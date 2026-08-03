@@ -7,6 +7,7 @@
 #include "CNA/Internal/Backends/Glide/GlidePrimitiveClip.hpp"
 #include "CNA/Internal/Backends/Glide/GlideTextureCoordinate.hpp"
 #include "CNA/Internal/Backends/Glide/GlideTextureEviction.hpp"
+#include "CNA/Internal/Backends/Glide/GlideTextureFormat.hpp"
 #include "CNA/Internal/Backends/Glide/GlideTextureMip.hpp"
 #include "CNA/Internal/Backends/Glide/GlideVertexLayout.hpp"
 #include "CNA/Internal/Graphics/BuiltInVertexStreams.hpp"
@@ -94,7 +95,20 @@ namespace CNA::Internal::Backends::Glide
         constexpr FxI32 kTexClampWrap = 0x0;
         constexpr FxI32 kTexClampClamp = 0x1;
         constexpr FxI32 kTexClampMirror = 0x2;
+        constexpr FxI32 kTexFormatRgb565 = 0xa;
+        constexpr FxI32 kTexFormatArgb1555 = 0xb;
         constexpr FxI32 kTexFormatArgb4444 = 0xc;
+
+        [[nodiscard]] FxI32 ToGlideNativeTextureFormat(GlideTextureAlphaClass alphaClass)
+        {
+            switch (alphaClass)
+            {
+                case GlideTextureAlphaClass::Opaque: return kTexFormatRgb565;
+                case GlideTextureAlphaClass::Binary: return kTexFormatArgb1555;
+                case GlideTextureAlphaClass::Fractional: return kTexFormatArgb4444;
+            }
+            return kTexFormatArgb4444;
+        }
         constexpr FxI32 kMipMapNearest = 0x1;
         constexpr FxU32 kMipMapBoth = 0x3;
         constexpr FxU32 kLfbSrc565 = 0x0;
@@ -855,6 +869,15 @@ namespace CNA::Internal::Backends::Glide
             const char* value = std::getenv("CNA_GLIDE_DIAGNOSTICS");
             return value != nullptr && value[0] != '\0' && std::strcmp(value, "0") != 0;
         }();
+        // GLIDE-FUT-007: classifying and re-packing a logical texture's mip pyramid as RGB565/
+        // ARGB1555 is implemented and unit-tested, but has never been checked against a real
+        // Glide runtime or dgVoodoo image (blocked by the sibling sharp-runtime i686 dependency).
+        // Keep it opt-in so every already-validated ARGB4444 texture is unaffected by default.
+        bool adaptiveTextureFormatEnabled = []
+        {
+            const char* value = std::getenv("CNA_GLIDE_ADAPTIVE_TEXTURE_FORMAT");
+            return value != nullptr && value[0] != '\0' && std::strcmp(value, "0") != 0;
+        }();
         SDL_Window* window = nullptr;
         GlideApi::Context context = nullptr;
         bool glideInitialized = false;
@@ -1237,6 +1260,14 @@ namespace CNA::Internal::Backends::Glide
                 ApplyExplicitMipLevel(next, static_cast<int>(logicalMipLevels_.size()), addressU, addressV);
                 logicalMipLevels_.push_back(std::move(next));
             }
+            // Classify every explicit and generated level (already address-padded above) so a
+            // format narrower than ARGB4444 is only ever chosen when genuinely lossless for it.
+            classifiedAlphaClass_ = GlideTextureAlphaClass::Opaque;
+            for (const LogicalMipLevel& level : logicalMipLevels_)
+            {
+                classifiedAlphaClass_ = CombineGlideTextureAlphaClass(
+                    classifiedAlphaClass_, ClassifyGlideArgb4444AlphaCoverage(level.texels));
+            }
         }
 
         void BuildTiles()
@@ -1334,6 +1365,9 @@ namespace CNA::Internal::Backends::Glide
 
         void ConvertTileToGlideTexels(Tile& tile, int addressU, int addressV)
         {
+            const bool useAdaptiveFormat = GetImpl().adaptiveTextureFormatEnabled;
+            const GlideTextureAlphaClass alphaClass =
+                useAdaptiveFormat ? classifiedAlphaClass_ : GlideTextureAlphaClass::Fractional;
             const int largeDimension = std::max(tile.paddedWidth, tile.paddedHeight);
             tile.nativeTexels.clear();
             tile.nativeTexels.reserve(static_cast<std::size_t>(tile.paddedWidth) * tile.paddedHeight * 2u);
@@ -1355,8 +1389,20 @@ namespace CNA::Internal::Backends::Glide
                     for (int x = 0; x < levelWidth; ++x)
                     {
                         const int sourceX = AddressGlideTextureTexel(logicalOriginX + x, logicalLevel.width, addressU);
-                        tile.nativeTexels.push_back(logicalLevel.texels[
-                            static_cast<std::size_t>(sourceY) * logicalLevel.width + sourceX]);
+                        const std::uint16_t argb4444 = logicalLevel.texels[
+                            static_cast<std::size_t>(sourceY) * logicalLevel.width + sourceX];
+                        switch (alphaClass)
+                        {
+                            case GlideTextureAlphaClass::Opaque:
+                                tile.nativeTexels.push_back(GlideArgb4444ToRgb565(argb4444));
+                                break;
+                            case GlideTextureAlphaClass::Binary:
+                                tile.nativeTexels.push_back(GlideArgb4444ToArgb1555(argb4444));
+                                break;
+                            case GlideTextureAlphaClass::Fractional:
+                                tile.nativeTexels.push_back(argb4444);
+                                break;
+                        }
                     }
                 }
                 if (levelWidth == 1 && levelHeight == 1)
@@ -1369,7 +1415,7 @@ namespace CNA::Internal::Backends::Glide
             tile.nativeInfo = GlideTexInfo{
                 0, Log2PowerOfTwo(largeDimension),
                 Log2PowerOfTwo(tile.paddedWidth) - Log2PowerOfTwo(tile.paddedHeight),
-                kTexFormatArgb4444, tile.nativeTexels.data() };
+                ToGlideNativeTextureFormat(alphaClass), tile.nativeTexels.data() };
         }
 
         void Upload(Tile& tile)
@@ -1397,6 +1443,8 @@ namespace CNA::Internal::Backends::Glide
         std::vector<std::uint8_t> rgba_;
         std::vector<std::vector<std::uint8_t>> explicitMipLevels_;
         std::vector<LogicalMipLevel> logicalMipLevels_;
+        // Only meaningful when GLIDE-FUT-007's opt-in classifier is enabled; ARGB4444 otherwise.
+        GlideTextureAlphaClass classifiedAlphaClass_ = GlideTextureAlphaClass::Fractional;
         std::vector<Tile> tiles_;
         std::uint64_t lastUsedCounter_ = 0;
 

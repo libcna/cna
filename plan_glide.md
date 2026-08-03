@@ -360,20 +360,35 @@ plus a dgVoodoo/real-hardware visual test before it can be advertised as support
   fake-renderer sequencing and dgVoodoo/real-Voodoo minification/update captures remain needed,
   as does a performance pass to regenerate only the affected derived levels rather than the
   presently correct full shared pyramid.
-- [ ] **GLIDE-FUT-007 — Select the best native texture encoding per logical texture.** Keep a
-  deterministic RGBA8 source copy, then use RGB565 for provably opaque data, ARGB1555 for binary
-  alpha and ARGB4444 for fractional alpha, with a documented reallocation rule if later updates
-  change the alpha class. Compare sampling/blending captures against the existing ARGB4444
-  baseline; do not enable palette/NCC compression merely as an undocumented lossy shortcut.
-  **Audit (2026-08-01):** the Glide 3.0 guide confirms that RGB565, ARGB1555 and ARGB4444 are all
-  16-bit texture formats, but only RGB565 is safe from a proven-opaque source without inspecting
-  the full chain. The current 2x2 generated-mip path averages alpha, so a binary-alpha base level
-  can produce fractional-alpha derived levels; selecting ARGB1555 from level zero alone would
-  silently turn those values into a one-bit mask. A future classifier must inspect every explicit
-  and generated logical mip after address padding (or adopt a separately validated alpha-coverage
-  rule), then fence and atomically re-download the new format descriptor/source data. Matching
-  element width suggests the TMU byte range may be reusable, but that still needs a fake-DLL
-  memory/value capture and sampling/blending images before any format is enabled.
+- [x] **GLIDE-FUT-007 — Select the best native texture encoding per logical texture.**
+  **Audit (2026-08-01) confirmed and acted on:** the Glide 3.0 guide confirms RGB565 (`0xa`),
+  ARGB1555 (`0xb`) and ARGB4444 (`0xc`, cross-checked against the already-shipping
+  `kTexFormatArgb4444` constant) are all 16-bit texture formats, so the required TMU byte range is
+  identical regardless of which is chosen -- no reallocation is ever needed, only re-packing the
+  existing tile range and updating `GrTexInfo.format`. The classifier the audit called for now
+  exists in a portable `GlideTextureFormat.hpp`
+  (`ClassifyGlideArgb4444AlphaCoverage`/`CombineGlideTextureAlphaClass`), and inspects every
+  explicit and generated logical mip level (address-padded, exactly as the audit required) rather
+  than only the base level, closing the exact silent-one-bit-mask hazard the audit flagged.
+  `BuildLogicalMipChain()` recomputes the combined classification every time it runs (construction,
+  address-mode change, eviction rebuild, or a pixel update), so "later updates changing the alpha
+  class" are handled by the *same* mechanism that already re-derives the logical pyramid, not a
+  separate rule. `GlideArgb4444ToRgb565`/`GlideArgb4444ToArgb1555` re-pack each already-quantized
+  ARGB4444 texel using standard high-bit replication (not a naive left-shift, which would bias the
+  widened channel toward black) rather than re-deriving from the RGBA8 source, deliberately
+  matching this backend's existing "the whole mip pyramid is generated in ARGB4444 space" design
+  (documented in this file's Fixed-function fidelity notes) instead of redesigning it.
+  **Deliberately not enabled by default:** the prior audit explicitly required a fake-DLL memory/
+  value capture and sampling/blending images before enabling any non-ARGB4444 format, and that
+  validation is still blocked by the same external i686 `sharp-runtime` dependency as
+  GLIDE-AUD-006/007. The classifier and re-packing are wired into `ConvertTileToGlideTexels()` but
+  gated behind a new opt-in `CNA_GLIDE_ADAPTIVE_TEXTURE_FORMAT` environment variable (mirroring the
+  existing `CNA_GLIDE_DIAGNOSTICS` pattern), defaulting to off, so every already-validated
+  ARGB4444 texture is completely unaffected unless a caller explicitly opts in. Ten portable
+  probes cover classification (opaque/binary/fractional/empty), combination across levels, and
+  both converters' extremes and exact bit positions. Verified with i686 MinGW `-fsyntax-only`
+  recompilation of the whole backend and the portable Glide unit suite (65/65). Palette/NCC
+  compression remains untouched, as required.
 - [ ] **GLIDE-FUT-008 — Calibrate constant depth bias.** Establish, on real Voodoo and dgVoodoo,
   the conversion between CNA's normalized `RasterizerState::DepthBias` and Glide's integer depth
   bias for both Z and W depth modes, including sign, clamp and viewport-depth interaction. Support
