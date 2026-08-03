@@ -259,4 +259,14 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_BACKEND STREQUAL "DILIGEN
         COMMAND cna_test_diligent_device_selection_integration
         TIMEOUT 120 LABELS "GraphicsSmoke;Diligent"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_diligent.md DILIGENT-59: hand-derived proof of the four lighting-fidelity fixes
+    # (emissive isolation, specular*alpha, multi-light additive, non-uniform-world normal).
+    cna_diligent_test(cna_test_diligent_lighting_fidelity
+                      examples/diligent_lighting_fidelity_test.cpp)
+    cna_register_backend_test(NAME Diligent_LightingFidelity
+        COMMAND cna_test_diligent_lighting_fidelity
+        TIMEOUT 90 LABELS "GraphicsSmoke;Diligent"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
+        SKIP_REGULAR_EXPRESSION "\\[SKIP\\] CNA Diligent smoke")
 endif()
