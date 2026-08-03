@@ -2533,3 +2533,609 @@ TEST_F(InstancedDrawMultiStreamTest, BindingStateKeepsEverySlotsOwnOffsetAndFreq
     EXPECT_EQ(kBandStreamFrequency, bindings[3].getInstanceFrequencyProperty());
 }
 
+// ===========================================================================
+// REMED-GFX-211 / REMED-GFX-213 permanent matrices, on the CLASSIC 1+1 shape.
+//
+// The triage group above answers "does this backend read the two offsets and the divisor at all",
+// which is the question that classified the tickets. These legs answer the questions a correction
+// has to keep answering: that each term is applied to its OWN stream, exactly ONCE, that it
+// survives the deferred capture, the index width, the buffer kind, a return to zero and a return
+// to a previous value, and that a divisor other than the two the triage happened to use is
+// arithmetic rather than a special case.
+//
+// The shape stays the classic one-per-vertex + one-per-instance pair throughout, so nothing here
+// depends on multi-stream input and every leg runs on every backend that has been taught the
+// contract. Colour is deliberately not asserted: CNA's stock instanced shader takes DiffuseColor
+// on several backends (REMED-GFX-212, open), and WHICH RECORDS each stream supplied -- which is
+// the whole question here -- is already carried by the cell positions.
+// ===========================================================================
+#ifdef CNA_INSTANCED_BINDING_OFFSET_ORACLE
+namespace
+{
+    /// The live instance records every leg below shares: `count` records displacing 0..count-1
+    /// columns and nothing vertically, so the column axis alone reads the consumed record.
+    std::vector<InstanceShift> LiveColumnShifts(int count)
+    {
+        std::vector<InstanceShift> shifts;
+        for (int i = 0; i < count; ++i)
+            shifts.push_back(InstanceShift{i, 0});
+        return shifts;
+    }
+
+    /// The cells a draw lights when the geometry group's base cell is (`baseColumn`, `kLiveBand`),
+    /// expressed in the `ExpectedCell` form the fixture's colour-blind assertion takes.
+    std::vector<ExpectedCell> ExpectedCellsForDraw(
+        const std::vector<InstanceShift>& shifts, int firstRecord, int instanceCount, int divisor,
+        int baseColumn)
+    {
+        return CellsForDraw(shifts, firstRecord, instanceCount, divisor, baseColumn, kLiveBand);
+    }
+
+    /// The whole classic fixture in one object, so a leg that varies only the draw arguments does
+    /// not repeat six buffer constructions.
+    struct ClassicOffsetFixture
+    {
+        std::vector<TriagePackedVertex> packed;
+        std::vector<WholeMatrixRecord> matrices;
+        std::vector<std::uint16_t> indices16;
+        std::vector<std::uint32_t> indices32;
+    };
+
+    ClassicOffsetFixture BuildClassicOffsetFixture(
+        const GridLayout& layout, bool meshHasDecoy, const std::vector<InstanceShift>& shifts)
+    {
+        return ClassicOffsetFixture{
+            BuildTriagePackedStream(layout, meshHasDecoy), MatricesFromShifts(shifts),
+            BuildIdentityIndices16(), BuildIdentityIndices32()};
+    }
+}
+
+// ---------------------------------------------------------------------------
+// baseVertex and the geometry binding's VertexOffset are DIFFERENT terms that both advance the
+// per-vertex stream, so a backend that folds one into the other must fold it exactly once. They are
+// deliberately different multiples of a group here: losing the offset lands on group 1, losing
+// baseVertex on group 0, losing both on the mesh's own decoy cell, doubling the offset on group 3
+// and doubling baseVertex on group 4 -- five failures, five distinct frames, one correct one.
+// ---------------------------------------------------------------------------
+TEST_F(InstancedDrawMultiStreamTest, ClassicBaseVertexAndPerVertexOffsetAddExactlyOnce)
+{
+    RequireInstancedRendering();
+
+    const GridLayout layout = TargetLayout();
+    const std::vector<InstanceShift> shifts = LiveColumnShifts(kInstanceCount);
+    const ClassicOffsetFixture fixture = BuildClassicOffsetFixture(layout, true, shifts);
+
+    constexpr int kPerVertexOffset = kTriageMeshPrefix;        // one group: skips the decoy
+    constexpr int kBaseVertex      = 2 * kVerticesPerSlot;     // two more groups
+    constexpr int kFirstLiveGroup  = 2;                        // (3 + 6 - 3) / 3
+
+    VertexBuffer meshBuffer(
+        device, TriagePackedDeclaration(), static_cast<int>(fixture.packed.size()),
+        BufferUsage::None);
+    meshBuffer.SetDataRaw(
+        fixture.packed.data(), static_cast<int>(fixture.packed.size()), 16);
+    VertexBuffer matrixBuffer(
+        device, WholeMatrixDeclaration(), static_cast<int>(fixture.matrices.size()),
+        BufferUsage::None);
+    matrixBuffer.SetDataRaw(
+        fixture.matrices.data(), static_cast<int>(fixture.matrices.size()), 64);
+    IndexBuffer indexBuffer(
+        device, IndexElementSize::SixteenBits, kMeshElementCount, BufferUsage::None);
+    indexBuffer.SetData(fixture.indices16.data(), kMeshElementCount);
+
+    RenderTarget2D target = MakeTarget();
+    BasicEffect effect(device);
+
+    device.SetVertexBuffers({
+        VertexBufferBinding(&meshBuffer, kPerVertexOffset, 0),
+        VertexBufferBinding(&matrixBuffer, 0, 1),
+    });
+    device.SetIndexBuffer(&indexBuffer);
+    device.SetRenderTarget(&target);
+    device.Clear(Color::Black);
+    ApplyMeshEffect(effect);
+    device.DrawInstancedPrimitives(
+        PrimitiveType::TriangleList, kBaseVertex, 0, kVerticesPerSlot, 0, 1, kInstanceCount);
+    device.SetRenderTarget(nullptr);
+
+    const FrameSnapshot snapshot = CaptureTarget(target);
+    ExpectExactlyTheseCellsIgnoringColour(
+        snapshot, layout,
+        ExpectedCellsForDraw(shifts, 0, kInstanceCount, 1, kFirstLiveGroup),
+        "the geometry binding's VertexOffset and baseVertex each advanced the per-vertex stream "
+        "exactly once, and neither replaced nor doubled the other");
+}
+
+// ---------------------------------------------------------------------------
+// The same two offsets under a nonzero startIndex, on BOTH index widths. startIndex selects index
+// ELEMENTS and must never reach the vertex streams; the two widths must produce the identical
+// frame, since the index format changes only how the same values are stored.
+// ---------------------------------------------------------------------------
+TEST_F(InstancedDrawMultiStreamTest, ClassicBothOffsetsHoldUnderStartIndexOnBothIndexWidths)
+{
+    RequireInstancedRendering();
+
+    const GridLayout layout = TargetLayout();
+
+    // One decoy instance record in front of the four live ones, so the instance offset has
+    // something to skip.
+    std::vector<InstanceShift> shifts;
+    shifts.push_back(InstanceShift{kColumnDecoyShift, kBandDecoyShift});
+    for (int i = 0; i < kInstanceCount; ++i)
+        shifts.push_back(InstanceShift{i, 0});
+    const ClassicOffsetFixture fixture = BuildClassicOffsetFixture(layout, true, shifts);
+
+    constexpr int kPerVertexOffset = kTriageMeshPrefix;      // skips the mesh decoy
+    constexpr int kInstanceOffset  = 1;                      // skips the instance decoy
+    constexpr int kStartIndex      = kVerticesPerSlot;       // one group of index ELEMENTS
+    constexpr int kFirstLiveGroup  = 1;                      // startIndex advanced one group
+
+    VertexBuffer meshBuffer(
+        device, TriagePackedDeclaration(), static_cast<int>(fixture.packed.size()),
+        BufferUsage::None);
+    meshBuffer.SetDataRaw(
+        fixture.packed.data(), static_cast<int>(fixture.packed.size()), 16);
+    VertexBuffer matrixBuffer(
+        device, WholeMatrixDeclaration(), static_cast<int>(fixture.matrices.size()),
+        BufferUsage::None);
+    matrixBuffer.SetDataRaw(
+        fixture.matrices.data(), static_cast<int>(fixture.matrices.size()), 64);
+
+    IndexBuffer indexBuffer16(
+        device, IndexElementSize::SixteenBits, kMeshElementCount, BufferUsage::None);
+    indexBuffer16.SetData(fixture.indices16.data(), kMeshElementCount);
+    IndexBuffer indexBuffer32(
+        device, IndexElementSize::ThirtyTwoBits, kMeshElementCount, BufferUsage::None);
+    indexBuffer32.SetData(fixture.indices32.data(), kMeshElementCount);
+
+    BasicEffect effect(device);
+    const std::vector<ExpectedCell> expected =
+        ExpectedCellsForDraw(shifts, kInstanceOffset, kInstanceCount, 1, kFirstLiveGroup);
+
+    const auto drawWith = [&](IndexBuffer& indexBuffer, const char* label) {
+        RenderTarget2D target = MakeTarget();
+        device.SetVertexBuffers({
+            VertexBufferBinding(&meshBuffer, kPerVertexOffset, 0),
+            VertexBufferBinding(&matrixBuffer, kInstanceOffset, 1),
+        });
+        device.SetIndexBuffer(&indexBuffer);
+        device.SetRenderTarget(&target);
+        device.Clear(Color::Black);
+        ApplyMeshEffect(effect);
+        device.DrawInstancedPrimitives(
+            PrimitiveType::TriangleList, 0, 0, kVerticesPerSlot, kStartIndex, 1, kInstanceCount);
+        device.SetRenderTarget(nullptr);
+        const FrameSnapshot snapshot = CaptureTarget(target);
+        ExpectExactlyTheseCellsIgnoringColour(snapshot, layout, expected, label);
+        return snapshot.CountLit();
+    };
+
+    const int lit16 = drawWith(
+        indexBuffer16,
+        "16-bit indices: startIndex selected index elements only, and both bindings kept their own "
+        "VertexOffset");
+    const int lit32 = drawWith(
+        indexBuffer32,
+        "32-bit indices: startIndex selected index elements only, and both bindings kept their own "
+        "VertexOffset");
+    EXPECT_EQ(lit16, lit32)
+        << "the index element width changed how many pixels the same geometry range covered";
+}
+
+// ---------------------------------------------------------------------------
+// REMED-GFX-213 beyond the frequency the triage happened to measure. Frequency 3 must group in
+// threes, a frequency LARGER than the instance count must collapse every instance onto the first
+// record it owns, and both must respect the instance binding's own VertexOffset -- which together
+// rule out a divisor implemented as a special case for two.
+// ---------------------------------------------------------------------------
+TEST_F(InstancedDrawMultiStreamTest, ClassicInstanceFrequencyIsArithmeticNotASpecialCase)
+{
+    RequireInstancedRendering();
+
+    const GridLayout layout = TargetLayout();
+    // Six records, each in its own column, so any consumed grouping is readable from one frame.
+    const std::vector<InstanceShift> shifts = LiveColumnShifts(6);
+    const ClassicOffsetFixture fixture = BuildClassicOffsetFixture(layout, false, shifts);
+
+    VertexBuffer meshBuffer(
+        device, TriagePackedDeclaration(), static_cast<int>(fixture.packed.size()),
+        BufferUsage::None);
+    meshBuffer.SetDataRaw(
+        fixture.packed.data(), static_cast<int>(fixture.packed.size()), 16);
+    VertexBuffer matrixBuffer(
+        device, WholeMatrixDeclaration(), static_cast<int>(fixture.matrices.size()),
+        BufferUsage::None);
+    matrixBuffer.SetDataRaw(
+        fixture.matrices.data(), static_cast<int>(fixture.matrices.size()), 64);
+    IndexBuffer indexBuffer(
+        device, IndexElementSize::SixteenBits, kMeshElementCount, BufferUsage::None);
+    indexBuffer.SetData(fixture.indices16.data(), kMeshElementCount);
+
+    BasicEffect effect(device);
+    device.SetIndexBuffer(&indexBuffer);
+
+    const auto drawAt = [&](int instanceOffset, int frequency, int instanceCount,
+                            const char* label) {
+        RenderTarget2D target = MakeTarget();
+        device.SetVertexBuffers({
+            VertexBufferBinding(&meshBuffer, 0, 0),
+            VertexBufferBinding(&matrixBuffer, instanceOffset, frequency),
+        });
+        device.SetRenderTarget(&target);
+        device.Clear(Color::Black);
+        ApplyMeshEffect(effect);
+        device.DrawInstancedPrimitives(
+            PrimitiveType::TriangleList, 0, 0, kVerticesPerSlot, 0, 1, instanceCount);
+        device.SetRenderTarget(nullptr);
+        const FrameSnapshot snapshot = CaptureTarget(target);
+        ExpectExactlyTheseCellsIgnoringColour(
+            snapshot, layout,
+            ExpectedCellsForDraw(shifts, instanceOffset, instanceCount, frequency, 0), label);
+    };
+
+    // Records 0,0,0,1,1,1 -- two distinct cells, not six and not one.
+    drawAt(0, 3, 6, "InstanceFrequency 3 grouped six instances into records 0,0,0,1,1,1");
+    // Records 1,1,1,2,2,2 -- the divisor is applied to the OFFSET stream, not from record zero.
+    drawAt(1, 3, 6, "InstanceFrequency 3 with a nonzero instance VertexOffset consumed records "
+                    "1,1,1,2,2,2");
+    // A frequency larger than the instance count owes exactly one record.
+    drawAt(0, 8, kInstanceCount,
+           "an InstanceFrequency larger than the instance count consumed record 0 for every "
+           "instance");
+    drawAt(2, 8, kInstanceCount,
+           "an InstanceFrequency larger than the instance count consumed the OFFSET record for "
+           "every instance");
+    // Back to one record per instance, on the same buffers, after all of the above.
+    drawAt(0, 1, 6, "InstanceFrequency returned to 1 and consumed records 0..5 again");
+}
+
+// ---------------------------------------------------------------------------
+// Deferred capture. Every draw in one frame is queued and replayed at the end of it, so a backend
+// that keeps a pointer into the mutable binding state -- rather than the values the draw was issued
+// under -- renders the LAST draw's offsets and frequency for all of them. Six draws, six different
+// (per-vertex offset, instance offset, frequency) triples, each landing in its own cells.
+// ---------------------------------------------------------------------------
+TEST_F(InstancedDrawMultiStreamTest, QueuedClassicDrawsKeepTheirOwnOffsetsAndFrequencies)
+{
+    RequireInstancedRendering();
+
+    const GridLayout layout = TargetLayout();
+    // Eight instance records, TWO per band: record r displaces `r % 2` columns and `r / 2` bands.
+    // Each queued draw below takes its own pair, so the band axis separates the draws from one
+    // another while the column axis still reads which of its two records each instance consumed.
+    std::vector<InstanceShift> shifts;
+    for (int r = 0; r < 8; ++r)
+        shifts.push_back(InstanceShift{r % 2, r / 2});
+    const ClassicOffsetFixture fixture = BuildClassicOffsetFixture(layout, true, shifts);
+
+    VertexBuffer meshBuffer(
+        device, TriagePackedDeclaration(), static_cast<int>(fixture.packed.size()),
+        BufferUsage::None);
+    meshBuffer.SetDataRaw(
+        fixture.packed.data(), static_cast<int>(fixture.packed.size()), 16);
+    VertexBuffer matrixBuffer(
+        device, WholeMatrixDeclaration(), static_cast<int>(fixture.matrices.size()),
+        BufferUsage::None);
+    matrixBuffer.SetDataRaw(
+        fixture.matrices.data(), static_cast<int>(fixture.matrices.size()), 64);
+    IndexBuffer indexBuffer(
+        device, IndexElementSize::SixteenBits, kMeshElementCount, BufferUsage::None);
+    indexBuffer.SetData(fixture.indices16.data(), kMeshElementCount);
+
+    RenderTarget2D target = MakeTarget();
+    BasicEffect effect(device);
+    device.SetIndexBuffer(&indexBuffer);
+    device.SetRenderTarget(&target);
+    device.Clear(Color::Black);
+
+    // Each queued draw takes its own geometry group (so its cells cannot overlap another's), its
+    // own instance offset and its own frequency.
+    struct QueuedLeg
+    {
+        int perVertexOffset;   ///< element offset into the mesh, decoy included
+        int instanceOffset;
+        int frequency;
+        int instanceCount;
+    };
+    // Geometry group `2k` pairs with instance records `2k, 2k+1`, which live in band `k`, so the
+    // four draws occupy four disjoint band/column rectangles: (0,1)x0, (2,3)x1, (4,5)x2, (6,7)x3.
+    // Two of them run at frequency 1 and two at frequency 2, and every one of the three values
+    // differs from its neighbours', so a draw that adopted another's offsets or step rate would
+    // land in another's rectangle or off the target entirely.
+    const std::vector<QueuedLeg> legs{
+        {kTriageMeshPrefix + 0 * kVerticesPerSlot, 0, 1, 2},
+        {kTriageMeshPrefix + 2 * kVerticesPerSlot, 2, 1, 2},
+        {kTriageMeshPrefix + 4 * kVerticesPerSlot, 4, 2, 4},
+        {kTriageMeshPrefix + 6 * kVerticesPerSlot, 6, 2, 4},
+    };
+
+    std::vector<ExpectedCell> expected;
+    for (const QueuedLeg& leg : legs)
+    {
+        device.SetVertexBuffers({
+            VertexBufferBinding(&meshBuffer, leg.perVertexOffset, 0),
+            VertexBufferBinding(&matrixBuffer, leg.instanceOffset, leg.frequency),
+        });
+        ApplyMeshEffect(effect);
+        device.DrawInstancedPrimitives(
+            PrimitiveType::TriangleList, 0, 0, kVerticesPerSlot, 0, 1, leg.instanceCount);
+        const int baseColumn =
+            (leg.perVertexOffset - kTriageMeshPrefix) / kVerticesPerSlot;
+        const std::vector<ExpectedCell> cells = ExpectedCellsForDraw(
+            shifts, leg.instanceOffset, leg.instanceCount, leg.frequency, baseColumn);
+        expected.insert(expected.end(), cells.begin(), cells.end());
+    }
+
+    // The public binding state is replaced entirely AFTER every draw is queued: a deferred command
+    // holding a pointer into it now sees an empty array rather than any leg's values.
+    device.SetVertexBuffers({});
+    device.SetVertexBuffer(nullptr);
+
+    device.SetRenderTarget(nullptr);
+    const FrameSnapshot snapshot = CaptureTarget(target);
+    ExpectExactlyTheseCellsIgnoringColour(
+        snapshot, layout, expected,
+        "every queued instanced draw kept the per-vertex offset, instance offset and "
+        "InstanceFrequency it was issued under, after the public bindings were cleared");
+}
+
+// ---------------------------------------------------------------------------
+// A nonzero pair, a return to both zero with an ordinary indexed draw in between, and a return to
+// the SAME nonzero pair -- the sequence that catches an offset cached into a pipeline, an input
+// layout or a per-frame staging arena and never recomputed. The last frame must reproduce the first
+// one exactly, and the whole sequence must reproduce across frames.
+// ---------------------------------------------------------------------------
+TEST_F(InstancedDrawMultiStreamTest, ClassicOffsetsReturnToZeroAndBackAroundOrdinaryDraws)
+{
+    RequireInstancedRendering();
+
+    const GridLayout layout = TargetLayout();
+    std::vector<InstanceShift> shifts;
+    shifts.push_back(InstanceShift{kColumnDecoyShift, kBandDecoyShift});
+    for (int i = 0; i < kInstanceCount; ++i)
+        shifts.push_back(InstanceShift{i, 0});
+    const ClassicOffsetFixture fixture = BuildClassicOffsetFixture(layout, true, shifts);
+
+    VertexBuffer meshBuffer(
+        device, TriagePackedDeclaration(), static_cast<int>(fixture.packed.size()),
+        BufferUsage::None);
+    meshBuffer.SetDataRaw(
+        fixture.packed.data(), static_cast<int>(fixture.packed.size()), 16);
+    VertexBuffer matrixBuffer(
+        device, WholeMatrixDeclaration(), static_cast<int>(fixture.matrices.size()),
+        BufferUsage::None);
+    matrixBuffer.SetDataRaw(
+        fixture.matrices.data(), static_cast<int>(fixture.matrices.size()), 64);
+    IndexBuffer indexBuffer(
+        device, IndexElementSize::SixteenBits, kMeshElementCount, BufferUsage::None);
+    indexBuffer.SetData(fixture.indices16.data(), kMeshElementCount);
+
+    BasicEffect effect(device);
+    device.SetIndexBuffer(&indexBuffer);
+
+    /// One frame: an optional ordinary indexed draw of the mesh's own decoy group, then one
+    /// instanced draw under the requested offsets. The ordinary draw is the route REMED-GFX-200
+    /// and REMED-GFX-201 own -- running it between the instanced ones proves neither route leaves
+    /// state the other reads.
+    const auto renderFrame = [&](int perVertexOffset, int instanceOffset, bool withOrdinaryDraw) {
+        RenderTarget2D target = MakeTarget();
+        device.SetRenderTarget(&target);
+        device.Clear(Color::Black);
+        if (withOrdinaryDraw)
+        {
+            // The ordinary route with its OWN nonzero binding offset, landing on the mesh decoy's
+            // cell, which no instanced leg here uses.
+            device.SetVertexBuffers({VertexBufferBinding(&meshBuffer, 0, 0)});
+            ApplyMeshEffect(effect);
+            device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, kVerticesPerSlot, 0, 1);
+        }
+        device.SetVertexBuffers({
+            VertexBufferBinding(&meshBuffer, perVertexOffset, 0),
+            VertexBufferBinding(&matrixBuffer, instanceOffset, 1),
+        });
+        ApplyMeshEffect(effect);
+        device.DrawInstancedPrimitives(
+            PrimitiveType::TriangleList, 0, 0, kVerticesPerSlot, 0, 1, kInstanceCount);
+        device.SetRenderTarget(nullptr);
+        return CaptureTarget(target);
+    };
+
+    /// The instanced draw's own cells, plus the ordinary draw's decoy cell when it ran.
+    const auto expectedFor = [&](int perVertexOffset, int instanceOffset, bool withOrdinaryDraw) {
+        const int baseColumn = perVertexOffset == 0
+                                   ? kTriageMeshDecoyColumn
+                                   : (perVertexOffset - kTriageMeshPrefix) / kVerticesPerSlot;
+        const int baseBand = perVertexOffset == 0 ? kTriageMeshDecoyBand : kLiveBand;
+        std::vector<ExpectedCell> cells = CellsForDraw(
+            shifts, instanceOffset, kInstanceCount, 1, baseColumn, baseBand);
+        if (withOrdinaryDraw)
+        {
+            const bool alreadyListed = std::any_of(
+                cells.begin(), cells.end(), [](const ExpectedCell& cell) {
+                    return cell.column == kTriageMeshDecoyColumn &&
+                           cell.band == kTriageMeshDecoyBand;
+                });
+            if (!alreadyListed)
+                cells.push_back(ExpectedCell{
+                    kTriageMeshDecoyColumn, kTriageMeshDecoyBand, ColorCode::Unknown});
+        }
+        return cells;
+    };
+
+    constexpr int kPerVertexOffset = kTriageMeshPrefix;
+    constexpr int kInstanceOffset  = 1;
+
+    const FrameSnapshot first = renderFrame(kPerVertexOffset, kInstanceOffset, false);
+    ExpectExactlyTheseCellsIgnoringColour(
+        first, layout, expectedFor(kPerVertexOffset, kInstanceOffset, false),
+        "frame 1: both bindings honoured their own nonzero VertexOffset");
+
+    const FrameSnapshot zeroed = renderFrame(0, 0, true);
+    ExpectExactlyTheseCellsIgnoringColour(
+        zeroed, layout, expectedFor(0, 0, true),
+        "frame 2: both offsets returned to zero around an ordinary indexed draw, so the geometry "
+        "stream rendered its decoy group and the instance stream its decoy record");
+
+    const FrameSnapshot restored = renderFrame(kPerVertexOffset, kInstanceOffset, true);
+    ExpectExactlyTheseCellsIgnoringColour(
+        restored, layout, expectedFor(kPerVertexOffset, kInstanceOffset, true),
+        "frame 3: the previous nonzero pair was restored after a zero frame and an ordinary draw");
+
+    const FrameSnapshot repeated = renderFrame(kPerVertexOffset, kInstanceOffset, false);
+    ExpectExactlyTheseCellsIgnoringColour(
+        repeated, layout, expectedFor(kPerVertexOffset, kInstanceOffset, false),
+        "frame 4: repeating frame 1 reproduced it exactly");
+    EXPECT_EQ(first.CountLit(), repeated.CountLit())
+        << "the same offsets rendered a different number of pixels on a later frame"
+        << DescribeFrame(repeated, layout);
+}
+
+// ---------------------------------------------------------------------------
+// The offsets and the frequency must survive the death of the wrappers that carried them, and must
+// not be re-read from a replacement object that happens to reuse the freed address. Both streams
+// are heap wrappers destroyed while their draws are still queued, and replacements holding
+// DIFFERENT records are allocated immediately afterwards to encourage exactly that reuse.
+// ---------------------------------------------------------------------------
+TEST_F(InstancedDrawMultiStreamTest, QueuedClassicInstancedDrawSurvivesWrapperDeathAndAddressReuse)
+{
+    RequireInstancedRendering();
+
+    const GridLayout layout = TargetLayout();
+    std::vector<InstanceShift> shifts;
+    shifts.push_back(InstanceShift{kColumnDecoyShift, kBandDecoyShift});
+    for (int i = 0; i < kInstanceCount; ++i)
+        shifts.push_back(InstanceShift{i, 0});
+    const ClassicOffsetFixture fixture = BuildClassicOffsetFixture(layout, true, shifts);
+
+    // The replacement instance records displace by a band instead of a column, so a draw that
+    // re-read its stream after the swap lands somewhere the assertion below cannot mistake for the
+    // correct frame.
+    std::vector<InstanceShift> replacementShifts;
+    for (int i = 0; i < static_cast<int>(shifts.size()); ++i)
+        replacementShifts.push_back(InstanceShift{0, 2});
+    const std::vector<WholeMatrixRecord> replacementMatrices =
+        MatricesFromShifts(replacementShifts);
+
+    auto meshBuffer = std::make_unique<VertexBuffer>(
+        device, TriagePackedDeclaration(), static_cast<int>(fixture.packed.size()),
+        BufferUsage::None);
+    meshBuffer->SetDataRaw(
+        fixture.packed.data(), static_cast<int>(fixture.packed.size()), 16);
+    auto matrixBuffer = std::make_unique<VertexBuffer>(
+        device, WholeMatrixDeclaration(), static_cast<int>(fixture.matrices.size()),
+        BufferUsage::None);
+    matrixBuffer->SetDataRaw(
+        fixture.matrices.data(), static_cast<int>(fixture.matrices.size()), 64);
+    IndexBuffer indexBuffer(
+        device, IndexElementSize::SixteenBits, kMeshElementCount, BufferUsage::None);
+    indexBuffer.SetData(fixture.indices16.data(), kMeshElementCount);
+
+    RenderTarget2D target = MakeTarget();
+    BasicEffect effect(device);
+    device.SetIndexBuffer(&indexBuffer);
+    device.SetRenderTarget(&target);
+    device.Clear(Color::Black);
+
+    constexpr int kPerVertexOffset = kTriageMeshPrefix + 2 * kVerticesPerSlot;
+    constexpr int kInstanceOffset  = 1;
+    constexpr int kFrequency       = 2;
+    constexpr int kBaseColumn      = 2;
+
+    device.SetVertexBuffers({
+        VertexBufferBinding(meshBuffer.get(), kPerVertexOffset, 0),
+        VertexBufferBinding(matrixBuffer.get(), kInstanceOffset, kFrequency),
+    });
+    ApplyMeshEffect(effect);
+    device.DrawInstancedPrimitives(
+        PrimitiveType::TriangleList, 0, 0, kVerticesPerSlot, 0, 1, kInstanceCount);
+
+    // Unbind first -- the established lifetime contract -- then destroy both wrappers while the
+    // draw is still queued, then allocate replacements of the same shapes so the allocator is free
+    // to hand back the addresses just released.
+    device.SetVertexBuffers({});
+    device.SetVertexBuffer(nullptr);
+    meshBuffer.reset();
+    matrixBuffer.reset();
+
+    auto reusedMesh = std::make_unique<VertexBuffer>(
+        device, TriagePackedDeclaration(), static_cast<int>(fixture.packed.size()),
+        BufferUsage::None);
+    reusedMesh->SetDataRaw(
+        fixture.packed.data(), static_cast<int>(fixture.packed.size()), 16);
+    auto reusedMatrices = std::make_unique<VertexBuffer>(
+        device, WholeMatrixDeclaration(), static_cast<int>(replacementMatrices.size()),
+        BufferUsage::None);
+    reusedMatrices->SetDataRaw(
+        replacementMatrices.data(), static_cast<int>(replacementMatrices.size()), 64);
+
+    device.SetRenderTarget(nullptr);
+    const FrameSnapshot snapshot = CaptureTarget(target);
+    ExpectExactlyTheseCellsIgnoringColour(
+        snapshot, layout,
+        ExpectedCellsForDraw(shifts, kInstanceOffset, kInstanceCount, kFrequency, kBaseColumn),
+        "the queued draw kept its own offsets, frequency and record data after both wrappers died "
+        "and replacements were allocated over their addresses");
+}
+
+// ---------------------------------------------------------------------------
+// The same contract on DYNAMIC buffers, whose backing storage a backend may orphan or re-map
+// between SetData calls -- a source offset computed once against a stale mapping is exactly the
+// defect this leg would catch.
+// ---------------------------------------------------------------------------
+TEST_F(InstancedDrawMultiStreamTest, ClassicOffsetsAndFrequencyHoldOnDynamicBuffers)
+{
+    RequireInstancedRendering();
+
+    const GridLayout layout = TargetLayout();
+    std::vector<InstanceShift> shifts;
+    shifts.push_back(InstanceShift{kColumnDecoyShift, kBandDecoyShift});
+    for (int i = 0; i < kInstanceCount; ++i)
+        shifts.push_back(InstanceShift{i, 0});
+    const ClassicOffsetFixture fixture = BuildClassicOffsetFixture(layout, true, shifts);
+
+    DynamicVertexBuffer meshBuffer(
+        device, TriagePackedDeclaration(), static_cast<int>(fixture.packed.size()),
+        BufferUsage::None);
+    DynamicVertexBuffer matrixBuffer(
+        device, WholeMatrixDeclaration(), static_cast<int>(fixture.matrices.size()),
+        BufferUsage::None);
+    // Written TWICE, so anything cached from the first upload is stale by the time the draw runs.
+    meshBuffer.SetDataRaw(fixture.packed.data(), static_cast<int>(fixture.packed.size()), 16);
+    matrixBuffer.SetDataRaw(
+        fixture.matrices.data(), static_cast<int>(fixture.matrices.size()), 64);
+    meshBuffer.SetDataRaw(fixture.packed.data(), static_cast<int>(fixture.packed.size()), 16);
+    matrixBuffer.SetDataRaw(
+        fixture.matrices.data(), static_cast<int>(fixture.matrices.size()), 64);
+
+    IndexBuffer indexBuffer(
+        device, IndexElementSize::SixteenBits, kMeshElementCount, BufferUsage::None);
+    indexBuffer.SetData(fixture.indices16.data(), kMeshElementCount);
+
+    RenderTarget2D target = MakeTarget();
+    BasicEffect effect(device);
+
+    constexpr int kPerVertexOffset = kTriageMeshPrefix + kVerticesPerSlot;
+    constexpr int kInstanceOffset  = 1;
+    constexpr int kFrequency       = 2;
+    constexpr int kBaseColumn      = 1;
+
+    device.SetVertexBuffers({
+        VertexBufferBinding(&meshBuffer, kPerVertexOffset, 0),
+        VertexBufferBinding(&matrixBuffer, kInstanceOffset, kFrequency),
+    });
+    device.SetIndexBuffer(&indexBuffer);
+    device.SetRenderTarget(&target);
+    device.Clear(Color::Black);
+    ApplyMeshEffect(effect);
+    device.DrawInstancedPrimitives(
+        PrimitiveType::TriangleList, 0, 0, kVerticesPerSlot, 0, 1, kInstanceCount);
+    device.SetRenderTarget(nullptr);
+
+    const FrameSnapshot snapshot = CaptureTarget(target);
+    ExpectExactlyTheseCellsIgnoringColour(
+        snapshot, layout,
+        ExpectedCellsForDraw(shifts, kInstanceOffset, kInstanceCount, kFrequency, kBaseColumn),
+        "a dynamic per-vertex and a dynamic per-instance buffer, both re-uploaded before the draw, "
+        "kept their own VertexOffset and InstanceFrequency");
+}
+#endif   // CNA_INSTANCED_BINDING_OFFSET_ORACLE
