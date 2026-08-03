@@ -1946,13 +1946,49 @@ level-boundary contract.
   classification task, not an implementation one). The document's closing section enumerates
   exactly what each of SKIA-145–151 still owes so the phase's task boundaries stay unambiguous.
 
+## Completed in this session: SKIA-145
+
+- Added `Skia_CubeSampling_Spike` (`examples/skia_cube_sampling_spike_test.cpp`), a headless
+  raster-only feasibility spike proving SKIA-144's `cnaSampleCubeEXT` preamble as real, compiled
+  SkSL run against real pixels -- matching the SKIA-93 spike's own precedent of proving a formula
+  below the public API before any integration exists. `BindTextureCube`/`SetTexture(TextureCube)`
+  still throw `ThrowSkiaUnsupported3D`; wiring the real weak-lifetime-tracked public path is
+  SKIA-149's job, unchanged by this task.
+- The spike compiles the exact preamble text from `docs/skia-cube-volume-sampling-contract.md`
+  (six `cnaCubeFace0`–`5` children, `cnaCubeFaceSizeEXT`, the D3D dominant-axis face/UV table) via
+  `SkRuntimeEffect::MakeForShader`, builds six 2x2 quadrant-coloured (Red/Green/Blue/Yellow)
+  face images, and reflects uniform offsets via `findUniform` rather than guessing SkSL's uniform
+  block byte layout by hand.
+- Six BR-quadrant-biased test directions, one per face, were each computed directly from SKIA-144's
+  own per-face `(ma, uc, vc)` formula so that both `uc/ma` and `vc/ma` land positive -- this proves
+  face SELECTION (only the correct dominant axis reaches that face's branch at all) and UV SIGN/
+  ORIENTATION (a transposed or sign-flipped per-face term would land in the wrong quadrant)
+  simultaneously and independently for every face, not just the aggregate "some face was picked."
+  All six matched their predicted quadrant on the first run: **SKIA-144's D3D table hypothesis
+  needed no correction.** A `(1,1,1)` corner direction additionally confirmed the documented
+  deterministic tie-break (X before Y before Z, positive before negative) resolves to the exact
+  predicted face and quadrant.
+- A dedicated Point-versus-Linear comparison samples the same +X quadrant-boundary direction
+  (`u=0.5` exactly) under both filter modes: Nearest must snap to one pure quadrant colour while
+  Linear -- sampling exactly between two texel centres -- must blend both, landing on neither pure
+  colour. Both held, proving filter mode is genuinely observable through `cnaSampleCubeEXT`'s
+  pixel-space child sample rather than silently collapsed to one mode.
+- 11/11 checks pass in Debug, Release, and ASan+UBSan
+  (`ASAN_OPTIONS=detect_leaks=0:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1`) with zero sanitizer
+  findings -- meaningful here specifically because the spike does real pointer/offset arithmetic
+  into a raw reflected-uniform byte buffer (`memcpy` at `uniform->offset`), exactly the kind of
+  mistake ASan/UBSan exist to catch. The complete Debug Skia suite passes 160/160 (22 Raster, 133
+  Display, six Audit -- one net new Raster test) on the persistent `:99` Xvfb display.
+- No production code changes; `SkiaEffectBackend.cpp`/`.hpp` are untouched. The formula is proven;
+  SKIA-146 (cube mip/seam/snapshot policy) and SKIA-149 (public `ShaderEffect` integration with
+  weak lifetime tracking) are the next tasks that actually consume it.
+
 ## Next candidates
 
-1. SKIA-145: prototype and implement cube sampling from six 2D child shaders using dominant-axis
-   face selection, per the fixed `docs/skia-cube-volume-sampling-contract.md` contract -- and
-   empirically confirm or correct its D3D face/UV table against real rendered pixels.
-2. SKIA-146–158: continue Phase S15/S16 (cube mip/seam policy, volume sampling, effect ABI wiring,
-   wider explicit 2D effects) in dependency order.
+1. SKIA-146: add cube mip selection, cross-face seam policy, filtering, and `RenderTargetCube`
+   snapshot-invalidation policy, building on SKIA-145's confirmed `cnaSampleCubeEXT` formula.
+2. SKIA-147–158: continue Phase S15/S16 (volume sampling, effect ABI wiring, wider explicit 2D
+   effects) in dependency order.
 2. SKIA-159–170: add opt-in Ganesh, probe real MSAA/anisotropy, re-evaluate MRT, and hold the
    successor gate only after the raster extensions are stable.
 3. The pre-existing `CNA_ENABLE_NET=OFF`/monolithic-`CnaTests` ENet build-graph defect is recorded
