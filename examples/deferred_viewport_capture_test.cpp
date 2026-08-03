@@ -168,6 +168,12 @@ namespace
     constexpr Contract kContract{"D3D11", Support::Exact, Support::Exact, true, true, true, false};
 #elif defined(CNA_BACKEND_D3D9)
     constexpr Contract kContract{"D3D9", Support::Exact, Support::Exact, true, true, true, true};
+#elif defined(CNA_BACKEND_LLGL)
+    // `depthRangeApplies` false: LlglGraphicsBackend::SetViewport's own minDepth/maxDepth parameters
+    // are unused entirely (never forwarded to LLGL::Viewport), the same boundary already declared on
+    // bgfx. Every X/Y/Width/Height viewport check in this file passes; checks E1/E2 assert the
+    // IGNORED outcome so the declaration is falsifiable in both directions.
+    constexpr Contract kContract{"LLGL", Support::Exact, Support::Exact, true, true, false, false};
 #else
 #error "REMED-GFX-116: this backend has no declared deferred-viewport contract."
 #endif

@@ -619,4 +619,39 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "LLGL")
         TIMEOUT 120 LABELS "Llgl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-116 cross-backend control: every deferred draw must execute under the
+    # GraphicsDevice.Viewport active at its own public call.
+    cna_llgl_test(cna_test_llgl_deferred_viewport
+                  examples/deferred_viewport_capture_test.cpp)
+    cna_register_backend_test(NAME Llgl_Deferred_Viewport COMMAND cna_test_llgl_deferred_viewport
+        TIMEOUT 120 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # REMED-GFX-146 cross-backend control: every deferred draw must execute under the
+    # GraphicsDevice.ScissorRectangle and RasterizerState.ScissorTestEnable active at its own public
+    # call.
+    cna_llgl_test(cna_test_llgl_deferred_scissor
+                  examples/deferred_scissor_capture_test.cpp)
+    cna_register_backend_test(NAME Llgl_Deferred_Scissor COMMAND cna_test_llgl_deferred_scissor
+        TIMEOUT 120 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # deferred_source_lifetime_test.cpp is deliberately NOT registered here: 8/17 legs pass in full
+    # (B1, B2, C1, E1, E2, I1, K1, L1) and, critically, 0/17 legs CRASHED -- the REMED-GFX-167 defect
+    # this fixture exists to catch (a heap-use-after-free when a deferred draw's SOURCE dies before
+    # replay) does not reproduce on LLGL at all. The other 9 legs fail their own unconditional
+    # backbuffer check for the SAME reason as bound_target_lifetime_test.cpp: this file's 72x36
+    # backbuffer request is a fourth reproduction of the open FixedHeightDynamicWidth logical-width
+    # finding -- see known_bugs.md's broadened entry.
+    cna_llgl_test(cna_test_llgl_deferred_source_lifetime
+                  examples/deferred_source_lifetime_test.cpp)
+
+    # REMED-GFX-157: a stock 3D draw issued AFTER a SpriteBatch inside ONE render-target bind cycle
+    # must execute after it rather than be dropped.
+    cna_llgl_test(cna_test_llgl_spritebatch_3d_order
+                  examples/spritebatch_3d_order_test.cpp)
+    cna_register_backend_test(NAME Llgl_SpriteBatch3DOrder COMMAND cna_test_llgl_spritebatch_3d_order
+        TIMEOUT 300 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()

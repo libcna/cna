@@ -173,6 +173,8 @@ namespace
     constexpr const char* kBackendName = "D3D11";
 #elif defined(CNA_BACKEND_D3D12)
     constexpr const char* kBackendName = "D3D12";
+#elif defined(CNA_BACKEND_LLGL)
+    constexpr const char* kBackendName = "LLGL";
 #else
 #error "REMED-GFX-167: this backend has no declared deferred-source lifetime contract."
 #endif

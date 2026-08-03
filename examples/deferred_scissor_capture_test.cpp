@@ -198,6 +198,9 @@ namespace
 #elif defined(CNA_BACKEND_D3D9)
     constexpr Contract kContract{"D3D9", Support::Exact, Support::Exact, true,
                                  true, true, true, true, false, true};
+#elif defined(CNA_BACKEND_LLGL)
+    constexpr Contract kContract{"LLGL", Support::Exact, Support::Exact, true,
+                                 true, true, true, true, false, false};
 #else
 #error "REMED-GFX-146: this backend has no declared deferred-scissor contract."
 #endif

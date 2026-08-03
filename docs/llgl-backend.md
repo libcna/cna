@@ -862,6 +862,19 @@ render-target readback exactness), `Llgl_TextureFilterOrdinalContract` (70/70, a
 non-integer scale, render-target source and viewport offset this fixture probes), and
 `Llgl_ColorSpace_MidTone` (17/17, a render-target colour round-trip is byte-identical with no sRGB
 conversion baked in).
+Phase LLGL-7's `LLGL-43` deferred-capture/`SpriteBatch` viewport batch adds three more fully-passing
+tests with no fix required: `Llgl_Deferred_Viewport` (39/39 -- every deferred draw executes under the
+`GraphicsDevice.Viewport` active at its own public call; `depthRangeApplies` is declared `false`
+since this backend's `SetViewport` never forwards `minDepth`/`maxDepth` to LLGL, the same boundary
+already declared on bgfx), `Llgl_Deferred_Scissor` (47/47 -- the same contract for
+`GraphicsDevice.ScissorRectangle`/`RasterizerState.ScissorTestEnable`, including a degenerate
+zero-width/height rectangle rasterizing nothing, unlike Vulkan/EasyGL/bgfx's own declared exception),
+and `Llgl_SpriteBatch3DOrder` (83/83, 3 declared skips -- a stock 3D draw issued after a `SpriteBatch`
+inside one bind cycle executes in public order, not grouped by family). `deferred_source_lifetime
+_test.cpp` stays unregistered (8/17 legs pass in full): critically, **0/17 legs crashed** -- the
+REMED-GFX-167 defect this fixture exists to catch does not reproduce on LLGL, and the other 9 legs
+fail only the already-catalogued `FixedHeightDynamicWidth` backbuffer artifact (a fourth
+reproduction, this file's own 72x36 backbuffer request).
 Every other test is registered a second time pinned to the OpenGL
 module through `CNA_LLGL_RENDERER`, which also exercises the selection path itself. All these tests
 need a display; on a machine without one they report SKIPPED

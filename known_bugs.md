@@ -588,9 +588,10 @@ sweep run clean afterward with zero regressions.
 ## LLGL backend: `FixedHeightDynamicWidth`'s logical width ignores the requested backbuffer width — OPEN
 
 **Status:** open, discovered while wiring `plan_llgl.md`'s Phase LLGL-7 (`LLGL-40`,
-`backbuffer_first_read_test.cpp`; also reproduced by `LLGL-41`'s `bound_target_lifetime_test.cpp`).
-Root cause identified with confidence; not fixed here (needs comparison against how other backends
-implement the same `CnaPresentationMode`, out of scope for a test-wiring task).
+`backbuffer_first_read_test.cpp`; also reproduced by `LLGL-41`'s `bound_target_lifetime_test.cpp` and
+`LLGL-43`'s `deferred_source_lifetime_test.cpp`). Root cause identified with confidence; not fixed
+here (needs comparison against how other backends implement the same `CnaPresentationMode`, out of
+scope for a test-wiring task).
 
 **Symptom:** `backbuffer_first_read_test.cpp`'s D63/D64/D65 legs (backbuffers 63x17/64x17/65x17,
 deliberately probing GPU row-pitch alignment boundaries) and E1 (64x32) all fail with columns near
@@ -647,9 +648,19 @@ assertions (the NEXT target reads correctly, a live sibling in an MRT set still 
 rounds complete cleanly) pass everywhere they are not entangled with the unrelated backbuffer-column
 finding above.
 
-**Tracked as:** `plan_llgl.md` Phase LLGL-7, `LLGL-40`/`LLGL-41` (no CTest registration for
-`backbuffer_first_read_test.cpp` or `bound_target_lifetime_test.cpp` until this is resolved -- see
-`cmake/Tests/LlglTests.cmake`'s own comments there for the full per-leg breakdown).
+**Fourth reproduction, the same story again:** `deferred_source_lifetime_test.cpp` (`LLGL-43`) also
+requests a 72x36 backbuffer and hits the identical column-7-reads-column-6 symptom on 9 of its 17
+legs. Critically, **0 of 17 legs crashed** here either: the REMED-GFX-167 defect this fixture exists
+to catch (a heap-use-after-free when a deferred draw's SOURCE dies before the frame that queued it
+replays) does not reproduce on LLGL at all. The 8 legs whose own assertions never touch the backbuffer
+(B1, B2, C1, E1, E2, I1, K1, L1) pass in full, including a `RenderTargetCube` destroyed before
+`Present()`, 120-round handle-reuse safety, and a source released while still in-flight across two
+more frames.
+
+**Tracked as:** `plan_llgl.md` Phase LLGL-7, `LLGL-40`/`LLGL-41`/`LLGL-43` (no CTest registration for
+`backbuffer_first_read_test.cpp`, `bound_target_lifetime_test.cpp`, or
+`deferred_source_lifetime_test.cpp` until this is resolved -- see `cmake/Tests/LlglTests.cmake`'s own
+comments there for the full per-leg breakdown).
 
 ---
 
