@@ -214,11 +214,35 @@ renderer.
   whole backend and the portable Glide unit suite (22/22). A fake-DLL check that invalid vertices
   never reach Glide remains blocked by the same external i686 `sharp-runtime` `__int128`
   dependency as GLIDE-AUD-006/007.
-- [ ] **GLIDE-AUD-015 — Make state application exception-atomic.** Convert and validate every
-  blend/depth/cull/alpha-test value into local native values before mutating cached state or issuing
-  any Glide call. If a requested combination is unsupported, both the backend cache and native
-  state must remain unchanged. Add failure-injection sequences which apply a valid state, attempt
-  an invalid state, then draw and prove that the prior complete state is still active.
+- [x] **GLIDE-AUD-015 — Make state application exception-atomic.** Audited all four named
+  categories:
+  - **Blend** — already fixed as part of GLIDE-AUD-011: `ApplyBlendState()` resolves all four
+    factors into locals (and validates the depth/auxiliary-buffer conflict) before writing any of
+    `impl_->colorSrcBlend`/`colorDstBlend`/`alphaSrcBlend`/`alphaDstBlend` or calling
+    `grAlphaBlendFunction`.
+  - **Depth** — already fixed as part of GLIDE-AUD-011: `ApplyDepthStencilState()` resolves
+    `ToGlideDepthCompare(depthFunc)` and validates the same auxiliary-buffer conflict before
+    writing `impl_->depthTestEnabled`/`depthWriteEnabled`/`depthCompare`; `SetDepthTestEnabled()`
+    and `SetBlendEnabled()` validate the same conflict symmetrically before their own mutation.
+  - **Cull** — audited, no change needed. `ApplyRasterizerState()` already validates `fillMode`
+    and `depthBias`/`slopeScaleDepthBias` before touching any state, and its `cullMode` switch's
+    `default` throws before reaching a `grCullMode()` call; only a recognized `cullMode` value ever
+    mutates native state, so an unsupported value already leaves everything untouched.
+  - **Alpha-test** — `DecodeAlphaTest()` is a total function over its float inputs (every input
+    maps to a defined native compare function/reference; there is no "unsupported combination" to
+    reject), but `DrawPrimitiveRange()` was pushing its result to native Glide
+    (`grAlphaTestReferenceValue`/`grAlphaTestFunction`) immediately after decoding it — before
+    several later checks that **can** throw and abort the draw entirely (vertex-buffer/texture
+    downcasts, `vertexStart` bounds, textured-without-a-texture, lighting-without-a-normal-stream,
+    and the lighting normal-matrix inversion for a singular `World`). A draw that failed any of
+    those still permanently changed Glide's native alpha-test state even though it submitted no
+    geometry. Moved the two native calls to immediately before the actual primitive-type dispatch,
+    after every throw-capable check in the function has already passed.
+  Verified with i686 MinGW `-fsyntax-only` recompilation of the whole backend and the portable
+  Glide unit suite (31/31, unaffected — this is all renderer-internal control flow). A fake-DLL
+  failure-injection capture (apply valid state, attempt an invalid state, redraw, and prove the
+  prior state's native calls repeat unchanged) remains blocked by the same external i686
+  `sharp-runtime` `__int128` dependency as GLIDE-AUD-006/007.
 - [ ] Validate and, if observable on real Voodoo/dgVoodoo output, compensate the remaining
   sub-texel LOD phase at a logical tile seam. All levels now use one shared logical mip pyramid,
   but a physical tile's one-texel gutter means its coordinate origin cannot be exactly aligned for

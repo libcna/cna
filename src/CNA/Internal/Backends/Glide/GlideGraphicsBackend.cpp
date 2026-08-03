@@ -2097,9 +2097,11 @@ namespace CNA::Internal::Backends::Glide
                                                   const GpuDrawParams& params)
     {
         ValidateFixedFunctionDrawParams(params);
+        // Decoding never fails (DecodeAlphaTest is total over its float inputs), but do not push
+        // it to native Glide yet: several checks below (buffer/texture casts, bounds, the lighting
+        // normal-matrix inversion) can still throw and abort this draw entirely, and native alpha-
+        // test state must not change for a draw that never actually submits geometry.
         const AlphaTestState alphaTest = DecodeAlphaTest(params);
-        impl_->api.grAlphaTestReferenceValue(alphaTest.reference);
-        impl_->api.grAlphaTestFunction(alphaTest.function);
         const auto* vb = dynamic_cast<const GlideVertexBufferBackend*>(&vbIn);
         if (vb == nullptr)
         {
@@ -2276,6 +2278,10 @@ namespace CNA::Internal::Backends::Glide
                 input.r, input.g, input.b, input.a, ndcZ,
                 s * reciprocalW, t * reciprocalW, reciprocalW};
         };
+        // Every throw-capable validation above has now passed: this draw will definitely submit
+        // geometry, so it is safe to commit the decoded alpha-test state to native Glide.
+        impl_->api.grAlphaTestReferenceValue(alphaTest.reference);
+        impl_->api.grAlphaTestFunction(alphaTest.function);
         const bool pointPrimitive = primitive == PrimitiveType::PointListEXT;
         const bool linePrimitive = primitive == PrimitiveType::LineList || primitive == PrimitiveType::LineStrip;
         if (pointPrimitive || linePrimitive)
