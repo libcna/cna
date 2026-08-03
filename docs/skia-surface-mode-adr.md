@@ -89,3 +89,10 @@ An accelerated successor must, before changing the default or any capability:
 6. probe MSAA and anisotropy on the selected native API rather than copying raster policy.
 
 Until all six gates pass, the release claim remains CPU-raster 2D only.
+
+Gate 1's artifact half is done: SKIA-159 (`docs/skia-ganesh-artifact.md`) produced a separately
+pinned Ganesh/OpenGL GN artifact and a `CNA::SkiaGanesh` CMake target, functionally verified below
+the API (a real `GrDirectContexts::MakeGL()` context over a real SDL GL context). Gate 1's
+construction-time mode selector, and all of gates 2-6, remain fully open -- no backend selection
+links or constructs the new artifact yet, and this note does not itself change the release claim
+above.

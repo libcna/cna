@@ -2663,19 +2663,70 @@ level-boundary contract.
   failure's output, and out of scope for it; the Skia-labeled subset above is this project's own
   established acceptance evidence.)
 
+## Completed in this session: SKIA-159 (opens Phase S17)
+
+- New `docs/skia-ganesh-artifact.md` fixes the contract first, matching this backend's own "fix the
+  contract before implementation" precedent.
+- Reused the exact same pinned Skia source checkout the raster artifact already uses (`~/deps/skia`,
+  revision `ebf50520d720a1ce9d842d942d04c6c39c3fbc7b`, confirmed via `git rev-parse HEAD` -- no
+  re-clone) and generated a second GN output directory (`~/deps/skia-out/ganesh`) with only
+  `skia_use_gl=true skia_enable_ganesh=true` flipped from the raster GN args; every other arg is
+  byte-identical (still no Vulkan/Dawn/Graphite/PDF/FreeType/fontconfig/decoders/wuffs/ICU/tools).
+  Built with `ninja -j3` (926/926 steps, ~41 MB output); confirmed the same six archive names as the
+  raster artifact -- Ganesh/GL sources compile into `libskia.a` itself rather than adding a seventh
+  archive. Read `BUILD.gn`'s own conditional `libs +=` blocks line-by-line for this exact GN
+  configuration (Linux/x64/GLX, not EGL) and confirmed exactly one new system library requirement:
+  `-lGL`.
+- New `cmake/ThirdPartySkiaGanesh.cmake` (zero changes to the existing `cmake/ThirdPartySkia.cmake`)
+  defines a new optional `CNA_SKIA_GANESH_BUILD_DIR` cache var and `CNA::SkiaGanesh` INTERFACE
+  target, with the same per-archive missing/mismatched-artifact `FATAL_ERROR` diagnostics the raster
+  target already has, plus two Ganesh-specific ones. **Nothing in `cmake/BackendSelection.cmake` or
+  `cmake/BackendLibraries.cmake` changed** -- `CNA_GRAPHICS_BACKEND=SKIA` still links only
+  `CNA::Skia`; construction-time mode selection is explicitly SKIA-160's job.
+- New `tools/skia/skia_ganesh_artifact_probe.cpp` + a `cna_skia_ganesh_artifact_probe` harness in
+  `cmake/Harnesses.cmake` (gated entirely behind `if(CNA_SKIA_GANESH_BUILD_DIR)`) proves the artifact
+  is genuinely functional, not just link-complete: a real SDL `SDL_GLContext`, made current, handed
+  to `GrDirectContexts::MakeGL()`, which succeeded and reported `maxTextureSize=16384` against the
+  real desktop display (`DISPLAY=:0`, not Xvfb -- same real-GLX requirement as the EasyGL golden
+  build). Not a CTest test: a below-the-API, manually-run, real-display-only proof, matching this
+  backend's "prove it below the API first" sequencing, not a claim of CI-run GPU coverage.
+- Verified "without changing the validated raster artifact" concretely: reconfigured the existing
+  `cmake-build-skia` directory in place (reusing its already-built SDL3 rather than a redundant
+  from-scratch build in a fresh directory), built only the new target, then reran the full raster
+  `Skia_*` suite in that same directory afterward -- 170/170 still pass, zero regressions. Deleted
+  the probe binary and intermediate object files after recording the result, per this repository's
+  build-probe hygiene convention; the CMake registration and source remain for a one-line rebuild.
+- Closed a real, previously-open documentation gap: Skia had no `THIRD_PARTY_NOTICES.md` entry at
+  all despite already being a shipped raster dependency; added one covering both artifacts
+  (BSD-3-Clause, Google Inc., not vendored into the repo, same pattern as the existing `wgpu-native`
+  entry).
+- Updated `docs/skia-surface-mode-adr.md`'s "Reopening requirements" section to note gate 1's
+  artifact half is now done while explicitly leaving the mode-selector half and gates 2-6 open, and
+  `docs/skia-developer-build.md` to point at the new doc and fix a real pre-existing inconsistency:
+  every `-j8`/`--parallel 8` example there predated this repository's current mandatory `-j3` build
+  cap; corrected all seven occurrences.
+- `docs/skia-backend.md`/`docs/skia-release-gate.md` deliberately untouched, per their existing
+  freeze-until-SKIA-170 policy.
+- No change to any source file under `src/CNA/Internal/Backends/Skia/` or
+  `include/CNA/Internal/Backends/Skia/`; the raster suite's 170/170 pass count and pixel evidence
+  are unaffected.
+
 ## Next candidates
 
-1. SKIA-159–170: add opt-in Ganesh, probe real MSAA/anisotropy, re-evaluate MRT, and hold the
-   successor gate only after the raster extensions are stable -- also where the mesh-effect cache's
-   deferred "mode" key axis (see SKIA-156 above) should actually be added, once a second compilation
-   target genuinely exists to test against.
-2. The pre-existing `CNA_ENABLE_NET=OFF`/monolithic-`CnaTests` ENet build-graph defect is recorded
+1. SKIA-160: add an explicit construction-time raster/Ganesh mode selection and mode-specific
+   capability diagnostic with no silent runtime fallback -- the natural next step now that
+   `CNA::SkiaGanesh` exists but nothing selects it.
+2. SKIA-161-170: implement backend-owned Ganesh context/surface wrapping, resize/loss/recovery,
+   probe real MSAA/anisotropy, re-evaluate MRT, and hold the successor gate only after the raster
+   extensions are stable -- also where the mesh-effect cache's deferred "mode" key axis (see
+   SKIA-156 above) should actually be added, now that a second compilation target genuinely exists.
+3. The pre-existing `CNA_ENABLE_NET=OFF`/monolithic-`CnaTests` ENet build-graph defect is recorded
    by SKIA-112/113 but remains outside Skia scope.
-3. Standalone follow-up (not yet a numbered task): wire `cnaVolumeAddressModesEXT` to the active
+4. Standalone follow-up (not yet a numbered task): wire `cnaVolumeAddressModesEXT` to the active
    `SamplerState` in `MakeSpriteShaderEXT` instead of the current hardcoded Clamp, so
    Wrap/Mirror volume addressing (already implemented in the sampling formula since SKIA-148)
    becomes reachable through the real public API.
-4. Standalone follow-up (not yet a numbered task): `SpriteBatch::DrawMeshEXT` currently requires
+5. Standalone follow-up (not yet a numbered task): `SpriteBatch::DrawMeshEXT` currently requires
    `SpriteSortMode::Immediate` and does not participate in the deferred sort/batch queue --
    integrating mesh draws into `Deferred`/sorted modes (extending `SpriteInfo`/`spriteQueue_` to
    carry a mesh-shaped variant, not just quads) is real additional scope, deliberately left open
@@ -2683,8 +2734,10 @@ level-boundary contract.
 
 ## Known boundaries / assumptions
 
-- The Skia path is raster-only.  Its current requested MSAA 0/1 reports 0; requests normalizing
-  to 2+ are rejected and the capability remains false.
+- The `CNA_GRAPHICS_BACKEND=SKIA` selection is still raster-only; its current requested MSAA 0/1
+  reports 0, and requests normalizing to 2+ are rejected with the capability remaining false. A
+  separate Ganesh/OpenGL artifact and CMake target now exist (SKIA-159,
+  `docs/skia-ganesh-artifact.md`) but nothing selects or constructs them yet.
 - `TextureFilter::Anisotropic` deliberately falls back byte-exactly to complete Linear, including
   mip interpolation, while the real anisotropy capability remains false.
 - Mipmapped Texture2D construction, exact level reporting, full/partial transfer at every level,

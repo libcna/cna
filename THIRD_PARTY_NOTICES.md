@@ -39,6 +39,20 @@ than shipping Microsoft's pre-built `.fxb` bytecode — see `plan_dx9.md`'s "CNA
 XNA 4.0" section and design decision 4 for why, and `src/CNA/Internal/Backends/D3D9/shaders/xna/README.md`
 for the full list of compiled entry points.
 
+## Skia (optional Skia 2D raster / Ganesh backend dependency)
+
+The experimental `SKIA` graphics backend links against Skia, Google's 2D graphics library, at the
+pinned revision `ebf50520d720a1ce9d842d942d04c6c39c3fbc7b`. Skia is licensed under the BSD 3-Clause
+License; copyright Google Inc. CNA's CMake integration (`cmake/ThirdPartySkia.cmake`,
+`cmake/ThirdPartySkiaGanesh.cmake`) links a separately built, unmodified upstream static-archive
+artifact; Skia's source is not copied into the CNA source tree, matching `wgpu-native`'s pattern
+below. See the upstream checkout's own `LICENSE` file for the complete license text.
+
+Two mutually exclusive GN-built artifacts of the same pinned checkout exist: the validated CPU
+raster artifact (`docs/skia-developer-build.md`, the release-gated `CNA_GRAPHICS_BACKEND=SKIA`
+selection) and a separately pinned Ganesh/OpenGL artifact (`docs/skia-ganesh-artifact.md`, SKIA-159,
+not yet wired into any backend selection). Both are the same upstream project and license.
+
 ## wgpu-native (optional WebGPU backend dependency)
 
 The experimental `WEBGPU` graphics backend uses `wgpu-native`, a native implementation of the

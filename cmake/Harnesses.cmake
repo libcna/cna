@@ -243,3 +243,26 @@ if(CNA_BUILD_TESTS)
         SHARP_RUNTIME
     )
 endif()
+
+# --- SKIA-159: standalone Ganesh/OpenGL artifact probe ---
+# Throwaway (per this project's build-hygiene convention) proof that the separately pinned
+# Ganesh/OpenGL Skia artifact (docs/skia-ganesh-artifact.md) actually links and constructs a real
+# GrDirectContext via GrDirectContexts::MakeGL() over a real SDL GL context. Only built when
+# -DCNA_SKIA_GANESH_BUILD_DIR is explicitly set; the ordinary CNA_GRAPHICS_BACKEND=SKIA (raster)
+# build never sets it, so this target does not exist there and the validated raster artifact/build
+# graph is unaffected. Not wired into CTest: SKIA-160/161 own construction-time mode selection and
+# the real backend integration; this is strictly a below-the-API artifact-correctness probe,
+# matching this backend's established "prove it below the API first" sequencing.
+if(CNA_SKIA_GANESH_BUILD_DIR)
+    include(cmake/ThirdPartySkiaGanesh.cmake)
+    cna_configure_skia_ganesh()
+
+    add_executable(cna_skia_ganesh_artifact_probe
+        tools/skia/skia_ganesh_artifact_probe.cpp
+    )
+    target_link_libraries(cna_skia_ganesh_artifact_probe
+        PRIVATE
+        CNA::SkiaGanesh
+        SDL3::SDL3
+    )
+endif()
