@@ -555,7 +555,11 @@ protected:
         const Color blendBackground(20, 40, 80, 255);
         const Color halfRedOverBackground(138, 20, 40, 255);
         const Color halfAlphaTint(255, 255, 255, 128);
-        const Color quarterRedOverBackground(79, 30, 60, 255);
+        // D2D-34: EasyGL's SpriteBatch shader is FragColor = texture * Color, a purely
+        // component-wise multiply. Color.A must scale only the resulting alpha; it must not also
+        // attenuate the (already premultiplied) source RGB a second time. The tinted premultiplied
+        // source therefore stays (128,0,0,64) here -- full red, halved alpha -- not (64,0,0,64).
+        const Color halfRedColorAlphaOverBackground(143, 30, 60, 255);
 
         device.Clear(blendBackground);
         sprites_->Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend, &point, nullptr, &scissorDisabled);
@@ -566,9 +570,9 @@ protected:
         sprites_->Draw(straightHalfRed, Rectangle(8, 0, 4, 4),
                        Rectangle(0, 0, 1, 1), Color::White);
         sprites_->End();
-        // Color.A has to attenuate both the premultiplied RGB value and alpha for source-over
-        // and Plus. It must still attenuate the copied alpha for Opaque while leaving that
-        // preset's RGB source factor equal to one.
+        // D2D-34: Color.A attenuates only the resulting alpha, for every preset including
+        // Opaque -- it must never additionally attenuate the source RGB (which stays scaled by
+        // Color.R/G/B alone, independent of Color.A).
         sprites_->Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend, &point, nullptr, &scissorDisabled);
         sprites_->Draw(premultipliedHalfRed, Rectangle(0, 4, 4, 4),
                        Rectangle(0, 0, 1, 1), halfAlphaTint);
@@ -598,8 +602,8 @@ protected:
         }
         check("AlphaBlend premultiplied texture", 1, 1, halfRedOverBackground);
         check("NonPremultiplied straight texture", 9, 1, halfRedOverBackground);
-        check("AlphaBlend texture Color.A", 1, 5, quarterRedOverBackground);
-        check("NonPremultiplied texture Color.A", 9, 5, quarterRedOverBackground);
+        check("AlphaBlend texture Color.A", 1, 5, halfRedColorAlphaOverBackground);
+        check("NonPremultiplied texture Color.A", 9, 5, halfRedColorAlphaOverBackground);
         if (verifyAdvancedBlend)
         {
             check("Additive premultiplied texture", 17, 1, Color(148, 40, 80, 255));
@@ -692,7 +696,10 @@ protected:
             sprites_->Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend, &point, nullptr, &scissorDisabled);
             sprites_->Draw(blendSourceTarget, Rectangle(0, 4, 4, 4), Rectangle(0, 0, 1, 1), halfAlphaTint);
             sprites_->End();
-            check("AlphaBlend RenderTarget2D source Color.A", 1, 5, quarterRedOverBackground);
+            // D2D-34: the GPU ColorMatrix path uses its default (non-STRAIGHT) alpha mode here,
+            // applying the tint matrix directly to the already-premultiplied source -- the same
+            // independent-component result as the CPU fallback above, so it shares that oracle.
+            check("AlphaBlend RenderTarget2D source Color.A", 1, 5, halfRedColorAlphaOverBackground);
 
             // NonPremultiplied declares its RT input to be straight-alpha data. Its stored
             // premultiplied red is therefore premultiplied once more before source-over.

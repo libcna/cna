@@ -1708,13 +1708,13 @@ namespace CNA::Internal::Backends::Direct2D
                 const int sourceG = nonPremultipliedSource_ ? input[1] * alpha / 255 : input[1];
                 const int sourceB = nonPremultipliedSource_ ? input[2] * alpha / 255 : input[2];
                 uint8_t* output = result.data() + (static_cast<std::size_t>(dy) * sourceWidth + dx) * 4u;
-                // Direct2D source-over/add pixels are premultiplied, so Color.A scales both source
-                // alpha and RGB. Copy/Opaque instead uses an alpha-ignore bitmap: XNA's source
-                // factor is One there, therefore its RGB must not be attenuated by Color.A.
-                const int colourAlpha = blendMode_ == Direct2DBlendMode::Copy ? 255 : color.getAProperty();
-                output[0] = static_cast<uint8_t>(sourceR * color.getRProperty() * colourAlpha / (255 * 255));
-                output[1] = static_cast<uint8_t>(sourceG * color.getGProperty() * colourAlpha / (255 * 255));
-                output[2] = static_cast<uint8_t>(sourceB * color.getBProperty() * colourAlpha / (255 * 255));
+                // D2D-34: EasyGL's SpriteBatch shader is FragColor = texture * Color, a purely
+                // component-wise multiply -- Color.A scales only the resulting alpha, for every
+                // blend preset, and must never additionally attenuate the (already premultiplied,
+                // for source-over/add) source RGB a second time.
+                output[0] = static_cast<uint8_t>(sourceR * color.getRProperty() / 255);
+                output[1] = static_cast<uint8_t>(sourceG * color.getGProperty() / 255);
+                output[2] = static_cast<uint8_t>(sourceB * color.getBProperty() / 255);
                 output[3] = static_cast<uint8_t>(alpha * color.getAProperty() / 255);
             }
         }
