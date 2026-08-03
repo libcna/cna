@@ -14,22 +14,27 @@ renderer.
 
 - [x] Native `grSstWinOpen`, back-buffer clear/present, LFB readback, and loader support for both
   undecorated and x86 stdcall-exported Glide DLLs.
-- [x] `SpriteBatch` texture upload and quad submission through TMU0 plus `grDrawTriangle`.
+- [x] `SpriteBatch` texture upload and quad submission through TMU0 plus `grDrawTriangle`; native
+  texture-coordinate unit conversion remains open under GLIDE-AUD-010.
 - [x] Fixed-function `VertexPositionColor` triangle lists/strips, including indexed draws and CPU
   `world * view * projection` transforms. Compatible clipped triangle runs are batched through
   native `grDrawVertexArray(GR_TRIANGLES)`; SpriteBatch remains two direct `grDrawTriangle` calls.
-- [x] Native 16-bit Z buffer, depth clear/test/write state, source/destination alpha blending, and
-  a manual dgVoodoo smoke target.
+- [x] Native 16-bit Z buffer, depth clear/test/write state, initial alpha-blend state plumbing, and
+  a manual dgVoodoo smoke target. Exact XNA-to-Glide blend-factor fidelity remains open under
+  GLIDE-AUD-011 because Glide restricts factors by argument position and alpha factors more
+  strongly than the current shared mapper expresses.
 - [x] Homogeneous CPU frustum clipping before the perspective divide. Triangles crossing a side,
-  near, far, or eye plane are split into a clipped fan and then emitted as native
+  near, or far plane are split into a clipped fan and then emitted as native
   `grDrawVertexArray(GR_TRIANGLES)` batches; invalid non-finite input is rejected rather than sent
-  to Glide's FIFO.
+  to Glide's FIFO. A strict positive-W eye-plane margin remains open under GLIDE-AUD-014.
 - [x] Textured 3D `VertexPositionTexture` and `VertexPositionColorTexture` through TMU0, with
   Glide `s/w`, `t/w`, and `1/w`. Indexed versions expand the index stream before the same real
-  triangle submission.
+  triangle submission. Correct native coordinate scaling remains open under GLIDE-AUD-010, and
+  indexed custom-layout preservation under GLIDE-AUD-012.
 - [x] The documented fixed-function `BasicEffect` subset: unlit diffuse/vertex-colour, or
   `VertexPositionNormalTexture` directional **per-vertex** diffuse and Blinn-Phong specular
   lighting with ambient and emissive terms. It deliberately rejects `PreferPerPixelLighting`.
+  Normal-matrix correctness for rotated/sheared worlds is reopened under GLIDE-AUD-004.
 - [x] AlphaTestEffect's discrete alpha-test encoding maps to `grAlphaTestFunction` and
   `grAlphaTestReferenceValue`; cull and depth-compare states map to their native Glide equivalents.
 - [x] Logical textures are tiled to the runtime-reported `GR_MAX_TEXTURE_SIZE`, each tile is padded
@@ -43,7 +48,9 @@ renderer.
   its isolated padded tile, removing the cross-tile source mismatch during minification.
 - [x] Startup queries `grQueryResolutions` for the actually usable double-buffered depth modes and
   `grGet` for `GR_MAX_TEXTURE_SIZE`, `GR_MAX_TEXTURE_ASPECT_RATIO`, and `GR_NUM_TMU`. It selects
-  the smallest listed historical Glide mode that contains CNA's virtual framebuffer.
+  the smallest listed historical Glide resolution that contains CNA's virtual framebuffer.
+  Selecting and opening the refresh rate from the same returned candidate remains open under
+  GLIDE-AUD-013.
 
 ## Fixed-function fidelity notes
 
@@ -81,18 +88,68 @@ renderer.
 - [x] **GLIDE-AUD-001 — Make the standard clear path work without inventing stencil.** The shared backend contract now distinguishes default depth and stencil planes. Glide reports depth=true/stencil=false, so `GraphicsDevice::Clear(Color)` preserves its colour+Z clear while masking only its impossible stencil portion; the smoke target executes this standard path.
 - [x] **GLIDE-AUD-002 — Implement the XNA viewport contract and combine it correctly with scissor.** Glide now stores and validates XY/depth viewport state, maps 3D XY/Z into it, and submits the viewport/scissor/framebuffer intersection through `grClipWindow`. The smoke target contains an offset-viewport probe; the comprehensive state matrix remains under GLIDE-AUD-007.
 - [x] **GLIDE-AUD-003 — Fence texture mutation/reuse and make resource lifetime safe.** `UpdatePixels()` and address-mode rebuilds now finish the FIFO before replacing TMU contents; destruction finishes before returning ranges. Textures keep only a weak native-state reference, so backend-first teardown is safe instead of dereferencing a destroyed backend.
-- [x] **GLIDE-AUD-004 — Correct per-vertex lighting for non-uniform world transforms.** BasicEffect lighting now uses the transpose of the inverse World 3×3 and rejects singular/non-finite normal transforms with a clear error.
+- [ ] **GLIDE-AUD-004 — Correct per-vertex lighting for non-uniform world transforms.**
+  **Reopened by the 2026-08-03 audit:** the helper computes the inverse World 3×3, but the current
+  row-vector multiplication indexes its columns and therefore applies the inverse rather than the
+  required inverse-transpose. The existing diagonal non-uniform-scale probe cannot distinguish
+  those matrices. Correct the multiplication (or store the inverse-transpose explicitly), retain
+  singular/non-finite rejection, and add rotation plus non-symmetric shear tests whose expected
+  transformed normals are calculated independently of the production helper. Add a lit-image
+  probe before restoring the completed mark.
 - [x] **GLIDE-AUD-005 — Make reset, virtual resolution and presentation policy honest.** Glide explicitly supports only `NativeBackBuffer` and swap intervals 0/1. Resize remains an atomic fit-or-throw operation, which `GraphicsDevice::SetVirtualResolution()` already commits only after backend success.
 - [ ] **GLIDE-AUD-006 — Add an automated native-ABI contract test.** The backend deliberately hand-declares Glide 3.x types, numeric constants, layouts and stdcall byte counts. Factor the loader-facing declarations into a small auditable unit and test them against a purpose-built x86 fake `glide3x.dll` that records calls, including undecorated and decorated exports, `grSstWinOpen`, vertex layout, combiner state, texture calls, clear/readback and shutdown ordering. This must run without dgVoodoo and without the external `sharp-runtime` i686 executable dependency. **Implementation staged:** `GlideAbi.hpp` now owns every renderer-facing signature and native layout; the independent x86 fake DLL + Wine contract resolves the complete 37-export surface, checks undecorated and `name@N` stdcall lookup plus missing-export rejection, and calls every resolved signature while the fake recorder proves each entry point was reached. The actual CNA renderer still cannot be instantiated in that target because the sibling i686 `sharp-runtime` build fails on `__int128`; when that dependency is portable, the next stage must use the recorder to assert the real initialization, draw, texture, clear/readback and teardown sequences and their values/order.
 - [ ] **GLIDE-AUD-006 follow-up — real renderer fake-DLL sequence.** **needs_external_dependency:** the sibling `../sharp-runtime` must first build for i686 MinGW without `__int128`. Then link CNA against the fake DLL and assert real call order/values for startup, primitive modes, texture updates, clear/readback and shutdown.
-- [ ] **GLIDE-AUD-007 — Expand rendering regressions beyond the nine smoke probes.** Add deterministic pixel probes/golden captures for all alpha-test compare functions, source/destination blend factors, depth compare/write combinations, cull modes, colour-mask groups, scissor, indexed strips, point/line clipping and joins, fog, and BasicEffect lighting. Include NPOT and multi-tile textures under Point/Linear × Clamp/Wrap/Mirror, with minification and texture updates. Run the visual subset on both dgVoodoo and, when available, real Voodoo hardware; record emulator/version, tolerance and known intentional ARGB4444/RGB565 differences.
+- [ ] **GLIDE-AUD-007 — Expand rendering regressions beyond the ten smoke probes.** Add deterministic pixel probes/golden captures for all alpha-test compare functions, source/destination blend factors, depth compare/write combinations, cull modes, colour-mask groups, scissor, indexed strips, point/line clipping and joins, fog, and BasicEffect lighting. Include NPOT and multi-tile textures under Point/Linear × Clamp/Wrap/Mirror, with minification and texture updates. Run the visual subset on both dgVoodoo and, when available, real Voodoo hardware; record emulator/version, tolerance and known intentional ARGB4444/RGB565 differences. The corrective tasks GLIDE-AUD-010 through GLIDE-AUD-015 add mandatory targeted cases to this suite.
 - [ ] **GLIDE-AUD-007 execution — native image suite.** **needs_external_dependency:** requires the same runnable i686 CNA executable plus a caller-provided dgVoodoo or Voodoo runtime; no emulator DLL is bundled or configured by CNA.
 - [x] **GLIDE-AUD-008 — Harden texture input and TMU allocation failure paths.** Texture creation rejects undersized RGBA8 input, oversized logical dimensions and overflowing byte counts; TMU range allocation/coalescing now uses checked 64-bit intermediates. Failure-injection coverage remains part of the fake-DLL harness in GLIDE-AUD-006.
-- [x] **GLIDE-AUD-009 — Batch native submissions without crossing state boundaries.** Compatible
-  3D fan triangles now accumulate in bounded (1024-triangle) submission-order batches and use
-  `grDrawVertexArray(GR_TRIANGLES)`. The batch flushes before a texture-tile/state change and
-  preserves the existing per-triangle vertex order; SpriteBatch deliberately retains its direct
-  two-triangle path. The still-pending fake-DLL/dgVoodoo checks are tracked in GLIDE-AUD-006/007.
+- [ ] **GLIDE-AUD-009 — Batch native submissions without crossing state or ordering boundaries.**
+  **Reopened by the 2026-08-03 audit:** compatible 3D fan triangles accumulate in bounded
+  (1024-triangle) batches and preserve order inside one physical tile, but the current tile-major
+  outer loop can reorder the complete draw from `A, B` to `A/tile0, B/tile0, A/tile1, B/tile1`.
+  Replace it with primitive-order traversal or an ordered command stream which only coalesces
+  consecutive compatible tile/state runs. Apply the same rule to tiled points and lines. Prove
+  completion with overlapping translucent multi-tile primitives, equal-depth cases and a fake-DLL
+  call-order capture; SpriteBatch may retain its direct two-triangle path.
+- [ ] **GLIDE-AUD-010 — Convert all texture coordinates to native Glide units.** Glide window-space
+  TMU coordinates use `0..256` across the texture's long side and an aspect-scaled range across the
+  short side. The current SpriteBatch path submits normalized UVs directly, while the 3D path
+  submits tile texel coordinates; neither applies the required native scale. Define one shared
+  conversion based on each physical tile's padded dimensions, use it for sprites, triangles,
+  points and lines before multiplying by reciprocal W, and keep gutter/tile offsets in the same
+  unit system. Add fake-DLL vertex-value assertions plus coloured 2x2, 64x32, 128x128, NPOT and
+  multi-tile Point/Linear image probes. A uniform 1x1 texture is not sufficient evidence.
+- [ ] **GLIDE-AUD-011 — Make blend-factor mapping argument-aware and reject impossible states
+  atomically.** Replace the shared factor mapper with separate validation/mapping for RGB source,
+  RGB destination, alpha source and alpha destination. Account for Glide constants whose meaning
+  depends on their argument position and for the more restricted alpha-factor domain. Define and
+  document the nearest faithful policy for CNA presets which Glide cannot encode, including alpha
+  writes when an auxiliary depth buffer is open; otherwise fail before changing cached or native
+  state. Test every accepted/rejected factor in the x86 fake DLL and add translucent image probes
+  for `Opaque`, `AlphaBlend`, `NonPremultiplied`, additive and custom independent-alpha states.
+- [ ] **GLIDE-AUD-012 — Preserve custom vertex declarations in indexed draws.** The indexed path
+  currently expands bytes into a temporary vertex buffer without copying its parsed declaration,
+  then guesses the layout from stride. Refactor decoding so indices address the original buffer
+  and resolved layout directly, or explicitly carry the validated layout into the expansion.
+  Cover arbitrary legal offsets/padding and a stride that intentionally aliases a built-in layout;
+  require matching indexed/non-indexed fake-DLL vertices and dgVoodoo images. This is a release
+  blocker for the staged GLIDE-FUT-002 claim.
+- [ ] **GLIDE-AUD-013 — Open the exact resolution/refresh candidate returned by Glide.** Preserve
+  the refresh token while collecting `grQueryResolutions` candidates and pass that token to
+  `grSstWinOpen`, or query only the refresh rate that the backend is prepared to open. Candidate
+  selection must be deterministic when the same dimensions occur at multiple rates. Extend the
+  fake DLL with mode matrices containing no 60 Hz entry, multiple refresh rates and a failing open;
+  assert that startup never combines a resolution from one candidate with another refresh value.
+- [ ] **GLIDE-AUD-014 — Clip triangles against a strict positive-W eye plane.** Share the
+  point/line positive-W margin with triangle clipping so geometry at or extremely near `W == 0`
+  is clipped before perspective division instead of surviving the six nominal frustum planes and
+  throwing during vertex conversion. Preserve interpolated colour/UV/fog attributes at the new
+  intersections. Add exact-zero, below-epsilon, crossing-eye-plane and fully-behind tests with
+  finite-output assertions and a fake-DLL check that invalid vertices never reach Glide.
+- [ ] **GLIDE-AUD-015 — Make state application exception-atomic.** Convert and validate every
+  blend/depth/cull/alpha-test value into local native values before mutating cached state or issuing
+  any Glide call. If a requested combination is unsupported, both the backend cache and native
+  state must remain unchanged. Add failure-injection sequences which apply a valid state, attempt
+  an invalid state, then draw and prove that the prior complete state is still active.
 - [ ] Validate and, if observable on real Voodoo/dgVoodoo output, compensate the remaining
   sub-texel LOD phase at a logical tile seam. All levels now use one shared logical mip pyramid,
   but a physical tile's one-texel gutter means its coordinate origin cannot be exactly aligned for
@@ -125,19 +182,23 @@ plus a dgVoodoo/real-hardware visual test before it can be advertised as support
   normal, and texture-coordinate 0 at arbitrary legal offsets and strides. Feed it into the
   existing fixed-function paths and reject unsupported semantics deterministically, instead of
   relying on accidental binary layout compatibility. **Implementation staged:** the parser and
-  portable unit coverage now exist, and the 3D decoder uses the resolved layout; completion still
-  requires the fake-DLL draw capture and dgVoodoo/real-hardware visual checks from GLIDE-AUD-006/007.
+  portable unit coverage now exist, and the non-indexed 3D decoder uses the resolved layout. The
+  indexed expansion currently loses that layout and is tracked as a release blocker in
+  GLIDE-AUD-012; completion also requires the fake-DLL draw capture and dgVoodoo/real-hardware
+  visual checks from GLIDE-AUD-006/007.
 - [ ] **GLIDE-FUT-003 — Complete the feasible `BasicEffect` vertex-lighting subset.** Compute
   the existing FNA-compatible Blinn/Phong specular term on the CPU per vertex (eye position,
   material specular colour/power and all enabled directional lights), add it to the iterated
   Glide RGB result, and add golden tests for non-uniform worlds and multiple lights. Keep
   `PreferPerPixelLighting` rejected: Glide has no per-pixel programmable lighting.
   **Implementation staged:** the CPU path now evaluates FNA's three-light Blinn-Phong term,
-  applies it before alpha-aware fog, and corrects the inverse-transpose normal cofactors.
-  Six portable unit probes cover a front/back light, three-light sum, non-uniform scale,
-  vertex-colour/emissive/specular order and fog. The recorder cannot yet drive the full CNA
-  backend, so a fake-DLL renderer-sequence assertion and dgVoodoo/real-Voodoo image capture
-  remain required before this capability is release-validated.
+  applies it before alpha-aware fog, and attempts an inverse-transpose normal transform. The
+  2026-08-03 audit found that the final multiplication instead applies the inverse for the
+  backend's row-vector convention; GLIDE-AUD-004 reopens that correction. Six portable unit probes
+  cover a front/back light, three-light sum, diagonal non-uniform scale,
+  vertex-colour/emissive/specular order and fog, but rotation and shear coverage is still required.
+  The recorder cannot yet drive the full CNA backend, so a fake-DLL renderer-sequence assertion
+  and dgVoodoo/real-Voodoo image capture remain required before this capability is release-validated.
 - [ ] **GLIDE-FUT-004 — Use a second TMU when the selected runtime actually has one.** Add
   per-TMU texture memory allocators/residency, two-texture tiled draw partitioning and the exact
   fixed-function combiner for `DualTextureEffect` / texture slot 1. Gate it on `GR_NUM_TMU >= 2`,
