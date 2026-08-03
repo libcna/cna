@@ -525,6 +525,20 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "LLGL")
     cna_llgl_test(cna_test_llgl_rendertarget_backbuffer_consumer
                   examples/rendertarget_backbuffer_consumer_test.cpp)
 
+    # bound_target_lifetime_test.cpp is deliberately NOT registered here: 3/18 legs pass in full
+    # (G1, G2, J1) and, critically, 0/18 CRASHED -- the REMED-GFX-168 defect this fixture exists to
+    # catch (a SIGSEGV when a bound render target is destroyed mid-cycle) does not reproduce on LLGL
+    # at all, and every leg's own destroy-while-bound-specific assertions pass wherever they are not
+    # entangled with an unrelated finding. 15 of 18 legs still fail their own RequireBackbufferExact
+    # check (unconditional in this fixture, no per-backend declaration to route around it): this
+    # file's 72x36 backbuffer request is a third reproduction of the open FixedHeightDynamicWidth
+    # logical-width finding above LLGL-40's own backbuffer_first_read_test.cpp already found -- see
+    # known_bugs.md's broadened entry. Leg L1's own MRT-slot-mip-regeneration check is a SEPARATE,
+    # already cross-backend-documented (Vulkan, BGFX) capability gap, not new here -- the file's own
+    # kMrtSlotMipReadable now declares LLGL alongside them.
+    cna_llgl_test(cna_test_llgl_bound_target_lifetime
+                  examples/bound_target_lifetime_test.cpp)
+
     # backbuffer_first_read_test.cpp is deliberately NOT registered here: 9/13 legs pass
     # (A1, A3, A4, A6, B1, B2, B3, B4, C1), but D63/D64/D65 (its own row-pitch matrix, widths
     # 63/64/65 against a fixed height of 17) and E1 (64x32) all fail for a real, identified,

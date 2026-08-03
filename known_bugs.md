@@ -588,9 +588,9 @@ sweep run clean afterward with zero regressions.
 ## LLGL backend: `FixedHeightDynamicWidth`'s logical width ignores the requested backbuffer width — OPEN
 
 **Status:** open, discovered while wiring `plan_llgl.md`'s Phase LLGL-7 (`LLGL-40`,
-`backbuffer_first_read_test.cpp`). Root cause identified with confidence; not fixed here (needs
-comparison against how other backends implement the same `CnaPresentationMode`, out of scope for a
-test-wiring task).
+`backbuffer_first_read_test.cpp`; also reproduced by `LLGL-41`'s `bound_target_lifetime_test.cpp`).
+Root cause identified with confidence; not fixed here (needs comparison against how other backends
+implement the same `CnaPresentationMode`, out of scope for a test-wiring task).
 
 **Symptom:** `backbuffer_first_read_test.cpp`'s D63/D64/D65 legs (backbuffers 63x17/64x17/65x17,
 deliberately probing GPU row-pitch alignment boundaries) and E1 (64x32) all fail with columns near
@@ -627,9 +627,29 @@ the requested size and apply the aspect mismatch purely as a physical-fit letter
 established here -- fixing it correctly requires settling that question first, not just patching
 this one formula.
 
-**Tracked as:** `plan_llgl.md` Phase LLGL-7, `LLGL-40` (no CTest registration for
-`backbuffer_first_read_test.cpp` until this is resolved -- see `cmake/Tests/LlglTests.cmake`'s own
-comment there for the full per-leg breakdown).
+**Third reproduction, a different symptom variant:** `bound_target_lifetime_test.cpp` requests a
+72x36 backbuffer (`kBBW`/`kBBH`). Empirically confirmed via a temporary debug print (added and
+removed, not left in the source): `physical=800x480 virtual=72x36`, so `logicalWidth =
+round(800*36/480) = 60`, thirteen columns short of the requested 72 -- the SAME formula, the same
+fixed-physical-window environment characteristic. The observable symptom differs from D63/D64/D65
+above: rather than reading back the frame's `Clear()` colour, the out-of-bounds column (7 of 8) reads
+back the PREVIOUS valid column's content (`PatternColor(6)` instead of `PatternColor(7)`) --
+consistent with the same root cause surfacing through a different code path (a clamped sample rather
+than an unwritten region), not a second, independent bug. This affects nearly every leg's own
+`RequireBackbufferExact` check (15 of 18), since it is unconditional in this fixture with no
+per-backend declaration to route around it. The two exceptions (G1, G2) route their backbuffer check
+through a leg that Present()s and lets the physical window settle first, and J1 has no backbuffer
+check at all -- those three legs pass in full. Critically, **0 of 18 legs crashed**: the actual
+REMED-GFX-168 defect this fixture exists to catch (a SIGSEGV when a bound render target is destroyed
+mid-cycle) does not reproduce on LLGL at all -- every leg's own destroy-while-bound-specific
+assertions (the NEXT target reads correctly, a live sibling in an MRT set still resolves and survives,
+`Present()` refuses identically for a live or a destroyed bound target, 120 create/destroy-while-bound
+rounds complete cleanly) pass everywhere they are not entangled with the unrelated backbuffer-column
+finding above.
+
+**Tracked as:** `plan_llgl.md` Phase LLGL-7, `LLGL-40`/`LLGL-41` (no CTest registration for
+`backbuffer_first_read_test.cpp` or `bound_target_lifetime_test.cpp` until this is resolved -- see
+`cmake/Tests/LlglTests.cmake`'s own comments there for the full per-leg breakdown).
 
 ---
 

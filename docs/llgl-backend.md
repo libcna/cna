@@ -834,6 +834,16 @@ content -- is a fifth reproduction of the same bucket-ordering finding, sharing 
 _producer_consumer_test.cpp`'s own I2 shape exactly. Every other producer/consumer/ordering leg in the
 file passes, including MSAA and mip-mapped producers, `RenderTargetCube` face bind cycles, multi-family
 (`SpriteBatch` + 3D) replay order, and 8 same-frame bind cycles repeated across 8 consecutive frames.
+`bound_target_lifetime_test.cpp` (LLGL-41's last file) also stays unregistered, but for a good reason:
+3/18 legs pass in full and, critically, **0/18 legs crashed** -- this fixture exists specifically to
+catch a SIGSEGV when a bound render target is destroyed mid-cycle, and that defect simply does not
+reproduce here. Every leg's own destroy-while-bound assertions (the next target reads correctly, a
+live MRT sibling still resolves and survives, `Present()` refuses identically for a live or destroyed
+bound target, 120 create/destroy-while-bound rounds complete cleanly) pass wherever not entangled with
+two unrelated, already-catalogued findings: 15/18 legs fail their own unconditional backbuffer check,
+a third reproduction of the `FixedHeightDynamicWidth` logical-width finding (this file's 72x36 request
+derives a 60-wide logical space, confirmed via a temporary debug print), and leg L1's MRT-slot
+mip-regeneration gap is the same one already declared on Vulkan and bgfx, not new here.
 `rendertarget_sampling_orientation_test.cpp` also stays unregistered: its first 10 checks (`SpriteBatch`
 orientation into and out of a `RenderTarget2D`, `BasicEffect`/`AlphaTestEffect` mesh-UV sampling,
 `RenderTarget2D` vs. `Texture2D` byte-exact agreement) all pass, but its CD4 check -- a lit, textured

@@ -174,6 +174,8 @@ namespace
     constexpr const char* kBackendName = "D3D11";
 #elif defined(CNA_BACKEND_D3D12)
     constexpr const char* kBackendName = "D3D12";
+#elif defined(CNA_BACKEND_LLGL)
+    constexpr const char* kBackendName = "LLGL";
 #else
 #error "REMED-GFX-168: this backend has no declared bound-target lifetime contract."
 #endif
@@ -219,10 +221,12 @@ namespace
      * mip chain (leg E1a passes there) but returns all-zero for level 1 of a target bound as part of
      * an MRT set (`L1 the surviving MRT slot's mip chain was still regenerated (0/8) ... got
      * (0,0,0,0)`). Recorded as an independent finding rather than folded into this task's subject;
-     * L1's level-0 check and its backbuffer check stay asserted on every backend.
+     * L1's level-0 check and its backbuffer check stay asserted on every backend. LLGL measures the
+     * identical (0,0,0,0) result running on its own Vulkan module, unsurprising since that module
+     * wraps real Vulkan and shares the same MRT/mip-regeneration path.
      */
     constexpr bool kMrtSlotMipReadable =
-#if defined(CNA_BACKEND_BGFX) || defined(CNA_BACKEND_VULKAN)
+#if defined(CNA_BACKEND_BGFX) || defined(CNA_BACKEND_VULKAN) || defined(CNA_BACKEND_LLGL)
         false;
 #else
         true;
