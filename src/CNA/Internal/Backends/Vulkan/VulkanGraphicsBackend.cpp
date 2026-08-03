@@ -10145,11 +10145,16 @@ namespace CNA::Internal::Backends::Vulkan
         PrimitiveType primitive, int primitiveCount, int instanceCount,
         const GpuDrawParams& params)
     {
-        if (params.instanceVb == nullptr) {
+        // REMED-GFX-202: the per-instance stream is the lowest-slot entry of the shared
+        // GpuVertexStreamBinding array whose InstanceFrequency is greater than zero.
+        const auto* instanceStream = FirstInstanceStream(params);
+        if (instanceStream == nullptr) {
             // No per-instance VB — fall back to single-instance indexed draw.
             DrawIndexedPrimitivesEx(vb_in, ib_in, world, view, projection, primitive, primitiveCount, params);
             return;
         }
+        // REMED-GFX-202: one stream of each rate (REMED-GFX-203 tracks widening it).
+        RejectUnsupportedStreamCombination(params, "The Vulkan backend");
 
         // REMED-GFX-151: as in the two Ex draws above. The `instanceVb == nullptr` branch already
         // returned through DrawIndexedPrimitivesEx, which notes them itself.
@@ -10159,7 +10164,8 @@ namespace CNA::Internal::Backends::Vulkan
 
         const auto& vb       = static_cast<const VulkanVertexBufferBackend&>(vb_in);
         const auto& ib       = static_cast<const VulkanIndexBufferBackend&>(ib_in);
-        const auto& instVb   = static_cast<const VulkanVertexBufferBackend&>(*params.instanceVb);
+        const auto& instVb   =
+            static_cast<const VulkanVertexBufferBackend&>(*instanceStream->buffer);
         const std::size_t pvStride   = vb.GetStride() > 0 ? vb.GetStride() : 20;
         const std::size_t instStride = instVb.GetStride() > 0 ? instVb.GetStride() : 64;
         const uint32_t indexCount    = static_cast<uint32_t>(VertexCountForPrimitives(primitive, primitiveCount));

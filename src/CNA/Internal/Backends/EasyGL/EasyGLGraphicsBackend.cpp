@@ -3339,6 +3339,76 @@ void main()
             return true;
         }
 
+        /// REMED-GFX-202: the first attribute location the per-instance streams occupy.
+        ///
+        /// The stock instanced shaders declare their per-instance world matrix at the fixed
+        /// locations 12..15 (`cnaInstanceCol0..3`), chosen so it cannot collide with an extended
+        /// mesh declaration; a `ShaderEffect` program instead continues straight after the
+        /// per-vertex streams, in the same "location N == Nth field of the ported HLSL input
+        /// struct" order every other EasyGL layout uses.
+        constexpr unsigned int kStockInstanceBaseLocation = 12u;
+
+        /// The XNA 4.0 profile's vertex-attribute ceiling, and GL ES 3's guaranteed minimum.
+        constexpr unsigned int kMaxAttributeLocations = 16u;
+
+        /// REMED-GFX-202: how many attribute locations every per-vertex stream occupies together.
+        unsigned int PerVertexLocationCount(const GpuDrawParams& params)
+        {
+            unsigned int total = 0;
+            for (int i = 0; i < params.vertexStreamCount; ++i)
+            {
+                const auto& stream = params.vertexStreams[static_cast<std::size_t>(i)];
+                if (stream.instanceFrequency != 0)
+                    continue;
+                total += static_cast<unsigned int>(
+                    static_cast<const EasyGLVertexBufferBackend*>(stream.buffer)
+                        ->GetDeclarationElements().size());
+            }
+            return total;
+        }
+
+        /// One per-instance stream's place in the attribute space: where its declaration starts and
+        /// how many of its elements actually have a location to go to. FNA3D skips an element whose
+        /// shader input does not exist ("Stream not in use!"), so an over-long declaration loses its
+        /// tail rather than failing -- but a stream that gets NO location at all supplies nothing,
+        /// which is the shape this backend genuinely cannot express.
+        struct InstanceStreamPlacement
+        {
+            unsigned int firstLocation = 0;
+            std::size_t elementCount = 0;
+        };
+
+        /// Walks the per-instance streams in public slot order, concatenating their declarations
+        /// after @p baseLocation. Returns false when a bound per-instance stream has no
+        /// declaration at all or would receive no location.
+        bool PlaceInstanceStreams(
+            const GpuDrawParams& params,
+            unsigned int baseLocation,
+            std::vector<InstanceStreamPlacement>& placements)
+        {
+            placements.clear();
+            unsigned int location = baseLocation;
+            for (int i = 0; i < params.vertexStreamCount; ++i)
+            {
+                const auto& stream = params.vertexStreams[static_cast<std::size_t>(i)];
+                if (stream.instanceFrequency <= 0)
+                    continue;
+                const auto* buffer =
+                    static_cast<const EasyGLVertexBufferBackend*>(stream.buffer);
+                if (buffer == nullptr || buffer->GetDeclarationElements().empty())
+                    return false;
+                if (location >= kMaxAttributeLocations)
+                    return false;
+                const std::size_t available =
+                    static_cast<std::size_t>(kMaxAttributeLocations - location);
+                const std::size_t count =
+                    std::min(buffer->GetDeclarationElements().size(), available);
+                placements.push_back(InstanceStreamPlacement{location, count});
+                location += static_cast<unsigned int>(count);
+            }
+            return true;
+        }
+
         /// REMED-GFX-201: undoes ConfigureMultiStreamAttributes so the VAO is left exactly as
         /// ApplyLayout() built it. Without this a later single-stream draw through the same buffer
         /// would still have the secondary streams' locations enabled and pointing at a foreign VBO.
@@ -5187,7 +5257,8 @@ CNA_GL_RT_SAMPLE_UV_DECL
         if (p.loc_wvp >= 0)
             p.prog.set_uniform_matrix4(p.loc_wvp, wvp_col);
         if (p.loc_instanced >= 0)
-            p.prog.set_uniform(p.loc_instanced, params.instanceVb != nullptr ? 1.0f : 0.0f);
+            p.prog.set_uniform(
+                p.loc_instanced, FirstInstanceStream(params) != nullptr ? 1.0f : 0.0f);
 
         // Normal matrix — transpose(inverse(world3x3)), via the cofactor/det shortcut, so
         // non-uniform-scale World transforms don't skew the transformed normal (Task 398 fix;
@@ -5919,29 +5990,39 @@ CNA_GL_RT_SAMPLE_UV_DECL
             static_cast<std::uintptr_t>(indexSize));
 
         const auto& meshDecl = vb.GetDeclarationElements();
-        if (params.vertexBufferOffset != 0 && meshDecl.empty())
+        // REMED-GFX-202: the per-vertex side is now exactly what the two ordinary routes do --
+        // every bound per-vertex stream at its own locations, with its own VBO, stride and byte
+        // offset. Stream 0 is only rewritten when it carries a nonzero offset, which is the
+        // condition this route has always used, so a classic zero-offset instanced draw configures
+        // nothing extra.
+        const bool multiStream = HasMultipleVertexStreams(params);
+        const GpuVertexStreamBinding* firstPerVertex = FirstPerVertexStream(params);
+        const bool reconfigurePerVertex =
+            multiStream || (firstPerVertex != nullptr && firstPerVertex->vertexOffset != 0);
+        if (reconfigurePerVertex && meshDecl.empty())
         {
             throw System::InvalidOperationException(
                 "EasyGL instanced drawing cannot apply a nonzero vertex-buffer offset "
                 "without a VertexDeclaration.");
         }
 
-        const EasyGLVertexBufferBackend* instVb = nullptr;
-        unsigned int instanceBaseLocation = 0;
-        std::size_t instanceElementCount = 0;
-        if (params.instanceVb != nullptr)
+        // REMED-GFX-202: every per-instance stream, not just the first, each at its own locations
+        // with its own stride, element offset and divisor.
+        std::vector<InstanceStreamPlacement> instancePlacements;
+        const unsigned int instanceBaseLocation = params.customEffectBackend != nullptr
+            ? PerVertexLocationCount(params)
+            : kStockInstanceBaseLocation;
+        const bool hasInstanceStreams = FirstInstanceStream(params) != nullptr;
+        if (hasInstanceStreams)
         {
-            instVb = &static_cast<const EasyGLVertexBufferBackend&>(*params.instanceVb);
-            instanceBaseLocation = params.customEffectBackend != nullptr
-                ? static_cast<unsigned int>(meshDecl.size())
-                : 12u;
-            instanceElementCount = params.customEffectBackend != nullptr
-                ? instVb->GetDeclarationElements().size()
-                : 4u;
-            if (instanceElementCount == 0 ||
-                instanceElementCount > instVb->GetDeclarationElements().size() ||
-                instanceBaseLocation < meshDecl.size() ||
-                instanceBaseLocation + instanceElementCount > 16)
+            if (params.customEffectBackend == nullptr &&
+                instanceBaseLocation < PerVertexLocationCount(params))
+            {
+                throw System::InvalidOperationException(
+                    "EasyGL instanced drawing requires a complete per-instance declaration "
+                    "within the 16-attribute XNA profile limit.");
+            }
+            if (!PlaceInstanceStreams(params, instanceBaseLocation, instancePlacements))
             {
                 throw System::InvalidOperationException(
                     "EasyGL instanced drawing requires a complete per-instance declaration "
@@ -5951,17 +6032,32 @@ CNA_GL_RT_SAMPLE_UV_DECL
 
         auto& vao = const_cast<::easygl::VertexArray&>(vb.vao);
         vao.bind();
-        if (params.vertexBufferOffset != 0)
+        if (reconfigurePerVertex && !ConfigureMultiStreamAttributes(vao, params))
         {
-            ConfigureDeclarationAttributes(
-                vao, vb, 0, params.vertexBufferOffset, 0, meshDecl.size());
+            vao.unbind();
+            throw System::InvalidOperationException(
+                "EasyGL multi-stream drawing requires every bound VertexBuffer to carry a "
+                "VertexDeclaration.");
         }
-        if (instVb != nullptr)
         {
-            ConfigureDeclarationAttributes(
-                vao, *instVb, instanceBaseLocation, params.instanceVertexOffset,
-                static_cast<unsigned int>(std::max(1, params.instanceFrequency)),
-                instanceElementCount);
+            std::size_t placementIndex = 0;
+            for (int i = 0; i < params.vertexStreamCount; ++i)
+            {
+                const auto& stream = params.vertexStreams[static_cast<std::size_t>(i)];
+                if (stream.instanceFrequency <= 0)
+                    continue;
+                const InstanceStreamPlacement& placement = instancePlacements[placementIndex++];
+                // The divisor IS the public InstanceFrequency: GL advances the attribute once per
+                // `divisor` instances, which is `floor(instanceIndex / frequency)` -- the same rule
+                // D3D11's InstanceDataStepRate defines. The element offset is this stream's own
+                // VertexOffset, converted with this stream's own stride inside
+                // ConfigureDeclarationAttributes, never another stream's.
+                ConfigureDeclarationAttributes(
+                    vao, *static_cast<const EasyGLVertexBufferBackend*>(stream.buffer),
+                    placement.firstLocation, stream.vertexOffset,
+                    static_cast<unsigned int>(stream.instanceFrequency),
+                    placement.elementCount);
+            }
         }
 
         if (params.customEffectBackend)
@@ -5971,7 +6067,10 @@ CNA_GL_RT_SAMPLE_UV_DECL
         }
         else
         {
-            Prog3D& p = SelectProgram(vb.GetStride(), params);
+            // REMED-GFX-201: the shader sees the CONCATENATION of the per-vertex streams, so the
+            // program is selected by the combined stride -- which equals the one stream's own
+            // stride whenever a single per-vertex buffer is bound.
+            Prog3D& p = SelectProgram(CombinedVertexStrideOr(params, vb.GetStride()), params);
             p.prog.use();
             BindDrawParams(p, world, view, projection, params);
             ib.ibo.bind(::easygl::BufferTarget::ElementArray);
@@ -5989,18 +6088,20 @@ CNA_GL_RT_SAMPLE_UV_DECL
                 instanceCount, params.baseVertex);
         }
 
-        if (instVb != nullptr)
+        // REMED-GFX-202: every location this draw claimed is released again, in reverse, so a later
+        // draw through the same VAO never inherits a stale divisor or a pointer into a foreign VBO.
+        for (std::size_t i = instancePlacements.size(); i-- > 0;)
         {
             DisableDeclarationAttributes(
-                vao, instanceBaseLocation, instanceElementCount);
+                vao, instancePlacements[i].firstLocation, instancePlacements[i].elementCount);
         }
-        if (params.vertexBufferOffset != 0)
+        if (reconfigurePerVertex)
         {
-            ConfigureDeclarationAttributes(vao, vb, 0, 0, 0, meshDecl.size());
+            RestoreSingleStreamAttributes(vao, params);
         }
         if (params.customEffectBackend == nullptr)
         {
-            Prog3D& p = SelectProgram(vb.GetStride(), params);
+            Prog3D& p = SelectProgram(CombinedVertexStrideOr(params, vb.GetStride()), params);
             if (p.loc_instanced >= 0)
                 p.prog.set_uniform(p.loc_instanced, 0.0f);
         }

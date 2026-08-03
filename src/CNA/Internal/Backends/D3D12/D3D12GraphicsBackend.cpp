@@ -2442,11 +2442,18 @@ namespace CNA::Internal::Backends::D3D12
     {
         // Matches D3D11GraphicsBackend::DrawInstancedPrimitivesEx's own fallback -- no per-instance
         // VB means this isn't really an instanced draw at all.
-        if (params.instanceVb == nullptr)
+        // REMED-GFX-202: the per-instance stream is the lowest-slot entry of the shared
+        // GpuVertexStreamBinding array whose InstanceFrequency is greater than zero.
+        const auto* instanceStream = FirstInstanceStream(params);
+        if (instanceStream == nullptr)
         {
             DrawIndexedPrimitivesEx(vb, ib, world, view, projection, primitive, primitiveCount, params);
             return;
         }
+        // REMED-GFX-202: one stream of each rate (REMED-GFX-207 tracks widening it); a wider array
+        // is rejected rather than truncated.
+        RejectUnsupportedStreamCombination(params, "The D3D12 backend");
+        const auto* perVertexStream = FirstPerVertexStream(params);
         if (!boundColorResource_)
         {
             NotYetImplemented("DrawInstancedPrimitivesEx (no off-screen color target bound -- "
@@ -2455,14 +2462,16 @@ namespace CNA::Internal::Backends::D3D12
 
         const auto& d3dVb     = static_cast<const D3D12VertexBufferBackend&>(vb);
         const auto& d3dIb     = static_cast<const D3D12IndexBufferBackend&>(ib);
-        const auto& d3dInstVb = static_cast<const D3D12VertexBufferBackend&>(*params.instanceVb);
+        const auto& d3dInstVb =
+            static_cast<const D3D12VertexBufferBackend&>(*instanceStream->buffer);
 
         auto rootSig = rootSigCache_.GetOrCreate(device_.Get(), /*numCbvs=*/1, /*numSrvs=*/0, /*numSamplers=*/0);
         if (!rootSig)
             throw std::runtime_error("DrawInstancedPrimitivesEx: failed to create root signature");
         // REMED-GFX-123: instanceFrequency is zero only when no per-instance stream is bound, and
-        // the null-instanceVb fallback above already took that case.
-        const UINT instanceStepRate = static_cast<UINT>(std::max(1, params.instanceFrequency));
+        // the no-instance-stream fallback above already took that case.
+        const UINT instanceStepRate =
+            static_cast<UINT>(std::max(1, instanceStream->instanceFrequency));
         ID3D12PipelineState* pso = GetOrCreateInstancedPsoEXT(rootSig.Get(), instanceStepRate);
         if (!pso)
             throw std::runtime_error("DrawInstancedPrimitivesEx: failed to create instanced3d PSO");
@@ -2508,8 +2517,9 @@ namespace CNA::Internal::Backends::D3D12
         // below: the IA adds the base vertex to the decoded index and then fetches at
         // `BufferLocation + index * stride`, so both apply once.
         D3D12_VERTEX_BUFFER_VIEW vbViews[2] = { d3dVb.GetViewEXT(), d3dInstVb.GetViewEXT() };
-        AdvanceVertexBufferView(vbViews[0], params.vertexBufferOffset);
-        AdvanceVertexBufferView(vbViews[1], params.instanceVertexOffset);
+        AdvanceVertexBufferView(
+            vbViews[0], perVertexStream != nullptr ? perVertexStream->vertexOffset : 0);
+        AdvanceVertexBufferView(vbViews[1], instanceStream->vertexOffset);
         cmdList->IASetVertexBuffers(0, 2, vbViews);
         D3D12_INDEX_BUFFER_VIEW ibView = d3dIb.GetViewEXT();
         cmdList->IASetIndexBuffer(&ibView);

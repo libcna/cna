@@ -327,7 +327,10 @@ protected:
             instVb->SetData(instances, 1, sizeof(InstanceRow));
 
             GpuDrawParams p;
-            p.instanceVb = instVb.get();
+            // REMED-GFX-202: the classic two-stream instanced binding set.
+            SetInstancedVertexStreamsEXT(p, *vb, *instVb, /*instanceFrequency=*/1,
+                                         static_cast<int>(sizeof(VP)), 0,
+                                         static_cast<int>(sizeof(InstanceRow)), 0);
             p.instanceCount = 1;
             p.diffuseColor[0] = 0.0f; p.diffuseColor[1] = 1.0f; p.diffuseColor[2] = 0.0f; p.diffuseColor[3] = 1.0f;
             p.startIndex = 3; // IB[3..5] = indices 3,4,5

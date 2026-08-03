@@ -7293,7 +7293,10 @@ struct VSOut {
         PrimitiveType primitive, int primitiveCount, int instanceCount,
         const GpuDrawParams& params)
     {
-        if (params.instanceVb == nullptr)
+        // REMED-GFX-202: the per-instance stream is the lowest-slot entry of the shared
+        // GpuVertexStreamBinding array whose InstanceFrequency is greater than zero.
+        const auto* instanceStream = FirstInstanceStream(params);
+        if (instanceStream == nullptr)
         {
             // No per-instance VB -- fall back to a single-instance indexed draw, matching
             // VulkanGraphicsBackend::DrawInstancedPrimitivesEx's own identical fallback.
@@ -7303,7 +7306,10 @@ struct VSOut {
 
         const auto& webgpuVb = static_cast<const WebGPUVertexBufferBackend&>(vb);
         const auto& webgpuIb = static_cast<const WebGPUIndexBufferBackend&>(ib);
-        const auto& webgpuInstVb = static_cast<const WebGPUVertexBufferBackend&>(*params.instanceVb);
+        // REMED-GFX-202: one stream of each rate (REMED-GFX-205 tracks widening it).
+        RejectUnsupportedStreamCombination(params, "The WebGPU backend");
+        const auto& webgpuInstVb =
+            static_cast<const WebGPUVertexBufferBackend&>(*instanceStream->buffer);
 
         InstancedDrawCommand command;
         command.pvStride = webgpuVb.Stride() > 0 ? webgpuVb.Stride() : 20;

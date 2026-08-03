@@ -23,7 +23,7 @@
 // Check D -- a region far from all three triangles stays the original clear colour -- proves the
 //   draw painted only the 3 small triangles, not the whole screen (rules out an implementation that
 //   happens to overlap by drawing something much larger).
-// Check E -- params.instanceVb == nullptr falls back to a real (non-instanced)
+// Check E -- a binding set with no per-instance stream falls back to a real (non-instanced)
 //   DrawIndexedPrimitivesEx() draw (stride-16 VertexPositionColor, VertexColorEnabled=false, a
 //   distinct pure-component DiffuseColor overriding the per-vertex colour) instead of throwing or
 //   corrupting the frame -- matches D3D11GraphicsBackend::DrawInstancedPrimitivesEx()'s own
@@ -149,7 +149,10 @@ protected:
             instVb->SetData(instances, 3, sizeof(InstanceColumns));
 
             GpuDrawParams params;
-            params.instanceVb = instVb.get();
+            // REMED-GFX-202: the classic two-stream instanced binding set.
+            SetInstancedVertexStreamsEXT(params, *vb, *instVb, /*instanceFrequency=*/1,
+                                         static_cast<int>(sizeof(VP)), 0,
+                                         static_cast<int>(sizeof(InstanceColumns)), 0);
             params.instanceCount = 3;
             params.diffuseColor[0] = 0.0f;
             params.diffuseColor[1] = 1.0f;
@@ -185,7 +188,7 @@ protected:
                   "3 small quads, not the whole screen");
         }
 
-        // Check E: instanceVb == nullptr falls back to a real (non-instanced) draw.
+        // Check E: no per-instance stream falls back to a real (non-instanced) draw.
         {
             auto vb = backend.CreateVertexBuffer(4);
             struct VPC { float x, y, z; std::uint8_t r, g, b, a; };
@@ -203,7 +206,7 @@ protected:
             // prefers an sRGB format, so a genuinely mid-range linear fragment value reads back
             // gamma-encoded, not linear (see webgpu_littextured3d_test.cpp's identical, pre-existing
             // documented caveat); pure extremes are gamma-invariant.
-            GpuDrawParams params; // instanceVb stays null
+            GpuDrawParams params; // no per-instance stream is described at all
             params.vertexColorEnabled = false; // ignore the (red) per-vertex colour above
             params.diffuseColor[0] = 1.0f; params.diffuseColor[1] = 1.0f;
             params.diffuseColor[2] = 0.0f; params.diffuseColor[3] = 1.0f; // yellow
@@ -219,7 +222,7 @@ protected:
             Color center(0, 0, 0, 0);
             ReadPixel(dev, 32, 32, center);
             check(!threw && IsColor(center, 255, 255, 0, 255),
-                  "DrawInstancedPrimitivesEx: instanceVb==nullptr falls back to a real, working "
+                  "DrawInstancedPrimitivesEx: no per-instance stream falls back to a real, working "
                   "DrawIndexedPrimitivesEx() draw (yellow, VertexColorEnabled=false override), not "
                   "a throw or a corrupted frame");
         }

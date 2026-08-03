@@ -924,7 +924,8 @@ namespace CNA::Internal::Backends::WebGPU
                                      const GpuDrawParams& params) override;
         // WEBGPU-27/38/68: real per-instance mat4 world transform via a genuine second
         // WGPUVertexStepMode_Instance vertex buffer binding -- see instancedShader_'s own doc
-        // comment. params.instanceVb == nullptr falls back to a real (non-instanced)
+        // comment. A binding set with no per-instance stream (REMED-GFX-202:
+        // FirstInstanceStream(params) == nullptr) falls back to a real (non-instanced)
         // DrawIndexedPrimitivesEx() dispatch, matching every other backend's identical fallback
         // (VulkanGraphicsBackend::DrawInstancedPrimitivesEx's own precedent).
         void DrawInstancedPrimitivesEx(const IVertexBufferBackend& vb, const IIndexBufferBackend& ib,

@@ -1894,15 +1894,23 @@ namespace CNA::Internal::Backends::D3D11
     {
         // DX-68: matches VulkanGraphicsBackend::DrawInstancedPrimitivesEx's own fallback -- no
         // per-instance VB means this isn't really an instanced draw at all.
-        if (params.instanceVb == nullptr)
+        // REMED-GFX-202: the per-instance stream is now the lowest-slot entry of the shared
+        // GpuVertexStreamBinding array whose InstanceFrequency is greater than zero.
+        const auto* instanceStream = FirstInstanceStream(params);
+        if (instanceStream == nullptr)
         {
             DrawIndexedPrimitivesEx(vb, ib, world, view, projection, primitive, primitiveCount, params);
             return;
         }
+        // REMED-GFX-202: this backend binds exactly one stream of each rate (REMED-GFX-207 tracks
+        // widening it), so a wider array is rejected rather than truncated.
+        RejectUnsupportedStreamCombination(params, "The D3D11 backend");
+        const auto* perVertexStream = FirstPerVertexStream(params);
 
         const auto& d3dVb     = static_cast<const D3D11VertexBufferBackend&>(vb);
         const auto& d3dIb     = static_cast<const D3D11IndexBufferBackend&>(ib);
-        const auto& d3dInstVb = static_cast<const D3D11VertexBufferBackend&>(*params.instanceVb);
+        const auto& d3dInstVb =
+            static_cast<const D3D11VertexBufferBackend&>(*instanceStream->buffer);
         const std::size_t perVertexStride = d3dVb.GetStrideEXT() > 0 ? d3dVb.GetStrideEXT() : 16;
         // REMED-GFX-123: the per-instance stream's own declared stride, not a hardcoded 64. The
         // instanced3d layout reads INSTANCEWORLD0-3 at 0/16/32/48, so a 64-byte record is what it
@@ -1918,8 +1926,9 @@ namespace CNA::Internal::Backends::D3D11
             throw std::runtime_error("DrawInstancedPrimitivesEx: failed to create instanced3d shader objects");
 
         // REMED-GFX-123: instanceFrequency is zero only when no per-instance stream is bound, and
-        // the null-instanceVb fallback above already took that case.
-        const UINT instanceStepRate = static_cast<UINT>(std::max(1, params.instanceFrequency));
+        // the no-instance-stream fallback above already took that case.
+        const UINT instanceStepRate =
+            static_cast<UINT>(std::max(1, instanceStream->instanceFrequency));
         ID3D11InputLayout* layout = GetOrCreateInstancedInputLayoutEXT(instanceStepRate);
         if (!layout)
             throw std::runtime_error("DrawInstancedPrimitivesEx: failed to create instanced3d input layout");
@@ -1946,8 +1955,11 @@ namespace CNA::Internal::Backends::D3D11
         ID3D11Buffer* vbs[2] = { d3dVb.GetBufferEXT(), d3dInstVb.GetBufferEXT() };
         UINT strides[2] = { static_cast<UINT>(perVertexStride), static_cast<UINT>(instanceStride) };
         UINT offsets[2] = {
-            static_cast<UINT>(static_cast<std::size_t>(params.vertexBufferOffset) * perVertexStride),
-            static_cast<UINT>(static_cast<std::size_t>(params.instanceVertexOffset) * instanceStride),
+            static_cast<UINT>(
+                static_cast<std::size_t>(perVertexStream != nullptr ? perVertexStream->vertexOffset : 0) *
+                perVertexStride),
+            static_cast<UINT>(
+                static_cast<std::size_t>(instanceStream->vertexOffset) * instanceStride),
         };
         context_->IASetVertexBuffers(0, 2, vbs, strides, offsets);
         context_->IASetIndexBuffer(d3dIb.GetBufferEXT(), d3dIb.GetFormatEXT(), 0);

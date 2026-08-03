@@ -216,7 +216,8 @@ namespace CNA::Internal::Backends::D3D9
         /// CNA's own NOXNA `Instanced3D` shader (`shaders/cna/Instanced3D.hlsl`) -- real XNA has no
         /// per-instance-aware Stock Effect vertex shader at all, so this is not effect-aware and
         /// does not dispatch through `DrawPrimitivesExImpl()`. Falls back to
-        /// `DrawIndexedPrimitivesEx()` when `params.instanceVb` is null (matches
+        /// `DrawIndexedPrimitivesEx()` when the bound set has no per-instance stream
+        /// (REMED-GFX-202: `FirstInstanceStream(params) == nullptr`; matches
         /// `D3D11GraphicsBackend`'s own identical fallback). Defined in `D3D9InstancedDraw.cpp`.
         void DrawInstancedPrimitivesEx(const IVertexBufferBackend& vb, const IIndexBufferBackend& ib,
                                        const Matrix& world, const Matrix& view, const Matrix& projection,

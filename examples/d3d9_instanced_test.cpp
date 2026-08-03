@@ -9,7 +9,7 @@
 // Check B -- instance 1 (per-instance world translation +0.5 on X), SAME draw call
 //   (instanceCount=2): paints at a DIFFERENT screen location with the SAME DiffuseColor -- proves
 //   two genuinely distinct instances were drawn, not just one.
-// Check C -- params.instanceVb == nullptr falls back to a real DrawIndexedPrimitivesEx() draw
+// Check C -- no per-instance stream falls back to a real DrawIndexedPrimitivesEx() draw
 //   (BasicEffect dispatch) rather than throwing, matching D3D11GraphicsBackend's own identical
 //   fallback.
 // Check D -- stream-frequency reset: a NORMAL (non-instanced) DrawIndexedColoredPrimitives() call
@@ -64,7 +64,8 @@ namespace
 
     // Per-instance world matrix, 4 row-major float4 "rows" (64 bytes) -- matches
     // D3D11GraphicsBackend::DrawInstancedPrimitivesEx's own established convention for
-    // GpuDrawParams::instanceVb. A pure translation matrix: row3 = (Tx,Ty,Tz,1).
+    // the per-instance stream of GpuDrawParams::vertexStreams. A pure translation matrix:
+    // row3 = (Tx,Ty,Tz,1).
     struct InstanceRow { float row0[4], row1[4], row2[4], row3[4]; };
 
     InstanceRow TranslationInstance(float tx, float ty, float tz)
@@ -123,7 +124,10 @@ protected:
             instVb->SetData(instances, 2, sizeof(InstanceRow));
 
             GpuDrawParams params;
-            params.instanceVb = instVb.get();
+            // REMED-GFX-202: the classic two-stream instanced binding set.
+            SetInstancedVertexStreamsEXT(params, *vb, *instVb, /*instanceFrequency=*/1,
+                                         static_cast<int>(sizeof(VP)), 0,
+                                         static_cast<int>(sizeof(InstanceRow)), 0);
             params.instanceCount = 2;
             params.diffuseColor[0] = 0.0f;
             params.diffuseColor[1] = 1.0f;
@@ -161,7 +165,7 @@ protected:
                   "DiffuseColor at a DIFFERENT screen location -- proves 2 distinct instances drawn");
         }
 
-        // Check C: instanceVb == nullptr falls back to a real (non-instanced) draw.
+        // Check C: no per-instance stream falls back to a real (non-instanced) draw.
         {
             auto vb = backend.CreateVertexBuffer(3);
             struct VPT { float x, y, z, u, v; };
@@ -174,7 +178,7 @@ protected:
             auto ib = backend.CreateIndexBuffer16(3);
             ib->SetData16(kSmallTriIdx, 3);
 
-            GpuDrawParams params; // instanceVb stays null; textureEnabled false -> BasicEffect combo throws
+            GpuDrawParams params; // no per-instance stream; textureEnabled false -> BasicEffect combo throws
             params.vertexColorEnabled = false;
             params.lightingEnabled = false;
 
@@ -190,7 +194,7 @@ protected:
             // has no matching CNA vertex layout (D9-82b's own honest gap) -- the fallback correctly
             // reaches real BasicEffect dispatch code (not a "not yet implemented" stub) and that
             // dispatch correctly throws for this specific combination, proving the fallback is real.
-            check(threw, "DrawInstancedPrimitivesEx: instanceVb==nullptr falls back to real "
+            check(threw, "DrawInstancedPrimitivesEx: no per-instance stream falls back to real "
                          "DrawIndexedPrimitivesEx() dispatch (not a stub)");
         }
 

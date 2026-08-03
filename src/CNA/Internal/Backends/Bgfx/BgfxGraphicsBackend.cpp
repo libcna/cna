@@ -4574,12 +4574,17 @@ namespace CNA::Internal::Backends::Bgfx
                                                          int instanceCount,
                                                          const GpuDrawParams& params)
     {
-        if (params.instanceVb == nullptr) return;
+        // REMED-GFX-202: the per-instance stream is the lowest-slot entry of the shared
+        // GpuVertexStreamBinding array whose InstanceFrequency is greater than zero.
+        const auto* instanceStream = FirstInstanceStream(params);
+        if (instanceStream == nullptr) return;
+        // REMED-GFX-202: one stream of each rate (REMED-GFX-204 tracks widening it).
+        RejectUnsupportedStreamCombination(params, "The bgfx backend");
         if (!bgfx::isValid(instanced3DProgram_) || !bgfx::isValid(vpInstanced3DUnif_)) return;
 
         auto& vb     = static_cast<const BgfxVertexBufferBackend&>(vb_in);
         auto& ib     = static_cast<const BgfxIndexBufferBackend&>(ib_in);
-        auto& instVb = static_cast<const BgfxVertexBufferBackend&>(*params.instanceVb);
+        auto& instVb = static_cast<const BgfxVertexBufferBackend&>(*instanceStream->buffer);
         if (!bgfx::isValid(vb.handle) || !bgfx::isValid(ib.handle) || instVb.cpuData.empty())
             return;
 

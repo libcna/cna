@@ -2297,7 +2297,11 @@ protected:
             instVb->SetData(kInstanceWorld, 1, sizeof(kInstanceWorld));
 
             GpuDrawParams ip;
-            ip.instanceVb = instVb.get();
+            // REMED-GFX-202: the classic two-stream instanced binding set, in the shared
+            // GpuVertexStreamBinding array every draw route now carries.
+            SetInstancedVertexStreamsEXT(ip, *vbInst, *instVb, /*instanceFrequency=*/1,
+                                         static_cast<int>(sizeof(VP3)), 0,
+                                         static_cast<int>(sizeof(kInstanceWorld)), 0);
             ip.diffuseColor[0] = 1.0f; ip.diffuseColor[1] = 1.0f;
             ip.diffuseColor[2] = 0.0f; ip.diffuseColor[3] = 1.0f;
 

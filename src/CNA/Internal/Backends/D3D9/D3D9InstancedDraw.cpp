@@ -75,7 +75,8 @@ namespace CNA::Internal::Backends::D3D9
     {
         // D9-83: matches D3D11GraphicsBackend::DrawInstancedPrimitivesEx's own fallback -- no
         // per-instance VB means this isn't really an instanced draw at all.
-        if (params.instanceVb == nullptr)
+        const auto* instanceStream = FirstInstanceStream(params);
+        if (instanceStream == nullptr)
         {
             DrawIndexedPrimitivesEx(vb, ib, world, view, projection, primitive, primitiveCount, params);
             return;
@@ -85,7 +86,10 @@ namespace CNA::Internal::Backends::D3D9
 
         const auto& d3dVb     = static_cast<const D3D9VertexBufferBackend&>(vb);
         const auto& d3dIb     = static_cast<const D3D9IndexBufferBackend&>(ib);
-        const auto& d3dInstVb = static_cast<const D3D9VertexBufferBackend&>(*params.instanceVb);
+        // REMED-GFX-202: one stream of each rate (REMED-GFX-208 tracks widening it).
+        RejectUnsupportedStreamCombination(params, "The D3D9 backend");
+        const auto& d3dInstVb =
+            static_cast<const D3D9VertexBufferBackend&>(*instanceStream->buffer);
         const std::size_t perVertexStride = d3dVb.GetStrideEXT() > 0 ? d3dVb.GetStrideEXT() : 16;
         constexpr UINT kInstanceStride = 64; // 4 x float4 rows (matches every other backend's own convention)
 
