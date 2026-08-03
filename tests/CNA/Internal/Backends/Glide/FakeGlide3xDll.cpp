@@ -12,7 +12,7 @@ namespace
         AlphaTestReferenceValue, AlphaBlendFunction, ColorMask, DepthBufferMode,
         DepthBufferFunction, DepthMask, TexMinAddress, TexMaxAddress, TexTextureMemRequired,
         TexDownloadMipMap, TexSource, TexFilterMode, TexClampMode, TexMipMapMode, TexLodBiasValue,
-        TexCombine, LfbReadRegion, Count,
+        TexCombine, LfbReadRegion, GetString, GetProcAddress, Count,
     };
 
     std::uint64_t g_callMask = 0;
@@ -90,4 +90,24 @@ extern "C" __declspec(dllexport) std::uint32_t WINAPI grLfbReadRegion(int, std::
 {
     Record(Call::LfbReadRegion);
     return 1;
+}
+extern "C" __declspec(dllexport) const char* WINAPI grGetString(std::uint32_t selector)
+{
+    Record(Call::GetString);
+    switch (selector)
+    {
+        case 0xa0: return " "; // GR_EXTENSION: this fake advertises no optional extensions.
+        case 0xa1: return "Voodoo2";
+        case 0xa2: return "Glide";
+        case 0xa3: return "3Dfx Interactive";
+        case 0xa4: return "3.0";
+        default: return nullptr;
+    }
+}
+// Matches the documented GrProc typedef (int (__stdcall *)()) that grGetProcAddress returns.
+using FakeGrProc = int(WINAPI*)();
+extern "C" __declspec(dllexport) FakeGrProc WINAPI grGetProcAddress(const char*)
+{
+    Record(Call::GetProcAddress);
+    return nullptr; // No extension functions are consumed yet; every lookup legitimately misses.
 }

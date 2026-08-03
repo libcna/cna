@@ -102,7 +102,7 @@ renderer.
   pre-fix code and pass after it. A lit-image probe on real Glide output remains blocked by the
   same external i686 `sharp-runtime` `__int128` dependency as GLIDE-AUD-006/007.
 - [x] **GLIDE-AUD-005 — Make reset, virtual resolution and presentation policy honest.** Glide explicitly supports only `NativeBackBuffer` and swap intervals 0/1. Resize remains an atomic fit-or-throw operation, which `GraphicsDevice::SetVirtualResolution()` already commits only after backend success.
-- [ ] **GLIDE-AUD-006 — Add an automated native-ABI contract test.** The backend deliberately hand-declares Glide 3.x types, numeric constants, layouts and stdcall byte counts. Factor the loader-facing declarations into a small auditable unit and test them against a purpose-built x86 fake `glide3x.dll` that records calls, including undecorated and decorated exports, `grSstWinOpen`, vertex layout, combiner state, texture calls, clear/readback and shutdown ordering. This must run without dgVoodoo and without the external `sharp-runtime` i686 executable dependency. **Implementation staged:** `GlideAbi.hpp` now owns every renderer-facing signature and native layout; the independent x86 fake DLL + Wine contract resolves the complete 37-export surface, checks undecorated and `name@N` stdcall lookup plus missing-export rejection, and calls every resolved signature while the fake recorder proves each entry point was reached. The actual CNA renderer still cannot be instantiated in that target because the sibling i686 `sharp-runtime` build fails on `__int128`; when that dependency is portable, the next stage must use the recorder to assert the real initialization, draw, texture, clear/readback and teardown sequences and their values/order.
+- [ ] **GLIDE-AUD-006 — Add an automated native-ABI contract test.** The backend deliberately hand-declares Glide 3.x types, numeric constants, layouts and stdcall byte counts. Factor the loader-facing declarations into a small auditable unit and test them against a purpose-built x86 fake `glide3x.dll` that records calls, including undecorated and decorated exports, `grSstWinOpen`, vertex layout, combiner state, texture calls, clear/readback and shutdown ordering. This must run without dgVoodoo and without the external `sharp-runtime` i686 executable dependency. **Implementation staged:** `GlideAbi.hpp` now owns every renderer-facing signature and native layout; the independent x86 fake DLL + Wine contract resolves the complete 39-export surface (37 plus `grGetString`/`grGetProcAddress`, added for GLIDE-FUT-011), checks undecorated and `name@N` stdcall lookup plus missing-export rejection, and calls every resolved signature while the fake recorder proves each entry point was reached. The actual CNA renderer still cannot be instantiated in that target because the sibling i686 `sharp-runtime` build fails on `__int128`; when that dependency is portable, the next stage must use the recorder to assert the real initialization, draw, texture, clear/readback and teardown sequences and their values/order.
 - [ ] **GLIDE-AUD-006 follow-up — real renderer fake-DLL sequence.** **needs_external_dependency:** the sibling `../sharp-runtime` must first build for i686 MinGW without `__int128`. Then link CNA against the fake DLL and assert real call order/values for startup, primitive modes, texture updates, clear/readback and shutdown.
 - [ ] **GLIDE-AUD-007 — Expand rendering regressions beyond the ten smoke probes.** Add deterministic pixel probes/golden captures for all alpha-test compare functions, source/destination blend factors, depth compare/write combinations, cull modes, colour-mask groups, scissor, indexed strips, point/line clipping and joins, fog, and BasicEffect lighting. Include NPOT and multi-tile textures under Point/Linear × Clamp/Wrap/Mirror, with minification and texture updates. Run the visual subset on both dgVoodoo and, when available, real Voodoo hardware; record emulator/version, tolerance and known intentional ARGB4444/RGB565 differences. The corrective tasks GLIDE-AUD-010 through GLIDE-AUD-015 add mandatory targeted cases to this suite.
 - [ ] **GLIDE-AUD-007 execution — native image suite.** **needs_external_dependency:** requires the same runnable i686 CNA executable plus a caller-provided dgVoodoo or Voodoo runtime; no emulator DLL is bundled or configured by CNA.
@@ -387,11 +387,32 @@ plus a dgVoodoo/real-hardware visual test before it can be advertised as support
   CNA-level gamma/presentation control first, then use the Glide helper/runtime gamma facility
   only if it is exported by the chosen 3.x runtime. Restore the previous ramp on shutdown and
   treat per-window emulator gamma as separate from process/global hardware gamma.
-- [ ] **GLIDE-FUT-011 — Negotiate optional runtime extensions safely.** Centralize core versus
-  optional export loading and capability reporting (non-power-of-two textures, extended blending,
-  texture detail controls and emulator-specific functions). Every extension needs an ABI test and
-  an explicit policy: use it only when it preserves CNA semantics, otherwise keep the portable
-  tiled/core path. Never identify an extension solely from a DLL name.
+- [x] **GLIDE-FUT-011 — Negotiate optional runtime extensions safely.** The Glide 3.0 Reference
+  Manual documents exactly one DLL-name-independent extension mechanism: `grGetString(GR_EXTENSION)`
+  returns a space-separated list of supported extension names (a single space means none), and
+  `grGetProcAddress(name)` resolves an extension's function pointers, only for functions listed
+  against an extension actually present in that list. `grGetString`/`grGetProcAddress` are now
+  resolved as two additional required core exports in `GlideAbi.hpp` (39 total). Added a portable
+  `GlideExtensionCapabilities.hpp` (`ParseGlideExtensionList`, `GlideExtensionListContains`) plus
+  `Impl::QueryRuntimeCapabilities()`, called once at startup alongside the existing
+  `QueryHardwareLimits()`, which queries `GR_HARDWARE`/`GR_RENDERER`/`GR_VENDOR`/`GR_VERSION`
+  (throwing if any of these four basic-identity strings is unexpectedly null) and
+  `GR_EXTENSION` (tolerated as "no extensions" if null, since extension support is inherently
+  optional). `CNA_GLIDE_DIAGNOSTICS=1` now reports hardware/renderer/vendor/version and the
+  parsed extension list, explicitly labelled "none used yet -- detection only": this task is
+  infrastructure and reporting only, not a policy to adopt any specific extension yet, matching
+  "otherwise keep the portable tiled/core path" until a later task designs, tests and visually
+  validates one specific extension's use (e.g. GLIDE-FUT-012's NPOT path, gated on a real
+  advertised extension name rather than invented). Six portable probes cover the space-separated
+  parser (normal list, the single-space "none" case, empty/null input, repeated/surrounding
+  spaces, a single name, and exact-match containment). **Verified further than the usual portable/
+  i686-`-fsyntax-only` pair this session:** built the fake DLL and `GlideAbiLoaderTests.cpp`
+  client with i686 MinGW and actually ran the resulting `GlideAbiLoaderContract` test under Wine
+  outside a build directory (throwaway location, cleaned up afterward) — exit code 0, confirming
+  the two new exports resolve and are called correctly and the full 39-bit recorder mask is
+  observed, without needing dgVoodoo or the blocked `sharp-runtime` i686 dependency (this specific
+  contract test has never needed either). The GLIDE-AUD-006 entry above is updated from a
+  37-export to a 39-export count; `docs/glide-backend.md` does not itself state a specific count.
 - [ ] **GLIDE-FUT-012 — Exploit genuine NPOT texture support when advertised.** After
   GLIDE-FUT-011, add an optional direct-NPOT storage path for runtimes reporting it, while keeping
   the existing tiled power-of-two path as the canonical fallback. Verify mip selection, wrap,

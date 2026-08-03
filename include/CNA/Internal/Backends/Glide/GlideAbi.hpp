@@ -113,6 +113,10 @@ namespace CNA::Internal::Backends::Glide::Abi
         using TexLodBiasValueFn = void (WINAPI*)(FxI32, float);
         using TexCombineFn = void (WINAPI*)(FxI32, FxI32, FxI32, FxI32, FxI32, FxBool, FxBool);
         using LfbReadRegionFn = FxBool (WINAPI*)(FxI32, FxU32, FxU32, FxU32, FxU32, FxU32, void*);
+        using GetStringFn = const char* (WINAPI*)(FxU32);
+        /** Matches the documented GrProc typedef: callers reinterpret_cast to the real signature. */
+        using GetProcAddressFn = int (WINAPI*)();
+        using GetProcAddressLookupFn = GetProcAddressFn (WINAPI*)(const char*);
 
         /** Resolves every renderer-facing Glide export from an already-loaded module. */
         void Resolve(HMODULE module)
@@ -154,6 +158,8 @@ namespace CNA::Internal::Backends::Glide::Abi
             grTexLodBiasValue = Required<TexLodBiasValueFn>(module, "grTexLodBiasValue", 8);
             grTexCombine = Required<TexCombineFn>(module, "grTexCombine", 28);
             grLfbReadRegion = Required<LfbReadRegionFn>(module, "grLfbReadRegion", 28);
+            grGetString = Required<GetStringFn>(module, "grGetString", 4);
+            grGetProcAddress = Required<GetProcAddressLookupFn>(module, "grGetProcAddress", 4);
         }
 
         GlideInitFn grGlideInit = nullptr;
@@ -193,6 +199,8 @@ namespace CNA::Internal::Backends::Glide::Abi
         TexLodBiasValueFn grTexLodBiasValue = nullptr;
         TexCombineFn grTexCombine = nullptr;
         LfbReadRegionFn grLfbReadRegion = nullptr;
+        GetStringFn grGetString = nullptr;
+        GetProcAddressLookupFn grGetProcAddress = nullptr;
 
     private:
         template <typename T>

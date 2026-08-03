@@ -2,6 +2,7 @@
 #include "CNA/Internal/Backends/Glide/GlideAbi.hpp"
 #include "CNA/Internal/Backends/Glide/GlideBlendFactor.hpp"
 #include "CNA/Internal/Backends/Glide/GlideDisplayModeSelection.hpp"
+#include "CNA/Internal/Backends/Glide/GlideExtensionCapabilities.hpp"
 #include "CNA/Internal/Backends/Glide/GlideLighting.hpp"
 #include "CNA/Internal/Backends/Glide/GlidePrimitiveClip.hpp"
 #include "CNA/Internal/Backends/Glide/GlideTextureCoordinate.hpp"
@@ -100,6 +101,15 @@ namespace CNA::Internal::Backends::Glide
         constexpr FxI32 kGetMaxTextureSize = 0x0a;
         constexpr FxI32 kGetMaxTextureAspectRatio = 0x0b;
         constexpr FxI32 kGetNumTmu = 0x13;
+
+        // grGetString() selectors (Glide 3.0 Reference Manual). GR_EXTENSION plus
+        // grGetProcAddress() is the only documented, DLL-name-independent way to negotiate an
+        // optional Glide capability.
+        constexpr FxU32 kGlideStringExtension = 0xa0;
+        constexpr FxU32 kGlideStringHardware = 0xa1;
+        constexpr FxU32 kGlideStringRenderer = 0xa2;
+        constexpr FxU32 kGlideStringVendor = 0xa3;
+        constexpr FxU32 kGlideStringVersion = 0xa4;
 
         constexpr FxI32 kBlendZero = 0x0;
         constexpr FxI32 kBlendSourceAlpha = 0x1;
@@ -411,6 +421,7 @@ namespace CNA::Internal::Backends::Glide
                 ApplyEffectiveClipWindow();
 
                 QueryHardwareLimits();
+                QueryRuntimeCapabilities();
 
                 const FxU32 minAddress = api.grTexMinAddress(0);
                 const FxU32 maxAddress = api.grTexMaxAddress(0);
@@ -489,6 +500,29 @@ namespace CNA::Internal::Backends::Glide
             }
         }
 
+        // Records what the runtime advertises via grGetString so future optional-capability work
+        // (e.g. native TEXMIRROR clamp, or any other GR_EXTENSION-gated feature) has a single,
+        // DLL-name-independent source of truth instead of re-querying ad hoc. Nothing here changes
+        // rendering behaviour yet: no extension is consumed until a separate task adds one, tests
+        // it against the x86 fake DLL, and validates it visually.
+        void QueryRuntimeCapabilities()
+        {
+            const auto queryString = [&](FxU32 selector, const char* name) -> std::string
+            {
+                const char* value = api.grGetString(selector);
+                if (value == nullptr)
+                {
+                    throw std::runtime_error(std::string("grGetString failed for ") + name);
+                }
+                return value;
+            };
+            hardwareName = queryString(kGlideStringHardware, "GR_HARDWARE");
+            rendererName = queryString(kGlideStringRenderer, "GR_RENDERER");
+            vendorName = queryString(kGlideStringVendor, "GR_VENDOR");
+            versionString = queryString(kGlideStringVersion, "GR_VERSION");
+            supportedExtensions = ParseGlideExtensionList(api.grGetString(kGlideStringExtension));
+        }
+
         void LogStartupDiagnostics() const
         {
             if (!diagnosticsEnabled)
@@ -502,6 +536,20 @@ namespace CNA::Internal::Backends::Glide
                          api.ModulePath().c_str(), virtualWidth, virtualHeight, nativeWidth, nativeHeight,
                          textureUnitCount, maxTextureDimension, maxTextureAspectLog2,
                          static_cast<unsigned long long>(tmu0Bytes));
+            std::string extensionSummary;
+            for (const std::string& extension : supportedExtensions)
+            {
+                if (!extensionSummary.empty())
+                {
+                    extensionSummary += ',';
+                }
+                extensionSummary += extension;
+            }
+            std::fprintf(stderr,
+                         "[CNA GLIDE] hardware=%s, renderer=%s, vendor=%s, version=%s, "
+                         "extensions=%s (none used yet -- detection only)\n",
+                         hardwareName.c_str(), rendererName.c_str(), vendorName.c_str(), versionString.c_str(),
+                         extensionSummary.empty() ? "(none)" : extensionSummary.c_str());
         }
 
         void ConfigureSpriteCombiner()
@@ -771,6 +819,11 @@ namespace CNA::Internal::Backends::Glide
         int maxTextureAspectLog2 = 3;
         int textureUnitCount = 1;
         std::vector<TextureRange> freeTextureRanges;
+        std::string hardwareName;
+        std::string rendererName;
+        std::string vendorName;
+        std::string versionString;
+        std::vector<std::string> supportedExtensions;
     };
 
     class GlideTextureBackend final : public ITextureBackend

@@ -96,6 +96,15 @@ int main()
             FreeLibrary(module);
             return 8;
         }
+        const char* extensionList = glide.grGetString(0xa0);
+        const char* hardwareName = glide.grGetString(0xa1);
+        if (extensionList == nullptr || hardwareName == nullptr)
+        {
+            std::fputs("fake Glide grGetString contract returned an unexpected value\n", stderr);
+            FreeLibrary(module);
+            return 11;
+        }
+        static_cast<void>(glide.grGetProcAddress("grChromaRangeExt"));
         if (glide.grSstWinClose(context) != 1)
         {
             FreeLibrary(module);
@@ -103,7 +112,7 @@ int main()
         }
         glide.grGlideShutdown();
 
-        constexpr std::uint64_t expectedMask = (std::uint64_t{1} << 37) - 1;
+        constexpr std::uint64_t expectedMask = (std::uint64_t{1} << 39) - 1;
         const auto callMask = reinterpret_cast<MaskFn>(
             CNA::Internal::Backends::Glide::ResolveGlideExport(module, "FakeGlideCallMask", 0));
         if (callMask() != expectedMask)
