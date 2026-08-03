@@ -1161,6 +1161,39 @@ float4 main(in PSInput psIn) : SV_Target
             createInfo.Features.OcclusionQueries = Dg::DEVICE_FEATURE_STATE_OPTIONAL;
             createInfo.Features.BinaryOcclusionQueries = Dg::DEVICE_FEATURE_STATE_OPTIONAL;
         }
+
+#if defined(_WIN32)
+#define CNA_DILIGENT_GLAPI __stdcall
+#else
+#define CNA_DILIGENT_GLAPI
+#endif
+
+        /// Diligent's own OpenGL backend (`RenderDeviceGLImpl::Initialize()`) unconditionally calls
+        /// `glEnable(GL_FRAMEBUFFER_SRGB)` whenever the context reports the *feature* as available
+        /// (GL >= 4.0) -- regardless of whether the swap chain's own colour format is sRGB.
+        /// `TryCreateDevice()` always requests `TEX_FORMAT_RGBA8_UNORM` (its own comment: "a
+        /// non-sRGB back buffer keeps colours numerically identical to what a game wrote, matching
+        /// every other CNA backend"), but the default window framebuffer this project's Mesa/
+        /// llvmpipe test environment hands back for a plain `SDL_WINDOW_OPENGL` window is itself
+        /// sRGB-capable, so that unconditional enable silently gamma-encodes every write regardless
+        /// -- every colour this backend produced under the OpenGL device type read back visibly
+        /// brighter than written (confirmed: readback values consistently matched an sRGB decode of
+        /// the expected linear value, e.g. expected 204 decodes to 204/255 -> ^(1/2.2) -> *255 ~= 232,
+        /// matching the observed 231 to within rounding, across every mismatching check in
+        /// `Diligent_Pbr`/`Diligent_LightingFidelity`). Disabled explicitly right after OpenGL
+        /// device/context creation to restore the stated non-sRGB contract; resolved through SDL's
+        /// own `SDL_GL_GetProcAddress()` rather than adding a GL loader dependency to this backend.
+        void DisableGLFramebufferSrgb()
+        {
+            using PFNGLDISABLEPROC = void(CNA_DILIGENT_GLAPI*)(unsigned int);
+            constexpr unsigned int kGlFramebufferSrgb = 0x8DB9;
+            auto* glDisableFn =
+                reinterpret_cast<PFNGLDISABLEPROC>(SDL_GL_GetProcAddress("glDisable"));
+            if (glDisableFn != nullptr)
+                glDisableFn(kGlFramebufferSrgb);
+        }
+
+#undef CNA_DILIGENT_GLAPI
     }
 
     const char* GetDeviceTypeName(DiligentDeviceType type)
@@ -2536,6 +2569,8 @@ float4 main(in PSInput psIn) : SV_Target
                 factory->CreateDeviceAndSwapChainGL(createInfo, &device_, &context_, swapChainDesc,
                                                     &swapChain_);
                 engineFactory_ = Dg::RefCntAutoPtr<Dg::IEngineFactory>(factory);
+                if (device_ && context_)
+                    DisableGLFramebufferSrgb();
                 break;
             }
 #endif
