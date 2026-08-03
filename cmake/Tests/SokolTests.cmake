@@ -296,4 +296,13 @@ if(CNA_BUILD_TESTS AND CNA_BUILD_EXAMPLES
         COMMAND cna_test_sokol_customeffect_blendstate_order
         TIMEOUT 30 LABELS "Sokol"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_sokol.md SOKOL-47: committed RenderTargetCube mipmap coverage, replacing SOKOL-39's
+    # original throwaway/uncommitted verification program.
+    cna_sokol_test(cna_test_sokol_rendertargetcube_mip
+                    examples/sokol_rendertargetcube_mip_test.cpp)
+    cna_register_backend_test(NAME Sokol_RenderTargetCube_Mip
+        COMMAND cna_test_sokol_rendertargetcube_mip
+        TIMEOUT 30 LABELS "Sokol"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()
