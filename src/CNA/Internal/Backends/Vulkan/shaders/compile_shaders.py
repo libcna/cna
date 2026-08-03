@@ -200,6 +200,10 @@ def main():
         # descriptor binding for fog, incompatible with Instanced3D's unmodified 1-binding layout).
         ("instanced3d.vert.glsl",        VERTEX_SHADER,   "kInstanced3dVertSpv"),
         ("instanced3d.frag.glsl",        FRAGMENT_SHADER, "kInstanced3dFragSpv"),
+        # REMED-GFX-212: the position+colour Instanced3D VS, selected when the geometry stride's
+        # packed layout carries a COLOR0 element (16/24). Shares instanced3d's FS and its
+        # 1-binding pipeline layout; only the vertex input set and the diffuse mixing differ.
+        ("instanced_colored3d.vert.glsl", VERTEX_SHADER,  "kInstancedColored3dVertSpv"),
     ]
 
     output_path = Path(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[1] == "--output" else \

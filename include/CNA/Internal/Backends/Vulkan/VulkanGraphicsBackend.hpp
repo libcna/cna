@@ -1085,6 +1085,15 @@ namespace CNA::Internal::Backends::Vulkan
                 + pipelinesPbr3D_.size() + pipelinesPbrSkinned3D_.size()
                 + pipelinesInstanced3D_.size();
         }
+        /// REMED-GFX-212 diagnostic, mirroring the WebGPU backend's own accessor of the same name.
+        /// `BasicEffect.VertexColorEnabled` is NOT part of this cache's key -- it travels in the
+        /// 128-byte push constant, so toggling it must reuse the variant an otherwise-identical
+        /// draw already built, while a geometry declaration that carries a COLOR0 element must not
+        /// share a pipeline with one that does not.
+        NOXNA [[nodiscard]] std::size_t GetInstancedPipelineCacheSizeEXT() const noexcept
+        {
+            return pipelinesInstanced3D_.size();
+        }
         // REMED-GFX-095: live MRT construction/pipeline diagnostics used by the dedicated
         // regression to distinguish a requested multisample target from a silent 1x pass.
         [[nodiscard]] const VulkanMRTProxy* GetCurrentMRTProxyEXT() const noexcept

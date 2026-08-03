@@ -4183,6 +4183,39 @@ namespace CNA::Internal::Backends::Vulkan
         return key ^ (static_cast<uint64_t>(depthFmt) << 45);
     }
 
+    // REMED-GFX-212: the Instanced3D cache is the one 3D pipeline cache whose per-vertex binding
+    // takes the RAW stride rather than a bucketed one -- MakeExt3DKey folds 16 and every stride it
+    // does not recognise into the same bucket 0. That was harmless while every stride produced the
+    // same position-only vertex input, and is not once the stride decides whether a COLOR0
+    // attribute exists at all: a position-only declaration and a position+colour one must never
+    // share a pipeline. Bits 53..63 are free -- Make3DKey's own bits top out at 40, MakeExt3DKey's
+    // at 44, and FoldDepthFormatIntoKey occupies 45..52 for a core VkFormat ordinal.
+    static uint64_t FoldPerVertexStrideIntoKey(uint64_t key, std::size_t pvStride)
+    {
+        return key ^ ((static_cast<uint64_t>(pvStride) & 0x7FFull) << 53);
+    }
+
+    // REMED-GFX-212: whether this per-vertex stride's established packed layout carries a COLOR0
+    // element, and at which byte offset. The ordinary route's own pipelines derive their
+    // R8G8B8A8_UNORM colour attribute from exactly this table -- GetOrCreatePipelineFogColored3D's
+    // stride-16 `attrs[1]` and GetOrCreatePipelineFogTex3D's stride-24 `attrs[1]`, both at offset
+    // 12 -- so reading the same one here is what makes the instanced route's VertexColorEnabled
+    // mean what its own ordinary route's already means. Every other stride keeps the position-only
+    // Instanced3D shader it has always used: 20 (VertexPositionTexture) and 32
+    // (VertexPositionNormalTexture) carry no COLOR0 at all, and the skinned/PBR strides carry one
+    // the instanced route has no bone palette or tangent basis to render anyway.
+    static bool PackedColorOffsetForStride(std::size_t pvStride, uint32_t& colorOffsetOut)
+    {
+        switch (pvStride) {
+        case 16:   // VertexPositionColor
+        case 24:   // VertexPositionColorTexture
+            colorOffsetOut = 12;
+            return true;
+        default:
+            return false;
+        }
+    }
+
     VkPipeline VulkanGraphicsBackend::GetOrCreatePipeline3D(VkPrimitiveTopology topo,
                                                              bool depthTest, bool depthWrite,
                                                              bool blend, int cullMode,
@@ -7061,15 +7094,26 @@ namespace CNA::Internal::Backends::Vulkan
                 throw std::runtime_error("vkCreatePipelineLayout (Ext3D/Instanced) failed");
         }
 
-        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(pvStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), blendParams.sampleMask };
+        // REMED-GFX-212: the exact per-vertex stride, not MakeExt3DKey's bucket -- see
+        // FoldPerVertexStrideIntoKey. VertexColorEnabled itself is deliberately NOT in the key:
+        // it travels in the push constant (FillInstancedPushConst's pc[31]), exactly as it does
+        // for the ordinary colored3d pipeline, so toggling it never creates a pipeline variant.
+        PipelineKey key = { FoldPerVertexStrideIntoKey(FoldDepthFormatIntoKey(MakeExt3DKey(pvStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), pvStride), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), blendParams.sampleMask };
         auto it = pipelinesInstanced3D_.find(key);
         if (it != pipelinesInstanced3D_.end()) return it->second;
 
         using namespace Shaders;
-        VkShaderModule vert = CreateShaderModule(kInstanced3dVertSpv, kInstanced3dVertSpv_size);
+        // REMED-GFX-212: the geometry stride's own packed layout selects the vertex shader, the
+        // same way the ordinary route picks colored3d/textured3d/colored_textured3d by stride.
+        uint32_t packedColorOffset = 0;
+        const bool hasPackedColor = PackedColorOffsetForStride(pvStride, packedColorOffset);
+        VkShaderModule vert = hasPackedColor
+            ? CreateShaderModule(kInstancedColored3dVertSpv, kInstancedColored3dVertSpv_size)
+            : CreateShaderModule(kInstanced3dVertSpv, kInstanced3dVertSpv_size);
         // Task 899: dedicated FS (was: reuse kColored3dFragSpv) -- colored3d.frag.glsl now
         // declares a 2nd descriptor binding (fog UBO) as part of the shared colored3d/textured3d/
         // colored_textured3d bundle, incompatible with Instanced3D's unmodified 1-binding layout.
+        // Both VS variants emit the same single `location = 0` vec4, so they share it unchanged.
         VkShaderModule frag = CreateShaderModule(kInstanced3dFragSpv, kInstanced3dFragSpv_size);
 
         // Two vertex bindings: binding=0 per-vertex (VERTEX rate), binding=1 per-instance (INSTANCE rate).
@@ -7078,17 +7122,22 @@ namespace CNA::Internal::Backends::Vulkan
         binds[0] = { 0, static_cast<uint32_t>(pvStride), VK_VERTEX_INPUT_RATE_VERTEX   };
         binds[1] = { 1, kInstStride,                      VK_VERTEX_INPUT_RATE_INSTANCE };
 
-        VkVertexInputAttributeDescription attrs[5]{};
-        attrs[0] = { 0, 0, VK_FORMAT_R32G32B32_SFLOAT,    0  }; // aPos (per-vertex)
-        attrs[1] = { 4, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 0  }; // aInstCol0 (per-instance)
-        attrs[2] = { 5, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 16 }; // aInstCol1
-        attrs[3] = { 6, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 32 }; // aInstCol2
-        attrs[4] = { 7, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 48 }; // aInstCol3
+        VkVertexInputAttributeDescription attrs[6]{};
+        uint32_t attrCount = 0;
+        attrs[attrCount++] = { 0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0 }; // aPos (per-vertex)
+        // REMED-GFX-212: the geometry stream's own COLOR0, at its own stride's offset. The
+        // per-instance columns keep locations 4..7, so this can never collide with them.
+        if (hasPackedColor)
+            attrs[attrCount++] = { 1, 0, VK_FORMAT_R8G8B8A8_UNORM, packedColorOffset }; // aColor
+        attrs[attrCount++] = { 4, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 0  }; // aInstCol0 (per-instance)
+        attrs[attrCount++] = { 5, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 16 }; // aInstCol1
+        attrs[attrCount++] = { 6, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 32 }; // aInstCol2
+        attrs[attrCount++] = { 7, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 48 }; // aInstCol3
 
         VkPipelineVertexInputStateCreateInfo vis{};
         vis.sType                           = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
         vis.vertexBindingDescriptionCount   = 2; vis.pVertexBindingDescriptions   = binds;
-        vis.vertexAttributeDescriptionCount = 5; vis.pVertexAttributeDescriptions = attrs;
+        vis.vertexAttributeDescriptionCount = attrCount; vis.pVertexAttributeDescriptions = attrs;
 
         VkPipelineShaderStageCreateInfo stages[2]{};
         stages[0] = { VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0,
