@@ -177,7 +177,7 @@ mezi `SpriteBatch::End` a `Present`.
 
 | # | Úkol | Stav | Akceptace |
 |---|---|---|---|
-| D2D-46 | Oprav `NativeBackBuffer`, aby logická velikost a kreslicí plocha odpovídaly fyzickému backbufferu. | ⬜ | Při virtual 40×24 a okně 80×48 marker i pozadí pokryjí správné fyzické pixely bez levého horního výřezu. |
+| D2D-46 | Oprav `NativeBackBuffer`, aby logická velikost a kreslicí plocha odpovídaly fyzickému backbufferu. | ✅ | `GetPresentationTransform` nyní pro `NativeBackBuffer` vrací logickou velikost rovnou fyzickému backbufferu (scale 1, offset 0), stejně jako WebGPU/SdlGpu backend. `Direct2D_2DParity` ve Wine ověřuje `GetViewportSize` i `ReadBackbuffer` na fyzickém okně 80×24 s virtuální 48×32 (marker v pravém dolním rohu i pozadí v levém horním); test byl ověřen jako regresní (bez opravy shodí `ReadBackbuffer`/`GetBackBufferData` na "outside bounds"). Fyzická DPI/desktop-capture gate (D2D-126) zůstává mimo rozsah. |
 | D2D-47 | Sjednoť viewport, readback a coordinate-transform kontrakt pro `NativeBackBuffer`. | ⬜ | Veřejné rozměry, logical readback a obousměrný převod souřadnic používají jednu zdokumentovanou fyzickou doménu. |
 | D2D-48 | Volej kontrolu velikosti swap chainu také z `Present`, i když snímek nic nekreslil. | ⬜ | Resize těsně před prázdným `Present` vytvoří správně velký backbuffer a další snímek nezdědí staré rozměry. |
 | D2D-49 | Definuj a implementuj `Present` při stále aktivním RT. | ⬜ | Buď deterministicky prezentuje poslední logický framebuffer a zachová RT, nebo pojmenovaně odmítne; transform nikdy nesmí vycházet z RT rozměrů. |

@@ -1240,6 +1240,49 @@ protected:
                                     physicalHeightF / virtualHeightF, physicalHeightF / virtualHeightF,
                                     0.0f, 0.0f);
 
+        // D2D-46: NativeBackBuffer applies no virtual-resolution scaling at all, so it must draw
+        // across the entire physical backbuffer (80x24 here) rather than only a virtual-size
+        // (48x32) corner of it left uncovered by a stale identity transform. This probes the
+        // backend directly (GetViewportSize/ReadBackbuffer): GraphicsDevice::GetBackBufferData
+        // validates against PresentationParameters, which this section intentionally never
+        // resizes through GraphicsDeviceManager (it drives the backend's SDL window/virtual
+        // resolution directly to isolate the backend's own presentation-transform contract).
+        backend.SetPresentationMode(static_cast<int>(PresentationMode::NativeBackBuffer));
+        int nativeViewportWidth = 0;
+        int nativeViewportHeight = 0;
+        backend.GetViewportSize(nativeViewportWidth, nativeViewportHeight);
+        const bool nativeViewportMatchesPhysical =
+            nativeViewportWidth == physicalWidth && nativeViewportHeight == physicalHeight;
+        std::printf("[%s] Direct2D NativeBackBuffer viewport matches physical size: got=(%d,%d), expected=(%d,%d)\n",
+                    nativeViewportMatchesPhysical ? "PASS" : "FAIL",
+                    nativeViewportWidth, nativeViewportHeight, physicalWidth, physicalHeight);
+        passed = passed && nativeViewportMatchesPhysical;
+
+        // Earlier sections left the backend's own SpriteBatch-local viewport clip set to a small
+        // sub-region; reset it to the full physical target so it cannot hide this probe's marker.
+        backend.SetViewport(0, 0, physicalWidth, physicalHeight, 0.0f, 1.0f);
+        device.Clear(Color::Black);
+        sprites_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, nullptr, &scissorDisabled);
+        sprites_->Draw(*white_, Rectangle(physicalWidth - 4, physicalHeight - 4, 4, 4),
+                       Rectangle(0, 0, 1, 1), Color::White);
+        sprites_->End();
+        std::array<uint8_t, 4> farCornerPixel{};
+        backend.ReadBackbuffer(physicalWidth - 1, physicalHeight - 1, 1, 1, farCornerPixel.data());
+        const bool farCornerMatches = farCornerPixel[0] == 255 && farCornerPixel[1] == 255 &&
+            farCornerPixel[2] == 255 && farCornerPixel[3] == 255;
+        std::printf("[%s] Direct2D NativeBackBuffer covers full physical backbuffer far corner: got=(%d,%d,%d,%d)\n",
+                    farCornerMatches ? "PASS" : "FAIL", farCornerPixel[0], farCornerPixel[1],
+                    farCornerPixel[2], farCornerPixel[3]);
+        passed = passed && farCornerMatches;
+        std::array<uint8_t, 4> nearCornerPixel{};
+        backend.ReadBackbuffer(1, 1, 1, 1, nearCornerPixel.data());
+        const bool nearCornerMatches = nearCornerPixel[0] == 0 && nearCornerPixel[1] == 0 &&
+            nearCornerPixel[2] == 0 && nearCornerPixel[3] == 255;
+        std::printf("[%s] Direct2D NativeBackBuffer keeps other physical pixels background: got=(%d,%d,%d,%d)\n",
+                    nearCornerMatches ? "PASS" : "FAIL", nearCornerPixel[0], nearCornerPixel[1],
+                    nearCornerPixel[2], nearCornerPixel[3]);
+        passed = passed && nearCornerMatches;
+
         backend.SetPresentationMode(static_cast<int>(PresentationMode::Letterbox));
         device.Clear(Color::Black);
         sprites_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, nullptr, &scissorDisabled);

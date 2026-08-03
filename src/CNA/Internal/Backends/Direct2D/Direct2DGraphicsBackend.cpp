@@ -1196,7 +1196,12 @@ namespace CNA::Internal::Backends::Direct2D
         const D2D1_SIZE_U size = backBufferTarget_->GetPixelSize();
         const int physicalWidth = static_cast<int>(size.width);
         const int physicalHeight = static_cast<int>(size.height);
-        if (virtualWidth_ <= 0 || virtualHeight_ <= 0)
+        // NativeBackBuffer draws at the swap chain's own physical size: unlike every other
+        // presentation mode it applies no virtual-resolution scaling at all, so the logical
+        // target must equal the physical backbuffer, not the (possibly much smaller) virtual
+        // resolution left at an identity scale/offset.
+        if (virtualWidth_ <= 0 || virtualHeight_ <= 0 ||
+            presentationMode_ == CnaPresentationMode::NativeBackBuffer)
         {
             result.logicalWidth = physicalWidth;
             result.logicalHeight = physicalHeight;
