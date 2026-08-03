@@ -18,6 +18,7 @@
 #include <functional>
 #include <stdexcept>
 #include <string>
+#include <unordered_set>
 
 // The GL back-buffer readback below calls glReadPixels directly: sokol_gfx has no readback API of
 // its own, and on this project's target platform (SOKOL_GLCORE on Linux) sokol renders into the
@@ -126,6 +127,42 @@ namespace CNA::Internal::Backends::Sokol
             // sokol's SG_COLORMASK_* bit layout, so the ordinal maps straight through. The explicit
             // masking keeps a caller-supplied value outside 0..15 from producing an invalid enum.
             return static_cast<sg_color_mask>(colorWriteChannels & 0x0F);
+        }
+
+        /// plan_sokol.md SOKOL-44. `SokolEffectBackend::BindTexture()`/`BindTextureCube()` only
+        /// ever RECORD the `ITextureBackend*`/`ITextureCubeBackend*` they are given -- realized
+        /// later, at draw time, by `ApplyPendingTextureBindsEXT()` -- but not every XNA-layer
+        /// texture wrapper keeps that pointer valid for as long as the wrapper itself lives.
+        /// `SokolTextureCubeBackend`/`SokolRenderTargetBackend`/`SokolRenderTargetCubeBackend` all
+        /// mutate the SAME C++ object in place on every upload (only the internal `sg_image`
+        /// handle changes, e.g. `SokolTextureBackend::RecreateImage()`'s own doc comment) -- but
+        /// `Texture2D::SetData(const Color*, int)` (unlike its own sibling overloads) replaces
+        /// `Texture2D::backend_` with an ENTIRELY NEW backend object, destroying the old one
+        /// immediately. A pointer captured by `BindTexture()` before that call would dangle by the
+        /// time `ApplyPendingTextureBindsEXT()` runs. This tiny registry -- populated by every
+        /// constructor/destructor of the four backend classes `ResolveSampledTextureImageId()`/
+        /// `ResolveSampledCubeImageId()` accept -- lets that later dereference check the pointer is
+        /// still a real, currently-alive object first, rather than assuming it. A pointer that is
+        /// no longer live is silently skipped (matches the graceful "id 0, texture stays unbound"
+        /// degradation this same call already has for other invalid inputs), not dereferenced.
+        std::unordered_set<const void*>& LiveSampledBackendRegistryEXT()
+        {
+            static std::unordered_set<const void*> registry;
+            return registry;
+        }
+
+        /// Packs GraphicsDevice.BlendFactor's four 0..1 floats (GraphicsDevice divides the public
+        /// 8-bit Color by 255.0f before calling SetBlendFactor) back into 0xRRGGBBAA so the pipeline
+        /// cache keys (plan_sokol.md SOKOL-40) can compare/hash it as a single exact integer instead
+        /// of four floats that would need epsilon comparison for no real precision benefit.
+        std::uint32_t PackBlendFactorEXT(const float factor[4])
+        {
+            const auto channel = [](float value) -> std::uint32_t {
+                const float clamped = value < 0.0f ? 0.0f : (value > 1.0f ? 1.0f : value);
+                return static_cast<std::uint32_t>(clamped * 255.0f + 0.5f);
+            };
+            return (channel(factor[0]) << 24) | (channel(factor[1]) << 16)
+                 | (channel(factor[2]) << 8) | channel(factor[3]);
         }
 
         sg_wrap ToWrap(int addressMode)
@@ -279,6 +316,82 @@ namespace CNA::Internal::Backends::Sokol
                 case 7:  return GL_NOTEQUAL; // NotEqual
                 default: return GL_LEQUAL;
             }
+        }
+
+        /// Raw-GL blend factor for the custom-ShaderEffect draw paths (plan_sokol.md SOKOL-41),
+        /// the same Blend-ordinal mapping ToBlendFactor() uses for sg_blend_factor, just for
+        /// glBlendFuncSeparate(). GL has a single GL_CONSTANT_COLOR/GL_ONE_MINUS_CONSTANT_COLOR
+        /// pair (fed by glBlendColor()) where sokol_gfx's SG_BLENDFACTOR_BLEND_COLOR distinguishes
+        /// nothing further either -- both APIs apply the same one constant to every channel.
+        GLenum ToGLBlendFactor(int blend)
+        {
+            switch (blend)
+            {
+                case 0:  return GL_ONE;                       // Blend::One
+                case 1:  return GL_ZERO;                       // Zero
+                case 2:  return GL_SRC_COLOR;                  // SourceColor
+                case 3:  return GL_ONE_MINUS_SRC_COLOR;        // InverseSourceColor
+                case 4:  return GL_SRC_ALPHA;                  // SourceAlpha
+                case 5:  return GL_ONE_MINUS_SRC_ALPHA;        // InverseSourceAlpha
+                case 6:  return GL_DST_COLOR;                  // DestinationColor
+                case 7:  return GL_ONE_MINUS_DST_COLOR;        // InverseDestinationColor
+                case 8:  return GL_DST_ALPHA;                  // DestinationAlpha
+                case 9:  return GL_ONE_MINUS_DST_ALPHA;        // InverseDestinationAlpha
+                case 10: return GL_CONSTANT_COLOR;             // BlendFactor
+                case 11: return GL_ONE_MINUS_CONSTANT_COLOR;   // InverseBlendFactor
+                case 12: return GL_SRC_ALPHA_SATURATE;         // SourceAlphaSaturation
+                default: return GL_ONE;
+            }
+        }
+
+        /// Raw-GL blend equation, the same BlendFunction-ordinal mapping ToBlendOp() uses for
+        /// sg_blend_op, just for glBlendEquationSeparate().
+        GLenum ToGLBlendOp(int blendFunction)
+        {
+            switch (blendFunction)
+            {
+                case 0:  return GL_FUNC_ADD;              // BlendFunction::Add
+                case 1:  return GL_FUNC_SUBTRACT;         // Subtract
+                case 2:  return GL_FUNC_REVERSE_SUBTRACT; // ReverseSubtract
+                case 3:  return GL_MAX;                   // Max
+                case 4:  return GL_MIN;                   // Min
+                default: return GL_FUNC_ADD;
+            }
+        }
+
+        /// Raw-GL stencil op, the same StencilOperation-ordinal mapping ToStencilOp() uses for
+        /// sg_stencil_op, just for glStencilOpSeparate(). Increment/Decrement (wrapping) map to
+        /// GL_INCR_WRAP/GL_DECR_WRAP; IncrementSaturation/DecrementSaturation (clamping) map to
+        /// plain GL_INCR/GL_DECR -- the same wrap-vs-clamp distinction sokol's own
+        /// SG_STENCILOP_INCR_WRAP vs SG_STENCILOP_INCR_CLAMP makes.
+        GLenum ToGLStencilOp(int stencilOperation)
+        {
+            switch (stencilOperation)
+            {
+                case 0:  return GL_KEEP;      // StencilOperation::Keep
+                case 1:  return GL_ZERO;      // Zero
+                case 2:  return GL_REPLACE;   // Replace
+                case 3:  return GL_INCR_WRAP; // Increment
+                case 4:  return GL_DECR_WRAP; // Decrement
+                case 5:  return GL_INCR;      // IncrementSaturation
+                case 6:  return GL_DECR;      // DecrementSaturation
+                case 7:  return GL_INVERT;    // Invert
+                default: return GL_KEEP;
+            }
+        }
+
+        /// Raw-GL face-culling mode, the same CullMode-ordinal mapping this file's ToCullMode()
+        /// uses for sg_cull_mode (see that function's own doc comment for the CW-winding
+        /// reasoning), just for glEnable(GL_CULL_FACE)/glCullFace(). CullMode::None (0) has no GL
+        /// enum of its own -- callers must glDisable(GL_CULL_FACE) instead of calling this for
+        /// that case, matching Get3DPipeline's own desc.cull_mode branch shape. Every caller must
+        /// also glFrontFace(GL_CW) -- this backend's sg_pipeline_desc.face_winding is fixed at
+        /// SG_FACEWINDING_CW everywhere, and GL's own default front face is CCW, so leaving it
+        /// unset would cull the WRONG faces the first time this raw-GL path runs before any
+        /// sg_pipeline draw has incidentally already left glFrontFace(GL_CW) behind.
+        GLenum ToGLCullFace(int cullMode)
+        {
+            return cullMode == 1 ? GL_FRONT : GL_BACK;  // 1=CullClockwiseFace, 2=CullCounterClockwiseFace
         }
 
         /// The raw-GL attribute shape needed to bind one VertexElement for the custom-ShaderEffect
@@ -578,10 +691,12 @@ namespace CNA::Internal::Backends::Sokol
             std::memcpy(levels_[0].data(), data.pixels.data(), std::min(level0Bytes, data.pixels.size()));
 
         RecreateImage();
+        LiveSampledBackendRegistryEXT().insert(this);  // plan_sokol.md SOKOL-44
     }
 
     SokolTextureBackend::~SokolTextureBackend()
     {
+        LiveSampledBackendRegistryEXT().erase(this);  // plan_sokol.md SOKOL-44
         DestroyImage();
     }
 
@@ -740,10 +855,12 @@ namespace CNA::Internal::Backends::Sokol
                 face.assign(faceBytes, 0u);
         }
         RecreateImage();
+        LiveSampledBackendRegistryEXT().insert(this);  // plan_sokol.md SOKOL-44
     }
 
     SokolTextureCubeBackend::~SokolTextureCubeBackend()
     {
+        LiveSampledBackendRegistryEXT().erase(this);  // plan_sokol.md SOKOL-44
         DestroyImage();
     }
 
@@ -1114,7 +1231,11 @@ namespace CNA::Internal::Backends::Sokol
             throw std::runtime_error("Sokol backend: sg_make_view (texture) failed for a RenderTarget2D");
         }
 
-        if (!hasDepthStencil) return;
+        if (!hasDepthStencil)
+        {
+            LiveSampledBackendRegistryEXT().insert(this);  // plan_sokol.md SOKOL-44
+            return;
+        }
 
         sg_image_desc depthDesc = {};
         depthDesc.type = SG_IMAGETYPE_2D;
@@ -1166,10 +1287,12 @@ namespace CNA::Internal::Backends::Sokol
             colorImageId_ = 0;
             throw std::runtime_error("Sokol backend: sg_make_view (depth-stencil attachment) failed for a RenderTarget2D");
         }
+        LiveSampledBackendRegistryEXT().insert(this);  // plan_sokol.md SOKOL-44
     }
 
     SokolRenderTargetBackend::~SokolRenderTargetBackend()
     {
+        LiveSampledBackendRegistryEXT().erase(this);  // plan_sokol.md SOKOL-44
         if (depthStencilAttachmentViewId_ != 0) sg_destroy_view(MakeViewHandle(depthStencilAttachmentViewId_));
         if (depthStencilImageId_ != 0) sg_destroy_image(MakeImageHandle(depthStencilImageId_));
         if (colorTextureViewId_ != 0) sg_destroy_view(MakeViewHandle(colorTextureViewId_));
@@ -1286,7 +1409,11 @@ namespace CNA::Internal::Backends::Sokol
                 "Sokol backend: sg_make_view (texture) failed for a RenderTargetCube");
         }
 
-        if (!hasDepthStencil) return;
+        if (!hasDepthStencil)
+        {
+            LiveSampledBackendRegistryEXT().insert(this);  // plan_sokol.md SOKOL-44
+            return;
+        }
 
         // ONE plain 2D depth-stencil image, shared by all six faces -- see this class's own doc
         // comment for why that matches FNA3D's cube render-target convention.
@@ -1331,10 +1458,12 @@ namespace CNA::Internal::Backends::Sokol
             throw std::runtime_error(
                 "Sokol backend: sg_make_view (depth-stencil attachment) failed for a RenderTargetCube");
         }
+        LiveSampledBackendRegistryEXT().insert(this);  // plan_sokol.md SOKOL-44
     }
 
     SokolRenderTargetCubeBackend::~SokolRenderTargetCubeBackend()
     {
+        LiveSampledBackendRegistryEXT().erase(this);  // plan_sokol.md SOKOL-44
         if (depthStencilAttachmentViewId_ != 0) sg_destroy_view(MakeViewHandle(depthStencilAttachmentViewId_));
         if (depthStencilImageId_ != 0) sg_destroy_image(MakeImageHandle(depthStencilImageId_));
         if (textureViewId_ != 0) sg_destroy_view(MakeViewHandle(textureViewId_));
@@ -1507,7 +1636,8 @@ namespace CNA::Internal::Backends::Sokol
     // SokolOcclusionQueryBackend
     // ---------------------------------------------------------------------------------------
 
-    SokolOcclusionQueryBackend::SokolOcclusionQueryBackend()
+    SokolOcclusionQueryBackend::SokolOcclusionQueryBackend(SokolGraphicsBackend* owner)
+        : owner_(owner)
     {
 #if CNA_SOKOL_HAS_GL_READBACK
         GLuint id = 0;
@@ -1518,6 +1648,10 @@ namespace CNA::Internal::Backends::Sokol
 
     SokolOcclusionQueryBackend::~SokolOcclusionQueryBackend()
     {
+        // plan_sokol.md SOKOL-43: unconditional, regardless of active_ -- a query destroyed while
+        // still active must not leave the context's active-query slot pointing at a now-dangling
+        // object. ReleaseOcclusionQueryEXT() itself no-ops if this instance never held the slot.
+        if (owner_ != nullptr) owner_->ReleaseOcclusionQueryEXT(this);
 #if CNA_SOKOL_HAS_GL_READBACK
         if (queryId_ != 0)
         {
@@ -1534,6 +1668,10 @@ namespace CNA::Internal::Backends::Sokol
         // reach glBeginQuery a second time, or GL raises GL_INVALID_OPERATION that stays pending
         // until sokol_gfx's own next GL call trips over it.
         if (queryId_ == 0 || active_) return;
+        // plan_sokol.md SOKOL-43: OpenGL permits only one active GL_SAMPLES_PASSED query per
+        // context, not per object -- a DIFFERENT query's outstanding Begin() must be refused here
+        // too, the same silent-absorb contract as a repeated Begin() on this same object.
+        if (owner_ != nullptr && !owner_->TryActivateOcclusionQueryEXT(this)) return;
         active_ = true;
         // SOKOL_GLCORE is desktop GL, which reports the real sample count (GL_SAMPLES_PASSED);
         // GLES3 has no such query at all, only the any-samples boolean EasyGL's own GLES3 target
@@ -1559,6 +1697,7 @@ namespace CNA::Internal::Backends::Sokol
     #else
         glEndQuery(GL_ANY_SAMPLES_PASSED);
     #endif
+        if (owner_ != nullptr) owner_->ReleaseOcclusionQueryEXT(this);
 #endif
     }
 
@@ -1784,15 +1923,19 @@ namespace CNA::Internal::Backends::Sokol
     {
 #if CNA_SOKOL_HAS_GL_READBACK
         if (texture == nullptr) return;
-        const std::uint32_t imageId =
-            ResolveSampledTextureImageId(*texture, "a custom-effect texture bind");
-        // Recorded, not applied immediately -- see ApplyPendingTextureBindsEXT()'s own doc comment
-        // for why.
+        // Recorded, not resolved/applied immediately -- see PendingTextureBind's and
+        // ApplyPendingTextureBindsEXT()'s own doc comments for why (plan_sokol.md SOKOL-44).
         for (auto& pending : pendingTextureBinds_)
         {
-            if (pending.unit == unit) { pending.imageId = imageId; pending.isCube = false; return; }
+            if (pending.unit == unit)
+            {
+                pending.texture = texture;
+                pending.cubeTexture = nullptr;
+                pending.isCube = false;
+                return;
+            }
         }
-        pendingTextureBinds_.push_back({unit, imageId, false});
+        pendingTextureBinds_.push_back({unit, texture, nullptr, false});
 #endif
     }
 
@@ -1800,13 +1943,17 @@ namespace CNA::Internal::Backends::Sokol
     {
 #if CNA_SOKOL_HAS_GL_READBACK
         if (texture == nullptr) return;
-        const std::uint32_t imageId =
-            ResolveSampledCubeImageId(*texture, "a custom-effect cube-texture bind");
         for (auto& pending : pendingTextureBinds_)
         {
-            if (pending.unit == unit) { pending.imageId = imageId; pending.isCube = true; return; }
+            if (pending.unit == unit)
+            {
+                pending.texture = nullptr;
+                pending.cubeTexture = texture;
+                pending.isCube = true;
+                return;
+            }
         }
-        pendingTextureBinds_.push_back({unit, imageId, true});
+        pendingTextureBinds_.push_back({unit, nullptr, texture, true});
 #endif
     }
 
@@ -1815,7 +1962,29 @@ namespace CNA::Internal::Backends::Sokol
 #if CNA_SOKOL_HAS_GL_READBACK
         for (const PendingTextureBind& pending : pendingTextureBinds_)
         {
-            const sg_gl_image_info info = sg_gl_query_image_info(MakeImageHandle(pending.imageId));
+            // plan_sokol.md SOKOL-44: resolved HERE, at draw time, not when BindTexture()/
+            // BindTextureCube() was originally called -- the source's current sg_image id may have
+            // changed (or been destroyed and recreated) via SetData() in between. The liveness
+            // check guards against a rarer, more serious variant of the same problem: some XNA-
+            // layer texture wrappers (Texture2D::SetData(const Color*, int) in particular) replace
+            // their entire backend object rather than mutating it in place, which would leave this
+            // pointer dangling -- see LiveSampledBackendRegistryEXT()'s own doc comment.
+            std::uint32_t imageId = 0;
+            if (pending.isCube)
+            {
+                if (pending.cubeTexture == nullptr) continue;
+                if (LiveSampledBackendRegistryEXT().count(pending.cubeTexture) == 0) continue;
+                imageId = ResolveSampledCubeImageId(*pending.cubeTexture,
+                                                     "a custom-effect cube-texture bind");
+            }
+            else
+            {
+                if (pending.texture == nullptr) continue;
+                if (LiveSampledBackendRegistryEXT().count(pending.texture) == 0) continue;
+                imageId = ResolveSampledTextureImageId(*pending.texture,
+                                                        "a custom-effect texture bind");
+            }
+            const sg_gl_image_info info = sg_gl_query_image_info(MakeImageHandle(imageId));
             const GLuint texId = info.tex[info.active_slot];
             if (texId == 0) continue;
             glActiveTexture(GL_TEXTURE0 + static_cast<GLenum>(pending.unit));
@@ -2004,7 +2173,8 @@ namespace CNA::Internal::Backends::Sokol
             && depthFunc == other.depthFunc
             && hasDepthAttachment == other.hasDepthAttachment
             && sampleCount == other.sampleCount
-            && colorAttachmentCount == other.colorAttachmentCount;
+            && colorAttachmentCount == other.colorAttachmentCount
+            && blendFactorPacked == other.blendFactorPacked;
     }
 
     std::size_t SokolGraphicsBackend::PipelineKeyHash::operator()(const PipelineKey& key) const
@@ -2027,6 +2197,7 @@ namespace CNA::Internal::Backends::Sokol
         mix(static_cast<std::size_t>(key.hasDepthAttachment));
         mix(static_cast<std::size_t>(key.sampleCount));
         mix(static_cast<std::size_t>(key.colorAttachmentCount));
+        mix(static_cast<std::size_t>(key.blendFactorPacked));
         return hash;
     }
 
@@ -2077,7 +2248,8 @@ namespace CNA::Internal::Backends::Sokol
             && blendWeightOffset == other.blendWeightOffset
             && blendWeightFormat == other.blendWeightFormat
             && blendIndicesOffset == other.blendIndicesOffset
-            && blendIndicesFormat == other.blendIndicesFormat;
+            && blendIndicesFormat == other.blendIndicesFormat
+            && blendFactorPacked == other.blendFactorPacked;
     }
 
     std::size_t SokolGraphicsBackend::Pipeline3DKeyHash::operator()(const Pipeline3DKey& key) const
@@ -2132,6 +2304,7 @@ namespace CNA::Internal::Backends::Sokol
         mix(static_cast<std::size_t>(key.blendWeightFormat));
         mix(static_cast<std::size_t>(key.blendIndicesOffset + 1));
         mix(static_cast<std::size_t>(key.blendIndicesFormat));
+        mix(static_cast<std::size_t>(key.blendFactorPacked));
         return hash;
     }
 
@@ -2172,7 +2345,8 @@ namespace CNA::Internal::Backends::Sokol
             && indexType == other.indexType
             && stride == other.stride
             && positionOffset == other.positionOffset
-            && positionFormat == other.positionFormat;
+            && positionFormat == other.positionFormat
+            && blendFactorPacked == other.blendFactorPacked;
     }
 
     std::size_t SokolGraphicsBackend::PipelineInstanced3DKeyHash::operator()(
@@ -2217,6 +2391,7 @@ namespace CNA::Internal::Backends::Sokol
         mix(static_cast<std::size_t>(key.stride));
         mix(static_cast<std::size_t>(key.positionOffset));
         mix(static_cast<std::size_t>(key.positionFormat));
+        mix(static_cast<std::size_t>(key.blendFactorPacked));
         return hash;
     }
 
@@ -2239,7 +2414,16 @@ namespace CNA::Internal::Backends::Sokol
     // ---------------------------------------------------------------------------------------
 
     SokolGraphicsBackend::SokolGraphicsBackend(const GraphicsBackendCreateArgs& args)
+        : SokolGraphicsBackend(args, false, nullptr)
+    {
+    }
+
+    SokolGraphicsBackend::SokolGraphicsBackend(const GraphicsBackendCreateArgs& args,
+                                                bool forceMakeCurrentFailureEXT,
+                                                int* contextDestroyCountEXT)
         : window_(args.window)
+        , forceMakeCurrentFailureEXT_(forceMakeCurrentFailureEXT)
+        , contextDestroyCountEXT_(contextDestroyCountEXT)
         , virtualWidth_(args.virtualWidth)
         , virtualHeight_(args.virtualHeight)
         , presentationMode_(args.presentationMode)
@@ -2249,9 +2433,13 @@ namespace CNA::Internal::Backends::Sokol
         if (window_ == nullptr)
             throw std::runtime_error("Sokol backend: initialized with a null SDL_Window");
 
-        CreateGpuContext(window_, sampleCount_);
+        // plan_sokol.md SOKOL-45: context creation now shares the same transactional cleanup path
+        // as sokol_gfx setup -- a real SDL_GL_CreateContext() succeeding but the following
+        // SDL_GL_MakeCurrent() failing used to throw from inside CreateGpuContext, before this try
+        // block existed around it, leaking the just-created context.
         try
         {
+            CreateGpuContext(window_, sampleCount_);
             SetupSokol();
             CreateSpriteResources();
         }
@@ -2260,11 +2448,7 @@ namespace CNA::Internal::Backends::Sokol
             // Transactional construction: a partially initialised backend must never reach the
             // window registry or a caller's unique_ptr.
             if (sg_isvalid()) sg_shutdown();
-            if (glContext_ != nullptr)
-            {
-                SDL_GL_DestroyContext(static_cast<SDL_GLContext>(glContext_));
-                glContext_ = nullptr;
-            }
+            DestroyGpuContextIfAnyEXT();
             throw;
         }
 
@@ -2295,10 +2479,16 @@ namespace CNA::Internal::Backends::Sokol
         }
 #endif
         if (sg_isvalid()) sg_shutdown();
+        DestroyGpuContextIfAnyEXT();
+    }
+
+    void SokolGraphicsBackend::DestroyGpuContextIfAnyEXT()
+    {
         if (glContext_ != nullptr)
         {
             SDL_GL_DestroyContext(static_cast<SDL_GLContext>(glContext_));
             glContext_ = nullptr;
+            if (contextDestroyCountEXT_ != nullptr) ++(*contextDestroyCountEXT_);
         }
     }
 
@@ -2331,8 +2521,16 @@ namespace CNA::Internal::Backends::Sokol
         if (glContext_ == nullptr)
             throw std::runtime_error(std::string("Sokol backend: SDL_GL_CreateContext failed: ") + SDL_GetError());
 
-        if (!SDL_GL_MakeCurrent(window, static_cast<SDL_GLContext>(glContext_)))
-            throw std::runtime_error(std::string("Sokol backend: SDL_GL_MakeCurrent failed: ") + SDL_GetError());
+        // plan_sokol.md SOKOL-45 test hook: forces this path to behave as if a real
+        // SDL_GL_MakeCurrent() failure happened right after a real SDL_GL_CreateContext() success,
+        // without needing to actually break SDL. glContext_ is deliberately left non-null here,
+        // matching what a genuine MakeCurrent failure leaves behind -- the catch block in the
+        // constructor is what must destroy it, not this function.
+        const bool madeCurrent = SDL_GL_MakeCurrent(window, static_cast<SDL_GLContext>(glContext_))
+                               && !forceMakeCurrentFailureEXT_;
+        if (!madeCurrent)
+            throw std::runtime_error(std::string("Sokol backend: SDL_GL_MakeCurrent failed: ") +
+                (forceMakeCurrentFailureEXT_ ? "forced failure for test" : SDL_GetError()));
 
         SDL_GL_SetSwapInterval(swapInterval_);
 
@@ -2896,10 +3094,22 @@ namespace CNA::Internal::Backends::Sokol
     std::unique_ptr<IOcclusionQueryBackend> SokolGraphicsBackend::CreateOcclusionQuery()
     {
 #if CNA_SOKOL_HAS_GL_READBACK
-        return std::make_unique<SokolOcclusionQueryBackend>();
+        return std::make_unique<SokolOcclusionQueryBackend>(this);
 #else
         return nullptr;
 #endif
+    }
+
+    bool SokolGraphicsBackend::TryActivateOcclusionQueryEXT(SokolOcclusionQueryBackend* query)
+    {
+        if (activeOcclusionQueryEXT_ != nullptr && activeOcclusionQueryEXT_ != query) return false;
+        activeOcclusionQueryEXT_ = query;
+        return true;
+    }
+
+    void SokolGraphicsBackend::ReleaseOcclusionQueryEXT(SokolOcclusionQueryBackend* query)
+    {
+        if (activeOcclusionQueryEXT_ == query) activeOcclusionQueryEXT_ = nullptr;
     }
 
     std::unique_ptr<IEffectBackend> SokolGraphicsBackend::CreateEffectBackend(
@@ -3254,7 +3464,7 @@ namespace CNA::Internal::Backends::Sokol
             blendColorSrc_, blendAlphaSrc_, blendColorDst_, blendAlphaDst_,
             blendColorFunc_, blendAlphaFunc_, colorWriteChannels_[0],
             blendEnabled_, depthTestEnabled_, depthWriteEnabled_, depthFunc_, hasDepthAttachment,
-            sampleCount, colorAttachmentCount};
+            sampleCount, colorAttachmentCount, PackBlendFactorEXT(blendFactor_)};
 
         if (const auto found = pipelineCache_.find(key); found != pipelineCache_.end())
             return found->second;
@@ -3437,6 +3647,20 @@ namespace CNA::Internal::Backends::Sokol
             glActiveTexture(GL_TEXTURE0);
             glBindTexture(GL_TEXTURE_2D, texId);
             glBindSampler(0, samplerInfo.smp);
+            // Realizes any extra ShaderEffect::SetTexture(unit>0, ...) calls the caller made before
+            // SpriteBatch.End()/this flush -- SetTexture()'s own doc comment names SpriteBatch as a
+            // caller of this, but before plan_sokol.md SOKOL-41 it was never actually invoked here.
+            // Unit 0 above is authoritative for the sprite's own primary texture; a caller is not
+            // expected to SetTexture(0, ...) on a SpriteBatch-bound effect (see SetTexture()'s own
+            // "unit 0 is normally driven by the caller" doc comment), so no ordering conflict.
+            effectBackend->ApplyPendingTextureBindsEXT();
+
+            // plan_sokol.md SOKOL-41: full BlendState/DepthStencilState/RasterizerState, not just
+            // the texture/program bind -- this raw-GL draw bypasses sg_pipeline entirely, so none
+            // of it was ever applied to anything for it before, unlike GetSpritePipeline's own
+            // sg_pipeline_desc.
+            ApplyCustomEffectRasterStateEXT();
+            ApplyCustomEffectColorMasksEXT();
 
             if (customEffectVaoId_ == 0) glGenVertexArrays(1, &customEffectVaoId_);
             glBindVertexArray(customEffectVaoId_);
@@ -3465,6 +3689,7 @@ namespace CNA::Internal::Backends::Sokol
             glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibInfo.buf[ibInfo.active_slot]);
             glDrawElements(GL_TRIANGLES, quadCount * kSpriteIndicesPerQuad, GL_UNSIGNED_SHORT, nullptr);
 
+            ResetCustomEffectColorMasksEXT();
             glBindVertexArray(0);
             sg_reset_state_cache();
             return;
@@ -4003,6 +4228,7 @@ namespace CNA::Internal::Backends::Sokol
         key.referenceStencil = referenceStencil_;
         key.depthBias = depthBias_;
         key.slopeScaleDepthBias = slopeScaleDepthBias_;
+        key.blendFactorPacked = PackBlendFactorEXT(blendFactor_);
         key.primitiveType = static_cast<int>(ToPrimitiveType(primitive));
         key.indexType = static_cast<int>(
             ib == nullptr ? SG_INDEXTYPE_NONE
@@ -4619,6 +4845,120 @@ namespace CNA::Internal::Backends::Sokol
         sg_draw(baseElement, elementCount, 1);
     }
 
+    void SokolGraphicsBackend::ApplyCustomEffectRasterStateEXT()
+    {
+#if CNA_SOKOL_HAS_GL_READBACK
+        // Depth/stencil -- mirrors Get3DPipeline's own desc.depth/desc.stencil branches exactly:
+        // with no real depth-stencil attachment in the active pass, both are functionally disabled
+        // (matching XNA's no-op-if-no-depth-buffer behaviour); with one, depth stays enabled with
+        // compare=ALWAYS/write=false whenever depthTestEnabled_ is false, the same "functionally
+        // disabled but not GL_DEPTH_TEST-disabled" shape those pipelines use.
+        if (CurrentPassHasDepthStencilAttachmentEXT())
+        {
+            glEnable(GL_DEPTH_TEST);
+            glDepthFunc(depthTestEnabled_ ? ToGLCompareFunc(depthFunc_) : GL_ALWAYS);
+            glDepthMask((depthTestEnabled_ && depthWriteEnabled_) ? GL_TRUE : GL_FALSE);
+
+            if (stencilEnabled_)
+            {
+                glEnable(GL_STENCIL_TEST);
+                glStencilFuncSeparate(GL_FRONT, ToGLCompareFunc(stencilFunc_), referenceStencil_,
+                                      static_cast<GLuint>(stencilMask_ & 0xFF));
+                glStencilOpSeparate(GL_FRONT, ToGLStencilOp(stencilFail_),
+                                    ToGLStencilOp(stencilDepthFail_), ToGLStencilOp(stencilPass_));
+                // CounterClockwiseStencil* only applies when twoSidedStencilMode_ is set; otherwise
+                // GL_BACK mirrors GL_FRONT, matching Get3DPipeline's own
+                // "desc.stencil.back = twoSidedStencilMode ? ... : front" fallback.
+                const int backFunc = twoSidedStencilMode_ ? ccwStencilFunc_ : stencilFunc_;
+                const int backFail = twoSidedStencilMode_ ? ccwStencilFail_ : stencilFail_;
+                const int backDepthFail = twoSidedStencilMode_ ? ccwStencilDepthFail_ : stencilDepthFail_;
+                const int backPass = twoSidedStencilMode_ ? ccwStencilPass_ : stencilPass_;
+                glStencilFuncSeparate(GL_BACK, ToGLCompareFunc(backFunc), referenceStencil_,
+                                      static_cast<GLuint>(stencilMask_ & 0xFF));
+                glStencilOpSeparate(GL_BACK, ToGLStencilOp(backFail), ToGLStencilOp(backDepthFail),
+                                    ToGLStencilOp(backPass));
+                glStencilMask(static_cast<GLuint>(stencilWriteMask_ & 0xFF));
+            }
+            else
+            {
+                glDisable(GL_STENCIL_TEST);
+            }
+        }
+        else
+        {
+            glDisable(GL_DEPTH_TEST);
+            glDepthMask(GL_TRUE);
+            glDisable(GL_STENCIL_TEST);
+        }
+
+        // Blend, including the constant colour -- unlike the sg_pipeline paths (plan_sokol.md
+        // SOKOL-40), this raw-GL draw applies BlendFactor live on every draw, so it has no pipeline
+        // cache to go stale.
+        if (blendEnabled_)
+        {
+            glEnable(GL_BLEND);
+            glBlendFuncSeparate(ToGLBlendFactor(blendColorSrc_), ToGLBlendFactor(blendColorDst_),
+                                ToGLBlendFactor(blendAlphaSrc_), ToGLBlendFactor(blendAlphaDst_));
+            glBlendEquationSeparate(ToGLBlendOp(blendColorFunc_), ToGLBlendOp(blendAlphaFunc_));
+            glBlendColor(blendFactor_[0], blendFactor_[1], blendFactor_[2], blendFactor_[3]);
+        }
+        else
+        {
+            glDisable(GL_BLEND);
+        }
+
+        // Culling + winding -- every sg_pipeline in this backend fixes face_winding to
+        // SG_FACEWINDING_CW (see ToCullMode()'s own doc comment), so this raw-GL path must apply
+        // the same glFrontFace(GL_CW) explicitly rather than relying on a prior stock-pipeline
+        // draw having incidentally already left GL in that state.
+        if (cullMode_ == 0)
+        {
+            glDisable(GL_CULL_FACE);
+        }
+        else
+        {
+            glEnable(GL_CULL_FACE);
+            glCullFace(ToGLCullFace(cullMode_));
+        }
+        glFrontFace(GL_CW);
+
+        // Depth bias -- the same RasterizerState.DepthBias/SlopeScaleDepthBias -> glPolygonOffset
+        // mapping Get3DPipeline bakes into sg_depth_state.bias/bias_slope_scale.
+        if (depthBias_ != 0.0f || slopeScaleDepthBias_ != 0.0f)
+        {
+            glEnable(GL_POLYGON_OFFSET_FILL);
+            glPolygonOffset(slopeScaleDepthBias_, depthBias_);
+        }
+        else
+        {
+            glDisable(GL_POLYGON_OFFSET_FILL);
+        }
+#endif
+    }
+
+    void SokolGraphicsBackend::ApplyCustomEffectColorMasksEXT()
+    {
+#if CNA_SOKOL_HAS_GL_READBACK
+        const int activeColorAttachments = 1 + static_cast<int>(mrtExtraTargets_.size());
+        for (int slot = 0; slot < activeColorAttachments; ++slot)
+        {
+            const int mask = colorWriteChannels_[slot];
+            glColorMaski(static_cast<GLuint>(slot),
+                        (mask & 1) != 0 ? GL_TRUE : GL_FALSE, (mask & 2) != 0 ? GL_TRUE : GL_FALSE,
+                        (mask & 4) != 0 ? GL_TRUE : GL_FALSE, (mask & 8) != 0 ? GL_TRUE : GL_FALSE);
+        }
+#endif
+    }
+
+    void SokolGraphicsBackend::ResetCustomEffectColorMasksEXT()
+    {
+#if CNA_SOKOL_HAS_GL_READBACK
+        const int activeColorAttachments = 1 + static_cast<int>(mrtExtraTargets_.size());
+        for (int slot = 0; slot < activeColorAttachments; ++slot)
+            glColorMaski(static_cast<GLuint>(slot), GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+#endif
+    }
+
     void SokolGraphicsBackend::DrawCustomEffect3D(const SokolVertexBufferBackend& vb,
                                                   const SokolIndexBufferBackend* ib,
                                                   const VertexDeclaration* declaration,
@@ -4699,42 +5039,18 @@ namespace CNA::Internal::Backends::Sokol
         // not at BindTexture() call time.
         effectBackend->ApplyPendingTextureBindsEXT();
 
-        // Real depth-test/write state -- a genuine gap independent of MRT: this raw-GL draw
-        // bypasses sg_pipeline entirely, so DepthStencilState was never applied to anything for it,
-        // unlike every stock-effect/sprite pipeline (Get3DPipeline/GetSpritePipeline bake
-        // depthTestEnabled_/depthWriteEnabled_/depthFunc_ into desc.depth). Mirrors those pipelines'
-        // own semantics exactly: with no real depth-stencil attachment in the current pass, the test
-        // is disabled outright (matching XNA's no-op-if-no-depth-buffer behaviour); with one,
-        // GL_DEPTH_TEST stays enabled with compare=ALWAYS/write=false whenever depthTestEnabled_ is
-        // false, the same "functionally disabled but not GL_DEPTH_TEST-disabled" shape
-        // Get3DPipeline's own desc.depth.compare/write_enabled branch uses. Exercised end-to-end by
-        // easygl_mrt_test.cpp's own TestDepthOwnership (plan_sokol.md SOKOL-26).
-        if (CurrentPassHasDepthStencilAttachmentEXT())
-        {
-            glEnable(GL_DEPTH_TEST);
-            glDepthFunc(depthTestEnabled_ ? ToGLCompareFunc(depthFunc_) : GL_ALWAYS);
-            glDepthMask((depthTestEnabled_ && depthWriteEnabled_) ? GL_TRUE : GL_FALSE);
-        }
-        else
-        {
-            glDisable(GL_DEPTH_TEST);
-            glDepthMask(GL_TRUE);
-        }
+        // plan_sokol.md SOKOL-41: full depth/stencil/blend/cull/winding/depth-bias state, not just
+        // depth -- this raw-GL draw bypasses sg_pipeline entirely, so none of BlendState/
+        // DepthStencilState/RasterizerState was ever applied to anything for it before, unlike
+        // every stock-effect/sprite pipeline (Get3DPipeline/GetSpritePipeline bake all of it into
+        // their own sg_pipeline_desc). Exercised end-to-end by easygl_mrt_test.cpp's own
+        // TestDepthOwnership (plan_sokol.md SOKOL-26) for the depth half.
+        ApplyCustomEffectRasterStateEXT();
 
-        // ColorWriteChannels0..3 (plan_sokol.md SOKOL-26 MRT): this raw-GL draw bypasses
-        // sg_pipeline entirely, so BlendState's write masks are never baked into anything sokol_gfx
-        // applies for it -- glColorMaski per active attachment slot is the only way to honour them
-        // here. Reset to all-enabled afterward so a later sg_apply_pipeline-based draw (which only
-        // ever manages slot 0's write mask through its own pipeline state) never inherits a
-        // restricted mask on a slot beyond 0.
-        const int activeColorAttachments = 1 + static_cast<int>(mrtExtraTargets_.size());
-        for (int slot = 0; slot < activeColorAttachments; ++slot)
-        {
-            const int mask = colorWriteChannels_[slot];
-            glColorMaski(static_cast<GLuint>(slot),
-                        (mask & 1) != 0 ? GL_TRUE : GL_FALSE, (mask & 2) != 0 ? GL_TRUE : GL_FALSE,
-                        (mask & 4) != 0 ? GL_TRUE : GL_FALSE, (mask & 8) != 0 ? GL_TRUE : GL_FALSE);
-        }
+        // ColorWriteChannels0..3 (plan_sokol.md SOKOL-26 MRT): see ApplyCustomEffectColorMasksEXT()/
+        // ResetCustomEffectColorMasksEXT()'s own doc comments for why this needs its own before/
+        // after pair around the draw rather than living inside ApplyCustomEffectRasterStateEXT().
+        ApplyCustomEffectColorMasksEXT();
 
         const GLenum topology = ToGLPrimitiveTopology(primitive);
         const int elementCount = ElementCountForPrimitives(primitive, primitiveCount);
@@ -4759,8 +5075,7 @@ namespace CNA::Internal::Backends::Sokol
             glDrawArrays(topology, params.vertexStart, elementCount);
         }
 
-        for (int slot = 0; slot < activeColorAttachments; ++slot)
-            glColorMaski(static_cast<GLuint>(slot), GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+        ResetCustomEffectColorMasksEXT();
 
         glBindVertexArray(0);
         sg_reset_state_cache();
@@ -4881,6 +5196,7 @@ namespace CNA::Internal::Backends::Sokol
         key.referenceStencil = referenceStencil_;
         key.depthBias = depthBias_;
         key.slopeScaleDepthBias = slopeScaleDepthBias_;
+        key.blendFactorPacked = PackBlendFactorEXT(blendFactor_);
         key.primitiveType = static_cast<int>(ToPrimitiveType(primitive));
         key.indexType = static_cast<int>(ib.IsThirtyTwoBit() ? SG_INDEXTYPE_UINT32 : SG_INDEXTYPE_UINT16);
 

@@ -250,12 +250,50 @@ if(CNA_BUILD_TESTS AND CNA_BUILD_EXAMPLES
         TIMEOUT 30 LABELS "Sokol"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # plan_sokol.md SOKOL-40: GraphicsDevice.BlendFactor must not be cached away by a stale Sokol
+    # pipeline -- sg_pipeline_desc.blend_color is baked at creation time with no dynamic
+    # blend-constant call, unlike Vulkan/EasyGL, so it must be part of every pipeline cache key.
+    cna_sokol_test(cna_test_sokol_blendfactor_pipeline_cache
+                    examples/sokol_blendfactor_pipeline_cache_test.cpp)
+    cna_register_backend_test(NAME Sokol_BlendFactor_PipelineCache
+        COMMAND cna_test_sokol_blendfactor_pipeline_cache
+        TIMEOUT 30 LABELS "Sokol"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_sokol.md SOKOL-45: GL-context creation must share the constructor's transactional
+    # cleanup path -- a real SDL_GL_CreateContext() success followed by an SDL_GL_MakeCurrent()
+    # failure must not leak the context.
+    cna_sokol_test(cna_test_sokol_gl_context_transactional
+                    examples/sokol_gl_context_transactional_test.cpp)
+    cna_register_backend_test(NAME Sokol_GLContext_Transactional
+        COMMAND cna_test_sokol_gl_context_transactional
+        TIMEOUT 30 LABELS "Sokol"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # plan_sokol.md SOKOL-42: OcclusionQuery/ShaderEffect must release their raw-GL backend objects
     # during GraphicsDevice::Dispose(), before the backend device/GL context is torn down.
     cna_sokol_test(cna_test_sokol_dispose_order_occlusionquery_shadereffect
                     examples/sokol_dispose_order_occlusionquery_shadereffect_test.cpp)
     cna_register_backend_test(NAME Sokol_DisposeOrder_OcclusionQueryShaderEffect
         COMMAND cna_test_sokol_dispose_order_occlusionquery_shadereffect
+        TIMEOUT 30 LABELS "Sokol"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_sokol.md SOKOL-44: a custom ShaderEffect's deferred texture bindings must survive the
+    # bound texture being re-uploaded (SetData()) between SetTexture() and the eventual draw.
+    cna_sokol_test(cna_test_sokol_customeffect_texture_reupload
+                    examples/sokol_customeffect_texture_reupload_test.cpp)
+    cna_register_backend_test(NAME Sokol_CustomEffect_TextureReupload
+        COMMAND cna_test_sokol_customeffect_texture_reupload
+        TIMEOUT 30 LABELS "Sokol"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_sokol.md SOKOL-41: SpriteBatch's raw-GL custom-effect draw path must apply the device's
+    # real BlendState instead of inheriting whatever GL_BLEND state a previous draw left behind.
+    cna_sokol_test(cna_test_sokol_customeffect_blendstate_order
+                    examples/sokol_customeffect_blendstate_order_test.cpp)
+    cna_register_backend_test(NAME Sokol_CustomEffect_BlendStateOrder
+        COMMAND cna_test_sokol_customeffect_blendstate_order
         TIMEOUT 30 LABELS "Sokol"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

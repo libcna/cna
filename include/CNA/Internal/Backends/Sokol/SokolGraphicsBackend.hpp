@@ -915,8 +915,13 @@ namespace CNA::Internal::Backends::Sokol
     class SokolOcclusionQueryBackend : public IOcclusionQueryBackend
     {
     public:
-        /** @brief Allocates the underlying GL query object. */
-        SokolOcclusionQueryBackend();
+        /**
+         * @brief Allocates the underlying GL query object.
+         * @param owner The backend whose GL context this query's Begin/End calls target
+         *              (plan_sokol.md SOKOL-43); null is legal (matches the default constructor's
+         *              prior behaviour) and simply disables cross-object coordination.
+         */
+        explicit SokolOcclusionQueryBackend(SokolGraphicsBackend* owner = nullptr);
 
         /** @brief Destroys the GL query object. */
         ~SokolOcclusionQueryBackend() override;
@@ -936,6 +941,13 @@ namespace CNA::Internal::Backends::Sokol
          * site. `active_` tracks the real GL query state so this class only ever issues a
          * glBeginQuery/glEndQuery pair GL itself considers legal, silently absorbing everything
          * else -- matching FNA's "no exception" contract without corrupting sokol's error state.
+         *
+         * plan_sokol.md SOKOL-43: OpenGL permits only one active `GL_SAMPLES_PASSED` query per
+         * context at a time, not per query object -- `active_` alone cannot see a DIFFERENT
+         * object's outstanding Begin(). When `owner` was supplied, this also coordinates through
+         * `owner`'s single shared "which query owns the context's one active slot" tracking, so a
+         * second object's overlapping Begin() is silently absorbed exactly like a repeated Begin()
+         * on the same object, instead of reaching a second real `glBeginQuery` call.
          */
         void Begin() override;
 
@@ -957,6 +969,9 @@ namespace CNA::Internal::Backends::Sokol
         [[nodiscard]] int PixelCount() const override;
 
     private:
+        /// plan_sokol.md SOKOL-43: the backend whose context-wide active-query slot this instance
+        /// coordinates through; null disables coordination (see the constructor's own doc).
+        SokolGraphicsBackend* owner_ = nullptr;
         std::uint32_t queryId_ = 0;
         /// Whether a glBeginQuery for this object is currently outstanding (no matching
         /// glEndQuery yet) -- see Begin()'s own comment for why this exists.
@@ -1054,10 +1069,18 @@ namespace CNA::Internal::Backends::Sokol
         /// One texture unit's pending raw-GL bind, recorded by BindTexture()/BindTextureCube() and
         /// realized by ApplyPendingTextureBindsEXT() -- see that method's own doc comment for why
         /// this is deferred rather than applied immediately.
+        ///
+        /// plan_sokol.md SOKOL-44: holds the SOURCE backend, not a resolved sg_image id. A texture's
+        /// id is not stable across `SetData()` -- `SokolTextureBackend::RecreateImage()` (and the
+        /// cube/render-target equivalents) destroy the old `sg_image` and allocate a new one on every
+        /// upload -- so resolving eagerly here would let `effect.SetTexture(...); texture.SetData(...);
+        /// draw;` sample an already-destroyed image. ApplyPendingTextureBindsEXT() re-resolves the
+        /// CURRENT image from the source at draw time instead.
         struct PendingTextureBind
         {
             int unit;
-            std::uint32_t imageId;
+            const ITextureBackend* texture = nullptr;
+            const ITextureCubeBackend* cubeTexture = nullptr;
             bool isCube;
         };
 
@@ -1088,6 +1111,24 @@ namespace CNA::Internal::Backends::Sokol
          *             multisample count and swap interval are honoured.
          */
         explicit SokolGraphicsBackend(const GraphicsBackendCreateArgs& args);
+
+        /**
+         * @brief NOXNA test-only constructor (plan_sokol.md SOKOL-45) that can force the first
+         * `SDL_GL_MakeCurrent()` call this instance makes to fail regardless of its real return
+         * value, and counts every `SDL_GL_DestroyContext()` call this instance makes -- so a
+         * regression test can prove construction stays fully transactional even when
+         * `SDL_GL_CreateContext()` itself already succeeded before the failure.
+         *
+         * @param args Backend creation arguments, identical meaning to the public constructor.
+         * @param forceMakeCurrentFailureEXT When true, treat the first `SDL_GL_MakeCurrent()` call
+         *                                   as failed even if SDL itself reports success.
+         * @param contextDestroyCountEXT Optional counter incremented on every real
+         *                               `SDL_GL_DestroyContext()` call this instance makes; left
+         *                               untouched when null.
+         */
+        NOXNA SokolGraphicsBackend(const GraphicsBackendCreateArgs& args,
+                                    bool forceMakeCurrentFailureEXT,
+                                    int* contextDestroyCountEXT);
 
         /** @brief Shuts sokol_gfx down and destroys the GPU context. */
         ~SokolGraphicsBackend() override;
@@ -1250,6 +1291,35 @@ namespace CNA::Internal::Backends::Sokol
          * @return The new occlusion query backend, or null on a non-GL `CNA_SOKOL_API`.
          */
         std::unique_ptr<IOcclusionQueryBackend> CreateOcclusionQuery() override;
+
+        /**
+         * @brief NOXNA (plan_sokol.md SOKOL-43). Claims this context's one `GL_SAMPLES_PASSED`
+         * active-query slot for @p query.
+         *
+         * OpenGL permits only one active occlusion query per context, not per query object, so
+         * `SokolOcclusionQueryBackend::Begin()` calls this before ever issuing a real
+         * `glBeginQuery` -- a second, different query's overlapping `Begin()` is refused here and
+         * silently absorbed by the caller, the same "no exception" contract an already-active
+         * Begin() on the SAME object already has.
+         *
+         * @param query The query object requesting the slot.
+         * @return True if @p query now owns the slot (no other query was active); false if a
+         *         different query already holds it.
+         */
+        NOXNA bool TryActivateOcclusionQueryEXT(SokolOcclusionQueryBackend* query);
+
+        /**
+         * @brief NOXNA (plan_sokol.md SOKOL-43). Releases this context's active-query slot if
+         * @p query currently owns it (a no-op otherwise -- e.g. @p query never held the slot, or
+         * this is a redundant release).
+         *
+         * Called from both `SokolOcclusionQueryBackend::End()` and its destructor, so a query
+         * destroyed while still active (see `IOcclusionQueryBackend`'s own dispose-while-active
+         * contract) cannot leave the slot permanently claimed by a now-dangling pointer.
+         *
+         * @param query The query object releasing the slot.
+         */
+        NOXNA void ReleaseOcclusionQueryEXT(SokolOcclusionQueryBackend* query);
 
         /**
          * @brief Compiles a custom `ShaderEffect` from raw GLSL source (plan_sokol.md SOKOL-28).
@@ -1683,6 +1753,12 @@ namespace CNA::Internal::Backends::Sokol
             /// See Pipeline3DKey's identical field (plan_sokol.md SOKOL-26 MRT): sokol_gfx requires
             /// a pipeline's color_count to exactly match the active pass's real attachment count.
             int colorAttachmentCount;
+            /// GraphicsDevice.BlendFactor, packed 0xRRGGBBAA from the same 8-bit Color the public
+            /// API exposes (plan_sokol.md SOKOL-40). sokol_gfx bakes blend_color into the pipeline
+            /// object at creation time -- there is no dynamic blend-constant call, unlike most
+            /// APIs -- so a pipeline built under one BlendFactor is wrong for a draw under another
+            /// and must not be reused; only Blend::BlendFactor/InverseBlendFactor actually read it.
+            std::uint32_t blendFactorPacked;
 
             bool operator==(const PipelineKey& other) const;
         };
@@ -1821,6 +1897,8 @@ namespace CNA::Internal::Backends::Sokol
             /// this).
             int blendIndicesOffset;
             int blendIndicesFormat;
+            /// See PipelineKey's identical field (plan_sokol.md SOKOL-40).
+            std::uint32_t blendFactorPacked;
 
             bool operator==(const Pipeline3DKey& other) const;
         };
@@ -1879,6 +1957,8 @@ namespace CNA::Internal::Backends::Sokol
             int stride;
             int positionOffset;
             int positionFormat;
+            /// See PipelineKey's identical field (plan_sokol.md SOKOL-40).
+            std::uint32_t blendFactorPacked;
 
             bool operator==(const PipelineInstanced3DKey& other) const;
         };
@@ -1904,6 +1984,11 @@ namespace CNA::Internal::Backends::Sokol
         };
 
         void CreateGpuContext(SDL_Window* window, int multiSampleCount);
+        /// Destroys glContext_ if one was ever created, nulls it out, and increments
+        /// contextDestroyCountEXT_ when a test supplied one (plan_sokol.md SOKOL-45) -- the single
+        /// path both the constructor's transactional-cleanup catch block and the destructor use, so
+        /// a leaked or double-destroyed context cannot happen via one path but not the other.
+        void DestroyGpuContextIfAnyEXT();
         void SetupSokol();
         void CreateSpriteResources();
         void BeginPassIfNeeded();
@@ -1936,6 +2021,38 @@ namespace CNA::Internal::Backends::Sokol
                                 PrimitiveType primitive,
                                 int primitiveCount,
                                 const GpuDrawParams& params);
+        /**
+         * @brief NOXNA (plan_sokol.md SOKOL-41). Applies the device's full current graphics state
+         * -- depth test/write, stencil, blend (including the constant colour), face culling and
+         * winding, and depth bias -- as raw GL calls, for the two draw paths that bypass
+         * `sg_pipeline` entirely (`DrawCustomEffect3D` and `DrawSpriteRunEXT`'s custom-effect
+         * branch). Both bracket their whole raw-GL detour with `sg_reset_state_cache()`; call this
+         * AFTER that reset and BEFORE the draw call, on both sides of which real GL state is
+         * otherwise only ever set by an `sg_apply_pipeline()` call these draws never make -- so
+         * without this, a custom-effect draw silently keeps whatever blend/stencil/cull/depth-bias
+         * state a PRIOR stock-pipeline draw happened to leave configured in the GL context.
+         *
+         * Does not touch colour write masks -- see ApplyCustomEffectColorMasksEXT()'s own doc
+         * comment for why that needs a separate before/after pair instead.
+         */
+        void ApplyCustomEffectRasterStateEXT();
+        /**
+         * @brief NOXNA (plan_sokol.md SOKOL-41/SOKOL-26 MRT). Applies `ColorWriteChannels0..3` via
+         * `glColorMaski` per active colour-attachment slot, for the same two raw-GL draw paths
+         * ApplyCustomEffectRasterStateEXT() serves.
+         *
+         * A separate call (not folded into that function) because it must be undone with
+         * ResetCustomEffectColorMasksEXT() immediately AFTER the draw, not left in place like the
+         * rest of the raster state: every stock `sg_pipeline` bakes `desc.colors[slot].write_mask`
+         * from the SAME single `colorWriteChannels_[0]` value for every slot (stock pipelines have
+         * no per-slot write-mask concept), so a restricted mask this raw-GL path left on slot 1..N
+         * would otherwise silently survive into a later stock-pipeline draw that never intended to
+         * touch it.
+         */
+        void ApplyCustomEffectColorMasksEXT();
+        /** @brief Restores every active colour-attachment slot's write mask to all-enabled. See
+         *         ApplyCustomEffectColorMasksEXT()'s own doc comment for why this exists. */
+        void ResetCustomEffectColorMasksEXT();
         [[nodiscard]] std::uint32_t Get3DPipeline(const Pipeline3DKey& key);
         [[nodiscard]] std::uint32_t GetInstanced3DPipeline(const PipelineInstanced3DKey& key);
         [[nodiscard]] SokolTextureBackend& GetDefaultWhiteTexture();
@@ -1989,6 +2106,10 @@ namespace CNA::Internal::Backends::Sokol
 
         SDL_Window* window_ = nullptr;
         void* glContext_ = nullptr;
+        /// plan_sokol.md SOKOL-45 test-only failure injection -- see the NOXNA constructor's doc
+        /// comment. Always false/null via the public constructor.
+        bool forceMakeCurrentFailureEXT_ = false;
+        int* contextDestroyCountEXT_ = nullptr;
         int virtualWidth_ = 0;
         int virtualHeight_ = 0;
         CnaPresentationMode presentationMode_ = CnaPresentationMode::FixedHeightDynamicWidth;
@@ -2114,5 +2235,9 @@ namespace CNA::Internal::Backends::Sokol
         std::unordered_map<PipelineInstanced3DKey, std::uint32_t, PipelineInstanced3DKeyHash>
             pipelineInstanced3dCache_;
         std::unordered_map<SamplerKey, std::uint32_t, SamplerKeyHash> samplerCache_;
+        /// plan_sokol.md SOKOL-43: which SokolOcclusionQueryBackend, if any, currently owns this
+        /// context's one GL_SAMPLES_PASSED active-query slot. See
+        /// TryActivateOcclusionQueryEXT()/ReleaseOcclusionQueryEXT()'s own doc comments.
+        SokolOcclusionQueryBackend* activeOcclusionQueryEXT_ = nullptr;
     };
 }
