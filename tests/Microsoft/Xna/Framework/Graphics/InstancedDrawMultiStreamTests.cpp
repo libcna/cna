@@ -81,6 +81,7 @@
 #include <array>
 #include <cstdint>
 #include <cstring>
+#include <memory>
 #include <string>
 #include <vector>
 #include <gtest/gtest.h>
@@ -148,6 +149,13 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
     defined(CNA_BACKEND_D3D9) || defined(CNA_BACKEND_D3D11) || \
     defined(CNA_BACKEND_D3D12)
 #define CNA_INSTANCED_MULTI_STREAM_ORACLE 1
+#endif
+
+// The backends whose instanced path was corrected to consume VertexBufferBinding.VertexOffset --
+// EasyGL (REMED-GFX-122) and D3D11/D3D12 (REMED-GFX-123). InstancedDrawRangeTests.cpp uses exactly
+// this set for the same reason. Vulkan, bgfx and WebGPU still ignore it (REMED-GFX-211).
+#if defined(CNA_BACKEND_EASYGL) || defined(CNA_BACKEND_D3D11) || defined(CNA_BACKEND_D3D12)
+#define CNA_INSTANCED_BINDING_OFFSET_ORACLE 1
 #endif
 
 namespace
@@ -738,6 +746,30 @@ namespace
                 << label << ": geometry rendered outside the expected cells"
                 << DescribeFrame(snapshot, layout);
         }
+
+        /// The same assertion WITHOUT the colour axis, for the legs that run on every instancing
+        /// backend. CNA's stock instanced shader is a CNA extension, not an XNA one, and only
+        /// EasyGL's and bgfx's colour it from the per-vertex stream -- Vulkan's, WebGPU's, D3D11's
+        /// and D3D12's take `DiffuseColor` instead (recorded as REMED-GFX-212). A cross-backend
+        /// preservation gate must therefore assert WHICH RECORDS each stream supplied, which the
+        /// cell positions alone already say, and leave the colour axis to the mixed-stream group.
+        static void ExpectExactlyTheseCellsIgnoringColour(
+            const FrameSnapshot& snapshot, const GridLayout& layout,
+            const std::vector<ExpectedCell>& expected, const char* label)
+        {
+            int accounted = 0;
+            for (const ExpectedCell& cell : expected)
+            {
+                const int lit = CountLitInCell(snapshot, layout, cell.column, cell.band);
+                accounted += lit;
+                EXPECT_GT(lit, 0)
+                    << label << ": nothing rendered in column " << cell.column
+                    << " band " << cell.band << DescribeFrame(snapshot, layout);
+            }
+            EXPECT_EQ(accounted, snapshot.CountLit())
+                << label << ": geometry rendered outside the expected cells"
+                << DescribeFrame(snapshot, layout);
+        }
     };
 }
 
@@ -1255,6 +1287,17 @@ TEST_F(InstancedDrawMultiStreamTest, RepeatedFramesReproduceTheSameMixedStreamFr
 // InstancedDrawRangeTests. ONE per-vertex stream (the packed 16-byte vertex) plus ONE per-instance
 // stream carrying the whole matrix -- the shape every instancing backend already renders, so this
 // leg is NOT gated on MultiStreamVertexInput.
+//
+// Measured boundaries this leg deliberately stays inside, so that it is a preservation gate on
+// EVERY instancing backend rather than a restatement of open findings:
+//
+//   * the per-instance VertexOffset is 0 here. Vulkan, bgfx and WebGPU ignore a nonzero one --
+//     REMED-GFX-122/123 corrected only EasyGL and D3D11/D3D12 -- which is recorded as
+//     REMED-GFX-211 and asserted separately below on the backends that do honour it.
+//   * the colour axis is not asserted (REMED-GFX-212; see
+//     ExpectExactlyTheseCellsIgnoringColour).
+//   * the instance frequency is 1. bgfx implements no per-instance divisor at all
+//     (REMED-GFX-213).
 // ---------------------------------------------------------------------------
 TEST_F(InstancedDrawMultiStreamTest, ClassicSingleVertexAndSingleInstanceStreamIsUnchanged)
 {
@@ -1284,8 +1327,9 @@ TEST_F(InstancedDrawMultiStreamTest, ClassicSingleVertexAndSingleInstanceStreamI
             VertexElement(12, VertexElementFormat::Color, VertexElementUsage::Color, 0),
         });
 
+    // One record per instance, in order, at frequency 1 and VertexOffset 0: instance `i` displaces
+    // `i` columns and `i / kBandStreamFrequency` bands, which is exactly CanonicalCells(0).
     std::vector<WholeMatrixRecord> matrices;
-    matrices.push_back(MakeWholeMatrixRecord(kColumnDecoyShift, kBandDecoyShift));
     for (int i = 0; i < kInstanceCount; ++i)
         matrices.push_back(MakeWholeMatrixRecord(i, i / kBandStreamFrequency));
 
@@ -1296,6 +1340,179 @@ TEST_F(InstancedDrawMultiStreamTest, ClassicSingleVertexAndSingleInstanceStreamI
         static_cast<int>(matrices.size()), BufferUsage::None);
     matrixBuffer.SetDataRaw(
         matrices.data(), static_cast<int>(matrices.size()), 64);
+    const std::vector<std::uint16_t> indices = BuildIdentityIndices16();
+    IndexBuffer indexBuffer(
+        device, IndexElementSize::SixteenBits, kMeshElementCount, BufferUsage::None);
+    indexBuffer.SetData(indices.data(), kMeshElementCount);
+
+    RenderTarget2D target = MakeTarget();
+    BasicEffect effect(device);
+
+    device.SetVertexBuffers({
+        VertexBufferBinding(&meshBuffer, 0, 0),
+        VertexBufferBinding(&matrixBuffer, 0, 1),
+    });
+    device.SetIndexBuffer(&indexBuffer);
+    device.SetRenderTarget(&target);
+    device.Clear(Color::Black);
+    ApplyMeshEffect(effect);
+    device.DrawInstancedPrimitives(
+        PrimitiveType::TriangleList, 0, 0, kVerticesPerSlot, 0, 1, kInstanceCount);
+    device.SetRenderTarget(nullptr);
+
+    const FrameSnapshot snapshot = CaptureTarget(target);
+    ExpectExactlyTheseCellsIgnoringColour(
+        snapshot, layout, CanonicalCells(0),
+        "the classic one-per-vertex + one-per-instance shape is unchanged");
+}
+
+// ---------------------------------------------------------------------------
+// Coverage items 21 and 22: command-container growth, and destroying a stream's public wrapper
+// after its draw has been queued but BEFORE the deferred backends replay it.
+//
+// Twelve mixed-stream draws are queued into one bind cycle, alternating between two colour
+// streams, which grows every deferred backend's command container past its initial capacity -- a
+// container that stored a pointer INTO itself, or into GraphicsDevice's live binding state, breaks
+// exactly here. Then both replaceable wrappers are destroyed while the draws are still queued and
+// the readback triggers the replay. The array is captured BY VALUE and every backend copies the
+// concrete native handle, so each draw must still render its own bindings; under ASan this leg is
+// a direct use-after-free detector for a stale IVertexBufferBackend pointer.
+// ---------------------------------------------------------------------------
+TEST_F(InstancedDrawMultiStreamTest, QueuedMixedStreamDrawsSurviveContainerGrowthAndWrapperDeath)
+{
+    RequireInstancedRendering();
+    CNA_REQUIRE_MIXED_STREAM_INSTANCING();
+
+    const GridLayout layout = TargetLayout();
+    const MixedStreamFixture fixture = BuildMixedStreamFixture(layout);
+    const std::vector<ColorRecord> replacementColors =
+        BuildColorStream(ColorCode::Prefix, ColorCode::Alternate);
+
+    VertexBuffer positionBuffer(
+        device, PositionOnlyDeclaration(), kPositionElementCount, BufferUsage::None);
+    positionBuffer.SetDataRaw(fixture.positions.data(), kPositionElementCount, kPositionStride);
+    VertexBuffer columnBuffer(
+        device, ColumnStreamDeclaration(),
+        static_cast<int>(fixture.columns.size()), BufferUsage::None);
+    columnBuffer.SetDataRaw(
+        fixture.columns.data(), static_cast<int>(fixture.columns.size()), kColumnStreamStride);
+    VertexBuffer bandBuffer(
+        device, BandStreamDeclaration(),
+        static_cast<int>(fixture.bands.size()), BufferUsage::None);
+    bandBuffer.SetDataRaw(
+        fixture.bands.data(), static_cast<int>(fixture.bands.size()), kBandStreamStride);
+    IndexBuffer indexBuffer(
+        device, IndexElementSize::SixteenBits, kMeshElementCount, BufferUsage::None);
+    indexBuffer.SetData(fixture.indices16.data(), kMeshElementCount);
+
+    RenderTarget2D target = MakeTarget();
+    BasicEffect effect(device);
+    device.SetIndexBuffer(&indexBuffer);
+    device.SetRenderTarget(&target);
+    device.Clear(Color::Black);
+
+    // Heap-allocated so their public wrappers can die while the draws are still queued.
+    auto colorBuffer = std::make_unique<VertexBuffer>(
+        device, ColorOnlyDeclaration(), kColorElementCount, BufferUsage::None);
+    colorBuffer->SetDataRaw(fixture.colors.data(), kColorElementCount, kColorStride);
+    auto altColorBuffer = std::make_unique<VertexBuffer>(
+        device, ColorOnlyDeclaration(), kColorElementCount, BufferUsage::None);
+    altColorBuffer->SetDataRaw(replacementColors.data(), kColorElementCount, kColorStride);
+
+    // Twelve draws: geometry group `g` under the original colour stream for even `g` and the
+    // replacement for odd `g`, one instance each so every draw lands in exactly one cell.
+    constexpr int kQueuedDraws = 12;
+    std::vector<ExpectedCell> expected;
+    for (int draw = 0; draw < kQueuedDraws; ++draw)
+    {
+        const int group = draw % kSlotCount;
+        const bool alternate = (draw % 2) != 0;
+        device.SetVertexBuffers({
+            VertexBufferBinding(&positionBuffer, kPositionPrefix, 0),
+            VertexBufferBinding(
+                alternate ? altColorBuffer.get() : colorBuffer.get(), kColorPrefix, 0),
+            VertexBufferBinding(&columnBuffer, 1, kColumnStreamFrequency),
+            VertexBufferBinding(&bandBuffer, 1, kBandStreamFrequency),
+        });
+        ApplyMeshEffect(effect);
+        device.DrawInstancedPrimitives(
+            PrimitiveType::TriangleList, group * kVerticesPerSlot, 0, kVerticesPerSlot, 0, 1, 1);
+        if (draw < kSlotCount)
+        {
+            expected.push_back(ExpectedCell{
+                group, kLiveBand,
+                alternate ? ColorCode::Alternate : LiveCodeForGroup(group)});
+        }
+    }
+
+    // The wrappers die while every one of those draws is still queued. Unbinding first is what the
+    // established lifetime contract requires; the backends must already hold their own handles.
+    device.SetVertexBuffers({});
+    device.SetVertexBuffer(nullptr);
+    colorBuffer.reset();
+    altColorBuffer.reset();
+
+    device.SetRenderTarget(nullptr);
+    const FrameSnapshot snapshot = CaptureTarget(target);
+    // Draws 8..11 repeat groups 0..3 with the OPPOSITE colour stream, so those four cells are
+    // overdrawn and only the last writer's colour is asserted for them.
+    for (int draw = kSlotCount; draw < kQueuedDraws; ++draw)
+    {
+        const int group = draw % kSlotCount;
+        expected[static_cast<std::size_t>(group)].code =
+            (draw % 2) != 0 ? ColorCode::Alternate : LiveCodeForGroup(group);
+    }
+    ExpectExactlyTheseCells(
+        snapshot, layout, expected,
+        "every queued draw kept the complete binding array it was issued under, across container "
+        "growth and the death of two of its wrappers");
+}
+
+#ifdef CNA_INSTANCED_BINDING_OFFSET_ORACLE
+// ---------------------------------------------------------------------------
+// The same classic shape WITH a nonzero per-instance VertexOffset, on the backends REMED-GFX-122
+// and REMED-GFX-123 corrected. A prefix decoy record displacing five columns and three bands sits
+// in front of the live records, so a dropped instance offset lights column 5 band 3 and loses the
+// last live record -- which is exactly what Vulkan, bgfx and WebGPU still do (REMED-GFX-211,
+// A/B-proven byte-identical on the pre-REMED-GFX-202 production tree).
+// ---------------------------------------------------------------------------
+TEST_F(InstancedDrawMultiStreamTest, ClassicInstanceStreamHonoursItsOwnVertexOffset)
+{
+    RequireInstancedRendering();
+
+    const GridLayout layout = TargetLayout();
+    const std::vector<PositionRecord> positions = BuildPositionStream(layout);
+    const std::vector<ColorRecord> colors = BuildColorStream();
+
+    struct PackedVertex { PositionRecord position; ColorRecord color; };
+    static_assert(sizeof(PackedVertex) == 16);
+    std::vector<PackedVertex> packed;
+    packed.reserve(static_cast<std::size_t>(kMeshElementCount));
+    for (int i = 0; i < kMeshElementCount; ++i)
+    {
+        packed.push_back(PackedVertex{
+            positions[static_cast<std::size_t>(kPositionPrefix + i)],
+            colors[static_cast<std::size_t>(kColorPrefix + i)]});
+    }
+
+    const VertexDeclaration packedDeclaration(
+        16,
+        {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Color, VertexElementUsage::Color, 0),
+        });
+
+    std::vector<WholeMatrixRecord> matrices;
+    matrices.push_back(MakeWholeMatrixRecord(kColumnDecoyShift, kBandDecoyShift));
+    for (int i = 0; i < kInstanceCount; ++i)
+        matrices.push_back(MakeWholeMatrixRecord(i, i / kBandStreamFrequency));
+
+    VertexBuffer meshBuffer(device, packedDeclaration, kMeshElementCount, BufferUsage::None);
+    meshBuffer.SetDataRaw(packed.data(), kMeshElementCount, 16);
+    VertexBuffer matrixBuffer(
+        device, WholeMatrixDeclaration(),
+        static_cast<int>(matrices.size()), BufferUsage::None);
+    matrixBuffer.SetDataRaw(matrices.data(), static_cast<int>(matrices.size()), 64);
     const std::vector<std::uint16_t> indices = BuildIdentityIndices16();
     IndexBuffer indexBuffer(
         device, IndexElementSize::SixteenBits, kMeshElementCount, BufferUsage::None);
@@ -1317,10 +1534,11 @@ TEST_F(InstancedDrawMultiStreamTest, ClassicSingleVertexAndSingleInstanceStreamI
     device.SetRenderTarget(nullptr);
 
     const FrameSnapshot snapshot = CaptureTarget(target);
-    ExpectExactlyTheseCells(
+    ExpectExactlyTheseCellsIgnoringColour(
         snapshot, layout, CanonicalCells(0),
-        "the classic one-per-vertex + one-per-instance shape is unchanged");
+        "the per-instance stream's own VertexOffset skips its decoy record");
 }
+#endif   // CNA_INSTANCED_BINDING_OFFSET_ORACLE
 
 #endif   // CNA_INSTANCED_MULTI_STREAM_ORACLE
 
@@ -1478,24 +1696,21 @@ TEST_F(InstancedDrawMultiStreamTest, InstanceFrequencyFixesTheExactConsumedRecor
         VertexBufferBinding(&exactBuffer, kOffset, kFrequency),
     });
     effect.Apply();
-    // Exactly enough: the range is legal, so the only reason this may not draw is a backend that
-    // implements no instanced path at all, which reports its own runtime_error rather than an
-    // argument error.
+    // Exactly enough: the SHARED layer must accept it. A backend may still reject afterwards -- it
+    // may implement no instanced path at all, or, like bgfx, size its instance copy by
+    // `instanceCount` records because it has no per-instance divisor (REMED-GFX-213). Those are
+    // native capability limits, not verdicts on the public range, so they are told apart by the
+    // shared gate's own wording: only it names the offending slot.
     try
     {
         device.DrawInstancedPrimitives(
             PrimitiveType::TriangleList, 0, 0, kVerticesPerSlot, 0, 1, kInstances);
     }
-    catch (const System::ArgumentOutOfRangeException& e)
+    catch (const std::exception& e)
     {
-        ADD_FAILURE()
+        EXPECT_EQ(nullptr, std::strstr(e.what(), "bound to slot"))
             << "exactly `VertexOffset + 1 + (instanceCount - 1) / frequency` records must be "
-               "accepted, got: " << e.what();
-    }
-    catch (const std::exception&)
-    {
-        // A backend without an instanced implementation, or without this stream shape: not an
-        // argument-range verdict, which is all this test asserts.
+               "accepted by the shared range gate, got: " << e.what();
     }
 }
 
@@ -1546,18 +1761,42 @@ TEST_F(InstancedDrawMultiStreamTest, UnsupportedBackendRejectsMixedStreamInstanc
             PrimitiveType::TriangleList, 0, 0, kVerticesPerSlot, 0, 1, kInstanceCount);
     };
 
-    if (device.SupportsCapability(GraphicsCapability::MultiStreamVertexInput))
-    {
-        EXPECT_NO_THROW(draw())
-            << "a backend that claims MultiStreamVertexInput must accept a mixed-frequency "
-               "multi-stream instanced draw";
-    }
-    else
+    if (!device.SupportsCapability(GraphicsCapability::MultiStreamVertexInput))
     {
         EXPECT_THROW(draw(), System::NotSupportedException)
             << "a backend that does not claim MultiStreamVertexInput must reject a mixed-stream "
                "instanced draw deterministically, never render it from a subset of the streams";
+        return;
     }
+
+#ifdef CNA_INSTANCED_MULTI_STREAM_ORACLE
+    EXPECT_NO_THROW(draw())
+        << "a backend that claims MultiStreamVertexInput and implements instanced drawing must "
+           "accept a mixed-frequency multi-stream instanced draw";
+#else
+    // A THIRD, measured outcome, not a silent skip: this backend claims MultiStreamVertexInput
+    // (REMED-GFX-201 taught it ordinary multi-stream input) but overrides no
+    // DrawInstancedPrimitivesEx at all, so every instanced draw -- one stream or four -- reaches
+    // IGraphicsBackend's own default. The mixed-stream array must reach that SAME declared
+    // boundary and not some other failure; this arm fails the moment such a backend gains an
+    // instanced path, so the boundary cannot outlive itself. REMED-GFX-210 records that CNA has
+    // no capability a caller can query for hardware instancing (FNA3D's own
+    // FNA3D_SupportsHardwareInstancing), which is why this arm has to be selected by backend set.
+    try
+    {
+        draw();
+        ADD_FAILURE()
+            << "this backend was expected to implement no instanced draw path at all, but the "
+               "mixed-stream draw was accepted -- see REMED-GFX-210";
+    }
+    catch (const std::exception& e)
+    {
+        EXPECT_STREQ(
+            "DrawInstancedPrimitives is not supported on this graphics backend.", e.what())
+            << "a backend without an instanced draw path must reach IGraphicsBackend's own "
+               "declared boundary for a mixed-stream array too, not a different failure";
+    }
+#endif
 }
 
 // ---------------------------------------------------------------------------
