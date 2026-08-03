@@ -1,6 +1,6 @@
 # Diligent Engine Graphics Backend — Implementation Plan
 
-> **Status (2026-07-31): Phase `DILIGENT-1` is implemented, and most of Phase `DILIGENT-2`/`3` on
+> **Status (2026-08-03): Phase `DILIGENT-1` is implemented, and most of Phase `DILIGENT-2`/`3` on
 > top of it.** What that means concretely is in the "What the baseline actually does" section below
 > — read it before assuming parity with Vulkan/EasyGL/SDL_GPU, which this backend does **not** have.
 > `RenderTarget2D`/`RenderTargetCube`, `AlphaTestEffect`, `DualTextureEffect`,
@@ -10,6 +10,14 @@
 > and verified on a real (software) Vulkan device. Volume-texture sampling, MSAA on
 > `RenderTargetCube` and custom `ShaderEffect` programs are **not** implemented, and each one
 > *refuses loudly* rather than rendering a near-miss.
+>
+> **Independent audit correction (commit `3a64eeec7100`): the backend is usable on Vulkan but the
+> plan is not complete and several older ✅ claims were too broad.** Tasks `DILIGENT-57`–
+> `DILIGENT-68` below are the authoritative remediation backlog. In particular, device fallback,
+> pipeline-key completeness, stock-effect lighting fidelity, sample masks, capability reporting,
+> format-aware MSAA clamping and the full readback contract have not met their acceptance criteria.
+> The OpenGL device type currently passes 14/24 registered binaries (96/116 checks), not the full
+> suite. No real hardware GPU has been verified.
 >
 > **Status legend:** ✅ implemented *and verified against its stated acceptance criteria*;
 > 🟨 code or documentation exists but has not met those criteria; ⬜ not implemented.
@@ -107,7 +115,9 @@ Practical consequences that shaped this plan:
 
 Implemented and exercised:
 
-- Device + immediate context + swap chain over a real SDL window, with per-device-type fallback.
+- Device + immediate context + swap chain over a real SDL window. A per-device candidate loop exists,
+  but Vulkan↔OpenGL fallback is not operational because SDL window API flags are fixed earlier
+  (`DILIGENT-57`).
 - The whole clear family (colour, depth, stencil and every combination), `Present`, swap interval,
   runtime swap-chain resize.
 - Logical/virtual resolution with all five `CnaPresentationMode` policies, plus
@@ -124,7 +134,8 @@ Implemented and exercised:
 - `BlendState` (factors, functions, slot-0 colour write mask, blend factor constant),
   `DepthStencilState` (depth test/write/function, two-sided stencil, masks, reference value),
   `RasterizerState` (cull, fill, scissor enable, depth bias), and `SamplerState` on slot 0 —
-  all folded into the pipeline cache key.
+  mostly folded into the pipeline cache key. Scissor enable is missing from that key, sample mask is
+  discarded, and depth bias is lossily packed (`DILIGENT-58`/`60`/`64`).
 - `ReadBackbuffer`, resampling the physical region back to the caller's logical region.
 
 - `TextureCube` and `Texture3D`: creation with a mip chain, per-face / per-sub-box `SetData` and
@@ -166,7 +177,8 @@ Implemented and exercised:
 Deliberately refused (each throws, naming itself):
 
 - Custom `ShaderEffect` programs, `RenderTargetCube` MSAA, and `SkinnedEffect`'s stride-56
-  vertex-colour variant. `SupportsCapability()` reports each of these honestly.
+  vertex-colour variant. These individual gaps refuse loudly; overall capability reporting still
+  requires the device-probed correction in `DILIGENT-61`.
 
 ---
 
@@ -178,21 +190,21 @@ Deliberately refused (each throws, naming itself):
 | --- | --- | --- | --- |
 | `DILIGENT-1` | `CNA_GRAPHICS_BACKEND=DILIGENT` selection, target, compile definition | ✅ | `cmake/BackendSelection.cmake`, `cmake/BackendLibraries.cmake` |
 | `DILIGENT-2` | DiligentCore acquisition, engine gating, `cna_link_diligent()` | ✅ | `cmake/ThirdPartyDiligent.cmake`. Disables Diligent's tests/archiver/format validation and the WebGPU engine; disables its OpenGL engine when `GL/glx.h` is absent, with a STATUS line rather than a third-party error |
-| `DILIGENT-3` | Runtime device selection + `CNA_DILIGENT_DEVICE` override | ✅ | `GetDeviceTypePreferenceOrder()`/`ParseDeviceTypeOverride()` are free functions so they test without a GPU |
+| `DILIGENT-3` | Runtime device selection + `CNA_DILIGENT_DEVICE` override | 🟨 | Parsing is unit-tested, but SDL window flags are selected independently and prevent `gles` and automatic Vulkan→OpenGL fallback; superseded by `DILIGENT-57` |
 | `DILIGENT-4` | Swap chain from the SDL native window (X11, Win32) | ✅ | Wayland throws with the `SDL_VIDEODRIVER=x11` instruction (design decision 8) |
 | `DILIGENT-5` | Clear family, `Present`, swap interval, resize | ✅ | |
 | `DILIGENT-6` | Virtual resolution, presentation modes, coordinate transforms | ✅ | Same math as the SDL_GPU/WebGPU backends |
 | `DILIGENT-7` | `Texture2D` create/update/readback | ✅ | Mipped textures are created empty and filled per level: Diligent wants initial data for all levels or none |
 | `DILIGENT-8` | Vertex/index buffers | ✅ | 32-bit indices supported natively, unlike the interface's fallback default |
-| `DILIGENT-9` | HLSL shader set + pipeline cache | ✅ | Five variants; key covers topology and the full blend/depth-stencil/rasterizer state |
+| `DILIGENT-9` | HLSL shader set + pipeline cache | 🟨 | Built-in variants work, but the key omits scissor enable (and other missing immutable state is tracked below); superseded by `DILIGENT-58` |
 | `DILIGENT-10` | `SpriteBatch` | ✅ | Batches flush on texture/sampler/transform change and at `End()` |
-| `DILIGENT-11` | 3D stride dispatch 16/20/24/32 + `BasicEffect` lighting | ✅ | |
-| `DILIGENT-12` | Render state family (`ApplyBlendState`/`ApplyDepthStencilState`/`ApplyRasterizerState`/`ApplySamplerState`) | ✅ | Slots 1..3 write masks are carried since `DILIGENT-24`, but are only observable once a multi-output shader exists; `MultiSampleMask` has no effect at all (single-sampled everywhere) |
-| `DILIGENT-13` | `ReadBackbuffer` | ✅ | |
-| `DILIGENT-14` | Honest `SupportsCapability()` + loud refusals for the unimplemented set | ✅ | Design decision 7 |
+| `DILIGENT-11` | 3D stride dispatch 16/20/24/32 + `BasicEffect` lighting | 🟨 | Stride dispatch works, but stock lighting is not XNA/FNA-equivalent; superseded by `DILIGENT-59` |
+| `DILIGENT-12` | Render state family (`ApplyBlendState`/`ApplyDepthStencilState`/`ApplyRasterizerState`/`ApplySamplerState`) | 🟨 | Per-slot write masks exist, but `MultiSampleMask` is silently discarded and scissor/depth-bias state has cache/packing defects; see `DILIGENT-58`, `DILIGENT-60`, `DILIGENT-64` |
+| `DILIGENT-13` | `ReadBackbuffer` | 🟨 | Common-path pixels work, but the Vulkan swap chain lacks `SWAP_CHAIN_USAGE_COPY_SOURCE` and Overscan/out-of-bounds regions are not clipped; superseded by `DILIGENT-63` |
+| `DILIGENT-14` | Honest `SupportsCapability()` + loud refusals for the unimplemented set | 🟨 | Several capabilities return constants instead of device features/limits; superseded by `DILIGENT-61` |
 | `DILIGENT-15` | `Diligent_DeviceSelection` unit tests (no GPU required) | ✅ | Runs in the normal `CnaTests` suite |
-| `DILIGENT-16` | `Diligent_*` CTest binaries | ✅ | 9 binaries, 41 pixel checks total, all passing on a real Vulkan device — Mesa `lavapipe` (software rasterizer) under Xvfb, not hardware. See "Verification status" |
-| `DILIGENT-17` | `docs/diligent-backend.md` | ✅ | |
+| `DILIGENT-16` | `Diligent_*` CTest binaries | ✅ | 24 binaries, 116 pixel checks total; Vulkan is 115/116 and OpenGL is 96/116 on Mesa software devices under Xvfb. See "2026-08-03 independent audit" and "Verification status" |
+| `DILIGENT-17` | `docs/diligent-backend.md` | 🟨 | Substantially documented, but counts, capability statements and implementation comments have drifted; superseded by `DILIGENT-67` |
 
 ### Phase `DILIGENT-2` — render targets
 
@@ -203,7 +215,7 @@ Deliberately refused (each throws, naming itself):
 | `DILIGENT-22` | `RenderTargetCube` + per-face binding | ✅ | Six per-face `RENDER_TARGET` views over one `RESOURCE_DIM_TEX_CUBE` texture, a shared depth-stencil buffer (only one face is ever the active draw target at a time), and a `DiligentSampledTexture` conformance shared with plain `TextureCube` so `EnvironmentMapEffect` accepts either. Verified by `Diligent_RenderTargetCube`, including sampling the render target back through a real `EnvironmentMapEffect` reflection |
 | `DILIGENT-23` | `TextureCube` (`CreateTextureCube`, `SetData`/`GetData` per face) | ✅ | Six array slices of one `RESOURCE_DIM_TEX_CUBE`; full mip chain. Verified by the shared `TextureCubeTests`/`CnjCapabilityMatrixTests`/XNB cube fixtures, which now run for real on this backend instead of asserting the refusal |
 | `DILIGENT-24` | MRT (`SetRenderTargets` with 2..4 slots) | ✅ | All bound slots are attached and cleared, and the pipeline key carries every slot's format plus the per-slot colour write masks. Only slot 0 receives *fragments* today: every built-in shader declares one `SV_TARGET`, so slots 1..3 stay clear-only until `DILIGENT-42` |
-| `DILIGENT-25` | MSAA back buffer + render targets, device-probed clamping | ✅ | Real offscreen-then-resolve MSAA for the back buffer (`Present()`/`ReadBackbuffer()` resolve) and `RenderTarget2D` (its own independent multisampled texture + resolve texture, resolved on unbind), both clamped via `GetTextureFormatInfoExt()`'s per-format `SampleCounts` bitmask. `RenderTargetCube` MSAA is not implemented (still clamped to 1). Verified by `Diligent_MSAA`'s diagonal-edge differential (see "Verification status"). Found and fixed a real, separate, pre-existing bug while wiring this up -- see this row's own "Verification status" note |
+| `DILIGENT-25` | MSAA back buffer + render targets, device-probed clamping | 🟨 | Rendering/resolves work on Vulkan, but `RenderTarget2D` clamps against swap-chain colour/depth formats instead of its own RGBA8 and optional depth format; OpenGL's MSAA render-target check also fails. See `DILIGENT-62` and `DILIGENT-66` |
 | `DILIGENT-26` | Mip generation for render targets (`GenerateMips`) | ✅ | Implemented since `DILIGENT-25` (which also fixed the real bug that made it unreachable -- `SetRenderTarget2D()`/`SetRenderTargetCubeFace()`/`SetRenderTargets()` never called the outgoing target's `UnbindAsRenderTarget()`). Now closed with a dedicated pixel test, `Diligent_RenderTargetMipGen` (`examples/diligent_rendertarget_mipgen_test.cpp`): a 4x4 mipMap `RenderTarget2D` gets an exact (x+y)%2 Red/Blue checkerboard pixel-copied into level 0 (`SpriteBatch` + `PointClamp`, 1:1), so every aligned 2x2 block contains exactly 2 Red + 2 Blue texels. After unbinding (which triggers `IDeviceContext::GenerateMips()`), level 1 (2x2) and level 2 (1x1) both read back as the real box-filter average `(128,0,128)` at every texel -- not pure Red, pure Blue, or black, which is what a nearest-copy fallback or a silent no-op would produce instead. 7/7 checks pass, deterministic across repeated runs; level 0's own content is confirmed unaffected by the regeneration |
 
 ### Phase `DILIGENT-3` — remaining effect families
@@ -260,6 +272,54 @@ confused with each other:
 | `DILIGENT-54` | `Model` multi-mesh/bone-hierarchy orchestration test | ✅ | **Confirmed real and working — no stub-behind-a-code-path bug found.** Added `Diligent_Model` (`examples/diligent_model_test.cpp`), a direct port of D3D12's own `DX-148` Check KK6 (`examples/d3d12_smoke_test.cpp`): a real 2-bone hierarchy (root → child, `ModelBone::AddChild`) driving `Model::Draw()`'s full orchestration end to end (bone transform → `SetVertexBuffer`/`setIndicesProperty`/`DrawIndexedPrimitives`/`EffectPass.Apply`), not a raw `VertexBuffer` draw wearing a `Model` label. D3D12's own version of this exact test previously caught a real crash from unimplemented `SetDepthTestEnabled`/`SetDepthWriteEnabled`/`SetBlendEnabled` stubs nothing else in that backend's suite exercised — Diligent has no equivalent gap: the mesh's red renders exactly over the green clear, PASS, reproducible across repeated runs |
 | `DILIGENT-55` | `Texture2D` mip-level `SetData`/`GetData` (level > 0) dedicated round-trip test | ✅ | **Confirmed real, genuine GPU round-trip — not a CPU-shadow-only readback.** Added `Diligent_Mip` (`examples/diligent_mip_test.cpp`), a port of the cross-backend `easygl_texture2d_mip_test.cpp` (Task 171) fixture, but strictly stronger here: `DiligentSampledTexture::GetData()` is documented as reading a mip level back through a real staging-texture GPU readback (unlike the EasyGL precedent's own explicit "pure CPU shadow buffer" note), so this genuinely exercises the class of bug `D3D11`'s `DX-126` was written to catch elsewhere (Vulkan/Bgfx silently no-op-ing a non-zero mip level's `SetData`/`GetData` entirely, `Task 867`). A 4×4 `mipMap=true` texture (levels 4×4/2×2/1×1) gets a distinct solid colour per level; every level round-trips byte-exact, and a final level-0 re-read *after* levels 1/2's own uploads confirms `UpdatePixelsLevel()` targeted the correct subresource each time, not level 0. 22/22 PASS, reproducible across repeated runs |
 | `DILIGENT-56` | NPOT (non-power-of-two) `Texture2D` real GPU round-trip test | ✅ | **Confirmed real and correct — no row-pitch/stride bug found.** Added `Diligent_Npot` (`examples/diligent_npot_test.cpp`), going further than D3D11's own `DX-140` (which only checked "does NPOT sampling look plausible" against a *solid*-colour texture) in the same direction `DILIGENT-55` already established: a genuinely non-power-of-two 5×3 texture (5×4=20 bytes/row, not alignment-friendly) filled with 15 DISTINCT pseudo-random colours, so a `D3D12_TEXTURE_DATA_PITCH_ALIGNMENT`-shaped row-pitch bug in the staging-texture upload/readback path would shift pixels sideways between rows — something a solid fill could never reveal. Check A — full-texture `SetData`/`GetData` round-trips all 15 pixels byte-exact. Check B — a sub-rectangle `GetData()` read (columns [1,4), not aligned to the full 5-pixel row) round-trips exactly, independently exercising the row-pitch-vs-requested-width skip path. Check C — a real `BasicEffect` draw samples one of the texture's known colours at the viewport centre (not garbage/clear-colour), proving the normal draw path doesn't corrupt NPOT content either. 3/3 PASS, reproducible across repeated runs. This closes Phase `DILIGENT-5`'s full task list |
+
+---
+
+## 2026-08-03 independent audit (commit `3a64eeec7100`)
+
+This is the latest authoritative execution record. It was produced from a clean source archive at
+the exact commit above, with the repository's exact SDL/SDL_image/SDL_mixer/googletest submodule
+revisions and pinned DiligentCore v2.5.6. All graphics runs used Xvfb display `:199` and Mesa
+software devices; no physical display or hardware GPU was used.
+
+- Build: all 24 registered `Diligent_*` binaries compiled successfully.
+- Vulkan (`CNA_DILIGENT_DEVICE=vulkan`, llvmpipe): 23/24 binaries fully pass, 115/116 checks pass.
+  `Diligent_DepthBias` remains 3/4. Vulkan validation also reports that back-buffer readback
+  transitions/copies a swap-chain image lacking `VK_IMAGE_USAGE_TRANSFER_SRC_BIT`; this is a real
+  CNA swap-chain usage defect, not the documented constant-depth-bias limitation.
+- OpenGL (`CNA_DILIGENT_DEVICE=opengl`, OpenGL 4.5 llvmpipe): 14/24 binaries fully pass, 96/116
+  checks pass. The failing binaries are `Diligent_MSAA`, `Diligent_Instanced`,
+  `Diligent_DrawOffset`, `Diligent_VertexLit`, `Diligent_Pbr`, `Diligent_DepthBias`,
+  `Diligent_ReferenceStencil`, `Diligent_SpriteFont`, `Diligent_Npot` and
+  `Diligent_RenderTargetMipGen`.
+- Device selection: `CNA_DILIGENT_DEVICE=gles` creates an SDL Vulkan window and then fails with
+  `The specified window isn't an OpenGL window`. With `auto` and a deliberately unavailable Vulkan
+  ICD, `SDL_CreateWindow` fails before `DiligentGraphicsBackend` can attempt its advertised OpenGL
+  fallback.
+- Coverage audit: no registered Diligent test mentions scissor enable, `MultiSampleMask`, stock
+  effect emissive colour, or a non-uniform world normal transform. Passing the current Vulkan suite
+  therefore does not cover the static defects recorded below.
+
+## Phase `DILIGENT-6` — independent-audit remediation (opened 2026-08-03)
+
+These tasks supersede the over-broad older ✅ claims cited in their notes. A task may become ✅ only
+after its stated pixel/unit acceptance checks pass on every applicable compiled device type; a
+Vulkan-only pass does not close an OpenGL failure.
+
+| Task | Description | Status | Acceptance criteria / implementation notes |
+| --- | --- | --- | --- |
+| `DILIGENT-57` | Make runtime device selection and SDL window API selection one transaction | ⬜ | Resolve aliases through one shared parser before window creation. `gl`/`gles` must create an OpenGL window. `auto` must either recreate the SDL window when crossing Vulkan↔OpenGL or use another explicitly documented safe transaction; it must not promise an impossible fallback. Add integration tests for every alias and a forced-Vulkan-failure→working-OpenGL path under Xvfb. Closes the remaining correctness part of `DILIGENT-3`/`4`. |
+| `DILIGENT-58` | Make `PipelineKey` cover every immutable PSO field, starting with scissor enable | ⬜ | `ScissorEnable` is currently taken from live `scissorEnabled_` while absent from `PipelineKey`, equality and hash, so the first cached PSO wins after state toggles. Put it in the key and audit every field assigned in `GetOrCreatePipeline()` for the same pattern. Add off→on→off and on→off→on pixel tests for SpriteBatch, indexed 3D and instanced draws. Closes `DILIGENT-9`/`12`. |
+| `DILIGENT-59` | Restore XNA/FNA stock-effect lighting fidelity | ⬜ | Keep ambient and emissive separate: emissive is added after `(ambient + lights) * DiffuseColor`, never multiplied by diffuse a second time. Scale specular by final output alpha, normalize light directions, and use World's inverse-transpose normal matrix for `BasicEffect`/`EnvironmentMapEffect` in both per-pixel and per-vertex paths (the skinned/PBR helpers already show the intended pattern). Port emissive, alpha-specular, multi-light and non-uniform-world pixel tests from the established D3DCommon/EasyGL coverage for `BasicEffect`, `SkinnedEffect` and `EnvironmentMapEffect`. Closes `DILIGENT-11`/`34`/`35`/`37`. |
+| `DILIGENT-60` | Implement `BlendState.MultiSampleMask` | ⬜ | Carry the 32-bit mask from `BlendWriteState` into `PipelineKey` and Diligent's `GraphicsPipelineDesc::SampleMask`; it is supported by pinned DiligentCore and is currently silently discarded. Verify masks 0, 1 and all-ones on a single-sample target and a genuinely 4x MSAA render target, including A→B→A cache transitions. Closes the missing part of `DILIGENT-12`. |
+| `DILIGENT-61` | Report capabilities from the actual device | ⬜ | Replace unconditional `true`/device-type guesses with `GetDeviceInfo().Features` (`WireframeFill`, exact/binary occlusion queries), sampler properties (`MaxAnisotropy`), MRT limits and per-format sample-count support. `SupportsCapability()` and the corresponding Create/Apply operation must use the same cached facts; it must never report support immediately before creation throws. Add pure helper tests plus live-device consistency checks. Closes `DILIGENT-14`. |
+| `DILIGENT-62` | Clamp MSAA against the resources actually being created | ⬜ | Change the helper to accept the real colour format and optional depth format. The back buffer uses its granted swap-chain formats; `RenderTarget2D` uses `RGBA8_UNORM` and intersects `D24_UNORM_S8_UINT` only when depth was requested. Never use swap-chain BGRA/depth support to decide an RGBA/no-depth target. Add format/depth-none helper tests and fix the OpenGL render-target resolve failure. Closes `DILIGENT-25`. |
+| `DILIGENT-63` | Make back-buffer readback valid and bounded for every presentation mode | ⬜ | Request `SWAP_CHAIN_USAGE_COPY_SOURCE` so Vulkan creates present images with transfer-source usage and require a validation-clean readback. Intersect the physical source box with the real back-buffer extent, handle negative Overscan origins without unsigned conversion or shifted content, zero-fill uncovered logical pixels, and clamp rounding at right/bottom edges. Add full/subregion tests for Native, Stretch, Letterbox, Overscan and FixedHeightDynamicWidth. Closes `DILIGENT-6`/`13`. |
+| `DILIGENT-64` | Store depth-bias state without lossy signed-byte modulo packing | ⬜ | Replace the two 8-bit quantized fields (`DepthBias*1000`, slope*16) with lossless/canonical key fields or explicit native values. Values just outside the current ranges must clamp/convert deliberately, never wrap sign (for example +0.129 must not become negative). Add boundary, sign and A→B→A cache tests, then re-evaluate constant bias separately from the known llvmpipe limitation. Completes `DILIGENT-49`. |
+| `DILIGENT-65` | Make instancing respect vertex declarations and real stream strides | ⬜ | The current PSO hardcodes slot-0 stride 16 and derives slot-1 as exactly 64 while the buffers retain their actual strides. Either build/cache the input layout from the bound declarations/strides or reject unsupported layouts loudly before drawing. Cover a 12-byte position stream, a padded instance stream, offsets/baseVertex and both Vulkan/OpenGL. Closes the general contract behind `DILIGENT-43`/`45`. |
+| `DILIGENT-66` | Close OpenGL parity instead of documenting expected failures | ⬜ | Root-cause and fix all ten failing binaries listed in the audit record: RT MSAA resolve; instancing and instanced offsets; vertex-lit and PBR numerics; depth bias; reference stencil; SpriteFont; NPOT sampling; render-target mip level 0 preservation. Acceptance is 24/24 binaries and 116/116 checks under `CNA_DILIGENT_DEVICE=opengl` on Xvfb, with no skips caused by window-flag selection. Completes `DILIGENT-30`. |
+| `DILIGENT-67` | Add a dual-device CI/CTest matrix and normalize documentation | ⬜ | Run the registered suite explicitly once with Vulkan and once with OpenGL under Xvfb; do not let the default preference order hide GL. Add the missing scissor/sample-mask/emissive/non-uniform-normal/presentation tests from tasks above. Update this file, `docs/diligent-backend.md` and header comments from generated/current test facts (24 binaries, 116 checks); remove stale claims such as “single-sampled everywhere”, “five variants”, and implemented PBR/instancing being outside scope. |
+| `DILIGENT-68` | Split the backend and reuse shared shader references | ⬜ | Break the 4,493-line implementation into device/swap-chain, resources/readback, pipeline/state, SpriteBatch and shader/effect units. Move embedded shader sources to reviewable files or generate the Diligent variants from the established D3DCommon shader implementations so normal/lighting fixes cannot silently diverge again. No behavior change: both device suites must stay at least as green as before the refactor. |
 
 ---
 
