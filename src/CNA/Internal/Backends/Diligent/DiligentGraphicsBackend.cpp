@@ -2229,7 +2229,9 @@ float4 main(in PSInput psIn) : SV_Target
                raster == other.raster && targetFormats == other.targetFormats &&
                extraTargetFormats == other.extraTargetFormats && sampleCount == other.sampleCount &&
                scissorEnable == other.scissorEnable && depthBias == other.depthBias &&
-               slopeScaledDepthBias == other.slopeScaledDepthBias && sampleMask == other.sampleMask;
+               slopeScaledDepthBias == other.slopeScaledDepthBias && sampleMask == other.sampleMask &&
+               instancedVertexStride == other.instancedVertexStride &&
+               instancedInstanceStride == other.instancedInstanceStride;
     }
 
     std::size_t DiligentGraphicsBackend::PipelineKeyHash::operator()(const PipelineKey& key) const noexcept
@@ -2242,7 +2244,8 @@ float4 main(in PSInput psIn) : SV_Target
                                         key.stencilMasks, key.raster, key.targetFormats,
                                         key.extraTargetFormats, key.sampleCount, key.scissorEnable,
                                         static_cast<std::uint32_t>(key.depthBias), slopeBits,
-                                        key.sampleMask};
+                                        key.sampleMask, key.instancedVertexStride,
+                                        key.instancedInstanceStride};
         for (const std::uint32_t field : fields)
             hash = hash * 1099511628211ull ^ static_cast<std::size_t>(field);
         return hash;
@@ -3544,11 +3547,14 @@ float4 main(in PSInput psIn) : SV_Target
     }
 
     DiligentGraphicsBackend::PipelineKey DiligentGraphicsBackend::MakePipelineKey(
-        ShaderVariant variant, PrimitiveType primitive) const
+        ShaderVariant variant, PrimitiveType primitive, std::uint32_t instancedVertexStride,
+        std::uint32_t instancedInstanceStride) const
     {
         PipelineKey key = state_;
         key.variant = variant;
         key.topology = static_cast<std::uint32_t>(ToTopology(primitive));
+        key.instancedVertexStride = instancedVertexStride;
+        key.instancedInstanceStride = instancedInstanceStride;
         key.targetFormats = static_cast<std::uint32_t>(CurrentColorFormat()) |
                             (static_cast<std::uint32_t>(CurrentDepthStencilFormat()) << 16);
 
@@ -3678,28 +3684,36 @@ float4 main(in PSInput psIn) : SV_Target
                 usesEnvironmentMap = true;
                 break;
             case ShaderVariant::Instanced3D:
+            {
                 vertexSource = kInstancedVertexHlsl;
                 pixelSource = kInstancedPixelHlsl;
+                // Both strides come from the real buffers bound for this specific draw
+                // (DrawInstancedPrimitivesEx() validates and passes them into the pipeline key) --
+                // never a literal or LAYOUT_ELEMENT_AUTO_STRIDE guess. Diligent pipelines are
+                // immutable, so a caller with a different real stride gets its own distinct cached
+                // pipeline instead of silently misfetching through one built for someone else's
+                // layout (DILIGENT-65).
+                const auto vertexStride = static_cast<Dg::Uint32>(key.instancedVertexStride);
+                const auto instanceStride = static_cast<Dg::Uint32>(key.instancedInstanceStride);
                 layout = {
-                    // Slot 0: per-vertex Position only, out of a real VertexPositionColor stream
-                    // (stride 16 -- Position's own 12 bytes plus 4 bytes of packed colour this
-                    // shader never reads). The stride must be given explicitly: LAYOUT_ELEMENT_AUTO_STRIDE
-                    // would compute it from the elements actually DECLARED here (12 bytes, Position
-                    // alone), not the buffer's real per-vertex size, corrupting every vertex fetch
-                    // after the first by reading 4 bytes short each step.
-                    Dg::LayoutElement{0, 0, 3, Dg::VT_FLOAT32, Dg::False, Dg::LAYOUT_ELEMENT_AUTO_OFFSET, 16},
+                    // Slot 0: per-vertex Position only, out of whatever real stream the caller
+                    // bound (a plain 12-byte position buffer, a full VertexPositionColor stream,
+                    // or anything else at least 12 bytes with Position first).
+                    Dg::LayoutElement{0, 0, 3, Dg::VT_FLOAT32, Dg::False, Dg::LAYOUT_ELEMENT_AUTO_OFFSET,
+                                      vertexStride},
                     // Slot 1: one 4x4 world matrix per instance, as four consecutive float4 rows,
                     // advancing once per instance rather than once per vertex.
                     Dg::LayoutElement{1, 1, 4, Dg::VT_FLOAT32, Dg::False, Dg::LAYOUT_ELEMENT_AUTO_OFFSET,
-                                      Dg::LAYOUT_ELEMENT_AUTO_STRIDE, Dg::INPUT_ELEMENT_FREQUENCY_PER_INSTANCE},
+                                      instanceStride, Dg::INPUT_ELEMENT_FREQUENCY_PER_INSTANCE},
                     Dg::LayoutElement{2, 1, 4, Dg::VT_FLOAT32, Dg::False, Dg::LAYOUT_ELEMENT_AUTO_OFFSET,
-                                      Dg::LAYOUT_ELEMENT_AUTO_STRIDE, Dg::INPUT_ELEMENT_FREQUENCY_PER_INSTANCE},
+                                      instanceStride, Dg::INPUT_ELEMENT_FREQUENCY_PER_INSTANCE},
                     Dg::LayoutElement{3, 1, 4, Dg::VT_FLOAT32, Dg::False, Dg::LAYOUT_ELEMENT_AUTO_OFFSET,
-                                      Dg::LAYOUT_ELEMENT_AUTO_STRIDE, Dg::INPUT_ELEMENT_FREQUENCY_PER_INSTANCE},
+                                      instanceStride, Dg::INPUT_ELEMENT_FREQUENCY_PER_INSTANCE},
                     Dg::LayoutElement{4, 1, 4, Dg::VT_FLOAT32, Dg::False, Dg::LAYOUT_ELEMENT_AUTO_OFFSET,
-                                      Dg::LAYOUT_ELEMENT_AUTO_STRIDE, Dg::INPUT_ELEMENT_FREQUENCY_PER_INSTANCE},
+                                      instanceStride, Dg::INPUT_ELEMENT_FREQUENCY_PER_INSTANCE},
                 };
                 break;
+            }
             case ShaderVariant::LitTexturedVertexLit3D:
                 vertexSource = kLitVertexLitVertexHlsl;
                 pixelSource = kLitVertexLitPixelHlsl;
@@ -4192,6 +4206,23 @@ float4 main(in PSInput psIn) : SV_Target
             throw std::runtime_error(
                 "CNA Diligent: instanced draw requires a real per-instance vertex buffer");
 
+        // DILIGENT-65: the pipeline's slot-0/slot-1 LayoutElement strides are baked in from these
+        // real buffer strides (below), not guessed at 16/64 -- but a stride too small to hold what
+        // the shader actually reads (float3 Position at slot 0, four float4 rows at slot 1) can
+        // never be made to work by any stride value, so it is refused loudly here rather than
+        // producing an out-of-bounds or nonsensical fetch.
+        const auto vertexStride = static_cast<std::uint32_t>(vertexBuffer->GetStride());
+        const auto instanceStride = static_cast<std::uint32_t>(instanceBuffer->GetStride());
+        if (vertexStride < 12)
+            throw std::runtime_error(
+                "CNA Diligent: instanced draw's per-vertex stream stride (" +
+                std::to_string(vertexStride) + " bytes) is too small to hold Position (12 bytes)");
+        if (instanceStride < 64)
+            throw std::runtime_error(
+                "CNA Diligent: instanced draw's per-instance stream stride (" +
+                std::to_string(instanceStride) +
+                " bytes) is too small to hold a 4x4 world matrix (64 bytes)");
+
         SyncSwapChainSize();
         EnsureRenderTargetsBound();
 
@@ -4206,8 +4237,8 @@ float4 main(in PSInput psIn) : SV_Target
         constants.alphaTest[3] = 1.0f;
         UploadConstants(constants);
 
-        CachedPipeline& pipeline =
-            GetOrCreatePipeline(MakePipelineKey(ShaderVariant::Instanced3D, primitive));
+        CachedPipeline& pipeline = GetOrCreatePipeline(
+            MakePipelineKey(ShaderVariant::Instanced3D, primitive, vertexStride, instanceStride));
 
         context_->SetPipelineState(pipeline.pipeline);
         context_->SetStencilRef(static_cast<Dg::Uint32>(referenceStencil_));

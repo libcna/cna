@@ -1445,6 +1445,20 @@ namespace CNA::Internal::Backends::Diligent
             /// into `Dg::GraphicsPipelineDesc::SampleMask`. Previously silently discarded entirely
             /// (`DILIGENT-60`).
             std::uint32_t sampleMask = 0xFFFFFFFFu;
+            /// `ShaderVariant::Instanced3D` only: the real per-vertex (slot 0) stream stride, in
+            /// bytes, of the `IVertexBufferBackend` actually bound for this draw. Zero for every
+            /// other variant. Used as the PSO's slot-0 `LayoutElement::Stride` instead of a
+            /// hardcoded `16` -- a caller's real stride is part of what makes one cached pipeline
+            /// safe to reuse for another draw; a different stride needs its own pipeline, not a
+            /// silently-misfetching reuse of this one (`DILIGENT-65`).
+            std::uint32_t instancedVertexStride = 0;
+            /// `ShaderVariant::Instanced3D` only: the real per-instance (slot 1) stream stride, in
+            /// bytes. Zero for every other variant. Used as the PSO's slot-1 `LayoutElement::Stride`
+            /// instead of letting `LAYOUT_ELEMENT_AUTO_STRIDE` derive it purely from the four float4
+            /// rows this shader declares (64) -- a padded or otherwise larger real instance stream
+            /// would silently misfetch every instance past the first under that assumption
+            /// (`DILIGENT-65`).
+            std::uint32_t instancedInstanceStride = 0;
 
             bool operator==(const PipelineKey& other) const noexcept;
         };
@@ -1512,7 +1526,9 @@ namespace CNA::Internal::Backends::Diligent
         void ApplyViewportAndScissor();
         [[nodiscard]] LogicalViewport ComputeLogicalViewport() const;
         [[nodiscard]] CachedPipeline& GetOrCreatePipeline(const PipelineKey& key);
-        [[nodiscard]] PipelineKey MakePipelineKey(ShaderVariant variant, PrimitiveType primitive) const;
+        [[nodiscard]] PipelineKey MakePipelineKey(ShaderVariant variant, PrimitiveType primitive,
+                                                  std::uint32_t instancedVertexStride = 0,
+                                                  std::uint32_t instancedInstanceStride = 0) const;
         [[nodiscard]] Dg::ISampler* GetOrCreateSampler(int filter, int addressU, int addressV,
                                                        int maxAnisotropy);
         void UploadConstants(const ShaderConstants& constants);
