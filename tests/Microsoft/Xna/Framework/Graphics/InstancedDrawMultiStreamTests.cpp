@@ -152,22 +152,27 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 #define CNA_INSTANCED_MULTI_STREAM_ORACLE 1
 #endif
 
-// The backends whose instanced path was corrected to consume VertexBufferBinding.VertexOffset --
-// EasyGL (REMED-GFX-122) and D3D11/D3D12 (REMED-GFX-123). InstancedDrawRangeTests.cpp uses exactly
-// this set for the same reason. Vulkan, bgfx and WebGPU still ignore it (REMED-GFX-211).
-#if defined(CNA_BACKEND_EASYGL) || defined(CNA_BACKEND_D3D11) || defined(CNA_BACKEND_D3D12)
+// The backends whose instanced path was corrected to consume VertexBufferBinding.VertexOffset AND
+// InstanceFrequency -- EasyGL (REMED-GFX-122), D3D11/D3D12 (REMED-GFX-123) and Vulkan
+// (REMED-GFX-211/213). InstancedDrawRangeTests.cpp uses exactly this set for the same reason.
+// bgfx and WebGPU still ignore both (REMED-GFX-211/213, open for those two backends).
+#if defined(CNA_BACKEND_EASYGL) || defined(CNA_BACKEND_D3D11) || \
+    defined(CNA_BACKEND_D3D12) || defined(CNA_BACKEND_VULKAN)
 #define CNA_INSTANCED_BINDING_OFFSET_ORACLE 1
 #endif
 
-// The three backends the REMED-GFX-211/213 checkpoint triage MEASURED, at pixel level, dropping
-// both bindings' VertexOffset and rendering InstanceFrequency 2 at an effective divisor of one --
+// The backends the REMED-GFX-211/213 checkpoint triage MEASURED, at pixel level, dropping both
+// bindings' VertexOffset and rendering InstanceFrequency 2 at an effective divisor of one --
 // silently, on the classic supported shape. The triage group at the bottom of this file asserts
 // exactly that measurement on exactly these backends, so the record is a fact about what they do
 // rather than a gate recording that somebody once believed they were broken; each arm fails the
-// moment its backend is corrected, which is what forces the arm's own removal. D3D9 is deliberately
-// NOT here: it is outside CNA_INSTANCED_BINDING_OFFSET_ORACLE too, but no D3D display was available
-// to measure it, and an unmeasured backend must not be asserted either way.
-#if defined(CNA_BACKEND_VULKAN) || defined(CNA_BACKEND_BGFX) || defined(CNA_BACKEND_WEBGPU)
+// moment its backend is corrected, which is what forces the arm's own removal. Vulkan was in this
+// set until REMED-GFX-211/213 corrected it and every arm here duly failed; it now sits in
+// CNA_INSTANCED_BINDING_OFFSET_ORACLE above, and the two remaining backends keep their own
+// measured boundary. D3D9 is deliberately NOT here: it is outside
+// CNA_INSTANCED_BINDING_OFFSET_ORACLE too, but no D3D display was available to measure it, and an
+// unmeasured backend must not be asserted either way.
+#if defined(CNA_BACKEND_BGFX) || defined(CNA_BACKEND_WEBGPU)
 #define CNA_INSTANCED_OFFSET_DEFECT_MEASURED 1
 #endif
 
@@ -1483,11 +1488,12 @@ TEST_F(InstancedDrawMultiStreamTest, QueuedMixedStreamDrawsSurviveContainerGrowt
 
 #ifdef CNA_INSTANCED_BINDING_OFFSET_ORACLE
 // ---------------------------------------------------------------------------
-// The same classic shape WITH a nonzero per-instance VertexOffset, on the backends REMED-GFX-122
-// and REMED-GFX-123 corrected. A prefix decoy record displacing five columns and three bands sits
-// in front of the live records, so a dropped instance offset lights column 5 band 3 and loses the
-// last live record -- which is exactly what Vulkan, bgfx and WebGPU still do (REMED-GFX-211,
-// A/B-proven byte-identical on the pre-REMED-GFX-202 production tree).
+// The same classic shape WITH a nonzero per-instance VertexOffset, on the backends REMED-GFX-122,
+// REMED-GFX-123 and REMED-GFX-211 corrected. A prefix decoy record displacing five columns and
+// three bands sits in front of the live records, so a dropped instance offset lights column 5
+// band 3 and loses the last live record -- which is exactly what bgfx and WebGPU still do
+// (REMED-GFX-211, A/B-proven byte-identical on the pre-REMED-GFX-202 production tree, and still
+// measured by the triage group below).
 // ---------------------------------------------------------------------------
 TEST_F(InstancedDrawMultiStreamTest, ClassicInstanceStreamHonoursItsOwnVertexOffset)
 {
@@ -2092,7 +2098,9 @@ TEST_F(InstancedDrawMultiStreamTest, ClassicInstanceFrequencyDivisorIsReadOnEver
 
 #ifdef CNA_INSTANCED_BINDING_OFFSET_ORACLE
     EXPECT_EQ(std::string("divisor-2-honoured"), atTwo)
-        << "REMED-GFX-123 keyed this backend's input layout on the step rate: six instances at "
+        << "this backend implements the per-instance divisor -- REMED-GFX-123 by keying D3D11/D3D12's "
+           "input layout on the step rate, EasyGL through glVertexAttribDivisor, REMED-GFX-213 by "
+           "expanding the grouping into Vulkan's own instance staging copy: six instances at "
            "InstanceFrequency 2 must consume records 0,0,1,1,2,2";
 #elif defined(CNA_INSTANCED_OFFSET_DEFECT_MEASURED)
     EXPECT_EQ(std::string("divisor-1-silently"), atTwo)
@@ -2524,3 +2532,4 @@ TEST_F(InstancedDrawMultiStreamTest, BindingStateKeepsEverySlotsOwnOffsetAndFreq
     EXPECT_EQ(2, bindings[3].getVertexOffsetProperty());
     EXPECT_EQ(kBandStreamFrequency, bindings[3].getInstanceFrequencyProperty());
 }
+

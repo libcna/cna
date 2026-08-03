@@ -10172,6 +10172,44 @@ namespace CNA::Internal::Backends::Vulkan
         const int vertexCount        = vb.GetVertexCount();
         const int instCountClamped   = std::max(1, instanceCount);
 
+        // REMED-GFX-211: the GEOMETRY binding's own VertexOffset, which this route dropped. The
+        // deferred arena copies the whole per-vertex buffer and binds it at the draw's own packed
+        // arena offset, so binding 0 has no per-binding native offset channel to carry it -- but
+        // vkCmdDrawIndexed's `vertexOffset` is added to every decoded index, which is exactly the
+        // term this stream owes, and it is applied to the per-vertex binding only. The route binds
+        // exactly one per-vertex stream (RejectUnsupportedStreamCombination above), so folding it
+        // into baseVertex advances that stream and nothing else, exactly once: the fetched element
+        // becomes `VertexOffset + baseVertex + index`. The index buffer is untouched -- startIndex
+        // stays an index-element offset, already applied to the index copy below.
+        const GpuVertexStreamBinding* perVertexStream = FirstPerVertexStream(params);
+        const int perVertexOffset = perVertexStream != nullptr ? perVertexStream->vertexOffset : 0;
+
+        // REMED-GFX-211/213: the shared layer validates both of these before dispatch
+        // (ValidateVertexStreamRanges / ValidateInstanceStreamRanges), so neither can fire for a
+        // draw that arrived through GraphicsDevice. They exist because Draw*PrimitivesEx is a
+        // public interface method a harness may call with a hand-built GpuDrawParams, and because
+        // an offset that was previously ignored now indexes a real source copy -- an out-of-range
+        // one must name its slot here rather than over-read the mapped buffer and leave the
+        // diagnosis to a native layer that cannot see the public contract.
+        const int instanceFrequency = std::max(1, instanceStream->instanceFrequency);
+        const int lastInstanceRecord =
+            instanceStream->vertexOffset + (instCountClamped - 1) / instanceFrequency;
+        if (perVertexOffset < 0 || perVertexOffset > vertexCount ||
+            params.baseVertex > vertexCount - perVertexOffset)
+        {
+            throw std::runtime_error(
+                "The Vulkan backend: the per-vertex VertexBufferBinding.VertexOffset bound to slot " +
+                std::to_string(perVertexStream != nullptr ? perVertexStream->slot : 0) +
+                " leaves its own vertex buffer.");
+        }
+        if (instanceStream->vertexOffset < 0 || lastInstanceRecord >= instVb.GetVertexCount())
+        {
+            throw std::runtime_error(
+                "The Vulkan backend: the per-instance VertexBufferBinding bound to slot " +
+                std::to_string(instanceStream->slot) + " does not hold record " +
+                std::to_string(lastInstanceRecord) + '.');
+        }
+
         Pending3DDraw d{};
         FillInstancedPushConst(d.pushConst, view, projection, params);
 
@@ -10187,10 +10225,31 @@ namespace CNA::Internal::Backends::Vulkan
                     static_cast<const uint8_t*>(ib.GetMappedPtr()) + params.startIndex * indexSize,
                     static_cast<std::size_t>(indexCount) * indexSize);
 
-        // Copy per-instance data (instanceCount entries)
+        // Copy per-instance data: one destination record per instance, exactly as before -- only
+        // WHICH source record each one takes changed.
+        //
+        // REMED-GFX-211: the first source record is this stream's own VertexOffset, converted with
+        // this stream's own stride, never binding 0's.
+        //
+        // REMED-GFX-213: instance i takes record `VertexOffset + i / InstanceFrequency` -- the same
+        // rule glVertexAttribDivisor and D3D11's InstanceDataStepRate define, and the one EasyGL
+        // already implements natively. Vulkan 1.1 with VK_KHR_swapchain as its only device
+        // extension has no vertex-attribute-divisor feature to enable, so binding 1 keeps the
+        // implicit divisor of 1 and the grouping is expanded here, into the staging vector this
+        // route already fills. Nothing about the native binding, the pipeline or its cache key
+        // changes, and no frequency reaches them -- the divisor is a data-copy concern only.
+        // Frequency 1 stays the single bulk copy it has always been.
         d.instVbData.resize(static_cast<std::size_t>(instCountClamped) * instStride);
-        std::memcpy(d.instVbData.data(), instVb.GetMappedPtr(),
-                    d.instVbData.size());
+        const auto* instSrc = static_cast<const uint8_t*>(instVb.GetMappedPtr()) +
+                              static_cast<std::size_t>(instanceStream->vertexOffset) * instStride;
+        if (instanceFrequency == 1) {
+            std::memcpy(d.instVbData.data(), instSrc, d.instVbData.size());
+        } else {
+            for (int i = 0; i < instCountClamped; ++i)
+                std::memcpy(d.instVbData.data() + static_cast<std::size_t>(i) * instStride,
+                            instSrc + static_cast<std::size_t>(i / instanceFrequency) * instStride,
+                            instStride);
+        }
 
         d.topology     = ToVkTopology(primitive);
         d.drawCount    = indexCount;
@@ -10211,7 +10270,10 @@ namespace CNA::Internal::Backends::Vulkan
         d.stride       = pvStride;
         d.instVbStride = instStride;
         d.instanceCount = static_cast<uint32_t>(instCountClamped);
-        d.baseVertex   = static_cast<int32_t>(params.baseVertex);
+        // REMED-GFX-211: the geometry binding's VertexOffset rides the native draw's own
+        // vertexOffset term alongside baseVertex; captured by value here, so a later
+        // SetVertexBuffers cannot reach this queued draw.
+        d.baseVertex   = static_cast<int32_t>(params.baseVertex + perVertexOffset);
         d.useInstanced = true;
         d.descSet      = defaultWhiteDescSet_;  // no per-draw texture for now
         PushPending3DDraw(std::move(d));
