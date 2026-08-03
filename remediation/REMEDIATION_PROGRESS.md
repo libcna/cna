@@ -26279,3 +26279,222 @@ supported path. `REMED-GFX-203` … `REMED-GFX-210` remain DEFERRED in `plan_pos
 
 **The next action is post-audit exit reconciliation / checkpoint preparation, not another
 remediation ticket.** The remediation campaign as a whole is NOT complete.
+
+---
+
+## `REMED-GFX-216` — BGFX SCOPE, TICKET **DONE** (2026-08-03)
+
+The checkpoint blocker `REMED-GFX-215` spawned. Only bgfx production changed. `REMED-GFX-214` was
+not investigated, `REMED-GFX-204` was not begun, `REMED-GFX-203` … `REMED-GFX-210` remain DEFERRED,
+and no other backend's production was touched.
+
+### The authoritative contract
+
+A `VertexDeclaration` states, for every active element, its usage, usage index, byte offset, format,
+component count and normalization. The stride states only the distance between records. Stride
+therefore cannot determine element composition:
+
+- `Position@0 + Color@12` and `Color@0 + Position@4` are **both stride 16** and need different
+  native layouts;
+- `Position@0 + Color@12` is legal at stride 16 **and** at stride 32 — the same semantics with
+  different padding;
+- a stride that appears in no built-in table still describes a fully specified layout.
+
+`IVertexBufferBackend::SetVertexDeclaration` is **pure virtual on purpose** — its own contract says
+"each implementation must make an explicit decision to use or ignore a declaration, so a newly added
+backend cannot silently discard one" — and `VertexBuffer::UploadValidatedData` calls it immediately
+before every real upload.
+
+### Exact pre-fix path — three loss points, all required
+
+    VertexBuffer(declaration) -> UploadValidatedData
+      -> backend_->SetVertexDeclaration(vertexDeclaration_)
+           BgfxVertexBufferBackend::SetVertexDeclaration(const VertexDeclaration&) {}
+                                                            <-- loss point 1: discarded
+      -> backend_->SetData(data, count, stride)
+           const bool layoutChanged = stride_in_bytes != stride;
+                                                            <-- loss point 3: cannot see a
+                                                                re-declaration at the SAME stride
+           layout = MakeBgfxLayout(stride_in_bytes);        <-- loss point 2: a switch over
+                                                                52/20/24/32/48/56/68 plus a
+                                                                Position+Color0 fallback
+      -> bgfx::createDynamicVertexBuffer(capacity, layout, ...)
+
+Fixing any one alone is insufficient: a supplied declaration had nowhere to arrive, a
+declaration-derived layout would still not be rebuilt at an unchanged stride, and a rebuilt layout
+would still have been guessed.
+
+### The native layouts, before and after
+
+Read directly from `BgfxVertexBufferBackend::layout` through `VertexBuffer::GetBackend()`.
+
+| declaration | declared | native BEFORE | native AFTER |
+|---|---|---|---|
+| `positionOnly12` Pos@0 | stride 12 | **stride 16**, Pos@0, **Color0@12 invented** | stride 12, Pos@0, no Color0 |
+| `positionColor16` Pos@0 Col@12 | stride 16 | stride 16, Pos@0, Col@12 | unchanged |
+| `colorPosition16` Col@0 Pos@4 | stride 16 | **Pos@0, Col@12** | Pos@4, Col@0 |
+| `positionTexture20` Pos@0 Tex@12 | stride 20 | stride 20, Pos@0, Tex@12 | unchanged |
+| `positionColorTexture24` | stride 24 | Pos@0, Col@12, Tex@16 | unchanged |
+| `positionTextureColor24` Tex@12 Col@20 | stride 24 | **Col@12, Tex@16** | Col@20, Tex@12 |
+| `positionColorPadded32` Pos@0 Col@12 | stride 32 | stride 32, Pos@0, **NO Color0**, Tex@24 | stride 32, Pos@0, Col@12 |
+
+Four of seven were wrong. The three that were right were right by coincidence of stride, not by
+description — which is why the defect survived every existing fixture.
+
+### Three distinct mechanisms, separated rather than counted
+
+A pixel total cannot name a mechanism, because several wrong layouts light the same number of
+pixels. Each column therefore reports three independent signals — colour (attribute offset/format),
+lit count against a **staircase** of four different quad heights (record advancement), and top row
+(the position attribute) — against a **non-black** clear of `(17,34,51)`, because a lost colour
+attribute makes the shader emit black and against a black clear that is indistinguishable from
+"nothing was rasterized".
+
+| declaration | mechanism | evidence |
+|---|---|---|
+| `positionOnly12` | **record desynchronization** | lit 811/2311/4502/2558 vs 5760/4320/2880/1440, tops 8/26/15/24 vs 8/8/8/8 — and the **colour was correct** |
+| `colorPosition16` | **nothing rasterized** | lit 0 — position read from the colour bytes as floats |
+| `positionTextureColor24` | **pure attribute offset** | geometry **exact**, colour `(0,0,0,63)` — the texcoord's `0.5f` bytes as a normalized ubyte4 |
+| `positionColorPadded32` | **attribute absent** | geometry **exact**, colour `(0,0,0,255)` |
+
+### The fix
+
+One `VertexDeclaration` → `bgfx::VertexLayout` translator, in declaration order sorted by offset.
+
+It **never assumes where `add()` landed**. bgfx places an attribute at the layout's running offset
+and advances by that attribute's size *for the active renderer*: `s_attribTypeSize` is per-renderer
+and `Int16`/`Uint16`/`Half` with three components is **6 bytes on GL and 8 on D3D/Vulkan/WebGPU**.
+The builder skips to each element's declared offset first, adds, then verifies that bgfx's own
+advance equalled the declaration's byte span — and says so if it did not.
+
+`asInt` is deliberately **false** for every format. bgfx's `_asInt` selects the integer attribute
+path, and `varying.def.sc` declares `vec4 a_indices : BLENDINDICES`, not an `ivec4`; passing `Byte4`
+as an integer attribute would break the skinned bone-index lookup. These arrive converted, exactly
+as the stride table delivered them.
+
+Rejected **deterministically, before anything is created or submitted**, with
+`System::NotSupportedException`: an unmappable usage, a usage index outside the family bgfx can
+express, a repeated semantic, an unsupported format, overlapping elements, an element outside its
+own declared stride, and a renderer whose native size disagrees with the declaration. Never a
+substituted nearby built-in layout.
+
+`MakeBgfxLayout(stride)` survives **only** as the pre-declaration default for a buffer that has not
+been given a declaration yet.
+
+### Equivalence with the switch it replaced
+
+Every built-in vertex type still gets exactly the layout the removed switch handed it, transcribed
+into an assertion so a divergence is a test failure rather than a rendering surprise:
+
+| type | stride | attributes |
+|---|---|---|
+| `VertexPositionColor` | 16 | Pos@0 Col@12 |
+| `VertexPositionTexture` | 20 | Pos@0 Tex@12 |
+| `VertexPositionColorTexture` | 24 | Pos@0 Col@12 Tex@16 |
+| `VertexPositionNormalTexture` | 32 | Pos@0 Nrm@12 Tex@24 |
+| `VertexPositionNormalTangentTexture` | 48 | Pos@0 Nrm@12 Tan@24 Tex@40 |
+| `VertexPositionNormalTextureSkinned` | 52 | Pos@0 Nrm@12 Tex@24 Wgt@32 Idx@48 |
+| `VertexPositionNormalTangentTextureSkinned` | 68 | Pos@0 Nrm@12 Tan@24 Tex@40 Wgt@48 Idx@64 |
+
+All seven match byte for byte, and none invents an attribute its declaration does not name.
+
+### Cache identity and cardinality
+
+bgfx attaches the layout to the buffer at `createDynamicVertexBuffer`, so there is **no shared
+layout cache to key** — each backend buffer carries its own declaration-derived layout. The identity
+that matters is therefore "when is it rebuilt", and it is rebuilt exactly when the declaration
+changes (compared element by element: offset, format, usage, usage index) or the stride changes.
+
+- Same declaration again → no rebuild, no native allocation.
+- Same stride, different elements → rebuilt (this is the collision the old guard could not see).
+- Returning to an earlier declaration → correct layout restored.
+- **16 contents-only rewrites → `numDynamicVertexBuffers` unchanged at 1.**
+- Recycled buffer addresses → measured explicitly; no stale layout inherited.
+
+No extra draw, submit, view, frame, wait or readback. No vertex data is repacked and no stride is
+padded.
+
+### Validation
+
+| gate | result |
+|---|---|
+| `VertexDeclarationLayoutTest` + `BgfxVertexLayoutTest` (bgfx) | **12/12**, up from 1/10 |
+| full bgfx `CnaTests` | **5862 passed / 4 failed** of 5892 |
+| bgfx ASan | 53/53, **zero** memory-safety errors |
+| bgfx UBSan | 53/53, **zero** runtime errors |
+| bgfx diagnostics | 1260 warnings, **0 fatal**, **0** layout/attribute/stride/program |
+| Vulkan / EasyGL / WebGPU / Software controls | 6/6 each |
+| Headless | 0 tests — outside the oracle set, as designed |
+
+Regression gates inside the full run: `InstancedDrawRangeTest` 21/21, `InstancedDrawMultiStreamTest`
+21/21 (7 skips are `REMED-GFX-204`'s declared multi-stream boundary), `InstancedVertexColorTest`
+9/9, `InstancedDiffuseColorTest` 11/11, `BgfxInstancedColorCardinalityTest` 2/2,
+`VertexDeclarationTest` 53/53, `NonIndexedDrawRangeTest` 17/17, `IndexedDrawDeferredTest` 27/27 —
+so `REMED-GFX-111/113/118/125/155/157/158/160/181/200/201/202/211/213/215` all hold.
+
+**The 4 residuals are pre-existing, proven by A/B rather than by inspection:** `diff` of the failure
+set from the full run at `203deda9` (before this fix) against the full run after it is **empty**.
+They are `CnjEffectTest.LoadsRealCnjFixture` and `CnjStockEffectTest.CustomGlslEffectStillWorks`
+(both "bgfx backend requires pre-compiled binary shaders (not GLSL source)"),
+`GraphicsDeviceCapabilityTest.DoesNotSupportWireFrame` (`REMED-GFX-209`), and
+`XnbContainerFuzzTest.MutatedRealModelFixtureNeverCrashesAndOnlyFailsCleanly`.
+
+**Diagnostics detail:** all 1260 warnings are `TextureFormat::* is not supported` capability probes
+at `renderer_gl.cpp:1917` during `bgfx::init`, before any layout or draw exists. Zero
+invalid-vertex-layout, stride-mismatch, missing-attribute, program/layout-mismatch,
+vertex-buffer-range, stale-handle, transient-buffer or fatal diagnostics.
+
+**bgfx's Vulkan renderer is UNTESTED.** `CNA_BGFX_RENDERER=vulkan` reports
+`requested renderer: Vulkan, active renderer: OpenGL 2.1` on this Xvfb display.
+
+**ASan leaks classified by narrow A/B:** exactly **103852 bytes / 453 allocations per
+`GraphicsDevice`** (1 device → 453, 2 → 906), invariant to declaration, route and draw count, every
+frame in `libGLX_mesa.so.0` / `libdrm.so.2`, none in `cnaaudit/src/` or `cnaaudit/tests/`.
+
+### New findings
+
+Running the declaration oracle on **every** backend rather than only on the one the ticket named
+found the same class of defect everywhere else, from **two different mechanisms**. Neither may be
+fixed here — this task was explicitly forbidden from touching another backend's production.
+
+1. **`REMED-GFX-217`** (HIGH, OPEN) — Vulkan, WebGPU, Software, SDL_GPU, D3D9, D3D11, D3D12 and
+   Headless leave `SetVertexDeclaration` an **empty override** and select a layout by stride.
+   Measured: `colorPosition16` renders nothing on Vulkan/WebGPU/Software; `positionTextureColor24`
+   renders exact geometry with colour `(0,0,0,63)` on Vulkan/Software; `positionColorPadded32` loses
+   the colour attribute. Software's stride-12 refusal and WebGPU's stride-16 refusals are honest
+   capability boundaries, not this defect.
+2. **`REMED-GFX-218`** (HIGH, OPEN) — EasyGL **does** consume the declaration but assigns each
+   attribute's location from its **index in the element list** (`location = i`,
+   `EasyGLGraphicsBackend.cpp:3477`) rather than from its semantic, so a declaration whose element
+   order differs from the shader's input order binds the wrong attributes. Its
+   `positionTextureColor24` colour is `(102,45,0,255)` — a *different* wrong colour from Vulkan's
+   and Software's, which is the evidence that the mechanism differs. One layer below
+   `REMED-GFX-201`'s "XNA composes by semantic, not by position".
+
+Both are asserted as measured deviations that must remain **visible**, so each arm fails the moment
+its backend is corrected.
+
+### Bookkeeping correction
+
+`REMED-GFX-211` and `REMED-GFX-213`'s index rows still read `OPEN` and "Not begun" long after both
+tickets closed — this file recorded the Vulkan, bgfx and WebGPU scopes completing on 2026-08-03
+("BOTH TICKETS NOW DONE") and their regression fixtures are green. The status columns were never
+updated. Corrected to `DONE` with the divergence noted in each row, because exit reconciliation
+reads that table.
+
+### Scope held
+
+Production changed in exactly two files: `src/CNA/Internal/Backends/Bgfx/BgfxGraphicsBackend.cpp`
+and `include/CNA/Internal/Backends/Bgfx/BgfxGraphicsBackend.hpp`. No shader, no generated artifact,
+no shared header, no common interface, no public API, and no other backend.
+
+### Checkpoint state after this ticket
+
+`REMED-GFX-211`, `-212`, `-213`, `-215` and `-216` are all **DONE** and the checkpoint-blocker set
+inherited from this cluster is **EMPTY**. `REMED-GFX-217` and `REMED-GFX-218` are newly OPEN and
+**are** silent wrong results on supported public draws, so they belong to the same P1 class and must
+be triaged at exit reconciliation before a checkpoint is taken. `REMED-GFX-214` remains OPEN and
+uninvestigated. `REMED-GFX-203` … `REMED-GFX-210` remain DEFERRED.
+
+**The next action is post-audit exit reconciliation / checkpoint preparation, not another
+remediation ticket.** The remediation campaign as a whole is NOT complete.
