@@ -201,6 +201,7 @@ ctest --test-dir cmake-build-sokol -R Sokol --output-on-failure
 | `Sokol_CustomEffect_TextureReupload` | 2, a custom-effect texture bound then re-uploaded before the draw reads the new colour, 2D and cube (`SOKOL-44`) | all pass |
 | `Sokol_CustomEffect_BlendStateOrder` | 4, real BlendState applied in both custom-effect draw paths regardless of what a previous draw left in the GL context, both stock→custom and custom→stock (`SOKOL-41`) | all pass |
 | `Sokol_RenderTargetCube_Mip` | 3, `LevelCount` plus every texel of mip levels 1 and 2 read back via `RenderTargetCube::GetData()` (`SOKOL-47`) | all pass |
+| `Sokol_StateLifetimeRegressionMatrix` | 7: two-object `OcclusionQuery` interleaving in both begin/end orders plus a healthy fresh query afterward, and `DrawCustomEffect3D`'s `CullMode` applied independently of a preceding stock draw's leftover GL state (`SOKOL-48`) | all pass |
 
 The render-target fixtures above are shared, backend-agnostic oracles also registered for EasyGL/
 Vulkan/bgfx/SDL_GPU/etc.; SOKOL reuses them rather than duplicating bespoke tests. As of `SOKOL-38`

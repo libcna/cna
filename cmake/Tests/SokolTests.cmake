@@ -305,4 +305,14 @@ if(CNA_BUILD_TESTS AND CNA_BUILD_EXAMPLES
         COMMAND cna_test_sokol_rendertargetcube_mip
         TIMEOUT 30 LABELS "Sokol"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_sokol.md SOKOL-48: compact state-transition/lifetime regression matrix -- two-object
+    # OcclusionQuery interleaving (both orders) and DrawCustomEffect3D cull-mode independence from
+    # a preceding stock draw's leftover GL state.
+    cna_sokol_test(cna_test_sokol_state_lifetime_regression_matrix
+                    examples/sokol_state_lifetime_regression_matrix_test.cpp)
+    cna_register_backend_test(NAME Sokol_StateLifetimeRegressionMatrix
+        COMMAND cna_test_sokol_state_lifetime_regression_matrix
+        TIMEOUT 30 LABELS "Sokol"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()
