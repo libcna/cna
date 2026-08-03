@@ -2536,7 +2536,15 @@ existing task.
 | REMED-GFX-148 | **DONE 2026-08-02 — SOFTWARE NOW PRESERVES THE COMPLETE ADDITIVE EQUATION.** Current HEAD reproduced source-only `(64,96,32,255)` over `(36,92,173,255)` instead of `(100,188,205,255)`; the focused pre-fix matrix was 5/28. CNA/FNA define Additive as SourceAlpha/One with Add separately for colour and alpha. `ApplyBlendState` had discarded all six values into one boolean and every non-Opaque fragment used straight-alpha over. Software now captures all factors/functions plus BlendFactor per draw and evaluates colour/alpha independently before established clamp/byte conversion. Dedicated Software 28/28; EasyGL/Vulkan/Bgfx/WebGPU 28/28, SDL_GPU 26/26, Headless 2/2; ASan/UBSan clean; ordinary blend/effect/order/target controls green. Production plus same-mechanism fixture correction; only Software production changed. New independent finding GFX-198 recorded OPEN, not begun. | MEDIUM | P2 | `Software_AdditiveBlendContract` | **DONE (2026-08-02; signed fix/test/closure in this commit)** |
 | REMED-GFX-198 | **DONE 2026-08-02 — E9 NOW ASSERTS THE AUTHORITATIVE SHARED INVALID-MIP ARGUMENT CONTRACT AND PROVES ZERO SOFTWARE WORK.** **EXACT REPRODUCTION ON SIGNED HEAD `10f88165`:** `Software_RenderTargetReadback` was **90/91**; its only failure was E9. The non-mipmapped target is 32x16, public `LevelCount = 1`, and the request was `GetData(level=1, rectangle=null, startIndex=0, elementCount=512)`. The stale oracle expected `System::NotSupportedException`; current shared production threw `std::out_of_range("Texture2D::GetData: level 1 must be less than LevelCount 1")`. **BEFORE GFX-192:** shared Texture2D rejected only `level < 0`; level 1 reached `getMipBufferConst`, derived fictitious 16x8 dimensions, passed the 512-element capacity, allocated RGBA scratch, dispatched `SoftwareRenderTargetBackend::GetData(level=1, ...)`, then Software's level-0-only boundary threw `NotSupportedException`. The destination remained unchanged and the target was not mutated, but backend dispatch and scratch allocation did occur. **AUTHORITATIVE CONTRACT:** GFX-189 established invalid levels as caller errors rather than capability failures; GFX-192 centralized exactly `[0, LevelCount)` before dimensions or any backend. Correct Texture2D/Texture3D/TextureCube/RenderTargetCube sibling guards and accepted XNA-compatible implementations likewise identify out-of-chain mip levels as argument errors. Local FNA delegates the transfer to FNA3D without a managed upper-bound check, so it does not support a Software-only capability exception. Representative EasyGL/Vulkan/SDL_GPU/Bgfx/WebGPU/Software/Headless controls all accept the shared guard; no backend has authority to weaken it after shared rejection. **PRECEDENCE, PROVED:** null destination or `elementCount <= 0` first (`std::invalid_argument`), then negative `startIndex` (`std::out_of_range`), then invalid level (`std::out_of_range`), then format, mip dimensions/rectangle, GFX-149 positive transfer capacity/overflow, CPU storage/allocation and capability/backend work. Thus invalid level wins over invalid rectangle, positive undersized capacity and capability checks; negative startIndex and non-positive elementCount keep their own parameter identity. **FIX:** no exception behavior changed. E9's obsolete `NotSupportedException` expectation became a focused **E9a–E9i** contract at **102/102**. It asserts requested level 1 equals public LevelCount 1, exact `std::out_of_range` parameter/count identification, unchanged sentinel prefix/requested range/suffix, zero real Software readback calls, byte-exact same-address/same-size/same-capacity colour/depth storage, unchanged tracked-resource count, and then re-renders the same target and performs one exact valid read that reaches Software exactly once. A private Software diagnostic counter provides direct dispatch cardinality without changing readback semantics. **FOCUSED MATRIX STRENGTHENED:** signed inputs `-1`; `level == LevelCount`; `LevelCount + 1`; `1000`; `INT_MAX`; non-mipmapped and mipmapped RenderTarget2D; ordinary mipmapped Texture2D GetData/SetData; invalid level combined with invalid rectangle and positive capacity; invalid level combined with negative startIndex or zero elementCount; guarded destination prefix/range/suffix; repeated invalid requests followed by valid reads; every valid mip and later rendering/readback usability. Every rejected public Software request leaves the call counter unchanged. **RESULTS:** corrected Software fixture normal/ASan/UBSan **102/102** with no sanitizer report; focused invalid-level fixture Software normal/ASan/UBSan plus EasyGL, Vulkan, SDL_GPU, Bgfx, WebGPU and Headless each **16/16 legs, 0 skipped**; GFX-192 GoogleTests **4/4**; GFX-149 transfer-window fixture on all seven backends (**74/74** per rasterizing backend, **71/71** Headless); complete Software shard serially **60/60**, including the relevant target/readback routes and preserved GFX-124, GFX-134, GFX-149, GFX-150, GFX-182, GFX-192 and GFX-148 additive blending. ASan and UBSan runtimes were linked; LeakSanitizer alone was disabled because this ptrace environment cannot run it, while address/undefined-behaviour checks completed cleanly. Reused persistent ccache build trees; maximum compilation `-j8`, approximate observed peak 78 C, no cooling pause. Only focused fixtures and Software diagnostic observability changed; shared Texture2D behavior and every other backend's production are untouched. `audit/` untouched. **NO NEW FINDINGS; no next ticket begun.** | LOW | P3 | `Software_RenderTargetReadback` E9; `Software_InvalidMipLevel`; GFX-192/GFX-149 controls | **DONE (2026-08-02; fixture/coverage/closure in this signed commit)** |
 | REMED-GFX-200 | `GraphicsDevice::DrawPrimitives`/`DrawIndexedPrimitives` never read the bound `VertexBufferBinding`, so `VertexBufferBinding.VertexOffset` reached no backend on the ordinary (non-instanced) routes and every such draw rendered from element zero. | MEDIUM | P2 | REMED-GFX-123 spawned finding; REMED-GFX-113/118 range gates | **DONE 2026-08-02 — REPRODUCED FIRST ON UNFIXED HEAD (NEW SHARED ORACLE 2/17 ON EASYGL, AND THE ONLY TWO PASSES WERE THE ZERO-OFFSET CONTROLS; A `VertexOffset=3` DRAW WAS BYTE-IDENTICAL TO ITS OWN ZERO-OFFSET CONTROL). ONE SHARED CORRECTION, NOT A PER-BACKEND SWEEP: BOTH ORDINARY ROUTES NOW READ BINDING 0 THROUGH ONE SINGLE-SOURCED HELPER AND CARRY THE ELEMENT OFFSET IN `vertexStart`/`baseVertex`, THE CHANNEL EVERY BACKEND ALREADY CONVERTS TO BYTES EXACTLY ONCE WITH ITS OWN STRIDE; `startIndex` UNTOUCHED; `GpuDrawParams::vertexBufferOffset` STAYS 0 THERE SO NOTHING APPLIES IT TWICE; GFX-113/118 VALIDATION NOW COUNTS THE OFFSET. EASYGL 2/17 → 17/17; VULKAN/BGFX/WEBGPU/D3D11 17/17, D3D9 17/17 ON GENUINE DXVK, SDL_GPU 14/14, SOFTWARE 16/16, HEADLESS GATES 63/63; D3D12 CLEAN CROSS-BUILD + INSPECTION, RUNTIME A/B-PROVEN STILL BLOCKED BY REMED-BUILD-012. FOUR SANITIZER CONFIGS CLEAN. NO BACKEND PRODUCTION CHANGED. SPAWNED REMED-GFX-201.** |
-| REMED-GFX-201 | Ordinary draws hand a backend only vertex stream 0: `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` take one `IVertexBufferBackend`, so a second non-instanced `VertexBufferBinding` supplies no vertex elements at all and a split-stream `VertexDeclaration` cannot render. | MEDIUM | P2 | REMED-GFX-200 two-stream coverage | **OPEN — STRUCTURAL GAP IN THE SHARED BACKEND INTERFACE, NOT A DROPPED VALUE, SO DELIBERATELY NOT FOLDED INTO REMED-GFX-200; THE ONLY MULTI-STREAM SUPPORT CNA HAS IS THE INSTANCED ROUTE'S SEPARATE `instanceVb`. NOT A REGRESSION — NO BACKEND EVER RECEIVED A SECOND ORDINARY STREAM. UNMEASURED AT RUNTIME: NO FIXTURE CAN CURRENTLY EXPRESS A SPLIT-STREAM DECLARATION END TO END.** |
+| REMED-GFX-201 | Ordinary draws hand a backend only vertex stream 0: `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` take one `IVertexBufferBackend`, so a second non-instanced `VertexBufferBinding` supplies no vertex elements at all and a split-stream `VertexDeclaration` cannot render. | MEDIUM | P2 | REMED-GFX-200 two-stream coverage | **DONE 2026-08-03 — REPRODUCED FIRST ON UNFIXED HEAD (NEW THREE-AXIS SHARED ORACLE 3/19 ON EASYGL; EVERY PIXEL CASE RENDERED *NOTHING AT ALL* BECAUSE BINDING 1 REACHED NO BACKEND AND BINDING 0'S 12-BYTE POSITION-ONLY STRIDE MATCHES NO LAYOUT ANYWHERE). THE LOSS WAS DEEPER THAN RECORDED: 8 OF 9 RASTERIZING BACKENDS DISCARD THE `VertexDeclaration` ENTIRELY (`SetVertexDeclaration(...) override {}`) AND INFER THEIR INPUT ELEMENTS FROM THE BYTE STRIDE, SO A SECOND STREAM HAD NEITHER A BINDING NOR A LAYOUT. `GpuDrawParams` NOW CARRIES A FIXED-CAPACITY `GpuVertexStreamBinding[16]` — CNA'S `FNA3D_VertexBufferBinding` — BY VALUE, WITH EACH STREAM'S OWN SLOT/STRIDE/OFFSET/FREQUENCY AND ITS `combinedByteBase`. COMPOSITION FOLLOWS XNA'S OWN **SEMANTIC** RULE (A REPEATED `(usage, usageIndex)` IS DROPPED — *"Stream not in use!"*), WHICH REMED-GFX-200'S OWN TWO-STREAM FIXTURE CAUGHT BEING WRONG THE FIRST TIME. THE **SMALLEST** BINDING OFFSET IS FOLDED INTO `vertexStart`/`baseVertex` AND EACH STREAM CARRIES A NON-NEGATIVE REMAINDER — THE ONLY SPLIT KEEPING EVERY NATIVE BYTE OFFSET >= 0, AND BYTE-IDENTICAL TO REMED-GFX-200 FOR ONE STREAM. GFX-113'S RANGE GATE IS NOW PER-STREAM AND NAMES THE SLOT. **EASYGL 20/20 AND SOFTWARE 19/19 IMPLEMENTED**; THE OTHER SEVEN RASTERIZING BACKENDS REPORT THE NEW `GraphicsCapability::MultiStreamVertexInput` (DEFAULT **FALSE**) HONESTLY AND REJECT DETERMINISTICALLY BEFORE NATIVE SUBMISSION — SPAWNING REMED-GFX-202..208. GFX-200 17/17 AND EVERY DRAW/BINDING GATE GREEN ON ALL NINE BACKENDS (498-517 EACH, ZERO FAILURES); THREE SANITIZER CONFIGS CLEAN; PRINCIPAL SUITES EASYGL 5801/1 AND SOFTWARE 5731/4, ALL FIVE FAILURES A/B-PROVEN PRE-EXISTING. ALSO SPAWNED REMED-GFX-209.** |
+| REMED-GFX-202 | The instanced route keeps its own parallel two-stream channel (`vb` + `instanceVb` + `vertexBufferOffset` + `instanceVertexOffset`) instead of the shared `GpuVertexStreamBinding` list, so one struct describes the same concept twice and the instanced route has no multi-stream per-vertex input either. | LOW | P3 | REMED-GFX-201 spawned finding | **OPEN — DELIBERATELY DEFERRED FROM REMED-GFX-201 SO NO INSTANCED BACKEND PATH COULD DOUBLE-APPLY AN OFFSET THROUGH THE NEW REPRESENTATION; EVERY REMED-GFX-118/122/123 GATE STAYED UNTOUCHED.** |
+| REMED-GFX-203 | Vulkan cannot bind more than one ordinary per-vertex stream: 16 pipeline builders each bake a single `VkVertexInputBindingDescription` at binding 0 with combined-layout attribute offsets, and the replay issues one `vkCmdBindVertexBuffers(cb, 0, 1, ...)`. | MEDIUM | P2 | REMED-GFX-201 capability boundary | **OPEN — REPORTS `MultiStreamVertexInput = false`, SO SUCH A DRAW IS REJECTED DETERMINISTICALLY BEFORE SUBMISSION RATHER THAN RENDERED FROM STREAM 0 ALONE.** |
+| REMED-GFX-204 | Bgfx cannot bind more than one ordinary per-vertex stream: one `bgfx::VertexLayout` per byte stride, submitted through `setVertexBuffer(stream 0, ...)`. | MEDIUM | P2 | REMED-GFX-201 capability boundary | **OPEN — REPORTS `MultiStreamVertexInput = false`; BGFX'S OWN STREAM CEILING ALSO NEEDS SURFACING THROUGH `GetMaxVertexStreams()`.** |
+| REMED-GFX-205 | WebGPU cannot bind more than one ordinary per-vertex stream: one `WGPUVertexBufferLayout` per pipeline with a single `arrayStride` and combined `shaderLocation` offsets. | MEDIUM | P2 | REMED-GFX-201 capability boundary | **OPEN — REPORTS `MultiStreamVertexInput = false`; MUST PRESERVE REMED-GFX-116/146/159/167/172.** |
+| REMED-GFX-206 | SDL_GPU cannot bind more than one ordinary per-vertex stream: one vertex buffer description and one `SDL_GPUVertexBufferBinding` per pipeline. | MEDIUM | P2 | REMED-GFX-201 capability boundary | **OPEN — REPORTS `MultiStreamVertexInput = false`; MUST ADD NO EXTRA PASS OR SUBMIT AND PRESERVE REMED-GFX-143/145/152/156/173/176.** |
+| REMED-GFX-207 | D3D11 and D3D12 cannot bind more than one ordinary per-vertex stream: `InputElementsForStride`/`InputElementsForStrideD3D12` emit every element with `InputSlot = 0`, D3D11 caches on `(variant, stride)` and D3D12 bakes the array into the PSO. | MEDIUM | P2 | REMED-GFX-201 capability boundary | **OPEN — REPORTS `MultiStreamVertexInput = false`; MUST NOT DISTURB REMED-GFX-123, AND D3D12 RUNTIME VERIFICATION ALSO NEEDS REMED-BUILD-012.** |
+| REMED-GFX-208 | D3D9 cannot bind more than one ordinary per-vertex stream: `GetOrCreateVertexDeclarationEXT(stride)` emits every `D3DVERTEXELEMENT9` with `Stream = 0` and the draw issues one `SetStreamSource(0, ...)`. | MEDIUM | P2 | REMED-GFX-201 capability boundary | **OPEN — REPORTS `MultiStreamVertexInput = false`; MUST LEAVE STREAM-FREQUENCY STATE CLEAN AND PRESERVE REMED-GFX-060/117.** |
+| REMED-GFX-209 | `GraphicsDeviceCapabilityTest.DoesNotSupportWireFrame` asserts EasyGL's GLES3 wireframe gap unconditionally in a file that is not backend-gated, so it fails on every backend that does support wireframe. | LOW | P3 | found while classifying REMED-GFX-201's Software principal suite | **OPEN — MEASURED FAILING ON SOFTWARE. PRE-EXISTING AND UNRELATED: THE TEST FILE AND SOFTWARE'S OWN WIREFRAME REPORT ARE BYTE-IDENTICAL TO `75b61fa4`.** |
 | REMED-GFX-165 | WebGPU and SDL_GPU reject a correctly sized GraphicsDevice.GetBackBufferData: with a backbuffer PresentationParameters reports as 64x64, reading exactly 64*64 Color elements throws 'data array too small for requested region', while the same call is byte-exact on Software, EasyGL, Vulkan and Bgfx. Either the real swapchain is larger than the reported backbuffer (a PresentationParameters disagreement) or the size check is wrong; either way a portable caller sizing from the public BackBufferWidth/Height cannot read the backbuffer on these two backends. Distinct from REMED-GFX-161, which concerns the CONTENT of a first successful read. | MEDIUM | P2 | — | **DONE 2026-07-30 — NEITHER "THE SIZE CHECK IS WRONG" NOR "THE SWAPCHAIN IS LARGER": THE RECTANGLE-LESS PATH SIZED ITSELF FROM THE WRONG SOURCE, AND SDL_GPU HAD NO BACKBUFFER READ AT ALL. MEASURED WITH A DISTINCTIVE 37x23 (AND 41x29) BACKBUFFER: `GraphicsDevice::GetBackBufferData` SIZED A RECTANGLE-LESS READ FROM `backend_->GetViewportSize()`, WHICH UNDER THE DEFAULT `FixedHeightDynamicWidth` PRESENTATION MODE IS HEIGHT-LOCKED TO THE VIRTUAL RESOLUTION AND WIDTH-SCALED BY THE WINDOW ASPECT -- SO IT RETURNED 38x23 (874 ELEMENTS) FOR A BACKBUFFER PresentationParameters AND THE ACTUAL SURFACE BOTH REPORT AS 37x23 (851), TRIPPING `elementCount(851) < 874`. THE PHYSICAL SURFACE IS 37x23; ONLY THE ASPECT-SCALED LOGICAL VIEWPORT DIFFERS. **WebGPU root cause = the shared source; SDL_GPU has a SECOND, independent layer:** past the size check, SDL_GPU hits the base `ReadBackbuffer: not implemented` -- its backbuffer was never readable because the SDL swapchain texture is WRITE-ONLY by permanent SDL contract (plan_sdlgpu.md SDLGPU-39, which the owner deliberately left unimplemented for the per-frame cost of the only known fix). **FIX 1 (shared GraphicsDevice.cpp, behaviourally scoped to WebGPU/SDL_GPU):** the rectangle-less region is now the AUTHORITATIVE PresentationParameters backbuffer W x H, never the live viewport; a rectangle is validated against the real backbuffer bounds and an out-of-range request throws `std::out_of_range` BEFORE any native copy. The four already-correct backends compute the identical value (their viewport equals the backbuffer), so they are byte-unchanged -- proven by 8/8 controls. Env-gated `CNA_BACKBUFFER_READ_TRACE`. WebGPU needed NO production change: its `ReadBackbuffer` already reads the native surface and clamps, so the shared fix alone makes it byte-exact (only an env-gated trace was added). **FIX 2 (SDL_GPU, a LAZY proxy that refutes the SDLGPU-39 cost objection):** the deferred-frame model means the first `GetBackBufferData` runs while the frame is still pending, so the proxy can be created ON DEMAND rather than "before every frame's draws" -- the exact premise the owner declined it on. Once readback is first requested, the backbuffer pass renders into a self-owned `SAMPLER|COLOR_TARGET` swapchain-format proxy and one `SDL_BlitGPUTexture(proxy -> swapchain)` presents it; `ReadBackbuffer` downloads the region from the proxy via the render targets' proven transfer-buffer+fence path, swizzling BGRA->RGBA. ZERO cost until the first read (`backbufferReadbackEnabled_` gates it; the present path is byte-identical to before when disabled, which is why SdlGpu_RenderState et al. are untouched). NO SetRenderTarget round trip, no extra Present/frame/wait/dummy-draw -- differential control leg B1 (one round trip) returns byte-identically to the round-trip-free legs. **NEW `backbuffer_readback_dimension_test.cpp`, 8 process-isolated legs** (first-frame 37x23 & 41x29 with an asymmetric 4-quadrant oracle; round-trip control; sub-viewport still reads W x H; rectangle matrix full/1px/corners/centred; invalid-rect rejection extend-by-1/negative-origin/at-boundary; startIndex prefix + one-too-few; resize dimension contract) -- **8/8 on WEBGPU, SDL_GPU, SOFTWARE, VULKAN, EASYGL, HEADLESS and BGFX**. BGFX declares two PRE-EXISTING gaps as boundaries (sub-rectangle backbuffer read returns zeros; runtime resize faults in its bgfx::reset path) -- recorded as independent findings, NOT changed. HEADLESS declares its non-rasterizing pixel boundary. **REMOVED the GFX-165 workarounds** in bound_target_lifetime_test.cpp and deferred_source_lifetime_test.cpp (explicit-rectangle -> rectangle-less): both stay 18/18 and 17/17 on WEBGPU/SDL_GPU/BGFX/SOFTWARE. **ASan+UBSan clean on both subjects** (runtimes proved linked, 54 symbols each; the new proxy transfer/blit/swizzle arithmetic 0 reports, 0 runtime errors). Native validation clean: WebGPU no uncaptured-error/device-lost; SDL_GPU debug mode on, no VUIDs/copy-extent errors. `ctest -L WebGPU` **59/60** (the one failure WebGPU_Clear_Readback is pre-existing blend/texture-address-mode CONTENT, unrelated to dimensions) and `-L SdlGpu` **61/62** (SdlGpu_RenderState A/B-PROVEN pre-existing: aborts `Cannot present while render targets are bound` identically on the committed code). GFX-166/167/168 lifetime fixtures green with the workaround removed. **Fixed the one test the shared validation legitimately broke:** webgpu_msaa_test.cpp read a full VIEWPORT-width row (67 > backbuffer 64); it now clamps to the backbuffer. Resize physical-surface growth is not exercisable (SDL_SetWindowSize is a no-op under Xvfb for window-surface backends), so the resize legs assert the authoritative-DIMENSION contract only (element count follows PresentationParameters), verified byte-exact on SOFTWARE whose CPU backbuffer genuinely resizes. High-DPI 1x only here; the read validates in logical space and the backend copy clamps to the physical resource -- structurally guarded, runtime non-1x conformance not claimed. ONLY WebGPU and SDL_GPU production changed (plus the shared XNA-layer dimension source, byte-neutral on every other backend). Commits: test `b554e5c2`, shared fix `66bbe613`, SDL_GPU proxy `cf2d5432`, test-hardening `c8186660`, docs (this commit).** |
 
 #### REMED-BUILD-010 detail
@@ -24308,3 +24316,334 @@ build reused an existing in-repo `cmake-build-*` directory with ccache. `audit/`
 - `docs(remediation): record GFX-200 completion` (this record)
 
 Both GPG-signed. No shader, bytecode or other generated artifact changed.
+
+## REMED-GFX-201 — ordinary multi-stream vertex input — DONE 2026-08-03
+
+### The authoritative contract, from source
+
+Read before writing any code, and it changed the design twice.
+
+`Microsoft.Xna.Framework.Graphics.GraphicsDevice.SetVertexBuffers(params VertexBufferBinding[])`
+accepts up to 16 bindings (`FNA/src/Graphics/GraphicsDevice.cs:1143`, ceiling
+`vertexBufferBindings.Length`), and `VertexBufferBinding`
+(`FNA/src/Graphics/Vertices/VertexBufferBinding.cs`) is `(VertexBuffer, vertexOffset,
+instanceFrequency)`. The decisive evidence is that **the ordinary and instanced routes use the same
+code path**: `DrawPrimitives` calls `PrepareVertexBindingArray(0)`
+(`GraphicsDevice.cs:1301`), `DrawIndexedPrimitives` calls `PrepareVertexBindingArray(baseVertex)`
+(`:1242`) and `DrawInstancedPrimitives` calls `PrepareVertexBindingArray(baseVertex)` (`:1274`) —
+all three then hand the driver the **complete** binding array
+(`GraphicsDevice.cs:1649-1670`), one `FNA3D_VertexBufferBinding` per slot carrying that stream's
+buffer, declaration, stride, element offset and instance frequency. Multi-stream ordinary input is
+not an edge case in XNA; it is the same mechanism instancing already uses.
+
+The per-stream arithmetic, from both reference drivers:
+
+- OpenGL (`FNA3D/src/FNA3D_Driver_OpenGL.c:2486-2494`):
+  `basePtr = vertexDeclaration->vertexStride * (bindings[i].vertexOffset + baseVertex)`, then
+  `ptr = basePtr + element->offset`. **Per stream, with that stream's own stride.**
+- D3D11 (`FNA3D/src/FNA3D_Driver_D3D11.c:2226-2248`): `offset = bindings[i].vertexOffset * stride`,
+  `IASetVertexBuffers(i, 1, &handle, &stride, &offset)` — the binding index **is** the native input
+  slot; `d3dElement->InputSlot = i`, `AlignedByteOffset = element->offset` (stream-local),
+  `InputSlotClass`/`InstanceDataStepRate` from that binding's own `instanceFrequency`
+  (`:960-971`).
+- `vertexStart` is not folded into any binding: `DrawPrimitives` passes `baseVertex = 0` and
+  `FNA3D_DrawPrimitives(primitiveType, vertexStart, primitiveCount)` reaches `glDrawArrays`'s
+  `first`, which advances **every** enabled array by that many of **its own** elements.
+
+Composition is by **SEMANTIC, not by position** — the fact that reshaped this task. Both drivers
+track every claimed `(usage, usageIndex)` pair across the bindings in slot order; a later element
+repeating a claimed pair is pushed to the next free index for that usage, and
+`MOJOSHADER_*GetVertexAttribLocation` then returns `-1` — *"Stream not in use!"* — so it is skipped
+entirely (`FNA3D_Driver_OpenGL.c:2500-2527`, `FNA3D_Driver_D3D11.c:901-950`). A second stream that
+merely repeats stream 0's declaration therefore contributes **nothing**; it is not the second half
+of a vertex.
+
+Answers to the questions this task had to settle:
+
+| Question | Answer |
+| --- | --- |
+| Maximum public binding count | 16 (`kMaxVertexStreams`), enforced by `SetVertexBuffers` already |
+| Must slots be contiguous | Not required; CNA compacts, preserving each stream's public slot number |
+| Empty/null slot | `SetVertexBuffers` throws `ArgumentNullException` — a half-described vertex can never reach a draw |
+| Is binding 0 mandatory | Yes on the ordinary routes: `currentVertexBuffer_` *is* binding 0 |
+| VertexOffset units | Vertex ELEMENTS, multiplied by **that stream's own** stride exactly once |
+| vertexStart | Applies to **every** per-vertex stream, each in its own elements |
+| baseVertex + index | Applies to **every** per-vertex stream, each in its own elements |
+| startIndex | Index elements only; no binding offset ever displaces it |
+| `InstanceFrequency != 0` on an ordinary draw | Legal in XNA — the divisor is applied and a 1-instance draw simply stays on that stream's element 0. CNA excludes such a binding from the per-vertex layout and does not advance it with `baseVertex` |
+| Mixed per-vertex/per-instance | Only `DrawInstancedPrimitives` consumes the per-instance stream; that route is untouched here |
+| Duplicate semantics | The later stream's elements are dropped ("Stream not in use!") |
+| Incompatible declarations | A stream repeating *some but not all* of an earlier stream's usages has no expressible stride-keyed layout and throws `NotSupportedException` |
+| State persistence | `SetVertexBuffer` collapses the set to one binding; `SetVertexBuffers` replaces it wholesale — both already true, now asserted |
+
+### The pre-fix loss point, proven
+
+`GraphicsDevice::DrawPrimitives`/`DrawIndexedPrimitives` passed
+`currentVertexBuffer_->GetBackend()` — which `SetVertexBuffers` defines as binding 0 — into
+`IGraphicsBackend::DrawPrimitivesEx`/`DrawIndexedPrimitivesEx`, whose signatures take exactly
+**one** `const IVertexBufferBackend&`. `currentVertexBuffers_[1..15]` were read by nothing on those
+routes; the only multi-stream channel in the whole codebase was the instanced route's separate
+`GpuDrawParams::instanceVb`, found by scanning for `InstanceFrequency > 0`.
+
+The loss is **shared and backend-independent**, and it is deeper than the ticket recorded: the
+declaration itself never reaches eight of the nine rasterizing backends. Only EasyGL stores it —
+`Vulkan`, `WebGPU`, `SdlGpu`, `Bgfx`, `D3D11`, `D3D12`, `D3D9`, `Software` and `Headless` all
+declare `void SetVertexDeclaration(const VertexDeclaration&) override {}` and infer their native
+input elements from the **byte stride** alone (`D3DCommon::InputElementsForStride` and the
+equivalent per-backend tables). A second stream had neither a binding to arrive on nor a layout to
+be described by.
+
+### Red-first, on unfixed HEAD
+
+`tests/Microsoft/Xna/Framework/Graphics/OrdinaryDrawMultiStreamTests.cpp` (new, committed first at
+`272c2261` with production still at `75b61fa4`) measured **3 of 19 passing on EasyGL**. The three
+were the two pure public-API contract cases and REMED-GFX-113's existing stream-0 range gate.
+**Every pixel case rendered nothing at all — `total lit: 0`** — because binding 1 reached no backend
+and binding 0's 12-byte stride matches no layout anywhere; and **both** secondary-stream range gates
+let an out-of-range request straight through.
+
+The oracle is three-axis. Stream 0 is POSITION only (12-byte stride); stream 1 is COLOUR only
+(4-byte stride); their concatenation is byte-for-byte
+`CNA::Internal::Graphics::PositionColorStream`, the packed 16-byte layout every backend already
+recognizes — so the combined vertex needs no new shader anywhere, while **no rendered pixel of it
+can be produced from stream 0 alone**. The column says which records stream 0 supplied, the band
+says which bytes those were, and the colour says which records **stream 1** supplied. Colour codes
+are the six `{0,255}` RGB corners, 255 apart in at least one channel, so the nearest-corner
+classifier is exact rather than tolerant and a non-corner pixel classifies `unknown` and fails.
+
+### Architecture
+
+`GpuDrawParams` gains `std::array<GpuVertexStreamBinding, 16> vertexStreams`, `vertexStreamCount`
+and `combinedVertexStride`. `GpuVertexStreamBinding` is CNA's `FNA3D_VertexBufferBinding`: public
+slot, backend buffer, that stream's own stride, its own `VertexOffset`, its `InstanceFrequency`, its
+vertex count, and `combinedByteBase` — where its declaration begins inside the combined vertex.
+Fixed capacity, captured **by value**, no heap allocation on any draw, no pointer into mutable
+`currentVertexBuffers_`.
+
+`combinedByteBase` is the bridge between the two worlds: CNA's backends describe a layout by byte
+stride, so their element tables use *combined* offsets, while FNA3D takes `AlignedByteOffset`
+straight from the *per-stream* declaration. `MapCombinedOffsetToStream()` converts one to the other
+and **degenerates to the identity for a single stream**, which is what lets a backend route its
+existing stride-derived layout through it with no behavioural change until a second stream appears.
+`CombinedVertexStrideOr()`, `HasMultipleVertexStreams()` and `VertexStreamByteOffset()` degenerate
+the same way.
+
+### The offset fold
+
+The ordinary routes fold the **smallest** per-vertex binding offset into `vertexStart`/`baseVertex`
+and hand each stream the non-negative remainder:
+
+```
+non-indexed: stream k's first element = stream[k].vertexOffset + params.vertexStart
+indexed:     stream k's fetched element = stream[k].vertexOffset + params.baseVertex + index
+             where params.vertexStart/baseVertex already include min_k(binding[k].VertexOffset)
+```
+
+Substituting gives `binding[k].VertexOffset + publicVertexStart` for every k, because the folded
+term and the remainder are both multiplied by **that stream's own** stride exactly once — by the
+native draw's start-vertex and by the native binding's byte offset respectively. Folding binding
+**0**'s offset instead (REMED-GFX-200's rule) would make a stream whose offset is smaller carry a
+**negative** byte offset, which Vulkan/D3D12/WebGPU offsets cannot express; the minimum is the only
+split that keeps every one non-negative. With a single stream the fold is the whole offset and the
+remainder is 0, so **every single-stream native binding is byte-identical to its REMED-GFX-200
+form** — which is why GFX-200's 17/17 stayed 17/17 on all eight of its backends.
+
+### Validation
+
+REMED-GFX-113's gate widened from stream 0 to every per-vertex stream, in that stream's own
+elements against that stream's own capacity, naming the offending slot. A **short secondary stream
+is now rejected even when stream 0 is long enough** — the case that cannot be expressed at all
+without per-stream ranges, and one of the two gates that were red pre-fix. Argument validation runs
+**before** the capability gate so an out-of-range request reports the same public exception on every
+backend. No O(vertex-count) scan was added. Software additionally bounds its own addressing gate by
+the **shortest** bound stream.
+
+### Capability boundary — the honest part
+
+`GraphicsCapability::MultiStreamVertexInput` is the **one entry whose default is `false`**. Binding a
+second per-vertex stream is real per-backend work — re-slotting a stride-derived element table
+across several native bindings — so a backend must opt in **by name**; defaulting to true would let
+a backend that silently renders from stream 0 alone claim otherwise, which looks like a correct draw
+of the wrong data. `GraphicsDevice::ValidateVertexStreamCapability` rejects a multi-stream ordinary
+draw on a backend that does not claim it, and an over-wide binding set on one whose
+`GetMaxVertexStreams()` is below 16 — deterministically, before native submission, never by
+truncating the list or collapsing streams.
+
+`UnsupportedBackendRejectsMultiStreamDeterministically` asserts that boundary **in both directions
+on every backend**, and flips to the positive assertion the moment a backend claims the capability,
+so the skips cannot outlive the gap they describe.
+
+| Backend | `MultiStreamVertexInput` | Reason |
+| --- | --- | --- |
+| EasyGL | **true** | implemented |
+| Software | **true** | implemented |
+| Vulkan | false | 16 pipeline builders each bake one `VkVertexInputBindingDescription` at binding 0 with combined-layout attribute offsets |
+| Bgfx | false | one `bgfx::VertexLayout` per stride, submitted through `setVertexBuffer(stream 0)` |
+| WebGPU | false | one `WGPUVertexBufferLayout` per pipeline |
+| SDL_GPU | false | one vertex buffer description per pipeline |
+| D3D11 | false | `D3D11InputLayoutCache` is keyed on `(variant, stride)`; every element is `InputSlot = 0` |
+| D3D12 | false | `InputElementsForStrideD3D12` is baked into the PSO with `InputSlot = 0` |
+| D3D9 | false | `GetOrCreateVertexDeclarationEXT(stride)` emits `D3DVERTEXELEMENT9.Stream = 0` |
+| Headless | false | rasterizes nothing; claiming it would fabricate success |
+| SDL_Renderer / Canvas / Ascii / DX3 | false | 2D-only, report false for every capability |
+
+CNA public maximum 16; EasyGL/Software tested maximum 3 (the three-stream fixture); no backend
+reports a lower `GetMaxVertexStreams()` yet.
+
+### Backend implementations
+
+**EasyGL.** Every per-vertex stream is bound into the VAO the named buffer owns, at attribute
+locations continuing after the previous stream's — the same "location N == Nth field of the ported
+HLSL input struct" convention `ApplyLayout()` uses for one stream and `DrawInstancedPrimitivesEx`
+already uses to append a per-instance one — each with its own VBO, stride and byte offset.
+`glDrawArrays`'s `first` and `glDrawElementsBaseVertex`'s `baseVertex` then advance all of them by
+the same element count, each by its own stride. Stream 0's attributes are rewritten **only** when it
+carries a residual offset, so the common case leaves `ApplyLayout()`'s work untouched; after the
+draw the VAO is restored to exactly what `ApplyLayout()` built, so a later single-stream draw
+through the same buffer cannot inherit a foreign VBO on a stale location. No VAO is created per
+draw. A bound stream with no `VertexDeclaration` throws rather than drawing from stream 0 alone.
+REMED-GFX-122's instanced path is untouched.
+
+**Software.** `BuildGenericClipVertex` now reads through a `CombinedVertexReader` that resolves each
+combined-layout byte offset to the stream that owns it, so every attribute is fetched from its own
+buffer with that buffer's own stride and binding offset. **No interleaved temporary, no per-vertex
+allocation** — `recordBase[0]` is the same pointer the old `raw` was and `At(n)` is byte-for-byte
+the old `raw + n` for a single stream. REMED-GFX-119/124/150/182 untouched.
+
+### Results
+
+| Backend | Route | GFX-201 | GFX-200 | Draw/binding gates |
+| --- | --- | --- | --- | --- |
+| EasyGL | native `:101` | **20/20** | 17/17 | 517/517 |
+| Software | native `:101` | **19/19** | 17/17 | 500/500 |
+| Vulkan | native `:101` | 6 run + 14 declared boundary | 17/17 | 498/498 |
+| Bgfx | native `:101` | 6 + 14 boundary | 17/17 | 509/509 |
+| WebGPU | native `:101` | 6 + 14 boundary | 17/17 | 503/503 |
+| SDL_GPU | native `:101` | 6 + 14 boundary | 14/14 | 485/485 |
+| Headless | native `:101` | 3 (pixel oracle compiled out) | 63/63 | 440/440 |
+| D3D9 | Wine `:99`, **genuine DXVK 2.6.0** (`dxgi=b;d3d9=n`) | 6 + 14 boundary | 17/17 | — |
+| D3D11 | Wine `:99`, **Wine builtin D3D11, NOT DXVK** | 6 + 14 boundary | 17/17 | — |
+| D3D12 | cross-build clean; windowed runtime **blocked by REMED-BUILD-012** | — | — | — |
+
+Zero failures anywhere. Software's 19 vs EasyGL's 20 is the backbuffer-group difference the fixture
+already declares, not a skip.
+
+D3D12's block is **A/B-proven pre-existing**: two *untouched* windowed fixtures — REMED-GFX-200's
+own `ZeroOffsetIndexedDrawRendersThePrefixDecoy` and REMED-GFX-113's `NonIndexedDrawRangeTest` —
+die at the identical point, immediately after `[D3D12] Backend initialised`, in the same run.
+
+### Sanitizers
+
+| Config | Filter | Result | Reports |
+| --- | --- | --- | --- |
+| Software ASan | multi-stream + GFX-200 + vertex/instancing/range | 358 passed | **zero** |
+| Software UBSan | same | 358 passed | 3, all pre-existing `GetHashCode` int overflows in `Vector3.cpp:117` / `Matrix.cpp:249` (unchanged since 2026-05-24, no draw path involved) |
+| EasyGL ASan+UBSan | same | 372 passed | **zero** |
+
+Runtimes proven linked (`ldd` shows `libasan.so.8` / `libubsan.so.1`). No out-of-bounds read, no
+use-after-free, no stale declaration or backend-buffer pointer, no uninitialized binding entry.
+
+### Cardinality
+
+Per public draw, single-stream: unchanged in every count — same one native draw, one pass, one
+submit, one `GpuDrawParams` on the stack, same layout-cache key (`combinedVertexStride` **==**
+`vb.GetStride()`), same native binding bytes. Per additional stream: exactly one native binding
+operation (EasyGL: one VBO bind plus that stream's attribute pointers; Software: one extra base
+pointer). **No extra draw, pass, submit, frame, wait or Present; no stream interleaving copy; no
+temporary vertex buffer; no heap allocation per draw or per vertex; no new cache and no unbounded
+growth** — the stream list is a fixed 16-entry array inside the same stack-constructed
+`GpuDrawParams` that already carried 18 KB of bone transforms.
+
+### False-positive audit
+
+One found, and it was a **real design error caught by an existing test**, not a weak assertion.
+REMED-GFX-200's `MultipleStreamsUseOnlyTheGeometryStreamsOwnOffset` binds two *complete*
+`VertexPositionColor` streams and asserts only binding 0's data is used. The first implementation
+concatenated declarations positionally, making that a 32-byte combined vertex, and the test failed
+on Vulkan. Reading FNA3D's duplicate-usage handling showed the test was right and the design wrong:
+XNA composes by semantic and drops a repeated `(usage, usageIndex)`. The rule was corrected, the
+test went green unmodified, and it is now a genuine oracle for semantic dedup. Its assertion was
+strengthened by nothing and needed nothing — it was already the strongest statement available.
+
+No other test in the tree binds several buffers to an ordinary draw at all, so there was no second
+candidate to strengthen. The exact prior blind spot was structural rather than assertional: **no
+fixture could express a split-stream declaration end to end**, which is why the ticket was
+`UNMEASURED AT RUNTIME`.
+
+### Ordinary versus instanced
+
+Deliberately kept distinct. `DrawInstancedPrimitives` leaves `vertexStreamCount` at **0** and keeps
+its established `vb` + `instanceVb` + `vertexBufferOffset` + `instanceVertexOffset` channel
+(REMED-GFX-118/122/123), so no backend's instanced path can double-apply an offset through the new
+representation and every instancing gate is untouched. `HasMultipleVertexStreams()` is false there
+by construction. Per-instance bindings that appear in an *ordinary* draw's binding set are recorded
+with their own frequency, excluded from the per-vertex combined layout, and not advanced by
+`baseVertex` — matching XNA, where such a binding simply stays on its element 0 for a one-instance
+draw. Extending the shared stream description to the instanced route is **REMED-GFX-202**.
+
+### Scope not covered — new findings
+
+Seven backends still report `MultiStreamVertexInput = false`. Each is a real, separately verifiable
+piece of work in a different native input-layout model, and each is ticketed rather than swept:
+
+- **REMED-GFX-202** — extend the shared `GpuVertexStreamBinding` list to `DrawInstancedPrimitives`
+  so the instanced route stops carrying its own parallel two-stream channel.
+- **REMED-GFX-203** — Vulkan ordinary multi-stream input.
+- **REMED-GFX-204** — Bgfx ordinary multi-stream input.
+- **REMED-GFX-205** — WebGPU ordinary multi-stream input.
+- **REMED-GFX-206** — SDL_GPU ordinary multi-stream input.
+- **REMED-GFX-207** — D3D11 and D3D12 ordinary multi-stream input.
+- **REMED-GFX-208** — D3D9 ordinary multi-stream input.
+- **REMED-GFX-209** — `GraphicsDeviceCapabilityTest.DoesNotSupportWireFrame` asserts EasyGL's
+  wireframe gap unconditionally and therefore fails on every backend that *does* support wireframe
+  (measured failing on Software). Pre-existing, unrelated to this task, found while classifying the
+  Software full suite.
+
+**REMED-GFX-199 remains OPEN and untouched.** It is a D3D12 PSO render-target-format cache-key
+defect with no relationship to vertex input; nothing in this task touched
+`GetOrCreateInstancedPsoEXT` or any format cache key.
+
+### Full suites
+
+The common backend interface changed, so a principal suite was required.
+
+- **EasyGL: 5801 passed, 1 failed, 5 skipped.** The one failure,
+  `XnbContainerFuzzTest.MutatedRealModelFixtureNeverCrashesAndOnlyFailsCleanly`, is a content-load
+  `VertexBuffer` upload throw ("The VertexDeclaration contains an element outside the uploaded
+  vertex stride") — `git diff` against `75b61fa4` over the Content path, the Content tests and
+  `VertexBuffer.cpp` is **empty**, and REMED-GFX-200's own record already classified this same test
+  as failing identically with its change reverted and rebuilt.
+- **Software: 5731 passed, 4 failed, 44 skipped.** All four A/B-classified as pre-existing:
+  the same `XnbContainerFuzzTest`; `SetRenderTargets_FourTargets_DoesNotThrow` (the documented MRT
+  gap); `TwoProcessLoopbackTest.HostMigration…`, which **passes in isolation** and is the documented
+  30 s full-suite-load ENet timeout; and `GraphicsDeviceCapabilityTest.DoesNotSupportWireFrame`,
+  whose test file and Software's own wireframe report are both **byte-identical to `75b61fa4`** —
+  now ticketed as REMED-GFX-209.
+
+### Environment
+
+`:101` for every native Linux route, `:99` for both Wine routes. **`:0` was never used.** No
+`git stash`, `git reset --hard`, `git clean` or any destructive git command; the four pre-existing
+stashes are untouched. Every build reused an existing in-repo `cmake-build-*` directory with
+`CNA_USE_CCACHE=ON`; **no temporary build tree was created**, nothing under `/tmp` was built.
+`audit/` untouched. `git diff --check` clean.
+
+Machine-wide compilation: repository-root `CLAUDE.md` caps at **-j3** (lowered from 4 on
+2026-07-28) and `cnaaudit/CLAUDE.md` says -j4 — the lower wins, so **every build in this session used
+exactly `-j3`**. No other compilation lane existed at any point (`ps` showed zero `cc1plus` before
+each build, load average 0.37 at start); sharp-runtime was idle throughout. Estimated machine-wide
+maximum: **3 of the 8 permitted**. One build at a time, never concurrent.
+
+Thermals: start 39.6 °C, peak 82.9 °C, final ~66 °C. Four cooling pauses, each an explicit wait to
+≤68 °C before launching the next build (after Vulkan 82.9 °C, bgfx 81.4 °C, WebGPU 81.9 °C, and
+before the Software-ASan and D3D cross-build sequences). No sanitizer and ordinary build ran
+concurrently. No test was stopped or restarted; GPU test processes ran strictly serially.
+
+### Commits
+
+- `272c2261 test(Task REMED-GFX-201): reproduce dropped ordinary vertex streams`
+- `2f224081 refactor(graphics): carry immutable vertex stream descriptions`
+- `f1e65507 fix(Task REMED-GFX-201): bind all ordinary vertex streams on EasyGL and Software`
+- `docs(remediation): record GFX-201 completion` (this record)
+
+All GPG-signed. No shader, bytecode or other generated artifact changed.
