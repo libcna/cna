@@ -270,6 +270,16 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_skia_raster_test(Skia_CubeSampling_Spike
                                   cna_test_skia_cube_sampling_spike)
 
+    # SKIA-146: cube mip selection, cross-face (non-seamless) edge behaviour, and
+    # RenderTargetCube snapshot invalidation for cube sampling, reusing SKIA-145's confirmed
+    # cnaSampleCubeEXT formula against a real rendered-to RenderTargetCube.
+    cna_skia_test(cna_test_skia_cube_rendertarget_sampling_spike
+                  examples/skia_cube_rendertarget_sampling_spike_test.cpp)
+    target_include_directories(cna_test_skia_cube_rendertarget_sampling_spike
+                               PRIVATE "${CNA_SKIA_ROOT}")
+    cna_register_skia_raster_test(Skia_CubeRenderTargetSampling_Spike
+                                  cna_test_skia_cube_rendertarget_sampling_spike)
+
     # SKIA-94: fragment-like feasibility does not promote stock effects whose public route starts
     # with transformed primitives. Exercise AlphaTestEffect/DualTextureEffect property matrices,
     # atomic 3D refusal, actionable SpriteBatch diagnostics, and immediate 2D recovery.

@@ -1983,15 +1983,69 @@ level-boundary contract.
   SKIA-146 (cube mip/seam/snapshot policy) and SKIA-149 (public `ShaderEffect` integration with
   weak lifetime tracking) are the next tasks that actually consume it.
 
+## Completed in this session: SKIA-146
+
+- Extracted SKIA-145's `cnaSampleCubeEXT` preamble text out of its spike test into a new shared
+  header, `include/CNA/Internal/Backends/Skia/SkiaCubeSampling.hpp` (`kCnaSampleCubePreambleEXT`),
+  so every consumer -- this task's new spike and SKIA-149's eventual production wiring -- compiles
+  the exact same, already-confirmed formula rather than a per-file copy that could silently drift.
+- Gave `SkiaRenderTargetCubeBackend` a real per-face immutable sampling snapshot cache
+  (`NOXNA SnapshotFaceEXT(face, level)`), mirroring `SkiaRenderTargetBackend`'s existing
+  single-snapshot pattern for ordinary 2D targets -- but with **six independent per-face caches**,
+  not one: cube sampling binds all six faces as simultaneous `cnaCubeFace0`-`5` children, so a
+  single draw's fragment evaluation may read any of the six, not just whichever face a caller most
+  recently rendered to. Invalidation is wired into both write paths that can change a face's
+  pixels -- `BeforeWriteEXT()` (canvas draws to a bound face) and `SetData()` (direct uploads) --
+  each invalidating only *that* face's own cached snapshot, never an unrelated one. A new
+  `SkiaResourceCounters::cubeTargetSnapshots`/`cubeTargetSnapshotBytes` pair tracks them under the
+  same checked-arithmetic 256 MiB policy as every other Skia CPU allocation.
+- Cross-face seam policy is a deliberate decision, not new blending logic: real XNA/D3D9 hardware
+  has no automatic seamless cube filtering (that arrived with DX10+/`GL_ARB_seamless_cube_map`,
+  after the XNA4/D3D9 era XNA developers actually targeted), so CNA reproduces the same
+  non-seamless behaviour -- a direction near a face edge stays cleanly within its own Clamp-
+  addressed face rather than blending with an adjacent one. This matches SKIA-144's already-fixed
+  addressing decision; SKIA-146 makes it explicit and adds a discriminating pixel test rather than
+  building seamless filtering XNA itself never had.
+- Mip selection reuses SKIA-145's confirmed `cnaSampleCubeEXT` formula completely unchanged.
+  *Which* mip level's six faces to sample is a C++-side snapshot pick
+  (`SnapshotFaceEXT(face, level)` for the chosen level), not a new SkSL construct -- declaring
+  per-level SkSL children would multiply the six-child cost by the cube's level count (a 256x256
+  mipmapped cube has 9 levels: 54 children just for one bound cube), so mip selection deliberately
+  stays outside SkSL entirely, matching `docs/skia-cube-volume-sampling-contract.md`'s already-
+  documented design.
+- Added `Skia_CubeRenderTargetSampling_Spike` (11 checks, headless raster-only, below the public
+  `ShaderEffect`/`SetTexture(TextureCube)` API like the SKIA-93/145 spikes): renders six distinct
+  solid colours into a real `SkiaRenderTargetCubeBackend`'s faces via direct `SkiaSurface::Clear`
+  (the same low-level harness pattern `skia_rendertargetcube_policy_test.cpp` already established)
+  and proves, through the real compiled shared preamble: `cnaSampleCubeEXT` reads all six rendered
+  faces correctly; a near-edge direction (`u=0.999`) resolves cleanly within its own face's colour,
+  not a crash, garbage, or an adjacent face's colour; redrawing a face invalidates its cached
+  snapshot identity (`SnapshotFaceEXT` returns a genuinely different `sk_sp<SkImage>`) and sampling
+  immediately observes the new colour, never a stale one; generated mip level 1 of a solid-colour
+  face samples the exact area-box-averaged colour (an unambiguous check since averaging identical
+  values has no rounding uncertainty); an out-of-range face or level request returns nullptr rather
+  than fabricating data; and every cached snapshot plus surface releases to zero
+  (`cubeTargetSnapshots`/`cubeTargetSnapshotBytes`/`renderTargetCubes` all reach zero) on
+  destruction.
+- 11/11 spike checks pass in Debug, Release, and ASan+UBSan with zero sanitizer findings --
+  meaningful here specifically because the new snapshot cache does real per-face pointer lifetime
+  management (`const_cast`-based lazy sync, mirroring the established `SkiaRenderTargetBackend`
+  pattern, plus six independent `sk_sp<SkImage>` slots) exactly the kind of use-after-free or
+  double-release mistake ASan exists to catch. The complete Skia suite passes 161/161 (23 Raster,
+  133 Display, six Audit -- two net new Raster tests) in Debug, Release, and ASan+UBSan.
+- `SkiaEffectBackend.cpp`/`.hpp` remain untouched; the public `ShaderEffect`/`SetTexture` wiring
+  (weak lifetime tracking, the real `cnaCubeFace0`-`5` child declarations reaching a compiled
+  author effect) is still entirely SKIA-149's job, unchanged in scope by this task.
+
 ## Next candidates
 
-1. SKIA-146: add cube mip selection, cross-face seam policy, filtering, and `RenderTargetCube`
-   snapshot-invalidation policy, building on SKIA-145's confirmed `cnaSampleCubeEXT` formula.
-2. SKIA-147–158: continue Phase S15/S16 (volume sampling, effect ABI wiring, wider explicit 2D
-   effects) in dependency order.
-2. SKIA-159–170: add opt-in Ganesh, probe real MSAA/anisotropy, re-evaluate MRT, and hold the
+1. SKIA-147: prototype and implement volume sampling through a bounded slice atlas, per the fixed
+   `docs/skia-cube-volume-sampling-contract.md` padded-grid-atlas design.
+2. SKIA-148–158: continue Phase S15/S16 (volume trilinear/mip/address modes, effect ABI wiring,
+   wider explicit 2D effects) in dependency order.
+3. SKIA-159–170: add opt-in Ganesh, probe real MSAA/anisotropy, re-evaluate MRT, and hold the
    successor gate only after the raster extensions are stable.
-3. The pre-existing `CNA_ENABLE_NET=OFF`/monolithic-`CnaTests` ENet build-graph defect is recorded
+4. The pre-existing `CNA_ENABLE_NET=OFF`/monolithic-`CnaTests` ENet build-graph defect is recorded
    by SKIA-112/113 but remains outside Skia scope.
 
 ## Known boundaries / assumptions

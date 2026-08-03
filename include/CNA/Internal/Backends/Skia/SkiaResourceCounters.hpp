@@ -34,6 +34,8 @@ namespace CNA::Internal::Backends::Skia
         std::size_t cubeTargetStorageBytes = 0;
         std::size_t targetSnapshotBytes = 0;
         std::size_t mipChain2DStorageBytes = 0;
+        std::size_t cubeTargetSnapshots = 0;
+        std::size_t cubeTargetSnapshotBytes = 0;
     };
 
     /** Single-threaded resource counter shared by one graphics backend and its resource wrappers. */
@@ -137,6 +139,18 @@ namespace CNA::Internal::Backends::Skia
         {
             --stats_.mipChains2D;
             stats_.mipChain2DStorageBytes -= bytes;
+        }
+
+        void AddCubeTargetSnapshot(int width, int height) noexcept
+        {
+            ++stats_.cubeTargetSnapshots;
+            stats_.cubeTargetSnapshotBytes += RgbaBytes(width, height);
+        }
+
+        void RemoveCubeTargetSnapshot(int width, int height) noexcept
+        {
+            --stats_.cubeTargetSnapshots;
+            stats_.cubeTargetSnapshotBytes -= RgbaBytes(width, height);
         }
 
         [[nodiscard]] SkiaResourceStats GetStats() const noexcept { return stats_; }

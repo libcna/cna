@@ -52,6 +52,20 @@ namespace CNA::Internal::Backends::Skia
         NOXNA [[nodiscard]] std::size_t StorageBytesEXT() const noexcept { return storageBytes_; }
         NOXNA [[nodiscard]] bool PreservesContentsEXT() const noexcept { return preserveContents_; }
 
+        /**
+         * SKIA-146: returns an immutable sampling snapshot of one face/level, synchronizing that
+         * face first if a prior draw left it dirty (mirroring `SkiaRenderTargetBackend`'s existing
+         * single-target snapshot cache, but one independent cache per face -- cube sampling binds
+         * all six faces as simultaneous `cnaCubeFace0`-`5` children, so any of the six may be read
+         * by a given draw's fragment evaluation, not just whichever face was most recently bound).
+         * Returns nullptr for an out-of-range face/level. The cached snapshot for a face is
+         * dropped as soon as that face is next written to, never on an unrelated face's write.
+         */
+        NOXNA [[nodiscard]] sk_sp<SkImage> SnapshotFaceEXT(int face, int level) const;
+        /// Drops every face's cached sampling snapshot; called from the destructor and available
+        /// for callers that need every cache reset without writing to any face.
+        NOXNA void InvalidateAllFaceSnapshotsEXT() noexcept;
+
     private:
         struct Level final
         {
@@ -66,6 +80,7 @@ namespace CNA::Internal::Backends::Skia
         [[nodiscard]] const SkiaSurface* FaceSurface(int face, int level) const noexcept;
         void SynchronizeRenderedFace(int face);
         void GenerateMipChain(int face);
+        void InvalidateFaceSnapshotEXT(int face) const noexcept;
 
         int size_ = 0;
         bool preserveContents_ = false;
@@ -76,5 +91,7 @@ namespace CNA::Internal::Backends::Skia
         std::weak_ptr<SkiaRenderTargetBinding> binding_;
         std::shared_ptr<SkiaResourceCounters> resourceCounters_;
         bool resourceRegistered_ = false;
+        mutable std::array<sk_sp<SkImage>, 6> faceSnapshots_;
+        mutable std::array<int, 6> faceSnapshotLevel_{-1, -1, -1, -1, -1, -1};
     };
 } // namespace CNA::Internal::Backends::Skia

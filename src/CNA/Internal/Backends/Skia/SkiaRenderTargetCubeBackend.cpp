@@ -108,6 +108,7 @@ namespace CNA::Internal::Backends::Skia
     {
         if (const auto binding = binding_.lock())
             binding->Detach(this);
+        InvalidateAllFaceSnapshotsEXT();
         if (resourceRegistered_)
             resourceCounters_->RemoveRenderTargetCube(storageBytes_);
     }
@@ -162,7 +163,10 @@ namespace CNA::Internal::Backends::Skia
     void SkiaRenderTargetCubeBackend::BeforeWriteEXT() noexcept
     {
         if (boundFace_ >= 0 && boundFace_ < 6)
+        {
             mipDirty_[static_cast<std::size_t>(boundFace_)] = true;
+            InvalidateFaceSnapshotEXT(boundFace_);
+        }
     }
 
     void SkiaRenderTargetCubeBackend::FinalizeWriteEXT()
@@ -204,6 +208,7 @@ namespace CNA::Internal::Backends::Skia
                         static_cast<std::size_t>(width) * 4u,
                         targetPixels.data() + targetOffset);
         }
+        InvalidateFaceSnapshotEXT(face);
         return true;
     }
 
@@ -295,5 +300,47 @@ namespace CNA::Internal::Backends::Skia
                 throw std::runtime_error("Skia RenderTargetCube failed to generate a mip level.");
             }
         }
+    }
+
+    sk_sp<SkImage> SkiaRenderTargetCubeBackend::SnapshotFaceEXT(int face, int level) const
+    {
+        if (face < 0 || face >= 6 || level < 0 || level >= static_cast<int>(levels_.size()))
+            return nullptr;
+        if (mipDirty_[static_cast<std::size_t>(face)])
+            const_cast<SkiaRenderTargetCubeBackend*>(this)->SynchronizeRenderedFace(face);
+
+        const auto index = static_cast<std::size_t>(face);
+        if (faceSnapshots_[index] && faceSnapshotLevel_[index] == level)
+            return faceSnapshots_[index];
+
+        InvalidateFaceSnapshotEXT(face);
+        const SkiaSurface* surface = FaceSurface(face, level);
+        if (!surface)
+            return nullptr;
+        faceSnapshots_[index] = surface->SnapshotImage();
+        faceSnapshotLevel_[index] = faceSnapshots_[index] ? level : -1;
+        if (faceSnapshots_[index] && resourceCounters_)
+            resourceCounters_->AddCubeTargetSnapshot(surface->Width(), surface->Height());
+        return faceSnapshots_[index];
+    }
+
+    void SkiaRenderTargetCubeBackend::InvalidateFaceSnapshotEXT(int face) const noexcept
+    {
+        if (face < 0 || face >= 6)
+            return;
+        const auto index = static_cast<std::size_t>(face);
+        if (!faceSnapshots_[index])
+            return;
+        const SkiaSurface* surface = FaceSurface(face, faceSnapshotLevel_[index]);
+        if (resourceCounters_ && surface)
+            resourceCounters_->RemoveCubeTargetSnapshot(surface->Width(), surface->Height());
+        faceSnapshots_[index].reset();
+        faceSnapshotLevel_[index] = -1;
+    }
+
+    void SkiaRenderTargetCubeBackend::InvalidateAllFaceSnapshotsEXT() noexcept
+    {
+        for (int face = 0; face < 6; ++face)
+            InvalidateFaceSnapshotEXT(face);
     }
 } // namespace CNA::Internal::Backends::Skia
