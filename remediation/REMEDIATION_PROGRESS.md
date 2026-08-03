@@ -2546,9 +2546,9 @@ existing task.
 | REMED-GFX-208 | D3D9 cannot bind more than one ordinary per-vertex stream: `GetOrCreateVertexDeclarationEXT(stride)` emits every `D3DVERTEXELEMENT9` with `Stream = 0` and the draw issues one `SetStreamSource(0, ...)`. | MEDIUM | P2 | REMED-GFX-201 capability boundary | **DEFERRED 2026-08-03 — DISPOSITION: POST-AUDIT PLAN. TARGET PLAN: `plan_postaudit.md` §5. CHECKPOINT BLOCKER: NO. INTEGRATION BLOCKER: NO. POST-AUDIT PRIORITY P2, SCOPE MEDIUM. NOT STARTED, NOT CLOSED, EVIDENCE UNCHANGED. REPORTS `MultiStreamVertexInput = false`; MUST LEAVE STREAM-FREQUENCY STATE CLEAN AND PRESERVE REMED-GFX-060/117.** |
 | REMED-GFX-209 | `GraphicsDeviceCapabilityTest.DoesNotSupportWireFrame` asserts EasyGL's GLES3 wireframe gap unconditionally in a file that is not backend-gated, so it fails on every backend that does support wireframe. | LOW | P3 | found while classifying REMED-GFX-201's Software principal suite | **DEFERRED 2026-08-03 — DISPOSITION: POST-AUDIT PLAN. TARGET PLAN: `plan_postaudit.md` §7. CHECKPOINT BLOCKER: REVIEW — IT HIDES NOTHING (IT FAILS LOUDLY; IT CANNOT PASS FALSELY), BUT IT IS A STANDING KNOWN-CAUSE RED IN SIX BACKENDS' PRINCIPAL SUITES (SOFTWARE, HEADLESS, BGFX, WEBGPU, VULKAN, SDL_GPU PER REMED-GFX-201/-202'S SWEEPS), SO IT BLOCKS ONLY IF THE CHECKPOINT REQUIRES GREEN SUITES RATHER THAN CLASSIFIED FAILURES. INTEGRATION BLOCKER: NO. POST-AUDIT PRIORITY P3, SCOPE SMALL — THE CHEAPEST ITEM IN THE PLAN. NOT STARTED, NOT CLOSED, EVIDENCE UNCHANGED. PRE-EXISTING AND UNRELATED: THE TEST FILE AND SOFTWARE'S OWN WIREFRAME REPORT ARE BYTE-IDENTICAL TO `75b61fa4`.** |
 | REMED-GFX-210 | CNA exposes no capability a caller can query for hardware instancing. FNA has `FNA3D_SupportsHardwareInstancing`; in CNA the only signal is a `std::runtime_error` from `IGraphicsBackend::DrawInstancedPrimitivesEx`'s default, and Software reports `MultiStreamVertexInput = true` while overriding no instanced path at all. | LOW | P3 | found while making REMED-GFX-202's capability arm honest on Software | **DEFERRED 2026-08-03 — DISPOSITION: POST-AUDIT PLAN. TARGET PLAN: `plan_postaudit.md` §6. CHECKPOINT BLOCKER: NO — THE API PROMISES NO FALSE SUCCESS; THE CALL THROWS, ONLY WITH THE WRONG EXCEPTION TYPE, FROM THE WRONG LAYER, WITH NO ADVANCE QUERY. INTEGRATION BLOCKER: CONDITIONAL — IT BLOCKS NO MERGE, BUT THE COST OF NOT HAVING IT SCALES WITH EVERY NEWLY INTEGRATED BACKEND THAT IMPLEMENTS NO INSTANCED PATH. POST-AUDIT PRIORITY P3, SCOPE MEDIUM. FOLLOW REMED-GFX-185'S PRECEDENT: A CAPABILITY QUERY MUST REPORT WHAT THE BACKEND WILL ACTUALLY DO. NOT STARTED, NOT CLOSED, EVIDENCE UNCHANGED. MEASURED ON SOFTWARE AND SDL_GPU.** |
-| REMED-GFX-211 | Vulkan, bgfx and WebGPU ignore `VertexBufferBinding.VertexOffset` on the instanced route: Vulkan copies from `instVb.GetMappedPtr()` at offset 0, bgfx from `instVb.cpuData.data()` at offset 0, WebGPU from `ShadowData().begin()`. REMED-GFX-122 covered EasyGL and REMED-GFX-123 D3D11/D3D12; these three were never covered. | MEDIUM | P2 | found while classifying REMED-GFX-202's cross-backend baseline | **VULKAN SCOPE DONE (2026-08-03) — BGFX SCOPE OPEN, WEBGPU SCOPE OPEN, TICKET OVERALL OPEN, CHECKPOINT BLOCKER YES.** Vulkan's two loss points were separate expressions in `DrawInstancedPrimitivesEx`: the per-instance `std::memcpy(d.instVbData.data(), instVb.GetMappedPtr(), …)` the triage named, and — NOT the neighbouring per-vertex copy — `d.baseVertex = params.baseVertex`, which dropped the geometry binding's whole offset. The per-vertex copy takes the entire buffer into the deferred arena, so binding 0 has no native offset channel; `vkCmdDrawIndexed`'s `vertexOffset` is added to every decoded index and the route binds exactly one per-vertex stream, so the offset folds there once. Readings on `d750c10a`: leg A `instance-offset-ignored`→`instance-offset-honoured`, leg B `vertex-offset-ignored`→`vertex-offset-honoured`, leg C `both-offsets-ignored`→`both-offsets-honoured`. Vulkan moved into `CNA_INSTANCED_BINDING_OFFSET_ORACLE` in both instanced test files, enabling REMED-GFX-122/123's whole existing oracle; seven new permanent legs cover baseVertex-vs-VertexOffset, startIndex on 16/32-bit indices, deferred capture under four differing triples, return-to-zero-and-back around ordinary draws, wrapper death with address reuse and dynamic buffers. Vulkan 35/35 (7 skipped: its declared GFX-203 boundary); EasyGL runs the identical legs 43/43 as the independent control. Validation layer proven loaded, zero messages; ASan/UBSan clean; draw cardinality A/B-identical; no pipeline-key change needed or made. Original pre-fix record follows. **OPEN — POST-AUDIT CANDIDATE, CHECKPOINT TRIAGE REQUIRED. NOT DEFERRED. TARGET PLAN: `plan_postaudit.md` §4.1. CHECKPOINT BLOCKER: REVIEW, AND THE PRESENT EVIDENCE POINTS TO YES — NOTHING REJECTS, THE SHAPE IS THE CLASSIC ONE-PER-VERTEX + ONE-PER-INSTANCE DRAW THAT REACHES NO CAPABILITY CHECK BY DESIGN, AND IT RENDERS FROM THE WRONG RECORDS WITH NO DIAGNOSTIC: A SUPPORTED-PATH SILENT WRONG RESULT, WHICH IS A NON-CANDIDATE FOR DEFERRAL UNDER `plan_postaudit.md` §2. IT THEREFORE STAYS CAMPAIGN WORK UNLESS TRIAGE ESTABLISHES SOMETHING THIS RECORD DOES NOT CONTAIN. POST-AUDIT PRIORITY P1 — DELIBERATELY DIVERGING UPWARD FROM THE P2 OF RECORD, WHICH IS LEFT UNCHANGED — SCOPE MEDIUM. EVIDENCE STILL MISSING: A WEBGPU PIXEL MEASUREMENT (WEBGPU IS SOURCE-IDENTIFIED ONLY; VULKAN AND BGFX ARE A/B-PROVEN), AND A PER-VERTEX-SIDE MEASUREMENT ON ALL THREE. A/B-PROVEN BYTE-IDENTICAL ON `acd703af`: FOUR INSTANCES CONSUMED RECORDS 0..3 INSTEAD OF 1..4. NOT BEGUN.** |
+| REMED-GFX-211 | Vulkan, bgfx and WebGPU ignore `VertexBufferBinding.VertexOffset` on the instanced route: Vulkan copies from `instVb.GetMappedPtr()` at offset 0, bgfx from `instVb.cpuData.data()` at offset 0, WebGPU from `ShadowData().begin()`. REMED-GFX-122 covered EasyGL and REMED-GFX-123 D3D11/D3D12; these three were never covered. | MEDIUM | P2 | found while classifying REMED-GFX-202's cross-backend baseline | **VULKAN AND BGFX SCOPES DONE (2026-08-03) — WEBGPU SCOPE OPEN, TICKET OVERALL OPEN, CHECKPOINT BLOCKER YES.** bgfx's two loss points were also separate expressions in one function, `BgfxGraphicsBackend::DrawInstancedPrimitivesEx`: the per-instance one is `std::memcpy(idb.data, instVb.cpuData.data(), copyBytes)`, whose source base ignored `instanceStream->vertexOffset` and is now `cpuData.data() + vertexOffset * instStride`; the per-vertex one is `bgfx::setVertexBuffer(0, vb.handle, range.vertexStart, range.vertexCount)`, whose `vertexStart` carried `params.baseVertex` alone. bgfx has no draw-time base-vertex argument, so `_startVertex` is the only term that reaches a decoded index — which is why the ORDINARY bgfx indexed route was already correct (`params.baseVertex` there already contains the folded binding offset from REMED-GFX-200/201) while the instanced route, which folds nothing into it by design (REMED-GFX-202), lost the offset entirely. The fold now makes the fetched element `VertexOffset + baseVertex + index`, the bound remainder shrinks by the same amount, the index buffer is untouched, and the wireframe sibling takes the addend through `ExpandWireframeIndices` instead so its zero-based binding assertion stays green. Readings on `cb1d2398`: leg A `instance-offset-ignored`→`instance-offset-honoured`, leg B `vertex-offset-ignored`→`vertex-offset-honoured`, leg C `both-offsets-ignored`→`both-offsets-honoured`. bgfx moved into `CNA_INSTANCED_BINDING_OFFSET_ORACLE` in both instanced test files; two further permanent legs cover the two matrix cells nothing yet had — both offsets nonzero at frequency 3, and frequency 2 → 1 → 2 within a single frame. bgfx 41/41 on the two instanced fixtures and 320/320 across the wider draw/vertex regression set (7 and 21 skipped respectively, all the declared GFX-204 boundary); EasyGL 45/45 and Vulkan 37/37 as controls; WebGPU still measures its own defect. Active bgfx renderer: **OpenGL 2.1** — the Bgfx Vulkan renderer is UNTESTED here. bgfx diagnostics byte-identical to a device-creation-only run; ASan/UBSan clean with both runtimes proven linked and the leak total A/B-classified as Mesa/bgfx-shutdown. Only bgfx production changed. Vulkan's two loss points were separate expressions in `DrawInstancedPrimitivesEx`: the per-instance `std::memcpy(d.instVbData.data(), instVb.GetMappedPtr(), …)` the triage named, and — NOT the neighbouring per-vertex copy — `d.baseVertex = params.baseVertex`, which dropped the geometry binding's whole offset. The per-vertex copy takes the entire buffer into the deferred arena, so binding 0 has no native offset channel; `vkCmdDrawIndexed`'s `vertexOffset` is added to every decoded index and the route binds exactly one per-vertex stream, so the offset folds there once. Readings on `d750c10a`: leg A `instance-offset-ignored`→`instance-offset-honoured`, leg B `vertex-offset-ignored`→`vertex-offset-honoured`, leg C `both-offsets-ignored`→`both-offsets-honoured`. Vulkan moved into `CNA_INSTANCED_BINDING_OFFSET_ORACLE` in both instanced test files, enabling REMED-GFX-122/123's whole existing oracle; seven new permanent legs cover baseVertex-vs-VertexOffset, startIndex on 16/32-bit indices, deferred capture under four differing triples, return-to-zero-and-back around ordinary draws, wrapper death with address reuse and dynamic buffers. Vulkan 35/35 (7 skipped: its declared GFX-203 boundary); EasyGL runs the identical legs 43/43 as the independent control. Validation layer proven loaded, zero messages; ASan/UBSan clean; draw cardinality A/B-identical; no pipeline-key change needed or made. Original pre-fix record follows. **OPEN — POST-AUDIT CANDIDATE, CHECKPOINT TRIAGE REQUIRED. NOT DEFERRED. TARGET PLAN: `plan_postaudit.md` §4.1. CHECKPOINT BLOCKER: REVIEW, AND THE PRESENT EVIDENCE POINTS TO YES — NOTHING REJECTS, THE SHAPE IS THE CLASSIC ONE-PER-VERTEX + ONE-PER-INSTANCE DRAW THAT REACHES NO CAPABILITY CHECK BY DESIGN, AND IT RENDERS FROM THE WRONG RECORDS WITH NO DIAGNOSTIC: A SUPPORTED-PATH SILENT WRONG RESULT, WHICH IS A NON-CANDIDATE FOR DEFERRAL UNDER `plan_postaudit.md` §2. IT THEREFORE STAYS CAMPAIGN WORK UNLESS TRIAGE ESTABLISHES SOMETHING THIS RECORD DOES NOT CONTAIN. POST-AUDIT PRIORITY P1 — DELIBERATELY DIVERGING UPWARD FROM THE P2 OF RECORD, WHICH IS LEFT UNCHANGED — SCOPE MEDIUM. EVIDENCE STILL MISSING: A WEBGPU PIXEL MEASUREMENT (WEBGPU IS SOURCE-IDENTIFIED ONLY; VULKAN AND BGFX ARE A/B-PROVEN), AND A PER-VERTEX-SIDE MEASUREMENT ON ALL THREE. A/B-PROVEN BYTE-IDENTICAL ON `acd703af`: FOUR INSTANCES CONSUMED RECORDS 0..3 INSTEAD OF 1..4. NOT BEGUN.** |
 | REMED-GFX-212 | The stock instanced shader colours from `DiffuseColor` rather than the per-vertex colour stream on Vulkan, WebGPU, D3D11 and D3D12, while EasyGL and bgfx colour from the vertex stream, so `VertexColorEnabled` means different things per backend on the instanced route. | LOW | P3 | found while classifying REMED-GFX-202's cross-backend baseline | **OPEN — POST-AUDIT CANDIDATE, CHECKPOINT TRIAGE REQUIRED. NOT DEFERRED. TARGET PLAN: `plan_postaudit.md` §4.2. CHECKPOINT BLOCKER: REVIEW. NOTHING REJECTS AND THE SHAPE IS THE CLASSIC SUPPORTED INSTANCED DRAW, SO THIS IS A SUPPORTED-PATH CROSS-BACKEND DIVERGENCE — BUT THE RECORD ESTABLISHES THE DIVERGENCE WITHOUT ESTABLISHING WHICH SIDE IS CORRECT, SO IT IS EITHER A FOUR-BACKEND RENDERING DEFECT (P1) OR A GENUINE XNA CONTRACT QUESTION (P3). POST-AUDIT PRIORITY: REVIEW (P1 OR P3), SCOPE MEDIUM, LARGE IF THE CORRECTION LANDS IN SHADER SOURCES RATHER THAN PARAMETER BINDING. EVIDENCE STILL MISSING: THE AUTHORITATIVE FNA/XNA ANSWER FOR `VertexColorEnabled` ON `DrawInstancedPrimitives` (A SOURCE READ OF THE FNA REFERENCE TREE — THE CHEAPEST THING THAT RESOLVES THE TICKET'S CLASS); A PIXEL MEASUREMENT ON D3D11 AND D3D12 RATHER THAN INSPECTION; WHICH STOCK EFFECT FAMILIES ARE AFFECTED; AND WHETHER THE ORDINARY ROUTE AGREES WITH ITSELF ACROSS THE SAME SIX BACKENDS. MEASURED AS WHITE/UNCLASSIFIABLE ON VULKAN AND WEBGPU. NOT BEGUN.** |
-| REMED-GFX-213 | bgfx implements no per-instance divisor at all: `bgfx::setInstanceDataBuffer` advances one record per instance and `DrawInstancedPrimitivesEx` sizes its copy as `instanceCount * instStride`, so `InstanceFrequency > 1` neither advances correctly nor passes the backend's own capacity check — it rejects a range the shared layer correctly accepted. Separate from REMED-GFX-121 (transposed matrix on non-GLSL renderers). | MEDIUM | P2 | found while running REMED-GFX-202's frequency arithmetic on every backend | **VULKAN SCOPE DONE (2026-08-03) — BGFX SCOPE OPEN, WEBGPU SCOPE OPEN, TICKET OVERALL OPEN, CHECKPOINT BLOCKER YES.** Native capability classified before choosing a mechanism: the backend requests `VK_API_VERSION_1_1` and enables exactly one device extension (`VK_KHR_swapchain`), so no vertex-attribute-divisor extension or feature is present and divisors are core only in 1.4 — category C (replication into the existing staging path), not A or B. `binds[1]` keeps `VK_VERTEX_INPUT_RATE_INSTANCE` at implicit divisor 1 and the copy writes source record `vertexOffset + i / frequency` into slot `i`. Destination cardinality unchanged (one record per instance); frequency 1 keeps its single bulk memcpy; frequency > 1 costs `instanceCount` one-record memcpys and no extra allocation. The divisor is therefore a data-copy concern only here, so no pipeline-key term was needed — `MakeExt3DKey` takes stride/topology/depth/blend/cull/attachments/wireframe/msaa and no offset or frequency reaches it. Reading on `d750c10a`: `divisor-1-silently` → `divisor-2-honoured`, before and after an intervening frequency-1 draw, with the frequency-1 control unchanged. `ClassicInstanceFrequencyIsArithmeticNotASpecialCase` adds frequency 3 (0,0,0,1,1,1), frequency 3 with a nonzero instance offset (1,1,1,2,2,2), a frequency above the instance count at two offsets, and a return to frequency 1. Validation clean, ASan/UBSan clean, no extra draw/pass/submit/frame/wait/readback. Original pre-fix record follows. **OPEN — POST-AUDIT CANDIDATE, CHECKPOINT TRIAGE REQUIRED. NOT DEFERRED. TARGET PLAN: `plan_postaudit.md` §4.3. CHECKPOINT BLOCKER: REVIEW. THE RECORDED MECHANISM PRODUCES TWO OUTCOMES ON OPPOSITE SIDES OF THE DEFERRAL RULES. THE OBSERVABLE ONE IS A LOUD-BUT-WRONG REJECTION — A VALID PUBLIC RANGE REFUSED WITH `ArgumentOutOfRangeException` — WHICH IS A FALSE FAILURE, NOT A SILENT WRONG RESULT, AND CANNOT CORRUPT A FRAME. BUT THE SAME MECHANISM (A COPY SIZED `instanceCount * instStride` REGARDLESS OF FREQUENCY) IMPLIES THAT AN INSTANCE BUFFER HOLDING AT LEAST `instanceCount` RECORDS PASSES THE CAPACITY CHECK, REACHES THE DRAW, AND RENDERS AT AN EFFECTIVE DIVISOR OF 1. **THAT INFERENCE IS NOT MEASURED ANYWHERE IN THIS RECORD** AND MUST BE SETTLED BY TRIAGE, NOT ASSUMED. ESCALATION: IF CONFIRMED, P1 / CHECKPOINT BLOCKER YES, SAME CLASS AS REMED-GFX-211; IF REFUTED, P2 / CHECKPOINT BLOCKER NO, AND THE MINIMUM CORRECTION IS TO MAKE BGFX'S REFUSAL HONEST (A CAPABILITY REJECTION NAMING THE DIVISOR, NOT A RANGE ERROR). ONE MEASUREMENT SETTLES IT — AN OVERSIZED INSTANCE BUFFER AT `InstanceFrequency = 2`, WHICH `InstancedDrawMultiStreamTests.cpp`'S FREQUENCY AXIS (SLOT 3, STRIDE 16, FREQUENCY 2) ALREADY RUNS ON BGFX. POST-AUDIT PRIORITY P2 PENDING ESCALATION, SCOPE MEDIUM. NOT BEGUN.** |
+| REMED-GFX-213 | bgfx implements no per-instance divisor at all: `bgfx::setInstanceDataBuffer` advances one record per instance and `DrawInstancedPrimitivesEx` sizes its copy as `instanceCount * instStride`, so `InstanceFrequency > 1` neither advances correctly nor passes the backend's own capacity check — it rejects a range the shared layer correctly accepted. Separate from REMED-GFX-121 (transposed matrix on non-GLSL renderers). | MEDIUM | P2 | found while running REMED-GFX-202's frequency arithmetic on every backend | **VULKAN AND BGFX SCOPES DONE (2026-08-03) — WEBGPU SCOPE OPEN, TICKET OVERALL OPEN, CHECKPOINT BLOCKER YES.** bgfx's native capability was classified from the installed header rather than from a grep count: the whole public instancing surface is `allocInstanceDataBuffer` / `setInstanceDataBuffer` / `setInstanceCount` and `struct InstanceDataBuffer {data, size, offset, num, stride, handle}` — no divisor, step-rate or frequency parameter exists anywhere on the path, and every supplied record advances exactly once per drawn instance. Category C, therefore, the same as Vulkan: destination slot `i` takes source record `vertexOffset + i / frequency`, destination cardinality stays one record per instance, frequency 1 keeps its single bulk memcpy, and nothing about the native binding, the program, the layout or any cache key moves. The over-long-range gate was generalised at the same time — it was `instanceCount * stride > cpuData.size()`, which is the wrong count once a frequency groups instances and the wrong base once an offset moves them, and is now the highest source record `vertexOffset + (instanceCount - 1) / frequency`, `ValidateInstanceStreamRanges`' own arithmetic. Reading on `cb1d2398`: `divisor-1-silently` → `divisor-2-honoured`, before and after an intervening frequency-1 draw, frequency-1 control unchanged. Cardinality MEASURED, not inferred: 4 public instanced draws cost 5 bgfx submissions / 16 TriList prims / 1024 transient VB bytes / 0 transient IB / 0 extra views at frequency 1 and EXACTLY the same at frequency 2, with 8 draws costing 9 and 2048 at both — pinned permanently by `BgfxInstanceFrequencyCostsNoExtraSubmissionOrTransientMemory`. Vulkan: native capability classified before choosing a mechanism: the backend requests `VK_API_VERSION_1_1` and enables exactly one device extension (`VK_KHR_swapchain`), so no vertex-attribute-divisor extension or feature is present and divisors are core only in 1.4 — category C (replication into the existing staging path), not A or B. `binds[1]` keeps `VK_VERTEX_INPUT_RATE_INSTANCE` at implicit divisor 1 and the copy writes source record `vertexOffset + i / frequency` into slot `i`. Destination cardinality unchanged (one record per instance); frequency 1 keeps its single bulk memcpy; frequency > 1 costs `instanceCount` one-record memcpys and no extra allocation. The divisor is therefore a data-copy concern only here, so no pipeline-key term was needed — `MakeExt3DKey` takes stride/topology/depth/blend/cull/attachments/wireframe/msaa and no offset or frequency reaches it. Reading on `d750c10a`: `divisor-1-silently` → `divisor-2-honoured`, before and after an intervening frequency-1 draw, with the frequency-1 control unchanged. `ClassicInstanceFrequencyIsArithmeticNotASpecialCase` adds frequency 3 (0,0,0,1,1,1), frequency 3 with a nonzero instance offset (1,1,1,2,2,2), a frequency above the instance count at two offsets, and a return to frequency 1. Validation clean, ASan/UBSan clean, no extra draw/pass/submit/frame/wait/readback. Original pre-fix record follows. **OPEN — POST-AUDIT CANDIDATE, CHECKPOINT TRIAGE REQUIRED. NOT DEFERRED. TARGET PLAN: `plan_postaudit.md` §4.3. CHECKPOINT BLOCKER: REVIEW. THE RECORDED MECHANISM PRODUCES TWO OUTCOMES ON OPPOSITE SIDES OF THE DEFERRAL RULES. THE OBSERVABLE ONE IS A LOUD-BUT-WRONG REJECTION — A VALID PUBLIC RANGE REFUSED WITH `ArgumentOutOfRangeException` — WHICH IS A FALSE FAILURE, NOT A SILENT WRONG RESULT, AND CANNOT CORRUPT A FRAME. BUT THE SAME MECHANISM (A COPY SIZED `instanceCount * instStride` REGARDLESS OF FREQUENCY) IMPLIES THAT AN INSTANCE BUFFER HOLDING AT LEAST `instanceCount` RECORDS PASSES THE CAPACITY CHECK, REACHES THE DRAW, AND RENDERS AT AN EFFECTIVE DIVISOR OF 1. **THAT INFERENCE IS NOT MEASURED ANYWHERE IN THIS RECORD** AND MUST BE SETTLED BY TRIAGE, NOT ASSUMED. ESCALATION: IF CONFIRMED, P1 / CHECKPOINT BLOCKER YES, SAME CLASS AS REMED-GFX-211; IF REFUTED, P2 / CHECKPOINT BLOCKER NO, AND THE MINIMUM CORRECTION IS TO MAKE BGFX'S REFUSAL HONEST (A CAPABILITY REJECTION NAMING THE DIVISOR, NOT A RANGE ERROR). ONE MEASUREMENT SETTLES IT — AN OVERSIZED INSTANCE BUFFER AT `InstanceFrequency = 2`, WHICH `InstancedDrawMultiStreamTests.cpp`'S FREQUENCY AXIS (SLOT 3, STRIDE 16, FREQUENCY 2) ALREADY RUNS ON BGFX. POST-AUDIT PRIORITY P2 PENDING ESCALATION, SCOPE MEDIUM. NOT BEGUN.** |
 | REMED-GFX-165 | WebGPU and SDL_GPU reject a correctly sized GraphicsDevice.GetBackBufferData: with a backbuffer PresentationParameters reports as 64x64, reading exactly 64*64 Color elements throws 'data array too small for requested region', while the same call is byte-exact on Software, EasyGL, Vulkan and Bgfx. Either the real swapchain is larger than the reported backbuffer (a PresentationParameters disagreement) or the size check is wrong; either way a portable caller sizing from the public BackBufferWidth/Height cannot read the backbuffer on these two backends. Distinct from REMED-GFX-161, which concerns the CONTENT of a first successful read. | MEDIUM | P2 | — | **DONE 2026-07-30 — NEITHER "THE SIZE CHECK IS WRONG" NOR "THE SWAPCHAIN IS LARGER": THE RECTANGLE-LESS PATH SIZED ITSELF FROM THE WRONG SOURCE, AND SDL_GPU HAD NO BACKBUFFER READ AT ALL. MEASURED WITH A DISTINCTIVE 37x23 (AND 41x29) BACKBUFFER: `GraphicsDevice::GetBackBufferData` SIZED A RECTANGLE-LESS READ FROM `backend_->GetViewportSize()`, WHICH UNDER THE DEFAULT `FixedHeightDynamicWidth` PRESENTATION MODE IS HEIGHT-LOCKED TO THE VIRTUAL RESOLUTION AND WIDTH-SCALED BY THE WINDOW ASPECT -- SO IT RETURNED 38x23 (874 ELEMENTS) FOR A BACKBUFFER PresentationParameters AND THE ACTUAL SURFACE BOTH REPORT AS 37x23 (851), TRIPPING `elementCount(851) < 874`. THE PHYSICAL SURFACE IS 37x23; ONLY THE ASPECT-SCALED LOGICAL VIEWPORT DIFFERS. **WebGPU root cause = the shared source; SDL_GPU has a SECOND, independent layer:** past the size check, SDL_GPU hits the base `ReadBackbuffer: not implemented` -- its backbuffer was never readable because the SDL swapchain texture is WRITE-ONLY by permanent SDL contract (plan_sdlgpu.md SDLGPU-39, which the owner deliberately left unimplemented for the per-frame cost of the only known fix). **FIX 1 (shared GraphicsDevice.cpp, behaviourally scoped to WebGPU/SDL_GPU):** the rectangle-less region is now the AUTHORITATIVE PresentationParameters backbuffer W x H, never the live viewport; a rectangle is validated against the real backbuffer bounds and an out-of-range request throws `std::out_of_range` BEFORE any native copy. The four already-correct backends compute the identical value (their viewport equals the backbuffer), so they are byte-unchanged -- proven by 8/8 controls. Env-gated `CNA_BACKBUFFER_READ_TRACE`. WebGPU needed NO production change: its `ReadBackbuffer` already reads the native surface and clamps, so the shared fix alone makes it byte-exact (only an env-gated trace was added). **FIX 2 (SDL_GPU, a LAZY proxy that refutes the SDLGPU-39 cost objection):** the deferred-frame model means the first `GetBackBufferData` runs while the frame is still pending, so the proxy can be created ON DEMAND rather than "before every frame's draws" -- the exact premise the owner declined it on. Once readback is first requested, the backbuffer pass renders into a self-owned `SAMPLER|COLOR_TARGET` swapchain-format proxy and one `SDL_BlitGPUTexture(proxy -> swapchain)` presents it; `ReadBackbuffer` downloads the region from the proxy via the render targets' proven transfer-buffer+fence path, swizzling BGRA->RGBA. ZERO cost until the first read (`backbufferReadbackEnabled_` gates it; the present path is byte-identical to before when disabled, which is why SdlGpu_RenderState et al. are untouched). NO SetRenderTarget round trip, no extra Present/frame/wait/dummy-draw -- differential control leg B1 (one round trip) returns byte-identically to the round-trip-free legs. **NEW `backbuffer_readback_dimension_test.cpp`, 8 process-isolated legs** (first-frame 37x23 & 41x29 with an asymmetric 4-quadrant oracle; round-trip control; sub-viewport still reads W x H; rectangle matrix full/1px/corners/centred; invalid-rect rejection extend-by-1/negative-origin/at-boundary; startIndex prefix + one-too-few; resize dimension contract) -- **8/8 on WEBGPU, SDL_GPU, SOFTWARE, VULKAN, EASYGL, HEADLESS and BGFX**. BGFX declares two PRE-EXISTING gaps as boundaries (sub-rectangle backbuffer read returns zeros; runtime resize faults in its bgfx::reset path) -- recorded as independent findings, NOT changed. HEADLESS declares its non-rasterizing pixel boundary. **REMOVED the GFX-165 workarounds** in bound_target_lifetime_test.cpp and deferred_source_lifetime_test.cpp (explicit-rectangle -> rectangle-less): both stay 18/18 and 17/17 on WEBGPU/SDL_GPU/BGFX/SOFTWARE. **ASan+UBSan clean on both subjects** (runtimes proved linked, 54 symbols each; the new proxy transfer/blit/swizzle arithmetic 0 reports, 0 runtime errors). Native validation clean: WebGPU no uncaptured-error/device-lost; SDL_GPU debug mode on, no VUIDs/copy-extent errors. `ctest -L WebGPU` **59/60** (the one failure WebGPU_Clear_Readback is pre-existing blend/texture-address-mode CONTENT, unrelated to dimensions) and `-L SdlGpu` **61/62** (SdlGpu_RenderState A/B-PROVEN pre-existing: aborts `Cannot present while render targets are bound` identically on the committed code). GFX-166/167/168 lifetime fixtures green with the workaround removed. **Fixed the one test the shared validation legitimately broke:** webgpu_msaa_test.cpp read a full VIEWPORT-width row (67 > backbuffer 64); it now clamps to the backbuffer. Resize physical-surface growth is not exercisable (SDL_SetWindowSize is a no-op under Xvfb for window-surface backends), so the resize legs assert the authoritative-DIMENSION contract only (element count follows PresentationParameters), verified byte-exact on SOFTWARE whose CPU backbuffer genuinely resizes. High-DPI 1x only here; the read validates in logical space and the backend copy clamps to the physical resource -- structurally guarded, runtime non-1x conformance not claimed. ONLY WebGPU and SDL_GPU production changed (plus the shared XNA-layer dimension source, byte-neutral on every other backend). Commits: test `b554e5c2`, shared fix `66bbe613`, SDL_GPU proxy `cf2d5432`, test-hardening `c8186660`, docs (this commit).** |
 
 #### REMED-BUILD-010 detail
@@ -25372,3 +25372,201 @@ Only `src/CNA/Internal/Backends/Vulkan/VulkanGraphicsBackend.cpp` changed in pro
 header, no other backend, no public API, no shader. `REMED-GFX-212` was not begun — the
 `OrdinaryAndInstancedRoutesAgreeOnVertexColorEnabled` leg still prints Vulkan's instanced route as
 `unknown` against its own ordinary route's `liveA(red)`, unchanged. **No new finding was created.**
+
+---
+
+## `REMED-GFX-211` and `REMED-GFX-213` — BGFX SCOPE (2026-08-03)
+
+The second deliberately bounded **one-backend** lane. Both tickets remain **OPEN** for WebGPU and
+both remain **checkpoint blocker YES**; what closed is the bgfx third of each. `REMED-GFX-212` was
+not begun, and `REMED-GFX-203` … `REMED-GFX-210` remain DEFERRED in `plan_postaudit.md`.
+
+### Pre-fix reproduction, on `cb1d2398` with a clean tree
+
+The committed triage legs were again the red-first oracle; no new red test was needed. The pre-fix
+cell maps were recorded, not just the reading names, because a reading name alone cannot show
+*which* records were consumed:
+
+| leg | pre-fix reading | pre-fix lit cells (column, band) | post-fix reading |
+|---|---|---|---|
+| GFX-211 leg A — per-instance offset | `instance-offset-ignored` | (0,0) (1,0) (2,1) (5,3) — records 0..3, the decoy's own cell lit and live record 4's lost | `instance-offset-honoured` |
+| GFX-211 leg B — per-vertex offset | `vertex-offset-ignored` | (4,2) (5,2) (6,3) (7,3), all `prefix(green)` — every instance renders the mesh decoy | `vertex-offset-honoured` |
+| GFX-211 leg C — both offsets | `both-offsets-ignored` | (4,2) (5,2) (6,3), all `prefix(green)`, 768 lit | `both-offsets-honoured` |
+| GFX-213 — frequency 2 | `divisor-1-silently` | records 0,1,2,3,4,5 — 1536 lit, byte-identical to the frequency-1 control's frame | `divisor-2-honoured` |
+| GFX-213 — frequency 1 control | `divisor-1-honoured` | records 0..5, 1536 lit | `divisor-1-honoured` |
+| GFX-213 — frequency 2 after a frequency-1 draw | `divisor-1-silently` | records 0..5, 1536 lit | `divisor-2-honoured` |
+
+### The exact loss points
+
+Both sit in `BgfxGraphicsBackend::DrawInstancedPrimitivesEx`, at the location the ticket named
+(the recorded line ~4620 is the instance copy; the source was verified rather than assumed):
+
+- **Per-instance offset and divisor.** `std::memcpy(idb.data, instVb.cpuData.data(), copyBytes)`
+  copied `instanceCount` consecutive records from record zero. Two terms were missing from one
+  expression: the source base (`instanceStream->vertexOffset * instStride`) and the grouping
+  (`i / frequency`).
+- **Per-vertex offset.** `bgfx::setVertexBuffer(0, vb.handle, range.vertexStart, range.vertexCount)`,
+  where `range.vertexStart` is `params.baseVertex` and nothing else.
+
+### Why the per-vertex offset belongs on the vertex binding's start element here
+
+bgfx has **no draw-time base-vertex argument at all**: `setVertexBuffer`'s `_startVertex` is the
+only term that reaches a decoded index, which is exactly why `REMED-GFX-107`/`118` already deliver
+`baseVertex` through it. That also explains why the ORDINARY bgfx indexed route was already correct
+and the instanced one was not: on the ordinary routes `params.baseVertex` **already contains** the
+draw's folded per-vertex binding offset (`REMED-GFX-200`/`201`), while the instanced route folds
+nothing into it by design (`REMED-GFX-202`, so that a per-instance stream is not advanced by a
+base-vertex term). The stream's whole public offset therefore has to be added to the same term here,
+and `RejectUnsupportedStreamCombination` guarantees exactly one per-vertex stream on this route, so
+the fold applies it once, to its own stream only: the fetched element becomes
+`VertexOffset + baseVertex + index`. The bound remainder shrinks by exactly as much, so the binding
+still ends at the buffer's last element; the index buffer is untouched and `startIndex` stays an
+index-element offset. The wireframe sibling rebases its expanded indices to absolute elements and
+then binds from zero, so it takes the same addend through `ExpandWireframeIndices`'s `baseVertex`
+parameter instead — once, not twice — and `REMED-GFX-118`'s assertion that the wireframe path
+keeps a zero-based binding stays green.
+
+### Native divisor capability — classified from the installed header, not from a grep count
+
+bgfx's entire public instancing surface is:
+
+```
+void  allocInstanceDataBuffer(InstanceDataBuffer* _idb, uint32_t _num, uint16_t _stride);
+uint32_t getAvailInstanceDataBuffer(uint32_t _num, uint16_t _stride);
+void  setInstanceDataBuffer(const InstanceDataBuffer* _idb);
+void  setInstanceDataBuffer(const InstanceDataBuffer* _idb, uint32_t _start, uint32_t _num);
+void  setInstanceDataBuffer(VertexBufferHandle _handle, uint32_t _startVertex, uint32_t _num);
+void  setInstanceDataBuffer(DynamicVertexBufferHandle _handle, uint32_t _startVertex, uint32_t _num);
+void  setInstanceCount(uint32_t _numInstances);
+struct InstanceDataBuffer { uint8_t* data; uint32_t size; uint32_t offset; uint32_t num;
+                            uint16_t stride; VertexBufferHandle handle; };
+```
+
+There is **no divisor, step-rate or frequency parameter anywhere on this path**, and no
+renderer-specific step-rate mechanism is exposed through it: every supplied record advances exactly
+once per drawn instance. **Category C** — replication into the instance-data buffer the route
+already allocates — so destination slot `i` takes source record `vertexOffset + i / frequency`,
+frequency 1 keeps its single bulk `memcpy`, and frequency > 1 costs `instanceCount` one-record
+`memcpy`s and no allocation beyond the same single `allocInstanceDataBuffer`.
+
+### Validation
+
+The over-long-range gate was generalised rather than left as it was: `instanceCount * stride >
+cpuData.size()` is neither the right count once a frequency groups instances nor the right base once
+an offset moves them. It is now the highest **source** record, `vertexOffset + (instanceCount - 1) /
+frequency`, against the records the stream actually holds — `ValidateInstanceStreamRanges`' own
+arithmetic, in this stream's own elements. A second backend-local guard rejects a per-vertex offset
+that leaves its own buffer, naming its slot. Both are strictly looser than the shared gates
+(`ValidateVertexStreamRanges` / `ValidateInstanceStreamRanges`), which run first and are strictly
+tighter, so **neither can fire for a draw that arrived through `GraphicsDevice`**; they exist only
+because `Draw*PrimitivesEx` is a public interface method a harness may call with a hand-built
+`GpuDrawParams`, and because an offset that was previously ignored now addresses a real copy. The
+public one-record-short case is still rejected by the shared layer before native submission, with
+the slot-naming message that tells it apart from a backend capability limit
+(`InstanceFrequencyFixesTheExactConsumedRecordCount`, green on bgfx). Validation order is unchanged:
+index arguments → declared range → per-vertex stream range → per-instance stream range →
+capability.
+
+### Submission model, capture and lifetime
+
+bgfx's route is **immediate**: `setVertexBuffer` / `setIndexBuffer` / `setInstanceDataBuffer` /
+`submit` are encoder calls made inside the public draw, and `allocInstanceDataBuffer` returns
+transient memory owned by the current bgfx frame that the copy fills before `submit`. Nothing is
+read after the public call returns, so no capture-by-value question arises — and it is asserted
+anyway: `QueuedClassicDrawsKeepTheirOwnOffsetsAndFrequencies` issues four draws under four different
+(per-vertex offset, instance offset, frequency) triples and then replaces the public binding array
+entirely before the frame ends, and `QueuedClassicInstancedDrawSurvivesWrapperDeathAndAddressReuse`
+destroys both wrappers and allocates replacements holding different records over their addresses.
+Both green.
+
+### Pipeline and cache identity — no key change was needed, and none was made
+
+The divisor is fully expanded in the copied data and destination cardinality is unchanged (one
+record per instance), so no frequency term reaches the program, the vertex layout or any bgfx state
+word; `VertexOffset` moves only the native `_startVertex` and the copy's source base. No cache was
+disabled and no shader or program variant was added.
+
+### Cardinality and performance — measured
+
+`BgfxInstanceFrequencyCostsNoExtraSubmissionOrTransientMemory`, reading `bgfx::Stats` one rendered
+frame behind submission:
+
+| frame | bgfx submissions | TriList prims | transient VB | transient IB | views |
+|---|---|---|---|---|---|
+| 4 public draws @ frequency 1 | 5 | 16 | 1024 B | 0 | 0 |
+| 8 public draws @ frequency 1 | 9 | 32 | 2048 B | 0 | 0 |
+| 4 public draws @ frequency 2 | 5 | 16 | 1024 B | 0 | 0 |
+| 8 public draws @ frequency 2 | 9 | 32 | 2048 B | 0 | 0 |
+
+The fifth submission in a four-draw frame is the frame's own `Clear`, which is why the leg asserts
+the **delta** — exactly four more submissions for four more public draws, at either frequency —
+rather than an absolute that would depend on how `Clear` is implemented. Transient vertex memory
+scales with `instanceCount` (256 B per draw = 4 instances × a 64-byte record) and not with the
+divisor. No extra draw, submit, view, frame, wait, readback or `Present`, and no per-instance heap
+allocation.
+
+### Diagnostics
+
+Active renderer measured and reported: **OpenGL 2.1** (`BGFX backend requested renderer: OpenGL,
+active renderer: OpenGL 2.1`). The **Bgfx Vulkan renderer was not exercised and is UNTESTED** in
+this lane; no cross-renderer claim is made. With `CNA_BGFX_TRACE_DIAGNOSTICS=1`, a run that issues
+eight instanced draws through the new code and a run that only creates the device produce
+**byte-identical** diagnostic sets (66 lines each after pointer normalisation) — all texture-format
+capability probes on GL 2.1, EGL extension traces and the `librenderdoc.so` dlopen note. Zero
+diagnostics mention an instance data buffer, a vertex-buffer start, a stride, a transient
+exhaustion, a destroyed buffer or a view error. No fatal callback fired.
+
+### Sanitizers
+
+Both runtimes proven linked (`libasan.so.8` / `libubsan.so.1` in `ldd`; 41 `__asan_*` and 15
+`__ubsan_*` symbols).
+
+- **UBSan** — 42 passed, 7 skipped, **0 runtime errors** across the whole instanced matrix
+  (offsets, frequencies, offset+frequency, 16/32-bit indices, short source buffers, repeated draws,
+  state transitions, disposal and address reuse, device teardown).
+- **ASan** — 42 passed, 7 skipped, no out-of-bounds read or write, no use-after-free, no double
+  destruction. The leak total (2 943 940 B / 12 633 allocations over 49 tests) is classified by
+  exact A/B: **no CNA, `BgfxGraphicsBackend` or `GraphicsDevice` frame appears in any leak stack** —
+  every one is Mesa/`libGLX_mesa` or a bgfx render-thread `createUniform` — and the non-instanced
+  control leaks **more** per test (1 490 860 B / 6 475 allocations over 17 tests = 87.7 kB/test)
+  than the instanced run (60.1 kB/test). The leaks scale with device creation, not with instanced
+  draws.
+
+### Test matrix
+
+bgfx moved out of `CNA_INSTANCED_OFFSET_DEFECT_MEASURED` and into
+`CNA_INSTANCED_BINDING_OFFSET_ORACLE` in BOTH `InstancedDrawMultiStreamTests.cpp` and
+`InstancedDrawRangeTests.cpp`, which turns REMED-GFX-122/123/211/213's whole permanent matrix on for
+it rather than inventing a parallel one. Two legs were added for the only two matrix cells nothing
+yet covered:
+
+- `ClassicBothOffsetsHoldAtFrequencyThree` — a nonzero per-vertex offset, a nonzero instance
+  offset and a divisor of three on the **same** draw.
+- `ClassicFrequencyAlternatesWithinOneFrame` — frequency 2, then 1, then 2 in **one** frame, each
+  leg with its own offsets, so state carried across draws lands in another leg's rectangle.
+
+### Results
+
+- **Bgfx** 41/41 on the two instanced fixtures and 320/320 across the wider draw/vertex regression
+  set (`InstancedDraw*`, `OrdinaryDraw*`, `NonIndexedDrawRange`, `IndexedDrawDeferred`,
+  `BuiltInVertex*`, `VertexBufferBinding*`, `VertexDeclaration`, `DrawUser*`, `PointListPrimitive`,
+  `EnvironmentMapEffect*`, `PrimitiveVerts`). The 7 and 21 skips are all the declared
+  `MultiStreamVertexInput = false` boundary (`REMED-GFX-204`, deferred), asserted in both
+  directions.
+- The bgfx view-ordering, render-target-sample, RenderTargetCube-MSAA, front-face-winding and
+  cull-mode harnesses (`REMED-GFX-155`/`157`/`158`/`160`/`181` gates) all exit 0.
+- **EasyGL** 45/45 and **Vulkan** 37/37 (7 skipped) as controls, on the same shared fixtures.
+- **WebGPU** 27 passed / 7 skipped, still printing `instance-offset-ignored`,
+  `vertex-offset-ignored`, `both-offsets-ignored` and `divisor-1-silently`, and still printing its
+  `REMED-GFX-212` disagreement. Its boundary was preserved, not adjusted to make the suite globally
+  green.
+- **Headless** 5/5 on the public transport group.
+- Bgfx's own correct `REMED-GFX-212` behaviour is unchanged: `ordinary-route` and `instanced-route`
+  both read `liveA(red)`.
+
+### Scope held
+
+Only `src/CNA/Internal/Backends/Bgfx/BgfxGraphicsBackend.cpp` changed in production. No shared
+header, no other backend, no public API, no shader. `REMED-GFX-212` was not begun,
+`REMED-GFX-204` remains deferred, and the WebGPU scopes of both tickets remain **OPEN**.
+**No new finding was created.**
