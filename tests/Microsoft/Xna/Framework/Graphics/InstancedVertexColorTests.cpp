@@ -120,21 +120,22 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 #endif
 
 // The backends whose instanced route was measured obeying the PUBLIC CONTRACT: EasyGL always did,
-// and Vulkan and WebGPU were corrected by REMED-GFX-212.
+// Vulkan and WebGPU were corrected by REMED-GFX-212, and bgfx by REMED-GFX-215.
 //
-// bgfx is measured but deliberately NOT here. Its instanced route consumes COLOR0 -- which is what
-// REMED-GFX-212's own triage measured, with a WHITE DiffuseColor that cannot tell "COLOR0 times
-// DiffuseColor" apart from "COLOR0 alone" -- but this file's non-white DiffuseColor separates them
-// and shows bgfx emitting the RAW vertex colour: it ignores DiffuseColor and it ignores
-// VertexColorEnabled, in both settings. `src/CNA/Internal/Backends/Bgfx/shaders/vs_instanced3d.sc`
-// says so directly: its whole colour body is `v_color0 = a_color0;`, and the shader declares no
-// diffuse uniform at all, so neither term has anywhere to arrive. That is a DIFFERENT defect from
-// REMED-GFX-212's and its exact mirror image -- Vulkan and WebGPU kept DiffuseColor and dropped
-// COLOR0, bgfx keeps COLOR0 and drops DiffuseColor -- so it is recorded as REMED-GFX-215 and left
-// open rather than folded into a ticket about a different mechanism on different backends. The
-// bgfx arm below asserts the MEASURED behaviour, so it fails the moment bgfx is corrected and
-// forces its own removal.
-#if defined(CNA_BACKEND_EASYGL) || defined(CNA_BACKEND_VULKAN) || defined(CNA_BACKEND_WEBGPU)
+// bgfx was outside this set until REMED-GFX-215. Its instanced route consumed COLOR0 -- which is
+// what REMED-GFX-212's own triage measured, with a WHITE DiffuseColor that cannot tell "COLOR0
+// times DiffuseColor" apart from "COLOR0 alone" -- but a non-white DiffuseColor separated them and
+// showed bgfx emitting the RAW vertex colour, ignoring DiffuseColor AND VertexColorEnabled in both
+// settings: `vs_instanced3d.sc`'s whole colour body was `v_color0 = a_color0;` and it declared no
+// diffuse uniform, so neither term had anywhere to arrive. That was the exact mirror image of
+// REMED-GFX-212 -- Vulkan and WebGPU kept DiffuseColor and dropped COLOR0, bgfx kept COLOR0 and
+// dropped DiffuseColor -- so it was tracked separately as REMED-GFX-215 and fixed there. The arm
+// that asserted bgfx's measured defect did what it was written to do: it failed the moment bgfx was
+// corrected and forced its own removal. `InstancedDiffuseColorTests.cpp` is that ticket's permanent
+// non-neutral-DiffuseColor oracle, and it is what keeps this file's white-DiffuseColor blind spot
+// from ever certifying a backend again.
+#if defined(CNA_BACKEND_EASYGL) || defined(CNA_BACKEND_VULKAN) || \
+    defined(CNA_BACKEND_WEBGPU) || defined(CNA_BACKEND_BGFX)
 #define CNA_INSTANCED_VERTEX_COLOR_CONTRACT 1
 #endif
 
@@ -249,33 +250,17 @@ namespace
         Instanced,
     };
 
-    /// What THIS backend is asserted to produce. Identical to `ExpectedColor` everywhere except
-    /// bgfx's instanced route, where the measured behaviour -- the raw COLOR0, with neither
-    /// DiffuseColor nor VertexColorEnabled applied -- is asserted instead so the leg fails the
-    /// moment REMED-GFX-215 is fixed. See this file's CNA_INSTANCED_VERTEX_COLOR_CONTRACT comment.
+    /// What THIS backend is asserted to produce. Every measured backend is now held to the public
+    /// contract on both routes: the bgfx instanced exemption this function used to carry was
+    /// removed when REMED-GFX-215 fixed the defect it recorded.
     Rgba AssertedColor(const Rgba& color0, bool vertexColorEnabled, Route route)
     {
-#if defined(CNA_BACKEND_BGFX)
-        if (route == Route::Instanced)
-        {
-            (void)vertexColorEnabled;
-            return color0;
-        }
-#else
         (void)route;
-#endif
         return ExpectedColor(color0, vertexColorEnabled);
     }
 
-    /// The suffix every measured-defect message carries, so a failing arm names its own ticket.
-    constexpr const char* kAssertionBasis =
-#if defined(CNA_BACKEND_BGFX)
-        " [this backend asserts its MEASURED instanced behaviour: REMED-GFX-215, the bgfx "
-        "instanced shader emits the raw COLOR0 and applies neither DiffuseColor nor "
-        "VertexColorEnabled. If it now matches the contract the defect is FIXED: delete this arm]";
-#else
-        "";
-#endif
+    /// The suffix a measured-defect message would carry. No backend carries one any more.
+    constexpr const char* kAssertionBasis = "";
 
 
     /// Slot 0's record: the packed 16-byte position+colour vertex every instancing backend

@@ -61,6 +61,7 @@
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
 #include <gtest/gtest.h>
 
@@ -565,6 +566,50 @@ namespace
     {
         std::cout << "[ GFX-215  ] " << kBackendName << ' ' << leg << ':'
                   << DescribeFrame(snapshot) << std::endl;
+    }
+
+    /// Every distinct non-black colour anywhere in the frame, with how many pixels carry it. This
+    /// reads the WHOLE target rather than a per-column box, so it stays meaningful even when a
+    /// backend places the geometry wrongly -- what colour was written is then still answerable even
+    /// though where is not.
+    std::vector<std::pair<Rgba, int>> DistinctLitColors(const FrameSnapshot& snapshot)
+    {
+        std::vector<std::pair<Rgba, int>> found;
+        for (int y = 0; y < kTargetSize; ++y)
+        {
+            for (int x = 0; x < kTargetSize; ++x)
+            {
+                const Color pixel = snapshot.At(x, y);
+                const Rgba sample{pixel.getRProperty(), pixel.getGProperty(),
+                                  pixel.getBProperty(), pixel.getAProperty()};
+                if (sample.r == 0 && sample.g == 0 && sample.b == 0)
+                    continue;
+                bool merged = false;
+                for (auto& entry : found)
+                {
+                    if (entry.first.r == sample.r && entry.first.g == sample.g &&
+                        entry.first.b == sample.b && entry.first.a == sample.a)
+                    {
+                        ++entry.second;
+                        merged = true;
+                        break;
+                    }
+                }
+                if (!merged)
+                    found.emplace_back(sample, 1);
+            }
+        }
+        return found;
+    }
+
+    std::string DescribeLitColors(const std::vector<std::pair<Rgba, int>>& colors)
+    {
+        std::ostringstream os;
+        for (const auto& entry : colors)
+            os << "\n    " << entry.first.ToString() << " x" << entry.second;
+        if (colors.empty())
+            os << "\n    (nothing lit)";
+        return os.str();
     }
 
     /// 8-bit render-target quantization tolerance. Every failure mode the oracle separates differs
@@ -1175,12 +1220,18 @@ TEST_F(InstancedDiffuseColorTest, InstanceFrequencyKeepsTheFullContract)
 
 // ---------------------------------------------------------------------------
 // A declaration with NO COLOR0 element at all, drawn with VertexColorEnabled = false. The contract
-// says the disabled property must not require a colour attribute -- so this must render the plain
-// DiffuseColor, and it must not read whatever bytes happen to sit where a colour attribute would.
+// says the disabled property must not require a colour attribute, so the ONLY colour that may
+// appear anywhere in the frame is the plain DiffuseColor -- never a byte read from the vertex.
 //
-// This leg PRINTS its reading on every backend before asserting anything, because a backend whose
-// native vertex layout is derived from the stride rather than from the declaration has a real,
-// measurable boundary here rather than a bug in this file.
+// This leg reads the WHOLE target rather than per-column boxes, because WHAT colour was written and
+// WHERE it was written are separable questions here, and only the first belongs to REMED-GFX-215.
+// bgfx derives its native vertex layout from the buffer STRIDE, not from the VertexDeclaration
+// (`MakeBgfxLayout`, called from `BgfxVertexBufferBackend::SetData` before any draw route is
+// chosen): a stride of 12 is not in its table, so the fallback adds Position + Color0 and produces
+// a 16-byte native layout over a 12-byte buffer. The geometry is consequently strided wrongly --
+// which is a DIFFERENT defect from this ticket's, is route-independent, and is recorded as
+// REMED-GFX-216 rather than folded in here. The two routes are measured against each other below
+// so that classification rests on evidence rather than on reading `MakeBgfxLayout`.
 // ---------------------------------------------------------------------------
 
 TEST_F(InstancedDiffuseColorTest, PositionOnlyDeclarationRendersDiffuseColorWhenColorDisabled)
@@ -1201,36 +1252,103 @@ TEST_F(InstancedDiffuseColorTest, PositionOnlyDeclarationRendersDiffuseColorWhen
     device.SetIndexBuffer(&indexBuffer);
 
     BasicEffect effect(device);
-    RenderTarget2D target = MakeTarget();
-    device.SetVertexBuffers({VertexBufferBinding(&meshBuffer, 0, 0),
-                             VertexBufferBinding(&instanceBuffer, 0, 1)});
-    device.SetRenderTarget(&target);
-    device.Clear(Color::Black);
-    ApplyEffect(effect, false, kNonNeutral);
-    device.DrawInstancedPrimitives(
-        PrimitiveType::TriangleList, 0, 0, kMeshVertexCount, 0, kMeshPrimitiveCount, 1);
-    device.SetRenderTarget(nullptr);
 
-    const FrameSnapshot snapshot = CaptureTarget(target);
-    PrintMeasurement("positionOnly/false/instanced-route", snapshot);
+    const auto render = [&](bool instanced) {
+        RenderTarget2D target = MakeTarget();
+        if (instanced)
+            device.SetVertexBuffers({VertexBufferBinding(&meshBuffer, 0, 0),
+                                     VertexBufferBinding(&instanceBuffer, 0, 1)});
+        else
+            device.SetVertexBuffers({VertexBufferBinding(&meshBuffer, 0, 0)});
+        device.SetRenderTarget(&target);
+        device.Clear(Color::Black);
+        ApplyEffect(effect, false, kNonNeutral);
+        if (instanced)
+            device.DrawInstancedPrimitives(
+                PrimitiveType::TriangleList, 0, 0, kMeshVertexCount, 0, kMeshPrimitiveCount, 1);
+        else
+            device.DrawIndexedPrimitives(
+                PrimitiveType::TriangleList, 0, 0, kMeshVertexCount, 0, kMeshPrimitiveCount);
+        device.SetRenderTarget(nullptr);
+        return CaptureTarget(target);
+    };
+
+    const FrameSnapshot ordinary = render(false);
+    const FrameSnapshot instanced = render(true);
+    PrintMeasurement("positionOnly/false/ordinary-route", ordinary);
+    PrintMeasurement("positionOnly/false/instanced-route", instanced);
+
+    const auto ordinaryLit = DistinctLitColors(ordinary);
+    const auto instancedLit = DistinctLitColors(instanced);
+    std::cout << "[ GFX-215  ] " << kBackendName
+              << " positionOnly distinct lit colours, ordinary route:"
+              << DescribeLitColors(ordinaryLit) << "\n[ GFX-215  ] " << kBackendName
+              << " positionOnly distinct lit colours, instanced route:"
+              << DescribeLitColors(instancedLit) << std::endl;
+
 #ifdef CNA_INSTANCED_DIFFUSE_MEASURED
     const Rgba expected = ExpectedColor(kColumnColors[0], false, kNonNeutral);
-    for (int column = 0; column < kColumnCount; ++column)
+
+    // REMED-GFX-215's own guarantee, and the whole of it: with the property disabled, the plain
+    // DiffuseColor is the ONLY colour that may reach the target. This holds no matter how the
+    // backend derives its native layout, because a disabled COLOR0 is never consumed at all.
+    for (const auto& entry : instancedLit)
     {
-        int spread = 0;
-        int lit = 0;
-        const Rgba sample = SampleColumn(snapshot, column, spread, lit);
-        // The one thing the contract guarantees regardless of how a backend derives its native
-        // layout: whatever is lit must be the DiffuseColor, never a byte read from the vertex.
-        if (lit > 0)
-        {
-            EXPECT_TRUE(NearlyEqual(sample, expected))
-                << "positionOnly: column " << column << " carried " << sample.ToString()
-                << ", expected the plain DiffuseColor " << expected.ToString()
-                << " -- VertexColorEnabled is false, so no vertex byte may reach the pixel"
-                << DescribeFrame(snapshot);
-        }
+        EXPECT_TRUE(NearlyEqual(entry.first, expected))
+            << "positionOnly/instanced: " << entry.second << " pixels carried "
+            << entry.first.ToString() << ", but VertexColorEnabled is false so the only colour "
+               "that may appear is the plain DiffuseColor " << expected.ToString()
+            << DescribeLitColors(instancedLit);
     }
+    for (const auto& entry : ordinaryLit)
+    {
+        EXPECT_TRUE(NearlyEqual(entry.first, expected))
+            << "positionOnly/ordinary: " << entry.second << " pixels carried "
+            << entry.first.ToString() << ", but VertexColorEnabled is false so the only colour "
+               "that may appear is the plain DiffuseColor " << expected.ToString()
+            << DescribeLitColors(ordinaryLit);
+    }
+    EXPECT_FALSE(instancedLit.empty())
+        << "positionOnly/instanced: nothing rendered at all";
+
+    // The COVERAGE half is a separate question, and the answer here is a declared boundary rather
+    // than a pass: the two routes must agree, because a route-independent layout defect cannot
+    // differ between them. Whatever coverage this backend achieves, the instanced route must match
+    // the ordinary one exactly -- REMED-GFX-215 changed neither.
+    int coverageOrdinary = 0;
+    for (const auto& entry : ordinaryLit)
+        coverageOrdinary += entry.second;
+    int coverageInstanced = 0;
+    for (const auto& entry : instancedLit)
+        coverageInstanced += entry.second;
+    EXPECT_EQ(coverageOrdinary, coverageInstanced)
+        << "positionOnly: the ordinary route lit " << coverageOrdinary << " pixels and the "
+           "instanced route " << coverageInstanced
+        << ". A vertex layout derived before either route is chosen cannot differ between them";
+
+#if defined(CNA_BACKEND_BGFX)
+    // REMED-GFX-216, DECLARED AND MEASURED, not skipped. bgfx's MakeBgfxLayout keys on the buffer
+    // stride alone: stride 12 is not in its table, so the fallback emits a 16-byte
+    // Position+Color0 layout over a 12-byte buffer and the geometry is strided wrongly. Every
+    // colour above is nevertheless correct, which is exactly what separates REMED-GFX-216 from
+    // this ticket. The four full quads would light 4 * 52 * 244 = 50752 pixels; this asserts the
+    // measured shortfall, so the leg FAILS the moment REMED-GFX-216 is fixed and forces its own
+    // removal rather than silently outliving the defect.
+    constexpr int kFullCoverage = kColumnCount * (kColumnWidth - 2 * kGeometryInset) *
+                                  (kTargetSize - 2 * kGeometryInset);
+    EXPECT_LT(coverageInstanced, kFullCoverage)
+        << "positionOnly: bgfx now covers the full " << kFullCoverage
+        << " pixels, so REMED-GFX-216 (MakeBgfxLayout keys on stride, not on the "
+           "VertexDeclaration) is FIXED. Delete this arm";
+#else
+    // Every other measured backend builds its native layout from the declaration, so the geometry
+    // is exactly where it belongs and the full contract holds.
+    constexpr int kFullCoverage = kColumnCount * (kColumnWidth - 2 * kGeometryInset) *
+                                  (kTargetSize - 2 * kGeometryInset);
+    EXPECT_GT(coverageInstanced, kFullCoverage * 9 / 10)
+        << "positionOnly: only " << coverageInstanced << " of about " << kFullCoverage
+        << " pixels rendered";
+#endif
 #endif
 }
 

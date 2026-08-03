@@ -1,0 +1,8 @@
+# bgfx_shaders.hpp is written by src/CNA/Internal/Backends/Bgfx/shaders/compile_shaders.py from
+# shaderc's --bin2c output, whose ASCII-decode comment column is space-padded to a fixed width. The
+# padding therefore produces trailing whitespace on roughly 1150 lines of every regeneration. It is
+# a property of the generator, not of any edit, and the file must never be hand-corrected -- doing
+# so would desynchronise it from the deterministic shader-generation process that is the only
+# supported way to produce it. Exempt it from git's whitespace checks so `git diff --check` reports
+# real problems in hand-written sources instead of drowning in generated padding.
+src/CNA/Internal/Backends/Bgfx/shaders/bgfx_shaders.hpp -whitespace

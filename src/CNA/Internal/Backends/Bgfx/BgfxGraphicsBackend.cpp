@@ -4688,6 +4688,17 @@ namespace CNA::Internal::Backends::Bgfx
         vp.ToColumnMajor(vp_col);
         bgfx::setUniform(vpInstanced3DUnif_, vp_col);
         SetDepthBiasUniform();
+        // REMED-GFX-215: the same two uniforms the ordinary no-texture branch supplies (see the
+        // terminal `else` of DrawColoredPrimitives), because BasicEffect's shader index has no
+        // instancing term. This route previously supplied neither, so vs_instanced3d.sc emitted the
+        // raw COLOR0 and both DiffuseColor and VertexColorEnabled were silently dropped. Both are
+        // written unconditionally on every instanced draw: bgfx uniform values persist in the
+        // renderer until overwritten, so an instanced draw that skipped either would inherit
+        // whatever the preceding ordinary draw happened to set.
+        bgfx::setUniform(diffuseColor3DUnif_, params.diffuseColor);
+        const float vceInstanced[4] = {
+            params.vertexColorEnabled ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f};
+        bgfx::setUniform(vertexColorEn3DUnif_, vceInstanced);
 
         // Task 766: see DrawColoredPrimitives above.
         bgfx::TransientIndexBuffer wireTib;
