@@ -94,17 +94,30 @@ compatibility backend under validation, not yet as a release baseline.
   and forcibly disables depth state on every application. A `DepthStencilState` therefore cannot
   change SpriteBatch's ordinary submission order, while its independent stencil fields can still
   clip/mask a later 2D draw. New Software 3D methods cannot enter GDI through inheritance.
-- The GDI backend archive uses an explicit seven-file CPU-2D dependency list
-  (`SoftwareFramebufferAllocation.cpp`, `SoftwareFramebuffer.cpp`, `SoftwareTexture2D.cpp`,
-  `SoftwareRenderTarget2D.cpp`, `SoftwareGraphicsBackend2DState.cpp`, and
-  `SoftwareSpriteBatch.cpp`, and `SoftwareGraphicsBackend2D.cpp`); it does not glob the
-  Software directory and has no intermediate `software_core` archive. This prevents future
-  Software files from silently entering the Windows build. The resource/state/SpriteBatch sources
-  are independently compiled by GDI and SOFTWARE; the latter wrapper compiles the shared 2D
-  triangle-raster bridge with `CNA_SOFTWARE_2D_ONLY`. Software cube/resources, programmable
-  effects, and general-3D draw bodies are not compiled into GDI. The full SOFTWARE build retains
-  them through `SoftwareGraphicsBackend.cpp`. GDI-074 still tracks extracting shared raster helpers
-  from that remaining source-text monolith.
+- The GDI backend archive uses an explicit eight-file CPU-2D dependency list
+  (`SoftwareFramebufferAllocation.cpp`, `SoftwareTextureAllocation.cpp`,
+  `SoftwareFramebuffer.cpp`, `SoftwareTexture2D.cpp`, `SoftwareRenderTarget2D.cpp`,
+  `SoftwareGraphicsBackend2DState.cpp`, `SoftwareSpriteBatch.cpp`, and
+  `SoftwareGraphicsBackend2D.cpp`); it does not glob the Software directory and has no
+  intermediate `software_core` archive. This prevents future Software files from silently
+  entering the Windows build. `cmake/BackendLibraries.cmake`'s `CNA_GDI_SOFTWARE_SOURCES` is the
+  source of truth for this count and prints it (plus the three GDI-owned units, eleven total) at
+  configure time (GDI-078), rather than relying on this prose being kept in sync by hand. The
+  resource/state/SpriteBatch sources are independently compiled by GDI and SOFTWARE; the latter
+  wrapper compiles the shared 2D triangle-raster bridge with `CNA_SOFTWARE_2D_ONLY`. Software
+  cube/resources, programmable effects, and general-3D draw bodies are not compiled into GDI. The
+  full SOFTWARE build retains them through `SoftwareGraphicsBackend.cpp`. GDI-074 still tracks
+  extracting shared raster helpers from that remaining source-text monolith.
+- GDI-076 gave CPU `Texture2D` allocation the same checked layout/byte-budget discipline GDI-067
+  gave framebuffers: `SoftwareTextureAllocation.hpp`/`.cpp` plans positive dimensions, the shared
+  16,384-axis ceiling, every declared mip level's bytes, and a 512 MiB per-resource budget before
+  `SoftwareTextureBackend` allocates; a caller-supplied pixel buffer smaller than its own level is
+  rejected (`System::ArgumentException`), a larger one is truncated rather than retained verbatim,
+  and `std::bad_alloc`/`std::length_error` become `System::OutOfMemoryException`. This is enforced
+  at the GDI/Software CPU-texture boundary only -- the shared `Texture2D.cpp` public constructors
+  (used identically by every CNA backend) still allocate their own first `width*height*4` vector
+  before that boundary is reached, so an over-budget request still pays for one wasted transient
+  allocation before being rejected; closing that remains open, cross-backend scope.
 - A custom `ShaderEffect` throws `System::NotSupportedException` during construction on GDI. GDI
   does not create an invalid placeholder, accept shader source or uniforms, and then ignore them.
   `ColorMatrixEffect` is the sole fixed non-shader exception; every other custom `SpriteBatch`
@@ -224,11 +237,15 @@ CMAKE_BUILD_PARALLEL_LEVEL=2 cmake --build build-gdi \
            cna_test_gdi_window_metrics \
            cna_test_gdi_framebuffer_allocation \
            cna_test_gdi_msaa_contract \
+           cna_test_gdi_presentation_mode_transaction \
+           cna_test_gdi_dc_release_transaction \
+           cna_test_gdi_texture_allocation \
            cna_bench_gdi_2d cna_demo_2d -j2
 ```
 
-The backend is hard-gated to Windows targets. A native Windows build registers sixteen `GDI` CTest
-cases, including separate default, dirty and halftone configurations; run them with
+The backend is hard-gated to Windows targets. A native Windows build registers nineteen `GDI`
+CTest cases (GDI-078: up from sixteen after GDI-075/076/077 added three focused executables),
+including separate default, dirty and halftone configurations; run them with
 `ctest -L GDI --output-on-failure`.
 
 The GitHub Actions workflow `GDI Windows CI (MSVC)` is deliberately manual (`workflow_dispatch`).

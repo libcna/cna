@@ -20,6 +20,59 @@
   CPU sources now compile independently, while the remaining 2D-only wrapper retains only the
   shared triangle raster bridge/helpers. The native-MSVC workflow remains an external final
   validation gate.
+- 2026-08-03 follow-up: GDI-075, GDI-076, and GDI-077 (the three implementation gaps the
+  2026-08-03 re-audit found) are now closed; see the dated entry below. GDI-078 (this
+  documentation/evidence reconciliation) is closed by this same pass.
+
+## 2026-08-03 follow-up: GDI-075/076/077/078
+
+- GDI-075: `GdiGraphicsBackend::SetPresentationMode` now saves the previous mode, attempts
+  `SynchronizeBackbufferSize()`, and restores the previous mode on any exception before
+  rethrowing -- mirroring the transactional pattern `SetVirtualResolution` already used. A valid
+  ordinal whose derived logical size exceeds the axis/byte budget (e.g. `FixedHeightDynamicWidth`
+  against an extreme drawable aspect) now leaves the backend fully on its prior mode, dimensions,
+  pixels, and damage, and a subsequent `Present()`/`GetViewportSize()` succeeds instead of
+  repeating the same failing synchronization. New focused executable
+  `cna_test_gdi_presentation_mode_transaction` (`GDI_PresentationModeTransaction`).
+- GDI-077: `WindowDeviceContext` gained an explicit, checked `Release()` (returning success plus
+  any Win32 error); `Present()` now calls it before `ResetBackbufferDamage()`/generation
+  acknowledgement, so a failed release is visible in telemetry (`operation == "ReleaseDC"`) and
+  conservatively retains pending damage and the invalidation generation. The destructor is now a
+  fallback-only path for exceptional exits and is a no-op after `Release()` has run, so exactly one
+  release attempt (real or, under `DebugForceNextReleaseDcFailure()`, simulated) is ever made. New
+  focused executable `cna_test_gdi_dc_release_transaction` (`GDI_DcReleaseTransaction`).
+- GDI-076: new `SoftwareTextureAllocation.hpp/.cpp` (mirroring GDI-067's
+  `SoftwareFramebufferAllocation`) plans a checked CPU-texture layout -- positive dimensions, the
+  shared 16,384-axis ceiling, every declared mip level's bytes, and a 512 MiB per-resource budget
+  (`SoftwareTextureMaxBytes`) -- before any vector allocation. `SoftwareTextureBackend`'s two
+  constructors and `UpdatePixels`/`UpdatePixelsLevel` now validate this layout, reject a
+  caller-supplied pixel buffer smaller than its own level (`System::ArgumentException`), truncate
+  an oversized one to exactly `width*height*4` rather than retaining the excess, and translate
+  `std::bad_alloc`/`std::length_error` to `System::OutOfMemoryException`. This closes the gap at
+  the GDI/Software CPU-texture boundary (`GdiGraphicsBackend::CreateTexture` forwards directly
+  into it); it deliberately does **not** touch the shared `Texture2D.cpp` constructors or
+  `IGraphicsBackend.hpp` (every other backend's own texture path), since those are used
+  identically by all fourteen backends and this task's scope, and this session's ability to
+  rebuild/verify every other backend, is GDI/Software-only. A caller going through
+  `Texture2D(GraphicsDevice&, w, h[, mipMap, format])` still pays for one wasted transient
+  `w*h*4`-byte allocation in `Texture2D.cpp` itself before the GDI/Software boundary's own
+  rejection is reached for an over-budget request; eliminating that remains open, cross-backend
+  scope. New focused executable `cna_test_gdi_texture_allocation` (`GDI_TextureAllocation`).
+- GDI-078: this reconciliation itself. `cmake/BackendLibraries.cmake`'s `CNA_GDI_SOFTWARE_SOURCES`
+  is the actual source of truth: **eight** reviewed shared CPU-2D translation units as of this
+  session (GDI-076 added `SoftwareTextureAllocation.cpp` to GDI-074's seven), plus GDI's own three
+  (`GdiConfiguration.cpp`, `GdiGraphicsBackend.cpp`, `GdiPresentation.cpp`) -- eleven translation
+  units in the one GDI backend archive. `cmake/BackendLibraries.cmake` now also `message(STATUS
+  ...)`s this exact count at configure time so it is generated evidence, not a copied number (see
+  "Useful commands" below for the exact configure-time line to check). `cmake/Tests/GdiTests.cmake`
+  registers **seventeen** focused executables (fourteen from before GDI-075/076/077 plus the three
+  new ones above) and **nineteen** native `GDI` CTest cases (sixteen single-registration cases plus
+  the three `GDI_Presentation_*` environment variants of `cna_test_gdi_presentation_configuration`)
+  -- up from fourteen executables/sixteen cases. The stale "two required CPU-2D translation units",
+  "five-object GDI archive", and `-j8` claims elsewhere in this file are corrected in place above.
+  A fresh MinGW-w64 Release reconfigure plus `-j2` build of all seventeen focused executables, and
+  the complete nineteen-case run under Wine/Xvfb with `CNA_GDI_DWM_FLUSH=0`, all pass (see
+  Validation status).
 
 ## Completed in the current working tree
 
@@ -73,8 +126,9 @@
   enter GDI. Every resource/3D entry remains explicit. The unsupported-feature executable now has
   42 public/direct boundary checks and a compile-time assertion forbidding Software inheritance.
 - GDI-071: the GDI build no longer globs the Software directory or creates a separate
-  `cna_backend_graphics_software_core` archive. Its one backend archive names exactly the two
-  required CPU-2D translation units, so future files require deliberate review. The link graph is
+  `cna_backend_graphics_software_core` archive. Its one backend archive names an explicit, reviewed
+  list of the required CPU-2D translation units (eight as of GDI-076; see GDI-078 below for the
+  exact, CMake-derived count), so future files require deliberate review. The link graph is
   reduced to `CNA` ↔ GDI. A full independent SOFTWARE build exposed its own undeclared reverse
   dependency on CNA (`ColorMatrixEffect::FillSpriteDrawParams`); that cycle is now declared
   centrally, and Software tests no longer carry a GNU-only archive-group workaround.
@@ -210,23 +264,25 @@ baseline. All later tasks use one task per commit.
   in one Wine/Xvfb session after the composition change. The expanded unsupported-feature test
   passes all 42 public/direct boundary assertions.
 - GDI-071/GDI-073 focused MinGW build: CNA, all fourteen correctness executables, benchmark, and
-  demo link from the single five-object GDI archive at `-j2`; Ninja exposes no `software_core`
-  target. The final executable link line repeats only `libCNA.a` and
+  demo link from the single explicit-source-list GDI archive at `-j2`; Ninja exposes no
+  `software_core` target. The final executable link line repeats only `libCNA.a` and
   `libcna_backend_graphics_gdi.a` for the declared cycle. All thirteen ordinary executables and all
   three configuration variants pass in one Wine/Xvfb session.
 - GDI-073 `cna_test_gdi_msaa_contract`: all 19 mask, coverage, wireframe, stencil-ordering,
   single-sampled-target, and disable assertions pass under Wine/Xvfb.
 - GDI-074 focused MinGW build: CNA, all fourteen GDI correctness executables, benchmark, and demo
-  build at `-j8` from a GDI archive containing independently compiled framebuffer/`Texture2D`/
-  `RenderTarget2D`/backend-state/SpriteBatch units plus `SoftwareGraphicsBackend2D.cpp`, rather
-  than the full Software implementation. `x86_64-w64-mingw32-ar`/`nm -C` inspection finds no
-  `SoftwareTextureCubeBackend`, Software vertex/index-buffer implementation, or normal 3D
-  rasterizer bodies; only small throwing virtual stubs remain. All thirteen ordinary executables
-  plus the default, dirty, and halftone presentation configurations pass in one Wine/Xvfb session.
-  The current SpriteBatch split reran the complete sixteen-case Wine/Xvfb matrix successfully.
-  The full native GCC SOFTWARE build also succeeds at `-j8`; it retains the known cube allocation
-  warning, while `Software_Smoke`, `Software_Rasterizer`, `Software_SpriteBatch_CustomViewport`,
-  and `Software_SpriteBatch_RasterizerState` pass.
+  build at `-j2` (this plan's own ceiling -- an earlier draft of this entry wrongly recorded
+  `-j8`, corrected by GDI-078) from a GDI archive containing independently compiled
+  framebuffer/`Texture2D`/`RenderTarget2D`/backend-state/SpriteBatch units plus
+  `SoftwareGraphicsBackend2D.cpp`, rather than the full Software implementation.
+  `x86_64-w64-mingw32-ar`/`nm -C` inspection finds no `SoftwareTextureCubeBackend`, Software
+  vertex/index-buffer implementation, or normal 3D rasterizer bodies; only small throwing virtual
+  stubs remain. All thirteen ordinary executables plus the default, dirty, and halftone
+  presentation configurations pass in one Wine/Xvfb session. The current SpriteBatch split reran
+  the complete sixteen-case Wine/Xvfb matrix successfully. The full native GCC SOFTWARE build also
+  succeeds at `-j2` (also corrected from a wrongly recorded `-j8`); it retains the known cube
+  allocation warning, while `Software_Smoke`, `Software_Rasterizer`,
+  `Software_SpriteBatch_CustomViewport`, and `Software_SpriteBatch_RasterizerState` pass.
 - GDI-071 independent SOFTWARE gate: the full native GCC build links after centrally declaring
   `CNA` ↔ SOFTWARE, including the formerly failing `cna_xnb_audio_metadata_dump`; its test link
   line is portable repeated archives with no `--start-group`. The 57-test `Software` label has

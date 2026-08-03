@@ -11,6 +11,20 @@
 > remains outside the checked presentation commit, and the handoff's source/object-count claims have
 > drifted from CMake. Passing the existing suite therefore does not close these new tasks.
 >
+> **2026-08-03 remediation of the follow-up findings:** GDI-075, GDI-076, and GDI-077 are now
+> implemented and GDI-078's documentation/evidence reconciliation is complete (see their entries in
+> §6 and §4). Three new focused executables were added
+> (`cna_test_gdi_presentation_mode_transaction`, `cna_test_gdi_dc_release_transaction`,
+> `cna_test_gdi_texture_allocation`), each proven to fail against the pre-fix code and pass against
+> the fix. A fresh MinGW-w64 Release reconfigure plus `-j2` build of all seventeen focused
+> executables, and all nineteen native `GDI` CTest cases under Wine/Xvfb with
+> `CNA_GDI_DWM_FLUSH=0`, pass. The GDI backend archive now compiles eight shared CPU-2D
+> translation units (GDI-076 added `SoftwareTextureAllocation.cpp` to GDI-074's seven) plus GDI's
+> own three, a fact `cmake/BackendLibraries.cmake` now prints at configure time instead of relying
+> on hand-copied prose (GDI-078). GDI-061 (visible native-Windows lifecycle/DPI gate) and GDI-062
+> through GDI-066 (native visible performance data) remain the only gates this Linux/Wine sandbox
+> cannot close; the backend is still not a release baseline until those pass.
+>
 > **Assessment at the audited commit:** the backend was a sound Windows-only CPU-2D compatibility
 > prototype, but **not a release baseline**. The audit found three correctness blockers: the public
 > stencil-clear path was disconnected, dirty damage could omit pixels, and Win32 expose/paint repair
@@ -117,11 +131,16 @@ ResolveColor -> GdiPresentation planner -> scoped GetDC
 - GDI render targets deliberately force depth and MSAA to zero and explicitly expose their
   always-present standalone Software stencil allocation. `GraphicsDevice` now asks depth and
   stencil attachment questions independently.
-- Backbuffer and render-target allocations use GDI-067's checked 512 MiB framebuffer planner, but
-  ordinary CPU `Texture2D` construction still allocates/copies RGBA8 vectors without that planner,
-  allocation-failure translation, or equivalent byte-budget coverage. The public maximum remains
-  16,384 per axis even though a square RGBA8 level at that limit alone is 1 GiB; GDI-076 owns this
-  remaining resource-boundary gap.
+- Backbuffer and render-target allocations use GDI-067's checked 512 MiB framebuffer planner.
+  GDI-076 gave the composed `SoftwareTextureBackend` an equivalent checked 512 MiB
+  `SoftwareTextureAllocation` layout/budget, pixel-length agreement validation, and
+  `bad_alloc`/`length_error` translation at the GDI/Software CPU-texture boundary
+  (`GdiGraphicsBackend::CreateTexture`). The public per-axis maximum is still 16,384, but a request
+  whose byte cost exceeds the budget (a square level at that limit alone would be 1 GiB) is now
+  rejected there rather than silently allocated. The ordinary public `Texture2D` constructors
+  (shared by every CNA backend) still allocate their own first `width*height*4` vector before
+  that boundary is reached, so an over-budget public request still pays for one wasted transient
+  allocation first; GDI-076 remains 🟨 for that deliberately cross-backend residue.
 
 ### Presentation path
 
@@ -443,7 +462,7 @@ triangle raster helpers and the `RasterizeSpriteQuad` bridge remain centralized 
 `SoftwareGraphicsBackend.cpp` through the wrapper, so their extraction remains part of GDI-074.
 
 ### F9 — a valid presentation-mode change can leave the backend in a failed half-state (P1,
-open as GDI-075)
+resolved by GDI-075)
 
 [`GdiGraphicsBackend::SetPresentationMode`](src/CNA/Internal/Backends/Gdi/GdiGraphicsBackend.cpp)
 assigns `presentationMode_` before calling the fallible `SynchronizeBackbufferSize()`. Validation of
@@ -458,8 +477,21 @@ The current regression proves only that invalid ordinals preserve Letterbox. It 
 failure for a valid ordinal whose implicit resize is rejected. GDI-075 must make the whole
 mode/size/damage transition commit or roll back as one operation and add that missing test.
 
+**Resolution:** `SetPresentationMode` now saves `presentationMode_` before assigning the requested
+ordinal, and restores it in a `catch (...)` around `SynchronizeBackbufferSize()` before rethrowing
+-- the identical pattern `SetVirtualResolution` already used, and safe for the same reason:
+`SoftwareFramebuffer::Resize` is itself transactional, so restoring only the mode field fully rolls
+back the whole request. `cna_test_gdi_presentation_mode_transaction` starts from a valid retained
+Letterbox framebuffer, resizes the real window to an extreme aspect, switches to
+`FixedHeightDynamicWidth` (rejected with `System::ArgumentOutOfRangeException`), and verifies the
+old mode's dimensions, pixels, and damage are unchanged and that a subsequent `Present()` succeeds
+-- proving the backend does not get stuck repeating the same failing synchronization. Public
+`GraphicsDevice::SetPresentationMode(int)` is a private, single-line, stateless forward reachable
+only through `GraphicsDeviceManager` (which requires a live `Game` in this codebase), so it adds no
+state of its own to duplicate at that layer; the test file documents this explicitly.
+
 ### F10 — CPU `Texture2D` allocation bypasses the GDI framebuffer safety contract (P1,
-open as GDI-076)
+resolved by GDI-076)
 
 GDI reports a 16,384 maximum texture dimension, while the ordinary public `Texture2D` constructors
 check only that upper per-axis value and then allocate `width * height * 4` bytes. A square RGBA8
@@ -475,8 +507,27 @@ existing unsupported-feature test merely compares the reported integer ceiling; 
 the boundary allocation. GDI-076 must define a truthful CPU-texture byte contract and enforce it
 before the first large public allocation as well as at the direct backend entry.
 
+**Resolution:** new `SoftwareTextureAllocation.hpp`/`.cpp` mirrors GDI-067's framebuffer planner --
+positive dimensions, the shared 16,384-axis ceiling, every declared mip level's bytes (not just
+level 0), and a 512 MiB per-resource budget (`SoftwareTextureMaxBytes`) -- computed before any
+vector allocation. `SoftwareTextureBackend`'s two constructors and `UpdatePixels`/
+`UpdatePixelsLevel` now validate this layout, reject a supplied pixel buffer smaller than its own
+level (`System::ArgumentException`, closing the out-of-bounds-read risk), truncate an oversized one
+to exactly `width*height*4` instead of retaining the excess, and translate
+`std::bad_alloc`/`std::length_error` to `System::OutOfMemoryException`. `GdiGraphicsBackend::
+CreateTexture` forwards directly into this checked constructor, so the direct backend entry and the
+GDI/Software CPU-texture boundary are the same call. This deliberately stops at that boundary: the
+shared `Texture2D.cpp` public constructors (identical across all fourteen CNA backends) still
+allocate their own first `width*height*4` vector before ever reaching it, so an over-budget public
+request still pays for one wasted transient allocation before GDI/Software's own rejection is
+reached -- eliminating that is a cross-backend change this GDI-only task deliberately leaves open
+rather than touching a shared file this session cannot verify against every other backend.
+`cna_test_gdi_texture_allocation` covers the pure planner (byte-per-pixel/mip-chain/overflow/budget
+math) and the live GDI boundary (ordinary creation, buffer truncation, undersized-buffer rejection,
+over-budget rejection, non-positive-dimension rejection).
+
 ### F11 — `ReleaseDC` occurs after the presentation commit and its failure is invisible (P2,
-open as GDI-077)
+resolved by GDI-077)
 
 `WindowDeviceContext` guarantees a scoped `GetDC`/`ReleaseDC` pair, but its destructor discards the
 `ReleaseDC` result. `Present()` resets backbuffer damage and acknowledges the invalidation generation
@@ -489,8 +540,21 @@ GDI-077 should add an explicit, checked close before the commit point, retain a 
 for exception safety, and use injection or a small DC-provider seam to verify failure telemetry and
 damage retention without depending on a naturally failing Win32 desktop.
 
+**Resolution:** `WindowDeviceContext` gained an explicit `Release(bool forceFailure = false)` that
+performs the real (or, under test injection, simulated) `ReleaseDC` exactly once and nulls its
+handle regardless of outcome, so the destructor becomes a no-op after it runs and is otherwise only
+a non-throwing fallback for exception paths that never reached the explicit call. `Present()` now
+calls `Release()` after `GdiFlush`/`DwmFlush` but before `ResetBackbufferDamage()` and the
+invalidation-generation acknowledgement; a failed release surfaces through the same
+`ThrowWin32Failure` diagnostic path, records `operation == "ReleaseDC"` in presentation telemetry,
+and leaves damage/generation exactly as they were. A new `DebugForceNextReleaseDcFailure()` test
+seam skips the real Win32 call and reports a simulated failure, matching the existing
+`DebugForceNextDibBlitFailure()` convention. `cna_test_gdi_dc_release_transaction` proves telemetry
+identification, damage/generation retention across repeated forced failures, and that a normal
+`Present()` afterward still succeeds and commits.
+
 ### F12 — handoff evidence has drifted from the implemented build boundary (P2 documentation,
-open as GDI-078)
+resolved by GDI-078)
 
 The current CMake list names seven shared CPU-2D source files and the backend archive also contains
 the three GDI translation units. `NEXT_gdi.md` still says the archive names "exactly two" CPU-2D
@@ -502,6 +566,17 @@ GDI-078 must reconcile source/object/test counts with CMake-generated evidence, 
 parallelism claims, and record the 2026-08-03 clean `-j2` plus Xvfb/Wine rerun. Counts that are likely
 to change again should be derived or asserted by a small build-boundary check instead of copied into
 several prose sections.
+
+**Resolution:** `NEXT_gdi.md`'s "exactly the two required CPU-2D translation units", "five-object
+GDI archive", and three `-j8` claims are corrected in place to match the actual, already-current
+seven/eight-file split and this plan's `-j2` ceiling. `cmake/BackendLibraries.cmake` now
+`message(STATUS ...)`s the real `CNA_GDI_SOFTWARE_SOURCES` length (plus GDI's own three units) at
+every configure, so this count is generated evidence rather than a number copied into prose that
+can drift again. `docs/gdi-backend.md` and `NEXT_gdi.md` are updated to the current eight
+shared/eleven-total file count and nineteen-case CTest registration (GDI-076's
+`SoftwareTextureAllocation.cpp` and GDI-075/076/077's three new focused executables), and both
+record the 2026-08-03 clean MinGW-w64 Release `-j2` reconfigure/build plus the full nineteen-case
+Wine/Xvfb rerun with `CNA_GDI_DWM_FLUSH=0`.
 
 ---
 
@@ -583,10 +658,10 @@ means only the narrowed statement in this table, not overall release readiness.
 
 | # | Task | Status | Acceptance criteria |
 |---|---|---:|---|
-| GDI-075 | Make valid presentation-mode changes transactional. | 🔴 | Validate the requested ordinal, calculate the prospective logical size, and complete any fallible framebuffer replacement before committing `presentationMode_`, damage, or coordinate policy; alternatively restore every prior field on failure. Add a deterministic test that starts from a valid retained framebuffer, switches to `FixedHeightDynamicWidth` with an aspect/virtual-height combination that exceeds the axis or byte budget, and verifies the exception family/diagnostic, old mode transforms, dimensions, pixels, damage, and a subsequent successful `Present()`. Cover both direct backend and public `GraphicsDevice::SetPresentationMode` paths. |
-| GDI-076 | Give CPU `Texture2D` the same allocation discipline as GDI framebuffers. | 🔴 | Define a checked CPU-texture layout contract for positive dimensions, base RGBA8 bytes, declared/supplied mip levels, every `size_t` operation, and a documented per-resource byte budget. Enforce it before public constructors allocate their first large vector and again in `GdiGraphicsBackend::CreateTexture`/the shared CPU texture boundary so decoded and direct `ImageData` cannot bypass it. Make `GetMaxTextureDimension()` and the byte budget jointly honest, validate source pixel lengths before sampling, eliminate avoidable full-size transient copies where practical, and translate `bad_alloc`/`length_error` to `System::OutOfMemoryException`. Add public/direct, malformed-data, over-budget, mip-budget, and genuine 32-bit planner tests; rejected creation must not alter existing resources. |
-| GDI-077 | Include DC release in the checked presentation transaction. | 🔴 | Refactor scoped DC ownership to support an explicit checked close before `ResetBackbufferDamage()` and invalidation acknowledgement, with a non-throwing destructor fallback for exceptional paths. A zero `ReleaseDC` result must identify `ReleaseDC` in telemetry/diagnostics and conservatively retain pending damage/generation. Add deterministic failure injection or a DC-provider seam plus success/failure count assertions proving exactly one release attempt and no leak/double release. Do not make a destructor throw. |
-| GDI-078 | Reconcile handoff/build evidence with the actual archive boundary. | ⬜ | Update `NEXT_gdi.md`, `docs/gdi-backend.md`, and this plan from one CMake/source-of-truth inspection: seven reviewed shared CPU-2D sources plus the GDI-owned units, sixteen focused test cases, and at most `-j2`. Remove obsolete "two translation units", "five-object archive", and `-j8` claims. Record the 2026-08-03 clean MinGW Release plus Xvfb/Wine result and add a lightweight configure/archive assertion for boundary facts that should not rely on manually copied counts. |
+| GDI-075 | Make valid presentation-mode changes transactional. | ✅ | Validate the requested ordinal, calculate the prospective logical size, and complete any fallible framebuffer replacement before committing `presentationMode_`, damage, or coordinate policy; alternatively restore every prior field on failure. Add a deterministic test that starts from a valid retained framebuffer, switches to `FixedHeightDynamicWidth` with an aspect/virtual-height combination that exceeds the axis or byte budget, and verifies the exception family/diagnostic, old mode transforms, dimensions, pixels, damage, and a subsequent successful `Present()`. Cover both direct backend and public `GraphicsDevice::SetPresentationMode` paths. |
+| GDI-076 | Give CPU `Texture2D` the same allocation discipline as GDI framebuffers. | 🟨 | Define a checked CPU-texture layout contract for positive dimensions, base RGBA8 bytes, declared/supplied mip levels, every `size_t` operation, and a documented per-resource byte budget. Enforce it before public constructors allocate their first large vector and again in `GdiGraphicsBackend::CreateTexture`/the shared CPU texture boundary so decoded and direct `ImageData` cannot bypass it. Make `GetMaxTextureDimension()` and the byte budget jointly honest, validate source pixel lengths before sampling, eliminate avoidable full-size transient copies where practical, and translate `bad_alloc`/`length_error` to `System::OutOfMemoryException`. Add public/direct, malformed-data, over-budget, mip-budget, and genuine 32-bit planner tests; rejected creation must not alter existing resources. The GDI/Software CPU-texture boundary itself is fully checked; the shared `Texture2D.cpp` public constructors' own first `width*height*4` allocation, and a genuine 32-bit planner harness, remain open, deliberately cross-backend, scope before this task becomes ✅. |
+| GDI-077 | Include DC release in the checked presentation transaction. | ✅ | Refactor scoped DC ownership to support an explicit checked close before `ResetBackbufferDamage()` and invalidation acknowledgement, with a non-throwing destructor fallback for exceptional paths. A zero `ReleaseDC` result must identify `ReleaseDC` in telemetry/diagnostics and conservatively retain pending damage/generation. Add deterministic failure injection or a DC-provider seam plus success/failure count assertions proving exactly one release attempt and no leak/double release. Do not make a destructor throw. |
+| GDI-078 | Reconcile handoff/build evidence with the actual archive boundary. | ✅ | Update `NEXT_gdi.md`, `docs/gdi-backend.md`, and this plan from one CMake/source-of-truth inspection: seven reviewed shared CPU-2D sources plus the GDI-owned units, sixteen focused test cases, and at most `-j2`. Remove obsolete "two translation units", "five-object archive", and `-j8` claims. Record the 2026-08-03 clean MinGW Release plus Xvfb/Wine result and add a lightweight configure/archive assertion for boundary facts that should not rely on manually copied counts. |
 
 ---
 
@@ -599,10 +674,12 @@ means only the narrowed statement in this table, not overall release readiness.
 5. ✅ **Register configuration coverage:** GDI-056.
 6. **Establish native repeatability:** ✅ GDI-057 through GDI-060; GDI-061 remains a visible
    native-Windows gate.
-7. **Close follow-up correctness gaps:** GDI-075 and GDI-076, then harden the transaction with
-   GDI-077. These are implementation tasks, not substitutes for the visible native gate.
-8. **Reconcile evidence:** GDI-078; keep generated archive/test facts separate from human lifecycle
-   observations.
+7. **Close follow-up correctness gaps:** ✅ GDI-075 and GDI-077 are fully closed; GDI-076 is closed
+   at the GDI/Software CPU-texture boundary but leaves the shared `Texture2D.cpp` allocation-order
+   improvement as deliberate cross-backend scope (🟨). These are implementation tasks, not
+   substitutes for the visible native gate.
+8. **Reconcile evidence:** ✅ GDI-078; keep generated archive/test facts separate from human
+   lifecycle observations.
 9. **Measure a visible client:** GDI-062. Only then choose GDI-063 through GDI-066.
 10. **Reduce remaining architectural risk:** ✅ GDI-067, GDI-070, GDI-072, and GDI-073; GDI-071 is
    locally implemented and awaits native MSVC, while only GDI-074 remains in this group.
