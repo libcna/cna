@@ -13,10 +13,13 @@
 #include "CNA/Internal/Backends/Diligent/DiligentGraphicsBackend.hpp"
 
 #include <algorithm>
+#include <cstdint>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
+using CNA::Internal::Backends::Diligent::ComputeDiligentDepthBiasRawUnits;
 using CNA::Internal::Backends::Diligent::DiligentDeviceType;
 using CNA::Internal::Backends::Diligent::GetDeviceTypeName;
 using CNA::Internal::Backends::Diligent::GetDeviceTypePreferenceOrder;
@@ -103,6 +106,42 @@ TEST(DiligentDeviceSelectionTest, UnknownOverrideThrowsInsteadOfSilentlyFallingB
     EXPECT_THROW(ParseDeviceTypeOverride("metal"), std::runtime_error);
     EXPECT_THROW(ParseDeviceTypeOverride("webgpu"), std::runtime_error);
     EXPECT_THROW(ParseDeviceTypeOverride("vulcan"), std::runtime_error);
+}
+
+// plan_diligent.md DILIGENT-64: PipelineKey::depthBias used to be packed into a single signed byte
+// (lround(depthBias * 1000) & 0xFF) inside PipelineKey::raster, which silently wraps sign once the
+// scaled value leaves [-128, 127] -- e.g. +0.129 (scaled 129) would come back out of an int8_t cast
+// as -127. ComputeDiligentDepthBiasRawUnits() now stores the full lossless Int32 instead; these are
+// exactly the boundary/sign cases the old packing got wrong, verifiable with no GPU present.
+TEST(DiligentDeviceSelectionTest, DepthBiasRawUnitsMatchesTheOldPackingWithinItsFormerRange)
+{
+    EXPECT_EQ(ComputeDiligentDepthBiasRawUnits(0.0f), 0);
+    EXPECT_EQ(ComputeDiligentDepthBiasRawUnits(0.127f), 127);
+    EXPECT_EQ(ComputeDiligentDepthBiasRawUnits(-0.128f), -128);
+}
+
+TEST(DiligentDeviceSelectionTest, DepthBiasRawUnitsNeverWrapsSignPastTheOldByteBoundary)
+{
+    // The old `& 0xFF` packing made +0.128/+0.129 (scaled 128/129) come back as -128/-127 once
+    // reinterpreted as a signed byte -- a positive bias silently becoming a negative one.
+    EXPECT_EQ(ComputeDiligentDepthBiasRawUnits(0.128f), 128);
+    EXPECT_EQ(ComputeDiligentDepthBiasRawUnits(0.129f), 129);
+    EXPECT_GT(ComputeDiligentDepthBiasRawUnits(0.129f), 0);
+
+    // The old packing's negative side already round-tripped correctly at exactly -0.128 (the byte
+    // minimum), but anything past it silently aliased to a positive value the wrong sign entirely
+    // once cast back to int8_t (e.g. scaled -129 & 0xFF = 0x7F = +127).
+    EXPECT_EQ(ComputeDiligentDepthBiasRawUnits(-0.129f), -129);
+    EXPECT_LT(ComputeDiligentDepthBiasRawUnits(-0.129f), 0);
+}
+
+TEST(DiligentDeviceSelectionTest, DepthBiasRawUnitsClampsInsteadOfOverflowingOnExtremeInput)
+{
+    const std::int32_t maxUnits = std::numeric_limits<std::int32_t>::max();
+    const std::int32_t minUnits = std::numeric_limits<std::int32_t>::min();
+
+    EXPECT_EQ(ComputeDiligentDepthBiasRawUnits(1.0e10f), maxUnits);
+    EXPECT_EQ(ComputeDiligentDepthBiasRawUnits(-1.0e10f), minUnits);
 }
 
 #endif // CNA_BACKEND_DILIGENT

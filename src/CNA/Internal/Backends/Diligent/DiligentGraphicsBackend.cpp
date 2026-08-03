@@ -9,6 +9,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
+#include <limits>
 #include <stdexcept>
 
 #include "Graphics/GraphicsEngine/interface/GraphicsTypes.h"
@@ -1142,6 +1143,15 @@ float4 main(in PSInput psIn) : SV_Target
         return order;
     }
 
+    std::int32_t ComputeDiligentDepthBiasRawUnits(float depthBias)
+    {
+        const double scaled = static_cast<double>(depthBias) * 1000.0;
+        const double clamped =
+            std::clamp(scaled, static_cast<double>(std::numeric_limits<std::int32_t>::min()),
+                      static_cast<double>(std::numeric_limits<std::int32_t>::max()));
+        return static_cast<std::int32_t>(std::lround(clamped));
+    }
+
     // ---- DiligentTextureBackend ----
 
     DiligentTextureBackend::DiligentTextureBackend(DiligentGraphicsBackend& owner, const ImageData& data)
@@ -2216,16 +2226,20 @@ float4 main(in PSInput psIn) : SV_Target
                stencilBack == other.stencilBack && stencilMasks == other.stencilMasks &&
                raster == other.raster && targetFormats == other.targetFormats &&
                extraTargetFormats == other.extraTargetFormats && sampleCount == other.sampleCount &&
-               scissorEnable == other.scissorEnable;
+               scissorEnable == other.scissorEnable && depthBias == other.depthBias &&
+               slopeScaledDepthBias == other.slopeScaledDepthBias;
     }
 
     std::size_t DiligentGraphicsBackend::PipelineKeyHash::operator()(const PipelineKey& key) const noexcept
     {
         std::size_t hash = static_cast<std::size_t>(key.variant);
+        std::uint32_t slopeBits = 0;
+        std::memcpy(&slopeBits, &key.slopeScaledDepthBias, sizeof(slopeBits));
         const std::uint32_t fields[] = {key.topology, key.blend, key.blendFuncs, key.writeMask,
                                         key.depth, key.stencilFront, key.stencilBack,
                                         key.stencilMasks, key.raster, key.targetFormats,
-                                        key.extraTargetFormats, key.sampleCount, key.scissorEnable};
+                                        key.extraTargetFormats, key.sampleCount, key.scissorEnable,
+                                        static_cast<std::uint32_t>(key.depthBias), slopeBits};
         for (const std::uint32_t field : fields)
             hash = hash * 1099511628211ull ^ static_cast<std::size_t>(field);
         return hash;
@@ -3422,9 +3436,9 @@ float4 main(in PSInput psIn) : SV_Target
                                                         bool scissorTestEnable,
                                                         float depthBias, float slopeScaleDepthBias)
     {
-        state_.raster = PackBytes(cullMode, fillMode,
-                                  static_cast<int>(std::lround(depthBias * 1000.0f)) & 0xFF,
-                                  static_cast<int>(std::lround(slopeScaleDepthBias * 16.0f)) & 0xFF);
+        state_.raster = PackBytes(cullMode, fillMode, 0, 0);
+        state_.depthBias = ComputeDiligentDepthBiasRawUnits(depthBias);
+        state_.slopeScaledDepthBias = slopeScaleDepthBias;
         scissorEnabled_ = scissorTestEnable;
         renderTargetsBound_ = false;
     }
@@ -3827,9 +3841,8 @@ float4 main(in PSInput psIn) : SV_Target
                                                               : Dg::FILL_MODE_SOLID;
         rasterizer.FrontCounterClockwise = Dg::False;
         rasterizer.ScissorEnable = key.scissorEnable != 0 ? Dg::True : Dg::False;
-        rasterizer.DepthBias = static_cast<Dg::Int32>(static_cast<std::int8_t>((key.raster >> 16) & 0xFF));
-        rasterizer.SlopeScaledDepthBias =
-            static_cast<float>(static_cast<std::int8_t>((key.raster >> 24) & 0xFF)) / 16.0f;
+        rasterizer.DepthBias = static_cast<Dg::Int32>(key.depthBias);
+        rasterizer.SlopeScaledDepthBias = key.slopeScaledDepthBias;
 
         psoCI.pVS = vertexShader;
         psoCI.pPS = pixelShader;

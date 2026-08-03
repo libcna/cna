@@ -81,6 +81,22 @@ namespace CNA::Internal::Backends::Diligent
      */
     NOXNA [[nodiscard]] std::vector<DiligentDeviceType> GetDeviceTypePreferenceOrder();
 
+    /**
+     * @brief NOXNA. Converts XNA's `RasterizerState.DepthBias` (a small float, "r" units) into the
+     * raw `Int32` units `Dg::RasterizerStateDesc::DepthBias` stores, exactly as
+     * `DiligentGraphicsBackend::ApplyRasterizerState()` uses it -- exposed as a free function
+     * (`DILIGENT-3`'s own established reason for doing this: testable with no GPU present).
+     *
+     * @p depthBias is scaled by 1000 and rounded to the nearest integer, then clamped to the `Int32`
+     * range rather than truncated -- `PipelineKey::depthBias` used to instead mask this into a
+     * single signed byte, which silently wrapped sign at magnitudes just past 0.127/-0.128
+     * (`DILIGENT-64`).
+     *
+     * @param depthBias XNA-style depth bias value.
+     * @return The raw Diligent `DepthBias` unit, clamped to `[INT32_MIN, INT32_MAX]`.
+     */
+    NOXNA [[nodiscard]] std::int32_t ComputeDiligentDepthBiasRawUnits(float depthBias);
+
     class DiligentGraphicsBackend;
 
     /**
@@ -1418,6 +1434,13 @@ namespace CNA::Internal::Backends::Diligent
             /// pipeline created under one `ScissorTestEnable` value get reused, unchanged, after a
             /// later `ApplyRasterizerState()` call toggled it (`DILIGENT-58`).
             std::uint32_t scissorEnable = 0;
+            /// Raw Diligent `DepthBias` units (`ComputeDiligentDepthBiasRawUnits()`). Previously
+            /// packed into a single signed byte inside `raster`, which silently wrapped sign past
+            /// +-0.127/-0.128; stored losslessly as its own `Int32` field instead (`DILIGENT-64`).
+            std::int32_t depthBias = 0;
+            /// `Dg::RasterizerStateDesc::SlopeScaledDepthBias` is itself a `Float32`, so this is
+            /// stored exactly rather than quantized to 1/16 steps the way the old byte packing did.
+            float slopeScaledDepthBias = 0.0f;
 
             bool operator==(const PipelineKey& other) const noexcept;
         };

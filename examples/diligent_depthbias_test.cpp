@@ -12,18 +12,15 @@
 // RasterizerState. Under LESS, a second draw at equal depth fails (centre stays red) -- unless a
 // negative bias pulls B's depth toward the camera so it passes (centre turns green).
 //
-// DiligentGraphicsBackend::ApplyRasterizerState() packs DepthBias/SlopeScaleDepthBias into a single
-// signed byte each (PipelineKey::raster bits 16-23 / 24-31, DiligentGraphicsBackend.cpp
-// ApplyRasterizerState()/GetOrCreatePipeline()): DepthBias round-trips as
-// lround(depthBias * 1000) clamped to an int8_t, decoded directly into Dg::RasterizerStateDesc's
-// raw Int32 DepthBias units; SlopeScaleDepthBias round-trips as lround(value * 16) clamped the same
-// way, decoded back by dividing by 16. That packing's representable range is only
-// [-128, 127] / scale, i.e. DepthBias in [-0.128, 0.127] and SlopeScaleDepthBias in [-8.0, 7.9375]
-// -- unlike the native Vulkan backend's own depth-bias test (Task 328), which drives
-// vkCmdSetDepthBias directly and can use an arbitrarily large factor. This test therefore uses the
-// most extreme values this packing can exactly represent (-0.128 and -8.0, both round-tripping to
-// the packing's minimum byte, -128) rather than an arbitrarily large input, since anything larger
-// would silently alias to a different byte instead of clamping.
+// plan_diligent.md DILIGENT-64 note: DiligentGraphicsBackend::ApplyRasterizerState() used to pack
+// DepthBias/SlopeScaleDepthBias into a single signed byte each inside PipelineKey::raster, which
+// silently wrapped sign once a scaled value left [-128, 127] (see
+// DiligentDeviceSelectionTests.cpp's DepthBiasRawUnits* tests for that boundary/sign case, provable
+// with no GPU). PipelineKey now stores DepthBias as its own lossless Int32 field
+// (ComputeDiligentDepthBiasRawUnits()) and SlopeScaledDepthBias as an exact Float32, matching
+// Dg::RasterizerStateDesc's own field types. This test's own values (-0.128 and -8.0) still work
+// unchanged -- they were always exactly representable, byte-packed or not -- so checks 0-3 below are
+// a pure non-regression check for the storage change, not new coverage.
 //
 // Two scenarios: flat geometry (constant DepthBias) and tilted geometry with a real depth slope
 // (SlopeScaleDepthBias). Both rendered side by side in one frame, read back with one
@@ -34,9 +31,20 @@
 //   Strip 2 — tilted, B SlopeScaleDepthBias = 0 → RED   (B fails the equal-depth test)
 //   Strip 3 — tilted, B SlopeScaleDepthBias=-8.0 → GREEN (slope bias pulls B in front)
 //
-// If this backend's narrow 8-bit packing turns out too coarse to produce a visible effect on the
-// software (lavapipe) device under test -- the same open-gap shape as D3D9's own still-unresolved
-// D9-62 -- that is itself the recorded finding; this test does not silently report PASS for that.
+// Checks 4-6 are DILIGENT-64's own "A -> B -> A" pipeline-cache-identity acceptance criterion:
+// SlopeScaleDepthBias is the only one of the two bias fields with an observable pixel effect on
+// this software device (DepthBias's constant term shows none, on any sign, at any magnitude -- see
+// below), so it stands in for both fields to prove GetOrCreatePipeline() still creates and reuses
+// the right cached pipeline across a bias -> no-bias -> bias sequence at a fixed draw position, now
+// that the two fields moved out of the shared byte-packed `raster` key member into their own.
+//
+//   Strip 4 — tilted, B SlopeScaleDepthBias=-8.0 (A)       → GREEN
+//   Strip 5 — tilted, B SlopeScaleDepthBias=0     (B)      → RED (not stuck at strip 4's cached PSO)
+//   Strip 6 — tilted, B SlopeScaleDepthBias=-8.0 (A again) → GREEN (re-visiting A works again)
+//
+// If this backend's constant DepthBias term turns out to produce no visible effect on the software
+// (lavapipe) device under test -- the same open-gap shape as D3D9's own still-unresolved D9-62 --
+// that is itself the recorded finding; this test does not silently report PASS for that.
 //
 // Exit code 0 = all checks PASS, 1 = any FAIL, 77 = no usable device.
 
@@ -68,7 +76,7 @@ namespace
 {
     constexpr int kWidth = 320;
     constexpr int kHeight = 240;
-    constexpr int kChecks = 4;
+    constexpr int kChecks = 7;
 
     bool IsRed(const Color& px)
     {
@@ -196,6 +204,41 @@ protected:
         std::snprintf(buf, sizeof(buf), "SlopeScaleDepthBias=-8.0 (tilted): (%d,%d,%d) expected GREEN",
                       p3.getRProperty(), p3.getGProperty(), p3.getBProperty());
         Check(IsGreen(p3), buf);
+
+        // DILIGENT-64's own "A -> B -> A" pipeline-cache-identity acceptance check: with everything
+        // else about the draw held fixed (same position, same variant/topology/blend/depth-stencil),
+        // only SlopeScaleDepthBias changes across three sequential frames. If PipelineKey's own
+        // depthBias/slopeScaledDepthBias fields were somehow still aliasing between distinct values
+        // (the class of bug this task's storage change guards against), the second or third step
+        // would silently reuse the wrong cached pipeline.
+        struct SlopeStep { float slope; bool expectGreen; const char* label; };
+        const SlopeStep steps[3] = {
+            {-8.0f, true, "SlopeScaleDepthBias=-8.0 (A)"},
+            {0.0f, false, "SlopeScaleDepthBias=0 (B)"},
+            {-8.0f, true, "SlopeScaleDepthBias=-8.0 (A again)"},
+        };
+        for (const SlopeStep& step : steps)
+        {
+            RasterizerState rasterizerStep;
+            rasterizerStep.setSlopeScaleDepthBiasProperty(step.slope);
+
+            Color result(0, 0, 0, 0);
+            for (int attempt = 0; attempt < 20; ++attempt)
+            {
+                device.Clear(Color(0, 0, 0, 255));
+                device.setBlendStateProperty(BlendState::Opaque);
+                effect.Apply();
+                DrawPair(device, cx[3], true, rasterizerStep);
+                result = ReadAt(device, cx[3]);
+                if (!IsBlack(result))
+                    break;
+            }
+
+            std::snprintf(buf, sizeof(buf), "%s: (%d,%d,%d) expected %s", step.label,
+                          result.getRProperty(), result.getGProperty(), result.getBProperty(),
+                          step.expectGreen ? "GREEN" : "RED");
+            Check(step.expectGreen ? IsGreen(result) : IsRed(result), buf);
+        }
 
         std::printf("=== %d/%d PASS ===\n", passCount_, kChecks);
         result_ = passCount_ == kChecks ? 0 : 1;
