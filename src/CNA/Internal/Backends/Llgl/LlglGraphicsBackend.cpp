@@ -3802,9 +3802,20 @@ namespace CNA::Internal::Backends::Llgl
                 // The preferred height stays fixed and the logical width follows the real aspect
                 // ratio, so the canvas fills the surface exactly and a wider window simply shows
                 // more horizontal content.
-                logicalWidth = std::round(physicalWidth * logicalHeight / physicalHeight);
-                if (logicalWidth <= 0.0f)
-                    logicalWidth = physicalWidth;
+                float derivedWidth = std::round(physicalWidth * logicalHeight / physicalHeight);
+                if (derivedWidth <= 0.0f)
+                    derivedWidth = physicalWidth;
+                // LLGL-50: the aspect-derived width is a FLOOR, never a hard override -- a window
+                // narrower (relative to its own height) than the game's own requested aspect must
+                // not silently shrink an explicitly requested readable back buffer, or make
+                // columns the game asked for (PreferredBackBufferWidth) permanently unaddressable
+                // by any draw/readback/viewport call, all of which read this same rect.logicalWidth.
+                // A wider window is unaffected (derivedWidth already exceeds virtualWidth_ there),
+                // matching this mode's own already-tested "a wider window shows more content"
+                // contract (llgl_presentation_test.cpp Check E) exactly as before.
+                logicalWidth = virtualWidth_ > 0
+                    ? std::max(derivedWidth, static_cast<float>(virtualWidth_))
+                    : derivedWidth;
                 const float scale = std::min(physicalWidth / logicalWidth, physicalHeight / logicalHeight);
                 rect.width = logicalWidth * scale;
                 rect.height = logicalHeight * scale;

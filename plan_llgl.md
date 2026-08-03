@@ -633,7 +633,7 @@ reported before submission.
 | LLGL-47 | P0 | **Make custom-effect resource layouts safe.** Reflect or validate compiled GLSL/SPIR-V before LLGL pipeline creation. Either build every referenced descriptor set/binding or reject unsupported set numbers, resource types and stage visibility with a deterministic CNA exception; malformed/unsupported shader input must never reach a driver-crash path. | Enable `rendertarget_effect_source_test.cpp` C1 and add shaders using sets 0+1, missing bindings and conflicting declarations. Each supported shader renders correctly; each unsupported shader throws before `CreatePipelineState`. Run with Vulkan validation enabled where available. | 🟡 |
 | LLGL-48 | P1 | **Use collision-free typed pipeline-cache keys.** Replace ad-hoc multiply/truncate packing with key structs whose equality and hash include every field consumed by the relevant LLGL pipeline descriptor: vertex layout, topology, render-pass signature, depth/raster state, all blend factors/functions/write masks, full 32-bit `MultiSampleMask`, scissor enable and effective sample count. | Register `gfx077_colorwritechannels_3d_test.cpp`; add pairwise tests for blend factors/functions and masks that differ only above bit 3, including an 8x-MSAA mask when supported. Instrumented test builds assert that descriptor equality and key equality cannot disagree. `Llgl_BasicEffect` alpha blending remains green. | ⬜ |
 | LLGL-49 | P1 | **Track and capture sampler state per texture slot.** Store at least every slot consumed by stock effects, acquire the correct sampler for each slot, and capture those sampler objects in each deferred command so later state changes cannot leak backward. | Register `stock_effect_sampler_contract_test.cpp` at 65/65 or better. Add independent filter/address tests for `DualTextureEffect` slot 1 and all five `PbrEffect` maps; slot 0 changes must not alter another slot and vice versa. | 🟡 |
-| LLGL-50 | P1 | **Separate logical back-buffer dimensions from presentation scaling.** `FixedHeightDynamicWidth` may choose a presentation rectangle, but it must not silently shrink an explicitly requested readable back buffer or make valid columns unreachable. Define the mode contract once and make draw, readback, viewport and resize code use the same dimensions. | Register and fully pass `backbuffer_first_read_test.cpp`, `bound_target_lifetime_test.cpp` and `deferred_source_lifetime_test.cpp` with their 72x36 cases. Add wider-than-window and narrower-than-window aspect tests plus resize round-trips. | ⬜ |
+| LLGL-50 | P1 | **Separate logical back-buffer dimensions from presentation scaling.** `FixedHeightDynamicWidth` may choose a presentation rectangle, but it must not silently shrink an explicitly requested readable back buffer or make valid columns unreachable. Define the mode contract once and make draw, readback, viewport and resize code use the same dimensions. | Register and fully pass `backbuffer_first_read_test.cpp`, `bound_target_lifetime_test.cpp` and `deferred_source_lifetime_test.cpp` with their 72x36 cases. Add wider-than-window and narrower-than-window aspect tests plus resize round-trips. | 🟡 |
 | LLGL-51 | P1 | **Fix OpenGL back-buffer viewport/scissor Y conversion and test both modules explicitly.** Normalize LLGL's screen-origin rules at the command boundary without changing render-target orientation or the already-passing zero-Y cases. | Add `_OpenGL` registrations for `deferred_viewport_capture_test.cpp`, `deferred_scissor_capture_test.cpp`, `spritebatch_custom_viewport_test.cpp`, `spritebatch_viewport_switch_test.cpp` and the applicable cube/plural tests. The current 37/39 and 43/47 OpenGL results become full passes, including non-zero-Y target→backbuffer→target sequences. | ⬜ |
 | LLGL-52 | P1 | **Complete legal stock-effect vertex-layout permutations and resolve the orthographic camera case.** Add a defined untextured+unlit colourless BasicEffect path and a defined policy/shader for lit+textured input without normals; diagnose the `Orthographic`+`CreateLookAt` mismatch rather than masking it with a contract branch. | Register and pass `rasterizerstate_cullmode_indexed_basiceffect_test.cpp`, `rendertarget_sampling_orientation_test.cpp` CD4 and `rasterizerstate_cullmode_camera_test.cpp` on each capable module. Unsupported declarations, if any remain, are rejected before queuing with a precise message. | ⬜ |
 | LLGL-53 | P2 | **Finish or explicitly narrow raster/depth/stencil state support.** Wire viewport `minDepth`/`maxDepth`, depth bias, slope-scale depth bias and the full front/back stencil state into descriptors and cache keys. If LLGL 0.04b cannot express one field on a module, expose a precise module capability instead of accepting it as a silent no-op. | Add differential pixel tests for each state and for two draws differing only in that state. Enable the stencil branch of `graphicsdevice_ordered_clear_test.cpp`; update `SupportsCapability()` and `docs/llgl-backend.md` from measured module results. | ⬜ |
@@ -768,6 +768,35 @@ regressions. **Left at 🟡:** the acceptance gate's own "add independent filter
 only exercises the DualTextureEffect slot-0/1 case (its own `M` leg); a dedicated PbrEffect
 multi-slot test proving each of the 5 maps independently (not just that the mechanism exists) is
 still open for whoever continues this.
+
+**`LLGL-50` progress (2026-08-03): fixed and verified; new tests for wider/narrower/resize cases not
+added.** `ComputePresentationRect()`'s `FixedHeightDynamicWidth` branch now treats the aspect-derived
+logical width as a FLOOR, not a hard override:
+`logicalWidth = virtualWidth_ > 0 ? std::max(derivedWidth, virtualWidth_) : derivedWidth`. A window
+wider (relative to its own height) than the requested aspect is unaffected (`derivedWidth` already
+exceeds `virtualWidth_` there, matching this mode's own already-tested "a wider window shows more
+content" contract, `llgl_presentation_test.cpp` Check E, still 6/6 PASS unchanged); only a window
+narrower than the requested aspect (this project's own fixed ~800x480 headless test window combined
+with a short/tall requested backbuffer) now keeps the full requested width addressable instead of
+silently shrinking it. **Verified fixed** (`CNA_LLGL_RENDERER=opengl`, Xvfb, 2026-08-03):
+`backbuffer_first_read_test.cpp` 13/13 legs (up from 9/13, now registered as
+`Llgl_BackBuffer_FirstRead`), `bound_target_lifetime_test.cpp` 17/18 (up from 3/18, registered
+per-leg as `Llgl_BoundTargetLifetime_<leg>`), `deferred_source_lifetime_test.cpp` 15/17 (up from
+8/17, registered per-leg as `Llgl_DeferredSourceLifetime_<leg>`) -- the remaining failures in each
+(`bound_target_lifetime_test.cpp` F1, `deferred_source_lifetime_test.cpp` E1/E2) are the SAME
+pre-existing, unrelated OpenGL-module `hasCubeTextures` gap confirmed elsewhere this session, not
+this defect. **Left open:** the acceptance gate's own "add wider-than-window and narrower-than-window
+aspect tests plus resize round-trips" was not done -- the fix is verified only via the three
+already-existing files' own 72x36 requests against this sandbox's fixed ~800x480 window, not via new,
+purpose-built tests spanning the full matrix of aspect combinations and live resizes.
+
+While investigating this ticket's own regression sweep, discovered and fixed a SEPARATE, real issue:
+`backbuffer_pass_order_test.cpp`'s own `CNA_BACKEND_LLGL` `Contract.orderedBackbufferSegments` was
+still `false` (the pre-`LLGL-45` behavior) even though `LLGL-45` had already fixed the underlying
+replay engine -- a stale test assumption. Correcting it to `true` made dozens of previously-silently-
+skipped checks genuinely evaluate and PASS, strongly confirming `LLGL-45`'s own fix, but also exposed
+a new, real, narrower, still-open gap (V1/V2: per-cycle viewport/scissor on a revisited backbuffer) --
+see `known_bugs.md`'s new entry for the full writeup; not fixed this session.
 
 ---
 

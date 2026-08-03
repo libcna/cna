@@ -625,13 +625,19 @@ sweep run clean afterward with zero regressions.
 
 ---
 
-## LLGL backend: `FixedHeightDynamicWidth`'s logical width ignores the requested backbuffer width — OPEN
+## LLGL backend: `FixedHeightDynamicWidth`'s logical width ignores the requested backbuffer width — FIXED
 
-**Status:** open, discovered while wiring `plan_llgl.md`'s Phase LLGL-7 (`LLGL-40`,
-`backbuffer_first_read_test.cpp`; also reproduced by `LLGL-41`'s `bound_target_lifetime_test.cpp` and
-`LLGL-43`'s `deferred_source_lifetime_test.cpp`). Root cause identified with confidence; not fixed
-here (needs comparison against how other backends implement the same `CnaPresentationMode`, out of
-scope for a test-wiring task).
+**Status:** fixed by `plan_llgl.md` `LLGL-50` (2026-08-03). The question this entry's own earlier
+"why this needs more than a test-wiring fix" section left open -- whether the derived width should
+ever be allowed to fall below the requested one at all -- is answered: no. `ComputePresentationRect()`
+now treats the aspect-derived width as a FLOOR, not a hard override:
+`logicalWidth = virtualWidth_ > 0 ? std::max(derivedWidth, virtualWidth_) : derivedWidth`. A window
+WIDER (relative to its own height) than the requested aspect is unaffected -- `derivedWidth` already
+exceeds `virtualWidth_` there, exactly matching this mode's own already-tested "a wider window shows
+more content" contract (`llgl_presentation_test.cpp` Check E, still 6/6 PASS, unchanged). Only a
+window NARROWER than the requested aspect (this project's own fixed ~800x480 headless test window
+combined with a short/tall requested backbuffer) now keeps the full requested width addressable,
+letterboxing on the other axis instead of silently shrinking the addressable space.
 
 **Symptom:** `backbuffer_first_read_test.cpp`'s D63/D64/D65 legs (backbuffers 63x17/64x17/65x17,
 deliberately probing GPU row-pitch alignment boundaries) and E1 (64x32) all fail with columns near
@@ -657,16 +663,14 @@ instead of the drawn content. `backbuffer_readback_dimension_test.cpp`'s own pro
 to keep the requested width under their own derived boundary, which is why that file did not surface
 this on its own, and why it is safe to keep registered as-is.
 
-**Why this needs more than a test-wiring fix:** `presentationParameters_.getBackBufferWidthProperty()`
-already correctly reports the game's own requested width (63, not 28) -- `GraphicsDevice::
-GetBackBufferData` sizes its read from that, which is why every affected leg still returns the FULL
-requested element count with none of it left unwritten (poison-free), just with wrong CONTENT past
-the derived boundary. Whether `FixedHeightDynamicWidth` is SUPPOSED to let the logical width diverge
-from the requested width like this (an intentional "cinematic" width-follows-window-aspect feature)
-or whether other backends implementing the same named mode instead keep the logical extent pinned to
-the requested size and apply the aspect mismatch purely as a physical-fit letterbox/scale was not
-established here -- fixing it correctly requires settling that question first, not just patching
-this one formula.
+**Why a floor, not a pin:** `presentationParameters_.getBackBufferWidthProperty()` already correctly
+reports the game's own requested width (63, not 28) -- `GraphicsDevice::GetBackBufferData` sizes its
+read from that, which is why every affected leg still returns the FULL requested element count with
+none of it left unwritten (poison-free), just with wrong CONTENT past the derived boundary. The fix
+does not pin the logical extent to the requested size unconditionally (which would silently discard
+`FixedHeightDynamicWidth`'s own intentional "width follows window aspect" feature, already tested and
+relied on by `llgl_presentation_test.cpp` Check E) -- it only raises the derived value up to the
+requested one when the derivation would otherwise fall short, preserving both contracts at once.
 
 **Third reproduction, a different symptom variant:** `bound_target_lifetime_test.cpp` requests a
 72x36 backbuffer (`kBBW`/`kBBH`). Empirically confirmed via a temporary debug print (added and
@@ -697,10 +701,70 @@ replays) does not reproduce on LLGL at all. The 8 legs whose own assertions neve
 `Present()`, 120-round handle-reuse safety, and a source released while still in-flight across two
 more frames.
 
-**Tracked as:** `plan_llgl.md` Phase LLGL-7, `LLGL-40`/`LLGL-41`/`LLGL-43` (no CTest registration for
-`backbuffer_first_read_test.cpp`, `bound_target_lifetime_test.cpp`, or
-`deferred_source_lifetime_test.cpp` until this is resolved -- see `cmake/Tests/LlglTests.cmake`'s own
-comments there for the full per-leg breakdown).
+**Verified fixed** (`CNA_LLGL_RENDERER=opengl`, Xvfb, 2026-08-03): `backbuffer_first_read_test.cpp`
+now passes all 13 legs (supervisor: 13/13, 0 crashed) -- D63/D64/D65 and E1 all read back their own
+exact requested content now, registered as `Llgl_BackBuffer_FirstRead`. `bound_target_lifetime_test.cpp`
+went from 3/18 to 17/18 legs passing (the one remaining failure, F1, is the SEPARATE, PRE-EXISTING
+OpenGL-module `hasCubeTextures` limitation documented elsewhere in this file -- confirmed unrelated
+by reproducing it identically against the pre-`LLGL-50` binary too), the other 17 registered
+individually as `Llgl_BoundTargetLifetime_<leg>`. `deferred_source_lifetime_test.cpp` went from
+8/17 (this entry's own earlier count of "legs that pass in full" turned out to already include E1/E2
+inaccurately -- they hit the same cube limitation as `bound_target_lifetime_test.cpp`'s F1 both
+before and after this fix) to 15/17, the other 15 registered as `Llgl_DeferredSourceLifetime_<leg>`.
+`llgl_presentation_test.cpp` Check E (the mode's own intentional "wider window shows more content"
+behavior) remains 6/6 PASS, unaffected.
+
+**Tracked as:** `plan_llgl.md` Phase LLGL-8, `LLGL-50` -- fixed and verified (see above); all three
+files are now registered (see `cmake/Tests/LlglTests.cmake`'s own comments there for the full
+per-leg breakdown of what remains excluded and why).
+
+---
+
+## LLGL backend: `backbuffer_pass_order_test.cpp`'s own Contract was stale after LLGL-45; correcting it exposes a new, real, narrower gap (V1/V2) — OPEN
+
+**Status:** discovered 2026-08-03 while running a broad regression sweep after `LLGL-45`/`LLGL-46`/
+`LLGL-49`/`LLGL-50`. `backbuffer_pass_order_test.cpp`'s own `CNA_BACKEND_LLGL` `Contract` branch
+still declared `orderedBackbufferSegments = false` (the pre-`LLGL-45` bucket-by-identity behavior)
+after `LLGL-45` had already fixed the underlying replay engine -- a stale test assumption, not a code
+regression. Corrected the declaration to `true` and re-ran: **dozens of checks that were previously
+silently `skip()`ped** ("this backend replays all backbuffer work in one trailing pass") **now
+genuinely evaluate and PASS** (A3-A6, C1, C3, C5, C6, O1-O4, U1, U2, M1, and A1 itself, which had
+started FAILING once the stale `false` value made its own COLLAPSED-result assertion wrong) --
+strong, broad, independent confirmation that `LLGL-45`'s own fix is correct. This is registered
+here as its own entry (not folded into the `LLGL-45` entry above) because it also surfaces something
+`LLGL-45` did NOT fix.
+
+**The new, real, open finding:** V1 ("viewport per cycle") and V2 ("scissor per cycle") now FAIL for
+real, for the first time ever measured -- previously masked by the stale `false` contract, which
+made these checks silently skip too. Both drive the SAME shape: three backbuffer cycles
+(A: sub-Viewport/scissor X, draw; B: a DIFFERENT target bound in between; A again: a DIFFERENT
+sub-Viewport/scissor, a SECOND draw only covering part of the first cycle's own area) and expect the
+backbuffer to show BOTH the first cycle's surviving (non-overdrawn) content AND the third cycle's
+new content, each still clipped to its OWN viewport/scissor rectangle from when it was actually
+queued. V1 fails its combined position assertion outright (`ok == false`, no per-pixel detail
+captured); V2 fails with 18/? probes wrong, first probe reading the CLEAR colour instead of the
+expected red -- i.e. the FIRST cycle's own draw appears to be MISSING from the final image, not
+merely at the wrong scissor position. Not yet root-caused: this is a narrower, more specific defect
+than the general ordering `LLGL-45` fixed (segment placement itself is now empirically correct, per
+every OTHER check in this same file passing), so the cause is more likely in how per-command
+viewport/scissor state interacts with a target being revisited (e.g. something about how the
+SWAP CHAIN specifically -- as opposed to an off-screen `RenderTarget2D`, which is what
+`deferred_viewport_capture_test.cpp`'s own already-passing K2 leg exercises for a similar
+same-target-two-cycles shape -- carries its own per-segment viewport captures across a Load-reload).
+
+**Not yet verified whether this also affects the Vulkan module**, the actual default target this
+file's own registered `Llgl_BackBuffer_PassOrder` CTest runs against -- this sandbox's Vulkan module
+cannot present (no DRI3), the same infrastructure gap affecting several other findings this session.
+The file also independently crashes (`ValidateGLTextureType: hasCubeTextures not supported`) on a
+LATER, cube-texture-dependent leg under the OpenGL module specifically -- confirmed PRE-EXISTING
+(reproduces identically against the pre-`LLGL-45` binary too), the same OpenGL-module capability gap
+already documented elsewhere in this file, unrelated to this entry.
+
+**Tracked as:** `plan_llgl.md` Phase LLGL-8 (a follow-up correction to `LLGL-45`, not its own
+numbered ticket). `Llgl_BackBuffer_PassOrder` remains registered (unchanged from before this
+session) since this sandbox cannot re-verify it against Vulkan either way; whoever next has real
+Vulkan or a DRI3-capable Xvfb should re-run it and, if V1/V2 fail there too, open a dedicated
+follow-up ticket for the per-cycle viewport/scissor-on-backbuffer gap specifically.
 
 ---
 

@@ -255,13 +255,15 @@ namespace
     constexpr Contract kContract{"D3D12", Support::Exact, true, Support::Exact,
                                  true, true, true, true, true, true, true, true, true, false};
 #elif defined(CNA_BACKEND_LLGL)
-    // `orderedBackbufferSegments` is false: RecordAndSubmitFrame()/CaptureBackbuffer() group the
-    // whole frame's queued commands into one FrameCommandBucket per DISTINCT TARGET IDENTITY
-    // (GroupFrameCommandsByTargetEXT), replayed in FIRST-APPEARANCE order -- a target that is
-    // produced, consumed by the backbuffer, then produced again still gets ONE bucket covering
-    // both production cycles, replayed as one pass BEFORE the trailing backbuffer bucket runs. The
-    // same shape REMED-GFX-143 fixed on Vulkan/SdlGpu (a trailing pass, not per-bind-cycle
-    // segments), not yet fixed here.
+    // `orderedBackbufferSegments` is true (LLGL-45, 2026-08-03): GroupFrameCommandsByTargetEXT()
+    // now segments `frameCommands_` in TRUE public order -- a new segment starts only when the
+    // target actually changes from the immediately preceding command, so a target that is
+    // produced, consumed by the backbuffer, then produced again gets its OWN new segment in its
+    // own original position instead of being collapsed into one bucket replayed before a trailing
+    // backbuffer pass. The former "swap chain always trails every other bucket" special case
+    // (REMED-GFX-143's own original LLGL fix, when this field was still false) is gone entirely --
+    // every segment's own BeginRenderPass() reloads its target's real prior content via a real
+    // AttachmentLoadOp::Load pass, so revisiting a target mid-frame is genuinely safe now too.
     // Every other field reflects this backend's own single ordered `frameCommands_` stream: Clear/
     // Sprite/Primitives commands share ONE vector in public queue order (no separate per-family
     // queues), so `mixedQueuesKeepPublicOrder` is real, and a `Clear()` queued after a draw within
@@ -271,7 +273,7 @@ namespace
     // ComputeEffectiveScissor intersects the effective scissor with both the Viewport and any
     // explicit ScissorRectangle, captured per FrameCommand at queue time).
     constexpr Contract kContract{"LLGL", Support::Exact, true, Support::Exact,
-                                 true, false, true, true, true, true, true, true, true, false};
+                                 true, true, true, true, true, true, true, true, true, false};
 #else
 #error "REMED-GFX-143: this backend has no declared backbuffer command-order contract."
 #endif

@@ -441,6 +441,13 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "LLGL")
         TIMEOUT 90 LABELS "Llgl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # LLGL-45 follow-up (2026-08-03): this file's own Contract.orderedBackbufferSegments was
+    # corrected from false to true (the pre-LLGL-45 bucket-by-identity behavior it used to declare
+    # is fixed) -- dozens of previously-skipped checks now genuinely evaluate and pass, strongly
+    # confirming LLGL-45's own fix. Correcting it also exposed a new, real, narrower, still-OPEN
+    # finding: V1/V2 (per-cycle viewport/scissor on a REVISITED backbuffer) now fail for real. Left
+    # registered unchanged (this predates the current session and targets the default/Vulkan
+    # selection, which cannot be re-verified in this sandbox) -- see known_bugs.md's new entry.
     cna_llgl_test(cna_test_llgl_backbuffer_pass_order
                   examples/backbuffer_pass_order_test.cpp)
     cna_register_backend_test(NAME Llgl_BackBuffer_PassOrder COMMAND cna_test_llgl_backbuffer_pass_order
@@ -537,35 +544,30 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "LLGL")
         TIMEOUT 120 LABELS "Llgl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # bound_target_lifetime_test.cpp is deliberately NOT registered here: 3/18 legs pass in full
-    # (G1, G2, J1) and, critically, 0/18 CRASHED -- the REMED-GFX-168 defect this fixture exists to
-    # catch (a SIGSEGV when a bound render target is destroyed mid-cycle) does not reproduce on LLGL
-    # at all, and every leg's own destroy-while-bound-specific assertions pass wherever they are not
-    # entangled with an unrelated finding. 15 of 18 legs still fail their own RequireBackbufferExact
-    # check (unconditional in this fixture, no per-backend declaration to route around it): this
-    # file's 72x36 backbuffer request is a third reproduction of the open FixedHeightDynamicWidth
-    # logical-width finding above LLGL-40's own backbuffer_first_read_test.cpp already found -- see
-    # known_bugs.md's broadened entry. Leg L1's own MRT-slot-mip-regeneration check is a SEPARATE,
-    # already cross-backend-documented (Vulkan, BGFX) capability gap, not new here -- the file's own
-    # kMrtSlotMipReadable now declares LLGL alongside them.
+    # LLGL-50: 17/18 legs now pass (up from 3/18) now that FixedHeightDynamicWidth's own logical
+    # width is a floor, not a hard override -- this file's 72x36 backbuffer request is fully
+    # addressable now. Only F1 remains unregistered: it needs a RenderTargetCube, and this
+    # sandbox's OpenGL module has no cube-texture support at all (a separate, pre-existing,
+    # unrelated `hasCubeTextures` gap -- confirmed identical against the pre-LLGL-50 binary too).
     cna_llgl_test(cna_test_llgl_bound_target_lifetime
                   examples/bound_target_lifetime_test.cpp)
+    foreach(_llgl_btl_leg A1 A2 B1 B2 C1 D1 E1 G1 G2 H1 I1 J1 K1 L1 M1 N1 P1)
+        cna_register_backend_test(NAME "Llgl_BoundTargetLifetime_${_llgl_btl_leg}"
+            COMMAND cna_test_llgl_bound_target_lifetime --leg=${_llgl_btl_leg}
+            TIMEOUT 90 LABELS "Llgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    endforeach()
 
-    # backbuffer_first_read_test.cpp is deliberately NOT registered here: 9/13 legs pass
-    # (A1, A3, A4, A6, B1, B2, B3, B4, C1), but D63/D64/D65 (its own row-pitch matrix, widths
-    # 63/64/65 against a fixed height of 17) and E1 (64x32) all fail for a real, identified,
-    # UNRELATED-to-row-pitch reason -- see known_bugs.md's new open entry: this backend's default
-    # CnaPresentationMode::FixedHeightDynamicWidth derives its own internal logical width from the
-    # PHYSICAL window's aspect ratio (`round(physicalWidth * logicalHeight / physicalHeight)`),
-    # discarding the game's own requested PreferredBackBufferWidth entirely whenever the requested
-    # aspect is wider than the physical window's. In this project's own headless test environment
-    # the physical window is consistently ~800x480 regardless of what is requested, so a height-17
-    # request derives a logical width of only ~28 -- any column at or past that (including every
-    # one of D63/64/65/E1's own probed columns beyond the derived boundary) samples outside this
-    # backend's own internal coordinate space instead of the requested 63/64/65/64-wide content.
-    # backbuffer_readback_dimension_test.cpp's own odd/small sizes (37x23, 41x29, 50x40, 30x20)
-    # all happen to stay under their own derived logical width, which is why that file passes
-    # cleanly and did not surface this on its own.
+    # LLGL-50: the aspect-derived logical width FixedHeightDynamicWidth computes is now a floor,
+    # never a hard override -- it can no longer derive something NARROWER than the game's own
+    # PreferredBackBufferWidth, which is what silently made D63/D64/D65 (row-pitch matrix, widths
+    # 63/64/65 against a fixed height of 17) and E1 (64x32) unreachable before. Confirmed fixed with
+    # a fresh run: supervisor 13/13 legs, 0 crashed.
+    cna_llgl_test(cna_test_llgl_backbuffer_first_read
+                  examples/backbuffer_first_read_test.cpp)
+    cna_register_backend_test(NAME Llgl_BackBuffer_FirstRead COMMAND cna_test_llgl_backbuffer_first_read
+        TIMEOUT 120 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     cna_llgl_test(cna_test_llgl_viewport_reset_after_resize
                   examples/viewport_reset_after_resize_test.cpp)
@@ -648,15 +650,19 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "LLGL")
         TIMEOUT 120 LABELS "Llgl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # deferred_source_lifetime_test.cpp is deliberately NOT registered here: 8/17 legs pass in full
-    # (B1, B2, C1, E1, E2, I1, K1, L1) and, critically, 0/17 legs CRASHED -- the REMED-GFX-167 defect
-    # this fixture exists to catch (a heap-use-after-free when a deferred draw's SOURCE dies before
-    # replay) does not reproduce on LLGL at all. The other 9 legs fail their own unconditional
-    # backbuffer check for the SAME reason as bound_target_lifetime_test.cpp: this file's 72x36
-    # backbuffer request is a fourth reproduction of the open FixedHeightDynamicWidth logical-width
-    # finding -- see known_bugs.md's broadened entry.
+    # LLGL-50: 15/17 legs now pass (up from 8/17) now that FixedHeightDynamicWidth's own logical
+    # width is a floor, not a hard override -- this file's 72x36 backbuffer request is fully
+    # addressable now. E1/E2 remain unregistered: both need a RenderTargetCube, and this sandbox's
+    # OpenGL module has no cube-texture support at all (the same pre-existing, unrelated
+    # `hasCubeTextures` gap `bound_target_lifetime_test.cpp`'s own F1 hits).
     cna_llgl_test(cna_test_llgl_deferred_source_lifetime
                   examples/deferred_source_lifetime_test.cpp)
+    foreach(_llgl_dsl_leg A1 A2 A3 B1 B2 C1 D1 F1 G1 H1 I1 J1 K1 L1 N1)
+        cna_register_backend_test(NAME "Llgl_DeferredSourceLifetime_${_llgl_dsl_leg}"
+            COMMAND cna_test_llgl_deferred_source_lifetime --leg=${_llgl_dsl_leg}
+            TIMEOUT 90 LABELS "Llgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    endforeach()
 
     # REMED-GFX-157: a stock 3D draw issued AFTER a SpriteBatch inside ONE render-target bind cycle
     # must execute after it rather than be dropped.
