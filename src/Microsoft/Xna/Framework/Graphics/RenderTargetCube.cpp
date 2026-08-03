@@ -44,7 +44,7 @@ namespace Microsoft::Xna::Framework::Graphics
         : TextureCube(device, size, preferredFormat,
                       // IRenderTargetCubeBackend : ITextureCubeBackend — pass single backend
                       // to TextureCube so sampling and rendering share the same GPU image.
-                      std::unique_ptr<ITextureCubeBackend>(
+                      std::shared_ptr<ITextureCubeBackend>(
                           device.backend_ ? device.backend_->CreateRenderTargetCube(
                                                  size, static_cast<int>(preferredDepthFormat),
                                                  // REMED-GFX-136: `usage` used to stop here. The

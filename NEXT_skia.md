@@ -2121,15 +2121,87 @@ level-boundary contract.
   wiring is still entirely SKIA-149's job, which now has both cube (SKIA-144–146) and volume
   (SKIA-144/147/148) sampling formulas fully proven and ready to wire in together.
 
+## Completed in this session: SKIA-149
+
+- Wired SKIA-144–148's already-proven cube/volume sampling formulas into the real public
+  `ShaderEffect`/`SpriteBatch`/`SetTexture(TextureCube|Texture3D)` API for the first time --
+  `BindTextureCube`/`BindTexture3D` no longer throw `ThrowSkiaUnsupported3D` unconditionally.
+- Hit a real architectural blocker mid-task: `TextureCube`/`Texture3D` own their backend via
+  `unique_ptr`, but weak-lifetime tracking (the established `ITextureBackend`/`Texture2D`/
+  `SetTexture(unit, Texture2D&)` pattern this task must match) needs `shared_ptr` +
+  `enable_shared_from_this`. Asked the user how to proceed; they explicitly chose switching
+  `TextureCube`/`Texture3D`/`RenderTargetCube`'s backend ownership (and the
+  `ITextureCubeBackend`/`ITexture3DBackend` factory return type) from `unique_ptr` to `shared_ptr`
+  over the alternatives (a bind-time snapshot, or stopping short of full lifetime tracking).
+  Confirmed low-risk before committing to it: every `IGraphicsBackend::CreateTextureCube`/
+  `CreateTexture3D` call site across all ~12 backends is unchanged and still returns `unique_ptr`,
+  which converts implicitly into the new `shared_ptr`-typed members.
+- Added two new additive, default-bodied `EXT` virtual methods --
+  `ITextureCubeBackend::GetSizeEXT()` and `ITexture3DBackend::GetDimensionsEXT(w, h, d)` -- so
+  `SkiaEffectBackend` can learn a bound resource's size without changing `BindTextureCube`/
+  `BindTexture3D`'s shared cross-backend signature (which only receives the raw backend pointer).
+  Only `SkiaTextureCubeBackend`/`SkiaTexture3DBackend`/`SkiaRenderTargetCubeBackend` override them;
+  every other backend keeps the safe all-zero default, matching the `CreateRenderTarget2DEXT`
+  additive-extension precedent from SKIA-142.
+- `SkiaEffectBackend::CompileProgram` now conditionally prepends SKIA-145/147/148's confirmed
+  `kCnaSampleCubePreambleEXT`/`kCnaSampleVolumePreambleEXT` text (detected via a substring search
+  on the author's own `fragSrc` for `cnaSampleCubeEXT`/`cnaSampleVolumeEXT`, so an effect that
+  samples neither pays zero extra child/uniform budget) before parsing children, extending accepted
+  child names to `cnaCubeFace0`–`5`/`cnaVolumeAtlas0` alongside the existing `cnaTexture0`–`7`.
+- `BindTextureCube`/`BindTexture3D` now reject, in order: `unit != 1`; an effect whose own source
+  never actually calls the matching `cnaSampleCubeEXT`/`cnaSampleVolumeEXT` (so it declared no
+  matching children) -- naming exactly which call is missing, not a blanket "unsupported"; a null
+  backend pointer; and an already-expired backend -- then store a `weak_ptr`, exactly mirroring
+  `SetTexture(unit, Texture2D&)`. `ValidateSpriteBindingsEXT` gained matching pre-`Begin` checks so
+  a declared-but-never-bound cube/volume child is caught before the draw, not mid-shader.
+- `MakeSpriteShaderEXT` locks both weak backends fresh on every draw, reads all six live cube faces
+  and the live volume via `GetData`, repacks the volume atlas via SKIA-147's `PackVolumeAtlasEXT`,
+  and rebuilds every child shader each time -- so a `SetData` issued after `SetTexture` but before
+  the draw is observed, never a stale snapshot, matching `BindTexture`'s existing live-reference
+  contract. Volume address modes are hardcoded to Clamp (`{0,0,0}`) for this task and explicitly
+  documented as a scoped follow-up rather than silently wired to an unused `SamplerState` --
+  SKIA-148's Wrap/Mirror support exists in the sampling formula but is not yet reachable end to end.
+- New `Skia_CubeVolume_Effect_Binding` (`examples/skia_cube_volume_effect_binding_test.cpp`, 8
+  checks) proves the full path end to end through the real public API for the first time (every
+  prior SKIA-145–148 test was a below-the-API spike): a `TextureCube` built with six distinct
+  `SetData(CubeMapFace, ...)` face colours samples its exact +X face through a real `SpriteBatch`
+  draw; updating that face after `SetTexture` but before the next draw is immediately visible; a
+  `Texture3D` built with two distinct-colour slices samples slice 0 and slice 1 exactly at
+  `w=0.0`/`w=1.0`; and `SpriteBatch::Begin` rejects a cube-sampling effect with no `SetTexture(1,
+  TextureCube)` bound, naming exactly `SetTexture(1, TextureCube)` in the thrown message.
+- Fixed two pre-existing tests whose assertions depended on the *old* blanket-unsupported behavior
+  this task intentionally supersedes -- both are expected updates, not regressions:
+  - `skia_sksl_uniform_texture_test.cpp`: two `ThrowsContaining` checks expected the literal
+    substrings `"TextureCube"`/`"Texture3D"`; the new, more precise message
+    ("does not call cnaSampleCubeEXT/cnaSampleVolumeEXT") no longer contains them even though the
+    underlying rejection is unchanged and correct for that effect (it never calls either function).
+  - `skia_3d_refusal_test.cpp`'s `CheckStorageAndShaderBindings`: its `Refuses()` helper only
+    matches the old `kSkiaUnsupported3DPrefix` + operation `std::runtime_error`. Cube/volume SkSL
+    sampling is no longer a blanket-refused 3D feature -- it is now conditionally supported, so this
+    specific check no longer belongs to the "everything 3D is refused" matrix in the same way. Added
+    a `RejectsUndeclaredCubeOrVolumeEXT` helper that accepts the new `std::invalid_argument` and only
+    requires the message name the specific undeclared call, since this test's own SkSL never calls
+    `cnaSampleCubeEXT`/`cnaSampleVolumeEXT` and so still correctly rejects, just for a documented,
+    precise reason instead of a blanket refusal.
+- `docs/skia-easygl-parity-ledger.md` gained two new rows for `ITextureCubeBackend::GetSizeEXT/0`
+  and `ITexture3DBackend::GetDimensionsEXT/3` (252 entries total, 130 backend/resource methods, up
+  from 250/128), both `implemented` with the shared base-interface default explicitly noted as the
+  EasyGL/other-backend result since these are NOXNA additions with no direct GL analog.
+- Full Skia suite (up from 163 to 164 -- one net new Display test) passes 164/164 in Debug, Release,
+  and ASan+UBSan (`ASAN_OPTIONS=detect_leaks=0` for the documented `libGLX_mesa` display-test false
+  positive) with zero regressions and zero sanitizer findings.
+
 ## Next candidates
 
-1. SKIA-149: integrate cube/volume bindings into the explicit SkSL effect ABI (`BindTextureCube`/
-   `BindTexture3D`, weak lifetime tracking) -- both formulas are now fully proven and ready to wire.
-2. SKIA-150–158: continue Phase S15/S16 (public sampling oracles, content-loaded/target-produced
-   inputs, wider explicit 2D effects) in dependency order.
-3. SKIA-159–170: add opt-in Ganesh, probe real MSAA/anisotropy, re-evaluate MRT, and hold the
+1. SKIA-150: add public sampling oracles, content-loaded resources, target-produced inputs, and
+   cross-backend comparisons for cube/volume sampling -- now that SKIA-149 wires the real API.
+2. SKIA-151: finalize cube/volume sampling capability wording, resource budgets, performance bounds,
+   and parity documentation, closing Phase S15. Should also cover the SKIA-149 volume-address-mode
+   follow-up (currently hardcoded to Clamp) if it is meant to be in scope for the phase.
+3. SKIA-152–158: continue Phase S16 (wider explicit 2D effects) in dependency order.
+4. SKIA-159–170: add opt-in Ganesh, probe real MSAA/anisotropy, re-evaluate MRT, and hold the
    successor gate only after the raster extensions are stable.
-4. The pre-existing `CNA_ENABLE_NET=OFF`/monolithic-`CnaTests` ENet build-graph defect is recorded
+5. The pre-existing `CNA_ENABLE_NET=OFF`/monolithic-`CnaTests` ENet build-graph defect is recorded
    by SKIA-112/113 but remains outside Skia scope.
 
 ## Known boundaries / assumptions

@@ -136,12 +136,16 @@ protected:
         Check(ThrowsContaining([&] { backend->BindTexture(1, nullptr); }, "null"),
               "null additional Texture2D rejects");
 
+        // SKIA-149: this effect's own source never calls cnaSampleCubeEXT/cnaSampleVolumeEXT, so
+        // it declares no cnaCubeFace*/cnaVolumeAtlas0 children -- binding either still rejects for
+        // exactly this effect, not because cube/volume sampling is unsupported in general (see
+        // Skia_CubeVolume_Effect_Binding for the positive case, an effect that does call them).
         TextureCube cube(device, 1, false, SurfaceFormat::Color);
         Texture3D volume(device, 1, 1, 1, false, SurfaceFormat::Color);
-        Check(ThrowsContaining([&] { effect.SetTexture(1, cube); }, "TextureCube"),
-              "TextureCube child rejects explicitly");
-        Check(ThrowsContaining([&] { effect.SetTexture(1, volume); }, "Texture3D"),
-              "Texture3D child rejects explicitly");
+        Check(ThrowsContaining([&] { effect.SetTexture(1, cube); }, "cnaSampleCubeEXT"),
+              "TextureCube child rejects explicitly for an effect that never calls cnaSampleCubeEXT");
+        Check(ThrowsContaining([&] { effect.SetTexture(1, volume); }, "cnaSampleVolumeEXT"),
+              "Texture3D child rejects explicitly for an effect that never calls cnaSampleVolumeEXT");
 
         const auto originalPixel = Render(effect, Color(255, 128, 255, 255));
         Check(originalPixel.first == Color(255, 128, 255, 255)

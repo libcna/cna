@@ -30,6 +30,7 @@ namespace CNA::Internal::Backends::Skia
         SkiaRenderTargetCubeBackend& operator=(SkiaRenderTargetCubeBackend&&) = delete;
 
         [[nodiscard]] int GetSize() const override { return size_; }
+        [[nodiscard]] int GetSizeEXT() const noexcept override { return size_; }
         void BindAsRenderTargetFace(int face) override;
         void UnbindAsRenderTarget() override;
         [[nodiscard]] int GetMultiSampleCount() const override { return 0; }

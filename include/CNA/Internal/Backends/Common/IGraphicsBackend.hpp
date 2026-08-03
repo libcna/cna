@@ -183,8 +183,15 @@ namespace CNA::Internal::Backends
         [[nodiscard]] virtual int  PixelCount() const = 0;
     };
 
-    /** @brief Backend interface for a cube map texture. */
-    class ITextureCubeBackend
+    /**
+     * @brief Backend interface for a cube map texture.
+     *
+     * SKIA-149: inherits `enable_shared_from_this` (matching `ITextureBackend`) so a
+     * `SkiaEffectBackend` can hold a `weak_ptr` for cube-sampling lifetime tracking, identical to
+     * the existing `ITextureBackend`/`SetTexture(unit, Texture2D)` pattern. Requires
+     * `TextureCube`/`RenderTargetCube` to own their backend via `shared_ptr`, not `unique_ptr`.
+     */
+    class ITextureCubeBackend : public std::enable_shared_from_this<ITextureCubeBackend>
     {
     public:
         virtual ~ITextureCubeBackend() = default;
@@ -263,10 +270,24 @@ namespace CNA::Internal::Backends
         /// exactly (OpenGL-style backend context-loss restoration) -- default no-op; only OPENGL1
         /// currently implements it.
         virtual void ShareCpuPixels(int /*face*/, std::shared_ptr<std::vector<uint8_t>> /*pixels*/) {}
+        /// SKIA-149: face width/height in texels. `BindTextureCube(unit, ITextureCubeBackend*)`
+        /// receives only this raw backend pointer (see `ShaderEffect::SetTexture(unit,
+        /// TextureCube&)`), with no separate size parameter, so a backend that needs its own size
+        /// to build a sampling representation must be able to ask the backend directly rather than
+        /// requiring a shared, cross-backend `BindTextureCube` signature change. Defaults to 0
+        /// ("unknown/unsupported"), harmless for every backend that does not implement sampling.
+        [[nodiscard]] virtual int GetSizeEXT() const noexcept { return 0; }
     };
 
-    /** @brief Backend interface for a 3D (volume) texture. */
-    class ITexture3DBackend
+    /**
+     * @brief Backend interface for a 3D (volume) texture.
+     *
+     * SKIA-149: inherits `enable_shared_from_this` (matching `ITextureBackend`) so a
+     * `SkiaEffectBackend` can hold a `weak_ptr` for volume-sampling lifetime tracking, identical to
+     * the existing `ITextureBackend`/`SetTexture(unit, Texture2D)` pattern. Requires `Texture3D` to
+     * own its backend via `shared_ptr`, not `unique_ptr`.
+     */
+    class ITexture3DBackend : public std::enable_shared_from_this<ITexture3DBackend>
     {
     public:
         virtual ~ITexture3DBackend() = default;
@@ -321,6 +342,14 @@ namespace CNA::Internal::Backends
         }
         /// Binds this volume texture to the currently active GL texture unit. No-op on non-GL backends.
         virtual void BindGL() const {}
+        /// SKIA-149: width/height/depth in voxels, mirroring `ITextureCubeBackend::GetSizeEXT`'s
+        /// rationale exactly -- `BindTexture3D` receives only this raw backend pointer. Defaults to
+        /// all zero ("unknown/unsupported"), harmless for every backend that does not implement
+        /// sampling.
+        virtual void GetDimensionsEXT(int& width, int& height, int& depth) const noexcept
+        {
+            width = height = depth = 0;
+        }
     };
 
     /**

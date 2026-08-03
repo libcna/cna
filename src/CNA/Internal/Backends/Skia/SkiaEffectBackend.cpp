@@ -1,18 +1,23 @@
 #include "CNA/Internal/Backends/Skia/SkiaEffectBackend.hpp"
-#include "CNA/Internal/Backends/Skia/SkiaUnsupported3D.hpp"
+#include "CNA/Internal/Backends/Skia/SkiaCubeSampling.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaImageSource.hpp"
+#include "CNA/Internal/Backends/Skia/SkiaVolumeSampling.hpp"
 
 #include "include/core/SkData.h"
 #include "include/core/SkImage.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkPixmap.h"
 #include "include/core/SkSamplingOptions.h"
 #include "include/core/SkShader.h"
 #include "include/core/SkString.h"
 #include "include/core/SkTileMode.h"
 #include "include/effects/SkRuntimeEffect.h"
 
+#include <array>
 #include <cstring>
 #include <stdexcept>
 #include <utility>
+#include <vector>
 
 namespace CNA::Internal::Backends::Skia
 {
@@ -47,6 +52,52 @@ namespace CNA::Internal::Backends::Skia
             return false;
         }
 
+        // SKIA-149: cnaCubeFace0-5, matching docs/skia-cube-volume-sampling-contract.md's reserved
+        // child namespace -- orthogonal to ParseTextureChild's cnaTexture0-7, never colliding with
+        // it (the prefixes differ).
+        [[nodiscard]] bool ParseCubeFaceChild(std::string_view name, int& face)
+        {
+            constexpr std::string_view prefix = "cnaCubeFace";
+            if (!name.starts_with(prefix) || name.size() != prefix.size() + 1u)
+                return false;
+            const char digit = name.back();
+            if (digit < '0' || digit > '5')
+                return false;
+            face = digit - '0';
+            return true;
+        }
+
+        // SKIA-149: names the preamble(s) reserve for their own internal state -- an author's own
+        // SetUniformXxx call is rejected for these, matching the existing cnaTint precedent, and
+        // they are skipped by the general "is this a supported user uniform" type check below since
+        // CompileProgram validates their exact declared type separately while capturing offsets.
+        [[nodiscard]] bool IsReservedPreambleUniformName(std::string_view name) noexcept
+        {
+            return name == "cnaCubeFaceSizeEXT" || name == "cnaVolumeAtlasMeta0"
+                || name == "cnaVolumeAtlasMeta1" || name == "cnaVolumeAddressModesEXT";
+        }
+
+        // SKIA-149: builds an immutable straight-RGBA8 SkImage directly from tightly packed bytes
+        // (top row first), matching every cube face and the packed volume atlas -- both are always
+        // exact `SurfaceFormat::Color` per docs/skia-cube-volume-sampling-contract.md's storage
+        // decision, so no conversion or shadow is needed here.
+        [[nodiscard]] sk_sp<SkImage> MakeStraightRgba8ImageEXT(
+            int width, int height, const std::uint8_t* rgba)
+        {
+            if (width <= 0 || height <= 0 || !rgba)
+                return nullptr;
+            const SkImageInfo info =
+                SkImageInfo::Make(width, height, kRGBA_8888_SkColorType, kUnpremul_SkAlphaType);
+            const SkPixmap pixmap(info, rgba, static_cast<std::size_t>(width) * 4u);
+            return SkImages::RasterFromPixmapCopy(pixmap);
+        }
+
+        [[nodiscard]] sk_sp<SkShader> MakeClampLinearShaderEXT(const sk_sp<SkImage>& image)
+        {
+            return image ? image->makeShader(SkTileMode::kClamp, SkTileMode::kClamp,
+                                             SkSamplingOptions(SkFilterMode::kLinear))
+                         : nullptr;
+        }
     }
 
     SkiaEffectBackend::~SkiaEffectBackend() = default;
@@ -90,6 +141,14 @@ namespace CNA::Internal::Backends::Skia
         tintOffset_ = 0;
         bound_ = false;
         compileError_ = std::move(message);
+        cubeFaceChildIndices_.fill(-1);
+        volumeAtlasChildIndex_ = -1;
+        cubeFaceSizeOffset_ = 0;
+        volumeMeta0Offset_ = 0;
+        volumeMeta1Offset_ = 0;
+        volumeAddressModesOffset_ = 0;
+        boundCubeBackend_.reset();
+        boundVolumeBackend_.reset();
     }
 
     bool SkiaEffectBackend::CompileProgram(const std::string& vertSrc, const std::string& fragSrc)
@@ -106,13 +165,28 @@ namespace CNA::Internal::Backends::Skia
             Fail("Skia SkSL effect source must not be empty.");
             return false;
         }
-        if (fragSrc.size() > kSkiaSkslMaxSourceBytesEXT)
+
+        // SKIA-149: prepend the confirmed cube/volume preambles only when the author's own source
+        // actually calls the corresponding helper (docs/skia-cube-volume-sampling-contract.md).
+        // An effect that never calls cnaSampleCubeEXT/cnaSampleVolumeEXT pays no extra child or
+        // uniform budget and is byte-for-byte the same compile as before this task.
+        const bool wantsCube = fragSrc.find("cnaSampleCubeEXT") != std::string::npos;
+        const bool wantsVolume = fragSrc.find("cnaSampleVolumeEXT") != std::string::npos;
+        std::string fullSource;
+        fullSource.reserve(fragSrc.size()
+            + (wantsCube ? kCnaSampleCubePreambleEXT.size() : 0u)
+            + (wantsVolume ? kCnaSampleVolumePreambleEXT.size() : 0u));
+        if (wantsCube) fullSource.append(kCnaSampleCubePreambleEXT);
+        if (wantsVolume) fullSource.append(kCnaSampleVolumePreambleEXT);
+        fullSource.append(fragSrc);
+        if (fullSource.size() > kSkiaSkslMaxSourceBytesEXT)
         {
-            Fail("Skia SkSL effect source exceeds the 65536-byte safety limit.");
+            Fail("Skia SkSL effect source (including any cube/volume preamble) exceeds the "
+                 "65536-byte safety limit.");
             return false;
         }
 
-        auto result = SkRuntimeEffect::MakeForShader(SkString(fragSrc));
+        auto result = SkRuntimeEffect::MakeForShader(SkString(fullSource));
         if (!result.effect)
         {
             Fail(std::string("Skia SkSL compilation failed: ") + result.errorText.c_str());
@@ -130,24 +204,54 @@ namespace CNA::Internal::Backends::Skia
             Fail("Skia SkSL v1 requires the primary `uniform shader cnaTexture0` child.");
             return false;
         }
-        if (children.size() > childIndexByUnit_.size())
+        constexpr std::size_t kMaxChildrenEXT = 8u + 6u + 1u; // cnaTexture0-7 + cnaCubeFace0-5 + cnaVolumeAtlas0.
+        if (children.size() > kMaxChildrenEXT)
         {
-            Fail("Skia SkSL v1 requires between one and eight named 2D shader children.");
+            Fail("Skia SkSL v1 requires at most 15 named shader children "
+                 "(cnaTexture0-7, cnaCubeFace0-5, cnaVolumeAtlas0).");
             return false;
         }
         std::array<int, 8> childIndices = {-1, -1, -1, -1, -1, -1, -1, -1};
+        std::array<int, 6> cubeFaceIndices = {-1, -1, -1, -1, -1, -1};
+        int volumeAtlasIndex = -1;
         for (const auto& child : children)
         {
             int unit = -1;
-            if (child.type != SkRuntimeEffect::ChildType::kShader
-                || !ParseTextureChild(child.name, unit)
-                || childIndices[static_cast<std::size_t>(unit)] != -1)
+            int face = -1;
+            if (child.type != SkRuntimeEffect::ChildType::kShader)
             {
                 Fail("Skia SkSL v1 children must be unique `uniform shader cnaTexture0` through "
-                     "`cnaTexture7` declarations; filters, blenders, and other names are unsupported.");
+                     "`cnaTexture7`, `cnaCubeFace0` through `cnaCubeFace5`, or `cnaVolumeAtlas0` "
+                     "declarations; filters, blenders, and other names are unsupported.");
                 return false;
             }
-            childIndices[static_cast<std::size_t>(unit)] = child.index;
+            if (ParseTextureChild(child.name, unit))
+            {
+                if (childIndices[static_cast<std::size_t>(unit)] != -1)
+                {
+                    Fail("Skia SkSL v1 children must be unique `uniform shader cnaTexture0` "
+                         "through `cnaTexture7` declarations.");
+                    return false;
+                }
+                childIndices[static_cast<std::size_t>(unit)] = child.index;
+            }
+            else if (ParseCubeFaceChild(child.name, face))
+            {
+                // Always unique: cnaCubeFace0-5 come entirely from CNA's own source-controlled
+                // preamble, never from author text, so a duplicate is impossible by construction.
+                cubeFaceIndices[static_cast<std::size_t>(face)] = child.index;
+            }
+            else if (child.name == "cnaVolumeAtlas0")
+            {
+                volumeAtlasIndex = child.index;
+            }
+            else
+            {
+                Fail("Skia SkSL v1 children must be unique `uniform shader cnaTexture0` through "
+                     "`cnaTexture7`, `cnaCubeFace0` through `cnaCubeFace5`, or `cnaVolumeAtlas0` "
+                     "declarations; filters, blenders, and other names are unsupported.");
+                return false;
+            }
         }
         if (childIndices[0] < 0)
         {
@@ -162,6 +266,10 @@ namespace CNA::Internal::Backends::Skia
             return false;
         }
         const SkRuntimeEffect::Uniform* tintUniform = nullptr;
+        std::size_t cubeFaceSizeOffset = 0;
+        std::size_t volumeMeta0Offset = 0;
+        std::size_t volumeMeta1Offset = 0;
+        std::size_t volumeAddressModesOffset = 0;
         for (const auto& uniform : uniforms)
         {
             if (uniform.name == "cnaTint")
@@ -173,6 +281,22 @@ namespace CNA::Internal::Backends::Skia
                     return false;
                 }
                 tintUniform = &uniform;
+            }
+            else if (uniform.name == "cnaCubeFaceSizeEXT")
+            {
+                cubeFaceSizeOffset = uniform.offset;
+            }
+            else if (uniform.name == "cnaVolumeAtlasMeta0")
+            {
+                volumeMeta0Offset = uniform.offset;
+            }
+            else if (uniform.name == "cnaVolumeAtlasMeta1")
+            {
+                volumeMeta1Offset = uniform.offset;
+            }
+            else if (uniform.name == "cnaVolumeAddressModesEXT")
+            {
+                volumeAddressModesOffset = uniform.offset;
             }
             else if (!IsSupportedUserUniform(uniform))
             {
@@ -191,6 +315,12 @@ namespace CNA::Internal::Backends::Skia
 
         tintOffset_ = tintUniform->offset;
         childIndexByUnit_ = childIndices;
+        cubeFaceChildIndices_ = cubeFaceIndices;
+        volumeAtlasChildIndex_ = volumeAtlasIndex;
+        cubeFaceSizeOffset_ = cubeFaceSizeOffset;
+        volumeMeta0Offset_ = volumeMeta0Offset;
+        volumeMeta1Offset_ = volumeMeta1Offset;
+        volumeAddressModesOffset_ = volumeAddressModesOffset;
         uniformBytes_.assign(result.effect->uniformSize(), 0u);
         effect_ = std::move(result.effect);
         compileError_.clear();
@@ -219,6 +349,12 @@ namespace CNA::Internal::Backends::Skia
             throw std::invalid_argument(std::string("Skia ") + setter + " requires a non-empty uniform name.");
         if (std::string_view(name) == "cnaTint")
             throw std::invalid_argument("Skia cnaTint is reserved and supplied by each SpriteBatch draw.");
+        if (IsReservedPreambleUniformName(name))
+        {
+            throw std::invalid_argument(std::string("Skia `") + name + "` is reserved by the "
+                "cube/volume sampling preamble and supplied automatically by SetTexture(1, "
+                "TextureCube/Texture3D).");
+        }
         if (!data)
             throw std::invalid_argument(std::string("Skia ") + setter + " received null uniform data.");
         if (count < 0)
@@ -329,14 +465,61 @@ namespace CNA::Internal::Backends::Skia
         boundTextureBackends_[static_cast<std::size_t>(unit)] = std::move(weakTexture);
     }
 
-    void SkiaEffectBackend::BindTextureCube(int, ITextureCubeBackend*)
+    void SkiaEffectBackend::BindTextureCube(int unit, ITextureCubeBackend* texture)
     {
-        ThrowSkiaUnsupported3D("ShaderEffect::SetTexture(TextureCube)");
+        if (!effect_)
+            throw std::runtime_error("Skia BindTextureCube requires a valid SkSL effect.");
+        // SKIA-144: only unit 1 is supported for cube sampling, reusing the same numbering space
+        // SetTexture(unit, Texture2D) already uses -- a second bound cube map is out of scope.
+        if (unit != 1)
+        {
+            throw std::out_of_range(
+                "Skia SkSL cube sampling supports only SetTexture(1, TextureCube).");
+        }
+        if (cubeFaceChildIndices_[0] < 0)
+        {
+            throw std::invalid_argument(
+                "Skia effect does not call cnaSampleCubeEXT; no `cnaCubeFace*` children are "
+                "declared.");
+        }
+        if (!texture)
+            throw std::invalid_argument("Skia BindTextureCube received a null TextureCube backend.");
+        std::weak_ptr<ITextureCubeBackend> weakTexture = texture->weak_from_this();
+        if (weakTexture.expired())
+        {
+            throw std::invalid_argument(
+                "Skia BindTextureCube requires a shared, lifetime-tracked TextureCube backend.");
+        }
+        // Retain no raw pointer or immutable image. Draw locks this weak backend and reads its
+        // current six faces, so later SetData/rendering is visible and Dispose expires safely --
+        // identical contract to BindTexture above.
+        boundCubeBackend_ = std::move(weakTexture);
     }
 
-    void SkiaEffectBackend::BindTexture3D(int, ITexture3DBackend*)
+    void SkiaEffectBackend::BindTexture3D(int unit, ITexture3DBackend* texture)
     {
-        ThrowSkiaUnsupported3D("ShaderEffect::SetTexture(Texture3D)");
+        if (!effect_)
+            throw std::runtime_error("Skia BindTexture3D requires a valid SkSL effect.");
+        if (unit != 1)
+        {
+            throw std::out_of_range(
+                "Skia SkSL volume sampling supports only SetTexture(1, Texture3D).");
+        }
+        if (volumeAtlasChildIndex_ < 0)
+        {
+            throw std::invalid_argument(
+                "Skia effect does not call cnaSampleVolumeEXT; no `cnaVolumeAtlas0` child is "
+                "declared.");
+        }
+        if (!texture)
+            throw std::invalid_argument("Skia BindTexture3D received a null Texture3D backend.");
+        std::weak_ptr<ITexture3DBackend> weakTexture = texture->weak_from_this();
+        if (weakTexture.expired())
+        {
+            throw std::invalid_argument(
+                "Skia BindTexture3D requires a shared, lifetime-tracked Texture3D backend.");
+        }
+        boundVolumeBackend_ = std::move(weakTexture);
     }
 
     void SkiaEffectBackend::ValidateSpriteBindingsEXT() const
@@ -353,6 +536,18 @@ namespace CNA::Internal::Backends::Skia
                                          + std::to_string(unit) + "` before SpriteBatch::Begin.");
             }
         }
+        if (cubeFaceChildIndices_[0] >= 0 && boundCubeBackend_.expired())
+        {
+            throw std::runtime_error(
+                "Skia SkSL effect calls cnaSampleCubeEXT and requires SetTexture(1, TextureCube) "
+                "before SpriteBatch::Begin.");
+        }
+        if (volumeAtlasChildIndex_ >= 0 && boundVolumeBackend_.expired())
+        {
+            throw std::runtime_error(
+                "Skia SkSL effect calls cnaSampleVolumeEXT and requires SetTexture(1, Texture3D) "
+                "before SpriteBatch::Begin.");
+        }
     }
 
     sk_sp<SkShader> SkiaEffectBackend::MakeSpriteShaderEXT(
@@ -367,9 +562,8 @@ namespace CNA::Internal::Backends::Skia
             return nullptr;
         std::memcpy(drawUniforms.data() + tintOffset_, tint, tintBytes);
 
-        sk_sp<const SkData> uniforms = SkData::MakeWithCopy(
-            drawUniforms.data(), drawUniforms.size());
-        std::array<sk_sp<SkShader>, 8> children;
+        constexpr std::size_t kMaxChildrenEXT = 8u + 6u + 1u;
+        std::array<sk_sp<SkShader>, kMaxChildrenEXT> children;
         children[static_cast<std::size_t>(childIndexByUnit_[0])] = std::move(primaryTexture);
         for (int unit = 1; unit <= kSkiaSkslMaxTextureUnitEXT; ++unit)
         {
@@ -392,6 +586,95 @@ namespace CNA::Internal::Backends::Skia
             if (!children[static_cast<std::size_t>(childIndex)])
                 return nullptr;
         }
+
+        // SKIA-149: cube sampling reads the bound TextureCube/RenderTargetCube's six CURRENT
+        // faces fresh on every draw (via the shared ITextureCubeBackend::GetData contract, which
+        // already resynchronizes a dirty RenderTargetCube face before reading), matching
+        // BindTexture's "live reference, not a snapshot" semantic above -- a SetData or render
+        // between SetTexture(1, ...) and this draw is visible, and an expired weak backend fails
+        // this draw rather than sampling stale or fabricated pixels.
+        if (cubeFaceChildIndices_[0] >= 0)
+        {
+            const std::shared_ptr<ITextureCubeBackend> cube = boundCubeBackend_.lock();
+            const int size = cube ? cube->GetSizeEXT() : 0;
+            if (!cube || size <= 0)
+                return nullptr;
+            const float faceSize = static_cast<float>(size);
+            if (cubeFaceSizeOffset_ + sizeof(faceSize) > drawUniforms.size())
+                return nullptr;
+            std::memcpy(drawUniforms.data() + cubeFaceSizeOffset_, &faceSize, sizeof(faceSize));
+
+            std::vector<std::uint8_t> faceBytes(
+                static_cast<std::size_t>(size) * static_cast<std::size_t>(size) * 4u);
+            for (int face = 0; face < 6; ++face)
+            {
+                if (!cube->GetData(face, 0, 0, 0, size, size, faceBytes.data(),
+                                   static_cast<int>(faceBytes.size())))
+                {
+                    return nullptr;
+                }
+                const sk_sp<SkImage> image =
+                    MakeStraightRgba8ImageEXT(size, size, faceBytes.data());
+                const sk_sp<SkShader> shader = MakeClampLinearShaderEXT(image);
+                if (!shader)
+                    return nullptr;
+                children[static_cast<std::size_t>(cubeFaceChildIndices_[static_cast<std::size_t>(face)])]
+                    = shader;
+            }
+        }
+
+        // SKIA-149: volume sampling repacks the bound Texture3D's CURRENT level-0 voxels into a
+        // fresh atlas every draw, for the same "live reference" reason as cube sampling above.
+        // Address modes are fixed to Clamp (0, 0, 0) for this integration task; wiring the active
+        // SamplerState's AddressU/V/W through to cnaVolumeAddressModesEXT is a bounded follow-up
+        // that does not change this preamble's already-confirmed formula (SKIA-148).
+        if (volumeAtlasChildIndex_ >= 0)
+        {
+            const std::shared_ptr<ITexture3DBackend> volume = boundVolumeBackend_.lock();
+            int width = 0, height = 0, depth = 0;
+            if (volume)
+                volume->GetDimensionsEXT(width, height, depth);
+            if (!volume || width <= 0 || height <= 0 || depth <= 0)
+                return nullptr;
+
+            std::vector<std::uint8_t> voxelBytes(
+                static_cast<std::size_t>(width) * height * depth * 4u);
+            if (!volume->GetData(0, 0, 0, 0, width, height, depth, voxelBytes.data(),
+                                 static_cast<int>(voxelBytes.size())))
+            {
+                return nullptr;
+            }
+            const VolumeAtlasLayoutEXT layout = ComputeVolumeAtlasLayoutEXT(width, height, depth);
+            const std::vector<std::uint8_t> atlasBytes =
+                PackVolumeAtlasEXT(width, height, depth, voxelBytes.data(), voxelBytes.size());
+            if (atlasBytes.empty())
+                return nullptr;
+            const sk_sp<SkImage> atlasImage =
+                MakeStraightRgba8ImageEXT(layout.atlasWidth, layout.atlasHeight, atlasBytes.data());
+            const sk_sp<SkShader> atlasShader = MakeClampLinearShaderEXT(atlasImage);
+            if (!atlasShader)
+                return nullptr;
+
+            const float meta0[4] = {static_cast<float>(layout.cols), static_cast<float>(layout.rows),
+                                    static_cast<float>(depth), 0.0f};
+            const float meta1[4] = {static_cast<float>(layout.tileWidth),
+                                    static_cast<float>(layout.tileHeight), 0.0f, 0.0f};
+            const float addressModes[3] = {0.0f, 0.0f, 0.0f}; // Clamp/Clamp/Clamp for this task.
+            if (volumeMeta0Offset_ + sizeof(meta0) > drawUniforms.size()
+                || volumeMeta1Offset_ + sizeof(meta1) > drawUniforms.size()
+                || volumeAddressModesOffset_ + sizeof(addressModes) > drawUniforms.size())
+            {
+                return nullptr;
+            }
+            std::memcpy(drawUniforms.data() + volumeMeta0Offset_, meta0, sizeof(meta0));
+            std::memcpy(drawUniforms.data() + volumeMeta1Offset_, meta1, sizeof(meta1));
+            std::memcpy(drawUniforms.data() + volumeAddressModesOffset_, addressModes,
+                       sizeof(addressModes));
+            children[static_cast<std::size_t>(volumeAtlasChildIndex_)] = atlasShader;
+        }
+
+        sk_sp<const SkData> uniforms = SkData::MakeWithCopy(
+            drawUniforms.data(), drawUniforms.size());
         return effect_->makeShader(std::move(uniforms), children.data(), effect_->children().size());
     }
 } // namespace CNA::Internal::Backends::Skia

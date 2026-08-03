@@ -85,5 +85,19 @@ namespace CNA::Internal::Backends::Skia
         std::size_t tintOffset_ = 0;
         std::string compileError_;
         bool bound_ = false;
+
+        // SKIA-149: cube/volume sampling wiring. `cnaCubeFace0-5`/`cnaVolumeAtlas0` live in their
+        // own reserved child namespace (docs/skia-cube-volume-sampling-contract.md), orthogonal to
+        // `childIndexByUnit_`'s cnaTexture0-7 budget, and are only present when `CompileProgram`
+        // detected the author's source actually calling cnaSampleCubeEXT/cnaSampleVolumeEXT and
+        // prepended the matching confirmed preamble (SKIA-145/147/148).
+        std::array<int, 6> cubeFaceChildIndices_ = {-1, -1, -1, -1, -1, -1};
+        int volumeAtlasChildIndex_ = -1;
+        std::size_t cubeFaceSizeOffset_ = 0;
+        std::size_t volumeMeta0Offset_ = 0;
+        std::size_t volumeMeta1Offset_ = 0;
+        std::size_t volumeAddressModesOffset_ = 0;
+        std::weak_ptr<ITextureCubeBackend> boundCubeBackend_;
+        std::weak_ptr<ITexture3DBackend> boundVolumeBackend_;
     };
 } // namespace CNA::Internal::Backends::Skia

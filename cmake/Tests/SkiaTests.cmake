@@ -251,6 +251,13 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_skia_display_test(Skia_SkSL_UniformTexture
                                    cna_test_skia_sksl_uniform_texture)
 
+    # SKIA-149: integrates SKIA-144-148's confirmed cube/volume sampling formulas into the real
+    # public ShaderEffect/SpriteBatch API for the first time, end to end through real pixels.
+    cna_skia_test(cna_test_skia_cube_volume_effect_binding
+                  examples/skia_cube_volume_effect_binding_test.cpp)
+    cna_register_skia_display_test(Skia_CubeVolume_Effect_Binding
+                                   cna_test_skia_cube_volume_effect_binding)
+
     # SKIA-93: headless component spike. Alpha-test failure is coverage (clipShader), not a
     # transparent source; dual texture and colour transforms compose in one raster draw. This does
     # not promote their stock 3D Effect types, whose vertex/fog/depth contracts remain absent.

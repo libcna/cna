@@ -168,6 +168,27 @@ private:
         return false;
     }
 
+    // SKIA-149: unlike Refuses() above, this is not a blanket 3D-unsupported boundary -- it
+    // accepts std::invalid_argument and only requires that the message name the specific
+    // undeclared cnaSampleCubeEXT/cnaSampleVolumeEXT call that caused the rejection.
+    template<typename Callable>
+    bool RejectsUndeclaredCubeOrVolumeEXT(Callable&& callable, const char* expectedCall)
+    {
+        try
+        {
+            callable();
+        }
+        catch (const std::invalid_argument& error)
+        {
+            return std::string(error.what()).find(expectedCall) != std::string::npos;
+        }
+        catch (...)
+        {
+            return false;
+        }
+        return false;
+    }
+
     void Check(bool condition, const char* label)
     {
         ++checks_;
@@ -355,11 +376,16 @@ private:
             half4 main(float2 p) { return cnaTexture0.eval(p) * half4(cnaTint); }
         )";
         ShaderEffect effect(device, marker, sksl);
+        // SKIA-149: cnaSampleCubeEXT/cnaSampleVolumeEXT sampling is now supported for an effect
+        // that actually calls them (see Skia_CubeVolume_Effect_Binding); this effect's own source
+        // never does, so it declares no `cnaCubeFace*`/`cnaVolumeAtlas0` children and SetTexture(1,
+        // TextureCube/Texture3D) still rejects -- just with a precise std::invalid_argument naming
+        // the missing call, not the old blanket kSkiaUnsupported3DPrefix runtime_error.
         Check(effect.IsEffectValid()
-                  && Refuses([&] { effect.SetTexture(1, cube); },
-                             "ShaderEffect::SetTexture(TextureCube)")
-                  && Refuses([&] { effect.SetTexture(1, volume); },
-                             "ShaderEffect::SetTexture(Texture3D)"),
+                  && RejectsUndeclaredCubeOrVolumeEXT([&] { effect.SetTexture(1, cube); },
+                                                       "cnaSampleCubeEXT")
+                  && RejectsUndeclaredCubeOrVolumeEXT([&] { effect.SetTexture(1, volume); },
+                                                       "cnaSampleVolumeEXT"),
               "tagged SkSL rejects cube/volume sampling without damaging transfer storage");
     }
 

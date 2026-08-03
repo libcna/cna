@@ -29,6 +29,10 @@ namespace CNA::Internal::Backends::Skia
                                    const void* data, int dataLength) override;
         [[nodiscard]] bool GetData(int face, int level, int x, int y, int width, int height,
                                    void* data, int dataLength) const override;
+        [[nodiscard]] int GetSizeEXT() const noexcept override
+        {
+            return levels_.empty() ? 0 : levels_.front().dimension;
+        }
 
         NOXNA [[nodiscard]] std::size_t StorageBytesEXT() const noexcept { return storageBytes_; }
         NOXNA [[nodiscard]] int LevelCountEXT() const noexcept
@@ -68,6 +72,13 @@ namespace CNA::Internal::Backends::Skia
         [[nodiscard]] bool GetData(int level, int x, int y, int z,
                                    int width, int height, int depth,
                                    void* data, int dataLength) const override;
+        void GetDimensionsEXT(int& width, int& height, int& depth) const noexcept override
+        {
+            if (levels_.empty()) { width = height = depth = 0; return; }
+            width = levels_.front().width;
+            height = levels_.front().height;
+            depth = levels_.front().depth;
+        }
 
         NOXNA [[nodiscard]] std::size_t StorageBytesEXT() const noexcept { return storageBytes_; }
         NOXNA [[nodiscard]] int LevelCountEXT() const noexcept

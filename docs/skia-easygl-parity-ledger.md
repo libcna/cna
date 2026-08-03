@@ -6,7 +6,7 @@ public backend/resource interfaces in `IGraphicsBackend.hpp`, every `GraphicsCap
 public non-deleted `GraphicsDevice` method declaration. Overloads use `name/arity`; when that is
 still ambiguous, `#N` is their declaration order in the audited header.
 
-The current audited inventory contains 250 entries: 128 backend/resource methods, nine
+The current audited inventory contains 252 entries: 130 backend/resource methods, nine
 `GraphicsCapability` values, and 113 public `GraphicsDevice` declarations. The number is descriptive;
 the validator derives the authoritative live set from the headers.
 
@@ -42,9 +42,11 @@ file. The validator rejects missing, stale, duplicated, malformed, or unclassifi
 | `ITextureCubeBackend::SetData/8` | Uploads one GL cube-face region; cube transfer tests. | Exact bounded CPU face/mip/rectangle storage. | `implemented` | SKIA-80–84; shared 56-check write audit |
 | `ITextureCubeBackend::GetData/8` | Reads one cube-face region; cube readback tests. | Exact bounded CPU readback; no fabricated pixels. | `implemented` | SKIA-80–84; shared 56-check read audit |
 | `ITextureCubeBackend::BindGL/0` | Binds the cube GL target. | No GL/native cube handle exists. | `unsupported` | SKIA-80–84 |
+| `ITextureCubeBackend::GetSizeEXT/0` | N/A -- SKIA-149 NOXNA extension; the shared base default returns 0 for every other backend. | Reports the bound cube map's stored square face dimension so `cnaSampleCubeEXT` can size its per-draw CPU face read. | `implemented` | SKIA-149; `Skia_CubeVolume_Effect_Binding` |
 | `ITexture3DBackend::SetData/9` | Uploads a GL volume region; Texture3D tests. | Exact bounded CPU mip/sub-volume storage. | `implemented` | SKIA-82–84; shared 56-check write audit |
 | `ITexture3DBackend::GetData/9` | Reads a GL volume region; Texture3D tests. | Exact bounded CPU readback; no fabricated voxels. | `implemented` | SKIA-82–84; shared 56-check read audit |
 | `ITexture3DBackend::BindGL/0` | Binds the GL volume target. | No GL/native volume handle exists. | `unsupported` | SKIA-82–84 |
+| `ITexture3DBackend::GetDimensionsEXT/3` | N/A -- SKIA-149 NOXNA extension; the shared base default sets all three out-params to 0 for every other backend. | Reports the bound volume's stored width/height/depth so `cnaSampleVolumeEXT` can size its per-draw CPU voxel read and grid-atlas packing. | `implemented` | SKIA-149; `Skia_CubeVolume_Effect_Binding` |
 | `ITextureBackend::GetWidth/0` | Reports GL texture width; Texture2D tests. | Reports the CPU image width. | `implemented` | SKIA-22, SKIA-26 |
 | `ITextureBackend::GetHeight/0` | Reports GL texture height; Texture2D tests. | Reports the CPU image height. | `implemented` | SKIA-22, SKIA-26 |
 | `ITextureBackend::GetNativeTexture/0` | EasyGL exposes no SDL texture. | Returns null; Skia owns an `SkImage`. | `internal` | SKIA-22 |
