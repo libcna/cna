@@ -20,6 +20,7 @@
 #include "Graphics/GraphicsEngine/interface/SwapChain.h"
 
 #include "CNA/GraphicsCapability.hpp"
+#include "CNA/Internal/Backends/Diligent/DiligentDeviceSelection.hpp"
 
 /// Forward declaration matching SDL3's own `typedef struct SDL_GLContextState* SDL_GLContext;` --
 /// avoids pulling the full SDL3 header into every translation unit that includes this one, the same
@@ -33,56 +34,10 @@ namespace CNA::Internal::Backends::Diligent
     /// find the type.
     namespace Dg = ::Diligent;
 
-    /**
-     * @brief NOXNA. The Diligent Engine device type (native graphics API) a backend instance runs on.
-     *
-     * Diligent is itself an abstraction over several native APIs, so unlike every other CNA
-     * backend the choice is made at runtime rather than by the `CNA_GRAPHICS_BACKEND` CMake
-     * option. Which values are actually available in a given build is decided by the
-     * `CNA_DILIGENT_HAS_*` compile definitions set by `cna_link_diligent()`.
-     */
-    enum class DiligentDeviceType
-    {
-        /** @brief Direct3D 12 (Windows only). */
-        D3D12,
-        /** @brief Vulkan. */
-        Vulkan,
-        /** @brief Direct3D 11 (Windows only). */
-        D3D11,
-        /** @brief OpenGL / OpenGL ES. */
-        OpenGL,
-    };
-
-    /**
-     * @brief NOXNA. Returns the stable, human-readable name of a device type ("Vulkan", "OpenGL", …).
-     *
-     * @param type Device type to name.
-     * @return Name of the device type; never empty.
-     */
-    NOXNA [[nodiscard]] const char* GetDeviceTypeName(DiligentDeviceType type);
-
-    /**
-     * @brief NOXNA. Parses the `CNA_DILIGENT_DEVICE` environment variable value.
-     *
-     * Accepted values are case-insensitive: `d3d12`/`direct3d12`, `vulkan`/`vk`, `d3d11`/
-     * `direct3d11`, `opengl`/`gl`, and `auto` (meaning "use the built-in preference order").
-     *
-     * @param value Raw environment variable text.
-     * @return The requested device type, or an empty optional for `auto`.
-     * @throws std::runtime_error If @p value names no known device type.
-     */
-    NOXNA [[nodiscard]] std::vector<DiligentDeviceType> ParseDeviceTypeOverride(const std::string& value);
-
-    /**
-     * @brief NOXNA. Returns the device types this build can attempt, in preference order.
-     *
-     * The order is D3D12 → Vulkan → D3D11 → OpenGL, filtered down to the engines DiligentCore
-     * actually built for this platform. Device creation walks the list and uses the first entry
-     * that succeeds, so an entry being present means "worth attempting", not "known to work".
-     *
-     * @return Preference-ordered device types; empty only if no engine was built at all.
-     */
-    NOXNA [[nodiscard]] std::vector<DiligentDeviceType> GetDeviceTypePreferenceOrder();
+    // DiligentDeviceType, GetDeviceTypeName(), ParseDeviceTypeOverride() and
+    // GetDeviceTypePreferenceOrder() live in DiligentDeviceSelection.hpp (included above) -- they
+    // need no DiligentCore type, so GraphicsDevice.cpp's own window-flag selection can include
+    // just that header without needing this file's DiligentCore include path (DILIGENT-57).
 
     /**
      * @brief NOXNA. Converts XNA's `RasterizerState.DepthBias` (a small float, "r" units) into the

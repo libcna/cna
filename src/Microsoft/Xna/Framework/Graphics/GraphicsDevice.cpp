@@ -21,6 +21,12 @@
 #include "CNA/Internal/Backends/Bgfx/BgfxGraphicsBackend.hpp"
 #endif
 
+#ifdef CNA_BACKEND_DILIGENT
+// The minimal, DiligentCore-independent header -- GraphicsDevice.cpp is part of the CNA target,
+// which (unlike the Diligent backend target itself) has no DiligentCore include path wired up.
+#include "CNA/Internal/Backends/Diligent/DiligentDeviceSelection.hpp"
+#endif
+
 // plan_dx9.md Phase D9-10 (D9-103 follow-up): GraphicsProfile.Reach's own MaxRenderTargets=1
 // ceiling, real on this backend only -- matches Texture2D.cpp's own #ifdef CNA_BACKEND_D3D9
 // convention exactly. Distinct from MAX_RENDERTARGET_BINDINGS below (XNA's own general 4-target
@@ -143,23 +149,36 @@ namespace Microsoft::Xna::Framework::Graphics
             // Diligent picks its concrete device type (D3D12/Vulkan/D3D11/OpenGL) at RUNTIME, after
             // this window already exists -- but unlike CNA_BACKEND_BGFX's identical problem below,
             // SDL3 rejects a window created with BOTH SDL_WINDOW_VULKAN and SDL_WINDOW_OPENGL set
-            // ("Conflicting window graphics flags specified"), so only one can be requested. Reads
-            // the same CNA_DILIGENT_DEVICE override DiligentGraphicsBackend::CreateDeviceAndSwapChain()
-            // itself reads, mirroring CNA_BACKEND_BGFX's CNA_BGFX_RENDERER pattern just below. With no
-            // override, Vulkan is assumed: it is DiligentGraphicsBackend's first-tried candidate on
-            // Linux (D3D12 not being one), so this only actually needs to guess right when the game
-            // is not pinning a specific device type.
+            // ("Conflicting window graphics flags specified"), so only one can be requested.
+            //
+            // DILIGENT-57: this used to re-parse CNA_DILIGENT_DEVICE with its own narrow
+            // "opengl"/"gl"-only check, silently disagreeing with
+            // DiligentGraphicsBackend::ParseDeviceTypeOverride()'s own full alias set (gles, vk,
+            // dx11/direct3d11, dx12/direct3d12, ...) -- e.g. CNA_DILIGENT_DEVICE=gles created a
+            // Vulkan-flagged window here, then DiligentGraphicsBackend::TryCreateDevice() correctly
+            // resolved "gles" to OpenGL and failed with "the specified window isn't an OpenGL
+            // window". Calling the SAME shared parser here closes that gap for every alias.
+            //
+            // CNA_DILIGENT_DEVICE=auto (or unset) resolves to GetDeviceTypePreferenceOrder()'s own
+            // first entry, matching the first candidate TryCreateDevice() itself will attempt. Only
+            // one SDL flag can ever be requested for this window, so an auto build whose first
+            // preference (Vulkan) fails at runtime cannot then successfully fall through to OpenGL
+            // against this already-created window -- TryCreateDevice()'s own candidate loop still
+            // tries every candidate and reports each failure, but a Vulkan/OpenGL crossing specifically
+            // is a known, explicitly documented limitation (plan_diligent.md DILIGENT-57), not a
+            // silently broken promise: recreating the window mid-construction would need
+            // DiligentGraphicsBackend to own (not just borrow) it, a larger change out of this
+            // task's scope.
             windowFlags |= [] {
+                using CNA::Internal::Backends::Diligent::DiligentDeviceType;
+                using CNA::Internal::Backends::Diligent::ParseDeviceTypeOverride;
+
                 const char* override = SDL_getenv("CNA_DILIGENT_DEVICE");
-                if (override == nullptr)
-                    return SDL_WINDOW_VULKAN;
-                const std::string value = [&] {
-                    std::string lower(override);
-                    std::transform(lower.begin(), lower.end(), lower.begin(),
-                                   [](unsigned char c) { return std::tolower(c); });
-                    return lower;
-                }();
-                return (value == "opengl" || value == "gl") ? SDL_WINDOW_OPENGL : SDL_WINDOW_VULKAN;
+                const std::vector<DiligentDeviceType> resolved =
+                    ParseDeviceTypeOverride(override != nullptr ? override : "");
+                const DiligentDeviceType chosen =
+                    !resolved.empty() ? resolved.front() : DiligentDeviceType::Vulkan;
+                return chosen == DiligentDeviceType::OpenGL ? SDL_WINDOW_OPENGL : SDL_WINDOW_VULKAN;
             }();
 #endif
 
