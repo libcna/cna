@@ -818,6 +818,14 @@ namespace CNA::Internal::Backends::WebGPU
         {
             return queueSubmitCount_;
         }
+        /// REMED-GFX-211/213 diagnostic used by the permanent regression. Neither binding's
+        /// VertexOffset nor the InstanceFrequency is part of this cache's key -- the offsets select
+        /// source records and the divisor is expanded into the instance staging copy, so a draw
+        /// that changes either must reuse the variant an otherwise-identical draw already built.
+        [[nodiscard]] std::size_t GetInstancedPipelineCacheSizeEXT() const noexcept
+        {
+            return instancedPipelines_.size();
+        }
 
         void Clear(float r, float g, float b, float a) override;
         void Present() override;
