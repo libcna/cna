@@ -50,6 +50,24 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Ends the occlusion query and submits it to the GPU for evaluation. */
         void End();
 
+        /** @brief Returns true while the native query backend is still alive (CNA extension). */
+        NOXNA [[nodiscard]] bool HasBackend() const { return backend_ != nullptr; }
+
+    protected:
+        /**
+         * @brief Releases the native query backend before the base class marks this resource
+         * disposed (plan_sokol.md SOKOL-42).
+         *
+         * `GraphicsDevice::Dispose()` disposes tracked resources before tearing down the backend
+         * device/GL context; without this override the backend_ object below would only be
+         * destroyed whenever this OcclusionQuery's own C++ destructor happens to run, which may be
+         * long after that teardown -- e.g. a raw `glDeleteQueries` call after `sg_shutdown()` and
+         * SDL GL-context destruction on the Sokol backend.
+         *
+         * @param disposing True when called from Dispose(); false when called from the finalizer.
+         */
+        void Dispose(bool disposing) override;
+
     private:
         std::unique_ptr<CNA::Internal::Backends::IOcclusionQueryBackend> backend_;
     };

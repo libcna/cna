@@ -249,4 +249,13 @@ if(CNA_BUILD_TESTS AND CNA_BUILD_EXAMPLES
     cna_register_backend_test(NAME Sokol_MRT COMMAND cna_test_sokol_mrt
         TIMEOUT 30 LABELS "Sokol"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_sokol.md SOKOL-42: OcclusionQuery/ShaderEffect must release their raw-GL backend objects
+    # during GraphicsDevice::Dispose(), before the backend device/GL context is torn down.
+    cna_sokol_test(cna_test_sokol_dispose_order_occlusionquery_shadereffect
+                    examples/sokol_dispose_order_occlusionquery_shadereffect_test.cpp)
+    cna_register_backend_test(NAME Sokol_DisposeOrder_OcclusionQueryShaderEffect
+        COMMAND cna_test_sokol_dispose_order_occlusionquery_shadereffect
+        TIMEOUT 30 LABELS "Sokol"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()
