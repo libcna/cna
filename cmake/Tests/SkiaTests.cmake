@@ -289,6 +289,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_skia_raster_test(Skia_VolumeSampling_Spike
                                   cna_test_skia_volume_sampling_spike)
 
+    # SKIA-148: proves real trilinear (eight-voxel) interpolation, the corrected w-axis
+    # clamp/blend formula, and Clamp/Wrap/Mirror address modes against real SkSL pixels and a
+    # scalar C++ reference implementation of the same formula.
+    cna_skia_test(cna_test_skia_volume_trilinear_spike
+                  examples/skia_volume_trilinear_spike_test.cpp)
+    target_include_directories(cna_test_skia_volume_trilinear_spike PRIVATE "${CNA_SKIA_ROOT}")
+    cna_register_skia_raster_test(Skia_VolumeTrilinear_Spike
+                                  cna_test_skia_volume_trilinear_spike)
+
     # SKIA-94: fragment-like feasibility does not promote stock effects whose public route starts
     # with transformed primitives. Exercise AlphaTestEffect/DualTextureEffect property matrices,
     # atomic 3D refusal, actionable SpriteBatch diagnostics, and immediate 2D recovery.

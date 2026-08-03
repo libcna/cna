@@ -2073,12 +2073,60 @@ level-boundary contract.
   wiring is still entirely SKIA-149's job. SKIA-148 (trilinear interpolation, mip selection, address
   modes, partial updates, precision tests) is the next task that extends `cnaSampleVolumeEXT`'s body.
 
+## Completed in this session: SKIA-148
+
+- Extended `cnaSampleVolumeEXT`'s body (signature unchanged since SKIA-147) with real trilinear
+  interpolation and independent per-axis Clamp/Wrap/Mirror addressing, via a new
+  `cnaApplyAddressEXT(x, mode)` helper and a `cnaVolumeAddressModesEXT` reserved uniform
+  (`(addressU, addressV, addressW)`, matching the `cnaTint`/`cnaCubeFaceSizeEXT` precedent).
+- Implementing the w-axis blend surfaced a genuine bug in SKIA-144's own design-doc wording, caught
+  by hand-tracing the `w=0` boundary before writing any test: computing `s1 = clamp(s0 + 1, 0, d -
+  1)` from the *already-clamped* `s0` (as originally documented) double-counts the boundary clamp.
+  At `w=0`, `flooredS0=-1` clamps to `s0=0`, and clamping `s0+1` then gives `s1=1` with `wf=0.5`,
+  incorrectly blending 50% of slice 1 into a sample that should read slice 0 alone. The fix derives
+  `s1` and `wf` from the *unclamped* `flooredS0` instead, clamping only the two final slice
+  indices; both the SkSL preamble and `docs/skia-cube-volume-sampling-contract.md` are corrected to
+  match, with the doc explaining the bug concretely so it cannot silently reappear later.
+- Added `Skia_VolumeTrilinear_Spike` (13 checks, headless raster-only, below the public
+  `ShaderEffect`/`SetTexture(Texture3D)` API like the SKIA-93/145/146/147 spikes):
+  - The corrected `w=0`/`w=1` boundary formula, re-verified against a three-slice (0/100/200)
+    grayscale harness, plus exact-average midpoint blends between adjacent slices (50, 150) --
+    values chosen so byte rounding cannot mask an off-by-one in the blend weight.
+  - A genuine 2x2x2 volume with eight *distinct* voxel values (0..224), sampled at its exact
+    geometric centre: the well-known trilinear-centre identity says the result is the unweighted
+    mean of all eight corners regardless of their individual values (896/8=112 exactly), proving
+    real 8-voxel interpolation rather than just a w-axis blend that happens to also touch u/v.
+  - Wrap and Mirror address modes at a deliberately chosen `w=1.8` where the two modes disagree
+    (Wrap folds to 0.8, Mirror folds to 0.2), each checked against a scalar C++ reference
+    implementation of the identical formula (`ReferenceGraySample`) within a small rounding
+    tolerance -- avoiding by-hand arithmetic errors for genuinely-interpolated (non-exact) values.
+  - Mip-level selection reuses SKIA-146's cube precedent directly: two independently packed 2x2x2
+    "levels" (uniform grays 50 and 200) prove whichever atlas is bound as `cnaVolumeAtlas0` is
+    exactly what gets sampled, with zero bleed between levels and no new SkSL construct needed.
+  - A simulated partial `Texture3D::SetData` (overwriting one interior voxel) followed by a fresh
+    `PackVolumeAtlasEXT` call changes exactly that voxel's atlas texel -- including its own
+    replicated border -- and leaves every other packed byte untouched, proven by a full byte-level
+    diff of the before/after atlases. `PackVolumeAtlasEXT` always rebuilds the complete atlas from
+    the current voxel buffer (no separate incremental packing path exists to have a distinct bug),
+    so this determinism holds by construction, not by a special-cased partial-update code path.
+  - Confirmed SKIA-147's existing 17 checks still pass unchanged against the new trilinear body
+    before writing any new code: every one of its hand-picked `w` values happens to land exactly on
+    a slice centre (`wf=0`, or `s0==s1` so the blend is trivially exact regardless of `wf`), which
+    is corrected-formula-consistent by construction -- confirmed by rebuilding and rerunning it, not
+    just by this reasoning.
+- 13/13 new-spike checks pass in Debug, Release, and ASan+UBSan with zero sanitizer findings. The
+  complete Skia suite passes 163/163 (25 Raster, 133 Display, six Audit -- one net new Raster test)
+  in all three configurations.
+- `SkiaEffectBackend.cpp`/`.hpp` remain untouched; the public `ShaderEffect`/`SetTexture(Texture3D)`
+  wiring is still entirely SKIA-149's job, which now has both cube (SKIA-144–146) and volume
+  (SKIA-144/147/148) sampling formulas fully proven and ready to wire in together.
+
 ## Next candidates
 
-1. SKIA-148: add volume trilinear interpolation, mip selection, address modes, partial updates,
-   and precision tests, extending `cnaSampleVolumeEXT`'s body (fixed signature) unchanged.
-2. SKIA-149–158: continue Phase S15/S16 (effect ABI wiring for both cube and volume, public
-   sampling oracles, wider explicit 2D effects) in dependency order.
+1. SKIA-149: integrate cube/volume bindings into the explicit SkSL effect ABI (`BindTextureCube`/
+   `BindTexture3D`, weak lifetime tracking) -- both formulas are now fully proven and ready to wire.
+2. SKIA-150–158: continue Phase S15/S16 (public sampling oracles, content-loaded/target-produced
+   inputs, wider explicit 2D effects) in dependency order.
 3. SKIA-159–170: add opt-in Ganesh, probe real MSAA/anisotropy, re-evaluate MRT, and hold the
    successor gate only after the raster extensions are stable.
 4. The pre-existing `CNA_ENABLE_NET=OFF`/monolithic-`CnaTests` ENet build-graph defect is recorded

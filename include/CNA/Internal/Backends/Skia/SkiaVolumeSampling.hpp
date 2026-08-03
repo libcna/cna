@@ -41,41 +41,67 @@ namespace CNA::Internal::Backends::Skia
         int width, int height, int depth, const std::uint8_t* voxels, std::size_t voxelsByteCount);
 
     /**
-     * SKIA-144/147: the fixed `cnaSampleVolumeEXT` SkSL preamble. SKIA-147 implements Point
-     * (nearest-slice, nearest-texel) sampling only -- `s = floor(clamp(uvw.z, 0, 1) * depth)`,
-     * clamped to `[0, depth - 1]`, with `u`/`v` clamped (not yet Wrap/Mirror) before an ordinary
-     * nearest 2D sample inside the selected tile's own interior. SKIA-148 replaces the slice
-     * selection and per-axis clamp with the documented half-texel-centered trilinear blend and
-     * independent Clamp/Wrap/Mirror address modes; this preamble's `cnaSampleVolumeEXT` signature
-     * does not change, only its body, so nothing that already calls it needs to change with it.
+     * SKIA-144/147/148: the fixed `cnaSampleVolumeEXT` SkSL preamble. Its signature has stayed
+     * fixed since SKIA-147 (Point-only sampling); SKIA-148 replaces the body with the documented
+     * half-texel-centered trilinear blend and independent per-axis Clamp/Wrap/Mirror address
+     * modes, so nothing that already calls `cnaSampleVolumeEXT` needs to change with it.
+     *
+     * `cnaApplyAddressEXT`'s three modes (0=Clamp, 1=Wrap, 2=Mirror) apply identically to `u`, `v`,
+     * and the raw (pre-slice-index) `w` coordinate. The w-axis blend uses `sampleF = w * depth -
+     * 0.5` so `w=0`/`w=1` land exactly on the first/last slice's own centre; critically, `s1` and
+     * the blend weight `wf` are derived from the *unclamped* `floor(sampleF)`, with clamping to
+     * `[0, depth - 1]` applied only to the two final slice indices -- clamping `s0` before deriving
+     * `s1 = s0 + 1` (as this project's own earlier design-doc wording literally said) double-counts
+     * the boundary clamp and incorrectly blends slice 0 with slice 1 at `w=0` instead of returning
+     * slice 0 alone; this preamble is the corrected version, and
+     * docs/skia-cube-volume-sampling-contract.md's wording is corrected to match.
      *
      * Declares `cnaVolumeAtlas0` (the packed atlas image), `cnaVolumeAtlasMeta0` = `(cols, rows,
-     * depth, 0)` and `cnaVolumeAtlasMeta1` = `(tileWidth, tileHeight, 0, 0)` -- both reserved,
-     * written automatically by `SetTexture(1, Texture3D)` once SKIA-149 wires the public path, not
+     * depth, 0)`, `cnaVolumeAtlasMeta1` = `(tileWidth, tileHeight, 0, 0)`, and
+     * `cnaVolumeAddressModesEXT` = `(addressU, addressV, addressW)` -- all reserved, written
+     * automatically by `SetTexture(1, Texture3D)` once SKIA-149 wires the public path, not
      * settable by an effect author (matching the existing `cnaTint` reserved-uniform precedent).
      */
     inline constexpr std::string_view kCnaSampleVolumePreambleEXT = R"(
         uniform shader cnaVolumeAtlas0;
         uniform float4 cnaVolumeAtlasMeta0;
         uniform float4 cnaVolumeAtlasMeta1;
+        uniform float3 cnaVolumeAddressModesEXT;
 
-        half4 cnaSampleVolumeEXT(float3 uvw) {
+        float cnaApplyAddressEXT(float x, float mode) {
+            if (mode < 0.5) return clamp(x, 0.0, 1.0);
+            if (mode < 1.5) return fract(x);
+            return 1.0 - abs(fract(x * 0.5) * 2.0 - 1.0);
+        }
+
+        half4 cnaSampleVolumeAtEXT(float u, float v, float sliceIndex) {
             float cols = cnaVolumeAtlasMeta0.x;
-            float depth = cnaVolumeAtlasMeta0.z;
             float tileW = cnaVolumeAtlasMeta1.x;
             float tileH = cnaVolumeAtlasMeta1.y;
             float innerW = tileW - 2.0;
             float innerH = tileH - 2.0;
-
-            float u = clamp(uvw.x, 0.0, 1.0);
-            float v = clamp(uvw.y, 0.0, 1.0);
-            float s = clamp(floor(clamp(uvw.z, 0.0, 1.0) * depth), 0.0, depth - 1.0);
-
-            float col = s - cols * floor(s / cols);
-            float row = floor(s / cols);
+            float col = sliceIndex - cols * floor(sliceIndex / cols);
+            float row = floor(sliceIndex / cols);
             float atlasX = col * tileW + 1.0 + u * innerW;
             float atlasY = row * tileH + 1.0 + v * innerH;
             return cnaVolumeAtlas0.eval(float2(atlasX, atlasY));
+        }
+
+        half4 cnaSampleVolumeEXT(float3 uvw) {
+            float depth = cnaVolumeAtlasMeta0.z;
+            float u = cnaApplyAddressEXT(uvw.x, cnaVolumeAddressModesEXT.x);
+            float v = cnaApplyAddressEXT(uvw.y, cnaVolumeAddressModesEXT.y);
+            float w = cnaApplyAddressEXT(uvw.z, cnaVolumeAddressModesEXT.z);
+
+            float sampleF = w * depth - 0.5;
+            float flooredS0 = floor(sampleF);
+            float s0 = clamp(flooredS0, 0.0, depth - 1.0);
+            float s1 = clamp(flooredS0 + 1.0, 0.0, depth - 1.0);
+            float wf = clamp(sampleF - flooredS0, 0.0, 1.0);
+
+            half4 c0 = cnaSampleVolumeAtEXT(u, v, s0);
+            half4 c1 = cnaSampleVolumeAtEXT(u, v, s1);
+            return mix(c0, c1, wf);
         }
     )";
 } // namespace CNA::Internal::Backends::Skia

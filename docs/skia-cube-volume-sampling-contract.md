@@ -159,9 +159,16 @@ this per-tile clamp, never to the atlas sampling itself, which always effectivel
 tile boundary).
 
 **W-axis (slice) selection.** Given normalized volume coordinate `(u, v, w)` in `[0, 1]^3` and
-`sampleF = w * d - 0.5`, the two slices to blend are `s0 = clamp(floor(sampleF), 0, d - 1)` and `s1
-= clamp(s0 + 1, 0, d - 1)`, with blend weight `wf = clamp(sampleF - floor(sampleF), 0, 1)`. This is
-the standard half-texel-centered mip/slice convention already used elsewhere in this backend
+`sampleF = w * d - 0.5`, let `flooredS0 = floor(sampleF)` (unclamped, may be negative or `>= d`).
+The two slices to blend are `s0 = clamp(flooredS0, 0, d - 1)` and `s1 = clamp(flooredS0 + 1, 0, d -
+1)`, with blend weight `wf = clamp(sampleF - flooredS0, 0, 1)`. **`s1` and `wf` must be derived
+from the unclamped `flooredS0`, not from the already-clamped `s0`** -- an earlier draft of this
+formula computed `s1 = clamp(s0 + 1, 0, d - 1)` from the clamped `s0`, which double-counts the
+boundary clamp: at `w=0`, `flooredS0=-1` clamps to `s0=0`, and `clamp(s0+1,...)` then gives `s1=1`
+with `wf=0.5`, incorrectly blending 50% of slice 1 into a sample that should read slice 0 alone.
+Deriving `s1`/`wf` from the unclamped `flooredS0` instead gives `s1=clamp(-1+1,...)=0` (equal to
+`s0`) and the blend of two identical slices is that slice exactly regardless of `wf`. This is the
+standard half-texel-centered mip/slice convention already used elsewhere in this backend
 (`docs/skia-successor-resource-oracles.md`'s mip-selection precedent), so `w=0` samples exactly
 slice 0's centre and `w=1` samples exactly slice `d-1`'s centre with no half-slice bias. Address
 mode determines how `w` itself is derived from a caller value outside `[0, 1]` (`Clamp` clamps `w`
