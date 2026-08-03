@@ -2405,6 +2405,11 @@ float4 main(in PSInput psIn) : SV_Target
         // XNA's DepthFormat family tops out at Depth24Stencil8 and CNA's stencil support needs the
         // stencil half, so a combined format is used regardless of the requested DepthFormat.
         swapChainDesc.DepthBufferFormat = Dg::TEX_FORMAT_D24_UNORM_S8_UINT;
+        // DILIGENT-63: ReadBackbuffer()/GetBackBufferData() copy the swap chain's colour image into
+        // a staging texture; without COPY_SOURCE, Vulkan creates present images lacking
+        // VK_IMAGE_USAGE_TRANSFER_SRC_BIT and validation flags every such copy as a real usage
+        // violation, not just a warning.
+        swapChainDesc.Usage = Dg::SWAP_CHAIN_USAGE_RENDER_TARGET | Dg::SWAP_CHAIN_USAGE_COPY_SOURCE;
 
         Dg::NativeWindow nativeWindow{};
 #if defined(__linux__)
@@ -3238,23 +3243,52 @@ float4 main(in PSInput psIn) : SV_Target
         if (backBufferView == nullptr)
             throw std::runtime_error("CNA Diligent: the swap chain exposes no back buffer view");
         Dg::ITexture* backBuffer = backBufferView->GetTexture();
+        const auto& backBufferDesc = backBuffer->GetDesc();
+        const auto backBufferWidth = static_cast<int>(backBufferDesc.Width);
+        const auto backBufferHeight = static_cast<int>(backBufferDesc.Height);
 
-        // The caller works in logical game coordinates; the back buffer is physical.
+        // The caller works in logical game coordinates; the back buffer is physical. This is the
+        // FULL region the caller's logical request maps to -- it may extend outside the real back
+        // buffer (Overscan's negative origin, or simply the edge of the presentation area).
         const LogicalViewport viewport = ComputeLogicalViewport();
         const float scaleX = viewport.logicalWidth > 0.0f ? viewport.width / viewport.logicalWidth : 1.0f;
         const float scaleY = viewport.logicalHeight > 0.0f ? viewport.height / viewport.logicalHeight : 1.0f;
-        const auto physicalX = static_cast<int>(std::lround(viewport.x + x * scaleX));
-        const auto physicalY = static_cast<int>(std::lround(viewport.y + y * scaleY));
-        const auto physicalW = std::max(1, static_cast<int>(std::lround(w * scaleX)));
-        const auto physicalH = std::max(1, static_cast<int>(std::lround(h * scaleY)));
+        const int requestedX = static_cast<int>(std::lround(viewport.x + x * scaleX));
+        const int requestedY = static_cast<int>(std::lround(viewport.y + y * scaleY));
+        const int requestedW = std::max(1, static_cast<int>(std::lround(w * scaleX)));
+        const int requestedH = std::max(1, static_cast<int>(std::lround(h * scaleY)));
+
+        // DILIGENT-63: intersect with the real back buffer extent instead of trusting the request.
+        // The old code clamped MinX/MinY to 0 but left MaxX/MaxY as `clampedMin + physicalW/H`,
+        // which SHIFTS the copied region rather than clipping it whenever requestedX/Y were
+        // negative (Overscan) -- reading the wrong content, not just too much of it. It also never
+        // clamped against the back buffer's own width/height at all, risking an out-of-bounds
+        // source box at the right/bottom edge.
+        const int copyX0 = std::clamp(requestedX, 0, backBufferWidth);
+        const int copyY0 = std::clamp(requestedY, 0, backBufferHeight);
+        const int copyX1 = std::clamp(requestedX + requestedW, 0, backBufferWidth);
+        const int copyY1 = std::clamp(requestedY + requestedH, 0, backBufferHeight);
+        const int copyW = std::max(0, copyX1 - copyX0);
+        const int copyH = std::max(0, copyY1 - copyY0);
+
+        const bool blueFirst = IsBlueFirstFormat(backBufferDesc.Format);
+
+        if (copyW <= 0 || copyH <= 0)
+        {
+            // The entire requested region is outside the real back buffer -- every destination
+            // pixel is uncovered. Zero-fill and return without creating a staging texture or
+            // issuing a copy against an empty/invalid box at all.
+            std::memset(pixels, 0, static_cast<std::size_t>(w) * h * 4);
+            return;
+        }
 
         Dg::TextureDesc stagingDesc;
         stagingDesc.Name = "CNA backbuffer readback";
         stagingDesc.Type = Dg::RESOURCE_DIM_TEX_2D;
-        stagingDesc.Width = static_cast<Dg::Uint32>(physicalW);
-        stagingDesc.Height = static_cast<Dg::Uint32>(physicalH);
+        stagingDesc.Width = static_cast<Dg::Uint32>(copyW);
+        stagingDesc.Height = static_cast<Dg::Uint32>(copyH);
         stagingDesc.MipLevels = 1;
-        stagingDesc.Format = backBuffer->GetDesc().Format;
+        stagingDesc.Format = backBufferDesc.Format;
         stagingDesc.Usage = Dg::USAGE_STAGING;
         stagingDesc.BindFlags = Dg::BIND_NONE;
         stagingDesc.CPUAccessFlags = Dg::CPU_ACCESS_READ;
@@ -3265,10 +3299,10 @@ float4 main(in PSInput psIn) : SV_Target
             throw std::runtime_error("CNA Diligent: readback staging texture creation failed");
 
         Dg::Box sourceBox;
-        sourceBox.MinX = static_cast<Dg::Uint32>(std::max(0, physicalX));
-        sourceBox.MaxX = static_cast<Dg::Uint32>(std::max(0, physicalX) + physicalW);
-        sourceBox.MinY = static_cast<Dg::Uint32>(std::max(0, physicalY));
-        sourceBox.MaxY = static_cast<Dg::Uint32>(std::max(0, physicalY) + physicalH);
+        sourceBox.MinX = static_cast<Dg::Uint32>(copyX0);
+        sourceBox.MaxX = static_cast<Dg::Uint32>(copyX1);
+        sourceBox.MinY = static_cast<Dg::Uint32>(copyY0);
+        sourceBox.MaxY = static_cast<Dg::Uint32>(copyY1);
 
         // Unbind first: the back buffer cannot be both the bound render target and a copy source,
         // and letting Diligent notice that itself only produces an info message about the same
@@ -3312,21 +3346,34 @@ float4 main(in PSInput psIn) : SV_Target
         if (mapped.pData == nullptr)
             throw std::runtime_error("CNA Diligent: readback staging texture could not be mapped");
 
-        const bool blueFirst = IsBlueFirstFormat(stagingDesc.Format);
-
         // Resample the physical region back to the caller's logical region: with letterboxing or a
-        // scaled presentation the two differ, and the caller asked in logical pixels.
+        // scaled presentation the two differ, and the caller asked in logical pixels. Each logical
+        // pixel's position is first found in the FULL (unclamped) requested region, then translated
+        // into the staging texture's own local coordinates (the copied/intersected box) -- a
+        // position that falls outside it was clipped away above and is zero-filled instead of read.
         const auto* source = static_cast<const std::uint8_t*>(mapped.pData);
         for (int row = 0; row < h; ++row)
         {
-            const int sourceRow = std::clamp(static_cast<int>(row * scaleY), 0, physicalH - 1);
+            const int fullSourceRow =
+                requestedY + std::clamp(static_cast<int>(row * scaleY), 0, requestedH - 1);
+            const int stagingRow = fullSourceRow - copyY0;
             for (int column = 0; column < w; ++column)
             {
-                const int sourceColumn = std::clamp(static_cast<int>(column * scaleX), 0, physicalW - 1);
-                const std::uint8_t* texel =
-                    source + static_cast<std::size_t>(sourceRow) * mapped.Stride + sourceColumn * 4;
+                const int fullSourceColumn =
+                    requestedX + std::clamp(static_cast<int>(column * scaleX), 0, requestedW - 1);
+                const int stagingColumn = fullSourceColumn - copyX0;
                 std::uint8_t* destination =
                     pixels + (static_cast<std::size_t>(row) * w + column) * 4;
+                if (stagingRow < 0 || stagingRow >= copyH || stagingColumn < 0 || stagingColumn >= copyW)
+                {
+                    destination[0] = 0;
+                    destination[1] = 0;
+                    destination[2] = 0;
+                    destination[3] = 0;
+                    continue;
+                }
+                const std::uint8_t* texel =
+                    source + static_cast<std::size_t>(stagingRow) * mapped.Stride + stagingColumn * 4;
                 destination[0] = blueFirst ? texel[2] : texel[0];
                 destination[1] = texel[1];
                 destination[2] = blueFirst ? texel[0] : texel[2];

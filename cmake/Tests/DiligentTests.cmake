@@ -234,4 +234,19 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_BACKEND STREQUAL "DILIGEN
         TIMEOUT 90 LABELS "GraphicsSmoke;Diligent"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
         SKIP_REGULAR_EXPRESSION "\\[SKIP\\] CNA Diligent smoke")
+
+    # plan_diligent.md DILIGENT-63: ReadBackbuffer() must be valid and bounded for every
+    # CnaPresentationMode, constructed directly against IGraphicsBackend (not through
+    # GraphicsDeviceManager -- see the test file's own header for why). Unlike every other
+    # Diligent test, this one includes DiligentGraphicsBackend.hpp directly (to construct the
+    # backend itself), so it needs cna_link_diligent()'s own include dirs -- the same reason
+    # CnaTests calls it for DiligentDeviceSelectionTests.cpp (cmake/UnitTests.cmake).
+    cna_diligent_test(cna_test_diligent_backbuffer_readback_bounds
+                      examples/diligent_backbuffer_readback_bounds_test.cpp)
+    cna_link_diligent(cna_test_diligent_backbuffer_readback_bounds)
+    cna_register_backend_test(NAME Diligent_BackbufferReadbackBounds
+        COMMAND cna_test_diligent_backbuffer_readback_bounds
+        TIMEOUT 90 LABELS "GraphicsSmoke;Diligent"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
+        SKIP_REGULAR_EXPRESSION "\\[SKIP\\] CNA Diligent smoke")
 endif()
