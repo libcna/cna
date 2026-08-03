@@ -546,6 +546,29 @@ namespace CNA::Internal::Backends::WebGPU
             }
         }
 
+        // REMED-GFX-212: whether this per-vertex stride's established packed layout carries a
+        // COLOR0 element, and at which byte offset. The ordinary route's own pipelines derive
+        // their Unorm8x4 colour attribute from exactly this table -- colored3d.wgsl's stride-16
+        // ColoredVertex and the stride-24 colored+textured layout, both at offset 12 -- so reading
+        // the same one here is what makes the instanced route's VertexColorEnabled mean what its
+        // own ordinary route's already means. Every other stride keeps the position-only
+        // Instanced3D module it has always used: 20 (VertexPositionTexture) and 32
+        // (VertexPositionNormalTexture) carry no COLOR0 at all, and the skinned/PBR strides carry
+        // one the instanced route has no bone palette or tangent basis to render anyway.
+        [[nodiscard]] bool InstancedPackedColorOffsetForStride(
+            std::size_t pvStride, std::uint64_t& colorOffsetOut)
+        {
+            switch (pvStride)
+            {
+                case 16:   // VertexPositionColor
+                case 24:   // VertexPositionColorTexture
+                    colorOffsetOut = 12;
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
         // Encodes (topology, strip-index compatibility, depth test/write/func, blend enable+params,
         // cull mode, wireframe, depth bias, slope-scale depth bias, and a caller-supplied salt for
         // any extra dimension -- e.g. stride for AlphaTest3D/DualTexture3D) into a single uint64_t
@@ -4805,6 +4828,9 @@ struct VertexOutput {
         instancedPipelines_.clear();
         if (instancedShader_ != nullptr) wgpuShaderModuleRelease(instancedShader_);
         instancedShader_ = nullptr;
+        // REMED-GFX-212: the colour-capable sibling shares this cache and this lifetime exactly.
+        if (instancedColoredShader_ != nullptr) wgpuShaderModuleRelease(instancedColoredShader_);
+        instancedColoredShader_ = nullptr;
     }
 
     void WebGPUGraphicsBackend::CreateInstancedResources()
@@ -4814,12 +4840,13 @@ struct VertexOutput {
             return;
 
         // WEBGPU-27: ported from VulkanGraphicsBackend's instanced3d.{vert,frag}.glsl. Only
-        // position (binding 0, per-vertex) is consumed -- matches Vulkan's own shader, which reads
-        // nothing else even when the per-vertex stride is larger (e.g. a VertexPositionColor
-        // buffer's colour is simply unread, exactly like Vulkan's own comment on this). The
-        // per-instance mat4 world transform (binding 1, WGPUVertexStepMode_Instance) replaces the
-        // caller's own World matrix entirely: [0..15] of the Uniforms block below is View*Projection
-        // (not a full MVP), matching FillInstancedPushConst()'s identical choice.
+        // position (binding 0, per-vertex) is consumed by THIS module -- it is the variant selected
+        // for a geometry stride whose packed layout carries no COLOR0 element at all (20
+        // VertexPositionTexture, 32 VertexPositionNormalTexture, and any stride the table does not
+        // recognise). REMED-GFX-212 added the position+colour sibling below for the strides that do
+        // carry one. The per-instance mat4 world transform (binding 1, WGPUVertexStepMode_Instance)
+        // replaces the caller's own World matrix entirely: [0..15] of the Uniforms block below is
+        // View*Projection (not a full MVP), matching FillInstancedPushConst()'s identical choice.
         static constexpr char shaderSource[] = R"WGSL(
 struct Uniforms {
     vp: mat4x4f,
@@ -4864,6 +4891,59 @@ struct VertexOutput {
         instancedShader_ = wgpuDeviceCreateShaderModule(device_, &shaderDescriptor);
         if (instancedShader_ == nullptr)
             throw std::runtime_error("CNA WebGPU: failed to create Instanced3D shader");
+
+        // REMED-GFX-212: the position+colour sibling. BasicEffect's shader index has no instancing
+        // term (FNA BasicEffect.cs:490-511) and every vertex-colour permutation of BasicEffect.fx
+        // multiplies `vout.Diffuse *= vin.Color`, so an instanced draw owes exactly the mixing
+        // colored3d.wgsl above already performs -- the expression below is character-for-character
+        // its own, and `vertexColorEnabled` reaches it through the same uniform field
+        // (light0DiffuseVertexColor.w, FillExtUniforms' out[31]) the instanced route already fills.
+        static constexpr char coloredShaderSource[] = R"WGSL(
+struct Uniforms {
+    vp: mat4x4f,
+    diffuseColor: vec4f,
+    ambientLighting: vec4f,
+    light0DirTexture: vec4f,
+    light0DiffuseVertexColor: vec4f,
+};
+@group(0) @binding(0) var<uniform> u: Uniforms;
+
+struct VertexInput {
+    @location(0) position: vec3f,
+    @location(1) color: vec4f,
+};
+struct InstanceInput {
+    @location(4) instCol0: vec4f,
+    @location(5) instCol1: vec4f,
+    @location(6) instCol2: vec4f,
+    @location(7) instCol3: vec4f,
+};
+struct VertexOutput {
+    @builtin(position) position: vec4f,
+    @location(0) color: vec4f,
+};
+@vertex fn vs_main(input: VertexInput, instance: InstanceInput) -> VertexOutput {
+    var output: VertexOutput;
+    let world = mat4x4f(instance.instCol0, instance.instCol1, instance.instCol2, instance.instCol3);
+    output.position = u.vp * world * vec4f(input.position, 1.0);
+    let vertexColorEnabled = u.light0DiffuseVertexColor.w;
+    output.color = select(u.diffuseColor, input.color * u.diffuseColor, vertexColorEnabled > 0.5);
+    return output;
+}
+@fragment fn fs_main(input: VertexOutput) -> @location(0) vec4f {
+    return input.color;
+}
+)WGSL";
+
+        WGPUShaderSourceWGSL coloredWgsl{};
+        coloredWgsl.chain.sType = WGPUSType_ShaderSourceWGSL;
+        coloredWgsl.code = StringView(coloredShaderSource);
+        WGPUShaderModuleDescriptor coloredShaderDescriptor{};
+        coloredShaderDescriptor.label = StringView("CNA WebGPU Instanced3D Colored WGSL");
+        coloredShaderDescriptor.nextInChain = &coloredWgsl.chain;
+        instancedColoredShader_ = wgpuDeviceCreateShaderModule(device_, &coloredShaderDescriptor);
+        if (instancedColoredShader_ == nullptr)
+            throw std::runtime_error("CNA WebGPU: failed to create Instanced3D Colored shader");
     }
 
     WGPURenderPipeline WebGPUGraphicsBackend::GetOrCreatePipelineInstanced3D(
@@ -4882,15 +4962,29 @@ struct VertexOutput {
         if (auto it = instancedPipelines_.find(key); it != instancedPipelines_.end())
             return it->second;
 
-        // Binding 0: per-vertex, only position (location 0) is read regardless of the buffer's
-        // real stride. Binding 1: per-instance (WGPUVertexStepMode_Instance), a mat4 world
-        // transform as 4 Float32x4 columns at locations 4-7 (matching Vulkan's own location
-        // numbering choice for cross-reference clarity, though WGSL/WebGPU impose no such gap
-        // requirement).
-        std::array<WGPUVertexAttribute, 1> vertexAttrs{};
-        vertexAttrs[0].format = WGPUVertexFormat_Float32x3;
-        vertexAttrs[0].offset = 0;
-        vertexAttrs[0].shaderLocation = 0;
+        // Binding 0: per-vertex -- position at location 0, plus REMED-GFX-212's COLOR0 at location
+        // 1 when this stride's packed layout carries one. Binding 1: per-instance
+        // (WGPUVertexStepMode_Instance), a mat4 world transform as 4 Float32x4 columns at
+        // locations 4-7 (matching Vulkan's own location numbering choice for cross-reference
+        // clarity, though WGSL/WebGPU impose no such gap requirement), which is why the geometry
+        // colour at location 1 can never collide with the instance data.
+        std::uint64_t packedColorOffset = 0;
+        const bool hasPackedColor = InstancedPackedColorOffsetForStride(pvStride, packedColorOffset);
+        std::array<WGPUVertexAttribute, 2> vertexAttrs{};
+        std::size_t vertexAttrCount = 0;
+        vertexAttrs[vertexAttrCount].format = WGPUVertexFormat_Float32x3;
+        vertexAttrs[vertexAttrCount].offset = 0;
+        vertexAttrs[vertexAttrCount].shaderLocation = 0;
+        ++vertexAttrCount;
+        if (hasPackedColor)
+        {
+            // The same normalized R8G8B8A8 element colored3d.wgsl's own pipeline binds for this
+            // stride -- WGPUVertexFormat_Unorm8x4 is WebGPU's spelling of VertexElementFormat::Color.
+            vertexAttrs[vertexAttrCount].format = WGPUVertexFormat_Unorm8x4;
+            vertexAttrs[vertexAttrCount].offset = packedColorOffset;
+            vertexAttrs[vertexAttrCount].shaderLocation = 1;
+            ++vertexAttrCount;
+        }
 
         std::array<WGPUVertexAttribute, 4> instanceAttrs{};
         instanceAttrs[0].format = WGPUVertexFormat_Float32x4;
@@ -4909,7 +5003,7 @@ struct VertexOutput {
         std::array<WGPUVertexBufferLayout, 2> vertexBufferLayouts{};
         vertexBufferLayouts[0].arrayStride = static_cast<std::uint64_t>(pvStride);
         vertexBufferLayouts[0].stepMode = WGPUVertexStepMode_Vertex;
-        vertexBufferLayouts[0].attributeCount = vertexAttrs.size();
+        vertexBufferLayouts[0].attributeCount = vertexAttrCount;
         vertexBufferLayouts[0].attributes = vertexAttrs.data();
         vertexBufferLayouts[1].arrayStride = static_cast<std::uint64_t>(instVbStride);
         vertexBufferLayouts[1].stepMode = WGPUVertexStepMode_Instance;
@@ -4920,7 +5014,12 @@ struct VertexOutput {
         target.format = surfaceFormat_;
         target.writeMask = CurrentWriteMask(); // REMED-GFX-077: BlendState.ColorWriteChannels slot 0
         WGPUFragmentState fragment{};
-        fragment.module = instancedShader_;
+        // REMED-GFX-212: the geometry stride's own packed layout selects the module, the same way
+        // the ordinary route picks colored3d/textured3d/colored_textured3d by stride. Both modules
+        // declare the same single `@location(0) color: vec4f` fragment input, so the fragment
+        // entry point is unchanged either way.
+        WGPUShaderModule instancedModule = hasPackedColor ? instancedColoredShader_ : instancedShader_;
+        fragment.module = instancedModule;
         fragment.entryPoint = StringView("fs_main");
         fragment.targetCount = 1;
         fragment.targets = &target;
@@ -4928,7 +5027,7 @@ struct VertexOutput {
         WGPURenderPipelineDescriptor pipeline{};
         pipeline.label = StringView("CNA WebGPU Instanced3D Pipeline");
         pipeline.layout = coloredPipelineLayout_;
-        pipeline.vertex.module = instancedShader_;
+        pipeline.vertex.module = instancedModule;
         pipeline.vertex.entryPoint = StringView("vs_main");
         pipeline.vertex.bufferCount = vertexBufferLayouts.size();
         pipeline.vertex.buffers = vertexBufferLayouts.data();

@@ -2244,6 +2244,12 @@ namespace CNA::Internal::Backends::WebGPU
                               ReplayState& state);
 
         WGPUShaderModule instancedShader_ = nullptr;
+        /// REMED-GFX-212: the position+colour Instanced3D module, used when the geometry stride's
+        /// packed layout carries a COLOR0 element. WebGPU requires every shader vertex input to be
+        /// backed by a WGPUVertexAttribute, so a position-only geometry stride and a
+        /// position+colour one need different modules -- the same split the ordinary route already
+        /// makes between colored3d.wgsl and textured3d.wgsl.
+        WGPUShaderModule instancedColoredShader_ = nullptr;
         std::unordered_map<std::uint64_t, WGPURenderPipeline> instancedPipelines_;
         std::vector<InstancedDrawCommand> instancedDrawCommands_;
 
