@@ -96,6 +96,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 #include "System/ArgumentNullException.hpp"
+#include "System/NotSupportedException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 
 using CNA::GraphicsCapability;
@@ -615,6 +616,27 @@ namespace
     };
 }
 
+/// REMED-GFX-201: a DECLARED boundary, not a silent skip. A backend that has not yet been taught
+/// to re-slot its stride-derived input elements across several bindings reports the capability as
+/// false and is rejected deterministically by GraphicsDevice;
+/// UnsupportedBackendRejectsMultiStreamDeterministically below asserts exactly that on every
+/// backend and flips to the positive assertion the moment one claims the capability, so this skip
+/// cannot outlive the gap it describes. A macro rather than a helper because GTEST_SKIP() returns
+/// from the function it is written in -- inside a helper it would mark the test skipped and then
+/// let it run on anyway.
+#define CNA_REQUIRE_MULTI_STREAM_INPUT()                                                     \
+    do {                                                                                     \
+        if (!device.SupportsCapability(GraphicsCapability::MultiStreamVertexInput))           \
+        {                                                                                    \
+            GTEST_SKIP()                                                                     \
+                << "Backend reports GraphicsCapability::MultiStreamVertexInput = false: "     \
+                   "ordinary multi-stream vertex input is not implemented on this backend "   \
+                   "(REMED-GFX-201). The draw is rejected with System::NotSupportedException "\
+                   "rather than rendered from stream 0 alone -- see "                         \
+                   "UnsupportedBackendRejectsMultiStreamDeterministically.";                  \
+        }                                                                                    \
+    } while (false)
+
 #ifdef CNA_ORDINARY_MULTI_STREAM_ORACLE
 
 // ---------------------------------------------------------------------------
@@ -625,6 +647,7 @@ namespace
 TEST_F(OrdinaryDrawMultiStreamTest, NonIndexedBothOffsetsZeroRendersBothPrefixDecoys)
 {
     RequireOrdinaryRendering();
+    CNA_REQUIRE_MULTI_STREAM_INPUT();
 
     const GridLayout layout = TargetLayout();
     const std::vector<PositionRecord> positions = BuildPositionStream(layout, kLiveBand);
@@ -665,6 +688,7 @@ TEST_F(OrdinaryDrawMultiStreamTest, NonIndexedBothOffsetsZeroRendersBothPrefixDe
 TEST_F(OrdinaryDrawMultiStreamTest, NonIndexedStream0OffsetOnlyLeavesStream1OnItsDecoy)
 {
     RequireOrdinaryRendering();
+    CNA_REQUIRE_MULTI_STREAM_INPUT();
 
     const GridLayout layout = TargetLayout();
     const std::vector<PositionRecord> positions = BuildPositionStream(layout, kLiveBand);
@@ -704,6 +728,7 @@ TEST_F(OrdinaryDrawMultiStreamTest, NonIndexedStream0OffsetOnlyLeavesStream1OnIt
 TEST_F(OrdinaryDrawMultiStreamTest, NonIndexedStream1OffsetOnlyLeavesStream0OnItsDecoy)
 {
     RequireOrdinaryRendering();
+    CNA_REQUIRE_MULTI_STREAM_INPUT();
 
     const GridLayout layout = TargetLayout();
     const std::vector<PositionRecord> positions = BuildPositionStream(layout, kLiveBand);
@@ -744,6 +769,7 @@ TEST_F(OrdinaryDrawMultiStreamTest, NonIndexedStream1OffsetOnlyLeavesStream0OnIt
 TEST_F(OrdinaryDrawMultiStreamTest, NonIndexedDifferentNonzeroOffsetsSelectDifferentRecords)
 {
     RequireOrdinaryRendering();
+    CNA_REQUIRE_MULTI_STREAM_INPUT();
 
     const GridLayout layout = TargetLayout();
     const std::vector<PositionRecord> positions = BuildPositionStream(layout, kLiveBand);
@@ -783,6 +809,7 @@ TEST_F(OrdinaryDrawMultiStreamTest, NonIndexedDifferentNonzeroOffsetsSelectDiffe
 TEST_F(OrdinaryDrawMultiStreamTest, NonIndexedVertexStartAdvancesEveryStream)
 {
     RequireOrdinaryRendering();
+    CNA_REQUIRE_MULTI_STREAM_INPUT();
 
     const GridLayout layout = TargetLayout();
     const std::vector<PositionRecord> positions = BuildPositionStream(layout, kLiveBand);
@@ -823,6 +850,7 @@ TEST_F(OrdinaryDrawMultiStreamTest, NonIndexedVertexStartAdvancesEveryStream)
 TEST_F(OrdinaryDrawMultiStreamTest, Indexed16BothOffsetsZeroRendersBothPrefixDecoys)
 {
     RequireOrdinaryRendering();
+    CNA_REQUIRE_MULTI_STREAM_INPUT();
 
     const GridLayout layout = TargetLayout();
     const std::vector<PositionRecord> positions = BuildPositionStream(layout, kLiveBand);
@@ -867,6 +895,7 @@ TEST_F(OrdinaryDrawMultiStreamTest, Indexed16BothOffsetsZeroRendersBothPrefixDec
 TEST_F(OrdinaryDrawMultiStreamTest, Indexed16DifferentNonzeroOffsetsSelectDifferentRecords)
 {
     RequireOrdinaryRendering();
+    CNA_REQUIRE_MULTI_STREAM_INPUT();
 
     const GridLayout layout = TargetLayout();
     const std::vector<PositionRecord> positions = BuildPositionStream(layout, kLiveBand);
@@ -916,6 +945,7 @@ TEST_F(OrdinaryDrawMultiStreamTest, Indexed16DifferentNonzeroOffsetsSelectDiffer
 TEST_F(OrdinaryDrawMultiStreamTest, Indexed16StartIndexAndBaseVertexApplyToEveryStreamOnce)
 {
     RequireOrdinaryRendering();
+    CNA_REQUIRE_MULTI_STREAM_INPUT();
 
     const GridLayout layout = TargetLayout();
     const std::vector<PositionRecord> positions = BuildPositionStream(layout, kLiveBand);
@@ -965,6 +995,7 @@ TEST_F(OrdinaryDrawMultiStreamTest, Indexed16StartIndexAndBaseVertexApplyToEvery
 TEST_F(OrdinaryDrawMultiStreamTest, Indexed32StartIndexAndBaseVertexApplyToEveryStreamOnce)
 {
     RequireOrdinaryRendering();
+    CNA_REQUIRE_MULTI_STREAM_INPUT();
 
     const GridLayout layout = TargetLayout();
     const std::vector<PositionRecord> positions = BuildPositionStream(layout, kLiveBand);
@@ -1015,6 +1046,7 @@ TEST_F(OrdinaryDrawMultiStreamTest, Indexed32StartIndexAndBaseVertexApplyToEvery
 TEST_F(OrdinaryDrawMultiStreamTest, StreamsWithDifferentVertexCountsRenderTheValidRange)
 {
     RequireOrdinaryRendering();
+    CNA_REQUIRE_MULTI_STREAM_INPUT();
 
     const GridLayout layout = TargetLayout();
     const std::vector<PositionRecord> positions = BuildPositionStream(layout, kLiveBand);
@@ -1055,8 +1087,7 @@ TEST_F(OrdinaryDrawMultiStreamTest, StreamsWithDifferentVertexCountsRenderTheVal
 TEST_F(OrdinaryDrawMultiStreamTest, RangeLeavingStream0IsRejected)
 {
     RequireOrdinaryRendering();
-
-    const GridLayout layout = TargetLayout();
+     const GridLayout layout = TargetLayout();
     const std::vector<PositionRecord> positions = BuildPositionStream(layout, kLiveBand);
     const std::vector<ColorRecord> colors = BuildColorStream();
 
@@ -1089,8 +1120,7 @@ TEST_F(OrdinaryDrawMultiStreamTest, RangeLeavingStream0IsRejected)
 TEST_F(OrdinaryDrawMultiStreamTest, RangeLeavingOnlyStream1IsRejected)
 {
     RequireOrdinaryRendering();
-
-    const GridLayout layout = TargetLayout();
+     const GridLayout layout = TargetLayout();
     const std::vector<PositionRecord> positions = BuildPositionStream(layout, kLiveBand);
     std::vector<ColorRecord> colors = BuildColorStream();
     constexpr int kShortColorCount = kPrefixOffset + 2 * kVerticesPerSlot;
@@ -1123,8 +1153,7 @@ TEST_F(OrdinaryDrawMultiStreamTest, RangeLeavingOnlyStream1IsRejected)
 TEST_F(OrdinaryDrawMultiStreamTest, IndexedRangeLeavingOnlyStream1IsRejected)
 {
     RequireOrdinaryRendering();
-
-    const GridLayout layout = TargetLayout();
+     const GridLayout layout = TargetLayout();
     const std::vector<PositionRecord> positions = BuildPositionStream(layout, kLiveBand);
     std::vector<ColorRecord> colors = BuildColorStream();
     constexpr int kShortColorCount = kPrefixOffset + 2 * kVerticesPerSlot;
@@ -1163,6 +1192,7 @@ TEST_F(OrdinaryDrawMultiStreamTest, IndexedRangeLeavingOnlyStream1IsRejected)
 TEST_F(OrdinaryDrawMultiStreamTest, ReplacingOnlyStream1AndReturningKeepsEachLegsOwnBindings)
 {
     RequireOrdinaryRendering();
+    CNA_REQUIRE_MULTI_STREAM_INPUT();
 
     const GridLayout layout = TargetLayout();
     const std::vector<PositionRecord> positions = BuildPositionStream(layout, kLiveBand);
@@ -1221,6 +1251,7 @@ TEST_F(OrdinaryDrawMultiStreamTest, ReplacingOnlyStream1AndReturningKeepsEachLeg
 TEST_F(OrdinaryDrawMultiStreamTest, MultiStreamSingleStreamMultiStreamEachRendersItsOwnLayout)
 {
     RequireOrdinaryRendering();
+    CNA_REQUIRE_MULTI_STREAM_INPUT();
 
     const GridLayout layout = TargetLayout();
     const std::vector<PositionRecord> positions = BuildPositionStream(layout, kLiveBand);
@@ -1307,6 +1338,7 @@ TEST_F(OrdinaryDrawMultiStreamTest, MultiStreamSingleStreamMultiStreamEachRender
 TEST_F(OrdinaryDrawMultiStreamTest, ThreePerVertexStreamsEachSupplyTheirOwnElements)
 {
     RequireOrdinaryRendering();
+    CNA_REQUIRE_MULTI_STREAM_INPUT();
 
     const GridLayout layout = TargetLayout();
     const std::vector<PositionRecord> positions = BuildPositionStream(layout, kLiveBand);
@@ -1382,6 +1414,7 @@ TEST_F(OrdinaryDrawMultiStreamTest, ThreePerVertexStreamsEachSupplyTheirOwnEleme
 TEST_F(OrdinaryDrawMultiStreamTest, DestroyingAndRecreatingStream1RebindsTheNewBuffer)
 {
     RequireOrdinaryRendering();
+    CNA_REQUIRE_MULTI_STREAM_INPUT();
 
     const GridLayout layout = TargetLayout();
     const std::vector<PositionRecord> positions = BuildPositionStream(layout, kLiveBand);
@@ -1438,6 +1471,55 @@ TEST_F(OrdinaryDrawMultiStreamTest, DestroyingAndRecreatingStream1RebindsTheNewB
 }
 
 #endif  // CNA_ORDINARY_MULTI_STREAM_ORACLE
+
+// ---------------------------------------------------------------------------
+// The capability boundary itself, asserted on EVERY backend and in BOTH directions. A backend that
+// reports GraphicsCapability::MultiStreamVertexInput = false must reject an ordinary multi-stream
+// draw with a deterministic public exception before any native submission -- never render from
+// stream 0 alone, which would look like a correct draw of the wrong data. A backend that reports
+// true must accept it. This is what stops the skips above from outliving the gap they describe:
+// the moment a backend claims the capability, this test switches to the positive assertion and
+// every skipped pixel case starts running.
+// ---------------------------------------------------------------------------
+TEST_F(OrdinaryDrawMultiStreamTest, UnsupportedBackendRejectsMultiStreamDeterministically)
+{
+    if (!device.SupportsCapability(GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "Backend explicitly does not support 3D rendering";
+
+    const GridLayout layout = GridLayout{kTargetSize, kTargetSize};
+    const std::vector<PositionRecord> positions = BuildPositionStream(layout, kLiveBand);
+    const std::vector<ColorRecord> colors = BuildColorStream();
+
+    VertexBuffer positionBuffer(
+        device, PositionOnlyDeclaration(), kBufferElementCount, BufferUsage::None);
+    positionBuffer.SetDataRaw(positions.data(), kBufferElementCount, kPositionStride);
+    VertexBuffer colorBuffer(
+        device, ColorOnlyDeclaration(), kBufferElementCount, BufferUsage::None);
+    colorBuffer.SetDataRaw(colors.data(), kBufferElementCount, kColorStride);
+
+    BasicEffect effect(device);
+    device.SetVertexBuffers({
+        VertexBufferBinding(&positionBuffer, kPrefixOffset, 0),
+        VertexBufferBinding(&colorBuffer, kPrefixOffset, 0),
+    });
+    ApplyMeshEffect(effect);
+
+    // Deliberately NOT inside a render target: this asserts the shared gate, which runs before any
+    // backend work, so it is meaningful even on a backend with no readback.
+    if (device.SupportsCapability(GraphicsCapability::MultiStreamVertexInput))
+    {
+        EXPECT_NO_THROW(device.DrawPrimitives(PrimitiveType::TriangleList, 0, 1))
+            << "a backend that claims MultiStreamVertexInput must accept a two-stream draw";
+    }
+    else
+    {
+        EXPECT_THROW(
+            device.DrawPrimitives(PrimitiveType::TriangleList, 0, 1),
+            System::NotSupportedException)
+            << "a backend that does not claim MultiStreamVertexInput must reject a two-stream "
+               "draw deterministically, not render binding 0 alone";
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Coverage item 18: a missing required stream. Runs on every backend -- it is a public-API

@@ -677,6 +677,185 @@ namespace Microsoft::Xna::Framework::Graphics
         return currentVertexBuffers_[0].getVertexOffsetProperty();
     }
 
+    int GraphicsDevice::FoldedVertexStreamOffset() const
+    {
+        if (currentVertexBuffers_.empty() ||
+            currentVertexBuffers_[0].getVertexBufferProperty() != currentVertexBuffer_)
+        {
+            // No binding describes the bound buffer: the pre-VertexBufferBinding contract, where
+            // the stream starts at element zero and nothing is folded.
+            return 0;
+        }
+        int folded = std::numeric_limits<int>::max();
+        for (const auto& binding : currentVertexBuffers_)
+        {
+            if (binding.getInstanceFrequencyProperty() != 0)
+                continue;   // per-instance streams advance with instanceVertexOffset, not baseVertex
+            if (binding.getVertexBufferProperty() == nullptr)
+                continue;
+            folded = std::min(folded, binding.getVertexOffsetProperty());
+        }
+        return folded == std::numeric_limits<int>::max() ? 0 : folded;
+    }
+
+    void GraphicsDevice::FillVertexStreamBindings(
+        CNA::Internal::Backends::GpuDrawParams& p, int foldedOffset) const
+    {
+        p.vertexStreamCount = 0;
+        p.combinedVertexStride = 0;
+        if (currentVertexBuffers_.empty() ||
+            currentVertexBuffers_[0].getVertexBufferProperty() != currentVertexBuffer_)
+        {
+            // Same pre-VertexBufferBinding contract as FoldedVertexStreamOffset(): describe the
+            // one bound buffer so a backend never has to fall back to reading public state.
+            if (currentVertexBuffer_ == nullptr)
+                return;
+            auto& only = p.vertexStreams[0];
+            only.slot = 0;
+            only.buffer = &currentVertexBuffer_->GetBackend();
+            only.strideInBytes =
+                currentVertexBuffer_->getVertexDeclarationProperty().getVertexStrideProperty();
+            only.combinedByteBase = 0;
+            only.vertexOffset = 0;
+            only.instanceFrequency = 0;
+            only.vertexCount = currentVertexBuffer_->GetBackend().GetVertexCount();
+            p.vertexStreamCount = 1;
+            p.combinedVertexStride = only.strideInBytes;
+            return;
+        }
+
+        const int bindingCount = std::min<int>(
+            static_cast<int>(currentVertexBuffers_.size()),
+            CNA::Internal::Backends::kMaxVertexStreams);
+        int combinedByteBase = 0;
+        // REMED-GFX-201: XNA composes the bound declarations by SEMANTIC, not by position. FNA3D's
+        // drivers walk the bindings in slot order tracking every (usage, usageIndex) pair already
+        // claimed; a later element that repeats a claimed pair is pushed to the next free usage
+        // index, which no stock vertex shader has an input for, so it resolves to "Stream not in
+        // use!" and is skipped. A second stream that simply repeats stream 0's declaration
+        // therefore contributes nothing at all -- it is not a second half of the vertex.
+        bool usageClaimed[static_cast<std::size_t>(VertexElementUsage::TessellateFactor) + 1u]
+                         [16] = {};
+        const auto claimUsage = [&](const VertexElement& element) -> bool {
+            const auto usage = static_cast<std::size_t>(element.getVertexElementUsageProperty());
+            const int index = element.getUsageIndexProperty();
+            if (usage >= std::size(usageClaimed) || index < 0 || index >= 16)
+                return false;
+            if (usageClaimed[usage][static_cast<std::size_t>(index)])
+                return false;
+            usageClaimed[usage][static_cast<std::size_t>(index)] = true;
+            return true;
+        };
+
+        for (int slot = 0; slot < bindingCount; ++slot)
+        {
+            const VertexBufferBinding& binding = currentVertexBuffers_[static_cast<std::size_t>(slot)];
+            const VertexBuffer* buffer = binding.getVertexBufferProperty();
+            if (buffer == nullptr)
+                continue;   // SetVertexBuffers rejects nulls; a defaulted binding is simply unused
+
+            if (binding.getInstanceFrequencyProperty() == 0)
+            {
+                const auto& elements = buffer->getVertexDeclarationProperty().GetVertexElements();
+                int claimed = 0;
+                for (const VertexElement& element : elements)
+                    if (claimUsage(element)) ++claimed;
+                if (!elements.empty() && claimed == 0)
+                    continue;   // every element repeats an earlier stream's: not in use
+                if (claimed != static_cast<int>(elements.size()))
+                {
+                    throw System::NotSupportedException(
+                        "The VertexBuffer bound to slot " + std::to_string(slot) +
+                        " repeats some but not all of an earlier binding's vertex element "
+                        "usages. CNA describes a combined vertex layout by its byte stride, so a "
+                        "partially-duplicated stream has no expressible layout.");
+                }
+            }
+
+            auto& stream = p.vertexStreams[static_cast<std::size_t>(p.vertexStreamCount)];
+            stream.slot = slot;
+            stream.buffer = &buffer->GetBackend();
+            stream.strideInBytes =
+                buffer->getVertexDeclarationProperty().getVertexStrideProperty();
+            stream.instanceFrequency = binding.getInstanceFrequencyProperty();
+            stream.vertexCount = buffer->GetBackend().GetVertexCount();
+            if (stream.instanceFrequency == 0)
+            {
+                stream.combinedByteBase = combinedByteBase;
+                stream.vertexOffset = binding.getVertexOffsetProperty() - foldedOffset;
+                combinedByteBase += stream.strideInBytes;
+                p.combinedVertexStride += stream.strideInBytes;
+            }
+            else
+            {
+                // A per-instance stream contributes no bytes to the per-vertex layout and is not
+                // advanced by baseVertex, so it keeps its whole public offset.
+                stream.combinedByteBase = 0;
+                stream.vertexOffset = binding.getVertexOffsetProperty();
+            }
+            ++p.vertexStreamCount;
+        }
+    }
+
+    void GraphicsDevice::ValidateVertexStreamCapability(
+        const CNA::Internal::Backends::GpuDrawParams& p) const
+    {
+        if (!CNA::Internal::Backends::HasMultipleVertexStreams(p))
+            return;   // the single-stream path every backend has always had
+
+        int perVertexStreams = 0;
+        for (int i = 0; i < p.vertexStreamCount; ++i)
+            if (p.vertexStreams[static_cast<std::size_t>(i)].instanceFrequency == 0)
+                ++perVertexStreams;
+
+        if (!backend_->SupportsCapability(CNA::GraphicsCapability::MultiStreamVertexInput))
+        {
+            throw System::NotSupportedException(
+                "This graphics backend cannot bind more than one per-vertex VertexBufferBinding "
+                "to an ordinary draw (" + std::to_string(perVertexStreams) +
+                " were bound). Query GraphicsDevice::SupportsCapability("
+                "GraphicsCapability::MultiStreamVertexInput) before splitting a VertexDeclaration "
+                "across streams.");
+        }
+
+        const int backendMaximum = backend_->GetMaxVertexStreams();
+        if (perVertexStreams > backendMaximum)
+        {
+            throw System::NotSupportedException(
+                "This graphics backend supports at most " + std::to_string(backendMaximum) +
+                " per-vertex vertex streams, but " + std::to_string(perVertexStreams) +
+                " were bound. The binding list is never silently truncated.");
+        }
+    }
+
+    void GraphicsDevice::ValidateVertexStreamRanges(
+        const CNA::Internal::Backends::GpuDrawParams& p,
+        int startElement,
+        int elementCount,
+        const char* parameterName,
+        const std::string& parameterValue) const
+    {
+        for (int i = 0; i < p.vertexStreamCount; ++i)
+        {
+            const auto& stream = p.vertexStreams[static_cast<std::size_t>(i)];
+            if (stream.instanceFrequency != 0)
+                continue;   // the instanced route validates its per-instance stream separately
+            // Every term is an element count of THIS stream, so the arithmetic is done against
+            // this stream's own capacity -- a short secondary stream is rejected even when
+            // stream 0 could satisfy the same request.
+            const int available = stream.vertexCount;
+            if (stream.vertexOffset > available ||
+                startElement > available - stream.vertexOffset ||
+                elementCount > available - stream.vertexOffset - startElement)
+            {
+                throw System::ArgumentOutOfRangeException(
+                    parameterName, parameterValue,
+                    "The requested vertex range exceeds the vertex buffer bound to slot " +
+                        std::to_string(stream.slot) + '.');
+            }
+        }
+    }
+
     void GraphicsDevice::DrawPrimitives(PrimitiveType primitiveType, int vertexStart, int primitiveCount)
     {
         if (backend_ == nullptr)
@@ -713,15 +892,25 @@ namespace Microsoft::Xna::Framework::Graphics
         ExtractMatrices(currentEffect_, world, view, proj);
         CNA::Internal::Backends::GpuDrawParams p;
         currentEffect_->FillGpuDrawParams(p);
-        // REMED-GFX-200: VertexBufferBinding.VertexOffset shifts the stream base, and vertexStart
-        // indexes that stream -- both in the same vertex elements, against the same declaration
-        // stride, on the one per-vertex stream this route hands the backend. Their sum is the
-        // first record fetched, so carrying it in vertexStart delivers the offset through the
-        // element-unit channel every backend already converts to bytes exactly once with the
-        // stream's own stride, and applies each of the two exactly once. p.vertexBufferOffset is
-        // deliberately left at 0 here: it is the instanced route's separate per-stream channel
-        // (REMED-GFX-122/123), and populating it as well would apply this offset twice.
-        p.vertexStart = vertexStart + bindingVertexOffset;
+        // REMED-GFX-200: VertexBufferBinding.VertexOffset shifts a stream's base, and vertexStart
+        // indexes that stream -- both in vertex elements, against that stream's own declaration
+        // stride. Their sum is the first record fetched, so carrying the shared part in vertexStart
+        // delivers it through the element-unit channel every backend already converts to bytes
+        // exactly once with the stream's own stride, and applies each of the two exactly once.
+        // p.vertexBufferOffset is deliberately left at 0 here: it is the instanced route's separate
+        // per-stream channel (REMED-GFX-122/123), and populating it as well would double the offset.
+        // REMED-GFX-201: with several streams bound, "the shared part" is the smallest of their
+        // offsets and each stream carries the rest itself; with one it is the whole offset and the
+        // remainder is 0, which is exactly what REMED-GFX-200 measured.
+        const int foldedOffset = FoldedVertexStreamOffset();
+        p.vertexStart = vertexStart + foldedOffset;
+        FillVertexStreamBindings(p, foldedOffset);
+        // Argument validation first, capability second: an out-of-range request is wrong on every
+        // backend, so it must report the same public exception everywhere.
+        ValidateVertexStreamRanges(
+            p, p.vertexStart, consumedVertexCount,
+            "primitiveCount", std::to_string(primitiveCount));
+        ValidateVertexStreamCapability(p);
         applySamplerStatesToBackend();
         backend_->DrawPrimitivesEx(
             currentVertexBuffer_->GetBackend(),
@@ -787,17 +976,27 @@ namespace Microsoft::Xna::Framework::Graphics
         CNA::Internal::Backends::GpuDrawParams p;
         currentEffect_->FillGpuDrawParams(p);
         p.startIndex = startIndex;
-        // REMED-GFX-200: VertexBufferBinding.VertexOffset shifts the stream base and baseVertex is
-        // added to every decoded index -- both in the same vertex elements, against the same
-        // declaration stride, on the one per-vertex stream this route hands the backend. Their sum
-        // is what each decoded index is displaced by, so carrying it in baseVertex delivers the
-        // offset through the element-unit channel every backend already converts to bytes exactly
-        // once with the stream's own stride, and applies each of the two exactly once. startIndex
-        // is untouched: it selects index elements, which the binding offset never displaces.
-        // p.vertexBufferOffset is deliberately left at 0 here -- see DrawPrimitives above.
-        p.baseVertex = baseVertex + bindingVertexOffset;
+        // REMED-GFX-200: VertexBufferBinding.VertexOffset shifts a stream's base and baseVertex is
+        // added to every decoded index -- both in vertex elements, against that stream's own
+        // declaration stride. Their sum is what each decoded index is displaced by, so carrying the
+        // shared part in baseVertex delivers it through the element-unit channel every backend
+        // already converts to bytes exactly once with the stream's own stride, and applies each of
+        // the two exactly once. startIndex is untouched: it selects index elements, which a binding
+        // offset never displaces. p.vertexBufferOffset stays 0 here -- see DrawPrimitives above.
+        // REMED-GFX-201: baseVertex advances EVERY per-vertex stream, each by that many of its own
+        // elements, which is FNA3D's `vertexStride * (vertexOffset + baseVertex)` per binding.
+        const int foldedOffset = FoldedVertexStreamOffset();
+        p.baseVertex = baseVertex + foldedOffset;
         p.minVertexIndex = minVertexIndex;
         p.numVertices = numVertices;
+        FillVertexStreamBindings(p, foldedOffset);
+        // The declared window is [baseVertex + minVertexIndex, + numVertices) in every stream's
+        // own elements, so every stream must hold it -- not only the one named by `vb`. Argument
+        // validation precedes the capability gate for the reason DrawPrimitives states.
+        ValidateVertexStreamRanges(
+            p, p.baseVertex + minVertexIndex, numVertices,
+            "numVertices", std::to_string(numVertices));
+        ValidateVertexStreamCapability(p);
         applySamplerStatesToBackend();
         backend_->DrawIndexedPrimitivesEx(
             currentVertexBuffer_->GetBackend(),

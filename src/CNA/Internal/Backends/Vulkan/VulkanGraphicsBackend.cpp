@@ -1547,6 +1547,13 @@ namespace CNA::Internal::Backends::Vulkan
                 return anisotropySupported_;
             case CNA::GraphicsCapability::WireFrame:
                 return fillModeNonSolidSupported_;
+            case CNA::GraphicsCapability::MultiStreamVertexInput:
+                // REMED-GFX-201: not yet implemented here. Every 3D pipeline in this backend bakes
+                // a single VkVertexInputBindingDescription at binding 0 with combined-layout
+                // attribute offsets, so a second per-vertex stream has no binding to reach and no
+                // attribute to claim. Reported honestly so an ordinary multi-stream draw is
+                // rejected before submission instead of rendering from stream 0 alone.
+                return false;
             default:
                 return true;
         }

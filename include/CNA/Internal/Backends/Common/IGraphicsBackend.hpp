@@ -10,6 +10,7 @@
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
+#include <array>
 #include <cstddef>
 #include <functional>
 #include <stdexcept>
@@ -659,6 +660,63 @@ namespace CNA::Internal::Backends
     };
 
     /**
+     * @brief REMED-GFX-201: one bound vertex stream, captured by value for the duration of a draw.
+     *
+     * XNA's `GraphicsDevice.SetVertexBuffers` binds up to 16 `VertexBufferBinding`s, and a
+     * `VertexDeclaration` may split a single vertex's elements across several of them. FNA hands
+     * its driver exactly this per-slot tuple (`FNA3D_VertexBufferBinding`: buffer, declaration,
+     * stride, element offset, instance frequency) for *every* draw route -- ordinary and
+     * instanced alike -- and each driver converts `vertexOffset * stride` with **that stream's own
+     * stride**, binds it at **its own input slot**, and lets the native draw's start-vertex
+     * (`glDrawArrays`'s `first`, `vkCmdDraw`'s `firstVertex`, `Draw`'s `StartVertexLocation`,
+     * `BaseVertexLocation`) advance every stream by that same element count, each again by its own
+     * stride. This struct is CNA's equivalent, sized and shaped so an ordinary draw needs no heap
+     * allocation.
+     *
+     * A backend must read these fields, never the public binding state: `GraphicsDevice`'s
+     * `currentVertexBuffers_` is mutable between a deferred enqueue and its replay.
+     */
+    struct GpuVertexStreamBinding
+    {
+        /// Public binding slot -- the stream's index in the `SetVertexBuffers` array. Also the
+        /// native input slot on every API that has one (D3D11/D3D12 `InputSlot`, Vulkan
+        /// `binding`, WebGPU vertex-buffer index, bgfx stream index, SDL_GPU `slot`).
+        int slot = 0;
+
+        /// Backend resource for this stream. Never null for `slot < vertexStreamCount`. Only
+        /// valid for the duration of the `Draw*PrimitivesEx` call that carries it -- a deferred
+        /// backend must copy the concrete handle, exactly as it already does for `instanceVb`.
+        const IVertexBufferBackend* buffer = nullptr;
+
+        /// This stream's own `VertexDeclaration` stride, in bytes. Never stream 0's.
+        int strideInBytes = 0;
+
+        /// Byte offset at which this stream's declaration begins inside the *combined* layout --
+        /// the running sum of the strides of the per-vertex streams before it. CNA's backends
+        /// derive their native input elements from a byte stride (`InputElementsForStride` and
+        /// the equivalent per-backend tables), whose element offsets are combined-layout offsets;
+        /// subtracting this value converts one to the stream-local `AlignedByteOffset` that FNA3D
+        /// takes straight from the per-stream declaration.
+        int combinedByteBase = 0;
+
+        /// This stream's `VertexBufferBinding.VertexOffset`, in vertex elements, **less the shared
+        /// base already folded into `vertexStart`/`baseVertex`** (see `GpuDrawParams::vertexStart`).
+        /// Always >= 0, and always 0 for a single-stream draw, which is what keeps the
+        /// single-stream native binding byte-identical to its pre-REMED-GFX-201 form.
+        int vertexOffset = 0;
+
+        /// `VertexBufferBinding.InstanceFrequency`; 0 means a per-vertex stream.
+        int instanceFrequency = 0;
+
+        /// Vertex elements the stream's buffer holds, for backends that must bound a native range.
+        int vertexCount = 0;
+    };
+
+    /// XNA 4.0 HiDef's `SetVertexBuffers` limit, and therefore the fixed capacity of a draw's
+    /// stream list. Matches `GraphicsDevice::kMaxVertexBufferBindings`.
+    inline constexpr int kMaxVertexStreams = 16;
+
+    /**
      * @brief Per-draw effect parameters forwarded from the XNA effect layer
      *        to the graphics backend.
      *
@@ -784,11 +842,32 @@ namespace CNA::Internal::Backends
         int instanceVertexOffset = 0;
         /// Number of instances that reuse each per-instance record; zero when no instance stream is bound.
         int instanceFrequency = 0;
+        /// REMED-GFX-201: every active `VertexBufferBinding`, in public slot order, captured by
+        /// value. `vertexStreams[0]` is always the stream `Draw*PrimitivesEx`'s own `vb` argument
+        /// refers to, so a backend that reads only `vb` still sees exactly what it saw before this
+        /// field existed. Entries at or past `vertexStreamCount` are unset and must not be read.
+        std::array<GpuVertexStreamBinding, kMaxVertexStreams> vertexStreams{};
+        /// Active entries in `vertexStreams`. 0 only on the internal routes that bind no public
+        /// buffer at all (SpriteBatch, `DrawUser*`); 1 for every single-stream draw.
+        int vertexStreamCount = 0;
+        /// Sum of the per-vertex (`instanceFrequency == 0`) streams' strides -- the byte stride of
+        /// the *combined* vertex the shader sees, and therefore the key a stride-dispatched
+        /// backend must select its input layout and shader variant with. Equals the single
+        /// stream's own stride whenever `vertexStreamCount == 1`, so single-stream dispatch is
+        /// unchanged. 0 when `vertexStreamCount == 0`.
+        int combinedVertexStride = 0;
         /// First vertex index for non-indexed draws (maps to glDrawArrays `first` / vkCmdDraw `firstVertex`).
+        /// REMED-GFX-201: this already includes the smallest per-vertex binding offset of the draw
+        /// (`GraphicsDevice::FoldedVertexStreamOffset`), which is why every `vertexStreams[k].
+        /// vertexOffset` is a non-negative remainder and a single-stream draw carries its whole
+        /// public offset here exactly as REMED-GFX-200 established.
         int vertexStart = 0;
         /// First index in the IBO for indexed draws (maps to glDrawElements byte offset / vkCmdDrawIndexed `firstIndex`).
         int startIndex  = 0;
         /// Value added to each index before vertex fetch (maps to glDrawElementsBaseVertex / vkCmdDrawIndexed `vertexOffset`).
+        /// REMED-GFX-201: like `vertexStart` above, this already includes the draw's folded
+        /// per-vertex binding offset, and it advances **every** per-vertex stream by that many of
+        /// that stream's own elements -- exactly FNA3D's `vertexStride * (vertexOffset + baseVertex)`.
         int baseVertex  = 0;
         /// Lowest decoded index expected by the caller, relative to `baseVertex`.
         int minVertexIndex = 0;
@@ -821,6 +900,104 @@ namespace CNA::Internal::Backends
         /// when bound (or used alone as a constant when it isn't).
         float pbrRoughnessFactor = 1.0f;
     };
+
+    /**
+     * @brief REMED-GFX-201: where one element of the combined vertex layout actually lives.
+     *
+     * CNA's backends describe a vertex layout by its byte stride, so their element tables use
+     * offsets measured inside the *combined* vertex. A multi-stream draw stores those same bytes
+     * in several buffers, so each element must be re-slotted before it reaches a native input
+     * descriptor.
+     */
+    struct GpuVertexStreamSlot
+    {
+        /// Index into `GpuDrawParams::vertexStreams` -- and the native input slot.
+        int streamIndex = 0;
+        /// The element's byte offset inside that stream's own vertex, i.e. what FNA3D reads
+        /// straight from the per-stream `VertexElement.Offset`.
+        int byteOffsetInStream = 0;
+    };
+
+    /**
+     * @brief The byte stride a backend must select its input layout and shader variant with.
+     *
+     * REMED-GFX-201: for a bound-buffer draw this is the sum of the per-vertex streams' strides,
+     * which equals the one stream's own stride whenever a single buffer is bound. The internal
+     * routes that stage their own temporary buffer -- `DrawUser*`, SpriteBatch,
+     * `DrawColoredPrimitives` -- bind no public `VertexBufferBinding` at all and leave
+     * `vertexStreamCount` at 0; they keep dispatching on @p fallbackStride, the stride of the one
+     * buffer they built, so their behaviour is untouched by this feature.
+     *
+     * @param params         The draw being dispatched.
+     * @param fallbackStride The named `vb`'s own stride.
+     */
+    [[nodiscard]] inline std::size_t CombinedVertexStrideOr(
+        const GpuDrawParams& params, std::size_t fallbackStride)
+    {
+        return params.vertexStreamCount > 0 && params.combinedVertexStride > 0
+                   ? static_cast<std::size_t>(params.combinedVertexStride)
+                   : fallbackStride;
+    }
+
+    /**
+     * @brief Maps a combined-layout byte offset to the stream that holds it.
+     *
+     * @param params            The draw whose stream list is being bound.
+     * @param combinedByteOffset Byte offset of the element inside the combined vertex.
+     * @return The owning stream and the element's offset within it. Degenerates to
+     *         `{0, combinedByteOffset}` for a single-stream draw, so a caller that routes every
+     *         element through this helper keeps its single-stream native binding unchanged.
+     */
+    [[nodiscard]] inline GpuVertexStreamSlot MapCombinedOffsetToStream(
+        const GpuDrawParams& params, int combinedByteOffset)
+    {
+        GpuVertexStreamSlot result{};
+        for (int i = 0; i < params.vertexStreamCount; ++i)
+        {
+            const GpuVertexStreamBinding& stream = params.vertexStreams[i];
+            if (stream.instanceFrequency != 0)
+                continue;
+            if (combinedByteOffset >= stream.combinedByteBase &&
+                combinedByteOffset < stream.combinedByteBase + stream.strideInBytes)
+            {
+                result.streamIndex = i;
+                result.byteOffsetInStream = combinedByteOffset - stream.combinedByteBase;
+                return result;
+            }
+        }
+        result.byteOffsetInStream = combinedByteOffset;
+        return result;
+    }
+
+    /**
+     * @brief Whether this draw needs more than the one stream `Draw*PrimitivesEx` names directly.
+     *
+     * The single-stream fast path every backend already implements stays selected by this being
+     * false, which it is for every draw CNA issued before REMED-GFX-201.
+     */
+    [[nodiscard]] inline bool HasMultipleVertexStreams(const GpuDrawParams& params)
+    {
+        int perVertexStreams = 0;
+        for (int i = 0; i < params.vertexStreamCount; ++i)
+            if (params.vertexStreams[i].instanceFrequency == 0)
+                ++perVertexStreams;
+        return perVertexStreams > 1;
+    }
+
+    /**
+     * @brief The byte offset at which stream @p streamIndex's first fetched record begins.
+     *
+     * This is FNA3D's `vertexStride * (vertexOffset + baseVertex)` with the start-vertex term
+     * left to the native draw call, which applies it to every stream with that stream's own
+     * stride. Pass the start-vertex term in @p startElement only on APIs whose draw call cannot
+     * carry it.
+     */
+    [[nodiscard]] inline std::size_t VertexStreamByteOffset(
+        const GpuVertexStreamBinding& stream, int startElement = 0)
+    {
+        return static_cast<std::size_t>(stream.vertexOffset + startElement) *
+               static_cast<std::size_t>(stream.strideInBytes);
+    }
 
     class IGraphicsBackend
     {
@@ -1135,6 +1312,15 @@ namespace CNA::Internal::Backends
          * @brief Effect-aware draw — selects the shader variant based on
          *        vertex layout (derived from stride) and @p params.
          *
+         * REMED-GFX-201: @p vb is `params.vertexStreams[0].buffer`, kept as a named argument so
+         * the single-stream path is unchanged. The complete set of bound per-vertex streams is
+         * `params.vertexStreams[0 .. params.vertexStreamCount)`, and the layout the shader sees
+         * spans all of them: select the input layout with `params.combinedVertexStride`, re-slot
+         * each of its elements with `MapCombinedOffsetToStream()`, and bind every stream at its
+         * own slot with its own stride and `VertexStreamByteOffset()`. A backend that cannot
+         * express the combined layout must throw before native submission rather than render from
+         * stream 0 alone; `HasMultipleVertexStreams()` selects that branch.
+         *
          * Default implementation falls back to DrawColoredPrimitives so
          * backends that have not yet implemented this path still work.
          */
@@ -1192,9 +1378,31 @@ namespace CNA::Internal::Backends
         /// returns true for everything -- most backends are fully 3D-capable, so only backends
         /// with a genuine, known gap (SDL_Renderer/DX3/Canvas's 2D-only design, or a specific
         /// device-dependent feature like anisotropic filtering) need to override this.
-        [[nodiscard]] virtual bool SupportsCapability(CNA::GraphicsCapability /*capability*/) const
+        [[nodiscard]] virtual bool SupportsCapability(CNA::GraphicsCapability capability) const
         {
+            // REMED-GFX-201: MultiStreamVertexInput is the one entry whose default is FALSE. A
+            // backend derives its native input elements from a single byte stride, so binding a
+            // second per-vertex stream is real work it must opt into by name; defaulting to true
+            // would make a backend that silently renders from stream 0 alone claim otherwise.
+            if (capability == CNA::GraphicsCapability::MultiStreamVertexInput)
+                return false;
             return true;
+        }
+
+        /**
+         * @brief REMED-GFX-201: how many per-vertex `VertexBufferBinding`s this backend can bind
+         *        to one ordinary draw.
+         *
+         * XNA's public ceiling is `kMaxVertexStreams` (16). A backend that reports
+         * `GraphicsCapability::MultiStreamVertexInput` but has a lower native input-slot limit
+         * returns it here so `GraphicsDevice` rejects an over-wide binding set deterministically
+         * rather than truncating it, collapsing streams, or letting the native API abort. The
+         * default is the public maximum; a backend that does not support multi-stream input at
+         * all is already rejected by the capability itself and never reaches this.
+         */
+        [[nodiscard]] virtual int GetMaxVertexStreams() const
+        {
+            return kMaxVertexStreams;
         }
 
         /// REMED-CONTENT-001: returns this backend's real maximum single-axis texture dimension

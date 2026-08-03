@@ -2734,6 +2734,11 @@ namespace CNA::Internal::Backends::Software
             // call.
             case CNA::GraphicsCapability::Texture3D:
                 return false;
+            case CNA::GraphicsCapability::MultiStreamVertexInput:
+                // REMED-GFX-201: not implemented yet -- BuildGenericClipVertex reads every
+                // attribute from one contiguous record, so a vertex split across buffers has no
+                // way to be fetched.
+                return false;
             default:
                 return true;
         }

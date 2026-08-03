@@ -2188,6 +2188,11 @@ void main()
                 // GLES3 (EasyGL's underlying API) has no wireframe fill mode at all -- matches
                 // the XNA 4.0 Graphics API coverage table's own "EasyGL N/A (GLES3)" entry.
                 return false;
+            case CNA::GraphicsCapability::MultiStreamVertexInput:
+                // REMED-GFX-201: not implemented yet -- ApplyLayout() configures one VBO's
+                // declaration into this buffer's own VAO and Draw*PrimitivesEx binds that VAO
+                // alone, so a second per-vertex stream has no attribute locations to occupy.
+                return false;
             default:
                 return true;
         }

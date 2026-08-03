@@ -60,6 +60,7 @@ namespace Microsoft::Xna::Framework::Graphics
 namespace CNA::Internal::Backends
 {
     class IGraphicsBackend;
+    struct GpuDrawParams;
 }
 
 namespace Microsoft::Xna::Framework::Graphics
@@ -1137,6 +1138,44 @@ namespace Microsoft::Xna::Framework::Graphics
         // binding describes the bound buffer, which is the only value that leaves a
         // no-VertexBufferBinding draw byte-identical to its pre-REMED-GFX-200 behavior.
         [[nodiscard]] int CurrentVertexBufferOffset() const;
+
+        // REMED-GFX-201: the element offset shared by every per-vertex stream of the current
+        // binding set -- the smallest VertexBufferBinding.VertexOffset among them, 0 when none.
+        // The ordinary routes fold this into vertexStart/baseVertex, the element-unit channel each
+        // backend already multiplies by *each stream's own* stride exactly once, and hand every
+        // stream the non-negative remainder. With one stream the fold is the whole offset and the
+        // remainder is 0, which is byte-for-byte REMED-GFX-200's behaviour; with several it is the
+        // only split that keeps every per-stream native byte offset non-negative while still
+        // giving each stream `binding.VertexOffset + vertexStart` of its own elements.
+        [[nodiscard]] int FoldedVertexStreamOffset() const;
+
+        // REMED-GFX-201: copies every active VertexBufferBinding into `p.vertexStreams`, in public
+        // slot order, and computes `p.combinedVertexStride`. `foldedOffset` is subtracted from each
+        // per-vertex stream's VertexOffset (see FoldedVertexStreamOffset above). Captured by value:
+        // a deferred backend replays a draw long after currentVertexBuffers_ has been reassigned.
+        void FillVertexStreamBindings(
+            CNA::Internal::Backends::GpuDrawParams& p, int foldedOffset) const;
+
+        // REMED-GFX-201: rejects a multi-stream ordinary draw on a backend that cannot bind one,
+        // and an over-wide binding set on one whose native input-slot ceiling is lower than XNA's
+        // 16. Deterministic and before native submission: a backend that has not been taught to
+        // re-slot its stride-derived input elements across several bindings would otherwise render
+        // from stream 0 alone, which looks like a correct draw of the wrong data. Single-stream
+        // draws never reach either check.
+        void ValidateVertexStreamCapability(
+            const CNA::Internal::Backends::GpuDrawParams& p) const;
+
+        // REMED-GFX-201: REMED-GFX-113's range gate widened from stream 0 to every per-vertex
+        // stream. `startElement` is vertexStart for the non-indexed route and
+        // baseVertex + minVertexIndex for the indexed one; `elementCount` is the topology-derived
+        // vertex count or numVertices respectively. A stream too short for the requested window is
+        // rejected here even when stream 0 is long enough, naming the offending slot.
+        void ValidateVertexStreamRanges(
+            const CNA::Internal::Backends::GpuDrawParams& p,
+            int startElement,
+            int elementCount,
+            const char* parameterName,
+            const std::string& parameterValue) const;
 
         // The one object-to-GPU-stream conversion behind every built-in vertex type's explicit
         // VertexDeclaration draw: the values are packed into the stream that type's declaration

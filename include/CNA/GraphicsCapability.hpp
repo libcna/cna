@@ -50,6 +50,25 @@ namespace CNA
          * previously let `Texture3D::SetData()`/`GetData()` silently no-op instead of failing
          * cleanly (REMED-CONTENT-004).
          */
-        Texture3D
+        Texture3D,
+
+        /**
+         * @brief More than one per-vertex `VertexBufferBinding` on the ORDINARY (non-instanced)
+         * draw routes -- a `VertexDeclaration` whose elements are split across several bound
+         * buffers (REMED-GFX-201).
+         *
+         * XNA 4.0 allows this on every draw route, and CNA's shared layer carries the complete
+         * binding set to the backend boundary as `GpuDrawParams::vertexStreams`. Whether a backend
+         * can then express the combined layout natively is a real per-backend gap: CNA's backends
+         * derive their native input elements from a single byte stride, so a backend that has not
+         * yet been taught to re-slot those elements across several bindings would silently render
+         * from stream 0 alone. Such a backend reports false here and `DrawPrimitives`/
+         * `DrawIndexedPrimitives` reject a multi-stream draw before native submission instead.
+         *
+         * The default is false: a newly added backend must make an explicit decision to claim
+         * this, exactly like `IVertexBufferBackend::SetVertexDeclaration` being a required
+         * override. Single-stream drawing is unaffected and needs no capability at all.
+         */
+        MultiStreamVertexInput
     };
 } // CNA

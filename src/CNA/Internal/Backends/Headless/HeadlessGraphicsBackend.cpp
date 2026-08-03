@@ -651,6 +651,11 @@ namespace CNA::Internal::Backends::Headless
             // of silently discarding every SetData()/GetData() call.
             case CNA::GraphicsCapability::Texture3D:
                 return false;
+            case CNA::GraphicsCapability::MultiStreamVertexInput:
+                // REMED-GFX-201: Headless rasterizes nothing, so claiming this would fabricate
+                // success for a draw no other backend of its kind can perform. Its trace still
+                // records the complete binding set, which is what a Headless assertion checks.
+                return false;
             default:
                 return true;
         }

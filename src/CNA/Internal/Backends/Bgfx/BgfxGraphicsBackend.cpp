@@ -1939,6 +1939,12 @@ namespace CNA::Internal::Backends::Bgfx
         {
             case CNA::GraphicsCapability::OcclusionQuery:
                 return (bgfx::getCaps()->supported & BGFX_CAPS_OCCLUSION_QUERY) != 0;
+            case CNA::GraphicsCapability::MultiStreamVertexInput:
+                // REMED-GFX-201: not yet implemented here. Every draw builds one bgfx::VertexLayout
+                // from a single byte stride and submits it through setVertexBuffer(stream 0), so a
+                // second per-vertex stream has no layout and no stream index. Reported honestly so
+                // an ordinary multi-stream draw is rejected rather than rendered from stream 0.
+                return false;
             default:
                 return true;
         }
