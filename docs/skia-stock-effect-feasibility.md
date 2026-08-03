@@ -93,11 +93,11 @@ are different requirements and remain gaps.
 |---|---|---|
 | Position/normal/UV layout and ordinary texture | Reusable | SKIA-99 decodes the layout; CPU Texture2D and perspective UV pieces exist. |
 | Six-face cube storage | Reusable | SKIA-80--86 prove bounded face/mip storage and renderable level-zero faces. |
-| Direction-to-face cube sampling and filter/LOD | Gap | No Skia or CPU cube sampler consumes that storage. A 2D image child cannot emulate direction lookup. |
+| Direction-to-face cube sampling and filter/LOD | Gap | A bounded fragment-only cube sampler (`cnaSampleCubeEXT`, SKIA-144–151) now consumes this storage and performs direction-to-face lookup with mip selection and Point/Linear filtering, but only as a standalone 2D SkSL extension bound through `SetTexture(1, TextureCube)` -- not wired to this stock effect's real 3D vertex/normal/eye-space geometry. |
 | World position, inverse-transpose normal and eye vector | Gap | Required before reflection; no integrated CPU normal-space stage. |
 | Three-light diffuse/emissive result | Gap | Effect fields forward in common code, but CPU lighting remains absent. |
 | Per-vertex Fresnel, reflection, lerp and alpha-scaled specular | Gap | Current EasyGL semantics are more than a fragment colour filter and are not prototyped. |
-| Fog, production coverage and public draw | Gap | No complete route; cube sampling capability remains unadvertised. |
+| Fog, production coverage and public draw | Gap | No complete route. A bounded cube-sampling capability now exists and is documented (`docs/skia-cube-volume-sampling-contract.md`), but this effect additionally needs the still-absent normal/eye-space, lighting, Fresnel and public 3D draw pieces above before it could be considered. |
 
 ## SkinnedEffect matrix
 

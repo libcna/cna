@@ -9,7 +9,9 @@ import sys
 from collections import Counter
 
 
-ALLOWED_DISPOSITIONS = {"prototype-only", "2d-only", "transfer-only", "reject"}
+ALLOWED_DISPOSITIONS = {
+    "prototype-only", "2d-only", "transfer-only", "bounded-2d-sampling", "reject",
+}
 
 
 def feature_ids(path: pathlib.Path) -> list[str]:

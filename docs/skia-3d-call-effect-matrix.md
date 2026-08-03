@@ -50,8 +50,8 @@ but none supplies the missing vertex/depth pipeline. The accepted
 | `3D-TRANSFORM` | World/view/projection, normal/bone transforms and viewport mapping. | No vertex stage; projection semantics are investigated by SKIA-96. |
 | `3D-CLIP-INTERPOLATE` | Homogeneous clipping, perspective-correct varyings, winding after projection and viewport depth. | SkVertices is not an XNA clip-space pipeline; exact boundary is SKIA-96. |
 | `3D-TEXTURE-2D` | Effect-driven 2D sampling on geometry and render-target producer/consumer use. | CPU images exist; their 3D coordinates/LOD depend on SKIA-96/SKIA-100. |
-| `3D-TEXTURE-CUBE` | Direction-vector cube sampling, cube render targets and face orientation. | CPU face storage stays transfer-only; SKIA-101 rejects direction sampling. |
-| `3D-TEXTURE-VOLUME` | 3D coordinates, volume filtering and custom-effect binding. | CPU volume storage stays transfer-only; SKIA-101 rejects 3D-coordinate sampling. |
+| `3D-TEXTURE-CUBE` | Direction-vector cube sampling, cube render targets and face orientation, driven by real 3D vertex/geometry data. | CPU face storage stays transfer-only for that route; SKIA-101 still rejects it. SKIA-144–151 separately proved bounded direction-vector sampling through the explicit fragment-only `cnaSampleCubeEXT` extension (`docs/skia-cube-volume-sampling-contract.md`), not driven by geometry -- see the Hard gates note below. |
+| `3D-TEXTURE-VOLUME` | 3D coordinates, volume filtering and custom-effect binding, driven by real 3D vertex/geometry data. | CPU volume storage stays transfer-only for that route; SKIA-101 still rejects it. SKIA-144–151 separately proved bounded 3D-coordinate trilinear sampling through the explicit fragment-only `cnaSampleVolumeEXT` extension, not driven by geometry -- see the Hard gates note below. |
 | `3D-SAMPLER-MIP` | Independent slots, address/filter/mip selection and LOD behavior. | Raster 2D sampling is bounded; 3D/mip contract is unsupported, SKIA-99/SKIA-100. |
 | `3D-SAMPLER-ANISOTROPY` | Probed anisotropic filtering for stock-effect and texture paths. | Capability is false; SpriteBatch level-zero sampling has an exact Linear fallback, while the stock-3D sampler route rejects. |
 | `3D-STATE-DEPTH` | Depth storage, clear, compare/write, target persistence and bias interaction. | No depth attachment; CPU feasibility is conditional SKIA-97. |
@@ -65,7 +65,7 @@ but none supplies the missing vertex/depth pipeline. The accepted
 | `3D-FX-BASIC` | BasicEffect texture, vertex colour, alpha, lighting and shader combinations. | SKIA-100 proves one unlit/no-fog textured PCT route; normal/lighting/fog/variants/public draw remain gaps. |
 | `3D-FX-ALPHATEST` | AlphaTestEffect compare modes, reference alpha, vertex colour and fog on geometry. | Compare/discard pieces stay prototype-only; SKIA-101 rejects the incomplete public route. |
 | `3D-FX-DUAL` | Two independent 2D samplers, doubling equation, vertex colour, alpha and fog. | Two-child formula/address pieces are reusable; per-slot geometry sampling, fog, coverage and public draw remain gaps. |
-| `3D-FX-ENVMAP` | EnvironmentMapEffect cube reflection, Fresnel, amount, eye/normal space and lighting. | SKIA-100 matrix confirms cube direction sampling, normal/eye transforms, lighting/Fresnel and public draw are absent. |
+| `3D-FX-ENVMAP` | EnvironmentMapEffect cube reflection, Fresnel, amount, eye/normal space and lighting. | The bounded `cnaSampleCubeEXT` direction-lookup primitive itself now exists (`3D-TEXTURE-CUBE` above) but is not wired to this stock effect; normal/eye transforms, lighting/Fresnel and public draw remain absent. |
 | `3D-FX-SKINNED` | SkinnedEffect bone weights/matrices, vertex colour, lighting and fog. | Layout/palette data exist; weighted position/normal/fog/lighting and public integration are absent. |
 | `3D-FX-PBR` | PbrEffect and SkinnedPbrEffect material, lighting and skinning variants. | Layout/storage pieces exist; TBN, five samplers, BRDF, optional skinning and public integration are absent. |
 | `3D-FX-CUSTOM` | Arbitrary EasyGL GLSL vertex+fragment programs and custom varyings/layouts. | Fragment-only tagged SkSL stays 2D-only; SKIA-101 rejects a GLSL vertex/compiler emulator. |
@@ -82,8 +82,11 @@ but none supplies the missing vertex/depth pipeline. The accepted
   buffer, depth, custom vertex stage, stock-effect, model, instancing or query rows.
 - SKIA-97 and SKIA-98 are bounded depth/stencil evidence, not permission to weaken attachment or
   state semantics.
-- Cube/volume CPU storage is not sampling support. Fragment-only SkSL is not an EasyGL vertex
-  program. Transparent output is not alpha-test discard. One canvas is not MRT.
+- Cube/volume CPU storage plus SKIA-144–151's bounded fragment-only `cnaSampleCubeEXT`/
+  `cnaSampleVolumeEXT` extension is not a substitute for real 3D vertex/normal/lighting-driven
+  sampling support -- every `3D-TEXTURE-CUBE`/`3D-TEXTURE-VOLUME`/`3D-FX-ENVMAP` row above still
+  rejects geometry-driven use. Fragment-only SkSL is not an EasyGL vertex program. Transparent
+  output is not alpha-test discard. One canvas is not MRT.
 - `Skia_3DDecision_Audit` requires the accepted SKIA-101 ADR to account for every live feature ID
   in this document. The complete emulator was rejected, so SKIA-102 supplies uniform public
   failures. SKIA-103 is obsolete unless a replacement ADR first accepts and funds a successor.

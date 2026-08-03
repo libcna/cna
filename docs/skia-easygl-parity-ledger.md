@@ -82,8 +82,8 @@ file. The validator rejects missing, stale, duplicated, malformed, or unclassifi
 | `IEffectBackend::SetUniformFloatArray/3` | Sets a GL scalar array. | Exact reflected float-array count/data write. | `bounded` | SKIA-92; `Skia_SkSL_UniformTexture` |
 | `IEffectBackend::SetUniformVec2Array/3` | Sets a GL vec2 array. | Exact reflected float2-array count/data write. | `bounded` | SKIA-92; `Skia_SkSL_UniformTexture` |
 | `IEffectBackend::BindTexture/2` | Binds an extra 2D sampler. | Units 1–7 weakly bind declared cnaTexture1–7 children; draw snapshots current live pixels. | `bounded` | SKIA-92; `Skia_SkSL_UniformTexture` |
-| `IEffectBackend::BindTextureCube/2` | Binds an extra cube sampler. | Rejects with the shared stable no-3D diagnostic. | `unsupported` | SKIA-80, SKIA-89, SKIA-102 |
-| `IEffectBackend::BindTexture3D/2` | Binds an extra volume sampler. | Rejects with the shared stable no-3D diagnostic. | `unsupported` | SKIA-82, SKIA-89, SKIA-102 |
+| `IEffectBackend::BindTextureCube/2` | Binds an extra cube sampler. | Binds unit 1 for the bounded `cnaSampleCubeEXT` extension when the effect declares all six `cnaCubeFace0`-`5` children; rejects unit≠1, undeclared children, null, or an expired backend. | `bounded` | SKIA-144–151; `Skia_CubeVolume_Effect_Binding`, `Skia_CubeVolume_Sampling_Oracle` |
+| `IEffectBackend::BindTexture3D/2` | Binds an extra volume sampler. | Binds unit 1 for the bounded `cnaSampleVolumeEXT` extension when the effect declares the `cnaVolumeAtlas0` child; rejects unit≠1, undeclared children, null, an expired backend, or a padded atlas exceeding the 256 MiB budget. | `bounded` | SKIA-144–151; `Skia_CubeVolume_Effect_Binding`, `Skia_CubeVolume_Sampling_Oracle` |
 | `ISpriteBatchBackend::Begin/0` | Starts EasyGL sprite submission. | Starts checked immediate canvas session. | `implemented` | SKIA-31 |
 | `ISpriteBatchBackend::End/0` | Flushes/ends sprite submission. | Ends checked canvas session. | `implemented` | SKIA-31 |
 | `ISpriteBatchBackend::SetTransformMatrix/1` | Applies sprite transform in GL shader. | Applies equivalent SkCanvas transform. | `implemented` | SKIA-35 |

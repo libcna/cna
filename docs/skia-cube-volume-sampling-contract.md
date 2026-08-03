@@ -1,10 +1,14 @@
 # Skia cube and volume sampling contract
 
-Status: normative SKIA-144 contract for Phase S15 (SKIA-144–151). Fixes every ABI, orientation,
-addressing, filtering, mip/LOD, precision, and resource-limit decision before any sampling code is
-written. SKIA-145/147 implement the two formulas below; SKIA-149 wires them into the public
-`ShaderEffect`/`SetTexture` surface. Nothing here changes `TextureCube`/`Texture3D` CPU storage
-(`docs/skia-texture-storage.md`, SKIA-80–86), which remains exact and unaffected.
+Status: normative SKIA-144 contract for Phase S15 (SKIA-144–151), **closed**. Fixed every ABI,
+orientation, addressing, filtering, mip/LOD, precision, and resource-limit decision before any
+sampling code was written, then SKIA-145–150 implemented, empirically confirmed, and publicly
+wired every formula below exactly as decided (two design corrections along the way are called out
+in place: the volume w-axis blend's unclamped-`flooredS0` fix, SKIA-148; the speculative cached
+volume-atlas resource counter that was never built, SKIA-150). SKIA-145/147 implemented the two
+formulas below; SKIA-149 wired them into the public `ShaderEffect`/`SetTexture` surface. Nothing
+here changes `TextureCube`/`Texture3D` CPU storage (`docs/skia-texture-storage.md`, SKIA-80–86),
+which remains exact and unaffected.
 
 ## Non-goals
 
@@ -256,21 +260,41 @@ set, only adds a sampling path for the one format already supported).
   atlas would exceed budget, even though the same volume's plain storage already fit -- matching
   this codebase's established transactional-refusal pattern (no partial state change on rejection).
 
-## What SKIA-145–151 each still owe
+## What SKIA-145–151 delivered
 
-This document fixes the contract; none of the following exist yet and are unimplemented until their
-own task lands:
+This document fixed the contract before any sampling code existed; every item below is now
+implemented and tested exactly as decided here, with two corrections folded back into this document
+in place rather than left as a divergent implementation:
 
 - `cnaSampleCubeEXT`/`cnaSampleVolumeEXT` preamble source and `CompileProgram` child-name parsing
-  (SKIA-145 cube, SKIA-147 volume).
-- Empirical pixel confirmation (or correction) of the cube face/UV table above (SKIA-145) and the
-  volume padding/blend formulas above (SKIA-147/148).
-- `RenderTargetCube`/mip/seam/snapshot-invalidation policy for a cube bound as a *sampling* source
-  rather than a draw destination (SKIA-146).
+  (SKIA-145 cube, SKIA-147 volume) -- done, `SkiaCubeSampling.hpp`/`SkiaVolumeSampling.hpp`.
+- Empirical pixel confirmation of the cube face/UV table above (SKIA-145, `Skia_CubeSampling_Spike`)
+  and the volume padding/blend formulas above (SKIA-147/148, `Skia_VolumeSampling_Spike`/
+  `Skia_VolumeTrilinear_Spike`) -- both confirmed the table/formulas as designed, with one formula
+  correction along the way (the w-axis blend's unclamped-`flooredS0` fix, folded into this document
+  by SKIA-148).
+- `RenderTargetCube` mip/seam/snapshot-invalidation policy for a cube bound as a *sampling* source
+  rather than a draw destination (SKIA-146, `Skia_CubeRenderTargetSampling_Spike`) -- done.
 - `BindTextureCube`/`BindTexture3D` no longer throwing `ThrowSkiaUnsupported3D`, with weak lifetime
-  tracking matching the existing `BindTexture` pattern (SKIA-149).
-- Public sampling oracles, `SkiaResourceStats` accounting fields, and cross-backend/Release/
-  sanitizer evidence (SKIA-150).
+  tracking matching the existing `BindTexture` pattern (SKIA-149, `Skia_CubeVolume_Effect_Binding`)
+  -- done, reachable end to end through the real public `ShaderEffect`/`SpriteBatch`/`SetTexture(1,
+  TextureCube|Texture3D)` API.
+- Public sampling oracles covering content-loaded and target-produced inputs, cross-backend
+  regression evidence, and the volume-atlas resource budget check this document's own "Resource
+  limits" section requires (SKIA-150, `Skia_CubeVolume_Sampling_Oracle`) -- done. The speculative
+  cached, invalidation-tracked `SkiaResourceStats` volume-atlas counter this section originally
+  anticipated was never built: SKIA-149 settled on rebuilding the atlas fresh every draw instead
+  (see "Resource limits" above), so there is no live backend-owned object for such a counter to
+  represent; SKIA-150 corrected this document rather than adding a counter that would misrepresent
+  what is actually retained.
 - Final capability wording distinguishing this bounded sampling subset from general cube/volume/3D
-  support (SKIA-151); `GraphicsCapability::Texture3D`/`ThreeD`/`CustomEffects` reporting is
-  unaffected by this document alone.
+  support (SKIA-151) -- done; see `docs/skia-texture-storage.md`, `docs/skia-3d-emulation-adr.md`,
+  `docs/skia-3d-refusal.md`, `docs/skia-3d-call-effect-matrix.md`, `docs/skia-effects.md`,
+  `docs/skia-stock-effect-feasibility.md`, `docs/graphics-backend-feature-matrix.md`,
+  `docs/skia-successor-contract-matrix.md`, `docs/skia-easygl-parity-ledger.md`, and
+  `include/CNA/GraphicsCapability.hpp`'s `Texture3D` doc comment, all updated to describe this
+  bounded, fragment-only extension precisely rather than either overclaiming general 3D/cube/volume
+  sampling support or continuing to describe it as entirely absent.
+  `GraphicsCapability::Texture3D`/`ThreeD`/`CustomEffects` reporting itself is unaffected by this
+  document alone -- Skia still reports `ThreeD`/`CustomEffects` false and `Texture3D` true for
+  storage only, matching every other backend's meaning for that flag.

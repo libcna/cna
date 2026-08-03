@@ -21,9 +21,18 @@ Skia also overrides the backend methods that previously inherited a less-specifi
 
 - 32-bit index creation names `CreateIndexBuffer32`, independently from the 16-bit path;
 - effect-aware, indexed and instanced draws each name their actual entry point;
-- tagged SkSL cube and volume bindings use the same prefix;
 - an unsupported occlusion-query object reports `IsComplete=false` and `PixelCount=0`, while
   `Begin` and `End` throw instead of silently doing nothing.
+
+Tagged SkSL cube/volume bindings (`SetTexture(1, TextureCube&)` / `SetTexture(1, Texture3D&)`) are
+**not** part of this blanket prefix since SKIA-149 (`docs/skia-cube-volume-sampling-contract.md`):
+they are a separate, bounded, fragment-only sampling extension, not a rejected 3D route. For an
+effect whose own SkSL never calls `cnaSampleCubeEXT`/`cnaSampleVolumeEXT`, binding still rejects,
+but with an actionable `std::invalid_argument` naming exactly which call is missing -- not this
+prefix. This contract's own fixture (`Skia_3D_Refusal`) proves that specific case still rejects
+(see "Atomicity and retained behavior" below); `Skia_CubeVolume_Effect_Binding` and
+`Skia_CubeVolume_Sampling_Oracle` prove the positive case, an effect that does declare and bind
+them, succeeds and samples real pixels.
 
 `DepthStencilState::None` and reference value zero remain accepted because SpriteBatch uses them to
 describe the absence of depth/stencil work. Any enabled depth/write/stencil state, nonzero stencil
@@ -42,14 +51,17 @@ exercises:
 - all colored/effect-aware/instanced backend draw methods;
 - active depth/stencil state, reference stencil, wireframe, and all six attachment clear methods;
 - all seven stock 3D effect families and `ModelMesh::Draw`;
-- tagged SkSL cube/volume binding and occlusion-query lifecycle.
+- tagged SkSL cube/volume binding for an effect that never declares the matching children (the one
+  case where cube/volume binding still rejects, per above) and occlusion-query lifecycle.
 
 The target stays byte-exact after every failure and a depth/stencil-only public clear. A combined
 public clear changes only color. The same fixture then proves cube/volume CPU SetData/GetData and a
 normal SpriteBatch draw still work. Failed reference-stencil application also leaves the common
 public state cache unchanged.
 
-This contract does not turn cube/volume transfer storage into shader sampling, does not claim a
-depth attachment, and does not promote stock effects. The only true capability in the 3D-adjacent
-set remains bounded CPU `Texture3D` storage. See `skia-occlusion-query-feasibility.md` for the
-SKIA-104 proof that final raster pixels cannot supply a samples-passed query.
+This contract governs the general/stock 3D draw and effect boundary only. It does not claim a depth
+attachment or promote stock effects, and it does not change SKIA-144–151's separate, bounded
+`cnaSampleCubeEXT`/`cnaSampleVolumeEXT` fragment-only sampling extension
+(`docs/skia-cube-volume-sampling-contract.md`), which is real but narrower than this refusal
+boundary -- see above. See `skia-occlusion-query-feasibility.md` for the SKIA-104 proof that final
+raster pixels cannot supply a samples-passed query.

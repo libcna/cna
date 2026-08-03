@@ -2258,16 +2258,85 @@ level-boundary contract.
   and ASan+UBSan (`ASAN_OPTIONS=detect_leaks=0` for the documented `libGLX_mesa` display-test false
   positive) with zero regressions and zero sanitizer findings.
 
+## Completed in this session: SKIA-151 (closes Phase S15)
+
+- Pure documentation/wording task -- no runtime code changed except one doc-comment-only edit to
+  `include/CNA/GraphicsCapability.hpp`'s `Texture3D` enum value (tightened wording, no behavior
+  change). Dispatched a research agent first to map every stale claim across the Skia doc set
+  before touching anything, since SKIA-145–150 (implemented across several earlier sessions) had
+  each only updated their own narrow slice of documentation, leaving several older docs still
+  flatly describing cube/volume shader sampling as absent or blanket-refused.
+- Corrected, file by file: `docs/skia-cube-volume-sampling-contract.md` (closing "still owe"
+  section rewritten from "unimplemented" to "delivered"; status line marked closed);
+  `docs/skia-texture-storage.md` (matrix rows and closing sections split into
+  general/stock-sampling-still-unsupported versus the new bounded-extension rows, including
+  `RenderTargetCube` as a proven sampling source per SKIA-150's own oracle);
+  `docs/skia-3d-emulation-adr.md` (added a new `bounded-2d-sampling` disposition to the ADR's own
+  formal legend for the two rows that were previously `transfer-only` -- required updating
+  `scripts/validate_skia_3d_decision.py`'s allowlist too, since the audit enforces the legend);
+  `docs/skia-3d-refusal.md` (cube/volume binding is no longer part of the blanket no-3D-prefix set;
+  the one remaining rejection case, an effect that never declares the children, now correctly cites
+  the precise `std::invalid_argument`); `docs/skia-3d-call-effect-matrix.md` (rows and hard-gates
+  note updated to distinguish geometry-driven cube/volume sampling, still rejected, from the
+  bounded fragment-only extension, now proven); `docs/skia-effects.md` (the
+  `SetTexture(unit, TextureCube/Texture3D)` ABI row rewritten from "still unsupported" to its
+  actual bind/reject rules); `docs/skia-stock-effect-feasibility.md` (`EnvironmentMapEffect`'s
+  cube-sampling gap row updated to note the bounded primitive now exists but isn't wired to the
+  stock effect -- verdict stays `Gap`); `docs/graphics-backend-feature-matrix.md` (cube/volume
+  sampling row's symbol changed from ❌, this doc's own "tested and found to genuinely not work"
+  meaning, to ⚠️ bounded); `docs/skia-successor-contract-matrix.md` (`SAMPLING-CUBE`/
+  `SAMPLING-VOLUME` baseline moved `refused`→`bounded`, task ranges extended through SKIA-151;
+  `CAP-Texture3D` deliberately stays `transfer-only` -- storage and sampling remain separate
+  contracts by design, matching this task's own acceptance criterion -- with corrected evidence
+  text); `docs/skia-easygl-parity-ledger.md` (`BindTextureCube`/`BindTexture3D` rows moved
+  `unsupported`→`bounded` with their real conditional bind/reject rules); and
+  `GraphicsCapability.hpp`'s `Texture3D` doc comment (tightened to explicitly name the separate
+  bounded extension it does not represent).
+- Twice caught and fixed a literal `|` character inside new table-row prose before running the
+  validators (once in this session's own SKIA-149 row, once again while drafting a
+  `graphics-backend-feature-matrix.md` row) -- both would have silently broken that row's column
+  parsing had the validator not caught them first. Worth remembering: never write a raw `|` inside
+  markdown table cell prose in this repo's Skia docs, even as `SetTexture(A\|B)`-style shorthand;
+  use "or" instead.
+- Deliberately left `docs/skia-backend.md` and `docs/skia-release-gate.md` untouched: both
+  explicitly scope their capability claims to the signed SKIA-1–114 baseline, changing "only after
+  the successor release gate passes" -- the same deferral SKIA-143 (closing Phase S14) respected,
+  so promoting their tables is SKIA-170's job. `plan_skia.md`'s own top banner is unaffected for the
+  same reason: SKIA-151 closes Phase S15 within the still-active SKIA-115–170 expansion, not the
+  expansion itself. Also left `docs/skia-generated-blender.md` line 75 alone (a research-agent
+  finding graded "optional, low priority" -- its actual claim, that blend-tuple promotion doesn't
+  imply 3D/CustomEffects capability, remains true even though grouping "cube/volume sampling" with
+  "3D" there is now slightly imprecise).
+- Added a resource-budget table row and a new "Performance characteristics" section to
+  `docs/skia-successor-resource-oracles.md` documenting the volume-atlas 256 MiB bind-time check
+  (SKIA-150) and the deliberate no-cross-draw-cache design: the atlas and all six cube-face
+  children rebuild fresh on every draw that samples a bound cube/volume, trading draw-call cost
+  for the live-update guarantee -- a real, previously-undocumented performance characteristic
+  callers issuing many draws per frame against the same binding should know about.
+- All six Skia audit scripts pass (`validate_skia_3d_decision`, `validate_skia_parity_ledger`,
+  `validate_skia_release_gate`, `validate_skia_successor_contracts`, `validate_skia_surface_formats`,
+  `validate_skia_test_matrix`). Full 165/165 Skia suite passes in Debug; Release/ASan+UBSan are
+  unaffected by this task's doc-only changes (already covered by SKIA-149/150's own
+  three-configuration verification, and the one header edit is a comment, not code).
+- **Deliberately NOT addressed**: SKIA-149's own volume-address-mode follow-up (Wrap/Mirror exist
+  in `cnaSampleVolumeEXT`'s formula but `MakeSpriteShaderEXT` still hardcodes `cnaVolumeAddressModesEXT`
+  to Clamp, never reading the active `SamplerState`) is a runtime code change, not documentation --
+  out of SKIA-151's own scope (wording/budgets/performance/parity docs only). It remains open and
+  should be picked up as its own follow-up task if/when Phase S16 or a later successor task revisits
+  the volume sampling ABI; `docs/skia-cube-volume-sampling-contract.md` and the SKIA-149 plan row
+  both already flag it explicitly so it isn't lost.
+
 ## Next candidates
 
-1. SKIA-151: finalize cube/volume sampling capability wording, resource budgets, performance bounds,
-   and parity documentation, closing Phase S15. Should also cover the SKIA-149 volume-address-mode
-   follow-up (currently hardcoded to Clamp) if it is meant to be in scope for the phase.
-2. SKIA-152–158: continue Phase S16 (wider explicit 2D effects) in dependency order.
-3. SKIA-159–170: add opt-in Ganesh, probe real MSAA/anisotropy, re-evaluate MRT, and hold the
+1. SKIA-152–158: continue Phase S16 (wider explicit 2D effects) in dependency order.
+2. SKIA-159–170: add opt-in Ganesh, probe real MSAA/anisotropy, re-evaluate MRT, and hold the
    successor gate only after the raster extensions are stable.
-4. The pre-existing `CNA_ENABLE_NET=OFF`/monolithic-`CnaTests` ENet build-graph defect is recorded
+3. The pre-existing `CNA_ENABLE_NET=OFF`/monolithic-`CnaTests` ENet build-graph defect is recorded
    by SKIA-112/113 but remains outside Skia scope.
+4. Standalone follow-up (not yet a numbered task): wire `cnaVolumeAddressModesEXT` to the active
+   `SamplerState` in `MakeSpriteShaderEXT` instead of the current hardcoded Clamp, so
+   Wrap/Mirror volume addressing (already implemented in the sampling formula since SKIA-148)
+   becomes reachable through the real public API.
 
 ## Known boundaries / assumptions
 

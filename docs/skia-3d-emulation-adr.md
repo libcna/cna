@@ -80,6 +80,10 @@ Dispositions have exact meanings:
   must reject;
 - `2d-only`: an existing 2D analogue remains supported, but it must not be accepted as 3D evidence;
 - `transfer-only`: CPU cube/volume transfer storage remains, while shader sampling/3D use rejects;
+- `bounded-2d-sampling`: added by SKIA-144–151 (`docs/skia-cube-volume-sampling-contract.md`) after
+  this ADR was accepted -- CPU transfer storage remains as `transfer-only` describes, and a
+  separate, narrow, fragment-only 2D SkSL extension (`cnaSampleCubeEXT`/`cnaSampleVolumeEXT`) now
+  also samples that storage, but general/stock 3D shader sampling still rejects exactly as before;
 - `reject`: no positive Skia contract exists for the requirement.
 
 | Feature ID | Disposition | Evidence behind the decision | SKIA-102 consequence |
@@ -96,8 +100,8 @@ Dispositions have exact meanings:
 | `3D-TRANSFORM` | `prototype-only` | CPU WVP/viewport math passes for bounded fixtures. | Do not expose transforms without the complete clip/raster/effect route. |
 | `3D-CLIP-INTERPOLATE` | `prototype-only` | SKIA-96 proves direct SkVertices affine and near-plane mismatches; CPU clipping is incomplete. | Reject input requiring the absent public pipeline. |
 | `3D-TEXTURE-2D` | `2d-only` | Texture2D and SpriteBatch sampling are proven; geometry derivatives/LOD are not. | Retain 2D texture APIs, reject their use by public 3D draws. |
-| `3D-TEXTURE-CUBE` | `transfer-only` | Six-face/mip CPU transfer storage and face rendering exist; direction sampling does not. | Retain transfers/face targets, reject cube shader binding/sampling. |
-| `3D-TEXTURE-VOLUME` | `transfer-only` | Mip/slice/box CPU transfer storage exists; 3D-coordinate filtering does not. | Retain transfers, reject volume shader binding/sampling. |
+| `3D-TEXTURE-CUBE` | `bounded-2d-sampling` | Six-face/mip CPU transfer storage and face rendering exist; SKIA-144–151 additionally proved bounded direction-to-face sampling through the explicit fragment-only `cnaSampleCubeEXT` extension -- not a general 3D sampler. | Retain transfers/face targets; `BindTextureCube` now binds for the bounded SkSL extension only (unit/undeclared-children/null/expired checks), still rejecting for any general/stock 3D shader path. |
+| `3D-TEXTURE-VOLUME` | `bounded-2d-sampling` | Mip/slice/box CPU transfer storage exists; SKIA-144–151 additionally proved bounded 3D-coordinate trilinear sampling through the explicit fragment-only `cnaSampleVolumeEXT` extension -- not a general 3D sampler. | Retain transfers; `BindTexture3D` now binds for the bounded SkSL extension only (unit/undeclared-children/null/expired/atlas-budget checks), still rejecting for any general/stock 3D shader path. |
 | `3D-SAMPLER-MIP` | `reject` | Raster 2D SpriteBatch mipmaps and affine LOD are supported, but geometry derivatives and the public 3D sampler/effect route remain absent. | Retain the verified 2D mip route; reject 3D sampling and never substitute level zero silently. |
 | `3D-SAMPLER-ANISOTROPY` | `reject` | The capability is false and SpriteBatch has an exact complete-Linear fallback including mips; the stock-3D route remains absent. | Keep 3D sampling rejected and do not reinterpret the 2D fallback as hardware anisotropy. |
 | `3D-STATE-DEPTH` | `prototype-only` | SKIA-97 proves one float LessEqual/write buffer, not public depth formats/bias. | Reject depth attachments/3D clears through a consistent boundary. |
@@ -111,7 +115,7 @@ Dispositions have exact meanings:
 | `3D-FX-BASIC` | `prototype-only` | SKIA-100 matches one unlit/no-fog textured PCT route; lighting and variants are absent. | Effect properties may exist, but every public geometry draw must reject. |
 | `3D-FX-ALPHATEST` | `prototype-only` | Compare/discard pieces pass in isolation without depth/stencil/fog integration. | Do not expose the stock effect as a working 3D draw route. |
 | `3D-FX-DUAL` | `prototype-only` | Two-child formula/addressing passes without full sampler/fog/coverage integration. | Do not expose the stock effect as a working 3D draw route. |
-| `3D-FX-ENVMAP` | `reject` | Cube direction lookup, normal/eye transforms, Fresnel and lighting are absent. | Reject environment-map geometry and cube sampling uniformly. |
+| `3D-FX-ENVMAP` | `reject` | The bounded `cnaSampleCubeEXT` direction lookup itself now exists (`3D-TEXTURE-CUBE` above) but is not wired to `EnvironmentMapEffect`; normal/eye transforms, Fresnel and lighting remain absent regardless. | Reject environment-map geometry uniformly; the bounded cube-sampling primitive existing does not promote this stock effect. |
 | `3D-FX-SKINNED` | `reject` | Layout/palette data exist, but weighted position/normal/fog/lighting do not. | Reject skinned geometry without partial deformation. |
 | `3D-FX-PBR` | `reject` | TBN, five samplers, BRDF and skinned variant are absent. | Reject PBR and SkinnedPBR geometry uniformly. |
 | `3D-FX-CUSTOM` | `2d-only` | Tagged SkSL is fragment-only; arbitrary EasyGL GLSL vertex/fragment programs are incompatible. | Retain explicit 2D SkSL, reject custom 3D effect draws/source assumptions. |

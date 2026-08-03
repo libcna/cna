@@ -16,7 +16,8 @@ silently widen one to obtain a passing image.
 | CNA-owned stores for one resource | 256 MiB | Sum every retained mip, face, slice, conversion shadow and resolve store with checked `size_t` arithmetic. A transient store that overlaps retained data is part of peak accounting. |
 | Tagged SkSL source | 64 KiB | Reject before invoking the runtime compiler. |
 | Reflected SkSL uniform block | 16 KiB | Reject the compiled effect before publishing it. |
-| Reflected uniforms / texture children | 64 / 8 | Names and types remain separately validated; these counts are ceilings, not ABI promises. |
+| Reflected uniforms / texture children | 64 / 8 | Names and types remain separately validated; these counts are ceilings, not ABI promises. The 8 covers `cnaTexture0`-`7` only -- the reserved `cnaCubeFace0`-`5`/`cnaVolumeAtlas0` children (SKIA-144–151, `docs/skia-cube-volume-sampling-contract.md`) are a separate, orthogonal budget of up to 7 more, present only when an effect's own source calls `cnaSampleCubeEXT`/`cnaSampleVolumeEXT`. |
+| Volume sampling atlas (`SetTexture(1, Texture3D)`) | 256 MiB | Checked once at bind time from the bound `Texture3D`'s fixed dimensions (`SkiaEffectBackend::BindTexture3D`, SKIA-150); can reject even when the volume's own unpadded storage fits, since per-tile padding overhead is proportionally larger for small slices. See `docs/skia-cube-volume-sampling-contract.md`'s "Resource limits" section. |
 
 `CheckedSizeMultiply`, `CheckedSizeAdd`, `CheckedTexelBytes2D/3D`, and
 `CheckedSkiaResourceAccumulate` preserve their result argument on failure. Constructors must
@@ -94,6 +95,18 @@ Valid readback, sampling and unbind are identical resolve barriers and materiali
 once with the same complete odd/NPOT area partition as Texture2D. Unlike ordinary texture-authored
 ownership barriers, target descendants intentionally follow EasyGL resolve semantics and are
 replaced by a later parent write. Common `Texture2D` target staging is therefore never authoritative.
+
+## Performance characteristics
+
+- `SkiaEffectBackend::MakeSpriteShaderEXT` repacks the volume sampling atlas and rebuilds all six
+  `cnaCubeFace0`-`5` cube-face image children fresh on every single draw call that samples a bound
+  `TextureCube`/`Texture3D` -- there is no cross-draw cache (SKIA-149/150). This is a deliberate
+  trade of draw-call cost for correctness: it is what makes a `SetData()` issued after
+  `SetTexture()` but before the next draw immediately visible with no separate invalidation path,
+  matching `BindTexture`'s existing 2D contract exactly. A caller issuing many draws per frame
+  against the same bound cube/volume pays this rebuild cost every time; see
+  `docs/skia-cube-volume-sampling-contract.md`'s "Resource limits" section for the full design
+  rationale, including why a cached, invalidation-tracked alternative was considered and rejected.
 
 ## Pixel and precision rules
 
