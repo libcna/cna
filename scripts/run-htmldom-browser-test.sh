@@ -1,25 +1,41 @@
 #!/usr/bin/env bash
-# plan_html_dom.md HTMLDOM-72: runs the HTML_DOM backend's smoke test in a real browser.
+# plan_html_dom.md HTMLDOM-72/HTMLDOM-112: runs one of the HTML_DOM backend's browser test pages in
+# a real browser.
 #
 # The HTML_DOM backend renders through actual DOM elements and CSS, so a wasm module loaded under
 # `node` proves nothing at all -- SDL_Init(SDL_INIT_VIDEO) throws there before any backend code
 # runs. This drives the generated page through headless Chromium instead, so the checks the test
 # makes against the produced DOM are real.
 #
-# Usage: scripts/run-htmldom-browser-test.sh [build-dir]
+# Usage: scripts/run-htmldom-browser-test.sh [build-dir] [page]
 #        build-dir defaults to cmake-build-htmldom.
+#        page is one of: smoke (default), pixel, stress, dispose.
 #
-# Requires: a completed HTML_DOM build (cna_test_htmldom_smoke.html + .js + .wasm), node, and the
-# playwright package with a Chromium binary. Exit code 0 = every check passed.
+# To build and run all four pages in one command, use scripts/run-htmldom-test-suite.sh instead.
+#
+# Requires: a completed HTML_DOM build of the requested page's target, node, and the playwright
+# package with a Chromium binary. Exit code 0 = every check passed.
 set -euo pipefail
 
 BUILD_DIR="${1:-cmake-build-htmldom}"
-PAGE="cna_test_htmldom_smoke.html"
+PAGE_NAME="${2:-smoke}"
+
+case "${PAGE_NAME}" in
+    smoke)   TARGET="cna_test_htmldom_smoke" ;;
+    pixel)   TARGET="cna_test_htmldom_pixel_verification" ;;
+    stress)  TARGET="cna_test_htmldom_stress" ;;
+    dispose) TARGET="cna_test_htmldom_dispose" ;;
+    *)
+        echo "error: unknown page '${PAGE_NAME}' -- expected smoke|pixel|stress|dispose" >&2
+        exit 2
+        ;;
+esac
+PAGE="${TARGET}.html"
 
 if [[ ! -f "${BUILD_DIR}/${PAGE}" ]]; then
-    echo "error: ${BUILD_DIR}/${PAGE} not found -- build the HTML_DOM smoke test first:" >&2
+    echo "error: ${BUILD_DIR}/${PAGE} not found -- build it first:" >&2
     echo "  emcmake cmake -S . -B ${BUILD_DIR} -DCNA_GRAPHICS_BACKEND=HTML_DOM" >&2
-    echo "  cmake --build ${BUILD_DIR} --target cna_test_htmldom_smoke -j4" >&2
+    echo "  cmake --build ${BUILD_DIR} --target ${TARGET} -j3" >&2
     exit 2
 fi
 

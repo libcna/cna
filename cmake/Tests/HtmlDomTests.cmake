@@ -58,4 +58,13 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "HTML_DOM")
     target_link_options(cna_test_htmldom_dispose PRIVATE
         -sALLOW_MEMORY_GROWTH=1
         -sEXIT_RUNTIME=1)
+
+    # plan_html_dom.md HTMLDOM-112: one target that builds every browser test page, so
+    # scripts/run-htmldom-test-suite.sh (and CI) can build the whole suite with a single
+    # `cmake --build ... --target cna_test_htmldom_all` instead of four separate target names.
+    add_custom_target(cna_test_htmldom_all DEPENDS
+        cna_test_htmldom_smoke
+        cna_test_htmldom_pixel_verification
+        cna_test_htmldom_stress
+        cna_test_htmldom_dispose)
 endif()

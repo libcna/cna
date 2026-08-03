@@ -31,8 +31,17 @@ Select it with:
 
 ```bash
 emcmake cmake -S . -B cmake-build-htmldom -DCNA_GRAPHICS_BACKEND=HTML_DOM
-cmake --build cmake-build-htmldom --target cna_test_htmldom_smoke -j4
+cmake --build cmake-build-htmldom --target cna_test_htmldom_smoke -j3
 scripts/run-htmldom-browser-test.sh cmake-build-htmldom
+```
+
+To build and run all four pages (smoke/pixel/stress/dispose) in one command instead, use the
+HTMLDOM-112 suite runner, which also backs `.github/workflows/htmldom-ci.yml`:
+
+```bash
+emcmake cmake -S . -B cmake-build-htmldom -DCNA_GRAPHICS_BACKEND=HTML_DOM \
+  -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_C_COMPILER_LAUNCHER=ccache
+scripts/run-htmldom-test-suite.sh cmake-build-htmldom
 ```
 
 ---

@@ -1,0 +1,137 @@
+# plan_html_dom.md HTMLDOM-112: the HTML_DOM backend's browser test suite had never run in CI --
+# scripts/run-htmldom-browser-test.sh only ever served the smoke page manually, and no workflow in
+# this directory mentioned "htmldom" at all. This job builds the whole suite
+# (scripts/run-htmldom-test-suite.sh, which itself builds the cna_test_htmldom_all CMake target and
+# drives all four pages -- smoke, pixel, stress, dispose -- through headless Chromium via
+# Playwright) and archives the harness logs so a failure is diagnosable from the Actions UI alone.
+name: htmldom-ci
+
+on:
+  push:
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  pull_request:
+    branches: [develop, master]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  workflow_dispatch:
+
+concurrency:
+  group: htmldom-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  htmldom-browser-tests:
+    name: HTML_DOM browser test suite (smoke+pixel+stress+dispose)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      # Pinned to the emsdk version verified working in this project's own dev sandbox
+      # (docs/html-dom-backend.md's "emsdk 6.0.5" mention predates this pin; re-verify before
+      # bumping rather than tracking "latest", which can silently break a wasm build).
+      EMSDK_VERSION: "6.0.3"
+    steps:
+      - name: Checkout cnahtmldom (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Clone sharp-runtime (public sibling repo, no token needed)
+        run: |
+          set -euo pipefail
+          cd "${GITHUB_WORKSPACE}/.."
+          git clone --depth 1 --branch develop \
+            "https://github.com/openeggbert/sharp-runtime.git" sharp-runtime
+
+      - name: Cache emsdk install
+        id: emsdk-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/emsdk
+          key: emsdk-${{ runner.os }}-${{ env.EMSDK_VERSION }}
+
+      - name: Install emsdk (cache miss only)
+        if: steps.emsdk-cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          git clone https://github.com/emscripten-core/emsdk.git ~/emsdk
+          cd ~/emsdk
+          ./emsdk install "${EMSDK_VERSION}"
+
+      - name: Activate emsdk
+        run: |
+          cd ~/emsdk
+          ./emsdk activate "${EMSDK_VERSION}"
+
+      - name: Record SDL submodule commit (for the cache key)
+        id: sdlsha
+        run: echo "sha=$(git -C third_party/SDL rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache prebuilt Emscripten SDL (built once from the submodule, reused across runs)
+        uses: actions/cache@v4
+        with:
+          path: .sdl-prebuilt-emscripten
+          key: sdl-emscripten-${{ steps.sdlsha.outputs.sha }}
+
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: ~/.ccache
+          key: ccache-htmldom-${{ github.sha }}
+          restore-keys: |
+            ccache-htmldom-
+
+      - name: Install system dependencies (ccache, Playwright's browser deps, a virtual display)
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ccache xvfb python3
+
+      - name: Install Playwright + Chromium
+        run: |
+          set -euo pipefail
+          npm install -g playwright
+          npx playwright install --with-deps chromium
+
+      - name: Start a virtual display (Xvfb :99)
+        run: |
+          set -euo pipefail
+          Xvfb :99 -screen 0 1280x1024x24 &
+          disown
+          for i in $(seq 1 40); do
+            if xdpyinfo -display :99 >/dev/null 2>&1; then
+              echo "Xvfb ready on :99"
+              echo "DISPLAY=:99" >> "$GITHUB_ENV"
+              exit 0
+            fi
+            sleep 0.5
+          done
+          echo "Xvfb did not become ready on :99" >&2
+          exit 1
+
+      - name: Configure (HTML_DOM, ccache)
+        run: |
+          set -euo pipefail
+          source ~/emsdk/emsdk_env.sh
+          emcmake cmake -S . -B cmake-build-htmldom \
+            -DCNA_GRAPHICS_BACKEND=HTML_DOM \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache
+
+      - name: Build and run the full HTML_DOM browser test suite
+        run: |
+          set -euo pipefail
+          source ~/emsdk/emsdk_env.sh
+          scripts/run-htmldom-test-suite.sh cmake-build-htmldom
+
+      - name: Archive browser test artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: htmldom-browser-test-logs
+          path: |
+            cmake-build-htmldom/*.html
+            cmake-build-htmldom/*.js
+          retention-days: 7
