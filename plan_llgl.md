@@ -1,5 +1,26 @@
 # LLGL Graphics Backend — Implementation Plan
 
+> **Audit update (2026-08-03, revision `212cb62c`): functionally broad, but not yet production-ready
+> or at unqualified EasyGL parity.** The current backend builds with both LLGL Vulkan and OpenGL
+> modules and the core OpenGL pixel tests (`Smoke`, `2D`, `TextureReadback`, `Presentation`, `3D`,
+> `BasicEffect`, `RenderTarget`, `MRT`, `MultiSampleMask`) pass on Xvfb/llvmpipe. The audit also
+> confirmed several correctness bugs which are already partly described in `known_bugs.md`: replay
+> grouped by target can violate public call order, a queued draw can observe a later mutation of the
+> same vertex/index buffer, the 3D pipeline key drops blend/write-mask state, custom Vulkan shaders
+> with more than one descriptor set can crash during pipeline creation, and stock effects with more
+> than one texture do not retain per-slot sampler state. Phase LLGL-8 below is the remediation gate;
+> completing an earlier implementation/audit phase must not be interpreted as closing these bugs.
+>
+> **Verification limits of this audit:** the Vulkan module compiled, but the available Xvfb server
+> did not expose DRI3, so Vulkan presentation failed before backend rendering with
+> `VK_ERROR_SURFACE_LOST_KHR`. This is an infrastructure limitation, not counted as a renderer
+> regression. OpenGL-only execution additionally reproduced the known back-buffer Y-offset problem:
+> `Llgl_Deferred_Viewport` passed 37/39 checks and `Llgl_Deferred_Scissor` 43/47; the failing cases
+> switch between a render target and a non-zero-Y viewport/scissor on the back buffer. The complete
+> `CnaTests` target is currently also blocked independently of LLGL because `CNA_ENABLE_NET=OFF`
+> still compiles ENet tests and cannot find `enet/enet.h` (tracked by LLGL-55 as test-infrastructure
+> hardening, not as a graphics defect).
+>
 > **Status (2026-07-31): the 2D baseline is implemented and verified against real GPU pixels on
 > BOTH renderer modules.** `CNA_GRAPHICS_BACKEND=LLGL` configures and builds
 > (`cna_backend_graphics_llgl`), and on this environment's virtual display (Xvfb + Mesa lavapipe
@@ -32,8 +53,9 @@
 > their own paragraphs below. `SkinnedPbrEffect` (`PbrEffect` + skinning combined) is done too --
 > see its own paragraph below as well. Every stock effect this backend originally scoped is now
 > implemented.
-> Each either reports itself unsupported through `SupportsCapability()`/the shared interface's own
-> "no backend" convention, or throws through `NotYetImplemented()`. None of them silently no-ops.
+> The originally scoped stock-effect families are present, but the 2026-08-03 audit disproved the
+> older claim that every unsupported or incomplete path fails explicitly: several state, cache and
+> deferred-resource gaps are silent today. See the current gap list and Phase LLGL-8.
 >
 > **`RenderTarget2D` is implemented too** (`LLGL-26`, 2026-07-31): draw into it, unbind back to the
 > swap chain, sample it back onto the screen with `SpriteBatch`, draw the 3D path (`BasicEffect` +
@@ -334,7 +356,7 @@ plan's own `LLGL-17` investigation did exactly that).
 | 6 | **X11 only, for now.** A Wayland SDL window is refused with a clear error naming `SDL_VIDEODRIVER=x11`. | LLGL 0.04b compiles Wayland support only when explicitly enabled, and this integration does not enable it. Refusing beats handing LLGL a handle it cannot present to. |
 | 7 | **The X11 visual is reported to LLGL, not left for LLGL to choose.** | A GLX context created for a visual other than the drawable's cannot be made current. The SDL window already committed to a visual when it was created, so it is the only one that can work. |
 | 8 | **Both shader flavours are checked in, and the choice is made from the module's reported shading language, GLSL first.** Vulkan gets SPIR-V words, OpenGL gets GLSL source. | A build needs no shader toolchain — same discipline as the Bgfx and SDL_GPU backends' generated headers. The GLSL-first order is load-bearing, not cosmetic: a modern OpenGL module reports SPIR-V too, and accepting it there silently breaks every binding (see `LLGL-17`). |
-| 9 | **The whole frame is buffered on the CPU and recorded at `Present()`.** Clears and sprites go into one ordered command list; vertex data accumulates in one array. | LLGL forbids buffer uploads inside a render pass. Deferring everything means uploads happen with no command buffer open at all, and submission order matches call order without any pass-splitting. |
+| 9 | **The whole frame is buffered on the CPU and recorded at `Present()`.** Clears and draws first enter one logical command list; replay currently groups them by render-target identity. | LLGL forbids buffer uploads inside a render pass. Deferral keeps uploads outside render passes, but target-identity bucketing does **not** preserve call order across target transitions and lets later buffer mutations affect earlier queued draws. LLGL-45 and LLGL-46 must replace those two unsafe consequences without losing the upload constraint. |
 | 10 | **Sprite geometry is baked into window pixels on the CPU; the GPU viewport stays at the full window.** Letterboxing lives in the geometry, XNA's sub-`Viewport` clipping in the scissor. | Keeps one projection constant for a whole frame, which is what makes decision 9 cheap. |
 | 11 | **Clip space is treated as Y-up on every module.** | LLGL submits Vulkan viewports with a negated height, flipping Vulkan's natively Y-down clip space to match OpenGL's. `RenderingCapabilities::screenOrigin` describes viewport/scissor *rectangle* space, not clip space — keying the projection's Y sign off it renders the scene upside down (found by reading back real pixels, see `LLGL-13`). |
 | 12 | **`LLGL_ENABLE_EXCEPTIONS=ON`.** | LLGL's `LLGL_TRAP` aborts the process outright when exceptions are off. CNA reports backend failures as exceptions everywhere else, so an abort would replace a reportable failure with a crash. |
@@ -411,9 +433,13 @@ plan's own `LLGL-17` investigation did exactly that).
 | LLGL-29 | Real window resize (`ResizeBuffers` and the presentation rect following it). | ✅ | Done 2026-07-31 — `examples/llgl_resize_test.cpp`, `Llgl_Resize` (+ `_OpenGL`), 8/8 on both modules. Drives a real resize the way a game actually does it (`GraphicsDeviceManager.PreferredBackBufferWidth/Height` + `ApplyChanges()`, which resizes the real SDL window through `GameWindow::EndScreenDeviceChange`), grows past the original size, shrinks below it, and re-applies a square virtual canvas with `Letterbox` mode afterward -- covering `GetViewportSize()` following the resize, a pixel only reachable in the newly grown area, a read at the old (now out-of-range) bounds throwing rather than returning garbage, and the letterbox rect recomputing from the CURRENT physical resolution rather than a cached one. **Two real timing issues found and fixed, neither reachable from any test that only used the DEFAULT 800x480 size**: (1) `SDL_SetWindowSize()` (reached from both the very first `CreateDevice()` and every later `ApplyChanges()`) is not guaranteed synchronous under X11 -- even under a bare Xvfb with no window manager, the X server applies it asynchronously, so `LlglSdlSurface::GetContentSize()` (and, worse, the Vulkan driver's own surface-capabilities query) can still observe the OLD size for a moment after the call returns; calling `UpdateSwapChainResolution()`/`Present()` immediately afterward with no settling step produced a `VK_ERROR_OUT_OF_DATE_KHR` crash on `vkQueuePresentKHR`. Fixed in the TEST (not the backend -- a real game's own resize handling has the exact same obligation) by calling `SDL_SyncWindow()` + `SDL_PumpEvents()` before every post-resize `Present()`. (2) `ReadBackbuffer()` addresses LOGICAL (virtual-resolution) coordinates, not window pixels -- a letterbox bar cannot be named through it at all, since the bars sit outside the logical canvas by definition; fixed by following `llgl_presentation_test.cpp`'s own established pattern of switching to a 1:1 `NativeBackBuffer` presentation purely for reading back, after the frame's geometry has already been baked into window pixels by the draw call. |
 | LLGL-23 | MSAA back buffer. | ✅ | Done 2026-07-31 — `examples/llgl_msaa_test.cpp`, `Llgl_Msaa` (+ `_OpenGL`), 7/7 on Vulkan (5/7 + 2 documented `[SKIP]`s on OpenGL — see below). A right triangle's diagonal hypotenuse is scanned transversally at the one pixel whose centre sits exactly on the geometric edge (perpendicular distance zero), so any real multisample pattern must split that pixel's samples across it, while single-sample rendering is always a clean in-or-out decision — proving genuine antialiasing rather than merely "didn't crash". **Real, non-test finding along the way**: `MultiSampleCount` is honoured by this backend ONLY at swap-chain construction time (`requestedSampleCount_` read once in the constructor, forwarded straight into `LLGL::SwapChainDescriptor::samples`) — there is no `ApplyMultiSampleCount()` override, matching EasyGL's own documented precedent. Since a `Game`'s single, eagerly-constructed `GraphicsDevice` is always built with default `PresentationParameters` (`MultiSampleCount=0`) before any `GraphicsDeviceManager` preference can possibly reach it, **MSAA can never actually be enabled through the ordinary `Game` + `GraphicsDeviceManager.ApplyChanges()` flow on this backend** — confirmed with a throwaway probe (`GetMultiSampleCount()` stayed 0 with `PreferMultiSampling=true`) before the real test was written. The test therefore constructs two independent, raw `GraphicsDevice` objects directly (mirroring `examples/dx3_resize_transaction_test.cpp`'s own established pattern for exactly this reason), each with its own window and an explicit `PresentationParameters.MultiSampleCount`. **Module-dependent, like `WireFrame`/`AnisotropicFiltering` already are**: on this environment (Xvfb + Mesa), the Vulkan module (lavapipe) genuinely applies the requested sample count; the OpenGL module (llvmpipe via GLX) does not — `GetMultiSampleCount()` stays 0 at every requested count (1/2/4/8 all tried), with nothing reported even under `CNA_LLGL_DEBUG=1` — a real GLX/driver constraint, not a CNA bug. The test detects this at runtime and reports `[SKIP]` for the two sample-count-dependent checks on that module instead of failing, while still asserting `ReadBackbuffer` returns a sane result either way. |
 
+> Supersession note: LLGL-21's historical final sentence says `MultiSampleMask` was still unapplied at
+> that point. LLGL-33 later wired it into the descriptor; the remaining defect is the truncated
+> pipeline-cache identity tracked by LLGL-48, plus LLGL's OpenGL-module limitation.
+
 ---
 
-## Phase LLGL-5 — 3D pipeline (not started)
+## Phase LLGL-5 — 3D pipeline (implemented; conformance gaps tracked in Phase LLGL-8)
 
 | # | Task | Status | Notes |
 | --- | --- | --- | --- |
@@ -455,18 +481,35 @@ parity with `EasyGL`. The real, currently-known gaps:
   - Per-slot `BlendState.ColorWriteChannels1..3` under MRT does not work on the OpenGL module
     (`LLGL-21`) — `glColorMaski` is not honoured by this environment's GL driver once the real
     `independentBlendEnabled` bug was fixed.
-* **`BlendState.MultiSampleMask` is not implemented at all** (`LLGL-21`, deliberately deprioritized
-  — LLGL's sample mask lives in the blend descriptor and would multiply the pipeline cache with no
-  real use on this backend yet).
-* **`RenderTargetCube` has no MSAA or mip-mapping support** — only plain `RenderTarget2D` got real
-  `MultiSampleCount`/`mipMap` support (`LLGL-26` follow-ups); `RenderTargetCube`'s own `mipMap`/
-  `multiSampleCount` parameters are still silently ignored.
-* **`RenderTargetCube` is not wired into this project's shared cross-backend `RenderTargetCube`
-  oracles** (`examples/rendertargetcube_usage_test.cpp`'s `PreserveContents`/MSAA/mip battery,
-  `rendertargetcube_getdata_contract_test.cpp`'s row-order/orientation/mirroring `Contract` table,
-  `rendertargetcube_msaa_face_test.cpp`) — left as a documented follow-up rather than guessed at.
-* **`SkinnedEffect`'s `VertexColorEnabled` (CNA-only `NOXNA` extension property) and its stride-56
-  vertex-colour variant are not implemented** on this backend.
+* **Target-identity replay can violate public command order.** `GroupFrameCommandsByTargetEXT()`
+  merges every command for one target into one bucket and always appends the swap-chain bucket last.
+  Producer/consumer chains that revisit a target, cube faces sharing one depth resource, or a
+  back-buffer consumer between two binds of the same target can therefore observe the wrong cycle.
+* **Deferred buffer mutation is not versioned.** `VertexBuffer::SetData()` and index-buffer upload
+  mutate or replace the live LLGL resource immediately, while an earlier queued draw stores only the
+  resource pointer and replays at frame end. Two draws reusing one buffer in a frame can both render
+  the second upload.
+* **Pipeline cache identity is incomplete.** The 3D path keeps only the low 16 bits of
+  `MakeBlendPipelineKey()`, dropping blend factors/functions and `ColorWriteChannels0`; the shared
+  blend key also keeps only the low nibble of the 32-bit `MultiSampleMask`. Distinct legal states can
+  reuse the first pipeline.
+* **Custom-effect descriptor layout is unsafe on Vulkan.** The backend creates one fixed descriptor
+  set layout, but accepts SPIR-V that refers to additional sets. Pipeline creation can then crash in
+  the native driver instead of rejecting an unsupported shader by name.
+* **Sampler state is global, not per texture slot.** `ApplySamplerState()` ignores every slot except
+  0, so `DualTextureEffect` slot 1 and the extra `PbrEffect` maps silently use slot 0's sampler.
+* **Back-buffer and module-specific state contracts remain incomplete.**
+  `FixedHeightDynamicWidth` can replace an explicitly requested logical width with one derived from
+  the physical aspect ratio, and OpenGL back-buffer draws with a non-zero Y viewport/scissor can
+  render nothing. `minDepth`/`maxDepth`, depth bias, slope-scale depth bias, and draw-time stencil
+  state are accepted but not applied.
+* **MRT combined-feature coverage is incomplete.** `LlglMRTBinding` inherits sample count 1 and its
+  render target is built from the resolved single-sample colour textures, so binding multisampled
+  slots as MRT silently loses MSAA semantics; mip regeneration of all MRT slots is also not yet a
+  reliable contract.
+* **Some legal BasicEffect/layout/camera combinations are missing or unexplained.** In particular,
+  untextured+unlit vertices without vertex colour and lit+textured vertices without a normal are
+  rejected, and one orthographic `CreateLookAt` conformance scenario remains unresolved.
 * **Only per-pixel lighting.** Real XNA compiles 9 distinct vertex-shader permutations
   ({vertex-lit, one-light, pixel-lit} × {1,2,4 bones}); this backend is per-pixel-lit only
   regardless of `PreferPerPixelLighting` — the same documented deviation every established CNA
@@ -478,12 +521,13 @@ parity with `EasyGL`. The real, currently-known gaps:
   needed slot 0), but the underlying `independentBlendEnabled` bug (`LLGL-21`) means any FUTURE
   per-slot blend-state feature added to this backend needs the same care.
 
-None of these are silent — each either reports itself unsupported through
-`GraphicsDevice.SupportsCapability()`, is detected at runtime and reported `[SKIP]` (not `[FAIL]`)
-by the relevant CTest, or throws by name. See `docs/llgl-backend.md`'s own "Capability boundary"
-table for the authoritative, per-capability answer this backend gives.
+Several of these **are currently silent** (pipeline-cache collisions, later buffer uploads changing
+earlier draws, per-slot samplers, MRT+MSAA degradation, ignored depth range/bias/stencil), while the
+multi-set custom-effect case can crash. Until Phase LLGL-8 is complete, neither
+`SupportsCapability()` nor the currently registered CTests are a complete statement of backend
+correctness. `docs/llgl-backend.md` must be updated together with each remediation task.
 
-Of the gaps listed above, most are genuinely NOT actionable from this backend's own code: the
+Of the module-dependent gaps listed above, several are genuinely NOT actionable from this backend's own code: the
 module-dependent driver/library limitations (`LLGL-30` WireFrame-on-Vulkan, back-buffer MSAA and
 cube textures on OpenGL, `ColorWriteChannels1..3`-under-MRT on OpenGL) all require either patching
 vendored LLGL or a different driver, neither of which this project controls; `PreserveContents`
@@ -492,7 +536,7 @@ lighting matches every other established CNA backend except `D3D9`, so "fixing" 
 create a new inconsistency rather than close one. The remaining items ARE real, scoped, implementable
 work:
 
-## Phase LLGL-6 — Closing the remaining implementable EasyGL gap (not started)
+## Phase LLGL-6 — Closing the originally identified implementable EasyGL gaps (implemented; hardware verification open)
 
 | # | Task | Status | Notes |
 | --- | --- | --- | --- |
@@ -505,7 +549,12 @@ work:
 
 ---
 
-## Phase LLGL-7 — Wiring the remaining shared cross-backend test suite (complete: LLGL-39 through LLGL-44)
+## Phase LLGL-7 — Auditing the remaining shared cross-backend test suite (audit complete; remediation is Phase LLGL-8)
+
+The status in this historical table means that a batch was inspected and its LLGL contract branch
+was decided; it does **not** mean that every test in the row passes or is registered. In particular,
+LLGL-41, LLGL-43 and LLGL-44 retain open correctness findings and must not be treated as green
+backend-conformance milestones. Their fixes and mandatory registrations are tracked below.
 
 Found by diffing `cmake/Tests/EasyGLTests.cmake` against `cmake/Tests/LlglTests.cmake`
 (`comm -23` on the sorted `examples/*.cpp` basenames each references), then filtering to files
@@ -551,14 +600,60 @@ count (`grep -c "CNA_BACKEND_" examples/<file>.cpp`):
 | LLGL-43 | Deferred-capture / `SpriteBatch` viewport contract-branch batch. | `deferred_viewport_capture_test.cpp`, `deferred_scissor_capture_test.cpp`, `deferred_source_lifetime_test.cpp`, `spritebatch_3d_order_test.cpp` | 🟢 | 4/4 done. `Llgl_Deferred_Viewport` (39/39 PASS): every deferred draw executes under the `GraphicsDevice.Viewport` active at its own public call; `depthRangeApplies` declared `false` (this backend's `SetViewport` never forwards `minDepth`/`maxDepth` to LLGL, the same boundary already declared on bgfx). `Llgl_Deferred_Scissor` (47/47 PASS): the same contract for `GraphicsDevice.ScissorRectangle`/`RasterizerState.ScissorTestEnable`, including a degenerate zero-width/height rectangle rasterizing nothing (`emptyScissorDrawsNothing=true`, unlike Vulkan/EasyGL/bgfx's own declared `false`). `Llgl_SpriteBatch3DOrder` (83/83 PASS, 3 declared skips): a stock 3D draw issued after a `SpriteBatch` inside one bind cycle executes in public order, not grouped by family. `deferred_source_lifetime_test.cpp` (8/17 legs pass in full, NOT registered): critically, **0/17 legs crashed** -- the REMED-GFX-167 defect this fixture exists to catch (a heap-use-after-free when a deferred draw's source dies before replay) does not reproduce on LLGL. The other 9 legs fail their own unconditional backbuffer check -- a fourth reproduction of the `FixedHeightDynamicWidth` finding (this file's 72x36 backbuffer request), broadened into `known_bugs.md`'s existing entry rather than a new one. |
 | LLGL-44 | Misc state contract-branch batch. | `graphicsdevice_ordered_clear_test.cpp`, `frontface_winding_test.cpp`, `stock_effect_sampler_contract_test.cpp` | 🟢 | 3/3 done. `Llgl_GraphicsDevice_OrderedClear` (46/46 PASS, no fix needed): every declared value (`orderedClear`/`clearOnPreserveTarget`/`clearIgnoresViewport`/`clearIgnoresScissor` all true, `stencilBuffer3D`/`preferMultiSampling` both false) was correct on the first try. `frontface_winding_test.cpp` (115/127, NOT registered): a genuine, NEW, OPEN bug found -- W3's 4 buffer-reuse entry points (`SetVertexBuffer`+`DrawPrimitives`/`DrawIndexedPrimitives` variants) each reuse the SAME persistent `VertexBuffer`/`IndexBuffer` object for two draws in one frame, and `SetData()` overwrites the live GPU buffer immediately while the earlier draw's queued command only replays at frame end -- so the second `SetData()` silently erases the first draw's content. A candidate fix (defer the SECOND `SetData()`'s write via the same `ScheduleBufferReleaseEXT` deferred-release mechanism already used for buffer destruction) was implemented, found to introduce a NEW crash on an unrelated, previously-passing entry point, and fully reverted -- see `known_bugs.md`'s new open entry for the complete analysis and why a second blind attempt was not made. `stock_effect_sampler_contract_test.cpp` (64/65, NOT registered): a second, INDEPENDENT, already-self-documented-in-code OPEN finding -- `ApplySamplerState()` only ever tracks slot 0's own sampler state in a single set of member variables, so `DualTextureEffect`'s slot 1 (and `PbrEffect`'s other 4 texture units) always samples with slot 0's current filter/address settings rather than its own. Not attempted, given the adjacent VertexBuffer fix's own crash earlier in this same batch. This completes LLGL-44 (3/3) and Phase LLGL-7 in full. |
 
+### Effective LLGL-7 status after the 2026-08-03 audit
+
+This table supersedes the historical green icons and "complete" wording embedded in the long batch
+notes above; those icons recorded investigation coverage, not a passing conformance result.
+
+| Batch | Audit coverage | Current conformance status |
+| --- | --- | --- |
+| LLGL-39 | Complete | 🟡 Two shared tests remain unregistered; OpenGL Y-offset coverage is missing. |
+| LLGL-40 | Complete | 🟡 `backbuffer_first_read_test.cpp` remains blocked by logical-width handling. |
+| LLGL-41 | Complete | 🟡 Ordering, multi-set shader, layout-variant, logical-width and MRT-mip findings remain open. |
+| LLGL-42 | Complete | 🟢 All seven texture contract batches are registered and passing within declared module capabilities. |
+| LLGL-43 | Complete | 🟡 Source-lifetime exactness and OpenGL deferred viewport/scissor cases remain open. |
+| LLGL-44 | Complete | 🟡 Persistent buffer reuse and per-slot sampler state remain open. |
+
+---
+
+## Phase LLGL-8 — Correctness and production-readiness remediation (open)
+
+Priority is part of the acceptance gate: P0 defects can reorder or corrupt draws or crash a native
+driver; P1 defects silently apply the wrong public graphics contract; P2 items are incomplete
+capabilities or infrastructure weaknesses. A task is complete only when its named regression tests
+are registered for every renderer module that advertises the relevant capability. Excluding a
+failing leg, changing an expected pixel to `[SKIP]`, or narrowing a capability solely to make CI
+green does not close the task unless the API truly cannot support the contract and the limitation is
+reported before submission.
+
+| # | Priority | Task | Acceptance gate | Status |
+| --- | --- | --- | --- | --- |
+| LLGL-45 | P0 | **Replace target-identity bucket replay with ordered render-pass segments.** Preserve the public order of target binds, clears, producer/consumer sampling, back-buffer reads and cube-face operations. Implement real `PreserveContents` across flush/rebind either with load-capable passes, an explicit copy/restore path, or another design proven equivalent; do not rely on incidental one-bucket behaviour or the unconditional swap-chain-last rule. | Register and pass all legs of `rendertarget_depthstencil_usage_test.cpp`, `rendertarget_effect_source_test.cpp`, `rendertarget_producer_consumer_test.cpp`, `rendertarget_backbuffer_consumer_test.cpp` and `rendertarget_pass_boundary_test.cpp`, including A→B→A, target→backbuffer→target, shared cube depth and mid-frame readback cases. No ordering-specific exclusion remains. | ⬜ |
+| LLGL-46 | P0 | **Version deferred vertex/index data.** A queued draw must retain the exact buffer contents and native resource lifetime visible at its public draw call even if `SetData()` later overwrites or enlarges the same object. Prefer immutable per-frame slices/ring allocation or explicit versioned upload commands over in-place writes; releasing a replaced buffer must remain deferred until its last queued consumer is submitted. | Register `frontface_winding_test.cpp`; all W3 persistent-buffer reuse entry points pass for indexed/non-indexed and dynamic/static buffers on Vulkan and OpenGL. Add a focused grow-capacity regression proving the old resource is neither freed early nor reused with new contents. | ⬜ |
+| LLGL-47 | P0 | **Make custom-effect resource layouts safe.** Reflect or validate compiled GLSL/SPIR-V before LLGL pipeline creation. Either build every referenced descriptor set/binding or reject unsupported set numbers, resource types and stage visibility with a deterministic CNA exception; malformed/unsupported shader input must never reach a driver-crash path. | Enable `rendertarget_effect_source_test.cpp` C1 and add shaders using sets 0+1, missing bindings and conflicting declarations. Each supported shader renders correctly; each unsupported shader throws before `CreatePipelineState`. Run with Vulkan validation enabled where available. | ⬜ |
+| LLGL-48 | P1 | **Use collision-free typed pipeline-cache keys.** Replace ad-hoc multiply/truncate packing with key structs whose equality and hash include every field consumed by the relevant LLGL pipeline descriptor: vertex layout, topology, render-pass signature, depth/raster state, all blend factors/functions/write masks, full 32-bit `MultiSampleMask`, scissor enable and effective sample count. | Register `gfx077_colorwritechannels_3d_test.cpp`; add pairwise tests for blend factors/functions and masks that differ only above bit 3, including an 8x-MSAA mask when supported. Instrumented test builds assert that descriptor equality and key equality cannot disagree. `Llgl_BasicEffect` alpha blending remains green. | ⬜ |
+| LLGL-49 | P1 | **Track and capture sampler state per texture slot.** Store at least every slot consumed by stock effects, acquire the correct sampler for each slot, and capture those sampler objects in each deferred command so later state changes cannot leak backward. | Register `stock_effect_sampler_contract_test.cpp` at 65/65 or better. Add independent filter/address tests for `DualTextureEffect` slot 1 and all five `PbrEffect` maps; slot 0 changes must not alter another slot and vice versa. | ⬜ |
+| LLGL-50 | P1 | **Separate logical back-buffer dimensions from presentation scaling.** `FixedHeightDynamicWidth` may choose a presentation rectangle, but it must not silently shrink an explicitly requested readable back buffer or make valid columns unreachable. Define the mode contract once and make draw, readback, viewport and resize code use the same dimensions. | Register and fully pass `backbuffer_first_read_test.cpp`, `bound_target_lifetime_test.cpp` and `deferred_source_lifetime_test.cpp` with their 72x36 cases. Add wider-than-window and narrower-than-window aspect tests plus resize round-trips. | ⬜ |
+| LLGL-51 | P1 | **Fix OpenGL back-buffer viewport/scissor Y conversion and test both modules explicitly.** Normalize LLGL's screen-origin rules at the command boundary without changing render-target orientation or the already-passing zero-Y cases. | Add `_OpenGL` registrations for `deferred_viewport_capture_test.cpp`, `deferred_scissor_capture_test.cpp`, `spritebatch_custom_viewport_test.cpp`, `spritebatch_viewport_switch_test.cpp` and the applicable cube/plural tests. The current 37/39 and 43/47 OpenGL results become full passes, including non-zero-Y target→backbuffer→target sequences. | ⬜ |
+| LLGL-52 | P1 | **Complete legal stock-effect vertex-layout permutations and resolve the orthographic camera case.** Add a defined untextured+unlit colourless BasicEffect path and a defined policy/shader for lit+textured input without normals; diagnose the `Orthographic`+`CreateLookAt` mismatch rather than masking it with a contract branch. | Register and pass `rasterizerstate_cullmode_indexed_basiceffect_test.cpp`, `rendertarget_sampling_orientation_test.cpp` CD4 and `rasterizerstate_cullmode_camera_test.cpp` on each capable module. Unsupported declarations, if any remain, are rejected before queuing with a precise message. | ⬜ |
+| LLGL-53 | P2 | **Finish or explicitly narrow raster/depth/stencil state support.** Wire viewport `minDepth`/`maxDepth`, depth bias, slope-scale depth bias and the full front/back stencil state into descriptors and cache keys. If LLGL 0.04b cannot express one field on a module, expose a precise module capability instead of accepting it as a silent no-op. | Add differential pixel tests for each state and for two draws differing only in that state. Enable the stencil branch of `graphicsdevice_ordered_clear_test.cpp`; update `SupportsCapability()` and `docs/llgl-backend.md` from measured module results. | ⬜ |
+| LLGL-54 | P2 | **Define and implement combined MRT contracts.** Preserve the effective sample count when multiple multisampled targets are bound, create matching multisample/resolve attachments, regenerate mip chains for every written MRT slot, and either support cube-face slots or reject them before allocation without advertising broader support. | Add MRT+MSAA edge-resolution tests, per-slot mip readback after MRT writes, mixed requested/effective sample-count validation, and lifetime tests for every slot. `LlglMRTBinding::GetSampleCount()` must report the actual native target sample count. | ⬜ |
+| LLGL-55 | P2 | **Harden build and virtual-display CI.** Do not compile ENet tests when `CNA_ENABLE_NET=OFF`; make shaderc discovery conditional on the renderer modules that need runtime SPIR-V compilation; preflight Xvfb for GLX/DRI3 and report Vulkan WSI unavailability as an infrastructure skip rather than twelve renderer crashes. Keep explicit Vulkan and `_OpenGL` lanes so auto-selection cannot hide one module. | A clean LLGL build with `CNA_ENABLE_NET=OFF` produces `CnaTests`; OpenGL-only, Vulkan-only and dual-module configurations build. CI records whether Xvfb supports DRI3, runs the matching module suite, and never labels `VK_ERROR_SURFACE_LOST_KHR` from missing DRI3 as a backend pixel failure. | ⬜ |
+| LLGL-56 | P2 | **Clean up native-surface ownership and platform scope.** Stop leaking `XVisualInfo` from repeated `LlglSdlSurface::GetNativeHandle()` calls, document ownership in the adapter, and investigate a Wayland/native-handle path or make the X11-only restriction a first-class build/runtime capability. | ASan/LSan surface-create/destroy and resize loops show no X11 allocation leak. X11 rejection/selection is covered by tests; Wayland is either supported by an integration test or rejected once with an actionable capability message. | ⬜ |
+
+Recommended execution order: LLGL-45 → LLGL-46 → LLGL-47 → LLGL-48, then LLGL-49 through
+LLGL-54 in parallel-safe, independently testable changes, followed by LLGL-55/56 and the existing
+LLGL-38 real-hardware matrix. The command-replay redesign in LLGL-45 should land first because
+several later tests otherwise conflate their own state contract with known cross-target reordering.
+
 ---
 
 ## Closing notes
 
-The 2D baseline is real and pixel-verified on both renderer modules — but on one platform, and
-against a software rasterizer rather than a real GPU. That is the honest scope. Before this backend
-is offered as a general alternative to `VULKAN` or `EASYGL` it still needs a run on real hardware,
-and phase LLGL-5 for anything beyond 2D.
+The 2D baseline and a broad 3D/effect/render-target surface are real and pixel-verified, but only on
+one platform and primarily against software rasterizers. Before this backend is offered as a general
+alternative to `VULKAN` or `EASYGL`, Phase LLGL-8's P0/P1 tasks and LLGL-38's real-hardware matrix
+must be complete; P2 limitations must either be implemented or accurately capability-gated.
 
 `LLGL-17` is worth remembering for more than its fix: every symptom pointed at resource binding,
 and every experiment aimed there was wasted. What actually settled it was a shader that could not
