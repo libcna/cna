@@ -88,14 +88,18 @@ renderer.
 - [x] **GLIDE-AUD-001 — Make the standard clear path work without inventing stencil.** The shared backend contract now distinguishes default depth and stencil planes. Glide reports depth=true/stencil=false, so `GraphicsDevice::Clear(Color)` preserves its colour+Z clear while masking only its impossible stencil portion; the smoke target executes this standard path.
 - [x] **GLIDE-AUD-002 — Implement the XNA viewport contract and combine it correctly with scissor.** Glide now stores and validates XY/depth viewport state, maps 3D XY/Z into it, and submits the viewport/scissor/framebuffer intersection through `grClipWindow`. The smoke target contains an offset-viewport probe; the comprehensive state matrix remains under GLIDE-AUD-007.
 - [x] **GLIDE-AUD-003 — Fence texture mutation/reuse and make resource lifetime safe.** `UpdatePixels()` and address-mode rebuilds now finish the FIFO before replacing TMU contents; destruction finishes before returning ranges. Textures keep only a weak native-state reference, so backend-first teardown is safe instead of dereferencing a destroyed backend.
-- [ ] **GLIDE-AUD-004 — Correct per-vertex lighting for non-uniform world transforms.**
-  **Reopened by the 2026-08-03 audit:** the helper computes the inverse World 3×3, but the current
-  row-vector multiplication indexes its columns and therefore applies the inverse rather than the
-  required inverse-transpose. The existing diagonal non-uniform-scale probe cannot distinguish
-  those matrices. Correct the multiplication (or store the inverse-transpose explicitly), retain
-  singular/non-finite rejection, and add rotation plus non-symmetric shear tests whose expected
-  transformed normals are calculated independently of the production helper. Add a lit-image
-  probe before restoring the completed mark.
+- [x] **GLIDE-AUD-004 — Correct per-vertex lighting for non-uniform world transforms.**
+  `TransformGlideLightingNormal()` now dots the normal against each *row* of the inverse World 3×3
+  (`inverseWorld[0..2]`, `[3..5]`, `[6..8]`) instead of striding down its columns, which applies the
+  required inverse-transpose instead of the plain inverse. Singular/non-finite rejection in
+  `InvertGlideLightingWorld3x3()` is unchanged. Added three portable probes whose expected normals
+  are derived independently of the production helper: a 90° rotation (orthogonal World, so the
+  correct answer is the ordinary point-transform row, not an inverted one), a non-symmetric unit
+  lower-triangular shear whose inverse is derived by hand via forward substitution, and a
+  perpendicularity-preservation invariant (`n·t == 0` before implies `n'·t' == 0` after, for any
+  invertible World) checked against a second, unrelated shear matrix. All three fail against the
+  pre-fix code and pass after it. A lit-image probe on real Glide output remains blocked by the
+  same external i686 `sharp-runtime` `__int128` dependency as GLIDE-AUD-006/007.
 - [x] **GLIDE-AUD-005 — Make reset, virtual resolution and presentation policy honest.** Glide explicitly supports only `NativeBackBuffer` and swap intervals 0/1. Resize remains an atomic fit-or-throw operation, which `GraphicsDevice::SetVirtualResolution()` already commits only after backend success.
 - [ ] **GLIDE-AUD-006 — Add an automated native-ABI contract test.** The backend deliberately hand-declares Glide 3.x types, numeric constants, layouts and stdcall byte counts. Factor the loader-facing declarations into a small auditable unit and test them against a purpose-built x86 fake `glide3x.dll` that records calls, including undecorated and decorated exports, `grSstWinOpen`, vertex layout, combiner state, texture calls, clear/readback and shutdown ordering. This must run without dgVoodoo and without the external `sharp-runtime` i686 executable dependency. **Implementation staged:** `GlideAbi.hpp` now owns every renderer-facing signature and native layout; the independent x86 fake DLL + Wine contract resolves the complete 37-export surface, checks undecorated and `name@N` stdcall lookup plus missing-export rejection, and calls every resolved signature while the fake recorder proves each entry point was reached. The actual CNA renderer still cannot be instantiated in that target because the sibling i686 `sharp-runtime` build fails on `__int128`; when that dependency is portable, the next stage must use the recorder to assert the real initialization, draw, texture, clear/readback and teardown sequences and their values/order.
 - [ ] **GLIDE-AUD-006 follow-up — real renderer fake-DLL sequence.** **needs_external_dependency:** the sibling `../sharp-runtime` must first build for i686 MinGW without `__int128`. Then link CNA against the fake DLL and assert real call order/values for startup, primitive modes, texture updates, clear/readback and shutdown.

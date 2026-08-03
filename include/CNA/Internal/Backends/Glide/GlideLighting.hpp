@@ -109,10 +109,13 @@ namespace CNA::Internal::Backends::Glide
     [[nodiscard]] inline GlideLightingVector TransformGlideLightingNormal(
         const GlideLightingVector& normal, const std::array<float, 9>& inverseWorld)
     {
+        // Row-vector normals transform as n' = n * inverse(World)^T. Dotting `normal` against
+        // each *row* of `inverseWorld` (rather than each column) applies that transpose directly,
+        // without needing a separately materialized transposed matrix.
         return NormalizeGlideLightingVectorOrZero({
-            normal.x * inverseWorld[0] + normal.y * inverseWorld[3] + normal.z * inverseWorld[6],
-            normal.x * inverseWorld[1] + normal.y * inverseWorld[4] + normal.z * inverseWorld[7],
-            normal.x * inverseWorld[2] + normal.y * inverseWorld[5] + normal.z * inverseWorld[8]});
+            normal.x * inverseWorld[0] + normal.y * inverseWorld[1] + normal.z * inverseWorld[2],
+            normal.x * inverseWorld[3] + normal.y * inverseWorld[4] + normal.z * inverseWorld[5],
+            normal.x * inverseWorld[6] + normal.y * inverseWorld[7] + normal.z * inverseWorld[8]});
     }
 
     /**
