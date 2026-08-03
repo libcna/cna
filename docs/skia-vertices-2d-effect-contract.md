@@ -109,6 +109,68 @@ before any public API integration) that:
 
 Explicitly out of scope for this task (owned by later Phase S16 tasks): the versioned public SkSL
 mesh/effect ABI naming/uniform/child-texture reflection rules (SKIA-154), any GLSL-source
-translation (SKIA-155), compilation hardening/caching (SKIA-156), and public `ShaderEffect`/content
+translation (SKIA-155), compilation/cache hardening (SKIA-156), and public `ShaderEffect`/content
 integration (SKIA-157). SKIA-153 only needs to prove the underlying `SkVertices` mechanism is sound
 and pixel-correct; it does not wire a public API.
+
+## SKIA-154: the mesh/effect ABI itself
+
+### Marker
+
+`CNA_SKIA_SKSL_MESH_V1`, reusing `ShaderEffect`'s existing two-opaque-string payload convention
+exactly like `CNA_SKIA_SKSL_V1` does (the first string is the marker, never source; the second is
+the SkSL 100 fragment program). A different marker value -- not a variant of the sprite marker --
+so a mesh-mode program can never be silently accepted down the sprite path or vice versa; each
+compiles through its own dedicated code path with its own validation rules.
+
+### Why the fragment shader carries no reserved primary texture or tint
+
+`CNA_SKIA_SKSL_V1`'s `cnaTexture0`/`cnaTint` are reserved because SpriteBatch always has exactly one
+primary texture and one per-draw tint to hand the shader. A mesh draw has neither: SKIA-153's own
+spike proved the vertex-colour contribution combines *outside* the shader, through the `SkBlendMode`
+passed to `drawVertices` (`applyShaderColorBlend`), not as a value the shader itself reads. A
+`colored`-only mesh (no texture at all) is a completely valid, common case (`docs/skia-easygl-effect-
+inventory.md`'s `prog_colored_`). The mesh ABI's fragment `main(float2 p)` is therefore a plain,
+self-contained SkSL function with **no mandatory reserved uniform or child** -- it may declare zero
+or more optional texture children, reusing the exact same `cnaTexture0`-`7` reserved child-naming
+convention as the sprite ABI (same 8-slot budget, same names) purely for implementation consistency
+and reuse, not because a mesh draw has a "primary" texture in the sprite sense.
+
+### Budgets
+
+Reuses every existing `SkiaResourcePolicy.hpp` ceiling unchanged -- no new budget category:
+`kSkiaSkslMaxSourceBytesEXT` (64 KiB source), `kSkiaSkslMaxUniformBytesEXT` (16 KiB reflected
+uniform block), `kSkiaSkslMaxUniformCountEXT` (64 reflected uniforms), `kSkiaSkslMaxTextureUnitEXT`
+(8 texture children, `cnaTexture0`-`7`). Reflected uniform types are the same accepted set as the
+sprite ABI (non-array float/int/float2/float3/float4/float4x4, plus float/float2 arrays).
+
+### Compilation cache
+
+Every existing `ShaderEffect` construction -- sprite or mesh -- compiles its `SkRuntimeEffect` from
+scratch; `Effect::Clone()` (`ShaderEffect.cpp`) constructs an entirely new `ShaderEffect` from the
+same two source strings, which recompiles again. `SkRuntimeEffect::MakeForShader` itself has no
+internal cache (confirmed: no cache-related declaration anywhere in `include/effects/
+SkRuntimeEffect.h`). SKIA-154 gives the *mesh* ABI its own basic cache -- **not** applied to the
+existing, already-shipped sprite ABI, which is out of this task's scope -- keyed by the exact
+fragment source string (a `std::string` equality key is sufficient and unambiguous; no hashing
+scheme is introduced). A cache hit returns the same immutable compiled program (the `sk_sp<
+SkRuntimeEffect>` plus its reflected uniform-offset/type table and child-name/index table) without
+invoking the SkSL compiler again. Cache entries are retained for the lifetime of the owning cache
+object with no eviction policy in this task's scope -- bounding cache growth, time limits, and
+malicious-input stress are SKIA-156's "harden" job, not this one's "define and implement" job.
+
+**Clone isolation**: the cached object is immutable and shared read-only across every backend
+instance compiled from identical source. Each `SkiaMeshEffectBackend` instance still owns its own
+independent mutable uniform-value byte buffer (freshly zero-initialized to the compiled program's
+own uniform block size on construction, exactly like the sprite ABI's `uniformBytes_`) and its own
+independent `weak_ptr` array of bound texture children. Two instances sharing one cached compiled
+program therefore never observe each other's `SetUniformX`/`BindTexture` calls -- a cache hit changes
+*which compiled program object is referenced*, never *whose mutable state is shared*.
+
+### What SKIA-154 built
+
+A new, standalone below-the-API class, `SkiaMeshEffectBackend` (not an `IEffectBackend` override --
+that interface is sprite-shaped around a single primary texture/tint the mesh ABI deliberately has
+neither of), with a dedicated `SkiaMeshEffectCacheEXT` cache class, proven directly against
+`SkCanvas::drawVertices` the same way SKIA-153's spike did (`Skia_MeshEffect_ABI`, 19 checks) --
+still no public `ShaderEffect`/`SpriteBatch` wiring, which stays SKIA-157's job.

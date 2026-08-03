@@ -278,6 +278,16 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_skia_raster_test(Skia_Vertices2D_Spike
                                   cna_test_skia_vertices_2d_spike)
 
+    # SKIA-154: below-the-API proof of the versioned CNA_SKIA_SKSL_MESH_V1 ABI built on SKIA-153's
+    # confirmed SkVertices mechanism -- marker discrimination, bounded uniform/texture-child
+    # reflection diagnostics, weak texture lifetime tracking, and the basic source-keyed
+    # compilation cache with clone isolation. No public ShaderEffect/SpriteBatch wiring (SKIA-157).
+    cna_skia_test(cna_test_skia_mesh_effect_abi
+                  examples/skia_mesh_effect_abi_test.cpp)
+    target_include_directories(cna_test_skia_mesh_effect_abi PRIVATE "${CNA_SKIA_ROOT}")
+    cna_register_skia_raster_test(Skia_MeshEffect_ABI
+                                  cna_test_skia_mesh_effect_abi)
+
     # SKIA-93: headless component spike. Alpha-test failure is coverage (clipShader), not a
     # transparent source; dual texture and colour transforms compose in one raster draw. This does
     # not promote their stock 3D Effect types, whose vertex/fog/depth contracts remain absent.

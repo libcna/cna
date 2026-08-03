@@ -2426,12 +2426,57 @@ level-boundary contract.
 - Full Skia suite (up from 165 to 166 -- one net new Raster test) passes in Debug, Release, and
   ASan+UBSan with zero regressions and zero sanitizer findings.
 
+## Completed in this session: SKIA-154
+
+- Extended `docs/skia-vertices-2d-effect-contract.md` (not a new file -- kept every SkVertices
+  design decision in one place) with a "SKIA-154: the mesh/effect ABI itself" section fixing the
+  design before writing any implementation: marker `CNA_SKIA_SKSL_MESH_V1`, distinct from the
+  sprite ABI's `CNA_SKIA_SKSL_V1`; no mandatory reserved primary texture or tint, since SKIA-153
+  already proved the vertex-colour contribution combines externally through the `SkBlendMode`
+  passed to `drawVertices`, never inside the shader -- a `colored`-only mesh effect (zero children)
+  is a fully valid, common case; every existing `SkiaResourcePolicy.hpp` budget reused unchanged; a
+  basic source-keyed compilation cache scoped only to the new mesh ABI (not backported to the
+  already-shipped, already-tested sprite ABI, which stays out of this task's scope).
+- New standalone `SkiaMeshEffectBackend`/`SkiaMeshEffectCacheEXT`
+  (`include+src/CNA/Internal/Backends/Skia/SkiaMeshEffectBackend.{hpp,cpp}`) implement it --
+  deliberately not an `IEffectBackend` override, since that interface's `MakeSpriteShaderEXT`-shaped
+  contract assumes the single reserved primary texture a mesh draw doesn't have. Mirrors
+  `SkiaEffectBackend`'s reflection/validation code shape closely (same uniform-type acceptance set,
+  same `cnaTexture0`-`7` child-name convention) with one meaningful difference: unit 0 is an
+  ordinary, optional child here, not a SpriteBatch-reserved slot, so the accepted unit range is
+  `0..7` (eight slots) instead of the sprite ABI's reserved-0 `1..7` (seven bindable slots).
+- New `Skia_MeshEffect_ABI` (`examples/skia_mesh_effect_abi_test.cpp`, 19 checks, headless raster)
+  proves every acceptance point against real rendered pixels: marker discrimination (the sprite
+  ABI's own marker and untagged source both rejected, naming the expected marker); a zero-child
+  colored-only effect compiling and rendering; wrong-type/undeclared-name uniform diagnostics
+  alongside a correctly-set uniform rendering its exact value; texture-child bind/validate/lifetime
+  (unbound fails validation, bound passes and samples exactly, disposing the owning `Texture2D`
+  backend fails validation again -- weak, not owning, tracking); and the compilation cache itself,
+  proven by compiling the identical source through two separate backend instances and confirming
+  `SkiaMeshEffectCacheEXT::SizeEXT() == 1` (one compile, one cache hit) while each instance's own
+  `SetUniformFloat` renders its own distinct value -- the cache shares the immutable compiled
+  program only, never mutable state (clone isolation).
+- Writing the test caught one real bug before anything could pass: `MakeMeshShaderEXT()` initially
+  passed the fixed local children array's own size (always 8) as the child count to
+  `SkRuntimeEffect::makeShader`, instead of the compiled effect's actual reflected child count --
+  Skia rejects any call where the passed count doesn't exactly match the reflected count, so every
+  program declaring fewer than all eight `cnaTexture0`-`7` children (i.e. every realistic program)
+  failed to build a shader at all. Fixed to pass `compiled_->effect->children().size()`, matching
+  `SkiaEffectBackend::MakeSpriteShaderEXT`'s own already-correct precedent -- a copy-paste
+  divergence caught immediately by actually running the test against real pixels, not by reasoning
+  about the code.
+- Full Skia suite (up from 166 to 167 -- one net new Raster test) passes in Debug, Release, and
+  ASan+UBSan with zero regressions and zero sanitizer findings. No public `ShaderEffect`/
+  `SpriteBatch`/`SkVertices` draw integration yet -- SKIA-157's job.
+
 ## Next candidates
 
-1. SKIA-154: define and implement the versioned explicit SkSL mesh/effect ABI on top of SKIA-153's
-   confirmed `SkVertices` + `SkRuntimeEffect` mechanism (fixed position/texCoord/colour channels,
-   reflected fragment-stage uniforms/child textures matching `CNA_SKIA_SKSL_V1`'s existing pattern).
-2. SKIA-155–158: continue Phase S16 in dependency order once SKIA-154 lands.
+1. SKIA-155: implement a deliberately restricted GLSL-to-SkSL translator only for the source
+   constructs `docs/skia-easygl-effect-inventory.md`/SKIA-152 proved equivalent -- `PbrEffect`'s
+   `PbrLight()` helper is the flagged grammar acceptance bar (richest fragment function in the
+   corpus, zero branching); must also recognize and strip the `cnaSampleUV`/flip-V preprocessor
+   macro rather than attempt to translate it literally.
+2. SKIA-156–158: continue Phase S16 in dependency order once SKIA-155 lands.
 3. SKIA-159–170: add opt-in Ganesh, probe real MSAA/anisotropy, re-evaluate MRT, and hold the
    successor gate only after the raster extensions are stable.
 4. The pre-existing `CNA_ENABLE_NET=OFF`/monolithic-`CnaTests` ENet build-graph defect is recorded
