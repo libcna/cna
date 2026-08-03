@@ -1378,24 +1378,15 @@ TEST_F(InstancedDiffuseColorTest, PositionOnlyDeclarationRendersDiffuseColorWhen
             << ". A vertex layout derived before either route is chosen cannot differ between them";
     }
 
-#if defined(CNA_BACKEND_BGFX)
-    EXPECT_TRUE(instanced.rendered) << "positionOnly/instanced: bgfx rejected the draw";
-    // REMED-GFX-216, DECLARED AND MEASURED, not skipped. bgfx's MakeBgfxLayout keys on the buffer
-    // stride alone: stride 12 is not in its table, so the fallback emits a 16-byte
-    // Position+Color0 layout over a 12-byte buffer and the geometry is strided wrongly. Every
-    // colour above is nevertheless correct, which is exactly what separates REMED-GFX-216 from
-    // this ticket. The four full quads would light 4 * 52 * 244 = 50752 pixels; this asserts the
-    // measured shortfall, so the leg FAILS the moment REMED-GFX-216 is fixed and forces its own
-    // removal rather than silently outliving the defect.
-    constexpr int kFullCoverage = kColumnCount * (kColumnWidth - 2 * kGeometryInset) *
-                                  (kTargetSize - 2 * kGeometryInset);
-    EXPECT_LT(coverageInstanced, kFullCoverage)
-        << "positionOnly: bgfx now covers the full " << kFullCoverage
-        << " pixels, so REMED-GFX-216 (MakeBgfxLayout keys on stride, not on the "
-           "VertexDeclaration) is FIXED. Delete this arm";
-#else
-    // Every other measured backend that ACCEPTS the stride builds its native layout from the
+    // Every measured backend that ACCEPTS the stride builds its native layout from the
     // declaration, so the geometry lands exactly where it belongs and the full contract holds.
+    //
+    // bgfx carried a declared exemption here until REMED-GFX-216: its `MakeBgfxLayout` keyed on the
+    // buffer stride alone, so a stride-12 declaration fell to a fallback that emitted a 16-byte
+    // Position+Color0 layout over a 12-byte buffer and lit 27385 of these 50752 pixels. That arm
+    // asserted the measured shortfall precisely so it would FAIL the moment the defect was fixed --
+    // which is what happened, and why it is gone. Every colour was already correct under the wrong
+    // layout, which is what separated the two tickets in the first place.
     constexpr int kFullCoverage = kColumnCount * (kColumnWidth - 2 * kGeometryInset) *
                                   (kTargetSize - 2 * kGeometryInset);
     if (instanced.rendered)
@@ -1404,7 +1395,6 @@ TEST_F(InstancedDiffuseColorTest, PositionOnlyDeclarationRendersDiffuseColorWhen
             << "positionOnly: only " << coverageInstanced << " of about " << kFullCoverage
             << " pixels rendered";
     }
-#endif
 #endif
 }
 

@@ -535,8 +535,18 @@ namespace CNA::Internal::Backends::Bgfx
         ~BgfxVertexBufferBackend() override;
 
         void SetData(const void* data, int vertex_count, std::size_t stride_in_bytes) override;
-        void SetVertexDeclaration(const VertexDeclaration&) override {}
+        /// REMED-GFX-216: the caller's own declaration is what the native layout is built from.
+        /// This used to be an empty override, so the authoritative description was delivered and
+        /// discarded and `SetData` guessed a layout from the byte stride instead -- which cannot
+        /// distinguish `Position@0 + Color@12` from `Color@0 + Position@4`, both stride 16.
+        void SetVertexDeclaration(const VertexDeclaration& vertexDeclaration) override;
         [[nodiscard]] int GetVertexCount() const override { return vertexCount; }
+        /// The declaration this buffer's current native layout was derived from. Empty until the
+        /// first SetVertexDeclaration call. Diagnostics and tests only.
+        NOXNA [[nodiscard]] const VertexDeclaration& GetVertexDeclarationEXT() const noexcept
+        {
+            return declaration_;
+        }
         /// REMED-GFX-109: records that bgfx draw state now references this native version.
         /// The next real SetData must rotate to a different native allocation because bgfx
         /// executes every dynamic-buffer update before any draws in the submitted frame.
@@ -545,6 +555,13 @@ namespace CNA::Internal::Backends::Bgfx
     private:
         int capacity_ = 0;
         mutable bool submittedSinceUpdate_ = false;
+        /// REMED-GFX-216: the declaration the current `layout` was derived from, kept so an upload
+        /// can tell "the same declaration again" from "a different declaration that happens to
+        /// share a stride" -- the second is exactly the case a stride comparison cannot see.
+        VertexDeclaration declaration_;
+        bool hasDeclaration_ = false;
+        /// Set when `declaration_` was replaced and the native layout has not been rebuilt yet.
+        bool declarationChanged_ = false;
     };
 
     /// bgfx dynamic index buffer with a construction-time-fixed 16- or 32-bit element width.

@@ -3039,6 +3039,216 @@ namespace CNA::Internal::Backends::Bgfx
 
     // --- BgfxVertexBufferBackend ---
 
+    // REMED-GFX-216: the authoritative description of a vertex stream is its VertexDeclaration --
+    // usage, usage index, byte offset, format, component count and normalization, per element. The
+    // stride only states the distance between records and cannot determine their composition:
+    // `Position@0 + Color@12` and `Color@0 + Position@4` are both stride 16, and `Position@0 +
+    // Color@12` is legal at stride 16 and at stride 32. Everything below derives the native layout
+    // from the declaration; MakeBgfxLayout(stride) survives only as the pre-declaration default for
+    // a buffer that has not been given one yet.
+
+    /// One XNA vertex-element format expressed in bgfx's terms, plus the byte span the declaration
+    /// spends on it -- which is what lets the builder verify that bgfx's own per-renderer attribute
+    /// size agrees with the declaration instead of assuming it.
+    struct BgfxElementFormat
+    {
+        bgfx::AttribType::Enum type = bgfx::AttribType::Float;
+        uint8_t count = 0;
+        bool normalized = false;
+        uint8_t declaredBytes = 0;
+        bool supported = false;
+    };
+
+    static BgfxElementFormat DescribeElementFormat(VertexElementFormat format)
+    {
+        // `asInt` is deliberately false for every entry. bgfx's `_asInt` selects the integer
+        // attribute path (glVertexAttribIPointer and its equivalents), and every attribute the
+        // shaders in this backend declare is a float vector -- varying.def.sc declares
+        // `vec4 a_indices : BLENDINDICES`, not an ivec4. Passing Byte4 as an integer attribute
+        // would break the skinned bone-index lookup, so these arrive converted, exactly as the
+        // stride table did before this task.
+        switch (format)
+        {
+            case VertexElementFormat::Single:
+                return {bgfx::AttribType::Float, 1, false, 4, true};
+            case VertexElementFormat::Vector2:
+                return {bgfx::AttribType::Float, 2, false, 8, true};
+            case VertexElementFormat::Vector3:
+                return {bgfx::AttribType::Float, 3, false, 12, true};
+            case VertexElementFormat::Vector4:
+                return {bgfx::AttribType::Float, 4, false, 16, true};
+            case VertexElementFormat::Color:
+                return {bgfx::AttribType::Uint8, 4, true, 4, true};
+            case VertexElementFormat::Byte4:
+                return {bgfx::AttribType::Uint8, 4, false, 4, true};
+            case VertexElementFormat::Short2:
+                return {bgfx::AttribType::Int16, 2, false, 4, true};
+            case VertexElementFormat::Short4:
+                return {bgfx::AttribType::Int16, 4, false, 8, true};
+            case VertexElementFormat::NormalizedShort2:
+                return {bgfx::AttribType::Int16, 2, true, 4, true};
+            case VertexElementFormat::NormalizedShort4:
+                return {bgfx::AttribType::Int16, 4, true, 8, true};
+            case VertexElementFormat::HalfVector2:
+                return {bgfx::AttribType::Half, 2, false, 4, true};
+            case VertexElementFormat::HalfVector4:
+                return {bgfx::AttribType::Half, 4, false, 8, true};
+        }
+        return {};
+    }
+
+    /// Maps an XNA usage + usage index onto the single bgfx attribute that carries it. bgfx has one
+    /// slot per semantic for Position/Normal/Tangent/Bitangent/Indices/Weight and an indexed family
+    /// for Color and TexCoord, so a usage index those families cannot express is reported rather
+    /// than folded onto slot 0.
+    static bool MapElementUsage(VertexElementUsage usage, int usageIndex,
+                                bgfx::Attrib::Enum& out)
+    {
+        const auto indexed = [&](bgfx::Attrib::Enum base, int limit) {
+            if (usageIndex < 0 || usageIndex > limit) return false;
+            out = static_cast<bgfx::Attrib::Enum>(static_cast<int>(base) + usageIndex);
+            return true;
+        };
+        const auto single = [&](bgfx::Attrib::Enum attrib) {
+            if (usageIndex != 0) return false;
+            out = attrib;
+            return true;
+        };
+        switch (usage)
+        {
+            case VertexElementUsage::Position:          return single(bgfx::Attrib::Position);
+            case VertexElementUsage::Normal:            return single(bgfx::Attrib::Normal);
+            case VertexElementUsage::Tangent:           return single(bgfx::Attrib::Tangent);
+            case VertexElementUsage::Binormal:          return single(bgfx::Attrib::Bitangent);
+            case VertexElementUsage::BlendIndices:      return single(bgfx::Attrib::Indices);
+            case VertexElementUsage::BlendWeight:       return single(bgfx::Attrib::Weight);
+            case VertexElementUsage::Color:             return indexed(bgfx::Attrib::Color0, 3);
+            case VertexElementUsage::TextureCoordinate: return indexed(bgfx::Attrib::TexCoord0, 15);
+            default:                                    return false;
+        }
+    }
+
+    static const char* DescribeUsageName(VertexElementUsage usage)
+    {
+        switch (usage)
+        {
+            case VertexElementUsage::Position:          return "Position";
+            case VertexElementUsage::Color:             return "Color";
+            case VertexElementUsage::TextureCoordinate: return "TextureCoordinate";
+            case VertexElementUsage::Normal:            return "Normal";
+            case VertexElementUsage::Binormal:          return "Binormal";
+            case VertexElementUsage::Tangent:           return "Tangent";
+            case VertexElementUsage::BlendIndices:      return "BlendIndices";
+            case VertexElementUsage::BlendWeight:       return "BlendWeight";
+            case VertexElementUsage::Depth:             return "Depth";
+            case VertexElementUsage::Fog:               return "Fog";
+            case VertexElementUsage::PointSize:         return "PointSize";
+            case VertexElementUsage::Sample:            return "Sample";
+            case VertexElementUsage::TessellateFactor:  return "TessellateFactor";
+        }
+        return "Unknown";
+    }
+
+    /// Advances the layout's running offset to @p target. bgfx's `skip` takes a uint8_t, so a gap
+    /// wider than 255 bytes is walked in steps.
+    static void SkipTo(bgfx::VertexLayout& layout, int target)
+    {
+        while (layout.getStride() < target)
+        {
+            const int remaining = target - layout.getStride();
+            layout.skip(static_cast<uint8_t>(remaining > 255 ? 255 : remaining));
+        }
+    }
+
+    /// Builds the native layout that @p declaration describes, exactly.
+    ///
+    /// bgfx places an attribute at the layout's current running offset and advances it by that
+    /// attribute's size *for the active renderer* (`s_attribTypeSize` is per-renderer: Int16/Half
+    /// with three components is 6 bytes on GL and 8 on D3D/Vulkan/WebGPU). The builder therefore
+    /// never assumes where an `add` landed -- it skips to each element's declared offset first and
+    /// then verifies that bgfx's own advance matched the declaration's byte span. A declaration
+    /// this backend cannot express natively is rejected here, before anything is created or
+    /// submitted, rather than being replaced by a nearby built-in guess.
+    static bgfx::VertexLayout MakeBgfxLayout(const VertexDeclaration& declaration)
+    {
+        const std::vector<VertexElement>& elements = declaration.GetVertexElements();
+        const int declaredStride = declaration.getVertexStrideProperty();
+
+        // Declaration order is not required to be offset order, and bgfx builds strictly forward.
+        std::vector<const VertexElement*> ordered;
+        ordered.reserve(elements.size());
+        for (const VertexElement& element : elements)
+            ordered.push_back(&element);
+        std::sort(ordered.begin(), ordered.end(),
+                  [](const VertexElement* a, const VertexElement* b) {
+                      return a->getOffsetProperty() < b->getOffsetProperty();
+                  });
+
+        bgfx::VertexLayout layout;
+        layout.begin();
+        bool seen[bgfx::Attrib::Count] = {};
+        for (const VertexElement* element : ordered)
+        {
+            const VertexElementUsage usage = element->getVertexElementUsageProperty();
+            const int usageIndex = element->getUsageIndexProperty();
+            const int offset = element->getOffsetProperty();
+
+            bgfx::Attrib::Enum attrib = bgfx::Attrib::Count;
+            if (!MapElementUsage(usage, usageIndex, attrib))
+                throw System::NotSupportedException(
+                    std::string("The bgfx backend cannot bind vertex element usage ") +
+                    DescribeUsageName(usage) + std::to_string(usageIndex) +
+                    ": it has no native attribute for that semantic.");
+            if (seen[attrib])
+                throw System::NotSupportedException(
+                    std::string("The vertex declaration binds ") + DescribeUsageName(usage) +
+                    std::to_string(usageIndex) +
+                    " more than once; a single stream cannot repeat a semantic.");
+            seen[attrib] = true;
+
+            const BgfxElementFormat format =
+                DescribeElementFormat(element->getVertexElementFormatProperty());
+            if (!format.supported)
+                throw System::NotSupportedException(
+                    std::string("The bgfx backend cannot bind the vertex element format of ") +
+                    DescribeUsageName(usage) + std::to_string(usageIndex) + '.');
+
+            if (offset < static_cast<int>(layout.getStride()))
+                throw System::NotSupportedException(
+                    std::string("The vertex declaration places ") + DescribeUsageName(usage) +
+                    std::to_string(usageIndex) + " at byte " + std::to_string(offset) +
+                    ", which overlaps the preceding element; bgfx vertex layouts are strictly "
+                    "forward-ordered.");
+            SkipTo(layout, offset);
+
+            layout.add(attrib, format.count, format.type, format.normalized);
+
+            // bgfx's advance is renderer-dependent. If it disagrees with the declaration's own
+            // byte span, every later element would silently land at the wrong offset -- say so
+            // instead.
+            const int expectedEnd = offset + static_cast<int>(format.declaredBytes);
+            if (static_cast<int>(layout.getStride()) != expectedEnd)
+                throw System::NotSupportedException(
+                    std::string("The active bgfx renderer stores ") + DescribeUsageName(usage) +
+                    std::to_string(usageIndex) + " in " +
+                    std::to_string(static_cast<int>(layout.getStride()) - offset) +
+                    " bytes, but the vertex declaration allots " +
+                    std::to_string(static_cast<int>(format.declaredBytes)) + '.');
+
+            if (expectedEnd > declaredStride)
+                throw System::NotSupportedException(
+                    std::string("The vertex declaration places ") + DescribeUsageName(usage) +
+                    std::to_string(usageIndex) + " outside its own " +
+                    std::to_string(declaredStride) + "-byte stride.");
+        }
+
+        // Trailing padding is part of the declaration: the record spacing is the declared stride,
+        // not the sum of the elements.
+        SkipTo(layout, declaredStride);
+        layout.end();
+        return layout;
+    }
+
     static bgfx::VertexLayout MakeBgfxLayout(std::size_t stride)
     {
         bgfx::VertexLayout layout;
@@ -3141,14 +3351,55 @@ namespace CNA::Internal::Backends::Bgfx
         if (bgfx::isValid(handle)) bgfx::destroy(handle);
     }
 
+    // REMED-GFX-216: two declarations that share a stride are different layouts, so the stored
+    // declaration is compared element by element, not by stride. This runs immediately before every
+    // real upload (VertexBuffer::UploadValidatedData), so the layout SetData builds below is always
+    // the one the caller actually declared.
+    void BgfxVertexBufferBackend::SetVertexDeclaration(const VertexDeclaration& vertexDeclaration)
+    {
+        const auto sameDeclaration = [&] {
+            if (!hasDeclaration_) return false;
+            if (declaration_.getVertexStrideProperty() !=
+                vertexDeclaration.getVertexStrideProperty())
+                return false;
+            const std::vector<VertexElement>& a = declaration_.GetVertexElements();
+            const std::vector<VertexElement>& b = vertexDeclaration.GetVertexElements();
+            if (a.size() != b.size()) return false;
+            for (std::size_t i = 0; i < a.size(); ++i)
+            {
+                if (a[i].getOffsetProperty() != b[i].getOffsetProperty() ||
+                    a[i].getVertexElementFormatProperty() !=
+                        b[i].getVertexElementFormatProperty() ||
+                    a[i].getVertexElementUsageProperty() !=
+                        b[i].getVertexElementUsageProperty() ||
+                    a[i].getUsageIndexProperty() != b[i].getUsageIndexProperty())
+                    return false;
+            }
+            return true;
+        };
+        if (sameDeclaration()) return;
+        declaration_ = vertexDeclaration;
+        hasDeclaration_ = true;
+        declarationChanged_ = true;
+    }
+
     void BgfxVertexBufferBackend::SetData(const void* data, int vertex_count, std::size_t stride_in_bytes)
     {
         vertexCount = vertex_count;
-        const bool layoutChanged = stride_in_bytes != stride;
+        // REMED-GFX-216: the layout is rebuilt when the DECLARATION changes as well as when the
+        // stride does. A stride comparison alone cannot see a re-declaration at the same stride,
+        // which is precisely the collision this task exists for.
+        const bool layoutChanged = stride_in_bytes != stride || declarationChanged_;
         if (layoutChanged)
         {
             stride = stride_in_bytes;
-            layout = MakeBgfxLayout(stride_in_bytes);
+            // A declaration is authoritative when there is one. The stride overload remains only
+            // for a buffer that has not been given a declaration yet -- it is a default, not a
+            // description, and it is what this task removed from the normal path.
+            layout = hasDeclaration_ && !declaration_.GetVertexElements().empty()
+                         ? MakeBgfxLayout(declaration_)
+                         : MakeBgfxLayout(stride_in_bytes);
+            declarationChanged_ = false;
         }
 
         // REMED-GFX-109: bgfx records resource updates in the frame's pre-command buffer, then
