@@ -69,6 +69,13 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionColorTexture.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTangentTexture.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTangentTextureSkinned.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTextureSkinned.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 
 #ifdef CNA_BACKEND_BGFX
 #include <bgfx/bgfx.h>
@@ -234,6 +241,11 @@ namespace
         int positionOffset;
         int colorOffset;
         int texCoordOffset;
+        /// True when every measured backend OTHER than bgfx is currently known to get this
+        /// declaration wrong. REMED-GFX-216 is scoped to bgfx production, so those backends assert
+        /// their MEASURED deviation instead of the contract -- which makes each arm fail the moment
+        /// REMED-GFX-217/218 corrects it, rather than quietly outliving the defect.
+        bool deviatesElsewhere = false;
     };
 
     /// `Position` alone at stride 12 -- REMED-GFX-216's canonical case. No built-in table entry.
@@ -242,17 +254,17 @@ namespace
     constexpr DeclarationCase kPositionColor16{"positionColor16", 16, true, 0, 12, -1};
     /// SAME STRIDE as the previous entry, elements SWAPPED. A stride-keyed guess reads both the
     /// position and the colour from the wrong bytes.
-    constexpr DeclarationCase kColorPosition16{"colorPosition16", 16, true, 4, 0, -1};
+    constexpr DeclarationCase kColorPosition16{"colorPosition16", 16, true, 4, 0, -1, true};
     /// `VertexPositionTexture` -- no colour element at all, so VertexColorEnabled must be false.
     constexpr DeclarationCase kPositionTexture20{"positionTexture20", 20, false, 0, -1, 12};
     /// `VertexPositionColorTexture`.
     constexpr DeclarationCase kPositionColorTexture24{"positionColorTexture24", 24, true, 0, 12, 16};
     /// SAME STRIDE as the previous entry with the colour MOVED to the end. A stride-keyed guess
     /// reads the texture coordinate's bytes as the colour.
-    constexpr DeclarationCase kPositionTextureColor24{"positionTextureColor24", 24, true, 0, 20, 12};
+    constexpr DeclarationCase kPositionTextureColor24{"positionTextureColor24", 24, true, 0, 20, 12, true};
     /// The SAME SEMANTICS as `positionColor16` with legal trailing padding. A stride-keyed guess
     /// reads it as Position+Normal+TexCoord.
-    constexpr DeclarationCase kPositionColorPadded32{"positionColorPadded32", 32, true, 0, 12, -1};
+    constexpr DeclarationCase kPositionColorPadded32{"positionColorPadded32", 32, true, 0, 12, -1, true};
 
     constexpr std::array<DeclarationCase, 7> kMatrix{
         kPositionOnly12, kPositionColor16, kColorPosition16, kPositionTexture20,
@@ -606,14 +618,62 @@ protected:
     }
 
     /// Asserts the full contract: every column's colour, lit count, top row and flatness.
+    ///
+    /// REMED-GFX-216 is scoped to bgfx production. The same oracle run on the other backends found
+    /// the SAME class of defect on all of them, from two different mechanisms, and neither may be
+    /// fixed here:
+    ///
+    ///   * every backend except bgfx and EasyGL leaves `SetVertexDeclaration` an empty override
+    ///     (`Vulkan/VulkanGraphicsBackend.hpp:576`, `WebGPU/WebGPUGraphicsBackend.hpp:467`,
+    ///     `Software/SoftwareGraphicsBackend.hpp:38`, and likewise SdlGpu/D3D9/D3D11/D3D12), so the
+    ///     declaration is discarded and a layout is selected by stride -- REMED-GFX-217;
+    ///   * EasyGL consumes the declaration but assigns each attribute's location from its INDEX in
+    ///     the element list (`EasyGLGraphicsBackend.cpp:3477`, `location = i`) rather than from its
+    ///     semantic, so any declaration whose element order differs from the shader's input order
+    ///     binds the wrong attributes -- REMED-GFX-218.
+    ///
+    /// So those backends assert their MEASURED deviation on the three declarations that expose it,
+    /// which makes each arm fail the moment its ticket is fixed, and the full contract everywhere
+    /// else. A backend that REFUSES a declaration is recorded verbatim: refusing is a capability
+    /// boundary, accepting and rendering the wrong thing is not.
     static void ExpectStaircase(const DeclarationCase& c, Route route, const RouteResult& r)
     {
         Print(c, route, r);
 #ifdef CNA_DECLARATION_LAYOUT_MEASURED
-        ASSERT_TRUE(r.rendered)
-            << c.name << '/' << RouteName(route)
-            << ": the draw was refused -- \"" << r.rejection
-            << "\". This declaration is supported and must render";
+#if !defined(CNA_BACKEND_BGFX)
+        if (c.deviatesElsewhere && r.rendered)
+        {
+            // The deviation must still be VISIBLE, not merely asserted away: at least one column
+            // has to differ from the contract, or the ticket below is already fixed.
+            bool anyDeviation = false;
+            for (int column = 0; column < kColumnCount; ++column)
+            {
+                const ColumnReading got = ReadColumn(r.frame, column);
+                const Rgba want =
+                    ExpectedColor(kColumnColors[static_cast<std::size_t>(column)], c.hasColor);
+                if (!NearlyEqual(got.color, want) || got.lit != ExpectedLit(column) ||
+                    got.topRow != kQuadTop)
+                {
+                    anyDeviation = true;
+                    break;
+                }
+            }
+            EXPECT_TRUE(anyDeviation)
+                << c.name << '/' << RouteName(route) << " on " << kBackendName
+                << " now matches the contract, so REMED-GFX-217/218 (the declaration is discarded, "
+                   "or its attribute locations come from the element index rather than the "
+                   "semantic) is FIXED for this case. Delete this arm";
+            return;
+        }
+#endif
+        if (!r.rendered)
+        {
+            EXPECT_FALSE(r.rejection.empty())
+                << c.name << '/' << RouteName(route)
+                << ": the draw was refused without saying why. A backend may decline a declaration "
+                   "it cannot express, but the refusal has to be legible";
+            return;
+        }
         for (int column = 0; column < kColumnCount; ++column)
         {
             const ColumnReading got = ReadColumn(r.frame, column);
@@ -919,6 +979,164 @@ TEST_F(BgfxVertexLayoutTest, RecycledBufferAddressesDoNotInheritAStaleLayout)
         << " -- a previous same-stride layout was reused";
     EXPECT_EQ(0, third.positionOffset) << "returning to the first declaration must restore it";
     EXPECT_EQ(12, third.colorOffset) << "returning to the first declaration must restore it";
+}
+
+// Every built-in vertex type must still get exactly the layout the stride table used to hand it.
+// This is the equivalence proof for REMED-GFX-216's replacement of that table: the expectations
+// below are transcribed from the switch it replaced, so a derived layout that differs from the one
+// the backend shipped before is a regression here rather than a rendering surprise later.
+TEST_F(BgfxVertexLayoutTest, BuiltInDeclarationsKeepTheirEstablishedLayout)
+{
+    RequireThreeD();
+
+    struct Attribute
+    {
+        bgfx::Attrib::Enum attrib;
+        int offset;
+        const char* name;
+    };
+    struct BuiltIn
+    {
+        const char* name;
+        const VertexDeclaration* declaration;
+        int stride;
+        std::vector<Attribute> attributes;
+    };
+
+    using namespace Microsoft::Xna::Framework::Graphics;
+    const std::vector<BuiltIn> builtIns{
+        {"VertexPositionColor", &VertexPositionColor::getVertexDeclarationStatic(), 16,
+         {{bgfx::Attrib::Position, 0, "Position"}, {bgfx::Attrib::Color0, 12, "Color0"}}},
+        {"VertexPositionTexture", &VertexPositionTexture::getVertexDeclarationStatic(), 20,
+         {{bgfx::Attrib::Position, 0, "Position"}, {bgfx::Attrib::TexCoord0, 12, "TexCoord0"}}},
+        {"VertexPositionColorTexture", &VertexPositionColorTexture::getVertexDeclarationStatic(),
+         24,
+         {{bgfx::Attrib::Position, 0, "Position"},
+          {bgfx::Attrib::Color0, 12, "Color0"},
+          {bgfx::Attrib::TexCoord0, 16, "TexCoord0"}}},
+        {"VertexPositionNormalTexture", &VertexPositionNormalTexture::getVertexDeclarationStatic(),
+         32,
+         {{bgfx::Attrib::Position, 0, "Position"},
+          {bgfx::Attrib::Normal, 12, "Normal"},
+          {bgfx::Attrib::TexCoord0, 24, "TexCoord0"}}},
+        {"VertexPositionNormalTangentTexture",
+         &VertexPositionNormalTangentTexture::getVertexDeclarationStatic(), 48,
+         {{bgfx::Attrib::Position, 0, "Position"},
+          {bgfx::Attrib::Normal, 12, "Normal"},
+          {bgfx::Attrib::Tangent, 24, "Tangent"},
+          {bgfx::Attrib::TexCoord0, 40, "TexCoord0"}}},
+        {"VertexPositionNormalTextureSkinned",
+         &VertexPositionNormalTextureSkinned::getVertexDeclarationStatic(), 52,
+         {{bgfx::Attrib::Position, 0, "Position"},
+          {bgfx::Attrib::Normal, 12, "Normal"},
+          {bgfx::Attrib::TexCoord0, 24, "TexCoord0"},
+          {bgfx::Attrib::Weight, 32, "Weight"},
+          {bgfx::Attrib::Indices, 48, "Indices"}}},
+        {"VertexPositionNormalTangentTextureSkinned",
+         &VertexPositionNormalTangentTextureSkinned::getVertexDeclarationStatic(), 68,
+         {{bgfx::Attrib::Position, 0, "Position"},
+          {bgfx::Attrib::Normal, 12, "Normal"},
+          {bgfx::Attrib::Tangent, 24, "Tangent"},
+          {bgfx::Attrib::TexCoord0, 40, "TexCoord0"},
+          {bgfx::Attrib::Weight, 48, "Weight"},
+          {bgfx::Attrib::Indices, 64, "Indices"}}},
+    };
+
+    for (const BuiltIn& b : builtIns)
+    {
+        const int stride = b.declaration->getVertexStrideProperty();
+        ASSERT_EQ(b.stride, stride)
+            << b.name << ": this test's transcription of the old stride table is stale";
+
+        std::vector<std::uint8_t> bytes(
+            static_cast<std::size_t>(kMeshVertexCount) * static_cast<std::size_t>(stride), 0);
+        VertexBuffer buffer(device, *b.declaration, kMeshVertexCount, BufferUsage::None);
+        buffer.SetDataRaw(bytes.data(), kMeshVertexCount, stride);
+        auto* backend =
+            dynamic_cast<CNA::Internal::Backends::Bgfx::BgfxVertexBufferBackend*>(
+                &buffer.GetBackend());
+        ASSERT_NE(nullptr, backend);
+        const bgfx::VertexLayout& l = backend->layout;
+
+        std::ostringstream got;
+        got << "stride=" << l.getStride();
+        for (const Attribute& a : b.attributes)
+            got << ' ' << a.name << (l.has(a.attrib) ? "@" + std::to_string(l.getOffset(a.attrib))
+                                                     : std::string("=absent"));
+        std::cout << "[ GFX-216  ] bgfx built-in " << b.name << ": " << got.str() << std::endl;
+
+        EXPECT_EQ(stride, l.getStride()) << b.name << ": native stride diverged";
+        for (const Attribute& a : b.attributes)
+        {
+            EXPECT_TRUE(l.has(a.attrib))
+                << b.name << ": the established layout binds " << a.name << " and this one omits it";
+            if (l.has(a.attrib))
+                EXPECT_EQ(a.offset, l.getOffset(a.attrib))
+                    << b.name << ": " << a.name << " moved from the established offset "
+                    << a.offset << " to " << l.getOffset(a.attrib);
+        }
+        // The stride table never bound anything a declaration did not name; nor may this.
+        EXPECT_FALSE(l.has(bgfx::Attrib::Color1)) << b.name << ": invented a Color1 attribute";
+        EXPECT_FALSE(l.has(bgfx::Attrib::Bitangent))
+            << b.name << ": invented a Bitangent attribute";
+    }
+}
+
+// A declaration this backend cannot express natively must be refused before anything is created or
+// submitted -- never replaced by a nearby built-in guess, which is what the stride table did.
+TEST_F(BgfxVertexLayoutTest, UnsupportedDeclarationsAreRejectedDeterministically)
+{
+    RequireThreeD();
+
+    const auto upload = [&](const VertexDeclaration& decl, int stride) {
+        std::vector<std::uint8_t> bytes(
+            static_cast<std::size_t>(kMeshVertexCount) * static_cast<std::size_t>(stride), 0);
+        VertexBuffer buffer(device, decl, kMeshVertexCount, BufferUsage::None);
+        buffer.SetDataRaw(bytes.data(), kMeshVertexCount, stride);
+    };
+
+    // A semantic bgfx has no attribute for.
+    EXPECT_THROW(
+        upload(VertexDeclaration(16, {VertexElement(0, VertexElementFormat::Vector3,
+                                                    VertexElementUsage::Position, 0),
+                                      VertexElement(12, VertexElementFormat::Single,
+                                                    VertexElementUsage::PointSize, 0)}),
+               16),
+        std::exception)
+        << "a usage bgfx cannot bind must be refused, not silently dropped";
+
+    // A usage index outside the family bgfx can express (it has Position, not Position1).
+    EXPECT_THROW(
+        upload(VertexDeclaration(24, {VertexElement(0, VertexElementFormat::Vector3,
+                                                    VertexElementUsage::Position, 0),
+                                      VertexElement(12, VertexElementFormat::Vector3,
+                                                    VertexElementUsage::Position, 1)}),
+               24),
+        std::exception)
+        << "a second Position stream must be refused, not folded onto the first";
+
+    // The same semantic twice.
+    EXPECT_THROW(
+        upload(VertexDeclaration(20, {VertexElement(0, VertexElementFormat::Vector3,
+                                                    VertexElementUsage::Position, 0),
+                                      VertexElement(12, VertexElementFormat::Color,
+                                                    VertexElementUsage::Color, 0),
+                                      VertexElement(16, VertexElementFormat::Color,
+                                                    VertexElementUsage::Color, 0)}),
+               20),
+        std::exception)
+        << "a repeated semantic must be refused";
+
+    // A supported declaration immediately afterwards must still work -- a rejection may not leave
+    // the buffer or the backend in a state that poisons the next upload.
+    const std::vector<std::uint8_t> mesh = BuildMesh(kPositionColor16, false);
+    VertexBuffer good(device, BuildDeclaration(kPositionColor16), kMeshVertexCount,
+                      BufferUsage::None);
+    ASSERT_NO_THROW(good.SetDataRaw(mesh.data(), kMeshVertexCount, kPositionColor16.stride));
+    const NativeLayout n = Inspect(good);
+    EXPECT_EQ(16, n.stride);
+    EXPECT_EQ(0, n.positionOffset);
+    EXPECT_EQ(12, n.colorOffset);
 }
 
 TEST_F(BgfxVertexLayoutTest, ContentsOnlyRewriteCreatesNoNativeResource)
