@@ -6,6 +6,7 @@
 #include "CNA/Internal/Backends/Glide/GlideLighting.hpp"
 #include "CNA/Internal/Backends/Glide/GlidePrimitiveClip.hpp"
 #include "CNA/Internal/Backends/Glide/GlideTextureCoordinate.hpp"
+#include "CNA/Internal/Backends/Glide/GlideTextureEviction.hpp"
 #include "CNA/Internal/Backends/Glide/GlideTextureMip.hpp"
 #include "CNA/Internal/Backends/Glide/GlideVertexLayout.hpp"
 #include "CNA/Internal/Graphics/BuiltInVertexStreams.hpp"
@@ -327,6 +328,22 @@ namespace CNA::Internal::Backends::Glide
         {
             FxU32 address = 0;
             FxU32 size = 0;
+        };
+
+        /**
+         * A pointer-stable, forward-usable view of a Glide texture that Impl's TMU allocator can
+         * evict under memory pressure without needing GlideTextureBackend's full definition
+         * (which is declared later in this file). Evicting only releases native TMU memory; the
+         * texture keeps its CPU-side source and can rebuild its tiles on next use.
+         */
+        class IGlideResidentTexture
+        {
+        public:
+            virtual ~IGlideResidentTexture() = default;
+            [[nodiscard]] virtual bool IsResident() const = 0;
+            [[nodiscard]] virtual std::uint64_t LastUsedCounter() const = 0;
+            /** Fences the FIFO, releases every native tile range, and returns the bytes freed. */
+            virtual FxU32 EvictAndReleaseNativeMemory() = 0;
         };
     } // namespace
 
@@ -695,7 +712,7 @@ namespace CNA::Internal::Backends::Glide
             ApplyClipWindow(left, top, right - left, bottom - top);
         }
 
-        [[nodiscard]] TextureRange AllocateTexture(FxU32 size)
+        [[nodiscard]] std::optional<TextureRange> TryFitTexture(FxU32 size)
         {
             constexpr FxU32 alignment = 8;
             for (auto it = freeTextureRanges.begin(); it != freeTextureRanges.end(); ++it)
@@ -734,8 +751,65 @@ namespace CNA::Internal::Backends::Glide
                     return allocation;
                 }
             }
-            throw std::runtime_error("GLIDE TMU0 texture memory is exhausted");
+            return std::nullopt;
         }
+
+        /**
+         * `requester` is always excluded from eviction, even before it is registered (during its
+         * own construction) or while it is only partially resident (mid-rebuild after its own
+         * prior eviction) -- otherwise a texture could evict tiles it is in the middle of
+         * allocating for itself, corrupting its own atomic rebuild.
+         */
+        [[nodiscard]] TextureRange AllocateTexture(FxU32 size, const IGlideResidentTexture* requester)
+        {
+            for (;;)
+            {
+                if (const std::optional<TextureRange> fit = TryFitTexture(size))
+                {
+                    return *fit;
+                }
+                std::vector<GlideResidentTextureView> candidates;
+                candidates.reserve(residentTextures.size());
+                for (const IGlideResidentTexture* candidate : residentTextures)
+                {
+                    candidates.push_back(GlideResidentTextureView{
+                        candidate, candidate->IsResident(), candidate->LastUsedCounter()});
+                }
+                const void* victimIdentity = SelectGlideEvictionVictim(candidates, requester);
+                if (victimIdentity == nullptr)
+                {
+                    throw std::runtime_error("GLIDE TMU0 texture memory is exhausted");
+                }
+                const auto victimIt = std::find_if(residentTextures.begin(), residentTextures.end(),
+                    [victimIdentity](const IGlideResidentTexture* candidate)
+                    {
+                        return static_cast<const void*>(candidate) == victimIdentity;
+                    });
+                IGlideResidentTexture* victim = *victimIt;
+                // A pending SpriteBatch quad can reference any currently-resident tile via native
+                // TMU state that was already set up when it was queued, but has not reached
+                // Glide's FIFO yet. Submit it before reclaiming any tile's memory, so eviction can
+                // never invalidate geometry that has not been drawn -- deferred submission
+                // (GLIDE-FUT-015) must not change what a queued sprite actually samples from.
+                FlushSpriteBatch();
+                const FxU32 freedBytes = victim->EvictAndReleaseNativeMemory();
+                if (diagnosticsEnabled)
+                {
+                    std::fprintf(stderr,
+                                 "[CNA GLIDE] TMU0 memory pressure: evicted a least-recently-used texture, "
+                                 "freed %u bytes\n",
+                                 freedBytes);
+                }
+                if (freedBytes == 0)
+                {
+                    // A resident candidate with nothing to free would spin forever; the pool is
+                    // genuinely exhausted for this request.
+                    throw std::runtime_error("GLIDE TMU0 texture memory is exhausted");
+                }
+            }
+        }
+
+        [[nodiscard]] std::uint64_t NextTextureUseCounter() { return ++textureUseCounter; }
 
         void ReleaseTexture(TextureRange range)
         {
@@ -819,6 +893,12 @@ namespace CNA::Internal::Backends::Glide
         int maxTextureAspectLog2 = 3;
         int textureUnitCount = 1;
         std::vector<TextureRange> freeTextureRanges;
+        // Every live GlideTextureBackend registers itself here (after successful construction)
+        // so AllocateTexture() can evict the least-recently-used other resident texture under
+        // memory pressure instead of failing outright. NextTextureUseCounter() is a deterministic
+        // logical clock, not wall-clock time, so LRU ordering is reproducible.
+        std::vector<IGlideResidentTexture*> residentTextures;
+        std::uint64_t textureUseCounter = 0;
         std::string hardwareName;
         std::string rendererName;
         std::string vendorName;
@@ -826,7 +906,7 @@ namespace CNA::Internal::Backends::Glide
         std::vector<std::string> supportedExtensions;
     };
 
-    class GlideTextureBackend final : public ITextureBackend
+    class GlideTextureBackend final : public ITextureBackend, public IGlideResidentTexture
     {
     public:
         struct Tile
@@ -897,12 +977,16 @@ namespace CNA::Internal::Backends::Glide
                 }
                 throw;
             }
+            // Only a fully, successfully constructed texture becomes eligible for eviction.
+            GetImpl().residentTextures.push_back(this);
         }
 
         ~GlideTextureBackend() override
         {
             if (const std::shared_ptr<GlideGraphicsBackend::Impl> impl = impl_.lock())
             {
+                auto& residents = impl->residentTextures;
+                residents.erase(std::remove(residents.begin(), residents.end(), this), residents.end());
                 // A source command can remain in Glide's FIFO after the C++ texture dies. Do
                 // not make its TMU range reusable until the hardware/emulator has consumed it.
                 impl->api.grFinish();
@@ -911,6 +995,30 @@ namespace CNA::Internal::Backends::Glide
                     impl->ReleaseTexture(tile.range);
                 }
             }
+        }
+
+        [[nodiscard]] bool IsResident() const override { return !tiles_.empty(); }
+        [[nodiscard]] std::uint64_t LastUsedCounter() const override { return lastUsedCounter_; }
+
+        FxU32 EvictAndReleaseNativeMemory() override
+        {
+            if (tiles_.empty())
+            {
+                return 0;
+            }
+            GlideGraphicsBackend::Impl& impl = GetImpl();
+            // The retained CPU-side source (rgba_/logicalMipLevels_/explicitMipLevels_) is
+            // untouched: eviction only reclaims native TMU memory, which BuildTiles() can
+            // reconstruct from that source the next time this texture is actually used.
+            impl.api.grFinish();
+            FxU32 freedBytes = 0;
+            for (const Tile& tile : tiles_)
+            {
+                freedBytes += tile.range.size;
+                impl.ReleaseTexture(tile.range);
+            }
+            tiles_.clear();
+            return freedBytes;
         }
 
         [[nodiscard]] int GetWidth() const override { return width_; }
@@ -934,6 +1042,9 @@ namespace CNA::Internal::Backends::Glide
                 std::memcpy(rgba_.data() + static_cast<std::size_t>(row) * rowBytes,
                             rgba + static_cast<std::size_t>(row) * sourceStride, rowBytes);
             }
+            // A pending SpriteBatch quad was already computed against this texture's current
+            // tile content; submit it before that content changes underneath it.
+            GetImpl().FlushSpriteBatch();
             // Existing draws may still sample this native allocation. Synchronize before
             // downloading a replacement mip chain into the same TMU addresses.
             GetImpl().api.grFinish();
@@ -965,6 +1076,9 @@ namespace CNA::Internal::Backends::Glide
             explicitMipLevels_.resize(static_cast<std::size_t>(level + 1));
             explicitMipLevels_[level].assign(rgba, rgba + byteCount);
 
+            // A pending SpriteBatch quad was already computed against this texture's current
+            // tile content; submit it before that content changes underneath it.
+            GetImpl().FlushSpriteBatch();
             // Every native tile references the same logical pyramid. Rebuild it before replacing
             // tile data so this explicit source level, lower generated levels and tile gutters all
             // change atomically after the existing Glide FIFO has consumed prior draws.
@@ -982,24 +1096,63 @@ namespace CNA::Internal::Backends::Glide
 
         void EnsureAddressMode(int addressU, int addressV)
         {
-            // The source image is retained in RGBA8, so changing the sampler address mode can
-            // rebuild the global mip pyramid and tile padding without losing information to an
-            // earlier ARGB4444 conversion. Lower LODs also depend on the mode at image edges.
-            if (addressU == uploadedAddressU_ && addressV == uploadedAddressV_)
+            // Every real draw use funnels through here (even when nothing below actually needs
+            // to change), so this is also where residency/LRU state gets touched.
+            lastUsedCounter_ = GetImpl().NextTextureUseCounter();
+            const bool wasEvicted = tiles_.empty();
+            const bool addressModeChanged = addressU != uploadedAddressU_ || addressV != uploadedAddressV_;
+            if (!wasEvicted && !addressModeChanged)
             {
                 return;
             }
-            static_cast<void>(ToGlideTextureAddress(addressU));
-            static_cast<void>(ToGlideTextureAddress(addressV));
-            GetImpl().api.grFinish();
-            BuildLogicalMipChain(addressU, addressV);
-            for (Tile& tile : tiles_)
+            // A pending SpriteBatch quad's vertex data was already computed against whatever
+            // this texture's tiles contained when it was queued. Mutating that tile content in
+            // place (address-mode change) or reclaiming/reconstructing it (eviction) must not
+            // happen while such a quad is still unsubmitted, or it would render with texture
+            // data it was never actually queued against.
+            GetImpl().FlushSpriteBatch();
+            // The source image is retained in RGBA8, so changing the sampler address mode can
+            // rebuild the global mip pyramid and tile padding without losing information to an
+            // earlier ARGB4444 conversion. Lower LODs also depend on the mode at image edges.
+            if (addressModeChanged)
             {
-                ConvertTileToGlideTexels(tile, addressU, addressV);
-                Upload(tile);
+                static_cast<void>(ToGlideTextureAddress(addressU));
+                static_cast<void>(ToGlideTextureAddress(addressV));
             }
-            uploadedAddressU_ = addressU;
-            uploadedAddressV_ = addressV;
+            GetImpl().api.grFinish();
+            if (addressModeChanged)
+            {
+                BuildLogicalMipChain(addressU, addressV);
+                uploadedAddressU_ = addressU;
+                uploadedAddressV_ = addressV;
+            }
+            if (wasEvicted)
+            {
+                // Reconstruct every tile from the retained logical pyramid, atomically: a
+                // mid-rebuild failure (e.g. TMU0 still exhausted after evicting everything else)
+                // must leave this texture fully evicted again, never partially resident.
+                try
+                {
+                    BuildTiles();
+                }
+                catch (...)
+                {
+                    for (const Tile& tile : tiles_)
+                    {
+                        GetImpl().ReleaseTexture(tile.range);
+                    }
+                    tiles_.clear();
+                    throw;
+                }
+            }
+            else
+            {
+                for (Tile& tile : tiles_)
+                {
+                    ConvertTileToGlideTexels(tile, addressU, addressV);
+                    Upload(tile);
+                }
+            }
         }
 
     private:
@@ -1149,7 +1302,7 @@ namespace CNA::Internal::Backends::Glide
                     {
                         throw std::runtime_error("grTexTextureMemRequired rejected an ARGB4444 tiled Glide texture");
                     }
-                    tile.range = GetImpl().AllocateTexture(requiredBytes);
+                    tile.range = GetImpl().AllocateTexture(requiredBytes, this);
                     try
                     {
                         Upload(tile);
@@ -1245,6 +1398,7 @@ namespace CNA::Internal::Backends::Glide
         std::vector<std::vector<std::uint8_t>> explicitMipLevels_;
         std::vector<LogicalMipLevel> logicalMipLevels_;
         std::vector<Tile> tiles_;
+        std::uint64_t lastUsedCounter_ = 0;
 
         friend struct GlideGraphicsBackend::Impl;
     };

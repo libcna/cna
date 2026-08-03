@@ -417,11 +417,43 @@ plus a dgVoodoo/real-hardware visual test before it can be advertised as support
   GLIDE-FUT-011, add an optional direct-NPOT storage path for runtimes reporting it, while keeping
   the existing tiled power-of-two path as the canonical fallback. Verify mip selection, wrap,
   clamp, mirror and texture-coordinate precision before preferring the extension path.
-- [ ] **GLIDE-FUT-013 — Improve texture-memory residency under pressure.** Track logical source
-  data and native allocation costs, evict least-recently-used unbound textures only after FIFO
-  completion, and lazily re-upload them on reuse. Make eviction deterministic and observable in
-  diagnostics; if recovery cannot allocate an atomically complete tiled mip chain, fail the draw
-  rather than render a partially resident texture.
+- [x] **GLIDE-FUT-013 — Improve texture-memory residency under pressure.** `AllocateTexture()`
+  previously threw "TMU0 texture memory is exhausted" outright on the first failed first-fit
+  search. It now retries: on exhaustion, it flushes any pending SpriteBatch quad (see below),
+  picks the least-recently-used *other*, currently-resident texture via a new portable
+  `GlideTextureEviction.hpp` (`SelectGlideEvictionVictim`), evicts it (`grFinish()`, release every
+  native tile range, `tiles_.clear()` -- the CPU-side `rgba_`/`logicalMipLevels_`/
+  `explicitMipLevels_` source is untouched), and retries the fit. This repeats until an allocation
+  succeeds or no evictable candidate remains, at which point it throws the original exhaustion
+  error rather than ever returning a partial allocation. `GlideTextureBackend` now also implements
+  a small forward-declared `IGlideResidentTexture` interface (`IsResident`/`LastUsedCounter`/
+  `EvictAndReleaseNativeMemory`) and self-registers with `Impl::residentTextures` after
+  successfully constructing, self-unregisters in its destructor. `EnsureAddressMode()` -- the
+  single hook already called at the top of every real draw use -- now also stamps a deterministic
+  logical-clock `lastUsedCounter_` (not wall-clock time, so LRU ordering stays reproducible) and,
+  when it finds `tiles_` empty (evicted since last use), atomically reconstructs every tile from
+  the still-valid logical pyramid via `BuildTiles()` inside the same try/catch-and-roll-back
+  pattern the constructor already used, so a mid-rebuild failure (TMU0 still exhausted even after
+  evicting everything else) leaves the texture cleanly fully-evicted again, never partially
+  resident.
+  **Found and fixed a real hazard from composing this with GLIDE-FUT-015's deferred SpriteBatch
+  submission, done earlier this session:** a queued-but-unsubmitted sprite's vertex data is
+  already computed against whatever a texture's tiles contained when it was queued; mutating that
+  content in place (an address-mode change, `UpdatePixels`/`UpdatePixelsLevel`) or evicting/
+  rebuilding it, while such a quad is still unflushed, would make it render with texture data it
+  was never actually queued against. `EnsureAddressMode()`, `UpdatePixels()`,
+  `UpdatePixelsLevel()`, and `AllocateTexture()`'s eviction branch (the last one for the case
+  where a *different*, brand-new texture's construction evicts an unrelated existing one) all now
+  call `Impl::FlushSpriteBatch()` before touching native tile state. This closes a gap that was
+  already latent in the FUT-015 change (its own flush-coverage sweep only checked
+  `GlideGraphicsBackend::` methods, not `GlideTextureBackend::` ones).
+  Eviction is reported through the existing `CNA_GLIDE_DIAGNOSTICS=1` channel (bytes freed per
+  eviction). Five portable probes cover LRU selection, requester self-exclusion, skipping
+  non-resident candidates, the no-eligible-candidate case, and deterministic tie-breaking (first
+  encountered wins on equal counters, verified with reversed input order). Verified with i686
+  MinGW `-fsyntax-only` recompilation of the whole backend and the portable Glide unit suite
+  (55/55). An end-to-end memory-pressure/eviction fake-DLL or dgVoodoo capture remains blocked by
+  the same external i686 `sharp-runtime` `__int128` dependency as GLIDE-AUD-006/007.
 - [x] **GLIDE-FUT-014 — Replace pointer-array batches with the contiguous vertex-array path.**
   Load and ABI-test `grDrawVertexArrayContiguous`, then use it for compatible triangle batches if
   its byte-stride and FIFO behaviour match the existing pointer-array implementation. Compatible
