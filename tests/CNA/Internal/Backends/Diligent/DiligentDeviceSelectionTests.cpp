@@ -19,8 +19,13 @@
 #include <string>
 #include <vector>
 
+// Matches DiligentGraphicsBackend.hpp's own alias: the CNA namespace here is itself named
+// `Diligent`, so an unqualified `Diligent::X` would resolve to this namespace and fail.
+namespace Dg = ::Diligent;
+
 using CNA::Internal::Backends::Diligent::ComputeDiligentDepthBiasRawUnits;
 using CNA::Internal::Backends::Diligent::DiligentDeviceType;
+using CNA::Internal::Backends::Diligent::EvaluateCapability;
 using CNA::Internal::Backends::Diligent::GetDeviceTypeName;
 using CNA::Internal::Backends::Diligent::GetDeviceTypePreferenceOrder;
 using CNA::Internal::Backends::Diligent::ParseDeviceTypeOverride;
@@ -142,6 +147,93 @@ TEST(DiligentDeviceSelectionTest, DepthBiasRawUnitsClampsInsteadOfOverflowingOnE
 
     EXPECT_EQ(ComputeDiligentDepthBiasRawUnits(1.0e10f), maxUnits);
     EXPECT_EQ(ComputeDiligentDepthBiasRawUnits(-1.0e10f), minUnits);
+}
+
+// plan_diligent.md DILIGENT-61: SupportsCapability() used to answer WireFrame/OcclusionQuery
+// unconditionally `true` and AnisotropicFiltering from a device-TYPE guess (`!= OpenGL`) instead of
+// the actual device facts DiligentGraphicsBackend::CreateOcclusionQuery()/ApplySamplerState()
+// themselves depend on. EvaluateCapability() is the decision logic extracted into a free function
+// over already-queried facts, exercisable here with synthetic Dg::DeviceFeatures values -- no GPU
+// required, matching DILIGENT-3's own reason for using free functions for backend decisions.
+namespace
+{
+    Dg::DeviceFeatures FeaturesWith(Dg::DEVICE_FEATURE_STATE wireframe,
+                                    Dg::DEVICE_FEATURE_STATE occlusion,
+                                    Dg::DEVICE_FEATURE_STATE binaryOcclusion)
+    {
+        Dg::DeviceFeatures features{};
+        features.WireframeFill = wireframe;
+        features.OcclusionQueries = occlusion;
+        features.BinaryOcclusionQueries = binaryOcclusion;
+        return features;
+    }
+}
+
+TEST(DiligentDeviceSelectionTest, EvaluateCapabilityStructuralCapabilitiesAreAlwaysTrue)
+{
+    const Dg::DeviceFeatures noFeatures = FeaturesWith(
+        Dg::DEVICE_FEATURE_STATE_DISABLED, Dg::DEVICE_FEATURE_STATE_DISABLED,
+        Dg::DEVICE_FEATURE_STATE_DISABLED);
+
+    EXPECT_TRUE(EvaluateCapability(CNA::GraphicsCapability::ThreeD, noFeatures, 1, false));
+    EXPECT_TRUE(EvaluateCapability(CNA::GraphicsCapability::DepthStencilBuffer, noFeatures, 1, false));
+    EXPECT_TRUE(EvaluateCapability(CNA::GraphicsCapability::Texture3D, noFeatures, 1, false));
+    EXPECT_TRUE(EvaluateCapability(CNA::GraphicsCapability::MultipleRenderTargets, noFeatures, 1, false));
+    EXPECT_FALSE(EvaluateCapability(CNA::GraphicsCapability::CustomEffects, noFeatures, 16, true));
+}
+
+TEST(DiligentDeviceSelectionTest, EvaluateCapabilityWireFrameFollowsTheDeviceFeature)
+{
+    const Dg::DeviceFeatures enabled = FeaturesWith(
+        Dg::DEVICE_FEATURE_STATE_ENABLED, Dg::DEVICE_FEATURE_STATE_DISABLED,
+        Dg::DEVICE_FEATURE_STATE_DISABLED);
+    const Dg::DeviceFeatures disabled = FeaturesWith(
+        Dg::DEVICE_FEATURE_STATE_DISABLED, Dg::DEVICE_FEATURE_STATE_DISABLED,
+        Dg::DEVICE_FEATURE_STATE_DISABLED);
+
+    EXPECT_TRUE(EvaluateCapability(CNA::GraphicsCapability::WireFrame, enabled, 1, false));
+    EXPECT_FALSE(EvaluateCapability(CNA::GraphicsCapability::WireFrame, disabled, 1, false));
+}
+
+TEST(DiligentDeviceSelectionTest, EvaluateCapabilityOcclusionQueryAcceptsEitherExactOrBinary)
+{
+    const Dg::DeviceFeatures neither = FeaturesWith(
+        Dg::DEVICE_FEATURE_STATE_DISABLED, Dg::DEVICE_FEATURE_STATE_DISABLED,
+        Dg::DEVICE_FEATURE_STATE_DISABLED);
+    const Dg::DeviceFeatures exactOnly = FeaturesWith(
+        Dg::DEVICE_FEATURE_STATE_DISABLED, Dg::DEVICE_FEATURE_STATE_ENABLED,
+        Dg::DEVICE_FEATURE_STATE_DISABLED);
+    const Dg::DeviceFeatures binaryOnly = FeaturesWith(
+        Dg::DEVICE_FEATURE_STATE_DISABLED, Dg::DEVICE_FEATURE_STATE_DISABLED,
+        Dg::DEVICE_FEATURE_STATE_ENABLED);
+
+    // This exact disjunction is what CreateOcclusionQuery()'s own constructor throws against --
+    // SupportsCapability() must never say true immediately before that throws.
+    EXPECT_FALSE(EvaluateCapability(CNA::GraphicsCapability::OcclusionQuery, neither, 1, false));
+    EXPECT_TRUE(EvaluateCapability(CNA::GraphicsCapability::OcclusionQuery, exactOnly, 1, false));
+    EXPECT_TRUE(EvaluateCapability(CNA::GraphicsCapability::OcclusionQuery, binaryOnly, 1, false));
+}
+
+TEST(DiligentDeviceSelectionTest, EvaluateCapabilityAnisotropicFilteringFollowsMaxAnisotropy)
+{
+    const Dg::DeviceFeatures noFeatures = FeaturesWith(
+        Dg::DEVICE_FEATURE_STATE_DISABLED, Dg::DEVICE_FEATURE_STATE_DISABLED,
+        Dg::DEVICE_FEATURE_STATE_DISABLED);
+
+    EXPECT_FALSE(EvaluateCapability(CNA::GraphicsCapability::AnisotropicFiltering, noFeatures, 1, false));
+    EXPECT_TRUE(EvaluateCapability(CNA::GraphicsCapability::AnisotropicFiltering, noFeatures, 16, false));
+}
+
+TEST(DiligentDeviceSelectionTest, EvaluateCapabilityMultiSampleAntiAliasingFollowsTheProbe)
+{
+    const Dg::DeviceFeatures noFeatures = FeaturesWith(
+        Dg::DEVICE_FEATURE_STATE_DISABLED, Dg::DEVICE_FEATURE_STATE_DISABLED,
+        Dg::DEVICE_FEATURE_STATE_DISABLED);
+
+    EXPECT_FALSE(
+        EvaluateCapability(CNA::GraphicsCapability::MultiSampleAntiAliasing, noFeatures, 1, false));
+    EXPECT_TRUE(
+        EvaluateCapability(CNA::GraphicsCapability::MultiSampleAntiAliasing, noFeatures, 1, true));
 }
 
 #endif // CNA_BACKEND_DILIGENT

@@ -1095,6 +1095,20 @@ float4 main(in PSInput psIn) : SV_Target
                    (static_cast<std::uint32_t>(c & 0xFF) << 16) |
                    (static_cast<std::uint32_t>(d & 0xFF) << 24);
         }
+
+        /// DILIGENT-61: without this, every EngineCreateInfo::Features field defaults to
+        /// DEVICE_FEATURE_STATE_DISABLED, which the API contract guarantees is never auto-enabled
+        /// regardless of real hardware support -- `SupportsCapability()` reading
+        /// `IRenderDevice::GetDeviceInfo().Features` would then honestly, but wrongly, report every
+        /// one of these as unsupported on hardware that actually has them. OPTIONAL asks Diligent to
+        /// enable each one when (and only when) the device/driver actually supports it, and can
+        /// never fail device creation the way ENABLED could.
+        void RequestOptionalCapabilityFeatures(Dg::EngineCreateInfo& createInfo)
+        {
+            createInfo.Features.WireframeFill = Dg::DEVICE_FEATURE_STATE_OPTIONAL;
+            createInfo.Features.OcclusionQueries = Dg::DEVICE_FEATURE_STATE_OPTIONAL;
+            createInfo.Features.BinaryOcclusionQueries = Dg::DEVICE_FEATURE_STATE_OPTIONAL;
+        }
     }
 
     const char* GetDeviceTypeName(DiligentDeviceType type)
@@ -2427,6 +2441,7 @@ float4 main(in PSInput psIn) : SV_Target
             {
                 auto* factory = Dg::GetEngineFactoryVk();
                 Dg::EngineVkCreateInfo createInfo;
+                RequestOptionalCapabilityFeatures(createInfo);
                 factory->CreateDeviceAndContextsVk(createInfo, &device_, &context_);
                 if (!device_ || !context_)
                     return false;
@@ -2460,6 +2475,7 @@ float4 main(in PSInput psIn) : SV_Target
                 // XNA projection matrices produce Direct3D-style [0,1] clip depth, so the GL
                 // device is asked for the same range instead of GL's default [-1,1].
                 createInfo.ZeroToOneNDZ = true;
+                RequestOptionalCapabilityFeatures(createInfo);
                 factory->CreateDeviceAndSwapChainGL(createInfo, &device_, &context_, swapChainDesc,
                                                     &swapChain_);
                 engineFactory_ = Dg::RefCntAutoPtr<Dg::IEngineFactory>(factory);
@@ -2471,6 +2487,7 @@ float4 main(in PSInput psIn) : SV_Target
             {
                 auto* factory = Dg::GetEngineFactoryD3D11();
                 Dg::EngineD3D11CreateInfo createInfo;
+                RequestOptionalCapabilityFeatures(createInfo);
                 factory->CreateDeviceAndContextsD3D11(createInfo, &device_, &context_);
                 if (!device_ || !context_)
                     return false;
@@ -2487,6 +2504,7 @@ float4 main(in PSInput psIn) : SV_Target
                 Dg::EngineD3D12CreateInfo createInfo;
                 if (!factory->LoadD3D12())
                     return false;
+                RequestOptionalCapabilityFeatures(createInfo);
                 factory->CreateDeviceAndContextsD3D12(createInfo, &device_, &context_);
                 if (!device_ || !context_)
                     return false;
@@ -3365,28 +3383,53 @@ float4 main(in PSInput psIn) : SV_Target
         EnsureRenderTargetsBound();
     }
 
-    bool DiligentGraphicsBackend::SupportsCapability(CNA::GraphicsCapability capability) const
+    bool EvaluateCapability(CNA::GraphicsCapability capability, const Dg::DeviceFeatures& features,
+                            Dg::Uint8 maxAnisotropy, bool multiSampleSupported)
     {
         switch (capability)
         {
+            // Every CNA draw here always has vertex/index buffers, 3D pipelines and a real
+            // D24_UNORM_S8_UINT depth-stencil buffer (design decision 6) regardless of device type
+            // -- these three are structural to this backend, not device-variable.
             case CNA::GraphicsCapability::ThreeD:
             case CNA::GraphicsCapability::DepthStencilBuffer:
-            case CNA::GraphicsCapability::WireFrame:
-                return true;
-            case CNA::GraphicsCapability::AnisotropicFiltering:
-                return deviceType_ != DiligentDeviceType::OpenGL;
             case CNA::GraphicsCapability::Texture3D:
                 return true;
+            case CNA::GraphicsCapability::WireFrame:
+                return features.WireframeFill == Dg::DEVICE_FEATURE_STATE_ENABLED;
+            case CNA::GraphicsCapability::AnisotropicFiltering:
+                return maxAnisotropy > 1;
+            // DILIGENT_MAX_RENDER_TARGETS is a fixed compile-time 8 on every Diligent device type,
+            // well above the 4 slots GetOrCreatePipeline() itself clamps to (DILIGENT-24) -- there
+            // is no per-device MRT limit to probe here.
             case CNA::GraphicsCapability::MultipleRenderTargets:
                 return true;
             case CNA::GraphicsCapability::OcclusionQuery:
-                return true;
+                return features.OcclusionQueries == Dg::DEVICE_FEATURE_STATE_ENABLED ||
+                      features.BinaryOcclusionQueries == Dg::DEVICE_FEATURE_STATE_ENABLED;
             case CNA::GraphicsCapability::MultiSampleAntiAliasing:
-                return true;
+                return multiSampleSupported;
             case CNA::GraphicsCapability::CustomEffects:
                 return false;
         }
         return false;
+    }
+
+    bool DiligentGraphicsBackend::SupportsCapability(CNA::GraphicsCapability capability) const
+    {
+        // DILIGENT-61: device-type guesses and unconditional `true`s replaced with the actual
+        // facts CreateOcclusionQuery()/ApplyRasterizerState()/ApplySamplerState()/ClampSampleCount()
+        // themselves already consult (or, for MultiSampleAntiAliasing, the same helper those use),
+        // so a `true` here can never be followed by the corresponding operation throwing.
+        //
+        // Probing with the largest candidate ClampSampleCount() itself ever considers (64) --
+        // rather than the smallest non-1 value (2) -- matters: ClampSampleCount() only returns a
+        // candidate <= the requested value, so probing with 2 alone reports "unsupported" on a
+        // real device that supports 4x/8x but happens not to support 2x specifically (found live:
+        // this backend's own lavapipe verification device is exactly such a case).
+        return EvaluateCapability(capability, device_->GetDeviceInfo().Features,
+                                  device_->GetAdapterInfo().Sampler.MaxAnisotropy,
+                                  ClampSampleCount(64, Dg::TEX_FORMAT_RGBA8_UNORM) > 1);
     }
 
     std::unique_ptr<IOcclusionQueryBackend> DiligentGraphicsBackend::CreateOcclusionQuery()

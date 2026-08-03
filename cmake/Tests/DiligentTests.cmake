@@ -224,4 +224,14 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_BACKEND STREQUAL "DILIGEN
         TIMEOUT 90 LABELS "GraphicsSmoke;Diligent"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
         SKIP_REGULAR_EXPRESSION "\\[SKIP\\] CNA Diligent smoke")
+
+    # plan_diligent.md DILIGENT-61: SupportsCapability() must agree with what the corresponding
+    # Create/Apply operation actually does on the live device.
+    cna_diligent_test(cna_test_diligent_capability_consistency
+                      examples/diligent_capability_consistency_test.cpp)
+    cna_register_backend_test(NAME Diligent_CapabilityConsistency
+        COMMAND cna_test_diligent_capability_consistency
+        TIMEOUT 90 LABELS "GraphicsSmoke;Diligent"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
+        SKIP_REGULAR_EXPRESSION "\\[SKIP\\] CNA Diligent smoke")
 endif()

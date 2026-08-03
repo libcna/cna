@@ -14,9 +14,12 @@
 #include "Common/interface/RefCntAutoPtr.hpp"
 #include "Graphics/GraphicsEngine/interface/DeviceContext.h"
 #include "Graphics/GraphicsEngine/interface/EngineFactory.h"
+#include "Graphics/GraphicsEngine/interface/GraphicsTypes.h"
 #include "Graphics/GraphicsEngine/interface/Query.h"
 #include "Graphics/GraphicsEngine/interface/RenderDevice.h"
 #include "Graphics/GraphicsEngine/interface/SwapChain.h"
+
+#include "CNA/GraphicsCapability.hpp"
 
 /// Forward declaration matching SDL3's own `typedef struct SDL_GLContextState* SDL_GLContext;` --
 /// avoids pulling the full SDL3 header into every translation unit that includes this one, the same
@@ -96,6 +99,24 @@ namespace CNA::Internal::Backends::Diligent
      * @return The raw Diligent `DepthBias` unit, clamped to `[INT32_MIN, INT32_MAX]`.
      */
     NOXNA [[nodiscard]] std::int32_t ComputeDiligentDepthBiasRawUnits(float depthBias);
+
+    /**
+     * @brief NOXNA. Decides `SupportsCapability()`'s answer from already-queried device facts,
+     * exposed as a free function so the decision logic itself is testable with no GPU present
+     * (`DILIGENT-3`'s own established reason for doing this) -- `DiligentGraphicsBackend`'s own
+     * `SupportsCapability()` is a thin wrapper that fetches @p features /
+     * @p maxAnisotropy / @p multiSampleSupported from a live device and calls this.
+     *
+     * @param capability            Capability being queried.
+     * @param features              `IRenderDevice::GetDeviceInfo().Features` of the live device.
+     * @param maxAnisotropy         `IRenderDevice::GetAdapterInfo().Sampler.MaxAnisotropy`.
+     * @param multiSampleSupported  Whether the device supports any sample count above 1 for the
+     *                              formats CNA render targets/back buffers actually use.
+     * @return True if @p capability is genuinely usable given these facts.
+     */
+    NOXNA [[nodiscard]] bool EvaluateCapability(CNA::GraphicsCapability capability,
+                                                const Dg::DeviceFeatures& features,
+                                                Dg::Uint8 maxAnisotropy, bool multiSampleSupported);
 
     class DiligentGraphicsBackend;
 
