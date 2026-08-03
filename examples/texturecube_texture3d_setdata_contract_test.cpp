@@ -210,6 +210,13 @@ namespace
     constexpr Contract kContract{"D3D12", true, Support::Exact, Support::Unsupported,
                                  true, Support::Exact, Support::Exact,
                                  Support::Unsupported, false};
+#elif defined(CNA_BACKEND_LLGL)
+    // TextureCube and Texture3D both have a real, fully mip-chained upload/readback path here
+    // (LLGL-21/LLGL-31). Like Vulkan/BGFX/WebGPU/SDL_GPU, LlglRenderTargetCubeBackend only overrides
+    // GetData -- it inherits ITextureCubeBackend's default SetData refusal, so rtCube is Unsupported.
+    constexpr Contract kContract{"LLGL", true, Support::Exact, Support::Exact,
+                                 true, Support::Exact, Support::Exact,
+                                 Support::Unsupported, false};
 #else
 #error "REMED-GFX-135: this backend has no declared TextureCube/Texture3D SetData contract."
 #endif

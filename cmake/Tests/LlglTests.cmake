@@ -567,4 +567,56 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "LLGL")
         TIMEOUT 90 LABELS "Llgl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-135: the WRITE half of the same finding backbuffer_first_read_test.cpp's own
+    # REMED-GFX-127 covers the READ side of -- TextureCube::SetData/Texture3D::SetData must report
+    # honestly whether the whole requested region was actually stored, not silently accept-and-discard.
+    cna_llgl_test(cna_test_llgl_cube_volume_setdata_contract
+                  examples/texturecube_texture3d_setdata_contract_test.cpp)
+    cna_register_backend_test(NAME Llgl_CubeVolume_SetDataContract COMMAND cna_test_llgl_cube_volume_setdata_contract
+        TIMEOUT 90 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # REMED-GFX-130: the READ half of the same finding -- TextureCube/Texture3D GetData must report
+    # honestly whether it read anything back, not convert a zero-initialized scratch buffer into an
+    # apparently-successful, uniformly transparent-black readback.
+    cna_llgl_test(cna_test_llgl_cube_volume_getdata_contract
+                  examples/texturecube_texture3d_getdata_contract_test.cpp)
+    cna_register_backend_test(NAME Llgl_CubeVolume_GetDataContract COMMAND cna_test_llgl_cube_volume_getdata_contract
+        TIMEOUT 90 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # startIndex/elementCount contract of every public Texture2D::GetData overload. startIndex is a
+    # DESTINATION element offset and elementCount is the destination capacity available from it.
+    cna_llgl_test(cna_test_llgl_texture2d_getdata_transfer_range
+                  examples/texture2d_getdata_transfer_range_test.cpp)
+    cna_register_backend_test(NAME Llgl_Texture2D_GetDataTransferRange COMMAND cna_test_llgl_texture2d_getdata_transfer_range
+        TIMEOUT 90 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    cna_llgl_test(cna_test_llgl_texture2d_getdata_contract
+                  examples/texture2d_getdata_contract_test.cpp)
+    cna_register_backend_test(NAME Llgl_Texture2D_GetDataContract COMMAND cna_test_llgl_texture2d_getdata_contract
+        TIMEOUT 90 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # measures the two DIFFERENT partitions of the nine TextureFilter ordinals that magnification and
+    # minification induce, on SpriteBatch and on every textured stock family.
+    cna_llgl_test(cna_test_llgl_texture_filter_ordinal
+                  examples/texture_filter_ordinal_contract_test.cpp)
+    cna_register_backend_test(NAME Llgl_TextureFilterOrdinalContract COMMAND cna_test_llgl_texture_filter_ordinal
+        TIMEOUT 300 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    cna_llgl_test(cna_test_llgl_point_sampling
+                  examples/point_sampling_contract_test.cpp)
+    cna_register_backend_test(NAME Llgl_PointSamplingContract COMMAND cna_test_llgl_point_sampling
+        TIMEOUT 300 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    cna_llgl_test(cna_test_llgl_colorspace_midtone
+                  examples/colorspace_midtone_contract_test.cpp)
+    cna_register_backend_test(NAME Llgl_ColorSpace_MidTone COMMAND cna_test_llgl_colorspace_midtone
+        TIMEOUT 120 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()

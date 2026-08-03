@@ -174,6 +174,9 @@ namespace
 #elif defined(CNA_BACKEND_D3D12)
     constexpr Contract kContract{"D3D12", true, Support::Exact, Support::Exact,
                                  true, Support::Exact, Support::Exact, false};
+#elif defined(CNA_BACKEND_LLGL)
+    constexpr Contract kContract{"LLGL", true, Support::Exact, Support::Exact,
+                                 true, Support::Exact, Support::Exact, false};
 #else
 #error "REMED-GFX-130: this backend has no declared TextureCube/Texture3D GetData contract."
 #endif

@@ -850,6 +850,18 @@ orientation into and out of a `RenderTarget2D`, `BasicEffect`/`AlphaTestEffect` 
 `BasicEffect` draw from a normal-less `VertexPositionTexture` layout -- throws uncaught and aborts
 the whole process, since this fixture has no try/catch around that specific check. See
 `known_bugs.md`'s open entry for the underlying capability gap.
+Phase LLGL-7's `LLGL-42` `Texture`/`TextureCube`/`Texture3D` batch adds seven more fully-passing
+tests with no fix required: `Llgl_CubeVolume_SetDataContract`/`Llgl_CubeVolume_GetDataContract`
+(56/56 each -- `TextureCube`/`Texture3D` SetData/GetData are exact at every mip level, and
+`RenderTargetCube::SetData` correctly refuses since `LlglRenderTargetCubeBackend` only overrides
+`GetData`), `Llgl_Texture2D_GetDataTransferRange` (74/74) and `Llgl_Texture2D_GetDataContract`
+(40/40, both covering `Texture2D`/`RenderTarget2D` GetData's startIndex/elementCount contract and
+render-target readback exactness), `Llgl_TextureFilterOrdinalContract` (70/70, all nine
+`TextureFilter` ordinals resolve to the correct min/mag/mip native sampler) and
+`Llgl_PointSamplingContract` (146/146, point selection stays exact across every address mode,
+non-integer scale, render-target source and viewport offset this fixture probes), and
+`Llgl_ColorSpace_MidTone` (17/17, a render-target colour round-trip is byte-identical with no sRGB
+conversion baked in).
 Every other test is registered a second time pinned to the OpenGL
 module through `CNA_LLGL_RENDERER`, which also exercises the selection path itself. All these tests
 need a display; on a machine without one they report SKIPPED
