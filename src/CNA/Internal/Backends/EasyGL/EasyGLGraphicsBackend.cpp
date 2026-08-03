@@ -2189,10 +2189,10 @@ void main()
                 // the XNA 4.0 Graphics API coverage table's own "EasyGL N/A (GLES3)" entry.
                 return false;
             case CNA::GraphicsCapability::MultiStreamVertexInput:
-                // REMED-GFX-201: not implemented yet -- ApplyLayout() configures one VBO's
-                // declaration into this buffer's own VAO and Draw*PrimitivesEx binds that VAO
-                // alone, so a second per-vertex stream has no attribute locations to occupy.
-                return false;
+                // REMED-GFX-201: implemented -- Draw*PrimitivesEx binds every per-vertex stream
+                // into the VAO at locations continuing after the previous stream's, each with its
+                // own VBO, stride and byte offset, and restores the single-stream layout after.
+                return true;
             default:
                 return true;
         }
@@ -3290,6 +3290,82 @@ void main()
                 const unsigned int location = firstLocation + static_cast<unsigned int>(i);
                 vao.disable_attribute(location);
                 vao.set_attribute_divisor(location, 0);
+            }
+        }
+
+        /// REMED-GFX-201: how many attribute locations the streams before @p streamIndex occupy.
+        /// Locations run in binding-slot order across the concatenated declarations, which is the
+        /// same "location N == Nth field of the ported HLSL input struct" convention ApplyLayout()
+        /// uses for one stream and DrawInstancedPrimitivesEx already uses to append a second one.
+        unsigned int FirstLocationForStream(const GpuDrawParams& params, int streamIndex)
+        {
+            unsigned int location = 0;
+            for (int i = 0; i < streamIndex; ++i)
+            {
+                const auto& stream = params.vertexStreams[static_cast<std::size_t>(i)];
+                if (stream.instanceFrequency != 0)
+                    continue;
+                location += static_cast<unsigned int>(
+                    static_cast<const EasyGLVertexBufferBackend*>(stream.buffer)
+                        ->GetDeclarationElements().size());
+            }
+            return location;
+        }
+
+        /// REMED-GFX-201: binds every per-vertex stream into @p vao. Stream 0's own attributes are
+        /// only rewritten when it carries a residual offset, so the overwhelmingly common
+        /// "several streams, binding 0 has the smallest offset" case leaves ApplyLayout()'s work
+        /// untouched. Returns false when a bound stream has no declaration, which is the one shape
+        /// this path genuinely cannot express -- the caller then throws instead of drawing from
+        /// stream 0 alone.
+        bool ConfigureMultiStreamAttributes(
+            ::easygl::VertexArray& vao, const GpuDrawParams& params)
+        {
+            for (int i = 0; i < params.vertexStreamCount; ++i)
+            {
+                const auto& stream = params.vertexStreams[static_cast<std::size_t>(i)];
+                if (stream.instanceFrequency != 0)
+                    continue;
+                const auto* buffer =
+                    static_cast<const EasyGLVertexBufferBackend*>(stream.buffer);
+                if (buffer == nullptr || buffer->GetDeclarationElements().empty())
+                    return false;
+                if (i == 0 && stream.vertexOffset == 0)
+                    continue;   // exactly what ApplyLayout() already configured
+                ConfigureDeclarationAttributes(
+                    vao, *buffer, FirstLocationForStream(params, i),
+                    stream.vertexOffset, 0, buffer->GetDeclarationElements().size());
+            }
+            return true;
+        }
+
+        /// REMED-GFX-201: undoes ConfigureMultiStreamAttributes so the VAO is left exactly as
+        /// ApplyLayout() built it. Without this a later single-stream draw through the same buffer
+        /// would still have the secondary streams' locations enabled and pointing at a foreign VBO.
+        void RestoreSingleStreamAttributes(
+            ::easygl::VertexArray& vao, const GpuDrawParams& params)
+        {
+            for (int i = params.vertexStreamCount - 1; i >= 0; --i)
+            {
+                const auto& stream = params.vertexStreams[static_cast<std::size_t>(i)];
+                if (stream.instanceFrequency != 0)
+                    continue;
+                const auto* buffer =
+                    static_cast<const EasyGLVertexBufferBackend*>(stream.buffer);
+                if (buffer == nullptr || buffer->GetDeclarationElements().empty())
+                    continue;
+                if (i == 0)
+                {
+                    if (stream.vertexOffset != 0)
+                    {
+                        ConfigureDeclarationAttributes(
+                            vao, *buffer, 0, 0, 0, buffer->GetDeclarationElements().size());
+                    }
+                    continue;
+                }
+                DisableDeclarationAttributes(
+                    vao, FirstLocationForStream(params, i),
+                    buffer->GetDeclarationElements().size());
             }
         }
     }
@@ -5687,6 +5763,24 @@ CNA_GL_RT_SAMPLE_UV_DECL
     {
         if (metagl::IsContextLost()) return;
         const auto& vb  = static_cast<const EasyGLVertexBufferBackend&>(vb_in);
+        // REMED-GFX-201: every bound per-vertex stream is bound into this VAO, at locations
+        // continuing after the previous stream's, and each with its own VBO, stride and byte
+        // offset. glDrawArrays' `first` then advances all of them by params.vertexStart of their
+        // own elements. A single-stream draw takes neither branch and is unchanged.
+        const bool multiStream = HasMultipleVertexStreams(params);
+        auto& vao = const_cast<::easygl::VertexArray&>(vb.vao);
+        if (multiStream)
+        {
+            vao.bind();
+            if (!ConfigureMultiStreamAttributes(vao, params))
+            {
+                vao.unbind();
+                throw System::InvalidOperationException(
+                    "EasyGL multi-stream drawing requires every bound VertexBuffer to carry a "
+                    "VertexDeclaration.");
+            }
+            vao.unbind();
+        }
 
         if (params.customEffectBackend)
         {
@@ -5695,24 +5789,27 @@ CNA_GL_RT_SAMPLE_UV_DECL
             vb.vao.bind();
             device.draw_arrays(ToEasyGl(primitive), params.vertexStart, vertex_count);
             vb.vao.unbind();
+            if (multiStream) { vao.bind(); RestoreSingleStreamAttributes(vao, params); vao.unbind(); }
             return;
         }
 
-        Prog3D& p = SelectProgram(vb.GetStride(), params);
+        const std::size_t layoutStride = CombinedVertexStrideOr(params, vb.GetStride());
+        Prog3D& p = SelectProgram(layoutStride, params);
         p.prog.use();
         BindDrawParams(p, world, view, projection, params);
 
         const int vertex_count = VertexCountForPrimitives(primitive, primitiveCount);
-        CNA_RENDER_LOG("DrawPrimitivesEx: stride=" << vb.GetStride()
+        CNA_RENDER_LOG("DrawPrimitivesEx: stride=" << layoutStride
             << " prim=" << static_cast<int>(primitive) << " verts=" << vertex_count);
 
-        if (wireframe_ && DrawWireframe(vb, nullptr, primitive, primitiveCount,
-                                        0, 0, params.vertexStart))
+        if (!multiStream && wireframe_ &&
+            DrawWireframe(vb, nullptr, primitive, primitiveCount, 0, 0, params.vertexStart))
             return;
 
         vb.vao.bind();
         TraceBoundTextureUnit("draw-arrays-3d", 0);
         device.draw_arrays(ToEasyGl(primitive), params.vertexStart, vertex_count);
+        if (multiStream) RestoreSingleStreamAttributes(vao, params);
         vb.vao.unbind();
     }
 
@@ -5728,6 +5825,23 @@ CNA_GL_RT_SAMPLE_UV_DECL
         if (metagl::IsContextLost()) return;
         const auto& vb  = static_cast<const EasyGLVertexBufferBackend&>(vb_in);
         const auto& ib  = static_cast<const EasyGLIndexBufferBackend&>(ib_in);
+        // REMED-GFX-201: see DrawPrimitivesEx above. glDrawElementsBaseVertex's baseVertex plays
+        // the role glDrawArrays' `first` plays there -- it advances every bound stream by that
+        // many of its own elements.
+        const bool multiStream = HasMultipleVertexStreams(params);
+        auto& vao = const_cast<::easygl::VertexArray&>(vb.vao);
+        if (multiStream)
+        {
+            vao.bind();
+            if (!ConfigureMultiStreamAttributes(vao, params))
+            {
+                vao.unbind();
+                throw System::InvalidOperationException(
+                    "EasyGL multi-stream drawing requires every bound VertexBuffer to carry a "
+                    "VertexDeclaration.");
+            }
+            vao.unbind();
+        }
 
         if (params.customEffectBackend)
         {
@@ -5746,20 +5860,23 @@ CNA_GL_RT_SAMPLE_UV_DECL
                 ::metagl::glDrawElementsBaseVertex(ToEasyGl(primitive), index_count, idxTypeCustom,
                                                    indexOffsetCustom, params.baseVertex);
             }
+            if (multiStream) RestoreSingleStreamAttributes(vao, params);
             vb.vao.unbind();
             return;
         }
 
-        Prog3D& p = SelectProgram(vb.GetStride(), params);
+        const std::size_t layoutStride = CombinedVertexStrideOr(params, vb.GetStride());
+        Prog3D& p = SelectProgram(layoutStride, params);
         p.prog.use();
         BindDrawParams(p, world, view, projection, params);
 
         const int index_count = VertexCountForPrimitives(primitive, primitiveCount);
-        CNA_RENDER_LOG("DrawIndexedPrimitivesEx: stride=" << vb.GetStride()
+        CNA_RENDER_LOG("DrawIndexedPrimitivesEx: stride=" << layoutStride
             << " prim=" << static_cast<int>(primitive) << " indices=" << index_count);
 
-        if (wireframe_ && DrawWireframe(vb, &ib, primitive, primitiveCount,
-                                        params.startIndex, params.baseVertex, 0))
+        if (!multiStream && wireframe_ &&
+            DrawWireframe(vb, &ib, primitive, primitiveCount,
+                          params.startIndex, params.baseVertex, 0))
             return;
 
         vb.vao.bind();
@@ -5775,6 +5892,7 @@ CNA_GL_RT_SAMPLE_UV_DECL
             ::metagl::glDrawElementsBaseVertex(ToEasyGl(primitive), index_count, idxType2,
                                                indexOffset, params.baseVertex);
         }
+        if (multiStream) RestoreSingleStreamAttributes(vao, params);
         vb.vao.unbind();
     }
 

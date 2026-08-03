@@ -1429,11 +1429,34 @@ namespace CNA::Internal::Backends::Software
         /// doesn't affect the eventual texture/diffuse modulation, matching a real Effect's own
         /// VertexColorEnabled=false behavior. Attributes are left un-premultiplied; near-plane
         /// clipping (SOFTWARE-83) happens on ClipVertex, before the perspective divide.
-        ClipVertex BuildGenericClipVertex(const std::uint8_t* raw, std::size_t stride, const Matrix& combined,
+        /// REMED-GFX-201: reads one combined vertex whose bytes may live in several bound streams.
+        ///
+        /// The layout above is expressed in COMBINED byte offsets, and a multi-stream draw stores
+        /// those same bytes in separate buffers with separate strides. This resolves each offset to
+        /// the stream that owns it instead of copying the streams together: there is no
+        /// interleaved temporary, no allocation, and for a single-stream draw `At(n)` is exactly
+        /// the `raw + n` this path used before -- `recordBase[0]` is that same pointer and
+        /// MapCombinedOffsetToStream degenerates to the identity.
+        struct CombinedVertexReader
+        {
+            const GpuDrawParams* params = nullptr;
+            std::array<const std::uint8_t*, kMaxVertexStreams> recordBase{};
+
+            [[nodiscard]] const std::uint8_t* At(int combinedByteOffset) const
+            {
+                const GpuVertexStreamSlot slot =
+                    MapCombinedOffsetToStream(*params, combinedByteOffset);
+                return recordBase[static_cast<std::size_t>(slot.streamIndex)] +
+                       slot.byteOffsetInStream;
+            }
+        };
+
+        ClipVertex BuildGenericClipVertex(const CombinedVertexReader& raw, std::size_t stride,
+                                          const Matrix& combined,
                                           const GpuDrawParams& params)
         {
             Vector3 position;
-            std::memcpy(&position, raw, sizeof(Vector3));
+            std::memcpy(&position, raw.At(0), sizeof(Vector3));
             Vector3 normal(0.0f, 0.0f, 1.0f);
             bool haveNormal = false;
 
@@ -1446,9 +1469,9 @@ namespace CNA::Internal::Backends::Software
                 // blended matrix to Position/Normal BEFORE the standard World*View*Projection
                 // transform below, mirroring FNA's own Skin(vin, boneCount) step.
                 Vector4 blendWeight;
-                std::memcpy(&blendWeight, raw + 32, sizeof(Vector4));
+                std::memcpy(&blendWeight, raw.At(32), sizeof(Vector4));
                 std::uint8_t blendIndices[4];
-                std::memcpy(blendIndices, raw + 48, 4);
+                std::memcpy(blendIndices, raw.At(48), 4);
                 const float weights[4] = {blendWeight.X, blendWeight.Y, blendWeight.Z, blendWeight.W};
 
                 float blended[16] = {};
@@ -1462,7 +1485,7 @@ namespace CNA::Internal::Backends::Software
                 }
 
                 position = ApplyAffineColumnMajor(blended, position, 1.0f);
-                std::memcpy(&normal, raw + 12, sizeof(Vector3));
+                std::memcpy(&normal, raw.At(12), sizeof(Vector3));
                 normal = ApplyAffineColumnMajor(blended, normal, 0.0f);
                 haveNormal = true;
             }
@@ -1474,31 +1497,31 @@ namespace CNA::Internal::Backends::Software
 
             if (stride == 16)
             {
-                UnpackColorBytes(raw + 12, out.r, out.g, out.b, out.a);
+                UnpackColorBytes(raw.At(12), out.r, out.g, out.b, out.a);
             }
             else if (stride == 20)
             {
-                std::memcpy(&out.u, raw + 12, sizeof(float));
-                std::memcpy(&out.v, raw + 16, sizeof(float));
+                std::memcpy(&out.u, raw.At(12), sizeof(float));
+                std::memcpy(&out.v, raw.At(16), sizeof(float));
             }
             else if (stride == 24)
             {
-                UnpackColorBytes(raw + 12, out.r, out.g, out.b, out.a);
-                std::memcpy(&out.u, raw + 16, sizeof(float));
-                std::memcpy(&out.v, raw + 20, sizeof(float));
+                UnpackColorBytes(raw.At(12), out.r, out.g, out.b, out.a);
+                std::memcpy(&out.u, raw.At(16), sizeof(float));
+                std::memcpy(&out.v, raw.At(20), sizeof(float));
             }
             else if (stride == 32)
             {
                 // VertexPositionNormalTexture: Position@0, Normal@12, TextureCoordinate@24.
-                std::memcpy(&normal, raw + 12, sizeof(Vector3));
+                std::memcpy(&normal, raw.At(12), sizeof(Vector3));
                 haveNormal = true;
-                std::memcpy(&out.u, raw + 24, sizeof(float));
-                std::memcpy(&out.v, raw + 28, sizeof(float));
+                std::memcpy(&out.u, raw.At(24), sizeof(float));
+                std::memcpy(&out.v, raw.At(28), sizeof(float));
             }
             else if (stride == 52)
             {
-                std::memcpy(&out.u, raw + 24, sizeof(float));
-                std::memcpy(&out.v, raw + 28, sizeof(float));
+                std::memcpy(&out.u, raw.At(24), sizeof(float));
+                std::memcpy(&out.v, raw.At(28), sizeof(float));
             }
 
             if (haveNormal && params.envMapping)
@@ -2007,6 +2030,25 @@ namespace CNA::Internal::Backends::Software
         /// invalid pointer into the CPU vertex storage. All arithmetic is 64-bit, so neither a
         /// large primitiveCount nor an index near UINT32_MAX can wrap into an apparently valid
         /// address. Throws the public CNA range exception rather than any implementation type.
+        /// REMED-GFX-201: the element count every bound per-vertex stream can satisfy, once each
+        /// stream's own binding offset is deducted. A multi-stream draw addresses every stream with
+        /// the same element number, so the shortest stream bounds the draw -- validating only the
+        /// one `vb` names would let a short secondary stream be read past its end.
+        int SmallestAddressableVertexCount(const GpuDrawParams& params, int fallback)
+        {
+            if (params.vertexStreamCount == 0)
+                return fallback;
+            int smallest = fallback;
+            for (int i = 0; i < params.vertexStreamCount; ++i)
+            {
+                const auto& stream = params.vertexStreams[static_cast<std::size_t>(i)];
+                if (stream.instanceFrequency != 0)
+                    continue;
+                smallest = std::min(smallest, stream.vertexCount - stream.vertexOffset);
+            }
+            return std::max(smallest, 0);
+        }
+
         void ValidateIndexedAddressing(const std::uint8_t* indexBase, bool thirtyTwoBit,
                                        int availableIndexCount, int availableVertexCount,
                                        std::int64_t consumedIndexCount, int startIndex,
@@ -2735,10 +2777,11 @@ namespace CNA::Internal::Backends::Software
             case CNA::GraphicsCapability::Texture3D:
                 return false;
             case CNA::GraphicsCapability::MultiStreamVertexInput:
-                // REMED-GFX-201: not implemented yet -- BuildGenericClipVertex reads every
-                // attribute from one contiguous record, so a vertex split across buffers has no
-                // way to be fetched.
-                return false;
+                // REMED-GFX-201: implemented -- the vertex reader resolves each combined-layout
+                // byte offset to the stream that owns it, so every attribute is fetched from its
+                // own buffer with that buffer's own stride and binding offset, with no interleaved
+                // temporary and no per-vertex allocation.
+                return true;
             default:
                 return true;
         }
@@ -3180,10 +3223,15 @@ namespace CNA::Internal::Backends::Software
         const int vertexStart = params.vertexStart;
         const std::int64_t consumedVertexCount =
             PrimitiveElementCount(primitive, primitiveCount);
-        ValidateNonIndexedAddressing(vb.GetVertexCount(), consumedVertexCount, vertexStart);
+        ValidateNonIndexedAddressing(
+            SmallestAddressableVertexCount(params, vb.GetVertexCount()),
+            consumedVertexCount, vertexStart);
 
         const auto& swVb = static_cast<const SoftwareVertexBufferBackend&>(vb);
-        const std::size_t stride = swVb.Stride();
+        // REMED-GFX-201: the layout the shader sees spans every bound per-vertex stream, so the
+        // stride that selects it is their sum -- which is this one stream's own stride whenever a
+        // single buffer is bound.
+        const std::size_t stride = CombinedVertexStrideOr(params, swVb.Stride());
         if (stride != 16 && stride != 20 && stride != 24 && stride != 32 && stride != 52)
             throw std::runtime_error(
                 "SoftwareGraphicsBackend::DrawPrimitivesEx: unsupported vertex stride "
@@ -3212,8 +3260,29 @@ namespace CNA::Internal::Backends::Software
 
         // REMED-GFX-119: element = vertexStart + local (never a byte offset); the stride multiply
         // happens only after the element range above was validated.
-        const auto fetchVertex = [&](std::int64_t local) -> const std::uint8_t* {
-            return base + static_cast<std::size_t>(vertexStart + local) * stride;
+        // REMED-GFX-201: every bound per-vertex stream advances by the SAME element count, each
+        // multiplied by its OWN stride and shifted by its OWN binding offset -- FNA3D's
+        // `vertexStride * (vertexOffset + start)`, per stream.
+        const auto fetchVertex = [&](std::int64_t local) -> CombinedVertexReader {
+            CombinedVertexReader reader;
+            reader.params = &params;
+            const std::int64_t element = vertexStart + local;
+            if (params.vertexStreamCount == 0)
+            {
+                reader.recordBase[0] = base + static_cast<std::size_t>(element) * stride;
+                return reader;
+            }
+            for (int s = 0; s < params.vertexStreamCount; ++s)
+            {
+                const auto& stream = params.vertexStreams[static_cast<std::size_t>(s)];
+                const auto* streamVb =
+                    static_cast<const SoftwareVertexBufferBackend*>(stream.buffer);
+                reader.recordBase[static_cast<std::size_t>(s)] =
+                    streamVb->Data().data() +
+                    static_cast<std::size_t>(stream.vertexOffset + element) *
+                        static_cast<std::size_t>(stream.strideInBytes);
+            }
+            return reader;
         };
         // REMED-GFX-148: snapshot both static BlendState and dynamic BlendFactor once for this
         // public draw, beside the depth-state snapshot above.
@@ -3225,7 +3294,8 @@ namespace CNA::Internal::Backends::Software
             ClipVertex cv[3];
             for (int k = 0; k < 3; ++k)
             {
-                const std::uint8_t* raw = fetchVertex(static_cast<std::int64_t>(i) * 3 + k);
+                const CombinedVertexReader raw =
+                    fetchVertex(static_cast<std::int64_t>(i) * 3 + k);
                 cv[k] = BuildGenericClipVertex(raw, stride, combined, params);
             }
 
@@ -3274,7 +3344,9 @@ namespace CNA::Internal::Backends::Software
 
         const auto& swVb = static_cast<const SoftwareVertexBufferBackend&>(vb);
         const auto& swIb = static_cast<const SoftwareIndexBufferBackend&>(ib);
-        const std::size_t stride = swVb.Stride();
+        // REMED-GFX-201: see DrawPrimitivesEx -- the selecting stride is the sum of the bound
+        // per-vertex streams' strides, identical to this one stream's whenever one is bound.
+        const std::size_t stride = CombinedVertexStrideOr(params, swVb.Stride());
         if (stride != 16 && stride != 20 && stride != 24 && stride != 32 && stride != 52)
             throw std::runtime_error(
                 "SoftwareGraphicsBackend::DrawIndexedPrimitivesEx: unsupported vertex stride "
@@ -3292,7 +3364,8 @@ namespace CNA::Internal::Backends::Software
         const int startIndex = params.startIndex;
         const int baseVertex = params.baseVertex;
         const std::int64_t consumedIndexCount = PrimitiveElementCount(primitive, primitiveCount);
-        ValidateIndexedAddressing(ibBase, thirtyTwoBit, ib.GetIndexCount(), vb.GetVertexCount(),
+        ValidateIndexedAddressing(ibBase, thirtyTwoBit, ib.GetIndexCount(),
+                                  SmallestAddressableVertexCount(params, vb.GetVertexCount()),
                                   consumedIndexCount, startIndex, baseVertex);
 
         const Matrix combined = world * view * projection;
@@ -3316,11 +3389,31 @@ namespace CNA::Internal::Backends::Software
 
         // REMED-GFX-110: element = startIndex + local (never a byte offset), vertex = decoded
         // index + baseVertex (added exactly once). Every address below was validated above.
-        const auto fetchVertex = [&](std::int64_t local) -> const std::uint8_t* {
+        // REMED-GFX-201: the decoded index plus baseVertex addresses EVERY bound per-vertex
+        // stream, each shifted by its own binding offset and multiplied by its own stride.
+        const auto fetchVertex = [&](std::int64_t local) -> CombinedVertexReader {
             const std::int64_t vertexIndex =
                 static_cast<std::int64_t>(
                     DecodeIndexElement(ibBase, thirtyTwoBit, startIndex + local)) + baseVertex;
-            return vbBase + static_cast<std::size_t>(vertexIndex) * stride;
+            CombinedVertexReader reader;
+            reader.params = &params;
+            if (params.vertexStreamCount == 0)
+            {
+                reader.recordBase[0] =
+                    vbBase + static_cast<std::size_t>(vertexIndex) * stride;
+                return reader;
+            }
+            for (int s2 = 0; s2 < params.vertexStreamCount; ++s2)
+            {
+                const auto& stream = params.vertexStreams[static_cast<std::size_t>(s2)];
+                const auto* streamVb =
+                    static_cast<const SoftwareVertexBufferBackend*>(stream.buffer);
+                reader.recordBase[static_cast<std::size_t>(s2)] =
+                    streamVb->Data().data() +
+                    static_cast<std::size_t>(stream.vertexOffset + vertexIndex) *
+                        static_cast<std::size_t>(stream.strideInBytes);
+            }
+            return reader;
         };
         // REMED-GFX-148: one by-value state snapshot for the complete indexed public draw.
         const SoftwareBlendState blendState = blendState_;
@@ -3331,7 +3424,8 @@ namespace CNA::Internal::Backends::Software
             ClipVertex cv[3];
             for (int k = 0; k < 3; ++k)
             {
-                const std::uint8_t* raw = fetchVertex(static_cast<std::int64_t>(i) * 3 + k);
+                const CombinedVertexReader raw =
+                    fetchVertex(static_cast<std::int64_t>(i) * 3 + k);
                 cv[k] = BuildGenericClipVertex(raw, stride, combined, params);
             }
 
