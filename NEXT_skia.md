@@ -2037,12 +2037,48 @@ level-boundary contract.
   (weak lifetime tracking, the real `cnaCubeFace0`-`5` child declarations reaching a compiled
   author effect) is still entirely SKIA-149's job, unchanged in scope by this task.
 
+## Completed in this session: SKIA-147
+
+- Added `SkiaVolumeSampling.hpp/cpp`, implementing `docs/skia-cube-volume-sampling-contract.md`'s
+  padded grid-atlas design: `ComputeVolumeAtlasLayoutEXT` computes `cols=ceil(sqrt(depth))`,
+  `rows=ceil(depth/cols)`, and padded tile/atlas dimensions (`tileWidth=width+2`,
+  `tileHeight=height+2`) without allocating; `PackVolumeAtlasEXT` packs `ITexture3DBackend`'s
+  existing linear slice-major RGBA8 voxel layout (already established by SKIA-80–84) into that grid,
+  replicating a 1-texel border on every tile edge (plus all four corners) from that same tile's own
+  edge texels.
+- The shared `cnaSampleVolumeEXT` SkSL preamble (`kCnaSampleVolumePreambleEXT`) implements
+  Point-only sampling for this task: nearest slice via `floor(clamp(w, 0, 1) * depth)` clamped to
+  `[0, depth-1]`, then a nearest 2D sample inside that slice's own tile interior. Its signature is
+  fixed now so SKIA-148 (trilinear/mip/address modes) only ever changes the function body, never
+  any caller. Two reserved uniforms carry per-volume layout into SkSL: `cnaVolumeAtlasMeta0` =
+  `(cols, rows, depth, 0)`, `cnaVolumeAtlasMeta1` = `(tileWidth, tileHeight, 0, 0)` -- matching the
+  `cnaTint`/`cnaCubeFaceSizeEXT` reserved-uniform precedent (author-settable uniforms with those
+  exact names are rejected once SKIA-149 wires the public path).
+- Added `Skia_VolumeSampling_Spike` (17 checks, headless raster-only, below the public
+  `ShaderEffect`/`SetTexture(Texture3D)` API like the SKIA-93/145/146 spikes): packs a 4x4x5 NPOT
+  volume (depth 5 forces `ceil(sqrt(5))=3` columns x 2 rows with one unused grid cell, directly
+  exercising NPOT depth) with four uniformly-coloured slices plus one four-colour quadrant-pattern
+  slice, then proves through the real compiled preamble: slice selection is exact for every coloured
+  slice at `w` values landing dead-centre in each slice's `floor(w*depth)` range; the `w=0`/`w=1`
+  boundaries clamp correctly (never an out-of-range or wrapped slice); within-slice `(u, v)`
+  addressing is exact down to individual quadrants, not just "the right slice, some pixel"; and --
+  inspecting the packed atlas bytes directly, no SkSL involved -- a slice's replicated border pixels
+  are its own edge texels and never an adjacent grid tile's, the explicit "atlas padding cannot
+  bleed between slices" requirement, verified at the data level so SKIA-148's bilinear blend can
+  safely rely on it without its own tests re-proving the packing itself.
+- 17/17 spike checks pass in Debug, Release, and ASan+UBSan with zero sanitizer findings. The
+  complete Skia suite passes 162/162 (24 Raster, 133 Display, six Audit -- one net new Raster test)
+  in all three configurations.
+- `SkiaEffectBackend.cpp`/`.hpp` remain untouched; the public `ShaderEffect`/`SetTexture(Texture3D)`
+  wiring is still entirely SKIA-149's job. SKIA-148 (trilinear interpolation, mip selection, address
+  modes, partial updates, precision tests) is the next task that extends `cnaSampleVolumeEXT`'s body.
+
 ## Next candidates
 
-1. SKIA-147: prototype and implement volume sampling through a bounded slice atlas, per the fixed
-   `docs/skia-cube-volume-sampling-contract.md` padded-grid-atlas design.
-2. SKIA-148–158: continue Phase S15/S16 (volume trilinear/mip/address modes, effect ABI wiring,
-   wider explicit 2D effects) in dependency order.
+1. SKIA-148: add volume trilinear interpolation, mip selection, address modes, partial updates,
+   and precision tests, extending `cnaSampleVolumeEXT`'s body (fixed signature) unchanged.
+2. SKIA-149–158: continue Phase S15/S16 (effect ABI wiring for both cube and volume, public
+   sampling oracles, wider explicit 2D effects) in dependency order.
 3. SKIA-159–170: add opt-in Ganesh, probe real MSAA/anisotropy, re-evaluate MRT, and hold the
    successor gate only after the raster extensions are stable.
 4. The pre-existing `CNA_ENABLE_NET=OFF`/monolithic-`CnaTests` ENet build-graph defect is recorded

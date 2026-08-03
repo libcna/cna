@@ -280,6 +280,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_skia_raster_test(Skia_CubeRenderTargetSampling_Spike
                                   cna_test_skia_cube_rendertarget_sampling_spike)
 
+    # SKIA-147: proves the padded grid-atlas volume-sampling design
+    # docs/skia-cube-volume-sampling-contract.md fixed -- Point sampling only, real SkSL against
+    # real pixels, plus a direct byte-level check that atlas padding cannot bleed between slices.
+    cna_skia_test(cna_test_skia_volume_sampling_spike
+                  examples/skia_volume_sampling_spike_test.cpp)
+    target_include_directories(cna_test_skia_volume_sampling_spike PRIVATE "${CNA_SKIA_ROOT}")
+    cna_register_skia_raster_test(Skia_VolumeSampling_Spike
+                                  cna_test_skia_volume_sampling_spike)
+
     # SKIA-94: fragment-like feasibility does not promote stock effects whose public route starts
     # with transformed primitives. Exercise AlphaTestEffect/DualTextureEffect property matrices,
     # atomic 3D refusal, actionable SpriteBatch diagnostics, and immediate 2D recovery.
