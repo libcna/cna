@@ -288,6 +288,16 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_skia_raster_test(Skia_MeshEffect_ABI
                                   cna_test_skia_mesh_effect_abi)
 
+    # SKIA-155: proves the deliberately restricted GLSL-to-SkSL translator -- one isolated
+    # rejection per excluded construct, real EasyGL dual_textured source rejected outright, and a
+    # differential pixel comparison for the one accepted grammar (dual_textured's core formula)
+    # against SKIA-153's already-proven hand-written-SkSL equivalent.
+    cna_skia_test(cna_test_skia_glsl_translator
+                  examples/skia_glsl_translator_test.cpp)
+    target_include_directories(cna_test_skia_glsl_translator PRIVATE "${CNA_SKIA_ROOT}")
+    cna_register_skia_raster_test(Skia_GlslTranslator
+                                  cna_test_skia_glsl_translator)
+
     # SKIA-93: headless component spike. Alpha-test failure is coverage (clipShader), not a
     # transparent source; dual texture and colour transforms compose in one raster draw. This does
     # not promote their stock 3D Effect types, whose vertex/fog/depth contracts remain absent.

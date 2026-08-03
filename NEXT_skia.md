@@ -2469,17 +2469,68 @@ level-boundary contract.
   ASan+UBSan with zero regressions and zero sanitizer findings. No public `ShaderEffect`/
   `SpriteBatch`/`SkVertices` draw integration yet -- SKIA-157's job.
 
+## Completed in this session: SKIA-155
+
+- New `docs/skia-glsl-to-sksl-translator-contract.md` fixes the accepted grammar before any
+  implementation. Deliberately narrower than SKIA-152's own row speculatively flagged: that row
+  named `PbrEffect`'s `PbrLight()` helper as "SKIA-155's grammar acceptance bar", but this task
+  scoped down to exactly the one construct SKIA-152 actually classified `direct SkSL` --
+  `dual_textured`'s core formula -- and explicitly rejects every helper function definition rather
+  than attempt to cover `PbrLight()`. Widening the grammar to function definitions/calls beyond
+  `main` is real additional design work, correctly left as open, unclaimed follow-up rather than
+  silently included under this task's own name.
+- Chose a token-rewriter design over a full recursive-descent AST compiler, and wrote out the
+  reasoning in the contract doc before implementing: GLSL ES 3.00 and SkSL are both already
+  C-like languages with nearly identical statement/expression grammars (SkSL is itself "a
+  restricted GLSL-like language" by Skia's own design), so the accepted grammar's body needs no
+  structural transformation at all -- only two real differences: vector/matrix type-keyword renames
+  (`vec2`->`float2` etc.) and `texture(sampler, uv)` -> `sampler.eval(uv)` call rewriting. A full AST
+  would reproduce the input almost verbatim at far greater implementation risk than the actual
+  narrow grammar requires. Also found and exploited a genuinely simplifying trick: the SkSL entry's
+  `in vec2`/`out vec4` don't need every USE SITE renamed -- keeping the GLSL source's own declared
+  names as the SkSL function's parameter name / an implicit local means the body's existing
+  `vUV`/`FragColor` references need zero rewriting.
+- New `SkiaGlslToSkslTranslatorEXT` (`include+src/CNA/Internal/Backends/Skia/
+  SkiaGlslToSkslTranslatorEXT.{hpp,cpp}`) implements exactly that: tokenize once; a linear
+  reject-scan over every token for the unconditional exclusion list (works regardless of where in
+  the grammar a disallowed construct appears); a shallow top-level structural parse validating only
+  declarations and the `main` body's brace span (learns which uniforms are samplers along the way);
+  a body token-rewrite pass applying the two real rewrites, everything else copied through
+  unchanged.
+- New `Skia_GlslTranslator` (`examples/skia_glsl_translator_test.cpp`, 15 checks, headless raster)
+  proves every disallowed construct rejects in isolation with a message naming it and citing its
+  source location (`discard`, `gl_FragDepth`, a second `out`, `dFdx`, a second `in`, `precision`,
+  `samplerCube`, the `cnaSampleUV` backend macro, a helper function definition, a missing `main`);
+  feeds the translator the real, complete, *unmodified* `dual_textured` fragment source copied
+  verbatim from `EasyGLGraphicsBackend.cpp` and confirms it is rejected outright (it declares a
+  second `in float vFogFactor` varying and uses `discard`, both outside the accepted grammar) --
+  proving the translator does not silently mistranslate real, currently-unsupported EasyGL content
+  even though most of that source looks superficially close to the accepted shape; and translates a
+  hand-extracted "just the accepted subset" snippet (same formula, no alpha-test/fog/flip-V macro),
+  compiles it through `SkRuntimeEffect::MakeForShader`, and renders it through the identical
+  `SkVertices`/`drawVertices` path SKIA-153/154 used -- a genuine *differential* comparison against
+  SKIA-153's own already-proven hand-written-SkSL pixel result for the identical formula and inputs
+  (not just "it compiles"), and it matched exactly on the first real run with no correction needed.
+- Full Skia suite (up from 167 to 168 -- one net new Raster test) passes in Debug, Release, and
+  ASan+UBSan with zero regressions and zero sanitizer findings. One transient X11/Xvfb connection
+  flake (`SDL_InitSubSystem(SDL_INIT_VIDEO) failed: x11 not available`) hit an unrelated
+  pre-existing test (`Skia_DoubleDispose`) under `-j2` parallel ASan load -- confirmed unrelated to
+  this task by an isolated rerun (passed cleanly) and a subsequent clean full-168-test rerun.
+
 ## Next candidates
 
-1. SKIA-155: implement a deliberately restricted GLSL-to-SkSL translator only for the source
-   constructs `docs/skia-easygl-effect-inventory.md`/SKIA-152 proved equivalent -- `PbrEffect`'s
-   `PbrLight()` helper is the flagged grammar acceptance bar (richest fragment function in the
-   corpus, zero branching); must also recognize and strip the `cnaSampleUV`/flip-V preprocessor
-   macro rather than attempt to translate it literally.
-2. SKIA-156–158: continue Phase S16 in dependency order once SKIA-155 lands.
-3. SKIA-159–170: add opt-in Ganesh, probe real MSAA/anisotropy, re-evaluate MRT, and hold the
+1. SKIA-156: harden effect compilation, caching, resource/time limits, error propagation, and
+   recovery across raster and future GPU modes -- for both the SKIA-154 mesh ABI's compilation
+   cache (currently no eviction/growth bound, by SKIA-154's own declared scope) and the SKIA-155
+   translator (currently no malicious-input/pathological-source stress testing).
+2. SKIA-157: integrate the promoted effect subset through `ShaderEffect`, content descriptors,
+   SpriteBatch/`SkVertices` draws, setters, textures, clones, and disposal -- the first task in this
+   lineage to touch the actual public API; SKIA-153/154/155 all deliberately stayed below it.
+3. SKIA-158: compare every promoted 2D effect against EasyGL/XNA-style goldens and publish the final
+   programmable-effect boundary, closing Phase S16.
+4. SKIA-159–170: add opt-in Ganesh, probe real MSAA/anisotropy, re-evaluate MRT, and hold the
    successor gate only after the raster extensions are stable.
-4. The pre-existing `CNA_ENABLE_NET=OFF`/monolithic-`CnaTests` ENet build-graph defect is recorded
+5. The pre-existing `CNA_ENABLE_NET=OFF`/monolithic-`CnaTests` ENet build-graph defect is recorded
    by SKIA-112/113 but remains outside Skia scope.
 5. Standalone follow-up (not yet a numbered task): wire `cnaVolumeAddressModesEXT` to the active
    `SamplerState` in `MakeSpriteShaderEXT` instead of the current hardcoded Clamp, so
