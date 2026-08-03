@@ -234,16 +234,26 @@ set, only adds a sampling path for the one format already supported).
 - Volume: the packed grid atlas is a **new, additional** allocation distinct from the existing exact
   linear voxel storage (the atlas layout does not match the linear buffer's memory order, so it
   cannot alias it). Atlas bytes = `atlasWidth * atlasHeight * 4` per bound level using the padded
-  formula above. This is accounted as its own `SkiaResourceStats` category (`volumeAtlases` /
-  `volumeAtlasBytes`, SKIA-147) under the same checked-arithmetic, 256 MiB-per-resource policy as
-  every other Skia CPU allocation (`SkiaResourcePolicy.hpp`), and is retained only while a
-  `Texture3D` is actually bound to an effect -- unbinding or rebinding a different `Texture3D`
-  releases the previous atlas rather than caching one atlas per ever-bound volume.
+  formula above. SKIA-149 settled a simpler design than this document originally speculated: rather
+  than a cached atlas retained (and invalidation-tracked) across draws while a `Texture3D` stays
+  bound, `MakeSpriteShaderEXT` repacks the atlas fresh from the backend's live voxel buffer on
+  *every* draw and discards it once that draw's shader is built -- the same choice that makes a
+  `SetData` issued after `SetTexture` but before the next draw visible with no separate
+  invalidation path (`docs/skia-cube-volume-sampling-contract.md`'s live-reference requirement,
+  matching `BindTexture`'s existing contract). Because nothing retains the atlas between draws,
+  there is no live backend-owned object for `SkiaResourceStats` to count in the sense its existing
+  categories all share (`SkiaResourceCounters.hpp`'s own doc comment: "live backend-owned objects,
+  not Skia allocator totals") -- SKIA-150 confirmed this by inspection rather than adding a
+  same-shaped-but-meaningless always-zero-between-draws counter.
 - A `Texture3D` whose *unpadded* size already sits within the 256 MiB storage limit can still have a
   padded atlas that does not (padding overhead approaches `((w+2)(h+2))/(wh) - 1`, negligible for
-  large slices but proportionally large for tiny ones e.g. `w=h=2`). `SetTexture(1, Texture3D)`
-  checks the padded atlas size independently and throws `NotSupportedException` before allocating
-  if it would exceed budget, even though the same volume's plain storage already fit -- matching
+  large slices but proportionally large for tiny ones e.g. `w=h=2`). Because the atlas is rebuilt
+  fresh every draw rather than once at bind time, the budget check is still performed once, at
+  `SetTexture(1, Texture3D)` time (`SkiaEffectBackend::BindTexture3D`, SKIA-150) using the bound
+  `Texture3D`'s fixed dimensions -- `Texture3D` dimensions cannot change after construction, so a
+  bind-time check remains valid for every later draw against that same binding. `SetTexture(1,
+  Texture3D)` throws `System::NotSupportedException` before storing the new binding if the padded
+  atlas would exceed budget, even though the same volume's plain storage already fit -- matching
   this codebase's established transactional-refusal pattern (no partial state change on rejection).
 
 ## What SKIA-145–151 each still owe

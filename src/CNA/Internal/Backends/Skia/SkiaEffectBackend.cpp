@@ -13,6 +13,8 @@
 #include "include/core/SkTileMode.h"
 #include "include/effects/SkRuntimeEffect.h"
 
+#include "System/NotSupportedException.hpp"
+
 #include <array>
 #include <cstring>
 #include <stdexcept>
@@ -518,6 +520,24 @@ namespace CNA::Internal::Backends::Skia
         {
             throw std::invalid_argument(
                 "Skia BindTexture3D requires a shared, lifetime-tracked Texture3D backend.");
+        }
+        // SKIA-150: the packed grid atlas (docs/skia-cube-volume-sampling-contract.md's "Resource
+        // limits") is a new, additional allocation distinct from the volume's own already-budgeted
+        // linear voxel storage -- padding overhead means a volume that fits its plain storage
+        // budget can still produce an over-budget atlas. Reject transactionally, before storing
+        // any bound state, exactly like every other Skia CPU allocation's 256 MiB ceiling.
+        int width = 0;
+        int height = 0;
+        int depth = 0;
+        texture->GetDimensionsEXT(width, height, depth);
+        const VolumeAtlasLayoutEXT layout = ComputeVolumeAtlasLayoutEXT(width, height, depth);
+        std::size_t atlasBytes = 0;
+        if (!CheckedTexelBytes2D(static_cast<std::size_t>(layout.atlasWidth),
+                                 static_cast<std::size_t>(layout.atlasHeight), 4u, atlasBytes)
+            || atlasBytes > kSkiaCpuTextureStorageLimitBytes)
+        {
+            throw System::NotSupportedException(
+                "Skia volume sampling atlas exceeds the 256 MiB per-resource CPU storage limit.");
         }
         boundVolumeBackend_ = std::move(weakTexture);
     }

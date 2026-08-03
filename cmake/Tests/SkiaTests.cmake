@@ -258,6 +258,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_skia_display_test(Skia_CubeVolume_Effect_Binding
                                    cna_test_skia_cube_volume_effect_binding)
 
+    # SKIA-150: public sampling oracles for the three input shapes SKIA-149's own test never
+    # covered (a real DXT1-DDS-decoded TextureCube, a RenderTargetCube drawn through the public
+    # SpriteBatch API, a real hand-constructed-XNB-decoded Texture3D), plus a regression test for
+    # SKIA-150's new SkiaEffectBackend::BindTexture3D volume-atlas resource budget check.
+    cna_skia_test(cna_test_skia_cube_volume_sampling_oracle
+                  examples/skia_cube_volume_sampling_oracle_test.cpp)
+    cna_register_skia_display_test(Skia_CubeVolume_Sampling_Oracle
+                                   cna_test_skia_cube_volume_sampling_oracle)
+
     # SKIA-93: headless component spike. Alpha-test failure is coverage (clipShader), not a
     # transparent source; dual texture and colour transforms compose in one raster draw. This does
     # not promote their stock 3D Effect types, whose vertex/fog/depth contracts remain absent.

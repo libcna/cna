@@ -2191,17 +2191,82 @@ level-boundary contract.
   and ASan+UBSan (`ASAN_OPTIONS=detect_leaks=0` for the documented `libGLX_mesa` display-test false
   positive) with zero regressions and zero sanitizer findings.
 
+## Completed in this session: SKIA-150
+
+- New `Skia_CubeVolume_Sampling_Oracle` (`examples/skia_cube_volume_sampling_oracle_test.cpp`, 15
+  checks) covers the three input shapes SKIA-149's own end-to-end test never exercised, since it
+  only used in-memory `SetData`:
+  - **Content-loaded cube**: a real DXT1-compressed DDS cubemap (hand-encoded, matching the
+    established `easygl_texturecube_content_load_test.cpp` technique) decoded through
+    `TextureCube::DDSFromStreamEXT`, then sampled through `cnaSampleCubeEXT`.
+  - **Target-produced cube**: a `RenderTargetCube` drawn to through the real public
+    `SpriteBatch`/`GraphicsDevice::SetRenderTarget(RenderTargetCube*, CubeMapFace)` API (not below-
+    the-API Skia internals like SKIA-146's own spike), then bound and sampled the same way -- plus
+    a live-update check specific to a target-as-source, which SKIA-149's own test only proved for a
+    plain `TextureCube`.
+  - **Content-loaded volume**: a real `Texture3D` decoded through a hand-constructed-XNB
+    `Texture3DReader` (byte order verified against FNA's own reader, matching
+    `Texture3DTextureCubeContentTypeReaderTests.cpp`'s established precedent -- no real `.xnb`
+    volume fixture exists anywhere in the available library).
+  - Every case asserts the sampled pixel agrees *exactly* (not approximately) with `GetData`'s own
+    CPU transfer readback: every test colour is chosen from pure 0/255 channel combinations, which
+    round-trip losslessly through DXT1's RGB565 endpoints, so the oracle proves the sampling path
+    and the transfer path see the same bytes rather than merely "close enough."
+- Reviewing `docs/skia-cube-volume-sampling-contract.md`'s own unmet promises while building the
+  oracle surfaced a real, previously-unenforced gap: its "Resource limits" section requires
+  `SetTexture(1, Texture3D)` to reject a volume whose *plain* storage fits the 256 MiB budget but
+  whose *padded sampling atlas* does not -- nothing checked this; `MakeSpriteShaderEXT`'s volume
+  path packed an atlas of any size with zero budget check. Fixed in
+  `SkiaEffectBackend::BindTexture3D`: reads the bound `Texture3D`'s fixed dimensions via SKIA-149's
+  own `GetDimensionsEXT`, computes the padded atlas layout (`ComputeVolumeAtlasLayoutEXT`), and
+  throws `System::NotSupportedException` naming the 256 MiB limit before storing any bound state --
+  transactional, matching this codebase's established no-partial-state-on-rejection pattern.
+  `Texture3D` dimensions cannot change after construction, so a bind-time check remains valid for
+  every later draw against that same binding (no need to re-check on every draw's atlas rebuild).
+  The oracle's fourth check regression-covers this at its real boundary, not a trivially-oversized
+  case: a 64x64x16000 `Texture3D` (~250.0 MiB plain storage, fits with ~6.3 MiB headroom) whose
+  padded 8382x8316 atlas is ~278.8 MiB (exceeds by ~10.4 MiB) -- landing precisely on the doc's own
+  described boundary, where padding overhead `((w+2)(h+2))/(wh) - 1` is small in relative terms but
+  still large enough in absolute terms near the ceiling to flip a fitting plain allocation into an
+  over-budget atlas. (Depth is independently capped at the same 16384-axis ceiling as width/height,
+  which turns out to make w=h=64 close to the *only* viable region for this specific boundary: any
+  smaller w/h reaches a much higher padding ratio but cannot reach a large enough absolute plain
+  size before hitting the depth cap, and any larger w/h reaches a large enough absolute size but too
+  small a ratio to tip over 256 MiB from under it.)
+- Separately corrected the same doc section: it originally speculated a *cached*, invalidation-
+  tracked atlas with its own `SkiaResourceStats` counter (`volumeAtlases`/`volumeAtlasBytes`) that
+  SKIA-149 never actually built -- `MakeSpriteShaderEXT` repacks the atlas fresh every draw and
+  discards it immediately once that draw's shader is built (the same choice that makes a `SetData`
+  issued after `SetTexture` but before the next draw visible with no separate invalidation path).
+  Because nothing retains the atlas between draws, there is no live backend-owned object for
+  `SkiaResourceStats` to count in the sense its existing categories all share
+  (`SkiaResourceCounters.hpp`'s own doc comment: "live backend-owned objects, not Skia allocator
+  totals") -- confirmed by inspection rather than adding a same-shaped-but-always-zero-between-draws
+  counter that would misrepresent what is actually retained.
+- Cross-backend comparison (matching SKIA-143's own precedent): the `shared_ptr` ownership change
+  and the two new `GetSizeEXT`/`GetDimensionsEXT` interface methods (both SKIA-149) are shared,
+  non-Skia-gated code across every backend. `cmake-build-easygl-golden` was rebuilt clean and its
+  full cube/volume/render-target-cube/content-load fixture set (`EasyGL_ShaderEffect_TextureCube`,
+  `EasyGL_ShaderEffect_Texture3D`, every `EasyGL_RenderTargetCube_*`/`EasyGL_TextureCube_*`/
+  `EasyGL_Texture3D_*` CTest -- 130 tests total) was run directly against a real GLX-capable
+  display (the build's cached `CNA_TEST_DISPLAY` was stale, matching this session's own recorded
+  `feedback_cmake_ctesttestfile_diff`/display-staleness precedent -- reconfigured to the live `:0`
+  desktop display, a cache-var-only reconfigure, not a rebuild) and passes 130/130 (one unrelated
+  backend-gated test intentionally skipped), confirming the shared-interface changes are behavior-
+  preserving for every other backend.
+- Full Skia suite (up from 164 to 165 -- one net new Display test) passes 165/165 in Debug, Release,
+  and ASan+UBSan (`ASAN_OPTIONS=detect_leaks=0` for the documented `libGLX_mesa` display-test false
+  positive) with zero regressions and zero sanitizer findings.
+
 ## Next candidates
 
-1. SKIA-150: add public sampling oracles, content-loaded resources, target-produced inputs, and
-   cross-backend comparisons for cube/volume sampling -- now that SKIA-149 wires the real API.
-2. SKIA-151: finalize cube/volume sampling capability wording, resource budgets, performance bounds,
+1. SKIA-151: finalize cube/volume sampling capability wording, resource budgets, performance bounds,
    and parity documentation, closing Phase S15. Should also cover the SKIA-149 volume-address-mode
    follow-up (currently hardcoded to Clamp) if it is meant to be in scope for the phase.
-3. SKIA-152–158: continue Phase S16 (wider explicit 2D effects) in dependency order.
-4. SKIA-159–170: add opt-in Ganesh, probe real MSAA/anisotropy, re-evaluate MRT, and hold the
+2. SKIA-152–158: continue Phase S16 (wider explicit 2D effects) in dependency order.
+3. SKIA-159–170: add opt-in Ganesh, probe real MSAA/anisotropy, re-evaluate MRT, and hold the
    successor gate only after the raster extensions are stable.
-5. The pre-existing `CNA_ENABLE_NET=OFF`/monolithic-`CnaTests` ENet build-graph defect is recorded
+4. The pre-existing `CNA_ENABLE_NET=OFF`/monolithic-`CnaTests` ENet build-graph defect is recorded
    by SKIA-112/113 but remains outside Skia scope.
 
 ## Known boundaries / assumptions
