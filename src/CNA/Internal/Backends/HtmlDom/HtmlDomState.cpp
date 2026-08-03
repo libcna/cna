@@ -18,6 +18,11 @@
 // Conservative but correct -- every bind is treated as "this target's content may be about to
 // change", even when the caller only reads it back.
 //
+// plan_html_dom.md HTMLDOM-109: clears both the free shared base variant (its cached `.url`, if any,
+// would otherwise be a stale PNG of the pre-bind pixels) and this entry's own records in the capped
+// global variant cache -- previously just `entry.variants = {}`, which reset the lookup map but left
+// the corresponding global LRU array records behind as orphaned, unreachable-by-owner stale entries.
+//
 // This lives here, behind SetBoundRenderTargetIdEXT, rather than in either backend that needs it:
 // both the graphics backend (SetRenderTarget2D) and the render target itself (Bind/Unbind) switch
 // the binding, and an EM_JS function cannot be called from a translation unit other than the one
@@ -27,7 +32,8 @@ EM_JS(void, CNA_HtmlDom_SetBoundTarget, (int id), {
     const entry = Module['cnaDomTextures'] && Module['cnaDomTextures'][id];
     if (!entry) { console.error('[CNA] HTML_DOM: bind of unknown render target id', id); return; }
     Module['cnaDomBoundCtx'] = entry.ctx;
-    entry.variants = {};
+    entry.sharedBaseVariant = null;
+    if (Module['cnaDomVariantCacheClearOwner']) Module['cnaDomVariantCacheClearOwner'](entry);
 });
 #endif
 

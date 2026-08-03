@@ -49,8 +49,57 @@
 // `toDataURL` is the only SYNCHRONOUS canvas-to-URL route a browser offers -- `toBlob`/
 // `convertToBlob` are asynchronous and would let a draw be issued before its own texture URL
 // existed. The render-target draw path never calls this: it draws the variant's canvas directly.
+//
 EM_JS(void, CNA_HtmlDom_InstallTextureHelpers, (), {
     if (Module['cnaDomGetVariant']) return;
+
+    // plan_html_dom.md HTMLDOM-109: memory-owning variants (everything except the one free, shared,
+    // untinted-straight base variant below) live in ONE global `Module['cnaDomVariantCache']` -- a
+    // real `Map`, keyed `id + ':' + key`, whose OWN insertion order is the recency order this cache
+    // relies on. A cache HIT deletes and re-inserts its entry (`cnaDomVariantCacheGet`), which is
+    // how "was just used" becomes "youngest" in O(1) -- the previous design pushed a new LRU-array
+    // record on every CREATION only, so a hot variant that was never evicted still aged out from
+    // under sustained use by OTHER variants, a real FIFO wearing an LRU's name. Each Map value also
+    // carries its OWNING texture entry, so `cnaDomVariantCacheClearOwner` (called from every place
+    // that used to just reset `entry.variants = {}` -- SetData/UpdateTexture, render-target bind
+    // invalidation, texture destruction) can remove exactly that texture's own live cache records in
+    // one pass, rather than leaving them to rot as stale `(id,key)` pairs that could later delete a
+    // freshly regenerated variant sharing the same key. The cache is capped at 256 total entries; a
+    // full scan during `cnaDomVariantCacheClearOwner` is bounded by that same cap and only ever runs
+    // on these rare, non-per-frame lifecycle events, never per draw.
+    Module['cnaDomVariantCacheGet'] = function(id, key) {
+        const cache = Module['cnaDomVariantCache'];
+        if (!cache) return null;
+        const combined = id + ':' + key;
+        const hit = cache.get(combined);
+        if (!hit) return null;
+        // Re-inserting moves this key to the END of the Map's iteration order -- the youngest slot
+        // -- without touching any other entry's relative order. O(1) amortized, same as the lookup.
+        cache.delete(combined);
+        cache.set(combined, hit);
+        return hit.variant;
+    };
+
+    Module['cnaDomVariantCachePut'] = function(owner, id, key, variant) {
+        if (!Module['cnaDomVariantCache']) Module['cnaDomVariantCache'] = new Map();
+        const cache = Module['cnaDomVariantCache'];
+        cache.set(id + ':' + key, { owner: owner, variant: variant });
+        if (cache.size > 256) {
+            // Map iteration is insertion order, so the FIRST key is the least-recently-touched one
+            // -- exactly the LRU eviction candidate, found in O(1) with no separate age bookkeeping.
+            const oldestKey = cache.keys().next().value;
+            cache.delete(oldestKey);
+        }
+    };
+
+    Module['cnaDomVariantCacheClearOwner'] = function(owner) {
+        const cache = Module['cnaDomVariantCache'];
+        if (!cache) return;
+        for (const combined of Array.from(cache.keys())) {
+            const entry = cache.get(combined);
+            if (entry && entry.owner === owner) cache.delete(combined);
+        }
+    };
 
     Module['cnaDomGetVariant'] = function(id, mode, r, g, b) {
         const entry = Module['cnaDomTextures'] && Module['cnaDomTextures'][id];
@@ -65,52 +114,47 @@ EM_JS(void, CNA_HtmlDom_InstallTextureHelpers, (), {
         // so AlphaBlend sampling a render target is treated as mode 0 (already straight, as-is).
         if (entry.isRenderTarget && mode === 1) mode = 0;
         const tinted = (r !== 255 || g !== 255 || b !== 255);
-        const key = mode + ':' + r + ',' + g + ',' + b;
-        let variant = entry.variants[key];
-        if (variant) return variant;
 
+        // plan_html_dom.md HTMLDOM-109: the untinted straight variant is the base canvas itself, not
+        // a copy -- by far the most common case (an ordinary untinted sprite) -- so it is memoized
+        // directly on the entry, OUTSIDE the capped global cache entirely. It owns no memory of its
+        // own and must never compete with real (memory-owning) variants for one of the 256 slots.
         if (mode === 0 && !tinted) {
-            variant = { canvas: entry.canvas, url: null, shared: true };
-        } else {
-            const w = entry.w, h = entry.h;
-            const img = entry.ctx.getImageData(0, 0, w, h);
-            const data = img.data;
-            for (let i = 0; i < data.length; i += 4) {
-                let rr = data[i], gg = data[i + 1], bb = data[i + 2];
-                const aa = data[i + 3];
-                if (mode === 1 && aa > 0 && aa < 255) {
-                    const inv = 255 / aa;
-                    rr = Math.min(255, rr * inv);
-                    gg = Math.min(255, gg * inv);
-                    bb = Math.min(255, bb * inv);
-                }
-                if (tinted) {
-                    rr = (rr * r) / 255;
-                    gg = (gg * g) / 255;
-                    bb = (bb * b) / 255;
-                }
-                data[i] = rr; data[i + 1] = gg; data[i + 2] = bb;
-                if (mode === 2) data[i + 3] = 255;
+            if (!entry.sharedBaseVariant) {
+                entry.sharedBaseVariant = { canvas: entry.canvas, url: null, shared: true };
             }
-            const canvas = Module['cnaDomNewCanvas'](w, h);
-            if (!canvas) return null;
-            canvas.getContext('2d').putImageData(img, 0, 0);
-            variant = { canvas: canvas, url: null, shared: false };
-
-            // LRU cap: a game animating a sprite's tint every frame generates a new variant per
-            // frame, so this bounds the cache at a fixed cost instead of letting it grow without
-            // limit. Shared (base) variants own no memory of their own and are never enrolled.
-            if (!Module['cnaDomVariantLru']) Module['cnaDomVariantLru'] = [];
-            const lru = Module['cnaDomVariantLru'];
-            lru.push([id, key]);
-            while (lru.length > 256) {
-                const old = lru.shift();
-                const oldEntry = Module['cnaDomTextures'][old[0]];
-                const oldVariant = oldEntry && oldEntry.variants[old[1]];
-                if (oldVariant && !oldVariant.shared) delete oldEntry.variants[old[1]];
-            }
+            return entry.sharedBaseVariant;
         }
-        entry.variants[key] = variant;
+
+        const key = mode + ':' + r + ',' + g + ',' + b;
+        const cached = Module['cnaDomVariantCacheGet'](id, key);
+        if (cached) return cached;
+
+        const w = entry.w, h = entry.h;
+        const img = entry.ctx.getImageData(0, 0, w, h);
+        const data = img.data;
+        for (let i = 0; i < data.length; i += 4) {
+            let rr = data[i], gg = data[i + 1], bb = data[i + 2];
+            const aa = data[i + 3];
+            if (mode === 1 && aa > 0 && aa < 255) {
+                const inv = 255 / aa;
+                rr = Math.min(255, rr * inv);
+                gg = Math.min(255, gg * inv);
+                bb = Math.min(255, bb * inv);
+            }
+            if (tinted) {
+                rr = (rr * r) / 255;
+                gg = (gg * g) / 255;
+                bb = (bb * b) / 255;
+            }
+            data[i] = rr; data[i + 1] = gg; data[i + 2] = bb;
+            if (mode === 2) data[i + 3] = 255;
+        }
+        const canvas = Module['cnaDomNewCanvas'](w, h);
+        if (!canvas) return null;
+        canvas.getContext('2d').putImageData(img, 0, 0);
+        const variant = { canvas: canvas, url: null, shared: false };
+        Module['cnaDomVariantCachePut'](entry, id, key, variant);
         return variant;
     };
 
@@ -120,14 +164,14 @@ EM_JS(void, CNA_HtmlDom_InstallTextureHelpers, (), {
     // pixels are drawn once per quadrant, alternate quadrants horizontally/vertically flipped.
     // Tiling THAT image with ordinary CSS/CanvasPattern 'repeat' reproduces mirror-repeat exactly,
     // by construction -- repeating a 2x2 mirror tile at period 2*width/2*height IS mirror-repeat.
-    // Cached in the SAME entry.variants map and the SAME LRU array as plain variants (keyed
-    // "mirror:<mode>:<r>,<g>,<b>"), so eviction is unified rather than duplicated bookkeeping.
+    // Cached in the SAME global variant cache as plain variants (keyed "mirror:<mode>:<r>,<g>,<b>"),
+    // so eviction and lifecycle cleanup are unified rather than duplicated bookkeeping.
     Module['cnaDomGetMirrorVariant'] = function(id, mode, r, g, b) {
         const entry = Module['cnaDomTextures'] && Module['cnaDomTextures'][id];
         if (!entry || !entry.ctx) return null;
         const key = 'mirror:' + mode + ':' + r + ',' + g + ',' + b;
-        let variant = entry.variants[key];
-        if (variant) return variant;
+        const cached = Module['cnaDomVariantCacheGet'](id, key);
+        if (cached) return cached;
 
         const base = Module['cnaDomGetVariant'](id, mode, r, g, b);
         if (!base) return null;
@@ -149,18 +193,8 @@ EM_JS(void, CNA_HtmlDom_InstallTextureHelpers, (), {
         ctx.drawImage(base.canvas, 0, 0);
         ctx.restore();
 
-        variant = { canvas: canvas, url: null, shared: false };
-        entry.variants[key] = variant;
-
-        if (!Module['cnaDomVariantLru']) Module['cnaDomVariantLru'] = [];
-        const lru = Module['cnaDomVariantLru'];
-        lru.push([id, key]);
-        while (lru.length > 256) {
-            const old = lru.shift();
-            const oldEntry = Module['cnaDomTextures'][old[0]];
-            const oldVariant = oldEntry && oldEntry.variants[old[1]];
-            if (oldVariant && !oldVariant.shared) delete oldEntry.variants[old[1]];
-        }
+        const variant = { canvas: canvas, url: null, shared: false };
+        Module['cnaDomVariantCachePut'](entry, id, key, variant);
         return variant;
     };
 
@@ -177,8 +211,9 @@ EM_JS(void, CNA_HtmlDom_InstallTextureHelpers, (), {
     // sampled if the actual overflow is smaller, so this cannot produce wrong pixels, only a
     // (bounded) larger cached canvas than the exact minimum.
     //
-    // Cached in the SAME entry.variants map and the SAME LRU array as plain/mirror variants (keyed
-    // "pad:<mode>:<r>,<g>,<b>:<leftPad>,<topPad>,<rightPad>,<bottomPad>"), so eviction is unified.
+    // Cached in the SAME global variant cache as plain/mirror variants (keyed
+    // "pad:<mode>:<r>,<g>,<b>:<leftPad>,<topPad>,<rightPad>,<bottomPad>"), so eviction and lifecycle
+    // cleanup are unified.
     Module['cnaDomGetPaddedVariant'] = function(id, mode, r, g, b, leftPad, topPad, rightPad, bottomPad) {
         const entry = Module['cnaDomTextures'] && Module['cnaDomTextures'][id];
         if (!entry || !entry.ctx) return null;
@@ -186,8 +221,8 @@ EM_JS(void, CNA_HtmlDom_InstallTextureHelpers, (), {
         const roundUp = function(v) { return v <= 0 ? 0 : Math.ceil(v / GRANULARITY) * GRANULARITY; };
         const lp = roundUp(leftPad), tp = roundUp(topPad), rp = roundUp(rightPad), bp = roundUp(bottomPad);
         const key = 'pad:' + mode + ':' + r + ',' + g + ',' + b + ':' + lp + ',' + tp + ',' + rp + ',' + bp;
-        let variant = entry.variants[key];
-        if (variant) return variant;
+        const cached = Module['cnaDomVariantCacheGet'](id, key);
+        if (cached) return cached;
 
         const base = Module['cnaDomGetVariant'](id, mode, r, g, b);
         if (!base) return null;
@@ -214,18 +249,8 @@ EM_JS(void, CNA_HtmlDom_InstallTextureHelpers, (), {
         if (lp > 0 && bp > 0) ctx.drawImage(base.canvas, 0, h - 1, 1, 1, 0, tp + h, lp, bp);
         if (rp > 0 && bp > 0) ctx.drawImage(base.canvas, w - 1, h - 1, 1, 1, lp + w, tp + h, rp, bp);
 
-        variant = { canvas: canvas, url: null, shared: false, padLeft: lp, padTop: tp };
-        entry.variants[key] = variant;
-
-        if (!Module['cnaDomVariantLru']) Module['cnaDomVariantLru'] = [];
-        const lru = Module['cnaDomVariantLru'];
-        lru.push([id, key]);
-        while (lru.length > 256) {
-            const old = lru.shift();
-            const oldEntry = Module['cnaDomTextures'][old[0]];
-            const oldVariant = oldEntry && oldEntry.variants[old[1]];
-            if (oldVariant && !oldVariant.shared) delete oldEntry.variants[old[1]];
-        }
+        const variant = { canvas: canvas, url: null, shared: false, padLeft: lp, padTop: tp };
+        Module['cnaDomVariantCachePut'](entry, id, key, variant);
         return variant;
     };
 
@@ -268,8 +293,8 @@ EM_JS(void, CNA_HtmlDom_InstallTextureHelpers, (), {
 
 // plan_html_dom.md HTMLDOM-20: every texture owns one private off-screen canvas (OffscreenCanvas
 // where available, else a detached <canvas>), registered by integer id in Module['cnaDomTextures'].
-// The canvas holds the pixels; `variants` caches the derived forms of those pixels and is dropped
-// whenever the pixels change.
+// The canvas holds the pixels; every derived form of those pixels (HTMLDOM-109) lives in the global
+// `Module['cnaDomVariantCache']`, dropped for this entry specifically whenever its pixels change.
 //
 // willReadFrequently: every variant this texture ever produces starts with a getImageData on this
 // context, so the browser should keep it CPU-backed instead of repeatedly reading back from the GPU.
@@ -297,23 +322,33 @@ EM_JS(void, CNA_HtmlDom_CreateTexture, (int id, int width, int height, const uin
         const bytes = new Uint8ClampedArray(HEAPU8.subarray(rgba, rgba + width * height * 4));
         ctx.putImageData(new ImageData(bytes, width, height), 0, 0);
     }
-    Module['cnaDomTextures'][id] = { canvas: canvas, ctx: ctx, w: width, h: height, variants: {},
-                                     isRenderTarget: !!isRenderTarget };
+    Module['cnaDomTextures'][id] = { canvas: canvas, ctx: ctx, w: width, h: height,
+                                     sharedBaseVariant: null, isRenderTarget: !!isRenderTarget };
 });
 
-// plan_html_dom.md HTMLDOM-21: full level-0 re-upload. Every cached variant is dropped: they are
-// all derived from these pixels, so leaving one behind would show pre-update content on the next
-// draw that selected it.
+// plan_html_dom.md HTMLDOM-21/HTMLDOM-109: full level-0 re-upload. Every cached variant derived from
+// this entry's OLD pixels is dropped -- both the free shared base variant (its `.canvas` is `entry`'s
+// own canvas, so it always reflects the CURRENT pixels live and needs no data of its own re-created,
+// but its already-encoded `.url`, if any, is now a stale PNG of the old pixels and must not survive)
+// and every real (memory-owning) variant sitting in the capped global cache, or the next draw that
+// selects one of those keys would show pre-update content.
 EM_JS(void, CNA_HtmlDom_UpdateTexture, (int id, int width, int height, const uint8_t* rgba), {
     const entry = Module['cnaDomTextures'] && Module['cnaDomTextures'][id];
     if (!entry) { console.error('[CNA] HTML_DOM: UpdatePixels on unknown texture id', id); return; }
     if (!entry.ctx) return;
     const bytes = new Uint8ClampedArray(HEAPU8.subarray(rgba, rgba + width * height * 4));
     entry.ctx.putImageData(new ImageData(bytes, width, height), 0, 0);
-    entry.variants = {};
+    entry.sharedBaseVariant = null;
+    if (Module['cnaDomVariantCacheClearOwner']) Module['cnaDomVariantCacheClearOwner'](entry);
 });
 
+// plan_html_dom.md HTMLDOM-109: drops this texture's own live records from the global variant cache
+// BEFORE the registry entry itself is removed -- otherwise those records would become orphaned,
+// unreachable-by-owner stale `(id,key)` pairs sitting in the cache until eviction finally reaches
+// them, wasting a cache slot a real, still-live variant could have used instead.
 EM_JS(void, CNA_HtmlDom_DestroyTexture, (int id), {
+    const entry = Module['cnaDomTextures'] && Module['cnaDomTextures'][id];
+    if (entry && Module['cnaDomVariantCacheClearOwner']) Module['cnaDomVariantCacheClearOwner'](entry);
     if (Module['cnaDomTextures']) delete Module['cnaDomTextures'][id];
 });
 #endif

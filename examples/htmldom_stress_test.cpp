@@ -16,6 +16,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 
 #include "CNA/Internal/Backends/HtmlDom/HtmlDomGraphicsBackend.hpp"
+#include "CNA/Internal/Backends/HtmlDom/HtmlDomTextureBackend.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -32,7 +33,7 @@ using namespace Microsoft::Xna::Framework::Graphics;
 
 namespace
 {
-    constexpr int kExpectedChecks = 3;
+    constexpr int kExpectedChecks = 8;
 
     // plan_html_dom.md HTMLDOM-89: 500 sprites is a reasonable "real 2D game" upper-middle
     // sprite count (well past typical tile/UI/particle counts for the kind of game this backend
@@ -54,12 +55,23 @@ namespace
         return root ? root.children.length : -1;
     });
 
-    // Module['cnaDomVariantLru'] is only created lazily, on the first variant that needs one
+    // Module['cnaDomVariantCache'] is only created lazily, on the first variant that needs one
     // (plain untinted/un-blended draws share the base canvas and never enrol) -- undefined until
     // then is the correct, expected state, not a bug, so this reports 0 for that case.
-    EM_JS(int, JsVariantLruLength, (), {
-        const lru = Module['cnaDomVariantLru'];
-        return lru ? lru.length : 0;
+    EM_JS(int, JsVariantCacheSize, (), {
+        const cache = Module['cnaDomVariantCache'];
+        return cache ? cache.size : 0;
+    });
+
+    // plan_html_dom.md HTMLDOM-109: whether the global variant cache currently holds a live record
+    // for this exact (id, mode, r, g, b) key -- the same combined-key format cnaDomVariantCacheGet/
+    // Put use, restated here rather than exposed as its own JS function, so this test observes the
+    // cache the same way any other reader of Module['cnaDomVariantCache'] would.
+    EM_JS(int, JsVariantCacheHasKey, (int id, int mode, int r, int g, int b), {
+        const cache = Module['cnaDomVariantCache'];
+        if (!cache) return 0;
+        const combined = id + ':' + mode + ':' + r + ',' + g + ',' + b;
+        return cache.has(combined) ? 1 : 0;
     });
 
     EM_JS(void, JsPublishResult, (int result, int passed, int expected), {
@@ -71,7 +83,8 @@ namespace
 #else
     double JsNow() { return 0.0; }
     int JsPooledSpriteCount() { return -1; }
-    int JsVariantLruLength() { return -1; }
+    int JsVariantCacheSize() { return -1; }
+    int JsVariantCacheHasKey(int, int, int, int, int) { return -1; }
     void JsPublishResult(int, int, int) {}
 #endif
 }
@@ -181,10 +194,10 @@ protected:
         if (frame_ == 3 + kBenchmarkFrames + kStabilityFrames)
         {
             const int pooled = JsPooledSpriteCount();
-            const int lruLen = JsVariantLruLength();
+            const int cacheSize = JsVariantCacheSize();
             std::printf("       HTMLDOM-90: after %d stability frames -- pooled elements=%d "
-                        "(peak sprites/frame=%d), variant LRU length=%d\n",
-                        kStabilityFrames, pooled, peakSpritesInOneFrame_, lruLen);
+                        "(peak sprites/frame=%d), variant cache size=%d\n",
+                        kStabilityFrames, pooled, peakSpritesInOneFrame_, cacheSize);
             std::fflush(stdout);
             // The pool must never need more elements than the most sprites any single frame ever
             // drew -- if it grew beyond that, elements would be leaking rather than being
@@ -193,11 +206,106 @@ protected:
             check(pooled >= 0 && pooled <= peakSpritesInOneFrame_ * 2,
                   "HTMLDOM-90a: the sprite pool stays bounded by the peak per-frame sprite count "
                   "across 300 frames of oscillating draw counts, not growing unboundedly");
-            // The LRU cap (256) must actually hold under real, sustained eviction pressure -- not
-            // just "never filled up because the test never tried hard enough".
-            check(lruLen >= 0 && lruLen <= 256,
-                  "HTMLDOM-90b: the variant LRU cache never exceeds its 256-entry cap despite "
-                  "cycling through far more than 256 distinct tint values over the run");
+            // The cache cap (256) must actually hold under real, sustained eviction pressure -- not
+            // just "never filled up because the test never tried hard enough". A tight `== 256`
+            // isn't asserted HERE (this run's own r-value coverage across two independently-varying
+            // tint seeds isn't hand-derived) -- HTMLDOM-109's own deterministic frames below assert
+            // exact capacity and real eviction identity instead, which this soak run complements
+            // rather than duplicates.
+            check(cacheSize >= 0 && cacheSize <= 256,
+                  "HTMLDOM-90b: the variant cache never exceeds its 256-entry cap despite cycling "
+                  "through far more than 256 distinct tint values over the run");
+        }
+
+        // plan_html_dom.md HTMLDOM-109: real LRU hit-promotion, proven with a deterministic
+        // eviction-identity scenario rather than the soak run's own loose "<=256" bound above. Fills
+        // the cache to exactly its 256-entry cap with distinct (mode=1 i.e. AlphaBlend, r=0..255,
+        // g=200, b=150) keys -- g/b fixed means r alone spans the entire possible key space for this
+        // texture/mode, so this is deterministic, not probabilistic. Touches key r=0 again (a cache
+        // HIT, promoting it to most-recently-used) before inserting ONE more, never-before-seen key
+        // (g=201, distinct from every key inserted so far) -- a real LRU must therefore evict r=1
+        // (the next-oldest UNTOUCHED key), not r=0 (touched) and not the brand-new insertion.
+        if (frame_ == 4 + kBenchmarkFrames + kStabilityFrames)
+        {
+            const auto& backend =
+                static_cast<CNA::Internal::Backends::HtmlDom::HtmlDomTextureBackend&>(texture_->GetBackend());
+            const int id = backend.GetCanvasId();
+
+            spriteBatch_->Begin();
+            for (int r = 0; r < 256; ++r)
+            {
+                spriteBatch_->Draw(*texture_, Vector2(0, 0),
+                                   Color(static_cast<std::uint8_t>(r), static_cast<std::uint8_t>(200),
+                                         static_cast<std::uint8_t>(150), static_cast<std::uint8_t>(255)));
+            }
+            spriteBatch_->End();
+            const int sizeAfterFill = JsVariantCacheSize();
+
+            // Touch r=0 again -- a pure cache hit, no new key -- then insert one brand-new key.
+            spriteBatch_->Begin();
+            spriteBatch_->Draw(*texture_, Vector2(0, 0), Color(0, 200, 150, 255));
+            spriteBatch_->Draw(*texture_, Vector2(0, 0), Color(0, 201, 150, 255));
+            spriteBatch_->End();
+            const int sizeAfterOneMore = JsVariantCacheSize();
+
+            const bool touchedSurvived = JsVariantCacheHasKey(id, 1, 0, 200, 150) == 1;
+            const bool untouchedEvicted = JsVariantCacheHasKey(id, 1, 1, 200, 150) == 0;
+            const bool newKeyPresent = JsVariantCacheHasKey(id, 1, 0, 201, 150) == 1;
+            std::printf("       HTMLDOM-109 hot-entry: sizeAfterFill=%d sizeAfterOneMore=%d "
+                        "r=0/g=200 survived=%d r=1/g=200 evicted=%d new-key present=%d\n",
+                        sizeAfterFill, sizeAfterOneMore, touchedSurvived, untouchedEvicted, newKeyPresent);
+            std::fflush(stdout);
+            check(sizeAfterFill == 256 && sizeAfterOneMore == 256,
+                  "HTMLDOM-109: the variant cache reaches and then stays pinned at exactly its "
+                  "256-entry cap, never growing past it on a further insertion");
+            check(touchedSurvived && untouchedEvicted,
+                  "HTMLDOM-109: a cache HIT promotes that entry to most-recently-used, so it "
+                  "survives an eviction that instead claims the next-oldest UNTOUCHED entry -- real "
+                  "LRU recency, not FIFO-by-creation-order");
+            check(newKeyPresent,
+                  "HTMLDOM-109: the newly inserted key that triggered the eviction is itself present "
+                  "in the cache afterwards");
+        }
+
+        // plan_html_dom.md HTMLDOM-109: SetData/UpdatePixels must drop this texture's own live cache
+        // records, not merely reset the (now-removed) per-entry lookup map and leave the global
+        // records to rot as stale (id,key) pairs that could later delete a freshly regenerated
+        // variant sharing the same key.
+        if (frame_ == 5 + kBenchmarkFrames + kStabilityFrames)
+        {
+            const auto& backend =
+                static_cast<CNA::Internal::Backends::HtmlDom::HtmlDomTextureBackend&>(texture_->GetBackend());
+            const int id = backend.GetCanvasId();
+
+            spriteBatch_->Begin();
+            spriteBatch_->Draw(*texture_, Vector2(0, 0), Color(77, 202, 151, 255));
+            spriteBatch_->End();
+            const bool presentBeforeUpdate = JsVariantCacheHasKey(id, 1, 77, 202, 151) == 1;
+
+            std::vector<std::uint8_t> newPixels{
+                10, 20, 30, 255,   10, 20, 30, 255,
+                10, 20, 30, 255,   10, 20, 30, 255,
+            };
+            texture_->SetDataRGBA(newPixels.data(), 4);   // texture_ is 2x2 -- 4 pixels.
+            const bool goneAfterUpdate = JsVariantCacheHasKey(id, 1, 77, 202, 151) == 0;
+
+            spriteBatch_->Begin();
+            spriteBatch_->Draw(*texture_, Vector2(0, 0), Color(77, 202, 151, 255));
+            spriteBatch_->End();
+            const bool presentAfterRedraw = JsVariantCacheHasKey(id, 1, 77, 202, 151) == 1;
+
+            std::printf("       HTMLDOM-109 SetData regen: presentBeforeUpdate=%d goneAfterUpdate=%d "
+                        "presentAfterRedraw=%d\n",
+                        presentBeforeUpdate, goneAfterUpdate, presentAfterRedraw);
+            std::fflush(stdout);
+            check(presentBeforeUpdate && goneAfterUpdate,
+                  "HTMLDOM-109: SetData drops this texture's own cached variant for a key that was "
+                  "live a moment before, rather than leaving a stale record pointing at pixels that "
+                  "no longer exist");
+            check(presentAfterRedraw,
+                  "HTMLDOM-109: redrawing the same (mode, tint) key after SetData regenerates a "
+                  "fresh cache entry from the NEW pixels -- the key is reusable, not permanently "
+                  "poisoned by the earlier stale-entry bug");
 
             std::printf("=== %d/%d PASS ===\n", passCount_, kExpectedChecks);
             std::fflush(stdout);

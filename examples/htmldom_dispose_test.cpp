@@ -35,7 +35,7 @@ using namespace Microsoft::Xna::Framework::Graphics;
 
 namespace
 {
-    constexpr int kExpectedChecks = 6;
+    constexpr int kExpectedChecks = 10;
     constexpr int kBatchSize = 50;
     constexpr int kRenderTargetCount = 20;
     constexpr int kChurnIterations = 200;
@@ -48,6 +48,14 @@ namespace
         return Module['cnaDomTextures'] ? Object.keys(Module['cnaDomTextures']).length : 0;
     });
 
+    // plan_html_dom.md HTMLDOM-109: total live entries in the global variant cache, across every
+    // texture/render target -- the same size a texture/render-target destruction or a render-target
+    // rebind must shrink by exactly its own contribution, not leave behind as orphaned records.
+    EM_JS(int, JsVariantCacheSize, (), {
+        const cache = Module['cnaDomVariantCache'];
+        return cache ? cache.size : 0;
+    });
+
     EM_JS(void, JsPublishResult, (int result, int passed, int expected), {
         window.__cnaSmokeResult = result;
         window.__cnaSmokePassed = passed;
@@ -56,6 +64,7 @@ namespace
     });
 #else
     int JsTextureRegistryCount() { return -1; }
+    int JsVariantCacheSize() { return -1; }
     void JsPublishResult(int, int, int) {}
 #endif
 }
@@ -195,6 +204,83 @@ protected:
             check(after == before,
                   "HTMLDOM-95d: 200 rapid create/destroy cycles with distinct, never-reused "
                   "texture ids leave the registry exactly where it started, not accumulating");
+        }
+
+        // plan_html_dom.md HTMLDOM-109: destroying a texture must remove exactly its own live
+        // records from the global variant cache -- previously the cache's own LRU array kept a
+        // now-meaningless (id,key) pair around until it happened to reach the front of the eviction
+        // queue, at which point it could wrongly delete a DIFFERENT, still-live texture's variant
+        // that had since reused the same numeric id's map slot... except ids are never reused here,
+        // so the practical failure mode was a leaked slot: the cache stayed "full" of phantom
+        // entries pointing at nothing, permanently shrinking its real capacity for live textures.
+        if (frame_ == 4)
+        {
+            const int cacheBefore = JsVariantCacheSize();
+            {
+                Texture2D t = Texture2D::CreateFromPixels(
+                    dev, 2, 2, std::vector<std::uint8_t>{
+                        255, 255, 255, 255,   255, 255, 255, 255,
+                        255, 255, 255, 255,   255, 255, 255, 255,
+                    });
+                spriteBatch_->Begin();
+                for (int i = 0; i < 10; ++i)
+                {
+                    spriteBatch_->Draw(t, Vector2(0, 0),
+                                       Color(static_cast<std::uint8_t>(i * 20),
+                                             static_cast<std::uint8_t>(200),
+                                             static_cast<std::uint8_t>(150), static_cast<std::uint8_t>(255)));
+                }
+                spriteBatch_->End();
+                const int cacheWithLiveTexture = JsVariantCacheSize();
+                check(cacheWithLiveTexture == cacheBefore + 10,
+                      "HTMLDOM-109: drawing 10 distinct tints registers exactly 10 new "
+                      "variant-cache entries");
+            }   // t destroyed here.
+            const int cacheAfterDestroy = JsVariantCacheSize();
+            std::printf("       HTMLDOM-109 destroy cleanup: cacheBefore=%d cacheAfterDestroy=%d\n",
+                        cacheBefore, cacheAfterDestroy);
+            std::fflush(stdout);
+            check(cacheAfterDestroy == cacheBefore,
+                  "HTMLDOM-109: destroying a texture removes exactly its own variant-cache "
+                  "records, not leaving them behind as orphaned entries the cache never reclaims");
+        }
+
+        // plan_html_dom.md HTMLDOM-109: rebinding a render target as a render target -- the
+        // invalidation path that used to just reset `entry.variants = {}` -- must drop exactly that
+        // target's own cache records too, without disturbing any other live texture's entries.
+        if (frame_ == 5)
+        {
+            auto rt = std::make_unique<RenderTarget2D>(dev, 4, 4);
+            dev.SetRenderTarget(rt.get());
+            dev.Clear(Color(100, 50, 25, 255));
+            dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+            const int cacheBeforeSample = JsVariantCacheSize();
+            spriteBatch_->Begin();
+            for (int i = 0; i < 5; ++i)
+            {
+                spriteBatch_->Draw(*rt, Vector2(0, 0),
+                                   Color(static_cast<std::uint8_t>(i * 30 + 1),
+                                         static_cast<std::uint8_t>(210),
+                                         static_cast<std::uint8_t>(140), static_cast<std::uint8_t>(255)));
+            }
+            spriteBatch_->End();
+            const int cacheAfterSample = JsVariantCacheSize();
+            check(cacheAfterSample == cacheBeforeSample + 5,
+                  "HTMLDOM-109: sampling a render target as a Draw() source under 5 distinct tints "
+                  "registers exactly 5 new variant-cache entries");
+
+            dev.SetRenderTarget(rt.get());
+            dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            const int cacheAfterRebind = JsVariantCacheSize();
+            std::printf("       HTMLDOM-109 rebind cleanup: cacheBeforeSample=%d cacheAfterSample=%d "
+                        "cacheAfterRebind=%d\n",
+                        cacheBeforeSample, cacheAfterSample, cacheAfterRebind);
+            std::fflush(stdout);
+            check(cacheAfterRebind == cacheBeforeSample,
+                  "HTMLDOM-109: rebinding a render target drops exactly its own variant-cache "
+                  "records, matching the invalidation it replaces, not leaving them as stale "
+                  "(id,key) pairs the cache never reclaims");
 
             std::printf("=== %d/%d PASS ===\n", passCount_, kExpectedChecks);
             std::fflush(stdout);
