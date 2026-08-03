@@ -9,6 +9,7 @@
 #include "include/core/SkBlender.h"
 #include "include/core/SkBlendMode.h"
 
+#include <cstdint>
 #include <memory>
 
 namespace CNA::Internal::Backends::Skia
@@ -41,6 +42,10 @@ namespace CNA::Internal::Backends::Skia
         void Draw(const ITextureBackend& texture, const Rectangle& destinationRectangle,
                   const Rectangle& sourceRectangle, const Color& color, float rotation,
                   const Vector2& origin, SpriteEffects effects, float layerDepth) override;
+
+        void DrawMeshEXT(Effect& effect, const Vector2* positions, const Color* colors,
+                         const Vector2* uvs, int vertexCount, const std::uint16_t* indices,
+                         int indexCount) override;
 
     private:
         [[nodiscard]] std::shared_ptr<SkiaRenderTargetBinding> LockBinding(

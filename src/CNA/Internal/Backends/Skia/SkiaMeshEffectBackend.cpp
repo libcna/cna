@@ -382,4 +382,9 @@ namespace CNA::Internal::Backends::Skia
         return compiled_->effect->makeShader(
             uniformData, children.data(), compiled_->effect->children().size());
     }
+
+    sk_sp<SkShader> SkiaMeshEffectAdapterEXT::MakeMeshShaderEXT() const
+    {
+        return backend_.MakeMeshShaderEXT();
+    }
 } // namespace CNA::Internal::Backends::Skia

@@ -6,7 +6,7 @@ public backend/resource interfaces in `IGraphicsBackend.hpp`, every `GraphicsCap
 public non-deleted `GraphicsDevice` method declaration. Overloads use `name/arity`; when that is
 still ambiguous, `#N` is their declaration order in the audited header.
 
-The current audited inventory contains 252 entries: 130 backend/resource methods, nine
+The current audited inventory contains 253 entries: 131 backend/resource methods, nine
 `GraphicsCapability` values, and 113 public `GraphicsDevice` declarations. The number is descriptive;
 the validator derives the authoritative live set from the headers.
 
@@ -93,6 +93,7 @@ file. The validator rejects missing, stale, duplicated, malformed, or unclassifi
 | `ISpriteBatchBackend::Draw/3` | Draws a texture at point position. | Direct canvas image draw. | `implemented` | SKIA-32 |
 | `ISpriteBatchBackend::Draw/4` | Draws destination/source/tint rectangles. | Direct canvas image draw. | `implemented` | SKIA-32–33 |
 | `ISpriteBatchBackend::Draw/8` | Draws full transformed sprite contract. | Rotation/origin/effects/depth path covered. | `implemented` | SKIA-34–39 |
+| `ISpriteBatchBackend::DrawMeshEXT/7` | N/A -- SKIA-157 NOXNA extension; the shared base default throws for every other backend. | Draws a triangle-list `SkVertices` mesh through a bound `CNA_SKIA_SKSL_MESH_V1` effect's shader, composed with the active transform exactly like an ordinary sprite draw; requires `SpriteSortMode::Immediate` (does not join the deferred sort/batch queue) and throws if a declared texture child was never bound. | `bounded` | SKIA-144–157; `Skia_MeshEffect_PublicApi` |
 | `IGraphicsBackend::Clear/4` | Clears current GL framebuffer color. | Clears active raster surface. | `implemented` | SKIA-13, SKIA-61 |
 | `IGraphicsBackend::Present/0` | Swaps EasyGL window buffers. | Uploads raster snapshot to SDL presenter. | `implemented` | SKIA-7, SKIA-13 |
 | `IGraphicsBackend::GetViewportSize/2` | Reports EasyGL logical target size. | Reports active raster logical size. | `implemented` | SKIA-13, SKIA-61 |

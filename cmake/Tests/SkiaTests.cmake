@@ -308,6 +308,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_skia_raster_test(Skia_MeshEffect_Hardening
                                   cna_test_skia_mesh_effect_hardening)
 
+    # SKIA-157: the first task in this lineage to touch the real public API -- a ShaderEffect
+    # constructed from CNA_SKIA_SKSL_MESH_V1 source, SetUniformX/SetTexture/Clone(), and
+    # SpriteBatch::DrawMeshEXT() drawing real pixels end to end, including the SKIA-155 GLSL
+    # translator's output reaching a real draw for the first time.
+    cna_skia_test(cna_test_skia_mesh_effect_public_api
+                  examples/skia_mesh_effect_public_api_test.cpp)
+    cna_register_skia_display_test(Skia_MeshEffect_PublicApi
+                                   cna_test_skia_mesh_effect_public_api)
+
     # SKIA-93: headless component spike. Alpha-test failure is coverage (clipShader), not a
     # transparent source; dual texture and colour transforms compose in one raster draw. This does
     # not promote their stock 3D Effect types, whose vertex/fog/depth contracts remain absent.

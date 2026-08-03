@@ -173,4 +173,19 @@ A new, standalone below-the-API class, `SkiaMeshEffectBackend` (not an `IEffectB
 that interface is sprite-shaped around a single primary texture/tint the mesh ABI deliberately has
 neither of), with a dedicated `SkiaMeshEffectCacheEXT` cache class, proven directly against
 `SkCanvas::drawVertices` the same way SKIA-153's spike did (`Skia_MeshEffect_ABI`, 19 checks) --
-still no public `ShaderEffect`/`SpriteBatch` wiring, which stays SKIA-157's job.
+still no public `ShaderEffect`/`SpriteBatch` wiring, which stayed SKIA-157's job.
+
+### SKIA-157: reaching the real public API
+
+SKIA-157 added a second, thin class, `SkiaMeshEffectAdapterEXT`, that *does* conform to
+`IEffectBackend` -- it wraps a `SkiaMeshEffectBackend` and forwards every interface method, so a
+`CNA_SKIA_SKSL_MESH_V1`-tagged `ShaderEffect` flows through `ShaderEffect`'s existing, completely
+unmodified public surface. Drawing reuses `ISpriteBatchBackend`'s established additive-virtual-
+with-safe-default pattern: a new `DrawMeshEXT` method, implemented only by `SkiaSpriteBatchBackend`,
+reached from a new public `SpriteBatch::DrawMeshEXT` (NOXNA) restricted to `SpriteSortMode::
+Immediate`, since a mesh draw does not participate in the shared deferred sort/batch queue that
+every ordinary `Draw()` overload's quad-shaped `SpriteInfo` does. See `plan_skia.md`'s own SKIA-157
+row for the full acceptance evidence, including a real integration bug the new public test caught:
+the GLSL translator (SKIA-155) preserved each `sampler2D` uniform's original GLSL name, but the mesh
+ABI requires the reserved `cnaTexture0`-`7` child-naming convention -- fixed in the translator, not
+here, by renaming samplers to `cnaTexture0`-`7` in declaration order during translation.

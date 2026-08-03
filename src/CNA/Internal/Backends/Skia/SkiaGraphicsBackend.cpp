@@ -521,6 +521,14 @@ namespace CNA::Internal::Backends::Skia
         const std::string& vertSrc, const std::string& fragSrc)
     {
         AssertOwnership("CreateEffectBackend");
+        // SKIA-157: the mesh ABI (docs/skia-vertices-2d-effect-contract.md) uses its own, distinct
+        // marker so a mesh-mode program can never be silently accepted down the sprite path.
+        if (vertSrc == kSkiaSkslMeshEffectMarkerEXT)
+        {
+            auto meshEffect = std::make_unique<SkiaMeshEffectAdapterEXT>(meshEffectCache_);
+            (void)meshEffect->CompileProgram(vertSrc, fragSrc);
+            return meshEffect;
+        }
         // Existing ShaderEffect payloads are untagged GLSL/HLSL or even binary SPIR-V. Preserve
         // the historical null result for those rather than asking SkSL to guess their language.
         if (vertSrc != kSkiaSkslSpriteEffectMarkerEXT)

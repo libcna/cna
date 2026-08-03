@@ -3,6 +3,7 @@
 #include "../Common/IGraphicsBackend.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaGeneratedBlender.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaImageSource.hpp"
+#include "CNA/Internal/Backends/Skia/SkiaMeshEffectBackend.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaOwnership.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaRasterState.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaRenderTargetBinding.hpp"
@@ -180,6 +181,9 @@ namespace CNA::Internal::Backends::Skia
         std::shared_ptr<SkiaRenderTargetBinding> targetBinding_
             = std::make_shared<SkiaRenderTargetBinding>(ownership_);
         std::shared_ptr<SkiaResourceCounters> resourceCounters_ = std::make_shared<SkiaResourceCounters>();
+        /** SKIA-157: one persistent mesh-effect compilation cache per graphics backend instance,
+         * shared across every `CNA_SKIA_SKSL_MESH_V1`-tagged `ShaderEffect` this backend compiles. */
+        SkiaMeshEffectCacheEXT meshEffectCache_;
         SkBlendMode spriteBlendMode_ = SkBlendMode::kSrcOver;
         sk_sp<SkBlender> spriteCustomBlender_;
         SkiaSourceAlphaConvention spriteSourceAlphaConvention_ = SkiaSourceAlphaConvention::Premultiplied;

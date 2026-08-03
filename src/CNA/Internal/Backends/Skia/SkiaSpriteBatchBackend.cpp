@@ -1,6 +1,7 @@
 #include "CNA/Internal/Backends/Skia/SkiaSpriteBatchBackend.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaEffectBackend.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaImageSource.hpp"
+#include "CNA/Internal/Backends/Skia/SkiaMeshEffectBackend.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaMipSampling.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaRasterTarget.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaSourceAlphaPolicy.hpp"
@@ -14,9 +15,11 @@
 #include "include/core/SkData.h"
 #include "include/core/SkMatrix.h"
 #include "include/core/SkPaint.h"
+#include "include/core/SkPoint.h"
 #include "include/core/SkRect.h"
 #include "include/core/SkSamplingOptions.h"
 #include "include/core/SkShader.h"
+#include "include/core/SkVertices.h"
 #include "include/effects/SkRuntimeEffect.h"
 
 #include <algorithm>
@@ -24,6 +27,7 @@
 #include <cmath>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace CNA::Internal::Backends::Skia
 {
@@ -544,5 +548,122 @@ namespace CNA::Internal::Backends::Skia
         paint.setShader(std::move(primary));
         beforeDestinationWrite();
         canvas->drawRect(destination, paint);
+    }
+
+    void SkiaSpriteBatchBackend::DrawMeshEXT(
+        Effect& effect, const Vector2* positions, const Color* colors, const Vector2* uvs,
+        int vertexCount, const std::uint16_t* indices, int indexCount)
+    {
+        const std::shared_ptr<SkiaRenderTargetBinding> targetBinding =
+            LockBinding("SpriteBatch::DrawMeshEXT");
+        if (!begun_)
+            throw std::runtime_error("Skia SpriteBatch DrawMeshEXT() was called before Begin().");
+        if (!positions || vertexCount <= 0)
+        {
+            throw std::invalid_argument(
+                "Skia SpriteBatch DrawMeshEXT requires positions and a positive vertexCount.");
+        }
+        if (!indices || indexCount <= 0 || indexCount % 3 != 0)
+        {
+            throw std::invalid_argument(
+                "Skia SpriteBatch DrawMeshEXT requires a non-empty triangle-list indices array "
+                "(indexCount must be a multiple of 3).");
+        }
+
+        auto* adapter = dynamic_cast<SkiaMeshEffectAdapterEXT*>(effect.GetEffectBackendPtr());
+        if (!adapter || !adapter->IsValid())
+        {
+            throw std::runtime_error(
+                "Skia SpriteBatch DrawMeshEXT requires a valid CNA_SKIA_SKSL_MESH_V1 ShaderEffect.");
+        }
+        // Throws with an actionable diagnostic before any Skia work if a declared cnaTexture0-7
+        // child was never bound -- matches the sprite path's ValidateSpriteBindingsEXT precedent.
+        adapter->ValidateMeshBindingsEXT();
+
+        std::vector<SkPoint> skPositions(static_cast<std::size_t>(vertexCount));
+        for (int i = 0; i < vertexCount; ++i)
+            skPositions[static_cast<std::size_t>(i)] = SkPoint::Make(positions[i].X, positions[i].Y);
+
+        std::vector<SkPoint> skUvs;
+        if (uvs)
+        {
+            skUvs.resize(static_cast<std::size_t>(vertexCount));
+            for (int i = 0; i < vertexCount; ++i)
+                skUvs[static_cast<std::size_t>(i)] = SkPoint::Make(uvs[i].X, uvs[i].Y);
+        }
+
+        std::vector<SkColor> skColors;
+        if (colors)
+        {
+            skColors.resize(static_cast<std::size_t>(vertexCount));
+            for (int i = 0; i < vertexCount; ++i)
+            {
+                skColors[static_cast<std::size_t>(i)] = SkColorSetARGB(
+                    colors[i].getAProperty(), colors[i].getRProperty(),
+                    colors[i].getGProperty(), colors[i].getBProperty());
+            }
+        }
+
+        sk_sp<SkVertices> vertices = SkVertices::MakeCopy(
+            SkVertices::kTriangles_VertexMode, vertexCount, skPositions.data(),
+            uvs ? skUvs.data() : nullptr, colors ? skColors.data() : nullptr, indexCount, indices);
+        if (!vertices)
+            throw std::runtime_error("Skia SpriteBatch DrawMeshEXT failed to build SkVertices.");
+
+        SkCanvas* canvas = activeSurface_ && *activeSurface_ ? (*activeSurface_)->Canvas() : nullptr;
+        if (!canvas)
+            throw std::runtime_error("Skia SpriteBatch has no active raster canvas.");
+
+        // Locked fresh from the adapter's current uniform/texture-child state every draw -- a
+        // SetUniformX/BindTexture issued after this ShaderEffect was bound but before this draw is
+        // therefore visible, matching every other bound-effect/texture live-reference contract in
+        // this backend.
+        sk_sp<SkShader> shader = adapter->MakeMeshShaderEXT();
+        if (!shader)
+        {
+            throw std::runtime_error(
+                "Skia SpriteBatch DrawMeshEXT failed to instantiate the mesh effect's shader.");
+        }
+
+        SkPaint paint;
+        paint.setShader(std::move(shader));
+        if (customBlender_ && *customBlender_)
+            paint.setBlender(*customBlender_);
+        else
+            paint.setBlendMode(blendMode_ ? *blendMode_ : SkBlendMode::kSrcOver);
+
+        SkAutoCanvasRestore restore(canvas, true);
+        if (rasterState_ && rasterState_->viewportSet)
+        {
+            canvas->clipRect(SkRect::MakeXYWH(static_cast<float>(rasterState_->viewportX),
+                                               static_cast<float>(rasterState_->viewportY),
+                                               static_cast<float>(rasterState_->viewportWidth),
+                                               static_cast<float>(rasterState_->viewportHeight)),
+                             SkClipOp::kIntersect, false);
+        }
+        if (rasterState_ && rasterState_->scissorTestEnabled)
+        {
+            canvas->clipRect(SkRect::MakeXYWH(static_cast<float>(rasterState_->scissorX),
+                                               static_cast<float>(rasterState_->scissorY),
+                                               static_cast<float>(rasterState_->scissorWidth),
+                                               static_cast<float>(rasterState_->scissorHeight)),
+                             SkClipOp::kIntersect, false);
+        }
+        if (rasterState_ && rasterState_->viewportSet)
+        {
+            canvas->translate(static_cast<float>(rasterState_->viewportX),
+                              static_cast<float>(rasterState_->viewportY));
+        }
+        // Same ordering rationale as the ordinary Draw() overloads above: concat pre-multiplies so
+        // each caller-supplied position runs through this Begin transform exactly like a sprite's
+        // own corner does.
+        canvas->concat(ToSkMatrix(transformMatrix_));
+
+        if (SkiaRasterTarget* target = targetBinding->ActiveTarget())
+            target->BeforeWriteEXT();
+        // kModulate combines any per-vertex colour against the shader's own output; when `colors`
+        // is null this is a no-op (Skia's own drawVertices short-circuits to the shader alone),
+        // matching docs/skia-vertices-2d-effect-contract.md's alpha-convention section exactly.
+        canvas->drawVertices(vertices, SkBlendMode::kModulate, paint);
     }
 } // namespace CNA::Internal::Backends::Skia

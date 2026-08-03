@@ -12,6 +12,7 @@
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <stdexcept>
 #include <string>
@@ -703,6 +704,27 @@ namespace CNA::Internal::Backends
                           const Vector2& origin,
                           SpriteEffects effects,
                           float layerDepth) = 0;
+
+        /**
+         * SKIA-157: draws a triangle-list 2D mesh through @p effect's own bound custom shader
+         * (SKIA-144-156's bounded SkVertices/SkSL mesh ABI) -- an entirely different draw
+         * primitive from every `Draw()` overload above, which always submits exactly one
+         * quad through the built-in or `cnaTexture0`-shaped sprite shader. Composes with the
+         * active `SetTransformMatrix()` the same way ordinary sprite draws do; @p colors/@p uvs
+         * may be null if @p effect's compiled program declares no vertex-colour combine / no
+         * texture children respectively. Default: throws, since only a backend with a real mesh
+         * ABI (Skia) can implement this -- every other backend's `ISpriteBatchBackend` correctly
+         * keeps rejecting it rather than silently drawing nothing or falling back to sprite mode.
+         */
+        virtual void DrawMeshEXT(
+            Effect& /*effect*/,
+            const Vector2* /*positions*/, const Color* /*colors*/, const Vector2* /*uvs*/,
+            int /*vertexCount*/, const std::uint16_t* /*indices*/, int /*indexCount*/)
+        {
+            throw std::runtime_error(
+                "This backend does not support DrawMeshEXT (SKIA-144-157's bounded SkVertices "
+                "mesh ABI is Skia-specific).");
+        }
     };
 
     /**

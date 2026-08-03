@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <map>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -158,5 +159,81 @@ namespace CNA::Internal::Backends::Skia
         std::vector<std::uint8_t> uniformBytes_;
         std::array<std::weak_ptr<ITextureBackend>, 8> boundTextureBackends_;
         std::string compileError_;
+    };
+
+    /**
+     * SKIA-157: `IEffectBackend`-conforming wrapper around `SkiaMeshEffectBackend`, letting a mesh
+     * effect flow through `ShaderEffect`'s existing, unmodified public surface (`effectBackend_` is
+     * already `unique_ptr<IEffectBackend>`; `SetUniformX`/`SetTexture`/`Clone`/disposal all keep
+     * working unchanged once this class conforms to the interface). Mirrors the exact extensibility
+     * pattern `SkiaEffectBackend`/`MakeSpriteShaderEXT` already established: the interface itself
+     * stays generic, while `SkiaSpriteBatchBackend::DrawMeshEXT` reaches this class's own extra
+     * `MakeMeshShaderEXT()`/`ValidateMeshBindingsEXT()` methods through a `dynamic_cast` on
+     * `Effect::GetEffectBackendPtr()`'s return value, matching `SkiaSpriteBatchBackend::
+     * SetCustomEffect`'s existing `dynamic_cast<SkiaEffectBackend*>` precedent exactly.
+     */
+    class SkiaMeshEffectAdapterEXT final : public IEffectBackend
+    {
+    public:
+        explicit SkiaMeshEffectAdapterEXT(SkiaMeshEffectCacheEXT& cache) : cache_(cache) {}
+
+        bool CompileProgram(const std::string& vertSrc, const std::string& fragSrc) override
+        {
+            return backend_.CompileProgram(vertSrc, fragSrc, cache_);
+        }
+        void Bind() override {}
+        void Unbind() override {}
+        [[nodiscard]] bool IsValid() const override { return backend_.IsValid(); }
+        [[nodiscard]] std::string GetCompileError() const override { return backend_.GetCompileError(); }
+
+        void SetUniformFloat(const char* name, float value) override { backend_.SetUniformFloat(name, value); }
+        void SetUniformInt(const char* name, int value) override { backend_.SetUniformInt(name, value); }
+        void SetUniformVec2(const char* name, float x, float y) override { backend_.SetUniformVec2(name, x, y); }
+        void SetUniformVec3(const char* name, float x, float y, float z) override
+        {
+            backend_.SetUniformVec3(name, x, y, z);
+        }
+        void SetUniformVec4(const char* name, float x, float y, float z, float w) override
+        {
+            backend_.SetUniformVec4(name, x, y, z, w);
+        }
+        void SetUniformMat4(const char* name, const float* matrix) override
+        {
+            backend_.SetUniformMat4(name, matrix);
+        }
+        void SetUniformFloatArray(const char* name, const float* values, int count) override
+        {
+            backend_.SetUniformFloatArray(name, values, count);
+        }
+        void SetUniformVec2Array(const char* name, const float* values, int count) override
+        {
+            backend_.SetUniformVec2Array(name, values, count);
+        }
+        void BindTexture(int unit, ITextureBackend* texture) override { backend_.BindTexture(unit, texture); }
+
+        /** The mesh ABI has no cube/volume sampling at all -- reject explicitly rather than
+         * silently inherit the interface's no-op default, which would misleadingly suggest the
+         * call was accepted. */
+        void BindTextureCube(int /*unit*/, ITextureCubeBackend* /*texture*/) override
+        {
+            throw std::runtime_error(
+                "Skia SkSL mesh effects do not support cube texture binding.");
+        }
+        void BindTexture3D(int /*unit*/, ITexture3DBackend* /*texture*/) override
+        {
+            throw std::runtime_error(
+                "Skia SkSL mesh effects do not support volume texture binding.");
+        }
+
+        /** See `SkiaMeshEffectBackend::ValidateMeshBindingsEXT()`. */
+        void ValidateMeshBindingsEXT() const { backend_.ValidateMeshBindingsEXT(); }
+        /** See `SkiaMeshEffectBackend::MakeMeshShaderEXT()`. Defined out of line: `SkShader` is
+         * only forward-declared here, so an inline-returned `sk_sp<SkShader>`'s destructor cannot
+         * be instantiated in this header. */
+        [[nodiscard]] sk_sp<SkShader> MakeMeshShaderEXT() const;
+
+    private:
+        SkiaMeshEffectBackend backend_;
+        SkiaMeshEffectCacheEXT& cache_;
     };
 } // namespace CNA::Internal::Backends::Skia

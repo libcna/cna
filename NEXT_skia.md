@@ -2557,23 +2557,76 @@ level-boundary contract.
 - Full Skia suite (up from 168 to 169 -- one net new Raster test) passes in Debug, Release, and
   ASan+UBSan with zero regressions and zero sanitizer findings.
 
+## Completed in this session: SKIA-157
+
+- Dispatched a research fork before designing anything, given this is the first task in the
+  SKIA-153-156 lineage to touch the real public API. It found the exact reusable extensibility
+  pattern already established by `SkiaEffectBackend`/`MakeSpriteShaderEXT` (the shared
+  `IEffectBackend*`/`ISpriteBatchBackend` interfaces stay generic; a concrete Skia class exposes
+  extra methods a Skia-specific caller reaches via `dynamic_cast` on `Effect::GetEffectBackendPtr()`)
+  and confirmed reusing `GraphicsDevice::DrawUserPrimitives`-style 3D entry points was NOT viable --
+  they route unconditionally through `ThrowSkiaUnsupported3D`, part of the exhaustively-tested
+  `Skia_3D_Refusal` boundary; reopening it would have been a far larger, riskier change than this
+  task's own scope implies.
+- New `SkiaMeshEffectAdapterEXT` wraps SKIA-154's `SkiaMeshEffectBackend` behind a real
+  `IEffectBackend` conformance, so a mesh-marked `ShaderEffect` flows through every existing public
+  method (`SetUniformX`, `SetTexture(Texture2D&)`, `Clone()`, disposal) with **zero changes to
+  `ShaderEffect.hpp`/`.cpp` itself** -- `effectBackend_` was already `unique_ptr<IEffectBackend>`.
+  `SkiaGraphicsBackend::CreateEffectBackend` now also recognizes `CNA_SKIA_SKSL_MESH_V1` and owns
+  one persistent `SkiaMeshEffectCacheEXT` per backend instance.
+- A new `ISpriteBatchBackend::DrawMeshEXT` virtual (additive, safe-default-throws, matching the
+  established `GetSizeEXT()`/`GetDimensionsEXT()` precedent) is implemented only by
+  `SkiaSpriteBatchBackend`, reusing the exact same canvas-state setup (`SkAutoCanvasRestore`,
+  viewport/scissor clip, `canvas->concat(transformMatrix_)`, `BeforeWriteEXT()`) every ordinary
+  `Draw()` overload already uses. A public `SpriteBatch::DrawMeshEXT` (NOXNA) forwards to it,
+  **restricted to `SpriteSortMode::Immediate`** -- a declared, tested scope boundary: a mesh draw
+  does not participate in the shared deferred sort/batch queue (`SpriteInfo`/`spriteQueue_` are
+  quad-shaped), and building that integration is real additional scope left open, not silently
+  claimed.
+- New `Skia_MeshEffect_PublicApi` (17 checks, real `GraphicsDevice`/`SpriteBatch`/`ShaderEffect`)
+  proves every acceptance point end to end for the first time, including the literal "arbitrary
+  EasyGL GLSL still cannot silently fall back" proof (raw untranslated GLSL constructed directly
+  against the mesh marker fails to compile) and the "restricted GLSL route" half of the acceptance
+  text (SKIA-155's translator output, compiled and bound through the real public API, drawn via
+  `DrawMeshEXT`, renders the exact `dual_textured` formula).
+- That last check caught a real, previously-undiscovered integration bug on the very first run:
+  the translator (SKIA-155) preserved each `sampler2D` uniform's *original* GLSL name in its
+  output, but the mesh ABI (SKIA-154) requires the reserved `cnaTexture0`-`7` child-naming
+  convention -- these two already-shipped, already-tested pieces had never actually been connected
+  before this task, and each one's own test suite was individually correct in isolation while the
+  seam between them was silently broken. Fixed in the translator: `sampler2D` uniforms are now
+  renamed to `cnaTexture0`-`7` in declaration order during translation, both in the emitted
+  `uniform shader` declaration and every `texture(...)` call rewrite. Re-verified SKIA-155's own
+  15-check suite afterward (unaffected) plus the new public test (now passing) -- also corrected
+  `docs/skia-glsl-to-sksl-translator-contract.md`'s own text, which had documented the *original*
+  (buggy) name-preserving behaviour as the design intent.
+- Added the required `ISpriteBatchBackend::DrawMeshEXT/7` row to
+  `docs/skia-easygl-parity-ledger.md` (253 entries, 131 backend/resource methods) and reran
+  EasyGL's full `SpriteBatch`/`SpriteEffect`/`SpriteFont` suite (126/126) against a rebuilt
+  `cmake-build-easygl-golden` to confirm the additive shared-interface change is behavior-preserving
+  for every other backend.
+- Full Skia suite (up from 169 to 170 -- one net new Display test) passes in Debug, Release, and
+  ASan+UBSan with zero regressions and zero sanitizer findings.
+
 ## Next candidates
 
-1. SKIA-157: integrate the promoted effect subset through `ShaderEffect`, content descriptors,
-   SpriteBatch/`SkVertices` draws, setters, textures, clones, and disposal -- the first task in this
-   lineage to touch the actual public API; SKIA-153/154/155/156 all deliberately stayed below it.
-2. SKIA-158: compare every promoted 2D effect against EasyGL/XNA-style goldens and publish the final
+1. SKIA-158: compare every promoted 2D effect against EasyGL/XNA-style goldens and publish the final
    programmable-effect boundary, closing Phase S16.
-3. SKIA-159–170: add opt-in Ganesh, probe real MSAA/anisotropy, re-evaluate MRT, and hold the
+2. SKIA-159–170: add opt-in Ganesh, probe real MSAA/anisotropy, re-evaluate MRT, and hold the
    successor gate only after the raster extensions are stable -- also where the mesh-effect cache's
-   deferred "mode" key axis (see above) should actually be added, once a second compilation target
-   genuinely exists to test against.
-4. The pre-existing `CNA_ENABLE_NET=OFF`/monolithic-`CnaTests` ENet build-graph defect is recorded
+   deferred "mode" key axis (see SKIA-156 above) should actually be added, once a second compilation
+   target genuinely exists to test against.
+3. The pre-existing `CNA_ENABLE_NET=OFF`/monolithic-`CnaTests` ENet build-graph defect is recorded
    by SKIA-112/113 but remains outside Skia scope.
-5. Standalone follow-up (not yet a numbered task): wire `cnaVolumeAddressModesEXT` to the active
+4. Standalone follow-up (not yet a numbered task): wire `cnaVolumeAddressModesEXT` to the active
    `SamplerState` in `MakeSpriteShaderEXT` instead of the current hardcoded Clamp, so
    Wrap/Mirror volume addressing (already implemented in the sampling formula since SKIA-148)
    becomes reachable through the real public API.
+5. Standalone follow-up (not yet a numbered task): `SpriteBatch::DrawMeshEXT` currently requires
+   `SpriteSortMode::Immediate` and does not participate in the deferred sort/batch queue --
+   integrating mesh draws into `Deferred`/sorted modes (extending `SpriteInfo`/`spriteQueue_` to
+   carry a mesh-shaped variant, not just quads) is real additional scope, deliberately left open
+   by SKIA-157 rather than silently claimed.
 
 ## Known boundaries / assumptions
 

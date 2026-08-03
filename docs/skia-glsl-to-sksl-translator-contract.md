@@ -37,11 +37,18 @@ translator's accepted subset actually needs to bridge are narrow and lexical, no
   `out vec4` variable becomes a local declared at the top of the translated body and returned at
   the end (again keeping its own name, e.g. `FragColor`, so the body's existing `FragColor = ...`/
   `FragColor.rgb *= ...` assignments are emitted completely unchanged).
-- `sampler2D` uniforms become `shader` uniforms; `texture(uTex, uv)` calls become `uTex.eval(uv)`
-  member-call syntax. This is the one genuinely semantic (not just lexical) rewrite -- it requires
-  knowing which identifiers were declared as sampler uniforms, so a call `texture(X, ...)` can be
-  rewritten only when `X` is a known sampler name (a plain token-level regex could not tell a
-  sampler `texture()` call from an unrelated same-named function).
+- `sampler2D` uniforms become `shader` uniforms, **renamed** to the mesh ABI's own reserved
+  `cnaTexture0`-`7` child-naming convention (SKIA-154, `SkiaMeshEffectBackend`) in declaration
+  order -- unlike the `in`/`out` variable above, a sampler's *original* GLSL name cannot be kept:
+  SKIA-157's own public integration test caught this exact gap on its first run (the translator
+  originally preserved each sampler's original name, e.g. `uTexture`, but the mesh ABI rejects any
+  child name that isn't `cnaTexture0`-`7`). `texture(uTexture, uv)` therefore becomes
+  `cnaTexture0.eval(uv)` (for the first declared sampler), not `uTexture.eval(uv)`. This is the one
+  genuinely semantic (not just lexical) rewrite in this translator -- it requires knowing which
+  identifiers were declared as sampler uniforms and their declaration order, so a call
+  `texture(X, ...)` can be rewritten only when `X` is a known sampler name (a plain token-level
+  regex could not tell a sampler `texture()` call from an unrelated same-named function), and to the
+  *correct renamed* target, not `X` itself.
 
 Because the accepted body statements otherwise need **no structural transformation at all** --
 control flow, expressions, and every other keyword are identical token-for-token in both

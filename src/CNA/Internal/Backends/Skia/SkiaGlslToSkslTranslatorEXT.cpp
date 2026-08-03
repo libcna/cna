@@ -176,7 +176,13 @@ namespace CNA::Internal::Backends::Skia
         private:
             std::vector<Token> tokens_;
             std::vector<UniformDeclEXT> uniforms_;
-            std::unordered_set<std::string> samplerNames_;
+            // Maps each declared `sampler2D` uniform's original GLSL name to the reserved mesh-ABI
+            // child name it is renamed to (`cnaTexture0`, `cnaTexture1`, ... in declaration order)
+            // -- the mesh ABI (SkiaMeshEffectBackend, SKIA-154) requires exactly this naming for
+            // its shader children, unlike `in`/`out` variables, which keep their own GLSL names
+            // (see docs/skia-glsl-to-sksl-translator-contract.md's own rationale for those two).
+            std::unordered_map<std::string, std::string> samplerRenames_;
+            int nextSamplerUnit_ = 0;
             std::string inName_;
             std::string outName_;
             std::size_t bodyStart_ = 0;
@@ -241,7 +247,15 @@ namespace CNA::Internal::Backends::Skia
                                 + Loc(first) + ").";
                         }
                         uniforms_.push_back({type.text, name.text});
-                        if (type.text == "sampler2D") samplerNames_.insert(name.text);
+                        if (type.text == "sampler2D")
+                        {
+                            if (nextSamplerUnit_ > kSkiaSkslMaxTextureUnitEXT)
+                            {
+                                return "Skia GLSL-to-SkSL translator: at most 8 `sampler2D` "
+                                       "uniforms are supported (cnaTexture0-7) (" + Loc(first) + ").";
+                            }
+                            samplerRenames_[name.text] = "cnaTexture" + std::to_string(nextSamplerUnit_++);
+                        }
                         i += 4;
                         continue;
                     }
@@ -364,9 +378,15 @@ namespace CNA::Internal::Backends::Skia
                 std::ostringstream out;
                 for (const UniformDeclEXT& uniform : uniforms_)
                 {
-                    const std::string skslType = uniform.type == "sampler2D"
-                        ? "shader"
-                        : (TypeRenames().count(uniform.type) ? TypeRenames().at(uniform.type) : uniform.type);
+                    if (uniform.type == "sampler2D")
+                    {
+                        // Renamed to the mesh ABI's own reserved cnaTexture0-7 child convention --
+                        // see samplerRenames_'s own doc comment for why this differs from in/out.
+                        out << "uniform shader " << samplerRenames_.at(uniform.name) << ";\n";
+                        continue;
+                    }
+                    const std::string skslType = TypeRenames().count(uniform.type)
+                        ? TypeRenames().at(uniform.type) : uniform.type;
                     out << "uniform " << skslType << " " << uniform.name << ";\n";
                 }
                 out << "half4 main(float2 " << inName_ << ") {\n";
@@ -386,13 +406,13 @@ namespace CNA::Internal::Backends::Skia
                 for (std::size_t i = bodyStart_; i < bodyEnd_; )
                 {
                     const Token& token = tokens_[i];
-                    // texture ( SAMPLER , args... ) -> SAMPLER.eval( args... )
+                    // texture ( SAMPLER , args... ) -> cnaTextureN.eval( args... )
                     if (token.kind == TokenKind::Identifier && token.text == "texture"
                         && tokens_[i + 1].text == "(" && tokens_[i + 2].kind == TokenKind::Identifier
-                        && samplerNames_.count(tokens_[i + 2].text) != 0u
+                        && samplerRenames_.count(tokens_[i + 2].text) != 0u
                         && tokens_[i + 3].text == ",")
                     {
-                        out << tokens_[i + 2].text << ".eval(";
+                        out << samplerRenames_.at(tokens_[i + 2].text) << ".eval(";
                         std::size_t j = i + 4;
                         int depth = 1;
                         for (; tokens_[j].kind != TokenKind::End && depth > 0; ++j)
