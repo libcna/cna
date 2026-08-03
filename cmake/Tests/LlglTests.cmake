@@ -674,17 +674,28 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "LLGL")
         TIMEOUT 120 LABELS "Llgl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # frontface_winding_test.cpp is deliberately NOT registered here: 115/127 checks pass (its own
-    # CNA_BACKEND_LLGL Contract branch is otherwise accurate). W3's 12 failures are a real, distinct,
-    # OPEN finding, NOT a winding/culling bug: Entry::BufferPrimitives/BufferPrimitivesRange/
-    # BufferIndexed/BufferIndexedRange each reuse the SAME persistent VertexBuffer/IndexBuffer object
-    # for two draws within one frame, and this backend's SetData() writes into the live LLGL::Buffer
-    # immediately while the earlier draw's queued FrameCommand only replays at frame end -- so the
-    # SECOND SetData() silently overwrites the FIRST draw's content before it ever renders. See
-    # known_bugs.md's open entry, which also documents a candidate fix that was attempted, found to
-    # introduce a NEW crash on an unrelated entry point, and fully reverted rather than shipped.
+    # LLGL-46: W3's 12 former failures (Entry::BufferPrimitives/BufferPrimitivesRange/BufferIndexed/
+    # BufferIndexedRange, each reusing the SAME persistent VertexBuffer/IndexBuffer object for two
+    # draws within one frame) are fixed -- LlglVertexBufferBackend::SetData()/
+    # LlglIndexBufferBackend::Upload() now flush any pending frame (a no-op when nothing is queued)
+    # before writing in place or reallocating, so an earlier queued draw always replays against the
+    # content it actually had when queued. Confirmed by a fresh 127/127 run.
     cna_llgl_test(cna_test_llgl_frontface_winding
                   examples/frontface_winding_test.cpp)
+    cna_register_backend_test(NAME Llgl_FrontFaceWinding COMMAND cna_test_llgl_frontface_winding
+        TIMEOUT 120 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # LLGL-46 focused regression: growing a persistent VertexBuffer/IndexBuffer mid-frame (a
+    # SECOND SetData() exceeding the byte capacity the FIRST one allocated) must not free the old
+    # LLGL::Buffer an earlier, still-queued draw holds by raw pointer -- see this file's own header
+    # comment and known_bugs.md's now-fixed entry for the reverted fix attempt that first
+    # reproduced this exact crash shape elsewhere in this backend.
+    cna_llgl_test(cna_test_llgl_vertexindexbuffer_grow
+                  examples/llgl_vertexindexbuffer_grow_test.cpp)
+    cna_register_backend_test(NAME Llgl_VertexIndexBuffer_Grow COMMAND cna_test_llgl_vertexindexbuffer_grow
+        TIMEOUT 90 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # stock_effect_sampler_contract_test.cpp is deliberately NOT registered here: 64/65 checks pass
     # (its own CNA_BACKEND_LLGL Contract branch is otherwise accurate). M3 fails for a real, distinct,

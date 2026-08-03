@@ -1249,6 +1249,19 @@ namespace CNA::Internal::Backends::Llgl
 
         ResolveVertexAttributes(strideInBytes);
 
+        // LLGL-46: a draw already queued (but not yet submitted) this frame may still reference
+        // buffer_'s CURRENT content by raw pointer (QueuePrimitives() only stores the
+        // LLGL::Buffer*, replayed later at Present()/FlushPendingFrameEXT() time) -- writing in
+        // place or releasing it to grow would corrupt or crash that earlier draw once it finally
+        // replays. Flushing runs every such draw against its own correct content right now
+        // (a no-op when nothing is queued, e.g. this buffer's very first upload, buffer_ still
+        // null), so it is always safe to write in place or reallocate immediately afterward. Every
+        // GraphicsDevice::DrawUserPrimitives()/DrawUserIndexedPrimitives() overload's own per-draw
+        // temp buffer never reaches this (buffer_ is still null on its one and only SetData call),
+        // so this cannot interact with that unrelated internal mechanism.
+        if (buffer_ != nullptr && owner_ != nullptr)
+            owner_->FlushPendingFrameEXT();
+
         const std::size_t byteSize = static_cast<std::size_t>(vertexCount) * strideInBytes;
         if (buffer_ == nullptr || byteSize > byteCapacity_)
         {
@@ -1446,6 +1459,11 @@ namespace CNA::Internal::Backends::Llgl
             indexCount_ = 0;
             return;
         }
+
+        // LLGL-46: see LlglVertexBufferBackend::SetData()'s own identical comment -- flushing any
+        // pending frame first makes it safe to write in place or reallocate right afterward.
+        if (buffer_ != nullptr && owner_ != nullptr)
+            owner_->FlushPendingFrameEXT();
 
         const std::size_t byteSize = static_cast<std::size_t>(indexCount) * indexSize;
         if (buffer_ == nullptr || byteSize > byteCapacity_)

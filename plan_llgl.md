@@ -629,7 +629,7 @@ reported before submission.
 | # | Priority | Task | Acceptance gate | Status |
 | --- | --- | --- | --- | --- |
 | LLGL-45 | P0 | **Replace target-identity bucket replay with ordered render-pass segments.** Preserve the public order of target binds, clears, producer/consumer sampling, back-buffer reads and cube-face operations. Implement real `PreserveContents` across flush/rebind either with load-capable passes, an explicit copy/restore path, or another design proven equivalent; do not rely on incidental one-bucket behaviour or the unconditional swap-chain-last rule. | Register and pass all legs of `rendertarget_depthstencil_usage_test.cpp`, `rendertarget_effect_source_test.cpp`, `rendertarget_producer_consumer_test.cpp`, `rendertarget_backbuffer_consumer_test.cpp` and `rendertarget_pass_boundary_test.cpp`, including A→B→A, target→backbuffer→target, shared cube depth and mid-frame readback cases. No ordering-specific exclusion remains. | 🟡 |
-| LLGL-46 | P0 | **Version deferred vertex/index data.** A queued draw must retain the exact buffer contents and native resource lifetime visible at its public draw call even if `SetData()` later overwrites or enlarges the same object. Prefer immutable per-frame slices/ring allocation or explicit versioned upload commands over in-place writes; releasing a replaced buffer must remain deferred until its last queued consumer is submitted. | Register `frontface_winding_test.cpp`; all W3 persistent-buffer reuse entry points pass for indexed/non-indexed and dynamic/static buffers on Vulkan and OpenGL. Add a focused grow-capacity regression proving the old resource is neither freed early nor reused with new contents. | ⬜ |
+| LLGL-46 | P0 | **Version deferred vertex/index data.** A queued draw must retain the exact buffer contents and native resource lifetime visible at its public draw call even if `SetData()` later overwrites or enlarges the same object. Prefer immutable per-frame slices/ring allocation or explicit versioned upload commands over in-place writes; releasing a replaced buffer must remain deferred until its last queued consumer is submitted. | Register `frontface_winding_test.cpp`; all W3 persistent-buffer reuse entry points pass for indexed/non-indexed and dynamic/static buffers on Vulkan and OpenGL. Add a focused grow-capacity regression proving the old resource is neither freed early nor reused with new contents. | 🟡 |
 | LLGL-47 | P0 | **Make custom-effect resource layouts safe.** Reflect or validate compiled GLSL/SPIR-V before LLGL pipeline creation. Either build every referenced descriptor set/binding or reject unsupported set numbers, resource types and stage visibility with a deterministic CNA exception; malformed/unsupported shader input must never reach a driver-crash path. | Enable `rendertarget_effect_source_test.cpp` C1 and add shaders using sets 0+1, missing bindings and conflicting declarations. Each supported shader renders correctly; each unsupported shader throws before `CreatePipelineState`. Run with Vulkan validation enabled where available. | ⬜ |
 | LLGL-48 | P1 | **Use collision-free typed pipeline-cache keys.** Replace ad-hoc multiply/truncate packing with key structs whose equality and hash include every field consumed by the relevant LLGL pipeline descriptor: vertex layout, topology, render-pass signature, depth/raster state, all blend factors/functions/write masks, full 32-bit `MultiSampleMask`, scissor enable and effective sample count. | Register `gfx077_colorwritechannels_3d_test.cpp`; add pairwise tests for blend factors/functions and masks that differ only above bit 3, including an 8x-MSAA mask when supported. Instrumented test builds assert that descriptor equality and key equality cannot disagree. `Llgl_BasicEffect` alpha blending remains green. | ⬜ |
 | LLGL-49 | P1 | **Track and capture sampler state per texture slot.** Store at least every slot consumed by stock effects, acquire the correct sampler for each slot, and capture those sampler objects in each deferred command so later state changes cannot leak backward. | Register `stock_effect_sampler_contract_test.cpp` at 65/65 or better. Add independent filter/address tests for `DualTextureEffect` slot 1 and all five `PbrEffect` maps; slot 0 changes must not alter another slot and vice versa. | ⬜ |
@@ -675,7 +675,31 @@ regression) and its Vulkan module cannot present under this sandbox's Xvfb (no D
 this document already describes). `rendertarget_depthstencil_usage_test.cpp` is not yet even wired up
 as a `cna_llgl_test()` build target for this reason. Closing `LLGL-45` fully needs either `LLGL-38`'s
 real-hardware pass or a DRI3-capable Xvfb (`LLGL-55`) to actually run and register U2 -- see
-`known_bugs.md`'s updated entry for the complete writeup. `LLGL-46` was not started this session.
+`known_bugs.md`'s updated entry for the complete writeup.
+
+**`LLGL-46` progress (2026-08-03): fixed and verified on OpenGL; Vulkan verification blocked by the
+same infrastructure gap as `LLGL-45`'s own U2.** `LlglVertexBufferBackend::SetData()`/
+`LlglIndexBufferBackend::Upload()` now call `LlglGraphicsBackend::FlushPendingFrameEXT()` (a no-op
+when nothing is queued) before writing in place or reallocating, whenever this is not the buffer's
+very first upload -- flushing submits and waits on every currently-queued draw, including any draw
+that still holds this buffer's CURRENT content by raw `LLGL::Buffer*`, so it is always safe to write
+in place or `Release()` the old buffer immediately afterward (no deferred-release bookkeeping or new
+per-buffer tracking state needed at all). A buffer whose `buffer_` is still null (every
+`GraphicsDevice::DrawUserPrimitives()`/`DrawUserIndexedPrimitives()` overload's own per-draw temp
+buffer) never reaches this branch, so the fix cannot interact with that unrelated internal mechanism
+-- which is exactly the interaction that broke an earlier, reverted candidate fix (see
+`known_bugs.md`'s updated entry for that history). **Confirmed fixed** (`CNA_LLGL_RENDERER=opengl`,
+Xvfb, 2026-08-03): `frontface_winding_test.cpp` W3's 12 former failures are gone (127/127, up from
+115/127, now registered as `Llgl_FrontFaceWinding`). A new dedicated grow-capacity regression,
+`examples/llgl_vertexindexbuffer_grow_test.cpp` (`Llgl_VertexIndexBuffer_Grow`, 6/6), specifically
+proves the GROW case (a second upload exceeding the first one's byte capacity) does not corrupt or
+lose an earlier still-queued draw's own content -- confirmed to genuinely catch the pre-fix defect by
+running it against a stashed pre-fix binary, where it fails exactly as expected. A broad regression
+sweep (smoke/2D/texture-readback/presentation/3D/BasicEffect/RenderTarget/MRT/MultiSampleMask/MSAA
+render target/mip render target/lighting/ShaderEffect/resize/occlusion query/the `LLGL-45` target
+files) shows no regressions. **Not yet verified on the Vulkan module**, same infrastructure gap as
+`LLGL-45`'s own U2 (this sandbox's Xvfb has no DRI3) -- needs `LLGL-38`'s real-hardware pass or a
+DRI3-capable Xvfb (`LLGL-55`) to confirm there too before this row can close fully.
 
 ---
 

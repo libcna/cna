@@ -950,11 +950,44 @@ wrong.
 
 ---
 
-## LLGL backend: a `VertexBuffer`/`IndexBuffer` reused within one frame silently loses the earlier draw's content — OPEN
+## LLGL backend: a `VertexBuffer`/`IndexBuffer` reused within one frame silently loses the earlier draw's content — FIXED
 
-**Status:** open, discovered while wiring `plan_llgl.md`'s Phase LLGL-7 (`LLGL-44`,
-`frontface_winding_test.cpp`). Root cause identified with confidence and a fix was attempted and
-verified WRONG (introduced a new crash) -- reverted; not fixed here.
+**Status:** fixed by `plan_llgl.md` `LLGL-46` (2026-08-03). Confirmed by a fresh 127/127 run of
+`frontface_winding_test.cpp` (up from 115/127; now registered as `Llgl_FrontFaceWinding`), plus a new
+dedicated regression, `examples/llgl_vertexindexbuffer_grow_test.cpp` (registered as
+`Llgl_VertexIndexBuffer_Grow`, 6/6), that specifically targets the GROW case this entry's own earlier
+candidate-fix attempt never got to (see below) -- confirmed to genuinely reproduce the pre-fix defect
+by running it against the pre-fix binary (a stashed diff), where it fails exactly as expected
+(the pre-grow draw's own geometry area reads back as the clear colour instead of its own content,
+rather than a hard crash on this particular software rasterizer -- still a real correctness
+violation, just not the harder crash this same defect produced elsewhere before, see below).
+
+**The fix:** `LlglVertexBufferBackend::SetData()`/`LlglIndexBufferBackend::Upload()` now call
+`LlglGraphicsBackend::FlushPendingFrameEXT()` (a no-op when `frameCommands_` is empty) BEFORE either
+writing in place or reallocating, whenever `buffer_ != nullptr` (i.e. this is not the buffer's very
+first upload). Flushing submits and waits on every currently-queued draw -- including any draw that
+still references this buffer's CURRENT (about-to-change) content by raw `LLGL::Buffer*` -- so by the
+time the write or reallocation actually happens, nothing can still be reading the old content: safe
+to write in place, and safe to `Release()` the old buffer immediately when growing (no deferred-
+release bookkeeping needed at all). A buffer whose `buffer_` is still null (every
+`GraphicsDevice::DrawUserPrimitives()`/`DrawUserIndexedPrimitives()` overload's own per-draw temp
+buffer, always freshly constructed) never reaches this branch, so the fix cannot interact with that
+unrelated internal mechanism -- which is exactly the interaction that broke the reverted attempt
+below.
+
+**A candidate fix was attempted and reverted (historical, kept for context):** mark a
+`VertexBuffer`/`IndexBuffer` as "referenced by a pending frame command" when `QueuePrimitives()`
+captures it, and have `SetData()` force a fresh `LLGL::Buffer` allocation (deferring the OLD one's
+release) instead of writing in place whenever that mark is set -- clearing the mark once the frame
+that queued the draw is actually submitted. This built and looked correct by inspection, but running
+`frontface_winding_test.cpp` against it produced a NEW crash (`free(): invalid pointer` deep inside
+`libvulkan_lvp.so`) on `Entry::UserIndexed16`, an entry point that does not reuse a persistent
+`VertexBuffer` the way `Entry::BufferPrimitives` does -- meaning that fix's own tracking touched this
+project's internal "user primitives" scratch-buffer mechanism in a way not understood before the
+attempt was reverted. The flush-first fix above sidesteps this entirely: it adds no new tracking
+state and no address-keyed bookkeeping (the exact shape of bug that a stale/reused-address tracking
+map would produce), and never even reaches its own new code path for a buffer whose `buffer_` is
+still null.
 
 **Symptom:** `frontface_winding_test.cpp`'s W3 leg draws two triangles (a clockwise-wound one, then a
 counter-clockwise-wound one) into one bind cycle via `Entry::BufferPrimitives`/
@@ -985,33 +1018,14 @@ already avoid the identical trap by never reusing one buffer object across two d
 `SetData()` on a PUBLIC, game-owned `VertexBuffer`/`IndexBuffer` has no such guarantee, since the game
 decides when to call it.
 
-**A candidate fix was attempted and reverted:** mark a `VertexBuffer`/`IndexBuffer` as
-"referenced by a pending frame command" when `QueuePrimitives()` captures it, and have `SetData()`
-force a fresh `LLGL::Buffer` allocation (deferring the OLD one's release through the same
-`ScheduleBufferReleaseEXT` mechanism `VertexBuffer`'s own destructor already uses) instead of writing
-in place whenever that mark is set -- clearing the mark once the frame that queued the draw is
-actually submitted, mirroring `pendingBufferReleases_`'s own lifecycle. This built and looked correct
-by inspection, but running `frontface_winding_test.cpp` against it produced a NEW crash
-(`free(): invalid pointer` deep inside `libvulkan_lvp.so`, via `LLGL::VKCommandBuffer::Begin` during a
-LATER `GetBackBufferData()`'s own `CaptureBackbuffer()`) on `Entry::UserIndexed16` -- an entry point
-that was NOT failing before the fix and does not (as far as traced) reuse a persistent `VertexBuffer`
-object the way `Entry::BufferPrimitives` does, meaning the fix's `pendingReference_` tracking also
-touches this project's own internal "user primitives" scratch-buffer reuse mechanism in a way not
-fully understood before the attempt was reverted. The fix's diff (header + `.cpp` changes to
-`LlglVertexBufferBackend::SetData`, `LlglIndexBufferBackend::Upload`, `QueuePrimitives`, and a new
-`ClearPendingBufferReferencesEXT()`) was fully reverted via `git checkout` and verified byte-identical
-to the pre-attempt state before this checkpoint's commit.
+**A first candidate fix was attempted and reverted before the working one above was found** -- see
+this entry's own opening paragraphs for the full account of what it tried, why it crashed, and why
+the eventual fix (flush-before-write, no new tracking state at all) sidesteps that failure mode
+entirely rather than patching around it.
 
-**Why this needs more than a blind retry:** the crash proves the fix's mental model of "which buffers
-are safe to reuse when" does not fully match this backend's own internal scratch-buffer architecture
-for `DrawUserPrimitives`/`DrawUserIndexedPrimitives` -- a correct fix needs to first understand THAT
-mechanism (how/whether it already reuses persistent buffer objects across draws in one frame, and how
-it currently avoids this exact trap, if it does) before extending the same tracking to public
-`VertexBuffer`/`IndexBuffer` objects, rather than attempting a second blind patch late in a session.
-
-**Tracked as:** `plan_llgl.md` Phase LLGL-7, `LLGL-44` (no CTest registration for
-`frontface_winding_test.cpp` until this is resolved -- see `cmake/Tests/LlglTests.cmake`'s own
-comment there).
+**Tracked as:** `plan_llgl.md` Phase LLGL-8, `LLGL-46` -- fixed and verified (see above);
+`frontface_winding_test.cpp` is now registered (`Llgl_FrontFaceWinding`), and a new dedicated
+grow-capacity regression is registered alongside it (`Llgl_VertexIndexBuffer_Grow`).
 
 ---
 

@@ -265,6 +265,14 @@ namespace CNA::Internal::Backends::Llgl
         /**
          * @brief Uploads vertex data.
          *
+         * LLGL-46: a draw already queued (but not yet submitted) this frame may still reference
+         * this buffer's CURRENT content by raw `LLGL::Buffer*` -- overwriting it in place, or
+         * releasing it to grow, would corrupt or crash that earlier draw once it finally replays.
+         * A re-upload after this buffer's first one therefore flushes any pending frame first
+         * (`LlglGraphicsBackend::FlushPendingFrameEXT()`, a no-op when nothing is queued), so the
+         * earlier draw genuinely runs against the content it was queued with before this call
+         * changes it.
+         *
          * @param data           Packed vertex data.
          * @param vertexCount    Number of vertices in @p data.
          * @param strideInBytes  Size of one vertex in bytes.
@@ -348,6 +356,9 @@ namespace CNA::Internal::Backends::Llgl
         /**
          * @brief Uploads 16-bit index data.
          *
+         * See `Upload()`'s own doc comment (LLGL-46) for why a re-upload flushes any pending frame
+         * first.
+         *
          * @param data       Packed 16-bit indices.
          * @param indexCount Number of indices.
          */
@@ -355,6 +366,9 @@ namespace CNA::Internal::Backends::Llgl
 
         /**
          * @brief Uploads 32-bit index data.
+         *
+         * See `Upload()`'s own doc comment (LLGL-46) for why a re-upload flushes any pending frame
+         * first.
          *
          * @param data       Packed 32-bit indices.
          * @param indexCount Number of indices.
@@ -371,6 +385,15 @@ namespace CNA::Internal::Backends::Llgl
         [[nodiscard]] LLGL::Buffer* GetLlglBuffer() const { return buffer_; }
 
     private:
+        /**
+         * @brief Common upload path for `SetData16()`/`SetData32()`.
+         *
+         * LLGL-46: mirrors `LlglVertexBufferBackend::SetData()`'s own fix -- a re-upload after
+         * this buffer's first one (`buffer_ != nullptr`) flushes any pending frame first
+         * (`LlglGraphicsBackend::FlushPendingFrameEXT()`, a no-op when nothing is queued), so a
+         * draw already queued this frame against this buffer's CURRENT content genuinely replays
+         * with that content before this call overwrites or replaces it.
+         */
         void Upload(const void* data, int indexCount, std::size_t indexSize);
 
         LLGL::RenderSystem*  renderSystem_ = nullptr;
