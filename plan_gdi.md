@@ -2,6 +2,15 @@
 
 > **Audit snapshot:** 2026-08-01, commit `56bd8961` (`feature/gdi`).
 >
+> **Follow-up re-audit:** 2026-08-03, commit `83194d58` (`feature/gdi`). A fresh MinGW-w64
+> Release build of CNA plus all fourteen focused correctness executables passes at `-j2`, and all
+> sixteen cases pass under Wine on an Xvfb virtual display with `CNA_GDI_DWM_FLUSH=0`. The re-audit
+> also found three unremediated implementation gaps and one evidence-maintenance gap, now tracked as
+> GDI-075 through GDI-078: valid presentation-mode changes are not transactional when their implicit
+> resize fails, the CPU `Texture2D` path does not share GDI-067's allocation safety, `ReleaseDC`
+> remains outside the checked presentation commit, and the handoff's source/object-count claims have
+> drifted from CMake. Passing the existing suite therefore does not close these new tasks.
+>
 > **Assessment at the audited commit:** the backend was a sound Windows-only CPU-2D compatibility
 > prototype, but **not a release baseline**. The audit found three correctness blockers: the public
 > stencil-clear path was disconnected, dirty damage could omit pixels, and Win32 expose/paint repair
@@ -20,7 +29,8 @@
 > odd-resize/fullscreen/minimize
 > lifecycle coverage, and distinct default/dirty/halftone cases. The first manual
 > native-MSVC workflow result and the visible Windows lifecycle/DPI gate remain open, so the backend
-> is still not a release baseline.
+> is still not a release baseline. The follow-up GDI-075 through GDI-078 findings above are also open
+> and must be resolved before release-baseline status.
 >
 > **Status legend:** ✅ implemented and adequately verified for its stated scope; 🟨 implemented but
 > incompletely verified or with a provisional conclusion; 🔴 confirmed correctness defect;
@@ -107,6 +117,11 @@ ResolveColor -> GdiPresentation planner -> scoped GetDC
 - GDI render targets deliberately force depth and MSAA to zero and explicitly expose their
   always-present standalone Software stencil allocation. `GraphicsDevice` now asks depth and
   stencil attachment questions independently.
+- Backbuffer and render-target allocations use GDI-067's checked 512 MiB framebuffer planner, but
+  ordinary CPU `Texture2D` construction still allocates/copies RGBA8 vectors without that planner,
+  allocation-failure translation, or equivalent byte-budget coverage. The public maximum remains
+  16,384 per axis even though a square RGBA8 level at that limit alone is 1 GiB; GDI-076 owns this
+  remaining resource-boundary gap.
 
 ### Presentation path
 
@@ -122,8 +137,10 @@ ResolveColor -> GdiPresentation planner -> scoped GetDC
 - The shared SpriteBatch rasterizer reports clipped candidate-pixel bounds after origin, rotation,
   transform, viewport, and scissor. An SDL event watch independently advances a native-client
   invalidation generation for expose/restore/resize/display lifecycle events.
-- HDC ownership and DIB submission form a checked transaction. Damage and the captured native
-  invalidation generation are acknowledged only after the complete blit and `GdiFlush` succeed.
+- HDC acquisition, DIB submission, and `GdiFlush` form a checked transaction. Damage and the
+  captured native invalidation generation are acknowledged after those operations succeed.
+  `ReleaseDC` is still performed later by a non-throwing RAII destructor and its result is ignored,
+  so it is not yet part of that commit condition; GDI-077 tracks the remaining gap.
 - Full presentation currently fills the entire client black before every blit, including Stretch
   and Overscan where the following blit already covers the client.
 - Process environment options select `halftone` scaling, dirty presentation, and optional
@@ -189,6 +206,12 @@ presentation configuration also passes in its default, dirty, and halftone envir
 `CNA_GDI_DWM_FLUSH=0`. Unlike the audited baseline, the memory-DC test proves the exact GDI-produced
 pixels on a deterministic selected bitmap. It still does not replace the visible native Windows
 lifecycle/DPI gate.
+
+The 2026-08-03 follow-up independently repeated the focused Release configure/build and the complete
+sixteen-case Wine matrix under `xvfb-run`, again at `-j2`; all cases pass. This is strong evidence for
+the paths they exercise, but the suite has no fault-injected valid-mode allocation rollback, no
+ordinary `Texture2D` allocation-boundary matrix, and no observable `ReleaseDC` result. Those omissions
+correspond directly to F9 through F11 below rather than weakening unrelated passing assertions.
 
 ---
 
@@ -419,6 +442,67 @@ SOFTWARE build compiles the unguarded implementation and retains its feature set
 triangle raster helpers and the `RasterizeSpriteQuad` bridge remain centralized in
 `SoftwareGraphicsBackend.cpp` through the wrapper, so their extraction remains part of GDI-074.
 
+### F9 — a valid presentation-mode change can leave the backend in a failed half-state (P1,
+open as GDI-075)
+
+[`GdiGraphicsBackend::SetPresentationMode`](src/CNA/Internal/Backends/Gdi/GdiGraphicsBackend.cpp)
+assigns `presentationMode_` before calling the fallible `SynchronizeBackbufferSize()`. Validation of
+ordinals is transactional, and `SoftwareFramebuffer::Resize` itself is transactional, but the
+surrounding mode change is not. A valid switch to `FixedHeightDynamicWidth` can derive a width above
+the 16,384-axis limit or 512 MiB budget from the current drawable aspect and requested virtual
+height. The resize then throws after the new mode has already been stored. The old framebuffer and
+pixels survive, but subsequent `GetViewportSize()`, `Present()`, `Clear()`, or SpriteBatch begin can
+repeat the same failing synchronization instead of continuing with the prior presentation policy.
+
+The current regression proves only that invalid ordinals preserve Letterbox. It does not inject a
+failure for a valid ordinal whose implicit resize is rejected. GDI-075 must make the whole
+mode/size/damage transition commit or roll back as one operation and add that missing test.
+
+### F10 — CPU `Texture2D` allocation bypasses the GDI framebuffer safety contract (P1,
+open as GDI-076)
+
+GDI reports a 16,384 maximum texture dimension, while the ordinary public `Texture2D` constructors
+check only that upper per-axis value and then allocate `width * height * 4` bytes. A square RGBA8
+level at the advertised limit is 1 GiB before transient copies or mip storage. The composed
+[`SoftwareTextureBackend`](src/CNA/Internal/Backends/Software/SoftwareTexture2D.cpp) copies the
+provided vector without using GDI-067's checked layout/budget planner, without translating
+`std::bad_alloc`/`std::length_error`, and without validating that direct `ImageData` dimensions and
+pixel count agree. Decoded/asset paths also need the same backend-boundary guard rather than relying
+only on the integer-dimension check in selected public constructors.
+
+GDI-067 is correctly scoped to framebuffers, so its completed status does not cover this gap. The
+existing unsupported-feature test merely compares the reported integer ceiling; it never attempts
+the boundary allocation. GDI-076 must define a truthful CPU-texture byte contract and enforce it
+before the first large public allocation as well as at the direct backend entry.
+
+### F11 — `ReleaseDC` occurs after the presentation commit and its failure is invisible (P2,
+open as GDI-077)
+
+`WindowDeviceContext` guarantees a scoped `GetDC`/`ReleaseDC` pair, but its destructor discards the
+`ReleaseDC` result. `Present()` resets backbuffer damage and acknowledges the invalidation generation
+before that destructor runs. Consequently the otherwise checked native transaction cannot report a
+failed DC release, retain damage for a conservative retry, or expose the operation in telemetry.
+The normal valid-HWND path is unlikely to fail, but the code and GDI-053 wording currently provide no
+proof of the complete acquisition/release contract.
+
+GDI-077 should add an explicit, checked close before the commit point, retain a destructor fallback
+for exception safety, and use injection or a small DC-provider seam to verify failure telemetry and
+damage retention without depending on a naturally failing Win32 desktop.
+
+### F12 — handoff evidence has drifted from the implemented build boundary (P2 documentation,
+open as GDI-078)
+
+The current CMake list names seven shared CPU-2D source files and the backend archive also contains
+the three GDI translation units. `NEXT_gdi.md` still says the archive names "exactly two" CPU-2D
+translation units, later calls it a "five-object" archive, and records `-j8` validation even though
+this plan requires at most two parallel jobs. Other nearby paragraphs already describe the newer
+split, so the handoff is internally contradictory rather than merely old.
+
+GDI-078 must reconcile source/object/test counts with CMake-generated evidence, remove obsolete
+parallelism claims, and record the 2026-08-03 clean `-j2` plus Xvfb/Wine rerun. Counts that are likely
+to change again should be derived or asserted by a small build-boundary check instead of copied into
+several prose sections.
+
 ---
 
 ## 5. Reclassification of the existing roadmap
@@ -495,6 +579,15 @@ means only the narrowed statement in this table, not overall release readiness.
 | GDI-073 | Finish the advertised 4x MSAA semantics. | ✅ | The capability is explicitly narrowed and tested: filled backbuffer triangles have four 2x2-grid colour samples; mask bits 0–3 intersect geometric coverage and high bits are ignored; wireframe is a crisp full-enabled-sample DDA path without line AA; stencil is one value and one operation per covered pixel fragment that gates active colour samples. A 19-check pixel test covers every rule, and render targets remain single-sampled. |
 | GDI-074 | Physically split the reusable Software 2D implementation. | 🟨 | GDI now independently builds `SoftwareFramebuffer.cpp`, `SoftwareTexture2D.cpp`, `SoftwareRenderTarget2D.cpp`, `SoftwareGraphicsBackend2DState.cpp`, and `SoftwareSpriteBatch.cpp`, then uses `SoftwareGraphicsBackend2D.cpp` for the shared triangle-raster bridge. Cube, vertex/index-buffer, generic-effect, and general-3D draw bodies are compiled out and retained only by the full SOFTWARE build. Archive/symbol inspection proves GDI has no cube implementation or its allocation warning; focused GDI MinGW/Wine plus native SOFTWARE build/smoke/rasterizer/SpriteBatch gates pass. The shared raster helpers and bridge remain in `SoftwareGraphicsBackend.cpp` through the wrapper, so extracting them and validating native MSVC are the remaining completion criteria. |
 
+### Phase G9 — 2026-08-03 follow-up corrections
+
+| # | Task | Status | Acceptance criteria |
+|---|---|---:|---|
+| GDI-075 | Make valid presentation-mode changes transactional. | 🔴 | Validate the requested ordinal, calculate the prospective logical size, and complete any fallible framebuffer replacement before committing `presentationMode_`, damage, or coordinate policy; alternatively restore every prior field on failure. Add a deterministic test that starts from a valid retained framebuffer, switches to `FixedHeightDynamicWidth` with an aspect/virtual-height combination that exceeds the axis or byte budget, and verifies the exception family/diagnostic, old mode transforms, dimensions, pixels, damage, and a subsequent successful `Present()`. Cover both direct backend and public `GraphicsDevice::SetPresentationMode` paths. |
+| GDI-076 | Give CPU `Texture2D` the same allocation discipline as GDI framebuffers. | 🔴 | Define a checked CPU-texture layout contract for positive dimensions, base RGBA8 bytes, declared/supplied mip levels, every `size_t` operation, and a documented per-resource byte budget. Enforce it before public constructors allocate their first large vector and again in `GdiGraphicsBackend::CreateTexture`/the shared CPU texture boundary so decoded and direct `ImageData` cannot bypass it. Make `GetMaxTextureDimension()` and the byte budget jointly honest, validate source pixel lengths before sampling, eliminate avoidable full-size transient copies where practical, and translate `bad_alloc`/`length_error` to `System::OutOfMemoryException`. Add public/direct, malformed-data, over-budget, mip-budget, and genuine 32-bit planner tests; rejected creation must not alter existing resources. |
+| GDI-077 | Include DC release in the checked presentation transaction. | 🔴 | Refactor scoped DC ownership to support an explicit checked close before `ResetBackbufferDamage()` and invalidation acknowledgement, with a non-throwing destructor fallback for exceptional paths. A zero `ReleaseDC` result must identify `ReleaseDC` in telemetry/diagnostics and conservatively retain pending damage/generation. Add deterministic failure injection or a DC-provider seam plus success/failure count assertions proving exactly one release attempt and no leak/double release. Do not make a destructor throw. |
+| GDI-078 | Reconcile handoff/build evidence with the actual archive boundary. | ⬜ | Update `NEXT_gdi.md`, `docs/gdi-backend.md`, and this plan from one CMake/source-of-truth inspection: seven reviewed shared CPU-2D sources plus the GDI-owned units, sixteen focused test cases, and at most `-j2`. Remove obsolete "two translation units", "five-object archive", and `-j8` claims. Record the 2026-08-03 clean MinGW Release plus Xvfb/Wine result and add a lightweight configure/archive assertion for boundary facts that should not rely on manually copied counts. |
+
 ---
 
 ## 7. Recommended execution order
@@ -506,8 +599,12 @@ means only the narrowed statement in this table, not overall release readiness.
 5. ✅ **Register configuration coverage:** GDI-056.
 6. **Establish native repeatability:** ✅ GDI-057 through GDI-060; GDI-061 remains a visible
    native-Windows gate.
-7. **Measure a visible client:** GDI-062. Only then choose GDI-063 through GDI-066.
-8. **Reduce memory and architectural risk:** ✅ GDI-067, GDI-070, GDI-072, and GDI-073; GDI-071 is
+7. **Close follow-up correctness gaps:** GDI-075 and GDI-076, then harden the transaction with
+   GDI-077. These are implementation tasks, not substitutes for the visible native gate.
+8. **Reconcile evidence:** GDI-078; keep generated archive/test facts separate from human lifecycle
+   observations.
+9. **Measure a visible client:** GDI-062. Only then choose GDI-063 through GDI-066.
+10. **Reduce remaining architectural risk:** ✅ GDI-067, GDI-070, GDI-072, and GDI-073; GDI-071 is
    locally implemented and awaits native MSVC, while only GDI-074 remains in this group.
 
 The GDI-014 and GDI-026 prerequisites are now satisfied by GDI-050 through GDI-054 and their
@@ -520,7 +617,8 @@ in GDI-061 confirms the retained-client behavior outside focused automated lifec
 
 The GDI backend may be called a release baseline only when:
 
-- every G5 task is complete and no public capability depends on direct internal-backend calls;
+- every G5 task and GDI-075 through GDI-078 are complete, and no public capability depends on
+  direct internal-backend calls;
 - focused MinGW `-j2` build plus Wine smoke/regression and native MSVC `ctest -L GDI` pass;
 - deterministic presentation tests validate the pixels sent through both DIB paths and all
   registered environment variants;
@@ -528,7 +626,8 @@ The GDI backend may be called a release baseline only when:
   DPI setting tested;
 - public presentation/resource properties report applied reality;
 - native visible benchmark data, not a hidden Wine DC, supports all performance claims; and
-- `docs/gdi-backend.md` and this status table match the implementation at the same commit.
+- `NEXT_gdi.md`, `docs/gdi-backend.md`, and this status table match the implementation and generated
+  build-boundary evidence at the same commit.
 
 ---
 
@@ -536,5 +635,6 @@ The GDI backend may be called a release baseline only when:
 
 - Microsoft: [`StretchDIBits` return value and top-down DIB behavior](https://learn.microsoft.com/en-us/windows/win32/api/wingdi/nf-wingdi-stretchdibits)
 - Microsoft: [`SetDIBitsToDevice` scan-range contract](https://learn.microsoft.com/en-us/windows/win32/api/wingdi/nf-wingdi-setdibitstodevice)
+- Microsoft: [`ReleaseDC` return contract](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-releasedc)
 - Microsoft: [`BeginPaint` validates the update region](https://learn.microsoft.com/en-us/windows/win32/gdi/retrieving-the-update-region)
 - SDL3: [window coordinates, pixel size, density, and pixel-size/display-scale events](https://wiki.libsdl.org/SDL3/README-highdpi)
