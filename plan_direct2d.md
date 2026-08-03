@@ -13,19 +13,18 @@
 
 ## Aktuálně zbývající práce
 
-K 2026-08-01 neexistuje žádná otevřená položka `⬜` ani žádná známá další implementační mezera,
-kterou lze uzavřít na Linuxu, ve Wine nebo v Proton/DXVK. Všech deset zbývajících položek `🟨`
-vyžaduje **nativní Windows OS**:
+Audit z 2026-08-03 vyvrátil předchozí závěr, že zbývají pouze nativní validační brány. Bylo
+nalezeno 100 konkrétních otevřených úkolů `D2D-34` až `D2D-133`; část jsou prokázané chyby
+implementace, část chybějící nezávislé oracle a část odolnost, výkon a CI. Znovu se proto otevírají
+také `D2D-7`, `D2D-8`, `D2D-9`, `D2D-31` a `D2D-32`. Původní nativní položky `🟨` zůstávají
+platné, ale samy už netvoří celý backlog.
 
-- `D2D-4`, `D2D-13`, `D2D-20`, `D2D-22`, `D2D-24`, `D2D-27`, `D2D-28` a `D2D-33` vyžadují
-  první úspěšný běh připravené nativní MSVC/Direct2D validační brány bez kompatibilitních skipů,
-  včetně kontroly debug-layer/WARP artefaktu. Stejný běh uzavře také `ColorMatrix` část `D2D-1`.
-- `D2D-23` a presentation/DPI část `D2D-1` vyžadují fyzické Windows okno a samostatnou oracle
-  fyzického swap-chain výstupu pro letterbox pruhy, Overscan crop a nenulové DPI.
-
-Wine/Proton regresní matice je pro dostupné větve dokončená a prochází; její další opakování nemůže
-výše uvedené nativní položky změnit na `✅`, protože dané runtime neposkytují požadované Direct2D
-effects/composite chování ani důkaz fyzického Windows presentation/DPI výstupu.
+MinGW build tří samostatných Direct2D testů 2026-08-03 uspěl a `Direct2D_Smoke`,
+`Direct2D_2DParity` i `Direct2D_Lifetime` prošly ve Wine pod virtuálním displejem Xvfb
+(3/3, 21,56 s). Tento průchod však nepokrývá níže nalezené chyby, protože některé stávající testy
+potvrzují chybnou oracle a unit testy z `CnaTests.exe` nejsou v labelu `Direct2D`. Samotný
+`CnaTests.exe` se v auditním sestavení navíc zastavil na chybějící `enet/enet.h`, přestože byl build
+konfigurován s `CNA_ENABLE_NET=OFF`; tato nesouvisející závada nesmí blokovat Direct2D unit gate.
 
 ## Co EasyGL umí navíc a co je zde v rozsahu
 
@@ -72,9 +71,9 @@ pojmenovanou výjimkou a dokumentace má uživatele odkázat na `CNA_GRAPHICS_BA
 | D2D-4 | Doplň SpriteBatch pro `RenderTarget2D` jako zdroj: tint, flip, crop, non-premultiplied vstup a Wrap/Mirror bez CPU shadow/render-target readbacku. Použij Direct2D bitmap brush a effect graph. | 🟨 | Implementován GPU-only `ID2D1ImageBrush` pro RT, s `ColorMatrix` tintem, `Premultiply` pro NonPremultiplied, flip transformem a Wrap/Mirror extend modes; drží COM graph do `EndDraw` a nevytváří CPU kopii. Přidány pixelové probes tint/flip/Wrap/Mirror. Wine ani Proton Experimental (2026-08-01) nemají `ColorMatrix`/`Premultiply` zaregistrován (`CreateEffect(Premultiply) = 0x88990028`), proto jejich byte-exact běh zbývá na nativním Windows; Clamp mimo source rectangle zůstává explicitně pro D2D-13. |
 | D2D-5 | Uprav `ApplyRasterizerState` a `SetScissorRect`: ukládej `ScissorTestEnable`, clip zapínej jen pokud je povolený a počítej jej vůči aktivnímu RT/backbufferu. | ✅ | Samostatná brána `ScissorTestEnable`; nulový rectangle je prázdný clip, nikoli tiché vypnutí. Izolovaný Wine pixelový test prošel pro enabled/disabled backbuffer i menší RT po odbindu. |
 | D2D-6 | Implementuj `SetViewport` pro 2D výstup jako zdokumentovaný transform+clip stav. Urči interakci s virtual resolution, presentation transformem, SpriteBatch transformem a RT. | ✅ | `SpriteBatch transform → viewport-local offset+clip → presentation transform`; scissor se s viewport clipem protíná v targetových souřadnicích a RT reset přichází z `GraphicsDevice`. Izolovaný Wine pixelový test prošel na backbufferu i RT. |
-| D2D-7 | Zaveď obnovu po `D2DERR_RECREATE_TARGET`/device removal: znovu vytvoř D3D/D2D/DXGI prezentační zdroje a registrované 2D bitmapy. Obyčejné textury obnov z CPU shadow; chování obsahu RT explicitně definuj podle content usage. | ✅ | `EndDraw` a `Present` rozpoznají Direct2D/DXGI reset, znovu vytvoří kompletní D3D11/DXGI/Direct2D doménu a vyžádají překreslení snímku. Debug recovery rehydratuje registrované `Texture2D` z RGBA shadow, RT znovu alokuje jako transparentní a obnoví jen stále registrovaný aktivní RT. Izolovaný Wine pixelový test potvrzuje kreslení po resetu a že obsah RT po resetu není dál platný. |
-| D2D-8 | Implementuj `SetContextRecoveryEnabled`, `DebugSimulateContextLoss` a `DebugRestoreContext` ve stejném veřejném kontraktu jako EasyGL, ale jen pro 2D zdroje. | ✅ | Factory přebírá počáteční volbu z `GraphicsBackendCreateArgs`; přepnutí ovlivňuje registraci nových 2D zdrojů. Veřejný test ověřuje obnovu zdroje vytvořeného při zapnutí, odmítnutí stale textury vytvořené při vypnutí a funkčnost nového zdroje po resetu. |
-| D2D-9 | Průběžně aktualizuj capability reporting a dokumentaci 2D limitů; nikdy nehlaš 3D, custom effects ani queries, ale nezatajuj skutečnou čistě 2D schopnost. | ✅ | `docs/direct2d-backend.md` popisuje hranici 2D/D3D11 a explicitní limity. `Direct2D_2DParity` ověřuje osm nepodporovaných hodnot `GraphicsCapability`; `AnisotropicFiltering` po D2D-32 jako jediná vrací `true`, protože jde o nativní `D2D1_INTERPOLATION_MODE_ANISOTROPIC`, nikoli D3D11 sampler. |
+| D2D-7 | Zaveď obnovu po `D2DERR_RECREATE_TARGET`/device removal: znovu vytvoř D3D/D2D/DXGI prezentační zdroje a registrované 2D bitmapy. Obyčejné textury obnov z CPU shadow; chování obsahu RT explicitně definuj podle content usage. | 🟨 | Znovu otevřeno auditem: obnova není all-or-nothing, aktivní RT vytvořený bez registrace se po loss tiše odpojí a několik chybových cest neobnoví předchozí target. Dílčí Wine recovery test zůstává platný, ale nestačí pro `✅`. |
+| D2D-8 | Implementuj `SetContextRecoveryEnabled`, `DebugSimulateContextLoss` a `DebugRestoreContext` ve stejném veřejném kontraktu jako EasyGL, ale jen pro 2D zdroje. | 🟨 | Znovu otevřeno auditem: vypnutí recovery sice vypne registraci, ale backend stále pořizuje úplné CPU RGBA shadow všech mipů. Akceptace vyžaduje skutečně rozdílný paměťový režim a definovaný osud aktivního neregistrovaného RT. |
+| D2D-9 | Průběžně aktualizuj capability reporting a dokumentaci 2D limitů; nikdy nehlaš 3D, custom effects ani queries, ale nezatajuj skutečnou čistě 2D schopnost. | 🟨 | Znovu otevřeno auditem: `ApplyDepthStencilState` je zděděný no-op, rasterizer tiše ignoruje wireframe/cull/depth bias, anisotropie je hlášena bez runtime dotazu a maximální textura používá konstantu místo device limitu. |
 
 ## Fáze D2D-2 — mipy a vzorkování zůstávající uvnitř 2D API
 
@@ -130,18 +129,184 @@ Větve závislé na built-in effects/composite modes navíc podléhají nativní
 | D2D-28 | Oprav `BlendState::Opaque` s `Color.A != 255`. Zdrojový RGB faktor musí zůstat `One`, ale kopírovaná alpha se musí násobit `Color.A`; současná GPU větev alpha-only tint vůbec nevytvoří a CPU fallback ji při `D2D1_ALPHA_MODE_IGNORE` zahodí. | 🟨 | Implementováno: alpha je součástí tint rozhodnutí i pro Copy, ColorMatrix používá straight-alpha režim pro nezávislé RGB/alpha škálování a CPU fallback již nevytváří alpha-ignore bitmapu. Veřejný test obsahuje `(128,0,0,128)` × `Color.A=128` → `(128,0,0,64)` pro `Texture2D` i GPU-only RT. Wine tuto celou `BOUNDED_SOURCE_COPY`/ColorMatrix větev podle známé runtime mezery přeskakuje; k `✅` zbývá nativní běh D2D-22. |
 | D2D-29 | Implementuj skutečný `Direct2DRenderTargetBackend::UpdatePixelsLevel`. `RenderTarget2D::SetData(level>0)` dnes skončí v prázdném defaultu rozhraní a sdílený CPU mip shadow pak může lhát proti GPU obsahu. | ✅ | Level 0 zachová RT backend a každý nižší level validuje rozměry a zapisuje RGBA do odpovídající Direct2D bitmapy. GPU-only částečný SetData nejdřív načte celý aktuální level, přepíše region a žádný CPU shadow neuchová. Wine veřejně prošel full+partial level-1 upload, `GetData`, SpriteBatch sampling i přegenerování po následném Clear levelu 0. |
 | D2D-30 | Zpřesni volbu a mapování mip levelu pro NPOT textury a výsledný 2D transform. Současné `2^-level` není poměr skutečných NPOT rozměrů a LOD ignoruje scale/shear SpriteBatch matice i presentation scale. | ✅ | Source rectangle a origin používají skutečný poměr mip/base na každé ose. LOD počítá nejmenší singulární hodnotu lineární části sprite × rotation × batch × presentation, včetně shear a singulární matice, a potom clampuje na existující level. Přidán kompilovaný unit test NPOT/matic a Wine pixelově prošel batch scale `0.25` volící modrý level 2 místo červeného levelu 0. |
-| D2D-31 | Odstraň omezení `ReadBackbuffer` na 1:1 prezentaci čistě 2D logickým framebufferem. Přímé kreslení do fyzického swap-chain bitmapu dnes znemožňuje přesný logický readback při Letterbox/Overscan/Stretch/FixedHeightDynamicWidth. | ✅ | Defaultní scéna se kreslí do targetovatelné logické Direct2D bitmapy; `Present` vyčistí fyzický target a kompozituje ji presentation transformem, následně obnoví aktivní logický/RT target. Resize, změna režimu a recovery bitmapu přepočítají. Všechny tři Wine CTesty prošly a parity po reálném resize 80×24 pixelově přečetla marker i pozadí v non-1:1 Letterbox režimu. |
-| D2D-32 | Využij nativní Direct2D sampler schopnosti místo boolean point/linear aproximace všech devíti `TextureFilter` hodnot. | ✅ | SpriteBatch uchovává celý `TextureFilter`; Anisotropic předává `D2D1_INTERPOLATION_MODE_ANISOTROPIC` do `DrawImage` i `ImageBrush`, kombinované hodnoty volí min/mag Point/Linear podle výsledné transformace a mip-linear zůstává zdokumentovaný nearest-level. `SupportsCapability(AnisotropicFiltering)` vrací jako jediná Direct2D capability `true`; obě anisotropic veřejné pixelové cesty i reporting prošly ve Wine. |
+| D2D-31 | Odstraň omezení `ReadBackbuffer` na 1:1 prezentaci čistě 2D logickým framebufferem. Přímé kreslení do fyzického swap-chain bitmapu dnes znemožňuje přesný logický readback při Letterbox/Overscan/Stretch/FixedHeightDynamicWidth. | 🟨 | Znovu otevřeno auditem: `NativeBackBuffer` používá virtuální logickou bitmapu s identitní prezentací, takže při rozdílných rozměrech vyplní jen levý horní roh; `Present` navíc sám nekontroluje resize a chování při aktivním RT není definováno. |
+| D2D-32 | Využij nativní Direct2D sampler schopnosti místo boolean point/linear aproximace všech devíti `TextureFilter` hodnot. | 🟨 | Znovu otevřeno auditem: všechny `MipLinear` režimy stále vybírají jediný nejbližší mip místo interpolace dvou úrovní a anisotropní capability není ověřena proti konkrétnímu zařízení. |
 | D2D-33 | Rozšiř přesné 2D blend mapování o všechny symetrické Add faktorové kombinace, které mají ekvivalent v `D2D1_COMPOSITE_MODE` (Porter–Duff), bez obecného D3D11 blend pasu. | 🟨 | Implementována úplná mapovací tabulka DestinationOver, Source/Destination In/Out/Atop a Xor; přímý zdroj používá `DrawImage`, dekorovaný zdroj se materializuje v `ID2D1CommandList` a kompozituje stejným režimem. Geometrická Direct2D layer maska omezuje jinak transparentně na celý clip rozšířené non-SourceOver image přesně na transformovaný sprite quad. Unit tabulka se v MinGW sestavila a veřejný DestinationOver test pokrývá přímou i Flip/ImageBrush cestu. Wine non-source-over režimy ignoruje, proto k `✅` zbývá nativní běh D2D-22; odmítací testy ostatních faktorů dál ve Wine procházejí. |
+
+## Audit 2026-08-03 — proč dosavadní zelené testy nestačí
+
+Potvrzené funkční chyby mají přednost před rozšiřováním testovací matice:
+
+- `NativeBackBuffer` ponechá při rozdílné virtuální a fyzické velikosti identitní transformaci nad
+  virtuálně velkou logickou bitmapou; výstup proto nepokrývá celý fyzický backbuffer.
+- Sprite tint pro premultiplied `AlphaBlend` chybně násobí RGB také `Color.A`. EasyGL shader
+  násobí komponenty samostatně; současný parity test tak kodifikuje chybný výsledek.
+- `BlendState::Additive` má veřejně faktory `SourceAlpha/One`, zatímco Direct2D používá
+  `D2D1_COMPOSITE_MODE_PLUS`, tedy `One/One`; současný test znovu potvrzuje nesprávnou oracle.
+- Povolený depth/stencil a nepodporované rasterizer hodnoty jsou tiše ignorovány místo pojmenované
+  výjimky. Destruktor RT backendu může navíc volat házející odbind z implicitně `noexcept`
+  destruktoru; statická analýza tuto cestu označila jako `throwInNoexceptFunction`.
+- Bind stale RT změní `activeRenderTarget_` dříve, než ověří generaci bitmapy. Chyba tak může
+  zanechat logický a nativní target v rozdílném stavu.
+- `MipLinear` je pouze nearest-level, vypnutá recovery stále drží úplné CPU shadow a několik
+  resize/recovery/presentation operací není transakčních.
+
+Následující body jsou vysoká rizika, která nejdříve vyžadují nezávislou pixelovou oracle: kladně
+posunutý source rectangle u `ID2D1ImageBrush`, edge kernel CPU fallbacku pro Linear Wrap/Mirror,
+vzorované NPOT RT mipy, fyzický DPI/presentation výstup a životnost zdroje změněného či zrušeného
+mezi `SpriteBatch::End` a `Present`.
+
+## Fáze D2D-6 — oprava blend a alpha kontraktu
+
+| # | Úkol | Stav | Akceptace |
+|---|---|---|---|
+| D2D-34 | Oprav komponentové tintování premultiplied `AlphaBlend`; `Color.A` nesmí znovu násobit premultiplied RGB. | ⬜ | Byte-exact oracle odvozená z EasyGL shaderu projde pro nenulové RGB i poloviční texture alpha a `Color.A`, na texture i RT zdroji. |
+| D2D-35 | Implementuj `BlendState::Additive` přesně jako `SourceAlpha/One`, nikoli jako bezpodmínečné `PLUS` (`One/One`). | ⬜ | Nezávislý test s poloprůhledným premultiplied pixelem odliší oba vzorce a Direct2D odpoví veřejnému `BlendState::Additive`. |
+| D2D-36 | Sjednoť Additive pro straight-alpha, premultiplied Texture2D a render-target zdroje. | ⬜ | Všechny tři reprezentace dávají po správné konverzi stejný výsledný framebuffer; nepřesná větev je explicitně odmítnuta. |
+| D2D-37 | Audituj zvlášť color a alpha faktory všech čtyř standardních presetů. | ⬜ | Tabulka faktorů je strojově testovaná proti veřejným hodnotám `BlendState` a obsahuje případy s různou source/destination alpha. |
+| D2D-38 | Oprav alpha mode a matici `ColorMatrix`/`Premultiply` effect větve. | ⬜ | Nativní test prokáže nezávislé RGB a A škálování bez dvojité premultiplikace pro AlphaBlend, NonPremultiplied i Opaque. |
+| D2D-39 | Zajisti byte parity mezi native-effect a CPU-fallback dekorovanou cestou. | ⬜ | Stejný korpus pixelů přes obě vynucené větve dává totožný výsledek v toleranci nejvýše 1 LSB. |
+| D2D-40 | Přidej nezávislou algebraickou Porter–Duff oracle pro D2D-33. | ⬜ | Každý podporovaný composite mode je porovnán s CPU referencí na netriviálních RGBA dvojicích, nejen s Direct2D větví proti sobě. |
+| D2D-41 | Dokonči `Opaque` s nezávislým RGB/A tintem pro texture i RT. | ⬜ | `Color.A` ovlivní kopírovanou alpha, nikoli RGB; test projde přes native effect bez compatibility skipu. |
+| D2D-42 | Odmítej blend kombinace, které nelze přesně vyjádřit, ještě před zahájením nebo změnou draw stavu. | ⬜ | Výjimka je pojmenovaná, deterministická a následný podporovaný draw prokáže nezměněný backend stav. |
+| D2D-43 | Zvaliduj blend vstupy včetně neznámých enum hodnot a neplatného blend factoru transakčně. | ⬜ | Chybové testy pokryjí všechny endpointy a po každé výjimce úspěšně vykreslí kontrolní marker. |
+| D2D-44 | Zdokumentuj alpha reprezentaci každé upload/readback/RT/effect hranice. | ⬜ | Dokumentace a komentáře uvádějí straight/premultiplied/ignored alpha i místo každé konverze a odpovídají testům. |
+| D2D-45 | Vytvoř úplnou golden matici blend × source typ × tint × alpha reprezentace. | ⬜ | Matici generuje datově řízený test s CPU referencí; běží ve Wine i nativně a runtime skip je povolen pouze pro konkrétní nedostupný effect. |
+
+## Fáze D2D-7 — presentation, resize, DPI a swap chain
+
+| # | Úkol | Stav | Akceptace |
+|---|---|---|---|
+| D2D-46 | Oprav `NativeBackBuffer`, aby logická velikost a kreslicí plocha odpovídaly fyzickému backbufferu. | ⬜ | Při virtual 40×24 a okně 80×48 marker i pozadí pokryjí správné fyzické pixely bez levého horního výřezu. |
+| D2D-47 | Sjednoť viewport, readback a coordinate-transform kontrakt pro `NativeBackBuffer`. | ⬜ | Veřejné rozměry, logical readback a obousměrný převod souřadnic používají jednu zdokumentovanou fyzickou doménu. |
+| D2D-48 | Volej kontrolu velikosti swap chainu také z `Present`, i když snímek nic nekreslil. | ⬜ | Resize těsně před prázdným `Present` vytvoří správně velký backbuffer a další snímek nezdědí staré rozměry. |
+| D2D-49 | Definuj a implementuj `Present` při stále aktivním RT. | ⬜ | Buď deterministicky prezentuje poslední logický framebuffer a zachová RT, nebo pojmenovaně odmítne; transform nikdy nesmí vycházet z RT rozměrů. |
+| D2D-50 | Udělej `SetVirtualResolution` transakční. | ⬜ | Selhání alokace/recreate ponechá původní rozměry, bitmapu, viewport i coordinate transform a následný frame projde. |
+| D2D-51 | Udělej `SetPresentationMode` transakční. | ⬜ | Neplatný režim nebo selhání recreate nezmění backend, zatímco shared `GraphicsDevice` zůstane synchronní. |
+| D2D-52 | Zaveď rollback nebo úplnou obnovu po selhání `ResizeBuffers`/recreate targets. | ⬜ | Fault-injection test nenechá backend bez targetu a následující resize či recovery jej vrátí do použitelného stavu. |
+| D2D-53 | Zaruč minimálně 1×1 logický framebuffer pro extrémní poměry stran. | ⬜ | `FixedHeightDynamicWidth` ani jiný režim nikdy nevrátí nulovou šířku/výšku; transformy zůstanou konečné. |
+| D2D-54 | Urči jedinou DPI a SDL coordinate doménu pro client rect, window size a drawable pixely. | ⬜ | Návrh odkáže na konkrétní SDL/Win32 API a testy pro 100/125/150/200 % nemíchají DIP a fyzické pixely. |
+| D2D-55 | Obsluž runtime DPI/monitor změnu včetně `WM_DPICHANGED`. | ⬜ | Přesun mezi monitory znovu vytvoří správný backbuffer a zachová logical↔window round-trip bez restartu. |
+| D2D-56 | Zdokumentuj a otestuj interpolation mode finální presentation kompozice. | ⬜ | Point/linear politika je explicitní a fyzická oracle pokryje zvětšení i zmenšení necelým poměrem. |
+| D2D-57 | Přidej fyzickou pixelovou oracle pro Letterbox pruhy. | ⬜ | Desktop/swap-chain capture na Windows ověří barvu obou pruhů, hranice content rect a absenci starého obsahu. |
+| D2D-58 | Přidej fyzickou oracle pro Overscan crop, resize a Stretch. | ⬜ | Test odliší správný crop od letterboxu a projde po více resize cyklech s rozdílným aspect ratio. |
+| D2D-59 | Implementuj skutečný Immediate present s tearing capability/flags nebo jej poctivě odmítej. | ⬜ | `CheckFeatureSupport`, swap-chain flags a `Present` flags tvoří podporovanou matici vsync/immediate; fallback je dokumentovaný a testovaný. |
+
+## Fáze D2D-8 — recovery, transakčnost a životnost zdrojů
+
+| # | Úkol | Stav | Akceptace |
+|---|---|---|---|
+| D2D-60 | Zabraň výjimce z implicitně `noexcept` destruktoru `Direct2DRenderTargetBackend`. | ⬜ | Destruktor jen provede no-throw cleanup; explicitní `Dispose`/unbind nese případnou chybu a fault-injection test nikdy nekončí `std::terminate`. |
+| D2D-61 | Ověř vlastnictví, disposal a device generation RT před změnou `activeRenderTarget_`. | ⬜ | Každá validační výjimka nastane před mutací logického i nativního targetu. |
+| D2D-62 | Přidej transakční test bindu stale RT po recovery. | ⬜ | Po odmítnutí stale RT zůstane původní target čitelný a přijme kontrolní draw. |
+| D2D-63 | Definuj device loss s aktivním RT vytvořeným při vypnuté recovery. | ⬜ | Backend nevytvoří tichý rozpor s veřejně navázaným RT; chování je explicitní, testované a obnovitelné. |
+| D2D-64 | Definuj zdroj přežívající zánik backendu/GraphicsDevice. | ⬜ | Texture/RT destructory nevolají dangling backend a pořadí shutdownu je pokryto samostatným procesovým testem. |
+| D2D-65 | Udělej resource recreation all-or-nothing. | ⬜ | Selhání uprostřed registry nevytvoří směs generací; celý pokus lze bezpečně zopakovat nebo backend přejde do jasného lost stavu. |
+| D2D-66 | Obnov původní target a draw state při každém selhání generování RT mipů. | ⬜ | Fault na `EndDraw`, effect/downsample i `SetTarget` nezanechá context namířený na pomocný mip. |
+| D2D-67 | Obnov cílovou bitmapu a stav po každém selhání presentation kompozice. | ⬜ | Fault-injection v `Present` neovlivní následující recovery frame ani aktivní RT. |
+| D2D-68 | Pokryj rollback resize po uvolnění starých targetů. | ⬜ | Každý HRESULT bod resize má test a žádný nezanechá null swap-chain/logical target bez řízené recovery. |
+| D2D-69 | Centralizuj klasifikaci všech Direct2D/DXGI device-loss HRESULT. | ⬜ | Jedna helper tabulka pokrývá `D2DERR_RECREATE_TARGET`, removed/reset/hung/internal error a všechny call sites ji používají. |
+| D2D-70 | Napoj device-lost/reset notifikaci na veřejný lifecycle CNA. | ⬜ | Aplikace dostane přesně jednu událost ve správném pořadí a může deterministicky znovu vytvořit neobnovitelné zdroje. |
+| D2D-71 | Otestuj recovery s rozpracovaným SpriteBatch a drženými transient COM grafy. | ⬜ | Loss před/po `EndDraw` uvolní transients, neprovede draw ze staré generace a následující frame projde. |
+| D2D-72 | Zaveď invarianty resource registry a debug assertions. | ⬜ | Registrace/odregistrace je idempotentní, bez duplicit a dangling ukazatelů; stress test střídá create/dispose/recovery. |
+| D2D-73 | Při vypnuté context recovery skutečně neukládej backendové CPU shadows. | ⬜ | Paměťový test pro velkou mip texturu prokáže odstranění duplicitní kopie; SetData/GetData a stale-source chování zůstane správné. |
+
+## Fáze D2D-9 — mipy, sampling, crop a render target
+
+| # | Úkol | Stav | Akceptace |
+|---|---|---|---|
+| D2D-74 | Implementuj skutečnou interpolaci mezi dvěma mip levely pro všechny `MipLinear` filtry. | ⬜ | Fractional LOD test s odlišnými barvami sousedních mipů vrátí vypočtený mix, nikoli nearest-level. |
+| D2D-75 | Odděl výpočet spojitého LOD od volby mipů a zpřístupni jej jednotkovým testům. | ⬜ | NPOT, scale, rotation, shear, singularita, presentation scale a clamp mají deterministické numerické testy. |
+| D2D-76 | Zjišťuj anisotropic podporu na konkrétním zařízení/runtime. | ⬜ | Capability není bezpodmínečná; skutečný draw probe nebo dokumentovaný API dotaz určí podporu a fallback/exception. |
+| D2D-77 | Použij runtime `GetMaximumBitmapSize` místo konstantního maxima. | ⬜ | Veřejný limit odpovídá aktivnímu zařízení a alokace těsně nad ním selže před vytvořením vektoru/COM objektu. |
+| D2D-78 | Ověř RT mip downsample vzorovanou NPOT texturou. | ⬜ | Golden oracle pokryje 7×5 až 1×1, row/column hrany a každý level; solid-color test nestačí. |
+| D2D-79 | Rozšiř mip výběr na úplnou matici scale × source rect × transform × presentation. | ⬜ | Data-driven test pokryje minifikaci/magnifikaci, fractional bounds, flip a aktivní RT bez branch-dependent očekávání. |
+| D2D-80 | Ověř a oprav transform `ID2D1ImageBrush` pro kladně posunutý source rectangle. | ⬜ | Dekorovaná atlasová textura s odlišným okolím vrátí přesně crop od `X>0,Y>0`; oracle není odvozena z RT téže větve. |
+| D2D-81 | Přidej oracle pro source rectangle částečně uvnitř i vně textury. | ⬜ | Clamp/Wrap/Mirror na všech čtyřech hranách odpoví CPU/EasyGL referenci pro Texture2D i RT. |
+| D2D-82 | Otestuj společnou geometrii crop, origin, flip, rotation, scale a batch transformu. | ⬜ | Kombinační sada používá asymetrický atlas a odhalí posun či obrácené pořadí matic. |
+| D2D-83 | Vytvoř nezávislou sampling oracle pro ImageBrush a CPU fallback. | ⬜ | Point/Linear × Clamp/Wrap/Mirror se porovnává s matematickou referencí, nikoli dvěma Direct2D cestami proti sobě. |
+| D2D-84 | Oprav CPU fallback edge kernel pro lineární Wrap/Mirror podle oracle D2D-83. | ⬜ | Hraniční texely a half-texel souřadnice odpoví EasyGL/FNA v toleranci 1 LSB. |
+| D2D-85 | Definuj RT tint/NonPremultiplied na runtime bez built-in effects. | ⬜ | Backend buď poskytne korektní 2D fallback, nebo včas hodí pojmenovanou capability výjimku; nikdy nevystaví surové `0x88990028`. |
+| D2D-86 | Odmítej nebo bezpečně kopíruj sampling právě aktivního RT levelu 0. | ⬜ | Self-sampling nemá undefined D2D target/input alias a test ověří zvolený kontrakt i zachování targetu. |
+| D2D-87 | Definuj `SetData` do právě navázaného RT. | ⬜ | Update je bezpečně serializován, nebo odmítnut před mutací; následující draw/readback je konzistentní. |
+| D2D-88 | Definuj texture update během outstanding SpriteBatch draw. | ⬜ | Sprite už frontovaný před update použije jasně určenou verzi dat a COM lifetime neobsahuje dangling bitmapu. |
+| D2D-89 | Doplň úplnou full/partial `SetData` matici pro každý mip Texture2D i RT. | ⬜ | Testy pokryjí offset, row pitch, poslední pixel, prázdný region, invalidní rozsahy a následné sampling/readback. |
+| D2D-90 | Sjednoť dirty-mip invalidaci pro všechny úspěšné zápisy a žádné neúspěšné/no-op zápisy. | ⬜ | Stavový test pokryje Clear, draw, full/partial upload, readback, failed validation a opakovaný bind. |
+| D2D-91 | Urči politiku authored vs automaticky generovaných nižších mipů RT. | ⬜ | Explicitní `SetData(level>0)` se nepřepíše překvapivě, nebo je chování zdokumentováno a veřejně testováno. |
+
+## Fáze D2D-10 — validace, stav, formáty a readback
+
+| # | Úkol | Stav | Akceptace |
+|---|---|---|---|
+| D2D-92 | Zabal `Map`/`Unmap` do RAII a kontroluj výsledek `Unmap`. | ⬜ | Každá výjimka po mapování bezpečně odmapuje bitmapu a HRESULT se neztratí. |
+| D2D-93 | Otestuj readback row pitch, BGRA/RGBA převod a alpha režim na celé matici rozměrů. | ⬜ | Liché šířky, padding, subregiony, texture/RT/logical backbuffer a transparentní pixely mají byte-exact oracle. |
+| D2D-94 | Sjednoť null, zero-size a prázdný readback kontrakt. | ⬜ | Všechny veřejné endpointy mají stejné návratové hodnoty/výjimky a nikdy nedereferencují null ani nemapují 0×0. |
+| D2D-95 | Přidej checked aritmetiku pro všechny pixelové a pitch alokace. | ⬜ | Násobení width×height×4 a mip součty odmítají overflow před `std::vector`/D2D alokací. |
+| D2D-96 | Validuj rozměry proti runtime maximu před CPU i GPU alokací. | ⬜ | Záporné, nulové, extrémní a limit+1 rozměry selžou deterministickou named exception bez `bad_alloc`. |
+| D2D-97 | Audituj a obsluž všechny ignorované HRESULT. | ⬜ | `MakeWindowAssociation`, `GetDesc`, `Unmap` a další call sites jsou buď kontrolované, nebo mají zdokumentovaný důvod bezpečného ignorování. |
+| D2D-98 | Kontroluj návratové hodnoty použitých SDL API. | ⬜ | Window property, size/sync a native handle chyby mají kontextovou výjimku a failure-injection test. |
+| D2D-99 | Override `ApplyDepthStencilState` a odmítej povolené depth/stencil funkce. | ⬜ | Defaultní vypnutý stav je přijat, každá depth/stencil odchylka pojmenovaně selže a docs odkážou na D3D11. |
+| D2D-100 | Validuj podporovaný 2D subset `RasterizerState`. | ⬜ | Scissor funguje; wireframe, cull, depth bias a slope bias jsou buď přesně podporovány, nebo odmítnuty bez tichého no-op. |
+| D2D-101 | Definuj a validuj viewport `MinDepth`/`MaxDepth` v 2D backendu. | ⬜ | Jediný přijímaný rozsah je zdokumentovaný; NaN, infinity a 3D depth rozsahy jsou deterministicky odmítnuty. |
+| D2D-102 | Přidej společnou matici neznámých enumů a nekonečných/NaN vstupů. | ⬜ | Presentation, filter, addressing, blend, rasterizer, viewport a sprite transform selžou před mutací stavu. |
+| D2D-103 | Explicitně validuj RT depth format, MSAA a `RenderTargetUsage`. | ⬜ | Každá nepodporovaná kombinace selže nebo vrátí dokumentovaný 2D fallback; preserve/discard semantics mají test. |
+| D2D-104 | Zaveď pravdivý surface/texture/backbuffer format support reporting. | ⬜ | BGRA8/RGBA převody a nepodporované formáty jsou explicitní; create args nejsou tiše ignorovány. |
+| D2D-105 | Standardizuj pojmenované výjimky a kontext HRESULT. | ⬜ | Veřejná chyba obsahuje operaci a symbolický kód, bez holého hex čísla; testy neporovnávají lokalizované systémové texty. |
+
+## Fáze D2D-11 — výkon, paměť a dlouhodobá stabilita
+
+| # | Úkol | Stav | Akceptace |
+|---|---|---|---|
+| D2D-106 | Aktualizuj level 0 přes `CopyFromMemory` místo rekonstrukce všech mip bitmap. | ⬜ | Partial/full upload nemění COM identity nedotčených mipů a benchmark prokáže nižší alokace i čas. |
+| D2D-107 | Cacheuj nebo pooluj opakované effect/brush konfigurace. | ⬜ | 256 identických tinted sprites nevytvoří 256 nezávislých effect graphů; klíč zahrnuje zdroj, tint, alpha a addressing. |
+| D2D-108 | Změř a optimalizuj plain i decorated SpriteBatch throughput. | ⬜ | Benchmark odděluje DrawBitmap/DrawImage/ImageBrush/effect/CPU fallback a má hardware i WARP baseline. |
+| D2D-109 | Recykluj CPU fallback bitmapy a pracovní pixely. | ⬜ | Opakovaný stejný draw po warm-up nealokuje per-sprite vector ani upload bitmapu; cache má bezpečnou invalidaci/budget. |
+| D2D-110 | Odstraň zbytečné duplicitní CPU shadows mezi shared Texture2D a backendem. | ⬜ | Vlastnictví jediné obnovovací kopie je zdokumentované a měřený memory peak velké mip textury klesne bez ztráty recovery. |
+| D2D-111 | Rezervuj a znovu používej transient resource kontejnery. | ⬜ | Běžný frame po warm-up neprovádí růst vectorů a cleanup zůstává správný při výjimce. |
+| D2D-112 | Zaveď limit transientů a bezpečný chunk flush. | ⬜ | Extrémně dlouhý SpriteBatch nevyčerpá paměť; mezilehlý `EndDraw` zachová pořadí, clip, blend a lifetime. |
+| D2D-113 | Přeměň live-object report z textu na automatickou nulovou gate. | ⬜ | CI selže při neočekávaném D3D11/D2D/DXGI live objektu a whitelistuje pouze doložené runtime singletony. |
+| D2D-114 | Otestuj dispose zdroje po `SpriteBatch::End` a před `Present`. | ⬜ | Všechny draw větve drží potřebný COM lifetime do skutečného flush a nevykreslí uvolněnou paměť. |
+| D2D-115 | Otestuj update/dispose uprostřed frame na všech draw větvích. | ⬜ | Direct bitmap, effect, brush, command-list i CPU fallback mají jednotnou snapshot/lifetime semantiku. |
+| D2D-116 | Nastav stabilní benchmark prahy po warm-up. | ⬜ | Prahy oddělují hardware a WARP, zapisují adapter/driver a odhalí regresi bez falešných Wine timing gate. |
+| D2D-117 | Přidej dlouhý soak resize/recovery/target-switch. | ⬜ | Nejméně 10 000 cyklů drží stabilní paměť, handle/COM počty a nemá device-state drift. |
+
+## Fáze D2D-12 — testy, CI, dokumentace a release gate
+
+| # | Úkol | Stav | Akceptace |
+|---|---|---|---|
+| D2D-118 | Označ a spouštěj Direct2D unit testy z `CnaTests.exe` v Direct2D gates. | ⬜ | `ctest -L Direct2D` zahrne mapping/mip/state unit testy a jejich počet je ověřen CI assertion. |
+| D2D-119 | Veď Direct2D `CnaTests.exe` přes Direct2D runner a oddělený prefix. | ⬜ | Unit executable nepoužije generický D3D11 Wine/DXVK prefix a log jasně identifikuje runtime větev. |
+| D2D-120 | Přidej kanonický virtual-display runner přes Xvfb. | ⬜ | Lokální/CI Wine a Proton příkazy vždy vytvoří izolovaný virtuální displej, zvolí rozlišení/depth a po testu jej uklidí. |
+| D2D-121 | Ověř suite z čerstvého Wine prefixu bez uživatelského stavu. | ⬜ | Automat vytvoří prefix v dočasném adresáři, nainstaluje jen deklarované závislosti a 3 Direct2D CTesty projdou. |
+| D2D-122 | Připni Proton runtime a publikuj jeho identitu. | ⬜ | CI nepoužívá pohyblivý `Proton Experimental`; artefakt obsahuje přesnou verzi/build ID a DXVK verzi. |
+| D2D-123 | Vynucuj maximálně dva paralelní build/test joby. | ⬜ | Workflow i dokumentované příkazy používají `--parallel 2` nebo méně; statická kontrola odmítne neomezené `--parallel`. |
+| D2D-124 | Nech CI selhat na debug-layer error/corruption a live-object warnings. | ⬜ | Log parser má pozitivní i negativní fixture a výsledek je skutečná test gate, ne pouze upload artefaktu. |
+| D2D-125 | Ověř omezení nativního runneru pro okno, session, DPI a hardware. | ⬜ | Workflow rozlišuje headless WARP gate od fyzického desktop lab testu a netvrdí DPI/presentation důkaz z neinteraktivní session. |
+| D2D-126 | Implementuj fyzický desktop/swap-chain capture oracle na Windows. | ⬜ | Capture porovnává přesné fyzické pixely všech presentation režimů a zaznamená DPI, monitor, adapter a rozměry. |
+| D2D-127 | Přidej mutation testy kritických Direct2D větví. | ⬜ | Změna blend faktoru, presentation transformu, mip levelu či validačního pořadí způsobí pád odpovídajícího testu. |
+| D2D-128 | Rozděl monolitický `direct2d_2d_parity_test.cpp`. | ⬜ | Blend, sampling, presentation, recovery, validation a RT mají samostatné cíle/fixtures a společné helpers bez duplicitní oracle. |
+| D2D-129 | Přidej EasyGL-vs-Direct2D diferenciální korpus. | ⬜ | Stejné veřejné 2D příkazy produkují uložené framebuffer výsledky; známé rozdíly mají explicitní, úzký whitelist. |
+| D2D-130 | Udržuj runtime support matici Windows/Wine/Proton/WARP/hardware. | ⬜ | Každá effect/composite/presentation větev má `supported`, `fallback`, `named reject` nebo otevřený task; žádný globální skip. |
+| D2D-131 | Oprav README a Direct2D dokumentaci podle skutečné podpory. | ⬜ | Dokumentace netvrdí hotovou přesnou blend/mip-linear/recovery/presentation funkci dříve než její test gate a uvádí 2D-only hranici. |
+| D2D-132 | Automaticky kontroluj konzistenci stavů plánu a důkazů. | ⬜ | `✅` vyžaduje existující test/CI/doc evidence; checker odhalí neexistující test label, stale datum a protichůdné tvrzení. |
+| D2D-133 | Definuj závěrečná release kritéria Direct2D backendu. | ⬜ | Release vyžaduje uzavření všech potvrzených correctness úkolů, zelený Xvfb Wine běh, nativní effect gate, fyzickou presentation/DPI gate a nulové neočekávané live objekty. |
 
 ## Pořadí a pravidla ověření
 
-1. Nejprve D2D-1 až D2D-9: nejvyšší 2D přínos bez změny rozsahu backendu.
-2. D2D-10 je brána před skutečnými mip úkoly D2D-11/D2D-12.
-3. D2D-20/D2D-21 uzavírají compositing; plný blend model zůstává úkolem existujícího `D3D11` backendu.
-4. D2D-22 je nativní release gate pro effect/composite části D2D-1, D2D-4, D2D-13, D2D-20,
-   D2D-24, D2D-28 a D2D-33; jeho debug-layer/WARP artefakt je zároveň posledním důkazem D2D-27.
-   Fyzická presentation/DPI část D2D-1 se uzavírá samostatně přes D2D-23.
-5. D2D-24 a D2D-25 jsou opravné priority před D2D-27, protože jinak benchmark měří i chybnou cestu.
-6. D2D-28 až D2D-33 jsou auditované 2D mezery; jejich implementace nesmí oslabit explicitní 3D hranice ani D2D-21 odmítací kontrakty.
-7. Při každé změně ověř čistý unit test, Wine, Proton a podle rozsahu skutečný nativní Windows pixelový CTest. Budoucí kompilace a testy spouštěj nanejvýš se dvěma souběžnými joby (`-j2` / `--parallel 2`).
+1. Nejdříve oprav correctness chyby `D2D-34`, `D2D-35`, `D2D-46`, `D2D-60`, `D2D-61`,
+   `D2D-74`, `D2D-99` a `D2D-100`; dosavadní zelené testy pro ně nejsou důkazem správnosti.
+2. Současně vytvoř nezávislé oracle `D2D-40`, `D2D-45`, `D2D-57`, `D2D-78`, `D2D-80`,
+   `D2D-83` a `D2D-129`, aby opravy nebyly porovnávány se stejnou chybnou implementační větví.
+3. Potom uzavři recovery a transakčnost `D2D-50` až `D2D-52` a `D2D-62` až `D2D-73`;
+   performance změny nesmějí stavět na backendu, který může po výjimce zůstat nekonzistentní.
+4. Následují sampling/readback/validace `D2D-75` až `D2D-105` a až poté výkonové úkoly
+   `D2D-106` až `D2D-117`.
+5. `D2D-22` zůstává nativní release gate pro built-in effects/composite modes a `D2D-126` je
+   samostatná fyzická presentation/DPI gate. Xvfb Wine/Proton běh nenahrazuje ani jednu z nich.
+6. CI úkoly `D2D-118` až `D2D-125` implementuj průběžně, aby každá další oprava automaticky
+   běžela ve správném labelu, prefixu, runtime a virtuálním displeji.
+7. Stav `✅` vyžaduje nezávislý veřejný regresní test, relevantní runtime gate a aktuální
+   dokumentaci. Compatibility skip může znamenat nejvýše `🟨`.
+8. Při každé změně ověř čistý unit test, Wine pod Xvfb, připnutý Proton pod Xvfb a podle rozsahu
+   skutečný nativní Windows pixelový CTest. Build i testy spouštěj nanejvýš se dvěma souběžnými
+   joby (`-j2` / `--parallel 2`).
