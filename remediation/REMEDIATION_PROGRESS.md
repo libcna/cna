@@ -26034,3 +26034,248 @@ source, its `compile_shaders.py` registration, and the regenerated `spirv_shader
 header, no common interface, no public API, no bgfx or EasyGL production, and no other backend.
 `REMED-GFX-203` … `REMED-GFX-210` remain DEFERRED, `REMED-GFX-199` was not touched, and no other
 remediation ticket was begun.
+
+---
+
+## `REMED-GFX-215` — BGFX SCOPE, TICKET **DONE** (2026-08-03)
+
+The checkpoint blocker `REMED-GFX-212` spawned, and the exact mirror image of it: Vulkan and WebGPU
+kept `DiffuseColor` and dropped COLOR0, bgfx kept COLOR0 and dropped `DiffuseColor`. Only bgfx
+production and bgfx shader artifacts changed. `REMED-GFX-214` was not investigated,
+`REMED-GFX-203` … `REMED-GFX-210` remain DEFERRED, and no other remediation ticket was begun.
+
+### The prior false positive, proven on both axes
+
+`REMED-GFX-212`'s checkpoint triage certified bgfx a **correct control**. Its oracle used a WHITE
+`DiffuseColor` with `VertexColorEnabled = true`, and under a neutral DiffuseColor
+
+    COLOR0 × white  ==  COLOR0
+
+so a shader emitting the raw per-vertex colour produces **byte-identical pixels** to a correct one.
+The defect was not merely unnoticed — it was structurally invisible to that input.
+
+The new fixture proves this twice rather than asserting it. Arithmetically, it requires
+`ExpectedColor(c, true, neutral) == RawColor0(c)` for every record and
+`ExpectedColor(c, true, nonNeutral) != RawColor0(c)` for every record. Live, it renders both neutral
+legs on the unfixed shader:
+
+| leg | neutral DiffuseColor, unfixed bgfx | verdict |
+|---|---|---|
+| `true/neutral/instanced-route` | the four raw records | **PASSED** — the degenerate case |
+| `false/neutral/instanced-route` | the four raw records, expected opaque white | **FAILED** |
+
+So even a white DiffuseColor could have caught it — but only through the `VertexColorEnabled = false`
+half, which triage never ran. Two independent conditions had to coincide for the certification to be
+wrong, and both did.
+
+### The authoritative contract, cited from the reference
+
+| source | line | statement |
+|---|---|---|
+| FNA `Common.fxh` | 36-45 | `ComputeCommonVSOutput` opens `vout.Diffuse = DiffuseColor;` — the base of the diffuse term |
+| FNA `BasicEffect.fx` | 78-88 | `VSBasicVc` is that, plus exactly `vout.Diffuse *= vin.Color;` |
+| FNA `BasicEffect.fx` | 99, 142, 157, 183, 212, 238, 267 | the identical multiply, seven more times |
+| FNA `BasicEffect.fx` | 66-73 | `VSBasic` is `ComputeCommonVSOutput` alone; `vin.Color` appears nowhere |
+| FNA `BasicEffect.fx` | 336, 347 | `PSBasic` is `float4 color = pin.Diffuse;` — no further colour term |
+| FNA `GraphicsDevice.cs` | 1257 | `DrawInstancedPrimitives` is `ApplyState()` + `PrepareVertexBindingArray` + the FNA3D call; it touches no effect state |
+| FNA `BasicEffect.cs` | 490-511 | `OnApply` derives the shader index from fog, vertex colour, texture and lighting — **no instancing term** |
+
+Instancing therefore defines no separate public colour contract.
+
+### Exact pre-fix path and root cause
+
+    BasicEffect.DiffuseColor / .VertexColorEnabled
+      -> BasicEffect::FillGpuDrawParams  (diffuseColor = rgb*Alpha + Alpha, vertexColorEnabled)
+      -> GpuDrawParams                    BOTH FIELDS PRESENT AND CORRECT
+      -> BgfxGraphicsBackend::DrawInstancedPrimitivesEx
+                                          set u_vp and u_depthBias ONLY  <-- loss point 1
+      -> instanced3DProgram_ (the only instanced program; selection never varies)
+      -> vs_instanced3d.sc                v_color0 = a_color0;           <-- loss point 2
+                                          declares no diffuse uniform at all
+      -> fs_instanced3d.sc                gl_FragColor = v_color0;
+      -> raw COLOR0
+
+Both loss points are required: even a supplied uniform had nowhere to arrive. `params.diffuseColor`
+and `params.vertexColorEnabled` were already correct on arrival, so nothing above the backend was at
+fault, and no shared production needed to change.
+
+### The measurement, before and after
+
+bgfx, Xvfb `:101`, requested renderer OpenGL, **active renderer OpenGL 2.1**.
+`DiffuseColor = (0.80, 0.35, 0.55)`, `Alpha = 1`.
+
+| leg | COLOR0 | before | after | contract |
+|---|---|---|---|---|
+| instanced, true, col 0 | (255,128,64) | (255,128,64) | **(204,45,35)** | (204,45,35) |
+| instanced, true, col 1 | (64,255,128) | (64,255,128) | **(51,89,70)** | (51,89,70) |
+| instanced, true, col 2 | (128,64,255) | (128,64,255) | **(102,22,140)** | (102,22,140) |
+| instanced, true, col 3 | (255,255,255) | (255,255,255) | **(204,89,140)** | (204,89,140) |
+| instanced, **false**, all 4 | four different records | the four raw records | **(204,89,140)** ×4 | (204,89,140) |
+| ordinary, true | — | already correct | unchanged | matches instanced exactly |
+
+Before the fix the true and false frames were **identical**, which is the signature of both terms
+being lost rather than one. Column 3 is opaque white on purpose: its product IS DiffuseColor, so
+"DiffuseColor dropped" and "COLOR0 dropped" are separated inside a single frame.
+
+Alpha, `Alpha = 0.5` with per-vertex alphas 255/192/128/64:
+`(102,22,18,128) (26,45,35,96) (51,11,70,64) (102,45,70,32)` — both terms reach all four channels,
+matching `EffectHelpers.SetMaterialColor`'s `float4(rgb*Alpha, Alpha)` and FNA's float4
+`vout.Diffuse *= vin.Color`.
+
+### The fix, and why no new program variant
+
+The ordinary route has carried the correct architecture since Task 364: **one** program whose
+`a_color0` is gated by a uniform, in the terminal `else` of `DrawColoredPrimitives`. This applies
+that same shape to the existing instanced program:
+
+    vec4 vc  = (u_vertexColorEnabled3D.x > 0.5) ? a_color0 : vec4(1.0, 1.0, 1.0, 1.0);
+    v_color0 = vc * u_diffuseColor;
+
+plus the two matching `setUniform` calls. The gate is what makes a declaration without a colour
+element safe — a disabled COLOR0 is not consumed at all, so nothing reads an attribute it does not
+want, and no separate position-only program is needed. Both uniforms are written **unconditionally**
+on every instanced draw, because bgfx uniform values persist in the renderer until overwritten; an
+instanced draw that skipped either would inherit whatever the preceding ordinary draw set.
+
+### Shader generation
+
+`python3 src/CNA/Internal/Backends/Bgfx/shaders/compile_shaders.py cmake-build-bgfx-shaderc/cmake/bgfx/shaderc cmake-build-bgfx/_deps/bgfx_cmake-src/bgfx/src`,
+shaderc **1.19.150**, all four profiles (140, 300_es, spirv, wgsl). Exactly **4 of the 108** embedded
+arrays changed — `vs_instanced3d_glsl` 576→860, `_essl` 686→988, `_spv` 1647→2101, `_wgsl` 1203→1490
+— and the other **104 are byte-identical**. A second generation reproduces the header byte for byte
+(md5 `5abde0f854e2ea5b52c398ec73e05650` both times). Nothing was hand-edited.
+
+`.gitattributes` marks only this generated header `-whitespace`: shaderc's `--bin2c` ASCII column is
+space-padded, so every regeneration emits ~1150 trailing-whitespace lines (1145 already present
+before this task). Every hand-written file passes `git diff --check` on its own.
+
+### Cache identity and cardinality
+
+| dimension | baseline | after the whole matrix |
+|---|---|---|
+| programs | 25 | **25** |
+| shaders | 35 | **35** |
+| uniforms | 40 | **40** |
+| dynamic vertex buffers | 2 | **2** |
+| dynamic index buffers | 1 | **1** |
+
+Unchanged across eight `VertexColorEnabled` toggles, eight distinct `DiffuseColor` values, eight
+rewrites of the geometry colour buffer, and a return to an earlier complete state — whose frame is
+re-asserted, so "no growth" cannot be satisfied by a stale program.
+
+Submits, measured as an A/B against the ordinary route (which has supplied these same two uniforms
+since Task 364, so if the two agree the uniforms cost nothing):
+
+| public draws | ordinary | instanced |
+|---|---|---|
+| clear only | 1 | 1 |
+| 1 | 2 | **2** |
+| 2 | 3 | **3** |
+| 3 | 4 | **4** |
+| 4 | 5 | **5** |
+
+Exactly one native submit per public draw, identical on both routes, `numBlit` 0. No extra draw,
+submit, view, frame, wait, readback or Present. **`bgfx::getStats()` reports the PREVIOUS frame** —
+every measured frame is rendered twice before reading, which is what corrected an early false
+reading of ordinary=n / instanced=n+1 for identical work.
+
+### Validation
+
+| gate | result |
+|---|---|
+| new `InstancedDiffuseColorTest` (bgfx) | **11/11**, up from 0/11 |
+| `InstancedVertexColorTest` (bgfx), exemption deleted | **9/9** |
+| `BgfxInstancedColorCardinalityTest` | **2/2** |
+| full bgfx `CnaTests` | **5850 passed / 4 failed** of 5880 |
+| bgfx ASan | 22/22, **zero** memory-safety errors |
+| bgfx UBSan | 22/22, **zero** runtime errors |
+| bgfx diagnostics (`CNA_BGFX_TRACE_DIAGNOSTICS=1`) | 13/13, 780 warnings, **0 fatal** |
+| Vulkan control | 20/20 |
+| EasyGL control | 20/20 |
+| WebGPU control | 20/20 |
+| Headless | 0 tests — outside the oracle set, as designed |
+
+`REMED-GFX-211`/`REMED-GFX-213` regression gates inside the full run: `InstancedDrawRangeTest` 21/21,
+`InstancedDrawMultiStreamTest` 21/21, `InstancedVertexColorTest` 9/9, `NonIndexedDrawRangeTest`
+17/17, `IndexedDrawDeferredTest` 27/27, `VertexDeclarationTest` (`REMED-GFX-125`) 53/53 — all green,
+zero failures.
+
+**The 4 full-suite residuals are pre-existing, proven by narrow A/B**, not by inspection: restoring
+`BgfxGraphicsBackend.cpp` and `bgfx_shaders.hpp` to `411f6fd3` (pre-fix) and rebuilding reproduces
+all four identically. They are `CnjEffectTest.LoadsRealCnjFixture` and
+`CnjStockEffectTest.CustomGlslEffectStillWorks` (both "bgfx backend requires pre-compiled binary
+shaders (not GLSL source)"), `GraphicsDeviceCapabilityTest.DoesNotSupportWireFrame` (asserts bgfx
+lacks WireFrame; it has it), and
+`XnbContainerFuzzTest.MutatedRealModelFixtureNeverCrashesAndOnlyFailsCleanly`. A first full-suite run
+also showed ~121 failures and a segfault in `MediaLibraryTestFixture`; those were entirely an
+artifact of running the binary from `cmake-build-bgfx/` instead of the repository root, and vanish
+when the fixture-relative working directory is correct.
+
+**bgfx diagnostics detail:** all 780 warnings are `TextureFormat::* is not supported` capability
+probes emitted at `renderer_gl.cpp:1917` during `bgfx::init`, before any program or draw exists —
+60 per device init on this GL 2.1 software renderer. **Zero** shader-creation, program-creation,
+vertex-layout/program-mismatch, missing-attribute, invalid-uniform, stale-handle, transient-buffer,
+view or submission diagnostics, and zero fatal callbacks.
+
+**bgfx's Vulkan renderer is UNTESTED.** `CNA_BGFX_RENDERER=vulkan` reports
+`requested renderer: Vulkan, active renderer: OpenGL 2.1` — it falls back on this Xvfb display, so
+the regenerated SPIR-V blob was compiled but never executed. The colour legs still pass under that
+request, but they pass on OpenGL.
+
+**ASan leaks classified by narrow A/B**, not dismissed: every allocation site resolves into
+`libGLX_mesa.so.0` / `libdrm.so.2` and **no** frame lies in `cnaaudit/src/` or `cnaaudit/tests/`.
+The volume is exactly **103852 bytes / 453 allocations per `GraphicsDevice`** — 1 device → 453,
+2 → 906, 3 → 1359, perfectly linear and invariant to colour state, route and draw count. It is
+per-device Mesa GLX driver state, external to this repository.
+
+### The declared boundary, and the finding it separates out
+
+A position-only (stride-12) declaration with `VertexColorEnabled = false` is measured on every
+backend rather than skipped, through each route's own rejection barrier:
+
+| backend | route | reading |
+|---|---|---|
+| WebGPU | ordinary | **REJECTED**, "CNA WebGPU: DrawColoredPrimitives requires a stride-16 (VertexPositionColor) vertex buffer" |
+| WebGPU | instanced | 50752 px, every one `(204,89,140,255)` — the complete contract |
+| bgfx | ordinary | 27385 px, every one `(204,89,140,255)` |
+| bgfx | instanced | 27385 px, every one `(204,89,140,255)` — **byte-identical to ordinary** |
+
+WebGPU's refusal is the same ordinary-route stride boundary `REMED-GFX-214` already tracks, reached
+at stride 12 instead of 24. It is **loud**, so the leg records the exact text and asserts only that
+a refusal is legible. `REMED-GFX-214` remains OPEN and uninvestigated; no WebGPU production changed.
+
+bgfx's shortfall is a **new, independent** finding. Colour is entirely correct — every lit pixel on
+both routes is the plain DiffuseColor — but coverage is 27385 of 50752 pixels, **byte-identically on
+the ordinary and the instanced route**. A layout built before either route is chosen cannot differ
+between them, which is the evidence that places it in `MakeBgfxLayout`, not in this ticket's path.
+
+### New findings
+
+1. **`REMED-GFX-216`** (MEDIUM, OPEN) — `BgfxGraphicsBackend::MakeBgfxLayout(stride)` keys on the
+   buffer stride alone, not on the `VertexDeclaration`, and is called from
+   `BgfxVertexBufferBackend::SetData` before any draw route is chosen. Stride 12 is not in its table
+   (52/20/24/32/48/56/68), so the fallback adds Position + Color0 and yields a 16-byte native layout
+   striding through 12-byte records. Route-independent and pre-existing; unrelated to the colour
+   contract, which holds under it. `InstancedDiffuseColorTest.PositionOnlyDeclarationRenders`
+   `DiffuseColorWhenColorDisabled` asserts the measured shortfall on bgfx, so it fails when this is
+   fixed and forces its own removal.
+
+No other independent finding was created.
+
+### Scope held
+
+Production changed in exactly two files: `src/CNA/Internal/Backends/Bgfx/shaders/vs_instanced3d.sc`
+and `src/CNA/Internal/Backends/Bgfx/BgfxGraphicsBackend.cpp`, plus the regenerated
+`bgfx_shaders.hpp`. No shared header, no common interface, no public API, no Vulkan, WebGPU, EasyGL,
+Software, SDL_GPU or DirectX production, and no `audit/`. `REMED-GFX-204` was not begun.
+
+### Checkpoint state after this ticket
+
+`REMED-GFX-211`, `REMED-GFX-212`, `REMED-GFX-213` and `REMED-GFX-215` are all **DONE**, and the
+checkpoint-blocker set is **EMPTY** again. `REMED-GFX-214` (MEDIUM) and `REMED-GFX-216` (MEDIUM)
+are OPEN and are **not** checkpoint blockers: `REMED-GFX-214` is a loud deterministic rejection and
+`REMED-GFX-216` is a loud, visibly-wrong geometry coverage, neither a silent wrong result on a
+supported path. `REMED-GFX-203` … `REMED-GFX-210` remain DEFERRED in `plan_postaudit.md`.
+
+**The next action is post-audit exit reconciliation / checkpoint preparation, not another
+remediation ticket.** The remediation campaign as a whole is NOT complete.

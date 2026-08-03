@@ -54,7 +54,7 @@ what trigger.*
 |---|---|---|
 | **Known and planned** | Recorded, evidenced, scheduled, not started | `REMED-GFX-203` … `REMED-GFX-208` |
 | **Safe declared capability boundary** | The unsupported request is rejected deterministically, before native submission, with a public exception, and a test asserts the boundary in both directions | `MultiStreamVertexInput = false` on Vulkan / Bgfx / WebGPU / SDL_GPU / D3D11 / D3D12 / D3D9 / Headless |
-| **Silent wrong result** | A supported public call is accepted, submitted, and renders or reports the wrong thing with no exception and no diagnostic | `REMED-GFX-211`, `REMED-GFX-212` and `REMED-GFX-213` — all three measured at pixel level on 2026-08-03, and **all three DONE**; `REMED-GFX-215` is the newest member of the class |
+| **Silent wrong result** | A supported public call is accepted, submitted, and renders or reports the wrong thing with no exception and no diagnostic | `REMED-GFX-211`, `REMED-GFX-212`, `REMED-GFX-213` and `REMED-GFX-215` — all four measured at pixel level on 2026-08-03, and **all four DONE**. `REMED-GFX-215` showed the class's sharpest lesson: a white-`DiffuseColor` oracle cannot see a `DiffuseColor` defect, so a defective backend was certified a correct control |
 | **Checkpoint blocker** | Must be resolved or explicitly accepted before the post-audit checkpoint is taken | see the `Checkpoint blocker` column — `YES` / `NO` / `REVIEW`, never assumed |
 
 A "safe declared capability boundary" is **not** a silent wrong result and must never be recorded as
@@ -339,7 +339,9 @@ question.**~~ → **P1: the reference settles it as a defect (case A).**
 > without being fixed: **`REMED-GFX-214`** (WebGPU's ordinary route throws on a stride-24 draw with
 > `TextureEnabled = false`) and **`REMED-GFX-215`** (bgfx's instanced shader emits the raw COLOR0,
 > ignoring DiffuseColor *and* VertexColorEnabled — the mirror image of this ticket, invisible to the
-> triage oracle because its DiffuseColor was white).
+> triage oracle because its DiffuseColor was white). **`REMED-GFX-215` was triaged as a checkpoint
+> blocker and is now DONE (2026-08-03)**; it spawned `REMED-GFX-216`. `REMED-GFX-214` is still OPEN
+> and uninvestigated.
 
 **Why it is not pure capability completion.** Again nothing rejects, and again the shape is the
 classic supported instanced draw. The stock instanced shader colours from `DiffuseColor` on
@@ -895,7 +897,7 @@ For each integrated backend:
 
 | When | Tasks |
 |---|---|
-| **Before branch integration** | ~~`REMED-GFX-211`, `REMED-GFX-212`, `REMED-GFX-213` triage (§4)~~ — triage done 2026-08-03, and **all three tickets are now DONE on every backend they name**. **The checkpoint-blocker set of this cluster is EMPTY.** The next action is post-audit exit reconciliation / checkpoint preparation, not another remediation ticket. `REMED-GFX-214` and `REMED-GFX-215`, spawned by `REMED-GFX-212`, are OPEN and **not** checkpoint blockers of this cluster — `REMED-GFX-215` needs its own triage against §2 before the checkpoint |
+| **Before branch integration** | ~~`REMED-GFX-211`, `REMED-GFX-212`, `REMED-GFX-213` triage (§4)~~ — triage done 2026-08-03, and **all three tickets are now DONE on every backend they name**. `REMED-GFX-215`, spawned by `REMED-GFX-212`, was triaged against §2, confirmed a supported-path silent wrong result, treated as an immediate checkpoint blocker, and is **DONE (2026-08-03)**. **The checkpoint-blocker set is EMPTY.** The next action is post-audit exit reconciliation / checkpoint preparation, not another remediation ticket. `REMED-GFX-214` (MEDIUM, OPEN, uninvestigated) and `REMED-GFX-216` (MEDIUM, OPEN, spawned by `REMED-GFX-215`) are **not** checkpoint blockers: both fail loudly — a deterministic rejection and a visibly wrong geometry coverage — rather than silently returning wrong pixels on a supported path |
 | **While adapting a particular branch** | None of §5. Only the adaptation checklist above, plus `REMED-GFX-210` evidence-gathering when a branch adds a backend with no instanced path |
 | **After all 19 branches are integrated** | `REMED-GFX-209` (clean principal-suite baseline before the checkpoint); `REMED-GFX-210` |
 | **During modularization** | `REMED-GFX-203` … `REMED-GFX-208`, and `REMED-GFX-213`'s implementation if triage lands it on the capability side |
@@ -1034,9 +1036,13 @@ Recorded here and mirrored in `remediation/REMEDIATION_PROGRESS.md`:
   **checkpoint blocker YES**, and stayed in the immediate remediation campaign rather than being
   deferred to this plan. **All three are now DONE on every backend they name (2026-08-03), and this
   cluster's checkpoint-blocker set is EMPTY.** `REMED-GFX-212` spawned `REMED-GFX-214` and
-  `REMED-GFX-215`; `REMED-GFX-215` is a supported-path silent wrong result of the same class on bgfx
-  and must be triaged against §2 before the checkpoint, but it is not a blocker inherited from this
-  cluster's disposition.
+  `REMED-GFX-215`. `REMED-GFX-215` was a supported-path silent wrong result of the same class on
+  bgfx — its instanced shader emitted the raw COLOR0, dropping both `DiffuseColor` and
+  `VertexColorEnabled` — was triaged against §2, held as an immediate checkpoint blocker, and is
+  **DONE (2026-08-03)**. It spawned `REMED-GFX-216` (bgfx derives its native vertex layout from the
+  buffer stride rather than the `VertexDeclaration`). `REMED-GFX-214` and `REMED-GFX-216` are both
+  OPEN, both MEDIUM, and neither is a checkpoint blocker: each fails loudly rather than silently
+  returning wrong pixels on a supported path.
 - **Deferred work stays visible** through this file, and through the `DEFERRED` status and
   `Target plan: plan_postaudit.md` pointer on every affected row in
   `remediation/REMEDIATION_INDEX.md` and `remediation/REMEDIATION_PROGRESS.md`.
