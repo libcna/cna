@@ -2103,13 +2103,16 @@ namespace CNA::Internal::Backends::Llgl
          * @brief One contiguous render pass worth of frame commands, all sharing the same
          * destination (null means the swap chain).
          *
-         * LLGL's public Vulkan render-pass API has no portable way to re-enter a render pass with
-         * `Load` semantics (see plan_llgl.md LLGL-26), so a frame that interleaves draws to the
-         * back buffer and one or more RenderTarget2D instances is replayed as one pass PER DISTINCT
-         * TARGET IDENTITY -- every command for a given target is grouped together into a single
-         * pass, in that target's first-appearance order, rather than faithfully replaying the
-         * original interleaved call order. `RenderTargetUsage.PreserveContents` is not honored
-         * across separate binds in this first cut.
+         * LLGL-45: replayed in true public call order, not grouped by target identity -- a target
+         * revisited later in the same frame (after another target's or the swap chain's own
+         * commands appeared in between) becomes its OWN new segment in its own original position,
+         * rather than being merged into whichever segment first used that target. Two ADJACENT
+         * commands sharing the same target (no other target's command in between) still land in
+         * one segment, exactly as before, since nothing about their relative order changes either
+         * way. Every segment's own `BeginRenderPass()` uses `AcquireLoadRenderPassEXT()`'s
+         * `AttachmentLoadOp::Load` pass, so a target's real prior content genuinely survives being
+         * revisited -- real `RenderTargetUsage.PreserveContents`, not merely an accident of bucket
+         * merging.
          */
         struct FrameCommandBucket
         {
@@ -2118,6 +2121,39 @@ namespace CNA::Internal::Backends::Llgl
         };
 
         [[nodiscard]] std::vector<FrameCommandBucket> GroupFrameCommandsByTargetEXT() const;
+        /**
+         * @brief Returns a cached `LLGL::RenderPass` whose colour/depth/stencil attachments all
+         * use `AttachmentLoadOp::Load`, for a target with @p numColorAttachments colour
+         * attachments, @p hasDepthStencil, and @p sampleCount samples.
+         *
+         * Every render target and the swap chain in this backend always share the same colour
+         * format (`swapChain_->GetColorFormat()`) and depth/stencil format
+         * (`swapChain_->GetDepthStencilFormat()`) -- confirmed by reading `CreateRenderTarget2D()`/
+         * `CreateRenderTargetCube()`/`SetMultipleRenderTargetsEXT()`, all of which derive both from
+         * the swap chain rather than taking an independent format -- so one small, backend-lifetime
+         * cache keyed only by the three numbers above is compatible with all of them; no per-target
+         * render pass object is needed.
+         *
+         * Used by every segment's own `BeginRenderPass()` (`RecordAndSubmitFrame()`/
+         * `CaptureBackbuffer()`) so a target genuinely revisited later in the same unflushed frame
+         * reloads its real prior content instead of beginning from undefined memory. Applying this
+         * unconditionally, even to a target's very first-ever segment, is safe: a `DiscardContents`
+         * bind already queues its own explicit `Clear()` as that segment's first command (the
+         * shared cross-backend `GraphicsDevice`/`RenderTarget2D` layer does this, not this backend),
+         * so there is no case where "first use" needs to mean `Undefined` instead of `Load`.
+         *
+         * @param numColorAttachments Number of colour attachments (1 for a plain `RenderTarget2D`/
+         *                            cube face/the swap chain; 2-4 for an MRT bind).
+         * @param hasDepthStencil     Whether this target has a depth or stencil attachment (this
+         *                            backend always allocates one physically, so this is normally
+         *                            true).
+         * @param sampleCount         The target's own real, device-clamped sample count (1 = no
+         *                            MSAA).
+         * @return A render pass compatible with that attachment shape; never null.
+         */
+        [[nodiscard]] LLGL::RenderPass* AcquireLoadRenderPassEXT(std::uint32_t numColorAttachments,
+                                                                 bool hasDepthStencil,
+                                                                 std::uint32_t sampleCount);
         /** @brief Returns the colour texture to `GenerateMips()` after @p bucket's render pass
          *  ends, or null when this bucket's target has no real mip chain -- every command sharing
          *  one target carries the same `mipRegenColorTexture` answer (captured at queue time), so
@@ -2282,6 +2318,13 @@ namespace CNA::Internal::Backends::Llgl
         std::map<std::uint64_t, LLGL::PipelineState*> pipelineCache_;
         std::map<std::uint64_t, LLGL::Sampler*>       samplerCache_;
         std::map<std::uint64_t, LLGL::PipelineState*> primitivePipelineCache_;
+        /// One `AttachmentLoadOp::Load` render pass per distinct (colour-attachment-count,
+        /// has-depth-stencil, sample-count) shape, shared by every render target AND the swap
+        /// chain -- every one of them always uses the same colour/depth-stencil FORMAT
+        /// (`swapChain_->GetColorFormat()`/`GetDepthStencilFormat()`), so this single,
+        /// backend-lifetime cache is compatible with all of them. See
+        /// AcquireLoadRenderPassEXT()'s own doc comment (LLGL-45).
+        std::map<std::uint64_t, LLGL::RenderPass*>    loadRenderPassCache_;
         /// One vertex shader per distinct vertex layout: LLGL carries the input layout (offsets and
         /// stride included) on the shader object, so a second layout genuinely needs a second one.
         std::map<std::uint64_t, LLGL::Shader*>        primitiveVertexShaderCache_;

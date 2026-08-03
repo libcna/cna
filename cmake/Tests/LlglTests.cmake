@@ -465,23 +465,31 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "LLGL")
         TIMEOUT 90 LABELS "Llgl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # rendertarget_depthstencil_usage_test.cpp is deliberately NOT registered here: 28/29 checks
-    # pass (its own CNA_BACKEND_LLGL Contract branch is otherwise accurate), but U2 (two
-    # RenderTargetCube faces sharing one depth buffer, replayed out of public order) hits a real,
-    # separate, OPEN finding -- see known_bugs.md's new entry.
+    # rendertarget_depthstencil_usage_test.cpp is not yet wired up as a build target at all: U2 (two
+    # RenderTargetCube faces sharing one depth buffer, replayed out of public order, expecting the
+    # shared attachment's real prior content on a same-frame revisit) needs both LLGL-45's ordering
+    # fix AND real cube-texture support to verify -- this environment's OpenGL module has none
+    # (LLGL::RenderingFeatures::hasCubeTextures is false here) and its Vulkan module cannot present
+    # under this sandbox's Xvfb (no DRI3, VK_ERROR_SURFACE_LOST_KHR). D5/F1/G1/I2 below (the same
+    # bucket-ordering finding on plain RenderTarget2D/the swap chain, which need no cube support)
+    # are now confirmed fixed and registered; U2 itself still needs LLGL-38's real-hardware pass or
+    # a DRI3-capable Xvfb (LLGL-55) before it can be verified and registered.
 
-    # rendertarget_effect_source_test.cpp: 18/20 legs pass once EnvironmentMapEffect/SkinnedEffect
+    # rendertarget_effect_source_test.cpp: 19/20 legs pass once EnvironmentMapEffect/SkinnedEffect
     # are declared (like D3D9/D3D11/D3D12/WebGPU already are) as needing a normal/bone-weight-bearing
-    # vertex stream this fixture's plain VertexPositionTexture does not provide. The other two legs
-    # are registered nowhere: F1 hits the same bucket-ordering finding as
-    # rendertarget_depthstencil_usage_test.cpp's own U2 (see known_bugs.md), and C1 crashes the
-    # Vulkan driver via a custom ShaderEffect that uses multiple descriptor sets this backend's
-    # custom-effect pipeline layout does not support -- also known_bugs.md, a separate, distinct
-    # finding. Registered per-leg (not as one supervisor run) specifically so C1's crash cannot take
-    # the other 18 legs' own coverage down with it.
+    # vertex stream this fixture's plain VertexPositionTexture does not provide, and F1 (LLGL-45: "A
+    # -> B -> A round trip preserves the pattern exactly", 32/32) is now fixed by true public-order
+    # segment replay -- confirmed via a fresh, independent run after the fix, not assumed from the
+    # ordering-only reasoning alone. Only C1 remains unregistered: it crashes the Vulkan driver via a
+    # custom ShaderEffect using multiple descriptor sets this backend's custom-effect pipeline layout
+    # does not support (see known_bugs.md, a separate, distinct finding, LLGL-47's own scope) -- under
+    # this sandbox's OpenGL module the same shader simply fails to compile instead (no Vulkan SPIR-V
+    # runtime path), so C1's own crash is not even reachable here to confirm one way or the other.
+    # Registered per-leg (not as one supervisor run) specifically so C1's crash cannot take the other
+    # legs' own coverage down with it.
     cna_llgl_test(cna_test_llgl_rendertarget_effect_source
                   examples/rendertarget_effect_source_test.cpp)
-    foreach(_llgl_res_leg A1 A2 A3 B1 D1 E1 G1 H1 I1 J1 K1 L1 M1 M2 M3 N1 O1 P1)
+    foreach(_llgl_res_leg A1 A2 A3 B1 D1 E1 F1 G1 H1 I1 J1 K1 L1 M1 M2 M3 N1 O1 P1)
         cna_register_backend_test(NAME "Llgl_RenderTarget_EffectSource_${_llgl_res_leg}"
             COMMAND cna_test_llgl_rendertarget_effect_source --leg=${_llgl_res_leg}
             TIMEOUT 90 LABELS "Llgl"
@@ -495,14 +503,16 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "LLGL")
     cna_llgl_test(cna_test_llgl_rendertarget_sampling_orientation
                   examples/rendertarget_sampling_orientation_test.cpp)
 
-    # rendertarget_producer_consumer_test.cpp is deliberately NOT registered here: 39/41 checks pass
-    # (its own CNA_BACKEND_LLGL Contract branch is otherwise accurate), but D5 and I2 -- both "a
-    # target revisited after depending on another target" -- hit the same real, separate, OPEN
-    # finding as rendertarget_depthstencil_usage_test.cpp's own U2 and rendertarget_effect_source
-    # _test.cpp's own F1; see known_bugs.md's broadened entry, which now covers all four legs across
-    # three files.
+    # LLGL-45: D5 and I2 -- both "a target/the back buffer revisited after depending on another
+    # target" -- used to hit the bucket-ordering finding also covered by
+    # rendertarget_effect_source_test.cpp's own F1; true public-order segment replay fixes both,
+    # confirmed by a fresh 41/41 run (this file's own CNA_BACKEND_LLGL Contract branch needed no
+    # changes -- it was already accurate about what SHOULD happen, only the replay engine was wrong).
     cna_llgl_test(cna_test_llgl_rendertarget_producer_consumer
                   examples/rendertarget_producer_consumer_test.cpp)
+    cna_register_backend_test(NAME Llgl_RenderTarget_ProducerConsumer COMMAND cna_test_llgl_rendertarget_producer_consumer
+        TIMEOUT 120 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # REMED-GFX-158 cross-backend control: a RenderTarget2D constructed during a public frame must be
     # usable in that same frame -- bound, cleared and/or drawn into, unbound and observed -- with no
@@ -516,14 +526,16 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "LLGL")
         TIMEOUT 120 LABELS "Llgl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # rendertarget_backbuffer_consumer_test.cpp is deliberately NOT registered here: 88/90 checks
-    # pass (its own CNA_BACKEND_LLGL Contract branch is otherwise accurate), but G1 -- a BACKBUFFER
-    # consumer issued between two bind cycles of the SAME target, expected to see the FIRST cycle --
-    # hits the same real, separate, OPEN bucket-ordering finding as rendertarget_producer_consumer
-    # _test.cpp's own I2; see known_bugs.md's broadened entry, which now covers all five legs across
-    # four files.
+    # LLGL-45: G1 -- a BACKBUFFER consumer issued between two bind cycles of the SAME target,
+    # expected to see the FIRST cycle -- used to hit the same bucket-ordering finding as
+    # rendertarget_producer_consumer_test.cpp's own I2; true public-order segment replay (plus the
+    # swap chain's own AttachmentLoadOp::Load reload on a same-frame revisit) fixes it, confirmed by
+    # a fresh 86/86 run.
     cna_llgl_test(cna_test_llgl_rendertarget_backbuffer_consumer
                   examples/rendertarget_backbuffer_consumer_test.cpp)
+    cna_register_backend_test(NAME Llgl_RenderTarget_BackbufferConsumer COMMAND cna_test_llgl_rendertarget_backbuffer_consumer
+        TIMEOUT 120 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # bound_target_lifetime_test.cpp is deliberately NOT registered here: 3/18 legs pass in full
     # (G1, G2, J1) and, critically, 0/18 CRASHED -- the REMED-GFX-168 defect this fixture exists to

@@ -628,7 +628,7 @@ reported before submission.
 
 | # | Priority | Task | Acceptance gate | Status |
 | --- | --- | --- | --- | --- |
-| LLGL-45 | P0 | **Replace target-identity bucket replay with ordered render-pass segments.** Preserve the public order of target binds, clears, producer/consumer sampling, back-buffer reads and cube-face operations. Implement real `PreserveContents` across flush/rebind either with load-capable passes, an explicit copy/restore path, or another design proven equivalent; do not rely on incidental one-bucket behaviour or the unconditional swap-chain-last rule. | Register and pass all legs of `rendertarget_depthstencil_usage_test.cpp`, `rendertarget_effect_source_test.cpp`, `rendertarget_producer_consumer_test.cpp`, `rendertarget_backbuffer_consumer_test.cpp` and `rendertarget_pass_boundary_test.cpp`, including A→B→A, target→backbuffer→target, shared cube depth and mid-frame readback cases. No ordering-specific exclusion remains. | ⬜ |
+| LLGL-45 | P0 | **Replace target-identity bucket replay with ordered render-pass segments.** Preserve the public order of target binds, clears, producer/consumer sampling, back-buffer reads and cube-face operations. Implement real `PreserveContents` across flush/rebind either with load-capable passes, an explicit copy/restore path, or another design proven equivalent; do not rely on incidental one-bucket behaviour or the unconditional swap-chain-last rule. | Register and pass all legs of `rendertarget_depthstencil_usage_test.cpp`, `rendertarget_effect_source_test.cpp`, `rendertarget_producer_consumer_test.cpp`, `rendertarget_backbuffer_consumer_test.cpp` and `rendertarget_pass_boundary_test.cpp`, including A→B→A, target→backbuffer→target, shared cube depth and mid-frame readback cases. No ordering-specific exclusion remains. | 🟡 |
 | LLGL-46 | P0 | **Version deferred vertex/index data.** A queued draw must retain the exact buffer contents and native resource lifetime visible at its public draw call even if `SetData()` later overwrites or enlarges the same object. Prefer immutable per-frame slices/ring allocation or explicit versioned upload commands over in-place writes; releasing a replaced buffer must remain deferred until its last queued consumer is submitted. | Register `frontface_winding_test.cpp`; all W3 persistent-buffer reuse entry points pass for indexed/non-indexed and dynamic/static buffers on Vulkan and OpenGL. Add a focused grow-capacity regression proving the old resource is neither freed early nor reused with new contents. | ⬜ |
 | LLGL-47 | P0 | **Make custom-effect resource layouts safe.** Reflect or validate compiled GLSL/SPIR-V before LLGL pipeline creation. Either build every referenced descriptor set/binding or reject unsupported set numbers, resource types and stage visibility with a deterministic CNA exception; malformed/unsupported shader input must never reach a driver-crash path. | Enable `rendertarget_effect_source_test.cpp` C1 and add shaders using sets 0+1, missing bindings and conflicting declarations. Each supported shader renders correctly; each unsupported shader throws before `CreatePipelineState`. Run with Vulkan validation enabled where available. | ⬜ |
 | LLGL-48 | P1 | **Use collision-free typed pipeline-cache keys.** Replace ad-hoc multiply/truncate packing with key structs whose equality and hash include every field consumed by the relevant LLGL pipeline descriptor: vertex layout, topology, render-pass signature, depth/raster state, all blend factors/functions/write masks, full 32-bit `MultiSampleMask`, scissor enable and effective sample count. | Register `gfx077_colorwritechannels_3d_test.cpp`; add pairwise tests for blend factors/functions and masks that differ only above bit 3, including an 8x-MSAA mask when supported. Instrumented test builds assert that descriptor equality and key equality cannot disagree. `Llgl_BasicEffect` alpha blending remains green. | ⬜ |
@@ -645,6 +645,37 @@ Recommended execution order: LLGL-45 → LLGL-46 → LLGL-47 → LLGL-48, then L
 LLGL-54 in parallel-safe, independently testable changes, followed by LLGL-55/56 and the existing
 LLGL-38 real-hardware matrix. The command-replay redesign in LLGL-45 should land first because
 several later tests otherwise conflate their own state contract with known cross-target reordering.
+
+**`LLGL-45` progress (2026-08-03): the ordering half is done and verified; the one remaining gap is
+verification-blocked, not architectural.** `GroupFrameCommandsByTargetEXT()` now builds one segment
+per contiguous same-target run in TRUE public order (a target revisited after another target's or
+the swap chain's own commands appeared in between gets its own new segment in its own original
+position, instead of being merged into whichever segment first used that target) -- the former
+"swap chain always trails every other bucket" special case is gone entirely. Every segment's own
+`BeginRenderPass()` uses a new `AcquireLoadRenderPassEXT()` helper: a small, backend-lifetime cache
+of `AttachmentLoadOp::Load` render passes keyed only by (colour-attachment count, depth/stencil
+presence, sample count) -- every render target and the swap chain in this backend always share the
+same colour/depth-stencil FORMAT (confirmed by reading `CreateRenderTarget2D`/`CreateRenderTargetCube`/
+`SetMultipleRenderTargetsEXT`, all of which derive both from the swap chain), so this one small cache
+is compatible with all of them, generically, via the base `LLGL::RenderTarget` interface -- no
+per-target-kind plumbing needed. Applying `Load` unconditionally, even to a target's very first-ever
+segment, is safe: a `DiscardContents` bind already queues its own explicit `Clear()` as that segment's
+first command, at the shared cross-backend layer above this one. **Confirmed fixed** (fresh runs,
+`CNA_LLGL_RENDERER=opengl`, Xvfb, 2026-08-03): `rendertarget_producer_consumer_test.cpp` D5/I2 (41/41,
+now fully registered as `Llgl_RenderTarget_ProducerConsumer`), `rendertarget_effect_source_test.cpp`
+F1 (32/32, now registered alongside its other passing legs), `rendertarget_backbuffer_consumer_test.cpp`
+G1 (86/86, now fully registered as `Llgl_RenderTarget_BackbufferConsumer`). **Not yet verified:**
+`rendertarget_depthstencil_usage_test.cpp`'s U2 (two `RenderTargetCube` faces sharing one physical
+depth buffer) -- expected fixed by the same generic mechanism (it does not special-case cube faces
+at all), but this sandbox's OpenGL module has no cube-texture support
+(`LLGL::RenderingFeatures::hasCubeTextures == false`, confirmed via `rendertarget_pass_boundary_test.cpp`
+crashing identically on the pre-fix binary too -- a pre-existing, unrelated limitation, not a
+regression) and its Vulkan module cannot present under this sandbox's Xvfb (no DRI3,
+`VK_ERROR_SURFACE_LOST_KHR`, the same infrastructure gap this file's own audit paragraph at the top of
+this document already describes). `rendertarget_depthstencil_usage_test.cpp` is not yet even wired up
+as a `cna_llgl_test()` build target for this reason. Closing `LLGL-45` fully needs either `LLGL-38`'s
+real-hardware pass or a DRI3-capable Xvfb (`LLGL-55`) to actually run and register U2 -- see
+`known_bugs.md`'s updated entry for the complete writeup. `LLGL-46` was not started this session.
 
 ---
 

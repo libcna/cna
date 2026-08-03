@@ -1663,6 +1663,13 @@ namespace CNA::Internal::Backends::Llgl
         }
         pipelineCache_.clear();
 
+        for (const auto& entry : loadRenderPassCache_)
+        {
+            if (entry.second != nullptr)
+                renderer_->Release(*entry.second);
+        }
+        loadRenderPassCache_.clear();
+
         for (const auto& entry : samplerCache_)
         {
             if (entry.second != nullptr)
@@ -4690,48 +4697,78 @@ namespace CNA::Internal::Backends::Llgl
         frameSubmitted_ = true;
     }
 
+    LLGL::RenderPass* LlglGraphicsBackend::AcquireLoadRenderPassEXT(std::uint32_t numColorAttachments,
+                                                                    bool hasDepthStencil,
+                                                                    std::uint32_t sampleCount)
+    {
+        const std::uint32_t samples = sampleCount > 0 ? sampleCount : 1;
+        const std::uint64_t key = (static_cast<std::uint64_t>(numColorAttachments) << 40) |
+                                   (static_cast<std::uint64_t>(hasDepthStencil ? 1u : 0u) << 32) |
+                                   static_cast<std::uint64_t>(samples);
+
+        const auto found = loadRenderPassCache_.find(key);
+        if (found != loadRenderPassCache_.end())
+            return found->second;
+
+        LLGL::RenderPassDescriptor passDesc;
+        passDesc.samples = samples;
+        const LLGL::AttachmentFormatDescriptor colorFormat{
+            swapChain_->GetColorFormat(), LLGL::AttachmentLoadOp::Load, LLGL::AttachmentStoreOp::Store};
+        for (std::uint32_t i = 0; i < numColorAttachments && i < LLGL_MAX_NUM_COLOR_ATTACHMENTS; ++i)
+            passDesc.colorAttachments[i] = colorFormat;
+        if (hasDepthStencil)
+        {
+            const LLGL::AttachmentFormatDescriptor depthStencilFormat{
+                swapChain_->GetDepthStencilFormat(), LLGL::AttachmentLoadOp::Load, LLGL::AttachmentStoreOp::Store};
+            passDesc.depthAttachment = depthStencilFormat;
+            passDesc.stencilAttachment = depthStencilFormat;
+        }
+
+        LLGL::RenderPass* pass = renderer_->CreateRenderPass(passDesc);
+        if (pass == nullptr)
+            throw std::runtime_error(std::string(kBackendName) + " backend: load render pass creation failed");
+
+        loadRenderPassCache_[key] = pass;
+        return pass;
+    }
+
     std::vector<LlglGraphicsBackend::FrameCommandBucket> LlglGraphicsBackend::GroupFrameCommandsByTargetEXT() const
     {
-        std::vector<FrameCommandBucket> buckets;
-        // The swap chain's own commands are pulled out into this bucket as they're found, instead
-        // of taking their place in `buckets` at their own first-appearance position, so the swap
-        // chain always replays LAST regardless of when the frame first touched it. Without this, a
-        // Clear() (or any other backbuffer command) queued before an ordinary "render to a target,
-        // then composite it onto the backbuffer" sequence made the swap chain's bucket the FIRST one
-        // built, so the composite draw sampled the target BEFORE its own producer's bucket had even
-        // run -- reading whatever undefined content a fresh texture starts with, not merely stale
-        // content from an earlier cycle (REMED-GFX-143-shaped, found wiring plan_llgl.md's Phase
-        // LLGL-7 LLGL-40 via backbuffer_pass_order_test.cpp's own A1/A2 checks).
-        FrameCommandBucket swapChainBucket;
+        // LLGL-45: segmented in TRUE public order -- a new segment starts only when the target
+        // actually CHANGES from the immediately preceding command, so two genuinely adjacent
+        // commands on the same target (no other target's command between them) still land in one
+        // segment exactly as before, but a target revisited later in the frame (after another
+        // target's or the swap chain's own commands ran) becomes its OWN new segment in its own
+        // original position, instead of being retroactively merged into whichever segment first
+        // used that target. This replaces the old "group by target identity, swap chain always
+        // last" scheme, which could let a composite-onto-backbuffer draw sample a target BEFORE
+        // that target's own later-queued producer had run, or let a backbuffer draw queued between
+        // two binds of the same off-screen target see that target's FINAL content instead of the
+        // content it actually had at the time it was drawn (see known_bugs.md's now-fixed
+        // "render-target/back-buffer replay does not preserve public call order" entry).
+        std::vector<FrameCommandBucket> segments;
         for (const FrameCommand& command : frameCommands_)
         {
-            if (command.target == nullptr)
+            if (segments.empty() || segments.back().target != command.target)
             {
-                swapChainBucket.commands.push_back(&command);
-                continue;
+                FrameCommandBucket segment;
+                segment.target = command.target;
+                segments.push_back(std::move(segment));
             }
-
-            const auto found = std::find_if(buckets.begin(), buckets.end(),
-                [&](const FrameCommandBucket& bucket) { return bucket.target == command.target; });
-            if (found != buckets.end())
-            {
-                found->commands.push_back(&command);
-                continue;
-            }
-
-            FrameCommandBucket bucket;
-            bucket.target = command.target;
-            bucket.commands.push_back(&command);
-            buckets.push_back(std::move(bucket));
+            segments.back().commands.push_back(&command);
         }
 
         // Every RecordAndSubmitFrame/CaptureBackbuffer caller needs a swap-chain pass regardless of
         // whether this frame drew to it directly (Present() must always submit something, and
-        // CaptureBackbuffer's framebuffer copy can only run inside one), so it is always appended
-        // here, even when empty, rather than duplicated at each call site.
-        buckets.push_back(std::move(swapChainBucket));
+        // CaptureBackbuffer's framebuffer copy can only run inside one) -- appended at the end only
+        // when the frame's own true order never touched the swap chain at all; when it did, that
+        // segment already exists in its own correct position and is not duplicated or moved.
+        const bool hasSwapChainSegment = std::any_of(segments.begin(), segments.end(),
+            [](const FrameCommandBucket& segment) { return segment.target == nullptr; });
+        if (!hasSwapChainSegment)
+            segments.push_back(FrameCommandBucket{});
 
-        return buckets;
+        return segments;
     }
 
     void LlglGraphicsBackend::ReplayFrameCommandsList(const std::vector<const FrameCommand*>& commands)
@@ -4934,8 +4971,15 @@ namespace CNA::Internal::Backends::Llgl
                 ? *bucket.target
                 : static_cast<LLGL::RenderTarget&>(*swapChain_);
             const LLGL::Extent2D resolution = renderTarget.GetResolution();
+            // LLGL-45: real PreserveContents -- every segment reloads this target's own actual
+            // prior content (see AcquireLoadRenderPassEXT's own doc comment for why this is safe
+            // even for a first-ever segment).
+            LLGL::RenderPass* loadPass = AcquireLoadRenderPassEXT(
+                renderTarget.GetNumColorAttachments(),
+                renderTarget.HasDepthAttachment() || renderTarget.HasStencilAttachment(),
+                renderTarget.GetSamples());
 
-            commands_->BeginRenderPass(renderTarget);
+            commands_->BeginRenderPass(renderTarget, loadPass);
             commands_->SetViewport(LLGL::Viewport{0.0f, 0.0f,
                                                   static_cast<float>(resolution.width),
                                                   static_cast<float>(resolution.height)});
@@ -5025,21 +5069,38 @@ namespace CNA::Internal::Backends::Llgl
 
         const std::vector<FrameCommandBucket> buckets = GroupFrameCommandsByTargetEXT();
 
-        commands_->Begin();
-        for (const FrameCommandBucket& bucket : buckets)
+        // LLGL-45: the frame's true order can now touch the swap chain more than once (e.g. draw
+        // to the back buffer, then to an off-screen target, then to the back buffer again) --
+        // the framebuffer copy must read whichever state is CURRENT as of the end of everything
+        // queued so far, i.e. the LAST swap-chain segment, not just any one of them.
+        std::size_t lastSwapChainSegment = buckets.size();
+        for (std::size_t i = 0; i < buckets.size(); ++i)
         {
+            if (buckets[i].target == nullptr)
+                lastSwapChainSegment = i;
+        }
+
+        commands_->Begin();
+        for (std::size_t i = 0; i < buckets.size(); ++i)
+        {
+            const FrameCommandBucket& bucket = buckets[i];
             LLGL::RenderTarget& renderTarget = bucket.target != nullptr
                 ? *bucket.target
                 : static_cast<LLGL::RenderTarget&>(*swapChain_);
             const LLGL::Extent2D bucketResolution = renderTarget.GetResolution();
+            // See RecordAndSubmitFrame()'s own identical call for why this runs here.
+            LLGL::RenderPass* loadPass = AcquireLoadRenderPassEXT(
+                renderTarget.GetNumColorAttachments(),
+                renderTarget.HasDepthAttachment() || renderTarget.HasStencilAttachment(),
+                renderTarget.GetSamples());
 
-            commands_->BeginRenderPass(renderTarget);
+            commands_->BeginRenderPass(renderTarget, loadPass);
             commands_->SetViewport(LLGL::Viewport{0.0f, 0.0f,
                                                   static_cast<float>(bucketResolution.width),
                                                   static_cast<float>(bucketResolution.height)});
             ReplayFrameCommandsList(bucket.commands);
 
-            if (bucket.target == nullptr)
+            if (i == lastSwapChainSegment)
                 commands_->CopyTextureFromFramebuffer(*staging, region, LLGL::Offset2D{0, 0});
 
             commands_->EndRenderPass();

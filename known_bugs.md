@@ -664,15 +664,42 @@ comments there for the full per-leg breakdown).
 
 ---
 
-## LLGL backend: a target revisited after depending on another target replays out of public order — OPEN
+## LLGL backend: a target revisited after depending on another target replays out of public order — FIXED (4/5 reproductions), U2 unverified
 
-**Status:** open, discovered while wiring `plan_llgl.md`'s Phase LLGL-7 (`LLGL-41`,
-`rendertarget_depthstencil_usage_test.cpp`, `rendertarget_effect_source_test.cpp` and
-`rendertarget_producer_consumer_test.cpp`). Root cause identified with confidence; not fixed here
-(the correct fix is architectural -- interleaved cross-bucket replay, or segmenting every public bind
-cycle into its own pass -- and out of scope for a test-wiring task).
+**Status:** fixed by `plan_llgl.md` `LLGL-45` (2026-08-03): `GroupFrameCommandsByTargetEXT()` now
+segments `frameCommands_` in TRUE public order (a new segment starts only when the target actually
+changes from the immediately preceding command, instead of merging every command sharing one target
+into a single first-appearance bucket), and every segment's own `BeginRenderPass()` uses a real
+`AttachmentLoadOp::Load` render pass (`AcquireLoadRenderPassEXT()`) so a target's real prior content
+genuinely survives being revisited later in the same frame -- real `RenderTargetUsage.PreserveContents`
+across a same-frame rebind, not merely an accident of bucket merging. The former "swap chain always
+trails every other bucket" special case (the `LLGL-40` fix) is gone: the swap chain now gets its own
+ordered segment(s) like any other target, appended at the end only when the frame's own true order
+never touched it at all.
 
-**Symptom, five independent reproductions of the same root cause across four files:**
+**Verified fixed, 2026-08-03 (fresh runs after the fix, `CNA_LLGL_RENDERER=opengl`, Xvfb):**
+`rendertarget_producer_consumer_test.cpp` D5 and I2 (41/41 checks, up from 39/41),
+`rendertarget_effect_source_test.cpp` F1 (32/32, now 19/20 legs passing and registered, up from
+18/20), `rendertarget_backbuffer_consumer_test.cpp` G1 (86/86 checks, all registered). All three
+files' own `CNA_BACKEND_LLGL` Contract branches needed no changes -- they already correctly declared
+what SHOULD happen; only the replay engine was wrong.
+
+**Not yet verified: `rendertarget_depthstencil_usage_test.cpp`'s U2** (two `RenderTargetCube` faces
+sharing one physical depth buffer, replayed out of public order). The fix's own render-pass helper
+(`AcquireLoadRenderPassEXT()`) is generic over any `LLGL::RenderTarget` -- keyed only by colour-
+attachment count, depth/stencil presence and sample count, all read directly off the target at replay
+time -- so it applies uniformly to a cube face exactly like a plain `RenderTarget2D`, with no
+per-target-kind special-casing; U2's own scenario is expected to be fixed by the same ordering +
+real-Load mechanism. This is NOT confirmed empirically, though: this sandbox's OpenGL module reports
+`LLGL::RenderingFeatures::hasCubeTextures == false` (confirmed via `rendertarget_pass_boundary_test.cpp`
+crashing identically on both the pre- and post-fix binary, i.e. a pre-existing, unrelated environment
+limitation), and its Vulkan module cannot present under this sandbox's Xvfb (no DRI3,
+`VK_ERROR_SURFACE_LOST_KHR`) -- so U2 cannot be run at all here. `rendertarget_depthstencil_usage_test.cpp`
+is not yet even wired up as a `cna_llgl_test()` build target (LLGL-38's real-hardware pass, or a
+DRI3-capable Xvfb per LLGL-55, should verify and register it).
+
+**Original symptom, five independent reproductions of the same root cause across four files
+(historical, for context on what was broken):**
 - `rendertarget_depthstencil_usage_test.cpp`'s U2 check (28/29 checks otherwise pass): clear face A
   and face B of a `RenderTargetCube` to depth 1.0 each, then draw into face A at depth 0.25, then
   draw into face B (depth-tested) at depth 0.50 -- expects face B's draw to be REJECTED (0.50 is
@@ -738,22 +765,25 @@ whole "one bucket per target identity" model with "one native pass per public bi
 positioned in true public order" (the real form of `segmentsBindCycles`/`orderedBackbufferSegments`
 these test files' own Contracts describe as the ideal, currently-undeclared-as-true shape).
 
-**Why this needs more than a test-wiring fix:** a real fix requires either (a) true interleaved
-replay across buckets whenever a later-appearing bucket's commands were queued before some of an
-earlier bucket's own commands, or (b) segmenting every public bind cycle into its own native pass
-regardless of target identity -- both are architectural changes with real risk to the (large, only
-recently stabilized) rest of this backend's frame-replay model, not something to attempt blind at
-the end of a long session. Every OTHER check in both affected files passes cleanly, including U1 (a
-single cube face's own depth surviving its own unbind/rebind cycle) and every `rendertarget_pass
-_boundary_test.cpp` check (`LLGL-41`'s own already-registered `Llgl_RenderTarget_PassBoundary`,
-43/43) -- this is specifically about two DIFFERENT buckets' commands needing to interleave with each
-other, which no check in that already-passing file happens to require.
+**The fix (LLGL-45, option (b) above):** `GroupFrameCommandsByTargetEXT()` now builds one segment per
+contiguous run of same-target commands in TRUE public order -- a target revisited after another
+target's (or the swap chain's) commands appeared in between gets its OWN new segment in its own
+original position, rather than being merged into whichever segment first used that target. Every
+segment's own `BeginRenderPass()` uses `AcquireLoadRenderPassEXT()`'s `AttachmentLoadOp::Load` pass
+(a small, backend-lifetime cache keyed by colour-attachment count/depth-stencil presence/sample
+count, since every target and the swap chain in this backend always share the same colour and
+depth-stencil FORMAT), so a revisited target's real prior content is genuinely reloaded rather than
+begun from undefined memory -- safe even for a target's first-ever segment, since a `DiscardContents`
+bind already queues its own explicit `Clear()` as that segment's first command. This is option (b),
+not (a): no cross-bucket interleaving was needed once buckets stopped being merged by identity in the
+first place.
 
-**Tracked as:** `plan_llgl.md` Phase LLGL-7, `LLGL-41` (no CTest registration for
-`rendertarget_depthstencil_usage_test.cpp`, `rendertarget_effect_source_test.cpp`,
-`rendertarget_producer_consumer_test.cpp`, or `rendertarget_backbuffer_consumer_test.cpp` until this
-is resolved -- the second file also has a second, unrelated, separately-documented crash, see the
-next entry).
+**Tracked as:** `plan_llgl.md` Phase LLGL-8, `LLGL-45` -- fixed and verified for D5/F1/G1/I2 (see
+above); `rendertarget_producer_consumer_test.cpp` and `rendertarget_backbuffer_consumer_test.cpp` are
+now fully registered (`Llgl_RenderTarget_ProducerConsumer`, `Llgl_RenderTarget_BackbufferConsumer`),
+and `rendertarget_effect_source_test.cpp`'s F1 leg is registered alongside its other passing legs.
+U2/`rendertarget_depthstencil_usage_test.cpp` remains unregistered pending real-hardware or
+DRI3-capable-Xvfb verification (see above).
 
 ---
 
