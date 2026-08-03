@@ -1269,6 +1269,34 @@ protected:
         sprites_->End();
         check("Direct2D usable after rejected StencilEnable", 0, 0, Color::White);
 
+        // D2D-100: Direct2D has no wireframe rasterization pipeline and no depth buffer to bias
+        // against. CullMode is left unchecked (see ApplyRasterizerState's own comment) since
+        // GraphicsDevice's constructor unconditionally applies RasterizerState.CullCounterClockwise
+        // before any game code runs; FillMode/DepthBias/SlopeScaleDepthBias all stay at their
+        // inert defaults (Solid, 0, 0) in every named preset, so rejecting real deviations here
+        // can never trip on that constructor-forced default either.
+        RasterizerState wireFrameState = RasterizerState::CullNone;
+        wireFrameState.setFillModeProperty(FillMode::WireFrame);
+        expectNamedBlendRejection("Direct2D rejects RasterizerState.FillMode.WireFrame", [&] {
+            device.setRasterizerStateProperty(wireFrameState);
+        });
+        RasterizerState depthBiasState = RasterizerState::CullNone;
+        depthBiasState.setDepthBiasProperty(0.01f);
+        expectNamedBlendRejection("Direct2D rejects RasterizerState.DepthBias", [&] {
+            device.setRasterizerStateProperty(depthBiasState);
+        });
+        RasterizerState slopeBiasState = RasterizerState::CullNone;
+        slopeBiasState.setSlopeScaleDepthBiasProperty(0.5f);
+        expectNamedBlendRejection("Direct2D rejects RasterizerState.SlopeScaleDepthBias", [&] {
+            device.setRasterizerStateProperty(slopeBiasState);
+        });
+        device.setRasterizerStateProperty(scissorDisabled);
+        device.Clear(Color::Black);
+        sprites_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, nullptr, &scissorDisabled);
+        sprites_->Draw(*white_, Rectangle(0, 0, 2, 2), Rectangle(0, 0, 1, 1), Color::White);
+        sprites_->End();
+        check("Direct2D usable after rejected RasterizerState deviations", 0, 0, Color::White);
+
         // 16. Presentation transforms use the physical HWND client size, rather than assuming
         // GraphicsDeviceManager's virtual dimensions. The default scene now lives in a logical
         // Direct2D target, so these non-1:1 modes retain exact logical GetBackBufferData as well.

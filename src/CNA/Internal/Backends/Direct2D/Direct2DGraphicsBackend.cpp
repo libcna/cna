@@ -1600,10 +1600,35 @@ namespace CNA::Internal::Backends::Direct2D
         }
     }
 
-    void Direct2DGraphicsBackend::ApplyRasterizerState(int /*cullMode*/, int /*fillMode*/,
-                                                        bool scissorTestEnable, float /*depthBias*/,
-                                                        float /*slopeScaleDepthBias*/)
+    void Direct2DGraphicsBackend::ApplyRasterizerState(int /*cullMode*/, int fillMode,
+                                                        bool scissorTestEnable, float depthBias,
+                                                        float slopeScaleDepthBias)
     {
+        // D2D-100: FillMode.WireFrame and a nonzero depth bias are real, silently-wrong-if-ignored
+        // capability gaps (Direct2D has no wireframe rasterization and no depth buffer to bias
+        // against), so they fail with a named exception instead of silently drawing solid/unbiased.
+        // CullMode is always accepted regardless of value: Direct2D's SpriteBatch has no
+        // user-supplied triangle winding to cull at all (every draw is a fixed, internally
+        // generated quad), and GraphicsDevice's own constructor unconditionally applies
+        // RasterizerState.CullCounterClockwise before any game code runs -- rejecting any cull
+        // mode would break every Direct2D application at startup. The default RasterizerState and
+        // all three named Cull* presets leave FillMode/DepthBias/SlopeScaleDepthBias at their
+        // inert defaults (Solid, 0, 0), so this can never reject that same constructor-forced
+        // default.
+        constexpr int fillModeWireFrame = 1; // FillMode: Solid=0, WireFrame=1
+        if (fillMode == fillModeWireFrame)
+        {
+            throw std::runtime_error(
+                "Direct2D does not support RasterizerState.FillMode.WireFrame; it has no "
+                "wireframe rasterization pipeline. Use CNA_GRAPHICS_BACKEND=D3D11 for wireframe "
+                "rendering.");
+        }
+        if (depthBias != 0.0f || slopeScaleDepthBias != 0.0f)
+        {
+            throw std::runtime_error(
+                "Direct2D does not support RasterizerState.DepthBias/SlopeScaleDepthBias; it has "
+                "no depth buffer to bias against.");
+        }
         if (scissorTestEnabled_ == scissorTestEnable) return;
         if (drawing_) ClearOutputClips();
         scissorTestEnabled_ = scissorTestEnable;

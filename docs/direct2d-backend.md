@@ -83,11 +83,15 @@ exceptions rather than silently ignored. `DepthStencilState.DepthBufferEnable`/`
 `Function` are accepted but always inert: Direct2D never allocates a depth buffer, so unlike
 stencil there is no observable behavior to silently get wrong, and `GraphicsDevice`'s constructor
 applies `DepthStencilState.Default` (`DepthBufferEnable=true`) unconditionally before any game
-code runs.
+code runs. `RasterizerState.FillMode.WireFrame` and a nonzero `DepthBias`/`SlopeScaleDepthBias`
+are likewise rejected; `CullMode` is accepted regardless of value, since Direct2D's SpriteBatch
+never receives user-supplied triangle winding to cull (every draw is a fixed, internally
+generated quad) and the constructor also unconditionally applies
+`RasterizerState.CullCounterClockwise`.
 
 Accordingly, Direct2D rejects 3D vertex/index-buffer creation and draw calls, stencil testing,
 multiple render targets, 3D/cube textures, occlusion queries, custom `Effect` rendering,
-wireframe, general blend equations/factors, write masks, and 3D MSAA.
+wireframe, depth bias, general blend equations/factors, write masks, and 3D MSAA.
 Those are named errors rather than approximate D3D11 fallback passes. This keeps the backend's
 behavior honest and prevents a D3D11 presentation detail from being mistaken for 3D support.
 
