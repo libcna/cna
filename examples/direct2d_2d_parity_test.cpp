@@ -1402,6 +1402,36 @@ protected:
         check("Direct2D non-1:1 presentation logical readback", 3, 3, Color::White);
         check("Direct2D non-1:1 presentation logical background", 8, 3, Color::Black);
 
+        // D2D-53: an extreme physical/virtual aspect ratio under FixedHeightDynamicWidth must
+        // never collapse the logical framebuffer to zero width.
+        // lround(physicalWidth * virtualHeight_ / physicalHeight) rounds down to 0 well before
+        // either input actually reaches zero (e.g. lround(8.0 * 8 / 200) == 0).
+        SDL_SetWindowSize(window, 8, 200);
+        SDL_SyncWindow(window);
+        backend.SetVirtualResolution(8, 8);
+        backend.SetPresentationMode(static_cast<int>(PresentationMode::FixedHeightDynamicWidth));
+        int extremeViewportWidth = 0;
+        int extremeViewportHeight = 0;
+        backend.GetViewportSize(extremeViewportWidth, extremeViewportHeight);
+        const bool extremeViewportPositive = extremeViewportWidth >= 1 && extremeViewportHeight >= 1;
+        std::printf("[%s] Direct2D FixedHeightDynamicWidth keeps a >=1x1 logical framebuffer for "
+                    "an extreme aspect ratio: got=(%d,%d)\n",
+                    extremeViewportPositive ? "PASS" : "FAIL",
+                    extremeViewportWidth, extremeViewportHeight);
+        passed = passed && extremeViewportPositive;
+        device.Clear(Color::Black);
+        sprites_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, nullptr, &scissorDisabled);
+        sprites_->Draw(*white_, Rectangle(0, 0, 1, 1), Rectangle(0, 0, 1, 1), Color::White);
+        sprites_->End();
+        std::array<uint8_t, 4> extremePixel{};
+        backend.ReadBackbuffer(0, 0, 1, 1, extremePixel.data());
+        const bool extremePixelValid = extremePixel[3] == 255;
+        std::printf("[%s] Direct2D usable with an extreme FixedHeightDynamicWidth aspect ratio: "
+                    "got=(%d,%d,%d,%d)\n",
+                    extremePixelValid ? "PASS" : "FAIL",
+                    extremePixel[0], extremePixel[1], extremePixel[2], extremePixel[3]);
+        passed = passed && extremePixelValid;
+
         std::printf("[%s] Direct2D 2D parity baseline\n", passed ? "PASS" : "FAIL");
         result_ = passed ? 0 : 1;
         Exit();

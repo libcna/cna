@@ -1236,6 +1236,19 @@ namespace CNA::Internal::Backends::Direct2D
 
     Direct2DGraphicsBackend::PresentationTransform Direct2DGraphicsBackend::GetPresentationTransform() const
     {
+        PresentationTransform result = ComputePresentationTransform();
+        // D2D-53: guarantee at least a 1x1 logical framebuffer regardless of presentation mode or
+        // aspect ratio. FixedHeightDynamicWidth's lround(physicalWidth * virtualHeight_ /
+        // physicalHeight) can legitimately round to 0 for an extreme physical/virtual ratio; every
+        // other branch is defensively clamped here too so no downstream transform or bitmap
+        // creation ever sees a zero dimension.
+        result.logicalWidth = std::max(1, result.logicalWidth);
+        result.logicalHeight = std::max(1, result.logicalHeight);
+        return result;
+    }
+
+    Direct2DGraphicsBackend::PresentationTransform Direct2DGraphicsBackend::ComputePresentationTransform() const
+    {
         PresentationTransform result{};
         if (activeRenderTarget_)
         {

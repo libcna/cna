@@ -290,6 +290,9 @@ namespace CNA::Internal::Backends::Direct2D
         void ReadCurrentTargetPixels(int x, int y, int width, int height,
                                      const D2D1_PIXEL_FORMAT& pixelFormat, uint8_t* pixels);
         [[nodiscard]] PresentationTransform GetPresentationTransform() const;
+        /// Computes the raw per-mode presentation transform, without D2D-53's minimum-size clamp.
+        /// Only GetPresentationTransform() (which applies that clamp) should call this.
+        [[nodiscard]] PresentationTransform ComputePresentationTransform() const;
         [[nodiscard]] D2D1_MATRIX_3X2_F PresentationMatrix() const;
         [[nodiscard]] D2D1_MATRIX_3X2_F ViewportMatrix() const;
         void ApplyOutputClips();
