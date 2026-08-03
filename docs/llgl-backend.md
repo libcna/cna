@@ -825,6 +825,9 @@ forces its own read to happen last) are two more reproductions of the identical 
 finding -- `known_bugs.md`'s entry now covers all four legs across three files. Every other check in
 this file, including the D1-D4 producer chains, MSAA and mip-mapped producers, `RenderTargetUsage`
 variants and the never-read-target sampling legs, passes.
+`Llgl_RenderTarget_FirstUse` (26/26) establishes that a brand-new `RenderTarget2D`/`RenderTargetCube`
+constructed, bound, drawn into and read back all within one public frame already works here with no
+warm-up frame, extra `Present()`, dummy draw or manual flush -- needed no fix.
 `rendertarget_sampling_orientation_test.cpp` also stays unregistered: its first 10 checks (`SpriteBatch`
 orientation into and out of a `RenderTarget2D`, `BasicEffect`/`AlphaTestEffect` mesh-UV sampling,
 `RenderTarget2D` vs. `Texture2D` byte-exact agreement) all pass, but its CD4 check -- a lit, textured

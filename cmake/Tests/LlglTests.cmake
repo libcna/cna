@@ -504,6 +504,18 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "LLGL")
     cna_llgl_test(cna_test_llgl_rendertarget_producer_consumer
                   examples/rendertarget_producer_consumer_test.cpp)
 
+    # REMED-GFX-158 cross-backend control: a RenderTarget2D constructed during a public frame must be
+    # usable in that same frame -- bound, cleared and/or drawn into, unbound and observed -- with no
+    # warm-up frame, Present, GetData-before-first-render, dummy draw, empty bind cycle, manual frame
+    # advance or wait. The defect was bgfx-local (`bgfx::reset()` discards every view's framebuffer
+    # binding, including the bound target's); this run is what establishes that LLGL already honoured
+    # the contract rather than being made to.
+    cna_llgl_test(cna_test_llgl_rendertarget_first_use
+                  examples/rendertarget_first_use_test.cpp)
+    cna_register_backend_test(NAME Llgl_RenderTarget_FirstUse COMMAND cna_test_llgl_rendertarget_first_use
+        TIMEOUT 120 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # backbuffer_first_read_test.cpp is deliberately NOT registered here: 9/13 legs pass
     # (A1, A3, A4, A6, B1, B2, B3, B4, C1), but D63/D64/D65 (its own row-pitch matrix, widths
     # 63/64/65 against a fixed height of 17) and E1 (64x32) all fail for a real, identified,
