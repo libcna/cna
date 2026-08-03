@@ -954,87 +954,118 @@ before it can be registered.
 
 ---
 
-## LLGL backend: untextured+unlit `BasicEffect` with no vertex-colour attribute throws — OPEN
+## LLGL backend: untextured+unlit `BasicEffect` with no vertex-colour attribute throws — FIXED
 
-**Status:** open, discovered while wiring `plan_llgl.md`'s Phase LLGL-7 (LLGL-39). Root cause
-identified with confidence; not fixed here.
+**Status:** fixed by `plan_llgl.md` `LLGL-52` (2026-08-03). Confirmed: a fresh, isolated run of the
+`untextured+unlit+no-colour` combination no longer throws and renders `DiffuseColor` flat, as
+expected.
 
-**Symptom:** `examples/rasterizerstate_cullmode_indexed_basiceffect_test.cpp` crashes
-(`std::runtime_error`, uncaught) the moment it draws a `BasicEffect` with `TextureEnabled=false`,
-`VertexColorEnabled=false`, `PreferPerPixelLighting`'s default (lighting disabled, `BasicEffect`'s
-own default), and a `VertexPositionNormalTexture` (stride-32, no colour attribute at all) vertex
-layout -- an entirely ordinary, real-XNA-legal way to draw flat-`DiffuseColor`-only geometry (every
-`ModelMeshPart` drawn via a `BasicEffect` with no texture and no per-vertex colour hits exactly this
-combination). The thrown message is explicit: `"LLGL backend: an untextured draw needs vertex
-colours, and this vertex layout has none"`.
+**Symptom (as originally filed):** a `BasicEffect` with `TextureEnabled=false`,
+`VertexColorEnabled=false`, lighting disabled, and a `VertexPositionNormalTexture` (stride-32, no
+colour attribute at all) vertex layout threw `"LLGL backend: an untextured draw needs vertex
+colours, and this vertex layout has none"` -- an entirely ordinary, real-XNA-legal way to draw
+flat-`DiffuseColor`-only geometry (every `ModelMeshPart` drawn via a `BasicEffect` with no texture
+and no per-vertex colour hits exactly this combination).
+
+**Correction:** this entry originally cited `examples/rasterizerstate_cullmode_indexed_
+basiceffect_test.cpp` as the reproducer for THIS specific (unlit) combination. That was imprecise --
+live instrumentation during `LLGL-52` showed that test's own `BasicEffect` actually calls
+`EnableDefaultLighting()` (`lit=true`), so its crash was really the SEPARATE lit+untextured+
+no-vertex-colour gap documented in its own entry below, not this unlit one. The unlit,
+no-vertex-colour combination this entry describes is still a real, distinct gap in its own right
+(reachable from any `ModelMeshPart` with a colourless layout, no lighting, no texture); it just
+was not what that particular test file was hitting.
 
 **Root cause:** `AcquirePrimitiveVertexShader()`'s own shader-variant selection
-(`LlglGraphicsBackend.cpp`) has exactly one branch for the fully-untextured, fully-unlit case:
-`else if (hasColor) { ... kColored3dVertGlsl ... } else { throw ... }` -- there is no shader variant
-at all for "untextured, unlit, AND no vertex-colour attribute in the layout." Every other
-combination this backend supports (textured, lit, coloured) has its own dedicated compiled shader;
-this one specific combination -- a flat, constant-`DiffuseColor`-only draw -- was never given one.
+(`LlglGraphicsBackend.cpp`) had exactly one branch for the fully-untextured, fully-unlit case --
+`else if (hasColor) { ... kColored3dVertGlsl ... } else { throw ... }` -- with no shader variant at
+all for "untextured, unlit, AND no vertex-colour attribute in the layout."
 
-Notably, `kColored3dVertGlsl` itself does not actually NEED the colour attribute's VALUE when
-`VertexColorEnabled=false` (its own `vColor = (vertexColorEnabledPad.x > 0.5) ? diffuseColor *
-color : diffuseColor;` line already ignores `color` entirely in that case) -- the crash is purely
-because that shader unconditionally DECLARES a `layout(location = 1) in vec4 color` input, and
-handing it a pipeline whose `vertex.inputAttribs` has no location-1 entry (because the bound vertex
-buffer's own layout has no colour attribute to describe) was judged too risky to attempt blind
-(undefined behaviour on Vulkan at best, a validation-layer rejection at worst) rather than actually
-tested.
+**Fix:** a new, minimal `flat3d.vert.glsl`/`.gl.vert.glsl` shader pair (mirroring
+`untextured3d.frag.glsl`'s own existing fragment stage unchanged, matching `SkinnedEffect.
+VertexColorEnabled`'s own LLGL-37 precedent of adding a whole new shader variant rather than
+risking an unbound-attribute declaration) that declares ONLY `position` (location 0) as input and
+outputs `diffuseColor` unconditionally, selected instead of throwing when `!textured && !lit &&
+!hasColor`.
 
-**Fix shape (not implemented):** a new, minimal `flat3d.vert.glsl`/`.gl.vert.glsl` +
-`flat3d.frag.glsl`/`.gl.frag.glsl` shader pair (mirroring `untextured3d.frag.glsl`'s own fragment
-stage, matching `SkinnedEffect.VertexColorEnabled`'s own LLGL-37 precedent for "add a whole new
-shader variant rather than risk an unbound-attribute declaration") that declares ONLY `position`
-(location 0) as input and outputs `diffuseColor` unconditionally, selected instead of throwing when
-`!textured && !lit && !hasColor`.
-
-**Tracked as:** `plan_llgl.md` Phase LLGL-7 (blocks `LLGL-39`'s
-`Llgl_RasterizerState_CullMode_IndexedBasicEffect` registration).
+**Tracked as:** `plan_llgl.md` Phase LLGL-7/LLGL-8, `LLGL-39`/`LLGL-52`.
 
 ---
 
-## LLGL backend: lit+textured `BasicEffect` with no normal attribute throws — OPEN
+## LLGL backend: lit+textured `BasicEffect` with no normal attribute throws — FIXED
 
-**Status:** open, discovered while wiring `plan_llgl.md`'s Phase LLGL-7 (`LLGL-41`,
-`rendertarget_sampling_orientation_test.cpp`). Root cause identified with confidence, the
-same general class as the already-documented untextured+unlit finding above; not fixed here.
+**Status:** fixed by `plan_llgl.md` `LLGL-52` (2026-08-03). Confirmed by a fresh
+`rendertarget_sampling_orientation_test.cpp` run: 61/61 checks pass (up from crashing at CD4),
+including the previously-uncaught CD4 check.
 
 **Symptom:** `rendertarget_sampling_orientation_test.cpp`'s CD4 check ("BasicEffect lit +
-textured") crashes the whole process (`std::runtime_error`, uncaught -- this shared fixture has
-no try/catch around its `Leg3D` legs) the moment it draws a `BasicEffect` with
+textured") crashed the whole process (`std::runtime_error`, uncaught -- this shared fixture has
+no try/catch around its `Leg3D` legs) the moment it drew a `BasicEffect` with
 `TextureEnabled=true`, `LightingEnabled=true` (`EnableDefaultLighting()`), and a plain
-`VertexPositionTexture` (stride 20, no normal attribute) vertex layout -- 10/10 checks before it
-pass cleanly (`S1`/`S2`, both `AB1` orientation checks, `CD1`-`CD3`). The thrown message:
+`VertexPositionTexture` (stride 20, no normal attribute) vertex layout. The thrown message:
 `"LLGL backend: lighting needs a vertex layout with normals, and this one has none"`.
 
-**Root cause:** the same shape as the untextured+unlit `flat3d` gap above --
-`AcquirePrimitiveVertexShader()`'s shader-variant selection has no branch for "textured, LIT, and
-no normal attribute in the layout," only throws. Every other backend this shared fixture already
-runs against apparently tolerates a normal-less lit draw (most plausibly by defaulting to some
-fixed normal, e.g. `(0,0,1)`, rather than refusing it outright) -- this fixture's own CD4 check
+**Root cause:** `AcquirePrimitiveVertexShader()`'s shader-variant selection had no branch for
+"textured, LIT, and no normal attribute in the layout," only threw. The fixture's own CD4 check
 does not assert a specific lit colour, only that TEXTURE SAMPLING ORIENTATION survives lighting
-being turned on, so an approximate/default-normal lighting result would satisfy it exactly as
-well as a physically meaningful one.
+being turned on, so a fixed-normal lighting approximation satisfies it exactly as well as a
+physically meaningful one.
 
-**Fix shape (not implemented):** a new shader variant (or a uniform-supplied default normal
-substituted into the existing lit-textured shader when the vertex layout has no normal attribute)
-that computes lighting against a fixed `(0,0,1)` (or similar) normal instead of refusing to bind
-when the attribute is absent -- the same "declare only what the layout actually provides, pick the
-matching shader variant" approach `SkinnedEffect.VertexColorEnabled` (LLGL-37) and the proposed
-`flat3d` shader above already establish as this backend's convention.
+**Fix:** a new `lit_textured3d_flatnormal.vert.glsl`/`.gl.vert.glsl` shader variant that substitutes
+a fixed `(0,0,1)` object-space normal (transformed by the world normal matrix, same as every other
+lit shader) instead of reading a normal attribute the layout does not supply, selected when
+`lit && textured && !hasNormal` (regardless of `hasColor`). Pairs with the existing
+`lit_textured3d.frag.glsl`/`.gl.frag.glsl` fragment shader unchanged.
 
-**Tracked as:** `plan_llgl.md` Phase LLGL-7, `LLGL-41` (no CTest registration for
-`rendertarget_sampling_orientation_test.cpp` until this is resolved).
+**Tracked as:** `plan_llgl.md` Phase LLGL-7/LLGL-8, `LLGL-41`/`LLGL-52`.
+
+---
+
+## LLGL backend: lit+untextured `BasicEffect` with no vertex-colour attribute throws — FIXED
+
+**Status:** fixed by `plan_llgl.md` `LLGL-52` (2026-08-03). Confirmed by a fresh
+`rasterizerstate_cullmode_indexed_basiceffect_test.cpp` run: 6/6 PASS (up from an uncaught crash),
+plus `llgl_lighting_test.cpp`'s own Check H now lighting for real instead of asserting a throw
+(10/10 PASS).
+
+**Symptom:** `examples/rasterizerstate_cullmode_indexed_basiceffect_test.cpp` crashed
+(`terminate called after throwing an instance of 'std::runtime_error'`, GLSL link error: "definitions
+of uniform block `Transform' do not match") drawing a `BasicEffect` with `TextureEnabled=false`,
+`VertexColorEnabled=false`, and `EnableDefaultLighting()` (lighting ENABLED, not disabled -- an
+earlier pass at documenting this test's own trigger assumed lighting was off, see the correction in
+the untextured+unlit entry above) from a `VertexPositionNormalTexture` layout (no vertex-colour
+attribute).
+
+**Root cause:** discovered by adding temporary `fprintf` instrumentation directly in
+`AcquirePrimitiveVertexShader()` (not guessed from the ticket's own summary, which was imprecise) --
+the real combination hitting the throw was `lit=true, textured=false, hasColor=false`, for which
+`AcquirePrimitiveVertexShader()`'s if/else chain had NO branch at all: it checked `lit && textured`,
+then `lit && hasColor`, then fell through to `textured`, then `hasColor`, then a final unconditional
+`else` (the UNLIT `flat3d` branch, described above). A lit-but-colourless-and-untextured draw
+therefore silently got the UNLIT `flat3d` vertex shader -- but the SEPARATE fragment-shader-selection
+logic in `AcquirePrimitivePipeline()` (`lit && textured ? ... : lit ? primitiveLitUntexturedFragmentShader_
+: ...`) always pairs `lit && !textured` with the LIT fragment shader regardless of which vertex
+shader got selected -- so the pipeline linked an UNLIT vertex shader's `Transform` uniform block
+(no world matrix, no light uniforms) against a LIT fragment shader expecting the full block, a
+genuine byte-layout mismatch between the two actually-linked stages.
+
+**Fix:** a new `lit_flat3d.vert.glsl`/`.gl.vert.glsl` shader variant (identical to the existing
+`lit_colored3d.vert.glsl` lit-untextured shader minus the `color` attribute and its multiply,
+`vTint = diffuseColor` unconditionally) selected via a new `else if (lit) { ... }` branch inserted
+between the existing `lit && hasColor` branch and the `textured` branch. Pairs with the existing
+`lit_untextured3d.frag.glsl`/`.gl.frag.glsl` fragment shader unchanged -- its inputs
+(`vNormal`/`vWorldPos`/`vTint`/`vFogFactor`) are exactly what this new shader produces.
+
+**Tracked as:** `plan_llgl.md` Phase LLGL-8, `LLGL-52`.
 
 ---
 
 ## LLGL backend: `Orthographic` + `CreateLookAt` scenario reports geometry off-screen — OPEN
 
-**Status:** open, discovered while wiring `plan_llgl.md`'s Phase LLGL-7 (LLGL-39). Root cause NOT
-identified; not fixed here.
+**Status:** open, discovered while wiring `plan_llgl.md`'s Phase LLGL-7 (LLGL-39); narrowed
+considerably during `LLGL-52` (2026-08-03) by following this entry's own previously-suggested next
+step. Root cause STILL not identified, but the search space is now much smaller and one earlier
+claim in this entry (no LLGL-specific depth-range remap exists) is corrected below. Not fixed here.
 
 **Symptom:** `examples/rasterizerstate_cullmode_camera_test.cpp` (no `CNA_BACKEND_` conditional
 branches at all -- meant to be universal, backend-agnostic math, already registered and passing on
@@ -1047,28 +1078,65 @@ Scenarios (a) Identity, (c) Perspective+CreateLookAt (the IDENTICAL `eye`/`targe
 Perspective+CreateLookAt, with a rotated/mirrored World matrix) all pass cleanly -- 24/24 individual
 cull-mode checks PASS across those four scenarios.
 
-**What was ruled out:** this is NOT the per-draw-`Viewport` bug documented in this file's own
-previous entry -- scenario (b)'s own draw calls (`RunScenario`'s `findOne`/`renderBoth` lambdas)
-never change `GraphicsDevice.Viewport` at all, unlike the three files that entry covers. `Matrix::
-CreateOrthographic`/`CreateLookAt` are shared, backend-agnostic CPU-side math (`Matrix.cpp`),
-identical for every backend, so the WVP matrix and resulting NDC coordinates should be bit-for-bit
-identical across backends -- yet only LLGL fails to find the geometry it places. No LLGL-specific
-depth-range remapping code was found in `LlglGraphicsBackend.cpp` (`grep` for
-`glDepthRange`/`DepthRange`/`ClipControl`-style handling returned nothing), so a Z-range convention
-mismatch (OpenGL's traditional `[-1,1]` vs Vulkan/D3D's `[0,1]`) was considered but not confirmed --
-LLGL itself is expected to normalize this internally across its own modules, the same way it does
-for every other passing scenario in this same file.
+**Correction to this entry's own earlier claim:** a depth-range remap DOES exist in
+`LlglGraphicsBackend.cpp`, in `QueuePrimitives()` -- keyed on `renderer_->GetRenderingCaps().
+clippingRange == LLGL::ClippingRange::MinusOneToOne`, it folds XNA's D3D-convention `[0,1]` depth
+into GL's `[-1,1]` convention (`z' = 2*z - w`) directly into the combined `world*view*projection`
+matrix, once per draw, before the textured/lit/dualTexture/envMap/skinned/pbr branch. The earlier
+"no remap code found" claim searched for the wrong strings (`glDepthRange`/`DepthRange`/
+`ClipControl`); grepping for `ClippingRange` specifically finds it. This is now ruled out as the
+asymmetry's cause, though: this remap operates on the shared WVP matrix, identically for both
+triangles in the same draw call (same `world`/`view`/`projection` arguments, only vertex
+POSITIONS differ between the two `DrawUserPrimitives` calls) -- it cannot by itself explain why one
+triangle renders and the other does not.
 
-**Next step for whoever picks this up:** instrument (temporarily) to print the actual clip-space
-`x/y/z/w` for triangle A and B under scenario (b)'s specific WVP matrix, and compare against the
-same values computed independently (e.g. in Python) from the identical `Matrix::CreateOrthographic
-(400, 400, 10, 10000)` / `Matrix::CreateLookAt(eye=(1000,500,0), target=(0,150,0), up=(0,1,0))`
-inputs, to determine whether the NDC coordinates are genuinely outside `[-1,1]`/`[0,1]` (a real math
-or matrix-construction bug reachable only through this specific matrix shape) or whether they are
-in-range and something in this backend's own rasterization of that specific geometry is still
-wrong.
+**What was ruled out this session, with live instrumentation (not guessed):**
+- **Not a math/matrix-construction bug.** Printing `Vector4::Transform(vertex, wvp)` directly (CNA's
+  own real pipeline, the identical call `NdcSignedArea()` already used) for every vertex of both
+  triangles in scenario (b) shows: `W = 1.0` exactly for all six vertices (a true orthographic
+  projection, no perspective skew introduced anywhere upstream); triangle A's NDC X/Y in
+  `[-0.6,-0.2]`/`[-0.3,0.3]`, triangle B's in `[0.2,0.6]`/`[-0.3,0.3]` -- a clean mirror image, both
+  comfortably inside `[-1,1]`; `Z = 0.1051` identical for BOTH triangles (they sit at the same
+  camera-space depth, differing only along `camRight`), comfortably inside `[0,1]`. Nothing here is
+  even close to a clip-volume boundary.
+- **Not cull-mode-related.** `CullMode::None` is explicitly set for the probe draw and cannot cull
+  by winding at all; scenario (c) draws the exact same CCW-in-local-basis triangle B (same
+  `MakeCcwBasis` construction, same camera, just a different projection) and it DOES render under
+  `CullMode::None` -- so `CullMode::None` is not silently falling back to a default cull state in
+  this backend in general.
+- **Not draw-order/leftover-state.** Swapping which triangle's `findOne()` call runs first (B then
+  A, instead of A then B) reproduces identically: triangle B never appears, regardless of which
+  Clear+Draw+readback cycle runs first or second.
+- **Not a miscoloured or mislocated triangle.** A full 128x128 framebuffer scan for ANY non-black
+  pixel (not just near triangle B's predicted screen location) after triangle B's own isolated
+  Clear+Draw+GetBackBufferData cycle finds ZERO non-black pixels anywhere. This is a genuine
+  non-render, not a wrong-colour or wrong-position one.
+- **Not the per-draw-`Viewport` bug documented elsewhere in this file** -- scenario (b)'s own draw
+  calls (`RunScenario`'s `findOne`/`renderBoth` lambdas) never change `GraphicsDevice.Viewport` at
+  all.
+- **Not fog/large-coordinate precision** -- scenarios (c)/(d)/(e) use the identical world-scale
+  vertex positions (hundreds of units from the origin) and the identical `BasicEffect`/
+  `VertexColorEnabled` setup, and both triangles render correctly there.
 
-**Tracked as:** `plan_llgl.md` Phase LLGL-7 (blocks `LLGL-39`'s
+**What remains unexplained:** the one variable that reproduces the failure is Orthographic
+projection specifically, combined with a non-identity `CreateLookAt` view, drawing the
+`camRight`-positive-offset triangle. Perspective with the exact same view/camera/triangle
+construction does not reproduce it; Identity (no real Orthographic matrix at all) does not
+reproduce it. Since the CPU-side clip-space values are unremarkable and correct, whatever is wrong
+must be either (a) something about how THIS specific combination of matrix values interacts with
+LLGL's own OpenGL-module command translation (worth comparing against a Vulkan run once this
+sandbox can present via Vulkan -- Xvfb `:99` here has no DRI3, so only `CNA_LLGL_RENDERER=opengl`
+could be exercised this session), or (b) a genuine backend rasterization/pipeline-state defect
+specific to this exact matrix shape that CPU-side clip-space inspection cannot reveal.
+
+**Next step for whoever picks this up:** get a Vulkan-capable display (or a software Vulkan ICD,
+e.g. lavapipe) so this exact scenario can be compared Vulkan-vs-OpenGL on the SAME machine; if
+Vulkan also fails, the bug is architectural (in `QueuePrimitives`/pipeline state), not
+OpenGL-module-specific, and a GL-side `glGetError()`/pipeline-descriptor dump around this specific
+draw would be the next lead. If Vulkan passes, compare the two modules' actual `VkViewport`/
+`glViewport` and depth-range calls for this specific draw.
+
+**Tracked as:** `plan_llgl.md` Phase LLGL-7 / `LLGL-52` (blocks `LLGL-39`'s
 `Llgl_RasterizerState_CullMode_Camera` registration).
 
 ---

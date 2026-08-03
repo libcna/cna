@@ -15,8 +15,9 @@
 //   is small/dim off that point (SpecularColor/SpecularPower actually reaching the shader).
 // Check G -- lighting without a texture, but WITH vertex colours, lights the surface for real
 //   (LLGL-31) -- no fabricated white texture, a genuine untextured-but-lit shader variant.
-// Check H -- lighting without a texture AND without vertex colours is still refused by name (the
-//   one combination that remains a real, documented gap).
+// Check H -- lighting without a texture AND without vertex colours (LLGL-52) lights the surface
+//   using DiffuseColor alone, the same as Check A -- no fabricated vertex colour, a genuine
+//   untextured/uncoloured-but-lit shader variant with no colour attribute declared at all.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
@@ -335,7 +336,7 @@ public:
             effect.VertexColorEnabled = false;
         }
 
-        // --- Check H: lighting without a texture AND without vertex colours is still refused ------
+        // --- Check H: lighting without a texture or vertex colours lights for real (LLGL-52) ------
         {
             effect.setTextureEnabledProperty(false);
             effect.setTextureProperty(nullptr);
@@ -346,19 +347,12 @@ public:
             buffer.SetData(untexturedQuad.data(), static_cast<int>(untexturedQuad.size()));
             device.SetVertexBuffer(&buffer);
 
-            bool refused = false;
-            try
-            {
-                effect.Apply();
-                device.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
-            }
-            catch (const std::exception&)
-            {
-                refused = true;
-            }
-            ExpectTrue("lighting without a texture or vertex colours is refused rather than "
-                       "silently mishandled",
-                       refused);
+            device.Clear(kClear);
+            effect.Apply();
+            device.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
+            ExpectPixel("lighting without a texture or vertex colours lights the surface with "
+                        "DiffuseColor alone", Rectangle(160, 120, 1, 1), Color(255, 255, 255, 255),
+                        /*tolerance=*/10);
         }
     }
 };

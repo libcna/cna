@@ -32,14 +32,26 @@ SHADERS = [
     ("Sprite2dVert", "sprite2d.vert.glsl", "sprite2d.gl.vert.glsl", "vert"),
     ("Sprite2dFrag", "sprite2d.frag.glsl", "sprite2d.gl.frag.glsl", "frag"),
     ("Colored3dVert", "colored3d.vert.glsl", "colored3d.gl.vert.glsl", "vert"),
+    # LLGL-52: no colour attribute at all (untextured+unlit BasicEffect with a colourless vertex
+    # layout, e.g. VertexPositionNormalTexture) -- pairs with Untextured3dFrag below unchanged.
+    ("Flat3dVert", "flat3d.vert.glsl", "flat3d.gl.vert.glsl", "vert"),
     ("Textured3dVert", "textured3d.vert.glsl", "textured3d.gl.vert.glsl", "vert"),
     ("ColoredTextured3dVert", "colored_textured3d.vert.glsl", "colored_textured3d.gl.vert.glsl", "vert"),
     ("Untextured3dFrag", "untextured3d.frag.glsl", "untextured3d.gl.frag.glsl", "frag"),
     ("Textured3dFrag", "textured3d.frag.glsl", "textured3d.gl.frag.glsl", "frag"),
     ("LitTextured3dVert", "lit_textured3d.vert.glsl", "lit_textured3d.gl.vert.glsl", "vert"),
+    # LLGL-52: lit+textured with no normal attribute (e.g. plain VertexPositionTexture) -- defaults
+    # to a fixed (0, 0, 1) object-space normal instead of refusing the draw. Pairs with
+    # LitTextured3dFrag below unchanged.
+    ("LitTextured3dFlatNormalVert", "lit_textured3d_flatnormal.vert.glsl",
+     "lit_textured3d_flatnormal.gl.vert.glsl", "vert"),
     ("LitColoredTextured3dVert", "lit_colored_textured3d.vert.glsl", "lit_colored_textured3d.gl.vert.glsl", "vert"),
     ("LitTextured3dFrag", "lit_textured3d.frag.glsl", "lit_textured3d.gl.frag.glsl", "frag"),
     ("LitColored3dVert", "lit_colored3d.vert.glsl", "lit_colored3d.gl.vert.glsl", "vert"),
+    # LLGL-52: lit+untextured with no vertex-colour attribute either (e.g. VertexPositionNormalTexture
+    # with TextureEnabled=false, VertexColorEnabled=false, EnableDefaultLighting()) -- pairs with
+    # LitUntextured3dFrag below unchanged.
+    ("LitFlat3dVert", "lit_flat3d.vert.glsl", "lit_flat3d.gl.vert.glsl", "vert"),
     ("LitUntextured3dFrag", "lit_untextured3d.frag.glsl", "lit_untextured3d.gl.frag.glsl", "frag"),
     ("DualTextured3dFrag", "dual_textured3d.frag.glsl", "dual_textured3d.gl.frag.glsl", "frag"),
     ("EnvMap3dVert", "env_map3d.vert.glsl", "env_map3d.gl.vert.glsl", "vert"),

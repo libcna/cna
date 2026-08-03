@@ -2331,14 +2331,17 @@ namespace CNA::Internal::Backends::Llgl
             if (attribute.location == 2) hasTexCoord = true;
             if (attribute.location == 3) hasNormal = true;
         }
-
         if (textured && !hasTexCoord)
         {
             throw std::runtime_error(
                 std::string(kBackendName) + " backend: a textured effect needs a vertex layout with "
                 "texture coordinates, and this one has none");
         }
-        if (lit && !hasNormal)
+        // LLGL-52: lit+textured+no-colour with no normal attribute (e.g. plain VertexPositionTexture)
+        // has a defined shader variant below (a fixed (0,0,1) object-space normal) instead of
+        // refusing the draw; every OTHER lit-without-normal combination still throws.
+        const bool isLitTexturedFlatNormal = lit && textured && !hasColor && !hasNormal;
+        if (lit && !hasNormal && !isLitTexturedFlatNormal)
         {
             throw std::runtime_error(
                 std::string(kBackendName) + " backend: lighting needs a vertex layout with normals, "
@@ -2350,7 +2353,13 @@ namespace CNA::Internal::Backends::Llgl
         std::size_t spirvSize = 0;
         if (lit && textured)
         {
-            if (hasColor)
+            if (isLitTexturedFlatNormal)
+            {
+                glslSource = Shaders::kLitTextured3dFlatNormalVertGlsl;
+                spirv = Shaders::kLitTextured3dFlatNormalVertSpv;
+                spirvSize = sizeof(Shaders::kLitTextured3dFlatNormalVertSpv);
+            }
+            else if (hasColor)
             {
                 glslSource = Shaders::kLitColoredTextured3dVertGlsl;
                 spirv = Shaders::kLitColoredTextured3dVertSpv;
@@ -2371,6 +2380,20 @@ namespace CNA::Internal::Backends::Llgl
             glslSource = Shaders::kLitColored3dVertGlsl;
             spirv = Shaders::kLitColored3dVertSpv;
             spirvSize = sizeof(Shaders::kLitColored3dVertSpv);
+        }
+        else if (lit)
+        {
+            // LLGL-52: lit, untextured, with no vertex-colour attribute either (e.g.
+            // VertexPositionNormalTexture with TextureEnabled=false, VertexColorEnabled=false,
+            // EnableDefaultLighting()) previously fell all the way through to the UNLIT flat3d
+            // branch below, whose Transform block/outputs do not match the LIT fragment shader
+            // (primitiveLitUntexturedFragmentShader_) that the separate fragment-shader-selection
+            // logic always pairs with lit && !textured. Pairs with lit_untextured3d.frag.glsl
+            // unchanged -- identical inputs to kLitColored3dVertGlsl above, minus the colour
+            // attribute/multiply.
+            glslSource = Shaders::kLitFlat3dVertGlsl;
+            spirv = Shaders::kLitFlat3dVertSpv;
+            spirvSize = sizeof(Shaders::kLitFlat3dVertSpv);
         }
         else if (textured)
         {
@@ -2395,9 +2418,15 @@ namespace CNA::Internal::Backends::Llgl
         }
         else
         {
-            throw std::runtime_error(
-                std::string(kBackendName) + " backend: an untextured draw needs vertex colours, and "
-                "this vertex layout has none");
+            // LLGL-52: untextured, unlit, no vertex-colour attribute either (e.g. a flat,
+            // constant-DiffuseColor-only ModelMeshPart drawn from VertexPositionNormalTexture) --
+            // a defined shader variant with no colour attribute declared at all, instead of
+            // refusing the draw. Pairs with untextured3d.frag.glsl unchanged: that fragment stage
+            // only ever reads vColor/vTexCoord/vFogFactor, and does not care which vertex shader
+            // produced them.
+            glslSource = Shaders::kFlat3dVertGlsl;
+            spirv = Shaders::kFlat3dVertSpv;
+            spirvSize = sizeof(Shaders::kFlat3dVertSpv);
         }
 
         // The attribute list handed to the shader is trimmed to what that variant declares: a

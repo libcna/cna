@@ -635,7 +635,7 @@ reported before submission.
 | LLGL-49 | P1 | **Track and capture sampler state per texture slot.** Store at least every slot consumed by stock effects, acquire the correct sampler for each slot, and capture those sampler objects in each deferred command so later state changes cannot leak backward. | Register `stock_effect_sampler_contract_test.cpp` at 65/65 or better. Add independent filter/address tests for `DualTextureEffect` slot 1 and all five `PbrEffect` maps; slot 0 changes must not alter another slot and vice versa. | 🟡 |
 | LLGL-50 | P1 | **Separate logical back-buffer dimensions from presentation scaling.** `FixedHeightDynamicWidth` may choose a presentation rectangle, but it must not silently shrink an explicitly requested readable back buffer or make valid columns unreachable. Define the mode contract once and make draw, readback, viewport and resize code use the same dimensions. | Register and fully pass `backbuffer_first_read_test.cpp`, `bound_target_lifetime_test.cpp` and `deferred_source_lifetime_test.cpp` with their 72x36 cases. Add wider-than-window and narrower-than-window aspect tests plus resize round-trips. | 🟡 |
 | LLGL-51 | P1 | **Fix OpenGL back-buffer viewport/scissor Y conversion and test both modules explicitly.** Normalize LLGL's screen-origin rules at the command boundary without changing render-target orientation or the already-passing zero-Y cases. | Add `_OpenGL` registrations for `deferred_viewport_capture_test.cpp`, `deferred_scissor_capture_test.cpp`, `spritebatch_custom_viewport_test.cpp`, `spritebatch_viewport_switch_test.cpp` and the applicable cube/plural tests. The current 37/39 and 43/47 OpenGL results become full passes, including non-zero-Y target→backbuffer→target sequences. | ⬜ |
-| LLGL-52 | P1 | **Complete legal stock-effect vertex-layout permutations and resolve the orthographic camera case.** Add a defined untextured+unlit colourless BasicEffect path and a defined policy/shader for lit+textured input without normals; diagnose the `Orthographic`+`CreateLookAt` mismatch rather than masking it with a contract branch. | Register and pass `rasterizerstate_cullmode_indexed_basiceffect_test.cpp`, `rendertarget_sampling_orientation_test.cpp` CD4 and `rasterizerstate_cullmode_camera_test.cpp` on each capable module. Unsupported declarations, if any remain, are rejected before queuing with a precise message. | ⬜ |
+| LLGL-52 | P1 | **Complete legal stock-effect vertex-layout permutations and resolve the orthographic camera case.** Add a defined untextured+unlit colourless BasicEffect path and a defined policy/shader for lit+textured input without normals; diagnose the `Orthographic`+`CreateLookAt` mismatch rather than masking it with a contract branch. | Register and pass `rasterizerstate_cullmode_indexed_basiceffect_test.cpp`, `rendertarget_sampling_orientation_test.cpp` CD4 and `rasterizerstate_cullmode_camera_test.cpp` on each capable module. Unsupported declarations, if any remain, are rejected before queuing with a precise message. | 🟡 |
 | LLGL-53 | P2 | **Finish or explicitly narrow raster/depth/stencil state support.** Wire viewport `minDepth`/`maxDepth`, depth bias, slope-scale depth bias and the full front/back stencil state into descriptors and cache keys. If LLGL 0.04b cannot express one field on a module, expose a precise module capability instead of accepting it as a silent no-op. | Add differential pixel tests for each state and for two draws differing only in that state. Enable the stencil branch of `graphicsdevice_ordered_clear_test.cpp`; update `SupportsCapability()` and `docs/llgl-backend.md` from measured module results. | ⬜ |
 | LLGL-54 | P2 | **Define and implement combined MRT contracts.** Preserve the effective sample count when multiple multisampled targets are bound, create matching multisample/resolve attachments, regenerate mip chains for every written MRT slot, and either support cube-face slots or reject them before allocation without advertising broader support. | Add MRT+MSAA edge-resolution tests, per-slot mip readback after MRT writes, mixed requested/effective sample-count validation, and lifetime tests for every slot. `LlglMRTBinding::GetSampleCount()` must report the actual native target sample count. | ⬜ |
 | LLGL-55 | P2 | **Harden build and virtual-display CI.** Do not compile ENet tests when `CNA_ENABLE_NET=OFF`; make shaderc discovery conditional on the renderer modules that need runtime SPIR-V compilation; preflight Xvfb for GLX/DRI3 and report Vulkan WSI unavailability as an infrastructure skip rather than twelve renderer crashes. Keep explicit Vulkan and `_OpenGL` lanes so auto-selection cannot hide one module. | A clean LLGL build with `CNA_ENABLE_NET=OFF` produces `CnaTests`; OpenGL-only, Vulkan-only and dual-module configurations build. CI records whether Xvfb supports DRI3, runs the matching module suite, and never labels `VK_ERROR_SURFACE_LOST_KHR` from missing DRI3 as a backend pixel failure. | ⬜ |
@@ -797,6 +797,59 @@ replay engine -- a stale test assumption. Correcting it to `true` made dozens of
 skipped checks genuinely evaluate and PASS, strongly confirming `LLGL-45`'s own fix, but also exposed
 a new, real, narrower, still-open gap (V1/V2: per-cycle viewport/scissor on a revisited backbuffer) --
 see `known_bugs.md`'s new entry for the full writeup; not fixed this session.
+
+**`LLGL-52` progress (2026-08-03): 3 of 4 vertex-layout/lighting gaps fixed and verified; the
+orthographic camera case investigated but NOT fixed.** `AcquirePrimitiveVertexShader()`
+(`LlglGraphicsBackend.cpp`) previously threw for three distinct `BasicEffect` vertex-layout/lighting
+combinations that are all ordinary, real-XNA-legal draws; each now has its own dedicated shader
+variant instead of refusing the draw:
+1. Untextured + unlit + no vertex-colour attribute (`flat3d.vert.glsl`, pairs with the existing
+   `untextured3d.frag.glsl` unchanged).
+2. Lit + textured + no normal attribute (`lit_textured3d_flatnormal.vert.glsl`, a fixed `(0,0,1)`
+   object-space normal, pairs with the existing `lit_textured3d.frag.glsl` unchanged).
+3. Lit + untextured + no vertex-colour attribute (`lit_flat3d.vert.glsl`, pairs with the existing
+   `lit_untextured3d.frag.glsl` unchanged) -- discovered via live `fprintf` instrumentation in
+   `AcquirePrimitiveVertexShader()`, NOT the combination this ticket's own acceptance gate assumed:
+   `rasterizerstate_cullmode_indexed_basiceffect_test.cpp`'s `BasicEffect` actually calls
+   `EnableDefaultLighting()`, so its crash was really this lit case falling through to the UNLIT
+   `flat3d` branch and then failing to link against the LIT fragment shader the pipeline actually
+   paired it with (`"definitions of uniform block 'Transform' do not match"`), not the unlit case an
+   earlier `known_bugs.md` summary described.
+
+New shaders were compiled to SPIR-V via a scratch `libshaderc`/`ctypes` script rather than
+`compile_shaders.py`'s own `glslangValidator`, which is not installed in this sandbox and has no
+passwordless `sudo` path to install (`compile_shaders.py`'s `SHADERS` list was still updated with
+each new entry for whenever a proper regeneration is run). **Verified fixed**
+(`CNA_LLGL_RENDERER=opengl`, Xvfb, 2026-08-03): `rasterizerstate_cullmode_indexed_basiceffect_test.cpp`
+6/6 PASS (up from an uncaught crash, now registered as
+`Llgl_RasterizerState_CullMode_IndexedBasicEffect`); `rendertarget_sampling_orientation_test.cpp`
+61/61 PASS (up from crashing at CD4, now registered as `Llgl_RenderTarget_SamplingOrientation`);
+`llgl_lighting_test.cpp`'s own Check H rewritten from "asserts a throw" to "asserts real lighting"
+and now 10/10 PASS. A full 65-binary sweep of every LLGL test executable under
+`CNA_LLGL_RENDERER=opengl` found no regressions; every failure present both before and after this
+change traces to the same three already-documented, pre-existing environment limitations
+(`hasCubeTextures` unsupported on this sandbox's OpenGL module, `LLGL-51`'s own OpenGL Y/viewport
+gap on `Llgl_Deferred_Viewport`/`Llgl_Deferred_Scissor`/`spritebatch_custom_viewport`/
+`spritebatch_viewport_switch`, and `REMED-GFX-155`'s pre-existing rasterizer-state-leak finding on
+`spritebatch_3d_order_test.cpp`'s M2/M3) -- confirmed identical via `git stash` against the pre-fix
+binary, not merely assumed.
+
+**Left OPEN: the `Orthographic`+`CreateLookAt` camera case (`rasterizerstate_cullmode_camera_test.cpp`
+scenario (b)).** Investigated live per this ticket's own acceptance gate ("diagnose ... rather than
+masking"), narrowed considerably, but root cause NOT identified -- see `known_bugs.md`'s rewritten
+entry for the complete trace. Confirmed via direct `Vector4::Transform(vertex, wvp)` instrumentation
+that both test triangles have entirely valid, symmetric clip-space coordinates (`W=1.0` exactly,
+`X`/`Y` well inside `[-1,1]`, identical `Z=0.1051` inside `[0,1]`) -- ruling out a matrix/math bug.
+Also ruled out: `CullMode::None` silently not applying (the analogous CCW triangle in the Perspective
+scenario with the identical camera DOES render under `CullMode::None`), draw order/leftover state
+(swapping which triangle draws first reproduces identically), and the one LLGL-specific depth-range
+remap that does exist in this backend (`QueuePrimitives`' `clippingRange == MinusOneToOne`
+correction -- a real mechanism this entry's own earlier revision incorrectly claimed did not exist,
+found this time by grepping for `ClippingRange` rather than `DepthRange`/`ClipControl`; it applies
+identically to both triangles' shared WVP matrix and cannot explain the asymmetry). The test binary
+is built (`cna_test_llgl_rasterizerstate_cullmode_camera`) but deliberately not CTest-registered
+until this is resolved; a Vulkan-capable display (unavailable in this sandbox's Xvfb, no DRI3) is
+the most promising next step, to determine whether this is OpenGL-module-specific or architectural.
 
 ---
 

@@ -385,15 +385,44 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "LLGL")
         TIMEOUT 90 LABELS "Llgl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # rasterizerstate_cullmode_indexed_basiceffect_test.cpp and rasterizerstate_cullmode_camera_test.cpp
-    # are deliberately NOT registered here -- both fail for real, understood, UNRELATED reasons (see
-    # known_bugs.md): rasterizerstate_cullmode_indexed_basiceffect crashes on an untextured+unlit+
-    # no-vertex-colour BasicEffect draw (VertexPositionNormalTexture, TextureEnabled=false,
-    # VertexColorEnabled=false) -- AcquirePrimitiveVertexShader() has no shader variant for that
-    # combination at all and throws by name; rasterizerstate_cullmode_camera hits a scenario-setup
-    # failure specific to its own Orthographic+CreateLookAt scenario (every other scenario in the
-    # same file, including Perspective+CreateLookAt with the identical camera, passes) -- root cause
-    # not yet identified.
+    # LLGL-52: rasterizerstate_cullmode_indexed_basiceffect_test.cpp's own crash is fixed. The test's
+    # BasicEffect actually calls EnableDefaultLighting() (lit=true), not unlit as an earlier summary
+    # of this bug assumed -- live instrumentation in AcquirePrimitiveVertexShader() showed the real
+    # combination hitting the throw was lit+untextured+no-vertex-colour, which fell through to the
+    # UNLIT flat3d branch and then failed to link against the LIT fragment shader the pipeline
+    # actually paired it with. A new lit_flat3d shader variant (lit_colored3d minus the colour
+    # attribute) closes that gap. Confirmed with a fresh run.
+    cna_llgl_test(cna_test_llgl_rasterizerstate_cullmode_indexed_basiceffect
+                  examples/rasterizerstate_cullmode_indexed_basiceffect_test.cpp)
+    cna_register_backend_test(NAME Llgl_RasterizerState_CullMode_IndexedBasicEffect
+        COMMAND cna_test_llgl_rasterizerstate_cullmode_indexed_basiceffect
+        TIMEOUT 90 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # LLGL-52: rasterizerstate_cullmode_camera_test.cpp is deliberately NOT registered as a CTest
+    # case here: scenario (b) "Orthographic + CreateLookAt" alone fails -- its second triangle (a
+    # world-scale CCW-basis triangle 80 units to the +camRight side of the LookAt target) never
+    # appears anywhere in the framebuffer, even under CullMode::None (which cannot cull by winding
+    # at all). Every other scenario in the same file passes on this backend, including (c)
+    # Perspective + the SAME LookAt view/camera/basis-relative construction with the SAME two
+    # triangles just re-projected, and (a) Identity with axis-aligned triangles. Measured, not
+    # guessed: instrumenting the vertex data directly with CNA's own Vector4::Transform(vertex, wvp)
+    # shows both triangles' clip-space coordinates are unremarkable and entirely valid -- W=1.0
+    # exactly (a true orthographic projection, no perspective skew), X/Y well inside [-1,1], Z=0.1051
+    # identical for BOTH triangles (they sit at the same camera-space depth, only offset along
+    # camRight) comfortably inside [0,1]. Swapping which triangle is drawn first rules out ordering/
+    # leftover-state; a full-framebuffer scan (not just near the predicted pixel) finds zero non-
+    # black pixels anywhere for the failing triangle, so this is a real non-render, not a
+    # miscoloured or mislocated one. The one GL-vs-D3D depth-range compensation this backend applies
+    # (QueuePrimitives' `clippingRange == MinusOneToOne` correction, LlglGraphicsBackend.cpp) folds
+    # into the shared world*view*projection matrix BEFORE the textured/lit branch, applies
+    # identically to both triangles (same matrix, same Z), and cannot by itself explain an
+    # asymmetry between them. Root cause not yet identified -- this reproduces only when Orthographic
+    # projection is combined with a non-identity CreateLookAt view; Perspective+the identical view
+    # does not reproduce it. The binary is still built so it stays available for further
+    # investigation (see known_bugs.md).
+    cna_llgl_test(cna_test_llgl_rasterizerstate_cullmode_camera
+                  examples/rasterizerstate_cullmode_camera_test.cpp)
     #
     # rendertargetcube_plural_binding_test.cpp, spritebatch_custom_viewport_test.cpp and
     # spritebatch_viewport_switch_test.cpp previously failed here too, all three tracing to the same
@@ -503,12 +532,16 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "LLGL")
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
     endforeach()
 
-    # rendertarget_sampling_orientation_test.cpp is deliberately NOT registered here: 10/10 checks
-    # pass up to and including CD3, but CD4 ("BasicEffect lit + textured", no normal attribute)
-    # crashes the whole process (uncaught std::runtime_error, this fixture has no try/catch around
-    # its Leg3D checks) -- a real, distinct, OPEN finding, see known_bugs.md.
+    # LLGL-52: CD4 ("BasicEffect lit + textured", no normal attribute) used to crash the whole
+    # process (uncaught std::runtime_error) because AcquirePrimitiveVertexShader() refused any lit
+    # draw with no normal attribute; a new lit_textured3d_flatnormal shader variant (fixed (0,0,1)
+    # object-space normal) now handles it. Confirmed with a fresh 61/61 run.
     cna_llgl_test(cna_test_llgl_rendertarget_sampling_orientation
                   examples/rendertarget_sampling_orientation_test.cpp)
+    cna_register_backend_test(NAME Llgl_RenderTarget_SamplingOrientation
+        COMMAND cna_test_llgl_rendertarget_sampling_orientation
+        TIMEOUT 90 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # LLGL-45: D5 and I2 -- both "a target/the back buffer revisited after depending on another
     # target" -- used to hit the bucket-ordering finding also covered by
