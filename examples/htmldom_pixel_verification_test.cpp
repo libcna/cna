@@ -44,7 +44,7 @@ using namespace Microsoft::Xna::Framework::Graphics;
 
 namespace
 {
-    constexpr int kExpectedChecks = 15;
+    constexpr int kExpectedChecks = 16;
 
 #if defined(__EMSCRIPTEN__)
     EM_JS(void, JsPublishResult, (int result, int passed, int expected), {
@@ -607,6 +607,38 @@ protected:
                   "HTMLDOM-96b: Texture2D::FromStream decodes a PNG produced by this backend's own "
                   "SaveAsPng and re-uploads it correctly -- both the source and decoded textures "
                   "round-trip through the real HTML_DOM upload/readback path");
+        }
+
+        // plan_html_dom.md HTMLDOM-107: GraphicsDevice.Viewport applied on the Canvas2D
+        // render-target-bound path -- previously ignored there entirely. A sub-rectangle Viewport
+        // (4,4,10,10) set while rtB_ is bound must offset the sprite's own drawn position by
+        // (4,4) within the target's absolute pixel space, matching the DOM path's own per-sprite
+        // offset (htmldom_smoke_test.cpp HTMLDOM-107c). The "outside" sample point (1,1) is
+        // deliberately inside where the sprite would have landed WITHOUT the viewport offset
+        // (destRect (0,0,4,4)) -- if viewport were still ignored, this point would incorrectly
+        // show the sprite's own colour instead of the target's transparent clear.
+        if (frame_ == 13)
+        {
+            Texture2D tex = Make1x1(dev, 255, 0, 255, 255);
+            const auto pixels = ReadBackWholeTarget(*rtB_, 20, 20, [&] {
+                dev.setViewportProperty(Viewport(4, 4, 10, 10));
+                spriteBatch_->Begin();
+                spriteBatch_->Draw(tex, Rectangle(0, 0, 4, 4), Rectangle(0, 0, 1, 1), Color::White);
+                spriteBatch_->End();
+                dev.setViewportProperty(Viewport(0, 0, 20, 20));
+            });
+            const Color inside = pixels[static_cast<std::size_t>(6) * 20 + 6];
+            const Color outside = pixels[static_cast<std::size_t>(1) * 20 + 1];
+            std::printf("       RT viewport offset: inside(6,6)=(%d,%d,%d,%d) outside(1,1)=(%d,%d,%d,%d)\n",
+                        inside.getRProperty(), inside.getGProperty(), inside.getBProperty(),
+                        inside.getAProperty(), outside.getRProperty(), outside.getGProperty(),
+                        outside.getBProperty(), outside.getAProperty());
+            check(inside.getRProperty() > 200 && inside.getBProperty() > 200 &&
+                  inside.getGProperty() < 50 && outside.getAProperty() < 50,
+                  "HTMLDOM-107g: a sub-rectangle Viewport active while a RenderTarget2D is bound "
+                  "offsets the sprite's OWN drawn position within the target's absolute pixel "
+                  "space by the viewport's (X,Y) -- the Canvas2D render-target path previously "
+                  "ignored viewport offset entirely");
         }
 
         // plan_html_dom.md HTMLDOM-97: symmetric TextureAddressMode::Mirror with an out-of-bounds

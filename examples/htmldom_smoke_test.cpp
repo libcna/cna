@@ -44,7 +44,7 @@ using namespace CNA::Internal::Backends::HtmlDom;
 
 namespace
 {
-    constexpr int kExpectedChecks = 43;
+    constexpr int kExpectedChecks = 46;
 
 #if defined(__EMSCRIPTEN__)
     /// Number of sprite elements currently visible in the DOM surface.
@@ -97,6 +97,21 @@ namespace
         if (!root || !root.children[i]) return 0;
         const strip = function(s) { return s.split(" ").join(""); };
         return strip(root.children[i].style.transform).indexOf(strip(UTF8ToString(needle))) >= 0 ? 1 : 0;
+    });
+
+    /// plan_html_dom.md HTMLDOM-107: 1 when the DEFAULT ('full') region's own pool element at
+    /// `poolIndex`'s inline `transform` contains `needle`. Reads the pool array directly (not
+    /// `root.children[i]`) for the same reason JsFullRegionSpriteZIndexAt (HTMLDOM-103) does:
+    /// `root.children[i]` for a small `i` is NOT reliably the i-th 'full' sprite once named scissor
+    /// regions exist, since their own container `<div>`s are ALSO direct children of root,
+    /// interspersed among 'full' sprites by creation order rather than pool index.
+    EM_JS(int, JsFullRegionSpriteTransformContains, (int poolIndex, const char* needle), {
+        const regions = Module['cnaDomRegions'];
+        const full = regions ? regions['full'] : null;
+        const el = full ? full.pool[poolIndex] : null;
+        if (!el) return 0;
+        const strip = function(s) { return s.split(" ").join(""); };
+        return strip(el.style.transform).indexOf(strip(UTF8ToString(needle))) >= 0 ? 1 : 0;
     });
 
     /// 1 when sprite `i` is textured from a generated data URL rather than left unpainted.
@@ -273,6 +288,7 @@ namespace
     int JsSurfaceExists() { return 0; }
     int JsClearColorMatches(int, int, int) { return 0; }
     int JsSpriteTransformContains(int, const char*) { return 0; }
+    int JsFullRegionSpriteTransformContains(int, const char*) { return 0; }
     int JsSpriteHasDataUrlBackground(int) { return 0; }
     int JsSpriteWidth(int) { return -1; }
     int JsSpriteOpacity255(int) { return -1; }
@@ -802,24 +818,56 @@ protected:
 
         if (frame_ == 11)
         {
+            // plan_html_dom.md HTMLDOM-107: Viewport no longer resizes/repositions #cna-dom-root at
+            // all (that was HTMLDOM-98's approach, and the actual defect this task fixes: a SECOND
+            // viewport set later in the same frame retroactively moved/clipped every sprite an
+            // EARLIER batch already flushed, since they all shared root's one single position). Root
+            // now stays fixed at the full backbuffer; the viewport's own (X,Y) offset is applied
+            // directly to each BATCH's own sprites instead.
+            const int baseW = JsRootWidth(), baseH = JsRootHeight();
             const double baseLeft = JsRootLeft(), baseTop = JsRootTop();
 
             dev.setViewportProperty(Viewport(4, 4, 16, 16));
-            check(JsRootWidth() == 16 && JsRootHeight() == 16,
-                  "HTMLDOM-98a: a sub-rectangle Viewport resizes #cna-dom-root itself to the "
-                  "viewport's own width/height, not the full backbuffer");
-            check(JsRootLeft() == baseLeft + 4.0 && JsRootTop() == baseTop + 4.0,
-                  "HTMLDOM-98b: #cna-dom-root is repositioned by the viewport's X/Y offset "
-                  "(scaled by the logical->physical factor, which is exactly 1 here)");
+            check(JsRootWidth() == baseW && JsRootHeight() == baseH,
+                  "HTMLDOM-107a: a sub-rectangle Viewport does NOT resize #cna-dom-root -- it stays "
+                  "at the full backbuffer's own size regardless of which viewport is active");
+            check(JsRootLeft() == baseLeft && JsRootTop() == baseTop,
+                  "HTMLDOM-107b: #cna-dom-root is NOT repositioned by the viewport's X/Y offset "
+                  "either -- the offset is realized per-sprite instead (HTMLDOM-107c)");
 
             spriteBatch_->Begin();
             spriteBatch_->Draw(*texture_, Vector2(0, 0), Color::White);
             spriteBatch_->End();
-            check(JsSpriteTransformContains(0, "translate(0px,0px)") == 1,
-                  "HTMLDOM-98c: sprite-local coordinates are unaffected by the viewport offset -- "
-                  "positioning comes entirely from #cna-dom-root's own repositioning, matching real "
-                  "XNA/FNA where SpriteBatch's own projection is built from Viewport.Width/Height "
-                  "and needs no per-sprite offset");
+            check(JsFullRegionSpriteTransformContains(0, "translate(4px,4px)") == 1,
+                  "HTMLDOM-107c: the viewport's own (X,Y) offset is applied directly to the "
+                  "sprite's own CSS transform as the OUTERMOST translate, matching real XNA/FNA "
+                  "where Viewport.X/Y is applied by the rasterizer stage to every sprite's final "
+                  "position -- not coming from #cna-dom-root's own repositioning any more");
+            check(JsFullRegionSpriteTransformContains(0, "translate(0px,0px)") == 1,
+                  "HTMLDOM-107d: the sprite's own destX/destY translate is still present, "
+                  "unchanged, after the viewport's translate -- the offset is ADDED, not "
+                  "substituted for the sprite's own position");
+
+            // The actual regression this task exists to fix: a SECOND viewport set later in the
+            // SAME frame must never retroactively move/clip sprites an EARLIER batch already
+            // flushed under a DIFFERENT viewport -- the real "split-screen/sub-panel" claim.
+            dev.setViewportProperty(Viewport(4, 4, 16, 16));
+            spriteBatch_->Begin();
+            spriteBatch_->Draw(*texture_, Vector2(0, 0), Color::White);
+            spriteBatch_->End();
+
+            dev.setViewportProperty(Viewport(50, 50, 16, 16));
+            spriteBatch_->Begin();
+            spriteBatch_->Draw(*texture_, Vector2(0, 0), Color::White);
+            spriteBatch_->End();
+
+            check(JsFullRegionSpriteTransformContains(1, "translate(4px,4px)") == 1,
+                  "HTMLDOM-107e: an EARLIER batch's sprite keeps ITS OWN viewport's offset (4,4) "
+                  "even after a LATER batch sets a DIFFERENT viewport (50,50) -- no retroactive "
+                  "re-offsetting of already-flushed sprites");
+            check(JsFullRegionSpriteTransformContains(2, "translate(50px,50px)") == 1,
+                  "HTMLDOM-107f: the LATER batch's own sprite correctly carries ITS OWN "
+                  "viewport's offset");
 
             // Restore the full-backbuffer viewport for hygiene before the final publish below.
             dev.setViewportProperty(Viewport(0, 0, 128, 128));

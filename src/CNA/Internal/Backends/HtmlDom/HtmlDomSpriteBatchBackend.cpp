@@ -37,13 +37,26 @@
 // (design decision 10). The transform stack below is the exact CSS transform list, in the same
 // order, so both paths place a sprite identically. The bound-render-target path does not consult
 // the scissor rect at all -- that was already true before HTMLDOM-94 and is unchanged by it; scissor
-// clipping here is a DOM-backbuffer-only concept.
+// clipping here is a DOM-backbuffer-only concept. HTMLDOM-107: the ACTIVE VIEWPORT's own (X,Y)
+// offset, by contrast, is consulted on BOTH paths -- a bound render target can itself have a
+// sub-rectangle Viewport active (e.g. rendering split-screen INTO an intermediate texture), and
+// nothing about that is DOM-backbuffer-specific.
 EM_JS(void, CNA_HtmlDom_FlushSprites, (const void* cmds, int count, int stride,
                                        double m0, double m1, double m2, double m3, double m4, double m5,
                                        int hasMatrix), {
     if (count <= 0) return;
     const base = cmds >> 2;
     const targetCtx = Module['cnaDomBoundCtx'];
+
+    // plan_html_dom.md HTMLDOM-107: this flush's viewport offset, captured ONCE per batch (the same
+    // per-batch granularity the scissor rect already uses). Real XNA/FNA applies Viewport.X/Y at the
+    // RASTERIZER stage, strictly AFTER the projection matrix (built from Viewport.Width/Height
+    // alone) and therefore after SpriteBatch's own Begin(transformMatrix) too -- so it is the
+    // OUTERMOST translation applied below, not composed into transformMatrix. #cna-dom-root itself
+    // no longer moves to track viewport (HTMLDOM-107 -- it always covers the full backbuffer), so
+    // this per-flush offset is the only place that translation is realized now.
+    const vp = Module['cnaDomViewport'];
+    const vpOffX = vp ? vp.x : 0, vpOffY = vp ? vp.y : 0;
 
     if (targetCtx) {
         for (let i = 0; i < count; ++i) {
@@ -73,6 +86,7 @@ EM_JS(void, CNA_HtmlDom_FlushSprites, (const void* cmds, int count, int stride,
             const sx = HEAPF32[o + 1], sy = HEAPF32[o + 2], sw = HEAPF32[o + 3], sh = HEAPF32[o + 4];
             targetCtx.save();
             targetCtx.setTransform(1, 0, 0, 1, 0, 0);
+            if (vpOffX !== 0 || vpOffY !== 0) targetCtx.translate(vpOffX, vpOffY);
             if (hasMatrix) targetCtx.transform(m0, m1, m2, m3, m4, m5);
             targetCtx.imageSmoothingEnabled = (flags & 4) !== 0;
             targetCtx.globalAlpha = ((packed >>> 24) & 255) / 255;
@@ -204,7 +218,11 @@ EM_JS(void, CNA_HtmlDom_FlushSprites, (const void* cmds, int count, int stride,
         const mb = (flags & 16) !== 0 ? 'plus-lighter' : 'normal';
         if (st.mb !== mb) { style.mixBlendMode = mb; st.mb = mb; }
 
-        let tf = hasMatrix
+        // HTMLDOM-107: the viewport's own offset is the OUTERMOST transform -- see this function's
+        // own top-of-function comment for why it must come before (not be composed into)
+        // transformMatrix.
+        let tf = (vpOffX !== 0 || vpOffY !== 0) ? 'translate(' + vpOffX + 'px,' + vpOffY + 'px) ' : "";
+        tf += hasMatrix
             ? 'matrix(' + m0 + ',' + m1 + ',' + m2 + ',' + m3 + ',' + m4 + ',' + m5 + ') '
             : "";
         tf += 'translate(' + HEAPF32[o + 5] + 'px,' + HEAPF32[o + 6] + 'px)';
