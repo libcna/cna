@@ -132,14 +132,41 @@ renderer.
   points and lines before multiplying by reciprocal W, and keep gutter/tile offsets in the same
   unit system. Add fake-DLL vertex-value assertions plus coloured 2x2, 64x32, 128x128, NPOT and
   multi-tile Point/Linear image probes. A uniform 1x1 texture is not sufficient evidence.
-- [ ] **GLIDE-AUD-011 — Make blend-factor mapping argument-aware and reject impossible states
-  atomically.** Replace the shared factor mapper with separate validation/mapping for RGB source,
-  RGB destination, alpha source and alpha destination. Account for Glide constants whose meaning
-  depends on their argument position and for the more restricted alpha-factor domain. Define and
-  document the nearest faithful policy for CNA presets which Glide cannot encode, including alpha
-  writes when an auxiliary depth buffer is open; otherwise fail before changing cached or native
-  state. Test every accepted/rejected factor in the x86 fake DLL and add translucent image probes
-  for `Opaque`, `AlphaBlend`, `NonPremultiplied`, additive and custom independent-alpha states.
+- [x] **GLIDE-AUD-011 — Make blend-factor mapping argument-aware and reject impossible states
+  atomically.** The Glide 3.0 Reference documents `grAlphaBlendFunction(rgb_sf, rgb_df, alpha_sf,
+  alpha_df)` as accepting a *different* 9-constant set for the two `*_sf` ("source factor") slots
+  and 8-constant set for the two `*_df` ("destination factor") slots; `GR_BLEND_SRC_COLOR` and
+  `GR_BLEND_DST_COLOR` (and their inverses) even share the same native numeric code, so which XNA
+  `Blend` value a slot can represent depends entirely on which of the four slots it goes into. The
+  previous single `ToGlideBlend(int)` mapper ignored this and mapped `Blend::SourceColor` and
+  `Blend::DestinationColor` to the same code regardless of position, so e.g. a custom
+  `ColorDestinationBlend = Blend::DestinationColor` silently became `GR_BLEND_SRC_COLOR` in the
+  `rgb_df` slot instead of throwing — a real, silent semantic error, not a crash. The mapper is
+  now `ToGlideBlendFactor(Blend, GlideBlendSlot)` in the new portable
+  `include/CNA/Internal/Backends/Glide/GlideBlendFactor.hpp`, with `GlideBlendSlot` distinguishing
+  `RgbSource`/`RgbDestination`/`AlphaSource`/`AlphaDestination` and each of the four call sites in
+  `ApplyBlendState()` passing its own slot. The Glide 3.0 Reference also documents
+  `GR_BLEND_DST_ALPHA`/`GR_BLEND_ONE_MINUS_DST_ALPHA`/`GR_BLEND_ALPHA_SATURATE` as producing
+  undefined results whenever depth buffering is enabled (they contend for the same auxiliary
+  buffer Glide uses for Z); since CNA's Glide backend always allocates exactly one auxiliary
+  buffer for Z, `ApplyBlendState()`, `ApplyDepthStencilState()`, `SetDepthTestEnabled()` and
+  `SetBlendEnabled()` now all reject that combination symmetrically (whichever call would create
+  it), before mutating any cached or native state — this also incidentally fixed a pre-existing
+  non-atomic-mutation bug in `ApplyBlendState()`/`ApplyDepthStencilState()` where earlier fields
+  were assigned to `impl_` before a later `ToGlideBlend`/`ToGlideDepthCompare` call could still
+  throw. None of XNA's four built-in `BlendState` presets (`Opaque`, `AlphaBlend`, `Additive`,
+  `NonPremultiplied`) use `DestinationColor`/`InverseDestinationColor`/`SourceAlphaSaturation` or
+  the destination-alpha factors, so this is not a regression for the already-validated SpriteBatch
+  default. Nine portable probes cover every legal/illegal factor per slot (including the
+  same-native-code-different-slot fact directly) and the auxiliary-buffer-conflict predicate.
+  Verified with i686 MinGW `-fsyntax-only` recompilation of the whole backend and the portable
+  Glide unit suite (31/31). Fake-DLL argument capture and translucent multi-preset dgVoodoo image
+  probes remain blocked by the same external i686 `sharp-runtime` `__int128` dependency as
+  GLIDE-AUD-006/007. **Note for future hardware validation:** the Glide 3.0 Reference also states
+  original Voodoo Graphics (not Voodoo2/Banshee/Voodoo3+, which is what dgVoodoo2 emulates) accepts
+  only `GR_BLEND_ZERO`/`GR_BLEND_ONE` for the two alpha-channel slots; this is not enforced because
+  it is chip-generation-specific and outside CNA's stated target runtime, but real first-generation
+  Voodoo Graphics hardware testing under GLIDE-AUD-007 should re-check it.
 - [ ] **GLIDE-AUD-012 — Preserve custom vertex declarations in indexed draws.** The indexed path
   currently expands bytes into a temporary vertex buffer without copying its parsed declaration,
   then guesses the layout from stride. Refactor decoding so indices address the original buffer

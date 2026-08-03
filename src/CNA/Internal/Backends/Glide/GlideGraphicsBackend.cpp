@@ -1,5 +1,6 @@
 #include "CNA/Internal/Backends/Glide/GlideGraphicsBackend.hpp"
 #include "CNA/Internal/Backends/Glide/GlideAbi.hpp"
+#include "CNA/Internal/Backends/Glide/GlideBlendFactor.hpp"
 #include "CNA/Internal/Backends/Glide/GlideLighting.hpp"
 #include "CNA/Internal/Backends/Glide/GlidePrimitiveClip.hpp"
 #include "CNA/Internal/Backends/Glide/GlideTextureMip.hpp"
@@ -226,30 +227,6 @@ namespace CNA::Internal::Backends::Glide
             return (pack(a) << 24) | (pack(r) << 16) | (pack(g) << 8) | pack(b);
         }
 
-        [[nodiscard]] FxI32 ToGlideBlend(int blend)
-        {
-            using Microsoft::Xna::Framework::Graphics::Blend;
-            switch (static_cast<Blend>(blend))
-            {
-                case Blend::One:                     return kBlendOne;
-                case Blend::Zero:                    return kBlendZero;
-                case Blend::SourceColor:
-                case Blend::DestinationColor:        return kBlendSourceColor;
-                case Blend::InverseSourceColor:
-                case Blend::InverseDestinationColor: return kBlendInverseSourceColor;
-                case Blend::SourceAlpha:             return kBlendSourceAlpha;
-                case Blend::InverseSourceAlpha:      return kBlendInverseSourceAlpha;
-                case Blend::DestinationAlpha:        return kBlendDestinationAlpha;
-                case Blend::InverseDestinationAlpha: return kBlendInverseDestinationAlpha;
-                case Blend::SourceAlphaSaturation:   return kBlendAlphaSaturate;
-                case Blend::BlendFactor:
-                case Blend::InverseBlendFactor:
-                    throw std::runtime_error(
-                        "GLIDE backend does not support BlendFactor/InverseBlendFactor: Glide 3.x "
-                        "has no programmable constant blend color in this 2D scope.");
-            }
-            throw std::runtime_error("GLIDE backend received an unknown XNA Blend value");
-        }
 
         [[nodiscard]] FxI32 ToGlideTextureAddress(int address)
         {
@@ -1597,10 +1574,30 @@ namespace CNA::Internal::Backends::Glide
             throw std::runtime_error(
                 "GLIDE backend supports RGB and alpha write masks independently, but cannot mask individual RGB channels or samples");
         }
-        impl_->colorSrcBlend = ToGlideBlend(colorSrcBlend);
-        impl_->colorDstBlend = ToGlideBlend(colorDstBlend);
-        impl_->alphaSrcBlend = ToGlideBlend(alphaSrcBlend);
-        impl_->alphaDstBlend = ToGlideBlend(alphaDstBlend);
+        // Resolve every factor into a local before touching any cached or native state: if a
+        // later slot is invalid, the backend must still look exactly as it did before this call.
+        using Microsoft::Xna::Framework::Graphics::Blend;
+        const auto resolvedColorSrc = static_cast<FxI32>(
+            ToGlideBlendFactor(static_cast<Blend>(colorSrcBlend), GlideBlendSlot::RgbSource));
+        const auto resolvedColorDst = static_cast<FxI32>(
+            ToGlideBlendFactor(static_cast<Blend>(colorDstBlend), GlideBlendSlot::RgbDestination));
+        const auto resolvedAlphaSrc = static_cast<FxI32>(
+            ToGlideBlendFactor(static_cast<Blend>(alphaSrcBlend), GlideBlendSlot::AlphaSource));
+        const auto resolvedAlphaDst = static_cast<FxI32>(
+            ToGlideBlendFactor(static_cast<Blend>(alphaDstBlend), GlideBlendSlot::AlphaDestination));
+        if (impl_->depthTestEnabled && GlideBlendFactorsNeedAuxiliaryAlpha(
+                resolvedColorSrc, resolvedColorDst, resolvedAlphaSrc, resolvedAlphaDst))
+        {
+            throw std::runtime_error(
+                "GLIDE backend cannot use a DestinationAlpha/InverseDestinationAlpha/"
+                "SourceAlphaSaturation blend factor while depth buffering is enabled: Glide's "
+                "auxiliary buffer cannot hold both a Z plane and destination-alpha data, which the "
+                "Glide 3.0 reference documents as producing undefined results");
+        }
+        impl_->colorSrcBlend = resolvedColorSrc;
+        impl_->colorDstBlend = resolvedColorDst;
+        impl_->alphaSrcBlend = resolvedAlphaSrc;
+        impl_->alphaDstBlend = resolvedAlphaDst;
         impl_->colorMaskRgb = writeRed ? kFxTrue : kFxFalse;
         impl_->colorMaskAlpha = ColorWriteHasAlpha(writeState.colorWriteChannels[0]) ? kFxTrue : kFxFalse;
         impl_->ApplyColorMask();
@@ -1615,9 +1612,21 @@ namespace CNA::Internal::Backends::Glide
         {
             throw std::runtime_error("GLIDE has no stencil plane; stencil-enabled DepthStencilState is unsupported");
         }
+        // Resolve before mutating: an invalid depthFunc must leave depth state untouched, and
+        // enabling depth buffering while an active blend factor needs the auxiliary buffer for
+        // destination-alpha must be rejected rather than silently corrupting future draws.
+        const FxI32 resolvedDepthCompare = ToGlideDepthCompare(depthFunc);
+        if (depthEnable && impl_->blendEnabled && GlideBlendFactorsNeedAuxiliaryAlpha(
+                impl_->colorSrcBlend, impl_->colorDstBlend, impl_->alphaSrcBlend, impl_->alphaDstBlend))
+        {
+            throw std::runtime_error(
+                "GLIDE backend cannot enable depth buffering while a DestinationAlpha/"
+                "InverseDestinationAlpha/SourceAlphaSaturation blend factor is active: Glide's "
+                "auxiliary buffer cannot hold both a Z plane and destination-alpha data at once");
+        }
         impl_->depthTestEnabled = depthEnable;
         impl_->depthWriteEnabled = depthWriteEnable;
-        impl_->depthCompare = ToGlideDepthCompare(depthFunc);
+        impl_->depthCompare = resolvedDepthCompare;
         impl_->ApplyDepthState();
     }
 
@@ -1830,12 +1839,28 @@ namespace CNA::Internal::Backends::Glide
     void GlideGraphicsBackend::ClearColorDepthAndStencil(float, float, float, float, float, int) { ThrowUnsupported("ClearColorDepthAndStencil"); }
     void GlideGraphicsBackend::SetDepthTestEnabled(bool enabled)
     {
+        if (enabled && impl_->blendEnabled && GlideBlendFactorsNeedAuxiliaryAlpha(
+                impl_->colorSrcBlend, impl_->colorDstBlend, impl_->alphaSrcBlend, impl_->alphaDstBlend))
+        {
+            throw std::runtime_error(
+                "GLIDE backend cannot enable depth buffering while a DestinationAlpha/"
+                "InverseDestinationAlpha/SourceAlphaSaturation blend factor is active: Glide's "
+                "auxiliary buffer cannot hold both a Z plane and destination-alpha data at once");
+        }
         impl_->depthTestEnabled = enabled;
         impl_->ApplyDepthState();
     }
 
     void GlideGraphicsBackend::SetBlendEnabled(bool enabled)
     {
+        if (enabled && impl_->depthTestEnabled && GlideBlendFactorsNeedAuxiliaryAlpha(
+                impl_->colorSrcBlend, impl_->colorDstBlend, impl_->alphaSrcBlend, impl_->alphaDstBlend))
+        {
+            throw std::runtime_error(
+                "GLIDE backend cannot enable a DestinationAlpha/InverseDestinationAlpha/"
+                "SourceAlphaSaturation blend factor while depth buffering is enabled: Glide's "
+                "auxiliary buffer cannot hold both a Z plane and destination-alpha data at once");
+        }
         impl_->blendEnabled = enabled;
         impl_->ApplyBlendState();
     }
