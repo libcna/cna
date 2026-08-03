@@ -25140,3 +25140,118 @@ not at a zero ticket count.
 
 **The remediation campaign is not declared complete by this entry.** No checkpoint has been taken and
 no tag has been created.
+
+---
+
+## Post-audit checkpoint triage — `REMED-GFX-211`, `REMED-GFX-212`, `REMED-GFX-213` (2026-08-03)
+
+**Triage only. No production file was changed, no ticket was fixed, no ticket was closed, and no
+other ticket was begun.** `REMED-GFX-203` … `REMED-GFX-210` keep the `DEFERRED` disposition recorded
+above, `REMED-GFX-201`/`-202` stay `DONE`, `REMED-GFX-199` stays untouched, and `audit/` was not
+modified. The three tickets below stay `OPEN`; what changed is that each now has a **final checkpoint
+classification** instead of `REVIEW`.
+
+**All three resolved the same way: confirmed supported-path silent wrong result, checkpoint blocker
+YES.** None moved to deferred capability work. Per `plan_postaudit.md` §2 a silent wrong result on a
+supported path is a non-candidate for deferral, and all three now meet every clause of the
+blocker-YES definition: the classic one-per-vertex + one-per-instance shape is **accepted**, reaches
+no capability check by design, completes with **no exception and no diagnostic**, and renders from
+the wrong records — deterministically, backend-owned, and not an unavailable optional capability.
+
+### What was measured
+
+Four new legs in `tests/Microsoft/Xna/Framework/Graphics/InstancedDrawMultiStreamTests.cpp` (the
+CHECKPOINT TRIAGE group) plus one route-agreement leg. Every leg classifies the frame against every
+reading a defect of its class can produce, and **prints the reading and the full cell map whether it
+passes or fails** — a gate that merely excludes a backend records only that somebody once believed it
+was broken. EasyGL is the known-correct control and is green on every leg, which is what calibrates
+the oracle. Each per-backend arm asserts the **measured** behaviour, so it fails the moment its
+backend is corrected and forces its own removal.
+
+| backend | A: instance offset | B: per-vertex offset | C: both nonzero | freq 2 | freq 1 (control) | ordinary colour | instanced colour |
+|---|---|---|---|---|---|---|---|
+| EasyGL (control) | honoured | honoured | honoured | `divisor-2-honoured` | `divisor-1-honoured` | red | red |
+| Vulkan | ignored | ignored | both ignored | `divisor-1-silently` | `divisor-1-honoured` | red | **white** |
+| Bgfx | ignored | ignored | both ignored | `divisor-1-silently` | `divisor-1-honoured` | red | red |
+| WebGPU | ignored | ignored | both ignored | `divisor-1-silently` | `divisor-1-honoured` | red | **white** |
+
+Not one draw threw. Every wrong frame was an accepted draw.
+
+### `REMED-GFX-211` — CONFIRMED, P1, checkpoint blocker **YES**
+
+Both pieces of missing evidence were taken. The **WebGPU pixel measurement** now exists and matches
+Vulkan and Bgfx exactly, so WebGPU is no longer source-identified only. The **per-vertex side** is
+confirmed rather than inferred: leg B holds the instance offset at zero and puts the decoy in the
+geometry stream, and all three backends render the decoy triangle. Leg C reads
+`both-offsets-ignored` — not a cross-applied offset, not a doubly-applied one, not a partial loss —
+so **the two streams fail independently and a correction must carry both**. Confirmed by source:
+`VulkanGraphicsBackend.cpp:10180` copies the per-vertex stream from offset 0 and `:10192` the
+per-instance stream from offset 0.
+
+### `REMED-GFX-212` — CONFIRMED as case A, P1 (up from P3 of record), checkpoint blocker **YES**
+
+The authoritative FNA answer, the cheapest thing that could resolve the ticket's class, was read
+directly. FNA makes `VertexColorEnabled` **draw-call-independent**: `DrawInstancedPrimitives`
+(`GraphicsDevice.cs:1257`) touches no effect state, `BasicEffect.OnApply` (`BasicEffect.cs:488-511`)
+derives its shader index from fog/vertex-colour/texture/lighting with **no instancing term**, and
+every vertex-colour permutation in `BasicEffect.fx` multiplies `vout.Diffuse *= vin.Color`. The same
+vertex shader runs on both routes, so the reference requires the per-vertex colour on an instanced
+draw.
+
+The measurement needs no reference at all: under identical effect state, **Vulkan and WebGPU colour
+their own ordinary route from the bound `COLOR0` stream and their instanced route from
+`DiffuseColor`.** They disagree with the reference and with themselves. This also answers the
+ticket's fourth missing item — the ordinary route agrees with itself on every backend measured, so
+the divergence is instanced-route-only.
+
+Recorded for scope, not for the verdict: FNA's `BasicEffect.fx` has no instancing constructs at all
+and takes `World` from a constant buffer, so CNA's stock instanced shader is a CNA extension with no
+reference counterpart. The *colour* half is not — `VertexColorEnabled` is XNA public API on an XNA
+effect that CNA's own ordinary route already implements.
+
+### `REMED-GFX-213` — escalation condition CONFIRMED, P1, checkpoint blocker **YES**, scope widened
+
+The single missing measurement was taken: six instances at `InstanceFrequency = 2` against a
+**six**-record instance buffer, twice what a correct divisor needs, so neither the shared range gate
+nor a backend sizing its copy by `instanceCount` can refuse it. Nothing threw; the draw rendered
+records 0,1,2,3,4,5 — `InstanceFrequency = 2` produced exactly the frame `InstanceFrequency = 1`
+produces. The `ArgumentOutOfRangeException` the ticket records is real but second-order: it needs an
+under-sized buffer, and with an adequately sized one the failure is silent. The frequency-1 control
+proves the leg can see a divisor-1 sequence and the repeat draw rules out stale state.
+
+Two corrections to the ticket as recorded:
+
+1. **Backend scope widens to Bgfx, Vulkan and WebGPU**, not Bgfx alone. Divisor evidence belongs to
+   this ticket, so the scope is widened here rather than split into a new ID.
+2. **It is not an absent native capability on any of the three.** The string `frequency` occurs **0
+   times** in `VulkanGraphicsBackend.cpp`, `WebGPUGraphicsBackend.cpp` and `BgfxGraphicsBackend.cpp`
+   and once in `EasyGLGraphicsBackend.cpp` — the public value never reaches three of the four
+   backends. `bgfx.h` has no divisor or step-rate concept anywhere (0 matches) and WebGPU's
+   `WGPUVertexStepMode` is a binary enum, but all three can express a divisor by replicating records
+   into the instance buffer they already build. Unimplemented emulation, neither emulated nor
+   declared — not a hardware limit truthfully rejected.
+
+### Disposition
+
+- **Immediate remediation campaign:** `REMED-GFX-211`, `REMED-GFX-212`, `REMED-GFX-213`. All three
+  stay `OPEN` and stay campaign work. **None is deferred to `plan_postaudit.md`**, which now records
+  their evidence and smallest implementation task without owning their execution.
+- **Deferred, unchanged:** `REMED-GFX-203` … `REMED-GFX-210`.
+- `REMED-GFX-211` and `REMED-GFX-213` share a copy site on all three backends, so they are naturally
+  one piece of work per backend.
+
+### What could not be measured
+
+D3D9, D3D11 and D3D12. No D3D display was reachable: SDL reports
+`SDL_InitSubSystem(SDL_INIT_VIDEO) failed: x11 not available` under Wine on the Xvfb displays this
+environment permits, while a native binary runs on the same display — the limitation is Wine-specific,
+not a broken display. **This holds nothing at `REVIEW`**: the measured backends settle all three
+classifications on their own. The new legs assert nothing about the unmeasured backends in either
+direction and print their reading on any host that can run them. The smallest future action that
+resolves it is running this same filter on a host with a working D3D path.
+
+### New findings
+
+**None.** The Vulkan and WebGPU divisor results are divisor evidence and belong to `REMED-GFX-213`,
+whose backend scope is widened above; no independent mechanism was found, so no new ticket was
+created.
