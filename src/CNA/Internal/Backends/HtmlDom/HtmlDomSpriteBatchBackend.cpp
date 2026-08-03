@@ -95,13 +95,22 @@ EM_JS(void, CNA_HtmlDom_FlushSprites, (const void* cmds, int count, int stride,
             const fetchMode = isOpaque ? 0 : rawMode;
             const packed = HEAPU32[o + 16];
             const isMirror = (flags & 64) !== 0;
-            const variant = isMirror
-                ? Module['cnaDomGetMirrorVariant'](HEAP32[o], fetchMode,
-                    packed & 255, (packed >>> 8) & 255, (packed >>> 16) & 255)
-                : Module['cnaDomGetVariant'](HEAP32[o], fetchMode,
-                    packed & 255, (packed >>> 8) & 255, (packed >>> 16) & 255);
+            const rSrc = packed & 255, gSrc = (packed >>> 8) & 255, bSrc = (packed >>> 16) & 255;
+            const sxRaw = HEAPF32[o + 1], syRaw = HEAPF32[o + 2];
+            const sw = HEAPF32[o + 3], sh = HEAPF32[o + 4];
+            // plan_html_dom.md HTMLDOM-104: a padded (edge-extended) variant when Clamp overflows the
+            // texture on a non-tiled axis -- see cnaDomResolveClampVariant's own comment.
+            let variant, sx = sxRaw, sy = syRaw;
+            if (isMirror) {
+                variant = Module['cnaDomGetMirrorVariant'](HEAP32[o], fetchMode, rSrc, gSrc, bSrc);
+            } else {
+                const resolved = Module['cnaDomResolveClampVariant'](HEAP32[o], fetchMode, rSrc, gSrc, bSrc,
+                    sxRaw, syRaw, sw, sh, (flags & 8) !== 0, (flags & 32) !== 0);
+                if (!resolved) continue;
+                variant = resolved.variant;
+                sx = resolved.sx; sy = resolved.sy;
+            }
             if (!variant) continue;
-            const sx = HEAPF32[o + 1], sy = HEAPF32[o + 2], sw = HEAPF32[o + 3], sh = HEAPF32[o + 4];
             targetCtx.save();
             targetCtx.setTransform(1, 0, 0, 1, 0, 0);
             if (vpOffX !== 0 || vpOffY !== 0) targetCtx.translate(vpOffX, vpOffY);
@@ -198,11 +207,23 @@ EM_JS(void, CNA_HtmlDom_FlushSprites, (const void* cmds, int count, int stride,
         const packed = HEAPU32[o + 16];
         const flags = HEAP32[o + 14];
         const isMirror = (flags & 64) !== 0;
-        const variant = isMirror
-            ? Module['cnaDomGetMirrorVariant'](HEAP32[o], HEAP32[o + 15],
-                packed & 255, (packed >>> 8) & 255, (packed >>> 16) & 255)
-            : Module['cnaDomGetVariant'](HEAP32[o], HEAP32[o + 15],
-                packed & 255, (packed >>> 8) & 255, (packed >>> 16) & 255);
+        const rSrc = packed & 255, gSrc = (packed >>> 8) & 255, bSrc = (packed >>> 16) & 255;
+        const sxRaw = HEAPF32[o + 1], syRaw = HEAPF32[o + 2];
+        const sw0 = HEAPF32[o + 3], sh0 = HEAPF32[o + 4];
+        // plan_html_dom.md HTMLDOM-104: a padded (edge-extended) variant when Clamp overflows the
+        // texture on a non-tiled axis -- see cnaDomResolveClampVariant's own comment. background-
+        // position below uses the RESOLVED (possibly shifted) sx/sy, not the raw command values, so
+        // it aligns against the padded image's own coordinate space when one was used.
+        let variant, sx = sxRaw, sy = syRaw;
+        if (isMirror) {
+            variant = Module['cnaDomGetMirrorVariant'](HEAP32[o], HEAP32[o + 15], rSrc, gSrc, bSrc);
+        } else {
+            const resolved = Module['cnaDomResolveClampVariant'](HEAP32[o], HEAP32[o + 15], rSrc, gSrc, bSrc,
+                sxRaw, syRaw, sw0, sh0, (flags & 8) !== 0, (flags & 32) !== 0);
+            if (!resolved) continue;
+            variant = resolved.variant;
+            sx = resolved.sx; sy = resolved.sy;
+        }
         if (!variant) continue;
         Module['cnaDomEnsureUrl'](variant);
 
@@ -223,12 +244,14 @@ EM_JS(void, CNA_HtmlDom_FlushSprites, (const void* cmds, int count, int stride,
         const st = el.__cnaState;
         const style = el.style;
 
-        const sw = HEAPF32[o + 3], sh = HEAPF32[o + 4];
-        if (st.w !== sw) { style.width = sw + 'px'; st.w = sw; }
-        if (st.h !== sh) { style.height = sh + 'px'; st.h = sh; }
+        if (st.w !== sw0) { style.width = sw0 + 'px'; st.w = sw0; }
+        if (st.h !== sh0) { style.height = sh0 + 'px'; st.h = sh0; }
         if (st.url !== variant.url) { style.backgroundImage = 'url(' + variant.url + ')'; st.url = variant.url; }
 
-        const bp = (-HEAPF32[o + 1]) + 'px ' + (-HEAPF32[o + 2]) + 'px';
+        // plan_html_dom.md HTMLDOM-104: (-sx,-sy) uses the RESOLVED source coordinates -- shifted
+        // into the padded image's own coordinate space when Clamp overflow required one -- not the
+        // raw command values, so the requested source rect still aligns correctly.
+        const bp = (-sx) + 'px ' + (-sy) + 'px';
         if (st.bp !== bp) { style.backgroundPosition = bp; st.bp = bp; }
 
         // Two-value background-repeat shorthand: one repetition style per axis, independent of
@@ -327,44 +350,55 @@ namespace CNA::Internal::Backends::HtmlDom
         const bool tiledV = exceedsBounds && (addressV == 0 || addressV == 2);
         const bool mirror = exceedsBounds && addressU == 2 && addressV == 2;
 
-        // Clamp is implemented for real, by narrowing the source rectangle into the texture and
-        // shifting the sprite's local box by the same amount -- not by relying on any implicit
-        // out-of-bounds behaviour of CSS background painting or drawImage. A tiled axis deliberately
-        // keeps its full extent: tiling is what makes Wrap/Mirror differ from Clamp in the first
-        // place.
-        float clampedX = sourceX, clampedY = sourceY, clampedW = sourceW, clampedH = sourceH;
-        if (exceedsBounds)
+        // plan_html_dom.md HTMLDOM-104: Clamp (a non-tiled axis whose source rect still exceeds the
+        // texture) samples the nearest EDGE TEXEL for the out-of-bounds portion -- it does not crop
+        // destination geometry. An earlier version narrowed the source rect into the texture and
+        // shifted the destination box to match, which cropped the sprite's own footprint (leaving
+        // the removed area transparent) instead of showing the edge-replicated colour real XNA/D3D
+        // produce there -- confirmed wrong by the audit that reopened this task, and by the existing
+        // HTMLDOM-97b pixel test itself explicitly asserting the (wrong) transparent-crop result as
+        // correct. The texture-pixel padding needed on each non-tiled, out-of-bounds edge is
+        // computed here so the JS flush can fetch a cached, edge-extended texture variant
+        // (Module['cnaDomGetPaddedVariant'], resolved via cnaDomResolveClampVariant) sized to it --
+        // sx/sy/sw/sh below stay the RAW, unclamped source rect; only the JS-side variant image
+        // itself grows to cover the overflow, sourceRectangle. destRect/origin math is therefore
+        // completely unaffected by Clamp -- exactly as real XNA behaves.
+        const float texW = static_cast<float>(textureWidth);
+        const float texH = static_cast<float>(textureHeight);
+        const float padLeft = (exceedsBounds && !tiledU) ? std::max(0.0f, -sourceX) : 0.0f;
+        const float padRight = (exceedsBounds && !tiledU) ? std::max(0.0f, sourceX + sourceW - texW) : 0.0f;
+        const float padTop = (exceedsBounds && !tiledV) ? std::max(0.0f, -sourceY) : 0.0f;
+        const float padBottom = (exceedsBounds && !tiledV) ? std::max(0.0f, sourceY + sourceH - texH) : 0.0f;
+        // Honest boundary, not silent cropping: beyond this many texture pixels of edge-extension on
+        // any one side, reject the draw outright rather than approximate it. Generous for the real
+        // use case (a few pixels of atlas-seam bleed margin, or a modest out-of-bounds sample), while
+        // keeping the cached padded-canvas variants this generates bounded in size.
+        constexpr float kMaxClampPadding = 256.0f;
+        if (padLeft > kMaxClampPadding || padRight > kMaxClampPadding ||
+            padTop > kMaxClampPadding || padBottom > kMaxClampPadding)
         {
-            const float texW = static_cast<float>(textureWidth);
-            const float texH = static_cast<float>(textureHeight);
-            if (!tiledU)
-            {
-                clampedX = std::clamp(sourceX, 0.0f, texW);
-                clampedW = std::max(0.0f, std::min(sourceX + sourceW, texW) - clampedX);
-            }
-            if (!tiledV)
-            {
-                clampedY = std::clamp(sourceY, 0.0f, texH);
-                clampedH = std::max(0.0f, std::min(sourceY + sourceH, texH) - clampedY);
-            }
+            throw std::runtime_error(
+                "HTML_DOM backend: TextureAddressMode::Clamp sourceRectangle overflow exceeds " +
+                std::to_string(static_cast<int>(kMaxClampPadding)) + " texture pixels on at least "
+                "one edge (left=" + std::to_string(padLeft) + ", top=" + std::to_string(padTop) +
+                ", right=" + std::to_string(padRight) + ", bottom=" + std::to_string(padBottom) +
+                "). Rejected rather than silently cropping the sprite's own destination geometry -- "
+                "keep sourceRectangle closer to the texture's own bounds.");
         }
 
         HtmlDomDrawCommand cmd{};
         cmd.textureId = textureId;
-        cmd.sx = clampedX;
-        cmd.sy = clampedY;
-        cmd.sw = clampedW;
-        cmd.sh = clampedH;
+        cmd.sx = sourceX;
+        cmd.sy = sourceY;
+        cmd.sw = sourceW;
+        cmd.sh = sourceH;
         cmd.destX = static_cast<float>(dest.X);
         cmd.destY = static_cast<float>(dest.Y);
         cmd.scaleX = sourceW != 0.0f ? static_cast<float>(dest.Width) / sourceW : 0.0f;
         cmd.scaleY = sourceH != 0.0f ? static_cast<float>(dest.Height) / sourceH : 0.0f;
         cmd.rotation = rotation;
-        // Everything below the scale is in source-pixel units: the pivot moves the sprite so that
-        // `origin` sits at (destX,destY), and the clamp offset shifts the narrowed box back to
-        // where the un-narrowed one would have put those same texels.
-        cmd.localX = -origin.X + (clampedX - sourceX);
-        cmd.localY = -origin.Y + (clampedY - sourceY);
+        cmd.localX = -origin.X;
+        cmd.localY = -origin.Y;
         // Flip mirrors about the sprite's OWN centre -- not the pivot, and not the coordinate
         // system -- so the destination footprint is unchanged by flipping, matching real XNA/FNA
         // semantics where SpriteEffects only changes which source corner maps to which (unchanged)

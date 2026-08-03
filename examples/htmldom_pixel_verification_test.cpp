@@ -45,7 +45,7 @@ using namespace Microsoft::Xna::Framework::Graphics;
 
 namespace
 {
-    constexpr int kExpectedChecks = 18;
+    constexpr int kExpectedChecks = 20;
 
 #if defined(__EMSCRIPTEN__)
     EM_JS(void, JsPublishResult, (int result, int passed, int expected), {
@@ -746,13 +746,15 @@ protected:
                   "not a throw");
         }
 
-        // plan_html_dom.md HTMLDOM-97: mixed non-Mirror per-axis modes (U=Wrap, V=Clamp), the other
-        // half of the fix. Same 2x2 source, same Rectangle(0,0,4,4) sourceRect (exceeds bounds on
-        // both axes), but now U tiles (Wrap) while V does NOT (Clamp) -- V's own established Clamp
-        // behaviour (ClampNarrowsTheSourceRectAndShiftsTheLocalBoxToMatch, GTest) narrows the source
-        // rect into the texture's own 2px height and does not stretch to fill the requested 4px
-        // destination height, so rows y=2,3 must come back untouched (transparent), while rows
-        // y=0,1 tile the source horizontally exactly like Wrap's own already-verified pattern.
+        // plan_html_dom.md HTMLDOM-97/HTMLDOM-104: mixed non-Mirror per-axis modes (U=Wrap,
+        // V=Clamp). Same 2x2 source, same Rectangle(0,0,4,4) sourceRect (exceeds bounds on both
+        // axes) -- U tiles (Wrap) while V clamps independently. HTMLDOM-104 correction: real Clamp
+        // samples the nearest EDGE TEXEL for the out-of-bounds portion, it does not crop -- so rows
+        // y=2,3 (2px past the texture's own 2px height) must replicate row 1 (blue,yellow), tiled
+        // horizontally by U=Wrap exactly like row 1 itself, NOT come back transparent. (An earlier
+        // version of this test asserted transparency there, matching the pre-HTMLDOM-104 crop-based
+        // implementation -- the audit that reopened HTMLDOM-104 flagged this test oracle itself as
+        // wrong, not just the implementation it was checking.)
         if (frame_ == 16)
         {
             SamplerState mixedSampler;
@@ -774,20 +776,90 @@ protected:
                                matches(at(2, 0), red) && matches(at(3, 0), green) &&
                                matches(at(0, 1), blue) && matches(at(1, 1), yellow) &&
                                matches(at(2, 1), blue) && matches(at(3, 1), yellow);
-            bool bottomRowsClamped = at(0, 2).getAProperty() < 50 && at(1, 2).getAProperty() < 50 &&
-                                     at(2, 2).getAProperty() < 50 && at(3, 2).getAProperty() < 50 &&
-                                     at(0, 3).getAProperty() < 50 && at(3, 3).getAProperty() < 50;
-            std::printf("       mixed axes: row0=(%d,%d,%d)(%d,%d,%d) row2-alpha=(%d,%d)\n",
+            bool bottomRowsClampToEdge = matches(at(0, 2), blue) && matches(at(1, 2), yellow) &&
+                                         matches(at(2, 2), blue) && matches(at(3, 2), yellow) &&
+                                         matches(at(0, 3), blue) && matches(at(1, 3), yellow) &&
+                                         matches(at(2, 3), blue) && matches(at(3, 3), yellow) &&
+                                         at(0, 2).getAProperty() > 200 && at(0, 3).getAProperty() > 200;
+            std::printf("       mixed axes: row0=(%d,%d,%d)(%d,%d,%d) row2=(%d,%d,%d,a=%d) "
+                        "row3=(%d,%d,%d,a=%d)\n",
                         at(0, 0).getRProperty(), at(0, 0).getGProperty(), at(0, 0).getBProperty(),
                         at(2, 0).getRProperty(), at(2, 0).getGProperty(), at(2, 0).getBProperty(),
-                        at(0, 2).getAProperty(), at(2, 2).getAProperty());
-            check(topRowsTile && bottomRowsClamped,
-                  "HTMLDOM-97b: mixed U=Wrap/V=Clamp tiles the U axis exactly like symmetric Wrap "
-                  "while the V axis clamps independently (narrows to the source height, does not "
-                  "tile, and does not stretch to fill the requested destination height)");
+                        at(0, 2).getRProperty(), at(0, 2).getGProperty(), at(0, 2).getBProperty(),
+                        at(0, 2).getAProperty(), at(0, 3).getRProperty(), at(0, 3).getGProperty(),
+                        at(0, 3).getBProperty(), at(0, 3).getAProperty());
+            check(topRowsTile && bottomRowsClampToEdge,
+                  "HTMLDOM-97b/HTMLDOM-104: mixed U=Wrap/V=Clamp tiles the U axis exactly like "
+                  "symmetric Wrap while the V axis clamps independently -- overflow rows replicate "
+                  "the nearest edge row (still U-tiled), not left transparent");
         }
 
+        // plan_html_dom.md HTMLDOM-104: the rest of this task's own pixel-verification bar -- a
+        // sourceRectangle entirely outside the texture (checked under BOTH point and linear
+        // filtering, confirming the edge-extension is exact regardless -- this specific pairing is
+        // what caught a real bug while building this task: with smoothing left on, the browser's own
+        // GPU-accelerated drawImage bilinear-sampled slightly past a 1-texel padding slice's own
+        // edge, bleeding in the adjacent texel's colour), and a scaled, tinted, one-axis overflow
+        // with hand-derived exact expected colours.
         if (frame_ == 17)
+        {
+            // Entirely outside the 2x2 texture on both axes (sourceX/Y=10, texture is 2x2) -- every
+            // sampled texel clamps to the bottom-right corner texel (yellow).
+            const Color yellow(255, 255, 0, 255);
+            const auto sampleCorner = [&](SamplerState* sampler) {
+                const auto pixels = ReadBackWholeTarget(*rtB_, 20, 20, [&] {
+                    spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend, sampler,
+                                        nullptr, nullptr);
+                    spriteBatch_->Draw(*tileTex_, Rectangle(0, 0, 8, 8), Rectangle(10, 10, 4, 4), Color::White);
+                    spriteBatch_->End();
+                });
+                return pixels[static_cast<std::size_t>(4) * 20 + 4];
+            };
+            const Color linearResult = sampleCorner(const_cast<SamplerState*>(&SamplerState::LinearClamp));
+            const Color pointResult = sampleCorner(const_cast<SamplerState*>(&SamplerState::PointClamp));
+            std::printf("       fully-outside corner: linear=(%d,%d,%d,%d) point=(%d,%d,%d,%d)\n",
+                        linearResult.getRProperty(), linearResult.getGProperty(),
+                        linearResult.getBProperty(), linearResult.getAProperty(),
+                        pointResult.getRProperty(), pointResult.getGProperty(),
+                        pointResult.getBProperty(), pointResult.getAProperty());
+            check(linearResult == yellow && pointResult == yellow,
+                  "HTMLDOM-104: a sourceRectangle entirely outside the texture clamps every sampled "
+                  "texel to the nearest (bottom-right corner) texel, identically under both point "
+                  "and linear filtering -- a real bug (GPU bilinear edge-bleed from the adjacent "
+                  "texel under linear filtering specifically) was caught and fixed by this exact "
+                  "point-vs-linear comparison while building this task");
+
+            // Scale (2x) + tint + a modest one-axis (V) overflow: sourceRect (0,0,2,3) on the 2x2
+            // texture exceeds its 2px height by 1 on the bottom edge only. Dest is scaled 2x, so
+            // source rows [0,2) (the real texture) land on dest rows [0,4), and the 1-row overflow
+            // lands on dest rows [4,6) -- deep samples at dest y=5 must show the BOTTOM edge row
+            // (blue, yellow), tinted, not the top row and not transparent.
+            const Color tint(128, 255, 255, 255);
+            const auto tintedPixels = ReadBackWholeTarget(*rtB_, 20, 20, [&] {
+                spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend,
+                                    const_cast<SamplerState*>(&SamplerState::LinearClamp), nullptr, nullptr);
+                spriteBatch_->Draw(*tileTex_, Rectangle(0, 0, 4, 6), Rectangle(0, 0, 2, 3), tint);
+                spriteBatch_->End();
+            });
+            const Color tintedBlue = tintedPixels[static_cast<std::size_t>(5) * 20 + 0];
+            const Color tintedYellow = tintedPixels[static_cast<std::size_t>(5) * 20 + 3];
+            std::printf("       scaled+tinted overflow: blue=(%d,%d,%d,%d) yellow=(%d,%d,%d,%d)\n",
+                        tintedBlue.getRProperty(), tintedBlue.getGProperty(), tintedBlue.getBProperty(),
+                        tintedBlue.getAProperty(), tintedYellow.getRProperty(), tintedYellow.getGProperty(),
+                        tintedYellow.getBProperty(), tintedYellow.getAProperty());
+            // Blue (0,0,255) is unaffected by this tint (its only non-zero channel, B, is tinted by
+            // 255/255=1). Yellow (255,255,0) tinted by (128,255,255)/255 -> (128,255,0) exactly
+            // (255*128 == 32640 == 128*255, no rounding involved).
+            check(CloseEnough(tintedBlue.getRProperty(), 0, 1) && CloseEnough(tintedBlue.getGProperty(), 0, 1) &&
+                  CloseEnough(tintedBlue.getBProperty(), 255, 1) && tintedBlue.getAProperty() == 255 &&
+                  CloseEnough(tintedYellow.getRProperty(), 128, 1) && CloseEnough(tintedYellow.getGProperty(), 255, 1) &&
+                  CloseEnough(tintedYellow.getBProperty(), 0, 1) && tintedYellow.getAProperty() == 255,
+                  "HTMLDOM-104: a scaled (2x), tinted draw with a one-axis Clamp overflow shows the "
+                  "correctly TINTED edge-replicated row in the overflow region -- tint and scale both "
+                  "compose correctly with the edge extension, not just an untinted 1:1 draw");
+        }
+
+        if (frame_ == 18)
         {
             std::printf("=== %d/%d PASS ===\n", passCount_, kExpectedChecks);
             std::fflush(stdout);

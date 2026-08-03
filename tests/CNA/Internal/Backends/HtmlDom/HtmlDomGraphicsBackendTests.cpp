@@ -231,20 +231,35 @@ TEST(HtmlDomDrawCommand, FlipMirrorsAboutTheSpritesOwnCentreNotThePivot)
     EXPECT_FLOAT_EQ(topLeftPivot.flipCenterY, 8.0f);
 }
 
-TEST(HtmlDomDrawCommand, ClampNarrowsTheSourceRectAndShiftsTheLocalBoxToMatch)
+// plan_html_dom.md HTMLDOM-104: Clamp samples the nearest EDGE TEXEL for the out-of-bounds portion
+// -- it does NOT crop destination geometry. An earlier version narrowed sx/sw into the texture and
+// shifted localX to match, cropping the sprite's own footprint instead (the wrong result, per the
+// audit that reopened this task). The encoder now passes the RAW, unclamped source rect straight
+// through unconditionally -- the edge-extension itself happens entirely on the JS side
+// (Module['cnaDomGetPaddedVariant'], not unit-testable without a browser), so this is what pure
+// C++ can actually prove: destRect/origin math is completely unaffected by Clamp overflow.
+TEST(HtmlDomDrawCommand, ClampKeepsTheRawSourceRectAndLeavesDestGeometryUnchanged)
 {
-    // 8 pixels to the left of the texture and 16 past its right edge: only x in [0,64) survives.
+    // 8 pixels to the left of the texture, exactly flush with its right edge (-8+72=64=kTexW).
     const HtmlDomDrawCommand c = Build(Rectangle(0, 0, 72, 16), Rectangle(-8, 0, 72, 16));
-    EXPECT_FLOAT_EQ(c.sx, 0.0f);
-    EXPECT_FLOAT_EQ(c.sw, 64.0f);
-    // The surviving texels must stay where the unclamped draw would have put them: the box starts
-    // 8 source pixels into the sprite, so the local offset moves it there.
-    EXPECT_FLOAT_EQ(c.localX, 8.0f);
+    EXPECT_FLOAT_EQ(c.sx, -8.0f);
+    EXPECT_FLOAT_EQ(c.sw, 72.0f);
+    // No crop, so no compensating shift either -- origin is (0,0), so localX/Y are exactly what an
+    // ordinary in-bounds draw would produce.
+    EXPECT_FLOAT_EQ(c.localX, 0.0f);
     EXPECT_FLOAT_EQ(c.localY, 0.0f);
-    // The scale still divides by the UNCLAMPED source width -- clamping removes texels, it does not
-    // stretch the ones that remain.
     EXPECT_FLOAT_EQ(c.scaleX, 1.0f);
     EXPECT_EQ(c.flags & FlagWrap, 0);
+}
+
+// plan_html_dom.md HTMLDOM-104: an honest boundary, not silent cropping -- overflow beyond
+// kMaxClampPadding texture pixels on any one edge is rejected outright rather than approximated.
+TEST(HtmlDomDrawCommand, ClampOverflowBeyondTheCapThrows)
+{
+    // 300 texture pixels to the left of a 64-wide texture -- comfortably past the 256px cap.
+    EXPECT_THROW(Build(Rectangle(0, 0, 10, 10), Rectangle(-300, 0, 310, 16)), std::runtime_error);
+    // A modest overflow (8px) must NOT throw -- confirms the cap doesn't reject ordinary use.
+    EXPECT_NO_THROW(Build(Rectangle(0, 0, 72, 16), Rectangle(-8, 0, 72, 16)));
 }
 
 TEST(HtmlDomDrawCommand, WrapKeepsTheFullSourceRectAndFlagsTiling)
@@ -286,10 +301,12 @@ TEST(HtmlDomDrawCommand, MirrorMixedWithADifferentAxisModeThrowsFromTheEncoder)
 // HTMLDOM-97: mixed non-Mirror axes (U=Wrap, V=Clamp) tile only the U extent and clamp the V
 // extent independently -- flags carry each axis's own repetition, and the V extent is genuinely
 // narrowed while the U extent stays full, unlike the old whole-rect-follows-addressU behaviour.
+// plan_html_dom.md HTMLDOM-104: V (Clamp) keeps its own RAW source rect too now -- no narrowing,
+// no localY shift -- independent of U (Wrap), which continues to tile as before.
 TEST(HtmlDomDrawCommand, MixedWrapUClampVTilesOnlyUAndClampsV)
 {
-    // U: 0..128 (exceeds the 64-wide texture, Wrap). V: -8..24 (exceeds the 32-tall texture on
-    // both sides, Clamp) -- only y in [0,24) survives clamping to [0, kTexH).
+    // U: 0..128 (exceeds the 64-wide texture, Wrap). V: -8..24 (exceeds the 32-tall texture on the
+    // top edge only, by 8px -- Clamp).
     const HtmlDomDrawCommand c = Build(Rectangle(0, 0, 128, 32), Rectangle(0, -8, 128, 32),
                                        Color(255, 255, 255, 255), 0.0f, Vector2(0, 0),
                                        SpriteEffects::None, true, /*addressU*/ 0, /*addressV*/ 1);
@@ -298,9 +315,9 @@ TEST(HtmlDomDrawCommand, MixedWrapUClampVTilesOnlyUAndClampsV)
     EXPECT_EQ(c.flags & FlagMirror, 0);
     EXPECT_FLOAT_EQ(c.sx, 0.0f);
     EXPECT_FLOAT_EQ(c.sw, 128.0f);
-    EXPECT_FLOAT_EQ(c.sy, 0.0f);
-    EXPECT_FLOAT_EQ(c.sh, 24.0f);
-    EXPECT_FLOAT_EQ(c.localY, 8.0f);
+    EXPECT_FLOAT_EQ(c.sy, -8.0f);
+    EXPECT_FLOAT_EQ(c.sh, 32.0f);
+    EXPECT_FLOAT_EQ(c.localY, 0.0f);
 }
 
 TEST(HtmlDomDrawCommand, ColorIsPackedRgbaAndBlendOpSelectsTheVariant)

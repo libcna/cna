@@ -146,6 +146,93 @@ EM_JS(void, CNA_HtmlDom_InstallTextureHelpers, (), {
         return variant;
     };
 
+    // plan_html_dom.md HTMLDOM-104: TextureAddressMode::Clamp with an out-of-bounds sourceRectangle
+    // samples the nearest EDGE TEXEL for the overflow, not a crop -- this builds a cached, edge-
+    // extended copy of a texture's own variant so the ordinary single-background-image sprite path
+    // (unchanged otherwise) can sample straight through the padding as if it were real texture data.
+    // `leftPad`/`topPad`/`rightPad`/`bottomPad` are in TEXTURE pixels, already validated bounded
+    // (BuildDrawCommandEXT's own kMaxClampPadding) before this is ever called.
+    //
+    // Rounded UP to a coarse granularity so draws whose overflow amount differs only slightly (e.g.
+    // sub-pixel jitter from an animating sourceRectangle) still hit the SAME cached variant instead
+    // of generating a new padded canvas every frame -- the extra rounded-up padding is simply never
+    // sampled if the actual overflow is smaller, so this cannot produce wrong pixels, only a
+    // (bounded) larger cached canvas than the exact minimum.
+    //
+    // Cached in the SAME entry.variants map and the SAME LRU array as plain/mirror variants (keyed
+    // "pad:<mode>:<r>,<g>,<b>:<leftPad>,<topPad>,<rightPad>,<bottomPad>"), so eviction is unified.
+    Module['cnaDomGetPaddedVariant'] = function(id, mode, r, g, b, leftPad, topPad, rightPad, bottomPad) {
+        const entry = Module['cnaDomTextures'] && Module['cnaDomTextures'][id];
+        if (!entry || !entry.ctx) return null;
+        const GRANULARITY = 8;
+        const roundUp = function(v) { return v <= 0 ? 0 : Math.ceil(v / GRANULARITY) * GRANULARITY; };
+        const lp = roundUp(leftPad), tp = roundUp(topPad), rp = roundUp(rightPad), bp = roundUp(bottomPad);
+        const key = 'pad:' + mode + ':' + r + ',' + g + ',' + b + ':' + lp + ',' + tp + ',' + rp + ',' + bp;
+        let variant = entry.variants[key];
+        if (variant) return variant;
+
+        const base = Module['cnaDomGetVariant'](id, mode, r, g, b);
+        if (!base) return null;
+        const w = entry.w, h = entry.h;
+        const canvas = Module['cnaDomNewCanvas'](w + lp + rp, h + tp + bp);
+        if (!canvas) return null;
+        const ctx = canvas.getContext('2d');
+        // Stretching a 1-texel source to an N-pixel destination is exact clamp-to-edge sampling only
+        // if the browser's own scaler never reads outside that 1-texel band -- measured, not assumed:
+        // with smoothing left on, Chromium's GPU-accelerated drawImage bilinear-sampled slightly
+        // PAST a 1px source slice's own edge here, bleeding in the adjacent row/column's colour.
+        // imageSmoothingEnabled=false pins every draw below to true nearest-neighbour sampling, which
+        // cannot read outside the requested source rect.
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(base.canvas, 0, 0, w, h, lp, tp, w, h);                 // centre: the texture itself
+        // Edges: a single-texel-wide/tall strip from the nearest edge, stretched to fill the padding.
+        if (lp > 0) ctx.drawImage(base.canvas, 0, 0, 1, h, 0, tp, lp, h);
+        if (rp > 0) ctx.drawImage(base.canvas, w - 1, 0, 1, h, lp + w, tp, rp, h);
+        if (tp > 0) ctx.drawImage(base.canvas, 0, 0, w, 1, lp, 0, w, tp);
+        if (bp > 0) ctx.drawImage(base.canvas, 0, h - 1, w, 1, lp, tp + h, w, bp);
+        // Corners: the single corner texel, stretched to fill the corner padding rectangle.
+        if (lp > 0 && tp > 0) ctx.drawImage(base.canvas, 0, 0, 1, 1, 0, 0, lp, tp);
+        if (rp > 0 && tp > 0) ctx.drawImage(base.canvas, w - 1, 0, 1, 1, lp + w, 0, rp, tp);
+        if (lp > 0 && bp > 0) ctx.drawImage(base.canvas, 0, h - 1, 1, 1, 0, tp + h, lp, bp);
+        if (rp > 0 && bp > 0) ctx.drawImage(base.canvas, w - 1, h - 1, 1, 1, lp + w, tp + h, rp, bp);
+
+        variant = { canvas: canvas, url: null, shared: false, padLeft: lp, padTop: tp };
+        entry.variants[key] = variant;
+
+        if (!Module['cnaDomVariantLru']) Module['cnaDomVariantLru'] = [];
+        const lru = Module['cnaDomVariantLru'];
+        lru.push([id, key]);
+        while (lru.length > 256) {
+            const old = lru.shift();
+            const oldEntry = Module['cnaDomTextures'][old[0]];
+            const oldVariant = oldEntry && oldEntry.variants[old[1]];
+            if (oldVariant && !oldVariant.shared) delete oldEntry.variants[old[1]];
+        }
+        return variant;
+    };
+
+    // plan_html_dom.md HTMLDOM-104: given a draw's raw (possibly out-of-bounds) source rectangle and
+    // which axes are tiled (Wrap/Mirror -- never padded), decides whether a plain or edge-extended
+    // variant is needed and returns BOTH the variant to sample from and the source coordinates
+    // shifted to match it. Shared by both CNA_HtmlDom_FlushSprites paths (DOM and Canvas2D) so the
+    // padding decision lives in exactly one place. `sx`/`sy` in the returned object are always what
+    // the caller should actually use in place of the command's own raw sx/sy from here on.
+    Module['cnaDomResolveClampVariant'] = function(id, mode, r, g, b, sx, sy, sw, sh, tiledU, tiledV) {
+        const entry = Module['cnaDomTextures'] && Module['cnaDomTextures'][id];
+        if (!entry) return null;
+        const w = entry.w, h = entry.h;
+        const padLeft = tiledU ? 0 : Math.max(0, -sx);
+        const padRight = tiledU ? 0 : Math.max(0, sx + sw - w);
+        const padTop = tiledV ? 0 : Math.max(0, -sy);
+        const padBottom = tiledV ? 0 : Math.max(0, sy + sh - h);
+        if (padLeft === 0 && padRight === 0 && padTop === 0 && padBottom === 0) {
+            return { variant: Module['cnaDomGetVariant'](id, mode, r, g, b), sx: sx, sy: sy };
+        }
+        const variant = Module['cnaDomGetPaddedVariant'](id, mode, r, g, b, padLeft, padTop, padRight, padBottom);
+        if (!variant) return null;
+        return { variant: variant, sx: sx + (variant.padLeft || 0), sy: sy + (variant.padTop || 0) };
+    };
+
     Module['cnaDomEnsureUrl'] = function(variant) {
         if (!variant || variant.url) return;
         let source = variant.canvas;
