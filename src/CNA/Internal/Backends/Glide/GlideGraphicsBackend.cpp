@@ -2320,43 +2320,63 @@ namespace CNA::Internal::Backends::Glide
             {
                 impl_->ConfigureSpriteCombiner();
                 const GlideSamplerSettings sampler = ToGlideSamplerSettings(impl_->samplerFilter);
-                for (const GlideTextureBackend::Tile& tile : texture->Tiles())
+                // Traversal must stay primitive-major so two primitives whose tiled fragments
+                // interleave (A samples tile1 where B samples tile0 at the same pixel, or vice
+                // versa) still submit in their original relative order. Rebinding/flushing only
+                // when the tile actually changes keeps a single-tile texture's behaviour and cost
+                // identical to before.
+                const GlideTextureBackend::Tile* boundTile = nullptr;
+                const auto bindPrimitiveTile = [&](const GlideTextureBackend::Tile& tile)
                 {
+                    if (boundTile == &tile)
+                    {
+                        return;
+                    }
+                    flushPrimitiveBatch();
                     impl_->api.grTexSource(
                         0, tile.range.address, kMipMapBoth, const_cast<GlideTexInfo*>(&tile.nativeInfo));
                     impl_->api.grTexFilterMode(0, sampler.minFilter, sampler.magFilter);
                     impl_->api.grTexClampMode(0, kTexClampClamp, kTexClampClamp);
                     impl_->api.grTexMipMapMode(0, kMipMapNearest, sampler.lodBlend);
                     impl_->api.grTexLodBiasValue(0, impl_->samplerLodBias);
-                    if (pointPrimitive)
+                    boundTile = &tile;
+                };
+                if (pointPrimitive)
+                {
+                    for (int point = 0; point < primitiveCount; ++point)
                     {
-                        for (int point = 0; point < primitiveCount; ++point)
+                        CpuVertex input = readVertex(vertexStart + point);
+                        if (!IsGlidePointInsideFrustum(input))
                         {
-                            CpuVertex input = readVertex(vertexStart + point);
-                            if (!IsGlidePointInsideFrustum(input))
-                            {
-                                continue;
-                            }
-                            input.u = MapGlideTextureCoordinateToUnit(input.u, impl_->samplerAddressU);
-                            input.v = MapGlideTextureCoordinateToUnit(input.v, impl_->samplerAddressV);
+                            continue;
+                        }
+                        input.u = MapGlideTextureCoordinateToUnit(input.u, impl_->samplerAddressU);
+                        input.v = MapGlideTextureCoordinateToUnit(input.v, impl_->samplerAddressV);
+                        for (const GlideTextureBackend::Tile& tile : texture->Tiles())
+                        {
                             if (TileOwnsGlideTextureCoordinate(tile, *texture, input.u, input.v))
                             {
+                                bindPrimitiveTile(tile);
                                 drawPoint(input, &tile);
+                                break; // tiles partition UV space; a point owns exactly one.
                             }
                         }
                     }
-                    else
+                }
+                else
+                {
+                    for (int line = 0; line < primitiveCount; ++line)
                     {
-                        for (int line = 0; line < primitiveCount; ++line)
+                        const int offset = vertexStart +
+                            (primitive == PrimitiveType::LineList ? line * 2 : line);
+                        const std::optional<GlideClipSegment> frustumSegment = ClipGlideSegmentToFrustum(
+                            readVertex(offset), readVertex(offset + 1));
+                        if (!frustumSegment)
                         {
-                            const int offset = vertexStart +
-                                (primitive == PrimitiveType::LineList ? line * 2 : line);
-                            const std::optional<GlideClipSegment> frustumSegment = ClipGlideSegmentToFrustum(
-                                readVertex(offset), readVertex(offset + 1));
-                            if (!frustumSegment)
-                            {
-                                continue;
-                            }
+                            continue;
+                        }
+                        for (const GlideTextureBackend::Tile& tile : texture->Tiles())
+                        {
                             const float u0 = static_cast<float>(tile.sourceX) / texture->GetWidth();
                             const float u1 = static_cast<float>(tile.sourceX + tile.sourceWidth) / texture->GetWidth();
                             const float v0 = static_cast<float>(tile.sourceY) / texture->GetHeight();
@@ -2408,14 +2428,15 @@ namespace CNA::Internal::Backends::Glide
                                     const float midpointV = (mapped.first.v + mapped.second.v) * 0.5f;
                                     if (TileOwnsGlideTextureCoordinate(tile, *texture, midpointU, midpointV))
                                     {
+                                        bindPrimitiveTile(tile);
                                         drawSegment(mapped, &tile);
                                     }
                                 }
                             }
                         }
                     }
-                    flushPrimitiveBatch();
                 }
+                flushPrimitiveBatch();
             }
             else
             {
@@ -2479,8 +2500,19 @@ namespace CNA::Internal::Backends::Glide
         {
             impl_->ConfigureSpriteCombiner();
             const GlideSamplerSettings sampler = ToGlideSamplerSettings(impl_->samplerFilter);
-            for (const GlideTextureBackend::Tile& tile : texture->Tiles())
+            // Traversal is primitive-major, not tile-major: a tile-major outer loop would emit
+            // every triangle's tile-0 fragment before any triangle's tile-1 fragment, silently
+            // reordering two triangles whenever one samples tile-1 where the other samples tile-0
+            // at an overlapping pixel. Rebinding/flushing only on an actual tile change keeps a
+            // single-tile texture's native call count and batching identical to before.
+            const GlideTextureBackend::Tile* boundTile = nullptr;
+            const auto bindTriangleTile = [&](const GlideTextureBackend::Tile& tile)
             {
+                if (boundTile == &tile)
+                {
+                    return;
+                }
+                flushTriangleBatch();
                 impl_->api.grTexSource(0, tile.range.address, kMipMapBoth, const_cast<GlideTexInfo*>(&tile.nativeInfo));
                 impl_->api.grTexFilterMode(0, sampler.minFilter, sampler.magFilter);
                 // CPU partitions the logical image at every tile and address-mode boundary, so
@@ -2488,75 +2520,89 @@ namespace CNA::Internal::Backends::Glide
                 impl_->api.grTexClampMode(0, kTexClampClamp, kTexClampClamp);
                 impl_->api.grTexMipMapMode(0, kMipMapNearest, sampler.lodBlend);
                 impl_->api.grTexLodBiasValue(0, impl_->samplerLodBias);
-                const auto drawTriangleForTile = [&](CpuVertex a, CpuVertex b, CpuVertex c)
+                boundTile = &tile;
+            };
+            const auto drawTriangleForTile = [&](const GlideTextureBackend::Tile& tile,
+                                                  const CpuVertex& a, const CpuVertex& b, const CpuVertex& c)
+            {
+                std::vector<CpuVertex> polygon{a, b, c};
+                polygon = ClipToFrustum(std::move(polygon));
+                if (polygon.size() < 3)
                 {
-                    std::vector<CpuVertex> polygon{a, b, c};
-                    polygon = ClipToFrustum(std::move(polygon));
-                    if (polygon.size() < 3)
+                    return;
+                }
+                const float u0 = static_cast<float>(tile.sourceX) / texture->GetWidth();
+                const float u1 = static_cast<float>(tile.sourceX + tile.sourceWidth) / texture->GetWidth();
+                const float v0 = static_cast<float>(tile.sourceY) / texture->GetHeight();
+                const float v1 = static_cast<float>(tile.sourceY + tile.sourceHeight) / texture->GetHeight();
+                const auto minMaxU = std::minmax_element(
+                    polygon.begin(), polygon.end(), [](const CpuVertex& left, const CpuVertex& right)
                     {
-                        return;
+                        return left.u < right.u;
+                    });
+                const auto minMaxV = std::minmax_element(
+                    polygon.begin(), polygon.end(), [](const CpuVertex& left, const CpuVertex& right)
+                    {
+                        return left.v < right.v;
+                    });
+                const std::vector<TextureAddressSegment> uSegments = MakeTextureAddressSegments(
+                    impl_->samplerAddressU, minMaxU.first->u, minMaxU.second->u, u0, u1);
+                const std::vector<TextureAddressSegment> vSegments = MakeTextureAddressSegments(
+                    impl_->samplerAddressV, minMaxV.first->v, minMaxV.second->v, v0, v1);
+                for (const TextureAddressSegment& uSegment : uSegments)
+                {
+                    std::vector<CpuVertex> uPolygon = ClipPolygon(
+                        polygon, [uSegment](const CpuVertex& v) { return v.u - uSegment.lower; });
+                    uPolygon = ClipPolygon(
+                        uPolygon, [uSegment](const CpuVertex& v) { return uSegment.upper - v.u; });
+                    if (uPolygon.size() < 3)
+                    {
+                        continue;
                     }
-                    const float u0 = static_cast<float>(tile.sourceX) / texture->GetWidth();
-                    const float u1 = static_cast<float>(tile.sourceX + tile.sourceWidth) / texture->GetWidth();
-                    const float v0 = static_cast<float>(tile.sourceY) / texture->GetHeight();
-                    const float v1 = static_cast<float>(tile.sourceY + tile.sourceHeight) / texture->GetHeight();
-                    const auto minMaxU = std::minmax_element(
-                        polygon.begin(), polygon.end(), [](const CpuVertex& left, const CpuVertex& right)
-                        {
-                            return left.u < right.u;
-                        });
-                    const auto minMaxV = std::minmax_element(
-                        polygon.begin(), polygon.end(), [](const CpuVertex& left, const CpuVertex& right)
-                        {
-                            return left.v < right.v;
-                        });
-                    const std::vector<TextureAddressSegment> uSegments = MakeTextureAddressSegments(
-                        impl_->samplerAddressU, minMaxU.first->u, minMaxU.second->u, u0, u1);
-                    const std::vector<TextureAddressSegment> vSegments = MakeTextureAddressSegments(
-                        impl_->samplerAddressV, minMaxV.first->v, minMaxV.second->v, v0, v1);
-                    for (const TextureAddressSegment& uSegment : uSegments)
+                    for (const TextureAddressSegment& vSegment : vSegments)
                     {
-                        std::vector<CpuVertex> uPolygon = ClipPolygon(
-                            polygon, [uSegment](const CpuVertex& v) { return v.u - uSegment.lower; });
-                        uPolygon = ClipPolygon(
-                            uPolygon, [uSegment](const CpuVertex& v) { return uSegment.upper - v.u; });
-                        if (uPolygon.size() < 3)
+                        std::vector<CpuVertex> tilePolygon = ClipPolygon(
+                            uPolygon, [vSegment](const CpuVertex& v) { return v.v - vSegment.lower; });
+                        tilePolygon = ClipPolygon(
+                            tilePolygon, [vSegment](const CpuVertex& v) { return vSegment.upper - v.v; });
+                        if (tilePolygon.size() < 3)
                         {
                             continue;
                         }
-                        for (const TextureAddressSegment& vSegment : vSegments)
+                        for (CpuVertex& vertex : tilePolygon)
                         {
-                            std::vector<CpuVertex> tilePolygon = ClipPolygon(
-                                uPolygon, [vSegment](const CpuVertex& v) { return v.v - vSegment.lower; });
-                            tilePolygon = ClipPolygon(
-                                tilePolygon, [vSegment](const CpuVertex& v) { return vSegment.upper - v.v; });
-                            if (tilePolygon.size() < 3)
-                            {
-                                continue;
-                            }
-                            for (CpuVertex& vertex : tilePolygon)
-                            {
-                                vertex.u = vertex.u * uSegment.scale + uSegment.offset;
-                                vertex.v = vertex.v * vSegment.scale + vSegment.offset;
-                            }
-                            drawFan(tilePolygon, &tile);
+                            vertex.u = vertex.u * uSegment.scale + uSegment.offset;
+                            vertex.v = vertex.v * vSegment.scale + vSegment.offset;
                         }
-                    }
-                };
-                for (int triangle = 0; triangle < primitiveCount; ++triangle)
-                {
-                    const int offset = vertexStart + (primitive == PrimitiveType::TriangleList ? triangle * 3 : triangle);
-                    if (primitive == PrimitiveType::TriangleList || (triangle & 1) == 0)
-                    {
-                        drawTriangleForTile(readVertex(offset), readVertex(offset + 1), readVertex(offset + 2));
-                    }
-                    else
-                    {
-                        drawTriangleForTile(readVertex(offset + 1), readVertex(offset), readVertex(offset + 2));
+                        bindTriangleTile(tile);
+                        drawFan(tilePolygon, &tile);
                     }
                 }
-                flushTriangleBatch();
+            };
+            for (int triangle = 0; triangle < primitiveCount; ++triangle)
+            {
+                const int offset = vertexStart + (primitive == PrimitiveType::TriangleList ? triangle * 3 : triangle);
+                CpuVertex a;
+                CpuVertex b;
+                CpuVertex c;
+                if (primitive == PrimitiveType::TriangleList || (triangle & 1) == 0)
+                {
+                    a = readVertex(offset);
+                    b = readVertex(offset + 1);
+                    c = readVertex(offset + 2);
+                }
+                else
+                {
+                    a = readVertex(offset + 1);
+                    b = readVertex(offset);
+                    c = readVertex(offset + 2);
+                }
+                for (const GlideTextureBackend::Tile& tile : texture->Tiles())
+                {
+                    drawTriangleForTile(tile, a, b, c);
+                }
             }
+            flushTriangleBatch();
         }
         else
         {

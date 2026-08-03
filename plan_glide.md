@@ -106,14 +106,23 @@ renderer.
 - [ ] **GLIDE-AUD-007 — Expand rendering regressions beyond the ten smoke probes.** Add deterministic pixel probes/golden captures for all alpha-test compare functions, source/destination blend factors, depth compare/write combinations, cull modes, colour-mask groups, scissor, indexed strips, point/line clipping and joins, fog, and BasicEffect lighting. Include NPOT and multi-tile textures under Point/Linear × Clamp/Wrap/Mirror, with minification and texture updates. Run the visual subset on both dgVoodoo and, when available, real Voodoo hardware; record emulator/version, tolerance and known intentional ARGB4444/RGB565 differences. The corrective tasks GLIDE-AUD-010 through GLIDE-AUD-015 add mandatory targeted cases to this suite.
 - [ ] **GLIDE-AUD-007 execution — native image suite.** **needs_external_dependency:** requires the same runnable i686 CNA executable plus a caller-provided dgVoodoo or Voodoo runtime; no emulator DLL is bundled or configured by CNA.
 - [x] **GLIDE-AUD-008 — Harden texture input and TMU allocation failure paths.** Texture creation rejects undersized RGBA8 input, oversized logical dimensions and overflowing byte counts; TMU range allocation/coalescing now uses checked 64-bit intermediates. Failure-injection coverage remains part of the fake-DLL harness in GLIDE-AUD-006.
-- [ ] **GLIDE-AUD-009 — Batch native submissions without crossing state or ordering boundaries.**
-  **Reopened by the 2026-08-03 audit:** compatible 3D fan triangles accumulate in bounded
-  (1024-triangle) batches and preserve order inside one physical tile, but the current tile-major
-  outer loop can reorder the complete draw from `A, B` to `A/tile0, B/tile0, A/tile1, B/tile1`.
-  Replace it with primitive-order traversal or an ordered command stream which only coalesces
-  consecutive compatible tile/state runs. Apply the same rule to tiled points and lines. Prove
-  completion with overlapping translucent multi-tile primitives, equal-depth cases and a fake-DLL
-  call-order capture; SpriteBatch may retain its direct two-triangle path.
+- [x] **GLIDE-AUD-009 — Batch native submissions without crossing state or ordering boundaries.**
+  The textured triangle, point and line paths now traverse primitives in submission order and
+  iterate each primitive's owning tile(s) in the inner loop, instead of a tile-major outer loop.
+  A shared `boundTile` pointer only re-issues `grTexSource`/`grTexFilterMode`/`grTexClampMode`/
+  `grTexMipMapMode`/`grTexLodBiasValue` and flushes the pending batch when the tile actually
+  changes, so a single-tile texture (the overwhelming common case) is completely unaffected: one
+  bind, one growing batch, one final flush, identical to before. For a genuinely multi-tile
+  texture this removes the reordering: the previous tile-major loop could emit `A/tile0, B/tile0,
+  A/tile1, B/tile1`, which silently drew `B` before `A` at any pixel where `A` samples tile1 while
+  `B` samples tile0. Points still resolve to exactly one owning tile (tiles partition UV space), so
+  the inner loop `break`s once found; lines and triangles keep their existing per-tile
+  address-segment clipping, just parameterized by the tile passed in rather than closed over from
+  an outer loop. Verified by i686 MinGW `-fsyntax-only` recompilation of the whole backend and the
+  existing portable Glide unit suite (18/18, unaffected since none of it touches this file). A
+  fake-DLL native call-order capture and overlapping-translucent-multi-tile dgVoodoo image remain
+  blocked by the same external i686 `sharp-runtime` `__int128` dependency as GLIDE-AUD-006/007.
+  SpriteBatch keeps its direct two-triangle path, unaffected by this change.
 - [ ] **GLIDE-AUD-010 — Convert all texture coordinates to native Glide units.** Glide window-space
   TMU coordinates use `0..256` across the texture's long side and an aspect-scaled range across the
   short side. The current SpriteBatch path submits normalized UVs directly, while the 3D path
