@@ -4,7 +4,18 @@
 > stated acceptance criteria*; 🟨 code or documentation exists but has not met those criteria;
 > ⬜ not implemented.
 >
-> **Status (2026-07-31): the 2D baseline is implemented and pixel-verified.**
+> **Audit update (2026-08-03, commit `63a308d4`): the GLCORE backend is broadly functional but
+> the plan is not complete and several previously-green tasks need corrective follow-up.** All 28
+> registered Sokol GPU integration tests passed under Xvfb `:99`; `CnaTests` built successfully and
+> 109 targeted Texture3D/TextureCube/MRT/backend-identity tests passed (one known intermittent
+> SDL/Xvfb initialization failure passed on immediate retry). These happy-path results do not cover
+> the state-transition, cross-resource and device-disposal defects recorded in Phase 8 below.
+> The task table currently contains 33 ✅, 2 🟨 and 4 ⬜ entries even before the audit findings, so
+> this plan must not be described as fully implemented. Phase 8 is the authoritative status override
+> for affected older tasks (`SOKOL-9`, `SOKOL-15`, `SOKOL-28`, `SOKOL-29`, `SOKOL-39`) until their
+> corrective tasks and regression tests are complete.
+>
+> **Historical status (2026-07-31): the 2D baseline was implemented and pixel-verified.**
 > `CNA_GRAPHICS_BACKEND=SOKOL` configures, fetches sokol at a pinned commit, builds
 > `cna_backend_graphics_sokol`, and produces a real SDL window with a real OpenGL 4.1 core
 > context driving `sokol_gfx`. `Sokol_Smoke` (13/13) proves the device/context/pass lifecycle, a
@@ -39,10 +50,10 @@
 > `sg_shutdown()` had already invalidated the sokol context (member destruction order), aborting
 > on `sg_destroy_view`'s own internal assert.
 >
-> **Still not implemented: skinned/dual-texture/environment-mapped/PBR shading, custom effects,
-> render targets, cube/volume textures and occlusion queries** -- all fail loudly rather than
-> silently no-opping. Do not describe this backend as having EasyGL/Vulkan-level parity. See
-> `docs/sokol-backend.md` for the capability boundary and the complete list of known gaps.
+> **Historical limitation note:** the original statement here listed skinned/dual-texture/
+> environment-mapped shading, custom effects, render targets, cube/volume textures and occlusion
+> queries as absent. Those features landed later in `SOKOL-25..39`; PBR remains absent. The current
+> capability boundary and newly-discovered defects are recorded below, especially in Phase 8.
 
 ---
 
@@ -216,6 +227,35 @@ closed, giving both a real consumer (a custom `ShaderEffect` can declare arbitra
 multiple fragment outputs). `SOKOL-26`'s MRT item has since been implemented in full (see its own
 row above) as a direct follow-up once that blocker cleared. A stock normal-mapping/PBR shader
 variant remains unimplemented -- no task is assigned for it here since that is separate work.
+
+---
+
+### Phase 8 — Post-implementation audit remediation (open, 2026-08-03)
+
+This phase records defects found by reviewing the current `GLCORE` implementation at commit
+`63a308d4`. They are not contradicted by the green integration suite: the existing tests exercise
+the principal happy paths but do not cover repeated cache-key state changes, raw-GL state inherited
+from a previous draw, two query objects active at once, resources that outlive device disposal, or a
+texture upload between `ShaderEffect::SetTexture()` and the eventual draw. Until these tasks close,
+the older green rows named below describe the originally-tested slice, not complete correctness.
+
+| ID | Task | Status | Finding and acceptance criteria |
+|---|---|---|---|
+| SOKOL-40 | Fix constant blend-colour pipeline caching (`SOKOL-15` corrective follow-up) | ⬜ | `blendFactor_[4]` is copied into `sg_pipeline_desc.blend_color` when a sprite, stock-3D or instanced-3D pipeline is created, but it is absent from `PipelineKey`, `Pipeline3DKey` and `PipelineInstanced3DKey`. An otherwise-identical draw after changing `GraphicsDevice.BlendFactor` therefore reuses the first cached constant; `Blend::BlendFactor` and `Blend::InverseBlendFactor` render with stale state. Add a packed RGBA value (the public source is an 8-bit `Color`) to equality and hashing for all three keys, and add pixel tests that change the factor in both directions while every other pipeline field stays identical. `docs/sokol-backend.md` must not claim all thirteen factors are verified from only the existing `NonPremultiplied`/`Opaque` check. |
+| SOKOL-41 | Apply complete graphics state in both raw-GL custom-effect paths (`SOKOL-28` corrective follow-up) | ⬜ | `DrawSpriteRunEXT`'s custom branch binds a program/texture/VAO and draws without applying BlendState, colour masks, depth/stencil state or rasterizer state; it also omits `SokolEffectBackend::ApplyPendingTextureBindsEXT()`, despite that method's header claiming SpriteBatch is a caller, so extra `ShaderEffect::SetTexture(unit, ...)` inputs are unavailable there. `DrawCustomEffect3D` applies depth and per-target colour masks only; blending (including equations/factors/constant colour), stencil, culling and depth bias still inherit arbitrary GL state from a prior Sokol pipeline. Introduce one shared raw-GL state applicator, invoke it after `sg_reset_state_cache()` in both consumers, realize pending SpriteBatch effect texture units without losing its source texture contract, and add order-independent pixel tests (stock→custom and custom→stock) for alpha/constant blending, colour masks, depth, stencil, culling, depth bias and a second SpriteBatch texture. |
+| SOKOL-42 | Release raw-GL resource backends during `Dispose()` before device/context teardown | ⬜ | `GraphicsDevice::Dispose()` disposes tracked resources before destroying the backend, but `OcclusionQuery` has no `Dispose(bool)` override and `ShaderEffect` inherits `Effect::Dispose(bool)`, which only reaches `GraphicsResource`. Their `backend_` objects therefore survive logical disposal; later C++ destruction may call `glDeleteQueries`/`glDeleteProgram` after `sg_shutdown()` and SDL GL-context destruction. Override `Dispose(bool)` in both classes, reset the backend before the base call, preserve idempotence, and add a test in which both resource objects remain alive after explicit `GraphicsDevice::Dispose()` and are destroyed afterward without any contextless GL call. This is required by `docs/graphics-resource-lifetime.md`, not an optional Sokol convention. |
+| SOKOL-43 | Coordinate occlusion-query activity across objects (`SOKOL-29` corrective follow-up) | ⬜ | `SokolOcclusionQueryBackend::active_` prevents only a repeated `Begin()` on the same object. OpenGL permits one active query per target per context, so `q1.Begin(); q2.Begin()` still reaches a second `glBeginQuery(GL_SAMPLES_PASSED)`, produces `GL_INVALID_OPERATION`, marks `q2` active despite its failed begin, and lets later `End()` calls end the wrong target or leave an error for sokol_gfx to assert on. Track the active owner at backend/context scope (including destruction cleanup), silently absorb unsupported overlapping sequences to retain the public no-throw contract, and test two objects in both begin/end orders followed by a healthy fresh query. |
+| SOKOL-44 | Make deferred custom-effect texture bindings survive texture re-upload | ⬜ | `SokolEffectBackend::BindTexture`/`BindTextureCube` records the current `sg_image` ID, while `SokolTextureBackend::RecreateImage()` and the cube equivalent destroy that image and allocate another on every `SetData()`. `effect.SetTexture(...); texture.SetData(...); draw` therefore queries a stale generation-tagged handle and may sample nothing or trip validation. Preserve a stable handle across reinitialization or store a safe indirection that resolves the current image at draw time. Add 2D and cube custom-effect tests that upload after `SetTexture()` but before drawing. |
+| SOKOL-45 | Make GL-context construction fully transactional (`SOKOL-9` corrective follow-up) | ⬜ | `CreateGpuContext()` is called before the constructor's cleanup `try` block. If `SDL_GL_CreateContext()` succeeds but `SDL_GL_MakeCurrent()` fails, construction throws while leaking the new context. Put context creation under the same scope guard/cleanup path (or destroy it inside `CreateGpuContext()` on every post-create failure) and add an injectable failure-path test that verifies exactly one context destruction and no backend registration. |
+| SOKOL-46 | Synchronize the plan, public capability document and inline comments with the landed implementation | ⬜ | Several statements are historical but still written as current fact: old rows say 3D/custom effects/render targets/cube readback/mipmaps are absent; `docs/sokol-backend.md` says render targets cannot be multisampled and says `SOKOL-34` has not landed; the backend class/CreateRenderTarget/DrawPrimitives comments still describe the 2D-only boundary; the capability and CMake cube-MSAA comments contradict the implementation/test contract. Rewrite these as a concise current capability matrix plus a historical changelog. A ✅ row must name a committed reproducible test; unsupported silent no-ops (`FillMode`, `MultiSampleMask`, `PreferPerPixelLighting`) must not coexist with a blanket claim that everything unsupported fails loudly. |
+| SOKOL-47 | Commit reproducible RenderTargetCube mipmap coverage (`SOKOL-39` verification follow-up) | ⬜ | The cube half of `SOKOL-39` is marked ✅ using only a throwaway, uncommitted program, and its note incorrectly says `SOKOL-34`/cube sampling has not landed. Add a permanent test that renders a known face/level-0 colour, unbinds to regenerate mips, then verifies level 1 through `RenderTargetCube::GetData()` and, preferably, samples the target through the landed `EnvironmentMapEffect` path. Only then is the plan legend's “implemented and verified” criterion reproducible. |
+| SOKOL-48 | Add a compact state-transition/lifetime regression matrix | ⬜ | Preserve the existing 28 happy-path GPU tests, but add focused coverage for the failure dimensions exposed by this audit: first-use vs cached reuse, A→B→A state transitions, stock/custom draw ordering, two independent resource instances, mutation between bind and draw, and resource destruction after device disposal. These tests should run under the same Xvfb/llvmpipe CTest setup and must fail on the pre-fix implementation for `SOKOL-40..45`. |
+
+The pre-existing incomplete work remains open independently of this audit: `SOKOL-22` (remaining
+vertex usages), `SOKOL-23` (wireframe boundary), `SOKOL-24` (upload performance), and portability/
+hardware tasks `SOKOL-30..32`. Permanent upstream boundaries also remain explicit:
+`RenderTargetCube` MSAA and `BlendState.MultiSampleMask` cannot currently be implemented through
+sokol_gfx. PBR/normal-mapping variants remain outside the completed stock-effect set.
 
 ---
 
