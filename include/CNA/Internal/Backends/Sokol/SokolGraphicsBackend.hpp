@@ -1096,10 +1096,15 @@ namespace CNA::Internal::Backends::Sokol
      * context (SDL_GL_CreateContext for the GL APIs) and drives sokol_gfx inside it, so sokol_app
      * is deliberately not used.
      *
-     * Scope: this is the backend's 2D baseline -- clear/present, Texture2D, vertex/index buffers,
-     * and a real SpriteBatch. The 3D draw path, render targets, cube/volume textures, custom
-     * effects and occlusion queries are not implemented and fail loudly rather than silently
-     * no-opping. See plan_sokol.md and docs/sokol-backend.md for the current capability boundary.
+     * Scope: 2D (`Texture2D`, `SpriteBatch`, `VertexBuffer`/`IndexBuffer`), 3D (`BasicEffect`
+     * incl. textured/lit/fog, `DualTextureEffect`, `EnvironmentMapEffect`, `SkinnedEffect`,
+     * instanced draws, a custom `ShaderEffect` via raw runtime GLSL compilation), render targets
+     * (`RenderTarget2D`/`RenderTargetCube` incl. MSAA+resolve, mip-mapped rendering, MRT, direct
+     * `GetData()` readback), `TextureCube`/`Texture3D` storage and `OcclusionQuery` are all
+     * implemented. Anything genuinely unsupported (PBR shading, `RasterizerState.FillMode`,
+     * `RenderTargetCube` MSAA -- the last two are permanent sokol_gfx API boundaries, not
+     * "not implemented yet") fails loudly rather than silently no-opping. See plan_sokol.md and
+     * docs/sokol-backend.md for the current, test-verified capability boundary.
      */
     class SokolGraphicsBackend : public IGraphicsBackend
     {
@@ -1375,7 +1380,7 @@ namespace CNA::Internal::Backends::Sokol
         void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) override;
 
         /**
-         * @brief Creates a single, non-multisampled, non-mipmapped off-screen render target.
+         * @brief Creates an off-screen render target, optionally multisampled and/or mip-mapped.
          *
          * @param w                Target width in pixels.
          * @param h                Target height in pixels.
@@ -1385,8 +1390,13 @@ namespace CNA::Internal::Backends::Sokol
          *                         binds (a real FBO naturally does), matching the EasyGL
          *                         backend's own documented simplification -- an explicit `Clear()`
          *                         is what actually discards content, on every backend.
-         * @param mipMap           Must be false; a mipmapped render target is not implemented yet.
-         * @param multiSampleCount Silently clamped to 1 (no MSAA) -- not implemented yet
+         * @param mipMap           When true, only level 0 is ever rendered into directly (matching
+         *                         real D3D9 XNA's `D3DUSAGE_AUTOGENMIPMAP`); the rest of the mip
+         *                         chain is regenerated via `glGenerateMipmap` on unbind
+         *                         (plan_sokol.md SOKOL-39).
+         * @param multiSampleCount Clamped to the driver's real `GL_MAX_SAMPLES`, following
+         *                         sokol_gfx.h's own documented offscreen-MSAA workflow: a separate
+         *                         multisample-only colour image plus a single-sample resolve image
          *                         (plan_sokol.md SOKOL-26); observable via IRenderTargetBackend::
          *                         GetMultiSampleCount(), matching every other backend's own
          *                         device-clamped-count convention.
@@ -1397,7 +1407,8 @@ namespace CNA::Internal::Backends::Sokol
             int multiSampleCount) override;
 
         /**
-         * @brief Creates a single, non-multisampled, non-mipmapped cube render target.
+         * @brief Creates a cube render target, optionally mip-mapped; MSAA is a permanent
+         * sokol_gfx API boundary for cube images -- see @p multiSampleCount below.
          *
          * @param size             Edge length of each face in pixels.
          * @param depthFormat      Raw DepthFormat ordinal; None (0) allocates no depth-stencil
@@ -1407,10 +1418,17 @@ namespace CNA::Internal::Backends::Sokol
          * @param preserveContents Unused, for the same reason CreateRenderTarget2D's identically
          *                         named parameter is: a real sokol_gfx image naturally preserves
          *                         its content across binds.
-         * @param mipMap           Must be false; a mipmapped cube render target is not implemented
-         *                         yet.
-         * @param multiSampleCount Silently clamped to 1 (no MSAA) -- not implemented yet, matching
-         *                         CreateRenderTarget2D's own convention.
+         * @param mipMap           When true, only level 0 of each face is ever rendered into
+         *                         directly; the rest of the chain is regenerated via
+         *                         `glGenerateMipmap` on unbind (plan_sokol.md SOKOL-39), the same
+         *                         convention CreateRenderTarget2D uses.
+         * @param multiSampleCount Silently clamped to 1 -- **permanent, not "not implemented
+         *                         yet"**: sokol_gfx's own validation layer hard-rejects any
+         *                         `SG_IMAGETYPE_CUBE` image with `sample_count > 1`
+         *                         (`VALIDATE_IMAGEDESC_ATTACHMENT_MSAA_CUBE_IMAGE`), confirmed
+         *                         empirically while prototyping the same per-face multisample +
+         *                         resolve layout `RenderTarget2D` uses successfully
+         *                         (plan_sokol.md SOKOL-26).
          * @return The new cube render target backend.
          */
         std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(
@@ -1589,9 +1607,10 @@ namespace CNA::Internal::Backends::Sokol
         /**
          * @brief Effect-aware non-indexed draw.
          *
-         * Only the untextured, unlit path is implemented; any effect requesting texturing,
-         * lighting, dual texturing, environment mapping, skinning or PBR throws rather than
-         * quietly rendering an unshaded approximation of it.
+         * Textured, lit (up to 3 real per-pixel directional lights), `DualTextureEffect`,
+         * `EnvironmentMapEffect`, `SkinnedEffect` and a custom `ShaderEffect` are all implemented.
+         * Only an effect requesting PBR shading throws rather than quietly rendering an unshaded
+         * approximation of it (no CNA backend has PBR yet).
          *
          * @param vb             Vertex buffer to read from.
          * @param world          World matrix.
@@ -1610,7 +1629,7 @@ namespace CNA::Internal::Backends::Sokol
                               const GpuDrawParams& params) override;
 
         /**
-         * @brief Indexed counterpart of DrawPrimitivesEx(); same capability boundary.
+         * @brief Indexed counterpart of DrawPrimitivesEx(); same effect coverage.
          * @param vb             Vertex buffer to read from.
          * @param ib             Index buffer to read from.
          * @param world          World matrix.

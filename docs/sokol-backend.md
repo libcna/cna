@@ -6,11 +6,18 @@ WebGPU. CNA keeps ownership of the SDL window and the game loop; this backend cr
 context inside it (`sokol_app` is deliberately unused). The implementation plan, task list and
 design rationale live in [`../plan_sokol.md`](../plan_sokol.md).
 
-**This backend is experimental.** It covers 2D in full plus vertex-coloured, textured and lit 3D
-geometry; it is not comparable to EasyGL/Vulkan/D3D11 and must not be described as having XNA 3D
-parity. Everything outside the boundary below fails loudly —
-either a `std::runtime_error` naming the missing capability, or a `System::NotSupportedException`
-raised by the shared layer because the backend creates no resource — never a silent no-op.
+**This backend is experimental.** It covers 2D in full, the stock 3D effects (`BasicEffect`,
+`DualTextureEffect`, `EnvironmentMapEffect`, `SkinnedEffect`, instanced draws), a custom
+`ShaderEffect`, render targets (`RenderTarget2D`/`RenderTargetCube` incl. MSAA+resolve,
+mip-mapping, MRT and direct `GetData()` readback), `TextureCube`/`Texture3D` storage and
+`OcclusionQuery`. It is close to EasyGL/Vulkan/D3D11 parity on the GL API surface (`GLCORE`) but
+still falls short of it in a few permanent, sokol_gfx-API-shaped ways (`RasterizerState.FillMode`,
+`RenderTargetCube` MSAA, `BlendState.MultiSampleMask`, PBR/normal-mapping) and one portability gap
+(only `CNA_SOKOL_API=GLCORE` is implemented) — see "What does not work yet" below, and must not be
+described as having full XNA 3D parity until those close. Everything outside the boundary below
+fails loudly — either a `std::runtime_error` naming the missing capability, or a
+`System::NotSupportedException` raised by the shared layer because the backend creates no resource
+— never a silent no-op.
 
 ## Configure
 
@@ -68,7 +75,7 @@ letting the build reach a confusing `GL/gl.h: No such file or directory`.
 | `GetBackBufferData` while a `RenderTarget2D`/`RenderTargetCube` face is bound (reads the bound target's own content) | ✅ | Same oracle's check G; matches `EasyGLGraphicsBackend::ReadBackbuffer`'s "read from whatever's bound" convention |
 | `RenderTarget2D`/`RenderTargetCube::GetData` (direct CPU readback) | ✅ | A throwaway GL FBO around the raw GL texture `sg_gl_query_image_info()` exposes. Fixed two real bugs it surfaced: sampling a render target as a texture was exactly vertically mirrored (REMED-GFX-147, fixed with a per-draw `rtFlipV` shader uniform), and a target bound/`Clear()`-ed/unbound with no draw in between never reached the GPU at all (`Present()` already had this fix for the backbuffer; the render-target bind path now has it too). `Sokol_RenderTarget_SamplingOrientation` 53/53 (55/55 as of `SOKOL-33`, once its own DualTextureEffect legs stopped degrading to an INFO skip), plus the whole SOKOL-25/26 render-target oracle suite re-verified with real pixels |
 | `DualTextureEffect` (base + overlay texture, `base.rgb *= 2` doubling factor, no alpha test) | ✅ | `Sokol_DualTextureEffect_VertexColor` (Task 889's own backend-agnostic oracle) -- both texture slots reuse the same `texcoord0` (this codebase's project-wide DualTextureEffect convention, not real XNA's separate UV sets) and independently fall back to opaque white when null |
-| `RenderTarget2D`/`RenderTargetCube` mip-mapped (`mipMap=true`) | ✅ | `Sokol_RenderTarget2D_Mip` (Task 336's own backend-agnostic oracle, reused unmodified). Only level 0 is ever rendered into, matching real D3D9 XNA's `D3DUSAGE_AUTOGENMIPMAP`; the rest of the chain is regenerated via `glGenerateMipmap` on unbind (a GL-only escape hatch, the same shape `ReadColorImagePixelsViaGL` already uses). `RenderTargetCube`'s half has no shared cross-backend oracle yet and cannot be sampled by any Sokol effect (`SOKOL-34` not landed), so it was confirmed with a throwaway, uncommitted verification program against `GetData(face, level=1, ...)` instead |
+| `RenderTarget2D`/`RenderTargetCube` mip-mapped (`mipMap=true`) | ✅ | `Sokol_RenderTarget2D_Mip` (Task 336's own backend-agnostic oracle, reused unmodified). Only level 0 is ever rendered into, matching real D3D9 XNA's `D3DUSAGE_AUTOGENMIPMAP`; the rest of the chain is regenerated via `glGenerateMipmap` on unbind (a GL-only escape hatch, the same shape `ReadColorImagePixelsViaGL` already uses). `RenderTargetCube`'s half was originally confirmed only with a throwaway, uncommitted verification program (written before `SOKOL-34` landed cube sampling via `EnvironmentMapEffect`); `SOKOL-47` tracks replacing it with a committed regression test |
 | `SkinnedEffect` (bone-palette skinning, always textured and lit) | ✅ | `Sokol_SkinnedEffect_BoneDeformation` (Task 123's own backend-agnostic oracle, a real 2-bone GPU transform + mesh deformation) and `Sokol_SkinnedEffect_LightingConformance` (REMED-GFX-008's 9-check analytic ambient/emissive/diffuse/specular oracle -- shares `lit3d.glsl`'s fragment-stage math verbatim). Up to 4 bone matrices are blended per vertex from a `mat4 bones[72]` uniform array, gated by `weightsPerVertex` (1/2/4), the same shape `EasyGLGraphicsBackend::EnsureSkinnedProgram()` already established |
 | Instanced draws (`GraphicsDevice.DrawInstancedPrimitives`) | ✅ | `Sokol_Instanced3D` (WEBGPU-27/38/68's own backend-agnostic oracle, reused unmodified) -- 5/5 checks pass: 3 distinct instances each paint their own screen-space quad with the exact shared `DiffuseColor`, a region far from all 3 stays untouched, and `instanceVb == nullptr` falls back to a real non-instanced draw instead of throwing. A dedicated `instanced3d.glsl` shader (flat `DiffuseColor` only, no vertex colour/texturing/lighting -- the same scope reduction `VulkanGraphicsBackend`'s own instanced3d shaders already make) reads per-vertex Position from buffer slot 0 and a per-instance World matrix (4 vec4 columns, `step_func = SG_VERTEXSTEP_PER_INSTANCE`) from slot 1 -- the first Sokol feature to use a non-zero vertex-buffer slot |
 | `EnvironmentMapEffect` (reflection cube mapping, always textured and lit, no vertex colour) | ✅ | `Sokol_EnvironmentMapEffect_AlphaScaledLerp` (Task 891's own backend-agnostic oracle, reused unmodified) -- 2/2 checks pass, including the discriminating translucent-effect case (the FNA-correct alpha-scaled cube sample, not the old-bug unscaled value). The reflection vector and Fresnel blend factor are computed per-vertex then Gouraud-interpolated (matching real XNA); diffuse lighting is computed per-fragment. `SokolTextureCubeBackend` was promoted from a pure CPU-shadow store to a real `sg_image`/`sg_view` cube texture as part of this task -- the first Sokol consumer of cube sampling |
@@ -89,10 +96,11 @@ letting the build reach a confusing `GL/gl.h: No such file or directory`.
 | `CNA_SOKOL_API` other than `GLCORE` | configure warns; construction throws | `SOKOL-31` |
 
 `GraphicsDevice::SupportsCapability()` reports this boundary, so a game can query ahead of time
-instead of catching. Two entries need reading carefully: `MultiSampleAntiAliasing` is `true` for the
-**back buffer only** (there are no render targets here to multisample), and `ThreeD` is `true`
-because the 3D pipeline genuinely exists — it does not promise that every stock effect shades
-correctly, which the table above is the authority on.
+instead of catching. One entry needs reading carefully: `ThreeD` is `true` because the 3D pipeline
+genuinely exists — it does not promise that every stock effect shades correctly (only PBR is
+missing), which the table above is the authority on. `MultiSampleAntiAliasing` is `true` for both
+the back buffer and `RenderTarget2D` as of `SOKOL-26`; `RenderTargetCube` MSAA remains a permanent
+sokol_gfx boundary regardless of this flag (see "What does not work yet" below).
 
 ## Known limitations inside the supported set
 
@@ -187,6 +195,11 @@ ctest --test-dir cmake-build-sokol -R Sokol --output-on-failure
 | `Sokol_OcclusionQuery_VisibleQuad` | 3, real BasicEffect + depth-tested geometry | all pass |
 | `Sokol_OcclusionQuery_OccludedQuad` | 3, real BasicEffect + depth-tested geometry | all pass |
 | `Sokol_RasterizerState_DepthBias` | 4, a real coplanar-redraw proof | all pass |
+| `Sokol_BlendFactor_PipelineCache` | 3, `GraphicsDevice.BlendFactor` changed with every other pipeline field bit-identical (`SOKOL-40`) | all pass |
+| `Sokol_GLContext_Transactional` | 5, an injected `SDL_GL_MakeCurrent()` failure after a real `SDL_GL_CreateContext()` success leaks no context and permits an immediate retry (`SOKOL-45`) | all pass |
+| `Sokol_DisposeOrder_OcclusionQueryShaderEffect` | 10, `OcclusionQuery`/`ShaderEffect` backend release by `GraphicsDevice::Dispose()`, not deferred (`SOKOL-42`) | all pass |
+| `Sokol_CustomEffect_TextureReupload` | 2, a custom-effect texture bound then re-uploaded before the draw reads the new colour, 2D and cube (`SOKOL-44`) | all pass |
+| `Sokol_CustomEffect_BlendStateOrder` | 4, real BlendState applied in both custom-effect draw paths regardless of what a previous draw left in the GL context, both stock→custom and custom→stock (`SOKOL-41`) | all pass |
 
 The render-target fixtures above are shared, backend-agnostic oracles also registered for EasyGL/
 Vulkan/bgfx/SDL_GPU/etc.; SOKOL reuses them rather than duplicating bespoke tests. As of `SOKOL-38`

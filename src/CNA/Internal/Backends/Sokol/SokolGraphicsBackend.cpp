@@ -5263,17 +5263,20 @@ namespace CNA::Internal::Backends::Sokol
             // SDL_GL_STENCIL_SIZE 8) that the Clear* family writes through pass load actions.
             case CNA::GraphicsCapability::DepthStencilBuffer:
                 return true;
-            // Real, but back-buffer only: the sample count is negotiated with the GL context at
-            // construction. There are no render targets on this backend to multisample.
+            // Real for both the back buffer (sample count negotiated with the GL context at
+            // construction) and RenderTarget2D (plan_sokol.md SOKOL-26: a separate multisample-only
+            // colour image plus a single-sample resolve image, clamped to the driver's real
+            // GL_MAX_SAMPLES).
             case CNA::GraphicsCapability::MultiSampleAntiAliasing:
                 return true;
             // Real: SamplerState.MaxAnisotropy reaches sg_sampler_desc.max_anisotropy whenever
             // TextureFilter::Anisotropic is selected.
             case CNA::GraphicsCapability::AnisotropicFiltering:
                 return true;
-            // Real as of SOKOL-20: vertex/index buffers, depth-tested draws and the colored-3D
-            // pipeline all exist. Texturing and lighting do not, and those draws throw -- but this
-            // capability asks whether the 3D pipeline exists at all, and it now does.
+            // Real as of SOKOL-20, and considerably more since: vertex/index buffers, depth-tested
+            // draws, the colored-3D pipeline, texturing, up to 3 real per-pixel directional lights,
+            // DualTextureEffect, EnvironmentMapEffect, SkinnedEffect, instanced draws and a custom
+            // ShaderEffect all exist. Only PBR shading throws.
             case CNA::GraphicsCapability::ThreeD:
                 return true;
             // Real as of SOKOL-29, GL-only: a raw glBeginQuery/glEndQuery GL_SAMPLES_PASSED query,
