@@ -19,6 +19,7 @@
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 
 #include <cstdio>
+#include <exception>
 #include <memory>
 
 using namespace Microsoft::Xna::Framework;
@@ -28,6 +29,13 @@ using CNA::Internal::Backends::Skia::SkiaResourceStats;
 
 namespace
 {
+    template<typename Callable>
+    [[nodiscard]] bool Throws(Callable&& callable)
+    {
+        try { callable(); }
+        catch (const std::exception&) { return true; }
+        return false;
+    }
     constexpr int kCycles = 64;
     const Color kBlack(0, 0, 0, 255);
     const Color kBlue(0, 0, 255, 255);
@@ -156,10 +164,30 @@ protected:
 
         texture.reset();
         Check(IsEmpty(backend->GetResourceStatsEXT()), "all debug resource counters return to zero after release");
+
+        CheckWideFormatBudgetBoundary(device, *backend);
         Exit();
     }
 
 private:
+    // SKIA-142/143: the 256 MiB checked budget must reject based on a render target's real
+    // NATIVE surface bytes, not its public transfer bytesPerTexel. 4500x4500 is deliberately
+    // chosen so the public-bytes check (Single is 4 bytes/texel: ~81 MB, comfortably under
+    // budget) would wrongly ACCEPT this request, while the native-bytes check (Single widens to
+    // kRGBA_F32, 16 bytes/texel: ~324 MB) correctly rejects it -- proving the second checked
+    // layout pass added for the two extract-subset formats is load-bearing, not redundant.
+    void CheckWideFormatBudgetBoundary(GraphicsDevice& device, SkiaGraphicsBackend& backend)
+    {
+        const SkiaResourceStats before = backend.GetResourceStatsEXT();
+        const bool rejected = Throws([&] {
+            RenderTarget2D target(device, 4500, 4500, false, SurfaceFormat::Single, DepthFormat::None);
+            (void)target;
+        });
+        Check(rejected && SameStats(backend.GetResourceStatsEXT(), before),
+              "a 4500x4500 Single RenderTarget2D rejects transactionally: fits the public "
+              "4-byte transfer budget but exceeds the 256 MiB native kRGBA_F32 surface budget");
+    }
+
     [[nodiscard]] static bool SameStats(const SkiaResourceStats& left,
                                         const SkiaResourceStats& right)
     {

@@ -1864,15 +1864,44 @@ level-boundary contract.
   changed/new test set. No real display or subagent was used; compilation never exceeded three
   jobs; `NEXT.md` remained untouched.
 
+## Completed in this session: SKIA-143
+
+- Cross-backend comparison: `IGraphicsBackend.hpp`'s new `CreateRenderTarget2DEXT` and the removed
+  redundant `Texture2D` constructor validation (SKIA-142) are both shared, non-Skia-gated code
+  paths reachable by every backend, not Skia-only changes. Rebuilt the EasyGL backend
+  (`cmake-build-easygl-golden`) clean from these changes, then ran its `RenderTarget2D`
+  construction/pass-boundary fixtures (`cna_test_easygl_rendertarget_golden`,
+  `cna_test_easygl_rendertarget_pass_boundary`) and its `Texture2D::GetData` contract fixture
+  (`cna_test_easygl_texture2d_getdata_contract`, 40/40) directly -- all pass, confirming the shared
+  interface change and the constructor validation removal are behavior-preserving for the other
+  ~12 backends, not just Skia.
+- Resource limits: added `CheckWideFormatBudgetBoundary` to `Skia_ResourceBudget`, proving the
+  checked 256 MiB budget rejects based on a render target's real NATIVE surface bytes, not its
+  public transfer `bytesPerTexel` -- this is the specific edge SKIA-142's second checked-layout
+  pass exists to cover. A 4500x4500 `Single` RenderTarget2D fits comfortably under budget by its
+  public 4-byte-per-texel accounting (~81 MB) but exceeds budget by its true native `kRGBA_F32`
+  16-byte-per-texel surface size (~324 MB); the test proves construction rejects transactionally
+  (no resource-counter change) rather than either silently under-budgeting or over-allocating. No
+  large allocation actually occurs in the failing case -- the checked layout pass computes and
+  rejects the byte count before either buffer is allocated.
+- Documentation sweep: grepped every Skia doc for "texture-only"/"Texture2D-only" near any of the
+  thirteen promoted format names (zero hits -- none still mislabeled) and for "renderable"/"native
+  SkSurface" near any of the twelve permanently-refused format names (only the one correctly-scoped
+  summary row matched). Format contracts, content loading, and Release/sanitizer coverage were
+  already exhaustively exercised and synchronized as part of SKIA-142's own gate; this session's
+  addition is the resource-limit edge case and the cross-backend verification specifically called
+  out by SKIA-143's acceptance criteria that SKIA-142 had not yet covered.
+- The complete Debug Skia suite (including the new resource-budget check) passes 159/159 on the
+  persistent `:99` Xvfb display. Release and ASan+UBSan pass the new/changed test. No real display
+  or subagent was used; compilation never exceeded three jobs; `NEXT.md` remained untouched.
+
 ## Next candidates
 
-1. SKIA-143: run the exhaustive cross-format validation/documentation sweep now that SKIA-142 has
-   settled render-target support.
-2. SKIA-144–158: implement bounded cube/volume sampling and wider explicit 2D effects in dependency
-   order.
-3. SKIA-159–170: add opt-in Ganesh, probe real MSAA/anisotropy, re-evaluate MRT, and hold the
+1. SKIA-144–158: implement bounded cube/volume sampling and wider explicit 2D effects in dependency
+   order, now that Phase S14 (SurfaceFormat expansion, SKIA-134–143) is complete.
+2. SKIA-159–170: add opt-in Ganesh, probe real MSAA/anisotropy, re-evaluate MRT, and hold the
    successor gate only after the raster extensions are stable.
-4. The pre-existing `CNA_ENABLE_NET=OFF`/monolithic-`CnaTests` ENet build-graph defect is recorded
+3. The pre-existing `CNA_ENABLE_NET=OFF`/monolithic-`CnaTests` ENet build-graph defect is recorded
    by SKIA-112/113 but remains outside Skia scope.
 
 ## Known boundaries / assumptions
