@@ -168,8 +168,18 @@ EM_JS(void, CNA_HtmlDom_EnsureRoot, (), {
             delete regions[evictKey];
         }
 
+        // plan_html_dom.md HTMLDOM-101: width/height:100% (of #cna-dom-root, which cnaDomApplyViewport
+        // already keeps sized to the active viewport/backbuffer) gives this container a REAL,
+        // non-zero layout box. Without an explicit size an absolutely-positioned element's own
+        // absolutely-positioned children (the sprite <div>s -- also position:absolute) contribute no
+        // intrinsic size at all, so the box stayed exactly 0x0 -- clip-path had nothing to clip, and
+        // sprites inside it were genuinely unpainted/un-hit-testable despite the clip-path's own
+        // inset() values being computed correctly (confirmed with a focused headless-Chromium probe:
+        // offsetWidth/offsetHeight measured 0 before this fix). 100% tracks a resize/viewport change
+        // automatically, with no extra JS bookkeeping needed on top of what cnaDomApplyViewport
+        // already does to root itself.
         const container = document.createElement('div');
-        container.style.cssText = 'position:absolute;left:0;top:0;';
+        container.style.cssText = 'position:absolute;left:0;top:0;width:100%;height:100%;';
         Module['cnaDomRoot'].appendChild(container);
         region = { container: container, pool: [], used: 0, highWater: 0, rect: rect };
         regions[key] = region;

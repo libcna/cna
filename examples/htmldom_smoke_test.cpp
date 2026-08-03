@@ -44,7 +44,7 @@ using namespace CNA::Internal::Backends::HtmlDom;
 
 namespace
 {
-    constexpr int kExpectedChecks = 38;
+    constexpr int kExpectedChecks = 39;
 
 #if defined(__EMSCRIPTEN__)
     /// Number of sprite elements currently visible in the DOM surface.
@@ -178,6 +178,25 @@ namespace
         return n;
     });
 
+    /// plan_html_dom.md HTMLDOM-101: the region container's own real, COMPUTED layout box size
+    /// (offsetWidth/offsetHeight -- requires actual browser layout to have run), or -1 if the region
+    /// does not exist. Unlike JsRegionClipPathInsetIs (which only reads back the inline style STRING
+    /// CNA wrote), this proves the container genuinely has a non-zero box for that clip-path to clip
+    /// against -- the HTMLDOM-101 defect was a region whose clip-path values were exactly right but
+    /// whose own box was still 0x0, which no clip-path-string check could ever catch.
+    EM_JS(int, JsRegionOffsetWidth, (int x, int y, int w, int h), {
+        const regions = Module['cnaDomRegions'];
+        const region = regions ? regions[x + ',' + y + ',' + w + ',' + h] : null;
+        return region ? region.container.offsetWidth : -1;
+    });
+
+    /// plan_html_dom.md HTMLDOM-101: see JsRegionOffsetWidth -- the same, for offsetHeight.
+    EM_JS(int, JsRegionOffsetHeight, (int x, int y, int w, int h), {
+        const regions = Module['cnaDomRegions'];
+        const region = regions ? regions[x + ',' + y + ',' + w + ',' + h] : null;
+        return region ? region.container.offsetHeight : -1;
+    });
+
     /// 1 when sprite `i`'s `background-repeat` is `'repeat'` (TextureAddressMode::Wrap tiling).
     EM_JS(int, JsSpriteBackgroundRepeat, (int i), {
         const root = document.getElementById('cna-dom-root');
@@ -243,6 +262,8 @@ namespace
     int JsRegionExists(int, int, int, int) { return 0; }
     int JsRegionClipPathInsetIs(int, int, int, int, int, int, int, int) { return 0; }
     int JsRegionVisibleSpriteCount(int, int, int, int) { return -1; }
+    int JsRegionOffsetWidth(int, int, int, int) { return -1; }
+    int JsRegionOffsetHeight(int, int, int, int) { return -1; }
     void JsPublishResult(int, int, int) {}
 #endif
 }
@@ -706,6 +727,33 @@ protected:
 
             // Restore the full-backbuffer viewport for hygiene before the final publish below.
             dev.setViewportProperty(Viewport(0, 0, 128, 128));
+
+            // plan_html_dom.md HTMLDOM-101: prove the scissor region has a real, non-zero layout
+            // box, AND that clip-path genuinely removes out-of-bounds content from the page's real
+            // composited pixels -- not merely that a clip-path string with the right numbers exists
+            // on a container that might still be 0x0 (the actual HTMLDOM-101 defect: the earlier
+            // HTMLDOM-80/93/94 checks above only read clip-path's inline style string and counted
+            // non-'none' elements, both of which stayed green even with a 0x0 box). Left as the very
+            // LAST draw of the whole test, deliberately: Clear() (top of every Draw()) hides every
+            // region's sprites every frame, so anything drawn in an earlier frame would already be
+            // gone by the time scripts/htmldom-browser-test.mjs inspects the finished page -- this
+            // survives because nothing runs after it.
+            //
+            // Surface is 128x128 at this point, 1:1 mode, scale exactly 1 (frame 8/10's own
+            // comments already establish this). Source rectangle (0,0,1,1) samples a single solid
+            // texel (pure red, LoadContent's own texture layout) so the sprite's whole footprint is
+            // one unambiguous colour -- no tint maths, no multi-texel quadrants to reason about.
+            dev.setScissorRectangleProperty(Rectangle(60, 60, 20, 20));
+            spriteBatch_->Begin();
+            // Straddles the rect's own right/bottom edge: the rect spans logical x/y in [60,80),
+            // this sprite spans [55,95) on both axes -- part of its footprint must actually paint,
+            // part must not.
+            spriteBatch_->Draw(*texture_, Rectangle(55, 55, 40, 40), Rectangle(0, 0, 1, 1), Color::White);
+            spriteBatch_->End();
+            check(JsRegionOffsetWidth(60, 60, 20, 20) > 0 && JsRegionOffsetHeight(60, 60, 20, 20) > 0,
+                  "HTMLDOM-101: the region's own container has a real, non-zero computed layout box "
+                  "(offsetWidth/offsetHeight), not the 0x0 an unsized container would have");
+            dev.setScissorRectangleProperty(Rectangle(0, 0, 128, 128));
 
             std::printf("=== %d/%d PASS ===\n", passCount_, kExpectedChecks);
             std::fflush(stdout);
