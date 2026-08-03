@@ -204,6 +204,13 @@ namespace CNA::Internal::Backends::Direct2D
         void DebugRestoreContext() override;
         void SetScissorRect(int x, int y, int width, int height) override;
         void SetViewport(int x, int y, int width, int height, float minDepth, float maxDepth) override;
+        void ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable, int depthFunc,
+                                    bool stencilEnable, int stencilFunc,
+                                    int stencilPass, int stencilFail, int stencilDepthFail,
+                                    int stencilMask, int stencilWriteMask, int referenceStencil,
+                                    bool twoSidedStencilMode,
+                                    int ccwStencilFunc, int ccwStencilPass,
+                                    int ccwStencilFail, int ccwStencilDepthFail) override;
         void ApplyRasterizerState(int cullMode, int fillMode, bool scissorTestEnable,
                                   float depthBias = 0.0f,
                                   float slopeScaleDepthBias = 0.0f) override;

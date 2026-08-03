@@ -17,6 +17,7 @@
 #include "Microsoft/Xna/Framework/GameTime.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ColorWriteChannels.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
@@ -1235,6 +1236,38 @@ protected:
             device.setBlendFactorProperty(Color(64, 255, 255, 255));
         });
         device.setBlendFactorProperty(Color::White);
+
+        // D2D-99: Direct2D has no depth or stencil buffer at all. GraphicsDevice's own
+        // constructor unconditionally applies DepthStencilState.Default (DepthBufferEnable=true,
+        // StencilEnable=false) before any game code runs -- already proven harmless simply by
+        // this test having reached this point -- so DepthBufferEnable/WriteEnable/Function must
+        // stay silently accepted (they can never have an observable effect here) while
+        // StencilEnable=true, a real feature gap, fails with a named exception instead of
+        // silently doing nothing.
+        DepthStencilState depthEnabledState = DepthStencilState::Default;
+        bool depthDefaultAccepted = true;
+        try
+        {
+            device.setDepthStencilStateProperty(depthEnabledState);
+        }
+        catch (const std::exception&)
+        {
+            depthDefaultAccepted = false;
+        }
+        std::printf("[%s] Direct2D accepts DepthStencilState.Default (DepthBufferEnable=true)\n",
+                    depthDefaultAccepted ? "PASS" : "FAIL");
+        passed = passed && depthDefaultAccepted;
+        DepthStencilState stencilEnabledState = DepthStencilState::None;
+        stencilEnabledState.setStencilEnableProperty(true);
+        expectNamedBlendRejection("Direct2D rejects DepthStencilState.StencilEnable", [&] {
+            device.setDepthStencilStateProperty(stencilEnabledState);
+        });
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.Clear(Color::Black);
+        sprites_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, nullptr, &scissorDisabled);
+        sprites_->Draw(*white_, Rectangle(0, 0, 2, 2), Rectangle(0, 0, 1, 1), Color::White);
+        sprites_->End();
+        check("Direct2D usable after rejected StencilEnable", 0, 0, Color::White);
 
         // 16. Presentation transforms use the physical HWND client size, rather than assuming
         // GraphicsDeviceManager's virtual dimensions. The default scene now lives in a logical

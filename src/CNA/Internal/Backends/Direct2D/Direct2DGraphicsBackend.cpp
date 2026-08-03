@@ -1574,6 +1574,32 @@ namespace CNA::Internal::Backends::Direct2D
         if (drawing_) ApplyOutputClips();
     }
 
+    void Direct2DGraphicsBackend::ApplyDepthStencilState(
+        bool /*depthEnable*/, bool /*depthWriteEnable*/, int /*depthFunc*/,
+        bool stencilEnable, int /*stencilFunc*/,
+        int /*stencilPass*/, int /*stencilFail*/, int /*stencilDepthFail*/,
+        int /*stencilMask*/, int /*stencilWriteMask*/, int /*referenceStencil*/,
+        bool /*twoSidedStencilMode*/,
+        int /*ccwStencilFunc*/, int /*ccwStencilPass*/,
+        int /*ccwStencilFail*/, int /*ccwStencilDepthFail*/)
+    {
+        // D2D-99: Direct2D never allocates a depth or stencil buffer (RenderTarget2D has no real
+        // depth buffer; SupportsCapability(DepthStencilBuffer) is false), so DepthBufferEnable/
+        // WriteEnable/Function can never have an observable effect regardless of value. They are
+        // silently accepted -- including GraphicsDevice's own constructor-forced
+        // DepthStencilState::Default (DepthBufferEnable=true), which every GraphicsDevice applies
+        // unconditionally before any game code runs. Stencil testing is a real per-pixel masking
+        // feature a game could depend on, with no Direct2D equivalent, so it is rejected outright
+        // (DepthStencilState::Default/DepthRead/None all leave StencilEnable=false, so this can
+        // never reject that same constructor-forced default).
+        if (stencilEnable)
+        {
+            throw std::runtime_error(
+                "Direct2D does not support DepthStencilState.StencilEnable; it has no depth/stencil "
+                "buffer. Use CNA_GRAPHICS_BACKEND=D3D11 for stencil-dependent rendering.");
+        }
+    }
+
     void Direct2DGraphicsBackend::ApplyRasterizerState(int /*cullMode*/, int /*fillMode*/,
                                                         bool scissorTestEnable, float /*depthBias*/,
                                                         float /*slopeScaleDepthBias*/)

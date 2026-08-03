@@ -77,10 +77,15 @@ audit record. The same modes are available locally through `CNA_DIRECT2D_DEBUG_L
 `GraphicsDevice::SupportsCapability()` returns `true` for `AnisotropicFiltering` and `false` for
 `ThreeD`, `DepthStencilBuffer`, `MultiSampleAntiAliasing`, `MultipleRenderTargets`, `WireFrame`,
 `OcclusionQuery`, `CustomEffects`, and `Texture3D`. Color-write masks, coverage masks, blend
-factor/equation tuples without an exact Direct2D Porter-Duff equivalent, and
-`GraphicsDevice.BlendFactor` are rejected with named exceptions rather than silently ignored.
+factor/equation tuples without an exact Direct2D Porter-Duff equivalent,
+`GraphicsDevice.BlendFactor`, and `DepthStencilState.StencilEnable` are rejected with named
+exceptions rather than silently ignored. `DepthStencilState.DepthBufferEnable`/`WriteEnable`/
+`Function` are accepted but always inert: Direct2D never allocates a depth buffer, so unlike
+stencil there is no observable behavior to silently get wrong, and `GraphicsDevice`'s constructor
+applies `DepthStencilState.Default` (`DepthBufferEnable=true`) unconditionally before any game
+code runs.
 
-Accordingly, Direct2D rejects 3D vertex/index-buffer creation and draw calls, depth/stencil work,
+Accordingly, Direct2D rejects 3D vertex/index-buffer creation and draw calls, stencil testing,
 multiple render targets, 3D/cube textures, occlusion queries, custom `Effect` rendering,
 wireframe, general blend equations/factors, write masks, and 3D MSAA.
 Those are named errors rather than approximate D3D11 fallback passes. This keeps the backend's
