@@ -1078,6 +1078,7 @@ protected:
         device.SetContextRecoveryEnabled(false);
         auto unrecoverableTexture = Texture2D::CreateFromPixels(
             device, 1, 1, std::vector<uint8_t>{241, 77, 19, 255});
+        RenderTarget2D unrecoverableTarget(device, 2, 2);
         direct2dBackend.DebugRestoreContext();
         bool staleResourceRejected = false;
         try
@@ -1105,6 +1106,32 @@ protected:
         std::printf("[%s] Context recovery disabled rejects stale Texture2D\n",
                     staleResourceRejected ? "PASS" : "FAIL");
         passed = passed && staleResourceRejected;
+
+        // D2D-61: a render target from a lost device generation (recovery disabled, so it was
+        // never re-registered) must be rejected before activeRenderTarget_ or the native Direct2D
+        // target are touched at all -- not partway through, which would leave the logical and
+        // native target pointing at different resources.
+        bool staleTargetRejected = false;
+        try
+        {
+            device.SetRenderTarget(&unrecoverableTarget);
+        }
+        catch (const std::exception&)
+        {
+            staleTargetRejected = true;
+        }
+        std::printf("[%s] Context recovery disabled rejects stale RenderTarget2D bind\n",
+                    staleTargetRejected ? "PASS" : "FAIL");
+        passed = passed && staleTargetRejected;
+        const bool staleTargetLeftBackbufferActive = device.GetRenderTargets().empty();
+        std::printf("[%s] Rejected stale RenderTarget2D bind left the backbuffer active\n",
+                    staleTargetLeftBackbufferActive ? "PASS" : "FAIL");
+        passed = passed && staleTargetLeftBackbufferActive;
+        device.Clear(Color::Black);
+        sprites_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, nullptr, &scissorDisabled);
+        sprites_->Draw(*white_, Rectangle(0, 0, 2, 2), Rectangle(0, 0, 1, 1), Color::White);
+        sprites_->End();
+        check("Direct2D usable after rejected stale RenderTarget2D bind", 0, 0, Color::White);
 
         auto postRecoveryTexture = Texture2D::CreateFromPixels(
             device, 1, 1, std::vector<uint8_t>{40, 180, 90, 255});

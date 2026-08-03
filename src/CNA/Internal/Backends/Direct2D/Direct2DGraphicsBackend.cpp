@@ -1523,11 +1523,17 @@ namespace CNA::Internal::Backends::Direct2D
     void Direct2DGraphicsBackend::BindRenderTarget(Direct2DRenderTargetBackend* renderTarget)
     {
         if (activeRenderTarget_ == renderTarget) return;
+        // D2D-61: validate the incoming target's device generation (and fetch its native bitmap)
+        // before touching any logical or native state. Bitmap() throws for a target belonging to
+        // a lost device generation that was never registered for recovery; doing that check after
+        // activeRenderTarget_ was already reassigned left the logical and native target pointing
+        // at different resources on rejection.
+        ID2D1Bitmap1* const nativeTarget = renderTarget ? renderTarget->Bitmap() : nullptr;
         EndDrawing("render-target switch");
         if (activeRenderTarget_) activeRenderTarget_->EnsureMipLevelsCurrent();
         activeRenderTarget_ = renderTarget;
         if (!renderTarget) EnsureMainTargetSize();
-        d2dContext_->SetTarget(renderTarget ? renderTarget->Bitmap() : logicalTarget_.Get());
+        d2dContext_->SetTarget(renderTarget ? nativeTarget : logicalTarget_.Get());
         if (renderTarget) renderTarget->MarkMipLevelsDirty();
     }
 
