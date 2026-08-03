@@ -2215,7 +2215,8 @@ float4 main(in PSInput psIn) : SV_Target
                depth == other.depth && stencilFront == other.stencilFront &&
                stencilBack == other.stencilBack && stencilMasks == other.stencilMasks &&
                raster == other.raster && targetFormats == other.targetFormats &&
-               extraTargetFormats == other.extraTargetFormats && sampleCount == other.sampleCount;
+               extraTargetFormats == other.extraTargetFormats && sampleCount == other.sampleCount &&
+               scissorEnable == other.scissorEnable;
     }
 
     std::size_t DiligentGraphicsBackend::PipelineKeyHash::operator()(const PipelineKey& key) const noexcept
@@ -2224,7 +2225,7 @@ float4 main(in PSInput psIn) : SV_Target
         const std::uint32_t fields[] = {key.topology, key.blend, key.blendFuncs, key.writeMask,
                                         key.depth, key.stencilFront, key.stencilBack,
                                         key.stencilMasks, key.raster, key.targetFormats,
-                                        key.extraTargetFormats, key.sampleCount};
+                                        key.extraTargetFormats, key.sampleCount, key.scissorEnable};
         for (const std::uint32_t field : fields)
             hash = hash * 1099511628211ull ^ static_cast<std::size_t>(field);
         return hash;
@@ -3537,6 +3538,7 @@ float4 main(in PSInput psIn) : SV_Target
         }
         key.extraTargetFormats = extra;
         key.sampleCount = static_cast<std::uint32_t>(CurrentSampleCount());
+        key.scissorEnable = scissorEnabled_ ? 1u : 0u;
         return key;
     }
 
@@ -3824,7 +3826,7 @@ float4 main(in PSInput psIn) : SV_Target
         rasterizer.FillMode = ((key.raster >> 8) & 0xFF) != 0 ? Dg::FILL_MODE_WIREFRAME
                                                               : Dg::FILL_MODE_SOLID;
         rasterizer.FrontCounterClockwise = Dg::False;
-        rasterizer.ScissorEnable = scissorEnabled_ ? Dg::True : Dg::False;
+        rasterizer.ScissorEnable = key.scissorEnable != 0 ? Dg::True : Dg::False;
         rasterizer.DepthBias = static_cast<Dg::Int32>(static_cast<std::int8_t>((key.raster >> 16) & 0xFF));
         rasterizer.SlopeScaledDepthBias =
             static_cast<float>(static_cast<std::int8_t>((key.raster >> 24) & 0xFF)) / 16.0f;

@@ -1412,6 +1412,12 @@ namespace CNA::Internal::Backends::Diligent
             /// or Vulkan rejects it as incompatible with the render pass -- the same class of bug
             /// `targetFormats` was added to fix (`DILIGENT-24`'s note on this struct).
             std::uint32_t sampleCount = 1;
+            /// Whether `RasterizerDesc.ScissorEnable` is baked into this pipeline (1) or not (0).
+            /// Diligent pipelines are immutable, so this has to be part of the cache key like every
+            /// other `RasterizerDesc`/`BlendDesc`/`DepthStencilDesc` field -- omitting it let a
+            /// pipeline created under one `ScissorTestEnable` value get reused, unchanged, after a
+            /// later `ApplyRasterizerState()` call toggled it (`DILIGENT-58`).
+            std::uint32_t scissorEnable = 0;
 
             bool operator==(const PipelineKey& other) const noexcept;
         };
