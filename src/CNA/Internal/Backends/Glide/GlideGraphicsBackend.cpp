@@ -1886,54 +1886,6 @@ namespace CNA::Internal::Backends::Glide
     {
         using CpuVertex = GlideClipVertex;
 
-        template <typename Distance>
-        [[nodiscard]] std::vector<CpuVertex> ClipPolygon(const std::vector<CpuVertex>& input, Distance distance)
-        {
-            std::vector<CpuVertex> output;
-            if (input.empty())
-            {
-                return output;
-            }
-            CpuVertex previous = input.back();
-            float previousDistance = distance(previous);
-            bool previousInside = previousDistance >= 0.0f;
-            for (const CpuVertex& current : input)
-            {
-                const float currentDistance = distance(current);
-                const bool currentInside = currentDistance >= 0.0f;
-                if (currentInside != previousInside)
-                {
-                    const float denominator = previousDistance - currentDistance;
-                    if (std::abs(denominator) > 0.0000001f)
-                    {
-                        output.push_back(InterpolateGlideClipVertex(
-                            previous, current, previousDistance / denominator));
-                    }
-                }
-                if (currentInside)
-                {
-                    output.push_back(current);
-                }
-                previous = current;
-                previousDistance = currentDistance;
-                previousInside = currentInside;
-            }
-            return output;
-        }
-
-        [[nodiscard]] std::vector<CpuVertex> ClipToFrustum(std::vector<CpuVertex> polygon)
-        {
-            // D3D/XNA clip space: -w <= x,y <= w and 0 <= z <= w. Clip before dividing by w:
-            // it is the only safe way to split triangles that cross the eye/near/far planes.
-            polygon = ClipPolygon(polygon, [](const CpuVertex& v) { return v.clipW + v.clipX; });
-            polygon = ClipPolygon(polygon, [](const CpuVertex& v) { return v.clipW - v.clipX; });
-            polygon = ClipPolygon(polygon, [](const CpuVertex& v) { return v.clipW + v.clipY; });
-            polygon = ClipPolygon(polygon, [](const CpuVertex& v) { return v.clipW - v.clipY; });
-            polygon = ClipPolygon(polygon, [](const CpuVertex& v) { return v.clipZ; });
-            polygon = ClipPolygon(polygon, [](const CpuVertex& v) { return v.clipW - v.clipZ; });
-            return polygon;
-        }
-
         struct TextureAddressSegment
         {
             float lower = 0.0f;
@@ -2526,7 +2478,7 @@ namespace CNA::Internal::Backends::Glide
                                                   const CpuVertex& a, const CpuVertex& b, const CpuVertex& c)
             {
                 std::vector<CpuVertex> polygon{a, b, c};
-                polygon = ClipToFrustum(std::move(polygon));
+                polygon = ClipGlidePolygonToFrustum(std::move(polygon));
                 if (polygon.size() < 3)
                 {
                     return;
@@ -2551,9 +2503,9 @@ namespace CNA::Internal::Backends::Glide
                     impl_->samplerAddressV, minMaxV.first->v, minMaxV.second->v, v0, v1);
                 for (const TextureAddressSegment& uSegment : uSegments)
                 {
-                    std::vector<CpuVertex> uPolygon = ClipPolygon(
+                    std::vector<CpuVertex> uPolygon = ClipGlidePolygonToHalfSpace(
                         polygon, [uSegment](const CpuVertex& v) { return v.u - uSegment.lower; });
-                    uPolygon = ClipPolygon(
+                    uPolygon = ClipGlidePolygonToHalfSpace(
                         uPolygon, [uSegment](const CpuVertex& v) { return uSegment.upper - v.u; });
                     if (uPolygon.size() < 3)
                     {
@@ -2561,9 +2513,9 @@ namespace CNA::Internal::Backends::Glide
                     }
                     for (const TextureAddressSegment& vSegment : vSegments)
                     {
-                        std::vector<CpuVertex> tilePolygon = ClipPolygon(
+                        std::vector<CpuVertex> tilePolygon = ClipGlidePolygonToHalfSpace(
                             uPolygon, [vSegment](const CpuVertex& v) { return v.v - vSegment.lower; });
-                        tilePolygon = ClipPolygon(
+                        tilePolygon = ClipGlidePolygonToHalfSpace(
                             tilePolygon, [vSegment](const CpuVertex& v) { return vSegment.upper - v.v; });
                         if (tilePolygon.size() < 3)
                         {
@@ -2619,7 +2571,7 @@ namespace CNA::Internal::Backends::Glide
                 {
                     polygon = {readVertex(offset + 1), readVertex(offset), readVertex(offset + 2)};
                 }
-                polygon = ClipToFrustum(std::move(polygon));
+                polygon = ClipGlidePolygonToFrustum(std::move(polygon));
                 if (polygon.size() >= 3)
                 {
                     drawFan(polygon, nullptr);

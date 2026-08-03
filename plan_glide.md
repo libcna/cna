@@ -26,7 +26,8 @@ renderer.
 - [x] Homogeneous CPU frustum clipping before the perspective divide. Triangles crossing a side,
   near, or far plane are split into a clipped fan and then emitted as native
   `grDrawVertexArray(GR_TRIANGLES)` batches; invalid non-finite input is rejected rather than sent
-  to Glide's FIFO. A strict positive-W eye-plane margin remains open under GLIDE-AUD-014.
+  to Glide's FIFO. Triangle clipping shares the same strict positive-W eye-plane margin as
+  point/line clipping (GLIDE-AUD-014).
 - [x] Textured 3D `VertexPositionTexture` and `VertexPositionColorTexture` through TMU0, with
   Glide `s/w`, `t/w`, and `1/w`. Indexed versions expand the index stream before the same real
   triangle submission. Correct native coordinate scaling remains open under GLIDE-AUD-010, and
@@ -152,12 +153,24 @@ renderer.
   selection must be deterministic when the same dimensions occur at multiple rates. Extend the
   fake DLL with mode matrices containing no 60 Hz entry, multiple refresh rates and a failing open;
   assert that startup never combines a resolution from one candidate with another refresh value.
-- [ ] **GLIDE-AUD-014 — Clip triangles against a strict positive-W eye plane.** Share the
-  point/line positive-W margin with triangle clipping so geometry at or extremely near `W == 0`
-  is clipped before perspective division instead of surviving the six nominal frustum planes and
-  throwing during vertex conversion. Preserve interpolated colour/UV/fog attributes at the new
-  intersections. Add exact-zero, below-epsilon, crossing-eye-plane and fully-behind tests with
-  finite-output assertions and a fake-DLL check that invalid vertices never reach Glide.
+- [x] **GLIDE-AUD-014 — Clip triangles against a strict positive-W eye plane.** Triangle/polygon
+  clipping now shares the same `clipW - kGlideMinimumPositiveClipW >= 0` half-space as point/line
+  clipping. The generic Sutherland-Hodgman clipper and the frustum-plane composition were moved
+  from `GlideGraphicsBackend.cpp`'s anonymous namespace into `GlidePrimitiveClip.hpp` as
+  `ClipGlidePolygonToHalfSpace`/`ClipGlidePolygonToFrustum` (mirroring the existing segment
+  clipper pair in the same header), so the fix is portably unit-testable like the rest of the
+  fixed-function CPU math instead of only living in the non-portable renderer. With `clipX ==
+  clipY == clipZ == 0`, a vertex sits exactly on the boundary of all six nominal planes (every
+  distance evaluates to 0, "inside"), so only the new plane can reject it; that is exactly the
+  `W == 0` case that previously survived to the perspective divide and threw in
+  `makeGlideVertex()`. Four portable probes cover exact-zero W, below-epsilon positive W, a
+  clearly-behind-the-eye crossing, and a fully-behind triangle (entirely rejected, empty output);
+  the first two fail against the pre-fix clipper and pass after it. Interpolated colour/UV
+  attributes continue to flow through the existing `InterpolateGlideClipVertex()` used by every
+  plane, including the new one. Verified with i686 MinGW `-fsyntax-only` recompilation of the
+  whole backend and the portable Glide unit suite (22/22). A fake-DLL check that invalid vertices
+  never reach Glide remains blocked by the same external i686 `sharp-runtime` `__int128`
+  dependency as GLIDE-AUD-006/007.
 - [ ] **GLIDE-AUD-015 — Make state application exception-atomic.** Convert and validate every
   blend/depth/cull/alpha-test value into local native values before mutating cached state or issuing
   any Glide call. If a requested combination is unsupported, both the backend cache and native

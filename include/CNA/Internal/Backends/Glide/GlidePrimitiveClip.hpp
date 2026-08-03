@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <optional>
+#include <vector>
 
 namespace CNA::Internal::Backends::Glide
 {
@@ -119,5 +120,61 @@ namespace CNA::Internal::Backends::Glide
         clip([](const GlideClipVertex& vertex) { return vertex.clipZ; });
         clip([](const GlideClipVertex& vertex) { return vertex.clipW - vertex.clipZ; });
         return result;
+    }
+
+    /** Sutherland-Hodgman half-space clip of a (possibly non-triangular) polygon fan. */
+    template <typename Distance>
+    [[nodiscard]] inline std::vector<GlideClipVertex> ClipGlidePolygonToHalfSpace(
+        const std::vector<GlideClipVertex>& input, Distance distance)
+    {
+        std::vector<GlideClipVertex> output;
+        if (input.empty())
+        {
+            return output;
+        }
+        GlideClipVertex previous = input.back();
+        float previousDistance = distance(previous);
+        bool previousInside = previousDistance >= 0.0f;
+        for (const GlideClipVertex& current : input)
+        {
+            const float currentDistance = distance(current);
+            const bool currentInside = currentDistance >= 0.0f;
+            if (currentInside != previousInside)
+            {
+                const float denominator = previousDistance - currentDistance;
+                if (std::abs(denominator) > 0.0000001f)
+                {
+                    output.push_back(InterpolateGlideClipVertex(
+                        previous, current, previousDistance / denominator));
+                }
+            }
+            if (currentInside)
+            {
+                output.push_back(current);
+            }
+            previous = current;
+            previousDistance = currentDistance;
+            previousInside = currentInside;
+        }
+        return output;
+    }
+
+    /** Clips a polygon to D3D/XNA homogeneous clip space before the perspective divide. */
+    [[nodiscard]] inline std::vector<GlideClipVertex> ClipGlidePolygonToFrustum(std::vector<GlideClipVertex> polygon)
+    {
+        // D3D/XNA clip space: -w <= x,y <= w and 0 <= z <= w. Clip before dividing by w: it is
+        // the only safe way to split triangles that cross the eye/near/far planes. Keep the same
+        // small positive-W margin as segment/point clipping: a triangle crossing the eye plane can
+        // otherwise survive these six nominal planes with a vertex at or below W=0, which cannot
+        // be represented by Glide's Q/STW.
+        polygon = ClipGlidePolygonToHalfSpace(
+            polygon, [](const GlideClipVertex& v) { return v.clipW - kGlideMinimumPositiveClipW; });
+        polygon = ClipGlidePolygonToHalfSpace(polygon, [](const GlideClipVertex& v) { return v.clipW + v.clipX; });
+        polygon = ClipGlidePolygonToHalfSpace(polygon, [](const GlideClipVertex& v) { return v.clipW - v.clipX; });
+        polygon = ClipGlidePolygonToHalfSpace(polygon, [](const GlideClipVertex& v) { return v.clipW + v.clipY; });
+        polygon = ClipGlidePolygonToHalfSpace(polygon, [](const GlideClipVertex& v) { return v.clipW - v.clipY; });
+        polygon = ClipGlidePolygonToHalfSpace(polygon, [](const GlideClipVertex& v) { return v.clipZ; });
+        polygon = ClipGlidePolygonToHalfSpace(polygon, [](const GlideClipVertex& v) { return v.clipW - v.clipZ; });
+        return polygon;
     }
 } // namespace CNA::Internal::Backends::Glide
