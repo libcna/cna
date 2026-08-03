@@ -52,7 +52,11 @@ cbuffer Constants
     float4x4 g_WorldViewProj;
     float4x4 g_World;
     float4 g_DiffuseColor;
-    float4 g_EmissiveAmbient;
+    // Kept apart deliberately (DILIGENT-59): g_Ambient joins the per-light diffuse sum, which then
+    // gets multiplied by g_DiffuseColor once; g_Emissive is added to that result afterward and must
+    // never be multiplied by g_DiffuseColor (or a texture sample times it) a second time.
+    float4 g_Ambient;
+    float4 g_Emissive;
     float4 g_EyePositionSpecularPower;
     float4 g_SpecularColor;
     float4 g_LightDir[3];
@@ -92,6 +96,15 @@ float4 FinishPixel(float4 color, float fogKeep)
         discard;
     color.rgb = lerp(g_FogColor.rgb, color.rgb, fogKeep);
     return color;
+}
+
+// Mirrors kVertexLightingHlsl's own helper of the same name (defined again here, not shared,
+// since vertex and pixel shaders are separate HLSL compilations) -- see that copy's own comment
+// for why a disabled light's exactly-zero direction must not reach a plain normalize().
+float3 SafeNormalizeLightDir(float3 v)
+{
+    float lenSq = dot(v, v);
+    return (lenSq > 1e-12) ? (v / sqrt(lenSq)) : v;
 }
 )";
 
@@ -278,7 +291,11 @@ void main(in VSInput vsIn, out PSInput psIn)
 {
     psIn.Pos      = mul(float4(vsIn.Pos, 1.0), g_WorldViewProj);
     psIn.WorldPos = mul(float4(vsIn.Pos, 1.0), g_World).xyz;
-    psIn.Normal   = mul(float4(vsIn.Normal, 0.0), g_World).xyz;
+    // DILIGENT-59: World's inverse-transpose, not World itself -- correct under non-uniform scale
+    // (a plain World transform of the normal is only correct for uniform scale/pure rotation).
+    // Matches kSkinnedVertexHlsl's own established pattern.
+    float3x3 worldNormalMat = InverseTranspose3x3(float3x3(g_World[0].xyz, g_World[1].xyz, g_World[2].xyz));
+    psIn.Normal   = normalize(mul(vsIn.Normal, worldNormalMat));
     psIn.UV       = vsIn.UV;
     psIn.FogKeep  = ComputeFogKeep(vsIn.Pos);
 }
@@ -316,12 +333,12 @@ void main(in PSInput psIn, out PSOutput psOut)
 
     float3 normal   = normalize(psIn.Normal);
     float3 eyeDir   = normalize(g_EyePositionSpecularPower.xyz - psIn.WorldPos);
-    float3 diffuse  = g_EmissiveAmbient.rgb;
+    float3 diffuse  = g_Ambient.rgb;
     float3 specular = float3(0.0, 0.0, 0.0);
 
     for (int i = 0; i < 3; ++i)
     {
-        float3 lightDir = -g_LightDir[i].xyz;
+        float3 lightDir = SafeNormalizeLightDir(-g_LightDir[i].xyz);
         float  nDotL    = max(dot(normal, lightDir), 0.0);
         diffuse += g_LightDiffuse[i].rgb * nDotL;
         if (nDotL > 0.0)
@@ -332,7 +349,12 @@ void main(in PSInput psIn, out PSOutput psOut)
         }
     }
 
-    float3 lit = baseColor.rgb * diffuse + specular * g_SpecularColor.rgb;
+    // DILIGENT-59: g_Emissive is added AFTER the ambient/light-sum*DiffuseColor multiply, never
+    // multiplied by it (or by the bound texture, already folded into baseColor) a second time.
+    // Specular is scaled by the FINAL output alpha (baseColor.a, matching FNA's own AddSpecular
+    // macro), not left unscaled.
+    float3 lit = baseColor.rgb * diffuse + g_Emissive.rgb;
+    lit += specular * g_SpecularColor.rgb * baseColor.a;
     psOut.Color = FinishPixel(float4(lit, baseColor.a), psIn.FogKeep);
 }
 )";
@@ -345,16 +367,47 @@ void main(in PSInput psIn, out PSOutput psOut)
         /// kSkinnedVertexLitVertexHlsl below both call this from the vertex stage instead. Always
         /// prepended alongside kConstantsHlsl (see the assembly point below): harmless dead code in
         /// variants that never call it, since every uniform it reads is already declared there.
+        ///
+        /// Also hosts InverseTranspose3x3() (DILIGENT-59): every lit vertex shader needs it for a
+        /// correct world-space normal under non-uniform scale, not just the skinned ones kBonesHlsl
+        /// originally scoped it to, so it lives here instead -- always prepended, unlike kBonesHlsl
+        /// which is conditional on usesBones. Defined exactly once: kBonesHlsl's own former copy
+        /// would now collide with this one for every skinned variant, which prepends both.
         constexpr const char* kVertexLightingHlsl = R"(
+float3x3 InverseTranspose3x3(float3x3 m)
+{
+    float3 c0 = cross(m[1], m[2]);
+    float3 c1 = cross(m[2], m[0]);
+    float3 c2 = cross(m[0], m[1]);
+    float determinant = dot(m[0], c0);
+    float invDeterminant = (abs(determinant) > 1e-8) ? (1.0 / determinant) : 0.0;
+    return float3x3(c0 * invDeterminant, c1 * invDeterminant, c2 * invDeterminant);
+}
+
+// A disabled light's direction is left at exactly (0,0,0) by the effect layer (see this file's own
+// note on that convention); plain normalize() of a zero-length vector is undefined/NaN, which would
+// otherwise poison the whole per-light sum through dot()/max() once every enabled light's own math
+// runs alongside it. Non-zero vectors get treated the same as normalize() would.
+float3 SafeNormalizeLightDir(float3 v)
+{
+    float lenSq = dot(v, v);
+    return (lenSq > 1e-12) ? (v / sqrt(lenSq)) : v;
+}
+
+// DILIGENT-59: litDiffuse is g_Ambient + the per-light sum ONLY -- g_Emissive is deliberately never
+// folded in here (it is a per-draw constant, not per-vertex, and must be added by the pixel stage
+// AFTER the light-sum*DiffuseColor multiply, never multiplied by it). Light directions are
+// normalized defensively: CNA's own DirectionalLight.Direction setter (unlike real XNA's) does not
+// normalize on assignment.
 void ComputeVertexLighting(float3 worldPos, float3 normal, out float3 litDiffuse, out float3 litSpecular)
 {
     float3 eyeDir = normalize(g_EyePositionSpecularPower.xyz - worldPos);
-    litDiffuse  = g_EmissiveAmbient.rgb;
+    litDiffuse  = g_Ambient.rgb;
     litSpecular = float3(0.0, 0.0, 0.0);
 
     for (int i = 0; i < 3; ++i)
     {
-        float3 lightDir = -g_LightDir[i].xyz;
+        float3 lightDir = SafeNormalizeLightDir(-g_LightDir[i].xyz);
         float  nDotL    = max(dot(normal, lightDir), 0.0);
         litDiffuse += g_LightDiffuse[i].rgb * nDotL;
         if (nDotL > 0.0)
@@ -388,7 +441,9 @@ void main(in VSInput vsIn, out PSInput psIn)
 {
     psIn.Pos      = mul(float4(vsIn.Pos, 1.0), g_WorldViewProj);
     float3 worldPos = mul(float4(vsIn.Pos, 1.0), g_World).xyz;
-    float3 normal   = normalize(mul(float4(vsIn.Normal, 0.0), g_World).xyz);
+    // DILIGENT-59: World's inverse-transpose, not World itself -- see kLitVertexHlsl's own note.
+    float3x3 worldNormalMat = InverseTranspose3x3(float3x3(g_World[0].xyz, g_World[1].xyz, g_World[2].xyz));
+    float3 normal   = normalize(mul(vsIn.Normal, worldNormalMat));
     ComputeVertexLighting(worldPos, normal, psIn.LitDiffuse, psIn.LitSpecular);
     psIn.UV       = vsIn.UV;
     psIn.FogKeep  = ComputeFogKeep(vsIn.Pos);
@@ -419,7 +474,12 @@ void main(in PSInput psIn, out PSOutput psOut)
     if (g_Flags.x > 0.5)
         baseColor *= g_Texture.Sample(g_Texture_sampler, psIn.UV);
 
-    float3 lit = baseColor.rgb * psIn.LitDiffuse + psIn.LitSpecular * g_SpecularColor.rgb;
+    // DILIGENT-59: g_Emissive added after psIn.LitDiffuse (ambient+lights, computed per-vertex by
+    // ComputeVertexLighting -- never includes emissive) is multiplied by baseColor; specular scaled
+    // by the final output alpha, matching kLitPixelHlsl's own per-pixel-lit formula exactly (this
+    // is its per-vertex-lit sibling, same math, only the evaluation frequency differs).
+    float3 lit = baseColor.rgb * psIn.LitDiffuse + g_Emissive.rgb;
+    lit += psIn.LitSpecular * g_SpecularColor.rgb * baseColor.a;
     psOut.Color = FinishPixel(float4(lit, baseColor.a), psIn.FogKeep);
 }
 )";
@@ -520,8 +580,8 @@ void main(in VSInput vsIn, out PSInput psIn)
         /// Smith-Schlick-GGX visibility, Schlick Fresnel -- glTF 2.0's own reference BRDF, term for
         /// term identical to pbr3d.frag.hlsl. g_PbrAmbientMetallic/g_PbrEmissiveRoughness come from
         /// their own PbrConstants buffer (see UploadPbrConstants()) rather than the shared Constants
-        /// block's g_EmissiveAmbient, which folds ambient and emissive into one value -- PBR needs
-        /// them apart (ambient scales albedo*occlusion, emissive is added standalone, unscaled).
+        /// block's g_Ambient/g_Emissive: PBR's own formula (ambient scales albedo*occlusion,
+        /// emissive is added standalone, unscaled) doesn't fit that pair's own contract either.
         constexpr const char* kPbrPixelHlsl = R"(
 Texture2D    g_Texture;
 SamplerState g_Texture_sampler;
@@ -645,8 +705,8 @@ void main(in VSInput vsIn, out PSInput psIn)
     // Same composition kSkinnedVertexHlsl already uses: the skin matrix's own 3x3 applied first,
     // then the inverse-transpose of World (not a full inverse-transpose of skin*World) -- a
     // documented simplification shared with this backend's own unskinned-lit skinning path.
-    // InverseTranspose3x3() comes from kBonesHlsl (always prepended alongside ComputeSkinMatrix()
-    // for this variant), the same helper kSkinnedVertexHlsl itself already uses.
+    // InverseTranspose3x3() comes from kVertexLightingHlsl (always prepended to every vertex
+    // shader), the same helper kSkinnedVertexHlsl itself already uses.
     float3x3 skinNormalMat = float3x3(skin[0].xyz, skin[1].xyz, skin[2].xyz);
     float3x3 worldNormalMat = InverseTranspose3x3(float3x3(g_World[0].xyz, g_World[1].xyz, g_World[2].xyz));
     psIn.Normal = normalize(mul(mul(vsIn.Normal, skinNormalMat), worldNormalMat));
@@ -764,12 +824,17 @@ void main(in PSInput psIn, out PSOutput psOut)
     float3 normal = normalize(psIn.Normal);
     float3 eyeDir = normalize(g_EyePositionSpecularPower.xyz - psIn.WorldPos);
 
-    float3 lightSum = g_EmissiveAmbient.rgb;
+    // DILIGENT-59: g_Ambient joins the light sum (multiplied by DiffuseColor below, same as every
+    // other lit variant); g_Emissive is EnvironmentMapEffect::FillGpuDrawParams()'s own pre-baked
+    // EmissiveColor+AmbientLightColor*DiffuseColor value and must be added AFTER that multiply, not
+    // multiplied by DiffuseColor (or the texture sample) again.
+    float3 lightSum = g_Ambient.rgb;
     for (int i = 0; i < 3; ++i)
-        lightSum += g_LightDiffuse[i].rgb * max(dot(normal, -g_LightDir[i].xyz), 0.0);
+        lightSum += g_LightDiffuse[i].rgb * max(dot(normal, SafeNormalizeLightDir(-g_LightDir[i].xyz)), 0.0);
 
     float4 texel = g_Texture.Sample(g_Texture_sampler, psIn.UV);
-    float3 baseColor = lightSum * g_DiffuseColor.rgb * texel.rgb;
+    float3 litDiffuse = lightSum * g_DiffuseColor.rgb + g_Emissive.rgb;
+    float3 baseColor = litDiffuse * texel.rgb;
     float combinedAlpha = g_DiffuseColor.a * texel.a;
 
     float4 envSample = g_EnvMap.Sample(g_EnvMap_sampler, reflect(-eyeDir, normal));
@@ -805,19 +870,6 @@ float4x4 ComputeSkinMatrix(float4 weights, uint4 indices, float weightsPerVertex
     if (weightsPerVertex >= 4.0)
         skin += g_Bones[indices.z] * weights.z + g_Bones[indices.w] * weights.w;
     return skin;
-}
-
-/// Inverse transpose of a 3x3, written out because HLSL has no inverse(). FNA composes the
-/// bone-skin 3x3 with this outer world normal matrix, so a rotated or non-uniformly scaled
-/// skinned model is lit correctly rather than as if World were identity.
-float3x3 InverseTranspose3x3(float3x3 m)
-{
-    float3 c0 = cross(m[1], m[2]);
-    float3 c1 = cross(m[2], m[0]);
-    float3 c2 = cross(m[0], m[1]);
-    float determinant = dot(m[0], c0);
-    float invDeterminant = (abs(determinant) > 1e-8) ? (1.0 / determinant) : 0.0;
-    return float3x3(c0 * invDeterminant, c1 * invDeterminant, c2 * invDeterminant);
 }
 )";
 
@@ -4459,8 +4511,14 @@ float4 main(in PSInput psIn) : SV_Target
                 constants.diffuseColor[component] = params->diffuseColor[component];
             for (int component = 0; component < 3; ++component)
             {
-                constants.emissiveAmbient[component] =
-                    params->ambientColor[component] + params->emissiveColor[component];
+                // DILIGENT-59: previously summed together here and multiplied by DiffuseColor (and
+                // any bound texture) as a single value in the shader -- silently multiplying
+                // EmissiveColor by DiffuseColor/the texture a second time (it is already
+                // premultiplied where FNA's own convention calls for that, e.g.
+                // EnvironmentMapEffect::FillGpuDrawParams()'s own ambient*diffuse fold). Kept apart
+                // and forwarded to their own g_Ambient/g_Emissive constants instead.
+                constants.ambient[component] = params->ambientColor[component];
+                constants.emissive[component] = params->emissiveColor[component];
                 constants.eyePositionSpecularPower[component] = params->eyePositionWorld[component];
                 constants.specularColor[component] = params->specularColor[component];
                 constants.lightDir[0][component] = params->light0Dir[component];

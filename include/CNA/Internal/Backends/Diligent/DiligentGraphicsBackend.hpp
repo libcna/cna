@@ -1465,7 +1465,16 @@ namespace CNA::Internal::Backends::Diligent
             float worldViewProj[16];
             float world[16];
             float diffuseColor[4];
-            float emissiveAmbient[4];
+            /// Raw `AmbientLightColor`, folded into the per-light diffuse sum in the shader (so it
+            /// gets multiplied by `DiffuseColor` exactly once, together with the directional
+            /// lights) -- never combined with `emissive` on the CPU side (`DILIGENT-59`).
+            float ambient[4];
+            /// Raw `EmissiveColor` (BasicEffect/SkinnedEffect: `EmissiveColor*Alpha`;
+            /// EnvironmentMapEffect: FNA's own pre-baked `EmissiveColor + AmbientLightColor*
+            /// DiffuseColor`, see `EnvironmentMapEffect::FillGpuDrawParams()`) -- added to the lit
+            /// result AFTER the ambient/light sum is multiplied by `DiffuseColor`, never multiplied
+            /// by it again in the shader (`DILIGENT-59`).
+            float emissive[4];
             float eyePositionSpecularPower[4];
             float specularColor[4];
             float lightDir[3][4];
@@ -1595,9 +1604,10 @@ namespace CNA::Internal::Backends::Diligent
         Dg::RefCntAutoPtr<Dg::ITexture> flatNormalTexture_;
         Dg::ITextureView* flatNormalTextureView_ = nullptr;
         /// PbrEffect's ambient/metallic/emissive/roughness factors, separate from `constantBuffer_`
-        /// because that shared block folds ambient+emissive into one `g_EmissiveAmbient` value
-        /// (every other stock effect's own convention) -- PBR needs them apart (ambient scales
-        /// albedo*occlusion, emissive is added standalone).
+        /// because PBR's own formula (ambient scales albedo*occlusion, emissive is added
+        /// standalone, both meaningfully distinct from every other stock effect's diffuse-lighting
+        /// model) doesn't fit that shared block's `g_Ambient`/`g_Emissive` pair at all, not just a
+        /// packing convenience.
         Dg::RefCntAutoPtr<Dg::IBuffer> pbrBuffer_;
 
         std::unordered_map<PipelineKey, CachedPipeline, PipelineKeyHash> pipelines_;
