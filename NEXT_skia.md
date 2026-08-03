@@ -2326,14 +2326,65 @@ level-boundary contract.
   the volume sampling ABI; `docs/skia-cube-volume-sampling-contract.md` and the SKIA-149 plan row
   both already flag it explicitly so it isn't lost.
 
+## Completed in this session: SKIA-152
+
+- Pure documentation/inventory task -- no runtime code changed. Before writing anything, dispatched
+  a research fork to resolve a real scope ambiguity discovered by a quick manual search: this repo
+  has GLSL `.glsl` file trees under `src/CNA/Internal/Backends/SdlGpu/shaders/` and
+  `.../Vulkan/shaders/` (each ~25-30 files, full stock-effect sets), but CNA's own
+  `CNA_GRAPHICS_BACKEND=EASYGL` backend file (`EasyGLGraphicsBackend.cpp`) appeared on a first pass
+  to contain only one embedded shader pair (the SpriteBatch shader) -- which would have meant "the
+  EasyGL 3D test surface" `docs/skia-3d-emulation-adr.md` repeatedly references either didn't exist
+  as GLSL source at all, or "EasyGL" was being used as a loose/historical label for something else.
+  The fork's full read resolved this as a false negative from an incomplete manual scroll: the real
+  corpus is thirteen `#version 300 es` vertex+fragment program pairs, all embedded as C++ string
+  literals in that same one file (5748 lines total), compiled through a shared `CompileAndLink`
+  helper -- confirmed by grep (26 `#version` occurrences) and by the ADR's own framing matching this
+  file's `SupportsCapability` defaults exactly.
+- A second fork then read every one of the thirteen programs in full and produced the actual
+  classification, published as new `docs/skia-easygl-effect-inventory.md`. Spot-verified several of
+  its load-bearing claims directly against the source before publishing (not just trusted blindly):
+  confirmed via grep that `AlphaTestEffect` really is baked into all twelve stock-3D programs
+  identically (no separate program), confirmed zero MRT/`gl_FragDepth`/derivative-call matches
+  anywhere in the file, and confirmed the `DualTextureEffect` fragment formula
+  (`base.rgb*=2.0; FragColor=base*tex2*tint`) really does match `docs/skia-effects.md`'s own
+  SKIA-93 spike claim word for word.
+- Findings worth remembering for SKIA-153-158: `SpriteEffect` is already implemented (Skia's direct
+  SpriteBatch paint path); `DualTextureEffect`'s fragment formula is `direct SkSL`-ready *today*,
+  needing only a vertex/primitive route (SKIA-153) to reach a real public draw; `BasicEffect`
+  (pixel-lit)/`PbrEffect`/`SkinnedPbrEffect` fragment stages are `SkMesh`-shaped once correctly-
+  interpolated varyings exist, with `PbrEffect`'s `PbrLight()` Cook-Torrance helper specifically
+  flagged as the natural SKIA-155 translator-grammar acceptance bar (richest fragment function in
+  the corpus, zero branching); every vertex-lit/skinned/`EnvironmentMapEffect` program stays
+  `3D-only` because its lighting or Fresnel math runs in the vertex stage over real per-vertex
+  geometry with no separable 2D-fragment piece -- `EnvironmentMapEffect` specifically noted as
+  architecturally similar to the now-implemented `cnaSampleCubeEXT` (SKIA-144-151) at its cube-
+  sample call site alone, but blocked by its per-vertex Fresnel term, not the sample itself. A
+  render-target-source flip-V macro (`cnaSampleUV`) is preprocessor-injected into every fragment
+  shader's texture reads across the corpus -- flagged as a backend-specific construct SKIA-155's
+  translator must recognize and strip rather than attempt to translate literally.
+- Found and fixed one real leftover from SKIA-151's own documentation sweep while cross-referencing
+  `docs/skia-effects.md`: its live "Explicit SkSL SpriteBatch ABI v1" section (describing the
+  *current* ABI, unlike the dated historical log entries elsewhere in the same file that SKIA-151
+  correctly left untouched) still had a bullet reading "Cube/volume children remain unsupported"
+  after SKIA-149 implemented them -- SKIA-151's own sweep missed this one sentence. Corrected.
+- No validator script exists for the new inventory doc's table (unlike `plan_skia.md`/
+  `skia-easygl-parity-ledger.md`/`skia-successor-contract-matrix.md`, which all have one); manually
+  verified every row has the same column count via a small Python pipe-count check before
+  publishing, after catching -- for the second time this session -- a literal `|` character
+  (this time from `|N.E|` absolute-value notation) that would have silently broken a table row.
+
 ## Next candidates
 
-1. SKIA-152–158: continue Phase S16 (wider explicit 2D effects) in dependency order.
-2. SKIA-159–170: add opt-in Ganesh, probe real MSAA/anisotropy, re-evaluate MRT, and hold the
+1. SKIA-153: prototype `SkMeshSpecification` for the complete reusable 2D vertex/fragment subset
+   `docs/skia-easygl-effect-inventory.md` identified as `SkMesh`-shaped (position+colour,
+   position+uv, position+colour+uv, position+normal+uv, position+normal+tangent+uv layouts).
+2. SKIA-154–158: continue Phase S16 in dependency order once SKIA-153 lands.
+3. SKIA-159–170: add opt-in Ganesh, probe real MSAA/anisotropy, re-evaluate MRT, and hold the
    successor gate only after the raster extensions are stable.
-3. The pre-existing `CNA_ENABLE_NET=OFF`/monolithic-`CnaTests` ENet build-graph defect is recorded
+4. The pre-existing `CNA_ENABLE_NET=OFF`/monolithic-`CnaTests` ENet build-graph defect is recorded
    by SKIA-112/113 but remains outside Skia scope.
-4. Standalone follow-up (not yet a numbered task): wire `cnaVolumeAddressModesEXT` to the active
+5. Standalone follow-up (not yet a numbered task): wire `cnaVolumeAddressModesEXT` to the active
    `SamplerState` in `MakeSpriteShaderEXT` instead of the current hardcoded Clamp, so
    Wrap/Mirror volume addressing (already implemented in the sampling formula since SKIA-148)
    becomes reachable through the real public API.

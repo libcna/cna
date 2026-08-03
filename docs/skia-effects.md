@@ -152,8 +152,12 @@ ShaderEffect effect(device, "CNA_SKIA_SKSL_V1", R"(
 - Wrong markers stay on the historical null-backend path. Tagged syntax errors preserve Skia's
   compiler text; wrong children/uniforms and size violations keep an invalid backend with a
   deterministic adapter diagnostic. A failed `Begin` clears pending custom state.
-- Cube/volume children remain unsupported. `CustomEffects` remains false because the bounded
-  fragment-only opt-in is not arbitrary EasyGL GLSL compatibility.
+- Cube/volume sampling is supported as a further bounded extension of this same v1 ABI
+  (`cnaSampleCubeEXT`/`cnaSampleVolumeEXT`, reserved `cnaCubeFace0`-`5`/`cnaVolumeAtlas0` children,
+  SKIA-144–151, `docs/skia-cube-volume-sampling-contract.md`), reachable only for an effect that
+  actually calls one of those two functions in its own source. `CustomEffects` remains false
+  regardless because the bounded fragment-only opt-in -- with or without cube/volume sampling -- is
+  not arbitrary EasyGL GLSL compatibility.
 
 `Skia_Effect_Boundary` covers the unchanged untagged route. `Skia_SkSL_Effect_Prototype` proves
 real compile and pixel output through `cnaTexture0`, compiler/ABI/size diagnostics, and immediate
