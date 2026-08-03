@@ -54,7 +54,7 @@ what trigger.*
 |---|---|---|
 | **Known and planned** | Recorded, evidenced, scheduled, not started | `REMED-GFX-203` … `REMED-GFX-208` |
 | **Safe declared capability boundary** | The unsupported request is rejected deterministically, before native submission, with a public exception, and a test asserts the boundary in both directions | `MultiStreamVertexInput = false` on Vulkan / Bgfx / WebGPU / SDL_GPU / D3D11 / D3D12 / D3D9 / Headless |
-| **Silent wrong result** | A supported public call is accepted, submitted, and renders or reports the wrong thing with no exception and no diagnostic | `REMED-GFX-211`, `REMED-GFX-212` and `REMED-GFX-213` — all three measured at pixel level on 2026-08-03 |
+| **Silent wrong result** | A supported public call is accepted, submitted, and renders or reports the wrong thing with no exception and no diagnostic | `REMED-GFX-211`, `REMED-GFX-212` and `REMED-GFX-213` — all three measured at pixel level on 2026-08-03, and **all three DONE**; `REMED-GFX-215` is the newest member of the class |
 | **Checkpoint blocker** | Must be resolved or explicitly accepted before the post-audit checkpoint is taken | see the `Checkpoint blocker` column — `YES` / `NO` / `REVIEW`, never assumed |
 
 A "safe declared capability boundary" is **not** a silent wrong result and must never be recorded as
@@ -312,11 +312,34 @@ merely unread, and legs A/B/C are the acceptance gate.
 
 ### 4.2 `REMED-GFX-212` — `VertexColorEnabled` means different things per backend on the instanced route
 
-**Record of status:** OPEN, LOW, P3, not begun.
+**Record of status:** ~~OPEN, LOW, P3, not begun.~~ → **DONE 2026-08-03. Vulkan and WebGPU scopes
+both DONE; checkpoint blocker RESOLVED and the ticket has left the blocker set.**
 **Post-audit priority:** ~~**REVIEW — P1 if the divergence is a defect, P3 if it is a contract
 question.**~~ → **P1: the reference settles it as a defect (case A).**
-**Checkpoint blocker: ~~REVIEW~~ → YES, 2026-08-03 — see the TRIAGE RESULT at the end of this
-subsection.**
+**Checkpoint blocker: ~~REVIEW~~ → ~~YES, 2026-08-03~~ → NO — RESOLVED 2026-08-03.**
+
+> **CLOSED (2026-08-03).** Both backends were reproduced first on unfixed `199c9b7f` — the new
+> permanent oracle `tests/Microsoft/Xna/Framework/Graphics/InstancedVertexColorTests.cpp` ran
+> **1/9 on Vulkan and 1/9 on WebGPU**, the one passing leg on each being the
+> `VertexColorEnabled = false` control — then classified independently, then corrected. Both loss
+> points are **case C** with case A as its consequence: neither backend lost a colour attribute it
+> had, each selects a dedicated instanced shader family that never declared one
+> (`kInstanced3dVertSpv`'s `fragColor = pc.diffuseColor;` with a one-attribute vertex input, and
+> WebGPU's inline WGSL `output.color = u.diffuseColor;` with a one-element `vertexAttrs`). Both
+> already *received* `vertexColorEnabled` (`FillInstancedPushConst`'s `pc[31]`, `FillExtUniforms`'
+> `out[31]`) and simply never read it. The fix is the colored3d/textured3d split the ordinary route
+> already makes, applied to the instanced family and selected from each backend's own stride table
+> (16 and 24, colour at offset 12, shader location 1). `VertexColorEnabled` is deliberately not a
+> pipeline-key dimension on either backend; Vulkan additionally folds the raw per-vertex stride into
+> its Instanced3D key so a position-only and a position+colour declaration cannot share a pipeline.
+> **9/9 on Vulkan, WebGPU, EasyGL and bgfx; zero Vulkan VUIDs with the layer proven loaded; zero
+> WebGPU uncaptured errors; ASan and UBSan clean; 2 pipeline variants total and no extra draw, pass,
+> submit, frame, wait or readback.** Only Vulkan and WebGPU production changed. Full record in
+> `remediation/REMEDIATION_PROGRESS.md`. Two independent findings were spawned and given IDs
+> without being fixed: **`REMED-GFX-214`** (WebGPU's ordinary route throws on a stride-24 draw with
+> `TextureEnabled = false`) and **`REMED-GFX-215`** (bgfx's instanced shader emits the raw COLOR0,
+> ignoring DiffuseColor *and* VertexColorEnabled — the mirror image of this ticket, invisible to the
+> triage oracle because its DiffuseColor was white).
 
 **Why it is not pure capability completion.** Again nothing rejects, and again the shape is the
 classic supported instanced draw. The stock instanced shader colours from `DiffuseColor` on
@@ -803,7 +826,7 @@ constraints and different scope.
 | `REMED-GFX-209` | Test contract — `GraphicsDeviceCapabilityTest` | Test-contract defect (encodes an incorrect backend assumption; **hides nothing**) | **Fails loudly** on six backends; cannot mask a production defect | LOW / P3 | P3 | **REVIEW** | NO | none | Before the post-integration checkpoint, with the clean-baseline work | SMALL | Gate on `CNA_BACKEND_EASYGL` or assert the query does not throw, as the neighbouring cases do |
 | `REMED-GFX-210` | Capability reporting — instancing | Capability-query / reporting + public-exception parity | **Throws**, but a `std::runtime_error` from the interface default; no advance query, no false success | LOW / P3 | P3 | NO | **CONDITIONAL** | none technical; adjacent to GFX-213 triage | First integration group adding a backend with no instanced path | MEDIUM | FNA has `FNA3D_SupportsHardwareInstancing` + `NoSuitableGraphicsDeviceException`; follow `REMED-GFX-185`'s report-what-you-do precedent |
 | `REMED-GFX-211` | ~~Vulkan, Bgfx, WebGPU~~ **ALL THREE DONE — TICKET DONE** *(2026-08-03)* — instanced route | **Supported-path silent wrong result** — measured on all three, both stream sides | **None.** Classic 1+1 draw is accepted and submitted; instance records 0..3 consumed instead of 1..4, and the per-vertex stream renders its decoy | MEDIUM / P2 | **P1** | ~~REVIEW~~ **YES** *(triaged 2026-08-03)* | NO | GFX-202 (value already delivered); precedent GFX-122, GFX-123 | ~~Immediate remediation campaign~~ **COMPLETE — checkpoint blocker RESOLVED** | MEDIUM | Triaged: WebGPU pixel measurement taken; per-vertex side confirmed on all three; the two streams fail **independently** (`both-offsets-ignored`), so a fix must carry both. D3D9 unmeasured — no D3D display. **Vulkan corrected §4.1: instance offset into the copy's source base, per-vertex offset folded into `vkCmdDrawIndexed`'s own `vertexOffset` — the per-vertex loss point was `d.baseVertex`, not the neighbouring copy. Bgfx corrected §4.1 the same way at its own two expressions: the instance copy's source base became `cpuData.data() + vertexOffset * instStride`, and the per-vertex offset joined `baseVertex` in `bgfx::setVertexBuffer`'s `_startVertex` — bgfx has no draw-time base-vertex argument, so that start element IS the addend, which is also why the ordinary bgfx route was already correct (it folds into `params.baseVertex` upstream) and the instanced one was not (it folds nothing, by GFX-202 design). Vulkan and Bgfx now both in `CNA_INSTANCED_BINDING_OFFSET_ORACLE`; WebGPU corrected §4.1 at its own two expressions, and the per-vertex loss point was Vulkan's shape rather than bgfx's: `command.vertexData` copies the whole per-vertex buffer and the replay binds it at native offset 0, so `command.baseVertex = params.baseVertex` was the only term that could carry the offset and now carries `params.baseVertex + perVertexOffset`; the instance copy's source base became `vertexOffset * instVbStride`. All three backends are now in `CNA_INSTANCED_BINDING_OFFSET_ORACLE`, which emptied `CNA_INSTANCED_OFFSET_DEFECT_MEASURED` — the macro and its four arms were deleted, leaving the triage legs' `#else` UNCLASSIFIED arm for the still-unmeasured D3D9.** |
-| `REMED-GFX-212` | Vulkan, WebGPU *(measured)*; D3D11, D3D12 *(source-identified)* — stock instanced shader | **Supported-path silent wrong result.** Reference settles it: case A | **None.** The draw renders silently in the wrong colour; no diagnostic | LOW / P3 | ~~REVIEW~~ **P1** | ~~REVIEW~~ **YES** *(triaged 2026-08-03)* | NO | ~~an FNA reference determination~~ — **answered** | **Immediate remediation campaign** | MEDIUM *(LARGE if shader sources change)* | Triaged: FNA's shader index has no instancing term, so the same VS runs on both routes. Vulkan/WebGPU colour their **own** ordinary route from the stream and the instanced one from `DiffuseColor`. D3D11/D3D12 still unmeasured — no D3D display |
+| `REMED-GFX-212` | **~~Vulkan, WebGPU~~ BOTH DONE — TICKET DONE** *(2026-08-03)*; D3D11, D3D12 remain *(source-identified, unmeasured)* — stock instanced shader | **Supported-path silent wrong result.** Reference settles it: case A | **None.** The draw renders silently in the wrong colour; no diagnostic | LOW / P3 | ~~REVIEW~~ **P1** | ~~REVIEW~~ ~~**YES**~~ **NO — RESOLVED 2026-08-03** | NO | ~~an FNA reference determination~~ — **answered** | **Immediate remediation campaign** | MEDIUM *(LARGE if shader sources change)* | Triaged: FNA's shader index has no instancing term, so the same VS runs on both routes. Vulkan/WebGPU colour their **own** ordinary route from the stream and the instanced one from `DiffuseColor`. D3D11/D3D12 still unmeasured — no D3D display |
 | `REMED-GFX-213` | **~~Bgfx, Vulkan, WebGPU~~ ALL THREE DONE — TICKET DONE** *(2026-08-03)* — per-instance divisor *(scope widened by triage)* | **Supported-path silent wrong result.** Escalation condition confirmed | **None.** An adequately sized instance buffer clears every check and renders `InstanceFrequency = 2` at divisor 1 | MEDIUM / P2 | ~~P2~~ **P1** | ~~REVIEW~~ **YES** *(triaged 2026-08-03)* | NO | GFX-202; distinct from GFX-121; shares its copy site with GFX-211 | ~~Immediate remediation campaign~~ **COMPLETE — checkpoint blocker RESOLVED** | MEDIUM | Triaged: `frequency` occurs **0 times** in all three backends' sources. Not an absent native capability — all three can emulate a divisor in the buffer they already build. **Vulkan corrected §4.3 by replication: no divisor extension is enabled (API 1.1, `VK_KHR_swapchain` only), so the binding keeps divisor 1 and slot `i` takes source record `vertexOffset + i / frequency`. Destination cardinality unchanged, so no pipeline-key term was needed. Bgfx corrected §4.3 the same way, after classifying its native capability from the installed header rather than a grep count: bgfx's whole public instancing surface (`allocInstanceDataBuffer` / `setInstanceDataBuffer` / `setInstanceCount`, `InstanceDataBuffer{data,size,offset,num,stride,handle}`) has no divisor, step-rate or frequency parameter at all, so category C again — slot `i` takes source record `vertexOffset + i / frequency` in the instance-data buffer the route already allocates. Cardinality measured identical at frequency 1 and 2 (5 submissions / 16 prims / 1024 transient B for a 4-draw frame at both). Bgfx's over-long-range gate was generalised from `instanceCount * stride` to the highest source record at the same time. WebGPU corrected §4.3 the same way and classified its native capability from the installed wgpu-native v29.0.1.1 headers rather than a grep count: `WGPUVertexBufferLayout` is only `{nextInChain, stepMode, arrayStride, attributeCount, attributes}`, `WGPUVertexStepMode` is only `{Undefined, Vertex, Instance}`, none of the eleven `WGPUNativeSType` chains extends a vertex layout or vertex state, and no `WGPUNativeFeature` adds a step rate — category C again, so slot `i` takes source record `vertexOffset + i / frequency` in the command's own `instVbData`. Cardinality measured by a new permanent WebGPU regression (22/22) against the backend counters and wgpu-native's `wgpuGenerateReport()`: 1 pass, 1 submit, 0 new pipeline variants at every frequency and offset pair, and no native buffer added by doubling the instance count.** |
 
 ---
@@ -872,7 +895,7 @@ For each integrated backend:
 
 | When | Tasks |
 |---|---|
-| **Before branch integration** | ~~`REMED-GFX-211`, `REMED-GFX-212`, `REMED-GFX-213` triage (§4)~~ — triage done 2026-08-03; `REMED-GFX-211` and `REMED-GFX-213` are **DONE** on every backend they name, and **`REMED-GFX-212` is the only remaining checkpoint blocker of the cluster** (Vulkan and WebGPU scopes OPEN) |
+| **Before branch integration** | ~~`REMED-GFX-211`, `REMED-GFX-212`, `REMED-GFX-213` triage (§4)~~ — triage done 2026-08-03, and **all three tickets are now DONE on every backend they name**. **The checkpoint-blocker set of this cluster is EMPTY.** The next action is post-audit exit reconciliation / checkpoint preparation, not another remediation ticket. `REMED-GFX-214` and `REMED-GFX-215`, spawned by `REMED-GFX-212`, are OPEN and **not** checkpoint blockers of this cluster — `REMED-GFX-215` needs its own triage against §2 before the checkpoint |
 | **While adapting a particular branch** | None of §5. Only the adaptation checklist above, plus `REMED-GFX-210` evidence-gathering when a branch adds a backend with no instanced path |
 | **After all 19 branches are integrated** | `REMED-GFX-209` (clean principal-suite baseline before the checkpoint); `REMED-GFX-210` |
 | **During modularization** | `REMED-GFX-203` … `REMED-GFX-208`, and `REMED-GFX-213`'s implementation if triage lands it on the capability side |
@@ -1007,10 +1030,13 @@ Recorded here and mirrored in `remediation/REMEDIATION_PROGRESS.md`:
   every backend capability descendant.**
 - ~~**Checkpoint review must still inspect the supported-path silent-wrong-result candidates** — §4, at
   minimum `REMED-GFX-211`, `REMED-GFX-212` and `REMED-GFX-213`'s escalation condition.~~ **That
-  inspection ran on 2026-08-03.** All three are confirmed supported-path silent wrong results,
-  **checkpoint blocker YES**, and they stay in the immediate remediation campaign rather than being
-  deferred to this plan — this file records their evidence and their smallest implementation task, it
-  does not own their execution.
+  inspection ran on 2026-08-03.** All three were confirmed supported-path silent wrong results,
+  **checkpoint blocker YES**, and stayed in the immediate remediation campaign rather than being
+  deferred to this plan. **All three are now DONE on every backend they name (2026-08-03), and this
+  cluster's checkpoint-blocker set is EMPTY.** `REMED-GFX-212` spawned `REMED-GFX-214` and
+  `REMED-GFX-215`; `REMED-GFX-215` is a supported-path silent wrong result of the same class on bgfx
+  and must be triaged against §2 before the checkpoint, but it is not a blocker inherited from this
+  cluster's disposition.
 - **Deferred work stays visible** through this file, and through the `DEFERRED` status and
   `Target plan: plan_postaudit.md` pointer on every affected row in
   `remediation/REMEDIATION_INDEX.md` and `remediation/REMEDIATION_PROGRESS.md`.

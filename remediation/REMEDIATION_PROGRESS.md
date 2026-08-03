@@ -25784,3 +25784,253 @@ production, and the header change is one inline NOXNA diagnostic accessor. No sh
 other backend, no public API, no shader. `REMED-GFX-212` was not begun, `REMED-GFX-205` remains
 deferred, and `REMED-GFX-203` … `REMED-GFX-210` are unchanged.
 **No new finding was created.**
+
+---
+
+## `REMED-GFX-212` — VULKAN AND WEBGPU SCOPES, TICKET **DONE** (2026-08-03)
+
+The last checkpoint blocker of the `REMED-GFX-201`/`-202` descendant cluster. `REMED-GFX-211` and
+`REMED-GFX-213` were already DONE on every backend they name; this closes the third. Only Vulkan and
+WebGPU production changed. `REMED-GFX-203` … `REMED-GFX-210` remain **DEFERRED** in
+`plan_postaudit.md`, `REMED-GFX-199` was not touched, and `audit/` was not modified.
+
+### The authoritative contract, cited from source
+
+FNA makes `VertexColorEnabled` **draw-call-independent**, on three independent points:
+
+- `GraphicsDevice.DrawInstancedPrimitives` (`GraphicsDevice.cs:1257`) is `ApplyState()` +
+  `PrepareVertexBindingArray(baseVertex)` + the FNA3D call. It touches no effect state.
+- `BasicEffect.OnApply` (`BasicEffect.cs:490-511`) derives its shader index from fog, vertex colour,
+  texture and lighting. There is **no instancing term**.
+- Every vertex-colour permutation of `BasicEffect.fx` multiplies `vout.Diffuse *= vin.Color` — line
+  85 (`VSBasicVc`) and seven siblings — in a file containing **zero** instancing constructs.
+
+The same vertex shader therefore runs for both routes. `VertexColorEnabled = false` means the bound
+COLOR0 stream must not modulate the diffuse result; `true` means it multiplies it. Instance streams
+provide transform data and do not replace the geometry stream's COLOR0 semantic.
+
+### Pre-fix reproduction, on `199c9b7f` with a clean tree
+
+A new permanent oracle, `tests/Microsoft/Xna/Framework/Graphics/InstancedVertexColorTests.cpp`, was
+committed red-first and ran **1/9 on Vulkan** and **1/9 on WebGPU**. The single leg that passed on
+each was exactly the `VertexColorEnabled = false` control — which is the calibration that separates
+"this backend ignores the flag" from "this backend ignores the stream".
+
+The oracle's whole point is that it distinguishes the failure modes rather than counting them. With
+`DiffuseColor = (0.500, 1.000, 0.250)`, `Alpha = 1`, lighting/texture/fog off, and four columns
+carrying four different COLOR0 records, each mode lands on a different measurable colour:
+
+| reading for column 0 (`C = 255,128,64`) | what it means |
+|---|---|
+| `(128,128,16)` | COLOR0 applied once — the contract |
+| `(128,255,64)` | COLOR0 ignored — equals DiffuseColor |
+| `(128,64,4)` | COLOR0 applied twice |
+| `(255,128,64)` | DiffuseColor ignored — equals COLOR0 |
+| `(32,128,64)` | channel swizzle (BGR) |
+| `(255,255,255)` | read un-normalized; every product saturates |
+
+**Measured, pre-fix.** Both backends' ORDINARY route produced the analytic products exactly —
+`(128,128,16) (64,255,16) (32,128,64) (128,255,64)`, zero spread across 4416 sampled pixels per
+column — and both INSTANCED routes produced `(128,255,64)` in **all four** columns. That is
+unambiguously *COLOR0 ignored*: not doubled, not swizzled, not un-normalized, not stale, not the
+instance record misread as colour. Nothing threw; every wrong frame was an accepted draw.
+
+### The two loss points, classified independently
+
+Both are **case C** (the instanced path selects a shader permutation with no vertex-colour support),
+with **case A** as its consequence rather than its cause — neither backend *lost* a colour attribute
+it had; each selects a dedicated instanced shader family that never declared one. The expressions
+are different files in different languages, so each was proven on its own backend:
+
+- **Vulkan.** `GetOrCreatePipelineInstanced3D` unconditionally binds `kInstanced3dVertSpv`, whose
+  only per-vertex input is `layout(location = 0) in vec3 aPos` and whose entire colour body is
+  `fragColor = pc.diffuseColor;`. Its `VkVertexInputAttributeDescription attrs[5]` accordingly
+  declares one per-vertex attribute (`aPos`) and four per-instance ones (locations 4..7). The
+  push constant already carried the flag — `FillInstancedPushConst` writes `pc[31] =
+  p.vertexColorEnabled ? 1.f : 0.f` — and the shader simply never read it.
+- **WebGPU.** `CreateInstancedResources`'s single inline WGSL module declares
+  `struct VertexInput { @location(0) position: vec3f };` and `output.color = u.diffuseColor;`, and
+  `GetOrCreatePipelineInstanced3D` builds `std::array<WGPUVertexAttribute, 1> vertexAttrs`. Its
+  uniform already carried the flag too — `FillExtUniforms` writes `out[31]`, which the ordinary
+  `colored3d.wgsl` reads as `u.light0DiffuseVertexColor.w`.
+
+### The fix: the split the ordinary route already makes
+
+Both APIs require every user-defined vertex shader input to be backed by a vertex attribute
+description — `VUID-VkGraphicsPipelineCreateInfo-Input-07904` on Vulkan, the equivalent WebGPU
+validation rule — so a position-only geometry stride and a position+colour one **need different
+modules**. That is exactly the colored3d/textured3d split the ordinary route has always used, so
+the correction is that split applied to the instanced family, not a new mechanism:
+
+- **Vulkan** gains `src/CNA/Internal/Backends/Vulkan/shaders/instanced_colored3d.vert.glsl`,
+  registered in `compile_shaders.py` and regenerated into `spirv_shaders.hpp` through the
+  repository's own deterministic process (**60 lines added, none removed** — the generated file was
+  not hand-edited). Its mixing expression is byte-for-byte `colored3d.vert.glsl`'s own:
+  `(pc.vertexColorEnabled > 0.5) ? aColor * pc.diffuseColor : pc.diffuseColor`. It shares
+  `kInstanced3dFragSpv` and the unmodified 1-binding `pipelineLayoutExt3D_` unchanged.
+- **WebGPU** gains a second WGSL module, `instancedColoredShader_`, created and destroyed alongside
+  `instancedShader_` in `CreateInstancedResources`/`DestroyInstancedResources`. Its expression is
+  character-for-character `colored3d.wgsl`'s own:
+  `select(u.diffuseColor, input.color * u.diffuseColor, vertexColorEnabled > 0.5)`.
+
+Each backend selects its variant from **its own stride table** — `PackedColorOffsetForStride` and
+`InstancedPackedColorOffsetForStride`, strides **16** (`VertexPositionColor`) and **24**
+(`VertexPositionColorTexture`) at byte offset **12** — which is the same table the ordinary route's
+own pipelines already read: `GetOrCreatePipelineFogColored3D`'s `attrs[1] = {1, 0,
+VK_FORMAT_R8G8B8A8_UNORM, 12}` and `GetOrCreatePipelineFogTex3D`'s stride-24 arm, and WebGPU's
+stride-16 `ColoredVertex` layout. The attribute lands at shader **location 1**, which cannot collide
+with the instance matrix at 4..7. Strides 20 and 32 carry no COLOR0 at all and keep the
+position-only module unchanged; the skinned/PBR strides carry one the instanced route has no bone
+palette or tangent basis to render, which is a pre-existing boundary this task neither creates nor
+closes.
+
+### Pipeline and cache identity
+
+`VertexColorEnabled` is deliberately **not** a key dimension on either backend. It travels in the
+push constant / uniform, exactly as it does for the ordinary colored pipeline, so `false` and `true`
+cannot collide *because they are not distinguished at all* — the same pipeline serves both and reads
+the per-draw value.
+
+Vulkan's Instanced3D key gained one term: `FoldPerVertexStrideIntoKey` XORs the **raw** per-vertex
+stride into bits 53..63 (free — `Make3DKey` tops out at 40, `MakeExt3DKey` at 44, and
+`FoldDepthFormatIntoKey` occupies 45..52 for a core `VkFormat` ordinal). `MakeExt3DKey` buckets 16
+and every stride it does not recognise into the same bucket 0, which was harmless while every stride
+produced the same position-only vertex input and is not once the stride decides whether a COLOR0
+attribute exists at all. WebGPU needed no key change: its salt already carried
+`pvStride * 1000003 + instVbStride`.
+
+### Cardinality and performance
+
+Two new standalone measurements, `examples/vulkan_instanced_vertex_color_cardinality_test.cpp`
+(**14/14**) and `examples/webgpu_instanced_vertex_color_cardinality_test.cpp` (**18/18**), read the
+backends' own cumulative EXT counters and wgpu-native's `wgpuGenerateReport()` live-object registry
+before and after each known public sequence. `GetInstancedPipelineCacheSizeEXT` is the one
+production addition on Vulkan — an inline NOXNA diagnostic mirroring WebGPU's accessor of the same
+name.
+
+| sequence | Vulkan instanced variants | WebGPU instanced variants | WebGPU passes | WebGPU submits |
+|---|---|---|---|---|
+| 1 draw, `VertexColorEnabled = false` (cold) | **+1** | **+1** | 1 | 1 |
+| 1 draw, `VertexColorEnabled = true` (warm) | **+0** | **+0** | 1 | 1 |
+| 4 draws, alternating false/true, one cycle | **+0** | **+0** | 1 | 1 |
+| 1 draw, stride 24 (cold) | **+1** | **+1** | 1 | 1 |
+| every sequence above, repeated | **+0** | **+0** | 4 | 4 |
+| whole run | **2 total** | **2 total** | — | — |
+
+No extra draw, pass, submit, frame, wait or readback: WebGPU stays at exactly one render pass and
+one queue submit per render-target cycle whether one draw or four are issued and whether the flag is
+set or not, and Vulkan adds no `vkQueueWaitIdle`/frame-fence wait and no present. Both backends
+build **zero** native render pipelines when the flag is toggled. Cache growth is bounded by the two
+real declaration variants, not by draw count.
+
+A declared boundary, stated rather than skipped: Vulkan defers its 3D draws and
+`SetRenderTarget(nullptr)` only closes the segment, so each cycle in the Vulkan measurement ends
+with the **same** one-pixel `RenderTarget2D::GetData` as its flush trigger. It appears identically
+in every sequence, so the file asserts equalities *between* sequences rather than claiming an
+absolute "no readback". WebGPU's own `SetRenderTarget(nullptr)` does flush, which is why its
+absolute pass/submit numbers are asserted directly; its first render-target cycle after device
+creation additionally flushes the device's initial backbuffer pass, so a warm-up **ordinary** draw
+moves that start-up cost out of the measured window while leaving the Instanced3D cache cold.
+
+### Validation and sanitizers
+
+- **Vulkan validation: clean.** `VK_LAYER_KHRONOS_validation` proven loaded — `VK_LOADER_DEBUG=layer`
+  reports `Insert instance layer "VK_LAYER_KHRONOS_validation"` and `Loading layer library
+  libVkLayer_khronos_validation.so` — and 46/46 instanced tests across
+  `InstancedVertexColorTests`, `InstancedDrawMultiStreamTests` and `InstancedDrawRangeTests` produce
+  **zero** VUIDs, zero validation errors and zero validation warnings. No binding/attribute
+  mismatch, no format mismatch, no missing binding.
+- **WebGPU validation: clean.** The uncaptured-error and device-lost callbacks are installed and
+  print to `stderr`; the same suites produce **zero** uncaptured errors and **zero** device losses,
+  and `GetUncapturedErrorCountEXT` reports 0 across the whole cardinality matrix.
+### Sanitizers
+
+Sanitizer runtimes proven linked before trusting a silent run: **41** `__asan_*` symbols in
+`cmake-build-vulkan-asan/CnaTests`, **15** `__ubsan*` symbols in `cmake-build-vulkan-ubsan/CnaTests`,
+and **56** combined in `cmake-build-webgpu-asan-ubsan/CnaTests`.
+
+- **Vulkan ASan** (`ASAN_OPTIONS=detect_leaks=1`), all nine new legs: 9/9 pass, **zero**
+  heap-buffer-overflow, stack-buffer-overflow, use-after-free, double-free and SEGV. So: no
+  out-of-bounds colour fetch, no stride/attribute-offset overflow, no stale declaration or pipeline
+  pointer, no double release.
+- **Vulkan UBSan** (`print_stacktrace=1:halt_on_error=0`), all three instanced suites: **46/46 pass,
+  0 runtime errors** — no invalid format conversion and no uninitialized colour value.
+- **WebGPU ASan + UBSan** in one binary, all nine legs: 9/9 pass, **0** UBSan runtime errors, **0**
+  hard ASan errors.
+- **Leak classification by exact A/B in the same binary.** Both backends report **368 bytes in 4
+  allocations per `GraphicsDevice`** — 3312 bytes in 36 allocations across nine legs, exactly
+  9 × 368 — and the figure is *identical* for the `VertexColorEnabled = false` leg, the `true` leg,
+  and a pre-existing instanced control this task did not change. It is also the same 368/4 figure
+  `REMED-GFX-161` recorded as the external driver baseline. Every frame in every leak stack is
+  `realloc` from `<unknown module>`; **zero** `CNA::`, `Microsoft::Xna` or `WebGPUGraphicsBackend`
+  frames appear in any of them. The total tracks device creations, not instanced draws, not shader
+  modules and not pipeline variants — which is what proves WebGPU's second shader module and
+  Vulkan's second SPIR-V module are released, not leaked.
+
+### Test and regression results
+
+- `InstancedVertexColorTests.cpp` (new, 9 legs): **9/9 on Vulkan, 9/9 on WebGPU, 9/9 on EasyGL,
+  9/9 on bgfx.** Covers `VertexColorEnabled` false and true on both routes; the stride-24
+  declaration; 32-bit indices; a nonzero geometry `VertexOffset` skipping a decoy quad while the
+  survivors keep their own records; `InstanceFrequency = 2` repeating record 0 without touching the
+  colour; a seven-step transition chain (false→true, true→false, instanced→ordinary,
+  ordinary→instanced, and a return to an earlier complete state twice); two draws queued into ONE
+  render-target cycle with different flags and a buffer rewrite between them; and a queued draw
+  whose geometry `VertexBuffer` is destroyed before the flush, with a same-size same-declaration
+  replacement allocated to reuse the address.
+- The `REMED-GFX-212` triage leg in `InstancedDrawMultiStreamTests.cpp` lost its measured-defect
+  arm: Vulkan and WebGPU moved from the `EXPECT_NE` arm to the `EXPECT_EQ` one, which is what the
+  correction forced — the arm asserted the defect until it stopped being true.
+- `REMED-GFX-211`/`REMED-GFX-213` preserved: 46/46 Vulkan and the full WebGPU instanced set green,
+  with offsets and frequencies now exercised **together with** the colour.
+- The whole instanced/graphics shard (`*Instanc*` plus the three instanced suites) run per backend:
+  **EasyGL 329/329**, **bgfx 326/333**, **Vulkan 321/328**, **WebGPU 321/328** — **zero FAILED**
+  anywhere. The seven non-passing on each of the three are **SKIPPED**, and they are the declared
+  `MultiStreamVertexInput = false` boundary (`REMED-GFX-203`/`REMED-GFX-205`, deferred), asserted in
+  both directions. EasyGL runs all 329 because it is the one backend that supports multi-stream
+  input.
+
+- **Full principal suite, run although production stayed backend-local.** `cmake-build-vulkan`:
+  **5798/5828, 4 failed** (131 s). `cmake-build-webgpu`: **5819/5851, 6 failed** (175 s). Every
+  failure is pre-existing or environmental, and each was classified rather than counted:
+  `XnbContainerFuzzTest.MutatedRealModelFixtureNeverCrashesAndOnlyFailsCleanly` fails identically in
+  `cmake-build-debug` (EasyGL, untouched by this task); `CnjEffectTest.LoadsRealCnjFixture` and
+  `CnjStockEffectTest.CustomGlslEffectStillWorks` fail identically in `cmake-build-bgfx` (also
+  untouched); `GraphicsDeviceCapabilityTest.DoesNotSupportWireFrame` is `REMED-GFX-209`, deferred;
+  `GraphicsDeviceValidationTest.SetRenderTargets_FourTargets_DoesNotThrow` is the WebGPU failure the
+  `REMED-GFX-211`/`-213` WebGPU lane already recorded as pre-existing; and
+  `EnvironmentMapEffectDefaultsTest.EnvironmentMapAmountRoundTrips` threw
+  `SDL_InitSubSystem(SDL_INIT_VIDEO) failed: x11 not available` from its fixture constructor on a
+  loaded shared Xvfb and **passes in isolation** — a display flake, not a result. None of the six
+  issues an instanced draw (`grep -c DrawInstancedPrimitives` is 0 in each of their sources).
+
+### New findings — TWO, both with explicit IDs, neither fixed here
+
+1. **`REMED-GFX-214`** — WebGPU's **ordinary** route throws on a stride-24 draw with
+   `TextureEnabled = false`. `DrawIndexedPrimitivesEx` sends stride 20/24 to `QueueTexturedDraw`
+   only when `params.texture0 != nullptr`, so the draw falls through to
+   `DrawIndexedColoredPrimitives`, whose `QueueColoredDraw` throws "requires a stride-16
+   (VertexPositionColor) vertex buffer". Reproduced identically on unfixed `199c9b7f`, so this task
+   neither caused it nor is it a vertex-colour defect on the instanced route. It is a **loud**
+   failure, a different class from `REMED-GFX-212`'s silent wrong result. The stride-24 leg records
+   the exact rejection text and still asserts its own instanced half, rather than skipping.
+2. **`REMED-GFX-215`** — bgfx's instanced route ignores **DiffuseColor and VertexColorEnabled**,
+   emitting the raw per-vertex COLOR0. The exact mirror image of `REMED-GFX-212`. It was invisible
+   to this ticket's own checkpoint triage because that oracle used a **white** DiffuseColor, which
+   cannot tell `COLOR0 × white` apart from `COLOR0` alone; the new oracle's non-white DiffuseColor
+   separates them. bgfx's ordinary route produced the analytic products while its instanced route
+   produced the raw records `(255,128,64) (128,255,64) (64,128,255) (255,255,255)` — **identically
+   with the flag false and true**, so both terms are lost, not one. Confirmed by source:
+   `vs_instanced3d.sc`'s whole colour body is `v_color0 = a_color0;` and it declares no diffuse
+   uniform at all. Not fixed here: this lane was explicitly scoped to Vulkan and WebGPU production.
+   The bgfx arm of the new oracle asserts the **measured** behaviour, so it fails the moment bgfx is
+   corrected and forces its own removal.
+
+### Scope held
+
+Production changed in exactly four files: `VulkanGraphicsBackend.cpp`, its header (one inline NOXNA
+diagnostic accessor), `WebGPUGraphicsBackend.cpp` and its header (one member). Plus one new GLSL
+source, its `compile_shaders.py` registration, and the regenerated `spirv_shaders.hpp`. No shared
+header, no common interface, no public API, no bgfx or EasyGL production, and no other backend.
+`REMED-GFX-203` … `REMED-GFX-210` remain DEFERRED, `REMED-GFX-199` was not touched, and no other
+remediation ticket was begun.
