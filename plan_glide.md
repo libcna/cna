@@ -319,13 +319,13 @@ plus a dgVoodoo/real-hardware visual test before it can be advertised as support
   Glide RGB result, and add golden tests for non-uniform worlds and multiple lights. Keep
   `PreferPerPixelLighting` rejected: Glide has no per-pixel programmable lighting.
   **Implementation staged:** the CPU path now evaluates FNA's three-light Blinn-Phong term,
-  applies it before alpha-aware fog, and attempts an inverse-transpose normal transform. The
-  2026-08-03 audit found that the final multiplication instead applies the inverse for the
-  backend's row-vector convention; GLIDE-AUD-004 reopens that correction. Six portable unit probes
-  cover a front/back light, three-light sum, diagonal non-uniform scale,
-  vertex-colour/emissive/specular order and fog, but rotation and shear coverage is still required.
-  The recorder cannot yet drive the full CNA backend, so a fake-DLL renderer-sequence assertion
-  and dgVoodoo/real-Voodoo image capture remain required before this capability is release-validated.
+  applies it before alpha-aware fog, and correctly applies the inverse-transpose normal transform
+  (GLIDE-AUD-004 fixed the row/column transpose bug the 2026-08-03 audit found). Nine portable unit
+  probes now cover a front/back light, three-light sum, diagonal non-uniform scale, rotation,
+  non-symmetric shear, a perpendicularity-preservation invariant,
+  vertex-colour/emissive/specular order and fog. The recorder cannot yet drive the full CNA
+  backend, so a fake-DLL renderer-sequence assertion and dgVoodoo/real-Voodoo image capture remain
+  required before this capability is release-validated.
 - [ ] **GLIDE-FUT-004 — Use a second TMU when the selected runtime actually has one.** Add
   per-TMU texture memory allocators/residency, two-texture tiled draw partitioning and the exact
   fixed-function combiner for `DualTextureEffect` / texture slot 1. Gate it on `GR_NUM_TMU >= 2`,

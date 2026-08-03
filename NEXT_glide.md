@@ -2,48 +2,99 @@
 
 ## Session status
 
-- **Branch:** `feature/glide` (clean before this session).
+- **Branch:** `feature/glide`.
 - **Authoritative plan:** [`plan_glide.md`](plan_glide.md).
 - **Scope:** authentic 32-bit Windows/x86 Glide 3.x backend only. Do not add a software or modern-API fallback.
-- **Session focus:** `GLIDE-AUD-006`, the CPU portion of `GLIDE-FUT-003`, and the core submission of `GLIDE-FUT-001` are implemented. Continue with another independently testable Glide capability while retaining the external visual-validation items.
+- **Session focus:** closed every item in plan_glide.md's "Next implementation work" section that
+  does not require the external i686 `sharp-runtime`/dgVoodoo dependency: GLIDE-AUD-004, -009,
+  -010, -011, -012, -013, -014, -015. The only items still open there (GLIDE-AUD-006 follow-up,
+  GLIDE-AUD-007 execution, the sub-texel LOD phase validation) are explicitly blocked by that
+  dependency and were not touched. The "Future authentic Glide capability roadmap" section was not
+  worked this session beyond one documentation sync (GLIDE-FUT-003's staged note, since GLIDE-AUD-004
+  landed inside it).
 
 ## Established state
 
 - The backend dynamically loads an external `glide3x.dll`, submits native fixed-function work, and is intentionally limited to the documented Glide subset.
 - The local fake DLL / loader test is intended to work independently of CNA, SDL, sharp-runtime and dgVoodoo. Visual smoke validation still needs a compatible external Glide runtime.
-- The full CNA i686 smoke executable may remain blocked by the sibling `sharp-runtime` dependency using unsupported i686 `__int128`; record any changed status here rather than working around it in CNA.
+- **Confirmed durable, not just "may remain":** the sibling `../sharp-runtime` `System::Int128`/`Decimal` types require the GCC/Clang `__int128` extension, and i686-w64-mingw32-g++ 14 genuinely does not support `__int128` for the 32-bit target (`error: expected primary-expression before '__int128'`, verified directly this session with a standalone repro). sharp-runtime's own CLAUDE.md documents this as an explicit, permanent, accepted 2026-07-11 decision (not implementing hand-rolled 128-bit arithmetic as a workaround). This means the full i686 CNA executable — and therefore fake-DLL renderer-sequence tests and any dgVoodoo/real-hardware visual validation — stays blocked pending either a policy change on that decision or an equivalent prebuilt x86 CNA smoke binary. Do not attempt to work around it from the CNA side; it is out of this subsystem's scope.
 
-## Completed in this session
+## Completed in this session (2026-08-03)
 
-- Added `GlideAbi.hpp`, the single auditable declaration of all 37 Glide functions used by the renderer and the three native ABI data layouts. `GlideGraphicsBackend.cpp` now resolves that shared contract rather than carrying a second declaration.
-- Extended the self-contained x86 fake DLL contract: it resolves the complete renderer-facing export set, calls every signature, and verifies a 37-bit recorder mask. It retains undecorated/decorated stdcall lookup and missing-export coverage.
-- Validation passed: configure with the i686 MinGW toolchain, build `cna_glide_abi_loader_test`, then `ctest -R '^GlideAbiLoaderContract$'` under Wine (4.09 s on the latest run). Wine cannot run inside the filesystem sandbox (`SIGSYS`), so the successful test required the approved unsandboxed invocation.
-- Direct compilation of `GlideGraphicsBackend.cpp` with i686 MinGW and the configured include paths passed. The ordinary `CNA` target remains blocked before Glide compilation by `sharp-runtime`'s unsupported i686 `__int128` implementation in `System/Int128.hpp` / `UInt128.hpp`.
-- Added `GlideLighting.hpp` and six portable unit probes. Glide now evaluates FNA's per-vertex three-light Blinn-Phong term (eye position, material/light specular colors and power), correctly transforms normals through the inverse-transpose world 3x3, preserves FNA's vertex-colour/emissive/specular order, and applies fog after specular using output alpha. This also fixed a pre-existing incorrect normal-matrix cofactor in the old direct calculation.
-- Validation passed: the standalone gtest build of `GlideLightingTests.cpp` ran 6/6 green, and the complete `GlideGraphicsBackend.cpp` compiled to an x86 MinGW object. Runtime image tests remain unavailable until an x86 CNA executable can be linked against a portable `sharp-runtime`.
-- Implemented the core of `GLIDE-FUT-006`: explicit lower mip uploads are retained as RGBA8, expanded under the active Wrap/Clamp/Mirror mode into the shared power-of-two ARGB4444 pyramid, and re-downloaded after `grFinish`. The shared full level-zero `Texture2D::SetData` path now updates an existing backend in place, preserving those lower levels instead of recreating the texture; `Texture2DTests.cpp` has a recording-backend regression. `GlideTextureMipTests.cpp` adds three portable conversion/padding probes.
-- Implemented the core submission of `GLIDE-FUT-001`: `PointListEXT` uses `GR_POINTS`; `LineList` and safely split `LineStrip` runs use `GR_LINES`. `GlidePrimitiveClip.hpp` is a portable homogeneous point/segment clipper with attribute interpolation and a positive-W floor. Its four probes, together with lighting and mip probes, pass 15/15 in the standalone runner. The i686 MinGW source compile passes for both `GlideGraphicsBackend.cpp` and the shared `Texture2D.cpp` update path.
-- Audited `GLIDE-FUT-005`: Glide's `GrTexInfo.smallLodLog2`/`largeLodLog2` define the source LOD range passed to download/source, not an independent sampler maximum. CNA's differently sized edge tiles make a direct per-tile `MaxMipLevel` remap seam-variant, so the existing explicit rejection remains correct pending a validated tile-invariant design.
-- Audited `GLIDE-FUT-007`: RGB565, ARGB1555 and ARGB4444 are all 16-bit Glide formats, but base-level binary alpha is insufficient to choose ARGB1555 because the current generated mip chain averages alpha and can create fractional lower levels. Keep ARGB4444 until a classifier examines the full padded logical pyramid and fake/runtime sampling tests prove a format switch correct.
+All eight are individually committed (`git log --oneline` on `feature/glide`), verified with
+i686 MinGW `-fsyntax-only` recompilation of the whole `GlideGraphicsBackend.cpp` plus a standalone
+native g++ build/run of every portable Glide gtest file (44/44 passing at session end).
+
+- **GLIDE-AUD-004** — `TransformGlideLightingNormal()` was dotting the normal against columns of
+  the inverse World 3×3 (computing `n * World^-1`) instead of rows (`n * World^-1^T`), invisible to
+  the existing diagonal-scale probe since diagonal matrices are symmetric. Fixed the indexing; added
+  rotation, hand-derived-shear, and perpendicularity-invariant probes that fail pre-fix and pass
+  post-fix.
+- **GLIDE-AUD-009** — the textured triangle/point/line paths looped tiles in the outer position,
+  which could silently reorder two overlapping primitives whenever they sampled different physical
+  tiles of the same multi-tile texture. Swapped to primitive-major traversal with a shared
+  `boundTile` pointer that only rebinds/flushes on an actual tile change — zero behavioural or
+  performance difference for the common single-tile case.
+- **GLIDE-AUD-010** — confirmed via the actual Glide 3.0 Reference Manual (`grVertexLayout` /
+  `GR_PARAM_STn`) that `GR_WINDOW_COORDS` s/t are native `[0..256]`-per-repeat units, not texel
+  offsets or normalized UV. Added `GlideNativeTextureCoordinateScale()` and applied it in both the
+  SpriteBatch quad path and the shared 3D `makeGlideVertex` (triangles/points/lines).
+- **GLIDE-AUD-011** — `grAlphaBlendFunction`'s four argument slots have different, position-
+  dependent legal value sets (confirmed via the Reference Manual); `GR_BLEND_SRC_COLOR`/
+  `GR_BLEND_DST_COLOR` even share a numeric code. Added `ToGlideBlendFactor(Blend, GlideBlendSlot)`
+  in a new portable header, plus a same-buffer-conflict check for
+  `DestinationAlpha`/`InverseDestinationAlpha`/`SourceAlphaSaturation` while depth buffering is on
+  (also documented in the Reference Manual).
+- **GLIDE-AUD-012** — indexed draws expanded into a fresh `GlideVertexBufferBackend` and called
+  plain `SetData()`, which re-guessed the vertex layout from stride instead of reusing the source
+  buffer's already-resolved layout. Added `SetDataWithLayout()` to carry it forward exactly.
+- **GLIDE-AUD-013** — startup selected display *dimensions* by area but always opened a hardcoded
+  60 Hz refresh, never actually checked against the chosen candidate. Extracted portable
+  `SelectGlideDisplayMode()` that keeps each candidate's resolution and refresh paired.
+- **GLIDE-AUD-014** — triangle/polygon clipping was missing the positive-W eye-plane margin that
+  point/line clipping already had, so a vertex with `clipX=clipY=clipZ=0` could survive all six
+  nominal frustum planes at `W == 0` and throw in `makeGlideVertex`. Added the same margin plane;
+  moved the shared Sutherland-Hodgman clipper into `GlidePrimitiveClip.hpp` alongside the segment
+  clipper for portable testability.
+- **GLIDE-AUD-015** — audited all four named categories (blend/depth/cull/alpha-test). Blend and
+  depth were fixed as part of GLIDE-AUD-011. Cull was already atomic by construction. Alpha-test's
+  native push in `DrawPrimitiveRange()` was moved to after every throw-capable validation in that
+  function, since it was previously being committed to native Glide before checks that can still
+  abort the draw.
+
+New portable headers/tests added this session (all under
+`include/CNA/Internal/Backends/Glide/` and `tests/CNA/Internal/Backends/Glide/`):
+`GlideBlendFactor.hpp`, `GlideDisplayModeSelection.hpp`, `GlideTextureCoordinate.hpp`, plus new
+probes in `GlidePrimitiveClipTests.cpp` and `GlideLightingTests.cpp`.
 
 ## Rules and assumptions
 
 - Use `plan_glide.md` together with this file for all Glide work. `NEXT.md` is outside this subsystem's continuity scope.
 - Prefer testable x86 fake-DLL contracts and portable unit tests. Do not claim dgVoodoo or real-Voodoo visual validation without actually running it.
 - Preserve unrelated working-tree changes and make only focused Glide/backend/documentation edits.
+- When a fix's core logic is pure CPU math (clipping, lighting, blend-factor mapping, coordinate
+  conversion, display-mode selection), extract it into its own small header under
+  `include/CNA/Internal/Backends/Glide/` with a matching portable gtest file, mirroring the
+  existing `GlideLighting.hpp`/`GlidePrimitiveClip.hpp`/`GlideTextureMip.hpp`/`GlideVertexLayout.hpp`
+  pattern — this is the only way to get real, executable regression coverage while the external
+  i686 dependency stays blocked.
+- When fixing an audit-flagged bug, prefer proving the regression empirically (temporarily revert
+  the fix, show the new test fails, restore the fix, show it passes) over asserting correctness by
+  inspection alone, where practical.
 
 ## Validation in this session
 
-- `g++ -std=c++23 -pthread -Iinclude -Ivendor/googletest/googletest/include -Ivendor/googletest/googletest tests/CNA/Internal/Backends/Glide/GlideLightingTests.cpp tests/CNA/Internal/Backends/Glide/GlideTextureMipTests.cpp tests/CNA/Internal/Backends/Glide/GlidePrimitiveClipTests.cpp vendor/googletest/googletest/src/gtest-all.cc vendor/googletest/googletest/src/gtest_main.cc -o /tmp/cna-glide-unit-tests && /tmp/cna-glide-unit-tests` — passed 15/15.
-- Direct i686 MinGW compilation of `src/CNA/Internal/Backends/Glide/GlideGraphicsBackend.cpp` with `-DCNA_BACKEND_GLIDE` and the configured CNA/SDL/sharp-runtime include paths — passed.
-- Direct native compilation of `src/Microsoft/Xna/Framework/Graphics/Texture2D.cpp` with `-DCNA_BACKEND_HEADLESS` and the configured CNA/SDL/sharp-runtime include paths — passed.
-- Direct native compilation of `tests/Microsoft/Xna/Framework/Graphics/Texture2DTests.cpp` with `-DCNA_BACKEND_HEADLESS` and GTest/CNA include paths — passed. The full linked `CnaTests` suite was not completed in this session, so this regression has not yet been executed as part of that suite.
-- `ctest --test-dir cmake-build-glide-abi --output-on-failure -R '^GlideAbiLoaderContract$'` — passed 1/1 in 4.09 s under Wine outside the filesystem sandbox.
-- `git diff --check` — passed.
+- `g++ -std=c++23 -pthread -Iinclude -Ivendor/googletest/googletest/include -Ivendor/googletest/googletest tests/CNA/Internal/Backends/Glide/*.cpp vendor/googletest/googletest/src/gtest-all.cc vendor/googletest/googletest/src/gtest_main.cc -o <bin> && <bin>` — 44/44 passing (GlideLightingTest ×9, GlideTextureMipTest ×5, GlidePrimitiveClipTest ×8, GlideBlendFactorTest ×9, GlideDisplayModeSelectionTest ×8, GlideTextureCoordinateTest ×5).
+- `i686-w64-mingw32-g++ -std=c++23 -fsyntax-only -DCNA_BACKEND_GLIDE -Iinclude -I/usr/local/include -I../sharp-runtime/include src/CNA/Internal/Backends/Glide/GlideGraphicsBackend.cpp` — clean, after every commit.
+- `vendor/googletest` submodule was not yet initialized at session start; ran `git submodule update --init vendor/googletest` once (small, pinned, matches the project's own established test infra — not a "large dependency" re-clone).
+- `git diff --check` clean at every commit.
 
 ## Next action
 
-Next practical work is `GLIDE-AUD-006`'s real-renderer fake-DLL sequence once a portable i686
-`sharp-runtime` is available; then expand `GLIDE-AUD-007` with native point/line and texture-mip
-images. Until that external dependency is fixed, retain the explicit `MaxMipLevel` rejection and
-ARGB4444 default rather than inventing a seam-variant or lossy behavior.
+The next practical, non-blocked work is in the "Future authentic Glide capability roadmap"
+section of `plan_glide.md` — e.g. GLIDE-FUT-004 (second TMU), GLIDE-FUT-007 (per-format texture
+encoding), or GLIDE-FUT-008/009/010 (depth bias, dither, gamma). Each of those is a genuine new
+capability proposal (not a bug fix), needs its own design/scope confirmation before implementation,
+and still needs the same blocked fake-DLL/dgVoodoo validation to be marked release-complete. Until
+the sibling `sharp-runtime` i686 `__int128` dependency is resolved (see "Established state" above),
+prioritize portable, CPU-side, testable work over anything that claims runtime/visual validation.
