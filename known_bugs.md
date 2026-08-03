@@ -919,3 +919,109 @@ wrong.
 `Llgl_RasterizerState_CullMode_Camera` registration).
 
 ---
+
+## LLGL backend: a `VertexBuffer`/`IndexBuffer` reused within one frame silently loses the earlier draw's content — OPEN
+
+**Status:** open, discovered while wiring `plan_llgl.md`'s Phase LLGL-7 (`LLGL-44`,
+`frontface_winding_test.cpp`). Root cause identified with confidence and a fix was attempted and
+verified WRONG (introduced a new crash) -- reverted; not fixed here.
+
+**Symptom:** `frontface_winding_test.cpp`'s W3 leg draws two triangles (a clockwise-wound one, then a
+counter-clockwise-wound one) into one bind cycle via `Entry::BufferPrimitives`/
+`BufferPrimitivesRange`/`BufferIndexed`/`BufferIndexedRange` -- each calls `triVb_->SetData(...)` (or
+`wideVb_`/`triIb_`/`wideIb_`), `dev.SetVertexBuffer(...)`, then `dev.DrawPrimitives(...)`/
+`DrawIndexedPrimitives(...)`, reusing the SAME persistent `VertexBuffer`/`IndexBuffer` member object
+for BOTH triangles within one frame (no intervening `Present()`/readback). The FIRST (clockwise) triangle
+never appears on screen under ANY `RasterizerState.CullMode`, including `CullNone` (which should show
+both) -- 12 checks across those four entry points fail identically. Every OTHER entry point in the
+same file (`DrawUserPrimitives`/`DrawUserIndexedPrimitives`/`TriangleStrip`, 115/127 checks) passes,
+including the exact same winding/cull-mode logic -- this is not a culling bug, despite the symptom
+initially reading like one.
+
+**Root cause:** `LlglVertexBufferBackend::SetData()`/`LlglIndexBufferBackend::Upload()` write into the
+existing `LLGL::Buffer` object IMMEDIATELY (`renderSystem_->WriteBuffer(...)`), while `QueuePrimitives()`
+only stores a REFERENCE to that buffer object (`command.vertexBuffer = vertexBuffer.GetLlglBuffer()`)
+in a `FrameCommand` that does not actually replay until frame end (`RecordAndSubmitFrame()`). When a
+game calls `SetData()` + draw TWICE on the same buffer object within one frame, the second `SetData()`
+overwrites the buffer's GPU content before either queued draw command has replayed -- so BOTH commands
+end up rendering the buffer's FINAL content (the second triangle) when replay finally happens, and the
+first triangle's draw is not "culled", it simply never had its own geometry to render. This is the
+same general class of bug this whole project's `deferred_viewport_capture_test.cpp`/
+`deferred_scissor_capture_test.cpp`/`deferred_source_lifetime_test.cpp` family already probes for
+OTHER mutable state (viewport, scissor, texture source lifetime) -- just for `VertexBuffer`/
+`IndexBuffer` CONTENT specifically, which none of those files exercise. This project's OWN existing
+`transformBuffers_`/`customEffectUniformBuffers_` (internal, backend-owned per-draw uniform buffers)
+already avoid the identical trap by never reusing one buffer object across two draws in a frame --
+`SetData()` on a PUBLIC, game-owned `VertexBuffer`/`IndexBuffer` has no such guarantee, since the game
+decides when to call it.
+
+**A candidate fix was attempted and reverted:** mark a `VertexBuffer`/`IndexBuffer` as
+"referenced by a pending frame command" when `QueuePrimitives()` captures it, and have `SetData()`
+force a fresh `LLGL::Buffer` allocation (deferring the OLD one's release through the same
+`ScheduleBufferReleaseEXT` mechanism `VertexBuffer`'s own destructor already uses) instead of writing
+in place whenever that mark is set -- clearing the mark once the frame that queued the draw is
+actually submitted, mirroring `pendingBufferReleases_`'s own lifecycle. This built and looked correct
+by inspection, but running `frontface_winding_test.cpp` against it produced a NEW crash
+(`free(): invalid pointer` deep inside `libvulkan_lvp.so`, via `LLGL::VKCommandBuffer::Begin` during a
+LATER `GetBackBufferData()`'s own `CaptureBackbuffer()`) on `Entry::UserIndexed16` -- an entry point
+that was NOT failing before the fix and does not (as far as traced) reuse a persistent `VertexBuffer`
+object the way `Entry::BufferPrimitives` does, meaning the fix's `pendingReference_` tracking also
+touches this project's own internal "user primitives" scratch-buffer reuse mechanism in a way not
+fully understood before the attempt was reverted. The fix's diff (header + `.cpp` changes to
+`LlglVertexBufferBackend::SetData`, `LlglIndexBufferBackend::Upload`, `QueuePrimitives`, and a new
+`ClearPendingBufferReferencesEXT()`) was fully reverted via `git checkout` and verified byte-identical
+to the pre-attempt state before this checkpoint's commit.
+
+**Why this needs more than a blind retry:** the crash proves the fix's mental model of "which buffers
+are safe to reuse when" does not fully match this backend's own internal scratch-buffer architecture
+for `DrawUserPrimitives`/`DrawUserIndexedPrimitives` -- a correct fix needs to first understand THAT
+mechanism (how/whether it already reuses persistent buffer objects across draws in one frame, and how
+it currently avoids this exact trap, if it does) before extending the same tracking to public
+`VertexBuffer`/`IndexBuffer` objects, rather than attempting a second blind patch late in a session.
+
+**Tracked as:** `plan_llgl.md` Phase LLGL-7, `LLGL-44` (no CTest registration for
+`frontface_winding_test.cpp` until this is resolved -- see `cmake/Tests/LlglTests.cmake`'s own
+comment there).
+
+---
+
+## LLGL backend: every texture slot beyond slot 0 shares slot 0's own sampler state — OPEN
+
+**Status:** open, discovered while wiring `plan_llgl.md`'s Phase LLGL-7 (`LLGL-44`,
+`stock_effect_sampler_contract_test.cpp`). Root cause identified with certainty from the source
+itself -- the limitation is already self-documented in a code comment, just not previously surfaced
+as a public finding since no test had exercised two texture slots with genuinely DIFFERENT sampler
+states before this file. Not fixed here (a real fix needs per-slot sampler state tracking, out of
+scope for a test-wiring task).
+
+**Symptom:** `stock_effect_sampler_contract_test.cpp`'s M leg (64/65 checks otherwise pass) sets
+`DualTextureEffect`'s slot 0 to `TextureFilter.Point` and slot 1 to `TextureFilter.Linear`, then
+draws. M1 (swapping the two slots' filters changes the rendered image) and M2 (both slots
+`PointClamp` renders block-uniform, i.e. genuinely point-sampled) both pass. M3 -- slot 1's `Linear`
+filter alone should break block uniformity, since a linearly-interpolated slot should blend across
+texel boundaries -- FAILS: the rendered image stays block-uniform, as if slot 1 were ALSO sampled
+with `Point` despite the game requesting `Linear` for it.
+
+**Root cause:** `LlglGraphicsBackend::ApplySamplerState(int slot, ...)` only ever writes into the
+single global `samplerFilter_`/`samplerAddressU_`/`samplerAddressV_`/`samplerMaxAnisotropy_` member
+variables regardless of which `slot` the game names -- there is no per-slot storage at all. Every
+`QueuePrimitives()` call that builds a multi-texture-unit command (`DualTextureEffect`'s own
+`command.sampler2`, and `PbrEffect`'s 5 texture units, which already carry a code comment
+acknowledging this exact limitation: "All 5 texture units share this backend's single global sampler
+state (`ApplySamplerState` only ever tracks slot 0)") calls `AcquireSampler()` with those SAME global
+values for every slot, so slot 1+ always ends up with whatever slot 0's own sampler state currently
+is, never its own.
+
+**Why this needs more than a test-wiring fix:** correcting it needs `ApplySamplerState` to track an
+array of per-slot filter/address/anisotropy values (mirroring how `colorWriteChannels_` is already an
+array of 4 for MRT), plus every multi-texture-unit `QueuePrimitives()` call site (`DualTextureEffect`,
+`PbrEffect`'s 5 units, `SkinnedPbrEffect`) reading its OWN slot's entry instead of the shared globals.
+Given this session's own recent, closely-related attempt at a `VertexBuffer`/`IndexBuffer` fix in this
+exact same hot path introduced a new crash (see the entry above) and had to be reverted, a second
+speculative change to adjacent, equally sensitive draw-command-building code was judged too risky to
+attempt blind at the same point in the same session.
+
+**Tracked as:** `plan_llgl.md` Phase LLGL-7, `LLGL-44` (no CTest registration for
+`stock_effect_sampler_contract_test.cpp` until this is resolved).
+
+---

@@ -141,6 +141,9 @@ namespace
 #elif defined(CNA_BACKEND_D3D12)
     constexpr bool kRasterizes = true;
     constexpr const char* kBackendName = "D3D12";
+#elif defined(CNA_BACKEND_LLGL)
+    constexpr bool kRasterizes = true;
+    constexpr const char* kBackendName = "LLGL";
 #else
     constexpr bool kRasterizes = true;
     constexpr const char* kBackendName = "UNKNOWN";

@@ -220,6 +220,18 @@ namespace
     constexpr Contract kContract{"D3D11", true, true, true, true, true,
                                  true, true, true,
                                  true, true, true, true, false, true, false};
+#elif defined(CNA_BACKEND_LLGL)
+    // `stencilBuffer3D` false: ApplyDepthStencilState() deliberately never applies a stencil test to
+    // any pipeline (the same gap this backend's own rendertarget_depthstencil_usage_test.cpp Contract
+    // declares) -- the buffer exists and ClearStencil() works, but no draw path gates on it.
+    // `preferMultiSampling` false: measured -- RenderTarget2D.MultiSampleCount applies regardless of
+    // whether the device itself was constructed with PreferMultiSampling (LLGL reads a render
+    // target's own requested sample count at ITS OWN construction, not the swap chain's).
+    // `orderedClear`/`clearOnPreserveTarget` true: every command this backend queues, including
+    // Clear(), replays in original public order within its own target's bucket.
+    constexpr Contract kContract{"LLGL", true, true, true, true, true,
+                                 true, true, false,
+                                 true, true, true, true, false, true, false};
 #else
 #error "REMED-GFX-129: this backend has no declared ordered-Clear contract."
 #endif

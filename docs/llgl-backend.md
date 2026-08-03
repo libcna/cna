@@ -875,6 +875,18 @@ _test.cpp` stays unregistered (8/17 legs pass in full): critically, **0/17 legs 
 REMED-GFX-167 defect this fixture exists to catch does not reproduce on LLGL, and the other 9 legs
 fail only the already-catalogued `FixedHeightDynamicWidth` backbuffer artifact (a fourth
 reproduction, this file's own 72x36 backbuffer request).
+Phase LLGL-7's final `LLGL-44` misc-state batch adds `Llgl_GraphicsDevice_OrderedClear` (46/46, no
+fix required -- `Clear()` is a genuinely ordered command here, honours `RenderTargetUsage
+.PreserveContents`, and ignores both `Viewport` and `ScissorRectangle`). The other two files stay
+unregistered, each for a real, distinct, newly-found `OPEN` finding: `frontface_winding_test.cpp`
+(115/127) traces its 12 failures to a `VertexBuffer`/`IndexBuffer` reused (via `SetData()`+draw)
+twice within one frame silently losing the FIRST draw's content, since `SetData()` writes into the
+live GPU buffer immediately while the queued command only replays at frame end; a candidate fix was
+implemented, found to introduce a NEW crash on an unrelated entry point, and reverted.
+`stock_effect_sampler_contract_test.cpp` (64/65) traces its one failure to `ApplySamplerState()`
+tracking only slot 0's own sampler state, so `DualTextureEffect`'s slot 1 (and `PbrEffect`'s other 4
+texture units, already self-documented in a code comment) always samples with slot 0's filter/address
+rather than its own. See `known_bugs.md`'s two new open entries for the full analysis of both.
 Every other test is registered a second time pinned to the OpenGL
 module through `CNA_LLGL_RENDERER`, which also exercises the selection path itself. All these tests
 need a display; on a machine without one they report SKIPPED

@@ -654,4 +654,33 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "LLGL")
         TIMEOUT 300 LABELS "Llgl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-129: Clear() is an ORDERED command at its exact public call position, not a hint
+    # for the next render-pass load action.
+    cna_llgl_test(cna_test_llgl_ordered_clear
+                  examples/graphicsdevice_ordered_clear_test.cpp)
+    cna_register_backend_test(NAME Llgl_GraphicsDevice_OrderedClear COMMAND cna_test_llgl_ordered_clear
+        TIMEOUT 120 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # frontface_winding_test.cpp is deliberately NOT registered here: 115/127 checks pass (its own
+    # CNA_BACKEND_LLGL Contract branch is otherwise accurate). W3's 12 failures are a real, distinct,
+    # OPEN finding, NOT a winding/culling bug: Entry::BufferPrimitives/BufferPrimitivesRange/
+    # BufferIndexed/BufferIndexedRange each reuse the SAME persistent VertexBuffer/IndexBuffer object
+    # for two draws within one frame, and this backend's SetData() writes into the live LLGL::Buffer
+    # immediately while the earlier draw's queued FrameCommand only replays at frame end -- so the
+    # SECOND SetData() silently overwrites the FIRST draw's content before it ever renders. See
+    # known_bugs.md's open entry, which also documents a candidate fix that was attempted, found to
+    # introduce a NEW crash on an unrelated entry point, and fully reverted rather than shipped.
+    cna_llgl_test(cna_test_llgl_frontface_winding
+                  examples/frontface_winding_test.cpp)
+
+    # stock_effect_sampler_contract_test.cpp is deliberately NOT registered here: 64/65 checks pass
+    # (its own CNA_BACKEND_LLGL Contract branch is otherwise accurate). M3 fails for a real, distinct,
+    # OPEN finding: ApplySamplerState() only ever tracks slot 0's own filter/address/anisotropy in a
+    # single set of member variables, so DualTextureEffect's slot 1 (and PbrEffect's other 4 texture
+    # units, already self-documented in a code comment) always samples with whatever slot 0's current
+    # sampler state is, never its own. See known_bugs.md's new open entry.
+    cna_llgl_test(cna_test_llgl_stock_effect_sampler
+                  examples/stock_effect_sampler_contract_test.cpp)
+
 endif()
