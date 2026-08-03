@@ -189,3 +189,52 @@ row for the full acceptance evidence, including a real integration bug the new p
 the GLSL translator (SKIA-155) preserved each `sampler2D` uniform's original GLSL name, but the mesh
 ABI requires the reserved `cnaTexture0`-`7` child-naming convention -- fixed in the translator, not
 here, by renaming samplers to `cnaTexture0`-`7` in declaration order during translation.
+
+### SKIA-158: the final programmable-effect boundary
+
+Phase S16 (SKIA-152–158) closes with a bounded, but genuinely public and tested, programmable 2D
+effect route. This section states that boundary plainly, as the closing task for both this contract
+and `docs/skia-easygl-effect-inventory.md`'s survey.
+
+**Promoted** (reachable through the real public API today):
+
+- `DualTextureEffect`'s core fragment formula -- `base.rgb*=2.0; FragColor=base*tex2*tint;` -- drawn
+  as a triangle mesh through `SpriteBatch::DrawMeshEXT`, restricted to `SpriteSortMode::Immediate`.
+- Both a hand-written `CNA_SKIA_SKSL_MESH_V1` source for that formula (SKIA-154) and the same formula
+  reached from real EasyGL GLSL source through the restricted GLSL-to-SkSL translator (SKIA-155),
+  compiled and cached identically (SKIA-156's growth-bounded LRU cache).
+- Up to eight optional 2D texture children (`cnaTexture0`-`7`) and the full existing reflected
+  uniform-setter surface (scalars/vectors/matrices/arrays) v1 already established, reused unchanged.
+- Fixed per-vertex position/texcoord/colour, straight-alpha vertex colour combined externally via
+  `SkBlendMode::kModulate`, no winding/cull-mode distinction (`SkVertices` has none).
+
+**Refused, by API limitation rather than by pending implementation**:
+
+- Any custom vertex attribute, varying, or per-vertex computation beyond position/texcoord/colour --
+  `SkMeshSpecification`, the API that would have carried these, is a non-functional stub on raster
+  Skia (`SkBitmapDevice::drawMesh`); `SkVertices`, the promoted replacement, has no extension point
+  for one. This is the `colored`/`textured`/`col_textured`/`lit_textured`/`pbr`/`pbr_skinned` bucket
+  from `docs/skia-easygl-effect-inventory.md`.
+- Arbitrary EasyGL GLSL: the translator unconditionally rejects every construct outside
+  `dual_textured`'s exact accepted grammar (helper functions, branching-around-early-exit, `discard`,
+  fog, lighting, PBR, cube/volume sampling, a second varying), each with a source line/column, never
+  silently mistranslating.
+- Perspective-correct interpolation: `SkVertices`' `SkPoint` position carries no W component, so this
+  is architecturally impossible through this route, not merely unproven.
+- All stock 3D effects, `DrawUserPrimitives`, and every construct already governed by
+  `docs/skia-3d-emulation-adr.md`'s accepted `reject`/`3D-only` dispositions -- unaffected by
+  SKIA-152–158, which added a new bounded 2D mesh route alongside the existing v1 fragment-only ABI,
+  not a 3D capability.
+- `CustomEffects` remains `false`: the mesh ABI is one proven formula reached through one API entry
+  point, not arbitrary EasyGL GLSL compatibility.
+
+No new Skia golden image is registered for SKIA-158. `dual_textured`'s pixel result was already
+proven three times against independent methodologies -- SKIA-93's hand-written SkSL spike, SKIA-153's
+`SkVertices` spike, and SKIA-155's translator differential test, each comparing against the same
+known-correct formula result -- and SKIA-157's public-API test proved the identical result reachable
+through the real `SpriteBatch::DrawMeshEXT`/`ShaderEffect` surface. A fourth golden image comparing
+the same already-proven formula against itself would add no new evidence; see
+`docs/skia-easygl-test-matrix.md` for this codebase's existing golden-image classification. A true
+live dual-backend (Skia vs. EasyGL) runtime comparison remains architecturally impossible under CNA's
+one-backend-per-build CMake selection, matching every prior phase's own "derive the expected value
+from real EasyGL source text" golden methodology rather than a live side-by-side render.

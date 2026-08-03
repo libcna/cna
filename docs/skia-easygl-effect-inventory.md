@@ -98,21 +98,26 @@ arbitrary discard/coverage... reject" line is unaffected), they simply are not y
 
 - **already implemented** (SpriteBatch/`SpriteEffect`): no action; pre-existing and unaffected by
   Phase S16.
-- **direct SkSL** (`dual_textured`/`dual_textured_colored` fragment formulas): need no `SkMesh` work
-  for their fragment math -- the existing bounded `CNA_SKIA_SKSL_V1` two-child-texture ABI can
-  already express them today, and SKIA-93's spike already proved the exact formula pixel-correct.
-  The remaining gap is purely the primitive/vertex route around them, which is SKIA-153's job if
-  `DualTextureEffect` is ever promoted through a real public draw.
+- **direct SkSL** (`dual_textured`/`dual_textured_colored` fragment formulas): needed no `SkMesh`
+  work for their fragment math -- the existing bounded `CNA_SKIA_SKSL_V1` two-child-texture ABI
+  already expressed them, and SKIA-93's spike already proved the exact formula pixel-correct. The
+  remaining gap was purely the primitive/vertex route around them; SKIA-153-157 closed it by
+  promoting `DualTextureEffect`'s core formula through the new bounded `SkVertices`-based
+  `CNA_SKIA_SKSL_MESH_V1` mesh ABI and its public `SpriteBatch::DrawMeshEXT` entry point (see
+  `docs/skia-vertices-2d-effect-contract.md`), not through the originally-planned `SkMesh` route.
 - **SkMesh** (`colored`/`textured`/`col_textured`/`lit_textured` fragment stages, `pbr`/`pbr_skinned`
-  fragment stages): SKIA-153 must prototype `SkMeshSpecification` covering exactly these vertex
-  layouts (position+colour, position+uv, position+colour+uv, position+normal+uv,
-  position+normal+tangent+uv) and prove perspective-correct varying interpolation matches EasyGL's
-  own oracle before any of these fragment programs can be re-expressed.
-- **restricted-translation** (`pbr`/`pbr_skinned` fragment, as the concrete grammar target): SKIA-155
-  should scope its translator grammar first against `PbrLight()` -- the single richest-but-still-
-  mechanical fragment function in the corpus (helper-function definition, `pow`/`clamp`/`mix`/`dot`/
-  `normalize`/`cross`, `mat3` construction, zero branching) and a reasonable acceptance bar: nothing
-  else in this corpus is more complex at the fragment-language level.
+  fragment stages): SKIA-153 found `SkMeshSpecification`/`SkMesh` to be a non-functional stub on
+  raster Skia in the pinned revision (`SkBitmapDevice::drawMesh` is a literal empty function body),
+  so this route is closed, not pending. The promoted replacement, `SkVertices`, carries only a
+  fixed, non-programmable per-vertex attribute set (position, optional texcoord, optional colour --
+  no normal, tangent, or arbitrary varying), so these rows' custom vertex attributes remain refused
+  by that API limitation; see `docs/skia-vertices-2d-effect-contract.md` for the full finding.
+- **restricted-translation** (`dual_textured`'s fragment formula, as the concrete grammar target):
+  SKIA-155 scoped its translator grammar to exactly `dual_textured`'s core formula (two `sampler2D`
+  uniforms, one `vec4` tint uniform, one UV varying, straight-line combine), not `PbrLight()` --
+  `PbrLight()` needs helper-function definitions and `mat3` construction, both explicitly outside
+  this MVP grammar (`docs/skia-glsl-to-sksl-translator-contract.md`). Widening the grammar toward
+  `PbrLight()` remains a real, still-open next acceptance bar, but it was not attempted in SKIA-155.
 - **3D-only** (`lit_textured_vertexlit`, `env_mapped`, `skinned`, `skinned_vertexlit`,
   `pbr_skinned`, plus the *vertex stage* of every other row): unaffected by SKIA-153–158; these
   remain governed by `docs/skia-3d-emulation-adr.md`'s existing accepted `reject`/`3D-only`/

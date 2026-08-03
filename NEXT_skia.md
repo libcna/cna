@@ -2608,21 +2608,74 @@ level-boundary contract.
 - Full Skia suite (up from 169 to 170 -- one net new Display test) passes in Debug, Release, and
   ASan+UBSan with zero regressions and zero sanitizer findings.
 
+## Completed in this session: SKIA-158 (closes Phase S16)
+
+- Dispatched a research fork before editing anything to grep every `docs/skia-*.md` file plus
+  `docs/graphics-backend-feature-matrix.md` for staleness against what SKIA-152-157 actually
+  shipped. It returned a prioritized, line-referenced list split into "must fix," "confirmed fine,"
+  and "confirmed do not touch."
+- The only "compare against a golden" question this task genuinely owns -- the promoted
+  `dual_textured` core formula -- was already golden-compared three separate times by independent
+  methodologies before this task started (SKIA-93's hand-written SkSL spike, SKIA-153's
+  `SkVertices` spike, SKIA-155's translator differential test), and SKIA-157's public-API test
+  already proved that same result reachable through the real `SpriteBatch::DrawMeshEXT`. A fourth
+  golden image comparing the same already-proven formula against itself would add no new evidence,
+  so SKIA-158 registers none and closes the phase as a documentation sweep instead.
+- Fixed three stale claims in `docs/skia-easygl-effect-inventory.md`'s "Downstream task ownership"
+  section: the `direct SkSL` bucket's "SKIA-153's job if `DualTextureEffect` is ever promoted" --
+  it now has been; the `SkMesh` bucket's "SKIA-153 must prototype `SkMeshSpecification`" -- that API
+  is proven non-functional, reframed around `SkVertices`'s fixed-attribute limitation instead; the
+  `restricted-translation` bucket's claim that SKIA-155 scoped its grammar against `PbrLight()` --
+  it didn't, it scoped to `dual_textured`'s core formula only, `PbrLight()` remains open follow-up.
+- Updated `docs/graphics-backend-feature-matrix.md`'s "Custom `Effect` in `SpriteBatch.Begin`" row,
+  which previously mentioned only `CNA_SKIA_SKSL_V1` with no mention of the mesh ABI/`DrawMeshEXT`
+  at all.
+- Added a new "Explicit SkSL SpriteBatch Mesh ABI (SKIA-152-158)" section to `docs/skia-effects.md`
+  -- previously had zero mention of the mesh ABI anywhere despite being the effects-system doc of
+  record; mirrors the existing "Explicit SkSL SpriteBatch ABI v1" section's structure.
+- Corrected three self-contradictory rows in `docs/skia-successor-contract-matrix.md`:
+  `EFFECT-VERTEX` said SkMesh promotion was still pending proof -- it is refused by a proven API
+  limitation, not pending; `EFFECT-FRAGMENT` said "broader ABI and translated sources remain" -- the
+  translated-source route shipped in SKIA-155/157; `EFFECT-TEXTURES` cited its own now-completed
+  SKIA-150-157 range as still-future work, replaced with what actually shipped vs. what's genuinely
+  still open (`cnaVolumeAddressModesEXT` wiring).
+- Appended a new closing "SKIA-158: the final programmable-effect boundary" section to
+  `docs/skia-vertices-2d-effect-contract.md` stating the promoted/refused boundary plainly.
+- Deliberately left untouched: `docs/skia-backend.md`/`docs/skia-release-gate.md`, whose explicit
+  freeze-until-SKIA-170 policy the fork confirmed still holds (zero PASS/log entries exist for the
+  SKIA-140-157 range in either file already).
+- `CustomEffects` independently re-verified still reporting `false` directly from
+  `SkiaGraphicsBackend::SupportsCapability` (unaffected by SKIA-149-157).
+- Every edited markdown table row's pipe/field count was checked against its header before and
+  after editing. All six validator scripts
+  (`validate_skia_release_gate.py`, `validate_skia_successor_contracts.py` -- 87/87 contracts, tasks
+  SKIA-118-170 still fully routed, `validate_skia_parity_ledger.py`, `validate_skia_3d_decision.py`,
+  `validate_skia_surface_formats.py`, `validate_skia_test_matrix.py`) pass unchanged.
+- No source or test files were touched. Full 170/170 Skia suite (`ctest -R "^Skia_"` against the
+  existing `cmake-build-skia`) passes with zero regressions -- confirming the doc-only sweep changed
+  no behavior. (An unfiltered `ctest` run in the same build directory also runs thousands of generic,
+  backend-agnostic `CnaTests` suites -- `VertexBufferBindingValidationTest`, `IndexBufferEmptyDataTest`,
+  `SkinnedModelEXTPartTest`, and similar -- that construct 3D resources unconditionally in their test
+  fixtures and are not skipped when `CNA_GRAPHICS_BACKEND=SKIA` is selected; they throw on the same
+  accepted "Skia (raster 2D) does not support 3D" boundary `Skia_3D_Refusal` already covers
+  deliberately. This is a pre-existing characteristic of running the monolithic ctest registry against
+  a 2D-only backend selection, confirmed unrelated to this task by direct inspection of one such
+  failure's output, and out of scope for it; the Skia-labeled subset above is this project's own
+  established acceptance evidence.)
+
 ## Next candidates
 
-1. SKIA-158: compare every promoted 2D effect against EasyGL/XNA-style goldens and publish the final
-   programmable-effect boundary, closing Phase S16.
-2. SKIA-159–170: add opt-in Ganesh, probe real MSAA/anisotropy, re-evaluate MRT, and hold the
+1. SKIA-159–170: add opt-in Ganesh, probe real MSAA/anisotropy, re-evaluate MRT, and hold the
    successor gate only after the raster extensions are stable -- also where the mesh-effect cache's
    deferred "mode" key axis (see SKIA-156 above) should actually be added, once a second compilation
    target genuinely exists to test against.
-3. The pre-existing `CNA_ENABLE_NET=OFF`/monolithic-`CnaTests` ENet build-graph defect is recorded
+2. The pre-existing `CNA_ENABLE_NET=OFF`/monolithic-`CnaTests` ENet build-graph defect is recorded
    by SKIA-112/113 but remains outside Skia scope.
-4. Standalone follow-up (not yet a numbered task): wire `cnaVolumeAddressModesEXT` to the active
+3. Standalone follow-up (not yet a numbered task): wire `cnaVolumeAddressModesEXT` to the active
    `SamplerState` in `MakeSpriteShaderEXT` instead of the current hardcoded Clamp, so
    Wrap/Mirror volume addressing (already implemented in the sampling formula since SKIA-148)
    becomes reachable through the real public API.
-5. Standalone follow-up (not yet a numbered task): `SpriteBatch::DrawMeshEXT` currently requires
+4. Standalone follow-up (not yet a numbered task): `SpriteBatch::DrawMeshEXT` currently requires
    `SpriteSortMode::Immediate` and does not participate in the deferred sort/batch queue --
    integrating mesh draws into `Deferred`/sorted modes (extending `SpriteInfo`/`spriteQueue_` to
    carry a mesh-shaped variant, not just quads) is real additional scope, deliberately left open

@@ -165,3 +165,77 @@ stock-path reuse after a rejected tagged effect.
 `Skia_SkSL_UniformTexture` proves every accepted setter in one pixel equation, column-major matrix
 layout, `cnaTint`, updated additional-texture sampling, source rectangle/transform/PointClamp,
 deterministic negative cases, weak disposal safety and clone state/binding isolation.
+
+## Explicit SkSL SpriteBatch Mesh ABI (SKIA-152–158)
+
+The v1 ABI above is fragment-only: it paints one shader across the quad SpriteBatch already draws,
+with no way for a caller to supply its own vertex positions, per-vertex colours or per-vertex UVs.
+SKIA-152 surveyed every stock EasyGL effect against that limitation and found `SkMesh` -- Skia's
+programmable-vertex-shader mesh API, the originally planned route to lift it -- to be a non-functional
+stub on raster Skia in the pinned revision (`SkBitmapDevice::drawMesh` is a literal empty function
+body; SKIA-153). SKIA-153 redesigned the approach around `SkVertices`/`SkCanvas::drawVertices`
+instead, Skia's older, simpler mesh API, which genuinely rasterizes on this backend but carries only
+a **fixed, non-programmable** per-vertex attribute set: position (no W component -- perspective-
+correct interpolation is architecturally impossible, not just unimplemented), optional texcoord,
+optional colour. No custom vertex attribute, varying, or vertex-stage computation is possible through
+this route; see `docs/skia-vertices-2d-effect-contract.md` for the full finding.
+
+A second, separate marker distinguishes a mesh-ABI `ShaderEffect` from a v1 fragment-only one:
+
+```cpp
+ShaderEffect effect(device, "CNA_SKIA_SKSL_MESH_V1", R"(
+    uniform shader cnaTexture0;
+    uniform shader cnaTexture1;
+    uniform float4 cnaTint;
+    half4 main(float2 vUV) {
+        half4 base = cnaTexture0.eval(vUV);
+        base.rgb *= 2.0;
+        return base * cnaTexture1.eval(vUV) * half4(cnaTint);
+    }
+)");
+```
+
+- The marker must be exactly `CNA_SKIA_SKSL_MESH_V1` (SKIA-154, `SkiaMeshEffectBackend`/
+  `SkiaMeshEffectAdapterEXT`). Unlike v1, there is no mandatory reserved texture/tint: per-vertex
+  colour combines with the shader's output externally, through the `SkBlendMode` passed to
+  `drawVertices` (`kModulate`), not as a shader input. Optional texture children reuse the same
+  `cnaTexture0`-`7` naming convention as v1, but the unit range is `0..7` (all optional) rather than
+  v1's reserved-0 `1..7` range, and reuse every existing `SkiaResourcePolicy.hpp` budget constant.
+- The only route to draw a mesh-ABI effect is the new NOXNA `SpriteBatch::DrawMeshEXT(effect,
+  positions, colors, uvs, vertexCount, indices, indexCount)`, restricted to `SpriteSortMode::Immediate`
+  -- a declared, tested scope boundary, since a mesh draw does not fit the shared quad-shaped
+  deferred sort/batch queue every other `SpriteBatch` draw call uses. It throws for any other sort
+  mode, for a non-mesh-ABI effect, and for any unbound texture child the shader actually samples.
+- A restricted GLSL-to-SkSL translator (SKIA-155, `SkiaGlslToSkslTranslatorEXT`) additionally reaches
+  this ABI from real EasyGL GLSL source, but only for the one fragment formula SKIA-152 proved has a
+  direct SkSL equivalent (`DualTextureEffect`'s `base.rgb*=2.0; FragColor=base*tex2*tint;` combine).
+  It is a restricted token-rewriter, not a general compiler front end, and unconditionally rejects
+  every other construct (branching helper functions, `discard`, fog, lighting, PBR, cube/volume
+  sampling, a second varying) with a source line/column rather than silently mistranslating; see
+  `docs/skia-glsl-to-sksl-translator-contract.md` for the complete accepted grammar and rejection
+  list. `sampler2D` uniforms are renamed to `cnaTexture0`-`7` in declaration order during translation
+  -- SKIA-157's own public integration test caught this exact seam gap between two already-shipped,
+  already-individually-tested pieces (the ABI and the translator) on its first run.
+- The compiled-program cache (`SkiaMeshEffectCacheEXT`, SKIA-154/156) is source-keyed, growth-bounded
+  (`kSkiaMeshEffectCacheMaxEntriesEXT = 64`, monotonic-tick LRU eviction) and shared across both the
+  hand-written and translated routes into this ABI.
+- `CustomEffects` remains false regardless: the mesh ABI is bounded to `dual_textured`'s core formula
+  reached through one API entry point, not arbitrary EasyGL GLSL compatibility, matching the same
+  rationale the v1 ABI's cube/volume extension already established above.
+
+`Skia_MeshEffect_ABI`/`Skia_MeshEffect_Hardening` prove the ABI in isolation (compilation, uniform
+setters, texture children, cache growth/eviction bounds, oversized-source rejection) below the public
+API, matching this backend's established "prove it below the API first" sequencing. `Skia_Vertices2D_Spike`
+and `Skia_GlslTranslator` prove the `SkVertices` rasterization behaviour and the translator's accepted/
+rejected grammar respectively, also below the public API. `Skia_MeshEffect_PublicApi` is the first and
+only test to exercise the complete real path: raw untranslated GLSL rejected outright, colour-only and
+textured mesh draws, non-`Immediate` sort mode rejected, `Clone()` producing independently-compiled
+state, and the capstone check -- real EasyGL GLSL translated through `TranslateGlslToSkslEXT`, built
+into a real mesh `ShaderEffect`, drawn through the real public `SpriteBatch::DrawMeshEXT` with two
+real bound `Texture2D` children, and pixel-matched against `dual_textured`'s known formula result.
+
+SKIA-158 closed Phase S16 by comparing this promoted formula against its own prior golden results
+(SKIA-93's hand-written spike, SKIA-153's `SkVertices` spike, SKIA-155's translator differential
+test) rather than a fourth, redundant golden image, and by sweeping every doc claim below into
+agreement with what actually shipped; see `docs/skia-vertices-2d-effect-contract.md`'s closing
+section for the final refused/promoted boundary statement.
