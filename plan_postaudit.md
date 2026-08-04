@@ -1384,8 +1384,17 @@ constraints and different scope.
 > **The branch inventory is dynamic and is no longer maintained in this file.**
 > **Authoritative source: `remediation/INTEGRATION_BRANCH_INVENTORY.md`**, derived from Git refs.
 >
-> **Current inventory as of `099b03c0` (2026-08-04): 19 logical pending integration branches/lanes.**
-> The count is a snapshot, not an invariant. Do not quote it without its commit and date.
+> **Current inventory as of the 2026-08-04 exit-reconciliation fetch (checkpoint candidate on
+> `feature/audit`): 21 logical pending integration lanes.** N may change before integration begins.
+> The count is a snapshot, not an invariant. Do not quote it without its fetch date and commit.
+>
+> **Do not restate 19.** That figure was derived without a fetch and is retained in the inventory
+> document only as a labelled historical snapshot. Two corrections it hid: the two remote-only
+> `claude/*` lanes were invisible, and **Magnum and Wicked are audit-stacked lanes** (13 and 10 own
+> commits on `feature/audit` @ `2338b44f7`), not develop-forked backends 768/765 commits ahead.
+>
+> **`feature/direct2d` is the final actively-developed lane** — freeze it at a known head before
+> integration begins.
 
 **Historical snapshot (2026-08-03), preserved as a record of what was true then — not current:**
 CNA carried **19** unintegrated branches (excluding `develop`, `master` and this remediation branch
