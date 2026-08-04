@@ -12,11 +12,13 @@
 #include <memory>
 
 #include "CNA/Graphics/DepthEffect.hpp"
+#include "CNA/Graphics/DitherMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 
 using CNA::Graphics::DepthEffect;
 using CNA::Graphics::DepthEffectMode;
+using CNA::Graphics::DitherMode;
 using Microsoft::Xna::Framework::Graphics::Effect;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 
@@ -26,6 +28,32 @@ TEST(DepthEffectTest, DefaultModeIsColor16Bit)
     DepthEffect fx(gd);
 
     EXPECT_EQ(fx.getMode(), DepthEffectMode::Color16Bit);
+}
+
+TEST(DepthEffectTest, DefaultDitherModeIsNone)
+{
+    GraphicsDevice gd;
+    DepthEffect fx(gd);
+
+    EXPECT_EQ(fx.getDitherMode(), DitherMode::None);
+}
+
+TEST(DepthEffectTest, SetDitherModeRoundTripsForEveryMode)
+{
+    GraphicsDevice gd;
+    DepthEffect fx(gd);
+
+    const DitherMode ditherModes[] = {
+        DitherMode::None,
+        DitherMode::Bayer4x4,
+        DitherMode::Bayer8x8,
+    };
+
+    for (const auto ditherMode : ditherModes)
+    {
+        fx.setDitherMode(ditherMode);
+        EXPECT_EQ(fx.getDitherMode(), ditherMode);
+    }
 }
 
 TEST(DepthEffectTest, SetModeRoundTripsForEveryMode)
@@ -54,6 +82,7 @@ TEST(DepthEffectTest, ApplyDoesNotCrashWithoutABackend)
     DepthEffect fx(gd);
 
     fx.setMode(DepthEffectMode::Grayscale1Bit);
+    fx.setDitherMode(DitherMode::Bayer8x8);
     EXPECT_NO_THROW(fx.Apply());
 }
 
@@ -65,11 +94,12 @@ TEST(DepthEffectTest, GetTypeNameReturnsCnaGraphicsDepthEffect)
     EXPECT_EQ(fx.GetTypeName(), "CNA.Graphics.DepthEffect");
 }
 
-TEST(DepthEffectTest, CloneReturnsIndependentDepthEffectWithSameMode)
+TEST(DepthEffectTest, CloneReturnsIndependentDepthEffectWithSameModeAndDitherMode)
 {
     GraphicsDevice gd;
     DepthEffect fx(gd);
     fx.setMode(DepthEffectMode::Grayscale2Bit);
+    fx.setDitherMode(DitherMode::Bayer4x4);
 
     std::unique_ptr<Effect> cloned(fx.Clone());
     auto* clone = dynamic_cast<DepthEffect*>(cloned.get());
@@ -77,10 +107,13 @@ TEST(DepthEffectTest, CloneReturnsIndependentDepthEffectWithSameMode)
     ASSERT_NE(clone, nullptr);
     EXPECT_NE(static_cast<Effect*>(clone), static_cast<Effect*>(&fx));
     EXPECT_EQ(clone->getMode(), DepthEffectMode::Grayscale2Bit);
+    EXPECT_EQ(clone->getDitherMode(), DitherMode::Bayer4x4);
 
     // Mutating the clone must not affect the original.
     clone->setMode(DepthEffectMode::Color8Bit);
+    clone->setDitherMode(DitherMode::Bayer8x8);
     EXPECT_EQ(fx.getMode(), DepthEffectMode::Grayscale2Bit);
+    EXPECT_EQ(fx.getDitherMode(), DitherMode::Bayer4x4);
 }
 
 #endif // CNA_NOXNA

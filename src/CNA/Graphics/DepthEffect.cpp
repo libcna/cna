@@ -39,6 +39,13 @@ void main() {
     //   4 = Grayscale1Bit (2 luminance levels — pure black/white)
     // Luminance uses the BT.601 luma weights, matching this project's other greyscale
     // conversions (e.g. the ASCII backend).
+    //
+    // uDither selects an ordered (Bayer matrix) dither threshold added before quantization,
+    // matching DitherMode: 0 = None, 1 = Bayer4x4, 2 = Bayer8x8. Error-diffusion dithering
+    // (Floyd-Steinberg/Atkinson) is intentionally not offered here — it is inherently
+    // sequential (each pixel's rounding error is propagated into not-yet-shaded neighbours),
+    // which does not parallelize onto a single fragment-shader pass without compute-shader
+    // support (see DitherMode.hpp).
     const char* const kFragmentSource = R"(#version 300 es
 precision highp float;
 in vec2 vTexCoord;
@@ -46,9 +53,44 @@ in vec4 vColor;
 out vec4 FragColor;
 uniform sampler2D uTexture;
 uniform int uMode;
+uniform int uDither;
+
+const float kBayer4x4[16] = float[16](
+     0.0,  8.0,  2.0, 10.0,
+    12.0,  4.0, 14.0,  6.0,
+     3.0, 11.0,  1.0,  9.0,
+    15.0,  7.0, 13.0,  5.0
+);
+
+const float kBayer8x8[64] = float[64](
+     0.0, 32.0,  8.0, 40.0,  2.0, 34.0, 10.0, 42.0,
+    48.0, 16.0, 56.0, 24.0, 50.0, 18.0, 58.0, 26.0,
+    12.0, 44.0,  4.0, 36.0, 14.0, 46.0,  6.0, 38.0,
+    60.0, 28.0, 52.0, 20.0, 62.0, 30.0, 54.0, 22.0,
+     3.0, 35.0, 11.0, 43.0,  1.0, 33.0,  9.0, 41.0,
+    51.0, 19.0, 59.0, 27.0, 49.0, 17.0, 57.0, 25.0,
+    15.0, 47.0,  7.0, 39.0, 13.0, 45.0,  5.0, 37.0,
+    63.0, 31.0, 55.0, 23.0, 61.0, 29.0, 53.0, 21.0
+);
+
+// Returns a threshold in [-0.5, 0.5) sampled from the selected Bayer matrix at this fragment's
+// screen position, or 0.0 for DitherMode::None.
+float ditherThreshold() {
+    if (uDither == 1) {
+        int x = int(mod(gl_FragCoord.x, 4.0));
+        int y = int(mod(gl_FragCoord.y, 4.0));
+        return (kBayer4x4[y * 4 + x] + 0.5) / 16.0 - 0.5;
+    } else if (uDither == 2) {
+        int x = int(mod(gl_FragCoord.x, 8.0));
+        int y = int(mod(gl_FragCoord.y, 8.0));
+        return (kBayer8x8[y * 8 + x] + 0.5) / 64.0 - 0.5;
+    }
+    return 0.0;
+}
 
 float quantizeChannel(float value, float levels) {
-    return floor(value * (levels - 1.0) + 0.5) / (levels - 1.0);
+    float dithered = value + ditherThreshold() / (levels - 1.0);
+    return floor(clamp(dithered, 0.0, 1.0) * (levels - 1.0) + 0.5) / (levels - 1.0);
 }
 
 void main() {
@@ -88,6 +130,9 @@ namespace CNA::Graphics {
     DepthEffectMode DepthEffect::getMode() const { return mode_; }
     void DepthEffect::setMode(DepthEffectMode mode) { mode_ = mode; }
 
+    DitherMode DepthEffect::getDitherMode() const { return ditherMode_; }
+    void DepthEffect::setDitherMode(DitherMode mode) { ditherMode_ = mode; }
+
     const std::string& DepthEffect::GetTypeName() const
     {
         static const std::string name = "CNA.Graphics.DepthEffect";
@@ -98,12 +143,14 @@ namespace CNA::Graphics {
     {
         ShaderEffect::OnApply();
         SetUniformInt("uMode", static_cast<int>(mode_));
+        SetUniformInt("uDither", static_cast<int>(ditherMode_));
     }
 
     Effect* DepthEffect::Clone()
     {
         auto* clone = new DepthEffect(*device_);
         clone->setMode(mode_);
+        clone->setDitherMode(ditherMode_);
         return clone;
     }
 

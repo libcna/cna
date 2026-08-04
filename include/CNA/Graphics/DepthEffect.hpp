@@ -4,6 +4,7 @@
 #ifdef CNA_NOXNA
 
 #include "CNA/Graphics/DepthEffectMode.hpp"
+#include "CNA/Graphics/DitherMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
 
 namespace CNA::Graphics {
@@ -14,6 +15,9 @@ namespace CNA::Graphics {
      * A `ShaderEffect` (GLSL, EasyGL backend) that quantizes the rendered colour to a
      * fixed number of levels per channel, emulating limited-palette display hardware:
      * 16-bit (RGB565) colour, 8-bit (RGB332) colour, or 4-bit/2-bit/1-bit greyscale.
+     * Optionally applies ordered (Bayer matrix) dithering before quantization — see
+     * DitherMode — to break up flat banding the way period-authentic limited-palette
+     * hardware display shaders do.
      *
      * Usage mirrors any other custom `ShaderEffect`-based post-process — draw the scene
      * into a `Texture2D` (typically via a `RenderTarget2D`), then redraw it through
@@ -38,6 +42,12 @@ namespace CNA::Graphics {
         /** @brief Sets the colour-depth mode applied on the next Apply(). */
         void setMode(DepthEffectMode mode);
 
+        /** @brief Returns the active ordered-dithering pattern. */
+        [[nodiscard]] DitherMode getDitherMode() const;
+
+        /** @brief Sets the ordered-dithering pattern applied on the next Apply(). */
+        void setDitherMode(DitherMode mode);
+
         /** @brief Returns the fully qualified CNA type name. */
         [[nodiscard]] const std::string& GetTypeName() const override;
 
@@ -49,11 +59,12 @@ namespace CNA::Graphics {
         [[nodiscard]] Microsoft::Xna::Framework::Graphics::Effect* Clone() override;
 
     protected:
-        /** @brief Binds the compiled shader and uploads the current colour-depth mode. */
+        /** @brief Binds the compiled shader and uploads the current colour-depth/dither mode. */
         void OnApply() override;
 
     private:
         DepthEffectMode mode_ = DepthEffectMode::Color16Bit;
+        DitherMode ditherMode_ = DitherMode::None;
     };
 
 } // namespace CNA::Graphics

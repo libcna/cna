@@ -32,20 +32,29 @@ using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
 using CNA::Graphics::DepthEffect;
 using CNA::Graphics::DepthEffectMode;
+using CNA::Graphics::DitherMode;
 
 namespace
 {
     constexpr int kWidth = 800;
     constexpr int kHeight = 600;
 
-    struct ModeEntry { DepthEffectMode mode; const char* label; };
+    struct ModeEntry { DepthEffectMode mode; DitherMode dither; const char* label; };
 
+    // Baseline (no dither) for every colour-depth mode, plus Bayer4x4/8x8 dithered variants for
+    // the modes where ordered dithering visibly helps most (8-bit colour banding, 2-bit/1-bit
+    // greyscale — 1-bit especially, since without dithering it degenerates to a hard threshold).
     const ModeEntry kModes[] = {
-        {DepthEffectMode::Color16Bit,    "16bit"},
-        {DepthEffectMode::Color8Bit,     "8bit"},
-        {DepthEffectMode::Grayscale4Bit, "4bit_bw"},
-        {DepthEffectMode::Grayscale2Bit, "2bit_bw"},
-        {DepthEffectMode::Grayscale1Bit, "1bit_bw"},
+        {DepthEffectMode::Color16Bit,    DitherMode::None,     "16bit"},
+        {DepthEffectMode::Color8Bit,     DitherMode::None,     "8bit_none"},
+        {DepthEffectMode::Color8Bit,     DitherMode::Bayer4x4, "8bit_bayer4x4"},
+        {DepthEffectMode::Grayscale4Bit, DitherMode::None,     "4bit_bw_none"},
+        {DepthEffectMode::Grayscale2Bit, DitherMode::None,     "2bit_bw_none"},
+        {DepthEffectMode::Grayscale2Bit, DitherMode::Bayer4x4, "2bit_bw_bayer4x4"},
+        {DepthEffectMode::Grayscale2Bit, DitherMode::Bayer8x8, "2bit_bw_bayer8x8"},
+        {DepthEffectMode::Grayscale1Bit, DitherMode::None,     "1bit_bw_none"},
+        {DepthEffectMode::Grayscale1Bit, DitherMode::Bayer4x4, "1bit_bw_bayer4x4"},
+        {DepthEffectMode::Grayscale1Bit, DitherMode::Bayer8x8, "1bit_bw_bayer8x8"},
     };
 
     // Deterministic HSV -> RGB, matching the standard sextant formula.
@@ -148,6 +157,7 @@ class DepthEffectDemo : public Game
         {
             device.Clear(Color(18, 18, 32, 255));
             depthFx_->setMode(entry.mode);
+            depthFx_->setDitherMode(entry.dither);
             DrawScene();
 
             const std::string path = outDir_ + "/depth_effect_" + entry.label + ".png";

@@ -287,6 +287,7 @@ Tasks are listed in roughly recommended implementation order.
 | N24 | Exposure / gamma post-pass | ⬜ |
 | N25 | `RenderPipelineSettings` wired to actual backend passes | ⬜ |
 | N26 | `DepthEffect` — colour-depth-reduction post-process (`ShaderEffect` subclass): 16-bit/8-bit colour, 4/2/1-bit greyscale, GLSL for EasyGL | ✅ |
+| N27 | `DepthEffect::DitherMode` — ordered (Bayer 4x4/8x8) dithering before quantization. Error-diffusion (Floyd-Steinberg/Atkinson) deliberately not offered — inherently sequential, not single-pass-GPU-friendly without compute shaders (see N70) | ✅ |
 
 ### Shadows
 
