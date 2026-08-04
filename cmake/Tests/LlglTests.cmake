@@ -423,6 +423,34 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "LLGL")
     # investigation (see known_bugs.md).
     cna_llgl_test(cna_test_llgl_rasterizerstate_cullmode_camera
                   examples/rasterizerstate_cullmode_camera_test.cpp)
+
+    # LLGL-53: RasterizerState.DepthBias/SlopeScaleDepthBias, verbatim reuse of the shared,
+    # backend-agnostic source already registered on the Software backend (no CNA_BACKEND_
+    # conditionals, no Software-specific casts -- the large integer-valued bias magnitudes are
+    # deliberately chosen to be unambiguous across depth-buffer precisions/formats, per the file's
+    # own header comment). 12/17 PASS on this backend: the core constant-DepthBias mechanism is
+    # real and verified (A/B/C/E/G all flip correctly), but D1 (SlopeScaleDepthBias alone), H0/H1
+    # (a custom Viewport.MinDepth/MaxDepth) and I0/I1 (a bound RenderTarget2D) each reproduce a
+    # genuine, currently-unexplained failure -- see known_bugs.md. Registered anyway, matching this
+    # file's own established precedent for other partially-passing suites (e.g.
+    # Llgl_Deferred_Viewport at 37/39): a documented partial pass is a real regression trip-wire,
+    # not a silently-skipped one.
+    cna_llgl_test(cna_test_llgl_rasterizerstate_depthbias examples/software_depthbias_test.cpp)
+    cna_register_backend_test(NAME Llgl_RasterizerState_DepthBias
+        COMMAND cna_test_llgl_rasterizerstate_depthbias
+        TIMEOUT 90 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # LLGL-53: DepthStencilState's full front/back stencil test, exercised directly (write a
+    # reference value, gate a later draw on it) without touching RenderTargetCube at all -- this
+    # sandbox's OpenGL module has no hasCubeTextures support (a pre-existing, unrelated,
+    # already-documented environment limitation), which otherwise blocks
+    # graphicsdevice_ordered_clear_test.cpp's own stencil checks (now enabled via its
+    # `stencilBuffer3D` Contract flag, see that file) from ever being reached in THIS sandbox.
+    cna_llgl_test(cna_test_llgl_stencil examples/llgl_stencil_test.cpp)
+    cna_register_backend_test(NAME Llgl_Stencil COMMAND cna_test_llgl_stencil
+        TIMEOUT 90 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
     #
     # rendertargetcube_plural_binding_test.cpp, spritebatch_custom_viewport_test.cpp and
     # spritebatch_viewport_switch_test.cpp previously failed here too, all three tracing to the same

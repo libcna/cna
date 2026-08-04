@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <map>
 #include <memory>
+#include <tuple>
 #include <vector>
 
 namespace CNA::Internal::Backends::Llgl
@@ -1578,6 +1579,16 @@ namespace CNA::Internal::Backends::Llgl
                                     int ccwStencilFail, int ccwStencilDepthFail) override;
 
         /**
+         * @brief Records `GraphicsDevice.ReferenceStencil`, independent of a full
+         * `DepthStencilState` re-application (LLGL-53) -- applied per-draw via
+         * `LLGL::CommandBuffer::SetStencilReference()` at replay time, since the pipeline's own
+         * `stencil.referenceDynamic` is always true.
+         *
+         * @param value New reference stencil value.
+         */
+        void SetReferenceStencil(int value) override;
+
+        /**
          * @brief Records whether depth testing is enabled.
          *
          * @param enabled Requested depth test state.
@@ -1975,6 +1986,12 @@ namespace CNA::Internal::Backends::Llgl
             std::uint32_t    vertexCount  = 0;
             float            blendFactor[4] = {1.0f, 1.0f, 1.0f, 1.0f};
             bool             usesBlendFactor = false;
+            /** @brief Primitives only: `GraphicsDevice.ReferenceStencil` at queue time -- the
+             *  pipeline's own `stencil.referenceDynamic = true` (LLGL-53) means this is applied via
+             *  `CommandBuffer::SetStencilReference()` at replay, the same per-command-capture
+             *  reason `blendFactor` above exists (a standalone device property, independent of the
+             *  DepthStencilState that built the cached pipeline object). */
+            std::uint32_t    referenceStencilValue = 0;
             std::int32_t     scissor[4]   = {0, 0, 0, 0};
             bool             scissorEnabled = false;
             /** @brief The physical-pixel GPU viewport rectangle (x, y, width, height) this command
@@ -1984,6 +2001,12 @@ namespace CNA::Internal::Backends::Llgl
              *  replays after it. See that method's own doc comment for why only Primitives ever
              *  narrows this. */
             float            viewport[4]  = {0.0f, 0.0f, 0.0f, 0.0f};
+            /** @brief LLGL-53: the GPU depth range (XNA `Viewport.MinDepth`/`MaxDepth`) this
+             *  command's own viewport must be drawn with -- captured alongside `viewport[4]` by
+             *  `CaptureFrameCommandViewportEXT()`, same restriction (only `Primitives` narrows away
+             *  from the default `[0,1]`). */
+            float            viewportMinDepth = 0.0f;
+            float            viewportMaxDepth = 1.0f;
 
             /** @brief Primitives only: the caller's own vertex buffer, and index buffer if any. */
             LLGL::Buffer*    vertexBuffer = nullptr;
@@ -2360,7 +2383,23 @@ namespace CNA::Internal::Backends::Llgl
 
         std::map<std::uint64_t, LLGL::PipelineState*> pipelineCache_;
         std::map<std::uint64_t, LLGL::Sampler*>       samplerCache_;
-        std::map<std::uint64_t, LLGL::PipelineState*> primitivePipelineCache_;
+        /// LLGL-53: widened from a single `std::uint64_t` to a 4-way tuple. Folding depth bias's
+        /// two floats and the full front/back stencil state's ~10 fields into the SAME single
+        /// `std::uint64_t` the rest of this key already used (via more multiply-add steps) was
+        /// tried and MEASURED BROKEN: the cumulative multiplier of everything folded in AFTER
+        /// `depthBias_`/`slopeScaleDepthBias_` exceeded 2^64, silently overflowing those two
+        /// floats' bits away to nothing -- `rasterizerstate_depthbias_test.cpp`'s own A1 check
+        /// (`DepthBias=3000000` vs `DepthBias=0`) computed the IDENTICAL key for both, reusing the
+        /// zero-bias pipeline for the biased draw. `std::tuple` gets `std::map`'s ordering for
+        /// free, so each of the 3 new elements can use its OWN full 64-bit budget instead of
+        /// competing for bits with the original single-`uint64_t` key or with each other: element
+        /// 1 is the ORIGINAL key computation unchanged, element 2 packs both depth-bias floats
+        /// losslessly (32+32 bits, zero collision risk), element 3 packs both stencil masks
+        /// losslessly (32+32 bits), element 4 packs the 8 stencil op/function fields plus the 2
+        /// stencil bools (comfortably under 64 bits with the same small-multiplier style already
+        /// used elsewhere in this file).
+        std::map<std::tuple<std::uint64_t, std::uint64_t, std::uint64_t, std::uint64_t>,
+                 LLGL::PipelineState*> primitivePipelineCache_;
         /// One `AttachmentLoadOp::Load` render pass per distinct (colour-attachment-count,
         /// has-depth-stencil, sample-count) shape, shared by every render target AND the swap
         /// chain -- every one of them always uses the same colour/depth-stencil FORMAT
@@ -2454,6 +2493,13 @@ namespace CNA::Internal::Backends::Llgl
         std::int32_t scissorRect_[4] = {0, 0, 0, 0};
         bool  viewportSet_        = false;
         std::int32_t viewportRect_[4] = {0, 0, 0, 0};
+        /// XNA `Viewport.MinDepth`/`MaxDepth` (LLGL-53) -- 0/1 are XNA's own `Viewport` defaults.
+        /// Folded into the GPU viewport's own depth range at replay time, the same as every other
+        /// backend's `glDepthRangef`/`VkViewport::minDepth`/`maxDepth` equivalent -- see
+        /// `CaptureFrameCommandViewportEXT()`'s own doc comment for why only `Primitives` commands
+        /// ever narrow away from the full-target default, matching the rect's own restriction.
+        float minDepth_ = 0.0f;
+        float maxDepth_ = 1.0f;
 
         bool  depthTestEnabled_  = false;
         bool  depthWriteEnabled_ = true;
@@ -2474,5 +2520,28 @@ namespace CNA::Internal::Backends::Llgl
         std::unique_ptr<LlglMRTBinding> currentMrtBinding_;
         int   cullMode_ = 2;
         int   fillMode_ = 0;
+        /// LLGL-53: `RasterizerState.DepthBias`/`SlopeScaleDepthBias`, folded straight into
+        /// `LLGL::DepthBiasDescriptor::constantFactor`/`slopeFactor` (both share the native-API
+        /// "raw, unconverted, implementation-dependent units" contract -- confirmed against the
+        /// Vulkan backend's own identical raw pass-through into `vkCmdSetDepthBias`). XNA's own
+        /// default for both is `0.0f`.
+        float depthBias_ = 0.0f;
+        float slopeScaleDepthBias_ = 0.0f;
+
+        /// LLGL-53: `DepthStencilState`'s full front/back stencil test, previously recorded only as
+        /// `stencilRequested_` (enabled/disabled) with the other 8 fields discarded. Defaults match
+        /// XNA's own `DepthStencilState.Default`/`StencilFunction.Always`/`StencilOperation.Keep`.
+        int   stencilFunction_          = 0; // CompareFunction::Always
+        int   stencilPass_              = 0; // StencilOperation::Keep
+        int   stencilFail_              = 0;
+        int   stencilDepthFail_         = 0;
+        int   stencilMask_              = ~0;
+        int   stencilWriteMask_         = ~0;
+        int   referenceStencil_         = 0;
+        bool  twoSidedStencilMode_      = false;
+        int   ccwStencilFunction_       = 0; // CompareFunction::Always
+        int   ccwStencilPass_           = 0; // StencilOperation::Keep
+        int   ccwStencilFail_           = 0;
+        int   ccwStencilDepthFail_      = 0;
     };
 }

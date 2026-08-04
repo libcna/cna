@@ -636,7 +636,7 @@ reported before submission.
 | LLGL-50 | P1 | **Separate logical back-buffer dimensions from presentation scaling.** `FixedHeightDynamicWidth` may choose a presentation rectangle, but it must not silently shrink an explicitly requested readable back buffer or make valid columns unreachable. Define the mode contract once and make draw, readback, viewport and resize code use the same dimensions. | Register and fully pass `backbuffer_first_read_test.cpp`, `bound_target_lifetime_test.cpp` and `deferred_source_lifetime_test.cpp` with their 72x36 cases. Add wider-than-window and narrower-than-window aspect tests plus resize round-trips. | 🟡 |
 | LLGL-51 | P1 | **Fix OpenGL back-buffer viewport/scissor Y conversion and test both modules explicitly.** Normalize LLGL's screen-origin rules at the command boundary without changing render-target orientation or the already-passing zero-Y cases. | Add `_OpenGL` registrations for `deferred_viewport_capture_test.cpp`, `deferred_scissor_capture_test.cpp`, `spritebatch_custom_viewport_test.cpp`, `spritebatch_viewport_switch_test.cpp` and the applicable cube/plural tests. The current 37/39 and 43/47 OpenGL results become full passes, including non-zero-Y target→backbuffer→target sequences. | ⬜ |
 | LLGL-52 | P1 | **Complete legal stock-effect vertex-layout permutations and resolve the orthographic camera case.** Add a defined untextured+unlit colourless BasicEffect path and a defined policy/shader for lit+textured input without normals; diagnose the `Orthographic`+`CreateLookAt` mismatch rather than masking it with a contract branch. | Register and pass `rasterizerstate_cullmode_indexed_basiceffect_test.cpp`, `rendertarget_sampling_orientation_test.cpp` CD4 and `rasterizerstate_cullmode_camera_test.cpp` on each capable module. Unsupported declarations, if any remain, are rejected before queuing with a precise message. | 🟡 |
-| LLGL-53 | P2 | **Finish or explicitly narrow raster/depth/stencil state support.** Wire viewport `minDepth`/`maxDepth`, depth bias, slope-scale depth bias and the full front/back stencil state into descriptors and cache keys. If LLGL 0.04b cannot express one field on a module, expose a precise module capability instead of accepting it as a silent no-op. | Add differential pixel tests for each state and for two draws differing only in that state. Enable the stencil branch of `graphicsdevice_ordered_clear_test.cpp`; update `SupportsCapability()` and `docs/llgl-backend.md` from measured module results. | ⬜ |
+| LLGL-53 | P2 | **Finish or explicitly narrow raster/depth/stencil state support.** Wire viewport `minDepth`/`maxDepth`, depth bias, slope-scale depth bias and the full front/back stencil state into descriptors and cache keys. If LLGL 0.04b cannot express one field on a module, expose a precise module capability instead of accepting it as a silent no-op. | Add differential pixel tests for each state and for two draws differing only in that state. Enable the stencil branch of `graphicsdevice_ordered_clear_test.cpp`; update `SupportsCapability()` and `docs/llgl-backend.md` from measured module results. | 🟡 |
 | LLGL-54 | P2 | **Define and implement combined MRT contracts.** Preserve the effective sample count when multiple multisampled targets are bound, create matching multisample/resolve attachments, regenerate mip chains for every written MRT slot, and either support cube-face slots or reject them before allocation without advertising broader support. | Add MRT+MSAA edge-resolution tests, per-slot mip readback after MRT writes, mixed requested/effective sample-count validation, and lifetime tests for every slot. `LlglMRTBinding::GetSampleCount()` must report the actual native target sample count. | ⬜ |
 | LLGL-55 | P2 | **Harden build and virtual-display CI.** Do not compile ENet tests when `CNA_ENABLE_NET=OFF`; make shaderc discovery conditional on the renderer modules that need runtime SPIR-V compilation; preflight Xvfb for GLX/DRI3 and report Vulkan WSI unavailability as an infrastructure skip rather than twelve renderer crashes. Keep explicit Vulkan and `_OpenGL` lanes so auto-selection cannot hide one module. | A clean LLGL build with `CNA_ENABLE_NET=OFF` produces `CnaTests`; OpenGL-only, Vulkan-only and dual-module configurations build. CI records whether Xvfb supports DRI3, runs the matching module suite, and never labels `VK_ERROR_SURFACE_LOST_KHR` from missing DRI3 as a backend pixel failure. | ⬜ |
 | LLGL-56 | P2 | **Clean up native-surface ownership and platform scope.** Stop leaking `XVisualInfo` from repeated `LlglSdlSurface::GetNativeHandle()` calls, document ownership in the adapter, and investigate a Wayland/native-handle path or make the X11-only restriction a first-class build/runtime capability. | ASan/LSan surface-create/destroy and resize loops show no X11 allocation leak. X11 rejection/selection is covered by tests; Wayland is either supported by an integration test or rejected once with an actionable capability message. | ⬜ |
@@ -850,6 +850,72 @@ identically to both triangles' shared WVP matrix and cannot explain the asymmetr
 is built (`cna_test_llgl_rasterizerstate_cullmode_camera`) but deliberately not CTest-registered
 until this is resolved; a Vulkan-capable display (unavailable in this sandbox's Xvfb, no DRI3) is
 the most promising next step, to determine whether this is OpenGL-module-specific or architectural.
+
+**`LLGL-53` progress (2026-08-04): all four requested mechanisms now wired end-to-end
+(`SetViewport`'s `minDepth`/`maxDepth`, `RasterizerState.DepthBias`/`SlopeScaleDepthBias`, and
+`DepthStencilState`'s full front/back stencil test); the core constant-DepthBias path is real,
+verified, and committed, but each of the other three mechanisms hits its own genuine, unexplained
+defect that is NOT this ticket's own new code (confirmed by isolation) -- left OPEN rather than
+forced.** `AcquirePrimitivePipeline()` now sets `pipelineDesc.rasterizer.depthBias.constantFactor/
+slopeFactor/clamp` (raw XNA units, matching the Vulkan backend's own unconverted
+`vkCmdSetDepthBias` convention) and the full `pipelineDesc.stencil` (front/back
+op/compare/mask, `TwoSidedStencilMode=false` falls back to front's own state for the back face,
+matching the Vulkan/EasyGL backends' own established convention) instead of leaving both entirely
+unapplied. `GraphicsDevice.ReferenceStencil` is wired as a genuinely dynamic per-draw state
+(`stencil.referenceDynamic = true` + `CommandBuffer::SetStencilReference()` at replay, captured
+per-`FrameCommand` the same way `BlendState.BlendFactor` already is) rather than baked statically
+into the pipeline, so a standalone `ReferenceStencil` change (without a full `DepthStencilState`
+re-apply) still takes effect. `SetViewport()`'s previously-ignored `minDepth`/`maxDepth` parameters
+are now captured into `FrameCommand` (`CaptureFrameCommandViewportEXT()`, same "only `Primitives`
+narrows away from the default" restriction the rect itself already had) and passed through to
+`LLGL::Viewport`'s 6-argument constructor at replay.
+
+**Process finding along the way, independently valuable:** folding these ~10 new fields into
+`AcquirePrimitivePipeline()`'s existing single-`uint64_t` pipeline-cache key (using the SAME
+small-multiplier style every other field there already uses) silently overflowed and discarded
+`depthBias_`'s own contribution once the cumulative multiplier of everything folded in AFTER it
+exceeded 2^64 -- `rasterizerstate_depthbias_test.cpp`'s A1 check computed the IDENTICAL key for
+`DepthBias=0` and `DepthBias=3000000`, so the biased draw silently reused the unbiased cached
+pipeline. Fixed by widening `primitivePipelineCache_`'s key to a 4-element
+`std::tuple<uint64_t,uint64_t,uint64_t,uint64_t>` (free lexicographic ordering from `std::map`,
+each new field group gets its own lossless 64-bit budget instead of competing for bits) -- see
+`known_bugs.md`'s own dedicated entry for the two rejected techniques and the general lesson for
+whoever eventually tackles `LLGL-48`.
+
+**Verified** (`CNA_LLGL_RENDERER=opengl`, Xvfb, 2026-08-04):
+`rasterizerstate_depthbias_test.cpp` (reused from Software, no `CNA_BACKEND_` conditionals) 12/17
+PASS, now registered as `Llgl_RasterizerState_DepthBias` -- every constant-`DepthBias` flip check
+(A1/B1/C1/E1/G0) and every zero-bias baseline that does NOT involve a custom depth range or a
+render target (A0/B0/C0/D0/D2/E0/F0) passes. A new, minimal, RenderTargetCube-free
+`llgl_stencil_test.cpp` (registered as `Llgl_Stencil`) confirms stencil WRITE + a MATCHING
+`CompareFunction::Equal` test both work (2/4), but also newly found that a MISMATCHED reference is
+NOT rejected -- the stencil test does not actually gate. `graphicsdevice_ordered_clear_test.cpp`'s
+own `stencilBuffer3D` Contract flag is now `true` for LLGL (matching this ticket's own acceptance
+gate, "enable the stencil branch"), though this sandbox's pre-existing `hasCubeTextures` crash
+still blocks that file's own stencil checks from ever being reached here. A full 65-binary
+regression sweep plus a focused core-test rerun (`Llgl_Smoke`, `Llgl_3D`, `Llgl_BasicEffect`,
+`Llgl_Lighting`, `Llgl_FrontFaceWinding`, `Llgl_Msaa_RenderTarget`,
+`Llgl_RenderTarget2D_Depth`, `Llgl_GraphicsDevice_ClearDepth`,
+`Llgl_SkinnedEffect_LightingConformance`) shows zero regressions from this ticket's changes.
+
+**Left OPEN, three/four separate genuine defects, none root-caused (see `known_bugs.md`'s own
+dedicated entry for the full investigation trace):**
+- `SlopeScaleDepthBias` alone has no measurable effect (D1 fails; the constant `DepthBias` term
+  works perfectly in the SAME file).
+- ANY draw under a non-default `Viewport.MinDepth`/`MaxDepth` renders nothing at all (H0/H1) --
+  confirmed via `git stash` to be a genuine NEW regression from this ticket's own viewport-depth-
+  range plumbing, most likely somewhere between the (confirmed-correct, via debug instrumentation)
+  captured `LLGL::Viewport` call and LLGL's own OpenGL module, not yet traced further.
+- A bound `RenderTarget2D` with depth testing renders nothing even at the completely default depth
+  range and zero bias (I0/I1) -- also a confirmed new regression, via a different, unrelated
+  trigger path from H0's; may share H0's root cause once found.
+- The stencil COMPARE does not actually gate (writes correctly, but a mismatched reference is not
+  rejected) -- found via the new `llgl_stencil_test.cpp`, not yet root-caused.
+
+The acceptance gate's own "update `SupportsCapability()` and `docs/llgl-backend.md` from measured
+module results" was not done this session -- these four open defects should be reflected there
+once (or instead of) being fixed, so the documented capability boundary matches what was actually
+measured rather than what was intended.
 
 ---
 

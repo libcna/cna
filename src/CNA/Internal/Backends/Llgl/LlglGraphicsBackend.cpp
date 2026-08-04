@@ -9,6 +9,7 @@
 #include "Microsoft/Xna/Framework/Graphics/CullMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/FillMode.hpp"
+#include "Microsoft/Xna/Framework/Graphics/StencilOperation.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureFilter.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
@@ -226,6 +227,30 @@ namespace CNA::Internal::Backends::Llgl
             }
             throw std::runtime_error(
                 std::string(kBackendName) + " backend: unknown FillMode ordinal " + std::to_string(fillMode));
+        }
+
+        /// LLGL-53: XNA StencilOperation -> LLGL::StencilOp (mirrors the Vulkan/EasyGL backends'
+        /// own identical `ToVkStencilOp`/`ToEasyGLStencilOp` mapping): `Increment`/`Decrement` WRAP
+        /// (`IncWrap`/`DecWrap`), `IncrementSaturation`/`DecrementSaturation` CLAMP
+        /// (`IncClamp`/`DecClamp`) -- confirmed against `StencilOperation`'s own Doxygen wording
+        /// ("wrapping to 0" vs "clamping to the maximum value").
+        LLGL::StencilOp MapStencilOperation(int stencilOperation)
+        {
+            using XnaStencilOperation = Microsoft::Xna::Framework::Graphics::StencilOperation;
+            switch (static_cast<XnaStencilOperation>(stencilOperation))
+            {
+                case XnaStencilOperation::Keep:                return LLGL::StencilOp::Keep;
+                case XnaStencilOperation::Zero:                return LLGL::StencilOp::Zero;
+                case XnaStencilOperation::Replace:             return LLGL::StencilOp::Replace;
+                case XnaStencilOperation::Increment:           return LLGL::StencilOp::IncWrap;
+                case XnaStencilOperation::Decrement:           return LLGL::StencilOp::DecWrap;
+                case XnaStencilOperation::IncrementSaturation: return LLGL::StencilOp::IncClamp;
+                case XnaStencilOperation::DecrementSaturation: return LLGL::StencilOp::DecClamp;
+                case XnaStencilOperation::Invert:              return LLGL::StencilOp::Invert;
+            }
+            throw std::runtime_error(
+                std::string(kBackendName) + " backend: unknown StencilOperation ordinal " +
+                std::to_string(stencilOperation));
         }
 
         LLGL::PrimitiveTopology MapPrimitiveTopology(PrimitiveType primitive)
@@ -2822,7 +2847,54 @@ namespace CNA::Internal::Backends::Llgl
         key = key * (1024u * 64u) +
               (MakeBlendPipelineKey(scissorEnabled, 1, GetPrimarySampleCountEXT()) & 0xFFFFu);
 
-        const auto cached = primitivePipelineCache_.find(key);
+        // LLGL-53: depth bias and the full front/back stencil state are now part of the pipeline
+        // (see pipelineDesc.rasterizer.depthBias/pipelineDesc.stencil below), so two draws that
+        // differ ONLY in one of these fields must not share a cached pipeline object. Folding
+        // these ~10 fields into the SAME `key` the rest of this function already builds (via more
+        // multiply-add steps, even using SMALL per-step multipliers matching every other field's
+        // own established style) was tried and MEASURED BROKEN: once the CUMULATIVE multiplier of
+        // everything folded in after a given field exceeds 2^64, that field's bits are silently
+        // overflowed away entirely. `rasterizerstate_depthbias_test.cpp`'s own A1 check
+        // (`DepthBias=3000000` vs `DepthBias=0`, otherwise identical state) computed the IDENTICAL
+        // `key` for both -- the biased draw silently reused the zero-bias pipeline, so its bias
+        // never took effect. (An XOR + FNV-prime mix was tried before that and failed differently:
+        // matching this function's own MakeBlendPipelineKey() sibling's already-documented "tried
+        // and produced WRONG RENDERED PIXELS despite every logged descriptor field being provably
+        // correct" class of unexplained defect, LLGL-33 -- confirmed here as a second, independent
+        // data point, root cause still not understood for either technique.)
+        //
+        // The fix: `primitivePipelineCache_`'s key is now a 4-way tuple (see its own declaration),
+        // giving these new fields their OWN dedicated 64-bit budgets instead of competing for bits
+        // with `key` or each other -- both depth-bias floats packed losslessly into one uint64,
+        // both stencil masks packed losslessly into another, and the 8 stencil op/function fields
+        // plus 2 stencil bools packed into a third (comfortably under 64 bits, ordinary small-
+        // multiplier folding is fine there since nothing follows it to overflow it away).
+        std::uint32_t depthBiasBits = 0;
+        std::uint32_t slopeScaleDepthBiasBits = 0;
+        std::memcpy(&depthBiasBits, &depthBias_, sizeof(float));
+        std::memcpy(&slopeScaleDepthBiasBits, &slopeScaleDepthBias_, sizeof(float));
+        const std::uint64_t depthBiasKey =
+            (static_cast<std::uint64_t>(depthBiasBits) << 32) | slopeScaleDepthBiasBits;
+        const std::uint64_t stencilMaskKey =
+            (static_cast<std::uint64_t>(static_cast<std::uint32_t>(stencilMask_)) << 32) |
+            static_cast<std::uint32_t>(stencilWriteMask_);
+        // `referenceStencil_` is NOT folded in here: the pipeline uses `stencil.referenceDynamic =
+        // true` and the reference value is set per-draw via `CommandBuffer::SetStencilReference()`
+        // at replay time instead of being baked into the pipeline object -- see the FrameCommand
+        // capture below.
+        std::uint64_t stencilOpsKey = (stencilRequested_ ? 1u : 0u);
+        stencilOpsKey = stencilOpsKey * 2u + (twoSidedStencilMode_ ? 1u : 0u);
+        stencilOpsKey = stencilOpsKey * 8u + static_cast<std::uint64_t>(stencilFunction_ & 0x7);
+        stencilOpsKey = stencilOpsKey * 8u + static_cast<std::uint64_t>(stencilPass_ & 0x7);
+        stencilOpsKey = stencilOpsKey * 8u + static_cast<std::uint64_t>(stencilFail_ & 0x7);
+        stencilOpsKey = stencilOpsKey * 8u + static_cast<std::uint64_t>(stencilDepthFail_ & 0x7);
+        stencilOpsKey = stencilOpsKey * 8u + static_cast<std::uint64_t>(ccwStencilFunction_ & 0x7);
+        stencilOpsKey = stencilOpsKey * 8u + static_cast<std::uint64_t>(ccwStencilPass_ & 0x7);
+        stencilOpsKey = stencilOpsKey * 8u + static_cast<std::uint64_t>(ccwStencilFail_ & 0x7);
+        stencilOpsKey = stencilOpsKey * 8u + static_cast<std::uint64_t>(ccwStencilDepthFail_ & 0x7);
+
+        const auto pipelineKey = std::make_tuple(key, depthBiasKey, stencilMaskKey, stencilOpsKey);
+        const auto cached = primitivePipelineCache_.find(pipelineKey);
         if (cached != primitivePipelineCache_.end())
             return cached->second;
 
@@ -2914,6 +2986,39 @@ namespace CNA::Internal::Backends::Llgl
         // reasoned: with frontCCW true, CullClockwiseFace left a screen-clockwise triangle on
         // screen, which is the opposite of what XNA does.
         pipelineDesc.rasterizer.frontCCW = false;
+        // LLGL-53: RasterizerState.DepthBias/SlopeScaleDepthBias -- raw XNA units pass straight
+        // through to LLGL::DepthBiasDescriptor, the same convention the Vulkan backend's own
+        // `vkCmdSetDepthBias(draw.depthBias, 0.0f, draw.slopeScaleDepthBias)` already establishes
+        // (no unit conversion; XNA has no clamp parameter, so `clamp` is always 0).
+        pipelineDesc.rasterizer.depthBias.constantFactor = depthBias_;
+        pipelineDesc.rasterizer.depthBias.slopeFactor = slopeScaleDepthBias_;
+        pipelineDesc.rasterizer.depthBias.clamp = 0.0f;
+        // LLGL-53: DepthStencilState's full front/back stencil test. XNA's TwoSidedStencilMode
+        // == false uses the SAME (front, clockwise) ops/function for BOTH faces -- confirmed
+        // against the Vulkan backend's own identical fallback ("FNA's own real behavior: CCW
+        // fields are simply ignored when this is false, not reset to any default"), which itself
+        // mirrors EasyGL's own established convention.
+        pipelineDesc.stencil.testEnabled = stencilRequested_;
+        pipelineDesc.stencil.referenceDynamic = true;
+        pipelineDesc.stencil.front.stencilFailOp = MapStencilOperation(stencilFail_);
+        pipelineDesc.stencil.front.depthFailOp = MapStencilOperation(stencilDepthFail_);
+        pipelineDesc.stencil.front.depthPassOp = MapStencilOperation(stencilPass_);
+        pipelineDesc.stencil.front.compareOp = MapCompareFunction(stencilFunction_);
+        pipelineDesc.stencil.front.readMask = static_cast<std::uint32_t>(stencilMask_);
+        pipelineDesc.stencil.front.writeMask = static_cast<std::uint32_t>(stencilWriteMask_);
+        if (twoSidedStencilMode_)
+        {
+            pipelineDesc.stencil.back.stencilFailOp = MapStencilOperation(ccwStencilFail_);
+            pipelineDesc.stencil.back.depthFailOp = MapStencilOperation(ccwStencilDepthFail_);
+            pipelineDesc.stencil.back.depthPassOp = MapStencilOperation(ccwStencilPass_);
+            pipelineDesc.stencil.back.compareOp = MapCompareFunction(ccwStencilFunction_);
+            pipelineDesc.stencil.back.readMask = static_cast<std::uint32_t>(stencilMask_);
+            pipelineDesc.stencil.back.writeMask = static_cast<std::uint32_t>(stencilWriteMask_);
+        }
+        else
+        {
+            pipelineDesc.stencil.back = pipelineDesc.stencil.front;
+        }
         pipelineDesc.blend.blendFactorDynamic = UsesConstantBlendFactorState();
         pipelineDesc.blend.targets[0].blendEnabled = !IsOpaqueBlendState();
         pipelineDesc.blend.targets[0].srcColor = MapBlendFactor(colorSrcBlend_);
@@ -2938,7 +3043,7 @@ namespace CNA::Internal::Backends::Llgl
             }
         }
 
-        primitivePipelineCache_.emplace(key, pipeline);
+        primitivePipelineCache_.emplace(pipelineKey, pipeline);
         return pipeline;
     }
 
@@ -3587,6 +3692,7 @@ namespace CNA::Internal::Backends::Llgl
         command.baseVertex = baseVertex;
         std::memcpy(command.blendFactor, blendFactor_, sizeof(command.blendFactor));
         command.usesBlendFactor = UsesConstantBlendFactorState();
+        command.referenceStencilValue = static_cast<std::uint32_t>(referenceStencil_);
         std::memcpy(command.scissor, scissor, sizeof(command.scissor));
         command.scissorEnabled = scissorEnabled;
         CaptureFrameCommandViewportEXT(command);
@@ -4274,6 +4380,8 @@ namespace CNA::Internal::Backends::Llgl
         command.viewport[1] = 0.0f;
         command.viewport[2] = static_cast<float>(resolution.width);
         command.viewport[3] = static_cast<float>(resolution.height);
+        command.viewportMinDepth = 0.0f;
+        command.viewportMaxDepth = 1.0f;
 
         if (command.kind != FrameCommand::Kind::Primitives || !viewportSet_)
             return;
@@ -4291,6 +4399,10 @@ namespace CNA::Internal::Backends::Llgl
         command.viewport[1] = rect.y + static_cast<float>(viewportRect_[1]) * scaleY;
         command.viewport[2] = static_cast<float>(viewportRect_[2]) * scaleX;
         command.viewport[3] = static_cast<float>(viewportRect_[3]) * scaleY;
+        // LLGL-53: the depth range is not spatial, so it needs no rect-style rescaling -- XNA's
+        // MinDepth/MaxDepth pass straight through to the GPU viewport's own depth range.
+        command.viewportMinDepth = minDepth_;
+        command.viewportMaxDepth = maxDepth_;
     }
 
     void LlglGraphicsBackend::QueueSpriteEXT(const ITextureBackend& texture,
@@ -4928,7 +5040,8 @@ namespace CNA::Internal::Backends::Llgl
                 case FrameCommand::Kind::Clear:
                 {
                     commands_->SetViewport(LLGL::Viewport{command.viewport[0], command.viewport[1],
-                                                          command.viewport[2], command.viewport[3]});
+                                                          command.viewport[2], command.viewport[3],
+                                                          command.viewportMinDepth, command.viewportMaxDepth});
                     LLGL::ClearValue clearValue;
                     std::memcpy(clearValue.color, command.clearColor, sizeof(clearValue.color));
                     clearValue.depth = command.clearDepth;
@@ -4958,10 +5071,17 @@ namespace CNA::Internal::Backends::Llgl
                     }
 
                     commands_->SetViewport(LLGL::Viewport{command.viewport[0], command.viewport[1],
-                                                          command.viewport[2], command.viewport[3]});
+                                                          command.viewport[2], command.viewport[3],
+                                                          command.viewportMinDepth, command.viewportMaxDepth});
                     commands_->SetPipelineState(*command.pipeline);
                     if (command.usesBlendFactor)
                         commands_->SetBlendFactor(command.blendFactor);
+                    // LLGL-53: the pipeline's stencil.referenceDynamic is always true for this
+                    // command kind, so a reference value must be set on every Primitives draw
+                    // regardless of whether stencil testing is actually enabled -- LLGL requires a
+                    // dynamic state to be set before the draw that uses its pipeline, not gated
+                    // behind whether that state happens to matter for this particular pipeline.
+                    commands_->SetStencilReference(command.referenceStencilValue);
                     if (command.scissorEnabled)
                     {
                         commands_->SetScissor(LLGL::Scissor{command.scissor[0], command.scissor[1],
@@ -5065,7 +5185,8 @@ namespace CNA::Internal::Backends::Llgl
                     }
 
                     commands_->SetViewport(LLGL::Viewport{command.viewport[0], command.viewport[1],
-                                                          command.viewport[2], command.viewport[3]});
+                                                          command.viewport[2], command.viewport[3],
+                                                          command.viewportMinDepth, command.viewportMaxDepth});
                     commands_->SetPipelineState(*command.pipeline);
                     if (command.usesBlendFactor)
                         commands_->SetBlendFactor(command.blendFactor);
@@ -5866,7 +5987,7 @@ namespace CNA::Internal::Backends::Llgl
     }
 
     void LlglGraphicsBackend::ApplyRasterizerState(int cullMode, int fillMode, bool scissorTestEnable,
-                                                    float /*depthBias*/, float /*slopeScaleDepthBias*/)
+                                                    float depthBias, float slopeScaleDepthBias)
     {
         // Cull mode, fill mode and both depth biases belong to the 3D pipeline: a sprite quad is
         // always front-facing, solid, and unaffected by depth. They are recorded so the 3D path
@@ -5874,6 +5995,8 @@ namespace CNA::Internal::Backends::Llgl
         cullMode_ = cullMode;
         fillMode_ = fillMode;
         scissorTestEnabled_ = scissorTestEnable;
+        depthBias_ = depthBias;
+        slopeScaleDepthBias_ = slopeScaleDepthBias;
     }
 
     void LlglGraphicsBackend::SetScissorRect(int x, int y, int w, int h)
@@ -5885,37 +6008,62 @@ namespace CNA::Internal::Backends::Llgl
         scissorRectSet_ = true;
     }
 
-    void LlglGraphicsBackend::SetViewport(int x, int y, int w, int h, float /*minDepth*/, float /*maxDepth*/)
+    void LlglGraphicsBackend::SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth)
     {
         viewportRect_[0] = x;
         viewportRect_[1] = y;
         viewportRect_[2] = w;
         viewportRect_[3] = h;
+        minDepth_ = minDepth;
+        maxDepth_ = maxDepth;
 
         const PresentationRect rect = GetActiveDrawRect();
+        // LLGL-53: a depth range other than XNA's own [0,1] default must still narrow the GPU
+        // viewport away from the full-target default even when the RECT itself is unchanged --
+        // matches the rect-only check this flag used to be, now widened so `viewportSet_` means
+        // "this Viewport differs from the implicit full-target one in ANY of its five fields".
         viewportSet_ = !(x == 0 && y == 0 &&
                          static_cast<float>(w) == rect.logicalWidth &&
-                         static_cast<float>(h) == rect.logicalHeight);
+                         static_cast<float>(h) == rect.logicalHeight &&
+                         minDepth == 0.0f && maxDepth == 1.0f);
     }
 
     void LlglGraphicsBackend::ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable,
                                                       int depthFunc,
-                                                      bool stencilEnable, int /*stencilFunc*/,
-                                                      int /*stencilPass*/, int /*stencilFail*/,
-                                                      int /*stencilDepthFail*/,
-                                                      int /*stencilMask*/, int /*stencilWriteMask*/,
-                                                      int /*referenceStencil*/,
-                                                      bool /*twoSidedStencilMode*/,
-                                                      int /*ccwStencilFunc*/, int /*ccwStencilPass*/,
-                                                      int /*ccwStencilFail*/, int /*ccwStencilDepthFail*/)
+                                                      bool stencilEnable, int stencilFunc,
+                                                      int stencilPass, int stencilFail,
+                                                      int stencilDepthFail,
+                                                      int stencilMask, int stencilWriteMask,
+                                                      int referenceStencil,
+                                                      bool twoSidedStencilMode,
+                                                      int ccwStencilFunc, int ccwStencilPass,
+                                                      int ccwStencilFail, int ccwStencilDepthFail)
     {
         depthTestEnabled_ = depthEnable;
         depthWriteEnabled_ = depthWriteEnable;
         depthCompareFunction_ = depthFunc;
-        // Stencil is deliberately not applied: the swap chain carries a real stencil buffer and
-        // ClearStencil works, but no draw path consumes a stencil test yet, so translating the
-        // eight stencil fields into a pipeline nothing reads would only look like support.
+        // LLGL-53: the full stencil state is now applied (see AcquirePrimitivePipeline()'s
+        // `pipelineDesc.stencil`) -- previously only `stencilRequested_` (enabled/disabled) was
+        // recorded and the swap chain's real stencil buffer/ClearStencil worked, but no draw path
+        // ever consumed an actual stencil test.
         stencilRequested_ = stencilEnable;
+        stencilFunction_ = stencilFunc;
+        stencilPass_ = stencilPass;
+        stencilFail_ = stencilFail;
+        stencilDepthFail_ = stencilDepthFail;
+        stencilMask_ = stencilMask;
+        stencilWriteMask_ = stencilWriteMask;
+        referenceStencil_ = referenceStencil;
+        twoSidedStencilMode_ = twoSidedStencilMode;
+        ccwStencilFunction_ = ccwStencilFunc;
+        ccwStencilPass_ = ccwStencilPass;
+        ccwStencilFail_ = ccwStencilFail;
+        ccwStencilDepthFail_ = ccwStencilDepthFail;
+    }
+
+    void LlglGraphicsBackend::SetReferenceStencil(int value)
+    {
+        referenceStencil_ = value;
     }
 
     void LlglGraphicsBackend::SetDepthTestEnabled(bool enabled)

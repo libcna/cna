@@ -1261,3 +1261,138 @@ verification.
 `stock_effect_sampler_contract_test.cpp` is now registered as `Llgl_StockEffectSampler`.
 
 ---
+
+## LLGL backend: pipeline-cache key folding overflows and silently discards new fields — FIXED (process finding, LLGL-53)
+
+**Status:** fixed by `plan_llgl.md` `LLGL-53` (2026-08-04) as part of wiring `RasterizerState.
+DepthBias`/`SlopeScaleDepthBias` and the full stencil state into `AcquirePrimitivePipeline()`.
+Recorded here as its own entry because it is a REUSABLE lesson about this function's own key
+scheme, not just a one-off depth-bias bug -- the next person widening this key should read this
+first.
+
+**Symptom:** after wiring `depthBias_`/`slopeScaleDepthBias_`/8 stencil fields into
+`AcquirePrimitivePipeline()`'s existing single-`uint64_t` cache key (via more multiply-add steps,
+matching every other field's own established style), `rasterizerstate_depthbias_test.cpp`'s A1
+check (`DepthBias=3000000` vs `DepthBias=0`, otherwise identical draw state) computed the
+IDENTICAL key for both -- confirmed directly by printing the key: `key=9223372034707292159` for
+BOTH the zero-bias and the 3,000,000-bias draw. The biased draw silently reused the zero-bias
+cached pipeline, so its bias never took visual effect (behaved exactly as if depth bias were
+still unwired).
+
+**Two distinct bad techniques were tried and rejected, in order:**
+1. An XOR + FNV-prime mix (matching the technique `MakeBlendPipelineKey()`'s own comment already
+   documents as "tried and produced WRONG RENDERED PIXELS despite every logged descriptor field
+   being provably correct" for a DIFFERENT field, `LLGL-33`) reproduced the exact same unexplained
+   failure class here too, but differently: with it in place, `rasterizerstate_depthbias_test.cpp`'s
+   H0/I0 checks (baseline, zero bias) went from a correct green pixel to a completely BLACK one
+   (neither triangle drawn at all). A second, independent data point for that unexplained defect
+   class -- still not understood for either technique, and still worth avoiding blind.
+2. A plain multiply-add using a 32-bit multiplier (`key = key * 0x100000000ull + bits`) to fold
+   each float's full bit pattern "cleanly" LOOKS like the same safe small-multiplier style every
+   other field in this function already uses -- it is not. For a 64-bit `key` that already carries
+   entropy from every earlier-folded field, multiplying by 2^32 discards the key's entire previous
+   upper 32 bits via unsigned overflow (`(key * 2^32) mod 2^64 == (key mod 2^32) * 2^32`); doing
+   this 4 times in a row (two bias floats, two stencil masks) collapsed almost every earlier field
+   into irrelevance. This made H0/I0 pass again (coincidentally -- their real, separate bug is
+   documented below), but silently broke every bias-flip check that had been working
+   (A1/B1/C1/D1/E1/G0/H1/I1 all failed): the biased draw's key collided with an EARLIER,
+   already-cached unbiased pipeline instead of creating its own.
+
+**Root cause (general):** this whole key scheme folds every field via `key = key * N + value`
+using SMALL per-field multipliers (2, 4, 8, 64, 65536...), which is safe PROVIDED the field being
+folded needs to SURVIVE to the end -- but `std::uint64_t` overflow means any field's contribution
+gets multiplied away to nothing once the PRODUCT of every multiplier applied AFTER it exceeds
+2^64. The existing key already relied on this being "good enough" for its own fields (an accepted,
+documented risk, see `LLGL-48`); adding ~10 more fields' worth of multiply-add steps pushed the
+cumulative multiplier for early fields (like `depthBias_`) far past 2^64.
+
+**Fix:** `primitivePipelineCache_`'s key type was widened from a single `std::uint64_t` to a
+4-element `std::tuple<uint64_t, uint64_t, uint64_t, uint64_t>` (`std::map` gets lexicographic
+ordering on tuples for free, no custom comparator needed). Element 1 is the ORIGINAL key,
+unchanged. Element 2 packs both depth-bias floats losslessly (32+32 bits, zero collision risk).
+Element 3 packs both stencil masks losslessly (32+32 bits). Element 4 packs the 8 stencil
+op/function fields plus 2 stencil bools using the same small-multiplier style, safe here because
+nothing is folded in after it within its own dedicated 64-bit word. **Verified**: A1's key
+computation now differs correctly between bias=0 and bias=3000000, and
+`rasterizerstate_depthbias_test.cpp` returned to 12/17 PASS (all constant-DepthBias flip checks:
+A/B/C/E/G) -- see the separate entry below for the file's own remaining 5 failures, none of which
+are this key issue.
+
+**Lesson for whoever widens this key next (LLGL-48's own eventual scope):** do not add MORE
+multiply-add steps to the single `key` variable past a handful of small (<256) multipliers without
+checking whether an EARLIER field's contribution still survives. A tuple/composite key sidesteps
+the whole class of bug and costs nothing extra at `std::map`'s scale.
+
+**Tracked as:** `plan_llgl.md` Phase LLGL-8, `LLGL-53`.
+
+---
+
+## LLGL backend: `RasterizerState.SlopeScaleDepthBias`, custom `Viewport.MinDepth`/`MaxDepth`, and `RenderTarget2D` depth testing each have a genuine, unexplained defect — OPEN (LLGL-53)
+
+**Status:** open, discovered while wiring `plan_llgl.md`'s `LLGL-53`. Root cause NOT identified for
+any of the three; not fixed here. Distinct from the pipeline-cache-key entry above -- confirmed via
+isolation (disabling the depth-bias/stencil descriptor writes entirely, with the cache key already
+fixed, does NOT make any of these three pass), so none of these are a side effect of this ticket's
+own new descriptor/key code; they are real, separately-rooted defects that this ticket's own new
+test coverage (`rasterizerstate_depthbias_test.cpp`, reused from Software) happened to be the first
+thing to exercise them on this backend.
+
+**D1 -- `SlopeScaleDepthBias` alone has no effect.** `rasterizerstate_depthbias_test.cpp`'s D0
+(SlopeScale=0, shallow-sloped quad correctly wins over a flat one by ordinary depth) passes; D1
+(the SAME geometry, SlopeScale=150 expected to push the sloped quad's far edge behind the flat
+one) still reports the shallow quad winning, as if the slope factor were never applied. `D2`
+(a FLAT quad under the same high SlopeScale, expected to get ZERO slope offset since a flat
+polygon's screen-space depth slope is 0) correctly passes, which is at least consistent with "no
+slope offset is being applied to sloped geometry either" rather than some fixed non-zero offset
+firing regardless of slope. `pipelineDesc.rasterizer.depthBias.slopeFactor = slopeScaleDepthBias_;`
+is wired identically to `constantFactor` (LLGL's own `GLRasterizerState.cpp` reads both the same
+way, see `IsPolygonOffsetEnabled`/`Bind()`), and the CONSTANT factor demonstrably works (every
+`A1`/`B1`/`C1`/`E1`/`G0` check in the same file passes) -- so this is specifically about the SLOPE
+term, not depth bias wiring in general.
+
+**H0/H1 -- ANY draw under a non-default `Viewport.MinDepth`/`MaxDepth` renders nothing at all.**
+`rasterizerstate_depthbias_test.cpp`'s H0 (custom depth range `[0.2, 0.8]`, DepthBias=0 -- a pure
+baseline, no bias involved at all) expects the later of two coplanar quads to win by ordinary
+depth-test semantics, same as every other baseline check in the file. Instead, a full-framebuffer
+readback shows the centre pixel stays pure background black -- NEITHER quad drew. Confirmed via a
+`git stash`-based comparison against the exact pre-`LLGL-53` binary: this same scenario correctly
+rendered green (H0 passed) BEFORE any of `LLGL-53`'s changes, so it is a genuine new regression
+somewhere in this ticket's own work, most likely `SetViewport()`'s newly-wired
+`minDepth`/`maxDepth` plumbing (`CaptureFrameCommandViewportEXT()`'s own `viewportMinDepth`/
+`viewportMaxDepth` fields, and the `LLGL::Viewport`'s 6-argument constructor now used at replay).
+Debug instrumentation confirmed the CAPTURED values are correct at replay time
+(`viewport=(0,0,640,480) depth=(0.200,0.800)`, exactly matching what the test requested) -- so the
+defect is not in this backend's own capture/plumbing, but somewhere between that correct
+`LLGL::Viewport` call and what actually reaches the screen (LLGL's own OpenGL module's
+`GLImmediateCommandBuffer::SetViewport()`/`GLStateManager::SetDepthRange()` were read and look
+correct on their own too, `GLProfile::DepthRange(minDepth, maxDepth)`; not yet traced further).
+
+**I0/I1 -- a bound `RenderTarget2D` with depth testing renders nothing, even with DepthBias=0 and
+the DEFAULT `[0,1]` depth range.** Same "baseline renders nothing" symptom as H0, but reached via a
+completely different path (`SetVp(dev, 0, 0, rtW, rtH)` on a bound `RenderTarget2D`, no custom
+depth range at all). Also confirmed via `git stash` comparison to be a genuine NEW regression from
+this ticket's own work (I0 rendered green correctly before `LLGL-53`). Given H0 and I0 share the
+exact same symptom (baseline coplanar draw, expected winner is the later one, actual result is a
+fully blank/background readback) via two UNRELATED trigger conditions (custom depth range vs. a
+bound render target), they may share a common root cause once found -- worth investigating
+together rather than separately.
+
+**Also found while adding `llgl_stencil_test.cpp` (new, LLGL-53): the stencil test does not
+actually GATE.** Writing a reference value via `StencilOperation::Replace` and then reading it
+back via a `CompareFunction::Equal` test against the SAME reference passes correctly (Check A), but
+a mismatched reference (`CompareFunction::Equal` against a DIFFERENT value than what was written)
+is NOT rejected -- the gated draw lands anyway, as if the compare function were always
+`CompareFunction::Always` regardless of what was actually requested (Checks B and C's second half).
+Root cause not identified; candidates not yet ruled out: the swap chain's own depth-stencil
+attachment format may lack a real stencil channel despite `LLGL::SwapChainDescriptor::stencilBits`
+defaulting to 8 (not yet confirmed via `swapChain_->GetDepthStencilFormat()`'s actual reported
+value on this module), or `pipelineDesc.stencil.front.compareOp`/`readMask` may not be reaching the
+GPU the way `pipelineDesc.depth.compareOp` demonstrably does (ordinary depth testing works
+correctly elsewhere in this same backend).
+
+**Tracked as:** `plan_llgl.md` Phase LLGL-8, `LLGL-53` -- left OPEN, three/four distinct defects,
+none root-caused. `Llgl_RasterizerState_DepthBias` (12/17) and `Llgl_Stencil` (2/4) are both
+registered anyway as real regression trip-wires for whoever continues this, matching this session's
+own established `Llgl_Deferred_Viewport`-style precedent for partial-pass suites.
+
+---
