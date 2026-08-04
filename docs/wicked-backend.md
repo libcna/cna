@@ -143,6 +143,7 @@ Implemented and reported as supported:
 | 3D draws | `BasicEffect`, `AlphaTestEffect`, `DualTextureEffect`, `EnvironmentMapEffect`, `SkinnedEffect`, `PbrEffect`, `SkinnedPbrEffect`, fog, three directional lights, specular |
 | `RenderTarget2D` | Colour + optional depth/stencil, `RenderTargetUsage`, readback |
 | `RenderTargetCube` | Per-face rendering, whole-cube sampling, per-face upload and readback |
+| MRT | Up to 4 colour targets, shared depth from slot 0; stock shaders write slot 0 only |
 | Render state | Blend (incl. per-slot write masks and sample mask), depth/stencil (incl. two-sided), rasterizer (incl. wireframe and depth bias), samplers |
 | `TextureCube` | Six-face upload and readback, sampled by `EnvironmentMapEffect` |
 | MSAA render-target readback | Refused — no explicit resolve yet (`WICKED-52`) |
@@ -156,7 +157,6 @@ Not implemented; each is refused explicitly at the call site and reported by
 
 | Area | `GraphicsCapability` |
 |------|----------------------|
-| Multiple simultaneous render targets | `MultipleRenderTargets` |
 | Custom `ShaderEffect` / `SpriteBatch.Begin(effect)` | `CustomEffects` |
 | Multi-stream vertex input | `MultiStreamVertexInput` |
 | `InstanceFrequency` other than 1 | — (the draw throws; Wicked's `InputLayout` has no step-rate field) |

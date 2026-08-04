@@ -58,7 +58,7 @@ missing.
    lets CNA switch freely between the back buffer and a `RenderTarget2D` mid-frame, and it is the
    same texture the virtual-resolution/letterbox presentation needs anyway.
 
-6. **Unsupported draws are refused, never approximated.** MRT, an unexpressible instance-step-rate,
+6. **Unsupported draws are refused, never approximated.** An unexpressible instance-step-rate,
    a skinned draw on a layout without blend weights, a PBR draw on a layout without a tangent, and
    an instanced draw on a wider stride all throw at the call site rather than rendering an unlit,
    bind-pose, single-target or wrong-rate stand-in that would look like a working draw.
@@ -131,7 +131,7 @@ missing.
 | WICKED-51 | Fog (FNA's `EffectHelpers.SetFogVector` fog vector) | ✅ |
 | WICKED-52 | MSAA `RenderTarget2D` readback (needs an explicit resolve) | ⬜ |
 | WICKED-53 | `DrawInstancedPrimitivesEx` (per-instance 64-byte `Matrix` stream at input slot 1, four instanced VS variants); `InstanceFrequency != 1` refused — Wicked's `InputLayout` has no step-rate field | ✅ |
-| WICKED-54 | Multiple simultaneous render targets | ⬜ |
+| WICKED-54 | Multiple simultaneous render targets (up to 4, shared depth from slot 0, size-mismatched sets refused) | ✅ |
 | WICKED-55 | `RenderTargetCube` (per-face RTV subresources, whole-cube SRV, sampleable by `EnvironmentMapEffect`) | ✅ |
 | WICKED-56 | `EnvironmentMapEffect` (cube reflections, flat and Fresnel-weighted, dedicated VS/PS pair matching the established CNA env-map shading) | ✅ |
 | WICKED-56b | `SkinnedEffect` (bone palette at b1, FNA's `WeightsPerVertex` gating, skin composed with the world normal matrix, post-skin fog) | ✅ |
@@ -173,8 +173,14 @@ missing.
   as the next task, not as a formality.
 - **3D effect coverage stops at `BasicEffect`/`AlphaTestEffect`/`DualTextureEffect`**
   (`WICKED-56`). `EnvironmentMapEffect`, `SkinnedEffect` and `PbrEffect` throw.
-- **No MRT and no custom `ShaderEffect`** (`WICKED-54`/`57`/`68`). Each is refused explicitly and
-  reported through `SupportsCapability()`.
+- **No custom `ShaderEffect`** (`WICKED-57`/`68`), refused explicitly and reported through
+  `SupportsCapability()`. This is the one remaining feature gap that needs new infrastructure
+  rather than another shader: `IEffectBackend`'s uniform setters address constants BY NAME, which
+  needs SPIR-V reflection this backend does not do yet.
+- **MRT writes only slot 0's colour** (`WICKED-54`). The stock pixel shaders declare one
+  `SV_Target`, so slots 1..3 receive nothing beyond what their `ColorWriteChannels` mask lets
+  through — the same thing XNA does when a stock effect draws into an MRT set. Writing distinct
+  values per slot needs a custom effect, i.e. `WICKED-57`.
 - Every stock effect is now implemented: `BasicEffect`, `AlphaTestEffect`, `DualTextureEffect`,
   `EnvironmentMapEffect`, `SkinnedEffect`, `PbrEffect` and `SkinnedPbrEffect`.
 - **Instancing is limited to the four narrow strides** (16/20/24/32) and is refused on the wider

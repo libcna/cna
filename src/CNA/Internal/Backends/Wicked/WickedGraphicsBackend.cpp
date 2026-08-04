@@ -1700,7 +1700,7 @@ namespace CNA::Internal::Backends::Wicked
     {
         BeginFrame();
 
-        wig::RenderPassImage images[3];
+        wig::RenderPassImage images[kWickedMaxRenderTargets + 2];
         std::uint32_t imageCount = 0;
 
         if (currentRenderTargetCube_ != nullptr)
@@ -1723,21 +1723,29 @@ namespace CNA::Internal::Backends::Wicked
             }
             currentRenderTargetCube_->MarkFaceRenderedEXT(currentCubeFace_);
         }
-        else if (currentRenderTarget_ != nullptr)
+        else if (currentRenderTargetCount_ > 0)
         {
-            const bool load = currentRenderTarget_->PreservesContentsEXT() &&
-                              currentRenderTarget_->HasContentEXT();
-            images[imageCount++] = wig::RenderPassImage::RenderTarget(
-                &currentRenderTarget_->GetColorTextureEXT(),
-                load ? wig::RenderPassImage::LoadOp::LOAD : wig::RenderPassImage::LoadOp::DONTCARE);
-            if (currentRenderTarget_->GetDepthTextureEXT().IsValid())
+            for (int slot = 0; slot < currentRenderTargetCount_; ++slot)
             {
+                WickedRenderTargetBackend* target = currentRenderTargets_[slot];
+                const bool load = target->PreservesContentsEXT() && target->HasContentEXT();
+                images[imageCount++] = wig::RenderPassImage::RenderTarget(
+                    &target->GetColorTextureEXT(),
+                    load ? wig::RenderPassImage::LoadOp::LOAD
+                         : wig::RenderPassImage::LoadOp::DONTCARE);
+                target->MarkRenderedEXT();
+            }
+            // Depth comes from slot 0, which is what XNA's own MRT rules require: every target in
+            // the set shares one depth/stencil buffer.
+            WickedRenderTargetBackend* primary = currentRenderTargets_[0];
+            if (primary->GetDepthTextureEXT().IsValid())
+            {
+                const bool load = primary->PreservesContentsEXT() && primary->HasContentEXT();
                 images[imageCount++] = wig::RenderPassImage::DepthStencil(
-                    &currentRenderTarget_->GetDepthTextureEXT(),
+                    &primary->GetDepthTextureEXT(),
                     load ? wig::RenderPassImage::LoadOp::LOAD
                          : wig::RenderPassImage::LoadOp::DONTCARE);
             }
-            currentRenderTarget_->MarkRenderedEXT();
         }
         else
         {
@@ -1768,13 +1776,13 @@ namespace CNA::Internal::Backends::Wicked
     int WickedGraphicsBackend::ActiveTargetWidth() const
     {
         if (currentRenderTargetCube_ != nullptr) return currentRenderTargetCube_->GetSize();
-        return currentRenderTarget_ != nullptr ? currentRenderTarget_->GetWidth() : scene_.width;
+        return currentRenderTargetCount_ > 0 ? currentRenderTargets_[0]->GetWidth() : scene_.width;
     }
 
     int WickedGraphicsBackend::ActiveTargetHeight() const
     {
         if (currentRenderTargetCube_ != nullptr) return currentRenderTargetCube_->GetSize();
-        return currentRenderTarget_ != nullptr ? currentRenderTarget_->GetHeight() : scene_.height;
+        return currentRenderTargetCount_ > 0 ? currentRenderTargets_[0]->GetHeight() : scene_.height;
     }
 
     void WickedGraphicsBackend::ApplyViewportAndScissor()
@@ -1972,7 +1980,7 @@ namespace CNA::Internal::Backends::Wicked
         // only while no pass is open. Once one is open, the equivalent is a full-target quad drawn
         // with the requested colour/depth/stencil writes -- the same fallback the other
         // render-pass-based CNA backends use for a mid-frame clear.
-        if (!renderPassActive_ && currentRenderTarget_ == nullptr &&
+        if (!renderPassActive_ && currentRenderTargetCount_ == 0 &&
             currentRenderTargetCube_ == nullptr && color && !sceneCleared_)
         {
             BeginFrame();
@@ -2510,10 +2518,17 @@ namespace CNA::Internal::Backends::Wicked
     void WickedGraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt)
     {
         auto* target = dynamic_cast<WickedRenderTargetBackend*>(rt);
-        if (target == currentRenderTarget_ && currentRenderTargetCube_ == nullptr)
+        const int desiredCount = target != nullptr ? 1 : 0;
+        if (currentRenderTargetCube_ == nullptr && currentRenderTargetCount_ == desiredCount &&
+            (desiredCount == 0 || currentRenderTargets_[0] == target))
+        {
             return;
+        }
         EndRenderPassEXT();
-        currentRenderTarget_ = target;
+        currentRenderTargets_ = {};
+        currentRenderTargetCount_ = desiredCount;
+        if (target != nullptr)
+            currentRenderTargets_[0] = target;
         currentRenderTargetCube_ = nullptr;
         viewportSet_ = false;
     }
@@ -2541,7 +2556,8 @@ namespace CNA::Internal::Backends::Wicked
         if (target == currentRenderTargetCube_ && face == currentCubeFace_)
             return;
         EndRenderPassEXT();
-        currentRenderTarget_ = nullptr;
+        currentRenderTargets_ = {};
+        currentRenderTargetCount_ = 0;
         currentRenderTargetCube_ = target;
         currentCubeFace_ = face;
         viewportSet_ = false;
@@ -2556,30 +2572,85 @@ namespace CNA::Internal::Backends::Wicked
             return;
         }
 
-        // A cube face and a multi-target set are both refused deterministically rather than
-        // silently flattened to slot 0 / face +X (plan_wicked.md WICKED-54/55).
-        if (count > 1)
-        {
-            throw std::runtime_error(
-                "Wicked backend: multiple simultaneous render targets are not supported "
-                "(GraphicsCapability::MultipleRenderTargets reports false).");
-        }
         if (renderTargets[0].IsRenderTargetCubeFace())
         {
+            // A cube face is only ever bound alone: XNA has no MRT set mixing a cube face with
+            // other targets, and flattening one into slot 0 would silently lose the face.
+            if (count > 1)
+            {
+                throw std::runtime_error(
+                    "Wicked backend: a RenderTargetCube face cannot be combined with other "
+                    "render targets in one binding set.");
+            }
             SetRenderTargetCubeFace(renderTargets[0].GetRenderTargetCube(),
                                     renderTargets[0].GetCubeFace());
             return;
         }
 
-        SetRenderTarget2D(renderTargets[0].GetRenderTarget2D());
+        if (count > kWickedMaxRenderTargets)
+        {
+            throw std::runtime_error(
+                "Wicked backend: at most " + std::to_string(kWickedMaxRenderTargets) +
+                " simultaneous render targets are supported (" + std::to_string(count) +
+                " were bound).");
+        }
+
+        std::array<WickedRenderTargetBackend*, kWickedMaxRenderTargets> targets{};
+        for (int slot = 0; slot < count; ++slot)
+        {
+            if (renderTargets[slot].IsRenderTargetCubeFace())
+            {
+                throw std::runtime_error(
+                    "Wicked backend: a RenderTargetCube face cannot appear in a multi-target "
+                    "binding set.");
+            }
+            auto* target =
+                dynamic_cast<WickedRenderTargetBackend*>(renderTargets[slot].GetRenderTarget2D());
+            if (target == nullptr)
+            {
+                throw std::runtime_error(
+                    "Wicked backend: render-target slot " + std::to_string(slot) +
+                    " is empty; XNA's binding set has no holes.");
+            }
+            targets[slot] = target;
+        }
+        // Every attachment of one render pass must share an extent, so a mismatched set is refused
+        // rather than rendered into a region only the first target actually covers.
+        for (int slot = 1; slot < count; ++slot)
+        {
+            if (targets[slot]->GetWidth() != targets[0]->GetWidth() ||
+                targets[slot]->GetHeight() != targets[0]->GetHeight())
+            {
+                throw std::runtime_error(
+                    "Wicked backend: every render target in one binding set must have the same "
+                    "size; slot " + std::to_string(slot) + " differs from slot 0.");
+            }
+        }
+
+        if (count == 1)
+        {
+            SetRenderTarget2D(targets[0]);
+            return;
+        }
+
+        EndRenderPassEXT();
+        currentRenderTargets_ = targets;
+        currentRenderTargetCount_ = count;
+        currentRenderTargetCube_ = nullptr;
+        viewportSet_ = false;
     }
 
     void WickedGraphicsBackend::NotifyRenderTargetDestroyedEXT(const WickedRenderTargetBackend* rt)
     {
-        if (currentRenderTarget_ == rt)
+        for (int slot = 0; slot < currentRenderTargetCount_; ++slot)
         {
-            EndRenderPassEXT();
-            currentRenderTarget_ = nullptr;
+            if (currentRenderTargets_[slot] == rt)
+            {
+                EndRenderPassEXT();
+                currentRenderTargets_ = {};
+                currentRenderTargetCount_ = 0;
+                break;
+            }
         }
     }
 
@@ -3183,6 +3254,7 @@ namespace CNA::Internal::Backends::Wicked
             case CNA::GraphicsCapability::Texture3D:
                 return true;
             case CNA::GraphicsCapability::MultipleRenderTargets:
+                return true;
             case CNA::GraphicsCapability::CustomEffects:
             case CNA::GraphicsCapability::MultiStreamVertexInput:
                 return false;

@@ -70,6 +70,15 @@ namespace CNA::Internal::Backends::Wicked
      */
     NOXNA inline constexpr std::size_t kWickedInstancedVariantCount = 4;
 
+    /**
+     * @brief NOXNA. How many simultaneous colour targets this backend binds.
+     *
+     * XNA 4.0 HiDef's own ceiling. The stock pixel shaders write `SV_Target` only, so slots 1..3
+     * receive whatever their `BlendState.ColorWriteChannels` mask lets through and nothing more --
+     * the same thing XNA does when a stock effect is drawn into an MRT set.
+     */
+    NOXNA inline constexpr int kWickedMaxRenderTargets = 4;
+
     /** @brief NOXNA. The first variant that carries blend weights, and so can be skinned. */
     NOXNA inline constexpr std::size_t kWickedFirstSkinnableVariant =
         static_cast<std::size_t>(WickedShaderVariant::Basic52);
@@ -1266,7 +1275,8 @@ namespace CNA::Internal::Backends::Wicked
         bool renderPassActive_ = false;
         bool sceneCleared_ = false;
 
-        WickedRenderTargetBackend* currentRenderTarget_ = nullptr;
+        std::array<WickedRenderTargetBackend*, kWickedMaxRenderTargets> currentRenderTargets_{};
+        int currentRenderTargetCount_ = 0;
         WickedRenderTargetCubeBackend* currentRenderTargetCube_ = nullptr;
         int currentCubeFace_ = 0;
 
