@@ -497,6 +497,101 @@ protected:
             check("Direct2D ImageBrush positive-offset atlas crop (X=2)", 0, 0, Color(0, 0, 255, 255));
         }
 
+        // D2D-81: an independent numeric oracle for a source rectangle that is PARTIALLY inside
+        // and partially outside the texture, under Linear filtering with Clamp/Wrap/Mirror -- the
+        // existing outside-source coverage above (checkLinearParity) only compares the ordinary
+        // Texture2D path against the RenderTarget2D path, which proves the two AGREE but not that
+        // either is CORRECT. Sample points are chosen so the expected value never depends on
+        // Direct2D's exact undocumented half-texel sampling convention: deep-interior points
+        // (safely inside a 4-texel same-colored block) are pure-color regardless of exactly which
+        // neighboring texels bilinear blends; the one interior blend point sits at u=4.0 exactly,
+        // the precise midpoint between texel 3's and texel 4's centers (3.5 and 4.5) under the
+        // universal "texel center = index + 0.5" convention, so it must be an exact 50/50 blend
+        // under ANY reasonable implementation. The two outside-the-declared-crop points (u<0 and
+        // u>=8) land solidly inside a single-color 4-texel block after applying each addressing
+        // mode's own standard, well-documented coordinate transform (clamp-to-edge / wrap-modulo /
+        // mirror-reflect), so only which color block they land in matters, not sub-texel precision.
+        {
+            std::vector<uint8_t> stripePixels(8 * 4, 0);
+            for (int i = 0; i < 4; ++i)
+            {
+                stripePixels[static_cast<std::size_t>(i) * 4 + 0] = 255; // texels 0-3: red
+                stripePixels[static_cast<std::size_t>(i) * 4 + 3] = 255;
+            }
+            for (int i = 4; i < 8; ++i)
+            {
+                stripePixels[static_cast<std::size_t>(i) * 4 + 1] = 255; // texels 4-7: green
+                stripePixels[static_cast<std::size_t>(i) * 4 + 3] = 255;
+            }
+            Texture2D stripeTexture = Texture2D::CreateFromPixels(device, 8, 1, stripePixels);
+            RenderTarget2D stripeTarget(device, 8, 1);
+            device.SetRenderTarget(&stripeTarget);
+            device.Clear(Color::Black);
+            sprites_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, nullptr, nullptr);
+            sprites_->Draw(*white_, Rectangle(0, 0, 4, 1), Rectangle(0, 0, 1, 1), Color(255, 0, 0, 255));
+            sprites_->Draw(*white_, Rectangle(4, 0, 4, 1), Rectangle(0, 0, 1, 1), Color(0, 255, 0, 255));
+            sprites_->End();
+            device.SetRenderTarget(nullptr);
+
+            const Color red(255, 0, 0, 255);
+            const Color green(0, 255, 0, 255);
+            const Color halfBlend(128, 128, 0, 255);
+            // Wrap's outside-crop points land close to, but not exactly on, texel 7's/texel 0's
+            // center -- and WRAP topology puts a DIFFERENT-colored texel directly adjacent across
+            // the wrap seam (texel 7 green next to wrapped texel 0 red), unlike the interior
+            // red/green points above where all four neighboring texels share one color. The
+            // texel-center convention (index + 0.5) gives an exact weight of 1/18 for the minority
+            // color at both points: 255/18 = 14.1(6) -> 14, 255*17/18 = 240.8(3) -> 241.
+            const Color wrapOutsideLeft(14, 241, 0, 255);
+            const Color wrapOutsideRight(241, 14, 0, 255);
+            struct StripeSample { int destX; Color clampExpected; Color wrapExpected; Color mirrorExpected; const char* label; };
+            const StripeSample stripeSamples[] = {
+                {1, red, red, red, "u~0.67 interior red"},
+                {2, red, red, red, "u~1.78 interior red"},
+                {4, halfBlend, halfBlend, halfBlend, "u=4.0 exact red/green midpoint"},
+                {6, green, green, green, "u~6.22 interior green"},
+                {0, red, wrapOutsideLeft, red, "u~-0.44 outside left"},
+                {8, green, wrapOutsideRight, green, "u~8.44 outside right"},
+            };
+
+            for (SamplerState* sampler : {&linearClamp, &linearWrap, &linearMirror})
+            {
+                const char* modeName = sampler == &linearClamp ? "Clamp" : sampler == &linearWrap ? "Wrap" : "Mirror";
+                for (const StripeSample& sample : stripeSamples)
+                {
+                    const Color& expected = sampler == &linearClamp   ? sample.clampExpected
+                                            : sampler == &linearWrap  ? sample.wrapExpected
+                                                                      : sample.mirrorExpected;
+                    device.Clear(Color::Black);
+                    sprites_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, sampler, nullptr, nullptr);
+                    sprites_->Draw(stripeTexture, Rectangle(0, 0, 9, 1), Rectangle(-1, 0, 10, 1), Color::White);
+                    sprites_->Draw(stripeTarget, Rectangle(0, 1, 9, 1), Rectangle(-1, 0, 10, 1), Color::White);
+                    sprites_->End();
+                    Color ordinaryActual(0, 0, 0, 0);
+                    Color targetActual(0, 0, 0, 0);
+                    const Rectangle ordinaryTexel(sample.destX, 0, 1, 1);
+                    const Rectangle targetTexel(sample.destX, 1, 1, 1);
+                    device.GetBackBufferData(&ordinaryTexel, &ordinaryActual, 0, 1);
+                    device.GetBackBufferData(&targetTexel, &targetActual, 0, 1);
+                    const bool ordinaryMatches = Matches(ordinaryActual, expected, 8);
+                    const bool targetMatches = Matches(targetActual, expected, 8);
+                    std::printf("[%s] Texture2D independent oracle Linear %s %s: got=(%d,%d,%d,%d), expected=(%d,%d,%d,%d)\n",
+                                ordinaryMatches ? "PASS" : "FAIL", modeName, sample.label,
+                                ordinaryActual.getRProperty(), ordinaryActual.getGProperty(),
+                                ordinaryActual.getBProperty(), ordinaryActual.getAProperty(),
+                                expected.getRProperty(), expected.getGProperty(),
+                                expected.getBProperty(), expected.getAProperty());
+                    std::printf("[%s] RenderTarget2D independent oracle Linear %s %s: got=(%d,%d,%d,%d), expected=(%d,%d,%d,%d)\n",
+                                targetMatches ? "PASS" : "FAIL", modeName, sample.label,
+                                targetActual.getRProperty(), targetActual.getGProperty(),
+                                targetActual.getBProperty(), targetActual.getAProperty(),
+                                expected.getRProperty(), expected.getGProperty(),
+                                expected.getBProperty(), expected.getAProperty());
+                    passed = passed && ordinaryMatches && targetMatches;
+                }
+            }
+        }
+
         // 7. A recorded scissor rectangle must only affect SpriteBatch once RasterizerState
         // explicitly enables its test. Clear deliberately ignores it, so both branches begin
         // from the same black backbuffer.
