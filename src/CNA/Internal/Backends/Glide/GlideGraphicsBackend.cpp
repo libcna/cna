@@ -1149,6 +1149,7 @@ namespace CNA::Internal::Backends::Glide
                 ConvertTileToGlideTexels(tile, uploadedAddressU_, uploadedAddressV_);
                 Upload(tile);
             }
+            RefreshTmu1IfBuilt();
         }
 
         void UpdatePixelsLevel(int level, const std::uint8_t* rgba, int levelWidth, int levelHeight) override
@@ -1184,6 +1185,7 @@ namespace CNA::Internal::Backends::Glide
                 ConvertTileToGlideTexels(tile, uploadedAddressU_, uploadedAddressV_);
                 Upload(tile);
             }
+            RefreshTmu1IfBuilt();
         }
 
         [[nodiscard]] const std::vector<Tile>& Tiles() const { return tiles_; }
@@ -1560,6 +1562,26 @@ namespace CNA::Internal::Backends::Glide
                 impl.ReleaseTexture(1, tmu1Range_);
                 throw;
             }
+        }
+
+        /**
+         * GLIDE-FUT-004: UpdatePixels()/UpdatePixelsLevel() already refresh TMU0's tiles_ from the
+         * freshly rebuilt logicalMipLevels_, but a texture currently resident on TMU1 has its own,
+         * separately-uploaded copy (tmu1NativeTexels_/tmu1Range_) that would otherwise keep
+         * sampling the pre-update pixels for as long as it stays bound as DualTextureEffect's
+         * second texture. Called only after logicalMipLevels_ is already current for
+         * `tmu1UploadedAddressU_`/`tmu1UploadedAddressV_` and after the caller's own grFinish().
+         */
+        void RefreshTmu1IfBuilt()
+        {
+            if (!tmu1Built_)
+            {
+                return;
+            }
+            GetImpl().ReleaseTexture(1, tmu1Range_);
+            tmu1Built_ = false;
+            BuildSingleTmu1Tile(tmu1UploadedAddressU_, tmu1UploadedAddressV_);
+            tmu1Built_ = true;
         }
 
         [[nodiscard]] static int FloorDivide(int numerator, int denominator)

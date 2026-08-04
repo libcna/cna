@@ -380,6 +380,13 @@ plus a dgVoodoo/real-hardware visual test before it can be advertised as support
   independent-UV-channel `DualTextureEffect` support (the ticket's original "unequal tile grids"
   clause) is left for a future ticket if ever needed; it would require GLIDE-FUT-002's vertex
   decoder to accept a genuine second `TextureCoordinate1` semantic first.
+  **Correctness fix found during self-review:** `UpdatePixels()`/`UpdatePixelsLevel()` already
+  refreshed TMU0's `tiles_` from the rebuilt logical pyramid, but a texture currently resident on
+  TMU1 keeps its own, separately-uploaded `tmu1NativeTexels_`/`tmu1Range_` -- left untouched, a
+  `Texture2D::SetData()` call on a texture bound as `DualTextureEffect`'s second texture would
+  silently keep TMU1 sampling the pre-update pixels. Added `RefreshTmu1IfBuilt()`, called from both
+  update paths after their existing TMU0 refresh, which releases and rebuilds the TMU1 upload in
+  place (no-op when the texture was never used on TMU1).
 - [ ] **GLIDE-FUT-005 — Map sampler mip controls that Glide can represent.** Extend the common
   sampler-state hand-off so `MipMapLevelOfDetailBias` and `MaxMipLevel` reach the backend; map
   the former to native LOD bias and implement/clamp the latter without selecting unavailable
