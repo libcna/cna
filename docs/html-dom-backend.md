@@ -10,9 +10,9 @@ acceptance criteria*; 🟨 code exists but has not met those criteria; ⬜ not i
 
 **What ✅ means here.** Unlike the `CANVAS` backend's own document, ✅ on this page is backed by a
 real Emscripten build (emsdk 6.0.5) and, for everything the test pages below cover, by real runs in
-headless Chromium via `scripts/run-htmldom-browser-test.sh`. Four PASS/FAIL pages plus one visual
-demo, driven by the same harness, together assert against the actual DOM/pixels/timing the backend
-produced:
+headless Chromium via `scripts/run-htmldom-browser-test.sh`. Six PASS/FAIL pages plus one visual
+demo, driven by the same harness, together assert against the actual DOM/pixels/timing/memory the
+backend produced:
 
 | Page | What it checks | Result |
 |---|---|---|
@@ -22,6 +22,7 @@ produced:
 | `cna_test_htmldom_dispose` | Texture/render-target dispose actually shrinks the JS texture registry, bound-target auto-unbind, create/destroy churn, texture destruction and render-target rebinding each shrink the global variant cache by exactly their own contribution (HTMLDOM-109), a second `HtmlDomGraphicsBackend` sharing one window is reference-counted and destroying it does not tear down the first, still-alive backend's shared DOM surface (HTMLDOM-114) | 17/17 |
 | `cna_htmldom_visual_demo` | Screenshot-verified visual demo (not a PASS/FAIL page) | — |
 | `host-integration` (reuses the smoke page's own `.html`, driven by `scripts/htmldom-host-integration-test.mjs`) | A host page's own pre-existing canvas `visibility` value is captured and (implicitly, by the same code path) restored rather than assumed unset; a pre-existing, host-page-owned element with a colliding id is detected and refused rather than silently adopted (HTMLDOM-115) | 2/2 |
+| `cna_test_htmldom_memory` | 5,000/10,000-sprite pool-creation bursts stay within a sane time budget; the sprite pool's compositor-layer/DOM retention genuinely SHRINKS after a sustained settled idle period instead of permanently pinning at its session peak; the pool regrows normally afterward; ordinary fluctuating sprite counts never trigger the shrink (HTMLDOM-116) | 6/6 |
 
 Plus 40 GTest cases for everything pure-C++ (blend mapping, address-mode validation, the sprite
 geometry encoder, the 3D throw surface, inert-state-setter audit, `SetViewport`) under
@@ -240,7 +241,21 @@ software one without saying so.
 5. **No custom `Effect`s** — there is no shader stage.
 6. **No MSAA, no depth, no stencil** — the same 2D-only boundary as `SDL_RENDERER` and `CANVAS`.
 7. **`ColorWriteChannels` / `MultiSampleMask` are inexpressible.**
-8. **Sprite count drives DOM size** — this targets normal 2D games, not particle storms.
+8. **Sprite count drives DOM size** — this targets normal 2D games, not particle storms. Every
+   pooled sprite `<div>` carries `will-change:transform`, forcing its own permanent compositor
+   layer; measured directly (`examples/htmldom_memory_test.cpp`, HTMLDOM-116) rather than left as
+   an unmeasured claim: a 5,000/10,000-sprite burst creates that many pool elements in ~44 ms in
+   this container (well within a sane budget, no O(n²) blowup). Before HTMLDOM-116, the pool never
+   released an element once created — only hidden via `display:none` — so a single transient burst
+   permanently retained its peak DOM/layer count for the rest of the session even after usage
+   settled back down to a handful. `CNA_HtmlDom_PresentFrame` now ages out the excess once a
+   region's sprite count has been genuinely unchanged for 180 consecutive `Present()` calls
+   (~3 s at 60 fps) — actually removing (not just hiding) the elements above that settled count and
+   shrinking the pool array to match, verified to regrow normally afterward. The 180-frame
+   threshold is deliberately longer than any realistic action-to-idle gap between bursts, so
+   ordinary fluctuating gameplay (which also dips below its own past peak constantly) never
+   triggers it — verified with a 200-frame oscillating-count run that never repeats the same count
+   twice in a row.
 9. **`mix-blend-mode: plus-lighter` requires a current browser** (Chromium 108+, Safari 16.4+,
    Firefox 122+). On anything older, `Additive` composites as normal alpha blending instead of
    failing — the one place this backend degrades silently rather than throwing, because the CSS

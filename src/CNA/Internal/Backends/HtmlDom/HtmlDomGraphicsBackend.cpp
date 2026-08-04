@@ -127,7 +127,11 @@ EM_JS(void, CNA_HtmlDom_EnsureRoot, (), {
     // uses until a game actually narrows the scissor rect below the current surface size; its
     // container IS #cna-dom-root itself and its pool IS the same flat pool this backend always
     // had, so the overwhelmingly common no-scissor case costs nothing beyond what it always did.
-    Module['cnaDomRegions'] = { 'full': { container: root, pool: [], used: 0, highWater: 0, rect: null } };
+    // plan_html_dom.md HTMLDOM-116: idleStreak/idleUsed drive CNA_HtmlDom_PresentFrame's own pool
+    // age-out below -- see that function's comment for what they track.
+    Module['cnaDomRegions'] = {
+        'full': { container: root, pool: [], used: 0, highWater: 0, rect: null, idleStreak: 0, idleUsed: -1 }
+    };
     Module['cnaDomRegionOrder'] = [];
     // plan_html_dom.md HTMLDOM-103: which non-default regions a batch has actually flushed into
     // THIS FRAME -- reset in CNA_HtmlDom_Clear (frame start), populated by cnaDomTouchRegion. A
@@ -310,7 +314,8 @@ EM_JS(void, CNA_HtmlDom_EnsureRoot, (), {
         const container = document.createElement('div');
         container.style.cssText = 'position:absolute;left:0;top:0;width:100%;height:100%;';
         Module['cnaDomRoot'].appendChild(container);
-        region = { container: container, pool: [], used: 0, highWater: 0, rect: rect };
+        region = { container: container, pool: [], used: 0, highWater: 0, rect: rect,
+                   idleStreak: 0, idleUsed: -1 };
         regions[key] = region;
         // plan_html_dom.md HTMLDOM-110: this is the first-ever NAMED region -- see
         // CNA_HtmlDom_FlushSprites' own needsFullRegionZIndex comment for why this flag exists.
@@ -435,6 +440,42 @@ EM_JS(void, CNA_HtmlDom_PresentFrame, (), {
             if (el && !el.__cnaState.hidden) { el.style.display = 'none'; el.__cnaState.hidden = true; }
         }
         region.highWater = used;
+
+        // plan_html_dom.md HTMLDOM-116: every sprite element created in HtmlDomSpriteBatchBackend.cpp
+        // gets 'will-change:transform' (that file's own comment on why), which forces its own
+        // permanent compositor layer -- and until this fix, the pool never released one once
+        // created: elements past `used` are only ever hidden via display:none above, never removed.
+        // So a single transient burst (e.g. a one-time explosion effect briefly drawing 10,000
+        // sprites) permanently retained 10,000 DOM nodes and compositor layers for the rest of the
+        // session, even after usage settled back down to a handful -- measured directly in
+        // examples/htmldom_memory_test.cpp, which is also where kIdleShrinkFrames below is chosen
+        // and justified against real numbers, not just asserted.
+        //
+        // Age-out: once a region's used count has been EXACTLY unchanged for kIdleShrinkFrames
+        // consecutive Present() calls -- a genuinely settled scene, not merely "below peak", so a
+        // fluctuating sprite count never accumulates a streak and normal gameplay oscillation
+        // (including the 5-50/frame swings htmldom_stress_test.cpp's own HTMLDOM-90 run exercises)
+        // never triggers this -- the pool entries above that settled count are actually removed from
+        // the DOM (not just hidden), releasing their compositor layer and node, and the pool array
+        // itself shrinks to match. 180 frames (~3s at 60fps) is deliberately longer than any
+        // realistic action-to-idle gap a real game's own pacing would produce between bursts, so this
+        // never thrashes create/destroy churn during ordinary gameplay -- it only reclaims a pool
+        // that has genuinely stopped needing its past peak.
+        const kIdleShrinkFrames = 180;
+        if (used === region.idleUsed) {
+            if (++region.idleStreak >= kIdleShrinkFrames && pool.length > used) {
+                for (let i = pool.length - 1; i >= used; --i) {
+                    const el = pool[i];
+                    if (el && el.parentNode) el.parentNode.removeChild(el);
+                }
+                pool.length = used;
+                region.idleStreak = 0;
+            }
+        } else {
+            region.idleUsed = used;
+            region.idleStreak = 0;
+        }
+
         region.used = 0;
     }
 });

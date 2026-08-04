@@ -9,9 +9,9 @@
 #
 # Usage: scripts/run-htmldom-browser-test.sh [build-dir] [page]
 #        build-dir defaults to cmake-build-htmldom.
-#        page is one of: smoke (default), pixel, stress, dispose, host-integration.
+#        page is one of: smoke (default), pixel, stress, dispose, host-integration, memory.
 #
-# To build and run all five pages in one command, use scripts/run-htmldom-test-suite.sh instead.
+# To build and run all six pages in one command, use scripts/run-htmldom-test-suite.sh instead.
 #
 # Requires: a completed HTML_DOM build of the requested page's target, node, and the playwright
 # package with a Chromium binary. Exit code 0 = every check passed.
@@ -32,9 +32,10 @@ case "${PAGE_NAME}" in
     pixel)            TARGET="cna_test_htmldom_pixel_verification" ;;
     stress)           TARGET="cna_test_htmldom_stress" ;;
     dispose)          TARGET="cna_test_htmldom_dispose" ;;
+    memory)           TARGET="cna_test_htmldom_memory" ;;
     host-integration) TARGET="cna_test_htmldom_smoke"; HARNESS="htmldom-host-integration-test.mjs" ;;
     *)
-        echo "error: unknown page '${PAGE_NAME}' -- expected smoke|pixel|stress|dispose|host-integration" >&2
+        echo "error: unknown page '${PAGE_NAME}' -- expected smoke|pixel|stress|dispose|memory|host-integration" >&2
         exit 2
         ;;
 esac

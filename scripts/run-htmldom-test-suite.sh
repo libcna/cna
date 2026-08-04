@@ -10,7 +10,7 @@
 #          emcmake cmake -S . -B cmake-build-htmldom -DCNA_GRAPHICS_BACKEND=HTML_DOM \
 #            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_C_COMPILER_LAUNCHER=ccache
 #
-# Exit code 0 only when all four pages pass every one of their own checks.
+# Exit code 0 only when every page passes every one of its own checks.
 set -euo pipefail
 
 BUILD_DIR="${1:-cmake-build-htmldom}"
@@ -27,10 +27,11 @@ fi
 echo "==> Building every HTML_DOM browser test target (cna_test_htmldom_all, -j3)"
 cmake --build "${BUILD_DIR}" --target cna_test_htmldom_all -j3
 
-PAGES=(smoke pixel stress dispose host-integration)
+PAGES=(smoke pixel stress dispose host-integration memory)
 # Distinct ports per page: harmless for this script's own sequential runs, but keeps two concurrent
 # invocations of this script (e.g. two CI jobs sharing a runner) from colliding on one fixed port.
-declare -A PORTS=([smoke]=8731 [pixel]=8732 [stress]=8733 [dispose]=8734 [host-integration]=8735)
+declare -A PORTS=([smoke]=8731 [pixel]=8732 [stress]=8733 [dispose]=8734 [host-integration]=8735
+                  [memory]=8736)
 FAILED=()
 
 for page in "${PAGES[@]}"; do
@@ -47,7 +48,7 @@ done
 echo ""
 echo "=== HTML_DOM browser test suite summary ==="
 if [[ ${#FAILED[@]} -eq 0 ]]; then
-    echo "All 5 pages passed."
+    echo "All 6 pages passed."
     exit 0
 else
     echo "${#FAILED[@]} page(s) failed: ${FAILED[*]}"

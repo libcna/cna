@@ -59,6 +59,16 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "HTML_DOM")
         -sALLOW_MEMORY_GROWTH=1
         -sEXIT_RUNTIME=1)
 
+    # plan_html_dom.md HTMLDOM-116: measures and bounds the sprite pool's own compositor-layer/DOM
+    # memory retention (5,000/10,000-sprite bursts, then a genuinely settled long idle period) rather
+    # than trusting the "targets normal 2D games" claim on paper. Driven by the same harness.
+    add_executable(cna_test_htmldom_memory examples/htmldom_memory_test.cpp)
+    target_link_libraries(cna_test_htmldom_memory PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    set_target_properties(cna_test_htmldom_memory PROPERTIES SUFFIX ".html")
+    target_link_options(cna_test_htmldom_memory PRIVATE
+        -sALLOW_MEMORY_GROWTH=1
+        -sEXIT_RUNTIME=1)
+
     # plan_html_dom.md HTMLDOM-112: one target that builds every browser test page, so
     # scripts/run-htmldom-test-suite.sh (and CI) can build the whole suite with a single
     # `cmake --build ... --target cna_test_htmldom_all` instead of four separate target names.
@@ -66,5 +76,6 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "HTML_DOM")
         cna_test_htmldom_smoke
         cna_test_htmldom_pixel_verification
         cna_test_htmldom_stress
-        cna_test_htmldom_dispose)
+        cna_test_htmldom_dispose
+        cna_test_htmldom_memory)
 endif()
