@@ -15,8 +15,8 @@ a batched `SpriteBatch`, the four stock stride-dispatched 3D shader variants (16
 diffuse/vertex-colour/alpha-test/fog/three-directional-light shading, `RenderTarget2D`, full
 blend/depth-stencil/rasterizer/sampler state mapping, real GPU occlusion queries, MSAA on the scene
 target, back-buffer readback, `TextureCube` and `Texture3D` storage, `EnvironmentMapEffect` cube
-reflections, `RenderTargetCube`, `SkinnedEffect`, the full stock stride set (16/20/24/32/48/52/56/68),
-and instanced draws. This is
+reflections, `RenderTargetCube`, `SkinnedEffect`, `PbrEffect`/`SkinnedPbrEffect`, the full stock
+stride set (16/20/24/32/48/52/56/68), and instanced draws. This is
 **not** parity with the Vulkan or EasyGL backends — see "Remaining work" below for exactly what is
 missing.
 
@@ -58,11 +58,11 @@ missing.
    lets CNA switch freely between the back buffer and a `RenderTarget2D` mid-frame, and it is the
    same texture the virtual-resolution/letterbox presentation needs anyway.
 
-6. **Unsupported draws are refused, never approximated.** `PbrEffect`, MRT, an unexpressible
-   instance-step-rate, a skinned draw on a layout without blend weights, and an instanced draw on a
-   wider stride all throw at the call site rather than rendering an unlit, bind-pose, single-target
-   or wrong-rate stand-in that would look like a working draw. `SupportsCapability()` reports the
-   same set, so callers can ask instead of catching.
+6. **Unsupported draws are refused, never approximated.** MRT, an unexpressible instance-step-rate,
+   a skinned draw on a layout without blend weights, a PBR draw on a layout without a tangent, and
+   an instanced draw on a wider stride all throw at the call site rather than rendering an unlit,
+   bind-pose, single-target or wrong-rate stand-in that would look like a working draw.
+   `SupportsCapability()` reports the same set, so callers can ask instead of catching.
 
 ---
 
@@ -135,7 +135,7 @@ missing.
 | WICKED-55 | `RenderTargetCube` (per-face RTV subresources, whole-cube SRV, sampleable by `EnvironmentMapEffect`) | ✅ |
 | WICKED-56 | `EnvironmentMapEffect` (cube reflections, flat and Fresnel-weighted, dedicated VS/PS pair matching the established CNA env-map shading) | ✅ |
 | WICKED-56b | `SkinnedEffect` (bone palette at b1, FNA's `WeightsPerVertex` gating, skin composed with the world normal matrix, post-skin fog) | ✅ |
-| WICKED-56c | `PbrEffect` / `SkinnedPbrEffect` shader variants | ⬜ |
+| WICKED-56c | `PbrEffect` / `SkinnedPbrEffect` (glTF 2.0 metallic-roughness BRDF, normal/metallic-roughness/emissive/occlusion maps, strides 48 and 68) | ✅ |
 | WICKED-57 | Custom `ShaderEffect` (`CreateEffectBackend`) | ⬜ |
 | WICKED-58 | Multi-stream vertex input (`GraphicsCapability::MultiStreamVertexInput`) | ⬜ |
 | WICKED-59 | Strides 48/52/56/68 (tangent/skinned layouts) — declared, matched to the D3D11/D3D12 element tables, drawn with the ordinary shading | ✅ |
@@ -175,9 +175,8 @@ missing.
   (`WICKED-56`). `EnvironmentMapEffect`, `SkinnedEffect` and `PbrEffect` throw.
 - **No MRT and no custom `ShaderEffect`** (`WICKED-54`/`57`/`68`). Each is refused explicitly and
   reported through `SupportsCapability()`.
-- **`PbrEffect` still throws** (`WICKED-56c`) — it needs a metallic-roughness BRDF plus four more
-  texture slots. `BasicEffect`, `AlphaTestEffect`, `DualTextureEffect`, `EnvironmentMapEffect` and
-  `SkinnedEffect` all work.
+- Every stock effect is now implemented: `BasicEffect`, `AlphaTestEffect`, `DualTextureEffect`,
+  `EnvironmentMapEffect`, `SkinnedEffect`, `PbrEffect` and `SkinnedPbrEffect`.
 - **Instancing is limited to the four narrow strides** (16/20/24/32) and is refused on the wider
   tangent/skinned layouts, which have no instanced entry point.
 - **Instancing accepts only `InstanceFrequency == 1`** (`WICKED-53`). Wicked Engine's `InputLayout`

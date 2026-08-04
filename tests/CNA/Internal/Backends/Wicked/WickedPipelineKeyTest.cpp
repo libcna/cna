@@ -103,6 +103,28 @@ TEST(WickedPipelineKey, SkinnedFlagParticipatesInEquality)
     EXPECT_NE(hash(MakeKey()), hash(other));
 }
 
+TEST(WickedPipelineKey, PbrFlagParticipatesInEquality)
+{
+    // PbrEffect has its own vertex and pixel programs and its own texture slots, so confusing it
+    // with the ordinary program would render a PBR material through the Lambert path.
+    WickedPipelineKey other = MakeKey();
+    other.pbr = 1;
+    EXPECT_FALSE(MakeKey() == other);
+
+    const WickedPipelineKeyHash hash;
+    EXPECT_NE(hash(MakeKey()), hash(other));
+}
+
+TEST(WickedPipelineKey, SkinnedPbrIsDistinctFromUnskinnedPbr)
+{
+    // Both flags together select PbrSkinned68VS; either alone selects a different program.
+    WickedPipelineKey pbrOnly = MakeKey();
+    pbrOnly.pbr = 1;
+    WickedPipelineKey skinnedPbr = pbrOnly;
+    skinnedPbr.skinned = 1;
+    EXPECT_FALSE(pbrOnly == skinnedPbr);
+}
+
 TEST(WickedPipelineKey, EveryStateFieldParticipatesInEquality)
 {
     // Byte-wise comparison is what makes this hold for a field added later without touching

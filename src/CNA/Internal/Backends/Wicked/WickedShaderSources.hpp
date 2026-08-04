@@ -57,6 +57,7 @@ struct CnaConstants
     float4 worldIT3;
     float4 envMapParams;    // x = amount, y = fresnel enabled, z = fresnel factor
     float4 envMapSpecular;  // rgb = EnvironmentMapEffect.EnvironmentMapSpecular
+    float4 pbrFactors;      // x = metallic, y = roughness
 };
 
 ConstantBuffer<CnaConstants> cb : register(b0);
@@ -64,6 +65,10 @@ ConstantBuffer<CnaConstants> cb : register(b0);
 Texture2D<float4> texture0 : register(t0);
 Texture2D<float4> texture1 : register(t1);
 TextureCube<float4> environmentMap : register(t2);
+Texture2D<float4> normalMap : register(t3);
+Texture2D<float4> metallicRoughnessMap : register(t4);
+Texture2D<float4> emissiveMap : register(t5);
+Texture2D<float4> occlusionMap : register(t6);
 SamplerState sampler0 : register(s0);
 
 struct VSOut
@@ -302,6 +307,155 @@ VSOut Skinned68VS(float3 position : POSITION, float3 normal : NORMAL,
                   float4 blendWeights : BLENDWEIGHT, uint4 blendIndices : BLENDINDICES)
 {
     return FillSkinned(position, normal, uv, blendWeights, blendIndices);
+}
+
+// ---------------------------------------------------------------------------------------------
+// PbrEffect -- the glTF 2.0 metallic-roughness BRDF (GGX distribution, Smith-Schlick-GGX
+// visibility, Schlick Fresnel), term for term the same reference BRDF the other CNA backends
+// evaluate. Four texture slots beyond the base colour: normal, metallic-roughness (glTF packing,
+// G = roughness, B = metallic), emissive and occlusion.
+//
+// The tangent transforms as a plain direction under the world matrix rather than under its
+// inverse-transpose -- correct for uniform scale, and the same documented simplification the
+// established CNA PBR path makes.
+// ---------------------------------------------------------------------------------------------
+
+struct PbrVSOut
+{
+    float4 position      : SV_Position;
+    float3 normalWS      : TEXCOORD0;
+    float3 tangentWS     : TEXCOORD1;
+    float  bitangentSign : TEXCOORD2;
+    float2 uv            : TEXCOORD3;
+    float3 positionWS    : TEXCOORD4;
+    float4 positionOS    : TEXCOORD5;
+};
+
+PbrVSOut FillPbr(float3 position, float3 normal, float4 tangent, float2 uv)
+{
+    PbrVSOut o;
+    o.position = TransformPosition(position);
+    o.positionOS = float4(position, 1.0f);
+    o.positionWS = TransformToWorld(position);
+
+    const float4 n = float4(normal, 0.0f);
+    o.normalWS = normalize(float3(dot(n, cb.worldIT0), dot(n, cb.worldIT1), dot(n, cb.worldIT2)));
+    o.tangentWS = TransformNormalToWorld(tangent.xyz);
+    o.bitangentSign = tangent.w;
+    o.uv = uv;
+    return o;
+}
+
+// Stride 48 -- VertexPositionNormalTangentTexture.
+PbrVSOut Pbr48VS(float3 position : POSITION, float3 normal : NORMAL,
+                 float4 tangent : TANGENT, float2 uv : TEXCOORD0)
+{
+    return FillPbr(position, normal, tangent, uv);
+}
+
+// Stride 68 -- VertexPositionNormalTangentTextureSkinned, drawn unskinned.
+PbrVSOut Pbr68VS(float3 position : POSITION, float3 normal : NORMAL,
+                 float4 tangent : TANGENT, float2 uv : TEXCOORD0,
+                 float4 blendWeights : BLENDWEIGHT, uint4 blendIndices : BLENDINDICES)
+{
+    return FillPbr(position, normal, tangent, uv);
+}
+
+// Stride 68 -- SkinnedPbrEffect.
+PbrVSOut PbrSkinned68VS(float3 position : POSITION, float3 normal : NORMAL,
+                        float4 tangent : TANGENT, float2 uv : TEXCOORD0,
+                        float4 blendWeights : BLENDWEIGHT, uint4 blendIndices : BLENDINDICES)
+{
+    float3 skinnedPosition;
+    float3 skinnedNormal;
+    SkinVertex(position, normal, blendWeights, blendIndices, skinnedPosition, skinnedNormal);
+
+    float3 skinnedTangent;
+    float3 ignoredNormal;
+    SkinVertex(tangent.xyz, normal, blendWeights, blendIndices, skinnedTangent, ignoredNormal);
+    // SkinVertex applies the bone translation; a tangent is a direction, so remove it again by
+    // skinning the origin and subtracting.
+    float3 skinnedOrigin;
+    SkinVertex(float3(0.0f, 0.0f, 0.0f), normal, blendWeights, blendIndices,
+               skinnedOrigin, ignoredNormal);
+    skinnedTangent -= skinnedOrigin;
+
+    PbrVSOut o;
+    o.position = TransformPosition(skinnedPosition);
+    o.positionOS = float4(skinnedPosition, 1.0f);
+    o.positionWS = TransformToWorld(skinnedPosition);
+
+    const float4 n = float4(skinnedNormal, 0.0f);
+    o.normalWS = normalize(float3(dot(n, cb.worldIT0), dot(n, cb.worldIT1), dot(n, cb.worldIT2)));
+    o.tangentWS = TransformNormalToWorld(skinnedTangent);
+    o.bitangentSign = tangent.w;
+    o.uv = uv;
+    return o;
+}
+
+float3 PbrLight(float3 N, float3 V, float3 L, float3 lightColor, float3 albedo, float3 F0,
+                float roughness, float metallic)
+{
+    const float3 H = normalize(V + L);
+    const float NdotL = max(dot(N, L), 0.0f);
+    const float NdotV = max(dot(N, V), 1e-4f);
+    const float NdotH = max(dot(N, H), 0.0f);
+    const float VdotH = max(dot(V, H), 0.0f);
+
+    const float a2 = pow(roughness, 4.0f);
+    const float dTerm = (NdotH * NdotH * (a2 - 1.0f) + 1.0f);
+    const float D = a2 / (3.14159265f * dTerm * dTerm + 1e-7f);
+
+    float k = (roughness + 1.0f);
+    k = k * k / 8.0f;
+    const float G = (NdotV / (NdotV * (1.0f - k) + k)) * (NdotL / (NdotL * (1.0f - k) + k));
+
+    const float3 F = F0 + (float3(1.0f, 1.0f, 1.0f) - F0) * pow(saturate(1.0f - VdotH), 5.0f);
+    const float3 specular = (D * G * F) / max(4.0f * NdotV * NdotL, 1e-4f);
+    const float3 diffuseColor = albedo * (1.0f - metallic);
+    const float3 kd = float3(1.0f, 1.0f, 1.0f) - F;
+    return (kd * diffuseColor / 3.14159265f + specular) * lightColor * NdotL;
+}
+
+float4 PbrPS(PbrVSOut input) : SV_Target
+{
+    const float4 baseColorTex = texture0.Sample(sampler0, input.uv);
+    const float3 albedo = baseColorTex.rgb * cb.diffuse.rgb;
+    const float alpha = baseColorTex.a * cb.diffuse.a;
+
+    const float3 N = normalize(input.normalWS);
+    const float3 T = normalize(input.tangentWS - N * dot(N, input.tangentWS));
+    const float3 B = cross(N, T) * input.bitangentSign;
+    const float3x3 TBN = float3x3(T, B, N);
+    const float3 sampledNormal = normalMap.Sample(sampler0, input.uv).rgb * 2.0f - 1.0f;
+    const float3 finalNormal = normalize(mul(sampledNormal, TBN));
+
+    const float4 mr = metallicRoughnessMap.Sample(sampler0, input.uv);
+    const float roughness = clamp(mr.g * cb.pbrFactors.y, 0.045f, 1.0f);
+    const float metallic = saturate(mr.b * cb.pbrFactors.x);
+
+    const float3 V = normalize(cb.eyePosition.xyz - input.positionWS);
+    const float3 F0 = lerp(float3(0.04f, 0.04f, 0.04f), albedo, metallic);
+
+    float3 Lo = float3(0.0f, 0.0f, 0.0f);
+    Lo += PbrLight(finalNormal, V, normalize(-cb.lightDir0.xyz), cb.lightDiffuse0.rgb,
+                   albedo, F0, roughness, metallic);
+    Lo += PbrLight(finalNormal, V, normalize(-cb.lightDir1.xyz), cb.lightDiffuse1.rgb,
+                   albedo, F0, roughness, metallic);
+    Lo += PbrLight(finalNormal, V, normalize(-cb.lightDir2.xyz), cb.lightDiffuse2.rgb,
+                   albedo, F0, roughness, metallic);
+
+    const float occlusion = occlusionMap.Sample(sampler0, input.uv).r;
+    const float3 ambient = cb.ambient.rgb * albedo * occlusion;
+    const float3 emissive = cb.emissive.rgb * emissiveMap.Sample(sampler0, input.uv).rgb;
+
+    float3 rgb = ambient + Lo + emissive;
+    if (cb.fogColor.w != 0.0f)
+    {
+        const float keep = 1.0f - saturate(dot(input.positionOS, cb.fogVector));
+        rgb = lerp(cb.fogColor.rgb, rgb, keep);
+    }
+    return float4(rgb, alpha);
 }
 
 // ---------------------------------------------------------------------------------------------

@@ -110,6 +110,7 @@ namespace CNA::Internal::Backends::Wicked
         std::uint32_t instanced = 0;          ///< Non-zero when the per-instance input layout is used.
         std::uint32_t envMap = 0;             ///< Non-zero when the EnvironmentMapEffect program is used.
         std::uint32_t skinned = 0;            ///< Non-zero when the SkinnedEffect program is used.
+        std::uint32_t pbr = 0;                ///< Non-zero when the PbrEffect program is used.
         std::uint32_t topology = 0;           ///< wi::graphics::PrimitiveTopology ordinal.
         std::uint32_t blendEnabled = 0;       ///< Non-zero when colour blending is on.
         std::int32_t  colorSrcBlend = 0;      ///< Raw XNA Blend ordinal.
@@ -188,6 +189,7 @@ namespace CNA::Internal::Backends::Wicked
         float worldInverseTranspose[16] = {}; ///< Columns of the world inverse-transpose.
         float envMapParams[4] = {};      ///< x=amount, y=Fresnel enabled, z=Fresnel factor.
         float envMapSpecular[4] = {};    ///< `EnvironmentMapEffect.EnvironmentMapSpecular` RGB.
+        float pbrFactors[4] = {1.0f, 1.0f, 0.0f, 0.0f}; ///< x=metallic factor, y=roughness factor.
     };
 
     /**
@@ -1243,6 +1245,9 @@ namespace CNA::Internal::Backends::Wicked
         std::array<wig::Shader, static_cast<std::size_t>(WickedShaderVariant::Count)> vertexShaders_;
         std::array<wig::Shader, kWickedInstancedVariantCount> instancedVertexShaders_;
         std::array<wig::Shader, kWickedSkinnableVariantCount> skinnedVertexShaders_;
+        /// Pbr48VS, Pbr68VS and PbrSkinned68VS, in that order.
+        std::array<wig::Shader, 3> pbrVertexShaders_;
+        wig::Shader pbrPixelShader_;
         wig::Shader pixelShader_;
         std::array<wig::InputLayout, static_cast<std::size_t>(WickedShaderVariant::Count)> inputLayouts_;
         std::array<wig::InputLayout, kWickedInstancedVariantCount> instancedInputLayouts_;
@@ -1251,6 +1256,7 @@ namespace CNA::Internal::Backends::Wicked
         wig::InputLayout envMapInputLayout_;
         wig::Texture whiteTexture_;
         wig::Texture whiteCubeTexture_;
+        wig::Texture flatNormalTexture_;
 
         std::unordered_map<WickedPipelineKey, WickedPipelineEntry, WickedPipelineKeyHash> pipelines_;
         std::unordered_map<std::uint64_t, wig::Sampler> samplers_;

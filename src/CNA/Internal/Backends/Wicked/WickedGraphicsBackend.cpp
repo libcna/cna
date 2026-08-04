@@ -188,6 +188,14 @@ namespace CNA::Internal::Backends::Wicked
             }
         }
 
+        /// Pbr48VS = 0, Pbr68VS = 1, PbrSkinned68VS = 2 -- the order CreateBuiltinShaders compiles.
+        std::size_t PbrShaderIndex(const WickedPipelineKey& key)
+        {
+            if (key.variant == static_cast<std::uint32_t>(WickedShaderVariant::Basic48))
+                return 0;
+            return key.skinned != 0 ? 2 : 1;
+        }
+
         WickedShaderVariant VariantForStride(std::size_t strideInBytes)
         {
             switch (strideInBytes)
@@ -1301,6 +1309,17 @@ namespace CNA::Internal::Backends::Wicked
         if (!device_->CreateTexture(&whiteCubeDesc, whiteCubeData, &whiteCubeTexture_))
             throw std::runtime_error("Wicked backend: failed to create the fallback white cube map.");
 
+        // PbrEffect's normal-map slot needs a neutral default, and white is not it: the shader
+        // decodes the sample as `rgb * 2 - 1`, so an unbound normal map must read (0.5, 0.5, 1)
+        // to decode to the unperturbed surface normal (0, 0, 1).
+        const std::uint8_t flatNormalPixel[4] = {128, 128, 255, 255};
+        wig::SubresourceData flatNormalData;
+        flatNormalData.data_ptr = flatNormalPixel;
+        flatNormalData.row_pitch = 4;
+        flatNormalData.slice_pitch = 4;
+        if (!device_->CreateTexture(&whiteDesc, &flatNormalData, &flatNormalTexture_))
+            throw std::runtime_error("Wicked backend: failed to create the fallback normal map.");
+
         state_.depthEnable = 1;
         state_.depthWriteEnable = 1;
         state_.depthFunc = 3; // CompareFunction::LessEqual
@@ -1562,6 +1581,14 @@ namespace CNA::Internal::Backends::Wicked
         CompileShader(wig::ShaderStage::PS, "BasicPS", pixelShader_);
         CompileShader(wig::ShaderStage::VS, "EnvMapVS", envMapVertexShader_);
         CompileShader(wig::ShaderStage::PS, "EnvMapPS", envMapPixelShader_);
+        static constexpr const char* kPbrVertexEntryPoints[] = {
+            "Pbr48VS", "Pbr68VS", "PbrSkinned68VS"
+        };
+        static_assert(std::size(kPbrVertexEntryPoints) == 3,
+                      "The PBR vertex shader table must stay in step with PbrShaderIndex().");
+        for (std::size_t i = 0; i < pbrVertexShaders_.size(); ++i)
+            CompileShader(wig::ShaderStage::VS, kPbrVertexEntryPoints[i], pbrVertexShaders_[i]);
+        CompileShader(wig::ShaderStage::PS, "PbrPS", pbrPixelShader_);
 
         using Element = wig::InputLayout::Element;
         inputLayouts_[static_cast<std::size_t>(WickedShaderVariant::Basic16)].elements = {
@@ -1853,7 +1880,13 @@ namespace CNA::Internal::Backends::Wicked
         WickedPipelineEntry& stored = emplaced.first->second;
 
         wig::PipelineStateDesc desc;
-        if (key.envMap != 0)
+        if (key.pbr != 0)
+        {
+            desc.vs = &pbrVertexShaders_[PbrShaderIndex(key)];
+            desc.ps = &pbrPixelShader_;
+            desc.il = &inputLayouts_[key.variant];
+        }
+        else if (key.envMap != 0)
         {
             desc.vs = &envMapVertexShader_;
             desc.ps = &envMapPixelShader_;
@@ -2842,13 +2875,32 @@ namespace CNA::Internal::Backends::Wicked
                                    constants.worldInverseTranspose);
             }
 
-            // Effects this backend has no shader for are refused rather than rendered as an
-            // unlit/untextured approximation that would look like a working draw
-            // (plan_wicked.md WICKED-56b).
             if (params->pbr)
             {
-                throw std::runtime_error(
-                    "Wicked backend: PbrEffect is not implemented by this backend.");
+                if (stride != 48 && stride != 68)
+                {
+                    throw std::runtime_error(
+                        "Wicked backend: PbrEffect needs a vertex layout carrying a tangent "
+                        "(stride 48 or 68); stride " + std::to_string(stride) + " was bound.");
+                }
+                if (params->skinned && stride != 68)
+                {
+                    throw std::runtime_error(
+                        "Wicked backend: SkinnedPbrEffect needs the stride-68 layout; stride " +
+                        std::to_string(stride) + " was bound.");
+                }
+                if (instanced)
+                {
+                    throw std::runtime_error(
+                        "Wicked backend: PbrEffect has no instanced shader variant.");
+                }
+                key.pbr = 1;
+                // The PBR vertex stage needs the normal matrix whether or not the draw is skinned,
+                // so it is written here too rather than only on the skinned branch above.
+                WriteMatrixColumns(Matrix::Transpose(Matrix::Invert(world)),
+                                   constants.worldInverseTranspose);
+                constants.pbrFactors[0] = params->pbrMetallicFactor;
+                constants.pbrFactors[1] = params->pbrRoughnessFactor;
             }
         }
         else
@@ -2896,6 +2948,29 @@ namespace CNA::Internal::Backends::Wicked
             }
         }
         device_->BindResource(environmentMap, 2, cmd);
+
+        // The PBR sampler slots always resolve to a real texture. The neutral default differs per
+        // slot: a flat normal for t3, and white for the rest so the metallic/roughness/emissive
+        // factors act alone and occlusion leaves the ambient term untouched.
+        const wig::Texture* normalMap = &flatNormalTexture_;
+        const wig::Texture* metallicRoughnessMap = &whiteTexture_;
+        const wig::Texture* emissiveMap = &whiteTexture_;
+        const wig::Texture* occlusionMap = &whiteTexture_;
+        if (params != nullptr && key.pbr != 0)
+        {
+            if (params->pbrNormalMap != nullptr)
+                normalMap = resolveTexture(params->pbrNormalMap);
+            if (params->pbrMetallicRoughnessMap != nullptr)
+                metallicRoughnessMap = resolveTexture(params->pbrMetallicRoughnessMap);
+            if (params->pbrEmissiveMap != nullptr)
+                emissiveMap = resolveTexture(params->pbrEmissiveMap);
+            if (params->pbrOcclusionMap != nullptr)
+                occlusionMap = resolveTexture(params->pbrOcclusionMap);
+        }
+        device_->BindResource(normalMap, 3, cmd);
+        device_->BindResource(metallicRoughnessMap, 4, cmd);
+        device_->BindResource(emissiveMap, 5, cmd);
+        device_->BindResource(occlusionMap, 6, cmd);
         for (std::uint32_t slot = 0; slot < 2; ++slot)
         {
             const SamplerSlotState& sampler = samplerStates_[slot];
