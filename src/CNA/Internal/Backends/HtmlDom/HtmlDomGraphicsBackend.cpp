@@ -5,6 +5,9 @@
 #include "CNA/Internal/Backends/HtmlDom/HtmlDomSpriteBatchBackend.hpp"
 #include "CNA/Internal/Backends/Common/NotYetImplemented.hpp"
 
+#include "System/ArgumentNullException.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
+
 #include <SDL3/SDL.h>
 
 #include <algorithm>
@@ -807,6 +810,14 @@ namespace CNA::Internal::Backends::HtmlDom
     void HtmlDomGraphicsBackend::SetRenderTargets(
         const RenderTargetBindingDescriptor* renderTargets, int count)
     {
+        // plan_html_dom.md HTMLDOM-120: GraphicsDevice::SetRenderTargets (the shared layer, the
+        // only caller a real game ever goes through) always passes count=0 for a null pointer
+        // (GraphicsDevice.cpp), so this can only fire via a direct call to this backend bypassing
+        // the shared layer entirely -- exactly the case this ticket audits. Without this check,
+        // `renderTargets[0]` below dereferences a null pointer.
+        if (count > 0 && renderTargets == nullptr)
+            throw System::ArgumentNullException(
+                "renderTargets", "count was " + std::to_string(count) + " but renderTargets was null.");
         if (count > 1)
             throw std::runtime_error(
                 "HTML_DOM backend: multiple simultaneous render targets (MRT) are not yet "
@@ -826,6 +837,21 @@ namespace CNA::Internal::Backends::HtmlDom
                 "be: the backbuffer here is a live DOM subtree composited by the browser, and no "
                 "browser API rasterizes one to pixels. Render into a RenderTarget2D and read that "
                 "instead, or use the CANVAS backend when backbuffer readback is required.");
+        // plan_html_dom.md HTMLDOM-120: GraphicsDevice::GetBackBufferData (the shared layer) already
+        // validates a null buffer and bounds-checks the rectangle against PresentationParameters --
+        // but NOT against the actually-bound render target's own real size, which can legitimately
+        // be smaller (a too-large region there silently reads back transparent padding rather than
+        // throwing, since getImageData does not reject it -- a narrower, accepted gap this specific
+        // check does not attempt to close). This guards the direct-backend case the shared layer's
+        // own checks cannot reach at all, and the universally-safe invariants regardless of target
+        // size, mirroring HtmlDomRenderTargetBackend::GetData's own pattern: a null `pixels` here
+        // would otherwise write into the start of the wasm heap via HEAPU8.set (CNA_HtmlDom_ReadBound
+        // below), real memory corruption, not a clean crash.
+        System::ArgumentNullException::ThrowIfNull(pixels, "pixels");
+        System::ArgumentOutOfRangeException::ThrowIfNegative(x, "x");
+        System::ArgumentOutOfRangeException::ThrowIfNegative(y, "y");
+        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(w, "w");
+        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(h, "h");
 #if defined(__EMSCRIPTEN__)
         if (CNA_HtmlDom_ReadBound(x, y, w, h, pixels) == 0)
             throw std::runtime_error("HTML_DOM backend: the bound render target could not be read back.");

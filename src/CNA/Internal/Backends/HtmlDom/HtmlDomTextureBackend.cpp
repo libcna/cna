@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Backends/HtmlDom/HtmlDomTextureBackend.hpp"
 
+#include "System/ArgumentOutOfRangeException.hpp"
+
 #include <stdexcept>
 #include <string>
 
@@ -369,6 +371,13 @@ namespace CNA::Internal::Backends::HtmlDom
         , width_(data.width)
         , height_(data.height)
     {
+        // plan_html_dom.md HTMLDOM-120: neither Texture2D's own constructors nor this one validate
+        // width/height are positive anywhere upstream -- a zero/negative size would otherwise reach
+        // `new OffscreenCanvas(w,h)`/`canvas.width=w` (CNA_HtmlDom_CreateTexture below), whose
+        // behavior for a degenerate size is browser-implementation-defined and untested here.
+        // Caught here instead, at this backend's own JS-crossing boundary, with an actionable error.
+        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(width_, "width");
+        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(height_, "height");
 #if defined(__EMSCRIPTEN__)
         CNA_HtmlDom_CreateTexture(id_, width_, height_, data.pixels.data(), 0);
         CNA_HtmlDom_InstallTextureHelpers();
@@ -380,6 +389,12 @@ namespace CNA::Internal::Backends::HtmlDom
         , width_(width)
         , height_(height)
     {
+        // plan_html_dom.md HTMLDOM-120: this constructor is used exclusively by
+        // HtmlDomRenderTargetBackend (see this class's own header comment) -- RenderTarget2D's own
+        // constructor (RenderTarget2D.cpp) validates neither width nor height before calling
+        // CreateRenderTarget2D, so this is the only place in the whole chain that can catch it.
+        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(width_, "width");
+        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(height_, "height");
 #if defined(__EMSCRIPTEN__)
         // plan_html_dom.md HTMLDOM-106: isRenderTarget=1 -- this constructor is used exclusively by
         // HtmlDomRenderTargetBackend (see this class's own header comment), never for a plain

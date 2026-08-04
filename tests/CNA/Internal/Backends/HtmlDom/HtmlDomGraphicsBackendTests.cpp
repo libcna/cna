@@ -14,10 +14,15 @@
 
 #if defined(CNA_BACKEND_HTML_DOM)
 #include "CNA/Internal/Backends/HtmlDom/HtmlDomGraphicsBackend.hpp"
+#include "CNA/Internal/Backends/HtmlDom/HtmlDomRenderTargetBackend.hpp"
 #include "CNA/Internal/Backends/HtmlDom/HtmlDomSpriteBatchBackend.hpp"
 #include "CNA/Internal/Backends/HtmlDom/HtmlDomState.hpp"
+#include "CNA/Internal/Backends/HtmlDom/HtmlDomTextureBackend.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+
+#include "System/ArgumentNullException.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 
 #include <string>
 
@@ -153,6 +158,21 @@ TEST(HtmlDomAddressModes, MirrorMixedWithADifferentAxisModeThrowsOutOfBounds)
     EXPECT_THROW(ValidateAddressModes(0, 2, true), std::runtime_error);
     EXPECT_THROW(ValidateAddressModes(2, 1, true), std::runtime_error);
     EXPECT_THROW(ValidateAddressModes(1, 2, true), std::runtime_error);
+}
+
+// plan_html_dom.md HTMLDOM-120: an out-of-range TextureAddressMode ordinal (neither 0=Wrap,
+// 1=Clamp nor 2=Mirror) is never validated by SetSamplerAddressMode itself (it just stores the raw
+// ints -- see the SetSamplerAddressMode test below), and this function's own mismatch check
+// (`addressU != addressV && (addressU==2 || addressV==2)`) can only ever fire when one of the two
+// values IS 2 (Mirror) -- so neither a matched (999,999) nor a mismatched-but-neither-Mirror
+// (999,5) pair trips it. Documenting the CURRENT, accepted behaviour (falls through to Clamp-like
+// edge-padding, same as this repo's other backends' own unchecked address-mode translators -- see
+// this task's own plan_html_dom.md row for the cross-backend survey) rather than silently leaving
+// it unverified.
+TEST(HtmlDomAddressModes, OutOfRangeOrdinalsNeverThrowRegardlessOfMatch)
+{
+    EXPECT_NO_THROW(ValidateAddressModes(999, 999, true));
+    EXPECT_NO_THROW(ValidateAddressModes(999, 5, true));
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -407,6 +427,30 @@ TEST(HtmlDomSpriteBatch, SamplerFilterMapsMagnificationToSmoothing)
     EXPECT_NO_THROW(batch.SetSamplerFilter(1));
 }
 
+// plan_html_dom.md HTMLDOM-120: an out-of-range TextureFilter ordinal is not a silent capability
+// drop -- ISpriteBatchBackend::SetSamplerFilter's own doc comment specifies the fallback
+// explicitly ("others map to nearest"), and this backend's `default:` case does exactly that.
+// Confirmed here rather than left unverified: it must not throw for a value outside the documented
+// 0-8 range.
+TEST(HtmlDomSpriteBatch, SamplerFilterOutOfRangeOrdinalFallsBackToPointRatherThanThrowing)
+{
+    HtmlDomSpriteBatchBackend batch;
+    EXPECT_NO_THROW(batch.SetSamplerFilter(-1));
+    EXPECT_NO_THROW(batch.SetSamplerFilter(999));
+}
+
+// plan_html_dom.md HTMLDOM-120: unlike SetSamplerFilter, SetSamplerAddressMode stores its raw
+// ints completely unvalidated -- confirming the CURRENT, accepted behaviour (see
+// HtmlDomAddressModes.OutOfRangeOrdinalsNeverThrowRegardlessOfMatch for why an out-of-range value
+// can never trip ValidateAddressModes' own mismatch check either), matching every other CNA
+// backend's own unchecked address-mode translator, not a HTML_DOM-specific gap this task fixes
+// unilaterally.
+TEST(HtmlDomSpriteBatch, SamplerAddressModeOutOfRangeOrdinalDoesNotThrow)
+{
+    HtmlDomSpriteBatchBackend batch;
+    EXPECT_NO_THROW(batch.SetSamplerAddressMode(999, 999));
+}
+
 TEST(HtmlDomSpriteBatch, BeginClearsCommandsFromAPreviousBatch)
 {
     HtmlDomSpriteBatchBackend batch;
@@ -529,6 +573,16 @@ TEST_F(HtmlDom3DSurfaceTest, MultipleRenderTargetsAndCubeFacesThrow)
     EXPECT_NO_THROW(backend.SetRenderTargets(nullptr, 0));
 }
 
+// plan_html_dom.md HTMLDOM-120: GraphicsDevice::SetRenderTargets (the shared layer, the only
+// caller a real game ever goes through) always passes count=0 for a null pointer -- (nullptr,
+// count>0) can only happen via a direct call bypassing the shared layer, exactly what this test
+// audits. Without the fix, `renderTargets[0]` inside SetRenderTargets dereferences this null
+// pointer instead of throwing a clean, actionable exception.
+TEST_F(HtmlDom3DSurfaceTest, SetRenderTargetsNullArrayWithPositiveCountThrows)
+{
+    EXPECT_THROW(backend.SetRenderTargets(nullptr, 1), System::ArgumentNullException);
+}
+
 TEST_F(HtmlDom3DSurfaceTest, BackbufferReadbackThrowsWithAnActionableMessage)
 {
     std::uint8_t pixels[4] = {};
@@ -544,6 +598,26 @@ TEST_F(HtmlDom3DSurfaceTest, BackbufferReadbackThrowsWithAnActionableMessage)
         // The message must point at the supported alternative, not just refuse.
         EXPECT_NE(what.find("RenderTarget2D"), std::string::npos);
     }
+}
+
+// plan_html_dom.md HTMLDOM-120: once a target IS bound (so ReadBackbuffer gets past its own
+// "nothing bound" guard above), a null destination pointer or a non-positive/negative region must
+// be rejected with an actionable exception before crossing into JS -- not reach
+// CNA_HtmlDom_ReadBound, where a null pointer would write into the start of the wasm heap via
+// HEAPU8.set (real memory corruption, not a clean crash) and a negative/zero region has no defined
+// meaning. A fake nonzero id is enough here (no real texture needed): both new checks run and
+// throw before the (compiled-out, under native GTest) EM_JS call would ever be reached.
+TEST_F(HtmlDom3DSurfaceTest, ReadBackbufferValidatesPointerAndRegionOnceATargetIsBound)
+{
+    SetBoundRenderTargetIdEXT(1);
+    std::uint8_t pixels[4] = {};
+    EXPECT_THROW(backend.ReadBackbuffer(0, 0, 1, 1, nullptr), System::ArgumentNullException);
+    EXPECT_THROW(backend.ReadBackbuffer(-1, 0, 1, 1, pixels), System::ArgumentOutOfRangeException);
+    EXPECT_THROW(backend.ReadBackbuffer(0, -1, 1, 1, pixels), System::ArgumentOutOfRangeException);
+    EXPECT_THROW(backend.ReadBackbuffer(0, 0, 0, 1, pixels), System::ArgumentOutOfRangeException);
+    EXPECT_THROW(backend.ReadBackbuffer(0, 0, 1, 0, pixels), System::ArgumentOutOfRangeException);
+    EXPECT_THROW(backend.ReadBackbuffer(0, 0, -1, 1, pixels), System::ArgumentOutOfRangeException);
+    SetBoundRenderTargetIdEXT(0);
 }
 
 TEST_F(HtmlDom3DSurfaceTest, ApplyBlendStateAcceptsPresetsAndRejectsCustomOnes)
@@ -567,6 +641,22 @@ TEST_F(HtmlDom3DSurfaceTest, ViewportFollowsTheVirtualResolutionSetting)
     // With no virtual resolution there is no logical mapping to report.
     EXPECT_FALSE(backend.TransformWindowToLogical(10.0f, 10.0f, lx, ly));
     EXPECT_FALSE(backend.TransformLogicalToWindow(10.0f, 10.0f, lx, ly));
+}
+
+// plan_html_dom.md HTMLDOM-120: SetVirtualResolution stores width/height completely unvalidated --
+// confirming this is already safe by construction rather than leaving it unverified.
+// TransformWindowToLogical/TransformLogicalToWindow's own "no virtual resolution configured" guard
+// is `virtualWidth_ <= 0 || virtualHeight_ <= 0` (HtmlDomGraphicsBackend.cpp), so a NEGATIVE
+// resolution takes the exact same early-out as the already-tested (0,0) case above, not some
+// unvalidated third state.
+TEST_F(HtmlDom3DSurfaceTest, NegativeVirtualResolutionBehavesLikeUnsetRatherThanThrowingOrCorrupting)
+{
+    EXPECT_NO_THROW(backend.SetVirtualResolution(-100, -50));
+    backend.SetPresentationMode(static_cast<int>(CnaPresentationMode::NativeBackBuffer));
+    float lx = 0.0f, ly = 0.0f;
+    EXPECT_FALSE(backend.TransformWindowToLogical(10.0f, 10.0f, lx, ly));
+    EXPECT_FALSE(backend.TransformLogicalToWindow(10.0f, 10.0f, lx, ly));
+    backend.SetVirtualResolution(0, 0);
 }
 
 // plan_html_dom.md HTMLDOM-91: ApplyRasterizerState/ApplyDepthStencilState/SetBlendFactor/
@@ -647,5 +737,70 @@ TEST_F(HtmlDom3DSurfaceTest, SetViewportAcceptsArbitraryValuesAndIsIdempotent)
     EXPECT_NO_THROW(backend.SetViewport(0, 0, 800, 480, 0.0f, 1.0f));  // same values again
     EXPECT_NO_THROW(backend.SetViewport(4, 4, 16, 16, 0.25f, 0.75f));  // genuinely different values
     EXPECT_NO_THROW(backend.SetViewport(4, 4, 16, 16, 0.25f, 0.75f));  // same as the line above
+}
+
+// plan_html_dom.md HTMLDOM-120: SetViewport's w/h are stored into Module['cnaDomViewport'] but
+// (confirmed by grep) only ever READ as .x/.y by the sprite-flush path -- .w/.h are dead data this
+// backend never derives anything from -- and minDepth/maxDepth are literally unnamed parameters,
+// never read or stored at all. So negative w/h and a genuinely inverted depth range (minDepth >
+// maxDepth, itself never validated anywhere in the shared Viewport.cpp layer either) are already
+// safe by construction, not merely untested -- confirmed here rather than left unverified.
+TEST_F(HtmlDom3DSurfaceTest, SetViewportAcceptsNegativeDimensionsAndInvertedDepthRangeInertly)
+{
+    EXPECT_NO_THROW(backend.SetViewport(4, 4, -16, -16, 2.0f, -1.0f));
+    backend.SetViewport(0, 0, 800, 480, 0.0f, 1.0f);   // hygiene: restore for later tests.
+}
+
+// ---------------------------------------------------------------------------------------------
+// Texture/render-target size validation
+// ---------------------------------------------------------------------------------------------
+//
+// plan_html_dom.md HTMLDOM-120: neither Texture2D.cpp (upper-bound-only) nor RenderTarget2D.cpp
+// (no size validation at all -- it never even reaches Texture2D's own dimension checks, since it
+// bypasses the two Texture2D constructors that call them) rejects a zero/negative width or height
+// anywhere in the shared layer -- confirmed by reading both files. HtmlDomTextureBackend's own
+// constructors are the only place in the whole chain that can catch it before it would otherwise
+// reach `new OffscreenCanvas(w,h)`/`canvas.width=w`, whose behavior for a degenerate size is
+// browser-implementation-defined and was untested here. Both constructors run fully natively under
+// `node` (the CNA_HtmlDom_CreateTexture EM_JS call is never reached once the throw fires first).
+TEST(HtmlDomTextureBackendSizeValidation, ZeroOrNegativeDimensionsThrowFromThePixelDataConstructor)
+{
+    const ImageData zeroWidth{0, 4, std::vector<std::uint8_t>(4 * 4 * 4, 0)};
+    EXPECT_THROW((HtmlDomTextureBackend{zeroWidth}), System::ArgumentOutOfRangeException);
+    const ImageData negativeHeight{4, -1, std::vector<std::uint8_t>(4 * 4 * 4, 0)};
+    EXPECT_THROW((HtmlDomTextureBackend{negativeHeight}), System::ArgumentOutOfRangeException);
+    const CNA::Internal::Graphics::ImageData valid{4, 4, std::vector<std::uint8_t>(4 * 4 * 4, 0)};
+    EXPECT_NO_THROW((HtmlDomTextureBackend{valid}));
+}
+
+TEST(HtmlDomTextureBackendSizeValidation, ZeroOrNegativeDimensionsThrowFromTheRenderTargetConstructor)
+{
+    EXPECT_THROW((HtmlDomTextureBackend{0, 4}), System::ArgumentOutOfRangeException);
+    EXPECT_THROW((HtmlDomTextureBackend{4, -1}), System::ArgumentOutOfRangeException);
+    EXPECT_NO_THROW((HtmlDomTextureBackend{4, 4}));
+}
+
+// HtmlDomRenderTargetBackend(w,h) delegates straight to HtmlDomTextureBackend(w,h) (its own
+// member-initializer list) -- confirming the validation above is inherited, not something a
+// render target could bypass by constructing its own texture differently.
+TEST(HtmlDomTextureBackendSizeValidation, ZeroOrNegativeDimensionsThrowFromRenderTargetBackendToo)
+{
+    EXPECT_THROW((HtmlDomRenderTargetBackend{0, 0}), System::ArgumentOutOfRangeException);
+    EXPECT_NO_THROW((HtmlDomRenderTargetBackend{4, 4}));
+}
+
+// plan_html_dom.md HTMLDOM-120: locks in HtmlDomRenderTargetBackend::GetData's own documented
+// `data == nullptr` contract (returns false rather than throwing, HtmlDomRenderTargetBackend.cpp's
+// own comment: "false ... when no canvas exists") as an explicit, regression-proof test rather
+// than leaving it implicit in the implementation alone -- every OTHER invalid-argument case in
+// this same method (negative level, out-of-range level, an out-of-bounds rectangle, an
+// undersized destination buffer) already throws, so this is deliberately the one intentional
+// exception to that pattern, worth pinning down explicitly.
+TEST(HtmlDomTextureBackendSizeValidation, RenderTargetGetDataWithNullDestinationReturnsFalseNotThrow)
+{
+    HtmlDomRenderTargetBackend rt(4, 4);
+    bool result = true;
+    EXPECT_NO_THROW(result = rt.GetData(0, 0, 0, 2, 2, nullptr, 2 * 2 * 4));
+    EXPECT_FALSE(result);
 }
 #endif // CNA_BACKEND_HTML_DOM
