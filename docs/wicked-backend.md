@@ -113,6 +113,13 @@ D3D11/D3D12/Vulkan backends select theirs:
 A stride outside this set throws rather than being rendered through a layout that merely has the
 same byte width.
 
+Each variant has an instanced sibling (`Basic16InstVS` … `Basic32InstVS`) that reads a per-instance
+world matrix from a second input slot. The per-instance record is CNA's established 64-byte
+column-major `Matrix` — the same layout the Vulkan backend's instanced pipeline consumes — so an
+unmodified XNA `Matrix` in the instance buffer means the same thing on both backends. On these entry
+points the constant buffer's transform holds `view * projection` alone; the world transform comes
+from the instance.
+
 ---
 
 ## Capability boundary
@@ -130,6 +137,9 @@ Implemented and reported as supported:
 | 3D draws | `BasicEffect`, `AlphaTestEffect`, `DualTextureEffect`, fog, three directional lights, specular |
 | `RenderTarget2D` | Colour + optional depth/stencil, `RenderTargetUsage`, readback |
 | Render state | Blend (incl. per-slot write masks and sample mask), depth/stencil (incl. two-sided), rasterizer (incl. wireframe and depth bias), samplers |
+| `TextureCube` | Six-face upload and readback (storage only — nothing samples one yet) |
+| `Texture3D` | Volume upload and readback, real GPU storage |
+| Instanced draws | Per-instance 64-byte column-major `Matrix` stream, `InstanceFrequency == 1` only |
 | MSAA | On the scene target, with resolve; device-clamped |
 | Occlusion queries | Real `GPUQueryHeap` + readback buffer |
 
@@ -140,12 +150,11 @@ Not implemented; each is refused explicitly at the call site and reported by
 |------|----------------------|
 | Multiple simultaneous render targets | `MultipleRenderTargets` |
 | `RenderTargetCube` | — (`SetRenderTargets` throws on a cube-face descriptor) |
-| `Texture3D`, `TextureCube` | `Texture3D` |
 | Custom `ShaderEffect` / `SpriteBatch.Begin(effect)` | `CustomEffects` |
-| Instanced draws | — (`DrawInstancedPrimitivesEx` throws) |
 | Multi-stream vertex input | `MultiStreamVertexInput` |
-| `EnvironmentMapEffect`, `SkinnedEffect`, `PbrEffect` | — (the draw throws) |
-| Mip-chain generation | — (`CreateTexture` allocates level 0 only) |
+| `EnvironmentMapEffect`, `SkinnedEffect`, `PbrEffect` | — (the draw throws; this is also why a `TextureCube` cannot yet be sampled) |
+| `InstanceFrequency` other than 1 | — (the draw throws; Wicked's `InputLayout` has no step-rate field) |
+| Mip-chain generation | — (levels are allocated and uploadable, nothing downsamples level 0) |
 | D3D12 device selection | — (needs Wicked's root-signature macro in CNA's HLSL) |
 
 ---

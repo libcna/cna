@@ -67,6 +67,7 @@ namespace CNA::Internal::Backends::Wicked
     NOXNA struct WickedPipelineKey
     {
         std::uint32_t variant = 0;            ///< WickedShaderVariant ordinal.
+        std::uint32_t instanced = 0;          ///< Non-zero when the per-instance input layout is used.
         std::uint32_t topology = 0;           ///< wi::graphics::PrimitiveTopology ordinal.
         std::uint32_t blendEnabled = 0;       ///< Non-zero when colour blending is on.
         std::int32_t  colorSrcBlend = 0;      ///< Raw XNA Blend ordinal.
@@ -194,6 +195,139 @@ namespace CNA::Internal::Backends::Wicked
     protected:
         WickedGraphicsBackend* owner_ = nullptr; ///< Backend that owns the device.
         wig::Texture texture_;                   ///< The GPU resource.
+    };
+
+    /**
+     * @brief NOXNA. A cube map exposed to CNA as an `ITextureCubeBackend`.
+     *
+     * Upload and readback only. This backend has no `EnvironmentMapEffect` shader variant yet
+     * (plan_wicked.md WICKED-56), so a cube map cannot currently be sampled by a draw — it can be
+     * filled and read back, and `SetData`/`GetData` report honestly whether they did so.
+     */
+    class WickedTextureCubeBackend final : public ITextureCubeBackend
+    {
+    public:
+        /**
+         * @brief Creates a six-face cube map.
+         *
+         * @param owner  Backend that owns the device.
+         * @param size   Width and height of each face, in texels.
+         * @param mipMap True when a full mip chain was requested.
+         */
+        WickedTextureCubeBackend(WickedGraphicsBackend* owner, int size, bool mipMap);
+        /** @brief Releases the GPU texture. */
+        ~WickedTextureCubeBackend() override;
+
+        WickedTextureCubeBackend(const WickedTextureCubeBackend&) = delete;
+        WickedTextureCubeBackend& operator=(const WickedTextureCubeBackend&) = delete;
+
+        /**
+         * @brief Uploads tightly packed RGBA8 rows into a sub-rectangle of one cube face.
+         *
+         * @param face       Cube face index (0=+X, 1=-X, 2=+Y, 3=-Y, 4=+Z, 5=-Z).
+         * @param level      Mip level to write.
+         * @param x          Left edge of the region, in texels.
+         * @param y          Top edge of the region, in texels.
+         * @param w          Width of the region, in texels.
+         * @param h          Height of the region, in texels.
+         * @param data       Source pixels, top row first.
+         * @param dataLength Size of @p data in bytes; at least `w * h * 4`.
+         * @return True when the whole region was stored; false when nothing was stored.
+         */
+        [[nodiscard]] bool SetData(int face, int level, int x, int y, int w, int h,
+                                   const void* data, int dataLength) override;
+        /**
+         * @brief Reads a sub-rectangle of one cube face back as tightly packed RGBA8 rows.
+         *
+         * @param face       Cube face index (0=+X, 1=-X, 2=+Y, 3=-Y, 4=+Z, 5=-Z).
+         * @param level      Mip level to read.
+         * @param x          Left edge of the region, in texels.
+         * @param y          Top edge of the region, in texels.
+         * @param w          Width of the region, in texels.
+         * @param h          Height of the region, in texels.
+         * @param data       Destination buffer, top row first.
+         * @param dataLength Size of @p data in bytes; at least `w * h * 4`.
+         * @return True when the whole region was written; false when nothing was read back.
+         */
+        [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
+                                   void* data, int dataLength) const override;
+
+        /** @brief NOXNA. The underlying Wicked Engine resource. */
+        [[nodiscard]] const wig::Texture& GetTextureEXT() const { return texture_; }
+
+    private:
+        WickedGraphicsBackend* owner_ = nullptr;
+        wig::Texture texture_;
+        int size_ = 0;
+        std::uint32_t mipLevels_ = 1;
+    };
+
+    /**
+     * @brief NOXNA. A volume texture exposed to CNA as an `ITexture3DBackend`.
+     */
+    class WickedTexture3DBackend final : public ITexture3DBackend
+    {
+    public:
+        /**
+         * @brief Creates a volume texture.
+         *
+         * @param owner  Backend that owns the device.
+         * @param width  Width in voxels.
+         * @param height Height in voxels.
+         * @param depth  Depth in voxels.
+         * @param mipMap True when a full mip chain was requested.
+         */
+        WickedTexture3DBackend(WickedGraphicsBackend* owner, int width, int height, int depth,
+                               bool mipMap);
+        /** @brief Releases the GPU texture. */
+        ~WickedTexture3DBackend() override;
+
+        WickedTexture3DBackend(const WickedTexture3DBackend&) = delete;
+        WickedTexture3DBackend& operator=(const WickedTexture3DBackend&) = delete;
+
+        /**
+         * @brief Uploads a tightly packed RGBA8 box into the given mip level.
+         *
+         * @param level      Mip level to write.
+         * @param x          Left edge of the box, in voxels.
+         * @param y          Top edge of the box, in voxels.
+         * @param z          Front edge of the box, in voxels.
+         * @param w          Width of the box, in voxels.
+         * @param h          Height of the box, in voxels.
+         * @param depth      Depth of the box, in voxels.
+         * @param data       Source voxels, slice by slice, each slice top row first.
+         * @param dataLength Size of @p data in bytes; at least `w * h * depth * 4`.
+         * @return True when the whole box was stored; false when nothing was stored.
+         */
+        [[nodiscard]] bool SetData(int level, int x, int y, int z, int w, int h, int depth,
+                                   const void* data, int dataLength) override;
+        /**
+         * @brief Reads a box of the given mip level back as tightly packed RGBA8 voxels.
+         *
+         * @param level      Mip level to read.
+         * @param x          Left edge of the box, in voxels.
+         * @param y          Top edge of the box, in voxels.
+         * @param z          Front edge of the box, in voxels.
+         * @param w          Width of the box, in voxels.
+         * @param h          Height of the box, in voxels.
+         * @param depth      Depth of the box, in voxels.
+         * @param data       Destination buffer, slice by slice, each slice top row first.
+         * @param dataLength Size of @p data in bytes; at least `w * h * depth * 4`.
+         * @return True when the whole box was written; false when nothing was read back.
+         */
+        [[nodiscard]] bool GetData(int level, int x, int y, int z, int w, int h, int depth,
+                                   void* data, int dataLength) const override;
+
+        /** @brief NOXNA. The underlying Wicked Engine resource. */
+        [[nodiscard]] const wig::Texture& GetTextureEXT() const { return texture_; }
+
+    private:
+        WickedGraphicsBackend* owner_ = nullptr;
+        wig::Texture texture_;
+        int width_ = 0;
+        int height_ = 0;
+        int depth_ = 0;
+        std::uint32_t mipLevels_ = 1;
     };
 
     /**
@@ -619,6 +753,26 @@ namespace CNA::Internal::Backends::Wicked
         /** @brief Creates a 32-bit index buffer able to hold @p index_capacity indices. */
         std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer32(int index_capacity) override;
         /**
+         * @brief Creates a six-face cube map.
+         * @param size          Width and height of each face, in texels.
+         * @param mipMap        True when a full mip chain was requested.
+         * @param surfaceFormat Raw XNA `SurfaceFormat` ordinal; only `Color` is stored today.
+         * @return The new cube map.
+         */
+        std::unique_ptr<ITextureCubeBackend> CreateTextureCube(int size, bool mipMap,
+                                                               int surfaceFormat) override;
+        /**
+         * @brief Creates a volume texture.
+         * @param w             Width in voxels.
+         * @param h             Height in voxels.
+         * @param depth         Depth in voxels.
+         * @param mipMap        True when a full mip chain was requested.
+         * @param surfaceFormat Raw XNA `SurfaceFormat` ordinal; only `Color` is stored today.
+         * @return The new volume texture.
+         */
+        std::unique_ptr<ITexture3DBackend> CreateTexture3D(int w, int h, int depth, bool mipMap,
+                                                            int surfaceFormat) override;
+        /**
          * @brief Creates an off-screen render target.
          * @param w                Width in pixels.
          * @param h                Height in pixels.
@@ -812,6 +966,33 @@ namespace CNA::Internal::Backends::Wicked
                                      PrimitiveType primitive, int primitiveCount,
                                      const GpuDrawParams& params) override;
 
+        /**
+         * @brief Instanced indexed draw.
+         *
+         * The per-instance stream is CNA's established 64-byte column-major `Matrix` world
+         * transform, bound at its own input slot with per-instance step rate. Only
+         * `InstanceFrequency == 1` is expressible -- Wicked Engine's `InputLayout` has no
+         * instance-step-rate field -- so any other frequency is refused rather than silently
+         * treated as 1.
+         *
+         * @param vb             Vertex buffer named by `params.vertexStreams[0]`.
+         * @param ib             Index buffer to read from.
+         * @param world          World matrix; folded into the view/projection transform.
+         * @param view           View matrix.
+         * @param projection     Projection matrix.
+         * @param primitive      Primitive topology.
+         * @param primitiveCount Number of primitives per instance.
+         * @param instanceCount  Number of instances to draw.
+         * @param params         Per-draw effect parameters, carrying every bound stream.
+         */
+        void DrawInstancedPrimitivesEx(const IVertexBufferBackend& vb,
+                                       const IIndexBufferBackend& ib,
+                                       const Matrix& world, const Matrix& view,
+                                       const Matrix& projection,
+                                       PrimitiveType primitive, int primitiveCount,
+                                       int instanceCount,
+                                       const GpuDrawParams& params) override;
+
         /** @brief Inserts a named GPU debug marker into the command stream. */
         void SetStringMarkerEXT(const char* marker) override;
         /**
@@ -889,7 +1070,7 @@ namespace CNA::Internal::Backends::Wicked
         void SubmitDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
                         const Matrix& world, const Matrix& view, const Matrix& projection,
                         PrimitiveType primitive, int primitiveCount,
-                        const GpuDrawParams* params);
+                        const GpuDrawParams* params, int instanceCount = 1);
 
         SDL_Window* window_ = nullptr;
         std::unique_ptr<wig::GraphicsDevice> device_;
@@ -898,8 +1079,10 @@ namespace CNA::Internal::Backends::Wicked
         SceneTarget scene_;
 
         std::array<wig::Shader, static_cast<std::size_t>(WickedShaderVariant::Count)> vertexShaders_;
+        std::array<wig::Shader, static_cast<std::size_t>(WickedShaderVariant::Count)> instancedVertexShaders_;
         wig::Shader pixelShader_;
         std::array<wig::InputLayout, static_cast<std::size_t>(WickedShaderVariant::Count)> inputLayouts_;
+        std::array<wig::InputLayout, static_cast<std::size_t>(WickedShaderVariant::Count)> instancedInputLayouts_;
         wig::Texture whiteTexture_;
 
         std::unordered_map<WickedPipelineKey, WickedPipelineEntry, WickedPipelineKeyHash> pipelines_;

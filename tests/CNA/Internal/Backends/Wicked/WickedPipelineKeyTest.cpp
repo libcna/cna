@@ -65,6 +65,19 @@ TEST(WickedPipelineKey, ShaderVariantParticipatesInEquality)
     EXPECT_FALSE(MakeKey() == other);
 }
 
+TEST(WickedPipelineKey, InstancedFlagParticipatesInEquality)
+{
+    // The instanced flag selects a different vertex shader AND a different input layout, so a key
+    // that ignored it would hand an instanced draw the non-instanced pipeline -- which binds no
+    // per-instance stream at all and would render every instance on top of the first.
+    WickedPipelineKey other = MakeKey();
+    other.instanced = 1;
+    EXPECT_FALSE(MakeKey() == other);
+
+    const WickedPipelineKeyHash hash;
+    EXPECT_NE(hash(MakeKey()), hash(other));
+}
+
 TEST(WickedPipelineKey, EveryStateFieldParticipatesInEquality)
 {
     // Byte-wise comparison is what makes this hold for a field added later without touching

@@ -133,6 +133,84 @@ VSOut Basic32VS(float3 position : POSITION, float3 normal : NORMAL, float2 uv : 
     return o;
 }
 
+// ---------------------------------------------------------------------------------------------
+// Instanced variants.
+//
+// The per-instance stream is CNA's established 64-byte layout: a column-major float4x4 world
+// matrix delivered as four float4 attributes at byte offsets 0/16/32/48, identical to the Vulkan
+// backend's own instanced pipeline. `world * position` is therefore the column-vector product
+// `sum(position[k] * column[k])`, which is exactly XNA's row-vector `position * matrix` once the
+// matrix's raw bytes are read column-wise -- so an unmodified XNA Matrix in the instance buffer
+// means the same thing on both backends.
+//
+// On these entry points `cb.mvp` holds VIEW * PROJECTION only; the per-instance matrix supplies
+// the world transform that `cb.world` carries on the non-instanced entry points.
+// ---------------------------------------------------------------------------------------------
+
+float3 InstanceTransformPosition(float3 p, float4 i0, float4 i1, float4 i2, float4 i3)
+{
+    float4 world = i0 * p.x + i1 * p.y + i2 * p.z + i3;
+    return world.xyz;
+}
+
+float3 InstanceTransformNormal(float3 n, float4 i0, float4 i1, float4 i2, float4 i3)
+{
+    float4 world = i0 * n.x + i1 * n.y + i2 * n.z;
+    return world.xyz;
+}
+
+VSOut FillInstanced(float3 position, float4 i0, float4 i1, float4 i2, float4 i3)
+{
+    VSOut o = (VSOut)0;
+    const float3 worldPosition = InstanceTransformPosition(position, i0, i1, i2, i3);
+    const float4 v = float4(worldPosition, 1.0f);
+    o.position = float4(dot(v, cb.mvp0), dot(v, cb.mvp1), dot(v, cb.mvp2), dot(v, cb.mvp3));
+    o.positionOS = float4(position, 1.0f);
+    o.positionWS = worldPosition;
+    o.color = float4(1.0f, 1.0f, 1.0f, 1.0f);
+    o.uv = float2(0.0f, 0.0f);
+    o.normalWS = float3(0.0f, 0.0f, 1.0f);
+    return o;
+}
+
+VSOut Basic16InstVS(float3 position : POSITION, float4 color : COLOR,
+                    float4 i0 : TEXCOORD4, float4 i1 : TEXCOORD5,
+                    float4 i2 : TEXCOORD6, float4 i3 : TEXCOORD7)
+{
+    VSOut o = FillInstanced(position, i0, i1, i2, i3);
+    o.color = color;
+    return o;
+}
+
+VSOut Basic20InstVS(float3 position : POSITION, float2 uv : TEXCOORD0,
+                    float4 i0 : TEXCOORD4, float4 i1 : TEXCOORD5,
+                    float4 i2 : TEXCOORD6, float4 i3 : TEXCOORD7)
+{
+    VSOut o = FillInstanced(position, i0, i1, i2, i3);
+    o.uv = uv;
+    return o;
+}
+
+VSOut Basic24InstVS(float3 position : POSITION, float4 color : COLOR, float2 uv : TEXCOORD0,
+                    float4 i0 : TEXCOORD4, float4 i1 : TEXCOORD5,
+                    float4 i2 : TEXCOORD6, float4 i3 : TEXCOORD7)
+{
+    VSOut o = FillInstanced(position, i0, i1, i2, i3);
+    o.color = color;
+    o.uv = uv;
+    return o;
+}
+
+VSOut Basic32InstVS(float3 position : POSITION, float3 normal : NORMAL, float2 uv : TEXCOORD0,
+                    float4 i0 : TEXCOORD4, float4 i1 : TEXCOORD5,
+                    float4 i2 : TEXCOORD6, float4 i3 : TEXCOORD7)
+{
+    VSOut o = FillInstanced(position, i0, i1, i2, i3);
+    o.normalWS = InstanceTransformNormal(normal, i0, i1, i2, i3);
+    o.uv = uv;
+    return o;
+}
+
 float3 ApplyLighting(float3 albedo, float3 normalWS, float3 positionWS)
 {
     float3 n = normalize(normalWS);

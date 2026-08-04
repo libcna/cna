@@ -238,6 +238,157 @@ namespace CNA::Internal::Backends::Wicked
                 default: return wig::Format::UNKNOWN;
             }
         }
+
+        /**
+         * Uploads a tightly packed RGBA8 box into one subresource region of @p destination.
+         *
+         * Shared by Texture2D, TextureCube and Texture3D so the staging/barrier/copy sequence
+         * exists once: three near-identical copies of it would be three places for the mip, slice
+         * or row-pitch arithmetic to drift apart.
+         *
+         * The staging texture is created with Usage::UPLOAD and the caller's tightly packed
+         * SubresourceData; Wicked re-packs it row by row into the device's own
+         * optimalBufferCopyRowPitchAlignment, so no alignment handling is needed here.
+         */
+        bool UploadTextureRegion(WickedGraphicsBackend& owner, const wig::Texture& destination,
+                                 int level, int slice,
+                                 int x, int y, int z, int w, int h, int depth,
+                                 const void* data)
+        {
+            wig::GraphicsDevice* device = owner.GetDeviceEXT();
+            const bool volume = destination.desc.type == wig::TextureDesc::Type::TEXTURE_3D;
+
+            wig::TextureDesc stagingDesc;
+            stagingDesc.type = destination.desc.type;
+            stagingDesc.format = destination.desc.format;
+            stagingDesc.width = static_cast<std::uint32_t>(w);
+            stagingDesc.height = static_cast<std::uint32_t>(h);
+            stagingDesc.depth = volume ? static_cast<std::uint32_t>(depth) : 1u;
+            stagingDesc.mip_levels = 1;
+            stagingDesc.array_size = 1;
+            stagingDesc.sample_count = 1;
+            stagingDesc.usage = wig::Usage::UPLOAD;
+            stagingDesc.bind_flags = wig::BindFlag::NONE;
+            // Deliberately NOT inherited from the destination: a one-slice staging texture is
+            // never a cube map, whatever the destination is.
+            stagingDesc.misc_flags = wig::ResourceMiscFlag::NONE;
+            stagingDesc.layout = wig::ResourceState::COPY_SRC;
+
+            wig::SubresourceData initial;
+            initial.data_ptr = data;
+            initial.row_pitch = static_cast<std::uint32_t>(w) * 4u;
+            initial.slice_pitch = static_cast<std::uint32_t>(w) * h * 4u;
+
+            wig::Texture staging;
+            if (!device->CreateTexture(&stagingDesc, &initial, &staging))
+                return false;
+
+            // A copy cannot be recorded inside a render pass, so any open pass is closed first;
+            // the next draw re-opens it with a LOAD operation and keeps what was already rendered.
+            owner.EndRenderPassEXT();
+            wig::CommandList cmd = owner.GetCommandListEXT();
+
+            const wig::GPUBarrier toCopyDst = wig::GPUBarrier::Image(
+                &destination, destination.desc.layout, wig::ResourceState::COPY_DST);
+            device->Barrier(&toCopyDst, 1, cmd);
+
+            device->CopyTexture(&destination,
+                                static_cast<std::uint32_t>(x),
+                                static_cast<std::uint32_t>(y),
+                                static_cast<std::uint32_t>(volume ? z : 0),
+                                static_cast<std::uint32_t>(level),
+                                static_cast<std::uint32_t>(slice),
+                                &staging, 0, 0, cmd);
+
+            const wig::GPUBarrier toOriginalLayout = wig::GPUBarrier::Image(
+                &destination, wig::ResourceState::COPY_DST, destination.desc.layout);
+            device->Barrier(&toOriginalLayout, 1, cmd);
+
+            // The staging texture must outlive the copy. Submitting and waiting is the simple,
+            // always-correct choice for what is an infrequent, normally load-time operation in CNA;
+            // plan_wicked.md WICKED-31 tracks batching it instead.
+            owner.FlushAndWaitEXT();
+            return true;
+        }
+
+        /**
+         * Reads one subresource region back into @p data as a tightly packed RGBA8 box.
+         *
+         * The counterpart of UploadTextureRegion above, and shared for the same reason. The
+         * readback texture is sized to the requested region and the source box is selected with a
+         * Box, so the region lands at its origin and only the requested bytes cross the bus.
+         */
+        bool ReadbackTextureRegion(WickedGraphicsBackend& owner, const wig::Texture& source,
+                                   wig::ResourceState sourceLayout,
+                                   int level, int slice,
+                                   int x, int y, int z, int w, int h, int depth,
+                                   void* data)
+        {
+            wig::GraphicsDevice* device = owner.GetDeviceEXT();
+            const bool volume = source.desc.type == wig::TextureDesc::Type::TEXTURE_3D;
+
+            wig::TextureDesc readbackDesc;
+            readbackDesc.type = source.desc.type;
+            readbackDesc.format = source.desc.format;
+            readbackDesc.width = static_cast<std::uint32_t>(w);
+            readbackDesc.height = static_cast<std::uint32_t>(h);
+            readbackDesc.depth = volume ? static_cast<std::uint32_t>(depth) : 1u;
+            readbackDesc.mip_levels = 1;
+            readbackDesc.array_size = 1;
+            readbackDesc.sample_count = 1;
+            readbackDesc.usage = wig::Usage::READBACK;
+            readbackDesc.bind_flags = wig::BindFlag::NONE;
+            readbackDesc.misc_flags = wig::ResourceMiscFlag::NONE;
+            readbackDesc.layout = wig::ResourceState::COPY_DST;
+
+            wig::Texture readback;
+            if (!device->CreateTexture(&readbackDesc, nullptr, &readback))
+                return false;
+
+            owner.EndRenderPassEXT();
+            wig::CommandList cmd = owner.GetCommandListEXT();
+
+            wig::Box box;
+            box.left = static_cast<std::uint32_t>(x);
+            box.top = static_cast<std::uint32_t>(y);
+            box.front = static_cast<std::uint32_t>(volume ? z : 0);
+            box.right = static_cast<std::uint32_t>(x + w);
+            box.bottom = static_cast<std::uint32_t>(y + h);
+            box.back = static_cast<std::uint32_t>(volume ? z + depth : 1);
+
+            const wig::GPUBarrier toCopySrc = wig::GPUBarrier::Image(
+                &source, sourceLayout, wig::ResourceState::COPY_SRC);
+            device->Barrier(&toCopySrc, 1, cmd);
+            device->CopyTexture(&readback, 0, 0, 0, 0, 0,
+                                &source,
+                                static_cast<std::uint32_t>(level),
+                                static_cast<std::uint32_t>(slice),
+                                cmd, &box);
+            const wig::GPUBarrier toOriginalLayout = wig::GPUBarrier::Image(
+                &source, wig::ResourceState::COPY_SRC, sourceLayout);
+            device->Barrier(&toOriginalLayout, 1, cmd);
+
+            owner.FlushAndWaitEXT();
+
+            if (readback.mapped_data == nullptr || readback.mapped_subresource_count == 0)
+                return false;
+
+            const auto* mapped = static_cast<const std::uint8_t*>(readback.mapped_data);
+            const wig::SubresourceData& layout = readback.mapped_subresources[0];
+            auto* dest = static_cast<std::uint8_t*>(data);
+            const int sliceCount = volume ? depth : 1;
+            for (int slice3D = 0; slice3D < sliceCount; ++slice3D)
+            {
+                for (int row = 0; row < h; ++row)
+                {
+                    std::memcpy(dest + (static_cast<std::size_t>(slice3D) * h + row) * w * 4,
+                                mapped + static_cast<std::size_t>(slice3D) * layout.slice_pitch +
+                                    static_cast<std::size_t>(row) * layout.row_pitch,
+                                static_cast<std::size_t>(w) * 4);
+                }
+            }
+            return true;
+        }
     }
 
     // ------------------------------------------------------------------------------------------
@@ -319,53 +470,7 @@ namespace CNA::Internal::Backends::Wicked
         if (levelW <= 0 || levelH <= 0)
             return;
 
-        wig::GraphicsDevice* device = owner_->GetDeviceEXT();
-        const std::size_t byteCount = static_cast<std::size_t>(levelW) * levelH * 4;
-
-        // A copy cannot be recorded inside a render pass, so any open pass is closed first; the
-        // next draw re-opens it with a LOAD operation and keeps whatever was already rendered.
-        owner_->EndRenderPassEXT();
-        wig::CommandList cmd = owner_->GetCommandListEXT();
-
-        wig::GPUBufferDesc uploadDesc;
-        uploadDesc.size = byteCount;
-        uploadDesc.usage = wig::Usage::UPLOAD;
-        wig::GPUBuffer upload;
-        if (!device->CreateBuffer(&uploadDesc, rgba, &upload))
-            return;
-
-        wig::Texture staging;
-        wig::TextureDesc stagingDesc = texture_.desc;
-        stagingDesc.width = static_cast<std::uint32_t>(levelW);
-        stagingDesc.height = static_cast<std::uint32_t>(levelH);
-        stagingDesc.mip_levels = 1;
-        stagingDesc.array_size = 1;
-        stagingDesc.sample_count = 1;
-        stagingDesc.usage = wig::Usage::UPLOAD;
-        stagingDesc.bind_flags = wig::BindFlag::NONE;
-        stagingDesc.layout = wig::ResourceState::COPY_SRC;
-        wig::SubresourceData initial;
-        initial.data_ptr = rgba;
-        initial.row_pitch = static_cast<std::uint32_t>(levelW) * 4u;
-        initial.slice_pitch = static_cast<std::uint32_t>(byteCount);
-        if (!device->CreateTexture(&stagingDesc, &initial, &staging))
-            return;
-
-        const wig::GPUBarrier toCopyDst = wig::GPUBarrier::Image(
-            &texture_, texture_.desc.layout, wig::ResourceState::COPY_DST);
-        device->Barrier(&toCopyDst, 1, cmd);
-
-        device->CopyTexture(&texture_, 0, 0, 0, static_cast<std::uint32_t>(level), 0,
-                            &staging, 0, 0, cmd);
-
-        const wig::GPUBarrier toShaderResource = wig::GPUBarrier::Image(
-            &texture_, wig::ResourceState::COPY_DST, texture_.desc.layout);
-        device->Barrier(&toShaderResource, 1, cmd);
-
-        // The staging texture must outlive the copy. Submitting and waiting here is the simple,
-        // always-correct choice for what is an infrequent operation in CNA (Texture2D.SetData is
-        // normally a load-time call); plan_wicked.md WICKED-31 tracks batching it instead.
-        owner_->FlushAndWaitEXT();
+        (void)UploadTextureRegion(*owner_, texture_, level, 0, 0, 0, 0, levelW, levelH, 1, rgba);
     }
 
     bool WickedTextureBackend::GetData(int level, int x, int y, int w, int h,
@@ -373,14 +478,13 @@ namespace CNA::Internal::Backends::Wicked
     {
         if (owner_ == nullptr || data == nullptr || !texture_.IsValid())
             return false;
-        if (w <= 0 || h <= 0)
+        if (w <= 0 || h <= 0 || x < 0 || y < 0)
             return false;
         if (dataLength < w * h * 4)
             return false;
         if (level < 0 || static_cast<std::uint32_t>(level) >= texture_.desc.mip_levels)
             return false;
 
-        wig::GraphicsDevice* device = owner_->GetDeviceEXT();
         const std::uint32_t levelWidth = std::max(1u, texture_.desc.width >> level);
         const std::uint32_t levelHeight = std::max(1u, texture_.desc.height >> level);
         if (static_cast<std::uint32_t>(x + w) > levelWidth ||
@@ -389,45 +493,152 @@ namespace CNA::Internal::Backends::Wicked
             return false;
         }
 
-        wig::TextureDesc readbackDesc;
-        readbackDesc.width = levelWidth;
-        readbackDesc.height = levelHeight;
-        readbackDesc.format = texture_.desc.format;
-        readbackDesc.usage = wig::Usage::READBACK;
-        readbackDesc.bind_flags = wig::BindFlag::NONE;
-        readbackDesc.layout = wig::ResourceState::COPY_DST;
-        wig::Texture readback;
-        if (!device->CreateTexture(&readbackDesc, nullptr, &readback))
+        return ReadbackTextureRegion(*owner_, texture_, texture_.desc.layout,
+                                     level, 0, x, y, 0, w, h, 1, data);
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // WickedTextureCubeBackend
+    // ------------------------------------------------------------------------------------------
+
+    WickedTextureCubeBackend::WickedTextureCubeBackend(WickedGraphicsBackend* owner, int size,
+                                                       bool mipMap)
+        : owner_(owner)
+        , size_(std::max(1, size))
+    {
+        wig::TextureDesc desc;
+        desc.width = static_cast<std::uint32_t>(size_);
+        desc.height = static_cast<std::uint32_t>(size_);
+        desc.format = wig::Format::R8G8B8A8_UNORM;
+        desc.array_size = 6;
+        desc.misc_flags = wig::ResourceMiscFlag::TEXTURECUBE;
+        desc.bind_flags = wig::BindFlag::SHADER_RESOURCE;
+        desc.layout = wig::ResourceState::SHADER_RESOURCE;
+        desc.mip_levels = mipMap
+            ? wig::GetMipCount(desc.width, desc.height)
+            : 1u;
+
+        if (!owner_->GetDeviceEXT()->CreateTexture(&desc, nullptr, &texture_))
+            throw std::runtime_error("Wicked backend: failed to create a cube map.");
+        mipLevels_ = texture_.desc.mip_levels;
+    }
+
+    WickedTextureCubeBackend::~WickedTextureCubeBackend() = default;
+
+    bool WickedTextureCubeBackend::SetData(int face, int level, int x, int y, int w, int h,
+                                           const void* data, int dataLength)
+    {
+        if (owner_ == nullptr || data == nullptr || !texture_.IsValid())
+            return false;
+        if (face < 0 || face > 5)
+            return false;
+        if (level < 0 || static_cast<std::uint32_t>(level) >= mipLevels_)
+            return false;
+        if (w <= 0 || h <= 0 || x < 0 || y < 0)
+            return false;
+        if (dataLength < w * h * 4)
             return false;
 
-        owner_->EndRenderPassEXT();
-        wig::CommandList cmd = owner_->GetCommandListEXT();
-
-        const wig::GPUBarrier toCopySrc = wig::GPUBarrier::Image(
-            &texture_, texture_.desc.layout, wig::ResourceState::COPY_SRC);
-        device->Barrier(&toCopySrc, 1, cmd);
-        device->CopyTexture(&readback, 0, 0, 0, 0, 0,
-                            &texture_, static_cast<std::uint32_t>(level), 0, cmd);
-        const wig::GPUBarrier toShaderResource = wig::GPUBarrier::Image(
-            &texture_, wig::ResourceState::COPY_SRC, texture_.desc.layout);
-        device->Barrier(&toShaderResource, 1, cmd);
-
-        owner_->FlushAndWaitEXT();
-
-        if (readback.mapped_data == nullptr || readback.mapped_subresource_count == 0)
+        const int levelSize = std::max(1, size_ >> level);
+        if (x + w > levelSize || y + h > levelSize)
             return false;
 
-        const auto* source = static_cast<const std::uint8_t*>(readback.mapped_data);
-        const std::uint32_t rowPitch = readback.mapped_subresources[0].row_pitch;
-        auto* dest = static_cast<std::uint8_t*>(data);
-        for (int row = 0; row < h; ++row)
-        {
-            std::memcpy(dest + static_cast<std::size_t>(row) * w * 4,
-                        source + static_cast<std::size_t>(y + row) * rowPitch +
-                            static_cast<std::size_t>(x) * 4,
-                        static_cast<std::size_t>(w) * 4);
-        }
-        return true;
+        return UploadTextureRegion(*owner_, texture_, level, face, x, y, 0, w, h, 1, data);
+    }
+
+    bool WickedTextureCubeBackend::GetData(int face, int level, int x, int y, int w, int h,
+                                           void* data, int dataLength) const
+    {
+        if (owner_ == nullptr || data == nullptr || !texture_.IsValid())
+            return false;
+        if (face < 0 || face > 5)
+            return false;
+        if (level < 0 || static_cast<std::uint32_t>(level) >= mipLevels_)
+            return false;
+        if (w <= 0 || h <= 0 || x < 0 || y < 0)
+            return false;
+        if (dataLength < w * h * 4)
+            return false;
+
+        const int levelSize = std::max(1, size_ >> level);
+        if (x + w > levelSize || y + h > levelSize)
+            return false;
+
+        return ReadbackTextureRegion(*owner_, texture_, texture_.desc.layout,
+                                     level, face, x, y, 0, w, h, 1, data);
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // WickedTexture3DBackend
+    // ------------------------------------------------------------------------------------------
+
+    WickedTexture3DBackend::WickedTexture3DBackend(WickedGraphicsBackend* owner, int width,
+                                                   int height, int depth, bool mipMap)
+        : owner_(owner)
+        , width_(std::max(1, width))
+        , height_(std::max(1, height))
+        , depth_(std::max(1, depth))
+    {
+        wig::TextureDesc desc;
+        desc.type = wig::TextureDesc::Type::TEXTURE_3D;
+        desc.width = static_cast<std::uint32_t>(width_);
+        desc.height = static_cast<std::uint32_t>(height_);
+        desc.depth = static_cast<std::uint32_t>(depth_);
+        desc.format = wig::Format::R8G8B8A8_UNORM;
+        desc.bind_flags = wig::BindFlag::SHADER_RESOURCE;
+        desc.layout = wig::ResourceState::SHADER_RESOURCE;
+        desc.mip_levels = mipMap
+            ? wig::GetMipCount(desc.width, desc.height, desc.depth)
+            : 1u;
+
+        if (!owner_->GetDeviceEXT()->CreateTexture(&desc, nullptr, &texture_))
+            throw std::runtime_error("Wicked backend: failed to create a volume texture.");
+        mipLevels_ = texture_.desc.mip_levels;
+    }
+
+    WickedTexture3DBackend::~WickedTexture3DBackend() = default;
+
+    bool WickedTexture3DBackend::SetData(int level, int x, int y, int z, int w, int h, int depth,
+                                         const void* data, int dataLength)
+    {
+        if (owner_ == nullptr || data == nullptr || !texture_.IsValid())
+            return false;
+        if (level < 0 || static_cast<std::uint32_t>(level) >= mipLevels_)
+            return false;
+        if (w <= 0 || h <= 0 || depth <= 0 || x < 0 || y < 0 || z < 0)
+            return false;
+        if (dataLength < w * h * depth * 4)
+            return false;
+
+        const int levelWidth = std::max(1, width_ >> level);
+        const int levelHeight = std::max(1, height_ >> level);
+        const int levelDepth = std::max(1, depth_ >> level);
+        if (x + w > levelWidth || y + h > levelHeight || z + depth > levelDepth)
+            return false;
+
+        return UploadTextureRegion(*owner_, texture_, level, 0, x, y, z, w, h, depth, data);
+    }
+
+    bool WickedTexture3DBackend::GetData(int level, int x, int y, int z, int w, int h, int depth,
+                                         void* data, int dataLength) const
+    {
+        if (owner_ == nullptr || data == nullptr || !texture_.IsValid())
+            return false;
+        if (level < 0 || static_cast<std::uint32_t>(level) >= mipLevels_)
+            return false;
+        if (w <= 0 || h <= 0 || depth <= 0 || x < 0 || y < 0 || z < 0)
+            return false;
+        if (dataLength < w * h * depth * 4)
+            return false;
+
+        const int levelWidth = std::max(1, width_ >> level);
+        const int levelHeight = std::max(1, height_ >> level);
+        const int levelDepth = std::max(1, depth_ >> level);
+        if (x + w > levelWidth || y + h > levelHeight || z + depth > levelDepth)
+            return false;
+
+        return ReadbackTextureRegion(*owner_, texture_, texture_.desc.layout,
+                                     level, 0, x, y, z, w, h, depth, data);
     }
 
     // ------------------------------------------------------------------------------------------
@@ -503,7 +714,7 @@ namespace CNA::Internal::Backends::Wicked
     {
         if (owner_ == nullptr || data == nullptr || !color_.IsValid())
             return false;
-        if (level != 0 || w <= 0 || h <= 0 || dataLength < w * h * 4)
+        if (level != 0 || w <= 0 || h <= 0 || x < 0 || y < 0 || dataLength < w * h * 4)
             return false;
         if (x + w > width_ || y + h > height_)
             return false;
@@ -514,48 +725,9 @@ namespace CNA::Internal::Backends::Wicked
         if (multiSampleCount_ > 1)
             return false;
 
-        wig::GraphicsDevice* device = owner_->GetDeviceEXT();
-
-        wig::TextureDesc readbackDesc;
-        readbackDesc.width = static_cast<std::uint32_t>(width_);
-        readbackDesc.height = static_cast<std::uint32_t>(height_);
-        readbackDesc.format = color_.desc.format;
-        readbackDesc.usage = wig::Usage::READBACK;
-        readbackDesc.bind_flags = wig::BindFlag::NONE;
-        readbackDesc.layout = wig::ResourceState::COPY_DST;
-        wig::Texture readback;
-        if (!device->CreateTexture(&readbackDesc, nullptr, &readback))
-            return false;
-
-        owner_->EndRenderPassEXT();
-        wig::CommandList cmd = owner_->GetCommandListEXT();
-
-        const wig::GPUBarrier toCopySrc = wig::GPUBarrier::Image(
-            &color_, wig::ResourceState::SHADER_RESOURCE, wig::ResourceState::COPY_SRC);
-        device->Barrier(&toCopySrc, 1, cmd);
-        device->CopyTexture(&readback, 0, 0, 0, 0, 0, &color_, 0, 0, cmd);
-        const wig::GPUBarrier toShaderResource = wig::GPUBarrier::Image(
-            &color_, wig::ResourceState::COPY_SRC, wig::ResourceState::SHADER_RESOURCE);
-        device->Barrier(&toShaderResource, 1, cmd);
-
-        owner_->FlushAndWaitEXT();
-
-        if (readback.mapped_data == nullptr || readback.mapped_subresource_count == 0)
-            return false;
-
-        const auto* source = static_cast<const std::uint8_t*>(readback.mapped_data);
-        const std::uint32_t rowPitch = readback.mapped_subresources[0].row_pitch;
-        auto* dest = static_cast<std::uint8_t*>(data);
-        for (int row = 0; row < h; ++row)
-        {
-            std::memcpy(dest + static_cast<std::size_t>(row) * w * 4,
-                        source + static_cast<std::size_t>(y + row) * rowPitch +
-                            static_cast<std::size_t>(x) * 4,
-                        static_cast<std::size_t>(w) * 4);
-        }
-        return true;
+        return ReadbackTextureRegion(*owner_, color_, wig::ResourceState::SHADER_RESOURCE,
+                                     0, 0, x, y, 0, w, h, 1, data);
     }
-
     // ------------------------------------------------------------------------------------------
     // WickedVertexBufferBackend
     // ------------------------------------------------------------------------------------------
@@ -564,7 +736,11 @@ namespace CNA::Internal::Backends::Wicked
     {
         // The largest stride any built-in variant uses, so a buffer created before its declaration
         // is known can still hold the requested vertex count.
-        constexpr std::size_t kMaxSupportedStride = 32;
+        constexpr std::size_t kMaxSupportedStride = 64;
+
+        /// CNA's established per-instance stream layout: one column-major Matrix per instance,
+        /// the same 64-byte record the Vulkan backend's instanced pipeline consumes.
+        constexpr std::uint32_t kInstanceMatrixStride = 64;
     }
 
     WickedVertexBufferBackend::WickedVertexBufferBackend(WickedGraphicsBackend* owner,
@@ -1191,8 +1367,15 @@ namespace CNA::Internal::Backends::Wicked
         static constexpr const char* kVertexEntryPoints[] = {
             "Basic16VS", "Basic20VS", "Basic24VS", "Basic32VS"
         };
+        static constexpr const char* kInstancedVertexEntryPoints[] = {
+            "Basic16InstVS", "Basic20InstVS", "Basic24InstVS", "Basic32InstVS"
+        };
         for (std::size_t i = 0; i < vertexShaders_.size(); ++i)
+        {
             CompileShader(wig::ShaderStage::VS, kVertexEntryPoints[i], vertexShaders_[i]);
+            CompileShader(wig::ShaderStage::VS, kInstancedVertexEntryPoints[i],
+                          instancedVertexShaders_[i]);
+        }
         CompileShader(wig::ShaderStage::PS, "BasicPS", pixelShader_);
 
         using Element = wig::InputLayout::Element;
@@ -1214,6 +1397,20 @@ namespace CNA::Internal::Backends::Wicked
             Element{"NORMAL",   0, wig::Format::R32G32B32_FLOAT, 0, 12},
             Element{"TEXCOORD", 0, wig::Format::R32G32_FLOAT,    0, 24},
         };
+
+        // Each instanced layout is its non-instanced sibling plus CNA's established 64-byte
+        // per-instance world matrix at input slot 1, delivered as four float4 columns. Deriving it
+        // rather than writing it out four more times keeps the geometry half from drifting.
+        for (std::size_t i = 0; i < inputLayouts_.size(); ++i)
+        {
+            instancedInputLayouts_[i].elements = inputLayouts_[i].elements;
+            for (std::uint32_t column = 0; column < 4; ++column)
+            {
+                instancedInputLayouts_[i].elements.push_back(Element{
+                    "TEXCOORD", 4 + column, wig::Format::R32G32B32A32_FLOAT, 1, column * 16,
+                    wig::InputClassification::PER_INSTANCE_DATA});
+            }
+        }
     }
 
     // ---- frame plumbing ----
@@ -1413,12 +1610,14 @@ namespace CNA::Internal::Backends::Wicked
         WickedPipelineEntry& stored = emplaced.first->second;
 
         wig::PipelineStateDesc desc;
-        desc.vs = &vertexShaders_[key.variant];
+        desc.vs = key.instanced != 0 ? &instancedVertexShaders_[key.variant]
+                                     : &vertexShaders_[key.variant];
         desc.ps = &pixelShader_;
         desc.bs = &stored.blend;
         desc.rs = &stored.rasterizer;
         desc.dss = &stored.depthStencil;
-        desc.il = &inputLayouts_[key.variant];
+        desc.il = key.instanced != 0 ? &instancedInputLayouts_[key.variant]
+                                     : &inputLayouts_[key.variant];
         desc.pt = static_cast<wig::PrimitiveTopology>(key.topology);
         desc.sample_mask = key.multiSampleMask;
 
@@ -1986,6 +2185,23 @@ namespace CNA::Internal::Backends::Wicked
         return std::make_unique<WickedIndexBufferBackend>(this, index_capacity, true);
     }
 
+    std::unique_ptr<ITextureCubeBackend> WickedGraphicsBackend::CreateTextureCube(
+        int size, bool mipMap, int surfaceFormat)
+    {
+        // Only SurfaceFormat::Color is stored: CNA's shared Texture2D/TextureCube layer already
+        // converts every format it reads to RGBA8 before it reaches a backend, so accepting the
+        // ordinal and storing RGBA8 is what every other CNA backend does here too.
+        (void)surfaceFormat;
+        return std::make_unique<WickedTextureCubeBackend>(this, size, mipMap);
+    }
+
+    std::unique_ptr<ITexture3DBackend> WickedGraphicsBackend::CreateTexture3D(
+        int w, int h, int depth, bool mipMap, int surfaceFormat)
+    {
+        (void)surfaceFormat;
+        return std::make_unique<WickedTexture3DBackend>(this, w, h, depth, mipMap);
+    }
+
     std::unique_ptr<IRenderTargetBackend> WickedGraphicsBackend::CreateRenderTarget2D(
         int w, int h, int depthFormat, bool preserveContents, bool mipMap, int multiSampleCount)
     {
@@ -2170,9 +2386,9 @@ namespace CNA::Internal::Backends::Wicked
                                            const Matrix& world, const Matrix& view,
                                            const Matrix& projection,
                                            PrimitiveType primitive, int primitiveCount,
-                                           const GpuDrawParams* params)
+                                           const GpuDrawParams* params, int instanceCount)
     {
-        if (primitiveCount <= 0)
+        if (primitiveCount <= 0 || instanceCount <= 0)
             return;
 
         const auto& vertexBuffer = static_cast<const WickedVertexBufferBackend&>(vb);
@@ -2182,24 +2398,51 @@ namespace CNA::Internal::Backends::Wicked
         if (stride == 0)
             throw std::runtime_error("Wicked backend: the vertex buffer has no known stride.");
 
+        const bool instanced = instanceCount > 1;
+        const GpuVertexStreamBinding* instanceStream = nullptr;
         if (params != nullptr)
         {
             // REMED-GFX-201/202: a bound set this backend cannot express is refused before
             // submission rather than rendered from a subset of the streams.
             RejectUnsupportedStreamCombination(*params, "Wicked");
-            if (params->instanceCount > 1)
+            instanceStream = FirstInstanceStream(*params);
+        }
+
+        if (instanced)
+        {
+            if (instanceStream == nullptr || instanceStream->buffer == nullptr)
             {
                 throw std::runtime_error(
-                    "DrawInstancedPrimitives is not supported on this graphics backend.");
+                    "Wicked backend: an instanced draw needs a VertexBufferBinding whose "
+                    "InstanceFrequency is greater than zero; none was bound.");
+            }
+            // Wicked Engine's InputLayout has no instance-step-rate field, so a frequency other
+            // than 1 cannot be expressed natively. Refusing is the honest answer: silently
+            // treating it as 1 would draw every instance from the wrong record.
+            if (instanceStream->instanceFrequency != 1)
+            {
+                throw std::runtime_error(
+                    "Wicked backend: only InstanceFrequency == 1 is supported (requested " +
+                    std::to_string(instanceStream->instanceFrequency) + ").");
+            }
+            if (instanceStream->strideInBytes != kInstanceMatrixStride)
+            {
+                throw std::runtime_error(
+                    "Wicked backend: the per-instance stream must be a 64-byte Matrix (stride " +
+                    std::to_string(instanceStream->strideInBytes) + " was bound).");
             }
         }
 
         WickedPipelineKey key = state_;
         key.variant = static_cast<std::uint32_t>(VariantForStride(stride));
+        key.instanced = instanced ? 1u : 0u;
         key.topology = static_cast<std::uint32_t>(ToWickedTopology(primitive));
 
         WickedShaderConstants constants;
-        WriteMatrixColumns(world * view * projection, constants.mvp);
+        // The instanced entry points take the world transform per instance, so the constant buffer
+        // carries VIEW * PROJECTION alone there; `world` still folds in for the lighting/fog space.
+        WriteMatrixColumns(instanced ? view * projection : world * view * projection,
+                           constants.mvp);
         WriteMatrixColumns(world, constants.world);
 
         const ITextureBackend* texture0 = nullptr;
@@ -2269,10 +2512,21 @@ namespace CNA::Internal::Backends::Wicked
                                             sampler.maxAnisotropy), slot, cmd);
         }
 
-        const wig::GPUBuffer* buffers[] = {&vertexBuffer.GetBufferEXT()};
-        const std::uint32_t strides[] = {static_cast<std::uint32_t>(stride)};
-        const std::uint64_t offsets[] = {0};
-        device_->BindVertexBuffers(buffers, 0, 1, strides, offsets, cmd);
+        const wig::GPUBuffer* buffers[2] = {&vertexBuffer.GetBufferEXT(), nullptr};
+        std::uint32_t strides[2] = {static_cast<std::uint32_t>(stride), 0};
+        std::uint64_t offsets[2] = {0, 0};
+        std::uint32_t boundStreams = 1;
+        if (instanced)
+        {
+            const auto* instanceBuffer =
+                static_cast<const WickedVertexBufferBackend*>(instanceStream->buffer);
+            buffers[1] = &instanceBuffer->GetBufferEXT();
+            strides[1] = kInstanceMatrixStride;
+            // VertexOffset is in vertex ELEMENTS, so the byte offset is its own stride's multiple.
+            offsets[1] = VertexStreamByteOffset(*instanceStream);
+            boundStreams = 2;
+        }
+        device_->BindVertexBuffers(buffers, 0, boundStreams, strides, offsets, cmd);
 
         const int elementCount = VertexCountForPrimitives(primitive, primitiveCount);
         if (ib != nullptr)
@@ -2286,15 +2540,46 @@ namespace CNA::Internal::Backends::Wicked
                 params != nullptr ? static_cast<std::uint32_t>(params->startIndex) : 0u;
             const std::int32_t baseVertex =
                 params != nullptr ? static_cast<std::int32_t>(params->baseVertex) : 0;
-            device_->DrawIndexed(static_cast<std::uint32_t>(elementCount), startIndex,
-                                 baseVertex, cmd);
+            if (instanced)
+            {
+                device_->DrawIndexedInstanced(static_cast<std::uint32_t>(elementCount),
+                                              static_cast<std::uint32_t>(instanceCount),
+                                              startIndex, baseVertex, 0, cmd);
+            }
+            else
+            {
+                device_->DrawIndexed(static_cast<std::uint32_t>(elementCount), startIndex,
+                                     baseVertex, cmd);
+            }
         }
         else
         {
             const std::uint32_t startVertex =
                 params != nullptr ? static_cast<std::uint32_t>(params->vertexStart) : 0u;
-            device_->Draw(static_cast<std::uint32_t>(elementCount), startVertex, cmd);
+            if (instanced)
+            {
+                device_->DrawInstanced(static_cast<std::uint32_t>(elementCount),
+                                       static_cast<std::uint32_t>(instanceCount),
+                                       startVertex, 0, cmd);
+            }
+            else
+            {
+                device_->Draw(static_cast<std::uint32_t>(elementCount), startVertex, cmd);
+            }
         }
+    }
+
+    void WickedGraphicsBackend::DrawInstancedPrimitivesEx(const IVertexBufferBackend& vb,
+                                                           const IIndexBufferBackend& ib,
+                                                           const Matrix& world, const Matrix& view,
+                                                           const Matrix& projection,
+                                                           PrimitiveType primitive,
+                                                           int primitiveCount,
+                                                           int instanceCount,
+                                                           const GpuDrawParams& params)
+    {
+        SubmitDraw(vb, &ib, world, view, projection, primitive, primitiveCount, &params,
+                   instanceCount);
     }
 
     void WickedGraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend& vb,
@@ -2426,9 +2711,13 @@ namespace CNA::Internal::Backends::Wicked
                 return true;
             // Not implemented by this backend's first baseline; each is refused explicitly at the
             // call site rather than silently approximated (plan_wicked.md "Remaining work").
+            // Real volume-texture storage: CreateTexture3D() returns a genuine GPU resource whose
+            // SetData/GetData persist and retrieve voxels, which is exactly what this capability
+            // asks about.
+            case CNA::GraphicsCapability::Texture3D:
+                return true;
             case CNA::GraphicsCapability::MultipleRenderTargets:
             case CNA::GraphicsCapability::CustomEffects:
-            case CNA::GraphicsCapability::Texture3D:
             case CNA::GraphicsCapability::MultiStreamVertexInput:
                 return false;
             default:

@@ -14,8 +14,9 @@ presentation, colour/depth/stencil clears, `Texture2D` upload and readback, vert
 a batched `SpriteBatch`, the four stock stride-dispatched 3D shader variants (16/20/24/32) with
 diffuse/vertex-colour/alpha-test/fog/three-directional-light shading, `RenderTarget2D`, full
 blend/depth-stencil/rasterizer/sampler state mapping, real GPU occlusion queries, MSAA on the scene
-target, and back-buffer readback. This is **not** parity with the Vulkan or EasyGL backends — see
-"Remaining work" below for exactly what is missing.
+target, back-buffer readback, `TextureCube` and `Texture3D` storage, and instanced draws. This is
+**not** parity with the Vulkan or EasyGL backends — see "Remaining work" below for exactly what is
+missing.
 
 ---
 
@@ -33,7 +34,7 @@ target, and back-buffer readback. This is **not** parity with the Vulkan or Easy
    `_WIN32` nor `SDL2` is defined. CNA is SDL3-only, and SDL2 and SDL3 cannot be loaded into one
    process (they export the same symbol names with different ABIs), so there is no configuration in
    which unpatched upstream and CNA can share a window. `cmake/patches/wicked-sdl3-platform.patch`
-   adds a parallel `SDL3` branch everywhere the `SDL2` one already exists — four files, no
+   adds a parallel `SDL3` branch everywhere the `SDL2` one already exists — six files, no
    behavioural change to the SDL2 path — following the same pinned-revision + patch discipline the
    BGFX backend already uses (`cmake/patches/bgfx-max-render-target-msaa.patch`).
 
@@ -56,9 +57,10 @@ target, and back-buffer readback. This is **not** parity with the Vulkan or Easy
    same texture the virtual-resolution/letterbox presentation needs anyway.
 
 6. **Unsupported draws are refused, never approximated.** `EnvironmentMapEffect`, `SkinnedEffect`,
-   `PbrEffect`, instancing, MRT and `RenderTargetCube` all throw at the call site rather than
-   rendering an unlit or single-target stand-in that would look like a working draw.
-   `SupportsCapability()` reports the same set, so callers can ask instead of catching.
+   `PbrEffect`, MRT, `RenderTargetCube` and an unexpressible instance-step-rate all throw at the
+   call site rather than rendering an unlit, single-target or wrong-rate stand-in that would look
+   like a working draw. `SupportsCapability()` reports the same set, so callers can ask instead of
+   catching.
 
 ---
 
@@ -97,14 +99,15 @@ target, and back-buffer readback. This is **not** parity with the Vulkan or Easy
 | WICKED-20 | `Texture2D` creation from `ImageData` | ✅ |
 | WICKED-21 | `UpdatePixels` / `UpdatePixelsLevel` | ✅ |
 | WICKED-22 | `Texture2D` readback (`GetData`) | ✅ |
+| WICKED-33 | Shared `UploadTextureRegion`/`ReadbackTextureRegion` helpers behind every 2D/cube/3D/render-target transfer | ✅ |
 | WICKED-23 | Vertex buffers (UPLOAD-mapped, stride-tagged) | ✅ |
 | WICKED-24 | 16- and 32-bit index buffers | ✅ |
 | WICKED-25 | `RenderTarget2D` (colour + optional depth/stencil, `RenderTargetUsage`) | ✅ |
 | WICKED-26 | `RenderTarget2D` readback | ✅ |
 | WICKED-27 | Real GPU occlusion queries (`GPUQueryHeap` + readback buffer) | ✅ |
-| WICKED-28 | Mip-chain allocation and generation for `Texture2D` | ⬜ |
-| WICKED-29 | `TextureCube` | ⬜ |
-| WICKED-30 | `Texture3D` | ⬜ |
+| WICKED-28 | Mip-chain allocation for `Texture2D` (allocated + uploadable per level); automatic GENERATION still absent | 🟨 |
+| WICKED-29 | `TextureCube` (six-face upload + readback; not yet sampleable — no env-map shader, WICKED-56) | ✅ |
+| WICKED-30 | `Texture3D` (volume upload + readback, real GPU storage) | ✅ |
 | WICKED-31 | Batch texture uploads instead of submit-and-wait per call | ⬜ |
 | WICKED-32 | `SetDataOptions` (`Discard` / `NoOverwrite`) honoured on buffer uploads | ⬜ |
 
@@ -125,7 +128,7 @@ target, and back-buffer readback. This is **not** parity with the Vulkan or Easy
 | WICKED-50 | `DualTextureEffect` (second sampler slot) | ✅ |
 | WICKED-51 | Fog (FNA's `EffectHelpers.SetFogVector` fog vector) | ✅ |
 | WICKED-52 | MSAA `RenderTarget2D` readback (needs an explicit resolve) | ⬜ |
-| WICKED-53 | `DrawInstancedPrimitivesEx` | ⬜ |
+| WICKED-53 | `DrawInstancedPrimitivesEx` (per-instance 64-byte `Matrix` stream at input slot 1, four instanced VS variants); `InstanceFrequency != 1` refused — Wicked's `InputLayout` has no step-rate field | ✅ |
 | WICKED-54 | Multiple simultaneous render targets | ⬜ |
 | WICKED-55 | `RenderTargetCube` | ⬜ |
 | WICKED-56 | `EnvironmentMapEffect`, `SkinnedEffect`, `PbrEffect` shader variants | ⬜ |
@@ -166,16 +169,20 @@ target, and back-buffer readback. This is **not** parity with the Vulkan or Easy
   as the next task, not as a formality.
 - **3D effect coverage stops at `BasicEffect`/`AlphaTestEffect`/`DualTextureEffect`**
   (`WICKED-56`). `EnvironmentMapEffect`, `SkinnedEffect` and `PbrEffect` throw.
-- **No instancing, no MRT, no `RenderTargetCube`, no `Texture3D`/`TextureCube`, no custom
-  `ShaderEffect`** (`WICKED-29`/`30`/`53`/`54`/`55`/`57`/`68`). Each is refused explicitly and
-  reported through `SupportsCapability()`.
+- **No MRT, no `RenderTargetCube`, no custom `ShaderEffect`** (`WICKED-54`/`55`/`57`/`68`). Each is
+  refused explicitly and reported through `SupportsCapability()`.
+- **A `TextureCube` cannot yet be sampled** (`WICKED-29`). Its storage, upload and readback are
+  real, but `EnvironmentMapEffect` — the only thing that binds one — still throws (`WICKED-56`).
+- **Instancing accepts only `InstanceFrequency == 1`** (`WICKED-53`). Wicked Engine's `InputLayout`
+  carries no instance-step-rate field, so any other frequency is refused rather than silently
+  drawn at rate 1. The per-instance record must be CNA's 64-byte column-major `Matrix`.
 - **Texture uploads submit and wait per call** (`WICKED-31`). Correct, but a per-frame
   `Texture2D.SetData` pattern will stall; batching is a real follow-up.
 - **Vertex/index buffers are written straight into UPLOAD memory** (`WICKED-32`). `SetDataOptions`
   is ignored, so overwriting a buffer the GPU may still be reading is possible; the same shape as
   several other CNA backends, but it should become a proper ring or staged copy.
-- **Mip chains are declared but not generated** (`WICKED-28`) — `CreateTexture` currently allocates
-  level 0 only.
+- **Mip chains are allocated but not generated** (`WICKED-28`). Every declared level exists and can
+  be uploaded through `SetData`, but nothing downsamples level 0 into the rest.
 - **D3D12 is not selectable** (`WICKED-60`). Wicked's HLSL6 path compiles with
   `-rootsig-define WICKED_ENGINE_DEFAULT_ROOTSIGNATURE`, which CNA's own shader source does not
   declare, so the Vulkan device is chosen on every platform.
