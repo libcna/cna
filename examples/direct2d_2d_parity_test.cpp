@@ -1059,6 +1059,33 @@ protected:
                     targetFailuresKeptBackbuffer ? "PASS" : "FAIL");
         passed = passed && targetFailuresKeptBackbuffer;
 
+        // D2D-64: a Texture2D/RenderTarget2D that outlives the C++ scope of its GraphicsDevice
+        // must not dereference a dangling backend/device pointer in its own later destructor.
+        // GraphicsDevice::Dispose() proactively disposes every GraphicsResource it still tracks
+        // (which resets each one's own backend_ while the owning Direct2DGraphicsBackend is still
+        // alive) before tearing down its own backend, so this is safe by construction -- verified
+        // empirically here rather than trusted from reading the code alone. Reaching the PASS
+        // print below (instead of crashing) is the test.
+        {
+            std::unique_ptr<Texture2D> outlivingTexture;
+            std::unique_ptr<RenderTarget2D> outlivingRenderTarget;
+            {
+                PresentationParameters shortLivedPresentation;
+                shortLivedPresentation.setBackBufferWidthProperty(4);
+                shortLivedPresentation.setBackBufferHeightProperty(4);
+                GraphicsDevice shortLivedDevice(GraphicsAdapter::getDefaultAdapterProperty(),
+                                                 GraphicsProfile::Reach, shortLivedPresentation);
+                outlivingTexture = std::make_unique<Texture2D>(Texture2D::CreateFromPixels(
+                    shortLivedDevice, 1, 1, std::vector<uint8_t>{1, 2, 3, 4}));
+                outlivingRenderTarget = std::make_unique<RenderTarget2D>(shortLivedDevice, 2, 2);
+                // shortLivedDevice destructs here, while outlivingTexture/outlivingRenderTarget
+                // (declared in the enclosing scope) are still alive.
+            }
+            outlivingTexture.reset();
+            outlivingRenderTarget.reset();
+        }
+        std::printf("[PASS] Texture2D/RenderTarget2D destructors survive outliving their GraphicsDevice\n");
+
         // GraphicsDevice owns the bind-time clear contract, while Direct2D must preserve the
         // actual bitmap for PreserveContents and PlatformContents. Check all three public usages
         // after a real unbind/rebind cycle.
