@@ -186,6 +186,7 @@ CNA supports backend selection at build-time via `CNA_GRAPHICS_BACKEND` (choose 
 - `DX7` (Windows-only; CNA's real DirectX 7 backend -- new IDirectDraw7/IDirect3D7/IDirect3DDevice7, viewport object removed, direct texture binding)
 - `DX8` (Windows-only; CNA's real DirectX 8 backend -- no DirectDraw at all, real IDirect3D8/IDirect3DDevice8 via DXVK's D8VK, fixed-function 3D only)
 - `D3D10` (Windows-only; CNA's real Direct3D 10 backend -- no fixed-function pipeline at all, real HLSL vs_4_0/ps_4_0 shaders via Wine's own d3d10.dll + DXVK's d3d10core.dll, real MRT)
+- `WICKED` (Wicked Engine's `wi::graphics` RHI; Linux/Windows, needs a Wicked Engine checkout)
 
 ### Tradeoffs
 

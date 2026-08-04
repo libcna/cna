@@ -6,8 +6,8 @@ if(EMSCRIPTEN OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
 else()
     set(_cna_default_backend "SDL_RENDERER")
 endif()
-set(CNA_GRAPHICS_BACKEND "${_cna_default_backend}" CACHE STRING "Graphics backend to use (SDL_RENDERER, EASYGL, BGFX, VULKAN, WEBGPU, HEADLESS, SOFTWARE, STUB, D3D11, D3D12, CANVAS, ASCII, FREEDIRECT, D3D9, DX1, DX2, DX3, DX5, DX6, DX7, DX8, D3D10, OPENGLES1, OPENGL4, OPENGL1, OPENGL2, or SDL_GPU)")
-set_property(CACHE CNA_GRAPHICS_BACKEND PROPERTY STRINGS "SDL_RENDERER" "EASYGL" "BGFX" "VULKAN" "WEBGPU" "HEADLESS" "SOFTWARE" "STUB" "D3D11" "D3D12" "CANVAS" "ASCII" "FREEDIRECT" "D3D9" "DX1" "DX2" "DX3" "DX5" "DX6" "DX7" "DX8" "D3D10" "OPENGLES1" "OPENGL4" "OPENGL1" "OPENGL2" "SDL_GPU")
+set(CNA_GRAPHICS_BACKEND "${_cna_default_backend}" CACHE STRING "Graphics backend to use (SDL_RENDERER, EASYGL, BGFX, VULKAN, WEBGPU, HEADLESS, SOFTWARE, STUB, D3D11, D3D12, CANVAS, ASCII, FREEDIRECT, D3D9, DX1, DX2, DX3, DX5, DX6, DX7, DX8, D3D10, OPENGLES1, OPENGL4, OPENGL1, OPENGL2, SDL_GPU, or WICKED)")
+set_property(CACHE CNA_GRAPHICS_BACKEND PROPERTY STRINGS "SDL_RENDERER" "EASYGL" "BGFX" "VULKAN" "WEBGPU" "HEADLESS" "SOFTWARE" "STUB" "D3D11" "D3D12" "CANVAS" "ASCII" "FREEDIRECT" "D3D9" "DX1" "DX2" "DX3" "DX5" "DX6" "DX7" "DX8" "D3D10" "OPENGLES1" "OPENGL4" "OPENGL1" "OPENGL2" "SDL_GPU" "WICKED")
 
 option(CNA_BACKEND_SDL_RENDERER "Enable SDL_Renderer graphics backend" OFF)
 option(CNA_BACKEND_EASY_GL "Enable easy-gl graphics backend" OFF)
@@ -110,8 +110,12 @@ option(CNA_BACKEND_OPENGL1 "Enable native legacy OpenGL 1.x fixed-function graph
 # and cannot create a desktop GL 2.1 compatibility context).
 option(CNA_BACKEND_OPENGL2 "Enable native OpenGL 2.1 graphics backend (no EasyGL)" OFF)
 
+# plan_wicked.md: Wicked Engine's render hardware interface (wi::graphics::GraphicsDevice), which
+# itself dispatches to Vulkan (Linux/Windows) or D3D12 (Windows).
+option(CNA_BACKEND_WICKED "Enable Wicked Engine graphics backend" OFF)
+
 set(_cna_explicit_backend_selection OFF)
-if(CNA_BACKEND_SDL_RENDERER OR CNA_BACKEND_EASY_GL OR CNA_BACKEND_BGFX OR CNA_BACKEND_VULKAN OR CNA_BACKEND_WEBGPU OR CNA_BACKEND_HEADLESS OR CNA_BACKEND_SOFTWARE OR CNA_BACKEND_STUB OR CNA_BACKEND_D3D11 OR CNA_BACKEND_D3D12 OR CNA_BACKEND_CANVAS OR CNA_BACKEND_ASCII OR CNA_BACKEND_FREEDIRECT OR CNA_BACKEND_D3D9 OR CNA_BACKEND_DX1 OR CNA_BACKEND_DX2 OR CNA_BACKEND_DX3 OR CNA_BACKEND_DX5 OR CNA_BACKEND_DX6 OR CNA_BACKEND_DX7 OR CNA_BACKEND_DX8 OR CNA_BACKEND_D3D10 OR CNA_BACKEND_OPENGLES1 OR CNA_BACKEND_OPENGL4 OR CNA_BACKEND_OPENGL1 OR CNA_BACKEND_OPENGL2 OR CNA_BACKEND_SDL_GPU)
+if(CNA_BACKEND_SDL_RENDERER OR CNA_BACKEND_EASY_GL OR CNA_BACKEND_BGFX OR CNA_BACKEND_VULKAN OR CNA_BACKEND_WEBGPU OR CNA_BACKEND_HEADLESS OR CNA_BACKEND_SOFTWARE OR CNA_BACKEND_STUB OR CNA_BACKEND_D3D11 OR CNA_BACKEND_D3D12 OR CNA_BACKEND_CANVAS OR CNA_BACKEND_ASCII OR CNA_BACKEND_FREEDIRECT OR CNA_BACKEND_D3D9 OR CNA_BACKEND_DX1 OR CNA_BACKEND_DX2 OR CNA_BACKEND_DX3 OR CNA_BACKEND_DX5 OR CNA_BACKEND_DX6 OR CNA_BACKEND_DX7 OR CNA_BACKEND_DX8 OR CNA_BACKEND_D3D10 OR CNA_BACKEND_OPENGLES1 OR CNA_BACKEND_OPENGL4 OR CNA_BACKEND_OPENGL1 OR CNA_BACKEND_OPENGL2 OR CNA_BACKEND_SDL_GPU OR CNA_BACKEND_WICKED)
     set(_cna_explicit_backend_selection ON)
 endif()
 
@@ -198,6 +202,9 @@ if(_cna_explicit_backend_selection)
     if(CNA_BACKEND_OPENGL2)
         list(APPEND _cna_enabled_backends "OPENGL2")
     endif()
+    if(CNA_BACKEND_WICKED)
+        list(APPEND _cna_enabled_backends "WICKED")
+    endif()
 
     list(LENGTH _cna_enabled_backends _cna_enabled_backends_count)
     if(NOT _cna_enabled_backends_count EQUAL 1)
@@ -276,6 +283,20 @@ endif()
 
 if(CNA_GRAPHICS_BACKEND STREQUAL "BGFX" AND NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
     message(WARNING "CNA: BGFX backend is primarily tested on Linux. Other platforms may require additional setup.")
+endif()
+
+# plan_wicked.md design decision 3: Wicked Engine builds a native Vulkan (Linux/Windows) or D3D12
+# (Windows) device from vendored headers -- there is no web/Emscripten target for it at all, so this
+# is a hard gate in the same shape as the CANVAS/D3D11 ones above rather than a soft WARNING.
+if(CNA_GRAPHICS_BACKEND STREQUAL "WICKED")
+    if(EMSCRIPTEN)
+        message(FATAL_ERROR
+            "CNA: WICKED backend cannot target Emscripten -- Wicked Engine has no WebGPU/WebGL "
+            "device. Use -DCNA_GRAPHICS_BACKEND=EASYGL or CANVAS for web builds.")
+    endif()
+    if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT CMAKE_SYSTEM_NAME STREQUAL "Windows")
+        message(WARNING "CNA: WICKED backend is developed against Linux/Vulkan. Other platforms may require additional setup.")
+    endif()
 endif()
 
 if(CNA_GRAPHICS_BACKEND STREQUAL "SDL_RENDERER")
@@ -471,6 +492,14 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "OPENGL2")
     set(BACKEND_TARGET "cna_backend_graphics_opengl2")
     add_compile_definitions(CNA_BACKEND_OPENGL2)
     set(CNA_BACKEND_DEFINE "CNA_BACKEND_OPENGL2")
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "WICKED")
+    message(STATUS "CNA: Using WICKED (Wicked Engine) graphics backend")
+    set(BACKEND_DIR "src/CNA/Internal/Backends/Wicked")
+    set(BACKEND_TARGET "cna_backend_graphics_wicked")
+    add_compile_definitions(CNA_BACKEND_WICKED)
+    set(CNA_BACKEND_DEFINE "CNA_BACKEND_WICKED")
+    include(cmake/ThirdPartyWicked.cmake)
+    cna_configure_wicked()
 else()
 
     message(FATAL_ERROR "CNA: Unknown graphics backend: ${CNA_GRAPHICS_BACKEND}")
