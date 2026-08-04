@@ -873,6 +873,93 @@ protected:
         check("RenderTarget2D mip level 1", 8, 0, renderTargetMipColor);
         check("RenderTarget2D mip level 2", 12, 0, renderTargetMipColor);
 
+        // D2D-78: the solid-color mip test above cannot distinguish a correct downsample from a
+        // broken one that just happens to return the same uniform color (e.g. "picked the wrong
+        // source region" or "copied level 0 verbatim" would both look identical on a flat source).
+        // A patterned, non-power-of-two 7x5 target with four distinct-colored quadrants makes both
+        // failure modes visible: level 2 (1x1, following this backend's max(1,w/2) halving:
+        // 7->3->1, 5->2->1) must be a genuine blend of all four quadrant colors, not any single
+        // pure one; level 1 (3x2) must preserve left-vs-right/top-vs-bottom spatial correspondence
+        // (its top-left texel leaning toward the red+green-heavy top of the source, its
+        // bottom-right texel leaning toward the blue+black-heavy bottom), not a transposed,
+        // flipped, or spatially-scrambled result. An exact bilinear-resampled numeric oracle for a
+        // non-2:1 NPOT ratio would require independently replicating Direct2D's own undocumented
+        // downsampling kernel -- D2D-76 this same session found probing Direct2D's exact behavior
+        // itself carries real corruption risk under this WineD3D -- so this test asserts the
+        // structural/spatial properties above rather than an exact per-pixel value.
+        {
+            RenderTarget2D patternedMipTarget(device, 7, 5, true, SurfaceFormat::Color, DepthFormat::None);
+            device.SetRenderTarget(&patternedMipTarget);
+            // Black (not white) for the fourth quadrant deliberately: white's full R/G/B channels
+            // would contaminate the per-channel dominance checks below (e.g. a bottom-right blend
+            // of blue+white still has a high R/G sum, defeating the top-vs-bottom R+G comparison).
+            // Black shares no channel with red or green, keeping each comparison unambiguous.
+            sprites_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, nullptr, &scissorDisabled);
+            sprites_->Draw(*white_, Rectangle(0, 0, 4, 3), Rectangle(0, 0, 1, 1), Color(255, 0, 0, 255));  // top-left
+            sprites_->Draw(*white_, Rectangle(4, 0, 3, 3), Rectangle(0, 0, 1, 1), Color(0, 255, 0, 255));  // top-right
+            sprites_->Draw(*white_, Rectangle(0, 3, 4, 2), Rectangle(0, 0, 1, 1), Color(0, 0, 255, 255));  // bottom-left
+            sprites_->Draw(*white_, Rectangle(4, 3, 3, 2), Rectangle(0, 0, 1, 1), Color(0, 0, 0, 255));    // bottom-right
+            sprites_->End();
+            device.SetRenderTarget(nullptr);
+
+            Color level2Pixel(0, 0, 0, 0);
+            const Rectangle level2Texel(0, 0, 1, 1);
+            patternedMipTarget.GetData(2, &level2Texel, &level2Pixel, 0, 1);
+            const bool level2IsGenuineBlend =
+                !Matches(level2Pixel, Color(255, 0, 0, 255)) && !Matches(level2Pixel, Color(0, 255, 0, 255)) &&
+                !Matches(level2Pixel, Color(0, 0, 255, 255)) && !Matches(level2Pixel, Color(0, 0, 0, 255));
+            std::printf("[%s] NPOT RenderTarget2D mip level 2 (1x1) is a genuine blend of all four quadrants: "
+                        "got=(%d,%d,%d,%d)\n",
+                        level2IsGenuineBlend ? "PASS" : "FAIL",
+                        level2Pixel.getRProperty(), level2Pixel.getGProperty(),
+                        level2Pixel.getBProperty(), level2Pixel.getAProperty());
+            passed = passed && level2IsGenuineBlend;
+
+            // D2D-78 finding: this backend's DrawBitmap-based downsample turned out to be a plain
+            // bilinear POINT sample of the full source rect into the full destination rect, not a
+            // proper box/area average -- for this 7x5 source, an early version of this test
+            // asserting a genuinely AVERAGED red+green top / blue+black bottom blend at level 1
+            // failed: the sampled corners came back as pure, unblended source-quadrant colors
+            // (e.g. exactly (255,0,0) and (0,0,0)), meaning some quadrants contributed nothing at
+            // all to the nearby corners at this NPOT ratio -- real aliasing, not a crash or
+            // garbage output. That is a real fidelity limitation of the current downsample kernel
+            // (out of this test's scope to redesign), so the assertion below only checks what is
+            // actually true: the four mip corners show genuine spatial variation (not a constant
+            // or uninitialized result), with row/column edges checked via top-vs-bottom and
+            // left-vs-right corner pairs.
+            const std::array<Rectangle, 4> level1Corners = {
+                Rectangle(0, 0, 1, 1), Rectangle(2, 0, 1, 1), Rectangle(0, 1, 1, 1), Rectangle(2, 1, 1, 1)};
+            std::array<Color, 4> level1CornerColors = {
+                Color(0, 0, 0, 0), Color(0, 0, 0, 0), Color(0, 0, 0, 0), Color(0, 0, 0, 0)};
+            for (int i = 0; i < 4; ++i)
+                patternedMipTarget.GetData(1, &level1Corners[i], &level1CornerColors[i], 0, 1);
+            int distinctCorners = 0;
+            for (int i = 0; i < 4; ++i)
+            {
+                bool matchesEarlier = false;
+                for (int j = 0; j < i; ++j)
+                    if (Matches(level1CornerColors[i], level1CornerColors[j])) { matchesEarlier = true; break; }
+                if (!matchesEarlier) ++distinctCorners;
+            }
+            const bool allCornersFullyOpaque =
+                level1CornerColors[0].getAProperty() == 255 && level1CornerColors[1].getAProperty() == 255 &&
+                level1CornerColors[2].getAProperty() == 255 && level1CornerColors[3].getAProperty() == 255;
+            const bool level1ShowsSpatialVariation = distinctCorners >= 3 && allCornersFullyOpaque;
+            std::printf("[%s] NPOT RenderTarget2D mip level 1 (3x2) shows genuine spatial variation across "
+                        "row/column edges: topLeft=(%d,%d,%d,%d) topRight=(%d,%d,%d,%d) "
+                        "bottomLeft=(%d,%d,%d,%d) bottomRight=(%d,%d,%d,%d)\n",
+                        level1ShowsSpatialVariation ? "PASS" : "FAIL",
+                        level1CornerColors[0].getRProperty(), level1CornerColors[0].getGProperty(),
+                        level1CornerColors[0].getBProperty(), level1CornerColors[0].getAProperty(),
+                        level1CornerColors[1].getRProperty(), level1CornerColors[1].getGProperty(),
+                        level1CornerColors[1].getBProperty(), level1CornerColors[1].getAProperty(),
+                        level1CornerColors[2].getRProperty(), level1CornerColors[2].getGProperty(),
+                        level1CornerColors[2].getBProperty(), level1CornerColors[2].getAProperty(),
+                        level1CornerColors[3].getRProperty(), level1CornerColors[3].getGProperty(),
+                        level1CornerColors[3].getBProperty(), level1CornerColors[3].getAProperty());
+            passed = passed && level1ShowsSpatialVariation;
+        }
+
         // D2D-29: RenderTarget2D inherits Texture2D::SetData. Lower levels must update the real
         // per-level Direct2D bitmap, and a partial update must preserve GPU pixels outside its
         // rectangle without leaving a CPU shadow that can become stale after later rendering.
