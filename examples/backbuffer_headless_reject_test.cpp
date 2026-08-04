@@ -536,9 +536,17 @@ namespace
 #if CNA_GFX162_CAN_FORK
     constexpr unsigned kLegTimeoutSeconds = 180;
 
-    bool RunLegIsolated(const char* exePath, const char* legId, bool& crashed)
+    // Matches CNA::Examples::kSkipExitCode (common/PixelTestGame.hpp) -- a leg that exits with this
+    // code decided for itself, before this supervisor is involved, that its environment can't
+    // support the check (LLGL-55: e.g. the shared Vulkan-WSI-unavailable guard,
+    // examples/common/LlglVulkanWsiSkipGuard.cpp). That is not the same as the leg failing, so it
+    // must not be counted or reported as one.
+    constexpr int kLegSkipExitCode = 77;
+
+    bool RunLegIsolated(const char* exePath, const char* legId, bool& crashed, bool& skipped)
     {
         crashed = false;
+        skipped = false;
         std::string arg = std::string("--leg=") + legId;
         const pid_t pid = fork();
         if (pid < 0) { std::printf("[FAIL] supervisor: fork() failed for leg %s\n", legId); return false; }
@@ -570,6 +578,13 @@ namespace
         {
             const int code = WEXITSTATUS(status);
             if (code == 0) return true;
+            if (code == kLegSkipExitCode)
+            {
+                skipped = true;
+                std::printf("[SKIP] leg %s: exited %d\n", legId, code);
+                std::fflush(stdout);
+                return false;
+            }
             std::printf("[FAIL] leg %s: exited %d\n", legId, code);
             std::fflush(stdout);
             return false;
@@ -596,17 +611,21 @@ int main(int argc, char** argv)
         std::printf("[INFO] REMED-GFX-162 supervisor: %zu legs, each in its own process\n",
                     sizeof(kLegIds) / sizeof(kLegIds[0]));
         std::fflush(stdout);
-        int passed = 0, crashes = 0;
+        int passed = 0, crashes = 0, skips = 0;
         const int total = static_cast<int>(sizeof(kLegIds) / sizeof(kLegIds[0]));
         for (const char* leg : kLegIds)
         {
-            bool crashed = false;
-            if (RunLegIsolated(argv[0], leg, crashed)) ++passed;
+            bool crashed = false, skipped = false;
+            if (RunLegIsolated(argv[0], leg, crashed, skipped)) ++passed;
             if (crashed) ++crashes;
+            if (skipped) ++skips;
         }
-        std::printf("[INFO] supervisor: %d/%d legs passed, %d crashed\n", passed, total, crashes);
+        std::printf("[INFO] supervisor: %d/%d legs passed, %d crashed, %d skipped\n",
+                    passed, total, crashes, skips);
         std::fflush(stdout);
-        return (passed == total) ? 0 : 1;
+        const int failed = total - passed - skips;
+        if (failed > 0) return 1;
+        return (skips > 0) ? kLegSkipExitCode : 0;
     }
 #endif
 

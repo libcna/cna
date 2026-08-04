@@ -11,7 +11,11 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "LLGL")
     enable_testing()
 
     macro(cna_llgl_test target src)
-        add_executable(${target} ${src})
+        # LLGL-55: link every LLGL test binary against the shared Vulkan-WSI-unavailable skip guard
+        # (examples/common/LlglVulkanWsiSkipGuard.cpp) so a DRI3-less Xvfb reports a clean SKIP
+        # instead of a crash, without retrofitting each test's own main().
+        add_executable(${target} ${src}
+            ${CMAKE_CURRENT_SOURCE_DIR}/examples/common/LlglVulkanWsiSkipGuard.cpp)
         if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
             target_link_libraries(${target} PRIVATE
                 -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group

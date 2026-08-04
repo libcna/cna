@@ -977,6 +977,68 @@ SINGLE `LLGL::Texture*`, designed for one target; supporting "every written MRT 
 a sibling mechanism) restructured to return a list, a genuinely separate follow-up from the
 MSAA fix. Per-slot lifetime tests (the acceptance gate's own explicit ask) were also not added.
 
+**`LLGL-55` progress (2026-08-04): "no DRI3 crashes as an infrastructure skip" now covers every
+LLGL test binary, and the `CNA_ENABLE_NET=OFF` build/link gap is closed. Two sub-items still open.**
+Scope turned out much larger than the ticket's own "twelve renderer crashes" estimate: a full sweep
+of all 69 registered LLGL test binaries with `CNA_LLGL_RENDERER` unset (this sandbox's Xvfb has no
+DRI3, so the default Vulkan-preferring selection always hits `VK_ERROR_SURFACE_LOST_KHR`) found 43
+hard crashes and 6 more that "only" mislabeled the crash as a false FAIL (see below) -- only 16 of
+69 binaries route through `common/PixelTestGame.hpp`'s `RunPixelTest<TGame>()`, which already got a
+narrow try/catch for this earlier in the session; every other binary hand-rolls its own
+`Game`-derived class and `main()`, none of which caught anything.
+- Tried `SKIP_REGULAR_EXPRESSION` on the CTest registration first, since it needs zero source
+  changes -- **does not work**: CTest classifies a signal-terminated process as "Subprocess
+  aborted" before it ever consults that property, regardless of what the process printed. Confirmed
+  empirically, not assumed, before moving on (see [[feedback_llgl_investigate_dont_force_fix]]).
+- Fix: a new shared translation unit, `examples/common/LlglVulkanWsiSkipGuard.cpp`, installs one
+  process-wide `std::set_terminate()` handler at static-init time. It inspects the in-flight
+  exception; if its message contains `VK_ERROR_SURFACE_LOST_KHR` it prints `[SKIP] ...` and
+  `std::_Exit(77)` (`CNA::Examples::kSkipExitCode`, already covered project-wide by the root
+  `CMakeLists.txt`'s bulk `SKIP_RETURN_CODE 77`); any other uncaught exception falls through to the
+  previous terminate handler unchanged, so a genuine bug still aborts loudly. `cna_llgl_test()`
+  (`cmake/Tests/LlglTests.cmake`) now compiles this file into every LLGL test executable, so the fix
+  applies uniformly with no per-test-file `main()` retrofit. Deliberately test-only: linked via the
+  test macro, never into the LLGL backend library itself, so a real game seeing a genuinely lost
+  Vulkan surface is not silently swallowed.
+- A second, distinct defect surfaced once the crashes stopped: 6 of the 69 binaries
+  (`backbuffer_first_read`, `backbuffer_headless_reject`, `backbuffer_readback_dimension`,
+  `bound_target_lifetime`, `deferred_source_lifetime`, `rendertarget_effect_source`) use a
+  "supervisor" pattern (`RunLegIsolated()`) that forks+execs each leg as its own child process and
+  classifies the child's exit code. None of the six recognized exit code 77 as anything but a
+  generic non-zero failure, so once the guard converted the per-leg crash into a clean skip, the
+  supervisor still reported `[FAIL] leg X: exited 77` and the whole binary still exited 1 -- the
+  crash was gone but the false-FAIL mislabeling (the ticket's own acceptance criterion) was not.
+  Fixed in all six: `RunLegIsolated()` gained a `skipped` out-parameter recognizing
+  `kLegSkipExitCode == 77` distinctly from a real failure, and each `main()`'s aggregation now
+  reports `%d passed, %d crashed, %d skipped` and returns 1 only if any leg genuinely failed,
+  else 77 (skip) if any leg was skipped, else 0.
+- **Verified**, `CNA_LLGL_RENDERER` unset, Xvfb `:99` (no DRI3): all 69/69 binaries now cleanly
+  exit 77 with `[SKIP] Vulkan WSI unavailable ...`, zero crashes, zero false FAILs. Full `ctest -L
+  Llgl` run: every test reports `Skipped` except one pre-existing, unrelated failure,
+  `Llgl_Msaa_OpenGL` (a genuine swap-chain-MSAA-blending check failure under forced OpenGL,
+  confirmed via `git log` to predate this entire session -- `llgl_msaa_test.cpp` untouched today --
+  not investigated further here, out of LLGL-55's scope). Re-ran the existing
+  `CNA_LLGL_RENDERER=opengl`-forced regression sweep across all 69 binaries: still exactly the
+  established pre-existing crash/softfail set (`hasCubeTextures`, the LLGL-51 gap, the
+  REMED-GFX-155 stencil leak, LLGL-52's camera bug, LLGL-53's open DepthBias/stencil items, plus
+  the newly-confirmed `Llgl_Msaa_OpenGL`), zero new regressions.
+- `CNA_ENABLE_NET=OFF` sub-item: also DONE, verified separately via a throwaway `build-probe/`
+  configure (deleted once its result was recorded, per this project's own build-hygiene rule) --
+  `cmake/UnitTests.cmake` now excludes the CNA_Net/GamerServices test directories by regex when
+  `CNA_ENABLE_NET=OFF`, the same pattern already used there for FFmpeg/platform exclusions; `CnaTests`
+  built and linked cleanly.
+- **Left OPEN**: (1) "make shaderc discovery conditional on the renderer modules that need runtime
+  SPIR-V compilation" -- investigated, no actionable fix exists yet: this project has no CMake
+  option to select a subset of LLGL renderer modules (`CNA_GRAPHICS_BACKEND=LLGL` always links
+  Null+OpenGL+Vulkan together), so shaderc is never actually unnecessary for an LLGL build today;
+  doing this for real is module-selection infrastructure work, out of scope here. (2) "Keep explicit
+  Vulkan and `_OpenGL` lanes so auto-selection cannot hide one module" -- only 23 of 69 registered
+  LLGL tests currently have an explicit `_OpenGL`-suffixed lane, and there is no `_Vulkan`-suffixed
+  lane anywhere, so on a DRI3-capable machine there is still no way to force+verify the Vulkan
+  module through ctest specifically (only the auto-selecting default, which now merely skips
+  cleanly here rather than proving Vulkan actually works elsewhere). Adding both lanes to all 69
+  tests is a large, mechanical, separate follow-up.
+
 ---
 
 ## Closing notes
