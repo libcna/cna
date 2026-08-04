@@ -952,15 +952,39 @@ namespace CNA::Internal::Backends::Direct2D
         ++deviceGeneration_;
         CreateDeviceResources();
 
+        // D2D-65: attempt every resource even if one fails, instead of the first exception
+        // aborting the loop and silently skipping recreation of everything after it. A resource
+        // whose RecreateBitmap() throws never has its deviceGeneration_ updated, so it correctly
+        // keeps rejecting use via EnsureResourceGeneration; a retry (another recovery call) safely
+        // re-attempts every resource, including ones that already succeeded (redundant but
+        // harmless, since RecreateBitmap replaces bitmap_ wholesale).
+        std::vector<std::string> recreateFailures;
         for (Direct2DTextureBackend* texture : textures)
-            if (texture) texture->RecreateBitmap();
+        {
+            if (!texture) continue;
+            try { texture->RecreateBitmap(); }
+            catch (const std::exception& ex) { recreateFailures.emplace_back(ex.what()); }
+        }
         for (Direct2DRenderTargetBackend* renderTarget : renderTargets)
-            if (renderTarget) renderTarget->RecreateBitmap();
+        {
+            if (!renderTarget) continue;
+            try { renderTarget->RecreateBitmap(); }
+            catch (const std::exception& ex) { recreateFailures.emplace_back(ex.what()); }
+        }
+        const auto throwIfAnyRecreateFailed = [&recreateFailures] {
+            if (recreateFailures.empty()) return;
+            throw std::runtime_error(
+                "Direct2D device recovery recreated the device but failed to recreate " +
+                std::to_string(recreateFailures.size()) +
+                " resource(s); they remain in a lost state until recovery is retried. First "
+                "failure: " + recreateFailures.front());
+        };
 
         if (restorePreviousActive && previousActive)
         {
             activeRenderTarget_ = previousActive;
             d2dContext_->SetTarget(previousActive->Bitmap());
+            throwIfAnyRecreateFailed();
             return;
         }
 
@@ -979,6 +1003,7 @@ namespace CNA::Internal::Backends::Direct2D
                 "GraphicsDevice::SetContextRecoveryEnabled(false)); rebind an explicit render "
                 "target before drawing again.");
         }
+        throwIfAnyRecreateFailed();
     }
 
     void Direct2DGraphicsBackend::DebugSimulateContextLoss()
