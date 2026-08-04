@@ -48,8 +48,12 @@
 
 #ifdef CNA_BACKEND_WEBGPU
 
+#include <array>
 #include <cstddef>
+#include <cstdint>
 #include <exception>
+#include <memory>
+#include <vector>
 #include <iostream>
 #include <sstream>
 #include <stdexcept>
@@ -58,6 +62,13 @@
 
 #include "CNA/GraphicsCapability.hpp"
 #include "System/NotSupportedException.hpp"
+#include "Microsoft/Xna/Framework/Matrix.hpp"
+#include "Microsoft/Xna/Framework/Vector2.hpp"
+#include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/IndexElementSize.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexBufferBinding.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionColorTexture.hpp"
 #include "CNA/Internal/Backends/WebGPU/WebGPUGraphicsBackend.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 
@@ -129,6 +140,9 @@ namespace
         Frame frame = ClearFrame();
         bool accepted = false;
         std::string rejection;
+        /// Growth of the cache belonging to THIS route's own draw family, which for most routes is
+        /// the Colored3D one but is the Instanced3D one for the instanced route.
+        std::size_t familyPipelinesBuilt = 0;
 
         [[nodiscard]] std::size_t QueuedByDraw() const
         {
@@ -385,6 +399,585 @@ TEST(WebGpuWireFrameContract, RefusalIsACatchableNotSupportedException)
         << "the Solid draw after two refusals did not fill the interior -- " << frame.Describe();
     EXPECT_TRUE(frame.EveryLitPixelIsInk())
         << "a refused draw left a pixel behind -- " << frame.Describe();
+}
+
+// ===========================================================================
+// 5. THE ROUTE MATRIX.
+//
+// The guard sits at five entry points, not eleven, so the interesting question is not "does each
+// Queue*Draw() check?" but "does every public route actually reach one of those five?". Each route
+// below is run TWICE on the same device -- once with FillMode::Solid, once with WireFrame -- and
+// only the pair is conclusive: the Solid leg proves the route is real and reaches the GPU, the
+// WireFrame leg proves it is refused. A route that silently did nothing would fail the Solid leg,
+// so "refused" can never be confused with "never ran".
+// ===========================================================================
+namespace
+{
+    using Microsoft::Xna::Framework::Matrix;
+    using Microsoft::Xna::Framework::Vector2;
+    using Microsoft::Xna::Framework::Graphics::IndexBuffer;
+    using Microsoft::Xna::Framework::Graphics::IndexElementSize;
+    using Microsoft::Xna::Framework::Graphics::Texture2D;
+    using Microsoft::Xna::Framework::Graphics::VertexBufferBinding;
+    using Microsoft::Xna::Framework::Graphics::VertexPositionColorTexture;
+
+    /// One public draw route. `Setup` runs before the counter window opens, so nothing it creates
+    /// or binds can be mistaken for work the measured draw did; `Draw` is the single public call
+    /// the window brackets.
+    struct Route
+    {
+        Route() = default;
+        Route(const Route&) = delete;
+        Route& operator=(const Route&) = delete;
+        virtual ~Route() = default;
+        [[nodiscard]] virtual const char* Name() const = 0;
+        virtual void Setup(GraphicsDevice& device) = 0;
+        virtual void Draw(GraphicsDevice& device) = 0;
+        /// Which pipeline cache this route's family lands in, so the "+0 pipelines" assertion is
+        /// made against the cache the accepted leg actually grows.
+        [[nodiscard]] virtual std::size_t PipelineCacheSize(const WebGPUGraphicsBackend& b) const
+        {
+            return b.GetColoredPipelineCacheSizeEXT();
+        }
+    };
+
+    /// The shared triangle, optionally preceded by @p pad decoy vertices so a nonzero vertexStart /
+    /// baseVertex has something to skip over.
+    std::vector<VertexPositionColor> PaddedTriangle(int pad)
+    {
+        const std::array<VertexPositionColor, 3> tri = TriangleVertices();
+        std::vector<VertexPositionColor> out(static_cast<std::size_t>(pad));
+        out.insert(out.end(), tri.begin(), tri.end());
+        return out;
+    }
+
+    /// A VertexBuffer holding @p pad decoys then the triangle.
+    std::unique_ptr<VertexBuffer> MakeTriangleBuffer(GraphicsDevice& device, int pad,
+                                                     std::vector<VertexPositionColor>& keep)
+    {
+        keep = PaddedTriangle(pad);
+        auto vb = std::make_unique<VertexBuffer>(device, PositionColorDeclaration(),
+                                                 static_cast<int>(keep.size()), BufferUsage::None);
+        vb->SetData(keep.data(), static_cast<int>(keep.size()));
+        return vb;
+    }
+
+    // ---- ordinary VertexBuffer routes -------------------------------------------------------
+    struct OrdinaryNonIndexed : Route
+    {
+        int pad;
+        std::vector<VertexPositionColor> verts;
+        std::unique_ptr<VertexBuffer> vb;
+        std::unique_ptr<BasicEffect> effect;
+        explicit OrdinaryNonIndexed(int padVertices) : pad(padVertices) {}
+        [[nodiscard]] const char* Name() const override
+        {
+            return pad == 0 ? "ordinary-nonindexed" : "ordinary-nonindexed vertexStart>0";
+        }
+        void Setup(GraphicsDevice& device) override
+        {
+            vb = MakeTriangleBuffer(device, pad, verts);
+            effect = std::make_unique<BasicEffect>(device);
+            ApplyFixtureEffect(*effect);
+            effect->Apply();
+            device.SetVertexBuffer(vb.get());
+        }
+        void Draw(GraphicsDevice& device) override
+        {
+            device.DrawPrimitives(PrimitiveType::TriangleList, pad, 1);
+        }
+    };
+
+    struct OrdinaryIndexed : Route
+    {
+        bool wide;
+        int baseVertex;
+        int startIndex;
+        std::vector<VertexPositionColor> verts;
+        std::unique_ptr<VertexBuffer> vb;
+        std::unique_ptr<IndexBuffer> ib;
+        std::unique_ptr<BasicEffect> effect;
+        std::string name;
+        OrdinaryIndexed(bool thirtyTwoBit, int base, int start)
+            : wide(thirtyTwoBit), baseVertex(base), startIndex(start)
+        {
+            name = std::string("ordinary-indexed-") + (wide ? "32" : "16");
+            if (baseVertex != 0) name += " baseVertex>0";
+            if (startIndex != 0) name += " startIndex>0";
+        }
+        [[nodiscard]] const char* Name() const override { return name.c_str(); }
+        void Setup(GraphicsDevice& device) override
+        {
+            vb = MakeTriangleBuffer(device, baseVertex, verts);
+            // `startIndex` decoy indices, then the triangle's own three.
+            const int total = startIndex + 3;
+            ib = std::make_unique<IndexBuffer>(
+                device, wide ? IndexElementSize::ThirtyTwoBits : IndexElementSize::SixteenBits,
+                total, BufferUsage::None);
+            if (wide)
+            {
+                std::vector<std::uint32_t> idx(static_cast<std::size_t>(total), 0u);
+                for (int i = 0; i < 3; ++i)
+                    idx[static_cast<std::size_t>(startIndex + i)] = static_cast<std::uint32_t>(i);
+                ib->SetData(idx.data(), total);
+            }
+            else
+            {
+                std::vector<std::uint16_t> idx(static_cast<std::size_t>(total), 0u);
+                for (int i = 0; i < 3; ++i)
+                    idx[static_cast<std::size_t>(startIndex + i)] = static_cast<std::uint16_t>(i);
+                ib->SetData(idx.data(), total);
+            }
+            effect = std::make_unique<BasicEffect>(device);
+            ApplyFixtureEffect(*effect);
+            effect->Apply();
+            device.SetVertexBuffer(vb.get());
+            device.SetIndexBuffer(ib.get());
+        }
+        void Draw(GraphicsDevice& device) override
+        {
+            device.DrawIndexedPrimitives(PrimitiveType::TriangleList, baseVertex, 0, 3,
+                                         startIndex, 1);
+        }
+    };
+
+    // ---- DrawUser* routes ---------------------------------------------------------------------
+    struct UserTypedNonIndexed : Route
+    {
+        std::vector<VertexPositionColor> verts;
+        std::unique_ptr<BasicEffect> effect;
+        [[nodiscard]] const char* Name() const override { return "user-nonindexed (typed)"; }
+        void Setup(GraphicsDevice& device) override
+        {
+            verts = PaddedTriangle(0);
+            effect = std::make_unique<BasicEffect>(device);
+            ApplyFixtureEffect(*effect);
+            effect->Apply();
+        }
+        void Draw(GraphicsDevice& device) override
+        {
+            device.DrawUserPrimitives(PrimitiveType::TriangleList, verts.data(), 0, 1,
+                                      PositionColorDeclaration());
+        }
+    };
+
+    struct UserTypedIndexed : Route
+    {
+        std::vector<VertexPositionColor> verts;
+        std::array<std::uint16_t, 3> idx{0, 1, 2};
+        std::unique_ptr<BasicEffect> effect;
+        [[nodiscard]] const char* Name() const override { return "user-indexed (typed, 16-bit)"; }
+        void Setup(GraphicsDevice& device) override
+        {
+            verts = PaddedTriangle(0);
+            effect = std::make_unique<BasicEffect>(device);
+            ApplyFixtureEffect(*effect);
+            effect->Apply();
+        }
+        void Draw(GraphicsDevice& device) override
+        {
+            device.DrawUserIndexedPrimitives(PrimitiveType::TriangleList, verts.data(), 0, 3,
+                                             idx.data(), 0, 1);
+        }
+    };
+
+    /// The raw `const void*` overloads, which are the ONLY callers of the backend's
+    /// DrawColoredPrimitives / DrawIndexedColoredPrimitives entry points -- a different pair of
+    /// guarded entry points from every route above.
+    struct UserRawNonIndexed : Route
+    {
+        std::vector<VertexPositionColor> verts;
+        std::unique_ptr<BasicEffect> effect;
+        [[nodiscard]] const char* Name() const override { return "user-nonindexed (raw void*)"; }
+        void Setup(GraphicsDevice& device) override
+        {
+            verts = PaddedTriangle(0);
+            effect = std::make_unique<BasicEffect>(device);
+            ApplyFixtureEffect(*effect);
+            effect->Apply();
+        }
+        void Draw(GraphicsDevice& device) override
+        {
+            device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                      static_cast<const void*>(verts.data()), 0, 1);
+        }
+    };
+
+    struct UserRawIndexed : Route
+    {
+        std::vector<VertexPositionColor> verts;
+        std::array<std::uint16_t, 3> idx{0, 1, 2};
+        std::unique_ptr<BasicEffect> effect;
+        [[nodiscard]] const char* Name() const override { return "user-indexed (raw void*)"; }
+        void Setup(GraphicsDevice& device) override
+        {
+            verts = PaddedTriangle(0);
+            effect = std::make_unique<BasicEffect>(device);
+            ApplyFixtureEffect(*effect);
+            effect->Apply();
+        }
+        void Draw(GraphicsDevice& device) override
+        {
+            device.DrawUserIndexedPrimitives(PrimitiveType::TriangleList,
+                                             static_cast<const void*>(verts.data()), 0, 3,
+                                             static_cast<const void*>(idx.data()), 0, 1);
+        }
+    };
+
+    // ---- a second effect family ---------------------------------------------------------------
+    /// BasicEffect with a texture on a stride-24 buffer, which dispatches to QueueTexturedDraw and
+    /// its own pipeline cache instead of the Colored3D one every route above uses.
+    struct TexturedFamily : Route
+    {
+        std::vector<VertexPositionColorTexture> verts;
+        std::unique_ptr<VertexBuffer> vb;
+        std::unique_ptr<Texture2D> texture;
+        std::unique_ptr<BasicEffect> effect;
+        [[nodiscard]] const char* Name() const override { return "textured effect family"; }
+        [[nodiscard]] std::size_t PipelineCacheSize(const WebGPUGraphicsBackend&) const override
+        {
+            // The textured family has no EXT accessor of its own; the Colored3D cache is asserted
+            // instead, and must not grow either -- a refused draw creates no pipeline anywhere.
+            return 0;
+        }
+        void Setup(GraphicsDevice& device) override
+        {
+            const std::array<VertexPositionColor, 3> tri = TriangleVertices();
+            verts.clear();
+            for (const VertexPositionColor& v : tri)
+                verts.emplace_back(v.Position, v.Color, Vector2(0.5f, 0.5f));
+            const VertexDeclaration decl(
+                24,
+                {VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+                 VertexElement(12, VertexElementFormat::Color, VertexElementUsage::Color, 0),
+                 VertexElement(16, VertexElementFormat::Vector2,
+                               VertexElementUsage::TextureCoordinate, 0)});
+            vb = std::make_unique<VertexBuffer>(device, decl, 3, BufferUsage::None);
+            vb->SetData(verts.data(), 3);
+
+            texture = std::make_unique<Texture2D>(device, 1, 1);
+            const Color white(255, 255, 255, 255);
+            texture->SetData(&white, 1);
+
+            effect = std::make_unique<BasicEffect>(device);
+            ApplyFixtureEffect(*effect);
+            effect->setTextureEnabledProperty(true);
+            effect->setTextureProperty(texture.get());
+            effect->Apply();
+            device.SetVertexBuffer(vb.get());
+        }
+        void Draw(GraphicsDevice& device) override
+        {
+            device.DrawPrimitives(PrimitiveType::TriangleList, 0, 1);
+        }
+    };
+
+    // ---- the instanced route ------------------------------------------------------------------
+    struct InstancedRoute : Route
+    {
+        std::vector<VertexPositionColor> verts;
+        std::array<std::uint16_t, 3> idx{0, 1, 2};
+        std::unique_ptr<VertexBuffer> vb;
+        std::unique_ptr<IndexBuffer> ib;
+        std::unique_ptr<VertexBuffer> instances;
+        std::unique_ptr<BasicEffect> effect;
+        [[nodiscard]] const char* Name() const override { return "instanced"; }
+        [[nodiscard]] std::size_t PipelineCacheSize(const WebGPUGraphicsBackend& b) const override
+        {
+            return b.GetInstancedPipelineCacheSizeEXT();
+        }
+        void Setup(GraphicsDevice& device) override
+        {
+            verts = PaddedTriangle(0);
+            vb = std::make_unique<VertexBuffer>(device, PositionColorDeclaration(), 3,
+                                                BufferUsage::None);
+            vb->SetData(verts.data(), 3);
+            ib = std::make_unique<IndexBuffer>(device, IndexElementSize::SixteenBits, 3,
+                                               BufferUsage::None);
+            ib->SetData(idx.data(), 3);
+
+            const VertexDeclaration instanceDecl(
+                64,
+                {VertexElement(0, VertexElementFormat::Vector4,
+                               VertexElementUsage::TextureCoordinate, 1),
+                 VertexElement(16, VertexElementFormat::Vector4,
+                               VertexElementUsage::TextureCoordinate, 2),
+                 VertexElement(32, VertexElementFormat::Vector4,
+                               VertexElementUsage::TextureCoordinate, 3),
+                 VertexElement(48, VertexElementFormat::Vector4,
+                               VertexElementUsage::TextureCoordinate, 4)});
+            instances = std::make_unique<VertexBuffer>(device, instanceDecl, 1, BufferUsage::None);
+            const Matrix identity = Matrix::getIdentityProperty();
+            instances->SetDataRaw(&identity, 1, static_cast<int>(sizeof(Matrix)));
+
+            effect = std::make_unique<BasicEffect>(device);
+            ApplyFixtureEffect(*effect);
+            effect->Apply();
+            device.SetVertexBuffers({VertexBufferBinding(vb.get(), 0, 0),
+                                     VertexBufferBinding(instances.get(), 0, 1)});
+            device.SetIndexBuffer(ib.get());
+        }
+        void Draw(GraphicsDevice& device) override
+        {
+            device.DrawInstancedPrimitives(PrimitiveType::TriangleList, 0, 0, 3, 0, 1, 1);
+        }
+    };
+
+    /// Runs @p route once under @p fill, bracketing exactly the public draw call.
+    RouteRun RunRoute(GraphicsDevice& device, FillMode fill, Route& route)
+    {
+        RouteRun run;
+        WebGPUGraphicsBackend& backend = BackendOf(device);
+        RenderTarget2D target(device, kSize, kSize, false, SurfaceFormat::Color,
+                              DepthFormat::None, 0, RenderTargetUsage::PreserveContents);
+        const std::size_t pipelinesBefore = route.PipelineCacheSize(backend);
+        std::size_t pipelinesAfter = pipelinesBefore;
+        try
+        {
+            ApplyFixtureState(device, fill);
+            device.SetRenderTarget(&target);
+            device.setScissorRectangleProperty(Rectangle(0, 0, kSize, kSize));
+            device.Clear(Color(kClear[0], kClear[1], kClear[2], kClear[3]));
+            route.Setup(device);
+
+            run.before = Counters::Read(backend);
+            try
+            {
+                route.Draw(device);
+                run.accepted = true;
+            }
+            catch (const std::exception& e)
+            {
+                run.rejection = e.what();
+            }
+            run.afterDraw = Counters::Read(backend);
+
+            device.SetVertexBuffers({});
+            device.SetIndexBuffer(nullptr);
+            device.SetRenderTarget(nullptr);
+            ReadTarget(target, run.frame);
+            run.afterFlush = Counters::Read(backend);
+            pipelinesAfter = route.PipelineCacheSize(backend);
+        }
+        catch (const std::exception& e)
+        {
+            run.rejection = std::string("setup: ") + e.what();
+            device.SetVertexBuffers({});
+            device.SetIndexBuffer(nullptr);
+            device.SetRenderTarget(nullptr);
+        }
+        run.familyPipelinesBuilt = pipelinesAfter - pipelinesBefore;
+        return run;
+    }
+}   // namespace
+
+TEST(WebGpuWireFrameContract, EveryPublicDrawRouteRefusesWireFrameAndAcceptsSolid)
+{
+    std::vector<std::unique_ptr<Route>> routes;
+    routes.emplace_back(std::make_unique<OrdinaryNonIndexed>(0));
+    routes.emplace_back(std::make_unique<OrdinaryNonIndexed>(3));           // vertexStart > 0
+    routes.emplace_back(std::make_unique<OrdinaryIndexed>(false, 0, 0));    // 16-bit
+    routes.emplace_back(std::make_unique<OrdinaryIndexed>(true, 0, 0));     // 32-bit
+    routes.emplace_back(std::make_unique<OrdinaryIndexed>(false, 3, 0));    // baseVertex > 0
+    routes.emplace_back(std::make_unique<OrdinaryIndexed>(false, 0, 3));    // startIndex > 0
+    routes.emplace_back(std::make_unique<UserTypedNonIndexed>());
+    routes.emplace_back(std::make_unique<UserTypedIndexed>());
+    routes.emplace_back(std::make_unique<UserRawNonIndexed>());
+    routes.emplace_back(std::make_unique<UserRawIndexed>());
+    routes.emplace_back(std::make_unique<TexturedFamily>());
+    routes.emplace_back(std::make_unique<InstancedRoute>());
+
+    for (const std::unique_ptr<Route>& route : routes)
+    {
+        SCOPED_TRACE(route->Name());
+        GraphicsDevice gd;
+
+        // Solid first: this leg is the proof that the route exists and reaches the GPU at all.
+        const RouteRun solid = RunRoute(gd, FillMode::Solid, *route);
+        PrintRun((std::string(route->Name()) + " solid").c_str(), solid);
+        ASSERT_TRUE(solid.accepted)
+            << route->Name() << " refused an ordinary Solid draw: " << solid.rejection;
+        EXPECT_EQ(1u, solid.QueuedByDraw()) << solid.afterDraw.Describe();
+        EXPECT_EQ(1u, solid.NativeDraws()) << solid.afterFlush.Describe();
+        EXPECT_GT(solid.frame.LitTotal(), 0)
+            << route->Name() << " rendered nothing under Solid, so its WireFrame leg would prove "
+                                "nothing -- " << solid.frame.Describe();
+
+        // Then WireFrame, on a fresh device so no state from the Solid leg can carry over.
+        GraphicsDevice wireDevice;
+        const RouteRun wire = RunRoute(wireDevice, FillMode::WireFrame, *route);
+        PrintRun((std::string(route->Name()) + " wireframe").c_str(), wire);
+        ASSERT_FALSE(wire.accepted)
+            << route->Name() << " accepted a WireFrame draw and produced " << wire.frame.Describe();
+        ExpectWireFrameRejection(wire.rejection);
+        EXPECT_EQ(0u, wire.QueuedByDraw())
+            << route->Name() << " queued a command for a refused draw -- "
+            << wire.afterDraw.Describe();
+        EXPECT_EQ(0u, wire.NativeDraws())
+            << route->Name() << " reached the render-pass encoder -- " << wire.afterFlush.Describe();
+        EXPECT_EQ(0u, wire.familyPipelinesBuilt)
+            << route->Name() << " grew its family's pipeline cache -- " << wire.afterFlush.Describe();
+        EXPECT_EQ(0u, wire.ColoredPipelinesBuilt())
+            << route->Name() << " grew the Colored3D pipeline cache -- "
+            << wire.afterFlush.Describe();
+        EXPECT_EQ(0u, wire.UncapturedErrors())
+            << route->Name() << " produced native validation errors -- "
+            << wire.afterFlush.Describe();
+        ExpectClearOnly(wire.frame, route->Name());
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 6. STATE TRANSITIONS AND REPETITION on one device: WireFrame -> Solid, and
+//    Solid -> refused WireFrame -> Solid, with repeated refusals in between.
+// ---------------------------------------------------------------------------
+TEST(WebGpuWireFrameContract, AlternatingFillModesNeverLeaveStaleState)
+{
+    GraphicsDevice gd;
+    OrdinaryNonIndexed route(0);
+
+    const RouteRun wire1 = RunRoute(gd, FillMode::WireFrame, route);
+    PrintRun("alternate wireframe-1", wire1);
+    const RouteRun solid1 = RunRoute(gd, FillMode::Solid, route);
+    PrintRun("alternate solid-2", solid1);
+    const RouteRun wire2 = RunRoute(gd, FillMode::WireFrame, route);
+    PrintRun("alternate wireframe-3", wire2);
+    const RouteRun wire3 = RunRoute(gd, FillMode::WireFrame, route);
+    PrintRun("alternate wireframe-4", wire3);
+    const RouteRun solid2 = RunRoute(gd, FillMode::Solid, route);
+    PrintRun("alternate solid-5", solid2);
+
+    EXPECT_FALSE(wire1.accepted);
+    EXPECT_FALSE(wire2.accepted);
+    EXPECT_FALSE(wire3.accepted);
+    ASSERT_TRUE(solid1.accepted) << solid1.rejection;
+    ASSERT_TRUE(solid2.accepted) << solid2.rejection;
+
+    // Every refusal is identical -- the guard carries no state that a repetition could change.
+    EXPECT_EQ(wire1.rejection, wire2.rejection);
+    EXPECT_EQ(wire2.rejection, wire3.rejection);
+    ExpectClearOnly(wire1.frame, "the first refused draw");
+    ExpectClearOnly(wire2.frame, "the second refused draw");
+    ExpectClearOnly(wire3.frame, "the third refused draw");
+
+    // And every Solid frame is the same picture, before and after any number of refusals.
+    EXPECT_TRUE(solid1.frame.pixels == solid2.frame.pixels)
+        << "Solid output drifted across refused WireFrame draws -- " << solid1.frame.Describe()
+        << " then " << solid2.frame.Describe();
+    EXPECT_EQ(kInteriorArea, solid2.frame.LitIn(kInterior)) << solid2.frame.Describe();
+    // Two consecutive refusals cost nothing at all: no pipeline, no command, no native draw.
+    EXPECT_EQ(0u, wire3.QueuedByDraw());
+    EXPECT_EQ(0u, wire3.NativeDraws());
+    EXPECT_EQ(0u, wire3.ColoredPipelinesBuilt());
+}
+
+// ---------------------------------------------------------------------------
+// 7. LIFETIME. A refusal must not retain the resources the draw would have referenced, and must
+//    not stop them being replaced or the device being torn down.
+// ---------------------------------------------------------------------------
+TEST(WebGpuWireFrameContract, RefusalRetainsNothingAndSurvivesResourceReplacement)
+{
+    GraphicsDevice gd;
+    {
+        // Refuse a draw whose vertex buffer then goes out of scope while the device lives on.
+        OrdinaryNonIndexed doomed(0);
+        const RouteRun refused = RunRoute(gd, FillMode::WireFrame, doomed);
+        PrintRun("lifetime refused", refused);
+        EXPECT_FALSE(refused.accepted);
+        ExpectClearOnly(refused.frame, "the refused draw");
+    }
+    // The buffers the refused draw referenced are gone. If the refusal had queued a command that
+    // held them, the flush below would replay a dangling reference.
+    OrdinaryNonIndexed replacement(0);
+    const RouteRun recovered = RunRoute(gd, FillMode::Solid, replacement);
+    PrintRun("lifetime replacement solid", recovered);
+    ASSERT_TRUE(recovered.accepted) << recovered.rejection;
+    EXPECT_EQ(kInteriorArea, recovered.frame.LitIn(kInterior)) << recovered.frame.Describe();
+    EXPECT_EQ(0u, recovered.UncapturedErrors()) << recovered.afterFlush.Describe();
+
+    // A trailing refusal, then teardown: the destructor drains the queue, and a command left there
+    // by a refused draw would release native handles after the device is gone.
+    OrdinaryNonIndexed trailing(0);
+    const RouteRun last = RunRoute(gd, FillMode::WireFrame, trailing);
+    PrintRun("lifetime trailing refusal", last);
+    EXPECT_FALSE(last.accepted);
+    EXPECT_EQ(0u, last.QueuedByDraw()) << last.afterDraw.Describe();
+    EXPECT_EQ(0u, last.UncapturedErrors()) << last.afterFlush.Describe();
+}
+
+// ---------------------------------------------------------------------------
+// 8. NATIVE VALIDATION. The counter above says the uncaptured-error callback never fired; this
+//    asks wgpu-native itself, through a validation error scope wrapped around the whole sequence.
+// ---------------------------------------------------------------------------
+namespace
+{
+    struct ErrorScopeState
+    {
+        bool completed = false;
+        WGPUPopErrorScopeStatus status = WGPUPopErrorScopeStatus_Error;
+        WGPUErrorType type = WGPUErrorType_Unknown;
+        std::string message;
+    };
+
+    void OnErrorScope(WGPUPopErrorScopeStatus status, WGPUErrorType type, WGPUStringView message,
+                      void* userdata1, void*)
+    {
+        auto& state = *static_cast<ErrorScopeState*>(userdata1);
+        state.status = status;
+        state.type = type;
+        if (message.data != nullptr)
+        {
+            if (message.length == WGPU_STRLEN)
+                state.message = message.data;
+            else
+                state.message.assign(message.data, message.length);
+        }
+        state.completed = true;
+    }
+
+    void PopAndExpectClean(WebGPUGraphicsBackend& backend, const char* what)
+    {
+        ErrorScopeState state;
+        WGPUPopErrorScopeCallbackInfo callback{};
+        callback.mode = WGPUCallbackMode_AllowProcessEvents;
+        callback.callback = OnErrorScope;
+        callback.userdata1 = &state;
+        wgpuDevicePopErrorScope(backend.Device(), callback);
+        for (int attempt = 0; attempt < 10000 && !state.completed; ++attempt)
+            wgpuInstanceProcessEvents(backend.Instance());
+
+        ASSERT_TRUE(state.completed) << what << ": wgpu-native did not complete the error scope";
+        ASSERT_EQ(WGPUPopErrorScopeStatus_Success, state.status)
+            << what << ": status=" << static_cast<int>(state.status) << '\n' << state.message;
+        EXPECT_EQ(WGPUErrorType_NoError, state.type)
+            << what << ": type=" << static_cast<int>(state.type) << '\n' << state.message;
+        EXPECT_TRUE(state.message.empty())
+            << what << ": wgpu-native returned a message for a clean scope:\n" << state.message;
+    }
+}   // namespace
+
+TEST(WebGpuWireFrameContract, RefusalAndRecoveryAreNativelyClean)
+{
+    GraphicsDevice gd;
+    WebGPUGraphicsBackend& backend = BackendOf(gd);
+    const std::size_t uncapturedBefore = backend.GetUncapturedErrorCountEXT();
+    wgpuDevicePushErrorScope(backend.Device(), WGPUErrorFilter_OutOfMemory);
+    wgpuDevicePushErrorScope(backend.Device(), WGPUErrorFilter_Validation);
+
+    OrdinaryNonIndexed route(0);
+    const RouteRun refused = RunRoute(gd, FillMode::WireFrame, route);
+    PrintRun("validation refused", refused);
+    const RouteRun recovered = RunRoute(gd, FillMode::Solid, route);
+    PrintRun("validation recovery", recovered);
+
+    EXPECT_FALSE(refused.accepted);
+    ASSERT_TRUE(recovered.accepted) << recovered.rejection;
+    EXPECT_EQ(kInteriorArea, recovered.frame.LitIn(kInterior)) << recovered.frame.Describe();
+
+    PopAndExpectClean(backend, "validation scope");
+    PopAndExpectClean(backend, "out-of-memory scope");
+    EXPECT_EQ(uncapturedBefore, backend.GetUncapturedErrorCountEXT())
+        << "the refusal/recovery sequence produced uncaptured native errors";
 }
 
 #endif  // CNA_BACKEND_WEBGPU
