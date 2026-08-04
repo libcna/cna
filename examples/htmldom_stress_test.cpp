@@ -123,6 +123,11 @@ class HtmlDomStressTest : public Game
     double staticTotalMs_ = 0.0;
     int staticFramesTimed_ = 0;
 
+    // plan_html_dom.md HTMLDOM-111: see benchmarkEndToEndTotalMs_'s own comment at its use site.
+    double lastFrameStart_ = -1.0;
+    double benchmarkEndToEndTotalMs_ = 0.0;
+    int benchmarkEndToEndFramesTimed_ = 0;
+
     void check(bool ok, const char* label)
     {
         std::printf("[%s] %s\n", ok ? "PASS" : "FAIL", label);
@@ -163,13 +168,31 @@ protected:
     void Draw(const GameTime&) override
     {
         ++frame_;
+        const double frameStart = JsNow();
         auto& dev = getGraphicsDeviceProperty();
         dev.Clear(Color(10, 10, 20, 255));
 
         // plan_html_dom.md HTMLDOM-89: frame 1 pays the one-time pool-creation cost (every sprite
         // element gets created and appended for the first time) -- deliberately excluded from the
-        // measured average, which is meant to characterise the STEADY STATE the backend's whole
-        // performance premise ("moving sprites costs nothing") is actually about.
+        // measured average.
+        //
+        // plan_html_dom.md HTMLDOM-111: this workload's own position formula ((i*37)%400, fixed per
+        // sprite index `i`) never depends on `frame_` at all -- only the TINT (via `tintSeed`) does.
+        // So despite this row's own older text, this measures HEAVY TINT CHURN with STATIC
+        // position, not "moving sprites" -- the opposite of what "moving sprites costs nothing" is
+        // actually about. `graphics_backend_benchmark.cpp`'s own HTMLDOM-111 rework measures BOTH a
+        // genuinely moving/stable-tint workload and this heavy-churn one side by side, which is the
+        // right place to compare the two; this benchmark's job is narrower -- catch a gross
+        // regression under sustained load, which the churn case (this backend's own documented
+        // worst case, not its best) is if anything the MORE conservative choice for that purpose.
+        //
+        // plan_html_dom.md HTMLDOM-111: submission time (t0/t1 bracketing just Begin/Draw/End,
+        // below) is NOT a frame rate -- it excludes Present() and every deferred browser layout/
+        // paint/composite cost. benchmarkEndToEndTotalMs_ (the wall-clock gap between successive
+        // Draw() calls) is the real one: Game::Run() drives Emscripten's main loop with fps=0
+        // (Game.cpp), which per Emscripten's own contract means requestAnimationFrame-paced, so
+        // Draw() already fires once per real browser frame and the start-to-start gap can only
+        // elapse once the PREVIOUS frame's rendering actually finished.
         if (frame_ == 1)
         {
             DrawSprites(kBenchmarkSpriteCount, 0.0f);
@@ -181,25 +204,41 @@ protected:
             const double t1 = JsNow();
             benchmarkTotalMs_ += (t1 - t0);
             ++benchmarkFramesTimed_;
+            if (frame_ > 2)   // excludes the frame-1-to-2 gap, which includes frame 1's own warm-up.
+            {
+                benchmarkEndToEndTotalMs_ += (frameStart - lastFrameStart_);
+                ++benchmarkEndToEndFramesTimed_;
+            }
         }
         else if (frame_ == 2 + kBenchmarkFrames)
         {
             const double avgMs = benchmarkFramesTimed_ > 0 ? benchmarkTotalMs_ / benchmarkFramesTimed_ : -1.0;
-            std::printf("       HTMLDOM-89: %d sprites/frame, steady-state average over %d frames: "
-                        "%.3f ms/frame (%.1f fps-equivalent)\n",
-                        kBenchmarkSpriteCount, benchmarkFramesTimed_, avgMs,
-                        avgMs > 0 ? 1000.0 / avgMs : 0.0);
+            const double avgEndToEndMs = benchmarkEndToEndFramesTimed_ > 0
+                ? benchmarkEndToEndTotalMs_ / benchmarkEndToEndFramesTimed_ : -1.0;
+            std::printf("       HTMLDOM-89: %d sprites/frame (heavy tint churn, static position) "
+                        "over %d frames -- submission %.3f ms/frame (NOT a frame rate); real "
+                        "end-to-end %.3f ms/frame (%.1f real fps, includes browser layout/paint/"
+                        "composite)\n",
+                        kBenchmarkSpriteCount, benchmarkFramesTimed_, avgMs, avgEndToEndMs,
+                        avgEndToEndMs > 0 ? 1000.0 / avgEndToEndMs : 0.0);
             std::fflush(stdout);
             // Deliberately generous: this runs in a headless, possibly-virtualized/shared-CPU
             // container that may be far slower than a real user's machine, and the point of this
             // threshold is to catch a genuine architectural regression (e.g. an accidental
             // per-sprite JS call reappearing, or O(n^2) DOM work), not to assert a specific
             // competitive frame budget. 50ms/frame for 500 sprites is roughly 20x looser than a
-            // 60fps budget would demand.
+            // 60fps budget would demand. Checked against SUBMISSION time deliberately -- the
+            // real end-to-end number is dominated by the browser's own vsync/compositor cadence
+            // (headless Chromium still paces requestAnimationFrame near a real display's refresh
+            // rate), which this backend's own CPU work does not control and a regression in this
+            // backend's own code cannot fix or break on its own.
             check(avgMs >= 0.0 && avgMs < 50.0,
-                  "HTMLDOM-89: steady-state per-frame cost for 500 animated sprites stays well "
-                  "within a sane budget (no accidental O(n^2)/per-sprite-call regression)");
+                  "HTMLDOM-89: submission CPU cost for 500 sprites/frame under heavy tint churn "
+                  "stays well within a sane budget (no accidental O(n^2)/per-sprite-call "
+                  "regression) -- see HTMLDOM-111 for the separately measured real end-to-end "
+                  "frame cadence, which this check deliberately does not gate on");
         }
+        lastFrameStart_ = frameStart;
 
         // plan_html_dom.md HTMLDOM-90: sprite count oscillates between a low and high value every
         // frame (exercising the pool growing AND shrinking repeatedly, not just monotonically),

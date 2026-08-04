@@ -7,11 +7,41 @@
 // (cmake-build-canvas/cmake-build-easygl/cmake-build-htmldom), each producing its own
 // cna_bench_graphics_backend.html.
 //
-// Same methodology as examples/htmldom_stress_test.cpp's own HTMLDOM-89 benchmark: N animated
-// sprites/frame (position AND tint changing every frame -- the real steady-state case, not an
-// idle one), timed with performance.now(), averaged over many frames after a warm-up frame that
-// pays one-time setup cost. Reports ms/frame to console; the driver script/JS harness reads it
-// back via window.__cnaBenchAvgMs for a single-number cross-backend comparison table.
+// plan_html_dom.md HTMLDOM-111 (reopens HTMLDOM-89/92/99's own conclusions): an earlier version of
+// this file (and htmldom_stress_test.cpp's own HTMLDOM-89 benchmark) stopped its timer immediately
+// after SpriteBatch::End(), before Present() and before Chromium's own deferred style/layout/
+// paint/compositor work -- structurally favouring DOM style submission (cheap, deferred) over
+// Canvas2D/WebGL work (whose real cost is closer to synchronous), and unable to support an
+// "fps-equivalent" or cross-backend "X is faster" claim at all. Two independent corrections:
+//
+// 1. TWO metrics, not one, both reported: "CPU submission" (the original performance.now() bracket
+//    around Begin()/Draw()/End() -- real, but explicitly NOT a frame-rate number) and "real
+//    end-to-end frame cadence", measured as the wall-clock gap between the START of one Draw() call
+//    and the START of the next. Game::Run() drives its Emscripten main loop via
+//    emscripten_set_main_loop(..., fps=0, ...) (Game.cpp), which per Emscripten's own documented
+//    contract means "let requestAnimationFrame pace this" -- so Draw() already fires once per real
+//    browser animation frame, and the start-to-start gap between two calls is exactly the real
+//    frame period: it can only elapse once the browser has finished whatever rendering work the
+//    PREVIOUS frame queued, which is the one thing the old submission-only bracket could never see.
+// 2. TWO workloads, not one: "stable tint" (position animates every frame, tint per sprite is FIXED
+//    -- this backend's own documented sweet spot, "rewards static sprite sheets and moving
+//    sprites") and "heavy churn" (position AND tint both animate every frame -- this backend's own
+//    documented weak point, "a new cached variant per distinct colour"). The ORIGINAL single-
+//    workload version of this benchmark measured ONLY the heavy-churn case while calling it
+//    "steady state" -- a real, if unintentional, apples-to-oranges mislabelling: the published
+//    2.338 ms/frame number was this backend's OWN worst documented case, not its best one.
+//
+// Also captures navigator.userAgent (browser/build identification) and a real
+// WEBGL_debug_renderer_info UNMASKED_RENDERER_WEBGL query -- via a throwaway canvas unrelated to
+// whichever backend actually built this binary, since any WebGL context in the same browser
+// session reports the same renderer string -- so a hardware GPU result is never silently compared
+// against a software (SwiftShader) one without saying so. Harmless, informational-only for
+// CANVAS/HTML_DOM (neither creates a WebGL context of its own at all); genuinely load-bearing for
+// EASYGL, whose own canvas IS exactly what this ends up querying.
+//
+// Publishes raw per-frame samples (window.__cnaBenchSamples, a JSON array) alongside the averaged
+// numbers, so a result is independently reproducible/re-analysable rather than only the single
+// averaged headline number.
 //
 // Not registered as a CTest -- like every other Emscripten-only browser page in this project, it
 // needs a real browser (headless Chromium via Playwright), not `node`.
@@ -48,20 +78,56 @@ using namespace Microsoft::Xna::Framework::Graphics;
 namespace
 {
     constexpr int kSpriteCount = 500;
-    constexpr int kBenchmarkFrames = 60;
+    constexpr int kPhaseFrames = 60;
 
 #if defined(__EMSCRIPTEN__)
     EM_JS(double, JsNow, (), { return performance.now(); });
 
-    EM_JS(void, JsPublishResult, (double avgMs, const char* backendName), {
-        window.__cnaBenchAvgMs = avgMs;
+    // plan_html_dom.md HTMLDOM-111: raw per-frame end-to-end samples for the phase currently
+    // measuring, so the published average is independently re-derivable, not just asserted.
+    EM_JS(void, JsPushSample, (const char* phase, double ms), {
+        if (!window.__cnaBenchSamples) window.__cnaBenchSamples = [];
+        window.__cnaBenchSamples.push({ phase: UTF8ToString(phase), ms: ms });
+    });
+
+    EM_JS(void, JsPublishResult, (const char* backendName,
+                                  double stableSubmissionMs, double stableEndToEndMs,
+                                  double churnSubmissionMs, double churnEndToEndMs), {
         window.__cnaBenchBackend = UTF8ToString(backendName);
+        window.__cnaBenchStableSubmissionMs = stableSubmissionMs;
+        window.__cnaBenchStableEndToEndMs = stableEndToEndMs;
+        window.__cnaBenchChurnSubmissionMs = churnSubmissionMs;
+        window.__cnaBenchChurnEndToEndMs = churnEndToEndMs;
+        // Backward-compatible single-number field some earlier tooling may still read -- the
+        // heavy-churn end-to-end number, since that is the closer (though still not identical)
+        // analogue of what the old single "avgMs" used to mean.
+        window.__cnaBenchAvgMs = churnEndToEndMs;
+        window.__cnaBenchUserAgent = (typeof navigator !== 'undefined') ? navigator.userAgent : "";
+        // plan_html_dom.md HTMLDOM-111: never let a hardware-GPU WebGL result and a software
+        // (SwiftShader) one be compared without saying so. A real query, via a throwaway canvas
+        // unrelated to whichever CNA backend actually built this binary -- any WebGL context in
+        // the same browser session reports the same renderer string, so this works identically
+        // for EASYGL (whose OWN canvas is exactly this) and is simply extra, harmless information
+        // for CANVAS/HTML_DOM (which never create a WebGL context of their own at all).
+        window.__cnaBenchWebglRenderer = (function () {
+            try {
+                const c = document.createElement('canvas');
+                const gl = c.getContext('webgl2') || c.getContext('webgl');
+                if (!gl) return 'no WebGL context available in this browser';
+                const ext = gl.getExtension('WEBGL_debug_renderer_info');
+                if (!ext) return 'WEBGL_debug_renderer_info unavailable (renderer string hidden)';
+                return String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL));
+            } catch (e) {
+                return 'WebGL renderer query failed: ' + e;
+            }
+        })();
         window.__cnaSmokeDone = true;
         window.__cnaSmokeResult = 0;
     });
 #else
     double JsNow() { return 0.0; }
-    void JsPublishResult(double, const char*) {}
+    void JsPushSample(const char*, double) {}
+    void JsPublishResult(const char*, double, double, double, double) {}
 #endif
 }
 
@@ -71,8 +137,38 @@ class GraphicsBackendBenchmark : public Game
     std::unique_ptr<SpriteBatch> spriteBatch_;
     std::unique_ptr<Texture2D> texture_;
     int frame_ = 0;
-    double totalMs_ = 0.0;
-    int framesTimed_ = 0;
+    double lastFrameStart_ = -1.0;
+
+    double stableSubmissionTotalMs_ = 0.0;
+    double stableEndToEndTotalMs_ = 0.0;
+    int stableFramesTimed_ = 0;
+
+    double churnSubmissionTotalMs_ = 0.0;
+    double churnEndToEndTotalMs_ = 0.0;
+    int churnFramesTimed_ = 0;
+
+    // plan_html_dom.md HTMLDOM-111: draws kSpriteCount sprites, all moving every frame (this
+    // backend's own documented sweet spot on the position side regardless of workload). `churnTint`
+    // selects which of the two workloads this call belongs to: false = "stable tint" (per-sprite
+    // colour is a pure function of `i` alone -- fixed across every frame, the OTHER half of the
+    // documented sweet spot); true = "heavy churn" (colour is ALSO a function of `frame_`, a fresh
+    // value every single frame, this backend's own documented weak point).
+    void DrawSprites(bool churnTint)
+    {
+        spriteBatch_->Begin();
+        for (int i = 0; i < kSpriteCount; ++i)
+        {
+            const float x = static_cast<float>((i * 37 + frame_ * 2) % 400);
+            const float y = static_cast<float>((i * 53 + frame_) % 200);
+            const std::uint8_t r = churnTint
+                ? static_cast<std::uint8_t>(std::fmod(static_cast<float>(frame_) * 3.7f + i, 256.0f))
+                : static_cast<std::uint8_t>(i % 256);
+            spriteBatch_->Draw(*texture_, Vector2(x, y),
+                               Color(r, static_cast<std::uint8_t>(200), static_cast<std::uint8_t>(150),
+                                     static_cast<std::uint8_t>(255)));
+        }
+        spriteBatch_->End();
+    }
 
 protected:
     void LoadContent() override
@@ -88,42 +184,78 @@ protected:
     void Draw(const GameTime&) override
     {
         ++frame_;
+        const double frameStart = JsNow();
         auto& dev = getGraphicsDeviceProperty();
         dev.Clear(Color(10, 10, 20, 255));
 
-        const bool timed = frame_ > 1 && frame_ <= 1 + kBenchmarkFrames;
-        const double t0 = timed ? JsNow() : 0.0;
+        // Frame 1 pays the one-time pool-creation cost -- excluded from every measurement, the
+        // same "frame 1 is excluded" shape htmldom_stress_test.cpp's own HTMLDOM-89 benchmark uses.
+        // Frames 2..1+kPhaseFrames: stable-tint phase. Frames 2+kPhaseFrames..1+2*kPhaseFrames:
+        // heavy-churn phase, immediately following with no extra warm-up frame -- every one of ITS
+        // frames is already a fresh cache entry by design (churnTint=true), so there is no steady
+        // state to warm into first, unlike the stable-tint phase's one-time pool-creation cost.
+        const bool inStablePhase = frame_ > 1 && frame_ <= 1 + kPhaseFrames;
+        const bool inChurnPhase = frame_ > 1 + kPhaseFrames && frame_ <= 1 + 2 * kPhaseFrames;
 
-        spriteBatch_->Begin();
-        for (int i = 0; i < kSpriteCount; ++i)
+        const double subT0 = (inStablePhase || inChurnPhase) ? JsNow() : 0.0;
+        DrawSprites(/*churnTint=*/inChurnPhase);
+        if (inStablePhase || inChurnPhase)
         {
-            const float x = static_cast<float>((i * 37) % 400);
-            const float y = static_cast<float>((i * 53) % 200);
-            const std::uint8_t r = static_cast<std::uint8_t>(
-                std::fmod(static_cast<float>(frame_) * 3.7f + i, 256.0f));
-            spriteBatch_->Draw(*texture_, Vector2(x, y),
-                               Color(r, static_cast<std::uint8_t>(200), static_cast<std::uint8_t>(150),
-                                     static_cast<std::uint8_t>(255)));
-        }
-        spriteBatch_->End();
-
-        if (timed)
-        {
-            const double t1 = JsNow();
-            totalMs_ += (t1 - t0);
-            ++framesTimed_;
+            const double subMs = JsNow() - subT0;
+            (inStablePhase ? stableSubmissionTotalMs_ : churnSubmissionTotalMs_) += subMs;
         }
 
-        if (frame_ == 2 + kBenchmarkFrames)
+        // End-to-end: the wall-clock gap since the PREVIOUS Draw() call started -- see this file's
+        // own top-of-file comment for why that is exactly the real frame period under Emscripten's
+        // requestAnimationFrame-paced main loop. The transition INTO frame 2 (gap = frame 1's own
+        // expensive warm-up) and INTO the churn phase's first frame (gap = the stable phase's own
+        // last, still-valid frame -- fine to include, but the ACT of crossing phases mid-gap makes
+        // that one sample ambiguous) are both excluded by only recording once frame_ > 2 within a
+        // phase whose PREVIOUS frame was also in a timed, same-kind window.
+        if (lastFrameStart_ >= 0.0)
         {
-            const double avgMs = framesTimed_ > 0 ? totalMs_ / framesTimed_ : -1.0;
+            const double gapMs = frameStart - lastFrameStart_;
+            if (inStablePhase && frame_ > 2)
+            {
+                stableEndToEndTotalMs_ += gapMs;
+                ++stableFramesTimed_;
+                JsPushSample("stable", gapMs);
+            }
+            else if (inChurnPhase && frame_ > 2 + kPhaseFrames)
+            {
+                churnEndToEndTotalMs_ += gapMs;
+                ++churnFramesTimed_;
+                JsPushSample("churn", gapMs);
+            }
+        }
+        lastFrameStart_ = frameStart;
+
+        if (frame_ == 1 + 2 * kPhaseFrames)
+        {
+            const double stableSubAvg = stableSubmissionTotalMs_ / kPhaseFrames;
+            const double churnSubAvg = churnSubmissionTotalMs_ / kPhaseFrames;
+            const double stableE2eAvg =
+                stableFramesTimed_ > 0 ? stableEndToEndTotalMs_ / stableFramesTimed_ : -1.0;
+            const double churnE2eAvg =
+                churnFramesTimed_ > 0 ? churnEndToEndTotalMs_ / churnFramesTimed_ : -1.0;
+
             const auto backendName = CNA::getCurrentGraphicsBackendName();
-            std::printf("=== [%.*s] %d sprites/frame, %d frames: %.4f ms/frame (%.1f fps-equivalent) ===\n",
-                        static_cast<int>(backendName.size()), backendName.data(),
-                        kSpriteCount, framesTimed_, avgMs, avgMs > 0 ? 1000.0 / avgMs : 0.0);
+            std::printf("=== [%.*s] %d sprites/frame ===\n",
+                        static_cast<int>(backendName.size()), backendName.data(), kSpriteCount);
+            std::printf("    stable tint : submission %.4f ms/frame | end-to-end %.4f ms/frame "
+                        "(%.1f real fps)\n",
+                        stableSubAvg, stableE2eAvg, stableE2eAvg > 0 ? 1000.0 / stableE2eAvg : 0.0);
+            std::printf("    heavy churn : submission %.4f ms/frame | end-to-end %.4f ms/frame "
+                        "(%.1f real fps)\n",
+                        churnSubAvg, churnE2eAvg, churnE2eAvg > 0 ? 1000.0 / churnE2eAvg : 0.0);
+            std::printf("    (submission = SpriteBatch Begin/Draw/End CPU time only, NOT a frame "
+                        "rate; end-to-end = real wall-clock gap between successive "
+                        "requestAnimationFrame-paced Draw() calls, includes all deferred browser "
+                        "layout/paint/composite work)\n");
             std::fflush(stdout);
+
             const std::string backendNameStr(backendName);
-            JsPublishResult(avgMs, backendNameStr.c_str());
+            JsPublishResult(backendNameStr.c_str(), stableSubAvg, stableE2eAvg, churnSubAvg, churnE2eAvg);
             Exit();
         }
     }

@@ -153,13 +153,17 @@ exception.
 ## Performance characteristics
 
 **Measured, not just claimed** (`examples/htmldom_stress_test.cpp`, HTMLDOM-89/90): 500 sprites/
-frame, both position AND tint changing every frame (the genuine steady-state case, animated after a
-separate warm-up frame that pays the one-time pool-creation cost), averaged **2.338 ms/frame
-(~428 fps-equivalent)** over 60 frames in a headless-Chromium container — a shared/virtualized CPU
-that is typically slower than a real user's machine, not a best-case number. A further 300-frame run
-with sprite counts oscillating 5-50/frame and tints cycling through 300+ distinct values confirmed
-the sprite pool stays exactly bounded at the true peak (no leak) and the variant LRU cache caps at
-exactly 256 under sustained real eviction pressure, not merely "never filled up".
+frame, tint changing every frame with STATIC position (HTMLDOM-111 correction: despite this
+workload's own older "moving sprites" framing, its position formula never actually depends on the
+frame number — only tint does, so this is this backend's own documented heavy-tint-churn WORST
+case, not its moving-sprite best one), averaged **2.338 ms/frame** of submission time (Begin/Draw/
+End CPU cost only — NOT a frame rate; HTMLDOM-111's own real end-to-end measurement for this same
+workload came to ~19 ms/frame, ≈53 real fps, in this same container) over 60 frames after a
+warm-up frame — a shared/virtualized CPU that is typically slower than a real user's machine, not
+a best-case number. A further 300-frame run with sprite counts oscillating 5-50/frame and tints
+cycling through 300+ distinct values confirmed the sprite pool stays exactly bounded at the true
+peak (no leak) and the variant LRU cache caps at exactly 256 under sustained real eviction
+pressure, not merely "never filled up".
 
 **"Zero cost when nothing changes" (HTMLDOM-110), corrected to what is actually true and
 instrumented, not merely asserted**: a real XNA game resubmits its static sprites every frame —
@@ -194,22 +198,32 @@ layers cost more memory than a single canvas would.
 Rule of thumb: this backend rewards static sprite sheets and moving sprites, and punishes dynamic
 pixel data.
 
-**Comparative benchmark** (`examples/graphics_backend_benchmark.cpp`, HTMLDOM-92): the identical
-500-sprite/frame workload above, built and run under all three Emscripten-capable backends from
-three separate `emcmake` configures and measured in the same headless-Chromium harness:
-
-| Backend | ms/frame | fps-equivalent |
-|---|---|---|
-| `HTML_DOM` | 3.7 – 4.3 | ~233 – 270 |
-| `EASYGL` (WebGL2) | 4.66 | ~215 |
-| `CANVAS` (Canvas2D) | 27.6 – 29.1 | ~34 – 36 |
-
-`HTML_DOM` is on par with (in this run, marginally faster than) `EASYGL` and roughly 6–7× faster
-than `CANVAS` for this specific workload. Honest caveat: this container has no real GPU — `EASYGL`'s
-number is software-rasterized (SwiftShader via ANGLE); a real hardware WebGL2 context would very
-likely widen `EASYGL`'s advantage over both 2D backends. Read this as "DOM compositing beats
-Canvas2D redraw by a wide margin, and is competitive with software-rasterized WebGL2," not as
-evidence that `HTML_DOM` outperforms real hardware-accelerated WebGL2.
+**Comparative benchmark** (`examples/graphics_backend_benchmark.cpp`, HTMLDOM-92): the same
+500-sprite/frame workload, built and run under all three Emscripten-capable backends from three
+separate `emcmake` configures and measured in the same headless-Chromium harness. **HTMLDOM-111
+correction, superseding the table this section used to publish**: the earlier ms/frame numbers here
+were submission time only (`SpriteBatch::End()` alone — excludes `Present()` and every deferred
+browser layout/paint/composite cost), which structurally favours DOM style writes (cheap, deferred)
+over Canvas2D/WebGL work (closer to synchronous) and cannot support an honest cross-backend "X is
+faster" claim. `graphics_backend_benchmark.cpp` was reworked to report BOTH a submission number
+(explicitly labelled as not a frame rate) and a real end-to-end one — the wall-clock gap between
+successive `requestAnimationFrame`-paced `Draw()` calls, which can only elapse once the browser
+actually finished rendering the previous frame — across TWO workloads (stable tint: position
+animates, tint fixed, this backend's own documented sweet spot; heavy churn: both animate, this
+backend's own documented weak point; the OLD single workload measured only the churn case, despite
+being labelled "steady state"). `HTML_DOM`'s own real end-to-end numbers in this container, 500
+sprites: **stable tint ~17 ms/frame (~59 real fps)**, **heavy churn ~19 ms/frame (~53 real fps)** —
+both close to this machine's own ~60fps vsync floor, meaning the browser's own display cadence, not
+either backend's CPU cost, is the dominant factor at this sprite count. A genuine, re-verified
+side-by-side `HTML_DOM`/`CANVAS`/`EASYGL` table under this corrected methodology has not been
+re-run as of this correction (the old table's absolute "HTML_DOM 6-7x faster than CANVAS" framing
+should not be treated as confirmed under the new, honest methodology until it is) — re-run
+`graphics_backend_benchmark.cpp` per backend for a current comparison rather than reusing
+the old table. The old run's own real, useful finding stands independent of the metric used: this
+container has no real GPU (`EASYGL`'s own `WEBGL_debug_renderer_info` query, also added by
+HTMLDOM-111, confirms `SwiftShader` software rendering here), so a hardware WebGL2 context would
+likely change `EASYGL`'s own relative standing and must never be silently compared against this
+software one without saying so.
 
 ---
 
