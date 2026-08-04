@@ -590,6 +590,57 @@ protected:
                     passed = passed && ordinaryMatches && targetMatches;
                 }
             }
+
+            // D2D-83: the SAME oracle applied to the CPU FALLBACK path instead of ImageBrush --
+            // requiresCpuBitmap forces MakeSpritePixels whenever a draw is tinted (non-white
+            // Color) and GPU ColorMatrix is unavailable, which is unconditionally true under this
+            // Wine/WineD3D build. MakeSpritePixels itself does PURE NEAREST-NEIGHBOR sampling (see
+            // its sampleCoordinate lambda -- always returns an integer index, no fractional
+            // blending); the flattened, per-texel-tinted 1:1 RGBA buffer it produces is uploaded as
+            // a transient bitmap and THEN linearly interpolated by the GPU when scaled to the
+            // destination rect. Tint is a per-channel multiply (D2D-34), which commutes with
+            // linear interpolation, so the correct expected value is simply each ImageBrush-path
+            // expected color scaled by the tint factor -- reusing D2D-81's already-validated
+            // blend weights rather than re-deriving them.
+            const Color tint(200, 200, 200, 255);
+            const auto tinted = [&](const Color& c) {
+                return Color(static_cast<int>(c.getRProperty()) * 200 / 255,
+                             static_cast<int>(c.getGProperty()) * 200 / 255,
+                             static_cast<int>(c.getBProperty()) * 200 / 255, 255);
+            };
+            const StripeSample tintedSamples[] = {
+                {1, tinted(red), tinted(red), tinted(red), "u~0.67 interior red"},
+                {2, tinted(red), tinted(red), tinted(red), "u~1.78 interior red"},
+                {4, tinted(halfBlend), tinted(halfBlend), tinted(halfBlend), "u=4.0 exact red/green midpoint"},
+                {6, tinted(green), tinted(green), tinted(green), "u~6.22 interior green"},
+                {0, tinted(red), tinted(wrapOutsideLeft), tinted(red), "u~-0.44 outside left"},
+                {8, tinted(green), tinted(wrapOutsideRight), tinted(green), "u~8.44 outside right"},
+            };
+            for (SamplerState* sampler : {&linearClamp, &linearWrap, &linearMirror})
+            {
+                const char* modeName = sampler == &linearClamp ? "Clamp" : sampler == &linearWrap ? "Wrap" : "Mirror";
+                for (const StripeSample& sample : tintedSamples)
+                {
+                    const Color& expected = sampler == &linearClamp   ? sample.clampExpected
+                                            : sampler == &linearWrap  ? sample.wrapExpected
+                                                                      : sample.mirrorExpected;
+                    device.Clear(Color::Black);
+                    sprites_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, sampler, nullptr, nullptr);
+                    sprites_->Draw(stripeTexture, Rectangle(0, 0, 9, 1), Rectangle(-1, 0, 10, 1), tint);
+                    sprites_->End();
+                    Color actual(0, 0, 0, 0);
+                    const Rectangle texel(sample.destX, 0, 1, 1);
+                    device.GetBackBufferData(&texel, &actual, 0, 1);
+                    const bool matches = Matches(actual, expected, 8);
+                    std::printf("[%s] Texture2D CPU-fallback oracle Linear %s %s: got=(%d,%d,%d,%d), expected=(%d,%d,%d,%d)\n",
+                                matches ? "PASS" : "FAIL", modeName, sample.label,
+                                actual.getRProperty(), actual.getGProperty(),
+                                actual.getBProperty(), actual.getAProperty(),
+                                expected.getRProperty(), expected.getGProperty(),
+                                expected.getBProperty(), expected.getAProperty());
+                    passed = passed && matches;
+                }
+            }
         }
 
         // 7. A recorded scissor rectangle must only affect SpriteBatch once RasterizerState
