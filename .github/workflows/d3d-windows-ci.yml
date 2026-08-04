@@ -95,6 +95,14 @@ jobs:
           path: cna_graphics/.sdl-prebuilt-Windows-*
           key: sdl-prebuilt-windows-msvc-${{ steps.sdlsha.outputs.sha }}
 
+      # D2D-123: fail fast, before spending any build time, if a Direct2D-relevant build command
+      # regresses to an unbounded (or >2) parallel job count. Runs once regardless of matrix.backend
+      # since the checked files are not backend-specific.
+      - name: Verify Direct2D build commands cap parallelism at 2
+        if: matrix.backend == 'DIRECT2D'
+        working-directory: cna_graphics
+        run: bash scripts/verify-direct2d-parallel-jobs.sh
+
       # CNA_BUILD_EXAMPLES=OFF / CNA_ENABLE_NET=OFF: keeps this job scoped to exactly what it's
       # meant to verify (CNA core + the D3D11/D3D12 backend + their own CTest executables) --
       # demos/tools (cna_reference_dump, cna_demo_2d, ...) and networking are real, separate parts
@@ -110,9 +118,11 @@ jobs:
             -DCNA_BUILD_EXAMPLES=OFF \
             -DCNA_ENABLE_NET=OFF
 
+      # D2D-123: never an unbounded job count, even on a dedicated hosted runner -- capped the same
+      # as every locally documented Direct2D build command.
       - name: Build CNA + ${{ matrix.backend }} backend + CTest executables
         working-directory: cna_graphics
-        run: cmake --build build --parallel
+        run: cmake --build build --parallel 2
 
       # D3D11_CREATE_DEVICE_DEBUG depends on Windows' Graphics Tools capability. Hosted-image
       # contents change over time, so make the native audit deterministic instead of assuming the
