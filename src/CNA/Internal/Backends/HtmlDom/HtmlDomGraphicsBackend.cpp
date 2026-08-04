@@ -35,8 +35,21 @@
 // element itself to the physical canvas area, so an oversized/offset root could bleed into (or
 // trigger a scrollbar on) the surrounding host page. The wrapper is a real element specifically so
 // this clipping is self-contained within this backend's own DOM structure, independent of whatever
-// the host page's own layout happens to be (HTMLDOM-115 is the separate, later task for hardening
-// the REST of that host-page integration surface).
+// the host page's own layout happens to be.
+//
+// plan_html_dom.md HTMLDOM-115: the REST of the host-page integration surface -- an existing
+// element ID-colliding with this backend's own, the canvas's own pre-existing `visibility` value
+// (preserved and restored exactly, not assumed to have been unset), and a `window.resize` listener
+// so a host-page reflow that MOVES the canvas without resizing it (Present()'s own dirty check only
+// fires on a SIZE change) still re-syncs the wrapper's own position. Z-order relative to page
+// siblings is deliberately left as plain DOM order (no explicit `z-index`) -- the wrapper is
+// inserted immediately after the canvas, so it paints on top of whatever came before the canvas in
+// the page and below whatever comes after; a host page needing a specific stacking order relative
+// to its OWN unrelated content should give ITS OWN elements an explicit `z-index`, the same as it
+// would need to for any two ordinary sibling elements. A canvas positioned via a CSS `transform`
+// (scale/rotate/skew) is a documented, accepted gap -- `offsetLeft`/`offsetTop` (what
+// cnaDomApplySurfaceGeometry reads) do not account for CSS transforms at all, only layout position;
+// see docs/html-dom-backend.md's own Known Limitations.
 EM_JS(void, CNA_HtmlDom_EnsureRoot, (), {
     // Guarded: the repo's own GTest runner is plain `node`, where there is no document at all, so
     // an unguarded reference would throw a ReferenceError into wasm instead of degrading to
@@ -54,6 +67,17 @@ EM_JS(void, CNA_HtmlDom_EnsureRoot, (), {
     if (Module['cnaDomRoot']) return;
     const canvas = Module['canvas'] || document.querySelector('canvas');
     if (!canvas) { console.error('[CNA] HTML_DOM: no <canvas> element to anchor the DOM surface to'); return; }
+    // plan_html_dom.md HTMLDOM-115: a page that already has its OWN unrelated element using either
+    // of these exact ids is a real, if unlikely, host-page integration hazard -- silently adopting/
+    // conflating it with this backend's own root would let some other script's DOM manipulation
+    // corrupt this backend's rendering in confusing ways. Fails loudly, the same way the missing-
+    // canvas case above does, rather than proceeding into an ID collision.
+    if (document.getElementById('cna-dom-root') || document.getElementById('cna-dom-viewport')) {
+        console.error('[CNA] HTML_DOM: the page already has an element with id "cna-dom-root" or ' +
+                      '"cna-dom-viewport" that this backend did not create -- refusing to proceed ' +
+                      'to avoid a silent ID collision. Remove or rename the conflicting element.');
+        return;
+    }
     const viewportEl = document.createElement('div');
     viewportEl.id = 'cna-dom-viewport';
     // The static black matches SDL3's own SDL_LOGICAL_PRESENTATION_LETTERBOX behaviour (its bars
@@ -67,7 +91,26 @@ EM_JS(void, CNA_HtmlDom_EnsureRoot, (), {
                          'contain:strict;background-color:#000;';
     (canvas.parentNode || document.body).insertBefore(viewportEl, canvas.nextSibling);
     viewportEl.appendChild(root);
+    // plan_html_dom.md HTMLDOM-115: preserves whatever visibility the host page had already set
+    // (including "", the CSS default) rather than assuming it was unset -- an earlier version
+    // always restored "" on destroy, silently discarding a host page's own pre-existing visibility
+    // choice (e.g. a page that itself set visibility:hidden for an unrelated reason before this
+    // backend ever ran).
+    Module['cnaDomOriginalCanvasVisibility'] = canvas.style.visibility;
     canvas.style.visibility = 'hidden';
+    // plan_html_dom.md HTMLDOM-115: Present()'s own dirty check only re-derives geometry when the
+    // LOGICAL or PHYSICAL SIZE changes -- a host-page layout reflow that moves the canvas WITHOUT
+    // resizing it (a responsive layout shift, an animated margin/position change elsewhere on the
+    // page, ...) would never trip that check, leaving the wrapper's own left/top visibly stale
+    // until the next real resize. `resize` does not cover every possible reposition (a pure CSS
+    // animation with no window resize at all is a documented, accepted gap -- see docs/html-dom-
+    // backend.md's own Known Limitations), but it is the single highest-value, lowest-cost signal:
+    // window resizes and orientation changes are what most real responsive layouts key off of.
+    const resizeListener = function () {
+        if (Module['cnaDomApplySurfaceGeometry']) Module['cnaDomApplySurfaceGeometry']();
+    };
+    window.addEventListener('resize', resizeListener);
+    Module['cnaDomResizeListener'] = resizeListener;
     Module['cnaDomViewportEl'] = viewportEl;
     Module['cnaDomRoot'] = root;
     Module['cnaDomBoundCtx'] = null;
@@ -296,7 +339,14 @@ EM_JS(void, CNA_HtmlDom_DestroyRoot, (), {
     if (viewportEl && viewportEl.parentNode) viewportEl.parentNode.removeChild(viewportEl);
     const canvas = Module['canvas'] ||
                    (typeof document === 'undefined' ? null : document.querySelector('canvas'));
-    if (canvas) canvas.style.visibility = "";
+    // plan_html_dom.md HTMLDOM-115: restores the EXACT pre-existing value CNA_HtmlDom_EnsureRoot
+    // captured, not a hardcoded "" -- see that capture's own comment.
+    if (canvas) canvas.style.visibility = Module['cnaDomOriginalCanvasVisibility'] || "";
+    Module['cnaDomOriginalCanvasVisibility'] = null;
+    if (Module['cnaDomResizeListener']) {
+        window.removeEventListener('resize', Module['cnaDomResizeListener']);
+        Module['cnaDomResizeListener'] = null;
+    }
     Module['cnaDomViewportEl'] = null;
     Module['cnaDomRoot'] = null;
     Module['cnaDomRegions'] = null;

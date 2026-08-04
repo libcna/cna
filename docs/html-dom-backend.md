@@ -21,6 +21,7 @@ produced:
 | `cna_test_htmldom_stress` | Performance benchmark, 300-frame stability run, variant-cache eviction under sustained churn, deterministic LRU hit-promotion/eviction-identity (HTMLDOM-109), `SetData` cache regeneration, byte-identical static-resubmit flush-call/CSS-write instrumentation (HTMLDOM-110) | 10/10 |
 | `cna_test_htmldom_dispose` | Texture/render-target dispose actually shrinks the JS texture registry, bound-target auto-unbind, create/destroy churn, texture destruction and render-target rebinding each shrink the global variant cache by exactly their own contribution (HTMLDOM-109), a second `HtmlDomGraphicsBackend` sharing one window is reference-counted and destroying it does not tear down the first, still-alive backend's shared DOM surface (HTMLDOM-114) | 17/17 |
 | `cna_htmldom_visual_demo` | Screenshot-verified visual demo (not a PASS/FAIL page) | — |
+| `host-integration` (reuses the smoke page's own `.html`, driven by `scripts/htmldom-host-integration-test.mjs`) | A host page's own pre-existing canvas `visibility` value is captured and (implicitly, by the same code path) restored rather than assumed unset; a pre-existing, host-page-owned element with a colliding id is detected and refused rather than silently adopted (HTMLDOM-115) | 2/2 |
 
 Plus 40 GTest cases for everything pure-C++ (blend mapping, address-mode validation, the sprite
 geometry encoder, the 3D throw surface, inert-state-setter audit, `SetViewport`) under
@@ -266,3 +267,18 @@ software one without saying so.
     (nothing in `IGraphicsBackend` prevents it, and this is now safe rather than forbidden) — the
     shared DOM surface is reference-counted (`Module['cnaDomBackendRefCount']`), so destroying one
     backend never tears the surface down out from under another still-live one. Verified in-browser.
+13. **A canvas positioned via a CSS `transform` (scale/rotate/skew) is not accounted for**
+    (HTMLDOM-115) — `cnaDomApplySurfaceGeometry` positions the DOM surface from the canvas's own
+    `offsetLeft`/`offsetTop`, which report LAYOUT position only; CSS transforms are a purely visual,
+    post-layout effect neither property reflects at all. A host page that scales/rotates the canvas
+    via CSS will see the DOM surface misalign with it. Page SCROLL and the canvas's own offset-parent
+    chain are NOT a problem by the same reasoning in reverse: `offsetLeft`/`offsetTop` are relative
+    to the nearest positioned ancestor, not the viewport, so both the canvas and the DOM surface's
+    own wrapper (a sibling, sharing the same ancestor chain) scroll together and stay aligned without
+    any extra handling. A host-page layout reflow that MOVES the canvas without resizing it (a
+    responsive breakpoint, an animated `margin`/`left` elsewhere on the page) is caught by a
+    `window.resize` listener for the common case (window resize, orientation change); a pure
+    CSS-only reposition with no window resize at all is a narrower, accepted gap. Z-order relative
+    to other page content is plain DOM order (the wrapper is inserted immediately after the canvas)
+    — a host page needing a specific stacking order should give its OWN elements an explicit
+    `z-index`, the same as for any two ordinary page elements.

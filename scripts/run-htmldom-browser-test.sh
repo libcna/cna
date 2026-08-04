@@ -9,9 +9,9 @@
 #
 # Usage: scripts/run-htmldom-browser-test.sh [build-dir] [page]
 #        build-dir defaults to cmake-build-htmldom.
-#        page is one of: smoke (default), pixel, stress, dispose.
+#        page is one of: smoke (default), pixel, stress, dispose, host-integration.
 #
-# To build and run all four pages in one command, use scripts/run-htmldom-test-suite.sh instead.
+# To build and run all five pages in one command, use scripts/run-htmldom-test-suite.sh instead.
 #
 # Requires: a completed HTML_DOM build of the requested page's target, node, and the playwright
 # package with a Chromium binary. Exit code 0 = every check passed.
@@ -20,13 +20,21 @@ set -euo pipefail
 BUILD_DIR="${1:-cmake-build-htmldom}"
 PAGE_NAME="${2:-smoke}"
 
+# plan_html_dom.md HTMLDOM-115: host-integration reuses the smoke page's own built .html (no
+# separate C++ binary -- both host-page-integration behaviours it exercises are part of the
+# EXISTING constructor flow every htmldom page already goes through), but is driven by a different
+# harness script (htmldom-host-integration-test.mjs, not htmldom-browser-test.mjs below), since it
+# needs to rewrite the page's own HTML response before the browser parses it -- see that script's
+# own top-of-file comment for why.
+HARNESS="htmldom-browser-test.mjs"
 case "${PAGE_NAME}" in
-    smoke)   TARGET="cna_test_htmldom_smoke" ;;
-    pixel)   TARGET="cna_test_htmldom_pixel_verification" ;;
-    stress)  TARGET="cna_test_htmldom_stress" ;;
-    dispose) TARGET="cna_test_htmldom_dispose" ;;
+    smoke)            TARGET="cna_test_htmldom_smoke" ;;
+    pixel)            TARGET="cna_test_htmldom_pixel_verification" ;;
+    stress)           TARGET="cna_test_htmldom_stress" ;;
+    dispose)          TARGET="cna_test_htmldom_dispose" ;;
+    host-integration) TARGET="cna_test_htmldom_smoke"; HARNESS="htmldom-host-integration-test.mjs" ;;
     *)
-        echo "error: unknown page '${PAGE_NAME}' -- expected smoke|pixel|stress|dispose" >&2
+        echo "error: unknown page '${PAGE_NAME}' -- expected smoke|pixel|stress|dispose|host-integration" >&2
         exit 2
         ;;
 esac
@@ -50,5 +58,5 @@ for _ in $(seq 1 50); do
     sleep 0.1
 done
 
-NODE_PATH="$(npm root -g)" node "$(dirname "$0")/htmldom-browser-test.mjs" \
+NODE_PATH="$(npm root -g)" node "$(dirname "$0")/${HARNESS}" \
     "http://127.0.0.1:${PORT}/${PAGE}"
