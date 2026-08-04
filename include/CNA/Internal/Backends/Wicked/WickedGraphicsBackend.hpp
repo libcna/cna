@@ -79,6 +79,21 @@ namespace CNA::Internal::Backends::Wicked
      */
     NOXNA inline constexpr int kWickedMaxRenderTargets = 4;
 
+    /**
+     * @brief NOXNA. How many independent regions a CPU-writable buffer is split into.
+     *
+     * The backend's vertex and index buffers live in `Usage::UPLOAD` memory the CPU writes
+     * directly, so writing one the GPU may still be reading is a real hazard. Each write (other
+     * than `SetDataOptions::NoOverwrite`) moves to the next region instead — buffer orphaning,
+     * which is exactly what `Discard` asks for and a valid way to satisfy `None`.
+     *
+     * Wicked Engine keeps `GraphicsDevice::GetBufferCount()` (2) frames in flight, so two regions
+     * is the minimum that works; the third is slack for a second write within one frame. A game
+     * that rewrites the same buffer more than three times per frame can still outrun it — that
+     * limitation is documented rather than hidden, since detecting it needs per-region fences.
+     */
+    NOXNA inline constexpr int kWickedBufferRegions = 3;
+
     /** @brief NOXNA. The first variant that carries blend weights, and so can be skinned. */
     NOXNA inline constexpr std::size_t kWickedFirstSkinnableVariant =
         static_cast<std::size_t>(WickedShaderVariant::Basic52);
@@ -149,6 +164,19 @@ namespace CNA::Internal::Backends::Wicked
         std::int32_t  fillMode = 0;           ///< Raw XNA FillMode ordinal.
         float         depthBias = 0.0f;       ///< XNA RasterizerState.DepthBias.
         float         slopeScaleDepthBias = 0.0f; ///< XNA RasterizerState.SlopeScaleDepthBias.
+        /**
+         * @brief Bound per-vertex streams, or 0 for the single-stream layouts.
+         *
+         * A `VertexDeclaration` whose elements are split across several buffers needs its own
+         * input layout, so the split has to be part of what selects a pipeline. Zero here means
+         * "the variant's own single-slot layout", which is what every draw that binds one buffer
+         * uses and keeps its key byte-identical to what it was before multi-stream input existed.
+         */
+        std::uint32_t streamCount = 0;
+        /** @brief Each stream's byte offset inside the combined vertex. */
+        std::int32_t  streamBase[kMaxVertexStreams] = {};
+        /** @brief Each stream's own declaration stride, in bytes. */
+        std::int32_t  streamStride[kMaxVertexStreams] = {};
 
         /** @brief Byte-wise equality, so a new state field cannot be forgotten here. */
         [[nodiscard]] bool operator==(const WickedPipelineKey& other) const noexcept;
@@ -169,6 +197,8 @@ namespace CNA::Internal::Backends::Wicked
         wig::BlendState        blend;        ///< Owned blend state referenced by @ref pipeline.
         wig::RasterizerState   rasterizer;   ///< Owned rasterizer state referenced by @ref pipeline.
         wig::DepthStencilState depthStencil; ///< Owned depth/stencil state referenced by @ref pipeline.
+        /// Re-slotted input layout, used only when the key describes a multi-stream draw.
+        wig::InputLayout       inputLayout;
         wig::PipelineState     pipeline;     ///< The compiled pipeline.
     };
 
@@ -599,11 +629,27 @@ namespace CNA::Internal::Backends::Wicked
         /**
          * @brief Uploads @p vertexCount vertices of @p strideInBytes bytes each.
          *
+         * Equivalent to SetDataWithOptions() with `SetDataOptions::None`.
+         *
          * @param data           Packed vertex data.
          * @param vertexCount    Number of vertices.
          * @param strideInBytes  Size of one vertex in bytes.
          */
         void SetData(const void* data, int vertexCount, std::size_t strideInBytes) override;
+        /**
+         * @brief Uploads vertex data, honouring the caller's streaming hint.
+         *
+         * `Discard` and `None` both move to the next buffer region so the write cannot land on
+         * memory a queued draw may still read. `NoOverwrite` keeps the current region, which is
+         * the caller's explicit promise that it will not.
+         *
+         * @param data           Packed vertex data.
+         * @param vertexCount    Number of vertices.
+         * @param strideInBytes  Size of one vertex in bytes.
+         * @param options        Streaming hint.
+         */
+        void SetDataWithOptions(const void* data, int vertexCount, std::size_t strideInBytes,
+                                SetDataOptions options) override;
         /**
          * @brief Records the caller's complete vertex declaration.
          *
@@ -620,12 +666,18 @@ namespace CNA::Internal::Backends::Wicked
         [[nodiscard]] const wig::GPUBuffer& GetBufferEXT() const { return buffer_; }
         /** @brief NOXNA. Byte stride of the most recent upload, or 0 when nothing was uploaded. */
         [[nodiscard]] std::size_t GetStrideEXT() const { return stride_; }
+        /** @brief NOXNA. Byte offset of the region the most recent upload landed in. */
+        [[nodiscard]] std::uint64_t GetByteOffsetEXT() const;
 
     private:
+        void EnsureStorage(std::size_t strideInBytes);
+
         WickedGraphicsBackend* owner_ = nullptr;
         wig::GPUBuffer buffer_;
         int capacity_ = 0;
         int vertexCount_ = 0;
+        int regionIndex_ = 0;
+        std::size_t regionSizeBytes_ = 0;
         std::size_t stride_ = 0;
         std::size_t declaredStride_ = 0;
     };
@@ -662,6 +714,20 @@ namespace CNA::Internal::Backends::Wicked
          * @param indexCount Number of indices.
          */
         void SetData32(const void* data, int indexCount) override;
+        /**
+         * @brief Uploads 16-bit indices, honouring the caller's streaming hint.
+         * @param data       Packed index data.
+         * @param indexCount Number of indices.
+         * @param options    Streaming hint; see WickedVertexBufferBackend::SetDataWithOptions.
+         */
+        void SetData16WithOptions(const void* data, int indexCount, SetDataOptions options) override;
+        /**
+         * @brief Uploads 32-bit indices, honouring the caller's streaming hint.
+         * @param data       Packed index data.
+         * @param indexCount Number of indices.
+         * @param options    Streaming hint; see WickedVertexBufferBackend::SetDataWithOptions.
+         */
+        void SetData32WithOptions(const void* data, int indexCount, SetDataOptions options) override;
         /** @brief Number of indices most recently uploaded. */
         [[nodiscard]] int GetIndexCount() const override { return indexCount_; }
         /** @brief Whether this buffer stores 32-bit indices. */
@@ -669,12 +735,19 @@ namespace CNA::Internal::Backends::Wicked
 
         /** @brief NOXNA. The underlying Wicked Engine buffer. */
         [[nodiscard]] const wig::GPUBuffer& GetBufferEXT() const { return buffer_; }
+        /** @brief NOXNA. Byte offset of the region the most recent upload landed in. */
+        [[nodiscard]] std::uint64_t GetByteOffsetEXT() const;
 
     private:
+        void Upload(const void* data, int indexCount, std::size_t indexSize,
+                    SetDataOptions options);
+
         WickedGraphicsBackend* owner_ = nullptr;
         wig::GPUBuffer buffer_;
         int capacity_ = 0;
         int indexCount_ = 0;
+        int regionIndex_ = 0;
+        std::size_t regionSizeBytes_ = 0;
         bool thirtyTwoBit_ = false;
     };
 
@@ -1188,6 +1261,8 @@ namespace CNA::Internal::Backends::Wicked
         [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
         /** @brief The largest single-axis texture dimension this device accepts. */
         [[nodiscard]] int GetMaxTextureDimension() const override;
+        /** @brief How many per-vertex `VertexBufferBinding`s one draw may bind. */
+        [[nodiscard]] int GetMaxVertexStreams() const override;
 
         // ---- NOXNA: internals shared with this backend's resource classes ----
 

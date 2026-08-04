@@ -316,10 +316,12 @@ namespace CNA::Internal::Backends::Wicked
                 &destination, wig::ResourceState::COPY_DST, destination.desc.layout);
             device->Barrier(&toOriginalLayout, 1, cmd);
 
-            // The staging texture must outlive the copy. Submitting and waiting is the simple,
-            // always-correct choice for what is an infrequent, normally load-time operation in CNA;
-            // plan_wicked.md WICKED-31 tracks batching it instead.
-            owner.FlushAndWaitEXT();
+            // The staging texture goes out of scope here, and that is safe WITHOUT a stall:
+            // Wicked Engine's resource destructors do not free anything directly, they push the
+            // native handle onto the device's deferred-destruction queue stamped with the current
+            // frame, and the queue only releases an entry once BUFFERCOUNT further frames have
+            // been submitted. The copy recorded just above is therefore guaranteed to have
+            // executed before the memory it reads is reclaimed (plan_wicked.md WICKED-31).
             return true;
         }
 
@@ -924,37 +926,72 @@ namespace CNA::Internal::Backends::Wicked
         : owner_(owner)
         , capacity_(std::max(1, vertexCapacity))
     {
-        wig::GPUBufferDesc desc;
-        desc.size = static_cast<std::uint64_t>(capacity_) * kMaxSupportedStride;
-        desc.usage = wig::Usage::UPLOAD;
-        desc.bind_flags = wig::BindFlag::VERTEX_BUFFER;
-        if (!owner_->GetDeviceEXT()->CreateBuffer(&desc, nullptr, &buffer_))
-            throw std::runtime_error("Wicked backend: failed to create a vertex buffer.");
+        // Storage is allocated lazily, on the first upload that reveals the real vertex stride.
+        // Sizing it eagerly would mean assuming the widest supported stride for every buffer --
+        // over four times the memory a stride-16 buffer needs, before the region multiplier.
     }
 
     WickedVertexBufferBackend::~WickedVertexBufferBackend() = default;
 
+    void WickedVertexBufferBackend::EnsureStorage(std::size_t strideInBytes)
+    {
+        const std::size_t regionSize = static_cast<std::size_t>(capacity_) * strideInBytes;
+        if (buffer_.IsValid() && regionSize == regionSizeBytes_)
+            return;
+
+        wig::GPUBufferDesc desc;
+        desc.size = static_cast<std::uint64_t>(regionSize) * kWickedBufferRegions;
+        desc.usage = wig::Usage::UPLOAD;
+        desc.bind_flags = wig::BindFlag::VERTEX_BUFFER;
+
+        wig::GPUBuffer replacement;
+        if (!owner_->GetDeviceEXT()->CreateBuffer(&desc, nullptr, &replacement))
+            throw std::runtime_error("Wicked backend: failed to create a vertex buffer.");
+
+        buffer_ = std::move(replacement);
+        regionSizeBytes_ = regionSize;
+        regionIndex_ = 0;
+    }
+
+    std::uint64_t WickedVertexBufferBackend::GetByteOffsetEXT() const
+    {
+        return static_cast<std::uint64_t>(regionIndex_) * regionSizeBytes_;
+    }
+
     void WickedVertexBufferBackend::SetData(const void* data, int vertexCount,
                                             std::size_t strideInBytes)
+    {
+        SetDataWithOptions(data, vertexCount, strideInBytes, SetDataOptions::None);
+    }
+
+    void WickedVertexBufferBackend::SetDataWithOptions(const void* data, int vertexCount,
+                                                       std::size_t strideInBytes,
+                                                       SetDataOptions options)
     {
         if (data == nullptr || vertexCount <= 0 || strideInBytes == 0)
         {
             vertexCount_ = 0;
             return;
         }
+        if (vertexCount > capacity_)
+        {
+            throw std::runtime_error(
+                "Wicked backend: " + std::to_string(vertexCount) +
+                " vertices exceed this buffer's capacity of " + std::to_string(capacity_) + ".");
+        }
+
+        EnsureStorage(strideInBytes);
         if (buffer_.mapped_data == nullptr)
             throw std::runtime_error("Wicked backend: vertex buffer is not CPU-writable.");
 
-        const std::size_t byteCount = static_cast<std::size_t>(vertexCount) * strideInBytes;
-        if (byteCount > buffer_.desc.size)
-        {
-            throw std::runtime_error(
-                "Wicked backend: vertex data (" + std::to_string(byteCount) +
-                " bytes) exceeds the buffer's capacity (" +
-                std::to_string(buffer_.desc.size) + " bytes).");
-        }
+        // NoOverwrite is the caller's explicit promise that it is not touching data a queued draw
+        // still reads, so it keeps the current region. Everything else moves to the next one --
+        // buffer orphaning, which is what Discard asks for and a valid way to satisfy None.
+        if (options != SetDataOptions::NoOverwrite)
+            regionIndex_ = (regionIndex_ + 1) % kWickedBufferRegions;
 
-        std::memcpy(buffer_.mapped_data, data, byteCount);
+        auto* destination = static_cast<std::uint8_t*>(buffer_.mapped_data) + GetByteOffsetEXT();
+        std::memcpy(destination, data, static_cast<std::size_t>(vertexCount) * strideInBytes);
         vertexCount_ = vertexCount;
         stride_ = strideInBytes;
     }
@@ -980,8 +1017,12 @@ namespace CNA::Internal::Backends::Wicked
         , capacity_(std::max(1, indexCapacity))
         , thirtyTwoBit_(thirtyTwoBit)
     {
+        // Unlike a vertex buffer, an index buffer's element size is known at construction, so its
+        // storage can be sized right away.
+        regionSizeBytes_ = static_cast<std::size_t>(capacity_) * (thirtyTwoBit_ ? 4u : 2u);
+
         wig::GPUBufferDesc desc;
-        desc.size = static_cast<std::uint64_t>(capacity_) * (thirtyTwoBit_ ? 4u : 2u);
+        desc.size = static_cast<std::uint64_t>(regionSizeBytes_) * kWickedBufferRegions;
         desc.usage = wig::Usage::UPLOAD;
         desc.bind_flags = wig::BindFlag::INDEX_BUFFER;
         if (!owner_->GetDeviceEXT()->CreateBuffer(&desc, nullptr, &buffer_))
@@ -990,36 +1031,60 @@ namespace CNA::Internal::Backends::Wicked
 
     WickedIndexBufferBackend::~WickedIndexBufferBackend() = default;
 
-    void WickedIndexBufferBackend::SetData16(const void* data, int indexCount)
+    std::uint64_t WickedIndexBufferBackend::GetByteOffsetEXT() const
     {
-        if (thirtyTwoBit_)
-            throw std::runtime_error("Wicked backend: SetData16 on a 32-bit index buffer.");
+        return static_cast<std::uint64_t>(regionIndex_) * regionSizeBytes_;
+    }
+
+    void WickedIndexBufferBackend::Upload(const void* data, int indexCount, std::size_t indexSize,
+                                          SetDataOptions options)
+    {
         if (data == nullptr || indexCount <= 0)
         {
             indexCount_ = 0;
             return;
         }
-        const std::size_t byteCount = static_cast<std::size_t>(indexCount) * 2u;
-        if (buffer_.mapped_data == nullptr || byteCount > buffer_.desc.size)
-            throw std::runtime_error("Wicked backend: 16-bit index data exceeds buffer capacity.");
-        std::memcpy(buffer_.mapped_data, data, byteCount);
+        if (indexCount > capacity_)
+        {
+            throw std::runtime_error(
+                "Wicked backend: " + std::to_string(indexCount) +
+                " indices exceed this buffer's capacity of " + std::to_string(capacity_) + ".");
+        }
+        if (buffer_.mapped_data == nullptr)
+            throw std::runtime_error("Wicked backend: index buffer is not CPU-writable.");
+
+        if (options != SetDataOptions::NoOverwrite)
+            regionIndex_ = (regionIndex_ + 1) % kWickedBufferRegions;
+
+        auto* destination = static_cast<std::uint8_t*>(buffer_.mapped_data) + GetByteOffsetEXT();
+        std::memcpy(destination, data, static_cast<std::size_t>(indexCount) * indexSize);
         indexCount_ = indexCount;
+    }
+
+    void WickedIndexBufferBackend::SetData16(const void* data, int indexCount)
+    {
+        SetData16WithOptions(data, indexCount, SetDataOptions::None);
     }
 
     void WickedIndexBufferBackend::SetData32(const void* data, int indexCount)
     {
+        SetData32WithOptions(data, indexCount, SetDataOptions::None);
+    }
+
+    void WickedIndexBufferBackend::SetData16WithOptions(const void* data, int indexCount,
+                                                        SetDataOptions options)
+    {
+        if (thirtyTwoBit_)
+            throw std::runtime_error("Wicked backend: SetData16 on a 32-bit index buffer.");
+        Upload(data, indexCount, 2u, options);
+    }
+
+    void WickedIndexBufferBackend::SetData32WithOptions(const void* data, int indexCount,
+                                                        SetDataOptions options)
+    {
         if (!thirtyTwoBit_)
             throw std::runtime_error("Wicked backend: SetData32 on a 16-bit index buffer.");
-        if (data == nullptr || indexCount <= 0)
-        {
-            indexCount_ = 0;
-            return;
-        }
-        const std::size_t byteCount = static_cast<std::size_t>(indexCount) * 4u;
-        if (buffer_.mapped_data == nullptr || byteCount > buffer_.desc.size)
-            throw std::runtime_error("Wicked backend: 32-bit index data exceeds buffer capacity.");
-        std::memcpy(buffer_.mapped_data, data, byteCount);
-        indexCount_ = indexCount;
+        Upload(data, indexCount, 4u, options);
     }
 
     // ------------------------------------------------------------------------------------------
@@ -1902,6 +1967,41 @@ namespace CNA::Internal::Backends::Wicked
             entry.depthStencil.back_face = entry.depthStencil.front_face;
         }
 
+        // A multi-stream draw needs its own input layout: the variant's own element table places
+        // every element in slot 0 at its offset inside the COMBINED vertex, which is where those
+        // bytes live only when one buffer holds all of them.
+        if (key.streamCount > 0)
+        {
+            const wig::InputLayout& base = key.instanced != 0
+                ? instancedInputLayouts_[key.variant]
+                : inputLayouts_[key.variant];
+            for (const wig::InputLayout::Element& element : base.elements)
+            {
+                wig::InputLayout::Element reslotted = element;
+                if (element.input_slot_class == wig::InputClassification::PER_INSTANCE_DATA)
+                {
+                    // The per-instance elements already name their own slot and their offsets are
+                    // relative to the instance record, not the combined vertex.
+                    entry.inputLayout.elements.push_back(reslotted);
+                    continue;
+                }
+                for (std::uint32_t stream = 0; stream < key.streamCount; ++stream)
+                {
+                    const std::int32_t base_offset = key.streamBase[stream];
+                    const std::int32_t end = base_offset + key.streamStride[stream];
+                    if (static_cast<std::int32_t>(element.aligned_byte_offset) >= base_offset &&
+                        static_cast<std::int32_t>(element.aligned_byte_offset) < end)
+                    {
+                        reslotted.input_slot = stream;
+                        reslotted.aligned_byte_offset =
+                            element.aligned_byte_offset - static_cast<std::uint32_t>(base_offset);
+                        break;
+                    }
+                }
+                entry.inputLayout.elements.push_back(reslotted);
+            }
+        }
+
         auto emplaced = pipelines_.emplace(key, std::move(entry));
         WickedPipelineEntry& stored = emplaced.first->second;
 
@@ -1938,6 +2038,8 @@ namespace CNA::Internal::Backends::Wicked
             desc.il = key.instanced != 0 ? &instancedInputLayouts_[key.variant]
                                          : &inputLayouts_[key.variant];
         }
+        if (key.streamCount > 0)
+            desc.il = &stored.inputLayout;
         desc.bs = &stored.blend;
         desc.rs = &stored.rasterizer;
         desc.dss = &stored.depthStencil;
@@ -2439,12 +2541,17 @@ namespace CNA::Internal::Backends::Wicked
         const std::size_t level0Bytes = static_cast<std::size_t>(width) * height * 4;
         const bool hasPixels = data.pixels.size() >= level0Bytes;
 
-        // The whole requested chain is allocated so UpdatePixelsLevel() can reach every level CNA
-        // declared, but only level 0 carries real content here: levels above it are zero-filled
-        // until the caller uploads them. Automatic mip GENERATION is a separate, unimplemented
-        // feature (plan_wicked.md WICKED-28) -- allocating the chain is not the same as filling it.
+        // Every declared level is filled with a real 2x2 box-filtered reduction of the one below
+        // it, computed here on the CPU (plan_wicked.md WICKED-28).
+        //
+        // A GPU blit chain would be faster, but it needs each mip level transitioned independently
+        // between render-target and shader-resource while the SAME image is both sampled and
+        // rendered into -- per-subresource layout reasoning that cannot be verified anywhere in
+        // this environment and fails silently when wrong. Texture creation is a load-time
+        // operation in CNA, so the CPU cost buys determinism at a price nothing here pays per
+        // frame.
         const std::uint32_t mipLevels = std::max(1u, desc.mip_levels);
-        std::vector<std::uint8_t> zeroed;
+        std::vector<std::uint8_t> mipChain;
         std::vector<wig::SubresourceData> initial(mipLevels);
         if (hasPixels)
         {
@@ -2455,25 +2562,62 @@ namespace CNA::Internal::Backends::Wicked
                 const std::size_t levelHeight = std::max(1, height >> level);
                 upperLevelBytes += levelWidth * levelHeight * 4;
             }
-            zeroed.assign(upperLevelBytes, 0);
+            mipChain.resize(upperLevelBytes);
 
-            std::size_t zeroedOffset = 0;
-            for (std::uint32_t level = 0; level < mipLevels; ++level)
+            const std::uint8_t* previous = data.pixels.data();
+            int previousWidth = width;
+            int previousHeight = height;
+            std::size_t chainOffset = 0;
+
+            initial[0].data_ptr = data.pixels.data();
+            initial[0].row_pitch = static_cast<std::uint32_t>(width) * 4u;
+            initial[0].slice_pitch = static_cast<std::uint32_t>(level0Bytes);
+
+            for (std::uint32_t level = 1; level < mipLevels; ++level)
             {
-                const std::size_t levelWidth = std::max(1, width >> level);
-                const std::size_t levelHeight = std::max(1, height >> level);
-                const std::size_t levelBytes = levelWidth * levelHeight * 4;
-                initial[level].row_pitch = static_cast<std::uint32_t>(levelWidth * 4);
-                initial[level].slice_pitch = static_cast<std::uint32_t>(levelBytes);
-                if (level == 0)
+                const int levelWidth = std::max(1, width >> level);
+                const int levelHeight = std::max(1, height >> level);
+                std::uint8_t* destination = mipChain.data() + chainOffset;
+
+                for (int y = 0; y < levelHeight; ++y)
                 {
-                    initial[level].data_ptr = data.pixels.data();
+                    // A level whose parent is already 1 texel on an axis samples that texel twice,
+                    // which is what keeps a non-square chain correct all the way to 1x1.
+                    const int y0 = std::min(y * 2, previousHeight - 1);
+                    const int y1 = std::min(y * 2 + 1, previousHeight - 1);
+                    for (int x = 0; x < levelWidth; ++x)
+                    {
+                        const int x0 = std::min(x * 2, previousWidth - 1);
+                        const int x1 = std::min(x * 2 + 1, previousWidth - 1);
+                        const std::size_t offsets[4] = {
+                            (static_cast<std::size_t>(y0) * previousWidth + x0) * 4,
+                            (static_cast<std::size_t>(y0) * previousWidth + x1) * 4,
+                            (static_cast<std::size_t>(y1) * previousWidth + x0) * 4,
+                            (static_cast<std::size_t>(y1) * previousWidth + x1) * 4,
+                        };
+                        std::uint8_t* texel =
+                            destination + (static_cast<std::size_t>(y) * levelWidth + x) * 4;
+                        for (int channel = 0; channel < 4; ++channel)
+                        {
+                            const unsigned sum =
+                                static_cast<unsigned>(previous[offsets[0] + channel]) +
+                                previous[offsets[1] + channel] +
+                                previous[offsets[2] + channel] +
+                                previous[offsets[3] + channel];
+                            texel[channel] = static_cast<std::uint8_t>((sum + 2) / 4);
+                        }
+                    }
                 }
-                else
-                {
-                    initial[level].data_ptr = zeroed.data() + zeroedOffset;
-                    zeroedOffset += levelBytes;
-                }
+
+                initial[level].data_ptr = destination;
+                initial[level].row_pitch = static_cast<std::uint32_t>(levelWidth) * 4u;
+                initial[level].slice_pitch =
+                    static_cast<std::uint32_t>(levelWidth) * levelHeight * 4u;
+
+                previous = destination;
+                previousWidth = levelWidth;
+                previousHeight = levelHeight;
+                chainOffset += static_cast<std::size_t>(levelWidth) * levelHeight * 4;
             }
         }
 
@@ -2830,9 +2974,16 @@ namespace CNA::Internal::Backends::Wicked
         const GpuVertexStreamBinding* instanceStream = nullptr;
         if (params != nullptr)
         {
-            // REMED-GFX-201/202: a bound set this backend cannot express is refused before
-            // submission rather than rendered from a subset of the streams.
-            RejectUnsupportedStreamCombination(*params, "Wicked");
+            // REMED-GFX-202: several per-instance streams remain unexpressible -- the instanced
+            // vertex programs declare exactly one instance record -- so that shape is still
+            // refused rather than rendered from the first of them. Several PER-VERTEX streams are
+            // supported (WICKED-58) and handled below.
+            if (HasMultipleInstanceStreams(*params))
+            {
+                throw std::runtime_error(
+                    "Wicked backend: only one per-instance VertexBufferBinding is supported (" +
+                    std::to_string(InstanceStreamCount(*params)) + " were bound).");
+            }
             instanceStream = FirstInstanceStream(*params);
         }
 
@@ -2872,6 +3023,30 @@ namespace CNA::Internal::Backends::Wicked
         key.variant = static_cast<std::uint32_t>(VariantForStride(stride));
         key.instanced = instanced ? 1u : 0u;
         key.topology = static_cast<std::uint32_t>(ToWickedTopology(primitive));
+
+        // WICKED-58: only a genuinely split declaration populates the stream table, so a
+        // single-buffer draw keeps producing exactly the key it produced before this existed.
+        if (params != nullptr && HasMultipleVertexStreams(*params))
+        {
+            int perVertexSlots = 0;
+            for (int i = 0; i < params->vertexStreamCount; ++i)
+            {
+                const GpuVertexStreamBinding& stream = params->vertexStreams[i];
+                if (stream.instanceFrequency != 0)
+                    continue;
+                if (stream.slot < 0 || stream.slot >= kMaxVertexStreams)
+                {
+                    throw std::runtime_error(
+                        "Wicked backend: vertex stream slot " + std::to_string(stream.slot) +
+                        " is outside the supported range.");
+                }
+                key.streamBase[stream.slot] = stream.combinedByteBase;
+                key.streamStride[stream.slot] = stream.strideInBytes;
+                ++perVertexSlots;
+            }
+            key.streamCount = static_cast<std::uint32_t>(params->vertexStreamCount);
+            (void)perVertexSlots;
+        }
 
         WickedShaderConstants constants;
         // The instanced entry points take the world transform per instance, so the constant buffer
@@ -3067,19 +3242,58 @@ namespace CNA::Internal::Backends::Wicked
                                             sampler.maxAnisotropy), slot, cmd);
         }
 
-        const wig::GPUBuffer* buffers[2] = {&vertexBuffer.GetBufferEXT(), nullptr};
-        std::uint32_t strides[2] = {static_cast<std::uint32_t>(stride), 0};
-        std::uint64_t offsets[2] = {0, 0};
-        std::uint32_t boundStreams = 1;
-        if (instanced)
+        if (!vertexBuffer.GetBufferEXT().IsValid())
         {
-            const auto* instanceBuffer =
-                static_cast<const WickedVertexBufferBackend*>(instanceStream->buffer);
-            buffers[1] = &instanceBuffer->GetBufferEXT();
-            strides[1] = kInstanceMatrixStride;
-            // VertexOffset is in vertex ELEMENTS, so the byte offset is its own stride's multiple.
-            offsets[1] = VertexStreamByteOffset(*instanceStream);
-            boundStreams = 2;
+            throw std::runtime_error(
+                "Wicked backend: the vertex buffer has no storage yet; SetData must run before a "
+                "draw that reads it.");
+        }
+
+        const wig::GPUBuffer* buffers[kMaxVertexStreams] = {};
+        std::uint32_t strides[kMaxVertexStreams] = {};
+        // The buffer's own region offset is added to every binding: an UPLOAD buffer is split into
+        // regions so a write cannot land on memory a queued draw still reads (WICKED-32).
+        std::uint64_t offsets[kMaxVertexStreams] = {};
+        std::uint32_t boundStreams = 0;
+
+        const auto bindStream = [&](int slot, const IVertexBufferBackend* backendBuffer,
+                                    std::uint32_t slotStride, std::uint64_t elementOffset)
+        {
+            const auto* wicked = static_cast<const WickedVertexBufferBackend*>(backendBuffer);
+            if (wicked == nullptr || !wicked->GetBufferEXT().IsValid())
+            {
+                throw std::runtime_error(
+                    "Wicked backend: vertex stream " + std::to_string(slot) +
+                    " has no storage yet; SetData must run before a draw that reads it.");
+            }
+            buffers[slot] = &wicked->GetBufferEXT();
+            strides[slot] = slotStride;
+            offsets[slot] = wicked->GetByteOffsetEXT() + elementOffset;
+            boundStreams = std::max(boundStreams, static_cast<std::uint32_t>(slot) + 1u);
+        };
+
+        if (key.streamCount > 0)
+        {
+            for (int i = 0; i < params->vertexStreamCount; ++i)
+            {
+                const GpuVertexStreamBinding& s = params->vertexStreams[i];
+                bindStream(s.slot, s.buffer, static_cast<std::uint32_t>(s.strideInBytes),
+                           VertexStreamByteOffset(s));
+            }
+        }
+        else
+        {
+            buffers[0] = &vertexBuffer.GetBufferEXT();
+            strides[0] = static_cast<std::uint32_t>(stride);
+            offsets[0] = vertexBuffer.GetByteOffsetEXT();
+            boundStreams = 1;
+            if (instanced)
+            {
+                // VertexOffset is in vertex ELEMENTS, so the byte offset is its own stride's
+                // multiple.
+                bindStream(instanceStream->slot, instanceStream->buffer, kInstanceMatrixStride,
+                           VertexStreamByteOffset(*instanceStream));
+            }
         }
         device_->BindVertexBuffers(buffers, 0, boundStreams, strides, offsets, cmd);
 
@@ -3090,7 +3304,8 @@ namespace CNA::Internal::Backends::Wicked
             const wig::IndexBufferFormat format = indexBuffer.IsThirtyTwoBit()
                 ? wig::IndexBufferFormat::UINT32
                 : wig::IndexBufferFormat::UINT16;
-            device_->BindIndexBuffer(&indexBuffer.GetBufferEXT(), format, 0, cmd);
+            device_->BindIndexBuffer(&indexBuffer.GetBufferEXT(), format,
+                                     indexBuffer.GetByteOffsetEXT(), cmd);
             const std::uint32_t startIndex =
                 params != nullptr ? static_cast<std::uint32_t>(params->startIndex) : 0u;
             const std::int32_t baseVertex =
@@ -3273,8 +3488,12 @@ namespace CNA::Internal::Backends::Wicked
                 return true;
             case CNA::GraphicsCapability::MultipleRenderTargets:
                 return true;
-            case CNA::GraphicsCapability::CustomEffects:
+            // WICKED-58: a VertexDeclaration split across several per-vertex buffers is re-slotted
+            // into its own input layout. Several PER-INSTANCE streams remain unsupported and are
+            // refused at the draw, as the interface requires.
             case CNA::GraphicsCapability::MultiStreamVertexInput:
+                return true;
+            case CNA::GraphicsCapability::CustomEffects:
                 return false;
             default:
                 return false;
@@ -3284,6 +3503,11 @@ namespace CNA::Internal::Backends::Wicked
     int WickedGraphicsBackend::GetMaxTextureDimension() const
     {
         return 16384;
+    }
+
+    int WickedGraphicsBackend::GetMaxVertexStreams() const
+    {
+        return kMaxVertexStreams;
     }
 
 #ifdef CNA_BACKEND_WICKED

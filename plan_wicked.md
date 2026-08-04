@@ -107,11 +107,11 @@ missing.
 | WICKED-25 | `RenderTarget2D` (colour + optional depth/stencil, `RenderTargetUsage`) | ✅ |
 | WICKED-26 | `RenderTarget2D` readback | ✅ |
 | WICKED-27 | Real GPU occlusion queries (`GPUQueryHeap` + readback buffer) | ✅ |
-| WICKED-28 | Mip-chain allocation for `Texture2D` (allocated + uploadable per level); automatic GENERATION still absent | 🟨 |
+| WICKED-28 | Mip chains for `Texture2D` — every declared level filled with a real 2x2 box-filtered reduction, computed on the CPU at creation | ✅ |
 | WICKED-29 | `TextureCube` (six-face upload + readback, sampled by `EnvironmentMapEffect`) | ✅ |
 | WICKED-30 | `Texture3D` (volume upload + readback, real GPU storage) | ✅ |
-| WICKED-31 | Batch texture uploads instead of submit-and-wait per call | ⬜ |
-| WICKED-32 | `SetDataOptions` (`Discard` / `NoOverwrite`) honoured on buffer uploads | ⬜ |
+| WICKED-31 | Texture uploads no longer stall — the staging resource rides Wicked's deferred-destruction queue instead of a submit-and-wait | ✅ |
+| WICKED-32 | `SetDataOptions` honoured — vertex/index buffers are region-orphaned on `Discard`/`None`, written in place on `NoOverwrite` | ✅ |
 
 ### Phase W4 — pipeline, state and draws
 
@@ -137,7 +137,7 @@ missing.
 | WICKED-56b | `SkinnedEffect` (bone palette at b1, FNA's `WeightsPerVertex` gating, skin composed with the world normal matrix, post-skin fog) | ✅ |
 | WICKED-56c | `PbrEffect` / `SkinnedPbrEffect` (glTF 2.0 metallic-roughness BRDF, normal/metallic-roughness/emissive/occlusion maps, strides 48 and 68) | ✅ |
 | WICKED-57 | Custom `ShaderEffect` (`CreateEffectBackend`) | ⬜ |
-| WICKED-58 | Multi-stream vertex input (`GraphicsCapability::MultiStreamVertexInput`) | ⬜ |
+| WICKED-58 | Multi-stream vertex input — a split `VertexDeclaration` is re-slotted into its own input layout; several per-INSTANCE streams still refused | ✅ |
 | WICKED-59 | Strides 48/52/56/68 (tangent/skinned layouts) — declared, matched to the D3D11/D3D12 element tables, drawn with the ordinary shading | ✅ |
 | WICKED-60 | D3D12 device selection (needs Wicked's root-signature macro in CNA's HLSL) | ⬜ |
 
@@ -188,13 +188,12 @@ missing.
 - **Instancing accepts only `InstanceFrequency == 1`** (`WICKED-53`). Wicked Engine's `InputLayout`
   carries no instance-step-rate field, so any other frequency is refused rather than silently
   drawn at rate 1. The per-instance record must be CNA's 64-byte column-major `Matrix`.
-- **Texture uploads submit and wait per call** (`WICKED-31`). Correct, but a per-frame
-  `Texture2D.SetData` pattern will stall; batching is a real follow-up.
-- **Vertex/index buffers are written straight into UPLOAD memory** (`WICKED-32`). `SetDataOptions`
-  is ignored, so overwriting a buffer the GPU may still be reading is possible; the same shape as
-  several other CNA backends, but it should become a proper ring or staged copy.
-- **Mip chains are allocated but not generated** (`WICKED-28`). Every declared level exists and can
-  be uploaded through `SetData`, but nothing downsamples level 0 into the rest.
+- **Buffer regioning is bounded, not fenced** (`WICKED-32`). A buffer rotates through
+  `kWickedBufferRegions` (3) regions, which covers the two frames Wicked keeps in flight plus one
+  extra write. A game that rewrites the same buffer more than three times in one frame can still
+  outrun it; detecting that needs per-region fences.
+- **Mip generation is a CPU box filter at creation** (`WICKED-28`), not a GPU blit chain, and does
+  not re-run when `SetData` replaces level 0 afterwards.
 - **D3D12 is not selectable** (`WICKED-60`). Wicked's HLSL6 path compiles with
   `-rootsig-define WICKED_ENGINE_DEFAULT_ROOTSIGNATURE`, which CNA's own shader source does not
   declare, so the Vulkan device is chosen on every platform.

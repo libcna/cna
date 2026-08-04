@@ -125,6 +125,31 @@ TEST(WickedPipelineKey, SkinnedPbrIsDistinctFromUnskinnedPbr)
     EXPECT_FALSE(pbrOnly == skinnedPbr);
 }
 
+TEST(WickedPipelineKey, VertexStreamSplitParticipatesInEquality)
+{
+    // A split declaration gets its own re-slotted input layout, so two draws that differ only in
+    // how their elements are spread across buffers must not share a pipeline.
+    WickedPipelineKey single = MakeKey();
+    EXPECT_EQ(0u, single.streamCount);
+
+    WickedPipelineKey split = MakeKey();
+    split.streamCount = 2;
+    split.streamBase[0] = 0;
+    split.streamStride[0] = 12;
+    split.streamBase[1] = 12;
+    split.streamStride[1] = 12;
+    EXPECT_FALSE(single == split);
+
+    WickedPipelineKey differentSplit = split;
+    differentSplit.streamStride[0] = 16;
+    differentSplit.streamBase[1] = 16;
+    EXPECT_FALSE(split == differentSplit);
+
+    const WickedPipelineKeyHash hash;
+    EXPECT_NE(hash(single), hash(split));
+    EXPECT_NE(hash(split), hash(differentSplit));
+}
+
 TEST(WickedPipelineKey, EveryStateFieldParticipatesInEquality)
 {
     // Byte-wise comparison is what makes this hold for a field added later without touching
