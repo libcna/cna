@@ -286,6 +286,7 @@ Tasks are listed in roughly recommended implementation order.
 | N23 | SSAO pass (hemisphere sampling + blur) | ⬜ |
 | N24 | Exposure / gamma post-pass | ⬜ |
 | N25 | `RenderPipelineSettings` wired to actual backend passes | ⬜ |
+| N26 | `DepthEffect` — colour-depth-reduction post-process (`ShaderEffect` subclass): 16-bit/8-bit colour, 4/2/1-bit greyscale, GLSL for EasyGL | ✅ |
 
 ### Shadows
 
