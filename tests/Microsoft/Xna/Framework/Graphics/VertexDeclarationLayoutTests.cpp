@@ -62,6 +62,7 @@
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetUsage.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBufferBinding.hpp"
@@ -98,6 +99,7 @@ using Microsoft::Xna::Framework::Graphics::PrimitiveType;
 using Microsoft::Xna::Framework::Graphics::RasterizerState;
 using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
 using Microsoft::Xna::Framework::Graphics::RenderTargetUsage;
+using Microsoft::Xna::Framework::Graphics::ShaderEffect;
 using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 using Microsoft::Xna::Framework::Graphics::VertexBuffer;
 using Microsoft::Xna::Framework::Graphics::VertexBufferBinding;
@@ -808,6 +810,348 @@ TEST_F(VertexDeclarationLayoutTest, DeclarationTransitionsDoNotReuseAStaleLayout
     for (const DeclarationCase& c : sequence)
         ExpectStaircase(c, Route::OrdinaryIndexed16, Render(c, Route::OrdinaryIndexed16));
 }
+
+// ---------------------------------------------------------------------------
+// REMED-GFX-DECL-GUARD. The legs above prove that a colliding declaration no longer renders. These
+// prove the rest of the boundary's contract: that refusing costs the caller nothing, that the
+// refusal happens before anything native is produced, and that every route into the backend goes
+// through it -- not only the one the collision matrix happens to use.
+//
+// bgfx is excluded from the REFUSAL legs and only from those: it has a real declaration translator
+// (REMED-GFX-216), so the same declarations are representable there and must keep rendering. That
+// asymmetry is the point -- the guard is a per-backend capability boundary, not a claim that these
+// declarations are globally invalid.
+// ---------------------------------------------------------------------------
+
+class DeclarationGuardTest : public VertexDeclarationLayoutTest
+{
+protected:
+    /// True when nothing at all was rasterized into @p s -- every pixel is still the clear colour.
+    static bool Untouched(const FrameSnapshot& s)
+    {
+        for (const Color& p : s.pixels)
+            if (p.getRProperty() != kClearColor.r || p.getGProperty() != kClearColor.g ||
+                p.getBProperty() != kClearColor.b)
+                return false;
+        return true;
+    }
+
+    /// The four-column staircase, asserted in full.
+    static void ExpectContract(const FrameSnapshot& frame, const DeclarationCase& c,
+                               const char* where)
+    {
+        for (int column = 0; column < kColumnCount; ++column)
+        {
+            const ColumnReading got = ReadColumn(frame, column);
+            const Rgba want =
+                ExpectedColor(kColumnColors[static_cast<std::size_t>(column)], c.hasColor);
+            EXPECT_EQ(kQuadTop, got.topRow) << where << " column " << column << DescribeFrame(frame);
+            EXPECT_EQ(ExpectedLit(column), got.lit)
+                << where << " column " << column << DescribeFrame(frame);
+            EXPECT_TRUE(NearlyEqual(got.color, want))
+                << where << " column " << column << ": carried " << got.color.ToString()
+                << ", expected " << want.ToString() << DescribeFrame(frame);
+        }
+    }
+
+    /// Uploads @p c's mesh, draws it into @p target and reports what happened. Unlike
+    /// VertexDeclarationLayoutTest::Render this keeps the target, so a refused draw's frame can be
+    /// inspected: a boundary that refuses AFTER queueing work is not a boundary.
+    struct GuardedDraw
+    {
+        bool rendered = false;
+        std::string rejection;
+        FrameSnapshot frame;
+    };
+
+    GuardedDraw DrawInto(RenderTarget2D& target, const DeclarationCase& c, bool dynamicUpload,
+                         bool use32BitIndices)
+    {
+        GuardedDraw out;
+        const std::vector<std::uint8_t> mesh = BuildMesh(c, false);
+        const std::vector<std::uint16_t> i16 = BuildQuadIndices<std::uint16_t>(kColumnCount);
+        const std::vector<std::uint32_t> i32 = BuildQuadIndices<std::uint32_t>(kColumnCount);
+        try
+        {
+            VertexBuffer meshBuffer(device, BuildDeclaration(c), kMeshVertexCount,
+                                    dynamicUpload ? BufferUsage::WriteOnly : BufferUsage::None);
+            if (dynamicUpload)
+            {
+                // Two uploads through the streaming path, so the guard is proven to survive a
+                // re-upload as well as a first one.
+                meshBuffer.SetDataRaw(mesh.data(), kMeshVertexCount, c.stride);
+                meshBuffer.SetDataRaw(mesh.data(), kMeshVertexCount, c.stride);
+            }
+            else
+            {
+                meshBuffer.SetDataRaw(mesh.data(), kMeshVertexCount, c.stride);
+            }
+
+            IndexBuffer indexBuffer(device,
+                                    use32BitIndices ? IndexElementSize::ThirtyTwoBits
+                                                    : IndexElementSize::SixteenBits,
+                                    kMeshIndexCount, BufferUsage::None);
+            if (use32BitIndices)
+                indexBuffer.SetData(i32.data(), kMeshIndexCount);
+            else
+                indexBuffer.SetData(i16.data(), kMeshIndexCount);
+
+            device.SetVertexBuffers({VertexBufferBinding(&meshBuffer, 0, 0)});
+            device.SetIndexBuffer(&indexBuffer);
+
+            BasicEffect effect(device);
+            device.SetRenderTarget(&target);
+            device.Clear(Color(kClearColor.r, kClearColor.g, kClearColor.b, kClearColor.a));
+            ApplyEffect(effect, c.hasColor);
+            device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, kMeshVertexCount, 0,
+                                         kMeshPrimitiveCount);
+            device.SetRenderTarget(nullptr);
+            out.rendered = true;
+        }
+        catch (const std::exception& e)
+        {
+            out.rejection = e.what();
+            device.SetRenderTarget(nullptr);
+        }
+        device.SetIndexBuffer(nullptr);
+        out.frame = Capture(target);
+        return out;
+    }
+};
+
+#if !defined(CNA_BACKEND_BGFX)
+
+// A refused draw must produce NOTHING: no partial geometry, no half-queued command that a later
+// Present flushes. The target still holds exactly the clear colour it was given.
+TEST_F(DeclarationGuardTest, ARefusedDeclarationRasterizesNothing)
+{
+    RequireThreeD();
+    RenderTarget2D target = MakeTarget();
+    const GuardedDraw got = DrawInto(target, kColorPosition16, false, false);
+    std::cout << "[ DECL-GUARD ] " << kBackendName << " colorPosition16 refusal: "
+              << (got.rendered ? std::string("ACCEPTED") : '"' + got.rejection + '"') << std::endl;
+    ASSERT_FALSE(got.rendered)
+        << "a declaration this backend infers no faithful layout for was accepted"
+        << DescribeFrame(got.frame);
+    EXPECT_FALSE(got.rejection.empty()) << "the refusal must say why";
+    EXPECT_TRUE(Untouched(got.frame))
+        << "the refused draw still rasterized something -- the boundary is downstream of the "
+           "work it was supposed to prevent" << DescribeFrame(got.frame);
+}
+
+// The refusal may not poison the device, the buffer allocator or any cached layout: the very next
+// draw, through a freshly allocated buffer that very likely reuses the refused one's address, must
+// render its own declaration exactly.
+TEST_F(DeclarationGuardTest, AValidDrawAfterARefusedOneStillRenders)
+{
+    RequireThreeD();
+    RenderTarget2D target = MakeTarget();
+
+    const GuardedDraw before = DrawInto(target, kPositionColor16, false, false);
+    ASSERT_TRUE(before.rendered) << before.rejection;
+    ExpectContract(before.frame, kPositionColor16, "before the refusal");
+
+    const GuardedDraw refused = DrawInto(target, kColorPosition16, false, false);
+    ASSERT_FALSE(refused.rendered);
+
+    const GuardedDraw after = DrawInto(target, kPositionColor16, false, false);
+    ASSERT_TRUE(after.rendered)
+        << "a valid declaration was refused after an invalid one -- the guard kept state: "
+        << after.rejection;
+    ExpectContract(after.frame, kPositionColor16, "after the refusal");
+
+    // A different valid declaration, to prove the recovery is not specific to repeating the first.
+    const GuardedDraw other = DrawInto(target, kPositionColorTexture24, false, false);
+    if (other.rendered)
+        ExpectContract(other.frame, kPositionColorTexture24, "a third declaration");
+    else
+        EXPECT_FALSE(other.rejection.empty())
+            << "positionColorTexture24 was refused without saying why";
+}
+
+// Static and dynamic buffers, and both index widths, reach the same boundary. A guard that only
+// covers the one upload path the collision matrix happens to use is not a boundary.
+TEST_F(DeclarationGuardTest, EveryUploadAndIndexWidthReachesTheSameBoundary)
+{
+    RequireThreeD();
+    for (const bool dynamicUpload : {false, true})
+    {
+        for (const bool use32 : {false, true})
+        {
+            RenderTarget2D target = MakeTarget();
+            const GuardedDraw got = DrawInto(target, kColorPosition16, dynamicUpload, use32);
+            std::cout << "[ DECL-GUARD ] " << kBackendName << " colorPosition16 "
+                      << (dynamicUpload ? "dynamic" : "static") << '/'
+                      << (use32 ? "index32" : "index16") << ": "
+                      << (got.rendered ? std::string("ACCEPTED") : "refused") << std::endl;
+            EXPECT_FALSE(got.rendered)
+                << (dynamicUpload ? "dynamic" : "static") << '/'
+                << (use32 ? "index32" : "index16")
+                << " slipped past the declaration guard" << DescribeFrame(got.frame);
+            EXPECT_TRUE(Untouched(got.frame)) << DescribeFrame(got.frame);
+        }
+    }
+}
+
+// DrawUserPrimitives builds its own VertexBuffer inside GraphicsDevice and propagates the caller's
+// declaration to it, so it reaches the same boundary -- and a valid user draw afterwards still
+// works.
+TEST_F(DeclarationGuardTest, DrawUserPrimitivesReachesTheSameBoundary)
+{
+    RequireThreeD();
+    RenderTarget2D target = MakeTarget();
+    BasicEffect effect(device);
+
+    const auto drawUser = [&](const DeclarationCase& c) {
+        const std::vector<std::uint8_t> mesh = BuildMesh(c, false);
+        const std::vector<std::uint16_t> indices = BuildQuadIndices<std::uint16_t>(kColumnCount);
+        std::string rejection;
+        device.SetRenderTarget(&target);
+        device.Clear(Color(kClearColor.r, kClearColor.g, kClearColor.b, kClearColor.a));
+        ApplyEffect(effect, c.hasColor);
+        try
+        {
+            device.DrawUserIndexedPrimitives(PrimitiveType::TriangleList, mesh.data(), 0,
+                                             kMeshVertexCount, indices.data(), 0,
+                                             kMeshPrimitiveCount, BuildDeclaration(c));
+        }
+        catch (const std::exception& e)
+        {
+            rejection = e.what();
+        }
+        device.SetRenderTarget(nullptr);
+        return rejection;
+    };
+
+    const std::string refused = drawUser(kColorPosition16);
+    std::cout << "[ DECL-GUARD ] " << kBackendName << " DrawUser colorPosition16: "
+              << (refused.empty() ? std::string("ACCEPTED") : '"' + refused + '"') << std::endl;
+    EXPECT_FALSE(refused.empty())
+        << "DrawUserIndexedPrimitives bypassed the declaration guard"
+        << DescribeFrame(Capture(target));
+    EXPECT_TRUE(Untouched(Capture(target))) << DescribeFrame(Capture(target));
+
+    const std::string accepted = drawUser(kPositionColor16);
+    EXPECT_TRUE(accepted.empty()) << "a valid user draw was refused after an invalid one: "
+                                  << accepted;
+    if (accepted.empty())
+        ExpectContract(Capture(target), kPositionColor16, "DrawUser after the refusal");
+}
+
+#else   // CNA_BACKEND_BGFX
+
+// The control. bgfx derives its native layout from the declaration (REMED-GFX-216), so the very
+// declarations the other backends now refuse must still render their own contract here -- which is
+// what makes the refusals a per-backend capability boundary rather than a claim that these
+// declarations are invalid.
+TEST_F(DeclarationGuardTest, TheTranslatingBackendStillRendersEveryCollidingDeclaration)
+{
+    RequireThreeD();
+    for (const DeclarationCase& c : {kColorPosition16, kPositionTextureColor24,
+                                     kPositionColorPadded32})
+    {
+        RenderTarget2D target = MakeTarget();
+        const GuardedDraw got = DrawInto(target, c, false, false);
+        std::cout << "[ DECL-GUARD ] bgfx control " << c.name << ": "
+                  << (got.rendered ? "rendered" : '"' + got.rejection + '"') << std::endl;
+        ASSERT_TRUE(got.rendered)
+            << c.name
+            << " was refused on bgfx. bgfx translates the declaration, so the checkpoint guard "
+               "must never fire here: " << got.rejection;
+        ExpectContract(got.frame, c, c.name);
+    }
+}
+
+#endif  // CNA_BACKEND_BGFX
+
+#ifdef CNA_BACKEND_EASYGL
+
+// REMED-GFX-218's control. EasyGL's CUSTOM ShaderEffect path documents its own convention --
+// attribute location N is the Nth element of the declaration, exactly as ApplyLayout binds it --
+// and the checkpoint guard must not touch it. A ShaderEffect written to that convention has to
+// keep rendering the declaration the stock programs now refuse, because for a shader the game owns
+// there is no stock input list to compare against and nothing is being reinterpreted.
+TEST_F(DeclarationGuardTest, CustomShaderEffectKeepsItsElementIndexConvention)
+{
+    RequireThreeD();
+
+    // Location 0 is this declaration's FIRST element (the colour at byte 0) and location 1 its
+    // second (the position at byte 4) -- the colorPosition16 shape, read by index.
+    static const char* kVert = R"(#version 300 es
+precision highp float;
+layout(location = 0) in vec4 aColorIn;
+layout(location = 1) in vec3 aPosIn;
+out vec4 vColor;
+uniform mat4 World;
+uniform mat4 View;
+uniform mat4 Projection;
+void main() {
+    vColor = aColorIn;
+    gl_Position = Projection * View * World * vec4(aPosIn, 1.0);
+}
+)";
+    static const char* kFrag = R"(#version 300 es
+precision mediump float;
+in vec4 vColor;
+out vec4 FragColor;
+void main() { FragColor = vColor; }
+)";
+
+    RenderTarget2D target = MakeTarget();
+    const std::vector<std::uint8_t> mesh = BuildMesh(kColorPosition16, false);
+    const std::vector<std::uint16_t> indices = BuildQuadIndices<std::uint16_t>(kColumnCount);
+
+    std::string rejection;
+    try
+    {
+        VertexBuffer meshBuffer(device, BuildDeclaration(kColorPosition16), kMeshVertexCount,
+                                BufferUsage::None);
+        meshBuffer.SetDataRaw(mesh.data(), kMeshVertexCount, kColorPosition16.stride);
+        IndexBuffer indexBuffer(device, IndexElementSize::SixteenBits, kMeshIndexCount,
+                                BufferUsage::None);
+        indexBuffer.SetData(indices.data(), kMeshIndexCount);
+        device.SetVertexBuffers({VertexBufferBinding(&meshBuffer, 0, 0)});
+        device.SetIndexBuffer(&indexBuffer);
+
+        ShaderEffect effect(device, kVert, kFrag);
+        device.SetRenderTarget(&target);
+        device.Clear(Color(kClearColor.r, kClearColor.g, kClearColor.b, kClearColor.a));
+        effect.Apply();
+        device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, kMeshVertexCount, 0,
+                                     kMeshPrimitiveCount);
+        device.SetRenderTarget(nullptr);
+    }
+    catch (const std::exception& e)
+    {
+        rejection = e.what();
+        device.SetRenderTarget(nullptr);
+    }
+    device.SetIndexBuffer(nullptr);
+
+    const FrameSnapshot frame = Capture(target);
+    std::cout << "[ DECL-GUARD ] EasyGL ShaderEffect control: "
+              << (rejection.empty() ? DescribeFrame(frame) : '"' + rejection + '"') << std::endl;
+    ASSERT_TRUE(rejection.empty())
+        << "the stock-program guard fired on a custom ShaderEffect draw. REMED-GFX-218's "
+           "checkpoint action must leave the custom path untouched: " << rejection;
+
+    // The shader writes COLOR0 straight out with no DiffuseColor term, so each column carries its
+    // own record's colour unmultiplied -- which is only true if location 0 really did bind the
+    // declaration's first element.
+    for (int column = 0; column < kColumnCount; ++column)
+    {
+        const ColumnReading got = ReadColumn(frame, column);
+        const Rgba want = kColumnColors[static_cast<std::size_t>(column)];
+        EXPECT_EQ(kQuadTop, got.topRow) << "column " << column << DescribeFrame(frame);
+        EXPECT_EQ(ExpectedLit(column), got.lit) << "column " << column << DescribeFrame(frame);
+        EXPECT_TRUE(NearlyEqual(got.color, want))
+            << "column " << column << ": custom ShaderEffect carried " << got.color.ToString()
+            << ", expected its own record's colour " << want.ToString()
+            << " -- the element-index convention changed" << DescribeFrame(frame);
+    }
+}
+
+#endif  // CNA_BACKEND_EASYGL
 
 // ---------------------------------------------------------------------------
 // bgfx-only: the native layout itself. The rendering legs above prove the OUTCOME; this proves the
