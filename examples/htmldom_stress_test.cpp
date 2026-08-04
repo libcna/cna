@@ -259,13 +259,18 @@ protected:
                         "(peak sprites/frame=%d), variant cache size=%d\n",
                         kStabilityFrames, pooled, peakSpritesInOneFrame_, cacheSize);
             std::fflush(stdout);
-            // The pool must never need more elements than the most sprites any single frame ever
-            // drew -- if it grew beyond that, elements would be leaking rather than being
-            // recycled. A little headroom (2x) allows for the benchmark phase's own separate peak
-            // without being a meaningless "any value passes" check.
-            check(pooled >= 0 && pooled <= peakSpritesInOneFrame_ * 2,
-                  "HTMLDOM-90a: the sprite pool stays bounded by the peak per-frame sprite count "
-                  "across 300 frames of oscillating draw counts, not growing unboundedly");
+            // plan_html_dom.md HTMLDOM-113: exact identity, not a `<=2*peak` headroom check -- the
+            // pool never shrinks (elements are hidden via display:none, never removed), and exactly
+            // one new element is ever created per newly-reached pool index (cnaDomGetRegion's own
+            // `if (el === undefined) { ...create...; }` guard), so its final size must equal EXACTLY
+            // the highest sprite count any single frame across the WHOLE run (benchmark phase
+            // included) ever drew -- not merely "somewhere under a doubled bound", which would have
+            // let a real leak (e.g. one stray extra element per stability-phase oscillation) pass
+            // undetected as long as it stayed under 2x.
+            check(pooled == peakSpritesInOneFrame_,
+                  "HTMLDOM-90a: the sprite pool's final size is EXACTLY the peak per-frame sprite "
+                  "count reached anywhere in the whole run, not merely bounded under a headroom "
+                  "multiplier -- proves real recycling, not just an absence of unbounded growth");
             // The cache cap (256) must actually hold under real, sustained eviction pressure -- not
             // just "never filled up because the test never tried hard enough". A tight `== 256`
             // isn't asserted HERE (this run's own r-value coverage across two independently-varying

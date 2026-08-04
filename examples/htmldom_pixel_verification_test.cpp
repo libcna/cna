@@ -45,7 +45,7 @@ using namespace Microsoft::Xna::Framework::Graphics;
 
 namespace
 {
-    constexpr int kExpectedChecks = 28;
+    constexpr int kExpectedChecks = 31;
 
 #if defined(__EMSCRIPTEN__)
     EM_JS(void, JsPublishResult, (int result, int passed, int expected), {
@@ -693,6 +693,68 @@ protected:
                   "the sprite's own colour");
         }
 
+        // plan_html_dom.md HTMLDOM-113: Viewport AND ScissorRectangle active AT THE SAME TIME --
+        // frames 13/14 above proved each independently, but never together, and HTMLDOM-107's own
+        // design explicitly claims they are "independent absolute-render-target-space concepts"
+        // (scissor is never relative to the viewport's own offset). Viewport(4,4,10,10) offsets the
+        // sprite's drawn position by (4,4); ScissorRectangle(2,2,6,6) clips in the SAME absolute
+        // target-pixel space the (now-offset) sprite lands in. Sprite drawn at logical (2,2) size
+        // (6,6) -> actual absolute position (2+4,2+4)=(6,6) to (12,12) (viewport-offset applied);
+        // scissor covers absolute [2,8)x[2,8). The two rects overlap only in [6,8)x[6,8) -- a
+        // genuine partial intersection, not "everything visible" or "everything clipped", so all
+        // three sample points below are independently meaningful.
+        if (frame_ == 15)
+        {
+            RasterizerState scissorEnabled;
+            scissorEnabled.setScissorTestEnableProperty(true);
+            Texture2D tex = Make1x1(dev, 255, 0, 255, 255);
+
+            const auto pixels = ReadBackWholeTarget(*rtB_, 20, 20, [&] {
+                dev.setViewportProperty(Viewport(4, 4, 10, 10));
+                dev.setScissorRectangleProperty(Rectangle(2, 2, 6, 6));
+                spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend, nullptr,
+                                    nullptr, &scissorEnabled);
+                spriteBatch_->Draw(tex, Rectangle(2, 2, 6, 6), Rectangle(0, 0, 1, 1), Color::White);
+                spriteBatch_->End();
+                dev.setViewportProperty(Viewport(0, 0, 20, 20));
+                dev.setScissorRectangleProperty(Rectangle(0, 0, 20, 20));
+            });
+            // (3,3): inside the sprite's UN-offset footprint (2,2)-(8,8) but OUTSIDE its real,
+            // viewport-offset one (6,6)-(12,12) -- transparent here proves the viewport offset was
+            // genuinely applied, not silently ignored while the scissor rect happened to still hide
+            // the mistake.
+            const Color viewportProof = pixels[static_cast<std::size_t>(3) * 20 + 3];
+            // (7,7): inside BOTH the real (offset) sprite footprint AND the scissor rect's own
+            // [2,8)x[2,8) bounds -- the one point where the sprite is actually visible.
+            const Color bothVisible = pixels[static_cast<std::size_t>(7) * 20 + 7];
+            // (10,10): inside the real (offset) sprite footprint but OUTSIDE the scissor rect --
+            // transparent here proves the scissor clip is still independently enforced even with a
+            // non-default viewport simultaneously active.
+            const Color scissorProof = pixels[static_cast<std::size_t>(10) * 20 + 10];
+            std::printf("       RT viewport+scissor together: viewportProof(3,3)=(%d,%d,%d,%d) "
+                        "bothVisible(7,7)=(%d,%d,%d,%d) scissorProof(10,10)=(%d,%d,%d,%d)\n",
+                        viewportProof.getRProperty(), viewportProof.getGProperty(),
+                        viewportProof.getBProperty(), viewportProof.getAProperty(),
+                        bothVisible.getRProperty(), bothVisible.getGProperty(),
+                        bothVisible.getBProperty(), bothVisible.getAProperty(),
+                        scissorProof.getRProperty(), scissorProof.getGProperty(),
+                        scissorProof.getBProperty(), scissorProof.getAProperty());
+            check(viewportProof.getAProperty() < 50,
+                  "HTMLDOM-113: with a scissor rect ALSO active, the viewport's own (X,Y) offset "
+                  "still genuinely moves the sprite's drawn position -- a point inside where the "
+                  "sprite would have landed WITHOUT the offset is correctly empty");
+            check(bothVisible.getRProperty() > 200 && bothVisible.getBProperty() > 200 &&
+                  bothVisible.getAProperty() > 200,
+                  "HTMLDOM-113: the point inside BOTH the viewport-offset sprite footprint AND the "
+                  "scissor rect shows the sprite's own colour -- the two states compose correctly "
+                  "rather than one masking the other");
+            check(scissorProof.getAProperty() < 50,
+                  "HTMLDOM-113: with a non-default viewport ALSO active, the scissor rect still "
+                  "independently clips the (now-offset) sprite's footprint at its own absolute "
+                  "bounds, matching HTMLDOM-107's own design claim that viewport and scissor are "
+                  "independent absolute-space concepts, not one relative to the other");
+        }
+
         // plan_html_dom.md HTMLDOM-97: symmetric TextureAddressMode::Mirror with an out-of-bounds
         // sourceRectangle, drawn pixel-exact for the first time (previously this threw). A 2x2
         // source Rectangle(0,0,4,4) sourceRect tiles it twice in each axis; under real mirror-repeat
@@ -702,7 +764,7 @@ protected:
         // every tile boundary" definition: effective source index for tiled position i (tile size 2)
         // is i for i<2, and (1-(i-2)) for i in [2,4) -- i.e. output index 0,1,2,3 samples source
         // index 0,1,1,0 on both axes.
-        if (frame_ == 15)
+        if (frame_ == 16)
         {
             SamplerState mirrorSampler;
             mirrorSampler.setAddressUProperty(TextureAddressMode::Mirror);
@@ -755,7 +817,7 @@ protected:
         // version of this test asserted transparency there, matching the pre-HTMLDOM-104 crop-based
         // implementation -- the audit that reopened HTMLDOM-104 flagged this test oracle itself as
         // wrong, not just the implementation it was checking.)
-        if (frame_ == 16)
+        if (frame_ == 17)
         {
             SamplerState mixedSampler;
             mixedSampler.setAddressUProperty(TextureAddressMode::Wrap);
@@ -801,7 +863,7 @@ protected:
         // GPU-accelerated drawImage bilinear-sampled slightly past a 1-texel padding slice's own
         // edge, bleeding in the adjacent texel's colour), and a scaled, tinted, one-axis overflow
         // with hand-derived exact expected colours.
-        if (frame_ == 17)
+        if (frame_ == 18)
         {
             // Entirely outside the 2x2 texture on both axes (sourceX/Y=10, texture is 2x2) -- every
             // sampled texel clamps to the bottom-right corner texel (yellow).
@@ -872,7 +934,7 @@ protected:
         // backend's actual (CSS-native, non-squared) result with real translucent source AND
         // destination data and raw RGBA readback, documenting the XNA-exact delta by hand rather than
         // asserting pixel-exactness that is not architecturally achievable here.
-        if (frame_ == 18)
+        if (frame_ == 19)
         {
             // NonPremultiplied, single translucent draw onto a transparent target: CSS-native
             // source-over onto fully-transparent dst always yields the source unchanged (a standard
@@ -994,7 +1056,7 @@ protected:
         // HTMLDOM-85's own premultiplied texel (255,100,50) at alpha=128 -> premultiplied
         // (128,50,25,128), so the write, readback, and resample legs below are all hand-derived from
         // the exact same already-verified numbers.
-        if (frame_ == 19)
+        if (frame_ == 20)
         {
             // Leg 1 (write + readback): draw the premultiplied texel into rtA_ under AlphaBlend, onto
             // rtA_'s own transparent clear. Reused HTMLDOM-85 math: an AlphaBlend draw onto a fully
@@ -1090,7 +1152,7 @@ protected:
                   "unaffected by the mode-1 double-division bug and remains correct after the fix");
         }
 
-        if (frame_ == 20)
+        if (frame_ == 21)
         {
             std::printf("=== %d/%d PASS ===\n", passCount_, kExpectedChecks);
             std::fflush(stdout);

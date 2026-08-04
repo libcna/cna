@@ -45,7 +45,7 @@ using namespace CNA::Internal::Backends::HtmlDom;
 
 namespace
 {
-    constexpr int kExpectedChecks = 63;
+    constexpr int kExpectedChecks = 64;
 
 #if defined(__EMSCRIPTEN__)
     /// Number of sprite elements currently visible in the DOM surface.
@@ -140,6 +140,20 @@ namespace
     EM_JS(int, JsCanvasHidden, (), {
         const canvas = Module['canvas'] || document.querySelector('canvas');
         return canvas && canvas.style.visibility === 'hidden' ? 1 : 0;
+    });
+
+    /// plan_html_dom.md HTMLDOM-113: 1 when THIS browser actually recognises
+    /// `mix-blend-mode: plus-lighter` (docs/html-dom-backend.md's own documented "requires
+    /// Chromium 108+/Safari 16.4+/Firefox 122+" boundary -- older engines silently ignore the
+    /// value and Additive degrades to normal alpha blending instead of failing, the one place this
+    /// backend degrades silently rather than throwing). An automated CI browser cannot itself be
+    /// downgraded to exercise that fallback path, so this check instead confirms the assumption
+    /// every OTHER Additive test in this suite depends on: that plus-lighter is genuinely
+    /// supported here, and those tests are therefore exercising the real blend, not a silently
+    /// degraded one none of them would be able to tell apart from the real thing.
+    EM_JS(int, JsSupportsPlusLighter, (), {
+        return (typeof CSS !== 'undefined' && CSS.supports &&
+                CSS.supports('mix-blend-mode', 'plus-lighter')) ? 1 : 0;
     });
 
     /// plan_html_dom.md HTMLDOM-94: 1 when a region exists for the exact rectangle `(x,y,w,h)` (a
@@ -319,6 +333,7 @@ namespace
     int JsSpriteWidth(int) { return -1; }
     int JsSpriteOpacity255(int) { return -1; }
     int JsCanvasHidden() { return 0; }
+    int JsSupportsPlusLighter() { return 0; }
     int JsSpriteBackgroundRepeat(int) { return 0; }
     int JsSpriteBackgroundRepeatIs(int, const char*) { return 0; }
     int JsRootWidth() { return -1; }
@@ -413,6 +428,12 @@ protected:
             check(w > 0 && h > 0, "GetViewportSize() reports a positive logical size");
             check(JsSurfaceExists() == 1, "the #cna-dom-root surface element was created");
             check(JsCanvasHidden() == 1, "the SDL <canvas> is hidden, so only the DOM surface shows");
+            check(JsSupportsPlusLighter() == 1,
+                  "HTMLDOM-113: this test browser genuinely supports mix-blend-mode: "
+                  "plus-lighter -- every other Additive pixel check in this suite (and "
+                  "htmldom_pixel_verification_test.cpp's own) is therefore exercising the real "
+                  "CSS blend, not this backend's documented old-browser silent-degradation "
+                  "fallback, which an automated CI browser cannot itself be downgraded to exercise");
         }
 
         dev.Clear(Color::CornflowerBlue);
