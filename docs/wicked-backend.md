@@ -146,10 +146,10 @@ Implemented and reported as supported:
 | MRT | Up to 4 colour targets, shared depth from slot 0; stock shaders write slot 0 only |
 | Render state | Blend (incl. per-slot write masks and sample mask), depth/stencil (incl. two-sided), rasterizer (incl. wireframe and depth bias), samplers |
 | `TextureCube` | Six-face upload and readback, sampled by `EnvironmentMapEffect` |
-| MSAA render-target readback | Refused — no explicit resolve yet (`WICKED-52`) |
+| MSAA render targets | `RenderTarget2D` resolves to a single-sample texture used for both sampling and readback |
 | `Texture3D` | Volume upload and readback, real GPU storage |
 | Instanced draws | Per-instance 64-byte column-major `Matrix` stream, `InstanceFrequency == 1` only |
-| MSAA | On the scene target, with resolve; device-clamped |
+| MSAA | On the scene target and on `RenderTarget2D`, with resolve; device-clamped |
 | Occlusion queries | Real `GPUQueryHeap` + readback buffer |
 
 Not implemented; each is refused explicitly at the call site and reported by

@@ -444,8 +444,21 @@ namespace CNA::Internal::Backends::Wicked
         [[nodiscard]] bool GetData(int level, int x, int y, int w, int h,
                                    void* data, int dataLength) const override;
 
-        /** @brief NOXNA. The colour texture, for binding as a shader resource. */
+        /** @brief NOXNA. The colour attachment this target renders into. */
         [[nodiscard]] const wig::Texture& GetColorTextureEXT() const { return color_; }
+        /**
+         * @brief NOXNA. The texture to sample or copy from.
+         *
+         * For a multisampled target this is the single-sample resolve destination, not the
+         * attachment: a multisampled image can be neither sampled by the ordinary shaders nor
+         * copied by a plain `CopyTexture`.
+         */
+        [[nodiscard]] const wig::Texture& GetSampleableTextureEXT() const
+        {
+            return resolve_.IsValid() ? resolve_ : color_;
+        }
+        /** @brief NOXNA. The resolve destination, or an invalid handle when MSAA is off. */
+        [[nodiscard]] const wig::Texture& GetResolveTextureEXT() const { return resolve_; }
         /** @brief NOXNA. The depth texture, or an invalid handle when none was allocated. */
         [[nodiscard]] const wig::Texture& GetDepthTextureEXT() const { return depth_; }
         /** @brief NOXNA. Whether a bind must load the existing contents instead of discarding. */
@@ -458,6 +471,7 @@ namespace CNA::Internal::Backends::Wicked
     private:
         WickedGraphicsBackend* owner_ = nullptr;
         wig::Texture color_;
+        wig::Texture resolve_;
         wig::Texture depth_;
         int width_ = 0;
         int height_ = 0;

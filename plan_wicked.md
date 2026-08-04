@@ -129,7 +129,7 @@ missing.
 | WICKED-49 | `AlphaTestEffect` (FNA's four-component alpha-test comparison) | ✅ |
 | WICKED-50 | `DualTextureEffect` (second sampler slot) | ✅ |
 | WICKED-51 | Fog (FNA's `EffectHelpers.SetFogVector` fog vector) | ✅ |
-| WICKED-52 | MSAA `RenderTarget2D` readback (needs an explicit resolve) | ⬜ |
+| WICKED-52 | MSAA `RenderTarget2D` resolve — single-sample resolve destination written by the render pass, used for both readback and sampling | ✅ |
 | WICKED-53 | `DrawInstancedPrimitivesEx` (per-instance 64-byte `Matrix` stream at input slot 1, four instanced VS variants); `InstanceFrequency != 1` refused — Wicked's `InputLayout` has no step-rate field | ✅ |
 | WICKED-54 | Multiple simultaneous render targets (up to 4, shared depth from slot 0, size-mismatched sets refused) | ✅ |
 | WICKED-55 | `RenderTargetCube` (per-face RTV subresources, whole-cube SRV, sampleable by `EnvironmentMapEffect`) | ✅ |

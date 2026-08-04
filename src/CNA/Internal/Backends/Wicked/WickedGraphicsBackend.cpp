@@ -685,6 +685,21 @@ namespace CNA::Internal::Backends::Wicked
         if (!device->CreateTexture(&colorDesc, nullptr, &color_))
             throw std::runtime_error("Wicked backend: failed to create a render-target texture.");
 
+        if (sampleCount > 1)
+        {
+            // A multisampled image can be neither sampled by the ordinary shaders nor copied by a
+            // plain CopyTexture, so an MSAA target keeps a single-sample resolve destination that
+            // the render pass writes on end. Without it, MultiSampleCount > 1 would make the
+            // target unreadable and unsampleable -- which is what it used to do.
+            wig::TextureDesc resolveDesc = colorDesc;
+            resolveDesc.sample_count = 1;
+            if (!device->CreateTexture(&resolveDesc, nullptr, &resolve_))
+            {
+                throw std::runtime_error(
+                    "Wicked backend: failed to create a render-target resolve texture.");
+            }
+        }
+
         const wig::Format depth = DepthFormatFor(depthFormat);
         if (depth != wig::Format::UNKNOWN)
         {
@@ -731,13 +746,10 @@ namespace CNA::Internal::Backends::Wicked
         if (x + w > width_ || y + h > height_)
             return false;
 
-        // A multisampled colour target has no directly copyable single-sample content; MSAA
-        // render-target readback is tracked as plan_wicked.md WICKED-52 and refused rather than
-        // answered with content this backend never resolved.
-        if (multiSampleCount_ > 1)
-            return false;
-
-        return ReadbackTextureRegion(*owner_, color_, wig::ResourceState::SHADER_RESOURCE,
+        // A multisampled target reads back through its resolve destination, which the render pass
+        // wrote when the target was last unbound.
+        return ReadbackTextureRegion(*owner_, GetSampleableTextureEXT(),
+                                     wig::ResourceState::SHADER_RESOURCE,
                                      0, 0, x, y, 0, w, h, 1, data);
     }
     // ------------------------------------------------------------------------------------------
@@ -1700,7 +1712,7 @@ namespace CNA::Internal::Backends::Wicked
     {
         BeginFrame();
 
-        wig::RenderPassImage images[kWickedMaxRenderTargets + 2];
+        wig::RenderPassImage images[kWickedMaxRenderTargets * 2 + 2];
         std::uint32_t imageCount = 0;
 
         if (currentRenderTargetCube_ != nullptr)
@@ -1734,6 +1746,12 @@ namespace CNA::Internal::Backends::Wicked
                     load ? wig::RenderPassImage::LoadOp::LOAD
                          : wig::RenderPassImage::LoadOp::DONTCARE);
                 target->MarkRenderedEXT();
+            }
+            for (int slot = 0; slot < currentRenderTargetCount_; ++slot)
+            {
+                const wig::Texture& resolve = currentRenderTargets_[slot]->GetResolveTextureEXT();
+                if (resolve.IsValid())
+                    images[imageCount++] = wig::RenderPassImage::Resolve(&resolve);
             }
             // Depth comes from slot 0, which is what XNA's own MRT rules require: every target in
             // the set shares one depth/stencil buffer.
@@ -2998,7 +3016,7 @@ namespace CNA::Internal::Backends::Wicked
             if (const auto* wicked = dynamic_cast<const WickedTextureBackend*>(texture))
                 return &wicked->GetTextureEXT();
             if (const auto* target = dynamic_cast<const WickedRenderTargetBackend*>(texture))
-                return &target->GetColorTextureEXT();
+                return &target->GetSampleableTextureEXT();
             return &whiteTexture_;
         };
         device_->BindResource(resolveTexture(texture0), 0, cmd);
@@ -3206,7 +3224,7 @@ namespace CNA::Internal::Backends::Wicked
         if (const auto* wicked = dynamic_cast<const WickedTextureBackend*>(&texture))
             bound = &wicked->GetTextureEXT();
         else if (const auto* target = dynamic_cast<const WickedRenderTargetBackend*>(&texture))
-            bound = &target->GetColorTextureEXT();
+            bound = &target->GetSampleableTextureEXT();
         device_->BindResource(bound, 0, cmd);
         device_->BindResource(&whiteTexture_, 1, cmd);
         device_->BindSampler(GetSampler(filter, addressU, addressV, 1), 0, cmd);
