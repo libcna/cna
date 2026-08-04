@@ -11,6 +11,7 @@
 #include <SDL3/SDL.h>
 
 #include <algorithm>
+#include <cassert>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -810,19 +811,27 @@ namespace CNA::Internal::Backends::Direct2D
 
     void Direct2DGraphicsBackend::RegisterTexture(Direct2DTextureBackend* texture)
     {
-        if (contextRecoveryEnabled_ && texture)
-            recoverableTextures_.push_back(texture);
+        if (!contextRecoveryEnabled_ || !texture) return;
+        assert(std::find(recoverableTextures_.begin(), recoverableTextures_.end(), texture) ==
+                   recoverableTextures_.end() &&
+               "Direct2DTextureBackend registered twice in recoverableTextures_");
+        recoverableTextures_.push_back(texture);
     }
 
     void Direct2DGraphicsBackend::UnregisterTexture(Direct2DTextureBackend* texture)
     {
+        // erase-remove over the whole vector makes this idempotent: unregistering an
+        // already-unregistered (or never-registered) pointer is a safe no-op.
         std::erase(recoverableTextures_, texture);
     }
 
     void Direct2DGraphicsBackend::RegisterRenderTarget(Direct2DRenderTargetBackend* renderTarget)
     {
-        if (contextRecoveryEnabled_ && renderTarget)
-            recoverableRenderTargets_.push_back(renderTarget);
+        if (!contextRecoveryEnabled_ || !renderTarget) return;
+        assert(std::find(recoverableRenderTargets_.begin(), recoverableRenderTargets_.end(), renderTarget) ==
+                   recoverableRenderTargets_.end() &&
+               "Direct2DRenderTargetBackend registered twice in recoverableRenderTargets_");
+        recoverableRenderTargets_.push_back(renderTarget);
     }
 
     void Direct2DGraphicsBackend::UnregisterRenderTarget(Direct2DRenderTargetBackend* renderTarget)

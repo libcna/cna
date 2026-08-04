@@ -1228,6 +1228,52 @@ protected:
         sprites_->End();
         check("Direct2D SpriteBatch survives mid-batch device loss", 0, 0, Color::White);
 
+        // D2D-72: registry invariants under churn. Repeated cycles of create/dispose/recovery
+        // must not duplicate-register a resource, leave a dangling pointer in
+        // recoverableTextures_/recoverableRenderTargets_, or corrupt a surviving resource's
+        // generation/content when other resources are created and disposed around it.
+        {
+            struct StressEntry { std::unique_ptr<Texture2D> texture; uint8_t expectedRed; };
+            std::vector<StressEntry> stressTextures;
+            std::vector<std::unique_ptr<RenderTarget2D>> stressTargets;
+            for (int cycle = 0; cycle < 4; ++cycle)
+            {
+                for (int i = 0; i < 3; ++i)
+                {
+                    const uint8_t red = static_cast<uint8_t>(cycle * 20 + i * 5 + 1);
+                    stressTextures.push_back(StressEntry{
+                        std::make_unique<Texture2D>(Texture2D::CreateFromPixels(
+                            device, 1, 1, std::vector<uint8_t>{red, 0, 0, 255})),
+                        red});
+                    stressTargets.push_back(std::make_unique<RenderTarget2D>(device, 2, 2));
+                }
+                // Churn: dispose every other texture/target accumulated so far before the next
+                // recovery, so surviving and freshly-created resources interleave across losses.
+                for (std::size_t i = 0; i < stressTextures.size(); i += 2)
+                    stressTextures[i].texture.reset();
+                for (std::size_t i = 0; i < stressTargets.size(); i += 2)
+                    stressTargets[i].reset();
+                direct2dBackend.DebugSimulateContextLoss();
+            }
+
+            bool stressPassed = true;
+            for (const StressEntry& entry : stressTextures)
+            {
+                if (!entry.texture) continue;
+                device.Clear(Color::Black);
+                sprites_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, nullptr, &scissorDisabled);
+                sprites_->Draw(*entry.texture, Rectangle(0, 0, 1, 1), Rectangle(0, 0, 1, 1), Color::White);
+                sprites_->End();
+                Color actual(0, 0, 0, 0);
+                const Rectangle texel(0, 0, 1, 1);
+                device.GetBackBufferData(&texel, &actual, 0, 1);
+                if (!Matches(actual, Color(static_cast<int>(entry.expectedRed), 0, 0, 255))) { stressPassed = false; break; }
+            }
+            std::printf("[%s] Direct2D registry survives create/dispose/recovery churn\n",
+                        stressPassed ? "PASS" : "FAIL");
+            passed = passed && stressPassed;
+        }
+
         // D2D-63: device loss while an unrecoverable render target (created with recovery
         // disabled) is the ACTIVE target must not silently leave GraphicsDevice's public binding
         // out of sync with the backend's actual current target -- it now surfaces loudly instead
