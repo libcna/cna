@@ -29,6 +29,13 @@
     *emulated* via the fixed-function pipeline; **custom user `Effect`s (arbitrary HLSL) cannot run**.
   - DX8: adds Shader Model 1.x → 2D works, stock effects work, but XNA's `ps_2_0`/`vs_2_0`+ effects
     still **do not fit** SM 1.x, so custom effects mostly cannot run either.
+- **An existing 3D game *can* run on DX2/3/5/6/7/8 if the backend degrades instead of throwing** (§3.2).
+  CNA forwards a *semantic* effect description (`GpuDrawParams`: matrices, lights, materials, textures,
+  fog, skinning), not opaque shader bytecode, and already blesses an "accept-and-ignore unsupported
+  fields" pattern — so a fixed-function backend can reconstruct the stock effects from it and silently
+  ignore what it can't do (custom shaders → fallback render). The only change from `DX3` is *policy*
+  (best-effort vs `ThrowNo3D`); it needs **no** shared-code or XNA-layer change. Fidelity climbs with
+  the version; *whether the game runs* does not.
 - **If any single legacy backend were worth building, it is D3D8**, because DXVK ships a `d3d8`
   runtime (D3D8→D3D9→Vulkan), so it reuses the *exact* MinGW-cross-compile + Wine + DXVK toolchain
   the shipping `D3D9`/`D3D11` backends already prove. A "D3D7" fixed-function backend is also
@@ -196,6 +203,77 @@ Two things worth calling out from the matrix:
 The exact DirectX interface-version boundaries above (e.g. vertex-buffer objects at DX6, volume
 textures at DX8, queries at DX9) are stated from known Direct3D history and should be spike-confirmed
 against the actual MinGW-w64 headers before any backend work — same "pending a spike" caveat as §4/§8.
+
+### 3.2 Best-effort 3D: would an existing 3D game actually *run* (degrade, not throw)?
+
+The most important design question for these legacy backends is **not** "how much can they render"
+(§3.1) but "does an existing CNA/XNA 3D game **run without crashing** on them, even if a lot is
+ignored?" The answer is **yes**, and the reason is a specific, already-shipped property of CNA's draw
+path — this is not a hypothetical.
+
+**Key finding — CNA forwards the *semantics* of an effect, not opaque shader bytecode.** The per-draw
+`IGraphicsBackend::GpuDrawParams` struct (`IGraphicsBackend.hpp`) is a fully structured description of
+the stock effect: world/view/projection matrix, three directional lights (dir/diffuse/specular),
+material colors, diffuse/dual/cube textures, fog, alpha-test, per-bone skinning transforms, and
+boolean flags selecting the variant (`textureEnabled`, `lightingEnabled`, `dualTexture`, `envMapping`,
+`skinned`, `fogEnabled`, …). It is populated by `BasicEffect::FillGpuDrawParams()` &c. Because
+`BasicEffect` *is* effectively the fixed-function pipeline, a fixed-function DX5/6/7/8 backend has
+everything it needs to reproduce the stock effects **with no shader at all**, by translating
+`GpuDrawParams` straight into fixed-function state:
+
+| `GpuDrawParams` field | Fixed-function mapping (DX5–8) |
+|---|---|
+| `worldColMajor` (+ view/proj) | `SetTransform(D3DTS_WORLD/VIEW/PROJECTION)` |
+| `light{0,1,2}{Dir,Diffuse,Specular}`, `lightingEnabled` | `SetLight()` + `LightEnable()` |
+| `diffuseColor`/`ambientColor`/`emissiveColor`/`specularColor`/`specularPower` | `SetMaterial()` |
+| `texture0`, `textureEnabled` | `SetTexture(0)` + texture-stage states |
+| `texture1`, `dualTexture` | second texture stage |
+| `envMap`, `envMapping` | cube texture + reflection texcoord-gen (DX7+) |
+| `fogEnabled`/`fogColor`/`fogStart`/`fogEnd` | `D3DRS_FOG*` render states |
+| `alphaTest` | `D3DRS_ALPHATESTENABLE`/`ALPHAREF`/`ALPHAFUNC` |
+| `boneTransforms`/`boneCount`, `skinned` | indexed vertex blending (DX7+) or CPU skinning |
+| `vertexColorEnabled` | `D3DRS_COLORVERTEX` / texture-stage color arg |
+
+**Key finding — "accept and ignore" is already a blessed pattern.** The custom-shader path is a single
+nullable pointer, `GpuDrawParams::customEffectBackend`. Its own doc-comment states that backends which
+don't implement it "**safely ignore it, matching the established accepted-and-ignored pattern for
+other not-yet-backend-supported `GpuDrawParams` fields.**" So graceful degradation of unsupported
+features is not a new concept to be invented — it is how the interface already works. A fixed-function
+backend that ignores `customEffectBackend` renders that draw from the (default) stock fields — i.e.
+the geometry still appears, flat/vertex-colored, instead of throwing. That is exactly the owner's
+"ignore a lot, but the game runs" model.
+
+**Consequence — the only change from `DX3` is *policy*, not architecture.** `DX3` chose to
+`ThrowNo3D` on every 3D entry point (so a 3D game crashes on it). A "best-effort 3D" backend makes the
+opposite choice: implement `CreateVertexBuffer`/`CreateIndexBuffer`/`DrawPrimitivesEx`/… as real
+fixed-function work, and *no-op or approximate* whatever it can't do, **never throwing**. This is
+entirely backend-local — the 3D methods are virtual; a backend just implements them instead of
+throwing. **No shared-code or XNA-layer change is required.**
+
+**The spectrum of "runs"** (climbs with the version — this is the real answer to the owner's question):
+
+| Level of "runs" | Where it is reachable |
+|---|---|
+| **Does not crash** (every 3D call returns / no-ops instead of throwing) | DX2/3, DX5, DX6, DX7, DX8 |
+| **Renders the geometry** (fixed-function from `GpuDrawParams`) | DX2/3 (execute buffers), DX5–8 cleanly |
+| **Stock-effect games render ~correctly** (`BasicEffect`/`DualTexture`/`AlphaTest`/`EnvironmentMap`/`Skinned`) | DX7/DX8 fully, DX6 mostly, DX5 partially |
+| **Custom-shader games render *correctly*** | DX9+ only (below it they run, but the shader is ignored → fallback image) |
+
+The owner's bar — "an existing 3D game would run, even ignoring a lot" — is level 2–3, and it is
+reachable on **all** of DX2/3/5/6/7/8. What climbs with the version is *fidelity*, not *whether it
+runs*.
+
+**What degrades badly (runs, but looks different — must be declared up front, not discovered later):**
+custom HLSL effects (post-processing, custom lighting) → ignored, fallback render; per-pixel lighting
+(`preferPerPixelLighting`) → per-vertex only; render-target-as-shader-input, MRT, `Texture3D` (below
+DX8), and occlusion query (below DX9 → "everything visible" fallback).
+
+**Practical shape.** Write **one shared `GpuDrawParams` → fixed-function-state translator**, reusable
+across a DX5/6/7/8 family (write once), with a "degrade, don't throw" policy and a sensible
+custom-shader fallback (e.g. draw with `texture0`/`diffuseColor` + gouraud so custom-shader geometry
+is visible, not black). The single most feasible first target is still **D3D8** (DXVK `d3d8` path,
+§4), now for a stronger reason than §7 gave: it can host that fixed-function translator *and* run
+under the same proven MinGW+Wine+DXVK toolchain as the shipping backends.
 
 ---
 
