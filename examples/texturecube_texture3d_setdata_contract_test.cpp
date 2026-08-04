@@ -182,8 +182,8 @@ namespace
     constexpr Contract kContract{"CANVAS", false, Support::Unsupported, Support::Unsupported,
                                  false, Support::Unsupported, Support::Unsupported,
                                  Support::Unsupported, false};
-#elif defined(CNA_BACKEND_DX3)
-    constexpr Contract kContract{"DX3", false, Support::Unsupported, Support::Unsupported,
+#elif defined(CNA_BACKEND_FREEDIRECT)
+    constexpr Contract kContract{"FREEDIRECT", false, Support::Unsupported, Support::Unsupported,
                                  false, Support::Unsupported, Support::Unsupported,
                                  Support::Unsupported, false};
 #elif defined(CNA_BACKEND_D3D9)

@@ -3,7 +3,7 @@
 > **Temporary name notice.** This is CNA's real, Route-B "DirectX 3" backend per `plan_dxold.md`'s
 > roadmap (row 3), built and shipped under the CMake name **`DX30`**
 > (`CNA_GRAPHICS_BACKEND=DX30`), **not** `DX3` — the `DX3` name is still owned by the existing,
-> shipping `../free-direct`-backed 2D backend (`docs/dx3-backend.md`). See `plan_dx30.md`'s own
+> shipping `../free-direct`-backed 2D backend (`docs/freedirect-backend.md`). See `plan_dx30.md`'s own
 > status note and `plan_dxold.md`'s "DX3 naming transition" section for the still-not-executed
 > rename task that will eventually free up the bare `DX3` name for this backend.
 

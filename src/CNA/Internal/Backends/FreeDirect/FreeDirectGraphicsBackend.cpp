@@ -1,7 +1,7 @@
-#include "CNA/Internal/Backends/Dx3/Dx3GraphicsBackend.hpp"
+#include "CNA/Internal/Backends/FreeDirect/FreeDirectGraphicsBackend.hpp"
 
-// plan_dx3.md Design decision 9: <ddraw.h> (and the <windows.h> compatibility shim it pulls in
-// from free-api) is contained to this .cpp only -- see Dx3GraphicsBackend.hpp's own comment for
+// plan_freedirect.md Design decision 9: <ddraw.h> (and the <windows.h> compatibility shim it pulls in
+// from free-api) is contained to this .cpp only -- see FreeDirectGraphicsBackend.hpp's own comment for
 // why this backend goes further than D3D11/D3D12's precedent and keeps it out of its own header
 // too (the fopen -> free_api_fopen macro leak risk).
 #include <ddraw.h>
@@ -17,7 +17,7 @@
 #include <stdexcept>
 #include <string>
 
-namespace CNA::Internal::Backends::Dx3
+namespace CNA::Internal::Backends::FreeDirect
 {
     using namespace Microsoft::Xna::Framework;
     using namespace Microsoft::Xna::Framework::Graphics;
@@ -31,30 +31,30 @@ namespace CNA::Internal::Backends::Dx3
                                       std::to_string(static_cast<unsigned long>(hr)));
         }
 
-        [[nodiscard]] const char* ResizeFailurePointName(Dx3ResizeFailurePointEXT point)
+        [[nodiscard]] const char* ResizeFailurePointName(FreeDirectResizeFailurePointEXT point)
         {
             switch (point)
             {
-                case Dx3ResizeFailurePointEXT::ShadowBackBufferCreation:
+                case FreeDirectResizeFailurePointEXT::ShadowBackBufferCreation:
                     return "shadow-backbuffer creation";
-                case Dx3ResizeFailurePointEXT::ShadowBackBufferValidation:
+                case FreeDirectResizeFailurePointEXT::ShadowBackBufferValidation:
                     return "shadow-backbuffer validation";
-                case Dx3ResizeFailurePointEXT::DisplayModeBinding:
+                case FreeDirectResizeFailurePointEXT::DisplayModeBinding:
                     return "display-mode binding";
-                case Dx3ResizeFailurePointEXT::PrimarySurfaceCreation:
+                case FreeDirectResizeFailurePointEXT::PrimarySurfaceCreation:
                     return "primary-surface creation";
-                case Dx3ResizeFailurePointEXT::PrimarySurfaceValidation:
+                case FreeDirectResizeFailurePointEXT::PrimarySurfaceValidation:
                     return "primary-surface validation";
-                case Dx3ResizeFailurePointEXT::SurfaceSetCommit:
+                case FreeDirectResizeFailurePointEXT::SurfaceSetCommit:
                     return "surface-set commit";
-                case Dx3ResizeFailurePointEXT::None:
+                case FreeDirectResizeFailurePointEXT::None:
                     return "none";
             }
             return "unknown";
         }
 
-        void NotifyResource(const Dx3TestHooksEXT& hooks, Dx3ResourceKindEXT resource,
-                            Dx3ResourceEventEXT event, const void* identity) noexcept
+        void NotifyResource(const FreeDirectTestHooksEXT& hooks, FreeDirectResourceKindEXT resource,
+                            FreeDirectResourceEventEXT event, const void* identity) noexcept
         {
             if (hooks.resourceEvent != nullptr)
                 hooks.resourceEvent(hooks.context, resource, event, identity);
@@ -105,11 +105,11 @@ namespace CNA::Internal::Backends::Dx3
         // of time instead of relying on this throw -- see SupportsCapability() in the header.
         [[noreturn]] void ThrowNo3D(const char* methodName)
         {
-            throw std::runtime_error(std::string("DX3 (DirectDraw) does not support 3D: ") + methodName);
+            throw std::runtime_error(std::string("FreeDirect (DirectDraw) does not support 3D: ") + methodName);
         }
 
-        // ---- Phase X3: shared offscreen-surface helpers, used by both Dx3TextureBackend and
-        // Dx3RenderTargetBackend (same underlying DirectDraw mechanism -- design decision 4:
+        // ---- Phase X3: shared offscreen-surface helpers, used by both FreeDirectTextureBackend and
+        // FreeDirectRenderTargetBackend (same underlying DirectDraw mechanism -- design decision 4:
         // 32bpp DDSCAPS_OFFSCREENPLAIN only, no palette/8-bit path). Kept as free functions rather
         // than a shared base class: neither type is ever named outside this .cpp (only returned
         // polymorphically as ITextureBackend/IRenderTargetBackend), so there is no header/ddraw.h
@@ -202,7 +202,7 @@ namespace CNA::Internal::Backends::Dx3
         [[noreturn]] void ThrowMipLevelUnsupported(int level)
         {
             throw std::runtime_error(
-                "DX3 (DirectDraw) does not support mip-level texture uploads (level " +
+                "FreeDirect (DirectDraw) does not support mip-level texture uploads (level " +
                 std::to_string(level) + "): IDirectDrawSurface has no native mip chain or "
                 "per-level LOD sampling. Use Texture2D::SetData(level=0, ...) only.");
         }
@@ -240,7 +240,7 @@ namespace CNA::Internal::Backends::Dx3
         // SdlGraphicsBackend::ToSdlBlendFactor): One=0, Zero=1, SourceColor=2,
         // InverseSourceColor=3, SourceAlpha=4, InverseSourceAlpha=5, DestinationColor=6,
         // InverseDestinationColor=7, DestinationAlpha=8, InverseDestinationAlpha=9.
-        enum class Dx3BlendMode { Opaque, AlphaBlend, NonPremultiplied, Additive };
+        enum class FreeDirectBlendMode { Opaque, AlphaBlend, NonPremultiplied, Additive };
 
         // Detects which of the 4 BlendState presets (BlendState.cpp) the raw factors match, by
         // exact value -- not by BlendState identity (the backend never sees a BlendState object,
@@ -251,21 +251,21 @@ namespace CNA::Internal::Backends::Dx3
         // BlendState with e.g. Opaque's exact factors but BlendFunction::Subtract is NOT
         // equivalent to Opaque and must fall through to the DX3-44 AlphaBlend fallback below, not
         // be misdetected as Opaque just because the factors happen to match.
-        Dx3BlendMode DetectBlendMode(int colorSrc, int alphaSrc, int colorDst, int alphaDst,
+        FreeDirectBlendMode DetectBlendMode(int colorSrc, int alphaSrc, int colorDst, int alphaDst,
                                      int colorFunc, int alphaFunc)
         {
             const bool bothAdd = (colorFunc == 0 && alphaFunc == 0);
             // NonPremultiplied: ColorSrc=SourceAlpha, AlphaSrc=SourceAlpha, ColorDst=InvSrcAlpha, AlphaDst=InvSrcAlpha
-            if (bothAdd && colorSrc == 4 && alphaSrc == 4 && colorDst == 5 && alphaDst == 5) return Dx3BlendMode::NonPremultiplied;
+            if (bothAdd && colorSrc == 4 && alphaSrc == 4 && colorDst == 5 && alphaDst == 5) return FreeDirectBlendMode::NonPremultiplied;
             // Additive: ColorSrc=SourceAlpha, AlphaSrc=SourceAlpha, ColorDst=One, AlphaDst=One
-            if (bothAdd && colorSrc == 4 && alphaSrc == 4 && colorDst == 0 && alphaDst == 0) return Dx3BlendMode::Additive;
+            if (bothAdd && colorSrc == 4 && alphaSrc == 4 && colorDst == 0 && alphaDst == 0) return FreeDirectBlendMode::Additive;
             // Opaque: ColorSrc=One, AlphaSrc=One, ColorDst=Zero, AlphaDst=Zero
-            if (bothAdd && colorSrc == 0 && alphaSrc == 0 && colorDst == 1 && alphaDst == 1) return Dx3BlendMode::Opaque;
+            if (bothAdd && colorSrc == 0 && alphaSrc == 0 && colorDst == 1 && alphaDst == 1) return FreeDirectBlendMode::Opaque;
             // AlphaBlend: ColorSrc=One, AlphaSrc=One, ColorDst=InvSrcAlpha, AlphaDst=InvSrcAlpha --
             // and DX3-44's fallback for any other/custom factor+op combination (including a
             // factor match with a non-Add function), same recorded scope limitation SOFTWARE's
             // design decision 7 already made (no general blend-equation interpreter in v1).
-            return Dx3BlendMode::AlphaBlend;
+            return FreeDirectBlendMode::AlphaBlend;
         }
 
         // TextureAddressMode raw int convention (matches ISpriteBatchBackend::SetSamplerAddressMode's
@@ -340,7 +340,7 @@ namespace CNA::Internal::Backends::Dx3
                            LPDIRECTDRAWSURFACE srcSurface, int srcW, int srcH,
                            const Vector2 corners[4], const Vector2 uvs[4],
                            float tintR, float tintG, float tintB, float tintA,
-                           Dx3BlendMode blendMode, int filter, int addressU, int addressV)
+                           FreeDirectBlendMode blendMode, int filter, int addressU, int addressV)
         {
             DDSURFACEDESC dstDesc{};
             dstDesc.dwSize = sizeof(DDSURFACEDESC);
@@ -400,7 +400,7 @@ namespace CNA::Internal::Backends::Dx3
 
                         switch (blendMode)
                         {
-                        case Dx3BlendMode::Opaque:
+                        case FreeDirectBlendMode::Opaque:
                             // Direct overwrite -- source alpha is not part of the blend equation
                             // at all (ColorSrcBlend=One, ColorDstBlend=Zero).
                             dp[0] = static_cast<uint8_t>(std::clamp(srcR * 255.0f, 0.0f, 255.0f));
@@ -408,7 +408,7 @@ namespace CNA::Internal::Backends::Dx3
                             dp[2] = static_cast<uint8_t>(std::clamp(srcB * 255.0f, 0.0f, 255.0f));
                             dp[3] = static_cast<uint8_t>(std::clamp(srcA * 255.0f, 0.0f, 255.0f));
                             break;
-                        case Dx3BlendMode::AlphaBlend:
+                        case FreeDirectBlendMode::AlphaBlend:
                         {
                             // Premultiplied convention (ColorSrcBlend=One, ColorDstBlend=
                             // InverseSourceAlpha): the source color is used as-is, NOT multiplied
@@ -421,7 +421,7 @@ namespace CNA::Internal::Backends::Dx3
                             dp[3] = static_cast<uint8_t>(std::clamp(srcA * 255.0f + static_cast<float>(dp[3]) * invA, 0.0f, 255.0f));
                             break;
                         }
-                        case Dx3BlendMode::NonPremultiplied:
+                        case FreeDirectBlendMode::NonPremultiplied:
                         {
                             // Straight alpha (ColorSrcBlend=SourceAlpha, ColorDstBlend=
                             // InverseSourceAlpha): out = src*srcAlpha + dst*(1-srcAlpha).
@@ -432,7 +432,7 @@ namespace CNA::Internal::Backends::Dx3
                             dp[3] = static_cast<uint8_t>(std::clamp(srcA * 255.0f * srcA + static_cast<float>(dp[3]) * invA, 0.0f, 255.0f));
                             break;
                         }
-                        case Dx3BlendMode::Additive:
+                        case FreeDirectBlendMode::Additive:
                             // ColorSrcBlend=SourceAlpha, ColorDstBlend=One: saturating add, no
                             // destination attenuation at all.
                             dp[0] = static_cast<uint8_t>(std::clamp(srcR * 255.0f * srcA + static_cast<float>(dp[0]), 0.0f, 255.0f));
@@ -451,20 +451,20 @@ namespace CNA::Internal::Backends::Dx3
         }
     }
 
-    // Common accessor so Dx3SpriteBatchBackend can reach the underlying IDirectDrawSurface* of
+    // Common accessor so FreeDirectSpriteBatchBackend can reach the underlying IDirectDrawSurface* of
     // either concrete backend it might be asked to sample from (a plain texture, or a former
     // render target now being sampled as one) without needing to know which. Never named outside
-    // this .cpp, same reasoning as Dx3TextureBackend/Dx3RenderTargetBackend themselves.
-    class Dx3SurfaceOwner
+    // this .cpp, same reasoning as FreeDirectTextureBackend/FreeDirectRenderTargetBackend themselves.
+    class FreeDirectSurfaceOwner
     {
     public:
-        virtual ~Dx3SurfaceOwner() = default;
+        virtual ~FreeDirectSurfaceOwner() = default;
         [[nodiscard]] virtual LPDIRECTDRAWSURFACE Surface() const = 0;
     };
 
-    struct Dx3GraphicsBackend::Impl
+    struct FreeDirectGraphicsBackend::Impl
     {
-        explicit Impl(const Dx3TestHooksEXT& hooks) : testHooks(hooks) {}
+        explicit Impl(const FreeDirectTestHooksEXT& hooks) : testHooks(hooks) {}
 
         // NOTE: SDL_Window is NOT owned by the backend -- same convention as every other
         // window-based CNA backend (GraphicsDevice/platform layer owns it).
@@ -473,18 +473,18 @@ namespace CNA::Internal::Backends::Dx3
         LPDIRECTDRAW dd = nullptr;
         // The real DirectDraw primary surface. Never Lock()'d directly for pixel access --
         // free-direct's own Lock() never exposes a writable pointer for a primary surface (see
-        // Dx3GraphicsBackend.hpp's class comment). Written to only via the single identity Blt()
+        // FreeDirectGraphicsBackend.hpp's class comment). Written to only via the single identity Blt()
         // in Present().
         LPDIRECTDRAWSURFACE primary = nullptr;
-        // DX3-owned "shadow backbuffer": a Lockable offscreen surface, sized to the logical/virtual
+        // FreeDirect-owned "shadow backbuffer": a Lockable offscreen surface, sized to the logical/virtual
         // resolution, that Clear() and (from Phase X4 on) SpriteBatch draws always composite into.
         LPDIRECTDRAWSURFACE backBuffer = nullptr;
 
-        // Phase X3: the offscreen surface owned by the currently-bound Dx3RenderTargetBackend, or
+        // Phase X3: the offscreen surface owned by the currently-bound FreeDirectRenderTargetBackend, or
         // nullptr when no custom render target is bound (i.e. the shadow backbuffer is active).
-        // Set directly by Dx3RenderTargetBackend::BindAsRenderTarget/UnbindAsRenderTarget via a
+        // Set directly by FreeDirectRenderTargetBackend::BindAsRenderTarget/UnbindAsRenderTarget via a
         // pointer to this field (passed at construction) -- kept as a plain LPDIRECTDRAWSURFACE
-        // rather than a Dx3RenderTargetBackend* so Dx3RenderTargetBackend never needs to name this
+        // rather than a FreeDirectRenderTargetBackend* so FreeDirectRenderTargetBackend never needs to name this
         // private Impl type (it is defined later in this file, after Impl).
         LPDIRECTDRAWSURFACE currentTargetSurface = nullptr;
         // Width/height of currentTargetSurface, kept alongside it (Phase X4: the SpriteBatch
@@ -496,14 +496,14 @@ namespace CNA::Internal::Backends::Dx3
         int logicalWidth = 0;
         int logicalHeight = 0;
         CnaPresentationMode presentationMode = CnaPresentationMode::Overscan;
-        Dx3TestHooksEXT testHooks{};
+        FreeDirectTestHooksEXT testHooks{};
         bool testFailureInjected = false;
 
         // Phase X5 (design decision 6): the real, distinct blend mode detected from
         // ApplyBlendState's raw factors (DetectBlendMode) -- gates the SpriteBatch identity fast
         // path (design decision 5, Opaque only) and selects CompositeQuad's per-formula math.
         // Default AlphaBlend matches SpriteBatch::Begin()'s own default blend state.
-        Dx3BlendMode currentBlendMode = Dx3BlendMode::AlphaBlend;
+        FreeDirectBlendMode currentBlendMode = FreeDirectBlendMode::AlphaBlend;
 
         // Resolves to whichever surface Clear()/ReadBackbuffer() should currently target: the
         // bound render target's surface if one is bound, else the shadow backbuffer. Present()
@@ -523,25 +523,25 @@ namespace CNA::Internal::Backends::Dx3
             else { w = logicalWidth; h = logicalHeight; }
         }
 
-        void MaybeFail(Dx3ResizeFailurePointEXT point)
+        void MaybeFail(FreeDirectResizeFailurePointEXT point)
         {
             if (!testFailureInjected && testHooks.failAt == point)
             {
                 testFailureInjected = true;
                 throw std::runtime_error(
-                    std::string("CNA DX3: injected resize failure during ") +
+                    std::string("CNA FreeDirect: injected resize failure during ") +
                     ResizeFailurePointName(point));
             }
         }
 
-        void ReleaseSurface(LPDIRECTDRAWSURFACE& surface, Dx3ResourceKindEXT kind) noexcept
+        void ReleaseSurface(LPDIRECTDRAWSURFACE& surface, FreeDirectResourceKindEXT kind) noexcept
         {
             if (surface == nullptr)
                 return;
             LPDIRECTDRAWSURFACE released = surface;
             surface = nullptr;
             released->Release();
-            NotifyResource(testHooks, kind, Dx3ResourceEventEXT::Released, released);
+            NotifyResource(testHooks, kind, FreeDirectResourceEventEXT::Released, released);
         }
 
         void ReleaseDirectDraw() noexcept
@@ -552,14 +552,14 @@ namespace CNA::Internal::Backends::Dx3
             dd = nullptr;
             released->Release();
             NotifyResource(
-                testHooks, Dx3ResourceKindEXT::DirectDraw,
-                Dx3ResourceEventEXT::Released, released);
+                testHooks, FreeDirectResourceKindEXT::DirectDraw,
+                FreeDirectResourceEventEXT::Released, released);
         }
 
         ~Impl()
         {
-            ReleaseSurface(backBuffer, Dx3ResourceKindEXT::ShadowBackBuffer);
-            ReleaseSurface(primary, Dx3ResourceKindEXT::PrimarySurface);
+            ReleaseSurface(backBuffer, FreeDirectResourceKindEXT::ShadowBackBuffer);
+            ReleaseSurface(primary, FreeDirectResourceKindEXT::PrimarySurface);
             ReleaseDirectDraw();
         }
 
@@ -579,25 +579,25 @@ namespace CNA::Internal::Backends::Dx3
             backDesc.dwWidth = static_cast<DWORD>(width);
             backDesc.dwHeight = static_cast<DWORD>(height);
             if (injectResizeFailure)
-                MaybeFail(Dx3ResizeFailurePointEXT::ShadowBackBufferCreation);
+                MaybeFail(FreeDirectResizeFailurePointEXT::ShadowBackBufferCreation);
 
             LPDIRECTDRAWSURFACE replacementBackBuffer = nullptr;
             HRESULT hr = dd->CreateSurface(&backDesc, &replacementBackBuffer, nullptr);
             if (FAILED(hr))
                 ThrowHr("IDirectDraw::CreateSurface(shadow backbuffer)", hr);
             NotifyResource(
-                testHooks, Dx3ResourceKindEXT::ShadowBackBuffer,
-                Dx3ResourceEventEXT::Acquired, replacementBackBuffer);
+                testHooks, FreeDirectResourceKindEXT::ShadowBackBuffer,
+                FreeDirectResourceEventEXT::Acquired, replacementBackBuffer);
 
             struct TemporarySurfaceOwner
             {
                 Impl* owner = nullptr;
                 LPDIRECTDRAWSURFACE surface = nullptr;
-                Dx3ResourceKindEXT kind{};
+                FreeDirectResourceKindEXT kind{};
 
                 TemporarySurfaceOwner(
                     Impl* resourceOwner, LPDIRECTDRAWSURFACE ownedSurface,
-                    Dx3ResourceKindEXT resourceKind) noexcept
+                    FreeDirectResourceKindEXT resourceKind) noexcept
                     : owner(resourceOwner), surface(ownedSurface), kind(resourceKind)
                 {
                 }
@@ -620,15 +620,15 @@ namespace CNA::Internal::Backends::Dx3
             };
 
             TemporarySurfaceOwner replacementBackOwner{
-                this, replacementBackBuffer, Dx3ResourceKindEXT::ShadowBackBuffer};
+                this, replacementBackBuffer, FreeDirectResourceKindEXT::ShadowBackBuffer};
             if (injectResizeFailure)
-                MaybeFail(Dx3ResizeFailurePointEXT::ShadowBackBufferValidation);
+                MaybeFail(FreeDirectResizeFailurePointEXT::ShadowBackBufferValidation);
             ValidateResizeSurface(
                 replacementBackBuffer, width, height, DDSCAPS_OFFSCREENPLAIN,
                 "IDirectDrawSurface::GetSurfaceDesc(shadow backbuffer)");
 
             if (injectResizeFailure)
-                MaybeFail(Dx3ResizeFailurePointEXT::DisplayModeBinding);
+                MaybeFail(FreeDirectResizeFailurePointEXT::DisplayModeBinding);
             hr = dd->SetDisplayMode(
                 static_cast<DWORD>(width), static_cast<DWORD>(height), 32);
             if (FAILED(hr))
@@ -644,38 +644,38 @@ namespace CNA::Internal::Backends::Dx3
                 primaryDesc.dwFlags = DDSD_CAPS;
                 primaryDesc.ddsCaps.dwCaps = DDSCAPS_PRIMARYSURFACE;
                 if (injectResizeFailure)
-                    MaybeFail(Dx3ResizeFailurePointEXT::PrimarySurfaceCreation);
+                    MaybeFail(FreeDirectResizeFailurePointEXT::PrimarySurfaceCreation);
 
                 LPDIRECTDRAWSURFACE replacementPrimary = nullptr;
                 hr = dd->CreateSurface(&primaryDesc, &replacementPrimary, nullptr);
                 if (FAILED(hr))
                     ThrowHr("IDirectDraw::CreateSurface(primary)", hr);
                 NotifyResource(
-                    testHooks, Dx3ResourceKindEXT::PrimarySurface,
-                    Dx3ResourceEventEXT::Acquired, replacementPrimary);
+                    testHooks, FreeDirectResourceKindEXT::PrimarySurface,
+                    FreeDirectResourceEventEXT::Acquired, replacementPrimary);
                 TemporarySurfaceOwner replacementPrimaryOwner{
-                    this, replacementPrimary, Dx3ResourceKindEXT::PrimarySurface};
+                    this, replacementPrimary, FreeDirectResourceKindEXT::PrimarySurface};
 
                 if (injectResizeFailure)
-                    MaybeFail(Dx3ResizeFailurePointEXT::PrimarySurfaceValidation);
+                    MaybeFail(FreeDirectResizeFailurePointEXT::PrimarySurfaceValidation);
                 ValidateResizeSurface(
                     replacementPrimary, width, height, DDSCAPS_PRIMARYSURFACE,
                     "IDirectDrawSurface::GetSurfaceDesc(primary)");
 
                 if (replacementPrimary == replacementBackBuffer)
                     throw std::runtime_error(
-                        "CNA DX3: replacement primary aliases the shadow backbuffer");
+                        "CNA FreeDirect: replacement primary aliases the shadow backbuffer");
                 if ((currentTargetSurface == nullptr &&
                      (currentTargetWidth != 0 || currentTargetHeight != 0)) ||
                     (currentTargetSurface != nullptr &&
                      (currentTargetWidth <= 0 || currentTargetHeight <= 0)))
                 {
                     throw std::runtime_error(
-                        "CNA DX3: invalid active render-target state during resize");
+                        "CNA FreeDirect: invalid active render-target state during resize");
                 }
 
                 if (injectResizeFailure)
-                    MaybeFail(Dx3ResizeFailurePointEXT::SurfaceSetCommit);
+                    MaybeFail(FreeDirectResizeFailurePointEXT::SurfaceSetCommit);
 
                 LPDIRECTDRAWSURFACE oldBackBuffer = backBuffer;
                 LPDIRECTDRAWSURFACE oldPrimary = primary;
@@ -686,8 +686,8 @@ namespace CNA::Internal::Backends::Dx3
                 restoreDisplayMode = false;
 
                 // Commit is complete before either old identity is released.
-                ReleaseSurface(oldBackBuffer, Dx3ResourceKindEXT::ShadowBackBuffer);
-                ReleaseSurface(oldPrimary, Dx3ResourceKindEXT::PrimarySurface);
+                ReleaseSurface(oldBackBuffer, FreeDirectResourceKindEXT::ShadowBackBuffer);
+                ReleaseSurface(oldPrimary, FreeDirectResourceKindEXT::PrimarySurface);
             }
             catch (...)
             {
@@ -705,24 +705,24 @@ namespace CNA::Internal::Backends::Dx3
         }
     };
 
-    Dx3GraphicsBackend::Dx3GraphicsBackend(const GraphicsBackendCreateArgs& args)
-        : Dx3GraphicsBackend(args, Dx3TestHooksEXT{})
+    FreeDirectGraphicsBackend::FreeDirectGraphicsBackend(const GraphicsBackendCreateArgs& args)
+        : FreeDirectGraphicsBackend(args, FreeDirectTestHooksEXT{})
     {
     }
 
-    Dx3GraphicsBackend::Dx3GraphicsBackend(
-        const GraphicsBackendCreateArgs& args, const Dx3TestHooksEXT& testHooks)
+    FreeDirectGraphicsBackend::FreeDirectGraphicsBackend(
+        const GraphicsBackendCreateArgs& args, const FreeDirectTestHooksEXT& testHooks)
         : impl_(std::make_unique<Impl>(testHooks))
     {
-        if (!args.window) throw std::runtime_error("Dx3GraphicsBackend initialized with null window.");
+        if (!args.window) throw std::runtime_error("FreeDirectGraphicsBackend initialized with null window.");
         impl_->window = args.window;
         impl_->presentationMode = args.presentationMode;
 
         HRESULT hr = DirectDrawCreate(nullptr, &impl_->dd, nullptr);
         if (FAILED(hr)) ThrowHr("DirectDrawCreate", hr);
         NotifyResource(
-            impl_->testHooks, Dx3ResourceKindEXT::DirectDraw,
-            Dx3ResourceEventEXT::Acquired, impl_->dd);
+            impl_->testHooks, FreeDirectResourceKindEXT::DirectDraw,
+            FreeDirectResourceEventEXT::Acquired, impl_->dd);
 
         // Design decision 2: free-direct's SetCooperativeLevel does
         // sdlWindow_ = reinterpret_cast<SDL_Window*>(hwnd) internally -- HWND is CNA's own already-
@@ -735,9 +735,9 @@ namespace CNA::Internal::Backends::Dx3
         impl_->CreateSurfaces(width, height, false);
     }
 
-    Dx3GraphicsBackend::~Dx3GraphicsBackend() = default;
+    FreeDirectGraphicsBackend::~FreeDirectGraphicsBackend() = default;
 
-    void Dx3GraphicsBackend::Clear(float r, float g, float b, float a)
+    void FreeDirectGraphicsBackend::Clear(float r, float g, float b, float a)
     {
         // Not DDBLT_COLORFILL: free-direct's own FillColor() hardcodes the written alpha byte to
         // 255 regardless of dwFillColor's contents, so a ColorFill-based Clear() could never
@@ -752,7 +752,7 @@ namespace CNA::Internal::Backends::Dx3
                          static_cast<uint8_t>(std::clamp(a * 255.0f, 0.0f, 255.0f)));
     }
 
-    void Dx3GraphicsBackend::Present()
+    void FreeDirectGraphicsBackend::Present()
     {
         // A single identity Blt() (null dest/src rects = full surface, unscaled 1:1 copy) from the
         // shadow backbuffer onto the real primary. This mirrors the exact "once-per-frame back-
@@ -766,16 +766,16 @@ namespace CNA::Internal::Backends::Dx3
         if (FAILED(hr)) ThrowHr("IDirectDrawSurface::Blt(present)", hr);
     }
 
-    void Dx3GraphicsBackend::GetViewportSize(int& width, int& height)
+    void FreeDirectGraphicsBackend::GetViewportSize(int& width, int& height)
     {
-        // Unlike SDL_Renderer-based backends, DX3 has no independent "physical output size" to
+        // Unlike SDL_Renderer-based backends, FreeDirect has no independent "physical output size" to
         // fall back to -- the primary surface's own size (set via SetDisplayMode) IS the logical
         // size; free-direct's internal SDL_Renderer handles physical window scaling invisibly.
         width = impl_->logicalWidth;
         height = impl_->logicalHeight;
     }
 
-    void Dx3GraphicsBackend::ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels)
+    void FreeDirectGraphicsBackend::ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels)
     {
         // DX3-26: reads from whichever surface is currently active -- the bound render target's
         // surface if one is bound (SetRenderTarget2D), else the shadow backbuffer. Never through
@@ -785,7 +785,7 @@ namespace CNA::Internal::Backends::Dx3
         ReadSurfacePixels(impl_->ActiveSurface(), x, y, w, h, pixels);
     }
 
-    void Dx3GraphicsBackend::SetVirtualResolution(int width, int height)
+    void FreeDirectGraphicsBackend::SetVirtualResolution(int width, int height)
     {
         if (width <= 0 || height <= 0) return;
         if (width == impl_->logicalWidth && height == impl_->logicalHeight) return;
@@ -797,25 +797,25 @@ namespace CNA::Internal::Backends::Dx3
         impl_->CreateSurfaces(width, height, true);
     }
 
-    void Dx3GraphicsBackend::SetPresentationMode(int mode)
+    void FreeDirectGraphicsBackend::SetPresentationMode(int mode)
     {
         impl_->presentationMode = static_cast<CnaPresentationMode>(mode);
         // free-direct's own PresentPrimary hardcodes SDL_LOGICAL_PRESENTATION_LETTERBOX (see
-        // src/directdraw/DirectDraw.cpp) -- DX3 cannot honor Stretch/Overscan/NativeBackBuffer's
+        // src/directdraw/DirectDraw.cpp) -- FreeDirect cannot honor Stretch/Overscan/NativeBackBuffer's
         // real physical-scaling behavior without modifying free-direct itself (out of scope, design
         // decision 8). The mode is still stored so GetViewportSize()/logical-resolution bookkeeping
         // stays consistent with what the game requested.
     }
 
-    void Dx3GraphicsBackend::SetTestHooksEXT(const Dx3TestHooksEXT& testHooks)
+    void FreeDirectGraphicsBackend::SetTestHooksEXT(const FreeDirectTestHooksEXT& testHooks)
     {
         impl_->testHooks = testHooks;
         impl_->testFailureInjected = false;
     }
 
-    Dx3TestStateEXT Dx3GraphicsBackend::GetTestStateEXT() const
+    FreeDirectTestStateEXT FreeDirectGraphicsBackend::GetTestStateEXT() const
     {
-        return Dx3TestStateEXT{
+        return FreeDirectTestStateEXT{
             impl_->dd,
             impl_->primary,
             impl_->backBuffer,
@@ -825,7 +825,7 @@ namespace CNA::Internal::Backends::Dx3
             static_cast<int>(impl_->presentationMode)};
     }
 
-    SDL_Window* Dx3GraphicsBackend::GetWindowInternal() const
+    SDL_Window* FreeDirectGraphicsBackend::GetWindowInternal() const
     {
         return impl_->window;
     }
@@ -855,7 +855,7 @@ namespace CNA::Internal::Backends::Dx3
         }
     }
 
-    bool Dx3GraphicsBackend::TransformWindowToLogical(float windowX, float windowY,
+    bool FreeDirectGraphicsBackend::TransformWindowToLogical(float windowX, float windowY,
                                                        float& logX, float& logY) const
     {
         float scale = 1.0f, offsetX = 0.0f, offsetY = 0.0f;
@@ -866,7 +866,7 @@ namespace CNA::Internal::Backends::Dx3
         return true;
     }
 
-    bool Dx3GraphicsBackend::TransformLogicalToWindow(float logX, float logY,
+    bool FreeDirectGraphicsBackend::TransformLogicalToWindow(float logX, float logY,
                                                        float& windowX, float& windowY) const
     {
         float scale = 1.0f, offsetX = 0.0f, offsetY = 0.0f;
@@ -879,27 +879,27 @@ namespace CNA::Internal::Backends::Dx3
 
     // ---- Phase X3: textures and render targets ----
     // Both classes below are never named outside this .cpp (only returned polymorphically), so
-    // <ddraw.h> stays fully contained here -- see this file's own Dx3TextureBackend/
-    // Dx3RenderTargetBackend definitions for the shared surface-creation helpers they use.
+    // <ddraw.h> stays fully contained here -- see this file's own FreeDirectTextureBackend/
+    // FreeDirectRenderTargetBackend definitions for the shared surface-creation helpers they use.
 
-    class Dx3TextureBackend : public ITextureBackend, public Dx3SurfaceOwner
+    class FreeDirectTextureBackend : public ITextureBackend, public FreeDirectSurfaceOwner
     {
     public:
-        Dx3TextureBackend(LPDIRECTDRAW dd, int width, int height)
+        FreeDirectTextureBackend(LPDIRECTDRAW dd, int width, int height)
             : width_(width), height_(height), surface_(CreateOffscreenSurface(dd, width, height))
         {
         }
 
-        Dx3TextureBackend(LPDIRECTDRAW dd, const ImageData& data)
-            : Dx3TextureBackend(dd, data.width, data.height)
+        FreeDirectTextureBackend(LPDIRECTDRAW dd, const ImageData& data)
+            : FreeDirectTextureBackend(dd, data.width, data.height)
         {
             WriteSurfacePixels(surface_, width_, height_, data.pixels.data(), width_ * 4);
         }
 
-        ~Dx3TextureBackend() override { if (surface_) surface_->Release(); }
+        ~FreeDirectTextureBackend() override { if (surface_) surface_->Release(); }
 
-        Dx3TextureBackend(const Dx3TextureBackend&) = delete;
-        Dx3TextureBackend& operator=(const Dx3TextureBackend&) = delete;
+        FreeDirectTextureBackend(const FreeDirectTextureBackend&) = delete;
+        FreeDirectTextureBackend& operator=(const FreeDirectTextureBackend&) = delete;
 
         [[nodiscard]] int GetWidth() const override { return width_; }
         [[nodiscard]] int GetHeight() const override { return height_; }
@@ -926,10 +926,10 @@ namespace CNA::Internal::Backends::Dx3
         LPDIRECTDRAWSURFACE surface_ = nullptr;
     };
 
-    class Dx3RenderTargetBackend final : public IRenderTargetBackend, public Dx3SurfaceOwner
+    class FreeDirectRenderTargetBackend final : public IRenderTargetBackend, public FreeDirectSurfaceOwner
     {
     public:
-        Dx3RenderTargetBackend(LPDIRECTDRAWSURFACE* currentTargetSlot, int* currentTargetWidthSlot,
+        FreeDirectRenderTargetBackend(LPDIRECTDRAWSURFACE* currentTargetSlot, int* currentTargetWidthSlot,
                                int* currentTargetHeightSlot, LPDIRECTDRAW dd,
                                int width, int height, int multiSampleCount)
             : currentTargetSlot_(currentTargetSlot), currentTargetWidthSlot_(currentTargetWidthSlot),
@@ -938,14 +938,14 @@ namespace CNA::Internal::Backends::Dx3
         {
         }
 
-        ~Dx3RenderTargetBackend() override
+        ~FreeDirectRenderTargetBackend() override
         {
             UnbindAsRenderTarget();
             if (surface_) surface_->Release();
         }
 
-        Dx3RenderTargetBackend(const Dx3RenderTargetBackend&) = delete;
-        Dx3RenderTargetBackend& operator=(const Dx3RenderTargetBackend&) = delete;
+        FreeDirectRenderTargetBackend(const FreeDirectRenderTargetBackend&) = delete;
+        FreeDirectRenderTargetBackend& operator=(const FreeDirectRenderTargetBackend&) = delete;
 
         [[nodiscard]] int GetWidth() const override { return width_; }
         [[nodiscard]] int GetHeight() const override { return height_; }
@@ -1013,7 +1013,7 @@ namespace CNA::Internal::Backends::Dx3
                     "level", std::to_string(level), "level must not be negative.");
             if (level > 0)
                 throw System::NotSupportedException(
-                    "Dx3RenderTargetBackend::GetData: IDirectDrawSurface has no mip chain; level " +
+                    "FreeDirectRenderTargetBackend::GetData: IDirectDrawSurface has no mip chain; level " +
                     std::to_string(level) + " was requested.");
             // 64-bit throughout, so a rectangle near INT_MAX is rejected rather than wrapping.
             const std::int64_t right = static_cast<std::int64_t>(x) + static_cast<std::int64_t>(w);
@@ -1059,20 +1059,20 @@ namespace CNA::Internal::Backends::Dx3
         LPDIRECTDRAWSURFACE surface_ = nullptr;
     };
 
-    std::unique_ptr<ITextureBackend> Dx3GraphicsBackend::CreateTexture(const ImageData& data)
+    std::unique_ptr<ITextureBackend> FreeDirectGraphicsBackend::CreateTexture(const ImageData& data)
     {
-        return std::make_unique<Dx3TextureBackend>(impl_->dd, data);
+        return std::make_unique<FreeDirectTextureBackend>(impl_->dd, data);
     }
 
-    std::unique_ptr<IRenderTargetBackend> Dx3GraphicsBackend::CreateRenderTarget2D(
+    std::unique_ptr<IRenderTargetBackend> FreeDirectGraphicsBackend::CreateRenderTarget2D(
         int w, int h, int /*depthFormat*/, bool /*preserveContents*/, bool /*mipMap*/, int multiSampleCount)
     {
-        return std::make_unique<Dx3RenderTargetBackend>(&impl_->currentTargetSurface,
+        return std::make_unique<FreeDirectRenderTargetBackend>(&impl_->currentTargetSurface,
                                                          &impl_->currentTargetWidth, &impl_->currentTargetHeight,
                                                          impl_->dd, w, h, multiSampleCount);
     }
 
-    void Dx3GraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt)
+    void FreeDirectGraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt)
     {
         if (rt)
             rt->BindAsRenderTarget();
@@ -1084,31 +1084,31 @@ namespace CNA::Internal::Backends::Dx3
         }
     }
 
-    void Dx3GraphicsBackend::SetRenderTargets(
+    void FreeDirectGraphicsBackend::SetRenderTargets(
         const RenderTargetBindingDescriptor* renderTargets, int count)
     {
         // DX3-27: DirectDraw has no multi-render-target concept -- single active surface only.
         if (count > 1)
             throw std::runtime_error(
-                "DX3 (DirectDraw) does not support multiple simultaneous render targets (MRT): "
+                "FreeDirect (DirectDraw) does not support multiple simultaneous render targets (MRT): "
                 "requested " + std::to_string(count) + ", but IDirectDrawSurface supports exactly "
                 "one active render target at a time.");
         if (count > 0 && renderTargets[0].IsRenderTargetCubeFace())
             throw std::runtime_error(
-                "DX3 (DirectDraw) does not support RenderTargetCube face bindings.");
+                "FreeDirect (DirectDraw) does not support RenderTargetCube face bindings.");
         SetRenderTarget2D(
             count > 0 ? renderTargets[0].GetRenderTarget2D() : nullptr);
     }
 
     // ---- Phase X4: the CPU compositor / SpriteBatch draw path (design decision 5) ----
-    // Never named outside this .cpp, same reasoning as Dx3TextureBackend/Dx3RenderTargetBackend.
+    // Never named outside this .cpp, same reasoning as FreeDirectTextureBackend/FreeDirectRenderTargetBackend.
 
-    class Dx3SpriteBatchBackend final : public ISpriteBatchBackend
+    class FreeDirectSpriteBatchBackend final : public ISpriteBatchBackend
     {
     public:
-        Dx3SpriteBatchBackend(std::function<LPDIRECTDRAWSURFACE()> getActiveSurface,
+        FreeDirectSpriteBatchBackend(std::function<LPDIRECTDRAWSURFACE()> getActiveSurface,
                               std::function<void(int&, int&)> getActiveSurfaceSize,
-                              std::function<Dx3BlendMode()> getBlendMode)
+                              std::function<FreeDirectBlendMode()> getBlendMode)
             : getActiveSurface_(std::move(getActiveSurface)),
               getActiveSurfaceSize_(std::move(getActiveSurfaceSize)),
               getBlendMode_(std::move(getBlendMode))
@@ -1118,14 +1118,14 @@ namespace CNA::Internal::Backends::Dx3
         void Begin() override
         {
             if (begun_)
-                throw std::runtime_error("Dx3SpriteBatchBackend::Begin: Begin() called without a matching End()");
+                throw std::runtime_error("FreeDirectSpriteBatchBackend::Begin: Begin() called without a matching End()");
             begun_ = true;
         }
 
         void End() override
         {
             if (!begun_)
-                throw std::runtime_error("Dx3SpriteBatchBackend::End: End() called without a matching Begin()");
+                throw std::runtime_error("FreeDirectSpriteBatchBackend::End: End() called without a matching Begin()");
             begun_ = false;
         }
 
@@ -1138,7 +1138,7 @@ namespace CNA::Internal::Backends::Dx3
         {
             if (effect != nullptr)
                 throw std::runtime_error(
-                    "DX3 (DirectDraw) does not support custom SpriteBatch Effects: no programmable "
+                    "FreeDirect (DirectDraw) does not support custom SpriteBatch Effects: no programmable "
                     "shader stage exists on this backend.");
         }
 
@@ -1173,12 +1173,12 @@ namespace CNA::Internal::Backends::Dx3
                  const Vector2& origin, SpriteEffects effects, float /*layerDepth*/) override
         {
             if (!begun_)
-                throw std::runtime_error("Dx3SpriteBatchBackend::Draw: Draw() called before Begin()");
+                throw std::runtime_error("FreeDirectSpriteBatchBackend::Draw: Draw() called before Begin()");
 
-            const auto* owner = dynamic_cast<const Dx3SurfaceOwner*>(&texture);
+            const auto* owner = dynamic_cast<const FreeDirectSurfaceOwner*>(&texture);
             if (!owner)
                 throw std::runtime_error(
-                    "Dx3SpriteBatchBackend::Draw: texture backend is not a DX3 surface (created by "
+                    "FreeDirectSpriteBatchBackend::Draw: texture backend is not a FreeDirect surface (created by "
                     "a different graphics backend?)");
             LPDIRECTDRAWSURFACE srcSurface = owner->Surface();
             LPDIRECTDRAWSURFACE dstSurface = getActiveSurface_();
@@ -1213,7 +1213,7 @@ namespace CNA::Internal::Backends::Dx3
             const bool isWhiteTint =
                 color.getRProperty() == 255 && color.getGProperty() == 255 &&
                 color.getBProperty() == 255 && color.getAProperty() == 255;
-            if (isIdentityGeometry && isWhiteTint && getBlendMode_() == Dx3BlendMode::Opaque)
+            if (isIdentityGeometry && isWhiteTint && getBlendMode_() == FreeDirectBlendMode::Opaque)
             {
                 RECT srcRect{};
                 srcRect.left = sourceRectangle.X;
@@ -1266,7 +1266,7 @@ namespace CNA::Internal::Backends::Dx3
     private:
         std::function<LPDIRECTDRAWSURFACE()> getActiveSurface_;
         std::function<void(int&, int&)> getActiveSurfaceSize_;
-        std::function<Dx3BlendMode()> getBlendMode_;
+        std::function<FreeDirectBlendMode()> getBlendMode_;
         bool begun_ = false;
         Matrix transformMatrix_ = Matrix::getIdentityProperty();
         // Defaults match SpriteBatch::Begin()'s own documented default sampler state
@@ -1277,21 +1277,21 @@ namespace CNA::Internal::Backends::Dx3
         int addressV_ = 1;
     };
 
-    std::unique_ptr<ISpriteBatchBackend> Dx3GraphicsBackend::CreateSpriteBatch()
+    std::unique_ptr<ISpriteBatchBackend> FreeDirectGraphicsBackend::CreateSpriteBatch()
     {
         Impl* impl = impl_.get();
-        return std::make_unique<Dx3SpriteBatchBackend>(
+        return std::make_unique<FreeDirectSpriteBatchBackend>(
             [impl]() { return impl->ActiveSurface(); },
             [impl](int& w, int& h) { impl->ActiveSurfaceSize(w, h); },
             [impl]() { return impl->currentBlendMode; });
     }
 
-    void Dx3GraphicsBackend::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
+    void FreeDirectGraphicsBackend::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
                                              int colorDstBlend, int alphaDstBlend,
                                              int colorBlendFunc, int alphaBlendFunc,
                                              const BlendWriteState& /*writeState*/)
     {
-        // REMED-GFX-077: the DirectDraw/Direct3D-3-era Dx3 backend classifies blending into one of
+        // REMED-GFX-077: the DirectDraw/Direct3D-3-era FreeDirect backend classifies blending into one of
         // four preset modes for 2D blits and has no per-channel colour-write-mask or coverage
         // sample-mask surface. BlendState.ColorWriteChannels* / MultiSampleMask are inexpressible
         // (documented capability gap, not a silent drop).
@@ -1299,31 +1299,31 @@ namespace CNA::Internal::Backends::Dx3
                                                   colorBlendFunc, alphaBlendFunc);
     }
 
-    void Dx3GraphicsBackend::ClearColorAndDepth(float, float, float, float, float) { ThrowNo3D("ClearColorAndDepth"); }
-    void Dx3GraphicsBackend::ClearDepth(float) { ThrowNo3D("ClearDepth"); }
-    void Dx3GraphicsBackend::ClearStencil(int) { ThrowNo3D("ClearStencil"); }
-    void Dx3GraphicsBackend::ClearDepthAndStencil(float, int) { ThrowNo3D("ClearDepthAndStencil"); }
-    void Dx3GraphicsBackend::ClearColorAndStencil(float, float, float, float, int) { ThrowNo3D("ClearColorAndStencil"); }
-    void Dx3GraphicsBackend::ClearColorDepthAndStencil(float, float, float, float, float, int) { ThrowNo3D("ClearColorDepthAndStencil"); }
-    void Dx3GraphicsBackend::SetDepthTestEnabled(bool)  { ThrowNo3D("SetDepthTestEnabled"); }
-    void Dx3GraphicsBackend::SetBlendEnabled(bool)      { ThrowNo3D("SetBlendEnabled"); }
-    void Dx3GraphicsBackend::SetDepthWriteEnabled(bool) { ThrowNo3D("SetDepthWriteEnabled"); }
+    void FreeDirectGraphicsBackend::ClearColorAndDepth(float, float, float, float, float) { ThrowNo3D("ClearColorAndDepth"); }
+    void FreeDirectGraphicsBackend::ClearDepth(float) { ThrowNo3D("ClearDepth"); }
+    void FreeDirectGraphicsBackend::ClearStencil(int) { ThrowNo3D("ClearStencil"); }
+    void FreeDirectGraphicsBackend::ClearDepthAndStencil(float, int) { ThrowNo3D("ClearDepthAndStencil"); }
+    void FreeDirectGraphicsBackend::ClearColorAndStencil(float, float, float, float, int) { ThrowNo3D("ClearColorAndStencil"); }
+    void FreeDirectGraphicsBackend::ClearColorDepthAndStencil(float, float, float, float, float, int) { ThrowNo3D("ClearColorDepthAndStencil"); }
+    void FreeDirectGraphicsBackend::SetDepthTestEnabled(bool)  { ThrowNo3D("SetDepthTestEnabled"); }
+    void FreeDirectGraphicsBackend::SetBlendEnabled(bool)      { ThrowNo3D("SetBlendEnabled"); }
+    void FreeDirectGraphicsBackend::SetDepthWriteEnabled(bool) { ThrowNo3D("SetDepthWriteEnabled"); }
 
-    std::unique_ptr<IVertexBufferBackend> Dx3GraphicsBackend::CreateVertexBuffer(int)
+    std::unique_ptr<IVertexBufferBackend> FreeDirectGraphicsBackend::CreateVertexBuffer(int)
     {
         ThrowNo3D("CreateVertexBuffer");
     }
 
-    std::unique_ptr<IIndexBufferBackend> Dx3GraphicsBackend::CreateIndexBuffer16(int)
+    std::unique_ptr<IIndexBufferBackend> FreeDirectGraphicsBackend::CreateIndexBuffer16(int)
     {
         ThrowNo3D("CreateIndexBuffer16");
     }
 
-    void Dx3GraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend&,
+    void FreeDirectGraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend&,
                                                    const Matrix&, const Matrix&, const Matrix&,
                                                    PrimitiveType, int) { ThrowNo3D("DrawColoredPrimitives"); }
 
-    void Dx3GraphicsBackend::DrawIndexedColoredPrimitives(const IVertexBufferBackend&,
+    void FreeDirectGraphicsBackend::DrawIndexedColoredPrimitives(const IVertexBufferBackend&,
                                                           const IIndexBufferBackend&,
                                                           const Matrix&, const Matrix&, const Matrix&,
                                                           PrimitiveType, int) { ThrowNo3D("DrawIndexedColoredPrimitives"); }
@@ -1331,10 +1331,10 @@ namespace CNA::Internal::Backends::Dx3
 
 namespace CNA::Internal::Backends
 {
-#ifdef CNA_BACKEND_DX3
+#ifdef CNA_BACKEND_FREEDIRECT
     std::unique_ptr<IGraphicsBackend> CreateGraphicsBackend(const GraphicsBackendCreateArgs& args)
     {
-        return std::make_unique<Dx3::Dx3GraphicsBackend>(args);
+        return std::make_unique<FreeDirect::FreeDirectGraphicsBackend>(args);
     }
 #endif
 }

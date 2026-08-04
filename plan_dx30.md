@@ -4,11 +4,11 @@
 > `plan_dxold.md`'s roadmap (row 3), but it is built and shipped under the CMake name **`DX30`**
 > (`CNA_GRAPHICS_BACKEND=DX30`, `CNA_BACKEND_DX30`, `Dx30GraphicsBackend`, `src/CNA/Internal/
 > Backends/Dx30/`), **not** `DX3` — the `DX3` name is still owned by the existing, shipping
-> `../free-direct`-backed 2D backend (`plan_dx3.md`, `docs/dx3-backend.md`). `plan_dxold.md`'s own
+> `../free-direct`-backed 2D backend (`plan_freedirect.md`, `docs/freedirect-backend.md`). `plan_dxold.md`'s own
 > "DX3 naming transition" section describes a still-not-executed future task to rename that
 > existing backend to `FREE_DIRECT`, at which point `DX30` should be renamed to `DX3` (mechanical:
-> `Dx30`→`Dx3` class/file/directory renames, `DX30`→`DX3` CMake option/define renames, `plan_dx30.md`
-> retired in favor of `plan_dx3_real.md`/reusing `plan_dx3.md`'s name once the old content is
+> `Dx30`→`FreeDirect` class/file/directory renames, `DX30`→`DX3` CMake option/define renames, `plan_dx30.md`
+> retired in favor of `plan_dx3_real.md`/reusing `plan_freedirect.md`'s name once the old content is
 > archived). **Do not reuse the bare `DX3` identifier for anything until that rename task actually
 > runs** — this repo's own established caution (`plan_dxold.md`), respected here by using `DX30`
 > instead of colliding with the still-shipping backend.
@@ -262,5 +262,5 @@ exposed through any public API (decision 4) — a deliberate scope boundary, not
 - `plan_dx2.md`, `docs/dx2-backend.md` — the backend this plan ports verbatim (2D layer + 3D layer
   + Phase O9 lighting/`WireFrame`), including the existence-gate-spike discipline `DX30-0` follows.
 - `dx30-spike/README.md` — the full `DX30-0` spike record.
-- `plan_dx3.md`, `docs/dx3-backend.md` — the existing, shipping `../free-direct`-backed `DX3`
+- `plan_freedirect.md`, `docs/freedirect-backend.md` — the existing, shipping `../free-direct`-backed `DX3`
   backend, whose name this backend will inherit once the still-pending rename task runs.

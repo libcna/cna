@@ -2,7 +2,7 @@
 
 > Short, English-language index for the whole "legacy DirectX" backend line, per the project
 > owner's direct instruction (2026-07-20). This file stays short on purpose — each version gets
-> its own full `plan_dxN.md` (this repo's standing convention, see `plan_dx3.md`/`plan_dx9.md`)
+> its own full `plan_dxN.md` (this repo's standing convention, see `plan_freedirect.md`/`plan_dx9.md`)
 > when its turn comes. Background analysis: `docs/directx-legacy-backends-analysis.md`.
 >
 > **Status (2026-07-21): the entire 1/2/3/5/6/7/8/10 line is done.** All 8 backends in the table
@@ -54,7 +54,7 @@ of this roadmap's scope.
 ## The `DX3` naming transition (owner-authorized, not yet executed)
 
 - **Today**: `CNA_GRAPHICS_BACKEND=DX3` is the existing, shipped `free-direct`-backed 2D DirectDraw
-  backend (`plan_dx3.md`, `docs/dx3-backend.md`). It stays exactly as-is until the rename below is
+  backend (`plan_freedirect.md`, `docs/freedirect-backend.md`). It stays exactly as-is until the rename below is
   actually carried out as its own task — this roadmap does not touch it.
 - **Done (2026-07-21)**: the real (Route B) DirectX 3 backend itself — real `ddraw.h`/`IDirectDraw2`
   interfaces, MinGW cross-compile, Wine translation, **no `free-direct`** — is implemented and
@@ -64,9 +64,9 @@ of this roadmap's scope.
   `IDirectDraw2`.
 - **Still-future task**: rename the existing `free-direct`-backed backend's `CNA_GRAPHICS_BACKEND`
   value (and matching `CNA_BACKEND_*`/library-target/file-path identifiers) from `DX3` to
-  `FREE_DIRECT`, then rename `DX30` (mechanical: `Dx30`→`Dx3` class/file/directory renames,
+  `FREE_DIRECT`, then rename `DX30` (mechanical: `Dx30`→`FreeDirect` class/file/directory renames,
   `DX30`→`DX3` CMake option/define renames) to inherit the now-free `DX3` name; `plan_dx30.md` can
-  be retired/merged into `plan_dx3.md` once the old `free-direct` content there is archived —
+  be retired/merged into `plan_freedirect.md` once the old `free-direct` content there is archived —
   decide the exact filename mechanics at that task's own start, not here.
 - Until the rename task actually runs, do not reuse the bare `DX3` `CMakeLists.txt`/CMake-option
   identifiers for anything else — that would collide with the still-shipping backend. `DX30` is
@@ -115,7 +115,7 @@ of this roadmap's scope.
   3D only.
 - `plan_d3d10.md`, `docs/d3d10-backend.md` — D3D10, no fixed-function pipeline at all, real HLSL
   `vs_4_0`/`ps_4_0` shaders everywhere, delivered via Wine's own `d3d10.dll` + DXVK's `d3d10core.dll`.
-- `plan_dx3.md`, `docs/dx3-backend.md` — the shipping `free-direct`-backed DX3, pending its
+- `plan_freedirect.md`, `docs/freedirect-backend.md` — the shipping `free-direct`-backed DX3, pending its
   `FREE_DIRECT` rename.
 - `plan_dx9.md`, `plan_dx.md` — the shipping D3D9/D3D11/D3D12 plans; their Route-B conventions
   (CTest shape, Wine wrapper scripts, MinGW toolchain file, header-containment discipline) are what

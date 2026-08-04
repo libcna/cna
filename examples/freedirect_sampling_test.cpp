@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx3.md Phase X5 (DX3-45/DX3-46): TextureFilter (nearest vs. bilinear) and
+// plan_freedirect.md Phase X5 (DX3-45/DX3-46): TextureFilter (nearest vs. bilinear) and
 // TextureAddressMode (Wrap/Mirror/Clamp) sampling tests for the DX3 (DirectDraw, via the
 // ../free-direct sibling) graphics backend.
 //
@@ -7,7 +7,7 @@
 // AlphaBlend's premultiplied formula (out = src + dst*(1-srcAlpha)), srcAlpha=255 makes
 // (1-srcAlpha)=0, so the result is exactly the sampled source color regardless of the
 // destination's prior content -- this isolates the sampling logic itself (DX3-45/46) from any
-// blend-formula concern (DX3-40..44, already covered by Dx3_Blend).
+// blend-formula concern (DX3-40..44, already covered by FreeDirect_Blend).
 //
 // Check A -- TextureFilter::Point (nearest) at a texel boundary yields a pure endpoint color (not
 //   a blend of the two neighboring texels).
@@ -42,7 +42,7 @@ using namespace Microsoft::Xna::Framework::Graphics;
 
 static constexpr int kCanvasSize = 32;
 
-class Dx3SamplingTest : public Game
+class FreeDirectSamplingTest : public Game
 {
     std::unique_ptr<GraphicsDeviceManager> gdm_;
     int passCount_ = 0;
@@ -147,7 +147,7 @@ protected:
     }
 
 public:
-    Dx3SamplingTest()
+    FreeDirectSamplingTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
         gdm_->setPreferredBackBufferWidthProperty(kCanvasSize);
@@ -159,7 +159,7 @@ public:
 
 int main()
 {
-    Dx3SamplingTest game;
+    FreeDirectSamplingTest game;
     game.Run();
     return game.getResult();
 }

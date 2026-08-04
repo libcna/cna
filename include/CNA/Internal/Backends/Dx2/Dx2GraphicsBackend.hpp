@@ -40,7 +40,7 @@ namespace CNA::Internal::Backends::Dx2
      * the logical/virtual resolution, that Clear()/SpriteBatch draws always target; Present()
      * letterbox-scales that shadow buffer onto the primary via a single Blt(), with the destination
      * rect recomputed every frame from the window's real client area (GetClientRect +
-     * ClientToScreen) -- unlike DX3's own documented stale-scale limitation (plan_dx3.md DX3-16), a
+     * ClientToScreen) -- unlike DX3's own documented stale-scale limitation (plan_freedirect.md DX3-16), a
      * virtual-resolution or window-resize change is correct on the very next Present(), since
      * nothing here is cached.
      *

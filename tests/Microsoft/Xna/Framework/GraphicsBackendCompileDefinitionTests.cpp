@@ -44,7 +44,7 @@ TEST(GraphicsBackendCompileDefinitionsTest, ExactlyOneGraphicsBackendIsSelected)
 #ifdef CNA_BACKEND_D3D12
     ++enabled;
 #endif
-#ifdef CNA_BACKEND_DX3
+#ifdef CNA_BACKEND_FREEDIRECT
     ++enabled;
 #endif
     // A genuine, previously-uncaught gap in the D3D9 branch (feature/dx9): no commit in this

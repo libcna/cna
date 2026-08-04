@@ -1,6 +1,6 @@
 #pragma once
 
-// plan_dx3.md Phase X1/X2: DX3 backend skeleton + real DirectDraw (via the ../free-direct sibling)
+// plan_freedirect.md Phase X1/X2: FreeDirect (formerly DX3) backend skeleton + real DirectDraw (via the ../free-direct sibling)
 // device/window bring-up. 2D-only, like SDL_RENDERER -- every 3D entry point throws (Phase X7).
 //
 // This header intentionally does NOT include <ddraw.h> (design decision 9's containment rule),
@@ -9,23 +9,23 @@
 // every translation unit that includes it. Unlike D3D11's <d3d11.h> (no such macro), leaking that
 // into this header would silently rewrite fopen() in every .cpp across the project that happens to
 // include this backend header. All real free-direct/<ddraw.h> usage lives in
-// Dx3GraphicsBackend.cpp behind the Impl pimpl below.
+// FreeDirectGraphicsBackend.cpp behind the Impl pimpl below.
 
 #include "../Common/IGraphicsBackend.hpp"
 #include <SDL3/SDL.h>
 #include <cstdint>
 #include <memory>
 
-namespace CNA::Internal::Backends::Dx3
+namespace CNA::Internal::Backends::FreeDirect
 {
     /**
-     * @brief Resize-only failure points used by the DX3 transaction regression. NOXNA.
+     * @brief Resize-only failure points used by the FreeDirect transaction regression. NOXNA.
      *
      * Hooks are copied into one backend instance and never shared globally. Initial construction
      * is deliberately not injectable through these points; they apply only to later
      * SetVirtualResolution() replacement attempts.
      */
-    enum class Dx3ResizeFailurePointEXT : std::uint8_t
+    enum class FreeDirectResizeFailurePointEXT : std::uint8_t
     {
         None,
         ShadowBackBufferCreation,
@@ -36,16 +36,16 @@ namespace CNA::Internal::Backends::Dx3
         SurfaceSetCommit
     };
 
-    /** @brief Native DX3 resource categories reported by Dx3TestHooksEXT. NOXNA. */
-    enum class Dx3ResourceKindEXT : std::uint8_t
+    /** @brief Native FreeDirect resource categories reported by FreeDirectTestHooksEXT. NOXNA. */
+    enum class FreeDirectResourceKindEXT : std::uint8_t
     {
         DirectDraw,
         PrimarySurface,
         ShadowBackBuffer
     };
 
-    /** @brief Native acquisition/release edge reported by Dx3TestHooksEXT. NOXNA. */
-    enum class Dx3ResourceEventEXT : std::uint8_t
+    /** @brief Native acquisition/release edge reported by FreeDirectTestHooksEXT. NOXNA. */
+    enum class FreeDirectResourceEventEXT : std::uint8_t
     {
         Acquired,
         Released
@@ -58,16 +58,16 @@ namespace CNA::Internal::Backends::Dx3
      * native COM interface pointer and is for identity comparison only; a Released identity must
      * never be dereferenced.
      */
-    struct Dx3TestHooksEXT
+    struct FreeDirectTestHooksEXT
     {
-        Dx3ResizeFailurePointEXT failAt = Dx3ResizeFailurePointEXT::None;
+        FreeDirectResizeFailurePointEXT failAt = FreeDirectResizeFailurePointEXT::None;
         void* context = nullptr;
-        void (*resourceEvent)(void* context, Dx3ResourceKindEXT resource,
-                              Dx3ResourceEventEXT event, const void* identity) noexcept = nullptr;
+        void (*resourceEvent)(void* context, FreeDirectResourceKindEXT resource,
+                              FreeDirectResourceEventEXT event, const void* identity) noexcept = nullptr;
     };
 
     /** @brief Snapshot used by the resize regression to prove native identity preservation. NOXNA. */
-    struct Dx3TestStateEXT
+    struct FreeDirectTestStateEXT
     {
         const void* directDraw = nullptr;
         const void* primarySurface = nullptr;
@@ -79,7 +79,7 @@ namespace CNA::Internal::Backends::Dx3
     };
 
     /**
-     * DX3 graphics backend (plan_dx3.md): a CPU 2D compositor that uses free-direct's
+     * FreeDirect graphics backend (formerly DX3; plan_freedirect.md): a CPU 2D compositor that uses free-direct's
      * IDirectDraw/IDirectDrawSurface as its pixel storage/present mechanism. Real DirectDraw
      * device/window bring-up (Phase X2): DirectDrawCreate -> SetCooperativeLevel (against CNA's
      * own already-existing SDL_Window*) -> SetDisplayMode -> primary CreateSurface. Because
@@ -93,14 +93,14 @@ namespace CNA::Internal::Backends::Dx3
      * for no benefit, since Flip() itself does not copy from anywhere else).
      *
      * Textures and render targets (Phase X3) are real: both are private offscreen
-     * DDSCAPS_OFFSCREENPLAIN surfaces (Dx3TextureBackend/Dx3RenderTargetBackend, defined entirely
-     * in Dx3GraphicsBackend.cpp -- neither is ever named outside it), and SetRenderTarget2D()
+     * DDSCAPS_OFFSCREENPLAIN surfaces (FreeDirectTextureBackend/FreeDirectRenderTargetBackend, defined entirely
+     * in FreeDirectGraphicsBackend.cpp -- neither is ever named outside it), and SetRenderTarget2D()
      * redirects Clear()/ReadBackbuffer() to whichever surface is currently bound. The SpriteBatch
-     * CPU compositor (Phase X4, Dx3SpriteBatchBackend, also defined entirely in the .cpp) is real:
+     * CPU compositor (Phase X4, FreeDirectSpriteBatchBackend, also defined entirely in the .cpp) is real:
      * an identity-transform Opaque draw is a genuine BltFast straight copy (design decision 5's
      * cheap case); every other draw (rotation/scale/tint/flip/custom transform, or any non-Opaque
      * blend mode) is composited manually, pixel by pixel, through Lock()/Unlock() on both the
-     * source and destination surfaces (Dx3GraphicsBackend.cpp's CompositeQuad). Blend math (Phase
+     * source and destination surfaces (FreeDirectGraphicsBackend.cpp's CompositeQuad). Blend math (Phase
      * X5, design decision 6) is real and distinct per mode -- Opaque/AlphaBlend/NonPremultiplied/
      * Additive are detected from ApplyBlendState()'s raw factors and each use their own formula,
      * matching BlendState.cpp's actual preset semantics (not a single baseline approximation);
@@ -108,16 +108,16 @@ namespace CNA::Internal::Backends::Dx3
      * sampling (design decision 7) supports both Point/nearest and Linear/bilinear filtering, and
      * Wrap/Mirror/Clamp addressing, via SetSamplerFilter()/SetSamplerAddressMode().
      */
-    class Dx3GraphicsBackend final : public IGraphicsBackend
+    class FreeDirectGraphicsBackend final : public IGraphicsBackend
     {
     public:
-        explicit Dx3GraphicsBackend(const GraphicsBackendCreateArgs& args);
+        explicit FreeDirectGraphicsBackend(const GraphicsBackendCreateArgs& args);
         /** @brief Test-only constructor with instance-local lifetime observation. NOXNA. */
-        Dx3GraphicsBackend(const GraphicsBackendCreateArgs& args, const Dx3TestHooksEXT& testHooks);
-        ~Dx3GraphicsBackend() override;
+        FreeDirectGraphicsBackend(const GraphicsBackendCreateArgs& args, const FreeDirectTestHooksEXT& testHooks);
+        ~FreeDirectGraphicsBackend() override;
 
-        Dx3GraphicsBackend(const Dx3GraphicsBackend&) = delete;
-        Dx3GraphicsBackend& operator=(const Dx3GraphicsBackend&) = delete;
+        FreeDirectGraphicsBackend(const FreeDirectGraphicsBackend&) = delete;
+        FreeDirectGraphicsBackend& operator=(const FreeDirectGraphicsBackend&) = delete;
 
         // ---- IGraphicsBackend: real (Phase X2) ----
         void Clear(float r, float g, float b, float a) override;
@@ -128,9 +128,9 @@ namespace CNA::Internal::Backends::Dx3
         void SetPresentationMode(int mode) override;
         SDL_Window* GetWindowInternal() const override;
         /** @brief Replaces this instance's resize-only test hooks and rearms one failure. NOXNA. */
-        void SetTestHooksEXT(const Dx3TestHooksEXT& testHooks);
+        void SetTestHooksEXT(const FreeDirectTestHooksEXT& testHooks);
         /** @brief Returns native identities and resize-dependent backend state. NOXNA. */
-        [[nodiscard]] Dx3TestStateEXT GetTestStateEXT() const;
+        [[nodiscard]] FreeDirectTestStateEXT GetTestStateEXT() const;
         // free-direct manages its own internal SDL_Renderer privately (created lazily inside
         // PresentPrimary, against the same SDL_Window* this backend hands to
         // SetCooperativeLevel) -- it is never exposed to CNA, so this always returns nullptr,
@@ -172,7 +172,7 @@ namespace CNA::Internal::Backends::Dx3
                              int colorBlendFunc, int alphaBlendFunc,
                              const BlendWriteState& writeState) override;
 
-        // ---- 3D pipeline: NOT supported by DX3 (DirectDraw is 2D-only). ----
+        // ---- 3D pipeline: NOT supported by FreeDirect (DirectDraw is 2D-only). ----
         // @note Status: STUB. Every entry point throws std::runtime_error (CreateOcclusionQuery
         // deliberately doesn't override the shared nullptr-returning default at all -- see
         // DX3-66's own comment below). SupportsCapability() lets callers check ahead of time

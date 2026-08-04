@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx3.md Phase X5 (DX3-40..DX3-44): blend-mode compositing math tests for the DX3
+// plan_freedirect.md Phase X5 (DX3-40..DX3-44): blend-mode compositing math tests for the DX3
 // (DirectDraw, via the ../free-direct sibling) graphics backend.
 //
 // All 4 checks draw the SAME source pixel (200, 0, 0, 100) over the SAME background
@@ -39,7 +39,7 @@ using namespace Microsoft::Xna::Framework::Graphics;
 
 static constexpr int kCanvasSize = 32;
 
-class Dx3BlendTest : public Game
+class FreeDirectBlendTest : public Game
 {
     std::unique_ptr<GraphicsDeviceManager> gdm_;
     int passCount_ = 0;
@@ -134,7 +134,7 @@ protected:
     }
 
 public:
-    Dx3BlendTest()
+    FreeDirectBlendTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
         gdm_->setPreferredBackBufferWidthProperty(kCanvasSize);
@@ -146,7 +146,7 @@ public:
 
 int main()
 {
-    Dx3BlendTest game;
+    FreeDirectBlendTest game;
     game.Run();
     return game.getResult();
 }

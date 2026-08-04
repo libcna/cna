@@ -84,7 +84,7 @@ protected:
         // Check D: Clear() honors a non-opaque requested alpha exactly. Uses FillSurfaceColor
         // (direct Lock()/Unlock() writes of all 4 channels), not DDBLT_COLORFILL, proactively
         // avoiding the class of bug DX3 found and fixed for its own DDBLT_COLORFILL-based Clear()
-        // (plan_dx3.md DX3-14, free-direct's FillColor() hardcoding alpha to 255).
+        // (plan_freedirect.md DX3-14, free-direct's FillColor() hardcoding alpha to 255).
         {
             dev.Clear(Color(10, 20, 30, 128));
             const Rectangle region(0, 0, 4, 4);

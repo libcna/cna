@@ -34,7 +34,7 @@ namespace CNA::Internal::Backends::Dx1
      * target; Present() letterbox-scales that shadow buffer onto the primary via a single Blt(),
      * with the destination rect recomputed every frame from the window's real client area
      * (GetClientRect + ClientToScreen) -- unlike DX3's own documented stale-scale limitation
-     * (plan_dx3.md DX3-16), a virtual-resolution or window-resize change is correct on the very next
+     * (plan_freedirect.md DX3-16), a virtual-resolution or window-resize change is correct on the very next
      * Present(), since nothing here is cached.
      *
      * Textures and render targets (Phase O3) are real: both are private offscreen

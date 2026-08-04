@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx3.md Phase X7 (DX3-60..DX3-67, DX3-69): ThrowNo3D wiring and remaining-default
+// plan_freedirect.md Phase X7 (DX3-60..DX3-67, DX3-69): ThrowNo3D wiring and remaining-default
 // verification for the DX3 (DirectDraw, via the ../free-direct sibling) graphics backend.
 // DirectDraw is 2D-only -- every 3D entry point either throws honestly or degrades to a
 // documented "unsupported, returns nullptr" default, matching this backend's own class-level
@@ -48,7 +48,7 @@
 #include "Microsoft/Xna/Framework/Graphics/ClearOptions.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 
-#include "CNA/Internal/Backends/Dx3/Dx3GraphicsBackend.hpp"
+#include "CNA/Internal/Backends/FreeDirect/FreeDirectGraphicsBackend.hpp"
 
 #include <cstdio>
 #include <cstdlib>
@@ -56,7 +56,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::Dx3;
+using namespace CNA::Internal::Backends::FreeDirect;
 
 static constexpr int kCanvasSize = 32;
 
@@ -68,7 +68,7 @@ static bool Throws(Fn&& fn)
     return false;
 }
 
-class Dx3No3DTest : public Game
+class FreeDirectNo3DTest : public Game
 {
     std::unique_ptr<GraphicsDeviceManager> gdm_;
     int passCount_ = 0;
@@ -85,7 +85,7 @@ protected:
     void Draw(const GameTime&) override
     {
         auto& dev = getGraphicsDeviceProperty();
-        auto& backend = static_cast<Dx3GraphicsBackend&>(dev.GetBackend());
+        auto& backend = static_cast<FreeDirectGraphicsBackend&>(dev.GetBackend());
 
         // Check A (DX3-62): VertexBuffer construction throws.
         check(Throws([&] { VertexBuffer vb(dev, 1); }),
@@ -179,7 +179,7 @@ protected:
     }
 
 public:
-    Dx3No3DTest()
+    FreeDirectNo3DTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
         gdm_->setPreferredBackBufferWidthProperty(kCanvasSize);
@@ -191,7 +191,7 @@ public:
 
 int main()
 {
-    Dx3No3DTest game;
+    FreeDirectNo3DTest game;
     game.Run();
     return game.getResult();
 }

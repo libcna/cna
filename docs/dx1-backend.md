@@ -14,7 +14,7 @@ This document is the completeness status after `plan_dx1.md`'s full Phase O1–O
 Every row cites the task(s) that verified it — see `plan_dx1.md`'s own task tables for full design
 rationale and code detail.
 
-**Status legend** (matches `docs/dx3-backend.md`'s own convention)
+**Status legend** (matches `docs/freedirect-backend.md`'s own convention)
 
 - ✅ — fully supported, matches FNA/XNA behavior exactly (or as closely as a 2D-only backend
   reasonably can).
@@ -50,7 +50,7 @@ Run and recorded before any backend code was written (`plan_dx1.md` section 2), 
 |---|---|---|
 | `CNA_GRAPHICS_BACKEND=DX1` CMake selection, Windows-only gate, MinGW cross-compile | ✅ | Same `FATAL_ERROR` gate `D3D9`/`D3D11`/`D3D12` already share (design decision 1) — unlike `DX3`, this backend cannot build natively on Linux. |
 | `DirectDrawCreate` → `SetCooperativeLevel(DDSCL_NORMAL)` → primary `CreateSurface` | ✅ | Real device/window bring-up against a **real Win32 `HWND`**, obtained via `SDL_GetPointerProperty(..., SDL_PROP_WINDOW_WIN32_HWND_POINTER, ...)` on CNA's own already-existing `SDL_Window*` — the same mechanism `D3D9GraphicsBackend.cpp` uses, never `DX3`'s `reinterpret_cast<HWND>(sdlWindow)` hack (design decision 3). No `SetDisplayMode` call: windowed mode never needs one (`DX1-0c`). |
-| `Clear()` / `Present()` | ✅ | Owns an internal, always-Lockable "shadow backbuffer" offscreen surface that `Clear()`/`SpriteBatch` draws always target (design decision 4) — the same shadow-buffer *shape* `DX3` uses, but for a different reason here (the primary is desktop-sized, not because `Lock()` fails). `Present()` letterbox-scales the shadow buffer onto the primary via a single `Blt()`, with the destination rect recomputed **every frame** from the window's real client area (`GetClientRect`+`ClientToScreen`) — a genuine correctness improvement over `DX3`'s own documented stale-scale bug (`plan_dx3.md` DX3-16): a `SetVirtualResolution()`/window-resize change is correct on the very next `Present()`, since nothing here is cached. `Clear()` writes all 4 channels directly via `Lock()`/`Unlock()` (`FillSurfaceColor`), not `DDBLT_COLORFILL`, proactively avoiding the class of bug `DX3` found and fixed for its own alpha handling. |
+| `Clear()` / `Present()` | ✅ | Owns an internal, always-Lockable "shadow backbuffer" offscreen surface that `Clear()`/`SpriteBatch` draws always target (design decision 4) — the same shadow-buffer *shape* `DX3` uses, but for a different reason here (the primary is desktop-sized, not because `Lock()` fails). `Present()` letterbox-scales the shadow buffer onto the primary via a single `Blt()`, with the destination rect recomputed **every frame** from the window's real client area (`GetClientRect`+`ClientToScreen`) — a genuine correctness improvement over `DX3`'s own documented stale-scale bug (`plan_freedirect.md` DX3-16): a `SetVirtualResolution()`/window-resize change is correct on the very next `Present()`, since nothing here is cached. `Clear()` writes all 4 channels directly via `Lock()`/`Unlock()` (`FillSurfaceColor`), not `DDBLT_COLORFILL`, proactively avoiding the class of bug `DX3` found and fixed for its own alpha handling. |
 | Pixel-exact readback (`Dx1_Smoke` CTest) | ✅ | Real window, `Clear()`+readback round-trip (RGB and alpha) via the shadow backbuffer, `Present()` doesn't throw. 4/4 checks. |
 | `SetPresentationMode()` | 🟨 | `Present()` always applies a letterbox-equivalent uniform scale (`ComputeLetterbox`) regardless of the requested mode — `Stretch`/`Overscan`/`NativeBackBuffer` are not yet distinguished, the same honest scope `DX3-16` recorded. Unlike `DX3`, this is a real, first-class implementation choice (not an inherited third-party limitation), and the stale-after-resize sub-bug does **not** reproduce here. |
 | `TransformWindowToLogical`/`TransformLogicalToWindow` | ✅ | Real letterbox scale+offset transform (`ComputeLetterbox`), shared with `Present()` itself so the two are always mutually consistent (`DX1-68`). Verified via `Dx1_LogicalTransform` CTest (5 checks). |
@@ -171,7 +171,7 @@ virtual display: **5336 passed, 11 skipped, 48 failed.** Every one of the 48 is 
 pre-existing and unrelated to DX1 itself — 34 are 3D-content-loading tests (`SkinnedModelEXTPartTest`,
 `RuntimeGltfModelTest`, `CnjModelTest`/`CnjEffectTest`, `ModelContentTypeReaderTest`, …) hitting
 DX1's correct `ThrowNo3D` via a plain `GraphicsDevice gd;` fixture with no 2D-backend gate — the
-identical structural gap `plan_dx3.md`'s own regression already documented; 5 are
+identical structural gap `plan_freedirect.md`'s own regression already documented; 5 are
 `GraphicsDeviceCapabilityTest`'s `SupportsThreeD`/etc. checks, which have **no backend gate at
 all** and would fail identically under `DX3`/`SDL_RENDERER`/`ASCII`/`CANVAS`; 6 are
 `MediaLibraryTestFixture` duration/metadata tests, a real consequence of `CNA_FFMPEG_AVAILABLE=OFF`
@@ -202,7 +202,7 @@ per-category breakdown and the list of pre-existing CMake/test gaps found and fi
 
 - `plan_dx1.md` — the full implementation plan (design decisions, phase task tables).
 - `plan_dxold.md` — the roadmap this backend is row 1 of (DX1/2/3/5/6/7/8/10).
-- `docs/dx3-backend.md` — the shipping `../free-direct`-backed DX3, the architecture and math this
+- `docs/freedirect-backend.md` — the shipping `../free-direct`-backed DX3, the architecture and math this
   backend ports verbatim wherever the surface-layer difference doesn't matter.
 - `docs/directx-legacy-backends-analysis.md` — the feasibility analysis that authorized this whole
   backend family.

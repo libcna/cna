@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx3.md Phase X7 (DX3-68): TransformWindowToLogical/TransformLogicalToWindow (real
+// plan_freedirect.md Phase X7 (DX3-68): TransformWindowToLogical/TransformLogicalToWindow (real
 // letterbox scale+offset) tests for the DX3 (DirectDraw, via the ../free-direct sibling)
 // graphics backend.
 //
@@ -29,7 +29,7 @@
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 
-#include "CNA/Internal/Backends/Dx3/Dx3GraphicsBackend.hpp"
+#include "CNA/Internal/Backends/FreeDirect/FreeDirectGraphicsBackend.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -40,7 +40,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::Dx3;
+using namespace CNA::Internal::Backends::FreeDirect;
 
 static constexpr int kLogicalSize = 64;
 
@@ -49,7 +49,7 @@ static bool NearlyEqual(float a, float b, float tol = 0.05f)
     return std::fabs(a - b) <= tol;
 }
 
-class Dx3LogicalTransformTest : public Game
+class FreeDirectLogicalTransformTest : public Game
 {
     std::unique_ptr<GraphicsDeviceManager> gdm_;
     int passCount_ = 0;
@@ -66,7 +66,7 @@ protected:
     void Draw(const GameTime&) override
     {
         auto& dev = getGraphicsDeviceProperty();
-        auto& backend = static_cast<Dx3GraphicsBackend&>(dev.GetBackend());
+        auto& backend = static_cast<FreeDirectGraphicsBackend&>(dev.GetBackend());
 
         SDL_Window* window = backend.GetWindowInternal();
         int physW = 0, physH = 0;
@@ -128,7 +128,7 @@ protected:
     }
 
 public:
-    Dx3LogicalTransformTest()
+    FreeDirectLogicalTransformTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
         gdm_->setPreferredBackBufferWidthProperty(kLogicalSize);
@@ -140,7 +140,7 @@ public:
 
 int main()
 {
-    Dx3LogicalTransformTest game;
+    FreeDirectLogicalTransformTest game;
     game.Run();
     return game.getResult();
 }

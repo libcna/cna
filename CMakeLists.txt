@@ -119,10 +119,10 @@ include(cmake/Tests/SoftwareTests.cmake)
 # plan_ascii.md Phase G2+: ASCII (SDL-windowed glyph-grid) backend test registration.
 include(cmake/Tests/AsciiTests.cmake)
 
-# plan_dx3.md Phase X2/X8 (DX3-18/DX3-80): DX3 (DirectDraw via free-direct) CTest registration.
+# plan_freedirect.md Phase X2/X8 (DX3-18/DX3-80): DX3 (DirectDraw via free-direct) CTest registration.
 # Unlike SDL_RENDERER's own window-based ctests, these do NOT need a real/virtual X11 display:
 # every pixel assertion reads back through the shadow-backbuffer surface directly
-# (Dx3GraphicsBackend::ReadBackbuffer/GetBackBufferData), never through real physical
+# (FreeDirectGraphicsBackend::ReadBackbuffer/GetBackBufferData), never through real physical
 # presentation, so SDL_VIDEODRIVER=dummy (no display required at all) produces identical,
 # verified-correct results (confirmed empirically: all 8 binaries, 49/49 checks, under
 # SDL_VIDEODRIVER=dummy) while being far more portable than requiring CNA_TEST_DISPLAY to point
@@ -130,7 +130,7 @@ include(cmake/Tests/AsciiTests.cmake)
 # SDL_VIDEODRIVER=x11 registration (copy-pasted from SDL_RENDERER's own pattern, which genuinely
 # does need a real display) made every one of these 8 ctests fail outright in any environment
 # without a live DISPLAY, even though the underlying binaries themselves were always correct.
-include(cmake/Tests/Dx3Tests.cmake)
+include(cmake/Tests/FreeDirectTests.cmake)
 
 # plan_dx.md DX-80: D3D11 CTest registration. When cross-compiled from Linux (this backend is
 # Windows-only, design decision 2), CTest itself still runs on the Linux host, so the test COMMAND

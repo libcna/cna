@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx3.md Phase X1/X2 (DX3-1..DX3-18): smoke test for the DX3 (DirectDraw, via the
+// plan_freedirect.md Phase X1/X2 (DX3-1..DX3-18): smoke test for the DX3 (DirectDraw, via the
 // ../free-direct sibling) graphics backend's foundation -- real DirectDrawCreate/
 // SetCooperativeLevel/SetDisplayMode/CreateSurface device bring-up, real Clear()/Present(), real
 // pixel readback. SpriteBatch/Texture2D draws are not yet implemented (Phase X3/X4).
@@ -24,7 +24,7 @@
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 
-#include "CNA/Internal/Backends/Dx3/Dx3GraphicsBackend.hpp"
+#include "CNA/Internal/Backends/FreeDirect/FreeDirectGraphicsBackend.hpp"
 
 #include <cstdio>
 #include <cstdlib>
@@ -33,11 +33,11 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::Dx3;
+using namespace CNA::Internal::Backends::FreeDirect;
 
 static constexpr int kCanvasSize = 64;
 
-class Dx3SmokeTest : public Game
+class FreeDirectSmokeTest : public Game
 {
     std::unique_ptr<GraphicsDeviceManager> gdm_;
     int passCount_ = 0;
@@ -53,7 +53,7 @@ protected:
     void Draw(const GameTime&) override
     {
         auto& dev = getGraphicsDeviceProperty();
-        auto& backend = static_cast<Dx3GraphicsBackend&>(dev.GetBackend());
+        auto& backend = static_cast<FreeDirectGraphicsBackend&>(dev.GetBackend());
 
         // Check A: real window.
         check(backend.GetWindowInternal() != nullptr, "GraphicsDevice has a real window under the DX3 backend");
@@ -119,7 +119,7 @@ protected:
     }
 
 public:
-    Dx3SmokeTest()
+    FreeDirectSmokeTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
         gdm_->setPreferredBackBufferWidthProperty(kCanvasSize);
@@ -131,7 +131,7 @@ public:
 
 int main()
 {
-    Dx3SmokeTest game;
+    FreeDirectSmokeTest game;
     game.Run();
     return game.getResult();
 }

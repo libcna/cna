@@ -242,8 +242,8 @@ namespace
 #elif defined(CNA_BACKEND_CANVAS)
     constexpr Contract kContract{"CANVAS", Support::Exact, true, Support::Exact,
                                  false, true, true, true, true, true, true, true, true, false};
-#elif defined(CNA_BACKEND_DX3)
-    constexpr Contract kContract{"DX3", Support::Exact, true, Support::Exact,
+#elif defined(CNA_BACKEND_FREEDIRECT)
+    constexpr Contract kContract{"FREEDIRECT", Support::Exact, true, Support::Exact,
                                  false, true, true, true, true, false, false, false, false, false};
 #elif defined(CNA_BACKEND_D3D9)
     constexpr Contract kContract{"D3D9", Support::Exact, true, Support::Exact,

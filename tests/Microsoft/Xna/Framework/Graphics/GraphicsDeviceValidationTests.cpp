@@ -163,8 +163,8 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_FourTargets_DoesNotThrow)
         targets.push_back(std::make_unique<RenderTarget2D>(gd, 4, 4));
         bindings.emplace_back(targets.back().get());
     }
-#if defined(CNA_BACKEND_SDL_RENDERER) || defined(CNA_BACKEND_ASCII) || defined(CNA_BACKEND_DX3) || defined(CNA_BACKEND_DX1) || defined(CNA_BACKEND_DX2) || defined(CNA_BACKEND_DX30) || defined(CNA_BACKEND_DX5) || defined(CNA_BACKEND_DX6) || defined(CNA_BACKEND_DX7) || defined(CNA_BACKEND_DX8)
-    // Task 709 (SDL_Renderer) / DX3-27 (DirectDraw, plan_dx3.md) / DX1-27 (real DirectDraw v1,
+#if defined(CNA_BACKEND_SDL_RENDERER) || defined(CNA_BACKEND_ASCII) || defined(CNA_BACKEND_FREEDIRECT) || defined(CNA_BACKEND_DX1) || defined(CNA_BACKEND_DX2) || defined(CNA_BACKEND_DX30) || defined(CNA_BACKEND_DX5) || defined(CNA_BACKEND_DX6) || defined(CNA_BACKEND_DX7) || defined(CNA_BACKEND_DX8)
+    // Task 709 (SDL_Renderer) / DX3-27 (DirectDraw, plan_freedirect.md) / DX1-27 (real DirectDraw v1,
     // plan_dx1.md) / DX2-84 (same DirectDraw v1 2D layer, plan_dx2.md) / plan_dx30.md (same 2D
     // layer, now DirectDraw v2) / plan_dx5.md (same 2D layer, now DirectDraw v4): all six support
     // exactly one active render target at a time -- unlike the other, real-MRT-capable backends,

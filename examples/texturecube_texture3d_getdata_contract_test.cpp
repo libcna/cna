@@ -155,8 +155,8 @@ namespace
 #elif defined(CNA_BACKEND_CANVAS)
     constexpr Contract kContract{"CANVAS", false, Support::Unsupported, Support::Unsupported,
                                  false, Support::Unsupported, Support::Unsupported, false};
-#elif defined(CNA_BACKEND_DX3)
-    constexpr Contract kContract{"DX3", false, Support::Unsupported, Support::Unsupported,
+#elif defined(CNA_BACKEND_FREEDIRECT)
+    constexpr Contract kContract{"FREEDIRECT", false, Support::Unsupported, Support::Unsupported,
                                  false, Support::Unsupported, Support::Unsupported, false};
 #elif defined(CNA_BACKEND_D3D9)
     // plan_dx9.md D9-100: GraphicsProfile.Reach does not support volume textures at all, so the

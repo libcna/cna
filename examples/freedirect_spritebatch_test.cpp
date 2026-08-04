@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx3.md Phase X4 (DX3-30..DX3-39): CPU compositor / SpriteBatch draw path tests for the DX3
+// plan_freedirect.md Phase X4 (DX3-30..DX3-39): CPU compositor / SpriteBatch draw path tests for the DX3
 // (DirectDraw, via the ../free-direct sibling) graphics backend.
 //
 // Check A -- Draw() before Begin()/End() without Begin() throw (DX3-30 Begin/End contract).
@@ -51,7 +51,7 @@ using namespace Microsoft::Xna::Framework::Graphics;
 static constexpr int kCanvasSize = 96;
 static constexpr float kPi = 3.14159265358979323846f;
 
-class Dx3SpriteBatchTest : public Game
+class FreeDirectSpriteBatchTest : public Game
 {
     std::unique_ptr<GraphicsDeviceManager> gdm_;
     int passCount_ = 0;
@@ -260,7 +260,7 @@ protected:
     }
 
 public:
-    Dx3SpriteBatchTest()
+    FreeDirectSpriteBatchTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
         gdm_->setPreferredBackBufferWidthProperty(kCanvasSize);
@@ -272,7 +272,7 @@ public:
 
 int main()
 {
-    Dx3SpriteBatchTest game;
+    FreeDirectSpriteBatchTest game;
     game.Run();
     return game.getResult();
 }

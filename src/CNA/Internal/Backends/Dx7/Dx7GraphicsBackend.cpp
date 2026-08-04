@@ -70,7 +70,7 @@ namespace CNA::Internal::Backends::Dx7
         // be R=0x00ff0000/G=0x0000ff00/B=0x000000ff, i.e. byte order (B,G,R,X) in memory, NOT the
         // (R,G,B,A) byte order every WriteSurfacePixels/FillSurfaceColor/CompositeQuad call in this
         // file assumed (matching every other CNA backend's own ImageData::pixels convention,
-        // SDL_PIXELFORMAT_RGBA32 -- see plan_dx3.md design decision 4). Both sides of every
+        // SDL_PIXELFORMAT_RGBA32 -- see plan_freedirect.md design decision 4). Both sides of every
         // round-trip through this backend's OWN surfaces stayed internally consistent (which is why
         // Dx7_Smoke/Dx7_Blend/etc.'s Clear()+GetBackBufferData() checks all still passed), but a
         // real IDirectDrawSurface::Blt() between two DIFFERENTLY-formatted surfaces performs genuine
@@ -220,7 +220,7 @@ namespace CNA::Internal::Backends::Dx7
         // Fills the full (width, height) extent of `surface` with a solid RGBA8 color via
         // Lock()/Unlock() (not DDBLT_COLORFILL -- writing all 4 channels directly avoids relying on
         // whatever a given ddraw.dll implementation's ColorFill does with the alpha channel,
-        // matching DX3's own found-and-fixed lesson (plan_dx3.md DX3-14) proactively instead of
+        // matching DX3's own found-and-fixed lesson (plan_freedirect.md DX3-14) proactively instead of
         // re-discovering the same class of bug here). Writes into g_layout's real native byte
         // positions, not fixed (R,G,B,A) positions -- see DetectChannelLayout's own comment.
         void FillSurfaceColor(LPDIRECTDRAWSURFACE7 surface, int width, int height,
@@ -257,7 +257,7 @@ namespace CNA::Internal::Backends::Dx7
         // physical SDL_Window size on every call, shared by Present() (the on-screen Blt
         // destination) and TransformWindowToLogical/TransformLogicalToWindow, so those three are
         // always mutually consistent and a resize/SetVirtualResolution change is correct on the
-        // very next call, unlike DX3's own documented stale-scale limitation (plan_dx3.md DX3-16).
+        // very next call, unlike DX3's own documented stale-scale limitation (plan_freedirect.md DX3-16).
         bool ComputeLetterbox(SDL_Window* window, int logicalWidth, int logicalHeight,
                               float& scale, float& offsetX, float& offsetY)
         {

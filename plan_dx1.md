@@ -18,7 +18,7 @@
 > gating gap (see `DX1-88`'s own row for the full list — this exact from-scratch MinGW + full
 > `CnaTests` configuration had simply never been exercised before). Full regression:
 > **5336 passed, 11 skipped, 48 failed** — every one of the 48 confirmed pre-existing and unrelated
-> to DX1 (mostly the same structural "3D content load under a 2D-only backend" gap `plan_dx3.md`
+> to DX1 (mostly the same structural "3D content load under a 2D-only backend" gap `plan_freedirect.md`
 > already documented). See `docs/dx1-backend.md` for the full completeness table.
 >
 > **Post-ship: two more real bugs found by actually running `examples/demo_2d` live (not just the
@@ -54,7 +54,7 @@
 > This plan, and the roadmap it belongs to (`plan_dxold.md`), are the direct product of that
 > instruction.
 >
-> **Status legend** (matches this repo's convention, e.g. `plan_dx3.md`): ✅ implemented *and*
+> **Status legend** (matches this repo's convention, e.g. `plan_freedirect.md`): ✅ implemented *and*
 > verified against its stated acceptance criteria; 🟨 code/doc exists but hasn't met that bar yet;
 > ⬜ not implemented.
 
@@ -82,7 +82,7 @@
   same already-proven pivot/blend-formula math `DX3` built get **ported, not re-derived**. The only
   real delta is *how the surface layer is obtained*: real Win32 COM + Wine, instead of
   `free-direct`'s SDL3 reimplementation.
-- **Existence-gate spike first** (`DX1-0`), same discipline `plan_dx9.md`'s `D9-0` and `plan_dx3.md`
+- **Existence-gate spike first** (`DX1-0`), same discipline `plan_dx9.md`'s `D9-0` and `plan_freedirect.md`
   design decision 2 both used: prove the MinGW header + a real Wine `ddraw.dll` run actually work in
   this environment *before* writing backend code, not after.
 
@@ -125,13 +125,13 @@ DX3+ territory, not just a comment promising it.
 
 ## 2. Existence-gate spike — `DX1-0` (run before any backend code)
 
-Mirrors `plan_dx9.md`'s `D9-0` and `plan_dx3.md` design decision 2's own "prove it empirically,
+Mirrors `plan_dx9.md`'s `D9-0` and `plan_freedirect.md` design decision 2's own "prove it empirically,
 don't assume" bar.
 
 | # | Spike | What it proves |
 |---|---|---|
 | `DX1-0a` | Throwaway MinGW-w64 `.cpp` including only `<ddraw.h>`, calling `DirectDrawCreate`, naming only v1 symbols (§1's table); compiles + links against `libddraw.a`/`libdxguid.a` with `x86_64-w64-mingw32-g++` | The header/import-lib pair genuinely exists and the v1-only symbol set is real, not a guess |
-| `DX1-0b` | Extend `DX1-0a` into a real, running program: create an SDL3 (mingw-built) window → real `HWND` via `SDL_PROP_WINDOW_WIN32_HWND_POINTER` → `DirectDrawCreate` → `SetCooperativeLevel(hwnd, DDSCL_NORMAL)` → `CreateSurface` (`DDSCAPS_PRIMARYSURFACE`) → `Lock()` the primary → write one solid color → `Unlock()` → observe, run for real under Wine (a fresh, vanilla prefix — **no DXVK, no `free-direct`, nothing else in the process**) | Whether `Lock()` on the *primary* surface in windowed (`DDSCL_NORMAL`) mode is genuinely writable under Wine's `ddraw.dll` — the exact question `DX3` got burned by with `free-direct` (see `plan_dx3.md`'s "Real, confirmed finding" note) and must not assume away here just because the library is different |
+| `DX1-0b` | Extend `DX1-0a` into a real, running program: create an SDL3 (mingw-built) window → real `HWND` via `SDL_PROP_WINDOW_WIN32_HWND_POINTER` → `DirectDrawCreate` → `SetCooperativeLevel(hwnd, DDSCL_NORMAL)` → `CreateSurface` (`DDSCAPS_PRIMARYSURFACE`) → `Lock()` the primary → write one solid color → `Unlock()` → observe, run for real under Wine (a fresh, vanilla prefix — **no DXVK, no `free-direct`, nothing else in the process**) | Whether `Lock()` on the *primary* surface in windowed (`DDSCL_NORMAL`) mode is genuinely writable under Wine's `ddraw.dll` — the exact question `DX3` got burned by with `free-direct` (see `plan_freedirect.md`'s "Real, confirmed finding" note) and must not assume away here just because the library is different |
 | `DX1-0c` | Confirm, by reading `ddraw.h` plus Microsoft's own historical DirectDraw programming-model documentation (not assumed): a windowed (`DDSCL_NORMAL`) `IDirectDraw` app legitimately never calls `SetDisplayMode` at all (that call is exclusive-fullscreen-only in the real historical API) | Settles design decision 4 below — confirms the windowed present path needs no display-mode change, only `CreateSurface`+`Blt` |
 
 **`DX1-0` result (run 2026-07-20, all three spikes passed):**
@@ -143,7 +143,7 @@ don't assume" bar.
 - `DX1-0b`: run for real under a fresh, vanilla `~/.wine-cna-dx1` prefix (`wineboot --init`, no
   DXVK, no `free-direct` anywhere in the process), against Xvfb `:99`. **Every step succeeded**,
   including `Lock()` on the primary surface — a genuinely *better* result than `DX3` got from
-  `free-direct` (`plan_dx3.md`'s own "Lock() on primary never returns a writable pointer" finding
+  `free-direct` (`plan_freedirect.md`'s own "Lock() on primary never returns a writable pointer" finding
   does **not** reproduce here; real Wine `ddraw.dll` genuinely honors it). One real, load-bearing
   wrinkle found along the way, **not anticipated by design decision 4's original wording**: with no
   `SetDisplayMode` call (windowed `DDSCL_NORMAL`, per `DX1-0c`), the primary surface Wine hands
@@ -192,7 +192,7 @@ assumed. Phase O1 is now unblocked.
 
 4. **Windowed present via a CPU-owned shadow-backbuffer surface, adopted proactively from `DX3`'s
    own proven design** (its design decision 5 / the "Real, confirmed finding" note in
-   `plan_dx3.md`), rather than re-discovering the same class of problem from scratch: real
+   `plan_freedirect.md`), rather than re-discovering the same class of problem from scratch: real
    `IDirectDraw::SetCooperativeLevel(hwnd, DDSCL_NORMAL)` (windowed — not exclusive fullscreen, so
    this stays scriptable under Wine/CTest with no display-mode switch, confirmed by `DX1-0c`). An
    offscreen `DDSCAPS_OFFSCREENPLAIN` surface is what `Clear()`/the `SpriteBatch` compositor always
@@ -208,10 +208,10 @@ assumed. Phase O1 is now unblocked.
    `tint=White`, `blend=Opaque`, no rotation/flip) uses a real `BltFast`/`Blt`; everything else goes
    through `Lock()` on both source and destination surfaces and a per-pixel edge-function
    rasterizer, ported verbatim from `DX3`'s `CompositeQuad` (pivot/rotation-around-`origin` math,
-   `SpriteEffects` flip, per-source-pixel `Wrap`/`Mirror`/`TextureFilter` sampling — `plan_dx3.md`
+   `SpriteEffects` flip, per-source-pixel `Wrap`/`Mirror`/`TextureFilter` sampling — `plan_freedirect.md`
    design decisions 5/7, `DX3-32`/`DX3-33`/`DX3-45`/`DX3-46`).
 
-6. **Blend-mode math — port `DX3`'s 4 formulas verbatim** (`plan_dx3.md` design decision 6,
+6. **Blend-mode math — port `DX3`'s 4 formulas verbatim** (`plan_freedirect.md` design decision 6,
    `DX3-40`..`DX3-44`): `Opaque` direct overwrite; `AlphaBlend` premultiplied `out = src +
    dst*(1-srcAlpha)`; `NonPremultiplied` straight `out = src*srcAlpha + dst*(1-srcAlpha)`;
    `Additive` `out = src*srcAlpha + dst` (saturating); any other custom `BlendState` factor/op
@@ -219,7 +219,7 @@ assumed. Phase O1 is now unblocked.
    (`DX3-44`'s own real bug-fix — do not repeat the "factors only, ignoring the blend equation"
    mistake here).
 
-7. **32-bit surfaces only** — XNA's `Texture2D` has no palette-texture concept (`plan_dx3.md`
+7. **32-bit surfaces only** — XNA's `Texture2D` has no palette-texture concept (`plan_freedirect.md`
    design decision 4). `DX1`'s `CreateSurface` calls always request 32bpp RGB (`DDPF_RGB`);
    `SetPalette`/`CreatePalette`/8-bit `Lock`/`GetDC` paths are never called.
 
@@ -230,7 +230,7 @@ assumed. Phase O1 is now unblocked.
 
 9. **Header containment.** `<ddraw.h>` (pulls in real `<windows.h>`) is included **only** inside
    `src/CNA/Internal/Backends/Dx1/*.cpp` plus a private pimpl header — never from any public CNA
-   header, matching `D3D11`/`D3D12`/`DX3`'s own discipline (`plan_dx3.md` design decision 9).
+   header, matching `D3D11`/`D3D12`/`DX3`'s own discipline (`plan_freedirect.md` design decision 9).
    `IGraphicsBackend.hpp` gains no `ddraw`-shaped forward declarations.
 
 10. **CMake integration**: add `"DX1"` to `CNA_GRAPHICS_BACKEND`'s `STRINGS` property and a
@@ -257,12 +257,12 @@ assumed. Phase O1 is now unblocked.
 
 1. **`DX1-0`** (existence-gate spike, §2) unblocks everything else — do this first, record the
    real finding.
-2. **Phase O1** (CMake integration + skeleton) — same shape as `plan_dx3.md` Phase X1.
+2. **Phase O1** (CMake integration + skeleton) — same shape as `plan_freedirect.md` Phase X1.
 3. **Phase O2** (DirectDraw device/window bring-up: `DirectDrawCreate` →
    `SetCooperativeLevel`(design decision 3) → primary `CreateSurface` → shadow-backbuffer
    `CreateSurface`(design decision 4) → `Clear`(`Blt`/`Lock`+`memset`) → `Present`(`Blt`
    shadow→primary)) must land and be pixel-verified before anything else, same "prove the
-   foundation" order `plan_dx3.md` Phase X2 used.
+   foundation" order `plan_freedirect.md` Phase X2 used.
 4. **Phase O3** (texture/render-target backends: offscreen surfaces + `Lock`/`Unlock`) is the
    storage layer everything else composites into/out of.
 5. **Phase O4** (CPU compositor / `SpriteBatch` draw path) — port `DX3`'s `CompositeQuad`
@@ -377,14 +377,14 @@ actually passing.
 | # | Task | Status | Notes |
 |---|---|---|---|
 | `DX1-80` | `Dx1_Smoke` CTest (see `DX1-18`) | ✅ | |
-| `DX1-81` | `Dx1_SpriteBatch` CTest: rotation/scale/tint/flip pixel-verified, same rigor `Dx3_SpriteBatch` applied | ✅ | |
+| `DX1-81` | `Dx1_SpriteBatch` CTest: rotation/scale/tint/flip pixel-verified, same rigor `FreeDirect_SpriteBatch` applied | ✅ | |
 | `DX1-82` | `Dx1_Blend` CTest: all 4 blend modes + custom-`BlendState` fallback pixel-verified | ✅ | |
 | `DX1-83` | `Dx1_AddressMode` CTest: `Wrap`/`Mirror`/`TextureFilter` sampling pixel-verified | ✅ | |
 | `DX1-84` | `Dx1_SpriteFont` CTest | ✅ | |
 | `DX1-85` | `Dx1_No3D` CTest: every 3D entry point throws/degrades per Phase O7's table | ✅ | |
-| `DX1-86` | `docs/dx1-backend.md`: mirror `docs/dx3-backend.md`'s table/status-legend structure | ✅ | |
+| `DX1-86` | `docs/dx1-backend.md`: mirror `docs/freedirect-backend.md`'s table/status-legend structure | ✅ | |
 | `DX1-87` | Update `CMakeLists.txt`'s `CNA_GRAPHICS_BACKEND` STRINGS docstring, `README.md` §1/§6, and `plan_dxold.md`'s status row for DX1 | ✅ | |
-| `DX1-88` | Full `CnaTests`/DX1 CTest suite regression run under `-DCNA_GRAPHICS_BACKEND=DX1` (MinGW cross-compile) — confirm no unrelated suite breaks | ✅ | **Final: 5336 passed, 11 skipped, 48 failed** (`ctest`/`CnaTests.exe` run through Wine on the virtual display). Getting here required fixing several pre-existing, not-DX1-specific gaps this exact configuration (from-scratch MinGW cross-compile + full `CnaTests`) had never hit before (README.md's own CI caveat: the full suite has never run on Windows CI at all): two audio harnesses missing an `SDL3::SDL3` link (`cmake/Harnesses.cmake`), a POSIX-only (`geteuid`/`<unistd.h>`) media test needing a Windows guard, `CNA_ENABLE_NET=OFF`'s test glob never excluding ENet-dependent test files, and — the deepest one — `CnaLibrary.cmake`'s existing `CNA_FFMPEG_AVAILABLE=OFF` source exclusion (Video/VideoPlayer/VideoDecoder, deliberate on every Windows target) never being mirrored for the corresponding test files or for `VideoContentTypeReader.cpp`/its `XnbBuiltInReaders.cpp` registration call site. All are narrowly-scoped, mirror an already-established pattern in the same file, and are unrelated to DX1's own logic. Of the remaining 48 failures: 34 are 3D-content-loading tests (`SkinnedModelEXTPartTest`, `RuntimeGltfModelTest`, `CnjModelTest`/`CnjEffectTest`/`CnjTexture3DTest`/`CnjStockEffectTest`, `ModelContentTypeReaderTest`, etc.) hitting DX1's correct `ThrowNo3D` via a plain `GraphicsDevice gd;` fixture with no 2D-backend gate — the **identical** structural gap `plan_dx3.md`'s own regression already documented and left explicitly out of scope; 5 are `GraphicsDeviceCapabilityTest.SupportsThreeD`/`SupportsDepthStencilBuffer`/`SupportsMultipleRenderTargets`/`SupportsOcclusionQuery`/`SupportsCustomEffects`, which assert these capabilities unconditionally true with **no backend gate at all** (would fail identically under `DX3`/`SDL_RENDERER`/`ASCII`/`CANVAS` too, confirmed by reading the test source — not new); 6 are `MediaLibraryTestFixture` song/album duration and genre tests reading `0ms`/wrong metadata, a real consequence of `CNA_FFMPEG_AVAILABLE=OFF` on every Windows target (pre-existing, predates this session); the remaining 4 (`PictureLibraryIndexTest` ×3, `AudioTagParserTest.ReadsNonAsciiVorbisCommentTitleCorrectly`) are Windows/Wine-filesystem or non-ASCII-encoding quirks unrelated to the graphics backend. One real, DX1-relevant test-gate fix was applied: `GraphicsDeviceValidationTest.SetRenderTargets_FourTargets_DoesNotThrow`'s backend gate didn't know about `DX1` either (mirrors `DX3-27`'s own identical fix) — added, confirmed fixed (49→48 failures). Zero DX1-caused failures remain unaccounted for. |
+| `DX1-88` | Full `CnaTests`/DX1 CTest suite regression run under `-DCNA_GRAPHICS_BACKEND=DX1` (MinGW cross-compile) — confirm no unrelated suite breaks | ✅ | **Final: 5336 passed, 11 skipped, 48 failed** (`ctest`/`CnaTests.exe` run through Wine on the virtual display). Getting here required fixing several pre-existing, not-DX1-specific gaps this exact configuration (from-scratch MinGW cross-compile + full `CnaTests`) had never hit before (README.md's own CI caveat: the full suite has never run on Windows CI at all): two audio harnesses missing an `SDL3::SDL3` link (`cmake/Harnesses.cmake`), a POSIX-only (`geteuid`/`<unistd.h>`) media test needing a Windows guard, `CNA_ENABLE_NET=OFF`'s test glob never excluding ENet-dependent test files, and — the deepest one — `CnaLibrary.cmake`'s existing `CNA_FFMPEG_AVAILABLE=OFF` source exclusion (Video/VideoPlayer/VideoDecoder, deliberate on every Windows target) never being mirrored for the corresponding test files or for `VideoContentTypeReader.cpp`/its `XnbBuiltInReaders.cpp` registration call site. All are narrowly-scoped, mirror an already-established pattern in the same file, and are unrelated to DX1's own logic. Of the remaining 48 failures: 34 are 3D-content-loading tests (`SkinnedModelEXTPartTest`, `RuntimeGltfModelTest`, `CnjModelTest`/`CnjEffectTest`/`CnjTexture3DTest`/`CnjStockEffectTest`, `ModelContentTypeReaderTest`, etc.) hitting DX1's correct `ThrowNo3D` via a plain `GraphicsDevice gd;` fixture with no 2D-backend gate — the **identical** structural gap `plan_freedirect.md`'s own regression already documented and left explicitly out of scope; 5 are `GraphicsDeviceCapabilityTest.SupportsThreeD`/`SupportsDepthStencilBuffer`/`SupportsMultipleRenderTargets`/`SupportsOcclusionQuery`/`SupportsCustomEffects`, which assert these capabilities unconditionally true with **no backend gate at all** (would fail identically under `DX3`/`SDL_RENDERER`/`ASCII`/`CANVAS` too, confirmed by reading the test source — not new); 6 are `MediaLibraryTestFixture` song/album duration and genre tests reading `0ms`/wrong metadata, a real consequence of `CNA_FFMPEG_AVAILABLE=OFF` on every Windows target (pre-existing, predates this session); the remaining 4 (`PictureLibraryIndexTest` ×3, `AudioTagParserTest.ReadsNonAsciiVorbisCommentTitleCorrectly`) are Windows/Wine-filesystem or non-ASCII-encoding quirks unrelated to the graphics backend. One real, DX1-relevant test-gate fix was applied: `GraphicsDeviceValidationTest.SetRenderTargets_FourTargets_DoesNotThrow`'s backend gate didn't know about `DX1` either (mirrors `DX3-27`'s own identical fix) — added, confirmed fixed (49→48 failures). Zero DX1-caused failures remain unaccounted for. |
 
 ---
 
@@ -414,7 +414,7 @@ actually passing.
 ## See also
 
 - `plan_dxold.md` — the roadmap this plan is row 1 of.
-- `plan_dx3.md`, `docs/dx3-backend.md` — the architecture and math this backend ports verbatim
+- `plan_freedirect.md`, `docs/freedirect-backend.md` — the architecture and math this backend ports verbatim
   wherever the surface-layer difference doesn't matter.
 - `plan_dx9.md` — the Route-B (MinGW + Wine) discipline this backend's CMake/testing
   infrastructure is modeled on.

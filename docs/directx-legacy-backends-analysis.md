@@ -6,7 +6,7 @@
 > each version onto the `IGraphicsBackend` contract CNA actually requires, and estimates build/runtime
 > feasibility against the two backend-delivery patterns this repo already uses. It does **not** open
 > tasks, edit any plan file, or change any build. Any real backend would need its own `plan_dx*.md`,
-> its own owner authorization, and its own existence-gate spike — exactly as `plan_dx3.md`/`plan_dx9.md`
+> its own owner authorization, and its own existence-gate spike — exactly as `plan_freedirect.md`/`plan_dx9.md`
 > already did.
 
 ---
@@ -22,7 +22,7 @@
   (`DrawPrimitive`), so `SpriteBatch` becomes a GPU quad-batcher instead of `DX3`'s CPU compositor.
 - **DirectX 3 is already done.** It ships today as the `DX3` backend (`CNA_GRAPHICS_BACKEND=DX3`),
   a complete 2D-only DirectDraw backend built on the `../free-direct` sibling reimplementation. See
-  `docs/dx3-backend.md`.
+  `docs/freedirect-backend.md`.
 - **The hard wall is programmable shaders, not "2D vs 3D."** XNA 4.0's own floor is Direct3D 9 /
   Shader Model 2.0. Every DirectX older than 9 is a *strict subset* of what XNA requires:
   - DX5/6/7: fixed-function only → 2D works; the stock effects (`BasicEffect` &c.) can be
@@ -51,7 +51,7 @@
 A compressed reference, focused on the *graphics* stack (DirectDraw + Direct3D), since that is all a
 CNA graphics backend touches. Audio/input/networking (DirectSound/DirectInput/DirectPlay) are out of
 scope — CNA's audio/input already live elsewhere and are explicitly not part of the `DX3` backend
-either (`docs/dx3-backend.md`, "Known limitations").
+either (`docs/freedirect-backend.md`, "Known limitations").
 
 | Version | Year | Graphics headline | Programmable shaders? | 3D pipeline |
 |---|---|---|---|---|
@@ -307,7 +307,7 @@ reimplementation of a *narrow* `IDirectDraw`/`IDirectDrawSurface` subset, itself
 
 - **Pro:** native, portable, no Wine/GPU-translation stack; total control.
 - **Con:** someone has to *write the reimplementation*. `free-direct` implements DirectDraw (2D
-  blitting) **only** — it has **no Direct3D** at all ("Direct3D not implemented", `docs/dx3-backend.md`).
+  blitting) **only** — it has **no Direct3D** at all ("Direct3D not implemented", `docs/freedirect-backend.md`).
   Delivering DX5/6/7 this way would mean reimplementing a fixed-function Direct3D immediate-mode
   device (transform/lighting/rasterization/texture stages) on top of SDL3 or OpenGL — a large,
   from-scratch software-or-GL fixed-function pipeline. That is a project in itself, well beyond a
@@ -347,7 +347,7 @@ a translation layer exists for that DirectX version. That "if" is the whole game
 
 ### DirectX 3 — **already shipping** (`DX3`)
 Nothing to analyze; it exists. Complete 2D-only DirectDraw backend via `free-direct`, Route A, native
-Linux, `ThrowNo3D` on everything 3D. Full status in `docs/dx3-backend.md` and `plan_dx3.md`. If the
+Linux, `ThrowNo3D` on everything 3D. Full status in `docs/freedirect-backend.md` and `plan_freedirect.md`. If the
 owner's "a co DirectX 3?" was asking whether it *could* be done — it is done. If it was asking whether
 the *analysis* here changes anything for it — it does not.
 
@@ -395,7 +395,7 @@ with no CNA-facing benefit; DX4 was never released. No reason to target any of t
 
 `DX3`'s 2D is genuinely hard: DirectDraw has no triangle rasterizer, so the backend carries a CPU
 compositor (`CompositeQuad`, an edge-function rasterizer) to implement rotation/scale/blend/sampling —
-see `docs/dx3-backend.md` §3. Every DirectX from 5 onward has **hardware-accelerated textured-triangle
+see `docs/freedirect-backend.md` §3. Every DirectX from 5 onward has **hardware-accelerated textured-triangle
 `DrawPrimitive`**, so `SpriteBatch` collapses to "batch quads → two triangles each → one draw call
 with alpha blending + a sampler state," which is exactly what the GPU backends already do. The 2D
 feature set CNA needs (blend presets, Wrap/Mirror/Clamp sampling, source-crop, rotation, flip,
@@ -422,7 +422,7 @@ Ranked by value-for-effort, purely as input to an owner decision — **no task i
    backend if that path is ever taken.
 4. **DX3: already done.** No action.
 
-Whatever is chosen, it should follow the exact discipline `plan_dx9.md`/`plan_dx3.md` set:
+Whatever is chosen, it should follow the exact discipline `plan_dx9.md`/`plan_freedirect.md` set:
 
 - **Run an existence-gate spike first** (does MinGW ship the header? does DXVK-`d3d8`/Wine-`wined3d`
   render a triangle under Wine on this machine?) — *before* authorizing backend code.
@@ -451,13 +451,13 @@ Whatever is chosen, it should follow the exact discipline `plan_dx9.md`/`plan_dx
 
 ## 9. See also
 
-- `docs/dx3-backend.md` — the shipping DX3 (DirectDraw) 2D backend; the concrete model for "2D-only,
+- `docs/freedirect-backend.md` — the shipping DX3 (DirectDraw) 2D backend; the concrete model for "2D-only,
   throw on 3D."
 - `docs/d3d9-backend.md`, `docs/d3d9-divergence-report.md` — the D3D9 backend and the byte-exact XNA
   oracle bar that legacy backends cannot meet.
 - `docs/graphics-backend-feature-matrix.md` — cross-backend feature matrix and the Wine+DXVK/vkd3d
   verification caveat.
-- `plan_dx3.md`, `plan_dx9.md`, `plan_dx.md` — the existing DirectX-family plans and their
+- `plan_freedirect.md`, `plan_dx9.md`, `plan_dx.md` — the existing DirectX-family plans and their
   existence-gate discipline any legacy plan should copy.
 - `cmake/BackendSelection.cmake`, `cmake/BackendLibraries.cmake`, `cmake/toolchains/mingw-w64.cmake` —
   the backend-selection, link-set, and cross-compile wiring a new backend would extend.

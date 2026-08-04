@@ -1,6 +1,10 @@
-# DX3 (DirectDraw) 2D Backend — Completeness Status
+# FreeDirect (DirectDraw) 2D Backend — Completeness Status
 
-`DX3` is CNA's second 2D-only graphics backend (after `SDL_RENDERER`): no 3D pipeline, no
+> **Renamed 2026-08-04 (owner instruction, dxold integration):** formerly the `DX3` backend;
+> now `CNA_GRAPHICS_BACKEND=FREEDIRECT`. The `DX3` name belongs to the real Microsoft/Wine
+> DirectX 3 backend (`docs/dx3-backend.md`). Historical `DX3-*` task IDs are unchanged.
+
+`FREEDIRECT` is CNA's second 2D-only graphics backend (after `SDL_RENDERER`): no 3D pipeline, no
 programmable shader stage, no depth/stencil buffer, no MSAA. Unlike `SDL_RENDERER`, it does not
 use SDL3's own 2D texture-blit API at all — it fronts `IDirectDraw`/`IDirectDrawSurface`
 COM-shaped calls against `../free-direct`, a sibling project's own C++20 reimplementation of a
@@ -8,17 +12,17 @@ narrow, two-game-scoped DirectDraw subset, itself built on SDL3 internally (neve
 CNA). Every unsupported 3D-only feature fails loudly (throws) or degrades gracefully to a
 documented `nullptr`, matching this project's house style.
 
-This document is the completeness status after `plan_dx3.md`'s full Phase X1–X8 implementation
-plus a subsequent external code review pass (see `plan_dx3.md`'s own status-header correction
+This document is the completeness status after `plan_freedirect.md`'s full Phase X1–X8 implementation
+plus a subsequent external code review pass (see `plan_freedirect.md`'s own status-header correction
 notes for what that review found and fixed). Every row cites the task(s) that verified it — see
-`plan_dx3.md`'s own task tables for full design rationale and code detail.
+`plan_freedirect.md`'s own task tables for full design rationale and code detail.
 
 **Status legend** (matches `docs/sdl-renderer-2d-completeness.md`'s own convention)
 
 - ✅ — fully supported, matches FNA/XNA behavior exactly (or as closely as a 2D-only backend
   reasonably can).
 - 🟨 — code exists but does not fully meet its own stated goal; a real, documented, permanent
-  limitation rather than a hidden gap (matches `plan_dx3.md`'s own status-legend definition).
+  limitation rather than a hidden gap (matches `plan_freedirect.md`'s own status-legend definition).
 - ❌-throws-by-design — intentionally unsupported; throws a clear, specific exception rather than
   silently no-op'ing or producing wrong output (`ThrowNo3D`).
 - ⚪-degrades-to-nullptr — intentionally unsupported, but via `IGraphicsBackend`'s own
@@ -36,14 +40,14 @@ notes for what that review found and fixed). Every row cites the task(s) that ve
 | `CNA_GRAPHICS_BACKEND=DX3` CMake selection + `../free-direct` sibling wiring | ✅ | Mirrors `../easy-gl`'s exact dependency pattern. Verified: `free-direct`'s own `add_subdirectory(../free-api)` resolves CNA's already-vendored SDL3/SDL3_image/SDL3_mixer targets with zero extra flags (DX3-3). |
 | `DirectDrawCreate` → `SetCooperativeLevel` → `SetDisplayMode` → primary `CreateSurface` | ✅ | Real device/window bring-up against CNA's own already-existing `SDL_Window*` — `HWND` is that same window via `reinterpret_cast`, never a second window or `free-direct`'s own `CreateWindowA` scaffolding (DX3-10..13). |
 | `Clear()` / `Present()` | ✅ | **Real architectural finding, not anticipated by the original design**: `free-direct`'s `IDirectDrawSurface::Lock()` never exposes a writable pointer for the *primary* surface. Fixed by never treating the primary as a render target at all — DX3 owns an internal, always-Lockable "shadow backbuffer" offscreen surface that `Clear()`/`SpriteBatch` draws always target; `Present()` is a single identity `Blt()` from that surface onto the real primary (DX3-14/15). **Second real bug found in external code review and fixed**: `Clear()` originally used `DDBLT_COLORFILL`, but `free-direct`'s own `FillColor()` hardcodes the written alpha byte to `255` unconditionally — any requested alpha other than fully opaque was silently discarded. Fixed by writing all 4 channels directly via `Lock()`/`Unlock()` instead. |
-| Pixel-exact readback (`Dx3_Smoke` CTest) | ✅ | Real window, `Clear()`+readback round-trip (RGB and alpha), `Present()` doesn't throw (DX3-18/80). |
+| Pixel-exact readback (`FreeDirect_Smoke` CTest) | ✅ | Real window, `Clear()`+readback round-trip (RGB and alpha), `Present()` doesn't throw (DX3-18/80). |
 | `SetPresentationMode()` / resize-after-first-`Present()` | 🟨 | **Downgraded from ✅ in external code review**: `SetPresentationMode()` stores the requested mode but never actually changes physical output, which is always `LETTERBOX` regardless of what's requested; `SetVirtualResolution()` has a known, self-documented bug where a resolution change after the first `Present()` keeps presenting at the stale old physical scale. A real, permanent-for-now limitation, not a hidden gap — fixing it requires changing `free-direct` itself (out of scope, design decision 8) (DX3-16). |
 
 ## 2. Texture2D / RenderTarget2D (Phase X3)
 
 | Feature | Status | Notes |
 |---|---|---|
-| `Dx3TextureBackend`/`Dx3RenderTargetBackend` construction | ✅ | Both own a private offscreen `DDSCAPS_OFFSCREENPLAIN` 32bpp surface; both classes are defined entirely inside `Dx3GraphicsBackend.cpp` (never named outside it) to keep `<ddraw.h>` fully contained without needing a pimpl (DX3-20/23). |
+| `FreeDirectTextureBackend`/`FreeDirectRenderTargetBackend` construction | ✅ | Both own a private offscreen `DDSCAPS_OFFSCREENPLAIN` 32bpp surface; both classes are defined entirely inside `FreeDirectGraphicsBackend.cpp` (never named outside it) to keep `<ddraw.h>` fully contained without needing a pimpl (DX3-20/23). |
 | `SetData`/`UpdatePixels` round-trip | ✅ | Genuinely synchronous `Lock()`/`memcpy`/`Unlock()` — no async concerns at all, unlike `CANVAS`'s workaround for the same problem. `Texture2D::GetData` itself is a CPU-side cache read on every CNA backend, so the meaningful backend round-trip proof is via `RenderTarget2D` bind+`Clear`+`GetBackBufferData` instead (DX3-21). |
 | Mip levels (`level>0` `SetData`) | ❌-throws-by-design | No native mip chain on `IDirectDrawSurface`; `level=0` unaffected (DX3-22). |
 | `SetRenderTarget2D` / bind-redirect | ✅ | `Clear()`/`ReadBackbuffer()` redirect to whichever surface is currently bound via `Impl::ActiveSurface()`; `Present()` always targets the real shadow backbuffer regardless of binding (DX3-26). |
@@ -59,7 +63,7 @@ notes for what that review found and fixed). Every row cites the task(s) that ve
 | Identity fast path | ✅ | 1:1 scale, no rotation/flip/custom transform, white tint, `BlendState::Opaque` → a real `BltFast` straight copy, no CPU compositing at all (DX3-31). |
 | General path (`CompositeQuad`) | ✅ | A 2-triangle, winding-agnostic edge-function CPU rasterizer; quad-corner placement math ported verbatim from `SoftwareSpriteBatchBackend::Draw()` (design decision 5: reuse, don't re-derive) (DX3-32). A real bug was caught and fixed before any test ran: the blend formula initially forgot to multiply the source term by `srcAlpha`. |
 | Rotation around `origin` | ✅ | Pixel-verified via a `pi`-rotation quadrant-swap check (DX3-33). |
-| `SpriteEffects::FlipHorizontally`/`FlipVertically` | ✅ | Verified via `Dx3_SpriteBatch` (DX3-34). |
+| `SpriteEffects::FlipHorizontally`/`FlipVertically` | ✅ | Verified via `FreeDirect_SpriteBatch` (DX3-34). |
 | Scalar / `Vector2` scale overloads | ✅ | Both resolve to the same `destinationRectangle`-vs-`sourceRectangle` ratio at the backend `Draw()` boundary (DX3-35). |
 | `SetTransformMatrix()` | ✅ | Applied as a point transform on the already-screen-space quad corners (DX3-36). |
 | `SpriteSortMode` | ✅ | Fully resolved in shared, backend-agnostic `SpriteBatch.cpp` before `backend_->Draw()` is ever called — zero backend-specific code needed (DX3-37). |
@@ -153,6 +157,6 @@ the `Clear()` alpha-channel discard, the `DetectBlendMode()` `BlendFunction`-ign
 process issue — a background agent's commit falsely claimed prior user approval for Phase X1/X2,
 corrected via a follow-up doc commit rather than rewriting history — plus a full-test-output
 undercounting mistake caught and corrected at Phase X4 closure, and DX3-16 correctly downgraded
-from ✅ to 🟨 rather than left overclaimed. See `plan_dx3.md`'s own status-header correction notes
+from ✅ to 🟨 rather than left overclaimed. See `plan_freedirect.md`'s own status-header correction notes
 for full detail. No BLOCKED decisions remain open for
 this backend.

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx3.md Phase X6 (DX3-50..DX3-54): SpriteFont / DrawString tests for the DX3 (DirectDraw,
+// plan_freedirect.md Phase X6 (DX3-50..DX3-54): SpriteFont / DrawString tests for the DX3 (DirectDraw,
 // via the ../free-direct sibling) graphics backend.
 //
 // SpriteBatch::DrawString (shared, backend-agnostic SpriteBatch.cpp) lays out each glyph as a
@@ -51,7 +51,7 @@ static const Color kRed(255, 0, 0, 255);
 static const Color kGreen(0, 255, 0, 255);
 static const Color kBlack(0, 0, 0, 255);
 
-class Dx3SpriteFontTest : public Game
+class FreeDirectSpriteFontTest : public Game
 {
     std::unique_ptr<GraphicsDeviceManager> gdm_;
     int passCount_ = 0;
@@ -200,7 +200,7 @@ protected:
     }
 
 public:
-    Dx3SpriteFontTest()
+    FreeDirectSpriteFontTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
         gdm_->setPreferredBackBufferWidthProperty(kCanvasSize);
@@ -212,7 +212,7 @@ public:
 
 int main()
 {
-    Dx3SpriteFontTest game;
+    FreeDirectSpriteFontTest game;
     game.Run();
     return game.getResult();
 }

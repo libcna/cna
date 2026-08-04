@@ -80,8 +80,8 @@ Kept for their investigation methodology and root-cause detail, not as current s
   the doc's own caveat.
 - **[`ascii-backend.md`](ascii-backend.md)** — current status for the `ASCII` (SDL-windowed retro
   glyph-grid) backend; see `../plan_ascii.md` for full task-by-task detail.
-- `dx3-backend.md` — DX3 (DirectDraw, via the `../free-direct` sibling)'s own completeness status,
-  current as of `plan_dx3.md`'s Phase X1-X7 closure (2026-07-15).
+- `freedirect-backend.md` — FreeDirect (formerly `DX3`; DirectDraw via the `../free-direct` sibling)'s own completeness status,
+  current as of `plan_freedirect.md`'s Phase X1-X7 closure (2026-07-15).
 - `fna-reference-harness.md` — the differential-testing infra (`tools/fna-reference/`) mentioned
   in `../README.md`'s verification-methodology bullet.
 

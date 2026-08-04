@@ -50,7 +50,7 @@ TEST(GraphicsBackendTypeTest, NameMatchesTypeForEveryBackend)
         case GraphicsBackendType::D3D12:       EXPECT_EQ(name, "D3D12");        break;
         case GraphicsBackendType::Canvas:      EXPECT_EQ(name, "CANVAS");       break;
         case GraphicsBackendType::Ascii:       EXPECT_EQ(name, "ASCII");        break;
-        case GraphicsBackendType::Dx3:         EXPECT_EQ(name, "DX3");          break;
+        case GraphicsBackendType::FreeDirect:         EXPECT_EQ(name, "FREEDIRECT");          break;
         case GraphicsBackendType::D3D9:        EXPECT_EQ(name, "D3D9");         break;
         case GraphicsBackendType::SdlGpu:      EXPECT_EQ(name, "SDL_GPU");      break;
     }

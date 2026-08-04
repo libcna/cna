@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx3.md Phase X3 (DX3-20..DX3-28): texture and render-target backend tests for the DX3
+// plan_freedirect.md Phase X3 (DX3-20..DX3-28): texture and render-target backend tests for the DX3
 // (DirectDraw, via the ../free-direct sibling) graphics backend.
 //
 // Check A -- Texture2D construction (CreateTexture, a real offscreen surface) + SetData(level=0,
-//   ...) round-trips through Dx3TextureBackend::UpdatePixels (Lock()/memcpy/Unlock()) without
+//   ...) round-trips through FreeDirectTextureBackend::UpdatePixels (Lock()/memcpy/Unlock()) without
 //   throwing (DX3-20/21).
 // Check B -- Texture2D::SetData(level=1, ...) throws: no native mip chain on IDirectDrawSurface
 //   (DX3-22).
@@ -44,7 +44,7 @@ using namespace Microsoft::Xna::Framework::Graphics;
 static constexpr int kCanvasSize = 64;
 static constexpr int kTargetSize = 8;
 
-class Dx3TextureRenderTargetTest : public Game
+class FreeDirectTextureRenderTargetTest : public Game
 {
     std::unique_ptr<GraphicsDeviceManager> gdm_;
     int passCount_ = 0;
@@ -189,7 +189,7 @@ protected:
     }
 
 public:
-    Dx3TextureRenderTargetTest()
+    FreeDirectTextureRenderTargetTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
         gdm_->setPreferredBackBufferWidthProperty(kCanvasSize);
@@ -201,7 +201,7 @@ public:
 
 int main()
 {
-    Dx3TextureRenderTargetTest game;
+    FreeDirectTextureRenderTargetTest game;
     game.Run();
     return game.getResult();
 }

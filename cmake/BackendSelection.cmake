@@ -6,8 +6,8 @@ if(EMSCRIPTEN OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
 else()
     set(_cna_default_backend "SDL_RENDERER")
 endif()
-set(CNA_GRAPHICS_BACKEND "${_cna_default_backend}" CACHE STRING "Graphics backend to use (SDL_RENDERER, EASYGL, BGFX, VULKAN, WEBGPU, HEADLESS, SOFTWARE, D3D11, D3D12, CANVAS, ASCII, DX3, D3D9, DX1, DX2, DX30, DX5, DX6, DX7, DX8, D3D10, or SDL_GPU)")
-set_property(CACHE CNA_GRAPHICS_BACKEND PROPERTY STRINGS "SDL_RENDERER" "EASYGL" "BGFX" "VULKAN" "WEBGPU" "HEADLESS" "SOFTWARE" "D3D11" "D3D12" "CANVAS" "ASCII" "DX3" "D3D9" "DX1" "DX2" "DX30" "DX5" "DX6" "DX7" "DX8" "D3D10" "SDL_GPU")
+set(CNA_GRAPHICS_BACKEND "${_cna_default_backend}" CACHE STRING "Graphics backend to use (SDL_RENDERER, EASYGL, BGFX, VULKAN, WEBGPU, HEADLESS, SOFTWARE, D3D11, D3D12, CANVAS, ASCII, FREEDIRECT, D3D9, DX1, DX2, DX30, DX5, DX6, DX7, DX8, D3D10, or SDL_GPU)")
+set_property(CACHE CNA_GRAPHICS_BACKEND PROPERTY STRINGS "SDL_RENDERER" "EASYGL" "BGFX" "VULKAN" "WEBGPU" "HEADLESS" "SOFTWARE" "D3D11" "D3D12" "CANVAS" "ASCII" "FREEDIRECT" "D3D9" "DX1" "DX2" "DX30" "DX5" "DX6" "DX7" "DX8" "D3D10" "SDL_GPU")
 
 option(CNA_BACKEND_SDL_RENDERER "Enable SDL_Renderer graphics backend" OFF)
 option(CNA_BACKEND_EASY_GL "Enable easy-gl graphics backend" OFF)
@@ -25,11 +25,11 @@ option(CNA_BACKEND_CANVAS "Enable HTML Canvas 2D graphics backend (Emscripten on
 # SDL_RENDERER's own SdlGraphicsBackend (see the shared cna_backend_graphics_sdl_renderer_core
 # library below), not a real terminal/TTY backend.
 option(CNA_BACKEND_ASCII "Enable ASCII (SDL-windowed glyph-grid) graphics backend" OFF)
-option(CNA_BACKEND_DX3 "Enable DirectX 3 (DirectDraw, via the ../free-direct sibling) graphics backend" OFF)
+option(CNA_BACKEND_FREEDIRECT "Enable FreeDirect (DirectDraw via the ../free-direct sibling reimplementation; formerly DX3) graphics backend" OFF)
 option(CNA_BACKEND_D3D9 "Enable Direct3D 9 graphics backend (Windows only)" OFF)
 # plan_dx1.md: real DirectX 1 (DirectDraw v1) graphics backend -- genuine ddraw.h v1 COM
 # interfaces (IDirectDraw/IDirectDrawSurface/DDSURFACEDESC, never IDirectDraw2+), Windows-only,
-# same MinGW-cross-compile + Wine delivery route as D3D9/D3D11/D3D12 (Route B). Unlike DX3, this
+# same MinGW-cross-compile + Wine delivery route as D3D9/D3D11/D3D12 (Route B). Unlike FreeDirect (formerly DX3), this
 # backend deliberately does NOT use ../free-direct -- see plan_dxold.md's roadmap.
 option(CNA_BACKEND_DX1 "Enable Direct X 1 (real DirectDraw v1) graphics backend (Windows only)" OFF)
 # plan_dx2.md: real DirectX 2 graphics backend -- 2D layer is a verbatim port of DX1's real
@@ -43,7 +43,7 @@ option(CNA_BACKEND_DX1 "Enable Direct X 1 (real DirectDraw v1) graphics backend 
 # owner's confirmation of this scope choice.
 option(CNA_BACKEND_DX2 "Enable Direct X 2 (real DirectDraw v1 + Direct3D v2 DrawPrimitive) graphics backend (Windows only)" OFF)
 # plan_dx30.md: real DirectX 3 graphics backend, temporarily named DX30 (see plan_dx30.md's own
-# status note -- the existing CNA_BACKEND_DX3/../free-direct backend still owns the bare "DX3"
+# status note -- the existing CNA_BACKEND_FREEDIRECT/../free-direct backend still owns the bare "FREEDIRECT"
 # name until its own not-yet-executed rename to FREE_DIRECT runs). Mechanical port of DX2's own 2D
 # layer (upgraded to IDirectDraw2) + 3D layer (verbatim, including Phase O9's CPU lighting).
 option(CNA_BACKEND_DX30 "Enable Direct X 3 (real DirectDraw v2 + Direct3D v2 DrawPrimitive; temporarily named DX30) graphics backend (Windows only)" OFF)
@@ -86,7 +86,7 @@ option(CNA_BACKEND_D3D10 "Enable Direct3D 10 (real ID3D10Device, DXVK-delivered 
 option(CNA_BACKEND_SDL_GPU "Enable SDL_gpu graphics backend" OFF)
 
 set(_cna_explicit_backend_selection OFF)
-if(CNA_BACKEND_SDL_RENDERER OR CNA_BACKEND_EASY_GL OR CNA_BACKEND_BGFX OR CNA_BACKEND_VULKAN OR CNA_BACKEND_WEBGPU OR CNA_BACKEND_HEADLESS OR CNA_BACKEND_SOFTWARE OR CNA_BACKEND_D3D11 OR CNA_BACKEND_D3D12 OR CNA_BACKEND_CANVAS OR CNA_BACKEND_ASCII OR CNA_BACKEND_DX3 OR CNA_BACKEND_D3D9 OR CNA_BACKEND_DX1 OR CNA_BACKEND_DX2 OR CNA_BACKEND_DX30 OR CNA_BACKEND_DX5 OR CNA_BACKEND_DX6 OR CNA_BACKEND_DX7 OR CNA_BACKEND_DX8 OR CNA_BACKEND_D3D10 OR CNA_BACKEND_SDL_GPU)
+if(CNA_BACKEND_SDL_RENDERER OR CNA_BACKEND_EASY_GL OR CNA_BACKEND_BGFX OR CNA_BACKEND_VULKAN OR CNA_BACKEND_WEBGPU OR CNA_BACKEND_HEADLESS OR CNA_BACKEND_SOFTWARE OR CNA_BACKEND_D3D11 OR CNA_BACKEND_D3D12 OR CNA_BACKEND_CANVAS OR CNA_BACKEND_ASCII OR CNA_BACKEND_FREEDIRECT OR CNA_BACKEND_D3D9 OR CNA_BACKEND_DX1 OR CNA_BACKEND_DX2 OR CNA_BACKEND_DX30 OR CNA_BACKEND_DX5 OR CNA_BACKEND_DX6 OR CNA_BACKEND_DX7 OR CNA_BACKEND_DX8 OR CNA_BACKEND_D3D10 OR CNA_BACKEND_SDL_GPU)
     set(_cna_explicit_backend_selection ON)
 endif()
 
@@ -125,8 +125,8 @@ if(_cna_explicit_backend_selection)
     if(CNA_BACKEND_ASCII)
         list(APPEND _cna_enabled_backends "ASCII")
     endif()
-    if(CNA_BACKEND_DX3)
-        list(APPEND _cna_enabled_backends "DX3")
+    if(CNA_BACKEND_FREEDIRECT)
+        list(APPEND _cna_enabled_backends "FREEDIRECT")
     endif()
     if(CNA_BACKEND_D3D9)
         list(APPEND _cna_enabled_backends "D3D9")
@@ -171,7 +171,7 @@ endif()
 # MinGW/MSVC cross-compile) -- d3d11.h/d3d12.h/dxgi.h do not exist elsewhere. Unlike BGFX's soft
 # WARNING-only platform check below, this is a hard FATAL_ERROR. plan_dx9.md design decision 1
 # extends this same gate to D3D9 (d3d9.h is equally Windows-only). plan_dx1.md design decision 1
-# extends it again to DX1: unlike DX3 (SDL3-backed ../free-direct, genuinely native-Linux-buildable),
+# extends it again to DX1: unlike FreeDirect (formerly DX3; SDL3-backed ../free-direct, genuinely native-Linux-buildable),
 # DX1 uses the real Windows ddraw.h, so it needs the exact same gate.
 if((CNA_GRAPHICS_BACKEND STREQUAL "D3D11" OR CNA_GRAPHICS_BACKEND STREQUAL "D3D12" OR CNA_GRAPHICS_BACKEND STREQUAL "D3D9" OR CNA_GRAPHICS_BACKEND STREQUAL "DX1" OR CNA_GRAPHICS_BACKEND STREQUAL "DX2" OR CNA_GRAPHICS_BACKEND STREQUAL "DX30" OR CNA_GRAPHICS_BACKEND STREQUAL "DX5" OR CNA_GRAPHICS_BACKEND STREQUAL "DX6" OR CNA_GRAPHICS_BACKEND STREQUAL "DX7" OR CNA_GRAPHICS_BACKEND STREQUAL "DX8" OR CNA_GRAPHICS_BACKEND STREQUAL "D3D10")
         AND NOT CMAKE_SYSTEM_NAME STREQUAL "Windows")
@@ -210,14 +210,14 @@ if(CNA_GRAPHICS_BACKEND STREQUAL "EASYGL")
     add_subdirectory(../easy-gl easy-gl)
 endif()
 
-# plan_dx3.md design decision 10 / Task DX3-2: free-direct is a SIBLING repository checkout, not a
+# plan_freedirect.md design decision 10 / Task DX3-2: free-direct is a SIBLING repository checkout, not a
 # git submodule of this repo -- same rationale as sharp-runtime/easy-gl's identical checks above.
 # free-direct's own CMakeLists.txt (add_subdirectory(../free-api ...)) resolves SDL3::SDL3/
 # SDL3_image::SDL3_image/SDL3_mixer::SDL3_mixer from CNA's own already-vendored targets (set up by
 # cna_configure_vendored_sdl() above, before backend selection runs), so no
 # -DFREE_API_USE_SYSTEM_SDL3 flag is needed here, mirroring how ../free-eggbert/../planetblupi
 # already consume free-direct today (design decision 10).
-if(CNA_GRAPHICS_BACKEND STREQUAL "DX3")
+if(CNA_GRAPHICS_BACKEND STREQUAL "FREEDIRECT")
     if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../free-direct/CMakeLists.txt")
         message(FATAL_ERROR
             "CNA: Missing sibling repository 'free-direct' at "
@@ -330,12 +330,12 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "ASCII")
     set(BACKEND_TARGET "cna_backend_graphics_ascii")
     add_compile_definitions(CNA_BACKEND_ASCII)
     set(CNA_BACKEND_DEFINE "CNA_BACKEND_ASCII")
-elseif(CNA_GRAPHICS_BACKEND STREQUAL "DX3")
-    message(STATUS "CNA: Using DX3 (DirectDraw via free-direct) graphics backend")
-    set(BACKEND_DIR "src/CNA/Internal/Backends/Dx3")
-    set(BACKEND_TARGET "cna_backend_graphics_dx3")
-    add_compile_definitions(CNA_BACKEND_DX3)
-    set(CNA_BACKEND_DEFINE "CNA_BACKEND_DX3")
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "FREEDIRECT")
+    message(STATUS "CNA: Using FreeDirect (DirectDraw via free-direct; formerly DX3) graphics backend")
+    set(BACKEND_DIR "src/CNA/Internal/Backends/FreeDirect")
+    set(BACKEND_TARGET "cna_backend_graphics_freedirect")
+    add_compile_definitions(CNA_BACKEND_FREEDIRECT)
+    set(CNA_BACKEND_DEFINE "CNA_BACKEND_FREEDIRECT")
 elseif(CNA_GRAPHICS_BACKEND STREQUAL "D3D9")
     message(STATUS "CNA: Using D3D9 graphics backend")
     set(BACKEND_DIR "src/CNA/Internal/Backends/D3D9")

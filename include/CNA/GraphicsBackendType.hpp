@@ -40,8 +40,8 @@ namespace CNA
         /** @brief ASCII (SDL-windowed glyph grid). */
         Ascii,
 
-        /** @brief DX3 (DirectDraw via free-direct). */
-        Dx3,
+        /** @brief FreeDirect (DirectDraw via the ../free-direct sibling reimplementation; formerly DX3). */
+        FreeDirect,
 
         /** @brief Direct3D 9. */
         D3D9,
@@ -110,8 +110,8 @@ namespace CNA
         return GraphicsBackendType::Canvas;
 #elif defined(CNA_BACKEND_ASCII)
         return GraphicsBackendType::Ascii;
-#elif defined(CNA_BACKEND_DX3)
-        return GraphicsBackendType::Dx3;
+#elif defined(CNA_BACKEND_FREEDIRECT)
+        return GraphicsBackendType::FreeDirect;
 #elif defined(CNA_BACKEND_D3D9)
         return GraphicsBackendType::D3D9;
 #elif defined(CNA_BACKEND_DX1)
@@ -162,7 +162,7 @@ namespace CNA
             case GraphicsBackendType::D3D12:        return "D3D12";
             case GraphicsBackendType::Canvas:       return "CANVAS";
             case GraphicsBackendType::Ascii:        return "ASCII";
-            case GraphicsBackendType::Dx3:           return "DX3";
+            case GraphicsBackendType::FreeDirect:           return "FREEDIRECT";
             case GraphicsBackendType::D3D9:          return "D3D9";
             case GraphicsBackendType::Dx1:            return "DX1";
             case GraphicsBackendType::Dx2:            return "DX2";

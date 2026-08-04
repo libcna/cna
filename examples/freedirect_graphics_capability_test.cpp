@@ -20,7 +20,7 @@ using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
 using CNA::GraphicsCapability;
 
-class Dx3GraphicsCapabilityTest : public Game
+class FreeDirectGraphicsCapabilityTest : public Game
 {
     std::unique_ptr<GraphicsDeviceManager> gdm_;
     int pass_ = 0;
@@ -69,7 +69,7 @@ protected:
     }
 
 public:
-    Dx3GraphicsCapabilityTest()
+    FreeDirectGraphicsCapabilityTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
         gdm_->setPreferredBackBufferWidthProperty(32);
@@ -81,7 +81,7 @@ public:
 
 int main()
 {
-    Dx3GraphicsCapabilityTest game;
+    FreeDirectGraphicsCapabilityTest game;
     game.Run();
     return game.getResult();
 }

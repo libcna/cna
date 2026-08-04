@@ -90,8 +90,8 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "D3D11")
     # runtime D3DCompile() custom-ShaderEffect path (D3D11EffectBackend) -- confirmed safe to link
     # in isolation by DX-1/DX-14-compile's own spikes; the offline stock pipeline never calls it.
     target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 d3d11 dxgi d3dcompiler cna_backend_graphics_d3dcommon)
-elseif(CNA_GRAPHICS_BACKEND STREQUAL "DX3")
-    # plan_dx3.md design decision 10: free-direct's own public target is the literal lowercase
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "FREEDIRECT")
+    # plan_freedirect.md design decision 10: free-direct's own public target is the literal lowercase
     # `free-direct` (PUBLIC-links free-api::free-api, PUBLIC-exposes its own include/ dir so
     # #include <ddraw.h> resolves) -- no ALIAS namespace exists for it, unlike easy-gl's own target.
     target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 free-direct)
