@@ -1163,9 +1163,34 @@ namespace CNA::Internal::Backends::Direct2D
             logicalTarget_.Reset();
             backBufferTarget_.Reset();
             backBufferTexture_.Reset();
-            ThrowIfFailed(swapChain_->ResizeBuffers(0, width, height, DXGI_FORMAT_UNKNOWN, 0),
-                          "IDXGISwapChain::ResizeBuffers");
-            CreateBackBufferTarget();
+            // D2D-68: IDXGISwapChain::ResizeBuffers requires every reference to the old
+            // swap-chain buffers released first (the Reset() calls above), so a failure here
+            // cannot roll back to the previous buffers -- they are already gone. Treat it exactly
+            // like any other device loss (the same recovery EndDrawing/Present already use for
+            // D2DERR_RECREATE_TARGET/DXGI_ERROR_DEVICE_REMOVED) instead of leaving
+            // backBufferTarget_/logicalTarget_ null.
+            const HRESULT resizeResult = swapChain_->ResizeBuffers(0, width, height, DXGI_FORMAT_UNKNOWN, 0);
+            if (FAILED(resizeResult))
+            {
+                RecreateDeviceResourcesForRecovery();
+                throw std::runtime_error(
+                    "Direct2D device resources were recreated after a failed swap-chain resize (hr=" +
+                    FormatHr(resizeResult) + "); redraw the current frame.");
+            }
+            try
+            {
+                CreateBackBufferTarget();
+            }
+            catch (const std::exception&)
+            {
+                // Same reasoning: CreateBackBufferTarget failing partway (GetBuffer or
+                // CreateBitmapFromDxgiSurface) leaves backBufferTarget_/logicalTarget_ null with
+                // no prior buffers to roll back to either.
+                RecreateDeviceResourcesForRecovery();
+                throw std::runtime_error(
+                    "Direct2D device resources were recreated after a failed swap-chain target "
+                    "rebuild; redraw the current frame.");
+            }
             return;
         }
 
