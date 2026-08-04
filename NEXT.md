@@ -1,35 +1,61 @@
 # NEXT.md
 
-## CURRENT — `feature/audit` post-audit remediation exit (2026-08-04)
+## CURRENT — `feature/audit` post-audit remediation **phase-1 checkpoint TAKEN** (2026-08-04)
 
-> **STATUS: STILL NOT A CHECKPOINT. No checkpoint tag exists.**
-> The last recorded checkpoint blocker, `WEBGPU-115`, is **RESOLVED**. The checkpoint itself has not
-> been taken and was deliberately not taken by that ticket.
+> **STATUS: OUTCOME A — READY. Checkpoint-blocker set is EMPTY.**
+> Signed annotated tag **`cna-post-audit-remediation-phase1`** on `feature/audit`, **local only,
+> not pushed**. **This is phase 1, not the completion of all CNA work.**
 
-**Read first:** `remediation/REMEDIATION_EXIT.md` (exit record — §3.6 is the resolution, §8 is why it
-is still not a clearance) and `remediation/INTEGRATION_BRANCH_INVENTORY.md` (branch inventory; §5.1
-is the corrected Magnum/Wicked entry).
+**Read first:** `remediation/REMEDIATION_EXIT.md` (authoritative exit record) and
+`remediation/INTEGRATION_BRANCH_INVENTORY.md` (**21 logical lanes**, re-derived after a fetch).
 
-### The next single task — re-run post-audit exit reconciliation
+### The next single task — freeze Direct2D, then begin integration preparation
 
-`WEBGPU-115` closed on 2026-08-04. WebGPU now reports `GraphicsCapability::WireFrame` as **`false`**
-and throws `System::NotSupportedException` from the first **polygon** draw that would consume it,
-before any command is queued, any pipeline key is computed, any `WGPURenderPipeline` is created, any
-render pass is encoded or anything is submitted. The target is unchanged, the next Solid draw is
-exact, and line/point topologies are deliberately still accepted — they have no polygon interior for
-a fill mode to select and were measured byte-identical under both modes.
+**Do not begin branch integration yet.** `feature/direct2d` is the **final actively-developed lane**:
+its head moved from `f6edeb7c` to `6cd6ad06` *during* the exit-reconciliation session, last commit
+`2026-08-04T11:27:08Z`, and its local ref is 34 commits ahead of `origin`. Integrating a moving
+branch converts one adaptation into a recurring one.
+
+**Entry conditions before the first adaptation branch** (inventory §8.4): the checkpoint tag exists
+(done), Direct2D is frozen at an owner-confirmed head, the lane's archive tag is created, and its
+`GpuDrawParams` adaptation is planned per §10 below.
+
+### The strongest *substantive* next task — `REMED-CONTENT-007` / `-008`
+
+Two **HIGH/P1 path-containment findings**, re-verified as still present in current source by the
+exit reconciliation:
+
+- `SongContentTypeReader.cpp` / `VideoContentTypeReader.cpp` each define a private
+  `ResolveRelativeFilePath()` with **no containment check**, fed by the `.xnb`'s own embedded
+  filename;
+- `ContentManager.cpp` has **zero** `PathContainment` calls while joining 8 manifest-supplied path
+  fields onto the content root raw.
+
+`include/CNA/Internal/PathContainment.hpp` already exists and the neighbouring `sourceFile` field is
+already hardened via `CnjSourceFile.hpp` — the fix is mechanical. These do **not** block the
+checkpoint (they fall outside its blocker classes — `REMEDIATION_EXIT.md` §2.1, §4.4) but they are
+the **highest-severity open items in the entire inventory**. This checkpoint does not claim security
+is clean.
+
+### `WEBGPU-115` — closed and re-verified in source
 
 ```
 before:  [ GFX-209 ] WebGPU wireframe: total=18176 interior=1089/1089   (byte-identical to Solid)
 after:   [ GFX-209 ] WebGPU wireframe: REJECTED, target total=0 interior=0/1089
 ```
 
-**The next session must re-derive, not inherit.** Run `git fetch --all --prune --tags` first: the
-previous reconciliation did not, and recorded "no Magnum or Wicked Engine branch exists anywhere"
-when both are on `origin` (`origin/claude/cna-magnum-gr-backend-211xsx` @ `9b903db8`,
-`origin/claude/wicked-engine-cna-backend-5ffqzd` @ `91d8587e`). The **19 logical pending lanes**
-figure is stale for the same reason — do not restate it. Take the signed checkpoint tag only if the
-freshly derived blocker inventory is empty.
+`SupportsCapability(WireFrame)` returns `false`; `RequireSupportedFillModeEXT` is the first statement
+of all five public 3D draw entry points, so nothing is queued, keyed, created, encoded or submitted.
+Line and point topologies are deliberately still accepted. `WebGpuWireFrameContract.*` **9/9**.
+
+### Corrected at exit reconciliation — three stale records
+
+1. **`REMED-GFX-172` is DONE** (fix `25bb5ecc`, closure `92546670`), not OPEN as the progress table
+   and the previous exit record both had it.
+2. **`REMED-GFX-137`/`-139` were never actually classified** despite a note claiming they were.
+   Both now classified, neither blocks.
+3. **`REMED-GFX-132`'s scope was too narrow** — the tool link failure reproduces under **bgfx** as
+   well as ASCII. Pre-existing, tool-only, blocker NO.
 
 ### Everything else is clear
 
@@ -44,7 +70,14 @@ freshly derived blocker inventory is empty.
   called clean.
 - `feature/gl` needs the **MetaGL → EasyGL → CNA** order first; EasyGL (`rvc` @ `b52f671`) and MetaGL
   (`feature/followup-audit` @ `d5bc155`) are **development-complete**, merely unmerged into their own
-  `develop` branches.
+  `develop` branches. Both heads re-verified unchanged after a fresh fetch in each repository
+  (16 and 5 commits ahead of their `develop`, 0 behind, neither merged). One correction: the MetaGL
+  redirect lives in an **uncommitted** working-tree edit to `easy-glrvc/CMakeLists.txt`, not in
+  committed history — reconcile it at step 7 of the inventory §6.2 sequence.
+- **Magnum and Wicked are audit-stacked lanes**, not develop-forked backends: both fork from
+  `feature/audit` @ `2338b44f7` and add only **13** and **10** commits of their own, so each needs a
+  22-commit rebase onto the checkpoint base before anything else. Neither is established as
+  integration-ready.
 
 ---
 
