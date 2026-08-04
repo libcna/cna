@@ -855,6 +855,21 @@ namespace CNA::Internal::Backends::WebGPU
             return nativeDrawIssueCount_;
         }
 
+        /**
+         * @brief Reports whether @p capability is genuinely available on this backend.
+         *
+         * WEBGPU-115: `GraphicsCapability::WireFrame` answers **false** here. wgpu-native exposes
+         * no polygon mode at all -- `WGPUPrimitiveState` has no field a wireframe fill could reach
+         * -- so the shared permissive default (which this backend used to inherit) was an
+         * affirmative false claim: it promised a mode the renderer then silently replaced with a
+         * solid fill. Everything else falls through to `IGraphicsBackend`'s own answer, including
+         * `MultiStreamVertexInput`, whose shared default is already false (REMED-GFX-201).
+         *
+         * @param capability The capability to query.
+         * @return True when this backend can genuinely honour @p capability.
+         */
+        [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
+
         void Clear(float r, float g, float b, float a) override;
         void Present() override;
         void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) override;
@@ -910,10 +925,13 @@ namespace CNA::Internal::Backends::WebGPU
                              int colorBlendFunc, int alphaBlendFunc,
                              const BlendWriteState& writeState) override;
         // WEBGPU-41/79: CullMode/FillMode -> WGPUPrimitiveState (storage-only; also baked into the
-        // pipeline object). FillMode::WireFrame is stored but has no rendering effect -- wgpu-native
-        // has no polygon-mode API at all (WEBGPU-115, a documented, accepted deviation, same as
-        // Vulkan's own comment references). DepthBias/SlopeScaleDepthBias ARE genuinely supported by
-        // WGPUDepthStencilState (unlike a dynamic vkCmdSetDepthBias-style override) and are baked in too.
+        // pipeline object). WEBGPU-115: FillMode::WireFrame is still STORED here and this call
+        // still succeeds -- selecting a RasterizerState is a state operation in XNA's lifecycle and
+        // a state setter cannot know whether a draw will follow, exactly as REMED-GFX-DECL-GUARD
+        // found for SetVertexDeclaration. The refusal happens at the first draw that would consume
+        // it (RequireSupportedFillModeEXT below). DepthBias/SlopeScaleDepthBias ARE genuinely
+        // supported by WGPUDepthStencilState (unlike a dynamic vkCmdSetDepthBias-style override)
+        // and are baked in too.
         void ApplyRasterizerState(int cullMode, int fillMode, bool scissorTestEnable,
                                   float depthBias = 0.0f, float slopeScaleDepthBias = 0.0f) override;
         // WEBGPU-82: per-slot SamplerState -> a genuine WGPUSampler cache (GetOrCreateSlotSampler()
@@ -1240,6 +1258,22 @@ namespace CNA::Internal::Backends::WebGPU
          * @return A stable lower-camel identifier owned by the backend.
          */
         [[nodiscard]] static const char* DrawFamilyName(DrawFamily family) noexcept;
+
+        /**
+         * @brief WEBGPU-115: refuses a draw that would consume the unsupported WireFrame fill.
+         *
+         * Called once at the top of each of this backend's five public 3D draw entry points, which
+         * is the narrowest boundary every one of the eleven Queue*Draw() command families passes
+         * through. That placement is what makes the refusal safe: it runs before any command is
+         * built or appended to @ref drawOrder_, before any pipeline key is computed, before any
+         * WGPURenderPipeline is created, before a render pass is encoded and before anything is
+         * submitted -- so a refused draw creates nothing, queues nothing, mutates no target and
+         * leaves no partial native object behind. The next Solid draw is unaffected.
+         *
+         * @param route The route's name (for example `ordinary-indexed`), for the diagnostic.
+         * @throws System::NotSupportedException When FillMode::WireFrame is the active fill mode.
+         */
+        void RequireSupportedFillModeEXT(const char* route) const;
 
         /** @brief Appends @p index of @p family to the ordered stream at its public call. */
         void RecordDrawOrder(DrawFamily family, std::size_t index);
@@ -1610,7 +1644,10 @@ namespace CNA::Internal::Backends::WebGPU
         { return static_cast<WGPUColorWriteMask>(colorWriteMask_ & 0xF); }
         [[nodiscard]] std::uint32_t CurrentSampleMask() const { return sampleMask_; }
         int cullMode_ = 0;                ///< XNA CullMode::None
-        bool fillModeWireframe_ = false;  ///< XNA FillMode::WireFrame -- stored only, see WEBGPU-115
+        /// XNA FillMode::WireFrame, as last selected through ApplyRasterizerState. WEBGPU-115: this
+        /// is the state the draw-time guard reads; no pipeline ever consumes it, because no draw
+        /// that would reach one gets past RequireSupportedFillModeEXT().
+        bool fillModeWireframe_ = false;
         bool scissorEnabled_ = false;
         float depthBias_ = 0.0f;
         float slopeScaleDepthBias_ = 0.0f;

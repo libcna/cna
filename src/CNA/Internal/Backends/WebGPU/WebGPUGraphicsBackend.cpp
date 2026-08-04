@@ -31,6 +31,9 @@
 #include <thread>
 #include <vector>
 
+#include "CNA/GraphicsCapability.hpp"
+#include "System/NotSupportedException.hpp"
+
 namespace CNA::Internal::Backends::WebGPU
 {
     namespace
@@ -6059,12 +6062,41 @@ struct VSOut {
         sampleMask_ = writeState.multiSampleMask;
     }
 
+    bool WebGPUGraphicsBackend::SupportsCapability(CNA::GraphicsCapability capability) const
+    {
+        // WEBGPU-115: the single entry this backend genuinely lacks. wgpu-native has no polygon
+        // mode -- WGPUPrimitiveState carries topology, strip index format, front face and cull
+        // mode, and nothing that selects a fill. Reporting the shared permissive default here
+        // promised a mode the renderer then silently replaced with a solid fill, which is the one
+        // shape a capability query exists to prevent.
+        if (capability == CNA::GraphicsCapability::WireFrame)
+            return false;
+        return IGraphicsBackend::SupportsCapability(capability);
+    }
+
+    void WebGPUGraphicsBackend::RequireSupportedFillModeEXT(const char* route) const
+    {
+        if (!fillModeWireframe_)
+            return;
+        throw System::NotSupportedException(
+            std::string("WebGPU: FillMode::WireFrame is not supported on this backend, so the ") +
+            route +
+            " draw is refused rather than rendered as a solid fill. wgpu-native exposes no polygon "
+            "mode, so a wireframe request cannot reach any native pipeline state. Query "
+            "GraphicsDevice::SupportsCapability(GraphicsCapability::WireFrame) -- it reports false "
+            "here -- and select FillMode::Solid instead.");
+    }
+
     void WebGPUGraphicsBackend::ApplyRasterizerState(int cullMode, int fillMode, bool scissorTestEnable,
                                                       float depthBias, float slopeScaleDepthBias)
     {
         // XNA CullMode: None=0, CullClockwiseFace=1, CullCounterClockwiseFace=2.
         // XNA FillMode: Solid=0, WireFrame=1.
         cullMode_ = cullMode;
+        // WEBGPU-115: stored, not judged. Selecting a RasterizerState is a state operation in
+        // XNA's lifecycle and this setter cannot know whether a draw will follow, or which route
+        // it would take -- the same reasoning REMED-GFX-DECL-GUARD applied to SetVertexDeclaration.
+        // RequireSupportedFillModeEXT() refuses at the first draw that would consume this.
         fillModeWireframe_ = (fillMode == 1);
         scissorEnabled_ = scissorTestEnable;
         depthBias_ = depthBias;
@@ -7239,6 +7271,7 @@ struct VSOut {
                                                         const Matrix& world, const Matrix& view, const Matrix& projection,
                                                         PrimitiveType primitive, int primitiveCount)
     {
+        RequireSupportedFillModeEXT("user-nonindexed");
         QueueColoredDraw(vb, nullptr, world, view, projection, primitive, primitiveCount);
     }
 
@@ -7247,16 +7280,20 @@ struct VSOut {
                                                                const Matrix& world, const Matrix& view, const Matrix& projection,
                                                                PrimitiveType primitive, int primitiveCount)
     {
+        RequireSupportedFillModeEXT("user-indexed");
         QueueColoredDraw(vb, &ib, world, view, projection, primitive, primitiveCount);
     }
 
     // REMED-GFX-DECL-GUARD lives at the top of each of the three routes below; see the anonymous
-    // namespace helper of the same name.
+    // namespace helper of the same name. WEBGPU-115's fill-mode guard sits beside it, on these
+    // three plus the two DrawColoredPrimitives routes above -- the five public 3D draw entry
+    // points, which together are the narrowest boundary every Queue*Draw() family passes through.
     void WebGPUGraphicsBackend::DrawPrimitivesEx(const IVertexBufferBackend& vb,
                                                   const Matrix& world, const Matrix& view, const Matrix& projection,
                                                   PrimitiveType primitive, int primitiveCount,
                                                   const GpuDrawParams& params)
     {
+        RequireSupportedFillModeEXT("ordinary-nonindexed");
         RequireFaithfulDeclarationEXT(vb, "ordinary-nonindexed");
         const auto& webgpuVb = static_cast<const WebGPUVertexBufferBackend&>(vb);
         // Matches VulkanGraphicsBackend's own dispatch precedence: alpha test wins over
@@ -7350,6 +7387,7 @@ struct VSOut {
                                                          PrimitiveType primitive, int primitiveCount,
                                                          const GpuDrawParams& params)
     {
+        RequireSupportedFillModeEXT("ordinary-indexed");
         RequireFaithfulDeclarationEXT(vb, "ordinary-indexed");
         const auto& webgpuVb = static_cast<const WebGPUVertexBufferBackend&>(vb);
         const bool needsAlphaTest = params.alphaTest[2] < 0.0f || params.alphaTest[3] < 0.0f;
@@ -7420,6 +7458,10 @@ struct VSOut {
         PrimitiveType primitive, int primitiveCount, int instanceCount,
         const GpuDrawParams& params)
     {
+        // WEBGPU-115: before the no-instance-stream fallback below, so a refused instanced draw
+        // names its own route rather than re-entering DrawIndexedPrimitivesEx and reporting the
+        // ordinary one.
+        RequireSupportedFillModeEXT("instanced");
         // REMED-GFX-202: the per-instance stream is the lowest-slot entry of the shared
         // GpuVertexStreamBinding array whose InstanceFrequency is greater than zero.
         const auto* instanceStream = FirstInstanceStream(params);

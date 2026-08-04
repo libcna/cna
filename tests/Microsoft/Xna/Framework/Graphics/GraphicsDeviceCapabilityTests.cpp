@@ -124,20 +124,26 @@ TEST(GraphicsDeviceCapabilityTest, GetMaxTextureDimensionReturnsSanePositiveValu
 //
 //   Software, Vulkan, bgfx, SDL_GPU, D3D9, D3D11  reports true, renders a real wireframe
 //   EasyGL                                        reports FALSE, renders a real wireframe anyway
-//   WebGPU                                        reports true, renders SOLID geometry
+//   WebGPU                                        reports FALSE, refuses the draw (WEBGPU-115)
 //   Headless                                      reports true, rasterizes nothing at all
 //   D3D12                                         maps FILL_WIREFRAME through the shared
 //                                                 D3DCommon table; no runtime in this environment
 //
-// So there is no universal answer in either direction, and -- decisively -- there is no backend
-// that REJECTS a WireFrame request. A "deterministic rejection" arm would have an empty
-// registration set here, and manufacturing one would need a production change this task must not
-// make. What replaces the old assertion is therefore three honest shapes:
+// So there is no universal answer in either direction. What replaces the old assertion is three
+// honest shapes:
 //
 //   * a POSITIVE PIXEL ORACLE where wireframe genuinely renders;
-//   * a DOCUMENTED-DEVIATION oracle where it silently renders solid, asserting that the deviation
-//     is real and visible, so the arm fails the moment the deviation is fixed;
+//   * a NEGATIVE ORACLE where the backend reports the gap and refuses the draw, proving the
+//     refusal mutated nothing and that Solid still works afterwards;
 //   * an HONEST SKIP where the backend has no pixel route to measure at all.
+//
+// WEBGPU-115 FILLED THE REJECTION ARM. When REMED-GFX-209 measured this contract the arm had an
+// EMPTY registration set -- no backend refused, so the absence was recorded rather than a rejection
+// manufactured. WebGPU used to report true, accept the request, build and natively submit a
+// distinct pipeline for it, and return a frame byte-identical to Solid. It now reports false and
+// throws System::NotSupportedException before anything is queued. The full cardinality and route
+// matrix for that boundary lives in WebGpuWireFrameContractTests.cpp; this file keeps the
+// per-backend shape of the contract.
 //
 // EASYGL'S REPORT CONTRADICTS ITS OWN RENDERING. `EasyGLGraphicsBackend::SupportsCapability`
 // returns false for WireFrame, but `ApplyRasterizerState` sets `wireframe_` and every triangle
@@ -167,18 +173,25 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameCapabilityReportIsThisBackendsOwn)
     const bool reported = gd.SupportsCapability(GraphicsCapability::WireFrame);
 
 #if defined(CNA_BACKEND_EASYGL)
-    // EasyGL is the only backend that answers false, and it is the ONE backend whose answer is
-    // known to be wrong: the pixel oracle below measures a correct wireframe here. Asserting the
-    // current value keeps the baseline truthful and makes this arm fail -- deliberately -- the day
-    // REMED-GFX-219 corrects the report.
+    // EasyGL answers false, and it is the ONE backend whose answer is known to be wrong: the pixel
+    // oracle below measures a correct wireframe here. Asserting the current value keeps the
+    // baseline truthful and makes this arm fail -- deliberately -- the day REMED-GFX-219 corrects
+    // the report. This is the exact inverse of WEBGPU-115 and must not be bundled with it: EasyGL
+    // UNDER-reports a capability it has (a caller that gates on the query loses a working feature),
+    // WebGPU used to OVER-report one it does not (a caller got silently wrong geometry).
     EXPECT_FALSE(reported)
         << "EasyGL now reports WireFrame support. If REMED-GFX-219 landed, move this arm to the "
            "true side and delete the contradiction note above";
+#elif defined(CNA_BACKEND_WEBGPU)
+    // WEBGPU-115: asserted, not inherited. wgpu-native has no polygon mode at all, so
+    // WebGPUGraphicsBackend::SupportsCapability answers false and the draw-time guard refuses.
+    EXPECT_FALSE(reported)
+        << "WebGPU claims WireFrame support again -- WEBGPU-115's capability override is gone, and "
+           "the renderer has no polygon mode to back the claim with";
 #else
     // Every other backend in this file answers true, either because it renders a real wireframe
     // (Software, Vulkan, bgfx, SDL_GPU, D3D9, D3D11, D3D12) or because it inherits
-    // IGraphicsBackend's default (WebGPU, whose renderer ignores the request -- WEBGPU-115 -- and
-    // Headless, which rasterizes nothing at all).
+    // IGraphicsBackend's default (Headless, which rasterizes nothing at all).
     EXPECT_TRUE(reported);
 #endif
 }
@@ -191,9 +204,14 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameCapabilityReportIsThisBackendsOwn)
 
 TEST(GraphicsDeviceCapabilityTest, WireFrameLightsEveryEdgeAndLeavesTheInteriorUnfilled)
 {
-#ifndef CNA_WIREFRAME_MEASURED
+#if !defined(CNA_WIREFRAME_MEASURED)
     GTEST_SKIP() << kBackendName
                  << " has no runtime in this environment; the oracle compiles but cannot measure";
+#elif !defined(CNA_WIREFRAME_RENDERS_EDGES)
+    // The rejecting backend gets its own arm below; asserting the positive contract here would
+    // only duplicate that arm's failure mode with a worse diagnostic.
+    GTEST_SKIP() << kBackendName
+                 << " does not rasterize wireframe; see the deterministic-rejection arm";
 #else
     GraphicsDevice gd;
     const Result solid = RenderTriangle(gd, FillMode::Solid);
@@ -205,9 +223,7 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameLightsEveryEdgeAndLeavesTheInteriorU
     ASSERT_TRUE(wire.rendered)
         << kBackendName << " refused a WireFrame draw: " << wire.rejection;
 
-#ifdef CNA_WIREFRAME_RENDERS_EDGES
-    // 1. THE INTERIOR IS EMPTY. This is what separates a wireframe from a solid fill, and it is
-    //    the assertion WebGPU's silent solid fill fails.
+    // 1. THE INTERIOR IS EMPTY. This is what separates a wireframe from a solid fill.
     EXPECT_EQ(0, wire.frame.LitIn(kInterior))
         << kBackendName << " filled " << wire.frame.LitIn(kInterior)
         << " interior pixels under FillMode::WireFrame -- that is a solid fill, not a wireframe ("
@@ -242,12 +258,6 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameLightsEveryEdgeAndLeavesTheInteriorU
     //    a third colour somewhere in the frame.
     EXPECT_TRUE(wire.frame.EveryLitPixelIsInk())
         << kBackendName << " WireFrame produced a lit pixel that is neither ink nor clear";
-#else
-    // WebGPU: the documented deviation gets its own arm below, and asserting the positive contract
-    // here would only duplicate its failure.
-    GTEST_SKIP() << kBackendName
-                 << " does not rasterize wireframe; see the documented-deviation arm";
-#endif
 #endif
 }
 
@@ -295,8 +305,16 @@ TEST(GraphicsDeviceCapabilityTest, SolidRendersExactlyAfterAWireFrameDraw)
     GraphicsDevice gd;
     const Result wire = RenderTriangle(gd, FillMode::WireFrame);
     PrintReading("wireframe-before-recovery", wire);
+#ifdef CNA_WIREFRAME_REJECTED
+    // A refusal is this backend's correct answer (WEBGPU-115) -- what must still hold is that it
+    // left nothing behind for the next draw to trip over.
+    ASSERT_FALSE(wire.rendered)
+        << kBackendName << " accepted a WireFrame draw again -- " << wire.frame.Describe();
+    ExpectClearOnly(wire.frame, "the refused WireFrame draw");
+#else
     ASSERT_TRUE(wire.rendered)
         << kBackendName << " refused a WireFrame draw: " << wire.rejection;
+#endif
 
     const Result recovered = RenderTriangle(gd, FillMode::Solid);
     PrintReading("solid-recovery", recovered);
@@ -305,19 +323,17 @@ TEST(GraphicsDeviceCapabilityTest, SolidRendersExactlyAfterAWireFrameDraw)
 }
 
 // ---------------------------------------------------------------------------
-// DOCUMENTED DEVIATION -- WebGPU accepts FillMode::WireFrame and renders solid geometry.
+// NEGATIVE CONTRACT -- the backend reports the gap and refuses the draw rather than substituting a
+// different rendering mode. WEBGPU-115.
 // ---------------------------------------------------------------------------
-TEST(GraphicsDeviceCapabilityTest, WireFrameSilentlyRendersSolidGeometryOnThisBackend)
+TEST(GraphicsDeviceCapabilityTest, WireFrameIsRefusedDeterministicallyOnThisBackend)
 {
-#if !defined(CNA_WIREFRAME_MEASURED) || defined(CNA_WIREFRAME_RENDERS_EDGES)
-    GTEST_SKIP() << kBackendName << " is not the silently-solid backend";
+#ifndef CNA_WIREFRAME_REJECTED
+    GTEST_SKIP() << kBackendName << " is not in the WireFrame-rejecting set";
 #else
-    // WEBGPU-115: wgpu-native has no polygon-mode API, so `ApplyRasterizerState` stores
-    // `fillModeWireframe_` and no pipeline ever reads it. This is an accepted, already recorded
-    // deviation -- it is NOT a new finding. What must not happen is that a test quietly treats
-    // solid output as a satisfied wireframe request, so the deviation is asserted here at full
-    // strength: the WireFrame frame must be BYTE-IDENTICAL to the Solid one. The day wgpu-native
-    // grows a polygon mode, this arm fails and the record has to be corrected.
+    // The whole point of the boundary is that the two frames are NOT the same picture and NOT both
+    // produced: Solid renders exactly, WireFrame throws, and the target the refused draw was aimed
+    // at still holds nothing but the clear colour.
     GraphicsDevice gd;
     const Result solid = RenderTriangle(gd, FillMode::Solid);
     PrintReading("solid", solid);
@@ -325,16 +341,28 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameSilentlyRendersSolidGeometryOnThisBa
     PrintReading("wireframe", wire);
 
     ExpectSolidTriangle(solid);
-    ASSERT_TRUE(wire.rendered)
-        << kBackendName << " refused a WireFrame draw: " << wire.rejection;
-    EXPECT_EQ(kInteriorArea, wire.frame.LitIn(kInterior))
-        << kBackendName << " no longer fills the interior under FillMode::WireFrame -- "
-        << wire.frame.Describe();
-    EXPECT_TRUE(wire.frame.pixels == solid.frame.pixels)
-        << kBackendName
-        << " WireFrame output now differs from Solid. If WEBGPU-115 was implemented, move this "
-           "backend into CNA_WIREFRAME_RENDERS_EDGES -- " << wire.frame.Describe() << " vs "
-        << solid.frame.Describe();
+    ASSERT_FALSE(wire.rendered)
+        << kBackendName << " accepted a WireFrame draw and produced " << wire.frame.Describe()
+        << ". If real wireframe rendering landed, move this backend into "
+           "CNA_WIREFRAME_RENDERS_EDGES";
+    // The message has to name the thing that was refused -- a bare "not supported" cannot be acted
+    // on, and a message that names something else means a different guard fired.
+    EXPECT_NE(std::string::npos, wire.rejection.find("WireFrame"))
+        << kBackendName << " refused the draw with a message that does not name FillMode::"
+        << "WireFrame: \"" << wire.rejection << '"';
+    EXPECT_NE(std::string::npos, wire.rejection.find("SupportsCapability"))
+        << kBackendName << " refused the draw without pointing at the capability query: \""
+        << wire.rejection << '"';
+    ExpectClearOnly(wire.frame, "the refused WireFrame draw");
+    EXPECT_FALSE(wire.frame.pixels == solid.frame.pixels)
+        << kBackendName << " produced the Solid picture for a refused WireFrame draw";
+
+    // The device survives the refusal: a second Solid draw renders exactly, on a new target.
+    const Result again = RenderTriangle(gd, FillMode::Solid);
+    PrintReading("solid-after-refusal", again);
+    ExpectSolidTriangle(again);
+    EXPECT_TRUE(again.frame.pixels == solid.frame.pixels)
+        << kBackendName << " did not reproduce its own Solid frame after a refused WireFrame draw";
 #endif
 }
 

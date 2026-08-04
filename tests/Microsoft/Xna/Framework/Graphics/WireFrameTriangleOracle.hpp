@@ -63,6 +63,15 @@
 #define CNA_WIREFRAME_RENDERS_EDGES 1
 #endif
 
+// WEBGPU-115: the backends that answer a WireFrame request with a deterministic refusal instead of
+// pixels. This arm used to have an empty registration set -- no backend rejected, so REMED-GFX-209
+// recorded the absence rather than manufacturing one. WebGPU now fills it, and it is the only
+// member: EasyGL renders a genuine wireframe despite reporting false (REMED-GFX-219, deferred and
+// deliberately untouched here), and every other measured backend reports true and renders one.
+#if defined(CNA_WIREFRAME_MEASURED) && defined(CNA_BACKEND_WEBGPU)
+#define CNA_WIREFRAME_REJECTED 1
+#endif
+
 #ifdef CNA_WIREFRAME_PIXEL_ORACLE
 
 namespace CnaTest::WireFrameOracle
@@ -367,8 +376,31 @@ namespace CnaTest::WireFrameOracle
         {
             out.rejection = e.what();
             device.SetRenderTarget(nullptr);
+            // A refused draw still owes an answer about the target: "the draw was rejected" and
+            // "the draw was rejected AND scribbled on the target anyway" are different outcomes,
+            // and only reading the pixels back separates them. Wrapped so a readback that itself
+            // fails cannot overwrite the rejection this run exists to report.
+            try
+            {
+                ReadTarget(target, out.frame);
+            }
+            catch (const std::exception&)
+            {
+                out.frame = ClearFrame();
+            }
         }
         return out;
+    }
+
+    /// Asserts @p frame holds nothing but the clear colour -- the picture a target must still show
+    /// after a refused draw.
+    inline void ExpectClearOnly(const Frame& frame, const char* what)
+    {
+        EXPECT_EQ(0, frame.LitTotal())
+            << kBackendName << ' ' << what << " mutated the target -- " << frame.Describe();
+        EXPECT_EQ(0, frame.LitIn(kInterior))
+            << kBackendName << ' ' << what << " filled the triangle interior -- "
+            << frame.Describe();
     }
 
     /// Every reading is PRINTED before it is judged, on every backend including the unmeasured
@@ -377,7 +409,8 @@ namespace CnaTest::WireFrameOracle
     {
         std::cout << "[ GFX-209  ] " << kBackendName << ' ' << label << ": ";
         if (!r.rendered)
-            std::cout << "REJECTED -- \"" << r.rejection << '"' << std::endl;
+            std::cout << "REJECTED, target " << r.frame.Describe() << " -- \"" << r.rejection << '"'
+                      << std::endl;
         else
             std::cout << r.frame.Describe() << std::endl;
     }

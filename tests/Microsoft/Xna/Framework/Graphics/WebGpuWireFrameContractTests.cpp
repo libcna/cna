@@ -18,11 +18,28 @@
 //     target                         total=18176 interior=1089/1089 AB=298 BC=310 CA=329
 //     the same frame under Solid     total=18176 interior=1089/1089 AB=298 BC=310 CA=329
 //
-// The two frames are BYTE-IDENTICAL. So the runtime made an affirmative false claim through the
+// The two frames were BYTE-IDENTICAL. So the runtime made an affirmative false claim through the
 // public capability query, accepted the request, built and natively submitted a distinct pipeline
 // for it, and returned solid geometry -- with no exception, no capability rejection and no
-// diagnostic anywhere on the path. That is the defect, and every assertion below states it as the
-// CURRENT behaviour so the record is a measurement and not a description.
+// diagnostic anywhere on the path. The commit that added this file asserts exactly those numbers;
+// it is the A/B evidence, and `git show` on it is where the old behaviour lives.
+//
+// THE CONTRACT THIS FILE NOW MEASURES. A backend must not report a capability as supported while
+// silently substituting a different rendering mode, so:
+//
+//     SupportsCapability(WireFrame) == false        asserted by the backend, not inherited
+//     a RasterizerState carrying WireFrame          still a legal state operation
+//     the first draw that would consume it          throws System::NotSupportedException
+//     queued draw commands                          +0
+//     pipeline caches                               +0
+//     native draw issues                            +0
+//     queue submits attributable to the draw        +0
+//     the target                                    unchanged -- clear colour only
+//     the next Solid draw                           renders exactly
+//
+// Rejection is at DRAW time, not at ApplyRasterizerState: a state setter cannot know whether a
+// draw will follow or which route it would take, which is the same reasoning REMED-GFX-DECL-GUARD
+// applied to SetVertexDeclaration.
 //
 // The geometry is REMED-GFX-209's asymmetric triangle, shared through WireFrameTriangleOracle.hpp
 // rather than copied, so these readings are directly comparable with the per-backend contract
@@ -40,6 +57,7 @@
 #include <gtest/gtest.h>
 
 #include "CNA/GraphicsCapability.hpp"
+#include "System/NotSupportedException.hpp"
 #include "CNA/Internal/Backends/WebGPU/WebGPUGraphicsBackend.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 
@@ -193,6 +211,19 @@ namespace
         return run;
     }
 
+    /// The refusal's own contract: a catchable System::NotSupportedException whose message names
+    /// what was refused and where to ask about it. A guard that fires with someone else's message
+    /// is a different guard.
+    void ExpectWireFrameRejection(const std::string& message)
+    {
+        EXPECT_NE(std::string::npos, message.find("WireFrame"))
+            << "the refusal does not name FillMode::WireFrame: \"" << message << '"';
+        EXPECT_NE(std::string::npos, message.find("WebGPU"))
+            << "the refusal does not name the backend: \"" << message << '"';
+        EXPECT_NE(std::string::npos, message.find("SupportsCapability"))
+            << "the refusal does not point at the capability query: \"" << message << '"';
+    }
+
     void PrintRun(const char* label, const RouteRun& run)
     {
         std::cout << "[WEBGPU-115] " << label << ": "
@@ -219,12 +250,12 @@ TEST(WebGpuWireFrameContract, CapabilityQueryAnswersForWireFrame)
     std::cout << "[WEBGPU-115] SupportsCapability(WireFrame) == "
               << (reported ? "true" : "false") << std::endl;
 
-    // PRE-FIX: WebGPUGraphicsBackend does not override SupportsCapability at all, so this is
-    // IGraphicsBackend's permissive default -- a `true` that is inherited, never asserted, and
-    // contradicted by every pixel the renderer produces.
-    EXPECT_TRUE(reported)
-        << "WebGPU no longer claims WireFrame support. If WEBGPU-115's capability override landed, "
-           "this arm and the two below must move to the rejection contract";
+    // WEBGPU-115: false, and asserted by WebGPUGraphicsBackend::SupportsCapability rather than
+    // inherited from IGraphicsBackend's permissive default. The renderer has no polygon mode to
+    // back a `true` with, and the query is the public contract for that fact.
+    EXPECT_FALSE(reported)
+        << "WebGPU claims WireFrame support again -- the capability override is gone, and the "
+           "draws below will silently render solid geometry instead of refusing";
 
     // The surrounding capability answers must not move with it. MultiStreamVertexInput is the one
     // entry whose shared default is false (REMED-GFX-201); everything else is genuinely supported.
@@ -241,51 +272,119 @@ TEST(WebGpuWireFrameContract, CapabilityQueryAnswersForWireFrame)
 // 2. THE FULL PATH, counted. Capability -> RasterizerState -> public draw -> queued command ->
 //    pipeline key -> native pipeline -> render pass -> queue submit.
 // ---------------------------------------------------------------------------
-TEST(WebGpuWireFrameContract, WireFrameDrawIsQueuedPipelinedAndNativelySubmitted)
+TEST(WebGpuWireFrameContract, WireFrameDrawIsRefusedBeforeAnythingIsQueued)
 {
     GraphicsDevice gd;
     const RouteRun run = RunOrdinaryRoute(gd, FillMode::WireFrame);
     PrintRun("ordinary-nonindexed wireframe", run);
 
-    // PRE-FIX: accepted at every stage. Not one of these is zero.
-    ASSERT_TRUE(run.accepted) << "WebGPU refused a WireFrame draw: " << run.rejection;
-    EXPECT_EQ(1u, run.QueuedByDraw()) << run.afterDraw.Describe();
-    EXPECT_EQ(1u, run.ColoredPipelinesBuilt())
-        << "the `wireframe` bit is folded into Make3DPipelineKey, so the request builds its own "
-           "WGPURenderPipeline -- " << run.afterFlush.Describe();
-    EXPECT_EQ(1u, run.NativeDraws()) << run.afterFlush.Describe();
-    EXPECT_EQ(1u, run.Passes()) << run.afterFlush.Describe();
-    EXPECT_EQ(1u, run.Submits()) << run.afterFlush.Describe();
-    // The native layer never complains, because nothing invalid was ever asked of it: the request
-    // simply evaporated between the pipeline key and WGPUPrimitiveState.
-    EXPECT_EQ(0u, run.UncapturedErrors()) << run.afterFlush.Describe();
+    ASSERT_FALSE(run.accepted)
+        << "WebGPU accepted a WireFrame draw again and produced " << run.frame.Describe();
+    ExpectWireFrameRejection(run.rejection);
 
-    // And the target was mutated -- fully, as a solid triangle.
-    EXPECT_EQ(kInteriorArea, run.frame.LitIn(kInterior)) << run.frame.Describe();
+    // Nothing downstream of the guard ran. Each of these was 1 before the fix.
+    EXPECT_EQ(0u, run.QueuedByDraw())
+        << "a refused draw appended a command to drawOrder_ -- " << run.afterDraw.Describe();
+    EXPECT_EQ(0u, run.ColoredPipelinesBuilt())
+        << "a refused draw grew the Colored3D pipeline cache -- " << run.afterFlush.Describe();
+    EXPECT_EQ(0u, run.NativeDraws())
+        << "a refused draw reached the render-pass encoder -- " << run.afterFlush.Describe();
+    EXPECT_EQ(0u, run.UncapturedErrors())
+        << "the refusal produced native validation errors -- " << run.afterFlush.Describe();
+
+    // No extra work either: the guard adds no retry, no dummy draw, no second frame. The one
+    // remaining pass and submit belong to the ordered Clear this fixture issued before the draw,
+    // which the refusal must neither cancel nor duplicate.
+    EXPECT_LE(run.Passes(), 1u) << run.afterFlush.Describe();
+    EXPECT_LE(run.Submits(), 1u) << run.afterFlush.Describe();
+
+    // The target the refused draw was aimed at still holds the clear colour and nothing else.
+    ExpectClearOnly(run.frame, "the refused WireFrame draw");
 }
 
 // ---------------------------------------------------------------------------
 // 3. THE OUTPUT. The single measurement that makes this a silent wrong result rather than a
 //    missing feature: WireFrame and Solid are the same picture, byte for byte.
 // ---------------------------------------------------------------------------
-TEST(WebGpuWireFrameContract, WireFrameOutputIsByteIdenticalToSolid)
+TEST(WebGpuWireFrameContract, SolidRendersExactlyAfterARefusedWireFrameDraw)
 {
     GraphicsDevice gd;
     const RouteRun solid = RunOrdinaryRoute(gd, FillMode::Solid);
     PrintRun("ordinary-nonindexed solid", solid);
     const RouteRun wire = RunOrdinaryRoute(gd, FillMode::WireFrame);
     PrintRun("ordinary-nonindexed wireframe", wire);
+    const RouteRun recovered = RunOrdinaryRoute(gd, FillMode::Solid);
+    PrintRun("ordinary-nonindexed solid-recovery", recovered);
 
     ASSERT_TRUE(solid.accepted) << "WebGPU refused an ordinary Solid draw: " << solid.rejection;
-    ASSERT_TRUE(wire.accepted) << "WebGPU refused a WireFrame draw: " << wire.rejection;
+    ASSERT_FALSE(wire.accepted) << "WebGPU accepted a WireFrame draw -- " << wire.frame.Describe();
+    ASSERT_TRUE(recovered.accepted)
+        << "WebGPU refused a Solid draw after a refused WireFrame one: " << recovered.rejection;
 
-    // PRE-FIX: identical. A wireframe would empty the interior and light only the three edges.
-    EXPECT_EQ(kInteriorArea, wire.frame.LitIn(kInterior))
-        << "WebGPU no longer fills the interior under FillMode::WireFrame -- "
-        << wire.frame.Describe();
-    EXPECT_TRUE(wire.frame.pixels == solid.frame.pixels)
-        << "WireFrame output now differs from Solid -- " << wire.frame.Describe() << " vs "
-        << solid.frame.Describe();
+    // The refusal is not the Solid picture, and the Solid picture is unchanged by it.
+    ExpectClearOnly(wire.frame, "the refused WireFrame draw");
+    EXPECT_TRUE(recovered.frame.pixels == solid.frame.pixels)
+        << "Solid output changed across a refused WireFrame draw -- " << recovered.frame.Describe()
+        << " vs " << solid.frame.Describe();
+
+    // And recovery costs exactly one ordinary draw: no extra frame, Present, wait, retry or dummy.
+    EXPECT_EQ(1u, recovered.QueuedByDraw()) << recovered.afterDraw.Describe();
+    EXPECT_EQ(1u, recovered.NativeDraws()) << recovered.afterFlush.Describe();
+    EXPECT_EQ(1u, recovered.Submits()) << recovered.afterFlush.Describe();
+    // The recovery reuses the pipeline the first Solid draw built -- the refused draw left no
+    // WireFrame variant behind for it to collide with, and built none of its own.
+    EXPECT_EQ(0u, recovered.ColoredPipelinesBuilt()) << recovered.afterFlush.Describe();
+    EXPECT_EQ(0u, recovered.UncapturedErrors()) << recovered.afterFlush.Describe();
+}
+
+// ---------------------------------------------------------------------------
+// 4. THE EXCEPTION TYPE. "Deterministic" means a caller can catch it by name and fall back, so the
+//    type is part of the contract, not just the fact that something was thrown.
+// ---------------------------------------------------------------------------
+TEST(WebGpuWireFrameContract, RefusalIsACatchableNotSupportedException)
+{
+    GraphicsDevice gd;
+    RenderTarget2D target(gd, kSize, kSize, false, SurfaceFormat::Color,
+                          DepthFormat::None, 0, RenderTargetUsage::PreserveContents);
+    const std::array<VertexPositionColor, 3> verts = TriangleVertices();
+    VertexBuffer vb(gd, PositionColorDeclaration(), static_cast<int>(verts.size()),
+                    BufferUsage::None);
+    vb.SetData(verts.data(), static_cast<int>(verts.size()));
+
+    ApplyFixtureState(gd, FillMode::WireFrame);
+    BasicEffect effect(gd);
+    ApplyFixtureEffect(effect);
+
+    gd.SetRenderTarget(&target);
+    gd.setScissorRectangleProperty(Rectangle(0, 0, kSize, kSize));
+    gd.Clear(Color(kClear[0], kClear[1], kClear[2], kClear[3]));
+    effect.Apply();
+    gd.SetVertexBuffer(&vb);
+
+    EXPECT_THROW(gd.DrawPrimitives(PrimitiveType::TriangleList, 0, 1),
+                 System::NotSupportedException);
+
+    // Repeating the refused draw is idempotent -- the guard holds no state of its own, so the
+    // second call fails exactly like the first rather than leaking through or aborting.
+    EXPECT_THROW(gd.DrawPrimitives(PrimitiveType::TriangleList, 0, 1),
+                 System::NotSupportedException);
+
+    // Selecting Solid on the same device, without recreating anything, is all recovery takes.
+    ApplyFixtureState(gd, FillMode::Solid);
+    effect.Apply();
+    EXPECT_NO_THROW(gd.DrawPrimitives(PrimitiveType::TriangleList, 0, 1));
+
+    gd.SetVertexBuffer(nullptr);
+    gd.SetRenderTarget(nullptr);
+
+    Frame frame;
+    ReadTarget(target, frame);
+    std::cout << "[WEBGPU-115] refuse, refuse, then Solid on one target: " << frame.Describe()
+              << std::endl;
+    EXPECT_EQ(kInteriorArea, frame.LitIn(kInterior))
+        << "the Solid draw after two refusals did not fill the interior -- " << frame.Describe();
+    EXPECT_TRUE(frame.EveryLitPixelIsInk())
+        << "a refused draw left a pixel behind -- " << frame.Describe();
 }
 
 #endif  // CNA_BACKEND_WEBGPU

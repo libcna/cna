@@ -23,9 +23,11 @@
 // Check F -- Viewport smaller than the backbuffer confines a full-clip-space quad to that
 //   sub-rectangle: a pixel inside the viewport shows the quad colour, a pixel outside it (but
 //   still inside the backbuffer) shows the untouched clear colour.
-// Check G -- FillMode.WireFrame does not crash or misbehave (WEBGPU-115: wgpu-native has no
-//   polygon-mode API at all, a documented, accepted deviation -- this is a smoke check only, not
-//   a real wireframe-rendering check).
+// Check G -- FillMode.WireFrame is REFUSED deterministically (WEBGPU-115). wgpu-native has no
+//   polygon-mode API at all, so the backend reports the capability as unsupported and throws
+//   System::NotSupportedException at the draw rather than silently rendering a solid fill. The
+//   check asserts the throw, that the backbuffer the refused draw was aimed at still holds the
+//   clear colour, and that an ordinary Solid draw works immediately afterwards.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
@@ -46,9 +48,13 @@
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 
+#include "CNA/GraphicsCapability.hpp"
+#include "System/NotSupportedException.hpp"
+
 #include <cstdio>
 #include <cstdlib>
 #include <memory>
+#include <string>
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -62,6 +68,12 @@ namespace
         return std::abs(a.getRProperty() - b.getRProperty()) <= tol &&
                std::abs(a.getGProperty() - b.getGProperty()) <= tol &&
                std::abs(a.getBProperty() - b.getBProperty()) <= tol;
+    }
+
+    std::string ColorStr(const Color& c)
+    {
+        return '(' + std::to_string(c.getRProperty()) + ',' + std::to_string(c.getGProperty()) +
+               ',' + std::to_string(c.getBProperty()) + ',' + std::to_string(c.getAProperty()) + ')';
     }
 
     Color readPixel(GraphicsDevice& dev, int x, int y)
@@ -138,7 +150,7 @@ class WebGpuGraphicsStateTest : public Game
     std::unique_ptr<GraphicsDeviceManager> gdm_;
     bool done_ = false;
     int passCount_ = 0;
-    static constexpr int kTotalChecks = 10;
+    static constexpr int kTotalChecks = 14;
     int result_ = 1;
 
     void check(bool ok, const char* label)
@@ -281,17 +293,53 @@ protected:
             dev.setRasterizerStateProperty(RasterizerState::CullNone);
         }
 
-        // ---- Check G: FillMode.WireFrame does not crash (WEBGPU-115 documented deviation). ----
+        // ---- Check G: FillMode.WireFrame is refused deterministically (WEBGPU-115). ----
+        // The backbuffer route, and the typed DrawUserPrimitives route with it -- the render-target
+        // routes and the full cardinality live in the CnaTests WebGpuWireFrameContract suite.
         {
+            check(!dev.SupportsCapability(CNA::GraphicsCapability::WireFrame),
+                  "WEBGPU-115: SupportsCapability(WireFrame) reports false");
+
             RasterizerState rs;
+            rs.setCullModeProperty(CullMode::None);
             rs.setFillModeProperty(FillMode::WireFrame);
-            dev.setRasterizerStateProperty(rs);
+            dev.setRasterizerStateProperty(rs);   // a state operation, and still legal
+            dev.Clear(Color::Black);
+
+            bool refused = false;
+            std::string message;
+            try
+            {
+                DrawWindingQuad(dev, Color::White);
+            }
+            catch (const System::NotSupportedException& e)
+            {
+                refused = true;
+                message = e.what();
+            }
+            check(refused,
+                  "WEBGPU-115: a WireFrame draw throws System::NotSupportedException instead of "
+                  "silently rendering a solid fill");
+            check(message.find("WireFrame") != std::string::npos,
+                  ("WEBGPU-115: the refusal names what was refused: \"" + message + '"').c_str());
+            // The refused draw wrote nothing: the backbuffer still holds the Clear that preceded it.
+            const Color afterRefusal = readPixel(dev, kSize / 2, kSize / 2);
+            check(colorNear(afterRefusal, Color::Black),
+                  ("WEBGPU-115: the refused WireFrame draw left the backbuffer untouched: got=" +
+                   ColorStr(afterRefusal)).c_str());
+
+            // And the device is immediately usable again through the identical route.
+            RasterizerState solid;
+            solid.setCullModeProperty(CullMode::None);
+            solid.setFillModeProperty(FillMode::Solid);
+            dev.setRasterizerStateProperty(solid);
             dev.Clear(Color::Black);
             DrawWindingQuad(dev, Color::White);
-            readPixel(dev, kSize / 2, kSize / 2); // must not throw/crash -- pixel value not asserted
-            check(true, "FillMode.WireFrame does not crash (real wireframe rendering not "
-                        "implemented -- WEBGPU-115 documented deviation, wgpu-native has no "
-                        "polygon-mode API)");
+            const Color recovered = readPixel(dev, kSize / 2, kSize / 2);
+            check(colorNear(recovered, Color::White),
+                  ("WEBGPU-115: Solid renders exactly after a refused WireFrame draw: got=" +
+                   ColorStr(recovered)).c_str());
+
             dev.setRasterizerStateProperty(RasterizerState::CullNone);
         }
 
