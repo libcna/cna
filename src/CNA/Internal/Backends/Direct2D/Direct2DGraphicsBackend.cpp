@@ -1293,9 +1293,17 @@ namespace CNA::Internal::Backends::Direct2D
         }
         catch (...)
         {
-            // EndDrawing already handles real device loss atomically. For ordinary failures the
-            // caller receives the error and the chain remains dirty, so it cannot be mistaken for
-            // a completed generated chain on the next use.
+            // EndDrawing already handles real device loss atomically (including restoring
+            // d2dContext_'s target via RecreateDeviceResourcesForRecovery), but an ordinary
+            // (non-device-loss) EndDraw failure leaves d2dContext_ still pointed at whichever
+            // destination mip bitmap was current when the loop threw. Restore the logical
+            // binding the same way the success path below does, so the caller's next Clear/Draw
+            // lands on the real target instead of a helper mip bitmap. Safe to repeat after a
+            // device-loss recovery already restored it: same value, redundant SetTarget call.
+            d2dContext_->SetTarget(activeRenderTarget_ ? activeRenderTarget_->bitmap_.Get()
+                                                        : logicalTarget_.Get());
+            // The chain remains dirty, so it cannot be mistaken for a completed generated chain
+            // on the next use; the caller receives the error.
             throw;
         }
 
