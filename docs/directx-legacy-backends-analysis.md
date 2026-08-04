@@ -132,6 +132,71 @@ So a fixed-function DX7 backend could plausibly render a large fraction of *stoc
 content, while being fundamentally unable to run a single line of user HLSL. That is the honest shape
 of "a piece of CNA won't work."
 
+### 3.1 How much *3D* does each real Direct3D version actually offer? (incl. DX1/2)
+
+§3 answered "2D vs 3D vs effects." This subsection zooms into the **3D** column specifically: how much
+of CNA's 3D/`Effect` contract (§2's second list) each version's *real* Direct3D can back. The amount
+does **not** grow smoothly — it steps at three hard boundaries: the `DrawPrimitive` API (DX5),
+hardware T&L + cube maps + skinning (DX7), and programmable shaders (DX8).
+
+**First, the two the previous version of this doc waved off in one line:**
+
+- **DirectX 1 (1995): zero 3D.** Direct3D did not exist yet. DX1 is DirectDraw + DirectSound +
+  DirectInput + DirectPlay only. A "DX1 backend" would be *less* than `DX3` — early DirectDraw, 2D
+  only, no reason to build it.
+- **DirectX 2 (1996): the *first* Direct3D — but via *execute buffers*.** You describe geometry by
+  filling a buffer with vertices + rendering opcodes and submitting it (`IDirect3DDevice::Execute`),
+  not with draw calls. It has a z-buffer, gouraud shading, one texture, alpha blending, and
+  fixed-function lighting/materials — so *minimal* real 3D exists — but the execute-buffer model is
+  awkward and single-texture-limited. DX3's Direct3D is essentially the same execute-buffer 3D.
+
+**3D-depth ladder** (the "% of CNA's 3D contract" figures are deliberately rough qualitative
+estimates for intuition, **not** a measured metric):
+
+| Version | 3D tier | What the real Direct3D backs for CNA 3D | ~share of CNA 3D |
+|---|---|---|---|
+| **DX1** | none | No Direct3D at all — 2D only | **0%** |
+| **DX2 / DX3** | minimal, *execute buffers* | z-buffer, gouraud, **1 texture**, alpha blend, fixed-function lights/materials — but no `DrawPrimitive`, no stencil, no multitexture | **~15%** |
+| **DX5** | clean fixed-function | **`DrawPrimitive`/`DrawIndexedPrimitive`** (modern draw-call model), depth, alpha blend/test, fog, 1–2 textures, software T&L — `DrawPrimitivesEx` maps here cleanly | **~30%** |
+| **DX6** | full fixed-function | + **multitexturing** (stage cascade → `DualTextureEffect`), + **stencil** (stencil ops), DXTn compression, `IDirect3DVertexBuffer` objects, table fog | **~45%** |
+| **DX7** | peak fixed-function | + **hardware T&L**, + **cube env maps** (→ `EnvironmentMapEffect`), + **indexed vertex blending** (→ `SkinnedEffect`, partial). Effectively **all *stock* XNA effects emulable**. Still no shaders, no volume textures, no occlusion query | **~65%** |
+| **DX8** | early programmable | + **Shader Model 1.x** (VS 1.1 / PS 1.0–1.4), + **volume/3D textures** (→ `Texture3D`), + **MSAA**. But XNA effects are `ps_2_0`+ → **do not fit SM 1.x**, so `CreateEffectBackend` still throws for real XNA effects | **~80%** |
+| DX9 *(ref)* | XNA parity floor | SM 2.0/3.0, occlusion queries, everything — the floor of full XNA fidelity | **100%** |
+
+**Per-feature view** (CNA 3D contract rows × version — `~` = present but limited/partial):
+
+| CNA 3D contract feature | DX1 | DX2/3 | DX5 | DX6 | DX7 | DX8 |
+|---|:--:|:--:|:--:|:--:|:--:|:--:|
+| Any Direct3D at all | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `DrawPrimitive` model (not execute buffers) | — | ❌ | ✅ | ✅ | ✅ | ✅ |
+| `VertexBuffer`/`IndexBuffer` objects | — | ~ | ~ | ✅ | ✅ | ✅ |
+| Depth test/write | — | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Stencil ops | — | ❌ | ❌ | ✅ | ✅ | ✅ |
+| Fixed-function lights/materials (`BasicEffect` core) | — | ✅ | ✅ | ✅ | ✅ HW | ✅ |
+| Multitexturing (`DualTextureEffect`) | — | ❌ | ~ | ✅ | ✅ | ✅ |
+| Hardware T&L | — | ❌ | ❌ | ❌ | ✅ | ✅ |
+| Cube maps (`EnvironmentMapEffect`) | — | ❌ | ❌ | ❌ | ✅ | ✅ |
+| Skinning (`SkinnedEffect`) | — | ❌ | ❌ | ~ | ~ | ~ |
+| Volume/3D textures (`Texture3D`) | — | ❌ | ❌ | ❌ | ❌ | ✅ |
+| Programmable shaders (custom `Effect`) | — | ❌ | ❌ | ❌ | ❌ | ~ SM 1.x |
+| MSAA | — | ❌ | ❌ | ❌ | ~ | ✅ |
+| Occlusion query (`CreateOcclusionQuery`) | — | ❌ | ❌ | ❌ | ❌ | ❌ |
+
+Two things worth calling out from the matrix:
+
+- **Occlusion query is DX9-only.** It is absent in *every* version through DX8 — and not even a gap
+  unique to legacy backends: CNA's own shipping `D3D9` and `D3D12` backends don't wire it either
+  (`docs/graphics-backend-feature-matrix.md`).
+- **`DX3` as shipped is 0% 3D by choice, not by DirectX limit.** DX2/3's execute-buffer Direct3D
+  could back ~15% of the 3D contract in principle, but the shipping `DX3` backend deliberately does
+  0% because its `../free-direct` sibling implements **DirectDraw only, no Direct3D** — so there is no
+  3D device to call. Reaching that ~15% would mean adding an execute-buffer Direct3D reimplementation
+  (Route A cost, §4) for a very low payoff.
+
+The exact DirectX interface-version boundaries above (e.g. vertex-buffer objects at DX6, volume
+textures at DX8, queries at DX9) are stated from known Direct3D history and should be spike-confirmed
+against the actual MinGW-w64 headers before any backend work — same "pending a spike" caveat as §4/§8.
+
 ---
 
 ## 4. The two delivery routes CNA already uses
@@ -224,8 +289,9 @@ the *analysis* here changes anything for it — it does not.
   the options, and on the least-proven runtime path.
 
 ### DirectX 1 / 2 / 4 — not worth analyzing
-DX1/2 use execute buffers (pre-`DrawPrimitive`), strictly worse than DX3/5 with no CNA-facing benefit;
-DX4 was never released. No reason to target any of them.
+DX1 has **no Direct3D at all** (2D only — less than `DX3`); DX2 has only execute-buffer Direct3D
+(pre-`DrawPrimitive`, single-texture, ~15% of the 3D contract — see §3.1), strictly worse than DX5
+with no CNA-facing benefit; DX4 was never released. No reason to target any of them.
 
 ---
 
