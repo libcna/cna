@@ -187,6 +187,38 @@ recorded for either — inventing one would be worse than recording the absence.
 workspace and must be pointed at explicitly before it can be inventoried or sequenced. Until then
 they are, at most, **prospective future lanes** — not pending integration branches.
 
+### 5.1 CORRECTED 2026-08-04 — both exist on `origin`; the search above never fetched
+
+The `WEBGPU-115` session ran `git fetch --all --prune --tags` before making any inventory claim. Two
+branches appeared that no prior search could have seen, because **the reconciliation above searched
+only refs already present locally and never refreshed them from the remote.** That is the defect in
+the §5 method, not in its execution.
+
+Fetch: `git fetch --all --prune --tags`, exit 0. One configured remote,
+`origin` → `git@github-openeggbert:openeggbert/cna` (fetch and push). **Two remote-tracking refs
+added, none updated, none pruned; no tags added.**
+
+| Ref | Head | Remote | Authored | Tip subject |
+|---|---|---|---|---|
+| `refs/remotes/origin/claude/cna-magnum-gr-backend-211xsx` | `9b903db8cf16988e3fbc955a429bab6c6a5b191e` | `origin` | 2026-08-04T09:40:54Z | `docs(plan_magnum): record the verified baseline and the decisions behind it` |
+| `refs/remotes/origin/claude/wicked-engine-cna-backend-5ffqzd` | `91d8587e9a1a760c3275713f15f65bfafa387082` | `origin` | 2026-08-04T09:18:36Z | `feat(plan_wicked.md WICKED-32/31/58/28): buffer hazards, upload stalls, multi-stream, mips` |
+
+Both fork from `origin/develop` at `ac3aaaeb` and are **0 behind / ahead by 768 (Magnum) and 765
+(Wicked)** commits. Both carry a `plan_*.md` of their own (`plan_magnum.md`, `plan_wicked.md`) and
+`MAGNUM-*` / `WICKED-*` task IDs in their subjects.
+
+**What is NOT claimed.** Neither branch was checked out, modified, merged, rebased or cherry-picked,
+and no integration branch was created. **Nothing here says either is complete or integration-ready.**
+A branch name and a run of feature-shaped commit subjects are not a completion status; establishing
+that needs the per-branch adaptation checklist, which this ticket did not run. The ref names contain
+the literal token `claude` because that is what the refs are called — that is a factual ref name,
+not a contributor attribution.
+
+**Consequence for the count.** The "19 logical pending lanes" figure predates this fetch and is
+stale. **This document does not restate a corrected total** — deriving the authoritative inventory
+is the next exit-reconciliation session's job, and it must do so from refs as they stand then, after
+its own fetch. The pending count is dynamic by design.
+
 ---
 
 ## 6. Commit-history policy for integration — **mandatory**

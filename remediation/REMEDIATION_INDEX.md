@@ -3,18 +3,29 @@
 **105 remediation tasks + 15 accepted no-action items**, consolidated from 686 raw per-file findings
 plus the audit's 6 synthesis documents. Full detail for every ID is in `MASTER_REMEDIATION_PLAN.md`.
 
-> ## CAMPAIGN EXIT STATE (2026-08-04) — **EXIT BLOCKED, NOT A CHECKPOINT**
+> ## CAMPAIGN EXIT STATE (2026-08-04) — **STILL NOT A CHECKPOINT; the recorded blocker is closed**
 >
 > Authoritative exit record: **`REMEDIATION_EXIT.md`**.
-> Branch inventory: **`INTEGRATION_BRANCH_INVENTORY.md`** (dynamic — 19 logical lanes at `099b03c0`).
+> Branch inventory: **`INTEGRATION_BRANCH_INVENTORY.md`** — dynamic. The "19 logical lanes at
+> `099b03c0`" figure is **stale**: it was derived without fetching, and a later
+> `git fetch --all --prune --tags` added `origin/claude/cna-magnum-gr-backend-211xsx` (`9b903db8`)
+> and `origin/claude/wicked-engine-cna-backend-5ffqzd` (`91d8587e`). See that document's §5.1.
 >
-> **One checkpoint blocker remains: `WEBGPU-115`** — WebGPU reports
-> `GraphicsCapability::WireFrame` as `true` (inherited `IGraphicsBackend` default; the backend never
-> overrides it), accepts a `FillMode::WireFrame` draw with no throw, warning or log, creates and
-> **natively submits** a distinct pipeline keyed on `wireframe`, and returns a frame **byte-identical
-> to Solid** (`total=18176 interior=1089/1089` for both, re-measured at `099b03c0`). `plan_webgpu.md`'s
-> `WEBGPU-115` row is **`⬜` NOT DONE** — it *is* the unperformed documentation task — so this is not a
-> documented deviation. **P1, checkpoint blocker YES.** No checkpoint tag exists.
+> **`WEBGPU-115` — RESOLVED 2026-08-04.** It was the last recorded checkpoint blocker: WebGPU
+> reported `GraphicsCapability::WireFrame` as `true` (inherited `IGraphicsBackend` default; the
+> backend never overrode it), accepted a `FillMode::WireFrame` draw with no throw, warning or log,
+> created and **natively submitted** a distinct pipeline keyed on `wireframe`, and returned a frame
+> **byte-identical to Solid** (`total=18176 interior=1089/1089` for both). It now reports the
+> capability as **`false`** and throws `System::NotSupportedException` from the first **polygon**
+> draw that would consume it — before any command is queued, any pipeline key is computed, any
+> `WGPURenderPipeline` is created, any pass is encoded or anything is submitted. Target unchanged,
+> Solid recovery exact. Line and point topologies are deliberately **not** refused: they have no
+> polygon interior for a fill mode to select and were measured byte-identical under both modes.
+> `plan_webgpu.md`'s `WEBGPU-115` row is now **`✅`**.
+>
+> **No checkpoint tag exists**, and this document does not authorise one. The checkpoint decision
+> belongs to a fresh exit-reconciliation session that re-derives every inventory from refs as they
+> stand then — see `REMEDIATION_EXIT.md` §8.
 >
 > `REMED-GFX-219` (EasyGL **under**-reports `WireFrame` while rendering a correct one) is LOW/P3,
 > blocker **NO**, DEFERRED. **Do not bundle it with `WEBGPU-115`** — their safety directions are

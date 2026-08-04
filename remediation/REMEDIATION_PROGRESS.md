@@ -26991,6 +26991,9 @@ remain DONE; `REMED-GFX-219` is newly OPEN and blocks nothing.
 Full record: **`remediation/REMEDIATION_EXIT.md`**. Branch inventory:
 **`remediation/INTEGRATION_BRANCH_INVENTORY.md`**. No checkpoint tag was created.
 
+> **The blocker this section records was closed the same day** — see
+> *`WEBGPU-115` — RESOLVED* at the end of this section. No checkpoint tag has been created since.
+
 ### The one blocker: `WEBGPU-115`
 
 `REMED-GFX-209` classified WebGPU's byte-identical WireFrame/Solid output as a "documented
@@ -27068,3 +27071,64 @@ WebGPU and reject the draw deterministically at **draw** time (not at `ApplyRast
 state setter cannot know what the draw will be, per `REMED-GFX-DECL-GUARD`). Two dependent test
 contracts must move with it: `WireFrameSilentlyRendersSolidGeometryOnThisBackend`, written to fail
 the day this is fixed, and `examples/webgpu_graphicsstate_test.cpp` Check G.
+
+---
+
+## `WEBGPU-115` — **RESOLVED** (2026-08-04)
+
+The correction above was implemented exactly as scoped, backend-local: `679cbed2` (red-first
+reproduction), `636b43de` (capability override + draw-time guard), `40a5c46c` (route matrix),
+`0be30127` (topology narrowing).
+
+| Term of the blocker rule | Before | After |
+|---|---|---|
+| `SupportsCapability(WireFrame)` | `true`, inherited | **`false`**, asserted by the backend |
+| `ApplyRasterizerState(WireFrame)` | accepted silently | still accepted — a state operation stays one |
+| A polygon draw consuming it | queued → keyed → pipelined → submitted | **`System::NotSupportedException`** before any of it |
+| Queued draw commands | +1 | **0** |
+| Pipeline caches | +1 | **0** |
+| Native draw issues | +1 | **0** |
+| The target | `total=18176 interior=1089/1089` | **unchanged, `total=0`** |
+| Next Solid draw | — | exact; 1 draw, 1 submit, **0** new pipelines |
+
+**Where the refusal lives.** `RequireSupportedFillModeEXT(primitive, route)` at the top of the five
+public 3D draw entry points — `DrawColoredPrimitives`, `DrawIndexedColoredPrimitives`,
+`DrawPrimitivesEx`, `DrawIndexedPrimitivesEx`, `DrawInstancedPrimitivesEx`. That is the narrowest
+boundary all eleven `Queue*Draw()` families pass through: one guard, not ten that would drift apart.
+
+**Two corrections to the record above.** The queue-site count is **10**, not 11 — the eleventh
+`wireframe` reference is `DrawInstancedPrimitivesEx`'s own capture, already counted. And the first
+guard was **over-wide**: it refused every topology, and
+`PointListPrimitiveTest.PointListIsNotAffectedByTriangleCulling` failed on it, correctly. A fill mode
+selects how a *polygon's interior* is rasterized; a line or point list has no interior, both fill
+modes were measured **byte-identical** there, and nothing is substituted. An over-wide guard deletes
+a correct draw instead of preventing a wrong one, so only `TriangleList` and `TriangleStrip` are
+refused. Same asymmetry rule `REMED-GFX-DECL-GUARD` arrived at.
+
+**Both dependent test contracts moved with it**, as required:
+`WireFrameSilentlyRendersSolidGeometryOnThisBackend` →
+`WireFrameIsRefusedDeterministicallyOnThisBackend`, and `examples/webgpu_graphicsstate_test.cpp`
+Check G now asserts the refusal, an untouched backbuffer and exact Solid recovery (**14/14 PASS**).
+
+**Verification.** `WebGpuWireFrameContract.*` — 8 tests: capability query, pre-queue cardinality, a
+**12-route matrix** each run under *both* fill modes (ordinary non-indexed/indexed 16- and 32-bit,
+nonzero `vertexStart`/`startIndex`/`baseVertex`, both `DrawUser*` families in typed and raw-`void*`
+form, a second effect family, instanced), alternation and repeated refusals, resource-replacement
+and teardown lifetime, wgpu-native validation and out-of-memory error scopes, the topology boundary,
+and the exception type. Every WireFrame leg: 0 queued, 0 pipelines, 0 native draws, 0 uncaptured
+errors, target `total=0`. Every Solid leg: exactly 1 queued command, 1 native draw, a rendered
+triangle — so "refused" can never be read as "never ran".
+
+WebGPU principal suite **5909 ran / 5876 passed / 28 skipped / 5 failed** — exactly the five
+residuals already recorded, no new one. **ASan+UBSan clean** (`libasan.so.8`/`libubsan.so.1` proved
+linked by `ldd`; 0 use-after-free, 0 double-free, 0 overflow, 0 UBSan reports). Residual leaks are
+external wgpu-native allocations, A/B-classified: 1 device with 0 draws leaks 2 allocations, 1 device
+with **2** refusals and 1 device with **3** refusals both leak **4** — identical, so the leak scales
+with device count and not with refusals.
+
+**Cross-backend controls, all re-measured, all unchanged:** Software `total=556 interior=0/1089`,
+Vulkan `607/0`, bgfx `559/0`, SDL_GPU `607/0`, EasyGL `559/0`, D3D9 `560/0` and D3D11 `559/0` (both
+Wine on `:99`); Headless keeps its honest skip and exact one-draw cardinality; WebGPU is the negative
+arm. **`REMED-GFX-219` is untouched and still deferred** — opposite safety direction, not bundled.
+
+**No checkpoint tag was created.** The next action is a fresh exit reconciliation.

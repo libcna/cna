@@ -2,45 +2,49 @@
 
 ## CURRENT — `feature/audit` post-audit remediation exit (2026-08-04)
 
-> **STATUS: EXIT BLOCKED. This is not a checkpoint. No checkpoint tag exists.**
+> **STATUS: STILL NOT A CHECKPOINT. No checkpoint tag exists.**
+> The last recorded checkpoint blocker, `WEBGPU-115`, is **RESOLVED**. The checkpoint itself has not
+> been taken and was deliberately not taken by that ticket.
 
-**Read first:** `remediation/REMEDIATION_EXIT.md` (authoritative exit record) and
-`remediation/INTEGRATION_BRANCH_INVENTORY.md` (dynamic branch inventory).
+**Read first:** `remediation/REMEDIATION_EXIT.md` (exit record — §3.6 is the resolution, §8 is why it
+is still not a clearance) and `remediation/INTEGRATION_BRANCH_INVENTORY.md` (branch inventory; §5.1
+is the corrected Magnum/Wicked entry).
 
-### The next single task — `WEBGPU-115`, and nothing else
+### The next single task — re-run post-audit exit reconciliation
 
-WebGPU reports `GraphicsCapability::WireFrame` as **`true`** (inherited `IGraphicsBackend` default —
-the backend never overrides it), accepts a `FillMode::WireFrame` draw with **no throw, warning or
-log**, creates and **natively submits** a distinct pipeline keyed on `wireframe`, and returns a frame
-**byte-identical to Solid** — re-measured at `099b03c0`:
+`WEBGPU-115` closed on 2026-08-04. WebGPU now reports `GraphicsCapability::WireFrame` as **`false`**
+and throws `System::NotSupportedException` from the first **polygon** draw that would consume it,
+before any command is queued, any pipeline key is computed, any `WGPURenderPipeline` is created, any
+render pass is encoded or anything is submitted. The target is unchanged, the next Solid draw is
+exact, and line/point topologies are deliberately still accepted — they have no polygon interior for
+a fill mode to select and were measured byte-identical under both modes.
 
 ```
-[ GFX-209 ] WebGPU solid:     total=18176 interior=1089/1089 AB=298 BC=310 CA=329
-[ GFX-209 ] WebGPU wireframe: total=18176 interior=1089/1089 AB=298 BC=310 CA=329
+before:  [ GFX-209 ] WebGPU wireframe: total=18176 interior=1089/1089   (byte-identical to Solid)
+after:   [ GFX-209 ] WebGPU wireframe: REJECTED, target total=0 interior=0/1089
 ```
 
-`plan_webgpu.md:504`'s `WEBGPU-115` row is **`⬜` NOT DONE** — it *is* the unperformed "document it as
-unsupported" task — so this is **not** a documented deviation. **P1, checkpoint blocker YES.**
-
-**Smallest safe correction:** override `SupportsCapability` to return `false` for `WireFrame` on
-WebGPU and reject the draw deterministically **at draw time** (not at `ApplyRasterizerState` — a
-state setter cannot know what the draw will be, per `REMED-GFX-DECL-GUARD`). Two dependent test
-contracts move with it: `WireFrameSilentlyRendersSolidGeometryOnThisBackend` (written to fail when
-this is fixed) and `examples/webgpu_graphicsstate_test.cpp` Check G.
+**The next session must re-derive, not inherit.** Run `git fetch --all --prune --tags` first: the
+previous reconciliation did not, and recorded "no Magnum or Wicked Engine branch exists anywhere"
+when both are on `origin` (`origin/claude/cna-magnum-gr-backend-211xsx` @ `9b903db8`,
+`origin/claude/wicked-engine-cna-backend-5ffqzd` @ `91d8587e`). The **19 logical pending lanes**
+figure is stale for the same reason — do not restate it. Take the signed checkpoint tag only if the
+freshly derived blocker inventory is empty.
 
 ### Everything else is clear
 
-- `REMED-GFX-209` **DONE**; `-211`/`-212`/`-213`/`-215`/`-216` **DONE**; `REMED-GFX-DECL-GUARD` **DONE**.
+- `WEBGPU-115` **DONE**. `REMED-GFX-209` **DONE**; `-211`/`-212`/`-213`/`-215`/`-216` **DONE**;
+  `REMED-GFX-DECL-GUARD` **DONE**.
 - `REMED-GFX-217`/`-218` checkpoint blockers **RESOLVED** (translators still deferred).
-- `REMED-GFX-203`…`-208`, `-210`, `-214` **DEFERRED**; `REMED-GFX-219` **OPEN, LOW/P3, blocks nothing**
-  — and must **not** be bundled with `WEBGPU-115`: GFX-219 *under*-reports a capability EasyGL has,
-  `WEBGPU-115` *over*-reports one WebGPU lacks. Opposite safety directions.
+- `REMED-GFX-203`…`-208`, `-210`, `-214` **DEFERRED**; `REMED-GFX-219` **OPEN, LOW/P3, blocks
+  nothing, and was deliberately left untouched by `WEBGPU-115`** — GFX-219 *under*-reports a
+  capability EasyGL genuinely has, `WEBGPU-115` *over*-reported one WebGPU lacks. Opposite safety
+  directions; still must not be bundled.
 - `REMED-BUILD-012` platform-blocked (Wine/vkd3d-proton) — D3D12 is cross-build-only and is **not**
   called clean.
-- **Branch inventory as of `099b03c0`: 19 logical pending lanes** — a snapshot, not an invariant.
-  `feature/gl` needs the **MetaGL → EasyGL → CNA** order first; EasyGL (`rvc` @ `b52f671`) and MetaGL
+- `feature/gl` needs the **MetaGL → EasyGL → CNA** order first; EasyGL (`rvc` @ `b52f671`) and MetaGL
   (`feature/followup-audit` @ `d5bc155`) are **development-complete**, merely unmerged into their own
-  `develop` branches. **No Magnum or Wicked Engine branch exists anywhere in this workspace.**
+  `develop` branches.
 
 ---
 

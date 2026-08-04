@@ -485,8 +485,10 @@ open in `plan_webgpu.md`:
   backend's global sample count instead);
 - `Texture2D.GetData()` (arbitrary-texture readback — distinct from the now-implemented backbuffer
   readback, `WEBGPU-51`);
-- full BlendState, RasterizerState (cull mode/wireframe), viewport, scissor and stencil-operation
-  mapping (`DepthStencilState`'s *depth* portion is implemented, see below);
+- full BlendState, RasterizerState cull mode, viewport, scissor and stencil-operation mapping
+  (`DepthStencilState`'s *depth* portion is implemented, see below). `FillMode::WireFrame` is a
+  different case and is **not** on this list: it is not "not yet implemented", it is **reported as
+  unsupported and refused** -- see below;
 - custom SpriteBatch effects and custom WGSL effects;
 - browser/Emscripten WebGPU; this first implementation is the native wgpu-native backend.
 
@@ -494,6 +496,39 @@ open in `plan_webgpu.md`:
 `DrawIndexedColoredPrimitives`, with genuine depth testing) are implemented — see below. Interface
 methods still not overridden by this backend retain the common backend's existing unsupported/
 default behavior (mostly silent no-ops, by `IGraphicsBackend`'s own design for state setters).
+
+### `FillMode::WireFrame` is reported as unsupported and refused (`WEBGPU-115`)
+
+wgpu-native has **no polygon-mode API at all**: `WGPUPrimitiveState` carries topology, strip index
+format, front face and cull mode, and nothing that selects how a polygon's interior is filled. There
+is therefore no native state a wireframe request could reach.
+
+**What the backend does now.**
+
+| Step | Behaviour |
+|---|---|
+| `GraphicsDevice::SupportsCapability(GraphicsCapability::WireFrame)` | **`false`** — asserted by `WebGPUGraphicsBackend`, not inherited from `IGraphicsBackend`'s permissive default |
+| Selecting a `RasterizerState` whose `FillMode` is `WireFrame` | **Succeeds.** Setting state is a state operation; a state setter cannot know whether a draw will follow, or which route it would take |
+| The first **polygon** draw that would consume it | Throws `System::NotSupportedException` before any command is queued, any pipeline key is computed, any `WGPURenderPipeline` is created, any render pass is encoded and anything is submitted |
+| The refused draw's target | **Unchanged.** Nothing is written, nothing is created, nothing is retained |
+| The next `FillMode::Solid` draw | Renders exactly, on the same device, with no recreation and no extra frame |
+| A `LineList`, `LineStrip` or `PointListEXT` draw under `WireFrame` | **Accepted.** A fill mode selects how a *polygon's interior* is rasterized; a line or point has no interior, so `Solid` and `WireFrame` are the same request and this backend substitutes nothing. Measured byte-identical under both modes |
+
+The refusal covers every public 3D draw route -- ordinary non-indexed and indexed (16- and 32-bit,
+with nonzero `vertexStart` / `startIndex` / `baseVertex`), both `DrawUserPrimitives` /
+`DrawUserIndexedPrimitives` families, every stock-effect family, and the instanced route.
+
+**Why this is a refusal rather than a documented deviation.** Until `WEBGPU-115` the backend
+reported `WireFrame` as **supported**, accepted the request without a throw, warning or log, folded
+the `wireframe` bit into `Make3DPipelineKey` so a distinct `WGPURenderPipeline` was built and
+natively submitted, and returned a frame **byte-identical to the `Solid` one**. A prose note in this
+document is not reachable through the public API and was directly contradicted by the capability
+query, so callers had no way to find out. A backend must not report a capability as supported while
+silently substituting a different rendering mode.
+
+**Implementing real wireframe** would mean index-expanding triangles into line topology, since
+wgpu-native offers no polygon mode. That is a genuine implementation task, tracked separately; it is
+not what `WEBGPU-115` did.
 
 ## Architecture notes
 

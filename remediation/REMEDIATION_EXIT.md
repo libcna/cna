@@ -1,9 +1,17 @@
 # REMEDIATION_EXIT.md — post-audit remediation exit reconciliation
 
-> ## STATUS: **EXIT BLOCKED — THIS IS NOT A CHECKPOINT**
+> ## STATUS: **SUPERSEDED — the recorded blocker is closed; this is still NOT a checkpoint**
 >
-> One checkpoint blocker remains: **`WEBGPU-115`**. No checkpoint tag was created, and none may be
-> created until it is resolved. Everything below is the exit-candidate record, not a certification.
+> This document reconciled the campaign at `099b03c0` and returned **OUTCOME B — EXIT BLOCKED** on
+> one blocker, **`WEBGPU-115`**. **`WEBGPU-115` was resolved on 2026-08-04** (§3.6). No checkpoint
+> tag was created then and none has been created since.
+>
+> **This document may not be read as a clearance.** Its blocker inventory, its branch inventory and
+> its principal-suite baselines were all derived from refs and builds as they stood at `099b03c0`,
+> and `git fetch --all --prune --tags` on 2026-08-04 already made two previously invisible remote
+> branches appear (§9). The checkpoint decision belongs to a **fresh exit-reconciliation session**
+> that re-derives every inventory from refs as they stand at that moment. Everything below remains
+> the exit-candidate record, not a certification.
 
 ---
 
@@ -38,17 +46,17 @@ is unimportant.
 |---|---|---|
 | E1 | No known unblocked CRITICAL | ✅ The audit's single CRITICAL (`REMED-CONTENT-001`) is DONE |
 | E2 | No known supported-path crash, memory corruption or silent data loss | ✅ See §5 for the two aborts that remain, both test-owned and classified |
-| E3 | **No unresolved supported-path silent wrong result classified as a blocker** | ❌ **FAILS — `WEBGPU-115`** (§3) |
+| E3 | **No unresolved supported-path silent wrong result classified as a blocker** | ❌ **FAILED at `099b03c0` — `WEBGPU-115`** (§3). **That blocker is now closed** (§3.6); whether E3 holds overall is for the next reconciliation to re-derive, not for this document to assert |
 | E4 | Principal backend baselines classified | ✅ 7 native + 2 Wine, §6 |
 | E5 | Deferred work safely bounded and traceable | ✅ Every deferred ticket has an ID, a reason and a target plan (§4) |
 | E6 | `plan_postaudit.md` authoritative for deferred work | ✅ |
 | E7 | Branch inventory recorded dynamically | ✅ `INTEGRATION_BRANCH_INVENTORY.md`, derived from refs at `099b03c0` |
 
-**E3 is the only failing criterion.** It is sufficient on its own to block.
+**E3 was the only failing criterion**, and it was sufficient on its own to block. Its cause is fixed (§3.6); the criterion itself must be re-evaluated, not inherited.
 
 ---
 
-## 3. `WEBGPU-115` — checkpoint blocker **YES**
+## 3. `WEBGPU-115` — checkpoint blocker **YES** (at `099b03c0`) → **RESOLVED 2026-08-04** (§3.6)
 
 ### 3.1 The evidence, measured live at `099b03c0`
 
@@ -111,6 +119,54 @@ same task, not worked around:
   message). That is the oracle working correctly.
 - `examples/webgpu_graphicsstate_test.cpp` Check G asserts the WireFrame draw "does not crash"; a
   deterministic rejection changes that contract.
+
+### 3.6 Resolution — 2026-08-04
+
+The preferred correction in §3.5 was implemented, backend-local, in `636b43de` (+ `0be30127`), with
+the pre-fix path committed first as red-first A/B evidence in `679cbed2`.
+
+| Term of the blocker rule | At `099b03c0` | Now |
+|---|---|---|
+| Capability reports support | `true`, inherited from `IGraphicsBackend` | **`false`**, asserted by `WebGPUGraphicsBackend::SupportsCapability` |
+| Public operation accepted | yes, silently | `ApplyRasterizerState` still accepts — a state operation stays one |
+| Command queued | +1 at one of 10 sites | **0** |
+| Pipeline created | +1 `WGPURenderPipeline` | **0** |
+| Native submission occurs | yes | **0 native draws** |
+| Silently produces Solid | `total=18176 interior=1089/1089` | **target unchanged, `total=0`** |
+| A truthful boundary exists | **NO** | **YES** — `System::NotSupportedException`, catchable, message names the mode, the backend and the capability query |
+
+*(The count of queue sites is **10**, not the 11 stated in §3.2 — that figure counted
+`DrawInstancedPrimitivesEx`'s own `command.wireframe` capture twice. It does not change the finding.)*
+
+**Where the refusal lives.** `RequireSupportedFillModeEXT(primitive, route)`, called at the top of
+the five public 3D draw entry points — `DrawColoredPrimitives`, `DrawIndexedColoredPrimitives`,
+`DrawPrimitivesEx`, `DrawIndexedPrimitivesEx`, `DrawInstancedPrimitivesEx`. That is the narrowest
+boundary all eleven `Queue*Draw()` command families pass through, so one guard covers every route
+instead of ten that would drift apart. Rejection is at **draw** time, not at `ApplyRasterizerState`,
+per `REMED-GFX-DECL-GUARD`'s precedent.
+
+**Only polygon topologies are refused.** The first guard refused every topology, and
+`PointListPrimitiveTest.PointListIsNotAffectedByTriangleCulling` failed on it — correctly. A fill
+mode selects how a *polygon's interior* is rasterized; a line or point list has no interior, both
+fill modes were measured **byte-identical** there, and this backend substitutes nothing. An
+over-wide guard deletes a correct draw rather than preventing a wrong one.
+
+**Both dependent test contracts were updated in the same task**, as §3.5 required:
+`WireFrameSilentlyRendersSolidGeometryOnThisBackend` became
+`WireFrameIsRefusedDeterministicallyOnThisBackend`, and `examples/webgpu_graphicsstate_test.cpp`
+Check G now asserts the refusal, an untouched backbuffer and exact Solid recovery (14/14 PASS).
+
+**Verification.** `WebGpuWireFrameContract.*` — 8 tests covering the capability, pre-queue
+cardinality, a 12-route matrix each run under both fill modes, alternation and repeated refusals,
+resource-replacement and teardown lifetime, wgpu-native validation/out-of-memory error scopes, the
+topology boundary and the exception type. WebGPU principal suite **5909 ran / 5876 passed / 28
+skipped / 5 failed** — exactly the five residuals recorded in §6, no new one. ASan+UBSan clean
+(runtimes proved linked by `ldd`; residual leaks A/B-classified as per-device wgpu-native
+allocations — identical totals for 2 refusals and for 3, scaling only with device count). Positive
+controls re-measured unchanged on Software, Vulkan, bgfx, SDL_GPU, EasyGL, D3D9 and D3D11; Headless
+keeps its honest skip and its exact-one-draw cardinality.
+
+**`REMED-GFX-219` is untouched and still deferred** (§4.2). Opposite safety direction; not bundled.
 
 ---
 
@@ -248,39 +304,46 @@ commit those suites measured).
 
 ---
 
-## 8. Checkpoint decision — **OUTCOME B, EXIT BLOCKED**
+## 8. Checkpoint decision — **OUTCOME B, EXIT BLOCKED** *(as reconciled at `099b03c0`)*
 
-- **No checkpoint tag was created.**
-- The single blocking condition is **`WEBGPU-115`** (§3).
-- **The next single bounded task is `WEBGPU-115`**, and nothing else. It must not be bundled with
-  `REMED-GFX-219`.
+- **No checkpoint tag was created**, and none has been created since.
+- The single blocking condition was **`WEBGPU-115`** (§3). It is **RESOLVED** (§3.6), and it was not
+  bundled with `REMED-GFX-219`.
 
-**Smallest condition required to reach READY:** WebGPU must stop making an affirmative false
-capability claim about `FillMode::WireFrame`. Either report the capability truthfully and reject the
-draw deterministically before native submission (preferred, bounded), or implement real wireframe.
-Once that lands — with its two dependent test contracts updated (§3.5) — every other exit criterion
-in §2 is already satisfied and the checkpoint can be taken.
+**This section is not amended to READY, deliberately.** The condition it named is met, but a
+checkpoint decision cannot be inherited from a document whose inventories were derived at an earlier
+commit — `git fetch --all --prune --tags` on 2026-08-04 already revealed two remote branches this
+document recorded as not evidenced (§9). **The next action is a fresh exit-reconciliation session**
+that re-derives the blocker inventory, the branch inventory and the principal-suite baselines from
+refs and builds as they stand at that moment; it may take the signed checkpoint tag only if it
+confirms the blocker set is empty.
 
 ---
 
 ## 9. Integration handoff
 
-- **Current inventory as of `099b03c0` (2026-08-04): 19 logical pending integration branches/lanes.**
-  The count is *coincidentally* still 19, but **four refs in the previously recorded list no longer
-  exist**. Derived from Git refs, not carried forward. Full detail, methodology and per-branch data:
-  **`remediation/INTEGRATION_BRANCH_INVENTORY.md`**. This number is a snapshot and will change.
+- **Inventory as recorded at `099b03c0` (2026-08-04): 19 logical pending integration
+  branches/lanes — now STALE.** It was derived from local refs without a fetch, and a fetch later
+  the same day added two remote branches (see the Magnum/Wicked entry below). **Do not restate 19.**
+  Full detail, methodology and per-branch data: **`remediation/INTEGRATION_BRANCH_INVENTORY.md`**.
+  The pending count is dynamic; the next reconciliation must re-derive it after its own fetch.
 - **`feature/gl` is a cross-repository lane** and cannot be integrated on its own schedule — the
   MetaGL → EasyGL → CNA order is mandatory. See the inventory document §4.
 - **EasyGL and MetaGL are development-complete.** Their completed branches are simply unmerged into
   their respective `develop` branches. They are **not** unfinished feature developments.
-- **Magnum and Wicked Engine:** no branch, ref, worktree or planning entry exists for either in this
-  repository or the surrounding workspace as of `099b03c0`. Recorded as **not evidenced** — see the
-  inventory document §5. They are deliberately **not** counted in the 19.
+- **Magnum and Wicked Engine:** recorded here as *not evidenced* as of `099b03c0`. **That was wrong,
+  and the reason is a method defect worth naming: the search never fetched.** After
+  `git fetch --all --prune --tags` on 2026-08-04, `origin/claude/cna-magnum-gr-backend-211xsx`
+  (`9b903db8`) and `origin/claude/wicked-engine-cna-backend-5ffqzd` (`91d8587e`) both appeared — the
+  only two refs the fetch added. Both fork from `origin/develop` at `ac3aaaeb`, are 0 behind, and
+  carry their own `plan_magnum.md` / `plan_wicked.md`. Neither was checked out or touched, and
+  **nothing establishes that either is complete or integration-ready.** Detail:
+  **`remediation/INTEGRATION_BRANCH_INVENTORY.md` §5.1**.
 - **Commit-history policy for all future CNA/EasyGL/MetaGL integration** is mandatory and recorded in
   the inventory document §6: archive tags preserve original heads, adapted commits are GPG-signed,
   and **no AI attribution may appear** in the final adapted history.
-- **Integration entry conditions:** `WEBGPU-115` resolved and the checkpoint tag taken; then the
-  per-branch adaptation checklist in `plan_postaudit.md` §10.
+- **Integration entry conditions:** `WEBGPU-115` resolved (**done**, §3.6) **and** the checkpoint tag
+  taken (**not done** — see §8); then the per-branch adaptation checklist in `plan_postaudit.md` §10.
 
 ---
 
