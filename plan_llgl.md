@@ -634,7 +634,7 @@ reported before submission.
 | LLGL-48 | P1 | **Use collision-free typed pipeline-cache keys.** Replace ad-hoc multiply/truncate packing with key structs whose equality and hash include every field consumed by the relevant LLGL pipeline descriptor: vertex layout, topology, render-pass signature, depth/raster state, all blend factors/functions/write masks, full 32-bit `MultiSampleMask`, scissor enable and effective sample count. | Register `gfx077_colorwritechannels_3d_test.cpp`; add pairwise tests for blend factors/functions and masks that differ only above bit 3, including an 8x-MSAA mask when supported. Instrumented test builds assert that descriptor equality and key equality cannot disagree. `Llgl_BasicEffect` alpha blending remains green. | ⬜ |
 | LLGL-49 | P1 | **Track and capture sampler state per texture slot.** Store at least every slot consumed by stock effects, acquire the correct sampler for each slot, and capture those sampler objects in each deferred command so later state changes cannot leak backward. | Register `stock_effect_sampler_contract_test.cpp` at 65/65 or better. Add independent filter/address tests for `DualTextureEffect` slot 1 and all five `PbrEffect` maps; slot 0 changes must not alter another slot and vice versa. | 🟡 |
 | LLGL-50 | P1 | **Separate logical back-buffer dimensions from presentation scaling.** `FixedHeightDynamicWidth` may choose a presentation rectangle, but it must not silently shrink an explicitly requested readable back buffer or make valid columns unreachable. Define the mode contract once and make draw, readback, viewport and resize code use the same dimensions. | Register and fully pass `backbuffer_first_read_test.cpp`, `bound_target_lifetime_test.cpp` and `deferred_source_lifetime_test.cpp` with their 72x36 cases. Add wider-than-window and narrower-than-window aspect tests plus resize round-trips. | 🟡 |
-| LLGL-51 | P1 | **Fix OpenGL back-buffer viewport/scissor Y conversion and test both modules explicitly.** Normalize LLGL's screen-origin rules at the command boundary without changing render-target orientation or the already-passing zero-Y cases. | Add `_OpenGL` registrations for `deferred_viewport_capture_test.cpp`, `deferred_scissor_capture_test.cpp`, `spritebatch_custom_viewport_test.cpp`, `spritebatch_viewport_switch_test.cpp` and the applicable cube/plural tests. The current 37/39 and 43/47 OpenGL results become full passes, including non-zero-Y target→backbuffer→target sequences. | ⬜ |
+| LLGL-51 | P1 | **Fix OpenGL back-buffer viewport/scissor Y conversion and test both modules explicitly.** Normalize LLGL's screen-origin rules at the command boundary without changing render-target orientation or the already-passing zero-Y cases. | Add `_OpenGL` registrations for `deferred_viewport_capture_test.cpp`, `deferred_scissor_capture_test.cpp`, `spritebatch_custom_viewport_test.cpp`, `spritebatch_viewport_switch_test.cpp` and the applicable cube/plural tests. The current 37/39 and 43/47 OpenGL results become full passes, including non-zero-Y target→backbuffer→target sequences. | 🟡 |
 | LLGL-52 | P1 | **Complete legal stock-effect vertex-layout permutations and resolve the orthographic camera case.** Add a defined untextured+unlit colourless BasicEffect path and a defined policy/shader for lit+textured input without normals; diagnose the `Orthographic`+`CreateLookAt` mismatch rather than masking it with a contract branch. | Register and pass `rasterizerstate_cullmode_indexed_basiceffect_test.cpp`, `rendertarget_sampling_orientation_test.cpp` CD4 and `rasterizerstate_cullmode_camera_test.cpp` on each capable module. Unsupported declarations, if any remain, are rejected before queuing with a precise message. | 🟡 |
 | LLGL-53 | P2 | **Finish or explicitly narrow raster/depth/stencil state support.** Wire viewport `minDepth`/`maxDepth`, depth bias, slope-scale depth bias and the full front/back stencil state into descriptors and cache keys. If LLGL 0.04b cannot express one field on a module, expose a precise module capability instead of accepting it as a silent no-op. | Add differential pixel tests for each state and for two draws differing only in that state. Enable the stencil branch of `graphicsdevice_ordered_clear_test.cpp`; update `SupportsCapability()` and `docs/llgl-backend.md` from measured module results. | 🟡 |
 | LLGL-54 | P2 | **Define and implement combined MRT contracts.** Preserve the effective sample count when multiple multisampled targets are bound, create matching multisample/resolve attachments, regenerate mip chains for every written MRT slot, and either support cube-face slots or reject them before allocation without advertising broader support. | Add MRT+MSAA edge-resolution tests, per-slot mip readback after MRT writes, mixed requested/effective sample-count validation, and lifetime tests for every slot. `LlglMRTBinding::GetSampleCount()` must report the actual native target sample count. | 🟡 |
@@ -746,6 +746,40 @@ leads (`CommandBuffer::CopyTextureFromFramebuffer`'s own path, or leftover sciss
 the off-screen bind) for whoever continues this. `Llgl_Deferred_Viewport`/`Llgl_Deferred_Scissor`
 remain unchanged at 37/39 and 43/47 -- this pass corrected the understanding of the defect but did
 not close it, and no code in this repository was changed by this investigation.
+
+**`LLGL-51` progress (2026-08-04): root cause FOUND and FIXED, following this task's own recommended
+next leads exactly.** Continued live-instrumenting the vendored, pinned LLGL dependency (temporary
+probes in `GLCommandExecutor.cpp` and `GLFramebufferCapture.cpp`, all fully reverted via `git
+checkout --`, confirmed clean before implementing the real fix) -- this time tracing
+`CommandBuffer::CopyTextureFromFramebuffer()`'s own internal steps, exactly the lead the prior pass
+identified. Found: `CopyTextureFromFramebuffer` does `glCopyTexSubImage2D` (framebuffer -> an
+intermediate texture) followed by `glBlitFramebuffer` (intermediate texture -> the destination
+staging texture). The first is NOT scissor-tested (confirmed correct at every probed pixel); the
+second IS scissor-tested per the GL spec, and nothing in `CaptureBackbuffer()`'s own sequence ever
+resets `GL_SCISSOR_TEST`/`GL_SCISSOR_BOX` before it runs. This project's own `ComputeEffectiveScissor()`
+deliberately computes an "effective scissor" for every `Primitives` draw with a smaller-than-target
+viewport (intentional XNA-style sub-viewport clipping) -- so the LAST draw replayed before the
+capture leaves ITS OWN small scissor rectangle active, and the blit silently confines the ENTIRE
+backbuffer readback to that one rectangle. Confirmed via live `glGetIntegerv(GL_SCISSOR_BOX)`
+probes: `(64,0,32,72)` and `(0,0,32,72)` for the two previously-failing legs, each matching that
+leg's own last draw's sub-viewport exactly. **Fix** (`LlglGraphicsBackend.cpp`,
+`CaptureBackbuffer()`): `commands_->SetScissor()` to the full bucket resolution immediately before
+`CopyTextureFromFramebuffer()` -- verified two ways before implementing for real (temporary
+`glDisable(GL_SCISSOR_TEST)`, then the actual fix's own "widen the box" approach, both worked) --
+using only the public `CommandBuffer::SetScissor()` API, no vendored-source change needed.
+**Verified** (`git stash` pre/post, `CNA_LLGL_RENDERER=opengl`, Xvfb): `Llgl_Deferred_Scissor`
+43/47 -> **47/47 full pass**; `Llgl_Deferred_Viewport` 35/39 -> 37/39 (F2/F3, the only checks this
+mechanism explains, now pass; E1/E2 are a separate, already-declared depth-remap limitation,
+unaffected). This same mechanism turns out to be the ORIGINAL 2026-08-02 "Y-offset" symptom too --
+`spritebatch_custom_viewport_test.cpp`/`spritebatch_viewport_switch_test.cpp` (this ticket's own
+starting point) now pass **13/13 and 6/6, full passes**, up from reading back zero matching pixels
+for any non-zero-Y rectangle. A full 69-binary regression sweep (Vulkan-default and OpenGL-forced)
+shows zero new regressions. Added `_OpenGL` ctest registrations for all four files named in this
+ticket's own acceptance gate, matching its own explicit ask; `rendertargetcube_plural_binding`
+still has no `_OpenGL` lane -- blocked by the separate, pre-existing `hasCubeTextures` gap, not by
+anything this fix touches, so that part of the acceptance gate ("and the applicable cube/plural
+tests") is not yet satisfied. See `known_bugs.md`'s rewritten entry for the full instrumentation
+trace.
 
 **`LLGL-49` progress (2026-08-03): fixed and verified; PbrEffect's own dedicated multi-slot test not
 added.** `ApplySamplerState(int slot, ...)` now tracks 5 slots independently

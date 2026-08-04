@@ -5367,7 +5367,27 @@ namespace CNA::Internal::Backends::Llgl
             ReplayFrameCommandsList(bucket.commands);
 
             if (i == lastSwapChainSegment)
+            {
+                // LLGL-51: a queued Primitives draw with a smaller-than-target viewport also
+                // carries an "effective scissor" matching that viewport (see
+                // ComputeEffectiveScissor()'s own doc comment -- this is intentional, XNA-style
+                // sub-viewport clipping) and the LAST such draw replayed above leaves that
+                // rectangle set as GL_SCISSOR_BOX. LLGL's own CopyTextureFromFramebuffer ends in
+                // a glBlitFramebuffer call, which -- unlike the raw framebuffer-to-texture copy
+                // that precedes it -- IS clipped by an enabled scissor test: confirmed by live
+                // instrumentation of the vendored LLGL OpenGL module, a leftover scissor rect
+                // from the frame's last sub-viewport draw silently confined the whole backbuffer
+                // readback to that draw's own small rectangle, reading zero-initialised (black)
+                // staging-texture memory everywhere else. Re-issuing a full-resolution scissor
+                // immediately before the copy does not need to disable the test itself (there is
+                // no public LLGL API for that outside a pipeline bind) -- widening the box to
+                // cover the whole destination has the same effect, since nothing inside it is
+                // ever clipped.
+                commands_->SetScissor(LLGL::Scissor{0, 0,
+                                                     static_cast<int>(bucketResolution.width),
+                                                     static_cast<int>(bucketResolution.height)});
                 commands_->CopyTextureFromFramebuffer(*staging, region, LLGL::Offset2D{0, 0});
+            }
 
             commands_->EndRenderPass();
             // See RecordAndSubmitFrame()'s own identical call for why this runs here.

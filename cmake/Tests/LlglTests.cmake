@@ -502,12 +502,22 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "LLGL")
     cna_register_backend_test(NAME Llgl_SpriteBatch_CustomViewport COMMAND cna_test_llgl_spritebatch_custom_viewport
         TIMEOUT 90 LABELS "Llgl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    # LLGL-51 (2026-08-04): this OpenGL-forced lane used to read back ZERO matching pixels for
+    # every non-zero-Y checked rectangle -- root-caused and fixed in CaptureBackbuffer() (see the
+    # Llgl_Deferred_Viewport/Llgl_Deferred_Scissor comment below), now a full 13/13 pass.
+    cna_register_backend_test(NAME Llgl_SpriteBatch_CustomViewport_OpenGL COMMAND cna_test_llgl_spritebatch_custom_viewport
+        TIMEOUT 90 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_LLGL_RENDERER=opengl")
 
     cna_llgl_test(cna_test_llgl_spritebatch_viewport_switch
                   examples/spritebatch_viewport_switch_test.cpp)
     cna_register_backend_test(NAME Llgl_SpriteBatch_ViewportSwitch COMMAND cna_test_llgl_spritebatch_viewport_switch
         TIMEOUT 90 LABELS "Llgl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    # LLGL-51 (2026-08-04): same fix as above, now a full 6/6 pass.
+    cna_register_backend_test(NAME Llgl_SpriteBatch_ViewportSwitch_OpenGL COMMAND cna_test_llgl_spritebatch_viewport_switch
+        TIMEOUT 90 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_LLGL_RENDERER=opengl")
 
     # LLGL-45 follow-up (2026-08-03): this file's own Contract.orderedBackbufferSegments was
     # corrected from false to true (the pre-LLGL-45 bucket-by-identity behavior it used to declare
@@ -712,6 +722,17 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "LLGL")
     cna_register_backend_test(NAME Llgl_Deferred_Viewport COMMAND cna_test_llgl_deferred_viewport
         TIMEOUT 120 LABELS "Llgl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    # LLGL-51 (2026-08-04): a leftover GL_SCISSOR_TEST rectangle from the frame's last
+    # sub-viewport draw was silently clipping CaptureBackbuffer()'s own internal glBlitFramebuffer
+    # call to that draw's own small rectangle -- fixed by widening the scissor box to the full
+    # resolution immediately before the copy. F2/F3 (the only two failures this file's own
+    # backbuffer-after-an-off-screen-bind legs had) now pass: 35/39 -> 37/39. The remaining two
+    # (E1/E2) are a genuinely separate, pre-existing, DECLARED limitation ("this rasterizer has no
+    # viewport depth remap"), not silently masked -- kept registered as a real regression
+    # trip-wire, matching this project's own established partial-pass-suite precedent.
+    cna_register_backend_test(NAME Llgl_Deferred_Viewport_OpenGL COMMAND cna_test_llgl_deferred_viewport
+        TIMEOUT 120 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_LLGL_RENDERER=opengl")
 
     # REMED-GFX-146 cross-backend control: every deferred draw must execute under the
     # GraphicsDevice.ScissorRectangle and RasterizerState.ScissorTestEnable active at its own public
@@ -721,6 +742,11 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "LLGL")
     cna_register_backend_test(NAME Llgl_Deferred_Scissor COMMAND cna_test_llgl_deferred_scissor
         TIMEOUT 120 LABELS "Llgl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    # LLGL-51 (2026-08-04): same fix as Llgl_Deferred_Viewport_OpenGL above -- 43/47 -> 47/47, a
+    # full pass.
+    cna_register_backend_test(NAME Llgl_Deferred_Scissor_OpenGL COMMAND cna_test_llgl_deferred_scissor
+        TIMEOUT 120 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_LLGL_RENDERER=opengl")
 
     # LLGL-50: 15/17 legs now pass (up from 8/17) now that FixedHeightDynamicWidth's own logical
     # width is a floor, not a hard override -- this file's 72x36 backbuffer request is fully

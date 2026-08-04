@@ -456,9 +456,73 @@ limitation these files still hit under `CNA_LLGL_RENDERER=opengl`.
 
 ---
 
-## LLGL backend: OpenGL module renders nothing for the backbuffer after an intervening render-target bind — OPEN (LLGL-51, root cause re-investigated 2026-08-03, still not confirmed)
+## LLGL backend: OpenGL module renders nothing for the backbuffer after an intervening render-target bind — FIXED (LLGL-51, 2026-08-04)
 
-**Status:** open. Re-investigated for `plan_llgl.md`'s `LLGL-51` via LIVE instrumentation of the
+**Root cause, confirmed via live instrumentation of the vendored LLGL OpenGL module (temporary,
+fully reverted -- `~/deps/LLGL` is pristine again):** `GraphicsDevice.GetBackBufferData()` /
+`LlglGraphicsBackend::CaptureBackbuffer()` ends with LLGL's own `CommandBuffer::
+CopyTextureFromFramebuffer()`, which internally does two GL operations: `glCopyTexSubImage2D`
+(framebuffer -> an intermediate texture, confirmed via direct `glReadPixels`/`glGetTexImage`-style
+probes to be UNAFFECTED by `GL_SCISSOR_TEST`, matching the OpenGL spec) followed by
+`glBlitFramebuffer` (intermediate texture -> the destination staging texture, confirmed to BE
+scissor-clipped, also per spec). Nothing in `CaptureBackbuffer()`'s own command sequence ever
+resets `GL_SCISSOR_TEST`/`GL_SCISSOR_BOX` before this call -- and this project's own
+`ComputeEffectiveScissor()` (see its own doc comment) deliberately computes an "effective scissor"
+rectangle for EVERY `Primitives` draw whose viewport is smaller than its target, as the mechanism
+that clips XNA-style sub-viewport rendering. Whichever draw ran LAST in the capture's own render
+pass leaves that draw's own (correct, intentional) scissor rectangle active at the GL level, and
+the later blit silently clips the ENTIRE backbuffer readback down to that one small rectangle --
+every pixel outside it reads back as the destination staging texture's own zero-initialised
+(black, alpha-zero) memory, never touched by the blit at all. This is not a Y-flip/coordinate bug
+(the original 2026-08-02 hypothesis, see below, was investigating the wrong mechanism) and not
+scissor/viewport application to the DRAWS themselves (both were independently confirmed correct at
+every step via live pixel probes) -- it is a driver-state-hygiene gap around one specific,
+non-draw, internal LLGL operation.
+
+**Confirmed empirically at every step**, not reasoned from source alone: added temporary
+`fprintf`/`glReadPixels` probes to `~/deps/LLGL`'s `GLCommandExecutor.cpp` (after each draw) and
+`GLFramebufferCapture.cpp` (before/after the copy, before/after the blit) -- draws land correctly
+on FBO 0, `glCopyTexSubImage2D` correctly captures them into the intermediate texture, and the
+blit's destination is black ONLY outside whatever `GL_SCISSOR_BOX` happened to be active
+(`(64,0,32,72)` for one failing leg, `(0,0,32,72)` for another -- both exactly matching that leg's
+own last draw's sub-viewport). Verified the fix two ways before implementing it for real: first by
+`glDisable(GL_SCISSOR_TEST)` right before the blit (temporary, vendored-side experiment), then by
+only widening `GL_SCISSOR_BOX` to the full destination (matching what CNA's own code can actually
+do via the public `LLGL::CommandBuffer::SetScissor()` API, since there is no public way to reach
+into this internal call and disable the test itself) -- both fixed every affected check.
+
+**Fix** (`src/CNA/Internal/Backends/Llgl/LlglGraphicsBackend.cpp`, `CaptureBackbuffer()`): issue
+`commands_->SetScissor(LLGL::Scissor{0, 0, bucketResolution.width, bucketResolution.height})`
+immediately before `commands_->CopyTextureFromFramebuffer(...)`. This does not need to disable the
+scissor test itself -- widening the box to cover the whole destination means nothing inside it is
+ever clipped, achieving the same effect through the public API alone. No change to the vendored
+LLGL dependency (would diverge from the pinned `Release-v0.04b` tag).
+
+**Verified, `CNA_LLGL_RENDERER=opengl`, Xvfb `:99`** (`git stash` pre/post comparison against the
+pre-fix binary): `deferred_scissor_capture_test.cpp` 43/47 -> **47/47 (full pass)**;
+`deferred_viewport_capture_test.cpp` 35/39 -> 37/39 (its own F2/F3, the only two checks this
+mechanism could explain, both now pass; the remaining two, E1/E2, are a genuinely separate,
+already-declared "this rasterizer has no viewport depth remap" limitation, unaffected by this fix);
+`spritebatch_custom_viewport_test.cpp` and `spritebatch_viewport_switch_test.cpp` -- this ticket's
+own ORIGINAL tracked symptom, described below -- now **13/13 and 6/6, full passes**. A full
+69-binary regression sweep (both Vulkan-default-on-DRI3-less-Xvfb and OpenGL-forced) shows zero
+new regressions elsewhere. `rendertargetcube_plural_binding_test.cpp` still cannot be verified on
+this sandbox's OpenGL module -- blocked by the separate, pre-existing `hasCubeTextures` gap, not
+by anything this fix touches.
+
+**`_OpenGL` ctest lanes added** for all four files named in `LLGL-51`'s own acceptance gate
+(`Llgl_SpriteBatch_CustomViewport_OpenGL`, `Llgl_SpriteBatch_ViewportSwitch_OpenGL`,
+`Llgl_Deferred_Scissor_OpenGL` -- full passes -- and `Llgl_Deferred_Viewport_OpenGL`, kept
+registered despite E1/E2 as a real regression trip-wire, matching this project's own established
+partial-pass-suite precedent). `rendertargetcube_plural_binding` still has no `_OpenGL` lane (same
+`hasCubeTextures` blocker as above).
+
+---
+
+<details>
+<summary>Original investigation history (2026-08-02/03), superseded by the confirmed root cause above</summary>
+
+**Status:** re-investigated for `plan_llgl.md`'s `LLGL-51` via LIVE instrumentation of the
 vendored LLGL source (temporary `fprintf` added to `~/deps/LLGL`'s own `GLStateManager.cpp`, run
 against this backend's real Xvfb/llvmpipe environment, then fully reverted via `git checkout --` --
 `~/deps/LLGL` is a pristine, unmodified pinned checkout again). This narrows out the ORIGINAL
@@ -547,6 +611,8 @@ than attempted blind.
 `spritebatch_viewport_switch`/`rendertargetcube_plural_binding` -- see
 `cmake/Tests/LlglTests.cmake`'s own comment there). `Llgl_Deferred_Viewport`/`Llgl_Deferred_Scissor`
 remain at 37/39 / 43/47 on the OpenGL module.
+
+</details>
 
 ---
 
