@@ -1,5 +1,7 @@
 #include "CNA/Internal/Backends/Dx8/Dx8GraphicsBackend.hpp"
 
+#include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
+
 // plan_dx8.md: real DirectX 8 graphics backend, delivered via DXVK (Direct3DCreate8 resolved from
 // DXVK's own d3d8.dll.a -- mingw-w64 ships no real d3d8 import library for x86_64, design decision
 // 2). "DirectDraw+Direct3D merged": a single IDirect3D8::CreateDevice call creates both the device
@@ -504,9 +506,9 @@ namespace CNA::Internal::Backends::Dx8
             ThrowMipLevelUnsupported(level);
         }
 
-        void GetData(int level, int x, int y, int w, int h, void* data, int /*dataLength*/) const override
+        [[nodiscard]] bool GetData(int level, int x, int y, int w, int h, void* data, int /*dataLength*/) const override
         {
-            if (w <= 0 || h <= 0) return;
+            if (w <= 0 || h <= 0) return true;
             D3DLOCKED_RECT locked{};
             RECT rect{static_cast<LONG>(x), static_cast<LONG>(y),
                       static_cast<LONG>(x + w), static_cast<LONG>(y + h)};
@@ -521,6 +523,7 @@ namespace CNA::Internal::Backends::Dx8
                                  dst + static_cast<std::size_t>(row) * rowBytes, w);
             }
             texture_->UnlockRect(static_cast<UINT>(level));
+            return true;
         }
 
         [[nodiscard]] IDirect3DTexture8* Texture() const override { return texture_; }
@@ -655,14 +658,18 @@ namespace CNA::Internal::Backends::Dx8
         }
     }
 
-    void Dx8GraphicsBackend::SetRenderTargets(IRenderTargetBackend* const* rts, int count)
+    void Dx8GraphicsBackend::SetRenderTargets(
+        const RenderTargetBindingDescriptor* renderTargets, int count)
     {
         if (count > 1)
             throw std::runtime_error(
                 "DX8 does not support multiple simultaneous render targets (MRT): requested " +
                 std::to_string(count) + ", but this backend's fixed-function scope supports "
                 "exactly one active render target at a time.");
-        SetRenderTarget2D(count > 0 ? rts[0] : nullptr);
+        if (count > 0 && renderTargets[0].IsRenderTargetCubeFace())
+            throw std::runtime_error(
+                "DX8 does not support RenderTargetCube face bindings.");
+        SetRenderTarget2D(count > 0 ? renderTargets[0].GetRenderTarget2D() : nullptr);
     }
 
     // ---- 2D compositor: real GPU-rendered textured quads (design decision 11) ----
@@ -989,8 +996,14 @@ namespace CNA::Internal::Backends::Dx8
     // accepted and ignored, matching every prior backend in this family.
     void Dx8GraphicsBackend::ApplyBlendState(int colorSrcBlend, int /*alphaSrcBlend*/,
                                              int colorDstBlend, int /*alphaDstBlend*/,
-                                             int /*colorBlendFunc*/, int /*alphaBlendFunc*/)
+                                             int /*colorBlendFunc*/, int /*alphaBlendFunc*/,
+                                             const BlendWriteState& /*writeState*/)
     {
+        // REMED-GFX-077: D3D8 does expose D3DRS_COLORWRITEENABLE/D3DRS_MULTISAMPLEMASK, but
+        // wiring them is deferred with the rest of this backend's accepted-and-ignored raster
+        // states (scissor/depth-bias, see ApplyRasterizerState); the write state is accepted and
+        // ignored -- a documented deferral of this Historical backend, not a silent drop the
+        // caller was told succeeded in full.
         impl_->device8->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
         impl_->device8->SetRenderState(D3DRS_SRCBLEND, Dx8BlendToD3D(colorSrcBlend));
         impl_->device8->SetRenderState(D3DRS_DESTBLEND, Dx8BlendToD3D(colorDstBlend));
@@ -1109,8 +1122,22 @@ namespace CNA::Internal::Backends::Dx8
         [[nodiscard]] int Capacity() const { return capacity_; }
         [[nodiscard]] std::size_t Stride() const { return stride_; }
         [[nodiscard]] const std::vector<uint8_t>& Data() const { return data_; }
+
+        // REMED-GFX-DECL-GUARD: the draw routes infer attribute byte offsets from the stride
+        // alone (REMED-GFX-217), so the declaration is remembered rather than discarded and the
+        // Draw*Ex routes refuse one those offsets would silently reinterpret.
+        void SetVertexDeclaration(const VertexDeclaration& vertexDeclaration) override
+        {
+            declaration_.Remember(vertexDeclaration);
+        }
+        /// The declaration this buffer carries, for REMED-GFX-DECL-GUARD's fidelity check.
+        [[nodiscard]] const CNA::Internal::Graphics::DeclaredVertexLayout& Declaration() const
+        {
+            return declaration_;
+        }
     private:
         int capacity_ = 0;
+        CNA::Internal::Graphics::DeclaredVertexLayout declaration_;
         int vertexCount_ = 0;
         std::size_t stride_ = 0;
         std::vector<uint8_t> data_;
@@ -1509,11 +1536,25 @@ namespace CNA::Internal::Backends::Dx8
             primitiveCount, nullptr, false);
     }
 
+    // REMED-GFX-DECL-GUARD: the declaration-fidelity boundary. The Draw*Ex routes below read
+    // their attributes at byte offsets chosen by the stride alone (REMED-GFX-217), so a
+    // declaration those offsets cannot represent is refused before any vertex is fetched. A
+    // stride outside this backend's own supported set is left to its established out-of-table
+    // rejection, which is already loud and deterministic.
+    static void RequireFaithfulDeclarationEXT(const IVertexBufferBackend& vb, const char* route)
+    {
+        const auto& dxVb = static_cast<const Dx8VertexBufferBackend&>(vb);
+        CNA::Internal::Graphics::RequireFaithfulVertexDeclaration(
+            dxVb.Declaration(), static_cast<int>(dxVb.Stride()),
+            CNA::Internal::Graphics::UnlistedStrideLayout::BackendRefusesIt, "DX8", route);
+    }
+
     void Dx8GraphicsBackend::DrawPrimitivesEx(const IVertexBufferBackend& vb,
                                              const Matrix& world, const Matrix& view, const Matrix& projection,
                                              PrimitiveType primitive, int primitiveCount,
                                              const GpuDrawParams& params)
     {
+        RequireFaithfulDeclarationEXT(vb, "ordinary-nonindexed");
         Dx8CheckDrawPreconditions("DrawPrimitivesEx", impl_->currentTargetSurface != nullptr,
                                   primitive, primitiveCount);
         if (params.textureEnabled && params.texture0 == nullptr)
@@ -1546,6 +1587,7 @@ namespace CNA::Internal::Backends::Dx8
                                                      PrimitiveType primitive, int primitiveCount,
                                                      const GpuDrawParams& params)
     {
+        RequireFaithfulDeclarationEXT(vb, "ordinary-indexed");
         Dx8CheckDrawPreconditions("DrawIndexedPrimitivesEx", impl_->currentTargetSurface != nullptr,
                                   primitive, primitiveCount);
         if (params.textureEnabled && params.texture0 == nullptr)

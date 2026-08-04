@@ -188,6 +188,16 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameCapabilityReportIsThisBackendsOwn)
     EXPECT_FALSE(reported)
         << "WebGPU claims WireFrame support again -- WEBGPU-115's capability override is gone, and "
            "the renderer has no polygon mode to back the claim with";
+#elif defined(CNA_BACKEND_DX1)
+    // DX1 is 2D-only by design -- DirectX 1 has no Direct3D at all, so there is no polygon fill
+    // mode to report on and Dx1GraphicsBackend::SupportsCapability answers false for every
+    // capability, WireFrame included. Same truthful-false shape as WebGPU above, for the opposite
+    // reason: nothing here could rasterize a triangle in the first place. (DX2..DX8 and D3D10
+    // report true and take the default arm below -- their fill mode is real, spike-verified on
+    // DX2's own software RGB device and on DX8/D3D10's DXVK GPU path.)
+    EXPECT_FALSE(reported)
+        << "DX1 claims WireFrame support -- this backend has no 3D pipeline at all, so a true "
+           "report cannot be backed by any rendering path";
 #else
     // Every other backend in this file answers true, either because it renders a real wireframe
     // (Software, Vulkan, bgfx, SDL_GPU, D3D9, D3D11, D3D12) or because it inherits

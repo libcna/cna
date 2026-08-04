@@ -2,6 +2,8 @@
 // doc comment for the architecture summary; design decisions are recorded in plan_d3d10.md itself.
 #include "CNA/Internal/Backends/D3D10/D3D10GraphicsBackend.hpp"
 
+#include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
+
 #include "Microsoft/Xna/Framework/Graphics/Blend.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CompareFunction.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CullMode.hpp"
@@ -523,8 +525,22 @@ namespace CNA::Internal::Backends::D3D10
         [[nodiscard]] ID3D10Buffer* GetBufferEXT() const { return buffer_; }
         [[nodiscard]] std::size_t GetStrideEXT() const { return stride_; }
 
+        // REMED-GFX-DECL-GUARD: the draw routes infer attribute byte offsets from the stride
+        // alone (REMED-GFX-217), so the declaration is remembered rather than discarded and the
+        // Draw*Ex routes refuse one those offsets would silently reinterpret.
+        void SetVertexDeclaration(const VertexDeclaration& vertexDeclaration) override
+        {
+            declaration_.Remember(vertexDeclaration);
+        }
+        /// The declaration this buffer carries, for REMED-GFX-DECL-GUARD's fidelity check.
+        [[nodiscard]] const CNA::Internal::Graphics::DeclaredVertexLayout& Declaration() const
+        {
+            return declaration_;
+        }
+
     private:
         ID3D10Device* device_;
+        CNA::Internal::Graphics::DeclaredVertexLayout declaration_;
         int capacity_;
         ID3D10Buffer* buffer_ = nullptr;
         UINT capacityBytes_ = 0;
@@ -1115,7 +1131,8 @@ namespace CNA::Internal::Backends::D3D10
         impl_->device->OMSetRenderTargets(1, &rtv, d3dRt->DSV());
     }
 
-    void D3D10GraphicsBackend::SetRenderTargets(IRenderTargetBackend* const* rts, int count)
+    void D3D10GraphicsBackend::SetRenderTargets(
+        const RenderTargetBindingDescriptor* renderTargets, int count)
     {
         if (count <= 0) { impl_->BindDefaultTargets(); return; }
         if (count > Impl::kMaxTargets)
@@ -1124,7 +1141,10 @@ namespace CNA::Internal::Backends::D3D10
         ID3D10RenderTargetView* rtvs[Impl::kMaxTargets] = {};
         for (int i = 0; i < count; ++i)
         {
-            auto* d3dRt = dynamic_cast<D3D10RenderTargetBackend*>(rts[i]);
+            if (renderTargets[i].IsRenderTargetCubeFace())
+                throw std::runtime_error(
+                    "D3D10GraphicsBackend::SetRenderTargets: RenderTargetCube face bindings are not supported");
+            auto* d3dRt = dynamic_cast<D3D10RenderTargetBackend*>(renderTargets[i].GetRenderTarget2D());
             if (!d3dRt)
                 throw std::runtime_error("D3D10GraphicsBackend::SetRenderTargets: not a D3D10 render target");
             rtvs[i] = d3dRt->RTV();
@@ -1147,8 +1167,13 @@ namespace CNA::Internal::Backends::D3D10
 
     void D3D10GraphicsBackend::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
                                                int colorDstBlend, int alphaDstBlend,
-                                               int colorBlendFunc, int /*alphaBlendFunc*/)
+                                               int colorBlendFunc, int /*alphaBlendFunc*/,
+                                               const BlendWriteState& /*writeState*/)
     {
+        // REMED-GFX-077: D3D10_BLEND_DESC does carry a per-target RenderTargetWriteMask[8] and
+        // OMSetBlendState takes a sample mask, but wiring them is deferred with the rest of this
+        // backend's owner-confirmed v1 scope; the write state is accepted and ignored -- a
+        // documented deferral, not a silent drop the caller was told succeeded in full.
         // Unlike D3D11_BLEND_DESC (per-target full RenderTarget[8] blend options),
         // D3D10_BLEND_DESC shares ONE set of blend factors/op across all 8 targets -- only
         // BlendEnable/RenderTargetWriteMask are per-target arrays (D3D10.1's D3D10_BLEND_DESC1

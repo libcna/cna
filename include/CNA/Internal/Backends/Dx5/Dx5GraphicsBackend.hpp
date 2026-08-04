@@ -107,7 +107,7 @@ namespace CNA::Internal::Backends::Dx5
         void SetRenderTarget2D(IRenderTargetBackend* rt) override;
         // DirectDraw has no multi-render-target concept -- throws for count > 1, same conclusion
         // SDL_RENDERER/CANVAS/DX3 already reached.
-        void SetRenderTargets(IRenderTargetBackend* const* rts, int count) override;
+        void SetRenderTargets(const RenderTargetBindingDescriptor* renderTargets, int count) override;
 
         // ---- IGraphicsBackend: real (Phase O4/O5) ----
         std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;
@@ -119,7 +119,8 @@ namespace CNA::Internal::Backends::Dx5
         // colorBlendFunc/alphaBlendFunc are accepted and ignored, decision 7's pattern).
         void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
                              int colorDstBlend, int alphaDstBlend,
-                             int colorBlendFunc, int alphaBlendFunc) override;
+                             int colorBlendFunc, int alphaBlendFunc,
+                             const BlendWriteState& writeState) override;
 
         // Phase O6 (design decision 10): real per-draw 3D state application, replacing the shared
         // no-op defaults. ApplyDepthStencilState honors depth (enable/write/func) only -- stencil

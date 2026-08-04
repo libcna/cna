@@ -104,7 +104,7 @@ namespace CNA::Internal::Backends::Dx8
         void SetRenderTarget2D(IRenderTargetBackend* rt) override;
         // No multi-render-target concept at this DirectX era -- throws for count > 1, same
         // conclusion every DirectDraw-based backend in this family already reached.
-        void SetRenderTargets(IRenderTargetBackend* const* rts, int count) override;
+        void SetRenderTargets(const RenderTargetBindingDescriptor* renderTargets, int count) override;
 
         // ---- IGraphicsBackend: 2D compositor + state mapping ----
         // Design decision 11: real GPU-rendered textured quads (Dx8SpriteBatchBackend), not a
@@ -116,7 +116,8 @@ namespace CNA::Internal::Backends::Dx8
         // alphaBlendFunc are accepted and ignored, matching every prior backend in this family.
         void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
                              int colorDstBlend, int alphaDstBlend,
-                             int colorBlendFunc, int alphaBlendFunc) override;
+                             int colorBlendFunc, int alphaBlendFunc,
+                             const BlendWriteState& writeState) override;
 
         // plan_dx8.md design decision 9: ApplyDepthStencilState honors depth AND the front-face
         // stencil parameters (enable/func/fail/zfail/pass/mask/writemask/ref) -- unchanged in

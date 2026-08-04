@@ -1,5 +1,7 @@
 #include "CNA/Internal/Backends/Dx30/Dx30GraphicsBackend.hpp"
 
+#include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
+
 // plan_dx30.md: real DirectX 3 graphics backend (temporarily named DX30 -- see plan_dx30.md's own
 // status note for why -- pending a still-not-executed rename of the existing, shipping
 // ../free-direct-backed DX3 backend to FREE_DIRECT). <ddraw.h> (and the real <windows.h> it pulls
@@ -1086,8 +1088,22 @@ namespace CNA::Internal::Backends::Dx30
         [[nodiscard]] std::size_t Stride() const { return stride_; }
         [[nodiscard]] const std::vector<uint8_t>& Data() const { return data_; }
 
+        // REMED-GFX-DECL-GUARD: the draw routes infer attribute byte offsets from the stride
+        // alone (REMED-GFX-217), so the declaration is remembered rather than discarded and the
+        // Draw*Ex routes refuse one those offsets would silently reinterpret.
+        void SetVertexDeclaration(const VertexDeclaration& vertexDeclaration) override
+        {
+            declaration_.Remember(vertexDeclaration);
+        }
+        /// The declaration this buffer carries, for REMED-GFX-DECL-GUARD's fidelity check.
+        [[nodiscard]] const CNA::Internal::Graphics::DeclaredVertexLayout& Declaration() const
+        {
+            return declaration_;
+        }
+
     private:
         int capacity_ = 0;
+        CNA::Internal::Graphics::DeclaredVertexLayout declaration_;
         int vertexCount_ = 0;
         std::size_t stride_ = 0;
         std::vector<uint8_t> data_;
@@ -1661,7 +1677,8 @@ namespace CNA::Internal::Backends::Dx30
         }
     }
 
-    void Dx30GraphicsBackend::SetRenderTargets(IRenderTargetBackend* const* rts, int count)
+    void Dx30GraphicsBackend::SetRenderTargets(
+        const RenderTargetBindingDescriptor* renderTargets, int count)
     {
         // DirectDraw has no multi-render-target concept -- single active surface only.
         if (count > 1)
@@ -1669,7 +1686,10 @@ namespace CNA::Internal::Backends::Dx30
                 "DX30 (DirectDraw v2) does not support multiple simultaneous render targets (MRT): "
                 "requested " + std::to_string(count) + ", but IDirectDrawSurface supports exactly "
                 "one active render target at a time.");
-        SetRenderTarget2D(count > 0 ? rts[0] : nullptr);
+        if (count > 0 && renderTargets[0].IsRenderTargetCubeFace())
+            throw std::runtime_error(
+                "DX30 (DirectDraw v2) does not support RenderTargetCube face bindings.");
+        SetRenderTarget2D(count > 0 ? renderTargets[0].GetRenderTarget2D() : nullptr);
     }
 
     // ---- Phase O4: the CPU compositor / SpriteBatch draw path (design decision 5) ----
@@ -1877,8 +1897,13 @@ namespace CNA::Internal::Backends::Dx30
 
     void Dx30GraphicsBackend::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
                                              int colorDstBlend, int alphaDstBlend,
-                                             int colorBlendFunc, int alphaBlendFunc)
+                                             int colorBlendFunc, int alphaBlendFunc,
+                                             const BlendWriteState& /*writeState*/)
     {
+        // REMED-GFX-077: BlendState's ColorWriteChannels0-3 and MultiSampleMask are genuinely
+        // inexpressible at this DirectX era -- no colour-write-enable or coverage-sample-mask
+        // render state exists at all -- so the write state is accepted and ignored: a documented
+        // capability gap of this Historical backend, not a silent drop of expressible state.
         impl_->currentBlendMode = DetectBlendMode(colorSrcBlend, alphaSrcBlend, colorDstBlend, alphaDstBlend,
                                                   colorBlendFunc, alphaBlendFunc);
 
@@ -2055,11 +2080,25 @@ namespace CNA::Internal::Backends::Dx30
             primitiveCount, 0, false);
     }
 
+    // REMED-GFX-DECL-GUARD: the declaration-fidelity boundary. The Draw*Ex routes below read
+    // their attributes at byte offsets chosen by the stride alone (REMED-GFX-217), so a
+    // declaration those offsets cannot represent is refused before any vertex is fetched. A
+    // stride outside this backend's own supported set is left to its established out-of-table
+    // rejection, which is already loud and deterministic.
+    static void RequireFaithfulDeclarationEXT(const IVertexBufferBackend& vb, const char* route)
+    {
+        const auto& dxVb = static_cast<const Dx30VertexBufferBackend&>(vb);
+        CNA::Internal::Graphics::RequireFaithfulVertexDeclaration(
+            dxVb.Declaration(), static_cast<int>(dxVb.Stride()),
+            CNA::Internal::Graphics::UnlistedStrideLayout::BackendRefusesIt, "DX30", route);
+    }
+
     void Dx30GraphicsBackend::DrawPrimitivesEx(const IVertexBufferBackend& vb,
                                               const Matrix& world, const Matrix& view, const Matrix& projection,
                                               PrimitiveType primitive, int primitiveCount,
                                               const GpuDrawParams& params)
     {
+        RequireFaithfulDeclarationEXT(vb, "ordinary-nonindexed");
         Dx30CheckDrawPreconditions("DrawPrimitivesEx", impl_->currentTargetSurface != nullptr,
                                   primitive, primitiveCount);
         if (params.textureEnabled && params.texture0 == nullptr)
@@ -2093,6 +2132,7 @@ namespace CNA::Internal::Backends::Dx30
                                                      PrimitiveType primitive, int primitiveCount,
                                                      const GpuDrawParams& params)
     {
+        RequireFaithfulDeclarationEXT(vb, "ordinary-indexed");
         Dx30CheckDrawPreconditions("DrawIndexedPrimitivesEx", impl_->currentTargetSurface != nullptr,
                                   primitive, primitiveCount);
         if (params.textureEnabled && params.texture0 == nullptr)

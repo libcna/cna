@@ -86,13 +86,14 @@ namespace CNA::Internal::Backends::D3D10
         void SetRenderTarget2D(IRenderTargetBackend* rt) override;
         // Real MRT support -- does NOT throw for count > 1 (a genuine difference from every
         // DX1..DX8 backend), up to D3D10_SIMULTANEOUS_RENDER_TARGET_COUNT (8).
-        void SetRenderTargets(IRenderTargetBackend* const* rts, int count) override;
+        void SetRenderTargets(const RenderTargetBindingDescriptor* renderTargets, int count) override;
 
         // ---- IGraphicsBackend: 2D compositor + state objects ----
         std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;
         void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
                              int colorDstBlend, int alphaDstBlend,
-                             int colorBlendFunc, int alphaBlendFunc) override;
+                             int colorBlendFunc, int alphaBlendFunc,
+                             const BlendWriteState& writeState) override;
         void ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable, int depthFunc,
                                     bool stencilEnable, int stencilFunc,
                                     int stencilPass, int stencilFail, int stencilDepthFail,

@@ -917,7 +917,8 @@ namespace CNA::Internal::Backends::Dx1
         }
     }
 
-    void Dx1GraphicsBackend::SetRenderTargets(IRenderTargetBackend* const* rts, int count)
+    void Dx1GraphicsBackend::SetRenderTargets(
+        const RenderTargetBindingDescriptor* renderTargets, int count)
     {
         // DirectDraw has no multi-render-target concept -- single active surface only.
         if (count > 1)
@@ -925,7 +926,10 @@ namespace CNA::Internal::Backends::Dx1
                 "DX1 (DirectDraw v1) does not support multiple simultaneous render targets (MRT): "
                 "requested " + std::to_string(count) + ", but IDirectDrawSurface supports exactly "
                 "one active render target at a time.");
-        SetRenderTarget2D(count > 0 ? rts[0] : nullptr);
+        if (count > 0 && renderTargets[0].IsRenderTargetCubeFace())
+            throw std::runtime_error(
+                "DX1 (DirectDraw v1) does not support RenderTargetCube face bindings.");
+        SetRenderTarget2D(count > 0 ? renderTargets[0].GetRenderTarget2D() : nullptr);
     }
 
     // ---- Phase O4: the CPU compositor / SpriteBatch draw path (design decision 5) ----
@@ -1133,8 +1137,13 @@ namespace CNA::Internal::Backends::Dx1
 
     void Dx1GraphicsBackend::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
                                              int colorDstBlend, int alphaDstBlend,
-                                             int colorBlendFunc, int alphaBlendFunc)
+                                             int colorBlendFunc, int alphaBlendFunc,
+                                             const BlendWriteState& /*writeState*/)
     {
+        // REMED-GFX-077: BlendState's ColorWriteChannels0-3 and MultiSampleMask are genuinely
+        // inexpressible at this DirectX era -- no colour-write-enable or coverage-sample-mask
+        // render state exists at all -- so the write state is accepted and ignored: a documented
+        // capability gap of this Historical backend, not a silent drop of expressible state.
         impl_->currentBlendMode = DetectBlendMode(colorSrcBlend, alphaSrcBlend, colorDstBlend, alphaDstBlend,
                                                   colorBlendFunc, alphaBlendFunc);
     }

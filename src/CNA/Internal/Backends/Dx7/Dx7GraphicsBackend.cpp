@@ -1,5 +1,7 @@
 #include "CNA/Internal/Backends/Dx7/Dx7GraphicsBackend.hpp"
 
+#include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
+
 // plan_dx7.md: real DirectX 7 graphics backend -- DirectDraw v7 (IDirectDraw7/
 // IDirectDrawSurface7/DDSURFACEDESC2/DDSCAPS2, created via DirectDrawCreateEx) + Direct3D v7
 // (IDirect3D7/IDirect3DDevice7). Unlike DX6 (no new interface at all vs DX5), DX7 is a real
@@ -1091,8 +1093,22 @@ namespace CNA::Internal::Backends::Dx7
         [[nodiscard]] std::size_t Stride() const { return stride_; }
         [[nodiscard]] const std::vector<uint8_t>& Data() const { return data_; }
 
+        // REMED-GFX-DECL-GUARD: the draw routes infer attribute byte offsets from the stride
+        // alone (REMED-GFX-217), so the declaration is remembered rather than discarded and the
+        // Draw*Ex routes refuse one those offsets would silently reinterpret.
+        void SetVertexDeclaration(const VertexDeclaration& vertexDeclaration) override
+        {
+            declaration_.Remember(vertexDeclaration);
+        }
+        /// The declaration this buffer carries, for REMED-GFX-DECL-GUARD's fidelity check.
+        [[nodiscard]] const CNA::Internal::Graphics::DeclaredVertexLayout& Declaration() const
+        {
+            return declaration_;
+        }
+
     private:
         int capacity_ = 0;
+        CNA::Internal::Graphics::DeclaredVertexLayout declaration_;
         int vertexCount_ = 0;
         std::size_t stride_ = 0;
         std::vector<uint8_t> data_;
@@ -1665,7 +1681,8 @@ namespace CNA::Internal::Backends::Dx7
         }
     }
 
-    void Dx7GraphicsBackend::SetRenderTargets(IRenderTargetBackend* const* rts, int count)
+    void Dx7GraphicsBackend::SetRenderTargets(
+        const RenderTargetBindingDescriptor* renderTargets, int count)
     {
         // DirectDraw has no multi-render-target concept -- single active surface only.
         if (count > 1)
@@ -1673,7 +1690,10 @@ namespace CNA::Internal::Backends::Dx7
                 "DX7 (DirectDraw v4) does not support multiple simultaneous render targets (MRT): "
                 "requested " + std::to_string(count) + ", but IDirectDrawSurface7 supports exactly "
                 "one active render target at a time.");
-        SetRenderTarget2D(count > 0 ? rts[0] : nullptr);
+        if (count > 0 && renderTargets[0].IsRenderTargetCubeFace())
+            throw std::runtime_error(
+                "DX7 (DirectDraw v7) does not support RenderTargetCube face bindings.");
+        SetRenderTarget2D(count > 0 ? renderTargets[0].GetRenderTarget2D() : nullptr);
     }
 
     // ---- Phase O4: the CPU compositor / SpriteBatch draw path (design decision 5) ----
@@ -1881,8 +1901,13 @@ namespace CNA::Internal::Backends::Dx7
 
     void Dx7GraphicsBackend::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
                                              int colorDstBlend, int alphaDstBlend,
-                                             int colorBlendFunc, int alphaBlendFunc)
+                                             int colorBlendFunc, int alphaBlendFunc,
+                                             const BlendWriteState& /*writeState*/)
     {
+        // REMED-GFX-077: BlendState's ColorWriteChannels0-3 and MultiSampleMask are genuinely
+        // inexpressible at this DirectX era -- no colour-write-enable or coverage-sample-mask
+        // render state exists at all -- so the write state is accepted and ignored: a documented
+        // capability gap of this Historical backend, not a silent drop of expressible state.
         impl_->currentBlendMode = DetectBlendMode(colorSrcBlend, alphaSrcBlend, colorDstBlend, alphaDstBlend,
                                                   colorBlendFunc, alphaBlendFunc);
 
@@ -2095,11 +2120,25 @@ namespace CNA::Internal::Backends::Dx7
             primitiveCount, nullptr, false);
     }
 
+    // REMED-GFX-DECL-GUARD: the declaration-fidelity boundary. The Draw*Ex routes below read
+    // their attributes at byte offsets chosen by the stride alone (REMED-GFX-217), so a
+    // declaration those offsets cannot represent is refused before any vertex is fetched. A
+    // stride outside this backend's own supported set is left to its established out-of-table
+    // rejection, which is already loud and deterministic.
+    static void RequireFaithfulDeclarationEXT(const IVertexBufferBackend& vb, const char* route)
+    {
+        const auto& dxVb = static_cast<const Dx7VertexBufferBackend&>(vb);
+        CNA::Internal::Graphics::RequireFaithfulVertexDeclaration(
+            dxVb.Declaration(), static_cast<int>(dxVb.Stride()),
+            CNA::Internal::Graphics::UnlistedStrideLayout::BackendRefusesIt, "DX7", route);
+    }
+
     void Dx7GraphicsBackend::DrawPrimitivesEx(const IVertexBufferBackend& vb,
                                               const Matrix& world, const Matrix& view, const Matrix& projection,
                                               PrimitiveType primitive, int primitiveCount,
                                               const GpuDrawParams& params)
     {
+        RequireFaithfulDeclarationEXT(vb, "ordinary-nonindexed");
         Dx7CheckDrawPreconditions("DrawPrimitivesEx", impl_->currentTargetSurface != nullptr,
                                   primitive, primitiveCount);
         if (params.textureEnabled && params.texture0 == nullptr)
@@ -2133,6 +2172,7 @@ namespace CNA::Internal::Backends::Dx7
                                                      PrimitiveType primitive, int primitiveCount,
                                                      const GpuDrawParams& params)
     {
+        RequireFaithfulDeclarationEXT(vb, "ordinary-indexed");
         Dx7CheckDrawPreconditions("DrawIndexedPrimitivesEx", impl_->currentTargetSurface != nullptr,
                                   primitive, primitiveCount);
         if (params.textureEnabled && params.texture0 == nullptr)

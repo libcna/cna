@@ -17,8 +17,10 @@
 //   reached some other way.
 // Check E (DX1-61) -- SetDepthTestEnabled/SetBlendEnabled/SetDepthWriteEnabled all throw (these
 //   ARE directly, unconditionally reachable from GraphicsDevice, no masking).
-// Check F (DX1-64) -- Texture3D/TextureCube/RenderTargetCube construction does NOT throw
-//   (backend returns nullptr; these classes are designed to degrade gracefully).
+// Check F (DX1-64) -- Texture3D construction throws System::NotSupportedException up front
+//   (REMED-CONTENT-004: the constructor queries SupportsCapability(Texture3D) before creating
+//   any backend resource); TextureCube/RenderTargetCube construction still does NOT throw
+//   (their factories return nullptr; both classes degrade gracefully).
 // Check G (DX1-66) -- OcclusionQuery construction does NOT throw; IsComplete()/PixelCount()
 //   degrade to false/0 -- CreateOcclusionQuery() is deliberately never overridden, letting
 //   IGraphicsBackend's own nullptr-returning default apply directly (ported from DX3-66's own
@@ -48,6 +50,8 @@
 #include "Microsoft/Xna/Framework/Graphics/ClearOptions.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 
+#include "System/NotSupportedException.hpp"
+
 #include "CNA/Internal/Backends/Dx1/Dx1GraphicsBackend.hpp"
 
 #include <cstdio>
@@ -72,7 +76,7 @@ class Dx1No3DTest : public Game
 {
     std::unique_ptr<GraphicsDeviceManager> gdm_;
     int passCount_ = 0;
-    static constexpr int kTotal = 9;
+    static constexpr int kTotal = 10;
     int result_ = 1;
 
     void check(bool ok, const char* label)
@@ -125,19 +129,31 @@ protected:
               Throws([&] { dev.SetDepthWriteEnabled(true); }),
               "SetDepthTestEnabled/SetBlendEnabled/SetDepthWriteEnabled all throw (DX1-61)");
 
-        // Check F (DX1-64): construction does NOT throw -- these classes are designed to degrade
-        // gracefully against a null backend.
+        // Check F (DX1-64): Texture3D construction now throws a typed rejection up front --
+        // REMED-CONTENT-004 made the constructor check SupportsCapability(Texture3D) before
+        // creating any backend resource, so a capability-less backend fails loudly instead of
+        // leaving a null backend whose SetData/GetData silently discard the caller's bytes.
+        // TextureCube/RenderTargetCube keep the original degrade-gracefully contract: their
+        // factories return nullptr and construction succeeds.
         {
-            bool threw = false;
+            bool t3dThrewTyped = false;
             try
             {
                 Texture3D t3d(dev, 2, 2, 2, false, SurfaceFormat::Color);
+            }
+            catch (const System::NotSupportedException&) { t3dThrewTyped = true; }
+            check(t3dThrewTyped,
+                  "Texture3D construction throws System::NotSupportedException (DX1-64 + REMED-CONTENT-004)");
+
+            bool cubesThrew = false;
+            try
+            {
                 TextureCube tcube(dev, 2, false, SurfaceFormat::Color);
                 RenderTargetCube rtcube(dev, 2, false, SurfaceFormat::Color, DepthFormat::None, 0,
                                         RenderTargetUsage::DiscardContents);
             }
-            catch (const std::exception&) { threw = true; }
-            check(!threw, "Texture3D/TextureCube/RenderTargetCube construction does not throw (DX1-64)");
+            catch (const std::exception&) { cubesThrew = true; }
+            check(!cubesThrew, "TextureCube/RenderTargetCube construction does not throw (DX1-64)");
         }
 
         // Check G (DX1-66): OcclusionQuery degrades gracefully (a real fix in this phase -- see

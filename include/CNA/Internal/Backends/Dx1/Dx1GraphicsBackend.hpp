@@ -96,7 +96,7 @@ namespace CNA::Internal::Backends::Dx1
         void SetRenderTarget2D(IRenderTargetBackend* rt) override;
         // DirectDraw has no multi-render-target concept -- throws for count > 1, same conclusion
         // SDL_RENDERER/CANVAS/DX3 already reached.
-        void SetRenderTargets(IRenderTargetBackend* const* rts, int count) override;
+        void SetRenderTargets(const RenderTargetBindingDescriptor* renderTargets, int count) override;
 
         // ---- IGraphicsBackend: real (Phase O4/O5) ----
         std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;
@@ -105,7 +105,8 @@ namespace CNA::Internal::Backends::Dx1
         // only) and selects CompositeQuad's per-formula blend math.
         void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
                              int colorDstBlend, int alphaDstBlend,
-                             int colorBlendFunc, int alphaBlendFunc) override;
+                             int colorBlendFunc, int alphaBlendFunc,
+                             const BlendWriteState& writeState) override;
 
         // ---- 3D pipeline: NOT supported by DX1 -- DirectX 1 shipped no Direct3D at all (it did
         // not exist until DX2), so unlike DX3 (which throws by policy even though its DirectDraw
