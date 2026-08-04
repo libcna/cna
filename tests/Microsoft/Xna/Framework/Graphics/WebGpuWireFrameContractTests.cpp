@@ -980,4 +980,128 @@ TEST(WebGpuWireFrameContract, RefusalAndRecoveryAreNativelyClean)
         << "the refusal/recovery sequence produced uncaptured native errors";
 }
 
+// ---------------------------------------------------------------------------
+// 9. THE TOPOLOGY BOUNDARY. A fill mode describes how a POLYGON's interior is rasterized, so a
+//    line or point list has nothing for it to select and Solid/WireFrame are the same request.
+//    This backend substitutes nothing there, so refusing those draws would delete a draw that is
+//    already correct -- an over-wide guard, not a safety property. The claim is MEASURED here, not
+//    reasoned about: each non-polygon topology is drawn under both fill modes and the two frames
+//    must be byte-identical.
+//
+//    This is what PointListPrimitiveTest.PointListIsNotAffectedByTriangleCulling found: the first
+//    version of the guard refused a WireFrame point-list draw that every other backend renders,
+//    identically, under either fill mode.
+// ---------------------------------------------------------------------------
+namespace
+{
+    /// Draws @p primitive from the shared triangle's three vertices under @p fill, returning the
+    /// frame or the refusal. Line and point topologies consume the same three positions, so the
+    /// two fill modes are directly comparable per topology.
+    RouteRun RunTopology(GraphicsDevice& device, FillMode fill, PrimitiveType primitive,
+                         int primitiveCount)
+    {
+        RouteRun run;
+        WebGPUGraphicsBackend& backend = BackendOf(device);
+        RenderTarget2D target(device, kSize, kSize, false, SurfaceFormat::Color,
+                              DepthFormat::None, 0, RenderTargetUsage::PreserveContents);
+        try
+        {
+            const std::array<VertexPositionColor, 3> verts = TriangleVertices();
+            VertexBuffer vb(device, PositionColorDeclaration(), 3, BufferUsage::None);
+            vb.SetData(verts.data(), 3);
+
+            ApplyFixtureState(device, fill);
+            BasicEffect effect(device);
+            ApplyFixtureEffect(effect);
+
+            device.SetRenderTarget(&target);
+            device.setScissorRectangleProperty(Rectangle(0, 0, kSize, kSize));
+            device.Clear(Color(kClear[0], kClear[1], kClear[2], kClear[3]));
+            effect.Apply();
+            device.SetVertexBuffer(&vb);
+
+            run.before = Counters::Read(backend);
+            try
+            {
+                device.DrawPrimitives(primitive, 0, primitiveCount);
+                run.accepted = true;
+            }
+            catch (const std::exception& e)
+            {
+                run.rejection = e.what();
+            }
+            run.afterDraw = Counters::Read(backend);
+
+            device.SetVertexBuffer(nullptr);
+            device.SetRenderTarget(nullptr);
+            ReadTarget(target, run.frame);
+            run.afterFlush = Counters::Read(backend);
+        }
+        catch (const std::exception& e)
+        {
+            run.rejection = std::string("setup: ") + e.what();
+            device.SetVertexBuffer(nullptr);
+            device.SetRenderTarget(nullptr);
+        }
+        return run;
+    }
+
+    struct TopologyCase
+    {
+        const char* name;
+        PrimitiveType primitive;
+        int primitiveCount;
+        bool polygon;
+    };
+}   // namespace
+
+TEST(WebGpuWireFrameContract, OnlyPolygonTopologiesAreRefused)
+{
+    const std::array<TopologyCase, 5> cases{
+        TopologyCase{"TriangleList", PrimitiveType::TriangleList, 1, true},
+        TopologyCase{"TriangleStrip", PrimitiveType::TriangleStrip, 1, true},
+        TopologyCase{"LineList", PrimitiveType::LineList, 1, false},
+        TopologyCase{"LineStrip", PrimitiveType::LineStrip, 2, false},
+        TopologyCase{"PointListEXT", PrimitiveType::PointListEXT, 3, false},
+    };
+
+    for (const TopologyCase& c : cases)
+    {
+        SCOPED_TRACE(c.name);
+        GraphicsDevice gd;
+        const RouteRun solid = RunTopology(gd, FillMode::Solid, c.primitive, c.primitiveCount);
+        PrintRun((std::string(c.name) + " solid").c_str(), solid);
+        GraphicsDevice wireDevice;
+        const RouteRun wire =
+            RunTopology(wireDevice, FillMode::WireFrame, c.primitive, c.primitiveCount);
+        PrintRun((std::string(c.name) + " wireframe").c_str(), wire);
+
+        ASSERT_TRUE(solid.accepted) << c.name << " refused a Solid draw: " << solid.rejection;
+        EXPECT_GT(solid.frame.LitTotal(), 0)
+            << c.name << " rendered nothing under Solid -- " << solid.frame.Describe();
+
+        if (c.polygon)
+        {
+            EXPECT_FALSE(wire.accepted)
+                << c.name << " is a polygon topology and must be refused -- "
+                << wire.frame.Describe();
+            ExpectClearOnly(wire.frame, c.name);
+        }
+        else
+        {
+            // Accepted, and -- the part that justifies accepting it -- the output is exactly what
+            // Solid produces. Nothing was substituted, so there is nothing to refuse.
+            ASSERT_TRUE(wire.accepted)
+                << c.name << " has no polygon interior, so WireFrame selects nothing and the draw "
+                             "must not be refused: " << wire.rejection;
+            EXPECT_TRUE(wire.frame.pixels == solid.frame.pixels)
+                << c.name << " rendered differently under WireFrame than under Solid -- "
+                << wire.frame.Describe() << " vs " << solid.frame.Describe();
+            EXPECT_EQ(1u, wire.QueuedByDraw()) << wire.afterDraw.Describe();
+            EXPECT_EQ(1u, wire.NativeDraws()) << wire.afterFlush.Describe();
+            EXPECT_EQ(0u, wire.UncapturedErrors()) << wire.afterFlush.Describe();
+        }
+    }
+}
+
 #endif  // CNA_BACKEND_WEBGPU

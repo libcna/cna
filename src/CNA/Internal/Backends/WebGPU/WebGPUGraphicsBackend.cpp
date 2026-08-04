@@ -6074,9 +6074,16 @@ struct VSOut {
         return IGraphicsBackend::SupportsCapability(capability);
     }
 
-    void WebGPUGraphicsBackend::RequireSupportedFillModeEXT(const char* route) const
+    void WebGPUGraphicsBackend::RequireSupportedFillModeEXT(PrimitiveType primitive,
+                                                             const char* route) const
     {
         if (!fillModeWireframe_)
+            return;
+        // A fill mode describes how a POLYGON's interior is rasterized. A line or point list has no
+        // interior, so Solid and WireFrame are the same request for it -- this backend substitutes
+        // nothing there and the output already matches every other backend's. Refusing it would
+        // delete a correct draw rather than prevent a wrong one.
+        if (primitive != PrimitiveType::TriangleList && primitive != PrimitiveType::TriangleStrip)
             return;
         throw System::NotSupportedException(
             std::string("WebGPU: FillMode::WireFrame is not supported on this backend, so the ") +
@@ -7271,7 +7278,7 @@ struct VSOut {
                                                         const Matrix& world, const Matrix& view, const Matrix& projection,
                                                         PrimitiveType primitive, int primitiveCount)
     {
-        RequireSupportedFillModeEXT("user-nonindexed");
+        RequireSupportedFillModeEXT(primitive, "user-nonindexed");
         QueueColoredDraw(vb, nullptr, world, view, projection, primitive, primitiveCount);
     }
 
@@ -7280,7 +7287,7 @@ struct VSOut {
                                                                const Matrix& world, const Matrix& view, const Matrix& projection,
                                                                PrimitiveType primitive, int primitiveCount)
     {
-        RequireSupportedFillModeEXT("user-indexed");
+        RequireSupportedFillModeEXT(primitive, "user-indexed");
         QueueColoredDraw(vb, &ib, world, view, projection, primitive, primitiveCount);
     }
 
@@ -7293,7 +7300,7 @@ struct VSOut {
                                                   PrimitiveType primitive, int primitiveCount,
                                                   const GpuDrawParams& params)
     {
-        RequireSupportedFillModeEXT("ordinary-nonindexed");
+        RequireSupportedFillModeEXT(primitive, "ordinary-nonindexed");
         RequireFaithfulDeclarationEXT(vb, "ordinary-nonindexed");
         const auto& webgpuVb = static_cast<const WebGPUVertexBufferBackend&>(vb);
         // Matches VulkanGraphicsBackend's own dispatch precedence: alpha test wins over
@@ -7387,7 +7394,7 @@ struct VSOut {
                                                          PrimitiveType primitive, int primitiveCount,
                                                          const GpuDrawParams& params)
     {
-        RequireSupportedFillModeEXT("ordinary-indexed");
+        RequireSupportedFillModeEXT(primitive, "ordinary-indexed");
         RequireFaithfulDeclarationEXT(vb, "ordinary-indexed");
         const auto& webgpuVb = static_cast<const WebGPUVertexBufferBackend&>(vb);
         const bool needsAlphaTest = params.alphaTest[2] < 0.0f || params.alphaTest[3] < 0.0f;
@@ -7461,7 +7468,7 @@ struct VSOut {
         // WEBGPU-115: before the no-instance-stream fallback below, so a refused instanced draw
         // names its own route rather than re-entering DrawIndexedPrimitivesEx and reporting the
         // ordinary one.
-        RequireSupportedFillModeEXT("instanced");
+        RequireSupportedFillModeEXT(primitive, "instanced");
         // REMED-GFX-202: the per-instance stream is the lowest-slot entry of the shared
         // GpuVertexStreamBinding array whose InstanceFrequency is greater than zero.
         const auto* instanceStream = FirstInstanceStream(params);

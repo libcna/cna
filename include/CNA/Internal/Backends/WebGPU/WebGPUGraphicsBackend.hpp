@@ -1270,10 +1270,19 @@ namespace CNA::Internal::Backends::WebGPU
          * submitted -- so a refused draw creates nothing, queues nothing, mutates no target and
          * leaves no partial native object behind. The next Solid draw is unaffected.
          *
+         * ONLY POLYGON TOPOLOGIES ARE REFUSED. A fill mode selects how a POLYGON's interior is
+         * rasterized; a line or point list has no interior, so `Solid` and `WireFrame` mean the
+         * identical thing for them on every backend and this backend substitutes nothing. Refusing
+         * those would delete a draw that is already correct -- the failure mode of an over-wide
+         * guard, not a safety property. The refusal is scoped to exactly the case where the output
+         * would otherwise be a solid fill standing in for a wireframe.
+         *
+         * @param primitive The topology the draw will rasterize.
          * @param route The route's name (for example `ordinary-indexed`), for the diagnostic.
-         * @throws System::NotSupportedException When FillMode::WireFrame is the active fill mode.
+         * @throws System::NotSupportedException When FillMode::WireFrame is the active fill mode
+         *         and @p primitive is a polygon topology.
          */
-        void RequireSupportedFillModeEXT(const char* route) const;
+        void RequireSupportedFillModeEXT(PrimitiveType primitive, const char* route) const;
 
         /** @brief Appends @p index of @p family to the ordered stream at its public call. */
         void RecordDrawOrder(DrawFamily family, std::size_t index);
