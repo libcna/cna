@@ -136,8 +136,10 @@ Implemented and reported as supported:
 | `SpriteBatch` | Batched quads, tint, rotation, origin, flip, layer depth, per-batch sampler |
 | 3D draws | `BasicEffect`, `AlphaTestEffect`, `DualTextureEffect`, `EnvironmentMapEffect`, fog, three directional lights, specular |
 | `RenderTarget2D` | Colour + optional depth/stencil, `RenderTargetUsage`, readback |
+| `RenderTargetCube` | Per-face rendering, whole-cube sampling, per-face upload and readback |
 | Render state | Blend (incl. per-slot write masks and sample mask), depth/stencil (incl. two-sided), rasterizer (incl. wireframe and depth bias), samplers |
 | `TextureCube` | Six-face upload and readback, sampled by `EnvironmentMapEffect` |
+| MSAA render-target readback | Refused — no explicit resolve yet (`WICKED-52`) |
 | `Texture3D` | Volume upload and readback, real GPU storage |
 | Instanced draws | Per-instance 64-byte column-major `Matrix` stream, `InstanceFrequency == 1` only |
 | MSAA | On the scene target, with resolve; device-clamped |
@@ -149,7 +151,6 @@ Not implemented; each is refused explicitly at the call site and reported by
 | Area | `GraphicsCapability` |
 |------|----------------------|
 | Multiple simultaneous render targets | `MultipleRenderTargets` |
-| `RenderTargetCube` | — (`SetRenderTargets` throws on a cube-face descriptor) |
 | Custom `ShaderEffect` / `SpriteBatch.Begin(effect)` | `CustomEffects` |
 | Multi-stream vertex input | `MultiStreamVertexInput` |
 | `SkinnedEffect`, `PbrEffect` | — (the draw throws; they also need the tangent/skinning vertex strides) |

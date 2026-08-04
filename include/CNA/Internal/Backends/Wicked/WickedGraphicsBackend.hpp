@@ -415,6 +415,103 @@ namespace CNA::Internal::Backends::Wicked
     };
 
     /**
+     * @brief NOXNA. A cube map CNA can render each face of, and sample as a whole.
+     *
+     * One face is bound at a time through a per-face render-target subresource view, created once
+     * at construction. The whole-cube shader-resource view is the resource's default, so a
+     * dynamically rendered cube map is sampled by `EnvironmentMapEffect` exactly like an uploaded
+     * one.
+     */
+    class WickedRenderTargetCubeBackend final : public IRenderTargetCubeBackend
+    {
+    public:
+        /**
+         * @brief Creates the cube colour target and, when requested, its depth buffer.
+         *
+         * @param owner            Backend that owns the device.
+         * @param size             Width and height of each face, in pixels.
+         * @param depthFormat      Raw XNA `DepthFormat` ordinal.
+         * @param preserveContents True when the target's `RenderTargetUsage` preserves contents.
+         * @param mipMap           True when a full mip chain was requested.
+         * @param multiSampleCount Requested MSAA sample count; 0 or 1 means none.
+         */
+        WickedRenderTargetCubeBackend(WickedGraphicsBackend* owner, int size, int depthFormat,
+                                      bool preserveContents, bool mipMap, int multiSampleCount);
+        /** @brief Releases the colour and depth resources. */
+        ~WickedRenderTargetCubeBackend() override;
+
+        WickedRenderTargetCubeBackend(const WickedRenderTargetCubeBackend&) = delete;
+        WickedRenderTargetCubeBackend& operator=(const WickedRenderTargetCubeBackend&) = delete;
+
+        /** @brief Width and height of each cube face, in pixels. */
+        [[nodiscard]] int GetSize() const override { return size_; }
+        /** @brief Makes face @p face the destination of subsequent draws. */
+        void BindAsRenderTargetFace(int face) override;
+        /** @brief Restores the back buffer as the destination of subsequent draws. */
+        void UnbindAsRenderTarget() override;
+        /** @brief The device-clamped MSAA sample count this target was created with; 0 if none. */
+        [[nodiscard]] int GetMultiSampleCount() const override { return multiSampleCount_; }
+        /** @brief Whether a real depth/stencil buffer backs this target. */
+        [[nodiscard]] bool HasRealDepthBuffer(bool /*depthFormatWasRequested*/) const override
+        {
+            return depth_.IsValid();
+        }
+        /**
+         * @brief Uploads tightly packed RGBA8 rows into a sub-rectangle of one rendered face.
+         *
+         * @param face       Cube face index (0=+X, 1=-X, 2=+Y, 3=-Y, 4=+Z, 5=-Z).
+         * @param level      Mip level to write.
+         * @param x          Left edge of the region, in pixels.
+         * @param y          Top edge of the region, in pixels.
+         * @param w          Width of the region, in pixels.
+         * @param h          Height of the region, in pixels.
+         * @param data       Source pixels, top row first.
+         * @param dataLength Size of @p data in bytes; at least `w * h * 4`.
+         * @return True when the whole region was stored; false when nothing was stored.
+         */
+        [[nodiscard]] bool SetData(int face, int level, int x, int y, int w, int h,
+                                   const void* data, int dataLength) override;
+        /**
+         * @brief Reads a sub-rectangle of one rendered face back as tightly packed RGBA8 rows.
+         *
+         * @param face       Cube face index (0=+X, 1=-X, 2=+Y, 3=-Y, 4=+Z, 5=-Z).
+         * @param level      Mip level to read.
+         * @param x          Left edge of the region, in pixels.
+         * @param y          Top edge of the region, in pixels.
+         * @param w          Width of the region, in pixels.
+         * @param h          Height of the region, in pixels.
+         * @param data       Destination buffer, top row first.
+         * @param dataLength Size of @p data in bytes; at least `w * h * 4`.
+         * @return True when the whole region was written; false when nothing was read back.
+         */
+        [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
+                                   void* data, int dataLength) const override;
+
+        /** @brief NOXNA. The cube colour texture, for binding as a shader resource. */
+        [[nodiscard]] const wig::Texture& GetColorTextureEXT() const { return color_; }
+        /** @brief NOXNA. The depth texture, or an invalid handle when none was allocated. */
+        [[nodiscard]] const wig::Texture& GetDepthTextureEXT() const { return depth_; }
+        /** @brief NOXNA. The render-target subresource index of @p face. */
+        [[nodiscard]] int RenderTargetSubresourceEXT(int face) const;
+        /** @brief NOXNA. Whether a bind must load the existing contents instead of discarding. */
+        [[nodiscard]] bool PreservesContentsEXT() const { return preserveContents_; }
+        /** @brief NOXNA. Marks that @p face has been rendered into at least once. */
+        void MarkFaceRenderedEXT(int face);
+        /** @brief NOXNA. Whether anything has been rendered into @p face yet. */
+        [[nodiscard]] bool HasFaceContentEXT(int face) const;
+
+    private:
+        WickedGraphicsBackend* owner_ = nullptr;
+        wig::Texture color_;
+        wig::Texture depth_;
+        std::array<int, 6> faceSubresources_{};
+        std::array<bool, 6> faceHasContent_{};
+        int size_ = 0;
+        int multiSampleCount_ = 0;
+        bool preserveContents_ = false;
+    };
+
+    /**
      * @brief NOXNA. A CPU-writable vertex buffer.
      */
     class WickedVertexBufferBackend final : public IVertexBufferBackend
@@ -793,6 +890,24 @@ namespace CNA::Internal::Backends::Wicked
         /** @brief Binds @p rt as the draw destination, or the scene target when null. */
         void SetRenderTarget2D(IRenderTargetBackend* rt) override;
         /**
+         * @brief Creates a cube-map render target.
+         * @param size             Width and height of each face, in pixels.
+         * @param depthFormat      Raw XNA `DepthFormat` ordinal.
+         * @param preserveContents True when the target's usage preserves contents across binds.
+         * @param mipMap           True when a full mip chain was requested.
+         * @param multiSampleCount Requested MSAA sample count.
+         * @return The new cube render target.
+         */
+        std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(
+            int size, int depthFormat, bool preserveContents, bool mipMap,
+            int multiSampleCount) override;
+        /**
+         * @brief Binds one face of a cube render target as the draw destination.
+         * @param rt   Cube target, or null to restore the back buffer.
+         * @param face Cube face index (0=+X, 1=-X, 2=+Y, 3=-Y, 4=+Z, 5=-Z).
+         */
+        void SetRenderTargetCubeFace(IRenderTargetCubeBackend* rt, int face) override;
+        /**
          * @brief Binds a normalized render-target set.
          * @param renderTargets Ordered descriptors, or null to restore the back buffer.
          * @param count         Number of descriptors.
@@ -1024,6 +1139,8 @@ namespace CNA::Internal::Backends::Wicked
         [[nodiscard]] wig::ShaderFormat GetShaderFormatEXT() const;
         /** @brief NOXNA. Records that @p rt is the render target currently bound, if any. */
         void NotifyRenderTargetDestroyedEXT(const WickedRenderTargetBackend* rt);
+        /** @brief NOXNA. The cube-target counterpart of NotifyRenderTargetDestroyedEXT. */
+        void NotifyRenderTargetCubeDestroyedEXT(const WickedRenderTargetCubeBackend* rt);
         /** @brief NOXNA. Submits a batch of sprite quads; used by WickedSpriteBatchBackend. */
         void DrawSpriteQuadsEXT(const void* vertices, int vertexCount,
                                 const ITextureBackend& texture,
@@ -1102,6 +1219,8 @@ namespace CNA::Internal::Backends::Wicked
         bool sceneCleared_ = false;
 
         WickedRenderTargetBackend* currentRenderTarget_ = nullptr;
+        WickedRenderTargetCubeBackend* currentRenderTargetCube_ = nullptr;
+        int currentCubeFace_ = 0;
 
         /// One slot's `SamplerState`, kept as the raw XNA ordinals `ApplySamplerState` receives.
         /// The state is recorded rather than bound immediately: XNA sets sampler state outside a

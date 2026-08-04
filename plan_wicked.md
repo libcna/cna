@@ -15,7 +15,7 @@ a batched `SpriteBatch`, the four stock stride-dispatched 3D shader variants (16
 diffuse/vertex-colour/alpha-test/fog/three-directional-light shading, `RenderTarget2D`, full
 blend/depth-stencil/rasterizer/sampler state mapping, real GPU occlusion queries, MSAA on the scene
 target, back-buffer readback, `TextureCube` and `Texture3D` storage, `EnvironmentMapEffect` cube
-reflections, and instanced draws. This is
+reflections, `RenderTargetCube`, and instanced draws. This is
 **not** parity with the Vulkan or EasyGL backends — see "Remaining work" below for exactly what is
 missing.
 
@@ -57,10 +57,10 @@ missing.
    lets CNA switch freely between the back buffer and a `RenderTarget2D` mid-frame, and it is the
    same texture the virtual-resolution/letterbox presentation needs anyway.
 
-6. **Unsupported draws are refused, never approximated.** `SkinnedEffect`, `PbrEffect`, MRT,
-   `RenderTargetCube` and an unexpressible instance-step-rate all throw at the call site rather than
-   rendering an unlit, single-target or wrong-rate stand-in that would look like a working draw.
-   `SupportsCapability()` reports the same set, so callers can ask instead of catching.
+6. **Unsupported draws are refused, never approximated.** `SkinnedEffect`, `PbrEffect`, MRT and an
+   unexpressible instance-step-rate all throw at the call site rather than rendering an unlit,
+   single-target or wrong-rate stand-in that would look like a working draw. `SupportsCapability()`
+   reports the same set, so callers can ask instead of catching.
 
 ---
 
@@ -130,7 +130,7 @@ missing.
 | WICKED-52 | MSAA `RenderTarget2D` readback (needs an explicit resolve) | ⬜ |
 | WICKED-53 | `DrawInstancedPrimitivesEx` (per-instance 64-byte `Matrix` stream at input slot 1, four instanced VS variants); `InstanceFrequency != 1` refused — Wicked's `InputLayout` has no step-rate field | ✅ |
 | WICKED-54 | Multiple simultaneous render targets | ⬜ |
-| WICKED-55 | `RenderTargetCube` | ⬜ |
+| WICKED-55 | `RenderTargetCube` (per-face RTV subresources, whole-cube SRV, sampleable by `EnvironmentMapEffect`) | ✅ |
 | WICKED-56 | `EnvironmentMapEffect` (cube reflections, flat and Fresnel-weighted, dedicated VS/PS pair matching the established CNA env-map shading) | ✅ |
 | WICKED-56b | `SkinnedEffect` and `PbrEffect` shader variants | ⬜ |
 | WICKED-57 | Custom `ShaderEffect` (`CreateEffectBackend`) | ⬜ |
@@ -170,8 +170,8 @@ missing.
   as the next task, not as a formality.
 - **3D effect coverage stops at `BasicEffect`/`AlphaTestEffect`/`DualTextureEffect`**
   (`WICKED-56`). `EnvironmentMapEffect`, `SkinnedEffect` and `PbrEffect` throw.
-- **No MRT, no `RenderTargetCube`, no custom `ShaderEffect`** (`WICKED-54`/`55`/`57`/`68`). Each is
-  refused explicitly and reported through `SupportsCapability()`.
+- **No MRT and no custom `ShaderEffect`** (`WICKED-54`/`57`/`68`). Each is refused explicitly and
+  reported through `SupportsCapability()`.
 - **`SkinnedEffect` and `PbrEffect` still throw** (`WICKED-56b`); they also need the tangent and
   skinning vertex strides (`WICKED-59`). `EnvironmentMapEffect` works and is what makes a
   `TextureCube` sampleable.

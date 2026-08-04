@@ -729,6 +729,158 @@ namespace CNA::Internal::Backends::Wicked
                                      0, 0, x, y, 0, w, h, 1, data);
     }
     // ------------------------------------------------------------------------------------------
+    // WickedRenderTargetCubeBackend
+    // ------------------------------------------------------------------------------------------
+
+    WickedRenderTargetCubeBackend::WickedRenderTargetCubeBackend(WickedGraphicsBackend* owner,
+                                                                 int size, int depthFormat,
+                                                                 bool preserveContents, bool mipMap,
+                                                                 int multiSampleCount)
+        : owner_(owner)
+        , size_(std::max(1, size))
+        , preserveContents_(preserveContents)
+    {
+        wig::GraphicsDevice* device = owner_->GetDeviceEXT();
+
+        const std::uint32_t sampleCount =
+            multiSampleCount > 1 ? static_cast<std::uint32_t>(multiSampleCount) : 1u;
+        multiSampleCount_ = sampleCount > 1 ? static_cast<int>(sampleCount) : 0;
+
+        wig::TextureDesc colorDesc;
+        colorDesc.width = static_cast<std::uint32_t>(size_);
+        colorDesc.height = static_cast<std::uint32_t>(size_);
+        colorDesc.format = wig::Format::R8G8B8A8_UNORM;
+        colorDesc.array_size = 6;
+        colorDesc.misc_flags = wig::ResourceMiscFlag::TEXTURECUBE;
+        colorDesc.bind_flags = wig::BindFlag::RENDER_TARGET | wig::BindFlag::SHADER_RESOURCE;
+        colorDesc.layout = wig::ResourceState::SHADER_RESOURCE;
+        colorDesc.sample_count = sampleCount;
+        colorDesc.mip_levels = mipMap && sampleCount == 1
+            ? wig::GetMipCount(colorDesc.width, colorDesc.height)
+            : 1u;
+        if (!device->CreateTexture(&colorDesc, nullptr, &color_))
+            throw std::runtime_error("Wicked backend: failed to create a cube render target.");
+
+        // One render-target view per face, created once. The resource's default shader-resource
+        // view stays the whole cube, so the same texture is sampled as a cube map without a
+        // second resource or a copy.
+        for (int face = 0; face < 6; ++face)
+        {
+            faceSubresources_[face] = device->CreateSubresource(
+                &color_, wig::SubresourceType::RTV, static_cast<std::uint32_t>(face), 1, 0, 1);
+            if (faceSubresources_[face] < 0)
+            {
+                throw std::runtime_error(
+                    "Wicked backend: failed to create a cube render-target face view.");
+            }
+        }
+
+        const wig::Format depth = DepthFormatFor(depthFormat);
+        if (depth != wig::Format::UNKNOWN)
+        {
+            // A single face-sized depth buffer is enough: exactly one face is bound at a time, and
+            // depth is never read back across faces.
+            wig::TextureDesc depthDesc;
+            depthDesc.width = colorDesc.width;
+            depthDesc.height = colorDesc.height;
+            depthDesc.format = depth;
+            depthDesc.bind_flags = wig::BindFlag::DEPTH_STENCIL;
+            depthDesc.layout = wig::ResourceState::DEPTHSTENCIL;
+            depthDesc.sample_count = sampleCount;
+            if (!device->CreateTexture(&depthDesc, nullptr, &depth_))
+            {
+                throw std::runtime_error(
+                    "Wicked backend: failed to create a cube render-target depth buffer.");
+            }
+        }
+    }
+
+    WickedRenderTargetCubeBackend::~WickedRenderTargetCubeBackend()
+    {
+        if (owner_ != nullptr)
+            owner_->NotifyRenderTargetCubeDestroyedEXT(this);
+    }
+
+    int WickedRenderTargetCubeBackend::RenderTargetSubresourceEXT(int face) const
+    {
+        if (face < 0 || face > 5)
+            return -1;
+        return faceSubresources_[static_cast<std::size_t>(face)];
+    }
+
+    void WickedRenderTargetCubeBackend::MarkFaceRenderedEXT(int face)
+    {
+        if (face >= 0 && face <= 5)
+            faceHasContent_[static_cast<std::size_t>(face)] = true;
+    }
+
+    bool WickedRenderTargetCubeBackend::HasFaceContentEXT(int face) const
+    {
+        return face >= 0 && face <= 5 && faceHasContent_[static_cast<std::size_t>(face)];
+    }
+
+    void WickedRenderTargetCubeBackend::BindAsRenderTargetFace(int face)
+    {
+        if (owner_ != nullptr)
+            owner_->SetRenderTargetCubeFace(this, face);
+    }
+
+    void WickedRenderTargetCubeBackend::UnbindAsRenderTarget()
+    {
+        if (owner_ != nullptr)
+            owner_->SetRenderTargetCubeFace(nullptr, 0);
+    }
+
+    bool WickedRenderTargetCubeBackend::SetData(int face, int level, int x, int y, int w, int h,
+                                                const void* data, int dataLength)
+    {
+        if (owner_ == nullptr || data == nullptr || !color_.IsValid())
+            return false;
+        if (face < 0 || face > 5)
+            return false;
+        if (level < 0 || static_cast<std::uint32_t>(level) >= color_.desc.mip_levels)
+            return false;
+        if (w <= 0 || h <= 0 || x < 0 || y < 0 || dataLength < w * h * 4)
+            return false;
+        // A multisampled face holds per-sample content that a plain copy cannot write.
+        if (multiSampleCount_ > 1)
+            return false;
+
+        const int levelSize = std::max(1, size_ >> level);
+        if (x + w > levelSize || y + h > levelSize)
+            return false;
+
+        const bool stored =
+            UploadTextureRegion(*owner_, color_, level, face, x, y, 0, w, h, 1, data);
+        if (stored)
+            MarkFaceRenderedEXT(face);
+        return stored;
+    }
+
+    bool WickedRenderTargetCubeBackend::GetData(int face, int level, int x, int y, int w, int h,
+                                                void* data, int dataLength) const
+    {
+        if (owner_ == nullptr || data == nullptr || !color_.IsValid())
+            return false;
+        if (face < 0 || face > 5)
+            return false;
+        if (level < 0 || static_cast<std::uint32_t>(level) >= color_.desc.mip_levels)
+            return false;
+        if (w <= 0 || h <= 0 || x < 0 || y < 0 || dataLength < w * h * 4)
+            return false;
+        // Same refusal as WickedRenderTargetBackend::GetData -- see plan_wicked.md WICKED-52.
+        if (multiSampleCount_ > 1)
+            return false;
+
+        const int levelSize = std::max(1, size_ >> level);
+        if (x + w > levelSize || y + h > levelSize)
+            return false;
+
+        return ReadbackTextureRegion(*owner_, color_, wig::ResourceState::SHADER_RESOURCE,
+                                     level, face, x, y, 0, w, h, 1, data);
+    }
+
+    // ------------------------------------------------------------------------------------------
     // WickedVertexBufferBackend
     // ------------------------------------------------------------------------------------------
 
@@ -1472,7 +1624,27 @@ namespace CNA::Internal::Backends::Wicked
         wig::RenderPassImage images[3];
         std::uint32_t imageCount = 0;
 
-        if (currentRenderTarget_ != nullptr)
+        if (currentRenderTargetCube_ != nullptr)
+        {
+            const bool load = currentRenderTargetCube_->PreservesContentsEXT() &&
+                              currentRenderTargetCube_->HasFaceContentEXT(currentCubeFace_);
+            images[imageCount++] = wig::RenderPassImage::RenderTarget(
+                &currentRenderTargetCube_->GetColorTextureEXT(),
+                load ? wig::RenderPassImage::LoadOp::LOAD : wig::RenderPassImage::LoadOp::DONTCARE,
+                wig::RenderPassImage::StoreOp::STORE,
+                wig::ResourceState::SHADER_RESOURCE,
+                wig::ResourceState::SHADER_RESOURCE,
+                currentRenderTargetCube_->RenderTargetSubresourceEXT(currentCubeFace_));
+            if (currentRenderTargetCube_->GetDepthTextureEXT().IsValid())
+            {
+                images[imageCount++] = wig::RenderPassImage::DepthStencil(
+                    &currentRenderTargetCube_->GetDepthTextureEXT(),
+                    load ? wig::RenderPassImage::LoadOp::LOAD
+                         : wig::RenderPassImage::LoadOp::DONTCARE);
+            }
+            currentRenderTargetCube_->MarkFaceRenderedEXT(currentCubeFace_);
+        }
+        else if (currentRenderTarget_ != nullptr)
         {
             const bool load = currentRenderTarget_->PreservesContentsEXT() &&
                               currentRenderTarget_->HasContentEXT();
@@ -1516,11 +1688,13 @@ namespace CNA::Internal::Backends::Wicked
 
     int WickedGraphicsBackend::ActiveTargetWidth() const
     {
+        if (currentRenderTargetCube_ != nullptr) return currentRenderTargetCube_->GetSize();
         return currentRenderTarget_ != nullptr ? currentRenderTarget_->GetWidth() : scene_.width;
     }
 
     int WickedGraphicsBackend::ActiveTargetHeight() const
     {
+        if (currentRenderTargetCube_ != nullptr) return currentRenderTargetCube_->GetSize();
         return currentRenderTarget_ != nullptr ? currentRenderTarget_->GetHeight() : scene_.height;
     }
 
@@ -1701,7 +1875,8 @@ namespace CNA::Internal::Backends::Wicked
         // only while no pass is open. Once one is open, the equivalent is a full-target quad drawn
         // with the requested colour/depth/stencil writes -- the same fallback the other
         // render-pass-based CNA backends use for a mid-frame clear.
-        if (!renderPassActive_ && currentRenderTarget_ == nullptr && color && !sceneCleared_)
+        if (!renderPassActive_ && currentRenderTarget_ == nullptr &&
+            currentRenderTargetCube_ == nullptr && color && !sceneCleared_)
         {
             BeginFrame();
             wig::RenderPassImage images[3];
@@ -2238,10 +2413,40 @@ namespace CNA::Internal::Backends::Wicked
     void WickedGraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt)
     {
         auto* target = dynamic_cast<WickedRenderTargetBackend*>(rt);
-        if (target == currentRenderTarget_)
+        if (target == currentRenderTarget_ && currentRenderTargetCube_ == nullptr)
             return;
         EndRenderPassEXT();
         currentRenderTarget_ = target;
+        currentRenderTargetCube_ = nullptr;
+        viewportSet_ = false;
+    }
+
+    std::unique_ptr<IRenderTargetCubeBackend> WickedGraphicsBackend::CreateRenderTargetCube(
+        int size, int depthFormat, bool preserveContents, bool mipMap, int multiSampleCount)
+    {
+        return std::make_unique<WickedRenderTargetCubeBackend>(
+            this, size, depthFormat, preserveContents, mipMap, multiSampleCount);
+    }
+
+    void WickedGraphicsBackend::SetRenderTargetCubeFace(IRenderTargetCubeBackend* rt, int face)
+    {
+        auto* target = dynamic_cast<WickedRenderTargetCubeBackend*>(rt);
+        if (target == nullptr)
+        {
+            SetRenderTarget2D(nullptr);
+            return;
+        }
+        if (face < 0 || face > 5)
+        {
+            throw std::runtime_error(
+                "Wicked backend: cube face index " + std::to_string(face) + " is out of range.");
+        }
+        if (target == currentRenderTargetCube_ && face == currentCubeFace_)
+            return;
+        EndRenderPassEXT();
+        currentRenderTarget_ = nullptr;
+        currentRenderTargetCube_ = target;
+        currentCubeFace_ = face;
         viewportSet_ = false;
     }
 
@@ -2264,8 +2469,9 @@ namespace CNA::Internal::Backends::Wicked
         }
         if (renderTargets[0].IsRenderTargetCubeFace())
         {
-            throw std::runtime_error(
-                "Wicked backend: RenderTargetCube is not supported by this backend.");
+            SetRenderTargetCubeFace(renderTargets[0].GetRenderTargetCube(),
+                                    renderTargets[0].GetCubeFace());
+            return;
         }
 
         SetRenderTarget2D(renderTargets[0].GetRenderTarget2D());
@@ -2277,6 +2483,16 @@ namespace CNA::Internal::Backends::Wicked
         {
             EndRenderPassEXT();
             currentRenderTarget_ = nullptr;
+        }
+    }
+
+    void WickedGraphicsBackend::NotifyRenderTargetCubeDestroyedEXT(
+        const WickedRenderTargetCubeBackend* rt)
+    {
+        if (currentRenderTargetCube_ == rt)
+        {
+            EndRenderPassEXT();
+            currentRenderTargetCube_ = nullptr;
         }
     }
 
@@ -2564,6 +2780,11 @@ namespace CNA::Internal::Backends::Wicked
                     dynamic_cast<const WickedTextureCubeBackend*>(params->envMap))
             {
                 environmentMap = &cube->GetTextureEXT();
+            }
+            else if (const auto* renderedCube =
+                         dynamic_cast<const WickedRenderTargetCubeBackend*>(params->envMap))
+            {
+                environmentMap = &renderedCube->GetColorTextureEXT();
             }
         }
         device_->BindResource(environmentMap, 2, cmd);
