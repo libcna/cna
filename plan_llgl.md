@@ -1012,6 +1012,17 @@ block resets the viewport, and by extension `MaxDepth`, back to default before I
 despite the superficially similar "renders nothing" symptom, I0/I1 remain a fully separate,
 still-unexplained defect. See `known_bugs.md`'s entry for the complete trace.
 
+**`LLGL-53` stencil-gate check (2026-08-04, no code change, nothing new found):** re-read the
+stencil-doesn't-gate defect's own suspects with fresh eyes after cracking H0/H1 -- confirmed
+`AcquirePrimitivePipeline()`'s pipeline-cache key already folds in `stencilFunction_`/`stencilPass_`
+(so `WriteState`/`TestState` genuinely get distinct, non-colliding cached pipelines, not a repeat of
+the depth-bias key-overflow class of bug); confirmed `ReferenceStencil` is captured correctly at
+queue time and reaches `CommandBuffer::SetStencilReference()` at replay; confirmed LLGL's own
+`GLDepthStencilState::BindStencilRefOnly()` reissues `glStencilFuncSeparate` with the CORRECT stored
+func/mask alongside the new reference. No live instrumentation was run this pass (unlike H0/H1,
+nothing in this reading turned up anything worth measuring) -- this is a "ruled out via code
+reading" pass, not a "confirmed via live GL state" one; still open, root cause still unknown.
+
 **`LLGL-54` progress (2026-08-04, commit `07a56e8d`): MSAA sample-count preservation across an MRT
 bind fixed and verified; mip regeneration for MRT slots NOT addressed.**
 `SetMultipleRenderTargetsEXT()` previously omitted `RenderTargetDescriptor::samples` entirely,
