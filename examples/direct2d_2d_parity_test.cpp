@@ -471,6 +471,32 @@ protected:
             checkLinearVerticalParity("Mirror FlipV", 16, sampleY);
         }
 
+        // D2D-80: ID2D1ImageBrush's sourceRectangle bounds/clips which part of the underlying
+        // image is visible, but does NOT by itself align that rectangle's top-left corner with
+        // the brush's local origin -- brush-local (0,0) still maps to the FULL image's (0,0)
+        // unless SetTransform compensates. DrawSprite's existing compensation
+        // (`clippedLeft`/`clippedTop` in the ImageBrush branch) only ever shifts for a NEGATIVE
+        // source origin (`std::max(0.0f, -X)` is exactly zero for any X >= 0), so a positively
+        // offset, in-bounds crop from a multi-region atlas is the untested case this task names.
+        // Forcing the ImageBrush code path under Wine (which lacks the GPU ColorMatrix/Premultiply
+        // effects that would otherwise divert a tinted draw to the CPU fallback instead) requires
+        // an untinted Color::White draw combined with a non-default SpriteEffects/address mode --
+        // FlipHorizontally is used here purely as that trigger, not as the property under test (a
+        // 1x1 crop has no visible flip of its own). The oracle is the atlas's own known per-pixel
+        // content, not any Direct2D render-target branch of the same code being verified.
+        {
+            Texture2D atlasTexture = Texture2D::CreateFromPixels(
+                device, 4, 1,
+                std::vector<uint8_t>{255, 0, 0, 255,   0, 255, 0, 255,
+                                     0, 0, 255, 255,   255, 255, 255, 255});
+            device.Clear(Color::Black);
+            sprites_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, nullptr, nullptr);
+            sprites_->Draw(atlasTexture, Rectangle(0, 0, 1, 1), Rectangle(2, 0, 1, 1), Color::White,
+                           0.0f, Vector2::Zero, SpriteEffects::FlipHorizontally, 0.0f);
+            sprites_->End();
+            check("Direct2D ImageBrush positive-offset atlas crop (X=2)", 0, 0, Color(0, 0, 255, 255));
+        }
+
         // 7. A recorded scissor rectangle must only affect SpriteBatch once RasterizerState
         // explicitly enables its test. Clear deliberately ignores it, so both branches begin
         // from the same black backbuffer.

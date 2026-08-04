@@ -2387,13 +2387,16 @@ namespace CNA::Internal::Backends::Direct2D
             ComPtr<ID2D1ImageBrush> imageBrush;
             ThrowIfFailed(d2dContext_->CreateImageBrush(input, &imageProperties, nullptr, &imageBrush),
                           "ID2D1DeviceContext::CreateImageBrush(SpriteBatch source)");
-            // Direct2D clips a negative ImageBrush source-rectangle origin to the image bounds,
-            // which would otherwise make local x=0 sample texel zero instead of the requested
-            // negative coordinate. Translate the brush's output back by that clipped amount so
-            // its inverse coordinate mapping still reaches -1/-2/etc.; the image brush's
-            // Clamp/Wrap/Mirror extend mode then implements the same sampler contract as EasyGL.
-            const float clippedLeft = std::max(0.0f, -static_cast<float>(localSource.X));
-            const float clippedTop = std::max(0.0f, -static_cast<float>(localSource.Y));
+            // ID2D1ImageBrush's sourceRectangle bounds which part of the image is visible, but
+            // does not by itself align that rectangle's corner with the brush's local origin --
+            // brush-local (0,0) still maps to the underlying image's (0,0) unless SetTransform
+            // compensates, for ANY source origin, not just a negative one. D2D-80: the previous
+            // std::max(0.0f, -X) formula was a no-op for negative X (its own -X is already
+            // positive there) but incorrectly clamped to zero for X >= 0, leaving a
+            // positively-offset atlas crop sampling from the image's real origin instead of the
+            // requested one. The general, direction-correct shift is -X unconditionally.
+            const float clippedLeft = -static_cast<float>(localSource.X);
+            const float clippedTop = -static_cast<float>(localSource.Y);
             // The correction has to run before reflection. A post-flip translation would send
             // negative UVs to the far edge instead (the exact error D2D-13's Flip probes guard
             // against); the original clipped-origin magnitude remains correct on both axes.
