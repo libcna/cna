@@ -94,7 +94,7 @@ appends a fixed-stride 80-byte command and `End()` hands the array over as a blo
 | Feature | Status | Notes |
 |---|---|---|
 | `Texture2D` construction / `SetData` | ✅ | Private off-screen canvas per texture; CSS-usable PNG data URLs derived from it on demand. |
-| Texture upload cost | ⚠️ by design | Each upload costs a **PNG encode**. Fine once at load time; expensive every frame. Use `CANVAS` or `EASYGL` for per-frame `SetData`. |
+| Texture upload cost | ⚠️ by design | **HTMLDOM-117 correction**: the **PNG encode** is not paid at upload time -- `cnaDomEnsureUrl` runs from the sprite-FLUSH path, not from texture creation/`SetData`, so the cost is genuinely lazy (paid the first time a DRAW actually needs a given texture/tint/mode variant's URL, then cached) and a texture that is uploaded but never drawn never pays it at all. Fine once per variant at load time; expensive every frame for anything re-uploaded AND re-drawn every frame. Use `CANVAS` or `EASYGL` for per-frame `SetData`. |
 | Mip-level (`level>0`) `SetData` | ✅ throws-by-design | No mip chain exists here — the same boundary `CANVAS` and `SDL_RENDERER` draw. |
 | `RenderTarget2D` construction / bind / unbind | ✅ | Backed by a real off-screen canvas; while bound, draws replay into its Canvas2D context. |
 | `RenderTarget2D` used as a `Draw()` source texture | ✅ (fixed for translucent content) | Sampling a target's own rendered content back into an ordinary sprite draw (render-to-texture) — pixel-verified: content cleared into RT A and later `Draw()`n from RT A onto RT B reads back on B exactly, confirming the data-URL-regenerated-from-a-dirty-flag path round-trips real content. HTMLDOM-106: a render target's own canvas is always straight (non-premultiplied) alpha on any Canvas2D read — `getImageData`'s own contract, regardless of which `BlendState` drew it — unlike an UPLOADED texture's bytes, which `AlphaBlend` assumes are already premultiplied. Sampling a render target under `AlphaBlend` previously divided its already-straight bytes by alpha a SECOND time; the original round-trip test used only fully opaque content (alpha=255), where that division is a structural no-op, so it could never have caught this. `cnaDomGetVariant` now tags each texture entry `isRenderTarget` at creation and downgrades a requested un-premultiply to a plain straight fetch for any entry so marked. Pixel-verified with a genuinely translucent render target sampled under `AlphaBlend` onto both a transparent and a non-transparent destination, matching the browser's real `source-over` algebra by hand in both cases. |
@@ -114,7 +114,7 @@ appends a fixed-stride 80-byte command and `End()` hands the array over as a blo
 | `Opaque` | ✅ (fixed) | HTMLDOM-100: `BlendState::Opaque` uses symmetric `One`/`Zero` factors for BOTH colour and alpha (confirmed via this project's own `BlendState.cpp`), i.e. the destination is replaced by the source pixel INCLUDING its own alpha, not forced to 255. The two draw paths reproduce this differently. Canvas2D render-target path: STRAIGHT (as-uploaded) pixels composited with Porter-Duff `'copy'`, clipped to exactly the sprite's own footprint first (`'copy'` is evaluated over the WHOLE compositing area, not just the drawn shape — the same pitfall `plan_canvas.md` CANVAS-44 found and fixed, applied here identically). Pixel-verified with a genuinely semi-transparent source: reads back at the source's own alpha, not 255. DOM `<div>` backbuffer path: still drawn from an alpha-stripped copy — CSS has no operator that can replace what's beneath a stacked element while still showing a partial source alpha through it, so full opacity is the closest a `<div>` can get; this is an accepted, documented deviation for that path only, not a bug. An earlier version used the alpha-stripped copy unconditionally on BOTH paths, forcing alpha to 255 even on the Canvas2D path where a correct replacement was possible. |
 | `AlphaBlend` | ✅ | Drawn from an un-premultiplied copy: `srcBlend=One` assumes already-premultiplied source, while CSS composites straight alpha and premultiplies internally. Pixel-verified with a hand-premultiplied texel (mirroring `SDL_RENDERER`'s own Task 697 test) — the exact category of algebra bug `CANVAS`'s external review found genuinely wrong in that sibling backend, confirmed correct here rather than assumed from the ported logic alone. The un-premultiply step applies only to UPLOADED texture bytes; a `RenderTarget2D` used as the source is never un-premultiplied a second time (HTMLDOM-106 — see the `RenderTarget2D`-as-`Draw()`-source row above). |
 | `NonPremultiplied` | ✅ colour; ⬜ alpha (translucent source) | Pixels as uploaded — exactly what CSS assumes natively, for the COLOUR channels, in every case. `alphaSrcBlend=SourceAlpha` (`BlendState.cpp`) means the real per-factor alpha equation SQUARES the source alpha's own contribution (`result_a = src_a² + dst_a*(1-src_a)`); CSS's `source-over` alpha (`src_a + dst_a*(1-src_a)`, no squaring) cannot reproduce that — no per-channel blend-factor model exists in CSS to express it with (HTMLDOM-105). Coincides exactly with the real XNA/D3D result whenever the SOURCE is opaque (`src_a=255` makes `src_a²==src_a`), which is why this went unnoticed until translucent-source-and-destination raw RGBA readback was tested. Documented architectural limitation, not a silent drop — measured and pixel-verified against real translucent data, not assumed. |
-| `Additive` | ✅ colour; ⬜ alpha (translucent source) | `mix-blend-mode: plus-lighter`, CSS Compositing's exact `lighter` operator — for the COLOUR channels, in every case. Pixel-verified: two overlapping opaque colours read back as their exact channel-wise sum (clamped), not a plain overwrite or an average. The SAME `alphaSrcBlend=SourceAlpha` alpha-squaring gap `NonPremultiplied` has applies here too (HTMLDOM-105): two sequential 50%-alpha draws measure alpha `255` (CSS-native Porter-Duff "plus", `min(1,src_a+dst_a)`) where XNA's own squared formula, applied recursively, would give `~128` — the exact scenario and numbers this project's own audit first found. Documented architectural limitation for translucent sources; exact for opaque ones. |
+| `Additive` | ✅ colour; ⬜ alpha (translucent source) | `mix-blend-mode: plus-lighter`, CSS Compositing's exact `lighter` operator — for the COLOUR channels, in every case. Pixel-verified: two overlapping opaque colours read back as their exact channel-wise sum (clamped), not a plain overwrite or an average. The SAME `alphaSrcBlend=SourceAlpha` alpha-squaring gap `NonPremultiplied` has applies here too (HTMLDOM-105): two sequential 50%-alpha draws measure alpha `255` (CSS-native Porter-Duff "plus", `min(1,src_a+dst_a)`) where XNA's own squared formula, applied recursively, would give `~128` — the exact scenario and numbers this project's own audit first found. Documented architectural limitation for translucent sources; exact for opaque ones. On a browser without `mix-blend-mode: plus-lighter` support, the CSS value is silently ignored and `Additive` renders as ordinary source-over blending instead — **queryable, not just documented (HTMLDOM-117)**: `GraphicsDevice::SupportsCapability(GraphicsCapability::AdditiveBlending)` reports the running browser's REAL support for it (memoized `CSS.supports('mix-blend-mode', 'plus-lighter')`), the one capability this backend answers for real rather than a blanket `false`. |
 | Any other custom `BlendState` | ✅ throws-by-design | CSS has no blend-factor or blend-equation model to approximate one with. |
 | `ColorWriteChannels` / `MultiSampleMask` | ⬜ inexpressible | No per-channel write mask and no coverage mask exist in CSS compositing. Documented gap, not a silent drop. |
 
@@ -143,15 +143,29 @@ appends a fixed-stride 80-byte command and `End()` hands the array over as a blo
 
 ## 6. The 3D surface
 
-Every 3D entry point throws `std::runtime_error("HTML_DOM backend: … not yet implemented")`:
-depth/stencil clears, `SetDepthTestEnabled`/`SetBlendEnabled`/`SetDepthWriteEnabled`, vertex and
-index buffer creation, and both `Draw*Primitives` families. `CreateTexture3D`, `CreateTextureCube`,
-`CreateRenderTargetCube`, `CreateOcclusionQuery` and `CreateEffectBackend` keep `IGraphicsBackend`'s
-own null/throw defaults, the same deliberate choice `CANVAS` made.
+Every DIRECT 3D entry point this backend itself overrides throws `std::runtime_error("HTML_DOM
+backend: … not yet implemented")`: depth/stencil clears, `SetDepthTestEnabled`/`SetBlendEnabled`/
+`SetDepthWriteEnabled`, vertex and index buffer creation, and both `Draw*Primitives` families.
 
-`GraphicsDevice::SupportsCapability()` reports `false` for every capability and
-`SupportsDepthStencil()` is `false`, so a caller can branch ahead of time instead of provoking an
-exception.
+**HTMLDOM-117 correction**: the five 3D resource FACTORY methods (`CreateTexture3D`,
+`CreateTextureCube`, `CreateRenderTargetCube`, `CreateOcclusionQuery`, `CreateEffectBackend`) are a
+genuinely different case, NOT covered by the same throw above — they keep `IGraphicsBackend`'s own
+null default (the same deliberate choice `CANVAS` made), and what a caller actually observes
+through the public API differs per type (verified by reading each constructor, not assumed
+uniform): `Texture3D`'s own constructor checks `SupportsCapability(Texture3D)` first and throws
+`System::NotSupportedException` immediately, so construction itself fails cleanly; `TextureCube`/
+`RenderTargetCube` construct successfully with a silently-null backend, and only the FIRST
+`SetData`/`GetData` call throws; `OcclusionQuery` is more permissive still — its accessors (e.g.
+`IsComplete`) just return a default value with no exception ever; `Effect`'s stock constructor
+never touches a backend resource at all here, while its compiled-bytecode constructor throws
+`System::NotImplementedException` unconditionally, for every backend. This is a shared-layer
+inconsistency across all backends that leave these five factory methods at their null default, not
+something specific to (or fixable unilaterally from) HTML_DOM.
+
+`GraphicsDevice::SupportsCapability()` reports `false` for every capability except
+`AdditiveBlending` (HTMLDOM-117 — see §3 above), which reports the browser's real support for
+`mix-blend-mode: plus-lighter`. `SupportsDepthStencil()` is unconditionally `false`. Both let a
+caller branch ahead of time instead of provoking an exception, for the capabilities they cover.
 
 ---
 
@@ -195,7 +209,8 @@ above); moving, rotating, scaling or fading sprites (one `transform`/`opacity` w
 composited on the GPU); large sprite counts that stay stable frame to frame; batches of any size
 (one wasm→JS crossing per batch, always, even for unchanged content).
 
-**Slow here:** uploading texture pixels (PNG encode per upload); animating a sprite's tint RGB every
+**Slow here:** uploading AND drawing texture pixels (the PNG encode itself is lazy, paid on first
+draw after upload, not upload itself -- see the corrected Texture upload cost row above); animating a sprite's tint RGB every
 frame (a new cached variant per distinct colour, LRU-capped at 256); render-target-heavy frames
 (those fall back to Canvas2D rasterization); very high sprite counts, where per-element compositor
 layers cost more memory than a single canvas would.
@@ -236,7 +251,8 @@ software one without saying so.
 
 1. **No backbuffer readback** — no browser API rasterizes a live DOM subtree. Render into a
    `RenderTarget2D` and read that, or use `CANVAS`.
-2. **Texture upload costs a PNG encode** — by design; see design decision 6 in `plan_html_dom.md`.
+2. **Drawing a texture costs a PNG encode the first time, lazily** — by design; see design
+   decision 6 in `plan_html_dom.md` (HTMLDOM-117: the encode is paid on first DRAW, not upload).
 3. **`TextureAddressMode::Mirror` mixed with a different mode on the other axis throws** when the
    source rectangle leaves the texture (HTMLDOM-97) — symmetric Mirror and non-Mirror mixed axes
    (e.g. Wrap+Clamp) are both supported now.

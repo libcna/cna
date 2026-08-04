@@ -96,6 +96,18 @@ namespace CNA
          * CPU stencil-mask extension without falsely claiming a depth attachment or 3D pipeline.
          * Appended to preserve the numeric values of the existing capability entries.
          */
-        StencilBuffer
+        StencilBuffer,
+
+        /**
+         * @brief `BlendState.Additive` composites via genuine additive math, rather than silently
+         * degrading to normal alpha blending. HTML_DOM support is browser-version-dependent
+         * (plan_html_dom.md HTMLDOM-117):
+         * on an engine without `plus-lighter`, the CSS value is simply ignored before any CNA code
+         * can observe it, and `Additive` silently renders as ordinary source-over blending instead
+         * -- no exception, a different visual result. Query this before relying on genuine additive
+         * compositing. Each backend reports the fidelity of its CNA implementation, not merely
+         * whether its underlying graphics API could theoretically express additive blending.
+         */
+        AdditiveBlending
     };
 } // CNA

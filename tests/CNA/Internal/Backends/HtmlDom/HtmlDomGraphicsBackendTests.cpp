@@ -554,6 +554,18 @@ TEST_F(HtmlDom3DSurfaceTest, CapabilityQueriesReportTheTwoDimensionalBoundaryUpF
     EXPECT_EQ(backend.GetWindowInternal(), FakeWindow());
 }
 
+// plan_html_dom.md HTMLDOM-117: GraphicsCapability::AdditiveBlending is the one capability this
+// backend answers for real rather than a blanket false -- under `node` (no __EMSCRIPTEN__,
+// CNA_HtmlDom_SupportsAdditiveBlending's own EM_JS body compiles out entirely) there is no CSS
+// engine to ask, so `false` is the correct native answer here, not merely the same "2D-only"
+// blanket every other capability gets for an unrelated reason. The real, TRUE-in-a-real-browser
+// answer is verified in htmldom_smoke_test.cpp instead (SupportsCapability(AdditiveBlending) ==
+// JsSupportsPlusLighter(), the same raw CSS.supports() query this backend's own EM_JS uses).
+TEST_F(HtmlDom3DSurfaceTest, SupportsCapabilityAnswersAdditiveBlendingNatively)
+{
+    EXPECT_FALSE(backend.SupportsCapability(CNA::GraphicsCapability::AdditiveBlending));
+}
+
 TEST_F(HtmlDom3DSurfaceTest, MultipleRenderTargetsAndCubeFacesThrow)
 {
     // Null targets are enough: both rejections happen on the descriptor count and kind, before any

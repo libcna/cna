@@ -45,7 +45,7 @@ using namespace CNA::Internal::Backends::HtmlDom;
 
 namespace
 {
-    constexpr int kExpectedChecks = 68;
+    constexpr int kExpectedChecks = 69;
 
 #if defined(__EMSCRIPTEN__)
     /// Number of sprite elements currently visible in the DOM surface.
@@ -434,6 +434,17 @@ protected:
                   "htmldom_pixel_verification_test.cpp's own) is therefore exercising the real "
                   "CSS blend, not this backend's documented old-browser silent-degradation "
                   "fallback, which an automated CI browser cannot itself be downgraded to exercise");
+            // plan_html_dom.md HTMLDOM-117: the PUBLIC, game-facing query -- not just the raw CSS
+            // check the line above uses directly -- agrees with it. A real game can now check
+            // GraphicsDevice::SupportsCapability(GraphicsCapability::AdditiveBlending) BEFORE
+            // relying on genuine additive compositing, instead of only being able to infer the
+            // silent degradation by comparing rendered pixels after the fact.
+            check(dev.SupportsCapability(CNA::GraphicsCapability::AdditiveBlending) ==
+                  (JsSupportsPlusLighter() == 1),
+                  "HTMLDOM-117: GraphicsDevice::SupportsCapability(AdditiveBlending) reports the "
+                  "SAME real answer as the raw CSS.supports() query it wraps -- a real, queryable "
+                  "capability, not a blanket false this backend gives every other 2D-only-boundary "
+                  "capability");
         }
 
         dev.Clear(Color::CornflowerBlue);

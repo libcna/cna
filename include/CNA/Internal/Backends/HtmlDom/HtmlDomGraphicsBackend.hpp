@@ -309,15 +309,18 @@ namespace CNA::Internal::Backends::HtmlDom
         [[nodiscard]] bool SupportsDepthStencil() const override { return false; }
 
         /**
-         * @brief Reports every graphics capability as unsupported: this backend is 2D-only.
+         * @brief Reports every graphics capability as unsupported, except
+         *        `GraphicsCapability::AdditiveBlending`, which is queried for real.
+         *
+         * plan_html_dom.md HTMLDOM-117: `BlendState.Additive` degrades silently (not an exception)
+         * on a browser without CSS `mix-blend-mode: plus-lighter` support -- this lets a caller
+         * check for that ahead of time instead of only discovering it by comparing pixels.
          *
          * @param capability The capability being queried.
-         * @return False, for every currently enumerated capability.
+         * @return For `AdditiveBlending`, whether the running browser genuinely supports
+         *         `mix-blend-mode: plus-lighter`; `false` for every other capability.
          */
-        [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability /*capability*/) const override
-        {
-            return false;
-        }
+        [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
 
         /** @brief 3D: not yet implemented. @param r,g,b,a Clear colour. @param depth Depth value. */
         void ClearColorAndDepth(float r, float g, float b, float a, float depth) override;

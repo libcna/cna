@@ -569,6 +569,19 @@ EM_JS(int, CNA_HtmlDom_ReadBound, (int x, int y, int w, int h, uint8_t* outPixel
     HEAPU8.set(imageData.data, outPixels);
     return 1;
 });
+
+// plan_html_dom.md HTMLDOM-117: GraphicsCapability::AdditiveBlending's real, queryable answer --
+// memoized, since CSS.supports' own answer can never change mid-session, the same "compute once,
+// cache on Module" shape this backend already uses elsewhere rather than re-querying the CSSOM on
+// every SupportsCapability() call.
+EM_JS(int, CNA_HtmlDom_SupportsAdditiveBlending, (), {
+    if (Module['cnaDomSupportsAdditiveBlending'] === undefined) {
+        Module['cnaDomSupportsAdditiveBlending'] =
+            (typeof CSS !== 'undefined' && CSS.supports &&
+             CSS.supports('mix-blend-mode', 'plus-lighter')) ? 1 : 0;
+    }
+    return Module['cnaDomSupportsAdditiveBlending'];
+});
 #endif
 
 namespace CNA::Internal::Backends::HtmlDom
@@ -711,6 +724,21 @@ namespace CNA::Internal::Backends::HtmlDom
         viewport.x = (static_cast<float>(physW) - viewport.width) * 0.5f;
         viewport.y = (static_cast<float>(physH) - viewport.height) * 0.5f;
         return viewport;
+    }
+
+    bool HtmlDomGraphicsBackend::SupportsCapability(CNA::GraphicsCapability capability) const
+    {
+        switch (capability)
+        {
+            case CNA::GraphicsCapability::AdditiveBlending:
+#if defined(__EMSCRIPTEN__)
+                return CNA_HtmlDom_SupportsAdditiveBlending() != 0;
+#else
+                return false;
+#endif
+            default:
+                return false;
+        }
     }
 
     void HtmlDomGraphicsBackend::getLogicalSize(int& width, int& height) const
