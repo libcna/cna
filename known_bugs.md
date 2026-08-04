@@ -1232,17 +1232,38 @@ the SHARED deferred-command capture/replay path itself (`QueuePrimitives`'s own 
 pooling, `FrameCommand` capture, or `AcquirePrimitivePipeline`'s pipeline-cache key/reuse) rather
 than in either module's own native rendering calls.
 
-**Next step for whoever picks this up:** instrument `QueuePrimitives()` directly (not just the
-CPU-side test's own math) to compare what actually gets written into the transform/uniform buffer
-and which cached pipeline object gets used for the FAILING (`world Z=-80`) triangle's draw versus
-the SUCCEEDING (`world Z=+80`) one in scenario (b) specifically -- given this session's own
-separate, confirmed finding that `AcquirePrimitivePipeline`'s pipeline-cache key scheme can
-silently alias two semantically-different draws together (see the pipeline-cache-key-overflow
-entry, `LLGL-53`), a similar aliasing between this scenario's two draws (which differ only in
-vertex POSITION, not in any of the fields that key currently folds in) is a plausible next lead,
-though vertex position is not itself part of that key today so this would have to be an indirect
-effect (e.g. a stale/wrong transform-buffer index reused between the two draws) rather than a
-literal key collision.
+**2026-08-04 follow-up: the previously-suggested next lead is now RULED OUT too.** Followed this
+entry's own recommendation and instrumented `QueuePrimitives()` directly (temporary `fprintf`,
+fully removed before committing -- confirmed via `git diff` showing no residual change) to compare
+the actual captured `FrameCommand` for triA's (succeeding) and triB's (failing) draws in scenario
+(b): vertex buffer pointer, cached pipeline pointer, WVP matrix values, `elementCount`/
+`vertexStart`/`startIndex`/`baseVertex`. Every one of these is either byte-identical between the
+two draws (matrix -- correctly so, since world/view/projection are the same camera for both
+triangles by the test's own design; pipeline -- correctly so, since none of the state
+`AcquirePrimitivePipeline` keys on differs between the two draws; `elementCount=3`/all offsets 0)
+or a REUSED-BUT-EXPECTED pointer value (the vertex buffer address is identical for both draws, but
+this is ordinary allocator address reuse across two temporally-separate, fully-flushed frames --
+`DrawUserPrimitives`'s own per-call temp buffer is torn down via `ScheduleBufferReleaseEXT()`,
+which was independently verified by reading its own source to correctly DEFER the actual release
+until `frameCommands_` is next flushed, not release-then-dangle immediately -- so this is not the
+same-shape bug as the pipeline-cache-key-overflow finding this entry originally suspected: there is
+no aliasing here, both draws' commands are captured, transported, and would replay with fully
+correct, distinct data). **This rules out the entire capture/replay-machinery layer as the cause**:
+whatever is happening must be at or below the actual GPU rasterization of triB's own vertex data,
+which the CPU-side `Vector4::Transform` check already showed is unremarkable (same as triA's own
+passing check, just mirrored in X). Not yet checked: the ACTUAL BYTES uploaded into the vertex
+buffer via `DrawUserPrimitives`'s `Pack()`/`PositionColorStream` conversion (confirmed only that
+the SOURCE `Tri` vertices are correct pre-pack, not that the packed GPU-visible bytes match).
+
+**Next step for whoever picks this up:** read back the vertex buffer's own GPU-side content right
+after `SetData()` (e.g. via `LLGL::RenderSystem::ReadTexture`'s buffer-readback analogue, or by
+mapping the buffer if the module supports it) for triB's own draw specifically, to rule out (or
+confirm) a `Pack()`/stride/format bug that only manifests for this specific vertex data -- this is
+the one remaining untested layer between "CPU math is correct" (confirmed) and "GPU draws nothing"
+(confirmed). If that also comes back clean, the defect is genuinely inside actual GPU rasterization
+of this specific geometry under Orthographic + this specific view matrix, which would need either
+a native GPU debugger (RenderDoc, apitrace) or a from-scratch minimal repro outside this whole
+engine to isolate further.
 
 **Tracked as:** `plan_llgl.md` Phase LLGL-7 / `LLGL-52` (blocks `LLGL-39`'s
 `Llgl_RasterizerState_CullMode_Camera` registration).
