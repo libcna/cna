@@ -29,6 +29,7 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Model.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "System/ArgumentException.hpp"
 #include "System/IO/EndOfStreamException.hpp"
 
 using Microsoft::Xna::Framework::Audio::SoundEffect;
@@ -140,6 +141,20 @@ namespace
             }
             catch (const System::IO::EndOfStreamException&)
             {
+                ++cleanlyRejected;
+            }
+            catch (const System::ArgumentException&)
+            {
+                // The XNA public API's own argument validation rejecting mutated content before it
+                // can reach the GPU. The Model fixture reaches it through
+                // VertexBuffer::SetData (VertexBuffer.cpp:183): a mutation of the vertex
+                // declaration's element offsets/formats, or of the stride, leaves a declared
+                // element outside the bytes actually uploaded, and SetData refuses the upload
+                // rather than reading past the end of the caller's data. The stride guard
+                // (VertexBuffer.cpp:153) raises the derived ArgumentOutOfRangeException on the same
+                // path, which this base catch also covers. Only the ArgumentException family is
+                // accepted here -- System::NotSupportedException (a backend capability boundary),
+                // std::runtime_error, and every other class still fail this test.
                 ++cleanlyRejected;
             }
             catch (const std::bad_any_cast&)
