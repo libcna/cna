@@ -1215,6 +1215,19 @@ protected:
         check("Context recovery new Texture2D", 1, 1, Color(40, 180, 90, 255));
         device.SetContextRecoveryEnabled(true);
 
+        // D2D-71: a device loss while a SpriteBatch is open (Begin called, a tinted Draw already
+        // issued -- so transient COM resources, e.g. a CPU-fallback bitmap, are held -- but End
+        // not yet called) must not leave dangling transients or draw from a stale generation.
+        // ReleaseDeviceResourcesNoThrow already flushes the open EndDraw and clears every
+        // transient collection as part of recovery; this verifies that empirically rather than
+        // trusting it from reading the code.
+        sprites_->Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend, &point, nullptr, &scissorDisabled);
+        sprites_->Draw(*white_, Rectangle(0, 0, 2, 2), Rectangle(0, 0, 1, 1), Color(10, 20, 30, 128));
+        direct2dBackend.DebugSimulateContextLoss();
+        sprites_->Draw(*white_, Rectangle(0, 0, 2, 2), Rectangle(0, 0, 1, 1), Color::White);
+        sprites_->End();
+        check("Direct2D SpriteBatch survives mid-batch device loss", 0, 0, Color::White);
+
         // D2D-63: device loss while an unrecoverable render target (created with recovery
         // disabled) is the ACTIVE target must not silently leave GraphicsDevice's public binding
         // out of sync with the backend's actual current target -- it now surfaces loudly instead
