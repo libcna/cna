@@ -5748,6 +5748,8 @@ struct VSOut {
         }
         drawOrder_.push_back(DrawOrderEntry{family, static_cast<std::uint32_t>(index),
                                             static_cast<std::uint32_t>(drawOrder_.size())});
+        // WEBGPU-115: the cumulative counterpart of drawOrder_.size(), which a flush drains.
+        ++queuedDrawCommandCount_;
     }
 
     void WebGPUGraphicsBackend::RecordOrderedClear(bool color, bool depth, bool stencil)
@@ -5980,6 +5982,10 @@ struct VSOut {
             state.publicOrder = entry.order;
             state.replayPosition = issued;
             ++issued;
+            // WEBGPU-115: one increment per command actually handed to the pass encoder. This is
+            // the single point every family's native draw passes through, so a refused draw's
+            // "nothing reached the GPU" is a measured zero here, not an inference from pixels.
+            ++nativeDrawIssueCount_;
             switch (entry.family)
             {
             case DrawFamily::Sprite:

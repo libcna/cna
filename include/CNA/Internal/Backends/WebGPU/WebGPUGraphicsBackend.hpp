@@ -839,6 +839,21 @@ namespace CNA::Internal::Backends::WebGPU
         {
             return instancedPipelines_.size();
         }
+        /// WEBGPU-115: draw commands appended to @ref drawOrder_ since device creation, across
+        /// every family. Cumulative and never reset, unlike drawOrder_ itself, which a flush
+        /// drains -- so a refused draw can be proven to have queued nothing even across the bind
+        /// cycle that would have replayed it.
+        [[nodiscard]] std::size_t GetQueuedDrawCommandCountEXT() const noexcept
+        {
+            return queuedDrawCommandCount_;
+        }
+        /// WEBGPU-115: queued draw commands actually replayed into a native render pass since
+        /// device creation. It is the count of native wgpuRenderPassEncoderDraw*/sprite issues, so
+        /// "nothing was submitted for the refused draw" is measured rather than inferred.
+        [[nodiscard]] std::size_t GetNativeDrawIssueCountEXT() const noexcept
+        {
+            return nativeDrawIssueCount_;
+        }
 
         void Clear(float r, float g, float b, float a) override;
         void Present() override;
@@ -1625,6 +1640,10 @@ namespace CNA::Internal::Backends::WebGPU
         std::size_t setScissorCallCount_ = 0;
         std::size_t renderPassCount_ = 0;
         std::size_t queueSubmitCount_ = 0;
+        /// WEBGPU-115: see GetQueuedDrawCommandCountEXT().
+        std::size_t queuedDrawCommandCount_ = 0;
+        /// WEBGPU-115: see GetNativeDrawIssueCountEXT().
+        std::size_t nativeDrawIssueCount_ = 0;
         float blendFactorR_ = 1.0f;
         float blendFactorG_ = 1.0f;
         float blendFactorB_ = 1.0f;
