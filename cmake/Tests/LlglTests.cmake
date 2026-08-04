@@ -227,6 +227,13 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "LLGL")
         TIMEOUT 90 LABELS "Llgl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # LLGL-54: preserve the effective MSAA sample count across a multi-render-target bind, and
+    # resolve every attachment independently, not just slot 0.
+    cna_llgl_test(cna_test_llgl_mrt_msaa examples/llgl_mrt_msaa_test.cpp)
+    cna_register_backend_test(NAME Llgl_MRT_MSAA COMMAND cna_test_llgl_mrt_msaa
+        TIMEOUT 90 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # LLGL-25 follow-up: PbrEffect + SkinnedPbrEffect -- adapted (Check (d) ported back once
     # SkinnedPbrEffect itself landed) from the Vulkan backend's own
     # examples/vulkan_pbreffect_handderived_test.cpp (itself fully backend-agnostic real public XNA

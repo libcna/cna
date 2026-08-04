@@ -5907,21 +5907,45 @@ namespace CNA::Internal::Backends::Llgl
 
         // Dimensions, applied sample count and duplicate-subresource checks already happened at the
         // shared GraphicsDevice::SetRenderTargets layer before this backend was ever called -- slot
-        // 0's own width/height/projection buffer are correct for every slot.
+        // 0's own width/height/projection buffer/applied MultiSampleCount are correct for every
+        // slot (that shared layer's own "render targets must have matching applied sample counts"
+        // check already rejects a mixed-MSAA bind before this method ever runs).
         const int width = slots[0]->GetWidth();
         const int height = slots[0]->GetHeight();
+        const int requestedSamples = slots[0]->GetSampleCount();
 
         LLGL::RenderTargetDescriptor targetDesc;
         targetDesc.resolution = {static_cast<std::uint32_t>(width), static_cast<std::uint32_t>(height)};
+        // LLGL-54: preserve every slot's own already-applied MSAA sample count instead of silently
+        // dropping it (this used to omit `targetDesc.samples` entirely, defaulting to 1/no-MSAA
+        // regardless of what the individual RenderTarget2D slots were actually created with).
+        // Matches CreateRenderTarget2D()'s own single-target pattern: an anonymous (textureless)
+        // multisampled colour attachment per slot, LLGL-owned, with each slot's own already-created
+        // single-sample texture as ITS OWN resolve target -- LLGL resolves each attachment
+        // independently at the end of the render pass, so GetData()/sampling afterwards reads
+        // fully-resolved pixels per slot with no extra work here.
+        targetDesc.samples = requestedSamples;
         for (int i = 0; i < count; ++i)
         {
-            targetDesc.colorAttachments[static_cast<std::size_t>(i)] =
-                LLGL::AttachmentDescriptor{slots[static_cast<std::size_t>(i)]->GetLlglColorTexture()};
+            LLGL::Texture* colorTexture = slots[static_cast<std::size_t>(i)]->GetLlglColorTexture();
+            if (requestedSamples > 1)
+            {
+                targetDesc.colorAttachments[static_cast<std::size_t>(i)] =
+                    LLGL::AttachmentDescriptor{swapChain_->GetColorFormat()};
+                targetDesc.resolveAttachments[static_cast<std::size_t>(i)] =
+                    LLGL::AttachmentDescriptor{colorTexture};
+            }
+            else
+            {
+                targetDesc.colorAttachments[static_cast<std::size_t>(i)] =
+                    LLGL::AttachmentDescriptor{colorTexture};
+            }
         }
         // Fresh, anonymous depth attachment -- LLGL allocates and owns it internally as part of
         // renderTarget_, exactly like CreateRenderTarget2D's own single-target depth attachment,
         // rather than trying to share/preserve any one slot's own depth buffer (see LlglMRTBinding's
-        // doc comment on why).
+        // doc comment on why). Implicitly created at targetDesc.samples too, matching every colour
+        // attachment's own sample count -- a render target's attachments must all share one.
         targetDesc.depthStencilAttachment = LLGL::AttachmentDescriptor{swapChain_->GetDepthStencilFormat()};
 
         LLGL::RenderTarget* renderTarget = renderer_->CreateRenderTarget(targetDesc);
@@ -5930,10 +5954,13 @@ namespace CNA::Internal::Backends::Llgl
             throw std::runtime_error(
                 std::string(kBackendName) + " backend: multiple-render-target creation failed");
         }
+        // The REAL, device-clamped sample count -- LLGL "silently reduces" an unsupported request
+        // rather than failing, exactly like the single-target path's own `appliedSamples`.
+        const int appliedSamples = static_cast<int>(renderTarget->GetSamples());
 
         ReleaseCurrentMrtBindingEXT();
         currentMrtBinding_ = std::make_unique<LlglMRTBinding>(
-            renderTarget, width, height, count, slots[0]->GetSpriteProjectionBuffer());
+            renderTarget, width, height, count, slots[0]->GetSpriteProjectionBuffer(), appliedSamples);
         currentRenderTargetBackend_ = currentMrtBinding_.get();
     }
 

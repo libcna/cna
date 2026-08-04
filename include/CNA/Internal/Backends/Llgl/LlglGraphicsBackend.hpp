@@ -436,9 +436,10 @@ namespace CNA::Internal::Backends::Llgl
          *  was built with (1 = no MSAA). A pipeline drawn against this target must be built with a
          *  matching `rasterizer.multiSampleEnabled`/sample count, or a software Vulkan module can
          *  silently rasterize single-sample into a multisampled framebuffer instead of erroring --
-         *  see `LlglGraphicsBackend::GetPrimarySampleCountEXT()`. Cube faces support MSAA now
-         *  (LLGL-34, see `LlglRenderTargetCubeFaceBinding`'s own override); MRT binds do not yet,
-         *  so the default of 1 (no MSAA) remains correct for those without an override. */
+         *  see `LlglGraphicsBackend::GetPrimarySampleCountEXT()`. Cube faces support MSAA (LLGL-34,
+         *  see `LlglRenderTargetCubeFaceBinding`'s own override) and MRT binds do too now (LLGL-54,
+         *  see `LlglMRTBinding`'s own override) -- the default of 1 (no MSAA) here only still
+         *  applies to a plain single-target `LlglRenderTargetBackend` bound without MSAA. */
         [[nodiscard]] virtual int GetSampleCount() const { return 1; }
         /** @brief Returns the colour texture that needs its mip chain regenerated after this
          *  target's render pass ends, or null when this target has no real mip chain to
@@ -820,10 +821,12 @@ namespace CNA::Internal::Backends::Llgl
     {
     public:
         LlglMRTBinding(LLGL::RenderTarget* renderTarget, int width, int height,
-                      int colorAttachmentCount, LLGL::Buffer* spriteProjectionBuffer)
+                      int colorAttachmentCount, LLGL::Buffer* spriteProjectionBuffer,
+                      int sampleCount)
             : renderTarget_(renderTarget), width_(width), height_(height)
             , colorAttachmentCount_(colorAttachmentCount)
             , spriteProjectionBuffer_(spriteProjectionBuffer)
+            , sampleCount_(sampleCount)
         {
         }
 
@@ -832,6 +835,13 @@ namespace CNA::Internal::Backends::Llgl
         [[nodiscard]] int GetHeight() const override { return height_; }
         [[nodiscard]] LLGL::Buffer* GetSpriteProjectionBuffer() const override { return spriteProjectionBuffer_; }
         [[nodiscard]] int GetColorAttachmentCount() const override { return colorAttachmentCount_; }
+        /** @brief LLGL-54: the real, device-clamped MSAA sample count every bound slot shares --
+         *  `GraphicsDevice::SetRenderTargets()`'s own shared validation layer already requires
+         *  every slot's OWN applied `MultiSampleCount` to agree before this binding is ever built,
+         *  so slot 0's is authoritative for the whole bind. Previously unset (inherited the base
+         *  class's hardcoded `1`), so a pipeline drawn against a multisampled MRT bind was built
+         *  single-sample regardless of what the render target itself was actually created with. */
+        [[nodiscard]] int GetSampleCount() const override { return sampleCount_; }
 
     private:
         LLGL::RenderTarget* renderTarget_          = nullptr;
@@ -839,6 +849,7 @@ namespace CNA::Internal::Backends::Llgl
         int                 height_                = 0;
         int                 colorAttachmentCount_  = 1;
         LLGL::Buffer*       spriteProjectionBuffer_ = nullptr;
+        int                 sampleCount_            = 1;
     };
 
     /**
