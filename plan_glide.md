@@ -326,10 +326,60 @@ plus a dgVoodoo/real-hardware visual test before it can be advertised as support
   vertex-colour/emissive/specular order and fog. The recorder cannot yet drive the full CNA
   backend, so a fake-DLL renderer-sequence assertion and dgVoodoo/real-Voodoo image capture remain
   required before this capability is release-validated.
-- [ ] **GLIDE-FUT-004 — Use a second TMU when the selected runtime actually has one.** Add
-  per-TMU texture memory allocators/residency, two-texture tiled draw partitioning and the exact
-  fixed-function combiner for `DualTextureEffect` / texture slot 1. Gate it on `GR_NUM_TMU >= 2`,
-  keep single-TMU Voodoo paths explicit, and test state changes, alpha and unequal tile grids.
+- [x] **GLIDE-FUT-004 — Use a second TMU when the selected runtime actually has one.**
+  **Scope confirmed with the project owner (2026-08-04):** implemented for single-tile texture0
+  and texture1 only, both required to share identical width/height; full unequal-tile-grid /
+  independent-second-UV-channel support is an explicit, loudly-rejected non-goal of this pass, not
+  a silent limitation (see below). Startup now queries `grTexMinAddress(1)`/`grTexMaxAddress(1)`
+  whenever `GR_NUM_TMU >= 2` was already detected, registers a second per-TMU free-range allocator
+  (`freeTextureRangesByTmu[1]`/`residentTexturesByTmu[1]`, reusing the exact GLIDE-FUT-013
+  allocator/eviction machinery `AllocateTexture`/`ReleaseTexture`/`TryFitTexture` now take a `tmu`
+  parameter for) and registers `GR_PARAM_ST1` at the same vertex offset as `GR_PARAM_ST0` via
+  `grVertexLayout`, and only then sets `secondTmuAvailable = true`.
+  `GlideTextureBackend` gained `EnsureTmu1Resident()`/`BuildSingleTmu1Tile()`: a second, independent
+  single-tile upload path (no gutter, no multi-tile split -- `BuildSingleTmu1Tile` throws if the
+  logical image exceeds one native tile) that reuses the already-built TMU0 logical mip pyramid and
+  the same address-mode-aware conversion and adaptive-format selection as GLIDE-FUT-007, tracked by
+  its own `tmu1Range_`/`tmu1NativeInfo_`/`tmu1UploadedAddressU_`/`tmu1UploadedAddressV_` state and
+  released in the destructor and on rebuild.
+  `DrawPrimitiveRange` validates, before touching any native state: TMU0 texture present,
+  `TriangleList`/`TriangleStrip` only, `secondTmuAvailable`, `params.texture1` resolves to a
+  `GlideTextureBackend`, and `texture0.GetWidth()/GetHeight() == texture1.GetWidth()/GetHeight()`
+  -- throwing a specific `std::runtime_error` for each violation rather than misrendering. The
+  dimension-equality requirement is load-bearing, not cosmetic: this backend's vertex-declaration
+  parser (GLIDE-AUD-012/FUT-002) only accepts a single `TextureCoordinate0` semantic, so `GR_PARAM_ST1`
+  necessarily reads the *same* native `(sow, tow)` bytes as `GR_PARAM_ST0`. Native `s = u * width *
+  (256/paddedWidth)`; since `paddedWidth = NextPowerOfTwo(width)`, two textures of identical width
+  necessarily produce an identical `s` (and likewise `t`) for the same `u`/`v` -- sharing one UV
+  channel between TMUs is then mathematically exact, not approximate, which is what makes the
+  narrower scope correct rather than merely convenient. `ValidateFixedFunctionDrawParams` also now
+  rejects `lightingEnabled && dualTexture` together (`BasicEffect` lighting and `DualTextureEffect`
+  are mutually exclusive stock effects in FNA/XNA).
+  The fixed-function combiner chain (`Impl::ConfigureDualTextureCombiner()`) reproduces FNA's
+  `DualTextureEffect.fx` exactly: `color = tex0; color.rgb *= 2; color *= tex1 * diffuse` (alpha is
+  never doubled). Glide's combiner has no native "x2" stage, so the x2 is folded into the
+  CPU-computed iterated RGB in `DrawPrimitiveRange`'s `readVertex` (after lighting/fog, before the
+  final `ClampUnit`), which is exactly equivalent by associativity/commutativity of scalar
+  multiplication (`2*tex0*tex1*diffuse == tex0*tex1*(2*diffuse)`), not an approximation. TMU1 is
+  configured as the upstream stage (`grTexCombine(1, LOCAL, ONE, LOCAL, ONE, ...)`, passing its own
+  sampled texel through unchanged as `Cother`/`Aother`); TMU0 multiplies its own sample by that
+  upstream output (`grTexCombine(0, SCALE_OTHER, LOCAL, SCALE_OTHER, LOCAL, ...)`, chaining
+  `tex0 * tex1`); the existing final iterated stage (shared with `ConfigureSpriteCombiner`) then
+  multiplies by the (already 2x-prescaled) iterated colour. `DrawPrimitiveRange`'s textured-triangle
+  branch selects this combiner instead of `ConfigureSpriteCombiner()` when `params.dualTexture`, and
+  binds TMU1 once inside `bindTriangleTile` (texture0 is enforced single-tile whenever dual-textured,
+  so this runs at most once per draw call). `DrawIndexedPrimitiveRange` needs no separate wiring --
+  it always delegates to `DrawPrimitiveRange` with `params` forwarded unchanged.
+  Verified with i686 MinGW `-fsyntax-only` recompilation of the whole backend and the full portable
+  Glide unit suite (65/65, unchanged -- this ticket's logic is combiner-native-call sequencing and a
+  single associative scalar multiply, not new branchy CPU math, so no new portable header/test file
+  was warranted, matching the precedent that `ConfigureSpriteCombiner`/`ConfigureColoredCombiner`
+  themselves are native-call sequences and were never separately unit-tested either). An end-to-end
+  two-texture fake-DLL capture or dgVoodoo/real-Voodoo image comparison remains blocked by the same
+  external i686 `sharp-runtime` `__int128` dependency as GLIDE-AUD-006/007. Unequal-tile-grid /
+  independent-UV-channel `DualTextureEffect` support (the ticket's original "unequal tile grids"
+  clause) is left for a future ticket if ever needed; it would require GLIDE-FUT-002's vertex
+  decoder to accept a genuine second `TextureCoordinate1` semantic first.
 - [ ] **GLIDE-FUT-005 — Map sampler mip controls that Glide can represent.** Extend the common
   sampler-state hand-off so `MipMapLevelOfDetailBias` and `MaxMipLevel` reach the backend; map
   the former to native LOD bias and implement/clamp the latter without selecting unavailable

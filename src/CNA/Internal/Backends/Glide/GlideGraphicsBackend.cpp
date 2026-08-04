@@ -68,6 +68,7 @@ namespace CNA::Internal::Backends::Glide
         constexpr FxU32 kParamA = 0x10;
         constexpr FxU32 kParamRgb = 0x20;
         constexpr FxU32 kParamSt0 = 0x40;
+        constexpr FxU32 kParamSt1 = 0x41;
         constexpr FxU32 kParamEnable = 0x01;
 
         constexpr FxI32 kCombineFunctionLocal = 0x1;
@@ -465,7 +466,34 @@ namespace CNA::Internal::Backends::Glide
                 {
                     throw std::runtime_error("Glide TMU0 reported an unrepresentable texture-memory range");
                 }
-                freeTextureRanges.push_back(TextureRange{minAddress, static_cast<FxU32>(rangeSize)});
+                freeTextureRangesByTmu[0].push_back(TextureRange{minAddress, static_cast<FxU32>(rangeSize)});
+
+                // GLIDE-FUT-004: a second TMU, when the runtime actually reports one, is used for
+                // DualTextureEffect's second texture slot. GR_PARAM_ST1 is registered pointing at
+                // the SAME sow/tow bytes as GR_PARAM_ST0 (Glide defaults an unset GR_PARAM_Q1 to
+                // the shared GR_PARAM_Q, so this needs no other vertex-layout changes): this
+                // backend's vertex-declaration parser already accepts only a single texture-
+                // coordinate semantic (GLIDE-AUD-012/FUT-002), so a shared UV between TMU0 and
+                // TMU1 is that pre-existing boundary, not a new one. Registering GR_PARAM_ST1 is
+                // harmless for ordinary single-texture draws: their TMU0 combiner always uses
+                // GR_COMBINE_FUNCTION_LOCAL (see ConfigureSpriteCombiner/ConfigureColoredCombiner),
+                // which never reads TMU1's upstream contribution at all.
+                if (textureUnitCount >= 2)
+                {
+                    const FxU32 minAddress1 = api.grTexMinAddress(1);
+                    const FxU32 maxAddress1 = api.grTexMaxAddress(1);
+                    if (maxAddress1 > minAddress1)
+                    {
+                        const std::uint64_t rangeSize1 = static_cast<std::uint64_t>(maxAddress1) - minAddress1 + 1u;
+                        if (rangeSize1 <= std::numeric_limits<FxU32>::max())
+                        {
+                            freeTextureRangesByTmu[1].push_back(
+                                TextureRange{minAddress1, static_cast<FxU32>(rangeSize1)});
+                            api.grVertexLayout(kParamSt1, static_cast<FxI32>(offsetof(GlideVertex, sow)), kParamEnable);
+                            secondTmuAvailable = true;
+                        }
+                    }
+                }
                 LogStartupDiagnostics();
             }
             catch (...)
@@ -560,13 +588,18 @@ namespace CNA::Internal::Backends::Glide
             {
                 return;
             }
-            const std::uint64_t tmu0Bytes = freeTextureRanges.empty() ? 0u : freeTextureRanges.front().size;
+            const std::vector<TextureRange>& freeTmu0 = freeTextureRangesByTmu[0];
+            const std::uint64_t tmu0Bytes = freeTmu0.empty() ? 0u : freeTmu0.front().size;
+            const std::vector<TextureRange>& freeTmu1 = freeTextureRangesByTmu[1];
+            const std::uint64_t tmu1Bytes = freeTmu1.empty() ? 0u : freeTmu1.front().size;
             std::fprintf(stderr,
                          "[CNA GLIDE] runtime=%s, virtual=%dx%d, native=%dx%d, TMUs=%d, "
-                         "maxTexture=%d, maxAspectLog2=%d, TMU0Bytes=%llu\n",
+                         "maxTexture=%d, maxAspectLog2=%d, TMU0Bytes=%llu, secondTmuAvailable=%d, "
+                         "TMU1Bytes=%llu\n",
                          api.ModulePath().c_str(), virtualWidth, virtualHeight, nativeWidth, nativeHeight,
                          textureUnitCount, maxTextureDimension, maxTextureAspectLog2,
-                         static_cast<unsigned long long>(tmu0Bytes));
+                         static_cast<unsigned long long>(tmu0Bytes), secondTmuAvailable ? 1 : 0,
+                         static_cast<unsigned long long>(tmu1Bytes));
             std::string extensionSummary;
             for (const std::string& extension : supportedExtensions)
             {
@@ -602,6 +635,25 @@ namespace CNA::Internal::Backends::Glide
                                kCombineLocalIterated, kCombineOtherNone, kFxFalse);
             api.grAlphaCombine(kCombineFunctionLocal, kCombineFactorZero,
                                kCombineLocalIterated, kCombineOtherNone, kFxFalse);
+        }
+
+        void ConfigureDualTextureCombiner()
+        {
+            // GLIDE-FUT-004: DualTextureEffect. TMU1 is upstream of TMU0 in Glide's combiner
+            // chain: TMU1 first outputs its own sampled texel unchanged as Cother/Aother for TMU0.
+            api.grTexCombine(1, kCombineFunctionLocal, kCombineFactorOne,
+                              kCombineFunctionLocal, kCombineFactorOne, kFxFalse, kFxFalse);
+            // TMU0 then multiplies its own sampled texel by TMU1's upstream output, chaining
+            // tex0 * tex1 as this stage's own Cother/Aother for the final iterated combiner below.
+            api.grTexCombine(0, kCombineFunctionScaleOther, kCombineFactorLocal,
+                              kCombineFunctionScaleOther, kCombineFactorLocal, kFxFalse, kFxFalse);
+            // Final stage multiplies the CPU-iterated colour (already RGB-prescaled by 2, see
+            // readVertex in DrawPrimitiveRange) by TMU0's chained tex0*tex1 output. Alpha is never
+            // doubled, matching FNA's DualTextureEffect.fx: iteratedAlpha * tex0.a * tex1.a.
+            api.grColorCombine(kCombineFunctionScaleOther, kCombineFactorLocal,
+                               kCombineLocalIterated, kCombineOtherTexture, kFxFalse);
+            api.grAlphaCombine(kCombineFunctionScaleOther, kCombineFactorLocal,
+                               kCombineLocalIterated, kCombineOtherTexture, kFxFalse);
         }
 
         void ApplyBlendState()
@@ -726,10 +778,11 @@ namespace CNA::Internal::Backends::Glide
             ApplyClipWindow(left, top, right - left, bottom - top);
         }
 
-        [[nodiscard]] std::optional<TextureRange> TryFitTexture(FxU32 size)
+        [[nodiscard]] std::optional<TextureRange> TryFitTexture(int tmu, FxU32 size)
         {
             constexpr FxU32 alignment = 8;
-            for (auto it = freeTextureRanges.begin(); it != freeTextureRanges.end(); ++it)
+            std::vector<TextureRange>& freeRanges = freeTextureRangesByTmu[static_cast<std::size_t>(tmu)];
+            for (auto it = freeRanges.begin(); it != freeRanges.end(); ++it)
             {
                 const std::uint64_t alignedAddress64 =
                     (static_cast<std::uint64_t>(it->address) + alignment - 1) & ~(static_cast<std::uint64_t>(alignment) - 1);
@@ -749,7 +802,7 @@ namespace CNA::Internal::Backends::Glide
                         it->size -= size;
                         if (it->size == 0)
                         {
-                            freeTextureRanges.erase(it);
+                            freeRanges.erase(it);
                         }
                     }
                     else
@@ -758,7 +811,7 @@ namespace CNA::Internal::Backends::Glide
                         const std::uint64_t allocationEnd = static_cast<std::uint64_t>(alignedAddress) + size;
                         if (allocationEnd < oldEnd)
                         {
-                            freeTextureRanges.insert(std::next(it), TextureRange{
+                            freeRanges.insert(std::next(it), TextureRange{
                                 static_cast<FxU32>(allocationEnd), static_cast<FxU32>(oldEnd - allocationEnd)});
                         }
                     }
@@ -773,18 +826,25 @@ namespace CNA::Internal::Backends::Glide
          * own construction) or while it is only partially resident (mid-rebuild after its own
          * prior eviction) -- otherwise a texture could evict tiles it is in the middle of
          * allocating for itself, corrupting its own atomic rebuild.
+         *
+         * `residentTexturesByTmu[1]` is never populated (GLIDE-FUT-004's single-tile-only TMU1
+         * support does not participate in LRU eviction), so a TMU1 request that cannot be
+         * satisfied simply fails cleanly here instead of ever evicting a TMU0 resident -- doing
+         * that would free TMU0 memory while leaving TMU1 exactly as exhausted as before.
          */
-        [[nodiscard]] TextureRange AllocateTexture(FxU32 size, const IGlideResidentTexture* requester)
+        [[nodiscard]] TextureRange AllocateTexture(int tmu, FxU32 size, const IGlideResidentTexture* requester)
         {
             for (;;)
             {
-                if (const std::optional<TextureRange> fit = TryFitTexture(size))
+                if (const std::optional<TextureRange> fit = TryFitTexture(tmu, size))
                 {
                     return *fit;
                 }
+                const std::vector<IGlideResidentTexture*>& residents =
+                    residentTexturesByTmu[static_cast<std::size_t>(tmu)];
                 std::vector<GlideResidentTextureView> candidates;
-                candidates.reserve(residentTextures.size());
-                for (const IGlideResidentTexture* candidate : residentTextures)
+                candidates.reserve(residents.size());
+                for (const IGlideResidentTexture* candidate : residents)
                 {
                     candidates.push_back(GlideResidentTextureView{
                         candidate, candidate->IsResident(), candidate->LastUsedCounter()});
@@ -792,9 +852,9 @@ namespace CNA::Internal::Backends::Glide
                 const void* victimIdentity = SelectGlideEvictionVictim(candidates, requester);
                 if (victimIdentity == nullptr)
                 {
-                    throw std::runtime_error("GLIDE TMU0 texture memory is exhausted");
+                    throw std::runtime_error("GLIDE TMU texture memory is exhausted");
                 }
-                const auto victimIt = std::find_if(residentTextures.begin(), residentTextures.end(),
+                const auto victimIt = std::find_if(residents.begin(), residents.end(),
                     [victimIdentity](const IGlideResidentTexture* candidate)
                     {
                         return static_cast<const void*>(candidate) == victimIdentity;
@@ -810,31 +870,32 @@ namespace CNA::Internal::Backends::Glide
                 if (diagnosticsEnabled)
                 {
                     std::fprintf(stderr,
-                                 "[CNA GLIDE] TMU0 memory pressure: evicted a least-recently-used texture, "
+                                 "[CNA GLIDE] TMU%d memory pressure: evicted a least-recently-used texture, "
                                  "freed %u bytes\n",
-                                 freedBytes);
+                                 tmu, freedBytes);
                 }
                 if (freedBytes == 0)
                 {
                     // A resident candidate with nothing to free would spin forever; the pool is
                     // genuinely exhausted for this request.
-                    throw std::runtime_error("GLIDE TMU0 texture memory is exhausted");
+                    throw std::runtime_error("GLIDE TMU texture memory is exhausted");
                 }
             }
         }
 
         [[nodiscard]] std::uint64_t NextTextureUseCounter() { return ++textureUseCounter; }
 
-        void ReleaseTexture(TextureRange range)
+        void ReleaseTexture(int tmu, TextureRange range)
         {
             if (range.size == 0)
             {
                 return;
             }
-            auto position = std::lower_bound(freeTextureRanges.begin(), freeTextureRanges.end(), range.address,
+            std::vector<TextureRange>& freeRanges = freeTextureRangesByTmu[static_cast<std::size_t>(tmu)];
+            auto position = std::lower_bound(freeRanges.begin(), freeRanges.end(), range.address,
                 [](const TextureRange& candidate, FxU32 address) { return candidate.address < address; });
-            position = freeTextureRanges.insert(position, range);
-            if (position != freeTextureRanges.begin())
+            position = freeRanges.insert(position, range);
+            if (position != freeRanges.begin())
             {
                 const auto previous = std::prev(position);
                 if (static_cast<std::uint64_t>(previous->address) + previous->size == position->address)
@@ -842,24 +903,24 @@ namespace CNA::Internal::Backends::Glide
                     const std::uint64_t combinedSize = static_cast<std::uint64_t>(previous->size) + position->size;
                     if (combinedSize > std::numeric_limits<FxU32>::max())
                     {
-                        throw std::runtime_error("GLIDE TMU0 free-range coalescing overflowed");
+                        throw std::runtime_error("GLIDE TMU free-range coalescing overflowed");
                     }
                     previous->size = static_cast<FxU32>(combinedSize);
-                    position = freeTextureRanges.erase(position);
+                    position = freeRanges.erase(position);
                     position = previous;
                 }
             }
             const auto next = std::next(position);
-            if (next != freeTextureRanges.end() &&
+            if (next != freeRanges.end() &&
                 static_cast<std::uint64_t>(position->address) + position->size == next->address)
             {
                 const std::uint64_t combinedSize = static_cast<std::uint64_t>(position->size) + next->size;
                 if (combinedSize > std::numeric_limits<FxU32>::max())
                 {
-                    throw std::runtime_error("GLIDE TMU0 free-range coalescing overflowed");
+                    throw std::runtime_error("GLIDE TMU free-range coalescing overflowed");
                 }
                 position->size = static_cast<FxU32>(combinedSize);
-                freeTextureRanges.erase(next);
+                freeRanges.erase(next);
             }
         }
 
@@ -915,12 +976,19 @@ namespace CNA::Internal::Backends::Glide
         int maxTextureDimension = 256;
         int maxTextureAspectLog2 = 3;
         int textureUnitCount = 1;
-        std::vector<TextureRange> freeTextureRanges;
-        // Every live GlideTextureBackend registers itself here (after successful construction)
-        // so AllocateTexture() can evict the least-recently-used other resident texture under
-        // memory pressure instead of failing outright. NextTextureUseCounter() is a deterministic
-        // logical clock, not wall-clock time, so LRU ordering is reproducible.
-        std::vector<IGlideResidentTexture*> residentTextures;
+        // True only once startup has confirmed both GR_NUM_TMU >= 2 and a usable TMU1 memory
+        // range; DualTextureEffect draws must check this rather than textureUnitCount alone.
+        bool secondTmuAvailable = false;
+        // Index 0 is TMU0 (always present); index 1 is TMU1, only ever populated when
+        // GLIDE-FUT-004 finds GR_NUM_TMU >= 2 at startup.
+        std::array<std::vector<TextureRange>, 2> freeTextureRangesByTmu;
+        // Every live GlideTextureBackend registers itself in index 0 (after successful
+        // construction) so AllocateTexture() can evict the least-recently-used other TMU0-
+        // resident texture under memory pressure instead of failing outright.
+        // NextTextureUseCounter() is a deterministic logical clock, not wall-clock time, so LRU
+        // ordering is reproducible. Index 1 is deliberately never populated: GLIDE-FUT-004's
+        // single-tile-only TMU1 support does not participate in eviction.
+        std::array<std::vector<IGlideResidentTexture*>, 2> residentTexturesByTmu;
         std::uint64_t textureUseCounter = 0;
         std::string hardwareName;
         std::string rendererName;
@@ -996,26 +1064,30 @@ namespace CNA::Internal::Backends::Glide
             {
                 for (const Tile& tile : tiles_)
                 {
-                    GetImpl().ReleaseTexture(tile.range);
+                    GetImpl().ReleaseTexture(0, tile.range);
                 }
                 throw;
             }
             // Only a fully, successfully constructed texture becomes eligible for eviction.
-            GetImpl().residentTextures.push_back(this);
+            GetImpl().residentTexturesByTmu[0].push_back(this);
         }
 
         ~GlideTextureBackend() override
         {
             if (const std::shared_ptr<GlideGraphicsBackend::Impl> impl = impl_.lock())
             {
-                auto& residents = impl->residentTextures;
+                auto& residents = impl->residentTexturesByTmu[0];
                 residents.erase(std::remove(residents.begin(), residents.end(), this), residents.end());
                 // A source command can remain in Glide's FIFO after the C++ texture dies. Do
                 // not make its TMU range reusable until the hardware/emulator has consumed it.
                 impl->api.grFinish();
                 for (const Tile& tile : tiles_)
                 {
-                    impl->ReleaseTexture(tile.range);
+                    impl->ReleaseTexture(0, tile.range);
+                }
+                if (tmu1Built_)
+                {
+                    impl->ReleaseTexture(1, tmu1Range_);
                 }
             }
         }
@@ -1038,7 +1110,7 @@ namespace CNA::Internal::Backends::Glide
             for (const Tile& tile : tiles_)
             {
                 freedBytes += tile.range.size;
-                impl.ReleaseTexture(tile.range);
+                impl.ReleaseTexture(0, tile.range);
             }
             tiles_.clear();
             return freedBytes;
@@ -1162,7 +1234,7 @@ namespace CNA::Internal::Backends::Glide
                 {
                     for (const Tile& tile : tiles_)
                     {
-                        GetImpl().ReleaseTexture(tile.range);
+                        GetImpl().ReleaseTexture(0, tile.range);
                     }
                     tiles_.clear();
                     throw;
@@ -1177,6 +1249,51 @@ namespace CNA::Internal::Backends::Glide
                 }
             }
         }
+
+        /**
+         * GLIDE-FUT-004: makes this texture resident on TMU1 as DualTextureEffect's second
+         * texture slot. Single-tile only -- throws if this logical texture would need more than
+         * one physical tile at the runtime's reported GR_MAX_TEXTURE_SIZE, rather than attempting
+         * the substantially harder problem of partitioning geometry against two independent
+         * tile/address-mode grids at once.
+         */
+        void EnsureTmu1Resident(int addressU, int addressV)
+        {
+            // Guarantees logicalMipLevels_ is current for this address mode; this is also this
+            // texture's own TMU0 use-counter/residency touch, which is always legal even if this
+            // particular draw only reads it through TMU1.
+            EnsureAddressMode(addressU, addressV);
+            if (tmu1Built_ && addressU == tmu1UploadedAddressU_ && addressV == tmu1UploadedAddressV_)
+            {
+                return;
+            }
+            GlideGraphicsBackend::Impl& impl = GetImpl();
+            // Same hazard as EnsureAddressMode(): a queued-but-unsubmitted SpriteBatch quad must
+            // not have TMU1 content it never asked for swapped out from under it. SpriteBatch
+            // itself never uses TMU1, but a 3D dual-textured draw could still be preceded by one.
+            impl.FlushSpriteBatch();
+            if (tmu1Built_)
+            {
+                impl.api.grFinish();
+                impl.ReleaseTexture(1, tmu1Range_);
+                tmu1Built_ = false;
+            }
+            try
+            {
+                BuildSingleTmu1Tile(addressU, addressV);
+            }
+            catch (...)
+            {
+                tmu1Built_ = false;
+                throw;
+            }
+            tmu1UploadedAddressU_ = addressU;
+            tmu1UploadedAddressV_ = addressV;
+            tmu1Built_ = true;
+        }
+
+        [[nodiscard]] FxU32 Tmu1TextureAddress() const { return tmu1Range_.address; }
+        [[nodiscard]] const GlideTexInfo& Tmu1NativeInfo() const { return tmu1NativeInfo_; }
 
     private:
         struct LogicalMipLevel
@@ -1333,20 +1450,115 @@ namespace CNA::Internal::Backends::Glide
                     {
                         throw std::runtime_error("grTexTextureMemRequired rejected an ARGB4444 tiled Glide texture");
                     }
-                    tile.range = GetImpl().AllocateTexture(requiredBytes, this);
+                    tile.range = GetImpl().AllocateTexture(0, requiredBytes, this);
                     try
                     {
                         Upload(tile);
                     }
                     catch (...)
                     {
-                        GetImpl().ReleaseTexture(tile.range);
+                        GetImpl().ReleaseTexture(0, tile.range);
                         throw;
                     }
                     tiles_.push_back(std::move(tile));
                     sourceX += sourceWidth;
                 }
                 sourceY += sourceHeight;
+            }
+        }
+
+        /**
+         * Builds this texture's single TMU1 tile straight from logicalMipLevels_ (already current
+         * for `addressU`/`addressV` by the time EnsureTmu1Resident() calls this). No gutters are
+         * needed: a single tile covering the whole logical image never touches another tile's
+         * edge, only the address-mode-aware power-of-two padding ConvertTileToGlideTexels() also
+         * relies on via AddressGlideTextureTexel().
+         */
+        void BuildSingleTmu1Tile(int addressU, int addressV)
+        {
+            GlideGraphicsBackend::Impl& impl = GetImpl();
+            const int maximum = impl.maxTextureDimension;
+            if (maximum < 1 || (maximum & (maximum - 1)) != 0)
+            {
+                throw std::runtime_error("Glide reported an invalid non-power-of-two maximum texture size");
+            }
+            if (width_ > maximum || height_ > maximum)
+            {
+                throw std::runtime_error(
+                    "GLIDE DualTextureEffect's second texture exceeds the native tile size limit; "
+                    "multi-tile dual-texture rendering is not supported");
+            }
+            const int paddedWidth = NextPowerOfTwo(width_, maximum);
+            const int paddedHeight = NextPowerOfTwo(height_, maximum);
+            const int maximumAspect = 1 << impl.maxTextureAspectLog2;
+            if (paddedWidth > paddedHeight * maximumAspect || paddedHeight > paddedWidth * maximumAspect)
+            {
+                throw std::runtime_error(
+                    "GLIDE DualTextureEffect's second texture cannot satisfy the emulator-reported "
+                    "aspect-ratio limit");
+            }
+            const GlideTextureAlphaClass alphaClass =
+                impl.adaptiveTextureFormatEnabled ? classifiedAlphaClass_ : GlideTextureAlphaClass::Fractional;
+            const int largeDimension = std::max(paddedWidth, paddedHeight);
+            tmu1NativeTexels_.clear();
+            tmu1NativeTexels_.reserve(static_cast<std::size_t>(paddedWidth) * paddedHeight * 2u);
+            int levelWidth = paddedWidth;
+            int levelHeight = paddedHeight;
+            for (std::size_t levelIndex = 0; ; ++levelIndex)
+            {
+                if (levelIndex >= logicalMipLevels_.size())
+                {
+                    throw std::runtime_error("GLIDE TMU1 tile mip chain exceeds the logical texture mip chain");
+                }
+                const LogicalMipLevel& logicalLevel = logicalMipLevels_[levelIndex];
+                for (int y = 0; y < levelHeight; ++y)
+                {
+                    const int sourceY = AddressGlideTextureTexel(y, logicalLevel.height, addressV);
+                    for (int x = 0; x < levelWidth; ++x)
+                    {
+                        const int sourceX = AddressGlideTextureTexel(x, logicalLevel.width, addressU);
+                        const std::uint16_t argb4444 = logicalLevel.texels[
+                            static_cast<std::size_t>(sourceY) * logicalLevel.width + sourceX];
+                        switch (alphaClass)
+                        {
+                            case GlideTextureAlphaClass::Opaque:
+                                tmu1NativeTexels_.push_back(GlideArgb4444ToRgb565(argb4444));
+                                break;
+                            case GlideTextureAlphaClass::Binary:
+                                tmu1NativeTexels_.push_back(GlideArgb4444ToArgb1555(argb4444));
+                                break;
+                            case GlideTextureAlphaClass::Fractional:
+                                tmu1NativeTexels_.push_back(argb4444);
+                                break;
+                        }
+                    }
+                }
+                if (levelWidth == 1 && levelHeight == 1)
+                {
+                    break;
+                }
+                levelWidth = std::max(1, levelWidth / 2);
+                levelHeight = std::max(1, levelHeight / 2);
+            }
+            tmu1NativeInfo_ = GlideTexInfo{
+                0, Log2PowerOfTwo(largeDimension),
+                Log2PowerOfTwo(paddedWidth) - Log2PowerOfTwo(paddedHeight),
+                ToGlideNativeTextureFormat(alphaClass), tmu1NativeTexels_.data() };
+            const FxU32 requiredBytes = impl.api.grTexTextureMemRequired(kMipMapBoth, &tmu1NativeInfo_);
+            if (requiredBytes == 0)
+            {
+                throw std::runtime_error("grTexTextureMemRequired rejected a tiled Glide texture for TMU1");
+            }
+            tmu1Range_ = impl.AllocateTexture(1, requiredBytes, this);
+            try
+            {
+                tmu1NativeInfo_.data = tmu1NativeTexels_.data();
+                impl.api.grTexDownloadMipMap(1, tmu1Range_.address, kMipMapBoth, &tmu1NativeInfo_);
+            }
+            catch (...)
+            {
+                impl.ReleaseTexture(1, tmu1Range_);
+                throw;
             }
         }
 
@@ -1447,6 +1659,18 @@ namespace CNA::Internal::Backends::Glide
         GlideTextureAlphaClass classifiedAlphaClass_ = GlideTextureAlphaClass::Fractional;
         std::vector<Tile> tiles_;
         std::uint64_t lastUsedCounter_ = 0;
+
+        // GLIDE-FUT-004: this texture's residency as DualTextureEffect's TMU1 (second) slot,
+        // single-tile only (throws in BuildSingleTmu1Tile() if it would need more than one tile).
+        // Deliberately separate from tiles_/uploadedAddressU_/V_ above: the same texture object
+        // can legally be used as an ordinary TMU0 texture in one draw and as texture1 in another,
+        // and does not participate in eviction (see Impl::residentTexturesByTmu[1]).
+        bool tmu1Built_ = false;
+        int tmu1UploadedAddressU_ = 1;
+        int tmu1UploadedAddressV_ = 1;
+        TextureRange tmu1Range_{};
+        GlideTexInfo tmu1NativeInfo_{};
+        std::vector<std::uint16_t> tmu1NativeTexels_{};
 
         friend struct GlideGraphicsBackend::Impl;
     };
@@ -2330,17 +2554,20 @@ namespace CNA::Internal::Backends::Glide
 
         void ValidateFixedFunctionDrawParams(const GpuDrawParams& params)
         {
-            if (params.texture1 != nullptr || params.envMap != nullptr || params.dualTexture ||
-                params.envMapping || params.pbr || params.skinned || params.instanceCount != 1 ||
-                params.instanceVb != nullptr || params.customEffectBackend != nullptr)
+            if (params.envMap != nullptr || params.envMapping || params.pbr || params.skinned ||
+                params.instanceCount != 1 || params.instanceVb != nullptr || params.customEffectBackend != nullptr)
             {
                 throw std::runtime_error(
-                    "GLIDE 3D supports one TMU0 texture and the fixed-function BasicEffect subset only; "
-                    "dual textures, environment mapping, PBR, skinning, instancing and custom Effects are unavailable");
+                    "GLIDE 3D supports the fixed-function BasicEffect/DualTextureEffect subset only; "
+                    "environment mapping, PBR, skinning, instancing and custom Effects are unavailable");
             }
             if (params.lightingEnabled && params.preferPerPixelLighting)
             {
                 throw std::runtime_error("GLIDE BasicEffect supports only per-vertex lighting, not PreferPerPixelLighting");
+            }
+            if (params.lightingEnabled && params.dualTexture)
+            {
+                throw std::runtime_error("GLIDE backend does not support combining BasicEffect lighting with DualTextureEffect");
             }
         }
 
@@ -2429,10 +2656,62 @@ namespace CNA::Internal::Backends::Glide
         {
             throw std::runtime_error("GLIDE textured draw received a texture created by a different backend");
         }
+        // GLIDE-FUT-004: DualTextureEffect's second texture slot. Validate everything before
+        // touching any native state (matching this backend's usual exception-atomicity rule).
+        const GlideTextureBackend* dualTexture1 = nullptr;
+        if (params.dualTexture)
+        {
+            if (!textured)
+            {
+                throw std::runtime_error("GLIDE DualTextureEffect requires a TMU0 texture");
+            }
+            if (primitive != PrimitiveType::TriangleList && primitive != PrimitiveType::TriangleStrip)
+            {
+                throw std::runtime_error("GLIDE DualTextureEffect is only supported for triangle primitives");
+            }
+            if (!impl_->secondTmuAvailable)
+            {
+                throw std::runtime_error(
+                    "GLIDE DualTextureEffect requires a second TMU, which this Glide runtime did not report "
+                    "(GR_NUM_TMU < 2)");
+            }
+            dualTexture1 = dynamic_cast<const GlideTextureBackend*>(params.texture1);
+            if (dualTexture1 == nullptr)
+            {
+                throw std::runtime_error(
+                    "GLIDE DualTextureEffect requires a second texture created by this same backend");
+            }
+            if (texture->GetWidth() != dualTexture1->GetWidth() || texture->GetHeight() != dualTexture1->GetHeight())
+            {
+                // A genuinely independent second UV channel would remove this restriction, but
+                // this backend's vertex-declaration parser (GLIDE-AUD-012/FUT-002) only accepts a
+                // single TextureCoordinate0 semantic, so both TMUs necessarily read the same
+                // native s/t value; that is only correct when both textures share one scale.
+                throw std::runtime_error(
+                    "GLIDE DualTextureEffect requires both textures to have identical dimensions: this "
+                    "backend shares one texture-coordinate channel between TMU0 and TMU1");
+            }
+        }
         if (textured)
         {
             const_cast<GlideTextureBackend*>(texture)->EnsureAddressMode(
                 impl_->samplerAddressU, impl_->samplerAddressV);
+            if (params.dualTexture)
+            {
+                // texture0 has no reason to reject being tiled on its own (that is its normal,
+                // fully-supported mode); only the dual-texture combination cannot handle it, since
+                // TMU1's single tile shares a native coordinate with whichever of texture0's tiles
+                // a given fragment lands in. texture1's own single-tile requirement is enforced
+                // directly inside EnsureTmu1Resident()/BuildSingleTmu1Tile().
+                if (texture->IsTiled())
+                {
+                    throw std::runtime_error(
+                        "GLIDE DualTextureEffect does not support a first texture that needs more than "
+                        "one physical tile at the runtime's reported GR_MAX_TEXTURE_SIZE");
+                }
+                const_cast<GlideTextureBackend*>(dualTexture1)->EnsureTmu1Resident(
+                    impl_->samplerAddressU, impl_->samplerAddressV);
+            }
         }
         const Matrix wvp = world * view * projection;
         // CNA's matrix convention transforms positions as row vectors. Normals therefore need
@@ -2538,6 +2817,19 @@ namespace CNA::Internal::Backends::Glide
                 r = fogged.x;
                 g = fogged.y;
                 b = fogged.z;
+            }
+            if (params.dualTexture)
+            {
+                // FNA's DualTextureEffect.fx: color = tex0; color.rgb *= 2; color *= tex1 * diffuse
+                // (alpha is never doubled). Glide's texture combiner can compute tex0*tex1*diffuse
+                // exactly (SCALE_OTHER chained TMU1 -> TMU0 -> iterated), but has no native "x2"
+                // scale; folding it into the CPU-computed iterated RGB here is exactly equivalent,
+                // since scalar multiplication is associative: 2*tex0*tex1*diffuse ==
+                // tex0*tex1*(2*diffuse). The final ClampUnit() below matches the shader's implicit
+                // clamp when writing the doubled result to a render target.
+                r *= 2.0f;
+                g *= 2.0f;
+                b *= 2.0f;
             }
             CpuVertex result{
                 x * wvp.M11 + y * wvp.M21 + z * wvp.M31 + wvp.M41,
@@ -2804,7 +3096,14 @@ namespace CNA::Internal::Backends::Glide
         };
         if (textured)
         {
-            impl_->ConfigureSpriteCombiner();
+            if (params.dualTexture)
+            {
+                impl_->ConfigureDualTextureCombiner();
+            }
+            else
+            {
+                impl_->ConfigureSpriteCombiner();
+            }
             const GlideSamplerSettings sampler = ToGlideSamplerSettings(impl_->samplerFilter);
             // Traversal is primitive-major, not tile-major: a tile-major outer loop would emit
             // every triangle's tile-0 fragment before any triangle's tile-1 fragment, silently
@@ -2826,6 +3125,17 @@ namespace CNA::Internal::Backends::Glide
                 impl_->api.grTexClampMode(0, kTexClampClamp, kTexClampClamp);
                 impl_->api.grTexMipMapMode(0, kMipMapNearest, sampler.lodBlend);
                 impl_->api.grTexLodBiasValue(0, impl_->samplerLodBias);
+                if (params.dualTexture && dualTexture1 != nullptr)
+                {
+                    // texture0 is validated single-tile whenever dualTexture is set, so this runs
+                    // at most once per draw call -- TMU1's single tile never changes mid-loop.
+                    impl_->api.grTexSource(1, dualTexture1->Tmu1TextureAddress(), kMipMapBoth,
+                                            const_cast<GlideTexInfo*>(&dualTexture1->Tmu1NativeInfo()));
+                    impl_->api.grTexFilterMode(1, sampler.minFilter, sampler.magFilter);
+                    impl_->api.grTexClampMode(1, kTexClampClamp, kTexClampClamp);
+                    impl_->api.grTexMipMapMode(1, kMipMapNearest, sampler.lodBlend);
+                    impl_->api.grTexLodBiasValue(1, impl_->samplerLodBias);
+                }
                 boundTile = &tile;
             };
             const auto drawTriangleForTile = [&](const GlideTextureBackend::Tile& tile,
