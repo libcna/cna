@@ -1068,7 +1068,7 @@ namespace CNA::Internal::Backends::Direct2D
         CreateLogicalTarget();
     }
 
-    void Direct2DGraphicsBackend::CreateLogicalTarget()
+    Microsoft::WRL::ComPtr<ID2D1Bitmap1> Direct2DGraphicsBackend::CreateLogicalTargetBitmap() const
     {
         const PresentationTransform presentation = GetPresentationTransform();
         const int logicalWidth = std::max(1, presentation.logicalWidth);
@@ -1077,11 +1077,18 @@ namespace CNA::Internal::Backends::Direct2D
             D2D1_BITMAP_OPTIONS_TARGET,
             D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED),
             96.0f, 96.0f);
+        ComPtr<ID2D1Bitmap1> bitmap;
         ThrowIfFailed(d2dContext_->CreateBitmap(
                           D2D1::SizeU(static_cast<UINT32>(logicalWidth),
                                       static_cast<UINT32>(logicalHeight)),
-                          nullptr, 0, &properties, &logicalTarget_),
+                          nullptr, 0, &properties, &bitmap),
                       "ID2D1DeviceContext::CreateBitmap(logical backbuffer)");
+        return bitmap;
+    }
+
+    void Direct2DGraphicsBackend::CreateLogicalTarget()
+    {
+        logicalTarget_ = CreateLogicalTargetBitmap();
         d2dContext_->SetTarget(logicalTarget_.Get());
     }
 
@@ -1115,9 +1122,14 @@ namespace CNA::Internal::Backends::Direct2D
             logicalSize.height == static_cast<UINT32>(std::max(1, desired.logicalHeight)))
             return;
         if (drawing_) EndDrawing("logical backbuffer resize");
-        d2dContext_->SetTarget(nullptr);
-        logicalTarget_.Reset();
-        CreateLogicalTarget();
+        // D2D-50/D2D-52: create the replacement before releasing the current logical target. A
+        // failed CreateBitmap (e.g. requested dimensions exceeding the device's maximum bitmap
+        // size, reachable from an extreme SetVirtualResolution/SetPresentationMode request) then
+        // leaves the previous logical target -- and the current draw target -- intact and usable,
+        // instead of a null logicalTarget_ that would crash the next dereference.
+        ComPtr<ID2D1Bitmap1> replacement = CreateLogicalTargetBitmap();
+        logicalTarget_ = replacement;
+        d2dContext_->SetTarget(logicalTarget_.Get());
     }
 
     void Direct2DGraphicsBackend::EnsureDrawing()
@@ -1487,10 +1499,27 @@ namespace CNA::Internal::Backends::Direct2D
 
     void Direct2DGraphicsBackend::SetVirtualResolution(int width, int height)
     {
+        const int previousWidth = virtualWidth_;
+        const int previousHeight = virtualHeight_;
         if (!activeRenderTarget_) EndDrawing("virtual-resolution change");
         virtualWidth_ = width;
         virtualHeight_ = height;
-        if (!activeRenderTarget_) EnsureMainTargetSize();
+        if (!activeRenderTarget_)
+        {
+            try
+            {
+                EnsureMainTargetSize();
+            }
+            catch (...)
+            {
+                // D2D-50: a failed recreate (CreateLogicalTargetBitmap already leaves the actual
+                // logical target itself intact) must not also leave virtualWidth_/virtualHeight_
+                // pointing at dimensions the target never adopted.
+                virtualWidth_ = previousWidth;
+                virtualHeight_ = previousHeight;
+                throw;
+            }
+        }
     }
 
     void Direct2DGraphicsBackend::SetPresentationMode(int mode)
@@ -1502,13 +1531,25 @@ namespace CNA::Internal::Backends::Direct2D
             case CnaPresentationMode::Overscan:
             case CnaPresentationMode::Stretch:
             case CnaPresentationMode::NativeBackBuffer:
+            {
+                const CnaPresentationMode previousMode = presentationMode_;
                 presentationMode_ = static_cast<CnaPresentationMode>(mode);
                 if (!activeRenderTarget_)
                 {
                     EndDrawing("presentation-mode change");
-                    EnsureMainTargetSize();
+                    try
+                    {
+                        EnsureMainTargetSize();
+                    }
+                    catch (...)
+                    {
+                        // D2D-51: same transactional guarantee as SetVirtualResolution above.
+                        presentationMode_ = previousMode;
+                        throw;
+                    }
                 }
                 return;
+            }
         }
         throw std::runtime_error("Direct2D received an unknown CnaPresentationMode value.");
     }

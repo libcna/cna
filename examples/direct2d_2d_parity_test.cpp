@@ -1477,6 +1477,41 @@ protected:
                     extremePixel[0], extremePixel[1], extremePixel[2], extremePixel[3]);
         passed = passed && extremePixelValid;
 
+        // D2D-50/D2D-51/D2D-52: an INT_MAX virtual resolution asks for a logical bitmap far
+        // beyond any device's maximum bitmap size, so CreateBitmap must fail -- but that failure
+        // must not corrupt virtualWidth_/virtualHeight_/presentationMode_, nor leave a null
+        // logical target that would crash the very next frame. CreateLogicalTargetBitmap creates
+        // the replacement before releasing the current one, so the prior logical target survives
+        // a failed resize untouched.
+        int viewportBeforeFault[2] = {0, 0};
+        backend.GetViewportSize(viewportBeforeFault[0], viewportBeforeFault[1]);
+        bool virtualResolutionFaultRejected = false;
+        try
+        {
+            backend.SetVirtualResolution(std::numeric_limits<int>::max(), std::numeric_limits<int>::max());
+        }
+        catch (const std::exception&)
+        {
+            virtualResolutionFaultRejected = true;
+        }
+        std::printf("[%s] Direct2D rejects an INT_MAX SetVirtualResolution\n",
+                    virtualResolutionFaultRejected ? "PASS" : "FAIL");
+        passed = passed && virtualResolutionFaultRejected;
+        int viewportAfterFault[2] = {0, 0};
+        backend.GetViewportSize(viewportAfterFault[0], viewportAfterFault[1]);
+        const bool viewportRestoredAfterFault = viewportAfterFault[0] == viewportBeforeFault[0] &&
+            viewportAfterFault[1] == viewportBeforeFault[1];
+        std::printf("[%s] Rejected SetVirtualResolution restored the previous viewport: got=(%d,%d), expected=(%d,%d)\n",
+                    viewportRestoredAfterFault ? "PASS" : "FAIL",
+                    viewportAfterFault[0], viewportAfterFault[1],
+                    viewportBeforeFault[0], viewportBeforeFault[1]);
+        passed = passed && viewportRestoredAfterFault;
+        device.Clear(Color::Black);
+        sprites_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, nullptr, &scissorDisabled);
+        sprites_->Draw(*white_, Rectangle(0, 0, 2, 2), Rectangle(0, 0, 1, 1), Color::White);
+        sprites_->End();
+        check("Direct2D usable after rejected extreme SetVirtualResolution", 0, 0, Color::White);
+
         std::printf("[%s] Direct2D 2D parity baseline\n", passed ? "PASS" : "FAIL");
         result_ = passed ? 0 : 1;
         Exit();

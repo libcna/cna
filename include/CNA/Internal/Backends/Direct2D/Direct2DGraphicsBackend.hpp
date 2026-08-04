@@ -293,6 +293,11 @@ namespace CNA::Internal::Backends::Direct2D
         void EnsureResourceGeneration(std::uint64_t generation, const char* resourceKind) const;
         void CreateBackBufferTarget();
         void CreateLogicalTarget();
+        /// D2D-50/D2D-52: creates a logical-target-sized bitmap without touching logicalTarget_ or
+        /// the device context's current target, so a resize can create-then-swap instead of
+        /// destroy-then-create -- a failed CreateBitmap here leaves the previous logical target
+        /// (and virtualWidth_/virtualHeight_/presentationMode_) intact and usable.
+        [[nodiscard]] Microsoft::WRL::ComPtr<ID2D1Bitmap1> CreateLogicalTargetBitmap() const;
         void EnsureMainTargetSize();
         void EndDrawing(const char* operation);
         /// Copies a render target through a temporary Direct2D CPU-readable bitmap. This is a
