@@ -45,7 +45,7 @@ using namespace Microsoft::Xna::Framework::Graphics;
 
 namespace
 {
-    constexpr int kExpectedChecks = 31;
+    constexpr int kExpectedChecks = 35;
 
 #if defined(__EMSCRIPTEN__)
     EM_JS(void, JsPublishResult, (int result, int passed, int expected), {
@@ -88,6 +88,8 @@ class HtmlDomPixelVerificationTest : public Game
     std::unique_ptr<RenderTarget2D> rtB_;
     std::unique_ptr<RenderTarget2D> tileRt_;
     std::unique_ptr<Texture2D> tileTex_;
+    std::unique_ptr<RenderTarget2D> atlasRt_;
+    std::unique_ptr<Texture2D> atlasTexture_;
     int frame_ = 0;
     int passCount_ = 0;
     int result_ = 1;
@@ -192,6 +194,26 @@ protected:
         }
         fontAtlas_ = std::make_unique<Texture2D>(
             Texture2D::CreateFromPixels(getGraphicsDeviceProperty(), 8, 4, atlas));
+
+        // plan_html_dom.md HTMLDOM-119: a 4x4 "atlas" with a hard, unpadded edge between two
+        // regions -- left half (columns 0-1) solid red, right half (columns 2-3) solid blue -- the
+        // same shape a real, unpadded sprite atlas has between two adjacent packed sprites. Drawing
+        // ONLY the red half (an IN-BOUNDS source rect, distinct from HTMLDOM-104's already-fixed
+        // OUT-of-bounds Clamp overflow) scaled up under linear filtering is what can reveal GPU
+        // bilinear sampling reading past its own source rect into the adjacent blue region.
+        atlasRt_ = std::make_unique<RenderTarget2D>(getGraphicsDeviceProperty(), 44, 44);
+        std::vector<std::uint8_t> atlasPixels(4 * 4 * 4, 0);
+        for (int y = 0; y < 4; ++y)
+        {
+            for (int x = 0; x < 4; ++x)
+            {
+                const std::size_t i = (static_cast<std::size_t>(y) * 4 + x) * 4;
+                if (x < 2) { atlasPixels[i] = 255; atlasPixels[i+1] = 0; atlasPixels[i+2] = 0; atlasPixels[i+3] = 255; }
+                else       { atlasPixels[i] = 0; atlasPixels[i+1] = 0; atlasPixels[i+2] = 255; atlasPixels[i+3] = 255; }
+            }
+        }
+        atlasTexture_ = std::make_unique<Texture2D>(
+            Texture2D::CreateFromPixels(getGraphicsDeviceProperty(), 4, 4, atlasPixels));
         font_ = std::make_unique<SpriteFont>(
             *fontAtlas_,
             std::vector<Rectangle>{Rectangle(0, 0, 4, 4), Rectangle(4, 0, 4, 4)},
@@ -1154,6 +1176,145 @@ protected:
 
         if (frame_ == 21)
         {
+            // plan_html_dom.md HTMLDOM-119: Wrap/Mirror phase alignment for a NEGATIVE source
+            // rectangle origin -- every existing Wrap/Mirror test in this suite starts its source
+            // rect at (0,0); neither cnaDomResolveClampVariant's tiled branch nor
+            // cnaDomGetMirrorVariant normalizes sx/sy at all (both hand the browser a raw,
+            // un-normalized offset and rely on native infinite background-repeat/CanvasPattern
+            // tiling), so a negative origin should be architecturally identical, just phase-shifted
+            // -- confirmed here rather than left untested. Shift of -1 (not a multiple of the 2px
+            // Wrap period or the 4px Mirror period) so the result is genuinely different from --
+            // not accidentally identical to -- the existing (0,0,4,4) checks above, and hand-derived
+            // from the real tiling formula rather than compared against this backend's own output.
+            {
+                SamplerState wrapSampler;
+                wrapSampler.setAddressUProperty(TextureAddressMode::Wrap);
+                wrapSampler.setAddressVProperty(TextureAddressMode::Wrap);
+                const auto pixels = ReadBackWholeTarget(*tileRt_, 4, 4, [&] {
+                    spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, &wrapSampler,
+                                        nullptr, nullptr);
+                    spriteBatch_->Draw(*tileTex_, Rectangle(0, 0, 4, 4), Rectangle(-1, -1, 4, 4), Color::White);
+                    spriteBatch_->End();
+                });
+                const auto at = [&](int x, int y) { return pixels[static_cast<std::size_t>(y) * 4 + x]; };
+                const Color red(255, 0, 0, 255), green(0, 255, 0, 255), blue(0, 0, 255, 255), yellow(255, 255, 0, 255);
+                const auto matches = [](const Color& a, const Color& b) {
+                    return a.getRProperty() == b.getRProperty() && a.getGProperty() == b.getGProperty() &&
+                           a.getBProperty() == b.getBProperty();
+                };
+                // Hand-derived: real Wrap samples texel ((sourceX+elementX) mod texW). With
+                // sourceX=-1 and texW=2, columns 0..3 map to texel-x [1,0,1,0]; same formula on Y
+                // gives rows [1,0,1,0]. texel(x,y): (0,0)=red (1,0)=green (0,1)=blue (1,1)=yellow.
+                const Color expected[4][4] = {
+                    {yellow, blue, yellow, blue},
+                    {green, red, green, red},
+                    {yellow, blue, yellow, blue},
+                    {green, red, green, red},
+                };
+                bool wrapNegMatches = true;
+                for (int y = 0; wrapNegMatches && y < 4; ++y)
+                    for (int x = 0; x < 4; ++x)
+                        if (!matches(at(x, y), expected[y][x])) { wrapNegMatches = false; break; }
+                check(wrapNegMatches,
+                      "HTMLDOM-119: TextureAddressMode::Wrap with a NEGATIVE source rectangle "
+                      "origin (-1,-1) tiles at the correct phase, hand-derived from "
+                      "(sourceX+elementX) mod texW -- not merely happening to look right at the "
+                      "(0,0) origin every other test in this suite uses");
+            }
+            {
+                SamplerState mirrorSampler;
+                mirrorSampler.setAddressUProperty(TextureAddressMode::Mirror);
+                mirrorSampler.setAddressVProperty(TextureAddressMode::Mirror);
+                const auto pixels = ReadBackWholeTarget(*tileRt_, 4, 4, [&] {
+                    spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, &mirrorSampler,
+                                        nullptr, nullptr);
+                    spriteBatch_->Draw(*tileTex_, Rectangle(0, 0, 4, 4), Rectangle(-1, -1, 4, 4), Color::White);
+                    spriteBatch_->End();
+                });
+                const auto at = [&](int x, int y) { return pixels[static_cast<std::size_t>(y) * 4 + x]; };
+                const Color red(255, 0, 0, 255), green(0, 255, 0, 255), blue(0, 0, 255, 255), yellow(255, 255, 0, 255);
+                const auto matches = [](const Color& a, const Color& b) {
+                    return a.getRProperty() == b.getRProperty() && a.getGProperty() == b.getGProperty() &&
+                           a.getBProperty() == b.getBProperty();
+                };
+                // Hand-derived from the real GL_MIRRORED_REPEAT formula (m=((i mod 2w)+2w) mod 2w;
+                // result = m<w ? m : 2w-1-m) with sourceX=-1, w=2: columns 0..3 map to texel-x
+                // [0,0,1,1]; same on Y gives rows [0,0,1,1] -- solid 2x2 blocks, not the
+                // checkerboard the (0,0) origin produces.
+                const Color expected[4][4] = {
+                    {red, red, green, green},
+                    {red, red, green, green},
+                    {blue, blue, yellow, yellow},
+                    {blue, blue, yellow, yellow},
+                };
+                bool mirrorNegMatches = true;
+                for (int y = 0; mirrorNegMatches && y < 4; ++y)
+                    for (int x = 0; x < 4; ++x)
+                        if (!matches(at(x, y), expected[y][x])) { mirrorNegMatches = false; break; }
+                check(mirrorNegMatches,
+                      "HTMLDOM-119: TextureAddressMode::Mirror with a NEGATIVE source rectangle "
+                      "origin (-1,-1) reflects at the correct phase, hand-derived from the real "
+                      "GL_MIRRORED_REPEAT formula -- solid 2x2 blocks, not the (0,0)-origin "
+                      "checkerboard every other Mirror test in this suite uses");
+            }
+
+            // plan_html_dom.md HTMLDOM-119: the Canvas2D-path half of the atlas-edge-bleed /
+            // fractional-scale scenario -- see the DOM-path half in
+            // scripts/htmldom-browser-test.mjs's own verifyPixelVerificationScreenshot, which reads
+            // back the SAME scenario drawn to the real backbuffer below via a real screenshot
+            // (design decision 11: no in-page DOM readback exists). Both checked against the SAME
+            // hand-derived "pure red, no bleed" expectation independently, rather than compared
+            // against each other -- a cross-path A==B comparison could pass even if BOTH paths bled
+            // identically, which would be a false sense of confidence.
+            SamplerState linearSampler;
+            linearSampler.setFilterProperty(TextureFilter::Linear);
+            const auto atlasPixels = ReadBackWholeTarget(*atlasRt_, 44, 44, [&] {
+                spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, &linearSampler,
+                                    nullptr, nullptr);
+                spriteBatch_->Draw(*atlasTexture_, Rectangle(2, 2, 39, 39), Rectangle(0, 0, 2, 4), Color::White);
+                spriteBatch_->End();
+            });
+            const auto atlasAt = [&](int x, int y) { return atlasPixels[static_cast<std::size_t>(y) * 44 + x]; };
+            const Color atlasInterior = atlasAt(12, 21);
+            const Color atlasNearEdge = atlasAt(39, 21);
+            std::printf("       HTMLDOM-119 Canvas2D-path atlas interior=(%d,%d,%d) nearEdge=(%d,%d,%d)\n",
+                        atlasInterior.getRProperty(), atlasInterior.getGProperty(), atlasInterior.getBProperty(),
+                        atlasNearEdge.getRProperty(), atlasNearEdge.getGProperty(), atlasNearEdge.getBProperty());
+            check(CloseEnough(atlasInterior.getRProperty(), 255, 20) &&
+                  CloseEnough(atlasInterior.getGProperty(), 0, 20) &&
+                  CloseEnough(atlasInterior.getBProperty(), 0, 20),
+                  "HTMLDOM-119: Canvas2D path -- a large fractional scale (19.5x/9.75x) with linear "
+                  "filtering, sampled well inside the drawn red region, stays pure red");
+            // plan_html_dom.md HTMLDOM-119: measured first, NOT assumed clean -- this sample DOES
+            // pick up real bilinear bleed from the atlas's adjacent (undrawn) blue region, and that
+            // is the CORRECT, hardware-matching result, not a bug: real D3D/XNA hardware sampling
+            // an unpadded atlas sub-rectangle under LinearWrap/LinearClamp exhibits the identical
+            // texel bleed (why real games pad their own atlases) -- this backend faithfully
+            // reproducing it is what "correct" means here. Hand-derived exactly, not just measured
+            // once and pinned: local x=37 maps to source-space x=37/19.5=1.897, which is
+            // 0.397 texels past the last drawn (red) texel's own centre (1.5) toward the
+            // NEXT (undrawn, blue) texel's centre (2.5) -- linear interpolation with that weight
+            // gives R=255*(1-0.397)=~154, B=255*0.397=~101, matching the measured (147,0,108)
+            // within ordinary cross-technology bilinear-coordinate rounding.
+            check(CloseEnough(atlasNearEdge.getRProperty(), 154, 25) &&
+                  CloseEnough(atlasNearEdge.getGProperty(), 0, 10) &&
+                  CloseEnough(atlasNearEdge.getBProperty(), 101, 25),
+                  "HTMLDOM-119: Canvas2D path -- sampled 2px from the drawn region's own right "
+                  "edge shows REAL bilinear bleed from the atlas's adjacent undrawn region, at "
+                  "exactly the hand-derived interpolation weight -- matching real GPU hardware "
+                  "sampling an unpadded atlas, not a CNA-specific corruption");
+
+            // The DOM-path half of the SAME scenario -- identical source/dest rects and sampler,
+            // drawn to the real backbuffer (no render target bound) instead of atlasRt_. Left as
+            // the very LAST thing this whole test draws, deliberately: nothing runs after this
+            // frame, so it survives for scripts/htmldom-browser-test.mjs's own screenshot-based
+            // verifyPixelVerificationScreenshot to sample -- the same "last draw survives" shape
+            // htmldom_smoke_test.cpp's own HTMLDOM-101 screenshot check already relies on.
+            spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, &linearSampler,
+                                nullptr, nullptr);
+            spriteBatch_->Draw(*atlasTexture_, Rectangle(2, 2, 39, 39), Rectangle(0, 0, 2, 4), Color::White);
+            spriteBatch_->End();
+
             std::printf("=== %d/%d PASS ===\n", passCount_, kExpectedChecks);
             std::fflush(stdout);
             result_ = (passCount_ == kExpectedChecks) ? 0 : 1;

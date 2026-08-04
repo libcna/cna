@@ -17,14 +17,14 @@ backend produced:
 | Page | What it checks | Result |
 |---|---|---|
 | `cna_test_htmldom_smoke` | DOM surface, sprite pool/recycling, `RenderTarget2D` readback, backbuffer refusal, `SpriteFont`, `TextureAddressMode::Wrap`/`Mirror`/mixed-axis, `SetScissorRect` (per-batch region isolation, region container has a real non-zero layout box, true per-flush paint order across regions, non-destructive eviction, honours `RasterizerState.ScissorTestEnable`), resize + scissor interaction, `SetViewport` sub-rectangle (per-batch, root never moves, no cross-batch retroactive offset), every `CnaPresentationMode`'s real scale/offset geometry under a mismatched aspect ratio, `SetPresentationMode` ordinal validation, `TransformWindowToLogical` outside-Letterbox-bar result (HTMLDOM-108), this browser's real `mix-blend-mode: plus-lighter` support (HTMLDOM-113), `SpriteSortMode::Immediate` genuinely applying scissor-rect state per-draw vs. `Deferred`'s single end-of-batch snapshot (HTMLDOM-118) | 68/68 + 2 real screenshot pixel checks |
-| `cna_test_htmldom_pixel_verification` | Pixel-exact tint/`AlphaBlend`/`Opaque`/`Additive`, multi-glyph `SpriteFont` (kerning/`\n`/scale/flip), `transformMatrix`, render-target-as-`Draw()`-source, plain-texture `GetData`, `FromStream` decode, `TextureAddressMode::Mirror`/mixed-axis tiling, render-target `Viewport` offset, render-target scissor clip (enabled vs. disabled), render-target `Viewport`+`ScissorRectangle` active simultaneously (HTMLDOM-113), `TextureAddressMode::Clamp` edge-extension (fully outside, point vs. linear, scaled+tinted), `NonPremultiplied`/`Additive` translucent-source alpha (documented gap), zero-alpha, tint alpha, translucent render-target write/readback/resample premultiplied-alpha round trip (HTMLDOM-106) | 31/31 |
+| `cna_test_htmldom_pixel_verification` | Pixel-exact tint/`AlphaBlend`/`Opaque`/`Additive`, multi-glyph `SpriteFont` (kerning/`\n`/scale/flip), `transformMatrix`, render-target-as-`Draw()`-source, plain-texture `GetData`, `FromStream` decode, `TextureAddressMode::Mirror`/mixed-axis tiling, render-target `Viewport` offset, render-target scissor clip (enabled vs. disabled), render-target `Viewport`+`ScissorRectangle` active simultaneously (HTMLDOM-113), `TextureAddressMode::Clamp` edge-extension (fully outside, point vs. linear, scaled+tinted), `NonPremultiplied`/`Additive` translucent-source alpha (documented gap), zero-alpha, tint alpha, translucent render-target write/readback/resample premultiplied-alpha round trip (HTMLDOM-106), `Wrap`/`Mirror` phase alignment for a negative source-rectangle origin, a large-fractional-scale/linear-filtering atlas edge-bleed check on BOTH the Canvas2D and DOM paths (HTMLDOM-119) | 35/35 + 2 real screenshot pixel checks |
 | `cna_test_htmldom_stress` | Performance benchmark, 300-frame stability run, variant-cache eviction under sustained churn, deterministic LRU hit-promotion/eviction-identity (HTMLDOM-109), `SetData` cache regeneration, byte-identical static-resubmit flush-call/CSS-write instrumentation (HTMLDOM-110) | 10/10 |
 | `cna_test_htmldom_dispose` | Texture/render-target dispose actually shrinks the JS texture registry, bound-target auto-unbind, create/destroy churn, texture destruction and render-target rebinding each shrink the global variant cache by exactly their own contribution (HTMLDOM-109), a second `HtmlDomGraphicsBackend` sharing one window is reference-counted and destroying it does not tear down the first, still-alive backend's shared DOM surface (HTMLDOM-114) | 17/17 |
 | `cna_htmldom_visual_demo` | Screenshot-verified visual demo (not a PASS/FAIL page) | — |
 | `host-integration` (reuses the smoke page's own `.html`, driven by `scripts/htmldom-host-integration-test.mjs`) | A host page's own pre-existing canvas `visibility` value is captured and (implicitly, by the same code path) restored rather than assumed unset; a pre-existing, host-page-owned element with a colliding id is detected and refused rather than silently adopted (HTMLDOM-115) | 2/2 |
 | `cna_test_htmldom_memory` | 5,000/10,000-sprite pool-creation bursts stay within a sane time budget; the sprite pool's compositor-layer/DOM retention genuinely SHRINKS after a sustained settled idle period instead of permanently pinning at its session peak; the pool regrows normally afterward; ordinary fluctuating sprite counts never trigger the shrink (HTMLDOM-116) | 6/6 |
 
-Plus 41 GTest cases for everything pure-C++ (blend mapping, address-mode validation, the sprite
+Plus 42 GTest cases for everything pure-C++ (blend mapping, address-mode validation, the sprite
 geometry encoder, the 3D throw surface, inert-state-setter audit, `SetViewport`, `SetImmediateMode`)
 under `node CnaTests.js`. Rows marked 🟨 are implemented and code-reviewed but not covered by any of
 these runs.
@@ -297,3 +297,26 @@ software one without saying so.
     to other page content is plain DOM order (the wrapper is inserted immediately after the canvas)
     — a host page needing a specific stacking order should give its OWN elements an explicit
     `z-index`, the same as for any two ordinary page elements.
+14. **The Canvas2D render-target path bleeds adjacent atlas pixels under linear filtering; the DOM
+    path does not** (HTMLDOM-119) — a real, measured divergence between this backend's two draw
+    paths, not a shared characteristic. Drawing an ordinary, IN-BOUNDS source rectangle from a
+    larger, unpadded atlas texture (distinct from `TextureAddressMode::Clamp`'s already-fixed
+    OUT-of-bounds overflow, HTMLDOM-104) at a large fractional scale under linear filtering: the
+    Canvas2D path (active while a `RenderTarget2D` is bound) measurably bleeds the adjacent,
+    UNDRAWN atlas region into an edge sample still genuinely inside the drawn source rect — hand-
+    derived and confirmed exact (`examples/htmldom_pixel_verification_test.cpp`, HTMLDOM-119):
+    sampling 0.397 texels past the last drawn texel's own centre toward the next (undrawn) one
+    produces almost precisely the linearly-interpolated blend of the two (measured (147,0,108)
+    against a hand-derived (154,0,101)). This is the CORRECT, hardware-matching result — real D3D/
+    XNA hardware sampling an unpadded atlas sub-rectangle under `LinearWrap`/`LinearClamp`
+    addressing exhibits the identical texel bleed, which is exactly why real games pad their own
+    atlases; it is not a CNA-specific corruption. The DOM `<div>` `background-image` path, checked
+    identically via a real screenshot, measures ZERO bleed at the same sample point: a
+    `background-image` element's own box is a hard clip by CSS spec (`background-repeat:no-repeat`,
+    no `background-size` override), structurally unlike `drawImage`'s explicit sub-rectangle-
+    extraction-then-resample model, which is exactly where the Canvas2D path's own bleed comes
+    from. Not fixed — padding every atlas draw to eliminate the Canvas2D path's bleed would make
+    this backend diverge FROM real hardware behavior for that path, the wrong direction; a game
+    that draws the identical sprite through both paths and needs pixel-identical results should pad
+    its own atlas (standard practice regardless of backend) or avoid linear filtering on
+    render-target-bound draws specifically.

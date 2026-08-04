@@ -210,6 +210,23 @@ TEST(HtmlDomDrawCommand, OriginBecomesTheLocalPivotOffset)
     EXPECT_FLOAT_EQ(c.destY, 100.0f);
 }
 
+// plan_html_dom.md HTMLDOM-119: a negative origin is a valid, if unusual, XNA pivot (not clamped to
+// the sprite's own bounds -- a pivot placed OUTSIDE the sprite, e.g. for an object that should
+// rotate around a point beyond its own edge). localX/localY is plain negation with no sign branch
+// or clamp anywhere in BuildDrawCommandEXT, so this should compose identically to a positive
+// origin, just offset the other way -- confirmed here rather than left unverified.
+TEST(HtmlDomDrawCommand, NegativeOriginIsAcceptedAndComposesLikeAnyOtherPivot)
+{
+    const HtmlDomDrawCommand c = Build(Rectangle(100, 100, 32, 16), Rectangle(0, 0, 32, 16),
+                                       Color(255, 255, 255, 255), 0.0f, Vector2(-16, -8));
+    // Same sign-flip relationship as the positive-origin case above, just mirrored: localX/localY
+    // is always -origin, unconditionally.
+    EXPECT_FLOAT_EQ(c.localX, 16.0f);
+    EXPECT_FLOAT_EQ(c.localY, 8.0f);
+    EXPECT_FLOAT_EQ(c.destX, 100.0f);
+    EXPECT_FLOAT_EQ(c.destY, 100.0f);
+}
+
 TEST(HtmlDomDrawCommand, FlipMirrorsAboutTheSpritesOwnCentreNotThePivot)
 {
     const HtmlDomDrawCommand c = Build(Rectangle(0, 0, 32, 16), Rectangle(0, 0, 32, 16),

@@ -78,6 +78,70 @@ async function verifySmokeScreenshotPixels(page) {
     return insideOk && outsideOk;
 }
 
+// plan_html_dom.md HTMLDOM-119: the DOM-path half of the atlas-edge-bleed / fractional-scale
+// scenario -- htmldom_pixel_verification_test.cpp's own frame 21 already checks the Canvas2D-path
+// half in-process (RenderTarget2D::GetData); design decision 11 means the DOM backbuffer can only
+// be read back via a real screenshot, the same mechanism verifySmokeScreenshotPixels above already
+// proved out for HTMLDOM-101. That C++ frame leaves an IDENTICAL scenario (same source/dest rects,
+// same sampler) drawn to the real backbuffer as the very last thing the whole test does.
+async function verifyPixelVerificationScreenshot(page) {
+    const pngBase64 = (await page.screenshot()).toString('base64');
+    const pixels = await page.evaluate((b64) => new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = img.naturalWidth;
+            canvas.height = img.naturalHeight;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0);
+            const root = document.getElementById('cna-dom-root');
+            const rect = root ? root.getBoundingClientRect() : { left: 0, top: 0 };
+            const sample = (logicalX, logicalY) => {
+                const px = Math.round(rect.left + logicalX);
+                const py = Math.round(rect.top + logicalY);
+                const d = ctx.getImageData(px, py, 1, 1).data;
+                return [d[0], d[1], d[2], d[3]];
+            };
+            // Dest rect (2,2,39,39), source rect (0,0,2,4) of a 4x4 atlas (columns 0-1 red,
+            // columns 2-3 blue) -- same coordinates as the Canvas2D-path check's own atlasAt(12,21)/
+            // (39,21), offset by the dest rect's own (2,2) origin since those were RENDER-TARGET-
+            // local coordinates and these are logical CANVAS coordinates.
+            resolve({ interior: sample(12, 21), nearEdge: sample(39, 21) });
+        };
+        img.onerror = () => reject(new Error('failed to decode the screenshot inside the page'));
+        img.src = 'data:image/png;base64,' + b64;
+    }), pngBase64);
+
+    const near = (a, b, tol) => Math.abs(a - b) <= tol;
+    // Interior: well inside the drawn red region, away from any edge -- must stay pure red
+    // regardless of which technology (CSS transform:scale vs Canvas2D drawImage+ctx.scale)
+    // rasterized the fractional scale, since a scaled CONSTANT-colour region has nothing to
+    // interpolate against that could shift its own colour.
+    const interiorOk = near(pixels.interior[0], 255, 25) && near(pixels.interior[1], 0, 25) &&
+                        near(pixels.interior[2], 0, 25);
+    // Near-edge: measured first, NOT assumed -- unlike the Canvas2D-path check (which hand-derives
+    // and asserts a REAL, expected bleed of roughly R~154/B~101, see
+    // htmldom_pixel_verification_test.cpp's own comment for the derivation), the DOM path measures
+    // PURE RED here, zero bleed. This is a genuine, real divergence BETWEEN this backend's own two
+    // draw paths, not a bug in this check: a CSS `background-image` element's own box is a hard
+    // clip by spec (`background-repeat:no-repeat` + no `background-size` override), structurally
+    // unlike `drawImage`'s explicit sub-rectangle-extraction-then-resample model, which is exactly
+    // where Canvas2D's own bleed comes from. See docs/html-dom-backend.md's Known Limitations for
+    // the full writeup -- this assertion is deliberately tight (matching the interior check's own
+    // tolerance) specifically BECAUSE the DOM path is not expected to bleed at all here.
+    const nearEdgeOk = near(pixels.nearEdge[0], 255, 25) && near(pixels.nearEdge[1], 0, 25) &&
+                        near(pixels.nearEdge[2], 0, 25);
+
+    console.log(`       HTMLDOM-119 DOM-path atlas interior=(${pixels.interior.slice(0, 3).join(',')}) ` +
+                `nearEdge=(${pixels.nearEdge.slice(0, 3).join(',')})`);
+    console.log(`[${interiorOk ? 'PASS' : 'FAIL'}] HTMLDOM-119: DOM path -- a large fractional scale ` +
+                `with linear filtering, sampled well inside the drawn red region, stays pure red`);
+    console.log(`[${nearEdgeOk ? 'PASS' : 'FAIL'}] HTMLDOM-119: DOM path -- sampled 2px from the drawn ` +
+                `region's own right edge ALSO stays pure red, unlike the Canvas2D path's own real, ` +
+                `expected bleed there -- a genuine cross-path divergence, not a shared characteristic`);
+    return interiorOk && nearEdgeOk;
+}
+
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage();
 
@@ -103,11 +167,13 @@ try {
         expected: window.__cnaSmokeExpected,
     }));
 
-    // Only the smoke page leaves the HTMLDOM-101 straddling-sprite scenario live in its final DOM
-    // state; pixel/stress/dispose pages have no such scenario to screenshot.
+    // Only the smoke and pixel-verification pages leave a screenshot-verifiable scenario live in
+    // their final DOM state; stress/dispose have no such scenario.
     let screenshotOk = true;
     if (url.includes('cna_test_htmldom_smoke')) {
         screenshotOk = await verifySmokeScreenshotPixels(page);
+    } else if (url.includes('cna_test_htmldom_pixel_verification')) {
+        screenshotOk = await verifyPixelVerificationScreenshot(page);
     }
 
     console.log(`\nbrowser verdict: ${result.passed}/${result.expected} checks passed`);
