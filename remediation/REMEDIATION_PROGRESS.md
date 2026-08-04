@@ -26677,3 +26677,157 @@ of ten backends, and custom vertex structs are core XNA rather than an exotic co
 Three documentation files changed: `plan_postaudit.md`, `remediation/REMEDIATION_INDEX.md` and this
 file. **No production source, no shader, no generated artifact, no test, no build-system file and
 nothing under `audit/`.**
+
+---
+
+## `REMED-GFX-DECL-GUARD` — declaration-fidelity guard — DONE (2026-08-04)
+
+The bounded checkpoint safety action for `REMED-GFX-217` and `REMED-GFX-218`. **It is not a new
+finding and has no ticket ID of its own** — it is remediation of those two, and it resolves both
+checkpoint blockers while leaving both tickets OPEN for their real translators.
+
+### What the problem actually was
+
+Seven rasterizing backends (Vulkan, Software, WebGPU, SDL_GPU, D3D9, D3D11, D3D12) left
+`IVertexBufferBackend::SetVertexDeclaration` an empty override and chose a native input layout from
+the buffer's byte stride. EasyGL consumed the declaration but bound each element at the attribute
+location matching its **index** in the element list, while its stock programs assign different
+meanings to the same location. Both reach the same class of failure: a supported public draw is
+accepted, submitted, and rendered from the wrong bytes, with no diagnostic.
+
+### Measured baseline, before any production change
+
+The `REMED-GFX-216` oracle, run on every measured backend on `:101`:
+
+| Declaration | Vulkan | Software | WebGPU | SDL_GPU | EasyGL | bgfx |
+|---|---|---|---|---|---|---|
+| `positionOnly12` | correct | refused (out-of-table) | refused / instanced correct | refused | correct | correct |
+| `positionColor16` | correct | correct | correct | correct | correct | correct |
+| `colorPosition16` | **blank, accepted** | **blank, accepted** | **blank, accepted** | **blank, accepted** | **blank, accepted** | correct |
+| `positionTexture20` | correct | correct | refused | refused | correct | correct |
+| `positionColorTexture24` | correct | correct | refused | refused | correct | correct |
+| `positionTextureColor24` | **`(0,0,0,63)`, accepted** | **`(0,0,0,63)`, accepted** | refused | refused | **`(102,45,0,255)`, accepted** | correct |
+| `positionColorPadded32` | **colour lost, accepted** | **colour lost, accepted** | refused ord. / **lost, instanced** | refused | **colour lost, accepted** | correct |
+
+bgfx renders every entry correctly. That is what makes the collisions *representable* declarations
+and the refusals a per-backend capability boundary rather than a claim that the shapes are invalid.
+
+### The rule that shipped
+
+`include/CNA/Internal/Graphics/VertexDeclarationFidelity.hpp` — one pure, header-only predicate.
+
+> **R0** the native record advance equals the declared stride;
+> **R1** no native fetch reads bytes a declared element owns under any other semantic, usage index,
+> offset or format;
+> **R2** every declared element has a native attribute with the same usage **and usage index**, at
+> the same byte offset, in the same format;
+> **R3** every declared element lies wholly inside the declared stride;
+> **R4** declared elements do not overlap one another.
+
+**A native attribute the declaration does not name is not a violation.** That asymmetry is the whole
+design: Vulkan's unlisted-stride fallback binds `Color0@12`, `positionOnly12` names no colour, and
+the two never meet — so it still renders, where a strict "declaration equals table entry" rule would
+have deleted a working layout. `plan_postaudit.md` §4.4.4 proposed only what became R2; R0, R1, R3
+and R4 were added because the sketch did not survive the full matrix, and R2 gained the usage-index
+term (`Color1` is not `Color0`).
+
+**Header-only is a link fact, not a style choice.** Each backend is its own static library linked
+against `cna_backend_graphics_common` and SharpRuntime rather than against the CNA library — a
+first attempt with a `.cpp` under `src/CNA/Internal/Graphics/` failed to link on Software with
+`undefined reference to RequireFaithfulVertexDeclaration`. The alternative was a new shared build
+target, which this task was forbidden to add. **No CMake file changed.**
+
+### Where it runs, and why not at `SetVertexDeclaration`
+
+At the top of each backend's `DrawPrimitivesEx` / `DrawIndexedPrimitivesEx` /
+`DrawInstancedPrimitivesEx` — before any pipeline, PSO, `ID3D11InputLayout` or
+`IDirect3DVertexDeclaration9` exists, before any command is queued, before any submission. The three
+D3D backends share one call site each through their own `DrawPrimitivesExImpl`.
+
+`SetVertexDeclaration` was the obvious site and is wrong: **per-instance streams carry declarations
+the per-vertex stride table has never described** — the instancing fixture's own instance stream is
+stride 64 with `TextureCoordinate1..4` — and a buffer does not know at upload time which role it
+will play. The seven overrides therefore only *remember* the declaration; the verdict is taken at
+draw time, on the geometry stream.
+
+### The unlisted-stride behaviour is measured per route
+
+| Backend / route | Policy | Evidence |
+|---|---|---|
+| Vulkan ordinary | `PositionColorFallback` | `positionOnly12` renders the correct flat staircase |
+| Vulkan instanced | `PositionOnlyFallback` | `PackedColorOffsetForStride` lists 16 and 24 only |
+| WebGPU ordinary | `BackendRefusesIt` | `QueueColoredDraw` throws for any stride but 16 |
+| WebGPU instanced | `PositionOnlyFallback` | `positionOnly12/instanced` renders correctly |
+| SDL_GPU both | `BackendRefusesIt` | the unmatched-shape tail reaches the same refusal |
+| Software | `BackendRefusesIt` | *"unsupported vertex stride (only 16/20/24/32/52 …)"* |
+| D3D9 / D3D11 / D3D12 | `BackendRefusesIt` | `InputElementsForStride*` returns null; caller throws |
+
+Under `BackendRefusesIt` the guard **abstains**, so every pre-existing rejection message is
+byte-identical after this task.
+
+### EasyGL — a different mechanism, a different rule
+
+The stock programs bind by attribute location and the declaration's element **order** chooses those
+locations, so the only truthful comparison is against the selected program's own ordered input list,
+transcribed from the `layout(location=N) in …` lines of the shaders themselves. `SelectProgram`'s
+twelve-way cascade was factored into one `SelectStockProgramShape(stride, params)` that both the
+program selection and the guard read — the one drift failure a transcribed table would otherwise
+have. The guard runs only when `params.customEffectBackend == nullptr`; **the custom `ShaderEffect`
+path is untouched**, proven by a control that renders `colorPosition16` through a `ShaderEffect`
+declaring `aColorIn` at location 0 and `aPosIn` at location 1 and reads back each column's own
+unmultiplied record colour.
+
+### Result
+
+Every one of the collisions moved from *accepted and silently wrong* to a deterministic
+`System::NotSupportedException` naming the backend, the route and the element that cannot be
+represented — before any native work. Every built-in declaration, every currently-correct custom
+declaration and every pre-existing loud refusal is unchanged. bgfx still renders all three.
+
+### Validation
+
+- **New `VertexDeclarationFidelityTest`** — 24 backend-independent legs over the rule itself,
+  asserting the accepted cases as hard as the rejected ones, so tightening the rule into equality
+  fails the suite.
+- **New `DeclarationGuardTest`** — a refused draw rasterizes nothing (the target is byte-identical
+  to its clear); a valid draw after a refused one still renders; static and dynamic uploads and
+  16- and 32-bit indices all reach the same boundary; `DrawUserIndexedPrimitives` reaches it too;
+  and the bgfx arm asserts the translator control.
+- **`VertexDeclarationLayoutTest`** — the `deviatesElsewhere` arms now assert deterministic
+  rejection instead of a measured wrong picture, and fail loudly whether a backend starts rendering
+  correctly (translator landed, arm stale) or wrongly (guard regressed). SDL_GPU was added to the
+  oracle, which had never covered it.
+- Guard suites **34/34** Software, Vulkan, WebGPU, SDL_GPU, D3D9, D3D11; **35/35** EasyGL;
+  **37/37** bgfx; **24/24** Headless.
+- Full principal suites: Software 5743/5790, Vulkan 5842/5873, EasyGL 5884/5890, WebGPU 5865/5896,
+  SDL_GPU 5781/5804, bgfx 5887/5917, Headless 5687/5733. **Every failure is pre-existing** —
+  `XnbContainerFuzzTest`, `CnjEffectTest`/`CnjStockEffectTest` (GLSL fed to a non-GL backend,
+  *"SPIR-V size must be a multiple of 4 bytes"*), `GraphicsDeviceValidationTest.SetRenderTargets_FourTargets_DoesNotThrow`,
+  `REMED-GFX-209`'s own `DoesNotSupportWireFrame`, and one 30 s two-process networking test. The
+  Vulkan set was **A/B-proven** by restoring `VulkanGraphicsBackend.{hpp,cpp}` from HEAD and
+  reproducing all four.
+- **D3D9 and D3D11 RUN under Wine on `:99`, 34/34 each.** D3D12 cross-builds and its first three
+  legs prove the guard directly — `colorPosition16` rendered pre-guard and rejects post-guard —
+  before a **pre-existing** stride-20 crash under Wine, A/B-proven by reverting
+  `D3D12GraphicsBackend.{cpp}`/`D3D12Buffers.hpp` and reproducing the same crash point.
+- **Sanitizers**, runtimes proved linked by `ldd`: software-asan 101/101, software-ubsan 101/101,
+  vulkan-asan 120/120, easygl-asan+ubsan 143/143 — **zero** AddressSanitizer reports, **zero**
+  runtime errors.
+- **Diagnostics:** Vulkan validation layer loaded (150 loader lines) with **0 VUID**; WebGPU 0
+  uncaptured-error/device-lost; SDL_GPU 0; EasyGL 0 GL errors; bgfx 0 fatals.
+- **Cardinality:** an accepted draw adds no pipeline, buffer, pass, submit, frame, wait, readback or
+  allocation — bgfx's own `ContentsOnlyRewriteCreatesNoNativeResource` and the WebGPU/SDL_GPU
+  cardinality regressions from `REMED-GFX-213` are green unchanged. A refused draw creates none of
+  them and leaves the render target byte-identical to its clear.
+
+### Architecture constraint held
+
+`GraphicsDevice.cpp`, `IGraphicsBackend.hpp`, `GraphicsCapability.hpp` and the public API are
+**unchanged**. No backend gained a declaration translator. No vertex data is repacked or padded and
+no fallback layout was added. Nothing under `audit/` was touched.
+
+### Next
+
+**`REMED-GFX-209`**, then exit reconciliation, then the checkpoint. `REMED-GFX-203` … `-208`,
+`REMED-GFX-210` and `REMED-GFX-214` remain DEFERRED; `REMED-GFX-217` and `REMED-GFX-218` remain OPEN
+for their translators.
