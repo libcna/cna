@@ -179,8 +179,8 @@ namespace
 #elif defined(CNA_BACKEND_CANVAS)
     constexpr Contract kContract{"CANVAS", false, Support::Unsupported, false,
                                  Support::Unsupported, false, false};
-#elif defined(CNA_BACKEND_DX3)
-    constexpr Contract kContract{"DX3", false, Support::Unsupported, false,
+#elif defined(CNA_BACKEND_FREEDIRECT)
+    constexpr Contract kContract{"FREEDIRECT", false, Support::Unsupported, false,
                                  Support::Unsupported, false, false};
 #elif defined(CNA_BACKEND_D3D9)
     // `msaaEngages` false: D3D9RenderTargetCubeBackend::Recreate() allocates a plain

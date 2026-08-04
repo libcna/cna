@@ -45,6 +45,18 @@ if(CNA_BUILD_TESTS)
     # the on-device filesystem, and CnaTests is run as a bare pushed executable, not a packaged app
     # with its own bundled assets. Not part of the Task 6.2/6.4 verification filters
     # (*Network*:*Gamer*:*ENet*:*Packet*) either, since its suite name is TwoProcessLoopbackTest.
+    # plan_dx1.md DX1-88 regression pass: found and fixed a pre-existing, not-DX1-specific gap --
+    # this glob picks up tests/CNA/Internal/Net/ENet*Tests.cpp unconditionally, but those files
+    # #include <enet/enet.h> directly, which only resolves when CNA_ENABLE_NET actually configured
+    # the vendored ENet target (cmake/ThirdPartyENet.cmake). CNA_ENABLE_NET=OFF is a real,
+    # supported configuration (CMakeLists.txt's own option default is ON, but OFF is explicitly
+    # supported for builds that don't need Net/GamerServices) -- this was simply never exercised
+    # against a from-scratch full CnaTests build before. Excluded the same way the WIN32/
+    # EMSCRIPTEN/ANDROID-specific files just below already are.
+    if(NOT CNA_ENABLE_NET)
+        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Net/ENet[A-Za-z]*Tests\\.cpp$")
+    endif()
+
     if(WIN32 OR EMSCRIPTEN OR ANDROID)
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Net/TwoProcessLoopbackTest\\.cpp$")
         # GamerServicesDispatcherHangRegressionTest.cpp (Task 12.1) uses the same POSIX-only
@@ -230,6 +242,47 @@ if(CNA_BUILD_TESTS)
         elseif(CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
             set_target_properties(CnaTests PROPERTIES
                 CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_D3D12_SKIP_VKD3D_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-vkd3d.sh")
+        elseif(CNA_GRAPHICS_BACKEND STREQUAL "DX1")
+            # plan_dx2.md DX2-84 follow-up: this gap pre-dates DX2 (DX1 never got this wiring
+            # either, plan_dx1.md's own DX1-88 full-suite regression must have run CnaTests.exe
+            # directly through run-wine-dx1.sh by hand rather than via `ctest -L DX1`'s
+            # gtest_discover_tests(PRE_TEST) step) -- fixed here for both backends together, same
+            # skip-gate reasoning as D3D9/D3D11/D3D12 above (a bare --gtest_list_tests never opens
+            # a real DirectDraw object).
+            set_target_properties(CnaTests PROPERTIES
+                CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_DX1_SKIP_DDRAW_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-dx1.sh")
+        elseif(CNA_GRAPHICS_BACKEND STREQUAL "DX2")
+            set_target_properties(CnaTests PROPERTIES
+                CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_DX2_SKIP_DDRAW_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-dx2.sh")
+        elseif(CNA_GRAPHICS_BACKEND STREQUAL "DX3")
+            # plan_dx3.md: wired proactively (not discovered by a from-scratch regression this
+            # time) -- same DX2-84 finding/fix, applied up front for this new backend.
+            set_target_properties(CnaTests PROPERTIES
+                CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_DX3_SKIP_DDRAW_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-dx3.sh")
+        elseif(CNA_GRAPHICS_BACKEND STREQUAL "DX5")
+            # plan_dx5.md: same proactive wiring as DX3.
+            set_target_properties(CnaTests PROPERTIES
+                CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_DX5_SKIP_DDRAW_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-dx5.sh")
+        elseif(CNA_GRAPHICS_BACKEND STREQUAL "DX6")
+            # plan_dx6.md: same proactive wiring as DX3/DX5.
+            set_target_properties(CnaTests PROPERTIES
+                CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_DX6_SKIP_DDRAW_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-dx6.sh")
+        elseif(CNA_GRAPHICS_BACKEND STREQUAL "DX7")
+            # plan_dx7.md: same proactive wiring as DX3/DX5/DX6.
+            set_target_properties(CnaTests PROPERTIES
+                CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_DX7_SKIP_DDRAW_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-dx7.sh")
+        elseif(CNA_GRAPHICS_BACKEND STREQUAL "DX8")
+            # plan_dx8.md: DXVK-delivered (not DirectDraw-based), same proactive wiring shape as
+            # D3D9's own run-wine-dxvk9.sh gate -- CNA_DX8_SKIP_DXVK_GATE for a binary that
+            # legitimately never opens a real D3D8 device (e.g. a bare --gtest_list_tests call).
+            set_target_properties(CnaTests PROPERTIES
+                CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_DX8_SKIP_DXVK_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-dx8.sh")
+        elseif(CNA_GRAPHICS_BACKEND STREQUAL "D3D10")
+            # plan_d3d10.md: DXVK-delivered (via d3d10core), same proactive wiring shape as DX8's
+            # own gate -- CNA_D3D10_SKIP_DXVK_GATE for a binary that legitimately never opens a
+            # real D3D10 device (e.g. a bare --gtest_list_tests call).
+            set_target_properties(CnaTests PROPERTIES
+                CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_D3D10_SKIP_DXVK_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-d3d10.sh")
         endif()
     endif()
 

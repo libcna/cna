@@ -40,11 +40,39 @@ namespace CNA
         /** @brief ASCII (SDL-windowed glyph grid). */
         Ascii,
 
-        /** @brief DX3 (DirectDraw via free-direct). */
-        Dx3,
+        /** @brief FreeDirect (DirectDraw via the ../free-direct sibling reimplementation; formerly DX3). */
+        FreeDirect,
 
         /** @brief Direct3D 9. */
         D3D9,
+
+        /** @brief DX1 (real DirectDraw v1, no ../free-direct). */
+        Dx1,
+
+        /** @brief DX2 (real DirectDraw v1 + Direct3D v2 DrawPrimitive, no execute buffers). */
+        Dx2,
+
+        /** @brief DX3 (real DirectX 3 -- DirectDraw v2 + Direct3D v2 DrawPrimitive; originally
+         * landed as DX30 while the free-direct backend still owned the DX3 name, renamed once
+         * that backend became FreeDirect). */
+        Dx3,
+
+        /** @brief DX5 (real DirectDraw v4 + Direct3D v3 FVF DrawPrimitive, no execute buffers). */
+        Dx5,
+
+        /** @brief DX6 (real DirectDraw v4 + Direct3D v3, real stencil buffer operations). */
+        Dx6,
+
+        /** @brief DX7 (real DirectDraw v7 + Direct3D v7, flattened device model -- no viewport
+         * object, direct texture binding). */
+        Dx7,
+
+        /** @brief DX8 (real Direct3D 8, DXVK-delivered, fixed-function only -- no DirectDraw). */
+        Dx8,
+
+        /** @brief Direct3D 10 (real ID3D10Device, DXVK-delivered via d3d10core, real HLSL shaders
+         * -- no fixed-function pipeline at all, unlike DX1..DX8). */
+        D3D10,
 
         /** @brief SDL_GPU. */
         SdlGpu
@@ -83,10 +111,26 @@ namespace CNA
         return GraphicsBackendType::Canvas;
 #elif defined(CNA_BACKEND_ASCII)
         return GraphicsBackendType::Ascii;
-#elif defined(CNA_BACKEND_DX3)
-        return GraphicsBackendType::Dx3;
+#elif defined(CNA_BACKEND_FREEDIRECT)
+        return GraphicsBackendType::FreeDirect;
 #elif defined(CNA_BACKEND_D3D9)
         return GraphicsBackendType::D3D9;
+#elif defined(CNA_BACKEND_DX1)
+        return GraphicsBackendType::Dx1;
+#elif defined(CNA_BACKEND_DX2)
+        return GraphicsBackendType::Dx2;
+#elif defined(CNA_BACKEND_DX3)
+        return GraphicsBackendType::Dx3;
+#elif defined(CNA_BACKEND_DX5)
+        return GraphicsBackendType::Dx5;
+#elif defined(CNA_BACKEND_DX6)
+        return GraphicsBackendType::Dx6;
+#elif defined(CNA_BACKEND_DX7)
+        return GraphicsBackendType::Dx7;
+#elif defined(CNA_BACKEND_DX8)
+        return GraphicsBackendType::Dx8;
+#elif defined(CNA_BACKEND_D3D10)
+        return GraphicsBackendType::D3D10;
 #elif defined(CNA_BACKEND_SDL_GPU)
         return GraphicsBackendType::SdlGpu;
 #else
@@ -119,8 +163,16 @@ namespace CNA
             case GraphicsBackendType::D3D12:        return "D3D12";
             case GraphicsBackendType::Canvas:       return "CANVAS";
             case GraphicsBackendType::Ascii:        return "ASCII";
-            case GraphicsBackendType::Dx3:           return "DX3";
+            case GraphicsBackendType::FreeDirect:           return "FREEDIRECT";
             case GraphicsBackendType::D3D9:          return "D3D9";
+            case GraphicsBackendType::Dx1:            return "DX1";
+            case GraphicsBackendType::Dx2:            return "DX2";
+            case GraphicsBackendType::Dx3:           return "DX3";
+            case GraphicsBackendType::Dx5:            return "DX5";
+            case GraphicsBackendType::Dx6:            return "DX6";
+            case GraphicsBackendType::Dx7:            return "DX7";
+            case GraphicsBackendType::Dx8:            return "DX8";
+            case GraphicsBackendType::D3D10:          return "D3D10";
             case GraphicsBackendType::SdlGpu:        return "SDL_GPU";
         }
         return "UNKNOWN";

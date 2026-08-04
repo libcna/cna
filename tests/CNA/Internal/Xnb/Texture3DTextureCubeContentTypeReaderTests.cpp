@@ -47,7 +47,7 @@ using Microsoft::Xna::Framework::Graphics::TextureCube;
 // SetData call, so the whole ContentManager::Load fails instead of quietly returning an empty cube.
 // Software gained real per-mip cube storage in that finding, so its mip readback is now exact.
 #if defined(CNA_BACKEND_SDL_RENDERER) || defined(CNA_BACKEND_ASCII) || \
-    defined(CNA_BACKEND_CANVAS) || defined(CNA_BACKEND_DX3) || defined(CNA_BACKEND_HEADLESS)
+    defined(CNA_BACKEND_CANVAS) || defined(CNA_BACKEND_FREEDIRECT) || defined(CNA_BACKEND_HEADLESS)
 constexpr bool kCubeStorageSupported         = false;
 constexpr bool kCubeLevel0ReadbackSupported  = false;
 constexpr bool kCubeMipReadbackSupported     = false;

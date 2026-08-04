@@ -7,7 +7,7 @@
 // outcome: the original primary/shadow pair is still the live pair, every temporary is released
 // once, and the original pair is not released until a later successful commit.
 
-#include "CNA/Internal/Backends/Dx3/Dx3GraphicsBackend.hpp"
+#include "CNA/Internal/Backends/FreeDirect/FreeDirectGraphicsBackend.hpp"
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
@@ -35,7 +35,7 @@
 #include <string>
 
 using namespace CNA::Internal::Backends;
-using namespace CNA::Internal::Backends::Dx3;
+using namespace CNA::Internal::Backends::FreeDirect;
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
 
@@ -62,8 +62,8 @@ namespace
 
     struct ResourceRecord
     {
-        Dx3ResourceKindEXT kind{};
-        Dx3ResourceEventEXT event{};
+        FreeDirectResourceKindEXT kind{};
+        FreeDirectResourceEventEXT event{};
         const void* identity = nullptr;
     };
 
@@ -72,8 +72,8 @@ namespace
         std::array<ResourceRecord, 128> records{};
         std::size_t count = 0;
 
-        static void OnResource(void* context, Dx3ResourceKindEXT kind,
-                               Dx3ResourceEventEXT event, const void* identity) noexcept
+        static void OnResource(void* context, FreeDirectResourceKindEXT kind,
+                               FreeDirectResourceEventEXT event, const void* identity) noexcept
         {
             auto& tracker = *static_cast<ResourceTracker*>(context);
             if (tracker.count < tracker.records.size())
@@ -85,7 +85,7 @@ namespace
             count = 0;
         }
 
-        [[nodiscard]] int Count(Dx3ResourceKindEXT kind, Dx3ResourceEventEXT event) const
+        [[nodiscard]] int Count(FreeDirectResourceKindEXT kind, FreeDirectResourceEventEXT event) const
         {
             int result = 0;
             for (std::size_t i = 0; i < count; ++i)
@@ -96,7 +96,7 @@ namespace
             return result;
         }
 
-        [[nodiscard]] int Count(Dx3ResourceKindEXT kind, Dx3ResourceEventEXT event,
+        [[nodiscard]] int Count(FreeDirectResourceKindEXT kind, FreeDirectResourceEventEXT event,
                                 const void* identity) const
         {
             int result = 0;
@@ -116,8 +116,8 @@ namespace
             for (std::size_t i = 0; i < count; ++i)
             {
                 const auto& record = records[i];
-                if (record.event == Dx3ResourceEventEXT::Acquired &&
-                    Count(record.kind, Dx3ResourceEventEXT::Released, record.identity) != 1)
+                if (record.event == FreeDirectResourceEventEXT::Acquired &&
+                    Count(record.kind, FreeDirectResourceEventEXT::Released, record.identity) != 1)
                 {
                     return false;
                 }
@@ -126,11 +126,11 @@ namespace
         }
     };
 
-    [[nodiscard]] Dx3TestHooksEXT Hooks(
+    [[nodiscard]] FreeDirectTestHooksEXT Hooks(
         ResourceTracker& tracker,
-        Dx3ResizeFailurePointEXT failure = Dx3ResizeFailurePointEXT::None)
+        FreeDirectResizeFailurePointEXT failure = FreeDirectResizeFailurePointEXT::None)
     {
-        return Dx3TestHooksEXT{failure, &tracker, &ResourceTracker::OnResource};
+        return FreeDirectTestHooksEXT{failure, &tracker, &ResourceTracker::OnResource};
     }
 
     [[nodiscard]] PresentationParameters Parameters(
@@ -177,7 +177,7 @@ namespace
         return result;
     }
 
-    [[nodiscard]] bool SameSurfaceSet(const Dx3TestStateEXT& lhs, const Dx3TestStateEXT& rhs)
+    [[nodiscard]] bool SameSurfaceSet(const FreeDirectTestStateEXT& lhs, const FreeDirectTestStateEXT& rhs)
     {
         return lhs.directDraw == rhs.directDraw &&
                lhs.primarySurface == rhs.primarySurface &&
@@ -216,52 +216,52 @@ namespace
         Check(usable, label);
     }
 
-    [[nodiscard]] const char* FailureName(Dx3ResizeFailurePointEXT point)
+    [[nodiscard]] const char* FailureName(FreeDirectResizeFailurePointEXT point)
     {
         switch (point)
         {
-            case Dx3ResizeFailurePointEXT::ShadowBackBufferCreation: return "shadow creation";
-            case Dx3ResizeFailurePointEXT::ShadowBackBufferValidation: return "shadow validation";
-            case Dx3ResizeFailurePointEXT::DisplayModeBinding: return "display binding";
-            case Dx3ResizeFailurePointEXT::PrimarySurfaceCreation: return "primary creation";
-            case Dx3ResizeFailurePointEXT::PrimarySurfaceValidation: return "primary validation";
-            case Dx3ResizeFailurePointEXT::SurfaceSetCommit: return "surface-set commit";
-            case Dx3ResizeFailurePointEXT::None: return "none";
+            case FreeDirectResizeFailurePointEXT::ShadowBackBufferCreation: return "shadow creation";
+            case FreeDirectResizeFailurePointEXT::ShadowBackBufferValidation: return "shadow validation";
+            case FreeDirectResizeFailurePointEXT::DisplayModeBinding: return "display binding";
+            case FreeDirectResizeFailurePointEXT::PrimarySurfaceCreation: return "primary creation";
+            case FreeDirectResizeFailurePointEXT::PrimarySurfaceValidation: return "primary validation";
+            case FreeDirectResizeFailurePointEXT::SurfaceSetCommit: return "surface-set commit";
+            case FreeDirectResizeFailurePointEXT::None: return "none";
         }
         return "unknown";
     }
 
     void CheckFailureTemporaryCounts(
-        const ResourceTracker& tracker, Dx3ResizeFailurePointEXT point,
+        const ResourceTracker& tracker, FreeDirectResizeFailurePointEXT point,
         const std::string& prefix)
     {
         int expectedShadow = 0;
         int expectedPrimary = 0;
         switch (point)
         {
-            case Dx3ResizeFailurePointEXT::ShadowBackBufferCreation:
+            case FreeDirectResizeFailurePointEXT::ShadowBackBufferCreation:
                 break;
-            case Dx3ResizeFailurePointEXT::ShadowBackBufferValidation:
-            case Dx3ResizeFailurePointEXT::DisplayModeBinding:
-            case Dx3ResizeFailurePointEXT::PrimarySurfaceCreation:
+            case FreeDirectResizeFailurePointEXT::ShadowBackBufferValidation:
+            case FreeDirectResizeFailurePointEXT::DisplayModeBinding:
+            case FreeDirectResizeFailurePointEXT::PrimarySurfaceCreation:
                 expectedShadow = 1;
                 break;
-            case Dx3ResizeFailurePointEXT::PrimarySurfaceValidation:
-            case Dx3ResizeFailurePointEXT::SurfaceSetCommit:
+            case FreeDirectResizeFailurePointEXT::PrimarySurfaceValidation:
+            case FreeDirectResizeFailurePointEXT::SurfaceSetCommit:
                 expectedShadow = 1;
                 expectedPrimary = 1;
                 break;
-            case Dx3ResizeFailurePointEXT::None:
+            case FreeDirectResizeFailurePointEXT::None:
                 break;
         }
 
         Check(
             tracker.Count(
-                Dx3ResourceKindEXT::ShadowBackBuffer,
-                Dx3ResourceEventEXT::Acquired) == expectedShadow &&
+                FreeDirectResourceKindEXT::ShadowBackBuffer,
+                FreeDirectResourceEventEXT::Acquired) == expectedShadow &&
             tracker.Count(
-                Dx3ResourceKindEXT::PrimarySurface,
-                Dx3ResourceEventEXT::Acquired) == expectedPrimary,
+                FreeDirectResourceKindEXT::PrimarySurface,
+                FreeDirectResourceEventEXT::Acquired) == expectedPrimary,
             prefix + " acquires only the temporaries reached before that stage");
         Check(
             tracker.EveryAcquisitionWasReleasedExactlyOnce(),
@@ -282,14 +282,14 @@ namespace
             return;
         }
 
-        Dx3TestStateEXT state{};
+        FreeDirectTestStateEXT state{};
         {
             GraphicsBackendCreateArgs args;
             args.window = window;
             args.virtualWidth = 48;
             args.virtualHeight = 32;
             args.depthStencilFormat = static_cast<int>(depthFormat);
-            Dx3GraphicsBackend backend(args, Hooks(tracker));
+            FreeDirectGraphicsBackend backend(args, Hooks(tracker));
             state = backend.GetTestStateEXT();
             Check(
                 state.directDraw != nullptr && state.primarySurface != nullptr &&
@@ -297,14 +297,14 @@ namespace
                 prefix + " owns one complete native surface set");
             Check(
                 tracker.Count(
-                    Dx3ResourceKindEXT::DirectDraw,
-                    Dx3ResourceEventEXT::Acquired, state.directDraw) == 1 &&
+                    FreeDirectResourceKindEXT::DirectDraw,
+                    FreeDirectResourceEventEXT::Acquired, state.directDraw) == 1 &&
                 tracker.Count(
-                    Dx3ResourceKindEXT::PrimarySurface,
-                    Dx3ResourceEventEXT::Acquired, state.primarySurface) == 1 &&
+                    FreeDirectResourceKindEXT::PrimarySurface,
+                    FreeDirectResourceEventEXT::Acquired, state.primarySurface) == 1 &&
                 tracker.Count(
-                    Dx3ResourceKindEXT::ShadowBackBuffer,
-                    Dx3ResourceEventEXT::Acquired, state.shadowBackBuffer) == 1,
+                    FreeDirectResourceKindEXT::ShadowBackBuffer,
+                    FreeDirectResourceEventEXT::Acquired, state.shadowBackBuffer) == 1,
                 prefix + " acquires each constructor resource exactly once");
             Check(
                 !backend.SupportsDepthStencil(),
@@ -313,14 +313,14 @@ namespace
 
         Check(
             tracker.Count(
-                Dx3ResourceKindEXT::ShadowBackBuffer,
-                Dx3ResourceEventEXT::Released, state.shadowBackBuffer) == 1 &&
+                FreeDirectResourceKindEXT::ShadowBackBuffer,
+                FreeDirectResourceEventEXT::Released, state.shadowBackBuffer) == 1 &&
             tracker.Count(
-                Dx3ResourceKindEXT::PrimarySurface,
-                Dx3ResourceEventEXT::Released, state.primarySurface) == 1 &&
+                FreeDirectResourceKindEXT::PrimarySurface,
+                FreeDirectResourceEventEXT::Released, state.primarySurface) == 1 &&
             tracker.Count(
-                Dx3ResourceKindEXT::DirectDraw,
-                Dx3ResourceEventEXT::Released, state.directDraw) == 1,
+                FreeDirectResourceKindEXT::DirectDraw,
+                FreeDirectResourceEventEXT::Released, state.directDraw) == 1,
             prefix + " shutdown releases each constructor resource exactly once");
         Check(SDL_GetWindowID(window) != 0, prefix + " preserves the caller-owned SDL window");
 
@@ -348,7 +348,7 @@ namespace
             args.window = window;
             args.virtualWidth = 4097;
             args.virtualHeight = 32;
-            Dx3GraphicsBackend backend(args, Hooks(tracker));
+            FreeDirectGraphicsBackend backend(args, Hooks(tracker));
         }
         catch (const std::exception&)
         {
@@ -357,25 +357,25 @@ namespace
         Check(threw, "unsupported constructor dimensions throw through existing native validation");
         Check(
             tracker.Count(
-                Dx3ResourceKindEXT::DirectDraw,
-                Dx3ResourceEventEXT::Acquired) == 1 &&
+                FreeDirectResourceKindEXT::DirectDraw,
+                FreeDirectResourceEventEXT::Acquired) == 1 &&
             tracker.Count(
-                Dx3ResourceKindEXT::DirectDraw,
-                Dx3ResourceEventEXT::Released) == 1,
+                FreeDirectResourceKindEXT::DirectDraw,
+                FreeDirectResourceEventEXT::Released) == 1,
             "failed construction releases its DirectDraw owner exactly once");
         Check(
             tracker.Count(
-                Dx3ResourceKindEXT::PrimarySurface,
-                Dx3ResourceEventEXT::Acquired) ==
+                FreeDirectResourceKindEXT::PrimarySurface,
+                FreeDirectResourceEventEXT::Acquired) ==
                 tracker.Count(
-                    Dx3ResourceKindEXT::PrimarySurface,
-                    Dx3ResourceEventEXT::Released) &&
+                    FreeDirectResourceKindEXT::PrimarySurface,
+                    FreeDirectResourceEventEXT::Released) &&
             tracker.Count(
-                Dx3ResourceKindEXT::ShadowBackBuffer,
-                Dx3ResourceEventEXT::Acquired) ==
+                FreeDirectResourceKindEXT::ShadowBackBuffer,
+                FreeDirectResourceEventEXT::Acquired) ==
                 tracker.Count(
-                    Dx3ResourceKindEXT::ShadowBackBuffer,
-                    Dx3ResourceEventEXT::Released),
+                    FreeDirectResourceKindEXT::ShadowBackBuffer,
+                    FreeDirectResourceEventEXT::Released),
             "failed construction balances every surface acquisition");
         Check(SDL_GetWindowID(window) != 0, "failed construction preserves the caller-owned window");
 
@@ -383,14 +383,14 @@ namespace
         SDL_QuitSubSystem(SDL_INIT_VIDEO);
     }
 
-    void RunFailureStage(Dx3ResizeFailurePointEXT failure)
+    void RunFailureStage(FreeDirectResizeFailurePointEXT failure)
     {
         const std::string prefix = std::string("failure at ") + FailureName(failure);
         ResourceTracker tracker;
         GraphicsDevice device(
             GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::Reach,
             Parameters(kWidthA, kHeightA, DepthFormat::Depth24, PresentInterval::Immediate));
-        auto& backend = static_cast<Dx3GraphicsBackend&>(device.GetBackend());
+        auto& backend = static_cast<FreeDirectGraphicsBackend&>(device.GetBackend());
 
         Texture2D texture(device, 1, 1);
         const Color source(220, 40, 90, 255);
@@ -427,7 +427,7 @@ namespace
         device.setDepthStencilStateProperty(customDepth);
 
         backend.SetPresentationMode(static_cast<int>(CnaPresentationMode::Letterbox));
-        const Dx3TestStateEXT before = backend.GetTestStateEXT();
+        const FreeDirectTestStateEXT before = backend.GetTestStateEXT();
         const PresentationParameters ppBefore =
             device.getPresentationParametersProperty().Clone();
         const Viewport viewportBefore = device.getViewportProperty();
@@ -454,19 +454,19 @@ namespace
             diagnostic = exception.what();
         }
 
-        const Dx3TestStateEXT after = backend.GetTestStateEXT();
+        const FreeDirectTestStateEXT after = backend.GetTestStateEXT();
         Check(
-            threw && diagnostic.find("CNA DX3: injected resize failure during") !=
+            threw && diagnostic.find("CNA FreeDirect: injected resize failure during") !=
                          std::string::npos,
             prefix + " throws its stage-specific diagnostic");
         Check(
             SameSurfaceSet(before, after) &&
                 tracker.Count(
-                    Dx3ResourceKindEXT::PrimarySurface,
-                    Dx3ResourceEventEXT::Released, before.primarySurface) == 0 &&
+                    FreeDirectResourceKindEXT::PrimarySurface,
+                    FreeDirectResourceEventEXT::Released, before.primarySurface) == 0 &&
                 tracker.Count(
-                    Dx3ResourceKindEXT::ShadowBackBuffer,
-                    Dx3ResourceEventEXT::Released, before.shadowBackBuffer) == 0,
+                    FreeDirectResourceKindEXT::ShadowBackBuffer,
+                    FreeDirectResourceEventEXT::Released, before.shadowBackBuffer) == 0,
             prefix + " preserves both original native surface identities without destroying them");
         Check(
             after.logicalWidth == kWidthA && after.logicalHeight == kHeightA &&
@@ -522,10 +522,10 @@ namespace
         GraphicsDevice device(
             GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::Reach,
             Parameters(kWidthA, kHeightA));
-        auto& backend = static_cast<Dx3GraphicsBackend&>(device.GetBackend());
+        auto& backend = static_cast<FreeDirectGraphicsBackend&>(device.GetBackend());
         backend.SetTestHooksEXT(Hooks(tracker));
 
-        const Dx3TestStateEXT initial = backend.GetTestStateEXT();
+        const FreeDirectTestStateEXT initial = backend.GetTestStateEXT();
         Viewport customViewport(3, 4, 20, 12);
         const Rectangle customScissor(2, 3, 9, 8);
         device.setViewportProperty(customViewport);
@@ -570,11 +570,11 @@ namespace
                     device.getPresentationParametersProperty().getBackBufferHeightProperty() ==
                         kHeightA &&
                     tracker.Count(
-                        Dx3ResourceKindEXT::PrimarySurface,
-                        Dx3ResourceEventEXT::Released, initial.primarySurface) == 0 &&
+                        FreeDirectResourceKindEXT::PrimarySurface,
+                        FreeDirectResourceEventEXT::Released, initial.primarySurface) == 0 &&
                     tracker.Count(
-                        Dx3ResourceKindEXT::ShadowBackBuffer,
-                        Dx3ResourceEventEXT::Released, initial.shadowBackBuffer) == 0,
+                        FreeDirectResourceKindEXT::ShadowBackBuffer,
+                        FreeDirectResourceEventEXT::Released, initial.shadowBackBuffer) == 0,
                 label);
         };
 
@@ -587,8 +587,8 @@ namespace
     }
 
     void CheckSuccessfulCommitEvents(
-        const ResourceTracker& tracker, const Dx3TestStateEXT& oldState,
-        const Dx3TestStateEXT& newState, const std::string& prefix)
+        const ResourceTracker& tracker, const FreeDirectTestStateEXT& oldState,
+        const FreeDirectTestStateEXT& newState, const std::string& prefix)
     {
         Check(
             newState.primarySurface != nullptr &&
@@ -598,27 +598,27 @@ namespace
             prefix + " commits distinct replacement resource identities");
         Check(
             tracker.Count(
-                Dx3ResourceKindEXT::PrimarySurface,
-                Dx3ResourceEventEXT::Acquired, newState.primarySurface) == 1 &&
+                FreeDirectResourceKindEXT::PrimarySurface,
+                FreeDirectResourceEventEXT::Acquired, newState.primarySurface) == 1 &&
             tracker.Count(
-                Dx3ResourceKindEXT::ShadowBackBuffer,
-                Dx3ResourceEventEXT::Acquired, newState.shadowBackBuffer) == 1,
+                FreeDirectResourceKindEXT::ShadowBackBuffer,
+                FreeDirectResourceEventEXT::Acquired, newState.shadowBackBuffer) == 1,
             prefix + " acquires each replacement exactly once");
         Check(
             tracker.Count(
-                Dx3ResourceKindEXT::PrimarySurface,
-                Dx3ResourceEventEXT::Released, oldState.primarySurface) == 1 &&
+                FreeDirectResourceKindEXT::PrimarySurface,
+                FreeDirectResourceEventEXT::Released, oldState.primarySurface) == 1 &&
             tracker.Count(
-                Dx3ResourceKindEXT::ShadowBackBuffer,
-                Dx3ResourceEventEXT::Released, oldState.shadowBackBuffer) == 1,
+                FreeDirectResourceKindEXT::ShadowBackBuffer,
+                FreeDirectResourceEventEXT::Released, oldState.shadowBackBuffer) == 1,
             prefix + " releases each old surface exactly once after commit");
         Check(
             tracker.Count(
-                Dx3ResourceKindEXT::PrimarySurface,
-                Dx3ResourceEventEXT::Released, newState.primarySurface) == 0 &&
+                FreeDirectResourceKindEXT::PrimarySurface,
+                FreeDirectResourceEventEXT::Released, newState.primarySurface) == 0 &&
             tracker.Count(
-                Dx3ResourceKindEXT::ShadowBackBuffer,
-                Dx3ResourceEventEXT::Released, newState.shadowBackBuffer) == 0,
+                FreeDirectResourceKindEXT::ShadowBackBuffer,
+                FreeDirectResourceEventEXT::Released, newState.shadowBackBuffer) == 0,
             prefix + " leaves the committed replacements live");
     }
 
@@ -628,7 +628,7 @@ namespace
         GraphicsDevice device(
             GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::Reach,
             Parameters(kWidthA, kHeightA, DepthFormat::None));
-        auto& backend = static_cast<Dx3GraphicsBackend&>(device.GetBackend());
+        auto& backend = static_cast<FreeDirectGraphicsBackend&>(device.GetBackend());
         backend.SetTestHooksEXT(Hooks(tracker));
         backend.SetPresentationMode(static_cast<int>(CnaPresentationMode::Letterbox));
 
@@ -645,10 +645,10 @@ namespace
         device.setViewportProperty(Viewport(4, 5, 20, 15));
         device.setScissorRectangleProperty(Rectangle(3, 4, 11, 10));
 
-        const Dx3TestStateEXT stateA = backend.GetTestStateEXT();
+        const FreeDirectTestStateEXT stateA = backend.GetTestStateEXT();
         tracker.Clear();
         device.Reset(Parameters(kWidthB, kHeightB, DepthFormat::None));
-        const Dx3TestStateEXT stateB = backend.GetTestStateEXT();
+        const FreeDirectTestStateEXT stateB = backend.GetTestStateEXT();
         CheckSuccessfulCommitEvents(tracker, stateA, stateB, "successful A -> B");
         Check(
             stateB.logicalWidth == kWidthB && stateB.logicalHeight == kHeightB &&
@@ -675,7 +675,7 @@ namespace
 
         tracker.Clear();
         device.Reset(Parameters(kWidthC, kHeightC, DepthFormat::Depth24));
-        const Dx3TestStateEXT stateC = backend.GetTestStateEXT();
+        const FreeDirectTestStateEXT stateC = backend.GetTestStateEXT();
         CheckSuccessfulCommitEvents(tracker, stateB, stateC, "successful B -> C");
         Check(
             stateC.logicalWidth == kWidthC && stateC.logicalHeight == kHeightC &&
@@ -732,12 +732,12 @@ int main()
     RunConstructorFailureCase();
 
     constexpr std::array failurePoints{
-        Dx3ResizeFailurePointEXT::ShadowBackBufferCreation,
-        Dx3ResizeFailurePointEXT::ShadowBackBufferValidation,
-        Dx3ResizeFailurePointEXT::DisplayModeBinding,
-        Dx3ResizeFailurePointEXT::PrimarySurfaceCreation,
-        Dx3ResizeFailurePointEXT::PrimarySurfaceValidation,
-        Dx3ResizeFailurePointEXT::SurfaceSetCommit};
+        FreeDirectResizeFailurePointEXT::ShadowBackBufferCreation,
+        FreeDirectResizeFailurePointEXT::ShadowBackBufferValidation,
+        FreeDirectResizeFailurePointEXT::DisplayModeBinding,
+        FreeDirectResizeFailurePointEXT::PrimarySurfaceCreation,
+        FreeDirectResizeFailurePointEXT::PrimarySurfaceValidation,
+        FreeDirectResizeFailurePointEXT::SurfaceSetCommit};
     for (const auto failure : failurePoints)
         RunFailureStage(failure);
 

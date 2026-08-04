@@ -3,7 +3,7 @@
 // SDL_Renderer (2D-only by design) supports none of the currently-enumerated capabilities, and
 // that calling the corresponding 3D methods anyway still throws (SupportsCapability() is a way
 // to check ahead of time, not a way to make the underlying call itself succeed). Twin of
-// dx3_graphics_capability_test.cpp/canvas_graphics_capability_test.cpp.
+// freedirect_graphics_capability_test.cpp/canvas_graphics_capability_test.cpp.
 //
 // Exit code 0 = PASS, 1 = FAIL.
 

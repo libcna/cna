@@ -32,7 +32,7 @@ scaling transform exists) before `SDL_WarpMouseInWindow`, so the OS cursor lands
 physical pixel on a scaled/letterboxed window. Vulkan/bgfx use the no-op passthrough (they don't do
 logical-presentation scaling). Verified by `MouseInputTests` (`SetPositionConvertsLogicalToWindowFor
 LetterboxedRenderer`, passing under both ambient Wayland and `SDL_VIDEODRIVER=x11`) and the stale
-`Mouse.cpp` deviation comment was replaced (task 848). **2026-07-15 update**: `DX3` (`plan_dx3.md`
+`Mouse.cpp` deviation comment was replaced (task 848). **2026-07-15 update**: `DX3` (`plan_freedirect.md`
 DX3-68) now also implements a real `TransformLogicalToWindow` (a letterbox scale+offset computed
 from the actual physical `SDL_Window` size) and gets `Mouse::SetPosition` correctness through this
 exact same generic `logical_to_window` helper with zero DX3-specific code in `Mouse.cpp`. The

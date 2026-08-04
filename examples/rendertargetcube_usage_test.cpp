@@ -185,8 +185,8 @@ namespace
 #elif defined(CNA_BACKEND_CANVAS)
     constexpr Contract kContract{"CANVAS", false, Support::Unsupported, false, false,
                                  false, Support::Unsupported, false, true, false};
-#elif defined(CNA_BACKEND_DX3)
-    constexpr Contract kContract{"DX3", false, Support::Unsupported, false, false,
+#elif defined(CNA_BACKEND_FREEDIRECT)
+    constexpr Contract kContract{"FREEDIRECT", false, Support::Unsupported, false, false,
                                  false, Support::Unsupported, false, true, false};
 #elif defined(CNA_BACKEND_D3D9)
     // `mipMapCubeTargets` true only in the sense that construction and level-0 rendering work:

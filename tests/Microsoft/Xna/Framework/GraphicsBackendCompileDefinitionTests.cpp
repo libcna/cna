@@ -44,7 +44,7 @@ TEST(GraphicsBackendCompileDefinitionsTest, ExactlyOneGraphicsBackendIsSelected)
 #ifdef CNA_BACKEND_D3D12
     ++enabled;
 #endif
-#ifdef CNA_BACKEND_DX3
+#ifdef CNA_BACKEND_FREEDIRECT
     ++enabled;
 #endif
     // A genuine, previously-uncaught gap in the D3D9 branch (feature/dx9): no commit in this
@@ -53,6 +53,36 @@ TEST(GraphicsBackendCompileDefinitionsTest, ExactlyOneGraphicsBackendIsSelected)
     // CNA_GRAPHICS_BACKEND=D3D9 (NEXT.md's own D9-123 note says as much), so this would have
     // silently failed EXPECT_EQ(enabled, 1) the first time anyone actually did.
 #ifdef CNA_BACKEND_D3D9
+    ++enabled;
+#endif
+#ifdef CNA_BACKEND_DX1
+    ++enabled;
+#endif
+    // plan_dx2.md DX2-84: the same class of gap the D3D9 comment above documents -- no commit in
+    // this file's history ever added a DX2 entry either, so the full CnaTests suite's first-ever
+    // run under CNA_GRAPHICS_BACKEND=DX2 (this regression pass) would have silently failed
+    // EXPECT_EQ(enabled, 1) the same way D3D9's did.
+#ifdef CNA_BACKEND_DX2
+    ++enabled;
+#endif
+    // plan_dx3.md: same class of gap DX2-84's own comment above documents -- DX3 needs its own
+    // entry here too, added proactively this time rather than discovered by a from-scratch regression.
+#ifdef CNA_BACKEND_DX3
+    ++enabled;
+#endif
+#ifdef CNA_BACKEND_DX5
+    ++enabled;
+#endif
+#ifdef CNA_BACKEND_DX6
+    ++enabled;
+#endif
+#ifdef CNA_BACKEND_DX7
+    ++enabled;
+#endif
+#ifdef CNA_BACKEND_DX8
+    ++enabled;
+#endif
+#ifdef CNA_BACKEND_D3D10
     ++enabled;
 #endif
 #ifdef CNA_BACKEND_SDL_GPU

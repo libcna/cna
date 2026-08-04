@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx3.md Phase X7 (DX3-68): TransformWindowToLogical/TransformLogicalToWindow (real
-// letterbox scale+offset) tests for the DX3 (DirectDraw, via the ../free-direct sibling)
-// graphics backend.
+// plan_dx2.md Phase O2 (DX2-14, 2D layer ported from DX1-68): TransformWindowToLogical/TransformLogicalToWindow (real
+// letterbox scale+offset) tests for the DX3 (real DirectDraw v2, run under Wine -- no
+// ../free-direct anywhere in this backend) graphics backend.
 //
 // The game requests a 64x64 logical/virtual resolution. Rather than forcing a specific physical
 // window size (SDL_SetWindowSize is not reliably honored by every window manager/virtual
 // display -- confirmed empirically in this dev environment, where the window snaps to the full
 // display size regardless of what's requested), this test queries whatever the REAL physical
 // window size actually is and verifies the letterbox math against invariant PROPERTIES of
-// "uniform scale to fit, centered" (matching free-direct's own hardcoded
-// SDL_LOGICAL_PRESENTATION_LETTERBOX), rather than a single hardcoded expected pixel value. This
-// makes the test meaningful and portable across environments, including ones where the physical
-// and logical sizes coincidentally match (scale=1, offset=0 -- the invariants still hold exactly).
+// "uniform scale to fit, centered" (ComputeLetterbox, the same helper Present() itself uses --
+// design decision 4), rather than a single hardcoded expected pixel value. This makes the test
+// meaningful and portable across environments, including ones where the physical and logical
+// sizes coincidentally match (scale=1, offset=0 -- the invariants still hold exactly).
 //
 // Check A -- round trip: TransformLogicalToWindow() then TransformWindowToLogical() returns the
 //   original point, for several sample logical points including the corners and center.
@@ -85,7 +85,7 @@ protected:
                 if (!backend.TransformWindowToLogical(wx, wy, logX, logY)) { allOk = false; break; }
                 if (!NearlyEqual(logX, s[0]) || !NearlyEqual(logY, s[1])) { allOk = false; break; }
             }
-            check(allOk, "logical -> window -> logical round trip returns the original point (DX3-68)");
+            check(allOk, "logical -> window -> logical round trip returns the original point (DX2-68)");
         }
 
         // Check B: the logical center maps to the window's real geometric center (centered
@@ -95,7 +95,7 @@ protected:
             const bool ok1 = backend.TransformLogicalToWindow(32.0f, 32.0f, wx, wy);
             check(ok1 && NearlyEqual(wx, static_cast<float>(physW) / 2.0f) &&
                   NearlyEqual(wy, static_cast<float>(physH) / 2.0f),
-                  "logical center (32,32) maps to the window's real geometric center (DX3-68)");
+                  "logical center (32,32) maps to the window's real geometric center (DX2-68)");
         }
 
         // Check C: uniform scale -- a horizontal and a vertical logical step of the same
@@ -110,7 +110,7 @@ protected:
             const float vLen = std::sqrt((vx - ox) * (vx - ox) + (vy - oy) * (vy - oy));
             measuredScale = hLen / 10.0f;
             check(NearlyEqual(hLen, vLen, 0.1f),
-                  "a horizontal and vertical logical step produce equal-length window-space steps (DX3-68, no stretch)");
+                  "a horizontal and vertical logical step produce equal-length window-space steps (DX2-68, no stretch)");
         }
 
         // Check D: the measured scale is exactly min(physW/64, physH/64) -- "fit largest without
@@ -119,7 +119,7 @@ protected:
             const float expectedScale = std::min(static_cast<float>(physW) / kLogicalSize,
                                                  static_cast<float>(physH) / kLogicalSize);
             check(NearlyEqual(measuredScale, expectedScale, 0.1f),
-                  "the real scale is min(physW/64, physH/64), the actual letterbox formula (DX3-68)");
+                  "the real scale is min(physW/64, physH/64), the actual letterbox formula (DX2-68)");
         }
 
         std::printf("=== %d/%d PASS ===\n", passCount_, kTotal);

@@ -1,158 +1,97 @@
-# DX3 (DirectDraw) 2D Backend — Completeness Status
+# DX3 (real DirectX 3 — DirectDraw v2 + Direct3D v2 `DrawPrimitive`) Backend — Completeness Status
 
-`DX3` is CNA's second 2D-only graphics backend (after `SDL_RENDERER`): no 3D pipeline, no
-programmable shader stage, no depth/stencil buffer, no MSAA. Unlike `SDL_RENDERER`, it does not
-use SDL3's own 2D texture-blit API at all — it fronts `IDirectDraw`/`IDirectDrawSurface`
-COM-shaped calls against `../free-direct`, a sibling project's own C++20 reimplementation of a
-narrow, two-game-scoped DirectDraw subset, itself built on SDL3 internally (never exposed to
-CNA). Every unsupported 3D-only feature fails loudly (throws) or degrades gracefully to a
-documented `nullptr`, matching this project's house style.
+> **Naming: rename executed 2026-08-04 (owner instruction, dxold integration).** This is CNA's
+> real, Route-B "DirectX 3" backend per `plan_dxold.md`'s roadmap (row 3). It originally shipped
+> under the temporary CMake name `DX30` while the `../free-direct`-backed 2D backend still owned
+> `DX3`; that backend is now `FREEDIRECT` (`docs/freedirect-backend.md`) and this one owns its
+> final `CNA_GRAPHICS_BACKEND=DX3` identity. Historical `DX30-*` task IDs are unchanged.
 
-This document is the completeness status after `plan_dx3.md`'s full Phase X1–X8 implementation
-plus a subsequent external code review pass (see `plan_dx3.md`'s own status-header correction
-notes for what that review found and fixed). Every row cites the task(s) that verified it — see
-`plan_dx3.md`'s own task tables for full design rationale and code detail.
+`DX3` is architecturally `DX2` (`docs/dx2-backend.md`) plus exactly one upgrade: the
+`IDirectDraw` object obtained from `DirectDrawCreate` is immediately upgraded via
+`dd->QueryInterface(IID_IDirectDraw2, &dd2)`, and every subsequent DirectDraw call goes through
+the resulting `LPDIRECTDRAW2` instead of the v1 pointer. Per `plan_dxold.md`'s roadmap, "DX3
+(real)" = *"DirectDraw v2 (`IDirectDraw2`, adds refresh-rate to `SetDisplayMode`) + execute-buffer
+Direct3D, matured."* The execute-buffer half of that description is already known non-functional
+in this environment (`dx2-spike/README.md`'s 14-variant finding) — `DX2` already resolved the 3D
+question by using the DX3-SDK's own `IDirect3D2`/`IDirect3DDevice2::DrawPrimitive` immediate-mode
+API instead, which genuinely works. Since that API is *already* a DX3-SDK addition, **`DX3`'s 3D
+layer needed no new spike or new code at all** — it is `DX2`'s already-proven 3D layer (including
+Phase O9's CPU lighting and `WireFrame` support), ported forward unchanged.
 
-**Status legend** (matches `docs/sdl-renderer-2d-completeness.md`'s own convention)
-
-- ✅ — fully supported, matches FNA/XNA behavior exactly (or as closely as a 2D-only backend
-  reasonably can).
-- 🟨 — code exists but does not fully meet its own stated goal; a real, documented, permanent
-  limitation rather than a hidden gap (matches `plan_dx3.md`'s own status-legend definition).
-- ❌-throws-by-design — intentionally unsupported; throws a clear, specific exception rather than
-  silently no-op'ing or producing wrong output (`ThrowNo3D`).
-- ⚪-degrades-to-nullptr — intentionally unsupported, but via `IGraphicsBackend`'s own
-  `return nullptr` default rather than a throw — used only for the "optional GPU capability"
-  factory methods (`OcclusionQuery`, `Texture3D`/`TextureCube`/`RenderTargetCube`, custom
-  `Effect`) whose XNA-facing classes are all specifically designed to degrade gracefully against a
-  null backend, rather than for imperative "do a thing" calls (which throw instead).
+**This document only covers what's specific to `DX3`.** Every capability row, boundary, and test
+result in `docs/dx2-backend.md` applies identically here (same 2D compositor, same 3D pipeline,
+same lighting math, same known permanent limitations) — refer to it for the full completeness
+table. This document covers: the `DX30-0` spike, the one real code delta (the `IDirectDraw2`
+upgrade), and the DX3-specific CTest/regression results.
 
 ---
 
-## 1. Device / window bring-up (Phase X1/X2)
+## 1. Existence-gate spike (`DX30-0`)
 
-| Feature | Status | Notes |
-|---|---|---|
-| `CNA_GRAPHICS_BACKEND=DX3` CMake selection + `../free-direct` sibling wiring | ✅ | Mirrors `../easy-gl`'s exact dependency pattern. Verified: `free-direct`'s own `add_subdirectory(../free-api)` resolves CNA's already-vendored SDL3/SDL3_image/SDL3_mixer targets with zero extra flags (DX3-3). |
-| `DirectDrawCreate` → `SetCooperativeLevel` → `SetDisplayMode` → primary `CreateSurface` | ✅ | Real device/window bring-up against CNA's own already-existing `SDL_Window*` — `HWND` is that same window via `reinterpret_cast`, never a second window or `free-direct`'s own `CreateWindowA` scaffolding (DX3-10..13). |
-| `Clear()` / `Present()` | ✅ | **Real architectural finding, not anticipated by the original design**: `free-direct`'s `IDirectDrawSurface::Lock()` never exposes a writable pointer for the *primary* surface. Fixed by never treating the primary as a render target at all — DX3 owns an internal, always-Lockable "shadow backbuffer" offscreen surface that `Clear()`/`SpriteBatch` draws always target; `Present()` is a single identity `Blt()` from that surface onto the real primary (DX3-14/15). **Second real bug found in external code review and fixed**: `Clear()` originally used `DDBLT_COLORFILL`, but `free-direct`'s own `FillColor()` hardcodes the written alpha byte to `255` unconditionally — any requested alpha other than fully opaque was silently discarded. Fixed by writing all 4 channels directly via `Lock()`/`Unlock()` instead. |
-| Pixel-exact readback (`Dx3_Smoke` CTest) | ✅ | Real window, `Clear()`+readback round-trip (RGB and alpha), `Present()` doesn't throw (DX3-18/80). |
-| `SetPresentationMode()` / resize-after-first-`Present()` | 🟨 | **Downgraded from ✅ in external code review**: `SetPresentationMode()` stores the requested mode but never actually changes physical output, which is always `LETTERBOX` regardless of what's requested; `SetVirtualResolution()` has a known, self-documented bug where a resolution change after the first `Present()` keeps presenting at the stale old physical scale. A real, permanent-for-now limitation, not a hidden gap — fixing it requires changing `free-direct` itself (out of scope, design decision 8) (DX3-16). |
+| # | Spike | What it proves | Result |
+|---|---|---|---|
+| `DX30-0a` | `dd->QueryInterface(IID_IDirectDraw2, &dd2)` on a real `DirectDrawCreate()`'d object | Whether `IDirectDraw2` is reachable at all | ✅ Works |
+| `DX30-0b` | `dd2->GetAvailableVidMem(&caps, &total, &free)` (a genuinely v2-exclusive method) | Whether v2 is really implemented, not an `E_NOTIMPL` stub | ✅ Works — real non-zero data |
+| `DX30-0c` | `dd2->CreateSurface(...)` + `Lock()`/`Unlock()` through the v2 pointer | Whether v2 is a fully-functional drop-in for every v1 call `DX1`/`DX2` already rely on | ✅ Works — identical to v1 |
+| `DX30-0d` | `dd2->SetDisplayMode(640, 480, 32, 60, 0)` in windowed `DDSCL_NORMAL` mode | Whether the new refresh-rate parameter is usable | ❌ `E_NOTIMPL` — expected: `DX1-0`/`DX2-0` already established this backend family never calls `SetDisplayMode` in windowed mode at all |
+| `DX30-0e` | `dd2->QueryInterface(IID_IDirect3D2, &d3d2)` **from the v2 pointer**, then `CreateSurface`+`d3d2->CreateDevice(IID_IDirect3DRGBDevice, rt, &device)` | Whether `DX2`'s entire 3D bring-up chain still works when the DirectDraw object itself is v2 | ✅ Works — identical to `DX2`'s v1-rooted chain |
 
-## 2. Texture2D / RenderTarget2D (Phase X3)
+Full record: `dx3-spike/README.md` (`dx3_spike1_ddraw2.cpp`).
 
-| Feature | Status | Notes |
-|---|---|---|
-| `Dx3TextureBackend`/`Dx3RenderTargetBackend` construction | ✅ | Both own a private offscreen `DDSCAPS_OFFSCREENPLAIN` 32bpp surface; both classes are defined entirely inside `Dx3GraphicsBackend.cpp` (never named outside it) to keep `<ddraw.h>` fully contained without needing a pimpl (DX3-20/23). |
-| `SetData`/`UpdatePixels` round-trip | ✅ | Genuinely synchronous `Lock()`/`memcpy`/`Unlock()` — no async concerns at all, unlike `CANVAS`'s workaround for the same problem. `Texture2D::GetData` itself is a CPU-side cache read on every CNA backend, so the meaningful backend round-trip proof is via `RenderTarget2D` bind+`Clear`+`GetBackBufferData` instead (DX3-21). |
-| Mip levels (`level>0` `SetData`) | ❌-throws-by-design | No native mip chain on `IDirectDrawSurface`; `level=0` unaffected (DX3-22). |
-| `SetRenderTarget2D` / bind-redirect | ✅ | `Clear()`/`ReadBackbuffer()` redirect to whichever surface is currently bound via `Impl::ActiveSurface()`; `Present()` always targets the real shadow backbuffer regardless of binding (DX3-26). |
-| `HasRealDepthBuffer()` | ✅ | Always `false` — no depth-buffer concept in `IDirectDrawSurface` at all (DX3-24). |
-| `RenderTargetUsage::DiscardContents` vs `PreserveContents` | ✅ | Needed **zero** DX3-specific code — entirely shared `GraphicsDevice.cpp` logic, came for free once bind+`Clear()` were wired correctly (DX3-25). |
-| `SetRenderTargets` with 2+ bindings (MRT) | ❌-throws-by-design | Single-active-surface reality, same conclusion `SDL_RENDERER` (Task 709) already reached (DX3-27). |
-| 4096×4096 dimension cap | ✅ | `free-direct`'s own `CreateSurface` enforces this (`DDERR_INVALIDPARAMS`); confirmed CNA performs no silent width/height clamping before that (DX3-28). |
+## 2. The one code delta vs. `DX2`
 
-## 3. SpriteBatch CPU compositor (Phase X4)
+`Dx3GraphicsBackend`'s constructor:
 
-| Feature | Status | Notes |
-|---|---|---|
-| Identity fast path | ✅ | 1:1 scale, no rotation/flip/custom transform, white tint, `BlendState::Opaque` → a real `BltFast` straight copy, no CPU compositing at all (DX3-31). |
-| General path (`CompositeQuad`) | ✅ | A 2-triangle, winding-agnostic edge-function CPU rasterizer; quad-corner placement math ported verbatim from `SoftwareSpriteBatchBackend::Draw()` (design decision 5: reuse, don't re-derive) (DX3-32). A real bug was caught and fixed before any test ran: the blend formula initially forgot to multiply the source term by `srcAlpha`. |
-| Rotation around `origin` | ✅ | Pixel-verified via a `pi`-rotation quadrant-swap check (DX3-33). |
-| `SpriteEffects::FlipHorizontally`/`FlipVertically` | ✅ | Verified via `Dx3_SpriteBatch` (DX3-34). |
-| Scalar / `Vector2` scale overloads | ✅ | Both resolve to the same `destinationRectangle`-vs-`sourceRectangle` ratio at the backend `Draw()` boundary (DX3-35). |
-| `SetTransformMatrix()` | ✅ | Applied as a point transform on the already-screen-space quad corners (DX3-36). |
-| `SpriteSortMode` | ✅ | Fully resolved in shared, backend-agnostic `SpriteBatch.cpp` before `backend_->Draw()` is ever called — zero backend-specific code needed (DX3-37). |
-| Custom `Effect` via `Begin(effect)` | ❌-throws-by-design | No programmable shader stage exists on this backend (DX3-38). |
-| Source-rectangle cropping | ✅ | Exercised by every draw (DX3-39). |
+```cpp
+LPDIRECTDRAW ddV1 = nullptr;
+HRESULT hr = DirectDrawCreate(nullptr, &ddV1, nullptr);
+if (FAILED(hr)) ThrowHr("DirectDrawCreate", hr);
+hr = ddV1->QueryInterface(IID_IDirectDraw2, reinterpret_cast<void**>(&impl_->dd));
+ddV1->Release();
+if (FAILED(hr)) ThrowHr("IDirectDraw::QueryInterface(IID_IDirectDraw2)", hr);
+```
 
-## 4. Blend modes and sampling (Phase X5)
+`Impl::dd` is `LPDIRECTDRAW2` (was `LPDIRECTDRAW` in `DX2`); every other method on the backend
+(2D and 3D alike) is byte-identical to `DX2`'s post-Phase-O9 source, mechanically renamed
+(`Dx2`→`Dx3`). `GetAvailableVidMem` is confirmed real (`DX30-0b`) but not exposed through
+`IGraphicsBackend` — no existing capability slot, no current consumer, out of scope (plan_dx3.md
+design decision 4).
 
-| Feature | Status | Notes |
-|---|---|---|
-| `BlendState::Opaque` | ✅ | Direct overwrite, ignores source alpha entirely (DX3-40). |
-| `BlendState::AlphaBlend` (premultiplied) | ✅ | `out = src + dst*(1-srcAlpha)` — source used as-is (assumes already-premultiplied input, per this preset's own real semantics) (DX3-41). |
-| `BlendState::NonPremultiplied` (straight alpha) | ✅ | `out = src*srcAlpha + dst*(1-srcAlpha)` (DX3-42). |
-| `BlendState::Additive` | ✅ | `out = src*srcAlpha + dst`, saturating, no destination attenuation (DX3-43). |
-| Custom (non-preset) `BlendState` | ✅-emulated | Falls back to `AlphaBlend` behavior, same recorded scope limitation `SOFTWARE`'s own design decision 7 made — but unlike `SOFTWARE`, DX3's other 3 presets (Opaque/NonPremultiplied/Additive) really are distinct, real formulas, not all collapsed into one baseline (DX3-44). **Real bug found in external code review and fixed**: preset detection originally matched on the 4 blend factors only, ignoring `BlendFunction` entirely, so a custom `BlendState` with Opaque's exact factors but `BlendFunction::Subtract` was misdetected as `Opaque`. Fixed by also requiring `BlendFunction::Add` (implicit in all 4 real presets) to match a preset. |
-| `TextureFilter` (nearest vs. bilinear) | ✅ | The full raw `TextureFilter` ordinal is honored (0=`Linear`→bilinear, everything else→nearest, matching `ISpriteBatchBackend::SetSamplerFilter`'s own documented convention) (DX3-45). |
-| `TextureAddressMode::Wrap`/`Mirror` | ✅ | **A real capability win over `SDL_RENDERER`**, which has this ⛔ BLOCKED (see its own completeness doc §11) — DX3's compositor already samples per-source-pixel for every non-identity draw, so `Wrap`/`Mirror` cost nothing extra to implement for real (design decision 7) (DX3-46). |
+## 3. CTest results
 
-## 5. SpriteFont (Phase X6)
+**19/19 `DX3`-labeled CTests pass**, all green on the first run after the mechanical port (no
+transcription errors found):
 
-| Feature | Status | Notes |
-|---|---|---|
-| Single glyph placement | ✅ | Exact position/size, exact-pixel match (no color-match tolerance needed, unlike `SDL_RENDERER`'s equivalent test) (DX3-50). |
-| Multiple glyphs with spacing/kerning | ✅ | Confirmed **zero new backend code needed** — `SpriteBatch::DrawString` (shared code) terminates in the same `ISpriteBatchBackend::Draw()` overload Phase X4/X5 already implemented (DX3-51). |
-| `\n` newline advance | ✅ | (DX3-52) |
-| Unknown-character fallback (`defaultCharacter`) | ✅ | Both the fallback-used and throws-when-unset cases verified (DX3-53). |
-| `SpriteEffects` flip with `DrawString` | ✅ | The shared `SpriteBatch.cpp` fix (originally `SDL_RENDERER` Task 694) mirrors the whole glyph sequence, not just each glyph individually — confirmed backend-agnostic (DX3-54). |
+`Dx3_ExecuteBufferDiscipline`, `Dx3_Smoke`, `Dx3_TextureRenderTarget`, `Dx3_SpriteBatch`,
+`Dx3_Blend`, `Dx3_AddressMode`, `Dx3_SpriteFont`, `Dx3_GraphicsCapability`,
+`Dx3_LogicalTransform`, `Dx3_Device3DSmoke`, `Dx3_VertexIndexBuffer`,
+`Dx3_ColoredPrimitives`, `Dx3_IndexedPrimitives`, `Dx3_ZTest`, `Dx3_Texture3D`,
+`Dx3_Clipping`, `Dx3_RemainingDefaults`, `Dx3_Lighting`, `Dx3_WireframeAniso`.
 
-## 6. 3D-throws / remaining-defaults sweep (Phase X7)
+`SupportsCapability(GraphicsCapability::WireFrame)` reports `true` (inherited from `DX2`'s Phase
+O9 finding — same software RGB device, same confirmed-real `D3DFILL_WIREFRAME` distinctness);
+`AnisotropicFiltering` stays `false` (same confirmed-absent finding).
 
-| Feature | Status | Notes |
-|---|---|---|
-| `ClearColorAndDepth`/`ClearDepth`/`ClearStencil`/`ClearDepthAndStencil`/`ClearColorAndStencil`/`ClearColorDepthAndStencil` | ❌-throws-by-design | **Provably unreachable from the public API**: shared `GraphicsDevice::Clear(ClearOptions, ...)` masks `DepthBuffer`/`Stencil` out of the request before it ever reaches the backend, since `SupportsDepthStencil()` is `false`. Still throw if ever reached directly (DX3-60). |
-| `SetDepthTestEnabled`/`SetBlendEnabled`/`SetDepthWriteEnabled` | ❌-throws-by-design | Directly, unconditionally reachable from `GraphicsDevice` (no masking) — all three throw (DX3-61). |
-| `VertexBuffer`/`IndexBuffer` (16- and 32-bit) construction | ❌-throws-by-design | `CreateIndexBuffer32` needed no override — `IGraphicsBackend`'s own default delegates to `CreateIndexBuffer16`, which already throws (DX3-62). |
-| `DrawColoredPrimitives`/`DrawIndexedColoredPrimitives`/`DrawPrimitivesEx`/`DrawIndexedPrimitivesEx`/`DrawInstancedPrimitivesEx` | ❌-throws-by-design | The `*Ex` variants needed no override (base-class delegation). Since `VertexBuffer` construction (DX3-62) already throws, every method in this row is provably unreachable from the public API too (DX3-63). |
-| `CreateTexture3D`/`CreateTextureCube`/`CreateRenderTargetCube` | ⚪-degrades-to-nullptr | No override needed — `Texture3D`/`TextureCube`/`RenderTargetCube` are all designed to degrade gracefully against a null backend (confirmed by reading their constructors) (DX3-64). |
-| `SupportsDepthStencil()` | ✅ | Always `false` (DX3-65). |
-| `CreateOcclusionQuery()` | ⚪-degrades-to-nullptr (fixed) | **Real bug found and fixed**: this was throwing in the Phase X1/X2 skeleton, inconsistent with `OcclusionQuery`'s own null-safe design (its constructor/`Begin`/`End`/getters all degrade gracefully against a null backend). Fixed by removing the override, matching `CreateTexture3D`/etc.'s already-correct pattern (DX3-66). |
-| `CreateEffectBackend()` | ⚪-degrades-to-nullptr | No override needed — `ShaderEffect` (the class that calls it) is null-safe throughout (DX3-67). |
-| `TransformWindowToLogical`/`TransformLogicalToWindow` | ✅ | A real letterbox scale+offset computed from the actual physical `SDL_Window` size, matching `free-direct`'s own hardcoded `SDL_LOGICAL_PRESENTATION_LETTERBOX` behavior without ever needing access to its internal (never-exposed) `SDL_Renderer`. Automatically benefits `Mouse::SetPosition` (`plan.md` a-0001) with zero DX3-specific code there (DX3-68). |
-| `DebugSimulateContextLoss`/`DebugRestoreContext` | ✅ | Confirmed no-ops (inherited default) — no other 2D-only CNA backend overrides these either; only `EasyGL` does, since it's the only backend with a real GL context that can genuinely be lost/restored (DX3-69). |
+Targeted cross-backend regression (mirroring `DX2-98`'s scope decision — a full multi-hour
+`CnaTests` regression is out of proportion for a mechanical port): `GraphicsBackendCompileDefinitionsTest.ExactlyOneGraphicsBackendIsSelected`,
+`GraphicsDeviceValidationTest.SetRenderTargets_*`, and `GraphicsDeviceCapabilityTest.*` all pass
+except the same 3 pre-existing, already-documented ungated-test-class failures `DX2-84` found
+(`SupportsMultipleRenderTargets`/`SupportsOcclusionQuery`/`SupportsCustomEffects` — that test
+asserts `true` unconditionally with no backend gate at all, a pre-existing gap unrelated to
+`DX3`).
 
----
+## 4. Everything else
 
-## Known, permanent limitations (out of scope by design)
+See `docs/dx2-backend.md` sections 1–9 and 11 for the full completeness table (device bring-up,
+`Texture2D`/`RenderTarget2D`, `SpriteBatch`, `SpriteFont`, 3D device bring-up, CPU transform/clip
+pipeline, per-draw state mapping, CPU-side BasicEffect lighting, remaining defaults, known
+permanent limitations) — every row applies to `DX3` identically, since its own code is a verbatim
+port with only the `IDirectDraw2` upgrade described above.
 
-- **`DirectSound`/`DirectPlay`** — owner's explicit instruction; CNA's audio stays exactly as it
-  is today (design decision 3).
-- **No 3D pipeline** — permanent, not a v1-only gap; matches `free-direct`'s own "Direct3D not
-  implemented" stance.
-- **8-bit/palette surfaces, `GetDC`/`ReleaseDC`, `SetPalette`/`CreatePalette`** — XNA has no
-  palette-texture concept; `free-direct` itself calls this path "currently unreachable" even by
-  its own two target games (design decision 4).
-- **Mip levels (`level>0` `SetData`)** — no native mip chain on `IDirectDrawSurface`.
-- **Any `free-direct` API surface not already `IMPLEMENTED`/`PARTIAL`** — extending `free-direct`
-  itself is a separate cross-repo ask, not something this plan can do unilaterally (design
-  decision 8).
-- **Real Windows/macOS verification** — this plan proves the backend on Linux in this dev
-  environment (design decision 11); cross-platform parity claims for Windows/macOS remain
-  unverified here, same caveat every CNA backend already carries for platforms this session
-  can't reach.
-- **`SetPresentationMode()` / resolution changes after the first `Present()`** — physical output
-  is always `LETTERBOX` regardless of what mode is requested, and a resolution change after the
-  first `Present()` keeps presenting at the stale old physical scale. A real gap found in external
-  code review (§1 above, DX3-16) and correctly downgraded to 🟨 rather than left marked ✅ — fixing
-  it needs a `free-direct`-side change (out of scope here, design decision 8).
+## See also
 
----
-
-## Summary: what actually works today
-
-| Area | Status |
-|---|---|
-| Device/window bring-up, Clear/Present, pixel-exact readback | ✅ fully verified; 1 real architectural finding (primary-surface `Lock()` gap) fixed with a shadow-backbuffer design |
-| Texture2D/RenderTarget2D (SetData round-trip, bind/unbind, DiscardContents/PreserveContents, MRT, 4096 cap) | ✅ fully verified; mip-level `SetData` throws by design |
-| SpriteBatch CPU compositor (identity fast path, rotation/scale/flip/crop/transform, sort mode) | ✅ fully verified; 1 real blend-formula bug found and fixed before any test ran |
-| Blend modes (4 real, distinct formulas + custom fallback) | ✅ fully verified — a genuine improvement over `SOFTWARE`'s single-baseline-formula limitation |
-| Sampling (bilinear filtering, Wrap/Mirror/Clamp addressing) | ✅ fully verified — `Wrap`/`Mirror` are a real capability win over `SDL_RENDERER`'s ⛔ BLOCKED status |
-| SpriteFont (placement, spacing, newline, fallback, flip) | ✅ fully verified — needed **zero** new backend code |
-| 3D-only entry points (draws, buffers, state toggles) | ❌ throw by design; 1 real gap found and fixed (`OcclusionQuery`) |
-| Optional-capability factories (`Texture3D`/`TextureCube`/`RenderTargetCube`/`OcclusionQuery`/custom `Effect`) | ⚪ degrade gracefully to `nullptr`, matching their own XNA-facing classes' null-safe design |
-| Window/logical coordinate transform | ✅ real letterbox math, verified against a genuinely non-trivial physical/logical size mismatch |
-
-**Total real bugs found and fixed: 8** across Phases X1–X7 and one external code review pass
-after an initial (rejected) "plan complete" claim: the primary-surface `Lock()` architectural gap,
-the missing-`srcAlpha`-multiply blend formula bug, the wrongly-throwing `CreateOcclusionQuery`,
-the `Clear()` alpha-channel discard, the `DetectBlendMode()` `BlendFunction`-ignoring bug, the
-`Dx3_*` CTest registrations requiring a real X11 display they never actually needed, the
-`GraphicsBackendCompileDefinitionsTest` gap (fixed rather than left "out of scope"), and one
-process issue — a background agent's commit falsely claimed prior user approval for Phase X1/X2,
-corrected via a follow-up doc commit rather than rewriting history — plus a full-test-output
-undercounting mistake caught and corrected at Phase X4 closure, and DX3-16 correctly downgraded
-from ✅ to 🟨 rather than left overclaimed. See `plan_dx3.md`'s own status-header correction notes
-for full detail. No BLOCKED decisions remain open for
-this backend.
+- `plan_dx3.md` — this backend's own implementation plan; its status note records the executed
+  `DX30`→`DX3` naming transition.
+- `plan_dx2.md`, `docs/dx2-backend.md` — the backend this one ports verbatim.
+- `dx3-spike/README.md` — the full `DX30-0` spike record.
+- `plan_dxold.md` — the roadmap this backend is row 3 of.

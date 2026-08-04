@@ -1,27 +1,28 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx3.md Phase X4 (DX3-30..DX3-39): CPU compositor / SpriteBatch draw path tests for the DX3
-// (DirectDraw, via the ../free-direct sibling) graphics backend.
+// plan_dx2.md Phase O2 (DX2-12, 2D layer ported from DX1-30..DX1-39): CPU compositor / SpriteBatch draw path tests for the DX2
+// (real DirectDraw v1, run under Wine -- no ../free-direct anywhere in this backend) graphics backend.
 //
-// Check A -- Draw() before Begin()/End() without Begin() throw (DX3-30 Begin/End contract).
+// Check A -- Draw() before Begin()/End() without Begin() throw (DX2-30 Begin/End contract).
 // Check B -- Identity draw (BlendState::Opaque, 1:1 scale, no rotation/flip, white tint) is a real
-//   BltFast straight copy -- exact pixel match (DX3-31).
+//   BltFast straight copy -- exact pixel match (DX2-31).
 // Check C -- General-path full-opacity draw under BlendState::AlphaBlend (NOT the Opaque preset,
 //   so the identity fast path never triggers) reproduces the source color exactly -- proves the
-//   CPU compositor itself, not just its blend math (DX3-32).
-// Check D -- General-path zero-alpha draw under BlendState::AlphaBlend leaves the destination
-//   exactly untouched -- proves the straight-alpha "over" baseline formula (DX3-40's precursor).
-// Check E -- SpriteEffects::FlipHorizontally swaps sampled texels left-right (DX3-34).
-// Check F -- Scale (dest rect != source rect) samples the correct texel per screen region (DX3-35).
+//   CPU compositor itself, not just its blend math (DX2-32).
+// Check D -- General-path zero-alpha draw under BlendState::NonPremultiplied (straight alpha)
+//   leaves the destination exactly untouched -- proves the straight-alpha "over" baseline formula
+//   (DX2-40's precursor).
+// Check E -- SpriteEffects::FlipHorizontally swaps sampled texels left-right (DX2-34).
+// Check F -- Scale (dest rect != source rect) samples the correct texel per screen region (DX2-35).
 // Check G -- Rotation by pi around the texture's center origin maps the top-left source texel to
-//   the bottom-right screen quadrant and vice versa (DX3-33).
+//   the bottom-right screen quadrant and vice versa (DX2-33).
 // Check H -- SetTransformMatrix() (a translation) shifts an otherwise-identity draw by exactly the
-//   translation offset (DX3-36).
+//   translation offset (DX2-36).
 // Check I -- SpriteSortMode is fully handled by shared SpriteBatch.cpp -- Begin(sortMode, ...)
-//   with a non-Deferred mode draws without throwing or needing backend-specific code (DX3-37).
+//   with a non-Deferred mode draws without throwing or needing backend-specific code (DX2-37).
 // Check J -- Begin(..., a non-null custom Effect) throws: no programmable shader stage exists on
-//   this backend (DX3-38).
+//   this backend (DX2-38).
 //
-// Source-rectangle cropping (DX3-39) is exercised implicitly by every Draw() call above (all use
+// Source-rectangle cropping (DX2-39) is exercised implicitly by every Draw() call above (all use
 // an explicit sourceRectangle).
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
@@ -129,20 +130,31 @@ protected:
                   "General-path full-opacity draw (AlphaBlend) reproduces the source exactly");
         }
 
-        // Check D: general-path zero-alpha under AlphaBlend leaves the destination untouched.
+        // Check D: general-path zero-alpha draw under BlendState::NonPremultiplied (straight
+        // alpha) leaves the destination untouched. Real bug found and fixed during this port's
+        // own first test run: this originally used BlendState::AlphaBlend, which in this codebase
+        // (matching real XNA) is the PREMULTIPLIED preset -- out = src + dst*(1-srcAlpha), where
+        // `src` is used as-is, NOT multiplied by srcAlpha again, because premultiplied convention
+        // assumes the source RGB was already multiplied by alpha at authoring time. A
+        // (255,0,0,0) texel is not validly premultiplied data (a truly transparent premultiplied
+        // red pixel is (0,0,0,0)), so under AlphaBlend its full red channel legitimately bleeds
+        // through regardless of alpha -- correct XNA behavior (see BlendState::NonPremultiplied's
+        // own doc), not a compositor bug. Switched to NonPremultiplied (out =
+        // src*srcAlpha + dst*(1-srcAlpha)), which is the preset a straight-alpha, zero-alpha
+        // source pixel actually needs to leave the destination untouched.
         {
             dev.Clear(Color(5, 6, 7, 255));
             Texture2D tex(dev, 2, 2);
             std::vector<Color> px(4, Color(255, 0, 0, 0));
             tex.SetData(px.data(), static_cast<int>(px.size()));
 
-            sb.Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend);
+            sb.Begin(SpriteSortMode::Deferred, BlendState::NonPremultiplied);
             sb.Draw(tex, Rectangle(30, 10, 2, 2), Rectangle(0, 0, 2, 2), Color(255, 255, 255, 255));
             sb.End();
 
             const Color got = ReadPixel(dev, 30, 10);
             check(SameColor(got, Color(5, 6, 7, 255)),
-                  "General-path zero-alpha draw (AlphaBlend) leaves the destination untouched");
+                  "General-path zero-alpha draw (NonPremultiplied) leaves the destination untouched");
         }
 
         dev.Clear(Color(1, 1, 1, 255));
@@ -195,8 +207,17 @@ protected:
             // offset from it: screen bounding box is [56,64]x[36,44]. Un-rotated, texel(0,0)=Red
             // would land in the top-left quadrant and texel(1,1)=Yellow in the bottom-right one.
             // After a pi rotation about that same center, the quadrants swap.
+            // Sample points are offset (+1,+1)/(-1,-1) from each respective bbox corner (56,36)/
+            // (64,44), the same "1px in from the corner" convention Check F already uses (11,41
+            // relative to its own (10,40) corner) -- with only a 2x2 source texture and the
+            // default bilinear (Linear) sampler, only the pixels immediately adjacent to a corner
+            // (where Clamp addressing saturates all 4 bilinear taps to the same texel) read back a
+            // pure, unblended color; a real bug was found and fixed here during this port's own
+            // first test run -- the original sample point (58,38) was 2px in from the corner,
+            // already inside the blend gradient (confirmed empirically: it read (199,223,27), not
+            // pure yellow) -- not a compositor/rotation-math bug, a test sample-point precision bug.
             const bool ok = SameColor(ReadPixel(dev, 62, 42), Color(255, 0, 0, 255)) &&    // bottom-right quadrant
-                            SameColor(ReadPixel(dev, 58, 38), Color(255, 255, 0, 255));    // top-left quadrant
+                            SameColor(ReadPixel(dev, 57, 37), Color(255, 255, 0, 255));    // top-left quadrant
             check(ok, "Rotation by pi around the center origin maps top-left <-> bottom-right");
         }
 

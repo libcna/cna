@@ -90,8 +90,8 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "D3D11")
     # runtime D3DCompile() custom-ShaderEffect path (D3D11EffectBackend) -- confirmed safe to link
     # in isolation by DX-1/DX-14-compile's own spikes; the offline stock pipeline never calls it.
     target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 d3d11 dxgi d3dcompiler cna_backend_graphics_d3dcommon)
-elseif(CNA_GRAPHICS_BACKEND STREQUAL "DX3")
-    # plan_dx3.md design decision 10: free-direct's own public target is the literal lowercase
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "FREEDIRECT")
+    # plan_freedirect.md design decision 10: free-direct's own public target is the literal lowercase
     # `free-direct` (PUBLIC-links free-api::free-api, PUBLIC-exposes its own include/ dir so
     # #include <ddraw.h> resolves) -- no ALIAS namespace exists for it, unlike easy-gl's own target.
     target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 free-direct)
@@ -115,6 +115,60 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "D3D9")
     # design decision 9/16 keep the stock pipeline dependency-free; it will only be added, later, to
     # a custom-ShaderEffect-only target if Phase D9-11 is authorized (ask-first per its own row).
     target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 d3d9)
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "DX1")
+    # plan_dx1.md design decision 10: ddraw + dxguid (GUID storage for IID_IDirectDraw etc.) is the
+    # confirmed minimal link set (DX1-0 spike) -- no free-direct, no DXVK, no d3dcompiler, no
+    # d3d11/dxgi. SDL3 is linked only for window/HWND access (design decision 3), same as every
+    # other backend.
+    target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 ddraw dxguid)
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "DX2")
+    # plan_dx2.md design decision 10: same confirmed minimal link set as DX1 -- ddraw + dxguid +
+    # SDL3::SDL3. No separate Direct3D import library is needed: IDirect3D2/IDirect3DDevice2 are
+    # obtained purely via QueryInterface/CreateDevice on DirectDraw objects/surfaces (confirmed
+    # during the DX2-0 spike, see plan_dx2.md section 1).
+    target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 ddraw dxguid)
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "DX3")
+    # plan_dx3.md design decision 6: same confirmed minimal link set as DX1/DX2 -- ddraw + dxguid +
+    # SDL3::SDL3. No separate Direct3D import library is needed here either (DX30-0 spike confirmed
+    # IDirect3D2/IDirect3DDevice2 are still obtained purely via QueryInterface/CreateDevice, now off
+    # an IDirectDraw2 object instead of v1 -- see plan_dx3.md section 1).
+    target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 ddraw dxguid)
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "DX5")
+    # plan_dx5.md design decision 9: same confirmed minimal link set as DX1/DX2/DX3 -- ddraw +
+    # dxguid + SDL3::SDL3. No separate Direct3D import library is needed here either (DX5-0 spike
+    # confirmed IDirect3D3/IDirect3DDevice3 are still obtained purely via QueryInterface/
+    # CreateDevice, now off an IDirectDraw4 object instead of v2 -- see plan_dx5.md section 1).
+    target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 ddraw dxguid)
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "DX6")
+    # plan_dx6.md design decision 10: same confirmed minimal link set as DX1/DX2/DX3/DX5 -- ddraw +
+    # dxguid + SDL3::SDL3. DX6 introduces no new interface at all, so no new link dependency either.
+    target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 ddraw dxguid)
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "DX7")
+    # plan_dx7.md design decision 14: same confirmed minimal link set as DX1/DX2/DX3/DX5/DX6 --
+    # ddraw + dxguid + SDL3::SDL3. DirectDrawCreateEx/IDirectDraw7/IDirect3D7 all resolve from the
+    # same import libraries, spike-confirmed (DX7-0) with no new link dependency.
+    target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 ddraw dxguid)
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "DX8")
+    # plan_dx8.md design decision 2/14: mingw-w64's x86_64 target ships NO real d3d8 import
+    # library at all (only the unrelated libd3d8thk.a "thunk" library; only the i686/32-bit target
+    # has a real one) -- DXVK's own d3d8.dll.a (D8VK, merged into DXVK 2.0+) exports the real
+    # Direct3DCreate8 symbol and is linked against directly instead, spike-confirmed (DX8-0a).
+    set(CNA_DX8_DXVK_LIB "/usr/lib/dxvk/wine64/d3d8.dll.a" CACHE FILEPATH
+        "Path to DXVK's own d3d8 import library (exports Direct3DCreate8) -- no MinGW x86_64 import library exists for real d3d8.")
+    if(NOT EXISTS "${CNA_DX8_DXVK_LIB}")
+        message(FATAL_ERROR
+            "CNA: DX8 backend requires DXVK's own d3d8 import library, not found at "
+            "${CNA_DX8_DXVK_LIB} -- install the dxvk package (providing /usr/lib/dxvk/wine64/"
+            "d3d8.dll.a) or set -DCNA_DX8_DXVK_LIB=<path> to point at it explicitly.")
+    endif()
+    target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 "${CNA_DX8_DXVK_LIB}")
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "D3D10")
+    # plan_d3d10.md design decision: unlike DX8, mingw-w64 ships a REAL d3d10 import library
+    # (libd3d10.a) -- no DXVK .dll.a linking hack needed. DXVK itself ships no d3d10.dll at all
+    # (only d3d10core.dll); the real d3d10.dll/d3d10_1.dll come from Wine's own builtin, which
+    # forward to d3d10core (overridden to DXVK's real implementation at the Wine-prefix level, not
+    # a link-time concern).
+    target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 d3d10 dxgi d3dcompiler)
 elseif(CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU")
     # plan_sdlgpu.md SDLGPU-1: SDL_gpu.h is part of SDL3 itself (SDL_gpu.c is already compiled
     # into the same SDL3 library every other backend links against) -- no separate find_package

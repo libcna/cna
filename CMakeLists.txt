@@ -119,10 +119,10 @@ include(cmake/Tests/SoftwareTests.cmake)
 # plan_ascii.md Phase G2+: ASCII (SDL-windowed glyph-grid) backend test registration.
 include(cmake/Tests/AsciiTests.cmake)
 
-# plan_dx3.md Phase X2/X8 (DX3-18/DX3-80): DX3 (DirectDraw via free-direct) CTest registration.
+# plan_freedirect.md Phase X2/X8 (DX3-18/DX3-80): DX3 (DirectDraw via free-direct) CTest registration.
 # Unlike SDL_RENDERER's own window-based ctests, these do NOT need a real/virtual X11 display:
 # every pixel assertion reads back through the shadow-backbuffer surface directly
-# (Dx3GraphicsBackend::ReadBackbuffer/GetBackBufferData), never through real physical
+# (FreeDirectGraphicsBackend::ReadBackbuffer/GetBackBufferData), never through real physical
 # presentation, so SDL_VIDEODRIVER=dummy (no display required at all) produces identical,
 # verified-correct results (confirmed empirically: all 8 binaries, 49/49 checks, under
 # SDL_VIDEODRIVER=dummy) while being far more portable than requiring CNA_TEST_DISPLAY to point
@@ -130,7 +130,7 @@ include(cmake/Tests/AsciiTests.cmake)
 # SDL_VIDEODRIVER=x11 registration (copy-pasted from SDL_RENDERER's own pattern, which genuinely
 # does need a real display) made every one of these 8 ctests fail outright in any environment
 # without a live DISPLAY, even though the underlying binaries themselves were always correct.
-include(cmake/Tests/Dx3Tests.cmake)
+include(cmake/Tests/FreeDirectTests.cmake)
 
 # plan_dx.md DX-80: D3D11 CTest registration. When cross-compiled from Linux (this backend is
 # Windows-only, design decision 2), CTest itself still runs on the Linux host, so the test COMMAND
@@ -165,6 +165,42 @@ include(cmake/Tests/D3D9Tests.cmake)
 # window, a real SDL_GPUDevice, and a 60-frame Clear()+Present() loop. Needs a real
 # display/GPU, same as the Vulkan/Bgfx/D3D11 CTest entries above -- run with a real DISPLAY.
 include(cmake/Tests/SdlGpuTests.cmake)
+
+# plan_dx1.md: DX1 (real DirectDraw v1, no ../free-direct) CTest registration, mirroring D3D9's
+# own cna_d3d9_test/cna_d3d9_ctest_command shape (Windows-only, MinGW cross-compile + Wine
+# wrapper) rather than DX3's native-Linux shape, since DX1 genuinely needs real ddraw.h.
+include(cmake/Tests/Dx1Tests.cmake)
+
+# plan_dx2.md Phase O1/O2: DX2 (real DirectDraw v1 2D layer ported from DX1 + Direct3D v2
+# DrawPrimitive 3D layer, landing in a later phase) CTest registration, mirroring Dx1Tests.cmake's
+# own shape (Windows-only, MinGW cross-compile + Wine wrapper).
+include(cmake/Tests/Dx2Tests.cmake)
+
+# plan_dx3.md: real DirectX 3 backend (originally landed under the temporary DX30 name; renamed
+# to DX3 on 2026-08-04 once the free-direct backend released the name as FREEDIRECT) -- a
+# mechanical port of DX2's own 2D+3D layers upgraded to IDirectDraw2, same
+# Windows-only/MinGW-cross-compile/Wine-wrapper shape as Dx2Tests.cmake.
+include(cmake/Tests/Dx3Tests.cmake)
+
+# plan_dx5.md: real DirectX 5 backend -- DirectDraw v4 + Direct3D v3 FVF DrawPrimitive, a further
+# port of DX3's own 2D+3D layers, same Windows-only/MinGW-cross-compile/Wine-wrapper shape.
+include(cmake/Tests/Dx5Tests.cmake)
+
+# plan_dx6.md: real DirectX 6 backend -- same DirectDraw v4 + Direct3D v3 interfaces as DX5, with
+# real stencil buffer operations added; same Windows-only/MinGW-cross-compile/Wine-wrapper shape.
+include(cmake/Tests/Dx6Tests.cmake)
+
+# plan_dx7.md: real DirectX 7 backend -- new IDirectDraw7/IDirect3D7 interfaces, viewport object
+# removed, texture binding simplified; same Windows-only/MinGW-cross-compile/Wine-wrapper shape.
+include(cmake/Tests/Dx7Tests.cmake)
+
+# plan_dx8.md: real DirectX 8 backend -- DXVK-delivered (not DirectDraw-based), fixed-function 3D
+# only, real GPU-quad SpriteBatch; same Windows-only/MinGW-cross-compile/Wine-wrapper shape.
+include(cmake/Tests/Dx8Tests.cmake)
+
+# plan_d3d10.md: real Direct3D 10 backend -- no fixed-function at all, real HLSL vs_4_0/ps_4_0
+# shaders throughout, DXVK-delivered via d3d10core.
+include(cmake/Tests/D3D10Tests.cmake)
 
 include(cmake/Harnesses.cmake)
 

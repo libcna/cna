@@ -195,11 +195,11 @@ namespace
     constexpr bool kReadsBackbuffer = true;
     constexpr bool kDraws3D = true;
     constexpr const char* kBackendName = "CANVAS";
-#elif defined(CNA_BACKEND_DX3)
+#elif defined(CNA_BACKEND_FREEDIRECT)
     constexpr bool kRasterizes = true;
     constexpr bool kReadsBackbuffer = true;
     constexpr bool kDraws3D = false;
-    constexpr const char* kBackendName = "DX3";
+    constexpr const char* kBackendName = "FREEDIRECT";
 #elif defined(CNA_BACKEND_D3D9)
     constexpr bool kRasterizes = true;
     constexpr bool kReadsBackbuffer = true;

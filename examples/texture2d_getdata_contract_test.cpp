@@ -118,9 +118,9 @@ namespace
 #elif defined(CNA_BACKEND_ASCII)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr const char* kBackendName = "ASCII";
-#elif defined(CNA_BACKEND_DX3)
+#elif defined(CNA_BACKEND_FREEDIRECT)
     constexpr RtContract kRtContract = RtContract::Exact;
-    constexpr const char* kBackendName = "DX3";
+    constexpr const char* kBackendName = "FREEDIRECT";
 #elif defined(CNA_BACKEND_D3D9)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr const char* kBackendName = "D3D9";

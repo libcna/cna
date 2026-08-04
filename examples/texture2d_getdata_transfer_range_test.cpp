@@ -171,9 +171,9 @@ namespace
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr const char* kBackendName = "ASCII";
     constexpr MipUpload kMipUpload = MipUpload::Unsupported;
-#elif defined(CNA_BACKEND_DX3)
+#elif defined(CNA_BACKEND_FREEDIRECT)
     constexpr RtContract kRtContract = RtContract::Exact;
-    constexpr const char* kBackendName = "DX3";
+    constexpr const char* kBackendName = "FREEDIRECT";
     constexpr MipUpload kMipUpload = MipUpload::Unsupported;
 #elif defined(CNA_BACKEND_D3D9)
     constexpr RtContract kRtContract = RtContract::Exact;

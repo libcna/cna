@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx3.md Phase X6 (DX3-50..DX3-54): SpriteFont / DrawString tests for the DX3 (DirectDraw,
-// via the ../free-direct sibling) graphics backend.
+// plan_dx2.md Phase O2 (DX2-13, 2D layer ported from DX1-50..DX1-54): SpriteFont / DrawString tests for the DX3 (real
+// DirectDraw v1, run under Wine -- no ../free-direct anywhere in this backend) graphics backend.
 //
 // SpriteBatch::DrawString (shared, backend-agnostic SpriteBatch.cpp) lays out each glyph as a
 // destination rectangle and calls pushSprite() -> backend_->Draw(), the EXACT same
-// ISpriteBatchBackend::Draw() overload Phase X4/X5 already implemented and pixel-verified for
-// plain sprites. This phase therefore needs no new backend code (DX3-50/51 confirm this
+// ISpriteBatchBackend::Draw() overload Phase O4/O5 already implemented and pixel-verified for
+// plain sprites. This phase therefore needs no new backend code (DX2-50/51 confirm this
 // directly); it exists to prove that claim empirically rather than merely assert it.
 //
 // A 2-glyph atlas is used throughout: glyph 'A' = solid Red 8x8 at atlas (0,0,8,8), glyph 'B' =
@@ -13,13 +13,13 @@
 // a color-match tolerance to work around that backend's own physical/logical scaling), DX3's CPU
 // compositor is exact-pixel, so every check here asserts an exact color match.
 //
-// Check A (DX3-50) -- a single glyph lands at exactly the expected destination rect.
-// Check B (DX3-51) -- two glyphs with spacing land at their correctly kerning-advanced positions,
+// Check A (DX2-50) -- a single glyph lands at exactly the expected destination rect.
+// Check B (DX2-51) -- two glyphs with spacing land at their correctly kerning-advanced positions,
 //   with the gap between them staying background (proves spacing/kerning, not just glyph 1).
-// Check C (DX3-52) -- '\n' advances to the next line by exactly lineSpacing pixels, resetting X.
-// Check D (DX3-53) -- an unresolvable character falls back to `defaultCharacter` when set, and
+// Check C (DX2-52) -- '\n' advances to the next line by exactly lineSpacing pixels, resetting X.
+// Check D (DX2-53) -- an unresolvable character falls back to `defaultCharacter` when set, and
 //   throws std::invalid_argument when not set.
-// Check E (DX3-54) -- SpriteEffects::FlipHorizontally with DrawString mirrors the WHOLE glyph
+// Check E (DX2-54) -- SpriteEffects::FlipHorizontally with DrawString mirrors the WHOLE glyph
 //   sequence (B then A, not just each glyph individually), the shared Task 694 fix.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
@@ -107,7 +107,7 @@ protected:
         SpriteBatch sb(dev);
         Texture2D atlas;
 
-        // Check A (DX3-50): single glyph lands at exactly the expected destination rect.
+        // Check A (DX2-50): single glyph lands at exactly the expected destination rect.
         {
             auto font = BuildFont(dev, atlas, 8, 2.0f, std::nullopt);
             dev.Clear(kBlack);
@@ -118,10 +118,10 @@ protected:
             const bool ok = SameColor(ReadPixel(dev, 8, 8), kRed) &&
                             SameColor(ReadPixel(dev, 2, 2), kBlack) &&
                             SameColor(ReadPixel(dev, 13, 13), kBlack);
-            check(ok, "Single glyph 'A' lands at exactly (4,4,8,8) (DX3-50)");
+            check(ok, "Single glyph 'A' lands at exactly (4,4,8,8) (DX2-50)");
         }
 
-        // Check B (DX3-51): two glyphs with spacing -- 'A' at x=4, 'B' at x=4+8+spacing=14, gap
+        // Check B (DX2-51): two glyphs with spacing -- 'A' at x=4, 'B' at x=4+8+spacing=14, gap
         // between them (x=12,13) stays background.
         {
             auto font = BuildFont(dev, atlas, 8, 2.0f, std::nullopt);
@@ -133,10 +133,10 @@ protected:
             const bool ok = SameColor(ReadPixel(dev, 8, 8), kRed) &&
                             SameColor(ReadPixel(dev, 18, 8), kGreen) &&
                             SameColor(ReadPixel(dev, 12, 8), kBlack);
-            check(ok, "Two glyphs 'AB' with spacing land correctly, gap stays background (DX3-51)");
+            check(ok, "Two glyphs 'AB' with spacing land correctly, gap stays background (DX2-51)");
         }
 
-        // Check C (DX3-52): '\n' advances to the next line by exactly lineSpacing (8) pixels.
+        // Check C (DX2-52): '\n' advances to the next line by exactly lineSpacing (8) pixels.
         {
             auto font = BuildFont(dev, atlas, 8, 2.0f, std::nullopt);
             dev.Clear(kBlack);
@@ -146,10 +146,10 @@ protected:
             sb.End();
             const bool ok = SameColor(ReadPixel(dev, 8, 8), kRed) &&      // line 1: 'A' at y=4
                             SameColor(ReadPixel(dev, 8, 16), kGreen);     // line 2: 'B' at y=4+8
-            check(ok, "'\\n' advances to the next line by exactly lineSpacing (DX3-52)");
+            check(ok, "'\\n' advances to the next line by exactly lineSpacing (DX2-52)");
         }
 
-        // Check D (DX3-53): unresolvable character falls back to defaultCharacter when set, and
+        // Check D (DX2-53): unresolvable character falls back to defaultCharacter when set, and
         // throws when not set.
         {
             auto fontWithFallback = BuildFont(dev, atlas, 8, 2.0f, std::optional<SharpRuntime::charcs>(u'A'));
@@ -176,10 +176,10 @@ protected:
                 sb.End();
             }
             check(fallbackOk && threw,
-                  "Unresolvable char uses defaultCharacter when set, throws when not (DX3-53)");
+                  "Unresolvable char uses defaultCharacter when set, throws when not (DX2-53)");
         }
 
-        // Check E (DX3-54): SpriteEffects::FlipHorizontally mirrors the whole glyph sequence
+        // Check E (DX2-54): SpriteEffects::FlipHorizontally mirrors the whole glyph sequence
         // (Task 694's shared-code fix) -- 'B' (green) ends up on the LEFT, 'A' (red) on the RIGHT.
         {
             auto font = BuildFont(dev, atlas, 8, 2.0f, std::nullopt);
@@ -191,7 +191,7 @@ protected:
             sb.End();
             const bool ok = SameColor(ReadPixel(dev, 8, 8), kGreen) &&
                             SameColor(ReadPixel(dev, 18, 8), kRed);
-            check(ok, "SpriteEffects::FlipHorizontally mirrors the whole glyph sequence (DX3-54)");
+            check(ok, "SpriteEffects::FlipHorizontally mirrors the whole glyph sequence (DX2-54)");
         }
 
         std::printf("=== %d/%d PASS ===\n", passCount_, kTotal);

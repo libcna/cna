@@ -1,9 +1,13 @@
 // SPDX-License-Identifier: MS-PL
-// CNA::GraphicsCapability: verifies GraphicsDevice::SupportsCapability() correctly reports that
-// DX3 (DirectDraw, 2D-only by design) supports none of the currently-enumerated capabilities,
-// and that calling the corresponding 3D methods anyway still throws (SupportsCapability() is a
-// way to check ahead of time, not a way to make the underlying call itself succeed). Twin of
-// sdlrenderer_graphics_capability_test.cpp/canvas_graphics_capability_test.cpp.
+// CNA::GraphicsCapability: verifies GraphicsDevice::SupportsCapability() correctly reports DX3's
+// capability set. Unlike an earlier version of this test (mirroring a 2D-only backend's
+// capability test, matching DX1/SDL_RENDERER/CANVAS), DX3's 3D pipeline is now genuinely real
+// end-to-end (Phase O3-O6, plan_dx2.md) -- ThreeD and DepthStencilBuffer both report true. What
+// remains false is genuinely unavailable at this DirectX era (MSAA/MRT/occlusion query/custom
+// effects), or empirically confirmed absent on this software RGB device (AnisotropicFiltering,
+// Phase O9's dx2_spike10 Test E). WireFrame reports true as of Phase O9 -- the same spike's Test D
+// confirmed D3DFILL_WIREFRAME genuinely renders edge-only output here (see Dx3GraphicsBackend.hpp's
+// own SupportsCapability() comment for the full rationale).
 //
 // Exit code 0 = PASS, 1 = FAIL.
 
@@ -11,7 +15,8 @@
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "CNA/GraphicsCapability.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
-#include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
+
+#include "CNA/Internal/Backends/Dx3/Dx3GraphicsBackend.hpp"
 
 #include <cstdio>
 #include <memory>
@@ -19,6 +24,8 @@
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
 using CNA::GraphicsCapability;
+using CNA::Internal::Backends::IRenderTargetBackend;
+using CNA::Internal::Backends::RenderTargetBindingDescriptor;
 
 class Dx3GraphicsCapabilityTest : public Game
 {
@@ -47,22 +54,33 @@ protected:
         done_ = true;
 
         auto& dev = getGraphicsDeviceProperty();
+        auto& backend = static_cast<CNA::Internal::Backends::Dx3::Dx3GraphicsBackend&>(dev.GetBackend());
 
-        check(!dev.SupportsCapability(GraphicsCapability::ThreeD), "ThreeD not supported");
-        check(!dev.SupportsCapability(GraphicsCapability::DepthStencilBuffer), "DepthStencilBuffer not supported");
+        // Phase O6 completes the real 3D pipeline -- both report true now.
+        check(dev.SupportsCapability(GraphicsCapability::ThreeD), "ThreeD supported");
+        check(dev.SupportsCapability(GraphicsCapability::DepthStencilBuffer), "DepthStencilBuffer supported");
+
+        // Genuinely unavailable at this DirectX era.
         check(!dev.SupportsCapability(GraphicsCapability::MultiSampleAntiAliasing), "MultiSampleAntiAliasing not supported");
         check(!dev.SupportsCapability(GraphicsCapability::MultipleRenderTargets), "MultipleRenderTargets not supported");
-        check(!dev.SupportsCapability(GraphicsCapability::AnisotropicFiltering), "AnisotropicFiltering not supported");
-        check(!dev.SupportsCapability(GraphicsCapability::WireFrame), "WireFrame not supported");
         check(!dev.SupportsCapability(GraphicsCapability::OcclusionQuery), "OcclusionQuery not supported");
         check(!dev.SupportsCapability(GraphicsCapability::CustomEffects), "CustomEffects not supported");
 
-        // SupportsCapability() is a check, not an enforcement mechanism -- calling the actual 3D
-        // method anyway still throws exactly as before this feature existed.
-        check(Throws([&] { dev.SetDepthTestEnabled(true); }),
-              "SetDepthTestEnabled still throws when called without checking first");
-        check(Throws([&] { VertexBuffer vb(dev, 4); (void)vb; }),
-              "Constructing a VertexBuffer still throws when called without checking first");
+        // Phase O9 (dx2_spike10_specular_wireframe_aniso.cpp): WireFrame is real (Test D --
+        // D3DFILL_WIREFRAME genuinely renders edge-only output), AnisotropicFiltering is
+        // empirically confirmed absent (Test E -- byte-identical readback across POINT/LINEAR/
+        // ANISOTROPIC filters on this software RGB device), not merely "never tested" anymore.
+        check(dev.SupportsCapability(GraphicsCapability::WireFrame), "WireFrame supported (Phase O9, empirically verified)");
+        check(!dev.SupportsCapability(GraphicsCapability::AnisotropicFiltering), "AnisotropicFiltering not supported (Phase O9, empirically confirmed absent)");
+
+        // SupportsCapability() is a check, not an enforcement mechanism -- calling a method for a
+        // genuinely-unsupported capability anyway still throws. MultipleRenderTargets (checked
+        // above) is a real DX3 (and DX2, its own porting source) boundary: DirectDraw has exactly one active render target.
+        const RenderTargetBindingDescriptor twoTargets[2] = {
+            RenderTargetBindingDescriptor::ForRenderTarget2D(nullptr, 0, 4, 4, 0),
+            RenderTargetBindingDescriptor::ForRenderTarget2D(nullptr, 0, 4, 4, 0)};
+        check(Throws([&] { backend.SetRenderTargets(twoTargets, 2); }),
+              "SetRenderTargets(count=2) still throws (no MRT support)");
 
         std::printf("=== %d/%d PASS ===\n", pass_, pass_ + fail_);
         Exit();

@@ -1,20 +1,23 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx3.md Phase X1/X2 (DX3-1..DX3-18): smoke test for the DX3 (DirectDraw, via the
-// ../free-direct sibling) graphics backend's foundation -- real DirectDrawCreate/
-// SetCooperativeLevel/SetDisplayMode/CreateSurface device bring-up, real Clear()/Present(), real
-// pixel readback. SpriteBatch/Texture2D draws are not yet implemented (Phase X3/X4).
+// plan_dx3.md Phase P2 (DX30-10, ported from plan_dx2.md's DX2-10/DX1-10..DX1-18): smoke test for
+// the DX3 (real DirectDraw v2, run under Wine -- no ../free-direct anywhere in this backend)
+// graphics backend's foundation -- real DirectDrawCreate -> QueryInterface(IID_IDirectDraw2) ->
+// SetCooperativeLevel(DDSCL_NORMAL) -> CreateSurface device bring-up, real Clear()/Present(), real
+// pixel readback. SpriteBatch/Texture2D draws are covered by dx3_spritebatch_test.cpp (Phase P4).
 //
-// Check A -- GetWindowInternal() returns a real, non-null window (unlike HEADLESS/SOFTWARE, DX3
-//   genuinely needs one -- free-direct's SetCooperativeLevel wraps it via reinterpret_cast).
+// This test's own success IS the proof the IDirectDraw2 upgrade (plan_dx3.md design decision 2)
+// actually happened: Dx3GraphicsBackend's constructor unconditionally throws if
+// QueryInterface(IID_IDirectDraw2) fails, so every check below only ever runs against a genuine
+// v2 object -- no separate "did the upgrade happen" CTest is needed on top of that.
+//
+// Check A -- GetWindowInternal() returns a real, non-null window (DX3 needs a genuine Win32 HWND,
+//   obtained from it via SDL_PROP_WINDOW_WIN32_HWND_POINTER, design decision 3).
 // Check B -- Clear(r,g,b,a) followed by GetBackBufferData() reads back the exact clear color
-//   (RGB and alpha), read from DX3's own Lockable shadow-backbuffer surface (design decision 5's
-//   fix for free-direct's IDirectDrawSurface::Lock() never exposing a writable pointer for the
-//   *primary* surface).
+//   (RGB and alpha), read from DX3's own Lockable shadow-backbuffer surface (design decision 4).
 // Check D -- Clear() honors a non-opaque requested alpha (128) exactly, not silently forced to
-//   255 -- a real bug found in review: free-direct's own FillColor() (the DDBLT_COLORFILL path)
-//   hardcodes the written alpha byte to 255 unconditionally, so Clear() now writes all 4 channels
-//   directly via Lock()/Unlock() instead.
-// Check C -- Present() (the shadow-backbuffer -> primary identity Blt()) does not throw.
+//   255 -- written directly via Lock()/Unlock() (FillSurfaceColor), not DDBLT_COLORFILL, so this
+//   never depends on how a given ddraw.dll's ColorFill happens to treat the alpha channel.
+// Check C -- Present() (the shadow-backbuffer -> primary letterboxed Blt()) does not throw.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
@@ -78,11 +81,10 @@ protected:
             check(allMatch, "GetBackBufferData() reads back the exact Clear() color (incl. alpha) for every pixel");
         }
 
-        // Check D: Clear() honors a non-opaque requested alpha exactly. Real bug found and fixed
-        // in review: Clear() originally used DDBLT_COLORFILL, but free-direct's own FillColor()
-        // hardcodes the written alpha byte to 255 unconditionally, so any requested alpha other
-        // than 255 was silently discarded. Clear() now writes all 4 channels directly via
-        // Lock()/Unlock() instead.
+        // Check D: Clear() honors a non-opaque requested alpha exactly. Uses FillSurfaceColor
+        // (direct Lock()/Unlock() writes of all 4 channels), not DDBLT_COLORFILL, proactively
+        // avoiding the class of bug DX3 found and fixed for its own DDBLT_COLORFILL-based Clear()
+        // (plan_freedirect.md DX3-14, free-direct's FillColor() hardcoding alpha to 255).
         {
             dev.Clear(Color(10, 20, 30, 128));
             const Rectangle region(0, 0, 4, 4);
