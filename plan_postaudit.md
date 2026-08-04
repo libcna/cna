@@ -924,14 +924,20 @@ pre-existing loud rejection are unchanged.
 **Checkpoint blockers of `REMED-GFX-217` and `REMED-GFX-218` are RESOLVED. Both tickets stay OPEN**
 for the real translators, which remain in this plan alongside `REMED-GFX-203` … `-208`.
 
-### 4.5 `REMED-GFX-209` — carried here for checkpoint hygiene only
+### 4.5 `REMED-GFX-209` — **DONE 2026-08-04**
 
-Detailed in §7. It is a **test-contract defect, not a production defect**, and it cannot hide a
-production bug — it fails loudly rather than passing falsely. It appears in the checkpoint discussion
-for one reason only: it is a standing, known-cause red in **six** backends' principal suites, so if
-the checkpoint's criteria include "principal suites green" rather than "principal suite failures all
-classified", it blocks. **Checkpoint blocker: REVIEW**, scope SMALL — almost certainly cheaper to fix
-than to argue about.
+Detailed in §7, which now records what was measured rather than what was expected. It was a
+**test-contract defect, not a production defect**, and it could not hide a production bug — it failed
+loudly rather than passing falsely. It appeared in the checkpoint discussion for one reason only: it
+was a standing, known-cause red in **six** backends' principal suites, so it blocked under a
+"principal suites green" criterion and not under a "failures all classified" one. That question is
+now moot: the red is gone from all six, **no production file changed**, and the remaining failures on
+every backend are the pre-existing ones this plan already names.
+
+It also produced the campaign's one new finding, **`REMED-GFX-219`** — EasyGL reports
+`GraphicsCapability::WireFrame` as `false` while its own `GL_LINES` emulation renders a correct
+wireframe. That is a production defect, it is OPEN, it is **not** a checkpoint blocker (the renderer
+is right; only the report under-states it), and it is deliberately not fixed here.
 
 ---
 
@@ -1049,29 +1055,148 @@ to the remediation index, not to this plan, and nothing in the current records t
 
 ## 7. Test and infrastructure work
 
-### `REMED-GFX-209` — `GraphicsDeviceCapabilityTest.DoesNotSupportWireFrame` asserts one backend's gap unconditionally
+### `REMED-GFX-209` — **DONE 2026-08-04**. The WireFrame contract is per backend, and it was measured
 
-**Record of status:** OPEN, LOW, P3, not begun.
-**Post-audit priority: P3. Checkpoint blocker: REVIEW. Integration blocker: NO. Scope: SMALL.**
+**Record of status:** DONE. **Checkpoint blocker: RESOLVED. Integration blocker: NO. Scope: SMALL.**
+**No production source file changed. No new public capability API. `audit/` untouched.**
 
-The test asserts `SupportsCapability(GraphicsCapability::WireFrame) == false`, which is EasyGL's
-documented GLES3 limitation, in a file that is **not backend-gated** — so it fails on every backend
-that *does* support wireframe.
+#### The exact old assumption
 
-**Does it hide production behaviour?** **No.** It encodes an incorrect backend assumption and fails
-loudly; it cannot mask a production defect the way a falsely-passing test can. It is pre-existing and
-A/B-proven unrelated to `REMED-GFX-201`: that task confirmed both the test file and Software's own
-wireframe report byte-identical to `75b61fa4`.
+```cpp
+TEST(GraphicsDeviceCapabilityTest, DoesNotSupportWireFrame)
+{
+    GraphicsDevice gd;
+    EXPECT_FALSE(gd.SupportsCapability(GraphicsCapability::WireFrame));
+}
+```
 
-**Measured impact.** Failing on **six** backends across the two principal-suite sweeps recorded by
-`REMED-GFX-201` and `REMED-GFX-202`: Software, Headless, Bgfx, WebGPU, Vulkan and SDL_GPU.
+One test, in a file compiled once per backend and gated on nothing, encoding EasyGL's documented
+`ℹ️ EasyGL N/A (GLES3)` row from `plan_graphics.md`'s XNA 4.0 coverage table as though every backend
+shared it.
 
-**Fix shape, already recorded:** either gate the assertion on `CNA_BACKEND_EASYGL`, or assert that the
-query does not throw — which is what the neighbouring MSAA and anisotropy cases in the same file
-already do.
+#### Reproduced first, on the unmodified test
 
-**Suggested trigger:** before the post-integration checkpoint, as part of establishing a clean
-principal-suite baseline. It is the cheapest item in this entire plan.
+Run before anything was changed: **PASSES on EasyGL**; fails `Actual: true / Expected: false` on
+**Software, Headless, Vulkan, bgfx, WebGPU and SDL_GPU** — exactly the six of record, no more and no
+fewer. A/B-proven a test assumption rather than a production regression on two independent axes: the
+test file is byte-identical to `75b61fa4`, and every backend's `SupportsCapability` WireFrame arm is
+unchanged between `75b61fa4` and HEAD.
+
+#### The contract was then MEASURED on all ten backends, not read out of the source
+
+A new asymmetric-triangle pixel oracle: a 256×256 `RenderTarget2D`, one non-indexed `DrawPrimitives`,
+`CullMode::None`, a clear colour that is deliberately not black, one interior probe at least 40 px
+from every edge, and one disjoint 25×25 probe per edge. Solid and WireFrame differ in nothing but the
+fill mode, which is what makes the two frames comparable.
+
+| Backend | `SupportsCapability(WireFrame)` | Measured rendering | Classification |
+|---|---|---|---|
+| Software | true | wireframe — total 556, interior **0**/1089, edges 25/23/25 | positive pixel oracle |
+| Vulkan | true | wireframe — total 607, interior **0**/1089, edges 25/31/26 | positive pixel oracle |
+| bgfx | true | wireframe — total 559, interior **0**/1089, edges 25/25/25 | positive pixel oracle |
+| SDL_GPU | true | wireframe — total 607, interior **0**/1089, edges 25/31/26 | positive pixel oracle |
+| D3D9 | true | wireframe — total 560, interior **0**/1089 (Wine/DXVK on `:99`) | positive pixel oracle |
+| D3D11 | true | wireframe — total 559, interior **0**/1089 (Wine/DXVK on `:99`) | positive pixel oracle |
+| **EasyGL** | **false** | **wireframe — total 559, interior 0/1089, edges 25/25/25** | positive oracle + **`REMED-GFX-219`** |
+| **WebGPU** | true | **SOLID — total 18176, interior 1089/1089, byte-identical to the Solid frame** | documented deviation (`WEBGPU-115`) |
+| Headless | true | rasterizes nothing at all, by design | honest skip + exact draw cardinality |
+| D3D12 | (cross-built) | **not measured** — no D3D12 runtime under Wine | compiles; deliberately not called clean |
+
+Solid rendered **18176** lit pixels on every measured backend but D3D9 (18160) — the triangle's exact
+area, `|AB × AC| / 2`.
+
+Three results in that table are worth stating in words rather than leaving in a cell:
+
+- **No backend rejects a WireFrame request.** A "deterministic rejection" arm therefore has an
+  **empty registration set**, and manufacturing one would have required a production change this
+  task was forbidden to make. It was not manufactured.
+- **WebGPU accepts the request and renders solid.** That is `WEBGPU-115`, already recorded and
+  accepted, so it is **not** a new finding. What would have been wrong is letting a test treat solid
+  output as a satisfied wireframe request, so the deviation is now asserted at full strength — the
+  WireFrame frame must be *byte-identical* to the Solid one — and the arm fails the day
+  wgpu-native grows a polygon mode.
+- **EasyGL's report contradicts its own renderer.** Its `GL_LINES` emulation landed in `a55397f7`
+  (2026-06-30); the capability query claiming GLES3 has no wireframe was written in `33d6540b`
+  (2026-07-17), two and a half weeks later. The renderer is right and the report is stale. New
+  ticket **`REMED-GFX-219`**, OPEN, LOW, not a checkpoint blocker.
+
+#### The corrected test architecture
+
+Five arms replace one universal assertion, registered by backend rather than branched on at runtime:
+
+1. `WireFrameCapabilityReportIsThisBackendsOwn` — one `EXPECT` per backend, stating only what that
+   backend answers. EasyGL's arm asserts the current `false` so the baseline stays truthful, and
+   **fails deliberately** when `REMED-GFX-219` lands.
+2. `WireFrameLightsEveryEdgeAndLeavesTheInteriorUnfilled` — the positive oracle. Interior probe
+   exactly 0; each of three disjoint edge probes ≥ 8 lit pixels in the exact ink colour; WireFrame
+   total × 4 < Solid total; every lit pixel in the frame is ink or clear.
+3. `WireFrameAndSolidAlternateWithoutStaleRasterizerState` — WireFrame → Solid → WireFrame, third
+   frame **byte-identical** to the first and different from the Solid one.
+4. `SolidRendersExactlyAfterAWireFrameDraw` — the recovery contract, run on every measured backend
+   including WebGPU: no device loss, no stale state, no poisoned frame.
+5. `WireFrameSilentlyRendersSolidGeometryOnThisBackend` — WebGPU's documented deviation, asserted.
+
+Plus, on Headless: an **honest skip** stating that the route genuinely does not exist there, and
+`WireFrameReachesTheBackendAsExactlyOneDraw`, which is the one place native draw cardinality can be
+counted exactly — one public `DrawPrimitives`, one recorded draw, no retry and no second pass.
+
+#### The oracle's teeth were proven by injection, not asserted
+
+- Forcing WebGPU into the positive arm fails on *"filled 1089 interior pixels … that is a solid fill,
+  not a wireframe"* and *"WireFrame covered 18176 pixels against Solid's 18176"*.
+- Culling the geometry away fails the Solid control at total 0 — and revealed that EasyGL's
+  `GL_LINES` emulation **survives triangle culling**, which is why `CullMode::None` in the oracle is
+  load-bearing rather than decorative.
+- Moving one triangle vertex zeroes exactly the two edge probes that touch it and names them
+  individually.
+
+#### False-positive audit
+
+Every `FillMode`/`CullMode` mention in `tests/` was inspected: **7 files, 138 tests.**
+`RasterizerStateTests` (24) and `GraphicsDeviceDefaultStateTests` (10) are state-object round-trips
+making no rendering claim and are correct as they stand. The three pre-existing wireframe *pixel*
+tests — `PointListPrimitiveTests`' point case and the bgfx range cases in `NonIndexedDrawRangeTests`
+and `InstancedDrawRangeTests` — are real oracles and were not weakened. **1 defective (this one),
+1 strengthened (this one), 0 new tickets from the audit.**
+
+The blind spot, named concretely rather than implied: all three pre-existing wireframe pixel tests
+are scoped to bgfx or to point topology, and **none of them compares WireFrame output against a Solid
+control** — so WebGPU's silent solid fill passed every one of them. That is the gap the new positive
+oracle closes.
+
+#### The principal-suite baseline this task exists to produce
+
+Full suite, every backend, 2026-08-04, on `:101`:
+
+| Backend | Ran | Passed | Skipped | Failed | The failures |
+|---|---|---|---|---|---|
+| EasyGL | 5894 | 5887 | 6 | **1** | `XnbContainerFuzzTest` |
+| Software | 5822 | 5775 | 45 | **2** | `XnbContainerFuzzTest`, `SetRenderTargets_FourTargets_DoesNotThrow` |
+| Vulkan | 5877 | 5847 | 27 | **3** | `XnbContainerFuzzTest`, `CnjEffectTest`, `CnjStockEffectTest` |
+| bgfx | 5921 | 5891 | 27 | **3** | `XnbContainerFuzzTest`, `CnjEffectTest`, `CnjStockEffectTest` |
+| WebGPU | 5900 | 5867 | 28 | **5** | the above three, plus `SetRenderTargets_FourTargets_DoesNotThrow` and the 30 s `TwoProcessLoopbackTest` |
+| SDL_GPU | 5808 | 5784 | 20 | **4** | `XnbContainerFuzzTest`, `CnjEffectTest`, `CnjStockEffectTest`, `TwoProcessLoopbackTest` |
+| Headless | 5735 | 5688 | 44 | **3** | `XnbContainerFuzzTest`, `SetRenderTargets_FourTargets_DoesNotThrow`, `TwoProcessLoopbackTest` |
+
+**`DoesNotSupportWireFrame` appears in none of them.** Every remaining failure is drawn from the
+pre-existing set `REMED-GFX-DECL-GUARD` already named and classified — the XNB container fuzzer, the
+two `Cnj*` cases feeding GLSL to a non-GL backend, `SetRenderTargets_FourTargets_DoesNotThrow`, and
+one 30 s two-process networking test that is timing-flaky (it passed on Software in the full run and
+failed in the A/B run below).
+
+Two further checks, because "no failures appeared" is weaker than "no failures could have appeared":
+
+- **A/B, Software with the changed suite excluded** (`--gtest_filter=-GraphicsDeviceCapabilityTest.*`):
+  5809 ran, 5762 passed, 44 skipped, 3 failed — the same pre-existing set. The new tests neither
+  cause nor mask a failure anywhere else in the process.
+- **ASan**, `cmake-build-software-asan` with `libasan.so.8` proved linked by `ldd`: the changed suite
+  plus `RasterizerStateTest` at 36/37 (1 skip), **zero AddressSanitizer reports**. Run because the
+  new oracle reads a native surface back into a heap buffer; no broader sanitizer campaign was run,
+  and none was warranted — no production code changed.
+
+D3D9 and D3D11 run the corrected contract under Wine/DXVK on `:99` at **13/13** each (12 passed,
+1 skip — the WebGPU-only deviation arm). D3D12 cross-builds; its runtime is unavailable here and is
+**not** called clean.
 
 ### Test-only descendants recorded by `REMED-GFX-201`/`-202`
 
@@ -1086,6 +1211,11 @@ both tasks ran explicit false-positive audits and neither produced a further tes
   one-per-instance shape at contiguous slots. None were strengthened in place: they are correct as the
   classic-shape preservation gate and are now used as exactly that, with the blind spots covered by
   the new fixture instead.
+
+`REMED-GFX-209`'s own false-positive audit, run 2026-08-04, likewise produced **no** further
+test-only ticket. It did produce one *production* ticket, `REMED-GFX-219`, which is not a descendant
+of `-201`/`-202` at all: it exists because the corrected oracle measured EasyGL's renderer for the
+first time and found it contradicting EasyGL's own capability report.
 
 ---
 
@@ -1131,7 +1261,8 @@ constraints and different scope.
 | `REMED-GFX-206` | SDL_GPU — vertex input | Backend capability completion | **Safe declared boundary**, same gate | MEDIUM / P2 | P2 | NO | NO | GFX-201, GFX-202; pattern from GFX-203 | Modularization, after Vulkan; parallel with `-205` | MEDIUM | No extra pass or submit; preserve GFX-143/145/152/156/173/176 |
 | `REMED-GFX-207` | D3D11 + D3D12 — vertex input | Backend capability completion + platform-blocked verification | **Safe declared boundary**, same gate on both | MEDIUM / P2 | P2 | NO | NO | GFX-201, GFX-202, GFX-123 (must not disturb); **D3D12 runtime proof needs BUILD-012** | Modularization, while touching the D3D common module | LARGE | Two backends, two cache models; stale slots must be cleared when a later draw binds fewer streams |
 | `REMED-GFX-208` | D3D9 — vertex input | Backend capability completion | **Safe declared boundary**, same gate | MEDIUM / P2 | P2 | NO | NO | GFX-201, GFX-202, GFX-060, GFX-117 | Modularization, last of the six | MEDIUM | Per-stream `D3DVERTEXELEMENT9.Stream` + one `SetStreamSource` per binding; leave stream-frequency state clean |
-| `REMED-GFX-209` | Test contract — `GraphicsDeviceCapabilityTest` | Test-contract defect (encodes an incorrect backend assumption; **hides nothing**) | **Fails loudly** on six backends; cannot mask a production defect | LOW / P3 | P3 | **REVIEW** | NO | none | Before the post-integration checkpoint, with the clean-baseline work | SMALL | Gate on `CNA_BACKEND_EASYGL` or assert the query does not throw, as the neighbouring cases do |
+| `REMED-GFX-209` | ~~Test contract — `GraphicsDeviceCapabilityTest`~~ **DONE** *(2026-08-04)* | Test-contract defect (encoded one backend's assumption universally; **hid nothing**) | **Resolved.** Replaced by five backend-specific arms — positive pixel oracle, documented-deviation oracle, recovery oracle, honest skip, exact draw cardinality | LOW / P3 | P3 | **RESOLVED** | NO | none | ~~Before the post-integration checkpoint~~ — done | SMALL | Contract MEASURED on all ten backends, not assumed. No production file changed. Spawned `REMED-GFX-219` |
+| `REMED-GFX-219` | EasyGL — capability reporting | **Capability under-report on an accepted path.** `SupportsCapability(WireFrame)` returns `false` while the `GL_LINES` emulation renders a correct wireframe | **Under-reports.** The renderer is correct; a caller that gates on the query disables a working feature. No false success, no wrong pixels | LOW / P3 | P3 | NO | NO | found by `REMED-GFX-209`'s oracle | With the EasyGL module, or any time — it is three lines and two stale comments | SMALL | Also correct `plan_graphics.md`'s `ℹ️ EasyGL N/A (GLES3)` coverage row, which records the same non-existent boundary. `WireFrameCapabilityReportIsThisBackendsOwn` fails deliberately when this lands |
 | `REMED-GFX-210` | Capability reporting — instancing | Capability-query / reporting + public-exception parity | **Throws**, but a `std::runtime_error` from the interface default; no advance query, no false success | LOW / P3 | P3 | NO | **CONDITIONAL** | none technical; adjacent to GFX-213 triage | First integration group adding a backend with no instanced path | MEDIUM | FNA has `FNA3D_SupportsHardwareInstancing` + `NoSuitableGraphicsDeviceException`; follow `REMED-GFX-185`'s report-what-you-do precedent |
 | `REMED-GFX-211` | ~~Vulkan, Bgfx, WebGPU~~ **ALL THREE DONE — TICKET DONE** *(2026-08-03)* — instanced route | **Supported-path silent wrong result** — measured on all three, both stream sides | **None.** Classic 1+1 draw is accepted and submitted; instance records 0..3 consumed instead of 1..4, and the per-vertex stream renders its decoy | MEDIUM / P2 | **P1** | ~~REVIEW~~ **YES** *(triaged 2026-08-03)* | NO | GFX-202 (value already delivered); precedent GFX-122, GFX-123 | ~~Immediate remediation campaign~~ **COMPLETE — checkpoint blocker RESOLVED** | MEDIUM | Triaged: WebGPU pixel measurement taken; per-vertex side confirmed on all three; the two streams fail **independently** (`both-offsets-ignored`), so a fix must carry both. D3D9 unmeasured — no D3D display. **Vulkan corrected §4.1: instance offset into the copy's source base, per-vertex offset folded into `vkCmdDrawIndexed`'s own `vertexOffset` — the per-vertex loss point was `d.baseVertex`, not the neighbouring copy. Bgfx corrected §4.1 the same way at its own two expressions: the instance copy's source base became `cpuData.data() + vertexOffset * instStride`, and the per-vertex offset joined `baseVertex` in `bgfx::setVertexBuffer`'s `_startVertex` — bgfx has no draw-time base-vertex argument, so that start element IS the addend, which is also why the ordinary bgfx route was already correct (it folds into `params.baseVertex` upstream) and the instanced one was not (it folds nothing, by GFX-202 design). Vulkan and Bgfx now both in `CNA_INSTANCED_BINDING_OFFSET_ORACLE`; WebGPU corrected §4.1 at its own two expressions, and the per-vertex loss point was Vulkan's shape rather than bgfx's: `command.vertexData` copies the whole per-vertex buffer and the replay binds it at native offset 0, so `command.baseVertex = params.baseVertex` was the only term that could carry the offset and now carries `params.baseVertex + perVertexOffset`; the instance copy's source base became `vertexOffset * instVbStride`. All three backends are now in `CNA_INSTANCED_BINDING_OFFSET_ORACLE`, which emptied `CNA_INSTANCED_OFFSET_DEFECT_MEASURED` — the macro and its four arms were deleted, leaving the triage legs' `#else` UNCLASSIFIED arm for the still-unmeasured D3D9.** |
 | `REMED-GFX-212` | **~~Vulkan, WebGPU~~ BOTH DONE — TICKET DONE** *(2026-08-03)*; D3D11, D3D12 remain *(source-identified, unmeasured)* — stock instanced shader | **Supported-path silent wrong result.** Reference settles it: case A | **None.** The draw renders silently in the wrong colour; no diagnostic | LOW / P3 | ~~REVIEW~~ **P1** | ~~REVIEW~~ ~~**YES**~~ **NO — RESOLVED 2026-08-03** | NO | ~~an FNA reference determination~~ — **answered** | **Immediate remediation campaign** | MEDIUM *(LARGE if shader sources change)* | Triaged: FNA's shader index has no instancing term, so the same VS runs on both routes. Vulkan/WebGPU colour their **own** ordinary route from the stream and the instanced one from `DiffuseColor`. D3D11/D3D12 still unmeasured — no D3D display |
@@ -1208,7 +1339,7 @@ For each integrated backend:
 |---|---|
 | **Before branch integration** | ~~`REMED-GFX-211`, `REMED-GFX-212`, `REMED-GFX-213` triage (§4)~~ — triage done 2026-08-03, and **all three tickets are now DONE on every backend they name**. `REMED-GFX-215` and `REMED-GFX-216`, spawned in turn by `REMED-GFX-212` and `REMED-GFX-215`, were each triaged against §2, each confirmed a supported-path silent wrong result, each treated as an immediate checkpoint blocker, and **both are DONE (2026-08-03)**. **The checkpoint-blocker set inherited from this cluster is EMPTY.** `REMED-GFX-216` reclassified correctly on re-reading: bgfx accepted a supported single-stream draw, reached native submission, raised nothing, and rendered 27385 of 50752 pixels — deterministic and silently wrong, so P1 rather than deferred capability work. Its fix spawned **`REMED-GFX-217`** and **`REMED-GFX-218`**, which ARE of the same silent-wrong-result class on the other backends. ~~and must be triaged here before a checkpoint is taken~~ — **that triage ran on 2026-08-04 (§4.4).** Outcome: neither is a blocker in the "must be fully implemented" sense, but the checkpoint is **not honest without a bounded safety guard**, because both silently render supported public draws from the wrong bytes. The pre-checkpoint work is **one** Strategy-C task covering all eight affected rasterizing backends (seven stride-table + EasyGL's stock path) with no public API change; full declaration translation is deferred to modularization alongside `REMED-GFX-203` … `-208`. **Headless was removed from `REMED-GFX-217`'s scope at triage** — it rasterizes nothing. `REMED-GFX-214` (MEDIUM, OPEN) was triaged at the same time and is confirmed **not** a blocker: `QueueColoredDraw` throws before any command is queued, so the failure is loud, deterministic and pre-native — **DEFERRED** |
 | **While adapting a particular branch** | None of §5. Only the adaptation checklist above, plus `REMED-GFX-210` evidence-gathering when a branch adds a backend with no instanced path |
-| **After all 19 branches are integrated** | `REMED-GFX-209` (clean principal-suite baseline before the checkpoint); `REMED-GFX-210` |
+| **After all 19 branches are integrated** | ~~`REMED-GFX-209`~~ — **DONE 2026-08-04**, the clean principal-suite baseline is established and the six known-cause reds are gone; `REMED-GFX-210`. `REMED-GFX-219`, spawned by it, is OPEN and blocks nothing |
 | **During modularization** | `REMED-GFX-203` … `REMED-GFX-208`, and `REMED-GFX-213`'s implementation if triage lands it on the capability side. **Added 2026-08-04:** `REMED-GFX-217`'s full per-backend declaration translation and `REMED-GFX-218`'s per-family semantic placement, both after their Strategy-C guard has shipped |
 | **During NoXNA graphics-extension work** | Nothing from this plan is a prerequisite; see §12 |
 
@@ -1231,12 +1362,16 @@ prerequisite for taking the checkpoint.
    never on the custom-`ShaderEffect` path, whose element-index convention is a documented
    contract. **Touched no public API, no `GraphicsDevice.cpp`, no `IGraphicsBackend.hpp`, no
    `GraphicsCapability.hpp`** — therefore zero contention with any of the 19 branches.
-2. **`REMED-GFX-209`** — the clean principal-suite baseline. Already scheduled for this slot, and
-   step 1 needs the same runs, so the two are naturally one pass.
+2. **`REMED-GFX-209` — DONE (2026-08-04). See §7 for the measured per-backend contract.** The clean
+   principal-suite baseline is established: the universal `DoesNotSupportWireFrame` assumption is gone
+   from all six backends whose suites it reddened, no production file changed, no new public
+   capability API was added, and the remaining failure on every backend is one this plan already
+   names. It spawned one new ticket, **`REMED-GFX-219`** (EasyGL under-reports `WireFrame`), which is
+   OPEN, LOW, and blocks neither integration nor the checkpoint.
 3. **Exit reconciliation** — statuses, provenance and the deferred set.
 4. **Take the checkpoint.**
 
-**Step 1 is complete; the next single action is step 2, `REMED-GFX-209`.**
+**Steps 1 and 2 are complete; the next single action is step 3, post-audit exit reconciliation, then step 4, the checkpoint.**
 
 **Explicitly NOT in the sequence:** `REMED-GFX-203` … `REMED-GFX-210` (deferred, unchanged);
 `REMED-GFX-214` (safe loud boundary, deferred); `REMED-GFX-217`'s seven native declaration
@@ -1318,8 +1453,9 @@ contract. The checkpoint's job is the XNA 4.0 contract. NoXNA comes after modula
 
 Dependency-aware and **advisory**. This is not an instruction to begin any ticket now.
 
-1. **Complete checkpoint triage** — `REMED-GFX-211`, `REMED-GFX-212`, `REMED-GFX-213`, and decide
-   `REMED-GFX-209` against the checkpoint's actual green-suite criterion. Bounded: three measurements
+1. ~~**Complete checkpoint triage**~~ — **DONE.** `REMED-GFX-211`, `REMED-GFX-212` and `REMED-GFX-213`
+   are DONE; `REMED-GFX-209` no longer needs deciding against a green-suite criterion because it is
+   DONE and its reds are gone. Bounded: three measurements
    and one FNA source read (§4). Resolve anything triage classifies as a supported-path silent wrong
    result **inside the remediation campaign**, not here.
 2. **Integrate the 19 branches**, in groups, using the §10 adaptation checklist.
