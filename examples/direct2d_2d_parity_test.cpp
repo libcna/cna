@@ -960,6 +960,49 @@ protected:
             check("Direct2D usable after rejected RenderTarget2D source tint", 0, 0, Color::White);
         }
 
+        // D2D-86: sampling a RenderTarget2D as a SpriteBatch source while it is STILL the actively
+        // bound render target is a read/write bitmap alias -- must be rejected explicitly, and the
+        // rejection must not disturb the active target's own binding or content.
+        {
+            RenderTarget2D selfSampleTarget(device, 2, 2);
+            device.SetRenderTarget(&selfSampleTarget);
+            device.Clear(Color(10, 20, 30, 255));
+            bool selfSampleRejected = false;
+            try
+            {
+                sprites_->Begin(SpriteSortMode::Immediate, BlendState::Opaque, &point, nullptr, nullptr);
+                sprites_->Draw(selfSampleTarget, Rectangle(0, 0, 2, 2), Rectangle(0, 0, 1, 1), Color::White);
+            }
+            catch (const System::NotSupportedException&)
+            {
+                selfSampleRejected = true;
+            }
+            sprites_->End();
+            std::printf("[%s] Direct2D rejects sampling the actively bound RenderTarget2D as its own source\n",
+                        selfSampleRejected ? "PASS" : "FAIL");
+            passed = passed && selfSampleRejected;
+
+            const bool stillBound = device.GetRenderTargets().size() == 1;
+            std::printf("[%s] Rejected self-sample left the active render target bound\n",
+                        stillBound ? "PASS" : "FAIL");
+            passed = passed && stillBound;
+
+            Color preserved(0, 0, 0, 0);
+            const Rectangle preservedTexel(0, 0, 1, 1);
+            selfSampleTarget.GetData(0, &preservedTexel, &preserved, 0, 1);
+            const bool contentPreserved = Matches(preserved, Color(10, 20, 30, 255));
+            std::printf("[%s] Rejected self-sample left the target's own content untouched\n",
+                        contentPreserved ? "PASS" : "FAIL");
+            passed = passed && contentPreserved;
+
+            device.SetRenderTarget(nullptr);
+            device.Clear(Color::Black);
+            sprites_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, nullptr, nullptr);
+            sprites_->Draw(*white_, Rectangle(0, 0, 2, 2), Rectangle(0, 0, 1, 1), Color::White);
+            sprites_->End();
+            check("Direct2D usable after rejected self-sample", 0, 0, Color::White);
+        }
+
         // 10. A mipmapped Texture2D owns one Direct2D bitmap per initialized level. SpriteBatch
         // chooses the nearest populated level during minification, rather than sampling an
         // uninitialized lower level or silently collapsing every draw to level zero.

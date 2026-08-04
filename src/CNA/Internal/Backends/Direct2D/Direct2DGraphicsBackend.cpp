@@ -2197,6 +2197,17 @@ namespace CNA::Internal::Backends::Direct2D
             (renderTargetTexture && renderTargetTexture->owner_ != this))
             throw std::runtime_error(
                 "Direct2D SpriteBatch received a texture created by another GraphicsDevice.");
+        // D2D-86: sampling a RenderTarget2D while it is still the actively bound render target is
+        // a read/write alias of the same underlying ID2D1Bitmap1 -- Direct2D's own documented
+        // contract requires a bitmap to not be simultaneously the current target and a DrawImage/
+        // brush input. Reject explicitly rather than let that produce whatever undefined GPU
+        // behavior Direct2D (or WineD3D's reimplementation of it) happens to do.
+        if (renderTargetTexture && renderTargetTexture == activeRenderTarget_)
+            throw System::NotSupportedException(
+                "Direct2D cannot sample a RenderTarget2D as a SpriteBatch source while it is "
+                "still the actively bound render target (read/write alias of the same bitmap). "
+                "Unbind it first (GraphicsDevice::SetRenderTarget(nullptr) or a different target) "
+                "before drawing it as a source.");
         const std::int64_t sourceRight = static_cast<std::int64_t>(sourceRectangle.X) + sourceRectangle.Width;
         const std::int64_t sourceBottom = static_cast<std::int64_t>(sourceRectangle.Y) + sourceRectangle.Height;
         const bool sourceOutside = sourceRectangle.X < 0 || sourceRectangle.Y < 0 ||
