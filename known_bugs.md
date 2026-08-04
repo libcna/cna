@@ -1064,8 +1064,35 @@ between the existing `lit && hasColor` branch and the `textured` branch. Pairs w
 
 **Status:** open, discovered while wiring `plan_llgl.md`'s Phase LLGL-7 (LLGL-39); narrowed
 considerably during `LLGL-52` (2026-08-03) by following this entry's own previously-suggested next
-step. Root cause STILL not identified, but the search space is now much smaller and one earlier
-claim in this entry (no LLGL-specific depth-range remap exists) is corrected below. Not fixed here.
+step, and narrowed FURTHER on 2026-08-04 on real hardware (this machine's own physical desktop,
+`DISPLAY=:0`, has a real AMD Radeon 780M with a working RADV Vulkan driver -- confirmed via
+`vulkaninfo`/`glxinfo`, not assumed). Root cause STILL not identified, but two decisive new facts
+are now established (see the 2026-08-04 findings below) and one earlier claim in this entry (no
+LLGL-specific depth-range remap exists) is corrected below. Not fixed here.
+
+**2026-08-04 findings (real Vulkan + real hardware, `DISPLAY=:0 CNA_LLGL_RENDERER=vulkan`):**
+- **The bug is ARCHITECTURAL, not OpenGL-module-specific.** `cna_test_llgl_rasterizerstate_
+  cullmode_camera` run against the REAL Vulkan module (not Xvfb -- this sandbox's Xvfb `:99`/`:101`
+  still lack DRI3, but the machine's own real desktop display does not) reproduces scenario (b)'s
+  failure IDENTICALLY: `geometry off-screen (A found=1, B found=0)`, same as the OpenGL module.
+  This rules out anything specific to either renderer module (`GLStateManager`, `glDepthRangef`,
+  GL's own clip-space convention, `VkViewport` specifics) -- the defect must be in code SHARED
+  between both modules (`QueuePrimitives`, `AcquirePrimitivePipeline`, the deferred FrameCommand
+  capture/replay machinery, or CNA's own CPU-side matrix/vertex handling upstream of either
+  backend). It also independently confirms the `QueuePrimitives` GL-only Z-remap (see the
+  correction below) cannot be the cause: Vulkan's `clippingRange` is `ZeroToOne`, so that remap
+  code never even RUNS on the Vulkan module, yet the failure is identical.
+- **The failure tracks POSITION, not winding.** Swapping which triangle (`worldTriA`/`worldTriB`)
+  is built at `centerA` (`target + camRight*-80`, world Z=+80) vs `centerB` (`target +
+  camRight*+80`, world Z=-80) while keeping each variable's OWN winding function
+  (`MakeCwBasis`/`MakeCcwBasis`) attached to its own NAME moved the failure WITH the position, not
+  with the label or the winding: whichever triangle sits at `target + camRight*80` (world Z=-80,
+  this camera's screen-right side) fails to render, regardless of whether it is called `triA` or
+  `triB` and regardless of whether it is wound CW or CCW in local space. This rules out any
+  winding-dependent explanation (a stray cull, a front/back stencil-slot-style swap like the one
+  documented on the Vulkan backend for an unrelated stencil bug) and confirms this is purely about
+  WHERE the geometry sits, specifically along the camera's own right/screen-horizontal axis, under
+  Orthographic projection only.
 
 **Symptom:** `examples/rasterizerstate_cullmode_camera_test.cpp` (no `CNA_BACKEND_` conditional
 branches at all -- meant to be universal, backend-agnostic math, already registered and passing on
@@ -1117,24 +1144,39 @@ triangle renders and the other does not.
 - **Not fog/large-coordinate precision** -- scenarios (c)/(d)/(e) use the identical world-scale
   vertex positions (hundreds of units from the origin) and the identical `BasicEffect`/
   `VertexColorEnabled` setup, and both triangles render correctly there.
+- **Not a `Matrix::CreateOrthographic` construction bug** -- read directly (`Matrix.cpp`): a
+  textbook-symmetric orthographic matrix (`M11 = 2/width`, `M22 = 2/height`, both applied
+  identically regardless of the sign of the transformed X/Y), no sign-asymmetric or
+  absolute-value logic anywhere in it that could treat a negative-X and positive-X vertex
+  differently.
+- **Not OpenGL-module-specific** and **not winding-dependent** -- see the 2026-08-04 findings above.
 
 **What remains unexplained:** the one variable that reproduces the failure is Orthographic
-projection specifically, combined with a non-identity `CreateLookAt` view, drawing the
-`camRight`-positive-offset triangle. Perspective with the exact same view/camera/triangle
-construction does not reproduce it; Identity (no real Orthographic matrix at all) does not
-reproduce it. Since the CPU-side clip-space values are unremarkable and correct, whatever is wrong
-must be either (a) something about how THIS specific combination of matrix values interacts with
-LLGL's own OpenGL-module command translation (worth comparing against a Vulkan run once this
-sandbox can present via Vulkan -- Xvfb `:99` here has no DRI3, so only `CNA_LLGL_RENDERER=opengl`
-could be exercised this session), or (b) a genuine backend rasterization/pipeline-state defect
-specific to this exact matrix shape that CPU-side clip-space inspection cannot reveal.
+projection specifically, combined with a non-identity `CreateLookAt` view, drawing whichever
+triangle sits on the POSITIVE side of the camera's own right-axis offset (world Z=-80 for this
+specific camera; NDC X in `[0.2,0.6]`, the right half of the screen). Perspective with the exact
+same view/camera/triangle construction does not reproduce it; Identity (no real Orthographic
+matrix at all) does not reproduce it; the CPU-side clip-space values for the FAILING vertex are
+just as unremarkable and correct as the succeeding one's (confirmed identical `W=1.0`, symmetric
+NDC X, identical `Z=0.1051`). Since the defect (a) reproduces byte-for-byte identically on two
+independently-implemented renderer modules that share almost no code below `QueuePrimitives`/
+`AcquirePrimitivePipeline`, and (b) is provably NOT explained by anything in the CPU-side
+matrix/vertex math these two modules are FED, the most likely remaining location is somewhere in
+the SHARED deferred-command capture/replay path itself (`QueuePrimitives`'s own uniform-buffer
+pooling, `FrameCommand` capture, or `AcquirePrimitivePipeline`'s pipeline-cache key/reuse) rather
+than in either module's own native rendering calls.
 
-**Next step for whoever picks this up:** get a Vulkan-capable display (or a software Vulkan ICD,
-e.g. lavapipe) so this exact scenario can be compared Vulkan-vs-OpenGL on the SAME machine; if
-Vulkan also fails, the bug is architectural (in `QueuePrimitives`/pipeline state), not
-OpenGL-module-specific, and a GL-side `glGetError()`/pipeline-descriptor dump around this specific
-draw would be the next lead. If Vulkan passes, compare the two modules' actual `VkViewport`/
-`glViewport` and depth-range calls for this specific draw.
+**Next step for whoever picks this up:** instrument `QueuePrimitives()` directly (not just the
+CPU-side test's own math) to compare what actually gets written into the transform/uniform buffer
+and which cached pipeline object gets used for the FAILING (`world Z=-80`) triangle's draw versus
+the SUCCEEDING (`world Z=+80`) one in scenario (b) specifically -- given this session's own
+separate, confirmed finding that `AcquirePrimitivePipeline`'s pipeline-cache key scheme can
+silently alias two semantically-different draws together (see the pipeline-cache-key-overflow
+entry, `LLGL-53`), a similar aliasing between this scenario's two draws (which differ only in
+vertex POSITION, not in any of the fields that key currently folds in) is a plausible next lead,
+though vertex position is not itself part of that key today so this would have to be an indirect
+effect (e.g. a stale/wrong transform-buffer index reused between the two draws) rather than a
+literal key collision.
 
 **Tracked as:** `plan_llgl.md` Phase LLGL-7 / `LLGL-52` (blocks `LLGL-39`'s
 `Llgl_RasterizerState_CullMode_Camera` registration).

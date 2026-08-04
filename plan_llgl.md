@@ -851,6 +851,22 @@ is built (`cna_test_llgl_rasterizerstate_cullmode_camera`) but deliberately not 
 until this is resolved; a Vulkan-capable display (unavailable in this sandbox's Xvfb, no DRI3) is
 the most promising next step, to determine whether this is OpenGL-module-specific or architectural.
 
+**`LLGL-52` follow-up (2026-08-04): the promised next step landed -- this machine's own real
+desktop (`DISPLAY=:0`, a physical AMD Radeon 780M with a working RADV driver) can present Vulkan,
+unlike this sandbox's Xvfb instances. Two decisive new facts, both confirmed with live
+instrumentation on real hardware, neither the root cause yet: (1) the bug is ARCHITECTURAL, not
+OpenGL-module-specific -- `cna_test_llgl_rasterizerstate_cullmode_camera` run under
+`CNA_LLGL_RENDERER=vulkan` on `DISPLAY=:0` reproduces scenario (b)'s failure identically, which
+also independently rules out the GL-only `clippingRange` Z-remap as a cause (Vulkan never runs
+that code path at all). (2) The failure tracks vertex POSITION, not winding -- swapping which
+triangle is built at `centerA` vs `centerB` while keeping each one's own winding function
+(`MakeCwBasis`/`MakeCcwBasis`) attached to its own variable name moved the failure WITH the
+position (whichever triangle sits at `target + camRight*80`, this camera's screen-right side),
+not with the label or the winding. See `known_bugs.md`'s rewritten entry for the full trace and
+next lead (the shared `QueuePrimitives`/`AcquirePrimitivePipeline` deferred-command path, since
+both independently-implemented renderer modules fail identically and the CPU-side matrix/vertex
+math feeding them is provably correct for both triangles).
+
 **`LLGL-53` progress (2026-08-04): all four requested mechanisms now wired end-to-end
 (`SetViewport`'s `minDepth`/`maxDepth`, `RasterizerState.DepthBias`/`SlopeScaleDepthBias`, and
 `DepthStencilState`'s full front/back stencil test); the core constant-DepthBias path is real,
