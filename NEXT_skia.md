@@ -2899,30 +2899,42 @@ task -- closer in scope to the entire raster `SkiaGraphicsBackend` implementatio
 deserves its own architecture-decision-style scoping (mirroring `docs/skia-3d-emulation-adr.md`'s
 own precedent) rather than being assumed to fit inside the next available task number.
 
+**Owner decision (2026-08-04): stop the Ganesh arc here.** Given the choice between (a) stopping
+after SKIA-159-163's solid, well-tested below-the-API foundation, (b) scoping a new large task to
+build a minimal Ganesh `IGraphicsBackend`, or (c) something else, the owner chose (a). SKIA-163's
+row in `plan_skia.md` was changed from `⬜` to the honest `🟨` partial marker (this project's
+existing convention for "real, verified partial progress, specific obligation still owed," already
+used extensively in `plan_dx9.md`/`NEXT.md`), with a header note added to Phase S17 explaining the
+pause and its reasoning. SKIA-164-170 remain `⬜` with zero attempted work -- explicitly not
+started, not silently skipped. Resuming this arc later requires deciding how to sequence the
+missing `IGraphicsBackend` work first, not simply picking SKIA-164 up next; SKIA-164-170's own
+acceptance text likely has the same implicit-backend-exists assumption that made SKIA-163
+unclosable as literally written, so re-check each one against reality before attempting it, rather
+than discovering the same gap piecemeal.
+
+**Consequence: `plan_skia.md` currently has no other open task outside the paused Ganesh arc.**
+Every remaining `⬜`/`🟨` row is SKIA-163-170, all Ganesh-arc, all now paused. The next work should
+come from outside `plan_skia.md`'s own task list -- see "Next candidates" below.
+
 ## Next candidates
 
-1. **Open strategic question, not yet decided**: does Ganesh get a real `IGraphicsBackend`
-   (SpriteBatch/Texture2D/2D drawing) at all, and if so, is that a new task inserted before
-   SKIA-163, or a redefinition of SKIA-163 itself? Until that is decided, SKIA-163 as literally
-   written cannot be closed, and SKIA-164-170 (MSAA/anisotropy probing, MRT re-evaluation) likely
-   have the same implicit-backend-exists assumption baked into their own acceptance text -- worth
-   checking before attempting any of them literally, rather than discovering the same gap again.
-2. SKIA-164-170: probe real MSAA/anisotropy, re-evaluate MRT, and hold the successor gate only
-   after the raster extensions are stable -- also where the mesh-effect cache's deferred "mode" key
-   axis (see SKIA-156 above) should actually be added, now that a second compilation target
-   genuinely exists. (Same caveat as above: these may also assume backend integration that does
-   not exist.)
-3. The pre-existing `CNA_ENABLE_NET=OFF`/monolithic-`CnaTests` ENet build-graph defect is recorded
+Since `plan_skia.md` itself has no other open row (every remaining one is paused Ganesh-arc scope,
+see above), the next work should come from outside its task list -- these are the standalone
+follow-ups already flagged in earlier sessions, plus adjacent areas of the broader project:
+
+1. The pre-existing `CNA_ENABLE_NET=OFF`/monolithic-`CnaTests` ENet build-graph defect is recorded
    by SKIA-112/113 but remains outside Skia scope.
-4. Standalone follow-up (not yet a numbered task): wire `cnaVolumeAddressModesEXT` to the active
+2. Standalone follow-up (not yet a numbered task): wire `cnaVolumeAddressModesEXT` to the active
    `SamplerState` in `MakeSpriteShaderEXT` instead of the current hardcoded Clamp, so
    Wrap/Mirror volume addressing (already implemented in the sampling formula since SKIA-148)
    becomes reachable through the real public API.
-5. Standalone follow-up (not yet a numbered task): `SpriteBatch::DrawMeshEXT` currently requires
+3. Standalone follow-up (not yet a numbered task): `SpriteBatch::DrawMeshEXT` currently requires
    `SpriteSortMode::Immediate` and does not participate in the deferred sort/batch queue --
    integrating mesh draws into `Deferred`/sorted modes (extending `SpriteInfo`/`spriteQueue_` to
    carry a mesh-shaped variant, not just quads) is real additional scope, deliberately left open
    by SKIA-157 rather than silently claimed.
+4. Beyond Skia specifically: other areas of the broader CNA project (other backends, other
+   subsystems) -- see this repository's top-level `plan_*.md` files for what else is open.
 
 ## Known boundaries / assumptions
 
