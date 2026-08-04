@@ -281,6 +281,27 @@ if(CNA_BUILD_EXAMPLES AND CNA_NOXNA AND CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" A
     endif()
 endif()
 
+# ---- CRTEffect manual verification demo (renders + screenshots each CRT parameter set) --------
+if(CNA_BUILD_EXAMPLES AND CNA_NOXNA AND CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" AND NOT EMSCRIPTEN AND NOT ANDROID)
+    add_executable(cna_crt_effect_demo examples/crt_effect_demo_test.cpp)
+    target_include_directories(cna_crt_effect_demo PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/examples)
+    target_compile_definitions(cna_crt_effect_demo PRIVATE
+        CNA_CRT_EFFECT_DEMO_CONTENT_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/examples/demo_2d/Content")
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
+        target_link_libraries(cna_crt_effect_demo PRIVATE
+            -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group SHARP_RUNTIME)
+    else()
+        target_link_libraries(cna_crt_effect_demo PRIVATE CNA SHARP_RUNTIME)
+    endif()
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_crt_effect_demo PRIVATE SDL3::SDL3main)
+    endif()
+    if(WIN32)
+        set_target_properties(cna_crt_effect_demo PROPERTIES WIN32_EXECUTABLE TRUE)
+        cna_copy_sdl_runtime(cna_crt_effect_demo)
+    endif()
+endif()
+
 # ---- Task 479: CNA-side reference-value dump tool (no window/GraphicsDevice needed) -----------
 # Dumps enums, state presets, PackedVector, and Viewport reference values as JSON, mirroring
 # tools/fna-reference/*.cs exactly so scripts/compare-fna-reference.py can diff the two outputs.
