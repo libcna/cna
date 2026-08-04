@@ -9,6 +9,7 @@
 #include <wrl/client.h>
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <vector>
@@ -193,7 +194,8 @@ namespace CNA::Internal::Backends::Direct2D
     public:
         Direct2DGraphicsBackend(SDL_Window* window, int virtualWidth, int virtualHeight,
                                 CnaPresentationMode presentationMode, int swapInterval,
-                                bool contextRecoveryEnabled = true);
+                                bool contextRecoveryEnabled = true,
+                                std::function<void(BackendDeviceEvent)> deviceEventCallback = nullptr);
         ~Direct2DGraphicsBackend() override;
 
         void Clear(float r, float g, float b, float a) override;
@@ -348,6 +350,7 @@ namespace CNA::Internal::Backends::Direct2D
         CnaPresentationMode presentationMode_ = CnaPresentationMode::FixedHeightDynamicWidth;
         int swapInterval_ = 1;
         bool contextRecoveryEnabled_ = true;
+        std::function<void(BackendDeviceEvent)> deviceEventCallback_;
         std::uint64_t deviceGeneration_ = 1;
         Direct2DRenderTargetBackend* activeRenderTarget_ = nullptr;
         bool drawing_ = false;

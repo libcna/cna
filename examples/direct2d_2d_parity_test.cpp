@@ -1274,6 +1274,44 @@ protected:
             passed = passed && stressPassed;
         }
 
+        // D2D-70: device-lost/reset notification must reach the public XNA GraphicsDevice
+        // lifecycle (DeviceLost/DeviceResetting/DeviceReset events, GraphicsDeviceStatus), not
+        // just recover internally. Direct2D's recovery is atomic (no separately observable
+        // "lost, awaiting reset" state -- see DebugRestoreContext's own comment), so a single
+        // DebugSimulateContextLoss() call is expected to fire all three events exactly once each,
+        // in order.
+        {
+            std::vector<std::string> eventOrder;
+            device.DeviceLost += [&](System::Object*, const System::EventArgs&) { eventOrder.emplace_back("Lost"); };
+            device.DeviceResetting += [&](System::Object*, const System::EventArgs&) { eventOrder.emplace_back("Resetting"); };
+            device.DeviceReset += [&](System::Object*, const System::EventArgs&) { eventOrder.emplace_back("Reset"); };
+
+            const bool statusStartedNormal =
+                device.getGraphicsDeviceStatusProperty() == GraphicsDeviceStatus::Normal;
+            std::printf("[%s] Direct2D GraphicsDeviceStatus starts Normal\n", statusStartedNormal ? "PASS" : "FAIL");
+            passed = passed && statusStartedNormal;
+
+            direct2dBackend.DebugSimulateContextLoss();
+
+            const bool orderCorrect = eventOrder.size() == 3 &&
+                eventOrder[0] == "Lost" && eventOrder[1] == "Resetting" && eventOrder[2] == "Reset";
+            std::printf("[%s] Direct2D fires DeviceLost/DeviceResetting/DeviceReset exactly once each, in order\n",
+                        orderCorrect ? "PASS" : "FAIL");
+            passed = passed && orderCorrect;
+
+            const bool statusRecoveredToNormal =
+                device.getGraphicsDeviceStatusProperty() == GraphicsDeviceStatus::Normal;
+            std::printf("[%s] Direct2D GraphicsDeviceStatus returns to Normal after recovery\n",
+                        statusRecoveredToNormal ? "PASS" : "FAIL");
+            passed = passed && statusRecoveredToNormal;
+
+            device.Clear(Color::Black);
+            sprites_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, nullptr, &scissorDisabled);
+            sprites_->Draw(*white_, Rectangle(0, 0, 2, 2), Rectangle(0, 0, 1, 1), Color::White);
+            sprites_->End();
+            check("Direct2D usable after DeviceLost/DeviceReset notification cycle", 0, 0, Color::White);
+        }
+
         // D2D-63: device loss while an unrecoverable render target (created with recovery
         // disabled) is the ACTIVE target must not silently leave GraphicsDevice's public binding
         // out of sync with the backend's actual current target -- it now surfaces loudly instead

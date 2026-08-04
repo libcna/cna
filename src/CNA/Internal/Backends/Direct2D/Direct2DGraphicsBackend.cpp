@@ -792,10 +792,12 @@ namespace CNA::Internal::Backends::Direct2D
 
     Direct2DGraphicsBackend::Direct2DGraphicsBackend(
         SDL_Window* window, int virtualWidth, int virtualHeight,
-        CnaPresentationMode presentationMode, int swapInterval, bool contextRecoveryEnabled)
+        CnaPresentationMode presentationMode, int swapInterval, bool contextRecoveryEnabled,
+        std::function<void(BackendDeviceEvent)> deviceEventCallback)
         : window_(window), virtualWidth_(virtualWidth), virtualHeight_(virtualHeight),
           presentationMode_(presentationMode), swapInterval_(std::clamp(swapInterval, 0, 4)),
-          contextRecoveryEnabled_(contextRecoveryEnabled)
+          contextRecoveryEnabled_(contextRecoveryEnabled),
+          deviceEventCallback_(std::move(deviceEventCallback))
     {
         if (!window_) throw std::runtime_error("Direct2DGraphicsBackend initialized with null SDL_Window.");
         diagnosticsEnabled_ = EnvironmentFlagEnabled("CNA_DIRECT2D_DIAGNOSTICS");
@@ -949,6 +951,14 @@ namespace CNA::Internal::Backends::Direct2D
 
     void Direct2DGraphicsBackend::RecreateDeviceResourcesForRecovery()
     {
+        // D2D-70: this is the single entry point every device-loss detection site (EndDrawing,
+        // Present, EnsureMainTargetSize's resize fallback) and both debug hooks
+        // (DebugSimulateContextLoss/DebugRestoreContext) funnel through, so firing the public
+        // GraphicsDevice::DeviceLost/DeviceResetting/DeviceReset events here -- instead of at each
+        // call site -- guarantees the application observes exactly one of each, in XNA's order,
+        // per recovery cycle regardless of which path triggered it.
+        if (deviceEventCallback_) deviceEventCallback_(BackendDeviceEvent::Lost);
+
         // Snapshot active-target identity and registries before releasing the old Direct2D device.
         // Only resources that existed while recovery was enabled participate; later resources must
         // not retain stale COM objects silently after the reset.
@@ -957,6 +967,7 @@ namespace CNA::Internal::Backends::Direct2D
         const auto textures = recoverableTextures_;
         const auto renderTargets = recoverableRenderTargets_;
 
+        if (deviceEventCallback_) deviceEventCallback_(BackendDeviceEvent::Resetting);
         ReleaseDeviceResourcesNoThrow();
         ++deviceGeneration_;
         CreateDeviceResources();
@@ -988,6 +999,14 @@ namespace CNA::Internal::Backends::Direct2D
                 " resource(s); they remain in a lost state until recovery is retried. First "
                 "failure: " + recreateFailures.front());
         };
+
+        // The underlying D3D11/Direct2D device itself is fully usable at this point regardless of
+        // which branch below runs next -- CreateDeviceResources() above already succeeded (it
+        // throws on its own failure, which this function does not catch, so DeviceReset correctly
+        // never fires for that case). A branch throwing afterward reports a resource- or
+        // binding-level follow-up the caller must still handle (an explicit rebind, or which
+        // resources didn't survive), not a failed device reset.
+        if (deviceEventCallback_) deviceEventCallback_(BackendDeviceEvent::Reset);
 
         if (restorePreviousActive && previousActive)
         {
@@ -2493,7 +2512,7 @@ namespace CNA::Internal::Backends
     {
         return std::make_unique<Direct2D::Direct2DGraphicsBackend>(
             args.window, args.virtualWidth, args.virtualHeight, args.presentationMode, args.swapInterval,
-            args.contextRecoveryEnabled);
+            args.contextRecoveryEnabled, args.deviceEventCallback);
     }
 #endif
 }
