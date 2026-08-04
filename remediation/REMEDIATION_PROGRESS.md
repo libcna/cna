@@ -26498,3 +26498,182 @@ uninvestigated. `REMED-GFX-203` … `REMED-GFX-210` remain DEFERRED.
 
 **The next action is post-audit exit reconciliation / checkpoint preparation, not another
 remediation ticket.** The remediation campaign as a whole is NOT complete.
+
+---
+
+## POST-AUDIT EXIT TRIAGE — `REMED-GFX-217`, `REMED-GFX-218`, `REMED-GFX-214` (2026-08-04)
+
+**Triage and planning only. No production file was changed, no test was changed, no build was run
+and no test was run.** All three tickets remain **OPEN**. `REMED-GFX-216` remains **DONE**;
+`REMED-GFX-211`, `-212`, `-213` and `-215` remain **DONE**; `REMED-GFX-203` … `REMED-GFX-210` remain
+**DEFERRED**; `REMED-GFX-199` was not touched.
+
+The classifications below rest on the pixel measurements already committed under `REMED-GFX-216`
+plus source classification of every named backend. Re-running the oracle was considered and
+rejected: it would have re-measured what is already recorded and could not have changed any
+classification. That is stated rather than left implicit, because "no runtime evidence gathered" is
+otherwise indistinguishable from "runtime evidence skipped".
+
+### The mechanism, stated once
+
+Nine backends select a native vertex layout from **one canonical stride table** transcribed
+independently in at least four places — `D3DCommon::InputElementsForStride` /
+`InputElementsForStrideD3D12`, `MakeBgfxLayout(stride)`, `EasyGLVertexBufferBackend::ApplyLayout`'s
+switch, and Vulkan's / SDL_GPU's / WebGPU's per-family `attrs[]` builders. All four agree byte for
+byte: 16 = Pos@0 Col@12; 20 = Pos@0 Tex@12; 24 = Pos@0 Col@12 Tex@16; 32 = Pos@0 Nrm@12 Tex@24;
+48 = Pos@0 Nrm@12 Tan@24 Tex@40; 52 = Pos@0 Nrm@12 Tex@24 Wgt@32 Idx@48; 56 = 52 + Col@52;
+68 = 48 + Wgt@48 Idx@64.
+
+The public `VertexDeclaration` reaches all nine — `VertexBuffer::UploadValidatedData` calls
+`SetVertexDeclaration` immediately before every real upload — and eight of them discard it.
+
+**So the defect is not "custom declarations do not work".** It is: *a declaration whose elements
+disagree with the canonical table entry for its own stride is accepted, submitted, and rendered from
+the table's bytes instead of the declaration's.* Two declarations sharing a stride are
+indistinguishable to these backends.
+
+**The native binding stride comes from the buffer, not from the table**, on every backend except
+bgfx. That is why bgfx desynchronized whole records on `positionOnly12` and the others did not —
+bgfx derived record spacing from the layout it guessed; the others derive it from the real stride
+and only the *attribute offsets* are wrong.
+
+### `REMED-GFX-217` — per-backend classification
+
+**Headless is removed from this ticket's scope.** `HeadlessGraphicsBackend::DrawPrimitivesEx`
+validates its arguments and calls `DrawColoredPrimitives`, which records a trace. No pixel is ever
+produced, so no pixel can be wrong, and there is no native layout for the discarded declaration to
+have corrupted. It already reports `MultiStreamVertexInput = false` on exactly this reasoning. The
+ticket covers **seven** rasterizing backends.
+
+| backend | accepted strides (stock no-texture `BasicEffect`) | silent-wrong surface | safe-rejection surface |
+|---|---|---|---|
+| **Vulkan** | **every stride — no stride guard exists anywhere in the backend**; `MakeExt3DKey`'s `default: s = 0` buckets any unrecognised stride with 16 | **widest of the seven** — the three measured collisions plus every out-of-table stride silently treated as 16 | **none** |
+| **Software** | 16/20/24/32/52 | the same three collisions | out-of-table strides: *"unsupported vertex stride (only 16/20/24/32/52 supported in v1)"* — an honest v1 boundary, **not** this defect |
+| **WebGPU** | **16 only** without a bound texture; 20/24/32 gated on `texture0` | **`colorPosition16` alone** — five of seven never reach native submission | the other five, via `REMED-GFX-214`'s message |
+| **SDL_GPU** | same dispatch shape as WebGPU | **`colorPosition16` alone** | the rest, same fall-through |
+| **D3D11 / D3D12 / D3D9** | 16/20/24/32/48/52/56/68 via the shared `D3DCommon` table | the three collisions | out-of-table strides throw |
+
+D3D9/11/12 are **source-derived, not measured** — no D3D display is reachable here. That does not
+leave the classification at REVIEW: the loss point is a **shared helper** whose public consequence is
+already measured at pixel level on Vulkan and Software, and the D3D backends consume it unchanged.
+
+**Declaration classes, separated.** Built-in declarations match the table by construction and are
+**correct on all ten backends** — every example, `SpriteBatch` and every stock effect uses only
+these, which is why this was never visible. *Same stride, different content* (`colorPosition16`,
+`positionTextureColor24`) is silently wrong but needs no new shader: the family already has the right
+semantics and only the byte offsets come from the wrong source. *Same semantics, unusual padding*
+(`positionColorPadded32`) is worse — at stride 32 the table's semantic set is
+Position+Normal+TexCoord, so the declared Color has no attribute to land in at all, and correcting it
+requires the shader family to be chosen from the **declaration** rather than the stride. Vulkan
+renders `positionOnly12` correctly today **only** because `VertexColorEnabled` is false there and the
+out-of-record Color@12 is never read.
+
+### Does CNA permit a backend to reject a declaration it cannot represent?
+
+**Yes, with no new public API.** `GraphicsCapability::MultiStreamVertexInput` defaults to false,
+`GraphicsDevice::ValidateVertexStreamCapability` throws `System::NotSupportedException` before native
+submission, and its own doc comment names the analogy: *"a newly added backend must make an explicit
+decision to claim this, exactly like `IVertexBufferBackend::SetVertexDeclaration` being a required
+override."* `REMED-GFX-216`'s bgfx translator already raises `System::NotSupportedException` for an
+unmappable declaration before anything is created or submitted.
+
+### Strategies evaluated
+
+**A — full immediate implementation: REJECTED.** Declaration-driven layout plus family selection plus
+cache-key extension on seven backends *is* `REMED-GFX-203` … `-208` under another name, and the
+preferred strategy must not require implementing those.
+
+**B — shared guard in `GraphicsDevice`: REJECTED on integration grounds.** A new capability
+enumerator plus a new `IGraphicsBackend` query lands on the three highest-contention files in the
+tree immediately before a 19-branch integration — `GraphicsDevice.cpp` (16/19), `IGraphicsBackend.hpp`
+(13/19), `GraphicsCapability.hpp` (10/19).
+
+**C — backend-local guard, one shared predicate: RECOMMENDED.** One new header/source pair under
+`Backends/Common`, seven one-line override bodies, one EasyGL function plus its four `SelectProgram`
+call sites. **No public API, no `GraphicsDevice.cpp`, no `IGraphicsBackend.hpp`, no
+`GraphicsCapability.hpp` — zero contention with the 19 branches.**
+
+**D — direct deferral:** correct for Headless (does not rasterize) and for `REMED-GFX-214` (already a
+loud deterministic rejection); not defensible for Vulkan/Software/D3D, which silently render the
+wrong thing.
+
+**The predicate must be asymmetric, and the obvious one is wrong.** A strict "declaration equals the
+table entry" test would reject `positionOnly12`, which renders correctly on Vulkan today. The sound
+rule is: *reject when the declaration names a semantic the table entry for its stride does not carry,
+or places a shared semantic at a different offset or format.* Checked against the whole oracle
+matrix, `positionColor16`, `positionTexture20`, `positionColorTexture24` and `positionOnly12` pass
+unchanged, and `colorPosition16`, `positionTextureColor24` and `positionColorPadded32` reject.
+`VertexDeclarationLayoutTest` already accommodates this: its `deviatesElsewhere` arm is guarded on
+`r.rendered`, and a non-rendering result falls through to a branch that only requires the refusal to
+be legible.
+
+**Known consequence, stated up front.** The two production paths that can build a non-built-in
+declaration are `Xnb::VertexDeclarationReader` (`ModelContentTypeReaders.cpp:118`) and the public
+`DrawUserPrimitives` / custom-`VertexBuffer` surface. Under Strategy C they go from *silently wrong
+pixels* to *a deterministic exception naming the declaration and the backend*. Correct direction, but
+a public behaviour change that needs each affected backend's principal suite green first — which is
+`REMED-GFX-209`'s clean-baseline work, already scheduled for the same slot.
+
+### `REMED-GFX-218` — EasyGL, classified **MEDIUM, not SMALL**
+
+The one-line fix — replace `location = i` (`EasyGLGraphicsBackend.cpp:3477`) with
+`location = SemanticSlot(usage)` — **is wrong, for three independently sufficient reasons.**
+
+1. **There is no global semantic→location function to write.** EasyGL's stock shaders bind location 1
+   to `aColor` at stride 16, to `aUV` at stride 20 and to `aNormal` at stride 32; location 5 is
+   `aColor` in the skinned families. The correct location depends on the **bound program family**.
+2. **`ApplyLayout` runs at upload time**, from `SetData` (lines 3644/3683/3701), where no program is
+   bound and no `GpuDrawParams` exists. The family is known only at draw time, in
+   `SelectProgram(stride, params)` — four call sites (5877, 5949, 6083, 6116).
+3. **The index convention is load-bearing and, on one path, intentional.**
+   `ConfigureDeclarationAttributes`, `FirstLocationForStream` (`REMED-GFX-201`) and
+   `PerVertexLocationCount` (`REMED-GFX-202`) concatenate locations by element **count**, and the
+   `ShaderEffect` custom-program path documents *"location N == Nth field of the ported HLSL input
+   struct"* as its contract — a custom GLSL shader may declare inputs CNA has no semantic for, so
+   mapping by semantic there would **break** custom shaders.
+
+This is recorded explicitly because the triage instruction was not to recommend rejection merely to
+avoid a small semantic-mapping fix. The evidence says it is not a small semantic-mapping fix, and the
+reason is structural rather than a matter of effort. The correct fix is per-family semantic placement
+on the **stock** path only, at draw time — deferred to modularization.
+
+**Guarding EasyGL is not optional at the checkpoint.** Guarding the other seven and not EasyGL would
+leave EasyGL the **only** backend silently rendering the wrong thing — a worse divergence than today.
+
+### `REMED-GFX-214` — checkpoint blocker **NO**, DEFERRED
+
+`DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` dispatch stride 20/24 to `QueueTexturedDraw` only when
+`params.texture0 != nullptr`. With the texture off, the draw matches no branch and falls through the
+documented *"unmatched stride/texture combination"* tail to `DrawColoredPrimitives`;
+`QueueColoredDraw`'s **first statement** throws `std::invalid_argument("CNA WebGPU:
+DrawColoredPrimitives requires a stride-16 (VertexPositionColor) vertex buffer")` — before
+`ColoredDrawCommand command;` and before every encoder call. Nothing queued, no buffer written, no
+pass opened: **no partial submission, no device loss, no memory corruption**, and a deterministic
+exception whose text `InstancedVertexColorTest.PackedColorTextureStrideConsumesGeometryColorOnBothRoutes`
+already records verbatim. No other permutation of the same input misrenders silently — every route
+for this stride is gated on the same condition and reaches the same tail. Capability reporting is
+silent on it, which costs nothing because the failure is loud.
+
+### The exit sequence
+
+1. **`REMED-GFX-DECL-GUARD` (new, P1, SMALL–MEDIUM)** — the Strategy-C guard, all eight affected
+   rasterizing backends in one task, no public API change.
+2. **`REMED-GFX-209`** — clean principal-suite baseline; needs the same runs, so one pass.
+3. **Exit reconciliation.**
+4. **Take the checkpoint.**
+
+**Explicitly not in the sequence:** `REMED-GFX-203` … `-210`, `REMED-GFX-214`, `REMED-GFX-217`'s seven
+native translators, `REMED-GFX-218`'s per-family placement. **No backend gains a declaration
+translator before the checkpoint.**
+
+**Why not simply defer everything and document the boundary.** The oracle already prints and asserts
+every measured deviation and fails the moment a backend is corrected, so the *plan-level* boundary is
+already honest. What is not honest is the **runtime**: a caller passing a custom `VertexDeclaration`
+that collides with a built-in stride gets wrong pixels or a blank frame with no diagnostic on eight
+of ten backends, and custom vertex structs are core XNA rather than an exotic corner.
+
+### Scope held
+
+Three documentation files changed: `plan_postaudit.md`, `remediation/REMEDIATION_INDEX.md` and this
+file. **No production source, no shader, no generated artifact, no test, no build-system file and
+nothing under `audit/`.**
