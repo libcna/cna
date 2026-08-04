@@ -68,6 +68,7 @@ namespace CNA::Internal::Backends::Wicked
     {
         std::uint32_t variant = 0;            ///< WickedShaderVariant ordinal.
         std::uint32_t instanced = 0;          ///< Non-zero when the per-instance input layout is used.
+        std::uint32_t envMap = 0;             ///< Non-zero when the EnvironmentMapEffect program is used.
         std::uint32_t topology = 0;           ///< wi::graphics::PrimitiveTopology ordinal.
         std::uint32_t blendEnabled = 0;       ///< Non-zero when colour blending is on.
         std::int32_t  colorSrcBlend = 0;      ///< Raw XNA Blend ordinal.
@@ -143,6 +144,9 @@ namespace CNA::Internal::Backends::Wicked
         float lightSpecular[3][4] = {};  ///< Directional light specular colours.
         float eyePosition[4] = {};       ///< Camera world position + `w` unused.
         float flags[4] = {};             ///< x=texture, y=vertex colour, z=lighting, w=dual texture.
+        float worldInverseTranspose[16] = {}; ///< Columns of the world inverse-transpose.
+        float envMapParams[4] = {};      ///< x=amount, y=Fresnel enabled, z=Fresnel factor.
+        float envMapSpecular[4] = {};    ///< `EnvironmentMapEffect.EnvironmentMapSpecular` RGB.
     };
 
     /**
@@ -1083,7 +1087,11 @@ namespace CNA::Internal::Backends::Wicked
         wig::Shader pixelShader_;
         std::array<wig::InputLayout, static_cast<std::size_t>(WickedShaderVariant::Count)> inputLayouts_;
         std::array<wig::InputLayout, static_cast<std::size_t>(WickedShaderVariant::Count)> instancedInputLayouts_;
+        wig::Shader envMapVertexShader_;
+        wig::Shader envMapPixelShader_;
+        wig::InputLayout envMapInputLayout_;
         wig::Texture whiteTexture_;
+        wig::Texture whiteCubeTexture_;
 
         std::unordered_map<WickedPipelineKey, WickedPipelineEntry, WickedPipelineKeyHash> pipelines_;
         std::unordered_map<std::uint64_t, wig::Sampler> samplers_;

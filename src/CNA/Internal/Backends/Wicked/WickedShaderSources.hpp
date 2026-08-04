@@ -51,12 +51,19 @@ struct CnaConstants
     float4 lightSpecular2;
     float4 eyePosition;
     float4 flags;           // x = texture, y = vertex colour, z = lighting, w = dual texture
+    float4 worldIT0;        // columns of the world inverse-transpose (normal matrix)
+    float4 worldIT1;
+    float4 worldIT2;
+    float4 worldIT3;
+    float4 envMapParams;    // x = amount, y = fresnel enabled, z = fresnel factor
+    float4 envMapSpecular;  // rgb = EnvironmentMapEffect.EnvironmentMapSpecular
 };
 
 ConstantBuffer<CnaConstants> cb : register(b0);
 
 Texture2D<float4> texture0 : register(t0);
 Texture2D<float4> texture1 : register(t1);
+TextureCube<float4> environmentMap : register(t2);
 SamplerState sampler0 : register(s0);
 
 struct VSOut
@@ -275,6 +282,85 @@ float4 BasicPS(VSOut input) : SV_Target
     }
 
     return color;
+}
+
+// ---------------------------------------------------------------------------------------------
+// EnvironmentMapEffect.
+//
+// Deliberately its own entry-point pair rather than another BasicPS branch: FNA's environment-map
+// shading is not "BasicEffect plus a cube sample". It folds ambient into the emissive term on the
+// CPU and adds it UNSCALED after the light sum is multiplied by DiffuseColor, has no material
+// specular term at all, and scales the whole cube sample by the combined alpha. Every one of those
+// is a different expression from the one BasicPS evaluates, and the arithmetic below matches the
+// established CNA env-map shading exactly.
+// ---------------------------------------------------------------------------------------------
+
+struct EnvMapVSOut
+{
+    float4 position   : SV_Position;
+    float3 normalWS   : TEXCOORD0;
+    float3 eyeDir     : TEXCOORD1;
+    float2 uv         : TEXCOORD2;
+    float4 positionOS : TEXCOORD3;
+};
+
+EnvMapVSOut EnvMapVS(float3 position : POSITION, float3 normal : NORMAL, float2 uv : TEXCOORD0)
+{
+    EnvMapVSOut o;
+    o.position = TransformPosition(position);
+    o.positionOS = float4(position, 1.0f);
+
+    const float4 p = float4(position, 1.0f);
+    const float3 worldPosition =
+        float3(dot(p, cb.world0), dot(p, cb.world1), dot(p, cb.world2));
+
+    // The normal matrix is the world inverse-transpose, computed on the CPU so a non-uniform
+    // scale is handled exactly instead of being approximated by the world matrix's upper 3x3.
+    const float4 n = float4(normal, 0.0f);
+    o.normalWS = normalize(float3(dot(n, cb.worldIT0), dot(n, cb.worldIT1), dot(n, cb.worldIT2)));
+
+    o.eyeDir = cb.eyePosition.xyz - worldPosition;
+    o.uv = uv;
+    return o;
+}
+
+float4 EnvMapPS(EnvMapVSOut input) : SV_Target
+{
+    const float3 N = normalize(input.normalWS);
+    const float3 E = normalize(input.eyeDir);
+
+    const float3 lightSum =
+          cb.lightDiffuse0.rgb * max(dot(N, -cb.lightDir0.xyz), 0.0f)
+        + cb.lightDiffuse1.rgb * max(dot(N, -cb.lightDir1.xyz), 0.0f)
+        + cb.lightDiffuse2.rgb * max(dot(N, -cb.lightDir2.xyz), 0.0f);
+
+    // cb.emissive.rgb is the CPU-side pre-folded (EmissiveColor + AmbientLightColor * DiffuseColor)
+    // * alpha, added unscaled -- multiplying it by DiffuseColor again would re-scale the ambient
+    // term a second time.
+    const float3 litRGB = lightSum * cb.diffuse.rgb + cb.emissive.rgb;
+
+    const float4 texColor = texture0.Sample(sampler0, input.uv);
+    const float combinedAlpha = cb.diffuse.a * texColor.a;
+    const float3 baseColor = litRGB * texColor.rgb;
+
+    const float3 reflectionDir = reflect(-E, N);
+    const float4 envSample = environmentMap.Sample(sampler0, reflectionDir);
+
+    const float viewAngle = dot(E, N);
+    const float blendFactor = (cb.envMapParams.y > 0.5f)
+        ? pow(max(1.0f - abs(viewAngle), 0.0f), cb.envMapParams.z) * cb.envMapParams.x
+        : cb.envMapParams.x;
+
+    float3 rgb = lerp(baseColor, envSample.rgb * combinedAlpha, blendFactor)
+               + cb.envMapSpecular.rgb * envSample.a * combinedAlpha;
+
+    if (cb.fogColor.w != 0.0f)
+    {
+        const float keep = 1.0f - saturate(dot(input.positionOS, cb.fogVector));
+        rgb = lerp(cb.fogColor.rgb, rgb, keep);
+    }
+
+    return float4(rgb, combinedAlpha);
 }
 )HLSL";
 }

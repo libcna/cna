@@ -78,6 +78,18 @@ TEST(WickedPipelineKey, InstancedFlagParticipatesInEquality)
     EXPECT_NE(hash(MakeKey()), hash(other));
 }
 
+TEST(WickedPipelineKey, EnvMapFlagParticipatesInEquality)
+{
+    // The env-map flag selects a different vertex AND pixel shader, so confusing it with the
+    // ordinary program would silently render EnvironmentMapEffect geometry through BasicPS.
+    WickedPipelineKey other = MakeKey();
+    other.envMap = 1;
+    EXPECT_FALSE(MakeKey() == other);
+
+    const WickedPipelineKeyHash hash;
+    EXPECT_NE(hash(MakeKey()), hash(other));
+}
+
 TEST(WickedPipelineKey, EveryStateFieldParticipatesInEquality)
 {
     // Byte-wise comparison is what makes this hold for a field added later without touching

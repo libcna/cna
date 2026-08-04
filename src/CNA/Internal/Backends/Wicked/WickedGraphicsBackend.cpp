@@ -1135,6 +1135,16 @@ namespace CNA::Internal::Backends::Wicked
         if (!device_->CreateTexture(&whiteDesc, &whiteData, &whiteTexture_))
             throw std::runtime_error("Wicked backend: failed to create the fallback white texture.");
 
+        // The env-map sampler slot must always resolve to a real cube resource, even on a draw
+        // that binds none -- an unbound descriptor is undefined behaviour, not "black".
+        wig::TextureDesc whiteCubeDesc = whiteDesc;
+        whiteCubeDesc.array_size = 6;
+        whiteCubeDesc.misc_flags = wig::ResourceMiscFlag::TEXTURECUBE;
+        const wig::SubresourceData whiteCubeData[6] = {
+            whiteData, whiteData, whiteData, whiteData, whiteData, whiteData};
+        if (!device_->CreateTexture(&whiteCubeDesc, whiteCubeData, &whiteCubeTexture_))
+            throw std::runtime_error("Wicked backend: failed to create the fallback white cube map.");
+
         state_.depthEnable = 1;
         state_.depthWriteEnable = 1;
         state_.depthFunc = 3; // CompareFunction::LessEqual
@@ -1377,6 +1387,8 @@ namespace CNA::Internal::Backends::Wicked
                           instancedVertexShaders_[i]);
         }
         CompileShader(wig::ShaderStage::PS, "BasicPS", pixelShader_);
+        CompileShader(wig::ShaderStage::VS, "EnvMapVS", envMapVertexShader_);
+        CompileShader(wig::ShaderStage::PS, "EnvMapPS", envMapPixelShader_);
 
         using Element = wig::InputLayout::Element;
         inputLayouts_[static_cast<std::size_t>(WickedShaderVariant::Basic16)].elements = {
@@ -1397,6 +1409,11 @@ namespace CNA::Internal::Backends::Wicked
             Element{"NORMAL",   0, wig::Format::R32G32B32_FLOAT, 0, 12},
             Element{"TEXCOORD", 0, wig::Format::R32G32_FLOAT,    0, 24},
         };
+
+        // EnvironmentMapEffect draws VertexPositionNormalTexture geometry, so it reuses the
+        // stride-32 element list rather than declaring a fifth copy of it.
+        envMapInputLayout_.elements =
+            inputLayouts_[static_cast<std::size_t>(WickedShaderVariant::Basic32)].elements;
 
         // Each instanced layout is its non-instanced sibling plus CNA's established 64-byte
         // per-instance world matrix at input slot 1, delivered as four float4 columns. Deriving it
@@ -1610,14 +1627,23 @@ namespace CNA::Internal::Backends::Wicked
         WickedPipelineEntry& stored = emplaced.first->second;
 
         wig::PipelineStateDesc desc;
-        desc.vs = key.instanced != 0 ? &instancedVertexShaders_[key.variant]
-                                     : &vertexShaders_[key.variant];
-        desc.ps = &pixelShader_;
+        if (key.envMap != 0)
+        {
+            desc.vs = &envMapVertexShader_;
+            desc.ps = &envMapPixelShader_;
+            desc.il = &envMapInputLayout_;
+        }
+        else
+        {
+            desc.vs = key.instanced != 0 ? &instancedVertexShaders_[key.variant]
+                                         : &vertexShaders_[key.variant];
+            desc.ps = &pixelShader_;
+            desc.il = key.instanced != 0 ? &instancedInputLayouts_[key.variant]
+                                         : &inputLayouts_[key.variant];
+        }
         desc.bs = &stored.blend;
         desc.rs = &stored.rasterizer;
         desc.dss = &stored.depthStencil;
-        desc.il = key.instanced != 0 ? &instancedInputLayouts_[key.variant]
-                                     : &inputLayouts_[key.variant];
         desc.pt = static_cast<wig::PrimitiveTopology>(key.topology);
         desc.sample_mask = key.multiSampleMask;
 
@@ -2476,14 +2502,39 @@ namespace CNA::Internal::Backends::Wicked
             constants.flags[2] = params->lightingEnabled ? 1.0f : 0.0f;
             constants.flags[3] = params->dualTexture && texture1 != nullptr ? 1.0f : 0.0f;
 
+            if (params->envMapping)
+            {
+                if (instanced)
+                {
+                    throw std::runtime_error(
+                        "Wicked backend: EnvironmentMapEffect has no instanced shader variant.");
+                }
+                if (stride != 32)
+                {
+                    throw std::runtime_error(
+                        "Wicked backend: EnvironmentMapEffect needs the stride-32 "
+                        "VertexPositionNormalTexture layout (stride " +
+                        std::to_string(stride) + " was bound).");
+                }
+                key.envMap = 1;
+                // The normal matrix is computed here rather than in the shader so a non-uniform
+                // scale is handled exactly; HLSL has no matrix inverse.
+                WriteMatrixColumns(Matrix::Transpose(Matrix::Invert(world)),
+                                   constants.worldInverseTranspose);
+                constants.envMapParams[0] = params->envMapAmount;
+                constants.envMapParams[1] = params->fresnelEnabled ? 1.0f : 0.0f;
+                constants.envMapParams[2] = params->fresnelFactor;
+                std::copy_n(params->envMapSpecular, 3, constants.envMapSpecular);
+            }
+
             // Effects this backend has no shader for are refused rather than rendered as an
             // unlit/untextured approximation that would look like a working draw
             // (plan_wicked.md WICKED-56).
-            if (params->envMapping || params->skinned || params->pbr)
+            if (params->skinned || params->pbr)
             {
                 throw std::runtime_error(
-                    "Wicked backend: EnvironmentMapEffect, SkinnedEffect and PbrEffect are not "
-                    "implemented by this backend.");
+                    "Wicked backend: SkinnedEffect and PbrEffect are not implemented by this "
+                    "backend.");
             }
         }
         else
@@ -2505,6 +2556,17 @@ namespace CNA::Internal::Backends::Wicked
         };
         device_->BindResource(resolveTexture(texture0), 0, cmd);
         device_->BindResource(resolveTexture(texture1), 1, cmd);
+
+        const wig::Texture* environmentMap = &whiteCubeTexture_;
+        if (params != nullptr)
+        {
+            if (const auto* cube =
+                    dynamic_cast<const WickedTextureCubeBackend*>(params->envMap))
+            {
+                environmentMap = &cube->GetTextureEXT();
+            }
+        }
+        device_->BindResource(environmentMap, 2, cmd);
         for (std::uint32_t slot = 0; slot < 2; ++slot)
         {
             const SamplerSlotState& sampler = samplerStates_[slot];

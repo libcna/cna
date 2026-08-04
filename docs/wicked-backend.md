@@ -134,10 +134,10 @@ Implemented and reported as supported:
 | `Texture2D` | Creation, `SetData` (level 0 and explicit mip levels), `GetData` |
 | Vertex / index buffers | 16- and 32-bit indices |
 | `SpriteBatch` | Batched quads, tint, rotation, origin, flip, layer depth, per-batch sampler |
-| 3D draws | `BasicEffect`, `AlphaTestEffect`, `DualTextureEffect`, fog, three directional lights, specular |
+| 3D draws | `BasicEffect`, `AlphaTestEffect`, `DualTextureEffect`, `EnvironmentMapEffect`, fog, three directional lights, specular |
 | `RenderTarget2D` | Colour + optional depth/stencil, `RenderTargetUsage`, readback |
 | Render state | Blend (incl. per-slot write masks and sample mask), depth/stencil (incl. two-sided), rasterizer (incl. wireframe and depth bias), samplers |
-| `TextureCube` | Six-face upload and readback (storage only — nothing samples one yet) |
+| `TextureCube` | Six-face upload and readback, sampled by `EnvironmentMapEffect` |
 | `Texture3D` | Volume upload and readback, real GPU storage |
 | Instanced draws | Per-instance 64-byte column-major `Matrix` stream, `InstanceFrequency == 1` only |
 | MSAA | On the scene target, with resolve; device-clamped |
@@ -152,7 +152,7 @@ Not implemented; each is refused explicitly at the call site and reported by
 | `RenderTargetCube` | — (`SetRenderTargets` throws on a cube-face descriptor) |
 | Custom `ShaderEffect` / `SpriteBatch.Begin(effect)` | `CustomEffects` |
 | Multi-stream vertex input | `MultiStreamVertexInput` |
-| `EnvironmentMapEffect`, `SkinnedEffect`, `PbrEffect` | — (the draw throws; this is also why a `TextureCube` cannot yet be sampled) |
+| `SkinnedEffect`, `PbrEffect` | — (the draw throws; they also need the tangent/skinning vertex strides) |
 | `InstanceFrequency` other than 1 | — (the draw throws; Wicked's `InputLayout` has no step-rate field) |
 | Mip-chain generation | — (levels are allocated and uploadable, nothing downsamples level 0) |
 | D3D12 device selection | — (needs Wicked's root-signature macro in CNA's HLSL) |
