@@ -100,8 +100,10 @@ Vulkan device, DXIL for D3D12. Because `wi::shadercompiler::Compile()` reads fro
 source is written to a private temporary directory for the lifetime of the backend, so a CNA game
 needs no shader-asset deployment step.
 
-Four vertex entry points cover the stock vertex layouts, selected by byte stride exactly as the
-D3D11/D3D12/Vulkan backends select theirs:
+Vertex entry points cover the stock vertex layouts, selected by byte stride exactly as the
+D3D11/D3D12/Vulkan backends select theirs. Where two are listed, the second is the `SkinnedEffect`
+program for that layout; the ordinary one declares the blend attributes without consuming them, so
+the same geometry can also be drawn unskinned:
 
 | Stride | Layout | Entry point |
 |--------|--------|-------------|
@@ -117,7 +119,7 @@ D3D11/D3D12/Vulkan backends select theirs:
 A stride outside this set throws rather than being rendered through a layout that merely has the
 same byte width.
 
-Each variant has an instanced sibling (`Basic16InstVS` … `Basic32InstVS`) that reads a per-instance
+The four narrow variants have an instanced sibling (`Basic16InstVS` … `Basic32InstVS`) that reads a per-instance
 world matrix from a second input slot. The per-instance record is CNA's established 64-byte
 column-major `Matrix` — the same layout the Vulkan backend's instanced pipeline consumes — so an
 unmodified XNA `Matrix` in the instance buffer means the same thing on both backends. On these entry

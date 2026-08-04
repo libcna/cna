@@ -58,10 +58,11 @@ missing.
    lets CNA switch freely between the back buffer and a `RenderTarget2D` mid-frame, and it is the
    same texture the virtual-resolution/letterbox presentation needs anyway.
 
-6. **Unsupported draws are refused, never approximated.** `SkinnedEffect`, `PbrEffect`, MRT and an
-   unexpressible instance-step-rate all throw at the call site rather than rendering an unlit,
-   single-target or wrong-rate stand-in that would look like a working draw. `SupportsCapability()`
-   reports the same set, so callers can ask instead of catching.
+6. **Unsupported draws are refused, never approximated.** `PbrEffect`, MRT, an unexpressible
+   instance-step-rate, a skinned draw on a layout without blend weights, and an instanced draw on a
+   wider stride all throw at the call site rather than rendering an unlit, bind-pose, single-target
+   or wrong-rate stand-in that would look like a working draw. `SupportsCapability()` reports the
+   same set, so callers can ask instead of catching.
 
 ---
 
@@ -107,7 +108,7 @@ missing.
 | WICKED-26 | `RenderTarget2D` readback | ✅ |
 | WICKED-27 | Real GPU occlusion queries (`GPUQueryHeap` + readback buffer) | ✅ |
 | WICKED-28 | Mip-chain allocation for `Texture2D` (allocated + uploadable per level); automatic GENERATION still absent | 🟨 |
-| WICKED-29 | `TextureCube` (six-face upload + readback; not yet sampleable — no env-map shader, WICKED-56) | ✅ |
+| WICKED-29 | `TextureCube` (six-face upload + readback, sampled by `EnvironmentMapEffect`) | ✅ |
 | WICKED-30 | `Texture3D` (volume upload + readback, real GPU storage) | ✅ |
 | WICKED-31 | Batch texture uploads instead of submit-and-wait per call | ⬜ |
 | WICKED-32 | `SetDataOptions` (`Discard` / `NoOverwrite`) honoured on buffer uploads | ⬜ |
