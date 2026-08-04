@@ -84,24 +84,42 @@ namespace CNA::Internal::Backends::HtmlDom
         /**
          * @brief Updates the presentation/scaling policy at runtime.
          *
+         * plan_html_dom.md HTMLDOM-108: validates @p mode against `CnaPresentationMode`'s real
+         * range -- an earlier version accepted any int and stored it unchecked, so an invalid
+         * ordinal silently corrupted every later geometry computation instead of failing where the
+         * bad value was actually passed in.
+         *
          * @param mode Raw CnaPresentationMode ordinal.
+         * @throws std::out_of_range if @p mode is not a valid CnaPresentationMode ordinal.
          */
         void SetPresentationMode(int mode) override;
 
         /**
          * @brief Converts physical window coordinates to logical game coordinates.
          *
+         * plan_html_dom.md HTMLDOM-108: uses the same per-`CnaPresentationMode` `LogicalViewport`
+         * geometry `Present()` renders with (`ComputeLogicalViewport()`), not a single
+         * height-derived uniform scale that only happened to be correct for
+         * `FixedHeightDynamicWidth`. Under `Letterbox`, a @p windowX/@p windowY that falls in the
+         * letterbox bars (outside the scaled content rectangle) correctly returns false, matching
+         * `SdlGpuGraphicsBackend::TransformWindowToLogical`'s own contract.
+         *
          * @param windowX Physical X.
          * @param windowY Physical Y.
          * @param logX    Receives the logical X.
          * @param logY    Receives the logical Y.
-         * @return True when a logical resolution is set; false otherwise.
+         * @return True when a logical resolution is set and @p windowX/@p windowY falls within the
+         *         scaled content rectangle; false otherwise (including every point in a Letterbox
+         *         bar).
          */
         bool TransformWindowToLogical(float windowX, float windowY,
                                       float& logX, float& logY) const override;
 
         /**
          * @brief Converts logical game coordinates to physical window coordinates.
+         *
+         * plan_html_dom.md HTMLDOM-108: exact inverse of `TransformWindowToLogical`, using the same
+         * per-mode `LogicalViewport` geometry.
          *
          * @param logX    Logical X.
          * @param logY    Logical Y.
@@ -352,20 +370,61 @@ namespace CNA::Internal::Backends::HtmlDom
                                           PrimitiveType primitive, int primitiveCount) override;
 
     private:
+        /**
+         * @brief The physical-pixel rectangle the logical (game-coordinate) surface occupies, and
+         * the logical size itself.
+         *
+         * plan_html_dom.md HTMLDOM-108: the single computation every `CnaPresentationMode` value's
+         * geometry derives from, ported from `SdlGpuGraphicsBackend::ComputeLogicalViewport` (the
+         * "complete backend" this task's own row names) rather than re-derived from scratch, so this
+         * backend's Letterbox/Overscan/Stretch/NativeBackBuffer math matches an already-tested
+         * reference exactly instead of being its own independent (and, before this task, incomplete)
+         * implementation. `x`/`y`/`width`/`height` are where the SCALED logical content actually
+         * lands in physical pixels (Letterbox: `width`/`height` <= physical, centred, bars outside;
+         * Overscan: `width`/`height` >= physical, centred, cropped at the physical edges;
+         * Stretch/FixedHeightDynamicWidth/NativeBackBuffer: always the full physical rect, `x`=`y`=0).
+         * `logicalWidth`/`logicalHeight` are the game-coordinate size `SpriteBatch`/`GetViewportSize`
+         * work in -- NOT necessarily proportional to `width`/`height` (Stretch scales the two axes by
+         * different factors on purpose).
+         */
+        struct LogicalViewport
+        {
+            float x = 0.0f;
+            float y = 0.0f;
+            float width = 0.0f;
+            float height = 0.0f;
+            float logicalWidth = 0.0f;
+            float logicalHeight = 0.0f;
+        };
+
+        /// Computes this backend's current LogicalViewport from the window's physical size,
+        /// virtualWidth_/virtualHeight_, and presentationMode_. See LogicalViewport's own doc
+        /// comment for the per-mode geometry this derives.
+        [[nodiscard]] LogicalViewport ComputeLogicalViewport() const;
+
         /// Derives the logical size from the window's physical size and the presentation mode --
-        /// the same FixedHeightDynamicWidth math every other backend uses.
+        /// now a thin wrapper over ComputeLogicalViewport() (HTMLDOM-108), kept as its own method
+        /// since GetViewportSize/SetVirtualResolution callers only ever need the size, not the full
+        /// viewport rectangle.
         void getLogicalSize(int& width, int& height) const;
 
         SDL_Window* window_ = nullptr;
         int virtualWidth_ = 0;
         int virtualHeight_ = 0;
         CnaPresentationMode presentationMode_ = CnaPresentationMode::FixedHeightDynamicWidth;
-        /// Last surface geometry pushed to JS; the DOM is only touched when this actually changes,
-        /// so a steady-state frame performs no layout-affecting style writes at all.
+        /// Last LogicalViewport pushed to JS; the DOM is only touched when this actually changes, so
+        /// a steady-state frame performs no layout-affecting style writes at all. HTMLDOM-108:
+        /// tracking the full viewport (not just logical/physical W/H, as before) so that a
+        /// SetPresentationMode call alone -- same virtual and physical size, different mode, and
+        /// therefore a different scale/offset -- is correctly detected as a geometry change too.
         int lastLogicalWidth_ = -1;
         int lastLogicalHeight_ = -1;
         int lastPhysicalWidth_ = -1;
         int lastPhysicalHeight_ = -1;
+        float lastViewportOffsetX_ = 0.0f;
+        float lastViewportOffsetY_ = 0.0f;
+        float lastViewportScaleX_ = -1.0f;
+        float lastViewportScaleY_ = -1.0f;
         /// Last viewport pushed to JS (HTMLDOM-98); SetViewport is a no-op when called again with
         /// the same values, matching the same "only touch the DOM when something actually changed"
         /// rule the logical/physical size tracking above already follows. -1 sentinel width/height

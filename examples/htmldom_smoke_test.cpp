@@ -45,7 +45,7 @@ using namespace CNA::Internal::Backends::HtmlDom;
 
 namespace
 {
-    constexpr int kExpectedChecks = 48;
+    constexpr int kExpectedChecks = 63;
 
 #if defined(__EMSCRIPTEN__)
     /// Number of sprite elements currently visible in the DOM surface.
@@ -277,6 +277,31 @@ namespace
         return root ? parseFloat(root.style.top) : -1;
     });
 
+    /// plan_html_dom.md HTMLDOM-108: the per-CnaPresentationMode scale factor
+    /// HtmlDomGraphicsBackend::ComputeLogicalViewport last computed and CNA_HtmlDom_UpdateSurface
+    /// applied to #cna-dom-root, read directly from the Module state it is stored in (not parsed
+    /// back out of the CSS transform string, which is empty whenever the scale is exactly 1).
+    EM_JS(double, JsViewportScaleX, (), {
+        const v = Module['cnaDomViewportScaleX'];
+        return v === undefined ? -1 : v;
+    });
+    EM_JS(double, JsViewportScaleY, (), {
+        const v = Module['cnaDomViewportScaleY'];
+        return v === undefined ? -1 : v;
+    });
+
+    /// plan_html_dom.md HTMLDOM-108: #cna-dom-viewport's own inline geometry, in CSS px -- the
+    /// physical-canvas-sized wrapper that clips the scaled/offset #cna-dom-root (needed for
+    /// Overscan, whose root deliberately extends past the canvas's own bounds).
+    EM_JS(int, JsViewportWrapperWidth, (), {
+        const el = Module['cnaDomViewportEl'];
+        return el ? parseInt(el.style.width, 10) : -1;
+    });
+    EM_JS(int, JsViewportWrapperHeight, (), {
+        const el = Module['cnaDomViewportEl'];
+        return el ? parseInt(el.style.height, 10) : -1;
+    });
+
     EM_JS(void, JsPublishResult, (int result, int passed, int expected), {
         window.__cnaSmokeResult = result;
         window.__cnaSmokePassed = passed;
@@ -300,6 +325,10 @@ namespace
     int JsRootHeight() { return -1; }
     double JsRootLeft() { return -1; }
     double JsRootTop() { return -1; }
+    double JsViewportScaleX() { return -1; }
+    double JsViewportScaleY() { return -1; }
+    int JsViewportWrapperWidth() { return -1; }
+    int JsViewportWrapperHeight() { return -1; }
     int JsRegionExists(int, int, int, int) { return 0; }
     int JsRegionClipPathInsetIs(int, int, int, int, int, int, int, int) { return 0; }
     int JsRegionVisibleSpriteCount(int, int, int, int) { return -1; }
@@ -872,7 +901,151 @@ protected:
             dev.setScissorRectangleProperty(Rectangle(0, 0, 128, 128));
         }
 
+        // plan_html_dom.md HTMLDOM-108: every CnaPresentationMode, implemented for real via
+        // HtmlDomGraphicsBackend::ComputeLogicalViewport (ported from SdlGpuGraphicsBackend's own
+        // reference implementation) -- an earlier version only had correct geometry for
+        // FixedHeightDynamicWidth; Letterbox/Overscan/Stretch/NativeBackBuffer all fell through to
+        // the SAME height-derived uniform scale, silently wrong for every one of them whenever the
+        // virtual and physical aspect ratios did not already match by coincidence.
+        //
+        // Surface is 128x128 physical at this point (frame 8's resize persists). Every scenario
+        // below uses virtual resolution 256x128 (a deliberately 2:1 mismatched aspect against the
+        // square 128x128 physical surface) so Letterbox/Overscan/Stretch each produce a REAL,
+        // different, hand-derivable geometry -- not the "happens to already fit" case that let
+        // FixedHeightDynamicWidth alone pass before this task.
         if (frame_ == 11)
+        {
+            using CNA::Internal::Backends::CnaPresentationMode;
+
+            // Letterbox: scale = min(physW/virtW, physH/virtH) = min(128/256, 128/128) = min(0.5,1.0)
+            // = 0.5 (uniform, both axes). Scaled content is 128x64, centred vertically in the
+            // 128-tall physical surface -> bars top and bottom, offsetX=0, offsetY=(128-64)/2=32.
+            backend.SetVirtualResolution(256, 128);
+            backend.SetPresentationMode(static_cast<int>(CnaPresentationMode::Letterbox));
+            backend.Present();
+            check(JsViewportScaleX() == 0.5 && JsViewportScaleY() == 0.5,
+                  "HTMLDOM-108a: Letterbox scales both axes by the SAME factor -- the smaller of the "
+                  "two per-axis ratios, so the whole logical rect fits inside the physical one");
+            check(JsRootLeft() == 0.0 && JsRootTop() == 32.0,
+                  "HTMLDOM-108a: Letterbox centres the scaled content in the physical surface -- "
+                  "here that means a real, non-zero 32px bar top and bottom, none left or right");
+
+            // Overscan: scale = max(0.5, 1.0) = 1.0. Scaled content is 256x128, wider than the
+            // 128-wide physical surface -> cropped left/right, offsetX=(128-256)/2=-64, offsetY=0.
+            backend.SetPresentationMode(static_cast<int>(CnaPresentationMode::Overscan));
+            backend.Present();
+            check(JsViewportScaleX() == 1.0 && JsViewportScaleY() == 1.0,
+                  "HTMLDOM-108b: Overscan scales both axes by the LARGER of the two per-axis ratios "
+                  "-- here that is exactly 1.0, unlike Letterbox's 0.5 above for the identical "
+                  "virtual/physical pair, a real measurable divergence between the two modes");
+            check(JsRootLeft() == -64.0 && JsRootTop() == 0.0,
+                  "HTMLDOM-108b: Overscan centres the scaled (now OVERSIZED) content, cropping "
+                  "128px total off the left+right edges (-64 offset) rather than adding bars");
+            check(JsViewportWrapperWidth() == 128 && JsViewportWrapperHeight() == 128,
+                  "HTMLDOM-108b: the physical-canvas-sized wrapper around #cna-dom-root stays "
+                  "exactly 128x128 regardless of root's own oversized/offset box -- this is what "
+                  "actually crops Overscan's overflow at the canvas's own edges");
+
+            // Stretch: independent per-axis scale, NO aspect-ratio preservation -- scaleX =
+            // physW/virtW = 128/256 = 0.5, scaleY = physH/virtH = 128/128 = 1.0. Deliberately
+            // DIFFERENT from each other, unlike every other mode's uniform scale.
+            backend.SetPresentationMode(static_cast<int>(CnaPresentationMode::Stretch));
+            backend.Present();
+            check(JsViewportScaleX() == 0.5 && JsViewportScaleY() == 1.0,
+                  "HTMLDOM-108c: Stretch scales each axis independently to exactly fill the "
+                  "physical surface -- the only mode whose two scale factors legitimately differ");
+            check(JsRootLeft() == 0.0 && JsRootTop() == 0.0,
+                  "HTMLDOM-108c: Stretch always fills the full physical rect, so there is never a "
+                  "centring offset to apply, on either axis");
+
+            // NativeBackBuffer: ignores virtualWidth_/virtualHeight_ entirely (still 256x128 from
+            // the scenarios above) -- no scaling, GetViewportSize reports the PHYSICAL 128x128, not
+            // the configured virtual resolution, matching SdlGpuGraphicsBackend::
+            // ComputeLogicalViewport's own treatment of this mode.
+            backend.SetPresentationMode(static_cast<int>(CnaPresentationMode::NativeBackBuffer));
+            backend.Present();
+            check(JsViewportScaleX() == 1.0 && JsViewportScaleY() == 1.0 &&
+                  JsRootLeft() == 0.0 && JsRootTop() == 0.0,
+                  "HTMLDOM-108d: NativeBackBuffer never scales or offsets -- the logical surface IS "
+                  "the physical one, regardless of any virtual resolution configured");
+            {
+                int vw = 0, vh = 0;
+                backend.GetViewportSize(vw, vh);
+                check(vw == 128 && vh == 128,
+                      "HTMLDOM-108d: NativeBackBuffer's own logical size is the PHYSICAL 128x128, "
+                      "not the 256x128 virtual resolution still configured from the earlier "
+                      "scenarios -- this mode opts out of the virtual-resolution concept entirely");
+            }
+
+            // FixedHeightDynamicWidth regression check: height fixed, width derived from the
+            // physical surface's own aspect ratio (here 1:1, so 128), which by construction always
+            // exactly fills the physical surface -- scale 1,1, no offset. Confirms switching back to
+            // this mode after the other four re-derives geometry correctly, not stale state.
+            backend.SetVirtualResolution(1, 128);
+            backend.SetPresentationMode(static_cast<int>(CnaPresentationMode::FixedHeightDynamicWidth));
+            backend.Present();
+            check(JsViewportScaleX() == 1.0 && JsViewportScaleY() == 1.0 &&
+                  JsRootLeft() == 0.0 && JsRootTop() == 0.0,
+                  "HTMLDOM-108e: FixedHeightDynamicWidth still fills the physical surface exactly "
+                  "after switching through every other mode first, not left showing stale geometry");
+
+            // plan_html_dom.md HTMLDOM-108: SetPresentationMode must validate its ordinal -- an
+            // earlier version accepted anything and stored it unchecked. A rejected call must not
+            // have changed the mode in effect, the same "rejected state leaves the prior one alone"
+            // contract ApplyBlendStateAcceptsPresetsAndRejectsCustomOnes already established for
+            // BlendState (HtmlDomGraphicsBackendTests.cpp).
+            bool threw = false;
+            try { backend.SetPresentationMode(99); }
+            catch (const std::out_of_range&) { threw = true; }
+            check(threw, "HTMLDOM-108f: SetPresentationMode throws std::out_of_range for an "
+                         "invalid CnaPresentationMode ordinal");
+            backend.Present();
+            check(JsViewportScaleX() == 1.0 && JsViewportScaleY() == 1.0 &&
+                  JsRootLeft() == 0.0 && JsRootTop() == 0.0,
+                  "HTMLDOM-108f: the rejected SetPresentationMode(99) call left the previously-set "
+                  "FixedHeightDynamicWidth mode's own geometry completely unchanged");
+
+            // plan_html_dom.md HTMLDOM-108: TransformWindowToLogical must return the correct
+            // outside-letterbox result -- re-establish the exact Letterbox scenario from above
+            // (bars top/bottom, content in physical y in [32,96)). A window point in the TOP BAR
+            // (y=10 < 32) has no logical counterpart at all; a point inside the content band
+            // (y=64, dead centre of [32,96)) does, at the hand-derived logical coordinates.
+            backend.SetVirtualResolution(256, 128);
+            backend.SetPresentationMode(static_cast<int>(CnaPresentationMode::Letterbox));
+            backend.Present();
+            float logX = -1.0f, logY = -1.0f;
+            const bool inBar = backend.TransformWindowToLogical(64.0f, 10.0f, logX, logY);
+            check(!inBar, "HTMLDOM-108g: a window coordinate inside a Letterbox bar (above the "
+                          "scaled content, not inside it) reports no logical mapping at all");
+            const bool inContent = backend.TransformWindowToLogical(64.0f, 64.0f, logX, logY);
+            check(inContent && logX == 128.0f && logY == 64.0f,
+                  "HTMLDOM-108g: a window coordinate inside the scaled content band DOES map, at "
+                  "the hand-derived logical position ((64,64) physical -> (128,64) logical for "
+                  "this exact 256x128-virtual/128x128-physical Letterbox scenario)");
+
+            // plan_html_dom.md HTMLDOM-108: TransformLogicalToWindow/TransformWindowToLogical round
+            // trip under Stretch (independent per-axis scale, the mode most likely to expose a
+            // swapped X/Y factor). Logical (100,50) -> window (100*0.5, 50*1.0) = (50,50) -> back to
+            // logical must reproduce (100,50) exactly (every factor here divides evenly, so this is
+            // an exact-equality check, not a tolerance one).
+            backend.SetPresentationMode(static_cast<int>(CnaPresentationMode::Stretch));
+            backend.Present();
+            float winX = -1.0f, winY = -1.0f;
+            const bool toWindowOk = backend.TransformLogicalToWindow(100.0f, 50.0f, winX, winY);
+            const bool roundTripOk = toWindowOk &&
+                backend.TransformWindowToLogical(winX, winY, logX, logY);
+            check(roundTripOk && winX == 50.0f && winY == 50.0f && logX == 100.0f && logY == 50.0f,
+                  "HTMLDOM-108h: TransformLogicalToWindow/TransformWindowToLogical round-trip "
+                  "exactly under Stretch's independent per-axis scale -- (100,50) logical -> "
+                  "(50,50) window -> (100,50) logical again");
+
+            // Restores the exact "128x128 physical, 1:1 (unset virtual resolution) mode, scale
+            // exactly 1" state frame 12 (below) and its own comments depend on.
+            backend.SetVirtualResolution(0, 0);
+            backend.Present();
+        }
+
+        if (frame_ == 12)
         {
             // plan_html_dom.md HTMLDOM-107: Viewport no longer resizes/repositions #cna-dom-root at
             // all (that was HTMLDOM-98's approach, and the actual defect this task fixes: a SECOND

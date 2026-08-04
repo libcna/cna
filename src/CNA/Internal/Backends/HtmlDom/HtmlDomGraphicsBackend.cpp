@@ -7,6 +7,8 @@
 
 #include <SDL3/SDL.h>
 
+#include <algorithm>
+#include <cmath>
 #include <stdexcept>
 #include <string>
 
@@ -20,6 +22,21 @@
 // and delivering input through it, so it has to stay in the layout. `contain:strict` keeps the
 // sprite subtree's layout and painting isolated from the rest of the page, and clips sprites that
 // leave the viewport.
+//
+// plan_html_dom.md HTMLDOM-108: #cna-dom-root now lives inside a second wrapper element,
+// #cna-dom-viewport, sized/positioned to the CANVAS's own physical bounds with its own
+// `overflow:hidden`. Root's own CSS box is always exactly the logical (game-coordinate) size and
+// gets a per-CnaPresentationMode `transform: scale()` plus a `left`/`top` offset (both computed by
+// cnaDomApplySurfaceGeometry, from HtmlDomGraphicsBackend::ComputeLogicalViewport) -- for Overscan
+// specifically, that scaled root is LARGER than the canvas and deliberately extends past its edges
+// on purpose (the whole point of an overscan crop). Root's own `overflow:hidden`/`contain:strict`
+// only ever clipped root's CHILDREN to root's OWN (pre-transform, logical-sized) box, which was
+// never the box that needed clipping here -- nothing previously bounded the SCALED, POSITIONED root
+// element itself to the physical canvas area, so an oversized/offset root could bleed into (or
+// trigger a scrollbar on) the surrounding host page. The wrapper is a real element specifically so
+// this clipping is self-contained within this backend's own DOM structure, independent of whatever
+// the host page's own layout happens to be (HTMLDOM-115 is the separate, later task for hardening
+// the REST of that host-page integration surface).
 EM_JS(void, CNA_HtmlDom_EnsureRoot, (), {
     if (Module['cnaDomRoot']) return;
     // Guarded: the repo's own GTest runner is plain `node`, where there is no document at all, so
@@ -28,12 +45,21 @@ EM_JS(void, CNA_HtmlDom_EnsureRoot, (), {
     if (typeof document === 'undefined') return;
     const canvas = Module['canvas'] || document.querySelector('canvas');
     if (!canvas) { console.error('[CNA] HTML_DOM: no <canvas> element to anchor the DOM surface to'); return; }
+    const viewportEl = document.createElement('div');
+    viewportEl.id = 'cna-dom-viewport';
+    // The static black matches SDL3's own SDL_LOGICAL_PRESENTATION_LETTERBOX behaviour (its bars
+    // are always black, not the app's current clear colour) -- this element is exactly what shows
+    // through in a Letterbox bar or outside an undersized NativeBackBuffer surface.
+    viewportEl.style.cssText = 'position:absolute;left:0;top:0;overflow:hidden;contain:strict;' +
+                               'background-color:#000;';
     const root = document.createElement('div');
     root.id = 'cna-dom-root';
     root.style.cssText = 'position:absolute;left:0;top:0;overflow:hidden;transform-origin:0 0;' +
                          'contain:strict;background-color:#000;';
-    (canvas.parentNode || document.body).insertBefore(root, canvas.nextSibling);
+    (canvas.parentNode || document.body).insertBefore(viewportEl, canvas.nextSibling);
+    viewportEl.appendChild(root);
     canvas.style.visibility = 'hidden';
+    Module['cnaDomViewportEl'] = viewportEl;
     Module['cnaDomRoot'] = root;
     Module['cnaDomBoundCtx'] = null;
     Module['cnaDomClearColor'] = null;
@@ -89,7 +115,7 @@ EM_JS(void, CNA_HtmlDom_EnsureRoot, (), {
             'inset(' + top + 'px ' + right + 'px ' + bottom + 'px ' + left + 'px)';
     };
 
-    // plan_html_dom.md HTMLDOM-107: positions and sizes #cna-dom-root to the FULL backbuffer,
+    // plan_html_dom.md HTMLDOM-107: positions and sizes #cna-dom-root to the full LOGICAL surface,
     // always -- HTMLDOM-98 previously shrank/moved root to track a sub-rectangle Viewport directly,
     // which meant a SECOND viewport set later in the SAME frame retroactively moved/clipped every
     // sprite already drawn under an EARLIER viewport (the split-screen/sub-panel use case the
@@ -97,12 +123,23 @@ EM_JS(void, CNA_HtmlDom_EnsureRoot, (), {
     // clears the WHOLE render target with, independent of the current Viewport, exactly like a real
     // glClear/ClearRenderTargetView call ignores glViewport/RSSetViewports -- left the backbuffer
     // area OUTSIDE a shrunk root showing the host page's own background instead of the clear colour.
-    // The viewport's own offset is applied per BATCH instead, in CNA_HtmlDom_FlushSprites (both the
-    // DOM and Canvas2D paths) -- see the comment there for why sprite position, not root's own box
-    // or a region's clip, is the correct place for it.
+    // The GraphicsDevice.Viewport's own offset is applied per BATCH instead, in
+    // CNA_HtmlDom_FlushSprites (both the DOM and Canvas2D paths) -- see the comment there for why
+    // sprite position, not root's own box or a region's clip, is the correct place for it. This is
+    // an entirely different concept from the CnaPresentationMode offset/scale below.
+    //
+    // plan_html_dom.md HTMLDOM-108: root's PHYSICAL placement (offset + scale) now follows
+    // HtmlDomGraphicsBackend::ComputeLogicalViewport's per-CnaPresentationMode geometry -- an
+    // earlier version applied a single height-derived uniform scale() unconditionally, correct only
+    // for FixedHeightDynamicWidth (which happens to always fill the physical surface exactly) and
+    // silently wrong for Letterbox/Overscan/Stretch/NativeBackBuffer. #cna-dom-viewport (the
+    // physical-canvas-sized wrapper CNA_HtmlDom_EnsureRoot creates root inside) clips the scaled,
+    // offset root to the canvas's own bounds -- needed for Overscan, whose scaled root is
+    // deliberately larger than the canvas and extends past its edges on purpose.
     Module['cnaDomApplySurfaceGeometry'] = function () {
         const root = Module['cnaDomRoot'];
-        if (!root) return;
+        const viewportEl = Module['cnaDomViewportEl'];
+        if (!root || !viewportEl) return;
         const w = Module['cnaDomBackbufferW'] || 0;
         const h = Module['cnaDomBackbufferH'] || 0;
         root.style.width = w + 'px';
@@ -111,8 +148,18 @@ EM_JS(void, CNA_HtmlDom_EnsureRoot, (), {
         Module['cnaDomLogicalH'] = h;
         const canvas = Module['canvas'] ||
                        (typeof document === 'undefined' ? null : document.querySelector('canvas'));
-        root.style.left = (canvas ? canvas.offsetLeft : 0) + 'px';
-        root.style.top = (canvas ? canvas.offsetTop : 0) + 'px';
+        viewportEl.style.left = (canvas ? canvas.offsetLeft : 0) + 'px';
+        viewportEl.style.top = (canvas ? canvas.offsetTop : 0) + 'px';
+        viewportEl.style.width = (canvas ? canvas.offsetWidth : w) + 'px';
+        viewportEl.style.height = (canvas ? canvas.offsetHeight : h) + 'px';
+        const offsetX = Module['cnaDomViewportOffsetX'] || 0;
+        const offsetY = Module['cnaDomViewportOffsetY'] || 0;
+        const scaleX = Module['cnaDomViewportScaleX'] || 1;
+        const scaleY = Module['cnaDomViewportScaleY'] || 1;
+        root.style.left = offsetX + 'px';
+        root.style.top = offsetY + 'px';
+        root.style.transform = (scaleX !== 1 || scaleY !== 1)
+            ? 'scale(' + scaleX + ',' + scaleY + ')' : "";
         // The backbuffer's own geometry just changed -- re-derive every region's clip-path against
         // it, the same reasoning HTMLDOM-93's own resize handling already used.
         const regions = Module['cnaDomRegions'];
@@ -208,11 +255,15 @@ EM_JS(void, CNA_HtmlDom_EnsureRoot, (), {
 });
 
 EM_JS(void, CNA_HtmlDom_DestroyRoot, (), {
-    const root = Module['cnaDomRoot'];
-    if (root && root.parentNode) root.parentNode.removeChild(root);
+    // plan_html_dom.md HTMLDOM-108: removes #cna-dom-viewport (which contains root), not root
+    // directly -- root's own parent is now the wrapper, not the canvas's own parent, so removing
+    // just root would leave the (now-empty) wrapper behind.
+    const viewportEl = Module['cnaDomViewportEl'];
+    if (viewportEl && viewportEl.parentNode) viewportEl.parentNode.removeChild(viewportEl);
     const canvas = Module['canvas'] ||
                    (typeof document === 'undefined' ? null : document.querySelector('canvas'));
     if (canvas) canvas.style.visibility = "";
+    Module['cnaDomViewportEl'] = null;
     Module['cnaDomRoot'] = null;
     Module['cnaDomRegions'] = null;
     Module['cnaDomRegionOrder'] = null;
@@ -304,35 +355,48 @@ EM_JS(void, CNA_HtmlDom_PresentFrame, (), {
     }
 });
 
-// Records the backbuffer's own logical/physical geometry and applies the logical→physical scale.
-// Called only when the geometry actually changed (the backend caches the last values), because
-// these are the backend's only layout-affecting style writes -- doing them every frame would defeat
-// the whole design.
+// Records the backbuffer's own logical geometry and the physical placement (offset + scale) it
+// should render at. Called only when the geometry actually changed (the backend caches the last
+// values), because these are the backend's only layout-affecting style writes -- doing them every
+// frame would defeat the whole design.
 //
 // plan_html_dom.md HTMLDOM-107: sizes/positions #cna-dom-root directly, to the full backbuffer --
 // root no longer tracks a sub-rectangle Viewport at all (see cnaDomApplySurfaceGeometry's own
 // comment, CNA_HtmlDom_EnsureRoot, for why).
-EM_JS(void, CNA_HtmlDom_UpdateSurface, (int logicalW, int logicalH, int physW, int physH), {
+//
+// plan_html_dom.md HTMLDOM-108: offsetX/offsetY/scaleX/scaleY come from
+// HtmlDomGraphicsBackend::ComputeLogicalViewport, computed on the C++ side once per Present() --
+// the same per-CnaPresentationMode geometry SdlGpuGraphicsBackend's own reference implementation
+// uses, replacing a single height-derived uniform scale that was only ever correct for
+// FixedHeightDynamicWidth.
+EM_JS(void, CNA_HtmlDom_UpdateSurface, (int logicalW, int logicalH,
+                                        double offsetX, double offsetY,
+                                        double scaleX, double scaleY), {
     const root = Module['cnaDomRoot'];
     if (!root) return;
     Module['cnaDomBackbufferW'] = logicalW;
     Module['cnaDomBackbufferH'] = logicalH;
-    Module['cnaDomScale'] = logicalH > 0 ? physH / logicalH : 1;
-    root.style.transform = Module['cnaDomScale'] !== 1 ? 'scale(' + Module['cnaDomScale'] + ')' : "";
-    // HTMLDOM-93/94/107: the backbuffer's own geometry just changed (that is the only reason this
-    // function runs at all -- Present() only calls it when geometry differs from last frame).
-    // cnaDomApplySurfaceGeometry re-sizes/positions root against the new geometry and re-derives
-    // every region's clip-path, the same reasoning HTMLDOM-93's own resize handling already used.
+    Module['cnaDomViewportOffsetX'] = offsetX;
+    Module['cnaDomViewportOffsetY'] = offsetY;
+    Module['cnaDomViewportScaleX'] = scaleX;
+    Module['cnaDomViewportScaleY'] = scaleY;
+    // HTMLDOM-93/94/107/108: the backbuffer's own geometry just changed (that is the only reason
+    // this function runs at all -- Present() only calls it when geometry differs from last frame).
+    // cnaDomApplySurfaceGeometry re-sizes/positions root and the viewport wrapper against the new
+    // geometry and re-derives every region's clip-path, the same reasoning HTMLDOM-93's own resize
+    // handling already used.
     Module['cnaDomApplySurfaceGeometry']();
 });
 
 // plan_html_dom.md HTMLDOM-80 / design decision 13: real scissor clipping via `clip-path: inset()`.
 // Exact, with no transform-inverse maths needed: region containers carry no rotation (only the
-// uniform logical->physical scale() CNA_HtmlDom_UpdateSurface applies to #cna-dom-root, which every
-// region container inherits), so clip-path's own pre-transform local coordinate space already
-// coincides with the same logical-pixel space every sprite's destX/destY is expressed in -- the
-// scissor rect can be turned into inset() distances directly, with no per-sprite transform to
-// invert.
+// scale()/translate() CNA_HtmlDom_UpdateSurface applies to #cna-dom-root, which every region
+// container inherits -- HTMLDOM-108: per-axis scale under Stretch, uniform under every other mode,
+// but `inset()` distances are always expressed in the element's own PRE-transform local units
+// regardless, so neither case needs different handling), so clip-path's own pre-transform local
+// coordinate space already coincides with the same logical-pixel space every sprite's destX/destY
+// is expressed in -- the scissor rect can be turned into inset() distances directly, with no
+// per-sprite transform to invert.
 //
 // HTMLDOM-94: this function ONLY records the current rect now -- it does not touch the DOM at all.
 // The rect it records is consumed once per SpriteBatch Begin/End batch, at CNA_HtmlDom_FlushSprites
@@ -430,19 +494,32 @@ namespace CNA::Internal::Backends::HtmlDom
 
     void HtmlDomGraphicsBackend::Present()
     {
-        int logicalW = 0, logicalH = 0;
-        getLogicalSize(logicalW, logicalH);
+        const LogicalViewport viewport = ComputeLogicalViewport();
+        const int logicalW = static_cast<int>(std::lround(viewport.logicalWidth));
+        const int logicalH = static_cast<int>(std::lround(viewport.logicalHeight));
         int physW = 0, physH = 0;
         SDL_GetWindowSize(window_, &physW, &physH);
+        const float scaleX = viewport.logicalWidth > 0.0f ? viewport.width / viewport.logicalWidth : 1.0f;
+        const float scaleY = viewport.logicalHeight > 0.0f ? viewport.height / viewport.logicalHeight : 1.0f;
+        // plan_html_dom.md HTMLDOM-108: tracks the full viewport (offset + scale), not just logical/
+        // physical W/H as before -- a SetPresentationMode call alone (same virtual and physical
+        // size, different mode, therefore a different scale/offset) must also re-apply geometry, and
+        // the old W/H-only comparison could not detect that.
         if (logicalW != lastLogicalWidth_ || logicalH != lastLogicalHeight_ ||
-            physW != lastPhysicalWidth_ || physH != lastPhysicalHeight_)
+            physW != lastPhysicalWidth_ || physH != lastPhysicalHeight_ ||
+            viewport.x != lastViewportOffsetX_ || viewport.y != lastViewportOffsetY_ ||
+            scaleX != lastViewportScaleX_ || scaleY != lastViewportScaleY_)
         {
             lastLogicalWidth_ = logicalW;
             lastLogicalHeight_ = logicalH;
             lastPhysicalWidth_ = physW;
             lastPhysicalHeight_ = physH;
+            lastViewportOffsetX_ = viewport.x;
+            lastViewportOffsetY_ = viewport.y;
+            lastViewportScaleX_ = scaleX;
+            lastViewportScaleY_ = scaleY;
 #if defined(__EMSCRIPTEN__)
-            CNA_HtmlDom_UpdateSurface(logicalW, logicalH, physW, physH);
+            CNA_HtmlDom_UpdateSurface(logicalW, logicalH, viewport.x, viewport.y, scaleX, scaleY);
 #endif
         }
 #if defined(__EMSCRIPTEN__)
@@ -450,20 +527,69 @@ namespace CNA::Internal::Backends::HtmlDom
 #endif
     }
 
+    HtmlDomGraphicsBackend::LogicalViewport HtmlDomGraphicsBackend::ComputeLogicalViewport() const
+    {
+        // plan_html_dom.md HTMLDOM-108: ported from SdlGpuGraphicsBackend::ComputeLogicalViewport
+        // (the "complete backend" this task's own plan row names) rather than re-derived, so every
+        // CnaPresentationMode's geometry matches an already-tested reference exactly. See
+        // LogicalViewport's own doc comment (HtmlDomGraphicsBackend.hpp) for what x/y/width/height
+        // and logicalWidth/logicalHeight mean per mode.
+        LogicalViewport viewport{};
+        int physW = 0, physH = 0;
+        SDL_GetWindowSize(window_, &physW, &physH);
+        viewport.width = viewport.logicalWidth = static_cast<float>(std::max(0, physW));
+        viewport.height = viewport.logicalHeight = static_cast<float>(std::max(0, physH));
+        if (physW <= 0 || physH <= 0) return viewport;
+        // NativeBackBuffer, and "no virtual resolution configured at all", both mean the same thing
+        // for rendering purposes: no scaling, the logical surface just IS the physical one.
+        if (presentationMode_ == CnaPresentationMode::NativeBackBuffer ||
+            virtualWidth_ <= 0 || virtualHeight_ <= 0)
+            return viewport;
+
+        float logicalWidth = static_cast<float>(virtualWidth_);
+        float logicalHeight = static_cast<float>(virtualHeight_);
+        if (presentationMode_ == CnaPresentationMode::FixedHeightDynamicWidth)
+        {
+            // Height fixed, width derived from the surface's own aspect ratio -- the viewport
+            // always ends up exactly the full physical rect (viewport.width/height keep their
+            // physical-size defaults above), by construction: this is the one mode where logical
+            // width is CHOSEN to make that true, not a coincidence needing bars or cropping.
+            logicalWidth = logicalHeight * static_cast<float>(physW) / static_cast<float>(physH);
+            viewport.logicalWidth = logicalWidth;
+            viewport.logicalHeight = logicalHeight;
+            return viewport;
+        }
+
+        viewport.logicalWidth = logicalWidth;
+        viewport.logicalHeight = logicalHeight;
+        if (presentationMode_ == CnaPresentationMode::Stretch)
+            // Fixed logical size stretched to fill the full physical rect on both axes
+            // independently (viewport.width/height keep their physical-size defaults) -- the only
+            // mode that does not preserve aspect ratio.
+            return viewport;
+
+        // Letterbox/Overscan: fixed logical size, UNIFORM scale (same factor both axes, so aspect
+        // ratio is preserved), centred in the physical rect. Letterbox picks the smaller of the two
+        // per-axis scales so the whole logical rect fits inside the physical one (bars on the
+        // non-fitting axis); Overscan picks the larger so the physical rect is fully covered
+        // (cropped on the non-fitting axis, content extends past the physical edges).
+        const float sx = static_cast<float>(physW) / logicalWidth;
+        const float sy = static_cast<float>(physH) / logicalHeight;
+        const float scale = presentationMode_ == CnaPresentationMode::Overscan
+                                 ? std::max(sx, sy)
+                                 : std::min(sx, sy);
+        viewport.width = logicalWidth * scale;
+        viewport.height = logicalHeight * scale;
+        viewport.x = (static_cast<float>(physW) - viewport.width) * 0.5f;
+        viewport.y = (static_cast<float>(physH) - viewport.height) * 0.5f;
+        return viewport;
+    }
+
     void HtmlDomGraphicsBackend::getLogicalSize(int& width, int& height) const
     {
-        if (virtualHeight_ <= 0)
-        {
-            SDL_GetWindowSize(window_, &width, &height);
-            return;
-        }
-        int physW, physH;
-        SDL_GetWindowSize(window_, &physW, &physH);
-        height = virtualHeight_;
-        if (presentationMode_ == CnaPresentationMode::FixedHeightDynamicWidth && physH > 0)
-            width = static_cast<int>(static_cast<double>(physW) * virtualHeight_ / physH + 0.5);
-        else
-            width = virtualWidth_ > 0 ? virtualWidth_ : physW;
+        const LogicalViewport viewport = ComputeLogicalViewport();
+        width = static_cast<int>(std::lround(viewport.logicalWidth));
+        height = static_cast<int>(std::lround(viewport.logicalHeight));
     }
 
     void HtmlDomGraphicsBackend::GetViewportSize(int& width, int& height)
@@ -479,35 +605,47 @@ namespace CNA::Internal::Backends::HtmlDom
 
     void HtmlDomGraphicsBackend::SetPresentationMode(int mode)
     {
+        // plan_html_dom.md HTMLDOM-108: matches SdlGpuGraphicsBackend::SetPresentationMode's own
+        // validation -- an invalid ordinal used to be stored unchecked, silently corrupting every
+        // later ComputeLogicalViewport() call instead of failing at the actual bad input.
+        if (mode < static_cast<int>(CnaPresentationMode::Letterbox) ||
+            mode > static_cast<int>(CnaPresentationMode::FixedHeightDynamicWidth))
+            throw std::out_of_range(
+                "HTML_DOM backend: invalid CnaPresentationMode ordinal " + std::to_string(mode));
         presentationMode_ = static_cast<CnaPresentationMode>(mode);
     }
 
     bool HtmlDomGraphicsBackend::TransformWindowToLogical(float windowX, float windowY,
                                                           float& logX, float& logY) const
     {
-        if (virtualHeight_ <= 0) return false;
-        int physW, physH;
-        SDL_GetWindowSize(window_, &physW, &physH);
-        if (physH <= 0) return false;
-        const float scale = static_cast<float>(virtualHeight_) / static_cast<float>(physH);
-        logX = windowX * scale;
-        logY = windowY * scale;
-        return true;
+        // Preserves this backend's own existing contract for "no virtual resolution configured at
+        // all": there is no distinct logical space to report a mapping into, regardless of the
+        // (perfectly valid, 1:1) rendering fallback ComputeLogicalViewport() uses for that same
+        // case when actually drawing.
+        if (virtualWidth_ <= 0 || virtualHeight_ <= 0) return false;
+        const LogicalViewport viewport = ComputeLogicalViewport();
+        if (viewport.width <= 0.0f || viewport.height <= 0.0f) return false;
+        logX = (windowX - viewport.x) * viewport.logicalWidth / viewport.width;
+        logY = (windowY - viewport.y) * viewport.logicalHeight / viewport.height;
+        // Letterbox: a point in the bars (outside the scaled content rectangle) has no logical
+        // counterpart at all -- matches SdlGpuGraphicsBackend::TransformWindowToLogical's own
+        // contract. Overscan's viewport always extends at least to the physical edges on every
+        // axis, so every on-screen point is inside it; Stretch/FixedHeightDynamicWidth/
+        // NativeBackBuffer's viewport IS the physical rect, so this is never false for them either.
+        return windowX >= viewport.x && windowX < viewport.x + viewport.width &&
+               windowY >= viewport.y && windowY < viewport.y + viewport.height;
     }
 
     bool HtmlDomGraphicsBackend::TransformLogicalToWindow(float logX, float logY,
                                                           float& windowX, float& windowY) const
     {
-        // Exact inverse of TransformWindowToLogical: under FixedHeightDynamicWidth the logical
-        // width already follows the surface's aspect ratio, so the mapping is a uniform scale with
-        // no letterbox offset to account for.
-        if (virtualHeight_ <= 0) return false;
-        int physW, physH;
-        SDL_GetWindowSize(window_, &physW, &physH);
-        if (physH <= 0) return false;
-        const float invScale = static_cast<float>(physH) / static_cast<float>(virtualHeight_);
-        windowX = logX * invScale;
-        windowY = logY * invScale;
+        // Exact inverse of TransformWindowToLogical, using the same per-mode LogicalViewport
+        // geometry; see that method's own comment for the "no virtual resolution" early-out.
+        if (virtualWidth_ <= 0 || virtualHeight_ <= 0) return false;
+        const LogicalViewport viewport = ComputeLogicalViewport();
+        if (viewport.logicalWidth <= 0.0f || viewport.logicalHeight <= 0.0f) return false;
+        windowX = viewport.x + logX * viewport.width / viewport.logicalWidth;
+        windowY = viewport.y + logY * viewport.height / viewport.logicalHeight;
         return true;
     }
 
