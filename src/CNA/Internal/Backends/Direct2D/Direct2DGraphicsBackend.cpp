@@ -639,6 +639,12 @@ namespace CNA::Internal::Backends::Direct2D
         if (!rgba) throw std::runtime_error("Direct2DRenderTargetBackend::UpdatePixels received null pixels.");
         if (stride < width_ * 4)
             throw std::runtime_error("Direct2DRenderTargetBackend::UpdatePixels stride is smaller than one RGBA row.");
+        // D2D-87: ID2D1Bitmap::CopyFromMemory bypasses the device context's own drawing pipeline
+        // entirely, so it can race an open BeginDraw/EndDraw recording session against this target
+        // (or whichever target IS currently active) -- the same reason ReadCurrentTargetPixels
+        // flushes before CopyFromRenderTarget. A no-op when nothing is currently being drawn
+        // (EndDrawing's own drawing_ guard), so this is safe to call unconditionally here.
+        owner_->EndDrawing("render-target SetData");
         std::vector<uint8_t> bgra(static_cast<std::size_t>(width_) * static_cast<std::size_t>(height_) * 4u);
         for (int y = 0; y < height_; ++y)
         {

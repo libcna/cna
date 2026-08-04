@@ -1003,6 +1003,38 @@ protected:
             check("Direct2D usable after rejected self-sample", 0, 0, Color::White);
         }
 
+        // D2D-87: RenderTarget2D::SetData while the target is the ACTIVE render target with an
+        // open BeginDraw recording session (a pending Clear queued, not yet flushed) must not race
+        // ID2D1Bitmap::CopyFromMemory against that pending GPU work. Verifies the update lands
+        // consistently: a subsequent readback and a subsequent draw both see the SetData'd content,
+        // not the earlier queued Clear color.
+        {
+            RenderTarget2D setDataWhileBoundTarget(device, 2, 2);
+            device.SetRenderTarget(&setDataWhileBoundTarget);
+            device.Clear(Color(1, 2, 3, 255)); // queues a pending draw the flush must complete
+            const std::vector<Color> newPixels(4, Color(40, 50, 60, 255));
+            setDataWhileBoundTarget.SetData(newPixels.data(), static_cast<int>(newPixels.size()));
+            device.SetRenderTarget(nullptr);
+
+            Color readback(0, 0, 0, 0);
+            const Rectangle readbackTexel(0, 0, 1, 1);
+            setDataWhileBoundTarget.GetData(0, &readbackTexel, &readback, 0, 1);
+            const bool readbackMatches = Matches(readback, Color(40, 50, 60, 255));
+            std::printf("[%s] RenderTarget2D SetData while actively bound is readback-consistent: "
+                        "got=(%d,%d,%d,%d)\n",
+                        readbackMatches ? "PASS" : "FAIL",
+                        readback.getRProperty(), readback.getGProperty(),
+                        readback.getBProperty(), readback.getAProperty());
+            passed = passed && readbackMatches;
+
+            device.Clear(Color::Black);
+            sprites_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, nullptr, nullptr);
+            sprites_->Draw(setDataWhileBoundTarget, Rectangle(0, 0, 2, 2), Rectangle(0, 0, 1, 1), Color::White);
+            sprites_->End();
+            check("RenderTarget2D SetData while actively bound is draw-consistent", 0, 0,
+                  Color(40, 50, 60, 255));
+        }
+
         // 10. A mipmapped Texture2D owns one Direct2D bitmap per initialized level. SpriteBatch
         // chooses the nearest populated level during minification, rather than sampling an
         // uninitialized lower level or silently collapsing every draw to level zero.
