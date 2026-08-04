@@ -2864,16 +2864,54 @@ level-boundary contract.
 - Session-scoped build note: all compilation from this task onward was capped at `-j2` (down from
   the repo's own `-j3`) per an explicit mid-session request, not a change to the standing default.
 
+## Attempted this session: SKIA-163 -- partial progress only, NOT marked complete
+
+Scoping this task surfaced a real gap in Phase S17's own task sequencing, not an execution
+shortfall: SKIA-163's row text ("run complete raster-versus-Ganesh 2D parity... performance...
+suites") assumes Ganesh already has a working `IGraphicsBackend` capable of drawing real 2D scenes
+through `SpriteBatch`/`Texture2D`. **No such backend exists.** SKIA-159-162 all deliberately stayed
+below the public API; nothing in the current `plan_skia.md` task list under any number actually
+builds one. There is no task between SKIA-162 and SKIA-163 that was supposed to close this gap.
+
+Given that, `plan_skia.md`'s SKIA-163 row is deliberately left `⬜`, not flipped to `✅` -- see
+`docs/skia-ganesh-artifact.md`'s own "SKIA-163" section for the full reasoning. What was actually
+delivered this session, addressing the parts of SKIA-163's acceptance text that genuinely can be
+satisfied at the level that exists today:
+
+- New `examples/skia_ganesh_resource_budget_test.cpp` (`Skia_Ganesh_ResourceBudget`): 64 independent
+  construct/draw/readback/destroy cycles, plus 64 `DebugSimulateContextLossEXT()` cycles on one
+  long-lived surface -- matching `examples/skia_resource_budget_test.cpp`'s own 64-cycle scale,
+  directly addressing the "resource-budget"/"repeated reconstruction" clauses at the
+  `SkiaGaneshSurface` level. ASan's allocator checks (not LSan leak counting, disabled for the same
+  pre-existing `libGLX_mesa.so.0` baseline reason every Ganesh/GLX test already documents) stay
+  fully active across all 128 cycles.
+- **First-ever Ganesh-mode Release build and verification**: new permanent
+  `cmake-build-skia-ganesh-release` directory, 173/173 -- SKIA-160-162 verified Debug and (from
+  SKIA-161) ASan+UBSan, but never Release. Closes that specific gap.
+- Verified in all three Ganesh configurations (`cmake-build-skia-ganesh`, `-asan`, new `-release`):
+  173/173 each (up from 172, +1), zero sanitizer findings. Raster builds
+  (`cmake-build-skia`/`-release`/`-asan`, still default) unchanged 171/171 in all three.
+
+What remains genuinely open, not attempted: a real 2D-scene "parity" oracle and any "performance"
+comparison, both of which need a real Ganesh `IGraphicsBackend` that does not exist yet and has no
+task number. Building one would be a materially larger undertaking than any single SKIA-159-163
+task -- closer in scope to the entire raster `SkiaGraphicsBackend` implementation -- and probably
+deserves its own architecture-decision-style scoping (mirroring `docs/skia-3d-emulation-adr.md`'s
+own precedent) rather than being assumed to fit inside the next available task number.
+
 ## Next candidates
 
-1. SKIA-163: run complete raster-vs-Ganesh 2D parity, lifecycle, resource-budget, performance,
-   Release, and sanitizer suites -- the point where Ganesh would need real
-   `IGraphicsBackend`/`SpriteBatch` wiring for the first time, not attempted by SKIA-159-162, which
-   all deliberately stayed below the public API.
+1. **Open strategic question, not yet decided**: does Ganesh get a real `IGraphicsBackend`
+   (SpriteBatch/Texture2D/2D drawing) at all, and if so, is that a new task inserted before
+   SKIA-163, or a redefinition of SKIA-163 itself? Until that is decided, SKIA-163 as literally
+   written cannot be closed, and SKIA-164-170 (MSAA/anisotropy probing, MRT re-evaluation) likely
+   have the same implicit-backend-exists assumption baked into their own acceptance text -- worth
+   checking before attempting any of them literally, rather than discovering the same gap again.
 2. SKIA-164-170: probe real MSAA/anisotropy, re-evaluate MRT, and hold the successor gate only
    after the raster extensions are stable -- also where the mesh-effect cache's deferred "mode" key
    axis (see SKIA-156 above) should actually be added, now that a second compilation target
-   genuinely exists.
+   genuinely exists. (Same caveat as above: these may also assume backend integration that does
+   not exist.)
 3. The pre-existing `CNA_ENABLE_NET=OFF`/monolithic-`CnaTests` ENet build-graph defect is recorded
    by SKIA-112/113 but remains outside Skia scope.
 4. Standalone follow-up (not yet a numbered task): wire `cnaVolumeAddressModesEXT` to the active
@@ -2890,11 +2928,13 @@ level-boundary contract.
 
 - `CNA_GRAPHICS_BACKEND=SKIA`'s default `CNA_SKIA_MODE=RASTER` build is still raster-only; its
   current requested MSAA 0/1 reports 0, and requests normalizing to 2+ are rejected with the
-  capability remaining false. An opt-in `CNA_SKIA_MODE=GANESH` build (SKIA-159-161,
-  `docs/skia-ganesh-artifact.md`) can now genuinely draw, flush/submit, swap, read back, and resize
-  a real default-framebuffer `SkSurface` (`SkiaGaneshSurface`), pixel-proven below the API -- but
-  no `IGraphicsBackend` wraps it, so there is still no `SpriteBatch`/`GraphicsDevice` integration,
-  no loss/recovery policy, and no MSAA/anisotropy capability probing (SKIA-162+).
+  capability remaining false. An opt-in `CNA_SKIA_MODE=GANESH` build (SKIA-159-163,
+  `docs/skia-ganesh-artifact.md`) can now genuinely draw, flush/submit, swap, read back, resize,
+  and recover from a simulated context loss on a real default-framebuffer `SkSurface`
+  (`SkiaGaneshSurface`), pixel-proven below the API and stress-tested at 64+64 cycles -- but no
+  `IGraphicsBackend` wraps it, so there is still no `SpriteBatch`/`GraphicsDevice` integration, no
+  2D-scene rendering, and no MSAA/anisotropy capability probing. No task in `plan_skia.md` currently
+  builds that integration -- see the "Attempted this session: SKIA-163" section above.
 - `TextureFilter::Anisotropic` deliberately falls back byte-exactly to complete Linear, including
   mip interpolation, while the real anisotropy capability remains false.
 - Mipmapped Texture2D construction, exact level reporting, full/partial transfer at every level,

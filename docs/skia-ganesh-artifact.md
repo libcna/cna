@@ -1,14 +1,15 @@
-# Skia Ganesh/OpenGL artifact (SKIA-159-162)
+# Skia Ganesh/OpenGL artifact (SKIA-159-163)
 
-Status: normative SKIA-159-162 contract. SKIA-159 produced a second, separately pinned GN artifact
-and a new optional CMake target; SKIA-160 added the construction-time mode selector and diagnostic
-on top of it; SKIA-161 added real default-framebuffer wrapping, flush/submit, swap, readback, and
-resize; SKIA-162 (see its own section below) added genuine GL context loss/recovery and a
-best-effort fullscreen proof on top of that. None of the four change the validated raster artifact,
-its CMake target, or its selection logic. SKIA-159/160 together close gate 1 of
-`docs/skia-surface-mode-adr.md`'s six reopening requirements in full; SKIA-161/162 together close
-gate 3 ("wrap and present the real backbuffer, including resize and loss/recovery") in full too.
-Gates 2, 4, and 6 remain fully open.
+Status: normative SKIA-159-162 contract, plus a SKIA-163 partial-progress section that is
+deliberately **not** claimed as closing that task -- see below for why. SKIA-159 produced a
+second, separately pinned GN artifact and a new optional CMake target; SKIA-160 added the
+construction-time mode selector and diagnostic on top of it; SKIA-161 added real
+default-framebuffer wrapping, flush/submit, swap, readback, and resize; SKIA-162 added genuine GL
+context loss/recovery and a best-effort fullscreen proof on top of that. None of the four change
+the validated raster artifact, its CMake target, or its selection logic. SKIA-159/160 together
+close gate 1 of `docs/skia-surface-mode-adr.md`'s six reopening requirements in full; SKIA-161/162
+together close gate 3 ("wrap and present the real backbuffer, including resize and loss/recovery")
+in full too. Gates 2, 4, and 6 remain fully open.
 
 ## Why a second artifact, not a second mode of the existing one
 
@@ -480,3 +481,72 @@ and ASan+UBSan, zero sanitizer findings. Two isolated transient test failures du
 `Skia_SpriteFont_DefaultChar` -- all pre-existing, unrelated tests, none touched by this task) were
 each confirmed to pass cleanly in isolation and on a full sequential rerun, matching this
 repository's own established transient-Xvfb-under-parallel-load pattern; none is a real regression.
+
+## SKIA-163: partial progress only -- a real gap in Phase S17's own task sequencing
+
+SKIA-163's row text is "Run complete raster-versus-Ganesh 2D parity, lifecycle, resource-budget,
+performance, Release, and sanitizer suites," accepted by "Exact/toleranced oracle results,
+ownership, state leakage, repeated reconstruction, and platform boundaries pass before Ganesh is
+advertised." Taken literally, this assumes Ganesh already has a working `IGraphicsBackend` capable
+of drawing real 2D scenes through `SpriteBatch`/`Texture2D` -- otherwise there is no "2D parity"
+corpus to run, and no "performance" to compare. **No such backend exists.** SKIA-159-162, entirely
+deliberately, all stayed below the public API (`SkiaGaneshContext`/`SkiaGaneshSurface` are not
+`IGraphicsBackend` implementations); nothing in the current `plan_skia.md` task list under any
+number actually builds one. This is a genuine gap in Phase S17's own sequencing, discovered while
+scoping this task, not a shortfall in how it was executed -- there is no task between SKIA-162 and
+SKIA-163 that was supposed to close it.
+
+Given that, this task is **not marked complete** in `plan_skia.md`. What follows is the honest
+subset of SKIA-163's acceptance text that genuinely can be satisfied at the level that exists
+today, delivered as real, verified work -- not a substitute for the missing backend integration,
+and not claimed as one.
+
+### What was delivered
+
+- New `examples/skia_ganesh_resource_budget_test.cpp` (`Skia_Ganesh_ResourceBudget`), directly
+  addressing the "resource-budget"/"repeated reconstruction" clauses at the `SkiaGaneshSurface`
+  level, matching `examples/skia_resource_budget_test.cpp`'s own 64-cycle scale and precedent:
+  - **Phase 1**: 64 independent construct/draw/readback/destroy cycles on the same window, each
+    with a distinct verified colour -- proving repeated `SkiaGaneshSurface` construction is stable
+    at scale, not just once (SKIA-161) or three times (SKIA-162).
+  - **Phase 2**: 64 `DebugSimulateContextLossEXT()` cycles on one long-lived surface, each followed
+    by a fresh draw/readback -- deepening SKIA-162's own 3-cycle proof to the same scale.
+  - Real memory-safety checking throughout both phases comes from ASan's allocator-level checks
+    (use-after-free, double-free, buffer overflow), which stay fully active even with
+    `detect_leaks=0` (only LSan's leak *counting* is disabled, for the same pre-existing
+    `libGLX_mesa.so.0` baseline-residual reason every other Ganesh/GLX test already documents).
+    Byte-level leak counting across 128 real GL context create/destroy cycles was not attempted --
+    the known baseline noise (confirmed non-zero and non-deterministic in earlier tasks) would make
+    any such count meaningless without also isolating the host GLX presenter (dummy/software SDL
+    driver), which does not work for a GL-context-requiring backend the way it does for raster.
+- **First-ever Ganesh-mode Release build and verification**: a new permanent
+  `cmake-build-skia-ganesh-release` directory (mirroring `cmake-build-skia-ganesh`/`-asan`'s
+  existing convention), 173/173. SKIA-160-162 each verified Ganesh in Debug (and, from SKIA-161
+  onward, ASan+UBSan) but never Release; this closes that specific gap, directly addressing this
+  task's "Release... suites" clause.
+- "Platform boundaries": re-confirmed, not newly built -- the `RASTER`-mode refusal
+  (`SkiaGaneshContext`/`SkiaGaneshSurface` both throw unconditionally there, SKIA-160/161) and the
+  null-window/invalid-construction refusals (SKIA-160) remain exactly as tested.
+- "Exact/toleranced oracle results": still only the pixel-level formulas SKIA-161 already proved
+  (origin, channel order, alpha blending), now additionally proven stable across many independent
+  constructions (this task's Phase 1) rather than a single one. Not extended to any new formula or
+  scene, and explicitly not a 2D-scene-level oracle -- there is no scene-rendering path to compare.
+
+### What remains genuinely open
+
+- A real 2D-scene "parity" oracle (rendering the same `SpriteBatch` scene through raster and
+  through Ganesh and comparing pixels) cannot exist until some task gives Ganesh an
+  `IGraphicsBackend`. No such task currently has a number in `plan_skia.md`.
+  `docs/skia-3d-emulation-adr.md`-style architecture-decision framing might be the right vehicle
+  for scoping that work properly (a full `IGraphicsBackend` is a materially larger undertaking than
+  any single SKIA-159-163 task, closer in scope to the entire raster `SkiaGraphicsBackend`
+  implementation) rather than assuming it fits inside the next available task number.
+- "Performance" comparison has no meaning without that same scene-rendering path.
+- Full LSan byte-level leak counting across GL context churn remains undemonstrated for the reason
+  given above.
+
+Verified: `cmake-build-skia-ganesh`, `-asan`, and the new `-release` are all 173/173 (up from 172,
++1 -- `Skia_Ganesh_ResourceBudget`), zero sanitizer findings; the raster builds
+(`cmake-build-skia`/`-release`/`-asan`, still default) are unchanged at 171/171 in all three, zero
+sanitizer findings, `Accelerated` still 0 there. `docs/skia-backend.md`/`docs/skia-release-gate.md`
+deliberately untouched, per their existing freeze-until-SKIA-170 policy.

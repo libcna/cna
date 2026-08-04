@@ -957,4 +957,14 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     if(CNA_SKIA_MODE STREQUAL "GANESH")
         cna_register_skia_accelerated_test(Skia_Ganesh_Backbuffer cna_test_skia_ganesh_backbuffer)
     endif()
+
+    # SKIA-163: the resource-budget/repeated-reconstruction half of this task's acceptance text,
+    # scoped to what genuinely exists in the Ganesh path today (see docs/skia-ganesh-artifact.md's
+    # "SKIA-163" section for the full scope note). Only registered in a GANESH build, same reason
+    # as Skia_Ganesh_Backbuffer above.
+    cna_skia_test(cna_test_skia_ganesh_resource_budget examples/skia_ganesh_resource_budget_test.cpp)
+    target_include_directories(cna_test_skia_ganesh_resource_budget PRIVATE "${CNA_SKIA_ROOT}")
+    if(CNA_SKIA_MODE STREQUAL "GANESH")
+        cna_register_skia_accelerated_test(Skia_Ganesh_ResourceBudget cna_test_skia_ganesh_resource_budget)
+    endif()
 endif()
