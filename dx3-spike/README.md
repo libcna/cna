@@ -1,12 +1,12 @@
-# `dx30-spike` — `DX30-0` existence-gate spike findings (2026-07-21)
+# `dx3-spike` — `DX30-0` existence-gate spike findings (2026-07-21)
 
 Run under real Wine `ddraw.dll` (Wine 10.0~repack-6, `WINEPREFIX=$HOME/.wine-cna-dx1`,
 `DISPLAY=:99` Xvfb, `WAYLAND_DISPLAY` unset) — same environment `dx1-spike`/`dx2-spike` used.
 
 ## What this backend needs to prove
 
-Per `plan_dxold.md`'s roadmap, "real DX3" (temporarily named `DX30` in this repo — see
-`plan_dx30.md`'s own status note for why) is DirectDraw **v2** (`IDirectDraw2`, adds a
+Per `plan_dxold.md`'s roadmap, "real DX3" (originally landed as `DX30` in this repo, since renamed — see
+`plan_dx3.md`'s own status note for why) is DirectDraw **v2** (`IDirectDraw2`, adds a
 refresh-rate parameter to `SetDisplayMode` and a new `GetAvailableVidMem` method) plus "execute-
 buffer Direct3D, matured." The execute-buffer half of that description is **already known
 non-functional** in this environment (`dx2-spike/README.md`'s 14-variant finding) — `DX2` already
@@ -14,7 +14,7 @@ resolved the 3D question by using the DX3-SDK's own `IDirect3D2`/`IDirect3DDevic
 immediate-mode API instead, which genuinely works. Since that API is *already* a DX3-SDK addition,
 `DX30`'s 3D layer needs no new spike at all — it is architecturally identical to `DX2`'s already-
 proven 3D layer. The only genuinely new surface for this backend is the 2D layer's **DirectDraw
-object itself becoming `IDirectDraw2`**, which is what `dx30_spike1_ddraw2.cpp` tests.
+object itself becoming `IDirectDraw2`**, which is what `dx3_spike1_ddraw2.cpp` tests.
 
 ## Result: `IDirectDraw2` is real and fully functional as a drop-in for `IDirectDraw` v1
 
@@ -45,13 +45,13 @@ verified `IDirect3D2`/`IDirect3DDevice2`/`IDirect3DViewport2`/`IDirect3DTexture2
 
 ## Files
 
-- `dx30_spike1_ddraw2.cpp` — the spike above.
+- `dx3_spike1_ddraw2.cpp` — the spike above.
 
 Build (MinGW cross, ccache-wrapped):
 
 ```bash
-ccache x86_64-w64-mingw32-g++ -O0 -g -c dx30_spike1_ddraw2.cpp -o dx30_spike1_ddraw2.o
-x86_64-w64-mingw32-g++ -O0 -g -o dx30_spike1_ddraw2.exe dx30_spike1_ddraw2.o -lddraw -ldxguid -luser32 -lgdi32 -lkernel32
+ccache x86_64-w64-mingw32-g++ -O0 -g -c dx3_spike1_ddraw2.cpp -o dx3_spike1_ddraw2.o
+x86_64-w64-mingw32-g++ -O0 -g -o dx3_spike1_ddraw2.exe dx3_spike1_ddraw2.o -lddraw -ldxguid -luser32 -lgdi32 -lkernel32
 ```
 
 Run:
@@ -60,5 +60,5 @@ Run:
 export WAYLAND_DISPLAY=       # unset -- Wine prefers Wayland over X11 if this is set at all
 export DISPLAY=:99
 export WINEPREFIX="$HOME/.wine-cna-dx1"
-wine dx30_spike1_ddraw2.exe
+wine dx3_spike1_ddraw2.exe
 ```

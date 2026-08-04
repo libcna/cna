@@ -7,7 +7,7 @@ entire delta vs. `DX5` is new render states/capabilities on the *same* interface
 buffer operations (this backend's primary deliverable), multitexturing, and DXTn compression.
 
 **This document only covers what's specific to `DX6`.** Every capability row, boundary, and test
-result in `docs/dx5-backend.md` (and, further back, `docs/dx30-backend.md`/`docs/dx2-backend.md`)
+result in `docs/dx5-backend.md` (and, further back, `docs/dx3-backend.md`/`docs/dx2-backend.md`)
 applies identically here (same 2D compositor, same 3D pipeline, same lighting math, same known
 permanent limitations) — refer to those for the full completeness table. This document covers: the
 `DX6-0` spike, the real code deltas vs. `DX5`, and the DX6-specific CTest/regression results.
@@ -53,7 +53,7 @@ having already been learned). See `dx6-spike/README.md` for the full record.
   proportion for this backend, documented rather than silently dropped.
 - **DXTn compression out of scope**: no real caller-facing gap, since CNA's content pipeline never
   feeds compressed texture data into any legacy DirectX backend's texture-upload path (same
-  no-consumer reasoning already used for `DX30`'s `GetAvailableVidMem` and `DX5`'s real vertex
+  no-consumer reasoning already used for `DX3`'s `GetAvailableVidMem` and `DX5`'s real vertex
   buffers).
 - Everything else — 2D layer, 3D device bring-up, CPU transform/clip pipeline, `D3DFVF_TLVERTEX`
   submission, Phase O9 lighting, `VertexBuffer`/`IndexBuffer` backends, remaining
@@ -92,7 +92,7 @@ vertex-type enum), since `DX6` introduces no new interface to add rules for.
 
 ## 4. Everything else
 
-See `docs/dx5-backend.md` (and, further back, `docs/dx30-backend.md`/`docs/dx2-backend.md`) for
+See `docs/dx5-backend.md` (and, further back, `docs/dx3-backend.md`/`docs/dx2-backend.md`) for
 the full completeness table — every row applies to `DX6` identically, since its own code is a port
 with only the stencil-related deltas described above.
 

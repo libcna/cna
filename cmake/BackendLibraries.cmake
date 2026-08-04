@@ -127,24 +127,24 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "DX2")
     # obtained purely via QueryInterface/CreateDevice on DirectDraw objects/surfaces (confirmed
     # during the DX2-0 spike, see plan_dx2.md section 1).
     target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 ddraw dxguid)
-elseif(CNA_GRAPHICS_BACKEND STREQUAL "DX30")
-    # plan_dx30.md design decision 6: same confirmed minimal link set as DX1/DX2 -- ddraw + dxguid +
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "DX3")
+    # plan_dx3.md design decision 6: same confirmed minimal link set as DX1/DX2 -- ddraw + dxguid +
     # SDL3::SDL3. No separate Direct3D import library is needed here either (DX30-0 spike confirmed
     # IDirect3D2/IDirect3DDevice2 are still obtained purely via QueryInterface/CreateDevice, now off
-    # an IDirectDraw2 object instead of v1 -- see plan_dx30.md section 1).
+    # an IDirectDraw2 object instead of v1 -- see plan_dx3.md section 1).
     target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 ddraw dxguid)
 elseif(CNA_GRAPHICS_BACKEND STREQUAL "DX5")
-    # plan_dx5.md design decision 9: same confirmed minimal link set as DX1/DX2/DX30 -- ddraw +
+    # plan_dx5.md design decision 9: same confirmed minimal link set as DX1/DX2/DX3 -- ddraw +
     # dxguid + SDL3::SDL3. No separate Direct3D import library is needed here either (DX5-0 spike
     # confirmed IDirect3D3/IDirect3DDevice3 are still obtained purely via QueryInterface/
     # CreateDevice, now off an IDirectDraw4 object instead of v2 -- see plan_dx5.md section 1).
     target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 ddraw dxguid)
 elseif(CNA_GRAPHICS_BACKEND STREQUAL "DX6")
-    # plan_dx6.md design decision 10: same confirmed minimal link set as DX1/DX2/DX30/DX5 -- ddraw +
+    # plan_dx6.md design decision 10: same confirmed minimal link set as DX1/DX2/DX3/DX5 -- ddraw +
     # dxguid + SDL3::SDL3. DX6 introduces no new interface at all, so no new link dependency either.
     target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 ddraw dxguid)
 elseif(CNA_GRAPHICS_BACKEND STREQUAL "DX7")
-    # plan_dx7.md design decision 14: same confirmed minimal link set as DX1/DX2/DX30/DX5/DX6 --
+    # plan_dx7.md design decision 14: same confirmed minimal link set as DX1/DX2/DX3/DX5/DX6 --
     # ddraw + dxguid + SDL3::SDL3. DirectDrawCreateEx/IDirectDraw7/IDirect3D7 all resolve from the
     # same import libraries, spike-confirmed (DX7-0) with no new link dependency.
     target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 ddraw dxguid)

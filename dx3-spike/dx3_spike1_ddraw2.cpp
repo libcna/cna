@@ -32,9 +32,9 @@ int main() {
     WNDCLASSW wc = {};
     wc.lpfnWndProc = WndProc;
     wc.hInstance = hInst;
-    wc.lpszClassName = L"Dx30Spike1Window";
+    wc.lpszClassName = L"Dx3Spike1Window";
     RegisterClassW(&wc);
-    HWND hwnd = CreateWindowExW(0, L"Dx30Spike1Window", L"DX30 Spike1",
+    HWND hwnd = CreateWindowExW(0, L"Dx3Spike1Window", L"DX3 Spike1",
         WS_OVERLAPPEDWINDOW, 0, 0, 64, 64, nullptr, nullptr, hInst, nullptr);
     ShowWindow(hwnd, SW_SHOW);
 
@@ -82,7 +82,7 @@ int main() {
     PrintHr("IDirectDraw2::SetDisplayMode(640,480,32,60Hz,0)", hr);
     if (SUCCEEDED(hr)) dd2->RestoreDisplayMode();
 
-    // --- Test E: QueryInterface(IID_IDirect3D2) FROM the v2 pointer (not v1) -- DX30's whole 3D
+    // --- Test E: QueryInterface(IID_IDirect3D2) FROM the v2 pointer (not v1) -- DX3's whole 3D
     // layer depends on this chain still working the same way DX2's did from its v1 pointer.
     LPDIRECT3D2 d3d2 = nullptr;
     hr = dd2->QueryInterface(IID_IDirect3D2, (void**)&d3d2);

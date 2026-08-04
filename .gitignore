@@ -39,7 +39,7 @@ cmake-build-windows/*
 cmake-build-tests/*
 cmake-build-ubsan/*
 cmake-build-dx2/*
-cmake-build-dx30/*
+cmake-build-dx3/*
 cmake-build-dx5/*
 cmake-build-dx6/*
 cmake-build-dx7/*
@@ -49,8 +49,8 @@ dx10-spike/*.exe
 dx10-spike/*.o
 dx2-spike/*.exe
 dx2-spike/*.o
-dx30-spike/*.exe
-dx30-spike/*.o
+dx3-spike/*.exe
+dx3-spike/*.o
 dx5-spike/*.exe
 dx5-spike/*.o
 dx6-spike/*.exe

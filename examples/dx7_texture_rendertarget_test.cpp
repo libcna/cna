@@ -177,7 +177,7 @@ protected:
         // ceiling -- must succeed without throwing here, the opposite assertion from DX3's own
         // equivalent check. CNA does not enforce any GraphicsProfile-based size ceiling outside the
         // D3D9 backend (Texture2D.cpp's own ValidateTextureSizeForProfileEXT is #ifdef
-        // CNA_BACKEND_D3D9-only) -- an honest, documented gap for DX7 (and DX2/DX30, its own porting sources), not silently dropped.
+        // CNA_BACKEND_D3D9-only) -- an honest, documented gap for DX7 (and DX2/DX3, its own porting sources), not silently dropped.
         {
             bool threw = false;
             try { Texture2D large(dev, 4096, 4096); }

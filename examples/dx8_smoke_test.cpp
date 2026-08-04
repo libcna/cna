@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx30.md Phase P2 (DX30-10, ported from plan_dx2.md's DX2-10/DX1-10..DX1-18): smoke test for
+// plan_dx3.md Phase P2 (DX30-10, ported from plan_dx2.md's DX2-10/DX1-10..DX1-18): smoke test for
 // the DX8 (real DirectDraw v4, run under Wine -- no ../free-direct anywhere in this backend)
 // graphics backend's foundation -- real DirectDrawCreate -> QueryInterface(IID_IDirectDraw2) ->
 // SetCooperativeLevel(DDSCL_NORMAL) -> CreateSurface device bring-up, real Clear()/Present(), real
-// pixel readback. SpriteBatch/Texture2D draws are covered by dx30_spritebatch_test.cpp (Phase P4).
+// pixel readback. SpriteBatch/Texture2D draws are covered by dx3_spritebatch_test.cpp (Phase P4).
 //
-// This test's own success IS the proof the IDirectDraw2 upgrade (plan_dx30.md design decision 2)
+// This test's own success IS the proof the IDirectDraw2 upgrade (plan_dx3.md design decision 2)
 // actually happened: Dx8GraphicsBackend's constructor unconditionally throws if
 // QueryInterface(IID_IDirectDraw2) fails, so every check below only ever runs against a genuine
 // v2 object -- no separate "did the upgrade happen" CTest is needed on top of that.

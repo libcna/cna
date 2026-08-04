@@ -1,5 +1,5 @@
 // DX6-0 existence-gate spike: confirm real stencil buffer operations work in this environment's
-// Wine, the one genuinely new capability plan_dxold.md's roadmap assigns to DX6 that DX2/DX30/DX5
+// Wine, the one genuinely new capability plan_dxold.md's roadmap assigns to DX6 that DX2/DX3/DX5
 // have all explicitly documented as "no real stencil buffer exists at this DirectX era (DX6+)".
 //
 // Unlike DX2->DX30->DX5's progression, DX6 introduces NO new COM interface revision at all --

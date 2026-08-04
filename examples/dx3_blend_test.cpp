@@ -39,7 +39,7 @@ using namespace Microsoft::Xna::Framework::Graphics;
 
 static constexpr int kCanvasSize = 32;
 
-class Dx30BlendTest : public Game
+class Dx3BlendTest : public Game
 {
     std::unique_ptr<GraphicsDeviceManager> gdm_;
     int passCount_ = 0;
@@ -134,7 +134,7 @@ protected:
     }
 
 public:
-    Dx30BlendTest()
+    Dx3BlendTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
         gdm_->setPreferredBackBufferWidthProperty(kCanvasSize);
@@ -146,7 +146,7 @@ public:
 
 int main()
 {
-    Dx30BlendTest game;
+    Dx3BlendTest game;
     game.Run();
     return game.getResult();
 }

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx2.md Phase O4 (DX2-30..DX2-35): the real proof DX8's (a port of DX30's own, itself a port of DX2's) CPU transform/clip -> D3DTLVERTEX
+// plan_dx2.md Phase O4 (DX2-30..DX2-35): the real proof DX8's (a port of DX3's own, itself a port of DX2's) CPU transform/clip -> D3DTLVERTEX
 // -> IDirect3DDevice2::DrawIndexedPrimitive pipeline works -- pixel-verified triangle rendering
 // through the real Direct3D v2 device, run under Wine.
 //

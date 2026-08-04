@@ -52,9 +52,10 @@ namespace CNA
         /** @brief DX2 (real DirectDraw v1 + Direct3D v2 DrawPrimitive, no execute buffers). */
         Dx2,
 
-        /** @brief DX30 (real DirectX 3 -- DirectDraw v2 + Direct3D v2 DrawPrimitive; temporarily
-         * named DX30, see plan_dx30.md's own status note for why). */
-        Dx30,
+        /** @brief DX3 (real DirectX 3 -- DirectDraw v2 + Direct3D v2 DrawPrimitive; originally
+         * landed as DX30 while the free-direct backend still owned the DX3 name, renamed once
+         * that backend became FreeDirect). */
+        Dx3,
 
         /** @brief DX5 (real DirectDraw v4 + Direct3D v3 FVF DrawPrimitive, no execute buffers). */
         Dx5,
@@ -118,8 +119,8 @@ namespace CNA
         return GraphicsBackendType::Dx1;
 #elif defined(CNA_BACKEND_DX2)
         return GraphicsBackendType::Dx2;
-#elif defined(CNA_BACKEND_DX30)
-        return GraphicsBackendType::Dx30;
+#elif defined(CNA_BACKEND_DX3)
+        return GraphicsBackendType::Dx3;
 #elif defined(CNA_BACKEND_DX5)
         return GraphicsBackendType::Dx5;
 #elif defined(CNA_BACKEND_DX6)
@@ -166,7 +167,7 @@ namespace CNA
             case GraphicsBackendType::D3D9:          return "D3D9";
             case GraphicsBackendType::Dx1:            return "DX1";
             case GraphicsBackendType::Dx2:            return "DX2";
-            case GraphicsBackendType::Dx30:           return "DX30";
+            case GraphicsBackendType::Dx3:           return "DX3";
             case GraphicsBackendType::Dx5:            return "DX5";
             case GraphicsBackendType::Dx6:            return "DX6";
             case GraphicsBackendType::Dx7:            return "DX7";

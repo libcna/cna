@@ -5,9 +5,9 @@
 // IDirect3DViewport3) -- DX6 introduces no new interface revision at all. Its own delta: real
 // stencil buffer operations (D3DRENDERSTATE_STENCIL*, spike-confirmed real write+test behavior)
 // against a combined depth+stencil Z-buffer surface. Its 2D and 3D layers are otherwise a
-// verbatim port of DX5's own (plan_dx5.md, itself a port of DX30's, itself a port of DX2's).
+// verbatim port of DX5's own (plan_dx5.md, itself a port of DX3's, itself a port of DX2's).
 // Cross-compiled via MinGW-w64 and run under Wine/Proton, the same Route B delivery mechanism
-// D3D9/D3D11/D3D12/DX1/DX2/DX30/DX5 already use.
+// D3D9/D3D11/D3D12/DX1/DX2/DX3/DX5 already use.
 //
 // This header intentionally does NOT include <ddraw.h> (design decision 9's containment rule,
 // mirroring DX3/D3D11/D3D12): it pulls in the full real <windows.h>, whose enormous macro surface
@@ -23,7 +23,7 @@ namespace CNA::Internal::Backends::Dx6
 {
     /**
      * DX6 graphics backend (plan_dx6.md): a verbatim port of Dx5GraphicsBackend (plan_dx5.md,
-     * itself a port of Dx30GraphicsBackend/Dx2GraphicsBackend) -- DirectDraw v4
+     * itself a port of Dx3GraphicsBackend/Dx2GraphicsBackend) -- DirectDraw v4
      * (IDirectDraw4/IDirectDrawSurface4/DDSURFACEDESC2/DDSCAPS2 throughout) and Direct3D v3
      * (IDirect3D3/IDirect3DDevice3/IDirect3DViewport3, DrawPrimitive/DrawIndexedPrimitive selected
      * via the D3DFVF_TLVERTEX FVF bitmask) -- the EXACT SAME interfaces DX5 already uses, since
@@ -65,7 +65,7 @@ namespace CNA::Internal::Backends::Dx6
      * stencil), and ApplyDepthStencilState's stencil parameters are real
      * (D3DRENDERSTATE_STENCILENABLE/FUNC/FAIL/ZFAIL/PASS/REF/MASK/WRITEMASK), spike-confirmed
      * genuine write-then-test behavior -- resolving the "no stencil until DX6" boundary
-     * DX2/DX30/DX5 all documented. Multitexture stays accepted-and-ignored (design decision 6 --
+     * DX2/DX3/DX5 all documented. Multitexture stays accepted-and-ignored (design decision 6 --
      * D3DTLVERTEX only carries one texture-coordinate pair; genuine multitexture would need a
      * second vertex layout, out of this plan's scope).
      */
@@ -131,7 +131,7 @@ namespace CNA::Internal::Backends::Dx6
         // plan_dx6.md design decision 5: ApplyDepthStencilState now honors depth AND the
         // front-face stencil parameters (enable/func/fail/zfail/pass/mask/writemask/ref) --
         // spike-confirmed real write+test behavior (DX6-0), resolving the "no real stencil buffer
-        // until DX6" boundary DX2/DX30/DX5 all documented. twoSidedStencilMode/ccwStencil* remain
+        // until DX6" boundary DX2/DX3/DX5 all documented. twoSidedStencilMode/ccwStencil* remain
         // accepted-and-ignored: two-sided stencil is a D3D9-era addition that doesn't exist at
         // this DirectX era at all (confirmed by inspection). ApplyRasterizerState honors
         // cullMode/fillMode; scissorTestEnable/depthBias/slopeScaleDepthBias are accepted and

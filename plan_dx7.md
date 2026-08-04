@@ -28,7 +28,7 @@
      this backend family has carried since `DX2-0` — spike-confirmed (`DX7-0` Tests D/E/F) working
      with no viewport object created at all.
   3. **`IDirect3D7::CreateDevice` drops the trailing `IUnknown* outer` parameter** `DX5`/`DX6`'s
-     `IDirect3D3::CreateDevice` had (present on `DX5`/`DX6`, absent on `DX2`/`DX30`, absent again
+     `IDirect3D3::CreateDevice` had (present on `DX5`/`DX6`, absent on `DX2`/`DX3`, absent again
      on `DX7` — a real signature oscillation across this backend family's own history).
   4. **`IDirect3DDevice7::SetTexture(stage, IDirectDrawSurface7*)` binds a texture directly from
      the surface pointer** — no more `D3DRENDERSTATE_TEXTUREHANDLE` + `IDirect3DTexture2::GetHandle`
@@ -104,7 +104,7 @@ confirmed. Phase S1 is unblocked.
 
 ## 3. Design decisions (recorded before implementation)
 
-1. **Platform gate, same as `DX1`/`DX2`/`DX30`/`DX5`/`DX6`.** Same Windows-native-or-MinGW-cross-compile
+1. **Platform gate, same as `DX1`/`DX2`/`DX3`/`DX5`/`DX6`.** Same Windows-native-or-MinGW-cross-compile
    `FATAL_ERROR` gate.
 
 2. **2D layer: port of `DX6`'s own, upgraded to `IDirectDraw7`/`IDirectDrawSurface7`.** `DDSURFACEDESC2`/
@@ -182,7 +182,7 @@ confirmed. Phase S1 is unblocked.
 14. **CMake integration**: add `"DX7"` to `CNA_GRAPHICS_BACKEND`'s `STRINGS` property + a
     `CNA_BACKEND_DX7` option; a `cna_backend_graphics_dx7` static library target under
     `src/CNA/Internal/Backends/Dx7/`, same Windows-only `FATAL_ERROR` gate. Link set: `ddraw` +
-    `dxguid` + `SDL3::SDL3` — identical to `DX1`/`DX2`/`DX30`/`DX5`/`DX6`.
+    `dxguid` + `SDL3::SDL3` — identical to `DX1`/`DX2`/`DX3`/`DX5`/`DX6`.
 
 15. **Testing: `scripts/run-wine-dx7.sh`**, modeled on `scripts/run-wine-dx6.sh` — same
     `~/.wine-cna-dx1` prefix.

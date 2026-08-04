@@ -13,14 +13,14 @@
 // This header intentionally does NOT include <ddraw.h> (design decision 9's containment rule,
 // mirroring DX3/D3D11/D3D12): it pulls in the full real <windows.h>, whose enormous macro surface
 // (near/far/ERROR/…) has no business leaking into every translation unit that merely wants to hold
-// a Dx30GraphicsBackend pointer. All real <ddraw.h> usage lives in Dx30GraphicsBackend.cpp behind the
+// a Dx3GraphicsBackend pointer. All real <ddraw.h> usage lives in Dx3GraphicsBackend.cpp behind the
 // Impl pimpl below.
 
 #include "../Common/IGraphicsBackend.hpp"
 #include <SDL3/SDL.h>
 #include <memory>
 
-namespace CNA::Internal::Backends::Dx30
+namespace CNA::Internal::Backends::Dx3
 {
     /**
      * DX2 graphics backend (plan_dx2.md): its 2D layer is a verbatim port of DX1's own
@@ -45,10 +45,10 @@ namespace CNA::Internal::Backends::Dx30
      * nothing here is cached.
      *
      * Textures and render targets (Phase O3, ported from DX1's Phase O3) are real: both are
-     * private offscreen DDSCAPS_OFFSCREENPLAIN surfaces (Dx30TextureBackend/Dx30RenderTargetBackend,
-     * defined entirely in Dx30GraphicsBackend.cpp -- neither is ever named outside it), and
+     * private offscreen DDSCAPS_OFFSCREENPLAIN surfaces (Dx3TextureBackend/Dx3RenderTargetBackend,
+     * defined entirely in Dx3GraphicsBackend.cpp -- neither is ever named outside it), and
      * SetRenderTarget2D() redirects Clear()/ReadBackbuffer() to whichever surface is currently
-     * bound. The SpriteBatch CPU compositor (Phase O4, Dx30SpriteBatchBackend, ported from DX1's
+     * bound. The SpriteBatch CPU compositor (Phase O4, Dx3SpriteBatchBackend, ported from DX1's
      * Phase O4, itself ported verbatim from DX3's own already-verified CompositeQuad):
      * IDirectDrawSurface::Blt/BltFast has never supported rotation in any DirectX version, so an
      * identity-transform Opaque draw is a genuine BltFast straight copy; every other draw
@@ -63,14 +63,14 @@ namespace CNA::Internal::Backends::Dx30
      * The 3D layer (Direct3D v2, IDirect3D2/IDirect3DDevice2::DrawPrimitive) is NOT part of this
      * phase -- see the note above the 3D method group below. It lands in Phase O3/O4.
      */
-    class Dx30GraphicsBackend final : public IGraphicsBackend
+    class Dx3GraphicsBackend final : public IGraphicsBackend
     {
     public:
-        explicit Dx30GraphicsBackend(const GraphicsBackendCreateArgs& args);
-        ~Dx30GraphicsBackend() override;
+        explicit Dx3GraphicsBackend(const GraphicsBackendCreateArgs& args);
+        ~Dx3GraphicsBackend() override;
 
-        Dx30GraphicsBackend(const Dx30GraphicsBackend&) = delete;
-        Dx30GraphicsBackend& operator=(const Dx30GraphicsBackend&) = delete;
+        Dx3GraphicsBackend(const Dx3GraphicsBackend&) = delete;
+        Dx3GraphicsBackend& operator=(const Dx3GraphicsBackend&) = delete;
 
         // ---- IGraphicsBackend: real (Phase O2) ----
         void Clear(float r, float g, float b, float a) override;
@@ -201,8 +201,8 @@ namespace CNA::Internal::Backends::Dx30
         void SetDepthTestEnabled(bool enabled) override;
         void SetBlendEnabled(bool enabled) override;
         void SetDepthWriteEnabled(bool enabled) override;
-        // Phase O5 (design decision 8): plain CPU-side storage (Dx30VertexBufferBackend/
-        // Dx30IndexBufferBackend, defined entirely in Dx30GraphicsBackend.cpp), matching the
+        // Phase O5 (design decision 8): plain CPU-side storage (Dx3VertexBufferBackend/
+        // Dx3IndexBufferBackend, defined entirely in Dx3GraphicsBackend.cpp), matching the
         // Software backend's own identical approach -- Phase O4's CPU transform pipeline reads
         // directly from these buffers each draw, so there is no GPU-side object to upload to.
         // CreateIndexBuffer32 is explicitly overridden (real 32-bit storage) rather than relying

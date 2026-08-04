@@ -71,7 +71,7 @@ protected:
 
         // SupportsCapability() is a check, not an enforcement mechanism -- calling a method for a
         // genuinely-unsupported capability anyway still throws. MultipleRenderTargets (checked
-        // above) is a real DX8 (and DX2/DX30, its own porting sources) boundary: DirectDraw has exactly one active render target.
+        // above) is a real DX8 (and DX2/DX3, its own porting sources) boundary: DirectDraw has exactly one active render target.
         IRenderTargetBackend* twoTargets[2] = {nullptr, nullptr};
         check(Throws([&] { backend.SetRenderTargets(twoTargets, 2); }),
               "SetRenderTargets(count=2) still throws (no MRT support)");

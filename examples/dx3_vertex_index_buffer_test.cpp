@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx2.md Phase O5 (DX2-40..DX2-42): Dx30VertexBufferBackend/Dx30IndexBufferBackend CTest.
+// plan_dx2.md Phase O5 (DX2-40..DX2-42): Dx3VertexBufferBackend/Dx3IndexBufferBackend CTest.
 // Neither IVertexBufferBackend nor IIndexBufferBackend exposes a GetData()-style readback (both
 // are write-only from the public interface's own perspective, matching every other CNA backend) --
 // so "round-trip" here means: SetData() succeeds and the buffer's own count/width metadata
@@ -18,7 +18,7 @@
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 
-#include "CNA/Internal/Backends/Dx30/Dx30GraphicsBackend.hpp"
+#include "CNA/Internal/Backends/Dx3/Dx3GraphicsBackend.hpp"
 
 #include <cstdint>
 #include <cstdio>
@@ -28,11 +28,11 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::Dx30;
+using namespace CNA::Internal::Backends::Dx3;
 
 static constexpr int kCanvasSize = 64;
 
-class Dx30VertexIndexBufferTest : public Game
+class Dx3VertexIndexBufferTest : public Game
 {
     std::unique_ptr<GraphicsDeviceManager> gdm_;
     int passCount_ = 0;
@@ -48,7 +48,7 @@ protected:
     void Draw(const GameTime&) override
     {
         auto& dev = getGraphicsDeviceProperty();
-        auto& backend = static_cast<Dx30GraphicsBackend&>(dev.GetBackend());
+        auto& backend = static_cast<Dx3GraphicsBackend&>(dev.GetBackend());
 
         // Check A: VertexPositionColor-shaped data (stride 16), SetData -> GetVertexCount().
         {
@@ -106,7 +106,7 @@ protected:
     }
 
 public:
-    Dx30VertexIndexBufferTest()
+    Dx3VertexIndexBufferTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
         gdm_->setPreferredBackBufferWidthProperty(kCanvasSize);
@@ -118,7 +118,7 @@ public:
 
 int main()
 {
-    Dx30VertexIndexBufferTest game;
+    Dx3VertexIndexBufferTest game;
     game.Run();
     return game.getResult();
 }

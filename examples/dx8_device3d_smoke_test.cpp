@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx2.md Phase O3 (DX2-20..DX2-26): smoke test for DX8's real Direct3D v7 device bring-up (a port of DX6's own, itself a port of DX5/DX30/DX2's) --
+// plan_dx2.md Phase O3 (DX2-20..DX2-26): smoke test for DX8's real Direct3D v7 device bring-up (a port of DX6's own, itself a port of DX5/DX3/DX2's) --
 // IDirect3D7/IDirect3DDevice7 creation against the shadow-backbuffer surface (no separate viewport
 // object at all, plan_dx8.md design decision 4), a real attached 32-bit depth+stencil Z-buffer, and
 // the ClearColorAndDepth/ClearDepth/ClearStencil/etc entry points. VertexBuffer/IndexBuffer storage,

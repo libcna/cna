@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx2.md Phase O3 (DX2-20..DX2-26): smoke test for DX30's real Direct3D v2 device bring-up (a verbatim port of DX2's own) --
+// plan_dx2.md Phase O3 (DX2-20..DX2-26): smoke test for DX3's real Direct3D v2 device bring-up (a verbatim port of DX2's own) --
 // IDirect3D2/IDirect3DDevice2/IDirect3DViewport2 creation against the shadow-backbuffer surface,
 // a real attached 16-bit Z-buffer, and the newly-real ClearColorAndDepth/ClearDepth/etc entry
 // points. VertexBuffer/IndexBuffer storage (Phase O5), the 3D draw path itself
 // (DrawColoredPrimitives/DrawPrimitivesEx, Phase O4), and state application (SetDepthTestEnabled/
 // ApplyRasterizerState/etc, Phase O6) are all real now -- pixel-verified 3D rendering is covered
 // by dx2_colored_primitives_test.cpp/dx2_ztest_test.cpp/etc, not this file. Check D below only
-// confirms the simple state-toggle methods don't throw anymore (a smoke-level check) -- Dx30_ZTest
+// confirms the simple state-toggle methods don't throw anymore (a smoke-level check) -- Dx3_ZTest
 // already covers real depth-test behavior in depth.
 //
 // Check A -- backend.SupportsDepthStencil() reports true (device bring-up succeeded; DX1 always
@@ -20,7 +20,7 @@
 //   stencil) with all three flags) does not throw and clears color correctly -- stencil is
 //   accepted and silently ignored (design decision 7), not thrown.
 // Check D -- SetDepthTestEnabled/SetDepthWriteEnabled no longer throw (Phase O6 state application
-//   is real) -- a smoke-level check; Dx30_ZTest covers real depth-test pixel behavior.
+//   is real) -- a smoke-level check; Dx3_ZTest covers real depth-test pixel behavior.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
@@ -31,7 +31,7 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ClearOptions.hpp"
 
-#include "CNA/Internal/Backends/Dx30/Dx30GraphicsBackend.hpp"
+#include "CNA/Internal/Backends/Dx3/Dx3GraphicsBackend.hpp"
 
 #include <cstdio>
 #include <cstdlib>
@@ -40,11 +40,11 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::Dx30;
+using namespace CNA::Internal::Backends::Dx3;
 
 static constexpr int kCanvasSize = 64;
 
-class Dx30Device3DSmokeTest : public Game
+class Dx3Device3DSmokeTest : public Game
 {
     std::unique_ptr<GraphicsDeviceManager> gdm_;
     int passCount_ = 0;
@@ -74,7 +74,7 @@ protected:
     void Draw(const GameTime&) override
     {
         auto& dev = getGraphicsDeviceProperty();
-        auto& backend = static_cast<Dx30GraphicsBackend&>(dev.GetBackend());
+        auto& backend = static_cast<Dx3GraphicsBackend&>(dev.GetBackend());
 
         // Check A: device bring-up succeeded -- SupportsDepthStencil() reports true.
         check(backend.SupportsDepthStencil(), "SupportsDepthStencil() reports true after Phase O3 device bring-up");
@@ -133,7 +133,7 @@ protected:
     }
 
 public:
-    Dx30Device3DSmokeTest()
+    Dx3Device3DSmokeTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
         gdm_->setPreferredBackBufferWidthProperty(kCanvasSize);
@@ -145,7 +145,7 @@ public:
 
 int main()
 {
-    Dx30Device3DSmokeTest game;
+    Dx3Device3DSmokeTest game;
     game.Run();
     return game.getResult();
 }

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx2.md Phase O4 (DX2-30, DX2-39): near-plane clipping (Dx30ClipTriangleNearPlane, ported
+// plan_dx2.md Phase O4 (DX2-30, DX2-39): near-plane clipping (Dx3ClipTriangleNearPlane, ported
 // verbatim from SoftwareGraphicsBackend.cpp's SOFTWARE-83) -- a triangle straddling the near plane
 // renders its visible portion only, with no crash or garbage output.
 //
@@ -49,7 +49,7 @@ namespace
     }
 }
 
-class Dx30ClippingTest : public Game
+class Dx3ClippingTest : public Game
 {
     std::unique_ptr<GraphicsDeviceManager> gdm_;
     int result_ = 1;
@@ -162,7 +162,7 @@ protected:
     }
 
 public:
-    Dx30ClippingTest()
+    Dx3ClippingTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
         gdm_->setPreferredBackBufferWidthProperty(64);
@@ -174,7 +174,7 @@ public:
 
 int main()
 {
-    Dx30ClippingTest game;
+    Dx3ClippingTest game;
     game.Run();
     return game.getResult();
 }

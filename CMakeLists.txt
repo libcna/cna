@@ -176,13 +176,14 @@ include(cmake/Tests/Dx1Tests.cmake)
 # own shape (Windows-only, MinGW cross-compile + Wine wrapper).
 include(cmake/Tests/Dx2Tests.cmake)
 
-# plan_dx30.md: real DirectX 3 backend, temporarily named DX30 (see plan_dx30.md's own status note
-# for why) -- a mechanical port of DX2's own 2D+3D layers upgraded to IDirectDraw2, same
+# plan_dx3.md: real DirectX 3 backend (originally landed under the temporary DX30 name; renamed
+# to DX3 on 2026-08-04 once the free-direct backend released the name as FREEDIRECT) -- a
+# mechanical port of DX2's own 2D+3D layers upgraded to IDirectDraw2, same
 # Windows-only/MinGW-cross-compile/Wine-wrapper shape as Dx2Tests.cmake.
-include(cmake/Tests/Dx30Tests.cmake)
+include(cmake/Tests/Dx3Tests.cmake)
 
 # plan_dx5.md: real DirectX 5 backend -- DirectDraw v4 + Direct3D v3 FVF DrawPrimitive, a further
-# port of DX30's own 2D+3D layers, same Windows-only/MinGW-cross-compile/Wine-wrapper shape.
+# port of DX3's own 2D+3D layers, same Windows-only/MinGW-cross-compile/Wine-wrapper shape.
 include(cmake/Tests/Dx5Tests.cmake)
 
 # plan_dx6.md: real DirectX 6 backend -- same DirectDraw v4 + Direct3D v3 interfaces as DX5, with

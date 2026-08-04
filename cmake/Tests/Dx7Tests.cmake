@@ -76,7 +76,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "DX7")
     cna_register_backend_test(NAME Dx7_SpriteFont COMMAND ${_dx7_spritefont_cmd}
         TIMEOUT 60 LABELS "DX7")
 
-    # CNA::GraphicsCapability: DX7 is fully 3D-capable from day one (a port of DX30's own, itself a port of DX2's
+    # CNA::GraphicsCapability: DX7 is fully 3D-capable from day one (a port of DX3's own, itself a port of DX2's
     # post-Phase-O9 state -- no "3D lands later" scope gap the way DX2's own Phase O1/O2 history
     # had) -- SupportsCapability() reports which capabilities are genuinely unavailable at this
     # DirectX era vs. real.
@@ -91,7 +91,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "DX7")
     cna_register_backend_test(NAME Dx7_LogicalTransform COMMAND ${_dx7_logical_transform_cmd}
         TIMEOUT 60 LABELS "DX7")
 
-    # NOTE: Dx1_No3D has no DX7 equivalent here either, same reasoning as DX2/DX30 -- DX7's
+    # NOTE: Dx1_No3D has no DX7 equivalent here either, same reasoning as DX2/DX3 -- DX7's
     # 3D layer is real (not a permanent throw like DX1's), so its own 3D CTest suite grows across
     # Phase O3/O4/O5 instead of a single "throws" test that would need replacing almost immediately.
 

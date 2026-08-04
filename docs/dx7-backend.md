@@ -9,7 +9,7 @@ methods instead), a shorter `CreateDevice` signature, and a much simpler texture
 `DX6`, ported verbatim.
 
 **This document only covers what's specific to `DX7`.** Every capability row, boundary, and test
-result in `docs/dx6-backend.md` (and, further back, `docs/dx5-backend.md`/`docs/dx30-backend.md`/
+result in `docs/dx6-backend.md` (and, further back, `docs/dx5-backend.md`/`docs/dx3-backend.md`/
 `docs/dx2-backend.md`) applies identically here (same 2D compositor, same 3D pipeline, same
 lighting math, same known permanent limitations) — refer to those for the full completeness table.
 This document covers: the `DX7-0` spike, the real code deltas vs. `DX6`, and the DX7-specific
@@ -47,7 +47,7 @@ all this round. See `dx7-spike/README.md` for the full record.
   struct than `D3DVIEWPORT2` (no `dvClipX`/`dvClipY`/`dvClipWidth`/`dvClipHeight` fields — just
   `dwX`/`dwY`/`dwWidth`/`dwHeight`/`dvMinZ`/`dvMaxZ`).
 - **`IDirect3D7::CreateDevice` drops the trailing `IUnknown* outer` parameter** `DX5`/`DX6`'s
-  `IDirect3D3::CreateDevice` needed (present on `DX5`/`DX6`, absent on `DX2`/`DX30`, absent again on
+  `IDirect3D3::CreateDevice` needed (present on `DX5`/`DX6`, absent on `DX2`/`DX3`, absent again on
   `DX7` — a real signature oscillation across this backend family's own history).
 - **Texture binding is a direct `IDirect3DDevice7::SetTexture(stage, surface)` call**, replacing the
   whole `D3DRENDERSTATE_TEXTUREHANDLE` + `IDirect3DTexture2::GetHandle` +
@@ -120,7 +120,7 @@ to a real multi-line-aware `perl` block-comment stripper that preserves line num
 
 ## 4. Everything else
 
-See `docs/dx6-backend.md` (and, further back, `docs/dx5-backend.md`/`docs/dx30-backend.md`/
+See `docs/dx6-backend.md` (and, further back, `docs/dx5-backend.md`/`docs/dx3-backend.md`/
 `docs/dx2-backend.md`) for the full completeness table — every row applies to `DX7` identically,
 since its own code is a port with only the deltas described above.
 

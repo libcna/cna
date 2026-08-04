@@ -1,25 +1,25 @@
 #!/usr/bin/env bash
-# plan_dx30.md design decision 8: run a Windows cross-compiled .exe (DX30 backend, CNA's real
-# DirectX 3 -- temporarily named DX30, see plan_dx30.md's own status note) under Wine against real
+# plan_dx3.md design decision 8: run a Windows cross-compiled .exe (DX3 backend, CNA's real
+# DirectX 3 -- temporarily named DX3, see plan_dx3.md's own status note) under Wine against real
 # DirectDraw v2, using this project's own dedicated Wine prefix.
 #
-# Usage: scripts/run-wine-dx30.sh <path-to.exe> [args...]
+# Usage: scripts/run-wine-dx3.sh <path-to.exe> [args...]
 #
 # Unlike scripts/run-wine-dxvk9.sh/run-wine-dxvk.sh, this deliberately does NOT install or gate on
 # DXVK: docs/directx-legacy-backends-analysis.md section 4 confirms DXVK does not translate
 # DirectDraw at all, so a vanilla Wine prefix's own builtin ddraw.dll IS the real DirectDraw
 # implementation for this backend -- no extra setup beyond `wineboot --init`.
 #
-# Set CNA_DX30_WINEPREFIX to point at a different prefix; defaults to ~/.wine-cna-dx1 -- DX30
+# Set CNA_DX3_WINEPREFIX to point at a different prefix; defaults to ~/.wine-cna-dx1 -- DX3
 # deliberately REUSES DX1/DX2's own already-initialized prefix rather than creating a fresh one
-# (plan_dx30.md's own DX30-0 spike ran entirely against ~/.wine-cna-dx1 and confirmed it works for
-# DX30's IDirectDraw2 + Direct3D v2 needs, so there is nothing DX30-specific a separate prefix
+# (plan_dx3.md's own DX30-0 spike ran entirely against ~/.wine-cna-dx1 and confirmed it works for
+# DX3's IDirectDraw2 + Direct3D v2 needs, so there is nothing DX30-specific a separate prefix
 # would buy).
 #
 # This wrapper also ASSERTS that Wine's real ddraw.dll actually engaged (not a silently-missing/
 # no-op DirectDraw implementation), the same DX2 equivalent of run-wine-dxvk9.sh's "DXVK: <version>"
 # gate -- a `trace:ddraw:` WINEDEBUG channel line only appears when the real ddraw.dll handled at
-# least one DirectDraw call. Set CNA_DX30_SKIP_DDRAW_GATE=1 for a binary that legitimately never
+# least one DirectDraw call. Set CNA_DX3_SKIP_DDRAW_GATE=1 for a binary that legitimately never
 # creates a DirectDraw object at all.
 set -uo pipefail
 
@@ -28,8 +28,8 @@ if [ "$#" -lt 1 ]; then
     exit 2
 fi
 
-export WINEPREFIX="${CNA_DX30_WINEPREFIX:-$HOME/.wine-cna-dx1}"
-export WINEDEBUG="${CNA_DX30_WINEDEBUG:-+ddraw}"
+export WINEPREFIX="${CNA_DX3_WINEPREFIX:-$HOME/.wine-cna-dx1}"
+export WINEDEBUG="${CNA_DX3_WINEDEBUG:-+ddraw}"
 
 # Real bug found earlier in this session family (2026-07-20, DX1/DX2): setting DISPLAY alone is NOT
 # enough in a sandbox that also has a real Wayland session (WAYLAND_DISPLAY set) -- Wine prefers
@@ -49,13 +49,13 @@ trap 'rm -f "$logFile"' EXIT
 wine "$@" 2>&1 | tee "$logFile"
 wineExit="${PIPESTATUS[0]}"
 
-if [ "${CNA_DX30_SKIP_DDRAW_GATE:-0}" != "1" ]; then
+if [ "${CNA_DX3_SKIP_DDRAW_GATE:-0}" != "1" ]; then
     if ! grep -Eq ':ddraw:' "$logFile"; then
-        echo "error: DX30's ddraw-engagement gate failed -- no 'trace:ddraw:' WINEDEBUG line was" >&2
+        echo "error: DX3's ddraw-engagement gate failed -- no 'trace:ddraw:' WINEDEBUG line was" >&2
         echo "seen in this run's output, so real Wine ddraw.dll may never have actually handled a" >&2
-        echo "DirectDraw call. This invalidates any DX30 pixel-test result from this run -- fix the" >&2
+        echo "DirectDraw call. This invalidates any DX3 pixel-test result from this run -- fix the" >&2
         echo "Wine prefix rather than ignoring this." >&2
-        echo "(Set CNA_DX30_SKIP_DDRAW_GATE=1 for a binary that legitimately never opens a DirectDraw object.)" >&2
+        echo "(Set CNA_DX3_SKIP_DDRAW_GATE=1 for a binary that legitimately never opens a DirectDraw object.)" >&2
         exit 3
     fi
 fi

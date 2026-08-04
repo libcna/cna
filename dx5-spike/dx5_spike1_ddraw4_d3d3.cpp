@@ -4,11 +4,11 @@
 // interface revision before writing any backend code.
 //
 // DX5 (1997) is the first DirectX release where Direct3D drops execute buffers entirely --
-// IDirect3DDevice3 only ever exposes DrawPrimitive/DrawIndexedPrimitive (matches DX2/DX30's own
+// IDirect3DDevice3 only ever exposes DrawPrimitive/DrawIndexedPrimitive (matches DX2/DX3's own
 // already-proven choice of avoiding execute buffers, but now it's the ONLY option, not a
-// workaround). Concretely new vs DX2/DX30:
+// workaround). Concretely new vs DX2/DX3:
 //   - DirectDraw object/surfaces upgrade from v1/v2 to v4: IDirectDraw4, IDirectDrawSurface4,
-//     DDSURFACEDESC2 (not just DDSURFACEDESC), DDSCAPS2 (not just DDSCAPS). Unlike DX30's
+//     DDSURFACEDESC2 (not just DDSURFACEDESC), DDSCAPS2 (not just DDSCAPS). Unlike DX3's
 //     "upgrade only the top DirectDraw object" change, DX5 needs EVERY surface to be v4, since
 //     IDirectDraw4::CreateSurface returns LPDIRECTDRAWSURFACE4, and IDirect3D3::CreateDevice/
 //     IDirect3DViewport3::SetBackgroundDepth2 all require v4 surfaces specifically.
@@ -122,7 +122,7 @@ int main() {
     PrintHr("IDirect3D3::CreateDevice(RGBDevice3)", hr);
     if (FAILED(hr)) { printf("DX5-SPIKE1-ABORT: no device\n"); return 1; }
 
-    // --- Test C: IDirect3DViewport3 creation, SetViewport2 (same D3DVIEWPORT2 struct as DX2/DX30).
+    // --- Test C: IDirect3DViewport3 creation, SetViewport2 (same D3DVIEWPORT2 struct as DX2/DX3).
     LPDIRECT3DVIEWPORT3 viewport = nullptr;
     hr = d3d3->CreateViewport(&viewport, nullptr);
     PrintHr("IDirect3D3::CreateViewport", hr);
@@ -260,7 +260,7 @@ int main() {
     SamplePixel(rt, 61, 61, "F(texture bottom-right, expect Red)");
 
     // --- Test G: IDirect3DViewport3::Clear2 -- real explicit color/z/stencil clear, the exact
-    // capability DX2-24/DX30 had to work around via a manual Z-buffer Lock().
+    // capability DX2-24/DX3 had to work around via a manual Z-buffer Lock().
     D3DRECT fullRect2{0, 0, 64, 64};
     hr = viewport->Clear2(1, &fullRect2, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER,
                            0xFF123456u, 0.75f, 0);

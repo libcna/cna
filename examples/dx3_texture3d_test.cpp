@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // plan_dx2.md Phase O4 (DX2-34, DX2-38): real Direct3D v2 texture sampling in a 3D draw --
-// D3DRENDERSTATE_TEXTUREHANDLE bound via IDirect3DTexture2::GetHandle on a Dx30TextureBackend
+// D3DRENDERSTATE_TEXTUREHANDLE bound via IDirect3DTexture2::GetHandle on a Dx3TextureBackend
 // surface (mirrors DX2-0's own dx2_spike7_full.cpp test B, now through the full XNA public API).
 //
 // Check A -- a full-screen quad sampling a 2x2 checker texture (nearest-neighbor at the corners)
@@ -46,7 +46,7 @@ namespace
     bool Close(int a, int b, int tolerance) { return std::abs(a - b) <= tolerance; }
 }
 
-class Dx30Texture3DTest : public Game
+class Dx3Texture3DTest : public Game
 {
     std::unique_ptr<GraphicsDeviceManager> gdm_;
     int result_ = 1;
@@ -111,7 +111,7 @@ protected:
     }
 
 public:
-    Dx30Texture3DTest()
+    Dx3Texture3DTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
         gdm_->setPreferredBackBufferWidthProperty(64);
@@ -123,7 +123,7 @@ public:
 
 int main()
 {
-    Dx30Texture3DTest game;
+    Dx3Texture3DTest game;
     game.Run();
     return game.getResult();
 }

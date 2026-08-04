@@ -20,7 +20,7 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 
-#include "CNA/Internal/Backends/Dx30/Dx30GraphicsBackend.hpp"
+#include "CNA/Internal/Backends/Dx3/Dx3GraphicsBackend.hpp"
 
 #include <cstdio>
 #include <cstdlib>
@@ -28,12 +28,12 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::Dx30;
+using namespace CNA::Internal::Backends::Dx3;
 using CNA::Internal::Backends::GpuDrawParams;
 
 static constexpr int kCanvasSize = 64;
 
-class Dx30RemainingDefaultsTest : public Game
+class Dx3RemainingDefaultsTest : public Game
 {
     std::unique_ptr<GraphicsDeviceManager> gdm_;
     int passCount_ = 0;
@@ -49,7 +49,7 @@ protected:
     void Draw(const GameTime&) override
     {
         auto& dev = getGraphicsDeviceProperty();
-        auto& backend = static_cast<Dx30GraphicsBackend&>(dev.GetBackend());
+        auto& backend = static_cast<Dx3GraphicsBackend&>(dev.GetBackend());
 
         check(backend.CreateOcclusionQuery() == nullptr,
               "CreateOcclusionQuery() returns nullptr (occlusion queries are DX9-only)");
@@ -98,7 +98,7 @@ protected:
     }
 
 public:
-    Dx30RemainingDefaultsTest()
+    Dx3RemainingDefaultsTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
         gdm_->setPreferredBackBufferWidthProperty(kCanvasSize);
@@ -110,7 +110,7 @@ public:
 
 int main()
 {
-    Dx30RemainingDefaultsTest game;
+    Dx3RemainingDefaultsTest game;
     game.Run();
     return game.getResult();
 }

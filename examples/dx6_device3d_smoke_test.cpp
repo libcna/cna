@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx2.md Phase O3 (DX2-20..DX2-26): smoke test for DX6's real Direct3D v3 device bring-up (a port of DX5's own, itself a port of DX30/DX2's) --
+// plan_dx2.md Phase O3 (DX2-20..DX2-26): smoke test for DX6's real Direct3D v3 device bring-up (a port of DX5's own, itself a port of DX3/DX2's) --
 // IDirect3D3/IDirect3DDevice3/IDirect3DViewport3 creation against the shadow-backbuffer surface,
 // a real attached 32-bit depth+stencil Z-buffer (plan_dx6.md design decision 4), and the
 // ClearColorAndDepth/ClearDepth/ClearStencil/etc entry points. VertexBuffer/IndexBuffer storage,

@@ -2,17 +2,17 @@
 
 Run under real Wine `ddraw.dll`/`d3d.dll` (Wine 10.0~repack-6, `WINEPREFIX=$HOME/.wine-cna-dx1`,
 `DISPLAY=:99` Xvfb, `WAYLAND_DISPLAY` unset) — same environment `dx1-spike`/`dx2-spike`/
-`dx30-spike` used.
+`dx3-spike` used.
 
-## What DX5 concretely needs, vs. `DX2`/`DX30`
+## What DX5 concretely needs, vs. `DX2`/`DX3`
 
 DX5 (1997) is the first DirectX release where Direct3D drops execute buffers entirely —
-`IDirect3DDevice3` only ever exposes `DrawPrimitive`/`DrawIndexedPrimitive` (matches `DX2`/`DX30`'s
+`IDirect3DDevice3` only ever exposes `DrawPrimitive`/`DrawIndexedPrimitive` (matches `DX2`/`DX3`'s
 own already-proven choice of avoiding execute buffers, but now it's the *only* option, not a
-workaround for a broken path). Concretely new vs. `DX2`/`DX30`, all confirmed real by this spike:
+workaround for a broken path). Concretely new vs. `DX2`/`DX3`, all confirmed real by this spike:
 
 - **DirectDraw object AND every surface upgrade to v4**: `IDirectDraw4`, `IDirectDrawSurface4`,
-  `DDSURFACEDESC2` (not just `DDSURFACEDESC`), `DDSCAPS2` (not just `DDSCAPS`). Unlike `DX30`'s
+  `DDSURFACEDESC2` (not just `DDSURFACEDESC`), `DDSCAPS2` (not just `DDSCAPS`). Unlike `DX3`'s
   "upgrade only the top DirectDraw object" change, DX5 needs *every* surface to be v4 —
   `IDirectDraw4::CreateSurface` returns `LPDIRECTDRAWSURFACE4`, and `IDirect3D3::CreateDevice`
   requires a v4 surface specifically.
@@ -34,11 +34,11 @@ workaround for a broken path). Concretely new vs. `DX2`/`DX30`, all confirmed re
 |---|---|---|---|
 | A | `ddV1->QueryInterface(IID_IDirectDraw4, &dd4)`, then `CreateSurface`(`DDSURFACEDESC2`)/`Lock`/`Unlock` via v4 | Whether `IDirectDraw4` is a real, fully-functional 2D surface layer | ✅ Works |
 | B | `dd4->QueryInterface(IID_IDirect3D3, &d3d3)`, `d3d3->CreateDevice(IID_IDirect3DRGBDevice, v4surface, &device, nullptr)` | Whether the v4-surface-rooted Direct3D device chain works | ✅ Works |
-| C | `IDirect3DViewport3` creation, `SetViewport2` (same `D3DVIEWPORT2` struct as `DX2`/`DX30`) | Whether viewport setup is unchanged | ✅ Works |
+| C | `IDirect3DViewport3` creation, `SetViewport2` (same `D3DVIEWPORT2` struct as `DX2`/`DX3`) | Whether viewport setup is unchanged | ✅ Works |
 | D | `device->DrawPrimitive(D3DPT_TRIANGLELIST, D3DFVF_TLVERTEX, verts, 3, 0)` | Whether FVF-based submission of the same `D3DTLVERTEX` struct still Gouraud-interpolates correctly | ✅ Works — non-black, blended readback |
 | E | `DrawIndexedPrimitive` + real `D3DZB_TRUE`/`D3DCMP_LESS` Z-test, two overlapping quads | Whether depth-test occlusion is real through the new FVF path | ✅ Works — near (red) quad correctly wins, exact `(255,0,0)` readback |
 | F | Real 2×2 texture via `IDirectDrawSurface4`+`IDirect3DTexture2` (unchanged interface, obtained from a v4 surface), sampled via `DrawIndexedPrimitive` | Whether texture sampling still works when the owning surface is v4 | ✅ Works — both sampled corners exact |
-| G | `IDirect3DViewport3::Clear2(1, &fullRect, D3DCLEAR_TARGET\|D3DCLEAR_ZBUFFER, color, z, stencil)`, then a z=0.8 quad against a Clear2 z=0.75 | Whether `Clear2` is a real, working replacement for the `DX2`/`DX30` manual-Z-buffer-Lock workaround | ✅ Works — exact requested clear color read back, and the z=0.8 quad is correctly Z-rejected against the Clear2-written 0.75 depth |
+| G | `IDirect3DViewport3::Clear2(1, &fullRect, D3DCLEAR_TARGET\|D3DCLEAR_ZBUFFER, color, z, stencil)`, then a z=0.8 quad against a Clear2 z=0.75 | Whether `Clear2` is a real, working replacement for the `DX2`/`DX3` manual-Z-buffer-Lock workaround | ✅ Works — exact requested clear color read back, and the z=0.8 quad is correctly Z-rejected against the Clear2-written 0.75 depth |
 
 **Two real bugs found in the spike itself, not in Wine/Direct3D5, corrected before reaching the
 result above (worth remembering for the actual backend implementation):**
@@ -58,12 +58,12 @@ result above (worth remembering for the actual backend implementation):**
 
 ## Practical conclusion
 
-DX5's 3D layer is architecturally identical to `DX2`/`DX30`'s own CPU-transform-then-submit
+DX5's 3D layer is architecturally identical to `DX2`/`DX3`'s own CPU-transform-then-submit
 pipeline, with two real, mechanical changes: (1) `DrawPrimitive`/`DrawIndexedPrimitive`'s
 vertex-type parameter becomes `D3DFVF_TLVERTEX` instead of `D3DVT_TLVERTEX` (same struct,
 different selector), and (2) `IDirect3DViewport3::Clear2` can now do a real one-call depth+color
-clear with explicit values, replacing `DX2`/`DX30`'s manual Z-buffer `Lock()` workaround. DX5's 2D
-layer needs a more invasive port than `DX30`'s (every surface type, not just the top DirectDraw
+clear with explicit values, replacing `DX2`/`DX3`'s manual Z-buffer `Lock()` workaround. DX5's 2D
+layer needs a more invasive port than `DX3`'s (every surface type, not just the top DirectDraw
 object, moves to v4), but every v4 call behaves exactly as its v1/v2 predecessor did.
 
 ## Files

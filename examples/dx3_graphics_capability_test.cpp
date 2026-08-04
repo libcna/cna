@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MS-PL
-// CNA::GraphicsCapability: verifies GraphicsDevice::SupportsCapability() correctly reports DX30's
+// CNA::GraphicsCapability: verifies GraphicsDevice::SupportsCapability() correctly reports DX3's
 // capability set. Unlike an earlier version of this test (mirroring a 2D-only backend's
-// capability test, matching DX1/SDL_RENDERER/CANVAS), DX30's 3D pipeline is now genuinely real
+// capability test, matching DX1/SDL_RENDERER/CANVAS), DX3's 3D pipeline is now genuinely real
 // end-to-end (Phase O3-O6, plan_dx2.md) -- ThreeD and DepthStencilBuffer both report true. What
 // remains false is genuinely unavailable at this DirectX era (MSAA/MRT/occlusion query/custom
 // effects), or empirically confirmed absent on this software RGB device (AnisotropicFiltering,
 // Phase O9's dx2_spike10 Test E). WireFrame reports true as of Phase O9 -- the same spike's Test D
-// confirmed D3DFILL_WIREFRAME genuinely renders edge-only output here (see Dx30GraphicsBackend.hpp's
+// confirmed D3DFILL_WIREFRAME genuinely renders edge-only output here (see Dx3GraphicsBackend.hpp's
 // own SupportsCapability() comment for the full rationale).
 //
 // Exit code 0 = PASS, 1 = FAIL.
@@ -16,7 +16,7 @@
 #include "CNA/GraphicsCapability.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 
-#include "CNA/Internal/Backends/Dx30/Dx30GraphicsBackend.hpp"
+#include "CNA/Internal/Backends/Dx3/Dx3GraphicsBackend.hpp"
 
 #include <cstdio>
 #include <memory>
@@ -26,7 +26,7 @@ using namespace Microsoft::Xna::Framework::Graphics;
 using CNA::GraphicsCapability;
 using CNA::Internal::Backends::IRenderTargetBackend;
 
-class Dx30GraphicsCapabilityTest : public Game
+class Dx3GraphicsCapabilityTest : public Game
 {
     std::unique_ptr<GraphicsDeviceManager> gdm_;
     int pass_ = 0;
@@ -53,7 +53,7 @@ protected:
         done_ = true;
 
         auto& dev = getGraphicsDeviceProperty();
-        auto& backend = static_cast<CNA::Internal::Backends::Dx30::Dx30GraphicsBackend&>(dev.GetBackend());
+        auto& backend = static_cast<CNA::Internal::Backends::Dx3::Dx3GraphicsBackend&>(dev.GetBackend());
 
         // Phase O6 completes the real 3D pipeline -- both report true now.
         check(dev.SupportsCapability(GraphicsCapability::ThreeD), "ThreeD supported");
@@ -74,7 +74,7 @@ protected:
 
         // SupportsCapability() is a check, not an enforcement mechanism -- calling a method for a
         // genuinely-unsupported capability anyway still throws. MultipleRenderTargets (checked
-        // above) is a real DX30 (and DX2, its own porting source) boundary: DirectDraw has exactly one active render target.
+        // above) is a real DX3 (and DX2, its own porting source) boundary: DirectDraw has exactly one active render target.
         IRenderTargetBackend* twoTargets[2] = {nullptr, nullptr};
         check(Throws([&] { backend.SetRenderTargets(twoTargets, 2); }),
               "SetRenderTargets(count=2) still throws (no MRT support)");
@@ -84,7 +84,7 @@ protected:
     }
 
 public:
-    Dx30GraphicsCapabilityTest()
+    Dx3GraphicsCapabilityTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
         gdm_->setPreferredBackBufferWidthProperty(32);
@@ -96,7 +96,7 @@ public:
 
 int main()
 {
-    Dx30GraphicsCapabilityTest game;
+    Dx3GraphicsCapabilityTest game;
     game.Run();
     return game.getResult();
 }

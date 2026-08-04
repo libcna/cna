@@ -67,7 +67,7 @@ namespace
     bool Close(int a, int b, int tolerance) { return std::abs(a - b) <= tolerance; }
 }
 
-class Dx30LightingTest : public Game
+class Dx3LightingTest : public Game
 {
     std::unique_ptr<GraphicsDeviceManager> gdm_;
     int result_ = 1;
@@ -176,7 +176,7 @@ protected:
     }
 
 public:
-    Dx30LightingTest()
+    Dx3LightingTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
         gdm_->setPreferredBackBufferWidthProperty(128);
@@ -188,7 +188,7 @@ public:
 
 int main()
 {
-    Dx30LightingTest game;
+    Dx3LightingTest game;
     game.Run();
     return game.getResult();
 }

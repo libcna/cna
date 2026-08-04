@@ -8,11 +8,11 @@
 // (DrawPrimitive/DrawIndexedPrimitive, now selected via a DWORD FVF bitmask -- D3DFVF_TLVERTEX --
 // instead of the old D3DVERTEXTYPE enum, plan_dx5.md design decision 4). <ddraw.h> (and the real
 // <windows.h> it pulls in) is contained to this .cpp only -- see Dx5GraphicsBackend.hpp's own
-// comment. This file's 2D layer is a mechanical port of DX30's own (plan_dx30.md, itself a port of
+// comment. This file's 2D layer is a mechanical port of DX3's own (plan_dx3.md, itself a port of
 // DX2's, plan_dx2.md), upgraded further: EVERY surface is v4 here (plan_dx5.md design decision 2),
-// not just the top DirectDraw object the way DX30 upgraded -- IDirectDraw4/IDirectDrawSurface4/
+// not just the top DirectDraw object the way DX3 upgraded -- IDirectDraw4/IDirectDrawSurface4/
 // DDSURFACEDESC2/DDSCAPS2 only, never IDirectDraw7+/IDirectDrawSurface[23567]+. <d3d.h>/
-// IDirect3D3/IDirect3DDevice3 are not forbidden -- this backend's 3D layer (a port of DX30's own
+// IDirect3D3/IDirect3DDevice3 are not forbidden -- this backend's 3D layer (a port of DX3's own
 // already-proven 3D layer, including Phase O9's CPU lighting, resubmitted via the new FVF
 // parameter) is built on them -- only the literal execute-buffer surface
 // (IDirect3DDevice::Execute/D3DEXECUTEBUFFERDESC/IDirect3DExecuteBuffer/D3DOP_*/the un-versioned
@@ -912,7 +912,7 @@ namespace CNA::Internal::Backends::Dx5
         // hands back a v1 IDirectDraw object -- this backend immediately upgrades it to
         // IDirectDraw4 via QueryInterface and releases the v1 pointer, using the v4 object (and,
         // from here on, v4 surfaces -- LPDIRECTDRAWSURFACE4/DDSURFACEDESC2 throughout, unlike
-        // DX30's more limited "upgrade only the top object" change) for everything from this point
+        // DX3's more limited "upgrade only the top object" change) for everything from this point
         // on.
         LPDIRECTDRAW ddV1 = nullptr;
         HRESULT hr = DirectDrawCreate(nullptr, &ddV1, nullptr);
@@ -1969,7 +1969,7 @@ namespace CNA::Internal::Backends::Dx5
         ClearDepth(depth);
     }
 
-    // plan_dx5.md design decision 5: a real IDirect3DViewport3::Clear2 call, replacing DX2/DX30's
+    // plan_dx5.md design decision 5: a real IDirect3DViewport3::Clear2 call, replacing DX2/DX3's
     // manual Z-buffer Lock()-and-write-raw-values workaround (that workaround existed only because
     // IDirect3DViewport(2)::Clear() has no depth-value parameter at all -- Clear2, new at this
     // DirectX era, does). Spike-confirmed (DX5-0g) gotcha, must not be reintroduced: Clear2's

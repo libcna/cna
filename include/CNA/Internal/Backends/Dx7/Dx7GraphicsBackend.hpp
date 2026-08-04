@@ -10,7 +10,7 @@
 // replacing the old D3DRENDERSTATE_TEXTUREHANDLE + IDirect3DTexture2::GetHandle dance entirely.
 // Stencil (D3DRENDERSTATE_STENCIL*) is unchanged from DX6, ported verbatim. Cross-compiled via
 // MinGW-w64 and run under Wine/Proton, the same Route B delivery mechanism
-// D3D9/D3D11/D3D12/DX1/DX2/DX30/DX5/DX6 already use.
+// D3D9/D3D11/D3D12/DX1/DX2/DX3/DX5/DX6 already use.
 //
 // This header intentionally does NOT include <ddraw.h> (design decision 13's containment rule,
 // mirroring DX3/D3D11/D3D12): it pulls in the full real <windows.h>, whose enormous macro surface
@@ -26,7 +26,7 @@ namespace CNA::Internal::Backends::Dx7
 {
     /**
      * DX7 graphics backend (plan_dx7.md): a port of Dx6GraphicsBackend (plan_dx6.md, itself a
-     * port of Dx5/Dx30/Dx2GraphicsBackend), upgraded to DirectDraw v7
+     * port of Dx5/Dx3/Dx2GraphicsBackend), upgraded to DirectDraw v7
      * (IDirectDraw7/IDirectDrawSurface7/DDSURFACEDESC2/DDSCAPS2) and Direct3D v7
      * (IDirect3D7/IDirect3DDevice7). Device/window bring-up: DirectDrawCreateEx(nullptr, &dd7,
      * IID_IDirectDraw7, nullptr) -- the new DX7 entry point, spike-confirmed real (design decision

@@ -2,11 +2,11 @@
 
 Run under real Wine `ddraw.dll`/`d3d.dll` (Wine 10.0~repack-6, `WINEPREFIX=$HOME/.wine-cna-dx1`,
 `DISPLAY=:99` Xvfb, `WAYLAND_DISPLAY` unset) — same environment `dx1-spike`/`dx2-spike`/
-`dx30-spike`/`dx5-spike` used.
+`dx3-spike`/`dx5-spike` used.
 
 ## What DX6 concretely means, vs. `DX5`
 
-Unlike `DX2`→`DX30`→`DX5`'s progression (each a genuine new COM interface revision), **DX6
+Unlike `DX2`→`DX3`→`DX5`'s progression (each a genuine new COM interface revision), **DX6
 introduces NO new `IDirect3D`/`IDirect3DDevice`/`IDirectDraw` interface at all** — confirmed by
 inspecting the real MinGW headers: there is no `IDirect3D4`/`IDirect3DDevice4`. `IDirect3D3`/
 `IDirect3DDevice3`/`IDirect3DViewport3`/`IDirectDraw4` (the exact interfaces `DX5` already uses)
@@ -17,7 +17,7 @@ states/capabilities on the *same* interface: real stencil buffer operations
 multitexturing (`SetTextureStageState`/`D3DTSS_*`, also confirmed present), and DXTn compression
 (not spiked — see `plan_dx6.md` for why it's out of scope).
 
-**This spike tests only stencil** — the one DX6-era capability `DX2`/`DX30`/`DX5` have all
+**This spike tests only stencil** — the one DX6-era capability `DX2`/`DX3`/`DX5` have all
 explicitly documented as "no real stencil buffer exists at this DirectX era (DX6+)." Multitexture
 was investigated but deferred (see `plan_dx6.md` design decision 6): the header-defined
 `D3DTLVERTEX`/`D3DFVF_TLVERTEX` vertex format carries only a single texture-coordinate pair

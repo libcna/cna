@@ -6,7 +6,7 @@
 > cross-backend suite (`GraphicsBackendCompileDefinitionsTest`/`GraphicsDeviceValidationTest`/
 > `GraphicsDeviceCapabilityTest` — the only 3 failures are the same pre-existing, ungated
 > `GraphicsDeviceCapabilityTest.SupportsMultipleRenderTargets`/`SupportsOcclusionQuery`/
-> `SupportsCustomEffects` gap shared by every DX2/DX30/DX5/DX6/DX7/DX8 backend equally, not
+> `SupportsCustomEffects` gap shared by every DX2/DX3/DX5/DX6/DX7/DX8 backend equally, not
 > introduced here). Two real bugs found only by the full test suite, beyond the `DX8-0` spike's
 > own findings, are recorded in `dx8-spike/README.md`'s "Two further runtime bugs" section: (1) a
 > real `Dx8GraphicsBackend::SetVirtualResolution` bug (the logical render target was created once

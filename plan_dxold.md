@@ -6,9 +6,10 @@
 > when its turn comes. Background analysis: `docs/directx-legacy-backends-analysis.md`.
 >
 > **Status (2026-07-21): the entire 1/2/3/5/6/7/8/10 line is done.** All 8 backends in the table
-> below are implemented, spiked, CTest-verified, and documented. The only remaining item from the
-> owner's original instruction is the still-future `DX3` naming transition (see its own section
-> below) — a rename task, not a new backend.
+> below are implemented, spiked, CTest-verified, and documented.
+> **Update (2026-08-04):** the one item that remained — the `DX3` naming transition — has been
+> executed (see its own section below): the `free-direct`-backed backend is now `FREEDIRECT` and
+> the real DirectX 3 backend now ships as `DX3`.
 
 ## Owner's instruction (translated from Czech, verbatim intent)
 
@@ -37,7 +38,7 @@ backend code is authorized, mirroring `plan_dx9.md`'s `D9-0` discipline.
 |---|---|---|---|---|---|---|---|
 | 1 | **DX1** | 1995 | DirectDraw v1 only (`IDirectDraw`/`IDirectDrawSurface`/`DDSURFACEDESC`) — no Direct3D exists yet | throw (no code path exists at all) | `DX1` | `plan_dx1.md` | ✅ done (2026-07-20) — 10/10 CTests passing, see `docs/dx1-backend.md` |
 | 2 | **DX2** | 1996 | DirectDraw v1 (unchanged); 3D built on `IDirect3D2`/`IDirect3DDevice2`'s `DrawPrimitive`/`DrawIndexedPrimitive` (DX3-SDK addition) rather than the literal DX2-SDK execute-buffer API (`IDirect3D`/`IDirect3DDevice`/`IDirect3DExecuteBuffer`) — **spike-proven non-functional in this Wine environment**, see below | 2D real (ported from DX1); 3D real geometry/Z-test/one-texture/blend/`WireFrame` via `DrawPrimitive`, plus (Phase O9) real CPU-side ambient+directional lighting for normal-bearing vertices; fog/multitexture/stencil/`AnisotropicFiltering` accepted-and-ignored or empirically confirmed absent (owner-confirmed scope) | `DX2` | `plan_dx2.md` | ✅ done (2026-07-21) — all 9 phases complete (O1-O8 baseline + O9 lighting/`WireFrame` improvement), 19/19 dedicated CTests + full 5415-test `CnaTests` regression (19 failed/1 not-run, all pre-existing or documented scope boundaries, zero DX2-caused), real 3D rendering + lighting verified, see `docs/dx2-backend.md` |
-| 3 | **DX3 (real)** | 1996 | DirectDraw v2 (`IDirectDraw2`, adds refresh-rate to `SetDisplayMode` — confirmed real via `DX30-0`, but dead code for this backend family's windowed-only design, same as DX1/DX2); 3D built on `IDirect3D2`/`IDirect3DDevice2::DrawPrimitive` (already a DX3-SDK addition, verbatim port of DX2's own post-Phase-O9 3D layer, incl. CPU lighting/`WireFrame`) rather than the execute-buffer surface (proven non-functional, same `DX2-0` finding) | 2D real (mechanical port of DX2, upgraded to `IDirectDraw2`); 3D real geometry/Z-test/one-texture/blend/`WireFrame`/CPU lighting, identical to DX2's own boundary | `DX30` (temporary — see rename note; will become `DX3` once the rename below runs) | `plan_dx30.md`, `docs/dx30-backend.md` | ✅ done (2026-07-21) — 19/19 dedicated CTests pass (all green on first run, mechanical port of DX2), see `docs/dx30-backend.md` |
+| 3 | **DX3 (real)** | 1996 | DirectDraw v2 (`IDirectDraw2`, adds refresh-rate to `SetDisplayMode` — confirmed real via `DX30-0`, but dead code for this backend family's windowed-only design, same as DX1/DX2); 3D built on `IDirect3D2`/`IDirect3DDevice2::DrawPrimitive` (already a DX3-SDK addition, verbatim port of DX2's own post-Phase-O9 3D layer, incl. CPU lighting/`WireFrame`) rather than the execute-buffer surface (proven non-functional, same `DX2-0` finding) | 2D real (mechanical port of DX2, upgraded to `IDirectDraw2`); 3D real geometry/Z-test/one-texture/blend/`WireFrame`/CPU lighting, identical to DX2's own boundary | `DX3` (renamed from the temporary `DX30` on 2026-08-04 — see the naming-transition section) | `plan_dx3.md`, `docs/dx3-backend.md` | ✅ done (2026-07-21) — 19/19 dedicated CTests pass (all green on first run, mechanical port of DX2), see `docs/dx3-backend.md` |
 | 4 | *(DX4)* | — | never released | — | — | — | n/a |
 | 5 | **DX5** | 1997 | DirectDraw v4 (`IDirectDraw4`/`IDirectDrawSurface4`/`DDSURFACEDESC2`/`DDSCAPS2`, every surface not just the top object) + Direct3D v3 (`IDirect3D3`/`IDirect3DDevice3`/`IDirect3DViewport3`), execute buffers gone entirely — `DrawPrimitive`/`DrawIndexedPrimitive` selected via the `D3DFVF_TLVERTEX` FVF bitmask instead of the old `D3DVERTEXTYPE` enum (a port of `DX30`'s own already-proven 3D layer, incl. CPU lighting/`WireFrame`) | 2D real (mechanical port of `DX30`, upgraded to v4 throughout); 3D real geometry/Z-test/one-texture/blend/`WireFrame`/CPU lighting, identical to `DX2`/`DX30`'s own boundary, plus a real `Clear2`-based depth clear replacing the manual Z-buffer `Lock()` workaround | `DX5` | `plan_dx5.md`, `docs/dx5-backend.md` | ✅ done (2026-07-21) — 19/19 dedicated CTests pass, all green on first run, see `docs/dx5-backend.md` |
 | 6 | **DX6** | 1998 | Same `IDirect3D3`/`IDirect3DDevice3`/`IDirect3DViewport3`/`IDirectDraw4` as DX5 -- no new COM interface at all (confirmed via header inspection); new render states only: real stencil buffer (this backend's deliverable), multitexturing (deferred, `D3DFVF_TLVERTEX` carries only one UV pair), DXTn (out of scope, no consumer) | 2D/3D identical to DX5's own boundary, plus a real combined depth+stencil Z-buffer (`DDPF_ZBUFFER\|DDPF_STENCILBUFFER`, 32-bit total) and real `D3DRENDERSTATE_STENCIL*` write/test wiring | `DX6` | `plan_dx6.md`, `docs/dx6-backend.md` | ✅ done (2026-07-21) — 20/20 dedicated CTests pass (19 ported + new `Dx6_Stencil`), all green on first run, see `docs/dx6-backend.md` |
@@ -51,26 +52,24 @@ Execution order follows the table top to bottom (DX1 → DX2 → real DX3 → DX
 D3D10), each gated on its own spike and its own `plan_dxN.md`. DX9/11/12 already exist and are out
 of this roadmap's scope.
 
-## The `DX3` naming transition (owner-authorized, not yet executed)
+## The `DX3` naming transition — EXECUTED 2026-08-04
 
-- **Today**: `CNA_GRAPHICS_BACKEND=DX3` is the existing, shipped `free-direct`-backed 2D DirectDraw
-  backend (`plan_freedirect.md`, `docs/freedirect-backend.md`). It stays exactly as-is until the rename below is
-  actually carried out as its own task — this roadmap does not touch it.
 - **Done (2026-07-21)**: the real (Route B) DirectX 3 backend itself — real `ddraw.h`/`IDirectDraw2`
-  interfaces, MinGW cross-compile, Wine translation, **no `free-direct`** — is implemented and
-  shipping under the temporary name `DX30` (`plan_dx30.md`, `docs/dx30-backend.md`), per the
-  project owner's own instruction to build it now under a temporary name rather than wait for the
-  rename below. It is architecturally a mechanical port of `DX2`'s own 2D+3D layers, upgraded to
-  `IDirectDraw2`.
-- **Still-future task**: rename the existing `free-direct`-backed backend's `CNA_GRAPHICS_BACKEND`
-  value (and matching `CNA_BACKEND_*`/library-target/file-path identifiers) from `DX3` to
-  `FREE_DIRECT`, then rename `DX30` (mechanical: `Dx30`→`FreeDirect` class/file/directory renames,
-  `DX30`→`DX3` CMake option/define renames) to inherit the now-free `DX3` name; `plan_dx30.md` can
-  be retired/merged into `plan_freedirect.md` once the old `free-direct` content there is archived —
-  decide the exact filename mechanics at that task's own start, not here.
-- Until the rename task actually runs, do not reuse the bare `DX3` `CMakeLists.txt`/CMake-option
-  identifiers for anything else — that would collide with the still-shipping backend. `DX30` is
-  registered as its own, separate CMake option precisely to avoid this collision.
+  interfaces, MinGW cross-compile, Wine translation, **no `free-direct`** — was implemented and
+  shipped under the temporary name `DX30`, per the project owner's own instruction to build it
+  under a temporary name rather than wait for the rename. It is architecturally a mechanical port
+  of `DX2`'s own 2D+3D layers, upgraded to `IDirectDraw2`.
+- **Done (2026-08-04, owner instruction, dxold integration)**: the transition itself ran, in the
+  order this section always prescribed. First the `free-direct`-backed backend gave up the name —
+  `CNA_GRAPHICS_BACKEND=DX3` became **`FREEDIRECT`** (`CNA_BACKEND_FREEDIRECT`,
+  `FreeDirectGraphicsBackend`, `plan_freedirect.md`, `docs/freedirect-backend.md`; the owner's
+  spelling `FREEDIRECT` supersedes this section's earlier `FREE_DIRECT` sketch). Then the real
+  DirectX 3 backend took it — `DX30` became **`DX3`** (mechanical `Dx30`→`Dx3` class/file/directory
+  renames, `DX30`→`DX3` CMake option/define renames; `plan_dx30.md`→`plan_dx3.md`,
+  `docs/dx30-backend.md`→`docs/dx3-backend.md`, `dx30-spike/`→`dx3-spike/`).
+- **Task-ID provenance**: the historical `DX30-*` task IDs (this backend) and `DX3-*`/`X*` task IDs
+  (the FreeDirect backend, from its DX3-named era) are kept verbatim in their plan files and are
+  not renumbered — renaming recorded identifiers would break every citation of them.
 
 ## What's shared across every backend in this family
 
@@ -105,7 +104,7 @@ of this roadmap's scope.
 - `plan_dx1.md` — DX1's own full implementation plan (this session).
 - `plan_dx2.md`, `docs/dx2-backend.md` — DX2's own full implementation plan, the backend `DX30`
   ports verbatim.
-- `plan_dx30.md`, `docs/dx30-backend.md` — the real DirectX 3 backend, temporarily named `DX30`.
+- `plan_dx3.md`, `docs/dx3-backend.md` — the real DirectX 3 backend, temporarily named `DX30`.
 - `plan_dx5.md`, `docs/dx5-backend.md` — the real DirectX 5 backend (DirectDraw v4 + Direct3D v3
   FVF `DrawPrimitive`), a further port of `DX30`'s own 2D+3D layers.
 - `plan_dx6.md`, `docs/dx6-backend.md` — DX6's real stencil buffer, same interfaces as DX5.

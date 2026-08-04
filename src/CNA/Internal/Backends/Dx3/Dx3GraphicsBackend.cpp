@@ -1,21 +1,21 @@
-#include "CNA/Internal/Backends/Dx30/Dx30GraphicsBackend.hpp"
+#include "CNA/Internal/Backends/Dx3/Dx3GraphicsBackend.hpp"
 
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 
-// plan_dx30.md: real DirectX 3 graphics backend (temporarily named DX30 -- see plan_dx30.md's own
+// plan_dx3.md: real DirectX 3 graphics backend (temporarily named DX3 -- see plan_dx3.md's own
 // status note for why -- pending a still-not-executed rename of the existing, shipping
 // ../free-direct-backed DX3 backend to FREE_DIRECT). <ddraw.h> (and the real <windows.h> it pulls
-// in) is contained to this .cpp only -- see Dx30GraphicsBackend.hpp's own comment. This file's 2D
+// in) is contained to this .cpp only -- see Dx3GraphicsBackend.hpp's own comment. This file's 2D
 // layer (mechanically ported from DX2's own, plan_dx2.md, with one upgrade: the DirectDraw object
-// itself is IDirectDraw2 -- QueryInterface'd off a v1 DirectDrawCreate() result, plan_dx30.md
+// itself is IDirectDraw2 -- QueryInterface'd off a v1 DirectDrawCreate() result, plan_dx3.md
 // design decision 2) may name IDirectDraw2/IDirectDrawSurface/DDSURFACEDESC -- never
 // IDirectDraw3+/IDirectDrawSurface2+/DDSURFACEDESC2 (that boundary is this backend's own,
-// plan_dx30.md section 1). <d3d.h>/IDirect3D2/IDirect3DDevice2 are not forbidden -- this backend's
+// plan_dx3.md section 1). <d3d.h>/IDirect3D2/IDirect3DDevice2 are not forbidden -- this backend's
 // 3D layer (a verbatim port of DX2's own already-proven 3D layer, including Phase O9's CPU
 // lighting) is built on them -- only the literal execute-buffer surface
 // (IDirect3DDevice::Execute/D3DEXECUTEBUFFERDESC/IDirect3DExecuteBuffer/D3DOP_*/the un-versioned
-// IDirect3D/IDirect3DDevice) is permanently forbidden, asserted by the Dx30_ExecuteBufferDiscipline
-// CTest (scripts/check-dx30-execute-buffer-discipline.sh, plan_dx30.md design decision 9).
+// IDirect3D/IDirect3DDevice) is permanently forbidden, asserted by the Dx3_ExecuteBufferDiscipline
+// CTest (scripts/check-dx3-execute-buffer-discipline.sh, plan_dx3.md design decision 9).
 #include <ddraw.h>
 #include <d3d.h>
 
@@ -35,7 +35,7 @@
 #include <stdexcept>
 #include <string>
 
-namespace CNA::Internal::Backends::Dx30
+namespace CNA::Internal::Backends::Dx3
 {
     using namespace Microsoft::Xna::Framework;
     using namespace Microsoft::Xna::Framework::Graphics;
@@ -49,8 +49,8 @@ namespace CNA::Internal::Backends::Dx30
                                       std::to_string(static_cast<unsigned long>(hr)));
         }
 
-        // ---- Phase O3: shared offscreen-surface helpers, used by both Dx30TextureBackend and
-        // Dx30RenderTargetBackend (design decision 7: 32bpp DDSCAPS_OFFSCREENPLAIN only, no
+        // ---- Phase O3: shared offscreen-surface helpers, used by both Dx3TextureBackend and
+        // Dx3RenderTargetBackend (design decision 7: 32bpp DDSCAPS_OFFSCREENPLAIN only, no
         // palette/8-bit path). Kept as free functions rather than a shared base class: neither type
         // is ever named outside this .cpp (only returned polymorphically as ITextureBackend/
         // IRenderTargetBackend), so there is no header/ddraw.h containment reason to give them one
@@ -65,7 +65,7 @@ namespace CNA::Internal::Backends::Dx30
         // file assumed (matching every other CNA backend's own ImageData::pixels convention,
         // SDL_PIXELFORMAT_RGBA32 -- see plan_freedirect.md design decision 4). Both sides of every
         // round-trip through this backend's OWN surfaces stayed internally consistent (which is why
-        // Dx30_Smoke/Dx30_Blend/etc.'s Clear()+GetBackBufferData() checks all still passed), but a
+        // Dx3_Smoke/Dx3_Blend/etc.'s Clear()+GetBackBufferData() checks all still passed), but a
         // real IDirectDrawSurface::Blt() between two DIFFERENTLY-formatted surfaces performs genuine
         // pixel-format conversion -- so uploading a real RGBA8 image (a genuinely R,G,B,A-ordered
         // byte stream) directly into a (B,G,R,X)-formatted surface, then Blt()ing it toward the
@@ -268,7 +268,7 @@ namespace CNA::Internal::Backends::Dx30
         [[noreturn]] void ThrowMipLevelUnsupported(int level)
         {
             throw std::runtime_error(
-                "DX30 (DirectDraw v2) does not support mip-level texture uploads (level " +
+                "DX3 (DirectDraw v2) does not support mip-level texture uploads (level " +
                 std::to_string(level) + "): IDirectDrawSurface has no native mip chain or "
                 "per-level LOD sampling. Use Texture2D::SetData(level=0, ...) only.");
         }
@@ -330,7 +330,7 @@ namespace CNA::Internal::Backends::Dx30
         // SdlGraphicsBackend::ToSdlBlendFactor): One=0, Zero=1, SourceColor=2,
         // InverseSourceColor=3, SourceAlpha=4, InverseSourceAlpha=5, DestinationColor=6,
         // InverseDestinationColor=7, DestinationAlpha=8, InverseDestinationAlpha=9.
-        enum class Dx30BlendMode { Opaque, AlphaBlend, NonPremultiplied, Additive };
+        enum class Dx3BlendMode { Opaque, AlphaBlend, NonPremultiplied, Additive };
 
         // Detects which of the 4 BlendState presets (BlendState.cpp) the raw factors match, by
         // exact value -- not by BlendState identity (the backend never sees a BlendState object,
@@ -341,21 +341,21 @@ namespace CNA::Internal::Backends::Dx30
         // equivalent to Opaque and must fall through to the AlphaBlend fallback below, not be
         // misdetected as Opaque just because the factors happen to match (ported from DX3-44's own
         // found-and-fixed bug).
-        Dx30BlendMode DetectBlendMode(int colorSrc, int alphaSrc, int colorDst, int alphaDst,
+        Dx3BlendMode DetectBlendMode(int colorSrc, int alphaSrc, int colorDst, int alphaDst,
                                      int colorFunc, int alphaFunc)
         {
             const bool bothAdd = (colorFunc == 0 && alphaFunc == 0);
             // NonPremultiplied: ColorSrc=SourceAlpha, AlphaSrc=SourceAlpha, ColorDst=InvSrcAlpha, AlphaDst=InvSrcAlpha
-            if (bothAdd && colorSrc == 4 && alphaSrc == 4 && colorDst == 5 && alphaDst == 5) return Dx30BlendMode::NonPremultiplied;
+            if (bothAdd && colorSrc == 4 && alphaSrc == 4 && colorDst == 5 && alphaDst == 5) return Dx3BlendMode::NonPremultiplied;
             // Additive: ColorSrc=SourceAlpha, AlphaSrc=SourceAlpha, ColorDst=One, AlphaDst=One
-            if (bothAdd && colorSrc == 4 && alphaSrc == 4 && colorDst == 0 && alphaDst == 0) return Dx30BlendMode::Additive;
+            if (bothAdd && colorSrc == 4 && alphaSrc == 4 && colorDst == 0 && alphaDst == 0) return Dx3BlendMode::Additive;
             // Opaque: ColorSrc=One, AlphaSrc=One, ColorDst=Zero, AlphaDst=Zero
-            if (bothAdd && colorSrc == 0 && alphaSrc == 0 && colorDst == 1 && alphaDst == 1) return Dx30BlendMode::Opaque;
+            if (bothAdd && colorSrc == 0 && alphaSrc == 0 && colorDst == 1 && alphaDst == 1) return Dx3BlendMode::Opaque;
             // AlphaBlend: ColorSrc=One, AlphaSrc=One, ColorDst=InvSrcAlpha, AlphaDst=InvSrcAlpha --
             // and the fallback for any other/custom factor+op combination (including a factor
             // match with a non-Add function), same recorded scope limitation SOFTWARE/DX3 already
             // made (no general blend-equation interpreter in v1).
-            return Dx30BlendMode::AlphaBlend;
+            return Dx3BlendMode::AlphaBlend;
         }
 
         // ---- Phase O6 (design decision 10): raw XNA int -> real D3D v1/v2 render-state value
@@ -376,7 +376,7 @@ namespace CNA::Internal::Backends::Dx30
         using Microsoft::Xna::Framework::Graphics::TextureAddressMode;
         using Microsoft::Xna::Framework::Graphics::TextureFilter;
 
-        DWORD Dx30BlendToD3D(int blend)
+        DWORD Dx3BlendToD3D(int blend)
         {
             switch (static_cast<Blend>(blend))
             {
@@ -398,7 +398,7 @@ namespace CNA::Internal::Backends::Dx30
             }
         }
 
-        DWORD Dx30CompareFunctionToD3D(int compareFunction)
+        DWORD Dx3CompareFunctionToD3D(int compareFunction)
         {
             switch (static_cast<CompareFunction>(compareFunction))
             {
@@ -414,7 +414,7 @@ namespace CNA::Internal::Backends::Dx30
             }
         }
 
-        DWORD Dx30CullModeToD3D(int cullMode)
+        DWORD Dx3CullModeToD3D(int cullMode)
         {
             switch (static_cast<CullMode>(cullMode))
             {
@@ -425,7 +425,7 @@ namespace CNA::Internal::Backends::Dx30
             }
         }
 
-        DWORD Dx30FillModeToD3D(int fillMode)
+        DWORD Dx3FillModeToD3D(int fillMode)
         {
             switch (static_cast<FillMode>(fillMode))
             {
@@ -435,7 +435,7 @@ namespace CNA::Internal::Backends::Dx30
             }
         }
 
-        DWORD Dx30TextureAddressModeToD3D(int addressMode)
+        DWORD Dx3TextureAddressModeToD3D(int addressMode)
         {
             switch (static_cast<TextureAddressMode>(addressMode))
             {
@@ -446,13 +446,13 @@ namespace CNA::Internal::Backends::Dx30
             }
         }
 
-        struct Dx30FilterPair { DWORD mag; DWORD min; };
+        struct Dx3FilterPair { DWORD mag; DWORD min; };
 
         // No mip-filter concept is mapped -- D3D v1/v2 (and this backend's textures) have no real
         // mip chain at all (design decision, ported from DX1/DX3's own identical "no native mip
         // chain" finding), so every "MipPoint"/"MipLinear" variant collapses to its own mag/min
         // pair with the mip distinction simply not represented -- a real, documented simplification.
-        Dx30FilterPair Dx30TextureFilterToD3D(int textureFilter)
+        Dx3FilterPair Dx3TextureFilterToD3D(int textureFilter)
         {
             switch (static_cast<TextureFilter>(textureFilter))
             {
@@ -587,7 +587,7 @@ namespace CNA::Internal::Backends::Dx30
                            const uint8_t* srcBase, int srcPitch, int srcW, int srcH,
                            const Vector2 corners[4], const Vector2 uvs[4],
                            float tintR, float tintG, float tintB, float tintA,
-                           Dx30BlendMode blendMode, int filter, int addressU, int addressV)
+                           Dx3BlendMode blendMode, int filter, int addressU, int addressV)
         {
             float minX = corners[0].X, maxX = corners[0].X, minY = corners[0].Y, maxY = corners[0].Y;
             for (int i = 1; i < 4; ++i)
@@ -633,7 +633,7 @@ namespace CNA::Internal::Backends::Dx30
 
                         switch (blendMode)
                         {
-                        case Dx30BlendMode::Opaque:
+                        case Dx3BlendMode::Opaque:
                             // Direct overwrite -- source alpha is not part of the blend equation
                             // at all (ColorSrcBlend=One, ColorDstBlend=Zero).
                             dp[rO] = static_cast<uint8_t>(std::clamp(srcR * 255.0f, 0.0f, 255.0f));
@@ -641,7 +641,7 @@ namespace CNA::Internal::Backends::Dx30
                             dp[bO] = static_cast<uint8_t>(std::clamp(srcB * 255.0f, 0.0f, 255.0f));
                             dp[aO] = static_cast<uint8_t>(std::clamp(srcA * 255.0f, 0.0f, 255.0f));
                             break;
-                        case Dx30BlendMode::AlphaBlend:
+                        case Dx3BlendMode::AlphaBlend:
                         {
                             // Premultiplied convention (ColorSrcBlend=One, ColorDstBlend=
                             // InverseSourceAlpha): the source color is used as-is, NOT multiplied
@@ -654,7 +654,7 @@ namespace CNA::Internal::Backends::Dx30
                             dp[aO] = static_cast<uint8_t>(std::clamp(srcA * 255.0f + static_cast<float>(dp[aO]) * invA, 0.0f, 255.0f));
                             break;
                         }
-                        case Dx30BlendMode::NonPremultiplied:
+                        case Dx3BlendMode::NonPremultiplied:
                         {
                             // Straight alpha (ColorSrcBlend=SourceAlpha, ColorDstBlend=
                             // InverseSourceAlpha): out = src*srcAlpha + dst*(1-srcAlpha).
@@ -665,7 +665,7 @@ namespace CNA::Internal::Backends::Dx30
                             dp[aO] = static_cast<uint8_t>(std::clamp(srcA * 255.0f * srcA + static_cast<float>(dp[aO]) * invA, 0.0f, 255.0f));
                             break;
                         }
-                        case Dx30BlendMode::Additive:
+                        case Dx3BlendMode::Additive:
                             // ColorSrcBlend=SourceAlpha, ColorDstBlend=One: saturating add, no
                             // destination attenuation at all.
                             dp[rO] = static_cast<uint8_t>(std::clamp(srcR * 255.0f * srcA + static_cast<float>(dp[rO]), 0.0f, 255.0f));
@@ -681,18 +681,18 @@ namespace CNA::Internal::Backends::Dx30
         }
     }
 
-    // Common accessor so Dx30SpriteBatchBackend can reach the underlying IDirectDrawSurface* of
+    // Common accessor so Dx3SpriteBatchBackend can reach the underlying IDirectDrawSurface* of
     // either concrete backend it might be asked to sample from (a plain texture, or a former
     // render target now being sampled as one) without needing to know which. Never named outside
-    // this .cpp, same reasoning as Dx30TextureBackend/Dx30RenderTargetBackend themselves.
-    class Dx30SurfaceOwner
+    // this .cpp, same reasoning as Dx3TextureBackend/Dx3RenderTargetBackend themselves.
+    class Dx3SurfaceOwner
     {
     public:
-        virtual ~Dx30SurfaceOwner() = default;
+        virtual ~Dx3SurfaceOwner() = default;
         [[nodiscard]] virtual LPDIRECTDRAWSURFACE Surface() const = 0;
     };
 
-    struct Dx30GraphicsBackend::Impl
+    struct Dx3GraphicsBackend::Impl
     {
         // NOTE: SDL_Window is NOT owned by the backend -- same convention as every other
         // window-based CNA backend (GraphicsDevice/platform layer owns it).
@@ -702,7 +702,7 @@ namespace CNA::Internal::Backends::Dx30
         // Present()'s GetClientRect/ClientToScreen calls.
         HWND hwnd = nullptr;
 
-        // Design decision 2 (plan_dx30.md): IDirectDraw2, not v1 -- upgraded via QueryInterface
+        // Design decision 2 (plan_dx3.md): IDirectDraw2, not v1 -- upgraded via QueryInterface
         // immediately after DirectDrawCreate() (see the constructor); every other DirectDraw call
         // this backend makes goes through this v2 pointer, spike-confirmed (DX30-0c) to behave
         // identically to v1 for all of them.
@@ -729,11 +729,11 @@ namespace CNA::Internal::Backends::Dx30
         // match it exactly (design decision 5).
         LPDIRECTDRAWSURFACE zbuffer = nullptr;
 
-        // Phase O3: the offscreen surface owned by the currently-bound Dx30RenderTargetBackend, or
+        // Phase O3: the offscreen surface owned by the currently-bound Dx3RenderTargetBackend, or
         // nullptr when no custom render target is bound (i.e. the shadow backbuffer is active). Set
-        // directly by Dx30RenderTargetBackend::BindAsRenderTarget/UnbindAsRenderTarget via a pointer
+        // directly by Dx3RenderTargetBackend::BindAsRenderTarget/UnbindAsRenderTarget via a pointer
         // to this field (passed at construction) -- kept as a plain LPDIRECTDRAWSURFACE rather than
-        // a Dx30RenderTargetBackend* so Dx30RenderTargetBackend never needs to name this private Impl
+        // a Dx3RenderTargetBackend* so Dx3RenderTargetBackend never needs to name this private Impl
         // type (it is defined later in this file, after Impl).
         LPDIRECTDRAWSURFACE currentTargetSurface = nullptr;
         // Width/height of currentTargetSurface, kept alongside it (Phase O4: the SpriteBatch
@@ -750,7 +750,7 @@ namespace CNA::Internal::Backends::Dx30
         // ApplyBlendState's raw factors (DetectBlendMode) -- gates the SpriteBatch identity fast
         // path (design decision 5, Opaque only) and selects CompositeQuad's per-formula math.
         // Default AlphaBlend matches SpriteBatch::Begin()'s own default blend state.
-        Dx30BlendMode currentBlendMode = Dx30BlendMode::AlphaBlend;
+        Dx3BlendMode currentBlendMode = Dx3BlendMode::AlphaBlend;
 
         // Resolves to whichever surface Clear()/ReadBackbuffer() should currently target: the
         // bound render target's surface if one is bound, else the shadow backbuffer. Present()
@@ -908,10 +908,10 @@ namespace CNA::Internal::Backends::Dx30
         }
     };
 
-    Dx30GraphicsBackend::Dx30GraphicsBackend(const GraphicsBackendCreateArgs& args)
+    Dx3GraphicsBackend::Dx3GraphicsBackend(const GraphicsBackendCreateArgs& args)
         : impl_(std::make_unique<Impl>())
     {
-        if (!args.window) throw std::runtime_error("Dx30GraphicsBackend initialized with null window.");
+        if (!args.window) throw std::runtime_error("Dx3GraphicsBackend initialized with null window.");
         impl_->window = args.window;
         impl_->presentationMode = args.presentationMode;
 
@@ -921,9 +921,9 @@ namespace CNA::Internal::Backends::Dx30
         impl_->hwnd = static_cast<HWND>(SDL_GetPointerProperty(
             SDL_GetWindowProperties(impl_->window), SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr));
         if (!impl_->hwnd)
-            throw std::runtime_error("Dx30GraphicsBackend: could not obtain a real HWND from the SDL window.");
+            throw std::runtime_error("Dx3GraphicsBackend: could not obtain a real HWND from the SDL window.");
 
-        // Design decision 2 (plan_dx30.md), spike-confirmed (DX30-0a/DX30-0c): DirectDrawCreate
+        // Design decision 2 (plan_dx3.md), spike-confirmed (DX30-0a/DX30-0c): DirectDrawCreate
         // only ever hands back a v1 IDirectDraw object -- this backend immediately upgrades it to
         // IDirectDraw2 via QueryInterface and releases the v1 pointer, using the v2 object for
         // everything from this point on (confirmed to work identically to v1 for every call this
@@ -951,9 +951,9 @@ namespace CNA::Internal::Backends::Dx30
         impl_->CreateBackBuffer(width, height);
     }
 
-    Dx30GraphicsBackend::~Dx30GraphicsBackend() = default;
+    Dx3GraphicsBackend::~Dx3GraphicsBackend() = default;
 
-    void Dx30GraphicsBackend::Clear(float r, float g, float b, float a)
+    void Dx3GraphicsBackend::Clear(float r, float g, float b, float a)
     {
         int width = 0, height = 0;
         impl_->ActiveSurfaceSize(width, height);
@@ -964,7 +964,7 @@ namespace CNA::Internal::Backends::Dx30
                          static_cast<uint8_t>(std::clamp(a * 255.0f, 0.0f, 255.0f)));
     }
 
-    void Dx30GraphicsBackend::Present()
+    void Dx3GraphicsBackend::Present()
     {
         // DX2-0b finding: the primary surface is desktop-sized, not window-sized, so the Blt()
         // destination rect must be this window's own client area translated to screen coordinates
@@ -981,7 +981,7 @@ namespace CNA::Internal::Backends::Dx30
 
         POINT topLeft{0, 0};
         if (!ClientToScreen(impl_->hwnd, &topLeft))
-            throw std::runtime_error("Dx30GraphicsBackend::Present: ClientToScreen failed");
+            throw std::runtime_error("Dx3GraphicsBackend::Present: ClientToScreen failed");
 
         RECT destRect{};
         destRect.left = topLeft.x + static_cast<LONG>(offsetX);
@@ -993,13 +993,13 @@ namespace CNA::Internal::Backends::Dx30
         if (FAILED(hr)) ThrowHr("IDirectDrawSurface::Blt(present)", hr);
     }
 
-    void Dx30GraphicsBackend::GetViewportSize(int& width, int& height)
+    void Dx3GraphicsBackend::GetViewportSize(int& width, int& height)
     {
         width = impl_->logicalWidth;
         height = impl_->logicalHeight;
     }
 
-    void Dx30GraphicsBackend::ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels)
+    void Dx3GraphicsBackend::ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels)
     {
         // Reads from whichever surface is currently active -- the bound render target's surface if
         // one is bound (SetRenderTarget2D), else the shadow backbuffer. Never through the real
@@ -1009,14 +1009,14 @@ namespace CNA::Internal::Backends::Dx30
         ReadSurfacePixels(impl_->ActiveSurface(), x, y, w, h, pixels);
     }
 
-    void Dx30GraphicsBackend::SetVirtualResolution(int width, int height)
+    void Dx3GraphicsBackend::SetVirtualResolution(int width, int height)
     {
         if (width <= 0 || height <= 0) return;
         if (width == impl_->logicalWidth && height == impl_->logicalHeight) return;
         impl_->CreateBackBuffer(width, height);
     }
 
-    void Dx30GraphicsBackend::SetPresentationMode(int mode)
+    void Dx3GraphicsBackend::SetPresentationMode(int mode)
     {
         impl_->presentationMode = static_cast<CnaPresentationMode>(mode);
         // Present() always applies a letterbox-equivalent uniform scale (ComputeLetterbox) --
@@ -1025,12 +1025,12 @@ namespace CNA::Internal::Backends::Dx30
         // bookkeeping stays consistent with what the game requested.
     }
 
-    SDL_Window* Dx30GraphicsBackend::GetWindowInternal() const
+    SDL_Window* Dx3GraphicsBackend::GetWindowInternal() const
     {
         return impl_->window;
     }
 
-    bool Dx30GraphicsBackend::TransformWindowToLogical(float windowX, float windowY,
+    bool Dx3GraphicsBackend::TransformWindowToLogical(float windowX, float windowY,
                                                        float& logX, float& logY) const
     {
         float scale = 1.0f, offsetX = 0.0f, offsetY = 0.0f;
@@ -1041,7 +1041,7 @@ namespace CNA::Internal::Backends::Dx30
         return true;
     }
 
-    bool Dx30GraphicsBackend::TransformLogicalToWindow(float logX, float logY,
+    bool Dx3GraphicsBackend::TransformLogicalToWindow(float logX, float logY,
                                                        float& windowX, float& windowY) const
     {
         float scale = 1.0f, offsetX = 0.0f, offsetY = 0.0f;
@@ -1059,17 +1059,17 @@ namespace CNA::Internal::Backends::Dx30
     // no GPU-side vertex buffer object to upload to (IDirect3DVertexBuffer doesn't exist until
     // DX6 anyway, per docs/directx-legacy-backends-analysis.md section 3.1's table).
 
-    class Dx30VertexBufferBackend final : public IVertexBufferBackend
+    class Dx3VertexBufferBackend final : public IVertexBufferBackend
     {
     public:
-        explicit Dx30VertexBufferBackend(int vertexCapacity) : capacity_(vertexCapacity) {}
+        explicit Dx3VertexBufferBackend(int vertexCapacity) : capacity_(vertexCapacity) {}
 
         void SetData(const void* data, int vertex_count, std::size_t stride_in_bytes) override
         {
             if (vertex_count < 0 || vertex_count > capacity_)
-                throw std::runtime_error("Dx30VertexBufferBackend::SetData: vertex_count exceeds capacity");
+                throw std::runtime_error("Dx3VertexBufferBackend::SetData: vertex_count exceeds capacity");
             if (stride_in_bytes == 0)
-                throw std::runtime_error("Dx30VertexBufferBackend::SetData: stride_in_bytes must be > 0");
+                throw std::runtime_error("Dx3VertexBufferBackend::SetData: stride_in_bytes must be > 0");
 
             vertexCount_ = vertex_count;
             stride_ = stride_in_bytes;
@@ -1109,10 +1109,10 @@ namespace CNA::Internal::Backends::Dx30
         std::vector<uint8_t> data_;
     };
 
-    class Dx30IndexBufferBackend final : public IIndexBufferBackend
+    class Dx3IndexBufferBackend final : public IIndexBufferBackend
     {
     public:
-        Dx30IndexBufferBackend(int indexCapacity, bool thirtyTwoBit)
+        Dx3IndexBufferBackend(int indexCapacity, bool thirtyTwoBit)
             : capacity_(indexCapacity), thirtyTwoBit_(thirtyTwoBit)
         {
         }
@@ -1133,9 +1133,9 @@ namespace CNA::Internal::Backends::Dx30
         void Upload(const void* data, int index_count, bool dataIsThirtyTwoBit)
         {
             if (index_count < 0 || index_count > capacity_)
-                throw std::runtime_error("Dx30IndexBufferBackend: index_count exceeds capacity");
+                throw std::runtime_error("Dx3IndexBufferBackend: index_count exceeds capacity");
             if (dataIsThirtyTwoBit != thirtyTwoBit_)
-                throw std::runtime_error("Dx30IndexBufferBackend: SetData bit-width does not match the buffer's declared width");
+                throw std::runtime_error("Dx3IndexBufferBackend: SetData bit-width does not match the buffer's declared width");
 
             indexCount_ = index_count;
             const std::size_t elementSize = dataIsThirtyTwoBit ? sizeof(uint32_t) : sizeof(uint16_t);
@@ -1168,7 +1168,7 @@ namespace CNA::Internal::Backends::Dx30
     /// contribution, additive, packed into D3DTLVERTEX::specular and composited by real
     /// D3DRENDERSTATE_SPECULARENABLE hardware AFTER the texture-modulate stage -- zero for every
     /// draw except a lit DrawPrimitivesEx/DrawIndexedPrimitivesEx (stride 32/52, lightingEnabled).
-    struct Dx30ClipVertex
+    struct Dx3ClipVertex
     {
         float x = 0.0f, y = 0.0f, z = 0.0f, w = 1.0f;
         float r = 1.0f, g = 1.0f, b = 1.0f, a = 1.0f;
@@ -1176,9 +1176,9 @@ namespace CNA::Internal::Backends::Dx30
         float sr = 0.0f, sg = 0.0f, sb = 0.0f;
     };
 
-    Dx30ClipVertex Dx30LerpClipVertex(const Dx30ClipVertex& a, const Dx30ClipVertex& b, float t)
+    Dx3ClipVertex Dx3LerpClipVertex(const Dx3ClipVertex& a, const Dx3ClipVertex& b, float t)
     {
-        Dx30ClipVertex out;
+        Dx3ClipVertex out;
         out.x = a.x + t * (b.x - a.x);
         out.y = a.y + t * (b.y - a.y);
         out.z = a.z + t * (b.z - a.z);
@@ -1199,20 +1199,20 @@ namespace CNA::Internal::Backends::Dx30
     /// Sutherland-Hodgman clip against the single near-plane half-space `w > kNearEpsilon`.
     /// Returns 0 (fully behind, discarded), 3 (no clip needed / one corner clipped), or 4 (two
     /// corners clipped, forming a quad -- caller fans it into 2 triangles). Preserves winding.
-    int Dx30ClipTriangleNearPlane(const Dx30ClipVertex verts[3], Dx30ClipVertex out[4])
+    int Dx3ClipTriangleNearPlane(const Dx3ClipVertex verts[3], Dx3ClipVertex out[4])
     {
         constexpr float kNearEpsilon = 1e-5f;
         int count = 0;
         for (int i = 0; i < 3; ++i)
         {
-            const Dx30ClipVertex& cur = verts[i];
-            const Dx30ClipVertex& prev = verts[(i + 2) % 3];
+            const Dx3ClipVertex& cur = verts[i];
+            const Dx3ClipVertex& prev = verts[(i + 2) % 3];
             const bool curIn = cur.w > kNearEpsilon;
             const bool prevIn = prev.w > kNearEpsilon;
             if (curIn != prevIn)
             {
                 const float t = (kNearEpsilon - prev.w) / (cur.w - prev.w);
-                out[count++] = Dx30LerpClipVertex(prev, cur, t);
+                out[count++] = Dx3LerpClipVertex(prev, cur, t);
             }
             if (curIn)
                 out[count++] = cur;
@@ -1223,13 +1223,13 @@ namespace CNA::Internal::Backends::Dx30
     /// Transforms a VertexPositionColor vertex (Position@0, Color@12 -- DrawColoredPrimitives/
     /// DrawIndexedColoredPrimitives's own fixed layout) into clip space. Ported from
     /// SoftwareGraphicsBackend.cpp's BuildPositionColorClipVertex.
-    Dx30ClipVertex Dx30BuildPositionColorClipVertex(const uint8_t* raw, const Matrix& combined)
+    Dx3ClipVertex Dx3BuildPositionColorClipVertex(const uint8_t* raw, const Matrix& combined)
     {
         Vector3 position;
         std::memcpy(&position, raw, sizeof(Vector3));
         const Vector4 clip = Vector4::Transform(position, combined);
 
-        Dx30ClipVertex out;
+        Dx3ClipVertex out;
         out.x = clip.X; out.y = clip.Y; out.z = clip.Z; out.w = clip.W;
         const uint8_t* colorBytes = raw + sizeof(Vector3);
         out.r = colorBytes[0] / 255.0f;
@@ -1239,10 +1239,10 @@ namespace CNA::Internal::Backends::Dx30
         return out;
     }
 
-    /// Result of Dx30ComputeVertexLighting: the diffuse (base vertex color) and specular (additive,
+    /// Result of Dx3ComputeVertexLighting: the diffuse (base vertex color) and specular (additive,
     /// D3DTLVERTEX::specular) contributions, both already RGB (alpha handled separately by the
     /// caller -- diffuseColor's own alpha channel).
-    struct Dx30LitColor
+    struct Dx3LitColor
     {
         float diffuseR = 0.0f, diffuseG = 0.0f, diffuseB = 0.0f;
         float specR = 0.0f, specG = 0.0f, specB = 0.0f;
@@ -1254,7 +1254,7 @@ namespace CNA::Internal::Backends::Dx30
     /// per-vertex-lit path -- BasicEffect::preferPerPixelLighting_ defaults to false, matching
     /// real XNA) and BasicEffect::FillGpuDrawParams()'s field semantics -- not re-derived. Only
     /// called for stride==32/52 (the layouts that carry a normal) when params.lightingEnabled.
-    Dx30LitColor Dx30ComputeVertexLighting(const Vector3& localPosition, const Vector3& localNormal,
+    Dx3LitColor Dx3ComputeVertexLighting(const Vector3& localPosition, const Vector3& localNormal,
                                          const Matrix& world, const GpuDrawParams& params)
     {
         const Vector3 worldPos = Vector3::Transform(localPosition, world);
@@ -1307,7 +1307,7 @@ namespace CNA::Internal::Backends::Dx30
             specSum[2] += specTerm * lightSpeculars[li][2];
         }
 
-        Dx30LitColor out;
+        Dx3LitColor out;
         out.diffuseR = lightSum[0] * params.diffuseColor[0] + params.emissiveColor[0];
         out.diffuseG = lightSum[1] * params.diffuseColor[1] + params.emissiveColor[1];
         out.diffuseB = lightSum[2] * params.diffuseColor[2] + params.emissiveColor[2];
@@ -1326,17 +1326,17 @@ namespace CNA::Internal::Backends::Dx30
     /// `vertexColorEnabled` mirrors GpuDrawParams' own flag -- when false, vertex color is forced
     /// to opaque white so only texture modulation and the material-less diffuse pass-through
     /// apply. Phase O9 (design decision 13): when params.lightingEnabled and the stride carries a
-    /// normal (32/52), Dx30ComputeVertexLighting() replaces the raw/white vertex color with real
+    /// normal (32/52), Dx3ComputeVertexLighting() replaces the raw/white vertex color with real
     /// ambient+directional lighting instead -- `vertexColorEnabled` is irrelevant in that case
     /// (neither of those two strides carries a per-vertex diffuse channel to begin with).
-    Dx30ClipVertex Dx30BuildGenericClipVertex(const uint8_t* raw, std::size_t stride, const Matrix& combined,
+    Dx3ClipVertex Dx3BuildGenericClipVertex(const uint8_t* raw, std::size_t stride, const Matrix& combined,
                                             const Matrix& world, const GpuDrawParams& params)
     {
         Vector3 position;
         std::memcpy(&position, raw, sizeof(Vector3));
         const Vector4 clip = Vector4::Transform(position, combined);
 
-        Dx30ClipVertex out;
+        Dx3ClipVertex out;
         out.x = clip.X; out.y = clip.Y; out.z = clip.Z; out.w = clip.W;
 
         bool lit = false;
@@ -1367,7 +1367,7 @@ namespace CNA::Internal::Backends::Dx30
             {
                 Vector3 normal;
                 std::memcpy(&normal, raw + 12, sizeof(Vector3));
-                const Dx30LitColor litColor = Dx30ComputeVertexLighting(position, normal, world, params);
+                const Dx3LitColor litColor = Dx3ComputeVertexLighting(position, normal, world, params);
                 out.r = litColor.diffuseR; out.g = litColor.diffuseG; out.b = litColor.diffuseB;
                 out.a = params.diffuseColor[3];
                 out.sr = litColor.specR; out.sg = litColor.specG; out.sb = litColor.specB;
@@ -1385,7 +1385,7 @@ namespace CNA::Internal::Backends::Dx30
     /// Perspective-divides the POSITION ONLY and maps into a real D3DTLVERTEX ready for
     /// DrawPrimitive/DrawIndexedPrimitive. Deliberately does NOT premultiply color/uv by invW --
     /// see this section's own header comment and plan_dx2.md design decision 6 for why.
-    D3DTLVERTEX Dx30ClipVertexToD3DTLVERTEX(const Dx30ClipVertex& cv, int viewportWidth, int viewportHeight)
+    D3DTLVERTEX Dx3ClipVertexToD3DTLVERTEX(const Dx3ClipVertex& cv, int viewportWidth, int viewportHeight)
     {
         const float invW = 1.0f / cv.w;
         const float ndcX = cv.x * invW;
@@ -1419,17 +1419,17 @@ namespace CNA::Internal::Backends::Dx30
 
     /// Resolves a GpuDrawParams::texture0-style ITextureBackend* into a real D3DTEXTUREHANDLE for
     /// the current device, or 0 (no texture) when `texture` is null. Fetched fresh on every draw
-    /// (not cached) rather than stored on Dx30TextureBackend: a handle is only valid for the device
+    /// (not cached) rather than stored on Dx3TextureBackend: a handle is only valid for the device
     /// it was obtained against, and this backend's device2 is torn down and recreated whenever the
     /// backbuffer is resized (Create3DDevice) -- caching would need explicit invalidation on
     /// resize for no real benefit, since QueryInterface+GetHandle is a cheap COM call.
-    D3DTEXTUREHANDLE Dx30ResolveTextureHandle(const ITextureBackend* texture, LPDIRECT3DDEVICE2 device2)
+    D3DTEXTUREHANDLE Dx3ResolveTextureHandle(const ITextureBackend* texture, LPDIRECT3DDEVICE2 device2)
     {
         if (!texture) return 0;
-        const auto* owner = dynamic_cast<const Dx30SurfaceOwner*>(texture);
+        const auto* owner = dynamic_cast<const Dx3SurfaceOwner*>(texture);
         if (!owner)
             throw std::runtime_error(
-                "Dx30GraphicsBackend: texture0 is not a DX30 surface (created by a different graphics backend?)");
+                "Dx3GraphicsBackend: texture0 is not a DX3 surface (created by a different graphics backend?)");
 
         LPDIRECT3DTEXTURE2 tex2 = nullptr;
         HRESULT hr = owner->Surface()->QueryInterface(IID_IDirect3DTexture2, reinterpret_cast<void**>(&tex2));
@@ -1442,8 +1442,8 @@ namespace CNA::Internal::Backends::Dx30
         return handle;
     }
 
-    /// Shared core for all 4 draw entry points: clips each triangle (Dx30ClipTriangleNearPlane),
-    /// packs the result into D3DTLVERTEX (Dx30ClipVertexToD3DTLVERTEX), and submits via a single
+    /// Shared core for all 4 draw entry points: clips each triangle (Dx3ClipTriangleNearPlane),
+    /// packs the result into D3DTLVERTEX (Dx3ClipVertexToD3DTLVERTEX), and submits via a single
     /// DrawIndexedPrimitive call -- used even for CNA's non-indexed draw calls
     /// (DrawColoredPrimitives/DrawPrimitivesEx) since near-plane clipping can turn one triangle
     /// into a quad (2 triangles sharing 2 vertices), which an index buffer expresses without
@@ -1459,7 +1459,7 @@ namespace CNA::Internal::Backends::Dx30
     /// false (their vertices' specular channel is always zero anyway, but leaving the render
     /// state off avoids an unnecessary per-draw state change on the no-lighting-concept path).
     void SubmitDx30Primitives(LPDIRECT3DDEVICE2 device2, int viewportWidth, int viewportHeight,
-                             const std::function<Dx30ClipVertex(int)>& fetchVertex,
+                             const std::function<Dx3ClipVertex(int)>& fetchVertex,
                              int primitiveCount, D3DTEXTUREHANDLE texHandle, bool specularEnabled)
     {
         std::vector<D3DTLVERTEX> verts;
@@ -1469,17 +1469,17 @@ namespace CNA::Internal::Backends::Dx30
 
         for (int i = 0; i < primitiveCount; ++i)
         {
-            Dx30ClipVertex cv[3];
+            Dx3ClipVertex cv[3];
             for (int k = 0; k < 3; ++k)
                 cv[k] = fetchVertex(i * 3 + k);
 
-            Dx30ClipVertex clipped[4];
-            const int clippedCount = Dx30ClipTriangleNearPlane(cv, clipped);
+            Dx3ClipVertex clipped[4];
+            const int clippedCount = Dx3ClipTriangleNearPlane(cv, clipped);
             if (clippedCount == 0) continue;
 
             const auto baseIdx = static_cast<WORD>(verts.size());
             for (int k = 0; k < clippedCount; ++k)
-                verts.push_back(Dx30ClipVertexToD3DTLVERTEX(clipped[k], viewportWidth, viewportHeight));
+                verts.push_back(Dx3ClipVertexToD3DTLVERTEX(clipped[k], viewportWidth, viewportHeight));
 
             indices.push_back(static_cast<WORD>(baseIdx + 0));
             indices.push_back(static_cast<WORD>(baseIdx + 1));
@@ -1518,41 +1518,41 @@ namespace CNA::Internal::Backends::Dx30
     /// Common precondition checks shared by all 4 draw entry points (design decision 4: 3D drawing
     /// is scoped to the default backbuffer only -- device2 is never bound to a custom render
     /// target's surface).
-    void Dx30CheckDrawPreconditions(const char* who, bool customRenderTargetBound,
+    void Dx3CheckDrawPreconditions(const char* who, bool customRenderTargetBound,
                                    PrimitiveType primitive, int primitiveCount)
     {
         if (customRenderTargetBound)
-            throw std::runtime_error(std::string("Dx30GraphicsBackend::") + who +
+            throw std::runtime_error(std::string("Dx3GraphicsBackend::") + who +
                 ": 3D drawing is not supported while a custom RenderTarget2D is bound "
                 "(design decision 4 -- 3D is scoped to the default backbuffer only)");
         if (primitiveCount <= 0)
-            throw std::runtime_error(std::string("Dx30GraphicsBackend::") + who + ": primitiveCount must be > 0");
+            throw std::runtime_error(std::string("Dx3GraphicsBackend::") + who + ": primitiveCount must be > 0");
         if (primitive != PrimitiveType::TriangleList)
-            throw std::runtime_error(std::string("Dx30GraphicsBackend::") + who + ": only TriangleList is supported in v1");
+            throw std::runtime_error(std::string("Dx3GraphicsBackend::") + who + ": only TriangleList is supported in v1");
     }
 
     // ---- Phase O3: textures and render targets ----
     // Both classes below are never named outside this .cpp (only returned polymorphically), so
     // <ddraw.h> stays fully contained here.
 
-    class Dx30TextureBackend : public ITextureBackend, public Dx30SurfaceOwner
+    class Dx3TextureBackend : public ITextureBackend, public Dx3SurfaceOwner
     {
     public:
-        Dx30TextureBackend(LPDIRECTDRAW2 dd, int width, int height)
+        Dx3TextureBackend(LPDIRECTDRAW2 dd, int width, int height)
             : width_(width), height_(height), surface_(CreateOffscreenSurface(dd, width, height))
         {
         }
 
-        Dx30TextureBackend(LPDIRECTDRAW2 dd, const ImageData& data)
-            : Dx30TextureBackend(dd, data.width, data.height)
+        Dx3TextureBackend(LPDIRECTDRAW2 dd, const ImageData& data)
+            : Dx3TextureBackend(dd, data.width, data.height)
         {
             WriteSurfacePixels(surface_, width_, height_, data.pixels.data(), width_ * 4);
         }
 
-        ~Dx30TextureBackend() override { if (surface_) surface_->Release(); }
+        ~Dx3TextureBackend() override { if (surface_) surface_->Release(); }
 
-        Dx30TextureBackend(const Dx30TextureBackend&) = delete;
-        Dx30TextureBackend& operator=(const Dx30TextureBackend&) = delete;
+        Dx3TextureBackend(const Dx3TextureBackend&) = delete;
+        Dx3TextureBackend& operator=(const Dx3TextureBackend&) = delete;
 
         [[nodiscard]] int GetWidth() const override { return width_; }
         [[nodiscard]] int GetHeight() const override { return height_; }
@@ -1579,10 +1579,10 @@ namespace CNA::Internal::Backends::Dx30
         LPDIRECTDRAWSURFACE surface_ = nullptr;
     };
 
-    class Dx30RenderTargetBackend final : public IRenderTargetBackend, public Dx30SurfaceOwner
+    class Dx3RenderTargetBackend final : public IRenderTargetBackend, public Dx3SurfaceOwner
     {
     public:
-        Dx30RenderTargetBackend(LPDIRECTDRAWSURFACE* currentTargetSlot, int* currentTargetWidthSlot,
+        Dx3RenderTargetBackend(LPDIRECTDRAWSURFACE* currentTargetSlot, int* currentTargetWidthSlot,
                                int* currentTargetHeightSlot, LPDIRECTDRAW2 dd,
                                int width, int height, int multiSampleCount)
             : currentTargetSlot_(currentTargetSlot), currentTargetWidthSlot_(currentTargetWidthSlot),
@@ -1591,14 +1591,14 @@ namespace CNA::Internal::Backends::Dx30
         {
         }
 
-        ~Dx30RenderTargetBackend() override
+        ~Dx3RenderTargetBackend() override
         {
             UnbindAsRenderTarget();
             if (surface_) surface_->Release();
         }
 
-        Dx30RenderTargetBackend(const Dx30RenderTargetBackend&) = delete;
-        Dx30RenderTargetBackend& operator=(const Dx30RenderTargetBackend&) = delete;
+        Dx3RenderTargetBackend(const Dx3RenderTargetBackend&) = delete;
+        Dx3RenderTargetBackend& operator=(const Dx3RenderTargetBackend&) = delete;
 
         [[nodiscard]] int GetWidth() const override { return width_; }
         [[nodiscard]] int GetHeight() const override { return height_; }
@@ -1652,20 +1652,20 @@ namespace CNA::Internal::Backends::Dx30
         LPDIRECTDRAWSURFACE surface_ = nullptr;
     };
 
-    std::unique_ptr<ITextureBackend> Dx30GraphicsBackend::CreateTexture(const ImageData& data)
+    std::unique_ptr<ITextureBackend> Dx3GraphicsBackend::CreateTexture(const ImageData& data)
     {
-        return std::make_unique<Dx30TextureBackend>(impl_->dd, data);
+        return std::make_unique<Dx3TextureBackend>(impl_->dd, data);
     }
 
-    std::unique_ptr<IRenderTargetBackend> Dx30GraphicsBackend::CreateRenderTarget2D(
+    std::unique_ptr<IRenderTargetBackend> Dx3GraphicsBackend::CreateRenderTarget2D(
         int w, int h, int /*depthFormat*/, bool /*preserveContents*/, bool /*mipMap*/, int multiSampleCount)
     {
-        return std::make_unique<Dx30RenderTargetBackend>(&impl_->currentTargetSurface,
+        return std::make_unique<Dx3RenderTargetBackend>(&impl_->currentTargetSurface,
                                                          &impl_->currentTargetWidth, &impl_->currentTargetHeight,
                                                          impl_->dd, w, h, multiSampleCount);
     }
 
-    void Dx30GraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt)
+    void Dx3GraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt)
     {
         if (rt)
             rt->BindAsRenderTarget();
@@ -1677,30 +1677,30 @@ namespace CNA::Internal::Backends::Dx30
         }
     }
 
-    void Dx30GraphicsBackend::SetRenderTargets(
+    void Dx3GraphicsBackend::SetRenderTargets(
         const RenderTargetBindingDescriptor* renderTargets, int count)
     {
         // DirectDraw has no multi-render-target concept -- single active surface only.
         if (count > 1)
             throw std::runtime_error(
-                "DX30 (DirectDraw v2) does not support multiple simultaneous render targets (MRT): "
+                "DX3 (DirectDraw v2) does not support multiple simultaneous render targets (MRT): "
                 "requested " + std::to_string(count) + ", but IDirectDrawSurface supports exactly "
                 "one active render target at a time.");
         if (count > 0 && renderTargets[0].IsRenderTargetCubeFace())
             throw std::runtime_error(
-                "DX30 (DirectDraw v2) does not support RenderTargetCube face bindings.");
+                "DX3 (DirectDraw v2) does not support RenderTargetCube face bindings.");
         SetRenderTarget2D(count > 0 ? renderTargets[0].GetRenderTarget2D() : nullptr);
     }
 
     // ---- Phase O4: the CPU compositor / SpriteBatch draw path (design decision 5) ----
-    // Never named outside this .cpp, same reasoning as Dx30TextureBackend/Dx30RenderTargetBackend.
+    // Never named outside this .cpp, same reasoning as Dx3TextureBackend/Dx3RenderTargetBackend.
 
-    class Dx30SpriteBatchBackend final : public ISpriteBatchBackend
+    class Dx3SpriteBatchBackend final : public ISpriteBatchBackend
     {
     public:
-        Dx30SpriteBatchBackend(std::function<LPDIRECTDRAWSURFACE()> getActiveSurface,
+        Dx3SpriteBatchBackend(std::function<LPDIRECTDRAWSURFACE()> getActiveSurface,
                               std::function<void(int&, int&)> getActiveSurfaceSize,
-                              std::function<Dx30BlendMode()> getBlendMode)
+                              std::function<Dx3BlendMode()> getBlendMode)
             : getActiveSurface_(std::move(getActiveSurface)),
               getActiveSurfaceSize_(std::move(getActiveSurfaceSize)),
               getBlendMode_(std::move(getBlendMode))
@@ -1710,14 +1710,14 @@ namespace CNA::Internal::Backends::Dx30
         void Begin() override
         {
             if (begun_)
-                throw std::runtime_error("Dx30SpriteBatchBackend::Begin: Begin() called without a matching End()");
+                throw std::runtime_error("Dx3SpriteBatchBackend::Begin: Begin() called without a matching End()");
             begun_ = true;
         }
 
         void End() override
         {
             if (!begun_)
-                throw std::runtime_error("Dx30SpriteBatchBackend::End: End() called without a matching Begin()");
+                throw std::runtime_error("Dx3SpriteBatchBackend::End: End() called without a matching Begin()");
             begun_ = false;
             // See LockedSurfaceCache's own comment: never leave a Lock() held past the batch that
             // needed it.
@@ -1734,7 +1734,7 @@ namespace CNA::Internal::Backends::Dx30
         {
             if (effect != nullptr)
                 throw std::runtime_error(
-                    "DX30 (DirectDraw v2) does not support custom SpriteBatch Effects: no "
+                    "DX3 (DirectDraw v2) does not support custom SpriteBatch Effects: no "
                     "programmable shader stage exists on this backend.");
         }
 
@@ -1769,12 +1769,12 @@ namespace CNA::Internal::Backends::Dx30
                  const Vector2& origin, SpriteEffects effects, float /*layerDepth*/) override
         {
             if (!begun_)
-                throw std::runtime_error("Dx30SpriteBatchBackend::Draw: Draw() called before Begin()");
+                throw std::runtime_error("Dx3SpriteBatchBackend::Draw: Draw() called before Begin()");
 
-            const auto* owner = dynamic_cast<const Dx30SurfaceOwner*>(&texture);
+            const auto* owner = dynamic_cast<const Dx3SurfaceOwner*>(&texture);
             if (!owner)
                 throw std::runtime_error(
-                    "Dx30SpriteBatchBackend::Draw: texture backend is not a DX30 surface (created by "
+                    "Dx3SpriteBatchBackend::Draw: texture backend is not a DX3 surface (created by "
                     "a different graphics backend?)");
             LPDIRECTDRAWSURFACE srcSurface = owner->Surface();
             LPDIRECTDRAWSURFACE dstSurface = getActiveSurface_();
@@ -1808,7 +1808,7 @@ namespace CNA::Internal::Backends::Dx30
             const bool isWhiteTint =
                 color.getRProperty() == 255 && color.getGProperty() == 255 &&
                 color.getBProperty() == 255 && color.getAProperty() == 255;
-            if (isIdentityGeometry && isWhiteTint && getBlendMode_() == Dx30BlendMode::Opaque)
+            if (isIdentityGeometry && isWhiteTint && getBlendMode_() == Dx3BlendMode::Opaque)
             {
                 // A real Blt/BltFast call cannot target a surface that's currently Lock()'d --
                 // release both caches first (a cheap no-op if neither is actually holding a lock).
@@ -1873,7 +1873,7 @@ namespace CNA::Internal::Backends::Dx30
     private:
         std::function<LPDIRECTDRAWSURFACE()> getActiveSurface_;
         std::function<void(int&, int&)> getActiveSurfaceSize_;
-        std::function<Dx30BlendMode()> getBlendMode_;
+        std::function<Dx3BlendMode()> getBlendMode_;
         bool begun_ = false;
         Matrix transformMatrix_ = Matrix::getIdentityProperty();
         // Defaults match SpriteBatch::Begin()'s own documented default sampler state
@@ -1886,16 +1886,16 @@ namespace CNA::Internal::Backends::Dx30
         LockedSurfaceCache srcLock_;
     };
 
-    std::unique_ptr<ISpriteBatchBackend> Dx30GraphicsBackend::CreateSpriteBatch()
+    std::unique_ptr<ISpriteBatchBackend> Dx3GraphicsBackend::CreateSpriteBatch()
     {
         Impl* impl = impl_.get();
-        return std::make_unique<Dx30SpriteBatchBackend>(
+        return std::make_unique<Dx3SpriteBatchBackend>(
             [impl]() { return impl->ActiveSurface(); },
             [impl](int& w, int& h) { impl->ActiveSurfaceSize(w, h); },
             [impl]() { return impl->currentBlendMode; });
     }
 
-    void Dx30GraphicsBackend::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
+    void Dx3GraphicsBackend::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
                                              int colorDstBlend, int alphaDstBlend,
                                              int colorBlendFunc, int alphaBlendFunc,
                                              const BlendWriteState& /*writeState*/)
@@ -1911,11 +1911,11 @@ namespace CNA::Internal::Backends::Dx30
         // blend-equation render state (confirmed absent from d3dtypes.h by inspection) --
         // alphaSrcBlend/alphaDstBlend/colorBlendFunc/alphaBlendFunc are accepted and ignored.
         impl_->device2->SetRenderState(D3DRENDERSTATE_ALPHABLENDENABLE, TRUE);
-        impl_->device2->SetRenderState(D3DRENDERSTATE_SRCBLEND, Dx30BlendToD3D(colorSrcBlend));
-        impl_->device2->SetRenderState(D3DRENDERSTATE_DESTBLEND, Dx30BlendToD3D(colorDstBlend));
+        impl_->device2->SetRenderState(D3DRENDERSTATE_SRCBLEND, Dx3BlendToD3D(colorSrcBlend));
+        impl_->device2->SetRenderState(D3DRENDERSTATE_DESTBLEND, Dx3BlendToD3D(colorDstBlend));
     }
 
-    void Dx30GraphicsBackend::ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable, int depthFunc,
+    void Dx3GraphicsBackend::ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable, int depthFunc,
                                                     bool /*stencilEnable*/, int /*stencilFunc*/,
                                                     int /*stencilPass*/, int /*stencilFail*/, int /*stencilDepthFail*/,
                                                     int /*stencilMask*/, int /*stencilWriteMask*/, int /*referenceStencil*/,
@@ -1927,20 +1927,20 @@ namespace CNA::Internal::Backends::Dx30
         // parameter is accepted and silently ignored (no real stencil buffer/ops exist until DX6).
         impl_->device2->SetRenderState(D3DRENDERSTATE_ZENABLE, depthEnable ? D3DZB_TRUE : D3DZB_FALSE);
         impl_->device2->SetRenderState(D3DRENDERSTATE_ZWRITEENABLE, depthWriteEnable ? TRUE : FALSE);
-        impl_->device2->SetRenderState(D3DRENDERSTATE_ZFUNC, Dx30CompareFunctionToD3D(depthFunc));
+        impl_->device2->SetRenderState(D3DRENDERSTATE_ZFUNC, Dx3CompareFunctionToD3D(depthFunc));
     }
 
-    void Dx30GraphicsBackend::ApplyRasterizerState(int cullMode, int fillMode, bool /*scissorTestEnable*/,
+    void Dx3GraphicsBackend::ApplyRasterizerState(int cullMode, int fillMode, bool /*scissorTestEnable*/,
                                                   float /*depthBias*/, float /*slopeScaleDepthBias*/)
     {
         // Phase O6: scissorTestEnable/depthBias/slopeScaleDepthBias are accepted and ignored -- no
         // scissor test or depth-bias render state exists in d3dtypes.h at this DirectX era
         // (confirmed by inspection, matching design decision 7's pattern).
-        impl_->device2->SetRenderState(D3DRENDERSTATE_CULLMODE, Dx30CullModeToD3D(cullMode));
-        impl_->device2->SetRenderState(D3DRENDERSTATE_FILLMODE, Dx30FillModeToD3D(fillMode));
+        impl_->device2->SetRenderState(D3DRENDERSTATE_CULLMODE, Dx3CullModeToD3D(cullMode));
+        impl_->device2->SetRenderState(D3DRENDERSTATE_FILLMODE, Dx3FillModeToD3D(fillMode));
     }
 
-    void Dx30GraphicsBackend::ApplySamplerState(int slot, int filter, int addressU, int /*addressV*/,
+    void Dx3GraphicsBackend::ApplySamplerState(int slot, int filter, int addressU, int /*addressV*/,
                                                int maxAnisotropy)
     {
         // Phase O6: D3D v1/v2 has exactly one texture stage (no multitexture, decision 7) and no
@@ -1950,10 +1950,10 @@ namespace CNA::Internal::Backends::Dx30
         // mode, there is no separate per-axis render state to set it on.
         if (slot != 0) return;
 
-        const Dx30FilterPair filterPair = Dx30TextureFilterToD3D(filter);
+        const Dx3FilterPair filterPair = Dx3TextureFilterToD3D(filter);
         impl_->device2->SetRenderState(D3DRENDERSTATE_TEXTUREMAG, filterPair.mag);
         impl_->device2->SetRenderState(D3DRENDERSTATE_TEXTUREMIN, filterPair.min);
-        impl_->device2->SetRenderState(D3DRENDERSTATE_TEXTUREADDRESS, Dx30TextureAddressModeToD3D(addressU));
+        impl_->device2->SetRenderState(D3DRENDERSTATE_TEXTUREADDRESS, Dx3TextureAddressModeToD3D(addressU));
         impl_->device2->SetRenderState(D3DRENDERSTATE_ANISOTROPY, static_cast<DWORD>(maxAnisotropy));
     }
 
@@ -1962,13 +1962,13 @@ namespace CNA::Internal::Backends::Dx30
     // (design decision 4) ever has a Z-buffer attached in this v1 -- a custom RenderTarget2D bound
     // at the same time has no 3D capability at all (Phase O3/O4's scope), so this combination is
     // out of scope, not specially guarded against here.
-    void Dx30GraphicsBackend::ClearColorAndDepth(float r, float g, float b, float a, float depth)
+    void Dx3GraphicsBackend::ClearColorAndDepth(float r, float g, float b, float a, float depth)
     {
         Clear(r, g, b, a);
         ClearDepth(depth);
     }
 
-    void Dx30GraphicsBackend::ClearDepth(float depth)
+    void Dx3GraphicsBackend::ClearDepth(float depth)
     {
         int width = 0, height = 0;
         impl_->ActiveSurfaceSize(width, height);
@@ -1979,14 +1979,14 @@ namespace CNA::Internal::Backends::Dx30
     // are accepted and silently ignored, never thrown, matching the "accept and ignore" pattern
     // docs/directx-legacy-backends-analysis.md documents as already blessed elsewhere in this
     // family. A pure stencil-only clear is therefore a complete no-op.
-    void Dx30GraphicsBackend::ClearStencil(int) {}
-    void Dx30GraphicsBackend::ClearDepthAndStencil(float depth, int) { ClearDepth(depth); }
-    void Dx30GraphicsBackend::ClearColorAndStencil(float r, float g, float b, float a, int) { Clear(r, g, b, a); }
-    void Dx30GraphicsBackend::ClearColorDepthAndStencil(float r, float g, float b, float a, float depth, int)
+    void Dx3GraphicsBackend::ClearStencil(int) {}
+    void Dx3GraphicsBackend::ClearDepthAndStencil(float depth, int) { ClearDepth(depth); }
+    void Dx3GraphicsBackend::ClearColorAndStencil(float r, float g, float b, float a, int) { Clear(r, g, b, a); }
+    void Dx3GraphicsBackend::ClearColorDepthAndStencil(float r, float g, float b, float a, float depth, int)
     {
         ClearColorAndDepth(r, g, b, a, depth);
     }
-    void Dx30GraphicsBackend::SetDepthTestEnabled(bool enabled)
+    void Dx3GraphicsBackend::SetDepthTestEnabled(bool enabled)
     {
         impl_->device2->SetRenderState(D3DRENDERSTATE_ZENABLE, enabled ? D3DZB_TRUE : D3DZB_FALSE);
     }
@@ -1995,39 +1995,39 @@ namespace CNA::Internal::Backends::Dx30
     // blending" has no defined blend factors in XNA -- real blend configuration always arrives via
     // ApplyBlendState(), which already unconditionally enables blending
     // (D3DRENDERSTATE_ALPHABLENDENABLE) whenever it's called.
-    void Dx30GraphicsBackend::SetBlendEnabled(bool) {}
+    void Dx3GraphicsBackend::SetBlendEnabled(bool) {}
 
-    void Dx30GraphicsBackend::SetDepthWriteEnabled(bool enabled)
+    void Dx3GraphicsBackend::SetDepthWriteEnabled(bool enabled)
     {
         impl_->device2->SetRenderState(D3DRENDERSTATE_ZWRITEENABLE, enabled ? TRUE : FALSE);
     }
 
-    std::unique_ptr<IVertexBufferBackend> Dx30GraphicsBackend::CreateVertexBuffer(int vertex_capacity)
+    std::unique_ptr<IVertexBufferBackend> Dx3GraphicsBackend::CreateVertexBuffer(int vertex_capacity)
     {
-        return std::make_unique<Dx30VertexBufferBackend>(vertex_capacity);
+        return std::make_unique<Dx3VertexBufferBackend>(vertex_capacity);
     }
 
-    std::unique_ptr<IIndexBufferBackend> Dx30GraphicsBackend::CreateIndexBuffer16(int index_capacity)
+    std::unique_ptr<IIndexBufferBackend> Dx3GraphicsBackend::CreateIndexBuffer16(int index_capacity)
     {
-        return std::make_unique<Dx30IndexBufferBackend>(index_capacity, false);
+        return std::make_unique<Dx3IndexBufferBackend>(index_capacity, false);
     }
 
-    std::unique_ptr<IIndexBufferBackend> Dx30GraphicsBackend::CreateIndexBuffer32(int index_capacity)
+    std::unique_ptr<IIndexBufferBackend> Dx3GraphicsBackend::CreateIndexBuffer32(int index_capacity)
     {
-        return std::make_unique<Dx30IndexBufferBackend>(index_capacity, true);
+        return std::make_unique<Dx3IndexBufferBackend>(index_capacity, true);
     }
 
-    void Dx30GraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend& vb,
+    void Dx3GraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend& vb,
                                                    const Matrix& world, const Matrix& view, const Matrix& projection,
                                                    PrimitiveType primitive, int primitiveCount)
     {
-        Dx30CheckDrawPreconditions("DrawColoredPrimitives", impl_->currentTargetSurface != nullptr,
+        Dx3CheckDrawPreconditions("DrawColoredPrimitives", impl_->currentTargetSurface != nullptr,
                                   primitive, primitiveCount);
         if (primitiveCount * 3 > vb.GetVertexCount())
             throw std::runtime_error(
-                "Dx30GraphicsBackend::DrawColoredPrimitives: primitiveCount needs more vertices than the bound buffer has");
+                "Dx3GraphicsBackend::DrawColoredPrimitives: primitiveCount needs more vertices than the bound buffer has");
 
-        const auto& dxVb = static_cast<const Dx30VertexBufferBackend&>(vb);
+        const auto& dxVb = static_cast<const Dx3VertexBufferBackend&>(vb);
         const uint8_t* base = dxVb.Data().data();
         const std::size_t stride = dxVb.Stride();
         const Matrix combined = world * view * projection;
@@ -2035,23 +2035,23 @@ namespace CNA::Internal::Backends::Dx30
         impl_->ActiveSurfaceSize(vw, vh);
 
         SubmitDx30Primitives(impl_->device2, vw, vh,
-            [&](int i) { return Dx30BuildPositionColorClipVertex(base + static_cast<std::size_t>(i) * stride, combined); },
+            [&](int i) { return Dx3BuildPositionColorClipVertex(base + static_cast<std::size_t>(i) * stride, combined); },
             primitiveCount, 0, false);
     }
 
-    void Dx30GraphicsBackend::DrawIndexedColoredPrimitives(const IVertexBufferBackend& vb,
+    void Dx3GraphicsBackend::DrawIndexedColoredPrimitives(const IVertexBufferBackend& vb,
                                                           const IIndexBufferBackend& ib,
                                                           const Matrix& world, const Matrix& view, const Matrix& projection,
                                                           PrimitiveType primitive, int primitiveCount)
     {
-        Dx30CheckDrawPreconditions("DrawIndexedColoredPrimitives", impl_->currentTargetSurface != nullptr,
+        Dx3CheckDrawPreconditions("DrawIndexedColoredPrimitives", impl_->currentTargetSurface != nullptr,
                                   primitive, primitiveCount);
         if (primitiveCount * 3 > ib.GetIndexCount())
             throw std::runtime_error(
-                "Dx30GraphicsBackend::DrawIndexedColoredPrimitives: primitiveCount needs more indices than the bound buffer has");
+                "Dx3GraphicsBackend::DrawIndexedColoredPrimitives: primitiveCount needs more indices than the bound buffer has");
 
-        const auto& dxVb = static_cast<const Dx30VertexBufferBackend&>(vb);
-        const auto& dxIb = static_cast<const Dx30IndexBufferBackend&>(ib);
+        const auto& dxVb = static_cast<const Dx3VertexBufferBackend&>(vb);
+        const auto& dxIb = static_cast<const Dx3IndexBufferBackend&>(ib);
         const uint8_t* vbBase = dxVb.Data().data();
         const std::size_t stride = dxVb.Stride();
         const uint8_t* ibBase = dxIb.Data().data();
@@ -2075,7 +2075,7 @@ namespace CNA::Internal::Backends::Dx30
         SubmitDx30Primitives(impl_->device2, vw, vh,
             [&](int i) {
                 const uint32_t idx = readIndex(i);
-                return Dx30BuildPositionColorClipVertex(vbBase + static_cast<std::size_t>(idx) * stride, combined);
+                return Dx3BuildPositionColorClipVertex(vbBase + static_cast<std::size_t>(idx) * stride, combined);
             },
             primitiveCount, 0, false);
     }
@@ -2087,66 +2087,66 @@ namespace CNA::Internal::Backends::Dx30
     // rejection, which is already loud and deterministic.
     static void RequireFaithfulDeclarationEXT(const IVertexBufferBackend& vb, const char* route)
     {
-        const auto& dxVb = static_cast<const Dx30VertexBufferBackend&>(vb);
+        const auto& dxVb = static_cast<const Dx3VertexBufferBackend&>(vb);
         CNA::Internal::Graphics::RequireFaithfulVertexDeclaration(
             dxVb.Declaration(), static_cast<int>(dxVb.Stride()),
-            CNA::Internal::Graphics::UnlistedStrideLayout::BackendRefusesIt, "DX30", route);
+            CNA::Internal::Graphics::UnlistedStrideLayout::BackendRefusesIt, "DX3", route);
     }
 
-    void Dx30GraphicsBackend::DrawPrimitivesEx(const IVertexBufferBackend& vb,
+    void Dx3GraphicsBackend::DrawPrimitivesEx(const IVertexBufferBackend& vb,
                                               const Matrix& world, const Matrix& view, const Matrix& projection,
                                               PrimitiveType primitive, int primitiveCount,
                                               const GpuDrawParams& params)
     {
         RequireFaithfulDeclarationEXT(vb, "ordinary-nonindexed");
-        Dx30CheckDrawPreconditions("DrawPrimitivesEx", impl_->currentTargetSurface != nullptr,
+        Dx3CheckDrawPreconditions("DrawPrimitivesEx", impl_->currentTargetSurface != nullptr,
                                   primitive, primitiveCount);
         if (params.textureEnabled && params.texture0 == nullptr)
-            throw std::runtime_error("Dx30GraphicsBackend::DrawPrimitivesEx: textureEnabled=true but texture0 is null");
+            throw std::runtime_error("Dx3GraphicsBackend::DrawPrimitivesEx: textureEnabled=true but texture0 is null");
         if (params.vertexStart + primitiveCount * 3 > vb.GetVertexCount())
             throw std::runtime_error(
-                "Dx30GraphicsBackend::DrawPrimitivesEx: vertexStart + primitiveCount needs more vertices than the bound buffer has");
+                "Dx3GraphicsBackend::DrawPrimitivesEx: vertexStart + primitiveCount needs more vertices than the bound buffer has");
 
-        const auto& dxVb = static_cast<const Dx30VertexBufferBackend&>(vb);
+        const auto& dxVb = static_cast<const Dx3VertexBufferBackend&>(vb);
         const std::size_t stride = dxVb.Stride();
         if (stride != 16 && stride != 20 && stride != 24 && stride != 32 && stride != 52)
             throw std::runtime_error(
-                "Dx30GraphicsBackend::DrawPrimitivesEx: unsupported vertex stride (only 16/20/24/32/52 supported in v1)");
+                "Dx3GraphicsBackend::DrawPrimitivesEx: unsupported vertex stride (only 16/20/24/32/52 supported in v1)");
 
         const uint8_t* base = dxVb.Data().data();
         const Matrix combined = world * view * projection;
         int vw = 0, vh = 0;
         impl_->ActiveSurfaceSize(vw, vh);
         const D3DTEXTUREHANDLE texHandle = params.textureEnabled
-            ? Dx30ResolveTextureHandle(params.texture0, impl_->device2) : 0;
+            ? Dx3ResolveTextureHandle(params.texture0, impl_->device2) : 0;
         const int vertexStart = params.vertexStart;
 
         SubmitDx30Primitives(impl_->device2, vw, vh,
-            [&](int i) { return Dx30BuildGenericClipVertex(base + static_cast<std::size_t>(vertexStart + i) * stride,
+            [&](int i) { return Dx3BuildGenericClipVertex(base + static_cast<std::size_t>(vertexStart + i) * stride,
                                                           stride, combined, world, params); },
             primitiveCount, texHandle, params.lightingEnabled);
     }
 
-    void Dx30GraphicsBackend::DrawIndexedPrimitivesEx(const IVertexBufferBackend& vb, const IIndexBufferBackend& ib,
+    void Dx3GraphicsBackend::DrawIndexedPrimitivesEx(const IVertexBufferBackend& vb, const IIndexBufferBackend& ib,
                                                      const Matrix& world, const Matrix& view, const Matrix& projection,
                                                      PrimitiveType primitive, int primitiveCount,
                                                      const GpuDrawParams& params)
     {
         RequireFaithfulDeclarationEXT(vb, "ordinary-indexed");
-        Dx30CheckDrawPreconditions("DrawIndexedPrimitivesEx", impl_->currentTargetSurface != nullptr,
+        Dx3CheckDrawPreconditions("DrawIndexedPrimitivesEx", impl_->currentTargetSurface != nullptr,
                                   primitive, primitiveCount);
         if (params.textureEnabled && params.texture0 == nullptr)
-            throw std::runtime_error("Dx30GraphicsBackend::DrawIndexedPrimitivesEx: textureEnabled=true but texture0 is null");
+            throw std::runtime_error("Dx3GraphicsBackend::DrawIndexedPrimitivesEx: textureEnabled=true but texture0 is null");
         if (params.startIndex + primitiveCount * 3 > ib.GetIndexCount())
             throw std::runtime_error(
-                "Dx30GraphicsBackend::DrawIndexedPrimitivesEx: startIndex + primitiveCount needs more indices than the bound buffer has");
+                "Dx3GraphicsBackend::DrawIndexedPrimitivesEx: startIndex + primitiveCount needs more indices than the bound buffer has");
 
-        const auto& dxVb = static_cast<const Dx30VertexBufferBackend&>(vb);
-        const auto& dxIb = static_cast<const Dx30IndexBufferBackend&>(ib);
+        const auto& dxVb = static_cast<const Dx3VertexBufferBackend&>(vb);
+        const auto& dxIb = static_cast<const Dx3IndexBufferBackend&>(ib);
         const std::size_t stride = dxVb.Stride();
         if (stride != 16 && stride != 20 && stride != 24 && stride != 32 && stride != 52)
             throw std::runtime_error(
-                "Dx30GraphicsBackend::DrawIndexedPrimitivesEx: unsupported vertex stride (only 16/20/24/32/52 supported in v1)");
+                "Dx3GraphicsBackend::DrawIndexedPrimitivesEx: unsupported vertex stride (only 16/20/24/32/52 supported in v1)");
 
         const uint8_t* vbBase = dxVb.Data().data();
         const uint8_t* ibBase = dxIb.Data().data();
@@ -2155,7 +2155,7 @@ namespace CNA::Internal::Backends::Dx30
         int vw = 0, vh = 0;
         impl_->ActiveSurfaceSize(vw, vh);
         const D3DTEXTUREHANDLE texHandle = params.textureEnabled
-            ? Dx30ResolveTextureHandle(params.texture0, impl_->device2) : 0;
+            ? Dx3ResolveTextureHandle(params.texture0, impl_->device2) : 0;
         const int startIndex = params.startIndex;
         const int baseVertex = params.baseVertex;
 
@@ -2174,7 +2174,7 @@ namespace CNA::Internal::Backends::Dx30
         SubmitDx30Primitives(impl_->device2, vw, vh,
             [&](int i) {
                 const uint32_t idx = readIndex(startIndex + i) + static_cast<uint32_t>(baseVertex);
-                return Dx30BuildGenericClipVertex(vbBase + static_cast<std::size_t>(idx) * stride, stride,
+                return Dx3BuildGenericClipVertex(vbBase + static_cast<std::size_t>(idx) * stride, stride,
                                                  combined, world, params);
             },
             primitiveCount, texHandle, params.lightingEnabled);
@@ -2183,10 +2183,10 @@ namespace CNA::Internal::Backends::Dx30
 
 namespace CNA::Internal::Backends
 {
-#ifdef CNA_BACKEND_DX30
+#ifdef CNA_BACKEND_DX3
     std::unique_ptr<IGraphicsBackend> CreateGraphicsBackend(const GraphicsBackendCreateArgs& args)
     {
-        return std::make_unique<Dx30::Dx30GraphicsBackend>(args);
+        return std::make_unique<Dx3::Dx3GraphicsBackend>(args);
     }
 #endif
 }

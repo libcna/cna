@@ -52,7 +52,7 @@ using namespace Microsoft::Xna::Framework::Graphics;
 static constexpr int kCanvasSize = 96;
 static constexpr float kPi = 3.14159265358979323846f;
 
-class Dx30SpriteBatchTest : public Game
+class Dx3SpriteBatchTest : public Game
 {
     std::unique_ptr<GraphicsDeviceManager> gdm_;
     int passCount_ = 0;
@@ -272,7 +272,7 @@ protected:
             {
                 threw = true;
             }
-            check(threw, "Begin() with a non-null custom Effect throws (no shader stage on DX30)");
+            check(threw, "Begin() with a non-null custom Effect throws (no shader stage on DX3)");
         }
 
         std::printf("=== %d/%d PASS ===\n", passCount_, kTotal);
@@ -281,7 +281,7 @@ protected:
     }
 
 public:
-    Dx30SpriteBatchTest()
+    Dx3SpriteBatchTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
         gdm_->setPreferredBackBufferWidthProperty(kCanvasSize);
@@ -293,7 +293,7 @@ public:
 
 int main()
 {
-    Dx30SpriteBatchTest game;
+    Dx3SpriteBatchTest game;
     game.Run();
     return game.getResult();
 }

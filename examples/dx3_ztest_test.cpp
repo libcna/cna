@@ -44,7 +44,7 @@ namespace
     bool Close(int a, int b, int tolerance) { return std::abs(a - b) <= tolerance; }
 }
 
-class Dx30ZTestTest : public Game
+class Dx3ZTestTest : public Game
 {
     std::unique_ptr<GraphicsDeviceManager> gdm_;
     int result_ = 1;
@@ -62,7 +62,7 @@ protected:
     {
         auto& dev = getGraphicsDeviceProperty();
         dev.setRasterizerStateProperty(RasterizerState::CullNone);
-        // NOTE: setDepthStencilStateProperty() is deliberately NOT called here -- Dx30GraphicsBackend
+        // NOTE: setDepthStencilStateProperty() is deliberately NOT called here -- Dx3GraphicsBackend
         // does not wire ApplyDepthStencilState until Phase O6, so it would have no effect yet. This
         // test instead relies on Create3DDevice()'s own explicit Phase-O4 default (ZENABLE=TRUE,
         // ZFUNC=LESSEQUAL), which matches real XNA's DepthStencilState.Default exactly.
@@ -119,7 +119,7 @@ protected:
     }
 
 public:
-    Dx30ZTestTest()
+    Dx3ZTestTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
         gdm_->setPreferredBackBufferWidthProperty(64);
@@ -131,7 +131,7 @@ public:
 
 int main()
 {
-    Dx30ZTestTest game;
+    Dx3ZTestTest game;
     game.Run();
     return game.getResult();
 }

@@ -12,7 +12,7 @@
 # implementation for this backend -- no extra setup beyond `wineboot --init`.
 #
 # Set CNA_DX7_WINEPREFIX to point at a different prefix; defaults to ~/.wine-cna-dx1 -- DX7
-# deliberately REUSES DX1/DX2/DX30's own already-initialized prefix rather than creating a fresh
+# deliberately REUSES DX1/DX2/DX3's own already-initialized prefix rather than creating a fresh
 # one (plan_dx7.md's own DX7-0 spike ran entirely against ~/.wine-cna-dx1 and confirmed it works
 # for DX7's IDirectDraw7 + Direct3D v7 needs, so there is nothing DX7-specific a separate prefix
 # would buy).

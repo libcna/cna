@@ -4,12 +4,12 @@
 // IDirectDrawSurface4/DDSURFACEDESC2) + Direct3D v3 (IDirect3D3/IDirect3DDevice3/
 // IDirect3DViewport3), the first DirectX release where execute buffers are gone entirely
 // (DrawPrimitive/DrawIndexedPrimitive only, selected via a DWORD FVF bitmask -- D3DFVF_TLVERTEX --
-// instead of the old D3DVERTEXTYPE enum). Its 2D layer is a mechanical port of DX30's own
-// (plan_dx30.md, itself a port of DX2's, plan_dx2.md), upgraded further so EVERY surface is v4,
-// not just the top DirectDraw object; its 3D layer is a port of DX30's own already-proven one
+// instead of the old D3DVERTEXTYPE enum). Its 2D layer is a mechanical port of DX3's own
+// (plan_dx3.md, itself a port of DX2's, plan_dx2.md), upgraded further so EVERY surface is v4,
+// not just the top DirectDraw object; its 3D layer is a port of DX3's own already-proven one
 // (including Phase O9's CPU lighting), resubmitted through the new FVF parameter. Cross-compiled
 // via MinGW-w64 and run under Wine/Proton, the same Route B delivery mechanism
-// D3D9/D3D11/D3D12/DX1/DX2/DX30 already use.
+// D3D9/D3D11/D3D12/DX1/DX2/DX3 already use.
 //
 // This header intentionally does NOT include <ddraw.h> (design decision 9's containment rule,
 // mirroring DX3/D3D11/D3D12): it pulls in the full real <windows.h>, whose enormous macro surface
@@ -24,7 +24,7 @@
 namespace CNA::Internal::Backends::Dx5
 {
     /**
-     * DX5 graphics backend (plan_dx5.md): a mechanical port of Dx30GraphicsBackend (plan_dx30.md,
+     * DX5 graphics backend (plan_dx5.md): a mechanical port of Dx3GraphicsBackend (plan_dx3.md,
      * itself a port of Dx2GraphicsBackend, plan_dx2.md), upgraded to DirectDraw v4
      * (IDirectDraw4/IDirectDrawSurface4/DDSURFACEDESC2/DDSCAPS2 throughout -- every surface, not
      * just the top DirectDraw object) and Direct3D v3 (IDirect3D3/IDirect3DDevice3/
@@ -59,9 +59,9 @@ namespace CNA::Internal::Backends::Dx5
      * -- CPU transform + near-plane clip, D3DTLVERTEX packing (submitted via the new FVF
      * parameter), real depth-test occlusion, real texture sampling, full per-draw state mapping,
      * and Phase O9's CPU-side BasicEffect lighting (ambient + directional Lambertian/Blinn-Phong
-     * specular via real D3DRENDERSTATE_SPECULARENABLE) -- all ported from DX30's own already-
+     * specular via real D3DRENDERSTATE_SPECULARENABLE) -- all ported from DX3's own already-
      * proven 3D layer. IDirect3DViewport3::Clear2 provides a real, direct depth/color/stencil
-     * clear with explicit values, replacing DX2/DX30's manual Z-buffer Lock() workaround.
+     * clear with explicit values, replacing DX2/DX3's manual Z-buffer Lock() workaround.
      */
     class Dx5GraphicsBackend final : public IGraphicsBackend
     {

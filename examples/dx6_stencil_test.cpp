@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // plan_dx6.md Phase R5/R6: real stencil buffer write-then-test through the full XNA public API
-// (GraphicsDevice.DepthStencilState) -- DX6's primary new deliverable over DX5/DX30/DX2/DX1, which
+// (GraphicsDevice.DepthStencilState) -- DX6's primary new deliverable over DX5/DX3/DX2/DX1, which
 // all explicitly documented "no real stencil buffer exists at this DirectX era" as a boundary.
 // Mirrors the DX6-0 spike's own Test B/C shape (dx6-spike/dx6_spike1_stencil.cpp), but through
 // BasicEffect/DrawUserPrimitives/DepthStencilState instead of raw IDirect3DDevice3 calls.

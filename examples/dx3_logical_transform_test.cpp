@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // plan_dx2.md Phase O2 (DX2-14, 2D layer ported from DX1-68): TransformWindowToLogical/TransformLogicalToWindow (real
-// letterbox scale+offset) tests for the DX30 (real DirectDraw v2, run under Wine -- no
+// letterbox scale+offset) tests for the DX3 (real DirectDraw v2, run under Wine -- no
 // ../free-direct anywhere in this backend) graphics backend.
 //
 // The game requests a 64x64 logical/virtual resolution. Rather than forcing a specific physical
@@ -29,7 +29,7 @@
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 
-#include "CNA/Internal/Backends/Dx30/Dx30GraphicsBackend.hpp"
+#include "CNA/Internal/Backends/Dx3/Dx3GraphicsBackend.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -40,7 +40,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::Dx30;
+using namespace CNA::Internal::Backends::Dx3;
 
 static constexpr int kLogicalSize = 64;
 
@@ -49,7 +49,7 @@ static bool NearlyEqual(float a, float b, float tol = 0.05f)
     return std::fabs(a - b) <= tol;
 }
 
-class Dx30LogicalTransformTest : public Game
+class Dx3LogicalTransformTest : public Game
 {
     std::unique_ptr<GraphicsDeviceManager> gdm_;
     int passCount_ = 0;
@@ -66,7 +66,7 @@ protected:
     void Draw(const GameTime&) override
     {
         auto& dev = getGraphicsDeviceProperty();
-        auto& backend = static_cast<Dx30GraphicsBackend&>(dev.GetBackend());
+        auto& backend = static_cast<Dx3GraphicsBackend&>(dev.GetBackend());
 
         SDL_Window* window = backend.GetWindowInternal();
         int physW = 0, physH = 0;
@@ -128,7 +128,7 @@ protected:
     }
 
 public:
-    Dx30LogicalTransformTest()
+    Dx3LogicalTransformTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
         gdm_->setPreferredBackBufferWidthProperty(kLogicalSize);
@@ -140,7 +140,7 @@ public:
 
 int main()
 {
-    Dx30LogicalTransformTest game;
+    Dx3LogicalTransformTest game;
     game.Run();
     return game.getResult();
 }

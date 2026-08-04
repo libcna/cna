@@ -46,7 +46,7 @@ namespace
     bool Close(int a, int b, int tolerance) { return std::abs(a - b) <= tolerance; }
 }
 
-class Dx30WireframeAnisoTest : public Game
+class Dx3WireframeAnisoTest : public Game
 {
     std::unique_ptr<GraphicsDeviceManager> gdm_;
     int result_ = 1;
@@ -114,7 +114,7 @@ protected:
     }
 
 public:
-    Dx30WireframeAnisoTest()
+    Dx3WireframeAnisoTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
         gdm_->setPreferredBackBufferWidthProperty(64);
@@ -126,7 +126,7 @@ public:
 
 int main()
 {
-    Dx30WireframeAnisoTest game;
+    Dx3WireframeAnisoTest game;
     game.Run();
     return game.getResult();
 }

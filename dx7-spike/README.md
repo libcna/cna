@@ -2,7 +2,7 @@
 
 Run under real Wine `ddraw.dll`/`d3d.dll` (Wine 10.0~repack-6, `WINEPREFIX=$HOME/.wine-cna-dx1`,
 `DISPLAY=:99` Xvfb, `WAYLAND_DISPLAY` unset) — same environment `dx1-spike`/`dx2-spike`/
-`dx30-spike`/`dx5-spike`/`dx6-spike` used.
+`dx3-spike`/`dx5-spike`/`dx6-spike` used.
 
 ## What DX7 concretely means, vs. `DX6`
 
@@ -21,7 +21,7 @@ the object graph**, confirmed by inspecting the real MinGW headers:
    object, attach it to the device, clear through it" dance this backend family has done since
    `DX2-0` disappears.
 3. **`IDirect3D7::CreateDevice` drops the trailing `IUnknown* outer` parameter** `DX5`/`DX6`'s
-   `IDirect3D3::CreateDevice` had (a real signature oscillation: absent on `DX2`/`DX30`'s
+   `IDirect3D3::CreateDevice` had (a real signature oscillation: absent on `DX2`/`DX3`'s
    `IDirect3D2::CreateDevice`, added for `DX5`/`DX6`, removed again for `DX7`).
 4. **`IDirect3DDevice7::SetTexture(stage, IDirectDrawSurface7*)` binds a texture directly from the
    surface pointer** — no more texture-handle indirection (`D3DRENDERSTATE_TEXTUREHANDLE` +

@@ -11,7 +11,7 @@
 # implementation for this backend -- no extra setup beyond `wineboot --init`.
 #
 # Set CNA_DX6_WINEPREFIX to point at a different prefix; defaults to ~/.wine-cna-dx1 -- DX6
-# deliberately REUSES DX1/DX2/DX30's own already-initialized prefix rather than creating a fresh
+# deliberately REUSES DX1/DX2/DX3's own already-initialized prefix rather than creating a fresh
 # one (plan_dx6.md's own DX6-0 spike ran entirely against ~/.wine-cna-dx1 and confirmed it works
 # for DX6's IDirectDraw4 + Direct3D v3 needs, so there is nothing DX6-specific a separate prefix
 # would buy).

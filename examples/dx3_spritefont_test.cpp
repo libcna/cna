@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx2.md Phase O2 (DX2-13, 2D layer ported from DX1-50..DX1-54): SpriteFont / DrawString tests for the DX30 (real
+// plan_dx2.md Phase O2 (DX2-13, 2D layer ported from DX1-50..DX1-54): SpriteFont / DrawString tests for the DX3 (real
 // DirectDraw v1, run under Wine -- no ../free-direct anywhere in this backend) graphics backend.
 //
 // SpriteBatch::DrawString (shared, backend-agnostic SpriteBatch.cpp) lays out each glyph as a
@@ -10,7 +10,7 @@
 //
 // A 2-glyph atlas is used throughout: glyph 'A' = solid Red 8x8 at atlas (0,0,8,8), glyph 'B' =
 // solid Green 8x8 at atlas (8,0,8,8). Unlike the existing SDL_Renderer SpriteFont tests (which use
-// a color-match tolerance to work around that backend's own physical/logical scaling), DX30's CPU
+// a color-match tolerance to work around that backend's own physical/logical scaling), DX3's CPU
 // compositor is exact-pixel, so every check here asserts an exact color match.
 //
 // Check A (DX2-50) -- a single glyph lands at exactly the expected destination rect.
@@ -51,7 +51,7 @@ static const Color kRed(255, 0, 0, 255);
 static const Color kGreen(0, 255, 0, 255);
 static const Color kBlack(0, 0, 0, 255);
 
-class Dx30SpriteFontTest : public Game
+class Dx3SpriteFontTest : public Game
 {
     std::unique_ptr<GraphicsDeviceManager> gdm_;
     int passCount_ = 0;
@@ -200,7 +200,7 @@ protected:
     }
 
 public:
-    Dx30SpriteFontTest()
+    Dx3SpriteFontTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
         gdm_->setPreferredBackBufferWidthProperty(kCanvasSize);
@@ -212,7 +212,7 @@ public:
 
 int main()
 {
-    Dx30SpriteFontTest game;
+    Dx3SpriteFontTest game;
     game.Run();
     return game.getResult();
 }

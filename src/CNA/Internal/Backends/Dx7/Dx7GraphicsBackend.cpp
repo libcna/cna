@@ -16,7 +16,7 @@
 // deliberately deferred (design decisions 10/12 -- D3DTLVERTEX only carries one 2D
 // texture-coordinate pair). <ddraw.h> (and the real <windows.h> it pulls in) is contained to this
 // .cpp only -- see Dx7GraphicsBackend.hpp's own comment. This file's 2D and 3D layers are
-// otherwise a port of DX6's own (plan_dx6.md, itself a port of DX5's/DX30's/DX2's) -- only the
+// otherwise a port of DX6's own (plan_dx6.md, itself a port of DX5's/DX3's/DX2's) -- only the
 // literal execute-buffer surface (IDirect3DDevice::Execute/D3DEXECUTEBUFFERDESC/
 // IDirect3DExecuteBuffer/D3DOP_*/the un-versioned IDirect3D/IDirect3DDevice), the old v3/v4
 // interfaces, and the old texture-handle mechanism are all permanently forbidden, asserted by the

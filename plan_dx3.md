@@ -1,21 +1,17 @@
 # DirectX 3 (real, DirectDraw v2 + Direct3D v2 DrawPrimitive) Graphics Backend — Implementation Plan
 
-> **Temporary name notice.** This backend is CNA's real, Route-B "DirectX 3" implementation per
-> `plan_dxold.md`'s roadmap (row 3), but it is built and shipped under the CMake name **`DX30`**
-> (`CNA_GRAPHICS_BACKEND=DX30`, `CNA_BACKEND_DX30`, `Dx30GraphicsBackend`, `src/CNA/Internal/
-> Backends/Dx30/`), **not** `DX3` — the `DX3` name is still owned by the existing, shipping
-> `../free-direct`-backed 2D backend (`plan_freedirect.md`, `docs/freedirect-backend.md`). `plan_dxold.md`'s own
-> "DX3 naming transition" section describes a still-not-executed future task to rename that
-> existing backend to `FREE_DIRECT`, at which point `DX30` should be renamed to `DX3` (mechanical:
-> `Dx30`→`FreeDirect` class/file/directory renames, `DX30`→`DX3` CMake option/define renames, `plan_dx30.md`
-> retired in favor of `plan_dx3_real.md`/reusing `plan_freedirect.md`'s name once the old content is
-> archived). **Do not reuse the bare `DX3` identifier for anything until that rename task actually
-> runs** — this repo's own established caution (`plan_dxold.md`), respected here by using `DX30`
-> instead of colliding with the still-shipping backend.
+> **Naming: rename executed 2026-08-04 (owner instruction, dxold integration).** This backend
+> is CNA's real, Route-B "DirectX 3" implementation per `plan_dxold.md`'s roadmap (row 3). It was
+> originally built and shipped under the temporary CMake name `DX30`, because the `DX3` name was
+> owned by the `../free-direct`-backed 2D backend at the time. That backend has since been renamed
+> to `FREEDIRECT` (`plan_freedirect.md`, `docs/freedirect-backend.md`), and this backend now owns
+> its final identity: `CNA_GRAPHICS_BACKEND=DX3`, `CNA_BACKEND_DX3`, `Dx3GraphicsBackend`,
+> `src/CNA/Internal/Backends/Dx3/`, `plan_dx3.md`, `docs/dx3-backend.md`. The historical `DX30-*`
+> task IDs below are kept verbatim as provenance and are not renumbered.
 >
 > **Status (2026-07-21): all phases complete and verified.** 19/19 `DX30`-labeled CTests pass,
 > all green on the first run after the mechanical port (no transcription errors) — see the phase
-> tables below and `docs/dx30-backend.md` for the full result.
+> tables below and `docs/dx3-backend.md` for the full result.
 >
 > Owner's instruction (translated from Czech): *"Go do DX3. The rename of the current DX3 to
 > free-direct will happen later — for now, name it DX30."*
@@ -36,7 +32,7 @@
   Since that API is *already* a DX3-SDK addition, **`DX30`'s 3D layer needs no new spike or new
   code at all** — it is `DX2`'s already-proven 3D layer, ported forward unchanged (including Phase
   O9's CPU lighting and `WireFrame` support).
-- **New existence-gate spike (`DX30-0`, `dx30-spike/`)**: confirms `IDirectDraw2` is a real,
+- **New existence-gate spike (`DX30-0`, `dx3-spike/`)**: confirms `IDirectDraw2` is a real,
   fully-functional drop-in for `IDirectDraw` v1 in this Wine environment — `QueryInterface`
   succeeds, a genuinely v2-exclusive method (`GetAvailableVidMem`) returns real (non-stub) data,
   and `CreateSurface`/`Lock`/`Unlock` work identically through the v2 pointer. `SetDisplayMode`'s
@@ -44,7 +40,7 @@
   mode — expected, not a gap: `DX1-0`/`DX2-0` already established this backend family never calls
   `SetDisplayMode` at all (windowed mode never needs it), so the extra parameter is dead code here
   regardless, matching real DirectDraw's own documented "only in exclusive-fullscreen mode"
-  behavior. See `dx30-spike/README.md` for the full record.
+  behavior. See `dx3-spike/README.md` for the full record.
 - **2D layer: mechanical port of `Dx2GraphicsBackend`**, upgraded to the `IDirectDraw2` object.
   No other 2D-layer change — `SpriteBatch`/`SpriteFont`/blend modes/texture/render-target code is
   otherwise byte-identical.
@@ -82,14 +78,14 @@ DX3" in this environment, confirmed empirically by `DX30-0` rather than assumed.
 
 | # | Spike | What it proves | Result |
 |---|---|---|---|
-| `DX30-0a` | `dd->QueryInterface(IID_IDirectDraw2, &dd2)` on a real `DirectDrawCreate()`'d object (`dx30_spike1_ddraw2.cpp`, Test A) | Whether `IDirectDraw2` is reachable at all | ✅ **Works** |
+| `DX30-0a` | `dd->QueryInterface(IID_IDirectDraw2, &dd2)` on a real `DirectDrawCreate()`'d object (`dx3_spike1_ddraw2.cpp`, Test A) | Whether `IDirectDraw2` is reachable at all | ✅ **Works** |
 | `DX30-0b` | `dd2->GetAvailableVidMem(&caps, &total, &free)` (Test B) | Whether v2 is a real, implemented interface, not an `E_NOTIMPL` stub | ✅ **Works** — real non-zero data returned |
 | `DX30-0c` | `dd2->CreateSurface(...)` + `Lock()`/`Unlock()` through the v2 pointer (Test C) | Whether the v2 object is a fully-functional drop-in for every v1 call `DX1`/`DX2` already rely on | ✅ **Works** — identical to v1 |
 | `DX30-0d` | `dd2->SetDisplayMode(640, 480, 32, 60, 0)` in windowed `DDSCL_NORMAL` mode (Test D) | Whether the new refresh-rate parameter is usable | ❌ `E_NOTIMPL` — expected, matches `DX1-0`/`DX2-0`'s own finding that windowed mode never calls `SetDisplayMode` at all |
 
 **Net effect**: `DX30`'s 2D layer needs exactly one code change vs `DX2` (upgrade the DirectDraw
 object to v2 right after creation); its 3D layer needs zero changes. Phase O1 is unblocked. See
-`dx30-spike/README.md` for the full record.
+`dx3-spike/README.md` for the full record.
 
 ---
 
@@ -99,7 +95,7 @@ object to v2 right after creation); its 3D layer needs zero changes. Phase O1 is
    `FATAL_ERROR` gate.
 
 2. **2D layer: port of `Dx2GraphicsBackend`, with the DirectDraw object upgraded to v2.**
-   `Dx30GraphicsBackend`'s `Impl::dd` field becomes `LPDIRECTDRAW2` (was `LPDIRECTDRAW` in `DX2`);
+   `Dx3GraphicsBackend`'s `Impl::dd` field becomes `LPDIRECTDRAW2` (was `LPDIRECTDRAW` in `DX2`);
    immediately after `DirectDrawCreate(nullptr, &ddV1, nullptr)`, `ddV1->QueryInterface(
    IID_IDirectDraw2, &dd)` upgrades it, then `ddV1->Release()` (the v1 pointer is no longer
    needed — `dd` is used for everything from that point on, exactly where `DX2`'s code used its
@@ -116,7 +112,7 @@ object to v2 right after creation); its 3D layer needs zero changes. Phase O1 is
    pipeline, `D3DTLVERTEX` submission via `DrawPrimitive`/`DrawIndexedPrimitive`, all per-draw state
    mapping, and Phase O9's CPU-side BasicEffect lighting (ambient + up to 3 directional lights,
    Blinn-Phong specular via real `D3DRENDERSTATE_SPECULARENABLE`) are copied unchanged from
-   `Dx2GraphicsBackend.cpp` — only the enclosing namespace/class name changes (`Dx2`→`Dx30`). No
+   `Dx2GraphicsBackend.cpp` — only the enclosing namespace/class name changes (`Dx2`→`Dx3`). No
    re-derivation, no re-verification of already-proven math; only the CTests are re-run against the
    new backend binary to confirm the port itself introduced no transcription errors.
 
@@ -136,26 +132,26 @@ object to v2 right after creation); its 3D layer needs zero changes. Phase O1 is
    containment, CMake integration shape** — identical to `plan_dx1.md`/`plan_dx2.md`'s equivalent
    decisions, ported without change.
 
-7. **CMake integration**: add `"DX30"` to `CNA_GRAPHICS_BACKEND`'s `STRINGS` property + a
-   `CNA_BACKEND_DX30` option (temporary name, see the notice at the top of this plan); a
-   `cna_backend_graphics_dx30` static library target under `src/CNA/Internal/Backends/Dx30/`, same
+7. **CMake integration**: add `"DX3"` to `CNA_GRAPHICS_BACKEND`'s `STRINGS` property + a
+   `CNA_BACKEND_DX3` option (temporary name, see the notice at the top of this plan); a
+   `cna_backend_graphics_dx3` static library target under `src/CNA/Internal/Backends/Dx3/`, same
    Windows-only `FATAL_ERROR` gate. Link set: `ddraw` + `dxguid` + `SDL3::SDL3` — identical to
    `DX1`/`DX2`.
 
-8. **Testing: `scripts/run-wine-dx30.sh`**, modeled on `scripts/run-wine-dx2.sh` — same
+8. **Testing: `scripts/run-wine-dx3.sh`**, modeled on `scripts/run-wine-dx2.sh` — same
    `~/.wine-cna-dx1` prefix is reusable (confirmed by this plan's own spike, which ran against it).
 
 9. **No execute-buffer code anywhere in this backend.** Same grep-based discipline CTest as
-   `DX1-1`/`DX2-1` (`DX30-1`), asserting `src/CNA/Internal/Backends/Dx30/` never references
+   `DX1-1`/`DX2-1` (`DX30-1`), asserting `src/CNA/Internal/Backends/Dx3/` never references
    `IDirect3DDevice::Execute`/`D3DEXECUTEBUFFERDESC`/`IDirect3DExecuteBuffer`/`D3DINSTRUCTION`/
    `D3DOP_`.
 
 10. **Full CTest suite is a straight rename/port of `DX2`'s own 19 `DX2`-labeled CTests to
     `DX30`-labeled equivalents.** No separate "prove the `IDirectDraw2` upgrade happened" CTest is
-    needed on top of that: `Dx30GraphicsBackend`'s constructor unconditionally throws if
+    needed on top of that: `Dx3GraphicsBackend`'s constructor unconditionally throws if
     `QueryInterface(IID_IDirectDraw2)` fails (decision 2), so every one of these 19 tests already
     only ever runs against a genuine v2 object — their mere success already is the proof.
-    `dx30_smoke_test.cpp`'s own header comment states this explicitly rather than adding a
+    `dx3_smoke_test.cpp`'s own header comment states this explicitly rather than adding a
     redundant dedicated test file just to re-demonstrate it.
 
 ---
@@ -170,10 +166,10 @@ object to v2 right after creation); its 3D layer needs zero changes. Phase O1 is
 6. **Phase P5** (`VertexBuffer`/`IndexBuffer` backends: verbatim port).
 7. **Phase P6** (state mapping: verbatim port).
 8. **Phase P7** (remaining `IGraphicsBackend` defaults: verbatim port).
-9. **Phase P8** (tests + `docs/dx30-backend.md`).
+9. **Phase P8** (tests + `docs/dx3-backend.md`).
 
-For every task: build the affected target (`-DCNA_GRAPHICS_BACKEND=DX30`, MinGW cross-compile),
-run the relevant CTest through `scripts/run-wine-dx30.sh`, and do not mark a task ✅ without both
+For every task: build the affected target (`-DCNA_GRAPHICS_BACKEND=DX3`, MinGW cross-compile),
+run the relevant CTest through `scripts/run-wine-dx3.sh`, and do not mark a task ✅ without both
 actually passing.
 
 ---
@@ -182,12 +178,12 @@ actually passing.
 
 | # | Task | Status | Notes |
 |---|---|---|---|
-| `DX30-1` | Add `"DX30"` to `CNA_GRAPHICS_BACKEND`'s `STRINGS` property + `CNA_BACKEND_DX30` option; extend the Windows-only `FATAL_ERROR` gate; add the execute-buffer-discipline grep CTest (design decision 9) | ✅ | `Dx30_ExecuteBufferDiscipline` passing. |
-| `DX30-2` | `cna_backend_graphics_dx30` static library target; confirm minimal link set empirically | ✅ | Same link set as `DX1`/`DX2` (`SDL3::SDL3 ddraw dxguid`). |
-| `DX30-3` | `include/CNA/Internal/Backends/Dx30/Dx30GraphicsBackend.hpp` + `src/CNA/Internal/Backends/Dx30/Dx30GraphicsBackend.cpp`: mechanical port of `Dx2GraphicsBackend`'s files, `Dx2`→`Dx30` renamed throughout | ✅ | Every `IGraphicsBackend` method identical to `DX2`'s post-Phase-O9 state; only the DirectDraw object type/upgrade step (decision 2) differs. |
+| `DX30-1` | Add `"DX3"` to `CNA_GRAPHICS_BACKEND`'s `STRINGS` property + `CNA_BACKEND_DX3` option; extend the Windows-only `FATAL_ERROR` gate; add the execute-buffer-discipline grep CTest (design decision 9) | ✅ | `Dx3_ExecuteBufferDiscipline` passing. |
+| `DX30-2` | `cna_backend_graphics_dx3` static library target; confirm minimal link set empirically | ✅ | Same link set as `DX1`/`DX2` (`SDL3::SDL3 ddraw dxguid`). |
+| `DX30-3` | `include/CNA/Internal/Backends/Dx3/Dx3GraphicsBackend.hpp` + `src/CNA/Internal/Backends/Dx3/Dx3GraphicsBackend.cpp`: mechanical port of `Dx2GraphicsBackend`'s files, `Dx2`→`Dx3` renamed throughout | ✅ | Every `IGraphicsBackend` method identical to `DX2`'s post-Phase-O9 state; only the DirectDraw object type/upgrade step (decision 2) differs. |
 | `DX30-4` | Factory dispatch for `DX30` in `CreateGraphicsBackend()` | ✅ | |
-| `DX30-5` | `scripts/run-wine-dx30.sh` (design decision 8) | ✅ | Reuses `~/.wine-cna-dx1` prefix. |
-| `DX30-6` | Confirm `CnaTests`/the new MinGW test binaries link cleanly against the new backend target under cross-compilation | ✅ | `cmake-build-dx30` configures/builds clean (MinGW cross, Release, ccache). |
+| `DX30-5` | `scripts/run-wine-dx3.sh` (design decision 8) | ✅ | Reuses `~/.wine-cna-dx1` prefix. |
+| `DX30-6` | Confirm `CnaTests`/the new MinGW test binaries link cleanly against the new backend target under cross-compilation | ✅ | `cmake-build-dx3` configures/builds clean (MinGW cross, Release, ccache). |
 
 ## Phase P2 — 2D layer (port from `Dx2GraphicsBackend`, upgraded to `IDirectDraw2`)
 
@@ -204,20 +200,20 @@ actually passing.
 
 | # | Task | Status | Notes |
 |---|---|---|---|
-| `DX30-20`..`DX30-26` | `IDirect3D2`/`IDirect3DDevice2`/viewport/Z-buffer bring-up, `ClearColorAndDepth`/etc. wiring, `Dx30_Device3DSmoke` CTest | ✅ | Verbatim port of `DX2-20`..`DX2-26`; obtained via `QueryInterface(IID_IDirect3D2)` off the now-v2 `dd` object instead of the v1 one — spike-confirmed (`DX30-0c`) this works identically. |
+| `DX30-20`..`DX30-26` | `IDirect3D2`/`IDirect3DDevice2`/viewport/Z-buffer bring-up, `ClearColorAndDepth`/etc. wiring, `Dx3_Device3DSmoke` CTest | ✅ | Verbatim port of `DX2-20`..`DX2-26`; obtained via `QueryInterface(IID_IDirect3D2)` off the now-v2 `dd` object instead of the v1 one — spike-confirmed (`DX30-0c`) this works identically. |
 
 ## Phase P4 — CPU transform/clip pipeline + `DrawPrimitive` submission (verbatim port, incl. Phase O9)
 
 | # | Task | Status | Notes |
 |---|---|---|---|
 | `DX30-30`..`DX30-39` | CPU clip/transform math, `D3DTLVERTEX` packing, `DrawColoredPrimitives`/`DrawIndexedColoredPrimitives`/`DrawPrimitivesEx`/`DrawIndexedPrimitivesEx`, depth-test/texture/clipping CTests | ✅ | Verbatim port of `DX2-30`..`DX2-39`. |
-| `DX30-40` | CPU-side BasicEffect lighting (Phase O9's `Dx2ComputeVertexLighting`, specular via `D3DRENDERSTATE_SPECULARENABLE`) | ✅ | Verbatim port of `DX2-91`..`DX2-96`'s implementation. `Dx30_Lighting` CTest (4/4, same checks as `Dx2_Lighting`). |
+| `DX30-40` | CPU-side BasicEffect lighting (Phase O9's `Dx2ComputeVertexLighting`, specular via `D3DRENDERSTATE_SPECULARENABLE`) | ✅ | Verbatim port of `DX2-91`..`DX2-96`'s implementation. `Dx3_Lighting` CTest (4/4, same checks as `Dx2_Lighting`). |
 
 ## Phase P5 — `VertexBuffer`/`IndexBuffer` backends (verbatim port)
 
 | # | Task | Status | Notes |
 |---|---|---|---|
-| `DX30-50`, `DX30-51` | `Dx30VertexBufferBackend`/`Dx30IndexBufferBackend`, `SetData`/`GetData` round-trip test | ✅ | Verbatim port of `DX2-40`..`DX2-42`. |
+| `DX30-50`, `DX30-51` | `Dx3VertexBufferBackend`/`Dx3IndexBufferBackend`, `SetData`/`GetData` round-trip test | ✅ | Verbatim port of `DX2-40`..`DX2-42`. |
 
 ## Phase P6 — State mapping (verbatim port)
 
@@ -236,9 +232,9 @@ actually passing.
 | # | Task | Status | Notes |
 |---|---|---|---|
 | `DX30-80` | Full renamed 2D+3D CTest suite passing | ✅ | **19/19 `DX30`-labeled CTests**, all ported from `DX2`'s own 19, all green on the first run (no transcription errors found in the mechanical port). |
-| `DX30-81` | `docs/dx30-backend.md`: mirror `docs/dx2-backend.md`'s structure | ✅ | |
+| `DX30-81` | `docs/dx3-backend.md`: mirror `docs/dx2-backend.md`'s structure | ✅ | |
 | `DX30-82` | Update `CMakeLists.txt`'s `CNA_GRAPHICS_BACKEND` STRINGS docstring, `README.md`, and `plan_dxold.md`'s DX3(real) row | ✅ | |
-| `DX30-83` | Full `DX30`-labeled CTest suite regression + targeted cross-backend test re-run (mirroring `DX2-98`'s scope decision — a full multi-hour `CnaTests` regression is out of proportion for a mechanical port; the cross-backend test classes any new backend addition could plausibly affect are re-run directly) | ✅ | **19/19 `DX30`-labeled CTests pass** via `ctest -L DX30 -j2`. Targeted `CnaTests` filter run (`GraphicsBackendCompileDefinitionsTest.*:GraphicsDeviceValidationTest.SetRenderTargets_*:GraphicsDeviceCapabilityTest.*`) confirms `ExactlyOneGraphicsBackendIsSelected` passes (the new `GraphicsBackendType.hpp`/`GraphicsBackendCompileDefinitionTests.cpp` entries), `SetRenderTargets_FourTargets_DoesNotThrow`/`FiveTargets_Throws` pass (the new `GraphicsDeviceValidationTests.cpp` entry), `DoesNotSupportWireFrame` passes (the new `GraphicsDeviceCapabilityTests.cpp` entry) — and the same 3 pre-existing, already-documented ungated-test-class failures `DX2-84` found (`SupportsMultipleRenderTargets`/`SupportsOcclusionQuery`/`SupportsCustomEffects`) are unchanged, confirming zero new regressions. Also found and fixed one real, proactively-caught gap along the way: `include/CNA/GraphicsBackendType.hpp`'s own `CNA_BACKEND_*` → `GraphicsBackendType` mapping table had no `Dx30` entry at all (a full build under `-DCNA_GRAPHICS_BACKEND=DX30` failed to compile `#error`-gated code until fixed) — the same class of "new backend needs a matching entry in every `CNA_BACKEND_*` registry" gap `DX2-84` found for other files, caught here by an actual from-scratch build rather than discovered later. |
+| `DX30-83` | Full `DX30`-labeled CTest suite regression + targeted cross-backend test re-run (mirroring `DX2-98`'s scope decision — a full multi-hour `CnaTests` regression is out of proportion for a mechanical port; the cross-backend test classes any new backend addition could plausibly affect are re-run directly) | ✅ | **19/19 `DX30`-labeled CTests pass** via `ctest -L DX30 -j2`. Targeted `CnaTests` filter run (`GraphicsBackendCompileDefinitionsTest.*:GraphicsDeviceValidationTest.SetRenderTargets_*:GraphicsDeviceCapabilityTest.*`) confirms `ExactlyOneGraphicsBackendIsSelected` passes (the new `GraphicsBackendType.hpp`/`GraphicsBackendCompileDefinitionTests.cpp` entries), `SetRenderTargets_FourTargets_DoesNotThrow`/`FiveTargets_Throws` pass (the new `GraphicsDeviceValidationTests.cpp` entry), `DoesNotSupportWireFrame` passes (the new `GraphicsDeviceCapabilityTests.cpp` entry) — and the same 3 pre-existing, already-documented ungated-test-class failures `DX2-84` found (`SupportsMultipleRenderTargets`/`SupportsOcclusionQuery`/`SupportsCustomEffects`) are unchanged, confirming zero new regressions. Also found and fixed one real, proactively-caught gap along the way: `include/CNA/GraphicsBackendType.hpp`'s own `CNA_BACKEND_*` → `GraphicsBackendType` mapping table had no `Dx3` entry at all (a full build under `-DCNA_GRAPHICS_BACKEND=DX30` failed to compile `#error`-gated code until fixed) — the same class of "new backend needs a matching entry in every `CNA_BACKEND_*` registry" gap `DX2-84` found for other files, caught here by an actual from-scratch build rather than discovered later. |
 
 ---
 
@@ -261,6 +257,6 @@ exposed through any public API (decision 4) — a deliberate scope boundary, not
   for why this backend is temporarily named `DX30`.
 - `plan_dx2.md`, `docs/dx2-backend.md` — the backend this plan ports verbatim (2D layer + 3D layer
   + Phase O9 lighting/`WireFrame`), including the existence-gate-spike discipline `DX30-0` follows.
-- `dx30-spike/README.md` — the full `DX30-0` spike record.
+- `dx3-spike/README.md` — the full `DX30-0` spike record.
 - `plan_freedirect.md`, `docs/freedirect-backend.md` — the existing, shipping `../free-direct`-backed `DX3`
   backend, whose name this backend will inherit once the still-pending rename task runs.

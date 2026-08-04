@@ -3,7 +3,7 @@
 > **Status (2026-07-21): `DX6-0` spike AND implementation phases R1-R8 all complete and verified.**
 > 20/20 `DX6`-labeled CTests pass (19 ported + the new `Dx6_Stencil` real stencil write-then-test
 > proof), first try after fixing the CMake registry wiring. Targeted cross-backend regression
-> matches `DX30`/`DX5`'s own baseline exactly (same 3 pre-existing, already-documented `DX2-84`
+> matches `DX3`/`DX5`'s own baseline exactly (same 3 pre-existing, already-documented `DX2-84`
 > ungated-test-class failures, zero new ones). See §2 for the spike result and the phase tables
 > below for per-task detail.
 
@@ -12,13 +12,13 @@
 ## 0. TL;DR
 
 - **New backend: `CNA_GRAPHICS_BACKEND=DX6`.** No temporary-naming concern.
-- **DX6 introduces NO new COM interface revision at all.** Unlike `DX2`→`DX30`→`DX5`'s
+- **DX6 introduces NO new COM interface revision at all.** Unlike `DX2`→`DX3`→`DX5`'s
   progression (each a genuine new `IDirect3D`/`IDirect3DDevice`/`IDirectDraw` interface), DX6
   (1998) reuses `IDirect3D3`/`IDirect3DDevice3`/`IDirect3DViewport3`/`IDirectDraw4` verbatim —
   confirmed by inspecting the real MinGW headers: no `IDirect3D4`/`IDirect3DDevice4` exists. DX6's
   entire delta vs. `DX5` is new render states/capabilities on the *same* interface: stencil ops,
   multitexturing, and DXTn compression.
-- **Real deliverable: stencil buffer operations**, resolving a boundary `DX2`/`DX30`/`DX5` have
+- **Real deliverable: stencil buffer operations**, resolving a boundary `DX2`/`DX3`/`DX5` have
   all explicitly documented as "no real stencil buffer exists at this DirectX era (DX6+)." A new
   existence-gate spike (`DX6-0`, `dx6-spike/`) confirmed real stencil WRITE (via
   `D3DRENDERSTATE_STENCILPASS=REPLACE`) and real stencil TEST (via `D3DRENDERSTATE_STENCILFUNC`)
@@ -82,7 +82,7 @@ having already been learned). See `dx6-spike/README.md` for the full record.
 
 ## 3. Design decisions (recorded before implementation)
 
-1. **Platform gate, same as `DX1`/`DX2`/`DX30`/`DX5`.** Same Windows-native-or-MinGW-cross-compile
+1. **Platform gate, same as `DX1`/`DX2`/`DX3`/`DX5`.** Same Windows-native-or-MinGW-cross-compile
    `FATAL_ERROR` gate.
 
 2. **2D layer: verbatim port of `DX5`'s own** (`IDirectDraw4`/`IDirectDrawSurface4`/
@@ -97,7 +97,7 @@ having already been learned). See `dx6-spike/README.md` for the full record.
    D24S8-equivalent shape) — replacing `DX5`'s depth-only `dwZBufferBitDepth = 16` surface. Created
    once, attached to the shadow-backbuffer via `AddAttachedSurface`, same lifecycle as before.
 
-5. **`ApplyDepthStencilState`'s stencil parameters are now real**, replacing `DX2`/`DX30`/`DX5`'s
+5. **`ApplyDepthStencilState`'s stencil parameters are now real**, replacing `DX2`/`DX3`/`DX5`'s
    "accepted and ignored" boundary: `stencilEnable` → `D3DRENDERSTATE_STENCILENABLE`;
    `stencilFunc`/`referenceStencil`/`stencilMask` → `D3DRENDERSTATE_STENCILFUNC`/`STENCILREF`/
    `STENCILMASK`; `stencilFail`/`stencilDepthFail`/`stencilPass` → `D3DRENDERSTATE_STENCILFAIL`/
@@ -126,10 +126,10 @@ having already been learned). See `dx6-spike/README.md` for the full record.
    DirectX backend's `CreateTexture`/`UpdatePixels` path (all existing backends in this family
    receive already-decompressed RGBA8 pixel data), so there is no real caller-facing gap this
    plan needs to close — same "no consumer, no scope" reasoning already used for
-   `GetAvailableVidMem` (`DX30` design decision 4) and real vertex buffers (`DX5` design decision 7).
+   `GetAvailableVidMem` (`DX3` design decision 4) and real vertex buffers (`DX5` design decision 7).
 
 8. **Lighting/fog/envMap/skinning/MRT/instancing/occlusion-query/volume-cube-textures/
-   custom-effects: identical boundary to `DX5`/`DX30`/`DX2` post-Phase-O9.** Only stencil moves
+   custom-effects: identical boundary to `DX5`/`DX3`/`DX2` post-Phase-O9.** Only stencil moves
    from "accepted-and-ignored" to "real" in this phase.
 
 9. **32-bit surfaces only, `DirectSound`/`DirectInput`/`DirectPlay` out of scope, header
@@ -138,7 +138,7 @@ having already been learned). See `dx6-spike/README.md` for the full record.
 10. **CMake integration**: add `"DX6"` to `CNA_GRAPHICS_BACKEND`'s `STRINGS` property + a
     `CNA_BACKEND_DX6` option; a `cna_backend_graphics_dx6` static library target under
     `src/CNA/Internal/Backends/Dx6/`, same Windows-only `FATAL_ERROR` gate. Link set: `ddraw` +
-    `dxguid` + `SDL3::SDL3` — identical to `DX1`/`DX2`/`DX30`/`DX5`.
+    `dxguid` + `SDL3::SDL3` — identical to `DX1`/`DX2`/`DX3`/`DX5`.
 
 11. **Testing: `scripts/run-wine-dx6.sh`**, modeled on `scripts/run-wine-dx5.sh` — same
     `~/.wine-cna-dx1` prefix.

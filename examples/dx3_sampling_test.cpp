@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MS-PL
 // plan_dx2.md Phase O2 (DX2-12, 2D layer ported from DX1-45/DX1-46): TextureFilter (nearest vs. bilinear) and
-// TextureAddressMode (Wrap/Mirror/Clamp) sampling tests for the DX30 (DirectDraw v2, via
+// TextureAddressMode (Wrap/Mirror/Clamp) sampling tests for the DX3 (DirectDraw v2, via
 // real DirectDraw v1, run under Wine -- no ../free-direct anywhere in this backend) graphics backend.
 //
 // All draws use BlendState::AlphaBlend with a fully-opaque (alpha=255) source texture: under
 // AlphaBlend's premultiplied formula (out = src + dst*(1-srcAlpha)), srcAlpha=255 makes
 // (1-srcAlpha)=0, so the result is exactly the sampled source color regardless of the
 // destination's prior content -- this isolates the sampling logic itself (DX2-45/46) from any
-// blend-formula concern (DX2-40..44, already covered by Dx30_Blend).
+// blend-formula concern (DX2-40..44, already covered by Dx3_Blend).
 //
 // Check A -- TextureFilter::Point (nearest) at a texel boundary yields a pure endpoint color (not
 //   a blend of the two neighboring texels).
@@ -42,7 +42,7 @@ using namespace Microsoft::Xna::Framework::Graphics;
 
 static constexpr int kCanvasSize = 32;
 
-class Dx30SamplingTest : public Game
+class Dx3SamplingTest : public Game
 {
     std::unique_ptr<GraphicsDeviceManager> gdm_;
     int passCount_ = 0;
@@ -147,7 +147,7 @@ protected:
     }
 
 public:
-    Dx30SamplingTest()
+    Dx3SamplingTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
         gdm_->setPreferredBackBufferWidthProperty(kCanvasSize);
@@ -159,7 +159,7 @@ public:
 
 int main()
 {
-    Dx30SamplingTest game;
+    Dx3SamplingTest game;
     game.Run();
     return game.getResult();
 }

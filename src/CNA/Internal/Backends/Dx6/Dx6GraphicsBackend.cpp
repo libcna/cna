@@ -14,7 +14,7 @@
 // (design decision 6 -- D3DTLVERTEX only carries one texture-coordinate pair). <ddraw.h> (and the
 // real <windows.h> it pulls in) is contained to this .cpp only -- see Dx6GraphicsBackend.hpp's
 // own comment. This file's 2D and 3D layers are otherwise a verbatim port of DX5's own
-// (plan_dx5.md, itself a port of DX30's, itself a port of DX2's) -- only the literal
+// (plan_dx5.md, itself a port of DX3's, itself a port of DX2's) -- only the literal
 // execute-buffer surface (IDirect3DDevice::Execute/D3DEXECUTEBUFFERDESC/IDirect3DExecuteBuffer/
 // D3DOP_*/the un-versioned IDirect3D/IDirect3DDevice) is permanently forbidden, asserted by the
 // Dx6_ExecuteBufferDiscipline CTest (scripts/check-dx6-execute-buffer-discipline.sh, plan_dx6.md
@@ -939,7 +939,7 @@ namespace CNA::Internal::Backends::Dx6
         // hands back a v1 IDirectDraw object -- this backend immediately upgrades it to
         // IDirectDraw4 via QueryInterface and releases the v1 pointer, using the v4 object (and,
         // from here on, v4 surfaces -- LPDIRECTDRAWSURFACE4/DDSURFACEDESC2 throughout, unlike
-        // DX30's more limited "upgrade only the top object" change) for everything from this point
+        // DX3's more limited "upgrade only the top object" change) for everything from this point
         // on.
         LPDIRECTDRAW ddV1 = nullptr;
         HRESULT hr = DirectDrawCreate(nullptr, &ddV1, nullptr);
@@ -2007,7 +2007,7 @@ namespace CNA::Internal::Backends::Dx6
         ClearDepth(depth);
     }
 
-    // plan_dx5.md design decision 5: a real IDirect3DViewport3::Clear2 call, replacing DX2/DX30's
+    // plan_dx5.md design decision 5: a real IDirect3DViewport3::Clear2 call, replacing DX2/DX3's
     // manual Z-buffer Lock()-and-write-raw-values workaround (that workaround existed only because
     // IDirect3DViewport(2)::Clear() has no depth-value parameter at all -- Clear2, new at this
     // DirectX era, does). Spike-confirmed (DX5-0g) gotcha, must not be reintroduced: Clear2's
@@ -2023,7 +2023,7 @@ namespace CNA::Internal::Backends::Dx6
     }
 
     // plan_dx6.md design decision 4/5: a real, combined depth+stencil Z-buffer now exists (unlike
-    // DX2/DX30/DX5, which had no real stencil buffer at all until this DirectX era) -- these clear
+    // DX2/DX3/DX5, which had no real stencil buffer at all until this DirectX era) -- these clear
     // real stencil values via Clear2's own D3DCLEAR_STENCIL flag, instead of silently ignoring
     // the stencil parameter.
     void Dx6GraphicsBackend::ClearStencil(int stencil)

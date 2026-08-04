@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx2.md Phase O4 (DX2-30..DX2-35): the real proof DX30's (a verbatim port of DX2's own) CPU transform/clip -> D3DTLVERTEX
+// plan_dx2.md Phase O4 (DX2-30..DX2-35): the real proof DX3's (a verbatim port of DX2's own) CPU transform/clip -> D3DTLVERTEX
 // -> IDirect3DDevice2::DrawIndexedPrimitive pipeline works -- pixel-verified triangle rendering
 // through the real Direct3D v2 device, run under Wine.
 //
 // Draws go through the normal GraphicsDevice::DrawPrimitives()/DrawIndexedPrimitives() public API
 // with a BasicEffect applied (VertexColorEnabled explicitly set true), which GraphicsDevice routes
-// to IGraphicsBackend::DrawPrimitivesEx() -- Dx30GraphicsBackend's own override, built on the same
+// to IGraphicsBackend::DrawPrimitivesEx() -- Dx3GraphicsBackend's own override, built on the same
 // CPU transform/clip helpers DrawColoredPrimitives()/DrawIndexedColoredPrimitives() use. So this
 // exercises the real pipeline end-to-end through the exact same public API a real game uses.
 //
@@ -13,7 +13,7 @@
 // equal the raw vertex positions directly -- lets the test place vertices at exact, easy-to-reason
 // screen locations without needing a real projection matrix. RasterizerState::CullNone is set
 // explicitly since Phase O6 (ApplyRasterizerState) hasn't landed yet -- Phase O4 only guarantees a
-// safe D3DCULL_NONE default (see Dx30GraphicsBackend.cpp's Create3DDevice), so this test's own
+// safe D3DCULL_NONE default (see Dx3GraphicsBackend.cpp's Create3DDevice), so this test's own
 // triangle winding is deliberately not relied upon either way.
 //
 // Check A -- a large flat-colored (solid red) triangle covering the center of a 64x64 backbuffer
@@ -57,7 +57,7 @@ namespace
     bool Close(int a, int b, int tolerance) { return std::abs(a - b) <= tolerance; }
 }
 
-class Dx30ColoredPrimitivesTest : public Game
+class Dx3ColoredPrimitivesTest : public Game
 {
     std::unique_ptr<GraphicsDeviceManager> gdm_;
     int result_ = 1;
@@ -132,7 +132,7 @@ protected:
     }
 
 public:
-    Dx30ColoredPrimitivesTest()
+    Dx3ColoredPrimitivesTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
         gdm_->setPreferredBackBufferWidthProperty(64);
@@ -144,7 +144,7 @@ public:
 
 int main()
 {
-    Dx30ColoredPrimitivesTest game;
+    Dx3ColoredPrimitivesTest game;
     game.Run();
     return game.getResult();
 }

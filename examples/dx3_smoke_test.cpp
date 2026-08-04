@@ -1,19 +1,19 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx30.md Phase P2 (DX30-10, ported from plan_dx2.md's DX2-10/DX1-10..DX1-18): smoke test for
-// the DX30 (real DirectDraw v2, run under Wine -- no ../free-direct anywhere in this backend)
+// plan_dx3.md Phase P2 (DX30-10, ported from plan_dx2.md's DX2-10/DX1-10..DX1-18): smoke test for
+// the DX3 (real DirectDraw v2, run under Wine -- no ../free-direct anywhere in this backend)
 // graphics backend's foundation -- real DirectDrawCreate -> QueryInterface(IID_IDirectDraw2) ->
 // SetCooperativeLevel(DDSCL_NORMAL) -> CreateSurface device bring-up, real Clear()/Present(), real
-// pixel readback. SpriteBatch/Texture2D draws are covered by dx30_spritebatch_test.cpp (Phase P4).
+// pixel readback. SpriteBatch/Texture2D draws are covered by dx3_spritebatch_test.cpp (Phase P4).
 //
-// This test's own success IS the proof the IDirectDraw2 upgrade (plan_dx30.md design decision 2)
-// actually happened: Dx30GraphicsBackend's constructor unconditionally throws if
+// This test's own success IS the proof the IDirectDraw2 upgrade (plan_dx3.md design decision 2)
+// actually happened: Dx3GraphicsBackend's constructor unconditionally throws if
 // QueryInterface(IID_IDirectDraw2) fails, so every check below only ever runs against a genuine
 // v2 object -- no separate "did the upgrade happen" CTest is needed on top of that.
 //
-// Check A -- GetWindowInternal() returns a real, non-null window (DX30 needs a genuine Win32 HWND,
+// Check A -- GetWindowInternal() returns a real, non-null window (DX3 needs a genuine Win32 HWND,
 //   obtained from it via SDL_PROP_WINDOW_WIN32_HWND_POINTER, design decision 3).
 // Check B -- Clear(r,g,b,a) followed by GetBackBufferData() reads back the exact clear color
-//   (RGB and alpha), read from DX30's own Lockable shadow-backbuffer surface (design decision 4).
+//   (RGB and alpha), read from DX3's own Lockable shadow-backbuffer surface (design decision 4).
 // Check D -- Clear() honors a non-opaque requested alpha (128) exactly, not silently forced to
 //   255 -- written directly via Lock()/Unlock() (FillSurfaceColor), not DDBLT_COLORFILL, so this
 //   never depends on how a given ddraw.dll's ColorFill happens to treat the alpha channel.
@@ -27,7 +27,7 @@
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 
-#include "CNA/Internal/Backends/Dx30/Dx30GraphicsBackend.hpp"
+#include "CNA/Internal/Backends/Dx3/Dx3GraphicsBackend.hpp"
 
 #include <cstdio>
 #include <cstdlib>
@@ -36,11 +36,11 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::Dx30;
+using namespace CNA::Internal::Backends::Dx3;
 
 static constexpr int kCanvasSize = 64;
 
-class Dx30SmokeTest : public Game
+class Dx3SmokeTest : public Game
 {
     std::unique_ptr<GraphicsDeviceManager> gdm_;
     int passCount_ = 0;
@@ -56,10 +56,10 @@ protected:
     void Draw(const GameTime&) override
     {
         auto& dev = getGraphicsDeviceProperty();
-        auto& backend = static_cast<Dx30GraphicsBackend&>(dev.GetBackend());
+        auto& backend = static_cast<Dx3GraphicsBackend&>(dev.GetBackend());
 
         // Check A: real window.
-        check(backend.GetWindowInternal() != nullptr, "GraphicsDevice has a real window under the DX30 backend");
+        check(backend.GetWindowInternal() != nullptr, "GraphicsDevice has a real window under the DX3 backend");
 
         // Check B: real, correct pixel readback after Clear(), via the shadow-backbuffer surface,
         // including the alpha channel.
@@ -121,7 +121,7 @@ protected:
     }
 
 public:
-    Dx30SmokeTest()
+    Dx3SmokeTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
         gdm_->setPreferredBackBufferWidthProperty(kCanvasSize);
@@ -133,7 +133,7 @@ public:
 
 int main()
 {
-    Dx30SmokeTest game;
+    Dx3SmokeTest game;
     game.Run();
     return game.getResult();
 }

@@ -8,13 +8,13 @@
 # Dx5_ExecuteBufferDiscipline CTest (cmake/Tests/Dx5Tests.cmake) -- pure text check, no compiled
 # binary, no Wine needed, runs identically whether cross-compiling or not.
 #
-# Adapted from scripts/check-dx30-execute-buffer-discipline.sh with three changes: (1) DX5
+# Adapted from scripts/check-dx3-execute-buffer-discipline.sh with three changes: (1) DX5
 # legitimately uses IDirectDraw4/IDirectDrawSurface4/DDSURFACEDESC2 throughout (plan_dx5.md design
-# decision 2 -- every surface, not just the top object, unlike DX30's more limited v2 upgrade), so
+# decision 2 -- every surface, not just the top object, unlike DX3's more limited v2 upgrade), so
 # those are NOT forbidden here. IDirectDraw2/3/7+ remain forbidden -- DX5 is v4-only, not v2/v3/7+
 # (the one legitimate bare IDirectDraw usage is the transient v1 pointer DirectDrawCreate() itself
 # always returns, immediately upgraded and released -- matched as \bIDirectDraw\b so it isn't
-# flagged, same as DX30's own script does for its own v1 upgrade step). (2) unlike DX30 (which
+# flagged, same as DX3's own script does for its own v1 upgrade step). (2) unlike DX3 (which
 # never upgrades its surfaces past v1, so leaves bare IDirectDrawSurface unrestricted), DX5
 # upgrades EVERY surface to v4 -- bare IDirectDrawSurface (v1) is now ALSO forbidden, a real,
 # stricter proof the v4 upgrade is complete throughout (every prose mention of the general
