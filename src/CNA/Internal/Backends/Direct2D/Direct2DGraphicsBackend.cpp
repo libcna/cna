@@ -950,6 +950,23 @@ namespace CNA::Internal::Backends::Direct2D
         {
             activeRenderTarget_ = previousActive;
             d2dContext_->SetTarget(previousActive->Bitmap());
+            return;
+        }
+
+        // D2D-63: activeRenderTarget_ stays null here (matching the fresh logical/backbuffer
+        // target the device context now actually points at), rather than silently leaving it
+        // pointing at an unrecoverable render target GraphicsDevice's own public binding still
+        // believes is active. Without this, a subsequent Clear/Draw would silently land on the
+        // backbuffer instead of the render target the game explicitly bound and never unbound --
+        // no error, no crash, just the wrong destination. Surface the mismatch loudly instead: the
+        // caller must explicitly rebind (or accept the backbuffer) before drawing again.
+        if (previousActive)
+        {
+            throw std::runtime_error(
+                "Direct2D device resources were recreated after a context loss and the previously "
+                "active render target was not recoverable (created while "
+                "GraphicsDevice::SetContextRecoveryEnabled(false)); rebind an explicit render "
+                "target before drawing again.");
         }
     }
 

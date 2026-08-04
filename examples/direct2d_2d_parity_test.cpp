@@ -1188,6 +1188,34 @@ protected:
         check("Context recovery new Texture2D", 1, 1, Color(40, 180, 90, 255));
         device.SetContextRecoveryEnabled(true);
 
+        // D2D-63: device loss while an unrecoverable render target (created with recovery
+        // disabled) is the ACTIVE target must not silently leave GraphicsDevice's public binding
+        // out of sync with the backend's actual current target -- it now surfaces loudly instead
+        // of quietly redirecting later Clear/Draw calls to the backbuffer.
+        device.SetContextRecoveryEnabled(false);
+        RenderTarget2D unrecoverableActiveTarget(device, 2, 2);
+        device.SetRenderTarget(&unrecoverableActiveTarget);
+        device.Clear(Color(11, 22, 33, 255));
+        bool deviceLossWithUnrecoverableActiveRejected = false;
+        try
+        {
+            direct2dBackend.DebugSimulateContextLoss();
+        }
+        catch (const std::exception&)
+        {
+            deviceLossWithUnrecoverableActiveRejected = true;
+        }
+        std::printf("[%s] Direct2D surfaces device loss with an unrecoverable active render target\n",
+                    deviceLossWithUnrecoverableActiveRejected ? "PASS" : "FAIL");
+        passed = passed && deviceLossWithUnrecoverableActiveRejected;
+        device.SetContextRecoveryEnabled(true);
+        device.SetRenderTarget(nullptr);
+        device.Clear(Color::Black);
+        sprites_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, nullptr, &scissorDisabled);
+        sprites_->Draw(*white_, Rectangle(0, 0, 2, 2), Rectangle(0, 0, 1, 1), Color::White);
+        sprites_->End();
+        check("Direct2D usable after device loss with unrecoverable active target", 0, 0, Color::White);
+
         // 13. Resize through the public GraphicsDeviceManager path. Direct2D has to recreate
         // its DXGI target lazily for the newly sized SDL client area, then keep the logical
         // NativeBackBuffer viewport/readback contract coherent for subsequent SpriteBatch work.
