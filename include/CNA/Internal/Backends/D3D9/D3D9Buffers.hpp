@@ -15,6 +15,7 @@
 // established for this project.
 
 #include "../Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 #include "D3D9DefaultPoolResourceEXT.hpp"
 
 #include <d3d9.h>
@@ -44,10 +45,21 @@ namespace CNA::Internal::Backends::D3D9
         D3D9VertexBufferBackend& operator=(const D3D9VertexBufferBackend&) = delete;
 
         void SetData(const void* data, int vertex_count, std::size_t stride_in_bytes) override;
-        void SetVertexDeclaration(const VertexDeclaration&) override {}
+        // REMED-GFX-DECL-GUARD: this backend still selects its IDirect3DVertexDeclaration9 from
+        // the shared D3DCommon stride table (REMED-GFX-217), but the declaration is remembered
+        // rather than discarded so a draw can refuse one that table would silently reinterpret.
+        void SetVertexDeclaration(const VertexDeclaration& vertexDeclaration) override
+        {
+            declaration_.Remember(vertexDeclaration);
+        }
         void SetDataWithOptions(const void* data, int vertex_count, std::size_t stride_in_bytes,
                                 SetDataOptions options) override;
         [[nodiscard]] int GetVertexCount() const override { return vertexCount_; }
+        /// The declaration this buffer carries, for REMED-GFX-DECL-GUARD's fidelity check.
+        [[nodiscard]] const CNA::Internal::Graphics::DeclaredVertexLayout& GetDeclarationEXT() const
+        {
+            return declaration_;
+        }
 
         void ReleaseDefaultPoolResourceEXT() override;
 
@@ -69,7 +81,22 @@ namespace CNA::Internal::Backends::D3D9
         int vertexCount_ = 0;
         std::size_t stride_ = 0;
         UINT byteWidth_ = 0;
+        CNA::Internal::Graphics::DeclaredVertexLayout declaration_;
     };
+
+
+    /// REMED-GFX-DECL-GUARD: throws `System::NotSupportedException` unless @p vb's declaration can
+    /// be represented faithfully by the shared D3DCommon stride table's entry for its stride.
+    /// Pure: creates nothing, queues nothing and leaves no partial native object behind, so a
+    /// rejected draw cannot poison the device. An out-of-table stride is left to the table's own
+    /// established rejection.
+    inline void RequireFaithfulDeclarationEXT(const IVertexBufferBackend& vb, const char* route)
+    {
+        const auto& d3dVb = static_cast<const D3D9VertexBufferBackend&>(vb);
+        CNA::Internal::Graphics::RequireFaithfulVertexDeclaration(
+            d3dVb.GetDeclarationEXT(), static_cast<int>(d3dVb.GetStrideEXT()),
+            CNA::Internal::Graphics::UnlistedStrideLayout::BackendRefusesIt, "D3D9", route);
+    }
 
     /// Real D3D9 index buffer backend (D9-41). Supports both 16-bit (D3DFMT_INDEX16) and 32-bit
     /// (D3DFMT_INDEX32) indices -- the bit width is fixed at construction time (matches

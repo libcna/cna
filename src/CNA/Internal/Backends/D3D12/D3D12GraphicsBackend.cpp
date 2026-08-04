@@ -1615,6 +1615,12 @@ namespace CNA::Internal::Backends::D3D12
         const Matrix& world, const Matrix& view, const Matrix& projection,
         PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
     {
+        // REMED-GFX-DECL-GUARD: before any D3D12_INPUT_LAYOUT_DESC is built and before any draw is
+        // issued. This backend selects that layout from the shared D3DCommon stride table
+        // (REMED-GFX-217), so a declaration the table's entry cannot represent is refused rather
+        // than rendered from the wrong bytes. An out-of-table stride is left to
+        // InputElementsForStrideD3D12's own established rejection.
+        RequireFaithfulDeclarationEXT(vb, ib != nullptr ? "ordinary-indexed" : "ordinary-nonindexed");
         if (!boundColorResource_)
         {
             NotYetImplemented("DrawPrimitivesEx (no off-screen color target bound -- "
@@ -2453,6 +2459,8 @@ namespace CNA::Internal::Backends::D3D12
         // REMED-GFX-202: one stream of each rate (REMED-GFX-207 tracks widening it); a wider array
         // is rejected rather than truncated.
         RejectUnsupportedStreamCombination(params, "The D3D12 backend");
+        // REMED-GFX-DECL-GUARD: the geometry stream's declaration, same stride table.
+        RequireFaithfulDeclarationEXT(vb, "instanced");
         const auto* perVertexStream = FirstPerVertexStream(params);
         if (!boundColorResource_)
         {

@@ -520,6 +520,12 @@ namespace CNA::Internal::Backends::D3D9
         const Matrix& world, const Matrix& view, const Matrix& projection,
         PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
     {
+        // REMED-GFX-DECL-GUARD: before EnsureRenderReadyEXT, before any IDirect3DVertexDeclaration9
+        // is created and before any draw is issued. This backend selects that declaration from the
+        // shared D3DCommon stride table (REMED-GFX-217), so a declaration the table's entry cannot
+        // represent is refused rather than rendered from the wrong bytes. An out-of-table stride is
+        // left to GetOrCreateVertexDeclarationEXT's own established rejection.
+        RequireFaithfulDeclarationEXT(vb, ib != nullptr ? "ordinary-indexed" : "ordinary-nonindexed");
         EnsureRenderReadyEXT();
 
         const auto& d3dVb = static_cast<const D3D9VertexBufferBackend&>(vb);

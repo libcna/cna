@@ -13,6 +13,7 @@
 // Map/Unmap if a later SetData() call needs more bytes than the current allocation.
 
 #include "../Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 
 #include <d3d11.h>
 #include <wrl/client.h>
@@ -34,10 +35,21 @@ namespace CNA::Internal::Backends::D3D11
         D3D11VertexBufferBackend(ID3D11Device* device, ID3D11DeviceContext* context, int vertex_capacity);
 
         void SetData(const void* data, int vertex_count, std::size_t stride_in_bytes) override;
-        void SetVertexDeclaration(const VertexDeclaration&) override {}
+        // REMED-GFX-DECL-GUARD: this backend still selects its ID3D11InputLayout from the shared
+        // D3DCommon stride table (REMED-GFX-217), but the declaration is remembered rather than
+        // discarded so a draw can refuse one that table would silently reinterpret.
+        void SetVertexDeclaration(const VertexDeclaration& vertexDeclaration) override
+        {
+            declaration_.Remember(vertexDeclaration);
+        }
         void SetDataWithOptions(const void* data, int vertex_count, std::size_t stride_in_bytes,
                                 SetDataOptions options) override;
         [[nodiscard]] int GetVertexCount() const override { return vertexCount_; }
+        /// The declaration this buffer carries, for REMED-GFX-DECL-GUARD's fidelity check.
+        [[nodiscard]] const CNA::Internal::Graphics::DeclaredVertexLayout& GetDeclarationEXT() const
+        {
+            return declaration_;
+        }
 
         /// Requested capacity in vertices at construction time (NOXNA diagnostics).
         [[nodiscard]] int GetCapacityEXT() const { return capacity_; }
@@ -57,7 +69,21 @@ namespace CNA::Internal::Backends::D3D11
         int vertexCount_ = 0;
         std::size_t stride_ = 0;
         UINT byteWidth_ = 0;
+        CNA::Internal::Graphics::DeclaredVertexLayout declaration_;
     };
+
+    /// REMED-GFX-DECL-GUARD: throws `System::NotSupportedException` unless @p vb's declaration can
+    /// be represented faithfully by the shared D3DCommon stride table's entry for its stride.
+    /// Pure: creates nothing, queues nothing and leaves no partial native object behind, so a
+    /// rejected draw cannot poison the device. An out-of-table stride is left to the table's own
+    /// established rejection.
+    inline void RequireFaithfulDeclarationEXT(const IVertexBufferBackend& vb, const char* route)
+    {
+        const auto& d3dVb = static_cast<const D3D11VertexBufferBackend&>(vb);
+        CNA::Internal::Graphics::RequireFaithfulVertexDeclaration(
+            d3dVb.GetDeclarationEXT(), static_cast<int>(d3dVb.GetStrideEXT()),
+            CNA::Internal::Graphics::UnlistedStrideLayout::BackendRefusesIt, "D3D11", route);
+    }
 
     /// Real D3D11 index buffer backend (DX-31). Supports both 16-bit (DXGI_FORMAT_R16_UINT) and
     /// 32-bit (DXGI_FORMAT_R32_UINT) indices -- the bit width is fixed at construction time

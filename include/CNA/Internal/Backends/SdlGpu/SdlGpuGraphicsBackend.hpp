@@ -3,6 +3,7 @@
 
 #include "CNA/CNAHelper.hpp"
 #include "../Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 
 #include <SDL3/SDL_gpu.h>
 
@@ -652,7 +653,19 @@ namespace CNA::Internal::Backends::SdlGpu
         ~SdlGpuVertexBufferBackend() override;
 
         void SetData(const void* data, int vertexCount, std::size_t strideInBytes) override;
-        void SetVertexDeclaration(const VertexDeclaration&) override {}
+        /**
+         * @brief REMED-GFX-DECL-GUARD: remembers the declaration this buffer carries.
+         *
+         * This backend still selects its `SDL_GPUVertexAttribute` set from the byte stride
+         * (REMED-GFX-217). Storing the declaration is what lets a draw refuse one that layout
+         * would silently reinterpret, without translating it.
+         *
+         * @param vertexDeclaration The declaration the caller propagated for this buffer.
+         */
+        void SetVertexDeclaration(const VertexDeclaration& vertexDeclaration) override
+        {
+            declaration_.Remember(vertexDeclaration);
+        }
         /**
          * @brief SDLGPU-23: real `Discard`/`NoOverwrite` streaming hints, not the
          * `IGraphicsBackend` default (which ignores @p options and calls the plain `SetData()`).
@@ -676,6 +689,11 @@ namespace CNA::Internal::Backends::SdlGpu
         // IVertexBufferBackend already destroyed by then (matches WebGPUVertexBufferBackend's own
         // ShadowData() rationale).
         NOXNA [[nodiscard]] const std::vector<std::uint8_t>& ShadowData() const { return shadowData_; }
+        /** @brief The declaration this buffer carries, for REMED-GFX-DECL-GUARD. NOXNA. */
+        NOXNA [[nodiscard]] const CNA::Internal::Graphics::DeclaredVertexLayout& Declaration() const
+        {
+            return declaration_;
+        }
 
     private:
         SdlGpuGraphicsBackend* owner_ = nullptr;
@@ -685,6 +703,7 @@ namespace CNA::Internal::Backends::SdlGpu
         int vertexCount_ = 0;
         std::size_t stride_ = 0;
         std::vector<std::uint8_t> shadowData_;
+        CNA::Internal::Graphics::DeclaredVertexLayout declaration_;
     };
 
     /** @brief `SDL_gpu`-backed 16- or 32-bit index buffer. */

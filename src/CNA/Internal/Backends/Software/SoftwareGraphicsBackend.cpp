@@ -3199,11 +3199,25 @@ namespace CNA::Internal::Backends::Software
     // dualTexture/envMapping/skinned are supported (SOFTWARE-82; strides 32/52, see
     // BuildGenericClipVertex/RasterizeTriangleShaded) but without any per-light diffuse lighting
     // sum -- lightingEnabled/fogEnabled remain out of scope for v1 (design decision 6).
+    // REMED-GFX-DECL-GUARD: the declaration-fidelity boundary. BuildGenericClipVertex reads its
+    // attributes at byte offsets chosen by the stride alone (REMED-GFX-217), so a declaration
+    // those offsets cannot represent is refused before any vertex is fetched. A stride outside the
+    // 16/20/24/32/52 set is left to this backend's own established out-of-table rejection, which
+    // is already loud and deterministic.
+    static void RequireFaithfulDeclarationEXT(const IVertexBufferBackend& vb, const char* route)
+    {
+        const auto& swVb = static_cast<const SoftwareVertexBufferBackend&>(vb);
+        CNA::Internal::Graphics::RequireFaithfulVertexDeclaration(
+            swVb.Declaration(), static_cast<int>(swVb.Stride()),
+            CNA::Internal::Graphics::UnlistedStrideLayout::BackendRefusesIt, "Software", route);
+    }
+
     void SoftwareGraphicsBackend::DrawPrimitivesEx(const IVertexBufferBackend& vb, const Matrix& world,
                                                    const Matrix& view, const Matrix& projection,
                                                    PrimitiveType primitive, int primitiveCount,
                                                    const GpuDrawParams& params)
     {
+        RequireFaithfulDeclarationEXT(vb, "ordinary-nonindexed");
         if (primitiveCount <= 0)
             throw std::runtime_error("SoftwareGraphicsBackend::DrawPrimitivesEx: primitiveCount must be > 0");
         if (primitive != PrimitiveType::TriangleList)
@@ -3331,6 +3345,7 @@ namespace CNA::Internal::Backends::Software
                                                           const Matrix& projection, PrimitiveType primitive,
                                                           int primitiveCount, const GpuDrawParams& params)
     {
+        RequireFaithfulDeclarationEXT(vb, "ordinary-indexed");
         if (primitiveCount <= 0)
             throw std::runtime_error("SoftwareGraphicsBackend::DrawIndexedPrimitivesEx: primitiveCount must be > 0");
         if (primitive != PrimitiveType::TriangleList)

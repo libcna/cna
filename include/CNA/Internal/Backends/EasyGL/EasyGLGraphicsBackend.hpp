@@ -2,6 +2,7 @@
 
 #include "../Common/IGraphicsBackend.hpp"
 #include "CNA/Internal/Graphics/ImageData.hpp"
+#include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 #include <SDL3/SDL.h>
 #include <easygl/easygl.hpp>
 #include <array>
@@ -738,7 +739,25 @@ namespace CNA::Internal::Backends::EasyGL
         void EnsurePbrSkinnedProgram();
         void EnsureDefaultWhiteTexture();
         void EnsureDefaultFlatNormalTexture();
+        /// REMED-GFX-218: which stock program a draw gets. SelectProgram() and
+        /// RequireDeclarationFitsStockProgramEXT() both read this single cascade, so the program a
+        /// draw is bound to and the input shape it is checked against cannot drift apart.
+        enum class StockProgramShape
+        {
+            PbrSkinned, Pbr, SkinnedVertexLit, Skinned, EnvMapped,
+            DualTexturedColored, DualTextured, Textured, ColoredTextured,
+            LitVertexLit, Lit, Colored
+        };
+        static StockProgramShape SelectStockProgramShape(std::size_t stride,
+                                                          const GpuDrawParams& params);
         Prog3D& SelectProgram(std::size_t stride, const GpuDrawParams& params);
+        /// REMED-GFX-DECL-GUARD: throws `System::NotSupportedException` when @p declaredElements
+        /// would bind an element to a stock attribute location that means something else. Runs
+        /// before any program is selected, bound or drawn, and never touches a custom
+        /// `ShaderEffect` draw -- those keep their own documented element-index convention.
+        static void RequireDeclarationFitsStockProgramEXT(
+            const std::vector<VertexElement>& declaredElements, std::size_t stride,
+            const GpuDrawParams& params);
         void BindDrawParams(Prog3D& p, const Matrix& world, const Matrix& view,
                             const Matrix& projection, const GpuDrawParams& params);
         /// REMED-GFX-147: resolves uRtFlipV/uRtFlipVHi for a freshly linked stock 3D program.

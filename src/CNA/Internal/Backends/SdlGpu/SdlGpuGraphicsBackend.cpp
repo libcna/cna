@@ -5604,6 +5604,20 @@ namespace CNA::Internal::Backends::SdlGpu
         if (clearCommands) pbrDrawCommands_.clear();
     }
 
+    // REMED-GFX-DECL-GUARD: the declaration-fidelity boundary. This backend selects its
+    // SDL_GPUVertexAttribute set from the stride (REMED-GFX-217), so a declaration that set cannot
+    // represent is refused before a pipeline is created or a command queued. An unlisted stride is
+    // left to this backend's own established rejection -- the unmatched-shape fall-through reaches
+    // QueueColoredDraw, which refuses anything but a stride-16 buffer.
+    static void RequireFaithfulDeclarationEXT(const IVertexBufferBackend& vb, const char* route)
+    {
+        const auto& sdlGpuVb = static_cast<const SdlGpuVertexBufferBackend&>(vb);
+        CNA::Internal::Graphics::RequireFaithfulVertexDeclaration(
+            sdlGpuVb.Declaration(), static_cast<int>(sdlGpuVb.Stride()),
+            CNA::Internal::Graphics::UnlistedStrideLayout::BackendRefusesIt,
+            "SDL_GPU", route);
+    }
+
     void SdlGpuGraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend& vb,
                                                        const Matrix& world, const Matrix& view, const Matrix& projection,
                                                        PrimitiveType primitive, int primitiveCount)
@@ -5624,6 +5638,7 @@ namespace CNA::Internal::Backends::SdlGpu
                                                   PrimitiveType primitive, int primitiveCount,
                                                   const GpuDrawParams& params)
     {
+        RequireFaithfulDeclarationEXT(vb, "ordinary-nonindexed");
         const auto& sdlGpuVb = static_cast<const SdlGpuVertexBufferBackend&>(vb);
         const std::size_t stride = sdlGpuVb.Stride();
         // Matches VulkanGraphicsBackend/WebGPUGraphicsBackend's own dispatch precedence: alpha
@@ -5686,6 +5701,7 @@ namespace CNA::Internal::Backends::SdlGpu
                                                          PrimitiveType primitive, int primitiveCount,
                                                          const GpuDrawParams& params)
     {
+        RequireFaithfulDeclarationEXT(vb, "ordinary-indexed");
         const auto& sdlGpuVb = static_cast<const SdlGpuVertexBufferBackend&>(vb);
         const std::size_t stride = sdlGpuVb.Stride();
         const bool needsAlphaTest = params.alphaTest[2] < 0.0f || params.alphaTest[3] < 0.0f;

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 
 #include <array>
 #include <cstddef>
@@ -35,13 +36,24 @@ namespace CNA::Internal::Backends::Software
         explicit SoftwareVertexBufferBackend(int vertexCapacity);
 
         void SetData(const void* data, int vertex_count, std::size_t stride_in_bytes) override;
-        void SetVertexDeclaration(const VertexDeclaration&) override {}
+        // REMED-GFX-DECL-GUARD: the rasterizer still infers its attribute offsets from the byte
+        // stride (REMED-GFX-217), but the declaration is remembered rather than discarded so a
+        // draw can refuse a declaration those offsets would silently reinterpret.
+        void SetVertexDeclaration(const VertexDeclaration& vertexDeclaration) override
+        {
+            declaration_.Remember(vertexDeclaration);
+        }
         void SetDataWithOptions(const void* data, int vertex_count, std::size_t stride_in_bytes,
                                 SetDataOptions options) override;
         [[nodiscard]] int GetVertexCount() const override { return vertexCount_; }
 
         [[nodiscard]] int Capacity() const { return capacity_; }
         [[nodiscard]] std::size_t Stride() const { return stride_; }
+        /// The declaration this buffer carries, for REMED-GFX-DECL-GUARD's fidelity check.
+        [[nodiscard]] const CNA::Internal::Graphics::DeclaredVertexLayout& Declaration() const
+        {
+            return declaration_;
+        }
         /// Raw vertex bytes from the most recent SetData() call -- the rasterizer (Phase S4)
         /// reads vertex attributes directly from here, keyed by Stride() (plan_software.md
         /// design decision 2: stride-based format inference).
@@ -52,6 +64,7 @@ namespace CNA::Internal::Backends::Software
         int vertexCount_ = 0;
         std::size_t stride_ = 0;
         std::vector<std::uint8_t> data_;
+        CNA::Internal::Graphics::DeclaredVertexLayout declaration_;
     };
 
     class SoftwareIndexBufferBackend final : public IIndexBufferBackend

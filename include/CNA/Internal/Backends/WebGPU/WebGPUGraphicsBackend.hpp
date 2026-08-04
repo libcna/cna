@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 
 #if __has_include(<webgpu/webgpu.h>)
 #include <webgpu/webgpu.h>
@@ -464,12 +465,23 @@ namespace CNA::Internal::Backends::WebGPU
         ~WebGPUVertexBufferBackend() override;
 
         void SetData(const void* data, int vertexCount, std::size_t strideInBytes) override;
-        void SetVertexDeclaration(const VertexDeclaration&) override {}
+        // REMED-GFX-DECL-GUARD: this backend still selects its WGPUVertexBufferLayout from the
+        // byte stride (REMED-GFX-217), but the declaration is remembered rather than discarded so
+        // a draw can refuse a declaration that layout would silently reinterpret.
+        void SetVertexDeclaration(const VertexDeclaration& vertexDeclaration) override
+        {
+            declaration_.Remember(vertexDeclaration);
+        }
         void SetDataWithOptions(const void* data, int vertexCount, std::size_t strideInBytes, SetDataOptions options) override;
         [[nodiscard]] int GetVertexCount() const override { return vertexCount_; }
 
         [[nodiscard]] WGPUBuffer Buffer() const { return buffer_; }
         [[nodiscard]] std::size_t Stride() const { return stride_; }
+        /// The declaration this buffer carries, for REMED-GFX-DECL-GUARD's fidelity check.
+        [[nodiscard]] const CNA::Internal::Graphics::DeclaredVertexLayout& Declaration() const
+        {
+            return declaration_;
+        }
         // CPU-side copy of the most recent SetData() upload. WGPUBuffer objects are not
         // host-readable without an async GPU->CPU copy, but DrawColoredPrimitives() (Phase 57
         // vertical slice) needs the raw bytes *synchronously* at call time -- the caller's
@@ -486,6 +498,7 @@ namespace CNA::Internal::Backends::WebGPU
         int vertexCount_ = 0;
         std::size_t stride_ = 0;
         std::vector<std::uint8_t> shadowData_;
+        CNA::Internal::Graphics::DeclaredVertexLayout declaration_;
     };
 
     class WebGPUIndexBufferBackend final : public IIndexBufferBackend

@@ -88,6 +88,8 @@ namespace CNA::Internal::Backends::D3D9
         const auto& d3dIb     = static_cast<const D3D9IndexBufferBackend&>(ib);
         // REMED-GFX-202: one stream of each rate (REMED-GFX-208 tracks widening it).
         RejectUnsupportedStreamCombination(params, "The D3D9 backend");
+        // REMED-GFX-DECL-GUARD: the geometry stream's declaration, same stride table.
+        RequireFaithfulDeclarationEXT(vb, "instanced");
         const auto& d3dInstVb =
             static_cast<const D3D9VertexBufferBackend&>(*instanceStream->buffer);
         const std::size_t perVertexStride = d3dVb.GetStrideEXT() > 0 ? d3dVb.GetStrideEXT() : 16;

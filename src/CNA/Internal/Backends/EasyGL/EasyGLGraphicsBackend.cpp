@@ -5171,54 +5171,36 @@ CNA_GL_RT_SAMPLE_UV_DECL
         default_flat_normal_texture_ready_ = true;
     }
 
-    EasyGLGraphicsBackend::Prog3D& EasyGLGraphicsBackend::SelectProgram(std::size_t stride,
-                                                                          const GpuDrawParams& params)
+    // REMED-GFX-218 / REMED-GFX-DECL-GUARD: the ONE place that decides which stock program a draw
+    // gets. SelectProgram() below and StockProgramInputsEXT() both read this, so the program a
+    // draw is bound to and the input shape it is checked against can never drift apart.
+    EasyGLGraphicsBackend::StockProgramShape EasyGLGraphicsBackend::SelectStockProgramShape(
+        std::size_t stride, const GpuDrawParams& params)
     {
-        if (params.pbr && params.skinned)
-        {
-            EnsurePbrSkinnedProgram();
-            return prog_pbr_skinned_;
-        }
-        if (params.pbr)
-        {
-            EnsurePbrProgram();
-            return prog_pbr_;
-        }
+        if (params.pbr && params.skinned) return StockProgramShape::PbrSkinned;
+        if (params.pbr) return StockProgramShape::Pbr;
         if (params.skinned)
         {
             // Task 1102b (plan_dx9.md Divergence 1): real XNA's SkinnedEffect defaults
             // PreferPerPixelLighting=false too, same as BasicEffect (Task 1102). Only
             // meaningfully distinct while lighting is actually on, same reasoning as Task 1102's
             // own stride-32 gate.
-            if (params.lightingEnabled && !params.preferPerPixelLighting)
-            {
-                EnsureSkinnedVertexLitProgram();
-                return prog_skinned_vertexlit_;
-            }
-            EnsureSkinnedProgram();
-            return prog_skinned_;
+            return (params.lightingEnabled && !params.preferPerPixelLighting)
+                       ? StockProgramShape::SkinnedVertexLit
+                       : StockProgramShape::Skinned;
         }
-        if (params.envMapping)
-        {
-            EnsureEnvMapped3DProgram();
-            return prog_env_mapped_;
-        }
+        if (params.envMapping) return StockProgramShape::EnvMapped;
         if (params.dualTexture)
         {
             // Task 889: stride 24 (VertexPositionColorTexture) gets its own vertex-color-aware
             // program; stride 20 (VertexPositionTexture) keeps the original color-less shader.
-            if (stride == 24)
-            {
-                EnsureDualTexturedColored3DProgram();
-                return prog_dual_textured_colored_;
-            }
-            EnsureDualTextured3DProgram();
-            return prog_dual_textured_;
+            return stride == 24 ? StockProgramShape::DualTexturedColored
+                                : StockProgramShape::DualTextured;
         }
         switch (stride)
         {
-        case 20: EnsureTextured3DProgram();        return prog_textured_;
-        case 24: EnsureColoredTextured3DProgram(); return prog_col_textured_;
+        case 20: return StockProgramShape::Textured;
+        case 24: return StockProgramShape::ColoredTextured;
         case 32:
             // Task 1102 (plan_dx9.md Divergence 1): real XNA's BasicEffect defaults
             // PreferPerPixelLighting=false (per-vertex/Gouraud-shaded lighting), the opposite of
@@ -5227,15 +5209,120 @@ CNA_GL_RT_SAMPLE_UV_DECL
             // degenerate to the identical trivial ambient=(1,1,1) case (see BindDrawParams()'s
             // own else-branch), so the existing pixel-lit program stays selected there to avoid
             // an unnecessary program switch.
-            if (params.lightingEnabled && !params.preferPerPixelLighting)
-            {
-                EnsureLit3DVertexLitProgram();
-                return prog_lit_textured_vertexlit_;
-            }
-            EnsureLit3DProgram();
-            return prog_lit_textured_;
-        default: EnsureColored3DProgram();         return prog_colored_;
+            return (params.lightingEnabled && !params.preferPerPixelLighting)
+                       ? StockProgramShape::LitVertexLit
+                       : StockProgramShape::Lit;
+        default: return StockProgramShape::Colored;
         }
+    }
+
+    EasyGLGraphicsBackend::Prog3D& EasyGLGraphicsBackend::SelectProgram(std::size_t stride,
+                                                                          const GpuDrawParams& params)
+    {
+        switch (SelectStockProgramShape(stride, params))
+        {
+        case StockProgramShape::PbrSkinned:
+            EnsurePbrSkinnedProgram();          return prog_pbr_skinned_;
+        case StockProgramShape::Pbr:
+            EnsurePbrProgram();                 return prog_pbr_;
+        case StockProgramShape::SkinnedVertexLit:
+            EnsureSkinnedVertexLitProgram();    return prog_skinned_vertexlit_;
+        case StockProgramShape::Skinned:
+            EnsureSkinnedProgram();             return prog_skinned_;
+        case StockProgramShape::EnvMapped:
+            EnsureEnvMapped3DProgram();         return prog_env_mapped_;
+        case StockProgramShape::DualTexturedColored:
+            EnsureDualTexturedColored3DProgram(); return prog_dual_textured_colored_;
+        case StockProgramShape::DualTextured:
+            EnsureDualTextured3DProgram();      return prog_dual_textured_;
+        case StockProgramShape::Textured:
+            EnsureTextured3DProgram();          return prog_textured_;
+        case StockProgramShape::ColoredTextured:
+            EnsureColoredTextured3DProgram();   return prog_col_textured_;
+        case StockProgramShape::LitVertexLit:
+            EnsureLit3DVertexLitProgram();      return prog_lit_textured_vertexlit_;
+        case StockProgramShape::Lit:
+            EnsureLit3DProgram();               return prog_lit_textured_;
+        case StockProgramShape::Colored:
+            break;
+        }
+        EnsureColored3DProgram();
+        return prog_colored_;
+    }
+
+    // REMED-GFX-218 / REMED-GFX-DECL-GUARD: what each stock program declares, in attribute-location
+    // order, transcribed from the `layout(location=N) in ...` lines of the very shaders the
+    // Ensure*Program() calls above compile. EasyGL binds each declaration element at the location
+    // matching its INDEX (ApplyLayout), and the same location means different things in different
+    // programs -- location 1 is aColor at stride 16, aUV at 20 and aNormal at 32 -- so there is no
+    // global semantic-to-location function and this ordered list is the only truthful comparison.
+    void EasyGLGraphicsBackend::RequireDeclarationFitsStockProgramEXT(
+        const std::vector<VertexElement>& declaredElements, std::size_t stride,
+        const GpuDrawParams& params)
+    {
+        using CNA::Internal::Graphics::StockProgramInput;
+        using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
+        using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
+
+        static constexpr StockProgramInput kPos{
+            VertexElementUsage::Position, 0, VertexElementFormat::Vector3, "aPos"};
+        static constexpr StockProgramInput kColor{
+            VertexElementUsage::Color, 0, VertexElementFormat::Color, "aColor"};
+        static constexpr StockProgramInput kUv{
+            VertexElementUsage::TextureCoordinate, 0, VertexElementFormat::Vector2, "aUV"};
+        static constexpr StockProgramInput kNormal{
+            VertexElementUsage::Normal, 0, VertexElementFormat::Vector3, "aNormal"};
+        static constexpr StockProgramInput kTangent{
+            VertexElementUsage::Tangent, 0, VertexElementFormat::Vector4, "aTangent"};
+        static constexpr StockProgramInput kWeights{
+            VertexElementUsage::BlendWeight, 0, VertexElementFormat::Vector4, "aBoneWeights"};
+        static constexpr StockProgramInput kIndices{
+            VertexElementUsage::BlendIndices, 0, VertexElementFormat::Byte4, "aBoneIndices"};
+
+        static constexpr StockProgramInput kColored[]        = {kPos, kColor};
+        static constexpr StockProgramInput kTextured[]       = {kPos, kUv};
+        static constexpr StockProgramInput kColTextured[]    = {kPos, kColor, kUv};
+        static constexpr StockProgramInput kLit[]            = {kPos, kNormal, kUv};
+        static constexpr StockProgramInput kSkinned[]        = {kPos, kNormal, kUv, kWeights,
+                                                                kIndices, kColor};
+        static constexpr StockProgramInput kPbr[]            = {kPos, kNormal, kTangent, kUv};
+        static constexpr StockProgramInput kPbrSkinned[]     = {kPos, kNormal, kTangent, kUv,
+                                                                kWeights, kIndices};
+
+        const StockProgramInput* inputs = kColored;
+        std::size_t count = std::size(kColored);
+        const char* name = "colored3d";
+        switch (SelectStockProgramShape(stride, params))
+        {
+        case StockProgramShape::PbrSkinned:
+            inputs = kPbrSkinned; count = std::size(kPbrSkinned); name = "pbr_skinned3d"; break;
+        case StockProgramShape::Pbr:
+            inputs = kPbr; count = std::size(kPbr); name = "pbr3d"; break;
+        case StockProgramShape::SkinnedVertexLit:
+            inputs = kSkinned; count = std::size(kSkinned); name = "skinned3d_vertexlit"; break;
+        case StockProgramShape::Skinned:
+            inputs = kSkinned; count = std::size(kSkinned); name = "skinned3d"; break;
+        case StockProgramShape::EnvMapped:
+            inputs = kLit; count = std::size(kLit); name = "env_mapped3d"; break;
+        case StockProgramShape::DualTexturedColored:
+            inputs = kColTextured; count = std::size(kColTextured);
+            name = "dual_textured_colored3d"; break;
+        case StockProgramShape::DualTextured:
+            inputs = kTextured; count = std::size(kTextured); name = "dual_textured3d"; break;
+        case StockProgramShape::Textured:
+            inputs = kTextured; count = std::size(kTextured); name = "textured3d"; break;
+        case StockProgramShape::ColoredTextured:
+            inputs = kColTextured; count = std::size(kColTextured);
+            name = "colored_textured3d"; break;
+        case StockProgramShape::LitVertexLit:
+            inputs = kLit; count = std::size(kLit); name = "lit_textured3d_vertexlit"; break;
+        case StockProgramShape::Lit:
+            inputs = kLit; count = std::size(kLit); name = "lit_textured3d"; break;
+        case StockProgramShape::Colored:
+            break;
+        }
+        CNA::Internal::Graphics::RequireDeclarationMatchesStockProgram(
+            declaredElements, inputs, count, "EasyGL", name);
     }
 
     // REMED-GFX-147: resolved for every stock 3D program from one place, right after it links, so
@@ -5842,6 +5929,15 @@ CNA_GL_RT_SAMPLE_UV_DECL
                                                  const GpuDrawParams& params)
     {
         if (metagl::IsContextLost()) return;
+        // REMED-GFX-DECL-GUARD (REMED-GFX-218): before the VAO is touched, before a program is
+        // selected and before any draw is issued. A custom ShaderEffect owns its own
+        // element-index attribute convention and is deliberately untouched.
+        if (params.customEffectBackend == nullptr)
+            RequireDeclarationFitsStockProgramEXT(
+                static_cast<const EasyGLVertexBufferBackend&>(vb_in).GetDeclarationElements(),
+                CombinedVertexStrideOr(
+                    params, static_cast<const EasyGLVertexBufferBackend&>(vb_in).GetStride()),
+                params);
         const auto& vb  = static_cast<const EasyGLVertexBufferBackend&>(vb_in);
         // REMED-GFX-201: every bound per-vertex stream is bound into this VAO, at locations
         // continuing after the previous stream's, and each with its own VBO, stride and byte
@@ -5903,6 +5999,15 @@ CNA_GL_RT_SAMPLE_UV_DECL
                                                         const GpuDrawParams& params)
     {
         if (metagl::IsContextLost()) return;
+        // REMED-GFX-DECL-GUARD (REMED-GFX-218): before the VAO is touched, before a program is
+        // selected and before any draw is issued. A custom ShaderEffect owns its own
+        // element-index attribute convention and is deliberately untouched.
+        if (params.customEffectBackend == nullptr)
+            RequireDeclarationFitsStockProgramEXT(
+                static_cast<const EasyGLVertexBufferBackend&>(vb_in).GetDeclarationElements(),
+                CombinedVertexStrideOr(
+                    params, static_cast<const EasyGLVertexBufferBackend&>(vb_in).GetStride()),
+                params);
         const auto& vb  = static_cast<const EasyGLVertexBufferBackend&>(vb_in);
         const auto& ib  = static_cast<const EasyGLIndexBufferBackend&>(ib_in);
         // REMED-GFX-201: see DrawPrimitivesEx above. glDrawElementsBaseVertex's baseVertex plays
@@ -5987,6 +6092,15 @@ CNA_GL_RT_SAMPLE_UV_DECL
                                                           const GpuDrawParams& params)
     {
         if (metagl::IsContextLost()) return;
+        // REMED-GFX-DECL-GUARD (REMED-GFX-218): before the VAO is touched, before a program is
+        // selected and before any draw is issued. A custom ShaderEffect owns its own
+        // element-index attribute convention and is deliberately untouched.
+        if (params.customEffectBackend == nullptr)
+            RequireDeclarationFitsStockProgramEXT(
+                static_cast<const EasyGLVertexBufferBackend&>(vb_in).GetDeclarationElements(),
+                CombinedVertexStrideOr(
+                    params, static_cast<const EasyGLVertexBufferBackend&>(vb_in).GetStride()),
+                params);
         const auto& vb  = static_cast<const EasyGLVertexBufferBackend&>(vb_in);
         const auto& ib  = static_cast<const EasyGLIndexBufferBackend&>(ib_in);
 

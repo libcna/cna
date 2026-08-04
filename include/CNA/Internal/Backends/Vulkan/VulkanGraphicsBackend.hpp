@@ -2,6 +2,7 @@
 
 #include "CNA/CNAHelper.hpp"
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 #include <vulkan/vulkan.h>
 #include <algorithm>
 #include <array>
@@ -573,13 +574,24 @@ namespace CNA::Internal::Backends::Vulkan
         ~VulkanVertexBufferBackend() override;
 
         void SetData(const void* data, int vertex_count, std::size_t stride_in_bytes) override;
-        void SetVertexDeclaration(const VertexDeclaration&) override {}
+        // REMED-GFX-DECL-GUARD: this backend still infers its native input layout from the byte
+        // stride (REMED-GFX-217), but the declaration is no longer discarded -- it is remembered
+        // so a draw can refuse a declaration that layout would silently reinterpret.
+        void SetVertexDeclaration(const VertexDeclaration& vertexDeclaration) override
+        {
+            declaration_.Remember(vertexDeclaration);
+        }
         int  GetVertexCount() const override { return vertexCount_; }
 
         VkBuffer    GetBuffer()    const { return buffer_; }
         int         GetCapacity()  const { return capacity_; }
         const void* GetMappedPtr() const { return mappedPtr_; }
         std::size_t GetStride()    const { return stride_; }
+        /// The declaration this buffer carries, for REMED-GFX-DECL-GUARD's fidelity check.
+        const CNA::Internal::Graphics::DeclaredVertexLayout& GetDeclarationEXT() const
+        {
+            return declaration_;
+        }
 
         void ReleaseVulkanResources();
         void DisconnectOwner() { owner_ = nullptr; }
@@ -592,6 +604,7 @@ namespace CNA::Internal::Backends::Vulkan
         int                     vertexCount_ = 0;
         std::size_t             stride_      = 0;
         VulkanGraphicsBackend*  owner_       = nullptr;
+        CNA::Internal::Graphics::DeclaredVertexLayout declaration_;
     };
 
     // -------------------------------------------------------------------------

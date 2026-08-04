@@ -4183,6 +4183,23 @@ namespace CNA::Internal::Backends::Vulkan
         return key ^ (static_cast<uint64_t>(depthFmt) << 45);
     }
 
+    // REMED-GFX-DECL-GUARD: the declaration-fidelity boundary for every route that infers its
+    // vertex input from the stride. The ordinary routes fall back to the colored pipeline's
+    // Position@0 + Color@12 layout for a stride the canonical table does not list -- which is why
+    // a position-only stride-12 buffer renders correctly here today -- while the Instanced3D
+    // module is position-only for every stride PackedColorOffsetForStride below does not list.
+    static void RequireFaithfulDeclarationEXT(const IVertexBufferBackend& vb_in, const char* route,
+                                              bool positionOnlyFallback = false)
+    {
+        const auto& vb = static_cast<const VulkanVertexBufferBackend&>(vb_in);
+        CNA::Internal::Graphics::RequireFaithfulVertexDeclaration(
+            vb.GetDeclarationEXT(), static_cast<int>(vb.GetStride()),
+            positionOnlyFallback
+                ? CNA::Internal::Graphics::UnlistedStrideLayout::PositionOnlyFallback
+                : CNA::Internal::Graphics::UnlistedStrideLayout::PositionColorFallback,
+            "Vulkan", route);
+    }
+
     // REMED-GFX-212: the Instanced3D cache is the one 3D pipeline cache whose per-vertex binding
     // takes the RAW stride rather than a bucketed one -- MakeExt3DKey folds 16 and every stride it
     // does not recognise into the same bucket 0. That was harmless while every stride produced the
@@ -9691,6 +9708,10 @@ namespace CNA::Internal::Backends::Vulkan
         const Matrix& world, const Matrix& view, const Matrix& projection,
         PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
     {
+        // REMED-GFX-DECL-GUARD: before anything is recorded, queued or created. This backend
+        // still picks its VkVertexInputAttributeDescription set from the stride, so a declaration
+        // that set cannot represent is refused here rather than rendered from the wrong bytes.
+        RequireFaithfulDeclarationEXT(vb_in, "ordinary-nonindexed");
         // REMED-GFX-151: record which render targets this draw SAMPLES, so a mid-frame readback
         // flush replays their producing cycles before this one. See NoteSampledSourcesEXT.
         NoteSampledSourcesEXT(params);
@@ -9944,6 +9965,8 @@ namespace CNA::Internal::Backends::Vulkan
         const Matrix& world, const Matrix& view, const Matrix& projection,
         PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
     {
+        // REMED-GFX-DECL-GUARD: see DrawPrimitivesEx above.
+        RequireFaithfulDeclarationEXT(vb_in, "ordinary-indexed");
         // REMED-GFX-151: record which render targets this draw SAMPLES, so a mid-frame readback
         // flush replays their producing cycles before this one. See NoteSampledSourcesEXT.
         NoteSampledSourcesEXT(params);
@@ -10204,6 +10227,10 @@ namespace CNA::Internal::Backends::Vulkan
         }
         // REMED-GFX-202: one stream of each rate (REMED-GFX-203 tracks widening it).
         RejectUnsupportedStreamCombination(params, "The Vulkan backend");
+        // REMED-GFX-DECL-GUARD: the geometry stream's declaration, against the Instanced3D
+        // module's own inferred layout -- which binds a packed colour only at the two strides
+        // PackedColorOffsetForStride lists and is position-only everywhere else.
+        RequireFaithfulDeclarationEXT(vb_in, "instanced", /*positionOnlyFallback=*/true);
 
         // REMED-GFX-151: as in the two Ex draws above. The `instanceVb == nullptr` branch already
         // returned through DrawIndexedPrimitivesEx, which notes them itself.

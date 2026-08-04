@@ -546,6 +546,24 @@ namespace CNA::Internal::Backends::WebGPU
             }
         }
 
+        // REMED-GFX-DECL-GUARD: the declaration-fidelity boundary. This backend selects its
+        // WGPUVertexBufferLayout from the stride (REMED-GFX-217), so a declaration that layout
+        // cannot represent is refused before a pipeline is created or a command queued. The
+        // ordinary route leaves an unlisted stride to its own established rejection
+        // (DrawColoredPrimitives refuses anything but stride 16); the Instanced3D module is
+        // position-only for every stride InstancedPackedColorOffsetForStride below does not list.
+        void RequireFaithfulDeclarationEXT(const IVertexBufferBackend& vb, const char* route,
+                                           bool positionOnlyFallback = false)
+        {
+            const auto& webgpuVb = static_cast<const WebGPUVertexBufferBackend&>(vb);
+            CNA::Internal::Graphics::RequireFaithfulVertexDeclaration(
+                webgpuVb.Declaration(), static_cast<int>(webgpuVb.Stride()),
+                positionOnlyFallback
+                    ? CNA::Internal::Graphics::UnlistedStrideLayout::PositionOnlyFallback
+                    : CNA::Internal::Graphics::UnlistedStrideLayout::BackendRefusesIt,
+                "WebGPU", route);
+        }
+
         // REMED-GFX-212: whether this per-vertex stride's established packed layout carries a
         // COLOR0 element, and at which byte offset. The ordinary route's own pipelines derive
         // their Unorm8x4 colour attribute from exactly this table -- colored3d.wgsl's stride-16
@@ -7226,11 +7244,14 @@ struct VSOut {
         QueueColoredDraw(vb, &ib, world, view, projection, primitive, primitiveCount);
     }
 
+    // REMED-GFX-DECL-GUARD lives at the top of each of the three routes below; see the anonymous
+    // namespace helper of the same name.
     void WebGPUGraphicsBackend::DrawPrimitivesEx(const IVertexBufferBackend& vb,
                                                   const Matrix& world, const Matrix& view, const Matrix& projection,
                                                   PrimitiveType primitive, int primitiveCount,
                                                   const GpuDrawParams& params)
     {
+        RequireFaithfulDeclarationEXT(vb, "ordinary-nonindexed");
         const auto& webgpuVb = static_cast<const WebGPUVertexBufferBackend&>(vb);
         // Matches VulkanGraphicsBackend's own dispatch precedence: alpha test wins over
         // dual-texture/env-map/skinned/lit-textured; dual-texture wins over env-map/skinned/
@@ -7323,6 +7344,7 @@ struct VSOut {
                                                          PrimitiveType primitive, int primitiveCount,
                                                          const GpuDrawParams& params)
     {
+        RequireFaithfulDeclarationEXT(vb, "ordinary-indexed");
         const auto& webgpuVb = static_cast<const WebGPUVertexBufferBackend&>(vb);
         const bool needsAlphaTest = params.alphaTest[2] < 0.0f || params.alphaTest[3] < 0.0f;
         const bool needsDualTexture = !needsAlphaTest && params.dualTexture;
@@ -7407,6 +7429,9 @@ struct VSOut {
         const auto& webgpuIb = static_cast<const WebGPUIndexBufferBackend&>(ib);
         // REMED-GFX-202: one stream of each rate (REMED-GFX-205 tracks widening it).
         RejectUnsupportedStreamCombination(params, "The WebGPU backend");
+        // REMED-GFX-DECL-GUARD: the geometry stream's declaration, against the Instanced3D
+        // module's own inferred layout.
+        RequireFaithfulDeclarationEXT(vb, "instanced", /*positionOnlyFallback=*/true);
         const auto& webgpuInstVb =
             static_cast<const WebGPUVertexBufferBackend&>(*instanceStream->buffer);
 

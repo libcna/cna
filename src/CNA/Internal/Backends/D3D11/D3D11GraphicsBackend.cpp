@@ -1272,6 +1272,12 @@ namespace CNA::Internal::Backends::D3D11
         const Matrix& world, const Matrix& view, const Matrix& projection,
         PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
     {
+        // REMED-GFX-DECL-GUARD: before any ID3D11InputLayout is created and before any draw is
+        // issued. This backend selects that layout from the shared D3DCommon stride table
+        // (REMED-GFX-217), so a declaration the table's entry cannot represent is refused rather
+        // than rendered from the wrong bytes. An out-of-table stride is left to
+        // InputElementsForStride's own established rejection.
+        RequireFaithfulDeclarationEXT(vb, ib != nullptr ? "ordinary-indexed" : "ordinary-nonindexed");
         // DX-62/DX-63/DX-64/DX-65/DX-66/DX-67: real effect-aware variant dispatch.
         const auto& d3dVb = static_cast<const D3D11VertexBufferBackend&>(vb);
         const std::size_t stride = d3dVb.GetStrideEXT() > 0 ? d3dVb.GetStrideEXT() : 16;
@@ -1905,6 +1911,8 @@ namespace CNA::Internal::Backends::D3D11
         // REMED-GFX-202: this backend binds exactly one stream of each rate (REMED-GFX-207 tracks
         // widening it), so a wider array is rejected rather than truncated.
         RejectUnsupportedStreamCombination(params, "The D3D11 backend");
+        // REMED-GFX-DECL-GUARD: the geometry stream's declaration, same stride table.
+        RequireFaithfulDeclarationEXT(vb, "instanced");
         const auto* perVertexStream = FirstPerVertexStream(params);
 
         const auto& d3dVb     = static_cast<const D3D11VertexBufferBackend&>(vb);
