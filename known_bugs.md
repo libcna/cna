@@ -1432,9 +1432,47 @@ value on this module), or `pipelineDesc.stencil.front.compareOp`/`readMask` may 
 GPU the way `pipelineDesc.depth.compareOp` demonstrably does (ordinary depth testing works
 correctly elsewhere in this same backend).
 
-**Tracked as:** `plan_llgl.md` Phase LLGL-8, `LLGL-53` -- left OPEN, three/four distinct defects,
-none root-caused. `Llgl_RasterizerState_DepthBias` (12/17) and `Llgl_Stencil` (2/4) are both
-registered anyway as real regression trip-wires for whoever continues this, matching this session's
-own established `Llgl_Deferred_Viewport`-style precedent for partial-pass suites.
+**2026-08-04 cross-check on real Vulkan (`DISPLAY=:0 CNA_LLGL_RENDERER=vulkan`, this machine's own
+physical AMD Radeon 780M/RADV -- see `feedback_real_display_vulkan_available` in memory for how):**
+- **The stencil-doesn't-gate defect is confirmed ARCHITECTURAL**, not OpenGL-specific:
+  `llgl_stencil_test.cpp` fails Checks B and C's second half IDENTICALLY under Vulkan (same exact
+  output). Rules out anything GL-module-specific (`GLStateManager`'s own stencil state handling,
+  the swap chain's GL depth-stencil renderbuffer format) as the sole cause -- whatever is wrong is
+  in code shared between both renderer modules, most likely `AcquirePrimitivePipeline()`'s own
+  `pipelineDesc.stencil` construction or how `stencilFunction_`/`stencilMask_`/etc. get captured,
+  not either module's native stencil-state translation.
+- **NEW, separate, surprising finding: constant `DepthBias` -- the ONE mechanism from this ticket
+  already verified WORKING on the OpenGL module (`A1`/`B1`/`C1`/`E1`/`G0` all pass there) -- does
+  NOT work on the Vulkan module at all.** Under `CNA_LLGL_RENDERER=vulkan`,
+  `rasterizerstate_depthbias_test.cpp`'s `A1`/`B1`/`C1` (constant-bias flip checks) all FAIL,
+  behaving exactly as if `DepthBias` were still unwired (matching this ticket's OWN pre-fix
+  symptom) -- yet the C++ code building `pipelineDesc.rasterizer.depthBias` and the pipeline-cache
+  key is IDENTICAL for both renderer modules (no `CNA_LLGL_RENDERER`-specific branching anywhere
+  in `AcquirePrimitivePipeline()`), so this is not the same key-overflow bug already fixed. LLGL's
+  own `VKGraphicsPSO.cpp` was read directly and looks correct on its face
+  (`depthBiasEnable = VKBoolean(constantFactor != 0 || slopeFactor != 0 || clamp != 0)`, and the
+  three float fields copied straight into the static `VkPipelineRasterizationStateCreateInfo` --
+  `VK_DYNAMIC_STATE_DEPTH_BIAS` is notably NOT in this module's own dynamic-state list, unlike
+  viewport/scissor/blend-constants/stencil-reference, so depth bias is meant to be baked
+  statically at pipeline-creation time, which the code appears to do). Root cause NOT identified --
+  this needs its own dedicated investigation (candidates: a Vulkan validation layer message not yet
+  captured, a depth-buffer format/precision difference between the two modules that happens to make
+  RADV's `LLGL_DEBUG`/validation report something useful, or a genuinely different LLGL Vulkan-side
+  bug in applying `depthBiasConstantFactor` at draw time despite the pipeline being created with the
+  right value).
+- `D1` (`SlopeScaleDepthBias`) also fails identically under Vulkan (consistent with -- not new
+  information beyond -- its OpenGL failure already documented above).
+- `H0`/`H1`/`I0`/`I1` were not re-tested under Vulkan this pass (the file aborts earlier under
+  Vulkan on an unrelated, pre-existing, already-known limitation: `E0`'s `FillMode::WireFrame`
+  throws `"not yet implemented"` on the Vulkan renderer module by design, per
+  `AcquirePrimitivePipeline()`'s own `SupportsWireFrameEXT()` guard -- this is documented,
+  intentional behaviour, not a new finding).
+
+**Tracked as:** `plan_llgl.md` Phase LLGL-8, `LLGL-53` -- left OPEN, now FOUR/FIVE distinct
+defects, none root-caused (the Vulkan-specific `DepthBias` failure is a NEW fifth one, found only
+once real Vulkan testing became possible on this machine). `Llgl_RasterizerState_DepthBias`
+(12/17 on OpenGL) and `Llgl_Stencil` (2/4, same on both modules) are both registered anyway as real
+regression trip-wires for whoever continues this, matching this session's own established
+`Llgl_Deferred_Viewport`-style precedent for partial-pass suites.
 
 ---
