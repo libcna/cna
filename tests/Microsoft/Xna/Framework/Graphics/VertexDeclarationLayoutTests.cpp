@@ -110,8 +110,8 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 // RenderTarget2D::GetData -- InstancedDiffuseColorTests.cpp's own suite set.
 #if defined(CNA_BACKEND_BGFX) || defined(CNA_BACKEND_EASYGL) || \
     defined(CNA_BACKEND_WEBGPU) || defined(CNA_BACKEND_VULKAN) || \
-    defined(CNA_BACKEND_SOFTWARE) || defined(CNA_BACKEND_D3D9) || \
-    defined(CNA_BACKEND_D3D11) || defined(CNA_BACKEND_D3D12)
+    defined(CNA_BACKEND_SOFTWARE) || defined(CNA_BACKEND_SDL_GPU) || \
+    defined(CNA_BACKEND_D3D9) || defined(CNA_BACKEND_D3D11) || defined(CNA_BACKEND_D3D12)
 #define CNA_DECLARATION_LAYOUT_ORACLE 1
 #endif
 
@@ -119,7 +119,7 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 // display is reachable in this environment; every leg still PRINTS its reading there.
 #if defined(CNA_BACKEND_EASYGL) || defined(CNA_BACKEND_BGFX) || \
     defined(CNA_BACKEND_VULKAN) || defined(CNA_BACKEND_WEBGPU) || \
-    defined(CNA_BACKEND_SOFTWARE)
+    defined(CNA_BACKEND_SOFTWARE) || defined(CNA_BACKEND_SDL_GPU)
 #define CNA_DECLARATION_LAYOUT_MEASURED 1
 #endif
 
@@ -138,6 +138,8 @@ namespace
         "WebGPU";
 #elif defined(CNA_BACKEND_SOFTWARE)
         "Software";
+#elif defined(CNA_BACKEND_SDL_GPU)
+        "SDL_GPU";
 #elif defined(CNA_BACKEND_D3D9)
         "D3D9";
 #elif defined(CNA_BACKEND_D3D11)
@@ -241,10 +243,13 @@ namespace
         int positionOffset;
         int colorOffset;
         int texCoordOffset;
-        /// True when every measured backend OTHER than bgfx is currently known to get this
-        /// declaration wrong. REMED-GFX-216 is scoped to bgfx production, so those backends assert
-        /// their MEASURED deviation instead of the contract -- which makes each arm fail the moment
-        /// REMED-GFX-217/218 corrects it, rather than quietly outliving the defect.
+        /// True when this declaration collides with the byte-stride table every backend other
+        /// than bgfx still infers its native layout from. bgfx translates the declaration and must
+        /// render the contract; the other nine must REFUSE the draw deterministically before any
+        /// native work (REMED-GFX-DECL-GUARD), because their inferred layout would read the
+        /// caller's bytes as something else. Accepting one and rendering is a regression of the
+        /// guard, and rendering it CORRECTLY is REMED-GFX-217/218's translator landing -- both
+        /// fail this arm, and the message says which.
         bool deviatesElsewhere = false;
     };
 
@@ -619,50 +624,47 @@ protected:
 
     /// Asserts the full contract: every column's colour, lit count, top row and flatness.
     ///
-    /// REMED-GFX-216 is scoped to bgfx production. The same oracle run on the other backends found
-    /// the SAME class of defect on all of them, from two different mechanisms, and neither may be
-    /// fixed here:
+    /// REMED-GFX-216 is scoped to bgfx production, and bgfx must therefore render every entry in
+    /// the matrix. The same oracle run on the other backends found the SAME class of defect on all
+    /// of them, from two different mechanisms:
     ///
-    ///   * every backend except bgfx and EasyGL leaves `SetVertexDeclaration` an empty override
-    ///     (`Vulkan/VulkanGraphicsBackend.hpp:576`, `WebGPU/WebGPUGraphicsBackend.hpp:467`,
-    ///     `Software/SoftwareGraphicsBackend.hpp:38`, and likewise SdlGpu/D3D9/D3D11/D3D12), so the
-    ///     declaration is discarded and a layout is selected by stride -- REMED-GFX-217;
+    ///   * every backend except bgfx and EasyGL left `SetVertexDeclaration` an empty override
+    ///     (Vulkan, WebGPU, Software, SdlGpu, D3D9, D3D11, D3D12), so the declaration was discarded
+    ///     and a layout selected by stride -- REMED-GFX-217;
     ///   * EasyGL consumes the declaration but assigns each attribute's location from its INDEX in
-    ///     the element list (`EasyGLGraphicsBackend.cpp:3477`, `location = i`) rather than from its
-    ///     semantic, so any declaration whose element order differs from the shader's input order
-    ///     binds the wrong attributes -- REMED-GFX-218.
+    ///     the element list rather than from its semantic, so any declaration whose element order
+    ///     differs from the selected stock program's input order binds the wrong attributes --
+    ///     REMED-GFX-218.
     ///
-    /// So those backends assert their MEASURED deviation on the three declarations that expose it,
-    /// which makes each arm fail the moment its ticket is fixed, and the full contract everywhere
-    /// else. A backend that REFUSES a declaration is recorded verbatim: refusing is a capability
-    /// boundary, accepting and rendering the wrong thing is not.
+    /// Neither translator may be written here. REMED-GFX-DECL-GUARD instead makes both safe: a
+    /// declaration those inferred layouts cannot represent faithfully is REFUSED deterministically
+    /// before any native layout, command or submission exists. So on those nine backends the three
+    /// colliding declarations assert a REJECTION, not a measured wrong picture -- an arm that
+    /// starts rendering again fails whether the picture is right (the translator landed, and the
+    /// arm is stale) or wrong (the guard regressed), and the message distinguishes them.
+    ///
+    /// Everywhere else the full contract is asserted. A backend that REFUSES a declaration it
+    /// cannot express is recorded verbatim: refusing is a capability boundary, accepting and
+    /// rendering the wrong thing is not.
     static void ExpectStaircase(const DeclarationCase& c, Route route, const RouteResult& r)
     {
         Print(c, route, r);
 #ifdef CNA_DECLARATION_LAYOUT_MEASURED
 #if !defined(CNA_BACKEND_BGFX)
-        if (c.deviatesElsewhere && r.rendered)
+        if (c.deviatesElsewhere)
         {
-            // The deviation must still be VISIBLE, not merely asserted away: at least one column
-            // has to differ from the contract, or the ticket below is already fixed.
-            bool anyDeviation = false;
-            for (int column = 0; column < kColumnCount; ++column)
-            {
-                const ColumnReading got = ReadColumn(r.frame, column);
-                const Rgba want =
-                    ExpectedColor(kColumnColors[static_cast<std::size_t>(column)], c.hasColor);
-                if (!NearlyEqual(got.color, want) || got.lit != ExpectedLit(column) ||
-                    got.topRow != kQuadTop)
-                {
-                    anyDeviation = true;
-                    break;
-                }
-            }
-            EXPECT_TRUE(anyDeviation)
+            EXPECT_FALSE(r.rendered)
                 << c.name << '/' << RouteName(route) << " on " << kBackendName
-                << " now matches the contract, so REMED-GFX-217/218 (the declaration is discarded, "
-                   "or its attribute locations come from the element index rather than the "
-                   "semantic) is FIXED for this case. Delete this arm";
+                << " was ACCEPTED. This declaration collides with the byte-stride table this "
+                   "backend infers its native layout from, so REMED-GFX-DECL-GUARD must refuse it "
+                   "before any native work. If the picture below is correct, REMED-GFX-217/218's "
+                   "real translator has landed and this arm is stale; if it is wrong, the guard "
+                   "regressed and a draw is being rendered from the wrong bytes"
+                << DescribeFrame(r.frame);
+            if (!r.rendered)
+                EXPECT_FALSE(r.rejection.empty())
+                    << c.name << '/' << RouteName(route)
+                    << ": the refusal has to say why -- a silent refusal is not a boundary";
             return;
         }
 #endif
