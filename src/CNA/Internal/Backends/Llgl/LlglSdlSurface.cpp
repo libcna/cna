@@ -52,6 +52,14 @@ namespace CNA::Internal::Backends::Llgl
 #endif
     }
 
+    LlglSdlSurface::~LlglSdlSurface()
+    {
+#ifdef CNA_LLGL_SURFACE_X11
+        if (cachedVisualInfo_ != nullptr)
+            XFree(cachedVisualInfo_);
+#endif
+    }
+
     LlglSdlSurface::LlglSdlSurface(SDL_Window* window)
         : window_(window)
     {
@@ -100,22 +108,31 @@ namespace CNA::Internal::Backends::Llgl
         // null, and on X11 a GLX context created for a different visual than the drawable's cannot
         // be made current (BadMatch) -- the SDL window already committed to a visual when it was
         // created, so this is the only one that can work.
-        ::XWindowAttributes attributes = {};
-        if (XGetWindowAttributes(display, drawable, &attributes) != 0 && attributes.visual != nullptr)
+        //
+        // The window's visual and colormap never change once the window exists, so this is
+        // resolved once and cached rather than re-queried on every call (LLGL calls this once per
+        // swap-chain creation, and again on every resize) -- XGetVisualInfo allocates a fresh block
+        // each time it is called, and LLGL keeps the pointer past this call (it creates the GLX
+        // context from it later), so calling it again on every resize leaked one block per call.
+        if (!visualResolved_)
         {
-            ::XVisualInfo query = {};
-            query.visualid = XVisualIDFromVisual(attributes.visual);
-            int matchCount = 0;
-            ::XVisualInfo* visualInfo = XGetVisualInfo(display, VisualIDMask, &query, &matchCount);
-            if (visualInfo != nullptr && matchCount > 0)
+            ::XWindowAttributes attributes = {};
+            if (XGetWindowAttributes(display, drawable, &attributes) != 0 && attributes.visual != nullptr)
             {
-                // Deliberately leaked for the lifetime of the surface: LLGL keeps the pointer past
-                // this call (it creates the GLX context from it later), and the surface hands out
-                // the same window's visual every time, so at most one allocation per query.
-                handle->x11.visual = visualInfo;
+                ::XVisualInfo query = {};
+                query.visualid = XVisualIDFromVisual(attributes.visual);
+                int matchCount = 0;
+                ::XVisualInfo* visualInfo = XGetVisualInfo(display, VisualIDMask, &query, &matchCount);
+                if (visualInfo != nullptr && matchCount > 0)
+                {
+                    cachedVisualInfo_ = visualInfo;
+                    cachedColorMap_ = attributes.colormap;
+                    visualResolved_ = true;
+                }
             }
-            handle->x11.colorMap = attributes.colormap;
         }
+        handle->x11.visual = static_cast<::XVisualInfo*>(cachedVisualInfo_);
+        handle->x11.colorMap = cachedColorMap_;
 
         return true;
 #else

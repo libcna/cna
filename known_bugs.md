@@ -1488,3 +1488,42 @@ regression trip-wires for whoever continues this, matching this session's own es
 `Llgl_Deferred_Viewport`-style precedent for partial-pass suites.
 
 ---
+
+## `CnaTests` gtest fixtures (not the `examples/` LLGL test binaries) have no Vulkan-WSI-unavailable guard at all, and one failure can break every later test in the same process — OPEN (LLGL-55-adjacent)
+
+**Backend:** LLGL (Vulkan module), discovered incidentally while verifying the new
+`LlglSdlSurfaceConstructor` unit test (`LLGL-56`) against a wider `--gtest_filter`.
+
+**Symptom:** `LLGL-55`'s Vulkan-WSI-unavailable skip guard
+(`examples/common/LlglVulkanWsiSkipGuard.cpp`) is linked only into the `examples/*_test.cpp`
+binaries via `cna_llgl_test()` (`cmake/Tests/LlglTests.cmake`). It is **not** linked into
+`CnaTests`, the general gtest binary that also builds and runs graphics-fixture tests against
+whichever `CNA_GRAPHICS_BACKEND` is configured -- on this DRI3-less Xvfb with LLGL selected, a
+fixture that constructs a real `GraphicsDevice` (e.g. `Texture3DTest`) throws the same
+`VK_ERROR_SURFACE_LOST_KHR` mid-construction. gtest's own exception handling catches this cleanly
+(reported as `[FAILED]`, not a process abort), so on its own this is "only" a false FAIL rather
+than a crash. But the failing fixture's partially-torn-down `GraphicsDevice`/X11 client connection
+appears to corrupt something process-wide: the *next* test run in the same process
+(`TextureCubeTest` in the reproduction) immediately hits `"X connection to :99 broken (explicit
+kill or server shutdown)"` and fails too. The shared Xvfb `:99` server itself is unaffected
+(confirmed responsive via `xdpyinfo` immediately after) -- only that one process's own connection
+dies, but since `ctest`'s own `gtest_discover_tests(... DISCOVERY_MODE PRE_TEST ...)` runs each
+`TEST()` as its own separate process, ordinary `ctest` runs are NOT expected to cascade this way;
+the cascade only reproduces when multiple such tests are forced into one process (e.g. a broad
+`--gtest_filter` covering several graphics fixtures, as happened here).
+
+**Reproduction:** `CNA_LLGL_RENDERER` unset (default, Vulkan-preferring), `SDL_VIDEODRIVER=x11`,
+`DISPLAY=:99` (no DRI3): `./CnaTests --gtest_filter="*Window*"` (or any filter that pulls in
+several `GraphicsDevice`-constructing fixtures into one process) -- the first such fixture reports
+`[FAILED]` with the Vulkan swap-chain exception, and the next reports a broken X connection.
+
+**Not investigated further this session** (out of scope for the `LLGL-56` unit test being added at
+the time): whether every `CnaTests` fixture that constructs a real `GraphicsDevice` needs the same
+kind of guard `LLGL-55` gave the `examples/` binaries, or whether `ctest`'s per-test process
+isolation already makes this moot in normal CI use. Needs its own investigation before being
+folded into `LLGL-55`'s own scope or closed as "ctest isolation already covers it."
+
+**Tracked as:** new, not yet in `plan_llgl.md`'s task table -- follow-up for whoever continues
+`LLGL-55`/`LLGL-56`.
+
+---

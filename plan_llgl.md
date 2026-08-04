@@ -639,7 +639,7 @@ reported before submission.
 | LLGL-53 | P2 | **Finish or explicitly narrow raster/depth/stencil state support.** Wire viewport `minDepth`/`maxDepth`, depth bias, slope-scale depth bias and the full front/back stencil state into descriptors and cache keys. If LLGL 0.04b cannot express one field on a module, expose a precise module capability instead of accepting it as a silent no-op. | Add differential pixel tests for each state and for two draws differing only in that state. Enable the stencil branch of `graphicsdevice_ordered_clear_test.cpp`; update `SupportsCapability()` and `docs/llgl-backend.md` from measured module results. | 🟡 |
 | LLGL-54 | P2 | **Define and implement combined MRT contracts.** Preserve the effective sample count when multiple multisampled targets are bound, create matching multisample/resolve attachments, regenerate mip chains for every written MRT slot, and either support cube-face slots or reject them before allocation without advertising broader support. | Add MRT+MSAA edge-resolution tests, per-slot mip readback after MRT writes, mixed requested/effective sample-count validation, and lifetime tests for every slot. `LlglMRTBinding::GetSampleCount()` must report the actual native target sample count. | 🟡 |
 | LLGL-55 | P2 | **Harden build and virtual-display CI.** Do not compile ENet tests when `CNA_ENABLE_NET=OFF`; make shaderc discovery conditional on the renderer modules that need runtime SPIR-V compilation; preflight Xvfb for GLX/DRI3 and report Vulkan WSI unavailability as an infrastructure skip rather than twelve renderer crashes. Keep explicit Vulkan and `_OpenGL` lanes so auto-selection cannot hide one module. | A clean LLGL build with `CNA_ENABLE_NET=OFF` produces `CnaTests`; OpenGL-only, Vulkan-only and dual-module configurations build. CI records whether Xvfb supports DRI3, runs the matching module suite, and never labels `VK_ERROR_SURFACE_LOST_KHR` from missing DRI3 as a backend pixel failure. | ⬜ |
-| LLGL-56 | P2 | **Clean up native-surface ownership and platform scope.** Stop leaking `XVisualInfo` from repeated `LlglSdlSurface::GetNativeHandle()` calls, document ownership in the adapter, and investigate a Wayland/native-handle path or make the X11-only restriction a first-class build/runtime capability. | ASan/LSan surface-create/destroy and resize loops show no X11 allocation leak. X11 rejection/selection is covered by tests; Wayland is either supported by an integration test or rejected once with an actionable capability message. | ⬜ |
+| LLGL-56 | P2 | **Clean up native-surface ownership and platform scope.** Stop leaking `XVisualInfo` from repeated `LlglSdlSurface::GetNativeHandle()` calls, document ownership in the adapter, and investigate a Wayland/native-handle path or make the X11-only restriction a first-class build/runtime capability. | ASan/LSan surface-create/destroy and resize loops show no X11 allocation leak. X11 rejection/selection is covered by tests; Wayland is either supported by an integration test or rejected once with an actionable capability message. | 🟡 |
 
 Recommended execution order: LLGL-45 → LLGL-46 → LLGL-47 → LLGL-48, then LLGL-49 through
 LLGL-54 in parallel-safe, independently testable changes, followed by LLGL-55/56 and the existing
@@ -1038,6 +1038,46 @@ narrow try/catch for this earlier in the session; every other binary hand-rolls 
   module through ctest specifically (only the auto-selecting default, which now merely skips
   cleanly here rather than proving Vulkan actually works elsewhere). Adding both lanes to all 69
   tests is a large, mechanical, separate follow-up.
+
+**`LLGL-56` progress (2026-08-04): the named `XVisualInfo` leak is fixed and verified under
+ASan/LSan; X11 rejection now has test coverage. Wayland/capability-API redesign not attempted.**
+`LlglSdlSurface::GetNativeHandle()` called `XGetVisualInfo()` fresh on every invocation (LLGL calls
+it once per swap-chain creation and again on every resize) and never freed the previous result --
+its own comment claimed "at most one allocation per query," which was true per call but not
+across calls, so each resize leaked another block. Fixed: the window's visual and colormap are
+immutable for the window's lifetime (SDL commits to one at creation), so both are now resolved
+once, cached in two new private members (`cachedVisualInfo_`, `cachedColorMap_`), and released by
+a new `~LlglSdlSurface()` destructor via `XFree()`.
+- **Verified via ASan/LSan**, not assumed: configured a new `build-asan/` (per this project's own
+  shared-build-dir convention; `-fsanitize=address`, ccache, `CNA_ENABLE_NET=OFF` to keep the build
+  small), built only `cna_test_llgl_resize` (the acceptance gate's own named scenario), and
+  compared `git stash`'d pre-fix vs. post-fix leak totals under `LeakSanitizer`. Result: the fix
+  removes exactly 3 objects / 1920 bytes (3 x 640-byte `XGetVisualInfo` allocations, matching this
+  test's 3 total `GetNativeHandle()` calls: initial swap-chain creation + grow resize + shrink
+  resize) -- confirmed via a temporary debug print that `~LlglSdlSurface()` does run and does call
+  `XFree()` on a non-null cached pointer. The remaining ~899 leaked allocations in both runs are
+  identical and live entirely inside vendored LLGL/Mesa GL-context code
+  (`LinuxGLContextX11`/`GLContextManager`/`LinuxGLSwapChainContextX11`, per the full ASan stack
+  traces) -- LLGL's own internal `XGetVisualInfo` calls, not `LlglSdlSurface`'s, and out of this
+  ticket's named scope (`LlglSdlSurface::GetNativeHandle()` specifically).
+- Added `tests/CNA/Internal/Backends/Llgl/LlglSdlSurfaceTests.cpp` (new directory; follows the
+  existing `tests/CNA/Internal/Backends/EasyGL/EasyGLGraphicsBackendTests.cpp` precedent for
+  gtest-covering a backend-internal adapter class): constructs a real `SDL_Window` under SDL's
+  "dummy" video driver (via `SDL_SetHintWithPriority(..., SDL_HINT_OVERRIDE)` -- a plain
+  `SDL_SetHint` does NOT override the `SDL_VIDEODRIVER=x11` this project's own ctest registrations
+  already set, confirmed empirically after the first attempt silently ran under `x11` instead) and
+  confirms `LlglSdlSurface`'s constructor throws with a message naming the actual fix
+  (`SDL_VIDEODRIVER=x11`). This closes the acceptance gate's "X11 rejection/selection is covered by
+  tests" half; the existing constructor error message already satisfied "Wayland is ... rejected
+  once with an actionable capability message" before this session.
+- **Left undone**: a real Wayland integration test (no Wayland session exists in this sandbox) and
+  any redesign of the X11-only restriction into "a first-class build/runtime capability" API --
+  the acceptance gate's own wording treats the existing throw-with-actionable-message as already
+  satisfying that half, so no redesign was attempted.
+- **New, separate finding surfaced while verifying this ticket** (not fixed here): `CnaTests`
+  gtest fixtures that construct a real `GraphicsDevice` (unlike the `examples/` LLGL binaries) have
+  no Vulkan-WSI-unavailable guard at all, and one such failure can break the X11 connection for
+  every later test in the same process. See `known_bugs.md`'s new entry.
 
 ---
 

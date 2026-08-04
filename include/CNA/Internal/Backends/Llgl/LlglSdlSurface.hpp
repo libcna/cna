@@ -37,6 +37,9 @@ namespace CNA::Internal::Backends::Llgl
          */
         explicit LlglSdlSurface(SDL_Window* window);
 
+        /** @brief Frees the cached X11 visual info, if any was ever resolved. */
+        ~LlglSdlSurface() override;
+
         /**
          * @brief Fills in the platform native handle LLGL needs to create its context or surface.
          *
@@ -79,5 +82,14 @@ namespace CNA::Internal::Backends::Llgl
 
     private:
         SDL_Window* window_ = nullptr;
+
+        // The window's visual and colormap are fixed for its lifetime (SDL commits to one at
+        // window creation), so both are resolved at most once and cached rather than re-queried --
+        // and, on X11, re-allocated -- on every GetNativeHandle() call. Untyped so this header does
+        // not need Xlib's XVisualInfo; the .cpp is the only translation unit that includes X11
+        // headers (see its own top comment for why).
+        void* cachedVisualInfo_ = nullptr;
+        bool visualResolved_ = false;
+        unsigned long cachedColorMap_ = 0;
     };
 }
