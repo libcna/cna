@@ -637,7 +637,7 @@ reported before submission.
 | LLGL-51 | P1 | **Fix OpenGL back-buffer viewport/scissor Y conversion and test both modules explicitly.** Normalize LLGL's screen-origin rules at the command boundary without changing render-target orientation or the already-passing zero-Y cases. | Add `_OpenGL` registrations for `deferred_viewport_capture_test.cpp`, `deferred_scissor_capture_test.cpp`, `spritebatch_custom_viewport_test.cpp`, `spritebatch_viewport_switch_test.cpp` and the applicable cube/plural tests. The current 37/39 and 43/47 OpenGL results become full passes, including non-zero-Y target→backbuffer→target sequences. | ⬜ |
 | LLGL-52 | P1 | **Complete legal stock-effect vertex-layout permutations and resolve the orthographic camera case.** Add a defined untextured+unlit colourless BasicEffect path and a defined policy/shader for lit+textured input without normals; diagnose the `Orthographic`+`CreateLookAt` mismatch rather than masking it with a contract branch. | Register and pass `rasterizerstate_cullmode_indexed_basiceffect_test.cpp`, `rendertarget_sampling_orientation_test.cpp` CD4 and `rasterizerstate_cullmode_camera_test.cpp` on each capable module. Unsupported declarations, if any remain, are rejected before queuing with a precise message. | 🟡 |
 | LLGL-53 | P2 | **Finish or explicitly narrow raster/depth/stencil state support.** Wire viewport `minDepth`/`maxDepth`, depth bias, slope-scale depth bias and the full front/back stencil state into descriptors and cache keys. If LLGL 0.04b cannot express one field on a module, expose a precise module capability instead of accepting it as a silent no-op. | Add differential pixel tests for each state and for two draws differing only in that state. Enable the stencil branch of `graphicsdevice_ordered_clear_test.cpp`; update `SupportsCapability()` and `docs/llgl-backend.md` from measured module results. | 🟡 |
-| LLGL-54 | P2 | **Define and implement combined MRT contracts.** Preserve the effective sample count when multiple multisampled targets are bound, create matching multisample/resolve attachments, regenerate mip chains for every written MRT slot, and either support cube-face slots or reject them before allocation without advertising broader support. | Add MRT+MSAA edge-resolution tests, per-slot mip readback after MRT writes, mixed requested/effective sample-count validation, and lifetime tests for every slot. `LlglMRTBinding::GetSampleCount()` must report the actual native target sample count. | ⬜ |
+| LLGL-54 | P2 | **Define and implement combined MRT contracts.** Preserve the effective sample count when multiple multisampled targets are bound, create matching multisample/resolve attachments, regenerate mip chains for every written MRT slot, and either support cube-face slots or reject them before allocation without advertising broader support. | Add MRT+MSAA edge-resolution tests, per-slot mip readback after MRT writes, mixed requested/effective sample-count validation, and lifetime tests for every slot. `LlglMRTBinding::GetSampleCount()` must report the actual native target sample count. | 🟡 |
 | LLGL-55 | P2 | **Harden build and virtual-display CI.** Do not compile ENet tests when `CNA_ENABLE_NET=OFF`; make shaderc discovery conditional on the renderer modules that need runtime SPIR-V compilation; preflight Xvfb for GLX/DRI3 and report Vulkan WSI unavailability as an infrastructure skip rather than twelve renderer crashes. Keep explicit Vulkan and `_OpenGL` lanes so auto-selection cannot hide one module. | A clean LLGL build with `CNA_ENABLE_NET=OFF` produces `CnaTests`; OpenGL-only, Vulkan-only and dual-module configurations build. CI records whether Xvfb supports DRI3, runs the matching module suite, and never labels `VK_ERROR_SURFACE_LOST_KHR` from missing DRI3 as a backend pixel failure. | ⬜ |
 | LLGL-56 | P2 | **Clean up native-surface ownership and platform scope.** Stop leaking `XVisualInfo` from repeated `LlglSdlSurface::GetNativeHandle()` calls, document ownership in the adapter, and investigate a Wayland/native-handle path or make the X11-only restriction a first-class build/runtime capability. | ASan/LSan surface-create/destroy and resize loops show no X11 allocation leak. X11 rejection/selection is covered by tests; Wayland is either supported by an integration test or rejected once with an actionable capability message. | ⬜ |
 
@@ -952,6 +952,30 @@ The acceptance gate's own "update `SupportsCapability()` and `docs/llgl-backend.
 module results" was not done this session -- these five open defects should be reflected there
 once (or instead of) being fixed, so the documented capability boundary matches what was actually
 measured rather than what was intended.
+
+**`LLGL-54` progress (2026-08-04, commit `07a56e8d`): MSAA sample-count preservation across an MRT
+bind fixed and verified; mip regeneration for MRT slots NOT addressed.**
+`SetMultipleRenderTargetsEXT()` previously omitted `RenderTargetDescriptor::samples` entirely,
+always creating a single-sample MRT render target regardless of what the individual slots were
+created with -- fixed to read slot 0's own already-applied `MultiSampleCount` (the shared
+`GraphicsDevice::SetRenderTargets()` layer already guarantees every slot's applied count matches
+before this backend ever runs) and request it, with an anonymous multisampled colour attachment +
+each slot's own texture as its resolve target, matching `CreateRenderTarget2D()`'s own established
+single-target pattern. `LlglMRTBinding::GetSampleCount()` (previously hardcoded to the base
+class's `1`, so `AcquirePrimitivePipeline()` kept building single-sample pipelines against a
+multisampled MRT bind regardless) now has a real override. **Verified**
+(`CNA_LLGL_RENDERER=opengl`, Xvfb): a new `llgl_mrt_msaa_test.cpp` (registered as `Llgl_MRT_MSAA`)
+confirms BOTH bound slots independently resolve a genuinely antialiased edge, not just slot 0 --
+confirmed via `git stash` to fail identically (a hard, unblended edge in both slots) on the
+pre-fix binary. Also confirms the ticket's own "mixed requested/effective sample-count validation"
+item is already enforced by the shared `SetRenderTargets()` layer upstream, not silently accepted.
+A full 65+2-binary regression sweep plus the existing `llgl_mrt_test.cpp` show zero regressions.
+Cube-face MRT slots were ALREADY rejected by name (not silently degraded) before this change,
+satisfying that part of the acceptance gate without further work. **Left undone:** per-slot mip
+regeneration after MRT writes -- `GetActiveMipRegenColorTextureEXT()`'s architecture returns a
+SINGLE `LLGL::Texture*`, designed for one target; supporting "every written MRT slot" needs it (or
+a sibling mechanism) restructured to return a list, a genuinely separate follow-up from the
+MSAA fix. Per-slot lifetime tests (the acceptance gate's own explicit ask) were also not added.
 
 ---
 
