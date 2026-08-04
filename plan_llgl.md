@@ -987,6 +987,31 @@ module results" was not done this session -- these five open defects should be r
 once (or instead of) being fixed, so the documented capability boundary matches what was actually
 measured rather than what was intended.
 
+**`LLGL-53` follow-up (2026-08-04, docs only): H0/H1's mechanism CONFIRMED, not fixed -- I0/I1
+ruled to be a genuinely separate defect.** Live-instrumented the vendored LLGL OpenGL module again
+(temporary, fully reverted). Traced `SetViewport()`'s captured values all the way to raw GL state
+(`glGetIntegerv`/`glIsEnabled` queried directly): viewport, depth range, depth-test enable/func/
+write-mask are ALL exactly as requested for H0's own draws -- ruling out the entire capture/replay
+path. The scissor rect is identical between H0 (fails) and G0 (passes, same file, right before it),
+ruling out `viewportSet_`'s own LLGL-53-widened condition (this investigation's first hypothesis)
+too -- it was already true before this ticket touched anything, since this file's own viewport
+width (96) already differs from the logical width (120) regardless of depth range. **Root
+mechanism found:** `GraphicsDevice::Clear(Color)` clears the depth buffer to `Viewport.MaxDepth`
+(not a hardcoded `1.0`) -- correct, FNA-faithful behavior (Task 928, predates this ticket). For H0
+that's `0.8`; confirmed via direct `glGetFloatv(GL_DEPTH_CLEAR_VALUE, ...)` that this raw value IS
+what reaches the GPU. Clearing to a non-`1.0` raw depth value, combined with a narrowed
+`glDepthRangef(0.2, 0.8)` for the subsequent draws, causes the LEQUAL depth test to reject every
+fragment -- proven by temporarily forcing the clear to always use `1.0` (a deliberately
+XNA-incorrect experiment, reverted immediately), which makes H0 pass. **Not fixed**: the CORRECT
+behavior is what triggers this, so reverting it would violate XNA fidelity for any other legitimate
+non-default-`MaxDepth` clear, not just this case; the actual "why" (spec says `glClear` should
+be depth-range-independent, but this is a software rasterizer) needs a native GPU debugger
+(RenderDoc/apitrace, unavailable here) or real GPU hardware to distinguish an `llvmpipe`/Mesa
+quirk from a genuine LLGL-side bug. Also established: I0/I1 do NOT share this mechanism (H1's own
+block resets the viewport, and by extension `MaxDepth`, back to default before I's block runs) --
+despite the superficially similar "renders nothing" symptom, I0/I1 remain a fully separate,
+still-unexplained defect. See `known_bugs.md`'s entry for the complete trace.
+
 **`LLGL-54` progress (2026-08-04, commit `07a56e8d`): MSAA sample-count preservation across an MRT
 bind fixed and verified; mip regeneration for MRT slots NOT addressed.**
 `SetMultipleRenderTargetsEXT()` previously omitted `RenderTargetDescriptor::samples` entirely,

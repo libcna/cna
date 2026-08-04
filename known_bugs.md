@@ -1500,11 +1500,53 @@ correct on their own too, `GLProfile::DepthRange(minDepth, maxDepth)`; not yet t
 the DEFAULT `[0,1]` depth range.** Same "baseline renders nothing" symptom as H0, but reached via a
 completely different path (`SetVp(dev, 0, 0, rtW, rtH)` on a bound `RenderTarget2D`, no custom
 depth range at all). Also confirmed via `git stash` comparison to be a genuine NEW regression from
-this ticket's own work (I0 rendered green correctly before `LLGL-53`). Given H0 and I0 share the
-exact same symptom (baseline coplanar draw, expected winner is the later one, actual result is a
-fully blank/background readback) via two UNRELATED trigger conditions (custom depth range vs. a
-bound render target), they may share a common root cause once found -- worth investigating
-together rather than separately.
+this ticket's own work (I0 rendered green correctly before `LLGL-53`). By `Viewport(x,y,w,h)`'s own
+constructor defaulting `MinDepth`/`MaxDepth` to `[0,1]`, and H1's own block explicitly resetting the
+viewport (`SetVp`) before I's block runs, I0/I1 do NOT inherit H0/H1's non-default depth range --
+so despite the superficially similar symptom, **H0/H1's own root cause below (confirmed 2026-08-04)
+does not apply to I0/I1**, which remain a genuinely separate, still fully unexplained defect.
+
+**2026-08-04: H0/H1's root cause CONFIRMED, narrowed to one specific interaction -- not fixed
+(the correct behavior IS what triggers it).** Live-instrumented the vendored LLGL OpenGL module
+(temporary, fully reverted, `~/deps/LLGL` pristine again) end to end: `SetViewport()`'s captured
+`viewport`/`depthRange` reach `glViewport`/`glDepthRangef` correctly (`GL_VIEWPORT=(0,0,640,480)`,
+`GL_DEPTH_RANGE=(0.200,0.800)`, `depthTest=1`, `depthFunc=GL_LEQUAL`, `writeMask=1` -- all queried
+directly via `glGetIntegerv`/`glIsEnabled`, all exactly as requested) for BOTH the red and green
+draws in H0. The scissor rect computed by `ComputeEffectiveScissor()` is IDENTICAL between H0
+(fails) and G0 (passes, same file, immediately before H0) -- `(0,0,640,480)` in both, since
+`viewportRect_`'s own width (96) already differs from the logical width (120) for EVERY check in
+this file, independent of depth range -- ruling out `viewportSet_`'s LLGL-53-widened condition
+(the very first hypothesis this investigation reached for) as the cause; it was already true before
+LLGL-53 touched anything.
+
+**The actual mechanism:** `GraphicsDevice::Clear(Color)` uses `Viewport.MaxDepth` -- not a
+hardcoded `1.0` -- as the depth-buffer clear value, matching FNA's own exact behavior (Task 928,
+predates this ticket entirely). For H0, that is `0.8` (`Viewport.MaxDepth` from the just-applied
+custom range). Confirmed via direct `glGetFloatv(GL_DEPTH_CLEAR_VALUE, ...)`: the backend correctly
+requests and the GL module correctly applies a raw clear value of `0.8000`. **This combination --
+clearing the depth buffer to a non-`1.0` raw value, then drawing under a narrowed
+`glDepthRangef(0.2, 0.8)` -- causes the LEQUAL depth test to reject every subsequent fragment**,
+even though the fragment's own computed window-depth (`~0.5`, per the test's own worked example)
+is arithmetically `<= 0.8` and should pass. **Proven, not inferred:** temporarily forcing the GL
+clear-depth call to always use `1.0` (ignoring the correctly-computed `0.8`, a deliberately
+XNA-INCORRECT experiment, reverted immediately after) makes **H0 pass** -- conclusively isolating
+the mechanism to this one interaction. H1 (which also clears under the same non-default range)
+still fails even with that same experimental override, meaning it depends on something further
+(most likely `DepthBias`'s OWN interaction with a non-default range, not yet isolated).
+
+**Why this is not being "fixed" here:** `Clear()`'s use of `Viewport.MaxDepth` is CORRECT,
+intentional, XNA/FNA-faithful behavior (see Task 928's own comment) -- reverting it to a hardcoded
+`1.0` would violate XNA fidelity for any other legitimate use of a custom `MaxDepth`, not just
+paper over this specific case. The remaining question -- WHY a raw depth-buffer clear value
+combined with a narrowed `glDepthRangef` causes total fragment rejection, when the values involved
+are all within their documented valid ranges -- was not resolved: candidates not yet distinguished
+are a genuine `llvmpipe`/Mesa software-rasterizer quirk in how `glClear(GL_DEPTH_BUFFER_BIT)`
+interprets its clear value relative to the CURRENT depth range (non-standard per the GL spec, which
+says `glClear` writes the raw depth-buffer value unaffected by `glDepthRangef` -- but this is a
+SOFTWARE rasterizer, not a spec-perfect reference implementation), versus something LLGL's own GL
+module does differently for a narrowed range that a real GPU driver would not. Needs either a
+native GPU debugger (RenderDoc/apitrace, unavailable in this sandbox) or a real, non-software GL
+driver to distinguish a genuine environment limitation from an LLGL/CNA-side bug.
 
 **Also found while adding `llgl_stencil_test.cpp` (new, LLGL-53): the stencil test does not
 actually GATE.** Writing a reference value via `StencilOperation::Replace` and then reading it
