@@ -408,6 +408,25 @@ TEST(HtmlDomSpriteBatch, IdentityTransformMatrixIsAccepted)
     EXPECT_NO_THROW(batch.SetTransformMatrix(Matrix::CreateTranslation(10.0f, 20.0f, 0.0f)));
 }
 
+// plan_html_dom.md HTMLDOM-118: SetImmediateMode itself is trivially unit-testable (a plain
+// setter); the actual per-draw-flush BEHAVIOUR it enables needs a real ITextureBackend (which
+// this file's own DrawBeforeBeginThrows comment notes cannot be reached without one) and a real
+// JS-side flush to observe -- that is verified end-to-end in htmldom_smoke_test.cpp instead,
+// matching how BuildDrawCommandEXT's own geometry is unit-tested here while the JS variant
+// generation it feeds is only browser-verified (see e.g. HTMLDOM-104's own precedent).
+TEST(HtmlDomSpriteBatch, SetImmediateModeIsAcceptedAndDoesNotThrow)
+{
+    HtmlDomSpriteBatchBackend batch;
+    EXPECT_NO_THROW(batch.SetImmediateMode(true));
+    batch.Begin();
+    EXPECT_TRUE(batch.GetCommandsEXT().empty());
+    batch.End();
+    EXPECT_NO_THROW(batch.SetImmediateMode(false));
+    batch.Begin();
+    EXPECT_TRUE(batch.GetCommandsEXT().empty());
+    batch.End();
+}
+
 // ---------------------------------------------------------------------------------------------
 // The 3D surface: every entry point throws "not yet implemented"
 // ---------------------------------------------------------------------------------------------

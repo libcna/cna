@@ -191,6 +191,7 @@ namespace Microsoft::Xna::Framework::Graphics
                 backend_->SetSamplerFilter(static_cast<int>(effectiveSampler.getFilterProperty()));
                 backend_->SetSamplerAddressMode(static_cast<int>(effectiveSampler.getAddressUProperty()),
                                                 static_cast<int>(effectiveSampler.getAddressVProperty()));
+                backend_->SetImmediateMode(sortMode_ == SpriteSortMode::Immediate);
                 backend_->Begin();
             }
             catch (...)

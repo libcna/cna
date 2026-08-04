@@ -115,6 +115,19 @@ namespace CNA::Internal::Backends::HtmlDom
         void SetSamplerAddressMode(int addressU, int addressV) override;
 
         /**
+         * @brief NOXNA. Records whether the current batch is SpriteSortMode::Immediate.
+         *
+         * plan_html_dom.md HTMLDOM-118: called by SpriteBatch::Begin(), before Begin() itself, with
+         * the sort mode actually requested for this batch. When true, each subsequent Draw() flushes
+         * itself to the DOM/Canvas2D immediately (see QueueDraw()'s own comment) instead of being
+         * queued for a single end-of-batch flush -- matching real XNA/FNA Immediate semantics, where
+         * a device state change between two Draw() calls is honestly reflected per sprite.
+         *
+         * @param immediate True when SpriteSortMode::Immediate is active for this batch.
+         */
+        void SetImmediateMode(bool immediate) override { immediateMode_ = immediate; }
+
+        /**
          * @brief Draws a whole texture, unrotated and untinted, at the given position.
          *
          * @param texture Source texture.
@@ -182,6 +195,7 @@ namespace CNA::Internal::Backends::HtmlDom
                        SpriteEffects effects);
 
         bool begun_ = false;
+        bool immediateMode_ = false;
         bool smoothingEnabled_ = true;
         /// Raw TextureAddressMode ordinals; Clamp matches XNA/FNA's default LinearClamp sampler.
         int addressU_ = 1;

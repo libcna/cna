@@ -45,7 +45,7 @@ using namespace CNA::Internal::Backends::HtmlDom;
 
 namespace
 {
-    constexpr int kExpectedChecks = 64;
+    constexpr int kExpectedChecks = 68;
 
 #if defined(__EMSCRIPTEN__)
     /// Number of sprite elements currently visible in the DOM surface.
@@ -1121,6 +1121,51 @@ protected:
 
             // Restore the full-backbuffer viewport for hygiene before the final publish below.
             dev.setViewportProperty(Viewport(0, 0, 128, 128));
+
+            // plan_html_dom.md HTMLDOM-118: SpriteSortMode::Immediate must genuinely apply
+            // per-draw -- a scissor rect CHANGE between two Draw() calls inside ONE Begin(
+            // Immediate)/End() block must send each sprite to whichever region was actually
+            // active AT THE TIME that sprite's own Draw() was called, not both ending up wherever
+            // the rect happened to be by End(). Four tiny, non-overlapping regions, all corners
+            // far from the scissor-straddle sprite this frame ends on (60,60,20,20) and the exact
+            // pixels the harness samples there ((70,70)/(90,90)), so none of them interfere with
+            // the final screenshot check below.
+            dev.setScissorRectangleProperty(Rectangle(0, 0, 12, 12));
+            spriteBatch_->Begin(SpriteSortMode::Immediate, BlendState::AlphaBlend, nullptr, nullptr,
+                                &scissorEnabledState_);
+            spriteBatch_->Draw(*texture_, Vector2(0, 0), Color::White);
+            dev.setScissorRectangleProperty(Rectangle(100, 0, 12, 12));
+            spriteBatch_->Draw(*texture_, Vector2(0, 0), Color::White);
+            spriteBatch_->End();
+            check(JsRegionVisibleSpriteCount(0, 0, 12, 12) == 1,
+                  "HTMLDOM-118a: SpriteSortMode::Immediate -- the FIRST draw lands in the region "
+                  "that was active AT THE TIME IT WAS CALLED (before the scissor rect changed "
+                  "again), not wherever the rect ended up by End()");
+            check(JsRegionVisibleSpriteCount(100, 0, 12, 12) == 1,
+                  "HTMLDOM-118b: ...and the SECOND draw, issued after the rect changed, "
+                  "independently lands in its own DIFFERENT region -- genuine per-draw state "
+                  "capture, not a single end-of-batch snapshot applied to every sprite in it");
+
+            // Control: the identical interleaved sequence under Deferred must NOT show this
+            // per-draw behaviour -- proving the Immediate result above is real, not an artifact of
+            // how JsRegionVisibleSpriteCount counts or of the regions already existing.
+            dev.setScissorRectangleProperty(Rectangle(0, 12, 12, 12));
+            spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend, nullptr, nullptr,
+                                &scissorEnabledState_);
+            spriteBatch_->Draw(*texture_, Vector2(0, 0), Color::White);
+            dev.setScissorRectangleProperty(Rectangle(100, 12, 12, 12));
+            spriteBatch_->Draw(*texture_, Vector2(0, 0), Color::White);
+            spriteBatch_->End();
+            check(JsRegionVisibleSpriteCount(0, 12, 12, 12) == -1,
+                  "HTMLDOM-118c: control -- under Deferred, the FIRST draw does NOT land in the "
+                  "region that was active when it was CALLED (that per-draw behaviour is "
+                  "Immediate-only); a region for that rect isn't even created (-1: does not "
+                  "exist) since it was never current at End()");
+            check(JsRegionVisibleSpriteCount(100, 12, 12, 12) == 2,
+                  "HTMLDOM-118d: ...instead BOTH draws land in whichever region was active AT "
+                  "End() -- Deferred's real, unaffected, single end-of-batch-snapshot contract");
+
+            dev.setScissorRectangleProperty(Rectangle(0, 0, 128, 128));   // hygiene.
 
             // plan_html_dom.md HTMLDOM-101: prove the scissor region has a real, non-zero layout
             // box, AND that clip-path genuinely removes out-of-bounds content from the page's real

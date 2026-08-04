@@ -546,10 +546,34 @@ namespace CNA::Internal::Backends::HtmlDom
             destinationRectangle.Width == 0 || destinationRectangle.Height == 0)
             return;
 
-        commands_.push_back(BuildDrawCommandEXT(
+        const HtmlDomDrawCommand cmd = BuildDrawCommandEXT(
             id, texture.GetWidth(), texture.GetHeight(), destinationRectangle, sourceRectangle,
             color, rotation, origin, effects, smoothingEnabled_, addressU_, addressV_,
-            GetCurrentCompositeOpEXT()));
+            GetCurrentCompositeOpEXT());
+
+        // plan_html_dom.md HTMLDOM-118: SpriteSortMode::Immediate means THIS sprite's own draw call
+        // reaches the DOM/Canvas2D right now, under whatever device state is current AT THIS
+        // INSTANT -- not deferred until End(), which could see a LATER state some subsequent
+        // SetScissorRect()/SetViewport() call already overwrote. Flushing this one command as its
+        // own one-sprite "batch", synchronously, is what makes that true with no extra per-draw
+        // state capture needed here: every piece of global JS state CNA_HtmlDom_FlushSprites itself
+        // reads (Module['cnaDomScissorRect']/['cnaDomViewport'], GetCurrentCompositeOpEXT() above,
+        // GetCurrentScissorEnableEXT() below) is always whatever the game's last SetScissorRect()/
+        // SetViewport()/ApplyBlendState() call recorded, updated eagerly and independently of any
+        // SpriteBatch batching -- so reading it right now, synchronously, already gives the correct
+        // per-draw answer. Never queued into commands_ in this mode: an Immediate command has
+        // already reached its destination the instant this returns, so leaving it in commands_ too
+        // would flush it a second time at End().
+        if (immediateMode_)
+        {
+#if defined(__EMSCRIPTEN__)
+            CNA_HtmlDom_FlushSprites(&cmd, 1, HtmlDomDrawCommandFields,
+                                     matrix_[0], matrix_[1], matrix_[2], matrix_[3], matrix_[4], matrix_[5],
+                                     hasMatrix_ ? 1 : 0, GetCurrentScissorEnableEXT() ? 1 : 0);
+#endif
+            return;
+        }
+        commands_.push_back(cmd);
     }
 
     void HtmlDomSpriteBatchBackend::Draw(const ITextureBackend& texture, float x, float y)
