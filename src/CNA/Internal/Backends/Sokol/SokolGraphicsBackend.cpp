@@ -1514,8 +1514,9 @@ namespace CNA::Internal::Backends::Sokol
     // SokolVertexBufferBackend
     // ---------------------------------------------------------------------------------------
 
-    SokolVertexBufferBackend::SokolVertexBufferBackend(int vertexCapacity)
+    SokolVertexBufferBackend::SokolVertexBufferBackend(int vertexCapacity, SokolGraphicsBackend* owner)
         : capacity_(vertexCapacity)
+        , ownerEXT_(owner)
     {
     }
 
@@ -1532,21 +1533,44 @@ namespace CNA::Internal::Backends::Sokol
             return;
         }
 
-        // Recreated rather than updated: sokol_gfx permits at most one sg_update_buffer() per
-        // buffer per frame, while creating an immutable buffer with initial data has no such
-        // limit, so a game that re-uploads several times in one frame stays legal here.
+        const std::size_t requiredBytes = static_cast<std::size_t>(vertexCount) * strideInBytes;
+
+        // plan_sokol.md SOKOL-24: cheap path -- reuse the existing dynamic buffer in place. Only
+        // safe when the new data still fits what was actually allocated and this exact buffer
+        // has not already been updated once this frame (sokol_gfx permits exactly one
+        // sg_update_buffer() per buffer per frame; a second call trips a hard SOKOL_ASSERT, not
+        // just a validation warning). ownerEXT_ is only null where no frame counter exists to
+        // check against, so that case always falls through to recreate below.
+        if (bufferId_ != 0 && ownerEXT_ != nullptr && requiredBytes <= allocatedBytesEXT_
+            && lastUpdateFrameEXT_ != ownerEXT_->GetFrameIndexEXT())
+        {
+            sg_range range{ data, requiredBytes };
+            sg_update_buffer(MakeBufferHandle(bufferId_), &range);
+            lastUpdateFrameEXT_ = ownerEXT_->GetFrameIndexEXT();
+            vertexCount_ = vertexCount;
+            stride_ = strideInBytes;
+            return;
+        }
+
+        // Recreate: first upload, the data outgrew what is currently allocated, or a same-frame
+        // repeat upload would violate sokol_gfx's once-per-frame update rule.
         if (bufferId_ != 0)
         {
             sg_destroy_buffer(MakeBufferHandle(bufferId_));
             bufferId_ = 0;
         }
 
+        // Sized to this VertexBuffer's own declared capacity, not just this call's vertexCount --
+        // VertexBuffer::ValidateSetDataRange() (the XNA layer) never lets a SetData call exceed
+        // that capacity, so a same-shape upload next frame can reuse this allocation via the
+        // cheap path above instead of recreating again.
+        const std::size_t allocBytes = std::max<std::size_t>(
+            requiredBytes, static_cast<std::size_t>(capacity_) * strideInBytes);
+
         sg_buffer_desc desc = {};
         desc.usage.vertex_buffer = true;
-        desc.usage.immutable = true;
-        desc.size = static_cast<std::size_t>(vertexCount) * strideInBytes;
-        desc.data.ptr = data;
-        desc.data.size = desc.size;
+        desc.usage.dynamic_update = true;
+        desc.size = allocBytes;
         desc.label = "cna_vertex_buffer";
         bufferId_ = sg_make_buffer(&desc).id;
         if (sg_query_buffer_state(MakeBufferHandle(bufferId_)) != SG_RESOURCESTATE_VALID)
@@ -1554,6 +1578,16 @@ namespace CNA::Internal::Backends::Sokol
             bufferId_ = 0;
             throw std::runtime_error("Sokol backend: sg_make_buffer failed for a VertexBuffer");
         }
+        allocatedBytesEXT_ = allocBytes;
+        lastUpdateFrameEXT_ = 0;
+
+        // Dynamic/stream buffers must be created with no initial data (sokol_gfx validation:
+        // "sg_buffer_desc.data.ptr must be null for dynamic/stream buffers") -- seed the content
+        // with an immediate sg_update_buffer() instead. Always legal here: a just-created buffer
+        // has never been updated, so this can never be the disallowed second update this frame.
+        sg_range range{ data, requiredBytes };
+        sg_update_buffer(MakeBufferHandle(bufferId_), &range);
+        if (ownerEXT_ != nullptr) lastUpdateFrameEXT_ = ownerEXT_->GetFrameIndexEXT();
 
         vertexCount_ = vertexCount;
         stride_ = strideInBytes;
@@ -1573,9 +1607,11 @@ namespace CNA::Internal::Backends::Sokol
     // SokolIndexBufferBackend
     // ---------------------------------------------------------------------------------------
 
-    SokolIndexBufferBackend::SokolIndexBufferBackend(int indexCapacity, bool thirtyTwoBit)
+    SokolIndexBufferBackend::SokolIndexBufferBackend(int indexCapacity, bool thirtyTwoBit,
+                                                       SokolGraphicsBackend* owner)
         : capacity_(indexCapacity)
         , thirtyTwoBit_(thirtyTwoBit)
+        , ownerEXT_(owner)
     {
     }
 
@@ -1592,19 +1628,34 @@ namespace CNA::Internal::Backends::Sokol
             return;
         }
 
-        // Same recreate-instead-of-update reasoning as SokolVertexBufferBackend::SetData.
+        const std::size_t requiredBytes = static_cast<std::size_t>(indexCount) * indexSize;
+
+        // Same cheap-path reasoning as SokolVertexBufferBackend::SetData (plan_sokol.md SOKOL-24).
+        if (bufferId_ != 0 && ownerEXT_ != nullptr && requiredBytes <= allocatedBytesEXT_
+            && lastUpdateFrameEXT_ != ownerEXT_->GetFrameIndexEXT())
+        {
+            sg_range range{ data, requiredBytes };
+            sg_update_buffer(MakeBufferHandle(bufferId_), &range);
+            lastUpdateFrameEXT_ = ownerEXT_->GetFrameIndexEXT();
+            indexCount_ = indexCount;
+            return;
+        }
+
         if (bufferId_ != 0)
         {
             sg_destroy_buffer(MakeBufferHandle(bufferId_));
             bufferId_ = 0;
         }
 
+        // Sized to this IndexBuffer's own declared capacity at @p indexSize, not just this call's
+        // indexCount -- same reasoning as SokolVertexBufferBackend::SetData's own allocBytes.
+        const std::size_t allocBytes = std::max<std::size_t>(
+            requiredBytes, static_cast<std::size_t>(capacity_) * indexSize);
+
         sg_buffer_desc desc = {};
         desc.usage.index_buffer = true;
-        desc.usage.immutable = true;
-        desc.size = static_cast<std::size_t>(indexCount) * indexSize;
-        desc.data.ptr = data;
-        desc.data.size = desc.size;
+        desc.usage.dynamic_update = true;
+        desc.size = allocBytes;
         desc.label = "cna_index_buffer";
         bufferId_ = sg_make_buffer(&desc).id;
         if (sg_query_buffer_state(MakeBufferHandle(bufferId_)) != SG_RESOURCESTATE_VALID)
@@ -1612,6 +1663,14 @@ namespace CNA::Internal::Backends::Sokol
             bufferId_ = 0;
             throw std::runtime_error("Sokol backend: sg_make_buffer failed for an IndexBuffer");
         }
+        allocatedBytesEXT_ = allocBytes;
+        lastUpdateFrameEXT_ = 0;
+
+        // See SokolVertexBufferBackend::SetData's own comment on seeding a dynamic buffer's
+        // initial content via sg_update_buffer() rather than sg_buffer_desc.data.
+        sg_range range{ data, requiredBytes };
+        sg_update_buffer(MakeBufferHandle(bufferId_), &range);
+        if (ownerEXT_ != nullptr) lastUpdateFrameEXT_ = ownerEXT_->GetFrameIndexEXT();
 
         indexCount_ = indexCount;
     }
@@ -2975,6 +3034,10 @@ namespace CNA::Internal::Backends::Sokol
         EndPassIfActive();
         sg_commit();
         SDL_GL_SwapWindow(window_);
+        // plan_sokol.md SOKOL-24: sg_commit() is sokol_gfx's own frame boundary (it is what
+        // advances the internal frame counter sg_update_buffer()'s once-per-frame rule is
+        // checked against) -- advance this backend's own counter right alongside it.
+        ++frameIndexEXT_;
     }
 
     // ---------------------------------------------------------------------------------------
@@ -3127,17 +3190,17 @@ namespace CNA::Internal::Backends::Sokol
 
     std::unique_ptr<IVertexBufferBackend> SokolGraphicsBackend::CreateVertexBuffer(int vertexCapacity)
     {
-        return std::make_unique<SokolVertexBufferBackend>(vertexCapacity);
+        return std::make_unique<SokolVertexBufferBackend>(vertexCapacity, this);
     }
 
     std::unique_ptr<IIndexBufferBackend> SokolGraphicsBackend::CreateIndexBuffer16(int indexCapacity)
     {
-        return std::make_unique<SokolIndexBufferBackend>(indexCapacity, false);
+        return std::make_unique<SokolIndexBufferBackend>(indexCapacity, false, this);
     }
 
     std::unique_ptr<IIndexBufferBackend> SokolGraphicsBackend::CreateIndexBuffer32(int indexCapacity)
     {
-        return std::make_unique<SokolIndexBufferBackend>(indexCapacity, true);
+        return std::make_unique<SokolIndexBufferBackend>(indexCapacity, true, this);
     }
 
     std::unique_ptr<IRenderTargetBackend> SokolGraphicsBackend::CreateRenderTarget2D(

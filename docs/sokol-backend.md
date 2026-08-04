@@ -109,11 +109,18 @@ sokol_gfx boundary regardless of this flag (see "What does not work yet" below).
   and sized to exactly the largest run a uint16 index buffer can address. A frame that exceeds the
   cap raises `"Sokol backend: exceeded the per-frame sprite capacity of 16384 quads"` rather than
   silently dropping sprites.
-- **Every texture and buffer upload recreates its GPU resource.** sokol_gfx allows at most one
-  `sg_update_image()`/`sg_update_buffer()` per resource per frame, which a caller writing several
-  mip levels — or re-uploading a streaming vertex buffer — in one frame violates immediately.
-  Creating an immutable resource with initial data carries no such restriction, so that is what
-  every upload does. Correct in all cases, but it allocates; `SOKOL-24` covers improving it.
+- **Every texture upload still recreates its GPU resource** (`SOKOL-24` closed this same gap for
+  `VertexBuffer`/`IndexBuffer` only — see the next bullet). sokol_gfx allows at most one
+  `sg_update_image()` per resource per frame, which a caller writing several mip levels in one
+  frame would violate; creating an immutable image with initial data carries no such restriction,
+  so that is what every texture upload does. Correct, but it allocates on every call.
+- **`VertexBuffer`/`IndexBuffer` uploads reuse a `dynamic_update` sokol_gfx buffer via
+  `sg_update_buffer()` instead (`SOKOL-24`).** The buffer is allocated once, sized to the owning
+  buffer's own declared capacity, and only destroyed and recreated when a `SetData()` call's data
+  outgrows what is allocated, or a second `SetData()` on the same buffer lands within the same
+  frame — sokol_gfx's own one-update-per-buffer-per-frame limit (a violation of the real limit
+  would trip a hard `SOKOL_ASSERT`, not just a validation warning). A per-backend frame counter,
+  incremented once per `Present()`, is what lets each buffer tell the two cases apart.
 - **Back-buffer read-back is GL-only** (`glReadPixels`). sokol_gfx has no read-back API, so any
   other `CNA_SOKOL_API` refuses `ReadBackbuffer` instead of returning fabricated pixels.
 - **`TextureCube` allocates a real `sg_image`/`sg_view` pair as of `SOKOL-34`** (`SokolTextureCubeBackend`
@@ -204,6 +211,7 @@ ctest --test-dir cmake-build-sokol -R Sokol --output-on-failure
 | `Sokol_RenderTargetCube_Mip` | 3, `LevelCount` plus every texel of mip levels 1 and 2 read back via `RenderTargetCube::GetData()` (`SOKOL-47`) | all pass |
 | `Sokol_StateLifetimeRegressionMatrix` | 7: two-object `OcclusionQuery` interleaving in both begin/end orders plus a healthy fresh query afterward, and `DrawCustomEffect3D`'s `CullMode` applied independently of a preceding stock draw's leftover GL state (`SOKOL-48`) | all pass |
 | `Sokol_WireFrame` | 5: `Solid` fills the interior, `WireFrame` leaves it black (indexed and non-indexed) while genuinely rasterizing the quad's left edge red in both cases (`SOKOL-23`) | all pass |
+| `Sokol_VertexBuffer_Reupload` | 6: three same-shape `SetData()` calls across three frames each show the new colour *and* keep the identical `sg_buffer` id (the `sg_update_buffer()` reuse path actually firing, not silently still recreating), then a same-frame double `SetData()` shows the last write and gets a genuinely new id (the forced-recreate fallback) (`SOKOL-24`) | all pass |
 
 The render-target fixtures above are shared, backend-agnostic oracles also registered for EasyGL/
 Vulkan/bgfx/SDL_GPU/etc.; SOKOL reuses them rather than duplicating bespoke tests. As of `SOKOL-38`

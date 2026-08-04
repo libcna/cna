@@ -629,9 +629,15 @@ namespace CNA::Internal::Backends::Sokol
     /**
      * @brief Backend handle for a vertex buffer.
      *
-     * Each SetData() recreates the underlying immutable sokol_gfx buffer. sokol_gfx allows only
-     * one sg_update_buffer() per buffer per frame, whereas immutable creation is unrestricted, so
-     * recreation is what makes repeated uploads within a frame legal here.
+     * plan_sokol.md SOKOL-24: the underlying sokol_gfx buffer is `dynamic_update`, sized once (to
+     * the greater of the owning `VertexBuffer`'s own declared capacity and the first upload) and
+     * reused across SetData() calls via `sg_update_buffer()` whenever the new data still fits and
+     * this buffer has not already been updated once this frame. sokol_gfx permits at most one
+     * `sg_update_buffer()` per buffer per frame; a same-frame repeat upload, or one that outgrows
+     * what is currently allocated, destroys and recreates the buffer instead (the same "recreate
+     * on every SetData()" behaviour this class used unconditionally before SOKOL-24, and the only
+     * safe option `owner` being null degrades to, since there is then no frame counter to compare
+     * against).
      */
     class SokolVertexBufferBackend : public IVertexBufferBackend
     {
@@ -639,8 +645,12 @@ namespace CNA::Internal::Backends::Sokol
         /**
          * @brief Creates an empty vertex buffer handle with the given capacity hint.
          * @param vertexCapacity Number of vertices the owning VertexBuffer was created for.
+         * @param owner NOXNA (plan_sokol.md SOKOL-24). Owning backend, consulted for the current
+         *              frame index so repeated same-shape uploads can reuse the sokol_gfx buffer
+         *              via `sg_update_buffer()` instead of recreating it every time. Null falls
+         *              back to always recreating (still correct, just not the cheap path).
          */
-        explicit SokolVertexBufferBackend(int vertexCapacity);
+        explicit SokolVertexBufferBackend(int vertexCapacity, SokolGraphicsBackend* owner = nullptr);
 
         /** @brief Destroys the sokol_gfx buffer owned by this vertex buffer. */
         ~SokolVertexBufferBackend() override;
@@ -700,6 +710,14 @@ namespace CNA::Internal::Backends::Sokol
         int vertexCount_ = 0;
         std::size_t stride_ = 0;
         std::uint32_t bufferId_ = 0;
+        SokolGraphicsBackend* ownerEXT_ = nullptr;
+        /// plan_sokol.md SOKOL-24: byte size the current bufferId_ was actually created with --
+        /// an sg_update_buffer() is only legal while the new data still fits inside this.
+        std::size_t allocatedBytesEXT_ = 0;
+        /// plan_sokol.md SOKOL-24: ownerEXT_->GetFrameIndexEXT() as of the last sg_update_buffer()
+        /// on the current bufferId_, or 0 (never a real frame index) when it has not been
+        /// dynamically updated since it was (re)created.
+        std::uint64_t lastUpdateFrameEXT_ = 0;
         bool hasDeclaration_ = false;
         VertexDeclaration declaration_;
     };
@@ -707,8 +725,8 @@ namespace CNA::Internal::Backends::Sokol
     /**
      * @brief Backend handle for a 16- or 32-bit index buffer.
      *
-     * Recreates its immutable sokol_gfx buffer on every upload, for the same per-frame update
-     * restriction described on SokolVertexBufferBackend.
+     * plan_sokol.md SOKOL-24: same dynamic-buffer reuse strategy as SokolVertexBufferBackend --
+     * see that class's own doc comment.
      */
     class SokolIndexBufferBackend : public IIndexBufferBackend
     {
@@ -717,8 +735,11 @@ namespace CNA::Internal::Backends::Sokol
          * @brief Creates an empty index buffer handle with the given capacity hint.
          * @param indexCapacity  Number of indices the owning IndexBuffer was created for.
          * @param thirtyTwoBit   True when the owning IndexBuffer uses 32-bit indices.
+         * @param owner NOXNA (plan_sokol.md SOKOL-24). Same role as
+         *              `SokolVertexBufferBackend`'s own `owner` parameter.
          */
-        SokolIndexBufferBackend(int indexCapacity, bool thirtyTwoBit);
+        SokolIndexBufferBackend(int indexCapacity, bool thirtyTwoBit,
+                                 SokolGraphicsBackend* owner = nullptr);
 
         /** @brief Destroys the sokol_gfx buffer owned by this index buffer. */
         ~SokolIndexBufferBackend() override;
@@ -765,6 +786,11 @@ namespace CNA::Internal::Backends::Sokol
         int indexCount_ = 0;
         bool thirtyTwoBit_ = false;
         std::uint32_t bufferId_ = 0;
+        SokolGraphicsBackend* ownerEXT_ = nullptr;
+        /// plan_sokol.md SOKOL-24: see SokolVertexBufferBackend::allocatedBytesEXT_.
+        std::size_t allocatedBytesEXT_ = 0;
+        /// plan_sokol.md SOKOL-24: see SokolVertexBufferBackend::lastUpdateFrameEXT_.
+        std::uint64_t lastUpdateFrameEXT_ = 0;
     };
 
     /**
@@ -1325,6 +1351,22 @@ namespace CNA::Internal::Backends::Sokol
          * @param query The query object releasing the slot.
          */
         NOXNA void ReleaseOcclusionQueryEXT(SokolOcclusionQueryBackend* query);
+
+        /**
+         * @brief NOXNA (plan_sokol.md SOKOL-24). Monotonic counter incremented once per
+         * `Present()`/`sg_commit()`.
+         *
+         * `SokolVertexBufferBackend`/`SokolIndexBufferBackend` compare this against the frame
+         * index of their own last `sg_update_buffer()` call to decide whether a further in-place
+         * update is legal this frame -- sokol_gfx permits at most one `sg_update_buffer()` per
+         * buffer per frame (a second call in the same frame trips a hard `SOKOL_ASSERT`, not just
+         * a validation-layer warning).
+         *
+         * @return The current frame index (starts at 1, matching sokol_gfx's own internal
+         *         `_sg.frame_index` convention; never 0, used as this backend's own "no update
+         *         yet" sentinel).
+         */
+        NOXNA [[nodiscard]] std::uint64_t GetFrameIndexEXT() const { return frameIndexEXT_; }
 
         /**
          * @brief Compiles a custom `ShaderEffect` from raw GLSL source (plan_sokol.md SOKOL-28).
@@ -2287,5 +2329,7 @@ namespace CNA::Internal::Backends::Sokol
         /// buffer in this backend already uses, see BuildWireframeLineIndicesEXT()'s own doc
         /// comment.
         std::uint32_t wireframeIndexBufferId_ = 0;
+        /// plan_sokol.md SOKOL-24: see GetFrameIndexEXT()'s own doc comment.
+        std::uint64_t frameIndexEXT_ = 1;
     };
 }

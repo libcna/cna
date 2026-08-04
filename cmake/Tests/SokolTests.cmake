@@ -323,4 +323,15 @@ if(CNA_BUILD_TESTS AND CNA_BUILD_EXAMPLES
     cna_register_backend_test(NAME Sokol_WireFrame COMMAND cna_test_sokol_wireframe
         TIMEOUT 30 LABELS "Sokol"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_sokol.md SOKOL-24: VertexBuffer/IndexBuffer SetData() reuses its sokol_gfx buffer via
+    # sg_update_buffer() for same-shape re-uploads across frames instead of always recreating it,
+    # falling back to recreate when the data outgrows what is allocated or a second upload lands
+    # within the same frame (sokol_gfx's own one-update-per-buffer-per-frame rule).
+    cna_sokol_test(cna_test_sokol_vertexbuffer_reupload
+                    examples/sokol_vertexbuffer_reupload_test.cpp)
+    cna_register_backend_test(NAME Sokol_VertexBuffer_Reupload
+        COMMAND cna_test_sokol_vertexbuffer_reupload
+        TIMEOUT 30 LABELS "Sokol"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()
