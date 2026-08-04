@@ -181,7 +181,7 @@ GPU as RGBA8 unorm (8 bits per channel, linear).
 | Vector4 | 16 | ❌ | ❌ | ❌ | — | 32-bit float RGBA; requires GL_RGBA32F |
 | HalfSingle | 2 | ❌ | ❌ | ❌ | — | 16-bit half float R; requires GL_R16F |
 | HalfVector2 | 4 | ❌ | ❌ | ❌ | — | 16-bit half float RG; requires GL_RG16F |
-| HalfVector4 | 8 | ❌ | ❌ | ❌ | — | 16-bit half float RGBA; requires GL_RGBA16F — key format for HDR (NOXNA N20) |
+| HalfVector4 | 8 | ❌ | ❌ | ❌ | — | 16-bit half float RGBA; requires GL_RGBA16F — key format for HDR (NOXNA N11) |
 | HdrBlendable | 8 | ❌ | ❌ | ❌ | — | Alias for RGBA16F in FNA; same as HalfVector4 |
 | ColorBgraEXT | 4 | ❌ | ❌ | ❌ | ❌ | XNA3 legacy ABGR byte order; stored as RGBA8, byte order not respected |
 | **ColorSrgbEXT** | 4 | ❌ | ❌ | ❌ | ❌ | Stored as linear RGBA8; sRGB flag silently ignored; requires GL_SRGB8_ALPHA8 / VK_FORMAT_R8G8B8A8_SRGB |
@@ -217,7 +217,7 @@ GPU as RGBA8 unorm (8 bits per channel, linear).
 | # | Format(s) | Required GL/Vulkan format | Work needed |
 |---|-----------|--------------------------|------------|
 | T176a | ColorSrgbEXT | GL_SRGB8_ALPHA8 / VK_FORMAT_R8G8B8A8_SRGB | Forward `surfaceFormat` to backends; add sRGB branch |
-| T176b | HalfVector4 / HdrBlendable | GL_RGBA16F / VK_FORMAT_R16G16B16A16_SFLOAT | Required for NOXNA HDR render targets (N20) |
+| T176b | HalfVector4 / HdrBlendable | GL_RGBA16F / VK_FORMAT_R16G16B16A16_SFLOAT | Required for NOXNA HDR render targets (N11 EasyGL, N12 other backends) |
 | T176c | Dxt1/3/5 via SetData | GL_COMPRESSED_RGBA_S3TC_DXT1/3/5_EXT | Native GPU compressed upload path |
 
 ### Medium priority

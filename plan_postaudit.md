@@ -1569,9 +1569,10 @@ Two properties make this seam worth preserving through modularization:
 **No NoXNA API is designed or implemented here.** `NOXNA.md` remains the owner of that surface;
 `origin/claude/noxna-graphics-api-extension-lihfjk` is branch 18 of the 19.
 
-`NOXNA.md` already lists the tasks this plan is adjacent to — `N50` (`GraphicsDevice::DrawInstancedPrimitives`
-NOXNA overload), `N51` (instance-data `VertexBuffer` streaming helper) and `N52` (LOD selection helper),
-under §4.4 *Geometry & Instancing*, all `⬜ Not started`.
+`NOXNA.md` already lists the tasks this plan is adjacent to — `N50` (`InstancedRendererEXT`, the
+instance-stream helper over the existing `DrawInstancedPrimitives`) and `N51` (`LodGroupEXT` distance
+selection), under §8 *Geometry helpers*, both `⬜ Not started`. The `DrawInstancedPrimitives` overload
+this list previously named alongside them has since shipped and is no longer a backlog item.
 
 Eventual NoXNA graphics extensions are likely to want capabilities beyond the XNA 4.0 contract:
 

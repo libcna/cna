@@ -16,7 +16,7 @@ namespace CNA::Graphics {
      * pointers — the caller is responsible for lifetime management.
      *
      * This class is a settings bag only.  Actual PBR rendering requires a
-     * matching `PbrEffect` (Task N11) that reads these values and applies
+     * matching `PbrEffect` (Task N52) that reads these values and applies
      * them through a PBR GLSL/SPIR-V shader.
      */
     class PbrMaterial

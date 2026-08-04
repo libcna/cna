@@ -90,7 +90,7 @@ alongside the XNA-faithful `Microsoft::Xna::Framework` tree. Its shape:
 - **Gap in the current precedent, worth fixing in this new effort, not copying:**
   `PbrMaterial`/`RenderPipelineSettings` are settings-bag classes with no actual runtime
   behavior yet (per `PbrMaterial.hpp`'s own doc comment, "Actual PBR rendering requires
-  a matching `PbrEffect` ... Task N11" — not yet built) and no proper Google Test
+  a matching `PbrEffect` ... Task N52" — not yet built) and no proper Google Test
   coverage, only the one smoke-test executable. `CNA::Devices` should do better: real
   Google Test suites under `tests/CNA/Devices/`, matching the rigor
   `Microsoft::Devices::Sensors` already has (every public member tested, `SetXForTesting()`-style
