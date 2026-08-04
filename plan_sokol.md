@@ -4,6 +4,19 @@
 > stated acceptance criteria*; 🟨 code or documentation exists but has not met those criteria;
 > ⬜ not implemented.
 >
+> **Update (2026-08-04): `SOKOL-22`, `SOKOL-23` and `SOKOL-24` all closed.** `SOKOL-22`'s
+> remaining scope (Position/Color/TextureCoordinate/Normal/BlendWeight/BlendIndices vertex
+> declaration elements) was already complete; closing it mainly corrected stale plan/doc claims
+> that no CNA backend had PBR yet (`PbrEffect`/`SkinnedPbrEffect` are real everywhere except
+> Sokol -- newly tracked as `SOKOL-49`). `SOKOL-23` turned out not to be the permanent gap this
+> plan previously claimed: `RasterizerState.FillMode == WireFrame` is now implemented via the same
+> CPU-side triangle-to-`GL_LINES` re-expansion `EasyGLGraphicsBackend::DrawWireframe()` already
+> uses (`Sokol_WireFrame`). `SOKOL-24` replaced the always-recreate-per-`SetData()` `VertexBuffer`/
+> `IndexBuffer` path with a `dynamic_update` sokol_gfx buffer reused via `sg_update_buffer()`
+> across same-shape uploads (`Sokol_VertexBuffer_Reupload`). All three have their own detailed
+> closing notes in the task table below. 38 registered Sokol CTest cases now pass (36 -> 37 with
+> `Sokol_WireFrame` -> 38 with `Sokol_VertexBuffer_Reupload`).
+>
 > **Audit update (2026-08-03, commit `63a308d4`): the GLCORE backend is broadly functional but
 > the plan is not complete and several previously-green tasks need corrective follow-up.** All 28
 > registered Sokol GPU integration tests passed under Xvfb `:99`; `CnaTests` built successfully and
