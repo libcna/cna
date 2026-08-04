@@ -25,7 +25,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # failure injection, native identity/destruction accounting, and public resize-state checks.
     cna_dx3_test(cna_test_freedirect_resize_transaction examples/freedirect_resize_transaction_test.cpp)
     cna_register_backend_test(NAME FreeDirect_ResizeTransaction COMMAND cna_test_freedirect_resize_transaction
-        TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=dummy" LABELS "DX3;REMED-GFX-029")
+        TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=dummy" LABELS "FREEDIRECT;REMED-GFX-029")
 
     # plan_freedirect.md Phase X3 (DX3-20..DX3-28): texture/render-target backend CTest.
     cna_dx3_test(cna_test_freedirect_texture_rendertarget examples/freedirect_texture_rendertarget_test.cpp)
