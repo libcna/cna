@@ -176,51 +176,56 @@ Not implemented — each **throws with its own name** rather than rendering an a
   XCB connection) and has no Wayland surface member, so a Wayland session must use SDL's X11
   fallback: `SDL_VIDEODRIVER=x11`. A Wayland session fails at backend construction with that
   instruction rather than deep inside Diligent.
-- **OpenGL creates a device and renders most of the baseline, but is not fully verified or CTest-covered
-  yet (`DILIGENT-30`).** The verification below was performed on the Vulkan device type; running the
-  same GPU test binaries by hand with `CNA_DILIGENT_DEVICE=opengl` passes most checks. A real,
-  confirmed upstream DiligentCore v2.5.6 OpenGL-backend bug was root-caused and partially fixed this
-  session: `DeviceContextGLImpl::Flush()` (called by this backend's own `ReadBackbuffer()`/
-  `ReadTextureRegion()` to synchronize a staging-texture readback) wipes its internal SRB-binding
-  bookkeeping, including `ActiveSRBMask`, but `SetPipelineState()` skips recomputing it whenever the
-  *same* pipeline object is set again (an early-out on pipeline identity) -- which this backend does
-  on every draw that reuses a cached `ShaderVariant` pipeline. With `ActiveSRBMask` stuck at zero,
-  `BindProgramResources()` (the call that issues `glBindTexture`) is silently skipped on every draw
-  after a readback, leaving stale GL texture-unit content bound. Fixed with a GL-only
-  `context_->InvalidateState()` right after the existing `Flush()`/`WaitForIdle()` in both readback
-  paths, forcing the next `SetPipelineState()` to genuinely recompute `ActiveSRBMask`
-  (`renderTargetsBound_` is cleared alongside it, since `InvalidateState()` also wipes Diligent's own
-  render-target tracking). This fixes `SpriteBatch.Draw` with a `sourceRectangle` and
-  `DualTextureEffect`'s second layer; two related-but-distinct symptoms remain open --
-  sampling an unbound `RenderTarget2D` and `RenderTarget2D` MSAA resolve still fail under GL, evidently
-  a different trigger not yet root-caused.
+- **OpenGL creates a device and renders most of the baseline; 25 of 31 pixel-proof binaries fully
+  pass (`DILIGENT-30`/`DILIGENT-66`), and `ctest -R Diligent` now runs every binary under both
+  device types automatically (`DILIGENT-67`).** Two systemic OpenGL-only bugs were root-caused and
+  fixed:
+  1. **sRGB gamma.** DiligentCore's `RenderDeviceGLImpl::Initialize()` unconditionally calls
+     `glEnable(GL_FRAMEBUFFER_SRGB)` whenever the GL version supports the feature, regardless of
+     the swap chain's own requested (non-sRGB) colour format -- on this project's Mesa/llvmpipe
+     environment the default window framebuffer happens to be sRGB-capable, so every write was
+     silently gamma-encoded. Fixed by resolving `glDisable` through `SDL_GL_GetProcAddress` and
+     disabling `GL_FRAMEBUFFER_SRGB` right after OpenGL device creation.
+  2. **`ReadBackbuffer()`'s Y axis.** Reading the swap chain's own default framebuffer under GL
+     (`Texture2D_GL::CopyTexSubimage` → `glCopyTexSubImage2D`) uses GL's native bottom-up row
+     convention, unlike every other texture read in this backend (ordinary allocated textures are
+     self-consistently top-down). Fixed in `ReadBackbuffer()` itself: the requested source rows
+     are flipped about the back buffer's real height before the copy, and the CPU-side resample
+     loop un-reverses them afterward.
 
-  A second real, confirmed upstream bug was also root-caused and fixed this session:
-  `SkinnedEffect`'s (and, previously undiscovered, `PbrEffect`'s and the per-vertex-lighting shader
-  family's) vertex shaders failed to convert to GLSL at all. HLSL2GLSL cannot correctly convert a
-  C-style matrix-truncation cast, `(float3x3)someFloat4x4Expr`, unless the source expression is a
-  bare, directly-reflectable symbol. Fixed by avoiding the cast syntax entirely: `(float3x3)m` for a
-  `row_major float4x4 m` is exactly equivalent, at the HLSL language level, to the explicit
-  constructor call `float3x3(m[0].xyz, m[1].xyz, m[2].xyz)` -- a pure syntactic rewrite with no
-  semantic change (indexing `m[row]` always returns a row vector regardless of storage packing),
-  confirmed by re-running every affected shader's own Vulkan-device tests and seeing byte-identical
-  pixel output to before. `Diligent_Skinned` now compiles and passes 4/4 under GL (previously didn't
-  compile at all). `Diligent_VertexLit`/`Diligent_Pbr` now compile and run too, but expose *separate,
-  newly-visible* numeric mismatches -- per-vertex-vs-per-pixel lighting disagreement and an
-  off-magnitude analytic BRDF result -- not yet root-caused, out of this fix's own scope.
+  Together these fixed `Diligent_Pbr`, `Diligent_LightingFidelity`, `Diligent_Skinned`,
+  `Diligent_Npot`, `Diligent_MSAA`, `Diligent_DrawOffset`, `Diligent_VertexLit`,
+  `Diligent_SpriteFont` and 6 of `Diligent_DepthBias`'s 7 checks.
 
-  A broader manual sweep this session also found `Diligent_ReferenceStencil`, `SpriteFont`'s
-  `FlipVertically` check, hardware instancing, `DrawIndexedPrimitives`' `baseVertex` case, `Texture2D`
-  NPOT sampling through a real draw, and `RenderTarget2D` mip-generation's "level 0 unaffected" check
-  all fail under GL too -- none investigated yet. OpenGL device-type support is meaningfully less
-  complete than a first glance at this backend's Vulkan-verified feature list would suggest.
+  Six checks across six binaries remain open under GL, all documented in `plan_diligent.md`
+  `DILIGENT-66`: `Diligent_MultiSampleMask` and the instancing family
+  (`Diligent_Instanced`/`Diligent_InstancedStride`) are confirmed genuine upstream/driver
+  limitations, not CNA bugs -- `SampleMask` is explicitly unimplemented in DiligentCore v2.5.6's
+  own GL backend (`GLContextState::SetBlendState()` logs an error and does nothing), and
+  DiligentCore's own `VAOCache.cpp` instancing setup shows no defect, pointing at a Mesa/llvmpipe
+  software-rasterizer bug in per-instance divisor fetching instead. `Diligent_DepthBias`'s
+  remaining failure is the same pre-existing constant-`DepthBias` environment limitation Vulkan
+  also has (see below), now at parity rather than a GL-specific regression.
+  `Diligent_RenderTargetMipGen`'s two failures are a related-but-distinct, newly root-caused GL
+  defect (not the same mechanism as fix 2 above): rendering *into* an ordinary FBO under GL writes
+  content genuinely upside-down (confirmed by matching a vertically-mirrored expected pattern
+  exactly), because XNA's `top=0` orthographic-projection convention implicitly assumes a
+  rasterizer where NDC Y=+1 maps to row 0 -- true for Vulkan/D3D, but OpenGL's rasterizer always
+  maps NDC Y=+1 to the *highest* row index of the viewport, a fixed, unconfigurable API property.
+  A real fix needs a Y-flip in the projection/vertex path specifically for non-default render
+  targets under GL, verified across both the sprite and 3D draw paths and every render-target
+  type -- not yet attempted, given the blast radius. `Diligent_ReferenceStencil` remains
+  unexplained; static analysis of the override mechanism shows no defect on paper.
 - **Direct3D 11/12 are code paths only.** They compile only in a Windows-targeting build and have
   not been run.
 - **Depth-stencil is always `D24_UNORM_S8_UINT`**, regardless of the requested `DepthFormat`.
 - **MRT colour write masks have no effect on slots 1..3** — every built-in shader here declares a
   single output, so only slot 0 ever receives fragments regardless of the requested mask.
-  `BlendState.MultiSampleMask` also has no effect: it targets per-sample coverage, which this
-  backend's pipelines don't expose a way to set.
+- **`BlendState.MultiSampleMask` reaches `Dg::GraphicsPipelineDesc::SampleMask` and works on
+  Vulkan/D3D11/D3D12** (`DILIGENT-60`, verified by `Diligent_MultiSampleMask`) **but is
+  unimplemented in DiligentCore v2.5.6's own OpenGL backend** — `GLContextState::SetBlendState()`
+  logs an error and silently does nothing whenever the requested mask isn't `0xFFFFFFFF`. Not
+  fixable from this backend's own code without bypassing Diligent's GL abstraction entirely.
 - **`RenderTargetCube` is never multisampled**, even when the back buffer or a `RenderTarget2D` is —
   requesting MSAA on one clamps to 1 (`DILIGENT-25`).
 - **`RasterizerState.DepthBias` (the constant term) has no observable effect on this project's
@@ -241,15 +246,24 @@ preference order and the `CNA_DILIGENT_DEVICE` override. It needs no GPU, no win
 ctest --test-dir cmake-build-diligent -R DiligentDeviceSelection --output-on-failure
 ```
 
-Twenty-four further binaries are the real-device pixel proofs (116 checks total): `Diligent_2D` (6),
-`Diligent_3D` (6), `Diligent_RenderTarget` (5), `Diligent_RenderTargetCube` (4),
-`Diligent_AlphaTestFog` (4), `Diligent_DualTextureEnvMap` (6), `Diligent_Skinned` (4),
-`Diligent_MRT` (4), `Diligent_OcclusionQuery` (4), `Diligent_MSAA` (5), `Diligent_Instanced` (4),
+Thirty-one further binaries are the real-device pixel proofs (197 checks total, plus
+`Diligent_DeviceSelectionIntegration`'s own 7 device-selection scenarios, counted separately since
+it asserts on process exit codes rather than pixels): `Diligent_2D` (6), `Diligent_3D` (6),
+`Diligent_RenderTarget` (5), `Diligent_RenderTargetCube` (4), `Diligent_AlphaTestFog` (4),
+`Diligent_DualTextureEnvMap` (6), `Diligent_Skinned` (4), `Diligent_MRT` (4),
+`Diligent_OcclusionQuery` (4), `Diligent_MSAA` (6), `Diligent_Instanced` (4),
 `Diligent_DrawOffset` (5), `Diligent_SetDataOptions` (4), `Diligent_VertexLit` (4),
-`Diligent_Pbr` (5), `Diligent_DepthBias` (4), `Diligent_ReferenceStencil` (1),
+`Diligent_Pbr` (5), `Diligent_DepthBias` (7), `Diligent_ReferenceStencil` (1),
 `Diligent_FillMode` (3), `Diligent_Anisotropic` (1), `Diligent_SpriteFont` (4),
-`Diligent_Model` (1), `Diligent_Mip` (22), `Diligent_Npot` (3) and `Diligent_RenderTargetMipGen` (7).
-They clear, draw `SpriteBatch` quads and 3D primitives on the back buffer and
+`Diligent_Model` (1), `Diligent_Mip` (22), `Diligent_Npot` (3), `Diligent_RenderTargetMipGen` (7),
+`Diligent_ScissorPipelineCache` (36), `Diligent_MultiSampleMask` (9), `Diligent_InstancedStride` (6),
+`Diligent_CapabilityConsistency` (4), `Diligent_BackbufferReadbackBounds` (16) and
+`Diligent_LightingFidelity` (6). The last six were added by `DILIGENT-58`/`60`/`61`/`63`/`65`/`59`
+respectively to close a real coverage gap: no test previously exercised scissor-enable pipeline-key
+completeness, `BlendState.MultiSampleMask`, capability/device-consistency, back-buffer readback
+bounds under every presentation mode, non-standard instancing strides, or stock-effect emissive
+colour and non-uniform-world normal transforms at all. They clear, draw `SpriteBatch` quads and 3D
+primitives on the back buffer and
 into off-screen 2D/cube targets, and assert on pixels (or query results) read back through
 `GraphicsDevice.GetBackBufferData` / `RenderTarget2D.GetData` / `RenderTargetCube.GetData` /
 `OcclusionQuery`. `Diligent_MSAA` uses a diagonal-edge differential (binary transition with MSAA
@@ -312,8 +326,40 @@ known colours -- no row-pitch/stride-shift bug in the staging-texture path. `Dil
 on unbind) performs a genuine box-filter downsample rather than a nearest-pixel copy or a silent
 no-op: an exact Red/Blue checkerboard pixel-copied into level 0 of a 4x4 `mipMap` target reads back
 level 1 (2x2) and level 2 (1x1) as the real `(128,0,128)` blend at every texel, not pure Red, pure
-Blue, or black. 115 of the 116 checks pass against a real Vulkan device; the one known failure
-(`Diligent_DepthBias`'s constant-bias sub-case) is left visible rather than masked. On a machine
+Blue, or black -- but see [Known limitations](#known-limitations), its own render-to-FBO content is
+genuinely Y-flipped under the OpenGL device type, still open. `Diligent_ScissorPipelineCache`
+(`DILIGENT-58`) toggles `RasterizerState.ScissorTestEnable` across `SpriteBatch`, indexed-3D and
+instanced draws that all share one cached pipeline-state object, proving the immutable-PSO cache
+keys on scissor-enable rather than silently reusing a pipeline built for the opposite state.
+`Diligent_MultiSampleMask` (`DILIGENT-60`) proves `BlendState.MultiSampleMask` reaches
+`Dg::GraphicsPipelineDesc::SampleMask` at both 1x and 4x MSAA, including an A→B→A cache-reuse
+sequence -- real and working on Vulkan; unimplemented in DiligentCore's own OpenGL backend (see
+[Known limitations](#known-limitations)). `Diligent_InstancedStride` (`DILIGENT-65`) proves
+`DrawInstancedPrimitivesEx` reads real per-buffer strides instead of a hardcoded 16/64, with
+non-standard vertex/instance strides, `startIndex`+`baseVertex` composed with a non-standard
+stride, and two undersized-stride rejections. `Diligent_CapabilityConsistency` (`DILIGENT-61`)
+proves `SupportsCapability()` agrees with what the corresponding `Create`/`Apply` call actually
+does on the live device, closing a gap where the two could silently disagree.
+`Diligent_BackbufferReadbackBounds` (`DILIGENT-63`) constructs `IGraphicsBackend` directly (the
+physical/virtual mismatch it needs can't be produced through the public API in this headless
+sandbox) and proves `ReadBackbuffer()` is valid and bounded -- full-canvas and sub-region reads
+across all five `CnaPresentationMode`s, plus Overscan's own naturally-out-of-bounds edges reading
+back zero instead of crashing or shifting. `Diligent_LightingFidelity` (`DILIGENT-59`)
+hand-derives pixel values for emissive isolation, specular scaled by final alpha, multi-light
+additive summation and non-uniform-world normal transforms (World's inverse-transpose, not World
+itself) -- the four defects this task's stock-effect lighting fix corrected.
+`Diligent_DeviceSelectionIntegration` (`DILIGENT-57`) forks one child process per device-selection
+scenario (`vulkan`/`vk`/`opengl`/`gl`/`gles`/`auto`/an intentionally bogus value) and proves each
+one either round-trips a `Clear`+`GetBackBufferData()` correctly or, for the bogus value, is
+rejected with a clean exception rather than hanging or silently falling back.
+
+191 of 197 pixel checks pass against a real Vulkan device; the one known failure
+(`Diligent_DepthBias`'s constant-bias sub-case) is left visible rather than masked -- see
+[Known limitations](#known-limitations). `DILIGENT-67` also registers every one of these 31
+binaries a second time with `CNA_DILIGENT_DEVICE=opengl` forced (the `<Name>_OpenGL` CTest
+entries), so `ctest -R Diligent` exercises both device types on every run instead of only
+whichever one `GetDeviceTypePreferenceOrder()` picks by default; the current OpenGL-specific
+results are also in [Known limitations](#known-limitations). On a machine
 with no usable device the binaries exit 77 and print `[SKIP] CNA Diligent smoke`, which CTest
 reports as a skip — reporting a
 pass with nothing rendered would be dishonest.
