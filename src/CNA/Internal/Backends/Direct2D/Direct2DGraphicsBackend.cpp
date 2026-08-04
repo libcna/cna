@@ -2284,6 +2284,22 @@ namespace CNA::Internal::Backends::Direct2D
              ((needsTintEffect || nonPremultipliedSource_) &&
               ((needsTintEffect && !SupportsColorMatrixEffect()) ||
                (nonPremultipliedSource_ && !SupportsPremultiplyEffect()))));
+        // D2D-85: unlike ordinaryTexture (which falls back to MakeSpritePixels' CPU path above),
+        // a RenderTarget2D source has no CPU shadow to fall back to. Without this check, the same
+        // missing-effect condition would fall through to the ImageBrush branch below and its
+        // ThrowIfFailed(CreateEffect(...)) would surface a raw HRESULT (e.g. "hr=0x88990028")
+        // wrapped in a generic std::runtime_error instead of a named, documented capability gap.
+        if (renderTargetTexture &&
+            ((needsTintEffect && !SupportsColorMatrixEffect()) ||
+             (nonPremultipliedSource_ && !SupportsPremultiplyEffect())))
+        {
+            throw System::NotSupportedException(
+                "Direct2D cannot tint or apply a NonPremultiplied conversion to a "
+                "RenderTarget2D SpriteBatch source on this device: the required GPU "
+                "ColorMatrix/Premultiply effect is unavailable, and RenderTarget2D sources "
+                "(unlike Texture2D) have no CPU fallback path. Draw with Color::White and a "
+                "premultiplied source, or copy the render target to a Texture2D first.");
+        }
 
         ComPtr<ID2D1Bitmap1> transient;
         ID2D1Bitmap1* bitmap = ordinaryTexture

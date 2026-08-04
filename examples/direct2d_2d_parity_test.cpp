@@ -929,7 +929,35 @@ protected:
         }
         else
         {
-            std::printf("[SKIP] RenderTarget2D source Color.A/NonPremultiplied (Wine Direct2D lacks ColorMatrix)\n");
+            // D2D-85: when ColorMatrix isn't available (this Wine build), tinting a RenderTarget2D
+            // SpriteBatch source must throw a NAMED, documented capability exception instead of a
+            // generic std::runtime_error wrapping a raw HRESULT like "hr=0x88990028". Unlike
+            // Texture2D, a RenderTarget2D source has no CPU fallback to fall back to instead.
+            // SpriteSortMode::Immediate is used (not Deferred) so Draw() calls the native backend
+            // synchronously instead of queueing -- with Deferred, the actual native draw (and this
+            // exception) would fire inside End()'s flushBatch(), not Draw(), and a caught exception
+            // there would leave the queued sprite for a retry loop rather than a clean recovery.
+            bool namedExceptionThrown = false;
+            sprites_->Begin(SpriteSortMode::Immediate, BlendState::AlphaBlend, &point, nullptr, &scissorDisabled);
+            try
+            {
+                sprites_->Draw(blendSourceTarget, Rectangle(0, 4, 4, 4), Rectangle(0, 0, 1, 1), halfAlphaTint);
+            }
+            catch (const System::NotSupportedException&)
+            {
+                namedExceptionThrown = true;
+            }
+            sprites_->End();
+            std::printf("[%s] RenderTarget2D source tint without ColorMatrix throws a named "
+                        "NotSupportedException (not a raw HRESULT)\n",
+                        namedExceptionThrown ? "PASS" : "FAIL");
+            passed = passed && namedExceptionThrown;
+
+            device.Clear(Color::Black);
+            sprites_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, nullptr, &scissorDisabled);
+            sprites_->Draw(*white_, Rectangle(0, 0, 2, 2), Rectangle(0, 0, 1, 1), Color::White);
+            sprites_->End();
+            check("Direct2D usable after rejected RenderTarget2D source tint", 0, 0, Color::White);
         }
 
         // 10. A mipmapped Texture2D owns one Direct2D bitmap per initialized level. SpriteBatch
