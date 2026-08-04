@@ -334,9 +334,9 @@ namespace CNA::Internal::Backends::D3D10
             device_->UpdateSubresource(texture_, 0, nullptr, rgba, rowPitch, 0);
         }
 
-        void GetData(int /*level*/, int x, int y, int w, int h, void* data, int /*dataLength*/) const override
+        [[nodiscard]] bool GetData(int /*level*/, int x, int y, int w, int h, void* data, int /*dataLength*/) const override
         {
-            if (w <= 0 || h <= 0) return;
+            if (w <= 0 || h <= 0) return true;
             D3D10_TEXTURE2D_DESC stagingDesc{};
             stagingDesc.Width = static_cast<UINT>(width_);
             stagingDesc.Height = static_cast<UINT>(height_);
@@ -364,6 +364,7 @@ namespace CNA::Internal::Backends::D3D10
             }
             staging->Unmap(0);
             staging->Release();
+            return true;
         }
 
         [[nodiscard]] ID3D10ShaderResourceView* SRV() const override { return srv_; }
@@ -434,9 +435,9 @@ namespace CNA::Internal::Backends::D3D10
         SDL_Texture* GetNativeTexture() const override { return nullptr; }
         void UpdatePixels(const uint8_t*, int) override {}
 
-        void GetData(int /*level*/, int x, int y, int w, int h, void* data, int /*dataLength*/) const override
+        [[nodiscard]] bool GetData(int /*level*/, int x, int y, int w, int h, void* data, int /*dataLength*/) const override
         {
-            if (w <= 0 || h <= 0) return;
+            if (w <= 0 || h <= 0) return true;
             D3D10_TEXTURE2D_DESC stagingDesc{};
             stagingDesc.Width = static_cast<UINT>(width_);
             stagingDesc.Height = static_cast<UINT>(height_);
@@ -464,6 +465,7 @@ namespace CNA::Internal::Backends::D3D10
             }
             staging->Unmap(0);
             staging->Release();
+            return true;
         }
 
         [[nodiscard]] bool HasRealDepthBuffer(bool depthFormatWasRequested) const override
@@ -1152,7 +1154,7 @@ namespace CNA::Internal::Backends::D3D10
         }
         impl_->currentRTVCount = count;
         impl_->currentDSV = nullptr; // No shared per-target depth for MRT in this v1 (design decision 3).
-        auto* firstRt = dynamic_cast<D3D10RenderTargetBackend*>(rts[0]);
+        auto* firstRt = dynamic_cast<D3D10RenderTargetBackend*>(renderTargets[0].GetRenderTarget2D());
         impl_->currentTargetWidth = firstRt ? firstRt->GetWidth() : impl_->width;
         impl_->currentTargetHeight = firstRt ? firstRt->GetHeight() : impl_->height;
         impl_->boundSingleTarget = count == 1 ? firstRt : nullptr;

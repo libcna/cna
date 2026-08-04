@@ -576,9 +576,9 @@ namespace CNA::Internal::Backends::Dx8
         {
             ThrowMipLevelUnsupported(level);
         }
-        void GetData(int, int x, int y, int w, int h, void* data, int /*dataLength*/) const override
+        [[nodiscard]] bool GetData(int, int x, int y, int w, int h, void* data, int /*dataLength*/) const override
         {
-            if (w <= 0 || h <= 0) return;
+            if (w <= 0 || h <= 0) return true;
             D3DLOCKED_RECT locked{};
             RECT rect{static_cast<LONG>(x), static_cast<LONG>(y),
                       static_cast<LONG>(x + w), static_cast<LONG>(y + h)};
@@ -593,6 +593,7 @@ namespace CNA::Internal::Backends::Dx8
                                  dst + static_cast<std::size_t>(row) * rowBytes, w);
             }
             surface_->UnlockRect();
+            return true;
         }
 
         void BindAsRenderTarget() override
