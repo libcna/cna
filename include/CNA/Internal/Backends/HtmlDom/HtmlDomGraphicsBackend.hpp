@@ -17,8 +17,10 @@ namespace CNA::Internal::Backends::HtmlDom
      * visible sprite, placed with a CSS `transform`, textured with `background-image`, faded with
      * `opacity` -- inside a `<div id="cna-dom-root">` this backend creates over the `<canvas>`
      * SDL3's Emscripten video driver already owns. Nothing in the sprite path rasterizes into a
-     * canvas: the browser's compositor does the drawing, so a frame in which nothing moved costs
-     * nothing at all, and a frame in which sprites only moved costs one `transform` write each.
+     * canvas: the browser's compositor does the drawing, so a sprite whose properties did not
+     * change costs no CSS write at all (HTMLDOM-110 -- measured, not merely asserted: the JS flush
+     * call itself still happens every frame, since a real XNA game keeps resubmitting static
+     * sprites regardless), and a frame in which sprites only moved costs one `transform` write each.
      *
      * See `plan_html_dom.md` for the design decisions and `docs/html-dom-backend.md` for the
      * capability boundary. The 3D surface -- depth/stencil clears, vertex/index buffers, every

@@ -18,7 +18,7 @@ produced:
 |---|---|---|
 | `cna_test_htmldom_smoke` | DOM surface, sprite pool/recycling, `RenderTarget2D` readback, backbuffer refusal, `SpriteFont`, `TextureAddressMode::Wrap`/`Mirror`/mixed-axis, `SetScissorRect` (per-batch region isolation, region container has a real non-zero layout box, true per-flush paint order across regions, non-destructive eviction, honours `RasterizerState.ScissorTestEnable`), resize + scissor interaction, `SetViewport` sub-rectangle (per-batch, root never moves, no cross-batch retroactive offset), every `CnaPresentationMode`'s real scale/offset geometry under a mismatched aspect ratio, `SetPresentationMode` ordinal validation, `TransformWindowToLogical` outside-Letterbox-bar result (HTMLDOM-108) | 63/63 + 2 real screenshot pixel checks |
 | `cna_test_htmldom_pixel_verification` | Pixel-exact tint/`AlphaBlend`/`Opaque`/`Additive`, multi-glyph `SpriteFont` (kerning/`\n`/scale/flip), `transformMatrix`, render-target-as-`Draw()`-source, plain-texture `GetData`, `FromStream` decode, `TextureAddressMode::Mirror`/mixed-axis tiling, render-target `Viewport` offset, render-target scissor clip (enabled vs. disabled), `TextureAddressMode::Clamp` edge-extension (fully outside, point vs. linear, scaled+tinted), `NonPremultiplied`/`Additive` translucent-source alpha (documented gap), zero-alpha, tint alpha, translucent render-target write/readback/resample premultiplied-alpha round trip (HTMLDOM-106) | 28/28 |
-| `cna_test_htmldom_stress` | Performance benchmark, 300-frame stability run, variant-cache eviction under sustained churn, deterministic LRU hit-promotion/eviction-identity (HTMLDOM-109), `SetData` cache regeneration | 8/8 |
+| `cna_test_htmldom_stress` | Performance benchmark, 300-frame stability run, variant-cache eviction under sustained churn, deterministic LRU hit-promotion/eviction-identity (HTMLDOM-109), `SetData` cache regeneration, byte-identical static-resubmit flush-call/CSS-write instrumentation (HTMLDOM-110) | 10/10 |
 | `cna_test_htmldom_dispose` | Texture/render-target dispose actually shrinks the JS texture registry, bound-target auto-unbind, create/destroy churn, texture destruction and render-target rebinding each shrink the global variant cache by exactly their own contribution (HTMLDOM-109) | 10/10 |
 | `cna_htmldom_visual_demo` | Screenshot-verified visual demo (not a PASS/FAIL page) | — |
 
@@ -161,9 +161,30 @@ with sprite counts oscillating 5-50/frame and tints cycling through 300+ distinc
 the sprite pool stays exactly bounded at the true peak (no leak) and the variant LRU cache caps at
 exactly 256 under sustained real eviction pressure, not merely "never filled up".
 
-**Fast here:** a static frame (zero cost — no JS runs and nothing repaints); moving, rotating,
-scaling or fading sprites (one `transform`/`opacity` write each, composited on the GPU); large
-sprite counts that stay stable frame to frame; batches of any size (one wasm→JS crossing per batch).
+**"Zero cost when nothing changes" (HTMLDOM-110), corrected to what is actually true and
+instrumented, not merely asserted**: a real XNA game resubmits its static sprites every frame —
+`SpriteBatch.End()` always crosses the wasm/JS boundary and walks every command in the batch
+(`Module['cnaDomFlushCallCount']`, one real call per non-empty flush, no fewer) — so "no JS runs"
+for an unchanged frame was never literally true. What genuinely reaches zero is CSS property
+**writes**: per-property diffing means a value that did not change is never assigned
+(`Module['cnaDomStyleWriteCount']`), so nothing changing means no layout, no paint, and no
+composite-order work either, since none of those can happen without a write to trigger them.
+Measured directly: 200 byte-identical sprites (same position/tint/texture, every single frame, no
+variation at all) resubmitted for 30 consecutive frames produced exactly 30 flush calls and exactly
+**0** CSS property writes, averaging **0.7-0.8 ms/frame** — real, non-zero, but roughly 30-40%
+cheaper per sprite than the 500-*moving*-sprite number above. **The investigation this correction
+required found a genuine, previously-undocumented defect while instrumenting**: the default
+`'full'`-region sprites' own `z-index` (needed only to interleave paint order against OTHER
+regions, HTMLDOM-103) was written on *every single flush unconditionally*, since its own per-flush
+paint-order counter never repeats a value — measured at exactly `spriteCount × frameCount` CSS
+writes for a scene that never used a scissor rect at all. Fixed: that write is now skipped
+entirely for as long as no named region has ever existed this session, which is what let the
+static-resubmit measurement above reach a genuine, real zero.
+
+**Fast here:** a static frame (zero CSS writes/layout/paint/composite work — but NOT zero JS, see
+above); moving, rotating, scaling or fading sprites (one `transform`/`opacity` write each,
+composited on the GPU); large sprite counts that stay stable frame to frame; batches of any size
+(one wasm→JS crossing per batch, always, even for unchanged content).
 
 **Slow here:** uploading texture pixels (PNG encode per upload); animating a sprite's tint RGB every
 frame (a new cached variant per distinct colour, LRU-capped at 256); render-target-heavy frames

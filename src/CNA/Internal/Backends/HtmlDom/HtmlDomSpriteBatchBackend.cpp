@@ -23,13 +23,25 @@
 // rebuilding the elements, would give up exactly that. Nothing here ever READS layout (no
 // getBoundingClientRect, no offsetWidth), so no forced synchronous reflow is possible either.
 //
+// plan_html_dom.md HTMLDOM-110: this diffing is what makes "an unchanged sprite costs zero CSS
+// writes" TRUE -- it does NOT make an unchanged FRAME free of JS work. A real XNA game resubmits
+// its static sprites every frame regardless, and this function still runs (cnaDomFlushCallCount)
+// and still walks every command in the batch to reach that diffing in the first place; only the
+// actual property WRITES (cnaDomStyleWriteCount) are what genuinely reach zero for byte-identical
+// content. See docs/html-dom-backend.md's Performance section for the corrected claim and the real
+// measured numbers.
+//
 // Sprite n of THIS BATCH always lands on pool element n of the region THIS BATCH resolves to (see
 // HTMLDOM-94 below), and elements are appended to that region's container in pool order, so
 // document order within one region equals draw order within the batches that landed there.
 // Painter's-algorithm ordering ACROSS different regions (including the default 'full' one) is
 // realized via a per-flush `z-index` (HTMLDOM-103), not DOM position -- DOM position alone only
 // ever reflected each region's own FIRST-creation order, not the actual sequence its flushes
-// happened in a given frame.
+// happened in a given frame. HTMLDOM-110: that z-index write is itself skipped for the default
+// 'full' region's own sprites whenever no named region has ever existed this session (see
+// needsFullRegionZIndex below) -- with nothing to interleave against, an earlier version wrote it
+// on every single flush regardless, a real per-frame cost for the overwhelmingly common
+// no-scissor-rect case that had nothing to do with anything actually changing.
 //
 // With a render target bound there is no DOM to write to (a <div> cannot render into an off-screen
 // surface), so the very same command array is replayed into that target's Canvas2D context instead
@@ -44,6 +56,13 @@ EM_JS(void, CNA_HtmlDom_FlushSprites, (const void* cmds, int count, int stride,
                                        double m0, double m1, double m2, double m3, double m4, double m5,
                                        int hasMatrix, int scissorEnabled), {
     if (count <= 0) return;
+    // plan_html_dom.md HTMLDOM-110: NOXNA instrumentation -- every real (non-empty) flush crosses
+    // the wasm/JS boundary and runs this function's own body once per SpriteBatch Begin/End batch,
+    // REGARDLESS of whether any of it turns into an actual CSS write below (cnaDomStyleWriteCount
+    // is the separate counter for that). A real XNA game resubmits its static sprites every frame,
+    // so this count is never zero for a genuinely static scene -- direct, measured counter-evidence
+    // against any claim that "no JS runs" for an unchanged frame.
+    ++Module['cnaDomFlushCallCount'];
     const base = cmds >> 2;
     const targetCtx = Module['cnaDomBoundCtx'];
 
@@ -199,8 +218,23 @@ EM_JS(void, CNA_HtmlDom_FlushSprites, (const void* cmds, int count, int stride,
     const isFullRegion = container === root;
     if (!isFullRegion) {
         const z = String(paintOrder);
-        if (container.style.zIndex !== z) container.style.zIndex = z;
+        if (container.style.zIndex !== z) { container.style.zIndex = z; ++Module['cnaDomStyleWriteCount']; }
     }
+    // plan_html_dom.md HTMLDOM-110: per-sprite z-index on 'full'-region sprites exists ONLY to
+    // interleave their paint order against sprites in OTHER regions within the same frame -- with
+    // no named region ever created this session, there is nothing to interleave against (every
+    // 'full' sprite already paints in correct relative order via DOM/pool position alone), so the
+    // write is skipped entirely. An earlier version wrote it on EVERY flush unconditionally -- a
+    // real, measured per-frame cost (instrumented via cnaDomStyleWriteCount) that directly
+    // contradicted this backend's own "nothing changes -> nothing costs anything" claim: even a
+    // frame resubmitting byte-identical content wrote N CSS properties (N = sprite count) for no
+    // visible effect, since equal z-index values never change relative stacking order among
+    // themselves. Narrow, accepted caveat: on the exact frame a named region is FIRST created this
+    // session, a 'full' flush that already ran EARLIER in that SAME frame keeps its default (no
+    // z-index) stacking value, which could show through one frame off from a brand new named
+    // region flushed LATER in that same frame -- a one-time transition, never recurring once any
+    // named region exists, not worth a retroactive same-frame re-stamp to close completely.
+    const needsFullRegionZIndex = Module['cnaDomAnyNamedRegionEverCreated'];
 
     for (let i = 0; i < count; ++i) {
         const o = base + i * stride;
@@ -244,25 +278,28 @@ EM_JS(void, CNA_HtmlDom_FlushSprites, (const void* cmds, int count, int stride,
         const st = el.__cnaState;
         const style = el.style;
 
-        if (st.w !== sw0) { style.width = sw0 + 'px'; st.w = sw0; }
-        if (st.h !== sh0) { style.height = sh0 + 'px'; st.h = sh0; }
-        if (st.url !== variant.url) { style.backgroundImage = 'url(' + variant.url + ')'; st.url = variant.url; }
+        if (st.w !== sw0) { style.width = sw0 + 'px'; st.w = sw0; ++Module['cnaDomStyleWriteCount']; }
+        if (st.h !== sh0) { style.height = sh0 + 'px'; st.h = sh0; ++Module['cnaDomStyleWriteCount']; }
+        if (st.url !== variant.url) {
+            style.backgroundImage = 'url(' + variant.url + ')'; st.url = variant.url;
+            ++Module['cnaDomStyleWriteCount'];
+        }
 
         // plan_html_dom.md HTMLDOM-104: (-sx,-sy) uses the RESOLVED source coordinates -- shifted
         // into the padded image's own coordinate space when Clamp overflow required one -- not the
         // raw command values, so the requested source rect still aligns correctly.
         const bp = (-sx) + 'px ' + (-sy) + 'px';
-        if (st.bp !== bp) { style.backgroundPosition = bp; st.bp = bp; }
+        if (st.bp !== bp) { style.backgroundPosition = bp; st.bp = bp; ++Module['cnaDomStyleWriteCount']; }
 
         // Two-value background-repeat shorthand: one repetition style per axis, independent of
         // each other (HTMLDOM-97) -- 'no-repeat no-repeat' reads identically to plain 'no-repeat'.
         const rep = ((flags & 8) !== 0 ? 'repeat' : 'no-repeat') + ' ' +
                     ((flags & 32) !== 0 ? 'repeat' : 'no-repeat');
-        if (st.rep !== rep) { style.backgroundRepeat = rep; st.rep = rep; }
+        if (st.rep !== rep) { style.backgroundRepeat = rep; st.rep = rep; ++Module['cnaDomStyleWriteCount']; }
         const ir = (flags & 4) !== 0 ? 'auto' : 'pixelated';
-        if (st.ir !== ir) { style.imageRendering = ir; st.ir = ir; }
+        if (st.ir !== ir) { style.imageRendering = ir; st.ir = ir; ++Module['cnaDomStyleWriteCount']; }
         const mb = (flags & 16) !== 0 ? 'plus-lighter' : 'normal';
-        if (st.mb !== mb) { style.mixBlendMode = mb; st.mb = mb; }
+        if (st.mb !== mb) { style.mixBlendMode = mb; st.mb = mb; ++Module['cnaDomStyleWriteCount']; }
 
         // HTMLDOM-107: the viewport's own offset is the OUTERMOST transform -- see this function's
         // own top-of-function comment for why it must come before (not be composed into)
@@ -286,15 +323,19 @@ EM_JS(void, CNA_HtmlDom_FlushSprites, (const void* cmds, int count, int stride,
         }
         const lx = HEAPF32[o + 10], ly = HEAPF32[o + 11];
         if (lx !== 0 || ly !== 0) tf += ' translate(' + lx + 'px,' + ly + 'px)';
-        if (st.tf !== tf) { style.transform = tf; st.tf = tf; }
+        if (st.tf !== tf) { style.transform = tf; st.tf = tf; ++Module['cnaDomStyleWriteCount']; }
 
         const opacity = ((packed >>> 24) & 255) / 255;
-        if (st.op !== opacity) { style.opacity = opacity; st.op = opacity; }
+        if (st.op !== opacity) { style.opacity = opacity; st.op = opacity; ++Module['cnaDomStyleWriteCount']; }
         // HTMLDOM-103: the 'full' region has no container of its own to stamp a single z-index on
         // (its sprites are direct children of #cna-dom-root, siblings of every named region's own
         // container) -- so each of ITS sprites carries the current flush's paint order individually.
-        if (isFullRegion && st.zi !== paintOrder) { style.zIndex = paintOrder; st.zi = paintOrder; }
-        if (st.hidden) { style.display = ""; st.hidden = false; }
+        // HTMLDOM-110: skipped entirely when no named region has ever existed this session -- see
+        // needsFullRegionZIndex's own comment above.
+        if (isFullRegion && needsFullRegionZIndex && st.zi !== paintOrder) {
+            style.zIndex = paintOrder; st.zi = paintOrder; ++Module['cnaDomStyleWriteCount'];
+        }
+        if (st.hidden) { style.display = ""; st.hidden = false; ++Module['cnaDomStyleWriteCount']; }
         ++used;
     }
     region.used = used;

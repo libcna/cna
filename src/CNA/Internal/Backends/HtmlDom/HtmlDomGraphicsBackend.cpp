@@ -88,6 +88,18 @@ EM_JS(void, CNA_HtmlDom_EnsureRoot, (), {
     // SpriteBatch flushes this frame, not merely each region's own first-creation order (DOM
     // position, which HTMLDOM-94 originally relied on, only ever captured the latter).
     Module['cnaDomPaintOrderCounter'] = 0;
+    // plan_html_dom.md HTMLDOM-110: whether a named (non-'full') region has EVER been created this
+    // session -- set once, in cnaDomGetRegion's own region-creation path, never reset. Lets
+    // CNA_HtmlDom_FlushSprites skip 'full'-region sprites' otherwise-unconditional per-frame
+    // z-index write when there is provably nothing to interleave it against yet -- see that
+    // write's own comment for the full rationale and its one narrow, accepted caveat.
+    Module['cnaDomAnyNamedRegionEverCreated'] = false;
+    // plan_html_dom.md HTMLDOM-110: total CSS property writes / total flush calls
+    // CNA_HtmlDom_FlushSprites has issued this session -- NOXNA instrumentation only, read (and
+    // optionally reset) via Module['cnaDomStyleWriteCount']/['cnaDomFlushCallCount'] directly by
+    // test code. Never read by the backend itself.
+    Module['cnaDomStyleWriteCount'] = 0;
+    Module['cnaDomFlushCallCount'] = 0;
 
     // Sets a region's own clip-path from its stored rect against the CURRENT backbuffer size.
     // Called once when a region is created and again for every region whenever the surface's
@@ -248,6 +260,9 @@ EM_JS(void, CNA_HtmlDom_EnsureRoot, (), {
         Module['cnaDomRoot'].appendChild(container);
         region = { container: container, pool: [], used: 0, highWater: 0, rect: rect };
         regions[key] = region;
+        // plan_html_dom.md HTMLDOM-110: this is the first-ever NAMED region -- see
+        // CNA_HtmlDom_FlushSprites' own needsFullRegionZIndex comment for why this flag exists.
+        Module['cnaDomAnyNamedRegionEverCreated'] = true;
         Module['cnaDomTouchRegion'](key);
         Module['cnaDomApplyRegionClip'](region);
         return region;

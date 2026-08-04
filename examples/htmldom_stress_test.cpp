@@ -33,7 +33,7 @@ using namespace Microsoft::Xna::Framework::Graphics;
 
 namespace
 {
-    constexpr int kExpectedChecks = 8;
+    constexpr int kExpectedChecks = 10;
 
     // plan_html_dom.md HTMLDOM-89: 500 sprites is a reasonable "real 2D game" upper-middle
     // sprite count (well past typical tile/UI/particle counts for the kind of game this backend
@@ -46,6 +46,12 @@ namespace
     // frame number), and to exercise the sprite pool growing and shrinking repeatedly rather than
     // monotonically in one direction.
     constexpr int kStabilityFrames = 300;
+
+    // plan_html_dom.md HTMLDOM-110: a real XNA game resubmits its static sprites every frame --
+    // this measures exactly that (byte-identical position/tint/texture, every frame, no per-frame
+    // variation at all), the scenario the "zero cost" performance claim is actually about.
+    constexpr int kStaticSpriteCount = 200;
+    constexpr int kStaticMeasureFrames = 30;
 
 #if defined(__EMSCRIPTEN__)
     EM_JS(double, JsNow, (), { return performance.now(); });
@@ -74,6 +80,14 @@ namespace
         return cache.has(combined) ? 1 : 0;
     });
 
+    // plan_html_dom.md HTMLDOM-110: NOXNA instrumentation reads -- see
+    // HtmlDomSpriteBatchBackend.cpp's own cnaDomStyleWriteCount/cnaDomFlushCallCount comments for
+    // what each counts. Reset variants zero the counter for a clean measurement window.
+    EM_JS(int, JsStyleWriteCount, (), { return Module['cnaDomStyleWriteCount'] || 0; });
+    EM_JS(void, JsResetStyleWriteCount, (), { Module['cnaDomStyleWriteCount'] = 0; });
+    EM_JS(int, JsFlushCallCount, (), { return Module['cnaDomFlushCallCount'] || 0; });
+    EM_JS(void, JsResetFlushCallCount, (), { Module['cnaDomFlushCallCount'] = 0; });
+
     EM_JS(void, JsPublishResult, (int result, int passed, int expected), {
         window.__cnaSmokeResult = result;
         window.__cnaSmokePassed = passed;
@@ -85,6 +99,10 @@ namespace
     int JsPooledSpriteCount() { return -1; }
     int JsVariantCacheSize() { return -1; }
     int JsVariantCacheHasKey(int, int, int, int, int) { return -1; }
+    int JsStyleWriteCount() { return -1; }
+    void JsResetStyleWriteCount() {}
+    int JsFlushCallCount() { return -1; }
+    void JsResetFlushCallCount() {}
     void JsPublishResult(int, int, int) {}
 #endif
 }
@@ -101,6 +119,9 @@ class HtmlDomStressTest : public Game
     double benchmarkTotalMs_ = 0.0;
     int benchmarkFramesTimed_ = 0;
     int peakSpritesInOneFrame_ = 0;
+
+    double staticTotalMs_ = 0.0;
+    int staticFramesTimed_ = 0;
 
     void check(bool ok, const char* label)
     {
@@ -306,6 +327,66 @@ protected:
                   "HTMLDOM-109: redrawing the same (mode, tint) key after SetData regenerates a "
                   "fresh cache entry from the NEW pixels -- the key is reusable, not permanently "
                   "poisoned by the earlier stale-entry bug");
+        }
+
+        // plan_html_dom.md HTMLDOM-110: warm-up for the static-resubmit measurement below -- pays
+        // the one-time pool-creation cost (every sprite element created and appended for the first
+        // time), excluded from what gets measured, the same "frame 1 is excluded" shape HTMLDOM-89's
+        // own benchmark above already uses. Resets both instrumentation counters right after, so the
+        // measurement window below starts clean.
+        if (frame_ == 6 + kBenchmarkFrames + kStabilityFrames)
+        {
+            DrawSprites(kStaticSpriteCount, 0.0f);
+            JsResetStyleWriteCount();
+            JsResetFlushCallCount();
+        }
+
+        // plan_html_dom.md HTMLDOM-110: the actual claim under test -- byte-identical content
+        // (SAME tintSeed=0.0f every single frame, unlike DrawSprites' other callers above, which
+        // deliberately vary it) resubmitted kStaticMeasureFrames times in a row. A real XNA game
+        // does exactly this for anything that is not currently animating.
+        if (frame_ > 6 + kBenchmarkFrames + kStabilityFrames &&
+            frame_ <= 6 + kBenchmarkFrames + kStabilityFrames + kStaticMeasureFrames)
+        {
+            const double t0 = JsNow();
+            DrawSprites(kStaticSpriteCount, 0.0f);
+            const double t1 = JsNow();
+            staticTotalMs_ += (t1 - t0);
+            ++staticFramesTimed_;
+        }
+
+        if (frame_ == 7 + kBenchmarkFrames + kStabilityFrames + kStaticMeasureFrames)
+        {
+            const int styleWrites = JsStyleWriteCount();
+            const int flushCalls = JsFlushCallCount();
+            const double avgMs = staticFramesTimed_ > 0 ? staticTotalMs_ / staticFramesTimed_ : -1.0;
+            std::printf("       HTMLDOM-110: %d static (byte-identical) sprites/frame over %d "
+                        "frames -- %d flush calls, %d CSS property writes, %.3f ms/frame average "
+                        "(%.1f fps-equivalent)\n",
+                        kStaticSpriteCount, staticFramesTimed_, flushCalls, styleWrites, avgMs,
+                        avgMs > 0 ? 1000.0 / avgMs : 0.0);
+            std::fflush(stdout);
+            // "No JS runs" is false, measurably: one real CNA_HtmlDom_FlushSprites call happens
+            // for every one of the kStaticMeasureFrames frames, no fewer -- a real XNA game
+            // resubmits static sprites every frame, and this backend's own End() has no way to
+            // know in advance that a batch will turn out identical to the last one without first
+            // walking it, which is exactly what this call does.
+            check(flushCalls == kStaticMeasureFrames,
+                  "HTMLDOM-110: a real JS flush call happens on EVERY resubmitted frame, even a "
+                  "byte-identical one -- 'no JS runs' is measurably false for a static scene");
+            // The claim that IS true, and now proven by direct measurement rather than asserted:
+            // byte-identical resubmitted content produces ZERO CSS property writes across the
+            // whole measurement window -- no layout, no paint, no composite-order work either,
+            // since none of those can happen without a write to trigger them. Before this task,
+            // 'full'-region sprites got an UNCONDITIONAL style.zIndex write every single flush
+            // (HTMLDOM-103's own per-flush paint-order counter, which never repeats a value) --
+            // this specific, previously-undocumented cost is what made the old "no JS runs" claim
+            // wrong even for the narrower "no style writes" reading, not just pedantically wrong
+            // about the JS call itself.
+            check(styleWrites == 0,
+                  "HTMLDOM-110: byte-identical resubmitted content produces genuinely ZERO CSS "
+                  "property writes -- the corrected, real 'nothing changes -> nothing costs "
+                  "anything' guarantee, now measured rather than merely claimed");
 
             std::printf("=== %d/%d PASS ===\n", passCount_, kExpectedChecks);
             std::fflush(stdout);
