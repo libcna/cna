@@ -1572,7 +1572,21 @@ namespace CNA::Internal::Backends::Direct2D
         d2dContext_->DrawImage(logicalTarget_.Get(), D2D1_INTERPOLATION_MODE_LINEAR,
                                D2D1_COMPOSITE_MODE_SOURCE_OVER);
         d2dContext_->SetTransform(D2D1::Matrix3x2F::Identity());
-        EndDrawing("logical backbuffer presentation");
+        try
+        {
+            EndDrawing("logical backbuffer presentation");
+        }
+        catch (...)
+        {
+            // A device-loss failure already restored d2dContext_'s target independently
+            // (RecreateDeviceResourcesForRecovery, called from EndDrawing). An ordinary
+            // compositing failure does not, so without this the context would stay pointed at
+            // backBufferTarget_ (the physical swap chain surface) instead of the logical
+            // target/active render target the caller's next frame expects to draw into.
+            d2dContext_->SetTarget(activeRenderTarget_ ? activeRenderTarget_->bitmap_.Get()
+                                                       : logicalTarget_.Get());
+            throw;
+        }
         d2dContext_->SetTarget(activeRenderTarget_ ? activeRenderTarget_->bitmap_.Get()
                                                    : logicalTarget_.Get());
 
