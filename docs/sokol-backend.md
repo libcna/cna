@@ -12,8 +12,9 @@ design rationale live in [`../plan_sokol.md`](../plan_sokol.md).
 mip-mapping, MRT and direct `GetData()` readback), `TextureCube`/`Texture3D` storage and
 `OcclusionQuery`. It is close to EasyGL/Vulkan/D3D11 parity on the GL API surface (`GLCORE`) but
 still falls short of it in a few permanent, sokol_gfx-API-shaped ways (`RasterizerState.FillMode`,
-`RenderTargetCube` MSAA, `BlendState.MultiSampleMask`, PBR/normal-mapping) and one portability gap
-(only `CNA_SOKOL_API=GLCORE` is implemented) — see "What does not work yet" below, and must not be
+`RenderTargetCube` MSAA, `BlendState.MultiSampleMask`), one not-yet-ported feature (`PbrEffect`/
+`SkinnedPbrEffect`, real on every other CNA backend), and one portability gap (only
+`CNA_SOKOL_API=GLCORE` is implemented) — see "What does not work yet" below, and must not be
 described as having full XNA 3D parity until those close. Everything outside the boundary below
 fails loudly — either a `std::runtime_error` naming the missing capability, or a
 `System::NotSupportedException` raised by the shared layer because the backend creates no resource
@@ -86,7 +87,7 @@ letting the build reach a confusing `GL/gl.h: No such file or directory`.
 
 | Feature | Behaviour today | Tracked as |
 |---|---|---|
-| PBR 3D shading | throws, naming the unsupported combination | no CNA backend has PBR yet |
+| PBR 3D shading (`PbrEffect`/`SkinnedPbrEffect`) | throws, naming the unsupported combination | not yet ported here -- every OTHER CNA backend (EasyGL, D3D9/11/12, Vulkan, WebGPU, Bgfx, SdlGpu) already implements it; a genuine, sizeable follow-up feature (a new shader + `VertexPositionNormalTangentTextureSkinned` layout), not a small gap |
 | Per-vertex (Gouraud) lighting (`BasicEffect.PreferPerPixelLighting = false`) | ignored -- always renders per-pixel, matching every CNA backend except D3D9 | not planned |
 | A lit draw whose `VertexDeclaration` has a Normal but no TextureCoordinate (or vice versa) | throws -- see the source comment on why both are required together | not planned |
 | Vertex elements other than Position/Color at usage index 0 (Normal, TexCoord, …) | ignored by the colored-3D pipeline | `SOKOL-22` |

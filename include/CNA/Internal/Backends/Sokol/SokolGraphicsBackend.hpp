@@ -1610,7 +1610,8 @@ namespace CNA::Internal::Backends::Sokol
          * Textured, lit (up to 3 real per-pixel directional lights), `DualTextureEffect`,
          * `EnvironmentMapEffect`, `SkinnedEffect` and a custom `ShaderEffect` are all implemented.
          * Only an effect requesting PBR shading throws rather than quietly rendering an unshaded
-         * approximation of it (no CNA backend has PBR yet).
+         * approximation of it -- `PbrEffect`/`SkinnedPbrEffect` exist on every other CNA backend
+         * (EasyGL, D3D9/11/12, Vulkan, WebGPU, Bgfx, SdlGpu) but have not yet been ported here.
          *
          * @param vb             Vertex buffer to read from.
          * @param world          World matrix.

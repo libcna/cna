@@ -195,7 +195,7 @@ That makes it valuable to CNA in two specific ways:
 |---|---|---|---|
 | SOKOL-20 | `DrawColoredPrimitives`/`DrawIndexedColoredPrimitives` + a colored-3D shader | ✅ | `Sokol_3D` 10/10, incl. depth-occlusion and culling proofs |
 | SOKOL-21 | `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx`: `BasicEffect` variants (textured, lit, fog) | ✅ | `Sokol_Lit3D` 10/10; dual-texture/env-map/skinned/PBR still throw |
-| SOKOL-22 | Honour every `SetVertexDeclaration()` element, not just Position/Color usage index 0 | 🟨 | The colored-3D pipeline is keyed on the real declaration; other usages still ignored |
+| SOKOL-22 | Honour every `SetVertexDeclaration()` element, not just Position/Color usage index 0 | ✅ | **Closed 2026-08-04.** Position/Color/TextureCoordinate/Normal (every stock effect through `EnvironmentMapEffect`) and BlendWeight/BlendIndices (`SkinnedEffect`, `SOKOL-35`) are all read from a real `VertexDeclaration` at usage index 0, verified by `DrawColored3D`'s own `Pipeline3DKey` construction (`SokolGraphicsBackend.cpp`). The one remaining usage pair, Tangent/Binormal, only has meaning for a normal-mapping/PBR shader -- see `SOKOL-49`, a newly-scoped separate task (not folded back into this one, matching the size difference documented there). |
 | SOKOL-23 | Full `ApplyRasterizerState` (fill mode, depth bias) and stencil in the pipeline key | 🟨 | Stencil and depth bias done. Stencil: `ApplyDepthStencilState` wires the real stencil state (front/back ops, compare, read/write masks, reference) into `Pipeline3DKey`/`Get3DPipeline` -- `sg_stencil_state.ref` is baked into the pipeline object itself (sokol_gfx has no dynamic stencil-ref call, unlike most APIs), so it is part of the key too. Depth bias: `RasterizerState.DepthBias`/`SlopeScaleDepthBias` map straight onto `sg_depth_state.bias`/`bias_slope_scale` -- the same values EasyGL/Vulkan pass to `glPolygonOffset(slopeScaleDepthBias, depthBias)` -- also baked into the pipeline, also part of the key; verified with Task 767's own EasyGL-authored (but backend-agnostic) coplanar-redraw test, reused as `Sokol_RasterizerState_DepthBias`. Neither reaches the sprite pipeline (XNA's SpriteBatch never uses stencil or depth bias). Cull mode landed with `SOKOL-20`. Fill mode (`WireFrame`) remains a genuine, permanent gap: sokol_gfx exposes no polygon fill mode API at all, unlike EasyGL's CPU-side triangle-to-`GL_LINES` re-expansion at draw time, which this backend does not implement. |
 | SOKOL-24 | Cheaper `VertexBuffer`/`IndexBuffer` re-upload than recreate-per-`SetData` | ⬜ | Measure once a 3D path exists to measure with |
 
@@ -237,8 +237,19 @@ open task above) gets its own task here.
 blocked on `SOKOL-28` (custom `Effect` support), as noted in the gap table above. `SOKOL-28` is now
 closed, giving both a real consumer (a custom `ShaderEffect` can declare arbitrary vertex inputs or
 multiple fragment outputs). `SOKOL-26`'s MRT item has since been implemented in full (see its own
-row above) as a direct follow-up once that blocker cleared. A stock normal-mapping/PBR shader
-variant remains unimplemented -- no task is assigned for it here since that is separate work.
+row above) as a direct follow-up once that blocker cleared.
+
+**`SOKOL-22` closed 2026-08-04** for its actually-assigned scope: Position/Color/TextureCoordinate/
+Normal (every stock effect through `EnvironmentMapEffect`) and BlendWeight/BlendIndices (`SkinnedEffect`,
+`SOKOL-35`) are all read from a real `VertexDeclaration` at usage index 0. The remaining Tangent/
+Binormal/PBR-input elements only have meaning for a normal-mapping/PBR shader, which this plan had
+recorded as "no CNA backend has PBR yet, out of scope here" -- **stale**: `PbrEffect`/
+`SkinnedPbrEffect` are real, implemented stock effects on every OTHER CNA backend (EasyGL, D3D9/
+11/12, Vulkan, WebGPU, Bgfx, SdlGpu). Sokol is the only backend missing them. Porting them is a
+genuine, sizeable feature (~1000+ lines across shaders and the XNA layer in the Vulkan
+implementation alone, comparable to `SkinnedEffect`/`EnvironmentMapEffect`'s own scope), not a
+"vertex declaration" bugfix -- tracked as its own task, `SOKOL-49`, rather than folded into
+`SOKOL-22`.
 
 ---
 
@@ -265,11 +276,17 @@ plus `CnaTests`' `OcclusionQuery`/`ShaderEffect`/`Effect` suites.
 | SOKOL-47 | Commit reproducible RenderTargetCube mipmap coverage (`SOKOL-39` verification follow-up) | ✅ | The cube half of `SOKOL-39` is marked ✅ using only a throwaway, uncommitted program, and its note incorrectly says `SOKOL-34`/cube sampling has not landed. **Closed 2026-08-03**: new `Sokol_RenderTargetCube_Mip` fills face `PositiveX` level 0 solid, unbinds (regenerating mips), then reads back every texel of levels 1 (16x16) and 2 (8x8) via `RenderTargetCube::GetData()`, plus `LevelCount` itself -- 3/3 pass. Sampling through `EnvironmentMapEffect` was deliberately not attempted: that effect has no explicit mip-bias/LOD control, so a full-screen quad has no reliable way to force a non-zero level over level 0 -- automatic GLSL LOD selection is not a controllable, reproducible test signal; direct `GetData()` readback is. |
 | SOKOL-48 | Add a compact state-transition/lifetime regression matrix | ✅ | Preserve the existing 28 happy-path GPU tests, but add focused coverage for the failure dimensions exposed by this audit: first-use vs cached reuse, A→B→A state transitions, stock/custom draw ordering, two independent resource instances, mutation between bind and draw, and resource destruction after device disposal. **Closed 2026-08-03**: most of these dimensions are already covered by SOKOL-40/41/42/44/45's own per-ticket tests (A→B→A: `Sokol_BlendFactor_PipelineCache`; stock/custom ordering: `Sokol_CustomEffect_BlendStateOrder`; mutation between bind and draw: `Sokol_CustomEffect_TextureReupload`; destruction after device disposal: `Sokol_DisposeOrder_OcclusionQueryShaderEffect`); new `Sokol_StateLifetimeRegressionMatrix` adds the two dimensions those tickets' own closing notes explicitly deferred here: two independent `OcclusionQuery` instances interleaved in both begin/end orders plus a healthy fresh query afterward (SOKOL-43's own "two independent resource instances" gap), and `DrawCustomEffect3D`'s `CullMode` applied independently of a preceding stock draw's leftover GL cull state (SOKOL-41's own "the `DrawCustomEffect3D` (3D) path left to SOKOL-48" gap) -- 7/7 checks pass. |
 
-The pre-existing incomplete work remains open independently of this audit: `SOKOL-22` (remaining
-vertex usages), `SOKOL-23` (wireframe boundary), `SOKOL-24` (upload performance), and portability/
-hardware tasks `SOKOL-30..32`. Permanent upstream boundaries also remain explicit:
-`RenderTargetCube` MSAA and `BlendState.MultiSampleMask` cannot currently be implemented through
-sokol_gfx. PBR/normal-mapping variants remain outside the completed stock-effect set.
+The pre-existing incomplete work remains open independently of this audit: `SOKOL-23` (wireframe
+boundary), `SOKOL-24` (upload performance), and portability/hardware tasks `SOKOL-30..32`.
+Permanent upstream boundaries also remain explicit: `RenderTargetCube` MSAA and
+`BlendState.MultiSampleMask` cannot currently be implemented through sokol_gfx. `SOKOL-22` closed
+2026-08-04 (see its own row above); the PBR gap it used to bundle in is now its own task, `SOKOL-49`.
+
+### Phase 9 — Newly-scoped future work (open, 2026-08-04)
+
+| ID | Task | Status | Notes |
+|---|---|---|---|
+| SOKOL-49 | Port `PbrEffect`/`SkinnedPbrEffect` to Sokol | ⬜ | Discovered while closing `SOKOL-22`: this plan's own prior claim that "no CNA backend has PBR yet" was stale -- `PbrEffect`/`SkinnedPbrEffect` are real, implemented stock effects on every OTHER CNA backend (EasyGL, D3D9/11/12, Vulkan, WebGPU, Bgfx, SdlGpu; ~1000+ lines across shaders and the XNA layer in Vulkan's own implementation alone). Sokol is the only backend still missing it. A genuine, sizeable feature -- a new `pbr3d.glsl` shader variant (metallic/roughness/normal maps, `VertexPositionNormalTangentTextureSkinned`'s Tangent/Binormal inputs, a new `Shader3DKind`), comparable in scope to `SkinnedEffect`/`EnvironmentMapEffect` (`SOKOL-34`/`SOKOL-35`) -- not attempted as part of `SOKOL-22`'s own "honour vertex declaration elements" scope. Deliberately deferred pending explicit scoping. |
 
 ---
 
@@ -282,10 +299,10 @@ does not, as of the state above:
 |---|---|---|---|
 | Custom `Effect` via `SpriteBatch.Begin(effect)` / arbitrary `ShaderEffect` | ✅ real GLSL compilation at runtime | ✅ | Closed by `SOKOL-28`. |
 | `RasterizerState.FillMode = WireFrame` | ✅ CPU-side triangle-to-`GL_LINES` re-expansion at draw time | ⬜ accepted and ignored | **Permanent**: sokol_gfx exposes no polygon fill-mode API at all, unlike raw GL. `SOKOL-23`. |
-| Vertex elements other than Position/Color/TextureCoordinate/Normal at usage index 0 (BlendWeight/BlendIndices for skinning, Tangent/Binormal for normal mapping, PBR inputs) | ✅ (skinned, normal-mapped, PBR stock effect shaders) | BlendWeight/BlendIndices (skinning) ✅; Tangent/Binormal and PBR inputs still ignored | `SOKOL-22`; the skinning slice is closed by `SOKOL-35`. Normal-mapping/PBR are still-unimplemented stock effects (no CNA backend has PBR yet) -- `SOKOL-28` closing removed their former blocker, but the shader variants themselves are not written. |
+| Vertex elements other than Position/Color/TextureCoordinate/Normal at usage index 0 (BlendWeight/BlendIndices for skinning, Tangent/Binormal for normal mapping/PBR) | ✅ (skinned, normal-mapped, PBR stock effect shaders) | Position/Color/TextureCoordinate/Normal/BlendWeight/BlendIndices ✅; Tangent/Binormal still ignored | **`SOKOL-22` closed 2026-08-04** for its actually-assigned scope. Tangent/Binormal only have meaning for `PbrEffect`/`SkinnedPbrEffect`, which is real on every OTHER CNA backend but not yet ported to Sokol -- tracked as `SOKOL-49`, not folded back into this task. |
 | `DualTextureEffect` | ✅ | ✅ | Closed by `SOKOL-33`. |
 | `EnvironmentMapEffect` (reflection cube mapping) | ✅ | ✅ | Closed by `SOKOL-34`. |
-| PBR 3D shading | ✅ | ⬜ throws, naming the unsupported combination | No CNA backend has PBR yet, out of scope here. |
+| `PbrEffect`/`SkinnedPbrEffect` (PBR 3D shading) | ✅ | ⬜ throws, naming the unsupported combination | Real on EasyGL/D3D9/D3D11/D3D12/Vulkan/WebGPU/Bgfx/SdlGpu -- Sokol is the only backend missing it. Not a permanent gap, just not yet ported; tracked as `SOKOL-49`. |
 | `SkinnedEffect` (skinned `BasicEffect`) | ✅ | ✅ | Closed by `SOKOL-35`. |
 | Instanced draws | ✅ | ✅ | Closed by `SOKOL-36`. |
 | MRT (`SetRenderTargets` with more than one binding) | ✅ real multiple colour attachments | ✅ | Closed by `SOKOL-26`: a real multi-attachment `sg_pass`, 2-4 `RenderTarget2D` targets, both a custom-effect and every stock pipeline. |
