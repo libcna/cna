@@ -8,10 +8,28 @@
 
 using CNA::Internal::Backends::Direct2D::BlendStateToDirect2DBlendMode;
 using CNA::Internal::Backends::Direct2D::Direct2DBlendMode;
+using CNA::Internal::Backends::Direct2D::IsDeviceLossHResult;
 using CNA::Internal::Backends::Direct2D::MapSourceRectangleToMip;
 using CNA::Internal::Backends::Direct2D::PreferredMipLevelForTransform;
 using Microsoft::Xna::Framework::Matrix;
 using XnaRectangle = Microsoft::Xna::Framework::Rectangle;
+
+TEST(Direct2DDeviceLossClassification, RecognizesEveryDocumentedDeviceLossHResult)
+{
+    EXPECT_TRUE(IsDeviceLossHResult(D2DERR_RECREATE_TARGET));
+    EXPECT_TRUE(IsDeviceLossHResult(DXGI_ERROR_DEVICE_REMOVED));
+    EXPECT_TRUE(IsDeviceLossHResult(DXGI_ERROR_DEVICE_RESET));
+    EXPECT_TRUE(IsDeviceLossHResult(DXGI_ERROR_DEVICE_HUNG));
+    EXPECT_TRUE(IsDeviceLossHResult(DXGI_ERROR_DRIVER_INTERNAL_ERROR));
+}
+
+TEST(Direct2DDeviceLossClassification, DoesNotFlagOrdinaryFailuresOrSuccess)
+{
+    EXPECT_FALSE(IsDeviceLossHResult(S_OK));
+    EXPECT_FALSE(IsDeviceLossHResult(E_INVALIDARG));
+    EXPECT_FALSE(IsDeviceLossHResult(E_OUTOFMEMORY));
+    EXPECT_FALSE(IsDeviceLossHResult(DXGI_ERROR_INVALID_CALL));
+}
 
 TEST(Direct2DBlendStateMapping, StandardSpriteBatchPresetsMapToNativePrimitiveBlends)
 {

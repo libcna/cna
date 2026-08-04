@@ -43,6 +43,13 @@ namespace CNA::Internal::Backends::Direct2D
                                                     int colorDstBlend, int alphaDstBlend,
                                                     int colorBlendFunc, int alphaBlendFunc);
 
+    /// D2D-69: classifies whether @p hr means the Direct2D/D3D11/DXGI device itself was lost and
+    /// must be recreated (not just this one call retried). Centralizes every device-loss HRESULT
+    /// this backend recognizes -- D2DERR_RECREATE_TARGET plus DXGI_ERROR_DEVICE_REMOVED/RESET/
+    /// HUNG/DRIVER_INTERNAL_ERROR -- so ThrowIfFailed, EndDrawing and Present all agree instead of
+    /// each hand-checking a different subset.
+    [[nodiscard]] bool IsDeviceLossHResult(HRESULT hr);
+
     /** Pure helpers kept public to make Direct2D's manually managed mip policy unit-testable. */
     int PreferredMipLevelForTransform(int sourceWidth, int sourceHeight,
                                       int destinationWidth, int destinationHeight,

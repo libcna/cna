@@ -45,7 +45,9 @@ namespace CNA::Internal::Backends::Direct2D
         void ThrowIfFailed(HRESULT hr, const char* operation)
         {
             if (SUCCEEDED(hr)) return;
-            if (hr == D2DERR_RECREATE_TARGET)
+            // D2D-69: IsDeviceLossHResult (defined below, declared in the header) is the single
+            // classifier every device-loss check in this file uses.
+            if (IsDeviceLossHResult(hr))
             {
                 throw std::runtime_error(
                     std::string("Direct2D device resources were lost during ") + operation +
@@ -279,6 +281,15 @@ namespace CNA::Internal::Backends::Direct2D
             const double sigmaMin = std::sqrt(sigmaMinSquared);
             return {sigmaMin, sigmaMin < 1.0};
         }
+    }
+
+    bool IsDeviceLossHResult(HRESULT hr)
+    {
+        return hr == D2DERR_RECREATE_TARGET ||
+               hr == DXGI_ERROR_DEVICE_REMOVED ||
+               hr == DXGI_ERROR_DEVICE_RESET ||
+               hr == DXGI_ERROR_DEVICE_HUNG ||
+               hr == DXGI_ERROR_DRIVER_INTERNAL_ERROR;
     }
 
     Direct2DBlendMode BlendStateToDirect2DBlendMode(
@@ -1174,11 +1185,12 @@ namespace CNA::Internal::Backends::Direct2D
         transientEffects_.clear();
         transientImages_.clear();
         transientImageBrushes_.clear();
-        if (hr == D2DERR_RECREATE_TARGET)
+        if (IsDeviceLossHResult(hr))
         {
             RecreateDeviceResourcesForRecovery();
             throw std::runtime_error(
-                "Direct2D device resources were recreated after D2DERR_RECREATE_TARGET; redraw the current frame.");
+                "Direct2D device resources were recreated after a device loss (hr=" + FormatHr(hr) +
+                "); redraw the current frame.");
         }
         ThrowIfFailed(hr, operation);
     }
@@ -1498,11 +1510,12 @@ namespace CNA::Internal::Backends::Direct2D
                                                    : logicalTarget_.Get());
 
         const HRESULT hr = swapChain_->Present(static_cast<UINT>(swapInterval_), 0);
-        if (hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET)
+        if (IsDeviceLossHResult(hr))
         {
             RecreateDeviceResourcesForRecovery();
             throw std::runtime_error(
-                "Direct2D device resources were recreated after DXGI device removal/reset; redraw the current frame.");
+                "Direct2D device resources were recreated after a device loss (hr=" + FormatHr(hr) +
+                "); redraw the current frame.");
         }
         ThrowIfFailed(hr, "IDXGISwapChain::Present");
     }
