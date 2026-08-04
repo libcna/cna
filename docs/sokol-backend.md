@@ -57,6 +57,7 @@ letting the build reach a confusing `GL/gl.h: No such file or directory`.
 | `BasicEffect.DiffuseColor` and `VertexColorEnabled` | ✅ | `Sokol_3D` checks C, D — a real per-channel multiply |
 | Depth testing and depth writes (`DepthStencilState.DepthBufferEnable`/`WriteEnable`/`Function`) | ✅ | `Sokol_3D` check E — a real occlusion proof, both with and without the test |
 | Face culling (`RasterizerState.CullMode`) | ✅ | `Sokol_3D` check G — a clockwise triangle survives and a counter-clockwise one vanishes |
+| `RasterizerState.FillMode = WireFrame` | ✅ | `Sokol_WireFrame` -- CPU-side triangle-to-`GL_LINES` re-expansion at draw time (the same technique `EasyGLGraphicsBackend::DrawWireframe()` uses), since sokol_gfx's pipeline object bakes primitive topology and exposes no polygon fill-mode API to toggle. `GraphicsCapability.WireFrame` still reports `false`: that flag means *native* rasterizer fill-mode support, matching EasyGL's/Vulkan's own convention |
 | Arbitrary vertex layouts via `VertexDeclaration` (Position/Color/TextureCoordinate/Normal, usage index 0) | ✅ | The 3D pipeline is keyed on the real declaration, not on a fixed stride |
 | Textured 3D draws (`BasicEffect.TextureEnabled`) with `DiffuseColor`/vertex-colour tint, alpha test, fog | ✅ | `Sokol_Lit3D` checks A-D |
 | Lit 3D draws (`BasicEffect.LightingEnabled`): ambient + up to 3 real per-pixel Blinn-Phong directional lights, specular, emissive, alpha test, fog | ✅ | `Sokol_Lit3D` checks E-I -- real per-pixel lighting, not per-vertex |
@@ -90,9 +91,8 @@ letting the build reach a confusing `GL/gl.h: No such file or directory`.
 | PBR 3D shading (`PbrEffect`/`SkinnedPbrEffect`) | throws, naming the unsupported combination | not yet ported here -- every OTHER CNA backend (EasyGL, D3D9/11/12, Vulkan, WebGPU, Bgfx, SdlGpu) already implements it; a genuine, sizeable follow-up feature (a new shader + `VertexPositionNormalTangentTextureSkinned` layout), not a small gap |
 | Per-vertex (Gouraud) lighting (`BasicEffect.PreferPerPixelLighting = false`) | ignored -- always renders per-pixel, matching every CNA backend except D3D9 | not planned |
 | A lit draw whose `VertexDeclaration` has a Normal but no TextureCoordinate (or vice versa) | throws -- see the source comment on why both are required together | not planned |
-| Vertex elements other than Position/Color at usage index 0 (Normal, TexCoord, …) | ignored by the colored-3D pipeline | `SOKOL-22` |
+| Tangent/Binormal vertex elements (normal mapping / PBR) | ignored -- only meaningful to `PbrEffect`/`SkinnedPbrEffect`, not yet ported here | `SOKOL-49` |
 | `RenderTargetCube` MSAA | `multiSampleCount` is always silently clamped to 1/ignored -- **a permanent sokol_gfx API boundary, not a "not implemented yet" gap**: its own validation layer hard-rejects a `SG_IMAGETYPE_CUBE` image with `sample_count > 1` (`VALIDATE_IMAGEDESC_ATTACHMENT_MSAA_CUBE_IMAGE`), confirmed empirically (a real `[sg][panic]` validation abort) while prototyping the same per-face multisample + resolve layout `RenderTarget2D` uses. The same kind of declared boundary `WebGPUGraphicsBackend`/`D3D9RenderTargetCubeBackend` report for their own reasons | `SOKOL-26` (closed as a permanent gap) |
-| `RasterizerState.FillMode` (`WireFrame`) | accepted and ignored — sokol_gfx exposes no polygon fill mode at all, unlike EasyGL's CPU-side triangle-to-`GL_LINES` re-expansion at draw time (not implemented here). A permanent, not-just-"not yet" gap | `SOKOL-23` |
 | `BlendState.MultiSampleMask` | ignored — sokol_gfx has no per-sample coverage mask (it exposes alpha-to-coverage only) | no upstream API |
 | `CNA_SOKOL_API` other than `GLCORE` | configure warns; construction throws | `SOKOL-31` |
 
@@ -203,6 +203,7 @@ ctest --test-dir cmake-build-sokol -R Sokol --output-on-failure
 | `Sokol_CustomEffect_BlendStateOrder` | 4, real BlendState applied in both custom-effect draw paths regardless of what a previous draw left in the GL context, both stock→custom and custom→stock (`SOKOL-41`) | all pass |
 | `Sokol_RenderTargetCube_Mip` | 3, `LevelCount` plus every texel of mip levels 1 and 2 read back via `RenderTargetCube::GetData()` (`SOKOL-47`) | all pass |
 | `Sokol_StateLifetimeRegressionMatrix` | 7: two-object `OcclusionQuery` interleaving in both begin/end orders plus a healthy fresh query afterward, and `DrawCustomEffect3D`'s `CullMode` applied independently of a preceding stock draw's leftover GL state (`SOKOL-48`) | all pass |
+| `Sokol_WireFrame` | 5: `Solid` fills the interior, `WireFrame` leaves it black (indexed and non-indexed) while genuinely rasterizing the quad's left edge red in both cases (`SOKOL-23`) | all pass |
 
 The render-target fixtures above are shared, backend-agnostic oracles also registered for EasyGL/
 Vulkan/bgfx/SDL_GPU/etc.; SOKOL reuses them rather than duplicating bespoke tests. As of `SOKOL-38`

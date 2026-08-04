@@ -2025,6 +2025,28 @@ namespace CNA::Internal::Backends::Sokol
                            int primitiveCount,
                            const GpuDrawParams& params);
         /**
+         * @brief NOXNA (plan_sokol.md SOKOL-23). Builds a doubled-edge index list (a-b, b-c, c-a
+         * per triangle) for `RasterizerState.FillMode == WireFrame` -- the same CPU-side
+         * triangle-to-`GL_LINES` re-expansion `EasyGLGraphicsBackend::DrawWireframe()` uses.
+         * sokol_gfx has no native polygon-fill-mode API, but this technique needs none: it only
+         * changes which indices are drawn and with what primitive topology, both already fully
+         * controlled per draw. Reads the *original* index values back off the GPU via
+         * `glGetBufferSubData` (this backend keeps no CPU shadow of index data) when @p ib is
+         * non-null; generates sequential `vertexStart + i` values otherwise, matching the
+         * non-indexed draw's own vertex order.
+         *
+         * @param ib          Source index buffer, or null for a non-indexed draw.
+         * @param primitive   Only `TriangleList`/`TriangleStrip` produce a non-empty result --
+         *                    line/point primitives are already "wireframe".
+         * @param primitiveCount Number of triangles.
+         * @param startIndex  First index to read, when @p ib is non-null.
+         * @param vertexStart First vertex to read, when @p ib is null.
+         * @return The doubled-edge index list (empty when @p primitive is not a triangle type).
+         */
+        std::vector<std::uint32_t> BuildWireframeLineIndicesEXT(
+            const SokolIndexBufferBackend* ib, PrimitiveType primitive, int primitiveCount,
+            int startIndex, int vertexStart);
+        /**
          * @brief Custom-`ShaderEffect` 3D draw (plan_sokol.md SOKOL-28): bypasses `sg_pipeline`
          * entirely via raw GL calls bracketed by `sg_reset_state_cache()`. See
          * `SokolEffectBackend`'s own doc comment for why. Attribute layout comes from
@@ -2259,5 +2281,11 @@ namespace CNA::Internal::Backends::Sokol
         /// context's one GL_SAMPLES_PASSED active-query slot. See
         /// TryActivateOcclusionQueryEXT()/ReleaseOcclusionQueryEXT()'s own doc comments.
         SokolOcclusionQueryBackend* activeOcclusionQueryEXT_ = nullptr;
+        /// plan_sokol.md SOKOL-23: scratch line-topology index buffer for
+        /// RasterizerState.FillMode == WireFrame, recreated (immutable, with data) on every
+        /// wireframe draw -- same "every upload recreates the resource" convention every other
+        /// buffer in this backend already uses, see BuildWireframeLineIndicesEXT()'s own doc
+        /// comment.
+        std::uint32_t wireframeIndexBufferId_ = 0;
     };
 }

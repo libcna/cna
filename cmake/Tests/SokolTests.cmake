@@ -315,4 +315,12 @@ if(CNA_BUILD_TESTS AND CNA_BUILD_EXAMPLES
         COMMAND cna_test_sokol_state_lifetime_regression_matrix
         TIMEOUT 30 LABELS "Sokol"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_sokol.md SOKOL-23: RasterizerState.FillMode == WireFrame, implemented via CPU-side
+    # triangle-to-GL_LINES re-expansion (the same technique EasyGLGraphicsBackend::DrawWireframe()
+    # uses) despite sokol_gfx exposing no native polygon-fill-mode API.
+    cna_sokol_test(cna_test_sokol_wireframe examples/sokol_wireframe_test.cpp)
+    cna_register_backend_test(NAME Sokol_WireFrame COMMAND cna_test_sokol_wireframe
+        TIMEOUT 30 LABELS "Sokol"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

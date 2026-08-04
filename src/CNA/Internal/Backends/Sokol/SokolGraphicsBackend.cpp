@@ -3375,11 +3375,12 @@ namespace CNA::Internal::Backends::Sokol
         depthBias_ = depthBias;
         slopeScaleDepthBias_ = slopeScaleDepthBias;
 
-        // fillMode is still accepted and ignored: sokol_gfx exposes no polygon fill mode at all
-        // (WireFrame is a documented gap -- EasyGL emulates it by re-expanding triangles into
-        // GL_LINES at draw time, which this backend does not do). Recorded in
-        // docs/sokol-backend.md rather than throwing, since GraphicsDevice applies a
-        // RasterizerState every frame regardless of what is drawn.
+        // Real as of SOKOL-23: DrawColored3D reads fillMode_ and, when WireFrame, re-expands the
+        // draw's triangles into a LINES-topology draw (BuildWireframeLineIndicesEXT()'s own doc
+        // comment) -- the same technique EasyGLGraphicsBackend::DrawWireframe() uses, ported here
+        // despite sokol_gfx exposing no native polygon-fill-mode API at all. Only reaches the
+        // stock 3D pipeline; SpriteBatch never requests WireFrame (matches XNA), and a custom
+        // ShaderEffect draw's own topology is the caller's responsibility, same as raw GL.
     }
 
     void SokolGraphicsBackend::ApplySamplerState(int slot, int filter, int addressU, int addressV,
@@ -4145,6 +4146,84 @@ namespace CNA::Internal::Backends::Sokol
         return *defaultWhiteTexture_;
     }
 
+    std::vector<std::uint32_t> SokolGraphicsBackend::BuildWireframeLineIndicesEXT(
+        const SokolIndexBufferBackend* ib, PrimitiveType primitive, int primitiveCount,
+        int startIndex, int vertexStart)
+    {
+        std::vector<std::uint32_t> lines;
+        if (primitive != PrimitiveType::TriangleList && primitive != PrimitiveType::TriangleStrip)
+            return lines;
+        if (primitiveCount <= 0) return lines;
+
+#if CNA_SOKOL_HAS_GL_READBACK
+        const int vertexCount = ElementCountForPrimitives(primitive, primitiveCount);
+        std::vector<std::uint32_t> src(static_cast<std::size_t>(vertexCount));
+        if (ib != nullptr)
+        {
+            // This backend keeps no CPU shadow of index data (unlike EasyGL's own
+            // DrawWireframe(), which reads its own CPU-side copy) -- read the original values
+            // straight off the GPU instead, the same GL-only escape hatch every other raw-GL
+            // detour in this file already uses.
+            const sg_gl_buffer_info ibInfo =
+                sg_gl_query_buffer_info(MakeBufferHandle(ib->GetBufferIdEXT()));
+            const GLuint ibGlId = ibInfo.buf[ibInfo.active_slot];
+            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibGlId);
+            if (ib->IsThirtyTwoBit())
+            {
+                glGetBufferSubData(GL_ELEMENT_ARRAY_BUFFER,
+                                   static_cast<GLintptr>(startIndex) * 4,
+                                   static_cast<GLsizeiptr>(vertexCount) * 4, src.data());
+            }
+            else
+            {
+                std::vector<std::uint16_t> src16(static_cast<std::size_t>(vertexCount));
+                glGetBufferSubData(GL_ELEMENT_ARRAY_BUFFER,
+                                   static_cast<GLintptr>(startIndex) * 2,
+                                   static_cast<GLsizeiptr>(vertexCount) * 2, src16.data());
+                for (int i = 0; i < vertexCount; ++i)
+                    src[static_cast<std::size_t>(i)] = src16[static_cast<std::size_t>(i)];
+            }
+            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+        }
+        else
+        {
+            // Non-indexed: vertex order is exactly sequential, the same "no ib -> firstVertex+pos"
+            // fallback EasyGLGraphicsBackend::DrawWireframe() itself uses.
+            for (int i = 0; i < vertexCount; ++i)
+                src[static_cast<std::size_t>(i)] = static_cast<std::uint32_t>(vertexStart + i);
+        }
+
+        const auto edge = [&lines](std::uint32_t a, std::uint32_t b)
+        {
+            lines.push_back(a);
+            lines.push_back(b);
+        };
+        if (primitive == PrimitiveType::TriangleList)
+        {
+            for (int t = 0; t < primitiveCount; ++t)
+            {
+                const std::uint32_t a = src[static_cast<std::size_t>(3 * t)];
+                const std::uint32_t b = src[static_cast<std::size_t>(3 * t + 1)];
+                const std::uint32_t c = src[static_cast<std::size_t>(3 * t + 2)];
+                edge(a, b); edge(b, c); edge(c, a);
+            }
+        }
+        else  // TriangleStrip: primitiveCount triangles over primitiveCount+2 vertices.
+        {
+            for (int t = 0; t < primitiveCount; ++t)
+            {
+                const std::uint32_t a = src[static_cast<std::size_t>(t)];
+                const std::uint32_t b = src[static_cast<std::size_t>(t + 1)];
+                const std::uint32_t c = src[static_cast<std::size_t>(t + 2)];
+                edge(a, b); edge(b, c); edge(c, a);
+            }
+        }
+#else
+        (void)ib; (void)startIndex; (void)vertexStart;
+#endif
+        return lines;
+    }
+
     void SokolGraphicsBackend::DrawColored3D(const IVertexBufferBackend& vbIn,
                                              const IIndexBufferBackend* ibIn,
                                              const Matrix& world,
@@ -4229,10 +4308,20 @@ namespace CNA::Internal::Backends::Sokol
         key.depthBias = depthBias_;
         key.slopeScaleDepthBias = slopeScaleDepthBias_;
         key.blendFactorPacked = PackBlendFactorEXT(blendFactor_);
-        key.primitiveType = static_cast<int>(ToPrimitiveType(primitive));
+        // plan_sokol.md SOKOL-23: RasterizerState.FillMode == WireFrame draws the exact same
+        // vertex layout/shader through a LINES-topology pipeline instead of the requested
+        // triangle one -- see BuildWireframeLineIndicesEXT()'s own doc comment for why sokol_gfx
+        // needing no native polygon-fill-mode API at all makes this possible. The scratch index
+        // buffer built below is always 32-bit, regardless of the source's own width.
+        const bool wireframeActive = fillMode_ == 1  // FillMode::WireFrame
+            && (primitive == PrimitiveType::TriangleList
+                || primitive == PrimitiveType::TriangleStrip);
+        key.primitiveType = static_cast<int>(
+            wireframeActive ? SG_PRIMITIVETYPE_LINES : ToPrimitiveType(primitive));
         key.indexType = static_cast<int>(
-            ib == nullptr ? SG_INDEXTYPE_NONE
-                          : (ib->IsThirtyTwoBit() ? SG_INDEXTYPE_UINT32 : SG_INDEXTYPE_UINT16));
+            wireframeActive  ? SG_INDEXTYPE_UINT32
+            : ib == nullptr ? SG_INDEXTYPE_NONE
+                            : (ib->IsThirtyTwoBit() ? SG_INDEXTYPE_UINT32 : SG_INDEXTYPE_UINT16));
         key.positionOffset = -1;
         key.positionFormat = static_cast<int>(SG_VERTEXFORMAT_INVALID);
         key.colorOffset = -1;
@@ -4496,6 +4585,34 @@ namespace CNA::Internal::Backends::Sokol
             }
         }
 
+        // plan_sokol.md SOKOL-23: built before BeginPassIfNeeded()/sg_apply_pipeline() since it
+        // issues its own raw GL calls (reading the source index buffer back off the GPU) that
+        // sokol_gfx's own state cache does not know about.
+        std::vector<std::uint32_t> wireframeIndices;
+        if (wireframeActive)
+        {
+            wireframeIndices = BuildWireframeLineIndicesEXT(ib, primitive, primitiveCount,
+                                                             params.startIndex, params.vertexStart);
+#if CNA_SOKOL_HAS_GL_READBACK
+            sg_reset_state_cache();
+#endif
+            if (wireframeIndexBufferId_ != 0)
+            {
+                sg_destroy_buffer(MakeBufferHandle(wireframeIndexBufferId_));
+                wireframeIndexBufferId_ = 0;
+            }
+            sg_buffer_desc wireframeDesc = {};
+            wireframeDesc.usage.index_buffer = true;
+            wireframeDesc.usage.immutable = true;
+            wireframeDesc.size = wireframeIndices.size() * sizeof(std::uint32_t);
+            wireframeDesc.data.ptr = wireframeIndices.data();
+            wireframeDesc.data.size = wireframeDesc.size;
+            wireframeDesc.label = "cna_wireframe_line_indices";
+            wireframeIndexBufferId_ = sg_make_buffer(&wireframeDesc).id;
+            if (sg_query_buffer_state(MakeBufferHandle(wireframeIndexBufferId_)) != SG_RESOURCESTATE_VALID)
+                throw std::runtime_error("Sokol backend: wireframe line-index buffer creation failed");
+        }
+
         BeginPassIfNeeded();
 
         sg_apply_pipeline(MakePipelineHandle(Get3DPipeline(key)));
@@ -4505,7 +4622,9 @@ namespace CNA::Internal::Backends::Sokol
         // baseVertex is folded into the buffer offset rather than passed to sg_draw_ex, so the
         // same code path serves both the indexed and non-indexed shapes.
         bindings.vertex_buffer_offsets[0] = params.baseVertex * key.stride;
-        if (ib != nullptr)
+        if (wireframeActive)
+            bindings.index_buffer = MakeBufferHandle(wireframeIndexBufferId_);
+        else if (ib != nullptr)
             bindings.index_buffer = MakeBufferHandle(ib->GetBufferIdEXT());
         if (hasTexture)
         {
@@ -4840,8 +4959,14 @@ namespace CNA::Internal::Backends::Sokol
             }
         }
 
-        const int elementCount = ElementCountForPrimitives(primitive, primitiveCount);
-        const int baseElement = (ib != nullptr) ? params.startIndex : params.vertexStart;
+        // plan_sokol.md SOKOL-23: the wireframe scratch buffer starts fresh at index 0 and holds
+        // exactly the doubled-edge line list, regardless of the source draw's own startIndex/
+        // vertexStart -- those were already folded into BuildWireframeLineIndicesEXT()'s readback.
+        const int elementCount = wireframeActive
+            ? static_cast<int>(wireframeIndices.size())
+            : ElementCountForPrimitives(primitive, primitiveCount);
+        const int baseElement = wireframeActive ? 0
+            : (ib != nullptr) ? params.startIndex : params.vertexStart;
         sg_draw(baseElement, elementCount, 1);
     }
 
@@ -5302,8 +5427,14 @@ namespace CNA::Internal::Backends::Sokol
             // MRT is bound is still refused).
             case CNA::GraphicsCapability::MultipleRenderTargets:
                 return true;
-            // The remaining boundary. Each needs a phase that is not implemented yet -- see
-            // plan_sokol.md; every one fails loudly rather than silently no-opping.
+            // Matches EasyGLGraphicsBackend's own convention (also false, despite EasyGL's own
+            // real DrawWireframe() CPU-expansion path): this capability reports whether the
+            // NATIVE rasterizer has a real polygon-fill-mode toggle (Vulkan reports
+            // fillModeNonSolidSupported_, a genuine VkPhysicalDeviceFeatures flag) -- sokol_gfx,
+            // like GLES3, has none. RasterizerState.FillMode == WireFrame is functionally
+            // implemented regardless (plan_sokol.md SOKOL-23, DrawColored3D's own
+            // BuildWireframeLineIndicesEXT() call), unconditionally on every draw and independent
+            // of this flag, the same relationship EasyGL's own DrawWireframe() has to it.
             case CNA::GraphicsCapability::WireFrame:
                 return false;
         }
