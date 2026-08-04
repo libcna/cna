@@ -1,3 +1,49 @@
+# NEXT.md
+
+## CURRENT — `feature/audit` post-audit remediation exit (2026-08-04)
+
+> **STATUS: EXIT BLOCKED. This is not a checkpoint. No checkpoint tag exists.**
+
+**Read first:** `remediation/REMEDIATION_EXIT.md` (authoritative exit record) and
+`remediation/INTEGRATION_BRANCH_INVENTORY.md` (dynamic branch inventory).
+
+### The next single task — `WEBGPU-115`, and nothing else
+
+WebGPU reports `GraphicsCapability::WireFrame` as **`true`** (inherited `IGraphicsBackend` default —
+the backend never overrides it), accepts a `FillMode::WireFrame` draw with **no throw, warning or
+log**, creates and **natively submits** a distinct pipeline keyed on `wireframe`, and returns a frame
+**byte-identical to Solid** — re-measured at `099b03c0`:
+
+```
+[ GFX-209 ] WebGPU solid:     total=18176 interior=1089/1089 AB=298 BC=310 CA=329
+[ GFX-209 ] WebGPU wireframe: total=18176 interior=1089/1089 AB=298 BC=310 CA=329
+```
+
+`plan_webgpu.md:504`'s `WEBGPU-115` row is **`⬜` NOT DONE** — it *is* the unperformed "document it as
+unsupported" task — so this is **not** a documented deviation. **P1, checkpoint blocker YES.**
+
+**Smallest safe correction:** override `SupportsCapability` to return `false` for `WireFrame` on
+WebGPU and reject the draw deterministically **at draw time** (not at `ApplyRasterizerState` — a
+state setter cannot know what the draw will be, per `REMED-GFX-DECL-GUARD`). Two dependent test
+contracts move with it: `WireFrameSilentlyRendersSolidGeometryOnThisBackend` (written to fail when
+this is fixed) and `examples/webgpu_graphicsstate_test.cpp` Check G.
+
+### Everything else is clear
+
+- `REMED-GFX-209` **DONE**; `-211`/`-212`/`-213`/`-215`/`-216` **DONE**; `REMED-GFX-DECL-GUARD` **DONE**.
+- `REMED-GFX-217`/`-218` checkpoint blockers **RESOLVED** (translators still deferred).
+- `REMED-GFX-203`…`-208`, `-210`, `-214` **DEFERRED**; `REMED-GFX-219` **OPEN, LOW/P3, blocks nothing**
+  — and must **not** be bundled with `WEBGPU-115`: GFX-219 *under*-reports a capability EasyGL has,
+  `WEBGPU-115` *over*-reports one WebGPU lacks. Opposite safety directions.
+- `REMED-BUILD-012` platform-blocked (Wine/vkd3d-proton) — D3D12 is cross-build-only and is **not**
+  called clean.
+- **Branch inventory as of `099b03c0`: 19 logical pending lanes** — a snapshot, not an invariant.
+  `feature/gl` needs the **MetaGL → EasyGL → CNA** order first; EasyGL (`rvc` @ `b52f671`) and MetaGL
+  (`feature/followup-audit` @ `d5bc155`) are **development-complete**, merely unmerged into their own
+  `develop` branches. **No Magnum or Wicked Engine branch exists anywhere in this workspace.**
+
+---
+
 # NEXT.md — `feature/graphics` session handoff (2026-07-18)
 
 > **This section is current for `feature/graphics` (this checkout).** Everything below the

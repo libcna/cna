@@ -3,6 +3,29 @@
 **105 remediation tasks + 15 accepted no-action items**, consolidated from 686 raw per-file findings
 plus the audit's 6 synthesis documents. Full detail for every ID is in `MASTER_REMEDIATION_PLAN.md`.
 
+> ## CAMPAIGN EXIT STATE (2026-08-04) — **EXIT BLOCKED, NOT A CHECKPOINT**
+>
+> Authoritative exit record: **`REMEDIATION_EXIT.md`**.
+> Branch inventory: **`INTEGRATION_BRANCH_INVENTORY.md`** (dynamic — 19 logical lanes at `099b03c0`).
+>
+> **One checkpoint blocker remains: `WEBGPU-115`** — WebGPU reports
+> `GraphicsCapability::WireFrame` as `true` (inherited `IGraphicsBackend` default; the backend never
+> overrides it), accepts a `FillMode::WireFrame` draw with no throw, warning or log, creates and
+> **natively submits** a distinct pipeline keyed on `wireframe`, and returns a frame **byte-identical
+> to Solid** (`total=18176 interior=1089/1089` for both, re-measured at `099b03c0`). `plan_webgpu.md`'s
+> `WEBGPU-115` row is **`⬜` NOT DONE** — it *is* the unperformed documentation task — so this is not a
+> documented deviation. **P1, checkpoint blocker YES.** No checkpoint tag exists.
+>
+> `REMED-GFX-219` (EasyGL **under**-reports `WireFrame` while rendering a correct one) is LOW/P3,
+> blocker **NO**, DEFERRED. **Do not bundle it with `WEBGPU-115`** — their safety directions are
+> opposite.
+>
+> **Corrected 2026-08-04:** the "Discovered during remediation" table in `REMEDIATION_PROGRESS.md`
+> still showed `REMED-GFX-211`/`-212`/`-213` as OPEN blockers after they closed. All three are
+> **DONE**. The older open graphics tickets (`REMED-GFX-056`/`-114`/`-115`/`-120`/`-121`/`-126`/
+> `-132`/`-133`/`-137`/`-139`/`-171`/`-178`) had never been classified against the blocker rule at
+> all; they now are, in `REMEDIATION_EXIT.md` §4.3, and none blocks.
+
 ## Counts
 
 ### By priority
