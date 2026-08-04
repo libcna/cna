@@ -39,12 +39,18 @@ does not grow a parallel 3D implementation.
   plus symmetric Add factor tuples that exactly match Direct2D's DestinationOver, Source/Destination
   In/Out/Atop and Xor Porter-Duff modes. Image sprites use Direct2D's explicit composite modes,
   rather than treating the presentation D3D11 device as an application compositing pass. Sprite
-  `Color` modulates RGBA, including `Color.A`; render targets remain GPU image sources rather
-  than being copied through CPU memory for blending. A decorated Porter-Duff source is materialized
-  in a Direct2D command list before the same image composite mode is applied. A transformed
-  rectangle geometry layer bounds every non-source-over image composite to the rasterized sprite
-  quad, preventing Direct2D's transparent extension to the current clip from changing unrelated
-  destination pixels.
+  `Color` modulates RGBA, including `Color.A`. `Additive` is `BlendState`'s `SourceAlpha/One`, not
+  Direct2D's unconditional `PLUS` (`One/One`): since Direct2D has no general blend-factor API, an
+  ordinary `Texture2D` source under `Additive` always goes through a CPU pixel pass that folds the
+  source's own resulting alpha into itself (squaring alpha, premultiplying RGB by it) before
+  `PLUS`'s implicit `*1` reproduces the real factor exactly. A render target source under
+  `Additive` has no CPU shadow to fold and remains on the unmodified `PLUS` path (a tracked,
+  native-Windows-gated limitation); every other blend mode's render targets remain GPU image
+  sources rather than being copied through CPU memory. A decorated Porter-Duff source is
+  materialized in a Direct2D command list before the same image composite mode is applied. A
+  transformed rectangle geometry layer bounds every non-source-over image composite to the
+  rasterized sprite quad, preventing Direct2D's transparent extension to the current clip from
+  changing unrelated destination pixels.
 - Scissor enable/rectangle and a 2D viewport transform+clip. SpriteBatch coordinates are local to
   the viewport. The scene is rendered into a logical Direct2D target, then `Present` composites it
   into the physical swap-chain bitmap using the selected presentation transform. Consequently

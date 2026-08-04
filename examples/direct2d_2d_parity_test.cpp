@@ -607,15 +607,47 @@ protected:
         check("NonPremultiplied texture Color.A", 9, 5, halfRedColorAlphaOverBackground);
         if (verifyAdvancedBlend)
         {
-            check("Additive premultiplied texture", 17, 1, Color(148, 40, 80, 255));
+            // D2D-35: BlendState.Additive is SourceAlpha/One, not Direct2D's unconditional
+            // One/One PLUS. Pre-multiplying the CPU-generated source by its own resulting alpha
+            // (see MakeSpritePixels) makes PLUS reproduce that factor: for the untinted
+            // (128,0,0,128) source, fragA=128 folds RGB to (64,0,0) and alpha to 64 before adding
+            // the (20,40,80,255) background -- (84,40,80,255), not the old (148,40,80,255) that
+            // used the raw unfolded source directly.
+            check("Additive premultiplied texture", 17, 1, Color(84, 40, 80, 255));
             check("Opaque copies premultiplied source", 25, 1, Color(128, 0, 0, 128));
-            check("Additive texture Color.A", 17, 5, Color(84, 40, 80, 255));
+            // With halfAlphaTint (Color.A=128), fragA folds to 64 first (128*128/255), then the
+            // Additive fold multiplies RGB/A by that smaller fragA again: (32,0,0,16) + background
+            // == (52,40,80,255), not the old (84,40,80,255).
+            check("Additive texture Color.A", 17, 5, Color(52, 40, 80, 255));
             check("Opaque texture Color.A", 25, 5, Color(128, 0, 0, 64));
         }
         else
         {
             std::printf("[SKIP] Additive/Opaque composite modes (Wine Direct2D ignores PLUS/BOUNDED_SOURCE_COPY)\n");
         }
+
+        // D2D-35: unlike the two checks above, this does not depend on Direct2D's PLUS composite
+        // mode actually reaching the GPU as PLUS. MakeSpritePixels' Additive fold runs on the CPU
+        // regardless of platform, and any sane compositing formula (Direct2D's real PLUS, or
+        // whatever WineD3D substitutes for a composite mode it ignores) reduces to "= source" over
+        // a fully transparent destination, since the destination-side term is multiplied by zero
+        // either way. This isolates and verifies the CPU-side SourceAlpha fold itself on Wine.
+        RenderTarget2D additiveFoldTarget(device, 1, 1);
+        device.SetRenderTarget(&additiveFoldTarget);
+        device.Clear(Color::Transparent);
+        sprites_->Begin(SpriteSortMode::Deferred, BlendState::Additive, &point, nullptr, &scissorDisabled);
+        sprites_->Draw(premultipliedHalfRed, Rectangle(0, 0, 1, 1), Rectangle(0, 0, 1, 1), Color::White);
+        sprites_->End();
+        device.SetRenderTarget(nullptr);
+        Color additiveFoldPixel(0, 0, 0, 0);
+        const Rectangle additiveFoldTexel(0, 0, 1, 1);
+        additiveFoldTarget.GetData(0, &additiveFoldTexel, &additiveFoldPixel, 0, 1);
+        const bool additiveFoldMatches = Matches(additiveFoldPixel, Color(64, 0, 0, 64));
+        std::printf("[%s] Additive SourceAlpha fold over transparent destination: got=(%d,%d,%d,%d), expected=(64,0,0,64)\n",
+                    additiveFoldMatches ? "PASS" : "FAIL",
+                    additiveFoldPixel.getRProperty(), additiveFoldPixel.getGProperty(),
+                    additiveFoldPixel.getBProperty(), additiveFoldPixel.getAProperty());
+        passed = passed && additiveFoldMatches;
 
         RenderTarget2D blendTarget(device, 4, 4);
         device.SetRenderTarget(&blendTarget);

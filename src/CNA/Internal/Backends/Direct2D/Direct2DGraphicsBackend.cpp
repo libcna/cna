@@ -1880,10 +1880,34 @@ namespace CNA::Internal::Backends::Direct2D
                 // component-wise multiply -- Color.A scales only the resulting alpha, for every
                 // blend preset, and must never additionally attenuate the (already premultiplied,
                 // for source-over/add) source RGB a second time.
-                output[0] = static_cast<uint8_t>(sourceR * color.getRProperty() / 255);
-                output[1] = static_cast<uint8_t>(sourceG * color.getGProperty() / 255);
-                output[2] = static_cast<uint8_t>(sourceB * color.getBProperty() / 255);
-                output[3] = static_cast<uint8_t>(alpha * color.getAProperty() / 255);
+                const int fragR = sourceR * color.getRProperty() / 255;
+                const int fragG = sourceG * color.getGProperty() / 255;
+                const int fragB = sourceB * color.getBProperty() / 255;
+                const int fragA = alpha * color.getAProperty() / 255;
+                if (blendMode_ == Direct2DBlendMode::Add)
+                {
+                    // D2D-35: BlendState.Additive is SourceAlpha/One for both the color AND alpha
+                    // channel (FNA: colorSourceBlend=alphaSourceBlend=SourceAlpha, both
+                    // destination factors One), not Direct2D's D2D1_COMPOSITE_MODE_PLUS, which is
+                    // an unconditional One/One add with no per-fragment factor at all. Direct2D
+                    // exposes no general blend-factor API, so the SourceAlpha factor is folded
+                    // into the source pixels here instead: pre-multiplying by the fragment's own
+                    // resulting alpha (and squaring alpha itself, since the alpha channel's own
+                    // blend factor is also SourceAlpha) makes PLUS's implicit *1 reproduce
+                    // SourceAlpha/One exactly: PLUS(fragRGB*fragA, fragA*fragA) + dst*1
+                    // == fragRGB*fragA + dst.rgb, fragA*fragA + dst.a.
+                    output[0] = static_cast<uint8_t>(fragR * fragA / 255);
+                    output[1] = static_cast<uint8_t>(fragG * fragA / 255);
+                    output[2] = static_cast<uint8_t>(fragB * fragA / 255);
+                    output[3] = static_cast<uint8_t>(fragA * fragA / 255);
+                }
+                else
+                {
+                    output[0] = static_cast<uint8_t>(fragR);
+                    output[1] = static_cast<uint8_t>(fragG);
+                    output[2] = static_cast<uint8_t>(fragB);
+                    output[3] = static_cast<uint8_t>(fragA);
+                }
             }
         }
         return result;
@@ -1955,10 +1979,26 @@ namespace CNA::Internal::Backends::Direct2D
                 uint8_t* output = result.data() + (static_cast<std::size_t>(dy) * sourceWidth + dx) * 4u;
                 // D2D-34: same independent RGB/A tint as MakeSpritePixels -- Color.A scales only
                 // the blended alpha, never the blended RGB a second time.
-                output[0] = static_cast<uint8_t>(std::lround(blendedR * color.getRProperty() / 255.0));
-                output[1] = static_cast<uint8_t>(std::lround(blendedG * color.getGProperty() / 255.0));
-                output[2] = static_cast<uint8_t>(std::lround(blendedB * color.getBProperty() / 255.0));
-                output[3] = static_cast<uint8_t>(std::lround(blendedA * color.getAProperty() / 255.0));
+                const double fragR = blendedR * color.getRProperty() / 255.0;
+                const double fragG = blendedG * color.getGProperty() / 255.0;
+                const double fragB = blendedB * color.getBProperty() / 255.0;
+                const double fragA = blendedA * color.getAProperty() / 255.0;
+                if (blendMode_ == Direct2DBlendMode::Add)
+                {
+                    // D2D-35: same SourceAlpha/One fold as MakeSpritePixels, for a mip-linear
+                    // blend under BlendState.Additive.
+                    output[0] = static_cast<uint8_t>(std::lround(fragR * fragA / 255.0));
+                    output[1] = static_cast<uint8_t>(std::lround(fragG * fragA / 255.0));
+                    output[2] = static_cast<uint8_t>(std::lround(fragB * fragA / 255.0));
+                    output[3] = static_cast<uint8_t>(std::lround(fragA * fragA / 255.0));
+                }
+                else
+                {
+                    output[0] = static_cast<uint8_t>(std::lround(fragR));
+                    output[1] = static_cast<uint8_t>(std::lround(fragG));
+                    output[2] = static_cast<uint8_t>(std::lround(fragB));
+                    output[3] = static_cast<uint8_t>(std::lround(fragA));
+                }
             }
         }
         return result;
@@ -2058,9 +2098,13 @@ namespace CNA::Internal::Backends::Direct2D
         const bool needsTintEffect = !IsWhite(color);
         // D2D-74: a mip-linear blend has no GPU built-in-effect equivalent here, so it always
         // takes the CPU path (MakeMipBlendedSpritePixels), independent of ColorMatrix/Premultiply
-        // effect support.
+        // effect support. D2D-35: Additive's SourceAlpha/One factor likewise has no Direct2D
+        // built-in-effect equivalent (ColorMatrix cannot square alpha), so it also always takes
+        // the CPU path (MakeSpritePixels' Add-mode branch), even for an untinted Color::White
+        // draw that would otherwise go straight to the GPU with the wrong D2D1_COMPOSITE_MODE_PLUS
+        // semantics.
         const bool requiresCpuBitmap = ordinaryTexture &&
-            (mipBlendActive ||
+            (mipBlendActive || blendMode_ == Direct2DBlendMode::Add ||
              ((needsTintEffect || nonPremultipliedSource_) &&
               ((needsTintEffect && !SupportsColorMatrixEffect()) ||
                (nonPremultipliedSource_ && !SupportsPremultiplyEffect()))));
