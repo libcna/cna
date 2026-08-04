@@ -288,6 +288,7 @@ Tasks are listed in roughly recommended implementation order.
 | N25 | `RenderPipelineSettings` wired to actual backend passes | ⬜ |
 | N26 | `DepthEffect` — colour-depth-reduction post-process (`ShaderEffect` subclass): 16-bit/8-bit colour, 4/2/1-bit greyscale, GLSL for EasyGL | ✅ |
 | N27 | `DepthEffect::DitherMode` — ordered (Bayer 4x4/8x8) dithering before quantization. Error-diffusion (Floyd-Steinberg/Atkinson) deliberately not offered — inherently sequential, not single-pass-GPU-friendly without compute shaders (see N70) | ✅ |
+| N28 | `DepthEffect` `Palette256`/`Palette16` modes — real nearest-colour match against a fixed 216-entry web-safe palette / classic 16-entry EGA/CGA palette (lookup texture + fragment-shader search), composes with `DitherMode` | ✅ |
 
 ### Shadows
 

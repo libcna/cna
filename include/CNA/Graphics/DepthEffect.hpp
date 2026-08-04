@@ -6,6 +6,7 @@
 #include "CNA/Graphics/DepthEffectMode.hpp"
 #include "CNA/Graphics/DitherMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 
 namespace CNA::Graphics {
 
@@ -14,10 +15,13 @@ namespace CNA::Graphics {
      *
      * A `ShaderEffect` (GLSL, EasyGL backend) that quantizes the rendered colour to a
      * fixed number of levels per channel, emulating limited-palette display hardware:
-     * 16-bit (RGB565) colour, 8-bit (RGB332) colour, or 4-bit/2-bit/1-bit greyscale.
-     * Optionally applies ordered (Bayer matrix) dithering before quantization — see
-     * DitherMode — to break up flat banding the way period-authentic limited-palette
-     * hardware display shaders do.
+     * 16-bit (RGB565) colour, 8-bit (RGB332) colour, 4-bit/2-bit/1-bit greyscale, or a
+     * real nearest-colour palette match against a fixed 216-colour "web-safe" palette
+     * (Palette256) or the classic 16-colour EGA/CGA palette (Palette16) — unlike the bit-depth
+     * modes above, these search an actual non-uniform colour table instead of rounding each
+     * channel independently. Optionally applies ordered (Bayer matrix) dithering before
+     * quantization/matching — see DitherMode — to break up flat banding the way
+     * period-authentic limited-palette hardware display shaders do.
      *
      * Usage mirrors any other custom `ShaderEffect`-based post-process — draw the scene
      * into a `Texture2D` (typically via a `RenderTarget2D`), then redraw it through
@@ -63,8 +67,20 @@ namespace CNA::Graphics {
         void OnApply() override;
 
     private:
+        /**
+         * @brief Lazily builds the Palette256/Palette16 lookup textures on first use.
+         *
+         * No-op if the textures already exist or if this effect has no working backend
+         * (mirrors ShaderEffect's own "no device.backend_" tolerance — building a texture
+         * with GraphicsDevice::GetBackend() throws when there is no backend).
+         */
+        void EnsurePaletteTextures();
+
         DepthEffectMode mode_ = DepthEffectMode::Color16Bit;
         DitherMode ditherMode_ = DitherMode::None;
+        Microsoft::Xna::Framework::Graphics::Texture2D palette256Texture_;
+        Microsoft::Xna::Framework::Graphics::Texture2D palette16Texture_;
+        bool paletteTexturesBuilt_ = false;
     };
 
 } // namespace CNA::Graphics

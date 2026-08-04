@@ -23,6 +23,14 @@ namespace CNA::Graphics {
         Grayscale2Bit,
         /** @brief Black & white, 1-bit (2 luminance levels — pure black/white). */
         Grayscale1Bit,
+        /**
+         * @brief 216-colour "web-safe" palette (6 levels per channel: 0,51,102,153,204,255),
+         * nearest-colour matched — a real fixed historical palette, unlike Color8Bit's
+         * independent per-channel rounding.
+         */
+        Palette256,
+        /** @brief Classic 16-colour EGA/CGA palette, nearest-colour matched. */
+        Palette16,
     };
 
 } // namespace CNA::Graphics

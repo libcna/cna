@@ -67,6 +67,8 @@ TEST(DepthEffectTest, SetModeRoundTripsForEveryMode)
         DepthEffectMode::Grayscale4Bit,
         DepthEffectMode::Grayscale2Bit,
         DepthEffectMode::Grayscale1Bit,
+        DepthEffectMode::Palette256,
+        DepthEffectMode::Palette16,
     };
 
     for (const auto mode : modes)
@@ -83,6 +85,21 @@ TEST(DepthEffectTest, ApplyDoesNotCrashWithoutABackend)
 
     fx.setMode(DepthEffectMode::Grayscale1Bit);
     fx.setDitherMode(DitherMode::Bayer8x8);
+    EXPECT_NO_THROW(fx.Apply());
+}
+
+// Palette256/Palette16 lazily build their lookup textures inside OnApply() (via Apply()) --
+// this must stay a no-op (not throw) when there is no working backend, same as every other
+// mode, rather than crashing on GraphicsDevice::GetBackend()'s "no backend" exception.
+TEST(DepthEffectTest, ApplyDoesNotCrashForPaletteModesWithoutABackend)
+{
+    GraphicsDevice gd;
+    DepthEffect fx(gd);
+
+    fx.setMode(DepthEffectMode::Palette256);
+    EXPECT_NO_THROW(fx.Apply());
+
+    fx.setMode(DepthEffectMode::Palette16);
     EXPECT_NO_THROW(fx.Apply());
 }
 
@@ -114,6 +131,19 @@ TEST(DepthEffectTest, CloneReturnsIndependentDepthEffectWithSameModeAndDitherMod
     clone->setDitherMode(DitherMode::Bayer8x8);
     EXPECT_EQ(fx.getMode(), DepthEffectMode::Grayscale2Bit);
     EXPECT_EQ(fx.getDitherMode(), DitherMode::Bayer4x4);
+}
+
+TEST(DepthEffectTest, CloneReturnsIndependentDepthEffectWithSamePaletteMode)
+{
+    GraphicsDevice gd;
+    DepthEffect fx(gd);
+    fx.setMode(DepthEffectMode::Palette16);
+
+    std::unique_ptr<Effect> cloned(fx.Clone());
+    auto* clone = dynamic_cast<DepthEffect*>(cloned.get());
+
+    ASSERT_NE(clone, nullptr);
+    EXPECT_EQ(clone->getMode(), DepthEffectMode::Palette16);
 }
 
 #endif // CNA_NOXNA

@@ -55,6 +55,10 @@ namespace
         {DepthEffectMode::Grayscale1Bit, DitherMode::None,     "1bit_bw_none"},
         {DepthEffectMode::Grayscale1Bit, DitherMode::Bayer4x4, "1bit_bw_bayer4x4"},
         {DepthEffectMode::Grayscale1Bit, DitherMode::Bayer8x8, "1bit_bw_bayer8x8"},
+        {DepthEffectMode::Palette256,    DitherMode::None,     "palette256_none"},
+        {DepthEffectMode::Palette256,    DitherMode::Bayer4x4, "palette256_bayer4x4"},
+        {DepthEffectMode::Palette16,     DitherMode::None,     "palette16_none"},
+        {DepthEffectMode::Palette16,     DitherMode::Bayer4x4, "palette16_bayer4x4"},
     };
 
     // Deterministic HSV -> RGB, matching the standard sextant formula.
