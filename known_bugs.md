@@ -1441,25 +1441,37 @@ physical AMD Radeon 780M/RADV -- see `feedback_real_display_vulkan_available` in
   in code shared between both renderer modules, most likely `AcquirePrimitivePipeline()`'s own
   `pipelineDesc.stencil` construction or how `stencilFunction_`/`stencilMask_`/etc. get captured,
   not either module's native stencil-state translation.
-- **NEW, separate, surprising finding: constant `DepthBias` -- the ONE mechanism from this ticket
-  already verified WORKING on the OpenGL module (`A1`/`B1`/`C1`/`E1`/`G0` all pass there) -- does
-  NOT work on the Vulkan module at all.** Under `CNA_LLGL_RENDERER=vulkan`,
-  `rasterizerstate_depthbias_test.cpp`'s `A1`/`B1`/`C1` (constant-bias flip checks) all FAIL,
-  behaving exactly as if `DepthBias` were still unwired (matching this ticket's OWN pre-fix
-  symptom) -- yet the C++ code building `pipelineDesc.rasterizer.depthBias` and the pipeline-cache
-  key is IDENTICAL for both renderer modules (no `CNA_LLGL_RENDERER`-specific branching anywhere
-  in `AcquirePrimitivePipeline()`), so this is not the same key-overflow bug already fixed. LLGL's
-  own `VKGraphicsPSO.cpp` was read directly and looks correct on its face
-  (`depthBiasEnable = VKBoolean(constantFactor != 0 || slopeFactor != 0 || clamp != 0)`, and the
-  three float fields copied straight into the static `VkPipelineRasterizationStateCreateInfo` --
-  `VK_DYNAMIC_STATE_DEPTH_BIAS` is notably NOT in this module's own dynamic-state list, unlike
-  viewport/scissor/blend-constants/stencil-reference, so depth bias is meant to be baked
-  statically at pipeline-creation time, which the code appears to do). Root cause NOT identified --
-  this needs its own dedicated investigation (candidates: a Vulkan validation layer message not yet
-  captured, a depth-buffer format/precision difference between the two modules that happens to make
-  RADV's `LLGL_DEBUG`/validation report something useful, or a genuinely different LLGL Vulkan-side
-  bug in applying `depthBiasConstantFactor` at draw time despite the pipeline being created with the
-  right value).
+- **NEW, separate finding, plausible but NOT fully confirmed: constant `DepthBias` -- the ONE
+  mechanism already verified WORKING on the OpenGL module (`A1`/`B1`/`C1`/`E1`/`G0` all pass, on
+  Xvfb) -- appears to NOT work on the Vulkan module.** Under `CNA_LLGL_RENDERER=vulkan` on the real
+  display, `rasterizerstate_depthbias_test.cpp`'s `A1`/`B1`/`C1`/`D1` (every bias-effect check)
+  FAIL while every baseline (`A0`/`B0`/`C0`/`D0`/`D2`) PASSES -- a clean, internally-consistent
+  split (bias-off always right, bias-on always wrong), not scattered/random failures, which is why
+  this is treated as a plausible real finding rather than noise. **Two things were confirmed, not
+  guessed:** (1) distinct `LLGL::PipelineState*` pointers ARE created for `DepthBias=0` vs
+  `DepthBias=3000000` (`0x...b358` vs `0x...2778`, printed directly) -- this is NOT a repeat of the
+  pipeline-cache-key-overflow bug fixed elsewhere in this ticket, the cache is behaving correctly.
+  (2) LLGL's own `VKGraphicsPSO.cpp` (`CreateRasterizerState()`) was read directly and looks
+  correct on its face: `depthBiasEnable` is computed from the same three fields, all three are
+  copied verbatim into the static `VkPipelineRasterizationStateCreateInfo`, and
+  `VK_DYNAMIC_STATE_DEPTH_BIAS` is correctly absent from the module's own dynamic-state list
+  (meaning depth bias is INTENDED to be baked statically at creation time here, which the code does
+  do) -- no LLGL-side dynamic-state override was found that could be clobbering it afterward.
+  **However, a real confound was discovered during this same investigation that means this finding
+  needs independent re-verification before being trusted fully:** running the SAME test suite
+  against the OpenGL module on the real display (`CNA_LLGL_RENDERER=opengl DISPLAY=:0`, this
+  machine's own physical desktop, GNOME/Mutter compositor) produced SCATTERED, internally
+  INCONSISTENT results (`A0`/`B0`/`C0`/`D0` baselines FAIL -- unlike their reliable PASS on Xvfb --
+  while `D1`, a bias-EFFECT check, unexpectedly PASSES) -- a pattern that looks like genuine
+  window/compositor interference with this test's pixel-exact small-window readback assumptions
+  (window decorations, DPI scaling, vsync/compositor double-buffering catching a mid-transition
+  frame), NOT a real rendering defect. Since the Vulkan run was ALSO taken on this same real,
+  composited display (not Xvfb), the same class of interference cannot be fully ruled out there
+  either, even though its own result pattern is much cleaner/more consistent than GL's scattered
+  one. **Root cause not identified either way.** Next step: re-run this exact comparison once a
+  DRI3-capable Xvfb is available (`LLGL-55`'s own scope) to eliminate the real-desktop-compositor
+  variable entirely and get a clean Vulkan-vs-OpenGL comparison with NEITHER run touching a real,
+  composited window.
 - `D1` (`SlopeScaleDepthBias`) also fails identically under Vulkan (consistent with -- not new
   information beyond -- its OpenGL failure already documented above).
 - `H0`/`H1`/`I0`/`I1` were not re-tested under Vulkan this pass (the file aborts earlier under
