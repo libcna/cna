@@ -3385,11 +3385,28 @@ float4 main(in PSInput psIn) : SV_Target
         if (!staging)
             throw std::runtime_error("CNA Diligent: readback staging texture creation failed");
 
+        // DILIGENT-66: DiligentCore's GL backend copies the swap chain's own default framebuffer
+        // (Texture2D_GL::CopyTexSubimage -> glCopyTexSubImage2D) with the source Y taken straight
+        // from Box.MinY/MaxY, but the DEFAULT framebuffer's Y axis is GL's own native bottom-up
+        // convention (row 0 = bottom of the window) -- unlike every other texture read in this
+        // backend, which are ordinary allocated textures and therefore self-consistently top-down
+        // (their own upload and this backend's own staging-texture readback both use the same
+        // convention, so nothing but the swap chain's own default-framebuffer source needs this).
+        // Flipping the requested source rows here restores the top-down contract every other
+        // device type already provides.
         Dg::Box sourceBox;
         sourceBox.MinX = static_cast<Dg::Uint32>(copyX0);
         sourceBox.MaxX = static_cast<Dg::Uint32>(copyX1);
-        sourceBox.MinY = static_cast<Dg::Uint32>(copyY0);
-        sourceBox.MaxY = static_cast<Dg::Uint32>(copyY1);
+        if (deviceType_ == DiligentDeviceType::OpenGL)
+        {
+            sourceBox.MinY = static_cast<Dg::Uint32>(backBufferHeight - copyY1);
+            sourceBox.MaxY = static_cast<Dg::Uint32>(backBufferHeight - copyY0);
+        }
+        else
+        {
+            sourceBox.MinY = static_cast<Dg::Uint32>(copyY0);
+            sourceBox.MaxY = static_cast<Dg::Uint32>(copyY1);
+        }
 
         // Unbind first: the back buffer cannot be both the bound render target and a copy source,
         // and letting Diligent notice that itself only produces an info message about the same
@@ -3443,7 +3460,14 @@ float4 main(in PSInput psIn) : SV_Target
         {
             const int fullSourceRow =
                 requestedY + std::clamp(static_cast<int>(row * scaleY), 0, requestedH - 1);
-            const int stagingRow = fullSourceRow - copyY0;
+            const int stagingRowTopDown = fullSourceRow - copyY0;
+            // The Y-flipped source box above means glCopyTexSubImage2D copied GL-bottom-up rows
+            // in ascending order, landing the LOGICALLY-BOTTOM row of the copied box at staging
+            // row 0 -- un-reverse that here so stagingRow keeps meaning "row 0 = top", matching
+            // every non-GL device type.
+            const int stagingRow = (deviceType_ == DiligentDeviceType::OpenGL)
+                ? (copyH - 1 - stagingRowTopDown)
+                : stagingRowTopDown;
             for (int column = 0; column < w; ++column)
             {
                 const int fullSourceColumn =
