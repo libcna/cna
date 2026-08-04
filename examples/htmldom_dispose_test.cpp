@@ -20,6 +20,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 
+#include "CNA/Internal/Backends/HtmlDom/HtmlDomGraphicsBackend.hpp"
 #include "CNA/Internal/Backends/HtmlDom/HtmlDomState.hpp"
 
 #include <cstdio>
@@ -32,10 +33,11 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
+using namespace CNA::Internal::Backends::HtmlDom;
 
 namespace
 {
-    constexpr int kExpectedChecks = 10;
+    constexpr int kExpectedChecks = 17;
     constexpr int kBatchSize = 50;
     constexpr int kRenderTargetCount = 20;
     constexpr int kChurnIterations = 200;
@@ -56,6 +58,14 @@ namespace
         return cache ? cache.size : 0;
     });
 
+    // plan_html_dom.md HTMLDOM-114: whether the shared DOM surface (#cna-dom-root and everything
+    // CNA_HtmlDom_EnsureRoot owns) currently exists at all.
+    EM_JS(int, JsSurfaceExists, (), { return Module['cnaDomRoot'] ? 1 : 0; });
+
+    /// plan_html_dom.md HTMLDOM-114: how many live HtmlDomGraphicsBackend instances currently
+    /// reference the shared DOM surface -- see CNA_HtmlDom_EnsureRoot/DestroyRoot's own comments.
+    EM_JS(int, JsBackendRefCount, (), { return Module['cnaDomBackendRefCount'] || 0; });
+
     EM_JS(void, JsPublishResult, (int result, int passed, int expected), {
         window.__cnaSmokeResult = result;
         window.__cnaSmokePassed = passed;
@@ -65,6 +75,8 @@ namespace
 #else
     int JsTextureRegistryCount() { return -1; }
     int JsVariantCacheSize() { return -1; }
+    int JsSurfaceExists() { return 0; }
+    int JsBackendRefCount() { return 0; }
     void JsPublishResult(int, int, int) {}
 #endif
 }
@@ -281,6 +293,56 @@ protected:
                   "HTMLDOM-109: rebinding a render target drops exactly its own variant-cache "
                   "records, matching the invalidation it replaces, not leaving them as stale "
                   "(id,key) pairs the cache never reclaims");
+        }
+
+        // plan_html_dom.md HTMLDOM-114: a SECOND HtmlDomGraphicsBackend, constructed while the
+        // FIRST (this test's own, real) one is still alive and sharing the SAME window, must not
+        // silently ADOPT the shared DOM surface and then rip it out from under the first backend
+        // when the second one alone is destroyed. This is a real, confirmed defect the reference-
+        // counted CNA_HtmlDom_EnsureRoot/DestroyRoot fix closes: constructing a second backend was
+        // ALREADY a no-op for the JS surface itself (guarded as "already initialized"), but
+        // destroying that second backend unconditionally tore the WHOLE shared surface down --
+        // breaking the first, still-alive backend too, purely because ANOTHER backend happened to
+        // exist and get destroyed.
+        if (frame_ == 6)
+        {
+            auto& realBackend = static_cast<HtmlDomGraphicsBackend&>(dev.GetBackend());
+            check(JsSurfaceExists() == 1 && JsBackendRefCount() == 1,
+                  "HTMLDOM-114: before constructing a second backend, the shared surface exists "
+                  "with exactly one live reference -- this test's own real backend");
+            {
+                HtmlDomGraphicsBackend altBackend(
+                    realBackend.GetWindowInternal(), 64, 64,
+                    CNA::Internal::Backends::CnaPresentationMode::FixedHeightDynamicWidth);
+                check(JsBackendRefCount() == 2,
+                      "HTMLDOM-114: constructing a second backend sharing the same window "
+                      "increments the shared surface's reference count to 2, rather than either "
+                      "silently creating an independent surface or leaving the count unaware of it");
+                check(JsSurfaceExists() == 1,
+                      "HTMLDOM-114: the shared surface still exists while both backends are alive");
+            }   // altBackend destroyed here.
+            check(JsBackendRefCount() == 1,
+                  "HTMLDOM-114: destroying the second backend decrements the reference count back "
+                  "to 1, rather than tearing the surface down out from under the first");
+            check(JsSurfaceExists() == 1,
+                  "HTMLDOM-114: the shared surface genuinely SURVIVES the second backend's own "
+                  "destruction -- the real defect this task fixed: an earlier version tore the "
+                  "surface down unconditionally on ANY backend's destruction, breaking the "
+                  "first, still-alive backend too");
+
+            // The real, observable consequence: THIS test's own real backend must still be
+            // GENUINELY functional after the second backend's full construct-then-destroy cycle --
+            // not just "the root element object still exists".
+            const int beforeFresh = JsTextureRegistryCount();
+            {
+                Texture2D freshTex = Texture2D::CreateFromPixels(
+                    dev, 1, 1, std::vector<std::uint8_t>{1, 2, 3, 4});
+                check(JsTextureRegistryCount() == beforeFresh + 1,
+                      "HTMLDOM-114: creating a texture through the real backend still works "
+                      "normally after the second backend's construct-destroy cycle");
+            }
+            check(JsTextureRegistryCount() == beforeFresh,
+                  "HTMLDOM-114: ...and destroying that texture still works normally too");
 
             std::printf("=== %d/%d PASS ===\n", passCount_, kExpectedChecks);
             std::fflush(stdout);

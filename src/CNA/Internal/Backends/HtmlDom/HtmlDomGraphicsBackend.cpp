@@ -38,11 +38,20 @@
 // the host page's own layout happens to be (HTMLDOM-115 is the separate, later task for hardening
 // the REST of that host-page integration surface).
 EM_JS(void, CNA_HtmlDom_EnsureRoot, (), {
-    if (Module['cnaDomRoot']) return;
     // Guarded: the repo's own GTest runner is plain `node`, where there is no document at all, so
     // an unguarded reference would throw a ReferenceError into wasm instead of degrading to
-    // "no surface, nothing renders".
+    // "no surface, nothing renders". No document means no root and no ref count either, matching
+    // CNA_HtmlDom_DestroyRoot's own no-op there.
     if (typeof document === 'undefined') return;
+    // plan_html_dom.md HTMLDOM-114: reference-counted, not a plain "already initialized" guard.
+    // A SECOND HtmlDomGraphicsBackend constructed while a FIRST one is still alive (an unusual but
+    // real-to-guard-against scenario -- nothing in IGraphicsBackend prevents constructing more than
+    // one) must not silently ADOPT this shared root and then rip it out from under the first
+    // backend when the second one alone is later destroyed. CNA_HtmlDom_DestroyRoot only actually
+    // tears the DOM surface down once every backend that ever called this has also called that --
+    // the ordinary single-backend case still goes 0->1->0 exactly as before.
+    Module['cnaDomBackendRefCount'] = (Module['cnaDomBackendRefCount'] || 0) + 1;
+    if (Module['cnaDomRoot']) return;
     const canvas = Module['canvas'] || document.querySelector('canvas');
     if (!canvas) { console.error('[CNA] HTML_DOM: no <canvas> element to anchor the DOM surface to'); return; }
     const viewportEl = document.createElement('div');
@@ -270,6 +279,16 @@ EM_JS(void, CNA_HtmlDom_EnsureRoot, (), {
 });
 
 EM_JS(void, CNA_HtmlDom_DestroyRoot, (), {
+    // plan_html_dom.md HTMLDOM-114: mirrors CNA_HtmlDom_EnsureRoot's own reference count -- only
+    // the LAST backend to call this actually tears the shared DOM surface down. A second (or
+    // third, ...) live backend, constructed while this one was already alive, keeps the surface
+    // alive for whichever backend(s) are still using it; only its own count decrements here.
+    // typeof document check mirrors EnsureRoot's own early-out: no document means no ref count was
+    // ever incremented for this call's own construction, so there is nothing to decrement either.
+    if (typeof document !== 'undefined') {
+        Module['cnaDomBackendRefCount'] = Math.max(0, (Module['cnaDomBackendRefCount'] || 1) - 1);
+        if (Module['cnaDomBackendRefCount'] > 0) return;
+    }
     // plan_html_dom.md HTMLDOM-108: removes #cna-dom-viewport (which contains root), not root
     // directly -- root's own parent is now the wrapper, not the canvas's own parent, so removing
     // just root would leave the (now-empty) wrapper behind.

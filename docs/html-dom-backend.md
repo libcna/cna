@@ -19,7 +19,7 @@ produced:
 | `cna_test_htmldom_smoke` | DOM surface, sprite pool/recycling, `RenderTarget2D` readback, backbuffer refusal, `SpriteFont`, `TextureAddressMode::Wrap`/`Mirror`/mixed-axis, `SetScissorRect` (per-batch region isolation, region container has a real non-zero layout box, true per-flush paint order across regions, non-destructive eviction, honours `RasterizerState.ScissorTestEnable`), resize + scissor interaction, `SetViewport` sub-rectangle (per-batch, root never moves, no cross-batch retroactive offset), every `CnaPresentationMode`'s real scale/offset geometry under a mismatched aspect ratio, `SetPresentationMode` ordinal validation, `TransformWindowToLogical` outside-Letterbox-bar result (HTMLDOM-108), this browser's real `mix-blend-mode: plus-lighter` support (HTMLDOM-113) | 64/64 + 2 real screenshot pixel checks |
 | `cna_test_htmldom_pixel_verification` | Pixel-exact tint/`AlphaBlend`/`Opaque`/`Additive`, multi-glyph `SpriteFont` (kerning/`\n`/scale/flip), `transformMatrix`, render-target-as-`Draw()`-source, plain-texture `GetData`, `FromStream` decode, `TextureAddressMode::Mirror`/mixed-axis tiling, render-target `Viewport` offset, render-target scissor clip (enabled vs. disabled), render-target `Viewport`+`ScissorRectangle` active simultaneously (HTMLDOM-113), `TextureAddressMode::Clamp` edge-extension (fully outside, point vs. linear, scaled+tinted), `NonPremultiplied`/`Additive` translucent-source alpha (documented gap), zero-alpha, tint alpha, translucent render-target write/readback/resample premultiplied-alpha round trip (HTMLDOM-106) | 31/31 |
 | `cna_test_htmldom_stress` | Performance benchmark, 300-frame stability run, variant-cache eviction under sustained churn, deterministic LRU hit-promotion/eviction-identity (HTMLDOM-109), `SetData` cache regeneration, byte-identical static-resubmit flush-call/CSS-write instrumentation (HTMLDOM-110) | 10/10 |
-| `cna_test_htmldom_dispose` | Texture/render-target dispose actually shrinks the JS texture registry, bound-target auto-unbind, create/destroy churn, texture destruction and render-target rebinding each shrink the global variant cache by exactly their own contribution (HTMLDOM-109) | 10/10 |
+| `cna_test_htmldom_dispose` | Texture/render-target dispose actually shrinks the JS texture registry, bound-target auto-unbind, create/destroy churn, texture destruction and render-target rebinding each shrink the global variant cache by exactly their own contribution (HTMLDOM-109), a second `HtmlDomGraphicsBackend` sharing one window is reference-counted and destroying it does not tear down the first, still-alive backend's shared DOM surface (HTMLDOM-114) | 17/17 |
 | `cna_htmldom_visual_demo` | Screenshot-verified visual demo (not a PASS/FAIL page) | — |
 
 Plus 40 GTest cases for everything pure-C++ (blend mapping, address-mode validation, the sprite
@@ -258,3 +258,11 @@ software one without saying so.
     has no per-channel blend-factor customization to reproduce that with. Colour channels are always
     exact; the alpha channel is exact only when the source is fully opaque (where the squared and
     unsquared formulas coincide).
+12. **Effectively one live, actively-driven `GraphicsDevice` per process** (HTMLDOM-114) — not a
+    choice this backend makes, but a real constraint of `emscripten_set_main_loop`'s own
+    `simulate_infinite_loop` contract, which `Game::Run()` uses: it never returns to its caller, so
+    two independently-driven `Game::Run()` loops cannot coexist in one process. A SECOND
+    `HtmlDomGraphicsBackend` sharing the same window CAN still be constructed while a first is alive
+    (nothing in `IGraphicsBackend` prevents it, and this is now safe rather than forbidden) — the
+    shared DOM surface is reference-counted (`Module['cnaDomBackendRefCount']`), so destroying one
+    backend never tears the surface down out from under another still-live one. Verified in-browser.
