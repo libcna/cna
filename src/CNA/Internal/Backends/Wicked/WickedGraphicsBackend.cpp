@@ -196,11 +196,15 @@ namespace CNA::Internal::Backends::Wicked
                 case 20: return WickedShaderVariant::Basic20;
                 case 24: return WickedShaderVariant::Basic24;
                 case 32: return WickedShaderVariant::Basic32;
+                case 48: return WickedShaderVariant::Basic48;
+                case 52: return WickedShaderVariant::Basic52;
+                case 56: return WickedShaderVariant::Basic56;
+                case 68: return WickedShaderVariant::Basic68;
                 default:
                     throw std::runtime_error(
                         "Wicked backend: no built-in vertex layout for stride " +
                         std::to_string(strideInBytes) +
-                        " bytes. Supported strides are 16, 20, 24 and 32.");
+                        " bytes. Supported strides are 16, 20, 24, 32, 48, 52, 56 and 68.");
             }
         }
 
@@ -888,7 +892,7 @@ namespace CNA::Internal::Backends::Wicked
     {
         // The largest stride any built-in variant uses, so a buffer created before its declaration
         // is known can still hold the requested vertex count.
-        constexpr std::size_t kMaxSupportedStride = 64;
+        constexpr std::size_t kMaxSupportedStride = 68;
 
         /// CNA's established per-instance stream layout: one column-major Matrix per instance,
         /// the same 64-byte record the Vulkan backend's instanced pipeline consumes.
@@ -1527,16 +1531,33 @@ namespace CNA::Internal::Backends::Wicked
         }
 
         static constexpr const char* kVertexEntryPoints[] = {
-            "Basic16VS", "Basic20VS", "Basic24VS", "Basic32VS"
+            "Basic16VS", "Basic20VS", "Basic24VS", "Basic32VS",
+            "Basic48VS", "Basic52VS", "Basic56VS", "Basic68VS"
         };
+        static_assert(std::size(kVertexEntryPoints) ==
+                          static_cast<std::size_t>(WickedShaderVariant::Count),
+                      "Every shader variant needs its own vertex entry point.");
         static constexpr const char* kInstancedVertexEntryPoints[] = {
             "Basic16InstVS", "Basic20InstVS", "Basic24InstVS", "Basic32InstVS"
         };
+        static_assert(std::size(kInstancedVertexEntryPoints) == kWickedInstancedVariantCount,
+                      "Every instanced variant needs its own vertex entry point.");
         for (std::size_t i = 0; i < vertexShaders_.size(); ++i)
-        {
             CompileShader(wig::ShaderStage::VS, kVertexEntryPoints[i], vertexShaders_[i]);
+        for (std::size_t i = 0; i < instancedVertexShaders_.size(); ++i)
+        {
             CompileShader(wig::ShaderStage::VS, kInstancedVertexEntryPoints[i],
                           instancedVertexShaders_[i]);
+        }
+        static constexpr const char* kSkinnedVertexEntryPoints[] = {
+            "Skinned52VS", "Skinned56VS", "Skinned68VS"
+        };
+        static_assert(std::size(kSkinnedVertexEntryPoints) == kWickedSkinnableVariantCount,
+                      "Every skinnable variant needs its own vertex entry point.");
+        for (std::size_t i = 0; i < skinnedVertexShaders_.size(); ++i)
+        {
+            CompileShader(wig::ShaderStage::VS, kSkinnedVertexEntryPoints[i],
+                          skinnedVertexShaders_[i]);
         }
         CompileShader(wig::ShaderStage::PS, "BasicPS", pixelShader_);
         CompileShader(wig::ShaderStage::VS, "EnvMapVS", envMapVertexShader_);
@@ -1561,6 +1582,37 @@ namespace CNA::Internal::Backends::Wicked
             Element{"NORMAL",   0, wig::Format::R32G32B32_FLOAT, 0, 12},
             Element{"TEXCOORD", 0, wig::Format::R32G32_FLOAT,    0, 24},
         };
+        // The four wider stock layouts, byte-for-byte the same element tables the D3D11/D3D12
+        // backends use for these strides.
+        inputLayouts_[static_cast<std::size_t>(WickedShaderVariant::Basic48)].elements = {
+            Element{"POSITION", 0, wig::Format::R32G32B32_FLOAT,    0, 0},
+            Element{"NORMAL",   0, wig::Format::R32G32B32_FLOAT,    0, 12},
+            Element{"TANGENT",  0, wig::Format::R32G32B32A32_FLOAT, 0, 24},
+            Element{"TEXCOORD", 0, wig::Format::R32G32_FLOAT,       0, 40},
+        };
+        inputLayouts_[static_cast<std::size_t>(WickedShaderVariant::Basic52)].elements = {
+            Element{"POSITION",     0, wig::Format::R32G32B32_FLOAT,    0, 0},
+            Element{"NORMAL",       0, wig::Format::R32G32B32_FLOAT,    0, 12},
+            Element{"TEXCOORD",     0, wig::Format::R32G32_FLOAT,       0, 24},
+            Element{"BLENDWEIGHT",  0, wig::Format::R32G32B32A32_FLOAT, 0, 32},
+            Element{"BLENDINDICES", 0, wig::Format::R8G8B8A8_UINT,      0, 48},
+        };
+        inputLayouts_[static_cast<std::size_t>(WickedShaderVariant::Basic56)].elements = {
+            Element{"POSITION",     0, wig::Format::R32G32B32_FLOAT,    0, 0},
+            Element{"NORMAL",       0, wig::Format::R32G32B32_FLOAT,    0, 12},
+            Element{"TEXCOORD",     0, wig::Format::R32G32_FLOAT,       0, 24},
+            Element{"BLENDWEIGHT",  0, wig::Format::R32G32B32A32_FLOAT, 0, 32},
+            Element{"BLENDINDICES", 0, wig::Format::R8G8B8A8_UINT,      0, 48},
+            Element{"COLOR",        0, wig::Format::R8G8B8A8_UNORM,     0, 52},
+        };
+        inputLayouts_[static_cast<std::size_t>(WickedShaderVariant::Basic68)].elements = {
+            Element{"POSITION",     0, wig::Format::R32G32B32_FLOAT,    0, 0},
+            Element{"NORMAL",       0, wig::Format::R32G32B32_FLOAT,    0, 12},
+            Element{"TANGENT",      0, wig::Format::R32G32B32A32_FLOAT, 0, 24},
+            Element{"TEXCOORD",     0, wig::Format::R32G32_FLOAT,       0, 40},
+            Element{"BLENDWEIGHT",  0, wig::Format::R32G32B32A32_FLOAT, 0, 48},
+            Element{"BLENDINDICES", 0, wig::Format::R8G8B8A8_UINT,      0, 64},
+        };
 
         // EnvironmentMapEffect draws VertexPositionNormalTexture geometry, so it reuses the
         // stride-32 element list rather than declaring a fifth copy of it.
@@ -1570,7 +1622,7 @@ namespace CNA::Internal::Backends::Wicked
         // Each instanced layout is its non-instanced sibling plus CNA's established 64-byte
         // per-instance world matrix at input slot 1, delivered as four float4 columns. Deriving it
         // rather than writing it out four more times keeps the geometry half from drifting.
-        for (std::size_t i = 0; i < inputLayouts_.size(); ++i)
+        for (std::size_t i = 0; i < instancedInputLayouts_.size(); ++i)
         {
             instancedInputLayouts_[i].elements = inputLayouts_[i].elements;
             for (std::uint32_t column = 0; column < 4; ++column)
@@ -1809,9 +1861,21 @@ namespace CNA::Internal::Backends::Wicked
         }
         else
         {
-            desc.vs = key.instanced != 0 ? &instancedVertexShaders_[key.variant]
-                                         : &vertexShaders_[key.variant];
+            if (key.skinned != 0)
+            {
+                desc.vs = &skinnedVertexShaders_[key.variant - kWickedFirstSkinnableVariant];
+            }
+            else if (key.instanced != 0)
+            {
+                desc.vs = &instancedVertexShaders_[key.variant];
+            }
+            else
+            {
+                desc.vs = &vertexShaders_[key.variant];
+            }
             desc.ps = &pixelShader_;
+            // A skinned draw reads the same geometry layout as its non-skinned sibling; only the
+            // vertex program differs.
             desc.il = key.instanced != 0 ? &instancedInputLayouts_[key.variant]
                                          : &inputLayouts_[key.variant];
         }
@@ -2667,6 +2731,13 @@ namespace CNA::Internal::Backends::Wicked
                     "Wicked backend: only InstanceFrequency == 1 is supported (requested " +
                     std::to_string(instanceStream->instanceFrequency) + ").");
             }
+            if (VariantForStride(stride) >=
+                static_cast<WickedShaderVariant>(kWickedInstancedVariantCount))
+            {
+                throw std::runtime_error(
+                    "Wicked backend: instancing is available only for the stride-16/20/24/32 "
+                    "layouts (stride " + std::to_string(stride) + " was bound).");
+            }
             if (instanceStream->strideInBytes != kInstanceMatrixStride)
             {
                 throw std::runtime_error(
@@ -2743,14 +2814,41 @@ namespace CNA::Internal::Backends::Wicked
                 std::copy_n(params->envMapSpecular, 3, constants.envMapSpecular);
             }
 
+            if (params->skinned)
+            {
+                const auto variant = static_cast<std::size_t>(VariantForStride(stride));
+                if (variant < kWickedFirstSkinnableVariant)
+                {
+                    throw std::runtime_error(
+                        "Wicked backend: SkinnedEffect needs a vertex layout carrying blend "
+                        "weights and indices (stride 52, 56 or 68); stride " +
+                        std::to_string(stride) + " was bound.");
+                }
+                if (instanced)
+                {
+                    throw std::runtime_error(
+                        "Wicked backend: SkinnedEffect has no instanced shader variant.");
+                }
+                if (params->boneCount <= 0)
+                {
+                    throw std::runtime_error(
+                        "Wicked backend: SkinnedEffect was selected but no bone transforms were "
+                        "supplied.");
+                }
+                key.skinned = 1;
+                // The world inverse-transpose composes with the per-bone rotation in the vertex
+                // shader, so it is needed here exactly as it is for the env-map program.
+                WriteMatrixColumns(Matrix::Transpose(Matrix::Invert(world)),
+                                   constants.worldInverseTranspose);
+            }
+
             // Effects this backend has no shader for are refused rather than rendered as an
             // unlit/untextured approximation that would look like a working draw
-            // (plan_wicked.md WICKED-56).
-            if (params->skinned || params->pbr)
+            // (plan_wicked.md WICKED-56b).
+            if (params->pbr)
             {
                 throw std::runtime_error(
-                    "Wicked backend: SkinnedEffect and PbrEffect are not implemented by this "
-                    "backend.");
+                    "Wicked backend: PbrEffect is not implemented by this backend.");
             }
         }
         else
@@ -2761,6 +2859,16 @@ namespace CNA::Internal::Backends::Wicked
         wig::CommandList cmd = GetCommandListEXT();
         EnsureRenderPass();
         BindCommonState(cmd, key, constants);
+
+        if (key.skinned != 0 && params != nullptr)
+        {
+            WickedBoneConstants boneConstants;
+            const int boneCount = std::min(params->boneCount, 72);
+            std::copy_n(params->boneTransforms, static_cast<std::size_t>(boneCount) * 16,
+                        boneConstants.bones);
+            boneConstants.skinParams[0] = static_cast<float>(params->weightsPerVertex);
+            device_->BindDynamicConstantBuffer(boneConstants, 1, cmd);
+        }
 
         const auto resolveTexture = [&](const ITextureBackend* texture) -> const wig::Texture*
         {

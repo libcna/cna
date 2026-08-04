@@ -48,8 +48,48 @@ namespace CNA::Internal::Backends::Wicked
         Basic24 = 2,
         /** @brief Stride 32 — `VertexPositionNormalTexture`. */
         Basic32 = 3,
+        /** @brief Stride 48 — `VertexPositionNormalTangentTexture`. */
+        Basic48 = 4,
+        /** @brief Stride 52 — `VertexPositionNormalTextureSkinned`. */
+        Basic52 = 5,
+        /** @brief Stride 56 — the stride-52 layout with a per-vertex `Color` appended. */
+        Basic56 = 6,
+        /** @brief Stride 68 — `VertexPositionNormalTangentTextureSkinned`. */
+        Basic68 = 7,
         /** @brief Number of variants. */
-        Count = 4
+        Count = 8
+    };
+
+    /**
+     * @brief NOXNA. How many leading variants also have an instanced sibling.
+     *
+     * Instancing is offered for the four narrow stock layouts only. The wider tangent/skinned
+     * layouts exist to carry `PbrEffect`/`SkinnedEffect` geometry, and neither of those effects has
+     * an instanced form in CNA, so compiling four more entry points nothing can reach would be
+     * dead weight. An instanced draw on a wider stride is refused rather than silently downgraded.
+     */
+    NOXNA inline constexpr std::size_t kWickedInstancedVariantCount = 4;
+
+    /** @brief NOXNA. The first variant that carries blend weights, and so can be skinned. */
+    NOXNA inline constexpr std::size_t kWickedFirstSkinnableVariant =
+        static_cast<std::size_t>(WickedShaderVariant::Basic52);
+    /** @brief NOXNA. How many variants can be skinned (strides 52, 56 and 68). */
+    NOXNA inline constexpr std::size_t kWickedSkinnableVariantCount =
+        static_cast<std::size_t>(WickedShaderVariant::Count) - kWickedFirstSkinnableVariant;
+
+    /**
+     * @brief NOXNA. `SkinnedEffect`'s bone palette, bound as its own constant buffer.
+     *
+     * Kept out of @ref WickedShaderConstants deliberately: at 4608 bytes of matrices it dwarfs
+     * every other per-draw constant, and copying it into the frame allocator on draws that do no
+     * skinning at all would be pure waste. It is uploaded only for a skinned draw.
+     */
+    NOXNA struct WickedBoneConstants
+    {
+        /** @brief Columns of up to 72 bone matrices, in CNA's raw `Matrix` byte order. */
+        float bones[72 * 16] = {};
+        /** @brief x = `WeightsPerVertex` (1, 2 or 4); the rest is padding. */
+        float skinParams[4] = {4.0f, 0.0f, 0.0f, 0.0f};
     };
 
     /**
@@ -69,6 +109,7 @@ namespace CNA::Internal::Backends::Wicked
         std::uint32_t variant = 0;            ///< WickedShaderVariant ordinal.
         std::uint32_t instanced = 0;          ///< Non-zero when the per-instance input layout is used.
         std::uint32_t envMap = 0;             ///< Non-zero when the EnvironmentMapEffect program is used.
+        std::uint32_t skinned = 0;            ///< Non-zero when the SkinnedEffect program is used.
         std::uint32_t topology = 0;           ///< wi::graphics::PrimitiveTopology ordinal.
         std::uint32_t blendEnabled = 0;       ///< Non-zero when colour blending is on.
         std::int32_t  colorSrcBlend = 0;      ///< Raw XNA Blend ordinal.
@@ -1200,10 +1241,11 @@ namespace CNA::Internal::Backends::Wicked
         SceneTarget scene_;
 
         std::array<wig::Shader, static_cast<std::size_t>(WickedShaderVariant::Count)> vertexShaders_;
-        std::array<wig::Shader, static_cast<std::size_t>(WickedShaderVariant::Count)> instancedVertexShaders_;
+        std::array<wig::Shader, kWickedInstancedVariantCount> instancedVertexShaders_;
+        std::array<wig::Shader, kWickedSkinnableVariantCount> skinnedVertexShaders_;
         wig::Shader pixelShader_;
         std::array<wig::InputLayout, static_cast<std::size_t>(WickedShaderVariant::Count)> inputLayouts_;
-        std::array<wig::InputLayout, static_cast<std::size_t>(WickedShaderVariant::Count)> instancedInputLayouts_;
+        std::array<wig::InputLayout, kWickedInstancedVariantCount> instancedInputLayouts_;
         wig::Shader envMapVertexShader_;
         wig::Shader envMapPixelShader_;
         wig::InputLayout envMapInputLayout_;

@@ -15,7 +15,8 @@ a batched `SpriteBatch`, the four stock stride-dispatched 3D shader variants (16
 diffuse/vertex-colour/alpha-test/fog/three-directional-light shading, `RenderTarget2D`, full
 blend/depth-stencil/rasterizer/sampler state mapping, real GPU occlusion queries, MSAA on the scene
 target, back-buffer readback, `TextureCube` and `Texture3D` storage, `EnvironmentMapEffect` cube
-reflections, `RenderTargetCube`, and instanced draws. This is
+reflections, `RenderTargetCube`, `SkinnedEffect`, the full stock stride set (16/20/24/32/48/52/56/68),
+and instanced draws. This is
 **not** parity with the Vulkan or EasyGL backends — see "Remaining work" below for exactly what is
 missing.
 
@@ -132,10 +133,11 @@ missing.
 | WICKED-54 | Multiple simultaneous render targets | ⬜ |
 | WICKED-55 | `RenderTargetCube` (per-face RTV subresources, whole-cube SRV, sampleable by `EnvironmentMapEffect`) | ✅ |
 | WICKED-56 | `EnvironmentMapEffect` (cube reflections, flat and Fresnel-weighted, dedicated VS/PS pair matching the established CNA env-map shading) | ✅ |
-| WICKED-56b | `SkinnedEffect` and `PbrEffect` shader variants | ⬜ |
+| WICKED-56b | `SkinnedEffect` (bone palette at b1, FNA's `WeightsPerVertex` gating, skin composed with the world normal matrix, post-skin fog) | ✅ |
+| WICKED-56c | `PbrEffect` / `SkinnedPbrEffect` shader variants | ⬜ |
 | WICKED-57 | Custom `ShaderEffect` (`CreateEffectBackend`) | ⬜ |
 | WICKED-58 | Multi-stream vertex input (`GraphicsCapability::MultiStreamVertexInput`) | ⬜ |
-| WICKED-59 | Strides 48/52/56/68 (tangent/skinned layouts) | ⬜ |
+| WICKED-59 | Strides 48/52/56/68 (tangent/skinned layouts) — declared, matched to the D3D11/D3D12 element tables, drawn with the ordinary shading | ✅ |
 | WICKED-60 | D3D12 device selection (needs Wicked's root-signature macro in CNA's HLSL) | ⬜ |
 
 ### Phase W5 — 2D
@@ -172,9 +174,11 @@ missing.
   (`WICKED-56`). `EnvironmentMapEffect`, `SkinnedEffect` and `PbrEffect` throw.
 - **No MRT and no custom `ShaderEffect`** (`WICKED-54`/`57`/`68`). Each is refused explicitly and
   reported through `SupportsCapability()`.
-- **`SkinnedEffect` and `PbrEffect` still throw** (`WICKED-56b`); they also need the tangent and
-  skinning vertex strides (`WICKED-59`). `EnvironmentMapEffect` works and is what makes a
-  `TextureCube` sampleable.
+- **`PbrEffect` still throws** (`WICKED-56c`) — it needs a metallic-roughness BRDF plus four more
+  texture slots. `BasicEffect`, `AlphaTestEffect`, `DualTextureEffect`, `EnvironmentMapEffect` and
+  `SkinnedEffect` all work.
+- **Instancing is limited to the four narrow strides** (16/20/24/32) and is refused on the wider
+  tangent/skinned layouts, which have no instanced entry point.
 - **Instancing accepts only `InstanceFrequency == 1`** (`WICKED-53`). Wicked Engine's `InputLayout`
   carries no instance-step-rate field, so any other frequency is refused rather than silently
   drawn at rate 1. The per-instance record must be CNA's 64-byte column-major `Matrix`.

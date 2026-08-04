@@ -141,6 +141,170 @@ VSOut Basic32VS(float3 position : POSITION, float3 normal : NORMAL, float2 uv : 
 }
 
 // ---------------------------------------------------------------------------------------------
+// Tangent and skinned geometry layouts.
+//
+// These entry points accept the wider stock vertex layouts so geometry authored for PbrEffect or
+// SkinnedEffect can be drawn with the ordinary shading above. The tangent, blend-weight and
+// blend-index attributes are DECLARED but not consumed: declaring them is what makes the input
+// layout match the buffer, and consuming them is the job of the PbrEffect/SkinnedEffect programs
+// that plan_wicked.md WICKED-56b adds. A draw that actually asks for skinning is refused by the
+// backend rather than silently rendered in bind pose here.
+// ---------------------------------------------------------------------------------------------
+
+// Stride 48 -- VertexPositionNormalTangentTexture.
+VSOut Basic48VS(float3 position : POSITION, float3 normal : NORMAL,
+                float4 tangent : TANGENT, float2 uv : TEXCOORD0)
+{
+    VSOut o = FillCommon(position);
+    o.normalWS = TransformNormalToWorld(normal);
+    o.uv = uv;
+    return o;
+}
+
+// Stride 52 -- VertexPositionNormalTextureSkinned.
+VSOut Basic52VS(float3 position : POSITION, float3 normal : NORMAL, float2 uv : TEXCOORD0,
+                float4 blendWeights : BLENDWEIGHT, uint4 blendIndices : BLENDINDICES)
+{
+    VSOut o = FillCommon(position);
+    o.normalWS = TransformNormalToWorld(normal);
+    o.uv = uv;
+    return o;
+}
+
+// Stride 56 -- the stride-52 layout with a per-vertex Color appended.
+VSOut Basic56VS(float3 position : POSITION, float3 normal : NORMAL, float2 uv : TEXCOORD0,
+                float4 blendWeights : BLENDWEIGHT, uint4 blendIndices : BLENDINDICES,
+                float4 color : COLOR)
+{
+    VSOut o = FillCommon(position);
+    o.normalWS = TransformNormalToWorld(normal);
+    o.uv = uv;
+    o.color = color;
+    return o;
+}
+
+// Stride 68 -- VertexPositionNormalTangentTextureSkinned.
+VSOut Basic68VS(float3 position : POSITION, float3 normal : NORMAL,
+                float4 tangent : TANGENT, float2 uv : TEXCOORD0,
+                float4 blendWeights : BLENDWEIGHT, uint4 blendIndices : BLENDINDICES)
+{
+    VSOut o = FillCommon(position);
+    o.normalWS = TransformNormalToWorld(normal);
+    o.uv = uv;
+    return o;
+}
+
+// ---------------------------------------------------------------------------------------------
+// SkinnedEffect.
+//
+// Bone matrices arrive as CNA's raw per-bone `Matrix` bytes, read column-wise exactly like the
+// instance matrices above, so `bone * position` is the column-vector product that equals XNA's
+// row-vector `position * matrix`.
+//
+// FNA's Skin(vin, boneCount) sums only the first WeightsPerVertex (1, 2 or 4) weight/index pairs,
+// which is what the gating below reproduces -- summing all four unconditionally would blend in
+// bones the effect never selected.
+//
+// Skinning happens in object space, before the world transform, so `cb.mvp` (world * view *
+// projection) still applies unchanged and the fog term uses the POST-skin object-space position.
+// ---------------------------------------------------------------------------------------------
+
+struct CnaBones
+{
+    float4 boneColumns[72 * 4];
+    float4 skinParams;      // x = WeightsPerVertex
+};
+
+ConstantBuffer<CnaBones> bones : register(b1);
+
+float3 ApplyBonePosition(uint bone, float3 p)
+{
+    const uint base = bone * 4;
+    return (bones.boneColumns[base + 0] * p.x
+          + bones.boneColumns[base + 1] * p.y
+          + bones.boneColumns[base + 2] * p.z
+          + bones.boneColumns[base + 3]).xyz;
+}
+
+float3 ApplyBoneNormal(uint bone, float3 n)
+{
+    const uint base = bone * 4;
+    return (bones.boneColumns[base + 0] * n.x
+          + bones.boneColumns[base + 1] * n.y
+          + bones.boneColumns[base + 2] * n.z).xyz;
+}
+
+void SkinVertex(float3 position, float3 normal, float4 weights, uint4 indices,
+                out float3 skinnedPosition, out float3 skinnedNormal)
+{
+    const float weightsPerVertex = bones.skinParams.x;
+
+    skinnedPosition = ApplyBonePosition(indices.x, position) * weights.x;
+    skinnedNormal   = ApplyBoneNormal(indices.x, normal) * weights.x;
+
+    if (weightsPerVertex >= 2.0f)
+    {
+        skinnedPosition += ApplyBonePosition(indices.y, position) * weights.y;
+        skinnedNormal   += ApplyBoneNormal(indices.y, normal) * weights.y;
+    }
+    if (weightsPerVertex >= 4.0f)
+    {
+        skinnedPosition += ApplyBonePosition(indices.z, position) * weights.z
+                         + ApplyBonePosition(indices.w, position) * weights.w;
+        skinnedNormal   += ApplyBoneNormal(indices.z, normal) * weights.z
+                         + ApplyBoneNormal(indices.w, normal) * weights.w;
+    }
+}
+
+VSOut FillSkinned(float3 position, float3 normal, float2 uv, float4 weights, uint4 indices)
+{
+    float3 skinnedPosition;
+    float3 skinnedNormal;
+    SkinVertex(position, normal, weights, indices, skinnedPosition, skinnedNormal);
+
+    VSOut o = (VSOut)0;
+    o.position = TransformPosition(skinnedPosition);
+    // The fog term is evaluated on the post-skin object-space position, so a skinned vertex fogs
+    // by where it actually ended up rather than by its bind-pose location.
+    o.positionOS = float4(skinnedPosition, 1.0f);
+    o.positionWS = TransformToWorld(skinnedPosition);
+
+    // The bone-skin rotation composes with the outer world normal matrix; leaving the world factor
+    // out would light a rotated or non-uniformly scaled model as if World were identity.
+    const float4 n = float4(skinnedNormal, 0.0f);
+    o.normalWS = float3(dot(n, cb.worldIT0), dot(n, cb.worldIT1), dot(n, cb.worldIT2));
+
+    o.color = float4(1.0f, 1.0f, 1.0f, 1.0f);
+    o.uv = uv;
+    return o;
+}
+
+// Stride 52 -- VertexPositionNormalTextureSkinned.
+VSOut Skinned52VS(float3 position : POSITION, float3 normal : NORMAL, float2 uv : TEXCOORD0,
+                  float4 blendWeights : BLENDWEIGHT, uint4 blendIndices : BLENDINDICES)
+{
+    return FillSkinned(position, normal, uv, blendWeights, blendIndices);
+}
+
+// Stride 56 -- the stride-52 layout with a per-vertex Color appended.
+VSOut Skinned56VS(float3 position : POSITION, float3 normal : NORMAL, float2 uv : TEXCOORD0,
+                  float4 blendWeights : BLENDWEIGHT, uint4 blendIndices : BLENDINDICES,
+                  float4 color : COLOR)
+{
+    VSOut o = FillSkinned(position, normal, uv, blendWeights, blendIndices);
+    o.color = color;
+    return o;
+}
+
+// Stride 68 -- VertexPositionNormalTangentTextureSkinned.
+VSOut Skinned68VS(float3 position : POSITION, float3 normal : NORMAL,
+                  float4 tangent : TANGENT, float2 uv : TEXCOORD0,
+                  float4 blendWeights : BLENDWEIGHT, uint4 blendIndices : BLENDINDICES)
+{
+    return FillSkinned(position, normal, uv, blendWeights, blendIndices);
+}
+
+// ---------------------------------------------------------------------------------------------
 // Instanced variants.
 //
 // The per-instance stream is CNA's established 64-byte layout: a column-major float4x4 world

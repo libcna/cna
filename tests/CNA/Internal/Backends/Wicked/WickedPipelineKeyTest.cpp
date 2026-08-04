@@ -90,6 +90,19 @@ TEST(WickedPipelineKey, EnvMapFlagParticipatesInEquality)
     EXPECT_NE(hash(MakeKey()), hash(other));
 }
 
+TEST(WickedPipelineKey, SkinnedFlagParticipatesInEquality)
+{
+    // The skinned flag selects a different vertex program that consumes the bone palette. A key
+    // that ignored it would draw a skinned mesh through the bind-pose program -- a plausible
+    // looking render of the wrong thing.
+    WickedPipelineKey other = MakeKey();
+    other.skinned = 1;
+    EXPECT_FALSE(MakeKey() == other);
+
+    const WickedPipelineKeyHash hash;
+    EXPECT_NE(hash(MakeKey()), hash(other));
+}
+
 TEST(WickedPipelineKey, EveryStateFieldParticipatesInEquality)
 {
     // Byte-wise comparison is what makes this hold for a field added later without touching

@@ -109,6 +109,10 @@ D3D11/D3D12/Vulkan backends select theirs:
 | 20 | `VertexPositionTexture` | `Basic20VS` |
 | 24 | `VertexPositionColorTexture` (also `SpriteBatch` and every internal quad) | `Basic24VS` |
 | 32 | `VertexPositionNormalTexture` | `Basic32VS` |
+| 48 | `VertexPositionNormalTangentTexture` | `Basic48VS` |
+| 52 | `VertexPositionNormalTextureSkinned` | `Basic52VS` / `Skinned52VS` |
+| 56 | stride 52 with a per-vertex `Color` | `Basic56VS` / `Skinned56VS` |
+| 68 | `VertexPositionNormalTangentTextureSkinned` | `Basic68VS` / `Skinned68VS` |
 
 A stride outside this set throws rather than being rendered through a layout that merely has the
 same byte width.
@@ -134,7 +138,7 @@ Implemented and reported as supported:
 | `Texture2D` | Creation, `SetData` (level 0 and explicit mip levels), `GetData` |
 | Vertex / index buffers | 16- and 32-bit indices |
 | `SpriteBatch` | Batched quads, tint, rotation, origin, flip, layer depth, per-batch sampler |
-| 3D draws | `BasicEffect`, `AlphaTestEffect`, `DualTextureEffect`, `EnvironmentMapEffect`, fog, three directional lights, specular |
+| 3D draws | `BasicEffect`, `AlphaTestEffect`, `DualTextureEffect`, `EnvironmentMapEffect`, `SkinnedEffect`, fog, three directional lights, specular |
 | `RenderTarget2D` | Colour + optional depth/stencil, `RenderTargetUsage`, readback |
 | `RenderTargetCube` | Per-face rendering, whole-cube sampling, per-face upload and readback |
 | Render state | Blend (incl. per-slot write masks and sample mask), depth/stencil (incl. two-sided), rasterizer (incl. wireframe and depth bias), samplers |
@@ -153,7 +157,7 @@ Not implemented; each is refused explicitly at the call site and reported by
 | Multiple simultaneous render targets | `MultipleRenderTargets` |
 | Custom `ShaderEffect` / `SpriteBatch.Begin(effect)` | `CustomEffects` |
 | Multi-stream vertex input | `MultiStreamVertexInput` |
-| `SkinnedEffect`, `PbrEffect` | — (the draw throws; they also need the tangent/skinning vertex strides) |
+| `PbrEffect` | — (the draw throws; needs a metallic-roughness BRDF and four more texture slots) |
 | `InstanceFrequency` other than 1 | — (the draw throws; Wicked's `InputLayout` has no step-rate field) |
 | Mip-chain generation | — (levels are allocated and uploadable, nothing downsamples level 0) |
 | D3D12 device selection | — (needs Wicked's root-signature macro in CNA's HLSL) |
