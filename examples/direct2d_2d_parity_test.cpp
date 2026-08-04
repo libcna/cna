@@ -34,6 +34,7 @@
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "System/NotSupportedException.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -1310,6 +1311,46 @@ protected:
             sprites_->Draw(*white_, Rectangle(0, 0, 2, 2), Rectangle(0, 0, 1, 1), Color::White);
             sprites_->End();
             check("Direct2D usable after DeviceLost/DeviceReset notification cycle", 0, 0, Color::White);
+        }
+
+        // D2D-77: GetMaxTextureDimension() must reflect the active device's real
+        // ID2D1DeviceContext::GetMaximumBitmapSize(), not the base class's platform-wide 16384
+        // constant. Exercised with a 1-row texture (dimension x 1) so the boundary is tested
+        // exactly without allocating an O(dimension^2) buffer.
+        {
+            const int maxDim = device.GetMaxTextureDimension();
+            const bool maxDimSane = maxDim > 0 && maxDim <= (1 << 20);
+            std::printf("[%s] Direct2D GetMaxTextureDimension reports a device-derived value (%d)\n",
+                        maxDimSane ? "PASS" : "FAIL", maxDim);
+            passed = passed && maxDimSane;
+
+            bool atLimitAccepted = true;
+            try
+            {
+                Texture2D atLimit(device, maxDim, 1);
+                (void)atLimit;
+            }
+            catch (const std::exception&)
+            {
+                atLimitAccepted = false;
+            }
+            std::printf("[%s] Direct2D accepts a Texture2D exactly at the reported max dimension\n",
+                        atLimitAccepted ? "PASS" : "FAIL");
+            passed = passed && atLimitAccepted;
+
+            bool overLimitRejected = false;
+            try
+            {
+                Texture2D overLimit(device, maxDim + 1, 1);
+                (void)overLimit;
+            }
+            catch (const System::NotSupportedException&)
+            {
+                overLimitRejected = true;
+            }
+            std::printf("[%s] Direct2D rejects a Texture2D one past the reported max dimension\n",
+                        overLimitRejected ? "PASS" : "FAIL");
+            passed = passed && overLimitRejected;
         }
 
         // D2D-63: device loss while an unrecoverable render target (created with recovery

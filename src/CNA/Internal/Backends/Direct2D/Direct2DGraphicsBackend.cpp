@@ -1953,6 +1953,11 @@ namespace CNA::Internal::Backends::Direct2D
         return 0;
     }
 
+    int Direct2DGraphicsBackend::GetMaxTextureDimension() const
+    {
+        return static_cast<int>(d2dContext_->GetMaximumBitmapSize());
+    }
+
     bool Direct2DGraphicsBackend::SupportsCapability(CNA::GraphicsCapability capability) const
     {
         // D2D1_INTERPOLATION_MODE_ANISOTROPIC is a native ID2D1DeviceContext 2D sampler mode.

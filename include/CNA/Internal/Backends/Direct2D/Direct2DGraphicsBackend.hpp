@@ -245,6 +245,11 @@ namespace CNA::Internal::Backends::Direct2D
         [[nodiscard]] bool SupportsDepthStencil() const override { return false; }
         [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
         [[nodiscard]] int ApplyMultiSampleCount(int requestedMultiSampleCount) override;
+        /// D2D-77: the active device's real reported limit (ID2D1DeviceContext::
+        /// GetMaximumBitmapSize()), not the base class's platform-wide 16384 default -- lets
+        /// Texture2D's own creation-time validation reject an oversized request before any CPU
+        /// pixel buffer is allocated.
+        [[nodiscard]] int GetMaxTextureDimension() const override;
 
         void ClearColorAndDepth(float r, float g, float b, float a, float depth) override;
         void ClearDepth(float depth) override;
