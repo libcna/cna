@@ -928,8 +928,28 @@ dedicated entry for the full investigation trace):**
 - The stencil COMPARE does not actually gate (writes correctly, but a mismatched reference is not
   rejected) -- found via the new `llgl_stencil_test.cpp`, not yet root-caused.
 
+**`LLGL-53` follow-up (2026-08-04, docs only, commits `490ec9ed`/`8949e2c5`): cross-checked the
+open stencil and depth-bias defects on real Vulkan** (this machine's own physical desktop,
+`DISPLAY=:0`, AMD Radeon 780M/RADV -- see `LLGL-52`'s own follow-up above for how). The
+stencil-doesn't-gate defect is now confirmed ARCHITECTURAL: `llgl_stencil_test.cpp` fails
+identically under `CNA_LLGL_RENDERER=vulkan`, ruling out anything GL-module-specific. A NEW, fifth
+defect was found this way, plausible but not fully confirmed: constant `DepthBias` -- the one
+mechanism already verified working on OpenGL (Xvfb) -- appears to NOT take effect on the Vulkan
+module at all (every bias-effect check failed while every baseline passed, a clean and
+internally-consistent split). Confirmed NOT a repeat of the pipeline-cache-key bug (distinct
+`LLGL::PipelineState*` objects ARE created for different bias values); LLGL's own
+`VKGraphicsPSO.cpp` construction code was read and looks correct. **However, a real confound was
+found in the same investigation:** the SAME suite run against the OpenGL module on this same real,
+composited (`GNOME`/`Mutter`) display produced scattered, internally-inconsistent results (Xvfb-
+reliable baselines failing here, an unrelated check unexpectedly passing) -- almost certainly
+window/compositor interference with this test's pixel-exact small-window readback, not a real
+defect. Since the Vulkan run was ALSO taken on this same composited display, the DepthBias-on-
+Vulkan finding needs independent re-verification (ideally via a DRI3-capable Xvfb, `LLGL-55`'s own
+scope) before being trusted fully, despite its own cleaner result pattern. See `known_bugs.md`'s
+own entry for the complete trace.
+
 The acceptance gate's own "update `SupportsCapability()` and `docs/llgl-backend.md` from measured
-module results" was not done this session -- these four open defects should be reflected there
+module results" was not done this session -- these five open defects should be reflected there
 once (or instead of) being fixed, so the documented capability boundary matches what was actually
 measured rather than what was intended.
 
