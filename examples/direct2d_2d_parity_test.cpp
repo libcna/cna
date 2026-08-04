@@ -820,6 +820,63 @@ protected:
         sprites_->End();
         check("Texture2D MipLinear blends adjacent levels", 0, 0, Color(0, 128, 128, 255));
 
+        // D2D-79: mip LEVEL selection (as opposed to the pure PreferredMipLevelForTransform math,
+        // already covered independently by D2D-75's unit tests) is exercised here as an
+        // INTEGRATION matrix: destination scale (minification at three levels, plus a fractional
+        // scale that must still floor to level 0, not round up early) crossed with every
+        // SpriteEffects flip combination. A geometric symmetric solid-color quad makes flip
+        // invisible to the OUTPUT color, so any mismatch here can only mean flip corrupted mip
+        // selection itself (e.g. a sign error feeding into ComputeMinificationSigma), not a
+        // sampling artifact.
+        {
+            struct MipScaleCase { int destSize; Color expected; const char* label; };
+            const MipScaleCase mipScaleCases[] = {
+                {8, Color(255, 0, 0, 255), "scale 2.0 magnification (level 0)"},
+                {4, Color(255, 0, 0, 255), "scale 1.0 (level 0)"},
+                {3, Color(255, 0, 0, 255), "scale 0.75 fractional bound (still level 0)"},
+                {2, Color(0, 255, 0, 255), "scale 0.5 (level 1)"},
+                {1, Color(0, 0, 255, 255), "scale 0.25 (level 2)"},
+            };
+            const SpriteEffects flipCases[] = {
+                SpriteEffects::None, SpriteEffects::FlipHorizontally, SpriteEffects::FlipVertically,
+                static_cast<SpriteEffects>(static_cast<int>(SpriteEffects::FlipHorizontally) |
+                                           static_cast<int>(SpriteEffects::FlipVertically))};
+            const char* flipLabels[] = {"None", "FlipH", "FlipV", "FlipH|FlipV"};
+
+            bool mipSelectionMatrixPassed = true;
+            for (const MipScaleCase& scaleCase : mipScaleCases)
+            {
+                for (int flipIndex = 0; flipIndex < 4; ++flipIndex)
+                {
+                    device.Clear(Color::Black);
+                    sprites_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, nullptr, &scissorDisabled);
+                    sprites_->Draw(mipTexture, Rectangle(0, 0, scaleCase.destSize, scaleCase.destSize),
+                                   Rectangle(0, 0, 4, 4), Color::White, 0.0f, Vector2(0.0f, 0.0f),
+                                   flipCases[flipIndex], 0.0f);
+                    sprites_->End();
+                    Color actual(0, 0, 0, 0);
+                    const Rectangle centerTexel(0, 0, 1, 1);
+                    device.GetBackBufferData(&centerTexel, &actual, 0, 1);
+                    const bool caseMatches = Matches(actual, scaleCase.expected);
+                    if (!caseMatches)
+                    {
+                        std::printf("[FAIL] Texture2D mip selection matrix: %s, flip=%s: got=(%d,%d,%d,%d), "
+                                    "expected=(%d,%d,%d,%d)\n",
+                                    scaleCase.label, flipLabels[flipIndex],
+                                    actual.getRProperty(), actual.getGProperty(), actual.getBProperty(),
+                                    actual.getAProperty(), scaleCase.expected.getRProperty(),
+                                    scaleCase.expected.getGProperty(), scaleCase.expected.getBProperty(),
+                                    scaleCase.expected.getAProperty());
+                    }
+                    mipSelectionMatrixPassed = mipSelectionMatrixPassed && caseMatches;
+                }
+            }
+            std::printf("[%s] Texture2D mip selection matrix (scale x flip, %zu cases)\n",
+                        mipSelectionMatrixPassed ? "PASS" : "FAIL",
+                        std::size(mipScaleCases) * std::size(flipCases));
+            passed = passed && mipSelectionMatrixPassed;
+        }
+
         // Generating a mip while the target remains bound ends the Direct2D recording interval.
         // A subsequent draw in the same bind interval has to invalidate the chain again; otherwise
         // level one incorrectly keeps the red value read before the green draw below.
