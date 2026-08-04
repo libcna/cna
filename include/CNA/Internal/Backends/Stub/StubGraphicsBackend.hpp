@@ -16,6 +16,14 @@ namespace CNA::Internal::Backends::Stub
             vertexCount_ = vertex_count;
         }
 
+        /// The declaration is deliberately discarded, which is the explicit decision
+        /// IVertexBufferBackend requires rather than a default it could inherit silently. Stub
+        /// keeps no vertex storage and binds no native layout, so it holds nothing a declaration
+        /// could describe unfaithfully -- the draw-time declaration-fidelity guard that backends
+        /// with a real layout must apply has no subject here. Same shape as Headless, which
+        /// rasterizes nothing either.
+        void SetVertexDeclaration(const VertexDeclaration& vertexDeclaration) override {}
+
         [[nodiscard]] int GetVertexCount() const override { return vertexCount_; }
 
     private:
@@ -120,6 +128,15 @@ namespace CNA::Internal::Backends::Stub
 
         std::unique_ptr<ITextureBackend> CreateTexture(const ImageData& data) override;
         std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;
+
+        /// The binding set is deliberately discarded, which is the explicit decision
+        /// IGraphicsBackend requires of every backend rather than a default that could quietly
+        /// flatten a cube face to RenderTarget2D or to face +X. Stub creates no render targets at
+        /// all -- CreateRenderTarget2D()/CreateRenderTargetCube() keep the shared nullptr defaults
+        /// -- and rasterizes nothing, so there is no attachment to bind and no surface a
+        /// misinterpreted descriptor could corrupt.
+        void SetRenderTargets(const RenderTargetBindingDescriptor* renderTargets,
+                              int count) override {}
 
         void ClearColorAndDepth(float r, float g, float b, float a, float depth) override {}
         void ClearDepth(float depth) override {}

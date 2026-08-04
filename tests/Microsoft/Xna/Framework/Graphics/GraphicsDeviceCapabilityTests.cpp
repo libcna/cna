@@ -198,6 +198,25 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameCapabilityReportIsThisBackendsOwn)
     EXPECT_FALSE(reported)
         << "DX1 claims WireFrame support -- this backend has no 3D pipeline at all, so a true "
            "report cannot be backed by any rendering path";
+#elif defined(CNA_BACKEND_STUB)
+    // Stub answers false to EVERY capability, WireFrame included: it is a no-op backend that
+    // rasterizes nothing and keeps no state, so there is no rendering path a true report could
+    // stand on. Same truthful-false shape as DX1 above.
+    //
+    // Note what this arm is NOT. Stub is not in the rejection set: unlike WebGPU, it does not throw
+    // on a WireFrame draw, because its declared contract is that a real Game loop runs to
+    // completion without throwing (docs/stub-backend.md, examples/stub_smoke_test.cpp). The
+    // refusal obligation exists to stop a backend from returning a frame that silently lies -- a
+    // solid fill presented as a wireframe. Stub returns no frame at all, so it has the third shape
+    // this file describes: an honest report with no pixel route to measure, which is why
+    // WireFrameTriangleOracle.hpp deliberately leaves CNA_WIREFRAME_PIXEL_ORACLE undefined here.
+    //
+    // Stub is also stricter than Headless, which reaches the default arm below by INHERITING
+    // IGraphicsBackend's true. Stub overrides SupportsCapability to false precisely so a no-op
+    // backend stops claiming a capability it does not have.
+    EXPECT_FALSE(reported)
+        << "Stub claims WireFrame support -- its SupportsCapability override is gone and it has "
+           "fallen back to IGraphicsBackend's default true, which no no-op backend can back";
 #else
     // Every other backend in this file answers true, either because it renders a real wireframe
     // (Software, Vulkan, bgfx, SDL_GPU, D3D9, D3D11, D3D12) or because it inherits
