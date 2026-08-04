@@ -162,6 +162,7 @@ CNA supports backend selection at build-time via `CNA_GRAPHICS_BACKEND` (choose 
 - `WEBGPU`
 - `HEADLESS`
 - `SOFTWARE`
+- `STUB`
 - `D3D11` (Windows-only)
 - `D3D12` (Windows-only)
 - `CANVAS` (Emscripten only)

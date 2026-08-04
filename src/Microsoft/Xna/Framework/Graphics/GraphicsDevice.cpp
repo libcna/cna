@@ -176,11 +176,11 @@ namespace Microsoft::Xna::Framework::Graphics
         SDL_SetHint(SDL_HINT_ANDROID_TRAP_BACK_BUTTON, "1");
 #endif
 
-        // plan_headless.md design decision 2 / plan_software.md design decision 4: the Headless and
-        // Software backends never create a real window and never touch SDL's video subsystem at
-        // all, so both can run in CI containers with no display server present -- not just a
-        // headless-but-present one.
-#if !defined(CNA_BACKEND_HEADLESS) && !defined(CNA_BACKEND_SOFTWARE)
+        // plan_headless.md design decision 2 / plan_software.md design decision 4 / plan_stub.md
+        // design decision 1: the Headless, Software, and Stub backends never create a real window
+        // and never touch SDL's video subsystem at all, so all three can run in CI containers with
+        // no display server present -- not just a headless-but-present one.
+#if !defined(CNA_BACKEND_HEADLESS) && !defined(CNA_BACKEND_SOFTWARE) && !defined(CNA_BACKEND_STUB)
         // PresentationParameters::HeadlessEXT is the runtime opt-in equivalent of the compile-time
         // guard above: a backend that normally wants a window (D3D12) can be asked for a genuinely
         // off-screen device instead. Skipping SDL_INIT_VIDEO is the point -- it is what lets such a
@@ -2045,7 +2045,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::createOrAttachWindow()
     {
-#if defined(CNA_BACKEND_HEADLESS) || defined(CNA_BACKEND_SOFTWARE)
+#if defined(CNA_BACKEND_HEADLESS) || defined(CNA_BACKEND_SOFTWARE) || defined(CNA_BACKEND_STUB)
         // No real window, ever -- see the constructor's matching guard above.
         // GraphicsBackendCreateArgs::window stays nullptr; UpdateViewportFromWindow() already
         // falls back to the backend's own GetViewportSize() first and only touches window_ if

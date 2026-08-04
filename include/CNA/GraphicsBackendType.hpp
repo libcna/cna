@@ -28,6 +28,9 @@ namespace CNA
         /** @brief Software (CPU rasterizer). */
         Software,
 
+        /** @brief Stub (no-op, renders nothing). */
+        Stub,
+
         /** @brief Direct3D 11. */
         D3D11,
 
@@ -103,6 +106,8 @@ namespace CNA
         return GraphicsBackendType::Headless;
 #elif defined(CNA_BACKEND_SOFTWARE)
         return GraphicsBackendType::Software;
+#elif defined(CNA_BACKEND_STUB)
+        return GraphicsBackendType::Stub;
 #elif defined(CNA_BACKEND_D3D11)
         return GraphicsBackendType::D3D11;
 #elif defined(CNA_BACKEND_D3D12)
@@ -159,6 +164,7 @@ namespace CNA
             case GraphicsBackendType::WebGPU:       return "WEBGPU";
             case GraphicsBackendType::Headless:     return "HEADLESS";
             case GraphicsBackendType::Software:     return "SOFTWARE";
+            case GraphicsBackendType::Stub:          return "STUB";
             case GraphicsBackendType::D3D11:        return "D3D11";
             case GraphicsBackendType::D3D12:        return "D3D12";
             case GraphicsBackendType::Canvas:       return "CANVAS";

@@ -13,6 +13,7 @@ cmake-build-sdl/*
 cmake-build-webgpu/*
 cmake-build-headless/*
 cmake-build-software/*
+cmake-build-stub/*
 cmake-build-d3d11/*
 cmake-build-d3d12/*
 cmake-build-canvas/*

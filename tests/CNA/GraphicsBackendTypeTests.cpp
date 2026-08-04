@@ -46,6 +46,7 @@ TEST(GraphicsBackendTypeTest, NameMatchesTypeForEveryBackend)
         case GraphicsBackendType::WebGPU:      EXPECT_EQ(name, "WEBGPU");       break;
         case GraphicsBackendType::Headless:    EXPECT_EQ(name, "HEADLESS");     break;
         case GraphicsBackendType::Software:    EXPECT_EQ(name, "SOFTWARE");     break;
+        case GraphicsBackendType::Stub:        EXPECT_EQ(name, "STUB");         break;
         case GraphicsBackendType::D3D11:       EXPECT_EQ(name, "D3D11");        break;
         case GraphicsBackendType::D3D12:       EXPECT_EQ(name, "D3D12");        break;
         case GraphicsBackendType::Canvas:      EXPECT_EQ(name, "CANVAS");       break;
