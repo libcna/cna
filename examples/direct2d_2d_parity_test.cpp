@@ -1216,6 +1216,50 @@ protected:
         sprites_->End();
         check("Direct2D usable after device loss with unrecoverable active target", 0, 0, Color::White);
 
+        // D2D-62: rejecting a stale RT bind while a DIFFERENT, live RT is the active target must
+        // leave that original RT active and still draw-able -- not silently fall back to the
+        // backbuffer or leave the backend in a broken state. Render target content is documented
+        // to reset to transparent across a device loss regardless (RecreateBitmap), so this checks
+        // a fresh control draw after the rejection, not content predating the loss.
+        RenderTarget2D liveActiveTarget(device, 2, 2);
+        device.SetRenderTarget(&liveActiveTarget);
+        device.SetRenderTarget(nullptr); // unbind before the loss so D2D-63's own check does not trip here
+        device.SetContextRecoveryEnabled(false);
+        RenderTarget2D staleWhileOtherActiveTarget(device, 2, 2);
+        direct2dBackend.DebugRestoreContext();
+        device.SetContextRecoveryEnabled(true);
+        device.SetRenderTarget(&liveActiveTarget);
+        bool staleBindWhileOtherActiveRejected = false;
+        try
+        {
+            device.SetRenderTarget(&staleWhileOtherActiveTarget);
+        }
+        catch (const std::exception&)
+        {
+            staleBindWhileOtherActiveRejected = true;
+        }
+        std::printf("[%s] Direct2D rejects a stale RT bind while a different RT is active\n",
+                    staleBindWhileOtherActiveRejected ? "PASS" : "FAIL");
+        passed = passed && staleBindWhileOtherActiveRejected;
+        const bool originalTargetStillBound = device.GetRenderTargets().size() == 1 &&
+            device.GetRenderTargets()[0].getRenderTargetProperty() == &liveActiveTarget;
+        std::printf("[%s] Rejected stale RT bind left the original render target bound\n",
+                    originalTargetStillBound ? "PASS" : "FAIL");
+        passed = passed && originalTargetStillBound;
+        sprites_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, nullptr, &scissorDisabled);
+        sprites_->Draw(*white_, Rectangle(0, 0, 1, 1), Rectangle(0, 0, 1, 1), Color::White);
+        sprites_->End();
+        Color controlDrawPixel(0, 0, 0, 0);
+        const Rectangle liveTargetTexel(0, 0, 1, 1);
+        liveActiveTarget.GetData(0, &liveTargetTexel, &controlDrawPixel, 0, 1);
+        const bool controlDrawAccepted = Matches(controlDrawPixel, Color::White);
+        std::printf("[%s] Original render target accepts a control draw after rejected stale bind: got=(%d,%d,%d,%d)\n",
+                    controlDrawAccepted ? "PASS" : "FAIL",
+                    controlDrawPixel.getRProperty(), controlDrawPixel.getGProperty(),
+                    controlDrawPixel.getBProperty(), controlDrawPixel.getAProperty());
+        passed = passed && controlDrawAccepted;
+        device.SetRenderTarget(nullptr);
+
         // 13. Resize through the public GraphicsDeviceManager path. Direct2D has to recreate
         // its DXGI target lazily for the newly sized SDL client area, then keep the logical
         // NativeBackBuffer viewport/readback contract coherent for subsequent SpriteBatch work.
