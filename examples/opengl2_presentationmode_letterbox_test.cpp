@@ -88,10 +88,14 @@ class OpenGL2PresentationModeLetterboxTest : public Game
 
     Color ReadPixel(int x, int y)
     {
-        Color px(0, 0, 0, 0);
-        const Rectangle rect(x, y, 1, 1);
-        getGraphicsDeviceProperty().GetBackBufferData(&rect, &px, 0, 1);
-        return px;
+        // GFX-165: GetBackBufferData validates its rectangle against PresentationParameters'
+        // backbuffer size, which this test's own raw SDL_SetWindowSize deliberately does not
+        // update -- XNA's backbuffer does not follow the OS window until a device reset. What
+        // this test needs is the REAL framebuffer pixel, which is exactly the backend's own
+        // ReadBackbuffer (the same top-down row convention GetBackBufferData itself wraps).
+        std::uint8_t px[4] = {0, 0, 0, 0};
+        getGraphicsDeviceProperty().GetBackend().ReadBackbuffer(x, y, 1, 1, px);
+        return Color(px[0], px[1], px[2], px[3]);
     }
 
     void DrawFullCanvasSprite(GraphicsDevice& dev)
