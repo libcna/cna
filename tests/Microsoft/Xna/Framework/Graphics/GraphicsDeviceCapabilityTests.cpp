@@ -233,7 +233,8 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameCapabilityReportIsThisBackendsOwn)
            "fallen back to IGraphicsBackend's default true, which no no-op backend can back";
 #else
     // Every other backend in this file answers true, either because it renders a real wireframe
-    // (Software, Vulkan, bgfx, SDL_GPU, D3D9, D3D11, D3D12) or because it inherits
+    // (Software, Vulkan, bgfx, SDL_GPU, D3D9, D3D11, D3D12, OpenGL4 -- the last via desktop core
+    // GL's own glPolygonMode, asserted by the pixel oracle below) or because it inherits
     // IGraphicsBackend's default (Headless, which rasterizes nothing at all).
     EXPECT_TRUE(reported);
 #endif

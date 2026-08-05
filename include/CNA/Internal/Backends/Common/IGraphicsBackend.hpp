@@ -40,6 +40,7 @@ namespace CNA::Internal::Backends
     using SetDataOptions = Microsoft::Xna::Framework::Graphics::SetDataOptions;
     using VertexDeclaration = Microsoft::Xna::Framework::Graphics::VertexDeclaration;
     using VertexElement = Microsoft::Xna::Framework::Graphics::VertexElement;
+    using VertexElementFormat = Microsoft::Xna::Framework::Graphics::VertexElementFormat;
 
     /**
      * @brief Backend-neutral BlendState output-merger write state (REMED-GFX-077).

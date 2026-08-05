@@ -81,7 +81,9 @@ namespace CNA
         SdlGpu,
 
         /** @brief OpenGL ES 1.1 (fixed-function). */
-        OpenGLES1
+        OpenGLES1,
+        /** @brief Real desktop OpenGL 4.x core profile. */
+        OpenGL4
     };
 
     /**
@@ -143,6 +145,8 @@ namespace CNA
         return GraphicsBackendType::SdlGpu;
 #elif defined(CNA_BACKEND_OPENGLES1)
         return GraphicsBackendType::OpenGLES1;
+#elif defined(CNA_BACKEND_OPENGL4)
+        return GraphicsBackendType::OpenGL4;
 #else
 #error "CNA: no CNA_BACKEND_* compile definition set -- graphics backend selection (cmake/BackendSelection.cmake) is broken"
 #endif
@@ -186,6 +190,7 @@ namespace CNA
             case GraphicsBackendType::D3D10:          return "D3D10";
             case GraphicsBackendType::SdlGpu:        return "SDL_GPU";
             case GraphicsBackendType::OpenGLES1:     return "OPENGLES1";
+            case GraphicsBackendType::OpenGL4:       return "OPENGL4";
         }
         return "UNKNOWN";
     }

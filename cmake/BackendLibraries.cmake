@@ -216,4 +216,11 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "OPENGLES1")
     message(STATUS "CNA: using GLESv1_CM at ${CNA_GLESV1_CM_LIBRARY} (headers: ${CNA_GLES_INCLUDE_DIR})")
     target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 "${CNA_GLESV1_CM_LIBRARY}")
     target_include_directories(${BACKEND_TARGET} PRIVATE "${CNA_GLES_INCLUDE_DIR}")
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "OPENGL4")
+    # plan_opengl4.md GL4-1: real desktop OpenGL 4.x core profile via the platform's own GL
+    # library (libGL/opengl32/OpenGL.framework, resolved by find_package(OpenGL) in
+    # BackendSelection.cmake) plus SDL3 for window/context management -- no other new
+    # third-party dependency (GL4Loader.hpp/.cpp is this backend's own hand-rolled loader for
+    # the GL 1.2+ entry points a core profile needs).
+    target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 OpenGL::GL)
 endif()

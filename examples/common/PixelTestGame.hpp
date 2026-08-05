@@ -125,6 +125,20 @@ namespace CNA::Examples
             return pass;
         }
 
+        // Generic boolean assertion (Task 465), for a check that isn't itself a pixel-region
+        // compare -- e.g. "this rendered output must differ from that one" (proving a code path
+        // had a real effect, not just "didn't throw"). Mirrors the per-file local `check()`
+        // lambda every hand-rolled Game-subclass example test already defines for this exact
+        // purpose (e.g. sdlgpu_smoke_test.cpp), lifted here so PixelTestGame-derived tests don't
+        // need to redeclare it. Prints the same "[PASS]"/"[FAIL] label" line and folds into the
+        // same getResultProperty() as ExpectPixel/CompareGoldenImage.
+        bool Check(bool ok, const char* label)
+        {
+            std::printf("[%s] %s\n", ok ? "PASS" : "FAIL", label);
+            if (!ok) result_ = 1;
+            return ok;
+        }
+
         // Compares a region of the live rendered backbuffer against a small, checked-in
         // reference PNG image at goldenPath (Task 463), per-channel, with the same tolerance
         // convention as ExpectPixel (0 = exact match). Reuses Texture2D::FromStream/SaveAsPng

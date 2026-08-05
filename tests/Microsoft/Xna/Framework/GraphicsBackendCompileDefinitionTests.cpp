@@ -96,6 +96,9 @@ TEST(GraphicsBackendCompileDefinitionsTest, ExactlyOneGraphicsBackendIsSelected)
 #ifdef CNA_BACKEND_OPENGLES1
     ++enabled;
 #endif
+#ifdef CNA_BACKEND_OPENGL4
+    ++enabled;
+#endif
 
     EXPECT_EQ(enabled, 1);
 }
