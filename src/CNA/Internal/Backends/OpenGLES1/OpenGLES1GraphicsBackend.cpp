@@ -184,11 +184,11 @@ namespace CNA::Internal::Backends::OpenGLES1
         pixels_ = std::move(pixels);
     }
 
-    void OpenGLES1TextureBackend::GetData(int level, int x, int y, int w, int h,
+    bool OpenGLES1TextureBackend::GetData(int level, int x, int y, int w, int h,
                                           void* data, int dataLength) const
     {
-        if (level != 0 || !data || w <= 0 || h <= 0) return;
-        if (dataLength < w * h * 4) return;
+        if (level != 0 || !data || w <= 0 || h <= 0) return false;
+        if (dataLength < w * h * 4) return false;
         auto* pixels = static_cast<uint8_t*>(data);
 
         // Preferred route: attach this texture to a scratch framebuffer and read it back, so the
@@ -221,7 +221,7 @@ namespace CNA::Internal::Backends::OpenGLES1
 
                 owner_->BindFramebufferEXT(static_cast<GLuint>(previousFbo));
                 owner_->DeleteFramebufferEXT(&scratch);
-                return;
+                return true;
             }
 
             owner_->BindFramebufferEXT(static_cast<GLuint>(previousFbo));
@@ -230,15 +230,16 @@ namespace CNA::Internal::Backends::OpenGLES1
 
         // Fallback: the shared CPU copy. Correct for anything uploaded through SetData, which is
         // every ordinary texture -- just not evidence of the GPU's own contents.
-        if (!pixels_ || pixels_->empty()) return;
-        if (pixels_->size() < static_cast<std::size_t>(width_) * height_ * 4) return;
+        if (!pixels_ || pixels_->empty()) return false;
+        if (pixels_->size() < static_cast<std::size_t>(width_) * height_ * 4) return false;
         for (int row = 0; row < h; ++row)
         {
             const std::size_t src = (static_cast<std::size_t>(y + row) * width_ + x) * 4;
-            if (src + static_cast<std::size_t>(w) * 4 > pixels_->size()) return;
+            if (src + static_cast<std::size_t>(w) * 4 > pixels_->size()) return false;
             std::memcpy(pixels + static_cast<std::size_t>(row) * w * 4, pixels_->data() + src,
                         static_cast<std::size_t>(w) * 4);
         }
+        return true;
     }
 
     void OpenGLES1TextureBackend::RestoreAfterContextLoss()
@@ -1219,13 +1220,13 @@ namespace CNA::Internal::Backends::OpenGLES1
         }
     }
 
-    void OpenGLES1RenderTargetBackend::GetData(int level, int x, int y, int w, int h,
+    bool OpenGLES1RenderTargetBackend::GetData(int level, int x, int y, int w, int h,
                                                void* data, int dataLength) const
     {
         // Only level 0 exists here -- this backend does not generate mips (see CreateRenderTarget2D).
-        if (level != 0 || !data || w <= 0 || h <= 0) return;
-        if (dataLength < w * h * 4) return;
-        if (!owner_ || !owner_->glBindFramebufferOES_ || fbo_ == 0) return;
+        if (level != 0 || !data || w <= 0 || h <= 0) return false;
+        if (dataLength < w * h * 4) return false;
+        if (!owner_ || !owner_->glBindFramebufferOES_ || fbo_ == 0) return false;
 
         // ES 1.1 has no glGetTexImage, so the only way back out of the colour attachment is to
         // read it through its own FBO. Restore the previously bound target afterwards rather than
@@ -1253,6 +1254,7 @@ namespace CNA::Internal::Backends::OpenGLES1
         }
 
         owner_->glBindFramebufferOES_(GL_FRAMEBUFFER_OES, static_cast<GLuint>(previousFbo));
+        return true;
     }
 
 
@@ -1332,12 +1334,13 @@ namespace CNA::Internal::Backends::OpenGLES1
         glBindTexture(GL_TEXTURE_CUBE_MAP_OES, cubeTexture_);
     }
 
-    void OpenGLES1RenderTargetCubeBackend::GetData(int face, int level, int x, int y, int w, int h,
+    bool OpenGLES1RenderTargetCubeBackend::GetData(int face, int level, int x, int y, int w, int h,
                                                    void* data, int dataLength) const
     {
-        if (level != 0 || !data || w <= 0 || h <= 0) return;
-        if (dataLength < w * h * 4) return;
-        if (!owner_ || fbo_ == 0) return;
+        if (level != 0 || !data || w <= 0 || h <= 0) return false;
+        if (dataLength < w * h * 4) return false;
+        if (face < 0 || face > 5) return false;
+        if (!owner_ || fbo_ == 0) return false;
 
         GLint previousFbo = 0;
         glGetIntegerv(GL_FRAMEBUFFER_BINDING_OES, &previousFbo);
@@ -1360,13 +1363,18 @@ namespace CNA::Internal::Backends::OpenGLES1
         }
 
         owner_->BindFramebufferEXT(static_cast<GLuint>(previousFbo));
+        return true;
     }
 
     std::unique_ptr<IRenderTargetCubeBackend> OpenGLES1GraphicsBackend::CreateRenderTargetCube(
-        int size, int depthFormat, bool mipMap, int multiSampleCount)
+        int size, int depthFormat, bool preserveContents, bool mipMap, int multiSampleCount)
     {
         // Cube mip generation and multisampling are not implemented (documented gap).
-        (void)mipMap; (void)multiSampleCount;
+        //
+        // preserveContents needs no action here: the colour attachment IS the cube texture, so its
+        // contents survive every unbind by construction. RenderTargetUsage::DiscardContents is
+        // therefore only a missed optimisation on this backend, never a wrong result.
+        (void)preserveContents; (void)mipMap; (void)multiSampleCount;
         if (!fboSupported_ || !cubeMapSupported_) return nullptr;
         return std::make_unique<OpenGLES1RenderTargetCubeBackend>(this, size, depthFormat);
     }
@@ -1388,6 +1396,49 @@ namespace CNA::Internal::Backends::OpenGLES1
         if (rt) rt->BindAsRenderTarget();
         else if (currentRenderTarget_) currentRenderTarget_->UnbindAsRenderTarget();
         currentRenderTarget_ = rt;
+    }
+
+    void OpenGLES1GraphicsBackend::SetRenderTargets(
+        const RenderTargetBindingDescriptor* renderTargets, int count)
+    {
+        if (!renderTargets || count <= 0)
+        {
+            if (currentRenderTargetCube_)
+            {
+                currentRenderTargetCube_->UnbindAsRenderTarget();
+                currentRenderTargetCube_ = nullptr;
+            }
+            SetRenderTarget2D(nullptr);
+            return;
+        }
+
+        // ES 1.1 core has no MRT mechanism -- and no extension in the CM registry adds one. Refuse
+        // rather than silently binding only the first target, which would produce a frame that
+        // quietly lied about where the other slots went.
+        if (count > 1)
+            throw System::NotSupportedException(
+                "OpenGLES1: multiple simultaneous render targets are not available on OpenGL ES "
+                "1.1 -- SupportsCapability(MultipleRenderTargets) reports false for this backend.");
+
+        if (renderTargets[0].IsRenderTargetCubeFace())
+        {
+            auto* cube = dynamic_cast<OpenGLES1RenderTargetCubeBackend*>(
+                renderTargets[0].GetRenderTargetCube());
+            if (!cube)
+                throw System::NotSupportedException(
+                    "OpenGLES1: this render-target cube was not created by the OpenGLES1 backend.");
+            SetRenderTarget2D(nullptr);
+            cube->BindAsRenderTargetFace(renderTargets[0].GetCubeFace());
+            currentRenderTargetCube_ = cube;
+            return;
+        }
+
+        if (currentRenderTargetCube_)
+        {
+            currentRenderTargetCube_->UnbindAsRenderTarget();
+            currentRenderTargetCube_ = nullptr;
+        }
+        SetRenderTarget2D(renderTargets[0].GetRenderTarget2D());
     }
 
     // -------------------------------------------------------------------------
@@ -1417,10 +1468,11 @@ namespace CNA::Internal::Backends::OpenGLES1
         if (texture_) glDeleteTextures(1, &texture_);
     }
 
-    void OpenGLES1TextureCubeBackend::SetData(int face, int level, int x, int y, int w, int h,
+    bool OpenGLES1TextureCubeBackend::SetData(int face, int level, int x, int y, int w, int h,
                                               const void* data, int dataLength)
     {
         (void)dataLength;
+        if (face < 0 || face > 5 || !data || w <= 0 || h <= 0) return false;
         static constexpr GLenum kFaces[6] = {
             GL_TEXTURE_CUBE_MAP_POSITIVE_X_OES, GL_TEXTURE_CUBE_MAP_NEGATIVE_X_OES,
             GL_TEXTURE_CUBE_MAP_POSITIVE_Y_OES, GL_TEXTURE_CUBE_MAP_NEGATIVE_Y_OES,
@@ -1432,6 +1484,7 @@ namespace CNA::Internal::Backends::OpenGLES1
             glTexImage2D(kFaces[face], level, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
         else
             glTexSubImage2D(kFaces[face], level, x, y, w, h, GL_RGBA, GL_UNSIGNED_BYTE, data);
+        return true;
     }
 
     void OpenGLES1TextureCubeBackend::BindGL() const
@@ -1780,9 +1833,31 @@ namespace CNA::Internal::Backends::OpenGLES1
         // still produces a gradient there, while fixed-function fog works from a distance and
         // clamps. See docs/opengles1-backend.md -- EasyGL diverges from the reference on that case
         // too, so it is not an ES1-specific fault.
-        void ApplyFog(const GpuDrawParams& params)
+        //
+        // REMED-GFX-010 replaced GpuDrawParams' scalar fogStart/fogEnd with the FNA fog VECTOR,
+        // which every shader backend dots against the object-space position. A fixed-function
+        // pipeline has no such dot product -- glFog wants the two scalars back. They are recovered
+        // exactly, because the vector is built from them and from the same world*view matrix this
+        // draw is about to load:
+        //
+        //     fogVector.xyz = {M13,M23,M33} * scale,  fogVector.w = (M43 + fogStart) * scale
+        //     scale         = 1 / (fogStart - fogEnd)
+        //
+        // so projecting fogVector.xyz back onto the matrix's own eye-Z row recovers `scale`, and
+        // the w term then yields fogStart and fogEnd. This is an inversion, not an approximation.
+        //
+        // @param params The draw's stock-effect parameters.
+        // @param mvCol The world*view matrix in GL column-major order, as just loaded into
+        //        GL_MODELVIEW -- its eye-Z row is what the fog vector was built against.
+        void ApplyFog(const GpuDrawParams& params, const float* mvCol)
         {
-            if (!params.fogEnabled)
+            const bool fogVectorIsZero =
+                params.fogVector[0] == 0.0f && params.fogVector[1] == 0.0f &&
+                params.fogVector[2] == 0.0f && params.fogVector[3] == 0.0f;
+
+            // An all-zero vector is FNA's own "fog disabled" encoding: the dot product is 0, so the
+            // keep factor is 1 and fog is a true no-op. Honour it even if the flag disagrees.
+            if (!params.fogEnabled || fogVectorIsZero)
             {
                 glDisable(GL_FOG);
                 return;
@@ -1791,8 +1866,20 @@ namespace CNA::Internal::Backends::OpenGLES1
             glEnable(GL_FOG);
             glFogf(GL_FOG_MODE, GL_LINEAR);
 
-            if (params.fogStart == params.fogEnd)
+            // Eye-space Z row of world*view: z_view = zx*x + zy*y + zz*z + zw.
+            const float zx = mvCol[2], zy = mvCol[6], zz = mvCol[10], zw = mvCol[14];
+            const float denom = zx * zx + zy * zy + zz * zz;
+            const float numer = params.fogVector[0] * zx + params.fogVector[1] * zy +
+                                params.fogVector[2] * zz;
+            const float scale = denom > 0.0f ? numer / denom : 0.0f;
+
+            if (scale == 0.0f)
             {
+                // fogStart == fogEnd. FNA encodes it as {0,0,0,1}: the dot is 1 everywhere, so the
+                // keep factor is 0 and the whole draw is fogged. A world*view that collapses the
+                // eye-Z axis entirely lands here too, and is fogged for the same reason -- there is
+                // no depth left to build a ramp from.
+                //
                 // GL's visibility factor is (end - z) / (end - start), clamped to [0,1], with z the
                 // eye distance (never negative). start = -1, end = 0 gives -z, which is <= 0 for
                 // every z including z == 0 -- so it clamps to "no visibility", i.e. fully fogged
@@ -1803,8 +1890,10 @@ namespace CNA::Internal::Backends::OpenGLES1
             }
             else
             {
-                glFogf(GL_FOG_START, params.fogStart);
-                glFogf(GL_FOG_END, params.fogEnd);
+                const float fogStart = params.fogVector[3] / scale - zw;
+                const float fogEnd = fogStart - 1.0f / scale;
+                glFogf(GL_FOG_START, fogStart);
+                glFogf(GL_FOG_END, fogEnd);
             }
 
             const float fogColor4[4] = {params.fogColor[0], params.fogColor[1], params.fogColor[2], 1.0f};
@@ -1864,6 +1953,10 @@ namespace CNA::Internal::Backends::OpenGLES1
                                                          const Matrix& world, const Matrix& view, const Matrix& projection,
                                                          PrimitiveType primitive, int primitiveCount)
     {
+        // REMED-GFX-DECL-GUARD: the fixed-function pointer setup below selects its layout from
+        // the buffer stride alone, so a declaration that stride cannot represent is refused
+        // rather than rendered from the wrong bytes.
+        RequireFaithfulDeclarationEXT(vb_in, "colored-nonindexed");
         const auto& vb = static_cast<const OpenGLES1VertexBufferBackend&>(vb_in);
 
         float projCol[16], mvCol[16];
@@ -1896,6 +1989,10 @@ namespace CNA::Internal::Backends::OpenGLES1
                                                                 const Matrix& world, const Matrix& view, const Matrix& projection,
                                                                 PrimitiveType primitive, int primitiveCount)
     {
+        // REMED-GFX-DECL-GUARD: the fixed-function pointer setup below selects its layout from
+        // the buffer stride alone, so a declaration that stride cannot represent is refused
+        // rather than rendered from the wrong bytes.
+        RequireFaithfulDeclarationEXT(vb_in, "colored-indexed");
         const auto& vb = static_cast<const OpenGLES1VertexBufferBackend&>(vb_in);
         const auto& ib = static_cast<const OpenGLES1IndexBufferBackend&>(ib_in);
 
@@ -1938,6 +2035,10 @@ namespace CNA::Internal::Backends::OpenGLES1
                                                     PrimitiveType primitive, int primitiveCount,
                                                     const GpuDrawParams& params)
     {
+        // REMED-GFX-DECL-GUARD: the fixed-function pointer setup below selects its layout from
+        // the buffer stride alone, so a declaration that stride cannot represent is refused
+        // rather than rendered from the wrong bytes.
+        RequireFaithfulDeclarationEXT(vb_in, "ordinary-nonindexed");
         const auto& vb = static_cast<const OpenGLES1VertexBufferBackend&>(vb_in);
         const std::size_t stride = vb.Stride();
 
@@ -1990,7 +2091,7 @@ namespace CNA::Internal::Backends::OpenGLES1
         glMatrixMode(GL_MODELVIEW);
         glLoadMatrixf(mvCol);
 
-        ApplyFog(params);
+        ApplyFog(params, mvCol);
 
         ApplyAlphaTest(params);
 
@@ -2048,6 +2149,10 @@ namespace CNA::Internal::Backends::OpenGLES1
                                                            PrimitiveType primitive, int primitiveCount,
                                                            const GpuDrawParams& params)
     {
+        // REMED-GFX-DECL-GUARD: the fixed-function pointer setup below selects its layout from
+        // the buffer stride alone, so a declaration that stride cannot represent is refused
+        // rather than rendered from the wrong bytes.
+        RequireFaithfulDeclarationEXT(vb_in, "ordinary-indexed");
         const auto& vb = static_cast<const OpenGLES1VertexBufferBackend&>(vb_in);
         const auto& ib = static_cast<const OpenGLES1IndexBufferBackend&>(ib_in);
         const std::size_t stride = vb.Stride();
@@ -2093,7 +2198,7 @@ namespace CNA::Internal::Backends::OpenGLES1
         glMatrixMode(GL_MODELVIEW);
         glLoadMatrixf(mvCol);
 
-        ApplyFog(params);
+        ApplyFog(params, mvCol);
 
         ApplyAlphaTest(params);
 
@@ -2158,8 +2263,23 @@ namespace CNA::Internal::Backends::OpenGLES1
 
     void OpenGLES1GraphicsBackend::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
                                                    int colorDstBlend, int alphaDstBlend,
-                                                   int colorBlendFunc, int alphaBlendFunc)
+                                                   int colorBlendFunc, int alphaBlendFunc,
+                                                   const BlendWriteState& writeState)
     {
+        // REMED-GFX-077 slot 0. glColorMask is core ES 1.1, so the write channels are honoured for
+        // real. Applied before the Opaque early-out below, because ColorWriteChannels is
+        // independent of whether blending itself is on.
+        //
+        // Slots 1..3 have no subject on this backend: ES 1.1 has no MRT mechanism, and
+        // SetRenderTargets refuses a count above 1, so no second slot can ever be bound.
+        // MultiSampleMask likewise has no ES 1.1 equivalent (no glSampleMaski in the CM registry);
+        // it is not applied, and SupportsCapability reports MSAA from the real sample count.
+        const int channels = writeState.colorWriteChannels[0];
+        glColorMask(static_cast<GLboolean>((channels & 1) != 0),
+                    static_cast<GLboolean>((channels & 2) != 0),
+                    static_cast<GLboolean>((channels & 4) != 0),
+                    static_cast<GLboolean>((channels & 8) != 0));
+
         // Blend::One=0, Blend::Zero=1 -> Opaque preset: src=One, dst=Zero -> effectively no blending.
         const bool blendEnabled = !(colorSrcBlend == 0 && colorDstBlend == 1
                                     && alphaSrcBlend == 0 && alphaDstBlend == 1);

@@ -2,6 +2,7 @@
 #pragma once
 
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 
 #include <GLES/gl.h>
 #include <GLES/glext.h>
@@ -69,9 +70,10 @@ namespace CNA::Internal::Backends::OpenGLES1
          * @param h Height of the sub-rectangle.
          * @param data Destination buffer receiving RGBA8 pixels.
          * @param dataLength Size of that buffer in bytes.
+         * @return True when the pixels were read back, false when they could not be.
          */
-        void GetData(int level, int x, int y, int w, int h,
-                     void* data, int dataLength) const override;
+        [[nodiscard]] bool GetData(int level, int x, int y, int w, int h,
+                                   void* data, int dataLength) const override;
 
         /**
          * @brief Recreates this texture's GL object after the context it lived in was destroyed.
@@ -115,7 +117,22 @@ namespace CNA::Internal::Backends::OpenGLES1
         OpenGLES1VertexBufferBackend& operator=(const OpenGLES1VertexBufferBackend&) = delete;
 
         void SetData(const void* data, int vertex_count, std::size_t stride_in_bytes) override;
+
+        // REMED-GFX-DECL-GUARD: this backend still selects its fixed-function pointer layout from
+        // the vertex stride (16/20/24/32), but the declaration is remembered rather than discarded
+        // so a draw can refuse one that the stride table would silently reinterpret.
+        void SetVertexDeclaration(const VertexDeclaration& vertexDeclaration) override
+        {
+            declaration_.Remember(vertexDeclaration);
+        }
+
         int GetVertexCount() const override { return vertexCount_; }
+
+        /// NOXNA. The declaration this buffer carries, for REMED-GFX-DECL-GUARD's fidelity check.
+        [[nodiscard]] const CNA::Internal::Graphics::DeclaredVertexLayout& GetDeclarationEXT() const
+        {
+            return declaration_;
+        }
 
         /// NOXNA. Releases the raw vertex shadow; the buffer can no longer survive a context loss.
         void DropCpuShadowEXT();
@@ -142,7 +159,28 @@ namespace CNA::Internal::Backends::OpenGLES1
         // Raw vertex bytes, kept solely so the GPU buffer can be rebuilt after a context loss
         // (OPENGLES1-80) -- draws always read from the GPU buffer, never from here.
         std::vector<uint8_t> cpuShadow_;
+        CNA::Internal::Graphics::DeclaredVertexLayout declaration_;
     };
+
+    /**
+     * @brief Refuses a draw whose VertexDeclaration this backend cannot bind faithfully.
+     *
+     * REMED-GFX-DECL-GUARD. The fixed-function pointer setup below picks its layout from the
+     * buffer stride alone, so a declaration that packs different semantics into the same stride
+     * would be read from the wrong bytes. The check is asymmetric: only what the caller actually
+     * declared is verified, never equality against this backend's own template.
+     *
+     * @param vb The vertex buffer whose declaration is being checked.
+     * @param route Name of the draw route, for the diagnostic message.
+     * @throws System::NotSupportedException When the declaration cannot be represented.
+     */
+    inline void RequireFaithfulDeclarationEXT(const IVertexBufferBackend& vb, const char* route)
+    {
+        const auto& esVb = static_cast<const OpenGLES1VertexBufferBackend&>(vb);
+        CNA::Internal::Graphics::RequireFaithfulVertexDeclaration(
+            esVb.GetDeclarationEXT(), static_cast<int>(esVb.Stride()),
+            CNA::Internal::Graphics::UnlistedStrideLayout::BackendRefusesIt, "OpenGLES1", route);
+    }
 
     /**
      * @brief NOXNA. Real GPU-side 16-bit index buffer object for OpenGL ES 1.1 (see vertex buffer
@@ -327,9 +365,10 @@ namespace CNA::Internal::Backends::OpenGLES1
          * @param h Height of the sub-rectangle.
          * @param data Destination buffer receiving RGBA8 pixels.
          * @param dataLength Size of that buffer in bytes.
+         * @return True when the pixels were read back, false when they could not be.
          */
-        void GetData(int level, int x, int y, int w, int h,
-                     void* data, int dataLength) const override;
+        [[nodiscard]] bool GetData(int level, int x, int y, int w, int h,
+                                   void* data, int dataLength) const override;
 
         [[nodiscard]] unsigned int GetColorGLHandle() const override { return colorTexture_; }
         [[nodiscard]] bool HasRealDepthBuffer(bool depthFormatWasRequested) const override
@@ -366,8 +405,8 @@ namespace CNA::Internal::Backends::OpenGLES1
         OpenGLES1TextureCubeBackend(const OpenGLES1TextureCubeBackend&) = delete;
         OpenGLES1TextureCubeBackend& operator=(const OpenGLES1TextureCubeBackend&) = delete;
 
-        void SetData(int face, int level, int x, int y, int w, int h,
-                     const void* data, int dataLength) override;
+        [[nodiscard]] bool SetData(int face, int level, int x, int y, int w, int h,
+                                   const void* data, int dataLength) override;
         void BindGL() const override;
 
         [[nodiscard]] unsigned int GetGLHandle() const { return texture_; }
@@ -419,9 +458,10 @@ namespace CNA::Internal::Backends::OpenGLES1
          * @param h Sub-rectangle height.
          * @param data Destination RGBA8 buffer.
          * @param dataLength Size of that buffer in bytes.
+         * @return True when the face was read back, false when it could not be.
          */
-        void GetData(int face, int level, int x, int y, int w, int h,
-                     void* data, int dataLength) const override;
+        [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
+                                   void* data, int dataLength) const override;
 
     private:
         OpenGLES1GraphicsBackend* owner_ = nullptr;
@@ -475,6 +515,20 @@ namespace CNA::Internal::Backends::OpenGLES1
                                                                     bool mipMap = false,
                                                                     int multiSampleCount = 0) override;
         void SetRenderTarget2D(IRenderTargetBackend* rt) override;
+
+        /**
+         * @brief Binds a single render target, or restores the back buffer.
+         *
+         * ES 1.1 has no multiple-render-target mechanism, so a request for more than one target is
+         * refused rather than silently reduced to the first -- `SupportsCapability`
+         * (`MultipleRenderTargets`) reports `false` for the same reason.
+         *
+         * @param renderTargets The bindings to apply; nullptr restores the back buffer.
+         * @param count How many bindings @p renderTargets holds; 0 restores the back buffer.
+         * @throws System::NotSupportedException When more than one target is requested.
+         */
+        void SetRenderTargets(const RenderTargetBindingDescriptor* renderTargets,
+                              int count) override;
         std::unique_ptr<ITextureCubeBackend> CreateTextureCube(int size, bool mipMap, int surfaceFormat) override;
 
         void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) override;
@@ -511,7 +565,8 @@ namespace CNA::Internal::Backends::OpenGLES1
          * @return The target, or `nullptr` when the required extensions are missing.
          */
         std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(
-            int size, int depthFormat, bool mipMap = false, int multiSampleCount = 0) override;
+            int size, int depthFormat, bool preserveContents = false, bool mipMap = false,
+            int multiSampleCount = 0) override;
 
         void DrawColoredPrimitives(const IVertexBufferBackend& vb,
                                    const Matrix& world, const Matrix& view, const Matrix& projection,
@@ -530,7 +585,8 @@ namespace CNA::Internal::Backends::OpenGLES1
 
         void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
                              int colorDstBlend, int alphaDstBlend,
-                             int colorBlendFunc, int alphaBlendFunc) override;
+                             int colorBlendFunc, int alphaBlendFunc,
+                             const BlendWriteState& writeState) override;
         void ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable,
                                     int depthFunc,
                                     bool stencilEnable, int stencilFunc,
@@ -828,5 +884,6 @@ namespace CNA::Internal::Backends::OpenGLES1
         bool wireframe_ = false;
 
         IRenderTargetBackend* currentRenderTarget_ = nullptr;
+        IRenderTargetCubeBackend* currentRenderTargetCube_ = nullptr;
     };
 }
