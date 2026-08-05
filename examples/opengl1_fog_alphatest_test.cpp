@@ -3,15 +3,15 @@
 // (tests/opengl1/README.md scenario 7: "fog and alpha-test approximations").
 //
 // OpenGL1 implements XNA's BasicEffect fog via the real fixed-function GL_FOG pipeline
-// (glFogi(GL_FOG_MODE, GL_LINEAR) + glFogf(GL_FOG_START/END, ...) in
-// OpenGL1GraphicsBackend::DrawInternal), driven by the actual eye-space distance the GL
-// ModelView transform computes -- NOT FNA's own object-space FogVector dot-product formula
-// (see easygl_basiceffect_fog_test.cpp's header for that exact formula, and the sign-
-// convention subtleties it depends on). plan_opengl1.md documents fog as a "basic fixed-
-// function ... linear fog" approximation, not exact XNA parity, so this test only asserts
-// the qualitative, basis-independent property any correct GL_FOG setup must have -- geometry
-// genuinely farther from the eye along the view axis is genuinely more fog-tinted -- rather
-// than pinning an exact blended RGB value tuned for a different backend's own formula.
+// (glFogi(GL_FOG_MODE, GL_LINEAR) + glFogf(GL_FOG_START/END, ...)), with the two scalars
+// recovered EXACTLY from the FNA fog vector GpuDrawParams now carries (REMED-GFX-010) by
+// inverting it against the same world*view matrix the draw loads into GL_MODELVIEW -- see
+// ApplyFogFromVector() in OpenGL1GraphicsBackend.cpp. The qualitative monotonic checks below
+// predate that contract and still hold; the three-pair oracle after them pins the inversion
+// itself: three distinct FogStart/FogEnd pairs, each with its own expected pixel result
+// (unfogged / exact mid-ramp blend / the degenerate FogStart == FogEnd full fog), so a wrong
+// sign, a wrong scale or a mishandled degenerate encoding each fails its own distinct check --
+// a test that only proved "fog changes pixels" could not tell those apart.
 //
 // Similarly, AlphaTestEffect's CompareFunction is approximated by a single, always-on
 // glAlphaFunc(GL_GEQUAL, reference) test regardless of the real requested CompareFunction
@@ -169,6 +169,54 @@ protected:
         // would satisfy the two checks above vacuously (near == far in every channel).
         Check(farGot.getRProperty() > nearGot.getRProperty() + 20,
               "fog: near vs far actually differ (fog has a real, non-trivial effect)");
+
+        // ---- Fog-vector inversion oracle: three pairs, each with its own expected result ---
+        // The quad sits at a fixed eye-space distance kProbe; only FogStart/FogEnd change, so
+        // each pair isolates one property of the recovered scalars.
+        {
+            constexpr float kProbe = 100.0f;
+            auto drawPair = [&](float fogStart, float fogEnd) -> Color
+            {
+                dev.Clear(kBackground);
+                BasicEffect fx(dev);
+                fx.setWorldProperty(world); fx.setViewProperty(view); fx.setProjectionProperty(proj);
+                fx.VertexColorEnabled = true;
+                fx.setFogEnabledProperty(true);
+                fx.setFogColorProperty(Vector3(1.0f, 0.0f, 0.0f));
+                fx.setFogStartProperty(fogStart);
+                fx.setFogEndProperty(fogEnd);
+                fx.Apply();
+                DrawFacingQuad(dev, eye, forward, right, up, kProbe, kGreen);
+                return ReadCenter(dev);
+            };
+
+            // Pair 1 (200, 20000): the quad is well BEFORE the ramp -- a wrong inversion sign
+            // would fog it instead. Expected: pure geometry green.
+            const Color before = drawPair(200.0f, 20000.0f);
+            std::printf("fog pair(200,20000) at %.0f = (%d,%d,%d)\n", kProbe,
+                        before.getRProperty(), before.getGProperty(), before.getBProperty());
+            Check(before.getGProperty() > 200 && before.getRProperty() < 20,
+                  "fog pair (200,20000): geometry before the ramp is unfogged pure green");
+
+            // Pair 2 (50, 150): the quad sits EXACTLY mid-ramp -- fog factor 0.5, a 50/50
+            // green/red blend. A wrong scale or a wrong start offset lands at 0 or 1, not 0.5;
+            // the tolerance absorbs 8-bit rounding and fixed-function interpolation only.
+            const Color mid = drawPair(50.0f, 150.0f);
+            std::printf("fog pair(50,150) at %.0f = (%d,%d,%d)\n", kProbe,
+                        mid.getRProperty(), mid.getGProperty(), mid.getBProperty());
+            Check(mid.getRProperty() > 90 && mid.getRProperty() < 170 &&
+                  mid.getGProperty() > 90 && mid.getGProperty() < 170,
+                  "fog pair (50,150): geometry mid-ramp is a genuine ~50/50 blend");
+
+            // Pair 3 (100, 100): XNA's documented degenerate case -- FogStart == FogEnd fogs
+            // everything. FNA encodes it as {0,0,0,1}; the inversion must land on the
+            // fully-fogged ramp, not divide by the zero-width interval.
+            const Color degenerate = drawPair(100.0f, 100.0f);
+            std::printf("fog pair(100,100) at %.0f = (%d,%d,%d)\n", kProbe,
+                        degenerate.getRProperty(), degenerate.getGProperty(), degenerate.getBProperty());
+            Check(degenerate.getRProperty() > 200 && degenerate.getGProperty() < 40,
+                  "fog pair (100,100): FogStart == FogEnd fogs everything (degenerate encoding)");
+        }
 
         // ---- Alpha test: Always vs Equal (see file header for why not a full sweep) -------
         {
