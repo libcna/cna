@@ -216,14 +216,17 @@ silently fell back to the system Mesa.
   `TransformLogicalToWindow()` (same `FixedHeightDynamicWidth` scaling math as every other
   backend), `DebugSimulateContextLoss()`/`DebugRestoreContext()` (destroy + recreate).
 - `Texture2D` creation and level-0 upload (`glTexImage2D`), sampler filter/wrap state
-  (`glTexParameteri`).
-- Real GPU-side vertex/16-bit index buffer objects (`OpenGLES1VertexBufferBackend`/
+  (`glTexParameteri`), anisotropic filtering where `GL_EXT_texture_filter_anisotropic` is present
+  (OPENGLES1-86), and `ITextureBackend::GetData` readback (OPENGLES1-89) — through a scratch
+  framebuffer where FBOs exist, falling back to the CPU copy otherwise.
+- Real GPU-side vertex/index buffer objects (`OpenGLES1VertexBufferBackend`/
   `OpenGLES1IndexBufferBackend`) — `glGenBuffers`/`glBindBuffer`/`glBufferData` turned out to be
   **core** ES 1.1 entry points (confirmed directly against the real system `GLES/gl.h`), so every
   draw binds the real buffer and uses byte offsets with `glVertexPointer`/`glColorPointer`/
   `glTexCoordPointer`/`glNormalPointer`/`glDrawElements`, not client-side memory. The index buffer
   additionally keeps a small CPU-side shadow of the raw index values, used only for wireframe
-  emulation (below).
+  emulation (below). 16-bit indices are core; real 32-bit indices need
+  `GL_OES_element_index_uint` (OPENGLES1-83) and are refused where it is absent.
 - `SpriteBatch` (2D): an orthographic `glOrthof` projection matching XNA's top-left-origin pixel
   convention, `GL_MODULATE` texture environment, per-vertex color, rotation/origin/flip/layer
   handling identical to every other backend's `SpriteBatch` math. Sizes itself to a bound
@@ -278,38 +281,58 @@ implemented"**, gaps for a fixed-function ES 1.1 pipeline:
   this baseline implements (flat `envMapAmount` blending is used instead).
 - **Instancing** (`DrawInstancedPrimitivesEx`) — no fixed-function instancing mechanism exists;
   falls back to the plain colored path.
-- **`RenderTargetCube`/`Texture3D`/`TextureCube`/`OcclusionQuery`** — `RenderTarget2D` IS
-  implemented (see above); these others are not. `TextureCube` storage exists internally
-  (`OpenGLES1TextureCubeBackend`, used for `EnvironmentMapEffect`'s reflection map) but is not
-  exposed as a general-purpose `CreateTextureCube()`-only-no-render-target-cube feature beyond
-  that. `OcclusionQuery` is a **confirmed-impossible**, not "not yet implemented", gap — direct
-  inspection of the real system `GLES/gl.h`/`GLES/glext.h` found no occlusion-query mechanism
-  anywhere in the ES 1.1 CM registry.
+- **Multi-stream vertex input** (REMED-GFX-201) — the fixed-function pointer setup binds one
+  `GL_ARRAY_BUFFER` and reads every attribute out of it at stride offsets, so there is no second
+  per-vertex stream to resolve.
+- **Cube-map readback above mip level 0** — a cube face is read back by attaching it to a
+  framebuffer, and `GL_OES_framebuffer_object` requires an attached texture's level to be 0. Level
+  0 reads back exactly; any level above it is refused. Storage of the whole declared mip chain
+  still works, since `glTexImage2D` takes the level directly.
+- **Multiple render targets** — ES 1.1 has no MRT mechanism and no CM-registry extension adds one.
+  `SetRenderTargets` **refuses** a count above one with `System::NotSupportedException` rather than
+  binding the first and silently dropping the rest, and
+  `SupportsCapability(MultipleRenderTargets)` reports `false` for the same reason. A single
+  `RenderTarget2D` or a single `RenderTargetCube` face binds normally.
+- **Vertex declarations this backend cannot bind faithfully** — the fixed-function pointer setup
+  selects its layout from the buffer stride alone, so `REMED-GFX-DECL-GUARD`'s draw-time check
+  refuses a declaration that stride cannot represent (`System::NotSupportedException`) rather than
+  rendering it from the wrong bytes. The check is asymmetric: only what the caller actually
+  declared is verified, never equality against this backend's own template.
+- **`Texture3D`/`OcclusionQuery`** — not implemented, and both now report `false` from
+  `SupportsCapability()` rather than falling through a permissive default. `RenderTarget2D`, `TextureCube` and
+  `RenderTargetCube` all ARE implemented (OPENGLES1-72/74/84 — the last via per-face framebuffer
+  attachment). `OcclusionQuery` is a **confirmed-impossible**, not "not yet implemented", gap —
+  direct inspection of the real system `GLES/gl.h`/`GLES/glext.h` found no occlusion-query
+  mechanism anywhere in the ES 1.1 CM registry.
 - **`ApplyBlendState`'s `BlendFactor`/`InverseBlendFactor`** — ES 1.1 core has no `glBlendColor`/
   `GL_CONSTANT_COLOR`; these two `Blend` ordinals fall back to `SourceAlpha`/`InverseSourceAlpha`.
 - **`BlendFunction::Max`/`Min`** — `GL_OES_blend_subtract` only defines Add/Subtract/
-  ReverseSubtract; Max/Min fall back to Add.
+  ReverseSubtract, so these need `GL_EXT_blend_minmax` (OPENGLES1-88). They are honoured where
+  that extension is present and fall back to Add only where it is absent.
 - **Two-sided stencil** — ES 1.1 core has no separate front/back stencil functions; only the
   clockwise (front) face's stencil state is applied.
 - **`RasterizerState.DepthBias`/`SlopeScaleDepthBias`** — ES 1.1 has no `glPolygonOffset`; both are
   silently ignored. (`FillMode = WireFrame` IS implemented, via `GL_LINES` re-expansion — see
   above.)
-- **MSAA** — not implemented in this baseline (`SupportsCapability(MultiSampleAntiAliasing)`
-  returns `false`).
-- **Combining per-vertex `Color` with `BasicEffect.DiffuseColor` simultaneously** — the
-  fixed-function pipeline has exactly one "current color" input to `GL_MODULATE`; when
-  `VertexColorEnabled` is true this backend uses the per-vertex color array and does **not**
-  additionally multiply in `DiffuseColor` (no multiply-both-inputs stage without extra
-  `GL_COMBINE` setup this baseline does not implement). When `VertexColorEnabled` is false,
-  `DiffuseColor` is used as the flat constant color instead.
+- **MSAA** — backbuffer multisampling is requested at context creation and reported honestly
+  (OPENGLES1-87): `SupportsCapability(MultiSampleAntiAliasing)` returns whether the driver actually
+  granted more than one sample, not a hardcoded answer. Render-target multisampling is still not
+  implemented.
+- ~~Combining per-vertex `Color` with `BasicEffect.DiffuseColor`~~ — **implemented**
+  (OPENGLES1-92). The fixed-function pipeline has one "current color" input to `GL_MODULATE`, so
+  the two are folded together through a 1x1 white carrier texture and a `GL_COMBINE` stage, which
+  reproduces XNA's multiply. When `VertexColorEnabled` is false, `DiffuseColor` is still used as
+  the flat constant color.
 - **Compressed texture formats (DXT/BC)** — not implemented; same cross-backend gap every other
   CNA backend currently has.
-- **Render target mip generation and multisampling** — `CreateRenderTarget2D`'s `mipMap`/
-  `multiSampleCount` parameters are accepted but ignored (matches several other CNA backends'
-  own current gaps for these two specifically).
+- **Render-target multisampling** — `CreateRenderTarget2D`'s `multiSampleCount` is accepted but
+  ignored. `mipMap` IS honoured (OPENGLES1-85) where `glGenerateMipmapOES` resolves, and degrades
+  to a single level where it does not. Cube render targets honour neither.
 
-`GraphicsCapability::CustomEffects`, `MultipleRenderTargets`, `AnisotropicFiltering`,
-`OcclusionQuery`, and `MultiSampleAntiAliasing` all report `false` from `SupportsCapability()`;
+`GraphicsCapability::CustomEffects`, `MultipleRenderTargets`, `OcclusionQuery`, `Texture3D` and
+`MultiStreamVertexInput` report `false` from `SupportsCapability()`. `AnisotropicFiltering` and `MultiSampleAntiAliasing` are answered from
+what the driver actually granted (`GL_EXT_texture_filter_anisotropic`'s reported maximum and the
+context's real sample count respectively), so both can report either value;
 `WireFrame` now reports `true` (2026-07-21) — query before relying on any of these, per that
 method's own documented contract.
 
