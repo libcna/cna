@@ -3294,6 +3294,16 @@ namespace CNA::Internal::Backends::Wicked
             buffers[0] = &vertexBuffer.GetBufferEXT();
             strides[0] = static_cast<std::uint32_t>(stride);
             offsets[0] = vertexBuffer.GetByteOffsetEXT();
+            // WICKED-77: the instanced route does not fold the geometry stream's public
+            // VertexOffset into baseVertex -- GraphicsDevice::DrawInstancedPrimitives fills the
+            // stream table with foldedOffset = 0, so each stream carries its whole offset and the
+            // backend owes it at bind time. The ordinary routes fold it into baseVertex/vertexStart
+            // and leave this stream's own offset at 0, so adding it is exact on every route.
+            if (params != nullptr)
+            {
+                if (const GpuVertexStreamBinding* geometry = FirstPerVertexStream(*params))
+                    offsets[0] += VertexStreamByteOffset(*geometry);
+            }
             boundStreams = 1;
             if (instanced)
             {

@@ -47,6 +47,16 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     set_tests_properties(Wicked_DeviceLifecycle PROPERTIES LABELS "GraphicsSmoke;Wicked"
         TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # plan_wicked.md WICKED-77. The instanced route carries the geometry stream's whole public
+    # VertexOffset in the stream table (the ordinary routes fold it into baseVertex), and this
+    # backend dropped it at bind time -- an offset-selected record rendered nothing while the
+    # identical bytes drew correctly through the ordinary indexed route.
+    cna_wicked_test(cna_test_wicked_geometry_offset
+        tests/CNA/Internal/Backends/Wicked/WickedGeometryVertexOffsetTest.cpp)
+    add_test(NAME Wicked_GeometryVertexOffset COMMAND cna_test_wicked_geometry_offset)
+    set_tests_properties(Wicked_GeometryVertexOffset PROPERTIES LABELS "GraphicsSmoke;Wicked"
+        TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # plan_wicked.md WICKED-74. Everything else in this backend needs a real Vulkan device, a
     # window and a display, so it is covered by the same demo smoke test the other GPU backends
     # register. It is registered only when the examples are built, and skips rather than fails when

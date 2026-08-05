@@ -161,6 +161,7 @@ missing.
 | WICKED-74 | GPU smoke test (`cna_demo_2d --smoke`) verified on a real display | ⬜ |
 | WICKED-75 | Pixel-asserted readback tests (clear colour, sprite, 3D draw) | ⬜ |
 | WICKED-76 | Cross-backend pixel-parity comparison against EasyGL/Vulkan | ⬜ |
+| WICKED-77 | Instanced draws honour the geometry stream's `VertexOffset` (regression `Wicked_GeometryVertexOffset`) | ✅ |
 | WICKED-78 | Device teardown releases every GPU/VMA allocation (`cmake/patches/wicked-device-teardown.patch`; regression `Wicked_DeviceLifecycle`) | ✅ |
 
 ---
@@ -170,7 +171,7 @@ missing.
 - **First executed 2026-08-05 on a software Vulkan device; real-hardware verification still open
   (`WICKED-18`, `WICKED-74`).** The backend builds against the patched Wicked Engine, creates a
   real `GraphicsDevice_Vulkan` and compiles all 22 shader entry points at device creation; the
-  pipeline-key and device-lifecycle suites and the 2D demo smoke run pass on
+  pipeline-key, device-lifecycle and geometry-offset suites and the 2D demo smoke run pass on
   llvmpipe/lavapipe. What remains open is a run on real GPU hardware with a real display.
 - **`WICKED-78` (found and fixed at first execution): upstream device teardown leaked.** At the
   pinned revision the Vulkan device destructor never destroys its three null images, so VMA's
@@ -178,6 +179,12 @@ missing.
   pool-allocated command lists were also never freed, so a device that HAD drawn leaked its whole
   `VkInstance`/`VkDevice`/allocator instead — masking the assertion. Both destructor gaps are
   closed by `cmake/patches/wicked-device-teardown.patch`.
+- **`WICKED-77` (found and fixed at first execution): the instanced route dropped the geometry
+  stream's `VertexOffset`.** That route carries each stream's whole public offset in the stream
+  table (the ordinary routes fold it into `baseVertex`), and the single-geometry-stream binding
+  ignored it — an offset-selected record rendered nothing while the identical bytes drew correctly
+  through the ordinary indexed route. The binding now adds the stream's own offset, which is zero
+  on the folded ordinary routes.
 - **A declaration this backend's stride table would reinterpret is refused at draw time**
   (`REMED-GFX-DECL-GUARD`). `VariantForStride()` selects the input layout and vertex program from
   the byte stride alone, so a custom `VertexDeclaration` that happens to be one of the eight known

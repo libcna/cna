@@ -194,8 +194,8 @@ Not implemented; each is refused explicitly at the call site and reported by
 
 As of 2026-08-05 the backend builds against the patched Wicked Engine, creates a real
 `GraphicsDevice_Vulkan`, and compiles all 22 of its shader entry points at device creation. The
-pipeline-cache-key unit suite, the `Wicked_DeviceLifecycle` regression suite and the 2D demo
-smoke run pass on a **software** Vulkan device
+pipeline-cache-key unit suite, the `Wicked_DeviceLifecycle` and `Wicked_GeometryVertexOffset`
+regression suites and the 2D demo smoke run pass on a **software** Vulkan device
 (llvmpipe/lavapipe under Xvfb). **It has not yet been executed on real GPU hardware with a real
 display** (`plan_wicked.md` `WICKED-18` / `WICKED-74`); do not describe this backend as
 hardware-verified until that has happened.
