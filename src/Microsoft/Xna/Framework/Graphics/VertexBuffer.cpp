@@ -10,6 +10,7 @@
 #include "System/ObjectDisposedException.hpp"
 
 #include <cstdint>
+#include <cstring>
 #include <limits>
 #include <vector>
 
