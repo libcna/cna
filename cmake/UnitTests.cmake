@@ -90,6 +90,18 @@ if(CNA_BUILD_TESTS)
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/Microsoft/Devices/Detail/DevicesShutdownOrderingTests\\.cpp$")
     endif()
 
+    # plan_wicked.md: the Wicked backend's own regression suites live under
+    # tests/CNA/Internal/Backends/Wicked/, and the pipeline-key test among them includes the
+    # backend's header, which resolves only when the WICKED backend is configured (the
+    # WickedEngine include directories come with the backend target). Excluded from every other
+    # backend's corpus the same way the conditional files above are -- an unconditional glob of
+    # a backend-local test directory otherwise breaks every other backend's CnaTests configure.
+    # Under WICKED the corpus keeps them, and the dedicated cna_test_wicked_* targets
+    # (cmake/Tests/WickedTests.cmake) build them standalone as well.
+    if(NOT CNA_GRAPHICS_BACKEND STREQUAL "WICKED")
+        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Backends/Wicked/.*\\.cpp$")
+    endif()
+
     add_executable(CnaTests
             ${CNA_TEST_SOURCES}
     )
