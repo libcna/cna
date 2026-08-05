@@ -117,7 +117,11 @@ the same geometry can also be drawn unskinned:
 | 68 | `VertexPositionNormalTangentTextureSkinned` | `Basic68VS` / `Skinned68VS` |
 
 A stride outside this set throws rather than being rendered through a layout that merely has the
-same byte width.
+same byte width. A stride *inside* the set is not accepted on its width alone either: the caller's
+`VertexDeclaration` is remembered and checked at draw time (`REMED-GFX-DECL-GUARD`), so a custom
+layout that happens to be, say, 32 bytes is refused with `System::NotSupportedException` instead of
+being read through `VertexPositionNormalTexture`'s offsets. The check is asymmetric — only what the
+caller actually declared is verified, never equality against this backend's own template.
 
 The four narrow variants have an instanced sibling (`Basic16InstVS` … `Basic32InstVS`) that reads a per-instance
 world matrix from a second input slot. The per-instance record is CNA's established 64-byte

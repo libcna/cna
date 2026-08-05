@@ -999,9 +999,11 @@ namespace CNA::Internal::Backends::Wicked
     void WickedVertexBufferBackend::SetVertexDeclaration(const VertexDeclaration& vertexDeclaration)
     {
         // The declaration's stride is what selects this backend's input layout and shader variant,
-        // exactly as it does on D3D11/D3D12/Vulkan. The element list itself is not consumed yet --
-        // a genuinely custom layout is refused by VariantForStride() rather than silently rendered
-        // through a layout that merely has the same byte width (plan_wicked.md WICKED-45).
+        // exactly as it does on D3D11/D3D12/Vulkan (plan_wicked.md WICKED-45). VariantForStride()
+        // refuses an unlisted WIDTH, but a custom layout that happens to be one of the eight known
+        // widths would be read from the wrong bytes -- so the element list is remembered here and
+        // checked at draw time by RequireFaithfulDeclarationEXT() (REMED-GFX-DECL-GUARD).
+        declaration_.Remember(vertexDeclaration);
         declaredStride_ = static_cast<std::size_t>(vertexDeclaration.getVertexStrideProperty());
         if (stride_ == 0)
             stride_ = declaredStride_;
@@ -2963,6 +2965,12 @@ namespace CNA::Internal::Backends::Wicked
         if (primitiveCount <= 0 || instanceCount <= 0)
             return;
 
+        // REMED-GFX-DECL-GUARD, at draw time and before anything native is touched: this route
+        // dispatches on byte stride, so a declaration the stride table would reinterpret must be
+        // refused rather than silently rendered from the wrong offsets.
+        RequireFaithfulDeclarationEXT(vb, instanceCount > 1 ? "DrawInstancedPrimitivesEx"
+                                                            : "DrawPrimitives");
+
         const auto& vertexBuffer = static_cast<const WickedVertexBufferBackend&>(vb);
         std::size_t stride = vertexBuffer.GetStrideEXT();
         if (params != nullptr)
@@ -3468,6 +3476,11 @@ namespace CNA::Internal::Backends::Wicked
 
     bool WickedGraphicsBackend::SupportsCapability(CNA::GraphicsCapability capability) const
     {
+        // Exhaustive over CNA::GraphicsCapability with NO default arm, deliberately: a capability
+        // added after this backend was written must surface as a -Wswitch diagnostic, never as a
+        // catch-all answer. A permissive `default: return true` is what previously made another
+        // backend claim Texture3D it did not have; a `default: return false` is the mirror hazard
+        // and is what would have answered "no" to the real instancing route below.
         switch (capability)
         {
             case CNA::GraphicsCapability::ThreeD:
@@ -3479,8 +3492,6 @@ namespace CNA::Internal::Backends::Wicked
                 return true;
             case CNA::GraphicsCapability::AnisotropicFiltering:
                 return true;
-            // Not implemented by this backend's first baseline; each is refused explicitly at the
-            // call site rather than silently approximated (plan_wicked.md "Remaining work").
             // Real volume-texture storage: CreateTexture3D() returns a genuine GPU resource whose
             // SetData/GetData persist and retrieve voxels, which is exactly what this capability
             // asks about.
@@ -3493,11 +3504,19 @@ namespace CNA::Internal::Backends::Wicked
             // refused at the draw, as the interface requires.
             case CNA::GraphicsCapability::MultiStreamVertexInput:
                 return true;
+            // WICKED-53: four instanced vertex entry points read a per-instance 64-byte
+            // column-major Matrix from input slot 1. The narrower contract this backend does not
+            // meet -- an InstanceFrequency other than 1, and instancing on the wide
+            // tangent/skinned strides -- is refused at the draw, which is a boundary inside a
+            // supported capability rather than an absent one.
+            case CNA::GraphicsCapability::Instancing:
+                return true;
+            // WICKED-57/68: IEffectBackend addresses shader constants BY NAME, which needs SPIR-V
+            // reflection this backend does not do. Refused explicitly at the call site.
             case CNA::GraphicsCapability::CustomEffects:
                 return false;
-            default:
-                return false;
         }
+        return false;
     }
 
     int WickedGraphicsBackend::GetMaxTextureDimension() const

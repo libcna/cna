@@ -12,6 +12,7 @@
 
 #include "../Common/IGraphicsBackend.hpp"
 #include "CNA/CNAHelper.hpp"
+#include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 
 #include "wiGraphics.h"
 #include "wiGraphicsDevice.h"
@@ -653,8 +654,9 @@ namespace CNA::Internal::Backends::Wicked
         /**
          * @brief Records the caller's complete vertex declaration.
          *
-         * The stride is what selects the shader variant and input layout; the element list is kept
-         * so a future custom-layout path can consume it without another interface change.
+         * The stride is what selects the shader variant and input layout; the element list is
+         * retained so `RequireFaithfulDeclarationEXT()` can refuse, at draw time, a declaration
+         * that this backend's stride table would otherwise reinterpret (REMED-GFX-DECL-GUARD).
          *
          * @param vertexDeclaration Full declaration, in declaration order.
          */
@@ -668,6 +670,11 @@ namespace CNA::Internal::Backends::Wicked
         [[nodiscard]] std::size_t GetStrideEXT() const { return stride_; }
         /** @brief NOXNA. Byte offset of the region the most recent upload landed in. */
         [[nodiscard]] std::uint64_t GetByteOffsetEXT() const;
+        /** @brief NOXNA. The declaration this buffer carries, for the draw-time fidelity check. */
+        [[nodiscard]] const CNA::Internal::Graphics::DeclaredVertexLayout& GetDeclarationEXT() const
+        {
+            return declaration_;
+        }
 
     private:
         void EnsureStorage(std::size_t strideInBytes);
@@ -680,7 +687,36 @@ namespace CNA::Internal::Backends::Wicked
         std::size_t regionSizeBytes_ = 0;
         std::size_t stride_ = 0;
         std::size_t declaredStride_ = 0;
+        CNA::Internal::Graphics::DeclaredVertexLayout declaration_;
     };
+
+    /**
+     * @brief NOXNA. REMED-GFX-DECL-GUARD: refuses a vertex declaration this backend cannot
+     * represent faithfully.
+     *
+     * `VariantForStride()` picks the input layout and vertex program from the buffer's byte
+     * stride alone, so a declaration packing different semantics into one of the eight known
+     * widths would be read from the wrong bytes and rendered without any error. The check is
+     * **asymmetric** — only what the caller actually declared is verified, never equality against
+     * this backend's own template — so a declaration that omits attributes the template carries
+     * still draws. It is pure: nothing is created, queued or bound before it runs, so a rejected
+     * draw cannot leave the device in a partial state. An unlisted stride is left to
+     * `VariantForStride()`'s own established refusal.
+     *
+     * Header-only by necessity: `cna_backend_graphics_wicked` links only
+     * `cna_backend_graphics_common` and SharpRuntime, never the CNA library.
+     *
+     * @param vb    The vertex buffer whose declaration is being checked.
+     * @param route Name of the draw route, for the diagnostic message.
+     * @throws System::NotSupportedException When the declaration cannot be represented.
+     */
+    inline void RequireFaithfulDeclarationEXT(const IVertexBufferBackend& vb, const char* route)
+    {
+        const auto& wickedVb = static_cast<const WickedVertexBufferBackend&>(vb);
+        CNA::Internal::Graphics::RequireFaithfulVertexDeclaration(
+            wickedVb.GetDeclarationEXT(), static_cast<int>(wickedVb.GetStrideEXT()),
+            CNA::Internal::Graphics::UnlistedStrideLayout::BackendRefusesIt, "Wicked", route);
+    }
 
     /**
      * @brief NOXNA. A CPU-writable 16- or 32-bit index buffer.

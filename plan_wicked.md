@@ -171,8 +171,12 @@ missing.
   loader and no display, so nothing here has been executed. Every ✅ above means "implemented and
   compiles"; only `WICKED-70`'s unit test has actually been run. Treat the first run on a GPU host
   as the next task, not as a formality.
-- **3D effect coverage stops at `BasicEffect`/`AlphaTestEffect`/`DualTextureEffect`**
-  (`WICKED-56`). `EnvironmentMapEffect`, `SkinnedEffect` and `PbrEffect` throw.
+- **A declaration this backend's stride table would reinterpret is refused at draw time**
+  (`REMED-GFX-DECL-GUARD`). `VariantForStride()` selects the input layout and vertex program from
+  the byte stride alone, so a custom `VertexDeclaration` that happens to be one of the eight known
+  widths would otherwise be read from the wrong offsets and rendered without any error. The check
+  is asymmetric — only what the caller declared is verified, never equality against this backend's
+  own template — so a declaration that omits attributes the template carries still draws.
 - **No custom `ShaderEffect`** (`WICKED-57`/`68`), refused explicitly and reported through
   `SupportsCapability()`. This is the one remaining feature gap that needs new infrastructure
   rather than another shader: `IEffectBackend`'s uniform setters address constants BY NAME, which
