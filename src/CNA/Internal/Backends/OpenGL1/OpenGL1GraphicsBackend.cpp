@@ -485,16 +485,29 @@ glMaterialfv(GL_FRONT_AND_BACK,GL_EMISSION,emis);
  auto emit=[&](uint32_t i){if(i>=(uint32_t)vb.GetVertexCount())return;const uint8_t*b=s.data()+i*st;const float*f=(const float*)b;if(st==16){emitVertexColor(b);}else if(st==24){emitVertexColor(b);const float*t=(const float*)(b+16);emitTexCoord(t[0],t[1]);}else if(st==20){const float*t=(const float*)(b+12);if(params)glColor4fv(params->diffuseColor);else glColor4f(1,1,1,1);emitTexCoord(t[0],t[1]);}else if(st==32){const float*n=(const float*)(b+12);const float*t=(const float*)(b+24);glNormal3f(n[0],n[1],n[2]);emitTexCoord(t[0],t[1]);if(params)glColor4fv(params->diffuseColor);}else glColor4f(1,1,1,1);glVertex3f(f[0],f[1],f[2]);};
  int count=VertCount(prim,pc);glBegin(Prim(prim));if(ib){count=std::min(count,ib->GetIndexCount());for(int k=0;k<count;k++){uint32_t i=ib->IsThirtyTwoBit()?((const uint32_t*)ib->Data().data())[k]:((const uint16_t*)ib->Data().data())[k];emit(i);}}else{count=std::min(count,vb.GetVertexCount());for(int i=0;i<count;i++)emit((uint32_t)i);}glEnd();glDisable(GL_ALPHA_TEST);glDisable(GL_LIGHTING);}
 void OpenGL1GraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend&v,const Matrix&w,const Matrix&vi,const Matrix&p,PrimitiveType pr,int c){RequireFaithfulDeclarationEXT(v,"colored-nonindexed");SetupMatrices(w,vi,p);DrawInternal(dynamic_cast<const OpenGL1VertexBufferBackend&>(v),nullptr,pr,c,nullptr);}void OpenGL1GraphicsBackend::DrawIndexedColoredPrimitives(const IVertexBufferBackend&v,const IIndexBufferBackend&i,const Matrix&w,const Matrix&vi,const Matrix&p,PrimitiveType pr,int c){RequireFaithfulDeclarationEXT(v,"colored-indexed");SetupMatrices(w,vi,p);DrawInternal(dynamic_cast<const OpenGL1VertexBufferBackend&>(v),&dynamic_cast<const OpenGL1IndexBufferBackend&>(i),pr,c,nullptr);}void OpenGL1GraphicsBackend::DrawPrimitivesEx(const IVertexBufferBackend&v,const Matrix&w,const Matrix&vi,const Matrix&p,PrimitiveType pr,int c,const GpuDrawParams&gp){RequireFaithfulDeclarationEXT(v,"ordinary-nonindexed");SetupMatrices(w,vi,p);DrawInternal(dynamic_cast<const OpenGL1VertexBufferBackend&>(v),nullptr,pr,c,&gp);}void OpenGL1GraphicsBackend::DrawIndexedPrimitivesEx(const IVertexBufferBackend&v,const IIndexBufferBackend&i,const Matrix&w,const Matrix&vi,const Matrix&p,PrimitiveType pr,int c,const GpuDrawParams&gp){RequireFaithfulDeclarationEXT(v,"ordinary-indexed");SetupMatrices(w,vi,p);DrawInternal(dynamic_cast<const OpenGL1VertexBufferBackend&>(v),&dynamic_cast<const OpenGL1IndexBufferBackend&>(i),pr,c,&gp);}bool OpenGL1GraphicsBackend::SupportsCapability(CNA::GraphicsCapability capability)const{
+ // Exhaustive over the CURRENT GraphicsCapability enum with no default case, so a future member
+ // surfaces as a -Wswitch warning rather than an inherited wrong answer (the hazard every prior
+ // GL-family lane of this campaign hit: a fork-era switch answering for members it never knew).
  switch(capability){
+  // Real fixed-function 3D pipeline, real 24/8 depth/stencil, real glPolygonMode(GL_LINE).
   case CNA::GraphicsCapability::ThreeD:
   case CNA::GraphicsCapability::DepthStencilBuffer:
   case CNA::GraphicsCapability::WireFrame: return true;
+  // Runtime-detected GL_EXT_texture_filter_anisotropic (phase 1).
   case CNA::GraphicsCapability::AnisotropicFiltering: return caps_.anisotropicFiltering;
+  // What the driver GENUINELY granted for the window's visual (item 22), not what was requested.
   case CNA::GraphicsCapability::MultiSampleAntiAliasing: return multiSampleCount_>1;
+  // Runtime-detected ARB_occlusion_query/core-1.5 (item 23).
   case CNA::GraphicsCapability::OcclusionQuery: return caps_.occlusionQuery;
+  // One colour attachment, no shader pipeline, no volume textures, one vertex stream: all four
+  // are structural properties of this fixed-function backend, not missing detection.
   case CNA::GraphicsCapability::MultipleRenderTargets:
-  case CNA::GraphicsCapability::CustomEffects: return false;
+  case CNA::GraphicsCapability::CustomEffects:
+  case CNA::GraphicsCapability::Texture3D:
+  case CNA::GraphicsCapability::MultiStreamVertexInput: return false;
  }
+ // Unreachable for current members; a future member lands here (after the -Wswitch warning
+ // above) and is reported unsupported until this backend explicitly claims it.
  return false;
 }
 void OpenGL1SpriteBatchBackend::Begin(){if(begun_)return;begun_=true;glPushAttrib(GL_ENABLE_BIT|GL_COLOR_BUFFER_BIT|GL_TEXTURE_BIT);glDisable(GL_DEPTH_TEST);
