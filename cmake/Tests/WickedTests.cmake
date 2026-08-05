@@ -36,6 +36,17 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     add_test(NAME Wicked_PipelineKey COMMAND cna_test_wicked_pipeline_key)
     set_tests_properties(Wicked_PipelineKey PROPERTIES LABELS "Unit;Wicked" TIMEOUT 60)
 
+    # plan_wicked.md WICKED-78. The regression signal is the process surviving plain device
+    # lifecycles: before the teardown fix, the first bare create/destroy aborted the binary inside
+    # Wicked's VMA ("Some allocations were not freed"), which is also why the shared corpus could
+    # not run under this backend at all. Needs a real device, window and display, like the smoke
+    # test below.
+    cna_wicked_test(cna_test_wicked_device_lifecycle
+        tests/CNA/Internal/Backends/Wicked/WickedDeviceLifecycleTest.cpp)
+    add_test(NAME Wicked_DeviceLifecycle COMMAND cna_test_wicked_device_lifecycle)
+    set_tests_properties(Wicked_DeviceLifecycle PROPERTIES LABELS "GraphicsSmoke;Wicked"
+        TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # plan_wicked.md WICKED-74. Everything else in this backend needs a real Vulkan device, a
     # window and a display, so it is covered by the same demo smoke test the other GPU backends
     # register. It is registered only when the examples are built, and skips rather than fails when

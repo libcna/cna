@@ -1,0 +1,41 @@
+diff --git a/WickedEngine/wiGraphicsDevice_Vulkan.cpp b/WickedEngine/wiGraphicsDevice_Vulkan.cpp
+--- a/WickedEngine/wiGraphicsDevice_Vulkan.cpp
++++ b/WickedEngine/wiGraphicsDevice_Vulkan.cpp
+@@ -3405,13 +3405,37 @@ using namespace vulkan_internal;
+ 				x.destroy();
+ 			}
+ 		}
++		// The command lists are placement-allocated from cmd_allocator, so the vector alone does
++		// not run their destructors. Freeing them here releases every per-frame linear allocator
++		// buffer, bound-resource table entry and worker pipeline they still reference; otherwise
++		// those keep the allocationhandler (and with it the VmaAllocator, VkDevice and VkInstance)
++		// alive past device destruction.
++		for (auto& commandlist : commandlists)
++		{
++			cmd_allocator.free(commandlist);
++		}
++		commandlists.clear();
+ 
+ 		for (auto& x : semaphore_pool)
+ 		{
+ 			vkDestroySemaphore(device, x, nullptr);
+ 		}
+ 
++		vkDestroyBufferView(device, nullBufferView, nullptr);
+ 		vmaDestroyBuffer(allocationhandler->allocator, nullBuffer, nullBufferAllocation);
++		// The null images and their views are created in the constructor next to nullBuffer but
++		// were never destroyed, which leaves three live VMA allocations at vmaDestroyAllocator and
++		// trips its "Some allocations were not freed" assertion on every device teardown.
++		vkDestroyImageView(device, nullImageView1D, nullptr);
++		vkDestroyImageView(device, nullImageView1DArray, nullptr);
++		vkDestroyImageView(device, nullImageView2D, nullptr);
++		vkDestroyImageView(device, nullImageView2DArray, nullptr);
++		vkDestroyImageView(device, nullImageViewCube, nullptr);
++		vkDestroyImageView(device, nullImageViewCubeArray, nullptr);
++		vkDestroyImageView(device, nullImageView3D, nullptr);
++		vmaDestroyImage(allocationhandler->allocator, nullImage1D, nullImageAllocation1D);
++		vmaDestroyImage(allocationhandler->allocator, nullImage2D, nullImageAllocation2D);
++		vmaDestroyImage(allocationhandler->allocator, nullImage3D, nullImageAllocation3D);
+ 		vkDestroySampler(device, nullSampler, nullptr);
+ 
+ 		for (VkSampler sam : immutable_samplers)

@@ -76,6 +76,17 @@ constexpr bool kExpectCustomEffects         = false;
 constexpr bool kExpectMultipleRenderTargets = false;
 constexpr bool kExpectOcclusionQuery        = true;
 constexpr bool kExpectCustomEffects         = false;
+#elif defined(CNA_BACKEND_WICKED)
+// plan_wicked.md WICKED-57/68: this backend answers CustomEffects with a truthful false --
+// IEffectBackend addresses shader constants by name, which needs the SPIR-V reflection this
+// backend does not do, so custom effects are refused at the call site rather than approximated.
+// MRT (up to 4 attachments) and occlusion queries (a real GPUQueryHeap with readback) are
+// genuinely implemented, so those two keep the default expectation. This arm became reachable
+// only when WICKED-78 made a bare device's teardown survivable; the catch-all below had been
+// answering for this backend until then.
+constexpr bool kExpectMultipleRenderTargets = true;
+constexpr bool kExpectOcclusionQuery        = true;
+constexpr bool kExpectCustomEffects         = false;
 #else
 constexpr bool kExpectMultipleRenderTargets = true;
 constexpr bool kExpectOcclusionQuery        = true;

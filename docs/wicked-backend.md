@@ -64,6 +64,28 @@ leaves Wicked's cursor management inert rather than porting it to SDL3.
 Set `-DCNA_WICKED_APPLY_SDL3_PATCH=OFF` to apply it by hand instead. The patch is authored against
 the pinned `CNA_WICKED_COMMIT`; a different revision may need it rebasing.
 
+### The device-teardown patch (`WICKED-78`)
+
+At the pinned revision, `GraphicsDevice_Vulkan`'s destructor leaks in two complementary ways:
+
+- The three **null images** created beside `nullBuffer` (and their views) are never destroyed, so
+  they are still allocated when `vmaDestroyAllocator` runs and VMA's *"Some allocations were not
+  freed before destruction of this memory block"* assertion **aborts the process** — on exactly
+  the devices that never rendered, because those are the ones whose allocator is actually torn
+  down.
+- The **pool-allocated `CommandList_Vulkan` objects** are never freed (`cmd_allocator` placement-
+  allocates them; the destructor destroys their Vulkan pools but never runs their destructors), so
+  once any command list has touched its per-frame linear allocator, the retained `GPUBuffer` keeps
+  the whole allocation handler — `VmaAllocator`, `VkDevice` **and** `VkInstance` — alive forever.
+  A device that has drawn therefore *looks* like it tears down cleanly while actually leaking all
+  of it, which is also what masks the assertion above.
+
+`cmake/patches/wicked-device-teardown.patch` releases both in the destructor and is applied to the
+resolved checkout automatically, exactly like the SDL3 patch; set
+`-DCNA_WICKED_APPLY_TEARDOWN_PATCH=OFF` to apply it by hand. The `Wicked_DeviceLifecycle` test
+pins the fixed behaviour: it is plain device create/destroy cycles, and before the patch the first
+one aborts the binary inside `vk_mem_alloc.h`.
+
 ### Run-time requirement: `libdxcompiler.so` in the working directory
 
 CNA compiles its shaders at run time through `wi::shadercompiler`, which loads
@@ -170,8 +192,10 @@ Not implemented; each is refused explicitly at the call site and reported by
 
 ## Verification status
 
-As of 2026-08-04 the backend compiles and links against a patched Wicked Engine, and its
-device-independent pipeline-cache-key logic is unit tested. **It has not yet been executed on real
-hardware** — the development environment has no GPU, Vulkan loader or display. The first run on a
-GPU host (`plan_wicked.md` `WICKED-18` / `WICKED-74`) is the next task; do not describe this backend
-as verified until it has happened.
+As of 2026-08-05 the backend builds against the patched Wicked Engine, creates a real
+`GraphicsDevice_Vulkan`, and compiles all 22 of its shader entry points at device creation. The
+pipeline-cache-key unit suite, the `Wicked_DeviceLifecycle` regression suite and the 2D demo
+smoke run pass on a **software** Vulkan device
+(llvmpipe/lavapipe under Xvfb). **It has not yet been executed on real GPU hardware with a real
+display** (`plan_wicked.md` `WICKED-18` / `WICKED-74`); do not describe this backend as
+hardware-verified until that has happened.

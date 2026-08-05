@@ -23,9 +23,12 @@ set(CNA_WICKED_COMMIT "27c0df160d738925474a2181d3f88bfd59edaefe"
 set(CNA_WICKED_ROOT "" CACHE PATH "Root of a local Wicked Engine checkout")
 option(CNA_WICKED_AUTO_FETCH "Clone the pinned Wicked Engine revision when CNA_WICKED_ROOT is empty" OFF)
 option(CNA_WICKED_APPLY_SDL3_PATCH "Apply cmake/patches/wicked-sdl3-platform.patch to the resolved Wicked Engine checkout when it is not already SDL3-aware" ON)
+option(CNA_WICKED_APPLY_TEARDOWN_PATCH "Apply cmake/patches/wicked-device-teardown.patch to the resolved Wicked Engine checkout when its Vulkan device still leaks at destruction" ON)
 
 set(CNA_WICKED_SDL3_PATCH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/wicked-sdl3-platform.patch"
     CACHE FILEPATH "SDL3 platform patch applied to Wicked Engine")
+set(CNA_WICKED_TEARDOWN_PATCH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/wicked-device-teardown.patch"
+    CACHE FILEPATH "Vulkan device teardown patch applied to Wicked Engine")
 
 # Wicked Engine's Unix platform layer is SDL2-only upstream: wiPlatform.h calls SDL2 window
 # functions unconditionally under PLATFORM_LINUX, and GraphicsDevice_Vulkan::CreateSwapChain has a
@@ -61,6 +64,47 @@ function(cna_wicked_check_sdl3_support _root)
     if(NOT _patch_result EQUAL 0)
         message(FATAL_ERROR
             "CNA Wicked: failed to apply ${CNA_WICKED_SDL3_PATCH} to '${_root}':\n${_patch_error}\n"
+            "The patch is authored against Wicked Engine ${CNA_WICKED_COMMIT}; a different revision "
+            "may need it rebasing.")
+    endif()
+endfunction()
+
+# Wicked Engine's GraphicsDevice_Vulkan destructor at the pinned revision leaks at teardown
+# (plan_wicked.md WICKED-78): the three null images created beside nullBuffer are never destroyed,
+# so VMA's "Some allocations were not freed" assertion aborts the process whenever the allocator is
+# actually torn down; and the pooled CommandList_Vulkan objects are never freed, so once any
+# command list has touched its per-frame linear allocator, the retained GPUBuffer keeps the whole
+# allocation handler -- VmaAllocator, VkDevice and VkInstance -- alive forever, which both leaks
+# the device and hides the assertion. The patch releases both in the destructor.
+function(cna_wicked_check_device_teardown_fix _root)
+    file(READ "${_root}/WickedEngine/wiGraphicsDevice_Vulkan.cpp" _device_source)
+    if(_device_source MATCHES "cmd_allocator\\.free")
+        return()
+    endif()
+
+    if(NOT CNA_WICKED_APPLY_TEARDOWN_PATCH)
+        message(FATAL_ERROR
+            "CNA Wicked: the Wicked Engine checkout at '${_root}' still leaks its Vulkan device at "
+            "teardown (WICKED-78) and CNA_WICKED_APPLY_TEARDOWN_PATCH=OFF. Apply "
+            "${CNA_WICKED_TEARDOWN_PATCH} manually (git -C ${_root} apply <patch>) or re-enable "
+            "the option.")
+    endif()
+
+    find_package(Git QUIET)
+    if(NOT GIT_FOUND)
+        message(FATAL_ERROR
+            "CNA Wicked: git is required to apply ${CNA_WICKED_TEARDOWN_PATCH} to '${_root}'.")
+    endif()
+
+    message(STATUS "CNA Wicked: applying Vulkan device teardown patch to ${_root}")
+    execute_process(
+        COMMAND "${GIT_EXECUTABLE}" apply --whitespace=nowarn "${CNA_WICKED_TEARDOWN_PATCH}"
+        WORKING_DIRECTORY "${_root}"
+        RESULT_VARIABLE _patch_result
+        ERROR_VARIABLE _patch_error)
+    if(NOT _patch_result EQUAL 0)
+        message(FATAL_ERROR
+            "CNA Wicked: failed to apply ${CNA_WICKED_TEARDOWN_PATCH} to '${_root}':\n${_patch_error}\n"
             "The patch is authored against Wicked Engine ${CNA_WICKED_COMMIT}; a different revision "
             "may need it rebasing.")
     endif()
@@ -107,6 +151,9 @@ function(cna_configure_wicked)
         cna_wicked_check_sdl3_support("${_root}")
         set(WICKED_USE_SDL3 ON CACHE BOOL "" FORCE)
     endif()
+    # Platform-independent: the Vulkan device is the one this backend selects everywhere
+    # (WICKED-60 keeps D3D12 unselectable), so its teardown fix applies on every platform.
+    cna_wicked_check_device_teardown_fix("${_root}")
 
     # CNA needs the library only. Every sample/editor/template target is switched off: they build
     # the full engine application layer (SDL2 event loop, ImGui, editor content) that CNA replaces

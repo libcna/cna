@@ -161,16 +161,23 @@ missing.
 | WICKED-74 | GPU smoke test (`cna_demo_2d --smoke`) verified on a real display | ⬜ |
 | WICKED-75 | Pixel-asserted readback tests (clear colour, sprite, 3D draw) | ⬜ |
 | WICKED-76 | Cross-backend pixel-parity comparison against EasyGL/Vulkan | ⬜ |
+| WICKED-78 | Device teardown releases every GPU/VMA allocation (`cmake/patches/wicked-device-teardown.patch`; regression `Wicked_DeviceLifecycle`) | ✅ |
 
 ---
 
 ## Remaining work (read this first)
 
-- **No verified run on real hardware yet (`WICKED-18`, `WICKED-74`).** The backend compiles and
-  links against a patched Wicked Engine, but this development environment has no GPU, no Vulkan
-  loader and no display, so nothing here has been executed. Every ✅ above means "implemented and
-  compiles"; only `WICKED-70`'s unit test has actually been run. Treat the first run on a GPU host
-  as the next task, not as a formality.
+- **First executed 2026-08-05 on a software Vulkan device; real-hardware verification still open
+  (`WICKED-18`, `WICKED-74`).** The backend builds against the patched Wicked Engine, creates a
+  real `GraphicsDevice_Vulkan` and compiles all 22 shader entry points at device creation; the
+  pipeline-key and device-lifecycle suites and the 2D demo smoke run pass on
+  llvmpipe/lavapipe. What remains open is a run on real GPU hardware with a real display.
+- **`WICKED-78` (found and fixed at first execution): upstream device teardown leaked.** At the
+  pinned revision the Vulkan device destructor never destroys its three null images, so VMA's
+  "Some allocations were not freed" assertion aborted every device that never drew; the engine's
+  pool-allocated command lists were also never freed, so a device that HAD drawn leaked its whole
+  `VkInstance`/`VkDevice`/allocator instead — masking the assertion. Both destructor gaps are
+  closed by `cmake/patches/wicked-device-teardown.patch`.
 - **A declaration this backend's stride table would reinterpret is refused at draw time**
   (`REMED-GFX-DECL-GUARD`). `VariantForStride()` selects the input layout and vertex program from
   the byte stride alone, so a custom `VertexDeclaration` that happens to be one of the eight known
@@ -211,5 +218,8 @@ missing.
   not an incremental step.
 - The SDL3 patch is deliberately minimal and additive. It must not change behaviour on the SDL2
   path, so that rebasing it onto a newer Wicked revision stays mechanical.
+- The device-teardown patch is destructor-scoped: it releases what the constructor and command-list
+  pool already own and adds no behaviour anywhere else, so it too stays mechanical to rebase — and
+  drops out entirely if upstream fixes its own teardown.
 - The established backends are untouched: every change for this backend is either backend-local or
   in the shared CMake selection/linking lists.
