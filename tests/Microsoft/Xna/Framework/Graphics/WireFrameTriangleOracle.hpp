@@ -46,7 +46,7 @@
     defined(CNA_BACKEND_VULKAN) || defined(CNA_BACKEND_BGFX) || \
     defined(CNA_BACKEND_WEBGPU) || defined(CNA_BACKEND_SDL_GPU) || \
     defined(CNA_BACKEND_D3D9) || defined(CNA_BACKEND_D3D11) || defined(CNA_BACKEND_D3D12) || \
-    defined(CNA_BACKEND_OPENGL4)
+    defined(CNA_BACKEND_OPENGL4) || defined(CNA_BACKEND_OPENGL1)
 #define CNA_WIREFRAME_PIXEL_ORACLE 1
 #endif
 
@@ -98,6 +98,8 @@ namespace CnaTest::WireFrameOracle
         "D3D12";
 #elif defined(CNA_BACKEND_OPENGL4)
         "OpenGL4";
+#elif defined(CNA_BACKEND_OPENGL1)
+        "OpenGL1";
 #else
         "unknown";
 #endif
