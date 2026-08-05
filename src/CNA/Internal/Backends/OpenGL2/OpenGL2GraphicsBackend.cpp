@@ -3707,8 +3707,39 @@ namespace CNA::Internal::Backends::OpenGL2
 
     bool OpenGL2GraphicsBackend::SupportsCapability(CNA::GraphicsCapability capability) const
     {
+        // Every current member answered explicitly, with no default case: a future
+        // GraphicsCapability member surfaces as a -Wswitch warning here (and lands on the
+        // trailing return false) instead of inheriting a confident wrong answer.
         switch (capability)
         {
+            // Real vertex/index buffers, 3D draw routes, depth/stencil clears and state.
+            case CNA::GraphicsCapability::ThreeD:
+                return true;
+            // A real 24-bit depth / 8-bit stencil buffer requested for the window's context
+            // (SDL_GL_DEPTH_SIZE/STENCIL_SIZE) and created for every FBO render target.
+            case CNA::GraphicsCapability::DepthStencilBuffer:
+                return true;
+            // Real MRT: up to 8 colour attachments on one shared FBO with a real glDrawBuffers
+            // call (core GL 2.0; the entry point still resolves at runtime on Windows).
+            case CNA::GraphicsCapability::MultipleRenderTargets:
+                return glDrawBuffers != nullptr;
+            // Real GL_SAMPLES_PASSED query objects with exact passed-sample counts (core GL 1.5;
+            // entry points resolved at runtime).
+            case CNA::GraphicsCapability::OcclusionQuery:
+                return glGenQueries != nullptr;
+            // Real caller-supplied GLSL 1.10 compilation via CreateEffectBackend().
+            case CNA::GraphicsCapability::CustomEffects:
+                return true;
+            // Real GL_TEXTURE_3D storage with mip-level upload (core since GL 1.2; entry points
+            // resolved at runtime).
+            case CNA::GraphicsCapability::Texture3D:
+                return glTexImage3D != nullptr;
+            // REMED-GFX-201: not implemented -- the pointer setup binds ONE GL_ARRAY_BUFFER and
+            // reads every attribute out of it at stride (or declared) offsets; there is no second
+            // per-vertex stream to bind, and every Draw*Ex route refuses a wider binding set up
+            // front.
+            case CNA::GraphicsCapability::MultiStreamVertexInput:
+                return false;
             // Unlike EasyGL/GLES3 (which has no wireframe fill mode at all -- see its own
             // SupportsCapability), desktop GL 2.1's compatibility profile genuinely supports
             // glPolygonMode(GL_FRONT_AND_BACK, GL_LINE), already wired in
@@ -3731,9 +3762,10 @@ namespace CNA::Internal::Backends::OpenGL2
                 // unconditionally from the constructor) -- DrawInstancedPrimitivesEx's own guard
                 // checks the same condition before using either.
                 return glDrawElementsInstancedARB != nullptr && glVertexAttribDivisorARB != nullptr;
-            default:
-                return true;
         }
+        // Unreachable for current members; a future member lands here (after the -Wswitch
+        // warning above) and is reported unsupported until this backend explicitly claims it.
+        return false;
     }
 }
 
