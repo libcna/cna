@@ -51,6 +51,14 @@ using Microsoft::Xna::Framework::Graphics::TextureCube;
 constexpr bool kCubeStorageSupported         = false;
 constexpr bool kCubeLevel0ReadbackSupported  = false;
 constexpr bool kCubeMipReadbackSupported     = false;
+#elif defined(CNA_BACKEND_OPENGLES1)
+// OpenGL ES 1.1 stores the whole declared chain and reads the base level back through a scratch
+// framebuffer, but GL_OES_framebuffer_object requires an attached texture's level to be 0, so no
+// mip level above 0 can be read there however much storage exists. The three-way split is exactly
+// why these are separate constants.
+constexpr bool kCubeStorageSupported         = true;
+constexpr bool kCubeLevel0ReadbackSupported  = true;
+constexpr bool kCubeMipReadbackSupported     = false;
 #else
 constexpr bool kCubeStorageSupported         = true;
 constexpr bool kCubeLevel0ReadbackSupported  = true;

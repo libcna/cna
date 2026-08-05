@@ -79,6 +79,16 @@ constexpr bool kCubeLevel0ReadbackSupported = true;
 constexpr bool kCubeStorageSupported        = true;
 #endif
 
+// Readback above level 0 is a separate question from readback at level 0, and the two constants
+// above deliberately only answer the latter -- their names say so. OpenGL ES 1.1 reads a cube face
+// back by attaching it to a framebuffer, and GL_OES_framebuffer_object requires an attached
+// texture's level to be 0, so no mip level above 0 can be read there however much storage exists.
+#if defined(CNA_BACKEND_OPENGLES1)
+constexpr bool kCubeMipReadbackSupported = false;
+#else
+constexpr bool kCubeMipReadbackSupported = kCubeLevel0ReadbackSupported;
+#endif
+
 /// Runs one TextureCube::SetData call and asserts REMED-GFX-135's contract for this backend:
 /// it either completes, or it refuses with System::NotSupportedException. Never both, never
 /// neither.
@@ -289,12 +299,20 @@ TEST_F(TextureCubeTest, SetDataNullRectAtMipLevelUsesReducedSize)
     std::vector<Color> buf(4, Color(1, 2, 3, 4));
     ExpectUploadStoredOrRefused([&] { tex.SetData(CubeMapFace::PositiveX, 1, nullptr, buf.data(), 0, 4); });
 
-    if (kCubeLevel0ReadbackSupported)
+    if (kCubeMipReadbackSupported)
     {
         std::vector<Color> got(4, Color(0xCD, 0xCD, 0xCD, 0xCD));
         ASSERT_NO_THROW(tex.GetData(CubeMapFace::PositiveX, 1, nullptr, got.data(), 0, 4));
         for (const Color& c : got)
             EXPECT_EQ(c.getPackedValueProperty(), buf[0].getPackedValueProperty());
+    }
+    else if (kCubeLevel0ReadbackSupported)
+    {
+        // The store above is still asserted; only reading a mip level back is unavailable, and it
+        // must refuse rather than hand back undefined pixels.
+        std::vector<Color> got(4, Color(0xCD, 0xCD, 0xCD, 0xCD));
+        EXPECT_THROW(tex.GetData(CubeMapFace::PositiveX, 1, nullptr, got.data(), 0, 4),
+                     System::NotSupportedException);
     }
 }
 
@@ -538,6 +556,10 @@ TEST_F(TextureCubeTest, EveryDeclaredMipLevelStoresItsOwnContent)
     // Read back in reverse, so a backend that kept only the LAST write cannot pass either.
     for (int level = levels - 1; level >= 0; --level)
     {
+        // A backend that stores the whole chain but can only read the base level back still has
+        // its level-0 content verified; the levels it cannot read are skipped rather than
+        // asserted away.
+        if (!kCubeMipReadbackSupported && level != 0) continue;
         const int dim = 8 >> level;
         const Color expected(static_cast<std::uint8_t>(30 + level * 50),
                              static_cast<std::uint8_t>(200 - level * 40),
