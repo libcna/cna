@@ -2489,6 +2489,15 @@ namespace CNA::Internal::Backends::OpenGLES1
         // No programmable shaders at all on this backend -- permanently unsupported, not a
         // "not yet implemented" gap.
         case CNA::GraphicsCapability::CustomEffects: return false;
+        // REMED-CONTENT-004: no volume textures. GL_OES_texture_3D is an optional extension this
+        // backend does not use, and CreateTexture3D is left at IGraphicsBackend's nullptr default,
+        // so Texture3D's constructor must be allowed to refuse rather than build on a resource
+        // that was never created.
+        case CNA::GraphicsCapability::Texture3D: return false;
+        // REMED-GFX-201: not implemented here. The fixed-function pointer setup binds one
+        // GL_ARRAY_BUFFER and reads every attribute out of it at stride offsets, so there is no
+        // second per-vertex stream to resolve.
+        case CNA::GraphicsCapability::MultiStreamVertexInput: return false;
         default: return true;
         }
     }
