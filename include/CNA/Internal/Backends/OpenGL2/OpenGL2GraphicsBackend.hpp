@@ -50,10 +50,14 @@ namespace CNA::Internal::Backends::OpenGL2
                                                                     int multiSampleCount = 0) override;
         void SetRenderTarget2D(IRenderTargetBackend* rt) override;
         std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(int size, int depthFormat,
+                                                                          bool preserveContents = false,
                                                                           bool mipMap = false,
                                                                           int multiSampleCount = 0) override;
         void SetRenderTargetCubeFace(IRenderTargetCubeBackend* rt, int face) override;
-        void SetRenderTargets(IRenderTargetBackend* const* rts, int count) override;
+        void SetRenderTargets(const RenderTargetBindingDescriptor* renderTargets, int count) override;
+        /// The pre-descriptor MRT core: binds 2..8 RenderTarget2D backends to one shared MRT FBO.
+        /// Reached only through the validating descriptor override above.
+        void SetRenderTargetsArray(IRenderTargetBackend* const* rts, int count);
 
         // NOXNA: backend-internal helper (not part of IGraphicsBackend) mirroring
         // EasyGLGraphicsBackend::GetCurrentRenderTarget2DSize -- lets Sprite::Draw size its
@@ -93,7 +97,8 @@ namespace CNA::Internal::Backends::OpenGL2
                                        const GpuDrawParams& params) override;
 
         void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend, int colorDstBlend, int alphaDstBlend,
-                             int colorBlendFunc, int alphaBlendFunc) override;
+                             int colorBlendFunc, int alphaBlendFunc,
+                             const BlendWriteState& writeState) override;
         void SetBlendFactor(float r, float g, float b, float a) override;
         void ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable, int depthFunc,
                                     bool stencilEnable, int stencilFunc,

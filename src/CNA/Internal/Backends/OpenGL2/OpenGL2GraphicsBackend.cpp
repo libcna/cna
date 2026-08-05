@@ -1,5 +1,7 @@
 #include "CNA/Internal/Backends/OpenGL2/OpenGL2GraphicsBackend.hpp"
+#include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
+#include "System/NotSupportedException.hpp"
 
 // Windows' opengl32.dll only ever exports the ~350 GL 1.1 entry points (Microsoft never updated
 // its own ICD dispatch table beyond that) -- everything this backend calls beyond GL 1.1 (buffer
@@ -603,11 +605,17 @@ namespace CNA::Internal::Backends::OpenGL2
         // path and its customEffectBackend early-return path, since a custom ShaderEffect draws
         // through the exact same vertex data / attribute-location convention as every built-in
         // program (see EffectBackend's own doc comment above).
-        void BindVertexAttributesForStride(GLuint vboId, std::size_t stride)
+        // baseByteOffset (default 0): a byte bias added to every attribute pointer -- the
+        // software base-vertex technique. GL 2.1 has no glDrawElementsBaseVertex (core 3.2), so a
+        // draw's GpuDrawParams::baseVertex is honored exactly by re-basing the attribute pointers
+        // baseVertex*stride bytes forward instead of silently drawing from vertex 0.
+        void BindVertexAttributesForStride(GLuint vboId, std::size_t stride,
+                                           std::size_t baseByteOffset = 0)
         {
             glBindBuffer(GL_ARRAY_BUFFER, vboId);
             glEnableVertexAttribArray(0);
-            glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(stride), nullptr);
+            glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(stride),
+                                  reinterpret_cast<void*>(baseByteOffset));
 
             // Stride-based vertex-layout dispatch: VertexPositionColor=16, VertexPositionTexture=20,
             // VertexPositionColorTexture=24, VertexPositionNormalTextureSkinned=52/56 (checked before
@@ -621,7 +629,7 @@ namespace CNA::Internal::Backends::OpenGL2
             if (stride == 16)
             {
                 glEnableVertexAttribArray(1);
-                glVertexAttribPointer(1, 4, GL_UNSIGNED_BYTE, GL_TRUE, static_cast<GLsizei>(stride), reinterpret_cast<void*>(12));
+                glVertexAttribPointer(1, 4, GL_UNSIGNED_BYTE, GL_TRUE, static_cast<GLsizei>(stride), reinterpret_cast<void*>(baseByteOffset + 12));
                 glDisableVertexAttribArray(2);
                 glDisableVertexAttribArray(3);
                 glDisableVertexAttribArray(4);
@@ -633,7 +641,7 @@ namespace CNA::Internal::Backends::OpenGL2
                 glDisableVertexAttribArray(1);
                 glVertexAttrib4f(1, 1, 1, 1, 1);
                 glEnableVertexAttribArray(2);
-                glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(stride), reinterpret_cast<void*>(12));
+                glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(stride), reinterpret_cast<void*>(baseByteOffset + 12));
                 glDisableVertexAttribArray(3);
                 glDisableVertexAttribArray(4);
                 glDisableVertexAttribArray(5);
@@ -642,9 +650,9 @@ namespace CNA::Internal::Backends::OpenGL2
             else if (stride == 24)
             {
                 glEnableVertexAttribArray(1);
-                glVertexAttribPointer(1, 4, GL_UNSIGNED_BYTE, GL_TRUE, static_cast<GLsizei>(stride), reinterpret_cast<void*>(12));
+                glVertexAttribPointer(1, 4, GL_UNSIGNED_BYTE, GL_TRUE, static_cast<GLsizei>(stride), reinterpret_cast<void*>(baseByteOffset + 12));
                 glEnableVertexAttribArray(2);
-                glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(stride), reinterpret_cast<void*>(16));
+                glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(stride), reinterpret_cast<void*>(baseByteOffset + 16));
                 glDisableVertexAttribArray(3);
                 glDisableVertexAttribArray(4);
                 glDisableVertexAttribArray(5);
@@ -660,18 +668,18 @@ namespace CNA::Internal::Backends::OpenGL2
                 // GL_UNSIGNED_BYTE (converted to float 0..255 exactly, no precision loss), NOT
                 // normalized to [0,1] -- the vertex shader casts them back to int bone-array indices.
                 glEnableVertexAttribArray(3);
-                glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(stride), reinterpret_cast<void*>(12));
+                glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(stride), reinterpret_cast<void*>(baseByteOffset + 12));
                 glEnableVertexAttribArray(2);
-                glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(stride), reinterpret_cast<void*>(24));
+                glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(stride), reinterpret_cast<void*>(baseByteOffset + 24));
                 glEnableVertexAttribArray(4);
-                glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(stride), reinterpret_cast<void*>(32));
+                glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(stride), reinterpret_cast<void*>(baseByteOffset + 32));
                 glEnableVertexAttribArray(5);
-                glVertexAttribPointer(5, 4, GL_UNSIGNED_BYTE, GL_FALSE, static_cast<GLsizei>(stride), reinterpret_cast<void*>(48));
+                glVertexAttribPointer(5, 4, GL_UNSIGNED_BYTE, GL_FALSE, static_cast<GLsizei>(stride), reinterpret_cast<void*>(baseByteOffset + 48));
                 glDisableVertexAttribArray(6);
                 if (stride == 56)
                 {
                     glEnableVertexAttribArray(1);
-                    glVertexAttribPointer(1, 4, GL_UNSIGNED_BYTE, GL_TRUE, static_cast<GLsizei>(stride), reinterpret_cast<void*>(52));
+                    glVertexAttribPointer(1, 4, GL_UNSIGNED_BYTE, GL_TRUE, static_cast<GLsizei>(stride), reinterpret_cast<void*>(baseByteOffset + 52));
                 }
                 else
                 {
@@ -687,19 +695,19 @@ namespace CNA::Internal::Backends::OpenGL2
                 // matches EasyGLGraphicsBackend's own identical stride-48/68 layout comments].
                 // PbrEffect/SkinnedPbrEffect.
                 glEnableVertexAttribArray(3);
-                glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(stride), reinterpret_cast<void*>(12));
+                glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(stride), reinterpret_cast<void*>(baseByteOffset + 12));
                 glEnableVertexAttribArray(6);
-                glVertexAttribPointer(6, 4, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(stride), reinterpret_cast<void*>(24));
+                glVertexAttribPointer(6, 4, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(stride), reinterpret_cast<void*>(baseByteOffset + 24));
                 glEnableVertexAttribArray(2);
-                glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(stride), reinterpret_cast<void*>(40));
+                glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(stride), reinterpret_cast<void*>(baseByteOffset + 40));
                 glDisableVertexAttribArray(1);
                 glVertexAttrib4f(1, 1, 1, 1, 1);
                 if (stride == 68)
                 {
                     glEnableVertexAttribArray(4);
-                    glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(stride), reinterpret_cast<void*>(48));
+                    glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(stride), reinterpret_cast<void*>(baseByteOffset + 48));
                     glEnableVertexAttribArray(5);
-                    glVertexAttribPointer(5, 4, GL_UNSIGNED_BYTE, GL_FALSE, static_cast<GLsizei>(stride), reinterpret_cast<void*>(64));
+                    glVertexAttribPointer(5, 4, GL_UNSIGNED_BYTE, GL_FALSE, static_cast<GLsizei>(stride), reinterpret_cast<void*>(baseByteOffset + 64));
                 }
                 else
                 {
@@ -712,9 +720,9 @@ namespace CNA::Internal::Backends::OpenGL2
                 glDisableVertexAttribArray(1);
                 glVertexAttrib4f(1, 1, 1, 1, 1);
                 glEnableVertexAttribArray(2);
-                glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(stride), reinterpret_cast<void*>(24));
+                glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(stride), reinterpret_cast<void*>(baseByteOffset + 24));
                 glEnableVertexAttribArray(3);
-                glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(stride), reinterpret_cast<void*>(12));
+                glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(stride), reinterpret_cast<void*>(baseByteOffset + 12));
                 glDisableVertexAttribArray(4);
                 glDisableVertexAttribArray(5);
                 glDisableVertexAttribArray(6);
@@ -803,7 +811,8 @@ namespace CNA::Internal::Backends::OpenGL2
         // derived name the currently-bound program doesn't declare are silently skipped
         // (glGetAttribLocation returns -1 for an unused/optimized-out attribute -- not an error).
         void BindVertexAttributesForDeclaration(GLuint program, GLuint vboId, std::size_t stride,
-                                                const std::vector<VertexElement>& declaration)
+                                                const std::vector<VertexElement>& declaration,
+                                                std::size_t baseByteOffset = 0)
         {
             glBindBuffer(GL_ARRAY_BUFFER, vboId);
             // Every location this backend's built-in programs ever use must start disabled, so a
@@ -824,8 +833,63 @@ namespace CNA::Internal::Backends::OpenGL2
                 glEnableVertexAttribArray(static_cast<GLuint>(location));
                 glVertexAttribPointer(static_cast<GLuint>(location), desc.componentCount, desc.type, desc.normalized,
                                       static_cast<GLsizei>(stride),
-                                      reinterpret_cast<void*>(static_cast<std::uintptr_t>(element.getOffsetProperty())));
+                                      reinterpret_cast<void*>(baseByteOffset
+                                          + static_cast<std::uintptr_t>(element.getOffsetProperty())));
             }
+
+            // A declaration without a Color element leaves aColor disabled, and a disabled
+            // attribute delivers the CURRENT generic value -- whatever some earlier stride-based
+            // bind happened to set. The stride branches pin constant white for exactly this case
+            // (XNA: a colorless vertex type modulates by white), so pin the same constant here
+            // instead of inheriting stale state.
+            bool declaresColor = false;
+            for (const VertexElement& element : declaration)
+                if (element.getVertexElementUsageProperty() == VertexElementUsage::Color &&
+                    element.getUsageIndexProperty() == 0)
+                    declaresColor = true;
+            if (!declaresColor)
+            {
+                const GLint colorLocation = glGetAttribLocation(program, "aColor");
+                if (colorLocation >= 0)
+                    glVertexAttrib4f(static_cast<GLuint>(colorLocation), 1, 1, 1, 1);
+            }
+        }
+
+        // True when a propagated declaration is exactly the built-in layout this backend already
+        // infers for its stride (same semantics, usage indices, offsets and formats -- order
+        // aside). Such buffers keep the fixed-stride dispatch path with its validated
+        // constant-attribute handling; anything else is a genuinely custom declaration and is
+        // bound name-driven from its own elements (Task 1080), which reads exactly the caller's
+        // declared bytes and therefore needs no refusal-style fidelity guard.
+        bool DeclarationMatchesInferredStrideLayout(const std::vector<VertexElement>& declaration,
+                                                    std::size_t stride)
+        {
+            namespace G = CNA::Internal::Graphics;
+            // BackendRefusesIt: BindVertexAttributesForStride() throws for a stride outside its
+            // table, so an unlisted stride can never be "the built-in layout" -- it must take the
+            // declaration-driven path (or carry no declaration and hit the established refusal).
+            const G::InferredVertexLayout inferred = G::InferredLayoutForStride(
+                static_cast<int>(stride), G::UnlistedStrideLayout::BackendRefusesIt);
+            if (!inferred.known) return false;
+            if (declaration.size() != inferred.count) return false;
+            for (const VertexElement& element : declaration)
+            {
+                bool matched = false;
+                for (std::size_t n = 0; n < inferred.count; ++n)
+                {
+                    const auto& native = inferred.elements[n];
+                    if (native.usage == element.getVertexElementUsageProperty() &&
+                        native.usageIndex == element.getUsageIndexProperty() &&
+                        native.offset == element.getOffsetProperty() &&
+                        native.format == element.getVertexElementFormatProperty())
+                    {
+                        matched = true;
+                        break;
+                    }
+                }
+                if (!matched) return false;
+            }
+            return true;
         }
 
         class Tex final : public ITextureBackend, public RecoverableResource
@@ -1103,7 +1167,7 @@ namespace CNA::Internal::Backends::OpenGL2
             // texture) -- glGetTexImage reads the whole level, then the requested sub-rect is
             // copied out (same row-major layout convention as every other texture in this
             // backend, verified self-consistent by OpenGL2_2D's own quadrant UV test).
-            void GetData(int level, int x, int y, int rw, int rh, void* data, int /*dataLength*/) const override
+            bool GetData(int level, int x, int y, int rw, int rh, void* data, int /*dataLength*/) const override
             {
                 int levelW = w, levelH = h;
                 for (int i = 0; i < level; ++i) { levelW = std::max(1, levelW / 2); levelH = std::max(1, levelH / 2); }
@@ -1114,6 +1178,7 @@ namespace CNA::Internal::Backends::OpenGL2
                 for (int row = 0; row < rh; ++row)
                     std::memcpy(dst + static_cast<std::size_t>(row) * rw * 4,
                                full.data() + (static_cast<std::size_t>(y + row) * levelW + x) * 4, rw * 4);
+                return true;
             }
         };
 
@@ -1202,13 +1267,14 @@ namespace CNA::Internal::Backends::OpenGL2
 
             void BindGL() const override { glBindTexture(GL_TEXTURE_CUBE_MAP, id); }
 
-            void SetData(int face, int level, int x, int y, int w, int h, const void* data, int /*dataLength*/) override
+            bool SetData(int face, int level, int x, int y, int w, int h, const void* data, int /*dataLength*/) override
             {
                 glBindTexture(GL_TEXTURE_CUBE_MAP, id);
                 glTexSubImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + face, level, x, y, w, h, GL_RGBA, GL_UNSIGNED_BYTE, data);
+                return true;
             }
 
-            void GetData(int face, int level, int x, int y, int w, int h, void* data, int /*dataLength*/) const override
+            bool GetData(int face, int level, int x, int y, int w, int h, void* data, int /*dataLength*/) const override
             {
                 int levelSize = size;
                 for (int i = 0; i < level; ++i) levelSize = std::max(1, levelSize / 2);
@@ -1219,6 +1285,7 @@ namespace CNA::Internal::Backends::OpenGL2
                 for (int row = 0; row < h; ++row)
                     std::memcpy(dst + static_cast<std::size_t>(row) * w * 4,
                                full.data() + (static_cast<std::size_t>(y + row) * levelSize + x) * 4, w * 4);
+                return true;
             }
         };
 
@@ -1326,7 +1393,7 @@ namespace CNA::Internal::Backends::OpenGL2
 
             // Texture2D-style GetData isn't part of ITextureCubeBackend (only SetData is
             // pure-virtual there) -- read back via glGetTexImage exactly like TextureCubeBackend.
-            void GetData(int face, int level, int x, int y, int w, int h, void* data, int /*dataLength*/) const override
+            bool GetData(int face, int level, int x, int y, int w, int h, void* data, int /*dataLength*/) const override
             {
                 int levelSize = size;
                 for (int i = 0; i < level; ++i) levelSize = std::max(1, levelSize / 2);
@@ -1337,6 +1404,7 @@ namespace CNA::Internal::Backends::OpenGL2
                 for (int row = 0; row < h; ++row)
                     std::memcpy(dst + static_cast<std::size_t>(row) * w * 4,
                                full.data() + (static_cast<std::size_t>(y + row) * levelSize + x) * 4, w * 4);
+                return true;
             }
         };
 
@@ -1380,13 +1448,14 @@ namespace CNA::Internal::Backends::OpenGL2
 
             void BindGL() const override { glBindTexture(GL_TEXTURE_3D, id); }
 
-            void SetData(int level, int x, int y, int z, int sw, int sh, int sd, const void* data, int /*dataLength*/) override
+            bool SetData(int level, int x, int y, int z, int sw, int sh, int sd, const void* data, int /*dataLength*/) override
             {
                 glBindTexture(GL_TEXTURE_3D, id);
                 glTexSubImage3D(GL_TEXTURE_3D, level, x, y, z, sw, sh, sd, GL_RGBA, GL_UNSIGNED_BYTE, data);
+                return true;
             }
 
-            void GetData(int level, int x, int y, int z, int sw, int sh, int sd, void* data, int /*dataLength*/) const override
+            bool GetData(int level, int x, int y, int z, int sw, int sh, int sd, void* data, int /*dataLength*/) const override
             {
                 // Task (plan_opengl2.md follow-up, session 8): glGetTexImage returns THIS level's
                 // own (smaller, halved-per-level) dimensions, not level 0's -- both the buffer size
@@ -1406,6 +1475,7 @@ namespace CNA::Internal::Backends::OpenGL2
                         std::memcpy(dst + (static_cast<std::size_t>(slice) * sh + row) * sw * 4,
                                    full.data() + ((static_cast<std::size_t>(z + slice) * levelH + (y + row)) * levelW + x) * 4,
                                    sw * 4);
+                return true;
             }
         };
 
@@ -1486,9 +1556,15 @@ namespace CNA::Internal::Backends::OpenGL2
                 }
             }
 
-            void SetVertexDeclaration(const std::vector<VertexElement>& elements) override
+            void SetVertexDeclaration(const VertexDeclaration& vertexDeclaration) override
             {
-                declaration = elements;
+                // The shared layer propagates this buffer's complete declaration before every
+                // real upload (GFX-043) -- built-in vertex types included, not just the custom
+                // declarations the fork-era vector overload received. Binding dispatch stays
+                // behavior-preserving: DeclarationMatchesInferredStrideLayout() routes exact
+                // built-in layouts through BindVertexAttributesForStride()'s validated constant
+                // handling, and only genuinely custom declarations take the name-driven path.
+                declaration = vertexDeclaration.GetVertexElements();
             }
 
             int GetVertexCount() const override { return count; }
@@ -2000,10 +2076,16 @@ namespace CNA::Internal::Backends::OpenGL2
         // own doc comment. Both default to no-op (uFogEnabled=0, uAlphaTest={0,0,1,1}) so every
         // program works unchanged for draws that don't use either feature.
         const char* kFogVertexChunk =
-            "uniform float uFogEnabled;uniform float uFogStart;uniform float uFogEnd;varying float vFogFactor;";
+            "uniform float uFogEnabled;uniform vec4 uFogVector;varying float vFogFactor;";
+        // REMED-GFX-010: the FNA fog vector is consumed directly -- fogFactor is
+        // saturate(dot(objectPosition, uFogVector)) and vFogFactor keeps this file's established
+        // "keep" convention (1 = unfogged), so the fragment-side mix() chunks are unchanged. The
+        // vector's own encoding carries the special cases: all-zero yields keep=1 (fog disabled)
+        // and {0,0,0,1} (FogStart == FogEnd) yields keep=0 (fully fogged), so the scalar-era
+        // epsilon branch has no subject anymore.
         const char* kFogVertexCompute =
-            "vFogFactor=(uFogEnabled>0.5)?((abs(uFogEnd-uFogStart)<1e-6)?0.0:"
-            "clamp((aPosition.z+uFogEnd)/(uFogEnd-uFogStart),0.0,1.0)):1.0;";
+            "vFogFactor=(uFogEnabled>0.5)?"
+            "(1.0-clamp(dot(vec4(aPosition,1.0),uFogVector),0.0,1.0)):1.0;";
         const char* kFogFragmentChunk =
             "varying float vFogFactor;uniform vec3 uFogColor;";
         const char* kFogFragmentApply = "gl_FragData[0].rgb=mix(uFogColor,gl_FragData[0].rgb,vFogFactor);";
@@ -2062,7 +2144,7 @@ namespace CNA::Internal::Backends::OpenGL2
         const char* litVertexSrc =
             "attribute vec3 aPosition;attribute vec3 aNormal;attribute vec2 aTexCoord;attribute vec4 aColor;"
             "uniform mat4 uWVP;uniform mat4 uWorld;uniform mat3 uNormalMatrix;"
-            "uniform float uFogEnabled;uniform float uFogStart;uniform float uFogEnd;"
+            "uniform float uFogEnabled;uniform vec4 uFogVector;"
             "varying vec3 vNormal;varying vec2 vTex;varying vec3 vWorldPos;varying float vFogFactor;varying vec4 vColor;"
             "void main(){"
             "gl_Position=uWVP*vec4(aPosition,1.0);"
@@ -2070,8 +2152,8 @@ namespace CNA::Internal::Backends::OpenGL2
             "vTex=aTexCoord;"
             "vWorldPos=(uWorld*vec4(aPosition,1.0)).xyz;"
             "vColor=aColor;"
-            "vFogFactor=(uFogEnabled>0.5)?((abs(uFogEnd-uFogStart)<1e-6)?0.0:"
-            "clamp((aPosition.z+uFogEnd)/(uFogEnd-uFogStart),0.0,1.0)):1.0;"
+            "vFogFactor=(uFogEnabled>0.5)?"
+            "(1.0-clamp(dot(vec4(aPosition,1.0),uFogVector),0.0,1.0)):1.0;"
             "}";
         const char* litFragmentSrc =
             "varying vec3 vNormal;varying vec2 vTex;varying vec3 vWorldPos;varying float vFogFactor;varying vec4 vColor;"
@@ -2112,7 +2194,7 @@ namespace CNA::Internal::Backends::OpenGL2
         const char* envMapVertexSrc =
             "attribute vec3 aPosition;attribute vec3 aNormal;attribute vec2 aTexCoord;"
             "uniform mat4 uWVP;uniform mat4 uWorld;uniform mat3 uNormalMatrix;uniform vec3 uEyePosition;"
-            "uniform float uFogEnabled;uniform float uFogStart;uniform float uFogEnd;"
+            "uniform float uFogEnabled;uniform vec4 uFogVector;"
             "uniform float uEnvMapAmount;uniform float uFresnelEnabled;uniform float uFresnelFactor;"
             "varying vec3 vWorldNormal;varying vec3 vEyeDir;varying vec2 vTex;"
             "varying float vFogFactor;varying float vFresnel;"
@@ -2126,8 +2208,8 @@ namespace CNA::Internal::Backends::OpenGL2
             "vTex=aTexCoord;"
             "float viewAngle=dot(eyeVector,worldNormal);"
             "vFresnel=(uFresnelEnabled>0.5)?pow(max(1.0-abs(viewAngle),0.0),uFresnelFactor)*uEnvMapAmount:uEnvMapAmount;"
-            "vFogFactor=(uFogEnabled>0.5)?((abs(uFogEnd-uFogStart)<1e-6)?0.0:"
-            "clamp((aPosition.z+uFogEnd)/(uFogEnd-uFogStart),0.0,1.0)):1.0;"
+            "vFogFactor=(uFogEnabled>0.5)?"
+            "(1.0-clamp(dot(vec4(aPosition,1.0),uFogVector),0.0,1.0)):1.0;"
             "}";
         const char* envMapFragmentSrc =
             "varying vec3 vWorldNormal;varying vec3 vEyeDir;varying vec2 vTex;"
@@ -2172,7 +2254,7 @@ namespace CNA::Internal::Backends::OpenGL2
             "attribute vec3 aPosition;attribute vec3 aNormal;attribute vec2 aTexCoord;"
             "attribute vec4 aBoneWeight;attribute vec4 aBoneIndices;attribute vec4 aColor;"
             "uniform mat4 uWVP;uniform mat4 uWorld;uniform mat4 uBones[72];uniform int uWeightsPerVertex;"
-            "uniform float uFogEnabled;uniform float uFogStart;uniform float uFogEnd;"
+            "uniform float uFogEnabled;uniform vec4 uFogVector;"
             "varying vec3 vNormal;varying vec2 vTex;varying vec3 vWorldPos;varying float vFogFactor;varying vec4 vColor;"
             "void main(){"
             "int i0=int(aBoneIndices.x+0.5);int i1=int(aBoneIndices.y+0.5);"
@@ -2191,8 +2273,8 @@ namespace CNA::Internal::Backends::OpenGL2
             "vTex=aTexCoord;"
             "vWorldPos=(uWorld*skinnedPos).xyz;"
             "vColor=aColor;"
-            "vFogFactor=(uFogEnabled>0.5)?((abs(uFogEnd-uFogStart)<1e-6)?0.0:"
-            "clamp((aPosition.z+uFogEnd)/(uFogEnd-uFogStart),0.0,1.0)):1.0;"
+            "vFogFactor=(uFogEnabled>0.5)?"
+            "(1.0-clamp(dot(skinnedPos,uFogVector),0.0,1.0)):1.0;"
             "}";
         const char* skinnedFragmentSrc =
             "varying vec3 vNormal;varying vec2 vTex;varying vec3 vWorldPos;varying float vFogFactor;varying vec4 vColor;"
@@ -2287,7 +2369,7 @@ namespace CNA::Internal::Backends::OpenGL2
         const char* pbrVertexSrc =
             "attribute vec3 aPosition;attribute vec3 aNormal;attribute vec4 aTangent;attribute vec2 aTexCoord;"
             "uniform mat4 uWVP;uniform mat4 uWorld;uniform mat3 uNormalMatrix;"
-            "uniform float uFogEnabled;uniform float uFogStart;uniform float uFogEnd;"
+            "uniform float uFogEnabled;uniform vec4 uFogVector;"
             "varying vec3 vNormal;varying vec3 vTangent;varying float vBitangentSign;"
             "varying vec2 vTex;varying float vFogFactor;varying vec3 vWorldPos;"
             "void main(){"
@@ -2305,15 +2387,15 @@ namespace CNA::Internal::Backends::OpenGL2
             "vBitangentSign=aTangent.w;"
             "vTex=aTexCoord;"
             "vWorldPos=(uWorld*vec4(aPosition,1.0)).xyz;"
-            "vFogFactor=(uFogEnabled>0.5)?((abs(uFogEnd-uFogStart)<1e-6)?0.0:"
-            "clamp((aPosition.z+uFogEnd)/(uFogEnd-uFogStart),0.0,1.0)):1.0;"
+            "vFogFactor=(uFogEnabled>0.5)?"
+            "(1.0-clamp(dot(vec4(aPosition,1.0),uFogVector),0.0,1.0)):1.0;"
             "}";
 
         const char* pbrSkinnedVertexSrc =
             "attribute vec3 aPosition;attribute vec3 aNormal;attribute vec4 aTangent;attribute vec2 aTexCoord;"
             "attribute vec4 aBoneWeight;attribute vec4 aBoneIndices;"
             "uniform mat4 uWVP;uniform mat4 uWorld;uniform mat4 uBones[72];uniform int uWeightsPerVertex;"
-            "uniform float uFogEnabled;uniform float uFogStart;uniform float uFogEnd;"
+            "uniform float uFogEnabled;uniform vec4 uFogVector;"
             "varying vec3 vNormal;varying vec3 vTangent;varying float vBitangentSign;"
             "varying vec2 vTex;varying float vFogFactor;varying vec3 vWorldPos;"
             "void main(){"
@@ -2331,8 +2413,8 @@ namespace CNA::Internal::Backends::OpenGL2
             "vBitangentSign=aTangent.w;"
             "vTex=aTexCoord;"
             "vWorldPos=(uWorld*skinnedPos).xyz;"
-            "vFogFactor=(uFogEnabled>0.5)?((abs(uFogEnd-uFogStart)<1e-6)?0.0:"
-            "clamp((aPosition.z+uFogEnd)/(uFogEnd-uFogStart),0.0,1.0)):1.0;"
+            "vFogFactor=(uFogEnabled>0.5)?"
+            "(1.0-clamp(dot(skinnedPos,uFogVector),0.0,1.0)):1.0;"
             "}";
 
         colorProgram_ = LinkProgram(colorVertexSrc.c_str(), colorFragmentSrc.c_str());
@@ -2579,11 +2661,15 @@ namespace CNA::Internal::Backends::OpenGL2
     }
 
     std::unique_ptr<IRenderTargetCubeBackend> OpenGL2GraphicsBackend::CreateRenderTargetCube(
-        int size, int depthFormat, bool mipMap, int /*multiSampleCount*/)
+        int size, int depthFormat, bool /*preserveContents*/, bool mipMap, int /*multiSampleCount*/)
     {
         // plan_opengl2.md follow-up: MSAA cube render targets are not implemented (unlike
         // RenderTarget2D's own MSAA support) -- multiSampleCount is accepted (matching the
-        // interface signature) but ignored.
+        // interface signature) but ignored. preserveContents is likewise accepted and needs no
+        // storage: this backend renders cube faces into persistent GL texture storage directly
+        // (no transient/discardable face buffer exists), so face contents survive an unbind
+        // either way -- preserving under RenderTargetUsage::DiscardContents is permitted
+        // behavior, not a divergence.
         return std::make_unique<RenderTargetCubeBackend>(this, size, depthFormat, mipMap);
     }
 
@@ -2608,7 +2694,48 @@ namespace CNA::Internal::Backends::OpenGL2
         }
     }
 
-    void OpenGL2GraphicsBackend::SetRenderTargets(IRenderTargetBackend* const* rts, int count)
+    void OpenGL2GraphicsBackend::SetRenderTargets(
+        const RenderTargetBindingDescriptor* renderTargets, int count)
+    {
+        if (count <= 0) { SetRenderTarget2D(nullptr); return; }
+        if (!renderTargets)
+            throw std::invalid_argument(
+                "OPENGL2 SetRenderTargets: nonzero count requires a binding array.");
+        if (count == 1)
+        {
+            // Every descriptor kind is explicitly consumed: a cube-face binding routes to the
+            // real cube-face setter, never flattened to a RenderTarget2D or to face +X.
+            if (renderTargets[0].IsRenderTargetCubeFace())
+                SetRenderTargetCubeFace(renderTargets[0].GetRenderTargetCube(),
+                                        renderTargets[0].GetCubeFace());
+            else
+                SetRenderTarget2D(renderTargets[0].GetRenderTarget2D());
+            return;
+        }
+
+        constexpr int kMaxMrtDescriptors = 8;
+        if (count > kMaxMrtDescriptors)
+            throw std::runtime_error(
+                "OPENGL2 SetRenderTargets: requested " + std::to_string(count)
+                + " targets, but this backend binds at most "
+                + std::to_string(kMaxMrtDescriptors) + ".");
+        IRenderTargetBackend* targets[kMaxMrtDescriptors] = {};
+        for (int i = 0; i < count; ++i)
+        {
+            if (renderTargets[i].IsRenderTargetCubeFace())
+                throw std::runtime_error(
+                    "OPENGL2 SetRenderTargets: cube faces in a multi-target set are not "
+                    "implemented by this CNA backend.");
+            targets[i] = renderTargets[i].GetRenderTarget2D();
+            if (!targets[i])
+                throw std::runtime_error(
+                    "OPENGL2 SetRenderTargets: binding " + std::to_string(i)
+                    + " carries no RenderTarget2D backend.");
+        }
+        SetRenderTargetsArray(targets, count);
+    }
+
+    void OpenGL2GraphicsBackend::SetRenderTargetsArray(IRenderTargetBackend* const* rts, int count)
     {
         if (count <= 0) { SetRenderTarget2D(nullptr); return; }
         if (count == 1) { SetRenderTarget2D(rts[0]); return; }
@@ -2883,28 +3010,32 @@ namespace CNA::Internal::Backends::OpenGL2
             params->customEffectBackend->SetUniformMat4("View", viewCM);
             params->customEffectBackend->SetUniformMat4("Projection", projCM);
 
-            // Task 1080: a VertexBuffer given a genuinely custom VertexDeclaration (via
-            // SetDataRaw()) is bound by attribute NAME (see BindVertexAttributesForDeclaration's
-            // own doc comment) against THIS custom program specifically -- dynamic_cast to reach
-            // its raw program handle through the generic IEffectBackend interface (same reasoning
-            // as EffectBackend::GetProgramHandle()'s own doc comment).
-            if (!vb->declaration.empty())
+            // Task 1080: a VertexBuffer whose propagated declaration is genuinely custom (not the
+            // built-in layout its stride already implies) is bound by attribute NAME (see
+            // BindVertexAttributesForDeclaration's own doc comment) against THIS custom program
+            // specifically -- dynamic_cast to reach its raw program handle through the generic
+            // IEffectBackend interface (same reasoning as EffectBackend::GetProgramHandle()'s own
+            // doc comment). A non-zero baseVertex (indexed draws only) is honored by re-basing the
+            // attribute pointers -- GL 2.1 has no glDrawElementsBaseVertex.
+            const std::size_t customBaseByte = (ib && params->baseVertex > 0)
+                ? static_cast<std::size_t>(params->baseVertex) * vb->stride : 0;
+            if (!vb->declaration.empty()
+                && !DeclarationMatchesInferredStrideLayout(vb->declaration, vb->stride))
             {
                 if (auto* custom = dynamic_cast<EffectBackend*>(params->customEffectBackend))
-                    BindVertexAttributesForDeclaration(custom->GetProgramHandle(), vb->id, vb->stride, vb->declaration);
+                    BindVertexAttributesForDeclaration(custom->GetProgramHandle(), vb->id, vb->stride,
+                                                       vb->declaration, customBaseByte);
                 else
-                    BindVertexAttributesForStride(vb->id, vb->stride);
+                    BindVertexAttributesForStride(vb->id, vb->stride, customBaseByte);
             }
             else
             {
-                BindVertexAttributesForStride(vb->id, vb->stride);
+                BindVertexAttributesForStride(vb->id, vb->stride, customBaseByte);
             }
 
             const int customVertexCount = VertexCountForPrimitives(primitive, primitiveCount);
             if (ib)
             {
-                // See the non-custom-effect path's identical params->startIndex handling below --
-                // same real gap, same GL 2.1 baseVertex limitation.
                 const std::size_t indexElemSize = ib->thirtyTwoBit ? 4 : 2;
                 glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ib->id);
                 glDrawElements(ToGLPrimitiveMode(primitive), customVertexCount,
@@ -2945,8 +3076,9 @@ namespace CNA::Internal::Backends::OpenGL2
         if (params)
         {
             glUniform3fv(glGetUniformLocation(program, "uFogColor"), 1, params->fogColor);
-            glUniform1f(glGetUniformLocation(program, "uFogStart"), params->fogStart);
-            glUniform1f(glGetUniformLocation(program, "uFogEnd"), params->fogEnd);
+            // REMED-GFX-010: FNA's fog vector, consumed directly by every vertex shader's
+            // dot(position, uFogVector) term (post-skin position in the two skinned programs).
+            glUniform4fv(glGetUniformLocation(program, "uFogVector"), 1, params->fogVector);
         }
 
         if (lit || envMapped || skinned || pbr || pbrSkinned)
@@ -3023,14 +3155,21 @@ namespace CNA::Internal::Backends::OpenGL2
             }
         }
 
-        // Task 1080: a VertexBuffer given a genuinely custom VertexDeclaration (via
-        // SetDataRaw()) is bound by attribute NAME against whichever built-in program was just
-        // selected above, instead of this file's own fixed byte-stride dispatch -- see
-        // BindVertexAttributesForDeclaration's own doc comment.
-        if (!vb->declaration.empty())
-            BindVertexAttributesForDeclaration(program, vb->id, vb->stride, vb->declaration);
+        // Task 1080: a VertexBuffer whose propagated declaration is genuinely custom (not the
+        // built-in layout its stride already implies) is bound by attribute NAME against
+        // whichever built-in program was just selected above, instead of this file's own fixed
+        // byte-stride dispatch -- see BindVertexAttributesForDeclaration's own doc comment. A
+        // non-zero baseVertex (indexed draws only; the ordinary routes fold their per-vertex
+        // binding offset into it) is honored by re-basing the attribute pointers, since GL 2.1
+        // has no glDrawElementsBaseVertex.
+        const std::size_t stockBaseByte = (ib && params && params->baseVertex > 0)
+            ? static_cast<std::size_t>(params->baseVertex) * vb->stride : 0;
+        if (!vb->declaration.empty()
+            && !DeclarationMatchesInferredStrideLayout(vb->declaration, vb->stride))
+            BindVertexAttributesForDeclaration(program, vb->id, vb->stride, vb->declaration,
+                                               stockBaseByte);
         else
-            BindVertexAttributesForStride(vb->id, vb->stride);
+            BindVertexAttributesForStride(vb->id, vb->stride, stockBaseByte);
 
         // GL 2.1 has no sampler objects -- ApplySamplerState() caches the requested filter/wrap
         // per slot; apply it here, right after binding the texture that will actually be sampled
@@ -3163,9 +3302,10 @@ namespace CNA::Internal::Backends::OpenGL2
             // ignored entirely (always drew from index 0, no base-vertex offset) -- a real gap
             // EasyGLGraphicsBackend does not have (see its own params.startIndex/params.baseVertex
             // handling). glDrawElementsBaseVertex is GL 3.2+/ARB_draw_elements_base_vertex, not
-            // guaranteed on GL 2.1, so a non-zero baseVertex here still silently falls back to 0
-            // (startIndex alone -- the byte offset into the index buffer -- is core GL 1.5 and
-            // always honored).
+            // guaranteed on GL 2.1, so a non-zero baseVertex is honored by the software
+            // base-vertex pointer re-base above (stockBaseByte) instead of a native draw-call
+            // parameter (startIndex alone -- the byte offset into the index buffer -- is core
+            // GL 1.5 and honored directly).
             const std::size_t indexElemSize = ib->thirtyTwoBit ? 4 : 2;
             const int startIndex = params ? params->startIndex : 0;
             glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ib->id);
@@ -3204,6 +3344,14 @@ namespace CNA::Internal::Backends::OpenGL2
                                                    const Matrix& projection, PrimitiveType primitive, int primitiveCount,
                                                    const GpuDrawParams& params)
     {
+        // REMED-GFX-201: one per-vertex stream only on this backend; refuse a wider binding set
+        // before any program or pointer state is touched, never render from a stream subset
+        // (GraphicsCapability::MultiStreamVertexInput is false, and GraphicsDevice already
+        // rejects these -- this is the backend-level backstop for a direct call).
+        if (HasMultipleVertexStreams(params) || HasMultipleInstanceStreams(params))
+            throw System::NotSupportedException(
+                "OPENGL2: multiple per-vertex or per-instance vertex streams are not supported "
+                "by this backend (GraphicsCapability::MultiStreamVertexInput is false).");
         drawInternal(vb, nullptr, world, view, projection, primitive, primitiveCount, &params);
     }
 
@@ -3211,6 +3359,14 @@ namespace CNA::Internal::Backends::OpenGL2
                                                           const Matrix& world, const Matrix& view, const Matrix& projection,
                                                           PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
     {
+        // REMED-GFX-201: one per-vertex stream only on this backend; refuse a wider binding set
+        // before any program or pointer state is touched, never render from a stream subset
+        // (GraphicsCapability::MultiStreamVertexInput is false, and GraphicsDevice already
+        // rejects these -- this is the backend-level backstop for a direct call).
+        if (HasMultipleVertexStreams(params) || HasMultipleInstanceStreams(params))
+            throw System::NotSupportedException(
+                "OPENGL2: multiple per-vertex or per-instance vertex streams are not supported "
+                "by this backend (GraphicsCapability::MultiStreamVertexInput is false).");
         drawInternal(vb, &ib, world, view, projection, primitive, primitiveCount, &params);
     }
 
@@ -3226,6 +3382,15 @@ namespace CNA::Internal::Backends::OpenGL2
         // std::runtime_error is the correct, honest behavior for anything outside that scope
         // (no custom effect bound, or the driver genuinely lacks GL_ARB_draw_instanced/
         // GL_ARB_instanced_arrays), so this override only handles the cases it can do for real.
+        // REMED-GFX-201: one per-vertex stream only on this backend; refuse a wider binding set
+        // before any program or pointer state is touched, never render from a stream subset
+        // (GraphicsCapability::MultiStreamVertexInput is false, and GraphicsDevice already
+        // rejects these -- this is the backend-level backstop for a direct call).
+        if (HasMultipleVertexStreams(params) || HasMultipleInstanceStreams(params))
+            throw System::NotSupportedException(
+                "OPENGL2: multiple per-vertex or per-instance vertex streams are not supported "
+                "by this backend (GraphicsCapability::MultiStreamVertexInput is false).");
+
         if (!params.customEffectBackend || !glDrawElementsInstancedARB || !glVertexAttribDivisorARB)
         {
             IGraphicsBackend::DrawInstancedPrimitivesEx(vbi, ibi, world, view, projection, primitive,
@@ -3254,23 +3419,45 @@ namespace CNA::Internal::Backends::OpenGL2
         const GLuint program = custom->GetProgramHandle();
 
         // Mesh (per-vertex) attributes -- same declaration-driven or fixed-stride dispatch every
-        // other custom-effect draw uses.
-        if (!vb->declaration.empty())
-            BindVertexAttributesForDeclaration(program, vb->id, vb->stride, vb->declaration);
+        // other custom-effect draw uses. REMED-GFX-202: the instanced route folds nothing, so the
+        // mesh stream's own public VertexOffset arrives in vertexStreams[0].vertexOffset and the
+        // draw's baseVertex arrives separately -- both are honored here by the same software
+        // pointer re-base the ordinary indexed route uses (GL 2.1 has no glDrawElementsBaseVertex),
+        // advancing every per-vertex attribute by that many of this stream's own records.
+        const int meshVertexOffset =
+            params.vertexStreamCount > 0 ? params.vertexStreams[0].vertexOffset : 0;
+        const long long meshBaseRecords =
+            static_cast<long long>(meshVertexOffset) + static_cast<long long>(params.baseVertex);
+        const std::size_t meshBaseByte =
+            meshBaseRecords > 0 ? static_cast<std::size_t>(meshBaseRecords) * vb->stride : 0;
+        if (!vb->declaration.empty()
+            && !DeclarationMatchesInferredStrideLayout(vb->declaration, vb->stride))
+            BindVertexAttributesForDeclaration(program, vb->id, vb->stride, vb->declaration,
+                                               meshBaseByte);
         else
-            BindVertexAttributesForStride(vb->id, vb->stride);
+            BindVertexAttributesForStride(vb->id, vb->stride, meshBaseByte);
 
         // Per-instance attributes: bound by NAME (glGetAttribLocation), exactly like the mesh
         // buffer above -- unlike EasyGLGraphicsBackend's own fixed-layout-location approach, name-
         // based binding needs no "continue right after the mesh buffer's own locations" offset
         // arithmetic, since each attribute's location comes straight from the linker regardless of
-        // how many mesh attributes exist. glVertexAttribDivisorARB(location, 1) is what makes each
-        // of these advance once per INSTANCE instead of once per vertex -- the whole mechanism this
-        // task exists to add.
-        const auto* instVb = dynamic_cast<const VB*>(params.instanceVb);
+        // how many mesh attributes exist. glVertexAttribDivisorARB is what makes each of these
+        // advance once per instanceFrequency INSTANCES instead of once per vertex -- the whole
+        // mechanism this task exists to add. REMED-GFX-202: the one per-instance stream arrives as
+        // the vertexStreams entry whose instanceFrequency is greater than zero (there is no second
+        // representation of "the instance buffer"); its own public VertexOffset offsets every
+        // attribute pointer by that many of its own records (GFX-211), and its own
+        // InstanceFrequency is the divisor (GFX-213).
+        const GpuVertexStreamBinding* instanceStream = FirstInstanceStream(params);
+        const auto* instVb = instanceStream
+            ? dynamic_cast<const VB*>(instanceStream->buffer) : nullptr;
         std::vector<GLuint> instanceLocations;
         if (instVb && !instVb->declaration.empty())
         {
+            const std::size_t instBaseByte = instanceStream->vertexOffset > 0
+                ? static_cast<std::size_t>(instanceStream->vertexOffset) * instVb->stride : 0;
+            const GLuint divisor = static_cast<GLuint>(
+                instanceStream->instanceFrequency > 0 ? instanceStream->instanceFrequency : 1);
             glBindBuffer(GL_ARRAY_BUFFER, instVb->id);
             for (const auto& element : instVb->declaration)
             {
@@ -3281,20 +3468,23 @@ namespace CNA::Internal::Backends::OpenGL2
 
                 const VertexAttribFormat desc = DescribeVertexElementFormat(element.getVertexElementFormatProperty());
                 const auto offset = reinterpret_cast<const void*>(
-                    static_cast<std::uintptr_t>(element.getOffsetProperty()));
+                    instBaseByte + static_cast<std::uintptr_t>(element.getOffsetProperty()));
                 glEnableVertexAttribArray(static_cast<GLuint>(location));
                 glVertexAttribPointer(static_cast<GLuint>(location), desc.componentCount, desc.type,
                                       desc.normalized, static_cast<GLsizei>(instVb->stride), offset);
-                glVertexAttribDivisorARB(static_cast<GLuint>(location), 1);
+                glVertexAttribDivisorARB(static_cast<GLuint>(location), divisor);
                 instanceLocations.push_back(static_cast<GLuint>(location));
             }
         }
 
         const int indexCount = VertexCountForPrimitives(primitive, primitiveCount);
+        const std::size_t instIndexElemSize = ib->thirtyTwoBit ? 4 : 2;
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ib->id);
         glDrawElementsInstancedARB(ToGLPrimitiveMode(primitive), indexCount,
                                    ib->thirtyTwoBit ? GL_UNSIGNED_INT : GL_UNSIGNED_SHORT,
-                                   nullptr, instanceCount);
+                                   reinterpret_cast<void*>(
+                                       static_cast<std::uintptr_t>(params.startIndex) * instIndexElemSize),
+                                   instanceCount);
 
         // Reset divisor back to 0 (not just disable the attribute) -- otherwise a later,
         // unrelated draw that reuses the same attribute location number would silently inherit
@@ -3307,8 +3497,32 @@ namespace CNA::Internal::Backends::OpenGL2
     }
 
     void OpenGL2GraphicsBackend::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend, int colorDstBlend, int alphaDstBlend,
-                                                  int colorBlendFunc, int alphaBlendFunc)
+                                                  int colorBlendFunc, int alphaBlendFunc,
+                                                  const BlendWriteState& writeState)
     {
+        // REMED-GFX-077: glColorMaski is GL 3.0+, so this profile has ONE color mask for every
+        // draw buffer. With an MRT set active, distinct per-slot ColorWriteChannels values cannot
+        // be expressed -- refuse rather than silently applying slot 0's mask to every attachment
+        // (EasyGLGraphicsBackend::ApplyBlendState's identical GLES3 refusal).
+        if (!mrtTargets_.empty())
+        {
+            const int activeSlots = static_cast<int>(mrtTargets_.size()) < 4
+                ? static_cast<int>(mrtTargets_.size()) : 4;
+            for (int i = 1; i < activeSlots; ++i)
+                if (writeState.colorWriteChannels[i] != writeState.colorWriteChannels[0])
+                    throw std::runtime_error(
+                        "OPENGL2 ApplyBlendState: this GL profile cannot express distinct "
+                        "ColorWriteChannels values for active MRT slots.");
+        }
+        const int cwc = writeState.colorWriteChannels[0];
+        glColorMask(ColorWriteHasRed(cwc)   ? GL_TRUE : GL_FALSE,
+                    ColorWriteHasGreen(cwc) ? GL_TRUE : GL_FALSE,
+                    ColorWriteHasBlue(cwc)  ? GL_TRUE : GL_FALSE,
+                    ColorWriteHasAlpha(cwc) ? GL_TRUE : GL_FALSE);
+        // BlendState.MultiSampleMask: GL_SAMPLE_MASK is GL 3.2+, so a non-default coverage mask
+        // is a documented capability gap on this profile (EasyGL's and OPENGL1's same gap) -- the
+        // value reaches the backend and only the rare non-default path is unimplemented.
+
         // Blend::One=0, Blend::Zero=1 -> Opaque preset: src=One, dst=Zero => effectively no
         // blending (matches EasyGLGraphicsBackend::ApplyBlendState's identical detection).
         const bool blendEnabled = !(colorSrcBlend == 0 && colorDstBlend == 1 && alphaSrcBlend == 0 && alphaDstBlend == 1);
