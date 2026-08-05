@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include <array>
 #include <memory>
+#include <vector>
 #include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
@@ -185,5 +187,11 @@ namespace Microsoft::Xna::Framework::Graphics
     private:
         int size_;
         std::unique_ptr<CNA::Internal::Backends::ITextureCubeBackend> backend_;
+        /// Level-0-only CPU-side pixel shadow, one per face, lazily created on first SetData()
+        /// at level 0 and shared with the backend via ITextureCubeBackend::ShareCpuPixels() for
+        /// GL-style context-loss restoration (mirrors Texture2D::cpuPixels_'s own level-0-only
+        /// scope -- higher mip levels are not restored from any CPU shadow, matching how
+        /// Texture2D's own context recovery re-derives them via mipmap generation instead).
+        std::array<std::shared_ptr<std::vector<uint8_t>>, 6> cpuPixels_;
     };
 }

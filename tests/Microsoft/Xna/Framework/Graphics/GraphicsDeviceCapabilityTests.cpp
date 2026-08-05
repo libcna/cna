@@ -46,6 +46,18 @@ using CNA::GraphicsCapability;
 // This test target only ever builds against a fully 3D-capable backend (EasyGL by default on
 // Linux) -- SDL_Renderer/DX3/Canvas each have their own dedicated
 // *_graphics_capability_test.cpp example asserting the opposite (nothing supported).
+//
+// plan_opengl1.md phase 12 finding: OPENGL1 is a SECOND genuinely-3D-capable backend this file's
+// original "only ever builds against EasyGL" assumption did not anticipate -- and its real,
+// honest capability profile (examples/opengl1_graphics_capability_test.cpp, plan_opengl1.md
+// phase 11) legitimately differs from EasyGL's on 3 of these checks: OPENGL1 has no
+// ARB_multitexture-based MRT or custom-shader Effect pipeline (this backend's own design rule:
+// "No GLSL/custom ShaderEffect pipeline in the strict OPENGL1 backend"), but DOES support
+// wireframe via real glPolygonMode(GL_LINE) -- the opposite of GLES3's own total lack of a
+// wireframe fill mode. Neither backend is "wrong"; both are honestly reporting a real, different
+// fixed-function feature set. OcclusionQuery (plan_opengl1.md item 23, EasyGL parity, added
+// 2026-07-20) is no longer one of the differing checks -- both backends now genuinely support it
+// (OPENGL1 via real ARB_occlusion_query/core-1.5 GL_SAMPLES_PASSED queries).
 
 // OpenGL ES 1.1 is a fixed-function pipeline with no MRT mechanism, no occlusion-query mechanism
 // anywhere in the CM registry, and no shader compiler at all. Its `false` for these three is the
@@ -54,6 +66,15 @@ using CNA::GraphicsCapability;
 #if defined(CNA_BACKEND_OPENGLES1)
 constexpr bool kExpectMultipleRenderTargets = false;
 constexpr bool kExpectOcclusionQuery        = false;
+constexpr bool kExpectCustomEffects         = false;
+#elif defined(CNA_BACKEND_OPENGL1)
+// plan_opengl1.md phase 12: OPENGL1 is a second, legitimately-different, equally-honest
+// 3D-capable backend -- no MRT and no custom-shader support in its fixed-function
+// pipeline, reported truthfully rather than inherited. Occlusion queries became real in
+// item 23 (ARB_occlusion_query/core GL 1.5, GL_SAMPLES_PASSED), so that answer no longer
+// differs from EasyGL's.
+constexpr bool kExpectMultipleRenderTargets = false;
+constexpr bool kExpectOcclusionQuery        = true;
 constexpr bool kExpectCustomEffects         = false;
 #else
 constexpr bool kExpectMultipleRenderTargets = true;

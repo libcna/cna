@@ -191,6 +191,13 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_FourTargets_DoesNotThrow)
     // silently dropping the rest, which is also why SupportsCapability(MultipleRenderTargets)
     // reports false.
     EXPECT_THROW(gd.SetRenderTargets(bindings), System::NotSupportedException);
+#elif defined(CNA_BACKEND_OPENGL1)
+    // plan_opengl1.md: the same single-colour-attachment refusal shape as OPENGLES1 above, for the
+    // desktop fixed-function pipeline -- a single RenderTarget2D binds normally via the
+    // ARB_framebuffer_object/core FBO path; more than one is refused rather than binding the
+    // first and silently dropping the rest, which is also why
+    // SupportsCapability(MultipleRenderTargets) reports false.
+    EXPECT_THROW(gd.SetRenderTargets(bindings), System::NotSupportedException);
 #else
     EXPECT_NO_THROW(gd.SetRenderTargets(bindings));
 #endif

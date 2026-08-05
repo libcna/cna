@@ -99,6 +99,13 @@ TEST(GraphicsBackendCompileDefinitionsTest, ExactlyOneGraphicsBackendIsSelected)
 #ifdef CNA_BACKEND_OPENGL4
     ++enabled;
 #endif
+    // plan_opengl1.md phase 12 finding: same gap class as the D3D9 comment above -- no commit in
+    // this file's own history ever added an OPENGL1 entry either, and the full unfiltered
+    // CnaTests suite had never actually been run under CNA_GRAPHICS_BACKEND=OPENGL1 until this
+    // audit did so.
+#ifdef CNA_BACKEND_OPENGL1
+    ++enabled;
+#endif
 
     EXPECT_EQ(enabled, 1);
 }

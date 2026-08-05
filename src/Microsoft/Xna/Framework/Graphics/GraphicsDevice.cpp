@@ -106,7 +106,7 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             SDL_WindowFlags windowFlags = SDL_WINDOW_RESIZABLE;
 
-#ifdef CNA_BACKEND_EASYGL
+#if defined(CNA_BACKEND_EASYGL) || defined(CNA_BACKEND_OPENGL1)
             windowFlags |= SDL_WINDOW_OPENGL;
 #endif
 
@@ -2084,6 +2084,32 @@ namespace Microsoft::Xna::Framework::Graphics
         }
 
         SDL_WindowFlags windowFlags = getBackendWindowFlags();
+
+        // OPENGL1 requests a legacy/compatibility (non-ES) GL context, which on X11 goes through
+        // GLX rather than EasyGL's EGL path (SDL_GL_CONTEXT_PROFILE_MASK=ES steers SDL to EGL,
+        // where the framebuffer config can still be chosen at SDL_GL_CreateContext() time). GLX
+        // fixes the window's X visual -- and therefore its depth/stencil buffer bits -- at
+        // SDL_CreateWindow() time; setting SDL_GL_STENCIL_SIZE afterward (as
+        // OpenGL1GraphicsBackend's own constructor also does, for self-containment) is too late
+        // and silently produces a 0-bit stencil buffer, making every DepthStencilState.
+        // StencilEnable a permanent no-op. Confirmed empirically: GL_STENCIL_BITS read back 0
+        // without this block and 8 with it. Must run before SDL_CreateWindow() below.
+#if defined(CNA_BACKEND_OPENGL1)
+        SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
+        SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
+        SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+        // plan_opengl1.md item 22 (EasyGL parity): same GLX-visual-fixed-at-window-creation-time
+        // constraint as the depth/stencil attributes above -- SDL_GL_MULTISAMPLEBUFFERS/SAMPLES
+        // must also be requested before SDL_CreateWindow() below, or the window's X visual is
+        // fixed without a multisample buffer and OpenGL1GraphicsBackend's own constructor (which
+        // runs after the window already exists) can never recover it.
+        if (presentationParameters_.getMultiSampleCountProperty() > 1)
+        {
+            SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1);
+            SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES,
+                                 presentationParameters_.getMultiSampleCountProperty());
+        }
+#endif
 
         const int width = presentationParameters_.getBackBufferWidthProperty() > 0
                               ? presentationParameters_.getBackBufferWidthProperty()
