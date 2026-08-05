@@ -399,7 +399,7 @@ namespace CNA::Internal::Backends::OpenGLES1
     class OpenGLES1TextureCubeBackend : public ITextureCubeBackend
     {
     public:
-        explicit OpenGLES1TextureCubeBackend(int size);
+        OpenGLES1TextureCubeBackend(OpenGLES1GraphicsBackend* owner, int size);
         ~OpenGLES1TextureCubeBackend() override;
 
         OpenGLES1TextureCubeBackend(const OpenGLES1TextureCubeBackend&) = delete;
@@ -407,11 +407,32 @@ namespace CNA::Internal::Backends::OpenGLES1
 
         [[nodiscard]] bool SetData(int face, int level, int x, int y, int w, int h,
                                    const void* data, int dataLength) override;
+
+        /**
+         * @brief Reads back RGBA8 pixels from a sub-rectangle of one cube face.
+         *
+         * ES 1.1 has no glGetTexImage, so the face is attached to a scratch framebuffer and read
+         * through it -- the same route Texture2D::GetData and the render-target cube already take.
+         *
+         * @param face Cube face index (0=+X, 1=-X, 2=+Y, 3=-Y, 4=+Z, 5=-Z).
+         * @param level Mip level; only level 0 is stored by this backend.
+         * @param x Left edge of the sub-rectangle.
+         * @param y Top edge of the sub-rectangle, top-left origin.
+         * @param w Sub-rectangle width.
+         * @param h Sub-rectangle height.
+         * @param data Destination RGBA8 buffer.
+         * @param dataLength Size of that buffer in bytes.
+         * @return True when the face was read back, false when it could not be.
+         */
+        [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
+                                   void* data, int dataLength) const override;
+
         void BindGL() const override;
 
         [[nodiscard]] unsigned int GetGLHandle() const { return texture_; }
 
     private:
+        OpenGLES1GraphicsBackend* owner_ = nullptr;
         unsigned int texture_ = 0;
         int size_ = 0;
     };

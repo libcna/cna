@@ -1445,8 +1445,8 @@ namespace CNA::Internal::Backends::OpenGLES1
     // OpenGLES1TextureCubeBackend (OPENGLES1-74, GL_OES_texture_cube_map)
     // -------------------------------------------------------------------------
 
-    OpenGLES1TextureCubeBackend::OpenGLES1TextureCubeBackend(int size)
-        : size_(size)
+    OpenGLES1TextureCubeBackend::OpenGLES1TextureCubeBackend(OpenGLES1GraphicsBackend* owner, int size)
+        : owner_(owner), size_(size)
     {
         glGenTextures(1, &texture_);
         glBindTexture(GL_TEXTURE_CUBE_MAP_OES, texture_);
@@ -1487,6 +1487,48 @@ namespace CNA::Internal::Backends::OpenGLES1
         return true;
     }
 
+    bool OpenGLES1TextureCubeBackend::GetData(int face, int level, int x, int y, int w, int h,
+                                              void* data, int dataLength) const
+    {
+        // Only level 0 is stored by this backend (CreateTextureCube ignores mipMap).
+        if (level != 0 || !data || w <= 0 || h <= 0) return false;
+        if (face < 0 || face > 5) return false;
+        if (dataLength < w * h * 4) return false;
+        if (!owner_ || !owner_->HasFramebufferObjectsEXT() || texture_ == 0) return false;
+
+        static constexpr GLenum kFaces[6] = {
+            GL_TEXTURE_CUBE_MAP_POSITIVE_X_OES, GL_TEXTURE_CUBE_MAP_NEGATIVE_X_OES,
+            GL_TEXTURE_CUBE_MAP_POSITIVE_Y_OES, GL_TEXTURE_CUBE_MAP_NEGATIVE_Y_OES,
+            GL_TEXTURE_CUBE_MAP_POSITIVE_Z_OES, GL_TEXTURE_CUBE_MAP_NEGATIVE_Z_OES,
+        };
+
+        // ES 1.1 has no glGetTexImage, so the face is attached to a scratch framebuffer and read
+        // through it -- the same route Texture2D::GetData and the render-target cube already take.
+        GLint previousFbo = 0;
+        glGetIntegerv(GL_FRAMEBUFFER_BINDING_OES, &previousFbo);
+
+        GLuint scratch = 0;
+        owner_->GenFramebufferEXT(&scratch);
+        owner_->BindFramebufferEXT(scratch);
+        owner_->AttachCubeFaceEXT(kFaces[face], texture_);
+
+        bool ok = false;
+        if (owner_->IsFramebufferCompleteEXT())
+        {
+            // Deliberately NOT flipped, unlike Texture2D::GetData. This class's own SetData hands
+            // raw x/y straight to glTexSubImage2D, i.e. it works in GL's bottom-up space; reading
+            // back through the same space is what makes a SetData/GetData round trip exact. A flip
+            // here would only reintroduce the mismatch on every sub-rectangle.
+            glPixelStorei(GL_PACK_ALIGNMENT, 1);
+            glReadPixels(x, y, w, h, GL_RGBA, GL_UNSIGNED_BYTE, static_cast<uint8_t*>(data));
+            ok = true;
+        }
+
+        owner_->BindFramebufferEXT(static_cast<GLuint>(previousFbo));
+        owner_->DeleteFramebufferEXT(&scratch);
+        return ok;
+    }
+
     void OpenGLES1TextureCubeBackend::BindGL() const
     {
         glBindTexture(GL_TEXTURE_CUBE_MAP_OES, texture_);
@@ -1496,7 +1538,7 @@ namespace CNA::Internal::Backends::OpenGLES1
     {
         (void)mipMap; (void)surfaceFormat;
         if (!cubeMapSupported_) return nullptr;
-        return std::make_unique<OpenGLES1TextureCubeBackend>(size);
+        return std::make_unique<OpenGLES1TextureCubeBackend>(this, size);
     }
 
     // -------------------------------------------------------------------------
