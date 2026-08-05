@@ -192,6 +192,12 @@ namespace
     /// content assertion for the identical `set_sub_image_2d` path lives on the plain cube in
     /// examples/texturecube_texture3d_setdata_contract_test.cpp.
     constexpr bool kRenderTargetCubeAcceptsSetData = true;
+#elif defined(CNA_BACKEND_OPENGL4)
+    /// OpenGL4RenderTargetCubeBackend::SetData is the same real glTexSubImage2D upload shape as
+    /// EasyGL's above -- and unlike EasyGL this backend also implements the per-face+level FBO
+    /// readback, so the byte-exact round trip is asserted directly by its own
+    /// OpenGL4_RenderTargetCube CTest (plan_opengl4.md GL4-15).
+    constexpr bool kRenderTargetCubeAcceptsSetData = true;
 #else
     constexpr bool kRenderTargetCubeAcceptsSetData = false;
 #endif
