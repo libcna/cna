@@ -245,6 +245,7 @@ namespace CNA::Internal::Backends::OpenGL4::GL4
     using PFNGL4STENCILFUNCSEPARATEPROC         = void (*)(GLenum, GLenum, GLint, GLuint);
     using PFNGL4STENCILOPSEPARATEPROC           = void (*)(GLenum, GLenum, GLenum, GLenum);
     using PFNGL4STENCILMASKSEPARATEPROC         = void (*)(GLenum, GLuint);
+    using PFNGL4COLORMASKIPROC                  = void (*)(GLuint, GLboolean, GLboolean, GLboolean, GLboolean);
 
     // plan_opengl4.md GL4-20: plain Texture3D -- GL 1.2 core, not guaranteed to be declared by a
     // GL-1.1-vintage <GL/gl.h> (same rationale as the other GL4-prefixed entries above).
@@ -344,6 +345,7 @@ namespace CNA::Internal::Backends::OpenGL4::GL4
     extern PFNGL4STENCILFUNCSEPARATEPROC         gl4_glStencilFuncSeparate;
     extern PFNGL4STENCILOPSEPARATEPROC           gl4_glStencilOpSeparate;
     extern PFNGL4STENCILMASKSEPARATEPROC         gl4_glStencilMaskSeparate;
+    extern PFNGL4COLORMASKIPROC                  gl4_glColorMaski;
 
     extern PFNGL4TEXIMAGE3DPROC                  gl4_glTexImage3D;
     extern PFNGL4TEXSUBIMAGE3DPROC               gl4_glTexSubImage3D;

@@ -6,6 +6,7 @@
 #include <SDL3/SDL.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstring>
 #include <iostream>
@@ -117,24 +118,21 @@ void main()
 layout(location = 0) in vec3 aPos;
 layout(location = 1) in vec4 aColor;
 uniform mat4 uWorldViewProj;
-uniform float uFogEnabled;
-uniform float uFogStart;
-uniform float uFogEnd;
+uniform vec4 uFogVector;
 out vec4 vColor;
 out float vFogFactor;
 void main()
 {
     gl_Position = uWorldViewProj * vec4(aPos, 1.0);
     vColor = aColor;
-    // Task 1111's own already-verified formula (matches FNA's EffectHelpers.SetFogVector/
-    // Common.fxh ComputeFogFactor exactly when World=View=Identity, the scenario every CNA fog
-    // test/scene uses): fogFactor=saturate(scale*(z+fogStart)), scale=1/(fogStart-fogEnd);
-    // EasyGL's own vFogFactor is "fraction of original colour" (mix(fogColor,colour,vFogFactor)),
-    // the inverse of FNA's fogFactor -- simplifying 1-saturate(scale*(z+fogStart)) with
-    // uFogStart/uFogEnd naming gives the form below. Ported verbatim, not re-derived.
-    vFogFactor = (uFogEnabled > 0.5)
-        ? ((abs(uFogEnd - uFogStart) < 1e-6) ? 0.0 : clamp((aPos.z + uFogEnd) / (uFogEnd - uFogStart), 0.0, 1.0))
-        : 1.0;
+    // REMED-GFX-010: FNA EffectHelpers.SetFogVector / Common.fxh ComputeFogFactor. Fog is a
+    // true VIEW-SPACE Z term: fogFactor = saturate(dot(pos, uFogVector)), where uFogVector bakes
+    // the third column of World*View (CPU-side, GpuDrawParams::fogVector). vFogFactor is the
+    // inverse "keep" (mix(uFogColor, colour, vFogFactor)), so 1 - saturate(dot(pos, uFogVector)).
+    // uFogVector is 0 when fog is disabled (=> keep 1, no-op) and (0,0,0,1) for the
+    // fogStart==fogEnd degenerate case (=> keep 0, fully fogged) -- all handled CPU-side,
+    // matching FNA and EasyGLGraphicsBackend's own head-of-tree programs exactly.
+    vFogFactor = 1.0 - clamp(dot(vec4(aPos, 1.0), uFogVector), 0.0, 1.0);
 }
 )GLSL";
 
@@ -164,7 +162,7 @@ void main()
         // plan_opengl4.md GL4-13: textured3d (VertexPositionTexture, stride 20). Algorithmic
         // reference: VulkanGraphicsBackend's textured3d.vert/frag.glsl (no Y-flip -- OpenGL's own
         // NDC convention needs none, unlike Vulkan's flipped clip space). plan_opengl4.md GL4-25
-        // added real fog (Task 1111's formula, ported from EasyGLGraphicsBackend's own
+        // added real fog (REMED-GFX-010 fog-vector form, matching EasyGLGraphicsBackend's own
         // EnsureTextured3DProgram -- see kColoredParams3DVertSrc's own comment for the full
         // derivation, not re-explained per shader).
         const char* kTextured3DVertSrc = R"GLSL(
@@ -172,18 +170,14 @@ void main()
 layout(location = 0) in vec3 aPos;
 layout(location = 1) in vec2 aUV;
 uniform mat4 uWorldViewProj;
-uniform float uFogEnabled;
-uniform float uFogStart;
-uniform float uFogEnd;
+uniform vec4 uFogVector;
 out vec2 vUV;
 out float vFogFactor;
 void main()
 {
     vUV = aUV;
     gl_Position = uWorldViewProj * vec4(aPos, 1.0);
-    vFogFactor = (uFogEnabled > 0.5)
-        ? ((abs(uFogEnd - uFogStart) < 1e-6) ? 0.0 : clamp((aPos.z + uFogEnd) / (uFogEnd - uFogStart), 0.0, 1.0))
-        : 1.0;
+    vFogFactor = 1.0 - clamp(dot(vec4(aPos, 1.0), uFogVector), 0.0, 1.0);
 }
 )GLSL";
 
@@ -239,9 +233,7 @@ layout(location = 2) in vec2 aUV;
 uniform mat4 uWorldViewProj;
 uniform vec4 uDiffuseColor;
 uniform bool uVertexColorEnabled;
-uniform float uFogEnabled;
-uniform float uFogStart;
-uniform float uFogEnd;
+uniform vec4 uFogVector;
 out vec2 vUV;
 out vec4 vTint;
 out float vFogFactor;
@@ -250,9 +242,7 @@ void main()
     vUV = aUV;
     vTint = uVertexColorEnabled ? (aColor * uDiffuseColor) : uDiffuseColor;
     gl_Position = uWorldViewProj * vec4(aPos, 1.0);
-    vFogFactor = (uFogEnabled > 0.5)
-        ? ((abs(uFogEnd - uFogStart) < 1e-6) ? 0.0 : clamp((aPos.z + uFogEnd) / (uFogEnd - uFogStart), 0.0, 1.0))
-        : 1.0;
+    vFogFactor = 1.0 - clamp(dot(vec4(aPos, 1.0), uFogVector), 0.0, 1.0);
 }
 )GLSL";
 
@@ -305,9 +295,7 @@ layout(location = 1) in vec3 aNormal;
 layout(location = 2) in vec2 aUV;
 uniform mat4 uWorldViewProj;
 uniform mat4 uWorld;
-uniform float uFogEnabled;
-uniform float uFogStart;
-uniform float uFogEnd;
+uniform vec4 uFogVector;
 out vec2 vUV;
 out vec3 vNormal;
 out vec3 vWorldPos;
@@ -319,9 +307,7 @@ void main()
     vNormal = normalize(normalMatrix * aNormal);
     vWorldPos = (uWorld * vec4(aPos, 1.0)).xyz;
     gl_Position = uWorldViewProj * vec4(aPos, 1.0);
-    vFogFactor = (uFogEnabled > 0.5)
-        ? ((abs(uFogEnd - uFogStart) < 1e-6) ? 0.0 : clamp((aPos.z + uFogEnd) / (uFogEnd - uFogStart), 0.0, 1.0))
-        : 1.0;
+    vFogFactor = 1.0 - clamp(dot(vec4(aPos, 1.0), uFogVector), 0.0, 1.0);
 }
 )GLSL";
 
@@ -432,9 +418,7 @@ uniform vec3 uEmissiveColor;
 uniform vec3 uEyePosition;
 uniform vec3 uSpecularColor;
 uniform float uSpecularPower;
-uniform float uFogEnabled;
-uniform float uFogStart;
-uniform float uFogEnd;
+uniform vec4 uFogVector;
 out vec2 vUV;
 out float vFogFactor;
 out vec3 vLitRGB;
@@ -466,9 +450,7 @@ void main()
     vec3 h1 = normalize(E - nL1); float spec1 = pow(max(dot(h1, N), 0.0) * zeroL1, uSpecularPower);
     vec3 h2 = normalize(E - nL2); float spec2 = pow(max(dot(h2, N), 0.0) * zeroL2, uSpecularPower);
     vSpecularRGB = (spec0 * uLight0Specular + spec1 * uLight1Specular + spec2 * uLight2Specular) * uSpecularColor;
-    vFogFactor = (uFogEnabled > 0.5)
-        ? ((abs(uFogEnd - uFogStart) < 1e-6) ? 0.0 : clamp((aPos.z + uFogEnd) / (uFogEnd - uFogStart), 0.0, 1.0))
-        : 1.0;
+    vFogFactor = 1.0 - clamp(dot(vec4(aPos, 1.0), uFogVector), 0.0, 1.0);
 }
 )GLSL";
 
@@ -521,9 +503,7 @@ uniform vec3 uEyePosition;
 uniform float uEnvMapAmount;
 uniform bool uFresnelEnabled;
 uniform float uFresnelFactor;
-uniform float uFogEnabled;
-uniform float uFogStart;
-uniform float uFogEnd;
+uniform vec4 uFogVector;
 out vec3 vWorldNormal;
 out vec3 vEyeDir;
 out vec2 vUV;
@@ -544,11 +524,8 @@ void main()
     vFresnel = uFresnelEnabled
         ? pow(max(1.0 - abs(viewAngle), 0.0), uFresnelFactor) * uEnvMapAmount
         : uEnvMapAmount;
-    // plan_opengl4.md GL4-25: see kColoredParams3DVertSrc's own comment for the formula
-    // derivation (Task 1111).
-    vFogFactor = (uFogEnabled > 0.5)
-        ? ((abs(uFogEnd - uFogStart) < 1e-6) ? 0.0 : clamp((aPos.z + uFogEnd) / (uFogEnd - uFogStart), 0.0, 1.0))
-        : 1.0;
+    // REMED-GFX-010: see kColoredParams3DVertSrc's own comment for the fog-vector formula.
+    vFogFactor = 1.0 - clamp(dot(vec4(aPos, 1.0), uFogVector), 0.0, 1.0);
 }
 )GLSL";
 
@@ -630,9 +607,7 @@ uniform mat4 uWorldViewProj;
 uniform mat4 uWorld;
 uniform mat4 uBones[72];
 uniform int uWeightsPerVertex;
-uniform float uFogEnabled;
-uniform float uFogStart;
-uniform float uFogEnd;
+uniform vec4 uFogVector;
 out vec3 vNormal;
 out vec2 vUV;
 out vec3 vWorldPos;
@@ -658,12 +633,9 @@ void main()
     vUV = aUV;
     vWorldPos = (uWorld * skinnedPos).xyz;
     vColor = aColor;
-    // plan_opengl4.md GL4-25: see kColoredParams3DVertSrc's own comment for the formula
-    // derivation (Task 1111). Uses the pre-skin aPos.z, matching EasyGLGraphicsBackend's own
-    // EnsureSkinnedProgram convention.
-    vFogFactor = (uFogEnabled > 0.5)
-        ? ((abs(uFogEnd - uFogStart) < 1e-6) ? 0.0 : clamp((aPos.z + uFogEnd) / (uFogEnd - uFogStart), 0.0, 1.0))
-        : 1.0;
+    // REMED-GFX-010: see kColoredParams3DVertSrc's own comment. Skinned: dot the POST-skin
+    // position, since FNA's Skin() mutates vin.Position before ComputeFogFactor runs.
+    vFogFactor = 1.0 - clamp(dot(skinnedPos, uFogVector), 0.0, 1.0);
 }
 )GLSL";
 
@@ -760,9 +732,7 @@ uniform vec3 uEmissiveColor;
 uniform vec3 uEyePosition;
 uniform vec3 uSpecularColor;
 uniform float uSpecularPower;
-uniform float uFogEnabled;
-uniform float uFogStart;
-uniform float uFogEnd;
+uniform vec4 uFogVector;
 out vec2 vUV;
 out vec4 vColor;
 out float vFogFactor;
@@ -806,9 +776,7 @@ void main()
     vec3 h1 = normalize(E - nL1); float spec1 = pow(max(dot(h1, N), 0.0) * zeroL1, uSpecularPower);
     vec3 h2 = normalize(E - nL2); float spec2 = pow(max(dot(h2, N), 0.0) * zeroL2, uSpecularPower);
     vSpecularRGB = (spec0 * uLight0Specular + spec1 * uLight1Specular + spec2 * uLight2Specular) * uSpecularColor;
-    vFogFactor = (uFogEnabled > 0.5)
-        ? ((abs(uFogEnd - uFogStart) < 1e-6) ? 0.0 : clamp((aPos.z + uFogEnd) / (uFogEnd - uFogStart), 0.0, 1.0))
-        : 1.0;
+    vFogFactor = 1.0 - clamp(dot(skinnedPos, uFogVector), 0.0, 1.0);
 }
 )GLSL";
 
@@ -858,9 +826,7 @@ layout(location = 2) in vec4 aTangent;
 layout(location = 3) in vec2 aUV;
 uniform mat4 uWorldViewProj;
 uniform mat4 uWorld;
-uniform float uFogEnabled;
-uniform float uFogStart;
-uniform float uFogEnd;
+uniform vec4 uFogVector;
 out vec3 vNormal;
 out vec3 vTangent;
 out float vBitangentSign;
@@ -880,11 +846,8 @@ void main()
     vBitangentSign = aTangent.w;
     vUV = aUV;
     vWorldPos = (uWorld * vec4(aPos, 1.0)).xyz;
-    // plan_opengl4.md GL4-25: see kColoredParams3DVertSrc's own comment for the formula
-    // derivation (Task 1111).
-    vFogFactor = (uFogEnabled > 0.5)
-        ? ((abs(uFogEnd - uFogStart) < 1e-6) ? 0.0 : clamp((aPos.z + uFogEnd) / (uFogEnd - uFogStart), 0.0, 1.0))
-        : 1.0;
+    // REMED-GFX-010: see kColoredParams3DVertSrc's own comment for the fog-vector formula.
+    vFogFactor = 1.0 - clamp(dot(vec4(aPos, 1.0), uFogVector), 0.0, 1.0);
 }
 )GLSL";
 
@@ -900,9 +863,7 @@ uniform mat4 uWorldViewProj;
 uniform mat4 uWorld;
 uniform mat4 uBones[72];
 uniform int uWeightsPerVertex;
-uniform float uFogEnabled;
-uniform float uFogStart;
-uniform float uFogEnd;
+uniform vec4 uFogVector;
 out vec3 vNormal;
 out vec3 vTangent;
 out float vBitangentSign;
@@ -929,9 +890,7 @@ void main()
     vBitangentSign = aTangent.w;
     vUV = aUV;
     vWorldPos = (uWorld * skinnedPos).xyz;
-    vFogFactor = (uFogEnabled > 0.5)
-        ? ((abs(uFogEnd - uFogStart) < 1e-6) ? 0.0 : clamp((aPos.z + uFogEnd) / (uFogEnd - uFogStart), 0.0, 1.0))
-        : 1.0;
+    vFogFactor = 1.0 - clamp(dot(skinnedPos, uFogVector), 0.0, 1.0);
 }
 )GLSL";
 
@@ -1389,19 +1348,20 @@ void main()
         glBindTexture(GL_TEXTURE_3D, texture_);
     }
 
-    void OpenGL4Texture3DBackend::SetData(int level, int x, int y, int z, int w, int h, int depth,
+    bool OpenGL4Texture3DBackend::SetData(int level, int x, int y, int z, int w, int h, int depth,
                                           const void* data, int /*dataLength*/)
     {
         glBindTexture(GL_TEXTURE_3D, texture_);
         glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
         gl4_glTexSubImage3D(GL_TEXTURE_3D, level, x, y, z, w, h, depth, GL_RGBA, GL_UNSIGNED_BYTE, data);
         glBindTexture(GL_TEXTURE_3D, 0);
+        return true;
     }
 
-    void OpenGL4Texture3DBackend::GetData(int level, int x, int y, int z, int w, int h, int depth,
+    bool OpenGL4Texture3DBackend::GetData(int level, int x, int y, int z, int w, int h, int depth,
                                           void* data, int dataLength) const
     {
-        if (w <= 0 || h <= 0 || depth <= 0) return;
+        if (w <= 0 || h <= 0 || depth <= 0) return false;
         const std::size_t sizeBytes = static_cast<std::size_t>(w) * static_cast<std::size_t>(h) *
                                        static_cast<std::size_t>(depth) * 4;
         if (static_cast<std::size_t>(dataLength) < sizeBytes)
@@ -1433,6 +1393,7 @@ void main()
 
         gl4_glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(prevFbo));
         gl4_glDeleteFramebuffers(1, &readFbo);
+        return true;
     }
 
     // ------------------------------------------------------------------------------------
@@ -1481,20 +1442,21 @@ void main()
         glBindTexture(GL_TEXTURE_CUBE_MAP, texture_);
     }
 
-    void OpenGL4TextureCubeBackend::SetData(int face, int level, int x, int y, int w, int h,
+    bool OpenGL4TextureCubeBackend::SetData(int face, int level, int x, int y, int w, int h,
                                             const void* data, int /*dataLength*/)
     {
-        if (face < 0 || face >= 6) return;
+        if (face < 0 || face >= 6) return false;
         glBindTexture(GL_TEXTURE_CUBE_MAP, texture_);
         glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
         glTexSubImage2D(kTextureCubeFaceTargetsGL4[face], level, x, y, w, h, GL_RGBA, GL_UNSIGNED_BYTE, data);
         glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+        return true;
     }
 
-    void OpenGL4TextureCubeBackend::GetData(int face, int level, int x, int y, int w, int h,
+    bool OpenGL4TextureCubeBackend::GetData(int face, int level, int x, int y, int w, int h,
                                             void* data, int dataLength) const
     {
-        if (face < 0 || face >= 6 || w <= 0 || h <= 0) return;
+        if (face < 0 || face >= 6 || w <= 0 || h <= 0) return false;
         const std::size_t sizeBytes = static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4;
         if (static_cast<std::size_t>(dataLength) < sizeBytes)
             throw std::out_of_range("CNA OpenGL4: TextureCube::GetData: dataLength too small for the requested region");
@@ -1516,6 +1478,7 @@ void main()
 
         gl4_glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(prevFbo));
         gl4_glDeleteFramebuffers(1, &readFbo);
+        return true;
     }
 
     // ------------------------------------------------------------------------------------
@@ -1703,10 +1666,10 @@ void main()
         gl4_glBindFramebuffer(GL_FRAMEBUFFER, 0);
     }
 
-    void OpenGL4RenderTargetBackend::GetData(int level, int x, int y, int w, int h,
+    bool OpenGL4RenderTargetBackend::GetData(int level, int x, int y, int w, int h,
                                              void* data, int dataLength) const
     {
-        if (w <= 0 || h <= 0) return;
+        if (w <= 0 || h <= 0) return false;
         const std::size_t sizeBytes = static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4;
         if (static_cast<std::size_t>(dataLength) < sizeBytes)
             throw std::out_of_range("CNA OpenGL4: RenderTarget2D::GetData: dataLength too small for the requested region");
@@ -1747,6 +1710,7 @@ void main()
 
         gl4_glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(prevFbo));
         gl4_glDeleteFramebuffers(1, &readFbo);
+        return true;
     }
 
     // ------------------------------------------------------------------------------------
@@ -1882,21 +1846,22 @@ void main()
         gl4_glBindFramebuffer(GL_FRAMEBUFFER, 0);
     }
 
-    void OpenGL4RenderTargetCubeBackend::SetData(int face, int level, int x, int y, int w, int h,
+    bool OpenGL4RenderTargetCubeBackend::SetData(int face, int level, int x, int y, int w, int h,
                                                  const void* data, int /*dataLength*/)
     {
-        if (face < 0 || face >= 6) return;
+        if (face < 0 || face >= 6) return false;
         glBindTexture(GL_TEXTURE_CUBE_MAP, cubeTexture_);
         glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
         glTexSubImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + face, level, x, y, w, h, GL_RGBA,
                         GL_UNSIGNED_BYTE, data);
         glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+        return true;
     }
 
-    void OpenGL4RenderTargetCubeBackend::GetData(int face, int level, int x, int y, int w, int h,
+    bool OpenGL4RenderTargetCubeBackend::GetData(int face, int level, int x, int y, int w, int h,
                                                  void* data, int dataLength) const
     {
-        if (face < 0 || face >= 6 || w <= 0 || h <= 0) return;
+        if (face < 0 || face >= 6 || w <= 0 || h <= 0) return false;
         const std::size_t sizeBytes = static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4;
         if (static_cast<std::size_t>(dataLength) < sizeBytes)
             throw std::out_of_range("CNA OpenGL4: RenderTargetCube::GetData: dataLength too small for the requested region");
@@ -1929,6 +1894,7 @@ void main()
 
         gl4_glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(prevFbo));
         gl4_glDeleteFramebuffers(1, &readFbo);
+        return true;
     }
 
     // ------------------------------------------------------------------------------------
@@ -1984,9 +1950,9 @@ void main()
         }
     }
 
-    void OpenGL4VertexBufferBackend::SetVertexDeclaration(const std::vector<VertexElement>& elements)
+    void OpenGL4VertexBufferBackend::SetVertexDeclaration(const VertexDeclaration& vertexDeclaration)
     {
-        declarationElements_ = elements;
+        declaration_.Remember(vertexDeclaration);
     }
 
     void OpenGL4VertexBufferBackend::ApplyLayout(std::size_t stride)
@@ -1995,16 +1961,17 @@ void main()
         gl4_glBindVertexArray(vao_);
         gl4_glBindBuffer(GL_ARRAY_BUFFER, vbo_);
 
-        if (!declarationElements_.empty())
+        const std::vector<VertexElement>& declarationElements = declaration_.GetElements();
+        if (!declarationElements.empty())
         {
             // plan_opengl4.md GL4-33: generic layout binding driven by the caller's own
             // VertexDeclaration -- attribute location = the element's own index within the
             // declaration's element list, matching EasyGLVertexBufferBackend::ApplyLayout's own
             // Task 1080 convention. Covers layouts that don't match any of the fixed strides the
             // switch below recognizes (needed by hardware instancing's per-instance buffer).
-            for (std::size_t i = 0; i < declarationElements_.size(); ++i)
+            for (std::size_t i = 0; i < declarationElements.size(); ++i)
             {
-                const VertexElement& element = declarationElements_[i];
+                const VertexElement& element = declarationElements[i];
                 const VertexAttribFormat desc =
                     DescribeVertexElementFormat(element.getVertexElementFormatProperty());
                 const auto location = static_cast<GLuint>(i);
@@ -2813,8 +2780,14 @@ void main()
     }
 
     std::unique_ptr<IRenderTargetCubeBackend> OpenGL4GraphicsBackend::CreateRenderTargetCube(
-        int size, int depthFormat, bool mipMap, int multiSampleCount)
+        int size, int depthFormat, bool preserveContents, bool mipMap, int multiSampleCount)
     {
+        // REMED-GFX-136: consumed by being deliberately unused, matching
+        // EasyGLGraphicsBackend::CreateRenderTargetCube's own reasoning -- the FBO's colour
+        // attachment IS the cube texture and binding an FBO never touches its contents, so a
+        // single-sample face is preserved by construction. The only thing that clears one is the
+        // explicit glClear GraphicsDevice issues (and only issues) for a DiscardContents target.
+        (void) preserveContents;
         return std::make_unique<OpenGL4RenderTargetCubeBackend>(size, depthFormat, mipMap, multiSampleCount);
     }
 
@@ -2832,16 +2805,50 @@ void main()
         rt->BindAsRenderTargetFace(face);
     }
 
-    void OpenGL4GraphicsBackend::SetRenderTargets(IRenderTargetBackend* const* rts, int count)
+    void OpenGL4GraphicsBackend::SetRenderTargets(
+        const RenderTargetBindingDescriptor* renderTargets, int count)
     {
         if (count <= 0) { SetRenderTarget2D(nullptr); return; }
-        if (count == 1) { SetRenderTarget2D(rts[0]); return; }
+        if (!renderTargets)
+            throw std::invalid_argument(
+                "OpenGL4 SetRenderTargets: nonzero count requires a binding array.");
+        if (count == 1)
+        {
+            // Every descriptor kind is explicitly consumed: a cube-face binding routes to the
+            // real cube-face setter, never flattened to a RenderTarget2D or to face +X.
+            if (renderTargets[0].IsRenderTargetCubeFace())
+                SetRenderTargetCubeFace(renderTargets[0].GetRenderTargetCube(),
+                                        renderTargets[0].GetCubeFace());
+            else
+                SetRenderTarget2D(renderTargets[0].GetRenderTarget2D());
+            return;
+        }
 
         // MRT: unbind whatever single RT/cube-face was previously active (mip regen if needed).
         // MRT + per-target mipmaps is not supported here (mirrors
         // EasyGLGraphicsBackend::SetRenderTargets' identical, documented gap) -- MRT targets are
         // never tracked as currentRt2D_/currentRtCube_, so switching away from MRT mode cannot
         // regenerate their mips.
+        constexpr int kMaxMRT = 8;
+        if (count > kMaxMRT)
+            throw std::runtime_error(
+                "OpenGL4 SetRenderTargets: requested " + std::to_string(count)
+                + " targets, but this backend binds at most " + std::to_string(kMaxMRT) + ".");
+
+        std::array<IRenderTargetBackend*, kMaxMRT> targets{};
+        for (int i = 0; i < count; ++i)
+        {
+            if (renderTargets[i].IsRenderTargetCubeFace())
+                throw std::runtime_error(
+                    "OpenGL4 SetRenderTargets: cube faces in a multi-target set are not "
+                    "implemented by this CNA backend.");
+            targets[static_cast<std::size_t>(i)] = renderTargets[i].GetRenderTarget2D();
+            if (!targets[static_cast<std::size_t>(i)])
+                throw std::runtime_error(
+                    "OpenGL4 SetRenderTargets: binding " + std::to_string(i)
+                    + " does not carry a RenderTarget2D.");
+        }
+
         if (currentRt2D_) currentRt2D_->UnbindAsRenderTarget();
         if (currentRtCube_) currentRtCube_->UnbindAsRenderTarget();
         currentRt2D_ = nullptr;
@@ -2850,21 +2857,19 @@ void main()
         if (!mrtFbo_) gl4_glGenFramebuffers(1, &mrtFbo_);
         gl4_glBindFramebuffer(GL_FRAMEBUFFER, mrtFbo_);
 
-        constexpr int kMaxMRT = 8;
-        const int n = count < kMaxMRT ? count : kMaxMRT;
         GLenum drawBufs[kMaxMRT];
-        for (int i = 0; i < n; ++i)
+        for (int i = 0; i < count; ++i)
         {
             gl4_glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + i, GL_TEXTURE_2D,
-                                       rts[i]->GetColorGLHandle(), 0);
+                                       targets[static_cast<std::size_t>(i)]->GetColorGLHandle(), 0);
             drawBufs[i] = static_cast<GLenum>(GL_COLOR_ATTACHMENT0 + i);
         }
-        gl4_glDrawBuffers(n, drawBufs);
+        gl4_glDrawBuffers(count, drawBufs);
 
         // No depth attachment for MRT (same accepted gap as EasyGLGraphicsBackend's own MRT
         // FBO) -- the viewport reset that follows still needs the first target's height for
         // SetViewport's Y-flip.
-        currentRtHeight_ = rts[0]->GetHeight();
+        currentRtHeight_ = targets[0]->GetHeight();
     }
 
     void OpenGL4GraphicsBackend::ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels)
@@ -3107,14 +3112,12 @@ void main()
         // any program whose shader source doesn't declare them, so this is safe to call
         // unconditionally for every stride case below).
         const auto setFog = [&](OpenGL4RawProgram& prog) {
-            const int fogEnabledLoc = prog.UniformLocation("uFogEnabled");
-            if (fogEnabledLoc >= 0) gl4_glUniform1f(fogEnabledLoc, params.fogEnabled ? 1.0f : 0.0f);
+            const int fogVectorLoc = prog.UniformLocation("uFogVector");
+            if (fogVectorLoc >= 0)
+                gl4_glUniform4f(fogVectorLoc, params.fogVector[0], params.fogVector[1],
+                                params.fogVector[2], params.fogVector[3]);
             const int fogColorLoc = prog.UniformLocation("uFogColor");
             if (fogColorLoc >= 0) gl4_glUniform3f(fogColorLoc, params.fogColor[0], params.fogColor[1], params.fogColor[2]);
-            const int fogStartLoc = prog.UniformLocation("uFogStart");
-            if (fogStartLoc >= 0) gl4_glUniform1f(fogStartLoc, params.fogStart);
-            const int fogEndLoc = prog.UniformLocation("uFogEnd");
-            if (fogEndLoc >= 0) gl4_glUniform1f(fogEndLoc, params.fogEnd);
         };
 
         // plan_opengl4.md GL4-23: lazily create PbrEffect's fallback textures BEFORE any real
@@ -3495,6 +3498,17 @@ void main()
                                                   PrimitiveType primitive, int primitiveCount,
                                                   const GpuDrawParams& params)
     {
+        // REMED-GFX-201: one per-vertex stream only on this backend; refuse a wider binding
+        // set before any program or VAO state is touched, never render from a stream subset.
+        if (HasMultipleVertexStreams(params) || HasMultipleInstanceStreams(params))
+            throw System::NotSupportedException(
+                "OpenGL4: multiple per-vertex or per-instance vertex streams are not supported "
+                "by this backend (GraphicsCapability::MultiStreamVertexInput is false).");
+        // REMED-GFX-DECL-GUARD: before a program is selected and before any draw is issued.
+        // A custom ShaderEffect binds its attributes generically from the declaration itself
+        // (GL4-33) and is deliberately not guarded, matching EasyGL's own gating.
+        if (params.customEffectBackend == nullptr)
+            RequireFaithfulDeclarationEXT(vb_in, "ordinary-nonindexed");
         const auto& vb = static_cast<const OpenGL4VertexBufferBackend&>(vb_in);
 
         if (params.customEffectBackend)
@@ -3524,6 +3538,15 @@ void main()
                                                          PrimitiveType primitive, int primitiveCount,
                                                          const GpuDrawParams& params)
     {
+        // REMED-GFX-201: one per-vertex stream only on this backend; refuse a wider binding
+        // set before any program or VAO state is touched, never render from a stream subset.
+        if (HasMultipleVertexStreams(params) || HasMultipleInstanceStreams(params))
+            throw System::NotSupportedException(
+                "OpenGL4: multiple per-vertex or per-instance vertex streams are not supported "
+                "by this backend (GraphicsCapability::MultiStreamVertexInput is false).");
+        // REMED-GFX-DECL-GUARD: see DrawPrimitivesEx above.
+        if (params.customEffectBackend == nullptr)
+            RequireFaithfulDeclarationEXT(vb_in, "ordinary-indexed");
         const auto& vb = static_cast<const OpenGL4VertexBufferBackend&>(vb_in);
         const auto& ib = static_cast<const OpenGL4IndexBufferBackend&>(ib_in);
 
@@ -3578,8 +3601,21 @@ void main()
         const auto& vb = static_cast<const OpenGL4VertexBufferBackend&>(vb_in);
         const auto& ib = static_cast<const OpenGL4IndexBufferBackend&>(ib_in);
 
+        // REMED-GFX-201/202: this backend binds exactly one per-vertex stream plus at most one
+        // per-instance stream. GraphicsDevice already rejects wider shapes for a backend that
+        // reports no MultiStreamVertexInput; this defensive check keeps the refusal in place even
+        // if a caller reaches the backend directly, rather than rendering from a stream subset.
+        if (HasMultipleVertexStreams(params) || HasMultipleInstanceStreams(params))
+            throw System::NotSupportedException(
+                "OpenGL4: multiple per-vertex or per-instance vertex streams are not supported "
+                "by this backend (GraphicsCapability::MultiStreamVertexInput is false).");
+
         const int indexCount = VertexCountForPrimitives(primitive, primitiveCount);
         const GLenum idxType = ib.IsThirtyTwoBit() ? GL_UNSIGNED_INT : GL_UNSIGNED_SHORT;
+
+        // REMED-GFX-DECL-GUARD: the non-custom-effect instanced path below dispatches by stride.
+        if (params.customEffectBackend == nullptr)
+            RequireFaithfulDeclarationEXT(vb_in, "instanced");
 
         if (params.customEffectBackend)
         {
@@ -3587,20 +3623,31 @@ void main()
             // per-vertex mesh buffer's own attributes are already bound (via ApplyLayout, at
             // SetData time) into vb's own VAO; bind the *second*, per-instance buffer's own
             // attributes into that same VAO here, continuing at locations right after the mesh
-            // buffer's own, each with a divisor of 1 (advance once per instance -- XNA's most
-            // common instancing pattern, matches EasyGLGraphicsBackend::
-            // DrawInstancedPrimitivesEx's own Task 1082 shape exactly).
+            // buffer's own. REMED-GFX-202: the per-instance stream arrives as the
+            // GpuVertexStreamBinding whose instanceFrequency > 0 -- there is no second
+            // representation of "the instance buffer". REMED-GFX-213: the attribute divisor IS
+            // the public InstanceFrequency (GL advances the attribute once per `divisor`
+            // instances, the same rule D3D11's InstanceDataStepRate defines). REMED-GFX-211: the
+            // stream's own VertexOffset (in vertex elements) offsets every attribute pointer by
+            // that many of the stream's OWN records.
             BindCustomEffectMatrices(*params.customEffectBackend, world, view, projection);
 
             gl4_glBindVertexArray(vb.VaoHandle());
 
             const auto& meshDecl = vb.GetDeclarationElements();
             const auto baseLocation = static_cast<GLuint>(meshDecl.size());
-            if (params.instanceVb)
+            const GpuVertexStreamBinding* instanceStream = FirstInstanceStream(params);
+            if (instanceStream)
             {
-                const auto& instVb = static_cast<const OpenGL4VertexBufferBackend&>(*params.instanceVb);
+                const auto& instVb =
+                    static_cast<const OpenGL4VertexBufferBackend&>(*instanceStream->buffer);
                 const auto& instDecl = instVb.GetDeclarationElements();
                 const auto instStride = static_cast<GLsizei>(instVb.GetStrideInBytes());
+                const auto instBase = static_cast<std::uintptr_t>(instanceStream->vertexOffset)
+                                      * static_cast<std::uintptr_t>(instVb.GetStrideInBytes());
+                const auto divisor =
+                    static_cast<GLuint>(instanceStream->instanceFrequency > 0
+                                            ? instanceStream->instanceFrequency : 1);
 
                 gl4_glBindBuffer(GL_ARRAY_BUFFER, instVb.VboHandle());
                 for (std::size_t i = 0; i < instDecl.size(); ++i)
@@ -3610,26 +3657,31 @@ void main()
                         DescribeVertexElementFormat(element.getVertexElementFormatProperty());
                     const auto location = baseLocation + static_cast<GLuint>(i);
                     const void* offset = reinterpret_cast<void*>(
-                        static_cast<std::uintptr_t>(element.getOffsetProperty()));
+                        instBase + static_cast<std::uintptr_t>(element.getOffsetProperty()));
                     gl4_glEnableVertexAttribArray(location);
                     if (desc.isInteger)
                         gl4_glVertexAttribIPointer(location, desc.componentCount, desc.type, instStride, offset);
                     else
                         gl4_glVertexAttribPointer(location, desc.componentCount, desc.type,
                                                   desc.normalized ? GL_TRUE : GL_FALSE, instStride, offset);
-                    gl4_glVertexAttribDivisor(location, 1);
+                    gl4_glVertexAttribDivisor(location, divisor);
                 }
             }
 
             gl4_glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ib.IboHandle());
             gl4_glDrawElementsInstanced(ToGLPrimitive(primitive), indexCount, idxType, nullptr, instanceCount);
 
-            if (params.instanceVb)
+            if (instanceStream)
             {
-                const auto& instVb = static_cast<const OpenGL4VertexBufferBackend&>(*params.instanceVb);
+                const auto& instVb =
+                    static_cast<const OpenGL4VertexBufferBackend&>(*instanceStream->buffer);
                 const auto& instDecl = instVb.GetDeclarationElements();
                 for (std::size_t i = 0; i < instDecl.size(); ++i)
-                    gl4_glDisableVertexAttribArray(baseLocation + static_cast<GLuint>(i));
+                {
+                    const auto location = baseLocation + static_cast<GLuint>(i);
+                    gl4_glVertexAttribDivisor(location, 0);
+                    gl4_glDisableVertexAttribArray(location);
+                }
             }
 
             gl4_glBindVertexArray(0);
@@ -3675,6 +3727,8 @@ void main()
                                                        const Matrix& world, const Matrix& view, const Matrix& projection,
                                                        PrimitiveType primitive, int primitiveCount)
     {
+        // REMED-GFX-DECL-GUARD: this route reads the fixed stride-16 position+colour layout.
+        RequireFaithfulDeclarationEXT(vb_in, "colored-nonindexed");
         EnsureColored3DProgram();
         const auto& vb = static_cast<const OpenGL4VertexBufferBackend&>(vb_in);
 
@@ -3696,6 +3750,8 @@ void main()
                                                               const Matrix& world, const Matrix& view, const Matrix& projection,
                                                               PrimitiveType primitive, int primitiveCount)
     {
+        // REMED-GFX-DECL-GUARD: see DrawColoredPrimitives above.
+        RequireFaithfulDeclarationEXT(vb_in, "colored-indexed");
         EnsureColored3DProgram();
         const auto& vb = static_cast<const OpenGL4VertexBufferBackend&>(vb_in);
         const auto& ib = static_cast<const OpenGL4IndexBufferBackend&>(ib_in);
@@ -3761,7 +3817,8 @@ void main()
 
     void OpenGL4GraphicsBackend::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
                                                  int colorDstBlend, int alphaDstBlend,
-                                                 int colorBlendFunc, int alphaBlendFunc)
+                                                 int colorBlendFunc, int alphaBlendFunc,
+                                                 const BlendWriteState& writeState)
     {
         // Blend::One=0, Blend::Zero=1 -> the Opaque preset (src=One, dst=Zero) is XNA's own
         // encoding of "no blending", matching EasyGLGraphicsBackend::ApplyBlendState's identical
@@ -3776,6 +3833,23 @@ void main()
             gl4_glBlendEquationSeparate(ToGLBlendEquation(colorBlendFunc),
                                         ToGLBlendEquation(alphaBlendFunc));
         }
+        // REMED-GFX-077: per-MRT-slot ColorWriteChannels via the GL 3.0+ core indexed mask --
+        // always available on this backend's 4.1-core-minimum context, so no capability split is
+        // needed (unlike EasyGL's ES profile). The XNA bit layout (bit0=R,1=G,2=B,3=A) maps
+        // directly.
+        for (int i = 0; i < 4; ++i)
+        {
+            const int cwc = writeState.colorWriteChannels[i];
+            gl4_glColorMaski(static_cast<GLuint>(i),
+                             ColorWriteHasRed(cwc)   ? GL_TRUE : GL_FALSE,
+                             ColorWriteHasGreen(cwc) ? GL_TRUE : GL_FALSE,
+                             ColorWriteHasBlue(cwc)  ? GL_TRUE : GL_FALSE,
+                             ColorWriteHasAlpha(cwc) ? GL_TRUE : GL_FALSE);
+        }
+        // BlendState.MultiSampleMask: expressible via glSampleMaski + GL_SAMPLE_MASK, but left at
+        // the all-ones default here -- the same documented capability gap
+        // EasyGLGraphicsBackend::ApplyBlendState records; the value reaches the backend and only
+        // the (rare) non-default path is unimplemented, never silently dropped.
     }
 
     void OpenGL4GraphicsBackend::ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable,

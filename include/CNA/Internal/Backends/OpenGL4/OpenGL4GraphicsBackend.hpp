@@ -4,6 +4,7 @@
 #include "CNA/CNAHelper.hpp"
 #include "../Common/IGraphicsBackend.hpp"
 #include "CNA/Internal/Backends/OpenGL4/GL4Loader.hpp"
+#include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 
 #include <cstdint>
 #include <string>
@@ -115,7 +116,7 @@ namespace CNA::Internal::Backends::OpenGL4
         [[nodiscard]] int GetHeight() const override { return height_; }
         [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
         void BindGL() const override;
-        void GetData(int level, int x, int y, int w, int h, void* data, int dataLength) const override;
+        [[nodiscard]] bool GetData(int level, int x, int y, int w, int h, void* data, int dataLength) const override;
 
         void BindAsRenderTarget() override;
         void UnbindAsRenderTarget() override;
@@ -154,10 +155,10 @@ namespace CNA::Internal::Backends::OpenGL4
         OpenGL4RenderTargetCubeBackend(const OpenGL4RenderTargetCubeBackend&) = delete;
         OpenGL4RenderTargetCubeBackend& operator=(const OpenGL4RenderTargetCubeBackend&) = delete;
 
-        void SetData(int face, int level, int x, int y, int w, int h,
-                    const void* data, int dataLength) override;
-        void GetData(int face, int level, int x, int y, int w, int h,
-                    void* data, int dataLength) const override;
+        [[nodiscard]] bool SetData(int face, int level, int x, int y, int w, int h,
+                                   const void* data, int dataLength) override;
+        [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
+                                   void* data, int dataLength) const override;
         void BindGL() const override;
 
         [[nodiscard]] int GetSize() const override { return size_; }
@@ -198,10 +199,10 @@ namespace CNA::Internal::Backends::OpenGL4
         OpenGL4Texture3DBackend(const OpenGL4Texture3DBackend&) = delete;
         OpenGL4Texture3DBackend& operator=(const OpenGL4Texture3DBackend&) = delete;
 
-        void SetData(int level, int x, int y, int z, int w, int h, int depth,
-                    const void* data, int dataLength) override;
-        void GetData(int level, int x, int y, int z, int w, int h, int depth,
-                    void* data, int dataLength) const override;
+        [[nodiscard]] bool SetData(int level, int x, int y, int z, int w, int h, int depth,
+                                   const void* data, int dataLength) override;
+        [[nodiscard]] bool GetData(int level, int x, int y, int z, int w, int h, int depth,
+                                   void* data, int dataLength) const override;
         void BindGL() const override;
 
     private:
@@ -229,10 +230,10 @@ namespace CNA::Internal::Backends::OpenGL4
         OpenGL4TextureCubeBackend(const OpenGL4TextureCubeBackend&) = delete;
         OpenGL4TextureCubeBackend& operator=(const OpenGL4TextureCubeBackend&) = delete;
 
-        void SetData(int face, int level, int x, int y, int w, int h,
-                    const void* data, int dataLength) override;
-        void GetData(int face, int level, int x, int y, int w, int h,
-                    void* data, int dataLength) const override;
+        [[nodiscard]] bool SetData(int face, int level, int x, int y, int w, int h,
+                                   const void* data, int dataLength) override;
+        [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
+                                   void* data, int dataLength) const override;
         void BindGL() const override;
 
     private:
@@ -328,8 +329,10 @@ namespace CNA::Internal::Backends::OpenGL4
         /// own index within the declaration), instead of only the fixed byte-strides the switch
         /// in ApplyLayout() otherwise recognizes -- needed by hardware instancing's per-instance
         /// attribute buffer, which never matches one of those fixed strides. Mirrors
-        /// EasyGLVertexBufferBackend::SetVertexDeclaration's own shape.
-        void SetVertexDeclaration(const std::vector<VertexElement>& elements) override;
+        /// EasyGLVertexBufferBackend::SetVertexDeclaration's own shape. Pure in the current
+        /// IGraphicsBackend precisely so a backend must make this decision explicitly; the stored
+        /// declaration also feeds the REMED-GFX-DECL-GUARD fidelity check at draw time.
+        void SetVertexDeclaration(const VertexDeclaration& vertexDeclaration) override;
 
         NOXNA [[nodiscard]] unsigned int VaoHandle() const { return vao_; }
         NOXNA [[nodiscard]] unsigned int VboHandle() const { return vbo_; }
@@ -338,8 +341,11 @@ namespace CNA::Internal::Backends::OpenGL4
         /// none was ever supplied (this buffer uses the fixed stride-keyed layout instead).
         NOXNA [[nodiscard]] const std::vector<VertexElement>& GetDeclarationElements() const
         {
-            return declarationElements_;
+            return declaration_.GetElements();
         }
+        /// REMED-GFX-DECL-GUARD: the remembered declaration for the draw-time fidelity check.
+        NOXNA [[nodiscard]] const CNA::Internal::Graphics::DeclaredVertexLayout&
+        GetDeclarationEXT() const { return declaration_; }
 
     private:
         void ApplyLayout(std::size_t strideInBytes);
@@ -349,8 +355,33 @@ namespace CNA::Internal::Backends::OpenGL4
         int capacity_ = 0;
         int vertexCount_ = 0;
         std::size_t strideInBytes_ = 0;
-        std::vector<VertexElement> declarationElements_;
+        CNA::Internal::Graphics::DeclaredVertexLayout declaration_;
     };
+
+    /**
+     * @brief Refuses a stock-program draw whose VertexDeclaration this backend cannot bind
+     *        faithfully.
+     *
+     * REMED-GFX-DECL-GUARD. BindProgramForStride()/ApplyLayout() pick this backend's native
+     * attribute layout from the buffer's byte stride alone, so a declaration that packs different
+     * semantics into the same stride would be read from the wrong bytes. The check is asymmetric:
+     * only what the caller actually declared is verified, never equality against this backend's
+     * own template. Draws through a custom ShaderEffect are deliberately not guarded here -- their
+     * attributes are bound generically from the declaration itself (GL4-33), which is faithful by
+     * construction, matching EasyGLGraphicsBackend's own custom-effect gating.
+     *
+     * @param vb The vertex buffer whose declaration is being checked.
+     * @param route Name of the draw route, for the diagnostic message.
+     * @throws System::NotSupportedException When the declaration cannot be represented.
+     */
+    inline void RequireFaithfulDeclarationEXT(const IVertexBufferBackend& vb, const char* route)
+    {
+        const auto& glVb = static_cast<const OpenGL4VertexBufferBackend&>(vb);
+        CNA::Internal::Graphics::RequireFaithfulVertexDeclaration(
+            glVb.GetDeclarationEXT(), static_cast<int>(glVb.GetStrideInBytes()),
+            CNA::Internal::Graphics::UnlistedStrideLayout::PositionOnlyFallback,
+            "OpenGL4", route);
+    }
 
     /**
      * @brief `OpenGL4`-backed index buffer -- 16-bit by default, real 32-bit support
@@ -557,10 +588,14 @@ namespace CNA::Internal::Backends::OpenGL4
         void ApplySamplerState(int slot, int filter, int addressU, int addressV, int maxAnisotropy) override;
         void SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth) override;
 
-        /// plan_opengl4.md GL4-16: real dynamic BlendState/DepthStencilState/RasterizerState mapping.
+        /// plan_opengl4.md GL4-16: real dynamic BlendState/DepthStencilState/RasterizerState
+        /// mapping. REMED-GFX-077: the appended BlendWriteState carries the four per-MRT-slot
+        /// ColorWriteChannels masks (applied via the GL 3.0+ core glColorMaski) and the
+        /// MultiSampleMask (a documented capability gap on the GL profile, same as EasyGL's).
         void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
                              int colorDstBlend, int alphaDstBlend,
-                             int colorBlendFunc, int alphaBlendFunc) override;
+                             int colorBlendFunc, int alphaBlendFunc,
+                             const BlendWriteState& writeState) override;
         void ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable,
                                     int depthFunc,
                                     bool stencilEnable, int stencilFunc,
@@ -584,11 +619,21 @@ namespace CNA::Internal::Backends::OpenGL4
         void SetRenderTarget2D(IRenderTargetBackend* rt) override;
 
         /// plan_opengl4.md GL4-15: real per-face FBO-backed RenderTargetCube + real MRT.
+        /// REMED-GFX-136: preserveContents is consumed by being deliberately unused for the
+        /// single-sample case -- a GL FBO's colour attachment IS the cube texture and binding an
+        /// FBO never touches its contents, so a face is preserved by construction; the only thing
+        /// that clears one is the explicit glClear GraphicsDevice issues for a DiscardContents
+        /// target.
         std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(int size, int depthFormat,
+                                                                          bool preserveContents = false,
                                                                           bool mipMap = false,
                                                                           int multiSampleCount = 0) override;
         void SetRenderTargetCubeFace(IRenderTargetCubeBackend* rt, int face) override;
-        void SetRenderTargets(IRenderTargetBackend* const* rts, int count) override;
+        /// Descriptor-based multi-target binding: routes a single descriptor to the 2D or
+        /// cube-face setter (cube-face descriptors are explicitly consumed, never flattened), and
+        /// refuses cube faces inside a multi-target set rather than binding a subset.
+        void SetRenderTargets(const RenderTargetBindingDescriptor* renderTargets,
+                              int count) override;
 
         /// NOXNA: physical window size, used by the SpriteBatch backend to size its ortho projection.
         NOXNA void GetPhysicalSize(int& width, int& height) const;
