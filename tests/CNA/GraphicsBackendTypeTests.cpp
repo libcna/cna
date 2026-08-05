@@ -29,32 +29,70 @@ TEST(GraphicsBackendTypeTest, GetCurrentGraphicsBackendNameIsNotEmpty)
     EXPECT_FALSE(getCurrentGraphicsBackendName().empty());
 }
 
+namespace
+{
+    // The one authoritative expected name per public GraphicsBackendType member.
+    //
+    // Deliberately has NO `default:` label, so an enum member with no arm here falls through to
+    // the empty return below, which NameMatchesTypeForEveryBackend turns into a hard failure
+    // rather than a silent pass. That runtime guard is what this test relies on: the project
+    // compiles with `-g -std=c++23` and does not enable `-Wall`/`-Wswitch`, so a missing arm
+    // produces no compiler diagnostic. Omitting `default:` additionally means the switch WOULD
+    // be flagged at compile time by any build that does turn those warnings on.
+    //
+    // The previous form of this test switched directly on the active backend with only 15 of the
+    // enum's members listed and no failure arm, so every build selecting one of the other members
+    // executed no assertion at all and reported a vacuous pass.
+    constexpr std::string_view ExpectedNameFor(GraphicsBackendType type)
+    {
+        switch (type)
+        {
+            case GraphicsBackendType::SdlRenderer: return "SDL_RENDERER";
+            case GraphicsBackendType::EasyGL:      return "EASYGL";
+            case GraphicsBackendType::Bgfx:        return "BGFX";
+            case GraphicsBackendType::Vulkan:      return "VULKAN";
+            case GraphicsBackendType::WebGPU:      return "WEBGPU";
+            case GraphicsBackendType::Headless:    return "HEADLESS";
+            case GraphicsBackendType::Software:    return "SOFTWARE";
+            case GraphicsBackendType::D3D11:       return "D3D11";
+            case GraphicsBackendType::D3D12:       return "D3D12";
+            case GraphicsBackendType::Canvas:      return "CANVAS";
+            case GraphicsBackendType::Ascii:       return "ASCII";
+            case GraphicsBackendType::FreeDirect:  return "FREEDIRECT";
+            case GraphicsBackendType::Stub:        return "STUB";
+            case GraphicsBackendType::D3D9:        return "D3D9";
+            case GraphicsBackendType::Dx1:         return "DX1";
+            case GraphicsBackendType::Dx2:         return "DX2";
+            case GraphicsBackendType::Dx3:         return "DX3";
+            case GraphicsBackendType::Dx5:         return "DX5";
+            case GraphicsBackendType::Dx6:         return "DX6";
+            case GraphicsBackendType::Dx7:         return "DX7";
+            case GraphicsBackendType::Dx8:         return "DX8";
+            case GraphicsBackendType::D3D10:       return "D3D10";
+            case GraphicsBackendType::SdlGpu:      return "SDL_GPU";
+            case GraphicsBackendType::OpenGLES1:   return "OPENGLES1";
+            case GraphicsBackendType::OpenGL4:     return "OPENGL4";
+            case GraphicsBackendType::OpenGL1:     return "OPENGL1";
+            case GraphicsBackendType::OpenGL2:     return "OPENGL2";
+        }
+        return {};
+    }
+}
+
 TEST(GraphicsBackendTypeTest, NameMatchesTypeForEveryBackend)
 {
-    // Every call in this build returns the SAME compile-time-selected backend; this checks
-    // that the (type, name) pair returned is internally consistent (the name matches what this
-    // specific type is documented to map to), not that a specific backend is active.
+    // Every call in this build returns the SAME compile-time-selected backend, so one build
+    // checks one arm; the 27 backend builds between them cover the whole enum. What this asserts
+    // is that the (type, name) pair is internally consistent AND that the active backend has an
+    // expected-name arm at all -- a backend with no arm fails here instead of passing vacuously.
     const auto type = getCurrentGraphicsBackendType();
     const auto name = getCurrentGraphicsBackendName();
 
-    switch (type)
-    {
-        case GraphicsBackendType::SdlRenderer: EXPECT_EQ(name, "SDL_RENDERER"); break;
-        case GraphicsBackendType::EasyGL:      EXPECT_EQ(name, "EASYGL");       break;
-        case GraphicsBackendType::Bgfx:        EXPECT_EQ(name, "BGFX");         break;
-        case GraphicsBackendType::Vulkan:      EXPECT_EQ(name, "VULKAN");       break;
-        case GraphicsBackendType::WebGPU:      EXPECT_EQ(name, "WEBGPU");       break;
-        case GraphicsBackendType::Headless:    EXPECT_EQ(name, "HEADLESS");     break;
-        case GraphicsBackendType::Software:    EXPECT_EQ(name, "SOFTWARE");     break;
-        case GraphicsBackendType::Stub:        EXPECT_EQ(name, "STUB");         break;
-        case GraphicsBackendType::D3D11:       EXPECT_EQ(name, "D3D11");        break;
-        case GraphicsBackendType::D3D12:       EXPECT_EQ(name, "D3D12");        break;
-        case GraphicsBackendType::Canvas:      EXPECT_EQ(name, "CANVAS");       break;
-        case GraphicsBackendType::Ascii:       EXPECT_EQ(name, "ASCII");        break;
-        case GraphicsBackendType::FreeDirect:         EXPECT_EQ(name, "FREEDIRECT");          break;
-        case GraphicsBackendType::D3D9:        EXPECT_EQ(name, "D3D9");         break;
-        case GraphicsBackendType::SdlGpu:      EXPECT_EQ(name, "SDL_GPU");      break;
-    }
+    const std::string_view expected = ExpectedNameFor(type);
+    ASSERT_FALSE(expected.empty())
+        << "no expected-name arm for the active backend (getCurrentGraphicsBackendName() reports \""
+        << name << "\") -- add it to ExpectedNameFor() in this file";
+    EXPECT_EQ(name, expected);
 }
 
 TEST(GraphicsBackendTypeTest, RepeatedCallsAreStable)
