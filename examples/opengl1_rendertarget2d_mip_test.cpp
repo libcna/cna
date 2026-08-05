@@ -127,6 +127,13 @@ protected:
         sb_->End();
         dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
 
+        // REMED-GFX-081: SpriteBatch::Begin now applies its FNA-faithful default rasterizer state
+        // (CullCounterClockwise) through the device property, and -- real XNA semantics -- that
+        // state persists after End(). The CullNone this test set before painting the checkerboard
+        // is therefore gone by the time the 3D quads below draw, and their winding was authored
+        // under CullNone. Re-assert it where the 3D draws actually depend on it.
+        dev.setRasterizerStateProperty(RasterizerState::CullNone);
+
         Matrix world = Matrix::getIdentityProperty();
         Matrix view  = Matrix::getIdentityProperty();
         Matrix proj  = Matrix::CreateOrthographicOffCenter(0.0f, (float)kViewport, (float)kViewport, 0.0f, -1.0f, 1.0f);

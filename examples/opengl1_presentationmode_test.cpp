@@ -41,6 +41,7 @@
 
 #include <SDL3/SDL.h>
 
+#include <cstdint>
 #include <cstdio>
 #include <memory>
 #include <vector>
@@ -79,11 +80,15 @@ class OpenGL1PresentationModeTest : public Game
         sb_->Draw(*whiteTex_, Rectangle(logicalX, 0, kStripeW, physH), Color::White);
         sb_->End();
 
-        const Rectangle row(0, physH / 2, physW, 1);
-        std::vector<Color> pixels(physW, Color(0, 0, 0, 0));
-        dev.GetBackBufferData(&row, pixels.data(), 0, physW);
+        // GFX-165: GetBackBufferData validates its rectangle against PresentationParameters'
+        // backbuffer size, which this test's own raw SDL_SetWindowSize deliberately does not
+        // update -- XNA's backbuffer does not follow the OS window until a device reset. What
+        // this test needs is the REAL framebuffer row, which is exactly the backend's own
+        // ReadBackbuffer (the same top-down row convention GetBackBufferData itself wraps).
+        std::vector<std::uint8_t> pixels(static_cast<std::size_t>(physW) * 4, 0);
+        dev.GetBackend().ReadBackbuffer(0, physH / 2, physW, 1, pixels.data());
         for (int x = 0; x < physW; ++x)
-            if (pixels[x].getRProperty() >= 200) return x;
+            if (pixels[static_cast<std::size_t>(x) * 4] >= 200) return x;
         return -1;
     }
 
