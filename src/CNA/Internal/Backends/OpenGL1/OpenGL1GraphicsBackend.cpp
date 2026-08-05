@@ -216,11 +216,11 @@ for(int face=0;face<6;++face)if(cpuPixels_[face])GenerateMipsCPU(GL_TEXTURE_CUBE
 OpenGL1TextureCubeBackend::~OpenGL1TextureCubeBackend(){if(registry_)registry_->Remove(this);if(id_)glDeleteTextures(1,&id_);}
 void OpenGL1TextureCubeBackend::RecreateGLResource(){Build();}
 void OpenGL1TextureCubeBackend::BindGL()const{glBindTexture(GL_TEXTURE_CUBE_MAP,id_);}
-void OpenGL1TextureCubeBackend::SetData(int face,int level,int x,int y,int w,int h,const void*data,int /*dataLength*/){if(face<0||face>=6||!data)return;glBindTexture(GL_TEXTURE_CUBE_MAP,id_);glPixelStorei(GL_UNPACK_ALIGNMENT,1);glTexSubImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X+face,level,x,y,w,h,GL_RGBA,GL_UNSIGNED_BYTE,data);if(level==0&&mipMap_)RegenerateMips();}
+bool OpenGL1TextureCubeBackend::SetData(int face,int level,int x,int y,int w,int h,const void*data,int /*dataLength*/){if(face<0||face>=6||level<0||!data||w<=0||h<=0)return false;glBindTexture(GL_TEXTURE_CUBE_MAP,id_);glPixelStorei(GL_UNPACK_ALIGNMENT,1);glTexSubImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X+face,level,x,y,w,h,GL_RGBA,GL_UNSIGNED_BYTE,data);if(level==0&&mipMap_)RegenerateMips();return true;}
 // Desktop GL (unlike EasyGL's GLES3 target) has glGetTexImage, but it always reads the FULL
 // face/level image -- no sub-rectangle readback exists at the GL API level -- so the requested
 // [x,y,w,h] box is copied out of a full-image temporary rather than read directly.
-void OpenGL1TextureCubeBackend::GetData(int face,int level,int x,int y,int w,int h,void*data,int /*dataLength*/)const{if(face<0||face>=6||!data)return;glBindTexture(GL_TEXTURE_CUBE_MAP,id_);int levelSize=size_;for(int i=0;i<level;i++)levelSize=std::max(1,levelSize/2);std::vector<uint8_t>full((size_t)levelSize*levelSize*4);glPixelStorei(GL_PACK_ALIGNMENT,1);glGetTexImage(GL_TEXTURE_CUBE_MAP_POSITIVE_X+face,level,GL_RGBA,GL_UNSIGNED_BYTE,full.data());uint8_t*dest=static_cast<uint8_t*>(data);for(int row=0;row<h;++row)std::memcpy(dest+(size_t)row*w*4,full.data()+((size_t)(y+row)*levelSize+x)*4,(size_t)w*4);}
+bool OpenGL1TextureCubeBackend::GetData(int face,int level,int x,int y,int w,int h,void*data,int /*dataLength*/)const{if(face<0||face>=6||level<0||!data||w<=0||h<=0)return false;glBindTexture(GL_TEXTURE_CUBE_MAP,id_);int levelSize=size_;for(int i=0;i<level;i++)levelSize=std::max(1,levelSize/2);std::vector<uint8_t>full((size_t)levelSize*levelSize*4);glPixelStorei(GL_PACK_ALIGNMENT,1);glGetTexImage(GL_TEXTURE_CUBE_MAP_POSITIVE_X+face,level,GL_RGBA,GL_UNSIGNED_BYTE,full.data());uint8_t*dest=static_cast<uint8_t*>(data);for(int row=0;row<h;++row)std::memcpy(dest+(size_t)row*w*4,full.data()+((size_t)(y+row)*levelSize+x)*4,(size_t)w*4);return true;}
 // plan_opengl1.md item 22: SDL_GL_MULTISAMPLEBUFFERS/SAMPLES only report what the driver
 // GENUINELY granted for the visual the current GL context is bound to -- GLX can silently clamp
 // or altogether refuse the request GraphicsDevice.cpp made before SDL_CreateWindow(), so this is
@@ -300,12 +300,25 @@ std::cout<<"CNA: OpenGL1 desktop GL context recreated and all tracked resources 
 }
 void OpenGL1GraphicsBackend::DebugRestoreContext(){DebugSimulateContextLoss();}
 std::unique_ptr<ITextureCubeBackend>OpenGL1GraphicsBackend::CreateTextureCube(int size,bool mipMap,int surfaceFormat){if(!caps_.textureCubeMap)return nullptr;return std::make_unique<OpenGL1TextureCubeBackend>(size,mipMap,surfaceFormat,RegistryIfEnabled(),caps_.generateMipmap);}
-std::unique_ptr<IRenderTargetCubeBackend>OpenGL1GraphicsBackend::CreateRenderTargetCube(int size,int depthFormat,bool mipMap,int){if(!caps_.framebufferObject||!caps_.textureCubeMap)return nullptr;try{return std::make_unique<OpenGL1RenderTargetCubeBackend>(size,depthFormat,mipMap,RegistryIfEnabled());}catch(const std::exception&){return nullptr;}}
+std::unique_ptr<IRenderTargetCubeBackend>OpenGL1GraphicsBackend::CreateRenderTargetCube(int size,int depthFormat,bool /*preserveContents*/,bool mipMap,int){if(!caps_.framebufferObject||!caps_.textureCubeMap)return nullptr;try{return std::make_unique<OpenGL1RenderTargetCubeBackend>(size,depthFormat,mipMap,RegistryIfEnabled());}catch(const std::exception&){return nullptr;}}
 std::unique_ptr<IOcclusionQueryBackend>OpenGL1GraphicsBackend::CreateOcclusionQuery(){if(!caps_.occlusionQuery)return nullptr;return std::make_unique<OpenGL1OcclusionQueryBackend>();}
 void OpenGL1GraphicsBackend::SetRenderTarget2D(IRenderTargetBackend*rt){if(currentCubeRt_){currentCubeRt_->UnbindAsRenderTarget();currentCubeRt_=nullptr;currentCubeFace_=-1;}if(currentRt_&&currentRt_!=rt)currentRt_->UnbindAsRenderTarget();currentRt_=rt;if(rt)rt->BindAsRenderTarget();}
 // plan_opengl1.md item 24: mirrors SetRenderTarget2D's own clear-the-other-kind's-stale-pointer
 // symmetry -- switching TO a cube face must also unbind/clear whatever 2D currentRt_ was active.
 void OpenGL1GraphicsBackend::SetRenderTargetCubeFace(IRenderTargetCubeBackend*rt,int face){if(currentRt_){currentRt_->UnbindAsRenderTarget();currentRt_=nullptr;}if(currentCubeRt_&&currentCubeRt_!=rt)currentCubeRt_->UnbindAsRenderTarget();currentCubeRt_=rt;currentCubeFace_=rt?face:-1;if(rt)rt->BindAsRenderTargetFace(face);}
+// Post-audit descriptor route (see the header's own comment). SetRenderTarget2D(nullptr) already
+// unbinds and clears an active cube face, so the restore path needs no second call.
+void OpenGL1GraphicsBackend::SetRenderTargets(const RenderTargetBindingDescriptor*renderTargets,int count){
+ if(!renderTargets||count<=0){SetRenderTarget2D(nullptr);return;}
+ if(count>1)throw System::NotSupportedException("OpenGL1: multiple simultaneous render targets are not available on this fixed-function backend -- SupportsCapability(MultipleRenderTargets) reports false here.");
+ if(renderTargets[0].IsRenderTargetCubeFace()){
+  auto*cube=dynamic_cast<OpenGL1RenderTargetCubeBackend*>(renderTargets[0].GetRenderTargetCube());
+  if(!cube)throw System::NotSupportedException("OpenGL1: this render-target cube was not created by the OpenGL1 backend.");
+  SetRenderTargetCubeFace(cube,renderTargets[0].GetCubeFace());
+  return;
+ }
+ SetRenderTarget2D(renderTargets[0].GetRenderTarget2D());
+}
 void OpenGL1GraphicsBackend::SetDepthTestEnabled(bool e){e?glEnable(GL_DEPTH_TEST):glDisable(GL_DEPTH_TEST);}void OpenGL1GraphicsBackend::SetBlendEnabled(bool e){e?glEnable(GL_BLEND):glDisable(GL_BLEND);}void OpenGL1GraphicsBackend::SetDepthWriteEnabled(bool e){glDepthMask(e?GL_TRUE:GL_FALSE);}void OpenGL1GraphicsBackend::ClearColorAndDepth(float r,float g,float b,float a,float d){glClearColor(r,g,b,a);glClearDepth(d);glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);}void OpenGL1GraphicsBackend::ClearDepth(float d){glClearDepth(d);glClear(GL_DEPTH_BUFFER_BIT);}void OpenGL1GraphicsBackend::ClearStencil(int s){glClearStencil(s);glClear(GL_STENCIL_BUFFER_BIT);}void OpenGL1GraphicsBackend::ClearDepthAndStencil(float d,int s){glClearDepth(d);glClearStencil(s);glClear(GL_DEPTH_BUFFER_BIT|GL_STENCIL_BUFFER_BIT);}void OpenGL1GraphicsBackend::ClearColorAndStencil(float r,float g,float b,float a,int s){glClearColor(r,g,b,a);glClearStencil(s);glClear(GL_COLOR_BUFFER_BIT|GL_STENCIL_BUFFER_BIT);}void OpenGL1GraphicsBackend::ClearColorDepthAndStencil(float r,float g,float b,float a,float d,int s){glClearColor(r,g,b,a);glClearDepth(d);glClearStencil(s);glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT|GL_STENCIL_BUFFER_BIT);}
 // plan_opengl1.md items 18/19 (EasyGL parity): colorBlendFunc/alphaBlendFunc (blend equations
 // beyond additive) and alphaSrcBlend/alphaDstBlend (separate alpha blend factors) used to be
@@ -313,7 +326,15 @@ void OpenGL1GraphicsBackend::SetDepthTestEnabled(bool e){e?glEnable(GL_DEPTH_TES
 // color factors for alpha too. glBlendFuncSeparate/glBlendEquationSeparate (both core GL 1.4,
 // same TryLoadBlendFunctions() loader as item 17's glBlendColor) fix both; falls back to the
 // old single-value glBlendFunc/implicit-Add behavior when the driver genuinely lacks them.
-void OpenGL1GraphicsBackend::ApplyBlendState(int cs,int as,int cd,int ad,int cbf,int abf){glEnable(GL_BLEND);
+void OpenGL1GraphicsBackend::ApplyBlendState(int cs,int as,int cd,int ad,int cbf,int abf,const BlendWriteState&ws){
+// REMED-GFX-077: slot 0's ColorWriteChannels are real on desktop GL (glColorMask, core 1.0),
+// applied before anything else because the mask is independent of whether blending is enabled.
+// Slots 1..3 have no subject without MRT support here; BlendState.MultiSampleMask has no
+// fixed-function GL 1.x equivalent (GL_SAMPLE_MASK is GL 3.2+) -- the same documented gap as
+// EasyGL's, reported rather than silently approximated.
+const int cwc=ws.colorWriteChannels[0];
+glColorMask(ColorWriteHasRed(cwc)?GL_TRUE:GL_FALSE,ColorWriteHasGreen(cwc)?GL_TRUE:GL_FALSE,ColorWriteHasBlue(cwc)?GL_TRUE:GL_FALSE,ColorWriteHasAlpha(cwc)?GL_TRUE:GL_FALSE);
+glEnable(GL_BLEND);
 if(caps_.extendedBlend){glBlendFuncSeparate_(BlendF(cs,true),BlendF(cd,true),BlendF(as,true),BlendF(ad,true));glBlendEquationSeparate_(BlendEq(cbf),BlendEq(abf));}
 else glBlendFunc(BlendF(cs,false),BlendF(cd,false));}void OpenGL1GraphicsBackend::ApplyDepthStencilState(bool de,bool dw,int df,bool se,int sf,int sp,int sfa,int sdf,int sm,int sw,int ref,bool,int,int,int,int){de?glEnable(GL_DEPTH_TEST):glDisable(GL_DEPTH_TEST);glDepthMask(dw);glDepthFunc(Cmp(df));se?glEnable(GL_STENCIL_TEST):glDisable(GL_STENCIL_TEST);stencilRef_=ref;glStencilFunc(Cmp(sf),ref,(GLuint)sm);glStencilMask((GLuint)sw);glStencilOp(StencilOp(sfa),StencilOp(sdf),StencilOp(sp));}
 void OpenGL1GraphicsBackend::ApplyRasterizerState(int c,int f,bool sc,float db,float slope){if(c==0)glDisable(GL_CULL_FACE);else{glEnable(GL_CULL_FACE);glFrontFace(GL_CCW);glCullFace(c==1?GL_BACK:GL_FRONT);}glPolygonMode(GL_FRONT_AND_BACK,f==1?GL_LINE:GL_FILL);sc?glEnable(GL_SCISSOR_TEST):glDisable(GL_SCISSOR_TEST);if(db!=0||slope!=0){glEnable(GL_POLYGON_OFFSET_FILL);glPolygonOffset(slope,db);}else glDisable(GL_POLYGON_OFFSET_FILL);}// Pure bookkeeping now -- see the header's own comment on ApplySamplerFilterAndWrap for why this
@@ -329,6 +350,38 @@ void OpenGL1GraphicsBackend::ApplySamplerFilterAndWrap(int slot,bool hasMips){if
 // BlendFactor got a silently WRONG constant color, not just a degraded/ignored one.
 void OpenGL1GraphicsBackend::SetBlendFactor(float r,float g,float b,float a){if(caps_.extendedBlend)glBlendColor_(r,g,b,a);}void OpenGL1GraphicsBackend::SetReferenceStencil(int v){stencilRef_=v;}void OpenGL1GraphicsBackend::SetScissorRect(int x,int y,int w,int h){int H;if(currentRt_)H=currentRt_->GetHeight();else if(currentCubeRt_)H=currentCubeRt_->GetSize();else{int W;GetViewportSize(W,H);}glScissor(x,H-y-h,w,h);}void OpenGL1GraphicsBackend::SetViewport(int x,int y,int w,int h,float mn,float mx){int H;if(currentRt_)H=currentRt_->GetHeight();else if(currentCubeRt_)H=currentCubeRt_->GetSize();else{int W;GetViewportSize(W,H);}glViewport(x,H-y-h,w,h);glDepthRange(mn,mx);}
 void OpenGL1GraphicsBackend::SetupMatrices(const Matrix&w,const Matrix&v,const Matrix&p){float a[16];glMatrixMode(GL_PROJECTION);Mat(p,a);glLoadMatrixf(a);glMatrixMode(GL_MODELVIEW);Mat(v,a);glLoadMatrixf(a);Mat(w,a);glMultMatrixf(a);}
+// REMED-GFX-010 replaced GpuDrawParams' scalar fogStart/fogEnd with FNA's fog vector, which
+// every shader backend dots against the object-space position. A fixed-function pipeline has no
+// such dot product -- glFog wants the two scalars back. They are recovered exactly rather than
+// approximated: the vector is built from those scalars and from the same world*view matrix
+// SetupMatrices() just loaded into GL_MODELVIEW, so projecting fogVector.xyz back onto that
+// matrix's own eye-Z row recovers the scale, and the w term then yields fogStart and fogEnd.
+// All-zero is FNA's own "fog disabled" encoding (honoured even if the flag disagrees) and
+// {0,0,0,1} is FNA's degenerate fogStart==fogEnd encoding (fully fogged).
+static void ApplyFogFromVector(const GpuDrawParams*params){
+ if(!params||!params->fogEnabled){glDisable(GL_FOG);return;}
+ if(params->fogVector[0]==0.0f&&params->fogVector[1]==0.0f&&params->fogVector[2]==0.0f&&params->fogVector[3]==0.0f){glDisable(GL_FOG);return;}
+ glEnable(GL_FOG);glFogi(GL_FOG_MODE,GL_LINEAR);
+ float mv[16];glGetFloatv(GL_MODELVIEW_MATRIX,mv);
+ // Eye-space Z row of world*view: z_view = zx*x + zy*y + zz*z + zw.
+ const float zx=mv[2],zy=mv[6],zz=mv[10],zw=mv[14];
+ const float denom=zx*zx+zy*zy+zz*zz;
+ const float numer=params->fogVector[0]*zx+params->fogVector[1]*zy+params->fogVector[2]*zz;
+ const float scale=denom>0.0f?numer/denom:0.0f;
+ if(scale==0.0f){
+  // fogStart == fogEnd (or a world*view that collapses the eye-Z axis entirely): the whole draw
+  // is fogged. GL's visibility factor is (end - z)/(end - start), clamped to [0,1], with z the
+  // eye distance (never negative); start=-1, end=0 gives -z, <= 0 for every z including z == 0 --
+  // fully fogged everywhere. A near-zero-width ramp would NOT do: geometry sitting exactly at
+  // the eye would still come out unfogged.
+  glFogf(GL_FOG_START,-1.0f);glFogf(GL_FOG_END,0.0f);
+ }else{
+  const float fogStart=params->fogVector[3]/scale-zw;
+  const float fogEnd=fogStart-1.0f/scale;
+  glFogf(GL_FOG_START,fogStart);glFogf(GL_FOG_END,fogEnd);
+ }
+ float fc[4]={params->fogColor[0],params->fogColor[1],params->fogColor[2],1};glFogfv(GL_FOG_COLOR,fc);
+}
 void OpenGL1GraphicsBackend::DrawInternal(const OpenGL1VertexBufferBackend&vb,const OpenGL1IndexBufferBackend*ib,PrimitiveType prim,int pc,const GpuDrawParams*params){const auto&s=vb.Data();const size_t st=vb.Stride();if(st<12||s.empty())return;bool tex=params&&params->texture0&&(st==20||st==24||st==32);bool normal=(st==32);
 bool dual=tex&&params->dualTexture&&params->texture1&&glActiveTexture_&&glMultiTexCoord2f_;
 // plan_opengl1.md phase 5: EnvironmentMapEffect's fixed-function reflection-mapping subset.
@@ -421,7 +474,7 @@ glEnable(GL_COLOR_MATERIAL);glColorMaterial(GL_FRONT_AND_BACK,GL_AMBIENT_AND_DIF
 // BasicEffect's own EmissiveColor for the same lit path.
 float emis[4]={params->emissiveColor[0],params->emissiveColor[1],params->emissiveColor[2],0};
 glMaterialfv(GL_FRONT_AND_BACK,GL_EMISSION,emis);
-}else glDisable(GL_LIGHTING);if(params&&params->fogEnabled){glEnable(GL_FOG);float fc[4]={params->fogColor[0],params->fogColor[1],params->fogColor[2],1};glFogi(GL_FOG_MODE,GL_LINEAR);glFogfv(GL_FOG_COLOR,fc);glFogf(GL_FOG_START,params->fogStart);glFogf(GL_FOG_END,params->fogEnd);}else glDisable(GL_FOG);if(params&&params->alphaTest[3]<0){glEnable(GL_ALPHA_TEST);glAlphaFunc(GL_GEQUAL,params->alphaTest[0]);}else glDisable(GL_ALPHA_TEST);
+}else glDisable(GL_LIGHTING);ApplyFogFromVector(params);if(params&&params->alphaTest[3]<0){glEnable(GL_ALPHA_TEST);glAlphaFunc(GL_GEQUAL,params->alphaTest[0]);}else glDisable(GL_ALPHA_TEST);
  auto emitTexCoord=[&](float u,float v){if(dual){glMultiTexCoord2f_(GL_TEXTURE0,u,v);glMultiTexCoord2f_(GL_TEXTURE1,u,v);}else if(envMap){glMultiTexCoord2f_(GL_TEXTURE0,u,v);}else glTexCoord2f(u,v);};
  // plan_opengl1.md phase 4: matches FNA's real BasicEffect.fx combine -- when VertexColorEnabled,
  // the vertex color is multiplied by the material DiffuseColor (Task/GpuDrawParams convention:
@@ -431,7 +484,7 @@ glMaterialfv(GL_FRONT_AND_BACK,GL_EMISSION,emis);
  auto emitVertexColor=[&](const uint8_t*b){const uint32_t c=*(const uint32_t*)(b+12);const float r=(c&255)/255.0f,g=((c>>8)&255)/255.0f,bl=((c>>16)&255)/255.0f,a=((c>>24)&255)/255.0f;if(params)glColor4f(r*params->diffuseColor[0],g*params->diffuseColor[1],bl*params->diffuseColor[2],a*params->diffuseColor[3]);else glColor4f(r,g,bl,a);};
  auto emit=[&](uint32_t i){if(i>=(uint32_t)vb.GetVertexCount())return;const uint8_t*b=s.data()+i*st;const float*f=(const float*)b;if(st==16){emitVertexColor(b);}else if(st==24){emitVertexColor(b);const float*t=(const float*)(b+16);emitTexCoord(t[0],t[1]);}else if(st==20){const float*t=(const float*)(b+12);if(params)glColor4fv(params->diffuseColor);else glColor4f(1,1,1,1);emitTexCoord(t[0],t[1]);}else if(st==32){const float*n=(const float*)(b+12);const float*t=(const float*)(b+24);glNormal3f(n[0],n[1],n[2]);emitTexCoord(t[0],t[1]);if(params)glColor4fv(params->diffuseColor);}else glColor4f(1,1,1,1);glVertex3f(f[0],f[1],f[2]);};
  int count=VertCount(prim,pc);glBegin(Prim(prim));if(ib){count=std::min(count,ib->GetIndexCount());for(int k=0;k<count;k++){uint32_t i=ib->IsThirtyTwoBit()?((const uint32_t*)ib->Data().data())[k]:((const uint16_t*)ib->Data().data())[k];emit(i);}}else{count=std::min(count,vb.GetVertexCount());for(int i=0;i<count;i++)emit((uint32_t)i);}glEnd();glDisable(GL_ALPHA_TEST);glDisable(GL_LIGHTING);}
-void OpenGL1GraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend&v,const Matrix&w,const Matrix&vi,const Matrix&p,PrimitiveType pr,int c){SetupMatrices(w,vi,p);DrawInternal(dynamic_cast<const OpenGL1VertexBufferBackend&>(v),nullptr,pr,c,nullptr);}void OpenGL1GraphicsBackend::DrawIndexedColoredPrimitives(const IVertexBufferBackend&v,const IIndexBufferBackend&i,const Matrix&w,const Matrix&vi,const Matrix&p,PrimitiveType pr,int c){SetupMatrices(w,vi,p);DrawInternal(dynamic_cast<const OpenGL1VertexBufferBackend&>(v),&dynamic_cast<const OpenGL1IndexBufferBackend&>(i),pr,c,nullptr);}void OpenGL1GraphicsBackend::DrawPrimitivesEx(const IVertexBufferBackend&v,const Matrix&w,const Matrix&vi,const Matrix&p,PrimitiveType pr,int c,const GpuDrawParams&gp){SetupMatrices(w,vi,p);DrawInternal(dynamic_cast<const OpenGL1VertexBufferBackend&>(v),nullptr,pr,c,&gp);}void OpenGL1GraphicsBackend::DrawIndexedPrimitivesEx(const IVertexBufferBackend&v,const IIndexBufferBackend&i,const Matrix&w,const Matrix&vi,const Matrix&p,PrimitiveType pr,int c,const GpuDrawParams&gp){SetupMatrices(w,vi,p);DrawInternal(dynamic_cast<const OpenGL1VertexBufferBackend&>(v),&dynamic_cast<const OpenGL1IndexBufferBackend&>(i),pr,c,&gp);}bool OpenGL1GraphicsBackend::SupportsCapability(CNA::GraphicsCapability capability)const{
+void OpenGL1GraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend&v,const Matrix&w,const Matrix&vi,const Matrix&p,PrimitiveType pr,int c){RequireFaithfulDeclarationEXT(v,"colored-nonindexed");SetupMatrices(w,vi,p);DrawInternal(dynamic_cast<const OpenGL1VertexBufferBackend&>(v),nullptr,pr,c,nullptr);}void OpenGL1GraphicsBackend::DrawIndexedColoredPrimitives(const IVertexBufferBackend&v,const IIndexBufferBackend&i,const Matrix&w,const Matrix&vi,const Matrix&p,PrimitiveType pr,int c){RequireFaithfulDeclarationEXT(v,"colored-indexed");SetupMatrices(w,vi,p);DrawInternal(dynamic_cast<const OpenGL1VertexBufferBackend&>(v),&dynamic_cast<const OpenGL1IndexBufferBackend&>(i),pr,c,nullptr);}void OpenGL1GraphicsBackend::DrawPrimitivesEx(const IVertexBufferBackend&v,const Matrix&w,const Matrix&vi,const Matrix&p,PrimitiveType pr,int c,const GpuDrawParams&gp){RequireFaithfulDeclarationEXT(v,"ordinary-nonindexed");SetupMatrices(w,vi,p);DrawInternal(dynamic_cast<const OpenGL1VertexBufferBackend&>(v),nullptr,pr,c,&gp);}void OpenGL1GraphicsBackend::DrawIndexedPrimitivesEx(const IVertexBufferBackend&v,const IIndexBufferBackend&i,const Matrix&w,const Matrix&vi,const Matrix&p,PrimitiveType pr,int c,const GpuDrawParams&gp){RequireFaithfulDeclarationEXT(v,"ordinary-indexed");SetupMatrices(w,vi,p);DrawInternal(dynamic_cast<const OpenGL1VertexBufferBackend&>(v),&dynamic_cast<const OpenGL1IndexBufferBackend&>(i),pr,c,&gp);}bool OpenGL1GraphicsBackend::SupportsCapability(CNA::GraphicsCapability capability)const{
  switch(capability){
   case CNA::GraphicsCapability::ThreeD:
   case CNA::GraphicsCapability::DepthStencilBuffer:

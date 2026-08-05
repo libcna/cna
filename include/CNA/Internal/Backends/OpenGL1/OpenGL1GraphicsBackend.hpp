@@ -4,6 +4,7 @@
 #include "CNA/Internal/Backends/OpenGL1/OpenGL1ContextRecovery.hpp"
 #include "CNA/Internal/Backends/OpenGL1/OpenGL1OcclusionQueryBackend.hpp"
 #include "CNA/Internal/Backends/OpenGL1/OpenGL1RenderTargetBackend.hpp"
+#include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 #include <SDL3/SDL.h>
 #include <cstddef>
 #include <cstdint>
@@ -17,10 +18,29 @@ public:
  explicit OpenGL1VertexBufferBackend(int capacity):capacity_(capacity){}
  void SetData(const void*,int,std::size_t) override;
  void SetDataWithOptions(const void* d,int c,std::size_t s,SetDataOptions) override {SetData(d,c,s);} 
+ // REMED-GFX-DECL-GUARD: this backend selects its immediate-mode emit layout from the vertex
+ // stride alone (16/20/24/32 -- DrawInternal's own dispatch), so the declaration is remembered
+ // rather than discarded and a draw can refuse one the stride table would silently reinterpret.
+ void SetVertexDeclaration(const VertexDeclaration& vertexDeclaration) override{declaration_.Remember(vertexDeclaration);}
  int GetVertexCount() const override{return count_;}
  const std::vector<std::uint8_t>& Data() const{return data_;} std::size_t Stride()const{return stride_;}
+ // NOXNA. The declaration this buffer carries, for REMED-GFX-DECL-GUARD's fidelity check.
+ [[nodiscard]] const CNA::Internal::Graphics::DeclaredVertexLayout& GetDeclarationEXT()const{return declaration_;}
 private:int capacity_=0,count_=0;std::size_t stride_=0;std::vector<std::uint8_t> data_;
+ CNA::Internal::Graphics::DeclaredVertexLayout declaration_;
 };
+// REMED-GFX-DECL-GUARD: refuses a draw whose VertexDeclaration this backend cannot bind
+// faithfully. Asymmetric -- only what the caller actually declared is verified, never equality
+// against the backend's own template. An unlisted stride is emitted as position-at-offset-0 with
+// constant white (DrawInternal's measured default arm), i.e. the PositionOnlyFallback layout.
+// Header-only, as the backend static library cannot see src/CNA/**.cpp.
+inline void RequireFaithfulDeclarationEXT(const IVertexBufferBackend& vb, const char* route)
+{
+    const auto& glVb = static_cast<const OpenGL1VertexBufferBackend&>(vb);
+    CNA::Internal::Graphics::RequireFaithfulVertexDeclaration(
+        glVb.GetDeclarationEXT(), static_cast<int>(glVb.Stride()),
+        CNA::Internal::Graphics::UnlistedStrideLayout::PositionOnlyFallback, "OpenGL1", route);
+}
 class OpenGL1IndexBufferBackend final : public IIndexBufferBackend {
 public: explicit OpenGL1IndexBufferBackend(bool i32):i32_(i32){}
  void SetData16(const void*,int) override; void SetData32(const void*,int) override;
@@ -61,8 +81,8 @@ private:void RegenerateMips(const uint8_t*level0);
 // source-compatible unchanged).
 class OpenGL1TextureCubeBackend final : public ITextureCubeBackend, public IOpenGL1Recoverable {
 public: OpenGL1TextureCubeBackend(int size,bool mipMap,int surfaceFormat,OpenGL1ResourceRegistry*registry,bool generateMipmapCap); ~OpenGL1TextureCubeBackend() override;
- void SetData(int face,int level,int x,int y,int w,int h,const void*data,int dataLength) override;
- void GetData(int face,int level,int x,int y,int w,int h,void*data,int dataLength) const override;
+ [[nodiscard]] bool SetData(int face,int level,int x,int y,int w,int h,const void*data,int dataLength) override;
+ [[nodiscard]] bool GetData(int face,int level,int x,int y,int w,int h,void*data,int dataLength) const override;
  void BindGL()const override;
  void ShareCpuPixels(int face,std::shared_ptr<std::vector<uint8_t>> pixels) override{if(face>=0&&face<6)cpuPixels_[face]=std::move(pixels);}
  void ReleaseGLHandleOnly() override{id_=0;}
@@ -116,17 +136,24 @@ public: explicit OpenGL1GraphicsBackend(const GraphicsBackendCreateArgs&);~OpenG
  // documented IGraphicsBackend contract) when either the FBO or cube-map capability is absent.
  // multiSampleCount is accepted but ignored -- out of scope for this item (item 25 addresses
  // RenderTarget2D MSAA specifically, not six separate cube-face resolve targets).
- std::unique_ptr<IRenderTargetCubeBackend>CreateRenderTargetCube(int,int,bool,int)override;
+ // preserveContents needs no action here: the colour attachment IS the cube texture itself, so
+ // face contents survive every unbind by construction (same answer as OPENGLES1's).
+ std::unique_ptr<IRenderTargetCubeBackend>CreateRenderTargetCube(int,int,bool,bool,int)override;
  // Unlike SetRenderTarget2D()'s default single-target tracking, a cube-face target needs its OWN
  // tracked pointer+size (currentCubeRt_) so EffectiveWidth()/EffectiveHeight()/SetViewport()/
  // SetScissorRect() report the ACTIVE face's real size, not the window's -- SetRenderTarget2D()
  // and this override each clear the other's stale pointer when switching between the two kinds.
  void SetRenderTargetCubeFace(IRenderTargetCubeBackend*,int)override;
+ // Post-audit descriptor route. This fixed-function backend has one colour attachment, so a
+ // count above one is refused with System::NotSupportedException rather than silently reduced to
+ // the first target; a cube-face descriptor routes through SetRenderTargetCubeFace() above;
+ // nullptr / count 0 restores the default back buffer.
+ void SetRenderTargets(const RenderTargetBindingDescriptor*,int)override;
  // plan_opengl1.md item 23 (EasyGL parity): real ARB_occlusion_query/core-1.5 occlusion queries --
  // returns nullptr (the documented IGraphicsBackend contract, matching CreateRenderTarget2D's own
  // capability-gated fallback) when the driver genuinely lacks it.
  std::unique_ptr<IOcclusionQueryBackend>CreateOcclusionQuery()override;
- void ApplyBlendState(int,int,int,int,int,int)override;void ApplyDepthStencilState(bool,bool,int,bool,int,int,int,int,int,int,int,bool,int,int,int,int)override;
+ void ApplyBlendState(int,int,int,int,int,int,const BlendWriteState&)override;void ApplyDepthStencilState(bool,bool,int,bool,int,int,int,int,int,int,int,bool,int,int,int,int)override;
  void ApplyRasterizerState(int,int,bool,float,float)override;void ApplySamplerState(int,int,int,int,int)override;void SetBlendFactor(float,float,float,float)override;void SetReferenceStencil(int)override;
  void SetScissorRect(int,int,int,int)override;void SetViewport(int,int,int,int,float,float)override;
  void ClearColorAndDepth(float,float,float,float,float)override;void ClearDepth(float)override;void ClearStencil(int)override;void ClearDepthAndStencil(float,int)override;void ClearColorAndStencil(float,float,float,float,int)override;void ClearColorDepthAndStencil(float,float,float,float,float,int)override;

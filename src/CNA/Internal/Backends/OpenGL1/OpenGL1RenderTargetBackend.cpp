@@ -272,8 +272,9 @@ void OpenGL1RenderTargetBackend::UnbindAsRenderTarget()
     glBindFramebuffer_(GL_FRAMEBUFFER, 0);
 }
 
-void OpenGL1RenderTargetBackend::GetData(int /*level*/, int x, int y, int w, int h, void* data, int /*dataLength*/) const
+bool OpenGL1RenderTargetBackend::GetData(int /*level*/, int x, int y, int w, int h, void* data, int /*dataLength*/) const
 {
+    if (!data || w <= 0 || h <= 0) return false;
     glBindFramebuffer_(GL_FRAMEBUFFER, fbo_);
     glPixelStorei(GL_PACK_ALIGNMENT, 1);
     const int glY = height_ - y - h;
@@ -294,6 +295,7 @@ void OpenGL1RenderTargetBackend::GetData(int /*level*/, int x, int y, int w, int
         std::copy(bot, bot + rowBytes, top);
         std::copy(tmp.begin(), tmp.end(), bot);
     }
+    return true;
 }
 
 // plan_opengl1.md item 24 (EasyGL parity): shared by the constructor and RecreateGLResource(),
@@ -420,9 +422,9 @@ void OpenGL1RenderTargetCubeBackend::UnbindAsRenderTarget()
 // OpenGL1TextureCubeBackend::GetData() already uses for CPU-uploaded content). Still needs the
 // SAME row-flip OpenGL1RenderTargetBackend::GetData() applies, though: GPU-rasterized content is
 // bottom-up, unlike a CPU-uploaded face's top-down convention.
-void OpenGL1RenderTargetCubeBackend::GetData(int face, int level, int x, int y, int w, int h, void* data, int /*dataLength*/) const
+bool OpenGL1RenderTargetCubeBackend::GetData(int face, int level, int x, int y, int w, int h, void* data, int /*dataLength*/) const
 {
-    if (face < 0 || face >= 6 || !data) return;
+    if (face < 0 || face >= 6 || level < 0 || !data || w <= 0 || h <= 0) return false;
     glBindTexture(GL_TEXTURE_CUBE_MAP, id_);
     int levelSize = size_;
     for (int i = 0; i < level; ++i) levelSize = std::max(1, levelSize / 2);
@@ -440,5 +442,6 @@ void OpenGL1RenderTargetCubeBackend::GetData(int face, int level, int x, int y, 
                    full.data() + (static_cast<size_t>(srcRow) * levelSize + x) * 4 + rowBytes,
                    dest + static_cast<size_t>(row) * rowBytes);
     }
+    return true;
 }
 }
