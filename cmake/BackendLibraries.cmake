@@ -172,6 +172,9 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "D3D10")
     # forward to d3d10core (overridden to DXVK's real implementation at the Wine-prefix level, not
     # a link-time concern).
     target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 d3d10 dxgi d3dcompiler)
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "OPENGL2")
+    find_package(OpenGL REQUIRED)
+    target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 OpenGL::GL)
 elseif(CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU")
     # plan_sdlgpu.md SDLGPU-1: SDL_gpu.h is part of SDL3 itself (SDL_gpu.c is already compiled
     # into the same SDL3 library every other backend links against) -- no separate find_package

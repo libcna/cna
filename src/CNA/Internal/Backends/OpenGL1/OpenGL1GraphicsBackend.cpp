@@ -499,12 +499,14 @@ void OpenGL1GraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend&v,
   case CNA::GraphicsCapability::MultiSampleAntiAliasing: return multiSampleCount_>1;
   // Runtime-detected ARB_occlusion_query/core-1.5 (item 23).
   case CNA::GraphicsCapability::OcclusionQuery: return caps_.occlusionQuery;
-  // One colour attachment, no shader pipeline, no volume textures, one vertex stream: all four
-  // are structural properties of this fixed-function backend, not missing detection.
+  // One colour attachment, no shader pipeline, no volume textures, one vertex stream, no
+  // instancing (immediate-mode emission has no per-instance advancement of any kind): all
+  // five are structural properties of this fixed-function backend, not missing detection.
   case CNA::GraphicsCapability::MultipleRenderTargets:
   case CNA::GraphicsCapability::CustomEffects:
   case CNA::GraphicsCapability::Texture3D:
-  case CNA::GraphicsCapability::MultiStreamVertexInput: return false;
+  case CNA::GraphicsCapability::MultiStreamVertexInput:
+  case CNA::GraphicsCapability::Instancing: return false;
  }
  // Unreachable for current members; a future member lands here (after the -Wswitch warning
  // above) and is reported unsupported until this backend explicitly claims it.

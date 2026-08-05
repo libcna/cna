@@ -75,6 +75,11 @@ namespace CNA
          * this, exactly like `IVertexBufferBackend::SetVertexDeclaration` being a required
          * override.
          */
-        MultiStreamVertexInput
+        MultiStreamVertexInput,
+
+        /** @brief Hardware instancing (GraphicsDevice.DrawInstancedPrimitives). Device/driver-
+         *  dependent on backends that implement it via an optional GL/Vulkan extension rather
+         *  than an unconditional core feature. */
+        Instancing
     };
 } // CNA

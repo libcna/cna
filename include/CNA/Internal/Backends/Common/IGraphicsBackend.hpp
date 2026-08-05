@@ -1194,6 +1194,24 @@ namespace CNA::Internal::Backends
         virtual void Clear(float r, float g, float b, float a) = 0;
         virtual void Present() = 0;
         virtual void GetViewportSize(int& width, int& height) = 0;
+        /// Returns the PHYSICAL viewport rectangle (window/framebuffer pixels)
+        /// GraphicsDevice::UpdateViewportFromWindow() should apply as the default GL/GPU viewport
+        /// after a window resize or presentation-mode change -- separate from GetViewportSize(),
+        /// which returns the LOGICAL size exposed to game code via GraphicsDevice.Viewport.Width/
+        /// Height (those must stay the game's own virtual resolution even when the physical
+        /// rectangle differs, e.g. under CnaPresentationMode::Letterbox/Overscan).
+        /// Default: (0, 0, GetViewportSize()) -- the physical rectangle equals the logical
+        /// size at the window origin, matching every backend's behavior before this method
+        /// existed. Only a backend implementing REAL Letterbox/Overscan/Stretch (a physical
+        /// sub-rectangle that differs in size and/or is not at the window origin) needs to
+        /// override this -- see OpenGL2GraphicsBackend's override for the reference
+        /// implementation in this codebase.
+        virtual void GetDefaultViewportRect(int& x, int& y, int& width, int& height)
+        {
+            x = 0;
+            y = 0;
+            GetViewportSize(width, height);
+        }
         /// Updates the backend logical presentation size at runtime.
         /// Called by GraphicsDevice::SetVirtualResolution() when
         /// GraphicsDeviceManager::ApplyChanges() propagates a new

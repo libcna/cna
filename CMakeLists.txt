@@ -221,6 +221,11 @@ include(cmake/Tests/OpenGLES1Tests.cmake)
 # registration. Needs a real display/GPU, same as the Vulkan/Bgfx/D3D11/SDL_GPU entries above.
 include(cmake/Tests/OpenGL4Tests.cmake)
 
+# plan_opengl2.md: first end-to-end proof for the native OpenGL 2.1 graphics backend -- a real
+# window, a real SDL GL context, and Clear/Present + Texture2D/SpriteBatch vertical-slice tests.
+# Needs a real display/GPU, same as the SDL_GPU/Vulkan/Bgfx/D3D11 CTest entries above.
+include(cmake/Tests/OpenGL2Tests.cmake)
+
 include(cmake/Harnesses.cmake)
 
 include(cmake/ToolGltfToCnj.cmake)

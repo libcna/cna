@@ -2498,6 +2498,9 @@ namespace CNA::Internal::Backends::OpenGLES1
         // GL_ARRAY_BUFFER and reads every attribute out of it at stride offsets, so there is no
         // second per-vertex stream to resolve.
         case CNA::GraphicsCapability::MultiStreamVertexInput: return false;
+        // No instancing of any kind in the fixed-function ES 1.1 Common profile (no shaders, no
+        // attribute divisors) -- DrawInstancedPrimitivesEx stays the shared base-class refusal.
+        case CNA::GraphicsCapability::Instancing: return false;
         default: return true;
         }
     }

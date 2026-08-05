@@ -85,7 +85,9 @@ namespace CNA
         /** @brief Real desktop OpenGL 4.x core profile. */
         OpenGL4,
         /** @brief Legacy desktop OpenGL 1.x fixed-function pipeline. */
-        OpenGL1
+        OpenGL1,
+        /** @brief Native desktop OpenGL 2.1 (no EasyGL). */
+        OpenGL2
     };
 
     /**
@@ -151,6 +153,8 @@ namespace CNA
         return GraphicsBackendType::OpenGL4;
 #elif defined(CNA_BACKEND_OPENGL1)
         return GraphicsBackendType::OpenGL1;
+#elif defined(CNA_BACKEND_OPENGL2)
+        return GraphicsBackendType::OpenGL2;
 #else
 #error "CNA: no CNA_BACKEND_* compile definition set -- graphics backend selection (cmake/BackendSelection.cmake) is broken"
 #endif
@@ -196,6 +200,7 @@ namespace CNA
             case GraphicsBackendType::OpenGLES1:     return "OPENGLES1";
             case GraphicsBackendType::OpenGL4:       return "OPENGL4";
             case GraphicsBackendType::OpenGL1:       return "OPENGL1";
+            case GraphicsBackendType::OpenGL2:       return "OPENGL2";
         }
         return "UNKNOWN";
     }

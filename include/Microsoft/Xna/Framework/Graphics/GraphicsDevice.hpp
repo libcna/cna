@@ -1095,6 +1095,15 @@ namespace Microsoft::Xna::Framework::Graphics
         int virtualHeight_;
         int lastKnownViewportWidth_ = -1;
         int lastKnownViewportHeight_ = -1;
+        // Tracks the PHYSICAL viewport rectangle separately from the logical width/height above:
+        // under CnaPresentationMode::Letterbox/Overscan, the logical size can stay fixed (the
+        // game's own virtual resolution never changes) while the physical rectangle
+        // GetDefaultViewportRect() returns still needs to be re-applied after a window resize --
+        // comparing logical size alone would silently skip that re-application.
+        int lastKnownViewportPhysX_ = -1;
+        int lastKnownViewportPhysY_ = -1;
+        int lastKnownViewportPhysWidth_ = -1;
+        int lastKnownViewportPhysHeight_ = -1;
         bool contextRecoveryEnabled_ = true;
         GraphicsAdapter* adapter_;
         GraphicsProfile graphicsProfile_;

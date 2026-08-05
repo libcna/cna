@@ -2552,6 +2552,9 @@ void main()
         // attribute out of it at stride offsets; there is no second per-vertex stream to bind,
         // and the Ex draw routes refuse a wider binding set up front.
         case CNA::GraphicsCapability::MultiStreamVertexInput: return false;
+        // Real hardware instancing (GL4-33): glDrawElementsInstanced/glVertexAttribDivisor are
+        // core in every 4.x context, and DrawInstancedPrimitivesEx drives them unconditionally.
+        case CNA::GraphicsCapability::Instancing: return true;
         }
         // Unreachable for current members; a future member lands here (after the -Wswitch
         // warning above) and is reported unsupported until this backend explicitly claims it.
