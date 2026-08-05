@@ -98,6 +98,9 @@ namespace CNA::Internal::Backends::OpenGL4::GL4
 #ifndef GL_TEXTURE_MAX_ANISOTROPY
 #define GL_TEXTURE_MAX_ANISOTROPY 0x84FE
 #endif
+#ifndef GL_MAX_TEXTURE_MAX_ANISOTROPY
+#define GL_MAX_TEXTURE_MAX_ANISOTROPY 0x84FF
+#endif
 #ifndef GL_DEBUG_OUTPUT
 #define GL_DEBUG_OUTPUT 0x92E0
 #endif

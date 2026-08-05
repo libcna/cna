@@ -522,6 +522,16 @@ namespace CNA::Internal::Backends::OpenGL4
         [[nodiscard]] SDL_Window* GetWindowInternal() const override { return window_; }
         [[nodiscard]] SDL_Renderer* GetRendererInternal() const override { return nullptr; }
 
+        /**
+         * @brief Answers every current GraphicsCapability member explicitly.
+         *
+         * The base default answers `true` for almost everything, which is how a backend forked
+         * before an enum member existed ends up claiming it (the exact defect the `opengles1`
+         * lane found in its own inherited default). The switch below has no default case, so a
+         * future member surfaces as a compiler warning here instead of a confident wrong answer.
+         */
+        [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
+
         std::unique_ptr<ITextureBackend> CreateTexture(const ImageData& data) override;
         std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;
 
@@ -738,6 +748,9 @@ namespace CNA::Internal::Backends::OpenGL4
         int msaaSampleCount_ = 0;
         int msaaW_ = 0;
         int msaaH_ = 0;
+        /// Driver-granted anisotropic-filtering ceiling, queried once at context creation;
+        /// stays 1.0 when EXT/ARB_texture_filter_anisotropic is absent (core only in GL 4.6).
+        float maxAnisotropy_ = 1.0f;
 
         OpenGL4RawProgram spriteProgram_;
         OpenGL4RawProgram colored3DProgram_;

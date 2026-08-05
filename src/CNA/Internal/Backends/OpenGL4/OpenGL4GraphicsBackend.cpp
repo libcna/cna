@@ -2433,6 +2433,18 @@ void main()
 
         SDL_GL_SetSwapInterval(swapInterval_);
 
+        // Anisotropic filtering is an extension until GL 4.6
+        // (EXT/ARB_texture_filter_anisotropic), so the driver's real ceiling is queried once
+        // here: drain any pending error, ask, and treat a raised GL_INVALID_ENUM as "not
+        // supported" (maxAnisotropy_ stays 1). SupportsCapability answers from this value and
+        // ApplySamplerState only uploads the sampler parameter when the driver accepted the
+        // query, so an unsupporting driver never sees the unknown pname at all.
+        while (glGetError() != GL_NO_ERROR) {}
+        GLfloat maxAniso = 1.0f;
+        glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY, &maxAniso);
+        if (glGetError() == GL_NO_ERROR && maxAniso > 1.0f)
+            maxAnisotropy_ = maxAniso;
+
         gl4_glGenSamplers(kMaxSamplerSlots, samplers_);
 
         glEnable(GL_DEPTH_TEST);
@@ -2508,6 +2520,42 @@ void main()
         gl4_glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
         gl4_glBlitFramebuffer(0, 0, msaaW_, msaaH_, 0, 0, msaaW_, msaaH_, GL_COLOR_BUFFER_BIT,
                               GL_NEAREST);
+    }
+
+    bool OpenGL4GraphicsBackend::SupportsCapability(CNA::GraphicsCapability capability) const
+    {
+        switch (capability)
+        {
+        // Real vertex/index buffers, 3D draw routes, depth/stencil clears and state (GL4-1..16).
+        case CNA::GraphicsCapability::ThreeD: return true;
+        // A real 24-bit depth / 8-bit stencil buffer on the window and on FBO render targets.
+        case CNA::GraphicsCapability::DepthStencilBuffer: return true;
+        // Real backbuffer and render-target MSAA via multisample renderbuffers + blit resolve
+        // (GL4-17). The GL 4.x core spec requires GL_MAX_SAMPLES >= 4, so a 4.1-core context can
+        // never answer no.
+        case CNA::GraphicsCapability::MultiSampleAntiAliasing: return true;
+        // Real MRT: up to 8 colour attachments with a real glDrawBuffers call (GL4-15).
+        case CNA::GraphicsCapability::MultipleRenderTargets: return true;
+        // Device/driver-dependent: an extension until GL 4.6, so answered from the ceiling the
+        // running driver actually granted at context creation.
+        case CNA::GraphicsCapability::AnisotropicFiltering: return maxAnisotropy_ > 1.0f;
+        // Real glPolygonMode(GL_FRONT_AND_BACK, GL_LINE) -- desktop core GL keeps the entry
+        // point EasyGL's ES target has to emulate (GL4-16).
+        case CNA::GraphicsCapability::WireFrame: return true;
+        // Real GL_SAMPLES_PASSED query objects with exact passed-sample counts (GL4-24).
+        case CNA::GraphicsCapability::OcclusionQuery: return true;
+        // Real caller-supplied GLSL compilation via CreateEffectBackend (GL4-30/32).
+        case CNA::GraphicsCapability::CustomEffects: return true;
+        // Real GL_TEXTURE_3D storage with per-slice FBO readback (GL4-20).
+        case CNA::GraphicsCapability::Texture3D: return true;
+        // REMED-GFX-201: not implemented. ApplyLayout binds ONE GL_ARRAY_BUFFER and reads every
+        // attribute out of it at stride offsets; there is no second per-vertex stream to bind,
+        // and the Ex draw routes refuse a wider binding set up front.
+        case CNA::GraphicsCapability::MultiStreamVertexInput: return false;
+        }
+        // Unreachable for current members; a future member lands here (after the -Wswitch
+        // warning above) and is reported unsupported until this backend explicitly claims it.
+        return false;
     }
 
     void OpenGL4GraphicsBackend::Clear(float r, float g, float b, float a)
@@ -3809,8 +3857,9 @@ void main()
         gl4_glSamplerParameteri(sampler, GL_TEXTURE_MAG_FILTER, magFilter);
         gl4_glSamplerParameteri(sampler, GL_TEXTURE_WRAP_S, AddressModeToGL(addressU));
         gl4_glSamplerParameteri(sampler, GL_TEXTURE_WRAP_T, AddressModeToGL(addressV));
-        if (filter == 2) // Anisotropic
-            gl4_glSamplerParameterf(sampler, GL_TEXTURE_MAX_ANISOTROPY, static_cast<float>(maxAnisotropy));
+        if (filter == 2 && maxAnisotropy_ > 1.0f) // Anisotropic, and the driver has the extension
+            gl4_glSamplerParameterf(sampler, GL_TEXTURE_MAX_ANISOTROPY,
+                                    std::min(static_cast<float>(maxAnisotropy), maxAnisotropy_));
 
         gl4_glBindSampler(static_cast<GLuint>(slot), sampler);
     }
