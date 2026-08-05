@@ -286,14 +286,36 @@ namespace CNA::Internal::Backends::Wicked
             stagingDesc.misc_flags = wig::ResourceMiscFlag::NONE;
             stagingDesc.layout = wig::ResourceState::COPY_SRC;
 
-            wig::SubresourceData initial;
-            initial.data_ptr = data;
-            initial.row_pitch = static_cast<std::uint32_t>(w) * 4u;
-            initial.slice_pitch = static_cast<std::uint32_t>(w) * h * 4u;
-
+            // WICKED-79: the staging texture is created UNPOPULATED and written through its own
+            // mapped subresource layout. Passing the tightly packed box as CreateTexture initial
+            // data loses every row whose byte width is not already a multiple of the device's
+            // optimalBufferCopyRowPitchAlignment: the initial-data repack stores rows tightly
+            // while the later CopyTexture consumes the ALIGNED mapped pitches, so a narrow upload
+            // smears across the destination (rows land every alignment/rowBytes-th row and the
+            // rest reads back zero). Writing at staging.mapped_subresources[0]'s own pitches
+            // stores the bytes exactly where CopyTexture reads them, at every width.
             wig::Texture staging;
-            if (!device->CreateTexture(&stagingDesc, &initial, &staging))
+            if (!device->CreateTexture(&stagingDesc, nullptr, &staging))
                 return false;
+            if (staging.mapped_data == nullptr || staging.mapped_subresource_count == 0)
+                return false;
+            {
+                const wig::SubresourceData& layout = staging.mapped_subresources[0];
+                const auto* src = static_cast<const std::uint8_t*>(data);
+                auto* mappedBase = static_cast<std::uint8_t*>(staging.mapped_data);
+                const int sliceCount = volume ? depth : 1;
+                for (int slice3D = 0; slice3D < sliceCount; ++slice3D)
+                {
+                    for (int row = 0; row < h; ++row)
+                    {
+                        std::memcpy(mappedBase +
+                                        static_cast<std::size_t>(slice3D) * layout.slice_pitch +
+                                        static_cast<std::size_t>(row) * layout.row_pitch,
+                                    src + (static_cast<std::size_t>(slice3D) * h + row) * w * 4,
+                                    static_cast<std::size_t>(w) * 4);
+                    }
+                }
+            }
 
             // A copy cannot be recorded inside a render pass, so any open pass is closed first;
             // the next draw re-opens it with a LOAD operation and keeps what was already rendered.
@@ -316,12 +338,14 @@ namespace CNA::Internal::Backends::Wicked
                 &destination, wig::ResourceState::COPY_DST, destination.desc.layout);
             device->Barrier(&toOriginalLayout, 1, cmd);
 
-            // The staging texture goes out of scope here, and that is safe WITHOUT a stall:
-            // Wicked Engine's resource destructors do not free anything directly, they push the
-            // native handle onto the device's deferred-destruction queue stamped with the current
-            // frame, and the queue only releases an entry once BUFFERCOUNT further frames have
-            // been submitted. The copy recorded just above is therefore guaranteed to have
-            // executed before the memory it reads is reclaimed (plan_wicked.md WICKED-31).
+            // WICKED-79: each staged upload is submitted before this helper returns, exactly as
+            // the readback below always has been. Two staged texture copies recorded on ONE
+            // command list interfere -- measured on a raw device with no CNA in the process: the
+            // first face of a cube reads back with another upload's rows spliced in, while the
+            // same sequence with a submit between the copies is byte-exact at every width. The
+            // flush also keeps the staging texture's deferred destruction trivially ordered
+            // behind its copy (plan_wicked.md WICKED-31).
+            owner.FlushAndWaitEXT();
             return true;
         }
 

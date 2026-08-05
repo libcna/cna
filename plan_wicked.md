@@ -163,6 +163,7 @@ missing.
 | WICKED-76 | Cross-backend pixel-parity comparison against EasyGL/Vulkan | ⬜ |
 | WICKED-77 | Instanced draws honour the geometry stream's `VertexOffset` (regression `Wicked_GeometryVertexOffset`) | ✅ |
 | WICKED-78 | Device teardown releases every GPU/VMA allocation (`cmake/patches/wicked-device-teardown.patch`; regression `Wicked_DeviceLifecycle`) | ✅ |
+| WICKED-79 | Staged texture uploads store at the staging texture's own mapped pitches (narrow cube/3D/rect uploads no longer smear) | ✅ |
 
 ---
 
@@ -179,6 +180,16 @@ missing.
   pool-allocated command lists were also never freed, so a device that HAD drawn leaked its whole
   `VkInstance`/`VkDevice`/allocator instead — masking the assertion. Both destructor gaps are
   closed by `cmake/patches/wicked-device-teardown.patch`.
+- **`WICKED-79` (found by the first full corpus run): staged texture uploads smeared at narrow
+  widths.** Passing a tightly packed box as `CreateTexture` initial data loses every row whose
+  byte width is not a multiple of the device's `optimalBufferCopyRowPitchAlignment` -- the
+  initial-data repack stores rows tightly while `CopyTexture` consumes the ALIGNED mapped
+  pitches, so narrow cube faces, volumes and sub-rect uploads read back zeros past the first
+  rows. The staging texture is now created unpopulated and written through its own
+  `mapped_subresources[0]` pitches, and each staged upload submits before returning -- two
+  staged copies recorded on one command list interfere (measured on a raw device: the first
+  cube face reads back with another upload's rows spliced in; a submit between them is
+  byte-exact at every width).
 - **`WICKED-77` (found and fixed at first execution): the instanced route dropped the geometry
   stream's `VertexOffset`.** That route carries each stream's whole public offset in the stream
   table (the ordinary routes fold it into `baseVertex`), and the single-geometry-stream binding
