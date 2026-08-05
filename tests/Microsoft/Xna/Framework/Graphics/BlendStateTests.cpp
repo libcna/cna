@@ -7,6 +7,8 @@
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ColorWriteChannels.hpp"
 
+#include <cstdint>
+
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Graphics::Blend;
 using Microsoft::Xna::Framework::Graphics::BlendFunction;
@@ -70,6 +72,21 @@ TEST(BlendStateTest, DefaultMultiSampleMaskMinusOne)
 {
     BlendState bs;
     EXPECT_EQ(bs.getMultiSampleMaskProperty(), -1);
+}
+
+// --- Predefined: BlendFactor of every preset ---
+
+// The four presets are namespace-scope objects built during static initialization, so their
+// BlendFactor is settled before main() and the default-constructor test above cannot reach it.
+// The expectation is the packed literal rather than Color::White, so the oracle does not itself
+// depend on another translation unit's static object.
+TEST(BlendStateTest, PredefinedBlendFactorIsOpaqueWhite)
+{
+    constexpr std::uint32_t OpaqueWhite = 0xFFFFFFFFU;
+    EXPECT_EQ(BlendState::Additive.getBlendFactorProperty().getPackedValueProperty(),         OpaqueWhite);
+    EXPECT_EQ(BlendState::AlphaBlend.getBlendFactorProperty().getPackedValueProperty(),       OpaqueWhite);
+    EXPECT_EQ(BlendState::NonPremultiplied.getBlendFactorProperty().getPackedValueProperty(), OpaqueWhite);
+    EXPECT_EQ(BlendState::Opaque.getBlendFactorProperty().getPackedValueProperty(),           OpaqueWhite);
 }
 
 // --- Predefined: Opaque ---

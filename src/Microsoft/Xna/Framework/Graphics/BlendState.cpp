@@ -19,7 +19,12 @@ namespace Microsoft::Xna::Framework::Graphics
         , colorWriteChannels1_(ColorWriteChannels::All)
         , colorWriteChannels2_(ColorWriteChannels::All)
         , colorWriteChannels3_(ColorWriteChannels::All)
-        , blendFactor_(Color::White)
+        // Opaque white, constructed in place rather than copied from Color::White. The four
+        // namespace-scope presets above run this constructor during static initialization, and
+        // Color::White is defined in another translation unit whose relative initialization order
+        // is unspecified. Calling a constructor across translation units is safe; reading another
+        // unit's not-yet-constructed object is not.
+        , blendFactor_(255, 255, 255, 255)
         , multiSampleMask_(-1)
     {
     }
