@@ -1851,7 +1851,13 @@ namespace CNA::Internal::Backends::OpenGL2
                     // SpriteBatch's transform is always 2D).
                     const float tx = sc[i].x * transform_.M11 + sc[i].y * transform_.M21 + transform_.M41;
                     const float ty = sc[i].x * transform_.M12 + sc[i].y * transform_.M22 + transform_.M42;
-                    corners[i] = {(tx / viewportWidth) * 2.0f - 1.0f, 1.0f - (ty / viewportHeight) * 2.0f, layerDepth,
+                    // Render-time Y-flip for 2D render targets: screen-space top maps to clip
+                    // +1 for the window, clip -1 while a flipped target is bound -- see
+                    // RtFlipActive()'s own doc comment.
+                    const float ndcY = backend_->RtFlipActive()
+                        ? (ty / viewportHeight) * 2.0f - 1.0f
+                        : 1.0f - (ty / viewportHeight) * 2.0f;
+                    corners[i] = {(tx / viewportWidth) * 2.0f - 1.0f, ndcY, layerDepth,
                                   r, g, b, a, sc[i].u, sc[i].v};
                 }
                 const SpriteVertex quad[6] = {corners[0], corners[1], corners[2], corners[0], corners[2], corners[3]};
@@ -1972,8 +1978,15 @@ namespace CNA::Internal::Backends::OpenGL2
                 // SAME clip-space Z for the same layerDepth input, or mixing custom-Effect and
                 // built-in SpriteBatch draws under an enabled DepthStencilState (a legitimate XNA
                 // pattern for interleaving 2D/3D draw order) would sort inconsistently.
-                const Matrix ortho = Matrix::CreateOrthographicOffCenter(
-                    0.0f, static_cast<float>(viewportWidth), static_cast<float>(viewportHeight), 0.0f, 0.0f, -1.0f);
+                // Render-time Y-flip for 2D render targets: swap the ortho's top/bottom while a
+                // flipped target is bound -- see RtFlipActive()'s own doc comment.
+                const Matrix ortho = backend_->RtFlipActive()
+                    ? Matrix::CreateOrthographicOffCenter(
+                          0.0f, static_cast<float>(viewportWidth), 0.0f,
+                          static_cast<float>(viewportHeight), 0.0f, -1.0f)
+                    : Matrix::CreateOrthographicOffCenter(
+                          0.0f, static_cast<float>(viewportWidth), static_cast<float>(viewportHeight),
+                          0.0f, 0.0f, -1.0f);
                 const Matrix combined = transform_ * ortho;
                 float matColMajor[16];
                 combined.ToColumnMajor(matColMajor);
@@ -2621,6 +2634,8 @@ namespace CNA::Internal::Backends::OpenGL2
             currentRt_->BindAsRenderTarget();
         else if (currentRtCube_)
             currentRtCube_->BindAsRenderTargetFace(currentRtCubeFace_);
+        // Winding compensation for the render-time Y-flip survives recovery too.
+        glFrontFace(RtFlipActive() ? GL_CW : GL_CCW);
     }
 
     void OpenGL2GraphicsBackend::DebugRestoreContext()
@@ -2692,6 +2707,9 @@ namespace CNA::Internal::Backends::OpenGL2
             currentRtWidth_ = 0;
             currentRtHeight_ = 0;
         }
+        // Cube faces keep GL's native orientation (RtFlipActive() is false here), so this
+        // restores the default front face after any prior flipped 2D binding.
+        glFrontFace(RtFlipActive() ? GL_CW : GL_CCW);
     }
 
     void OpenGL2GraphicsBackend::SetRenderTargets(
@@ -2810,6 +2828,9 @@ namespace CNA::Internal::Backends::OpenGL2
         // MRT targets are deliberately NOT tracked as currentRt_/currentRtCube_ (a single pointer
         // can't represent a whole set) -- mrtTargets_ above is the dedicated equivalent
         // unbindCurrentRenderTarget() uses for MRT-specific per-target resolve/mip-regen.
+
+        // Winding compensation for the render-time Y-flip -- see RtFlipActive().
+        glFrontFace(RtFlipActive() ? GL_CW : GL_CCW);
     }
 
     void OpenGL2GraphicsBackend::unbindCurrentRenderTarget()
@@ -2873,6 +2894,9 @@ namespace CNA::Internal::Backends::OpenGL2
             currentRtHeight_ = 0;
         }
         currentRt_ = rt;
+        // The render-time Y-flip inverts rasterized winding; flipping the front-face definition
+        // restores every CullMode's screen-space meaning -- see RtFlipActive()'s own doc comment.
+        glFrontFace(RtFlipActive() ? GL_CW : GL_CCW);
     }
 
     bool OpenGL2GraphicsBackend::GetCurrentRenderTarget2DSize(int& width, int& height) const
@@ -2881,6 +2905,31 @@ namespace CNA::Internal::Backends::OpenGL2
         width = currentRtWidth_;
         height = currentRtHeight_;
         return true;
+    }
+
+    bool OpenGL2GraphicsBackend::RtFlipActive() const
+    {
+        // GFX-209 oracle finding: this backend used to render into 2D render targets in GL's
+        // native bottom-up texture order and read them back without a flip, so both
+        // RenderTarget2D::GetData and sampling a RenderTarget2D as a texture presented the scene
+        // VERTICALLY FLIPPED -- masked by the lane's own orientation-insensitive assertions
+        // (centre pixels, solid fills) and caught by the shared wireframe pixel oracle at
+        // integration. The fix is FNA's own convention: flip Y at RENDER time while a 2D target
+        // (single or MRT) is bound, so texture storage is top-down and matches Texture2D's
+        // upload/readback/sampling convention with no flips at any CPU boundary. Cube faces are
+        // deliberately excluded: GL cube faces have their own spec-defined orientation and every
+        // cube path (env-map sampling, per-face readback) is already self-consistent.
+        return currentRt_ != nullptr || !mrtTargets_.empty();
+    }
+
+    namespace
+    {
+        /// Negates the Y row of a column-major clip-space matrix (indices 1, 5, 9, 13) -- the
+        /// render-time Y-flip RtFlipActive() selects.
+        void FlipClipYColumnMajor(float m[16])
+        {
+            m[1] = -m[1]; m[5] = -m[5]; m[9] = -m[9]; m[13] = -m[13];
+        }
     }
 
     void OpenGL2GraphicsBackend::ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels)
@@ -2900,8 +2949,16 @@ namespace CNA::Internal::Backends::OpenGL2
             SDL_GetWindowSize(window_, &windowWidth, &fbH);
         }
 
-        // OpenGL origin is bottom-left; flip y so the caller gets top-left origin (mirrors
+        // While a flipped 2D render target is bound its storage is already top-down (see
+        // RtFlipActive()), so caller rows map to texture rows directly and glReadPixels'
+        // bottom-up window rows return them in ascending caller order with no swap. The window
+        // (and cube-face) path keeps GL's bottom-left origin and flips as before (mirrors
         // EasyGLGraphicsBackend::ReadBackbuffer's identical convention).
+        if (RtFlipActive())
+        {
+            glReadPixels(x, y, w, h, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+            return;
+        }
         const int glY = fbH - y - h;
         glReadPixels(x, glY, w, h, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
 
@@ -3008,6 +3065,10 @@ namespace CNA::Internal::Backends::OpenGL2
             projection.ToColumnMajor(projCM);
             params->customEffectBackend->SetUniformMat4("World", worldCM);
             params->customEffectBackend->SetUniformMat4("View", viewCM);
+            // Render-time Y-flip for 2D render targets, applied through the Projection uniform a
+            // custom shader multiplies by -- see RtFlipActive()'s own doc comment.
+            if (RtFlipActive())
+                FlipClipYColumnMajor(projCM);
             params->customEffectBackend->SetUniformMat4("Projection", projCM);
 
             // Task 1080: a VertexBuffer whose propagated declaration is genuinely custom (not the
@@ -3062,6 +3123,9 @@ namespace CNA::Internal::Backends::OpenGL2
 
         float wvp[16];
         ComputeColumnMajorWVP(world, view, projection, wvp);
+        // Render-time Y-flip for 2D render targets -- see RtFlipActive()'s own doc comment.
+        if (RtFlipActive())
+            FlipClipYColumnMajor(wvp);
         glUniformMatrix4fv(glGetUniformLocation(program, "uWVP"), 1, GL_FALSE, wvp);
 
         float diffuse[4] = {1, 1, 1, 1};
@@ -3414,6 +3478,10 @@ namespace CNA::Internal::Backends::OpenGL2
         projection.ToColumnMajor(projCM);
         params.customEffectBackend->SetUniformMat4("World", worldCM);
         params.customEffectBackend->SetUniformMat4("View", viewCM);
+        // Render-time Y-flip for 2D render targets, applied through the Projection uniform a
+        // custom shader multiplies by -- see RtFlipActive()'s own doc comment.
+        if (RtFlipActive())
+            FlipClipYColumnMajor(projCM);
         params.customEffectBackend->SetUniformMat4("Projection", projCM);
 
         const GLuint program = custom->GetProgramHandle();
@@ -3655,9 +3723,15 @@ namespace CNA::Internal::Backends::OpenGL2
     void OpenGL2GraphicsBackend::SetScissorRect(int x, int y, int w, int h)
     {
         if (w <= 0 || h <= 0) return;
-        // Use the render target's own height for the Y-flip when one is bound (mirrors
-        // ReadBackbuffer's identical fbH pattern); fall back to the window's height for the
-        // default framebuffer.
+        // A flipped 2D render target stores rows top-down (see RtFlipActive()), so the caller's
+        // top-left rectangle maps to GL window coordinates directly; the window and cube-face
+        // paths keep the bottom-left-origin Y-flip (using the bound target's own height,
+        // mirroring ReadBackbuffer's identical fbH pattern).
+        if (RtFlipActive())
+        {
+            glScissor(x, y, w, h);
+            return;
+        }
         int fbH = currentRtHeight_;
         if (fbH == 0)
         {
@@ -3670,6 +3744,13 @@ namespace CNA::Internal::Backends::OpenGL2
     void OpenGL2GraphicsBackend::SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth)
     {
         if (w <= 0 || h <= 0) return;
+        // Same top-down mapping as SetScissorRect while a flipped 2D render target is bound.
+        if (RtFlipActive())
+        {
+            glViewport(x, y, w, h);
+            glDepthRange(minDepth, maxDepth);
+            return;
+        }
         int fbH = currentRtHeight_;
         if (fbH == 0)
         {

@@ -65,6 +65,11 @@ namespace CNA::Internal::Backends::OpenGL2
         // resolution when one is active.
         bool GetCurrentRenderTarget2DSize(int& width, int& height) const;
 
+        // True while a 2D render target (single or MRT set) is bound -- the state under which
+        // this backend flips Y at render time so target storage is top-down. Cube faces are
+        // excluded by design. See the .cpp definition's doc comment for the full rationale.
+        [[nodiscard]] bool RtFlipActive() const;
+
         void ClearColorAndDepth(float r, float g, float b, float a, float depth) override;
         void ClearDepth(float depth) override;
         void ClearStencil(int stencil) override;

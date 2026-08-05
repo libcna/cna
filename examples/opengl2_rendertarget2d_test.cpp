@@ -137,9 +137,11 @@ class OpenGL2RenderTarget2DTest : public Game
     }
 
     // A single triangle covering the main-diagonal half of the target (vertices at the
-    // bottom-left, top-right, and top-left clip-space corners), leaving the rest showing
+    // bottom-left, top-left, and bottom-right clip-space corners), leaving the rest showing
     // whatever the target was Clear()'d to. The hypotenuse passes exactly through the target's
-    // center pixel.
+    // center pixel. Authored for the corrected top-down render-target orientation (clip +Y =
+    // caller row 0): the pre-fix vertex set only straddled the (c,c) probe diagonal because the
+    // backend's old bottom-up storage flipped it there.
     void DrawDiagonalTriangle(GraphicsDevice& dev, const Color& color)
     {
         BasicEffect fx(dev);
@@ -156,7 +158,7 @@ class OpenGL2RenderTarget2DTest : public Game
         // all-background result is trivially "flat, unblended" too) -- a test bug, not a
         // backend one.
         const VertexPositionColor verts[3] = {
-            {Vector3(-1.0f, -1.0f, 0.0f), color}, {Vector3(-1.0f, 1.0f, 0.0f), color}, {Vector3(1.0f, 1.0f, 0.0f), color},
+            {Vector3(-1.0f, -1.0f, 0.0f), color}, {Vector3(-1.0f, 1.0f, 0.0f), color}, {Vector3(1.0f, -1.0f, 0.0f), color},
         };
         VertexBuffer vb(dev, VertexPositionColor::getVertexDeclarationStatic(), 3, BufferUsage::None);
         vb.SetData(verts, 0, 3);
