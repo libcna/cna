@@ -2420,6 +2420,29 @@ TEST_F(InstancedDrawMultiStreamTest, UnsupportedBackendRejectsMixedStreamInstanc
     EXPECT_NO_THROW(draw())
         << "a backend that claims MultiStreamVertexInput and implements instanced drawing must "
            "accept a mixed-frequency multi-stream instanced draw";
+#elif defined(CNA_BACKEND_WICKED)
+    // A FOURTH measured outcome (plan_wicked.md WICKED-58 / REMED-GFX-202): this backend claims
+    // MultiStreamVertexInput because several PER-VERTEX streams genuinely re-slot, and it
+    // implements instanced drawing -- but its instanced vertex programs declare exactly one
+    // per-instance record, so a second per-instance stream cannot be expressed. The draw must
+    // reach that declared boundary, with the message naming the exact limit -- never a render
+    // from a subset of the streams, and never some other failure.
+    try
+    {
+        draw();
+        ADD_FAILURE()
+            << "this backend declares exactly one per-instance stream and was expected to refuse "
+               "the second rather than render from a subset of the streams";
+    }
+    catch (const std::exception& e)
+    {
+        EXPECT_STREQ(
+            "Wicked backend: only one per-instance VertexBufferBinding is supported (2 were "
+            "bound).",
+            e.what())
+            << "the refusal must be this backend's own declared one-instance-stream boundary, "
+               "not a different failure";
+    }
 #else
     // A THIRD, measured outcome, not a silent skip: this backend claims MultiStreamVertexInput
     // (REMED-GFX-201 taught it ordinary multi-stream input) but overrides no

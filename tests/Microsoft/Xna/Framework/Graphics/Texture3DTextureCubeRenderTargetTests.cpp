@@ -198,6 +198,13 @@ namespace
     /// readback, so the byte-exact round trip is asserted directly by its own
     /// OpenGL4_RenderTargetCube CTest (plan_opengl4.md GL4-15).
     constexpr bool kRenderTargetCubeAcceptsSetData = true;
+#elif defined(CNA_BACKEND_WICKED)
+    /// WickedRenderTargetCubeBackend::SetData is a real staged upload into the rendered cube's
+    /// colour array (UploadTextureRegion, plan_wicked.md WICKED-55/79), and the backend also
+    /// implements the per-face readback, so the byte-exact round trip is asserted by the shared
+    /// TextureCube/RenderTargetCube suites. A multisampled cube still refuses -- resolving into
+    /// one face needs a per-face resolve subresource this backend does not create.
+    constexpr bool kRenderTargetCubeAcceptsSetData = true;
 #else
     constexpr bool kRenderTargetCubeAcceptsSetData = false;
 #endif
