@@ -53,6 +53,14 @@ exists purely as the smallest possible complete `IGraphicsBackend` implementatio
 reference and a dependency-free placeholder, not a pixel-parity or diagnostic tool. See
 `docs/stub-backend.md` for its current capability boundary.
 
+The **Wicked Engine** backend (`CNA_GRAPHICS_BACKEND=WICKED`, tracked in `../plan_wicked.md`) is
+**not** a column here for the same reason WebGPU is not: its feature surface is a first baseline,
+and — more importantly — nothing in it has been executed on real hardware yet, so it has no cell
+that could honestly be marked ✅ under this doc's "a real, GPU-facing pixel/behavior check actually
+exercised it" bar. It compiles and links against a patched Wicked Engine and its device-independent
+logic is unit tested; that is all. Revisit once `plan_wicked.md` `WICKED-18`/`WICKED-74` have been
+run on a GPU host. See [`wicked-backend.md`](wicked-backend.md) for its current capability boundary.
+
 **Supersedes `docs/coverage.md`**, which is dated 2026-06-21
 and predates almost this entire session's work
 (dozens of real bugs fixed across all 4 backends, an entire SDL_Renderer 2D-only audit phase,

@@ -226,6 +226,11 @@ include(cmake/Tests/OpenGL4Tests.cmake)
 # Needs a real display/GPU, same as the SDL_GPU/Vulkan/Bgfx/D3D11 CTest entries above.
 include(cmake/Tests/OpenGL2Tests.cmake)
 
+# plan_wicked.md WICKED-70/74: the Wicked Engine backend's device-independent pipeline-cache-key
+# unit test, plus the same demo smoke test the other GPU backends register (needs a real
+# display/GPU and a Vulkan loader).
+include(cmake/Tests/WickedTests.cmake)
+
 include(cmake/Harnesses.cmake)
 
 include(cmake/ToolGltfToCnj.cmake)

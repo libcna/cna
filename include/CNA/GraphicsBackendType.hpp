@@ -87,7 +87,10 @@ namespace CNA
         /** @brief Legacy desktop OpenGL 1.x fixed-function pipeline. */
         OpenGL1,
         /** @brief Native desktop OpenGL 2.1 (no EasyGL). */
-        OpenGL2
+        OpenGL2,
+
+        /** @brief Wicked Engine (wi::graphics RHI). */
+        Wicked
     };
 
     /**
@@ -155,6 +158,8 @@ namespace CNA
         return GraphicsBackendType::OpenGL1;
 #elif defined(CNA_BACKEND_OPENGL2)
         return GraphicsBackendType::OpenGL2;
+#elif defined(CNA_BACKEND_WICKED)
+        return GraphicsBackendType::Wicked;
 #else
 #error "CNA: no CNA_BACKEND_* compile definition set -- graphics backend selection (cmake/BackendSelection.cmake) is broken"
 #endif
@@ -201,6 +206,7 @@ namespace CNA
             case GraphicsBackendType::OpenGL4:       return "OPENGL4";
             case GraphicsBackendType::OpenGL1:       return "OPENGL1";
             case GraphicsBackendType::OpenGL2:       return "OPENGL2";
+            case GraphicsBackendType::Wicked:        return "WICKED";
         }
         return "UNKNOWN";
     }

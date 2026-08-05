@@ -109,6 +109,13 @@ TEST(GraphicsBackendCompileDefinitionsTest, ExactlyOneGraphicsBackendIsSelected)
 #ifdef CNA_BACKEND_OPENGL2
     ++enabled;
 #endif
+    // plan_wicked.md: same gap class the D3D9 comment above documents -- the registration union
+    // that added the WICKED identity everywhere else never conflicted on this file, so its silent
+    // omission surfaced only when the full CnaTests suite first ran under
+    // CNA_GRAPHICS_BACKEND=WICKED and this test reported 0 enabled backends.
+#ifdef CNA_BACKEND_WICKED
+    ++enabled;
+#endif
 
     EXPECT_EQ(enabled, 1);
 }

@@ -74,6 +74,7 @@ namespace
             case GraphicsBackendType::OpenGL4:     return "OPENGL4";
             case GraphicsBackendType::OpenGL1:     return "OPENGL1";
             case GraphicsBackendType::OpenGL2:     return "OPENGL2";
+            case GraphicsBackendType::Wicked:      return "WICKED";
         }
         return {};
     }
