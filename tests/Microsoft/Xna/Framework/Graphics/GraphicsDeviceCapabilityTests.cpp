@@ -47,6 +47,20 @@ using CNA::GraphicsCapability;
 // Linux) -- SDL_Renderer/DX3/Canvas each have their own dedicated
 // *_graphics_capability_test.cpp example asserting the opposite (nothing supported).
 
+// OpenGL ES 1.1 is a fixed-function pipeline with no MRT mechanism, no occlusion-query mechanism
+// anywhere in the CM registry, and no shader compiler at all. Its `false` for these three is the
+// truthful answer, and is asserted here rather than left as a standing red -- the point of the
+// capability query is that a caller can trust it.
+#if defined(CNA_BACKEND_OPENGLES1)
+constexpr bool kExpectMultipleRenderTargets = false;
+constexpr bool kExpectOcclusionQuery        = false;
+constexpr bool kExpectCustomEffects         = false;
+#else
+constexpr bool kExpectMultipleRenderTargets = true;
+constexpr bool kExpectOcclusionQuery        = true;
+constexpr bool kExpectCustomEffects         = true;
+#endif
+
 TEST(GraphicsDeviceCapabilityTest, SupportsThreeD)
 {
     GraphicsDevice gd;
@@ -62,19 +76,19 @@ TEST(GraphicsDeviceCapabilityTest, SupportsDepthStencilBuffer)
 TEST(GraphicsDeviceCapabilityTest, SupportsMultipleRenderTargets)
 {
     GraphicsDevice gd;
-    EXPECT_TRUE(gd.SupportsCapability(GraphicsCapability::MultipleRenderTargets));
+    EXPECT_EQ(gd.SupportsCapability(GraphicsCapability::MultipleRenderTargets), kExpectMultipleRenderTargets);
 }
 
 TEST(GraphicsDeviceCapabilityTest, SupportsOcclusionQuery)
 {
     GraphicsDevice gd;
-    EXPECT_TRUE(gd.SupportsCapability(GraphicsCapability::OcclusionQuery));
+    EXPECT_EQ(gd.SupportsCapability(GraphicsCapability::OcclusionQuery), kExpectOcclusionQuery);
 }
 
 TEST(GraphicsDeviceCapabilityTest, SupportsCustomEffects)
 {
     GraphicsDevice gd;
-    EXPECT_TRUE(gd.SupportsCapability(GraphicsCapability::CustomEffects));
+    EXPECT_EQ(gd.SupportsCapability(GraphicsCapability::CustomEffects), kExpectCustomEffects);
 }
 
 // MSAA/anisotropic filtering are genuinely device/driver-dependent -- don't assert a specific

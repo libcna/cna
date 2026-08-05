@@ -206,6 +206,13 @@ include(cmake/Tests/Dx8Tests.cmake)
 # shaders throughout, DXVK-delivered via d3d10core.
 include(cmake/Tests/D3D10Tests.cmake)
 
+# plan_opengles1.md: OPENGLES1 (fixed-function OpenGL ES 1.1) CTest registration. Needs a real
+# EGL/GLESv1_CM driver capable of creating an actual ES1 context -- not every EGL implementation
+# does (see docs/opengles1-backend.md's own empirical finding on this project's Mesa/llvmpipe
+# development host), same "run with a real DISPLAY and a real driver" caveat as the Vulkan/Bgfx/
+# D3D11/SDL_GPU entries above.
+include(cmake/Tests/OpenGLES1Tests.cmake)
+
 include(cmake/Harnesses.cmake)
 
 include(cmake/ToolGltfToCnj.cmake)

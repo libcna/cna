@@ -91,6 +91,11 @@ TEST(GraphicsBackendCompileDefinitionsTest, ExactlyOneGraphicsBackendIsSelected)
 #ifdef CNA_BACKEND_SDL_GPU
     ++enabled;
 #endif
+    // plan_opengles1.md: same class of gap DX2-84's comment above documents -- a new backend that
+    // never gets an entry here makes this test report 0 enabled backends rather than 1.
+#ifdef CNA_BACKEND_OPENGLES1
+    ++enabled;
+#endif
 
     EXPECT_EQ(enabled, 1);
 }

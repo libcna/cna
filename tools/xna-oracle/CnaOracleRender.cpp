@@ -105,6 +105,8 @@ namespace
         return "BGFX";
 #elif defined(CNA_BACKEND_WEBGPU)
         return "WEBGPU";
+#elif defined(CNA_BACKEND_OPENGLES1)
+        return "OPENGLES1";
 #elif defined(CNA_BACKEND_SOFTWARE)
         return "SOFTWARE";
 #elif defined(CNA_BACKEND_HEADLESS)

@@ -22,6 +22,7 @@ cmake-build-freedirect/*
 cmake-build-d3d9/*
 cmake-build-sdlgpu/*
 cmake-build-dx1/*
+cmake-build-opengles1/*
 vkd3d-proton.cache.write
 vkd3d-proton.cache
 vendor/wgpu-native/

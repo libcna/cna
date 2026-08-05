@@ -183,6 +183,14 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_FourTargets_DoesNotThrow)
     // the correct behaviour and the reason it is asserted here: a no-op backend must not report
     // false success for a target it cannot honour.
     EXPECT_THROW(gd.SetRenderTargets(bindings), System::NotSupportedException);
+#elif defined(CNA_BACKEND_OPENGLES1)
+    // plan_opengles1.md: OpenGL ES 1.1 has no MRT mechanism, and no extension in the CM registry
+    // adds one -- a third distinct case from the single-target backends above (which support one)
+    // and from Stub (which supports none). A single RenderTarget2D binds normally via
+    // GL_OES_framebuffer_object; more than one is refused rather than binding the first and
+    // silently dropping the rest, which is also why SupportsCapability(MultipleRenderTargets)
+    // reports false.
+    EXPECT_THROW(gd.SetRenderTargets(bindings), System::NotSupportedException);
 #else
     EXPECT_NO_THROW(gd.SetRenderTargets(bindings));
 #endif

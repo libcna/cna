@@ -15,6 +15,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
+#include "CNA/GraphicsCapability.hpp"
 
 using Microsoft::Xna::Framework::Content::ContentLoadException;
 using Microsoft::Xna::Framework::Content::ContentManager;
@@ -108,6 +109,14 @@ TEST_F(CnjEffectTest, LoadsRealCnjFixture)
     ASSERT_NE(loaded, nullptr);
     auto* shaderEffect = dynamic_cast<ShaderEffect*>(loaded.get());
     ASSERT_NE(shaderEffect, nullptr);
+    // A backend with no shader compiler (OpenGL ES 1.1's fixed-function pipeline has none at all)
+    // cannot produce a valid custom-GLSL effect. Gate on the capability rather than the backend
+    // name, matching CnjTexture3DTests' own convention for the same situation.
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::CustomEffects))
+    {
+        EXPECT_FALSE(shaderEffect->IsEffectValid());
+        return;
+    }
     EXPECT_TRUE(shaderEffect->IsEffectValid());
 }
 

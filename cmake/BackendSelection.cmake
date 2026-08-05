@@ -6,8 +6,8 @@ if(EMSCRIPTEN OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
 else()
     set(_cna_default_backend "SDL_RENDERER")
 endif()
-set(CNA_GRAPHICS_BACKEND "${_cna_default_backend}" CACHE STRING "Graphics backend to use (SDL_RENDERER, EASYGL, BGFX, VULKAN, WEBGPU, HEADLESS, SOFTWARE, STUB, D3D11, D3D12, CANVAS, ASCII, FREEDIRECT, D3D9, DX1, DX2, DX3, DX5, DX6, DX7, DX8, D3D10, or SDL_GPU)")
-set_property(CACHE CNA_GRAPHICS_BACKEND PROPERTY STRINGS "SDL_RENDERER" "EASYGL" "BGFX" "VULKAN" "WEBGPU" "HEADLESS" "SOFTWARE" "STUB" "D3D11" "D3D12" "CANVAS" "ASCII" "FREEDIRECT" "D3D9" "DX1" "DX2" "DX3" "DX5" "DX6" "DX7" "DX8" "D3D10" "SDL_GPU")
+set(CNA_GRAPHICS_BACKEND "${_cna_default_backend}" CACHE STRING "Graphics backend to use (SDL_RENDERER, EASYGL, BGFX, VULKAN, WEBGPU, HEADLESS, SOFTWARE, STUB, D3D11, D3D12, CANVAS, ASCII, FREEDIRECT, D3D9, DX1, DX2, DX3, DX5, DX6, DX7, DX8, D3D10, OPENGLES1, or SDL_GPU)")
+set_property(CACHE CNA_GRAPHICS_BACKEND PROPERTY STRINGS "SDL_RENDERER" "EASYGL" "BGFX" "VULKAN" "WEBGPU" "HEADLESS" "SOFTWARE" "STUB" "D3D11" "D3D12" "CANVAS" "ASCII" "FREEDIRECT" "D3D9" "DX1" "DX2" "DX3" "DX5" "DX6" "DX7" "DX8" "D3D10" "OPENGLES1" "SDL_GPU")
 
 option(CNA_BACKEND_SDL_RENDERER "Enable SDL_Renderer graphics backend" OFF)
 option(CNA_BACKEND_EASY_GL "Enable easy-gl graphics backend" OFF)
@@ -90,9 +90,15 @@ option(CNA_BACKEND_DX8 "Enable Direct X 8 (real Direct3D 8, DXVK-delivered, fixe
 # (DXVK 2.6.0 ships no d3d10.dll at all) forwarding to DXVK's real d3d10core.dll + dxgi.dll.
 option(CNA_BACKEND_D3D10 "Enable Direct3D 10 (real ID3D10Device, DXVK-delivered via d3d10core, real HLSL shaders) graphics backend (Windows only)" OFF)
 option(CNA_BACKEND_SDL_GPU "Enable SDL_gpu graphics backend" OFF)
+# plan_opengles1.md design decision 1: a genuinely separate backend from EASYGL -- EASYGL targets
+# WebGL2/OpenGL ES 3.0 (shader-based) and cannot create an OpenGL ES 1.1 (fixed-function "Common"
+# profile) context at all. Requires a real system GLESv1_CM library/headers (see
+# BackendLibraries.cmake's own find_library/find_path FATAL_ERROR gate below), same "hard system
+# dependency, not vendored" shape as VULKAN's find_package(Vulkan REQUIRED).
+option(CNA_BACKEND_OPENGLES1 "Enable OpenGL ES 1.1 (fixed-function) graphics backend" OFF)
 
 set(_cna_explicit_backend_selection OFF)
-if(CNA_BACKEND_SDL_RENDERER OR CNA_BACKEND_EASY_GL OR CNA_BACKEND_BGFX OR CNA_BACKEND_VULKAN OR CNA_BACKEND_WEBGPU OR CNA_BACKEND_HEADLESS OR CNA_BACKEND_SOFTWARE OR CNA_BACKEND_STUB OR CNA_BACKEND_D3D11 OR CNA_BACKEND_D3D12 OR CNA_BACKEND_CANVAS OR CNA_BACKEND_ASCII OR CNA_BACKEND_FREEDIRECT OR CNA_BACKEND_D3D9 OR CNA_BACKEND_DX1 OR CNA_BACKEND_DX2 OR CNA_BACKEND_DX3 OR CNA_BACKEND_DX5 OR CNA_BACKEND_DX6 OR CNA_BACKEND_DX7 OR CNA_BACKEND_DX8 OR CNA_BACKEND_D3D10 OR CNA_BACKEND_SDL_GPU)
+if(CNA_BACKEND_SDL_RENDERER OR CNA_BACKEND_EASY_GL OR CNA_BACKEND_BGFX OR CNA_BACKEND_VULKAN OR CNA_BACKEND_WEBGPU OR CNA_BACKEND_HEADLESS OR CNA_BACKEND_SOFTWARE OR CNA_BACKEND_STUB OR CNA_BACKEND_D3D11 OR CNA_BACKEND_D3D12 OR CNA_BACKEND_CANVAS OR CNA_BACKEND_ASCII OR CNA_BACKEND_FREEDIRECT OR CNA_BACKEND_D3D9 OR CNA_BACKEND_DX1 OR CNA_BACKEND_DX2 OR CNA_BACKEND_DX3 OR CNA_BACKEND_DX5 OR CNA_BACKEND_DX6 OR CNA_BACKEND_DX7 OR CNA_BACKEND_DX8 OR CNA_BACKEND_D3D10 OR CNA_BACKEND_OPENGLES1 OR CNA_BACKEND_SDL_GPU)
     set(_cna_explicit_backend_selection ON)
 endif()
 
@@ -166,6 +172,9 @@ if(_cna_explicit_backend_selection)
     endif()
     if(CNA_BACKEND_SDL_GPU)
         list(APPEND _cna_enabled_backends "SDL_GPU")
+    endif()
+    if(CNA_BACKEND_OPENGLES1)
+        list(APPEND _cna_enabled_backends "OPENGLES1")
     endif()
 
     list(LENGTH _cna_enabled_backends _cna_enabled_backends_count)
@@ -411,6 +420,12 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU")
     set(BACKEND_TARGET "cna_backend_graphics_sdl_gpu")
     add_compile_definitions(CNA_BACKEND_SDL_GPU)
     set(CNA_BACKEND_DEFINE "CNA_BACKEND_SDL_GPU")
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "OPENGLES1")
+    message(STATUS "CNA: Using OPENGLES1 (fixed-function OpenGL ES 1.1) graphics backend")
+    set(BACKEND_DIR "src/CNA/Internal/Backends/OpenGLES1")
+    set(BACKEND_TARGET "cna_backend_graphics_opengles1")
+    add_compile_definitions(CNA_BACKEND_OPENGLES1)
+    set(CNA_BACKEND_DEFINE "CNA_BACKEND_OPENGLES1")
 else()
 
     message(FATAL_ERROR "CNA: Unknown graphics backend: ${CNA_GRAPHICS_BACKEND}")
