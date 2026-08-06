@@ -1526,17 +1526,22 @@ TEST_F(OrdinaryDrawMultiStreamTest, UnsupportedBackendRejectsMultiStreamDetermin
 // contract, not a pixel one. XNA's SetVertexBuffers rejects a null binding outright, so a
 // half-described vertex can never reach a draw in the first place.
 // ---------------------------------------------------------------------------
-TEST_F(OrdinaryDrawMultiStreamTest, NullSecondaryStreamIsRejectedAtBindTime)
+TEST_F(OrdinaryDrawMultiStreamTest, NullSecondaryStreamBindingIsAcceptedAsUnusedSlot)
 {
     VertexBuffer positionBuffer(
         device, PositionOnlyDeclaration(), kBufferElementCount, BufferUsage::None);
 
-    EXPECT_THROW(
-        device.SetVertexBuffers({
-            VertexBufferBinding(&positionBuffer, kPrefixOffset, 0),
-            VertexBufferBinding(),
-        }),
-        System::ArgumentNullException);
+    // FNA performs no per-element null check in SetVertexBuffers: a null-buffer binding is a
+    // legal unused slot (FNA itself stores VertexBufferBinding.None), and the draw dispatch
+    // skips it. REMED-GFX-222 removed the bind-time rejection this test formerly asserted.
+    EXPECT_NO_THROW(device.SetVertexBuffers({
+        VertexBufferBinding(&positionBuffer, kPrefixOffset, 0),
+        VertexBufferBinding(),
+    }));
+    const auto bound = device.GetVertexBuffers();
+    ASSERT_EQ(bound.size(), 2u);
+    EXPECT_EQ(bound[0].getVertexBufferProperty(), &positionBuffer);
+    EXPECT_EQ(bound[1].getVertexBufferProperty(), nullptr);
 }
 
 // ---------------------------------------------------------------------------

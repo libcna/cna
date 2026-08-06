@@ -14,7 +14,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBufferBinding.hpp"
-#include "System/ArgumentNullException.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
 #include "System/ObjectDisposedException.hpp"
@@ -235,12 +235,20 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_DefaultNullBindingThrows)
 // GraphicsDevice.SetVertexBuffers — public binding validation and empty unbind
 // =============================================================================
 
-TEST(GraphicsDeviceValidationTest, SetVertexBuffers_DefaultNullBindingThrows)
+TEST(GraphicsDeviceValidationTest, SetVertexBuffers_DefaultNullBindingIsAccepted)
+{
+    GraphicsDevice gd;
+    EXPECT_NO_THROW(gd.SetVertexBuffers({VertexBufferBinding()}));
+    ASSERT_EQ(gd.GetVertexBuffers().size(), 1u);
+    EXPECT_EQ(gd.GetVertexBuffers()[0].getVertexBufferProperty(), nullptr);
+}
+
+TEST(GraphicsDeviceValidationTest, SetVertexBuffers_SeventeenBindingsThrow)
 {
     GraphicsDevice gd;
     EXPECT_THROW(
-        gd.SetVertexBuffers({VertexBufferBinding()}),
-        System::ArgumentNullException);
+        gd.SetVertexBuffers(std::vector<VertexBufferBinding>(17)),
+        System::ArgumentOutOfRangeException);
 }
 
 TEST(GraphicsDeviceValidationTest, SetVertexBuffers_EmptyClearsSingularBinding)

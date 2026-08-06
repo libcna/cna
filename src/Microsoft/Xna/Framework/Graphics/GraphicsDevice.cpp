@@ -44,7 +44,6 @@
 #include <vector>
 
 #include "System/ArgumentException.hpp"
-#include "System/ArgumentNullException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
@@ -2870,12 +2869,9 @@ namespace Microsoft::Xna::Framework::Graphics
                 std::to_string(vertexBuffers.size()),
                 "Max Vertex Buffers supported is " + std::to_string(kMaxVertexBufferBindings));
 
-        for (const auto& binding : vertexBuffers)
-        {
-            if (binding.getVertexBufferProperty() == nullptr)
-                throw System::ArgumentNullException("vertexBuffers");
-        }
-
+        // A null-buffer binding is a legal unused slot in XNA -- FNA itself stores
+        // VertexBufferBinding.None entries -- so only the binding count is validated here;
+        // the draw dispatch already skips defaulted bindings.
         currentVertexBuffers_ = vertexBuffers;
         currentVertexBuffer_ = vertexBuffers.empty()
             ? nullptr
