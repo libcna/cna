@@ -16,11 +16,11 @@
 > including the shared multi-stream and instanced-draw pixel oracles.
 >
 > **Remaining work (check this section first; update it whenever a row's status changes):**
-> - **Stock effect variants (`MAGNUM-52`, `MAGNUM-53`)** — `SkinnedEffect` and
->   `PbrEffect`/`SkinnedPbrEffect` have no generated shader variant here yet, and their vertex
->   layouts (strides 52/48/68) are not in the stock attribute table either, so such a draw is
->   refused rather than rendered without its terms. `DualTextureEffect` (`MAGNUM-50`) and
->   `EnvironmentMapEffect` (`MAGNUM-51`) are done and pixel-verified.
+> - **Stock effect variants (`MAGNUM-53`)** — `PbrEffect`/`SkinnedPbrEffect` have no generated
+>   shader variant here yet, and their vertex layouts (strides 48/68) are not in the stock attribute
+>   table either, so such a draw is refused rather than rendered without its terms.
+>   `DualTextureEffect` (`MAGNUM-50`), `EnvironmentMapEffect` (`MAGNUM-51`) and `SkinnedEffect`
+>   (`MAGNUM-52`) are done and pixel-verified.
 > - **`SurfaceFormat` beyond `Color` (`MAGNUM-54`)** — every texture, cube, volume and render target
 >   allocates RGBA8. The requested format reaches the backend and is recorded but not honoured.
 > - **`BlendState.MultiSampleMask` (`MAGNUM-55`)** — only the all-ones default is applied; a real
@@ -122,9 +122,10 @@
 | MAGNUM-41 | `examples/magnum_smoke_test.cpp` + `ctest -R Magnum_Smoke` integration test | ✅ |
 | MAGNUM-42 | `docs/magnum-backend.md` | ✅ |
 | MAGNUM-43 | Stock shader selection keyed on program kind (stride + effect flags), not stride alone | ✅ |
+| MAGNUM-44 | A bound stream with a declaration-less (stride 0) buffer falls back to its uploaded stride | ✅ |
 | MAGNUM-50 | `DualTextureEffect` shader variant (strides 20 and 24), pixel-verified | ✅ |
 | MAGNUM-51 | `EnvironmentMapEffect` shader variant (cube-map reflection, flat and Fresnel-weighted), pixel-verified | ✅ |
-| MAGNUM-52 | `SkinnedEffect` shader variant (bone palette, `weightsPerVertex`) | ⬜ |
+| MAGNUM-52 | `SkinnedEffect` shader variant (bone palette, `weightsPerVertex`, strides 52 and 56), pixel-verified | ✅ |
 | MAGNUM-53 | `PbrEffect` / `SkinnedPbrEffect` shader variants | ⬜ |
 | MAGNUM-54 | Real `SurfaceFormat` storage beyond `Color` | ⬜ |
 | MAGNUM-55 | `BlendState.MultiSampleMask` via `GL_SAMPLE_MASK` / `glSampleMaski` | ⬜ |

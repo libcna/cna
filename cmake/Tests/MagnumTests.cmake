@@ -43,4 +43,12 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_BACKEND STREQUAL "MAGNUM"
         COMMAND cna_test_magnum_environmentmapeffect
         TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
         LABELS "GraphicsSmoke;Magnum")
+
+    # plan_magnum.md MAGNUM-52: SkinnedEffect measured by where the geometry lands, which is what a
+    # bone palette that never reaches the shader actually gets wrong.
+    cna_magnum_test(cna_test_magnum_skinnedeffect examples/magnum_skinnedeffect_test.cpp)
+    cna_register_backend_test(NAME Magnum_SkinnedEffect
+        COMMAND cna_test_magnum_skinnedeffect
+        TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
+        LABELS "GraphicsSmoke;Magnum")
 endif()

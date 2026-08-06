@@ -75,7 +75,8 @@ vec2 cnaSampleUV(vec2 uv, float flip){ return vec2(uv.x, mix(uv.y, 1.0 - uv.y, f
         bool ProgramHasNormal(MagnumStockProgram program)
         {
             return program == MagnumStockProgram::PositionNormalTexture
-                || program == MagnumStockProgram::EnvironmentMap;
+                || program == MagnumStockProgram::EnvironmentMap
+                || program == MagnumStockProgram::Skinned;
         }
 
         bool ProgramIsDualTexture(MagnumStockProgram program)
@@ -204,6 +205,117 @@ vec2 cnaSampleUV(vec2 uv, float flip){ return vec2(uv.x, mix(uv.y, 1.0 - uv.y, f
             return source;
         }
 
+        std::string SkinnedVertexShaderSource()
+        {
+            std::string source = "#version 330 core\n";
+            source += "layout(location=0) in vec3 aPosition;\n";
+            source += "layout(location=1) in vec3 aNormal;\n";
+            source += "layout(location=2) in vec2 aTexCoord;\n";
+            source += "layout(location=3) in vec4 aBoneWeights;\n";
+            source += "layout(location=4) in uvec4 aBoneIndices;\n";
+            // Location 5 belongs to the stride-56 layout's appended per-vertex colour. A stride-52
+            // draw leaves it unbound, which is why the colour is APPENDED there rather than
+            // inserted: locations 0..4 stay byte-identical and one program serves both strides.
+            source += "layout(location=5) in vec4 aColor;\n";
+            source += kInstanceTransformDeclaration;
+            source += "uniform mat4 uWVP;\n";
+            source += "uniform mat4 uWorld;\n";
+            source += "uniform mat3 uNormalMatrix;\n";
+            source += "uniform mat4 uBones[" + std::to_string(kMagnumMaxBones) + "];\n";
+            source += "uniform int uWeightsPerVertex;\n";
+            source += "uniform vec4 uFogVector;\n";
+            source += "out vec4 vColor;\n";
+            source += "out vec2 vTexCoord;\n";
+            source += "out vec3 vNormal;\n";
+            source += "out vec3 vWorldPosition;\n";
+            source += "out float vFogFactor;\n";
+            source += "void main(){\n";
+            // Only the first uWeightsPerVertex pairs are summed, matching XNA's own Skin(vin, n):
+            // a mesh authored for one or two bones per vertex leaves the remaining weights
+            // undefined rather than zeroed, so summing all four would corrupt it.
+            source += "    mat4 skin = uBones[aBoneIndices.x] * aBoneWeights.x;\n";
+            source += "    if (uWeightsPerVertex >= 2) skin += uBones[aBoneIndices.y] * aBoneWeights.y;\n";
+            source += "    if (uWeightsPerVertex >= 4)\n";
+            source += "        skin += uBones[aBoneIndices.z] * aBoneWeights.z\n";
+            source += "              + uBones[aBoneIndices.w] * aBoneWeights.w;\n";
+            source += "    vec4 cnaPosition = cnaInstancePosition(skin * vec4(aPosition, 1.0));\n";
+            source += "    gl_Position = uWVP * cnaPosition;\n";
+            // A degenerate palette (all-zero bones, or weights summing to zero) collapses the
+            // skinned normal to nothing; falling back to the unskinned one keeps such a vertex lit
+            // rather than black.
+            source += "    vec3 skinnedNormal = mat3(skin) * aNormal;\n";
+            source += "    float skinnedNormalLength = length(skinnedNormal);\n";
+            source += "    vec3 boneNormal = (skinnedNormalLength > 1e-6)\n";
+            source += "        ? (skinnedNormal / skinnedNormalLength) : aNormal;\n";
+            source += "    vNormal = uNormalMatrix * cnaInstanceDirection(boneNormal);\n";
+            source += "    vTexCoord = aTexCoord;\n";
+            source += "    vWorldPosition = (uWorld * cnaPosition).xyz;\n";
+            source += "    vColor = aColor;\n";
+            source += kFogVertexTerm;
+            source += "}\n";
+            return source;
+        }
+
+        std::string SkinnedFragmentShaderSource()
+        {
+            std::string source = "#version 330 core\n";
+            source += "in vec4 vColor;\n";
+            source += "in vec2 vTexCoord;\n";
+            source += "in vec3 vNormal;\n";
+            source += "in vec3 vWorldPosition;\n";
+            source += "in float vFogFactor;\n";
+            source += "uniform sampler2D uTexture;\n";
+            source += "uniform vec4 uDiffuseColor;\n";
+            source += "uniform vec3 uEmissiveColor;\n";
+            source += "uniform vec3 uLight0Dir;\n";
+            source += "uniform vec3 uLight0Diffuse;\n";
+            source += "uniform vec3 uLight0Specular;\n";
+            source += "uniform vec3 uLight1Dir;\n";
+            source += "uniform vec3 uLight1Diffuse;\n";
+            source += "uniform vec3 uLight1Specular;\n";
+            source += "uniform vec3 uLight2Dir;\n";
+            source += "uniform vec3 uLight2Diffuse;\n";
+            source += "uniform vec3 uLight2Specular;\n";
+            source += "uniform vec3 uSpecularColor;\n";
+            source += "uniform float uSpecularPower;\n";
+            source += "uniform vec3 uEyePosition;\n";
+            source += "uniform vec4 uAlphaTest;\n";
+            source += "uniform vec3 uFogColor;\n";
+            source += "uniform float uVertexColorEnabled;\n";
+            source += kRenderTargetSampleDeclaration;
+            source += "out vec4 fragColor;\n";
+            source += "void main(){\n";
+            source += "    vec3 normal = normalize(vNormal);\n";
+            source += "    vec3 eye = normalize(uEyePosition - vWorldPosition);\n";
+            source += "    float dot0 = dot(normal, -uLight0Dir);\n";
+            source += "    float dot1 = dot(normal, -uLight1Dir);\n";
+            source += "    float dot2 = dot(normal, -uLight2Dir);\n";
+            // SkinnedEffect folds its ambient term into EmissiveColor before the draw, so unlike
+            // BasicEffect's stage this light sum carries no separate ambient of its own.
+            source += "    vec3 lightSum = uLight0Diffuse * max(dot0, 0.0)\n";
+            source += "                  + uLight1Diffuse * max(dot1, 0.0)\n";
+            source += "                  + uLight2Diffuse * max(dot2, 0.0);\n";
+            source += "    vec3 litColor = lightSum * uDiffuseColor.rgb + uEmissiveColor;\n";
+            source += "    vec3 half0 = normalize(eye - uLight0Dir);\n";
+            source += "    vec3 half1 = normalize(eye - uLight1Dir);\n";
+            source += "    vec3 half2 = normalize(eye - uLight2Dir);\n";
+            source += "    vec3 specular = (pow(max(dot(half0, normal), 0.0) * step(0.0, dot0), uSpecularPower) * uLight0Specular\n";
+            source += "                   + pow(max(dot(half1, normal), 0.0) * step(0.0, dot1), uSpecularPower) * uLight1Specular\n";
+            source += "                   + pow(max(dot(half2, normal), 0.0) * step(0.0, dot2), uSpecularPower) * uLight2Specular)\n";
+            source += "                   * uSpecularColor;\n";
+            source += "    vec4 diffuse = texture(uTexture, cnaSampleUV(vTexCoord, uRtFlipV.x));\n";
+            source += "    vec4 tint = (uVertexColorEnabled > 0.5) ? vColor : vec4(1.0);\n";
+            // The vertex colour multiplies AFTER the specular highlight is added, so a tinted skin
+            // tints its highlight too rather than leaving a white one on a coloured surface.
+            source += "    fragColor = vec4(litColor * diffuse.rgb, uDiffuseColor.a * diffuse.a * tint.a);\n";
+            source += "    fragColor.rgb += specular * fragColor.a;\n";
+            source += "    fragColor.rgb *= tint.rgb;\n";
+            source += kAlphaTestFragmentTerm;
+            source += kFogFragmentTerm;
+            source += "}\n";
+            return source;
+        }
+
         std::string EnvironmentMapVertexShaderSource()
         {
             std::string source = "#version 330 core\n";
@@ -324,6 +436,16 @@ vec2 cnaSampleUV(vec2 uv, float flip){ return vec2(uv.x, mix(uv.y, 1.0 - uv.y, f
 
     bool SelectStockProgram(const MagnumStockSelector& selector, MagnumStockProgram& programOut)
     {
+        // Skinning is the most specific request of all: it is the only flag whose layout carries a
+        // bone palette, so it is resolved before anything that could share a stride with it.
+        if (selector.skinned)
+        {
+            if (selector.strideInBytes != 52 && selector.strideInBytes != 56)
+                return false;
+            programOut = MagnumStockProgram::Skinned;
+            return true;
+        }
+
         // Env mapping is tested ahead of dual texturing because it is the more specific request:
         // both flags name a program over a DIFFERENT layout (32 vs 20/24), so a draw carrying both
         // can only mean the one whose layout it actually supplies.
@@ -365,9 +487,12 @@ vec2 cnaSampleUV(vec2 uv, float flip){ return vec2(uv.x, mix(uv.y, 1.0 - uv.y, f
     std::string StockVertexShaderSource(MagnumStockProgram program)
     {
         // Env mapping needs its own vertex stage: the reflection basis and the Fresnel weight are
-        // per-vertex terms the shared generator has no varyings for.
+        // per-vertex terms the shared generator has no varyings for. Skinning needs one because it
+        // transforms the position and normal before anything else runs.
         if (program == MagnumStockProgram::EnvironmentMap)
             return EnvironmentMapVertexShaderSource();
+        if (program == MagnumStockProgram::Skinned)
+            return SkinnedVertexShaderSource();
         return BaseVertexShaderSource(program);
     }
 
@@ -375,6 +500,8 @@ vec2 cnaSampleUV(vec2 uv, float flip){ return vec2(uv.x, mix(uv.y, 1.0 - uv.y, f
     {
         if (program == MagnumStockProgram::EnvironmentMap)
             return EnvironmentMapFragmentShaderSource();
+        if (program == MagnumStockProgram::Skinned)
+            return SkinnedFragmentShaderSource();
         if (ProgramIsDualTexture(program))
             return DualTextureFragmentShaderSource(program);
         return BaseFragmentShaderSource(program);

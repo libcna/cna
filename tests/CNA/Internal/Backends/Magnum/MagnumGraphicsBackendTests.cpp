@@ -219,6 +219,48 @@ TEST(MagnumVertexLayoutTest, UnknownStrideResolvesToNoAttributes)
     EXPECT_TRUE(StockAttributesForStride(0).empty());
 }
 
+TEST(MagnumVertexLayoutTest, SkinnedStridesResolveToTheirBonePaletteAttributes)
+{
+    EXPECT_EQ(StockAttributesForStride(52).size(), 5u);
+    EXPECT_EQ(StockAttributesForStride(56).size(), 6u);
+}
+
+TEST(MagnumVertexLayoutTest, SkinnedStridesShareLocationsZeroToFourByteForByte)
+{
+    // Stride 56 appends its colour rather than inserting it, which is the whole reason one skinned
+    // program can serve both -- an inserted colour would shift every later element's location.
+    const std::vector<MagnumVertexAttribute> narrow = StockAttributesForStride(52);
+    const std::vector<MagnumVertexAttribute> wide = StockAttributesForStride(56);
+    ASSERT_EQ(narrow.size(), 5u);
+    ASSERT_EQ(wide.size(), 6u);
+    for (std::size_t i = 0; i < narrow.size(); ++i)
+    {
+        EXPECT_EQ(narrow[i].location, wide[i].location) << "element " << i;
+        EXPECT_EQ(narrow[i].offsetInStream, wide[i].offsetInStream) << "element " << i;
+        EXPECT_EQ(narrow[i].components, wide[i].components) << "element " << i;
+    }
+    EXPECT_EQ(wide[5].location, 5);
+    EXPECT_EQ(wide[5].offsetInStream, 52);
+    EXPECT_TRUE(wide[5].normalized);
+}
+
+TEST(MagnumVertexLayoutTest, OnlyBoneIndicesArriveAsIntegers)
+{
+    // Byte4 is a float-converted format everywhere else it appears; only the bone indices, which
+    // index a uniform array, need real integers.
+    const std::vector<MagnumVertexAttribute> skinned = StockAttributesForStride(52);
+    ASSERT_EQ(skinned.size(), 5u);
+    for (std::size_t i = 0; i < 4u; ++i)
+        EXPECT_FALSE(skinned[i].integral) << "element " << i;
+    EXPECT_TRUE(skinned[4].integral);
+    EXPECT_EQ(skinned[4].offsetInStream, 48);
+
+    const std::vector<VertexElement> byte4Declaration{
+        VertexElement(0, VertexElementFormat::Byte4, VertexElementUsage::BlendIndices, 0),
+    };
+    EXPECT_FALSE(AttributesForDeclaration(byte4Declaration, 0, 0)[0].integral);
+}
+
 TEST(MagnumVertexLayoutTest, PositionColorTextureOffsetsMatchThePackedLayout)
 {
     const std::vector<MagnumVertexAttribute> attributes = StockAttributesForStride(24);
@@ -310,12 +352,13 @@ TEST(MagnumVertexLayoutTest, NormalizedShortFormatsAreMarkedNormalized)
 namespace
 {
     MagnumStockProgram SelectOrDie(std::size_t stride, bool dualTexture = false,
-                                   bool envMapping = false)
+                                   bool envMapping = false, bool skinned = false)
     {
         MagnumStockSelector selector;
         selector.strideInBytes = stride;
         selector.dualTexture = dualTexture;
         selector.envMapping = envMapping;
+        selector.skinned = skinned;
         MagnumStockProgram program{};
         EXPECT_TRUE(SelectStockProgram(selector, program));
         return program;
@@ -329,6 +372,7 @@ namespace
         MagnumStockProgram::DualTexture,
         MagnumStockProgram::DualTextureColored,
         MagnumStockProgram::EnvironmentMap,
+        MagnumStockProgram::Skinned,
     };
 }
 
@@ -424,6 +468,77 @@ TEST(MagnumStockShaderTest, EnvironmentMapCarriesNoAmbientOrSpecularLightTerms)
     EXPECT_EQ(source.find("uAmbientColor"), std::string::npos);
     EXPECT_EQ(source.find("uSpecularPower"), std::string::npos);
     EXPECT_NE(source.find("uEmissiveColor"), std::string::npos);
+}
+
+TEST(MagnumStockShaderTest, SkinningSelectsItsOwnProgramOnBothBonePaletteLayouts)
+{
+    // 52 and 56 differ only by an APPENDED per-vertex colour, so one program serves both.
+    EXPECT_EQ(SelectOrDie(52, false, false, true), MagnumStockProgram::Skinned);
+    EXPECT_EQ(SelectOrDie(56, false, false, true), MagnumStockProgram::Skinned);
+}
+
+TEST(MagnumStockShaderTest, SkinningOnALayoutWithoutBoneDataSelectsNothing)
+{
+    MagnumStockSelector selector;
+    selector.skinned = true;
+    MagnumStockProgram program{};
+    for (const std::size_t stride : {std::size_t{16}, std::size_t{20},
+                                     std::size_t{24}, std::size_t{32}})
+    {
+        selector.strideInBytes = stride;
+        EXPECT_FALSE(SelectStockProgram(selector, program)) << "stride " << stride;
+    }
+}
+
+TEST(MagnumStockShaderTest, SkinningIsResolvedBeforeEveryOtherEffectFlag)
+{
+    // Only the skinned layouts carry a bone palette, so a draw naming skinning cannot mean any
+    // program that would share its stride.
+    EXPECT_EQ(SelectOrDie(52, true, true, true), MagnumStockProgram::Skinned);
+}
+
+TEST(MagnumStockShaderTest, SkinnedShaderSumsOnlyTheDeclaredWeightPairs)
+{
+    // A mesh authored for one or two bones per vertex leaves the remaining weights undefined
+    // rather than zeroed, so summing all four unconditionally corrupts it.
+    const std::string source = StockVertexShaderSource(MagnumStockProgram::Skinned);
+    EXPECT_NE(source.find("mat4 skin = uBones[aBoneIndices.x] * aBoneWeights.x"), std::string::npos);
+    EXPECT_NE(source.find("if (uWeightsPerVertex >= 2)"), std::string::npos);
+    EXPECT_NE(source.find("if (uWeightsPerVertex >= 4)"), std::string::npos);
+}
+
+TEST(MagnumStockShaderTest, SkinnedShaderDeclaresABonePaletteOfTheXnaLimit)
+{
+    const std::string source = StockVertexShaderSource(MagnumStockProgram::Skinned);
+    EXPECT_NE(source.find("uniform mat4 uBones[" + std::to_string(kMagnumMaxBones) + "]"),
+              std::string::npos);
+    EXPECT_EQ(kMagnumMaxBones, 72);
+}
+
+TEST(MagnumStockShaderTest, SkinnedShaderReadsBoneIndicesAsIntegers)
+{
+    // They index a uniform array; a float round trip loses exactness for the higher bone numbers.
+    const std::string source = StockVertexShaderSource(MagnumStockProgram::Skinned);
+    EXPECT_NE(source.find("in uvec4 aBoneIndices"), std::string::npos);
+}
+
+TEST(MagnumStockShaderTest, SkinnedShaderFallsBackToTheUnskinnedNormalWhenThePaletteDegenerates)
+{
+    // An all-zero palette collapses the skinned normal to nothing, which would light the surface
+    // black rather than leave it as authored.
+    const std::string source = StockVertexShaderSource(MagnumStockProgram::Skinned);
+    EXPECT_NE(source.find("skinnedNormalLength > 1e-6"), std::string::npos);
+    EXPECT_NE(source.find("(skinnedNormal / skinnedNormalLength) : aNormal"), std::string::npos);
+}
+
+TEST(MagnumStockShaderTest, SkinnedShaderCarriesNoAmbientTermOfItsOwn)
+{
+    // SkinnedEffect folds ambient into EmissiveColor before the draw, so a separate ambient term
+    // here would double-count it.
+    const std::string source = StockFragmentShaderSource(MagnumStockProgram::Skinned);
+    EXPECT_EQ(source.find("uAmbientColor"), std::string::npos);
+    EXPECT_NE(source.find("uEmissiveColor"), std::string::npos);
+    EXPECT_NE(source.find("uSpecularPower"), std::string::npos);
 }
 
 TEST(MagnumStockShaderTest, EveryStockShaderTargetsTheDesktopCoreProfile)

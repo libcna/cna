@@ -78,7 +78,8 @@ sudo apt-get install -y libegl1-mesa-dev                        # additionally, 
   test and view-space fog; `DualTextureEffect` adds its own two-sampler programs for strides 20 and
   24, carrying FNA's `color.rgb *= 2` overbright factor on the base layer, and
   `EnvironmentMapEffect` adds a cube-map program whose reflection lerps over the lit base (flat or
-  Fresnel-weighted) with its specular tint added on top.
+  Fresnel-weighted) with its specular tint added on top, and `SkinnedEffect` adds a 72-bone palette
+  program serving strides 52 and 56.
 - **Draws** — non-indexed, indexed and instanced, with per-stream binding offsets and instance
   frequencies honoured individually. Multi-stream vertex input is supported: a declaration split
   across several buffers is re-slotted per element, and a per-instance world matrix may itself be
@@ -94,10 +95,10 @@ sudo apt-get install -y libegl1-mesa-dev                        # additionally, 
   and are recorded, but every texture, cube, volume and render target is created as RGBA8.
 - **`BlendState.MultiSampleMask`** — reaches the backend but only its all-ones default is applied; a
   real coverage mask would need `GL_SAMPLE_MASK` plus `glSampleMaski`.
-- **Stock effect coverage** — `BasicEffect`, `AlphaTestEffect`, `DualTextureEffect` and
-  `EnvironmentMapEffect` are covered. `SkinnedEffect` and `PbrEffect`/`SkinnedPbrEffect` are not:
-  neither their shader variants nor their vertex layouts (strides 52/48/68) exist here yet, so such
-  a draw is refused rather than rendered without its terms.
+- **Stock effect coverage** — `BasicEffect`, `AlphaTestEffect`, `DualTextureEffect`,
+  `EnvironmentMapEffect` and `SkinnedEffect` are covered. `PbrEffect`/`SkinnedPbrEffect` are not:
+  neither their shader variants nor their vertex layouts (strides 48/68) exist here yet, so such a
+  draw is refused rather than rendered without its terms.
 - **Multi-target MSAA** — an ordered multi-target set attaches the targets' resolved colour
   textures, so a multisampled target contributes its single-sample image while it is part of a set.
 - **Mesh construction** — a `GL::Mesh` (and therefore a vertex array object) is built per draw
@@ -122,6 +123,9 @@ sudo apt-get install -y libegl1-mesa-dev                        # additionally, 
 - `examples/magnum_environmentmapeffect_test.cpp` (`ctest -R Magnum_EnvironmentMapEffect`) — the
   reflection at amount 0 and 1 plus the specular tint. The amount-1 case is what separates a lerp
   from an addition, which a saturated cube map cannot.
+- `examples/magnum_skinnedeffect_test.cpp` (`ctest -R Magnum_SkinnedEffect`) — an identity bone, a
+  translation bone and a two-bone blend, each measured by where the geometry lands rather than by
+  its colour.
 
 Both suites were run against Mesa's `llvmpipe` software rasterizer under `Xvfb`, so they need no GPU
 — point `CNA_TEST_DISPLAY` at the X server the ctest registration should use.

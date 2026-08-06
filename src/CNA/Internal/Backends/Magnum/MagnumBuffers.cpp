@@ -53,7 +53,7 @@ namespace CNA::Internal::Backends::Magnum
         }
 
         MagnumVertexAttribute MakeAttribute(int location, int offset, int components,
-                                            bool normalized, int format)
+                                            bool normalized, int format, bool integral = false)
         {
             MagnumVertexAttribute attribute;
             attribute.location = location;
@@ -61,6 +61,7 @@ namespace CNA::Internal::Backends::Magnum
             attribute.components = components;
             attribute.normalized = normalized;
             attribute.format = format;
+            attribute.integral = integral;
             return attribute;
         }
     }
@@ -68,7 +69,9 @@ namespace CNA::Internal::Backends::Magnum
     Mg::GL::DynamicAttribute ToDynamicAttribute(const MagnumVertexAttribute& attribute)
     {
         const FormatDescription description = DescribeFormat(attribute.format);
-        const Kind kind = description.normalized ? Kind::GenericNormalized : Kind::Generic;
+        const Kind kind = attribute.integral
+            ? Kind::Integral
+            : (description.normalized ? Kind::GenericNormalized : Kind::Generic);
         return Mg::GL::DynamicAttribute{
             kind, static_cast<Mg::UnsignedInt>(attribute.location),
             ToComponents(attribute.components), description.dataType};
@@ -92,6 +95,24 @@ namespace CNA::Internal::Backends::Magnum
                 return {MakeAttribute(0,  0, 3, false, 2),
                         MakeAttribute(1, 12, 3, false, 2),
                         MakeAttribute(2, 24, 2, false, 1)};
+            // VertexPositionNormalTextureSkinned: the stride-32 layout plus a float4 blend weight
+            // and a Byte4 blend index. Stride 56 is the same layout with a per-vertex Color
+            // APPENDED at the end rather than inserted, which is what keeps locations 0..4
+            // byte-identical between the two and lets one skinned program serve both -- for a
+            // stride-52 draw location 5 is simply left unbound.
+            case 52:
+                return {MakeAttribute(0,  0, 3, false, 2),
+                        MakeAttribute(1, 12, 3, false, 2),
+                        MakeAttribute(2, 24, 2, false, 1),
+                        MakeAttribute(3, 32, 4, false, 3),
+                        MakeAttribute(4, 48, 4, false, 5, true)};
+            case 56:
+                return {MakeAttribute(0,  0, 3, false, 2),
+                        MakeAttribute(1, 12, 3, false, 2),
+                        MakeAttribute(2, 24, 2, false, 1),
+                        MakeAttribute(3, 32, 4, false, 3),
+                        MakeAttribute(4, 48, 4, false, 5, true),
+                        MakeAttribute(5, 52, 4, true,  4)};
             default:
                 return {};
         }

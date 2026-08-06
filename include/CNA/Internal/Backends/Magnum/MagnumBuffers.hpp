@@ -33,6 +33,15 @@ namespace CNA::Internal::Backends::Magnum
         int components = 4;
         /** @brief True when the source is integral data normalized into [0,1] (or [-1,1]). */
         bool normalized = false;
+        /**
+         * @brief True when the element must reach the shader as a real integer.
+         *
+         * Only a stock layout sets this, for `SkinnedEffect`'s bone indices: they index a uniform
+         * array, so converting them to float and back would lose exactness for the higher bone
+         * numbers. A declaration-driven element never sets it -- XNA's `Byte4` is a float-converted
+         * format everywhere else it appears.
+         */
+        bool integral = false;
         /** @brief Raw `VertexElementFormat` ordinal this element was declared with. */
         int format = 0;
     };

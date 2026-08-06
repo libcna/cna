@@ -891,6 +891,7 @@ namespace CNA::Internal::Backends::Magnum
         selector.strideInBytes = stride;
         selector.dualTexture = params.dualTexture;
         selector.envMapping = params.envMapping;
+        selector.skinned = params.skinned;
 
         MagnumStockProgram stockProgram{};
         if (!SelectStockProgram(selector, stockProgram))
@@ -978,6 +979,17 @@ namespace CNA::Internal::Backends::Magnum
             program.SetInt(program.LocationOf("uTexture2"), 1);
             renderTargetFlips[1] = SampledRowOrderIsBottomUp(params.texture1) ? 1.0f : 0.0f;
         }
+        // SkinnedEffect's bone palette. Only the bones the draw declares are uploaded -- the
+        // array's remaining entries are never indexed, since a vertex's bone index cannot exceed
+        // the palette the effect populated.
+        if (params.skinned && params.boneCount > 0)
+        {
+            program.SetMatrix4Array(program.LocationOf("uBones"), params.boneTransforms,
+                                    std::min(params.boneCount, kMagnumMaxBones));
+            program.SetInt(program.LocationOf("uWeightsPerVertex"),
+                           std::clamp(params.weightsPerVertex, 1, 4));
+        }
+
         // EnvironmentMapEffect's cube map goes to its own unit so it never displaces the diffuse
         // texture, and the blend/Fresnel terms travel with it: a bound cube map with no blend
         // amount is a no-op reflection, which is not the same thing as no cube map at all.
@@ -1052,6 +1064,18 @@ namespace CNA::Internal::Backends::Magnum
         // instanced routes identically and each stream advances by its own stride.
         const int perVertexBase = ib != nullptr ? params.baseVertex : params.vertexStart;
 
+        // A stream's stride comes from its VertexDeclaration, which is empty -- stride 0 -- for the
+        // raw-upload route `VertexBuffer(device, count)` + `SetDataRaw(data, count, stride)` that
+        // SkinnedEffect's own vertex layout is normally fed through. The real stride is then the one
+        // the upload itself revealed, so that is what a zero falls back to; treating the zero as
+        // "no stream" bound nothing at all and rendered an empty frame.
+        const auto strideOf = [](const GpuVertexStreamBinding& stream,
+                                 const MagnumVertexBufferBackend& buffer) {
+            return stream.strideInBytes > 0
+                ? stream.strideInBytes
+                : static_cast<int>(buffer.GetStride());
+        };
+
         // Binds one resolved attribute out of one bound stream. `elementBase` is in that stream's
         // own vertex (or instance) elements, so every stream advances by its OWN stride -- which is
         // the whole point of carrying the bindings separately rather than deriving them from
@@ -1091,20 +1115,21 @@ namespace CNA::Internal::Backends::Magnum
                     const GpuVertexStreamBinding& stream = params.vertexStreams[i];
                     const auto* streamBuffer =
                         dynamic_cast<const MagnumVertexBufferBackend*>(stream.buffer);
-                    if (streamBuffer == nullptr || stream.strideInBytes <= 0
-                        || stream.instanceFrequency > 0)
+                    if (streamBuffer == nullptr || stream.instanceFrequency > 0)
+                        continue;
+                    const int streamStride = strideOf(stream, *streamBuffer);
+                    if (streamStride <= 0)
                         continue;
 
                     const std::vector<MagnumVertexAttribute> attributes =
                         streamBuffer->GetDeclarationElements().empty()
-                            ? StockAttributesForStride(
-                                  static_cast<std::size_t>(stream.strideInBytes))
+                            ? StockAttributesForStride(static_cast<std::size_t>(streamStride))
                             : AttributesForDeclaration(streamBuffer->GetDeclarationElements(),
                                                        nextCustomLocation, stream.combinedByteBase);
                     nextCustomLocation += static_cast<int>(attributes.size());
                     for (const MagnumVertexAttribute& attribute : attributes)
                     {
-                        bindAttribute(*streamBuffer, attribute, stream.strideInBytes,
+                        bindAttribute(*streamBuffer, attribute, streamStride,
                                       stream.vertexOffset + perVertexBase, 0);
                     }
                 }
@@ -1126,12 +1151,15 @@ namespace CNA::Internal::Backends::Magnum
                     const GpuVertexStreamBinding& stream = params.vertexStreams[slot.streamIndex];
                     const auto* streamBuffer =
                         dynamic_cast<const MagnumVertexBufferBackend*>(stream.buffer);
-                    if (streamBuffer == nullptr || stream.strideInBytes <= 0)
+                    if (streamBuffer == nullptr)
+                        continue;
+                    const int streamStride = strideOf(stream, *streamBuffer);
+                    if (streamStride <= 0)
                         continue;
 
                     MagnumVertexAttribute attribute = combined;
                     attribute.offsetInStream = slot.byteOffsetInStream;
-                    bindAttribute(*streamBuffer, attribute, stream.strideInBytes,
+                    bindAttribute(*streamBuffer, attribute, streamStride,
                                   stream.vertexOffset + perVertexBase, 0);
                 }
             }
@@ -1152,7 +1180,10 @@ namespace CNA::Internal::Backends::Magnum
                     continue;
                 const auto* streamBuffer =
                     dynamic_cast<const MagnumVertexBufferBackend*>(stream.buffer);
-                if (streamBuffer == nullptr || stream.strideInBytes <= 0)
+                if (streamBuffer == nullptr)
+                    continue;
+                const int streamStride = strideOf(stream, *streamBuffer);
+                if (streamStride <= 0)
                     continue;
 
                 const int baseLocation = custom ? nextCustomLocation : nextInstanceLocation;
@@ -1186,7 +1217,7 @@ namespace CNA::Internal::Backends::Magnum
                 // term must not advance it -- only its own binding offset does.
                 for (const MagnumVertexAttribute& attribute : attributes)
                 {
-                    bindAttribute(*streamBuffer, attribute, stream.strideInBytes,
+                    bindAttribute(*streamBuffer, attribute, streamStride,
                                   stream.vertexOffset, stream.instanceFrequency);
                 }
             }
