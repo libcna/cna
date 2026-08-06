@@ -310,10 +310,12 @@ namespace CNA::Internal::Backends::Magnum
      * rejected draw leaves the device untouched. An unlisted stride is left to the stock program
      * selection's own refusal.
      *
-     * Multi-stream draws are checked over the union of the per-vertex streams' declared elements:
-     * their offsets live in the combined record (each stream's `combinedByteBase` places it
-     * there), which is the same space the stock template describes. Per-instance streams carry
-     * instance records, not part of the combined per-vertex layout, and are skipped.
+     * Multi-stream draws are checked over the union of the per-vertex streams' declared elements,
+     * lifted into the combined record the stock template describes: a stream's declaration is
+     * stream-local (its `AlignedByteOffset`s start at 0, exactly as FNA3D consumes them), so each
+     * element is compared at `combinedByteBase + offset` -- the same mapping
+     * `MapCombinedOffsetToStream()` inverts when the stock layout is re-slotted. Per-instance
+     * streams carry instance records, not part of the combined per-vertex layout, and are skipped.
      *
      * Header-only by necessity: `cna_backend_graphics_magnum` links only
      * `cna_backend_graphics_common` and SharpRuntime, never the CNA library.
@@ -342,9 +344,14 @@ namespace CNA::Internal::Backends::Magnum
                     dynamic_cast<const MagnumVertexBufferBackend*>(stream.buffer);
                 if (streamBuffer == nullptr)
                     continue;
-                const std::vector<VertexElement>& elements =
-                    streamBuffer->GetDeclarationElements();
-                declared.insert(declared.end(), elements.begin(), elements.end());
+                for (const VertexElement& element : streamBuffer->GetDeclarationElements())
+                {
+                    declared.emplace_back(
+                        element.getOffsetProperty() + stream.combinedByteBase,
+                        element.getVertexElementFormatProperty(),
+                        element.getVertexElementUsageProperty(),
+                        element.getUsageIndexProperty());
+                }
             }
         }
         else
