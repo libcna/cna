@@ -42,6 +42,7 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <memory>
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -50,6 +51,11 @@ static constexpr int kSize = 64;
 
 class BlendFactorPipelineCacheTest : public Game
 {
+    // Owned, not leaked: every other harness in examples/ -- including this backend's own
+    // sokol_2d_test/sokol_wireframe_test -- holds its GraphicsDeviceManager in a unique_ptr
+    // member. This file was the only one that raw-`new`ed it, which ASan reported as a real
+    // 488-byte leak plus the 40-byte EventHandler vector reachable only from it.
+    std::unique_ptr<GraphicsDeviceManager> gdm_;
     int pass_ = 0;
     int fail_ = 0;
 
@@ -145,9 +151,9 @@ protected:
 public:
     BlendFactorPipelineCacheTest()
     {
-        auto gdm = new GraphicsDeviceManager(this);
-        gdm->setPreferredBackBufferWidthProperty(kSize);
-        gdm->setPreferredBackBufferHeightProperty(kSize);
+        gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        gdm_->setPreferredBackBufferWidthProperty(kSize);
+        gdm_->setPreferredBackBufferHeightProperty(kSize);
     }
 
     int getResult() const { return fail_ == 0 ? 0 : 1; }
