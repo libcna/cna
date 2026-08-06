@@ -158,8 +158,10 @@ namespace CNA::Internal::Backends::Magnum
         // current: Magnum's GL object destructors consult GL::Context::current() and abort outright
         // when there is none. Member destruction order alone is not enough -- it runs after this
         // body, which is where the context itself is torn down -- so each owned resource is
-        // released here first, in front of the context.
+        // released here first, in front of the context. Every GL-owning member has to appear below;
+        // one that does not is not a leak but an abort, and only on the paths that create it.
         defaultWhiteTexture_.reset();
+        defaultFlatNormalTexture_.reset();
         mrtFramebuffer_.reset();
         stockShaders_.reset();
         magnumContext_.reset();
