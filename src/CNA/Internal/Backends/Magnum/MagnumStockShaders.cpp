@@ -60,6 +60,63 @@ vec2 cnaSampleUV(vec2 uv, float flip){ return vec2(uv.x, mix(uv.y, 1.0 - uv.y, f
         constexpr const char* kFogFragmentTerm =
             "    fragColor.rgb = mix(uFogColor, fragColor.rgb, vFogFactor);\n";
 
+        /**
+         * The three directional lights, declared by whichever stage evaluates them. XNA picks
+         * between a per-vertex-lit and a per-pixel-lit shader from `PreferPerPixelLighting`, so the
+         * two families here differ only in which stage these uniforms and the function below live
+         * in -- the arithmetic is byte-identical, and any difference in the result is exactly the
+         * interpolation difference the flag selects.
+         *
+         * @param withAmbient False for `SkinnedEffect`, which folds its ambient term into
+         *                    `EmissiveColor` before the draw and so carries no separate one here.
+         */
+        std::string LightingUniformDeclarations(bool withAmbient)
+        {
+            std::string source;
+            if (withAmbient)
+                source += "uniform vec3 uAmbientColor;\n";
+            source += "uniform vec3 uLight0Dir;\n";
+            source += "uniform vec3 uLight0Diffuse;\n";
+            source += "uniform vec3 uLight0Specular;\n";
+            source += "uniform vec3 uLight1Dir;\n";
+            source += "uniform vec3 uLight1Diffuse;\n";
+            source += "uniform vec3 uLight1Specular;\n";
+            source += "uniform vec3 uLight2Dir;\n";
+            source += "uniform vec3 uLight2Diffuse;\n";
+            source += "uniform vec3 uLight2Specular;\n";
+            source += "uniform vec3 uSpecularColor;\n";
+            source += "uniform float uSpecularPower;\n";
+            source += "uniform vec3 uEyePosition;\n";
+            return source;
+        }
+
+        /** @see LightingUniformDeclarations for why one function serves both families. */
+        std::string LightingFunctionSource(bool withAmbient)
+        {
+            std::string source = R"(
+void cnaLighting(vec3 rawNormal, vec3 worldPosition, out vec3 lightSum, out vec3 specular){
+    vec3 normal = normalize(rawNormal);
+    vec3 eye = normalize(uEyePosition - worldPosition);
+    float dot0 = dot(normal, -uLight0Dir);
+    float dot1 = dot(normal, -uLight1Dir);
+    float dot2 = dot(normal, -uLight2Dir);
+    lightSum = )";
+            source += withAmbient ? "uAmbientColor\n        + " : "";
+            source += R"(uLight0Diffuse * max(dot0, 0.0)
+        + uLight1Diffuse * max(dot1, 0.0)
+        + uLight2Diffuse * max(dot2, 0.0);
+    vec3 half0 = normalize(eye - uLight0Dir);
+    vec3 half1 = normalize(eye - uLight1Dir);
+    vec3 half2 = normalize(eye - uLight2Dir);
+    specular = (pow(max(dot(half0, normal), 0.0) * step(0.0, dot0), uSpecularPower) * uLight0Specular
+              + pow(max(dot(half1, normal), 0.0) * step(0.0, dot1), uSpecularPower) * uLight1Specular
+              + pow(max(dot(half2, normal), 0.0) * step(0.0, dot2), uSpecularPower) * uLight2Specular)
+              * uSpecularColor;
+}
+)";
+            return source;
+        }
+
         bool ProgramHasColor(MagnumStockProgram program)
         {
             return program == MagnumStockProgram::PositionColor
@@ -72,11 +129,24 @@ vec2 cnaSampleUV(vec2 uv, float flip){ return vec2(uv.x, mix(uv.y, 1.0 - uv.y, f
             return program != MagnumStockProgram::PositionColor;
         }
 
+        bool ProgramIsVertexLit(MagnumStockProgram program)
+        {
+            return program == MagnumStockProgram::PositionNormalTextureVertexLit
+                || program == MagnumStockProgram::SkinnedVertexLit;
+        }
+
+        bool ProgramIsSkinned(MagnumStockProgram program)
+        {
+            return program == MagnumStockProgram::Skinned
+                || program == MagnumStockProgram::SkinnedVertexLit;
+        }
+
         bool ProgramHasNormal(MagnumStockProgram program)
         {
             return program == MagnumStockProgram::PositionNormalTexture
+                || program == MagnumStockProgram::PositionNormalTextureVertexLit
                 || program == MagnumStockProgram::EnvironmentMap
-                || program == MagnumStockProgram::Skinned;
+                || ProgramIsSkinned(program);
         }
 
         bool ProgramIsDualTexture(MagnumStockProgram program)
@@ -116,6 +186,13 @@ vec2 cnaSampleUV(vec2 uv, float flip){ return vec2(uv.x, mix(uv.y, 1.0 - uv.y, f
             source += "out vec3 vNormal;\n";
             source += "out vec3 vWorldPosition;\n";
             source += "out float vFogFactor;\n";
+            if (ProgramIsVertexLit(program))
+            {
+                source += LightingUniformDeclarations(true);
+                source += "out vec3 vLightSum;\n";
+                source += "out vec3 vSpecular;\n";
+                source += LightingFunctionSource(true);
+            }
             source += "void main(){\n";
             source += "    vec4 cnaPosition = cnaInstancePosition(vec4(aPosition, 1.0));\n";
             source += "    gl_Position = uWVP * cnaPosition;\n";
@@ -127,6 +204,8 @@ vec2 cnaSampleUV(vec2 uv, float flip){ return vec2(uv.x, mix(uv.y, 1.0 - uv.y, f
                 ? "    vNormal = uNormalMatrix * cnaInstanceDirection(aNormal);\n"
                 : "    vNormal = vec3(0.0, 0.0, 1.0);\n";
             source += "    vWorldPosition = (uWorld * cnaPosition).xyz;\n";
+            if (ProgramIsVertexLit(program))
+                source += "    cnaLighting(vNormal, vWorldPosition, vLightSum, vSpecular);\n";
             source += kFogVertexTerm;
             source += "}\n";
             return source;
@@ -142,20 +221,17 @@ vec2 cnaSampleUV(vec2 uv, float flip){ return vec2(uv.x, mix(uv.y, 1.0 - uv.y, f
             source += "in float vFogFactor;\n";
             source += "uniform sampler2D uTexture;\n";
             source += "uniform vec4 uDiffuseColor;\n";
-            source += "uniform vec3 uAmbientColor;\n";
             source += "uniform vec3 uEmissiveColor;\n";
-            source += "uniform vec3 uLight0Dir;\n";
-            source += "uniform vec3 uLight0Diffuse;\n";
-            source += "uniform vec3 uLight0Specular;\n";
-            source += "uniform vec3 uLight1Dir;\n";
-            source += "uniform vec3 uLight1Diffuse;\n";
-            source += "uniform vec3 uLight1Specular;\n";
-            source += "uniform vec3 uLight2Dir;\n";
-            source += "uniform vec3 uLight2Diffuse;\n";
-            source += "uniform vec3 uLight2Specular;\n";
-            source += "uniform vec3 uSpecularColor;\n";
-            source += "uniform float uSpecularPower;\n";
-            source += "uniform vec3 uEyePosition;\n";
+            if (ProgramIsVertexLit(program))
+            {
+                source += "in vec3 vLightSum;\n";
+                source += "in vec3 vSpecular;\n";
+            }
+            else
+            {
+                source += LightingUniformDeclarations(true);
+                source += LightingFunctionSource(true);
+            }
             source += "uniform vec4 uAlphaTest;\n";
             source += "uniform vec3 uFogColor;\n";
             source += "uniform float uVertexColorEnabled;\n";
@@ -177,36 +253,26 @@ vec2 cnaSampleUV(vec2 uv, float flip){ return vec2(uv.x, mix(uv.y, 1.0 - uv.y, f
             // both lit and unlit by ordinary XNA content (BasicEffect.LightingEnabled is a per-draw
             // property), and a gate keeps one compiled program serving both instead of doubling the
             // stock program count for a branch every driver folds away on a uniform.
-            source += R"(
-    if (uLightingEnabled > 0.5) {
-        vec3 normal = normalize(vNormal);
-        vec3 eye = normalize(uEyePosition - vWorldPosition);
-        float dot0 = dot(normal, -uLight0Dir);
-        float dot1 = dot(normal, -uLight1Dir);
-        float dot2 = dot(normal, -uLight2Dir);
-        vec3 lightSum = uAmbientColor
-            + uLight0Diffuse * max(dot0, 0.0)
-            + uLight1Diffuse * max(dot1, 0.0)
-            + uLight2Diffuse * max(dot2, 0.0);
-        vec3 half0 = normalize(eye - uLight0Dir);
-        vec3 half1 = normalize(eye - uLight1Dir);
-        vec3 half2 = normalize(eye - uLight2Dir);
-        vec3 specular = (pow(max(dot(half0, normal), 0.0) * step(0.0, dot0), uSpecularPower) * uLight0Specular
-                       + pow(max(dot(half1, normal), 0.0) * step(0.0, dot1), uSpecularPower) * uLight1Specular
-                       + pow(max(dot(half2, normal), 0.0) * step(0.0, dot2), uSpecularPower) * uLight2Specular)
-                       * uSpecularColor;
-        fragColor.rgb = fragColor.rgb * lightSum + uEmissiveColor;
-        fragColor.rgb += specular * fragColor.a;
-    }
-)";
+            source += "    if (uLightingEnabled > 0.5) {\n";
+            source += "        vec3 lightSum;\n";
+            source += "        vec3 specular;\n";
+            // The only difference between the two families: one interpolates the light result the
+            // vertex stage already computed, the other evaluates the same function here.
+            source += ProgramIsVertexLit(program)
+                ? "        lightSum = vLightSum; specular = vSpecular;\n"
+                : "        cnaLighting(vNormal, vWorldPosition, lightSum, specular);\n";
+            source += "        fragColor.rgb = fragColor.rgb * lightSum + uEmissiveColor;\n";
+            source += "        fragColor.rgb += specular * fragColor.a;\n";
+            source += "    }\n";
             source += kAlphaTestFragmentTerm;
             source += kFogFragmentTerm;
             source += "}\n";
             return source;
         }
 
-        std::string SkinnedVertexShaderSource()
+        std::string SkinnedVertexShaderSource(MagnumStockProgram program)
         {
+            const bool vertexLit = ProgramIsVertexLit(program);
             std::string source = "#version 330 core\n";
             source += "layout(location=0) in vec3 aPosition;\n";
             source += "layout(location=1) in vec3 aNormal;\n";
@@ -229,6 +295,13 @@ vec2 cnaSampleUV(vec2 uv, float flip){ return vec2(uv.x, mix(uv.y, 1.0 - uv.y, f
             source += "out vec3 vNormal;\n";
             source += "out vec3 vWorldPosition;\n";
             source += "out float vFogFactor;\n";
+            if (vertexLit)
+            {
+                source += LightingUniformDeclarations(false);
+                source += "out vec3 vLightSum;\n";
+                source += "out vec3 vSpecular;\n";
+                source += LightingFunctionSource(false);
+            }
             source += "void main(){\n";
             // Only the first uWeightsPerVertex pairs are summed, matching XNA's own Skin(vin, n):
             // a mesh authored for one or two bones per vertex leaves the remaining weights
@@ -251,6 +324,8 @@ vec2 cnaSampleUV(vec2 uv, float flip){ return vec2(uv.x, mix(uv.y, 1.0 - uv.y, f
             source += "    vTexCoord = aTexCoord;\n";
             source += "    vWorldPosition = (uWorld * cnaPosition).xyz;\n";
             source += "    vColor = aColor;\n";
+            if (vertexLit)
+                source += "    cnaLighting(vNormal, vWorldPosition, vLightSum, vSpecular);\n";
             source += kFogVertexTerm;
             source += "}\n";
             return source;
@@ -420,8 +495,9 @@ vec3 cnaPbrLight(vec3 normal, vec3 view, vec3 light, vec3 lightColor,
             return source;
         }
 
-        std::string SkinnedFragmentShaderSource()
+        std::string SkinnedFragmentShaderSource(MagnumStockProgram program)
         {
+            const bool vertexLit = ProgramIsVertexLit(program);
             std::string source = "#version 330 core\n";
             source += "in vec4 vColor;\n";
             source += "in vec2 vTexCoord;\n";
@@ -431,42 +507,30 @@ vec3 cnaPbrLight(vec3 normal, vec3 view, vec3 light, vec3 lightColor,
             source += "uniform sampler2D uTexture;\n";
             source += "uniform vec4 uDiffuseColor;\n";
             source += "uniform vec3 uEmissiveColor;\n";
-            source += "uniform vec3 uLight0Dir;\n";
-            source += "uniform vec3 uLight0Diffuse;\n";
-            source += "uniform vec3 uLight0Specular;\n";
-            source += "uniform vec3 uLight1Dir;\n";
-            source += "uniform vec3 uLight1Diffuse;\n";
-            source += "uniform vec3 uLight1Specular;\n";
-            source += "uniform vec3 uLight2Dir;\n";
-            source += "uniform vec3 uLight2Diffuse;\n";
-            source += "uniform vec3 uLight2Specular;\n";
-            source += "uniform vec3 uSpecularColor;\n";
-            source += "uniform float uSpecularPower;\n";
-            source += "uniform vec3 uEyePosition;\n";
+            if (vertexLit)
+            {
+                source += "in vec3 vLightSum;\n";
+                source += "in vec3 vSpecular;\n";
+            }
+            else
+            {
+                // SkinnedEffect folds its ambient term into EmissiveColor before the draw, so
+                // unlike BasicEffect's stage this light sum carries no separate ambient of its own.
+                source += LightingUniformDeclarations(false);
+                source += LightingFunctionSource(false);
+            }
             source += "uniform vec4 uAlphaTest;\n";
             source += "uniform vec3 uFogColor;\n";
             source += "uniform float uVertexColorEnabled;\n";
             source += kRenderTargetSampleDeclaration;
             source += "out vec4 fragColor;\n";
             source += "void main(){\n";
-            source += "    vec3 normal = normalize(vNormal);\n";
-            source += "    vec3 eye = normalize(uEyePosition - vWorldPosition);\n";
-            source += "    float dot0 = dot(normal, -uLight0Dir);\n";
-            source += "    float dot1 = dot(normal, -uLight1Dir);\n";
-            source += "    float dot2 = dot(normal, -uLight2Dir);\n";
-            // SkinnedEffect folds its ambient term into EmissiveColor before the draw, so unlike
-            // BasicEffect's stage this light sum carries no separate ambient of its own.
-            source += "    vec3 lightSum = uLight0Diffuse * max(dot0, 0.0)\n";
-            source += "                  + uLight1Diffuse * max(dot1, 0.0)\n";
-            source += "                  + uLight2Diffuse * max(dot2, 0.0);\n";
+            source += "    vec3 lightSum;\n";
+            source += "    vec3 specular;\n";
+            source += vertexLit
+                ? "    lightSum = vLightSum; specular = vSpecular;\n"
+                : "    cnaLighting(vNormal, vWorldPosition, lightSum, specular);\n";
             source += "    vec3 litColor = lightSum * uDiffuseColor.rgb + uEmissiveColor;\n";
-            source += "    vec3 half0 = normalize(eye - uLight0Dir);\n";
-            source += "    vec3 half1 = normalize(eye - uLight1Dir);\n";
-            source += "    vec3 half2 = normalize(eye - uLight2Dir);\n";
-            source += "    vec3 specular = (pow(max(dot(half0, normal), 0.0) * step(0.0, dot0), uSpecularPower) * uLight0Specular\n";
-            source += "                   + pow(max(dot(half1, normal), 0.0) * step(0.0, dot1), uSpecularPower) * uLight1Specular\n";
-            source += "                   + pow(max(dot(half2, normal), 0.0) * step(0.0, dot2), uSpecularPower) * uLight2Specular)\n";
-            source += "                   * uSpecularColor;\n";
             source += "    vec4 diffuse = texture(uTexture, cnaSampleUV(vTexCoord, uRtFlipV.x));\n";
             source += "    vec4 tint = (uVertexColorEnabled > 0.5) ? vColor : vec4(1.0);\n";
             // The vertex colour multiplies AFTER the specular highlight is added, so a tinted skin
@@ -624,7 +688,8 @@ vec3 cnaPbrLight(vec3 normal, vec3 view, vec3 light, vec3 lightColor,
         {
             if (selector.strideInBytes != 52 && selector.strideInBytes != 56)
                 return false;
-            programOut = MagnumStockProgram::Skinned;
+            programOut = selector.vertexLighting ? MagnumStockProgram::SkinnedVertexLit
+                                                 : MagnumStockProgram::Skinned;
             return true;
         }
 
@@ -661,7 +726,13 @@ vec3 cnaPbrLight(vec3 normal, vec3 view, vec3 light, vec3 lightColor,
             case 16: programOut = MagnumStockProgram::PositionColor;         return true;
             case 20: programOut = MagnumStockProgram::PositionTexture;       return true;
             case 24: programOut = MagnumStockProgram::PositionColorTexture;  return true;
-            case 32: programOut = MagnumStockProgram::PositionNormalTexture; return true;
+            // Stride 32 is the only built-in layout carrying a normal, so it is the only one
+            // where PreferPerPixelLighting names two different programs rather than one.
+            case 32:
+                programOut = selector.vertexLighting
+                    ? MagnumStockProgram::PositionNormalTextureVertexLit
+                    : MagnumStockProgram::PositionNormalTexture;
+                return true;
             default: return false;
         }
     }
@@ -673,8 +744,8 @@ vec3 cnaPbrLight(vec3 normal, vec3 view, vec3 light, vec3 lightColor,
         // transforms the position and normal before anything else runs.
         if (program == MagnumStockProgram::EnvironmentMap)
             return EnvironmentMapVertexShaderSource();
-        if (program == MagnumStockProgram::Skinned)
-            return SkinnedVertexShaderSource();
+        if (ProgramIsSkinned(program))
+            return SkinnedVertexShaderSource(program);
         if (ProgramIsPbr(program))
             return PbrVertexShaderSource(program);
         return BaseVertexShaderSource(program);
@@ -684,8 +755,8 @@ vec3 cnaPbrLight(vec3 normal, vec3 view, vec3 light, vec3 lightColor,
     {
         if (program == MagnumStockProgram::EnvironmentMap)
             return EnvironmentMapFragmentShaderSource();
-        if (program == MagnumStockProgram::Skinned)
-            return SkinnedFragmentShaderSource();
+        if (ProgramIsSkinned(program))
+            return SkinnedFragmentShaderSource(program);
         if (ProgramIsPbr(program))
             return PbrFragmentShaderSource();
         if (ProgramIsDualTexture(program))

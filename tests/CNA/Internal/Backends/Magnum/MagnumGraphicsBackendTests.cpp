@@ -398,7 +398,9 @@ namespace
         MagnumStockProgram::DualTexture,
         MagnumStockProgram::DualTextureColored,
         MagnumStockProgram::EnvironmentMap,
+        MagnumStockProgram::PositionNormalTextureVertexLit,
         MagnumStockProgram::Skinned,
+        MagnumStockProgram::SkinnedVertexLit,
         MagnumStockProgram::Pbr,
         MagnumStockProgram::PbrSkinned,
     };
@@ -834,6 +836,112 @@ TEST(MagnumShaderVersionTest, OnlyALeadingVersionLineIsStripped)
     EXPECT_EQ(StripVersionDirective("void main() {}\n"), "void main() {}\n");
     EXPECT_EQ(StripVersionDirective("#version 400 core"), "");
     EXPECT_EQ(StripVersionDirective(""), "");
+}
+
+namespace
+{
+    MagnumStockProgram SelectVertexLitOrDie(std::size_t stride, bool skinned)
+    {
+        MagnumStockSelector selector;
+        selector.strideInBytes = stride;
+        selector.skinned = skinned;
+        selector.vertexLighting = true;
+        MagnumStockProgram program{};
+        EXPECT_TRUE(SelectStockProgram(selector, program));
+        return program;
+    }
+}
+
+TEST(MagnumStockShaderTest, VertexLightingSelectsItsOwnProgramOnEveryNormalCarryingStride)
+{
+    // XNA's own BasicEffect/SkinnedEffect default is per-vertex lighting, so this is the family a
+    // draw that says nothing about lighting frequency lands in.
+    EXPECT_EQ(SelectVertexLitOrDie(32, false),
+              MagnumStockProgram::PositionNormalTextureVertexLit);
+    EXPECT_EQ(SelectVertexLitOrDie(52, true), MagnumStockProgram::SkinnedVertexLit);
+    EXPECT_EQ(SelectVertexLitOrDie(56, true), MagnumStockProgram::SkinnedVertexLit);
+}
+
+TEST(MagnumStockShaderTest, VertexLightingLeavesTheNormalFreeStridesAlone)
+{
+    // Lighting needs a normal, and only stride 32 and the skinned layouts carry one. A draw that
+    // asks for per-vertex lighting over a layout that cannot be lit must not be diverted to some
+    // other program by the flag.
+    for (const std::size_t stride : {std::size_t{16}, std::size_t{20}, std::size_t{24}})
+    {
+        MagnumStockSelector selector;
+        selector.strideInBytes = stride;
+        selector.vertexLighting = true;
+        MagnumStockProgram program{};
+        ASSERT_TRUE(SelectStockProgram(selector, program)) << "stride " << stride;
+        EXPECT_EQ(program, SelectOrDie(stride)) << "stride " << stride;
+    }
+}
+
+TEST(MagnumStockShaderTest, TheVertexLitFamilyEvaluatesLightingInItsVertexStage)
+{
+    for (const MagnumStockProgram program : {MagnumStockProgram::PositionNormalTextureVertexLit,
+                                             MagnumStockProgram::SkinnedVertexLit})
+    {
+        const std::string vertex = StockVertexShaderSource(program);
+        const std::string fragment = StockFragmentShaderSource(program);
+
+        EXPECT_NE(vertex.find("cnaLighting(vNormal, vWorldPosition, vLightSum, vSpecular)"),
+                  std::string::npos);
+        EXPECT_NE(vertex.find("out vec3 vLightSum;"), std::string::npos);
+        EXPECT_NE(vertex.find("uniform vec3 uLight0Dir;"), std::string::npos);
+
+        // The fragment stage reads the result rather than recomputing it, and therefore has no
+        // light uniforms of its own to recompute it from.
+        EXPECT_NE(fragment.find("in vec3 vLightSum;"), std::string::npos);
+        EXPECT_EQ(fragment.find("void cnaLighting"), std::string::npos);
+        EXPECT_EQ(fragment.find("uniform vec3 uLight0Dir;"), std::string::npos);
+    }
+}
+
+TEST(MagnumStockShaderTest, ThePerPixelFamilyKeepsLightingInItsFragmentStage)
+{
+    for (const MagnumStockProgram program : {MagnumStockProgram::PositionNormalTexture,
+                                             MagnumStockProgram::Skinned})
+    {
+        const std::string vertex = StockVertexShaderSource(program);
+        const std::string fragment = StockFragmentShaderSource(program);
+
+        EXPECT_NE(fragment.find("cnaLighting(vNormal, vWorldPosition, lightSum, specular)"),
+                  std::string::npos);
+        EXPECT_NE(fragment.find("uniform vec3 uLight0Dir;"), std::string::npos);
+        EXPECT_EQ(vertex.find("void cnaLighting"), std::string::npos);
+        EXPECT_EQ(vertex.find("out vec3 vLightSum;"), std::string::npos);
+    }
+}
+
+TEST(MagnumStockShaderTest, BothLightingFamiliesShareOneFormula)
+{
+    // The two families must differ ONLY in which stage evaluates the lighting -- if the arithmetic
+    // itself drifted, PreferPerPixelLighting would be changing the picture for a second reason.
+    const std::string perPixel =
+        StockFragmentShaderSource(MagnumStockProgram::PositionNormalTexture);
+    const std::string perVertex =
+        StockVertexShaderSource(MagnumStockProgram::PositionNormalTextureVertexLit);
+    const std::size_t body = perPixel.find("void cnaLighting");
+    ASSERT_NE(body, std::string::npos);
+    const std::size_t end = perPixel.find("\n}\n", body);
+    ASSERT_NE(end, std::string::npos);
+    EXPECT_NE(perVertex.find(perPixel.substr(body, end - body)), std::string::npos);
+}
+
+TEST(MagnumStockShaderTest, OnlyTheSkinnedFamilyDropsTheSeparateAmbientTerm)
+{
+    // SkinnedEffect folds ambient into EmissiveColor before the draw, so its light sum carries no
+    // ambient of its own -- in either family.
+    EXPECT_EQ(StockFragmentShaderSource(MagnumStockProgram::Skinned).find("uAmbientColor"),
+              std::string::npos);
+    EXPECT_EQ(StockVertexShaderSource(MagnumStockProgram::SkinnedVertexLit).find("uAmbientColor"),
+              std::string::npos);
+    EXPECT_NE(StockFragmentShaderSource(MagnumStockProgram::PositionNormalTexture)
+                  .find("uAmbientColor"), std::string::npos);
+    EXPECT_NE(StockVertexShaderSource(MagnumStockProgram::PositionNormalTextureVertexLit)
+                  .find("uAmbientColor"), std::string::npos);
 }
 
 #endif  // CNA_BACKEND_MAGNUM

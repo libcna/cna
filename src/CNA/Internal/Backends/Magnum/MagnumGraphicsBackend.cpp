@@ -913,6 +913,9 @@ namespace CNA::Internal::Backends::Magnum
         selector.envMapping = params.envMapping;
         selector.skinned = params.skinned;
         selector.pbr = params.pbr;
+        // XNA's own BasicEffect/SkinnedEffect default is per-vertex lighting; per-pixel is the
+        // opt-in. An unlit draw renders identically either way, so it is not asked to pick.
+        selector.vertexLighting = params.lightingEnabled && !params.preferPerPixelLighting;
 
         MagnumStockProgram stockProgram{};
         if (!SelectStockProgram(selector, stockProgram))

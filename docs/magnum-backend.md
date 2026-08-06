@@ -84,7 +84,10 @@ sudo apt-get install -y libegl1-mesa-dev                        # additionally, 
   Fresnel-weighted) with its specular tint added on top, `SkinnedEffect` adds a 72-bone palette
   program serving strides 52 and 56, and `PbrEffect`/`SkinnedPbrEffect` add a glTF
   metallic-roughness BRDF (GGX distribution, Smith-Schlick geometry, Schlick Fresnel) with normal,
-  metallic-roughness, emissive and occlusion maps over strides 48 and 68.
+  metallic-roughness, emissive and occlusion maps over strides 48 and 68. `BasicEffect` and
+  `SkinnedEffect` each generate both of the families `PreferPerPixelLighting` selects between,
+  sharing one lighting function so the flag changes only which stage evaluates it -- XNA's own
+  `false` default lands in the per-vertex one.
 - **Draws** — non-indexed, indexed and instanced, with per-stream binding offsets and instance
   frequencies honoured individually. Multi-stream vertex input is supported: a declaration split
   across several buffers is re-slotted per element, and a per-instance world matrix may itself be
@@ -106,9 +109,6 @@ sudo apt-get install -y libegl1-mesa-dev                        # additionally, 
   Magnum's `GL::Renderer` wraps no sample-mask state (`GL_SAMPLE_MASK`/`glSampleMaski` have no
   binding), so honouring a non-default coverage mask would mean going around the wrapper layer this
   backend exists to use.
-- **`PreferPerPixelLighting`** — always rendered per-pixel. Like every backend except D3D9, this
-  one has no per-vertex-lit shader family, so XNA's own `false` default is a tracked divergence
-  rather than an implemented mode.
 - **Context loss** — `SetContextRecoveryEnabled`/`DebugSimulateContextLoss` keep
   `IGraphicsBackend`'s defaults; desktop GL contexts are not lost the way an ES/WebGL one can be.
 
@@ -138,6 +138,10 @@ sudo apt-get install -y libegl1-mesa-dev                        # additionally, 
 - `examples/magnum_meshcache_test.cpp` (`ctest -R Magnum_MeshCache`) — four draws over one binding,
   each selecting a different range by index offset or base vertex, so a cached vertex array that
   kept either term is caught.
+- `examples/magnum_pervertexlighting_test.cpp` (`ctest -R Magnum_PerVertexLighting`) — a specular
+  highlight aimed at a quad's centre, which is the only place the two lighting families disagree:
+  per pixel the centre is lit, per vertex it interpolates four already-dark corners. The corners
+  themselves must still agree, which is what keeps the shared formula honest.
 - `examples/magnum_mrt_msaa_test.cpp` (`ctest -R Magnum_MrtMsaa`) — a `#version 400 core`
   `ShaderEffect` writing `gl_SampleMask[0] = 1` into two slots at once. One sample per pixel is the
   only thing that separates a genuinely multisampled attachment from a resolved image, and the same

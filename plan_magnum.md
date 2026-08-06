@@ -16,11 +16,10 @@
 > including the shared multi-stream and instanced-draw pixel oracles.
 >
 > **Remaining work (check this section first; update it whenever a row's status changes):**
-> - **Stock effect variants** — all five are now generated and pixel-verified:
+> - **Stock effect variants** — all of them are now generated and pixel-verified:
 >   `DualTextureEffect` (`MAGNUM-50`), `EnvironmentMapEffect` (`MAGNUM-51`), `SkinnedEffect`
->   (`MAGNUM-52`) and `PbrEffect`/`SkinnedPbrEffect` (`MAGNUM-53`). The one remaining stock-effect
->   gap is `PreferPerPixelLighting=false`: like every backend except D3D9, this one always renders
->   per-pixel and has no per-vertex-lit shader family (`MAGNUM-60`).
+>   (`MAGNUM-52`), `PbrEffect`/`SkinnedPbrEffect` (`MAGNUM-53`) and both lighting families that
+>   `PreferPerPixelLighting` selects between (`MAGNUM-60`).
 > - **`SurfaceFormat` beyond `Color` (`MAGNUM-54`)** — every texture, cube, volume and render target
 >   allocates RGBA8. The requested format reaches the backend and is recorded but not honoured.
 > - **`BlendState.MultiSampleMask` (`MAGNUM-55`)** — only the all-ones default is applied. Magnum's
@@ -73,6 +72,9 @@
    than as separate compiled variants. Ordinary XNA content draws the same layout both lit and unlit
    (`BasicEffect.LightingEnabled` is a per-draw property), so a gate keeps one program serving both
    instead of doubling the program count for a branch every driver folds away on a uniform.
+   Lighting *frequency* is the exception and is a real variant: `PreferPerPixelLighting` decides
+   which STAGE evaluates the lighting, which no uniform branch can express. The two families share
+   one generated `cnaLighting()` function so the flag changes nothing but where it runs.
 
 8. **`#version` is stripped before handing source to Magnum.** `GL::Shader` emits its own `#version`
    from the version passed to its constructor and then prefixes each added source with `#line`, so a
@@ -145,7 +147,7 @@
 | MAGNUM-57 | Cache `GL::Mesh` per binding configuration instead of building one per draw, pixel-verified | ✅ |
 | MAGNUM-58 | Context-loss simulation/recovery channel | ⬜ |
 | MAGNUM-59 | Cross-backend pixel-parity run (EasyGL/Vulkan/Magnum, same scene) | ⬜ |
-| MAGNUM-60 | `PreferPerPixelLighting=false` per-vertex-lit shader family | ⬜ |
+| MAGNUM-60 | `PreferPerPixelLighting=false` per-vertex-lit shader family, pixel-verified | ✅ |
 | MAGNUM-61 | Compile each shader stage at the GLSL version its own source declares | ✅ |
 
 ## Shared-test gates this backend changed

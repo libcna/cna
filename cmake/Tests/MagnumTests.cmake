@@ -76,4 +76,12 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_BACKEND STREQUAL "MAGNUM"
         COMMAND cna_test_magnum_mrt_msaa
         TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
         LABELS "GraphicsSmoke;Magnum")
+
+    # plan_magnum.md MAGNUM-60: PreferPerPixelLighting picks between two shader families, which
+    # only a specular highlight -- non-linear in a term that varies across the surface -- separates.
+    cna_magnum_test(cna_test_magnum_pervertexlighting examples/magnum_pervertexlighting_test.cpp)
+    cna_register_backend_test(NAME Magnum_PerVertexLighting
+        COMMAND cna_test_magnum_pervertexlighting
+        TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
+        LABELS "GraphicsSmoke;Magnum")
 endif()

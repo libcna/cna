@@ -26,8 +26,10 @@ namespace CNA::Internal::Backends::Magnum
         PositionTexture,
         /** @brief `VertexPositionColorTexture` (stride 24). */
         PositionColorTexture,
-        /** @brief `VertexPositionNormalTexture` (stride 32), lit or unlit. */
+        /** @brief `VertexPositionNormalTexture` (stride 32), unlit or lit per pixel. */
         PositionNormalTexture,
+        /** @brief `VertexPositionNormalTexture` (stride 32) lit per vertex, XNA's own default. */
+        PositionNormalTextureVertexLit,
         /** @brief `DualTextureEffect` over `VertexPositionTexture` (stride 20). */
         DualTexture,
         /** @brief `DualTextureEffect` over `VertexPositionColorTexture` (stride 24). */
@@ -36,6 +38,8 @@ namespace CNA::Internal::Backends::Magnum
         EnvironmentMap,
         /** @brief `SkinnedEffect` over `VertexPositionNormalTextureSkinned` (stride 52 or 56). */
         Skinned,
+        /** @brief `SkinnedEffect` over the same layout, lit per vertex -- XNA's own default. */
+        SkinnedVertexLit,
         /** @brief `PbrEffect` over `VertexPositionNormalTangentTexture` (stride 48). */
         Pbr,
         /** @brief `SkinnedPbrEffect` over the same layout plus a skinning suffix (stride 68). */
@@ -55,6 +59,14 @@ namespace CNA::Internal::Backends::Magnum
         bool skinned = false;
         /** @brief `GpuDrawParams::pbr` -- select the metallic-roughness `PbrEffect` program. */
         bool pbr = false;
+        /**
+         * @brief The draw is lit and asked for XNA's default per-vertex lighting.
+         *
+         * True only when `lightingEnabled` is set and `preferPerPixelLighting` is not: an unlit
+         * draw gets the same picture from either family, so it keeps the per-pixel program rather
+         * than paying for a second compile that would render identically.
+         */
+        bool vertexLighting = false;
     };
 
     /** @brief Bone palette size the skinned program declares, matching XNA's own limit. */
