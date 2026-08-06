@@ -187,13 +187,20 @@ namespace CNA::Internal::Backends::Magnum
                                             sampler_.addressV, sampler_.maxAnisotropy);
         graphicsBackend_->BindTextureToSlot(0, currentTexture_);
 
+        // Corrade's typed-pointer ArrayView<const void> constructor takes an ELEMENT count and
+        // scales it by sizeof(T) itself ("size is recalculated to size in bytes"). Passing a byte
+        // count here double-scaled the view -- sizeof(Vertex)-fold for the vertices, twofold for
+        // the indices -- so every flush uploaded from far past the vectors' storage. GL kept the
+        // oversized store and the draw read only the real prefix, which is why it still rendered
+        // correctly everywhere until the overread crossed an unmapped page (deterministically on
+        // radeonsi under the Guide keyboard render; AddressSanitizer flags it on every flush).
         vertexBuffer_->setData(
             Corrade::Containers::ArrayView<const void>{
-                pendingVertices_.data(), pendingVertices_.size() * sizeof(Vertex)},
+                pendingVertices_.data(), pendingVertices_.size()},
             Mg::GL::BufferUsage::DynamicDraw);
         indexBuffer_->setData(
             Corrade::Containers::ArrayView<const void>{
-                pendingIndices_.data(), pendingIndices_.size() * sizeof(uint16_t)},
+                pendingIndices_.data(), pendingIndices_.size()},
             Mg::GL::BufferUsage::DynamicDraw);
 
         mesh_->setCount(static_cast<Mg::Int>(pendingIndices_.size()));
