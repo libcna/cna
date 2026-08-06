@@ -8,12 +8,25 @@
 > **Status legend:** ✅ implemented *and verified against its stated acceptance criteria*;
 > 🟨 code or documentation exists but has not met those criteria; ⬜ not implemented.
 >
-> **Verified baseline (2026-08-04, `MAGNUM-1`–`MAGNUM-41`):** a clean Linux x86_64 configuration
-> builds Corrade+Magnum and `libcna_backend_graphics_magnum.a`, and the backend renders end-to-end
-> against Mesa's `llvmpipe` software rasterizer under `Xvfb` — clear, SpriteBatch textured quad, a
-> 3D coloured primitive draw and a `RenderTarget2D` round trip all read back their expected pixels
-> (`examples/magnum_smoke_test.cpp`). The full `CnaTests` suite runs green against this backend,
-> including the shared multi-stream and instanced-draw pixel oracles.
+> **Verified baseline (2026-08-04):** a clean Linux x86_64 configuration builds Corrade+Magnum and
+> `libcna_backend_graphics_magnum.a` through both acquisition routes (`CNA_MAGNUM_ROOT` and
+> `FetchContent`), and the backend renders end-to-end against Mesa's `llvmpipe` software rasterizer
+> under `Xvfb` — no GPU required. All eight registered pixel tests pass (`ctest -L Magnum`), and
+> `CnaTests` reports 5791 passing. Its one failure,
+> `XnbContainerFuzzTest.MutatedRealModelFixtureNeverCrashesAndOnlyFailsCleanly`, reproduces
+> identically on a `HEADLESS` build and is not this backend's: it throws from the shared
+> `VertexBuffer.cpp` declaration/stride check.
+>
+> | Pixel test | ctest name | What it measures |
+> |------------|------------|------------------|
+> | `magnum_smoke_test.cpp` | `Magnum_Smoke` | clear + back-buffer readback, SpriteBatch quad, 3D draw, render-target round trip |
+> | `magnum_dualtextureeffect_test.cpp` | `Magnum_DualTextureEffect` | the overbright factor and the second layer's participation |
+> | `magnum_environmentmapeffect_test.cpp` | `Magnum_EnvironmentMapEffect` | the reflection is a lerp, not an addition; the specular tint |
+> | `magnum_skinnedeffect_test.cpp` | `Magnum_SkinnedEffect` | identity bone, translation bone, two-bone blend, by where the geometry lands |
+> | `magnum_pbreffect_test.cpp` | `Magnum_PbrEffect` | the metallic-roughness BRDF on a rig where every expected byte follows from the formula |
+> | `magnum_meshcache_test.cpp` | `Magnum_MeshCache` | a cached vertex array that kept a previous draw's base vertex or index offset |
+> | `magnum_mrt_msaa_test.cpp` | `Magnum_MrtMsaa` | a multisampled slot keeps its multisample storage inside a set |
+> | `magnum_pervertexlighting_test.cpp` | `Magnum_PerVertexLighting` | `PreferPerPixelLighting` selects a genuinely different shader family |
 >
 > **Remaining work (check this section first; update it whenever a row's status changes):**
 > - **Stock effect variants** — all of them are now generated and pixel-verified:
@@ -76,18 +89,25 @@
    which STAGE evaluates the lighting, which no uniform branch can express. The two families share
    one generated `cnaLighting()` function so the flag changes nothing but where it runs.
 
-8. **`#version` is stripped before handing source to Magnum.** `GL::Shader` emits its own `#version`
-   from the version passed to its constructor and then prefixes each added source with `#line`, so a
-   source declaring one itself fails to compile outright. Both routes reach this — CNA's stock
-   shaders declare their version for readability, and a `ShaderEffect`'s GLSL is ordinary
-   caller-authored code that normally starts with one — so the strip lives in one place,
-   `MagnumProgram::CompileAndLink`.
+8. **`#version` is stripped before handing source to Magnum, but its value is kept.** `GL::Shader`
+   emits its own `#version` from the version passed to its constructor and then prefixes each added
+   source with `#line`, so a source declaring one itself fails to compile outright. Both routes
+   reach this — CNA's stock shaders declare their version for readability, and a `ShaderEffect`'s
+   GLSL is ordinary caller-authored code that normally starts with one — so the strip lives in one
+   place, `MagnumProgram::CompileAndLink`. The declared version is recovered first and handed to
+   `GL::Shader` per stage: a fragment stage may legitimately need a later version than its vertex
+   stage, and compiling everything as 3.30 made an effect reaching for a later feature fail for a
+   reason nothing in its own source explains. An absent or unrecognized directive keeps 3.30.
 
 9. **Owned GL objects are released in front of the context.** Magnum's GL object destructors consult
    `GL::Context::current()` and abort outright when there is none. Member destruction order alone is
    not enough, because it runs after the destructor body that tears the context down, so every
-   resource the backend owns is explicitly released there first. Found empirically: the stock shader
-   cache outliving the context aborted the whole test binary rather than leaking a handle.
+   resource the backend owns is explicitly released there first. Found empirically twice: the stock
+   shader cache outliving the context aborted the whole test binary rather than leaking a handle,
+   and later the lazily created default PBR normal map did the same — only on the runs that had
+   actually drawn a `PbrEffect`, so it aborted after reporting every assertion passed. Every
+   GL-owning member has to be named in that release list; one that is not is an abort, not a leak,
+   and only on the paths that create it.
 
 10. **Back-buffer MSAA comes from the context.** `SDL_GL_MULTISAMPLESAMPLES` makes the default
     framebuffer itself multisampled, so there is no off-screen buffer for this backend to resolve by
@@ -104,6 +124,14 @@
     the key holds a monotonic buffer identity rather than an address, because a destroyed buffer's
     address can be reused by a later one and a key matching on the address alone would silently
     draw the wrong data.
+
+12. **A multi-target set attaches multisample storage, not resolved textures.** A target that has
+    multisample colour storage contributes that renderbuffer to the shared MRT framebuffer; only a
+    single-sampled one contributes its colour texture. Attaching the resolved texture uniformly was
+    simpler but meant MSAA silently stopped applying the moment a second target joined the set. The
+    resolve path is unaffected: the blit a target runs on unbind reads the same renderbuffer
+    regardless of which framebuffer rendered into it, and `GraphicsDevice` already rejects a set
+    whose applied sample counts differ, so the attachments cannot end up mismatched.
 
 ## Tasks
 
