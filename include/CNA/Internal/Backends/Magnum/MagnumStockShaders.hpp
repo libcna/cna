@@ -36,6 +36,10 @@ namespace CNA::Internal::Backends::Magnum
         EnvironmentMap,
         /** @brief `SkinnedEffect` over `VertexPositionNormalTextureSkinned` (stride 52 or 56). */
         Skinned,
+        /** @brief `PbrEffect` over `VertexPositionNormalTangentTexture` (stride 48). */
+        Pbr,
+        /** @brief `SkinnedPbrEffect` over the same layout plus a skinning suffix (stride 68). */
+        PbrSkinned,
     };
 
     /** @brief What a draw asks of the stock shader set: its vertex stride plus its effect flags. */
@@ -49,6 +53,8 @@ namespace CNA::Internal::Backends::Magnum
         bool envMapping = false;
         /** @brief `GpuDrawParams::skinned` -- select the bone-palette `SkinnedEffect` program. */
         bool skinned = false;
+        /** @brief `GpuDrawParams::pbr` -- select the metallic-roughness `PbrEffect` program. */
+        bool pbr = false;
     };
 
     /** @brief Bone palette size the skinned program declares, matching XNA's own limit. */

@@ -16,11 +16,11 @@
 > including the shared multi-stream and instanced-draw pixel oracles.
 >
 > **Remaining work (check this section first; update it whenever a row's status changes):**
-> - **Stock effect variants (`MAGNUM-53`)** — `PbrEffect`/`SkinnedPbrEffect` have no generated
->   shader variant here yet, and their vertex layouts (strides 48/68) are not in the stock attribute
->   table either, so such a draw is refused rather than rendered without its terms.
->   `DualTextureEffect` (`MAGNUM-50`), `EnvironmentMapEffect` (`MAGNUM-51`) and `SkinnedEffect`
->   (`MAGNUM-52`) are done and pixel-verified.
+> - **Stock effect variants** — all five are now generated and pixel-verified:
+>   `DualTextureEffect` (`MAGNUM-50`), `EnvironmentMapEffect` (`MAGNUM-51`), `SkinnedEffect`
+>   (`MAGNUM-52`) and `PbrEffect`/`SkinnedPbrEffect` (`MAGNUM-53`). The one remaining stock-effect
+>   gap is `PreferPerPixelLighting=false`: like every backend except D3D9, this one always renders
+>   per-pixel and has no per-vertex-lit shader family (`MAGNUM-60`).
 > - **`SurfaceFormat` beyond `Color` (`MAGNUM-54`)** — every texture, cube, volume and render target
 >   allocates RGBA8. The requested format reaches the backend and is recorded but not honoured.
 > - **`BlendState.MultiSampleMask` (`MAGNUM-55`)** — only the all-ones default is applied; a real
@@ -126,13 +126,14 @@
 | MAGNUM-50 | `DualTextureEffect` shader variant (strides 20 and 24), pixel-verified | ✅ |
 | MAGNUM-51 | `EnvironmentMapEffect` shader variant (cube-map reflection, flat and Fresnel-weighted), pixel-verified | ✅ |
 | MAGNUM-52 | `SkinnedEffect` shader variant (bone palette, `weightsPerVertex`, strides 52 and 56), pixel-verified | ✅ |
-| MAGNUM-53 | `PbrEffect` / `SkinnedPbrEffect` shader variants | ⬜ |
+| MAGNUM-53 | `PbrEffect` / `SkinnedPbrEffect` shader variants (strides 48 and 68), pixel-verified | ✅ |
 | MAGNUM-54 | Real `SurfaceFormat` storage beyond `Color` | ⬜ |
 | MAGNUM-55 | `BlendState.MultiSampleMask` via `GL_SAMPLE_MASK` / `glSampleMaski` | ⬜ |
 | MAGNUM-56 | MSAA for an ordered multi-target set | ⬜ |
 | MAGNUM-57 | Cache `GL::Mesh` per buffer/layout pair instead of building one per draw | ⬜ |
 | MAGNUM-58 | Context-loss simulation/recovery channel | ⬜ |
 | MAGNUM-59 | Cross-backend pixel-parity run (EasyGL/Vulkan/Magnum, same scene) | ⬜ |
+| MAGNUM-60 | `PreferPerPixelLighting=false` per-vertex-lit shader family | ⬜ |
 
 ## Shared-test gates this backend changed
 

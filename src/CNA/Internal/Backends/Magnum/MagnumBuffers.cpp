@@ -113,6 +113,22 @@ namespace CNA::Internal::Backends::Magnum
                         MakeAttribute(3, 32, 4, false, 3),
                         MakeAttribute(4, 48, 4, false, 5, true),
                         MakeAttribute(5, 52, 4, true,  4)};
+            // VertexPositionNormalTangentTexture: the tangent's w carries the bitangent handedness,
+            // which is why it is a float4 rather than a float3. Stride 68 appends the same skinning
+            // suffix strides 52/56 use, so locations 0..3 stay byte-identical between the two PBR
+            // layouts for exactly the reason 52 and 56 share theirs.
+            case 48:
+                return {MakeAttribute(0,  0, 3, false, 2),
+                        MakeAttribute(1, 12, 3, false, 2),
+                        MakeAttribute(2, 24, 4, false, 3),
+                        MakeAttribute(3, 40, 2, false, 1)};
+            case 68:
+                return {MakeAttribute(0,  0, 3, false, 2),
+                        MakeAttribute(1, 12, 3, false, 2),
+                        MakeAttribute(2, 24, 4, false, 3),
+                        MakeAttribute(3, 40, 2, false, 1),
+                        MakeAttribute(4, 48, 4, false, 3),
+                        MakeAttribute(5, 64, 4, false, 5, true)};
             default:
                 return {};
         }

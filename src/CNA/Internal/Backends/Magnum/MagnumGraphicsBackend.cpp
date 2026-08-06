@@ -36,6 +36,12 @@ namespace CNA::Internal::Backends::Magnum
         /// Texture unit EnvironmentMapEffect's cube map is bound to. Units 0 and 1 belong to the
         /// diffuse and second-layer 2D textures, which an env-mapped draw may also carry.
         constexpr int kEnvironmentMapSlot = 2;
+        /// PbrEffect's own map units. Unit 0 stays the base colour, as in every other program; a
+        /// PBR draw carries no second colour layer and no cube map, so these cannot collide.
+        constexpr int kPbrNormalMapSlot = 1;
+        constexpr int kPbrMetallicRoughnessMapSlot = 2;
+        constexpr int kPbrEmissiveMapSlot = 3;
+        constexpr int kPbrOcclusionMapSlot = 4;
 
         Mg::Color4 ToMagnumColor(float r, float g, float b, float a)
         {
@@ -892,6 +898,7 @@ namespace CNA::Internal::Backends::Magnum
         selector.dualTexture = params.dualTexture;
         selector.envMapping = params.envMapping;
         selector.skinned = params.skinned;
+        selector.pbr = params.pbr;
 
         MagnumStockProgram stockProgram{};
         if (!SelectStockProgram(selector, stockProgram))
@@ -922,6 +929,7 @@ namespace CNA::Internal::Backends::Magnum
                          params.vertexColorEnabled ? 1.0f : 0.0f);
         program.SetFloat(program.LocationOf("uTextureEnabled"),
                          (params.textureEnabled && params.texture0 != nullptr) ? 1.0f : 0.0f);
+        program.SetInt(program.LocationOf("uTexture"), 0);
         program.SetFloat(program.LocationOf("uLightingEnabled"),
                          params.lightingEnabled ? 1.0f : 0.0f);
 
@@ -979,6 +987,37 @@ namespace CNA::Internal::Backends::Magnum
             program.SetInt(program.LocationOf("uTexture2"), 1);
             renderTargetFlips[1] = SampledRowOrderIsBottomUp(params.texture1) ? 1.0f : 0.0f;
         }
+        // PbrEffect's material maps. Every one is sampled unconditionally by the shader, so an
+        // absent map is bound to a neutral stand-in rather than left at whatever the previous draw
+        // happened to leave in that unit.
+        if (params.pbr)
+        {
+            EnsureDefaultPbrMaps();
+            float occlusionFlip = 0.0f;
+            program.SetVector4(program.LocationOf("uDiffuseColor"), Mg::Vector4{
+                params.diffuseColor[0], params.diffuseColor[1],
+                params.diffuseColor[2], params.diffuseColor[3]});
+            BindPbrMap(program, "uNormalMap", kPbrNormalMapSlot, params.pbrNormalMap,
+                       *defaultFlatNormalTexture_, renderTargetFlips[1]);
+            BindPbrMap(program, "uMetallicRoughnessMap", kPbrMetallicRoughnessMapSlot,
+                       params.pbrMetallicRoughnessMap, *defaultWhiteTexture_,
+                       renderTargetFlips[2]);
+            BindPbrMap(program, "uEmissiveMap", kPbrEmissiveMapSlot, params.pbrEmissiveMap,
+                       *defaultWhiteTexture_, renderTargetFlips[3]);
+            BindPbrMap(program, "uOcclusionMap", kPbrOcclusionMapSlot, params.pbrOcclusionMap,
+                       *defaultWhiteTexture_, occlusionFlip);
+            program.SetFloat(program.LocationOf("uMetallicFactor"), params.pbrMetallicFactor);
+            program.SetFloat(program.LocationOf("uRoughnessFactor"), params.pbrRoughnessFactor);
+            program.SetVector3(program.LocationOf("uAmbientColor"), Mg::Vector3{
+                params.ambientColor[0], params.ambientColor[1], params.ambientColor[2]});
+            program.SetVector3(program.LocationOf("uEmissiveColor"), Mg::Vector3{
+                params.emissiveColor[0], params.emissiveColor[1], params.emissiveColor[2]});
+            // A fifth unit does not fit in uRtFlipV's four components, so the occlusion map's own
+            // flag travels in its own uniform. This is the only program that samples that far.
+            program.SetVector4(program.LocationOf("uRtFlipVHi"),
+                               Mg::Vector4{occlusionFlip, 0.0f, 0.0f, 0.0f});
+        }
+
         // SkinnedEffect's bone palette. Only the bones the draw declares are uploaded -- the
         // array's remaining entries are never indexed, since a vertex's bone index cannot exceed
         // the palette the effect populated.
@@ -1006,6 +1045,50 @@ namespace CNA::Internal::Backends::Magnum
         }
 
         program.SetVector4(program.LocationOf("uRtFlipV"), renderTargetFlips);
+    }
+
+    void MagnumGraphicsBackend::EnsureDefaultPbrMaps()
+    {
+        if (defaultWhiteTexture_ && defaultFlatNormalTexture_)
+            return;
+
+        const auto makeSingleTexel = [](const std::array<uint8_t, 4>& texel) {
+            auto texture = std::make_unique<Mg::GL::Texture2D>();
+            texture->setStorage(1, Mg::GL::TextureFormat::RGBA8, Mg::Vector2i{1, 1});
+            texture->setSubImage(0, {}, Mg::ImageView2D{
+                Mg::PixelFormat::RGBA8Unorm, Mg::Vector2i{1, 1},
+                Corrade::Containers::ArrayView<const void>{texel.data(), texel.size()}});
+            texture->setMinificationFilter(Mg::GL::SamplerFilter::Nearest,
+                                          Mg::GL::SamplerMipmap::Base)
+                    .setMagnificationFilter(Mg::GL::SamplerFilter::Nearest)
+                    .setWrapping(Mg::GL::SamplerWrapping::ClampToEdge);
+            return texture;
+        };
+
+        if (!defaultWhiteTexture_)
+            defaultWhiteTexture_ = makeSingleTexel({255, 255, 255, 255});
+        if (!defaultFlatNormalTexture_)
+        {
+            // (0.5, 0.5, 1) decodes to a +Z tangent-space normal, i.e. "no perturbation".
+            defaultFlatNormalTexture_ = makeSingleTexel({128, 128, 255, 255});
+        }
+    }
+
+    void MagnumGraphicsBackend::BindPbrMap(MagnumProgram& program, const char* uniformName,
+                                           int slot, const ITextureBackend* texture,
+                                           Mg::GL::Texture2D& fallback, float& flipOut)
+    {
+        if (texture != nullptr)
+        {
+            BindTextureToSlot(slot, texture);
+            flipOut = SampledRowOrderIsBottomUp(texture) ? 1.0f : 0.0f;
+        }
+        else
+        {
+            fallback.bind(slot);
+            flipOut = 0.0f;
+        }
+        program.SetInt(program.LocationOf(uniformName), slot);
     }
 
     void MagnumGraphicsBackend::BindTextureCubeToSlot(int slot, const ITextureCubeBackend* texture)

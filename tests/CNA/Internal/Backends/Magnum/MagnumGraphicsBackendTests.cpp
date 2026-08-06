@@ -244,6 +244,29 @@ TEST(MagnumVertexLayoutTest, SkinnedStridesShareLocationsZeroToFourByteForByte)
     EXPECT_TRUE(wide[5].normalized);
 }
 
+TEST(MagnumVertexLayoutTest, PbrStridesResolveToTheirTangentCarryingAttributes)
+{
+    const std::vector<MagnumVertexAttribute> plain = StockAttributesForStride(48);
+    ASSERT_EQ(plain.size(), 4u);
+    // The tangent is a float4: its w carries the bitangent handedness, and dropping it flips the
+    // bitangent on every mirrored UV shell.
+    EXPECT_EQ(plain[2].components, 4);
+    EXPECT_EQ(plain[2].offsetInStream, 24);
+    EXPECT_EQ(plain[3].components, 2);
+    EXPECT_EQ(plain[3].offsetInStream, 40);
+
+    const std::vector<MagnumVertexAttribute> skinned = StockAttributesForStride(68);
+    ASSERT_EQ(skinned.size(), 6u);
+    for (std::size_t i = 0; i < plain.size(); ++i)
+    {
+        EXPECT_EQ(plain[i].location, skinned[i].location) << "element " << i;
+        EXPECT_EQ(plain[i].offsetInStream, skinned[i].offsetInStream) << "element " << i;
+    }
+    EXPECT_EQ(skinned[4].offsetInStream, 48);
+    EXPECT_EQ(skinned[5].offsetInStream, 64);
+    EXPECT_TRUE(skinned[5].integral);
+}
+
 TEST(MagnumVertexLayoutTest, OnlyBoneIndicesArriveAsIntegers)
 {
     // Byte4 is a float-converted format everywhere else it appears; only the bone indices, which
@@ -352,13 +375,15 @@ TEST(MagnumVertexLayoutTest, NormalizedShortFormatsAreMarkedNormalized)
 namespace
 {
     MagnumStockProgram SelectOrDie(std::size_t stride, bool dualTexture = false,
-                                   bool envMapping = false, bool skinned = false)
+                                   bool envMapping = false, bool skinned = false,
+                                   bool pbr = false)
     {
         MagnumStockSelector selector;
         selector.strideInBytes = stride;
         selector.dualTexture = dualTexture;
         selector.envMapping = envMapping;
         selector.skinned = skinned;
+        selector.pbr = pbr;
         MagnumStockProgram program{};
         EXPECT_TRUE(SelectStockProgram(selector, program));
         return program;
@@ -373,6 +398,8 @@ namespace
         MagnumStockProgram::DualTextureColored,
         MagnumStockProgram::EnvironmentMap,
         MagnumStockProgram::Skinned,
+        MagnumStockProgram::Pbr,
+        MagnumStockProgram::PbrSkinned,
     };
 }
 
@@ -539,6 +566,79 @@ TEST(MagnumStockShaderTest, SkinnedShaderCarriesNoAmbientTermOfItsOwn)
     EXPECT_EQ(source.find("uAmbientColor"), std::string::npos);
     EXPECT_NE(source.find("uEmissiveColor"), std::string::npos);
     EXPECT_NE(source.find("uSpecularPower"), std::string::npos);
+}
+
+TEST(MagnumStockShaderTest, PbrSelectsItsPlainOrSkinnedProgramByLayout)
+{
+    EXPECT_EQ(SelectOrDie(48, false, false, false, true), MagnumStockProgram::Pbr);
+    EXPECT_EQ(SelectOrDie(68, false, false, true, true), MagnumStockProgram::PbrSkinned);
+}
+
+TEST(MagnumStockShaderTest, PbrOnTheWrongLayoutSelectsNothing)
+{
+    // Each PBR program has exactly one layout: the plain one has no bone palette to read and the
+    // skinned one has no unskinned stride to fall back to.
+    MagnumStockSelector selector;
+    selector.pbr = true;
+    MagnumStockProgram program{};
+    selector.strideInBytes = 68;
+    EXPECT_FALSE(SelectStockProgram(selector, program)) << "plain PBR over the skinned stride";
+    selector.skinned = true;
+    selector.strideInBytes = 48;
+    EXPECT_FALSE(SelectStockProgram(selector, program)) << "skinned PBR over the plain stride";
+}
+
+TEST(MagnumStockShaderTest, PbrIsResolvedBeforeSkinning)
+{
+    // `pbr && skinned` is one program, not a choice between two: the two share a material model
+    // and differ only by whether a bone palette deforms the tangent frame.
+    EXPECT_EQ(SelectOrDie(68, false, false, true, true), MagnumStockProgram::PbrSkinned);
+    EXPECT_EQ(SelectOrDie(52, false, false, true, false), MagnumStockProgram::Skinned);
+}
+
+TEST(MagnumStockShaderTest, PbrShaderImplementsTheGltfMetallicRoughnessBrdf)
+{
+    const std::string source = StockFragmentShaderSource(MagnumStockProgram::Pbr);
+    // glTF's own packing: green is roughness, blue is metallic. Swapping them is invisible on any
+    // texture whose two channels happen to agree.
+    EXPECT_NE(source.find("metallicRoughness.g * uRoughnessFactor"), std::string::npos);
+    EXPECT_NE(source.find("metallicRoughness.b * uMetallicFactor"), std::string::npos);
+    // The diffuse lobe scales away as the surface becomes metallic, and F0 becomes the albedo.
+    EXPECT_NE(source.find("albedo * (1.0 - metallic)"), std::string::npos);
+    EXPECT_NE(source.find("mix(vec3(0.04), albedo, metallic)"), std::string::npos);
+}
+
+TEST(MagnumStockShaderTest, PbrShaderReorthogonalizesTheTangentBeforeBuildingItsBasis)
+{
+    // The interpolated tangent is no longer exactly perpendicular to the interpolated normal, so
+    // a basis built from it directly is skewed across the triangle's interior.
+    const std::string source = StockFragmentShaderSource(MagnumStockProgram::Pbr);
+    EXPECT_NE(source.find("normalize(vTangent - normal * dot(normal, vTangent))"),
+              std::string::npos);
+    EXPECT_NE(source.find("cross(normal, tangent) * vBitangentSign"), std::string::npos);
+}
+
+TEST(MagnumStockShaderTest, PbrShaderReadsTheOcclusionMapThroughItsOwnFlipFlag)
+{
+    // Five sampled units do not fit in uRtFlipV's four components, so the fifth needs its own.
+    const std::string source = StockFragmentShaderSource(MagnumStockProgram::Pbr);
+    EXPECT_NE(source.find("uniform vec4 uRtFlipVHi"), std::string::npos);
+    EXPECT_NE(source.find("texture(uOcclusionMap, cnaSampleUV(vTexCoord, uRtFlipVHi.x))"),
+              std::string::npos);
+}
+
+TEST(MagnumStockShaderTest, OnlyTheSkinnedPbrProgramDeformsItsTangentFrame)
+{
+    const std::string plain = StockVertexShaderSource(MagnumStockProgram::Pbr);
+    EXPECT_EQ(plain.find("uBones"), std::string::npos);
+    EXPECT_NE(plain.find("vec3 boneTangent = aTangent.xyz"), std::string::npos);
+
+    // Leaving the tangent frame in bind pose would light a deformed surface with the normal map of
+    // an undeformed one.
+    const std::string skinned = StockVertexShaderSource(MagnumStockProgram::PbrSkinned);
+    EXPECT_NE(skinned.find("uBones["), std::string::npos);
+    EXPECT_NE(skinned.find("vec3 boneTangent = mat3(skin) * aTangent.xyz"), std::string::npos);
+    EXPECT_NE(skinned.find("if (uWeightsPerVertex >= 2)"), std::string::npos);
 }
 
 TEST(MagnumStockShaderTest, EveryStockShaderTargetsTheDesktopCoreProfile)

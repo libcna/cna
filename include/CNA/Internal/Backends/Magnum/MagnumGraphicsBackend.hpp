@@ -555,6 +555,10 @@ namespace CNA::Internal::Backends::Magnum
         void BindDefaultFramebuffer();
         void FinalizeCurrentTargets();
         void ApplyColorWriteMasks();
+        void EnsureDefaultPbrMaps();
+        void BindPbrMap(MagnumProgram& program, const char* uniformName, int slot,
+                        const ITextureBackend* texture, Mg::GL::Texture2D& fallback,
+                        float& flipOut);
         void ForceAllColorWriteMasks();
         [[nodiscard]] bool HasRestrictedColorWriteMask() const;
         Mg::Vector2i DestinationExtent() const;
@@ -602,6 +606,13 @@ namespace CNA::Internal::Backends::Magnum
         /// program outliving the context aborts rather than quietly leaking a handle.
         std::unique_ptr<MagnumStockShaderCache> stockShaders_ =
             std::make_unique<MagnumStockShaderCache>();
+        /**
+         * Stand-ins for the PbrEffect maps a material does not supply. The shader samples all four
+         * unconditionally -- branching per map would cost more than a 1x1 fetch -- so an absent one
+         * must resolve to its own neutral value: opaque white for metallic-roughness, emissive and
+         * occlusion, and a flat +Z normal for the normal map.
+         */
         std::unique_ptr<Mg::GL::Texture2D> defaultWhiteTexture_;
+        std::unique_ptr<Mg::GL::Texture2D> defaultFlatNormalTexture_;
     };
 }

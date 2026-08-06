@@ -256,6 +256,170 @@ vec2 cnaSampleUV(vec2 uv, float flip){ return vec2(uv.x, mix(uv.y, 1.0 - uv.y, f
             return source;
         }
 
+        bool ProgramIsPbr(MagnumStockProgram program)
+        {
+            return program == MagnumStockProgram::Pbr
+                || program == MagnumStockProgram::PbrSkinned;
+        }
+
+        std::string PbrVertexShaderSource(MagnumStockProgram program)
+        {
+            const bool skinned = program == MagnumStockProgram::PbrSkinned;
+            std::string source = "#version 330 core\n";
+            source += "layout(location=0) in vec3 aPosition;\n";
+            source += "layout(location=1) in vec3 aNormal;\n";
+            // The tangent's w carries the bitangent handedness, which is why glTF stores a float4.
+            source += "layout(location=2) in vec4 aTangent;\n";
+            source += "layout(location=3) in vec2 aTexCoord;\n";
+            if (skinned)
+            {
+                source += "layout(location=4) in vec4 aBoneWeights;\n";
+                source += "layout(location=5) in uvec4 aBoneIndices;\n";
+            }
+            source += kInstanceTransformDeclaration;
+            source += "uniform mat4 uWVP;\n";
+            source += "uniform mat4 uWorld;\n";
+            source += "uniform mat3 uNormalMatrix;\n";
+            source += "uniform vec4 uFogVector;\n";
+            if (skinned)
+            {
+                source += "uniform mat4 uBones[" + std::to_string(kMagnumMaxBones) + "];\n";
+                source += "uniform int uWeightsPerVertex;\n";
+            }
+            source += "out vec3 vNormal;\n";
+            source += "out vec3 vTangent;\n";
+            source += "out float vBitangentSign;\n";
+            source += "out vec2 vTexCoord;\n";
+            source += "out vec3 vWorldPosition;\n";
+            source += "out float vFogFactor;\n";
+            source += "void main(){\n";
+            if (skinned)
+            {
+                // The same partial weight sum SkinnedEffect's own program uses -- see its comment.
+                source += "    mat4 skin = uBones[aBoneIndices.x] * aBoneWeights.x;\n";
+                source += "    if (uWeightsPerVertex >= 2) skin += uBones[aBoneIndices.y] * aBoneWeights.y;\n";
+                source += "    if (uWeightsPerVertex >= 4)\n";
+                source += "        skin += uBones[aBoneIndices.z] * aBoneWeights.z\n";
+                source += "              + uBones[aBoneIndices.w] * aBoneWeights.w;\n";
+                source += "    vec4 cnaPosition = cnaInstancePosition(skin * vec4(aPosition, 1.0));\n";
+                // The tangent frame is skinned too: leaving it in bind pose would light a deformed
+                // surface with the normal map of an undeformed one.
+                source += "    vec3 skinnedNormal = mat3(skin) * aNormal;\n";
+                source += "    float skinnedNormalLength = length(skinnedNormal);\n";
+                source += "    vec3 boneNormal = (skinnedNormalLength > 1e-6)\n";
+                source += "        ? (skinnedNormal / skinnedNormalLength) : aNormal;\n";
+                source += "    vec3 boneTangent = mat3(skin) * aTangent.xyz;\n";
+            }
+            else
+            {
+                source += "    vec4 cnaPosition = cnaInstancePosition(vec4(aPosition, 1.0));\n";
+                source += "    vec3 boneNormal = aNormal;\n";
+                source += "    vec3 boneTangent = aTangent.xyz;\n";
+            }
+            source += "    gl_Position = uWVP * cnaPosition;\n";
+            source += "    vNormal = uNormalMatrix * cnaInstanceDirection(boneNormal);\n";
+            source += "    vTangent = mat3(uWorld) * cnaInstanceDirection(boneTangent);\n";
+            source += "    vBitangentSign = aTangent.w;\n";
+            source += "    vTexCoord = aTexCoord;\n";
+            source += "    vWorldPosition = (uWorld * cnaPosition).xyz;\n";
+            source += kFogVertexTerm;
+            source += "}\n";
+            return source;
+        }
+
+        std::string PbrFragmentShaderSource()
+        {
+            std::string source = "#version 330 core\n";
+            source += "in vec3 vNormal;\n";
+            source += "in vec3 vTangent;\n";
+            source += "in float vBitangentSign;\n";
+            source += "in vec2 vTexCoord;\n";
+            source += "in vec3 vWorldPosition;\n";
+            source += "in float vFogFactor;\n";
+            source += "uniform sampler2D uTexture;\n";
+            source += "uniform sampler2D uNormalMap;\n";
+            source += "uniform sampler2D uMetallicRoughnessMap;\n";
+            source += "uniform sampler2D uEmissiveMap;\n";
+            source += "uniform sampler2D uOcclusionMap;\n";
+            source += "uniform vec4 uDiffuseColor;\n";
+            source += "uniform vec3 uAmbientColor;\n";
+            source += "uniform vec3 uEmissiveColor;\n";
+            source += "uniform float uMetallicFactor;\n";
+            source += "uniform float uRoughnessFactor;\n";
+            source += "uniform vec3 uLight0Dir;\n";
+            source += "uniform vec3 uLight0Diffuse;\n";
+            source += "uniform vec3 uLight1Dir;\n";
+            source += "uniform vec3 uLight1Diffuse;\n";
+            source += "uniform vec3 uLight2Dir;\n";
+            source += "uniform vec3 uLight2Diffuse;\n";
+            source += "uniform vec3 uEyePosition;\n";
+            source += "uniform vec4 uAlphaTest;\n";
+            source += "uniform vec3 uFogColor;\n";
+            // Unit 4 (the occlusion map) needs a fifth flag, which does not fit in uRtFlipV's four
+            // components -- this is the only program that samples that far.
+            source += "uniform vec4 uRtFlipVHi;\n";
+            source += kRenderTargetSampleDeclaration;
+            source += "out vec4 fragColor;\n";
+            // The glTF metallic-roughness BRDF: GGX distribution, Smith-Schlick geometry and a
+            // Schlick Fresnel, with the diffuse lobe scaled away as the surface becomes metallic.
+            source += R"(
+vec3 cnaPbrLight(vec3 normal, vec3 view, vec3 light, vec3 lightColor,
+                 vec3 albedo, vec3 f0, float roughness, float metallic){
+    vec3 halfway = normalize(view + light);
+    float nDotL = max(dot(normal, light), 0.0);
+    float nDotV = max(dot(normal, view), 1e-4);
+    float nDotH = max(dot(normal, halfway), 0.0);
+    float vDotH = max(dot(view, halfway), 0.0);
+    float alphaSquared = pow(roughness, 4.0);
+    float denominator = nDotH * nDotH * (alphaSquared - 1.0) + 1.0;
+    float distribution = alphaSquared / (3.14159265 * denominator * denominator + 1e-7);
+    float k = (roughness + 1.0);
+    k = k * k / 8.0;
+    float geometry = (nDotV / (nDotV * (1.0 - k) + k)) * (nDotL / (nDotL * (1.0 - k) + k));
+    vec3 fresnel = f0 + (vec3(1.0) - f0) * pow(clamp(1.0 - vDotH, 0.0, 1.0), 5.0);
+    vec3 specular = (distribution * geometry * fresnel) / max(4.0 * nDotV * nDotL, 1e-4);
+    vec3 diffuse = albedo * (1.0 - metallic);
+    return ((vec3(1.0) - fresnel) * diffuse / 3.14159265 + specular) * lightColor * nDotL;
+}
+)";
+            source += "void main(){\n";
+            source += "    vec4 baseColor = texture(uTexture, cnaSampleUV(vTexCoord, uRtFlipV.x));\n";
+            source += "    vec3 albedo = baseColor.rgb * uDiffuseColor.rgb;\n";
+            source += "    float alpha = baseColor.a * uDiffuseColor.a;\n";
+            source += "    vec3 normal = normalize(vNormal);\n";
+            // Gram-Schmidt: the interpolated tangent is no longer exactly perpendicular to the
+            // interpolated normal, so it is re-orthogonalized before the basis is built.
+            source += "    vec3 tangent = normalize(vTangent - normal * dot(normal, vTangent));\n";
+            source += "    vec3 bitangent = cross(normal, tangent) * vBitangentSign;\n";
+            source += "    mat3 tangentBasis = mat3(tangent, bitangent, normal);\n";
+            source += "    vec3 sampledNormal =\n";
+            source += "        texture(uNormalMap, cnaSampleUV(vTexCoord, uRtFlipV.y)).rgb * 2.0 - 1.0;\n";
+            source += "    vec3 shadingNormal = normalize(tangentBasis * sampledNormal);\n";
+            source += "    vec4 metallicRoughness =\n";
+            source += "        texture(uMetallicRoughnessMap, cnaSampleUV(vTexCoord, uRtFlipV.z));\n";
+            // glTF's own packing: green is roughness, blue is metallic. The roughness floor keeps
+            // the specular lobe from collapsing into a numerically undefined mirror.
+            source += "    float roughness = clamp(metallicRoughness.g * uRoughnessFactor, 0.045, 1.0);\n";
+            source += "    float metallic = clamp(metallicRoughness.b * uMetallicFactor, 0.0, 1.0);\n";
+            source += "    vec3 view = normalize(uEyePosition - vWorldPosition);\n";
+            source += "    vec3 f0 = mix(vec3(0.04), albedo, metallic);\n";
+            source += "    vec3 reflected = cnaPbrLight(shadingNormal, view, normalize(-uLight0Dir),\n";
+            source += "                                 uLight0Diffuse, albedo, f0, roughness, metallic)\n";
+            source += "                   + cnaPbrLight(shadingNormal, view, normalize(-uLight1Dir),\n";
+            source += "                                 uLight1Diffuse, albedo, f0, roughness, metallic)\n";
+            source += "                   + cnaPbrLight(shadingNormal, view, normalize(-uLight2Dir),\n";
+            source += "                                 uLight2Diffuse, albedo, f0, roughness, metallic);\n";
+            source += "    float occlusion = texture(uOcclusionMap, cnaSampleUV(vTexCoord, uRtFlipVHi.x)).r;\n";
+            source += "    vec3 ambient = uAmbientColor * albedo * occlusion;\n";
+            source += "    vec3 emissive =\n";
+            source += "        uEmissiveColor * texture(uEmissiveMap, cnaSampleUV(vTexCoord, uRtFlipV.w)).rgb;\n";
+            source += "    fragColor = vec4(ambient + reflected + emissive, alpha);\n";
+            source += kAlphaTestFragmentTerm;
+            source += kFogFragmentTerm;
+            source += "}\n";
+            return source;
+        }
+
         std::string SkinnedFragmentShaderSource()
         {
             std::string source = "#version 330 core\n";
@@ -436,6 +600,24 @@ vec2 cnaSampleUV(vec2 uv, float flip){ return vec2(uv.x, mix(uv.y, 1.0 - uv.y, f
 
     bool SelectStockProgram(const MagnumStockSelector& selector, MagnumStockProgram& programOut)
     {
+        // PBR is resolved first, and its skinned combination before its plain one: the two share
+        // the same material model and differ only by whether a bone palette deforms the tangent
+        // frame, so `pbr && skinned` is one program rather than a choice between two.
+        if (selector.pbr)
+        {
+            if (selector.skinned)
+            {
+                if (selector.strideInBytes != 68)
+                    return false;
+                programOut = MagnumStockProgram::PbrSkinned;
+                return true;
+            }
+            if (selector.strideInBytes != 48)
+                return false;
+            programOut = MagnumStockProgram::Pbr;
+            return true;
+        }
+
         // Skinning is the most specific request of all: it is the only flag whose layout carries a
         // bone palette, so it is resolved before anything that could share a stride with it.
         if (selector.skinned)
@@ -493,6 +675,8 @@ vec2 cnaSampleUV(vec2 uv, float flip){ return vec2(uv.x, mix(uv.y, 1.0 - uv.y, f
             return EnvironmentMapVertexShaderSource();
         if (program == MagnumStockProgram::Skinned)
             return SkinnedVertexShaderSource();
+        if (ProgramIsPbr(program))
+            return PbrVertexShaderSource(program);
         return BaseVertexShaderSource(program);
     }
 
@@ -502,6 +686,8 @@ vec2 cnaSampleUV(vec2 uv, float flip){ return vec2(uv.x, mix(uv.y, 1.0 - uv.y, f
             return EnvironmentMapFragmentShaderSource();
         if (program == MagnumStockProgram::Skinned)
             return SkinnedFragmentShaderSource();
+        if (ProgramIsPbr(program))
+            return PbrFragmentShaderSource();
         if (ProgramIsDualTexture(program))
             return DualTextureFragmentShaderSource(program);
         return BaseFragmentShaderSource(program);

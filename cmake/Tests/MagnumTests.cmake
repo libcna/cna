@@ -51,4 +51,12 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_BACKEND STREQUAL "MAGNUM"
         COMMAND cna_test_magnum_skinnedeffect
         TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
         LABELS "GraphicsSmoke;Magnum")
+
+    # plan_magnum.md MAGNUM-53: PbrEffect's glTF metallic-roughness BRDF, on a rig where every dot
+    # product is exactly 1 so each expected byte is derived from the formula, not captured.
+    cna_magnum_test(cna_test_magnum_pbreffect examples/magnum_pbreffect_test.cpp)
+    cna_register_backend_test(NAME Magnum_PbrEffect
+        COMMAND cna_test_magnum_pbreffect
+        TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
+        LABELS "GraphicsSmoke;Magnum")
 endif()
