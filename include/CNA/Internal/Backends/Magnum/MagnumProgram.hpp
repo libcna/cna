@@ -2,6 +2,7 @@
 #pragma once
 
 #include <Magnum/GL/AbstractShaderProgram.h>
+#include <Magnum/GL/Version.h>
 #include <Magnum/Math/Matrix4.h>
 #include <Magnum/Math/Vector4.h>
 
@@ -11,6 +12,27 @@
 namespace CNA::Internal::Backends::Magnum
 {
     namespace Mg = ::Magnum;
+
+    /**
+     * @brief Removes a leading `#version` directive from GLSL source.
+     *
+     * `GL::Shader` emits its own `#version` line from the version handed to its constructor and
+     * then prefixes every added source with a `#line` directive, so a source that declares one
+     * itself makes the directive land on line 2 and the compile fails outright. Only a directive
+     * at the very start of the source (after leading whitespace) is removed.
+     *
+     * @param source Complete GLSL source.
+     * @return The source with its leading `#version` line removed, or unchanged if it has none.
+     */
+    [[nodiscard]] std::string StripVersionDirective(const std::string& source);
+
+    /**
+     * @brief Recovers the GLSL version a source declares, so `GL::Shader` can re-emit it.
+     *
+     * @param source Complete GLSL source.
+     * @return The declared version, or `GL330` when the directive is absent or unrecognized.
+     */
+    [[nodiscard]] Mg::GL::Version DeclaredVersion(const std::string& source);
 
     /**
      * @brief A shader program built from GLSL source at runtime.

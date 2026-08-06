@@ -16,33 +16,61 @@
 #include <Magnum/Math/Matrix3.h>
 #include <Magnum/Math/Matrix4.h>
 
+#include <cctype>
 #include <sstream>
 
 namespace CNA::Internal::Backends::Magnum
 {
-    namespace
+    // `GL::Shader` emits its own `#version` line from the version handed to its constructor and
+    // then prefixes every added source with a `#line` directive, so a source that declares one
+    // itself makes the directive land on line 2 and the compile fails outright with "#version must
+    // appear on the first line". Both source routes reach this: CNA's stock shaders declare their
+    // version for readability, and a `ShaderEffect`'s GLSL is ordinary caller-authored code that
+    // normally starts with one. Only a directive at the very start is removed -- anywhere else it
+    // is not a version declaration this function has any business rewriting.
+    std::string StripVersionDirective(const std::string& source)
     {
-        /**
-         * @brief Removes a leading `#version` directive from GLSL source.
-         *
-         * `GL::Shader` emits its own `#version` line from the version handed to its constructor and
-         * then prefixes every added source with a `#line` directive, so a source that declares one
-         * itself makes the directive land on line 2 and the compile fails outright with
-         * "#version must appear on the first line". Both source routes reach this: CNA's stock
-         * shaders declare their version for readability, and a `ShaderEffect`'s GLSL is ordinary
-         * caller-authored code that normally starts with one. Only a directive at the very start
-         * (after leading whitespace) is removed -- anywhere else it is not a version declaration
-         * this function has any business rewriting.
-         */
-        std::string StripVersionDirective(const std::string& source)
+        const std::size_t start = source.find_first_not_of(" \t\r\n");
+        if (start == std::string::npos || source.compare(start, 8, "#version") != 0)
+            return source;
+        const std::size_t endOfLine = source.find('\n', start);
+        if (endOfLine == std::string::npos)
+            return {};
+        return source.substr(endOfLine + 1);
+    }
+
+    // Without this every shader would be compiled as 3.30 regardless of what it asked for, and a
+    // `ShaderEffect` needing a later feature -- `gl_SampleMask`, which is 4.00, is the case that
+    // surfaced this -- would fail to compile for a reason nothing in its own source explains. An
+    // unrecognized or absent directive keeps 3.30, the version CNA's own stock shaders are written
+    // against.
+    Mg::GL::Version DeclaredVersion(const std::string& source)
+    {
+        const std::size_t start = source.find_first_not_of(" \t\r\n");
+        if (start == std::string::npos || source.compare(start, 8, "#version") != 0)
+            return Mg::GL::Version::GL330;
+
+        const std::size_t digits = source.find_first_of("0123456789", start + 8);
+        if (digits == std::string::npos)
+            return Mg::GL::Version::GL330;
+
+        int declared = 0;
+        for (std::size_t i = digits; i < source.size() && std::isdigit(
+                 static_cast<unsigned char>(source[i])); ++i)
         {
-            const std::size_t start = source.find_first_not_of(" \t\r\n");
-            if (start == std::string::npos || source.compare(start, 8, "#version") != 0)
-                return source;
-            const std::size_t endOfLine = source.find('\n', start);
-            if (endOfLine == std::string::npos)
-                return {};
-            return source.substr(endOfLine + 1);
+            declared = declared * 10 + (source[i] - '0');
+        }
+
+        switch (declared)
+        {
+            case 400: return Mg::GL::Version::GL400;
+            case 410: return Mg::GL::Version::GL410;
+            case 420: return Mg::GL::Version::GL420;
+            case 430: return Mg::GL::Version::GL430;
+            case 440: return Mg::GL::Version::GL440;
+            case 450: return Mg::GL::Version::GL450;
+            case 460: return Mg::GL::Version::GL460;
+            default:  return Mg::GL::Version::GL330;
         }
     }
 
@@ -61,9 +89,12 @@ namespace CNA::Internal::Backends::Magnum
         Corrade::Utility::Error redirectError{&diagnostics};
         Corrade::Utility::Warning redirectWarning{&diagnostics};
 
-        Mg::GL::Shader vertex{Mg::GL::Version::GL330, Mg::GL::Shader::Type::Vertex};
+        // Each stage keeps the version its own source declared: a fragment stage may legitimately
+        // need a later one than its vertex stage, and forcing both to the higher of the two would
+        // silently change what the lower one compiles as.
+        Mg::GL::Shader vertex{DeclaredVersion(vertexSource), Mg::GL::Shader::Type::Vertex};
         vertex.addSource(StripVersionDirective(vertexSource));
-        Mg::GL::Shader fragment{Mg::GL::Version::GL330, Mg::GL::Shader::Type::Fragment};
+        Mg::GL::Shader fragment{DeclaredVersion(fragmentSource), Mg::GL::Shader::Type::Fragment};
         fragment.addSource(StripVersionDirective(fragmentSource));
 
         vertex.submitCompile();

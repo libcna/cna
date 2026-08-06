@@ -9,6 +9,7 @@
 
 #if defined(CNA_BACKEND_MAGNUM)
 #include "CNA/Internal/Backends/Magnum/MagnumBuffers.hpp"
+#include "CNA/Internal/Backends/Magnum/MagnumProgram.hpp"
 #include "CNA/Internal/Backends/Magnum/MagnumStateMapping.hpp"
 #include "CNA/Internal/Backends/Magnum/MagnumStockShaders.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
@@ -792,6 +793,47 @@ TEST(MagnumStockShaderTest, SpriteShaderMultipliesTheSampleByTheVertexTint)
     const std::string fragment = SpriteFragmentShaderSource();
     EXPECT_NE(fragment.find("texture(texture1, vTexCoord) * vColor"), std::string::npos);
     EXPECT_NE(SpriteVertexShaderSource().find("uniform mat4 projection"), std::string::npos);
+}
+
+TEST(MagnumShaderVersionTest, TheDeclaredVersionSurvivesToTheCompiler)
+{
+    // Every stage would otherwise be compiled as 3.30 regardless of what it asked for, so an
+    // effect needing a 4.00 feature would fail for a reason nothing in its own source explains.
+    EXPECT_EQ(DeclaredVersion("#version 400 core\nvoid main() {}\n"), Mg::GL::Version::GL400);
+    EXPECT_EQ(DeclaredVersion("#version 410\n"), Mg::GL::Version::GL410);
+    EXPECT_EQ(DeclaredVersion("#version 420\n"), Mg::GL::Version::GL420);
+    EXPECT_EQ(DeclaredVersion("#version 430\n"), Mg::GL::Version::GL430);
+    EXPECT_EQ(DeclaredVersion("#version 440\n"), Mg::GL::Version::GL440);
+    EXPECT_EQ(DeclaredVersion("#version 450\n"), Mg::GL::Version::GL450);
+    EXPECT_EQ(DeclaredVersion("#version 460\n"), Mg::GL::Version::GL460);
+    EXPECT_EQ(DeclaredVersion("  \n\t#version 400 core\nvoid main() {}\n"),
+              Mg::GL::Version::GL400);
+}
+
+TEST(MagnumShaderVersionTest, AnAbsentOrUnrecognizedVersionKeepsTheStockOne)
+{
+    // 3.30 is what CNA's own stock shaders are written against, so it is the safe fallback -- a
+    // source with no directive at all must not be rejected, and a version this backend has no
+    // enumerator for must not become a guess at a later one.
+    EXPECT_EQ(DeclaredVersion("void main() {}\n"), Mg::GL::Version::GL330);
+    EXPECT_EQ(DeclaredVersion(""), Mg::GL::Version::GL330);
+    EXPECT_EQ(DeclaredVersion("#version 330 core\n"), Mg::GL::Version::GL330);
+    EXPECT_EQ(DeclaredVersion("#version 999\n"), Mg::GL::Version::GL330);
+    EXPECT_EQ(DeclaredVersion("#version core\n"), Mg::GL::Version::GL330);
+    // Not a declaration at the start of the source, so not this function's business.
+    EXPECT_EQ(DeclaredVersion("void main() {}\n#version 400\n"), Mg::GL::Version::GL330);
+}
+
+TEST(MagnumShaderVersionTest, OnlyALeadingVersionLineIsStripped)
+{
+    // GL::Shader writes its own #version and then a #line, so a source keeping its own would push
+    // the directive to line 2 and fail to compile at all.
+    EXPECT_EQ(StripVersionDirective("#version 400 core\nvoid main() {}\n"),
+              "void main() {}\n");
+    EXPECT_EQ(StripVersionDirective("\n  #version 330 core\nbody\n"), "body\n");
+    EXPECT_EQ(StripVersionDirective("void main() {}\n"), "void main() {}\n");
+    EXPECT_EQ(StripVersionDirective("#version 400 core"), "");
+    EXPECT_EQ(StripVersionDirective(""), "");
 }
 
 #endif  // CNA_BACKEND_MAGNUM
