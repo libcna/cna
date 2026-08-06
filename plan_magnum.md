@@ -31,8 +31,6 @@
 >   unilaterally; a non-default coverage mask is rare in XNA content.
 > - **Multi-target MSAA (`MAGNUM-56`)** — an ordered multi-target set attaches resolved colour
 >   textures, so a multisampled target contributes its single-sample image while it is in a set.
-> - **Mesh caching (`MAGNUM-57`)** — a `GL::Mesh` (and therefore a VAO) is built per draw rather
->   than cached per buffer/layout pair.
 > - **Context-loss channel (`MAGNUM-58`)** — `SetContextRecoveryEnabled` /
 >   `DebugSimulateContextLoss` / `DebugRestoreContext` keep `IGraphicsBackend`'s defaults.
 > - **Cross-backend pixel-parity run (`MAGNUM-59`)** — the same scene measured on
@@ -95,6 +93,18 @@
     framebuffer itself multisampled, so there is no off-screen buffer for this backend to resolve by
     hand every `Present()`. The applied count is read back from SDL rather than assumed.
 
+11. **A vertex array is cached against its binding, and the draw's own range is not part of it.**
+    Primitive, element count, instance count, base vertex and index offset are per-draw setters on
+    an existing `GL::Mesh`, so a draw sweeping its start vertex reuses one cached array instead of
+    building one per value. The shared start term therefore goes through the native base-vertex
+    parameter (`glDrawArrays`'s `first`, `glDrawElementsBaseVertex`'s basevertex) rather than being
+    folded into the attribute offsets; only a per-stream `vertexOffset` remainder is folded, because
+    it differs per stream and no single native term expresses it. The cache lives on the vertex
+    buffer, not on the graphics backend, so a destroyed buffer takes its own arrays with it -- and
+    the key holds a monotonic buffer identity rather than an address, because a destroyed buffer's
+    address can be reused by a later one and a key matching on the address alone would silently
+    draw the wrong data.
+
 ## Tasks
 
 | ID | Task | Status |
@@ -134,7 +144,7 @@
 | MAGNUM-54 | Real `SurfaceFormat` storage beyond `Color` | ⬜ |
 | MAGNUM-55 | `BlendState.MultiSampleMask` -- blocked on Magnum wrapping no sample-mask state; see the note above | ⬜ |
 | MAGNUM-56 | MSAA for an ordered multi-target set | ⬜ |
-| MAGNUM-57 | Cache `GL::Mesh` per buffer/layout pair instead of building one per draw | ⬜ |
+| MAGNUM-57 | Cache `GL::Mesh` per binding configuration instead of building one per draw, pixel-verified | ✅ |
 | MAGNUM-58 | Context-loss simulation/recovery channel | ⬜ |
 | MAGNUM-59 | Cross-backend pixel-parity run (EasyGL/Vulkan/Magnum, same scene) | ⬜ |
 | MAGNUM-60 | `PreferPerPixelLighting=false` per-vertex-lit shader family | ⬜ |

@@ -5,6 +5,7 @@
 
 #include <Magnum/GL/Attribute.h>
 #include <Magnum/GL/Buffer.h>
+#include <Magnum/GL/Mesh.h>
 #include <Magnum/GL/SampleQuery.h>
 
 #include <cstddef>
@@ -82,6 +83,28 @@ namespace CNA::Internal::Backends::Magnum
     [[nodiscard]] std::vector<MagnumVertexAttribute> AttributesForDeclaration(
         const std::vector<VertexElement>& elements, int baseLocation, int byteBase);
 
+    /**
+     * @brief A vertex array configuration cached against the draw that produced it.
+     *
+     * Building a `GL::Mesh` creates a vertex array object and re-specifies every attribute pointer,
+     * which is real per-draw cost for a configuration that almost never changes between frames.
+     * The entry is keyed by everything the binding depends on -- each stream's buffer identity,
+     * declaration revision, stride, binding offset and instance frequency, plus the index buffer's
+     * identity and element size -- so a key match means the very same vertex array would have been
+     * rebuilt byte for byte.
+     *
+     * Identity is a monotonic counter rather than a pointer, because a destroyed buffer's address
+     * can be reused by a later one: keying on the address alone would let a stale entry match a
+     * different buffer and silently draw the wrong data.
+     */
+    struct MagnumMeshCacheEntry
+    {
+        /** @brief The binding configuration this vertex array was built for. */
+        std::vector<std::uint64_t> key;
+        /** @brief The vertex array itself. */
+        std::unique_ptr<Mg::GL::Mesh> mesh;
+    };
+
     /** @brief Magnum-backed vertex buffer. */
     class MagnumVertexBufferBackend : public IVertexBufferBackend
     {
@@ -136,11 +159,45 @@ namespace CNA::Internal::Backends::Magnum
         }
         /** @brief The underlying Magnum buffer, so a draw path can bind it into a mesh. */
         [[nodiscard]] Mg::GL::Buffer& GetBuffer() const { return *buffer_; }
+        /** @brief This buffer's process-unique identity, never reused by a later buffer. */
+        [[nodiscard]] std::uint64_t GetIdentity() const { return identity_; }
+        /** @brief Bumped whenever `SetVertexDeclaration` replaces the recorded elements. */
+        [[nodiscard]] std::uint64_t GetDeclarationRevision() const { return declarationRevision_; }
+
+        /**
+         * @brief Looks up a previously built vertex array for this binding configuration.
+         *
+         * The cache lives on the buffer rather than on the graphics backend so that a destroyed
+         * buffer takes its own vertex arrays with it -- a cache outliving the buffer it binds would
+         * hand out arrays pointing at deleted storage.
+         *
+         * @param key Binding configuration to match.
+         * @return The cached vertex array, or nullptr when none matches.
+         */
+        [[nodiscard]] Mg::GL::Mesh* FindCachedMesh(const std::vector<std::uint64_t>& key) const;
+
+        /**
+         * @brief Stores a freshly built vertex array against its binding configuration.
+         *
+         * @param key  Binding configuration the array was built for.
+         * @param mesh The array itself.
+         * @return A reference to the stored array.
+         */
+        Mg::GL::Mesh& StoreCachedMesh(std::vector<std::uint64_t> key,
+                                      std::unique_ptr<Mg::GL::Mesh> mesh) const;
 
     private:
         void Upload(const void* data, std::size_t byteCount, SetDataOptions options);
 
         std::unique_ptr<Mg::GL::Buffer> buffer_;
+        std::uint64_t identity_ = 0;
+        std::uint64_t declarationRevision_ = 0;
+        /**
+         * Bounded so a draw sweeping its start vertex cannot grow this without limit; the oldest
+         * entry is evicted at the cap, which degrades to rebuilding per draw -- the behaviour
+         * before this cache existed -- rather than to anything worse.
+         */
+        mutable std::vector<MagnumMeshCacheEntry> meshCache_;
         int vertexCapacity_ = 0;
         int vertexCount_ = 0;
         std::size_t strideInBytes_ = 0;
@@ -200,11 +257,14 @@ namespace CNA::Internal::Backends::Magnum
         [[nodiscard]] int GetIndexSize() const { return thirtyTwoBit_ ? 4 : 2; }
         /** @brief The underlying Magnum buffer, so a draw path can bind it into a mesh. */
         [[nodiscard]] Mg::GL::Buffer& GetBuffer() const { return *buffer_; }
+        /** @brief This buffer's process-unique identity, never reused by a later buffer. */
+        [[nodiscard]] std::uint64_t GetIdentity() const { return identity_; }
 
     private:
         void Upload(const void* data, int indexCount, int indexSize, SetDataOptions options);
 
         std::unique_ptr<Mg::GL::Buffer> buffer_;
+        std::uint64_t identity_ = 0;
         int indexCapacity_ = 0;
         int indexCount_ = 0;
         bool thirtyTwoBit_ = false;

@@ -1135,17 +1135,6 @@ namespace CNA::Internal::Backends::Magnum
             return;
 
         const bool custom = params.customEffectBackend != nullptr;
-        const GpuVertexStreamBinding* instanceStream = FirstInstanceStream(params);
-        BindDrawParams(*program, world, view, projection, params,
-                       instanceStream != nullptr && instanceCount > 1);
-
-        Mg::GL::Mesh mesh;
-        mesh.setPrimitive(ToMeshPrimitive(primitive));
-
-        // The draw's start offsets are folded into each stream's byte offset rather than expressed
-        // through a base-vertex term, so one code path serves the indexed, non-indexed and
-        // instanced routes identically and each stream advances by its own stride.
-        const int perVertexBase = ib != nullptr ? params.baseVertex : params.vertexStart;
 
         // A stream's stride comes from its VertexDeclaration, which is empty -- stride 0 -- for the
         // raw-upload route `VertexBuffer(device, count)` + `SetDataRaw(data, count, stride)` that
@@ -1158,6 +1147,83 @@ namespace CNA::Internal::Backends::Magnum
                 ? stream.strideInBytes
                 : static_cast<int>(buffer.GetStride());
         };
+        const GpuVertexStreamBinding* instanceStream = FirstInstanceStream(params);
+        BindDrawParams(*program, world, view, projection, params,
+                       instanceStream != nullptr && instanceCount > 1);
+
+        const auto* indexBuffer = ib != nullptr
+            ? dynamic_cast<const MagnumIndexBufferBackend*>(ib)
+            : nullptr;
+        if (ib != nullptr && indexBuffer == nullptr)
+            return;
+
+        // The draw's shared start term goes through the native base-vertex parameter --
+        // glDrawArrays' `first`, glDrawElementsBaseVertex's basevertex -- rather than being folded
+        // into the attribute offsets. Both advance every per-vertex stream by that many of its OWN
+        // elements and leave per-instance streams alone, which is exactly the documented semantics,
+        // and keeping it out of the binding is what lets a draw sweeping its start vertex reuse one
+        // cached vertex array instead of building a new one per value. A per-stream `vertexOffset`
+        // remainder still IS folded in: it differs per stream, so no single native term expresses it.
+        const int perVertexBase = ib != nullptr ? params.baseVertex : params.vertexStart;
+
+        // Everything the binding depends on, and nothing that does not. Primitive, element count,
+        // instance count, base vertex and index offset are all per-draw setters on an existing
+        // vertex array, so none of them belong here.
+        std::vector<std::uint64_t> cacheKey;
+        cacheKey.reserve(8 + 5 * static_cast<std::size_t>(params.vertexStreamCount));
+        cacheKey.push_back(custom ? 1u : 0u);
+        cacheKey.push_back(static_cast<std::uint64_t>(stride));
+        cacheKey.push_back(indexBuffer != nullptr ? indexBuffer->GetIdentity() : 0u);
+        cacheKey.push_back(indexBuffer != nullptr
+            ? static_cast<std::uint64_t>(indexBuffer->GetIndexSize()) : 0u);
+        cacheKey.push_back(static_cast<std::uint64_t>(params.vertexStreamCount));
+        if (params.vertexStreamCount > 0)
+        {
+            for (int i = 0; i < params.vertexStreamCount; ++i)
+            {
+                const GpuVertexStreamBinding& stream = params.vertexStreams[i];
+                const auto* streamBuffer =
+                    dynamic_cast<const MagnumVertexBufferBackend*>(stream.buffer);
+                cacheKey.push_back(streamBuffer != nullptr ? streamBuffer->GetIdentity() : 0u);
+                cacheKey.push_back(streamBuffer != nullptr
+                    ? streamBuffer->GetDeclarationRevision() : 0u);
+                cacheKey.push_back(streamBuffer != nullptr
+                    && !streamBuffer->GetDeclarationElements().empty() ? 1u : 0u);
+                cacheKey.push_back(streamBuffer != nullptr
+                    ? static_cast<std::uint64_t>(strideOf(stream, *streamBuffer)) : 0u);
+                cacheKey.push_back(static_cast<std::uint64_t>(stream.vertexOffset));
+                cacheKey.push_back(static_cast<std::uint64_t>(stream.instanceFrequency));
+            }
+        }
+        else
+        {
+            cacheKey.push_back(vertexBuffer->GetIdentity());
+            cacheKey.push_back(vertexBuffer->GetDeclarationRevision());
+            cacheKey.push_back(vertexBuffer->GetDeclarationElements().empty() ? 0u : 1u);
+        }
+
+        // The cache lives on the stream the draw named, so a destroyed buffer takes its own vertex
+        // arrays with it rather than leaving the backend holding arrays that bind deleted storage.
+        const auto finishDraw = [&](Mg::GL::Mesh& mesh) {
+            mesh.setPrimitive(ToMeshPrimitive(primitive));
+            mesh.setCount(VertexCountForPrimitives(primitive, primitiveCount));
+            mesh.setInstanceCount(std::max(1, instanceCount));
+            mesh.setBaseVertex(perVertexBase);
+            // setIndexOffset counts INDEX ELEMENTS, not bytes: Magnum multiplies it by the index
+            // type size itself before adding the buffer's own base offset.
+            if (indexBuffer != nullptr)
+                mesh.setIndexOffset(params.startIndex);
+            program->draw(mesh);
+        };
+
+        if (Mg::GL::Mesh* cached = vertexBuffer->FindCachedMesh(cacheKey))
+        {
+            finishDraw(*cached);
+            return;
+        }
+
+        auto owned = std::make_unique<Mg::GL::Mesh>();
+        Mg::GL::Mesh& mesh = *owned;
 
         // Binds one resolved attribute out of one bound stream. `elementBase` is in that stream's
         // own vertex (or instance) elements, so every stream advances by its OWN stride -- which is
@@ -1213,7 +1279,7 @@ namespace CNA::Internal::Backends::Magnum
                     for (const MagnumVertexAttribute& attribute : attributes)
                     {
                         bindAttribute(*streamBuffer, attribute, streamStride,
-                                      stream.vertexOffset + perVertexBase, 0);
+                                      stream.vertexOffset, 0);
                     }
                 }
             }
@@ -1243,7 +1309,7 @@ namespace CNA::Internal::Backends::Magnum
                     MagnumVertexAttribute attribute = combined;
                     attribute.offsetInStream = slot.byteOffsetInStream;
                     bindAttribute(*streamBuffer, attribute, streamStride,
-                                  stream.vertexOffset + perVertexBase, 0);
+                                  stream.vertexOffset, 0);
                 }
             }
 
@@ -1313,33 +1379,23 @@ namespace CNA::Internal::Backends::Magnum
                 vertexBuffer->GetDeclarationElements().empty()
                     ? StockAttributesForStride(stride)
                     : AttributesForDeclaration(vertexBuffer->GetDeclarationElements(), 0, 0);
-            const GLintptr streamBase = static_cast<GLintptr>(perVertexBase) * stride;
             for (const MagnumVertexAttribute& attribute : attributes)
             {
-                mesh.addVertexBuffer(vertexBuffer->GetBuffer(),
-                                     streamBase + attribute.offsetInStream,
+                mesh.addVertexBuffer(vertexBuffer->GetBuffer(), attribute.offsetInStream,
                                      static_cast<GLsizei>(stride), ToDynamicAttribute(attribute));
             }
         }
 
-        const int elementCount = VertexCountForPrimitives(primitive, primitiveCount);
-        mesh.setCount(elementCount);
-        if (instanceCount > 1)
-            mesh.setInstanceCount(instanceCount);
-
-        if (ib != nullptr)
+        if (indexBuffer != nullptr)
         {
-            const auto* indexBuffer = dynamic_cast<const MagnumIndexBufferBackend*>(ib);
-            if (indexBuffer == nullptr)
-                return;
-            const int indexSize = indexBuffer->GetIndexSize();
-            mesh.setIndexBuffer(indexBuffer->GetBuffer(),
-                                static_cast<GLintptr>(params.startIndex) * indexSize,
+            // Bound at offset 0 and then moved per draw through setIndexOffset, so a sub-range
+            // draw reuses the same vertex array rather than keying a new one per start index.
+            mesh.setIndexBuffer(indexBuffer->GetBuffer(), 0,
                                 indexBuffer->IsThirtyTwoBit() ? Mg::GL::MeshIndexType::UnsignedInt
                                                               : Mg::GL::MeshIndexType::UnsignedShort);
         }
 
-        program->draw(mesh);
+        finishDraw(vertexBuffer->StoreCachedMesh(std::move(cacheKey), std::move(owned)));
     }
 
     void MagnumGraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend& vb,

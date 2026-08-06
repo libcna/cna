@@ -90,6 +90,10 @@ sudo apt-get install -y libegl1-mesa-dev                        # additionally, 
   two-sided stencil, cull mode, real wireframe fill (desktop GL has `glPolygonMode`), polygon
   offset, scissor, viewport and depth range.
 - **Occlusion queries** — real `GL_SAMPLES_PASSED` queries.
+- **Vertex array caching** — a `GL::Mesh` is built once per binding configuration and reused, with
+  primitive, element count, instance count, base vertex and index offset applied per draw. The cache
+  lives on the vertex buffer, so a destroyed buffer takes its own arrays with it, and its key holds
+  a monotonic buffer identity rather than an address that a later buffer could reuse.
 
 ## Current limitations
 
@@ -104,8 +108,6 @@ sudo apt-get install -y libegl1-mesa-dev                        # additionally, 
   rather than an implemented mode.
 - **Multi-target MSAA** — an ordered multi-target set attaches the targets' resolved colour
   textures, so a multisampled target contributes its single-sample image while it is part of a set.
-- **Mesh construction** — a `GL::Mesh` (and therefore a vertex array object) is built per draw
-  rather than cached per buffer/layout pair. Correct, but a known performance boundary.
 - **Context loss** — `SetContextRecoveryEnabled`/`DebugSimulateContextLoss` keep
   `IGraphicsBackend`'s defaults; desktop GL contexts are not lost the way an ES/WebGL one can be.
 
@@ -132,6 +134,9 @@ sudo apt-get install -y libegl1-mesa-dev                        # additionally, 
 - `examples/magnum_pbreffect_test.cpp` (`ctest -R Magnum_PbrEffect`) — the metallic-roughness BRDF
   on a rig where N, V, L and H coincide, so every expected byte is derived from the formula rather
   than captured from a run.
+- `examples/magnum_meshcache_test.cpp` (`ctest -R Magnum_MeshCache`) — four draws over one binding,
+  each selecting a different range by index offset or base vertex, so a cached vertex array that
+  kept either term is caught.
 
 Both suites were run against Mesa's `llvmpipe` software rasterizer under `Xvfb`, so they need no GPU
 — point `CNA_TEST_DISPLAY` at the X server the ctest registration should use.

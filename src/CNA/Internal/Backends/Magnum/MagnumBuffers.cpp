@@ -52,6 +52,21 @@ namespace CNA::Internal::Backends::Magnum
             }
         }
 
+        /**
+         * @brief Hands out a process-unique identity for a buffer.
+         *
+         * Monotonic rather than address-derived: a destroyed buffer's address can be reused, and a
+         * cache key built on the address alone would then match a different buffer.
+         */
+        std::uint64_t NextBufferIdentity()
+        {
+            static std::uint64_t next = 1;
+            return next++;
+        }
+
+        /// Vertex arrays one buffer keeps before the oldest is evicted.
+        constexpr std::size_t kMeshCacheCapacity = 8;
+
         MagnumVertexAttribute MakeAttribute(int location, int offset, int components,
                                             bool normalized, int format, bool integral = false)
         {
@@ -156,8 +171,29 @@ namespace CNA::Internal::Backends::Magnum
 
     MagnumVertexBufferBackend::MagnumVertexBufferBackend(int vertexCapacity)
         : buffer_(std::make_unique<Mg::GL::Buffer>(Mg::GL::Buffer::TargetHint::Array))
+        , identity_(NextBufferIdentity())
         , vertexCapacity_(std::max(0, vertexCapacity))
     {
+    }
+
+    Mg::GL::Mesh* MagnumVertexBufferBackend::FindCachedMesh(
+        const std::vector<std::uint64_t>& key) const
+    {
+        for (const MagnumMeshCacheEntry& entry : meshCache_)
+        {
+            if (entry.key == key)
+                return entry.mesh.get();
+        }
+        return nullptr;
+    }
+
+    Mg::GL::Mesh& MagnumVertexBufferBackend::StoreCachedMesh(
+        std::vector<std::uint64_t> key, std::unique_ptr<Mg::GL::Mesh> mesh) const
+    {
+        if (meshCache_.size() >= kMeshCacheCapacity)
+            meshCache_.erase(meshCache_.begin());
+        meshCache_.push_back(MagnumMeshCacheEntry{std::move(key), std::move(mesh)});
+        return *meshCache_.back().mesh;
     }
 
     void MagnumVertexBufferBackend::SetData(const void* data, int vertexCount,
@@ -218,6 +254,9 @@ namespace CNA::Internal::Backends::Magnum
     void MagnumVertexBufferBackend::SetVertexDeclaration(const VertexDeclaration& vertexDeclaration)
     {
         declarationElements_ = vertexDeclaration.GetVertexElements();
+        // Every cached vertex array was built against the previous declaration, so the revision is
+        // what keeps a later draw from matching one of them.
+        ++declarationRevision_;
         if (strideInBytes_ == 0 && vertexDeclaration.getVertexStrideProperty() > 0)
             strideInBytes_ = static_cast<std::size_t>(vertexDeclaration.getVertexStrideProperty());
     }
@@ -226,6 +265,7 @@ namespace CNA::Internal::Backends::Magnum
 
     MagnumIndexBufferBackend::MagnumIndexBufferBackend(int indexCapacity, bool thirtyTwoBit)
         : buffer_(std::make_unique<Mg::GL::Buffer>(Mg::GL::Buffer::TargetHint::ElementArray))
+        , identity_(NextBufferIdentity())
         , indexCapacity_(std::max(0, indexCapacity))
         , thirtyTwoBit_(thirtyTwoBit)
     {
