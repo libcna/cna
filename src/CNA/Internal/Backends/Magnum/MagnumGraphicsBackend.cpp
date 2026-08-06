@@ -33,6 +33,9 @@ namespace CNA::Internal::Backends::Magnum
         constexpr int kBytesPerPixel = 4;
         /// Shader locations the stock programs reserve for an optional per-instance world matrix.
         constexpr int kInstanceMatrixBaseLocation = 12;
+        /// Texture unit EnvironmentMapEffect's cube map is bound to. Units 0 and 1 belong to the
+        /// diffuse and second-layer 2D textures, which an env-mapped draw may also carry.
+        constexpr int kEnvironmentMapSlot = 2;
 
         Mg::Color4 ToMagnumColor(float r, float g, float b, float a)
         {
@@ -887,6 +890,7 @@ namespace CNA::Internal::Backends::Magnum
         MagnumStockSelector selector;
         selector.strideInBytes = stride;
         selector.dualTexture = params.dualTexture;
+        selector.envMapping = params.envMapping;
 
         MagnumStockProgram stockProgram{};
         if (!SelectStockProgram(selector, stockProgram))
@@ -974,7 +978,43 @@ namespace CNA::Internal::Backends::Magnum
             program.SetInt(program.LocationOf("uTexture2"), 1);
             renderTargetFlips[1] = SampledRowOrderIsBottomUp(params.texture1) ? 1.0f : 0.0f;
         }
+        // EnvironmentMapEffect's cube map goes to its own unit so it never displaces the diffuse
+        // texture, and the blend/Fresnel terms travel with it: a bound cube map with no blend
+        // amount is a no-op reflection, which is not the same thing as no cube map at all.
+        if (params.envMap != nullptr)
+        {
+            BindTextureCubeToSlot(kEnvironmentMapSlot, params.envMap);
+            program.SetInt(program.LocationOf("uEnvMap"), kEnvironmentMapSlot);
+            program.SetFloat(program.LocationOf("uEnvMapAmount"), params.envMapAmount);
+            program.SetFloat(program.LocationOf("uFresnelEnabled"),
+                             params.fresnelEnabled ? 1.0f : 0.0f);
+            program.SetFloat(program.LocationOf("uFresnelFactor"), params.fresnelFactor);
+            program.SetVector3(program.LocationOf("uEnvMapSpecular"), Mg::Vector3{
+                params.envMapSpecular[0], params.envMapSpecular[1], params.envMapSpecular[2]});
+        }
+
         program.SetVector4(program.LocationOf("uRtFlipV"), renderTargetFlips);
+    }
+
+    void MagnumGraphicsBackend::BindTextureCubeToSlot(int slot, const ITextureCubeBackend* texture)
+    {
+        if (texture == nullptr || slot < 0 || slot >= kMaxSamplerSlots)
+            return;
+
+        const MagnumSamplerState& state = samplers_[static_cast<std::size_t>(slot)];
+        if (auto* cube = dynamic_cast<const MagnumTextureCubeBackend*>(texture))
+        {
+            ApplySamplerStateTo(cube->GetTexture(), state, cube->GetLevelCount());
+            cube->GetTexture().bind(slot);
+            return;
+        }
+        if (auto* target = dynamic_cast<const MagnumRenderTargetCubeBackend*>(texture))
+        {
+            ApplySamplerStateTo(target->GetTexture(), state, target->GetLevelCount());
+            target->GetTexture().bind(slot);
+            return;
+        }
+        texture->BindGL();
     }
 
     void MagnumGraphicsBackend::DrawGeneric(const IVertexBufferBackend& vb,

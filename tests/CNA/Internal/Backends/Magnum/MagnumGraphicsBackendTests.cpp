@@ -309,11 +309,13 @@ TEST(MagnumVertexLayoutTest, NormalizedShortFormatsAreMarkedNormalized)
 
 namespace
 {
-    MagnumStockProgram SelectOrDie(std::size_t stride, bool dualTexture = false)
+    MagnumStockProgram SelectOrDie(std::size_t stride, bool dualTexture = false,
+                                   bool envMapping = false)
     {
         MagnumStockSelector selector;
         selector.strideInBytes = stride;
         selector.dualTexture = dualTexture;
+        selector.envMapping = envMapping;
         MagnumStockProgram program{};
         EXPECT_TRUE(SelectStockProgram(selector, program));
         return program;
@@ -326,6 +328,7 @@ namespace
         MagnumStockProgram::PositionNormalTexture,
         MagnumStockProgram::DualTexture,
         MagnumStockProgram::DualTextureColored,
+        MagnumStockProgram::EnvironmentMap,
     };
 }
 
@@ -366,6 +369,63 @@ TEST(MagnumStockShaderTest, DualTextureOnALayoutWithoutTextureCoordinatesSelects
     EXPECT_FALSE(SelectStockProgram(selector, program));
 }
 
+TEST(MagnumStockShaderTest, EnvironmentMappingSelectsItsOwnProgramOnTheNormalCarryingLayout)
+{
+    EXPECT_EQ(SelectOrDie(32, false, true), MagnumStockProgram::EnvironmentMap);
+}
+
+TEST(MagnumStockShaderTest, EnvironmentMappingOnALayoutWithoutNormalsSelectsNothing)
+{
+    // The reflection basis needs a per-vertex normal; a layout without one has nothing to reflect
+    // about, so the draw is refused rather than rendered through some other program.
+    MagnumStockSelector selector;
+    selector.envMapping = true;
+    MagnumStockProgram program{};
+    for (const std::size_t stride : {std::size_t{16}, std::size_t{20}, std::size_t{24}})
+    {
+        selector.strideInBytes = stride;
+        EXPECT_FALSE(SelectStockProgram(selector, program)) << "stride " << stride;
+    }
+}
+
+TEST(MagnumStockShaderTest, EnvironmentMappingWinsOverDualTexturingOnItsOwnLayout)
+{
+    // Both flags name programs over different layouts, so a draw carrying both can only mean the
+    // one whose layout it actually supplies.
+    EXPECT_EQ(SelectOrDie(32, true, true), MagnumStockProgram::EnvironmentMap);
+    EXPECT_EQ(SelectOrDie(24, true, false), MagnumStockProgram::DualTextureColored);
+}
+
+TEST(MagnumStockShaderTest, EnvironmentMapBlendsByLerpAndAddsSpecularOnTop)
+{
+    // The reflection REPLACES the lit base as the amount rises -- an additive blend would answer
+    // base+cube at amount 1 instead. Only the lerp is FNA's own formula.
+    const std::string source = StockFragmentShaderSource(MagnumStockProgram::EnvironmentMap);
+    EXPECT_NE(source.find("mix(litColor * diffuse.rgb, reflection.rgb * alpha, vEnvMapBlend)"),
+              std::string::npos);
+    EXPECT_NE(source.find("uEnvMapSpecular * reflection.a * alpha"), std::string::npos);
+    EXPECT_NE(source.find("uniform samplerCube uEnvMap"), std::string::npos);
+    EXPECT_NE(source.find("reflect(-eye, normal)"), std::string::npos);
+}
+
+TEST(MagnumStockShaderTest, EnvironmentMapWeightsItsBlendByFresnelOnlyWhenAsked)
+{
+    const std::string source = StockVertexShaderSource(MagnumStockProgram::EnvironmentMap);
+    EXPECT_NE(source.find("uFresnelEnabled > 0.5"), std::string::npos);
+    EXPECT_NE(source.find("pow(max(1.0 - abs(viewAngle), 0.0), uFresnelFactor) * uEnvMapAmount"),
+              std::string::npos);
+}
+
+TEST(MagnumStockShaderTest, EnvironmentMapCarriesNoAmbientOrSpecularLightTerms)
+{
+    // EnvironmentMapEffect has neither in XNA -- the reflection stands in for them. Reusing
+    // BasicEffect's fragment stage would silently add an ambient term the effect does not have.
+    const std::string source = StockFragmentShaderSource(MagnumStockProgram::EnvironmentMap);
+    EXPECT_EQ(source.find("uAmbientColor"), std::string::npos);
+    EXPECT_EQ(source.find("uSpecularPower"), std::string::npos);
+    EXPECT_NE(source.find("uEmissiveColor"), std::string::npos);
+}
+
 TEST(MagnumStockShaderTest, EveryStockShaderTargetsTheDesktopCoreProfile)
 {
     for (const MagnumStockProgram program : kAllPrograms)
@@ -397,6 +457,10 @@ TEST(MagnumStockShaderTest, EachLayoutDeclaresExactlyTheInputsItsStrideCarries)
         StockVertexShaderSource(MagnumStockProgram::PositionNormalTexture);
     EXPECT_NE(normalTexture.find("location=1) in vec3 aNormal"), std::string::npos);
     EXPECT_NE(normalTexture.find("location=2) in vec2 aTexCoord"), std::string::npos);
+
+    const std::string environmentMap = StockVertexShaderSource(MagnumStockProgram::EnvironmentMap);
+    EXPECT_NE(environmentMap.find("location=1) in vec3 aNormal"), std::string::npos);
+    EXPECT_NE(environmentMap.find("location=2) in vec2 aTexCoord"), std::string::npos);
 }
 
 TEST(MagnumStockShaderTest, DualTextureProgramsDeclareTheirOwnLayoutsInputs)
@@ -455,6 +519,16 @@ TEST(MagnumStockShaderTest, OnlyDualTextureProgramsSampleASecondLayer)
                          || program == MagnumStockProgram::DualTextureColored;
         const std::string source = StockFragmentShaderSource(program);
         EXPECT_EQ(source.find("uTexture2") != std::string::npos, isDual);
+    }
+}
+
+TEST(MagnumStockShaderTest, OnlyTheEnvironmentMapProgramSamplesACubeMap)
+{
+    for (const MagnumStockProgram program : kAllPrograms)
+    {
+        const bool isEnvironmentMap = program == MagnumStockProgram::EnvironmentMap;
+        const std::string source = StockFragmentShaderSource(program);
+        EXPECT_EQ(source.find("samplerCube") != std::string::npos, isEnvironmentMap);
     }
 }
 

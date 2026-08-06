@@ -32,6 +32,8 @@ namespace CNA::Internal::Backends::Magnum
         DualTexture,
         /** @brief `DualTextureEffect` over `VertexPositionColorTexture` (stride 24). */
         DualTextureColored,
+        /** @brief `EnvironmentMapEffect` over `VertexPositionNormalTexture` (stride 32). */
+        EnvironmentMap,
     };
 
     /** @brief What a draw asks of the stock shader set: its vertex stride plus its effect flags. */
@@ -41,6 +43,8 @@ namespace CNA::Internal::Backends::Magnum
         std::size_t strideInBytes = 0;
         /** @brief `GpuDrawParams::dualTexture` -- select a two-sampler `DualTextureEffect` program. */
         bool dualTexture = false;
+        /** @brief `GpuDrawParams::envMapping` -- select the cube-map `EnvironmentMapEffect` program. */
+        bool envMapping = false;
     };
 
     /**

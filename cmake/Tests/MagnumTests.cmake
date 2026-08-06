@@ -34,4 +34,13 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_BACKEND STREQUAL "MAGNUM"
         COMMAND cna_test_magnum_dualtextureeffect
         TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
         LABELS "GraphicsSmoke;Magnum")
+
+    # plan_magnum.md MAGNUM-51: EnvironmentMapEffect's reflection blend is a lerp, not an addition,
+    # and the two only separate against a mid-tone cube map over a non-zero base.
+    cna_magnum_test(cna_test_magnum_environmentmapeffect
+                    examples/magnum_environmentmapeffect_test.cpp)
+    cna_register_backend_test(NAME Magnum_EnvironmentMapEffect
+        COMMAND cna_test_magnum_environmentmapeffect
+        TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
+        LABELS "GraphicsSmoke;Magnum")
 endif()

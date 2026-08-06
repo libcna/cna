@@ -76,7 +76,9 @@ sudo apt-get install -y libegl1-mesa-dev                        # additionally, 
   effect flags. The four built-in layouts (strides 16/20/24/32) cover diffuse colour, vertex colour,
   texturing, three directional lights with Blinn-Phong specular, ambient and emissive terms, alpha
   test and view-space fog; `DualTextureEffect` adds its own two-sampler programs for strides 20 and
-  24, carrying FNA's `color.rgb *= 2` overbright factor on the base layer.
+  24, carrying FNA's `color.rgb *= 2` overbright factor on the base layer, and
+  `EnvironmentMapEffect` adds a cube-map program whose reflection lerps over the lit base (flat or
+  Fresnel-weighted) with its specular tint added on top.
 - **Draws** — non-indexed, indexed and instanced, with per-stream binding offsets and instance
   frequencies honoured individually. Multi-stream vertex input is supported: a declaration split
   across several buffers is re-slotted per element, and a per-instance world matrix may itself be
@@ -92,10 +94,10 @@ sudo apt-get install -y libegl1-mesa-dev                        # additionally, 
   and are recorded, but every texture, cube, volume and render target is created as RGBA8.
 - **`BlendState.MultiSampleMask`** — reaches the backend but only its all-ones default is applied; a
   real coverage mask would need `GL_SAMPLE_MASK` plus `glSampleMaski`.
-- **Stock effect coverage** — `BasicEffect`/`AlphaTestEffect`/`DualTextureEffect`-shaped draws are
-  covered. The `EnvironmentMapEffect`, `SkinnedEffect` and `PbrEffect` shader variants that EasyGL
-  and Vulkan carry are not yet generated here; a draw selecting one renders through the layout's own
-  program without that variant's extra terms.
+- **Stock effect coverage** — `BasicEffect`, `AlphaTestEffect`, `DualTextureEffect` and
+  `EnvironmentMapEffect` are covered. `SkinnedEffect` and `PbrEffect`/`SkinnedPbrEffect` are not:
+  neither their shader variants nor their vertex layouts (strides 52/48/68) exist here yet, so such
+  a draw is refused rather than rendered without its terms.
 - **Multi-target MSAA** — an ordered multi-target set attaches the targets' resolved colour
   textures, so a multisampled target contributes its single-sample image while it is part of a set.
 - **Mesh construction** — a `GL::Mesh` (and therefore a vertex array object) is built per draw
@@ -117,6 +119,9 @@ sudo apt-get install -y libegl1-mesa-dev                        # additionally, 
 - `examples/magnum_dualtextureeffect_test.cpp` (`ctest -R Magnum_DualTextureEffect`) — the
   overbright factor and the second layer's participation, both measured against a mid-tone texel so
   a saturated scene cannot hide either.
+- `examples/magnum_environmentmapeffect_test.cpp` (`ctest -R Magnum_EnvironmentMapEffect`) — the
+  reflection at amount 0 and 1 plus the specular tint. The amount-1 case is what separates a lerp
+  from an addition, which a saturated cube map cannot.
 
 Both suites were run against Mesa's `llvmpipe` software rasterizer under `Xvfb`, so they need no GPU
 — point `CNA_TEST_DISPLAY` at the X server the ctest registration should use.

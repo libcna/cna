@@ -539,6 +539,13 @@ namespace CNA::Internal::Backends::Magnum
          * @param texture Texture to bind; ignored when null.
          */
         void BindTextureToSlot(int slot, const ITextureBackend* texture);
+        /**
+         * @brief Binds a cube map into a slot and configures it with that slot's sampler state.
+         *
+         * @param slot    Texture unit.
+         * @param texture Cube map to bind; ignored when null.
+         */
+        void BindTextureCubeToSlot(int slot, const ITextureCubeBackend* texture);
         /** @brief The lazily compiled stock program cache, shared with the SpriteBatch backend. */
         [[nodiscard]] MagnumStockShaderCache& GetStockShaders() { return *stockShaders_; }
         /** @brief The framebuffer draws currently go to. */

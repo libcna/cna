@@ -74,7 +74,8 @@ vec2 cnaSampleUV(vec2 uv, float flip){ return vec2(uv.x, mix(uv.y, 1.0 - uv.y, f
 
         bool ProgramHasNormal(MagnumStockProgram program)
         {
-            return program == MagnumStockProgram::PositionNormalTexture;
+            return program == MagnumStockProgram::PositionNormalTexture
+                || program == MagnumStockProgram::EnvironmentMap;
         }
 
         bool ProgramIsDualTexture(MagnumStockProgram program)
@@ -203,6 +204,88 @@ vec2 cnaSampleUV(vec2 uv, float flip){ return vec2(uv.x, mix(uv.y, 1.0 - uv.y, f
             return source;
         }
 
+        std::string EnvironmentMapVertexShaderSource()
+        {
+            std::string source = "#version 330 core\n";
+            source += "layout(location=0) in vec3 aPosition;\n";
+            source += "layout(location=1) in vec3 aNormal;\n";
+            source += "layout(location=2) in vec2 aTexCoord;\n";
+            source += kInstanceTransformDeclaration;
+            source += "uniform mat4 uWVP;\n";
+            source += "uniform mat4 uWorld;\n";
+            source += "uniform mat3 uNormalMatrix;\n";
+            source += "uniform vec3 uEyePosition;\n";
+            source += "uniform vec4 uFogVector;\n";
+            source += "uniform float uEnvMapAmount;\n";
+            source += "uniform float uFresnelEnabled;\n";
+            source += "uniform float uFresnelFactor;\n";
+            source += "out vec3 vWorldNormal;\n";
+            source += "out vec3 vEyeDirection;\n";
+            source += "out vec2 vTexCoord;\n";
+            source += "out float vFogFactor;\n";
+            source += "out float vEnvMapBlend;\n";
+            source += "void main(){\n";
+            source += "    vec4 cnaPosition = cnaInstancePosition(vec4(aPosition, 1.0));\n";
+            source += "    gl_Position = uWVP * cnaPosition;\n";
+            source += "    vec3 worldPosition = (uWorld * cnaPosition).xyz;\n";
+            source += "    vWorldNormal = normalize(uNormalMatrix * cnaInstanceDirection(aNormal));\n";
+            source += "    vEyeDirection = normalize(uEyePosition - worldPosition);\n";
+            source += "    vTexCoord = aTexCoord;\n";
+            // The Fresnel weighting is a per-vertex term in FNA's own stock effect, so it is
+            // computed here and interpolated rather than re-derived per fragment.
+            source += "    float viewAngle = dot(vEyeDirection, vWorldNormal);\n";
+            source += "    vEnvMapBlend = (uFresnelEnabled > 0.5)\n";
+            source += "        ? pow(max(1.0 - abs(viewAngle), 0.0), uFresnelFactor) * uEnvMapAmount\n";
+            source += "        : uEnvMapAmount;\n";
+            source += kFogVertexTerm;
+            source += "}\n";
+            return source;
+        }
+
+        std::string EnvironmentMapFragmentShaderSource()
+        {
+            std::string source = "#version 330 core\n";
+            source += "in vec3 vWorldNormal;\n";
+            source += "in vec3 vEyeDirection;\n";
+            source += "in vec2 vTexCoord;\n";
+            source += "in float vFogFactor;\n";
+            source += "in float vEnvMapBlend;\n";
+            source += "uniform sampler2D uTexture;\n";
+            source += "uniform samplerCube uEnvMap;\n";
+            source += "uniform vec4 uDiffuseColor;\n";
+            source += "uniform vec3 uEmissiveColor;\n";
+            source += "uniform vec3 uLight0Dir;\n";
+            source += "uniform vec3 uLight0Diffuse;\n";
+            source += "uniform vec3 uLight1Dir;\n";
+            source += "uniform vec3 uLight1Diffuse;\n";
+            source += "uniform vec3 uLight2Dir;\n";
+            source += "uniform vec3 uLight2Diffuse;\n";
+            source += "uniform vec3 uEnvMapSpecular;\n";
+            source += "uniform vec4 uAlphaTest;\n";
+            source += "uniform vec3 uFogColor;\n";
+            source += kRenderTargetSampleDeclaration;
+            source += "out vec4 fragColor;\n";
+            source += "void main(){\n";
+            source += "    vec3 normal = normalize(vWorldNormal);\n";
+            source += "    vec3 eye = normalize(vEyeDirection);\n";
+            // EnvironmentMapEffect has no ambient or specular light terms of its own -- the
+            // reflection replaces them -- so this is the diffuse sum alone, not BasicEffect's.
+            source += "    vec3 lightSum = uLight0Diffuse * max(dot(normal, -uLight0Dir), 0.0)\n";
+            source += "                  + uLight1Diffuse * max(dot(normal, -uLight1Dir), 0.0)\n";
+            source += "                  + uLight2Diffuse * max(dot(normal, -uLight2Dir), 0.0);\n";
+            source += "    vec3 litColor = lightSum * uDiffuseColor.rgb + uEmissiveColor;\n";
+            source += "    vec4 diffuse = texture(uTexture, cnaSampleUV(vTexCoord, uRtFlipV.x));\n";
+            source += "    vec4 reflection = texture(uEnvMap, reflect(-eye, normal));\n";
+            source += "    float alpha = uDiffuseColor.a * diffuse.a;\n";
+            source += "    vec3 rgb = mix(litColor * diffuse.rgb, reflection.rgb * alpha, vEnvMapBlend)\n";
+            source += "             + uEnvMapSpecular * reflection.a * alpha;\n";
+            source += "    fragColor = vec4(rgb, alpha);\n";
+            source += kAlphaTestFragmentTerm;
+            source += kFogFragmentTerm;
+            source += "}\n";
+            return source;
+        }
+
         std::string DualTextureFragmentShaderSource(MagnumStockProgram program)
         {
             std::string source = "#version 330 core\n";
@@ -241,6 +324,17 @@ vec2 cnaSampleUV(vec2 uv, float flip){ return vec2(uv.x, mix(uv.y, 1.0 - uv.y, f
 
     bool SelectStockProgram(const MagnumStockSelector& selector, MagnumStockProgram& programOut)
     {
+        // Env mapping is tested ahead of dual texturing because it is the more specific request:
+        // both flags name a program over a DIFFERENT layout (32 vs 20/24), so a draw carrying both
+        // can only mean the one whose layout it actually supplies.
+        if (selector.envMapping)
+        {
+            if (selector.strideInBytes != 32)
+                return false;
+            programOut = MagnumStockProgram::EnvironmentMap;
+            return true;
+        }
+
         if (selector.dualTexture)
         {
             // Stride 24 carries a vertex colour the two-layer result must be tinted by; stride 20
@@ -270,11 +364,17 @@ vec2 cnaSampleUV(vec2 uv, float flip){ return vec2(uv.x, mix(uv.y, 1.0 - uv.y, f
 
     std::string StockVertexShaderSource(MagnumStockProgram program)
     {
+        // Env mapping needs its own vertex stage: the reflection basis and the Fresnel weight are
+        // per-vertex terms the shared generator has no varyings for.
+        if (program == MagnumStockProgram::EnvironmentMap)
+            return EnvironmentMapVertexShaderSource();
         return BaseVertexShaderSource(program);
     }
 
     std::string StockFragmentShaderSource(MagnumStockProgram program)
     {
+        if (program == MagnumStockProgram::EnvironmentMap)
+            return EnvironmentMapFragmentShaderSource();
         if (ProgramIsDualTexture(program))
             return DualTextureFragmentShaderSource(program);
         return BaseFragmentShaderSource(program);
