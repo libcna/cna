@@ -2017,6 +2017,11 @@ namespace CNA::Internal::Backends::Sokol
             /// Per-vertex buffer (slot 0) stride; the instance buffer (slot 1) is always exactly
             /// 64 bytes (4 column-major vec4s), so it needs no key field of its own.
             int stride;
+            /// REMED-GFX-202: the bound per-instance stream's
+            /// `VertexBufferBinding.InstanceFrequency`, which sokol_gfx expresses as
+            /// `sg_vertex_buffer_layout_state.step_rate` (a `glVertexAttribDivisor` on the GL
+            /// backends). Part of the key because sokol_gfx bakes it into the pipeline object.
+            int instanceStepRate;
             int positionOffset;
             int positionFormat;
             /// See PipelineKey's identical field (plan_sokol.md SOKOL-40).

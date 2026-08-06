@@ -2403,6 +2403,7 @@ namespace CNA::Internal::Backends::Sokol
             && primitiveType == other.primitiveType
             && indexType == other.indexType
             && stride == other.stride
+            && instanceStepRate == other.instanceStepRate
             && positionOffset == other.positionOffset
             && positionFormat == other.positionFormat
             && blendFactorPacked == other.blendFactorPacked;
@@ -2448,6 +2449,7 @@ namespace CNA::Internal::Backends::Sokol
         mix(static_cast<std::size_t>(key.primitiveType));
         mix(static_cast<std::size_t>(key.indexType));
         mix(static_cast<std::size_t>(key.stride));
+        mix(static_cast<std::size_t>(key.instanceStepRate));
         mix(static_cast<std::size_t>(key.positionOffset));
         mix(static_cast<std::size_t>(key.positionFormat));
         mix(static_cast<std::size_t>(key.blendFactorPacked));
@@ -4129,6 +4131,11 @@ namespace CNA::Internal::Backends::Sokol
         desc.layout.attrs[ATTR_cna_instanced3d_instCol3].offset = 48;
         desc.layout.buffers[1].stride = 64;
         desc.layout.buffers[1].step_func = SG_VERTEXSTEP_PER_INSTANCE;
+        // REMED-GFX-202: XNA's VertexBufferBinding.InstanceFrequency is a step RATE, not a flag --
+        // it advances the per-instance record once every N instances. sokol_gfx expresses it
+        // natively (glVertexAttribDivisor on the GL backends), so it is honoured rather than
+        // refused; the key carries it because sokol_gfx bakes it into the pipeline.
+        desc.layout.buffers[1].step_rate = key.instanceStepRate;
 
         desc.index_type = static_cast<sg_index_type>(key.indexType);
         desc.primitive_type = static_cast<sg_primitive_type>(key.primitiveType);
@@ -4310,6 +4317,13 @@ namespace CNA::Internal::Backends::Sokol
         }
         if (params.instanceCount > 1)
             NotYetImplemented(kBackendName, "instanced draws");
+        // REMED-GFX-201: this route binds exactly the one stream `vb` names. A declaration split
+        // across several buffers would need every element re-slotted, which this backend's
+        // single-buffer pipeline layout cannot express, so it is refused before any pipeline is
+        // built rather than rendered from stream 0 alone. GraphicsCapability::MultiStreamVertexInput
+        // answers false, so the shared layer already rejects it one step earlier; this is the
+        // backend-side guarantee for a harness that calls Draw*PrimitivesEx directly.
+        RejectUnsupportedStreamCombination(params, kBackendName);
 
         const auto& vb = static_cast<const SokolVertexBufferBackend&>(vbIn);
         if (vb.GetBufferIdEXT() == 0 || vb.GetVertexCount() <= 0) return;
@@ -5334,7 +5348,17 @@ namespace CNA::Internal::Backends::Sokol
                                                          int instanceCount,
                                                          const GpuDrawParams& params)
     {
-        if (params.instanceVb == nullptr)
+        // REMED-GFX-201/202: the bound streams now arrive as one array covering both input rates,
+        // so the per-instance buffer this route needs is the lowest-slot entry whose
+        // InstanceFrequency is greater than zero. Neither shape this backend cannot express is
+        // silently reduced to a subset: a second per-vertex or per-instance stream is refused
+        // before anything native happens (instanced3d.glsl declares exactly one mesh record and
+        // exactly one instance record, and GraphicsCapability::MultiStreamVertexInput answers
+        // false so the shared layer already rejects it a step earlier).
+        RejectUnsupportedStreamCombination(params, kBackendName);
+
+        const GpuVertexStreamBinding* instanceStream = FirstInstanceStream(params);
+        if (instanceStream == nullptr || instanceStream->buffer == nullptr)
         {
             // No per-instance stream -- fall back to a real, working non-instanced draw rather
             // than throwing, matching VulkanGraphicsBackend/D3D11GraphicsBackend's own identical
@@ -5350,8 +5374,18 @@ namespace CNA::Internal::Backends::Sokol
         const auto& ib = static_cast<const SokolIndexBufferBackend&>(ibIn);
         if (ib.GetBufferIdEXT() == 0 || ib.GetIndexCount() <= 0) return;
 
-        const auto& instVb = static_cast<const SokolVertexBufferBackend&>(*params.instanceVb);
+        const auto& instVb = static_cast<const SokolVertexBufferBackend&>(*instanceStream->buffer);
         if (instVb.GetBufferIdEXT() == 0 || instVb.GetVertexCount() <= 0) return;
+
+        // instanced3d.glsl reads the per-instance World matrix as four column-major vec4s at fixed
+        // offsets, so a stream declaring anything else would be fetched as a matrix it is not.
+        // Refusing is the honest answer; the same shape WickedGraphicsBackend already refuses.
+        if (instanceStream->strideInBytes != 0 && instanceStream->strideInBytes != 64)
+        {
+            throw std::runtime_error(
+                "Sokol backend: the per-instance stream must be a 64-byte Matrix (stride " +
+                std::to_string(instanceStream->strideInBytes) + " was bound).");
+        }
 
         PipelineInstanced3DKey key{};
         key.colorSrcBlend = blendColorSrc_;
@@ -5387,6 +5421,10 @@ namespace CNA::Internal::Backends::Sokol
         key.blendFactorPacked = PackBlendFactorEXT(blendFactor_);
         key.primitiveType = static_cast<int>(ToPrimitiveType(primitive));
         key.indexType = static_cast<int>(ib.IsThirtyTwoBit() ? SG_INDEXTYPE_UINT32 : SG_INDEXTYPE_UINT16);
+        // REMED-GFX-202: the step rate is the bound stream's own InstanceFrequency, never an
+        // assumed 1. Zero cannot reach here (a zero-frequency entry is a per-vertex stream by
+        // definition), so no clamping is needed.
+        key.instanceStepRate = instanceStream->instanceFrequency;
 
         // Only Position is read (instanced3d.glsl's own doc comment); resolved from the mesh
         // buffer's declaration when one was supplied, else offset 0 / FLOAT3 -- every one of this
@@ -5422,6 +5460,12 @@ namespace CNA::Internal::Backends::Sokol
         bindings.vertex_buffers[0] = MakeBufferHandle(vb.GetBufferIdEXT());
         bindings.vertex_buffer_offsets[0] = params.baseVertex * key.stride;
         bindings.vertex_buffers[1] = MakeBufferHandle(instVb.GetBufferIdEXT());
+        // REMED-GFX-202: the instanced route folds nothing into baseVertex, so the per-instance
+        // stream carries its whole public VertexBufferBinding.VertexOffset here, in instance
+        // ELEMENTS -- the same `binding.vertexOffset * stride` FNA3D's own drivers apply. The
+        // record size is the pipeline's own 64-byte matrix, not the binding's declared stride,
+        // which is 0 for a buffer built without a VertexDeclaration.
+        bindings.vertex_buffer_offsets[1] = instanceStream->vertexOffset * 64;
         bindings.index_buffer = MakeBufferHandle(ib.GetBufferIdEXT());
         sg_apply_bindings(&bindings);
 
@@ -5500,7 +5544,28 @@ namespace CNA::Internal::Backends::Sokol
             // of this flag, the same relationship EasyGL's own DrawWireframe() has to it.
             case CNA::GraphicsCapability::WireFrame:
                 return false;
+            // REMED-GFX-201: false. The 3D pipeline builds one sokol_gfx vertex-buffer layout from
+            // one buffer's declaration, and the instanced route binds exactly one per-vertex plus
+            // one per-instance stream, so a declaration split across several buffers -- or several
+            // per-instance streams at their own frequencies -- has nowhere to go. Both routes
+            // refuse the shape outright (RejectUnsupportedStreamCombination) rather than rendering
+            // from a subset, and GraphicsDevice rejects it a step earlier on the strength of this
+            // answer.
+            case CNA::GraphicsCapability::MultiStreamVertexInput:
+                return false;
+            // REMED-GFX-202: real as of SOKOL-36. DrawInstancedPrimitivesEx binds the per-instance
+            // World-matrix stream at slot 1 with SG_VERTEXSTEP_PER_INSTANCE and the binding's own
+            // InstanceFrequency as sokol_gfx's step_rate; sg_draw's instance count drives the
+            // native instanced draw. Unconditional here, not device-dependent: sokol_gfx's GLCORE
+            // backend requires GL 4.1, where instanced drawing and vertex attribute divisors are
+            // core, not extensions.
+            case CNA::GraphicsCapability::Instancing:
+                return true;
         }
+        // Every enumerator above is answered explicitly and there is no default arm, so a
+        // capability added to CNA::GraphicsCapability after this backend was written is a compiler
+        // warning here rather than a silent answer. This return exists only for a value cast in
+        // from outside the enumeration.
         return false;
     }
 
