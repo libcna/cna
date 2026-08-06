@@ -5543,16 +5543,22 @@ namespace CNA::Internal::Backends::Sokol
             // MRT is bound is still refused).
             case CNA::GraphicsCapability::MultipleRenderTargets:
                 return true;
-            // Matches EasyGLGraphicsBackend's own convention (also false, despite EasyGL's own
-            // real DrawWireframe() CPU-expansion path): this capability reports whether the
-            // NATIVE rasterizer has a real polygon-fill-mode toggle (Vulkan reports
-            // fillModeNonSolidSupported_, a genuine VkPhysicalDeviceFeatures flag) -- sokol_gfx,
-            // like GLES3, has none. RasterizerState.FillMode == WireFrame is functionally
-            // implemented regardless (plan_sokol.md SOKOL-23, DrawColored3D's own
-            // BuildWireframeLineIndicesEXT() call), unconditionally on every draw and independent
-            // of this flag, the same relationship EasyGL's own DrawWireframe() has to it.
+            // REMED-GFX-209: true, and the answer is about the OBSERVABLE contract, not about
+            // which native mechanism delivers it. `RasterizerState.FillMode == WireFrame` really
+            // does produce a wireframe here on every triangle route, indexed and non-indexed
+            // alike (plan_sokol.md SOKOL-23: DrawColored3D re-expands triangles into GL_LINES and
+            // swaps the pipeline's topology, since sokol_gfx bakes topology into the pipeline and
+            // exposes no polygon-fill-mode toggle). The shared asymmetric-triangle oracle measures
+            // exactly that -- interior 0/1089 under WireFrame against 1089/1089 under Solid, all
+            // three edge probes lit, and no stale state across alternating draws.
+            //
+            // This deliberately does NOT copy EasyGL's `false`. That answer is recorded in
+            // GraphicsDeviceCapabilityTests.cpp as the one report known to be wrong (its own
+            // CPU-expansion path renders a genuine wireframe too), and REMED-GFX-219 exists to
+            // correct it; reproducing it here would add a second under-report rather than inherit
+            // a convention. A caller that gates on this query gets a working feature.
             case CNA::GraphicsCapability::WireFrame:
-                return false;
+                return true;
             // REMED-GFX-201: false. The 3D pipeline builds one sokol_gfx vertex-buffer layout from
             // one buffer's declaration, and the instanced route binds exactly one per-vertex plus
             // one per-instance stream, so a declaration split across several buffers -- or several

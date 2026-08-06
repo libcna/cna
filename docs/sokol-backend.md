@@ -57,7 +57,7 @@ letting the build reach a confusing `GL/gl.h: No such file or directory`.
 | `BasicEffect.DiffuseColor` and `VertexColorEnabled` | ✅ | `Sokol_3D` checks C, D — a real per-channel multiply |
 | Depth testing and depth writes (`DepthStencilState.DepthBufferEnable`/`WriteEnable`/`Function`) | ✅ | `Sokol_3D` check E — a real occlusion proof, both with and without the test |
 | Face culling (`RasterizerState.CullMode`) | ✅ | `Sokol_3D` check G — a clockwise triangle survives and a counter-clockwise one vanishes |
-| `RasterizerState.FillMode = WireFrame` | ✅ | `Sokol_WireFrame` -- CPU-side triangle-to-`GL_LINES` re-expansion at draw time (the same technique `EasyGLGraphicsBackend::DrawWireframe()` uses), since sokol_gfx's pipeline object bakes primitive topology and exposes no polygon fill-mode API to toggle. `GraphicsCapability.WireFrame` still reports `false`: that flag means *native* rasterizer fill-mode support, matching EasyGL's/Vulkan's own convention |
+| `RasterizerState.FillMode = WireFrame` | ✅ | `Sokol_WireFrame`, plus REMED-GFX-209's shared asymmetric-triangle pixel oracle in `CnaTests` -- CPU-side triangle-to-`GL_LINES` re-expansion at draw time (the same technique `EasyGLGraphicsBackend::DrawWireframe()` uses), since sokol_gfx's pipeline object bakes primitive topology and exposes no polygon fill-mode API to toggle. `GraphicsCapability.WireFrame` reports **`true`**: the query answers whether a `WireFrame` request genuinely produces a wireframe, which it does on every triangle route, not which native mechanism delivers it |
 | Arbitrary vertex layouts via `VertexDeclaration` (Position/Color/TextureCoordinate/Normal, usage index 0) | ✅ | The 3D pipeline is keyed on the real declaration, not on a fixed stride |
 | Textured 3D draws (`BasicEffect.TextureEnabled`) with `DiffuseColor`/vertex-colour tint, alpha test, fog | ✅ | `Sokol_Lit3D` checks A-D |
 | Lit 3D draws (`BasicEffect.LightingEnabled`): ambient + up to 3 real per-pixel Blinn-Phong directional lights, specular, emissive, alpha test, fog | ✅ | `Sokol_Lit3D` checks E-I -- real per-pixel lighting, not per-vertex |
@@ -97,11 +97,22 @@ letting the build reach a confusing `GL/gl.h: No such file or directory`.
 | `CNA_SOKOL_API` other than `GLCORE` | configure warns; construction throws | `SOKOL-31` |
 
 `GraphicsDevice::SupportsCapability()` reports this boundary, so a game can query ahead of time
-instead of catching. One entry needs reading carefully: `ThreeD` is `true` because the 3D pipeline
-genuinely exists — it does not promise that every stock effect shades correctly (only PBR is
-missing), which the table above is the authority on. `MultiSampleAntiAliasing` is `true` for both
-the back buffer and `RenderTarget2D` as of `SOKOL-26`; `RenderTargetCube` MSAA remains a permanent
-sokol_gfx boundary regardless of this flag (see "What does not work yet" below).
+instead of catching. The switch is exhaustive over every `CNA::GraphicsCapability` member and has
+no `default` arm, so a capability added later is a compiler warning here rather than a silent
+answer. Three entries need reading carefully:
+
+- `ThreeD` is `true` because the 3D pipeline genuinely exists — it does not promise that every
+  stock effect shades correctly (only PBR is missing), which the table above is the authority on.
+- `MultiSampleAntiAliasing` is `true` for both the back buffer and `RenderTarget2D` as of
+  `SOKOL-26`; `RenderTargetCube` MSAA remains a permanent sokol_gfx boundary regardless of this
+  flag (see "What does not work yet" below).
+- `MultiStreamVertexInput` is `false` (REMED-GFX-201/202). One sokol_gfx vertex-buffer layout is
+  built from one buffer's declaration, and `instanced3d.glsl` declares exactly one instance record,
+  so a `VertexDeclaration` split across several bound buffers — or several per-instance streams —
+  has nowhere to go. `GraphicsDevice` rejects both shapes on the strength of this answer, and both
+  draw routes refuse them again themselves rather than rendering from a subset of the streams.
+  `Instancing` is `true` and unconditional: sokol_gfx's GLCORE backend requires GL 4.1, where
+  instanced draws and attribute divisors are core rather than extensions.
 
 ## Known limitations inside the supported set
 
