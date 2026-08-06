@@ -151,7 +151,8 @@ TEST_F(XnbBuiltInReaderRegistrationTest, FreshContentManagerLoadsATexture2DFixtu
 // deterministically instead of accepting the data and discarding it. Same constant and same
 // reviewed backend set as tests/Microsoft/Xna/Framework/Graphics/TextureCubeTests.cpp.
 #if defined(CNA_BACKEND_SDL_RENDERER) || defined(CNA_BACKEND_ASCII) || \
-    defined(CNA_BACKEND_CANVAS) || defined(CNA_BACKEND_FREEDIRECT) || defined(CNA_BACKEND_HEADLESS)
+    defined(CNA_BACKEND_CANVAS) || defined(CNA_BACKEND_FREEDIRECT) || \
+    defined(CNA_BACKEND_HEADLESS) || defined(CNA_BACKEND_SOKOL)
 constexpr bool kCubeStorageSupported = false;
 #else
 constexpr bool kCubeStorageSupported = true;

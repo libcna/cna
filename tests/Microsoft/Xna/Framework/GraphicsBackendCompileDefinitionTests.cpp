@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
 
+#include "CNA/GraphicsBackendType.hpp"
+
 #if defined(CNA_BACKEND_BGFX) && __has_include(<bgfx/bgfx.h>)
 #define CNA_TEST_BGFX_AVAILABLE 1
 #include <bgfx/bgfx.h>
@@ -119,9 +121,23 @@ TEST(GraphicsBackendCompileDefinitionsTest, ExactlyOneGraphicsBackendIsSelected)
 #ifdef CNA_BACKEND_WICKED
     ++enabled;
 #endif
+#ifdef CNA_BACKEND_SOKOL
+    ++enabled;
+#endif
 
     EXPECT_EQ(enabled, 1);
 }
+
+#ifdef CNA_BACKEND_SOKOL
+TEST(GraphicsBackendCompileDefinitionsTest, SokolBackendIsReportedByName)
+{
+    // The compile-time backend identity has to agree with the CNA_BACKEND_SOKOL define
+    // cmake/BackendSelection.cmake set; a new backend that forgets its GraphicsBackendType.hpp
+    // entry would otherwise still link and silently report another backend's name.
+    EXPECT_EQ(CNA::getCurrentGraphicsBackendType(), CNA::GraphicsBackendType::Sokol);
+    EXPECT_EQ(CNA::getCurrentGraphicsBackendName(), "SOKOL");
+}
+#endif
 
 #ifdef CNA_TEST_BGFX_AVAILABLE
 TEST(GraphicsBackendCompileDefinitionsTest, BgfxApiIsLinkedForBgfxBackend)

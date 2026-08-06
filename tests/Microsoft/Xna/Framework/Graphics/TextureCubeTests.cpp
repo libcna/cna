@@ -71,7 +71,8 @@ using Microsoft::Xna::Framework::Graphics::TextureCollection;
 // support and readback support are the same set (a backend either owns cube pixels or it does
 // not), so one constant drives both.
 #if defined(CNA_BACKEND_SDL_RENDERER) || defined(CNA_BACKEND_ASCII) || \
-    defined(CNA_BACKEND_CANVAS) || defined(CNA_BACKEND_FREEDIRECT) || defined(CNA_BACKEND_HEADLESS)
+    defined(CNA_BACKEND_CANVAS) || defined(CNA_BACKEND_FREEDIRECT) || \
+    defined(CNA_BACKEND_HEADLESS) || defined(CNA_BACKEND_SOKOL)
 constexpr bool kCubeLevel0ReadbackSupported = false;
 constexpr bool kCubeStorageSupported        = false;
 #else

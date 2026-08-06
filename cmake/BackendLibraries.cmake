@@ -251,4 +251,11 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "OPENGL4")
     # third-party dependency (GL4Loader.hpp/.cpp is this backend's own hand-rolled loader for
     # the GL 1.2+ entry points a core profile needs).
     target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 OpenGL::GL)
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "SOKOL")
+    # plan_sokol.md SOKOL-2/SOKOL-3: cna_sokol_headers (cmake/ThirdPartySokol.cmake) carries the
+    # fetched sokol include directory, the CNA_SOKOL_API define sokol_gfx.h dispatches on, and --
+    # for the GL APIs -- OpenGL::GL, since sokol_gfx.h has no GL loader outside Windows. SDL3
+    # supplies the window and, via SDL_GL_CreateContext, the GL context sokol_gfx renders into
+    # (design decision 1: CNA keeps owning the window and the game loop, so sokol_app is not used).
+    target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 cna_sokol_headers)
 endif()

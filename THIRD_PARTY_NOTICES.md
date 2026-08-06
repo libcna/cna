@@ -46,3 +46,17 @@ WebGPU C API maintained by the gfx-rs project. CNA's CMake integration downloads
 unmodified upstream binary release; the library is not copied into the CNA source tree.
 `wgpu-native` is available under the Apache License 2.0 and MIT License. See the upstream release
 package for the complete license texts and notices that apply to the selected binary.
+
+## sokol (SOKOL backend dependency)
+
+The experimental `SOKOL` graphics backend uses `sokol_gfx.h` and `sokol_log.h` from the sokol
+single-header library collection by Andre Weissflog. CNA's CMake integration fetches an unmodified
+upstream checkout at a pinned commit at configure time; the headers are not copied into the CNA
+source tree. sokol is available under the zlib/libpng license. See `LICENSE` in the fetched
+upstream checkout for the complete license text.
+
+The `SOKOL` backend's shaders are compiled offline by `sokol-shdc`, from the companion sokol-tools
+project (MIT licensed). The generated header checked in at
+`src/CNA/Internal/Backends/Sokol/shaders/sokol_shaders.hpp` is machine-generated output derived
+from CNA's own shader sources; the `sokol-shdc` binary itself is not vendored and is not required
+for an ordinary build.

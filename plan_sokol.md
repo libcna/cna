@@ -1,0 +1,200 @@
+# sokol_gfx Graphics Backend — Implementation Plan
+
+> **Status legend** (matches this repo's own convention): ✅ implemented *and verified against its
+> stated acceptance criteria*; 🟨 code or documentation exists but has not met those criteria;
+> ⬜ not implemented.
+>
+> **Status (2026-07-31): the 2D baseline is implemented and pixel-verified.**
+> `CNA_GRAPHICS_BACKEND=SOKOL` configures, fetches sokol at a pinned commit, builds
+> `cna_backend_graphics_sokol`, and produces a real SDL window with a real OpenGL 4.1 core
+> context driving `sokol_gfx`. `Sokol_Smoke` (13/13) proves the device/context/pass lifecycle, a
+> 60-frame `Clear()`/`Present()` loop, vertex/index buffer round-trips, and that
+> `GetBackBufferData()` returns the exact colour `Clear()` was given. `Sokol_2D` (15/15) proves
+> `Texture2D` upload and `SpriteBatch` rendering with **every draw checked against real read-back
+> pixels** — quadrant placement, both flips, colour tint (a real per-channel multiply, not an
+> ignored tint), `NonPremultiplied` vs `Opaque` blending producing genuinely different results,
+> and a 90-degree rotation. Verified on this dev machine under Xvfb with Mesa's llvmpipe software
+> GL — a real GL 4.1 driver, but not discrete-GPU hardware (see `SOKOL-30`).
+>
+> **The 3D pipeline, render targets, cube/volume textures, custom effects and occlusion queries
+> are not implemented** and fail loudly rather than silently no-opping. Do not describe this
+> backend as having EasyGL/Vulkan-level parity. See `docs/sokol-backend.md` for the capability
+> boundary and the complete list of known gaps.
+
+---
+
+## Why this backend
+
+CNA already has fourteen graphics backends, several of which are themselves abstraction layers
+(`BGFX`, `WEBGPU`, `SDL_GPU`). `sokol_gfx` earns a fifteenth slot for a different reason than any
+of them: it is the smallest credible modern GPU abstraction in existence — two single-file headers,
+no build system, no runtime, no code generation required at build time — while still dispatching
+onto GL 4.1 / GLES3 / D3D11 / Metal / WebGPU behind one API.
+
+That makes it valuable to CNA in two specific ways:
+
+1. **A near-zero-dependency portable GPU path.** `BGFX` needs a full CMake sub-build and a
+   `shaderc` toolchain; `WEBGPU` needs a pinned `wgpu-native` binary package; `SDL_GPU` needs
+   `libshaderc` linked into the backend for custom effects. `SOKOL` needs a header on the include
+   path and `-lGL`.
+2. **An independent implementation of the same contract.** Every bug this backend's own pixel tests
+   catch is a bug in `IGraphicsBackend`'s contract or in CNA's shared 2D layer, not in one vendor's
+   driver — the same value the `SOFTWARE` backend provides, at GPU speed.
+
+---
+
+## Design decisions
+
+1. **CNA keeps the window and the game loop; sokol_app is not used.** `sokol_app.h` wants to own
+   window creation, the event loop and the frame callback. CNA already owns all three through
+   `Game`/`GraphicsDeviceManager` and SDL3, and `Microsoft::Xna::Framework::Input` reads SDL3
+   events directly. `SokolGraphicsBackend` therefore creates only the GPU *context*
+   (`SDL_GL_CreateContext` on the window CNA already made) and drives `sokol_gfx` inside it. This
+   is the same relationship `EASYGL` has with SDL3.
+   *Consequence:* `GraphicsDevice::getBackendWindowFlags()` must add `SDL_WINDOW_OPENGL` for this
+   backend — SDL refuses `SDL_GL_CreateContext` on a window created without it. This was found
+   empirically, by the smoke test failing with "The specified window isn't an OpenGL window".
+
+2. **The native API is a second compile-time axis, `CNA_SOKOL_API`.** `sokol_gfx` is itself a
+   multi-API abstraction, so `CNA_GRAPHICS_BACKEND=SOKOL` alone does not determine what actually
+   runs. `CNA_SOKOL_API` (`GLCORE` | `GLES3` | `D3D11` | `METAL` | `WGPU`) resolves to the single
+   `SOKOL_*` define `sokol_gfx.h` dispatches on. **`GLCORE` is the default and the only value
+   verified**; the others configure and warn, and their context-creation path is not written
+   (`SOKOL-31`). The C++ never branches on the API except where it genuinely must (context
+   creation, GL read-back), so adding one is a bounded change.
+
+3. **sokol is fetched at configure time at a pinned commit, not vendored.** sokol publishes no
+   release tags (its only tags mark historical API breaks), so `cmake/ThirdPartySokol.cmake` pins
+   a plain commit SHA. Offline builds use CMake's own `-DFETCHCONTENT_SOURCE_DIR_SOKOL=<path>`
+   override rather than a CNA-specific variable. Bump the pin deliberately: sokol changes its C
+   API without deprecation periods, and `sokol_shaders.hpp` must be regenerated with a matching
+   `sokol-shdc` whenever it moves.
+
+4. **Shaders are compiled offline by `sokol-shdc` and the generated header is checked in.** Same
+   convention as the Bgfx backend's `bgfx_shaders.hpp`. An ordinary CNA build needs no `sokol-shdc`
+   binary and no network. `src/CNA/Internal/Backends/Sokol/shaders/compile_shaders.py` regenerates
+   `sokol_shaders.hpp` for all five target shader languages at once (`--ifdef`-guarded, so only the
+   selected API's code compiles), and `--check` fails if the checked-in header is stale.
+
+5. **The sprite batcher streams into one appended buffer against a static quad index buffer.**
+   `sokol_gfx` allows at most one `sg_update_buffer()`/`sg_update_image()` per resource per frame,
+   which a `SpriteBatch` flushing per texture change would violate immediately. `sg_append_buffer()`
+   is the API designed for exactly this: each flush appends its own vertex run and draws from the
+   returned byte offset, so the number of flushes per frame is unbounded. The index pattern never
+   changes, so it is an immutable buffer built once.
+   *Consequence:* the streaming buffer is sized at construction, giving a hard per-frame cap of
+   **16384 sprite quads** (65536 vertices — exactly the largest run a uint16 index buffer can
+   address). Exceeding it throws a named error rather than silently dropping sprites.
+
+6. **User `VertexBuffer`/`IndexBuffer` uploads recreate an immutable buffer instead of updating
+   one.** Same one-update-per-frame rule as above, and immutable creation with initial data is
+   unrestricted. This trades an allocation per upload for correctness; `SOKOL-24` covers making it
+   cheaper once the 3D path exists to measure it.
+
+7. **Back-buffer read-back goes through `glReadPixels`, not sokol.** `sokol_gfx` has no read-back
+   API at all. On the GL APIs sokol renders into the window's default framebuffer, which
+   `glReadPixels` reads directly. This is the one genuinely API-specific piece of the backend and
+   it is guarded as such: any other `CNA_SOKOL_API` refuses `ReadBackbuffer` rather than pretending.
+
+8. **Passes are begun lazily and ended eagerly.** A `sokol_gfx` pass fixes its load actions when it
+   begins, so `Clear()` records a *pending* action and closes any open pass; the next draw (or
+   `Present()`, or `ReadBackbuffer()`) begins a pass that applies it. Every restart after the first
+   in a frame loads rather than discards, so a mid-frame clear cannot wipe earlier draws.
+   *Consequence found by the smoke test:* `ReadBackbuffer` must begin the pass too. Without that, a
+   `Clear()`-then-read-back sequence with nothing drawn in between read the previous frame's
+   post-swap garbage — the first version of this backend returned `(0,0,0,0)` for a clear to
+   `(32,64,128)`.
+
+---
+
+## Phases and tasks
+
+### Phase 1 — Build integration
+
+| ID | Task | Status | Notes |
+|---|---|---|---|
+| SOKOL-1 | Add `SOKOL` to `CNA_GRAPHICS_BACKEND`, `CNA_BACKEND_SOKOL` option, backend dir/target/define | ✅ | `cmake/BackendSelection.cmake` |
+| SOKOL-2 | `cmake/ThirdPartySokol.cmake`: pinned FetchContent, `cna_sokol_headers` interface target, `OpenGL::GL` for the GL APIs | ✅ | Pin `27b49604b19be8cee0dcc6b2bbfe803dd9517585` |
+| SOKOL-3 | `SokolImpl.cpp`: the one TU carrying `SOKOL_IMPL` + `SOKOL_SHDC_IMPL` | ✅ | Keeps sokol's ~20k-line C body out of the backend's incremental rebuilds |
+| SOKOL-4 | `SDL_WINDOW_OPENGL` in `GraphicsDevice::getBackendWindowFlags()` | ✅ | Found empirically — see design decision 1 |
+| SOKOL-5 | `CNA_SOKOL_API` option, `SOKOL_*` define resolution, unverified-API warning | ✅ | See design decision 2 |
+| SOKOL-6 | `GraphicsBackendType::Sokol` + `"SOKOL"` name | ✅ | `include/CNA/GraphicsBackendType.hpp` |
+| SOKOL-7 | `ExactlyOneGraphicsBackendIsSelected` covers `CNA_BACKEND_SOKOL`; backend-identity test | ✅ | `tests/.../GraphicsBackendCompileDefinitionTests.cpp` |
+
+### Phase 2 — Device, context and presentation
+
+| ID | Task | Status | Notes |
+|---|---|---|---|
+| SOKOL-8 | GL 4.1 core context via SDL3, depth24+stencil8, MSAA negotiation, swap interval | ✅ | Reports the driver's *granted* sample count, not the request |
+| SOKOL-9 | `sg_setup()` with the swapchain environment defaults; transactional construction | ✅ | A partially built backend never reaches the window registry |
+| SOKOL-10 | Lazy pass management, the whole `Clear*` family through pass load actions | ✅ | See design decision 8 |
+| SOKOL-11 | `Present()`, virtual resolution, presentation mode, window↔logical transforms | ✅ | Mirrors EasyGL's `FixedHeightDynamicWidth` geometry |
+| SOKOL-12 | `ReadBackbuffer()` via `glReadPixels`, with the row flip and logical→physical scaling | ✅ | GL APIs only — see design decision 7 |
+
+### Phase 3 — 2D resources and rendering
+
+| ID | Task | Status | Notes |
+|---|---|---|---|
+| SOKOL-13 | `SokolTextureBackend`: `sg_image` + `sg_view`, per-level CPU shadow, `GetData()` | ✅ | Full-image re-upload; sokol has no sub-image update |
+| SOKOL-14 | `sprite.glsl` + `compile_shaders.py` + checked-in `sokol_shaders.hpp` | ✅ | Five shader languages, `--ifdef`-guarded |
+| SOKOL-15 | `SokolSpriteBatchBackend` + streamed draw path, blend/sampler pipeline caches | ✅ | See design decision 5 |
+| SOKOL-16 | `Sokol_Smoke` CTest — lifecycle, buffers, clear read-back, loud 3D failure | ✅ | 13/13 |
+| SOKOL-17 | `Sokol_2D` CTest — `Texture2D` + `SpriteBatch`, all 15 checks pixel-verified | ✅ | 15/15 |
+| SOKOL-18 | `SokolVertexBufferBackend`/`SokolIndexBufferBackend` (16- and 32-bit) | ✅ | See design decision 6 |
+| SOKOL-19 | `docs/sokol-backend.md` capability boundary | ✅ | |
+
+### Phase 4 — 3D pipeline (not started)
+
+| ID | Task | Status | Notes |
+|---|---|---|---|
+| SOKOL-20 | `DrawColoredPrimitives`/`DrawIndexedColoredPrimitives` + a colored-3D shader | ⬜ | Currently throws via `NotYetImplemented` |
+| SOKOL-21 | `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx`: `BasicEffect` variants (textured, lit, fog) | ⬜ | Needs the stride-dispatched pipeline cache every other backend has |
+| SOKOL-22 | Honour `SetVertexDeclaration()` for genuinely custom vertex layouts | ⬜ | Declaration is already recorded, just unused |
+| SOKOL-23 | Full `ApplyRasterizerState` (cull, fill, depth bias) and stencil in the pipeline key | ⬜ | Accepted-and-ignored today; documented as such |
+| SOKOL-24 | Cheaper `VertexBuffer`/`IndexBuffer` re-upload than recreate-per-`SetData` | ⬜ | Measure once a 3D path exists to measure with |
+
+### Phase 5 — Render targets and remaining resources (not started)
+
+| ID | Task | Status | Notes |
+|---|---|---|---|
+| SOKOL-25 | `RenderTarget2D` via `sg_view` colour/depth-stencil attachments | ⬜ | `SetRenderTargets` throws on any non-null target today |
+| SOKOL-26 | `RenderTargetCube`, MRT, render-target MSAA resolve | ⬜ | |
+| SOKOL-27 | `TextureCube` and `Texture3D` | ⬜ | `CreateTextureCube`/`CreateTexture3D` return null today |
+| SOKOL-28 | Custom `ShaderEffect` — needs a runtime GLSL path or a shdc-at-build-time contract | ⬜ | `CreateEffectBackend` returns null today |
+| SOKOL-29 | Occlusion queries | ⬜ | sokol_gfx exposes no query API; needs raw GL or a sokol upstream change |
+
+### Phase 6 — Portability and hardware (not started)
+
+| ID | Task | Status | Notes |
+|---|---|---|---|
+| SOKOL-30 | Verify on real discrete-GPU hardware, not just llvmpipe | ⬜ | Everything verified so far is Mesa software GL under Xvfb |
+| SOKOL-31 | Implement the non-GL context paths so `CNA_SOKOL_API` other than `GLCORE` is real | ⬜ | Warns at configure time today |
+| SOKOL-32 | Emscripten/WebGL2 build via `CNA_SOKOL_API=GLES3` | ⬜ | Shaders already build for `glsl300es` |
+
+---
+
+## Regenerating the shaders
+
+```bash
+# sokol-shdc is not vendored; grab the prebuilt binary for your platform
+git clone --depth 1 https://github.com/floooh/sokol-tools-bin.git
+python3 src/CNA/Internal/Backends/Sokol/shaders/compile_shaders.py \
+    --shdc sokol-tools-bin/bin/linux/sokol-shdc
+git diff src/CNA/Internal/Backends/Sokol/shaders/sokol_shaders.hpp   # review, then commit
+```
+
+`--check` instead of a plain run verifies the checked-in header is current without writing it.
+
+## Building and testing
+
+```bash
+cmake -S . -B cmake-build-sokol -G Ninja -DCMAKE_BUILD_TYPE=Debug \
+      -DCNA_GRAPHICS_BACKEND=SOKOL -DCNA_TEST_DISPLAY=:99
+cmake --build cmake-build-sokol --target cna_test_sokol_smoke cna_test_sokol_2d -j4
+ctest --test-dir cmake-build-sokol -R Sokol --output-on-failure
+```
+
+Both tests need a real (or Xvfb) X display and a GL 4.1 driver; they exit 77 (SKIP) when none is
+available. `mesa-common-dev`/`libgl1-mesa-dev` must be installed — `find_package(OpenGL REQUIRED)`
+fails the configure otherwise, deliberately, rather than letting the build reach a confusing
+"GL/gl.h: No such file".

@@ -1,0 +1,1532 @@
+// SPDX-License-Identifier: MS-PL
+
+#include "CNA/Internal/Backends/Sokol/SokolGraphicsBackend.hpp"
+
+#include "CNA/Internal/Backends/Common/NotYetImplemented.hpp"
+
+#include "sokol_log.h"
+#include "sokol_gfx.h"
+
+#include "CNA/Internal/Backends/Sokol/shaders/sokol_shaders.hpp"
+
+#include <SDL3/SDL.h>
+
+#include <algorithm>
+#include <cmath>
+#include <cstring>
+#include <stdexcept>
+#include <string>
+
+// The GL back-buffer readback below calls glReadPixels directly: sokol_gfx has no readback API of
+// its own, and on this project's target platform (SOKOL_GLCORE on Linux) sokol renders into the
+// SDL window's default framebuffer, which glReadPixels can read straight out of. Restricted to the
+// GL APIs on purpose -- ReadBackbuffer refuses any other CNA_SOKOL_API rather than pretending.
+#if defined(SOKOL_GLCORE) || defined(SOKOL_GLES3)
+    #define CNA_SOKOL_HAS_GL_READBACK 1
+    #if defined(SOKOL_GLCORE)
+        #define GL_GLEXT_PROTOTYPES
+        #include <GL/gl.h>
+    #else
+        #include <GLES3/gl3.h>
+    #endif
+#else
+    #define CNA_SOKOL_HAS_GL_READBACK 0
+#endif
+
+namespace CNA::Internal::Backends::Sokol
+{
+    namespace
+    {
+        constexpr const char* kBackendName = "Sokol";
+
+        /// Per-frame sprite capacity. 16384 quads is exactly 65536 vertices, the largest run a
+        /// uint16 index buffer can address, so this is the natural ceiling for the shared quad
+        /// index buffer rather than an arbitrary number.
+        constexpr int kMaxSpriteQuads = 16384;
+        constexpr int kSpriteVerticesPerQuad = 4;
+        constexpr int kSpriteIndicesPerQuad = 6;
+
+        // --- XNA ordinal -> sokol_gfx enum translations -----------------------------------
+        //
+        // Every raw int crossing IGraphicsBackend is a Microsoft::Xna::Framework::Graphics enum
+        // ordinal. These map the complete enum, not the subset the 2D path happens to reach, so
+        // an unmapped value cannot silently collapse onto its neighbour (REMED-GFX-170).
+
+        sg_blend_factor ToBlendFactor(int blend)
+        {
+            switch (blend)
+            {
+                case 0:  return SG_BLENDFACTOR_ONE;                        // Blend::One
+                case 1:  return SG_BLENDFACTOR_ZERO;                       // Blend::Zero
+                case 2:  return SG_BLENDFACTOR_SRC_COLOR;                  // SourceColor
+                case 3:  return SG_BLENDFACTOR_ONE_MINUS_SRC_COLOR;        // InverseSourceColor
+                case 4:  return SG_BLENDFACTOR_SRC_ALPHA;                  // SourceAlpha
+                case 5:  return SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;        // InverseSourceAlpha
+                case 6:  return SG_BLENDFACTOR_DST_COLOR;                  // DestinationColor
+                case 7:  return SG_BLENDFACTOR_ONE_MINUS_DST_COLOR;        // InverseDestinationColor
+                case 8:  return SG_BLENDFACTOR_DST_ALPHA;                  // DestinationAlpha
+                case 9:  return SG_BLENDFACTOR_ONE_MINUS_DST_ALPHA;        // InverseDestinationAlpha
+                case 10: return SG_BLENDFACTOR_BLEND_COLOR;                // BlendFactor
+                case 11: return SG_BLENDFACTOR_ONE_MINUS_BLEND_COLOR;      // InverseBlendFactor
+                case 12: return SG_BLENDFACTOR_SRC_ALPHA_SATURATED;        // SourceAlphaSaturation
+                default: return SG_BLENDFACTOR_ONE;
+            }
+        }
+
+        sg_blend_op ToBlendOp(int blendFunction)
+        {
+            switch (blendFunction)
+            {
+                case 0:  return SG_BLENDOP_ADD;               // BlendFunction::Add
+                case 1:  return SG_BLENDOP_SUBTRACT;          // Subtract
+                case 2:  return SG_BLENDOP_REVERSE_SUBTRACT;  // ReverseSubtract
+                case 3:  return SG_BLENDOP_MAX;               // Max
+                case 4:  return SG_BLENDOP_MIN;               // Min
+                default: return SG_BLENDOP_ADD;
+            }
+        }
+
+        sg_compare_func ToCompareFunc(int compareFunction)
+        {
+            switch (compareFunction)
+            {
+                case 0:  return SG_COMPAREFUNC_ALWAYS;        // CompareFunction::Always
+                case 1:  return SG_COMPAREFUNC_NEVER;         // Never
+                case 2:  return SG_COMPAREFUNC_LESS;          // Less
+                case 3:  return SG_COMPAREFUNC_LESS_EQUAL;    // LessEqual
+                case 4:  return SG_COMPAREFUNC_EQUAL;         // Equal
+                case 5:  return SG_COMPAREFUNC_GREATER_EQUAL; // GreaterEqual
+                case 6:  return SG_COMPAREFUNC_GREATER;       // Greater
+                case 7:  return SG_COMPAREFUNC_NOT_EQUAL;     // NotEqual
+                default: return SG_COMPAREFUNC_LESS_EQUAL;
+            }
+        }
+
+        sg_color_mask ToColorMask(int colorWriteChannels)
+        {
+            // XNA's ColorWriteChannels bit layout (bit0=R, bit1=G, bit2=B, bit3=A) is identical to
+            // sokol's SG_COLORMASK_* bit layout, so the ordinal maps straight through. The explicit
+            // masking keeps a caller-supplied value outside 0..15 from producing an invalid enum.
+            return static_cast<sg_color_mask>(colorWriteChannels & 0x0F);
+        }
+
+        sg_wrap ToWrap(int addressMode)
+        {
+            switch (addressMode)
+            {
+                case 0:  return SG_WRAP_REPEAT;          // TextureAddressMode::Wrap
+                case 1:  return SG_WRAP_CLAMP_TO_EDGE;   // Clamp
+                case 2:  return SG_WRAP_MIRRORED_REPEAT; // Mirror
+                default: return SG_WRAP_CLAMP_TO_EDGE;
+            }
+        }
+
+        /// Decomposes an XNA TextureFilter into sokol's three independent min/mag/mip filters.
+        /// All nine XNA values are distinct combinations, so none of them may share a mapping.
+        void ToFilters(int textureFilter, sg_filter& minFilter, sg_filter& magFilter,
+                       sg_filter& mipFilter, bool& anisotropic)
+        {
+            anisotropic = false;
+            switch (textureFilter)
+            {
+                case 1: // Point
+                    minFilter = SG_FILTER_NEAREST; magFilter = SG_FILTER_NEAREST; mipFilter = SG_FILTER_NEAREST; return;
+                case 2: // Anisotropic
+                    minFilter = SG_FILTER_LINEAR; magFilter = SG_FILTER_LINEAR; mipFilter = SG_FILTER_LINEAR;
+                    anisotropic = true; return;
+                case 3: // LinearMipPoint
+                    minFilter = SG_FILTER_LINEAR; magFilter = SG_FILTER_LINEAR; mipFilter = SG_FILTER_NEAREST; return;
+                case 4: // PointMipLinear
+                    minFilter = SG_FILTER_NEAREST; magFilter = SG_FILTER_NEAREST; mipFilter = SG_FILTER_LINEAR; return;
+                case 5: // MinLinearMagPointMipLinear
+                    minFilter = SG_FILTER_LINEAR; magFilter = SG_FILTER_NEAREST; mipFilter = SG_FILTER_LINEAR; return;
+                case 6: // MinLinearMagPointMipPoint
+                    minFilter = SG_FILTER_LINEAR; magFilter = SG_FILTER_NEAREST; mipFilter = SG_FILTER_NEAREST; return;
+                case 7: // MinPointMagLinearMipLinear
+                    minFilter = SG_FILTER_NEAREST; magFilter = SG_FILTER_LINEAR; mipFilter = SG_FILTER_LINEAR; return;
+                case 8: // MinPointMagLinearMipPoint
+                    minFilter = SG_FILTER_NEAREST; magFilter = SG_FILTER_LINEAR; mipFilter = SG_FILTER_NEAREST; return;
+                case 0: // Linear
+                default:
+                    minFilter = SG_FILTER_LINEAR; magFilter = SG_FILTER_LINEAR; mipFilter = SG_FILTER_LINEAR; return;
+            }
+        }
+
+        sg_buffer MakeBufferHandle(std::uint32_t id) { sg_buffer handle; handle.id = id; return handle; }
+        sg_image MakeImageHandle(std::uint32_t id) { sg_image handle; handle.id = id; return handle; }
+        sg_view MakeViewHandle(std::uint32_t id) { sg_view handle; handle.id = id; return handle; }
+        sg_sampler MakeSamplerHandle(std::uint32_t id) { sg_sampler handle; handle.id = id; return handle; }
+        sg_shader MakeShaderHandle(std::uint32_t id) { sg_shader handle; handle.id = id; return handle; }
+        sg_pipeline MakePipelineHandle(std::uint32_t id) { sg_pipeline handle; handle.id = id; return handle; }
+
+        int MipDimension(int base, int level)
+        {
+            int value = base >> level;
+            return value > 0 ? value : 1;
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // SokolTextureBackend
+    // ---------------------------------------------------------------------------------------
+
+    SokolTextureBackend::SokolTextureBackend(const ImageData& data)
+        : width_(data.width)
+        , height_(data.height)
+        , mipLevels_(data.mipLevels > 0 ? data.mipLevels : 1)
+    {
+        if (width_ <= 0 || height_ <= 0)
+            throw std::runtime_error("Sokol backend: texture dimensions must be positive");
+        if (mipLevels_ > SG_MAX_MIPMAPS)
+            mipLevels_ = SG_MAX_MIPMAPS;
+
+        levels_.resize(static_cast<std::size_t>(mipLevels_));
+        for (int level = 0; level < mipLevels_; ++level)
+        {
+            const std::size_t bytes = static_cast<std::size_t>(MipDimension(width_, level))
+                                    * static_cast<std::size_t>(MipDimension(height_, level)) * 4u;
+            levels_[static_cast<std::size_t>(level)].assign(bytes, 0u);
+        }
+
+        const std::size_t level0Bytes = levels_[0].size();
+        if (!data.pixels.empty())
+            std::memcpy(levels_[0].data(), data.pixels.data(), std::min(level0Bytes, data.pixels.size()));
+
+        RecreateImage();
+    }
+
+    SokolTextureBackend::~SokolTextureBackend()
+    {
+        DestroyImage();
+    }
+
+    void SokolTextureBackend::DestroyImage()
+    {
+        if (viewId_ != 0)
+        {
+            sg_destroy_view(MakeViewHandle(viewId_));
+            viewId_ = 0;
+        }
+        if (imageId_ != 0)
+        {
+            sg_destroy_image(MakeImageHandle(imageId_));
+            imageId_ = 0;
+        }
+    }
+
+    void SokolTextureBackend::RecreateImage()
+    {
+        // Recreated as immutable rather than updated in place: sg_update_image() is limited to one
+        // call per image per frame, which a caller writing several mip levels in one frame (the
+        // XNB texture loader does exactly that) violates immediately, while creating an immutable
+        // image with initial data has no such limit. Every level comes from the CPU shadow, since
+        // sokol_gfx replaces an image in full and has no sub-image upload.
+        DestroyImage();
+
+        sg_image_desc desc = {};
+        desc.type = SG_IMAGETYPE_2D;
+        desc.usage.immutable = true;
+        desc.width = width_;
+        desc.height = height_;
+        desc.num_mipmaps = mipLevels_;
+        desc.pixel_format = SG_PIXELFORMAT_RGBA8;
+        desc.label = "cna_texture2d";
+        for (int level = 0; level < mipLevels_; ++level)
+        {
+            desc.data.mip_levels[level].ptr = levels_[static_cast<std::size_t>(level)].data();
+            desc.data.mip_levels[level].size = levels_[static_cast<std::size_t>(level)].size();
+        }
+        imageId_ = sg_make_image(&desc).id;
+        if (sg_query_image_state(MakeImageHandle(imageId_)) != SG_RESOURCESTATE_VALID)
+        {
+            imageId_ = 0;
+            throw std::runtime_error("Sokol backend: sg_make_image failed for a Texture2D");
+        }
+
+        sg_view_desc viewDesc = {};
+        viewDesc.texture.image = MakeImageHandle(imageId_);
+        viewDesc.label = "cna_texture2d_view";
+        viewId_ = sg_make_view(&viewDesc).id;
+        if (sg_query_view_state(MakeViewHandle(viewId_)) != SG_RESOURCESTATE_VALID)
+        {
+            viewId_ = 0;
+            DestroyImage();
+            throw std::runtime_error("Sokol backend: sg_make_view failed for a Texture2D");
+        }
+    }
+
+    int SokolTextureBackend::GetWidth() const { return width_; }
+
+    int SokolTextureBackend::GetHeight() const { return height_; }
+
+    SDL_Texture* SokolTextureBackend::GetNativeTexture() const { return nullptr; }
+
+    void SokolTextureBackend::UpdatePixels(const uint8_t* rgba, int stride)
+    {
+        if (rgba == nullptr) return;
+
+        const int rowBytes = width_ * 4;
+        auto& level0 = levels_[0];
+        if (stride <= 0 || stride == rowBytes)
+        {
+            std::memcpy(level0.data(), rgba, level0.size());
+        }
+        else
+        {
+            for (int row = 0; row < height_; ++row)
+            {
+                std::memcpy(level0.data() + static_cast<std::size_t>(row) * rowBytes,
+                            rgba + static_cast<std::size_t>(row) * stride,
+                            static_cast<std::size_t>(rowBytes));
+            }
+        }
+        RecreateImage();
+    }
+
+    void SokolTextureBackend::UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH)
+    {
+        if (rgba == nullptr || level < 0 || level >= mipLevels_) return;
+
+        auto& target = levels_[static_cast<std::size_t>(level)];
+        const std::size_t supplied = static_cast<std::size_t>(std::max(levelW, 0))
+                                   * static_cast<std::size_t>(std::max(levelH, 0)) * 4u;
+        std::memcpy(target.data(), rgba, std::min(target.size(), supplied));
+        RecreateImage();
+    }
+
+    bool SokolTextureBackend::GetData(int level, int x, int y, int w, int h,
+                                      void* data, int dataLength) const
+    {
+        if (data == nullptr || level < 0 || level >= mipLevels_) return false;
+        if (w <= 0 || h <= 0) return false;
+
+        const int levelW = MipDimension(width_, level);
+        const int levelH = MipDimension(height_, level);
+        if (x < 0 || y < 0 || x + w > levelW || y + h > levelH) return false;
+        if (dataLength < w * h * 4) return false;
+
+        const auto& source = levels_[static_cast<std::size_t>(level)];
+        auto* destination = static_cast<std::uint8_t*>(data);
+        for (int row = 0; row < h; ++row)
+        {
+            const std::size_t sourceOffset =
+                (static_cast<std::size_t>(y + row) * static_cast<std::size_t>(levelW)
+                 + static_cast<std::size_t>(x)) * 4u;
+            std::memcpy(destination + static_cast<std::size_t>(row) * w * 4u,
+                        source.data() + sourceOffset,
+                        static_cast<std::size_t>(w) * 4u);
+        }
+        return true;
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // SokolVertexBufferBackend
+    // ---------------------------------------------------------------------------------------
+
+    SokolVertexBufferBackend::SokolVertexBufferBackend(int vertexCapacity)
+        : capacity_(vertexCapacity)
+    {
+    }
+
+    SokolVertexBufferBackend::~SokolVertexBufferBackend()
+    {
+        if (bufferId_ != 0) sg_destroy_buffer(MakeBufferHandle(bufferId_));
+    }
+
+    void SokolVertexBufferBackend::SetData(const void* data, int vertexCount, std::size_t strideInBytes)
+    {
+        if (data == nullptr || vertexCount <= 0 || strideInBytes == 0)
+        {
+            vertexCount_ = 0;
+            return;
+        }
+
+        // Recreated rather than updated: sokol_gfx permits at most one sg_update_buffer() per
+        // buffer per frame, while creating an immutable buffer with initial data has no such
+        // limit, so a game that re-uploads several times in one frame stays legal here.
+        if (bufferId_ != 0)
+        {
+            sg_destroy_buffer(MakeBufferHandle(bufferId_));
+            bufferId_ = 0;
+        }
+
+        sg_buffer_desc desc = {};
+        desc.usage.vertex_buffer = true;
+        desc.usage.immutable = true;
+        desc.size = static_cast<std::size_t>(vertexCount) * strideInBytes;
+        desc.data.ptr = data;
+        desc.data.size = desc.size;
+        desc.label = "cna_vertex_buffer";
+        bufferId_ = sg_make_buffer(&desc).id;
+        if (sg_query_buffer_state(MakeBufferHandle(bufferId_)) != SG_RESOURCESTATE_VALID)
+        {
+            bufferId_ = 0;
+            throw std::runtime_error("Sokol backend: sg_make_buffer failed for a VertexBuffer");
+        }
+
+        vertexCount_ = vertexCount;
+        stride_ = strideInBytes;
+    }
+
+    void SokolVertexBufferBackend::SetVertexDeclaration(const VertexDeclaration& vertexDeclaration)
+    {
+        // Recorded, not acted on. The 3D draw path that would consume it is not implemented on
+        // this backend yet (plan_sokol.md Phase SOKOL-5); storing it here means the layout is
+        // already available when that phase lands, and makes the decision explicit rather than
+        // an accidental discard.
+        declaration_ = vertexDeclaration;
+        hasDeclaration_ = true;
+    }
+
+    int SokolVertexBufferBackend::GetVertexCount() const { return vertexCount_; }
+
+    // ---------------------------------------------------------------------------------------
+    // SokolIndexBufferBackend
+    // ---------------------------------------------------------------------------------------
+
+    SokolIndexBufferBackend::SokolIndexBufferBackend(int indexCapacity, bool thirtyTwoBit)
+        : capacity_(indexCapacity)
+        , thirtyTwoBit_(thirtyTwoBit)
+    {
+    }
+
+    SokolIndexBufferBackend::~SokolIndexBufferBackend()
+    {
+        if (bufferId_ != 0) sg_destroy_buffer(MakeBufferHandle(bufferId_));
+    }
+
+    void SokolIndexBufferBackend::Upload(const void* data, int indexCount, std::size_t indexSize)
+    {
+        if (data == nullptr || indexCount <= 0)
+        {
+            indexCount_ = 0;
+            return;
+        }
+
+        // Same recreate-instead-of-update reasoning as SokolVertexBufferBackend::SetData.
+        if (bufferId_ != 0)
+        {
+            sg_destroy_buffer(MakeBufferHandle(bufferId_));
+            bufferId_ = 0;
+        }
+
+        sg_buffer_desc desc = {};
+        desc.usage.index_buffer = true;
+        desc.usage.immutable = true;
+        desc.size = static_cast<std::size_t>(indexCount) * indexSize;
+        desc.data.ptr = data;
+        desc.data.size = desc.size;
+        desc.label = "cna_index_buffer";
+        bufferId_ = sg_make_buffer(&desc).id;
+        if (sg_query_buffer_state(MakeBufferHandle(bufferId_)) != SG_RESOURCESTATE_VALID)
+        {
+            bufferId_ = 0;
+            throw std::runtime_error("Sokol backend: sg_make_buffer failed for an IndexBuffer");
+        }
+
+        indexCount_ = indexCount;
+    }
+
+    void SokolIndexBufferBackend::SetData16(const void* data, int indexCount)
+    {
+        thirtyTwoBit_ = false;
+        Upload(data, indexCount, sizeof(std::uint16_t));
+    }
+
+    void SokolIndexBufferBackend::SetData32(const void* data, int indexCount)
+    {
+        thirtyTwoBit_ = true;
+        Upload(data, indexCount, sizeof(std::uint32_t));
+    }
+
+    int SokolIndexBufferBackend::GetIndexCount() const { return indexCount_; }
+
+    bool SokolIndexBufferBackend::IsThirtyTwoBit() const { return thirtyTwoBit_; }
+
+    // ---------------------------------------------------------------------------------------
+    // SokolSpriteBatchBackend
+    // ---------------------------------------------------------------------------------------
+
+    SokolSpriteBatchBackend::SokolSpriteBatchBackend(SokolGraphicsBackend& backend)
+        : backend_(backend)
+    {
+    }
+
+    SokolSpriteBatchBackend::~SokolSpriteBatchBackend() = default;
+
+    void SokolSpriteBatchBackend::Begin()
+    {
+        begun_ = true;
+        pendingVertices_.clear();
+        currentTexture_ = nullptr;
+    }
+
+    void SokolSpriteBatchBackend::End()
+    {
+        FlushBatch();
+        begun_ = false;
+    }
+
+    void SokolSpriteBatchBackend::SetTransformMatrix(const Matrix& m) { transform_ = m; }
+
+    void SokolSpriteBatchBackend::SetSamplerFilter(int textureFilter) { pendingFilter_ = textureFilter; }
+
+    void SokolSpriteBatchBackend::SetSamplerAddressMode(int addressU, int addressV)
+    {
+        pendingAddressU_ = addressU;
+        pendingAddressV_ = addressV;
+    }
+
+    void SokolSpriteBatchBackend::FlushBatch()
+    {
+        if (pendingVertices_.empty() || currentTexture_ == nullptr)
+        {
+            pendingVertices_.clear();
+            currentTexture_ = nullptr;
+            return;
+        }
+
+        backend_.DrawSpriteRunEXT(*currentTexture_, pendingVertices_, transform_,
+                                  pendingFilter_, pendingAddressU_, pendingAddressV_);
+        pendingVertices_.clear();
+        currentTexture_ = nullptr;
+    }
+
+    void SokolSpriteBatchBackend::Draw(const ITextureBackend& texture, float x, float y)
+    {
+        const int w = texture.GetWidth();
+        const int h = texture.GetHeight();
+        Draw(texture, Rectangle(static_cast<int>(x), static_cast<int>(y), w, h),
+             Rectangle(0, 0, w, h), Microsoft::Xna::Framework::Color::White);
+    }
+
+    void SokolSpriteBatchBackend::Draw(const ITextureBackend& texture,
+                                       const Rectangle& destinationRectangle,
+                                       const Rectangle& sourceRectangle,
+                                       const Color& color)
+    {
+        Draw(texture, destinationRectangle, sourceRectangle, color,
+             0.0f, Vector2(0, 0), SpriteEffects::None, 0.0f);
+    }
+
+    void SokolSpriteBatchBackend::Draw(const ITextureBackend& texture,
+                                       const Rectangle& destinationRectangle,
+                                       const Rectangle& sourceRectangle,
+                                       const Color& color,
+                                       float rotation,
+                                       const Vector2& origin,
+                                       SpriteEffects effects,
+                                       float layerDepth)
+    {
+        (void)layerDepth; // Sort order is resolved by the shared SpriteBatch before it reaches here.
+
+        if (!begun_) throw std::runtime_error("Sokol backend: SpriteBatch Draw called before Begin()");
+
+        if (currentTexture_ != &texture)
+        {
+            if (currentTexture_ != nullptr) FlushBatch();
+            currentTexture_ = &texture;
+        }
+
+        const float texW = static_cast<float>(texture.GetWidth());
+        const float texH = static_cast<float>(texture.GetHeight());
+        if (texW <= 0.0f || texH <= 0.0f) return;
+
+        // Deliberately unclamped, matching FNA: a sourceRectangle reaching past the texture yields
+        // UVs outside [0,1] so the bound TextureAddressMode governs the edge, which is what makes
+        // the classic XNA tiling/scrolling technique work.
+        float u1 = static_cast<float>(sourceRectangle.X) / texW;
+        float v1 = static_cast<float>(sourceRectangle.Y) / texH;
+        float u2 = static_cast<float>(sourceRectangle.X + sourceRectangle.Width) / texW;
+        float v2 = static_cast<float>(sourceRectangle.Y + sourceRectangle.Height) / texH;
+
+        if (static_cast<int>(effects) & static_cast<int>(SpriteEffects::FlipHorizontally)) std::swap(u1, u2);
+        if (static_cast<int>(effects) & static_cast<int>(SpriteEffects::FlipVertically)) std::swap(v1, v2);
+
+        const float r = static_cast<float>(color.getRProperty()) / 255.0f;
+        const float g = static_cast<float>(color.getGProperty()) / 255.0f;
+        const float b = static_cast<float>(color.getBProperty()) / 255.0f;
+        const float a = static_cast<float>(color.getAProperty()) / 255.0f;
+
+        const float dx = static_cast<float>(destinationRectangle.X);
+        const float dy = static_cast<float>(destinationRectangle.Y);
+        const float dw = static_cast<float>(destinationRectangle.Width);
+        const float dh = static_cast<float>(destinationRectangle.Height);
+        const float sw = static_cast<float>(sourceRectangle.Width);
+        const float sh = static_cast<float>(sourceRectangle.Height);
+        if (sw == 0.0f || sh == 0.0f) return;
+
+        const float scaleX = dw / sw;
+        const float scaleY = dh / sh;
+        const float ox = origin.X;
+        const float oy = origin.Y;
+
+        const float cornerX[4] = {(0.0f - ox) * scaleX, (sw - ox) * scaleX,
+                                  (sw - ox) * scaleX, (0.0f - ox) * scaleX};
+        const float cornerY[4] = {(0.0f - oy) * scaleY, (0.0f - oy) * scaleY,
+                                  (sh - oy) * scaleY, (sh - oy) * scaleY};
+        const float cornerU[4] = {u1, u2, u2, u1};
+        const float cornerV[4] = {v1, v1, v2, v2};
+
+        const float cosR = std::cos(rotation);
+        const float sinR = std::sin(rotation);
+
+        for (int corner = 0; corner < 4; ++corner)
+        {
+            Vertex vertex{};
+            vertex.x = dx + cornerX[corner] * cosR - cornerY[corner] * sinR;
+            vertex.y = dy + cornerX[corner] * sinR + cornerY[corner] * cosR;
+            vertex.u = cornerU[corner];
+            vertex.v = cornerV[corner];
+            vertex.r = r;
+            vertex.g = g;
+            vertex.b = b;
+            vertex.a = a;
+            pendingVertices_.push_back(vertex);
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // SokolGraphicsBackend -- cache keys
+    // ---------------------------------------------------------------------------------------
+
+    bool SokolGraphicsBackend::PipelineKey::operator==(const PipelineKey& other) const
+    {
+        return colorSrcBlend == other.colorSrcBlend
+            && alphaSrcBlend == other.alphaSrcBlend
+            && colorDstBlend == other.colorDstBlend
+            && alphaDstBlend == other.alphaDstBlend
+            && colorBlendFunc == other.colorBlendFunc
+            && alphaBlendFunc == other.alphaBlendFunc
+            && colorWriteChannels == other.colorWriteChannels
+            && blendEnabled == other.blendEnabled
+            && depthTestEnabled == other.depthTestEnabled
+            && depthWriteEnabled == other.depthWriteEnabled
+            && depthFunc == other.depthFunc;
+    }
+
+    std::size_t SokolGraphicsBackend::PipelineKeyHash::operator()(const PipelineKey& key) const
+    {
+        std::size_t hash = 1469598103934665603ull;
+        auto mix = [&hash](std::size_t value) {
+            hash ^= value + 0x9e3779b97f4a7c15ull + (hash << 6) + (hash >> 2);
+        };
+        mix(static_cast<std::size_t>(key.colorSrcBlend));
+        mix(static_cast<std::size_t>(key.alphaSrcBlend));
+        mix(static_cast<std::size_t>(key.colorDstBlend));
+        mix(static_cast<std::size_t>(key.alphaDstBlend));
+        mix(static_cast<std::size_t>(key.colorBlendFunc));
+        mix(static_cast<std::size_t>(key.alphaBlendFunc));
+        mix(static_cast<std::size_t>(key.colorWriteChannels));
+        mix(static_cast<std::size_t>(key.blendEnabled));
+        mix(static_cast<std::size_t>(key.depthTestEnabled));
+        mix(static_cast<std::size_t>(key.depthWriteEnabled));
+        mix(static_cast<std::size_t>(key.depthFunc));
+        return hash;
+    }
+
+    bool SokolGraphicsBackend::SamplerKey::operator==(const SamplerKey& other) const
+    {
+        return filter == other.filter && addressU == other.addressU
+            && addressV == other.addressV && maxAnisotropy == other.maxAnisotropy;
+    }
+
+    std::size_t SokolGraphicsBackend::SamplerKeyHash::operator()(const SamplerKey& key) const
+    {
+        return (static_cast<std::size_t>(key.filter) << 24)
+             ^ (static_cast<std::size_t>(key.addressU) << 16)
+             ^ (static_cast<std::size_t>(key.addressV) << 8)
+             ^ static_cast<std::size_t>(key.maxAnisotropy);
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // SokolGraphicsBackend -- lifetime
+    // ---------------------------------------------------------------------------------------
+
+    SokolGraphicsBackend::SokolGraphicsBackend(const GraphicsBackendCreateArgs& args)
+        : window_(args.window)
+        , virtualWidth_(args.virtualWidth)
+        , virtualHeight_(args.virtualHeight)
+        , presentationMode_(args.presentationMode)
+        , sampleCount_(args.multiSampleCount > 1 ? args.multiSampleCount : 1)
+        , swapInterval_(args.swapInterval)
+    {
+        if (window_ == nullptr)
+            throw std::runtime_error("Sokol backend: initialized with a null SDL_Window");
+
+        CreateGpuContext(window_, sampleCount_);
+        try
+        {
+            SetupSokol();
+            CreateSpriteResources();
+        }
+        catch (...)
+        {
+            // Transactional construction: a partially initialised backend must never reach the
+            // window registry or a caller's unique_ptr.
+            if (sg_isvalid()) sg_shutdown();
+            if (glContext_ != nullptr)
+            {
+                SDL_GL_DestroyContext(static_cast<SDL_GLContext>(glContext_));
+                glContext_ = nullptr;
+            }
+            throw;
+        }
+
+        IGraphicsBackend::RegisterForWindow(window_, this);
+    }
+
+    SokolGraphicsBackend::~SokolGraphicsBackend()
+    {
+        IGraphicsBackend::UnregisterForWindow(window_);
+
+        if (passActive_)
+        {
+            sg_end_pass();
+            passActive_ = false;
+        }
+        if (sg_isvalid()) sg_shutdown();
+        if (glContext_ != nullptr)
+        {
+            SDL_GL_DestroyContext(static_cast<SDL_GLContext>(glContext_));
+            glContext_ = nullptr;
+        }
+    }
+
+    void SokolGraphicsBackend::CreateGpuContext(SDL_Window* window, int multiSampleCount)
+    {
+#if defined(SOKOL_GLCORE) || defined(SOKOL_GLES3)
+    #if defined(SOKOL_GLCORE)
+        // sokol_gfx's GLCORE backend targets the OpenGL 4.1 core profile; asking for less would
+        // make sg_setup() fail on features it assumes unconditionally.
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+    #else
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
+    #endif
+        SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+        SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
+        // Without an explicit request SDL hands out a window with zero stencil bits, which would
+        // make every stencil clear and DepthStencilState.StencilEnable a silent no-op.
+        SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
+        if (multiSampleCount > 1)
+        {
+            SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1);
+            SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, multiSampleCount);
+        }
+
+        glContext_ = SDL_GL_CreateContext(window);
+        if (glContext_ == nullptr)
+            throw std::runtime_error(std::string("Sokol backend: SDL_GL_CreateContext failed: ") + SDL_GetError());
+
+        if (!SDL_GL_MakeCurrent(window, static_cast<SDL_GLContext>(glContext_)))
+            throw std::runtime_error(std::string("Sokol backend: SDL_GL_MakeCurrent failed: ") + SDL_GetError());
+
+        SDL_GL_SetSwapInterval(swapInterval_);
+
+        // Report back what the driver actually granted rather than what was asked for, matching
+        // FNA3D's "MultiSampleCount reflects the real clamped value" semantics.
+        int grantedSamples = 0;
+        if (SDL_GL_GetAttribute(SDL_GL_MULTISAMPLESAMPLES, &grantedSamples))
+            sampleCount_ = grantedSamples > 1 ? grantedSamples : 1;
+        else
+            sampleCount_ = 1;
+#else
+        (void)window;
+        (void)multiSampleCount;
+        throw std::runtime_error(
+            "Sokol backend: CNA_SOKOL_API is set to a non-GL API, but only the GL context path is "
+            "implemented (plan_sokol.md Phase SOKOL-8)");
+#endif
+    }
+
+    void SokolGraphicsBackend::SetupSokol()
+    {
+        sg_desc desc = {};
+        desc.logger.func = slog_func;
+        desc.environment.defaults.color_format = SG_PIXELFORMAT_RGBA8;
+        desc.environment.defaults.depth_format = SG_PIXELFORMAT_DEPTH_STENCIL;
+        desc.environment.defaults.sample_count = sampleCount_;
+        sg_setup(&desc);
+
+        if (!sg_isvalid())
+            throw std::runtime_error("Sokol backend: sg_setup() did not produce a valid sokol_gfx context");
+    }
+
+    void SokolGraphicsBackend::CreateSpriteResources()
+    {
+        spriteShaderId_ = sg_make_shader(cna_sprite_shader_desc(sg_query_backend())).id;
+        if (sg_query_shader_state(MakeShaderHandle(spriteShaderId_)) != SG_RESOURCESTATE_VALID)
+            throw std::runtime_error("Sokol backend: sprite shader creation failed");
+
+        // Streaming vertex buffer: each SpriteBatch flush appends its own run and draws from the
+        // returned byte offset, which is what makes an arbitrary number of flushes per frame legal
+        // under sokol_gfx's one-update-per-buffer-per-frame rule.
+        sg_buffer_desc vertexDesc = {};
+        vertexDesc.usage.vertex_buffer = true;
+        vertexDesc.usage.stream_update = true;
+        vertexDesc.size = static_cast<std::size_t>(kMaxSpriteQuads) * kSpriteVerticesPerQuad
+                        * sizeof(SokolSpriteBatchBackend::Vertex);
+        vertexDesc.label = "cna_sprite_vertices";
+        spriteVertexBufferId_ = sg_make_buffer(&vertexDesc).id;
+        if (sg_query_buffer_state(MakeBufferHandle(spriteVertexBufferId_)) != SG_RESOURCESTATE_VALID)
+            throw std::runtime_error("Sokol backend: sprite vertex buffer creation failed");
+
+        // The quad index pattern never changes, so it is built once as an immutable buffer and
+        // every flush indexes into its own appended vertex run via vertex_buffer_offsets.
+        std::vector<std::uint16_t> indices;
+        indices.reserve(static_cast<std::size_t>(kMaxSpriteQuads) * kSpriteIndicesPerQuad);
+        for (int quad = 0; quad < kMaxSpriteQuads; ++quad)
+        {
+            const auto base = static_cast<std::uint16_t>(quad * kSpriteVerticesPerQuad);
+            indices.push_back(static_cast<std::uint16_t>(base + 0));
+            indices.push_back(static_cast<std::uint16_t>(base + 1));
+            indices.push_back(static_cast<std::uint16_t>(base + 2));
+            indices.push_back(static_cast<std::uint16_t>(base + 2));
+            indices.push_back(static_cast<std::uint16_t>(base + 3));
+            indices.push_back(static_cast<std::uint16_t>(base + 0));
+        }
+
+        sg_buffer_desc indexDesc = {};
+        indexDesc.usage.index_buffer = true;
+        indexDesc.usage.immutable = true;
+        indexDesc.size = indices.size() * sizeof(std::uint16_t);
+        indexDesc.data.ptr = indices.data();
+        indexDesc.data.size = indexDesc.size;
+        indexDesc.label = "cna_sprite_indices";
+        spriteIndexBufferId_ = sg_make_buffer(&indexDesc).id;
+        if (sg_query_buffer_state(MakeBufferHandle(spriteIndexBufferId_)) != SG_RESOURCESTATE_VALID)
+            throw std::runtime_error("Sokol backend: sprite index buffer creation failed");
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // SokolGraphicsBackend -- pass management
+    // ---------------------------------------------------------------------------------------
+
+    void SokolGraphicsBackend::QueueClear(bool color, float r, float g, float b, float a,
+                                          bool depth, float depthValue,
+                                          bool stencil, int stencilValue)
+    {
+        // A sokol_gfx pass fixes its load actions when it begins, so a clear arriving mid-pass has
+        // to close that pass and let the next one start with the requested action.
+        EndPassIfActive();
+
+        if (color)
+        {
+            pendingClearColor_ = true;
+            pendingClear_[0] = r;
+            pendingClear_[1] = g;
+            pendingClear_[2] = b;
+            pendingClear_[3] = a;
+        }
+        if (depth)
+        {
+            pendingClearDepth_ = true;
+            pendingDepth_ = depthValue;
+        }
+        if (stencil)
+        {
+            pendingClearStencil_ = true;
+            pendingStencil_ = stencilValue;
+        }
+    }
+
+    void SokolGraphicsBackend::BeginPassIfNeeded()
+    {
+        if (passActive_) return;
+
+        int physicalWidth = 0;
+        int physicalHeight = 0;
+        GetPhysicalSizeEXT(physicalWidth, physicalHeight);
+
+        sg_pass pass = {};
+        pass.swapchain.width = physicalWidth;
+        pass.swapchain.height = physicalHeight;
+        pass.swapchain.sample_count = sampleCount_;
+        pass.swapchain.color_format = SG_PIXELFORMAT_RGBA8;
+        pass.swapchain.depth_format = SG_PIXELFORMAT_DEPTH_STENCIL;
+        pass.swapchain.gl.framebuffer = 0;
+
+        // LOAD unless an explicit Clear* asked otherwise: a pass restarted mid-frame (because a
+        // clear or a state change closed the previous one) must not discard what was already drawn.
+        pass.action.colors[0].load_action = pendingClearColor_ ? SG_LOADACTION_CLEAR : SG_LOADACTION_LOAD;
+        pass.action.colors[0].store_action = SG_STOREACTION_STORE;
+        pass.action.colors[0].clear_value.r = pendingClear_[0];
+        pass.action.colors[0].clear_value.g = pendingClear_[1];
+        pass.action.colors[0].clear_value.b = pendingClear_[2];
+        pass.action.colors[0].clear_value.a = pendingClear_[3];
+
+        pass.action.depth.load_action = pendingClearDepth_ ? SG_LOADACTION_CLEAR : SG_LOADACTION_LOAD;
+        pass.action.depth.store_action = SG_STOREACTION_STORE;
+        pass.action.depth.clear_value = pendingDepth_;
+
+        pass.action.stencil.load_action = pendingClearStencil_ ? SG_LOADACTION_CLEAR : SG_LOADACTION_LOAD;
+        pass.action.stencil.store_action = SG_STOREACTION_STORE;
+        pass.action.stencil.clear_value = static_cast<std::uint8_t>(pendingStencil_ & 0xFF);
+
+        pass.label = "cna_swapchain_pass";
+
+        sg_begin_pass(&pass);
+        passActive_ = true;
+
+        pendingClearColor_ = false;
+        pendingClearDepth_ = false;
+        pendingClearStencil_ = false;
+
+        ApplyPendingViewportAndScissor();
+    }
+
+    void SokolGraphicsBackend::EndPassIfActive()
+    {
+        if (!passActive_) return;
+        sg_end_pass();
+        passActive_ = false;
+    }
+
+    void SokolGraphicsBackend::ApplyPendingViewportAndScissor()
+    {
+        if (!passActive_) return;
+
+        int physicalWidth = 0;
+        int physicalHeight = 0;
+        GetPhysicalSizeEXT(physicalWidth, physicalHeight);
+
+        int logicalWidth = 0;
+        int logicalHeight = 0;
+        GetLogicalSizeEXT(logicalWidth, logicalHeight);
+
+        // Logical-to-physical is a single uniform scale: the logical height is what a game fixes
+        // and the logical width follows the window aspect, so there is no letterbox offset here.
+        const double scale = (logicalHeight > 0)
+            ? static_cast<double>(physicalHeight) / static_cast<double>(logicalHeight)
+            : 1.0;
+        auto toPhysical = [scale](int value) { return static_cast<int>(value * scale + 0.5); };
+
+        if (viewportSet_)
+        {
+            sg_apply_viewport(toPhysical(viewportRect_[0]), toPhysical(viewportRect_[1]),
+                              toPhysical(viewportRect_[2]), toPhysical(viewportRect_[3]), true);
+        }
+        else
+        {
+            sg_apply_viewport(0, 0, physicalWidth, physicalHeight, true);
+        }
+
+        if (scissorEnabled_)
+        {
+            sg_apply_scissor_rect(toPhysical(scissorRect_[0]), toPhysical(scissorRect_[1]),
+                                  toPhysical(scissorRect_[2]), toPhysical(scissorRect_[3]), true);
+        }
+        else
+        {
+            sg_apply_scissor_rect(0, 0, physicalWidth, physicalHeight, true);
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // SokolGraphicsBackend -- clears and present
+    // ---------------------------------------------------------------------------------------
+
+    void SokolGraphicsBackend::Clear(float r, float g, float b, float a)
+    {
+        QueueClear(true, r, g, b, a, false, 1.0f, false, 0);
+    }
+
+    void SokolGraphicsBackend::ClearColorAndDepth(float r, float g, float b, float a, float depth)
+    {
+        QueueClear(true, r, g, b, a, true, depth, false, 0);
+    }
+
+    void SokolGraphicsBackend::ClearDepth(float depth)
+    {
+        QueueClear(false, 0, 0, 0, 0, true, depth, false, 0);
+    }
+
+    void SokolGraphicsBackend::ClearStencil(int stencil)
+    {
+        QueueClear(false, 0, 0, 0, 0, false, 1.0f, true, stencil);
+    }
+
+    void SokolGraphicsBackend::ClearDepthAndStencil(float depth, int stencil)
+    {
+        QueueClear(false, 0, 0, 0, 0, true, depth, true, stencil);
+    }
+
+    void SokolGraphicsBackend::ClearColorAndStencil(float r, float g, float b, float a, int stencil)
+    {
+        QueueClear(true, r, g, b, a, false, 1.0f, true, stencil);
+    }
+
+    void SokolGraphicsBackend::ClearColorDepthAndStencil(float r, float g, float b, float a,
+                                                         float depth, int stencil)
+    {
+        QueueClear(true, r, g, b, a, true, depth, true, stencil);
+    }
+
+    void SokolGraphicsBackend::Present()
+    {
+        // Begin before ending so a frame whose only content was a Clear() still produces the pass
+        // that actually performs it.
+        BeginPassIfNeeded();
+        EndPassIfActive();
+        sg_commit();
+        SDL_GL_SwapWindow(window_);
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // SokolGraphicsBackend -- presentation geometry
+    // ---------------------------------------------------------------------------------------
+
+    void SokolGraphicsBackend::GetPhysicalSizeEXT(int& width, int& height) const
+    {
+        width = 0;
+        height = 0;
+        SDL_GetWindowSizeInPixels(window_, &width, &height);
+    }
+
+    void SokolGraphicsBackend::GetLogicalSizeEXT(int& width, int& height) const
+    {
+        if (virtualHeight_ <= 0)
+        {
+            GetPhysicalSizeEXT(width, height);
+            return;
+        }
+
+        int physicalWidth = 0;
+        int physicalHeight = 0;
+        GetPhysicalSizeEXT(physicalWidth, physicalHeight);
+
+        height = virtualHeight_;
+        if (presentationMode_ == CnaPresentationMode::FixedHeightDynamicWidth && physicalHeight > 0)
+        {
+            width = static_cast<int>(static_cast<double>(physicalWidth) * virtualHeight_
+                                     / physicalHeight + 0.5);
+        }
+        else
+        {
+            width = virtualWidth_ > 0 ? virtualWidth_ : physicalWidth;
+        }
+    }
+
+    void SokolGraphicsBackend::GetViewportSize(int& width, int& height)
+    {
+        GetLogicalSizeEXT(width, height);
+    }
+
+    void SokolGraphicsBackend::SetVirtualResolution(int width, int height)
+    {
+        virtualWidth_ = width;
+        virtualHeight_ = height;
+    }
+
+    void SokolGraphicsBackend::SetPresentationMode(int mode)
+    {
+        presentationMode_ = static_cast<CnaPresentationMode>(mode);
+    }
+
+    void SokolGraphicsBackend::SetSwapInterval(int interval)
+    {
+        swapInterval_ = interval;
+        SDL_GL_SetSwapInterval(interval);
+    }
+
+    bool SokolGraphicsBackend::TransformWindowToLogical(float windowX, float windowY,
+                                                        float& logX, float& logY) const
+    {
+        if (virtualHeight_ <= 0) return false;
+        int physicalWidth = 0;
+        int physicalHeight = 0;
+        GetPhysicalSizeEXT(physicalWidth, physicalHeight);
+        if (physicalHeight <= 0) return false;
+
+        const float scale = static_cast<float>(virtualHeight_) / static_cast<float>(physicalHeight);
+        logX = windowX * scale;
+        logY = windowY * scale;
+        return true;
+    }
+
+    bool SokolGraphicsBackend::TransformLogicalToWindow(float logX, float logY,
+                                                        float& windowX, float& windowY) const
+    {
+        if (virtualHeight_ <= 0) return false;
+        int physicalWidth = 0;
+        int physicalHeight = 0;
+        GetPhysicalSizeEXT(physicalWidth, physicalHeight);
+        if (physicalHeight <= 0) return false;
+
+        const float inverseScale = static_cast<float>(physicalHeight) / static_cast<float>(virtualHeight_);
+        windowX = logX * inverseScale;
+        windowY = logY * inverseScale;
+        return true;
+    }
+
+    SDL_Window* SokolGraphicsBackend::GetWindowInternal() const { return window_; }
+
+    SDL_Renderer* SokolGraphicsBackend::GetRendererInternal() const { return nullptr; }
+
+    // ---------------------------------------------------------------------------------------
+    // SokolGraphicsBackend -- resource creation
+    // ---------------------------------------------------------------------------------------
+
+    std::unique_ptr<ITextureBackend> SokolGraphicsBackend::CreateTexture(const ImageData& data)
+    {
+        return std::make_unique<SokolTextureBackend>(data);
+    }
+
+    std::unique_ptr<ISpriteBatchBackend> SokolGraphicsBackend::CreateSpriteBatch()
+    {
+        return std::make_unique<SokolSpriteBatchBackend>(*this);
+    }
+
+    std::unique_ptr<IVertexBufferBackend> SokolGraphicsBackend::CreateVertexBuffer(int vertexCapacity)
+    {
+        return std::make_unique<SokolVertexBufferBackend>(vertexCapacity);
+    }
+
+    std::unique_ptr<IIndexBufferBackend> SokolGraphicsBackend::CreateIndexBuffer16(int indexCapacity)
+    {
+        return std::make_unique<SokolIndexBufferBackend>(indexCapacity, false);
+    }
+
+    std::unique_ptr<IIndexBufferBackend> SokolGraphicsBackend::CreateIndexBuffer32(int indexCapacity)
+    {
+        return std::make_unique<SokolIndexBufferBackend>(indexCapacity, true);
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // SokolGraphicsBackend -- state
+    // ---------------------------------------------------------------------------------------
+
+    void SokolGraphicsBackend::SetRenderTargets(const RenderTargetBindingDescriptor* renderTargets,
+                                                int count)
+    {
+        if (renderTargets == nullptr || count == 0) return; // Back buffer: already the only target.
+
+        NotYetImplemented(kBackendName, "render targets (SetRenderTargets with a bound target)");
+    }
+
+    void SokolGraphicsBackend::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
+                                               int colorDstBlend, int alphaDstBlend,
+                                               int colorBlendFunc, int alphaBlendFunc,
+                                               const BlendWriteState& writeState)
+    {
+        blendColorSrc_ = colorSrcBlend;
+        blendAlphaSrc_ = alphaSrcBlend;
+        blendColorDst_ = colorDstBlend;
+        blendAlphaDst_ = alphaDstBlend;
+        blendColorFunc_ = colorBlendFunc;
+        blendAlphaFunc_ = alphaBlendFunc;
+        colorWriteChannels_ = writeState.colorWriteChannels[0];
+
+        // XNA has no separate "blending on" switch: Opaque is expressed as One/Zero/Add, which is
+        // exactly a disabled blend unit, so it is detected rather than requiring a second call.
+        const bool isOpaque = colorSrcBlend == 0 && colorDstBlend == 1
+                           && alphaSrcBlend == 0 && alphaDstBlend == 1
+                           && colorBlendFunc == 0 && alphaBlendFunc == 0;
+        blendEnabled_ = !isOpaque;
+
+        // BlendState.MultiSampleMask has no sokol_gfx equivalent -- sokol exposes alpha-to-coverage
+        // but no per-sample coverage mask -- so a non-default mask is intentionally not honoured
+        // here. Recorded as a known gap in docs/sokol-backend.md rather than silently pretended.
+    }
+
+    void SokolGraphicsBackend::ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable,
+                                                      int depthFunc,
+                                                      bool stencilEnable, int stencilFunc,
+                                                      int stencilPass, int stencilFail,
+                                                      int stencilDepthFail,
+                                                      int stencilMask, int stencilWriteMask,
+                                                      int referenceStencil,
+                                                      bool twoSidedStencilMode,
+                                                      int ccwStencilFunc, int ccwStencilPass,
+                                                      int ccwStencilFail, int ccwStencilDepthFail)
+    {
+        depthTestEnabled_ = depthEnable;
+        depthWriteEnabled_ = depthWriteEnable;
+        depthFunc_ = depthFunc;
+        referenceStencil_ = referenceStencil;
+
+        // Stencil is deliberately not wired into the pipeline key yet: this backend's only draw
+        // path is SpriteBatch, which XNA always runs with stencil disabled, so keying pipelines on
+        // sixteen more stencil fields would multiply the cache without any draw able to exercise
+        // it. It lands with the 3D path (plan_sokol.md Phase SOKOL-5).
+        (void)stencilEnable; (void)stencilFunc; (void)stencilPass; (void)stencilFail;
+        (void)stencilDepthFail; (void)stencilMask; (void)stencilWriteMask;
+        (void)twoSidedStencilMode; (void)ccwStencilFunc; (void)ccwStencilPass;
+        (void)ccwStencilFail; (void)ccwStencilDepthFail;
+    }
+
+    void SokolGraphicsBackend::ApplyRasterizerState(int cullMode, int fillMode,
+                                                    bool scissorTestEnable,
+                                                    float depthBias, float slopeScaleDepthBias)
+    {
+        scissorEnabled_ = scissorTestEnable;
+        if (!scissorTestEnable && passActive_) ApplyPendingViewportAndScissor();
+
+        // cullMode/fillMode/depthBias only affect the 3D pipeline this backend does not build yet;
+        // SpriteBatch always draws unculled, solid, unbiased quads. Accepted and recorded as a gap
+        // in docs/sokol-backend.md rather than throwing, since GraphicsDevice applies a
+        // RasterizerState on every frame regardless of whether anything 3D is drawn.
+        (void)cullMode; (void)fillMode; (void)depthBias; (void)slopeScaleDepthBias;
+    }
+
+    void SokolGraphicsBackend::ApplySamplerState(int slot, int filter, int addressU, int addressV,
+                                                 int maxAnisotropy)
+    {
+        // Sampler state reaches the GPU through the per-flush sampler the SpriteBatch path selects
+        // (DrawSpriteRunEXT), which receives its filter/address values straight from
+        // SpriteBatch::Begin's SamplerState. There is no other draw path on this backend yet, so
+        // there is nothing here to bind a slot-indexed sampler to.
+        (void)slot; (void)filter; (void)addressU; (void)addressV; (void)maxAnisotropy;
+    }
+
+    void SokolGraphicsBackend::SetBlendFactor(float r, float g, float b, float a)
+    {
+        blendFactor_[0] = r;
+        blendFactor_[1] = g;
+        blendFactor_[2] = b;
+        blendFactor_[3] = a;
+    }
+
+    void SokolGraphicsBackend::SetReferenceStencil(int value) { referenceStencil_ = value; }
+
+    void SokolGraphicsBackend::SetScissorRect(int x, int y, int w, int h)
+    {
+        scissorRect_[0] = x;
+        scissorRect_[1] = y;
+        scissorRect_[2] = w;
+        scissorRect_[3] = h;
+        if (passActive_) ApplyPendingViewportAndScissor();
+    }
+
+    void SokolGraphicsBackend::SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth)
+    {
+        viewportSet_ = true;
+        viewportRect_[0] = x;
+        viewportRect_[1] = y;
+        viewportRect_[2] = w;
+        viewportRect_[3] = h;
+
+        // sokol_gfx's viewport call carries no depth range; a non-default Viewport.MinDepth/
+        // MaxDepth would need the 3D projection path to fold it into the pipeline instead.
+        (void)minDepth; (void)maxDepth;
+
+        if (passActive_) ApplyPendingViewportAndScissor();
+    }
+
+    void SokolGraphicsBackend::SetDepthTestEnabled(bool enabled) { depthTestEnabled_ = enabled; }
+
+    void SokolGraphicsBackend::SetBlendEnabled(bool enabled) { blendEnabled_ = enabled; }
+
+    void SokolGraphicsBackend::SetDepthWriteEnabled(bool enabled) { depthWriteEnabled_ = enabled; }
+
+    // ---------------------------------------------------------------------------------------
+    // SokolGraphicsBackend -- caches and sprite drawing
+    // ---------------------------------------------------------------------------------------
+
+    std::uint32_t SokolGraphicsBackend::GetSpritePipeline()
+    {
+        const PipelineKey key{
+            blendColorSrc_, blendAlphaSrc_, blendColorDst_, blendAlphaDst_,
+            blendColorFunc_, blendAlphaFunc_, colorWriteChannels_,
+            blendEnabled_, depthTestEnabled_, depthWriteEnabled_, depthFunc_};
+
+        if (const auto found = pipelineCache_.find(key); found != pipelineCache_.end())
+            return found->second;
+
+        sg_pipeline_desc desc = {};
+        desc.shader = MakeShaderHandle(spriteShaderId_);
+        desc.layout.buffers[0].stride = static_cast<int>(sizeof(SokolSpriteBatchBackend::Vertex));
+        desc.layout.attrs[ATTR_cna_sprite_position].format = SG_VERTEXFORMAT_FLOAT2;
+        desc.layout.attrs[ATTR_cna_sprite_position].offset = 0;
+        desc.layout.attrs[ATTR_cna_sprite_texcoord0].format = SG_VERTEXFORMAT_FLOAT2;
+        desc.layout.attrs[ATTR_cna_sprite_texcoord0].offset = 2 * static_cast<int>(sizeof(float));
+        desc.layout.attrs[ATTR_cna_sprite_color0].format = SG_VERTEXFORMAT_FLOAT4;
+        desc.layout.attrs[ATTR_cna_sprite_color0].offset = 4 * static_cast<int>(sizeof(float));
+        desc.index_type = SG_INDEXTYPE_UINT16;
+        desc.primitive_type = SG_PRIMITIVETYPE_TRIANGLES;
+        desc.cull_mode = SG_CULLMODE_NONE;
+        desc.sample_count = sampleCount_;
+        desc.depth.pixel_format = SG_PIXELFORMAT_DEPTH_STENCIL;
+        desc.depth.compare = key.depthTestEnabled ? ToCompareFunc(key.depthFunc) : SG_COMPAREFUNC_ALWAYS;
+        desc.depth.write_enabled = key.depthTestEnabled && key.depthWriteEnabled;
+        desc.color_count = 1;
+        desc.colors[0].pixel_format = SG_PIXELFORMAT_RGBA8;
+        desc.colors[0].write_mask = ToColorMask(key.colorWriteChannels);
+        desc.colors[0].blend.enabled = key.blendEnabled;
+        desc.colors[0].blend.src_factor_rgb = ToBlendFactor(key.colorSrcBlend);
+        desc.colors[0].blend.dst_factor_rgb = ToBlendFactor(key.colorDstBlend);
+        desc.colors[0].blend.op_rgb = ToBlendOp(key.colorBlendFunc);
+        desc.colors[0].blend.src_factor_alpha = ToBlendFactor(key.alphaSrcBlend);
+        desc.colors[0].blend.dst_factor_alpha = ToBlendFactor(key.alphaDstBlend);
+        desc.colors[0].blend.op_alpha = ToBlendOp(key.alphaBlendFunc);
+        desc.blend_color.r = blendFactor_[0];
+        desc.blend_color.g = blendFactor_[1];
+        desc.blend_color.b = blendFactor_[2];
+        desc.blend_color.a = blendFactor_[3];
+        desc.label = "cna_sprite_pipeline";
+
+        const std::uint32_t pipelineId = sg_make_pipeline(&desc).id;
+        if (sg_query_pipeline_state(MakePipelineHandle(pipelineId)) != SG_RESOURCESTATE_VALID)
+            throw std::runtime_error("Sokol backend: sprite pipeline creation failed");
+
+        pipelineCache_.emplace(key, pipelineId);
+        return pipelineId;
+    }
+
+    std::uint32_t SokolGraphicsBackend::GetSampler(int filter, int addressU, int addressV,
+                                                   int maxAnisotropy)
+    {
+        const SamplerKey key{filter, addressU, addressV, maxAnisotropy};
+        if (const auto found = samplerCache_.find(key); found != samplerCache_.end())
+            return found->second;
+
+        sg_filter minFilter = SG_FILTER_LINEAR;
+        sg_filter magFilter = SG_FILTER_LINEAR;
+        sg_filter mipFilter = SG_FILTER_LINEAR;
+        bool anisotropic = false;
+        ToFilters(filter, minFilter, magFilter, mipFilter, anisotropic);
+
+        sg_sampler_desc desc = {};
+        desc.min_filter = minFilter;
+        desc.mag_filter = magFilter;
+        desc.mipmap_filter = mipFilter;
+        desc.wrap_u = ToWrap(addressU);
+        desc.wrap_v = ToWrap(addressV);
+        desc.wrap_w = SG_WRAP_CLAMP_TO_EDGE;
+        desc.max_anisotropy = anisotropic
+            ? static_cast<std::uint32_t>(std::clamp(maxAnisotropy, 1, 16))
+            : 1u;
+        desc.label = "cna_sampler";
+
+        const std::uint32_t samplerId = sg_make_sampler(&desc).id;
+        if (sg_query_sampler_state(MakeSamplerHandle(samplerId)) != SG_RESOURCESTATE_VALID)
+            throw std::runtime_error("Sokol backend: sampler creation failed");
+
+        samplerCache_.emplace(key, samplerId);
+        return samplerId;
+    }
+
+    void SokolGraphicsBackend::DrawSpriteRunEXT(
+        const ITextureBackend& texture,
+        const std::vector<SokolSpriteBatchBackend::Vertex>& vertices,
+        const Matrix& transform,
+        int filter, int addressU, int addressV)
+    {
+        if (vertices.empty()) return;
+
+        const auto* sokolTexture = dynamic_cast<const SokolTextureBackend*>(&texture);
+        if (sokolTexture == nullptr)
+            throw std::runtime_error("Sokol backend: SpriteBatch was handed a foreign texture backend");
+
+        BeginPassIfNeeded();
+
+        const std::size_t byteCount = vertices.size() * sizeof(SokolSpriteBatchBackend::Vertex);
+        const sg_buffer vertexBuffer = MakeBufferHandle(spriteVertexBufferId_);
+        if (sg_query_buffer_will_overflow(vertexBuffer, byteCount))
+        {
+            throw std::runtime_error(
+                "Sokol backend: exceeded the per-frame sprite capacity of "
+                + std::to_string(kMaxSpriteQuads) + " quads");
+        }
+
+        sg_range vertexRange{};
+        vertexRange.ptr = vertices.data();
+        vertexRange.size = byteCount;
+        const int vertexOffset = sg_append_buffer(vertexBuffer, &vertexRange);
+
+        int logicalWidth = 0;
+        int logicalHeight = 0;
+        GetLogicalSizeEXT(logicalWidth, logicalHeight);
+        if (viewportSet_ && viewportRect_[2] > 0 && viewportRect_[3] > 0)
+        {
+            // XNA builds the SpriteBatch projection from Viewport.Width/Height, so a custom
+            // sub-viewport makes sprite coordinates viewport-local rather than window-local.
+            logicalWidth = viewportRect_[2];
+            logicalHeight = viewportRect_[3];
+        }
+        if (logicalWidth <= 0 || logicalHeight <= 0) return;
+
+        const Matrix ortho = Matrix::CreateOrthographicOffCenter(
+            0.0f, static_cast<float>(logicalWidth),
+            static_cast<float>(logicalHeight), 0.0f,
+            -1.0f, 1.0f);
+        const Matrix combined = transform * ortho;
+
+        cna_sprite_vs_params_t params{};
+        combined.ToColumnMajor(params.mvp);
+
+        sg_apply_pipeline(MakePipelineHandle(GetSpritePipeline()));
+
+        sg_bindings bindings = {};
+        bindings.vertex_buffers[0] = vertexBuffer;
+        bindings.vertex_buffer_offsets[0] = vertexOffset;
+        bindings.index_buffer = MakeBufferHandle(spriteIndexBufferId_);
+        bindings.views[VIEW_cna_tex] = MakeViewHandle(sokolTexture->GetViewIdEXT());
+        bindings.samplers[SMP_cna_smp] = MakeSamplerHandle(GetSampler(filter, addressU, addressV, 1));
+        sg_apply_bindings(&bindings);
+
+        sg_range uniformRange{};
+        uniformRange.ptr = &params;
+        uniformRange.size = sizeof(params);
+        sg_apply_uniforms(UB_cna_sprite_vs_params, &uniformRange);
+
+        const int quadCount = static_cast<int>(vertices.size()) / kSpriteVerticesPerQuad;
+        sg_draw(0, quadCount * kSpriteIndicesPerQuad, 1);
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // SokolGraphicsBackend -- readback, 3D stubs, capabilities
+    // ---------------------------------------------------------------------------------------
+
+    void SokolGraphicsBackend::ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels)
+    {
+#if CNA_SOKOL_HAS_GL_READBACK
+        if (pixels == nullptr || w <= 0 || h <= 0)
+            throw std::runtime_error("Sokol backend: ReadBackbuffer called with an empty region");
+
+        // BeginPassIfNeeded() first, for the same reason Present() does it: a Clear() only records
+        // a pending pass action, so a Clear()-then-read-back sequence with nothing drawn in
+        // between would otherwise read whatever the previous frame's buffer swap left behind.
+        // Ending the pass then flushes everything, and glFinish waits for the driver to actually
+        // produce the pixels. sg_commit() is deliberately not called -- it would reset the sprite
+        // streaming buffer's append offset mid-frame, and a readback is not the end of a frame.
+        BeginPassIfNeeded();
+        EndPassIfActive();
+        glFinish();
+
+        int physicalWidth = 0;
+        int physicalHeight = 0;
+        GetPhysicalSizeEXT(physicalWidth, physicalHeight);
+
+        int logicalWidth = 0;
+        int logicalHeight = 0;
+        GetLogicalSizeEXT(logicalWidth, logicalHeight);
+
+        const double scale = (logicalHeight > 0)
+            ? static_cast<double>(physicalHeight) / static_cast<double>(logicalHeight)
+            : 1.0;
+        const int physicalX = static_cast<int>(x * scale + 0.5);
+        const int physicalY = static_cast<int>(y * scale + 0.5);
+        const int physicalW = std::max(1, static_cast<int>(w * scale + 0.5));
+        const int physicalH = std::max(1, static_cast<int>(h * scale + 0.5));
+
+        // glReadPixels' origin is the bottom-left of the framebuffer, while every CNA caller works
+        // in top-left game coordinates, so the region is mirrored on the way in and the rows are
+        // reversed on the way out.
+        const int glY = physicalHeight - (physicalY + physicalH);
+        std::vector<std::uint8_t> raw(static_cast<std::size_t>(physicalW) * physicalH * 4u);
+        glPixelStorei(GL_PACK_ALIGNMENT, 1);
+        glReadPixels(physicalX, glY, physicalW, physicalH, GL_RGBA, GL_UNSIGNED_BYTE, raw.data());
+
+        // Nearest-sample the physical pixels back down to the requested logical region, which is a
+        // no-op whenever the window is not scaled (the usual case, and every pixel test's case).
+        for (int row = 0; row < h; ++row)
+        {
+            const int sourceRow = std::min(physicalH - 1,
+                                           static_cast<int>((h - 1 - row) * scale + 0.5));
+            for (int column = 0; column < w; ++column)
+            {
+                const int sourceColumn = std::min(physicalW - 1,
+                                                  static_cast<int>(column * scale + 0.5));
+                const std::uint8_t* source =
+                    raw.data() + (static_cast<std::size_t>(sourceRow) * physicalW + sourceColumn) * 4u;
+                std::uint8_t* destination =
+                    pixels + (static_cast<std::size_t>(row) * w + column) * 4u;
+                destination[0] = source[0];
+                destination[1] = source[1];
+                destination[2] = source[2];
+                destination[3] = source[3];
+            }
+        }
+#else
+        (void)x; (void)y; (void)w; (void)h; (void)pixels;
+        NotYetImplemented(kBackendName, "ReadBackbuffer on a non-GL CNA_SOKOL_API");
+#endif
+    }
+
+    void SokolGraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend& vb,
+                                                     const Matrix& world,
+                                                     const Matrix& view,
+                                                     const Matrix& projection,
+                                                     PrimitiveType primitive,
+                                                     int primitiveCount)
+    {
+        (void)vb; (void)world; (void)view; (void)projection; (void)primitive; (void)primitiveCount;
+        NotYetImplemented(kBackendName, "the 3D draw path (DrawColoredPrimitives)");
+    }
+
+    void SokolGraphicsBackend::DrawIndexedColoredPrimitives(const IVertexBufferBackend& vb,
+                                                            const IIndexBufferBackend& ib,
+                                                            const Matrix& world,
+                                                            const Matrix& view,
+                                                            const Matrix& projection,
+                                                            PrimitiveType primitive,
+                                                            int primitiveCount)
+    {
+        (void)vb; (void)ib; (void)world; (void)view; (void)projection;
+        (void)primitive; (void)primitiveCount;
+        NotYetImplemented(kBackendName, "the 3D draw path (DrawIndexedColoredPrimitives)");
+    }
+
+    bool SokolGraphicsBackend::SupportsCapability(CNA::GraphicsCapability capability) const
+    {
+        switch (capability)
+        {
+            // Real: the swapchain carries a genuine depth-stencil buffer (SDL_GL_DEPTH_SIZE 24 /
+            // SDL_GL_STENCIL_SIZE 8) that the Clear* family writes through pass load actions.
+            case CNA::GraphicsCapability::DepthStencilBuffer:
+                return true;
+            // Real, but back-buffer only: the sample count is negotiated with the GL context at
+            // construction. There are no render targets on this backend to multisample.
+            case CNA::GraphicsCapability::MultiSampleAntiAliasing:
+                return true;
+            // Real: SamplerState.MaxAnisotropy reaches sg_sampler_desc.max_anisotropy whenever
+            // TextureFilter::Anisotropic is selected.
+            case CNA::GraphicsCapability::AnisotropicFiltering:
+                return true;
+            // The 2D baseline's boundary. Each of these needs a phase that is not implemented yet
+            // -- see plan_sokol.md; every one of them fails loudly rather than silently no-opping.
+            case CNA::GraphicsCapability::ThreeD:
+            case CNA::GraphicsCapability::MultipleRenderTargets:
+            case CNA::GraphicsCapability::WireFrame:
+            case CNA::GraphicsCapability::OcclusionQuery:
+            case CNA::GraphicsCapability::CustomEffects:
+            case CNA::GraphicsCapability::Texture3D:
+                return false;
+        }
+        return false;
+    }
+
+    int SokolGraphicsBackend::GetMultiSampleCount() const { return sampleCount_; }
+
+    SokolApiEXT SokolGraphicsBackend::GetApiEXT()
+    {
+#if defined(SOKOL_GLCORE)
+        return SokolApiEXT::GLCore;
+#elif defined(SOKOL_GLES3)
+        return SokolApiEXT::GLES3;
+#elif defined(SOKOL_D3D11)
+        return SokolApiEXT::D3D11;
+#elif defined(SOKOL_METAL)
+        return SokolApiEXT::Metal;
+#elif defined(SOKOL_WGPU)
+        return SokolApiEXT::WebGPU;
+#else
+    #error "CNA: no SOKOL_* API define set -- cmake/BackendSelection.cmake's CNA_SOKOL_API is broken"
+#endif
+    }
+
+    int SokolGraphicsBackend::GetMaxSpriteQuadsPerFrameEXT() { return kMaxSpriteQuads; }
+}
+
+namespace CNA::Internal::Backends
+{
+    std::unique_ptr<IGraphicsBackend> CreateGraphicsBackend(const GraphicsBackendCreateArgs& args)
+    {
+        return std::make_unique<Sokol::SokolGraphicsBackend>(args);
+    }
+}
