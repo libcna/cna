@@ -16,10 +16,10 @@
 > including the shared multi-stream and instanced-draw pixel oracles.
 >
 > **Remaining work (check this section first; update it whenever a row's status changes):**
-> - **Stock effect variants (`MAGNUM-50`–`MAGNUM-53`)** — `DualTextureEffect`,
->   `EnvironmentMapEffect`, `SkinnedEffect` and `PbrEffect`/`SkinnedPbrEffect` have no generated
->   shader variant here yet. A draw selecting one renders through its layout's own program without
->   that variant's extra terms.
+> - **Stock effect variants (`MAGNUM-51`–`MAGNUM-53`)** — `EnvironmentMapEffect`, `SkinnedEffect`
+>   and `PbrEffect`/`SkinnedPbrEffect` have no generated shader variant here yet. A draw selecting
+>   one renders through its layout's own program without that variant's extra terms.
+>   `DualTextureEffect` (`MAGNUM-50`) is done and pixel-verified.
 > - **`SurfaceFormat` beyond `Color` (`MAGNUM-54`)** — every texture, cube, volume and render target
 >   allocates RGBA8. The requested format reaches the backend and is recorded but not honoured.
 > - **`BlendState.MultiSampleMask` (`MAGNUM-55`)** — only the all-ones default is applied; a real
@@ -120,7 +120,8 @@
 | MAGNUM-40 | GTest coverage for the context-free surface (enum mappings, layout resolution, generated GLSL) | ✅ |
 | MAGNUM-41 | `examples/magnum_smoke_test.cpp` + `ctest -R Magnum_Smoke` integration test | ✅ |
 | MAGNUM-42 | `docs/magnum-backend.md` | ✅ |
-| MAGNUM-50 | `DualTextureEffect` shader variant | ⬜ |
+| MAGNUM-43 | Stock shader selection keyed on program kind (stride + effect flags), not stride alone | ✅ |
+| MAGNUM-50 | `DualTextureEffect` shader variant (strides 20 and 24), pixel-verified | ✅ |
 | MAGNUM-51 | `EnvironmentMapEffect` shader variant (cube-map reflection, flat and Fresnel-weighted) | ⬜ |
 | MAGNUM-52 | `SkinnedEffect` shader variant (bone palette, `weightsPerVertex`) | ⬜ |
 | MAGNUM-53 | `PbrEffect` / `SkinnedPbrEffect` shader variants | ⬜ |

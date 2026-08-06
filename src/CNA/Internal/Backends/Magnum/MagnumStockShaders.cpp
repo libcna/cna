@@ -60,130 +60,122 @@ vec2 cnaSampleUV(vec2 uv, float flip){ return vec2(uv.x, mix(uv.y, 1.0 - uv.y, f
         constexpr const char* kFogFragmentTerm =
             "    fragColor.rgb = mix(uFogColor, fragColor.rgb, vFogFactor);\n";
 
-        bool LayoutHasColor(MagnumStockLayout layout)
+        bool ProgramHasColor(MagnumStockProgram program)
         {
-            return layout == MagnumStockLayout::PositionColor
-                || layout == MagnumStockLayout::PositionColorTexture;
+            return program == MagnumStockProgram::PositionColor
+                || program == MagnumStockProgram::PositionColorTexture
+                || program == MagnumStockProgram::DualTextureColored;
         }
 
-        bool LayoutHasTexture(MagnumStockLayout layout)
+        bool ProgramHasTexture(MagnumStockProgram program)
         {
-            return layout != MagnumStockLayout::PositionColor;
+            return program != MagnumStockProgram::PositionColor;
         }
 
-        bool LayoutHasNormal(MagnumStockLayout layout)
+        bool ProgramHasNormal(MagnumStockProgram program)
         {
-            return layout == MagnumStockLayout::PositionNormalTexture;
+            return program == MagnumStockProgram::PositionNormalTexture;
         }
-    }
 
-    bool StockLayoutForStride(std::size_t strideInBytes, MagnumStockLayout& layoutOut)
-    {
-        switch (strideInBytes)
+        bool ProgramIsDualTexture(MagnumStockProgram program)
         {
-            case 16: layoutOut = MagnumStockLayout::PositionColor;         return true;
-            case 20: layoutOut = MagnumStockLayout::PositionTexture;       return true;
-            case 24: layoutOut = MagnumStockLayout::PositionColorTexture;  return true;
-            case 32: layoutOut = MagnumStockLayout::PositionNormalTexture; return true;
-            default: return false;
+            return program == MagnumStockProgram::DualTexture
+                || program == MagnumStockProgram::DualTextureColored;
         }
-    }
 
-    std::string StockVertexShaderSource(MagnumStockLayout layout)
-    {
-        std::string source = "#version 330 core\n";
-        source += "layout(location=0) in vec3 aPosition;\n";
-
-        switch (layout)
+        /// Shader location the texture coordinate occupies, which depends only on whether the
+        /// layout also carries a colour or a normal ahead of it.
+        int TexCoordLocation(MagnumStockProgram program)
         {
-            case MagnumStockLayout::PositionColor:
+            return (ProgramHasColor(program) || ProgramHasNormal(program)) ? 2 : 1;
+        }
+
+        std::string BaseVertexShaderSource(MagnumStockProgram program)
+        {
+            std::string source = "#version 330 core\n";
+            source += "layout(location=0) in vec3 aPosition;\n";
+            if (ProgramHasColor(program))
                 source += "layout(location=1) in vec4 aColor;\n";
-                break;
-            case MagnumStockLayout::PositionTexture:
-                source += "layout(location=1) in vec2 aTexCoord;\n";
-                break;
-            case MagnumStockLayout::PositionColorTexture:
-                source += "layout(location=1) in vec4 aColor;\n";
-                source += "layout(location=2) in vec2 aTexCoord;\n";
-                break;
-            case MagnumStockLayout::PositionNormalTexture:
+            if (ProgramHasNormal(program))
                 source += "layout(location=1) in vec3 aNormal;\n";
-                source += "layout(location=2) in vec2 aTexCoord;\n";
-                break;
+            if (ProgramHasTexture(program))
+            {
+                source += "layout(location=" + std::to_string(TexCoordLocation(program))
+                        + ") in vec2 aTexCoord;\n";
+            }
+
+            source += kInstanceTransformDeclaration;
+            source += "uniform mat4 uWVP;\n";
+            source += "uniform mat4 uWorld;\n";
+            source += "uniform mat3 uNormalMatrix;\n";
+            source += "uniform vec4 uFogVector;\n";
+            source += "out vec4 vColor;\n";
+            source += "out vec2 vTexCoord;\n";
+            source += "out vec3 vNormal;\n";
+            source += "out vec3 vWorldPosition;\n";
+            source += "out float vFogFactor;\n";
+            source += "void main(){\n";
+            source += "    vec4 cnaPosition = cnaInstancePosition(vec4(aPosition, 1.0));\n";
+            source += "    gl_Position = uWVP * cnaPosition;\n";
+            source += ProgramHasColor(program) ? "    vColor = aColor;\n"
+                                               : "    vColor = vec4(1.0);\n";
+            source += ProgramHasTexture(program) ? "    vTexCoord = aTexCoord;\n"
+                                                 : "    vTexCoord = vec2(0.0);\n";
+            source += ProgramHasNormal(program)
+                ? "    vNormal = uNormalMatrix * cnaInstanceDirection(aNormal);\n"
+                : "    vNormal = vec3(0.0, 0.0, 1.0);\n";
+            source += "    vWorldPosition = (uWorld * cnaPosition).xyz;\n";
+            source += kFogVertexTerm;
+            source += "}\n";
+            return source;
         }
 
-        source += kInstanceTransformDeclaration;
-        source += "uniform mat4 uWVP;\n";
-        source += "uniform mat4 uWorld;\n";
-        source += "uniform mat3 uNormalMatrix;\n";
-        source += "uniform vec4 uFogVector;\n";
-        source += "out vec4 vColor;\n";
-        source += "out vec2 vTexCoord;\n";
-        source += "out vec3 vNormal;\n";
-        source += "out vec3 vWorldPosition;\n";
-        source += "out float vFogFactor;\n";
-        source += "void main(){\n";
-        source += "    vec4 cnaPosition = cnaInstancePosition(vec4(aPosition, 1.0));\n";
-        source += "    gl_Position = uWVP * cnaPosition;\n";
-        source += LayoutHasColor(layout) ? "    vColor = aColor;\n"
-                                         : "    vColor = vec4(1.0);\n";
-        source += LayoutHasTexture(layout) ? "    vTexCoord = aTexCoord;\n"
-                                           : "    vTexCoord = vec2(0.0);\n";
-        source += LayoutHasNormal(layout)
-            ? "    vNormal = uNormalMatrix * cnaInstanceDirection(aNormal);\n"
-            : "    vNormal = vec3(0.0, 0.0, 1.0);\n";
-        source += "    vWorldPosition = (uWorld * cnaPosition).xyz;\n";
-        source += kFogVertexTerm;
-        source += "}\n";
-        return source;
-    }
-
-    std::string StockFragmentShaderSource(MagnumStockLayout layout)
-    {
-        std::string source = "#version 330 core\n";
-        source += "in vec4 vColor;\n";
-        source += "in vec2 vTexCoord;\n";
-        source += "in vec3 vNormal;\n";
-        source += "in vec3 vWorldPosition;\n";
-        source += "in float vFogFactor;\n";
-        source += "uniform sampler2D uTexture;\n";
-        source += "uniform vec4 uDiffuseColor;\n";
-        source += "uniform vec3 uAmbientColor;\n";
-        source += "uniform vec3 uEmissiveColor;\n";
-        source += "uniform vec3 uLight0Dir;\n";
-        source += "uniform vec3 uLight0Diffuse;\n";
-        source += "uniform vec3 uLight0Specular;\n";
-        source += "uniform vec3 uLight1Dir;\n";
-        source += "uniform vec3 uLight1Diffuse;\n";
-        source += "uniform vec3 uLight1Specular;\n";
-        source += "uniform vec3 uLight2Dir;\n";
-        source += "uniform vec3 uLight2Diffuse;\n";
-        source += "uniform vec3 uLight2Specular;\n";
-        source += "uniform vec3 uSpecularColor;\n";
-        source += "uniform float uSpecularPower;\n";
-        source += "uniform vec3 uEyePosition;\n";
-        source += "uniform vec4 uAlphaTest;\n";
-        source += "uniform vec3 uFogColor;\n";
-        source += "uniform float uVertexColorEnabled;\n";
-        source += "uniform float uTextureEnabled;\n";
-        source += "uniform float uLightingEnabled;\n";
-        source += kRenderTargetSampleDeclaration;
-        source += "out vec4 fragColor;\n";
-        source += "void main(){\n";
-        source += "    vec4 material = uDiffuseColor;\n";
-        source += "    if (uVertexColorEnabled > 0.5) material *= vColor;\n";
-        if (LayoutHasTexture(layout))
+        std::string BaseFragmentShaderSource(MagnumStockProgram program)
         {
-            source += "    if (uTextureEnabled > 0.5)\n";
-            source += "        material *= texture(uTexture, cnaSampleUV(vTexCoord, uRtFlipV.x));\n";
-        }
-        source += "    fragColor = material;\n";
+            std::string source = "#version 330 core\n";
+            source += "in vec4 vColor;\n";
+            source += "in vec2 vTexCoord;\n";
+            source += "in vec3 vNormal;\n";
+            source += "in vec3 vWorldPosition;\n";
+            source += "in float vFogFactor;\n";
+            source += "uniform sampler2D uTexture;\n";
+            source += "uniform vec4 uDiffuseColor;\n";
+            source += "uniform vec3 uAmbientColor;\n";
+            source += "uniform vec3 uEmissiveColor;\n";
+            source += "uniform vec3 uLight0Dir;\n";
+            source += "uniform vec3 uLight0Diffuse;\n";
+            source += "uniform vec3 uLight0Specular;\n";
+            source += "uniform vec3 uLight1Dir;\n";
+            source += "uniform vec3 uLight1Diffuse;\n";
+            source += "uniform vec3 uLight1Specular;\n";
+            source += "uniform vec3 uLight2Dir;\n";
+            source += "uniform vec3 uLight2Diffuse;\n";
+            source += "uniform vec3 uLight2Specular;\n";
+            source += "uniform vec3 uSpecularColor;\n";
+            source += "uniform float uSpecularPower;\n";
+            source += "uniform vec3 uEyePosition;\n";
+            source += "uniform vec4 uAlphaTest;\n";
+            source += "uniform vec3 uFogColor;\n";
+            source += "uniform float uVertexColorEnabled;\n";
+            source += "uniform float uTextureEnabled;\n";
+            source += "uniform float uLightingEnabled;\n";
+            source += kRenderTargetSampleDeclaration;
+            source += "out vec4 fragColor;\n";
+            source += "void main(){\n";
+            source += "    vec4 material = uDiffuseColor;\n";
+            source += "    if (uVertexColorEnabled > 0.5) material *= vColor;\n";
+            if (ProgramHasTexture(program))
+            {
+                source += "    if (uTextureEnabled > 0.5)\n";
+                source += "        material *= texture(uTexture, cnaSampleUV(vTexCoord, uRtFlipV.x));\n";
+            }
+            source += "    fragColor = material;\n";
 
-        // Lighting stays a uniform gate rather than a separate program: the same layout is drawn
-        // both lit and unlit by ordinary XNA content (BasicEffect.LightingEnabled is a per-draw
-        // property), and a gate keeps one compiled program serving both instead of doubling the
-        // stock program count for a branch every driver folds away on a uniform.
-        source += R"(
+            // Lighting stays a uniform gate rather than a separate program: the same layout is drawn
+            // both lit and unlit by ordinary XNA content (BasicEffect.LightingEnabled is a per-draw
+            // property), and a gate keeps one compiled program serving both instead of doubling the
+            // stock program count for a branch every driver folds away on a uniform.
+            source += R"(
     if (uLightingEnabled > 0.5) {
         vec3 normal = normalize(vNormal);
         vec3 eye = normalize(uEyePosition - vWorldPosition);
@@ -205,10 +197,87 @@ vec2 cnaSampleUV(vec2 uv, float flip){ return vec2(uv.x, mix(uv.y, 1.0 - uv.y, f
         fragColor.rgb += specular * fragColor.a;
     }
 )";
-        source += kAlphaTestFragmentTerm;
-        source += kFogFragmentTerm;
-        source += "}\n";
-        return source;
+            source += kAlphaTestFragmentTerm;
+            source += kFogFragmentTerm;
+            source += "}\n";
+            return source;
+        }
+
+        std::string DualTextureFragmentShaderSource(MagnumStockProgram program)
+        {
+            std::string source = "#version 330 core\n";
+            source += "in vec4 vColor;\n";
+            source += "in vec2 vTexCoord;\n";
+            source += "in float vFogFactor;\n";
+            source += "uniform sampler2D uTexture;\n";
+            source += "uniform sampler2D uTexture2;\n";
+            source += "uniform vec4 uDiffuseColor;\n";
+            source += "uniform vec4 uAlphaTest;\n";
+            source += "uniform vec3 uFogColor;\n";
+            source += "uniform float uVertexColorEnabled;\n";
+            source += kRenderTargetSampleDeclaration;
+            source += "out vec4 fragColor;\n";
+            source += "void main(){\n";
+            // The x2 on the base layer is DualTextureEffect's own overbright convention: the second
+            // layer is a modulate-2x lightmap, so a 0.5 texel is neutral rather than a halving.
+            source += "    vec4 base = texture(uTexture, cnaSampleUV(vTexCoord, uRtFlipV.x));\n";
+            source += "    base.rgb *= 2.0;\n";
+            source += "    vec4 overlay = texture(uTexture2, cnaSampleUV(vTexCoord, uRtFlipV.y));\n";
+            if (ProgramHasColor(program))
+            {
+                source += "    vec4 tint = (uVertexColorEnabled > 0.5) ? vColor : vec4(1.0);\n";
+                source += "    fragColor = base * overlay * tint * uDiffuseColor;\n";
+            }
+            else
+            {
+                source += "    fragColor = base * overlay * uDiffuseColor;\n";
+            }
+            source += kAlphaTestFragmentTerm;
+            source += kFogFragmentTerm;
+            source += "}\n";
+            return source;
+        }
+    }
+
+    bool SelectStockProgram(const MagnumStockSelector& selector, MagnumStockProgram& programOut)
+    {
+        if (selector.dualTexture)
+        {
+            // Stride 24 carries a vertex colour the two-layer result must be tinted by; stride 20
+            // has none, so it keeps the colour-free program rather than reading an absent input.
+            if (selector.strideInBytes == 24)
+            {
+                programOut = MagnumStockProgram::DualTextureColored;
+                return true;
+            }
+            if (selector.strideInBytes == 20)
+            {
+                programOut = MagnumStockProgram::DualTexture;
+                return true;
+            }
+            return false;
+        }
+
+        switch (selector.strideInBytes)
+        {
+            case 16: programOut = MagnumStockProgram::PositionColor;         return true;
+            case 20: programOut = MagnumStockProgram::PositionTexture;       return true;
+            case 24: programOut = MagnumStockProgram::PositionColorTexture;  return true;
+            case 32: programOut = MagnumStockProgram::PositionNormalTexture; return true;
+            default: return false;
+        }
+    }
+
+    std::string StockVertexShaderSource(MagnumStockProgram program)
+    {
+        return BaseVertexShaderSource(program);
+    }
+
+    std::string StockFragmentShaderSource(MagnumStockProgram program)
+    {
+        if (ProgramIsDualTexture(program))
+            return DualTextureFragmentShaderSource(program);
+        return BaseFragmentShaderSource(program);
     }
 
     std::string SpriteVertexShaderSource()
@@ -247,22 +316,22 @@ void main(){
 )";
     }
 
-    MagnumProgram* MagnumStockShaderCache::ForLayout(MagnumStockLayout layout)
+    MagnumProgram* MagnumStockShaderCache::ForProgram(MagnumStockProgram program)
     {
-        const int key = static_cast<int>(layout);
+        const int key = static_cast<int>(program);
         const auto existing = programs_.find(key);
         if (existing != programs_.end())
             return existing->second->IsValid() ? existing->second.get() : nullptr;
 
-        auto program = std::make_unique<MagnumProgram>();
-        if (!program->CompileAndLink(StockVertexShaderSource(layout),
-                                     StockFragmentShaderSource(layout)))
+        auto compiled = std::make_unique<MagnumProgram>();
+        if (!compiled->CompileAndLink(StockVertexShaderSource(program),
+                                      StockFragmentShaderSource(program)))
         {
-            std::cerr << "CNA: Magnum stock shader (layout " << key << ") failed to build:\n"
-                      << program->GetLog() << std::endl;
+            std::cerr << "CNA: Magnum stock shader (program " << key << ") failed to build:\n"
+                      << compiled->GetLog() << std::endl;
         }
-        MagnumProgram* raw = program.get();
-        programs_.emplace(key, std::move(program));
+        MagnumProgram* raw = compiled.get();
+        programs_.emplace(key, std::move(compiled));
         return raw->IsValid() ? raw : nullptr;
     }
 

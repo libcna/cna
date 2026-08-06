@@ -11,47 +11,63 @@
 namespace CNA::Internal::Backends::Magnum
 {
     /**
-     * @brief The vertex layouts CNA's stock (non-`ShaderEffect`) programs are written for.
+     * @brief The stock (non-`ShaderEffect`) programs this backend generates.
      *
-     * Selected by byte stride, matching how every CNA backend picks its input layout: the four
-     * built-in XNA vertex types are distinguishable by stride alone.
+     * A program is chosen from the draw's combined vertex stride together with the stock effect
+     * flags the draw carries, exactly as every other CNA backend selects its own: the four built-in
+     * XNA vertex types are distinguishable by stride alone, and the effect flags then pick between
+     * the programs that share one.
      */
-    enum class MagnumStockLayout
+    enum class MagnumStockProgram
     {
-        /** @brief `VertexPositionColor` -- stride 16. */
+        /** @brief `VertexPositionColor` (stride 16). */
         PositionColor,
-        /** @brief `VertexPositionTexture` -- stride 20. */
+        /** @brief `VertexPositionTexture` (stride 20). */
         PositionTexture,
-        /** @brief `VertexPositionColorTexture` -- stride 24. */
+        /** @brief `VertexPositionColorTexture` (stride 24). */
         PositionColorTexture,
-        /** @brief `VertexPositionNormalTexture` -- stride 32. */
+        /** @brief `VertexPositionNormalTexture` (stride 32), lit or unlit. */
         PositionNormalTexture,
+        /** @brief `DualTextureEffect` over `VertexPositionTexture` (stride 20). */
+        DualTexture,
+        /** @brief `DualTextureEffect` over `VertexPositionColorTexture` (stride 24). */
+        DualTextureColored,
+    };
+
+    /** @brief What a draw asks of the stock shader set: its vertex stride plus its effect flags. */
+    struct MagnumStockSelector
+    {
+        /** @brief Byte stride of one combined vertex. */
+        std::size_t strideInBytes = 0;
+        /** @brief `GpuDrawParams::dualTexture` -- select a two-sampler `DualTextureEffect` program. */
+        bool dualTexture = false;
     };
 
     /**
-     * @brief Resolves the stock layout a vertex stride selects.
+     * @brief Resolves the stock program a draw selects.
      *
-     * @param strideInBytes  Byte stride of one combined vertex.
-     * @param layoutOut      Receives the selected layout when the stride is recognized.
-     * @return True when @p strideInBytes names one of the built-in layouts.
+     * @param selector   The draw's stride and effect flags.
+     * @param programOut Receives the selected program when one exists.
+     * @return True when the stock shader set covers this draw.
      */
-    [[nodiscard]] bool StockLayoutForStride(std::size_t strideInBytes, MagnumStockLayout& layoutOut);
+    [[nodiscard]] bool SelectStockProgram(const MagnumStockSelector& selector,
+                                          MagnumStockProgram& programOut);
 
     /**
-     * @brief GLSL vertex shader source for one stock layout.
+     * @brief GLSL vertex shader source for one stock program.
      *
-     * @param layout Layout the shader declares its inputs for.
+     * @param program Program to generate.
      * @return Complete GLSL 3.30 source.
      */
-    [[nodiscard]] std::string StockVertexShaderSource(MagnumStockLayout layout);
+    [[nodiscard]] std::string StockVertexShaderSource(MagnumStockProgram program);
 
     /**
-     * @brief GLSL fragment shader source for one stock layout.
+     * @brief GLSL fragment shader source for one stock program.
      *
-     * @param layout Layout the matching vertex shader was generated for.
+     * @param program Program to generate.
      * @return Complete GLSL 3.30 source.
      */
-    [[nodiscard]] std::string StockFragmentShaderSource(MagnumStockLayout layout);
+    [[nodiscard]] std::string StockFragmentShaderSource(MagnumStockProgram program);
 
     /** @brief GLSL vertex shader source for the SpriteBatch quad program. */
     [[nodiscard]] std::string SpriteVertexShaderSource();
@@ -69,12 +85,12 @@ namespace CNA::Internal::Backends::Magnum
     {
     public:
         /**
-         * @brief Returns the program for one stock layout, compiling it on first use.
+         * @brief Returns one stock program, compiling it on first use.
          *
-         * @param layout Layout to select.
+         * @param program Program to select.
          * @return The linked program, or nullptr when compilation failed.
          */
-        MagnumProgram* ForLayout(MagnumStockLayout layout);
+        MagnumProgram* ForProgram(MagnumStockProgram program);
 
         /**
          * @brief Returns the SpriteBatch program, compiling it on first use.

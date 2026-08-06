@@ -26,4 +26,12 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_BACKEND STREQUAL "MAGNUM"
     cna_register_backend_test(NAME Magnum_Smoke COMMAND cna_test_magnum_smoke
         TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
         LABELS "GraphicsSmoke;Magnum")
+
+    # plan_magnum.md MAGNUM-50: DualTextureEffect's overbright factor and second-layer
+    # participation, both of which a 0/1-saturated scene cannot detect.
+    cna_magnum_test(cna_test_magnum_dualtextureeffect examples/magnum_dualtextureeffect_test.cpp)
+    cna_register_backend_test(NAME Magnum_DualTextureEffect
+        COMMAND cna_test_magnum_dualtextureeffect
+        TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
+        LABELS "GraphicsSmoke;Magnum")
 endif()

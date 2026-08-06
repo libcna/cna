@@ -884,10 +884,14 @@ namespace CNA::Internal::Backends::Magnum
             return nullptr;
         }
 
-        MagnumStockLayout layout{};
-        if (!StockLayoutForStride(stride, layout))
+        MagnumStockSelector selector;
+        selector.strideInBytes = stride;
+        selector.dualTexture = params.dualTexture;
+
+        MagnumStockProgram stockProgram{};
+        if (!SelectStockProgram(selector, stockProgram))
             return nullptr;
-        return stockShaders_->ForLayout(layout);
+        return stockShaders_->ForProgram(stockProgram);
     }
 
     void MagnumGraphicsBackend::BindDrawParams(MagnumProgram& program,

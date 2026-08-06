@@ -307,35 +307,71 @@ TEST(MagnumVertexLayoutTest, NormalizedShortFormatsAreMarkedNormalized)
 
 // ---- Stock shader generation ----
 
-TEST(MagnumStockShaderTest, BuiltInStridesSelectTheirStockLayout)
+namespace
 {
-    MagnumStockLayout layout{};
-    ASSERT_TRUE(StockLayoutForStride(16, layout));
-    EXPECT_EQ(layout, MagnumStockLayout::PositionColor);
-    ASSERT_TRUE(StockLayoutForStride(20, layout));
-    EXPECT_EQ(layout, MagnumStockLayout::PositionTexture);
-    ASSERT_TRUE(StockLayoutForStride(24, layout));
-    EXPECT_EQ(layout, MagnumStockLayout::PositionColorTexture);
-    ASSERT_TRUE(StockLayoutForStride(32, layout));
-    EXPECT_EQ(layout, MagnumStockLayout::PositionNormalTexture);
+    MagnumStockProgram SelectOrDie(std::size_t stride, bool dualTexture = false)
+    {
+        MagnumStockSelector selector;
+        selector.strideInBytes = stride;
+        selector.dualTexture = dualTexture;
+        MagnumStockProgram program{};
+        EXPECT_TRUE(SelectStockProgram(selector, program));
+        return program;
+    }
+
+    constexpr MagnumStockProgram kAllPrograms[] = {
+        MagnumStockProgram::PositionColor,
+        MagnumStockProgram::PositionTexture,
+        MagnumStockProgram::PositionColorTexture,
+        MagnumStockProgram::PositionNormalTexture,
+        MagnumStockProgram::DualTexture,
+        MagnumStockProgram::DualTextureColored,
+    };
 }
 
-TEST(MagnumStockShaderTest, UnknownStrideSelectsNoStockLayout)
+TEST(MagnumStockShaderTest, BuiltInStridesSelectTheirStockProgram)
 {
-    MagnumStockLayout layout{};
-    EXPECT_FALSE(StockLayoutForStride(52, layout));
-    EXPECT_FALSE(StockLayoutForStride(0, layout));
+    EXPECT_EQ(SelectOrDie(16), MagnumStockProgram::PositionColor);
+    EXPECT_EQ(SelectOrDie(20), MagnumStockProgram::PositionTexture);
+    EXPECT_EQ(SelectOrDie(24), MagnumStockProgram::PositionColorTexture);
+    EXPECT_EQ(SelectOrDie(32), MagnumStockProgram::PositionNormalTexture);
+}
+
+TEST(MagnumStockShaderTest, UnknownStrideSelectsNoStockProgram)
+{
+    MagnumStockSelector selector;
+    MagnumStockProgram program{};
+    selector.strideInBytes = 52;
+    EXPECT_FALSE(SelectStockProgram(selector, program));
+    selector.strideInBytes = 0;
+    EXPECT_FALSE(SelectStockProgram(selector, program));
+}
+
+TEST(MagnumStockShaderTest, DualTextureSelectsTheVertexColourAwareProgramOnlyForStride24)
+{
+    // Stride 20 carries no colour at all, so tinting the two-layer result by one would read an
+    // input the layout does not have; stride 24 does, and DualTextureEffect must honour it.
+    EXPECT_EQ(SelectOrDie(20, true), MagnumStockProgram::DualTexture);
+    EXPECT_EQ(SelectOrDie(24, true), MagnumStockProgram::DualTextureColored);
+}
+
+TEST(MagnumStockShaderTest, DualTextureOnALayoutWithoutTextureCoordinatesSelectsNothing)
+{
+    MagnumStockSelector selector;
+    selector.dualTexture = true;
+    MagnumStockProgram program{};
+    selector.strideInBytes = 16;
+    EXPECT_FALSE(SelectStockProgram(selector, program));
+    selector.strideInBytes = 32;
+    EXPECT_FALSE(SelectStockProgram(selector, program));
 }
 
 TEST(MagnumStockShaderTest, EveryStockShaderTargetsTheDesktopCoreProfile)
 {
-    for (const MagnumStockLayout layout : {MagnumStockLayout::PositionColor,
-                                           MagnumStockLayout::PositionTexture,
-                                           MagnumStockLayout::PositionColorTexture,
-                                           MagnumStockLayout::PositionNormalTexture})
+    for (const MagnumStockProgram program : kAllPrograms)
     {
-        EXPECT_EQ(StockVertexShaderSource(layout).rfind("#version 330 core", 0), 0u);
-        EXPECT_EQ(StockFragmentShaderSource(layout).rfind("#version 330 core", 0), 0u);
+        EXPECT_EQ(StockVertexShaderSource(program).rfind("#version 330 core", 0), 0u);
+        EXPECT_EQ(StockFragmentShaderSource(program).rfind("#version 330 core", 0), 0u);
     }
     EXPECT_EQ(SpriteVertexShaderSource().rfind("#version 330 core", 0), 0u);
     EXPECT_EQ(SpriteFragmentShaderSource().rfind("#version 330 core", 0), 0u);
@@ -343,34 +379,45 @@ TEST(MagnumStockShaderTest, EveryStockShaderTargetsTheDesktopCoreProfile)
 
 TEST(MagnumStockShaderTest, EachLayoutDeclaresExactlyTheInputsItsStrideCarries)
 {
-    const std::string positionColor = StockVertexShaderSource(MagnumStockLayout::PositionColor);
+    const std::string positionColor = StockVertexShaderSource(MagnumStockProgram::PositionColor);
     EXPECT_NE(positionColor.find("location=1) in vec4 aColor"), std::string::npos);
     EXPECT_EQ(positionColor.find("aTexCoord;"), std::string::npos);
     EXPECT_EQ(positionColor.find("aNormal;"), std::string::npos);
 
-    const std::string positionTexture = StockVertexShaderSource(MagnumStockLayout::PositionTexture);
+    const std::string positionTexture = StockVertexShaderSource(MagnumStockProgram::PositionTexture);
     EXPECT_NE(positionTexture.find("location=1) in vec2 aTexCoord"), std::string::npos);
     EXPECT_EQ(positionTexture.find("aColor;"), std::string::npos);
 
     const std::string colorTexture =
-        StockVertexShaderSource(MagnumStockLayout::PositionColorTexture);
+        StockVertexShaderSource(MagnumStockProgram::PositionColorTexture);
     EXPECT_NE(colorTexture.find("location=1) in vec4 aColor"), std::string::npos);
     EXPECT_NE(colorTexture.find("location=2) in vec2 aTexCoord"), std::string::npos);
 
     const std::string normalTexture =
-        StockVertexShaderSource(MagnumStockLayout::PositionNormalTexture);
+        StockVertexShaderSource(MagnumStockProgram::PositionNormalTexture);
     EXPECT_NE(normalTexture.find("location=1) in vec3 aNormal"), std::string::npos);
     EXPECT_NE(normalTexture.find("location=2) in vec2 aTexCoord"), std::string::npos);
 }
 
+TEST(MagnumStockShaderTest, DualTextureProgramsDeclareTheirOwnLayoutsInputs)
+{
+    // Each dual-texture program must declare the SAME inputs as the plain program sharing its
+    // stride -- reading a texture coordinate from the wrong location is exactly the failure a
+    // shared-source generator invites.
+    const std::string plain = StockVertexShaderSource(MagnumStockProgram::DualTexture);
+    EXPECT_NE(plain.find("location=1) in vec2 aTexCoord"), std::string::npos);
+    EXPECT_EQ(plain.find("aColor;"), std::string::npos);
+
+    const std::string colored = StockVertexShaderSource(MagnumStockProgram::DualTextureColored);
+    EXPECT_NE(colored.find("location=1) in vec4 aColor"), std::string::npos);
+    EXPECT_NE(colored.find("location=2) in vec2 aTexCoord"), std::string::npos);
+}
+
 TEST(MagnumStockShaderTest, EveryStockVertexShaderReservesTheInstanceMatrixLocations)
 {
-    for (const MagnumStockLayout layout : {MagnumStockLayout::PositionColor,
-                                           MagnumStockLayout::PositionTexture,
-                                           MagnumStockLayout::PositionColorTexture,
-                                           MagnumStockLayout::PositionNormalTexture})
+    for (const MagnumStockProgram program : kAllPrograms)
     {
-        const std::string source = StockVertexShaderSource(layout);
+        const std::string source = StockVertexShaderSource(program);
         EXPECT_NE(source.find("location=12) in vec4 cnaInstanceCol0"), std::string::npos);
         EXPECT_NE(source.find("location=15) in vec4 cnaInstanceCol3"), std::string::npos);
         EXPECT_NE(source.find("uniform float uCnaInstanced"), std::string::npos);
@@ -379,12 +426,9 @@ TEST(MagnumStockShaderTest, EveryStockVertexShaderReservesTheInstanceMatrixLocat
 
 TEST(MagnumStockShaderTest, EveryStockFragmentShaderCarriesAlphaTestAndFog)
 {
-    for (const MagnumStockLayout layout : {MagnumStockLayout::PositionColor,
-                                           MagnumStockLayout::PositionTexture,
-                                           MagnumStockLayout::PositionColorTexture,
-                                           MagnumStockLayout::PositionNormalTexture})
+    for (const MagnumStockProgram program : kAllPrograms)
     {
-        const std::string source = StockFragmentShaderSource(layout);
+        const std::string source = StockFragmentShaderSource(program);
         EXPECT_NE(source.find("uAlphaTest"), std::string::npos);
         EXPECT_NE(source.find("discard"), std::string::npos);
         EXPECT_NE(source.find("mix(uFogColor"), std::string::npos);
@@ -393,25 +437,63 @@ TEST(MagnumStockShaderTest, EveryStockFragmentShaderCarriesAlphaTestAndFog)
 
 TEST(MagnumStockShaderTest, OnlyTexturedLayoutsSampleTheDiffuseTexture)
 {
-    EXPECT_EQ(StockFragmentShaderSource(MagnumStockLayout::PositionColor)
+    EXPECT_EQ(StockFragmentShaderSource(MagnumStockProgram::PositionColor)
                   .find("texture(uTexture"), std::string::npos);
-    EXPECT_NE(StockFragmentShaderSource(MagnumStockLayout::PositionTexture)
+    EXPECT_NE(StockFragmentShaderSource(MagnumStockProgram::PositionTexture)
                   .find("texture(uTexture"), std::string::npos);
-    EXPECT_NE(StockFragmentShaderSource(MagnumStockLayout::PositionColorTexture)
+    EXPECT_NE(StockFragmentShaderSource(MagnumStockProgram::PositionColorTexture)
                   .find("texture(uTexture"), std::string::npos);
-    EXPECT_NE(StockFragmentShaderSource(MagnumStockLayout::PositionNormalTexture)
+    EXPECT_NE(StockFragmentShaderSource(MagnumStockProgram::PositionNormalTexture)
                   .find("texture(uTexture"), std::string::npos);
+}
+
+TEST(MagnumStockShaderTest, OnlyDualTextureProgramsSampleASecondLayer)
+{
+    for (const MagnumStockProgram program : kAllPrograms)
+    {
+        const bool isDual = program == MagnumStockProgram::DualTexture
+                         || program == MagnumStockProgram::DualTextureColored;
+        const std::string source = StockFragmentShaderSource(program);
+        EXPECT_EQ(source.find("uTexture2") != std::string::npos, isDual);
+    }
+}
+
+TEST(MagnumStockShaderTest, DualTextureOverbrightsTheBaseLayerAndTintsOnlyWhenTheLayoutCanBe)
+{
+    // DualTextureEffect's second layer is a modulate-2x lightmap, so the base is doubled and a 0.5
+    // overlay texel is neutral. Dropping the x2 halves every dual-textured surface, which is the
+    // kind of thing only an explicit assertion catches.
+    const std::string plain = StockFragmentShaderSource(MagnumStockProgram::DualTexture);
+    EXPECT_NE(plain.find("base.rgb *= 2.0"), std::string::npos);
+    EXPECT_EQ(plain.find("uVertexColorEnabled > 0.5"), std::string::npos);
+
+    const std::string colored = StockFragmentShaderSource(MagnumStockProgram::DualTextureColored);
+    EXPECT_NE(colored.find("base.rgb *= 2.0"), std::string::npos);
+    EXPECT_NE(colored.find("uVertexColorEnabled > 0.5"), std::string::npos);
+}
+
+TEST(MagnumStockShaderTest, DualTextureCorrectsRowOrderPerSampledUnit)
+{
+    // Either layer can be a render target, and the two flags are independent -- reusing unit 0's
+    // flag for unit 1 would flip a correctly-oriented overlay.
+    for (const MagnumStockProgram program : {MagnumStockProgram::DualTexture,
+                                             MagnumStockProgram::DualTextureColored})
+    {
+        const std::string source = StockFragmentShaderSource(program);
+        EXPECT_NE(source.find("cnaSampleUV(vTexCoord, uRtFlipV.x)"), std::string::npos);
+        EXPECT_NE(source.find("cnaSampleUV(vTexCoord, uRtFlipV.y)"), std::string::npos);
+    }
 }
 
 TEST(MagnumStockShaderTest, TexturedLayoutsCorrectRenderTargetRowOrderWhenSampling)
 {
     // A render target's colour texture is stored bottom-up; a stock shader that samples one must
     // mirror V, and it does so through the per-unit flag rather than by baking the flip in.
-    for (const MagnumStockLayout layout : {MagnumStockLayout::PositionTexture,
-                                           MagnumStockLayout::PositionColorTexture,
-                                           MagnumStockLayout::PositionNormalTexture})
+    for (const MagnumStockProgram program : {MagnumStockProgram::PositionTexture,
+                                             MagnumStockProgram::PositionColorTexture,
+                                             MagnumStockProgram::PositionNormalTexture})
     {
-        const std::string source = StockFragmentShaderSource(layout);
+        const std::string source = StockFragmentShaderSource(program);
         EXPECT_NE(source.find("cnaSampleUV(vTexCoord, uRtFlipV.x)"), std::string::npos);
     }
 }
