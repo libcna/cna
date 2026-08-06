@@ -118,6 +118,14 @@ namespace Microsoft::Xna::Framework::Graphics
             windowFlags |= SDL_WINDOW_OPENGL;
 #endif
 
+            // plan_magnum.md MAGNUM-3: Magnum renders through an OpenGL context CNA creates on
+            // this same SDL window, so the window needs the identical OpenGL flag EasyGL asks for
+            // just above -- SDL cannot attach a GL context to a window that was not created with
+            // it.
+#ifdef CNA_BACKEND_MAGNUM
+            windowFlags |= SDL_WINDOW_OPENGL;
+#endif
+
 #ifdef CNA_BACKEND_VULKAN
             windowFlags |= SDL_WINDOW_VULKAN;
 #endif

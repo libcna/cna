@@ -148,7 +148,7 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 #if defined(CNA_BACKEND_BGFX) || defined(CNA_BACKEND_EASYGL) || \
     defined(CNA_BACKEND_WEBGPU) || defined(CNA_BACKEND_VULKAN) || \
     defined(CNA_BACKEND_D3D9) || defined(CNA_BACKEND_D3D11) || \
-    defined(CNA_BACKEND_D3D12)
+    defined(CNA_BACKEND_D3D12) || defined(CNA_BACKEND_MAGNUM)
 #define CNA_INSTANCED_MULTI_STREAM_ORACLE 1
 #endif
 
@@ -167,7 +167,8 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 // measure it, and an unmeasured backend must not be asserted either way.
 #if defined(CNA_BACKEND_EASYGL) || defined(CNA_BACKEND_D3D11) || \
     defined(CNA_BACKEND_D3D12) || defined(CNA_BACKEND_VULKAN) || \
-    defined(CNA_BACKEND_BGFX) || defined(CNA_BACKEND_WEBGPU)
+    defined(CNA_BACKEND_BGFX) || defined(CNA_BACKEND_WEBGPU) || \
+    defined(CNA_BACKEND_MAGNUM)
 #define CNA_INSTANCED_BINDING_OFFSET_ORACLE 1
 #endif
 

@@ -156,6 +156,14 @@ if(CNA_BUILD_TESTS)
         target_link_libraries(CnaTests PRIVATE WebGPU::WebGPU)
     endif()
 
+    # plan_magnum.md MAGNUM-40: the MAGNUM backend's own tests exercise its XNA-ordinal -> Magnum-enum
+    # mappings and its generated stock GLSL directly, so they include Magnum's GL headers. CNA keeps
+    # Magnum PRIVATE on the backend target (same discipline as wgpu-native above), so it is exposed
+    # to this test executable only, and only in the Magnum configuration.
+    if(CNA_GRAPHICS_BACKEND STREQUAL "MAGNUM")
+        target_link_libraries(CnaTests PRIVATE Magnum::GL Magnum::Magnum)
+    endif()
+
     if(CNA_ENABLE_NET)
         target_link_libraries(CnaTests PRIVATE CNA_GamerServices CNA_Net)
     endif()

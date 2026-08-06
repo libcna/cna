@@ -185,9 +185,12 @@ namespace
     using Microsoft::Xna::Framework::Graphics::RenderTargetCube;
     using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 
-#if defined(CNA_BACKEND_EASYGL)
+#if defined(CNA_BACKEND_EASYGL) || defined(CNA_BACKEND_MAGNUM)
     /// EasyGLRenderTargetCubeBackend::SetData is a real glTexSubImage2D upload into the shared cube
-    /// texture. REMED-GFX-130 left RenderTargetCube READBACK unimplemented here (tracked as
+    /// texture, and MagnumRenderTargetCubeBackend::SetData is the same upload expressed through
+    /// Magnum's CubeMapTexture::setSubImage -- in both the framebuffer's colour attachment IS an
+    /// ordinary GL cube texture, so an upload reaches it directly.
+    /// REMED-GFX-130 left RenderTargetCube READBACK unimplemented here (tracked as
     /// REMED-GFX-134), so this test can only assert that the upload is accepted -- the byte-exact
     /// content assertion for the identical `set_sub_image_2d` path lives on the plain cube in
     /// examples/texturecube_texture3d_setdata_contract_test.cpp.

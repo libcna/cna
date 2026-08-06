@@ -1,0 +1,29 @@
+# plan_magnum.md MAGNUM-41: MAGNUM backend integration tests. Needs a real windowing system and a
+# real OpenGL driver, so like the EASYGL/VULKAN blocks these run against CNA_TEST_DISPLAY (a live
+# X server, or an Xvfb one with Mesa's software rasterizer behind it).
+if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_BACKEND STREQUAL "MAGNUM")
+    enable_testing()
+
+    macro(cna_magnum_test target src)
+        add_executable(${target} ${src})
+        if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
+            # CNA and the backend target call into each other (GraphicsDevice constructs the
+            # backend; the backend's factory lives in the backend library), so they are linked as
+            # one group rather than in a single pass -- the same shape every other backend's own
+            # test macro uses here.
+            target_link_libraries(${target} PRIVATE
+                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                SHARP_RUNTIME SDL3::SDL3)
+        else()
+            target_link_libraries(${target} PRIVATE CNA ${BACKEND_TARGET} SHARP_RUNTIME SDL3::SDL3)
+        endif()
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(${target} PRIVATE SDL3::SDL3main)
+        endif()
+    endmacro()
+
+    cna_magnum_test(cna_test_magnum_smoke examples/magnum_smoke_test.cpp)
+    cna_register_backend_test(NAME Magnum_Smoke COMMAND cna_test_magnum_smoke
+        TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
+        LABELS "GraphicsSmoke;Magnum")
+endif()

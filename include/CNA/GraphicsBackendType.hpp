@@ -22,6 +22,9 @@ namespace CNA
         /** @brief WebGPU (experimental). */
         WebGPU,
 
+        /** @brief Magnum (mosra/magnum, desktop OpenGL). */
+        Magnum,
+
         /** @brief Headless (no GPU/window). */
         Headless,
 
@@ -114,6 +117,8 @@ namespace CNA
         return GraphicsBackendType::Vulkan;
 #elif defined(CNA_BACKEND_WEBGPU)
         return GraphicsBackendType::WebGPU;
+#elif defined(CNA_BACKEND_MAGNUM)
+        return GraphicsBackendType::Magnum;
 #elif defined(CNA_BACKEND_HEADLESS)
         return GraphicsBackendType::Headless;
 #elif defined(CNA_BACKEND_SOFTWARE)
@@ -184,6 +189,7 @@ namespace CNA
             case GraphicsBackendType::Bgfx:         return "BGFX";
             case GraphicsBackendType::Vulkan:       return "VULKAN";
             case GraphicsBackendType::WebGPU:       return "WEBGPU";
+            case GraphicsBackendType::Magnum:       return "MAGNUM";
             case GraphicsBackendType::Headless:     return "HEADLESS";
             case GraphicsBackendType::Software:     return "SOFTWARE";
             case GraphicsBackendType::Stub:          return "STUB";

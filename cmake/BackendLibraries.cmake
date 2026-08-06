@@ -101,6 +101,14 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "WEBGPU")
                 "${CNA_WEBGPU_RUNTIME_LIBRARY}" "$<TARGET_FILE_DIR:${BACKEND_TARGET}>"
             VERBATIM)
     endif()
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "MAGNUM")
+    # plan_magnum.md MAGNUM-2: Magnum::GL is the whole rendering surface this backend uses, and
+    # Magnum::<platform>Context supplies the OpenGL function loader Platform::GLContext needs for a
+    # context CNA created itself through SDL3 (which stays the window/context owner, exactly as in
+    # every other windowed backend here). CNA_MAGNUM_CONTEXT_COMPONENT is resolved per platform in
+    # cmake/ThirdPartyMagnum.cmake.
+    target_link_libraries(${BACKEND_TARGET} PRIVATE
+        SDL3::SDL3 Magnum::GL Magnum::${CNA_MAGNUM_CONTEXT_COMPONENT} Magnum::Magnum)
 elseif(CNA_GRAPHICS_BACKEND STREQUAL "D3D11")
     # plan_dx.md design decision 3 (DX-1): d3d11/dxgi is the confirmed minimal link set for the
     # stock offline-compiled shader pipeline. d3dcompiler is linked too, specifically for DX-58's
