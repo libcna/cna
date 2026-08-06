@@ -190,6 +190,22 @@ missing.
   staged copies recorded on one command list interfere (measured on a raw device: the first
   cube face reads back with another upload's rows spliced in; a submit between them is
   byte-exact at every width).
+- **`WICKED-80` (OPEN — found by the Batch 2 stabilization's sanitized narrow-upload probe,
+  2026-08-06): `Texture3D` staged transfers corrupt dimension-dependent tail rows.** A byte-exact
+  SetData/GetData round trip fails for specific volume shapes (5×5×3 in one probe layout, 4×5×3
+  and 6×5×3 in another — deterministic per allocation sequence, not per dimension), with the first
+  wrong texel at a row/slice tail and the wrong bytes equal to EARLIER texels of the same uploaded
+  pattern: recycled staging memory showing through where the copy never wrote. Repeated readbacks
+  of an affected volume stay wrong the same way, so the stored volume itself is corrupt
+  (upload-side footprint arithmetic, with the shared staged readback path equally suspect).
+  Clean under ASan/UBSan — the bytes are wrong, not out of bounds — and invisible to all 13
+  corpus transfer tests and the dedicated suites, whose shapes never hit an affected footprint.
+  Reproducer, build instructions and the measured evidence are preserved in
+  `cmake-build-wicked/wicked-repro/` (probe_texture3d_staged_transfer.cpp). Not fixed in the
+  stabilization session, deliberately: guessing at GPU copy-footprint arithmetic without an
+  isolated raw-`wi::graphics` control is how a plausible-but-wrong fix lands (the `WICKED-78`
+  lesson); the CNA-versus-upstream ownership boundary is exactly what the preserved raw-probe
+  infrastructure settles first.
 - **`WICKED-77` (found and fixed at first execution): the instanced route dropped the geometry
   stream's `VertexOffset`.** That route carries each stream's whole public offset in the stream
   table (the ordinary routes fold it into `baseVertex`), and the single-geometry-stream binding
