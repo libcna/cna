@@ -102,6 +102,15 @@ if(CNA_BUILD_TESTS)
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Backends/Wicked/.*\\.cpp$")
     endif()
 
+    # plan_magnum.md: the MAGNUM backend's own GTest suite lives under
+    # tests/CNA/Internal/Backends/Magnum/ and includes the backend's headers, which resolve only
+    # when the MAGNUM backend is configured (the Magnum::GL include directories come with the
+    # backend target). Excluded from every other backend's corpus by the same convention as the
+    # Wicked directory above; under MAGNUM the corpus keeps it.
+    if(NOT CNA_GRAPHICS_BACKEND STREQUAL "MAGNUM")
+        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Backends/Magnum/.*\\.cpp$")
+    endif()
+
     add_executable(CnaTests
             ${CNA_TEST_SOURCES}
     )
@@ -154,6 +163,14 @@ if(CNA_BUILD_TESTS)
     # to this test executable in the WebGPU configuration.
     if(CNA_GRAPHICS_BACKEND STREQUAL "WEBGPU")
         target_link_libraries(CnaTests PRIVATE WebGPU::WebGPU)
+    endif()
+
+    # plan_magnum.md MAGNUM-40: the MAGNUM backend's own tests exercise its XNA-ordinal -> Magnum-enum
+    # mappings and its generated stock GLSL directly, so they include Magnum's GL headers. CNA keeps
+    # Magnum PRIVATE on the backend target (same discipline as wgpu-native above), so it is exposed
+    # to this test executable only, and only in the Magnum configuration.
+    if(CNA_GRAPHICS_BACKEND STREQUAL "MAGNUM")
+        target_link_libraries(CnaTests PRIVATE Magnum::GL Magnum::Magnum)
     endif()
 
     if(CNA_ENABLE_NET)

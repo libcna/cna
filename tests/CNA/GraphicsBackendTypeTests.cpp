@@ -52,6 +52,7 @@ namespace
             case GraphicsBackendType::Bgfx:        return "BGFX";
             case GraphicsBackendType::Vulkan:      return "VULKAN";
             case GraphicsBackendType::WebGPU:      return "WEBGPU";
+            case GraphicsBackendType::Magnum:      return "MAGNUM";
             case GraphicsBackendType::Headless:    return "HEADLESS";
             case GraphicsBackendType::Software:    return "SOFTWARE";
             case GraphicsBackendType::D3D11:       return "D3D11";

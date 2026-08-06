@@ -425,8 +425,13 @@ individual task. Do not push unless the user explicitly asks to push.
 | CNA utilities             | `include/CNA/`, `src/CNA/`                    | NOXNA helpers, logging, etc.   |
 
 Backend selection is compile-time via `CNA_GRAPHICS_BACKEND` CMake option
-(`SDL_RENDERER` | `EASYGL` | `VULKAN` | `BGFX` | `WEBGPU`). `WEBGPU` is experimental and has a
-functional native 2D baseline, not yet the 3D/effect parity of the established GPU backends.
+(`SDL_RENDERER` | `EASYGL` | `BGFX` | `VULKAN` | `WEBGPU` | `MAGNUM` | `HEADLESS` | `SOFTWARE` |
+`STUB` | `D3D11` | `D3D12` | `CANVAS` | `ASCII` | `FREEDIRECT` | `D3D9` | `DX1` | `DX2` | `DX3` |
+`DX5` | `DX6` | `DX7` | `DX8` | `D3D10` | `OPENGLES1` | `OPENGL4` | `OPENGL1` | `OPENGL2` |
+`SDL_GPU` | `WICKED`). `WEBGPU` is experimental and has a functional native 2D baseline, not yet
+the 3D/effect parity of the established GPU backends.
+`MAGNUM` is a desktop-OpenGL backend built on mosra/magnum -- see `docs/magnum-backend.md` and
+`plan_magnum.md` for its own capability boundary.
 
 ---
 
@@ -460,6 +465,11 @@ sudo apt-get install -y libavcodec-dev libavformat-dev libavutil-dev libswresamp
 
 # Note: libswscale-dev may not be available in some repos (runtime libswscale8 is enough).
 # CNA implements YUV→RGBA conversion internally and does NOT depend on libswscale headers.
+
+# Magnum — required only for CNA_GRAPHICS_BACKEND=MAGNUM (desktop OpenGL). Magnum itself is
+# fetched/built by cmake/ThirdPartyMagnum.cmake; these are the system GL/X11 headers it links
+# against. Add libegl1-mesa-dev as well when configuring with -DCNA_MAGNUM_USE_EGL=ON.
+sudo apt-get install -y libgl1-mesa-dev libglx-dev libx11-dev
 
 # Draco — optional, enables KHR_draco_mesh_compression decoding in GltfImportCore
 # (plan_cnj.md CNB-91, Phase 14F). Detected via CMake's find_package(draco CONFIG); when absent,

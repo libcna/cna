@@ -26,6 +26,9 @@ TEST(GraphicsBackendCompileDefinitionsTest, ExactlyOneGraphicsBackendIsSelected)
 #ifdef CNA_BACKEND_WEBGPU
     ++enabled;
 #endif
+#ifdef CNA_BACKEND_MAGNUM
+    ++enabled;
+#endif
 #ifdef CNA_BACKEND_HEADLESS
     ++enabled;
 #endif

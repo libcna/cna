@@ -112,6 +112,9 @@ include(cmake/Tests/BgfxTests.cmake)
 
 include(cmake/Tests/WebGpuTests.cmake)
 
+# plan_magnum.md: Magnum (mosra/magnum) backend integration tests.
+include(cmake/Tests/MagnumTests.cmake)
+
 # plan_headless.md: Headless (no GPU/window) graphics backend tests. Deliberately no
 # SDL_VIDEODRIVER/DISPLAY environment -- the entire point of this backend is running with neither.
 include(cmake/Tests/HeadlessTests.cmake)

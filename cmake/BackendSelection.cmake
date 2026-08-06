@@ -6,14 +6,17 @@ if(EMSCRIPTEN OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
 else()
     set(_cna_default_backend "SDL_RENDERER")
 endif()
-set(CNA_GRAPHICS_BACKEND "${_cna_default_backend}" CACHE STRING "Graphics backend to use (SDL_RENDERER, EASYGL, BGFX, VULKAN, WEBGPU, HEADLESS, SOFTWARE, STUB, D3D11, D3D12, CANVAS, ASCII, FREEDIRECT, D3D9, DX1, DX2, DX3, DX5, DX6, DX7, DX8, D3D10, OPENGLES1, OPENGL4, OPENGL1, OPENGL2, SDL_GPU, or WICKED)")
-set_property(CACHE CNA_GRAPHICS_BACKEND PROPERTY STRINGS "SDL_RENDERER" "EASYGL" "BGFX" "VULKAN" "WEBGPU" "HEADLESS" "SOFTWARE" "STUB" "D3D11" "D3D12" "CANVAS" "ASCII" "FREEDIRECT" "D3D9" "DX1" "DX2" "DX3" "DX5" "DX6" "DX7" "DX8" "D3D10" "OPENGLES1" "OPENGL4" "OPENGL1" "OPENGL2" "SDL_GPU" "WICKED")
+set(CNA_GRAPHICS_BACKEND "${_cna_default_backend}" CACHE STRING "Graphics backend to use (SDL_RENDERER, EASYGL, BGFX, VULKAN, WEBGPU, MAGNUM, HEADLESS, SOFTWARE, STUB, D3D11, D3D12, CANVAS, ASCII, FREEDIRECT, D3D9, DX1, DX2, DX3, DX5, DX6, DX7, DX8, D3D10, OPENGLES1, OPENGL4, OPENGL1, OPENGL2, SDL_GPU, or WICKED)")
+set_property(CACHE CNA_GRAPHICS_BACKEND PROPERTY STRINGS "SDL_RENDERER" "EASYGL" "BGFX" "VULKAN" "WEBGPU" "MAGNUM" "HEADLESS" "SOFTWARE" "STUB" "D3D11" "D3D12" "CANVAS" "ASCII" "FREEDIRECT" "D3D9" "DX1" "DX2" "DX3" "DX5" "DX6" "DX7" "DX8" "D3D10" "OPENGLES1" "OPENGL4" "OPENGL1" "OPENGL2" "SDL_GPU" "WICKED")
 
 option(CNA_BACKEND_SDL_RENDERER "Enable SDL_Renderer graphics backend" OFF)
 option(CNA_BACKEND_EASY_GL "Enable easy-gl graphics backend" OFF)
 option(CNA_BACKEND_BGFX "Enable bgfx graphics backend" OFF)
 option(CNA_BACKEND_VULKAN "Enable Vulkan graphics backend" OFF)
 option(CNA_BACKEND_WEBGPU "Enable WebGPU graphics backend (wgpu-native)" OFF)
+# plan_magnum.md: Magnum (mosra/magnum) GL backend -- a desktop-OpenGL backend expressed entirely
+# through Magnum's own typed GL wrappers, on the SDL3 window every other windowed backend uses.
+option(CNA_BACKEND_MAGNUM "Enable Magnum (mosra/magnum) graphics backend" OFF)
 option(CNA_BACKEND_HEADLESS "Enable Headless (no GPU/window) graphics backend" OFF)
 option(CNA_BACKEND_SOFTWARE "Enable Software (CPU rasterizer) graphics backend" OFF)
 # plan_stub.md: deliberately minimal no-op graphics backend -- renders nothing, touches no SDL
@@ -115,7 +118,7 @@ option(CNA_BACKEND_OPENGL2 "Enable native OpenGL 2.1 graphics backend (no EasyGL
 option(CNA_BACKEND_WICKED "Enable Wicked Engine graphics backend" OFF)
 
 set(_cna_explicit_backend_selection OFF)
-if(CNA_BACKEND_SDL_RENDERER OR CNA_BACKEND_EASY_GL OR CNA_BACKEND_BGFX OR CNA_BACKEND_VULKAN OR CNA_BACKEND_WEBGPU OR CNA_BACKEND_HEADLESS OR CNA_BACKEND_SOFTWARE OR CNA_BACKEND_STUB OR CNA_BACKEND_D3D11 OR CNA_BACKEND_D3D12 OR CNA_BACKEND_CANVAS OR CNA_BACKEND_ASCII OR CNA_BACKEND_FREEDIRECT OR CNA_BACKEND_D3D9 OR CNA_BACKEND_DX1 OR CNA_BACKEND_DX2 OR CNA_BACKEND_DX3 OR CNA_BACKEND_DX5 OR CNA_BACKEND_DX6 OR CNA_BACKEND_DX7 OR CNA_BACKEND_DX8 OR CNA_BACKEND_D3D10 OR CNA_BACKEND_OPENGLES1 OR CNA_BACKEND_OPENGL4 OR CNA_BACKEND_OPENGL1 OR CNA_BACKEND_OPENGL2 OR CNA_BACKEND_SDL_GPU OR CNA_BACKEND_WICKED)
+if(CNA_BACKEND_SDL_RENDERER OR CNA_BACKEND_EASY_GL OR CNA_BACKEND_BGFX OR CNA_BACKEND_VULKAN OR CNA_BACKEND_WEBGPU OR CNA_BACKEND_MAGNUM OR CNA_BACKEND_HEADLESS OR CNA_BACKEND_SOFTWARE OR CNA_BACKEND_STUB OR CNA_BACKEND_D3D11 OR CNA_BACKEND_D3D12 OR CNA_BACKEND_CANVAS OR CNA_BACKEND_ASCII OR CNA_BACKEND_FREEDIRECT OR CNA_BACKEND_D3D9 OR CNA_BACKEND_DX1 OR CNA_BACKEND_DX2 OR CNA_BACKEND_DX3 OR CNA_BACKEND_DX5 OR CNA_BACKEND_DX6 OR CNA_BACKEND_DX7 OR CNA_BACKEND_DX8 OR CNA_BACKEND_D3D10 OR CNA_BACKEND_OPENGLES1 OR CNA_BACKEND_OPENGL4 OR CNA_BACKEND_OPENGL1 OR CNA_BACKEND_OPENGL2 OR CNA_BACKEND_SDL_GPU OR CNA_BACKEND_WICKED)
     set(_cna_explicit_backend_selection ON)
 endif()
 
@@ -135,6 +138,9 @@ if(_cna_explicit_backend_selection)
     endif()
     if(CNA_BACKEND_WEBGPU)
         list(APPEND _cna_enabled_backends "WEBGPU")
+    endif()
+    if(CNA_BACKEND_MAGNUM)
+        list(APPEND _cna_enabled_backends "MAGNUM")
     endif()
     if(CNA_BACKEND_HEADLESS)
         list(APPEND _cna_enabled_backends "HEADLESS")
@@ -240,6 +246,18 @@ if(CNA_GRAPHICS_BACKEND STREQUAL "CANVAS" AND NOT EMSCRIPTEN)
         "CNA: CANVAS backend only builds when targeting Emscripten (HTML Canvas is a browser DOM "
         "API). Configure with -DCMAKE_TOOLCHAIN_FILE=\$EMSDK/upstream/emscripten/cmake/Modules/"
         "Platform/Emscripten.cmake (or use emcmake).")
+endif()
+
+# plan_magnum.md design decision 2: Magnum's Platform::GLContext takes its OpenGL entry points
+# from exactly one of Magnum's four platform context libraries (GLX/EGL/WGL/CGL), none of which
+# exists for Emscripten -- there the loader is baked into EmscriptenApplication, which owns the
+# window and event loop CNA already owns through SDL3. Same hard-gate shape as the CANVAS check
+# just above, inverted condition.
+if(CNA_GRAPHICS_BACKEND STREQUAL "MAGNUM" AND EMSCRIPTEN)
+    message(FATAL_ERROR
+        "CNA: MAGNUM backend cannot target Emscripten -- Magnum supplies no standalone WebGL "
+        "function loader for an externally created context. Use -DCNA_GRAPHICS_BACKEND=EASYGL "
+        "(WebGL 2) or CANVAS for browser builds.")
 endif()
 
 if(CNA_GRAPHICS_BACKEND STREQUAL "EASYGL")
@@ -365,6 +383,14 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "WEBGPU")
     set(CNA_BACKEND_DEFINE "CNA_BACKEND_WEBGPU")
     include(cmake/ThirdPartyWebGPU.cmake)
     cna_configure_webgpu()
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "MAGNUM")
+    message(STATUS "CNA: Using MAGNUM graphics backend")
+    set(BACKEND_DIR "src/CNA/Internal/Backends/Magnum")
+    set(BACKEND_TARGET "cna_backend_graphics_magnum")
+    add_compile_definitions(CNA_BACKEND_MAGNUM)
+    set(CNA_BACKEND_DEFINE "CNA_BACKEND_MAGNUM")
+    include(cmake/ThirdPartyMagnum.cmake)
+    cna_configure_magnum()
 elseif(CNA_GRAPHICS_BACKEND STREQUAL "HEADLESS")
     message(STATUS "CNA: Using HEADLESS (no GPU/window) graphics backend")
     set(BACKEND_DIR "src/CNA/Internal/Backends/Headless")
