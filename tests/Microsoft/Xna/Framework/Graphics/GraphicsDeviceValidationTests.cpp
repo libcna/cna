@@ -218,6 +218,7 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_OneTarget_DoesNotThrow)
     EXPECT_THROW(gd.SetRenderTargets(bindings), System::NotSupportedException);
 #else
     EXPECT_NO_THROW(gd.SetRenderTargets(bindings));
+#endif
 }
 
 TEST(GraphicsDeviceValidationTest, SetRenderTargets_Empty_DoesNotThrow)
