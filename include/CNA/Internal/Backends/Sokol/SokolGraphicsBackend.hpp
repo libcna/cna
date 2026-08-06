@@ -3,9 +3,11 @@
 
 #include "CNA/CNAHelper.hpp"
 #include "../Common/IGraphicsBackend.hpp"
+#include "System/NotSupportedException.hpp"
 
 #include <array>
 #include <cstdint>
+#include <cstddef>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -721,6 +723,180 @@ namespace CNA::Internal::Backends::Sokol
         bool hasDeclaration_ = false;
         VertexDeclaration declaration_;
     };
+
+    /// Implementation detail of RequireFaithfulDeclarationEXT below; not part of any contract.
+    namespace DeclarationGuardDetail
+    {
+        using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
+        using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
+
+        /** @brief Byte width of one element of @p format, or 0 when the value is not an enumerator. */
+        [[nodiscard]] inline int FormatSize(VertexElementFormat format) noexcept
+        {
+            switch (format)
+            {
+                case VertexElementFormat::Single:           return 4;
+                case VertexElementFormat::Vector2:          return 8;
+                case VertexElementFormat::Vector3:          return 12;
+                case VertexElementFormat::Vector4:          return 16;
+                case VertexElementFormat::Color:            return 4;
+                case VertexElementFormat::Byte4:            return 4;
+                case VertexElementFormat::Short2:           return 4;
+                case VertexElementFormat::Short4:           return 8;
+                case VertexElementFormat::NormalizedShort2: return 4;
+                case VertexElementFormat::NormalizedShort4: return 8;
+                case VertexElementFormat::HalfVector2:      return 4;
+                case VertexElementFormat::HalfVector4:      return 8;
+            }
+            return 0;
+        }
+
+        /**
+         * @brief Whether the 3D pipeline binds @p usage at all.
+         *
+         * The six semantics `DrawColored3D` resolves into `Pipeline3DKey`. Everything else --
+         * Tangent, Binormal, Fog, PointSize, Depth, Sample, TessellateFactor -- is genuinely
+         * unread by every stock shader this backend generates, so declaring one is a superset
+         * declaration rather than a misread, exactly like a declaration shorter than the selected
+         * program's input list.
+         */
+        [[nodiscard]] inline bool IsBoundSemantic(VertexElementUsage usage) noexcept
+        {
+            return usage == VertexElementUsage::Position
+                || usage == VertexElementUsage::Color
+                || usage == VertexElementUsage::TextureCoordinate
+                || usage == VertexElementUsage::Normal
+                || usage == VertexElementUsage::BlendWeight
+                || usage == VertexElementUsage::BlendIndices;
+        }
+
+        /** @brief Human-readable name of @p usage, for the diagnostic. */
+        [[nodiscard]] inline const char* UsageName(VertexElementUsage usage) noexcept
+        {
+            switch (usage)
+            {
+                case VertexElementUsage::Position:          return "Position";
+                case VertexElementUsage::Color:             return "Color";
+                case VertexElementUsage::TextureCoordinate: return "TextureCoordinate";
+                case VertexElementUsage::Normal:            return "Normal";
+                case VertexElementUsage::Binormal:          return "Binormal";
+                case VertexElementUsage::Tangent:           return "Tangent";
+                case VertexElementUsage::BlendIndices:      return "BlendIndices";
+                case VertexElementUsage::BlendWeight:       return "BlendWeight";
+                case VertexElementUsage::Depth:             return "Depth";
+                case VertexElementUsage::Fog:               return "Fog";
+                case VertexElementUsage::PointSize:         return "PointSize";
+                case VertexElementUsage::Sample:            return "Sample";
+                case VertexElementUsage::TessellateFactor:  return "TessellateFactor";
+            }
+            return "?";
+        }
+    }
+
+    /**
+     * @brief NOXNA. REMED-GFX-DECL-GUARD: refuses a vertex declaration this backend cannot
+     *        represent faithfully, at draw time and before any native object exists.
+     *
+     * The shared `RequireFaithfulVertexDeclaration()` helper is deliberately NOT reused here: it
+     * models a backend that infers its native layout from the byte stride alone and then asks
+     * whether the declaration agrees with that inference. This backend does the opposite -- it
+     * programs `sg_pipeline_desc::layout` from the declaration's OWN offsets and formats -- so
+     * every semantic it binds is faithful by construction, and applying the stride-table rule
+     * would refuse correct draws.
+     *
+     * What is left are the three ways a declaration can still be misread here, plus the one way an
+     * element can be silently dropped:
+     *
+     * - the declaration states a stride the buffer was not uploaded with, so the pipeline advances
+     *   records at a pitch the data does not have and every record after the first is fetched from
+     *   the wrong address;
+     * - an element that does not lie wholly inside the declared record;
+     * - two elements claiming the same bytes;
+     * - a second set of a semantic the pipeline binds (usage index other than 0). Every stock
+     *   shader here declares at most one input per semantic, so the extra set has nowhere to go
+     *   and the vertex fetch would supply the shader's unbound default instead of the caller's
+     *   data. A semantic the pipeline never binds at all is NOT refused -- see IsBoundSemantic().
+     *
+     * The check is asymmetric: only what the caller actually declared is inspected, never equality
+     * against this backend's own template. It is pure -- nothing is created, queued or bound
+     * before it runs -- so a rejected draw leaves the device usable and the next valid draw works.
+     * A buffer that carries no declaration at all is left to `DrawColored3D`'s own stride-table
+     * fallback and its established refusals.
+     *
+     * Header-only by necessity: `cna_backend_graphics_sokol` links only
+     * `cna_backend_graphics_common` and SharpRuntime, never the CNA library.
+     *
+     * @param declaration  The declaration the buffer carries, or null when it carries none.
+     * @param uploadStride Byte stride the buffer's data was actually uploaded with.
+     * @param route        Name of the draw route, for the diagnostic message.
+     * @throws System::NotSupportedException When the declaration cannot be represented.
+     */
+    inline void RequireFaithfulDeclarationEXT(const VertexDeclaration* declaration,
+                                              std::size_t uploadStride,
+                                              const char* route)
+    {
+        namespace detail = DeclarationGuardDetail;
+        using Microsoft::Xna::Framework::Graphics::VertexElement;
+
+        if (declaration == nullptr) return;
+        const std::vector<VertexElement>& elements = declaration->GetVertexElements();
+        if (elements.empty()) return;
+        if (uploadStride == 0) return;
+
+        const int declaredStride = declaration->getVertexStrideProperty();
+        const auto refuse = [route](const std::string& why) {
+            throw System::NotSupportedException(
+                std::string("Sokol backend: this VertexDeclaration cannot be represented on the ") +
+                route + " route -- " + why +
+                ". The draw is refused rather than rendered from the wrong bytes.");
+        };
+
+        if (declaredStride != static_cast<int>(uploadStride))
+        {
+            refuse("the declaration states a stride of " + std::to_string(declaredStride) +
+                   " bytes but the buffer was uploaded with a stride of " +
+                   std::to_string(uploadStride) +
+                   " bytes, so every record after the first would be read from the wrong address");
+        }
+
+        for (std::size_t i = 0; i < elements.size(); ++i)
+        {
+            const VertexElement& e = elements[i];
+            const int offset = e.getOffsetProperty();
+            const int size = detail::FormatSize(e.getVertexElementFormatProperty());
+            const auto usage = e.getVertexElementUsageProperty();
+            const int usageIndex = e.getUsageIndexProperty();
+            const std::string described = std::string(detail::UsageName(usage)) + std::to_string(usageIndex) +
+                                          " at offset " + std::to_string(offset);
+
+            if (offset < 0 || size <= 0 || offset + size > declaredStride)
+            {
+                refuse("declared element " + described + " does not fit inside the declared " +
+                       std::to_string(declaredStride) + "-byte record");
+            }
+
+            for (std::size_t j = i + 1; j < elements.size(); ++j)
+            {
+                const VertexElement& f = elements[j];
+                const int otherOffset = f.getOffsetProperty();
+                const int otherSize = detail::FormatSize(f.getVertexElementFormatProperty());
+                if (offset < otherOffset + otherSize && otherOffset < offset + size)
+                {
+                    refuse("declared elements " + described + " and " +
+                           std::string(detail::UsageName(f.getVertexElementUsageProperty())) +
+                           std::to_string(f.getUsageIndexProperty()) + " at offset " +
+                           std::to_string(otherOffset) + " claim the same bytes");
+                }
+            }
+
+            if (usageIndex != 0 && detail::IsBoundSemantic(usage))
+            {
+                refuse("the declaration carries " + described +
+                       ", and every stock shader here declares exactly one input per semantic, so "
+                       "that set would never reach the shader");
+            }
+        }
+    }
 
     /**
      * @brief Backend handle for a 16- or 32-bit index buffer.

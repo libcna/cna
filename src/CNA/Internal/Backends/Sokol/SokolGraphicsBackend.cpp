@@ -4329,6 +4329,10 @@ namespace CNA::Internal::Backends::Sokol
         if (vb.GetBufferIdEXT() == 0 || vb.GetVertexCount() <= 0) return;
 
         const VertexDeclaration* declaration = vb.GetDeclarationEXT();
+        // REMED-GFX-DECL-GUARD: pure, and before any pass, pipeline or binding exists, so a
+        // refused draw leaves the device exactly as it was.
+        RequireFaithfulDeclarationEXT(declaration, vb.GetStrideEXT(),
+                                      ibIn != nullptr ? "ordinary-indexed" : "ordinary-nonindexed");
 
         // Resolved before the pipeline key is built: the index width is part of the pipeline.
         const SokolIndexBufferBackend* ib = nullptr;
@@ -5376,6 +5380,11 @@ namespace CNA::Internal::Backends::Sokol
 
         const auto& instVb = static_cast<const SokolVertexBufferBackend&>(*instanceStream->buffer);
         if (instVb.GetBufferIdEXT() == 0 || instVb.GetVertexCount() <= 0) return;
+
+        // REMED-GFX-DECL-GUARD: the geometry stream's declaration is read here exactly as it is on
+        // the ordinary routes. The instance stream is not checked against it -- its layout is
+        // instanced3d.glsl's fixed 64-byte matrix, which the stride check above already pins.
+        RequireFaithfulDeclarationEXT(vb.GetDeclarationEXT(), vb.GetStrideEXT(), "instanced");
 
         // instanced3d.glsl reads the per-instance World matrix as four column-major vec4s at fixed
         // offsets, so a stream declaring anything else would be fetched as a matrix it is not.
