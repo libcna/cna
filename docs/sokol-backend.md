@@ -95,6 +95,8 @@ letting the build reach a confusing `GL/gl.h: No such file or directory`.
 | `RenderTargetCube` MSAA | `multiSampleCount` is always silently clamped to 1/ignored -- **a permanent sokol_gfx API boundary, not a "not implemented yet" gap**: its own validation layer hard-rejects a `SG_IMAGETYPE_CUBE` image with `sample_count > 1` (`VALIDATE_IMAGEDESC_ATTACHMENT_MSAA_CUBE_IMAGE`), confirmed empirically (a real `[sg][panic]` validation abort) while prototyping the same per-face multisample + resolve layout `RenderTarget2D` uses. The same kind of declared boundary `WebGPUGraphicsBackend`/`D3D9RenderTargetCubeBackend` report for their own reasons | `SOKOL-26` (closed as a permanent gap) |
 | `BlendState.MultiSampleMask` | ignored — sokol_gfx has no per-sample coverage mask (it exposes alpha-to-coverage only) | no upstream API |
 | `CNA_SOKOL_API` other than `GLCORE` | configure warns; construction throws | `SOKOL-31` |
+| A `VertexDeclaration` split across several bound `VertexBufferBinding`s, or a second per-instance stream | refused deterministically (`System::NotSupportedException` from the shared layer on the strength of `GraphicsCapability::MultiStreamVertexInput == false`, and `std::runtime_error` from the backend itself if a harness reaches `Draw*PrimitivesEx` directly). One sokol_gfx vertex-buffer layout is built from one buffer's declaration, and `instanced3d.glsl` declares exactly one instance record | REMED-GFX-201/202 |
+| A declaration this backend would misread -- a declared stride the buffer was not uploaded with, an element outside its record, two elements claiming the same bytes, or a second usage-index set of a semantic the pipeline binds | refused at draw time by `RequireFaithfulDeclarationEXT()`, before any pass, pipeline or binding exists, so the device stays usable. A semantic no stock shader reads (Tangent, Binormal, Fog, ...) is NOT refused -- that is a superset declaration, not a misread | REMED-GFX-DECL-GUARD |
 
 `GraphicsDevice::SupportsCapability()` reports this boundary, so a game can query ahead of time
 instead of catching. The switch is exhaustive over every `CNA::GraphicsCapability` member and has
@@ -223,6 +225,9 @@ ctest --test-dir cmake-build-sokol -R Sokol --output-on-failure
 | `Sokol_StateLifetimeRegressionMatrix` | 7: two-object `OcclusionQuery` interleaving in both begin/end orders plus a healthy fresh query afterward, and `DrawCustomEffect3D`'s `CullMode` applied independently of a preceding stock draw's leftover GL state (`SOKOL-48`) | all pass |
 | `Sokol_WireFrame` | 5: `Solid` fills the interior, `WireFrame` leaves it black (indexed and non-indexed) while genuinely rasterizing the quad's left edge red in both cases (`SOKOL-23`) | all pass |
 | `Sokol_VertexBuffer_Reupload` | 6: three same-shape `SetData()` calls across three frames each show the new colour *and* keep the identical `sg_buffer` id (the `sg_update_buffer()` reuse path actually firing, not silently still recreating), then a same-frame double `SetData()` shows the last write and gets a genuinely new id (the forced-recreate fallback) (`SOKOL-24`) | all pass |
+
+**37 registered CTests, 37 passing** (`ctest -R "^Sokol"`), re-measured at post-audit integration
+against Mesa 25.0.7 llvmpipe (LLVM 19.1.7), a real GL 4.5 core context on Xvfb.
 
 The render-target fixtures above are shared, backend-agnostic oracles also registered for EasyGL/
 Vulkan/bgfx/SDL_GPU/etc.; SOKOL reuses them rather than duplicating bespoke tests. As of `SOKOL-38`

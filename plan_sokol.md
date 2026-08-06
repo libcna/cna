@@ -14,8 +14,10 @@
 > uses (`Sokol_WireFrame`). `SOKOL-24` replaced the always-recreate-per-`SetData()` `VertexBuffer`/
 > `IndexBuffer` path with a `dynamic_update` sokol_gfx buffer reused via `sg_update_buffer()`
 > across same-shape uploads (`Sokol_VertexBuffer_Reupload`). All three have their own detailed
-> closing notes in the task table below. 38 registered Sokol CTest cases now pass (36 -> 37 with
-> `Sokol_WireFrame` -> 38 with `Sokol_VertexBuffer_Reupload`).
+> closing notes in the task table below. All registered Sokol CTest cases now pass (34 -> 35 with `Sokol_RenderTargetCube_Mip`
+> -> 36 with `Sokol_StateLifetimeRegressionMatrix` -> 37 with `Sokol_WireFrame` and
+> `Sokol_VertexBuffer_Reupload`; the total is **37**, re-derived at integration from
+> `cmake/Tests/SokolTests.cmake` itself, which is one fewer than the 38 this note first claimed).
 >
 > **Audit update (2026-08-03, commit `63a308d4`): the GLCORE backend is broadly functional but
 > the plan is not complete and several previously-green tasks need corrective follow-up.** All 28
@@ -212,7 +214,7 @@ That makes it valuable to CNA in two specific ways:
 | SOKOL-20 | `DrawColoredPrimitives`/`DrawIndexedColoredPrimitives` + a colored-3D shader | ✅ | `Sokol_3D` 10/10, incl. depth-occlusion and culling proofs |
 | SOKOL-21 | `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx`: `BasicEffect` variants (textured, lit, fog) | ✅ | `Sokol_Lit3D` 10/10; dual-texture/env-map/skinned/PBR still throw |
 | SOKOL-22 | Honour every `SetVertexDeclaration()` element, not just Position/Color usage index 0 | ✅ | **Closed 2026-08-04.** Position/Color/TextureCoordinate/Normal (every stock effect through `EnvironmentMapEffect`) and BlendWeight/BlendIndices (`SkinnedEffect`, `SOKOL-35`) are all read from a real `VertexDeclaration` at usage index 0, verified by `DrawColored3D`'s own `Pipeline3DKey` construction (`SokolGraphicsBackend.cpp`). The one remaining usage pair, Tangent/Binormal, only has meaning for a normal-mapping/PBR shader -- see `SOKOL-49`, a newly-scoped separate task (not folded back into this one, matching the size difference documented there). |
-| SOKOL-23 | Full `ApplyRasterizerState` (fill mode, depth bias) and stencil in the pipeline key | ✅ | Stencil and depth bias done. Stencil: `ApplyDepthStencilState` wires the real stencil state (front/back ops, compare, read/write masks, reference) into `Pipeline3DKey`/`Get3DPipeline` -- `sg_stencil_state.ref` is baked into the pipeline object itself (sokol_gfx has no dynamic stencil-ref call, unlike most APIs), so it is part of the key too. Depth bias: `RasterizerState.DepthBias`/`SlopeScaleDepthBias` map straight onto `sg_depth_state.bias`/`bias_slope_scale` -- the same values EasyGL/Vulkan pass to `glPolygonOffset(slopeScaleDepthBias, depthBias)` -- also baked into the pipeline, also part of the key; verified with Task 767's own EasyGL-authored (but backend-agnostic) coplanar-redraw test, reused as `Sokol_RasterizerState_DepthBias`. Neither reaches the sprite pipeline (XNA's SpriteBatch never uses stencil or depth bias). Cull mode landed with `SOKOL-20`. **Fill mode (`WireFrame`) closed 2026-08-04**: this plan's own prior claim that sokol_gfx's lack of a native polygon-fill-mode API made this a "genuine, permanent gap" was wrong -- it only means sokol_gfx cannot toggle fill mode on an existing pipeline, not that wireframe rendering is unreachable. `BuildWireframeLineIndicesEXT()` ports the same technique `EasyGLGraphicsBackend::DrawWireframe()` already uses: when `RasterizerState.FillMode == WireFrame` and the primitive is triangle-based, `DrawColored3D` builds a doubled-edge line-index list (a-b, b-c, c-a per triangle) -- reading the source indices back from the GPU via `glGetBufferSubData` (`sg_gl_query_buffer_info()` exposes the raw GL buffer name; Sokol keeps no CPU shadow) for indexed draws, or generating them sequentially for non-indexed ones -- uploads it into a scratch immutable `sg_buffer` recreated per draw, and overrides the pipeline key's `primitiveType`/`indexType` plus the draw call's index buffer/count to `SG_PRIMITIVETYPE_LINES`. `GraphicsCapability::WireFrame` still correctly reports `false` (it means *native* rasterizer polygon-mode support, matching EasyGL's and Vulkan's own convention -- EasyGL returns `false` too despite having a working CPU path). New `Sokol_WireFrame` test draws a two-triangle quad both indexed and non-indexed, confirming `Solid` fills the interior, `WireFrame` leaves the interior black (only edges draw) and the left edge itself rasterizes red -- the edge check scans a small pixel strip rather than one exact column, since a 1px GL line at an exact integer boundary coordinate can rasterize into the column on either side depending on the driver's fill-rule tie-break. |
+| SOKOL-23 | Full `ApplyRasterizerState` (fill mode, depth bias) and stencil in the pipeline key | ✅ | Stencil and depth bias done. Stencil: `ApplyDepthStencilState` wires the real stencil state (front/back ops, compare, read/write masks, reference) into `Pipeline3DKey`/`Get3DPipeline` -- `sg_stencil_state.ref` is baked into the pipeline object itself (sokol_gfx has no dynamic stencil-ref call, unlike most APIs), so it is part of the key too. Depth bias: `RasterizerState.DepthBias`/`SlopeScaleDepthBias` map straight onto `sg_depth_state.bias`/`bias_slope_scale` -- the same values EasyGL/Vulkan pass to `glPolygonOffset(slopeScaleDepthBias, depthBias)` -- also baked into the pipeline, also part of the key; verified with Task 767's own EasyGL-authored (but backend-agnostic) coplanar-redraw test, reused as `Sokol_RasterizerState_DepthBias`. Neither reaches the sprite pipeline (XNA's SpriteBatch never uses stencil or depth bias). Cull mode landed with `SOKOL-20`. **Fill mode (`WireFrame`) closed 2026-08-04**: this plan's own prior claim that sokol_gfx's lack of a native polygon-fill-mode API made this a "genuine, permanent gap" was wrong -- it only means sokol_gfx cannot toggle fill mode on an existing pipeline, not that wireframe rendering is unreachable. `BuildWireframeLineIndicesEXT()` ports the same technique `EasyGLGraphicsBackend::DrawWireframe()` already uses: when `RasterizerState.FillMode == WireFrame` and the primitive is triangle-based, `DrawColored3D` builds a doubled-edge line-index list (a-b, b-c, c-a per triangle) -- reading the source indices back from the GPU via `glGetBufferSubData` (`sg_gl_query_buffer_info()` exposes the raw GL buffer name; Sokol keeps no CPU shadow) for indexed draws, or generating them sequentially for non-indexed ones -- uploads it into a scratch immutable `sg_buffer` recreated per draw, and overrides the pipeline key's `primitiveType`/`indexType` plus the draw call's index buffer/count to `SG_PRIMITIVETYPE_LINES`. `GraphicsCapability::WireFrame` reported `false` when this row was written, on the reading that the flag means *native* rasterizer polygon-mode support; **corrected to `true` at post-audit integration** under REMED-GFX-209, which defines the query by what a caller observes rather than by which mechanism delivers it -- see the integration section below for the pixel oracle's own reading. New `Sokol_WireFrame` test draws a two-triangle quad both indexed and non-indexed, confirming `Solid` fills the interior, `WireFrame` leaves the interior black (only edges draw) and the left edge itself rasterizes red -- the edge check scans a small pixel strip rather than one exact column, since a 1px GL line at an exact integer boundary coordinate can rasterize into the column on either side depending on the driver's fill-rule tie-break. |
 | SOKOL-24 | Cheaper `VertexBuffer`/`IndexBuffer` re-upload than recreate-per-`SetData` | ✅ | **Closed 2026-08-04.** `SokolVertexBufferBackend`/`SokolIndexBufferBackend` now allocate a `dynamic_update` sokol_gfx buffer once -- sized to the owning `VertexBuffer`/`IndexBuffer`'s own declared capacity, which `VertexBuffer::ValidateSetDataRange()`'s XNA-layer bounds check guarantees no `SetData()` call can exceed -- and reuse it in place via `sg_update_buffer()` for same-shape re-uploads, instead of destroying and recreating an immutable buffer every call. `SokolGraphicsBackend::GetFrameIndexEXT()` (a counter incremented once per `Present()`/`sg_commit()`) lets each buffer tell whether it has already been updated this frame; sokol_gfx permits only one `sg_update_buffer()` per buffer per frame (a second call trips a hard `SOKOL_ASSERT`, not just a validation warning), so a same-frame repeat upload, or one whose data outgrows what is currently allocated, still falls back to destroy-and-recreate -- the same behaviour this class used unconditionally before this task, never a regression. New `Sokol_VertexBuffer_Reupload` test proves both halves: three consecutive frames of same-shape `SetData()` calls each show the newly-uploaded colour on read-back *and* report the identical `sg_buffer` id all three times (the actual optimisation -- a pixel-only test would pass identically against the old always-recreate code), then a fourth check calls `SetData()` twice within one frame and confirms the final draw shows the last upload's colour with a genuinely new buffer id (the forced-recreate fallback firing correctly, not silently skipping the second update or corrupting data). |
 
 ### Phase 5 — Render targets and remaining resources (SOKOL-25/26/27/28/29 landed)
@@ -308,6 +310,69 @@ always recreating one (see its own row above).
 | SOKOL-49 | Port `PbrEffect`/`SkinnedPbrEffect` to Sokol | ⬜ | Discovered while closing `SOKOL-22`: this plan's own prior claim that "no CNA backend has PBR yet" was stale -- `PbrEffect`/`SkinnedPbrEffect` are real, implemented stock effects on every OTHER CNA backend (EasyGL, D3D9/11/12, Vulkan, WebGPU, Bgfx, SdlGpu; ~1000+ lines across shaders and the XNA layer in Vulkan's own implementation alone). Sokol is the only backend still missing it. A genuine, sizeable feature -- a new `pbr3d.glsl` shader variant (metallic/roughness/normal maps, `VertexPositionNormalTangentTextureSkinned`'s Tangent/Binormal inputs, a new `Shader3DKind`), comparable in scope to `SkinnedEffect`/`EnvironmentMapEffect` (`SOKOL-34`/`SOKOL-35`) -- not attempted as part of `SOKOL-22`'s own "honour vertex declaration elements" scope. Deliberately deferred pending explicit scoping. |
 
 ---
+
+## Post-audit integration (2026-08-06)
+
+This backend was integrated into `integration/post-audit-phase1` as the campaign's twelfth lane and
+the **thirtieth** public CNA backend identity. Original head `261ea700`, preserved unchanged behind
+the signed archive tag `archive/preintegration/sokol-20260804`; adapted on `adapt/sokol` and merged
+with `--no-ff`. Full record: `integration/lanes/sokol.md` on the planning branch.
+
+**Interface drift was two references.** The lane was branched before REMED-GFX-201/202 replaced
+`GpuDrawParams::instanceVb` (and the three fields beside it) with `vertexStreams`, one array
+carrying every active `VertexBufferBinding` for every draw route. A compile probe of the backend
+against the current head reported exactly those two errors and nothing else. The instanced route now
+reads `FirstInstanceStream(params)` and, unlike the shape it replaced, honours the binding's own
+`InstanceFrequency` (through `sg_vertex_buffer_layout_state.step_rate`, a `glVertexAttribDivisor` on
+the GL backends) and its own `VertexOffset`.
+
+**Three post-audit obligations were paid at adaptation.**
+
+- `GraphicsCapability::MultiStreamVertexInput` answers **false** and
+  `GraphicsCapability::Instancing` answers **true**, in an exhaustive eleven-member switch with no
+  `default` arm. Both draw routes call `RejectUnsupportedStreamCombination()`, so a declaration
+  split across several buffers -- or a second per-instance stream -- is refused before any pipeline
+  is built rather than rendered from a subset of the bound streams.
+- REMED-GFX-DECL-GUARD: `RequireFaithfulDeclarationEXT()`, header-only, called at draw time on both
+  ordinary routes and the instanced route. It deliberately does **not** reuse the shared
+  stride-inferring helper, which models a different mechanism -- this backend programs
+  `sg_pipeline_desc::layout` from the declaration's own offsets and formats, so applying the
+  stride-table rule would refuse correct draws. It refuses a declared stride the buffer was not
+  uploaded with, an element outside its record, two elements claiming the same bytes, and a second
+  usage-index set of a semantic the pipeline binds. A semantic no stock shader reads (Tangent,
+  Binormal, Fog, ...) is explicitly not refused.
+- REMED-GFX-209: `GraphicsCapability::WireFrame` corrected from `false` to **true**, on measurement.
+  `CNA_BACKEND_SOKOL` joined `WireFrameTriangleOracle.hpp`'s pixel set and the shared
+  asymmetric-triangle fixture read `interior 0/1089` under `WireFrame` against `1089/1089` under
+  `Solid`, with all three disjoint edge probes lit at 25 px each, no stale state across alternating
+  draws, and an exact solid recovery afterwards. `SOKOL-23`'s row above is corrected accordingly.
+
+**Registration union.** The ninth of the campaign: `BackendSelection.cmake`, `BackendLibraries`,
+`CnaLibrary`, `CMakeLists`, `GraphicsBackendType.hpp` (enum + `#elif` + name table),
+`GraphicsBackendTypeTests.cpp`'s `ExpectedNameFor()` arm, the compile-definition count,
+`GraphicsDevice::getBackendWindowFlags()`, README and `THIRD_PARTY_NOTICES.md`. Every pre-existing
+identity was kept token-exact.
+
+**Dependency, unchanged.** sokol pinned at `27b49604b19be8cee0dcc6b2bbfe803dd9517585` (zlib/libpng,
+Andre Weissflog), fetched at configure time and never vendored; a shared `~/deps/sokol` checkout at
+that exact commit serves offline builds through CMake's own `FETCHCONTENT_SOURCE_DIR_SOKOL`. No
+carried patch was needed. `CNA_SOKOL_API=GLCORE` remains the only implemented value and is the
+default, so backend selection is deterministic.
+
+**Validated on Mesa 25.0.7 llvmpipe (LLVM 19.1.7), a real GL 4.5 core context on Xvfb.**
+
+| Gate | Result |
+|---|---|
+| Pre-adaptation baseline, built from the original head at its own fork point | `Sokol_Smoke` 13/13 · `Sokol_2D` 15/15 · `Sokol_3D` 10/10 · `Sokol_Lit3D` 10/10 — 48 checks, 0 failures |
+| Dedicated suites, adapted | **37/37** (`ctest -R "^Sokol"`) |
+| Full corpus under `CNA_GRAPHICS_BACKEND=SOKOL` | 5776 registered · **5768 passed · 1 failed · 7 truthful skips · 0 aborts** (697 s). The one failure is the pre-existing networking Outcome-C flake, 3/3 green re-run in isolation |
+| Multi-stream refusal | `InstancedDrawMultiStreamTest` + `OrdinaryDrawMultiStreamTest` **8/8**, both explicit deterministic-rejection cases included |
+| ASan + UBSan over all 37 suites | **0 ASan errors, 0 UBSan runtime errors**; every leak rooted in `libGLX_mesa` with no CNA frame (240 732 B / 1073 allocs, identical in all 37), `detect_leaks=0` control **37/37** |
+
+One CNA-frame leak was found and fixed by that sanitizer run: this backend's
+`sokol_blendfactor_pipeline_cache_test.cpp` was the only harness in `examples/` that raw-`new`ed its
+`GraphicsDeviceManager` instead of owning it in a `unique_ptr`, as every sibling — including this
+backend's own `sokol_2d_test` — already does.
 
 ## Feature gap vs. EasyGL
 
