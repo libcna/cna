@@ -102,6 +102,15 @@ if(CNA_BUILD_TESTS)
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Backends/Wicked/.*\\.cpp$")
     endif()
 
+    # plan_magnum.md: the MAGNUM backend's own GTest suite lives under
+    # tests/CNA/Internal/Backends/Magnum/ and includes the backend's headers, which resolve only
+    # when the MAGNUM backend is configured (the Magnum::GL include directories come with the
+    # backend target). Excluded from every other backend's corpus by the same convention as the
+    # Wicked directory above; under MAGNUM the corpus keeps it.
+    if(NOT CNA_GRAPHICS_BACKEND STREQUAL "MAGNUM")
+        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Backends/Magnum/.*\\.cpp$")
+    endif()
+
     add_executable(CnaTests
             ${CNA_TEST_SOURCES}
     )
