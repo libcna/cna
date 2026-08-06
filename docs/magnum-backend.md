@@ -95,8 +95,10 @@ sudo apt-get install -y libegl1-mesa-dev                        # additionally, 
 
 - **`SurfaceFormat`** — only `Color` (RGBA8) storage is allocated. Other formats reach the backend
   and are recorded, but every texture, cube, volume and render target is created as RGBA8.
-- **`BlendState.MultiSampleMask`** — reaches the backend but only its all-ones default is applied; a
-  real coverage mask would need `GL_SAMPLE_MASK` plus `glSampleMaski`.
+- **`BlendState.MultiSampleMask`** — reaches the backend but only its all-ones default is applied.
+  Magnum's `GL::Renderer` wraps no sample-mask state (`GL_SAMPLE_MASK`/`glSampleMaski` have no
+  binding), so honouring a non-default coverage mask would mean going around the wrapper layer this
+  backend exists to use.
 - **`PreferPerPixelLighting`** — always rendered per-pixel. Like every backend except D3D9, this
   one has no per-vertex-lit shader family, so XNA's own `false` default is a tracked divergence
   rather than an implemented mode.

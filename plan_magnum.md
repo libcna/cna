@@ -23,8 +23,12 @@
 >   per-pixel and has no per-vertex-lit shader family (`MAGNUM-60`).
 > - **`SurfaceFormat` beyond `Color` (`MAGNUM-54`)** — every texture, cube, volume and render target
 >   allocates RGBA8. The requested format reaches the backend and is recorded but not honoured.
-> - **`BlendState.MultiSampleMask` (`MAGNUM-55`)** — only the all-ones default is applied; a real
->   coverage mask needs `GL_SAMPLE_MASK` plus `glSampleMaski`.
+> - **`BlendState.MultiSampleMask` (`MAGNUM-55`)** — only the all-ones default is applied. Magnum's
+>   `GL::Renderer` wraps no sample-mask state at all (it has `SampleShading` and
+>   `SampleAlphaToCoverage`, but neither `GL_SAMPLE_MASK` nor `glSampleMaski`), so closing this
+>   means either calling into flextGL directly -- bypassing the wrapper layer this backend exists to
+>   go through -- or contributing the state upstream. Deliberately left open rather than decided
+>   unilaterally; a non-default coverage mask is rare in XNA content.
 > - **Multi-target MSAA (`MAGNUM-56`)** — an ordered multi-target set attaches resolved colour
 >   textures, so a multisampled target contributes its single-sample image while it is in a set.
 > - **Mesh caching (`MAGNUM-57`)** — a `GL::Mesh` (and therefore a VAO) is built per draw rather
@@ -128,7 +132,7 @@
 | MAGNUM-52 | `SkinnedEffect` shader variant (bone palette, `weightsPerVertex`, strides 52 and 56), pixel-verified | ✅ |
 | MAGNUM-53 | `PbrEffect` / `SkinnedPbrEffect` shader variants (strides 48 and 68), pixel-verified | ✅ |
 | MAGNUM-54 | Real `SurfaceFormat` storage beyond `Color` | ⬜ |
-| MAGNUM-55 | `BlendState.MultiSampleMask` via `GL_SAMPLE_MASK` / `glSampleMaski` | ⬜ |
+| MAGNUM-55 | `BlendState.MultiSampleMask` -- blocked on Magnum wrapping no sample-mask state; see the note above | ⬜ |
 | MAGNUM-56 | MSAA for an ordered multi-target set | ⬜ |
 | MAGNUM-57 | Cache `GL::Mesh` per buffer/layout pair instead of building one per draw | ⬜ |
 | MAGNUM-58 | Context-loss simulation/recovery channel | ⬜ |
