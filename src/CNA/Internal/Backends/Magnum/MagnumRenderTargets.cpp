@@ -229,7 +229,7 @@ namespace CNA::Internal::Backends::Magnum
             {
                 const int sourceRow = levelH - 1 - (y + row);
                 std::memcpy(out + static_cast<std::size_t>(row) * rowBytes,
-                            image.data()
+                            image.data().data()
                                 + (static_cast<std::size_t>(sourceRow) * levelW + x) * kBytesPerPixel,
                             rowBytes);
             }
@@ -409,7 +409,7 @@ namespace CNA::Internal::Backends::Magnum
         {
             const int sourceRow = levelSize - 1 - (y + row);
             std::memcpy(out + static_cast<std::size_t>(row) * rowBytes,
-                        image.data()
+                        image.data().data()
                             + (static_cast<std::size_t>(sourceRow) * levelSize + x) * kBytesPerPixel,
                         rowBytes);
         }

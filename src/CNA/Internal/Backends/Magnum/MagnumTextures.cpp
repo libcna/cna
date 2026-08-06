@@ -49,6 +49,10 @@ namespace CNA::Internal::Backends::Magnum
         /**
          * @brief Copies a sub-rectangle out of a whole-level readback into a tight destination.
          *
+         * @p source is the raw pointer behind `Image2D::data()`'s own `ArrayView` -- reached
+         * through the view rather than through an implicit conversion, which only a deprecated
+         * Corrade build provides.
+         *
          * Magnum's `Texture::image()` always returns a complete level, so a partial `GetData`
          * request is served by reading the level and copying the requested rows out here rather
          * than by a second GL call.
@@ -227,7 +231,7 @@ namespace CNA::Internal::Backends::Magnum
         if (image.size() != Mg::Vector2i{levelW, levelH})
             return false;
 
-        CopyRegion(image.data(), levelW, x, y, w, h, data);
+        CopyRegion(image.data().data(), levelW, x, y, w, h, data);
         return true;
     }
 
@@ -282,7 +286,7 @@ namespace CNA::Internal::Backends::Magnum
         if (image.size() != Mg::Vector2i{levelSize, levelSize})
             return false;
 
-        CopyRegion(image.data(), levelSize, x, y, w, h, data);
+        CopyRegion(image.data().data(), levelSize, x, y, w, h, data);
         return true;
     }
 
@@ -359,7 +363,7 @@ namespace CNA::Internal::Backends::Magnum
         for (int slice = 0; slice < depth; ++slice)
         {
             const char* sourceSlice =
-                image.data() + static_cast<std::size_t>(z + slice) * levelW * levelH * kBytesPerPixel;
+                image.data().data() + static_cast<std::size_t>(z + slice) * levelW * levelH * kBytesPerPixel;
             CopyRegion(sourceSlice, levelW, x, y, w, h,
                        out + static_cast<std::size_t>(slice) * w * h * kBytesPerPixel);
         }

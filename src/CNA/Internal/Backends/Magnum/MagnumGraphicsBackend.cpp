@@ -6,6 +6,7 @@
 
 #include <Corrade/Containers/ArrayView.h>
 #include <Corrade/Containers/Pair.h>
+#include <Corrade/Containers/StringView.h>
 #include <Magnum/GL/Context.h>
 #include <Magnum/GL/DefaultFramebuffer.h>
 #include <Magnum/GL/PixelFormat.h>

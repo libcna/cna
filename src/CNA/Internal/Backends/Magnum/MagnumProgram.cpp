@@ -2,6 +2,13 @@
 #include "CNA/Internal/Backends/Magnum/MagnumProgram.hpp"
 
 #include <Corrade/Containers/ArrayView.h>
+// Iterable.h is what makes the braced `{vertex, fragment}` argument to attachShaders()/checkLink()
+// convertible, and StringStl.h is what lets a std::string reach a Containers::StringView parameter.
+// Both are opt-in headers rather than transitive ones, and an in-tree Corrade build does not happen
+// to drag them in the way an installed one did -- found by building the FetchContent acquisition
+// route, which is what a checkout without CNA_MAGNUM_ROOT actually takes.
+#include <Corrade/Containers/Iterable.h>
+#include <Corrade/Containers/StringStl.h>
 #include <Corrade/Containers/StringView.h>
 #include <Corrade/Utility/DebugStl.h>
 #include <Magnum/GL/Shader.h>
