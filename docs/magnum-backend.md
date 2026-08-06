@@ -114,6 +114,25 @@ sudo apt-get install -y libegl1-mesa-dev                        # additionally, 
 
 `plan_magnum.md` tracks these as explicit tasks rather than leaving them implicit.
 
+## Post-audit contract
+
+- **Declaration fidelity (REMED-GFX-DECL-GUARD).** The stock route resolves its attribute layout
+  from the combined byte stride alone, so `RequireFaithfulDeclarationEXT()` runs at draw time,
+  before anything native is touched: a custom declaration packing different semantics into one of
+  the known stock widths is refused with `System::NotSupportedException` instead of being rendered
+  from the wrong bytes, and the device stays usable. The check is asymmetric (only what the caller
+  declared is verified), compares split multi-stream declarations in the combined record (each
+  stream's elements lifted by its `combinedByteBase`), and deliberately does not guard the
+  custom-effect route, which binds each element from the declaration itself.
+- **No silent drops.** A stock draw whose layout selects no generated program — an unlisted
+  stride, or a flag combination with no variant — throws rather than silently rendering nothing.
+- **Capability reporting.** `SupportsCapability` is an exhaustive switch over every
+  `GraphicsCapability` member with no default arm, so a future member is a compiler diagnostic
+  rather than a confident wrong answer. `WireFrame=true` is proven by the shared wireframe pixel
+  oracle, which MAGNUM joins as a measured backend.
+- **Corpus composition.** `tests/CNA/Internal/Backends/Magnum/` is excluded from every other
+  backend's `CnaTests` glob; under MAGNUM the corpus keeps it.
+
 ## Tests
 
 - `tests/CNA/Internal/Backends/Magnum/MagnumGraphicsBackendTests.cpp` — GTest coverage for

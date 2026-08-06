@@ -8,14 +8,19 @@
 > **Status legend:** ✅ implemented *and verified against its stated acceptance criteria*;
 > 🟨 code or documentation exists but has not met those criteria; ⬜ not implemented.
 >
-> **Verified baseline (2026-08-04):** a clean Linux x86_64 configuration builds Corrade+Magnum and
-> `libcna_backend_graphics_magnum.a` through both acquisition routes (`CNA_MAGNUM_ROOT` and
-> `FetchContent`), and the backend renders end-to-end against Mesa's `llvmpipe` software rasterizer
-> under `Xvfb` — no GPU required. All eight registered pixel tests pass (`ctest -L Magnum`), and
-> `CnaTests` reports 5791 passing. Its one failure,
-> `XnbContainerFuzzTest.MutatedRealModelFixtureNeverCrashesAndOnlyFailsCleanly`, reproduces
-> identically on a `HEADLESS` build and is not this backend's: it throws from the shared
-> `VertexBuffer.cpp` declaration/stride check.
+> **Verified baseline (2026-08-06, at integration):** the backend builds against the pinned
+> Corrade/Magnum revisions through the `FetchContent` route with
+> `FETCHCONTENT_SOURCE_DIR_CORRADE`/`_MAGNUM` local checkouts, and renders end-to-end against
+> Mesa's `llvmpipe` software rasterizer under `Xvfb` — no GPU required. All eight registered pixel
+> tests pass (`ctest -L Magnum`), and the full corpus reports **5843 registered · 5835 passed ·
+> 6 truthful skips · 2 failed**, both failures control-classified as pre-existing and
+> backend-independent: the known two-process networking flake, and the wall-clock audio race
+> class that fails identically (with shuffling victims) on the integration head's principal
+> EasyGL binary.
+> The post-audit obligations are proven at runtime: the declaration-fidelity guard refuses a
+> custom same-stride declaration and leaves the target unmutated, does not over-refuse the stock
+> or split multi-stream shapes, and a stock draw whose layout selects no program now throws
+> `System::NotSupportedException` instead of silently rendering nothing.
 >
 > | Pixel test | ctest name | What it measures |
 > |------------|------------|------------------|
@@ -177,19 +182,24 @@
 | MAGNUM-59 | Cross-backend pixel-parity run (EasyGL/Vulkan/Magnum, same scene) | ⬜ |
 | MAGNUM-60 | `PreferPerPixelLighting=false` per-vertex-lit shader family, pixel-verified | ✅ |
 | MAGNUM-61 | Compile each shader stage at the GLSL version its own source declares | ✅ |
+| MAGNUM-62 | Exhaustive no-default `SupportsCapability`; draw-time declaration-fidelity guard (combined-space over split streams); stock draws with no program refuse instead of silently dropping | ✅ |
+| MAGNUM-63 | Join the shared wireframe pixel oracle's measured rendering set | ✅ |
+| MAGNUM-64 | Backend-local test sources excluded from other backends' corpora | ✅ |
+| MAGNUM-65 | `SpriteBatch` flush heap overread: Corrade's typed-pointer `ArrayView<const void>` constructor scales its size argument by `sizeof(T)`, and the flush passed byte counts -- a `sizeof(Vertex)`-fold (and twofold for indices) overread past the pending vectors on every flush. Rendered correctly regardless (GL stored the oversized copy, the draw read only the real prefix), which is why only radeonsi's allocator faulted it (`GuideTest.RenderPendingKeyboardInput…` SIGSEGV on the real display, three coredumps preserved) and AddressSanitizer flagged it on the very first sanitized flush. Fixed by passing element counts; proven by ASan going clean on the identical path. The radeonsi reproducer was deliberately not re-run -- it needs the real display, which the campaign's validation environment excludes | ✅ |
 
 ## Shared-test gates this backend changed
 
-Three shared tests encoded a single backend's limitation as if it were universal. Each now names the
-backend it is true of instead of asserting it everywhere:
+The shared per-backend contract tables gained their MAGNUM arms at integration:
 
-- `GraphicsDeviceCapabilityTest` asserted a flat "no wireframe", which is GLES3's limitation (and
-  therefore EasyGL's). Desktop GL has a real `glPolygonMode` and Vulkan reports its device's own
-  `fillModeNonSolid`, so the strict arm now applies where it is true and every other backend gets
-  the same "querying it does not throw" contract MSAA and anisotropic filtering already had.
-- `RenderTargetCubeSetDataContractTest` gated "SetData is a real upload" on `CNA_BACKEND_EASYGL`.
-  Magnum's render-target cube attaches an ordinary GL cube texture too, so an upload reaches it
-  directly there as well.
+- The flat "no wireframe" assertion this lane originally re-gated had already been superseded at
+  the integration base by the REMED-GFX-209 per-backend WireFrame contract, so nothing of that
+  edit survived; instead MAGNUM joined `WireFrameTriangleOracle.hpp`'s measured
+  wireframe-rendering set, which proves the `true` claim at pixel level (edges lit, interior
+  empty, WireFrame/Solid alternation).
+- `RenderTargetCubeSetDataContractTest`'s acceptance table records that this backend's SetData is
+  a real `CubeMapTexture::setSubImage` upload — the framebuffer's colour attachment IS an
+  ordinary GL cube texture, so an upload reaches it directly.
 - `InstancedDrawMultiStreamTests` gates its pixel oracles on the set of backends that actually
   rasterize an instanced draw and consume per-binding offsets and frequencies. Magnum joins both
-  sets, which is what makes its instanced multi-stream path measured rather than skipped.
+  sets, which is what makes its instanced multi-stream path measured rather than skipped — and
+  what caught the guard's combined-space defect on its first run.
