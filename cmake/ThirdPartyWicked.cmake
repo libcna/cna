@@ -24,11 +24,14 @@ set(CNA_WICKED_ROOT "" CACHE PATH "Root of a local Wicked Engine checkout")
 option(CNA_WICKED_AUTO_FETCH "Clone the pinned Wicked Engine revision when CNA_WICKED_ROOT is empty" OFF)
 option(CNA_WICKED_APPLY_SDL3_PATCH "Apply cmake/patches/wicked-sdl3-platform.patch to the resolved Wicked Engine checkout when it is not already SDL3-aware" ON)
 option(CNA_WICKED_APPLY_TEARDOWN_PATCH "Apply cmake/patches/wicked-device-teardown.patch to the resolved Wicked Engine checkout when its Vulkan device still leaks at destruction" ON)
+option(CNA_WICKED_APPLY_STAGING_FOOTPRINT_PATCH "Apply cmake/patches/wicked-staging-footprint.patch to the resolved Wicked Engine checkout when its Vulkan UPLOAD/READBACK staging buffers are still allocated smaller than their mapped-layout footprint" ON)
 
 set(CNA_WICKED_SDL3_PATCH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/wicked-sdl3-platform.patch"
     CACHE FILEPATH "SDL3 platform patch applied to Wicked Engine")
 set(CNA_WICKED_TEARDOWN_PATCH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/wicked-device-teardown.patch"
     CACHE FILEPATH "Vulkan device teardown patch applied to Wicked Engine")
+set(CNA_WICKED_STAGING_FOOTPRINT_PATCH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/wicked-staging-footprint.patch"
+    CACHE FILEPATH "Vulkan staging-buffer footprint patch applied to Wicked Engine")
 
 # Wicked Engine's Unix platform layer is SDL2-only upstream: wiPlatform.h calls SDL2 window
 # functions unconditionally under PLATFORM_LINUX, and GraphicsDevice_Vulkan::CreateSwapChain has a
@@ -110,6 +113,49 @@ function(cna_wicked_check_device_teardown_fix _root)
     endif()
 endfunction()
 
+# At the pinned revision, GraphicsDevice_Vulkan::CreateTexture allocates UPLOAD/READBACK staging
+# buffers with ComputeTextureMemorySizeInBytes -- the TIGHT texel size -- while the mapped layout
+# it hands out (CreateTextureSubresourceDatas with optimalBufferCopyRowPitchAlignment) and the
+# CopyTexture buffer addressing consume row pitches aligned to that limit (plan_wicked.md
+# WICKED-80). Any subresource whose row bytes are not a multiple of the alignment makes the copy
+# address past the end of the buffer (VUID-vkCmdCopyBufferToImage-pRegions-00171 /
+# VUID-vkCmdCopyImageToBuffer-pRegions-00183), and whether the round trip corrupts depends only on
+# what the suballocator placed next to the buffer. The patch sizes the buffer with exactly the
+# footprint the mapped layout describes.
+function(cna_wicked_check_staging_footprint_fix _root)
+    file(READ "${_root}/WickedEngine/wiGraphicsDevice_Vulkan.cpp" _device_source)
+    if(_device_source MATCHES "footprint CreateTextureSubresourceDatas lays out")
+        return()
+    endif()
+
+    if(NOT CNA_WICKED_APPLY_STAGING_FOOTPRINT_PATCH)
+        message(FATAL_ERROR
+            "CNA Wicked: the Wicked Engine checkout at '${_root}' still under-allocates its Vulkan "
+            "staging buffers (WICKED-80) and CNA_WICKED_APPLY_STAGING_FOOTPRINT_PATCH=OFF. Apply "
+            "${CNA_WICKED_STAGING_FOOTPRINT_PATCH} manually (git -C ${_root} apply <patch>) or "
+            "re-enable the option.")
+    endif()
+
+    find_package(Git QUIET)
+    if(NOT GIT_FOUND)
+        message(FATAL_ERROR
+            "CNA Wicked: git is required to apply ${CNA_WICKED_STAGING_FOOTPRINT_PATCH} to '${_root}'.")
+    endif()
+
+    message(STATUS "CNA Wicked: applying Vulkan staging-buffer footprint patch to ${_root}")
+    execute_process(
+        COMMAND "${GIT_EXECUTABLE}" apply --whitespace=nowarn "${CNA_WICKED_STAGING_FOOTPRINT_PATCH}"
+        WORKING_DIRECTORY "${_root}"
+        RESULT_VARIABLE _patch_result
+        ERROR_VARIABLE _patch_error)
+    if(NOT _patch_result EQUAL 0)
+        message(FATAL_ERROR
+            "CNA Wicked: failed to apply ${CNA_WICKED_STAGING_FOOTPRINT_PATCH} to '${_root}':\n${_patch_error}\n"
+            "The patch is authored against Wicked Engine ${CNA_WICKED_COMMIT}; a different revision "
+            "may need it rebasing.")
+    endif()
+endfunction()
+
 function(cna_configure_wicked)
     if(TARGET WickedEngine)
         return()
@@ -154,6 +200,9 @@ function(cna_configure_wicked)
     # Platform-independent: the Vulkan device is the one this backend selects everywhere
     # (WICKED-60 keeps D3D12 unselectable), so its teardown fix applies on every platform.
     cna_wicked_check_device_teardown_fix("${_root}")
+    # Equally platform-independent, and required by the WICKED-79/WICKED-80 staged-transfer
+    # contract: every CNA texture upload/readback goes through these staging buffers.
+    cna_wicked_check_staging_footprint_fix("${_root}")
 
     # CNA needs the library only. Every sample/editor/template target is switched off: they build
     # the full engine application layer (SDL2 event loop, ImGui, editor content) that CNA replaces

@@ -57,6 +57,18 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     set_tests_properties(Wicked_GeometryVertexOffset PROPERTIES LABELS "GraphicsSmoke;Wicked"
         TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # plan_wicked.md WICKED-80. Byte-exact staged-transfer matrix: narrow/aligned/boundary
+    # Texture3D volumes, sub-box upload and readback, repeated readbacks, and the WICKED-79
+    # Texture2D, TextureCube-face and small-mip controls that ride the same staging arithmetic.
+    # Before cmake/patches/wicked-staging-footprint.patch the upstream device under-allocated
+    # every narrow staging buffer and this matrix corrupts (preserved probe evidence in
+    # cmake-build-wicked/wicked-repro/); with the patch it must stay green byte-for-byte.
+    cna_wicked_test(cna_test_wicked_texture3d_staged_transfer
+        tests/CNA/Internal/Backends/Wicked/WickedTexture3DStagedTransferTest.cpp)
+    add_test(NAME Wicked_Texture3DStagedTransfer COMMAND cna_test_wicked_texture3d_staged_transfer)
+    set_tests_properties(Wicked_Texture3DStagedTransfer PROPERTIES LABELS "GraphicsSmoke;Wicked"
+        TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # plan_wicked.md WICKED-74. Everything else in this backend needs a real Vulkan device, a
     # window and a display, so it is covered by the same demo smoke test the other GPU backends
     # register. It is registered only when the examples are built, and skips rather than fails when

@@ -164,6 +164,7 @@ missing.
 | WICKED-77 | Instanced draws honour the geometry stream's `VertexOffset` (regression `Wicked_GeometryVertexOffset`) | ✅ |
 | WICKED-78 | Device teardown releases every GPU/VMA allocation (`cmake/patches/wicked-device-teardown.patch`; regression `Wicked_DeviceLifecycle`) | ✅ |
 | WICKED-79 | Staged texture uploads store at the staging texture's own mapped pitches (narrow cube/3D/rect uploads no longer smear) | ✅ |
+| WICKED-80 | Staging buffers sized to their aligned mapped-layout footprint (`cmake/patches/wicked-staging-footprint.patch`; regression `Wicked_Texture3DStagedTransfer`) | ✅ |
 
 ---
 
@@ -190,22 +191,37 @@ missing.
   staged copies recorded on one command list interfere (measured on a raw device: the first
   cube face reads back with another upload's rows spliced in; a submit between them is
   byte-exact at every width).
-- **`WICKED-80` (OPEN — found by the Batch 2 stabilization's sanitized narrow-upload probe,
-  2026-08-06): `Texture3D` staged transfers corrupt dimension-dependent tail rows.** A byte-exact
-  SetData/GetData round trip fails for specific volume shapes (5×5×3 in one probe layout, 4×5×3
-  and 6×5×3 in another — deterministic per allocation sequence, not per dimension), with the first
-  wrong texel at a row/slice tail and the wrong bytes equal to EARLIER texels of the same uploaded
-  pattern: recycled staging memory showing through where the copy never wrote. Repeated readbacks
-  of an affected volume stay wrong the same way, so the stored volume itself is corrupt
-  (upload-side footprint arithmetic, with the shared staged readback path equally suspect).
-  Clean under ASan/UBSan — the bytes are wrong, not out of bounds — and invisible to all 13
-  corpus transfer tests and the dedicated suites, whose shapes never hit an affected footprint.
-  Reproducer, build instructions and the measured evidence are preserved in
-  `cmake-build-wicked/wicked-repro/` (probe_texture3d_staged_transfer.cpp). Not fixed in the
-  stabilization session, deliberately: guessing at GPU copy-footprint arithmetic without an
-  isolated raw-`wi::graphics` control is how a plausible-but-wrong fix lands (the `WICKED-78`
-  lesson); the CNA-versus-upstream ownership boundary is exactly what the preserved raw-probe
-  infrastructure settles first.
+- **`WICKED-80` (found by the Batch 2 stabilization's sanitized narrow-upload probe, 2026-08-06;
+  RESOLVED the same day by the third carried patch): upstream under-allocates every narrow
+  UPLOAD/READBACK staging buffer.** The stabilization measured `Texture3D` SetData/GetData round
+  trips corrupting shape-dependent tail rows/slices (5×5×3 in one probe layout, 4×5×3 and 6×5×3 in
+  another), with the wrong bytes equal to EARLIER texels of the same uploaded pattern. The
+  raw-`wi::graphics` control (no CNA in the process) settled ownership as an upstream defect:
+  `GraphicsDevice_Vulkan::CreateTexture` sizes UPLOAD/READBACK staging buffers with
+  `ComputeTextureMemorySizeInBytes` — the TIGHT texel size — while the mapped layout it hands out
+  (`CreateTextureSubresourceDatas` with `optimalBufferCopyRowPitchAlignment`, 128 on the measured
+  Mesa devices) and `CopyTexture`'s buffer addressing consume ALIGNED row pitches, so for any
+  subresource whose row bytes are not a multiple of the alignment both copy directions address past
+  the end of the allocation. The Khronos validation layer names it exactly
+  (`VUID-vkCmdCopyBufferToImage-pRegions-00171` / `VUID-vkCmdCopyImageToBuffer-pRegions-00183`, on
+  lavapipe AND on Intel ANV — not a driver quirk), and whether a given shape's round trip actually
+  corrupted was decided purely by what the suballocator placed next to the buffer — which is why
+  the failing shape set followed the allocation sequence, why isolated single-shape runs passed,
+  and why all 13 corpus transfer tests stayed green over a live defect. It also explains
+  `WICKED-79`'s measured "two staged copies on one command list interfere": the second staging
+  buffer landed inside the first one's out-of-bounds addressed range. The same under-allocation
+  covers narrow `Texture2D`/cube-face/small-mip staging (measured: a 5×5 upload staging is 100
+  bytes against a 640-byte addressed footprint) — every such transfer was latently exposed.
+  **Fix:** `cmake/patches/wicked-staging-footprint.patch` sizes those buffers with exactly the
+  footprint `CreateTextureSubresourceDatas` lays out (applies cleanly on the pristine pin after the
+  SDL3 and teardown patches; applied/verified by `cna_wicked_check_staging_footprint_fix` in
+  `cmake/ThirdPartyWicked.cmake`). **Regression:** `Wicked_Texture3DStagedTransfer` — a byte-exact
+  index-encoded matrix over narrow/aligned/boundary volumes, sub-box upload/readback, repeated
+  readbacks, plus the WICKED-79 Texture2D, TextureCube-face and small-mip controls; its sequenced
+  narrow matrix fails 3/3 deterministically against the pre-fix library and passes 3/3 with the
+  patch. Probes, run logs and the pre-fix discriminator evidence are preserved in
+  `cmake-build-wicked/wicked-repro/` (`probe_texture3d_staged_transfer.cpp`,
+  `probe_raw_wicked_texture3d.cpp`, `README.md`).
 - **`WICKED-77` (found and fixed at first execution): the instanced route dropped the geometry
   stream's `VertexOffset`.** That route carries each stream's whole public offset in the stream
   table (the ordinary routes fold it into `baseVertex`), and the single-geometry-stream binding

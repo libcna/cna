@@ -1,0 +1,46 @@
+diff --git a/WickedEngine/wiGraphicsDevice_Vulkan.cpp b/WickedEngine/wiGraphicsDevice_Vulkan.cpp
+--- a/WickedEngine/wiGraphicsDevice_Vulkan.cpp
++++ b/WickedEngine/wiGraphicsDevice_Vulkan.cpp
+@@ -4111,7 +4111,41 @@
+ 				//	With a buffer, we can tightly pack mips linearly into a buffer so it won't have that limitation
+ 				VkBufferCreateInfo bufferInfo = {};
+ 				bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+-				bufferInfo.size = ComputeTextureMemorySizeInBytes(*desc);
++				// The mapped layout this same function hands out below (CreateTextureSubresourceDatas
++				// with optimalBufferCopyRowPitchAlignment) aligns every subresource row pitch, and
++				// CopyTexture addresses this buffer through those aligned pitches (bufferRowLength =
++				// row_pitch / stride, bufferImageHeight = subresource height). ComputeTextureMemorySizeInBytes
++				// is the TIGHT texel size, so any subresource whose row bytes are not already a multiple
++				// of the alignment made the buffer smaller than the range the copy addresses --
++				// vkCmdCopyBufferToImage / vkCmdCopyImageToBuffer then read and wrote past the end of
++				// the allocation (VUID-vkCmdCopyBufferToImage-pRegions-00171 /
++				// VUID-vkCmdCopyImageToBuffer-pRegions-00183) and narrow uploads/readbacks corrupted.
++				// Size the buffer with exactly the footprint CreateTextureSubresourceDatas lays out.
++				{
++					const uint32_t buffer_alignment = (uint32_t)properties2.properties.limits.optimalBufferCopyRowPitchAlignment;
++					const uint32_t plane_count = GetFormatPlaneCount(desc->format);
++					const uint32_t pixels_per_block = GetFormatBlockSize(desc->format);
++					const uint32_t mip_count = GetMipCount(*desc);
++					size_t aligned_size = 0;
++					for (uint32_t plane = 0; plane < plane_count; ++plane)
++					{
++						const uint32_t bytes_per_block = GetFormatStride(desc->format, plane);
++						for (uint32_t layer = 0; layer < desc->array_size; ++layer)
++						{
++							for (uint32_t mip = 0; mip < mip_count; ++mip)
++							{
++								const uint32_t mip_width = std::max(1u, desc->width >> mip);
++								const uint32_t mip_height = std::max(1u, desc->height >> mip);
++								const uint32_t mip_depth = std::max(1u, desc->depth >> mip);
++								const uint32_t num_blocks_x = (mip_width + pixels_per_block - 1) / pixels_per_block;
++								const uint32_t num_blocks_y = (mip_height + pixels_per_block - 1) / pixels_per_block;
++								const uint32_t row_pitch = align(num_blocks_x * bytes_per_block, buffer_alignment);
++								aligned_size += (size_t)row_pitch * num_blocks_y * mip_depth;
++							}
++						}
++					}
++					bufferInfo.size = aligned_size;
++				}
+ 
+ 				allocInfo.flags |= VMA_ALLOCATION_CREATE_MAPPED_BIT;
+ 				if (texture->desc.usage == Usage::READBACK)

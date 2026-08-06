@@ -6,3 +6,10 @@
 # supported way to produce it. Exempt it from git's whitespace checks so `git diff --check` reports
 # real problems in hand-written sources instead of drowning in generated padding.
 src/CNA/Internal/Backends/Bgfx/shaders/bgfx_shaders.hpp -whitespace
+
+# Carried dependency patches are unified diffs: every context line is the original file's
+# tab-indented code behind a single leading space, and blank context lines carry one space --
+# both are what `git apply` requires byte-for-byte, so "fixing" them would break the patch.
+# Exempt them the same way as the generated header above, so `git diff --check` keeps reporting
+# real problems in hand-written sources.
+cmake/patches/*.patch -whitespace

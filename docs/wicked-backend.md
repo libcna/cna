@@ -86,6 +86,30 @@ resolved checkout automatically, exactly like the SDL3 patch; set
 pins the fixed behaviour: it is plain device create/destroy cycles, and before the patch the first
 one aborts the binary inside `vk_mem_alloc.h`.
 
+### The staging-footprint patch (`WICKED-80`)
+
+At the pinned revision, `GraphicsDevice_Vulkan::CreateTexture` sizes every UPLOAD/READBACK
+staging buffer with `ComputeTextureMemorySizeInBytes` — the **tight** texel size — while the
+mapped layout it returns (`CreateTextureSubresourceDatas` with
+`optimalBufferCopyRowPitchAlignment`) and `CopyTexture`'s buffer addressing
+(`bufferRowLength`/`bufferImageHeight`) consume row pitches **aligned** to that device limit
+(128 bytes on the measured Mesa devices). For any subresource whose row bytes are not a multiple
+of the alignment, both `vkCmdCopyBufferToImage` and `vkCmdCopyImageToBuffer` therefore address
+past the end of the buffer (`VUID-vkCmdCopyBufferToImage-pRegions-00171` /
+`VUID-vkCmdCopyImageToBuffer-pRegions-00183`, reproduced without CNA on lavapipe and Intel ANV
+alike), and whether a given transfer visibly corrupts depends only on what the suballocator
+placed next to the buffer. That is `WICKED-80`: narrow `Texture3D` volumes read back with tail
+rows/slices holding recycled bytes of earlier uploads — and the same exposure covers narrow
+`Texture2D`, cube-face and small-mip staging.
+
+`cmake/patches/wicked-staging-footprint.patch` sizes those buffers with exactly the footprint
+`CreateTextureSubresourceDatas` lays out, is applied to the resolved checkout automatically like
+the other two patches, and can be disabled with
+`-DCNA_WICKED_APPLY_STAGING_FOOTPRINT_PATCH=OFF` to apply by hand. The
+`Wicked_Texture3DStagedTransfer` test pins the fixed behaviour with a byte-exact index-encoded
+transfer matrix; its sequenced narrow matrix fails deterministically against the unpatched
+engine and must stay green byte-for-byte with the patch.
+
 ### Run-time requirement: `libdxcompiler.so` in the working directory
 
 CNA compiles its shaders at run time through `wi::shadercompiler`, which loads
