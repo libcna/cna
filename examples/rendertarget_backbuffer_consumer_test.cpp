@@ -156,6 +156,13 @@ namespace
 #elif defined(CNA_BACKEND_CANVAS)
     constexpr bool kRasterizes = true;
     constexpr const char* kBackendName = "CANVAS";
+#elif defined(CNA_BACKEND_SOKOL)
+    // plan_sokol.md SOKOL-25/38: real geometry is genuinely rasterized, and `SokolRenderTargetBackend`
+    // now overrides `ITextureBackend::GetData` via a throwaway GL FBO around the raw texture handle
+    // `sg_gl_query_image_info()` exposes -- `RequireReadable`'s direct `ReadWholeTarget` (a
+    // RenderTarget2D::GetData) round-trips real content, so `kRasterizes = true` is accurate.
+    constexpr bool kRasterizes = true;
+    constexpr const char* kBackendName = "SOKOL";
 #else
 #error "REMED-GFX-155: this backend has no declared backbuffer-consumer contract."
 #endif

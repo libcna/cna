@@ -167,13 +167,17 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_FourTargets_DoesNotThrow)
 #if defined(CNA_BACKEND_SDL_RENDERER) || defined(CNA_BACKEND_ASCII) || defined(CNA_BACKEND_FREEDIRECT) || defined(CNA_BACKEND_DX1) || defined(CNA_BACKEND_DX2) || defined(CNA_BACKEND_DX3) || defined(CNA_BACKEND_DX5) || defined(CNA_BACKEND_DX6) || defined(CNA_BACKEND_DX7) || defined(CNA_BACKEND_DX8)
     // Task 709 (SDL_Renderer) / DX3-27 (DirectDraw, plan_freedirect.md) / DX1-27 (real DirectDraw v1,
     // plan_dx1.md) / DX2-84 (same DirectDraw v1 2D layer, plan_dx2.md) / plan_dx3.md (same 2D
-    // layer, now DirectDraw v2) / plan_dx5.md (same 2D layer, now DirectDraw v4): all six support
+    // layer, now DirectDraw v2) / plan_dx5.md (same 2D layer, now DirectDraw v4): each supports
     // exactly one active render target at a time -- unlike the other, real-MRT-capable backends,
     // binding more than one target here must throw clearly rather than silently rendering to only
-    // the first. 4 is still within the MAX_RENDERTARGET_BINDINGS cap this test's name/history
-    // (Task 881) refers to, so the throw here comes entirely from the backend's own single-target
-    // limitation, not the cap check. ASCII (plan_ascii.md) forwards SetRenderTargets straight to
-    // the same real SdlGraphicsBackend instance it wraps, so it inherits this exact throw too.
+    // the first. 4 is still within the MAX_RENDERTARGET_BINDINGS cap
+    // this test's name/history (Task 881) refers to, so the throw here comes entirely from the
+    // backend's own single-target limitation, not the cap check. ASCII (plan_ascii.md) forwards
+    // SetRenderTargets straight to the same real SdlGraphicsBackend instance it wraps, so it
+    // inherits this exact throw too.
+    // Sokol left this list at plan_sokol.md SOKOL-26: it is now real-MRT-capable too (a genuine
+    // multi-attachment sg_pass, 2-4 RenderTarget2D targets), so 4 real targets bind cleanly here
+    // exactly like EasyGL/Vulkan/D3D11/etc. do below.
     EXPECT_THROW(gd.SetRenderTargets(bindings), std::runtime_error);
 #elif defined(CNA_BACKEND_STUB)
     // plan_stub.md: Stub supports no render targets AT ALL -- it keeps IGraphicsBackend's nullptr

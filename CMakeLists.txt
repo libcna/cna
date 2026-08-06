@@ -234,6 +234,10 @@ include(cmake/Tests/OpenGL2Tests.cmake)
 # display/GPU and a Vulkan loader).
 include(cmake/Tests/WickedTests.cmake)
 
+# plan_sokol.md SOKOL-16/17: sokol_gfx backend CTest registration. Needs a real display and GL
+# context, same as the EasyGL/Vulkan/Bgfx entries above -- run with a real (or Xvfb) DISPLAY.
+include(cmake/Tests/SokolTests.cmake)
+
 include(cmake/Harnesses.cmake)
 
 include(cmake/ToolGltfToCnj.cmake)

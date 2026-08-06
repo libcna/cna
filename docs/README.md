@@ -16,6 +16,9 @@ on it) rather than assuming either way.
   (SDL_Renderer/EasyGL/Vulkan/Bgfx). Start here for "does backend X support feature Y."
 - **[`webgpu-backend.md`](webgpu-backend.md)** — current status, build instructions and explicit
   limitations for the experimental fifth backend; detailed remaining work is in `../plan_webgpu.md`.
+- **[`sokol-backend.md`](sokol-backend.md)** — capability boundary, build options and known
+  limitations for the experimental `sokol_gfx` backend (a pixel-verified 2D baseline; no 3D path,
+  render targets or custom effects yet); task breakdown is in `../plan_sokol.md`.
 - **[`canvas-backend.md`](canvas-backend.md)** — current status for the Emscripten-only HTML Canvas
   2D backend, incl. a manual browser verification checklist (this dev loop has no real browser DOM
   to pixel-verify against); detailed task breakdown is in `../plan_canvas.md`.

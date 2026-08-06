@@ -87,6 +87,12 @@ namespace Microsoft::Xna::Framework::Graphics
 
     ShaderEffect::~ShaderEffect() = default;
 
+    void ShaderEffect::Dispose(bool disposing)
+    {
+        effectBackend_.reset();
+        Effect::Dispose(disposing);
+    }
+
     const std::string& ShaderEffect::getVertexSourceProperty() const { return vertSrc_; }
     const std::string& ShaderEffect::getFragmentSourceProperty() const { return fragSrc_; }
     const std::string& ShaderEffect::GetVertexSource() const { return vertSrc_; }

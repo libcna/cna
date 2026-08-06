@@ -13,6 +13,12 @@ namespace Microsoft::Xna::Framework::Graphics
 
     OcclusionQuery::~OcclusionQuery() = default;
 
+    void OcclusionQuery::Dispose(bool disposing)
+    {
+        backend_.reset();
+        GraphicsResource::Dispose(disposing);
+    }
+
     bool OcclusionQuery::getIsCompleteProperty() const
     {
         if (backend_) return backend_->IsComplete();

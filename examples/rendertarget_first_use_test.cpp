@@ -170,6 +170,12 @@ namespace
 #elif defined(CNA_BACKEND_CANVAS)
     constexpr bool kRasterizes = true;
     constexpr const char* kBackendName = "CANVAS";
+#elif defined(CNA_BACKEND_SOKOL)
+    // plan_sokol.md SOKOL-25/38: real geometry is genuinely rasterized, and `RequireReadable`'s
+    // direct `ReadWholeTarget` (a RenderTarget2D::GetData) now round-trips real content via a
+    // throwaway GL FBO around the raw texture handle `sg_gl_query_image_info()` exposes.
+    constexpr bool kRasterizes = true;
+    constexpr const char* kBackendName = "SOKOL";
 #else
 #error "REMED-GFX-158: this backend has no declared first-use contract."
 #endif
@@ -199,7 +205,9 @@ namespace
      *
      * WEBGPU declares this unimplemented (plan_webgpu.md WEBGPU-53/54) and throws when the target's
      * mip chain would have to be regenerated. That predates and is unrelated to first use, so leg I
-     * asserts the deterministic rejection there instead of a value.
+     * asserts the deterministic rejection there instead of a value. SOKOL implements it as of
+     * plan_sokol.md SOKOL-39 (mip storage allocated via sokol_gfx's num_mipmaps, regenerated from
+     * level 0 via glGenerateMipmap on unbind).
      */
     constexpr bool kMipmappedRenderTargetSupported =
 #if defined(CNA_BACKEND_WEBGPU)

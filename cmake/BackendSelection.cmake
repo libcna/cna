@@ -6,8 +6,8 @@ if(EMSCRIPTEN OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
 else()
     set(_cna_default_backend "SDL_RENDERER")
 endif()
-set(CNA_GRAPHICS_BACKEND "${_cna_default_backend}" CACHE STRING "Graphics backend to use (SDL_RENDERER, EASYGL, BGFX, VULKAN, WEBGPU, MAGNUM, HEADLESS, SOFTWARE, STUB, D3D11, D3D12, CANVAS, ASCII, FREEDIRECT, D3D9, DX1, DX2, DX3, DX5, DX6, DX7, DX8, D3D10, OPENGLES1, OPENGL4, OPENGL1, OPENGL2, SDL_GPU, or WICKED)")
-set_property(CACHE CNA_GRAPHICS_BACKEND PROPERTY STRINGS "SDL_RENDERER" "EASYGL" "BGFX" "VULKAN" "WEBGPU" "MAGNUM" "HEADLESS" "SOFTWARE" "STUB" "D3D11" "D3D12" "CANVAS" "ASCII" "FREEDIRECT" "D3D9" "DX1" "DX2" "DX3" "DX5" "DX6" "DX7" "DX8" "D3D10" "OPENGLES1" "OPENGL4" "OPENGL1" "OPENGL2" "SDL_GPU" "WICKED")
+set(CNA_GRAPHICS_BACKEND "${_cna_default_backend}" CACHE STRING "Graphics backend to use (SDL_RENDERER, EASYGL, BGFX, VULKAN, WEBGPU, MAGNUM, HEADLESS, SOFTWARE, STUB, D3D11, D3D12, CANVAS, ASCII, FREEDIRECT, D3D9, DX1, DX2, DX3, DX5, DX6, DX7, DX8, D3D10, OPENGLES1, OPENGL4, OPENGL1, OPENGL2, SDL_GPU, WICKED, or SOKOL)")
+set_property(CACHE CNA_GRAPHICS_BACKEND PROPERTY STRINGS "SDL_RENDERER" "EASYGL" "BGFX" "VULKAN" "WEBGPU" "MAGNUM" "HEADLESS" "SOFTWARE" "STUB" "D3D11" "D3D12" "CANVAS" "ASCII" "FREEDIRECT" "D3D9" "DX1" "DX2" "DX3" "DX5" "DX6" "DX7" "DX8" "D3D10" "OPENGLES1" "OPENGL4" "OPENGL1" "OPENGL2" "SDL_GPU" "WICKED" "SOKOL")
 
 option(CNA_BACKEND_SDL_RENDERER "Enable SDL_Renderer graphics backend" OFF)
 option(CNA_BACKEND_EASY_GL "Enable easy-gl graphics backend" OFF)
@@ -117,8 +117,12 @@ option(CNA_BACKEND_OPENGL2 "Enable native OpenGL 2.1 graphics backend (no EasyGL
 # itself dispatches to Vulkan (Linux/Windows) or D3D12 (Windows).
 option(CNA_BACKEND_WICKED "Enable Wicked Engine graphics backend" OFF)
 
+# plan_sokol.md: sokol_gfx (https://github.com/floooh/sokol) -- a single-header GPU abstraction
+# that itself dispatches onto GL/D3D11/Metal/WebGPU, selected here via CNA_SOKOL_API below.
+option(CNA_BACKEND_SOKOL "Enable sokol_gfx graphics backend" OFF)
+
 set(_cna_explicit_backend_selection OFF)
-if(CNA_BACKEND_SDL_RENDERER OR CNA_BACKEND_EASY_GL OR CNA_BACKEND_BGFX OR CNA_BACKEND_VULKAN OR CNA_BACKEND_WEBGPU OR CNA_BACKEND_MAGNUM OR CNA_BACKEND_HEADLESS OR CNA_BACKEND_SOFTWARE OR CNA_BACKEND_STUB OR CNA_BACKEND_D3D11 OR CNA_BACKEND_D3D12 OR CNA_BACKEND_CANVAS OR CNA_BACKEND_ASCII OR CNA_BACKEND_FREEDIRECT OR CNA_BACKEND_D3D9 OR CNA_BACKEND_DX1 OR CNA_BACKEND_DX2 OR CNA_BACKEND_DX3 OR CNA_BACKEND_DX5 OR CNA_BACKEND_DX6 OR CNA_BACKEND_DX7 OR CNA_BACKEND_DX8 OR CNA_BACKEND_D3D10 OR CNA_BACKEND_OPENGLES1 OR CNA_BACKEND_OPENGL4 OR CNA_BACKEND_OPENGL1 OR CNA_BACKEND_OPENGL2 OR CNA_BACKEND_SDL_GPU OR CNA_BACKEND_WICKED)
+if(CNA_BACKEND_SDL_RENDERER OR CNA_BACKEND_EASY_GL OR CNA_BACKEND_BGFX OR CNA_BACKEND_VULKAN OR CNA_BACKEND_WEBGPU OR CNA_BACKEND_MAGNUM OR CNA_BACKEND_HEADLESS OR CNA_BACKEND_SOFTWARE OR CNA_BACKEND_STUB OR CNA_BACKEND_D3D11 OR CNA_BACKEND_D3D12 OR CNA_BACKEND_CANVAS OR CNA_BACKEND_ASCII OR CNA_BACKEND_FREEDIRECT OR CNA_BACKEND_D3D9 OR CNA_BACKEND_DX1 OR CNA_BACKEND_DX2 OR CNA_BACKEND_DX3 OR CNA_BACKEND_DX5 OR CNA_BACKEND_DX6 OR CNA_BACKEND_DX7 OR CNA_BACKEND_DX8 OR CNA_BACKEND_D3D10 OR CNA_BACKEND_OPENGLES1 OR CNA_BACKEND_OPENGL4 OR CNA_BACKEND_OPENGL1 OR CNA_BACKEND_OPENGL2 OR CNA_BACKEND_SDL_GPU OR CNA_BACKEND_WICKED OR CNA_BACKEND_SOKOL)
     set(_cna_explicit_backend_selection ON)
 endif()
 
@@ -210,6 +214,9 @@ if(_cna_explicit_backend_selection)
     endif()
     if(CNA_BACKEND_WICKED)
         list(APPEND _cna_enabled_backends "WICKED")
+    endif()
+    if(CNA_BACKEND_SOKOL)
+        list(APPEND _cna_enabled_backends "SOKOL")
     endif()
 
     list(LENGTH _cna_enabled_backends _cna_enabled_backends_count)
@@ -314,6 +321,37 @@ if(CNA_GRAPHICS_BACKEND STREQUAL "WICKED")
     endif()
     if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT CMAKE_SYSTEM_NAME STREQUAL "Windows")
         message(WARNING "CNA: WICKED backend is developed against Linux/Vulkan. Other platforms may require additional setup.")
+    endif()
+endif()
+
+# plan_sokol.md design decision 2: sokol_gfx is itself a multi-API abstraction, so the SOKOL
+# backend has a second axis of its own -- which native API sokol_gfx dispatches onto. This is a
+# compile-time choice exactly like CNA_GRAPHICS_BACKEND, resolved here into the single SOKOL_*
+# define sokol_gfx.h switches on. GLCORE (OpenGL 4.1 core, sokol_gfx's own minimum for that
+# backend) is the default and the only value verified on this project's Linux dev machine; the
+# rest are wired but unproven, and say so at configure time rather than pretending otherwise.
+set(CNA_SOKOL_API "GLCORE" CACHE STRING "Native API sokol_gfx dispatches onto (GLCORE, GLES3, D3D11, METAL, WGPU)")
+set_property(CACHE CNA_SOKOL_API PROPERTY STRINGS "GLCORE" "GLES3" "D3D11" "METAL" "WGPU")
+if(CNA_GRAPHICS_BACKEND STREQUAL "SOKOL")
+    if(CNA_SOKOL_API STREQUAL "GLCORE")
+        set(CNA_SOKOL_API_DEFINE "SOKOL_GLCORE")
+    elseif(CNA_SOKOL_API STREQUAL "GLES3")
+        set(CNA_SOKOL_API_DEFINE "SOKOL_GLES3")
+    elseif(CNA_SOKOL_API STREQUAL "D3D11")
+        set(CNA_SOKOL_API_DEFINE "SOKOL_D3D11")
+    elseif(CNA_SOKOL_API STREQUAL "METAL")
+        set(CNA_SOKOL_API_DEFINE "SOKOL_METAL")
+    elseif(CNA_SOKOL_API STREQUAL "WGPU")
+        set(CNA_SOKOL_API_DEFINE "SOKOL_WGPU")
+    else()
+        message(FATAL_ERROR "CNA: Unknown CNA_SOKOL_API: ${CNA_SOKOL_API} (expected GLCORE, GLES3, D3D11, METAL, or WGPU)")
+    endif()
+    if(NOT CNA_SOKOL_API STREQUAL "GLCORE")
+        message(WARNING
+            "CNA: CNA_SOKOL_API=${CNA_SOKOL_API} is wired but unverified -- only GLCORE has been "
+            "exercised against real hardware. SokolGraphicsBackend also creates its GPU context "
+            "through SDL_GL_CreateContext, which only serves the GL APIs; a non-GL value needs "
+            "that context path implemented for the chosen API first (plan_sokol.md Phase SOKOL-8).")
     endif()
 endif()
 
@@ -526,6 +564,14 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "WICKED")
     set(CNA_BACKEND_DEFINE "CNA_BACKEND_WICKED")
     include(cmake/ThirdPartyWicked.cmake)
     cna_configure_wicked()
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "SOKOL")
+    message(STATUS "CNA: Using SOKOL graphics backend (sokol_gfx on ${CNA_SOKOL_API})")
+    set(BACKEND_DIR "src/CNA/Internal/Backends/Sokol")
+    set(BACKEND_TARGET "cna_backend_graphics_sokol")
+    add_compile_definitions(CNA_BACKEND_SOKOL)
+    set(CNA_BACKEND_DEFINE "CNA_BACKEND_SOKOL")
+    include(cmake/ThirdPartySokol.cmake)
+    cna_configure_sokol()
 else()
 
     message(FATAL_ERROR "CNA: Unknown graphics backend: ${CNA_GRAPHICS_BACKEND}")

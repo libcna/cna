@@ -129,6 +129,15 @@ namespace Microsoft::Xna::Framework::Graphics
             windowFlags |= SDL_WINDOW_VULKAN;
 #endif
 
+            // plan_sokol.md SOKOL-4: sokol_gfx does not create its own window or context -- the
+            // SOKOL backend calls SDL_GL_CreateContext on this window (design decision 1), which
+            // SDL rejects outright unless the window was created with SDL_WINDOW_OPENGL. The GL
+            // APIs are the only ones CNA_SOKOL_API can currently reach (see that option's own
+            // configure-time warning), so the flag is unconditional here.
+#ifdef CNA_BACKEND_SOKOL
+            windowFlags |= SDL_WINDOW_OPENGL;
+#endif
+
 #ifdef CNA_BACKEND_BGFX
             const auto rendererType = CNA::Internal::Backends::Bgfx::Detail::ResolveRendererType(
                 SDL_getenv("CNA_BGFX_RENDERER"));

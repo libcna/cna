@@ -164,6 +164,12 @@ namespace
 #elif defined(CNA_BACKEND_CANVAS)
     constexpr bool kRasterizes = true;
     constexpr const char* kBackendName = "CANVAS";
+#elif defined(CNA_BACKEND_SOKOL)
+    // plan_sokol.md SOKOL-25/38: real geometry really is rasterized into a RenderTarget2D here, and
+    // `SokolRenderTargetBackend::GetData` now round-trips real content via a throwaway GL FBO
+    // (docs/sokol-backend.md), so `kRasterizes = true` is accurate for this file's contract too.
+    constexpr bool kRasterizes = true;
+    constexpr const char* kBackendName = "SOKOL";
 #else
 #error "REMED-GFX-151: this backend has no declared render-target producer/consumer contract."
 #endif
@@ -179,6 +185,10 @@ namespace
      * runs: SIGSEGV against the pre-fix backend, 4/4 exact after.
      */
     constexpr bool kStockEffectRtSourceSupported = true;
+
+    // kStockEffectRtSourceSupported never gates GetData: it is read only where kRasterizes is
+    // already true, which is never SOKOL's case above, so its value is moot for this backend and
+    // left at the shared default rather than given a branch of its own.
 
     /**
      * @brief Whether a BACKBUFFER draw can sample a render target that was never read back.
@@ -222,6 +232,13 @@ namespace
      */
     constexpr bool kDualTextureAcceptsPositionTexture =
 #if defined(CNA_BACKEND_D3D9)
+        false;
+#elif defined(CNA_BACKEND_SOKOL)
+        // Not a vertex-layout rejection: SokolGraphicsBackend::DrawColored3D refuses ANY
+        // `params.dualTexture` draw outright (plan_sokol.md -- dual-texture 3D is not implemented
+        // yet, unlike the single-texture Textured/Lit paths SOKOL-21 landed), so C4 would throw
+        // uncaught here rather than reject cleanly. Reusing this flag to skip it is the same
+        // "documented boundary, unrelated to render-to-texture" carve-out D3D9 already uses.
         false;
 #else
         true;

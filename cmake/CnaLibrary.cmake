@@ -126,7 +126,14 @@ target_link_libraries(CNA
 # Logger.cpp.o) is fully scanned before libcna_backend_graphics_sdl_gpu.a creates the need. Only
 # the SDL_GPU CTest targets (cna_sdlgpu_test's own --start-group/--end-group wrapping) avoided
 # this; every other SDL_GPU-backend executable did not. Fixed the same way as D3D11/D3D12.
-if(CNA_GRAPHICS_BACKEND STREQUAL "D3D11" OR CNA_GRAPHICS_BACKEND STREQUAL "D3D12" OR CNA_GRAPHICS_BACKEND STREQUAL "D3D9" OR CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU")
+#
+# plan_sokol.md SOKOL-20: the SOKOL backend joins this condition for the same reason, reached from
+# a different direction -- SokolVertexBufferBackend stores the caller's VertexDeclaration by value
+# (so the 3D pipeline can be keyed on the real vertex layout), and that class's vtable lives in
+# CNA's own VertexDeclaration.cpp. Found empirically: cna_reference_dump failed with "undefined
+# reference to vtable for VertexDeclaration" while every SOKOL CTest target, which already wraps
+# its link line in --start-group/--end-group, linked fine.
+if(CNA_GRAPHICS_BACKEND STREQUAL "D3D11" OR CNA_GRAPHICS_BACKEND STREQUAL "D3D12" OR CNA_GRAPHICS_BACKEND STREQUAL "D3D9" OR CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU" OR CNA_GRAPHICS_BACKEND STREQUAL "SOKOL")
     target_link_libraries(${BACKEND_TARGET} PRIVATE CNA)
 endif()
 

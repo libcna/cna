@@ -42,6 +42,9 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Returns true if the backend compiled the shader program successfully. */
         NOXNA [[nodiscard]] bool IsEffectValid() const;
 
+        /** @brief Returns true while the native compiled-program backend is still alive. */
+        NOXNA [[nodiscard]] bool HasBackend() const { return effectBackend_ != nullptr; }
+
         /** @brief Sets a column-major 4×4 matrix uniform by name. */
         NOXNA void SetUniformMat4(const char* name, const float* matrix);
         /** @brief Sets a vec4 uniform by name (x, y, z, w). */
@@ -182,6 +185,21 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Applies the GLSL shaders to the graphics device before drawing.
          */
         void OnApply() override;
+
+        /**
+         * @brief Releases the compiled backend program before the base class marks this resource
+         * disposed (plan_sokol.md SOKOL-42).
+         *
+         * `Effect::Dispose(bool)` only reaches `GraphicsResource::Dispose(bool)`, which never
+         * touches `effectBackend_`. `GraphicsDevice::Dispose()` disposes tracked resources before
+         * tearing down the backend device/GL context, so without this override effectBackend_ is
+         * only destroyed whenever this ShaderEffect's own C++ destructor happens to run -- possibly
+         * long after that teardown -- e.g. a raw `glDeleteProgram` call after `sg_shutdown()` and
+         * SDL GL-context destruction on the Sokol backend.
+         *
+         * @param disposing True when called from Dispose(); false when called from the finalizer.
+         */
+        void Dispose(bool disposing) override;
 
     private:
         std::string vertSrc_;

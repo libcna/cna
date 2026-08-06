@@ -235,6 +235,14 @@ namespace CNA::Examples
         // CompareGoldenImage() call so far has passed, 1 if at least one has failed.
         [[nodiscard]] int getResultProperty() const { return result_; }
 
+        // Marks the overall result as failed for a check that is not a pixel comparison --
+        // e.g. "this unimplemented path must throw" (plan_sokol.md SOKOL-20). Without this a
+        // derived test could only fail the run through ExpectPixel(), which would mean either
+        // hand-rolling its own Game subclass for one non-pixel assertion or, worse, printing
+        // [FAIL] while still exiting 0. Printing the message stays the caller's job, so the
+        // wording can name whatever it actually checked.
+        void MarkFailedEXT() { result_ = 1; }
+
     protected:
         void Draw(const Microsoft::Xna::Framework::GameTime&) override
         {
