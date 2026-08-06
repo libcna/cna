@@ -2,6 +2,7 @@
 #pragma once
 
 #include "../Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 
 #include <Magnum/GL/Attribute.h>
 #include <Magnum/GL/Buffer.h>
@@ -292,4 +293,79 @@ namespace CNA::Internal::Backends::Magnum
         std::unique_ptr<Mg::GL::SampleQuery> query_;
         bool started_ = false;
     };
+
+    /**
+     * @brief NOXNA. REMED-GFX-DECL-GUARD: refuses a declaration the stock route would misread.
+     *
+     * The stock route resolves its attribute layout from `StockAttributesForStride()` -- the
+     * combined byte stride alone -- and its program's input semantics are fixed by that layout, so
+     * a custom declaration packing different semantics into one of the known stock widths would be
+     * read from the wrong bytes and rendered without any error. The custom-effect route is not
+     * guarded: it binds each declared element from the declaration itself
+     * (`AttributesForDeclaration()`), so it is faithful by construction.
+     *
+     * The check is **asymmetric** -- only what the caller actually declared is verified, never
+     * equality against the stock template -- so a declaration that omits attributes the template
+     * carries still draws. It is pure: nothing is created, queued or bound before it runs, so a
+     * rejected draw leaves the device untouched. An unlisted stride is left to the stock program
+     * selection's own refusal.
+     *
+     * Multi-stream draws are checked over the union of the per-vertex streams' declared elements:
+     * their offsets live in the combined record (each stream's `combinedByteBase` places it
+     * there), which is the same space the stock template describes. Per-instance streams carry
+     * instance records, not part of the combined per-vertex layout, and are skipped.
+     *
+     * Header-only by necessity: `cna_backend_graphics_magnum` links only
+     * `cna_backend_graphics_common` and SharpRuntime, never the CNA library.
+     *
+     * @param vb             The draw's principal vertex buffer.
+     * @param params         The draw's shared parameters, for the bound stream set.
+     * @param combinedStride The combined byte stride the stock layout is resolved from.
+     * @param route          Name of the draw route, for the diagnostic message.
+     * @throws System::NotSupportedException When the declaration cannot be represented.
+     */
+    inline void RequireFaithfulDeclarationEXT(const MagnumVertexBufferBackend& vb,
+                                              const GpuDrawParams& params,
+                                              std::size_t combinedStride, const char* route)
+    {
+        namespace fid = CNA::Internal::Graphics;
+
+        std::vector<VertexElement> declared;
+        if (params.vertexStreamCount > 0)
+        {
+            for (int i = 0; i < params.vertexStreamCount; ++i)
+            {
+                const GpuVertexStreamBinding& stream = params.vertexStreams[i];
+                if (stream.instanceFrequency > 0)
+                    continue;
+                const auto* streamBuffer =
+                    dynamic_cast<const MagnumVertexBufferBackend*>(stream.buffer);
+                if (streamBuffer == nullptr)
+                    continue;
+                const std::vector<VertexElement>& elements =
+                    streamBuffer->GetDeclarationElements();
+                declared.insert(declared.end(), elements.begin(), elements.end());
+            }
+        }
+        else
+        {
+            declared = vb.GetDeclarationElements();
+        }
+        if (declared.empty())
+            return;
+
+        const int stride = static_cast<int>(combinedStride);
+        const fid::InferredVertexLayout inferred =
+            fid::InferredLayoutForStride(stride, fid::UnlistedStrideLayout::BackendRefusesIt);
+        const std::string failure =
+            fid::DescribeUnrepresentableVertexDeclaration(declared, stride, stride, inferred);
+        if (failure.empty())
+            return;
+        throw System::NotSupportedException(
+            std::string("Magnum: this VertexDeclaration cannot be represented on the ") + route +
+            " route -- " + failure +
+            ". The stock route selects its native vertex layout from the buffer stride and does "
+            "not translate arbitrary declarations, so the draw is refused rather than rendered "
+            "from the wrong bytes.");
+    }
 }

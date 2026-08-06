@@ -22,6 +22,7 @@
 #include <cstring>
 #include <iostream>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 namespace CNA::Internal::Backends::Magnum
@@ -175,14 +176,35 @@ namespace CNA::Internal::Backends::Magnum
 
     bool MagnumGraphicsBackend::SupportsCapability(CNA::GraphicsCapability capability) const
     {
+        // Exhaustive over every GraphicsCapability member, with no default arm, so a member added
+        // after this switch is a -Wswitch diagnostic rather than a confident wrong answer in
+        // either direction. Each answer names what backs it.
         switch (capability)
         {
+            case CNA::GraphicsCapability::ThreeD:
+                // Real vertex/index buffers, 3D draw routes and depth/stencil state throughout.
+                return true;
+            case CNA::GraphicsCapability::DepthStencilBuffer:
+                // The context is created with a depth and stencil buffer, and both are cleared,
+                // tested and masked through GL::Renderer.
+                return true;
             case CNA::GraphicsCapability::MultipleRenderTargets:
                 return maxMrtTargets_ > 1;
             case CNA::GraphicsCapability::AnisotropicFiltering:
                 return Mg::GL::Sampler::maxMaxAnisotropy() > 1.0f;
             case CNA::GraphicsCapability::MultiSampleAntiAliasing:
                 return Mg::GL::Renderbuffer::maxSamples() > 1;
+            case CNA::GraphicsCapability::OcclusionQuery:
+                // Real GL_SAMPLES_PASSED queries through Magnum's SampleQuery.
+                return true;
+            case CNA::GraphicsCapability::CustomEffects:
+                // ShaderEffect GLSL is compiled and linked at runtime with uniform assignment by
+                // name and real driver diagnostics.
+                return true;
+            case CNA::GraphicsCapability::Texture3D:
+                // A real volume resource: Texture3D::SetData()/GetData() persist and retrieve
+                // voxels through Magnum's Texture3D wrapper.
+                return true;
             case CNA::GraphicsCapability::MultiStreamVertexInput:
                 // Each stream is bound at its own byte offset and stride through its own
                 // DynamicAttribute, and a per-instance stream is just one whose divisor is
@@ -192,9 +214,12 @@ namespace CNA::Internal::Backends::Magnum
                 // Desktop OpenGL has a real glPolygonMode, unlike the ES-profile backends that
                 // have to re-expand triangles into lines.
                 return true;
-            default:
+            case CNA::GraphicsCapability::Instancing:
+                // Real instanced draws: per-instance streams bind through addVertexBufferInstanced
+                // with their own divisors and the draw carries a real instance count.
                 return true;
         }
+        return false;
     }
 
     // ---- Presentation ----
@@ -1147,11 +1172,40 @@ namespace CNA::Internal::Backends::Magnum
         if (stride == 0)
             return;
 
+        const bool custom = params.customEffectBackend != nullptr;
+
+        // REMED-GFX-DECL-GUARD: the stock route resolves its attribute layout from the combined
+        // stride alone, so a declaration those stride-derived offsets would misread must be
+        // refused here, before any program is compiled, any mesh is built and anything is bound.
+        // The custom-effect route binds each element from the declaration itself and is faithful
+        // by construction, so it is not guarded.
+        if (!custom)
+        {
+            const char* route = ib != nullptr
+                ? (instanceCount > 1 ? "instanced-indexed" : "ordinary-indexed")
+                : "ordinary";
+            RequireFaithfulDeclarationEXT(*vertexBuffer, params, stride, route);
+        }
+
         MagnumProgram* program = SelectProgram(stride, params);
         if (program == nullptr)
-            return;
-
-        const bool custom = params.customEffectBackend != nullptr;
+        {
+            // An invalid custom effect already surfaced its diagnostics through
+            // IEffectBackend::GetCompileError(); skipping its draws is the established contract.
+            if (custom)
+                return;
+            // A stock draw with no program for its layout must refuse rather than silently render
+            // nothing -- the caller gets a catchable, accurate answer and the device stays usable.
+            std::string flags;
+            if (params.dualTexture) flags += " dual-texture";
+            if (params.envMapping)  flags += " env-map";
+            if (params.skinned)     flags += " skinned";
+            if (params.pbr)         flags += " pbr";
+            throw System::NotSupportedException(
+                "Magnum: no stock program exists for a " + std::to_string(stride) +
+                "-byte vertex record" + (flags.empty() ? std::string() : " with" + flags) +
+                " -- the draw is refused rather than silently dropped.");
+        }
 
         // A stream's stride comes from its VertexDeclaration, which is empty -- stride 0 -- for the
         // raw-upload route `VertexBuffer(device, count)` + `SetDataRaw(data, count, stride)` that
