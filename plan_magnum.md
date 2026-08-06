@@ -29,8 +29,6 @@
 >   means either calling into flextGL directly -- bypassing the wrapper layer this backend exists to
 >   go through -- or contributing the state upstream. Deliberately left open rather than decided
 >   unilaterally; a non-default coverage mask is rare in XNA content.
-> - **Multi-target MSAA (`MAGNUM-56`)** — an ordered multi-target set attaches resolved colour
->   textures, so a multisampled target contributes its single-sample image while it is in a set.
 > - **Context-loss channel (`MAGNUM-58`)** — `SetContextRecoveryEnabled` /
 >   `DebugSimulateContextLoss` / `DebugRestoreContext` keep `IGraphicsBackend`'s defaults.
 > - **Cross-backend pixel-parity run (`MAGNUM-59`)** — the same scene measured on
@@ -143,11 +141,12 @@
 | MAGNUM-53 | `PbrEffect` / `SkinnedPbrEffect` shader variants (strides 48 and 68), pixel-verified | ✅ |
 | MAGNUM-54 | Real `SurfaceFormat` storage beyond `Color` | ⬜ |
 | MAGNUM-55 | `BlendState.MultiSampleMask` -- blocked on Magnum wrapping no sample-mask state; see the note above | ⬜ |
-| MAGNUM-56 | MSAA for an ordered multi-target set | ⬜ |
+| MAGNUM-56 | MSAA for an ordered multi-target set, pixel-verified | ✅ |
 | MAGNUM-57 | Cache `GL::Mesh` per binding configuration instead of building one per draw, pixel-verified | ✅ |
 | MAGNUM-58 | Context-loss simulation/recovery channel | ⬜ |
 | MAGNUM-59 | Cross-backend pixel-parity run (EasyGL/Vulkan/Magnum, same scene) | ⬜ |
 | MAGNUM-60 | `PreferPerPixelLighting=false` per-vertex-lit shader family | ⬜ |
+| MAGNUM-61 | Compile each shader stage at the GLSL version its own source declares | ✅ |
 
 ## Shared-test gates this backend changed
 

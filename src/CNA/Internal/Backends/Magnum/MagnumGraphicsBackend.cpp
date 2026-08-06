@@ -426,13 +426,25 @@ namespace CNA::Internal::Backends::Magnum
             if (target == nullptr)
                 continue;
 
-            // Multi-target sets attach the resolved colour textures, so a target whose own
-            // framebuffer is multisampled contributes its single-sample image here. Mixed sample
-            // counts across attachments are not a valid GL framebuffer, and CNA's binding layer
-            // does not require every slot of a set to share one.
-            mrtFramebuffer_->attachTexture(Mg::GL::Framebuffer::ColorAttachment{
-                                               static_cast<Mg::UnsignedInt>(slot)},
-                                           target->GetColorTexture(), 0);
+            // A multisampled slot attaches the very storage its own framebuffer renders into, not
+            // its resolved texture -- otherwise a target would silently drop to single-sample for
+            // as long as it was part of a set. GraphicsDevice already rejects a set whose applied
+            // sample counts differ, so the attachments cannot end up mismatched here.
+            //
+            // Nothing extra is needed to resolve: the blit a target runs on unbind reads that same
+            // renderbuffer regardless of which framebuffer rendered into it.
+            if (Mg::GL::Renderbuffer* multisampleColor = target->GetMultisampleColorRenderbuffer())
+            {
+                mrtFramebuffer_->attachRenderbuffer(Mg::GL::Framebuffer::ColorAttachment{
+                                                        static_cast<Mg::UnsignedInt>(slot)},
+                                                    *multisampleColor);
+            }
+            else
+            {
+                mrtFramebuffer_->attachTexture(Mg::GL::Framebuffer::ColorAttachment{
+                                                   static_cast<Mg::UnsignedInt>(slot)},
+                                               target->GetColorTexture(), 0);
+            }
             bound_->mrt[static_cast<std::size_t>(slot)] = target;
             drawBuffers.emplace_back(static_cast<Mg::UnsignedInt>(slot),
                                      Mg::GL::Framebuffer::ColorAttachment{

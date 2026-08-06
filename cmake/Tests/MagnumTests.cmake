@@ -67,4 +67,13 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_BACKEND STREQUAL "MAGNUM"
         COMMAND cna_test_magnum_meshcache
         TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
         LABELS "GraphicsSmoke;Magnum")
+
+    # plan_magnum.md MAGNUM-56: a multisampled target must keep its multisample storage while it is
+    # part of a multi-target set, which only a one-sample-per-pixel write can tell apart from a
+    # resolved image.
+    cna_magnum_test(cna_test_magnum_mrt_msaa examples/magnum_mrt_msaa_test.cpp)
+    cna_register_backend_test(NAME Magnum_MrtMsaa
+        COMMAND cna_test_magnum_mrt_msaa
+        TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
+        LABELS "GraphicsSmoke;Magnum")
 endif()

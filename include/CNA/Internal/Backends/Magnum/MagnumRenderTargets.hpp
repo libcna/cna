@@ -126,6 +126,17 @@ namespace CNA::Internal::Backends::Magnum
         [[nodiscard]] int GetLevelCount() const { return levelCount_; }
         /** @brief Depth renderbuffer, or nullptr when no depth storage was allocated. */
         [[nodiscard]] Mg::GL::Renderbuffer* GetDepthRenderbuffer() const { return depth_.get(); }
+        /**
+         * @brief Multisample colour storage, or nullptr when this target is single-sampled.
+         *
+         * Exposed so a multi-target set can attach the same storage this target's own framebuffer
+         * uses. Its resolve is unaffected by which framebuffer rendered into it -- the blit reads
+         * this renderbuffer either way -- so a set needs no resolve path of its own.
+         */
+        [[nodiscard]] Mg::GL::Renderbuffer* GetMultisampleColorRenderbuffer() const
+        {
+            return multisampleColor_.get();
+        }
         /** @brief Raw `DepthFormat` ordinal this target was created with. */
         [[nodiscard]] int GetDepthFormat() const { return depthFormat_; }
         /** @brief Resolves multisample colour into the public texture without unbinding. */

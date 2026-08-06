@@ -66,12 +66,15 @@ sudo apt-get install -y libegl1-mesa-dev                        # additionally, 
   `Texture3D`, all RGBA8.
 - **Render targets** — `RenderTarget2D` and `RenderTargetCube`, with optional depth/stencil,
   optional mip chains regenerated on unbind, MSAA colour storage resolved on unbind, and readback
-  normalized to top-row-first. Up to four simultaneous targets (MRT).
+  normalized to top-row-first. Up to four simultaneous targets (MRT), each keeping its own
+  multisample storage while it is part of a set rather than contributing an already-resolved image.
 - **SpriteBatch** — batched quads with rotation, origin, flip, tint and transform; per-batch sampler
   filter/addressing; a custom `ShaderEffect` binds its own program rather than a recompiled copy.
 - **Effects** — `ShaderEffect` GLSL compiled and linked at runtime, with uniform assignment by name
-  and texture/cube/volume binding. Compile and link diagnostics are captured from Magnum's own
-  output streams and returned through `IEffectBackend::GetCompileError()`.
+  and texture/cube/volume binding. Each stage is compiled at the GLSL version its own source
+  declares, so an effect reaching for a later feature than 3.30 gets it. Compile and link
+  diagnostics are captured from Magnum's own output streams and returned through
+  `IEffectBackend::GetCompileError()`.
 - **Stock 3D shaders** — generated programs selected from the draw's combined stride plus its stock
   effect flags. The four built-in layouts (strides 16/20/24/32) cover diffuse colour, vertex colour,
   texturing, three directional lights with Blinn-Phong specular, ambient and emissive terms, alpha
@@ -106,8 +109,6 @@ sudo apt-get install -y libegl1-mesa-dev                        # additionally, 
 - **`PreferPerPixelLighting`** — always rendered per-pixel. Like every backend except D3D9, this
   one has no per-vertex-lit shader family, so XNA's own `false` default is a tracked divergence
   rather than an implemented mode.
-- **Multi-target MSAA** — an ordered multi-target set attaches the targets' resolved colour
-  textures, so a multisampled target contributes its single-sample image while it is part of a set.
 - **Context loss** — `SetContextRecoveryEnabled`/`DebugSimulateContextLoss` keep
   `IGraphicsBackend`'s defaults; desktop GL contexts are not lost the way an ES/WebGL one can be.
 
@@ -137,6 +138,10 @@ sudo apt-get install -y libegl1-mesa-dev                        # additionally, 
 - `examples/magnum_meshcache_test.cpp` (`ctest -R Magnum_MeshCache`) — four draws over one binding,
   each selecting a different range by index offset or base vertex, so a cached vertex array that
   kept either term is caught.
+- `examples/magnum_mrt_msaa_test.cpp` (`ctest -R Magnum_MrtMsaa`) — a `#version 400 core`
+  `ShaderEffect` writing `gl_SampleMask[0] = 1` into two slots at once. One sample per pixel is the
+  only thing that separates a genuinely multisampled attachment from a resolved image, and the same
+  draw into a single-sampled set is the control that makes the reading a measurement.
 
 Both suites were run against Mesa's `llvmpipe` software rasterizer under `Xvfb`, so they need no GPU
 — point `CNA_TEST_DISPLAY` at the X server the ctest registration should use.
