@@ -21,6 +21,18 @@ namespace CNA
         bool condition
     )
     {
+        // SDL defaults most non-application categories (including RENDER) to a stricter
+        // threshold than its application category. Synchronize SDL's category filters lazily
+        // with CNA's own documented default before the first CNA log message, otherwise a
+        // Logger::Warn(..., LogCategory::RENDER) can be discarded before reaching SDL's output
+        // callback even though Logger::IsEnabled() says it is enabled.
+        static const bool sdlPrioritiesInitialized = [] {
+            SDL_SetLogPriorities(
+                static_cast<SDL_LogPriority>(ToSDLPriority(minimumLevel_)));
+            return true;
+        }();
+        (void)sdlPrioritiesInitialized;
+
         if (!condition)
         {
             return;

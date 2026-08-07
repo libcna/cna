@@ -261,15 +261,14 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameCapabilityReportIsThisBackendsOwn)
     const bool reported = gd.SupportsCapability(GraphicsCapability::WireFrame);
 
 #if defined(CNA_BACKEND_EASYGL)
-    // EasyGL answers false, and it is the ONE backend whose answer is known to be wrong: the pixel
-    // oracle below measures a correct wireframe here. Asserting the current value keeps the
-    // baseline truthful and makes this arm fail -- deliberately -- the day REMED-GFX-219 corrects
-    // the report. This is the exact inverse of WEBGPU-115 and must not be bundled with it: EasyGL
-    // UNDER-reports a capability it has (a caller that gates on the query loses a working feature),
-    // WebGPU used to OVER-report one it does not (a caller got silently wrong geometry).
-    EXPECT_FALSE(reported)
-        << "EasyGL now reports WireFrame support. If REMED-GFX-219 landed, move this arm to the "
-           "true side and delete the contradiction note above";
+    // REMED-GFX-219 landed with the GL-family lane: the EasyGL implementation's GL_LINES
+    // re-expansion renders a correct wireframe (the pixel oracle below measures interior 0/1089
+    // with all three edges present), so the report now states the capability the backend
+    // genuinely has. True for every GL profile (OPENGLES/OPENGL33/WEBGL1/WEBGL2) alike -- the
+    // emulation draws line primitives and depends on no polygon-mode API.
+    EXPECT_TRUE(reported)
+        << "the EasyGL-family backends under-report WireFrame again -- REMED-GFX-219's corrected "
+           "report is gone while the GL_LINES emulation still renders a measured-correct wireframe";
 #elif defined(CNA_BACKEND_WEBGPU)
     // WEBGPU-115: asserted, not inherited. wgpu-native has no polygon mode at all, so
     // WebGPUGraphicsBackend::SupportsCapability answers false and the draw-time guard refuses.

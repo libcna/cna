@@ -45,6 +45,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <exception>
+#include <iostream>
 #include <limits>
 #include <stdexcept>
 #include <string>
@@ -2101,6 +2102,18 @@ namespace Microsoft::Xna::Framework::Graphics
         return GetBackend().GetMaxTextureDimension();
     }
 
+    void GraphicsDevice::SetUnsupported3DGraphicsCallBehavior(
+        CNA::Unsupported3DGraphicsCallBehavior behavior)
+    {
+        GetBackend().SetUnsupported3DGraphicsCallBehavior(behavior);
+    }
+
+    CNA::Unsupported3DGraphicsCallBehavior
+    GraphicsDevice::GetUnsupported3DGraphicsCallBehavior() const
+    {
+        return GetBackend().GetUnsupported3DGraphicsCallBehavior();
+    }
+
     void GraphicsDevice::SetCurrentEffect(Effect* effect)
     {
         currentEffect_ = effect;
@@ -2284,6 +2297,12 @@ namespace Microsoft::Xna::Framework::Graphics
         if (backend_ != nullptr)
         {
             backend_->SetVirtualResolution(virtualWidth_, virtualHeight_);
+            if (!backendStartupNameLogged_)
+            {
+                std::cout << "CNA: graphics backend: "
+                          << CNA::getCurrentGraphicsBackendName() << std::endl;
+                backendStartupNameLogged_ = true;
+            }
         }
     }
 

@@ -48,7 +48,10 @@ namespace
         switch (type)
         {
             case GraphicsBackendType::SdlRenderer: return "SDL_RENDERER";
-            case GraphicsBackendType::EasyGL:      return "EASYGL";
+            case GraphicsBackendType::OpenGLES:    return "OPENGLES";
+            case GraphicsBackendType::OpenGL33:    return "OPENGL33";
+            case GraphicsBackendType::WebGL1:      return "WEBGL1";
+            case GraphicsBackendType::WebGL2:      return "WEBGL2";
             case GraphicsBackendType::Bgfx:        return "BGFX";
             case GraphicsBackendType::Vulkan:      return "VULKAN";
             case GraphicsBackendType::WebGPU:      return "WEBGPU";

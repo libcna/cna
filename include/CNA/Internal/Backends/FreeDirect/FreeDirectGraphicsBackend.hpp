@@ -173,10 +173,8 @@ namespace CNA::Internal::Backends::FreeDirect
                              const BlendWriteState& writeState) override;
 
         // ---- 3D pipeline: NOT supported by FreeDirect (DirectDraw is 2D-only). ----
-        // @note Status: STUB. Every entry point throws std::runtime_error (CreateOcclusionQuery
-        // deliberately doesn't override the shared nullptr-returning default at all -- see
-        // DX3-66's own comment below). SupportsCapability() lets callers check ahead of time
-        // instead of relying on the throw -- see CNA::GraphicsCapability.
+        // Calls preserve their established throw/null behavior by default. WarnAndStub converts
+        // them to warn-once no-ops backed by safe null-object resources.
         [[nodiscard]] bool SupportsDepthStencil() const override { return false; }
         [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability /*capability*/) const override
         {
@@ -195,12 +193,14 @@ namespace CNA::Internal::Backends::FreeDirect
         void SetDepthWriteEnabled(bool enabled) override;
         std::unique_ptr<IVertexBufferBackend> CreateVertexBuffer(int vertex_capacity) override;
         std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer16(int index_capacity) override;
-        // DX3-66: no override -- IGraphicsBackend's own default (return nullptr) is already
-        // correct and is what OcclusionQuery's own constructor/Begin/End/getters are designed to
-        // degrade gracefully against (see OcclusionQuery.cpp), same as CreateTexture3D/
-        // CreateTextureCube/CreateRenderTargetCube/CreateEffectBackend below not being overridden
-        // either. A prior throwing override here (Phase X1/X2) was inconsistent with that
-        // established "optional capability -> nullptr" contract -- corrected in Phase X7.
+        std::unique_ptr<IOcclusionQueryBackend> CreateOcclusionQuery() override;
+        std::unique_ptr<ITexture3DBackend> CreateTexture3D(
+            int w, int h, int depth, bool mipMap, int surfaceFormat) override;
+        std::unique_ptr<ITextureCubeBackend> CreateTextureCube(
+            int size, bool mipMap, int surfaceFormat) override;
+        std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(
+            int size, int depthFormat, bool preserveContents = false, bool mipMap = false,
+            int multiSampleCount = 0) override;
         void DrawColoredPrimitives(const IVertexBufferBackend& vb,
                                    const Matrix& world, const Matrix& view, const Matrix& projection,
                                    PrimitiveType primitive, int primitiveCount) override;

@@ -83,7 +83,7 @@ namespace CNA::Internal::Backends::Magnum
         /** @brief Always null: this backend owns no SDL texture. */
         [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
         /** @brief Binds this target's resolved colour texture to texture unit 0. */
-        void BindGL() const override;
+        void BindGL(int /*unit*/) const override;
         /** @brief Makes this target the destination of subsequent draws. */
         void BindAsRenderTarget() override;
         /** @brief Resolves multisample storage and regenerates mip levels, if any. */
@@ -201,7 +201,7 @@ namespace CNA::Internal::Backends::Magnum
             return depthFormatWasRequested && depthFormat_ != 0;
         }
         /** @brief Binds the shared cube texture to texture unit 0. */
-        void BindGL() const override;
+        void BindGL(int /*unit*/) const override;
         /**
          * @brief Uploads CPU pixels into a rendered cube face's mip level.
          *

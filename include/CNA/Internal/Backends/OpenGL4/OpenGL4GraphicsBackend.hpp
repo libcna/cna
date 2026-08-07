@@ -75,7 +75,7 @@ namespace CNA::Internal::Backends::OpenGL4
         /// EasyGLTextureBackend::UpdatePixelsLevel's identical "caller supplies every level
         /// explicitly" contract; this backend does not auto-generate mips for plain textures).
         void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) override;
-        void BindGL() const override;
+        void BindGL(int /*unit*/) const override;
 
         NOXNA [[nodiscard]] unsigned int GLHandle() const { return texture_; }
 
@@ -115,7 +115,7 @@ namespace CNA::Internal::Backends::OpenGL4
         [[nodiscard]] int GetWidth() const override { return width_; }
         [[nodiscard]] int GetHeight() const override { return height_; }
         [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
-        void BindGL() const override;
+        void BindGL(int /*unit*/) const override;
         [[nodiscard]] bool GetData(int level, int x, int y, int w, int h, void* data, int dataLength) const override;
 
         void BindAsRenderTarget() override;
@@ -159,7 +159,7 @@ namespace CNA::Internal::Backends::OpenGL4
                                    const void* data, int dataLength) override;
         [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
                                    void* data, int dataLength) const override;
-        void BindGL() const override;
+        void BindGL(int /*unit*/) const override;
 
         [[nodiscard]] int GetSize() const override { return size_; }
         void BindAsRenderTargetFace(int face) override;
@@ -203,7 +203,7 @@ namespace CNA::Internal::Backends::OpenGL4
                                    const void* data, int dataLength) override;
         [[nodiscard]] bool GetData(int level, int x, int y, int z, int w, int h, int depth,
                                    void* data, int dataLength) const override;
-        void BindGL() const override;
+        void BindGL(int /*unit*/) const override;
 
     private:
         unsigned int texture_ = 0;
@@ -234,7 +234,7 @@ namespace CNA::Internal::Backends::OpenGL4
                                    const void* data, int dataLength) override;
         [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
                                    void* data, int dataLength) const override;
-        void BindGL() const override;
+        void BindGL(int /*unit*/) const override;
 
     private:
         unsigned int texture_ = 0;

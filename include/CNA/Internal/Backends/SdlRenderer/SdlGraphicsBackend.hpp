@@ -38,7 +38,7 @@ namespace CNA::Internal::Backends::SdlRenderer
         int GetHeight() const override { return height; }
         SDL_Texture* GetNativeTexture() const override { return texture; }
         void UpdatePixels(const uint8_t* rgba, int stride) override;
-        void BindGL() const override {}
+        void BindGL(int /*unit*/) const override {}
 
         /**
          * @brief Reads this target's rendered pixels back as tightly packed RGBA8 rows.
@@ -171,9 +171,10 @@ namespace CNA::Internal::Backends::SdlRenderer
 
         SDL_BlendMode blendMode_ = SDL_BLENDMODE_BLEND;
 
-        // 3D pipeline: NOT supported by the SDL_Renderer backend. Every entry point below
-        // unconditionally throws std::runtime_error. SupportsCapability() lets callers check
-        // ahead of time instead of relying on the throw -- see CNA::GraphicsCapability.
+        // 3D pipeline: NOT supported by the SDL_Renderer backend. Calls preserve their
+        // established throw/null behavior by default, or warn once and return a safe
+        // no-op/null object when the caller explicitly selects
+        // Unsupported3DGraphicsCallBehavior::WarnAndStub.
         [[nodiscard]] bool SupportsDepthStencil() const override { return false; }
         [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability /*capability*/) const override
         {
@@ -192,10 +193,17 @@ namespace CNA::Internal::Backends::SdlRenderer
         void SetDepthWriteEnabled(bool enabled) override;
         std::unique_ptr<IVertexBufferBackend> CreateVertexBuffer(int vertex_capacity) override;
         std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer16(int index_capacity) override;
+        std::unique_ptr<ITexture3DBackend> CreateTexture3D(
+            int w, int h, int depth, bool mipMap, int surfaceFormat) override;
+        std::unique_ptr<ITextureCubeBackend> CreateTextureCube(
+            int size, bool mipMap, int surfaceFormat) override;
+        std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(
+            int size, int depthFormat, bool preserveContents = false, bool mipMap = false,
+            int multiSampleCount = 0) override;
         // Task 727: the shared IGraphicsBackend::CreateOcclusionQuery default silently returns
         // nullptr (no throw) -- OcclusionQuery::Begin/End then silently no-op instead of ever
-        // running a real occlusion query, unlike every other 3D-only entry point on this backend
-        // (which all throw loudly and immediately). Throw here too for consistency.
+        // running a real occlusion query. This override throws in the default policy and returns
+        // a completed zero-pixel null query in WarnAndStub.
         std::unique_ptr<IOcclusionQueryBackend> CreateOcclusionQuery() override;
         void DrawColoredPrimitives(const IVertexBufferBackend& vb,
                                    const Matrix& world, const Matrix& view, const Matrix& projection,

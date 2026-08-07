@@ -12,9 +12,10 @@ namespace CNA::Internal::Backends::Ascii
      * @brief SDL-windowed retro text/glyph-grid graphics backend ("ASCII").
      *
      * Not a real terminal/TTY backend -- see plan_ascii.md. Architecturally a thin decorator
-     * around SDL_RENDERER's own SdlGraphicsBackend (design decision 2): every IGraphicsBackend
-     * method not related to presentation forwards straight to a wrapped, fully real
-     * SdlRenderer::SdlGraphicsBackend instance, which does all the actual compositing.
+     * around SDL_RENDERER's own SdlGraphicsBackend (design decision 2): supported rendering
+     * methods forward to a wrapped, fully real SdlRenderer::SdlGraphicsBackend instance, which
+     * does all the actual compositing. Permanently unsupported 3D calls remain on the wrapper so
+     * its device-local Unsupported3DGraphicsCallBehavior is honored.
      *
      * Phase G3: the game never draws directly to the real backbuffer. A private offscreen
      * render target (gameTarget_), sized to the game's own logical/virtual resolution, is bound
@@ -122,9 +123,10 @@ namespace CNA::Internal::Backends::Ascii
             return false;
         }
 
-        // 3D pipeline: NOT supported, same as the wrapped SDL_RENDERER backend. Forwards to
-        // SdlGraphicsBackend's own ThrowNo3D-driven implementations rather than re-declaring them
-        // (plan_ascii.md design decision 10 / Phase G7).
+        // 3D pipeline: NOT supported, same as the wrapped SDL_RENDERER backend. Calls throw by
+        // default or become warn-once no-ops with safe null-object resources under
+        // Unsupported3DGraphicsCallBehavior::WarnAndStub. Forwards to SdlGraphicsBackend's own
+        // implementations rather than re-declaring them (plan_ascii.md design decision 10 / G7).
         void ClearColorAndDepth(float r, float g, float b, float a, float depth) override;
         void ClearDepth(float depth) override;
         void ClearStencil(int stencil) override;
@@ -137,6 +139,13 @@ namespace CNA::Internal::Backends::Ascii
         std::unique_ptr<IVertexBufferBackend> CreateVertexBuffer(int vertex_capacity) override;
         std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer16(int index_capacity) override;
         std::unique_ptr<IOcclusionQueryBackend> CreateOcclusionQuery() override;
+        std::unique_ptr<ITexture3DBackend> CreateTexture3D(
+            int w, int h, int depth, bool mipMap, int surfaceFormat) override;
+        std::unique_ptr<ITextureCubeBackend> CreateTextureCube(
+            int size, bool mipMap, int surfaceFormat) override;
+        std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(
+            int size, int depthFormat, bool preserveContents = false, bool mipMap = false,
+            int multiSampleCount = 0) override;
         void DrawColoredPrimitives(const IVertexBufferBackend& vb,
                                    const Matrix& world, const Matrix& view, const Matrix& projection,
                                    PrimitiveType primitive, int primitiveCount) override;

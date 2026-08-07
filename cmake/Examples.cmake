@@ -1,7 +1,7 @@
 # --- Examples ---
 # The 3D house demo exercises the EasyGL 3D pipeline. Other backends throw
-# "3D not supported", so the target is only enabled with the EASYGL backend.
-# Emscripten uses WebGL 2 (= OpenGL ES 3.0), which the EasyGL backend targets.
+# "3D not supported", so the target is only enabled with a GL-family public backend
+# (OPENGLES/OPENGL33/WEBGL1/WEBGL2, all implemented by EasyGL -- see plan_glbackends.md).
 option(CNA_BUILD_EXAMPLES "Build CNA example applications (house3d demo, demo_2d, ...)" ON)
 if(CNA_BUILD_EXAMPLES)
     # ---- 2D sprite demo (works with all backends) ----------------------------
@@ -261,7 +261,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_NOXNA)
 endif()
 
 # ---- DepthEffect manual verification demo (renders + screenshots each colour-depth mode) -----
-if(CNA_BUILD_EXAMPLES AND CNA_NOXNA AND CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" AND NOT EMSCRIPTEN AND NOT ANDROID)
+if(CNA_BUILD_EXAMPLES AND CNA_NOXNA AND (CNA_GRAPHICS_BACKEND STREQUAL "OPENGLES" OR CNA_GRAPHICS_BACKEND STREQUAL "OPENGL33") AND NOT EMSCRIPTEN AND NOT ANDROID)
     add_executable(cna_depth_effect_demo examples/depth_effect_demo_test.cpp)
     target_include_directories(cna_depth_effect_demo PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/examples)
     target_compile_definitions(cna_depth_effect_demo PRIVATE
@@ -282,7 +282,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_NOXNA AND CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" A
 endif()
 
 # ---- CRTEffect manual verification demo (renders + screenshots each CRT parameter set) --------
-if(CNA_BUILD_EXAMPLES AND CNA_NOXNA AND CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" AND NOT EMSCRIPTEN AND NOT ANDROID)
+if(CNA_BUILD_EXAMPLES AND CNA_NOXNA AND (CNA_GRAPHICS_BACKEND STREQUAL "OPENGLES" OR CNA_GRAPHICS_BACKEND STREQUAL "OPENGL33") AND NOT EMSCRIPTEN AND NOT ANDROID)
     add_executable(cna_crt_effect_demo examples/crt_effect_demo_test.cpp)
     target_include_directories(cna_crt_effect_demo PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/examples)
     target_compile_definitions(cna_crt_effect_demo PRIVATE
@@ -316,7 +316,9 @@ if(CNA_BUILD_EXAMPLES AND NOT EMSCRIPTEN AND NOT ANDROID)
     endif()
 endif()
 
-if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHICS_BACKEND STREQUAL "VULKAN"))
+if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "OPENGLES" OR CNA_GRAPHICS_BACKEND STREQUAL "OPENGL33"
+        OR CNA_GRAPHICS_BACKEND STREQUAL "WEBGL1" OR CNA_GRAPHICS_BACKEND STREQUAL "WEBGL2"
+        OR CNA_GRAPHICS_BACKEND STREQUAL "VULKAN"))
     # ---- 3D house demo (EasyGL and Vulkan) -----------------------------------
     add_executable(cna_house3d_demo examples/house3d_demo.cpp)
 
@@ -328,13 +330,26 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         # wasm-ld resolves circular static-lib references without linker groups.
         target_link_libraries(cna_house3d_demo PRIVATE
             CNA ${BACKEND_TARGET} SDL3::SDL3-static SHARP_RUNTIME)
+        # plan_glbackends.md GLB-9 (revisited): MIN_WEBGL_VERSION/MAX_WEBGL_VERSION must match
+        # whichever GL profile this target is actually compiled for -- pre-GLB-9 this was
+        # hardcoded to WebGL 2 unconditionally, which would have forced a WebGL 2 context even
+        # under -DCNA_GRAPHICS_BACKEND=WEBGL1 (contradicting EasyGLGraphicsBackend's own
+        # SDL_GL_CONTEXT_MAJOR_VERSION=2 request for that profile, GLB-8) -- found while verifying
+        # GLB-36's real emcc WEBGL1 build.
+        if(CNA_GRAPHICS_BACKEND STREQUAL "WEBGL1")
+            set(_cna_house3d_min_webgl_version 1)
+            set(_cna_house3d_max_webgl_version 1)
+        else()
+            set(_cna_house3d_min_webgl_version 2)
+            set(_cna_house3d_max_webgl_version 2)
+        endif()
         target_link_options(cna_house3d_demo PRIVATE
             -sALLOW_MEMORY_GROWTH=1
             -sSTACK_SIZE=1048576
             -sINITIAL_MEMORY=67108864       # 64 MB — enough for a procedural scene
             -sFORCE_FILESYSTEM=1
-            "-sMIN_WEBGL_VERSION=2"         # WebGL 2 = OpenGL ES 3.0
-            "-sMAX_WEBGL_VERSION=2"
+            "-sMIN_WEBGL_VERSION=${_cna_house3d_min_webgl_version}"
+            "-sMAX_WEBGL_VERSION=${_cna_house3d_max_webgl_version}"
         )
     else()
         # ---- Native desktop --------------------------------------------------

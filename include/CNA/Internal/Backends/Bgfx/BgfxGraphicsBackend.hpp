@@ -366,7 +366,7 @@ namespace CNA::Internal::Backends::Bgfx
         int GetHeight() const override { return height; }
         SDL_Texture* GetNativeTexture() const override { return nullptr; }
         void UpdatePixels(const uint8_t* rgba, int stride) override {}
-        void BindGL() const override {}
+        void BindGL(int /*unit*/) const override {}
         int GetMultiSampleCount() const override { return multiSampleCount; }
         bgfx::TextureHandle GetBgfxTextureHandle() const override { return colorTex; }
         uint64_t GetBgfxCreationFlagsEXT() const override { return creationFlags_; }

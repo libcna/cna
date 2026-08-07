@@ -939,7 +939,7 @@ namespace CNA::Internal::Backends::OpenGL2
             int GetWidth() const override { return w; }
             int GetHeight() const override { return h; }
             SDL_Texture* GetNativeTexture() const override { return nullptr; }
-            void BindGL() const override { glBindTexture(GL_TEXTURE_2D, id); }
+            void BindGL(int /*unit*/) const override { glBindTexture(GL_TEXTURE_2D, id); }
 
             void ShareCpuPixels(std::shared_ptr<std::vector<uint8_t>> pixels) override
             {
@@ -1136,7 +1136,7 @@ namespace CNA::Internal::Backends::OpenGL2
             int GetWidth() const override { return w; }
             int GetHeight() const override { return h; }
             SDL_Texture* GetNativeTexture() const override { return nullptr; }
-            void BindGL() const override { glBindTexture(GL_TEXTURE_2D, colorTex); }
+            void BindGL(int /*unit*/) const override { glBindTexture(GL_TEXTURE_2D, colorTex); }
             unsigned int GetColorGLHandle() const override { return colorTex; }
             int GetMultiSampleCount() const override { return multiSampleCount; }
 
@@ -1265,7 +1265,7 @@ namespace CNA::Internal::Backends::OpenGL2
 
             ~TextureCubeBackend() override { if (id) glDeleteTextures(1, &id); }
 
-            void BindGL() const override { glBindTexture(GL_TEXTURE_CUBE_MAP, id); }
+            void BindGL(int /*unit*/) const override { glBindTexture(GL_TEXTURE_CUBE_MAP, id); }
 
             bool SetData(int face, int level, int x, int y, int w, int h, const void* data, int /*dataLength*/) override
             {
@@ -1367,7 +1367,7 @@ namespace CNA::Internal::Backends::OpenGL2
             void recreate_gl_resource() override { CreateResources(); }
 
             int GetSize() const override { return size; }
-            void BindGL() const override { glBindTexture(GL_TEXTURE_CUBE_MAP, colorTex); }
+            void BindGL(int /*unit*/) const override { glBindTexture(GL_TEXTURE_CUBE_MAP, colorTex); }
             unsigned int GetGLHandle() const override { return colorTex; }
 
             void BindAsRenderTargetFace(int face) override
@@ -1446,7 +1446,7 @@ namespace CNA::Internal::Backends::OpenGL2
 
             ~Texture3DBackend() override { if (id) glDeleteTextures(1, &id); }
 
-            void BindGL() const override { glBindTexture(GL_TEXTURE_3D, id); }
+            void BindGL(int /*unit*/) const override { glBindTexture(GL_TEXTURE_3D, id); }
 
             bool SetData(int level, int x, int y, int z, int sw, int sh, int sd, const void* data, int /*dataLength*/) override
             {

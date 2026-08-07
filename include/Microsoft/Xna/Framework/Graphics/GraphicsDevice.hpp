@@ -37,6 +37,7 @@
 #include "CNA/CNAHelper.hpp"
 #include "CNA/GraphicsBackendType.hpp"
 #include "CNA/GraphicsCapability.hpp"
+#include "CNA/Unsupported3DGraphicsCallBehavior.hpp"
 
 struct SDL_Window;
 struct SDL_Renderer;
@@ -1029,6 +1030,22 @@ namespace Microsoft::Xna::Framework::Graphics
         NOXNA [[nodiscard]] int GetMaxTextureDimension() const;
 
         /**
+         * @brief Configures how permanently unsupported 3D calls are handled by a 2D-only
+         * graphics backend.
+         *
+         * Throw is the default and preserves the backend's established exceptions/null results.
+         * WarnAndStub logs each unsupported operation once and substitutes a safe no-op or
+         * null-object resource. This setting does not change SupportsCapability() results and
+         * does not suppress argument, lifetime, driver, or implementation errors.
+         */
+        NOXNA void SetUnsupported3DGraphicsCallBehavior(
+            CNA::Unsupported3DGraphicsCallBehavior behavior);
+
+        /** @brief Returns the active unsupported-3D-call policy (Throw by default). */
+        NOXNA [[nodiscard]] CNA::Unsupported3DGraphicsCallBehavior
+        GetUnsupported3DGraphicsCallBehavior() const;
+
+        /**
          * @brief Sets the currently active Effect for draw calls.
          *
          * Called automatically by Effect::Apply(). Accepts any Effect subclass;
@@ -1088,6 +1105,7 @@ namespace Microsoft::Xna::Framework::Graphics
         SDL_Window* window_;
         bool ownsWindow_;
         std::unique_ptr<CNA::Internal::Backends::IGraphicsBackend> backend_;
+        bool backendStartupNameLogged_ = false;
         Viewport viewport_;
         const VertexBuffer* currentVertexBuffer_;
         const IndexBuffer* currentIndexBuffer_;

@@ -42,7 +42,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME Ascii_Input COMMAND cna_test_ascii_input
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # Phase G7 (ASCII-60): confirm ThrowNo3D reuse via the wrapped SdlGraphicsBackend.
+    # Phase G7 (ASCII-60): confirm the default Throw behavior for unsupported 3D calls.
     cna_ascii_test(cna_test_ascii_throwno3d examples/ascii_throwno3d_test.cpp)
     cna_register_backend_test(NAME Ascii_ThrowNo3D COMMAND cna_test_ascii_throwno3d
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
@@ -150,5 +150,11 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_ascii_test(cna_test_ascii_cube_volume_setdata_contract
                    examples/texturecube_texture3d_setdata_contract_test.cpp)
     cna_register_backend_test(NAME Ascii_CubeVolume_SetDataContract COMMAND cna_test_ascii_cube_volume_setdata_contract
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    cna_ascii_test(cna_test_ascii_unsupported_3d_behavior
+                   examples/unsupported_3d_call_behavior_test.cpp)
+    cna_register_backend_test(NAME Ascii_Unsupported3DBehavior
+        COMMAND cna_test_ascii_unsupported_3d_behavior
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

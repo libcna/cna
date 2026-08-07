@@ -102,4 +102,8 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "CANVAS")
     add_executable(cna_test_canvas_cube_volume_setdata_contract
                    examples/texturecube_texture3d_setdata_contract_test.cpp)
     target_link_libraries(cna_test_canvas_cube_volume_setdata_contract PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    add_executable(cna_test_canvas_unsupported_3d_behavior
+                   examples/unsupported_3d_call_behavior_test.cpp)
+    target_link_libraries(cna_test_canvas_unsupported_3d_behavior
+                          PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
 endif()

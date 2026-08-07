@@ -1,7 +1,7 @@
 # Android Graphics Backend — Status and Limitations
 
 CNA defaults to the `SDL_RENDERER` graphics backend on Android (confirmed directly: `CMakeLists.txt`'s
-backend-selection logic is `if(EMSCRIPTEN OR CMAKE_SYSTEM_NAME STREQUAL "Linux") EASYGL else
+backend-selection logic is `if(EMSCRIPTEN) WEBGL2 elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux") OPENGLES else
 SDL_RENDERER` — Android's `CMAKE_SYSTEM_NAME` is `"Android"`, not `"Linux"`, even under the NDK
 toolchain, so it falls into the `SDL_RENDERER` branch). This document is the Task 460 status
 write-up for Android graphics support specifically — audio, input, and sensor/device support on

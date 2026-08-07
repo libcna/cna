@@ -63,6 +63,12 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME FreeDirect_GraphicsCapability COMMAND cna_test_freedirect_graphics_capability
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=dummy" LABELS "FREEDIRECT")
 
+    cna_dx3_test(cna_test_freedirect_unsupported_3d_behavior
+                 examples/unsupported_3d_call_behavior_test.cpp)
+    cna_register_backend_test(NAME FreeDirect_Unsupported3DBehavior
+        COMMAND cna_test_freedirect_unsupported_3d_behavior
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=dummy" LABELS "FREEDIRECT")
+
     # plan_freedirect.md Phase X7 (DX3-68): logical/window coordinate transform CTest. Note:
     # SDL_VIDEODRIVER=dummy reports a fixed 1024x768 "window" size (no real display to query), so
     # this test's letterbox-invariant checks run against that fixed size rather than whatever a

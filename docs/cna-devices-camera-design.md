@@ -83,7 +83,7 @@ texture pipeline found it is already solved, generically, by existing infrastruc
 - `include/CNA/Internal/Backends/Common/IGraphicsBackend.hpp`'s `ITextureBackend`
   interface already has `virtual void UpdatePixels(const uint8_t* rgba, int stride)`
   — an in-place, full-level-0 RGBA pixel update, implemented per graphics backend
-  (`EASYGL`/`SDL_RENDERER`/`VULKAN`/`BGFX`) but exposed through one common,
+  (`OPENGLES`/`SDL_RENDERER`/`VULKAN`/`BGFX`) but exposed through one common,
   backend-agnostic virtual call.
 - `Microsoft::Xna::Framework::Graphics::Texture2D` already exposes
   `SetDataRGBA(const uint8_t* data, int pixelCount)` (`Texture2D.hpp:196`, `NOXNA`) as

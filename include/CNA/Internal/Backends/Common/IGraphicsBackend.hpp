@@ -10,14 +10,20 @@
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
+#include "CNA/Logger.hpp"
+#include "CNA/LogCategory.hpp"
+#include "CNA/GraphicsBackendType.hpp"
+#include "CNA/Unsupported3DGraphicsCallBehavior.hpp"
 #include <array>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <memory>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 #include "CNA/Internal/Graphics/ImageData.hpp"
 #include "CNA/GraphicsCapability.hpp"
@@ -264,8 +270,8 @@ namespace CNA::Internal::Backends
             (void)data; (void)dataLength;
             return false;
         }
-        /// Binds this cube map to the currently active GL texture unit. No-op on non-GL backends.
-        virtual void BindGL() const {}
+        /// Binds this cube map to the requested GL texture unit. No-op on non-GL backends.
+        virtual void BindGL(int unit = 0) const {}
         /// Shares a reference to the CPU pixel buffer owned by TextureCube::cpuPixels_[face] for
         /// one cube face's level 0. Mirrors ITextureBackend::ShareCpuPixels()'s own purpose
         /// exactly (OpenGL-style backend context-loss restoration) -- default no-op; only OPENGL1
@@ -341,8 +347,8 @@ namespace CNA::Internal::Backends
             (void)data; (void)dataLength;
             return false;
         }
-        /// Binds this volume texture to the currently active GL texture unit. No-op on non-GL backends.
-        virtual void BindGL() const {}
+        /// Binds this volume texture to the requested GL texture unit. No-op on non-GL backends.
+        virtual void BindGL(int unit = 0) const {}
         /// SKIA-149: width/height/depth in voxels, mirroring `ITextureCubeBackend::GetSizeEXT`'s
         /// rationale exactly -- `BindTexture3D` receives only this raw backend pointer. Defaults to
         /// all zero ("unknown/unsupported"), harmless for every backend that does not implement
@@ -376,8 +382,8 @@ namespace CNA::Internal::Backends
          * complete GetData for every valid rectangle of that level without fabricating bytes.
          */
         [[nodiscard]] virtual bool HasDefinedMipLevel(int /*level*/) const noexcept { return false; }
-        /// Binds the underlying GL texture handle (no-op on non-GL backends).
-        virtual void BindGL() const {}
+        /// Binds the underlying GL texture handle to the requested unit (no-op on non-GL backends).
+        virtual void BindGL(int unit = 0) const {}
         /// Shares a reference to the CPU pixel buffer owned by Texture2D::cpuPixels_.
         /// The backend stores this reference for OpenGL context-loss restoration instead
         /// of keeping its own duplicate copy of the pixel data.
@@ -1643,7 +1649,9 @@ namespace CNA::Internal::Backends
         }
 
         /**
-         * @brief Instanced indexed draw — default throws on backends that don't support it.
+         * @brief Instanced indexed draw — default throws on backends that don't support it. A
+         * permanently 2D-only backend may opt into WarnAndStub, in which case this is a
+         * warning-producing no-op.
          *
          * REMED-GFX-202: this route takes the SAME complete stream description the two ordinary
          * routes take. @p vb is `params.vertexStreams[0].buffer`, kept as a named argument so the
@@ -1672,6 +1680,14 @@ namespace CNA::Internal::Backends
         {
             (void)vb; (void)ib; (void)world; (void)view; (void)projection;
             (void)primitive; (void)primitiveCount; (void)instanceCount; (void)params;
+            if (!SupportsCapability(CNA::GraphicsCapability::ThreeD) &&
+                unsupported3DGraphicsCallBehavior_ ==
+                    CNA::Unsupported3DGraphicsCallBehavior::WarnAndStub)
+            {
+                HandleUnsupported3DCall(
+                    CNA::getCurrentGraphicsBackendName(), "DrawInstancedPrimitives");
+                return;
+            }
             throw std::runtime_error(
                 "DrawInstancedPrimitives is not supported on this graphics backend.");
         }
@@ -1681,6 +1697,30 @@ namespace CNA::Internal::Backends
         /// loaded yet (e.g. from Game1 constructor). Future Create* calls
         /// will skip registry registration and CPU shadow copies.
         virtual void SetContextRecoveryEnabled(bool /*enabled*/) {}
+
+        /**
+         * @brief Selects how permanently unsupported 3D calls are handled by 2D-only backends.
+         *
+         * The default is Throw, preserving each backend's established behavior. WarnAndStub is
+         * device-local and takes effect immediately; changing the policy clears the warn-once
+         * history so the first subsequent stubbed operation is visible in the log.
+         */
+        virtual void SetUnsupported3DGraphicsCallBehavior(
+            CNA::Unsupported3DGraphicsCallBehavior behavior)
+        {
+            if (unsupported3DGraphicsCallBehavior_ == behavior)
+                return;
+
+            unsupported3DGraphicsCallBehavior_ = behavior;
+            warnedUnsupported3DCalls_.clear();
+        }
+
+        /** @brief Returns the active unsupported-3D-call policy. */
+        [[nodiscard]] virtual CNA::Unsupported3DGraphicsCallBehavior
+        GetUnsupported3DGraphicsCallBehavior() const
+        {
+            return unsupported3DGraphicsCallBehavior_;
+        }
 
         /// Returns whether this backend (and, for device-dependent entries, the current runtime
         /// device/driver) supports the given CNA::GraphicsCapability. Default implementation
@@ -1765,7 +1805,48 @@ namespace CNA::Internal::Backends
             return it != reg.end() ? it->second : nullptr;
         }
 
+    protected:
+        /**
+         * @brief Throws or emits a warn-once message according to the active policy.
+         *
+         * Callers must invoke this only for operations permanently unsupported by a 2D-only
+         * backend. If it returns, WarnAndStub is active and the caller must perform a safe no-op
+         * or return a valid null-object resource.
+         */
+        void HandleUnsupported3DCall(std::string_view backendName,
+                                     std::string_view methodName)
+        {
+            const std::string failureMessage =
+                std::string(backendName) + " does not support 3D: " + std::string(methodName);
+
+            if (unsupported3DGraphicsCallBehavior_ !=
+                CNA::Unsupported3DGraphicsCallBehavior::WarnAndStub)
+            {
+                throw std::runtime_error(failureMessage);
+            }
+
+            if (warnedUnsupported3DCalls_.insert(std::string(methodName)).second)
+            {
+                CNA::Logger::Warn(
+                    failureMessage +
+                        " was ignored because Unsupported3DGraphicsCallBehavior::WarnAndStub "
+                        "is active.",
+                    CNA::LogCategory::RENDER);
+            }
+        }
+
+        /** @brief True when safe null-object resources should replace unsupported factories. */
+        [[nodiscard]] bool ShouldStubUnsupported3DResource() const
+        {
+            return unsupported3DGraphicsCallBehavior_ ==
+                   CNA::Unsupported3DGraphicsCallBehavior::WarnAndStub;
+        }
+
     private:
+        CNA::Unsupported3DGraphicsCallBehavior unsupported3DGraphicsCallBehavior_ =
+            CNA::Unsupported3DGraphicsCallBehavior::Throw;
+        std::unordered_set<std::string> warnedUnsupported3DCalls_;
+
         static std::unordered_map<SDL_Window*, IGraphicsBackend*>& windowRegistry()
         {
             static std::unordered_map<SDL_Window*, IGraphicsBackend*> reg;

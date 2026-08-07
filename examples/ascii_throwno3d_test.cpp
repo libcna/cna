@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // plan_ascii.md Phase G7 (ASCII-60): every 3D-pipeline IGraphicsBackend method on
-// AsciiGraphicsBackend forwards directly to the wrapped SdlGraphicsBackend's own existing
-// ThrowNo3D calls rather than re-declaring them (design decision 10) -- this test proves it by
-// calling each one directly on a real backend instance and confirming it throws.
+// AsciiGraphicsBackend uses the wrapper's own unsupported-3D policy. This test verifies its
+// default Throw/null behavior; unsupported_3d_call_behavior_test.cpp covers WarnAndStub.
 //
 // Checks A-K -- each of the 11 directly-reachable 3D-pipeline entry points throws
 //   std::runtime_error: ClearColorAndDepth, ClearDepth, ClearStencil, ClearDepthAndStencil,
@@ -10,18 +9,12 @@
 //   SetDepthWriteEnabled, CreateVertexBuffer, CreateIndexBuffer16, CreateOcclusionQuery.
 // Check L -- SupportsDepthStencil() is false.
 // Check M -- CreateTexture3D/CreateTextureCube/CreateRenderTargetCube/CreateEffectBackend all
-//   return nullptr (the shared IGraphicsBackend defaults -- never overridden by SdlGraphicsBackend
-//   either, so AsciiGraphicsBackend correctly leaves them un-overridden too, per design decision
-//   2's "same net behavior, less code" choice).
+//   preserve their established nullptr result under the default policy.
 //
-// DrawColoredPrimitives/DrawIndexedColoredPrimitives/DrawInstancedPrimitivesEx are NOT exercised
-// directly here: they need a real IVertexBufferBackend&, but CreateVertexBuffer/CreateIndexBuffer16
-// already throw on this backend (Checks J/K), so no real buffer can ever exist to pass them --
-// they are structurally unreachable via any real call path, not just untested. Confirmed correct
-// by code review instead: both forward to inner_ with the exact same one-line pattern as every
-// other method in this file, and SdlGraphicsBackend's own DrawColoredPrimitives/
-// DrawIndexedColoredPrimitives already throw via ThrowNo3D (DrawInstancedPrimitivesEx isn't
-// overridden by SdlGraphicsBackend either, so it uses IGraphicsBackend's own default throw).
+// DrawColoredPrimitives/DrawIndexedColoredPrimitives/DrawInstancedPrimitivesEx are covered by
+// unsupported_3d_call_behavior_test.cpp, which can obtain real null-object buffers after switching
+// to WarnAndStub. They are structurally unreachable under this test's default Throw policy because
+// CreateVertexBuffer/CreateIndexBuffer16 throw first.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 

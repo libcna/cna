@@ -36,6 +36,11 @@
 #include <cmath>
 #include <cstring>
 #include <SDL3/SDL.h>
+#include <string>
+#include <sstream>
+#include <set>
+#include <utility>
+#include <cctype>
 #include "Microsoft/Xna/Framework/Color.hpp"
 
 #if defined(__EMSCRIPTEN__)
@@ -251,13 +256,13 @@ namespace CNA::Internal::Backends::EasyGL
 
             int texMin = 0, texMag = 0, baseLevel = 0, maxLevel = 0;
             ::metagl::glGetTexParameteriv(::metagl::TextureTarget::Texture2D,
-                                          ::metagl::TextureParameter::MinFilter, &texMin);
+                                          ::metagl::TextureParameterQuery::MinFilter, &texMin);
             ::metagl::glGetTexParameteriv(::metagl::TextureTarget::Texture2D,
-                                          ::metagl::TextureParameter::MagFilter, &texMag);
+                                          ::metagl::TextureParameterQuery::MagFilter, &texMag);
             ::metagl::glGetTexParameteriv(::metagl::TextureTarget::Texture2D,
-                                          ::metagl::TextureParameter::BaseLevel, &baseLevel);
+                                          ::metagl::TextureParameterQuery::BaseLevel, &baseLevel);
             ::metagl::glGetTexParameteriv(::metagl::TextureTarget::Texture2D,
-                                          ::metagl::TextureParameter::MaxLevel, &maxLevel);
+                                          ::metagl::TextureParameterQuery::MaxLevel, &maxLevel);
 
             int effMin = texMin, effMag = texMag;
             if (samplerName != 0)
@@ -300,10 +305,317 @@ namespace CNA::Internal::Backends::EasyGL
         }
     }
 
+    // plan_glbackends.md Phase B (GLB-10/11): every embedded shader in this file is authored
+    // once, against GLSL ES 3.00 (the OPENGLES/WEBGL2 profiles' native syntax). Body syntax
+    // (in/out, texture(), no varying/attribute) is shared with desktop GLSL 3.30 core -- only
+    // the "#version ...\nprecision ... float;\n" header two lines differ, so OPENGL33 does not
+    // need a second copy of every shader, just a header rewrite performed here at first-use time.
+    enum class GlShaderStageKind { Vertex, Fragment };
+
+    namespace
+    {
+        // plan_glbackends.md GLB-36 helper: true whole-word replace (identifiers only), used for
+        // rewriting FragColor -> gl_FragColor in fragment shader bodies without touching
+        // substrings inside longer identifiers.
+        std::string ReplaceWholeWord(std::string text, const std::string& word, const std::string& replacement)
+        {
+            size_t pos = 0;
+            while ((pos = text.find(word, pos)) != std::string::npos)
+            {
+                const bool leftOk = (pos == 0) ||
+                    !(std::isalnum(static_cast<unsigned char>(text[pos - 1])) || text[pos - 1] == '_');
+                const size_t after = pos + word.size();
+                const bool rightOk = (after >= text.size()) ||
+                    !(std::isalnum(static_cast<unsigned char>(text[after])) || text[after] == '_');
+                if (leftOk && rightOk)
+                {
+                    text.replace(pos, word.size(), replacement);
+                    pos += replacement.size();
+                }
+                else
+                {
+                    pos += word.size();
+                }
+            }
+            return text;
+        }
+
+        // plan_glbackends.md GLB-36 helper: GLSL ES 1.00 has no unified texture() overload set --
+        // callers must use texture2D()/textureCube() depending on the sampler's declared type.
+        // Scans the ORIGINAL ES 3.00 source for "uniform samplerCube NAME;" declarations first
+        // (the only non-sampler2D case any shader in this file uses, confirmed by a full survey
+        // during GLB-36), then rewrites every texture(NAME, ...) call using that set.
+        std::string RewriteTextureCallsForEs100(std::string line, const std::set<std::string>& cubeSamplerNames)
+        {
+            size_t pos = 0;
+            while ((pos = line.find("texture(", pos)) != std::string::npos)
+            {
+                const size_t argStart = pos + 8;
+                const size_t argEnd = line.find(',', argStart);
+                if (argEnd == std::string::npos) { pos += 8; continue; }
+                std::string samplerName = line.substr(argStart, argEnd - argStart);
+                while (!samplerName.empty() && std::isspace(static_cast<unsigned char>(samplerName.front())))
+                    samplerName.erase(samplerName.begin());
+                while (!samplerName.empty() && std::isspace(static_cast<unsigned char>(samplerName.back())))
+                    samplerName.pop_back();
+                const bool isCube = cubeSamplerNames.count(samplerName) > 0;
+                const std::string replacement = isCube ? "textureCube(" : "texture2D(";
+                line.replace(pos, 8, replacement);
+                pos += replacement.size();
+            }
+            return line;
+        }
+
+        // plan_glbackends.md GLB-36 follow-up: GLSL ES 1.00 has no integer vertex attribute types
+        // at all -- "layout(location=N) in uvec4 aBoneIndices;" (this file's
+        // SkinnedEffect/SkinnedPbrEffect shaders) has no direct equivalent. Encodes bone indices
+        // as a float vec4 instead (the matching C++-side change is
+        // DescribeVertexElementFormat()'s Byte4 case, which reads the same underlying
+        // UnsignedByte bytes as floats under this profile rather than true integers -- 0-255
+        // range, far more than the <=72 bone count needs, exactly float-representable). Rewrites,
+        // applied only when the source actually declares "aBoneIndices" (a no-op for every other
+        // shader in this file):
+        //   - "uvec4" -> "vec4" (only ever appears in the aBoneIndices declaration itself, so a
+        //     blanket whole-word replace is safe)
+        //   - "aBoneIndices.x"/".y"/".z"/".w" -> "int(aBoneIndices.x)"/etc. at their 4 uBones[]
+        //     index expressions (the only place aBoneIndices is ever used in this file) -- array
+        //     indices must be integer-typed even though the attribute itself is now a float vec4.
+        std::string RewriteBoneIndicesForEs100(std::string text)
+        {
+            if (text.find("aBoneIndices") == std::string::npos) return text;
+            text = ReplaceWholeWord(std::move(text), "uvec4", "vec4");
+            for (char component : { 'x', 'y', 'z', 'w' })
+            {
+                const std::string from = std::string("aBoneIndices.") + component;
+                const std::string to = "int(" + from + ")";
+                size_t pos = 0;
+                while ((pos = text.find(from, pos)) != std::string::npos)
+                {
+                    text.replace(pos, from.size(), to);
+                    pos += to.size();
+                }
+            }
+            return text;
+        }
+
+        // plan_glbackends.md GLB-36: rewrites a GLSL ES 3.00 shader body to GLSL ES 1.00
+        // (WebGL 1). Real syntax differences handled, confirmed exhaustive by a full survey of
+        // every shader in this file during GLB-36 (no texelFetch/textureSize/derivatives/
+        // gl_FragDepth/flat/#extension/MRT usage anywhere):
+        //   - "layout(location=N) in TYPE NAME;" (vertex attributes) -> "attribute TYPE NAME;"
+        //     (the layout qualifier itself is not valid GLSL ES 1.00 -- the caller is expected to
+        //     have already extracted the (location, name) pairs via ExtractVertexAttribLocations()
+        //     from the ORIGINAL source and rebind them with Program::bind_attrib_location() before
+        //     linking, since ES 1.00 has no way to request a specific location from shader text).
+        //   - "out TYPE NAME;" varyings (vertex) / "in TYPE NAME;" varyings (fragment) ->
+        //     "varying TYPE NAME;" (the same varying keyword serves both directions in ES 1.00).
+        //   - "out vec4 FragColor;" (the single fragment color output every shader in this file
+        //     uses -- no MRT) is dropped entirely and every reference to the identifier
+        //     "FragColor" in the body is replaced with the ES 1.00 built-in "gl_FragColor".
+        //   - "texture(sampler, ...)" -> "texture2D(...)"/"textureCube(...)" depending on the
+        //     sampler's declared type (see RewriteTextureCallsForEs100 above).
+        //   - "#version 300 es" -> "#version 100"; the following "precision ... float;" line is
+        //     kept as-is (valid, and required, GLSL ES 1.00 syntax too).
+        //   - "uvec4 aBoneIndices" (SkinnedEffect/SkinnedPbrEffect only) -> float-encoded, see
+        //     RewriteBoneIndicesForEs100 above.
+        std::string TransformGlslEs300BodyToEs100(const std::string& es300Body, GlShaderStageKind stage)
+        {
+            std::set<std::string> cubeSamplerNames;
+            {
+                const std::string marker = "uniform samplerCube ";
+                size_t pos = 0;
+                while ((pos = es300Body.find(marker, pos)) != std::string::npos)
+                {
+                    const size_t nameStart = pos + marker.size();
+                    const size_t nameEnd = es300Body.find(';', nameStart);
+                    if (nameEnd == std::string::npos) break;
+                    cubeSamplerNames.insert(es300Body.substr(nameStart, nameEnd - nameStart));
+                    pos = nameEnd;
+                }
+            }
+
+            std::istringstream iss(es300Body);
+            std::string line;
+            std::string out;
+            while (std::getline(iss, line))
+            {
+                size_t firstNonSpace = line.find_first_not_of(" \t");
+                const std::string trimmed = (firstNonSpace == std::string::npos)
+                    ? std::string() : line.substr(firstNonSpace);
+
+                if (trimmed.rfind("layout(location", 0) == 0)
+                {
+                    // "layout(location=N) in TYPE NAME;" or "layout(location = N) in TYPE NAME;"
+                    const size_t inPos = trimmed.find(" in ");
+                    if (inPos != std::string::npos)
+                    {
+                        out += "attribute " + trimmed.substr(inPos + 4) + "\n";
+                        continue;
+                    }
+                }
+                if (stage == GlShaderStageKind::Vertex && trimmed.rfind("in ", 0) == 0)
+                {
+                    out += "attribute " + trimmed.substr(3) + "\n";
+                    continue;
+                }
+                if (stage == GlShaderStageKind::Vertex && trimmed.rfind("out ", 0) == 0)
+                {
+                    out += "varying " + trimmed.substr(4) + "\n";
+                    continue;
+                }
+                if (stage == GlShaderStageKind::Fragment && trimmed.rfind("in ", 0) == 0)
+                {
+                    out += "varying " + trimmed.substr(3) + "\n";
+                    continue;
+                }
+                if (stage == GlShaderStageKind::Fragment && trimmed == "out vec4 FragColor;")
+                {
+                    // No declaration needed -- gl_FragColor is an ES 1.00 built-in.
+                    continue;
+                }
+
+                std::string rewritten = RewriteTextureCallsForEs100(line, cubeSamplerNames);
+                if (stage == GlShaderStageKind::Fragment)
+                {
+                    rewritten = ReplaceWholeWord(rewritten, "FragColor", "gl_FragColor");
+                }
+                out += rewritten + "\n";
+            }
+            // Applied to the whole assembled output, not per-line, since it must also see the
+            // "attribute uvec4 aBoneIndices;" declaration line produced by the
+            // layout(location=N) branch above (which `continue`s past the per-line pipeline).
+            return RewriteBoneIndicesForEs100(std::move(out));
+        }
+    }
+
+    // plan_glbackends.md GLB-36: extracts (location, name) pairs from
+    // "layout(location=N) in TYPE NAME;" declarations in the ORIGINAL (unmodified) ES 3.00 vertex
+    // shader source, so the caller can rebind the same numeric locations via
+    // Program::bind_attrib_location() before linking on WEBGL1 (where the layout qualifier itself
+    // is stripped out of the shader text -- see TransformGlslEs300BodyToEs100). This is what lets
+    // every existing VertexArray/VAO attribute-binding call site in this file (all of which use
+    // hardcoded numeric indices matching these same layout(location=N) values) keep working
+    // completely unmodified regardless of which of the 4 GL profiles is active.
+    static std::vector<std::pair<int, std::string>> ExtractVertexAttribLocations(const std::string& es300VertexSource)
+    {
+        std::vector<std::pair<int, std::string>> result;
+        const std::string marker = "layout(location";
+        size_t pos = 0;
+        while ((pos = es300VertexSource.find(marker, pos)) != std::string::npos)
+        {
+            const size_t eq = es300VertexSource.find('=', pos);
+            const size_t closeParen = es300VertexSource.find(')', pos);
+            if (eq == std::string::npos || closeParen == std::string::npos || eq > closeParen) break;
+            const int location = std::stoi(es300VertexSource.substr(eq + 1, closeParen - eq - 1));
+
+            const size_t inPos = es300VertexSource.find(" in ", closeParen);
+            if (inPos == std::string::npos) break;
+            const size_t typeStart = inPos + 4;
+            const size_t typeEnd = es300VertexSource.find(' ', typeStart);
+            if (typeEnd == std::string::npos) break;
+            const size_t nameStart = typeEnd + 1;
+            const size_t nameEnd = es300VertexSource.find(';', nameStart);
+            if (nameEnd == std::string::npos) break;
+            result.emplace_back(location, es300VertexSource.substr(nameStart, nameEnd - nameStart));
+            pos = nameEnd;
+        }
+        return result;
+    }
+
+    // WEBGL1 (GLSL ES 1.00): see TransformGlslEs300BodyToEs100 above for the real syntax
+    // differences handled, and the one known-unconverted gap (integer vertex attributes).
+    static std::string AdaptGlslEs300ForActiveProfile(const char* es300Source, GlShaderStageKind stage)
+    {
+#if defined(CNA_GL_PROFILE_OPENGL33)
+        std::string src(es300Source);
+        const std::string versionLine = "#version 300 es\n";
+        const auto versionPos = src.find(versionLine);
+        if (versionPos == std::string::npos)
+        {
+            // Not one of the standard ES3-header shaders this function expects -- leave untouched
+            // rather than corrupt something it doesn't recognize.
+            return src;
+        }
+        src.replace(versionPos, versionLine.size(), "#version 330 core\n");
+
+        // Desktop GLSL 3.30 core does not accept "precision ... float;" (that syntax is only
+        // valid GLSL ES / with GL_ARB_ES2_compatibility) -- drop the line immediately following
+        // the version pragma if it is a precision qualifier.
+        const auto afterVersion = versionPos + std::string("#version 330 core\n").size();
+        if (src.compare(afterVersion, 10, "precision ") == 0)
+        {
+            const auto lineEnd = src.find('\n', afterVersion);
+            if (lineEnd != std::string::npos)
+            {
+                src.erase(afterVersion, lineEnd + 1 - afterVersion);
+            }
+        }
+        return src;
+#elif defined(CNA_GL_PROFILE_WEBGL1)
+        std::string src(es300Source);
+        const std::string versionLine = "#version 300 es\n";
+        const auto versionPos = src.find(versionLine);
+        if (versionPos == std::string::npos) return src;
+        src.replace(versionPos, versionLine.size(), "#version 100\n");
+        std::string transformed = TransformGlslEs300BodyToEs100(src, stage);
+        // SkinnedEffect/SkinnedPbrEffect's "uvec4 aBoneIndices" is converted away by
+        // TransformGlslEs300BodyToEs100/RewriteBoneIndicesForEs100 (float-encoded bone indices,
+        // GLB-36 follow-up). This check is now a defensive safety net for any FUTURE shader that
+        // introduces a genuinely new integer vertex attribute the transform doesn't yet handle --
+        // fail loudly rather than let an invalid shader reach the driver with only an opaque
+        // compile-error log as the symptom.
+        if (transformed.find("uvec4") != std::string::npos || transformed.find("ivec") != std::string::npos)
+        {
+            std::cerr << "[CNA EasyGL WEBGL1] shader uses an integer vertex attribute type "
+                          "(uvec4/ivecN) that TransformGlslEs300BodyToEs100 doesn't know how to "
+                          "convert, which has no GLSL ES 1.00 equivalent -- this shader is not "
+                          "supported under WEBGL1 (see EasyGLGraphicsBackend.cpp's WEBGL1 shader "
+                          "adaptation code)."
+                       << std::endl;
+        }
+        return transformed;
+#else
+        (void)stage;
+        return std::string(es300Source);
+#endif
+    }
+
+#if defined(CNA_GL_PROFILE_OPENGL33)
+    namespace
+    {
+        // plan_glbackends.md GLB-40: desktop GL core profile -- unlike GLES/WebGL, which always
+        // honor a vertex shader's gl_PointSize output automatically for GL_POINTS primitives --
+        // requires this capability explicitly enabled, or gl_PointSize is silently ignored and
+        // every point renders at the fixed 1.0-pixel default size. Found investigating why
+        // easygl_shipgame_particle_shader_test (a GL_POINTS/gl_PointSize/gl_PointCoord particle
+        // shader) rendered nothing under OPENGL33 while passing under OPENGLES/WEBGL2 -- NOT a
+        // shader compile failure (Mesa's desktop compiler accepts "#version 300 es" leniently
+        // even under a core-profile context, confirmed empirically), a real missing GL state
+        // toggle. Not exposed by meta-gl's typed Capability enum (GLES/WebGL have no equivalent
+        // constant at all, so meta-gl never needed to expose it), so loaded and called directly
+        // via a runtime function pointer, matching this project's own "no static libGL linkage"
+        // convention (meta-gl itself loads every GL entry point the same way).
+        void EnableVertexProgramPointSize()
+        {
+            using GlEnableFn = void (*)(unsigned int);
+            static const auto glEnableFn =
+                reinterpret_cast<GlEnableFn>(SDL_GL_GetProcAddress("glEnable"));
+            constexpr unsigned int kGlVertexProgramPointSize = 0x8642;
+            if (glEnableFn) glEnableFn(kGlVertexProgramPointSize);
+        }
+    }
+#endif
+
     // --- EasyGLTexture3DBackend ---
 
     static constexpr int kTexLinear       = static_cast<int>(::metagl::TextureMagFilter::Linear);
     static constexpr int kTexClampToEdge  = static_cast<int>(::metagl::TextureWrapMode::ClampToEdge);
+
+    static ::easygl::TextureUnit ToTextureUnit(int unit)
+    {
+        return static_cast<::easygl::TextureUnit>(
+            static_cast<GLenum>(::easygl::TextureUnit::Texture0) + unit);
+    }
 
     // Mirrors Texture3D.cpp's CalculateMipLevels(w,h) — depth does not participate in the level
     // count, matching FNA's Texture3D constructor, but each level's own GPU storage still halves
@@ -342,12 +654,12 @@ namespace CNA::Internal::Backends::EasyGL
         // REMED-GFX-174: see EasyGLRenderTargetBackend's identical clamp. The MinFilter written
         // below is overridden by whatever sampler object ApplySamplerState binds to this unit, so
         // the level range is what has to make the texture complete.
-        tex_.set_parameter(::easygl::TextureTarget::Texture3D, ::metagl::TextureParameter::MaxLevel,
+        tex_.set_parameter(::easygl::TextureTarget::Texture3D, ::easygl::TextureParameterSetter::MaxLevel,
                            levelCount_ - 1);
-        tex_.set_parameter(::easygl::TextureTarget::Texture3D, ::metagl::TextureParameter::MinFilter, kTexLinear);
-        tex_.set_parameter(::easygl::TextureTarget::Texture3D, ::metagl::TextureParameter::MagFilter, kTexLinear);
-        tex_.set_parameter(::easygl::TextureTarget::Texture3D, ::metagl::TextureParameter::WrapS, kTexClampToEdge);
-        tex_.set_parameter(::easygl::TextureTarget::Texture3D, ::metagl::TextureParameter::WrapT, kTexClampToEdge);
+        tex_.set_parameter(::easygl::TextureTarget::Texture3D, ::easygl::TextureParameterSetter::MinFilter, kTexLinear);
+        tex_.set_parameter(::easygl::TextureTarget::Texture3D, ::easygl::TextureParameterSetter::MagFilter, kTexLinear);
+        tex_.set_parameter(::easygl::TextureTarget::Texture3D, ::easygl::TextureParameterSetter::WrapS, kTexClampToEdge);
+        tex_.set_parameter(::easygl::TextureTarget::Texture3D, ::easygl::TextureParameterSetter::WrapT, kTexClampToEdge);
     }
 
     // REMED-GFX-135: glTexSubImage2D/3D have no return value, so GL's error queue is the only
@@ -388,9 +700,9 @@ namespace CNA::Internal::Backends::EasyGL
         return GlUploadSucceeded();
     }
 
-    void EasyGLTexture3DBackend::BindGL() const
+    void EasyGLTexture3DBackend::BindGL(int unit) const
     {
-        tex_.bind(::easygl::TextureTarget::Texture3D);
+        tex_.active_bind(ToTextureUnit(unit), ::easygl::TextureTarget::Texture3D);
     }
 
     // --- EasyGLTextureCubeBackend ---
@@ -439,12 +751,12 @@ namespace CNA::Internal::Backends::EasyGL
         }
         // REMED-GFX-174: see EasyGLRenderTargetBackend's identical clamp -- a cube sampled through
         // EnvironmentMapEffect's slot-1 sampler faces exactly the same completeness rule.
-        tex_.set_parameter(::easygl::TextureTarget::TextureCubeMap, ::metagl::TextureParameter::MaxLevel,
+        tex_.set_parameter(::easygl::TextureTarget::TextureCubeMap, ::easygl::TextureParameterSetter::MaxLevel,
                            levelCount_ - 1);
-        tex_.set_parameter(::easygl::TextureTarget::TextureCubeMap, ::metagl::TextureParameter::MinFilter, kTexLinear);
-        tex_.set_parameter(::easygl::TextureTarget::TextureCubeMap, ::metagl::TextureParameter::MagFilter, kTexLinear);
-        tex_.set_parameter(::easygl::TextureTarget::TextureCubeMap, ::metagl::TextureParameter::WrapS, kTexClampToEdge);
-        tex_.set_parameter(::easygl::TextureTarget::TextureCubeMap, ::metagl::TextureParameter::WrapT, kTexClampToEdge);
+        tex_.set_parameter(::easygl::TextureTarget::TextureCubeMap, ::easygl::TextureParameterSetter::MinFilter, kTexLinear);
+        tex_.set_parameter(::easygl::TextureTarget::TextureCubeMap, ::easygl::TextureParameterSetter::MagFilter, kTexLinear);
+        tex_.set_parameter(::easygl::TextureTarget::TextureCubeMap, ::easygl::TextureParameterSetter::WrapS, kTexClampToEdge);
+        tex_.set_parameter(::easygl::TextureTarget::TextureCubeMap, ::easygl::TextureParameterSetter::WrapT, kTexClampToEdge);
     }
 
     bool EasyGLTexture3DBackend::GetData(int level, int x, int y, int z,
@@ -487,9 +799,9 @@ namespace CNA::Internal::Backends::EasyGL
         return complete;
     }
 
-    void EasyGLTextureCubeBackend::BindGL() const
+    void EasyGLTextureCubeBackend::BindGL(int unit) const
     {
-        tex_.bind(::easygl::TextureTarget::TextureCubeMap);
+        tex_.active_bind(ToTextureUnit(unit), ::easygl::TextureTarget::TextureCubeMap);
     }
 
     bool EasyGLTextureCubeBackend::SetData(int face, int level, int x, int y, int w, int h,
@@ -647,10 +959,7 @@ namespace CNA::Internal::Backends::EasyGL
     void EasyGLEffectBackend::BindTexture(int unit, ITextureBackend* texture)
     {
         if (!texture) return;
-        const auto textureUnit = static_cast<::metagl::TextureUnit>(
-            static_cast<GLenum>(::metagl::TextureUnit::Texture0) + unit);
-        ::metagl::glActiveTexture(textureUnit);
-        texture->BindGL();
+        texture->BindGL(unit);
         TraceBoundTextureUnit("bind-texture-3d", unit);
         ::metagl::glActiveTexture(::metagl::TextureUnit::Texture0);
 
@@ -682,10 +991,7 @@ namespace CNA::Internal::Backends::EasyGL
     void EasyGLEffectBackend::BindTextureCube(int unit, ITextureCubeBackend* texture)
     {
         if (!texture) return;
-        const auto textureUnit = static_cast<::metagl::TextureUnit>(
-            static_cast<GLenum>(::metagl::TextureUnit::Texture0) + unit);
-        ::metagl::glActiveTexture(textureUnit);
-        texture->BindGL();
+        texture->BindGL(unit);
         ::metagl::glActiveTexture(::metagl::TextureUnit::Texture0);
     }
 
@@ -695,10 +1001,7 @@ namespace CNA::Internal::Backends::EasyGL
     void EasyGLEffectBackend::BindTexture3D(int unit, ITexture3DBackend* texture)
     {
         if (!texture) return;
-        const auto textureUnit = static_cast<::metagl::TextureUnit>(
-            static_cast<GLenum>(::metagl::TextureUnit::Texture0) + unit);
-        ::metagl::glActiveTexture(textureUnit);
-        texture->BindGL();
+        texture->BindGL(unit);
         ::metagl::glActiveTexture(::metagl::TextureUnit::Texture0);
     }
 
@@ -765,7 +1068,7 @@ namespace CNA::Internal::Backends::EasyGL
         // requiring TextureFilter (e.g. Anisotropic) treats this as an incomplete mipmap chain
         // (GL's own default max level is 1000) and renders solid black, even for an ordinary
         // single-level (mipLevels_==1) texture that never uploads any level beyond 0.
-        texture.set_parameter(::easygl::TextureTarget::Texture2D, ::metagl::TextureParameter::MaxLevel,
+        texture.set_parameter(::easygl::TextureTarget::Texture2D, ::easygl::TextureParameterSetter::MaxLevel,
                                mipLevels_ - 1);
         if (registry_) registry_->add(this);
     }
@@ -823,13 +1126,13 @@ namespace CNA::Internal::Backends::EasyGL
         AllocateDeclaredLevels();
         // Task 924: the fresh GL texture object defaults GL_TEXTURE_MAX_LEVEL back to 1000 --
         // reapply the same clamp the constructor set, matching this texture's real level count.
-        texture.set_parameter(::easygl::TextureTarget::Texture2D, ::metagl::TextureParameter::MaxLevel,
+        texture.set_parameter(::easygl::TextureTarget::Texture2D, ::easygl::TextureParameterSetter::MaxLevel,
                                mipLevels_ - 1);
     }
 
-    void EasyGLTextureBackend::BindGL() const
+    void EasyGLTextureBackend::BindGL(int unit) const
     {
-        texture.bind(::easygl::TextureTarget::Texture2D);
+        texture.active_bind(ToTextureUnit(unit), ::easygl::TextureTarget::Texture2D);
     }
 
     void EasyGLTextureBackend::ShareCpuPixels(std::shared_ptr<std::vector<uint8_t>> pixels)
@@ -1008,7 +1311,7 @@ namespace CNA::Internal::Backends::EasyGL
         // the texture complete whatever that filter turns out to be, and it allocates nothing: the
         // storage loop above already created exactly levelCount_ levels.
         colorTex_.set_parameter(::easygl::TextureTarget::Texture2D,
-                                ::metagl::TextureParameter::MaxLevel,
+                                ::easygl::TextureParameterSetter::MaxLevel,
                                 levelCount_ - 1);
         // REMED-GFX-175: this is the texture object's OWN default min filter, which every draw's
         // sampler object overrides, so it decides nothing about how a game's TextureFilter samples
@@ -1017,16 +1320,16 @@ namespace CNA::Internal::Backends::EasyGL
         // applied; it is no longer, and never really was, the completeness guard its old comment
         // claimed ("the RT has no mipmaps so a mip filter would be incomplete -- use LINEAR").
         colorTex_.set_parameter(::easygl::TextureTarget::Texture2D,
-                                ::metagl::TextureParameter::MinFilter,
+                                ::easygl::TextureParameterSetter::MinFilter,
                                 static_cast<int>(::metagl::TextureMagFilter::Linear));
         colorTex_.set_parameter(::easygl::TextureTarget::Texture2D,
-                                ::metagl::TextureParameter::MagFilter,
+                                ::easygl::TextureParameterSetter::MagFilter,
                                 static_cast<int>(::metagl::TextureMagFilter::Linear));
         colorTex_.set_parameter(::easygl::TextureTarget::Texture2D,
-                                ::metagl::TextureParameter::WrapS,
+                                ::easygl::TextureParameterSetter::WrapS,
                                 static_cast<int>(::metagl::TextureWrapMode::ClampToEdge));
         colorTex_.set_parameter(::easygl::TextureTarget::Texture2D,
-                                ::metagl::TextureParameter::WrapT,
+                                ::easygl::TextureParameterSetter::WrapT,
                                 static_cast<int>(::metagl::TextureWrapMode::ClampToEdge));
 
         // Clamp to GL_MAX_SAMPLES so glRenderbufferStorageMultisample never errors, mirroring
@@ -1248,9 +1551,9 @@ namespace CNA::Internal::Backends::EasyGL
         }
     }
 
-    void EasyGLRenderTargetBackend::BindGL() const
+    void EasyGLRenderTargetBackend::BindGL(int unit) const
     {
-        colorTex_.bind(::easygl::TextureTarget::Texture2D);
+        colorTex_.active_bind(ToTextureUnit(unit), ::easygl::TextureTarget::Texture2D);
     }
 
     unsigned int EasyGLRenderTargetBackend::GetColorGLHandle() const
@@ -1358,19 +1661,19 @@ namespace CNA::Internal::Backends::EasyGL
         }
         // REMED-GFX-174: see EasyGLRenderTargetBackend's identical clamp.
         cubeTex_.set_parameter(::easygl::TextureTarget::TextureCubeMap,
-                               ::metagl::TextureParameter::MaxLevel,
+                               ::easygl::TextureParameterSetter::MaxLevel,
                                levelCount_ - 1);
         cubeTex_.set_parameter(::easygl::TextureTarget::TextureCubeMap,
-                               ::metagl::TextureParameter::MinFilter,
+                               ::easygl::TextureParameterSetter::MinFilter,
                                static_cast<int>(::metagl::TextureMagFilter::Linear));
         cubeTex_.set_parameter(::easygl::TextureTarget::TextureCubeMap,
-                               ::metagl::TextureParameter::MagFilter,
+                               ::easygl::TextureParameterSetter::MagFilter,
                                static_cast<int>(::metagl::TextureMagFilter::Linear));
         cubeTex_.set_parameter(::easygl::TextureTarget::TextureCubeMap,
-                               ::metagl::TextureParameter::WrapS,
+                               ::easygl::TextureParameterSetter::WrapS,
                                static_cast<int>(::metagl::TextureWrapMode::ClampToEdge));
         cubeTex_.set_parameter(::easygl::TextureTarget::TextureCubeMap,
-                               ::metagl::TextureParameter::WrapT,
+                               ::easygl::TextureParameterSetter::WrapT,
                                static_cast<int>(::metagl::TextureWrapMode::ClampToEdge));
 
         // Clamp to GL_MAX_SAMPLES, same as EasyGLRenderTargetBackend.
@@ -1495,9 +1798,9 @@ namespace CNA::Internal::Backends::EasyGL
         return cubeTex_.native_handle();
     }
 
-    void EasyGLRenderTargetCubeBackend::BindGL() const
+    void EasyGLRenderTargetCubeBackend::BindGL(int unit) const
     {
-        cubeTex_.bind(::easygl::TextureTarget::TextureCubeMap);
+        cubeTex_.active_bind(ToTextureUnit(unit), ::easygl::TextureTarget::TextureCubeMap);
     }
 
     bool EasyGLRenderTargetCubeBackend::SetData(int face, int level, int x, int y, int w, int h,
@@ -1654,9 +1957,14 @@ void main()
 }
 )";
 
+        const std::string adaptedVertexSource =
+            AdaptGlslEs300ForActiveProfile(vertexShaderSource, GlShaderStageKind::Vertex);
+        const std::string adaptedFragmentSource =
+            AdaptGlslEs300ForActiveProfile(fragmentShaderSource, GlShaderStageKind::Fragment);
+
         ::easygl::Shader vertexShader(::easygl::ShaderType::Vertex);
         vertexShader.create();
-        vertexShader.compile_from_source(vertexShaderSource);
+        vertexShader.compile_from_source(adaptedVertexSource.c_str());
 
         if (!vertexShader.is_compiled())
         {
@@ -1665,7 +1973,7 @@ void main()
 
         ::easygl::Shader fragmentShader(::easygl::ShaderType::Fragment);
         fragmentShader.create();
-        fragmentShader.compile_from_source(fragmentShaderSource);
+        fragmentShader.compile_from_source(adaptedFragmentSource.c_str());
 
         if (!fragmentShader.is_compiled())
         {
@@ -1675,6 +1983,15 @@ void main()
         program_.create();
         program_.attach(vertexShader);
         program_.attach(fragmentShader);
+#if defined(CNA_GL_PROFILE_WEBGL1)
+        // plan_glbackends.md GLB-36: see CompileAndLink's identical comment -- rebind the same
+        // numeric attribute locations the ES 3.00 source's layout(location=N) qualifiers
+        // specified, since WEBGL1's shader text has no layout(location=N) at all.
+        for (const auto& [location, name] : ExtractVertexAttribLocations(vertexShaderSource))
+        {
+            program_.bind_attrib_location(static_cast<unsigned int>(location), name);
+        }
+#endif
         program_.link();
 
         if (!program_.is_linked())
@@ -2018,9 +2335,24 @@ void main()
         // NOTE: SDL_Window is NOT owned by EasyGL backend.
         // It is owned by GraphicsDevice or higher level platform layer.
 
+        // plan_glbackends.md GLB-8: context attributes depend on which of the 4 public GL
+        // profiles this translation unit was compiled for (see cmake/BackendSelection.cmake).
+        // OPENGLES/WEBGL2 request GLES 3.0 (today's original, unchanged behavior); WEBGL1
+        // requests GLES 2.0 (Emscripten maps this to a real WebGL 1 context); OPENGL33 requests
+        // a desktop GL 3.3 core profile context instead of an ES profile.
+#if defined(CNA_GL_PROFILE_OPENGL33)
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+#elif defined(CNA_GL_PROFILE_WEBGL1)
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
+#else // CNA_GL_PROFILE_OPENGLES or CNA_GL_PROFILE_WEBGL2
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
+#endif
         // Without this, no window ever gets stencil bits (SDL defaults to 0), making
         // DepthStencilState.StencilEnable a permanent no-op regardless of what's requested.
         SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
@@ -2033,6 +2365,9 @@ void main()
         }
 
         device.initialize(reinterpret_cast<::easygl::GLGetProcAddressFn>(SDL_GL_GetProcAddress));
+#if defined(CNA_GL_PROFILE_OPENGL33)
+        EnableVertexProgramPointSize();
+#endif
         std::cout << "EasyGLGraphicsBackend initialized with OpenGL "
             << device.capabilities().context_info().version_string << std::endl;
 
@@ -2185,14 +2520,51 @@ void main()
             case CNA::GraphicsCapability::AnisotropicFiltering:
                 return metagl::HasExtension("GL_EXT_texture_filter_anisotropic");
             case CNA::GraphicsCapability::WireFrame:
-                // GLES3 (EasyGL's underlying API) has no wireframe fill mode at all -- matches
-                // the XNA 4.0 Graphics API coverage table's own "EasyGL N/A (GLES3)" entry.
-                return false;
+                // REMED-GFX-219 resolved: this backend's GL_LINES re-expansion renders a genuinely
+                // correct wireframe (shared pixel oracle: interior 0/1089, all three triangle edges
+                // present), so the previous `false` under-stated the implementation. The emulation
+                // draws line primitives and depends on no polygon-mode API, so it holds for every
+                // GL profile (OPENGLES/OPENGL33/WEBGL1/WEBGL2) alike.
+                return true;
             case CNA::GraphicsCapability::MultiStreamVertexInput:
                 // REMED-GFX-201: implemented -- Draw*PrimitivesEx binds every per-vertex stream
                 // into the VAO at locations continuing after the previous stream's, each with its
                 // own VBO, stride and byte offset, and restores the single-stream layout after.
+#if defined(CNA_GL_PROFILE_WEBGL1)
+                // WebGL 1 (GLES 2.0) lacks the VAO/attrib-divisor entry points the Ex routes bind
+                // through; claiming support would fail inside GL instead of being refused up front.
+                return false;
+#else
                 return true;
+#endif
+            case CNA::GraphicsCapability::MultipleRenderTargets:
+#if defined(CNA_GL_PROFILE_WEBGL1)
+                // WebGL 1 core has no draw-buffers MRT.
+                return false;
+#else
+                return true;
+#endif
+            case CNA::GraphicsCapability::OcclusionQuery:
+#if defined(CNA_GL_PROFILE_WEBGL1)
+                // WebGL 1 (GLES 2.0) has no query objects.
+                return false;
+#else
+                return true;
+#endif
+            case CNA::GraphicsCapability::Texture3D:
+#if defined(CNA_GL_PROFILE_WEBGL1)
+                // WebGL 1 (GLES 2.0) has no 3D textures at all.
+                return false;
+#else
+                return true;
+#endif
+            case CNA::GraphicsCapability::Instancing:
+#if defined(CNA_GL_PROFILE_WEBGL1)
+                // WebGL 1 core has no glDrawElementsInstanced/glVertexAttribDivisor.
+                return false;
+#else
+                return true;
+#endif
             default:
                 return true;
         }
@@ -2241,6 +2613,9 @@ void main()
 
         // 3. Reload GL function pointers and increment context generation.
         device.initialize(reinterpret_cast<::easygl::GLGetProcAddressFn>(SDL_GL_GetProcAddress));
+#if defined(CNA_GL_PROFILE_OPENGL33)
+        EnableVertexProgramPointSize();
+#endif
 
         // 4. Notify listeners that context is restored. ResourceRegistry calls
         //    recreate_gl_resource() on every tracked resource (shaders, textures, buffers, VAOs).
@@ -3224,7 +3599,22 @@ void main()
             case VertexElementFormat::Vector3:         return { 3, ::easygl::DataType::Float,        false, false };
             case VertexElementFormat::Vector4:         return { 4, ::easygl::DataType::Float,        false, false };
             case VertexElementFormat::Color:           return { 4, ::easygl::DataType::UnsignedByte, true,  false };
-            case VertexElementFormat::Byte4:           return { 4, ::easygl::DataType::UnsignedByte, false, true  };
+            case VertexElementFormat::Byte4:
+#if defined(CNA_GL_PROFILE_WEBGL1)
+                // plan_glbackends.md GLB-36 follow-up: WEBGL1 (GLSL ES 1.00) has no integer
+                // vertex attributes at all -- glVertexAttribIPointer isn't available. Byte4 is
+                // used exclusively for BLENDINDICES-style bone-index attributes (confirmed: only
+                // VertexPositionNormalTangentTextureSkinned/VertexPositionNormalTextureSkinned
+                // declare it), so read the same underlying bytes as floats instead (0-255 range,
+                // far more than the <=72 bone count needs, exactly float-representable) rather
+                // than as a true integer. The skinned shaders themselves declare
+                // "attribute vec4 aBoneIndices;" (not uvec4) and cast to int() when indexing
+                // uBones[] for this profile -- see TransformGlslEs300BodyToEs100's bone-index
+                // rewrite.
+                return { 4, ::easygl::DataType::UnsignedByte, false, false };
+#else
+                return { 4, ::easygl::DataType::UnsignedByte, false, true  };
+#endif
             case VertexElementFormat::Short2:          return { 2, ::easygl::DataType::Short,        false, false };
             case VertexElementFormat::Short4:          return { 4, ::easygl::DataType::Short,        false, false };
             case VertexElementFormat::NormalizedShort2:return { 2, ::easygl::DataType::Short,        true,  false };
@@ -3821,21 +4211,34 @@ void main()
         void CompileAndLink(::easygl::Program& prog, const char* vsrc, const char* fsrc,
                             const char* label)
         {
+            const std::string adaptedVsrc = AdaptGlslEs300ForActiveProfile(vsrc, GlShaderStageKind::Vertex);
+            const std::string adaptedFsrc = AdaptGlslEs300ForActiveProfile(fsrc, GlShaderStageKind::Fragment);
+
             ::easygl::Shader vs(::easygl::ShaderType::Vertex);
             vs.create();
-            vs.compile_from_source(vsrc);
+            vs.compile_from_source(adaptedVsrc.c_str());
             if (!vs.is_compiled())
                 std::cerr << "[CNA EasyGL 3D] " << label << " VS failed:\n" << vs.info_log() << "\n";
 
             ::easygl::Shader fs(::easygl::ShaderType::Fragment);
             fs.create();
-            fs.compile_from_source(fsrc);
+            fs.compile_from_source(adaptedFsrc.c_str());
             if (!fs.is_compiled())
                 std::cerr << "[CNA EasyGL 3D] " << label << " FS failed:\n" << fs.info_log() << "\n";
 
             prog.create();
             prog.attach(vs);
             prog.attach(fs);
+#if defined(CNA_GL_PROFILE_WEBGL1)
+            // plan_glbackends.md GLB-36: WEBGL1's shader text has no layout(location=N) (GLSL
+            // ES 1.00 doesn't support it) -- rebind the SAME numeric locations here, extracted
+            // from the ORIGINAL ES 3.00 source, so every VertexArray/VAO attribute-binding call
+            // site elsewhere in this file (all hardcoded numeric indices) keeps working unchanged.
+            for (const auto& [location, name] : ExtractVertexAttribLocations(vsrc))
+            {
+                prog.bind_attrib_location(static_cast<unsigned int>(location), name);
+            }
+#endif
             prog.link();
             if (!prog.is_linked())
                 std::cerr << "[CNA EasyGL 3D] " << label << " link failed:\n" << prog.info_log() << "\n";
@@ -5522,11 +5925,11 @@ CNA_GL_RT_SAMPLE_UV_DECL
         {
             EnsureDefaultWhiteTexture();
             p.prog.set_uniform(p.loc_envmap, 1);
-            ::metagl::glActiveTexture(::metagl::TextureUnit::Texture1);
             if (params.envMap)
-                params.envMap->BindGL();
+                params.envMap->BindGL(1);
             else
-                default_white_texture_.bind(::easygl::TextureTarget::Texture2D);
+                default_white_texture_.active_bind(::easygl::TextureUnit::Texture1,
+                                                   ::easygl::TextureTarget::Texture2D);
             ::metagl::glActiveTexture(::metagl::TextureUnit::Texture0);
         }
 
@@ -5536,11 +5939,11 @@ CNA_GL_RT_SAMPLE_UV_DECL
             EnsureDefaultWhiteTexture();
             p.prog.set_uniform(p.loc_texture2, 1);
             rtFlipV[1] = SampledRowOrderIsBottomUp(params.texture1) ? 1.0f : 0.0f;
-            ::metagl::glActiveTexture(::metagl::TextureUnit::Texture1);
             if (params.texture1)
-                params.texture1->BindGL();
+                params.texture1->BindGL(1);
             else
-                default_white_texture_.bind(::easygl::TextureTarget::Texture2D);
+                default_white_texture_.active_bind(::easygl::TextureUnit::Texture1,
+                                                   ::easygl::TextureTarget::Texture2D);
             ::metagl::glActiveTexture(::metagl::TextureUnit::Texture0);
         }
 
@@ -5553,11 +5956,11 @@ CNA_GL_RT_SAMPLE_UV_DECL
             EnsureDefaultFlatNormalTexture();
             p.prog.set_uniform(p.loc_pbr_normalmap, 1);
             rtFlipV[1] = SampledRowOrderIsBottomUp(params.pbrNormalMap) ? 1.0f : 0.0f;
-            ::metagl::glActiveTexture(::metagl::TextureUnit::Texture1);
             if (params.pbrNormalMap)
-                params.pbrNormalMap->BindGL();
+                params.pbrNormalMap->BindGL(1);
             else
-                default_flat_normal_texture_.bind(::easygl::TextureTarget::Texture2D);
+                default_flat_normal_texture_.active_bind(::easygl::TextureUnit::Texture1,
+                                                         ::easygl::TextureTarget::Texture2D);
             ::metagl::glActiveTexture(::metagl::TextureUnit::Texture0);
         }
         if (p.loc_pbr_mr >= 0)
@@ -5565,11 +5968,11 @@ CNA_GL_RT_SAMPLE_UV_DECL
             EnsureDefaultWhiteTexture();
             p.prog.set_uniform(p.loc_pbr_mr, 2);
             rtFlipV[2] = SampledRowOrderIsBottomUp(params.pbrMetallicRoughnessMap) ? 1.0f : 0.0f;
-            ::metagl::glActiveTexture(::metagl::TextureUnit::Texture2);
             if (params.pbrMetallicRoughnessMap)
-                params.pbrMetallicRoughnessMap->BindGL();
+                params.pbrMetallicRoughnessMap->BindGL(2);
             else
-                default_white_texture_.bind(::easygl::TextureTarget::Texture2D);
+                default_white_texture_.active_bind(::easygl::TextureUnit::Texture2,
+                                                   ::easygl::TextureTarget::Texture2D);
             ::metagl::glActiveTexture(::metagl::TextureUnit::Texture0);
         }
         if (p.loc_pbr_emissivemap >= 0)
@@ -5577,11 +5980,11 @@ CNA_GL_RT_SAMPLE_UV_DECL
             EnsureDefaultWhiteTexture();
             p.prog.set_uniform(p.loc_pbr_emissivemap, 3);
             rtFlipV[3] = SampledRowOrderIsBottomUp(params.pbrEmissiveMap) ? 1.0f : 0.0f;
-            ::metagl::glActiveTexture(::metagl::TextureUnit::Texture3);
             if (params.pbrEmissiveMap)
-                params.pbrEmissiveMap->BindGL();
+                params.pbrEmissiveMap->BindGL(3);
             else
-                default_white_texture_.bind(::easygl::TextureTarget::Texture2D);
+                default_white_texture_.active_bind(::easygl::TextureUnit::Texture3,
+                                                   ::easygl::TextureTarget::Texture2D);
             ::metagl::glActiveTexture(::metagl::TextureUnit::Texture0);
         }
         if (p.loc_pbr_occlusionmap >= 0)
@@ -5589,11 +5992,11 @@ CNA_GL_RT_SAMPLE_UV_DECL
             EnsureDefaultWhiteTexture();
             p.prog.set_uniform(p.loc_pbr_occlusionmap, 4);
             rtFlipV[4] = SampledRowOrderIsBottomUp(params.pbrOcclusionMap) ? 1.0f : 0.0f;
-            ::metagl::glActiveTexture(::metagl::TextureUnit::Texture4);
             if (params.pbrOcclusionMap)
-                params.pbrOcclusionMap->BindGL();
+                params.pbrOcclusionMap->BindGL(4);
             else
-                default_white_texture_.bind(::easygl::TextureTarget::Texture2D);
+                default_white_texture_.active_bind(::easygl::TextureUnit::Texture4,
+                                                   ::easygl::TextureTarget::Texture2D);
             ::metagl::glActiveTexture(::metagl::TextureUnit::Texture0);
         }
         if (p.loc_pbr_metallic >= 0)
@@ -5608,9 +6011,10 @@ CNA_GL_RT_SAMPLE_UV_DECL
             p.prog.set_uniform(p.loc_texture, 0);
             rtFlipV[0] = SampledRowOrderIsBottomUp(params.texture0) ? 1.0f : 0.0f;
             if (params.texture0)
-                params.texture0->BindGL();
+                params.texture0->BindGL(0);
             else
-                default_white_texture_.bind(::easygl::TextureTarget::Texture2D);
+                default_white_texture_.active_bind(::easygl::TextureUnit::Texture0,
+                                                   ::easygl::TextureTarget::Texture2D);
             TraceBoundTextureUnit("stock3d-texture0", 0);
         }
 

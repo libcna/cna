@@ -1,16 +1,25 @@
 # --- Graphics Backend Selection ---
-# EasyGL is the default on Linux and Emscripten (WebGL 2 = OpenGL ES 3.0).
+# plan_glbackends.md: EasyGL is an internal implementation family, not a public backend name.
+# It is selected publicly via one of 4 GL-profile names -- OPENGLES/OPENGL33 (desktop/mobile,
+# non-Emscripten) and WEBGL1/WEBGL2 (Emscripten only). OPENGLES on Linux is the default GL-family
+# choice (was EASYGL); WEBGL2 is the default under Emscripten (was also EASYGL -- Emscripten's
+# GLES 3.0 request already mapped to a WebGL 2 context, it just had no name of its own).
 # Other platforms default to SDL_RENDERER.
-if(EMSCRIPTEN OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    set(_cna_default_backend "EASYGL")
+if(EMSCRIPTEN)
+    set(_cna_default_backend "WEBGL2")
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    set(_cna_default_backend "OPENGLES")
 else()
     set(_cna_default_backend "SDL_RENDERER")
 endif()
-set(CNA_GRAPHICS_BACKEND "${_cna_default_backend}" CACHE STRING "Graphics backend to use (SDL_RENDERER, EASYGL, BGFX, VULKAN, WEBGPU, MAGNUM, HEADLESS, SOFTWARE, STUB, D3D11, D3D12, CANVAS, SKIA, ASCII, FREEDIRECT, D3D9, DX1, DX2, DX3, DX5, DX6, DX7, DX8, D3D10, OPENGLES1, OPENGL4, OPENGL1, OPENGL2, SDL_GPU, WICKED, SOKOL, or DILIGENT)")
-set_property(CACHE CNA_GRAPHICS_BACKEND PROPERTY STRINGS "SDL_RENDERER" "EASYGL" "BGFX" "VULKAN" "WEBGPU" "MAGNUM" "HEADLESS" "SOFTWARE" "STUB" "D3D11" "D3D12" "CANVAS" "SKIA" "ASCII" "FREEDIRECT" "D3D9" "DX1" "DX2" "DX3" "DX5" "DX6" "DX7" "DX8" "D3D10" "OPENGLES1" "OPENGL4" "OPENGL1" "OPENGL2" "SDL_GPU" "WICKED" "SOKOL" "DILIGENT")
+set(CNA_GRAPHICS_BACKEND "${_cna_default_backend}" CACHE STRING "Graphics backend to use (SDL_RENDERER, OPENGLES, OPENGL33, WEBGL1, WEBGL2, BGFX, VULKAN, WEBGPU, MAGNUM, HEADLESS, SOFTWARE, STUB, D3D11, D3D12, CANVAS, SKIA, ASCII, FREEDIRECT, D3D9, DX1, DX2, DX3, DX5, DX6, DX7, DX8, D3D10, OPENGLES1, OPENGL4, OPENGL1, OPENGL2, SDL_GPU, WICKED, SOKOL, or DILIGENT)")
+set_property(CACHE CNA_GRAPHICS_BACKEND PROPERTY STRINGS "SDL_RENDERER" "OPENGLES" "OPENGL33" "WEBGL1" "WEBGL2" "BGFX" "VULKAN" "WEBGPU" "MAGNUM" "HEADLESS" "SOFTWARE" "STUB" "D3D11" "D3D12" "CANVAS" "SKIA" "ASCII" "FREEDIRECT" "D3D9" "DX1" "DX2" "DX3" "DX5" "DX6" "DX7" "DX8" "D3D10" "OPENGLES1" "OPENGL4" "OPENGL1" "OPENGL2" "SDL_GPU" "WICKED" "SOKOL" "DILIGENT")
 
 option(CNA_BACKEND_SDL_RENDERER "Enable SDL_Renderer graphics backend" OFF)
-option(CNA_BACKEND_EASY_GL "Enable easy-gl graphics backend" OFF)
+option(CNA_BACKEND_OPENGLES "Enable OpenGL ES graphics backend (internally: EasyGL)" OFF)
+option(CNA_BACKEND_OPENGL33 "Enable desktop OpenGL 3.3 core graphics backend (internally: EasyGL)" OFF)
+option(CNA_BACKEND_WEBGL1 "Enable WebGL 1 graphics backend, Emscripten only (internally: EasyGL)" OFF)
+option(CNA_BACKEND_WEBGL2 "Enable WebGL 2 graphics backend, Emscripten only (internally: EasyGL)" OFF)
 option(CNA_BACKEND_BGFX "Enable bgfx graphics backend" OFF)
 option(CNA_BACKEND_VULKAN "Enable Vulkan graphics backend" OFF)
 option(CNA_BACKEND_WEBGPU "Enable WebGPU graphics backend (wgpu-native)" OFF)
@@ -27,7 +36,7 @@ option(CNA_BACKEND_STUB "Enable Stub (no-op) graphics backend" OFF)
 option(CNA_BACKEND_D3D11 "Enable Direct3D 11 graphics backend (Windows only)" OFF)
 option(CNA_BACKEND_D3D12 "Enable Direct3D 12 graphics backend (Windows only)" OFF)
 # plan_canvas.md: HTML Canvas 2D backend -- Emscripten-only (design decision 1), a browser-native,
-# GPU-free 2D-only backend using canvas.getContext('2d') instead of EASYGL's WebGL2 context.
+# GPU-free 2D-only backend using canvas.getContext('2d') instead of WEBGL2's WebGL context.
 option(CNA_BACKEND_CANVAS "Enable HTML Canvas 2D graphics backend (Emscripten only)" OFF)
 option(CNA_BACKEND_SKIA "Enable Skia 2D raster graphics backend" OFF)
 # plan_ascii.md: SDL-windowed retro text/glyph-grid backend -- a thin decorator around
@@ -102,16 +111,17 @@ option(CNA_BACKEND_SDL_GPU "Enable SDL_gpu graphics backend" OFF)
 option(CNA_BACKEND_OPENGLES1 "Enable OpenGL ES 1.1 (fixed-function) graphics backend" OFF)
 
 # plan_opengl4.md GL4-1: real desktop OpenGL 4.x core-profile graphics backend -- deliberately
-# independent of CNA_BACKEND_EASY_GL/easy-gl (which targets OpenGL ES 3.0 / WebGL2, see
-# EasyGLGraphicsBackend's own SDL_GL_CONTEXT_PROFILE_ES context request, not a real desktop
-# GL 4.x core profile).
+# independent of the GL-family OPENGLES/OPENGL33/WEBGL1/WEBGL2 backends (internally EasyGL; the
+# OPENGLES default targets OpenGL ES 3.0 via EasyGLGraphicsBackend's own
+# SDL_GL_CONTEXT_PROFILE_ES context request, not a real desktop GL 4.x core profile).
 option(CNA_BACKEND_OPENGL4 "Enable real desktop OpenGL 4.x core-profile graphics backend" OFF)
 
 option(CNA_BACKEND_OPENGL1 "Enable native legacy OpenGL 1.x fixed-function graphics backend" OFF)
 
 # plan_opengl2.md: native desktop OpenGL 2.1 (compatibility profile, GLSL 1.10) graphics backend --
-# deliberately independent of CNA_BACKEND_EASY_GL/easy-gl (which targets OpenGL ES 3.0 / WebGL2
-# and cannot create a desktop GL 2.1 compatibility context).
+# deliberately independent of the GL-family OPENGLES/OPENGL33/WEBGL1/WEBGL2 backends (internally
+# EasyGL, which targets OpenGL ES 3.0 / WebGL2 or a 3.3 core profile and cannot create a desktop
+# GL 2.1 compatibility context).
 option(CNA_BACKEND_OPENGL2 "Enable native OpenGL 2.1 graphics backend (no EasyGL)" OFF)
 
 # plan_wicked.md: Wicked Engine's render hardware interface (wi::graphics::GraphicsDevice), which
@@ -128,7 +138,7 @@ option(CNA_BACKEND_SOKOL "Enable sokol_gfx graphics backend" OFF)
 option(CNA_BACKEND_DILIGENT "Enable Diligent Engine graphics backend" OFF)
 
 set(_cna_explicit_backend_selection OFF)
-if(CNA_BACKEND_SDL_RENDERER OR CNA_BACKEND_EASY_GL OR CNA_BACKEND_BGFX OR CNA_BACKEND_VULKAN OR CNA_BACKEND_WEBGPU OR CNA_BACKEND_MAGNUM OR CNA_BACKEND_HEADLESS OR CNA_BACKEND_SOFTWARE OR CNA_BACKEND_STUB OR CNA_BACKEND_D3D11 OR CNA_BACKEND_D3D12 OR CNA_BACKEND_CANVAS OR CNA_BACKEND_SKIA OR CNA_BACKEND_ASCII OR CNA_BACKEND_FREEDIRECT OR CNA_BACKEND_D3D9 OR CNA_BACKEND_DX1 OR CNA_BACKEND_DX2 OR CNA_BACKEND_DX3 OR CNA_BACKEND_DX5 OR CNA_BACKEND_DX6 OR CNA_BACKEND_DX7 OR CNA_BACKEND_DX8 OR CNA_BACKEND_D3D10 OR CNA_BACKEND_OPENGLES1 OR CNA_BACKEND_OPENGL4 OR CNA_BACKEND_OPENGL1 OR CNA_BACKEND_OPENGL2 OR CNA_BACKEND_SDL_GPU OR CNA_BACKEND_WICKED OR CNA_BACKEND_SOKOL OR CNA_BACKEND_DILIGENT)
+if(CNA_BACKEND_SDL_RENDERER OR CNA_BACKEND_OPENGLES OR CNA_BACKEND_OPENGL33 OR CNA_BACKEND_WEBGL1 OR CNA_BACKEND_WEBGL2 OR CNA_BACKEND_BGFX OR CNA_BACKEND_VULKAN OR CNA_BACKEND_WEBGPU OR CNA_BACKEND_MAGNUM OR CNA_BACKEND_HEADLESS OR CNA_BACKEND_SOFTWARE OR CNA_BACKEND_STUB OR CNA_BACKEND_D3D11 OR CNA_BACKEND_D3D12 OR CNA_BACKEND_CANVAS OR CNA_BACKEND_SKIA OR CNA_BACKEND_ASCII OR CNA_BACKEND_FREEDIRECT OR CNA_BACKEND_D3D9 OR CNA_BACKEND_DX1 OR CNA_BACKEND_DX2 OR CNA_BACKEND_DX3 OR CNA_BACKEND_DX5 OR CNA_BACKEND_DX6 OR CNA_BACKEND_DX7 OR CNA_BACKEND_DX8 OR CNA_BACKEND_D3D10 OR CNA_BACKEND_OPENGLES1 OR CNA_BACKEND_OPENGL4 OR CNA_BACKEND_OPENGL1 OR CNA_BACKEND_OPENGL2 OR CNA_BACKEND_SDL_GPU OR CNA_BACKEND_WICKED OR CNA_BACKEND_SOKOL OR CNA_BACKEND_DILIGENT)
     set(_cna_explicit_backend_selection ON)
 endif()
 
@@ -137,8 +147,17 @@ if(_cna_explicit_backend_selection)
     if(CNA_BACKEND_SDL_RENDERER)
         list(APPEND _cna_enabled_backends "SDL_RENDERER")
     endif()
-    if(CNA_BACKEND_EASY_GL)
-        list(APPEND _cna_enabled_backends "EASYGL")
+    if(CNA_BACKEND_OPENGLES)
+        list(APPEND _cna_enabled_backends "OPENGLES")
+    endif()
+    if(CNA_BACKEND_OPENGL33)
+        list(APPEND _cna_enabled_backends "OPENGL33")
+    endif()
+    if(CNA_BACKEND_WEBGL1)
+        list(APPEND _cna_enabled_backends "WEBGL1")
+    endif()
+    if(CNA_BACKEND_WEBGL2)
+        list(APPEND _cna_enabled_backends "WEBGL2")
     endif()
     if(CNA_BACKEND_BGFX)
         list(APPEND _cna_enabled_backends "BGFX")
@@ -275,13 +294,33 @@ endif()
 if(CNA_GRAPHICS_BACKEND STREQUAL "MAGNUM" AND EMSCRIPTEN)
     message(FATAL_ERROR
         "CNA: MAGNUM backend cannot target Emscripten -- Magnum supplies no standalone WebGL "
-        "function loader for an externally created context. Use -DCNA_GRAPHICS_BACKEND=EASYGL "
-        "(WebGL 2) or CANVAS for browser builds.")
+        "function loader for an externally created context. Use -DCNA_GRAPHICS_BACKEND=WEBGL2 "
+        "or CANVAS for browser builds.")
 endif()
 
-if(CNA_GRAPHICS_BACKEND STREQUAL "EASYGL")
-    if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
-        message(WARNING "CNA: EASYGL backend is primarily tested on Linux. Other platforms may require additional setup.")
+# plan_glbackends.md Phase A/GLB-7: all 4 GL-family public backends (OPENGLES/OPENGL33 desktop,
+# WEBGL1/WEBGL2 Emscripten) share one internal implementation (EasyGL, on top of the sibling
+# easy-gl library) -- this block sets it up once regardless of which of the 4 was selected.
+#
+# GLB-38 done: the WebGL1 work (GLB-30..35) landed on easy-gl develop, so this builds against
+# the canonical '../easy-gl' sibling checkout again; the temporary '../easy-glrvc' (branch
+# 'rvc') redirect from GLB-7 is retired.
+if(CNA_GRAPHICS_BACKEND STREQUAL "OPENGLES" OR CNA_GRAPHICS_BACKEND STREQUAL "OPENGL33"
+        OR CNA_GRAPHICS_BACKEND STREQUAL "WEBGL1" OR CNA_GRAPHICS_BACKEND STREQUAL "WEBGL2")
+    if((CNA_GRAPHICS_BACKEND STREQUAL "OPENGLES" OR CNA_GRAPHICS_BACKEND STREQUAL "OPENGL33") AND EMSCRIPTEN)
+        message(FATAL_ERROR
+            "CNA: ${CNA_GRAPHICS_BACKEND} is a desktop/mobile GL backend and cannot target "
+            "Emscripten -- use WEBGL1 or WEBGL2 instead.")
+    endif()
+    if((CNA_GRAPHICS_BACKEND STREQUAL "WEBGL1" OR CNA_GRAPHICS_BACKEND STREQUAL "WEBGL2") AND NOT EMSCRIPTEN)
+        message(FATAL_ERROR
+            "CNA: ${CNA_GRAPHICS_BACKEND} only builds when targeting Emscripten (WebGL is a "
+            "browser API). Configure with -DCMAKE_TOOLCHAIN_FILE=\$EMSDK/upstream/emscripten/"
+            "cmake/Modules/Platform/Emscripten.cmake (or use emcmake), or use OPENGLES/OPENGL33 "
+            "for a native desktop/mobile GL build.")
+    endif()
+    if(CNA_GRAPHICS_BACKEND STREQUAL "OPENGLES" AND NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        message(WARNING "CNA: OPENGLES backend is primarily tested on Linux. Other platforms may require additional setup.")
     endif()
     # easy-gl is a SIBLING repository checkout, not a git submodule of this
     # repo (Task DEV-BUILD-001) -- see sharp-runtime's identical check above
@@ -290,10 +329,10 @@ if(CNA_GRAPHICS_BACKEND STREQUAL "EASYGL")
         message(FATAL_ERROR
             "CNA: Missing sibling repository 'easy-gl' at "
             "${CMAKE_CURRENT_SOURCE_DIR}/../easy-gl -- this is a separate git "
-            "checkout expected next to this repo's own directory, not a git "
-            "submodule (git submodule update --init will not fetch it). Fix: "
-            "cd ${CMAKE_CURRENT_SOURCE_DIR}/.. && "
-            "git clone https://github.com/openeggbert/easy-gl.git")
+            "checkout (branch 'develop' of easy-gl) expected next to this repo's "
+            "own directory, not a git submodule (git submodule update --init will "
+            "not fetch it). easy-gl itself expects its own sibling '../meta-gl' "
+            "checkout (branch 'develop' of meta-gl).")
     endif()
     add_subdirectory(../easy-gl easy-gl)
 endif()
@@ -329,7 +368,7 @@ if(CNA_GRAPHICS_BACKEND STREQUAL "WICKED")
     if(EMSCRIPTEN)
         message(FATAL_ERROR
             "CNA: WICKED backend cannot target Emscripten -- Wicked Engine has no WebGPU/WebGL "
-            "device. Use -DCNA_GRAPHICS_BACKEND=EASYGL or CANVAS for web builds.")
+            "device. Use -DCNA_GRAPHICS_BACKEND=WEBGL2 or CANVAS for web builds.")
     endif()
     if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT CMAKE_SYSTEM_NAME STREQUAL "Windows")
         message(WARNING "CNA: WICKED backend is developed against Linux/Vulkan. Other platforms may require additional setup.")
@@ -379,12 +418,20 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "OPENGL1")
     set(BACKEND_TARGET "cna_backend_graphics_opengl1")
     add_compile_definitions(CNA_BACKEND_OPENGL1)
     set(CNA_BACKEND_DEFINE "CNA_BACKEND_OPENGL1")
-elseif(CNA_GRAPHICS_BACKEND STREQUAL "EASYGL")
-    message(STATUS "CNA: Using EASYGL graphics backend")
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "OPENGLES" OR CNA_GRAPHICS_BACKEND STREQUAL "OPENGL33"
+        OR CNA_GRAPHICS_BACKEND STREQUAL "WEBGL1" OR CNA_GRAPHICS_BACKEND STREQUAL "WEBGL2")
+    message(STATUS "CNA: Using ${CNA_GRAPHICS_BACKEND} graphics backend (internal implementation: EasyGL)")
     set(BACKEND_DIR "src/CNA/Internal/Backends/EasyGL")
     set(BACKEND_TARGET "cna_backend_graphics_easygl")
+    # CNA_BACKEND_EASYGL is the internal implementation identity -- existing #ifdef
+    # CNA_BACKEND_EASYGL guards elsewhere in the codebase keep working unmodified regardless of
+    # which of the 4 public GL profiles below was selected (plan_glbackends.md GLB-3).
     add_compile_definitions(CNA_BACKEND_EASYGL)
     set(CNA_BACKEND_DEFINE "CNA_BACKEND_EASYGL")
+    # CNA_GL_PROFILE_* selects the GL context/shader profile within the shared EasyGL
+    # implementation -- see plan_glbackends.md Phase B/GLB-8 for how EasyGLGraphicsBackend.cpp
+    # uses this to choose context-creation attributes and shader headers.
+    add_compile_definitions("CNA_GL_PROFILE_${CNA_GRAPHICS_BACKEND}")
 elseif(CNA_GRAPHICS_BACKEND STREQUAL "BGFX")
     message(STATUS "CNA: Using BGFX graphics backend")
     set(BACKEND_DIR "src/CNA/Internal/Backends/Bgfx")

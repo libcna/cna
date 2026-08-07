@@ -30,10 +30,26 @@ endif()
 # the whole runtime instead of unwinding) - this codebase relies on exceptions pervasively
 # (System::Exception hierarchy, EXPECT_THROW tests, etc.), so it must be enabled globally,
 # before sharp-runtime is added below, since unwinding requires every frame in the call chain
-# to be compiled with -fexceptions.
+# to agree on the same exception-handling ABI.
+#
+# plan_glbackends.md GLB-39: uses the modern Wasm exception-handling proposal
+# (-fwasm-exceptions), not the legacy JS-based -fexceptions model this project used previously.
+# Forced by a real link failure once the GL-family backends (OPENGLES/OPENGL33/WEBGL1/WEBGL2)
+# started depending on the sibling easy-gl -> meta-gl chain: easy-gl's own
+# cmake/EasyGlPlatform.cmake sets -fwasm-exceptions in ITS directory scope (needed for its own
+# standalone Emscripten preset/tests), which only affects object files compiled within that
+# subdirectory tree (meta-gl, easy-gl) -- it does NOT propagate to CNA's own top-level directory
+# scope, where the final executable link step is defined (cmake/Examples.cmake). With the old
+# legacy -fexceptions here, meta-gl's objects (compiled under -fwasm-exceptions, referencing the
+# Wasm EH exception-tag import symbol __cpp_exception) and the final link (configured for legacy
+# JS EH, unaware of that symbol) disagreed on ABI, producing
+# "wasm-ld: undefined symbol: __cpp_exception". Matching CNA's own top-level flag to
+# -fwasm-exceptions makes every object file in the link agree, without needing to touch the
+# sibling repo at all. -sNO_DISABLE_EXCEPTION_CATCHING is a legacy-JS-EH-only linker setting with
+# no Wasm-EH equivalent (Wasm EH can always catch), so it is dropped rather than replaced.
 if(EMSCRIPTEN)
-    add_compile_options(-fexceptions)
-    add_link_options(-fexceptions -sNO_DISABLE_EXCEPTION_CATCHING=1)
+    add_compile_options(-fwasm-exceptions)
+    add_link_options(-fwasm-exceptions)
 endif()
 
 option(CNA_BUILD_TESTS "Build CNA tests" ON)

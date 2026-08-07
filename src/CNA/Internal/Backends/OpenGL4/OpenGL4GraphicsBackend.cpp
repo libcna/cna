@@ -1266,7 +1266,7 @@ void main()
             glDeleteTextures(1, &texture_);
     }
 
-    void OpenGL4TextureBackend::BindGL() const
+    void OpenGL4TextureBackend::BindGL(int /*unit*/) const
     {
         glBindTexture(GL_TEXTURE_2D, texture_);
     }
@@ -1343,7 +1343,7 @@ void main()
             glDeleteTextures(1, &texture_);
     }
 
-    void OpenGL4Texture3DBackend::BindGL() const
+    void OpenGL4Texture3DBackend::BindGL(int /*unit*/) const
     {
         glBindTexture(GL_TEXTURE_3D, texture_);
     }
@@ -1437,7 +1437,7 @@ void main()
             glDeleteTextures(1, &texture_);
     }
 
-    void OpenGL4TextureCubeBackend::BindGL() const
+    void OpenGL4TextureCubeBackend::BindGL(int /*unit*/) const
     {
         glBindTexture(GL_TEXTURE_CUBE_MAP, texture_);
     }
@@ -1636,7 +1636,7 @@ void main()
         depthRenderbuffer_ = msaaColorRenderbuffer_ = resolveFbo_ = fbo_ = colorTexture_ = 0;
     }
 
-    void OpenGL4RenderTargetBackend::BindGL() const
+    void OpenGL4RenderTargetBackend::BindGL(int /*unit*/) const
     {
         glBindTexture(GL_TEXTURE_2D, colorTexture_);
     }
@@ -1805,7 +1805,7 @@ void main()
         depthRenderbuffer_ = msaaColorRenderbuffer_ = resolveFbo_ = fbo_ = cubeTexture_ = 0;
     }
 
-    void OpenGL4RenderTargetCubeBackend::BindGL() const
+    void OpenGL4RenderTargetCubeBackend::BindGL(int /*unit*/) const
     {
         glBindTexture(GL_TEXTURE_CUBE_MAP, cubeTexture_);
     }

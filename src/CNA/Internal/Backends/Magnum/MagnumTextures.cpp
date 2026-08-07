@@ -167,7 +167,7 @@ namespace CNA::Internal::Backends::Magnum
         ApplySamplerStateTo(*texture_, MagnumSamplerState{}, levelCount_);
     }
 
-    void MagnumTextureBackend::BindGL() const
+    void MagnumTextureBackend::BindGL(int /*unit*/) const
     {
         texture_->bind(0);
     }
@@ -290,7 +290,7 @@ namespace CNA::Internal::Backends::Magnum
         return true;
     }
 
-    void MagnumTextureCubeBackend::BindGL() const
+    void MagnumTextureCubeBackend::BindGL(int /*unit*/) const
     {
         texture_->bind(0);
     }
@@ -370,7 +370,7 @@ namespace CNA::Internal::Backends::Magnum
         return true;
     }
 
-    void MagnumTexture3DBackend::BindGL() const
+    void MagnumTexture3DBackend::BindGL(int /*unit*/) const
     {
         texture_->bind(0);
     }

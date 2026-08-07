@@ -1,5 +1,6 @@
 #include "CNA/Internal/Backends/Ascii/AsciiGraphicsBackend.hpp"
 #include "CNA/Internal/Backends/Ascii/AsciiFontAtlas.hpp"
+#include "CNA/Internal/Backends/Common/NoOp3DResources.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Blend.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendFunction.hpp"
 
@@ -212,30 +213,77 @@ namespace CNA::Internal::Backends::Ascii
 
     bool AsciiGraphicsBackend::SupportsDepthStencil() const { return inner_->SupportsDepthStencil(); }
 
-    void AsciiGraphicsBackend::ClearColorAndDepth(float r, float g, float b, float a, float depth) { inner_->ClearColorAndDepth(r, g, b, a, depth); }
-    void AsciiGraphicsBackend::ClearDepth(float depth) { inner_->ClearDepth(depth); }
-    void AsciiGraphicsBackend::ClearStencil(int stencil) { inner_->ClearStencil(stencil); }
-    void AsciiGraphicsBackend::ClearDepthAndStencil(float depth, int stencil) { inner_->ClearDepthAndStencil(depth, stencil); }
-    void AsciiGraphicsBackend::ClearColorAndStencil(float r, float g, float b, float a, int stencil) { inner_->ClearColorAndStencil(r, g, b, a, stencil); }
-    void AsciiGraphicsBackend::ClearColorDepthAndStencil(float r, float g, float b, float a, float depth, int stencil) { inner_->ClearColorDepthAndStencil(r, g, b, a, depth, stencil); }
-    void AsciiGraphicsBackend::SetDepthTestEnabled(bool enabled) { inner_->SetDepthTestEnabled(enabled); }
-    void AsciiGraphicsBackend::SetBlendEnabled(bool enabled) { inner_->SetBlendEnabled(enabled); }
-    void AsciiGraphicsBackend::SetDepthWriteEnabled(bool enabled) { inner_->SetDepthWriteEnabled(enabled); }
-    std::unique_ptr<IVertexBufferBackend> AsciiGraphicsBackend::CreateVertexBuffer(int vertex_capacity) { return inner_->CreateVertexBuffer(vertex_capacity); }
-    std::unique_ptr<IIndexBufferBackend> AsciiGraphicsBackend::CreateIndexBuffer16(int index_capacity) { return inner_->CreateIndexBuffer16(index_capacity); }
-    std::unique_ptr<IOcclusionQueryBackend> AsciiGraphicsBackend::CreateOcclusionQuery() { return inner_->CreateOcclusionQuery(); }
-    void AsciiGraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend& vb,
-                                                      const Matrix& world, const Matrix& view, const Matrix& projection,
-                                                      PrimitiveType primitive, int primitiveCount)
+    // The ASCII wrapper owns the policy. Do not forward unsupported calls to its inner
+    // SDL_Renderer instance, whose independently stored policy would otherwise stay at Throw.
+    void AsciiGraphicsBackend::ClearColorAndDepth(float, float, float, float, float) { HandleUnsupported3DCall("ASCII", "ClearColorAndDepth"); }
+    void AsciiGraphicsBackend::ClearDepth(float) { HandleUnsupported3DCall("ASCII", "ClearDepth"); }
+    void AsciiGraphicsBackend::ClearStencil(int) { HandleUnsupported3DCall("ASCII", "ClearStencil"); }
+    void AsciiGraphicsBackend::ClearDepthAndStencil(float, int) { HandleUnsupported3DCall("ASCII", "ClearDepthAndStencil"); }
+    void AsciiGraphicsBackend::ClearColorAndStencil(float, float, float, float, int) { HandleUnsupported3DCall("ASCII", "ClearColorAndStencil"); }
+    void AsciiGraphicsBackend::ClearColorDepthAndStencil(float, float, float, float, float, int) { HandleUnsupported3DCall("ASCII", "ClearColorDepthAndStencil"); }
+    void AsciiGraphicsBackend::SetDepthTestEnabled(bool) { HandleUnsupported3DCall("ASCII", "SetDepthTestEnabled"); }
+    void AsciiGraphicsBackend::SetBlendEnabled(bool) { HandleUnsupported3DCall("ASCII", "SetBlendEnabled"); }
+    void AsciiGraphicsBackend::SetDepthWriteEnabled(bool) { HandleUnsupported3DCall("ASCII", "SetDepthWriteEnabled"); }
+
+    std::unique_ptr<IVertexBufferBackend> AsciiGraphicsBackend::CreateVertexBuffer(
+        int vertexCapacity)
     {
-        inner_->DrawColoredPrimitives(vb, world, view, projection, primitive, primitiveCount);
+        HandleUnsupported3DCall("ASCII", "CreateVertexBuffer");
+        return std::make_unique<NoOpVertexBufferBackend>(vertexCapacity);
     }
-    void AsciiGraphicsBackend::DrawIndexedColoredPrimitives(const IVertexBufferBackend& vb,
-                                                             const IIndexBufferBackend& ib,
-                                                             const Matrix& world, const Matrix& view, const Matrix& projection,
-                                                             PrimitiveType primitive, int primitiveCount)
+
+    std::unique_ptr<IIndexBufferBackend> AsciiGraphicsBackend::CreateIndexBuffer16(
+        int indexCapacity)
     {
-        inner_->DrawIndexedColoredPrimitives(vb, ib, world, view, projection, primitive, primitiveCount);
+        HandleUnsupported3DCall("ASCII", "CreateIndexBuffer16");
+        return std::make_unique<NoOpIndexBufferBackend>(indexCapacity);
+    }
+
+    std::unique_ptr<IOcclusionQueryBackend> AsciiGraphicsBackend::CreateOcclusionQuery()
+    {
+        HandleUnsupported3DCall("ASCII", "CreateOcclusionQuery");
+        return std::make_unique<NoOpOcclusionQueryBackend>();
+    }
+
+    std::unique_ptr<ITexture3DBackend> AsciiGraphicsBackend::CreateTexture3D(
+        int width, int height, int depth, bool, int)
+    {
+        if (!ShouldStubUnsupported3DResource())
+            return nullptr;
+        HandleUnsupported3DCall("ASCII", "CreateTexture3D");
+        return std::make_unique<NoOpTexture3DBackend>(width, height, depth);
+    }
+
+    std::unique_ptr<ITextureCubeBackend> AsciiGraphicsBackend::CreateTextureCube(
+        int size, bool, int)
+    {
+        if (!ShouldStubUnsupported3DResource())
+            return nullptr;
+        HandleUnsupported3DCall("ASCII", "CreateTextureCube");
+        return std::make_unique<NoOpTextureCubeBackend>(size);
+    }
+
+    std::unique_ptr<IRenderTargetCubeBackend> AsciiGraphicsBackend::CreateRenderTargetCube(
+        int size, int, bool, bool, int)
+    {
+        if (!ShouldStubUnsupported3DResource())
+            return nullptr;
+        HandleUnsupported3DCall("ASCII", "CreateRenderTargetCube");
+        return std::make_unique<NoOpRenderTargetCubeBackend>(size);
+    }
+
+    void AsciiGraphicsBackend::DrawColoredPrimitives(
+        const IVertexBufferBackend&, const Matrix&, const Matrix&, const Matrix&,
+        PrimitiveType, int)
+    {
+        HandleUnsupported3DCall("ASCII", "DrawColoredPrimitives");
+    }
+
+    void AsciiGraphicsBackend::DrawIndexedColoredPrimitives(
+        const IVertexBufferBackend&, const IIndexBufferBackend&,
+        const Matrix&, const Matrix&, const Matrix&, PrimitiveType, int)
+    {
+        HandleUnsupported3DCall("ASCII", "DrawIndexedColoredPrimitives");
     }
 }
 
