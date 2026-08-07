@@ -133,7 +133,13 @@ target_link_libraries(CNA
 # CNA's own VertexDeclaration.cpp. Found empirically: cna_reference_dump failed with "undefined
 # reference to vtable for VertexDeclaration" while every SOKOL CTest target, which already wraps
 # its link line in --start-group/--end-group, linked fine.
-if(CNA_GRAPHICS_BACKEND STREQUAL "D3D11" OR CNA_GRAPHICS_BACKEND STREQUAL "D3D12" OR CNA_GRAPHICS_BACKEND STREQUAL "D3D9" OR CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU" OR CNA_GRAPHICS_BACKEND STREQUAL "SOKOL")
+#
+# plan_diligent.md DILIGENT-1: the Diligent backend joins for exactly the reason SDL_GPU did --
+# DiligentGraphicsBackend's constructor calls CNA::Logger::Info to report which native API the
+# runtime device selection actually chose (the one piece of information no other backend needs to
+# log, since every other backend's API is fixed at build time). Hit for real on the first full
+# build: cna_reference_dump failed with "undefined reference to CNA::Logger::Info".
+if(CNA_GRAPHICS_BACKEND STREQUAL "D3D11" OR CNA_GRAPHICS_BACKEND STREQUAL "D3D12" OR CNA_GRAPHICS_BACKEND STREQUAL "D3D9" OR CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU" OR CNA_GRAPHICS_BACKEND STREQUAL "SOKOL" OR CNA_GRAPHICS_BACKEND STREQUAL "DILIGENT")
     target_link_libraries(${BACKEND_TARGET} PRIVATE CNA)
 endif()
 

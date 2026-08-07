@@ -237,6 +237,10 @@ include(cmake/Tests/WickedTests.cmake)
 # plan_sokol.md SOKOL-16/17: sokol_gfx backend CTest registration. Needs a real display and GL
 # context, same as the EasyGL/Vulkan/Bgfx entries above -- run with a real (or Xvfb) DISPLAY.
 include(cmake/Tests/SokolTests.cmake)
+# plan_diligent.md DILIGENT-16: real-GPU pixel proof for the Diligent Engine backend.
+# Skips (exit 77) rather than fails when no device can be created, since Diligent picks its
+# native API at runtime and a headless machine may have none of them.
+include(cmake/Tests/DiligentTests.cmake)
 
 include(cmake/Harnesses.cmake)
 

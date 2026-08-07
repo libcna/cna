@@ -124,6 +124,9 @@ TEST(GraphicsBackendCompileDefinitionsTest, ExactlyOneGraphicsBackendIsSelected)
 #ifdef CNA_BACKEND_SOKOL
     ++enabled;
 #endif
+#ifdef CNA_BACKEND_DILIGENT
+    ++enabled;
+#endif
 
     EXPECT_EQ(enabled, 1);
 }

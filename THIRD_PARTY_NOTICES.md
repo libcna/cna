@@ -47,6 +47,17 @@ unmodified upstream binary release; the library is not copied into the CNA sourc
 `wgpu-native` is available under the Apache License 2.0 and MIT License. See the upstream release
 package for the complete license texts and notices that apply to the selected binary.
 
+## DiligentCore (DILIGENT backend dependency)
+
+The experimental `DILIGENT` graphics backend uses DiligentCore, the render-device/swap-chain layer
+of Diligent Engine by Diligent Graphics LLC. CNA's CMake integration fetches an unmodified upstream
+checkout at the pinned tag `v2.5.6` (recursive submodules included) at configure time and builds it
+from source; nothing is copied into the CNA source tree and no local patch is carried. DiligentCore
+is available under the Apache License 2.0. Its own vendored third-party components -- glslang,
+SPIRV-Tools, SPIRV-Cross, SPIRV-Headers, Vulkan-Headers, volk and xxHash -- carry their own
+licenses; see `License.txt` and `ThirdParty/` in the fetched upstream checkout for the complete
+license texts and notices.
+
 ## sokol (SOKOL backend dependency)
 
 The experimental `SOKOL` graphics backend uses `sokol_gfx.h` and `sokol_log.h` from the sokol

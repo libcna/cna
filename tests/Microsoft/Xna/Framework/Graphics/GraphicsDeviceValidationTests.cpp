@@ -16,7 +16,6 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexBufferBinding.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/InvalidOperationException.hpp"
-#include "System/NotSupportedException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
 using Microsoft::Xna::Framework::Color;
@@ -178,6 +177,8 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_FourTargets_DoesNotThrow)
     // Sokol left this list at plan_sokol.md SOKOL-26: it is now real-MRT-capable too (a genuine
     // multi-attachment sg_pass, 2-4 RenderTarget2D targets), so 4 real targets bind cleanly here
     // exactly like EasyGL/Vulkan/D3D11/etc. do below.
+    // Diligent left this list at plan_diligent.md DILIGENT-24: it is now real-MRT-capable
+    // too (up to four attachments), so 4 real targets bind cleanly here as well.
     EXPECT_THROW(gd.SetRenderTargets(bindings), std::runtime_error);
 #elif defined(CNA_BACKEND_STUB)
     // plan_stub.md: Stub supports no render targets AT ALL -- it keeps IGraphicsBackend's nullptr

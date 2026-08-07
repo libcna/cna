@@ -37,8 +37,10 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Uploads a slice of 16-bit indices with streaming semantics.
          *
-         * The @p options hint is accepted for API conformance but is currently
-         * ignored by all CNA backends — all writes go to the buffer beginning.
+         * Most CNA backends honor @p options as a real GPU mapping hint (buffer orphaning for
+         * `Discard`, an unsynchronized write for `NoOverwrite`); a few still ignore it and always
+         * behave like `Discard`. Either way the destination write always starts at the buffer's
+         * own beginning — @p startIndex only selects where reading from @p data begins.
          *
          * @param data         Pointer to the source 16-bit index array.
          * @param startIndex   Index of the first element to read from @p data.
@@ -56,8 +58,10 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Uploads a slice of 32-bit indices with streaming semantics.
          *
-         * The @p options hint is accepted for API conformance but is currently
-         * ignored by all CNA backends — all writes go to the buffer beginning.
+         * Most CNA backends honor @p options as a real GPU mapping hint (buffer orphaning for
+         * `Discard`, an unsynchronized write for `NoOverwrite`); a few still ignore it and always
+         * behave like `Discard`. Either way the destination write always starts at the buffer's
+         * own beginning — @p startIndex only selects where reading from @p data begins.
          *
          * @param data         Pointer to the source 32-bit index array.
          * @param startIndex   Index of the first element to read from @p data.

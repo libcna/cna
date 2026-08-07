@@ -96,7 +96,10 @@ namespace CNA
         Wicked,
 
         /** @brief sokol_gfx (experimental). */
-        Sokol
+        Sokol,
+
+        /** @brief Diligent Engine (experimental; picks its own native API at runtime). */
+        Diligent
     };
 
     /**
@@ -170,6 +173,8 @@ namespace CNA
         return GraphicsBackendType::Wicked;
 #elif defined(CNA_BACKEND_SOKOL)
         return GraphicsBackendType::Sokol;
+#elif defined(CNA_BACKEND_DILIGENT)
+        return GraphicsBackendType::Diligent;
 #else
 #error "CNA: no CNA_BACKEND_* compile definition set -- graphics backend selection (cmake/BackendSelection.cmake) is broken"
 #endif
@@ -219,6 +224,7 @@ namespace CNA
             case GraphicsBackendType::OpenGL2:       return "OPENGL2";
             case GraphicsBackendType::Wicked:        return "WICKED";
             case GraphicsBackendType::Sokol:         return "SOKOL";
+            case GraphicsBackendType::Diligent:      return "DILIGENT";
         }
         return "UNKNOWN";
     }

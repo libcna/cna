@@ -36,8 +36,10 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Uploads VertexPositionColor vertices with streaming semantics.
          *
-         * The @p options hint is stored for API conformance but is currently ignored
-         * by all CNA backends — all writes go to the buffer beginning.
+         * Most CNA backends honor @p options as a real GPU mapping hint (buffer orphaning for
+         * `Discard`, an unsynchronized write for `NoOverwrite`); a few still ignore it and always
+         * behave like `Discard`. Either way the destination write always starts at the buffer's
+         * own beginning — @p startIndex only selects where reading from @p data begins.
          *
          * @param data         Pointer to the source vertex array.
          * @param startIndex   Index of the first element to read from @p data.
@@ -55,8 +57,10 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Uploads VertexPositionColorTexture vertices with streaming semantics.
          *
-         * The @p options hint is stored for API conformance but is currently ignored
-         * by all CNA backends — all writes go to the buffer beginning.
+         * Most CNA backends honor @p options as a real GPU mapping hint (buffer orphaning for
+         * `Discard`, an unsynchronized write for `NoOverwrite`); a few still ignore it and always
+         * behave like `Discard`. Either way the destination write always starts at the buffer's
+         * own beginning — @p startIndex only selects where reading from @p data begins.
          *
          * @param data         Pointer to the source vertex array.
          * @param startIndex   Index of the first element to read from @p data.
@@ -74,8 +78,10 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Uploads VertexPositionNormalTexture vertices with streaming semantics.
          *
-         * The @p options hint is stored for API conformance but is currently ignored
-         * by all CNA backends — all writes go to the buffer beginning.
+         * Most CNA backends honor @p options as a real GPU mapping hint (buffer orphaning for
+         * `Discard`, an unsynchronized write for `NoOverwrite`); a few still ignore it and always
+         * behave like `Discard`. Either way the destination write always starts at the buffer's
+         * own beginning — @p startIndex only selects where reading from @p data begins.
          *
          * @param data         Pointer to the source vertex array.
          * @param startIndex   Index of the first element to read from @p data.
@@ -93,8 +99,10 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Uploads VertexPositionTexture vertices with streaming semantics.
          *
-         * The @p options hint is stored for API conformance but is currently ignored
-         * by all CNA backends — all writes go to the buffer beginning.
+         * Most CNA backends honor @p options as a real GPU mapping hint (buffer orphaning for
+         * `Discard`, an unsynchronized write for `NoOverwrite`); a few still ignore it and always
+         * behave like `Discard`. Either way the destination write always starts at the buffer's
+         * own beginning — @p startIndex only selects where reading from @p data begins.
          *
          * @param data         Pointer to the source vertex array.
          * @param startIndex   Index of the first element to read from @p data.
