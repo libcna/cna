@@ -21,6 +21,7 @@
 
 #include "CNA/GraphicsCapability.hpp"
 #include "CNA/Internal/Backends/Diligent/DiligentDeviceSelection.hpp"
+#include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 
 /// Forward declaration matching SDL3's own `typedef struct SDL_GLContextState* SDL_GLContext;` --
 /// avoids pulling the full SDL3 header into every translation unit that includes this one, the same
@@ -583,6 +584,17 @@ namespace CNA::Internal::Backends::Diligent
         /** @brief NOXNA. Returns the underlying Diligent buffer, or nullptr before the first upload. */
         NOXNA [[nodiscard]] Dg::IBuffer* GetBuffer() const { return buffer_; }
 
+        /**
+         * @brief NOXNA. REMED-GFX-DECL-GUARD: the declaration this buffer last had propagated.
+         *
+         * Empty until `SetVertexDeclaration` runs, which is exactly the case the draw-time guard
+         * treats as "nothing was declared, so there is nothing to contradict".
+         *
+         * @return The remembered elements and stride.
+         */
+        NOXNA [[nodiscard]] const CNA::Internal::Graphics::DeclaredVertexLayout&
+        GetDeclarationEXT() const { return declaration_; }
+
     private:
         DiligentGraphicsBackend& owner_;
         Dg::RefCntAutoPtr<Dg::IBuffer> buffer_;
@@ -590,6 +602,7 @@ namespace CNA::Internal::Backends::Diligent
         int capacity_ = 0;
         std::size_t stride_ = 0;
         std::size_t allocatedBytes_ = 0;
+        CNA::Internal::Graphics::DeclaredVertexLayout declaration_;
     };
 
     /**
@@ -1435,6 +1448,13 @@ namespace CNA::Internal::Backends::Diligent
             /// would silently misfetch every instance past the first under that assumption
             /// (`DILIGENT-65`).
             std::uint32_t instancedInstanceStride = 0;
+            /// `ShaderVariant::Instanced3D` only: the bound per-instance stream's own
+            /// `VertexBufferBinding.InstanceFrequency`, carried into the slot-1 layout elements'
+            /// `LayoutElement::InstanceDataStepRate`. Zero for every other variant. REMED-GFX-202:
+            /// the frequency is a property of the binding, so two draws that differ only in it
+            /// genuinely need two pipelines -- a step rate of 2 must advance the matrix once per
+            /// two instances, and reusing a rate-1 pipeline would silently draw the wrong ones.
+            std::uint32_t instancedStepRate = 0;
 
             bool operator==(const PipelineKey& other) const noexcept;
         };
@@ -1513,7 +1533,8 @@ namespace CNA::Internal::Backends::Diligent
         [[nodiscard]] CachedPipeline& GetOrCreatePipeline(const PipelineKey& key);
         [[nodiscard]] PipelineKey MakePipelineKey(ShaderVariant variant, PrimitiveType primitive,
                                                   std::uint32_t instancedVertexStride = 0,
-                                                  std::uint32_t instancedInstanceStride = 0) const;
+                                                  std::uint32_t instancedInstanceStride = 0,
+                                                  std::uint32_t instancedStepRate = 0) const;
         [[nodiscard]] Dg::ISampler* GetOrCreateSampler(int filter, int addressU, int addressV,
                                                        int maxAnisotropy);
         void UploadConstants(const ShaderConstants& constants);

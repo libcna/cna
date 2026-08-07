@@ -1003,9 +1003,14 @@ namespace CNA::Internal::Backends::Diligent
     {
         // The built-in shaders are selected by vertex stride (see DiligentGraphicsBackend::
         // DrawInternal), which the declaration already carries; genuinely custom element layouts
-        // need the custom-shader path that is not part of this baseline, so the declaration is
-        // deliberately consumed only for its stride rather than silently ignored.
+        // need the custom-shader path that is not part of this baseline.
+        //
+        // REMED-GFX-DECL-GUARD: the elements are remembered rather than discarded, because
+        // "selected by stride" is exactly the mechanism that can misread a declaration whose
+        // elements do not sit where the stride's canonical layout puts them. The draw-time guard
+        // compares the two and refuses such a draw instead of rendering the wrong bytes.
         stride_ = static_cast<std::size_t>(vertexDeclaration.getVertexStrideProperty());
+        declaration_.Remember(vertexDeclaration);
     }
 
     // ---- DiligentIndexBufferBackend ----
@@ -1418,7 +1423,8 @@ namespace CNA::Internal::Backends::Diligent
                scissorEnable == other.scissorEnable && depthBias == other.depthBias &&
                slopeScaledDepthBias == other.slopeScaledDepthBias && sampleMask == other.sampleMask &&
                instancedVertexStride == other.instancedVertexStride &&
-               instancedInstanceStride == other.instancedInstanceStride;
+               instancedInstanceStride == other.instancedInstanceStride &&
+               instancedStepRate == other.instancedStepRate;
     }
 
     std::size_t DiligentGraphicsBackend::PipelineKeyHash::operator()(const PipelineKey& key) const noexcept
@@ -1432,7 +1438,7 @@ namespace CNA::Internal::Backends::Diligent
                                         key.extraTargetFormats, key.sampleCount, key.scissorEnable,
                                         static_cast<std::uint32_t>(key.depthBias), slopeBits,
                                         key.sampleMask, key.instancedVertexStride,
-                                        key.instancedInstanceStride};
+                                        key.instancedInstanceStride, key.instancedStepRate};
         for (const std::uint32_t field : fields)
             hash = hash * 1099511628211ull ^ static_cast<std::size_t>(field);
         return hash;
@@ -2657,7 +2663,23 @@ namespace CNA::Internal::Backends::Diligent
                 return multiSampleSupported;
             case CNA::GraphicsCapability::CustomEffects:
                 return false;
+            // REMED-GFX-201/202: this backend binds exactly one per-vertex stream (its input
+            // layout and shader variant are both selected from that one buffer's byte stride) and
+            // exactly one per-instance stream. A declaration split across several buffers, or a
+            // second per-instance binding, would need element re-slotting this backend does not
+            // do -- so it answers false and both draw routes refuse the shape outright rather
+            // than rendering from a subset of what the caller bound.
+            case CNA::GraphicsCapability::MultiStreamVertexInput:
+                return false;
+            // DILIGENT-43/DILIGENT-65: real hardware instancing -- a per-instance vertex buffer at
+            // slot 1 with a genuine INPUT_ELEMENT_FREQUENCY_PER_INSTANCE step rate, drawn through
+            // IDeviceContext::DrawIndexed with NumInstances. Structural to the backend rather than
+            // device-variable: every Diligent device type CNA can select supports instanced draws.
+            case CNA::GraphicsCapability::Instancing:
+                return true;
         }
+        // No default arm: every GraphicsCapability member is answered above, so adding one to the
+        // enum breaks this build instead of silently returning a wrong answer here.
         return false;
     }
 
@@ -2837,13 +2859,14 @@ namespace CNA::Internal::Backends::Diligent
 
     DiligentGraphicsBackend::PipelineKey DiligentGraphicsBackend::MakePipelineKey(
         ShaderVariant variant, PrimitiveType primitive, std::uint32_t instancedVertexStride,
-        std::uint32_t instancedInstanceStride) const
+        std::uint32_t instancedInstanceStride, std::uint32_t instancedStepRate) const
     {
         PipelineKey key = state_;
         key.variant = variant;
         key.topology = static_cast<std::uint32_t>(ToTopology(primitive));
         key.instancedVertexStride = instancedVertexStride;
         key.instancedInstanceStride = instancedInstanceStride;
+        key.instancedStepRate = instancedStepRate;
         key.targetFormats = static_cast<std::uint32_t>(CurrentColorFormat()) |
                             (static_cast<std::uint32_t>(CurrentDepthStencilFormat()) << 16);
 
@@ -2984,6 +3007,9 @@ namespace CNA::Internal::Backends::Diligent
                 // layout (DILIGENT-65).
                 const auto vertexStride = static_cast<Dg::Uint32>(key.instancedVertexStride);
                 const auto instanceStride = static_cast<Dg::Uint32>(key.instancedInstanceStride);
+                // REMED-GFX-202: the binding's own InstanceFrequency, not an assumed 1. Diligent
+                // maps this to D3D11's InstanceDataStepRate / a glVertexAttribDivisor.
+                const auto stepRate = static_cast<Dg::Uint32>(std::max<std::uint32_t>(1, key.instancedStepRate));
                 layout = {
                     // Slot 0: per-vertex Position only, out of whatever real stream the caller
                     // bound (a plain 12-byte position buffer, a full VertexPositionColor stream,
@@ -2993,13 +3019,17 @@ namespace CNA::Internal::Backends::Diligent
                     // Slot 1: one 4x4 world matrix per instance, as four consecutive float4 rows,
                     // advancing once per instance rather than once per vertex.
                     Dg::LayoutElement{1, 1, 4, Dg::VT_FLOAT32, Dg::False, Dg::LAYOUT_ELEMENT_AUTO_OFFSET,
-                                      instanceStride, Dg::INPUT_ELEMENT_FREQUENCY_PER_INSTANCE},
+                                      instanceStride, Dg::INPUT_ELEMENT_FREQUENCY_PER_INSTANCE,
+                                      stepRate},
                     Dg::LayoutElement{2, 1, 4, Dg::VT_FLOAT32, Dg::False, Dg::LAYOUT_ELEMENT_AUTO_OFFSET,
-                                      instanceStride, Dg::INPUT_ELEMENT_FREQUENCY_PER_INSTANCE},
+                                      instanceStride, Dg::INPUT_ELEMENT_FREQUENCY_PER_INSTANCE,
+                                      stepRate},
                     Dg::LayoutElement{3, 1, 4, Dg::VT_FLOAT32, Dg::False, Dg::LAYOUT_ELEMENT_AUTO_OFFSET,
-                                      instanceStride, Dg::INPUT_ELEMENT_FREQUENCY_PER_INSTANCE},
+                                      instanceStride, Dg::INPUT_ELEMENT_FREQUENCY_PER_INSTANCE,
+                                      stepRate},
                     Dg::LayoutElement{4, 1, 4, Dg::VT_FLOAT32, Dg::False, Dg::LAYOUT_ELEMENT_AUTO_OFFSET,
-                                      instanceStride, Dg::INPUT_ELEMENT_FREQUENCY_PER_INSTANCE},
+                                      instanceStride, Dg::INPUT_ELEMENT_FREQUENCY_PER_INSTANCE,
+                                      stepRate},
                 };
                 break;
             }
@@ -3470,6 +3500,32 @@ namespace CNA::Internal::Backends::Diligent
         DrawInternal(vb, &ib, world, view, projection, primitive, primitiveCount, &params);
     }
 
+    namespace
+    {
+        // REMED-GFX-DECL-GUARD: this backend selects its native input layout from the buffer's
+        // byte stride (DrawInternal's own `switch (stride)`), exactly like Vulkan/SDL_GPU/D3D11,
+        // so the shared stride-inferring rule is the right one to reuse rather than re-derive.
+        //
+        // The rule is asymmetric on purpose: only the bytes the caller actually declared are
+        // checked. A declaration shorter than the canonical layout leaves the remaining native
+        // elements unfilled, which is a missing input rather than a reinterpretation -- and it is
+        // what a position-only declaration already relies on. It is pure: nothing is created,
+        // nothing is queued, and a refused draw leaves the device usable for the next valid one.
+        void RequireFaithfulDeclarationEXT(const IVertexBufferBackend& vb_in, const char* route,
+                                           bool positionOnlyFallback = false)
+        {
+            const auto* vb = dynamic_cast<const DiligentVertexBufferBackend*>(&vb_in);
+            if (vb == nullptr)
+                return;
+            CNA::Internal::Graphics::RequireFaithfulVertexDeclaration(
+                vb->GetDeclarationEXT(), static_cast<int>(vb->GetStride()),
+                positionOnlyFallback
+                    ? CNA::Internal::Graphics::UnlistedStrideLayout::PositionOnlyFallback
+                    : CNA::Internal::Graphics::UnlistedStrideLayout::BackendRefusesIt,
+                kBackendName, route);
+        }
+    }
+
     void DiligentGraphicsBackend::DrawInstancedPrimitivesEx(const IVertexBufferBackend& vb,
                                                              const IIndexBufferBackend& ib,
                                                              const Matrix& /*world*/, const Matrix& view,
@@ -3489,8 +3545,17 @@ namespace CNA::Internal::Backends::Diligent
         if (indexBuffer == nullptr || indexBuffer->GetBuffer() == nullptr)
             throw std::runtime_error(
                 "CNA Diligent: instanced draw with a foreign or empty index buffer");
+        // REMED-GFX-201/202: the instance buffer is no longer a field of its own -- it is simply
+        // the lowest-slot binding whose InstanceFrequency is greater than zero. This backend binds
+        // exactly one stream of each input rate, so anything richer is refused outright rather
+        // than rendered from a subset of what the caller actually bound.
+        RejectUnsupportedStreamCombination(params, kBackendName);
+        RequireFaithfulDeclarationEXT(vb, "instanced-indexed", /*positionOnlyFallback=*/true);
+        const GpuVertexStreamBinding* instanceStream = FirstInstanceStream(params);
         const auto* instanceBuffer =
-            dynamic_cast<const DiligentVertexBufferBackend*>(params.instanceVb);
+            instanceStream != nullptr
+                ? dynamic_cast<const DiligentVertexBufferBackend*>(instanceStream->buffer)
+                : nullptr;
         if (instanceBuffer == nullptr || instanceBuffer->GetBuffer() == nullptr)
             throw std::runtime_error(
                 "CNA Diligent: instanced draw requires a real per-instance vertex buffer");
@@ -3526,15 +3591,32 @@ namespace CNA::Internal::Backends::Diligent
         constants.alphaTest[3] = 1.0f;
         UploadConstants(constants);
 
+        // REMED-GFX-202: the instanced route folds nothing into baseVertex -- every stream carries
+        // its whole public VertexOffset, and a per-instance slot is addressed by instance index,
+        // which a base-vertex term does not touch. This is FNA3D's own D3D11 shape:
+        // `offset = binding.VertexOffset * stride` per binding, with BaseVertexLocation passed
+        // separately below. The multiplier is each stream's REAL buffer stride, not
+        // `GpuVertexStreamBinding::strideInBytes`, which is 0 for an instance buffer uploaded
+        // through SetDataRaw without a VertexDeclaration.
+        const GpuVertexStreamBinding* geometryStream = FirstPerVertexStream(params);
+        const auto geometryOffset =
+            geometryStream != nullptr
+                ? static_cast<Dg::Uint64>(geometryStream->vertexOffset) * vertexStride
+                : Dg::Uint64{0};
+        const auto instanceOffset =
+            static_cast<Dg::Uint64>(instanceStream->vertexOffset) * instanceStride;
+        const auto stepRate = static_cast<std::uint32_t>(std::max(1, instanceStream->instanceFrequency));
+
         CachedPipeline& pipeline = GetOrCreatePipeline(
-            MakePipelineKey(ShaderVariant::Instanced3D, primitive, vertexStride, instanceStride));
+            MakePipelineKey(ShaderVariant::Instanced3D, primitive, vertexStride, instanceStride,
+                            stepRate));
 
         context_->SetPipelineState(pipeline.pipeline);
         context_->SetStencilRef(static_cast<Dg::Uint32>(referenceStencil_));
         context_->SetBlendFactors(blendFactor_);
         context_->CommitShaderResources(pipeline.binding, Dg::RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
 
-        const Dg::Uint64 offsets[] = {0, 0};
+        const Dg::Uint64 offsets[] = {geometryOffset, instanceOffset};
         Dg::IBuffer* vertexBuffers[] = {vertexBuffer->GetBuffer(), instanceBuffer->GetBuffer()};
         context_->SetVertexBuffers(0, 2, vertexBuffers, offsets,
                                    Dg::RESOURCE_STATE_TRANSITION_MODE_TRANSITION,
@@ -3566,6 +3648,10 @@ namespace CNA::Internal::Backends::Diligent
         const auto* vertexBuffer = dynamic_cast<const DiligentVertexBufferBackend*>(&vb);
         if (vertexBuffer == nullptr || vertexBuffer->GetBuffer() == nullptr)
             throw std::runtime_error("CNA Diligent: draw with a foreign or empty vertex buffer");
+
+        if (params != nullptr)
+            RejectUnsupportedStreamCombination(*params, kBackendName);
+        RequireFaithfulDeclarationEXT(vb, ib != nullptr ? "ordinary-indexed" : "ordinary");
 
         if (params != nullptr)
         {
