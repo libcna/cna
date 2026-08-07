@@ -169,7 +169,7 @@ namespace CNA::Internal::Backends::Magnum
         }
     }
 
-    void MagnumRenderTargetBackend::BindGL() const
+    void MagnumRenderTargetBackend::BindGL(int /*unit*/) const
     {
         colorTexture_->bind(0);
     }
@@ -355,7 +355,7 @@ namespace CNA::Internal::Backends::Magnum
             texture_->generateMipmap();
     }
 
-    void MagnumRenderTargetCubeBackend::BindGL() const
+    void MagnumRenderTargetCubeBackend::BindGL(int /*unit*/) const
     {
         texture_->bind(0);
     }

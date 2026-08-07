@@ -36,7 +36,7 @@ option(CNA_BACKEND_STUB "Enable Stub (no-op) graphics backend" OFF)
 option(CNA_BACKEND_D3D11 "Enable Direct3D 11 graphics backend (Windows only)" OFF)
 option(CNA_BACKEND_D3D12 "Enable Direct3D 12 graphics backend (Windows only)" OFF)
 # plan_canvas.md: HTML Canvas 2D backend -- Emscripten-only (design decision 1), a browser-native,
-# GPU-free 2D-only backend using canvas.getContext('2d') instead of EASYGL's WebGL2 context.
+# GPU-free 2D-only backend using canvas.getContext('2d') instead of WEBGL2's WebGL context.
 option(CNA_BACKEND_CANVAS "Enable HTML Canvas 2D graphics backend (Emscripten only)" OFF)
 option(CNA_BACKEND_SKIA "Enable Skia 2D raster graphics backend" OFF)
 # plan_ascii.md: SDL-windowed retro text/glyph-grid backend -- a thin decorator around
@@ -369,7 +369,7 @@ if(CNA_GRAPHICS_BACKEND STREQUAL "WICKED")
     if(EMSCRIPTEN)
         message(FATAL_ERROR
             "CNA: WICKED backend cannot target Emscripten -- Wicked Engine has no WebGPU/WebGL "
-            "device. Use -DCNA_GRAPHICS_BACKEND=EASYGL or CANVAS for web builds.")
+            "device. Use -DCNA_GRAPHICS_BACKEND=WEBGL2 or CANVAS for web builds.")
     endif()
     if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT CMAKE_SYSTEM_NAME STREQUAL "Windows")
         message(WARNING "CNA: WICKED backend is developed against Linux/Vulkan. Other platforms may require additional setup.")

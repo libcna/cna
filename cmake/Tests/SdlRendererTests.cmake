@@ -554,6 +554,8 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_sdl_test(cna_test_sdl_cube_volume_setdata_contract
                  examples/texturecube_texture3d_setdata_contract_test.cpp)
     cna_register_backend_test(NAME SDL_Renderer_CubeVolume_SetDataContract COMMAND cna_test_sdl_cube_volume_setdata_contract
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # Runtime policy for calls permanently unsupported by this 2D-only backend.
     cna_sdl_test(cna_test_sdl_unsupported_3d_behavior
                  examples/unsupported_3d_call_behavior_test.cpp)

@@ -150,6 +150,8 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_ascii_test(cna_test_ascii_cube_volume_setdata_contract
                    examples/texturecube_texture3d_setdata_contract_test.cpp)
     cna_register_backend_test(NAME Ascii_CubeVolume_SetDataContract COMMAND cna_test_ascii_cube_volume_setdata_contract
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     cna_ascii_test(cna_test_ascii_unsupported_3d_behavior
                    examples/unsupported_3d_call_behavior_test.cpp)
     cna_register_backend_test(NAME Ascii_Unsupported3DBehavior

@@ -11,12 +11,15 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         # --- helper macro: build a headless EasyGL test exe --------------------
         macro(cna_easygl_test target src)
             add_executable(${target} ${src})
+            # SDL3::SDL3 is linked explicitly (same as cna_sokol_test/cna_diligent_test):
+            # examples include <SDL3/SDL.h> directly, and transitive SDL3 include/link
+            # propagation through CNA cannot be relied on (REMED-BUILD-005's finding).
             if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
                 target_link_libraries(${target} PRIVATE
                     -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
-                    SHARP_RUNTIME)
+                    SHARP_RUNTIME SDL3::SDL3)
             else()
-                target_link_libraries(${target} PRIVATE CNA SHARP_RUNTIME)
+                target_link_libraries(${target} PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
             endif()
             if(TARGET SDL3::SDL3main)
                 target_link_libraries(${target} PRIVATE SDL3::SDL3main)

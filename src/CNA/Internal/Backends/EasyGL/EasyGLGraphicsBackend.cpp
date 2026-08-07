@@ -256,13 +256,13 @@ namespace CNA::Internal::Backends::EasyGL
 
             int texMin = 0, texMag = 0, baseLevel = 0, maxLevel = 0;
             ::metagl::glGetTexParameteriv(::metagl::TextureTarget::Texture2D,
-                                          ::metagl::TextureParameter::MinFilter, &texMin);
+                                          ::metagl::TextureParameterQuery::MinFilter, &texMin);
             ::metagl::glGetTexParameteriv(::metagl::TextureTarget::Texture2D,
-                                          ::metagl::TextureParameter::MagFilter, &texMag);
+                                          ::metagl::TextureParameterQuery::MagFilter, &texMag);
             ::metagl::glGetTexParameteriv(::metagl::TextureTarget::Texture2D,
-                                          ::metagl::TextureParameter::BaseLevel, &baseLevel);
+                                          ::metagl::TextureParameterQuery::BaseLevel, &baseLevel);
             ::metagl::glGetTexParameteriv(::metagl::TextureTarget::Texture2D,
-                                          ::metagl::TextureParameter::MaxLevel, &maxLevel);
+                                          ::metagl::TextureParameterQuery::MaxLevel, &maxLevel);
 
             int effMin = texMin, effMag = texMag;
             if (samplerName != 0)
@@ -1311,7 +1311,7 @@ namespace CNA::Internal::Backends::EasyGL
         // the texture complete whatever that filter turns out to be, and it allocates nothing: the
         // storage loop above already created exactly levelCount_ levels.
         colorTex_.set_parameter(::easygl::TextureTarget::Texture2D,
-                                ::metagl::TextureParameter::MaxLevel,
+                                ::easygl::TextureParameterSetter::MaxLevel,
                                 levelCount_ - 1);
         // REMED-GFX-175: this is the texture object's OWN default min filter, which every draw's
         // sampler object overrides, so it decides nothing about how a game's TextureFilter samples
@@ -1661,7 +1661,7 @@ namespace CNA::Internal::Backends::EasyGL
         }
         // REMED-GFX-174: see EasyGLRenderTargetBackend's identical clamp.
         cubeTex_.set_parameter(::easygl::TextureTarget::TextureCubeMap,
-                               ::metagl::TextureParameter::MaxLevel,
+                               ::easygl::TextureParameterSetter::MaxLevel,
                                levelCount_ - 1);
         cubeTex_.set_parameter(::easygl::TextureTarget::TextureCubeMap,
                                ::easygl::TextureParameterSetter::MinFilter,
@@ -2520,14 +2520,51 @@ void main()
             case CNA::GraphicsCapability::AnisotropicFiltering:
                 return metagl::HasExtension("GL_EXT_texture_filter_anisotropic");
             case CNA::GraphicsCapability::WireFrame:
-                // GLES3 (EasyGL's underlying API) has no wireframe fill mode at all -- matches
-                // the XNA 4.0 Graphics API coverage table's own "EasyGL N/A (GLES3)" entry.
-                return false;
+                // REMED-GFX-219 resolved: this backend's GL_LINES re-expansion renders a genuinely
+                // correct wireframe (shared pixel oracle: interior 0/1089, all three triangle edges
+                // present), so the previous `false` under-stated the implementation. The emulation
+                // draws line primitives and depends on no polygon-mode API, so it holds for every
+                // GL profile (OPENGLES/OPENGL33/WEBGL1/WEBGL2) alike.
+                return true;
             case CNA::GraphicsCapability::MultiStreamVertexInput:
                 // REMED-GFX-201: implemented -- Draw*PrimitivesEx binds every per-vertex stream
                 // into the VAO at locations continuing after the previous stream's, each with its
                 // own VBO, stride and byte offset, and restores the single-stream layout after.
+#if defined(CNA_GL_PROFILE_WEBGL1)
+                // WebGL 1 (GLES 2.0) lacks the VAO/attrib-divisor entry points the Ex routes bind
+                // through; claiming support would fail inside GL instead of being refused up front.
+                return false;
+#else
                 return true;
+#endif
+            case CNA::GraphicsCapability::MultipleRenderTargets:
+#if defined(CNA_GL_PROFILE_WEBGL1)
+                // WebGL 1 core has no draw-buffers MRT.
+                return false;
+#else
+                return true;
+#endif
+            case CNA::GraphicsCapability::OcclusionQuery:
+#if defined(CNA_GL_PROFILE_WEBGL1)
+                // WebGL 1 (GLES 2.0) has no query objects.
+                return false;
+#else
+                return true;
+#endif
+            case CNA::GraphicsCapability::Texture3D:
+#if defined(CNA_GL_PROFILE_WEBGL1)
+                // WebGL 1 (GLES 2.0) has no 3D textures at all.
+                return false;
+#else
+                return true;
+#endif
+            case CNA::GraphicsCapability::Instancing:
+#if defined(CNA_GL_PROFILE_WEBGL1)
+                // WebGL 1 core has no glDrawElementsInstanced/glVertexAttribDivisor.
+                return false;
+#else
+                return true;
+#endif
             default:
                 return true;
         }

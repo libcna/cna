@@ -42,7 +42,7 @@ namespace CNA::Internal::Backends::OpenGLES1
 
         void UpdatePixels(const uint8_t* rgba, int stride) override;
         void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) override;
-        void BindGL() const override;
+        void BindGL(int /*unit*/) const override;
 
         /**
          * @brief Adopts `Texture2D`'s own CPU pixel buffer so the texture can be rebuilt after a
@@ -346,7 +346,7 @@ namespace CNA::Internal::Backends::OpenGLES1
         int GetWidth() const override { return width_; }
         int GetHeight() const override { return height_; }
         SDL_Texture* GetNativeTexture() const override { return nullptr; }
-        void BindGL() const override;
+        void BindGL(int /*unit*/) const override;
 
         void BindAsRenderTarget() override;
         void UnbindAsRenderTarget() override;
@@ -427,7 +427,7 @@ namespace CNA::Internal::Backends::OpenGLES1
         [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
                                    void* data, int dataLength) const override;
 
-        void BindGL() const override;
+        void BindGL(int /*unit*/) const override;
 
         [[nodiscard]] unsigned int GetGLHandle() const { return texture_; }
 
@@ -466,7 +466,7 @@ namespace CNA::Internal::Backends::OpenGLES1
         void BindAsRenderTargetFace(int face) override;
         void UnbindAsRenderTarget() override;
         [[nodiscard]] unsigned int GetGLHandle() const override { return cubeTexture_; }
-        void BindGL() const override;
+        void BindGL(int /*unit*/) const override;
 
         /**
          * @brief Reads raw RGBA8 pixels back from one cube face.

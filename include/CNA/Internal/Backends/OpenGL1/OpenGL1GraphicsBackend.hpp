@@ -62,7 +62,7 @@ private:bool i32_=false;int count_=0;std::vector<std::uint8_t> data_;
 class OpenGL1TextureBackend final : public ITextureBackend, public IOpenGL1Recoverable {
 public: OpenGL1TextureBackend(const ImageData&,OpenGL1ResourceRegistry*,bool generateMipmapCap); ~OpenGL1TextureBackend() override;
  int GetWidth()const override{return width_;} int GetHeight()const override{return height_;} SDL_Texture* GetNativeTexture()const override{return nullptr;}
- void UpdatePixels(const uint8_t*,int) override; void UpdatePixelsLevel(int,const uint8_t*,int,int) override; void BindGL()const override;
+ void UpdatePixels(const uint8_t*,int) override; void UpdatePixelsLevel(int,const uint8_t*,int,int) override; void BindGL(int /*unit*/)const override;
  void ShareCpuPixels(std::shared_ptr<std::vector<uint8_t>> pixels) override{cpuPixels_=std::move(pixels);}
  void ReleaseGLHandleOnly() override{id_=0;}
  void RecreateGLResource() override;
@@ -83,7 +83,7 @@ class OpenGL1TextureCubeBackend final : public ITextureCubeBackend, public IOpen
 public: OpenGL1TextureCubeBackend(int size,bool mipMap,int surfaceFormat,OpenGL1ResourceRegistry*registry,bool generateMipmapCap); ~OpenGL1TextureCubeBackend() override;
  [[nodiscard]] bool SetData(int face,int level,int x,int y,int w,int h,const void*data,int dataLength) override;
  [[nodiscard]] bool GetData(int face,int level,int x,int y,int w,int h,void*data,int dataLength) const override;
- void BindGL()const override;
+ void BindGL(int /*unit*/)const override;
  void ShareCpuPixels(int face,std::shared_ptr<std::vector<uint8_t>> pixels) override{if(face>=0&&face<6)cpuPixels_[face]=std::move(pixels);}
  void ReleaseGLHandleOnly() override{id_=0;}
  void RecreateGLResource() override;

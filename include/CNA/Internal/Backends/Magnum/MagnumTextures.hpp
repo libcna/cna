@@ -77,7 +77,7 @@ namespace CNA::Internal::Backends::Magnum
         /** @brief Always null: this backend owns no SDL texture. */
         [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
         /** @brief Binds this texture to texture unit 0. */
-        void BindGL() const override;
+        void BindGL(int /*unit*/) const override;
         /**
          * @brief Replaces the whole of level 0.
          *
@@ -170,7 +170,7 @@ namespace CNA::Internal::Backends::Magnum
         [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
                                    void* data, int dataLength) const override;
         /** @brief Binds this cube map to texture unit 0. */
-        void BindGL() const override;
+        void BindGL(int /*unit*/) const override;
 
         /** @brief The underlying Magnum cube map, so a draw path can bind and configure it. */
         [[nodiscard]] Mg::GL::CubeMapTexture& GetTexture() const { return *texture_; }
@@ -237,7 +237,7 @@ namespace CNA::Internal::Backends::Magnum
                                    int w, int h, int depth,
                                    void* data, int dataLength) const override;
         /** @brief Binds this volume texture to texture unit 0. */
-        void BindGL() const override;
+        void BindGL(int /*unit*/) const override;
 
         /** @brief The underlying Magnum volume texture, so a draw path can bind and configure it. */
         [[nodiscard]] Mg::GL::Texture3D& GetTexture() const { return *texture_; }

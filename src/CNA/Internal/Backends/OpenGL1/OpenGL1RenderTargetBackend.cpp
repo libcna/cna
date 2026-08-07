@@ -226,7 +226,7 @@ void OpenGL1RenderTargetBackend::RecreateGLResource()
     BuildMsaa();
 }
 
-void OpenGL1RenderTargetBackend::BindGL() const { glBindTexture(GL_TEXTURE_2D, colorTex_); }
+void OpenGL1RenderTargetBackend::BindGL(int /*unit*/) const { glBindTexture(GL_TEXTURE_2D, colorTex_); }
 
 // plan_opengl1.md item 25: targets the multisample draw FBO when active, so all rendering goes
 // to the multisample buffers -- UnbindAsRenderTarget() below resolves it into fbo_/colorTex_.
@@ -388,7 +388,7 @@ void OpenGL1RenderTargetCubeBackend::RecreateGLResource()
     }
 }
 
-void OpenGL1RenderTargetCubeBackend::BindGL() const { glBindTexture(GL_TEXTURE_CUBE_MAP, id_); }
+void OpenGL1RenderTargetCubeBackend::BindGL(int /*unit*/) const { glBindTexture(GL_TEXTURE_CUBE_MAP, id_); }
 
 void OpenGL1RenderTargetCubeBackend::BindAsRenderTargetFace(int face)
 {

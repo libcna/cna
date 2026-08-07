@@ -76,7 +76,7 @@ namespace CNA::Internal::Backends::OpenGL1
         int GetWidth() const override { return width_; }
         int GetHeight() const override { return height_; }
         SDL_Texture* GetNativeTexture() const override { return nullptr; }
-        void BindGL() const override;
+        void BindGL(int /*unit*/) const override;
         [[nodiscard]] bool GetData(int level, int x, int y, int w, int h, void* data, int dataLength) const override;
 
         void BindAsRenderTarget() override;
@@ -187,7 +187,7 @@ namespace CNA::Internal::Backends::OpenGL1
         [[nodiscard]] unsigned int GetGLHandle() const override { return id_; }
 
         [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h, void* data, int dataLength) const override;
-        void BindGL() const override;
+        void BindGL(int /*unit*/) const override;
 
         /** @brief True if the last UnbindAsRenderTarget() call generated a complete mip chain. */
         bool HasMips() const { return hasMips_; }

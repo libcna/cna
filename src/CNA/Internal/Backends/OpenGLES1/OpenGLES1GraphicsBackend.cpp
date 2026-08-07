@@ -284,7 +284,7 @@ namespace CNA::Internal::Backends::OpenGLES1
         glTexImage2D(GL_TEXTURE_2D, level, GL_RGBA, levelW, levelH, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
     }
 
-    void OpenGLES1TextureBackend::BindGL() const
+    void OpenGLES1TextureBackend::BindGL(int /*unit*/) const
     {
         glBindTexture(GL_TEXTURE_2D, texture_);
     }
@@ -1197,7 +1197,7 @@ namespace CNA::Internal::Backends::OpenGLES1
         if (colorTexture_) glDeleteTextures(1, &colorTexture_);
     }
 
-    void OpenGLES1RenderTargetBackend::BindGL() const
+    void OpenGLES1RenderTargetBackend::BindGL(int /*unit*/) const
     {
         glBindTexture(GL_TEXTURE_2D, colorTexture_);
     }
@@ -1329,7 +1329,7 @@ namespace CNA::Internal::Backends::OpenGLES1
         owner_->BindFramebufferEXT(0);
     }
 
-    void OpenGLES1RenderTargetCubeBackend::BindGL() const
+    void OpenGLES1RenderTargetCubeBackend::BindGL(int /*unit*/) const
     {
         glBindTexture(GL_TEXTURE_CUBE_MAP_OES, cubeTexture_);
     }
@@ -1529,7 +1529,7 @@ namespace CNA::Internal::Backends::OpenGLES1
         return ok;
     }
 
-    void OpenGLES1TextureCubeBackend::BindGL() const
+    void OpenGLES1TextureCubeBackend::BindGL(int /*unit*/) const
     {
         glBindTexture(GL_TEXTURE_CUBE_MAP_OES, texture_);
     }
