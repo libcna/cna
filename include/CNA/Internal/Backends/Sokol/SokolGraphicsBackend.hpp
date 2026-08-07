@@ -521,7 +521,7 @@ namespace CNA::Internal::Backends::Sokol
          * @brief Returns the edge length of mip level 0 in texels. NOXNA.
          * @return Cube face edge length.
          */
-        NOXNA [[nodiscard]] int GetSizeEXT() const { return size_; }
+        NOXNA [[nodiscard]] int GetSizeEXT() const noexcept override { return size_; }
 
         /**
          * @brief Returns the raw sokol_gfx texture-view handle id used to sample the whole cube.

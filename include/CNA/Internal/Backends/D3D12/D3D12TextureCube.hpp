@@ -60,7 +60,7 @@ namespace CNA::Internal::Backends::D3D12
         [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
                                    void* data, int dataLength) const override;
 
-        [[nodiscard]] int GetSizeEXT() const { return size_; }
+        [[nodiscard]] int GetSizeEXT() const noexcept override { return size_; }
         [[nodiscard]] int GetMipLevelsEXT() const { return mipLevels_; }
         /// Raw GPU-resident ID3D12Resource* (NOXNA diagnostics).
         [[nodiscard]] ID3D12Resource* GetResourceEXT() const { return texture_.Get(); }
