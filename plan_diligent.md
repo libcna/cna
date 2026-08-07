@@ -1,5 +1,33 @@
 # Diligent Engine Graphics Backend — Implementation Plan
 
+> **Integrated 2026-08-07 as the thirteenth post-audit lane and CNA's 31st public backend
+> identity.** Adapted from `feature/diligent` (`1ab12b50`, preserved behind
+> `archive/preintegration/diligent-20260804`) onto `integration/post-audit-phase1` as 69 signed
+> commits — 65 replayed 1:1 plus 4 added by the adaptation. Interface drift against the head was a
+> single reference to the removed `GpuDrawParams::instanceVb`.
+>
+> Three post-audit obligations were paid at adaptation and are now part of this backend's contract.
+> **REMED-GFX-201/202** — the instanced route reads the `vertexStreams` array through
+> `FirstInstanceStream()` and honours each binding's own `VertexOffset` and `InstanceFrequency`
+> (the latter reaching `LayoutElement::InstanceDataStepRate` and the pipeline cache key);
+> `MultiStreamVertexInput` answers **false** and both draw families refuse a split declaration or a
+> second per-instance stream outright, in an exhaustive eleven-member capability switch with no
+> `default` arm. **REMED-GFX-DECL-GUARD** — `SetVertexDeclaration` now remembers the caller's
+> elements and every draw route calls the shared `RequireFaithfulVertexDeclaration()` before any
+> pipeline is built, because this backend selects its layout from the buffer stride and would
+> otherwise misread a declaration whose elements sit elsewhere. **REMED-GFX-209** — `WireFrame` is
+> reported from the live device's own `DeviceFeatures::WireframeFill` and measured against the
+> shared pixel oracle rather than asserted.
+>
+> **`DILIGENT-69`** is the one new row that work adds: `Diligent_InstanceBindingOffsets`'s
+> `_OpenGL` variant fails for the same already-root-caused Mesa/llvmpipe per-instance-divisor
+> defect as `Diligent_Instanced_OpenGL` and `Diligent_InstancedStride_OpenGL` (`DILIGENT-66`).
+> Under GL the per-instance attribute reads as zero for every instance, so all instances draw
+> stacked at the origin. Not a CNA defect; it joins that existing documented class. The same test
+> is **12/12 on the Vulkan device type**.
+>
+> Full integration record: `integration/lanes/diligent.md`.
+
 > **Status (2026-08-03): Phase `DILIGENT-1` is implemented, and most of Phase `DILIGENT-2`/`3` on
 > top of it.** What that means concretely is in the "What the baseline actually does" section below
 > — read it before assuming parity with Vulkan/EasyGL/SDL_GPU, which this backend does **not** have.
@@ -397,3 +425,19 @@ MutatedRealModelFixtureNeverCrashesAndOnlyFailsCleanly`, which fails identically
 backend (verified in the same session) — a pre-existing gap in that test's accepted-exception list
 (`System::ArgumentException` from `VertexBuffer::SetData`'s declaration/stride validation is not
 listed), unrelated to this backend.
+
+---
+
+## Post-integration rows (2026-08-07)
+
+| Task | Description | Status | Notes |
+| --- | --- | --- | --- |
+| `DILIGENT-69` | `Diligent_InstanceBindingOffsets` fails under the OpenGL device type | 🟨 | **Not a CNA defect; joins `DILIGENT-66`'s existing GL instancing class.** The test added by the integration's REMED-GFX-202 work proves the instance binding's own `VertexOffset`, its `InstanceFrequency` and the geometry binding's `VertexOffset` on the instanced route. Each leg is built so "consumed" and "ignored" produce different, in-bounds pixels. **12/12 on the Vulkan device type.** Its `_OpenGL` variant reads 7/12 for the identical, already-root-caused reason as `Diligent_Instanced_OpenGL` and `Diligent_InstancedStride_OpenGL`: under Mesa/llvmpipe the per-instance attribute reads as zero for every instance, so all instances draw stacked at the origin and none of the probe columns is lit. Closes when `DILIGENT-66`'s GL divisor limitation does. |
+
+### Cross-backend test suite, re-measured at integration
+
+`ctest -j1` over the whole tree under `CNA_GRAPHICS_BACKEND=DILIGENT`, on the integrated content:
+**5816 registered · 5800 passed · 8 failed · 7 truthful skips.** All eight failures are this
+backend's own dedicated suites — the seven this plan already records plus `DILIGENT-69` above —
+and there is not one non-Diligent failure in the run. The `XnbContainerFuzzTest` failure recorded
+in the section above no longer reproduces at this head.
