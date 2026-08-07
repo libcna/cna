@@ -6,7 +6,7 @@ public backend/resource interfaces in `IGraphicsBackend.hpp`, every `GraphicsCap
 public non-deleted `GraphicsDevice` method declaration. Overloads use `name/arity`; when that is
 still ambiguous, `#N` is their declaration order in the audited header.
 
-The current audited inventory contains 253 entries: 131 backend/resource methods, nine
+The current audited inventory contains 258 entries: 134 backend/resource methods, eleven
 `GraphicsCapability` values, and 113 public `GraphicsDevice` declarations. The number is descriptive;
 the validator derives the authoritative live set from the headers.
 
@@ -43,6 +43,7 @@ file. The validator rejects missing, stale, duplicated, malformed, or unclassifi
 | `ITextureCubeBackend::GetData/8` | Reads one cube-face region; cube readback tests. | Exact bounded CPU readback; no fabricated pixels. | `implemented` | SKIA-80–84; shared 56-check read audit |
 | `ITextureCubeBackend::BindGL/0` | Binds the cube GL target. | No GL/native cube handle exists. | `unsupported` | SKIA-80–84 |
 | `ITextureCubeBackend::GetSizeEXT/0` | N/A -- SKIA-149 NOXNA extension; the shared base default returns 0 for every other backend. | Reports the bound cube map's stored square face dimension so `cnaSampleCubeEXT` can size its per-draw CPU face read. | `implemented` | SKIA-149; `Skia_CubeVolume_Effect_Binding` |
+| `ITextureCubeBackend::ShareCpuPixels/2` | Hands the backend a reference to `TextureCube::cpuPixels_[face]` so a GL-style backend can restore level 0 after a context loss; only OPENGL1 implements it. | Keeps the shared no-op default. Cube storage here is CPU-owned and outlives presenter reconstruction unchanged, so there is no lost GPU image to restore and no second shadow to keep coherent. | `internal` | SKIA-80–84, SKIA-110; `Skia_ContextRecovery`, `Skia_ResourceBudget` |
 | `ITexture3DBackend::SetData/9` | Uploads a GL volume region; Texture3D tests. | Exact bounded CPU mip/sub-volume storage. | `implemented` | SKIA-82–84; shared 56-check write audit |
 | `ITexture3DBackend::GetData/9` | Reads a GL volume region; Texture3D tests. | Exact bounded CPU readback; no fabricated voxels. | `implemented` | SKIA-82–84; shared 56-check read audit |
 | `ITexture3DBackend::BindGL/0` | Binds the GL volume target. | No GL/native volume handle exists. | `unsupported` | SKIA-82–84 |
@@ -97,6 +98,7 @@ file. The validator rejects missing, stale, duplicated, malformed, or unclassifi
 | `IGraphicsBackend::Clear/4` | Clears current GL framebuffer color. | Clears active raster surface. | `implemented` | SKIA-13, SKIA-61 |
 | `IGraphicsBackend::Present/0` | Swaps EasyGL window buffers. | Uploads raster snapshot to SDL presenter. | `implemented` | SKIA-7, SKIA-13 |
 | `IGraphicsBackend::GetViewportSize/2` | Reports EasyGL logical target size. | Reports active raster logical size. | `implemented` | SKIA-13, SKIA-61 |
+| `IGraphicsBackend::GetDefaultViewportRect/4` | Reports the PHYSICAL rectangle a GL/GPU backend must program after a resize or presentation-mode change; OPENGL2 is the reference override. | Keeps the shared base result -- origin plus the logical size -- and that is the correct answer here, not an unimplemented one: this backend has no GPU viewport to program, and Letterbox/Overscan/Stretch scale and centre through SDL's own logical presentation while the raster surface retains the requested dimensions. | `implemented` | SKIA-13–14, SKIA-71–72; `Skia_PresentationModes`, `Skia_Contract_ViewportResetAfterResize` |
 | `IGraphicsBackend::SetVirtualResolution/2` | Updates EasyGL logical projection/presentation. | Reallocates/maps raster presentation. | `implemented` | SKIA-13–14 |
 | `IGraphicsBackend::SetPresentationMode/1` | Applies EasyGL presentation mapping. | All five mappings are pixel-tested. | `implemented` | SKIA-13–14 |
 | `IGraphicsBackend::SetSwapInterval/1` | Applies GL swap interval. | Applies SDL presenter interval. | `implemented` | SKIA-15 |
@@ -147,6 +149,7 @@ file. The validator rejects missing, stale, duplicated, malformed, or unclassifi
 | `IGraphicsBackend::DrawPrimitivesEx/7` | Draws stock/custom EasyGL 3D parameters. | Explicit stable no-3D primitive refusal. | `unsupported` | SKIA-96, SKIA-99–102 |
 | `IGraphicsBackend::DrawIndexedPrimitivesEx/8` | Draws indexed stock/custom EasyGL 3D. | Explicit stable no-3D indexed refusal. | `unsupported` | SKIA-96, SKIA-99–102 |
 | `IGraphicsBackend::DrawInstancedPrimitivesEx/9` | Draws hardware-instanced EasyGL geometry. | Explicit stable no-3D instanced refusal. | `unsupported` | SKIA-102–103 |
+| `IGraphicsBackend::GetMaxVertexStreams/0` | REMED-GFX-201: how many per-vertex bindings of the same input rate the backend can express natively. | No vertex pipeline exists, so there is no binding ceiling to report; every draw route refuses through `Ensure3DSupported()` before a binding is read. | `unsupported` | SKIA-95, SKIA-102–103; `Skia_3D_Refusal` |
 | `IGraphicsBackend::SetContextRecoveryEnabled/1` | Controls EasyGL CPU restoration shadows. | Raster resources stay CPU-owned across presenter rebuild. | `internal` | SKIA-16, SKIA-28 |
 | `IGraphicsBackend::SupportsCapability/1` | Reports EasyGL compile/device features. | True only for storage-only Texture3D; GPU/3D entries false. | `implemented` | SKIA-17, SKIA-84, capability rows below |
 | `IGraphicsBackend::GetMaxTextureDimension/0` | Reports GL maximum texture axis. | Reports bounded raster maximum. | `implemented` | SKIA-26 |
@@ -170,6 +173,8 @@ file. The validator rejects missing, stale, duplicated, malformed, or unclassifi
 | `GraphicsCapability::OcclusionQuery` | EasyGL reports query API availability. | Raster backend reports false; final-pixel differences cannot observe samples passed. | `unsupported` | SKIA-104–105 |
 | `GraphicsCapability::CustomEffects` | EasyGL compiles custom GLSL effects. | False: the explicit bounded SkSL SpriteBatch extension is not arbitrary GLSL compatibility. | `unsupported` | SKIA-89–94 |
 | `GraphicsCapability::Texture3D` | EasyGL exposes GL volume textures. | True for persistent CPU transfer/readback storage only; no sampling claim. | `bounded` | SKIA-82–84; `Skia_GraphicsCapability` |
+| `GraphicsCapability::MultiStreamVertexInput` | REMED-GFX-201: EasyGL reports whether it can re-slot one declaration across several bindings of the same input rate. | Raster backend reports false; there is no vertex-stream pipeline to split. | `unsupported` | SKIA-95, SKIA-102–103; `Skia_GraphicsCapability` |
+| `GraphicsCapability::Instancing` | EasyGL reports driver-granted hardware instancing. | Raster backend reports false; the instanced draw route refuses rather than drawing one instance. | `unsupported` | SKIA-102–103; `Skia_GraphicsCapability`, `Skia_3D_Refusal` |
 
 ## Public GraphicsDevice calls
 

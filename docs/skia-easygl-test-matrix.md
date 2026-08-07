@@ -25,6 +25,7 @@ dispositions live in `docs/skia-3d-call-effect-matrix.md`.
 
 | Entry | Kind | Category | Skia route or evidence |
 |---|---|---|---|
+| `ctest:EasyGL_GFX153_SourceRectangleOrientation` | `ctest` | `2d-direct` | REMED-GFX-153's three coordinate spaces -- target readback bytes, partial source-rectangle selection, and destination placement -- are all direct `SkCanvas`/`SkImage`/`SkSurface` operations; `Skia_SpriteBatch_SourceRectLinear` and `Skia_RenderTarget2D_Golden` hold the same contract. |
 | `ctest:EasyGL_PixelTestGame_Smoke` | `ctest` | `2d-direct` | Reuse the backend-neutral pixel fixture; SKIA-7. |
 | `ctest:EasyGL_GoldenImage_Smoke` | `ctest` | `2d-direct` | Reuse golden comparison on raster output; SKIA-7. |
 | `ctest:EasyGL_TexturedQuad_Readback` | `ctest` | `2d-direct` | Exact source also runs as `Skia_TexturedQuad_Readback`; it uses only Clear, SpriteBatch, level-zero Texture2D and backbuffer readback; SKIA-32, SKIA-62, SKIA-106. |
@@ -93,6 +94,7 @@ dispositions live in `docs/skia-3d-call-effect-matrix.md`.
 
 | Entry | Kind | Category | Skia route or evidence |
 |---|---|---|---|
+| `ctest:EasyGL_AdditiveBlendContract` | `ctest` | `2d-emulation` | REMED-GFX-148's exact `BlendState::Additive` bytes need XNA's own `Sa*Sa + Da` alpha equation, which no native `SkBlendMode` expresses; SKIA-119-124's bounded runtime blender reproduces it, and `Skia_BlendState_Additive` asserts the same values. |
 | `ctest:EasyGL_ShaderEffect_GLSL` | `ctest` | `2d-emulation` | Untagged GLSL cannot be passed to fragment-only SkSL; explicit opt-in/subset tracked by SKIA-91–92 and `docs/skia-effects.md`. |
 | `ctest:EasyGL_ShaderEffect_SpriteBatch_Uniform` | `ctest` | `2d-emulation` | Reflected scalar/vector writes are viable only behind an explicit SkSL ABI; SKIA-89–92. |
 | `ctest:EasyGL_Bloom_Extract` | `ctest` | `2d-emulation` | Candidate SkSL/CPU image filter pass; SKIA-89–94. |
@@ -159,6 +161,7 @@ emulator is tracked by SKIA-80–105.
 | `ctest:EasyGL_PerPixelLighting_Shader` | `ctest` | `3d` | Normal/light vertex pipeline. |
 | `ctest:EasyGL_PerPixelLighting_DiffuseOnly_Shader` | `ctest` | `3d` | Normal/light vertex pipeline. |
 | `ctest:EasyGL_PerPixelLighting_VertexDiffusePixelPhong_Shader` | `ctest` | `3d` | Normal/light vertex pipeline. |
+| `ctest:EasyGL_TriangleStripWinding` | `ctest` | `3d` | REMED-GFX-183 measures triangle-strip primitive winding and `CullClockwiseFace`/`CullCounterClockwiseFace` against the XNA oracle -- a vertex/primitive and rasterizer-cull path SKIA-102 refuses outright. |
 | `ctest:EasyGL_VertexLighting_Diffuse_Shader` | `ctest` | `3d` | Vertex lighting pipeline. |
 | `ctest:EasyGL_VertexLighting_DiffusePhong_Shader` | `ctest` | `3d` | Vertex/specular lighting pipeline. |
 | `ctest:EasyGL_VertexLighting_Directional_Shader` | `ctest` | `3d` | Directional-light vertex pipeline. |
@@ -308,6 +311,7 @@ emulator is tracked by SKIA-80–105.
 
 | Entry | Kind | Category | Skia route or evidence |
 |---|---|---|---|
+| `ctest:EasyGL_GFX164_BoundMsaaAlpha` | `ctest` | `device-dependent` | REMED-GFX-164 reads a still-bound MULTISAMPLED `RenderTarget2D`, so the contract only exists where the device grants samples; the selected raster surface owns zero, and `Skia_RenderTarget2D_MsaaPolicy` asserts that truthfully instead. |
 | `ctest:EasyGL_RenderTarget2D_MsaaResolve` | `ctest` | `device-dependent` | Needs an accelerated sampled surface; SKIA-76–77. |
 | `ctest:EasyGL_OcclusionQuery_Cycle` | `ctest` | `device-dependent` | Query capability/probe; SKIA-104–105. |
 | `ctest:EasyGL_OcclusionQuery_VisibleQuad` | `ctest` | `device-dependent` | Query capability plus 3D visibility; SKIA-104–105. |
