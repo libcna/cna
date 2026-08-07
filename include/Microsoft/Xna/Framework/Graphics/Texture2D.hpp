@@ -591,11 +591,18 @@ namespace Microsoft::Xna::Framework::Graphics
         std::shared_ptr<std::vector<uint8_t>> cpuPixels_;
         std::shared_ptr<std::vector<std::vector<uint8_t>>> extraMipLevels_;
 
-        /// True only for instances built via the RenderTarget2D-exclusive protected constructor
-        /// above -- their content genuinely comes from GPU rendering, never SetData(), so an empty
-        /// CPU shadow means "ask the backend", not "the shadow was freed" (see GetData()'s
-        /// fallback). This applies to every mip: target descendants can be regenerated after a
-        /// render pass or parent upload, so common-layer transfer staging is never authoritative.
+        /// Declares that this resource's live backend is the sole authority for its pixels and
+        /// that no CPU shadow may be trusted. True only for a real RenderTarget2D: its content
+        /// genuinely comes from GPU rendering, never SetData(), so an empty CPU shadow means "ask
+        /// the backend", not "the shadow was freed" (see GetData()'s fallback). This applies to
+        /// every mip -- target descendants can be regenerated after a render pass or parent
+        /// upload, so common-layer transfer staging is never authoritative -- and it is why
+        /// SetData() updates a target's existing backend in place instead of replacing it.
+        ///
+        /// It is NOT a synonym for "was built by the protected constructor below".
+        /// ReconstructFromCache() borrows that constructor to wrap an already-created backend and
+        /// clears this flag again: a cache hit is an ordinary content texture whose CPU shadow is
+        /// authoritative and whose shared backend must never be written through (REMED-GFX-223).
         bool gpuOnlyContent_ = false;
 
         /// Frees cpuPixels_ when context recovery is disabled, saving ~1x texture RAM.

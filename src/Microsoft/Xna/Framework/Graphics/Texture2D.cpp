@@ -408,20 +408,20 @@ namespace Microsoft::Xna::Framework::Graphics
         // RenderTarget2D uses this inherited overload too. Replacing an existing backend would
         // turn its render-target backend into an ordinary Texture2D backend and leave its cached
         // IRenderTargetBackend pointer dangling. Update the existing level-0 resource instead.
-        if (backend_)
+        //
+        // REMED-GFX-223: this in-place update must stay confined to render targets. An ordinary
+        // Texture2D's backend is shareable -- ContentManager's weak texture cache hands the same
+        // ITextureBackend to every wrapper reconstructed from a cache hit -- so updating it in
+        // place would publish this upload to every other holder of that texture, which is exactly
+        // the aliasing CnjCacheIsolationTests pins (plan_cnj.md CNB-33). Building a fresh backend
+        // detaches this wrapper, which is what a full-level upload has always done here.
+        if (backend_ && gpuOnlyContent_)
         {
             backend_->UpdatePixels(img.pixels.data(), width * 4);
-            if (gpuOnlyContent_)
-            {
-                // Subsequent draws change the target surface directly, so retain no stale CPU
-                // upload shadow that could mask real target readback or generated descendants.
-                cpuPixels_.reset();
-                extraMipLevels_.reset();
-                return;
-            }
-            cpuPixels_ = std::make_shared<std::vector<uint8_t>>(std::move(img.pixels));
-            backend_->ShareCpuPixels(cpuPixels_);
-            MaybeFreeCpuPixels();
+            // Subsequent draws change the target surface directly, so retain no stale CPU
+            // upload shadow that could mask real target readback or generated descendants.
+            cpuPixels_.reset();
+            extraMipLevels_.reset();
             return;
         }
 
@@ -2703,6 +2703,13 @@ namespace Microsoft::Xna::Framework::Graphics
                                               std::shared_ptr<std::vector<uint8_t>> cpuPixels)
     {
         Texture2D tex(device, w, h, fmt, levelCount, std::move(backend));
+        // REMED-GFX-223: the constructor above belongs to RenderTarget2D and therefore raises
+        // gpuOnlyContent_, but a cache hit reconstructs an ordinary content texture -- its pixels
+        // come from the loader and SetData, never from rendering into it. Leaving the flag raised
+        // declares the shared cached backend authoritative, which makes GetData stop consulting
+        // the CPU shadow this factory is about to install and makes SetData mutate the cached
+        // backend in place instead of detaching from it.
+        tex.gpuOnlyContent_ = false;
         tex.cpuPixels_ = std::move(cpuPixels);
         return tex;
     }
