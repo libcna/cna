@@ -136,10 +136,19 @@ namespace Microsoft::Xna::Framework::Graphics
         if (format == SurfaceFormat::Color)
             return true;
 #ifdef CNA_BACKEND_SKIA
+        // Skia stores each promoted format in its own native layout, so a `Color*` transfer is
+        // only meaningful for the two that are genuinely 32-bit RGBA-shaped. Every other promoted
+        // format has a typed overload that reads its real bits instead.
         return format == SurfaceFormat::ColorBgraEXT
             || format == SurfaceFormat::ColorSrgbEXT;
 #else
-        return false;
+        // Every other backend keeps exactly the contract it had before this gate existed: the
+        // `Color*` overloads accept any format whose texel is a multiple of four bytes, which is
+        // the rule Texture::ValidateGetDataFormat(format, 4) applies on the next line. Returning a
+        // flat false here would withdraw a public route those backends genuinely serve --
+        // MouseCursor::FromTexture2D reads a ColorSrgbEXT texture through it -- from backends this
+        // lane does not otherwise touch.
+        return Texture::GetFormatSizeEXT(format) % 4 == 0;
 #endif
     }
 
@@ -1372,8 +1381,16 @@ namespace Microsoft::Xna::Framework::Graphics
         const int total = width * height;
         validateTransferWindow("Texture2D::GetData", startIndex, elementCount, total);
 
-        // RenderTarget2D always delegates level zero too. Even a temporary SetData staging
-        // buffer is not authoritative because a later canvas write may have replaced it.
+        // RenderTarget2D delegates level zero to the backend even when a CPU shadow exists: a
+        // temporary SetData staging buffer is not authoritative, because a later render into the
+        // target may have replaced its contents.
+        //
+        // The backend result is PREFERRED, not required. Where the backend cannot read its colour
+        // attachment back, an existing shadow is still the best answer available and is what this
+        // overload returned before the preference was introduced -- so fall through to it rather
+        // than withdrawing a working readback from every backend whose render targets are not
+        // CPU-readable. The NotSupportedException below stays reachable, and stays the right
+        // answer, only when there is genuinely nothing to return: no readback AND no shadow.
         if (gpuOnlyContent_ && backend_ && total > 0)
         {
             traceTransfer("whole-level(gpu)", width, height, 0, 0, 0, width, height,
@@ -1382,27 +1399,29 @@ namespace Microsoft::Xna::Framework::Graphics
             // so converting it unconditionally is not "leaving the caller's buffer untouched"
             // when the backend has no readback -- it fabricates a complete transparent-black
             // frame. Conversion happens only when the backend reports it wrote the whole
-            // region; otherwise the caller's `data` is left byte-for-byte as it was and the
-            // missing capability is raised instead of being answered with invented content.
+            // region; otherwise the caller's `data` is left byte-for-byte as it was.
             //
             // Sized to the REQUESTED REGION, not to elementCount: the backend fills exactly
             // width*height texels, so a larger elementCount would otherwise hand the caller
             // this buffer's untouched tail as if it were content.
             std::vector<uint8_t> pixels(static_cast<std::size_t>(total) * 4, 0);
-            if (!backend_->GetData(0, 0, 0, width, height, pixels.data(),
-                                   static_cast<int>(pixels.size())))
+            if (backend_->GetData(0, 0, 0, width, height, pixels.data(),
+                                  static_cast<int>(pixels.size())))
+            {
+                for (int i = 0; i < total; ++i)
+                {
+                    const int src = i * 4;
+                    data[startIndex + i] =
+                        Color(pixels[src + 0], pixels[src + 1], pixels[src + 2], pixels[src + 3]);
+                }
+                return;
+            }
+            if (!cpuPixels_ || cpuPixels_->empty())
             {
                 throw System::NotSupportedException(
                     "Texture2D::GetData: this graphics backend cannot read a render target's "
                     "colour attachment back to the CPU");
             }
-            for (int i = 0; i < total; ++i)
-            {
-                const int src = i * 4;
-                data[startIndex + i] =
-                    Color(pixels[src + 0], pixels[src + 1], pixels[src + 2], pixels[src + 3]);
-            }
-            return;
         }
 
         // For a plain Texture2D, an empty shadow means it was freed because context recovery is

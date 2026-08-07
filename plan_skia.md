@@ -437,6 +437,66 @@ sequence the missing `IGraphicsBackend` work first, not simply picking SKIA-164 
 | SKIA-169 | Run fresh raster and Ganesh builds, complete Debug/Release/sanitizer suites, reusable EasyGL comparisons, demos, and available platform backend matrix checks. | ⬜ | Commands, exact counts/timings, unsupported hosts, warnings, and any external-stack sanitizer baseline are recorded from clean configurations using at most eight workers. |
 | SKIA-170 | Hold the successor release gate and advertise only features with direct public evidence. | ⬜ | All SKIA-115–170 rows have an accurate implemented/emulated/refused disposition; capability code, ledgers, matrices, ADRs, build guide, `NEXT_skia.md`, and release summary agree. |
 
+## REMED-GFX-223 — cross-backend regression found at integration (OPEN, blocking)
+
+**Severity HIGH. Status OPEN. Affects every backend, not just Skia.** Numbered in the campaign's
+shared-layer series rather than this plan's SKIA series, because the defect is in
+`Microsoft::Xna::Framework::Graphics::Texture2D`, on a path every backend uses. Found by running the
+shared `CnaTests` corpus under `EASYGL` from this lane's own sources during Batch 4 integration; it
+had never been run, because this lane's validation has only ever been the Skia suite.
+
+**Failing tests:** `CnjCacheIsolationTest.SidecarLoadedFirstDoesNotCorruptLaterNativeLoad` and
+`CnjCacheIsolationTest.NativeLoadedFirstWithLiveHandleUnaffectedBySidecar`, under `EASYGL`, both in
+isolation and in the full corpus.
+
+### What breaks
+
+`ContentManager`'s texture cache reconstructs a hit through `Texture2D::ReconstructFromCache`, which
+builds the object with the `RenderTarget2D` constructor and therefore inherits
+`gpuOnlyContent_ = true` — even though the result is an ordinary content texture with a CPU shadow
+and no render target anywhere. That mislabel is pre-existing and was inert, because both code paths
+that read the flag looked at the shadow first.
+
+Two changes in this lane, each correct for a real Skia render target, make it live:
+
+1. `Texture2D::SetData(const Color*, int)` gained a `gpuOnlyContent_` branch that **resets
+   `cpuPixels_`** after uploading, so a later canvas write cannot be masked by a stale upload
+   shadow. Applied to a cache-reconstructed texture it discards the only copy of its pixels.
+2. `Texture2D::GetData(Color*, int, int)` moved its `gpuOnlyContent_` delegation **above** the
+   CPU-shadow check, so a flagged texture always asks the backend. On a backend whose plain
+   textures are not CPU-readable that now fails where it previously read the shadow.
+
+Together: the sidecar load drops the shadow, the cache's `weak_ptr` expires, the next load
+reconstructs with a null shadow, and `GetData` raises
+`"this graphics backend cannot read a render target's colour attachment back to the CPU"` for a
+texture that is not a render target.
+
+### Measured, not inferred
+
+Same test, same display, same fixture, traced with `CNA_TEXTURE_TRANSFER_TRACE=1`:
+
+| Tree | Third `GetData` | Result |
+|---|---|---|
+| integration head `aa9f3fb5` (EASYGL) | `source=cpuPixels_` | passes |
+| this lane adapted (EASYGL) | `source=backend` | throws; instrumented shadow is null |
+
+### Why it is recorded rather than fixed here
+
+The obvious repair — clearing `gpuOnlyContent_` in `ReconstructFromCache`, where it is simply
+untrue — also changes what the *head* does when such a texture's shadow has legitimately expired,
+turning a backend readback attempt into the plain-texture refusal. That is arguably the more honest
+answer, but it is a shared-layer semantic change on a path every backend uses, and it has to be
+re-validated across the Skia suite, both corpora and the sanitizer gate rather than asserted.
+
+**Its sibling was found the same way and is fixed.** `IsColorTransferFormatEXT` narrowed the
+`Color*` `SetData`/`GetData` overloads to `SurfaceFormat::Color` alone on every non-Skia backend,
+withdrawing the working `ColorSrgbEXT` route `MouseCursor::FromTexture2D` uses. It now preserves the
+pre-existing any-4-byte-format rule off Skia, and `MouseCursorTest` is 14/14 again.
+
+**The lesson this lane pays for:** a backend-local `#ifdef` is not the only way a lane reaches other
+backends. Both defects are in shared code that merely *branches* on a Skia condition, and neither
+would have been found by any amount of Skia testing.
+
 ## Completed dependency order
 
 1. SKIA-1 through SKIA-9 settled dependency, surface ownership, and the raster release mode.
