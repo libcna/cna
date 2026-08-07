@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -15,9 +16,31 @@ struct SDL_Texture;
 
 namespace System::IO { class Stream; }
 
+namespace Microsoft::Xna::Framework
+{
+    struct Vector2;
+    struct Vector4;
+}
+
 namespace CNA::Internal::Backends
 {
     class ITextureBackend;
+}
+
+namespace Microsoft::Xna::Framework::Graphics::PackedVector
+{
+    struct Alpha8;
+    struct Bgr565;
+    struct Bgra5551;
+    struct Bgra4444;
+    struct HalfSingle;
+    struct HalfVector2;
+    struct HalfVector4;
+    struct NormalizedByte2;
+    struct NormalizedByte4;
+    struct Rg32;
+    struct Rgba1010102;
+    struct Rgba64;
 }
 
 namespace Microsoft::Xna::Framework::Graphics
@@ -89,14 +112,18 @@ namespace Microsoft::Xna::Framework::Graphics
         // Format and LevelCount are inherited from Texture.
 
         /**
-         * @brief Uploads pixel data to the texture.
+         * @brief Uploads pixel data to a Color-compatible texture.
+         *
+         * In a Skia build, ColorBgraEXT and ColorSrgbEXT also use this overload. Each Color's
+         * R/G/B/A properties name the four raw transfer bytes in order; ColorBgraEXT sampling
+         * therefore interprets those bytes as B/G/R/A, while ColorSrgbEXT decodes RGB once.
          * @param data         Pointer to the Color array.
          * @param elementCount Number of Color elements to upload.
          */
         void SetData(const Color* data, int elementCount);
 
         /**
-         * @brief Uploads pixel data to a specific mip level and optional sub-rectangle.
+         * @brief Uploads raw Color-compatible data to a mip level and optional sub-rectangle.
          * @param level        Mip level to write (0 = full size).
          * @param rect         Sub-rectangle to update, or nullptr for the entire level.
          * @param data         Pointer to the Color array.
@@ -110,8 +137,111 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         void SetData(int level, const Rectangle* rect, const Color* data, int startIndex, int elementCount);
 
+        /** @brief Uploads exact packed Bgr565 texels to a Bgr565 texture. */
+        void SetData(const PackedVector::Bgr565* data, int elementCount);
+        /** @brief Uploads exact packed Bgr565 texels to a mip level or rectangle. */
+        void SetData(int level, const Rectangle* rect, const PackedVector::Bgr565* data,
+                     int startIndex, int elementCount);
+        /** @brief Uploads exact packed Bgra4444 texels to a Bgra4444 texture. */
+        void SetData(const PackedVector::Bgra4444* data, int elementCount);
+        /** @brief Uploads exact packed Bgra4444 texels to a mip level or rectangle. */
+        void SetData(int level, const Rectangle* rect, const PackedVector::Bgra4444* data,
+                     int startIndex, int elementCount);
+        /** @brief Uploads exact packed Bgra5551 texels to a Bgra5551 texture. */
+        void SetData(const PackedVector::Bgra5551* data, int elementCount);
+        /** @brief Uploads exact packed Bgra5551 texels to a mip level or rectangle. */
+        void SetData(int level, const Rectangle* rect, const PackedVector::Bgra5551* data,
+                     int startIndex, int elementCount);
+        /** @brief Uploads exact packed Rgba1010102 texels to an Rgba1010102 texture. */
+        void SetData(const PackedVector::Rgba1010102* data, int elementCount);
+        /** @brief Uploads exact packed Rgba1010102 texels to a mip level or rectangle. */
+        void SetData(int level, const Rectangle* rect, const PackedVector::Rgba1010102* data,
+                     int startIndex, int elementCount);
+        /** @brief Uploads exact packed Alpha8 texels to an Alpha8 texture. */
+        void SetData(const PackedVector::Alpha8* data, int elementCount);
+        /** @brief Uploads exact packed Alpha8 texels to a mip level or rectangle. */
+        void SetData(int level, const Rectangle* rect, const PackedVector::Alpha8* data,
+                     int startIndex, int elementCount);
+        /** @brief Uploads exact packed Rg32 texels to an Rg32 texture. */
+        void SetData(const PackedVector::Rg32* data, int elementCount);
+        /** @brief Uploads exact packed Rg32 texels to a mip level or rectangle. */
+        void SetData(int level, const Rectangle* rect, const PackedVector::Rg32* data,
+                     int startIndex, int elementCount);
+        /** @brief Uploads exact packed Rgba64 texels to an Rgba64 texture. */
+        void SetData(const PackedVector::Rgba64* data, int elementCount);
+        /** @brief Uploads exact packed Rgba64 texels to a mip level or rectangle. */
+        void SetData(int level, const Rectangle* rect, const PackedVector::Rgba64* data,
+                     int startIndex, int elementCount);
+        /** @brief Uploads exact packed signed-normalized XY bytes. */
+        void SetData(const PackedVector::NormalizedByte2* data, int elementCount);
+        /** @brief Uploads exact packed signed-normalized XY bytes to a mip or rectangle. */
+        void SetData(int level, const Rectangle* rect, const PackedVector::NormalizedByte2* data,
+                     int startIndex, int elementCount);
+        /** @brief Uploads exact packed signed-normalized XYZW bytes. */
+        void SetData(const PackedVector::NormalizedByte4* data, int elementCount);
+        /** @brief Uploads exact packed signed-normalized XYZW bytes to a mip or rectangle. */
+        void SetData(int level, const Rectangle* rect, const PackedVector::NormalizedByte4* data,
+                     int startIndex, int elementCount);
+        /** @brief Uploads exact IEEE binary32 values to a Single texture. */
+        void SetData(const float* data, int elementCount);
+        /** @brief Uploads exact IEEE binary32 values to a Single mip level or rectangle. */
+        void SetData(int level, const Rectangle* rect, const float* data,
+                     int startIndex, int elementCount);
+        /** @brief Uploads exact two-component binary32 values to a Vector2 texture. */
+        void SetData(const Vector2* data, int elementCount);
+        /** @brief Uploads exact two-component binary32 values to a Vector2 mip or rectangle. */
+        void SetData(int level, const Rectangle* rect, const Vector2* data,
+                     int startIndex, int elementCount);
+        /** @brief Uploads exact four-component binary32 values to a Vector4 texture. */
+        void SetData(const Vector4* data, int elementCount);
+        /** @brief Uploads exact four-component binary32 values to a Vector4 mip or rectangle. */
+        void SetData(int level, const Rectangle* rect, const Vector4* data,
+                     int startIndex, int elementCount);
+        /** @brief Uploads exact packed binary16 values to a HalfSingle texture. */
+        void SetData(const PackedVector::HalfSingle* data, int elementCount);
+        /** @brief Uploads exact packed binary16 values to a HalfSingle mip or rectangle. */
+        void SetData(int level, const Rectangle* rect, const PackedVector::HalfSingle* data,
+                     int startIndex, int elementCount);
+        /** @brief Uploads exact packed RG binary16 values to a HalfVector2 texture. */
+        void SetData(const PackedVector::HalfVector2* data, int elementCount);
+        /** @brief Uploads exact packed RG binary16 values to a HalfVector2 mip or rectangle. */
+        void SetData(int level, const Rectangle* rect, const PackedVector::HalfVector2* data,
+                     int startIndex, int elementCount);
+        /** @brief Uploads exact packed RGBA binary16 values to HalfVector4 or HdrBlendable. */
+        void SetData(const PackedVector::HalfVector4* data, int elementCount);
+        /** @brief Uploads exact packed RGBA binary16 values to a mip level or rectangle. */
+        void SetData(int level, const Rectangle* rect, const PackedVector::HalfVector4* data,
+                     int startIndex, int elementCount);
+        /** @brief Uploads exact unsigned bytes to a ByteEXT texture, or compressed blocks to a Dxt1/Dxt3/Dxt5 texture. */
+        NOXNA void SetData(const std::uint8_t* data, int elementCount);
         /**
-         * @brief Reads pixel data from the texture into the provided array.
+         * @brief Uploads exact unsigned bytes to a ByteEXT texture, or exact compressed blocks
+         * to a Dxt1/Dxt3/Dxt5 texture. For a compressed format, level/rect coordinates are texel
+         * space and must be block-aligned or reach the level's edge; elementCount is the exact
+         * padded block byte count for the requested region.
+         */
+        NOXNA void SetData(int level, const Rectangle* rect, const std::uint8_t* data,
+                           int startIndex, int elementCount);
+        /** @brief Uploads exact unsigned 16-bit values to a UShortEXT texture. */
+        NOXNA void SetData(const std::uint16_t* data, int elementCount);
+        /** @brief Uploads exact unsigned 16-bit values to a UShortEXT mip level or rectangle. */
+        NOXNA void SetData(int level, const Rectangle* rect, const std::uint16_t* data,
+                           int startIndex, int elementCount);
+
+        /** @brief Preserves the legacy null-pointer overload resolution after packed overloads. */
+        void SetData(std::nullptr_t, int elementCount)
+        {
+            SetData(static_cast<const Color*>(nullptr), elementCount);
+        }
+        /** @brief Preserves the legacy null-pointer overload resolution after packed overloads. */
+        void SetData(int level, const Rectangle* rect, std::nullptr_t,
+                     int startIndex, int elementCount)
+        {
+            SetData(level, rect, static_cast<const Color*>(nullptr), startIndex, elementCount);
+        }
+
+        /**
+         * @brief Reads raw Color-compatible bytes from the texture into the provided array.
          * @param data         Output array to receive the pixel data.
          * @param startIndex   First element in @p data to write to.
          * @param elementCount Number of Color elements to read.
@@ -119,14 +249,14 @@ namespace Microsoft::Xna::Framework::Graphics
         void GetData(Color* data, int startIndex, int elementCount) const;
 
         /**
-         * @brief Reads all pixel data from the texture into the provided array.
+         * @brief Reads all raw Color-compatible bytes from the texture into the provided array.
          * @param data         Output array to receive the pixel data.
          * @param elementCount Number of Color elements to read.
          */
         void GetData(Color* data, int elementCount) const;
 
         /**
-         * @brief Reads pixel data from a specific mip level and optional sub-rectangle.
+         * @brief Reads raw Color-compatible bytes from a mip level or sub-rectangle.
          * @param level        Mip level to read (0 = full size).
          * @param rect         Sub-rectangle to read, or nullptr for the entire level.
          * @param data         Output array to receive the pixel data.
@@ -134,6 +264,148 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param elementCount Number of Color elements to read.
          */
         void GetData(int level, const Rectangle* rect, Color* data, int startIndex, int elementCount) const;
+
+        /** @brief Reads exact packed Bgr565 texels from a Bgr565 texture. */
+        void GetData(PackedVector::Bgr565* data, int startIndex, int elementCount) const;
+        /** @brief Reads all exact packed Bgr565 texels from a Bgr565 texture. */
+        void GetData(PackedVector::Bgr565* data, int elementCount) const;
+        /** @brief Reads exact packed Bgr565 texels from a mip level or rectangle. */
+        void GetData(int level, const Rectangle* rect, PackedVector::Bgr565* data,
+                     int startIndex, int elementCount) const;
+        /** @brief Reads exact packed Bgra4444 texels from a Bgra4444 texture. */
+        void GetData(PackedVector::Bgra4444* data, int startIndex, int elementCount) const;
+        /** @brief Reads all exact packed Bgra4444 texels from a Bgra4444 texture. */
+        void GetData(PackedVector::Bgra4444* data, int elementCount) const;
+        /** @brief Reads exact packed Bgra4444 texels from a mip level or rectangle. */
+        void GetData(int level, const Rectangle* rect, PackedVector::Bgra4444* data,
+                     int startIndex, int elementCount) const;
+        /** @brief Reads exact packed Bgra5551 texels from a Bgra5551 texture. */
+        void GetData(PackedVector::Bgra5551* data, int startIndex, int elementCount) const;
+        /** @brief Reads all exact packed Bgra5551 texels from a Bgra5551 texture. */
+        void GetData(PackedVector::Bgra5551* data, int elementCount) const;
+        /** @brief Reads exact packed Bgra5551 texels from a mip level or rectangle. */
+        void GetData(int level, const Rectangle* rect, PackedVector::Bgra5551* data,
+                     int startIndex, int elementCount) const;
+        /** @brief Reads exact packed Rgba1010102 texels from an Rgba1010102 texture. */
+        void GetData(PackedVector::Rgba1010102* data, int startIndex, int elementCount) const;
+        /** @brief Reads all exact packed Rgba1010102 texels from an Rgba1010102 texture. */
+        void GetData(PackedVector::Rgba1010102* data, int elementCount) const;
+        /** @brief Reads exact packed Rgba1010102 texels from a mip level or rectangle. */
+        void GetData(int level, const Rectangle* rect, PackedVector::Rgba1010102* data,
+                     int startIndex, int elementCount) const;
+        /** @brief Reads exact packed Alpha8 texels from an Alpha8 texture. */
+        void GetData(PackedVector::Alpha8* data, int startIndex, int elementCount) const;
+        /** @brief Reads all exact packed Alpha8 texels from an Alpha8 texture. */
+        void GetData(PackedVector::Alpha8* data, int elementCount) const;
+        /** @brief Reads exact packed Alpha8 texels from a mip level or rectangle. */
+        void GetData(int level, const Rectangle* rect, PackedVector::Alpha8* data,
+                     int startIndex, int elementCount) const;
+        /** @brief Reads exact packed Rg32 texels from an Rg32 texture. */
+        void GetData(PackedVector::Rg32* data, int startIndex, int elementCount) const;
+        /** @brief Reads all exact packed Rg32 texels from an Rg32 texture. */
+        void GetData(PackedVector::Rg32* data, int elementCount) const;
+        /** @brief Reads exact packed Rg32 texels from a mip level or rectangle. */
+        void GetData(int level, const Rectangle* rect, PackedVector::Rg32* data,
+                     int startIndex, int elementCount) const;
+        /** @brief Reads exact packed Rgba64 texels from an Rgba64 texture. */
+        void GetData(PackedVector::Rgba64* data, int startIndex, int elementCount) const;
+        /** @brief Reads all exact packed Rgba64 texels from an Rgba64 texture. */
+        void GetData(PackedVector::Rgba64* data, int elementCount) const;
+        /** @brief Reads exact packed Rgba64 texels from a mip level or rectangle. */
+        void GetData(int level, const Rectangle* rect, PackedVector::Rgba64* data,
+                     int startIndex, int elementCount) const;
+        /** @brief Reads exact packed signed-normalized XY bytes. */
+        void GetData(PackedVector::NormalizedByte2* data, int startIndex, int elementCount) const;
+        /** @brief Reads all exact packed signed-normalized XY bytes. */
+        void GetData(PackedVector::NormalizedByte2* data, int elementCount) const;
+        /** @brief Reads exact packed signed-normalized XY bytes from a mip or rectangle. */
+        void GetData(int level, const Rectangle* rect, PackedVector::NormalizedByte2* data,
+                     int startIndex, int elementCount) const;
+        /** @brief Reads exact packed signed-normalized XYZW bytes. */
+        void GetData(PackedVector::NormalizedByte4* data, int startIndex, int elementCount) const;
+        /** @brief Reads all exact packed signed-normalized XYZW bytes. */
+        void GetData(PackedVector::NormalizedByte4* data, int elementCount) const;
+        /** @brief Reads exact packed signed-normalized XYZW bytes from a mip or rectangle. */
+        void GetData(int level, const Rectangle* rect, PackedVector::NormalizedByte4* data,
+                     int startIndex, int elementCount) const;
+        /** @brief Reads exact IEEE binary32 values from a Single texture. */
+        void GetData(float* data, int startIndex, int elementCount) const;
+        /** @brief Reads all exact IEEE binary32 values from a Single texture. */
+        void GetData(float* data, int elementCount) const;
+        /** @brief Reads exact IEEE binary32 values from a Single mip or rectangle. */
+        void GetData(int level, const Rectangle* rect, float* data,
+                     int startIndex, int elementCount) const;
+        /** @brief Reads exact two-component binary32 values from a Vector2 texture. */
+        void GetData(Vector2* data, int startIndex, int elementCount) const;
+        /** @brief Reads all exact two-component binary32 values from a Vector2 texture. */
+        void GetData(Vector2* data, int elementCount) const;
+        /** @brief Reads exact two-component binary32 values from a Vector2 mip or rectangle. */
+        void GetData(int level, const Rectangle* rect, Vector2* data,
+                     int startIndex, int elementCount) const;
+        /** @brief Reads exact four-component binary32 values from a Vector4 texture. */
+        void GetData(Vector4* data, int startIndex, int elementCount) const;
+        /** @brief Reads all exact four-component binary32 values from a Vector4 texture. */
+        void GetData(Vector4* data, int elementCount) const;
+        /** @brief Reads exact four-component binary32 values from a Vector4 mip or rectangle. */
+        void GetData(int level, const Rectangle* rect, Vector4* data,
+                     int startIndex, int elementCount) const;
+        /** @brief Reads exact packed binary16 values from a HalfSingle texture. */
+        void GetData(PackedVector::HalfSingle* data, int startIndex, int elementCount) const;
+        /** @brief Reads all exact packed binary16 values from a HalfSingle texture. */
+        void GetData(PackedVector::HalfSingle* data, int elementCount) const;
+        /** @brief Reads exact packed binary16 values from a HalfSingle mip or rectangle. */
+        void GetData(int level, const Rectangle* rect, PackedVector::HalfSingle* data,
+                     int startIndex, int elementCount) const;
+        /** @brief Reads exact packed RG binary16 values from a HalfVector2 texture. */
+        void GetData(PackedVector::HalfVector2* data, int startIndex, int elementCount) const;
+        /** @brief Reads all exact packed RG binary16 values from a HalfVector2 texture. */
+        void GetData(PackedVector::HalfVector2* data, int elementCount) const;
+        /** @brief Reads exact packed RG binary16 values from a HalfVector2 mip or rectangle. */
+        void GetData(int level, const Rectangle* rect, PackedVector::HalfVector2* data,
+                     int startIndex, int elementCount) const;
+        /** @brief Reads exact packed RGBA binary16 values from HalfVector4 or HdrBlendable. */
+        void GetData(PackedVector::HalfVector4* data, int startIndex, int elementCount) const;
+        /** @brief Reads all exact packed RGBA binary16 values from HalfVector4 or HdrBlendable. */
+        void GetData(PackedVector::HalfVector4* data, int elementCount) const;
+        /** @brief Reads exact packed RGBA binary16 values from a mip level or rectangle. */
+        void GetData(int level, const Rectangle* rect, PackedVector::HalfVector4* data,
+                     int startIndex, int elementCount) const;
+        /** @brief Reads exact unsigned bytes from a ByteEXT texture. */
+        NOXNA void GetData(std::uint8_t* data, int startIndex, int elementCount) const;
+        /** @brief Reads all exact unsigned bytes from a ByteEXT texture, or compressed blocks from a Dxt1/Dxt3/Dxt5 texture. */
+        NOXNA void GetData(std::uint8_t* data, int elementCount) const;
+        /**
+         * @brief Reads exact unsigned bytes from a ByteEXT mip level or rectangle, or exact
+         * compressed blocks from a Dxt1/Dxt3/Dxt5 mip level or rectangle. For a compressed
+         * format, rect coordinates are texel space and must be block-aligned or reach the
+         * level's edge; elementCount is the exact padded block byte count for the region.
+         */
+        NOXNA void GetData(int level, const Rectangle* rect, std::uint8_t* data,
+                           int startIndex, int elementCount) const;
+        /** @brief Reads exact unsigned 16-bit values from a UShortEXT texture. */
+        NOXNA void GetData(std::uint16_t* data, int startIndex, int elementCount) const;
+        /** @brief Reads all exact unsigned 16-bit values from a UShortEXT texture. */
+        NOXNA void GetData(std::uint16_t* data, int elementCount) const;
+        /** @brief Reads exact unsigned 16-bit values from a UShortEXT mip level or rectangle. */
+        NOXNA void GetData(int level, const Rectangle* rect, std::uint16_t* data,
+                           int startIndex, int elementCount) const;
+
+        /** @brief Preserves the legacy null-pointer overload resolution after packed overloads. */
+        void GetData(std::nullptr_t, int elementCount) const
+        {
+            GetData(static_cast<Color*>(nullptr), elementCount);
+        }
+        /** @brief Preserves the legacy null-pointer overload resolution after packed overloads. */
+        void GetData(std::nullptr_t, int startIndex, int elementCount) const
+        {
+            GetData(static_cast<Color*>(nullptr), startIndex, elementCount);
+        }
+        /** @brief Preserves the legacy null-pointer overload resolution after packed overloads. */
+        void GetData(int level, const Rectangle* rect, std::nullptr_t,
+                     int startIndex, int elementCount) const
+        {
+            GetData(level, rect, static_cast<Color*>(nullptr), startIndex, elementCount);
+        }
 
         /**
          * @brief Creates a Texture2D by decoding image data from a stream.
@@ -319,21 +591,49 @@ namespace Microsoft::Xna::Framework::Graphics
         std::shared_ptr<std::vector<uint8_t>> cpuPixels_;
         std::shared_ptr<std::vector<std::vector<uint8_t>>> extraMipLevels_;
 
-        /// True only for instances built via the RenderTarget2D-exclusive protected constructor
-        /// above -- their content genuinely comes from GPU rendering, never SetData(), so an empty
-        /// CPU shadow means "ask the backend", not "the shadow was freed" (see GetData()'s fallback).
+        /// Declares that this resource's live backend is the sole authority for its pixels and
+        /// that no CPU shadow may be trusted. True only for a real RenderTarget2D: its content
+        /// genuinely comes from GPU rendering, never SetData(), so an empty CPU shadow means "ask
+        /// the backend", not "the shadow was freed" (see GetData()'s fallback). This applies to
+        /// every mip -- target descendants can be regenerated after a render pass or parent
+        /// upload, so common-layer transfer staging is never authoritative -- and it is why
+        /// SetData() updates a target's existing backend in place instead of replacing it.
+        ///
+        /// It is NOT a synonym for "was built by the protected constructor below".
+        /// ReconstructFromCache() borrows that constructor to wrap an already-created backend and
+        /// clears this flag again: a cache hit is an ordinary content texture whose CPU shadow is
+        /// authoritative and whose shared backend must never be written through (REMED-GFX-223).
         bool gpuOnlyContent_ = false;
 
         /// Frees cpuPixels_ when context recovery is disabled, saving ~1x texture RAM.
         void MaybeFreeCpuPixels();
 
-        /// Builds a Texture2D from already-decoded RGBA8 pixel data; shared by both FromStream overloads.
+        /// Builds a single-level Texture2D from transformed/decoded RGBA8 pixel data.
         static Texture2D MakeTextureFromPixels(GraphicsDevice& device, int w, int h,
                                                std::vector<std::uint8_t>&& rgba);
+
+        /// Builds a Texture2D from an exact, fully decoded RGBA8 mip chain.
+        static Texture2D MakeTextureFromMipPixels(
+            GraphicsDevice& device, int w, int h,
+            std::vector<std::vector<std::uint8_t>>&& rgbaLevels);
 
         void storeCpuPixels(const uint8_t* rgba, int pixelCount);
         std::vector<uint8_t>& getMipBuffer(int level);
         const std::vector<uint8_t>* getMipBufferConst(int level) const;
+        [[nodiscard]] int getBytesPerTexel() const;
+        void SetDataBytes(int level, const Rectangle* rect, const std::uint8_t* data,
+                          int startIndex, int elementCount, int elementBytes);
+        void GetDataBytes(int level, const Rectangle* rect, std::uint8_t* data,
+                          int startIndex, int elementCount, int elementBytes) const;
+
+        /// Raw block-compressed byte upload for Dxt1/Dxt3/Dxt5 (SKIA-140). Unlike SetDataBytes,
+        /// there is no CPU-side mirror: each call reads back, patches, and re-uploads through
+        /// the backend directly, since compressed storage cannot be sliced by texel row.
+        void SetCompressedDataBytes(int level, const Rectangle* rect, const std::uint8_t* data,
+                                    int startIndex, int elementCount);
+        /// Raw block-compressed byte readback counterpart of SetCompressedDataBytes.
+        void GetCompressedDataBytes(int level, const Rectangle* rect, std::uint8_t* data,
+                                    int startIndex, int elementCount) const;
 
         [[nodiscard]] SDL_Texture* GetNativeTextureInternal() const;
 

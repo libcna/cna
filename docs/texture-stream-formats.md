@@ -7,11 +7,13 @@
 ## How format detection works
 
 `Texture2D::FromStream` first checks for a DDS header (`"DDS "` magic + valid `DDS_HEADER`)
-via an internal minimal parser (`TryDecodeDds` in `Texture2D.cpp`) that only recognizes the
-`DXT1`/`DXT3`/`DXT5` FourCC codes and decodes them itself via `DxtUtil`. Any other DDS FourCC,
-or any non-DDS stream, falls through to `CNA::Internal::Graphics::ImageLoader::LoadFromMemory`,
-which calls SDL3_image's `IMG_Load_IO` — a format-sniffing loader that auto-detects the
-container format from the byte stream, not from a file extension.
+via an internal parser (`TryDecodeDds` in `Texture2D.cpp`) that recognizes the
+`DXT1`/`DXT3`/`DXT5` FourCC codes and decodes each declared mip level itself via `DxtUtil`.
+Once DDS magic is present, malformed headers, unsupported FourCCs, incomplete chains and
+truncated per-level payloads raise a DDS-specific exception; they no longer fall through to an
+unrelated image decoder. Non-DDS streams use
+`CNA::Internal::Graphics::ImageLoader::LoadFromMemory`, which calls SDL3_image's `IMG_Load_IO` —
+a format-sniffing loader that auto-detects the container from bytes, not a file extension.
 
 The set of formats `IMG_Load_IO` can actually decode depends on which codecs the linked
 SDL3_image build was compiled with (see `Requires.private` in `sdl3-image.pc`).
@@ -23,7 +25,12 @@ SDL3_image build was compiled with (see `Requires.private` in `sdl3-image.pc`).
 | PNG | SDL3_image (`IMG_Load_IO`) | ✅ | Round-tripped via `Texture2D::SaveAsPng` → `FromStream`; lossless, exact pixel match. |
 | JPEG | SDL3_image (`IMG_Load_IO`) | ✅ | Round-tripped via `Texture2D::SaveAsJpeg` → `FromStream`; lossy, verified within tolerance. |
 | BMP | SDL3_image (`IMG_Load_IO`, native SDL3 BMP support) | ✅ | Verified via a hand-built minimal 24bpp uncompressed BMP; exact pixel match. |
-| DDS (DXT1/DXT3/DXT5) | CNA-internal `TryDecodeDds` + `DxtUtil` (bypasses SDL3_image entirely) | ✅ | Pre-existing; see `examples/dxt1_texture_test.cpp` (Task 125). |
+| DDS (DXT1/DXT3/DXT5) | CNA-internal `TryDecodeDds` + `DxtUtil` (bypasses SDL3_image entirely) | ✅ | `Skia_Texture2D_ContentMips` verifies all three codecs across an exact four-level 8×8 chain, plus single-level and malformed/truncated cases (SKIA-130). Decoded storage is canonical RGBA8 `SurfaceFormat::Color`. |
+
+DDS and XNB Texture2D content may declare either level zero only or the complete floor-halved
+chain through 1×1. A partial prefix is rejected: allocating CNA/XNA's complete mip resource and
+generating the absent suffix would silently invent asset content. The resize/crop `FromStream`
+overload intentionally transforms level zero and returns a single-level output texture.
 
 ## Not verified (present in the SDL3_image build's private deps, but untested here)
 

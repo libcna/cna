@@ -6,8 +6,8 @@ if(EMSCRIPTEN OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
 else()
     set(_cna_default_backend "SDL_RENDERER")
 endif()
-set(CNA_GRAPHICS_BACKEND "${_cna_default_backend}" CACHE STRING "Graphics backend to use (SDL_RENDERER, EASYGL, BGFX, VULKAN, WEBGPU, MAGNUM, HEADLESS, SOFTWARE, STUB, D3D11, D3D12, CANVAS, ASCII, FREEDIRECT, D3D9, DX1, DX2, DX3, DX5, DX6, DX7, DX8, D3D10, OPENGLES1, OPENGL4, OPENGL1, OPENGL2, SDL_GPU, WICKED, SOKOL, or DILIGENT)")
-set_property(CACHE CNA_GRAPHICS_BACKEND PROPERTY STRINGS "SDL_RENDERER" "EASYGL" "BGFX" "VULKAN" "WEBGPU" "MAGNUM" "HEADLESS" "SOFTWARE" "STUB" "D3D11" "D3D12" "CANVAS" "ASCII" "FREEDIRECT" "D3D9" "DX1" "DX2" "DX3" "DX5" "DX6" "DX7" "DX8" "D3D10" "OPENGLES1" "OPENGL4" "OPENGL1" "OPENGL2" "SDL_GPU" "WICKED" "SOKOL" "DILIGENT")
+set(CNA_GRAPHICS_BACKEND "${_cna_default_backend}" CACHE STRING "Graphics backend to use (SDL_RENDERER, EASYGL, BGFX, VULKAN, WEBGPU, MAGNUM, HEADLESS, SOFTWARE, STUB, D3D11, D3D12, CANVAS, SKIA, ASCII, FREEDIRECT, D3D9, DX1, DX2, DX3, DX5, DX6, DX7, DX8, D3D10, OPENGLES1, OPENGL4, OPENGL1, OPENGL2, SDL_GPU, WICKED, SOKOL, or DILIGENT)")
+set_property(CACHE CNA_GRAPHICS_BACKEND PROPERTY STRINGS "SDL_RENDERER" "EASYGL" "BGFX" "VULKAN" "WEBGPU" "MAGNUM" "HEADLESS" "SOFTWARE" "STUB" "D3D11" "D3D12" "CANVAS" "SKIA" "ASCII" "FREEDIRECT" "D3D9" "DX1" "DX2" "DX3" "DX5" "DX6" "DX7" "DX8" "D3D10" "OPENGLES1" "OPENGL4" "OPENGL1" "OPENGL2" "SDL_GPU" "WICKED" "SOKOL" "DILIGENT")
 
 option(CNA_BACKEND_SDL_RENDERER "Enable SDL_Renderer graphics backend" OFF)
 option(CNA_BACKEND_EASY_GL "Enable easy-gl graphics backend" OFF)
@@ -29,6 +29,7 @@ option(CNA_BACKEND_D3D12 "Enable Direct3D 12 graphics backend (Windows only)" OF
 # plan_canvas.md: HTML Canvas 2D backend -- Emscripten-only (design decision 1), a browser-native,
 # GPU-free 2D-only backend using canvas.getContext('2d') instead of EASYGL's WebGL2 context.
 option(CNA_BACKEND_CANVAS "Enable HTML Canvas 2D graphics backend (Emscripten only)" OFF)
+option(CNA_BACKEND_SKIA "Enable Skia 2D raster graphics backend" OFF)
 # plan_ascii.md: SDL-windowed retro text/glyph-grid backend -- a thin decorator around
 # SDL_RENDERER's own SdlGraphicsBackend (see the shared cna_backend_graphics_sdl_renderer_core
 # library below), not a real terminal/TTY backend.
@@ -127,7 +128,7 @@ option(CNA_BACKEND_SOKOL "Enable sokol_gfx graphics backend" OFF)
 option(CNA_BACKEND_DILIGENT "Enable Diligent Engine graphics backend" OFF)
 
 set(_cna_explicit_backend_selection OFF)
-if(CNA_BACKEND_SDL_RENDERER OR CNA_BACKEND_EASY_GL OR CNA_BACKEND_BGFX OR CNA_BACKEND_VULKAN OR CNA_BACKEND_WEBGPU OR CNA_BACKEND_MAGNUM OR CNA_BACKEND_HEADLESS OR CNA_BACKEND_SOFTWARE OR CNA_BACKEND_STUB OR CNA_BACKEND_D3D11 OR CNA_BACKEND_D3D12 OR CNA_BACKEND_CANVAS OR CNA_BACKEND_ASCII OR CNA_BACKEND_FREEDIRECT OR CNA_BACKEND_D3D9 OR CNA_BACKEND_DX1 OR CNA_BACKEND_DX2 OR CNA_BACKEND_DX3 OR CNA_BACKEND_DX5 OR CNA_BACKEND_DX6 OR CNA_BACKEND_DX7 OR CNA_BACKEND_DX8 OR CNA_BACKEND_D3D10 OR CNA_BACKEND_OPENGLES1 OR CNA_BACKEND_OPENGL4 OR CNA_BACKEND_OPENGL1 OR CNA_BACKEND_OPENGL2 OR CNA_BACKEND_SDL_GPU OR CNA_BACKEND_WICKED OR CNA_BACKEND_SOKOL OR CNA_BACKEND_DILIGENT)
+if(CNA_BACKEND_SDL_RENDERER OR CNA_BACKEND_EASY_GL OR CNA_BACKEND_BGFX OR CNA_BACKEND_VULKAN OR CNA_BACKEND_WEBGPU OR CNA_BACKEND_MAGNUM OR CNA_BACKEND_HEADLESS OR CNA_BACKEND_SOFTWARE OR CNA_BACKEND_STUB OR CNA_BACKEND_D3D11 OR CNA_BACKEND_D3D12 OR CNA_BACKEND_CANVAS OR CNA_BACKEND_SKIA OR CNA_BACKEND_ASCII OR CNA_BACKEND_FREEDIRECT OR CNA_BACKEND_D3D9 OR CNA_BACKEND_DX1 OR CNA_BACKEND_DX2 OR CNA_BACKEND_DX3 OR CNA_BACKEND_DX5 OR CNA_BACKEND_DX6 OR CNA_BACKEND_DX7 OR CNA_BACKEND_DX8 OR CNA_BACKEND_D3D10 OR CNA_BACKEND_OPENGLES1 OR CNA_BACKEND_OPENGL4 OR CNA_BACKEND_OPENGL1 OR CNA_BACKEND_OPENGL2 OR CNA_BACKEND_SDL_GPU OR CNA_BACKEND_WICKED OR CNA_BACKEND_SOKOL OR CNA_BACKEND_DILIGENT)
     set(_cna_explicit_backend_selection ON)
 endif()
 
@@ -168,6 +169,9 @@ if(_cna_explicit_backend_selection)
     endif()
     if(CNA_BACKEND_CANVAS)
         list(APPEND _cna_enabled_backends "CANVAS")
+    endif()
+    if(CNA_BACKEND_SKIA)
+        list(APPEND _cna_enabled_backends "SKIA")
     endif()
     if(CNA_BACKEND_ASCII)
         list(APPEND _cna_enabled_backends "ASCII")
@@ -473,6 +477,34 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "CANVAS")
     set(BACKEND_TARGET "cna_backend_graphics_canvas")
     add_compile_definitions(CNA_BACKEND_CANVAS)
     set(CNA_BACKEND_DEFINE "CNA_BACKEND_CANVAS")
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "SKIA")
+    # SKIA-160: CNA_SKIA_MODE is a sub-selector of CNA_GRAPHICS_BACKEND=SKIA, not a separate
+    # backend identity -- RASTER (default) and GANESH are two mutually exclusive GN builds of the
+    # same pinned Skia checkout (docs/skia-ganesh-artifact.md), never linked together in one
+    # binary. Every source file under BACKEND_DIR compiles in both modes (SkiaGaneshContext.cpp
+    # branches on CNA_SKIA_MODE_GANESH internally, matching the established safe-default-throws
+    # extensibility pattern); only which single Skia archive set gets linked differs.
+    set(CNA_SKIA_MODE "RASTER" CACHE STRING
+        "Skia surface mode: RASTER (default, release-gated) or GANESH (SKIA-159/160, experimental, requires CNA_SKIA_GANESH_BUILD_DIR)")
+    set_property(CACHE CNA_SKIA_MODE PROPERTY STRINGS "RASTER" "GANESH")
+
+    set(BACKEND_DIR "src/CNA/Internal/Backends/Skia")
+    set(BACKEND_TARGET "cna_backend_graphics_skia")
+    add_compile_definitions(CNA_BACKEND_SKIA)
+    set(CNA_BACKEND_DEFINE "CNA_BACKEND_SKIA")
+
+    if(CNA_SKIA_MODE STREQUAL "GANESH")
+        message(STATUS "CNA: Using SKIA backend in Ganesh/OpenGL mode (experimental, SKIA-159/160)")
+        add_compile_definitions(CNA_SKIA_MODE_GANESH)
+        include(cmake/ThirdPartySkiaGanesh.cmake)
+        cna_configure_skia_ganesh()
+        set(CNA_SKIA_LINK_TARGET CNA::SkiaGanesh)
+    else()
+        message(STATUS "CNA: Using SKIA raster graphics backend")
+        include(cmake/ThirdPartySkia.cmake)
+        cna_configure_skia()
+        set(CNA_SKIA_LINK_TARGET CNA::Skia)
+    endif()
 elseif(CNA_GRAPHICS_BACKEND STREQUAL "ASCII")
     message(STATUS "CNA: Using ASCII (SDL-windowed glyph-grid) graphics backend")
     set(BACKEND_DIR "src/CNA/Internal/Backends/Ascii")

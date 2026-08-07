@@ -281,7 +281,11 @@ namespace Microsoft::Xna::Framework::Graphics
         // DepthStencilState.Default; RasterizerState = RasterizerState.CullCounterClockwise;") —
         // Task 896 ported only the 3rd line; this now ports the other 2 as well, matching FNA.
         setBlendStateProperty(blendState_);
-        setDepthStencilStateProperty(depthStencilState_);
+        // A 2D-only backend has no native depth/stencil state to initialize. Skipping this one
+        // constructor-time synchronization lets such a backend reject every later public state
+        // assignment consistently, instead of needing a special first-call exception.
+        if (backend_->SupportsDepthStencil())
+            setDepthStencilStateProperty(depthStencilState_);
         setRasterizerStateProperty(rasterizerState_);
     }
 
@@ -962,6 +966,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (backend_ == nullptr)
             return;
+        backend_->Ensure3DSupported("GraphicsDevice::DrawPrimitives");
 
         if (currentVertexBuffer_ == nullptr)
             throw std::runtime_error("GraphicsDevice::DrawPrimitives: no vertex buffer is bound.");
@@ -1032,6 +1037,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (backend_ == nullptr)
             return;
+        backend_->Ensure3DSupported("GraphicsDevice::DrawIndexedPrimitives");
 
         if (currentVertexBuffer_ == nullptr)
             throw std::runtime_error("GraphicsDevice::DrawIndexedPrimitives: no vertex buffer is bound.");
@@ -1120,6 +1126,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (backend_ == nullptr)
             return;
+        backend_->Ensure3DSupported("GraphicsDevice::DrawInstancedPrimitives");
 
         if (currentVertexBuffer_ == nullptr)
             throw std::runtime_error(
@@ -1222,6 +1229,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (backend_ == nullptr)
             return;
+        backend_->Ensure3DSupported("GraphicsDevice::DrawUserPrimitives");
 
         if (currentEffect_ == nullptr)
             throw std::runtime_error("GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
@@ -1273,6 +1281,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (backend_ == nullptr)
             return;
+        backend_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
 
         if (currentEffect_ == nullptr)
             throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
@@ -1451,6 +1460,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                             const VertexPositionColor* data, int offset, int count)
     {
         if (!backend_) return;
+        backend_->Ensure3DSupported("GraphicsDevice::DrawUserPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(count, "primitiveCount");
@@ -1474,6 +1484,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                             const VertexPositionTexture* data, int offset, int count)
     {
         if (!backend_) return;
+        backend_->Ensure3DSupported("GraphicsDevice::DrawUserPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(count, "primitiveCount");
@@ -1497,6 +1508,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                             const VertexPositionColorTexture* data, int offset, int count)
     {
         if (!backend_) return;
+        backend_->Ensure3DSupported("GraphicsDevice::DrawUserPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(count, "primitiveCount");
@@ -1520,6 +1532,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                             const VertexPositionNormalTexture* data, int offset, int count)
     {
         if (!backend_) return;
+        backend_->Ensure3DSupported("GraphicsDevice::DrawUserPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(count, "primitiveCount");
@@ -1550,6 +1563,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                             const VertexDeclaration& vertexDeclaration)
     {
         if (!backend_) return;
+        backend_->Ensure3DSupported("GraphicsDevice::DrawUserPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primitiveCount, "primitiveCount");
@@ -1579,6 +1593,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         using Stream = CNA::Internal::Graphics::VertexStream<VertexT>;
         if (!backend_) return;
+        backend_->Ensure3DSupported("GraphicsDevice::DrawUserPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primitiveCount, "primitiveCount");
@@ -1663,6 +1678,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                                    const std::uint16_t* indices, int iOffset, int primCount)
     {
         if (!backend_) return;
+        backend_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primCount, "primitiveCount");
@@ -1690,6 +1706,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                                    const std::uint16_t* indices, int iOffset, int primCount)
     {
         if (!backend_) return;
+        backend_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primCount, "primitiveCount");
@@ -1717,6 +1734,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                                    const std::uint16_t* indices, int iOffset, int primCount)
     {
         if (!backend_) return;
+        backend_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primCount, "primitiveCount");
@@ -1744,6 +1762,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                                    const std::uint16_t* indices, int iOffset, int primCount)
     {
         if (!backend_) return;
+        backend_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primCount, "primitiveCount");
@@ -1773,6 +1792,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                                    const std::uint32_t* indices, int iOffset, int primCount)
     {
         if (!backend_) return;
+        backend_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primCount, "primitiveCount");
@@ -1800,6 +1820,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                                    const std::uint32_t* indices, int iOffset, int primCount)
     {
         if (!backend_) return;
+        backend_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primCount, "primitiveCount");
@@ -1827,6 +1848,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                                    const std::uint32_t* indices, int iOffset, int primCount)
     {
         if (!backend_) return;
+        backend_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primCount, "primitiveCount");
@@ -1854,6 +1876,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                                    const std::uint32_t* indices, int iOffset, int primCount)
     {
         if (!backend_) return;
+        backend_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primCount, "primitiveCount");
@@ -1887,6 +1910,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                                    const VertexDeclaration& vd)
     {
         if (!backend_) return;
+        backend_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primCount, "primitiveCount");
@@ -1917,6 +1941,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                                    const VertexDeclaration& vd)
     {
         if (!backend_) return;
+        backend_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primCount, "primitiveCount");
@@ -1953,6 +1978,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         using Stream = CNA::Internal::Graphics::VertexStream<VertexT>;
         if (!backend_) return;
+        backend_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primitiveCount, "primitiveCount");
@@ -2587,9 +2613,11 @@ namespace Microsoft::Xna::Framework::Graphics
     int GraphicsDevice::getReferenceStencilProperty() const { return referenceStencil_; }
     void GraphicsDevice::setReferenceStencilProperty(int value)
     {
-        referenceStencil_ = value;
         if (backend_)
             backend_->SetReferenceStencil(value);
+        // Match the other state setters: a backend rejection must not leave the public cache
+        // describing state that was never installed.
+        referenceStencil_ = value;
     }
 
     void GraphicsDevice::Reset()

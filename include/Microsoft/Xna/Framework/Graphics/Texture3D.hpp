@@ -205,6 +205,10 @@ namespace Microsoft::Xna::Framework::Graphics
         int width_;
         int height_;
         int depth_;
-        std::unique_ptr<CNA::Internal::Backends::ITexture3DBackend> backend_;
+        // SKIA-149: shared (not unique) ownership so a SkiaEffectBackend can hold a weak_ptr for
+        // volume-sampling lifetime tracking, matching Texture2D's identical ITextureBackend
+        // pattern. Texture3D itself remains non-copyable; this only lets a second, weak observer
+        // outlive a single call without becoming the resource's owner.
+        std::shared_ptr<CNA::Internal::Backends::ITexture3DBackend> backend_;
     };
 }

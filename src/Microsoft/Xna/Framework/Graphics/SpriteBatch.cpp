@@ -178,7 +178,6 @@ namespace Microsoft::Xna::Framework::Graphics
         transformMatrix_ = transformMatrix;
         sortMode_        = sortMode;
         spriteQueue_.clear();
-        begun            = true;
 
         if (backend_)
         {
@@ -192,6 +191,10 @@ namespace Microsoft::Xna::Framework::Graphics
                                             static_cast<int>(effectiveSampler.getAddressVProperty()));
             backend_->Begin();
         }
+        // Backend setup can reject an unsupported requested state (for example Skia's mip-only
+        // sampler filters). Publish a successful Begin only after that setup completes, so the
+        // same SpriteBatch remains reusable after the caller catches the exception.
+        begun = true;
     }
 
     void SpriteBatch::End()
@@ -650,5 +653,22 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         DrawString(spriteFont, text.ToString(), position, color,
                    rotation, origin, scale, effects, layerDepth);
+    }
+
+    void SpriteBatch::DrawMeshEXT(Effect& effect,
+                                  const Vector2* positions, const Color* colors, const Vector2* uvs,
+                                  int vertexCount, const std::uint16_t* indices, int indexCount)
+    {
+        if (!begun) throw std::runtime_error("SpriteBatch::DrawMeshEXT called before Begin().");
+        // A mesh draw does not participate in the deferred sort/batch queue -- a declared, tested
+        // scope boundary (docs/skia-vertices-2d-effect-contract.md), not a silent misbatch.
+        if (sortMode_ != SpriteSortMode::Immediate)
+        {
+            throw std::runtime_error(
+                "SpriteBatch::DrawMeshEXT requires SpriteSortMode::Immediate; it does not "
+                "participate in the deferred sprite sort/batch queue.");
+        }
+        if (!backend_) return;
+        backend_->DrawMeshEXT(effect, positions, colors, uvs, vertexCount, indices, indexCount);
     }
 }

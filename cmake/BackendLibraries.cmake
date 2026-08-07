@@ -131,6 +131,30 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "CANVAS")
     # plan_canvas.md design decision 2: reuses the existing SDL-created window/canvas element,
     # so still links SDL3 even though actual rendering goes through EM_JS/Canvas2D, not SDL_Renderer.
     target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3)
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "SKIA")
+    # SKIA-160: CNA_SKIA_LINK_TARGET is CNA::Skia (raster, default) or CNA::SkiaGanesh (GANESH
+    # mode), set by BackendSelection.cmake's CNA_SKIA_MODE branch above -- never both; the two are
+    # mutually exclusive GN builds of the same checkout and cannot be linked into one binary.
+    target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 ${CNA_SKIA_LINK_TARGET})
+    # SKIA-140/141: SkiaTextureBackend.cpp calls CNA::Internal::Graphics::DxtUtil/Bc7Util, which
+    # live in the main CNA library, not this backend target. CNA already PUBLIC-links
+    # ${BACKEND_TARGET} above (CnaLibrary.cmake), so a plain executable's link command scans
+    # libCNA.a before this target's archive; a single-pass linker cannot resolve a symbol defined
+    # in the earlier archive from a reference in the later one. Declaring the reverse edge here
+    # makes the mutual dependency explicit so CMake's own generator repeats/groups the two
+    # archives correctly, instead of leaving it to accidental transitive link order (found via a
+    # real "undefined reference to Bc7Util::DecompressBc7" failure on cna_reference_dump, which
+    # has no other path that happens to pull DxtUtil/Bc7Util's translation unit in first).
+    target_link_libraries(${BACKEND_TARGET} PRIVATE CNA)
+    # The pinned upstream raster archives are built with `skia_enable_ganesh=false` and RTTI
+    # disabled. GCC/Clang's broad `undefined` group otherwise instruments virtual calls made by
+    # this adapter with `vptr` checks and then requires typeinfo symbols (for example SkCanvas)
+    # which those archives deliberately do not export. Keep every other UBSan check enabled and
+    # exclude only the incompatible RTTI-dependent check at the third-party boundary.
+    if(CNA_SANITIZE MATCHES "(^|,)undefined(,|$)"
+       AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(${BACKEND_TARGET} PRIVATE -fno-sanitize=vptr)
+    endif()
 elseif(CNA_GRAPHICS_BACKEND STREQUAL "ASCII")
     target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 cna_backend_graphics_sdl_renderer_core)
 elseif(CNA_GRAPHICS_BACKEND STREQUAL "D3D9")

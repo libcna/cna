@@ -1,0 +1,125 @@
+// SPDX-License-Identifier: MS-PL
+// SKIA-12: transactional construction, window registry ownership, and repeated cleanup.
+
+#include "CNA/Internal/Backends/Skia/SkiaGraphicsBackend.hpp"
+
+#include <SDL3/SDL.h>
+
+#include <array>
+#include <cstdint>
+#include <cstdio>
+#include <exception>
+#include <string>
+
+using CNA::Internal::Backends::CnaPresentationMode;
+using CNA::Internal::Backends::IGraphicsBackend;
+using CNA::Internal::Backends::Skia::SkiaGraphicsBackend;
+using CNA::Internal::Backends::Skia::SkiaInitializationFailurePointEXT;
+
+namespace
+{
+    struct FailureCase
+    {
+        SkiaInitializationFailurePointEXT point;
+        const char* stage;
+    };
+
+    constexpr std::array<FailureCase, 3> kFailureCases{{
+        {SkiaInitializationFailurePointEXT::AfterRenderer, "renderer creation"},
+        {SkiaInitializationFailurePointEXT::AfterBackbuffer, "backbuffer creation"},
+        {SkiaInitializationFailurePointEXT::AfterRegistration, "backend registration"},
+    }};
+
+    int failures = 0;
+
+    void Check(bool pass, const std::string& label)
+    {
+        std::printf("[%s] %s\n", pass ? "PASS" : "FAIL", label.c_str());
+        if (!pass)
+            ++failures;
+    }
+
+    [[nodiscard]] bool ConstructUseAndDestroy(SDL_Window* window)
+    {
+        bool usable = false;
+        {
+            SkiaGraphicsBackend backend(window, 16, 12, CnaPresentationMode::NativeBackBuffer, 0);
+            std::array<std::uint8_t, 4> pixel{};
+            backend.Clear(1.0f, 0.0f, 0.0f, 1.0f);
+            backend.ReadBackbuffer(0, 0, 1, 1, pixel.data());
+            backend.Present();
+            usable = IGraphicsBackend::GetForWindow(window) == &backend
+                && SDL_GetRenderer(window) == backend.GetRendererInternal()
+                && pixel == std::array<std::uint8_t, 4>{255, 0, 0, 255};
+        }
+        return usable && IGraphicsBackend::GetForWindow(window) == nullptr
+            && SDL_GetRenderer(window) == nullptr && SDL_GetWindowID(window) != 0;
+    }
+}
+
+int main()
+{
+    if (!SDL_Init(SDL_INIT_VIDEO))
+    {
+        std::printf("[FAIL] SDL_Init: %s\n", SDL_GetError());
+        return 1;
+    }
+
+    SDL_Window* window = SDL_CreateWindow("CNA Skia lifecycle", 64, 48, SDL_WINDOW_HIDDEN);
+    if (!window)
+    {
+        std::printf("[FAIL] SDL_CreateWindow: %s\n", SDL_GetError());
+        SDL_Quit();
+        return 1;
+    }
+
+    bool nullRejected = false;
+    std::string nullDiagnostic;
+    try
+    {
+        SkiaGraphicsBackend invalid(nullptr, 16, 12, CnaPresentationMode::NativeBackBuffer, 0);
+    }
+    catch (const std::exception& exception)
+    {
+        nullRejected = true;
+        nullDiagnostic = exception.what();
+    }
+    Check(nullRejected && nullDiagnostic.find("null window") != std::string::npos,
+          "null-window construction fails with an actionable diagnostic");
+
+    for (const FailureCase& failure : kFailureCases)
+    {
+        bool threw = false;
+        std::string diagnostic;
+        try
+        {
+            SkiaGraphicsBackend backend(window, 16, 12, CnaPresentationMode::NativeBackBuffer, 0,
+                                        {}, failure.point);
+        }
+        catch (const std::exception& exception)
+        {
+            threw = true;
+            diagnostic = exception.what();
+        }
+
+        const std::string prefix = std::string("injected failure after ") + failure.stage;
+        const std::string expectedDiagnostic =
+            std::string("Skia injected initialization failure after ") + failure.stage;
+        Check(threw && diagnostic.find(expectedDiagnostic) != std::string::npos,
+              prefix + " retains its exact stage diagnostic");
+        Check(IGraphicsBackend::GetForWindow(window) == nullptr && SDL_GetRenderer(window) == nullptr
+                  && SDL_GetWindowID(window) != 0,
+              prefix + " releases renderer/texture/registry and preserves the caller window");
+        Check(ConstructUseAndDestroy(window),
+              prefix + " permits an immediately usable succeeding backend");
+    }
+
+    bool repeatedLifecycle = true;
+    for (int cycle = 0; cycle < 16; ++cycle)
+        repeatedLifecycle = repeatedLifecycle && ConstructUseAndDestroy(window);
+    Check(repeatedLifecycle, "16 construct/present/destroy cycles leave no renderer or registry state");
+
+    SDL_DestroyWindow(window);
+    SDL_Quit();
+    return failures == 0 ? 0 : 1;
+}

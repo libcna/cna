@@ -3,6 +3,14 @@
 > Generated from source inspection against Tasks 174, 281.
 > Covers: EasyGL, Vulkan, Bgfx, SDL_Renderer backends.
 
+> Skia successor note (SKIA-134): this historical cross-backend document does not define the Skia
+> implementation routes. The checked, current 27-value Skia contract is
+> [`skia-surface-format-matrix.md`](skia-surface-format-matrix.md). SKIA-135–139 have promoted
+> `Bgr565`, `Bgra4444`, `Rgba1010102`, `Rg32`, `Rgba64`, `Alpha8`, `ColorBgraEXT`,
+> `ColorSrgbEXT`, `ByteEXT`, `UShortEXT`, `Single`, `Vector2`, `Vector4`, `HalfSingle`,
+> `HalfVector2`, `HalfVector4`, `HdrBlendable`, `Bgra5551`, `NormalizedByte2`, and
+> `NormalizedByte4` for Skia `Texture2D`; the remaining format gates are tracked by SKIA-140–143.
+
 ---
 
 ## Canonical `SurfaceFormat` enum values (Task 281)
@@ -136,15 +144,16 @@ no equivalent bug — neither has any `SRGB`/`Srgb` format reference anywhere in
 
 ## How format selection works (current state)
 
-`Texture2D` stores the requested `SurfaceFormat` in `format_` but does **not** forward it
-to the backend.  The `IGraphicsBackend::CreateTexture(const ImageData&)` contract carries
-only pre-decoded RGBA8 pixel bytes — the format enum is invisible to all backends.
+Historically `Texture2D` stored the requested `SurfaceFormat` in `format_` but did not forward it
+to the backends covered by this document. `ImageData` now also carries a format ordinal so the
+Skia backend can implement its promoted packed formats; existing decoders and other backends keep
+the default `Color` value.
 
 `Texture3D` and `TextureCube` receive `surfaceFormat` as an `int` argument in
 `CreateTexture3D` / `CreateTextureCube`, but every backend ignores it (`/* surfaceFormat */`).
 
-**Result**: every texture, regardless of the requested `SurfaceFormat`, is stored on the
-GPU as RGBA8 unorm (8 bits per channel, linear).
+**Result for the historical backends covered below**: accepted textures are still stored as
+RGBA8 unorm. Skia's current exceptions are documented only in its checked matrix linked above.
 
 ---
 

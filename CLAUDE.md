@@ -421,12 +421,12 @@ individual task. Do not push unless the user explicitly asks to push.
 |---------------------------|-----------------------------------------------|--------------------------------|
 | XNA public API            | `include/Microsoft/Xna/Framework/…`           | Game-facing, must match XNA    |
 | Backend contracts         | `include/CNA/Internal/Backends/Common/…`      | `IGraphicsBackend` etc.        |
-| Backend implementations   | `src/CNA/Internal/Backends/{SDL,EasyGL,Vulkan}` | Hidden from XNA API           |
+| Backend implementations   | `src/CNA/Internal/Backends/{SDL,EasyGL,Vulkan,Skia}` | Hidden from XNA API           |
 | CNA utilities             | `include/CNA/`, `src/CNA/`                    | NOXNA helpers, logging, etc.   |
 
 Backend selection is compile-time via `CNA_GRAPHICS_BACKEND` CMake option
 (`SDL_RENDERER` | `EASYGL` | `BGFX` | `VULKAN` | `WEBGPU` | `MAGNUM` | `HEADLESS` | `SOFTWARE` |
-`STUB` | `D3D11` | `D3D12` | `CANVAS` | `ASCII` | `FREEDIRECT` | `D3D9` | `DX1` | `DX2` | `DX3` |
+`STUB` | `D3D11` | `D3D12` | `CANVAS` | `SKIA` | `ASCII` | `FREEDIRECT` | `D3D9` | `DX1` | `DX2` | `DX3` |
 `DX5` | `DX6` | `DX7` | `DX8` | `D3D10` | `OPENGLES1` | `OPENGL4` | `OPENGL1` | `OPENGL2` |
 `SDL_GPU` | `WICKED` | `SOKOL` | `DILIGENT`). `WEBGPU` is experimental and has a functional native
 2D baseline, not yet the 3D/effect parity of the established GPU backends.
@@ -435,13 +435,18 @@ Backend selection is compile-time via `CNA_GRAPHICS_BACKEND` CMake option
 `DILIGENT` is experimental too, and is the one backend whose native API is chosen at **runtime**
 (DiligentCore is itself an abstraction over D3D11/D3D12/Vulkan/OpenGL/Metal) — see
 `plan_diligent.md` and `docs/diligent-backend.md`.
+`SKIA` is a separate experimental CPU-raster 2D backend backed by a pinned external Skia artifact;
+it does not delegate rendering to EasyGL and does not advertise 3D/depth/MSAA/MRT capabilities.
+Use `plan_skia.md`, `NEXT_skia.md`, `docs/skia-backend.md`, and
+`docs/skia-developer-build.md` for that subsystem; do not reconstruct its state from the general
+`NEXT.md`.
 
 ---
 
 ## WebGPU Is Active (Experimental)
 
 The project owner explicitly lifted the former WebGPU prohibition on **2026-07-12** and authorized
-implementation as CNA's fifth graphics backend.
+its backend implementation.
 
 - WebGPU tasks live in **`plan_webgpu.md`** (`WEBGPU-1`–`WEBGPU-123`). Keep task statuses and
   limitations current as implementation proceeds.

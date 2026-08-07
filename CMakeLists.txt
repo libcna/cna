@@ -97,6 +97,9 @@ include(cmake/Examples.cmake)
 # condition this block has always (historically) required -- see EasyGLTests.cmake's own comment.
 include(cmake/Tests/EasyGLTests.cmake)
 
+# SKIA raster/display integration tests. The module is a no-op unless SKIA is selected.
+include(cmake/Tests/SkiaTests.cmake)
+
 # Vulkan integration tests. Self-contained: bundles the CNA_BUILD_EXAMPLES condition this block
 # has always (historically) required -- see VulkanTests.cmake's own comment.
 include(cmake/Tests/VulkanTests.cmake)

@@ -57,9 +57,11 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Throws std::runtime_error if @p fmt is not yet implemented.
          *
-         * Only SurfaceFormat::Color is currently supported by all backends.
-         * Texture2D, Texture3D, and TextureCube public constructors call this
-         * so callers get a clear error instead of silent RGBA8 misinterpretation.
+         * SurfaceFormat::Color is supported by all backends; individual selected backends may
+         * expose additional exact routes.
+         * Texture3D, TextureCube, and backend-default Texture2D constructors call this so callers
+         * get a clear error instead of silent RGBA8 misinterpretation. A selected Texture2D
+         * backend may use a stricter local allow-list for its additional exact routes.
          *
          * @param fmt The SurfaceFormat to validate.
          */

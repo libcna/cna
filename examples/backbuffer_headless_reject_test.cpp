@@ -82,6 +82,9 @@ namespace
 #elif defined(CNA_BACKEND_SDL_GPU)
     constexpr const char* kBackendName = "SDL_GPU";
     constexpr bool kRasterizes = true;
+#elif defined(CNA_BACKEND_SKIA)
+    constexpr const char* kBackendName = "SKIA";
+    constexpr bool kRasterizes = true;
 #else
 #error "REMED-GFX-162: this backend has no declared backbuffer-readback capability contract."
 #endif
@@ -113,7 +116,7 @@ namespace
         return Color(static_cast<std::uint8_t>(0x40 + i),
                      static_cast<std::uint8_t>(0x80 + i * 3),
                      static_cast<std::uint8_t>(0xC0 + i * 5),
-                     0xCD);
+                     static_cast<std::uint8_t>(0xCD));
     }
 
     bool Same(const Color& a, const Color& b)

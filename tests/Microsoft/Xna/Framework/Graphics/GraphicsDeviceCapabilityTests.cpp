@@ -87,6 +87,17 @@ constexpr bool kExpectCustomEffects         = false;
 constexpr bool kExpectMultipleRenderTargets = true;
 constexpr bool kExpectOcclusionQuery        = true;
 constexpr bool kExpectCustomEffects         = false;
+#elif defined(CNA_BACKEND_SKIA)
+// The one 2D-only backend in this block. All three answers are structural rather than
+// not-yet-implemented: SkCanvas produces exactly one colour result (docs/skia-backend.md's MRT
+// row, `Skia_MRT_Rejection`), raster final pixels cannot distinguish positive from zero coverage
+// so no samples-passed query is definable at all, and the accepted custom-effect route is the
+// narrow opt-in CNA_SKIA_SKSL_V1 ABI rather than the arbitrary-Effect support a true would
+// promise. Reported false and asserted here rather than left to the catch-all below, which would
+// have claimed all three.
+constexpr bool kExpectMultipleRenderTargets = false;
+constexpr bool kExpectOcclusionQuery        = false;
+constexpr bool kExpectCustomEffects         = false;
 #elif defined(CNA_BACKEND_DILIGENT)
 // plan_diligent.md DILIGENT-42: a third genuinely 3D-capable backend with its own
 // honest, narrower profile at this point in its implementation -- no custom ShaderEffect
@@ -102,6 +113,27 @@ constexpr bool kExpectOcclusionQuery        = true;
 constexpr bool kExpectCustomEffects         = true;
 #endif
 
+// Both of these assert `true` for every 3D-capable backend. A deliberately 2D-only backend
+// answers false, and that is the correct answer, not a gap -- so it gets its own arm rather than
+// a standing red. Only the arm for the backend being added is written here; the other 2D-only
+// identities in this repository are untouched by this file and keep whatever they answer today.
+#if defined(CNA_BACKEND_SKIA)
+TEST(GraphicsDeviceCapabilityTest, SupportsThreeD)
+{
+    GraphicsDevice gd;
+    EXPECT_FALSE(gd.SupportsCapability(GraphicsCapability::ThreeD))
+        << "the Skia raster backend claims a 3D pipeline -- every 3D route it owns refuses "
+           "through Ensure3DSupported(), so a true report cannot be backed by anything";
+}
+
+TEST(GraphicsDeviceCapabilityTest, SupportsDepthStencilBuffer)
+{
+    GraphicsDevice gd;
+    EXPECT_FALSE(gd.SupportsCapability(GraphicsCapability::DepthStencilBuffer))
+        << "the Skia raster backend claims a depth/stencil buffer -- its SkSurface targets have "
+           "no attachment, and DepthStencilState::None is accepted only as the absence of one";
+}
+#else
 TEST(GraphicsDeviceCapabilityTest, SupportsThreeD)
 {
     GraphicsDevice gd;
@@ -113,6 +145,7 @@ TEST(GraphicsDeviceCapabilityTest, SupportsDepthStencilBuffer)
     GraphicsDevice gd;
     EXPECT_TRUE(gd.SupportsCapability(GraphicsCapability::DepthStencilBuffer));
 }
+#endif
 
 TEST(GraphicsDeviceCapabilityTest, SupportsMultipleRenderTargets)
 {
@@ -253,6 +286,17 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameCapabilityReportIsThisBackendsOwn)
     EXPECT_FALSE(reported)
         << "DX1 claims WireFrame support -- this backend has no 3D pipeline at all, so a true "
            "report cannot be backed by any rendering path";
+#elif defined(CNA_BACKEND_SKIA)
+    // Skia's selected artifact is a CPU raster 2D surface: SkCanvas has no polygon fill mode, and
+    // there is no vertex/primitive route for one to apply to. The refusal half of REMED-GFX-209 is
+    // satisfied more strongly than it asks -- Ensure3DSupported() rejects every 3D draw before any
+    // vertex input is inspected, so no polygon topology can reach a raster queue to be silently
+    // filled solid. Same truthful-false shape as DX1 and Stub, and like Stub it has no pixel route
+    // to measure, which is why WireFrameTriangleOracle.hpp leaves CNA_WIREFRAME_PIXEL_ORACLE
+    // undefined here.
+    EXPECT_FALSE(reported)
+        << "Skia claims WireFrame support -- this raster backend has no polygon fill mode and no "
+           "3D draw route, so a true report cannot be backed by any rendering path";
 #elif defined(CNA_BACKEND_STUB)
     // Stub answers false to EVERY capability, WireFrame included: it is a no-op backend that
     // rasterizes nothing and keeps no state, so there is no rendering path a true report could

@@ -15,8 +15,9 @@ namespace CNA
     {
         /**
          * @brief The 3D pipeline as a whole (vertex/index buffers, 3D draw calls, depth/stencil
-         * clears and state). SDL_Renderer/DX3/Canvas are intentionally 2D-only and lack this
-         * entirely; every other backend supports it.
+         * clears and state). Several backends, including SDL_Renderer, DX3, Canvas, and the Skia
+         * raster backend, are intentionally 2D-only and lack this entirely. Query the selected
+         * backend rather than inferring support from its name.
          */
         ThreeD,
 
@@ -43,12 +44,17 @@ namespace CNA
 
         /**
          * @brief Real volume (3D) texture storage -- Texture3D::SetData()/GetData() actually
-         * persist and retrieve pixel data, not just validate arguments. Headless has no real GPU
-         * resource of any kind by design; Software's Texture3D support is an explicit, documented
-         * v1 scope boundary (`plan_software.md` Boundaries) -- both currently leave
-         * `IGraphicsBackend::CreateTexture3D()` at its shared default (returns `nullptr`), which
-         * previously let `Texture3D::SetData()`/`GetData()` silently no-op instead of failing
-         * cleanly (REMED-CONTENT-004).
+         * persist and retrieve pixel data, not just validate arguments. This capability describes
+         * storage only and never promises shader sampling: Skia reports it true for bounded CPU
+         * transfer/readback storage while keeping its 3D and custom-effect capabilities false, even
+         * though Skia separately offers a narrow, opt-in shader-sampling extension
+         * (`cnaSampleCubeEXT`/`cnaSampleVolumeEXT`, `docs/skia-cube-volume-sampling-contract.md`)
+         * that this flag does not represent and that does not imply general/stock 3D or effect
+         * support. Headless has no real GPU resource of any kind by design; Software's Texture3D
+         * support is an explicit, documented v1 scope boundary (`plan_software.md` Boundaries) --
+         * both currently leave `IGraphicsBackend::CreateTexture3D()` at its shared default (returns
+         * `nullptr`), which previously let `Texture3D::SetData()`/`GetData()` silently no-op
+         * instead of failing cleanly (REMED-CONTENT-004).
          */
         Texture3D,
 

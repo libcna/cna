@@ -154,6 +154,10 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_backend_test(NAME EasyGL_RenderTarget2D_Readback COMMAND cna_test_easygl_render_target
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        cna_easygl_test(cna_test_easygl_rendertarget_golden examples/rendertarget2d_golden_test.cpp)
+        cna_register_backend_test(NAME EasyGL_RenderTarget2D_Golden COMMAND cna_test_easygl_rendertarget_golden
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 335: RenderTarget2D depth buffer is real and functional (not just a stored property)
         cna_easygl_test(cna_test_easygl_rendertarget2d_depth
                         examples/rendertarget2d_depth_test.cpp)

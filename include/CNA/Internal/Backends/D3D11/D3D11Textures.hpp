@@ -73,7 +73,7 @@ namespace CNA::Internal::Backends::D3D11
         [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
                                    void* data, int dataLength) const override;
 
-        [[nodiscard]] int GetSizeEXT() const { return size_; }
+        [[nodiscard]] int GetSizeEXT() const noexcept override { return size_; }
         [[nodiscard]] int GetMipLevelsEXT() const { return mipLevels_; }
         [[nodiscard]] ID3D11Texture2D* GetTextureEXT() const { return texture_.Get(); }
         [[nodiscard]] ID3D11ShaderResourceView* GetShaderResourceViewEXT() const { return srv_.Get(); }

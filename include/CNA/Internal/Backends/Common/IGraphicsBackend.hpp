@@ -12,6 +12,7 @@
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <stdexcept>
 #include <string>
@@ -183,8 +184,15 @@ namespace CNA::Internal::Backends
         [[nodiscard]] virtual int  PixelCount() const = 0;
     };
 
-    /** @brief Backend interface for a cube map texture. */
-    class ITextureCubeBackend
+    /**
+     * @brief Backend interface for a cube map texture.
+     *
+     * SKIA-149: inherits `enable_shared_from_this` (matching `ITextureBackend`) so a
+     * `SkiaEffectBackend` can hold a `weak_ptr` for cube-sampling lifetime tracking, identical to
+     * the existing `ITextureBackend`/`SetTexture(unit, Texture2D)` pattern. Requires
+     * `TextureCube`/`RenderTargetCube` to own their backend via `shared_ptr`, not `unique_ptr`.
+     */
+    class ITextureCubeBackend : public std::enable_shared_from_this<ITextureCubeBackend>
     {
     public:
         virtual ~ITextureCubeBackend() = default;
@@ -263,10 +271,24 @@ namespace CNA::Internal::Backends
         /// exactly (OpenGL-style backend context-loss restoration) -- default no-op; only OPENGL1
         /// currently implements it.
         virtual void ShareCpuPixels(int /*face*/, std::shared_ptr<std::vector<uint8_t>> /*pixels*/) {}
+        /// SKIA-149: face width/height in texels. `BindTextureCube(unit, ITextureCubeBackend*)`
+        /// receives only this raw backend pointer (see `ShaderEffect::SetTexture(unit,
+        /// TextureCube&)`), with no separate size parameter, so a backend that needs its own size
+        /// to build a sampling representation must be able to ask the backend directly rather than
+        /// requiring a shared, cross-backend `BindTextureCube` signature change. Defaults to 0
+        /// ("unknown/unsupported"), harmless for every backend that does not implement sampling.
+        [[nodiscard]] virtual int GetSizeEXT() const noexcept { return 0; }
     };
 
-    /** @brief Backend interface for a 3D (volume) texture. */
-    class ITexture3DBackend
+    /**
+     * @brief Backend interface for a 3D (volume) texture.
+     *
+     * SKIA-149: inherits `enable_shared_from_this` (matching `ITextureBackend`) so a
+     * `SkiaEffectBackend` can hold a `weak_ptr` for volume-sampling lifetime tracking, identical to
+     * the existing `ITextureBackend`/`SetTexture(unit, Texture2D)` pattern. Requires `Texture3D` to
+     * own its backend via `shared_ptr`, not `unique_ptr`.
+     */
+    class ITexture3DBackend : public std::enable_shared_from_this<ITexture3DBackend>
     {
     public:
         virtual ~ITexture3DBackend() = default;
@@ -321,9 +343,21 @@ namespace CNA::Internal::Backends
         }
         /// Binds this volume texture to the currently active GL texture unit. No-op on non-GL backends.
         virtual void BindGL() const {}
+        /// SKIA-149: width/height/depth in voxels, mirroring `ITextureCubeBackend::GetSizeEXT`'s
+        /// rationale exactly -- `BindTexture3D` receives only this raw backend pointer. Defaults to
+        /// all zero ("unknown/unsupported"), harmless for every backend that does not implement
+        /// sampling.
+        virtual void GetDimensionsEXT(int& width, int& height, int& depth) const noexcept
+        {
+            width = height = depth = 0;
+        }
     };
 
-    class ITextureBackend
+    /**
+     * Backend texture handle. Shared lifetime identity lets bounded consumers retain weak
+     * bindings without keeping disposed public Texture2D resources alive or storing raw pointers.
+     */
+    class ITextureBackend : public std::enable_shared_from_this<ITextureBackend>
     {
     public:
         virtual ~ITextureBackend() = default;
@@ -335,6 +369,13 @@ namespace CNA::Internal::Backends
         virtual void UpdatePixels(const uint8_t* rgba, int stride) {}
         /// Uploads a specific mip level. levelW/levelH are the dimensions at that level.
         virtual void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) {}
+        /**
+         * Reports whether the backend owns deterministic readable bytes for a mip level even when
+         * Texture2D has no caller-authored CPU shadow for it. The default is false: allocated GPU
+         * mip storage is not necessarily initialized or readable. Backends returning true must
+         * complete GetData for every valid rectangle of that level without fabricating bytes.
+         */
+        [[nodiscard]] virtual bool HasDefinedMipLevel(int /*level*/) const noexcept { return false; }
         /// Binds the underlying GL texture handle (no-op on non-GL backends).
         virtual void BindGL() const {}
         /// Shares a reference to the CPU pixel buffer owned by Texture2D::cpuPixels_.
@@ -663,6 +704,27 @@ namespace CNA::Internal::Backends
                           const Vector2& origin,
                           SpriteEffects effects,
                           float layerDepth) = 0;
+
+        /**
+         * SKIA-157: draws a triangle-list 2D mesh through @p effect's own bound custom shader
+         * (SKIA-144-156's bounded SkVertices/SkSL mesh ABI) -- an entirely different draw
+         * primitive from every `Draw()` overload above, which always submits exactly one
+         * quad through the built-in or `cnaTexture0`-shaped sprite shader. Composes with the
+         * active `SetTransformMatrix()` the same way ordinary sprite draws do; @p colors/@p uvs
+         * may be null if @p effect's compiled program declares no vertex-colour combine / no
+         * texture children respectively. Default: throws, since only a backend with a real mesh
+         * ABI (Skia) can implement this -- every other backend's `ISpriteBatchBackend` correctly
+         * keeps rejecting it rather than silently drawing nothing or falling back to sprite mode.
+         */
+        virtual void DrawMeshEXT(
+            Effect& /*effect*/,
+            const Vector2* /*positions*/, const Color* /*colors*/, const Vector2* /*uvs*/,
+            int /*vertexCount*/, const std::uint16_t* /*indices*/, int /*indexCount*/)
+        {
+            throw std::runtime_error(
+                "This backend does not support DrawMeshEXT (SKIA-144-157's bounded SkVertices "
+                "mesh ABI is Skia-specific).");
+        }
     };
 
     /**
@@ -1301,6 +1363,20 @@ namespace CNA::Internal::Backends
         /// RenderTarget2D — Task 337/878/879).
         virtual std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2D(int w, int h, int depthFormat, bool preserveContents = false, bool mipMap = false, int multiSampleCount = 0) { return nullptr; }
 
+        /// SKIA-142: same contract as CreateRenderTarget2D, plus an explicit
+        /// Microsoft::Xna::Framework::Graphics::SurfaceFormat (passed as `int` so this header
+        /// does not need to include SurfaceFormat.hpp, matching CreateTexture's ImageData
+        /// convention). The default forwards to CreateRenderTarget2D and ignores the format,
+        /// preserving every existing backend's Color-only render-target behavior unchanged; only
+        /// a backend that actually supports additional render-target formats needs to override
+        /// this instead.
+        virtual std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2DEXT(
+            int w, int h, int depthFormat, bool preserveContents, bool mipMap,
+            int multiSampleCount, int /*surfaceFormat*/)
+        {
+            return CreateRenderTarget2D(w, h, depthFormat, preserveContents, mipMap, multiSampleCount);
+        }
+
         /// Activates the given render target (binds its FBO). Pass nullptr to
         /// restore the default back buffer.
         virtual void SetRenderTarget2D(IRenderTargetBackend* rt) {}
@@ -1419,6 +1495,14 @@ namespace CNA::Internal::Backends
          * ClearColorDepthAndStencil()-style method this backend cannot honor.
          */
         [[nodiscard]] virtual bool SupportsDepthStencil() const { return true; }
+
+        /**
+         * Backend boundary used by common public draw/model entry points before they inspect,
+         * pack, allocate, bind, or otherwise consume 3D input. Fully 3D-capable backends retain
+         * the no-op default; a deliberately 2D-only backend overrides this with its stable
+         * unsupported-operation diagnostic.
+         */
+        virtual void Ensure3DSupported(const char* /*operation*/) const {}
 
         /**
          * @brief Clears color and depth buffers in a single call.

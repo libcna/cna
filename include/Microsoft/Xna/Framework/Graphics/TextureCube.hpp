@@ -175,7 +175,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param levelCount Number of mip levels the backend actually allocated (1 if none).
          */
         NOXNA TextureCube(GraphicsDevice& device, int size, SurfaceFormat format,
-                          std::unique_ptr<CNA::Internal::Backends::ITextureCubeBackend> backend,
+                          std::shared_ptr<CNA::Internal::Backends::ITextureCubeBackend> backend,
                           int levelCount = 1);
 
         /** @brief Returns the raw backend pointer (used by RenderTargetCube to retrieve the RT handle). */
@@ -186,7 +186,11 @@ namespace Microsoft::Xna::Framework::Graphics
 
     private:
         int size_;
-        std::unique_ptr<CNA::Internal::Backends::ITextureCubeBackend> backend_;
+        // SKIA-149: shared (not unique) ownership so a SkiaEffectBackend can hold a weak_ptr for
+        // cube-sampling lifetime tracking, matching Texture2D's identical ITextureBackend pattern.
+        // TextureCube itself remains non-copyable; this only lets a second, weak observer outlive
+        // a single call without becoming the resource's owner.
+        std::shared_ptr<CNA::Internal::Backends::ITextureCubeBackend> backend_;
         /// Level-0-only CPU-side pixel shadow, one per face, lazily created on first SetData()
         /// at level 0 and shared with the backend via ITextureCubeBackend::ShareCpuPixels() for
         /// GL-style context-loss restoration (mirrors Texture2D::cpuPixels_'s own level-0-only

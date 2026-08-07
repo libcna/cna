@@ -1,6 +1,6 @@
 # docs/ index
 
-58 files in `docs/` (including this index), no prior map — this index exists so a reader (human or
+99 Markdown documents in `docs/` (including this index) — this index exists so a reader (human or
 AI agent) can tell what's current without opening every file. It groups files by topic and flags
 which ones are known-current vs. historical/dated. Entries not explicitly flagged have not been
 individually re-verified in the 2026-07-11 documentation pass that produced this index — treat
@@ -23,6 +23,25 @@ on it) rather than assuming either way.
   runtime device-type selection (`CNA_DILIGENT_DEVICE`) and known limitations for the experimental
   Diligent Engine backend, the one backend whose native graphics API is chosen at run time rather
   than by the CMake option; task breakdown is in `../plan_diligent.md`.
+- **[`skia-backend.md`](skia-backend.md)** — current verified CPU-raster 2D capability boundary,
+  dependency policy, tests, and explicit direct/emulation decisions; the 249-entry API ledger is
+  [`skia-easygl-parity-ledger.md`](skia-easygl-parity-ledger.md), active work is in
+  `../plan_skia.md`, Skia-only continuity is in `../NEXT_skia.md`, and the fresh-checkout procedure
+  is [`skia-developer-build.md`](skia-developer-build.md). The accepted raster-versus-GPU decision
+  and future acceleration reopening gate are in
+  [`skia-surface-mode-adr.md`](skia-surface-mode-adr.md); the final CPU-raster checklist is
+  [`skia-release-gate.md`](skia-release-gate.md). The checked routing inventory for the active
+  post-baseline expansion is
+  [`skia-successor-contract-matrix.md`](skia-successor-contract-matrix.md); its shared checked
+  allocation and oracle rules are
+  [`skia-successor-resource-oracles.md`](skia-successor-resource-oracles.md). Arbitrary blend work
+  is anchored by the explicit [`skia-source-alpha-contract.md`](skia-source-alpha-contract.md).
+  The normative 27-value format layout, sampling and renderability design is
+  [`skia-surface-format-matrix.md`](skia-surface-format-matrix.md).
+  The internal all-selector implementation is documented in
+  [`skia-generated-blender.md`](skia-generated-blender.md) and its exact raster surface is promoted
+  by SKIA-124. Checked 2D mip storage is documented in the successor resource policy; public mip
+  construction remains gated by SKIA-126 and later tasks.
 - **[`canvas-backend.md`](canvas-backend.md)** — current status for the Emscripten-only HTML Canvas
   2D backend, incl. a manual browser verification checklist (this dev loop has no real browser DOM
   to pixel-verify against); detailed task breakdown is in `../plan_canvas.md`.
@@ -82,6 +101,8 @@ Kept for their investigation methodology and root-cause detail, not as current s
 - `android-graphics-limitations.md`, `web-emscripten-graphics-limitations.md` — per-platform
   Graphics constraints (Emscripten, Android NDK).
 - `sdl-renderer-2d-completeness.md` — SDL_Renderer's own full Phase 70 2D audit.
+- **[`skia-backend.md`](skia-backend.md)** — the experimental Skia CPU-raster 2D backend; unlike
+  an accelerated Skia/GPU path, only its evidence-linked bounded feature table is advertised.
 - `canvas-backend.md` — the CANVAS (HTML Canvas 2D) backend's own completeness status; unlike the
   others here, its ✅ marks mean "implemented and structurally reviewed," not "pixel-verified" — see
   the doc's own caveat.

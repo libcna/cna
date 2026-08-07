@@ -140,9 +140,20 @@ python3 scripts/xna-diff.py xna_out.png cna_out.png --diff-out diff.png
 Requires Pillow (`pip install pillow`) — not previously a dependency of this project's other
 `scripts/*.py` tools, but the standard library has no PNG decoder.
 
+### Skia 2D subset
+
+The Skia backend builds this same renderer as `cna_oracle_render_skia` and registers
+`Skia_XNA_2D_Oracle`. `scripts/run-skia-2d-oracle-diff.sh` automatically selects all nine scenes
+whose declarative source contains `spritebatchmode=true`; the other 30 require the intentionally
+unsupported 3D/effect path. Seven Skia results are exact RGBA matches. The flipped and rotated
+linear-filter scenes allow only a measured one-byte RGB rounding difference, exact alpha, a
+bounded raw-pixel count, and a fixed sprite footprint. The machine-readable policy is
+`skia-2d-policy.tsv`; its rationale and the blend-alpha defect found by the comparison are in
+`docs/skia-xna-oracle.md`.
+
 ## Status
 
-Thirty-one scenes so far, **all pixel-perfect**, and every one of XNA's 5 Stock Effects plus
+Thirty-nine scenes so far, **all pixel-perfect on the original D3D9 oracle path**, and every one of XNA's 5 Stock Effects plus
 `IEffectFog`, ALL 8 `AlphaTestEffect.AlphaFunction` values (`AlphaTestEffect` compare-function
 coverage is COMPLETE), `EnvironmentMapEffect.FresnelFactor`, ALL 3
 `SkinnedEffect.WeightsPerVertex` values (`SkinnedEffect` weighting coverage is COMPLETE),

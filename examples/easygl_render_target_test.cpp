@@ -17,6 +17,7 @@
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
@@ -64,13 +65,13 @@ protected:
 
         // --- Pass 1: render solid green into the RT ---
         device.SetRenderTarget(rt_.get());
-        device.SetDepthTestEnabled(false);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
         device.Clear(Color(0, 255, 0, 255));
         device.SetRenderTarget(nullptr);
 
         // --- Pass 2: blit RT as a full-screen texture ---
         device.Clear(Color(0, 0, 0, 255));
-        device.SetDepthTestEnabled(false);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
 
         sb_->Begin();
         sb_->Draw(*rt_,
@@ -107,7 +108,7 @@ protected:
         const int half = kRTSize / 2;
 
         device.SetRenderTarget(rt_.get());
-        device.SetDepthTestEnabled(false);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
         device.Clear(Color(0, 0, 0, 255));
         {
             SamplerState point = SamplerState::PointClamp;

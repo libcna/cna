@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
+#include "CNA/GraphicsBackendType.hpp"
 
 #include "CNA/GraphicsBackendType.hpp"
 
@@ -41,6 +42,9 @@ TEST(GraphicsBackendCompileDefinitionsTest, ExactlyOneGraphicsBackendIsSelected)
     ++enabled;
 #endif
 #ifdef CNA_BACKEND_CANVAS
+    ++enabled;
+#endif
+#ifdef CNA_BACKEND_SKIA
     ++enabled;
 #endif
 #ifdef CNA_BACKEND_ASCII
@@ -139,6 +143,14 @@ TEST(GraphicsBackendCompileDefinitionsTest, SokolBackendIsReportedByName)
     // entry would otherwise still link and silently report another backend's name.
     EXPECT_EQ(CNA::getCurrentGraphicsBackendType(), CNA::GraphicsBackendType::Sokol);
     EXPECT_EQ(CNA::getCurrentGraphicsBackendName(), "SOKOL");
+}
+#endif
+
+#ifdef CNA_BACKEND_SKIA
+TEST(GraphicsBackendCompileDefinitionsTest, SkiaMacroMatchesPublicBackendIdentity)
+{
+    EXPECT_EQ(CNA::getCurrentGraphicsBackendType(), CNA::GraphicsBackendType::Skia);
+    EXPECT_EQ(CNA::getCurrentGraphicsBackendName(), "SKIA");
 }
 #endif
 

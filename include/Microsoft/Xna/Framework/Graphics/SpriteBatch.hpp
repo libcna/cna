@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include <cstdint>
 #include <optional>
 #include <vector>
 
@@ -442,5 +443,39 @@ namespace Microsoft::Xna::Framework::Graphics
                         Vector2 scale,
                         SpriteEffects effects,
                         float layerDepth);
+
+        /**
+         * @brief Draws a triangle-list 2D mesh through @p effect's own bounded SkVertices/SkSL
+         * mesh shader (SKIA-144-157, CNA_SKIA_SKSL_MESH_V1), composed with this SpriteBatch's
+         * active transform matrix exactly like an ordinary sprite draw. An entirely different draw
+         * primitive from every `Draw(Texture2D, ...)` overload above, which always submits one
+         * quad; @p colors/@p uvs may be null when @p effect's own compiled program needs neither
+         * (e.g. a colour-only effect with no texture children).
+         *
+         * @note NOXNA -- not part of the XNA 4.0 API. Currently supported only under
+         *       `SpriteSortMode::Immediate`: unlike ordinary sprite `Draw()` calls, a mesh draw
+         *       does not participate in the deferred sort/batch queue, so it throws if the active
+         *       `Begin()` used any other sort mode -- a declared, tested scope boundary, not a
+         *       silent misbatch. Currently implemented only by the Skia backend; every other
+         *       backend's `ISpriteBatchBackend` throws `std::runtime_error` (matching `Draw()`'s
+         *       own existing "backend does not support this" convention).
+         *
+         * @param effect      A `ShaderEffect` compiled from `CNA_SKIA_SKSL_MESH_V1` source.
+         * @param positions   Per-vertex 2D positions, in the same local space ordinary sprite
+         *                    `Draw()` destination rectangles use. Must not be null.
+         * @param colors      Optional per-vertex tint colours (straight alpha), or `nullptr`.
+         * @param uvs         Optional per-vertex texture coordinates in `[0, 1]`, or `nullptr`.
+         * @param vertexCount Number of entries in @p positions/@p colors/@p uvs. Must be positive.
+         * @param indices     Triangle-list vertex indices into the arrays above. Must not be null.
+         * @param indexCount  Number of entries in @p indices. Must be a positive multiple of 3.
+         * @throws std::runtime_error if called before `Begin()`, under a non-`Immediate` sort mode,
+         *         with an invalid/non-mesh @p effect, or if @p effect declares a texture child that
+         *         was never bound via `ShaderEffect::SetTexture()`.
+         * @throws std::invalid_argument if @p positions/@p indices are null or the counts are
+         *         non-positive/malformed.
+         */
+        NOXNA void DrawMeshEXT(Effect& effect,
+                               const Vector2* positions, const Color* colors, const Vector2* uvs,
+                               int vertexCount, const std::uint16_t* indices, int indexCount);
     };
 }
