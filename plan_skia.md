@@ -437,65 +437,220 @@ sequence the missing `IGraphicsBackend` work first, not simply picking SKIA-164 
 | SKIA-169 | Run fresh raster and Ganesh builds, complete Debug/Release/sanitizer suites, reusable EasyGL comparisons, demos, and available platform backend matrix checks. | ⬜ | Commands, exact counts/timings, unsupported hosts, warnings, and any external-stack sanitizer baseline are recorded from clean configurations using at most eight workers. |
 | SKIA-170 | Hold the successor release gate and advertise only features with direct public evidence. | ⬜ | All SKIA-115–170 rows have an accurate implemented/emulated/refused disposition; capability code, ledgers, matrices, ADRs, build guide, `NEXT_skia.md`, and release summary agree. |
 
-## REMED-GFX-223 — cross-backend regression found at integration (OPEN, blocking)
+## REMED-GFX-223 — cross-backend regression found at integration (RESOLVED)
 
-**Severity HIGH. Status OPEN. Affects every backend, not just Skia.** Numbered in the campaign's
-shared-layer series rather than this plan's SKIA series, because the defect is in
+**Severity HIGH. Status RESOLVED 2026-08-07. Affected every backend, not just Skia.** Numbered in
+the campaign's shared-layer series rather than this plan's SKIA series, because the defect is in
 `Microsoft::Xna::Framework::Graphics::Texture2D`, on a path every backend uses. Found by running the
-shared `CnaTests` corpus under `EASYGL` from this lane's own sources during Batch 4 integration; it
-had never been run, because this lane's validation has only ever been the Skia suite.
+shared `CnaTests` corpus under `EASYGL` from this lane's own sources; it had never been run, because
+this lane's validation has only ever been the Skia suite.
 
-**Failing tests:** `CnjCacheIsolationTest.SidecarLoadedFirstDoesNotCorruptLaterNativeLoad` and
-`CnjCacheIsolationTest.NativeLoadedFirstWithLiveHandleUnaffectedBySidecar`, under `EASYGL`, both in
-isolation and in the full corpus.
+**Failing tests (before the fix):** `CnjCacheIsolationTest.SidecarLoadedFirstDoesNotCorruptLaterNativeLoad`
+and `CnjCacheIsolationTest.NativeLoadedFirstWithLiveHandleUnaffectedBySidecar`, under `EASYGL`, both
+in isolation and in the full corpus.
 
-### What breaks
+### The contract that was violated
 
-`ContentManager`'s texture cache reconstructs a hit through `Texture2D::ReconstructFromCache`, which
-builds the object with the `RenderTarget2D` constructor and therefore inherits
-`gpuOnlyContent_ = true` — even though the result is an ordinary content texture with a CPU shadow
-and no render target anywhere. That mislabel is pre-existing and was inert, because both code paths
-that read the flag looked at the shadow first.
+`gpuOnlyContent_` carries two different statements, and only the weaker one was ever true of a
+cache hit:
 
-Two changes in this lane, each correct for a real Skia render target, make it live:
+| | Statement | Consequences |
+|---|---|---|
+| **B** (weak) | "an absent CPU shadow is normal here — fall back to the backend rather than throwing" | `GetData` reads the backend *only when there is no shadow* |
+| **A** (strong) | "the live backend is the sole authority; the shadow is never trusted" | `GetData` prefers the backend always; `SetData` drops the shadow and updates the existing backend **in place** rather than replacing it |
 
-1. `Texture2D::SetData(const Color*, int)` gained a `gpuOnlyContent_` branch that **resets
-   `cpuPixels_`** after uploading, so a later canvas write cannot be masked by a stale upload
-   shadow. Applied to a cache-reconstructed texture it discards the only copy of its pixels.
-2. `Texture2D::GetData(Color*, int, int)` moved its `gpuOnlyContent_` delegation **above** the
-   CPU-shadow check, so a flagged texture always asks the backend. On a backend whose plain
-   textures are not CPU-readable that now fails where it previously read the shadow.
+At the integration head the flag only ever meant **B**: both of its readers
+(`Texture2D.cpp:434` and `:509` at `aa9f3fb5`) sit *inside* a `if (!cpuPixels_ || cpuPixels_->empty())`
+branch. This lane promoted the same flag to **A**, correctly, for real Skia render targets.
 
-Together: the sidecar load drops the shadow, the cache's `weak_ptr` expires, the next load
-reconstructs with a null shadow, and `GetData` raises
-`"this graphics backend cannot read a render target's colour attachment back to the CPU"` for a
-texture that is not a render target.
+`Texture2D::ReconstructFromCache` builds through the protected constructor `RenderTarget2D` owns,
+and so inherits `gpuOnlyContent_ = true` — for an ordinary content texture with a CPU shadow and no
+render target anywhere. It only ever needed **B**. Once the flag meant **A**, every one of A's
+consequences became a false statement about a cache hit.
+
+### First incorrect state transition
+
+`gpuOnlyContent_ = true` at `Texture2D.cpp:356`, executed on behalf of `ReconstructFromCache`
+(`Texture2D.cpp:2703`), whose very next statement installs a non-null `cpuPixels_` — producing the
+contradictory state `gpuOnlyContent_ == true && cpuPixels_ != nullptr`. Everything else is
+downstream of that single store.
+
+### The two live consequences
+
+1. **`SetData(const Color*, int)` began updating the existing backend in place.** An ordinary
+   Texture2D's backend is *shared*: `ContentManager`'s weak texture cache hands the same
+   `ITextureBackend` to every wrapper reconstructed from a hit. Writing through it publishes the
+   upload into every other holder — the CNB-33 aliasing `CnjCacheIsolationTests` was written to
+   pin, whose own header comment predicted exactly this ("if a future change to SetData ever starts
+   mutating in place instead of reassigning, these tests will catch it"). It also keeps the cache
+   entry's `weak_ptr` alive, converting what the head resolves as a *miss* (reload from disk) into
+   a *hit* on mutated pixels.
+2. **`GetData(Color*, int, int)` moved its delegation above the shadow check**, so a flagged
+   texture always asks the backend — which, for a plain texture, EasyGL cannot serve.
 
 ### Measured, not inferred
 
 Same test, same display, same fixture, traced with `CNA_TEXTURE_TRANSFER_TRACE=1`:
 
-| Tree | Third `GetData` | Result |
+| Tree | `GetData` calls | Result |
 |---|---|---|
-| integration head `aa9f3fb5` (EASYGL) | `source=cpuPixels_` | passes |
-| this lane adapted (EASYGL) | `source=backend` | throws; instrumented shadow is null |
+| integration head `aa9f3fb5` (EASYGL) | all `source=cpuPixels_` | passes |
+| this lane, before the fix (EASYGL) | 1 failed `source=backend` readback in test 1, 2 in test 2 | throws `"this graphics backend cannot read a render target's colour attachment back to the CPU"` for a texture that is not a render target |
+| this lane, after the fix (EASYGL) | 3 × `source=cpuPixels_` per test, **zero** backend readbacks | passes |
 
-### Why it is recorded rather than fixed here
+### The fix
 
-The obvious repair — clearing `gpuOnlyContent_` in `ReconstructFromCache`, where it is simply
-untrue — also changes what the *head* does when such a texture's shadow has legitimately expired,
-turning a backend readback attempt into the plain-texture refusal. That is arguably the more honest
-answer, but it is a shared-layer semantic change on a path every backend uses, and it has to be
-re-validated across the Skia suite, both corpora and the sanitizer gate rather than asserted.
+Smallest correct shared change, at the point where the object first becomes misclassified —
+31 insertions / 17 deletions across two files:
 
-**Its sibling was found the same way and is fixed.** `IsColorTransferFormatEXT` narrowed the
-`Color*` `SetData`/`GetData` overloads to `SurfaceFormat::Color` alone on every non-Skia backend,
-withdrawing the working `ColorSrgbEXT` route `MouseCursor::FromTexture2D` uses. It now preserves the
-pre-existing any-4-byte-format rule off Skia, and `MouseCursorTest` is 14/14 again.
+1. **`ReconstructFromCache` clears `gpuOnlyContent_`.** A cache hit is an ordinary content texture:
+   its pixels come from the loader and `SetData`, never from rendering into it.
+2. **The in-place backend update in `SetData(const Color*, int)` is gated on `gpuOnlyContent_`.**
+   That branch exists for exactly one reason — a render target must not have its
+   render-target backend swapped for an ordinary texture backend, leaving `RenderTarget2D`'s cached
+   `IRenderTargetBackend` view dangling — and that reason applies only to render targets. Every
+   ordinary texture returns to the head's behaviour: a full-level upload builds a fresh backend and
+   thereby detaches from anything sharing the old one.
+3. The `gpuOnlyContent_` doc comment now states the **A** contract explicitly and records that
+   sharing the constructor is not the same as being a render target.
+
+**Net effect relative to the integration head:** ordinary textures are behaviourally identical;
+render targets keep this lane's improvement (their backend survives an upload, and their readback
+comes from the surface instead of a stale upload shadow); a cache hit whose shadow has legitimately
+expired now raises the ordinary-Texture2D refusal instead of attempting a backend readback, which is
+the contract `ContextRecoveryTest` already documents for every other plain texture.
+
+### Not done, and why
+
+The in-place upload is **not** extended to ordinary textures, even though it would avoid rebuilding
+a GPU texture on every full-level `SetData`. Making it safe there needs the weak texture cache to be
+invalidated or made copy-on-write; that is a design change, not a bug fix, and it is what this
+defect is made of. Recorded as an observation, not a finding — the allocation behaviour retained
+here is the head's.
+
+### Regression cover added
+
+`tests/Microsoft/Xna/Framework/Graphics/Texture2DCacheReconstructionTests.cpp` (8) and
+`tests/Microsoft/Xna/Framework/Content/ContentManagerTextureCacheCycleTests.cpp` (5) pin the whole
+matrix: ordinary round trip, reconstruction read, upload-detach, source-wrapper destruction, sibling
+isolation, repeated cycles, render-target backend retention and shadow drop, render-target readback
+provenance, cache hit, cache miss, alternating cycles, cross-handle isolation, and teardown with
+live entries.
+
+### Validation
+
+| Control | Result |
+|---|---|
+| `CnjCacheIsolationTest` under `EASYGL` | **2/2**, in isolation and in the corpus |
+| New cache/lifetime matrix under `EASYGL` | **13/13** |
+| `CnaTests` + harnesses under `EASYGL` (principal control, `ctest`) | **5912 registered · 5911 passed · 1 failed · 6 skipped.** The one failure is `easy-gl-resource-smoke-tests`, a binary from the sibling `easy-gl` repository that contains **zero** CNA symbols and was linked before this fix was first built — external and pre-existing |
+| Skia focused suite (`ctest -R "^Skia_"`) | **172/172**, 0 failed, 69.0 s |
+| `Skia_Texture_RowStride` | **8/8**, including the 13-texel widths and their odd row byte counts |
+| `CnaTests` under `SKIA` | **5746 run · 5611 passed · 124 failed · 23 skipped** |
+| `SOKOL` dedicated suite (`ctest -R "^Sokol"`) | **37/37**, 0 failed, 19.2 s — matches its own recorded figure |
+| `SOKOL` shared `Texture2D`/cache/context-recovery/`MouseCursor` | **34/34** |
+| `DILIGENT` focused `Texture2D`/cache/cube/render-target/`MouseCursor` control | **169/169**, 0 failed |
+| **ASan + UBSan** (`CNA_SANITIZE=address,undefined`, `SKIA` backend) | **0 ASan errors, 0 UBSan runtime errors.** 233 tests over the cache, texture, cube, render-target, content-manager and PNG paths; 228 passed and the 5 failures are already members of the 124 above and fail identically un-sanitized. `libasan.so.8` and `libubsan.so.1` are linked (13 ASan symbols, 14 UBSan handlers) |
+| ASan leak classification | **3 blocks, 15 382 736 bytes, every frame in `libGLX_mesa.so.0`** — 79 728 + 59 136 + 15 243 872 accounts for the total exactly. **Zero** CNA, Skia or SDL frames. External Mesa GLX driver allocations, not CNA leaks |
+
+**The corpus figure the previous session left unmeasured is now measured, and it is better than
+predicted: 124 against the fork point's 125.** Set-differenced against the fork-point baseline
+rather than compared as a total: **8 fixed, 7 new.** The 8 are the five `GraphicsDeviceCapabilityTest`
+rows the capability fix repaired, plus three content-path tests this fix repaired —
+`CnjCacheIsolationTest.SidecarLoadedFirstDoesNotCorruptLaterNativeLoad`,
+`CnjEffectTest.LoadsRealCnjFixture` and `CnjStockEffectTest.CustomGlslEffectStillWorks`, all latent
+in this lane since its fork and never attributed before. The 7 are **exactly** the `2 + 5`
+`OrdinaryDrawMultiStreamTest` / `InstancedDrawMultiStreamTest` rows that §7.1 of the lane card
+already classified as the pre-existing 2D-only class, which `SDL_RENDERER`, `CANVAS`, `ASCII` and
+`FREEDIRECT` fail identically. `125 − 8 + 7 = 124`. **Zero new supported-path failures.**
+
+> `CnaTests` must be run with the repository worktree as the working directory:
+> `MediaLibraryTestFixture` redirects `MediaLibraryPaths` at the **relative** paths
+> `tests/assets/media/{music,pictures}`. Run from a build directory those resolve to nothing, the
+> library comes up empty, `GetPictureFromTokenRoundTripsViaRealToken` indexes an empty collection
+> and `ObjectGraphIsInternallyConsistent` segfaults. `ctest` sets the directory correctly; a bare
+> `./CnaTests` from the build tree does not. Not a defect — an invocation requirement, recorded
+> because it costs an hour to rediscover.
+
+### Sibling, found the same way and fixed earlier in this lane
+
+`IsColorTransferFormatEXT` narrowed the `Color*` `SetData`/`GetData` overloads to
+`SurfaceFormat::Color` alone on every non-Skia backend, withdrawing the working `ColorSrgbEXT` route
+`MouseCursor::FromTexture2D` uses. It now preserves the pre-existing any-4-byte-format rule off
+Skia, and `MouseCursorTest` is 14/14 again.
 
 **The lesson this lane pays for:** a backend-local `#ifdef` is not the only way a lane reaches other
 backends. Both defects are in shared code that merely *branches* on a Skia condition, and neither
-would have been found by any amount of Skia testing.
+would have been found by any amount of Skia testing. **Run the principal control before believing a
+lane.**
+
+## REMED-GFX-224 — an EasyGL render target silently discards `SetData`
+
+**Severity MEDIUM. Status OPEN. Not introduced by this lane; surfaced by it.** Not a Skia defect and
+not part of `REMED-GFX-223`.
+
+`ITextureBackend::UpdatePixels` is declared with an **empty default body**, and
+`EasyGLRenderTargetBackend` does not override it. Uploading to an EasyGL `RenderTarget2D` therefore
+writes nothing to the GPU resource, and a subsequent `GetData` returns the target's cleared surface.
+
+At the integration head this was invisible, because `SetData(const Color*, int)` replaced the render
+target's backend with an ordinary texture backend and left a CPU shadow that `GetData` consulted
+first — so the read returned the last *upload* rather than the target's real content, which is its
+own defect (and the one this lane's in-place branch was written to remove). With
+`REMED-GFX-223` fixed, the render-target path is honest and the backend gap is visible.
+
+No test, example or documented contract depends on the round trip, and the partial-rectangle
+`SetData` overload has always gone straight to the same no-op `UpdatePixels`, so this is a
+pre-existing gap now correctly attributed rather than a new regression.
+`Texture2DCacheReconstructionTest.RenderTargetReadbackComesFromTheSurfaceNotAnUploadShadow`
+deliberately does not pin the round trip, and says so.
+
+**To fix:** implement `UpdatePixels`/`UpdatePixelsLevel` on `EasyGLRenderTargetBackend`, then audit
+every other backend's render-target backend for the same missing override.
+
+## REMED-GFX-225 — this lane's new `GetSizeEXT` virtual broke four other backends (RESOLVED)
+
+**Severity HIGH. Status RESOLVED 2026-08-07. Introduced by this lane.** `SKIA-149` added
+`[[nodiscard]] virtual int GetSizeEXT() const noexcept { return 0; }` to `ITextureCubeBackend`,
+because `SkiaEffectBackend` needs a cube's edge length through the interface. The phase-1 head's
+interface had **no** `GetSizeEXT` at all — but four concrete cube backends already carried a
+same-named non-virtual accessor declared **without** `noexcept`:
+
+| Backend | Site |
+|---|---|
+| `SokolTextureCubeBackend` | `Sokol/SokolGraphicsBackend.hpp:524` |
+| `D3D11TextureCubeBackend` | `D3D11/D3D11Textures.hpp:76` |
+| `D3D12TextureCubeBackend` | `D3D12/D3D12TextureCube.hpp:63` |
+| `D3D9TextureCubeBackend` | `D3D9/D3D9Textures.hpp:79` |
+
+All four derive from `ITextureCubeBackend`, so introducing the base virtual silently turned each
+accessor into an override with a **looser exception specification** — a hard compile error:
+
+```
+error: looser exception specification on overriding virtual function
+       'virtual int SokolTextureCubeBackend::GetSizeEXT() const'
+note:  overridden function is 'virtual int ITextureCubeBackend::GetSizeEXT() const noexcept'
+```
+
+**`CNA_GRAPHICS_BACKEND=SOKOL` did not build at all** from this lane's sources, failing at 47% in
+`cna_backend_graphics_sokol`. `D3D11`, `D3D12` and `D3D9` carry the identical break on Windows.
+
+No Skia test and no EasyGL control can reach this: EasyGL's cube backend never had a `GetSizeEXT`,
+so the collision does not exist there. It took building a *third* backend from this lane's sources
+— the Sokol cross-backend control the `diligent` lane's card set the precedent for. **This is the
+second defect in this lane that only another backend's build could find.**
+
+**Fix.** `noexcept override` on all four. `override` is the durable half: it makes the now-virtual
+relationship explicit and turns any future signature drift back into an error at the derived class
+instead of a silent re-binding. Every body is `return size_;` and cannot throw.
+
+The lane's five other new shared-interface virtuals — `GetDimensionsEXT`, `HasDefinedMipLevel`,
+`DrawMeshEXT`, `CreateRenderTarget2DEXT`, `Ensure3DSupported` — were checked for the same hazard by
+grepping every backend header for same-named members. **None collides**; only `GetSizeEXT` did.
+
+**`D3D11`/`D3D12`/`D3D9` are corrected by inspection and NOT compiled** — none of the three builds on
+this Linux host. Stated rather than implied.
+
 
 ## Completed dependency order
 
