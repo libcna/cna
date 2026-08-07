@@ -5,10 +5,11 @@ SKIA-102 implements the accepted decision in `skia-3d-emulation-adr.md`: the Ski
 
 ## Stable boundary
 
-Every rejected operation throws `std::runtime_error` with this prefix:
+Every rejected operation throws `std::runtime_error` with this prefix, followed by the name of
+the entry point that refused:
 
 ```text
-Skia (raster 2D) does not support 3D: 
+Skia (raster 2D) does not support 3D: <operation>
 ```
 
 `SkiaUnsupported3D.hpp` owns that prefix and the throw helper. `IGraphicsBackend::Ensure3DSupported`
