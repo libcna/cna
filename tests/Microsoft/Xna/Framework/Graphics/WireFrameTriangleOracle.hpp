@@ -47,7 +47,8 @@
     defined(CNA_BACKEND_WEBGPU) || defined(CNA_BACKEND_SDL_GPU) || \
     defined(CNA_BACKEND_D3D9) || defined(CNA_BACKEND_D3D11) || defined(CNA_BACKEND_D3D12) || \
     defined(CNA_BACKEND_OPENGL4) || defined(CNA_BACKEND_OPENGL1) || defined(CNA_BACKEND_OPENGL2) || \
-    defined(CNA_BACKEND_WICKED) || defined(CNA_BACKEND_MAGNUM) || defined(CNA_BACKEND_SOKOL)
+    defined(CNA_BACKEND_WICKED) || defined(CNA_BACKEND_MAGNUM) || defined(CNA_BACKEND_SOKOL) || \
+    defined(CNA_BACKEND_DILIGENT)
 #define CNA_WIREFRAME_PIXEL_ORACLE 1
 #endif
 
@@ -109,6 +110,8 @@ namespace CnaTest::WireFrameOracle
         "Magnum";
 #elif defined(CNA_BACKEND_SOKOL)
         "Sokol";
+#elif defined(CNA_BACKEND_DILIGENT)
+        "Diligent";
 #else
         "unknown";
 #endif
