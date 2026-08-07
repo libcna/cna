@@ -302,9 +302,9 @@ endif()
 # WEBGL1/WEBGL2 Emscripten) share one internal implementation (EasyGL, on top of the sibling
 # easy-gl library) -- this block sets it up once regardless of which of the 4 was selected.
 #
-# GLB-7 TEMPORARY: building against '../easy-glrvc' (branch 'rvc'), not '../easy-gl', for the
-# duration of plan_glbackends.md's WebGL1 work (GLB-30-GLB-35 land there first). Switch back to
-# '../easy-gl' per GLB-38 once that work is reviewed and merged upstream.
+# GLB-38 done: the WebGL1 work (GLB-30..35) landed on easy-gl develop, so this builds against
+# the canonical '../easy-gl' sibling checkout again; the temporary '../easy-glrvc' (branch
+# 'rvc') redirect from GLB-7 is retired.
 if(CNA_GRAPHICS_BACKEND STREQUAL "OPENGLES" OR CNA_GRAPHICS_BACKEND STREQUAL "OPENGL33"
         OR CNA_GRAPHICS_BACKEND STREQUAL "WEBGL1" OR CNA_GRAPHICS_BACKEND STREQUAL "WEBGL2")
     if((CNA_GRAPHICS_BACKEND STREQUAL "OPENGLES" OR CNA_GRAPHICS_BACKEND STREQUAL "OPENGL33") AND EMSCRIPTEN)
@@ -325,17 +325,16 @@ if(CNA_GRAPHICS_BACKEND STREQUAL "OPENGLES" OR CNA_GRAPHICS_BACKEND STREQUAL "OP
     # easy-gl is a SIBLING repository checkout, not a git submodule of this
     # repo (Task DEV-BUILD-001) -- see sharp-runtime's identical check above
     # for the full rationale.
-    if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../easy-glrvc/CMakeLists.txt")
+    if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../easy-gl/CMakeLists.txt")
         message(FATAL_ERROR
-            "CNA: Missing sibling repository 'easy-glrvc' at "
-            "${CMAKE_CURRENT_SOURCE_DIR}/../easy-glrvc -- this is a separate git "
-            "checkout (branch 'rvc' of easy-gl) expected next to this repo's own "
-            "directory, not a git submodule (git submodule update --init will not "
-            "fetch it). This is a temporary plan_glbackends.md GLB-7 dependency "
-            "while WebGL1 support lands in easy-gl; see that plan's GLB-38 for the "
-            "switch back to '../easy-gl'.")
+            "CNA: Missing sibling repository 'easy-gl' at "
+            "${CMAKE_CURRENT_SOURCE_DIR}/../easy-gl -- this is a separate git "
+            "checkout (branch 'develop' of easy-gl) expected next to this repo's "
+            "own directory, not a git submodule (git submodule update --init will "
+            "not fetch it). easy-gl itself expects its own sibling '../meta-gl' "
+            "checkout (branch 'develop' of meta-gl).")
     endif()
-    add_subdirectory(../easy-glrvc easy-gl)
+    add_subdirectory(../easy-gl easy-gl)
 endif()
 
 # plan_freedirect.md design decision 10 / Task DX3-2: free-direct is a SIBLING repository checkout, not a

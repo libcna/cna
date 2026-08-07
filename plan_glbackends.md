@@ -434,11 +434,15 @@ list. **All of GLB-30 through GLB-35 are `easy-gl` repo work** (on `easy-glrvc`,
   full GTest suite itself is NOT runnable under Emscripten at all regardless of GL profile
   (`cmake/Tests/EasyGLTests.cmake` gates `cna_test_easygl_*` targets to `NOT EMSCRIPTEN` — same
   pre-existing, unrelated scope limit already hit for `WEBGL2`/`CANVAS`).
-- ⬜ **GLB-38** — Once `easy-glrvc`'s `GLB-30`-`GLB-35` changes are reviewed and merged to
-  `easy-gl`'s real `main`/default branch, switch `cnagl`'s sibling-repo dependency in
-  `cmake/BackendSelection.cmake` back from `../easy-glrvc` to `../easy-gl` (reverts `GLB-7`'s
-  temporary redirect) and delete/archive `easy-glrvc` per the project owner's normal sibling-repo
-  cleanup convention. **Not done — needs a merge decision, not made here.**
+- ✅ **GLB-38** — **Done 2026-08-07, at Batch 4 integration under direct project-owner
+  instruction.** The completed MetaGL follow-up-audit work and EasyGL `rvc` work (`GLB-30`-`GLB-35`
+  among it) reached their `develop` branches as attribution-clean replays (MetaGL `develop`
+  `c964e73`, EasyGL `develop` `9b831de`; both trees byte-identical to the as-authored heads,
+  which remain preserved on `feature/followup-audit`/`rvc` and the signed
+  `archive/preintegration/*` tags). `cmake/BackendSelection.cmake` now builds against the
+  canonical `../easy-gl` sibling checkout again; the `GLB-7` temporary `../easy-glrvc` redirect
+  is retired, and no `easy-glrvc` reference remains in the build. The `easy-glrvc` worktree's
+  disposal is the owner's normal sibling-repo cleanup, outside this repository.
 
 ## 4. Open questions for the project owner — resolved 2026-07-19
 
