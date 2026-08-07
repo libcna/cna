@@ -89,6 +89,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_BACKEND STREQUAL "DILIGEN
     cna_diligent_test(cna_test_diligent_instanced examples/diligent_instanced_test.cpp)
     cna_register_diligent_test(Diligent_Instanced cna_test_diligent_instanced)
 
+    # REMED-GFX-202: the two per-binding properties the removed instanceVb/instanceVertexOffset/
+    # instanceFrequency trio could not carry -- the instance binding's own VertexOffset and its
+    # InstanceFrequency -- plus the geometry binding's VertexOffset on the same route. Each leg is
+    # built so that "consumed" and "ignored" produce different, in-bounds pixels.
+    cna_diligent_test(cna_test_diligent_instance_binding_offsets
+                      examples/diligent_instance_binding_offsets_test.cpp)
+    cna_register_diligent_test(Diligent_InstanceBindingOffsets
+                               cna_test_diligent_instance_binding_offsets)
+
     # plan_diligent.md DILIGENT-45: vertexStart/startIndex/baseVertex sub-range coverage.
     cna_diligent_test(cna_test_diligent_drawoffset examples/diligent_drawoffset_test.cpp)
     cna_register_diligent_test(Diligent_DrawOffset cna_test_diligent_drawoffset)
