@@ -27,9 +27,13 @@
   Ganesh/Graphite/GL/Vulkan/Dawn path, and the selected build registers zero `Accelerated` tests.
   Future Ganesh/OpenGL work requires a successor plan and must reopen
   [`docs/skia-surface-mode-adr.md`](docs/skia-surface-mode-adr.md).
-- **Capabilities:** all nine enum values are audited against the implementation. Only
-  `GraphicsCapability::Texture3D` is true, strictly for bounded CPU transfer/readback storage;
-  3D rendering and volume sampling remain unsupported.
+- **Capabilities:** all **eleven** enum values are audited against the implementation, through an
+  exhaustive `switch` with no `default` arm so a future member is a compile-time diagnostic rather
+  than an inherited answer. Only `GraphicsCapability::Texture3D` is true, strictly for bounded CPU
+  transfer/readback storage; 3D rendering and volume sampling remain unsupported.
+  `MultiStreamVertexInput` and `Instancing` — added to the enum after this backend was written —
+  are both false, because there is no vertex-stream or draw pipeline here at all: every 3D route
+  refuses through `Ensure3DSupported()` before any binding is read.
 - **Validation:** the complete Debug suite passes 133/133 on real display `:0` in 61.14 seconds
   with at most eight workers (16 Raster, 113 Display, four Audit). The final MSAA and anisotropy
   policy pair passes 2/2 in Release and under ASan+UBSan; the post-gate MSAA diagnostic assertion

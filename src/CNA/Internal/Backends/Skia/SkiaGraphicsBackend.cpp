@@ -867,7 +867,36 @@ namespace CNA::Internal::Backends::Skia
     bool SkiaGraphicsBackend::SupportsCapability(CNA::GraphicsCapability capability) const
     {
         AssertOwnership("SupportsCapability");
-        return capability == CNA::GraphicsCapability::Texture3D;
+        // REMED-GFX-201/202: exhaustive over every member, with no `default` arm, so a capability
+        // added after this backend was written is a compile-time -Wswitch diagnostic here instead
+        // of an inherited wrong answer. The equality test this replaces was already truthful for
+        // the nine members that existed then; MultiStreamVertexInput and Instancing are new, and
+        // both are false because this backend has no vertex-stream or draw pipeline at all --
+        // every 3D route goes through Ensure3DSupported()'s refusal before any binding is read.
+        switch (capability)
+        {
+            // Bounded CPU transfer/readback storage only, per docs/skia-texture-storage.md. This
+            // flag describes storage and never promises shader sampling.
+            case CNA::GraphicsCapability::Texture3D:
+                return true;
+
+            case CNA::GraphicsCapability::ThreeD:
+            case CNA::GraphicsCapability::DepthStencilBuffer:
+            case CNA::GraphicsCapability::MultiSampleAntiAliasing:
+            case CNA::GraphicsCapability::MultipleRenderTargets:
+            case CNA::GraphicsCapability::AnisotropicFiltering:
+            case CNA::GraphicsCapability::WireFrame:
+            case CNA::GraphicsCapability::OcclusionQuery:
+            // Deliberately false rather than true: the accepted route is the narrow, opt-in
+            // CNA_SKIA_SKSL_V1/CNA_SKIA_SKSL_MESH_V1 ABI, not the arbitrary-Effect support a true
+            // would promise. Under-reporting a bounded extension is honest; claiming general
+            // custom-effect support and then throwing on ordinary GLSL would not be.
+            case CNA::GraphicsCapability::CustomEffects:
+            case CNA::GraphicsCapability::MultiStreamVertexInput:
+            case CNA::GraphicsCapability::Instancing:
+                return false;
+        }
+        return false;
     }
 
     void SkiaGraphicsBackend::Ensure3DSupported(const char* operation) const

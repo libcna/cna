@@ -132,23 +132,63 @@ def main() -> int:
             f"{release_path}: expected only Texture3D=true, found {sorted(true_capabilities)}"
         )
 
-    implementation = re.search(
-        r"bool SkiaGraphicsBackend::SupportsCapability\([^)]*\) const\s*\{(?P<body>.*?)\n\s*\}",
-        backend,
-        flags=re.DOTALL,
+    # REMED-GFX-201/202 made SupportsCapability an exhaustive switch with no `default` arm, so the
+    # earlier `capability == X` extraction no longer sees anything, and a non-greedy body regex
+    # stops at the switch's own closing brace. Brace-match the real body, accept either shape, and
+    # additionally require the exhaustiveness the switch exists to provide.
+    signature = re.search(
+        r"bool SkiaGraphicsBackend::SupportsCapability\([^)]*\) const\s*\{", backend
     )
-    if not implementation:
+    if not signature:
         errors.append(f"{backend_path}: SupportsCapability implementation was not found")
     else:
-        returned = set(
-            re.findall(r"capability\s*==\s*CNA::GraphicsCapability::([A-Za-z0-9]+)",
-                       implementation.group("body"))
+        depth = 0
+        end = signature.end()
+        for index in range(signature.end() - 1, len(backend)):
+            if backend[index] == "{":
+                depth += 1
+            elif backend[index] == "}":
+                depth -= 1
+                if depth == 0:
+                    end = index
+                    break
+        body = backend[signature.end():end]
+
+        equality_form = set(
+            re.findall(r"capability\s*==\s*CNA::GraphicsCapability::([A-Za-z0-9]+)", body)
         )
+        # Switch form: each run of `case` labels takes the value of the `return` that closes it.
+        switch_true: set[str] = set()
+        labelled: set[str] = set()
+        pending: list[str] = []
+        for line in body.splitlines():
+            case = re.match(r"\s*case\s+CNA::GraphicsCapability::([A-Za-z0-9]+)\s*:", line)
+            if case:
+                pending.append(case.group(1))
+                labelled.add(case.group(1))
+                continue
+            returned_value = re.match(r"\s*return\s+(true|false)\s*;", line)
+            if returned_value:
+                if returned_value.group(1) == "true":
+                    switch_true.update(pending)
+                pending = []
+
+        returned = equality_form | switch_true
         if returned != true_capabilities:
             errors.append(
                 f"{backend_path}: true capabilities {sorted(returned)} do not match release table "
                 f"{sorted(true_capabilities)}"
             )
+        if labelled:
+            if re.search(r"^\s*default\s*:", body, flags=re.MULTILINE):
+                errors.append(
+                    f"{backend_path}: SupportsCapability must not carry a `default:` arm -- a "
+                    f"capability added later has to be a -Wswitch diagnostic, not a silent answer"
+                )
+            for name in sorted(capability_names - labelled):
+                errors.append(
+                    f"{backend_path}: SupportsCapability has no case arm for {name}"
+                )
 
     if "Status: passed" not in release:
         errors.append(f"{release_path}: passed status is missing")

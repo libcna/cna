@@ -70,6 +70,8 @@ not volume sampling or a 3D renderer.
 | `GraphicsCapability::OcclusionQuery` | `false` | framebuffer-diff/replay infeasibility proof; safe false/zero object properties |
 | `GraphicsCapability::CustomEffects` | `false` | arbitrary effects reject; the explicit bounded SkSL extension does not widen this enum |
 | `GraphicsCapability::Texture3D` | `true` | bounded mip/slice/box CPU SetData/GetData storage and shared exhaustive contracts |
+| `GraphicsCapability::MultiStreamVertexInput` | `false` | REMED-GFX-201; no vertex-stream pipeline exists to split across bindings |
+| `GraphicsCapability::Instancing` | `false` | REMED-GFX-202; the instanced draw route refuses through `Ensure3DSupported()` rather than drawing one instance |
 
 The release audit extracts this table and compares its complete enum coverage and true set with the
 live backend implementation. Any new enum or capability change must update evidence before the

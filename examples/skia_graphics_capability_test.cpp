@@ -6,6 +6,7 @@
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 
@@ -45,9 +46,14 @@ protected:
         Check(!device.SupportsCapability(GraphicsCapability::WireFrame), "wireframe is not advertised");
         Check(!device.SupportsCapability(GraphicsCapability::OcclusionQuery), "occlusion queries are not advertised");
         Check(!device.SupportsCapability(GraphicsCapability::CustomEffects), "custom effects are not advertised");
+        Check(!device.SupportsCapability(GraphicsCapability::MultiStreamVertexInput),
+              "MultiStreamVertexInput is not advertised");
+        Check(!device.SupportsCapability(GraphicsCapability::Instancing), "instancing is not advertised");
         Check(device.SupportsCapability(GraphicsCapability::Texture3D),
               "Texture3D CPU storage is advertised independently from 3D sampling");
         Check(Throws([&] { device.SetDepthTestEnabled(true); }), "3D state call throws deterministically");
+        Check(Throws([&] { device.DrawInstancedPrimitives(PrimitiveType::TriangleList, 0, 0, 3, 0, 1, 1); }),
+              "the instanced draw route refuses rather than silently drawing nothing");
         Check(Throws([&] { VertexBuffer vertexBuffer(device, 4); (void)vertexBuffer; }),
               "VertexBuffer construction throws deterministically");
         Exit();

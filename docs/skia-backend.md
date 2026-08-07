@@ -72,6 +72,36 @@ demanding Skia route; `Skia_TestMatrix_Audit` keeps CMake and both asset directo
 The effect-specific stage, source-language, uniform and texture-child boundary is documented in
 [`skia-effects.md`](skia-effects.md); arbitrary `ShaderEffect` source remains unsupported.
 
+## Post-audit backend obligations
+
+Three repository-wide rules apply to every backend and are answered here explicitly rather than
+inherited.
+
+**Exhaustive capability reporting (`REMED-GFX-201`/`-202`).** `SupportsCapability()` is an
+exhaustive `switch` over all **eleven** `CNA::GraphicsCapability` members with **no `default`
+arm**, so a member added later is a `-Wswitch` diagnostic at this call site instead of a silently
+wrong answer. `Texture3D` is the only `true`, and only for the bounded CPU transfer/readback
+storage [`skia-texture-storage.md`](skia-texture-storage.md) defines — it never promises shader
+sampling. `MultiStreamVertexInput` and `Instancing` postdate this backend and are both `false`:
+there is no vertex-stream or draw pipeline here to be multi-stream or instanced about.
+`CustomEffects` is a deliberate `false` even though the narrow, opt-in `CNA_SKIA_SKSL_V1` /
+`CNA_SKIA_SKSL_MESH_V1` ABI genuinely works — a `true` would promise the arbitrary-`Effect` support
+this backend rejects for ordinary GLSL, and under-reporting a bounded extension is the honest
+direction. `Skia_GraphicsCapability` asserts all eleven answers, and `Skia_Effect_Boundary` pins
+the `CustomEffects` decision to observed behaviour rather than leaving it an untested claim.
+
+**Truthful `WireFrame` (`REMED-GFX-209`).** Reported `false`. The accompanying rule — a backend
+reporting `false` must refuse polygon topologies before queueing rather than render solid — is
+satisfied more strongly than it requires: `Ensure3DSupported()` refuses **every** 3D draw route
+before any vertex input is inspected, so no polygon topology can reach a raster queue at all.
+`Skia_3D_Refusal` and `Skia_RasterizerState_Policy` exercise both halves.
+
+**Draw-time declaration fidelity (`REMED-GFX-DECL-GUARD`).** Not applicable, decided rather than
+waived. The guard exists for a backend that derives native input elements from a byte stride and
+would otherwise misread a declaration it cannot represent. This backend has no native vertex layout
+and no draw route that consumes one; the same reasoning `docs/stub-backend.md` records for a
+backend with no vertex pipeline applies unchanged. Adding the guard would give it no subject.
+
 ## Dependency policy
 
 CNA does not download Skia during CMake configuration. Build Skia outside the CNA source tree and pass the two resulting paths explicitly. The dependency is pinned to the official Skia commit `ebf50520d720a1ce9d842d942d04c6c39c3fbc7b`; it was the `main` revision used for the initial integration spike. Skia is distributed under the BSD-style license in its source checkout; a packaged CNA distribution must include its upstream license/notice before this experimental backend is shipped.
