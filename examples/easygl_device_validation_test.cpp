@@ -54,14 +54,17 @@ protected:
             check(threw, "SetVertexBuffers(17) throws ArgumentOutOfRangeException");
         }
 
-        // 2. The count limit is checked before entry validity: 16 default/null bindings must
-        // reach the shared null-entry guard rather than being accepted or misreported as >16.
+        // 2. REMED-GFX-222: 16 default/null bindings must be ACCEPTED, not rejected. FNA's own
+        // PrepareVertexBindingArray carries null entries through, so a null-entry guard here would
+        // reject a shape XNA allows. This assertion was written before REMED-GFX-222 landed and
+        // asserted the opposite; it is restored to the current shared contract, which every
+        // backend including this one already implements.
         {
-            bool threwNull = false;
+            bool threw = false;
             try { device.SetVertexBuffers(std::vector<VertexBufferBinding>(16)); }
-            catch (const System::ArgumentNullException&) { threwNull = true; }
-            catch (...) {}
-            check(threwNull, "SetVertexBuffers(16 null entries) throws ArgumentNullException");
+            catch (...) { threw = true; }
+            check(!threw, "SetVertexBuffers(16 null entries) is accepted");
+            device.SetVertexBuffers({});
         }
 
         // 3. Sixteen LIVE bindings are valid on a 3D backend. Raster-only Skia instead proves
