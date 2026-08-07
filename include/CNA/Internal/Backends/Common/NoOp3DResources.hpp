@@ -29,6 +29,10 @@ namespace CNA::Internal::Backends
             vertexCount_ = vertexCount;
         }
 
+        /// The declaration is accepted and dropped: nothing here renders, and the WarnAndStub
+        /// contract only requires the object to stay safe to use.
+        void SetVertexDeclaration(const VertexDeclaration& /*vertexDeclaration*/) override {}
+
         [[nodiscard]] int GetVertexCount() const override { return vertexCount_; }
 
     private:
@@ -85,17 +89,23 @@ namespace CNA::Internal::Backends
                     "NoOpTexture3DBackend: dimensions must be positive");
         }
 
-        void SetData(int /*level*/, int /*x*/, int /*y*/, int /*z*/,
-                     int /*w*/, int /*h*/, int /*depth*/,
-                     const void* /*data*/, int /*dataLength*/) override
+        /// Accepts and drops the upload. Reporting false would make the shared layer raise
+        /// NotSupportedException, which is exactly what WarnAndStub exists to avoid -- within
+        /// that explicitly opted-in policy the null object reports the transfer as handled.
+        [[nodiscard]] bool SetData(int /*level*/, int /*x*/, int /*y*/, int /*z*/,
+                                   int /*w*/, int /*h*/, int /*depth*/,
+                                   const void* /*data*/, int /*dataLength*/) override
         {
+            return true;
         }
 
-        void GetData(int /*level*/, int /*x*/, int /*y*/, int /*z*/,
-                     int /*w*/, int /*h*/, int /*depth*/,
-                     void* data, int dataLength) const override
+        /// Reads back deterministic zeros (same rationale as SetData above).
+        [[nodiscard]] bool GetData(int /*level*/, int /*x*/, int /*y*/, int /*z*/,
+                                   int /*w*/, int /*h*/, int /*depth*/,
+                                   void* data, int dataLength) const override
         {
             ZeroFill(data, dataLength);
+            return true;
         }
 
     private:
@@ -116,16 +126,22 @@ namespace CNA::Internal::Backends
                     "NoOpTextureCubeBackend: size must be positive");
         }
 
-        void SetData(int /*face*/, int /*level*/, int /*x*/, int /*y*/, int /*w*/, int /*h*/,
-                     const void* /*data*/, int /*dataLength*/) override
+        /// Accepts and drops the upload (see NoOpTexture3DBackend::SetData's rationale).
+        [[nodiscard]] bool SetData(int /*face*/, int /*level*/, int /*x*/, int /*y*/,
+                                   int /*w*/, int /*h*/,
+                                   const void* /*data*/, int /*dataLength*/) override
         {
+            return true;
         }
 
-        void GetData(int /*face*/, int /*level*/, int /*x*/, int /*y*/, int /*w*/, int /*h*/,
-                     void* data, int dataLength) const override
+        /// Reads back deterministic zeros.
+        [[nodiscard]] bool GetData(int /*face*/, int /*level*/, int /*x*/, int /*y*/,
+                                   int /*w*/, int /*h*/,
+                                   void* data, int dataLength) const override
         {
             if (data != nullptr && dataLength > 0)
                 std::memset(data, 0, static_cast<std::size_t>(dataLength));
+            return true;
         }
     };
 
@@ -144,11 +160,14 @@ namespace CNA::Internal::Backends
         void BindAsRenderTargetFace(int /*face*/) override {}
         void UnbindAsRenderTarget() override {}
 
-        void GetData(int /*face*/, int /*level*/, int /*x*/, int /*y*/, int /*w*/, int /*h*/,
-                     void* data, int dataLength) const override
+        /// Reads back deterministic zeros (see NoOpTexture3DBackend::GetData's rationale).
+        [[nodiscard]] bool GetData(int /*face*/, int /*level*/, int /*x*/, int /*y*/,
+                                   int /*w*/, int /*h*/,
+                                   void* data, int dataLength) const override
         {
             if (data != nullptr && dataLength > 0)
                 std::memset(data, 0, static_cast<std::size_t>(dataLength));
+            return true;
         }
 
     private:

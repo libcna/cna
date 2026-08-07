@@ -1345,7 +1345,7 @@ namespace CNA::Internal::Backends::FreeDirect
     }
 
     std::unique_ptr<IRenderTargetCubeBackend> FreeDirectGraphicsBackend::CreateRenderTargetCube(
-        int size, int, bool, int)
+        int size, int, bool, bool, int)
     {
         if (!ShouldStubUnsupported3DResource())
             return nullptr;

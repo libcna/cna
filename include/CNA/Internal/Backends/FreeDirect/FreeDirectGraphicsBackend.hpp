@@ -199,7 +199,7 @@ namespace CNA::Internal::Backends::FreeDirect
         std::unique_ptr<ITextureCubeBackend> CreateTextureCube(
             int size, bool mipMap, int surfaceFormat) override;
         std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(
-            int size, int depthFormat, bool mipMap = false,
+            int size, int depthFormat, bool preserveContents = false, bool mipMap = false,
             int multiSampleCount = 0) override;
         void DrawColoredPrimitives(const IVertexBufferBackend& vb,
                                    const Matrix& world, const Matrix& view, const Matrix& projection,

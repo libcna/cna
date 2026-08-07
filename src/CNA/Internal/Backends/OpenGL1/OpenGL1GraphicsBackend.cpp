@@ -153,7 +153,7 @@ if(registry_)registry_->Add(this);}
 // CPU pixel data Texture2D last shared via ShareCpuPixels() -- nullptr (a blank texture of the
 // right size) only if context recovery was disabled and no CPU shadow was ever kept.
 void OpenGL1TextureBackend::RecreateGLResource(){glGenTextures(1,&id_);glBindTexture(GL_TEXTURE_2D,id_);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);if(mipMap_&&!glGenerateMipmap_&&generateMipmapCap_)glTexParameteri(GL_TEXTURE_2D,GL_GENERATE_MIPMAP,GL_TRUE);const void*px=(cpuPixels_&&!cpuPixels_->empty())?cpuPixels_->data():nullptr;glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,width_,height_,0,GL_RGBA,GL_UNSIGNED_BYTE,px);RegenerateMips(static_cast<const uint8_t*>(px));}
-OpenGL1TextureBackend::~OpenGL1TextureBackend(){if(registry_)registry_->Remove(this);if(id_)glDeleteTextures(1,&id_);}void OpenGL1TextureBackend::BindGL()const{glBindTexture(GL_TEXTURE_2D,id_);}
+OpenGL1TextureBackend::~OpenGL1TextureBackend(){if(registry_)registry_->Remove(this);if(id_)glDeleteTextures(1,&id_);}void OpenGL1TextureBackend::BindGL(int /*unit*/)const{glBindTexture(GL_TEXTURE_2D,id_);}
 // plan_opengl1.md phase 6: mip regeneration off a level-0 update. Priority: an explicit
 // glGenerateMipmap call (works on core-profile drivers too) > the GL_GENERATE_MIPMAP texture
 // parameter already set before the level-0 upload above (driver did it automatically as a side
@@ -215,7 +215,7 @@ for(int face=0;face<6;++face)if(cpuPixels_[face])GenerateMipsCPU(GL_TEXTURE_CUBE
 }
 OpenGL1TextureCubeBackend::~OpenGL1TextureCubeBackend(){if(registry_)registry_->Remove(this);if(id_)glDeleteTextures(1,&id_);}
 void OpenGL1TextureCubeBackend::RecreateGLResource(){Build();}
-void OpenGL1TextureCubeBackend::BindGL()const{glBindTexture(GL_TEXTURE_CUBE_MAP,id_);}
+void OpenGL1TextureCubeBackend::BindGL(int /*unit*/)const{glBindTexture(GL_TEXTURE_CUBE_MAP,id_);}
 bool OpenGL1TextureCubeBackend::SetData(int face,int level,int x,int y,int w,int h,const void*data,int /*dataLength*/){if(face<0||face>=6||level<0||!data||w<=0||h<=0)return false;glBindTexture(GL_TEXTURE_CUBE_MAP,id_);glPixelStorei(GL_UNPACK_ALIGNMENT,1);glTexSubImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X+face,level,x,y,w,h,GL_RGBA,GL_UNSIGNED_BYTE,data);if(level==0&&mipMap_)RegenerateMips();return true;}
 // Desktop GL (unlike EasyGL's GLES3 target) has glGetTexImage, but it always reads the FULL
 // face/level image -- no sub-rectangle readback exists at the GL API level -- so the requested
