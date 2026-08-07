@@ -496,6 +496,13 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_skia_test(cna_test_skia_texture_storage_policy examples/skia_texture_storage_policy_test.cpp)
     cna_register_skia_raster_test(Skia_TextureStorage_Policy cna_test_skia_texture_storage_policy)
 
+    # Bounded row-stride unit audit: 13-wide/7-tall textures give level-0 rows of 13, 26 and 52
+    # bytes and level-1 rows of 6, 12 and 24, so no row is 4/8/16-aligned at either level. The
+    # GetData legs prove the packed CPU shadow; the drawn leg proves the sampling image built
+    # over it, which an exact readback alone cannot observe.
+    cna_skia_test(cna_test_skia_texture_row_stride examples/skia_texture_row_stride_test.cpp)
+    cna_register_skia_display_test(Skia_Texture_RowStride cna_test_skia_texture_row_stride)
+
     cna_skia_test(cna_test_skia_successor_resource_policy
                   examples/skia_successor_resource_policy_test.cpp)
     cna_register_skia_raster_test(Skia_SuccessorResource_Policy
