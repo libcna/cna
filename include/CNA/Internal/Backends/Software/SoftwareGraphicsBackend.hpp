@@ -2,6 +2,7 @@
 
 #include "../Common/IGraphicsBackend.hpp"
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
+#include "CNA/Internal/Backends/Software/SoftwareFramebufferAllocation.hpp"
 
 #include <array>
 #include <cstddef>
@@ -12,7 +13,7 @@
 namespace CNA::Internal::Backends::Software
 {
     /**
-     * @brief Real CPU-owned color (RGBA8) + depth (float32) buffer pair.
+     * @brief Real CPU-owned RGBA8 colour, depth and optional resolved 4x MSAA storage.
      *
      * This is the Software backend's actual state, not a bookkeeping fiction
      * (plan_software.md design decision 3) -- every pixel written here is a genuinely correct
@@ -20,14 +21,39 @@ namespace CNA::Internal::Backends::Software
      */
     struct SoftwareFramebuffer
     {
+        explicit SoftwareFramebuffer(bool allocateDepth = true,
+                                     bool allocateStencil = true)
+            : allocateDepthStorage(allocateDepth),
+              allocateStencilStorage(allocateStencil)
+        {
+        }
+
         int width = 0;
         int height = 0;
         std::vector<std::uint8_t> color;  ///< RGBA8, width*height*4 bytes.
         std::vector<float> depthBuffer;   ///< width*height floats, 0..1.
+        /// One 8-bit stencil value per pixel. It remains per-pixel when the optional four-sample
+        /// colour plane is active; it is deliberately not a per-sample depth/stencil attachment.
+        std::vector<std::uint8_t> stencilBuffer;
+        /// Four RGBA8 samples per pixel when 4x CPU MSAA is enabled; empty otherwise. `color`
+        /// remains the resolved presentation/readback image, so existing consumers never see an
+        /// unresolved sample plane.
+        std::vector<std::uint8_t> multiSampleColor;
+        int multiSampleCount = 0; ///< 0 = single sampled; the CPU implementation supports 4 only.
+        bool allocateDepthStorage = true;
+        bool allocateStencilStorage = true;
 
         void Resize(int w, int h);
+        void SetMultiSampleCount(int sampleCount);
+        [[nodiscard]] bool HasMultiSampleColor() const { return multiSampleCount == 4; }
+        [[nodiscard]] int EffectiveSampleCount() const { return HasMultiSampleColor() ? 4 : 1; }
+        /// Copies every resolved RGBA pixel into all active samples. A no-op when MSAA is off.
+        void CopyResolvedColorToMultiSample();
+        /// Resolves the per-sample colour plane into `color`. A no-op for single-sample targets.
+        void ResolveColor();
         void ClearColor(float r, float g, float b, float a);
         void ClearDepthValue(float depthValue);
+        void ClearStencilValue(int stencilValue);
     };
 
     class SoftwareVertexBufferBackend final : public IVertexBufferBackend
@@ -127,8 +153,9 @@ namespace CNA::Internal::Backends::Software
          * REMED-GFX-175. This is a count of levels whose pixels a caller actually supplied, not the
          * level count the public resource declares: a `Texture2D` created with `mipMap=true` whose
          * game only ever wrote level 0 reports 1 here, so the sampler cannot select a level nobody
-         * filled. The default of 1 keeps every resource that has no chain -- render targets, and any
-         * future colour surface -- behaving exactly as it did before mip selection existed.
+         * filled. The default of 1 keeps every resource that has no chain -- including a
+         * non-mipmapped render target and any future colour surface -- behaving exactly as it did
+         * before mip selection existed.
          *
          * @return The number of contiguously stored levels, always at least 1.
          */
@@ -260,7 +287,9 @@ namespace CNA::Internal::Backends::Software
     class SoftwareRenderTargetBackend final : public IRenderTargetBackend, public SoftwareColorSurface
     {
     public:
-        SoftwareRenderTargetBackend(int w, int h, int depthFormat, bool mipMap, int multiSampleCount);
+        SoftwareRenderTargetBackend(int w, int h, int depthFormat, bool mipMap, int multiSampleCount,
+                                    bool hasRealDepthBuffer = true,
+                                    bool hasStandaloneStencilBuffer = false);
 
         [[nodiscard]] int GetWidth() const override { return framebuffer_.width; }
         [[nodiscard]] int GetHeight() const override { return framebuffer_.height; }
@@ -280,7 +309,8 @@ namespace CNA::Internal::Backends::Software
          * applied. An unsupported or out-of-range request throws instead of leaving caller memory
          * silently unchanged.
          *
-         * @param level      Mip level; Software stores level 0 only.
+         * @param level      Mip level. Levels above zero are available only after a mipmapped
+         *                   target was unbound, which completes its CPU box-filter resolve.
          * @param x          Left edge of the requested rectangle, in pixels.
          * @param y          Top edge of the requested rectangle, in pixels.
          * @param w          Width of the requested rectangle, in pixels.
@@ -288,7 +318,8 @@ namespace CNA::Internal::Backends::Software
          * @param data       Destination for @p w * @p h tightly packed RGBA8 pixels.
          * @param dataLength Capacity of @p data in bytes.
          * @throws System::ArgumentNullException if @p data is null.
-         * @throws System::NotSupportedException if @p level is above 0.
+         * @throws System::NotSupportedException if @p level is outside this target's chain, or
+         *         if a requested generated level is not ready because its render pass is active.
          * @throws System::ArgumentOutOfRangeException if @p level is negative, the rectangle is
          *         empty or leaves the target, or @p dataLength is too small for the rectangle.
          * @return Always true -- REMED-GFX-127's "the whole region was written" report. Software's
@@ -308,29 +339,54 @@ namespace CNA::Internal::Backends::Software
          * @return The number of calls to GetData on this backend object.
          */
         [[nodiscard]] std::size_t GetReadbackCallCountEXT() const { return readbackCallCount_; }
-        void BindAsRenderTarget() override { bound_ = true; }
-        void UnbindAsRenderTarget() override { bound_ = false; }
+        void BindAsRenderTarget() override;
+        void UnbindAsRenderTarget() override;
         [[nodiscard]] int GetMultiSampleCount() const override { return multiSampleCount_; }
+        [[nodiscard]] int GetAppliedDepthStencilFormatEXT(int) const override
+        {
+            return hasRealDepthBuffer_ ? depthFormat_ : 0;
+        }
         [[nodiscard]] bool HasRealDepthBuffer(bool depthFormatWasRequested) const override
-        { return depthFormatWasRequested; }
+        { return hasRealDepthBuffer_ && depthFormatWasRequested; }
+        [[nodiscard]] bool HasRealStencilBuffer(bool stencilFormatWasRequested) const override
+        {
+            return hasStandaloneStencilBuffer_ ||
+                   (hasRealDepthBuffer_ && stencilFormatWasRequested);
+        }
 
-        // SoftwareColorSurface -- the SAME storage the rasterizer writes into. A finished target is
-        // sampleable with no resolve, no shadow copy and no extra allocation; there is no second
-        // colour buffer that could drift out of sync with what was rendered.
+        // SoftwareColorSurface -- level 0 is the SAME storage the rasterizer writes into. A
+        // finished mipmapped target additionally exposes its generated box-filter levels, with no
+        // shadow copy of level 0 that could drift out of sync with what was rendered.
         [[nodiscard]] int ColorWidth() const override { return framebuffer_.width; }
         [[nodiscard]] int ColorHeight() const override { return framebuffer_.height; }
         [[nodiscard]] const std::vector<std::uint8_t>& ColorPixels() const override
         { return framebuffer_.color; }
+        [[nodiscard]] int ColorLevelCount() const override
+        { return mipLevelsReady_ ? levelCount_ : 1; }
+        [[nodiscard]] int ColorWidth(int level) const override;
+        [[nodiscard]] int ColorHeight(int level) const override;
+        [[nodiscard]] const std::vector<std::uint8_t>& ColorPixels(int level) const override;
 
         [[nodiscard]] bool IsBound() const { return bound_; }
         [[nodiscard]] SoftwareFramebuffer& Framebuffer() { return framebuffer_; }
         [[nodiscard]] const SoftwareFramebuffer& Framebuffer() const { return framebuffer_; }
 
     private:
+        /// Regenerates levels 1..N from framebuffer level 0 with a clamped 2x2 RGBA8 box filter.
+        /// Called only as a render target leaves the active render pass.
+        void GenerateMipMaps();
+        [[nodiscard]] int MipWidth(int level) const;
+        [[nodiscard]] int MipHeight(int level) const;
+
         SoftwareFramebuffer framebuffer_;
         int depthFormat_ = 0;
         bool mipMap_ = false;
+        int levelCount_ = 1;
+        std::vector<std::vector<std::uint8_t>> mipLevels_; ///< levels 1..levelCount_-1
+        bool mipLevelsReady_ = false;
         int multiSampleCount_ = 0;
+        bool hasRealDepthBuffer_ = true;
+        bool hasStandaloneStencilBuffer_ = false;
         bool bound_ = false;
         mutable std::size_t readbackCallCount_ = 0;
     };
@@ -535,10 +591,12 @@ namespace CNA::Internal::Backends::Software
      * ReadBackbuffer() return genuinely correct pixels, with no GPU, display server, or driver
      * involved at all.
      */
-    class SoftwareGraphicsBackend final : public IGraphicsBackend
+    class SoftwareGraphicsBackend : public IGraphicsBackend
     {
     public:
-        SoftwareGraphicsBackend(int virtualWidth, int virtualHeight);
+        SoftwareGraphicsBackend(int virtualWidth, int virtualHeight,
+                                bool allocateDepthBuffer = true,
+                                bool allocateStencilBuffer = true);
         ~SoftwareGraphicsBackend() override;
 
         void Clear(float r, float g, float b, float a) override;
@@ -579,6 +637,7 @@ namespace CNA::Internal::Backends::Software
                                   float depthBias = 0.0f, float slopeScaleDepthBias = 0.0f) override;
         void ApplySamplerState(int slot, int filter, int addressU, int addressV, int maxAnisotropy) override;
         void SetBlendFactor(float r, float g, float b, float a) override;
+        void SetReferenceStencil(int value) override;
         void SetScissorRect(int x, int y, int w, int h) override;
         void SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth) override;
 
@@ -651,8 +710,9 @@ namespace CNA::Internal::Backends::Software
         /// one active colour buffer). Used by SoftwareSpriteBatchBackend so its quads honour the
         /// per-channel write mask the same way any other draw does. 15 (All) = every channel.
         [[nodiscard]] int GetColorWriteMask() const { return colorWriteMask_; }
-        /// REMED-GFX-077: the current BlendState.MultiSampleMask. Software is single-sample, so only
-        /// bit 0 is meaningful (bit 0 clear discards the fragment). 0xFFFFFFFF = all samples.
+        /// REMED-GFX-077/GDI-073: the current BlendState.MultiSampleMask. Bit 0 controls a
+        /// single-sample surface; when the optional four-sample colour plane is active, bits 0..3
+        /// independently gate its 2x2 coverage samples. 0xFFFFFFFF = all samples.
         [[nodiscard]] unsigned int GetMultiSampleMask() const { return multiSampleMask_; }
         /// The raw CullMode ordinal from the most recent ApplyRasterizerState() call (SOFTWARE-81).
         /// Used by SoftwareSpriteBatchBackend so its quads are culled the same way real FNA's
@@ -673,6 +733,14 @@ namespace CNA::Internal::Backends::Software
         /// the unit convention.
         [[nodiscard]] float GetDepthBias() const { return depthBias_; }
         [[nodiscard]] float GetSlopeScaleDepthBias() const { return slopeScaleDepthBias_; }
+        [[nodiscard]] bool IsStencilTestEnabled() const { return stencilTestEnabled_; }
+        [[nodiscard]] int GetStencilCompareFunction() const { return stencilCompareFunction_; }
+        [[nodiscard]] int GetStencilPassOperation() const { return stencilPassOperation_; }
+        [[nodiscard]] int GetStencilFailOperation() const { return stencilFailOperation_; }
+        [[nodiscard]] int GetStencilDepthFailOperation() const { return stencilDepthFailOperation_; }
+        [[nodiscard]] int GetStencilReadMask() const { return stencilReadMask_; }
+        [[nodiscard]] int GetStencilWriteMask() const { return stencilWriteMask_; }
+        [[nodiscard]] int GetReferenceStencil() const { return referenceStencil_; }
 
         /// REMED-GFX-073: the active GraphicsDevice.Viewport rectangle in pixels of the currently
         /// bound target. When no custom viewport has been set (SetViewport never called), the full
@@ -709,7 +777,39 @@ namespace CNA::Internal::Backends::Software
             return samplerSlots_[static_cast<std::size_t>(slot)];
         }
 
+    protected:
+        /**
+         * @brief Reports a SpriteBatch quad's clipped inclusive candidate-pixel bounds.
+         *
+         * The Software SpriteBatch invokes this only after applying origin, rotation, its
+         * transform matrix, viewport origin, viewport clipping, and optional scissor clipping.
+         * Presentation backends layered on this rasterizer can therefore track conservative
+         * display damage without maintaining a second copy of the quad geometry.
+         */
+        virtual void OnSpriteRasterBounds(int /*minX*/, int /*minY*/,
+                                          int /*maxX*/, int /*maxY*/) {}
+
+        /// The real backbuffer, independently of any currently bound render target. Presentation
+        /// backends layered on this CPU rasterizer use it rather than accidentally displaying an
+        /// off-screen target that happens to be active when Present() is called.
+        [[nodiscard]] SoftwareFramebuffer& BackbufferFramebuffer() { return backbuffer_; }
+        [[nodiscard]] const SoftwareFramebuffer& BackbufferFramebuffer() const { return backbuffer_; }
+
     private:
+        friend class SoftwareSpriteBatchBackend;
+
+        /// Submits one already-transformed SpriteBatch quad to the shared CPU triangle rasterizer.
+        /// Keeping this narrow bridge private lets SoftwareSpriteBatchBackend own the public draw
+        /// geometry/transform path in its own translation unit while all CPU 2D and 3D triangles
+        /// continue to share one fragment implementation.
+        void RasterizeSpriteQuad(const ITextureBackend& texture,
+                                 const Vector2& c0, const Vector2& c1,
+                                 const Vector2& c2, const Vector2& c3,
+                                 float layerDepth, float r, float g, float b, float a,
+                                 float u1, float v1, float u2, float v2,
+                                 Effect* customEffect,
+                                 const SoftwareSamplerState& spriteSampler);
+
         /// XNA exposes 16 texture sampler slots; ApplySamplerState validates against this.
         static constexpr int kMaxSamplerSlots = 16;
         /// REMED-GFX-150: the per-slot SamplerState the rasterizer's sampler consults. Previously
@@ -747,8 +847,9 @@ namespace CNA::Internal::Backends::Software
         /// REMED-GFX-077: raw XNA ColorWriteChannels of the current BlendState, slot 0 (bit0=R,
         /// bit1=G, bit2=B, bit3=A). Defaults to 15 (All), matching XNA's default BlendState.
         int colorWriteMask_ = 15;
-        /// REMED-GFX-077: current BlendState.MultiSampleMask. Single-sample ⇒ only bit 0 matters.
-        /// Defaults to 0xFFFFFFFF (all samples), matching XNA's default (-1).
+        /// REMED-GFX-077/GDI-073: current BlendState.MultiSampleMask. Single-sample surfaces use
+        /// bit 0; the optional four-sample colour plane uses bits 0..3. Defaults to 0xFFFFFFFF (all
+        /// samples), matching XNA's default (-1).
         unsigned int multiSampleMask_ = 0xFFFFFFFFu;
         /// Raw CullMode ordinal (0=None, 1=CullClockwiseFace, 2=CullCounterClockwiseFace) from the
         /// most recent ApplyRasterizerState() call (SOFTWARE-81). Defaults to 2
@@ -776,6 +877,17 @@ namespace CNA::Internal::Backends::Software
         /// via ComputeDepthBiasOffset (see the .cpp), matching the GPU backends' polygon-offset contract.
         float depthBias_ = 0.0f;
         float slopeScaleDepthBias_ = 0.0f;
+
+        // 8-bit stencil state, captured by the GDI 2D masking path and stored here beside the
+        // shared CPU depth state. The Software backend keeps its established default of disabled.
+        bool stencilTestEnabled_ = false;
+        int stencilCompareFunction_ = 0; // CompareFunction::Always
+        int stencilPassOperation_ = 0; // StencilOperation::Keep
+        int stencilFailOperation_ = 0;
+        int stencilDepthFailOperation_ = 0;
+        int stencilReadMask_ = 0xFF;
+        int stencilWriteMask_ = 0xFF;
+        int referenceStencil_ = 0;
 
         /// REMED-GFX-073: current GraphicsDevice.Viewport, stored by SetViewport() and consumed by
         /// the SpriteBatch path (GetActiveViewport()). GraphicsDevice pushes this on every viewport

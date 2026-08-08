@@ -145,6 +145,10 @@ target_link_libraries(CNA
 # archive cycle. SOFTWARE inherits IGraphicsBackend's default instanced-draw method, whose
 # permanently-2D guard shares that diagnostic helper (the guard is inactive on SOFTWARE because
 # ThreeD is supported, but the static object still contains the symbol reference).
+#
+# GDI's private Software CPU rasterizer is now compiled directly into the GDI archive and also
+# calls CNA-owned math and colour implementations. Without the declared cycle MinGW scans
+# libCNA.a before that rasterizer exposes its references.
 if(CNA_GRAPHICS_BACKEND STREQUAL "D3D11"
    OR CNA_GRAPHICS_BACKEND STREQUAL "D3D12"
    OR CNA_GRAPHICS_BACKEND STREQUAL "D3D9"
@@ -159,7 +163,8 @@ if(CNA_GRAPHICS_BACKEND STREQUAL "D3D11"
    OR CNA_GRAPHICS_BACKEND STREQUAL "OPENGLES"
    OR CNA_GRAPHICS_BACKEND STREQUAL "OPENGL33"
    OR CNA_GRAPHICS_BACKEND STREQUAL "WEBGL1"
-   OR CNA_GRAPHICS_BACKEND STREQUAL "WEBGL2")
+   OR CNA_GRAPHICS_BACKEND STREQUAL "WEBGL2"
+   OR CNA_GRAPHICS_BACKEND STREQUAL "GDI")
     target_link_libraries(${BACKEND_TARGET} PRIVATE CNA)
 endif()
 

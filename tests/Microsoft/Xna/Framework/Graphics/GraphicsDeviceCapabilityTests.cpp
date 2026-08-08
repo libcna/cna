@@ -11,6 +11,7 @@
 #include <gtest/gtest.h>
 
 #include "CNA/GraphicsCapability.hpp"
+#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
@@ -146,6 +147,13 @@ TEST(GraphicsDeviceCapabilityTest, SupportsDepthStencilBuffer)
     EXPECT_TRUE(gd.SupportsCapability(GraphicsCapability::DepthStencilBuffer));
 }
 #endif
+
+TEST(GraphicsDeviceCapabilityTest, SupportsStencilBuffer)
+{
+    GraphicsDevice gd;
+    EXPECT_EQ(gd.SupportsCapability(GraphicsCapability::StencilBuffer),
+              gd.GetBackend().SupportsStencilBuffer());
+}
 
 TEST(GraphicsDeviceCapabilityTest, SupportsMultipleRenderTargets)
 {

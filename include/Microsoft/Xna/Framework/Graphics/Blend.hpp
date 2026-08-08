@@ -30,7 +30,7 @@ namespace Microsoft::Xna::Framework::Graphics
         BlendFactor,
         /** @brief Each component is multiplied by the inverse of the GraphicsDevice::BlendFactor constant. */
         InverseBlendFactor,
-        /** @brief Each component is multiplied by min(As, 1-As): {f, f, f, 1} where f = min(As, 1-As). */
+        /** @brief RGB is multiplied by min(As, 1-Ad); alpha is multiplied by 1. */
         SourceAlphaSaturation,
     };
 }

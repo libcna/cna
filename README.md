@@ -199,6 +199,7 @@ CNA supports backend selection at build-time via `CNA_GRAPHICS_BACKEND` (choose 
 - `SOKOL` (sokol_gfx single-header GPU abstraction; dispatches onto desktop OpenGL 4.1 core here)
 - `DILIGENT` (experimental)
 - `GLIDE` (32-bit Windows-only; requires external `glide3x.dll` at runtime)
+- `GDI` (Windows-only, 2D-only)
 
 ### Tradeoffs
 
@@ -233,6 +234,13 @@ CNA supports backend selection at build-time via `CNA_GRAPHICS_BACKEND` (choose 
     - See [`docs/skia-backend.md`](docs/skia-backend.md) for the exact capability policy and
       [`docs/skia-developer-build.md`](docs/skia-developer-build.md) for the pinned artifact,
       fresh-checkout build, Xvfb tests, fallback policy, and diagnostics.
+
+- **GDI backend (Windows-only, 2D-only)**
+    - CPU-rasterizes CNA's 2D SpriteBatch/textures and presents the resulting RGBA8 backbuffer to
+      the SDL window's native `HWND` using classic Win32 GDI.
+    - Intended for compatibility, tools, UI, and modest-resolution 2D games; it is not a hardware-
+      accelerated replacement for the D3D/SDL_GPU backends and explicitly rejects 3D operations.
+      See [`docs/gdi-backend.md`](docs/gdi-backend.md) for its exact supported surface.
 
 ## 7. 🌐 Networking, Services & Avatar
 

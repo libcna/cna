@@ -34,8 +34,41 @@ if(CNA_GRAPHICS_BACKEND STREQUAL "ASCII")
     target_include_directories(cna_backend_graphics_sdl_renderer_core PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 endif()
 
+# GDI presents the Software backend's CPU framebuffer through classic Win32 GDI. Keep this dependency
+# explicit: future Software translation units must not enter the 2D-only GDI build without review.
+# GDI consumes the CPU 2D implementation through a dedicated translation unit. It deliberately
+# compiles neither the Software 3D/cube resource implementations nor the 3D draw entry points;
+# the full SOFTWARE backend compiles the remaining general implementation plus the shared 2D units.
+set(CNA_GDI_SOFTWARE_SOURCES)
+if(CNA_GRAPHICS_BACKEND STREQUAL "GDI")
+    set(CNA_GDI_SOFTWARE_SOURCES
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/CNA/Internal/Backends/Software/SoftwareFramebufferAllocation.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/CNA/Internal/Backends/Software/SoftwareTextureAllocation.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/CNA/Internal/Backends/Software/SoftwareFramebuffer.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/CNA/Internal/Backends/Software/SoftwareTexture2D.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/CNA/Internal/Backends/Software/SoftwareRenderTarget2D.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/CNA/Internal/Backends/Software/SoftwareGraphicsBackend2DState.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/CNA/Internal/Backends/Software/SoftwareSpriteBatch.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/CNA/Internal/Backends/Software/SoftwareGraphicsBackend2D.cpp"
+    )
+    # GDI-078: report the actual GDI archive boundary at configure time, so plan_gdi.md/NEXT_gdi.md
+    # source/object counts can be checked against generated evidence instead of a copied number.
+    list(LENGTH CNA_GDI_SOFTWARE_SOURCES CNA_GDI_SHARED_SOURCE_COUNT)
+    math(EXPR CNA_GDI_ARCHIVE_TOTAL "${CNA_GDI_SHARED_SOURCE_COUNT} + 3")
+    message(STATUS
+        "CNA: GDI backend archive = ${CNA_GDI_SHARED_SOURCE_COUNT} shared CPU-2D sources + 3 "
+        "GDI-owned units = ${CNA_GDI_ARCHIVE_TOTAL} translation units")
+endif()
+
 # Backend target
 file(GLOB BACKEND_SOURCES "${BACKEND_DIR}/*.cpp")
+if(CNA_GRAPHICS_BACKEND STREQUAL "SOFTWARE")
+    # This wrapper includes SoftwareGraphicsBackend.cpp with CNA_SOFTWARE_2D_ONLY for the GDI
+    # archive. The complete SOFTWARE archive compiles the implementation directly, once.
+    list(REMOVE_ITEM BACKEND_SOURCES
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/CNA/Internal/Backends/Software/SoftwareGraphicsBackend2D.cpp")
+endif()
+list(APPEND BACKEND_SOURCES ${CNA_GDI_SOFTWARE_SOURCES})
 
 # plan_dx9.md Phase D9-11 (D9-110/D9-111), design decision 16: D3D9EffectBackend.cpp calls
 # D3DCompile() (the custom-ShaderEffect runtime compile path), which needs d3dcompiler -- but the
@@ -75,6 +108,8 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "GLIDE")
     # Glide itself is dynamically loaded at runtime (glide3x.dll); SDL is used only to obtain the
     # application's existing Win32 HWND. Do not link or vendor a particular Glide emulator here.
     target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3)
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "GDI")
+    target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 gdi32)
 elseif(CNA_GRAPHICS_BACKEND STREQUAL "OPENGLES" OR CNA_GRAPHICS_BACKEND STREQUAL "OPENGL33"
         OR CNA_GRAPHICS_BACKEND STREQUAL "WEBGL1" OR CNA_GRAPHICS_BACKEND STREQUAL "WEBGL2")
     target_link_libraries(${BACKEND_TARGET} PRIVATE easy-gl SDL3::SDL3)

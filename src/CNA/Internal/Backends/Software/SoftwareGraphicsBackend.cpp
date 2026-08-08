@@ -1,4 +1,5 @@
 #include "CNA/Internal/Backends/Software/SoftwareGraphicsBackend.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ColorMatrixEffect.hpp"
 
 #include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "System/ArgumentNullException.hpp"
@@ -11,9 +12,11 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <new>
 #include <set>
 #include <stdexcept>
 #include <string>
+#include <utility>
 
 namespace CNA::Internal::Backends::Software
 {
@@ -85,7 +88,7 @@ namespace CNA::Internal::Backends::Software
                 case 11: return 1.0f - constant[channel];         // InverseBlendFactor
                 case 12: return channel == 3                      // SourceAlphaSaturation
                     ? 1.0f
-                    : std::min(source[3], 1.0f - source[3]);
+                    : std::min(source[3], 1.0f - destination[3]);
                 default:
                     throw std::runtime_error(
                         "SoftwareGraphicsBackend: unsupported Blend factor ordinal");
@@ -123,6 +126,21 @@ namespace CNA::Internal::Backends::Software
             return std::clamp(ApplyBlendFunction(function, sourceTerm, destinationTerm), 0.0f, 1.0f);
         }
 
+        /// One CPU stencil state snapshot.  The shared framebuffer stores one unsigned 8-bit
+        /// stencil value per pixel.  GDI uses this through SpriteBatch for 2D masking; retaining
+        /// it in the shared rasterizer also keeps a target switch from losing its stencil image.
+        struct RasterStencilState
+        {
+            bool testEnabled = false;
+            int compareFunction = 0; // CompareFunction::Always
+            int passOperation = 0; // StencilOperation::Keep
+            int failOperation = 0;
+            int depthFailOperation = 0;
+            std::uint8_t readMask = 0xFF;
+            std::uint8_t writeMask = 0xFF;
+            std::uint8_t reference = 0;
+        };
+
         /// REMED-GFX-030: XNA/FNA compares the incoming fragment depth (left operand) with the
         /// currently stored depth (right operand). Every public CompareFunction is mapped explicitly;
         /// an invalid ordinal is rejected instead of silently falling back to a different relation.
@@ -156,9 +174,69 @@ namespace CNA::Internal::Backends::Software
             // As on the correct EasyGL/D3D paths, disabling the depth test disables the complete
             // depth operation even if a custom state happens to retain writeEnable=true.
             if (state.testEnabled && state.writeEnabled)
+            {
+                if (fb.depthBuffer.empty())
+                    throw std::logic_error(
+                        "Software rasterizer received enabled depth state without depth storage.");
                 fb.depthBuffer[pixelIndex] = depth;
+            }
         }
 
+        bool StencilComparisonPasses(std::uint8_t reference, std::uint8_t stored,
+                                     std::uint8_t readMask, int compareFunction)
+        {
+            const int incoming = reference & readMask;
+            const int destination = stored & readMask;
+            switch (compareFunction)
+            {
+                case 0: return true;                    // Always
+                case 1: return false;                   // Never
+                case 2: return incoming <  destination; // Less
+                case 3: return incoming <= destination; // LessEqual
+                case 4: return incoming == destination; // Equal
+                case 5: return incoming >= destination; // GreaterEqual
+                case 6: return incoming >  destination; // Greater
+                case 7: return incoming != destination; // NotEqual
+                default:
+                    throw std::runtime_error(
+                        "SoftwareGraphicsBackend: unsupported stencil CompareFunction ordinal");
+            }
+        }
+
+        std::uint8_t ApplyStencilOperation(std::uint8_t stored, std::uint8_t reference,
+                                           int operation)
+        {
+            switch (operation)
+            {
+                case 0: return stored; // Keep
+                case 1: return 0; // Zero
+                case 2: return reference; // Replace
+                case 3: return static_cast<std::uint8_t>(stored + 1u); // Increment (wrap)
+                case 4: return static_cast<std::uint8_t>(stored - 1u); // Decrement (wrap)
+                case 5: return stored == 0xFF ? 0xFF : static_cast<std::uint8_t>(stored + 1u);
+                case 6: return stored == 0 ? 0 : static_cast<std::uint8_t>(stored - 1u);
+                case 7: return static_cast<std::uint8_t>(~stored); // Invert
+                default:
+                    throw std::runtime_error(
+                        "SoftwareGraphicsBackend: unsupported StencilOperation ordinal");
+            }
+        }
+
+        void WriteStencil(SoftwareFramebuffer& fb, const RasterStencilState& state,
+                          std::size_t pixelIndex, int operation)
+        {
+            if (fb.stencilBuffer.empty())
+                throw std::logic_error(
+                    "Software rasterizer received enabled stencil state without stencil storage.");
+            const std::uint8_t oldValue = fb.stencilBuffer[pixelIndex];
+            const std::uint8_t operationValue =
+                ApplyStencilOperation(oldValue, state.reference, operation);
+            fb.stencilBuffer[pixelIndex] = static_cast<std::uint8_t>(
+                (oldValue & static_cast<std::uint8_t>(~state.writeMask)) |
+                (operationValue & state.writeMask));
+        }
+
+#ifndef CNA_SOFTWARE_2D_ONLY
         /// One vertex in clip space (before the perspective divide), attributes NOT premultiplied
         /// by W (SOFTWARE-83). Clip space is still linear -- position and attributes can both be
         /// interpolated with a plain lerp here, unlike the post-divide RasterVertex above.
@@ -298,6 +376,7 @@ namespace CNA::Internal::Backends::Software
             out.nz = cv.nz * invW;
             return out;
         }
+#endif
 
         float EdgeFunction(float ax, float ay, float bx, float by, float px, float py)
         {
@@ -357,6 +436,38 @@ namespace CNA::Internal::Backends::Software
         {
             int minX = 0, minY = 0, maxX = -1, maxY = -1;
         };
+
+        /**
+         * Converts floating-point geometry bounds into clipped inclusive candidate-pixel bounds.
+         * Comparisons against the framebuffer-sized clip happen before float-to-int conversion,
+         * avoiding undefined casts for huge coordinates and infinities. NaN and empty or wholly
+         * clipped geometry deterministically produce no bounds.
+         */
+        bool CalculateRasterBounds(float minXf, float minYf, float maxXf, float maxYf,
+                                   const RasterClipRect& clip,
+                                   int& minX, int& minY, int& maxX, int& maxY)
+        {
+            if (clip.minX > clip.maxX || clip.minY > clip.maxY ||
+                std::isnan(minXf) || std::isnan(minYf) ||
+                std::isnan(maxXf) || std::isnan(maxYf) ||
+                static_cast<double>(minXf) >= static_cast<double>(clip.maxX) + 1.0 ||
+                static_cast<double>(minYf) >= static_cast<double>(clip.maxY) + 1.0 ||
+                static_cast<double>(maxXf) <= static_cast<double>(clip.minX) - 1.0 ||
+                static_cast<double>(maxYf) <= static_cast<double>(clip.minY) - 1.0)
+            {
+                return false;
+            }
+
+            minX = minXf <= static_cast<float>(clip.minX)
+                ? clip.minX : static_cast<int>(std::floor(minXf));
+            minY = minYf <= static_cast<float>(clip.minY)
+                ? clip.minY : static_cast<int>(std::floor(minYf));
+            maxX = maxXf >= static_cast<float>(clip.maxX)
+                ? clip.maxX : static_cast<int>(std::ceil(maxXf));
+            maxY = maxYf >= static_cast<float>(clip.maxY)
+                ? clip.maxY : static_cast<int>(std::ceil(maxYf));
+            return minX <= maxX && minY <= maxY;
+        }
 
         /// REMED-GFX-150: env-gated sampler trace. This is how the point path's "exactly one texel
         /// fetch per sample" claim is MEASURED rather than asserted from reading the code, and how a
@@ -895,6 +1006,7 @@ namespace CNA::Internal::Backends::Software
             return (lambda > 0.0f) ? lambda : 0.0f;
         }
 
+#ifndef CNA_SOFTWARE_2D_ONLY
         /// SOFTWARE-82: applies a column-major 4x4 matrix (GpuDrawParams::worldColMajor's own
         /// layout, and SkinnedEffect's boneTransforms per-bone entries) to a vector using the
         /// standard column-vector convention `v' = M*v` -- deliberately NOT going through CNA's
@@ -1195,6 +1307,7 @@ namespace CNA::Internal::Backends::Software
                          static_cast<int>(std::clamp(outG, 0.0f, 1.0f) * 255.0f),
                          static_cast<int>(std::clamp(outB, 0.0f, 1.0f) * 255.0f));
         }
+#endif
 
         /// SOFTWARE-81: whether a triangle with the given signed screen-space `area` should be
         /// culled under the given raw CullMode ordinal (0=None, 1=CullClockwiseFace,
@@ -1218,6 +1331,24 @@ namespace CNA::Internal::Backends::Software
         /// SpriteBatch always draws all three edges of each of its two quad triangles, so a wireframe
         /// sprite shows its split diagonal -- real submitted geometry, matching D3D11/FNA.
         enum : unsigned { kEdgeV0V1 = 1u, kEdgeV1V2 = 2u, kEdgeV2V0 = 4u, kEdgeAll = 7u };
+
+        /// A filled polygon split into two triangles must give its shared diagonal to exactly one
+        /// triangle.  The edge-function fill is intentionally inclusive on all three edges for an
+        /// individual triangle; without this narrow exclusion, an alpha-blended quad draws every
+        /// pixel on an exactly representable diagonal twice.  `edgeValues` map to edges V1-V2,
+        /// V2-V0 and V0-V1 respectively (the barycentric convention used below).
+        [[nodiscard]] bool IsExcludedFillEdge(unsigned excludedEdges, float edgeV1V2,
+                                              float edgeV2V0, float edgeV0V1, float area)
+        {
+            if (excludedEdges == 0u)
+                return false;
+            // The scale keeps this a boundary test after transformations rather than a thin
+            // interior strip, while accepting harmless arithmetic noise on a shared edge.
+            const float tolerance = std::max(1.0e-6f, std::fabs(area) * 1.0e-6f);
+            return ((excludedEdges & kEdgeV1V2) != 0u && std::fabs(edgeV1V2) <= tolerance) ||
+                   ((excludedEdges & kEdgeV2V0) != 0u && std::fabs(edgeV2V0) <= tolerance) ||
+                   ((excludedEdges & kEdgeV0V1) != 0u && std::fabs(edgeV0V1) <= tolerance);
+        }
 
         /// REMED-GFX-082: Liang-Barsky clip of the parametric segment P(t) = a + t*(b - a), t in
         /// [0,1], to the inclusive pixel rectangle [clip.minX,maxX] x [clip.minY,maxY]. Returns the
@@ -1289,6 +1420,7 @@ namespace CNA::Internal::Backends::Software
         /// byte-identical for the Solid fill and reused verbatim by the WireFrame line walk. The clip
         /// guard is a no-op for the fill loop (its bounding box is already clamped to `clip`) and the
         /// safety net for the line walk.
+#ifndef CNA_SOFTWARE_2D_ONLY
         inline void WriteColoredFragment(SoftwareFramebuffer& fb, const RasterDepthState& depthState,
                                          const RasterClipRect& clip, int x, int y,
                                          float depth, float invW, float pr, float pg, float pb, float pa,
@@ -1305,8 +1437,14 @@ namespace CNA::Internal::Backends::Software
             const std::size_t pixelIndex = static_cast<std::size_t>(y) * static_cast<std::size_t>(fb.width) +
                                            static_cast<std::size_t>(x);
             // REMED-GFX-030: comparison precedes every color/depth write.
-            if (!DepthFragmentPasses(depthState, depth, fb.depthBuffer[pixelIndex]))
-                return;
+            if (depthState.testEnabled)
+            {
+                if (fb.depthBuffer.empty())
+                    throw std::logic_error(
+                        "Software rasterizer received enabled depth state without depth storage.");
+                if (!DepthFragmentPasses(depthState, depth, fb.depthBuffer[pixelIndex]))
+                    return;
+            }
             const float r = pr / invW, g = pg / invW, b = pb / invW, a = pa / invW;
             // Depth is written independently of the colour write mask (REMED-GFX-077 Phase 11:
             // ColorWriteChannels controls only colour writes, never depth). REMED-GFX-030: a
@@ -1332,7 +1470,8 @@ namespace CNA::Internal::Backends::Software
                                const RasterClipRect& clip,
                                const RasterVertex& v0, const RasterVertex& v1, const RasterVertex& v2,
                                int colorWriteMask, unsigned int multiSampleMask,
-                               bool wireframe = false, unsigned edgeMask = kEdgeAll)
+                               bool wireframe = false, unsigned edgeMask = kEdgeAll,
+                               unsigned fillExcludedEdges = 0u)
         {
             const float area = EdgeFunction(v0.x, v0.y, v1.x, v1.y, v2.x, v2.y);
             if (area == 0.0f)
@@ -1376,10 +1515,10 @@ namespace CNA::Internal::Backends::Software
             // active Viewport) instead of the raw framebuffer -- pixels outside the Viewport are
             // never touched. A default full-target viewport yields the pre-GFX-079
             // [0,width-1] x [0,height-1] clamp byte-for-byte.
-            const int minX = std::max(clip.minX, static_cast<int>(std::floor(minXf)));
-            const int maxX = std::min(clip.maxX, static_cast<int>(std::ceil(maxXf)));
-            const int minY = std::max(clip.minY, static_cast<int>(std::floor(minYf)));
-            const int maxY = std::min(clip.maxY, static_cast<int>(std::ceil(maxYf)));
+            int minX = 0, minY = 0, maxX = -1, maxY = -1;
+            if (!CalculateRasterBounds(minXf, minYf, maxXf, maxYf, clip,
+                                       minX, minY, maxX, maxY))
+                return;
 
             for (int y = minY; y <= maxY; ++y)
             {
@@ -1395,6 +1534,8 @@ namespace CNA::Internal::Backends::Software
                     const bool inside = (w0 >= 0.0f && w1 >= 0.0f && w2 >= 0.0f) ||
                                         (w0 <= 0.0f && w1 <= 0.0f && w2 <= 0.0f);
                     if (!inside)
+                        continue;
+                    if (IsExcludedFillEdge(fillExcludedEdges, w0, w1, w2, area))
                         continue;
 
                     const float lambda0 = w0 / area;
@@ -1416,9 +1557,11 @@ namespace CNA::Internal::Backends::Software
                 }
             }
         }
+#endif
 
         // ---- Phase S5/S6: generalized (textured/blended/effect-driven) rasterization ----
 
+#ifndef CNA_SOFTWARE_2D_ONLY
         /// Transforms a vertex whose byte layout is inferred from `stride` (plan_software.md
         /// design decision 2: 16=VertexPositionColor, 20=VertexPositionTexture,
         /// 24=VertexPositionColorTexture, 32=VertexPositionNormalTexture (SOFTWARE-82,
@@ -1549,6 +1692,7 @@ namespace CNA::Internal::Backends::Software
             }
             return out;
         }
+#endif
 
         /// Builds a RasterVertex directly from already-final screen-space pixel coordinates, with
         /// no perspective divide needed (invW=1) -- used by SpriteBatch's own 2D quads, which are
@@ -1627,6 +1771,7 @@ namespace CNA::Internal::Backends::Software
             SoftwareBlendState blendState;
             std::array<float, 4> blendFactor;
             RasterDepthState depthState; // REMED-GFX-030: per-draw test/write/function snapshot
+            RasterStencilState stencilState; // GDI-026: per-draw 8-bit stencil snapshot
             int colorWriteMask;           // REMED-GFX-077: raw XNA ColorWriteChannels (bit0=R..bit3=A)
             unsigned int multiSampleMask; // REMED-GFX-077: single-sample ⇒ only bit 0 is meaningful
             // REMED-GFX-150: the SamplerState of each bound texture slot, resolved once per draw so
@@ -1660,13 +1805,18 @@ namespace CNA::Internal::Backends::Software
         inline void WriteShadedFragment(SoftwareFramebuffer& fb, const ShadedContext& ctx,
                                         const RasterClipRect& clip, int x, int y, float depth, float invW,
                                         float pr, float pg, float pb, float pa, float pu, float pv,
-                                        float pwpx, float pwpy, float pwpz, float pnx, float pny, float pnz)
+                                        float pwpx, float pwpy, float pwpz, float pnx, float pny, float pnz,
+                                        unsigned int coverageMask = 0xFFFFFFFFu)
         {
             if (x < clip.minX || x > clip.maxX || y < clip.minY || y > clip.maxY)
                 return;
-            // REMED-GFX-077: single-sample MultiSampleMask — bit 0 clear discards the fragment
-            // entirely (no colour, no depth). Default 0xFFFFFFFF keeps bit 0 set.
-            if ((ctx.multiSampleMask & 1u) == 0u)
+            // GDI-025: 4x CPU MSAA evaluates a 2x2 sub-pixel coverage pattern in the triangle
+            // walker below. MultiSampleMask gates those actual samples; single-sample backends
+            // retain the established bit-0 behavior exactly.
+            const unsigned int availableSamples = fb.HasMultiSampleColor() ? 0xFu : 0x1u;
+            const unsigned int activeSamples =
+                ctx.multiSampleMask & coverageMask & availableSamples;
+            if (activeSamples == 0u)
                 return;
             // REMED-GFX-182: the cube trace reports the same destination pixel, so this stamp is
             // shared by both traces rather than tied to the 2D one.
@@ -1674,9 +1824,36 @@ namespace CNA::Internal::Backends::Software
             { g_samplerTrace.fragX = x; g_samplerTrace.fragY = y; }
             const std::size_t pixelIndex = static_cast<std::size_t>(y) * static_cast<std::size_t>(fb.width) +
                                            static_cast<std::size_t>(x);
-            // REMED-GFX-030: comparison precedes shading and every color/depth write.
-            if (!DepthFragmentPasses(ctx.depthState, depth, fb.depthBuffer[pixelIndex]))
+            if (ctx.stencilState.testEnabled && fb.stencilBuffer.empty())
+                throw std::logic_error(
+                    "Software rasterizer received enabled stencil state without stencil storage.");
+            // Stencil runs before depth and shading, matching the GPU fragment-test order. GDI-073
+            // deliberately keeps one stencil byte per PIXEL: after sample-mask/coverage rejection,
+            // this comparison/operation runs once for the triangle fragment and gates its complete
+            // active colour-sample set. It does not claim a per-sample depth/stencil attachment.
+            // A failed stencil test updates only StencilFail and must not reach depth or colour.
+            if (ctx.stencilState.testEnabled && !StencilComparisonPasses(
+                    ctx.stencilState.reference, fb.stencilBuffer[pixelIndex],
+                    ctx.stencilState.readMask, ctx.stencilState.compareFunction))
+            {
+                WriteStencil(fb, ctx.stencilState, pixelIndex, ctx.stencilState.failOperation);
                 return;
+            }
+            // REMED-GFX-030: comparison precedes shading and every color/depth write.
+            if (ctx.depthState.testEnabled && fb.depthBuffer.empty())
+                throw std::logic_error(
+                    "Software rasterizer received enabled depth state without depth storage.");
+            if (ctx.depthState.testEnabled &&
+                !DepthFragmentPasses(ctx.depthState, depth, fb.depthBuffer[pixelIndex]))
+            {
+                if (ctx.stencilState.testEnabled)
+                    WriteStencil(fb, ctx.stencilState, pixelIndex,
+                                 ctx.stencilState.depthFailOperation);
+                return;
+            }
+
+            if (ctx.stencilState.testEnabled)
+                WriteStencil(fb, ctx.stencilState, pixelIndex, ctx.stencilState.passOperation);
 
             float r = pr / invW, g = pg / invW, b = pb / invW, a = pa / invW;
 
@@ -1720,6 +1897,26 @@ namespace CNA::Internal::Backends::Software
             b *= ctx.params.diffuseColor[2];
             a *= ctx.params.diffuseColor[3];
 
+            // GDI-022: ColorMatrixEffect is intentionally a small fixed CPU SpriteBatch effect,
+            // not a shader language. It acts after the ordinary texture/tint calculation and
+            // before stock-effect additions and BlendState, so its output is the source colour
+            // consumed by the normal XNA blend implementation.
+            if (ctx.params.cpu2DColorMatrixEnabled)
+            {
+                const float source[4] = { r, g, b, a };
+                const auto transform = [&](int row) {
+                    const float* m = ctx.params.cpu2DColorMatrix + row * 4;
+                    return std::clamp(m[0] * source[0] + m[1] * source[1] +
+                                      m[2] * source[2] + m[3] * source[3] +
+                                      ctx.params.cpu2DColorOffset[row], 0.0f, 1.0f);
+                };
+                r = transform(0);
+                g = transform(1);
+                b = transform(2);
+                a = transform(3);
+            }
+
+#ifndef CNA_SOFTWARE_2D_ONLY
             if (ctx.useEnvMap)
             {
                 // EnvironmentMapEffect (SOFTWARE-82), FNA's PSEnvMap/PSEnvMapSpecular formula, minus
@@ -1760,60 +1957,66 @@ namespace CNA::Internal::Backends::Software
 
                 if (g_cubeTrace.enabled) PrintCubeTraceLine(r, g, b);   // REMED-GFX-182
             }
+#endif
 
             // Depth is written independently of the colour write mask (REMED-GFX-077 Phase 11:
             // ColorWriteChannels never gates depth — only the colour channels below).
             // REMED-GFX-030: DepthRead reaches this point but leaves stored depth untouched.
             WritePassingDepth(fb, ctx.depthState, pixelIndex, depth);
 
-            const std::size_t colorIndex = pixelIndex * 4;
-            // REMED-GFX-077: final colour channels (opaque store or blended result). Each channel is
+            // REMED-GFX-077: final colour channels (opaque store or exact XNA blend result). Each channel is
             // gated by BlendState.ColorWriteChannels — a masked-off channel keeps its existing
             // destination byte (identity), applied AFTER blending (Phase 10). The common All(15)
             // path writes every channel exactly as before.
-            float outR, outG, outB, outA;
-            if (ctx.blendState.IsOpaqueIdentity())
+            const std::array<float, 4> source{r, g, b, a};
+            const auto writeBlendedColor = [&](std::uint8_t* destinationBytes) {
+                std::array<float, 4> output = source;
+                if (!ctx.blendState.IsOpaqueIdentity())
+                {
+                    const std::array<float, 4> destination{
+                        destinationBytes[0] / 255.0f, destinationBytes[1] / 255.0f,
+                        destinationBytes[2] / 255.0f, destinationBytes[3] / 255.0f,
+                    };
+                    output[0] = BlendComponent(0, ctx.blendState.colorSource,
+                                               ctx.blendState.colorDestination,
+                                               ctx.blendState.colorFunction,
+                                               source, destination, ctx.blendFactor);
+                    output[1] = BlendComponent(1, ctx.blendState.colorSource,
+                                               ctx.blendState.colorDestination,
+                                               ctx.blendState.colorFunction,
+                                               source, destination, ctx.blendFactor);
+                    output[2] = BlendComponent(2, ctx.blendState.colorSource,
+                                               ctx.blendState.colorDestination,
+                                               ctx.blendState.colorFunction,
+                                               source, destination, ctx.blendFactor);
+                    output[3] = BlendComponent(3, ctx.blendState.alphaSource,
+                                               ctx.blendState.alphaDestination,
+                                               ctx.blendState.alphaFunction,
+                                               source, destination, ctx.blendFactor);
+                }
+                for (float& channel : output)
+                    channel = std::clamp(channel, 0.0f, 1.0f);
+                if (ColorWriteHasRed(ctx.colorWriteMask))
+                    destinationBytes[0] = static_cast<std::uint8_t>(output[0] * 255.0f);
+                if (ColorWriteHasGreen(ctx.colorWriteMask))
+                    destinationBytes[1] = static_cast<std::uint8_t>(output[1] * 255.0f);
+                if (ColorWriteHasBlue(ctx.colorWriteMask))
+                    destinationBytes[2] = static_cast<std::uint8_t>(output[2] * 255.0f);
+                if (ColorWriteHasAlpha(ctx.colorWriteMask))
+                    destinationBytes[3] = static_cast<std::uint8_t>(output[3] * 255.0f);
+            };
+            if (!fb.HasMultiSampleColor())
             {
-                outR = std::clamp(r, 0.0f, 1.0f);
-                outG = std::clamp(g, 0.0f, 1.0f);
-                outB = std::clamp(b, 0.0f, 1.0f);
-                outA = std::clamp(a, 0.0f, 1.0f);
+                writeBlendedColor(fb.color.data() + pixelIndex * 4u);
+                return;
             }
-            else
+            for (int sample = 0; sample < 4; ++sample)
             {
-                // REMED-GFX-148: load the actual destination bytes before any conversion, multiply
-                // source and destination by their independently selected factors, apply separate
-                // colour/alpha functions, then clamp. The established byte conversion below stays
-                // last. For Additive this is rgb=src.rgb*src.a+dst.rgb and
-                // a=src.a*src.a+dst.a -- never the old straight-alpha "over" equation.
-                const std::array<float, 4> source{r, g, b, a};
-                const std::array<float, 4> destination{
-                    fb.color[colorIndex + 0] / 255.0f,
-                    fb.color[colorIndex + 1] / 255.0f,
-                    fb.color[colorIndex + 2] / 255.0f,
-                    fb.color[colorIndex + 3] / 255.0f,
-                };
-                outR = BlendComponent(0, ctx.blendState.colorSource,
-                                      ctx.blendState.colorDestination,
-                                      ctx.blendState.colorFunction,
-                                      source, destination, ctx.blendFactor);
-                outG = BlendComponent(1, ctx.blendState.colorSource,
-                                      ctx.blendState.colorDestination,
-                                      ctx.blendState.colorFunction,
-                                      source, destination, ctx.blendFactor);
-                outB = BlendComponent(2, ctx.blendState.colorSource,
-                                      ctx.blendState.colorDestination,
-                                      ctx.blendState.colorFunction,
-                                      source, destination, ctx.blendFactor);
-                outA = BlendComponent(3, ctx.blendState.alphaSource,
-                                      ctx.blendState.alphaDestination,
-                                      ctx.blendState.alphaFunction,
-                                      source, destination, ctx.blendFactor);
+                if ((activeSamples & (1u << sample)) == 0u)
+                    continue;
+                writeBlendedColor(fb.multiSampleColor.data() +
+                                  (pixelIndex * 4u + static_cast<std::size_t>(sample)) * 4u);
             }
-            if (ColorWriteHasRed  (ctx.colorWriteMask)) fb.color[colorIndex + 0] = static_cast<std::uint8_t>(outR * 255.0f);
-            if (ColorWriteHasGreen(ctx.colorWriteMask)) fb.color[colorIndex + 1] = static_cast<std::uint8_t>(outG * 255.0f);
-            if (ColorWriteHasBlue (ctx.colorWriteMask)) fb.color[colorIndex + 2] = static_cast<std::uint8_t>(outB * 255.0f);
-            if (ColorWriteHasAlpha(ctx.colorWriteMask)) fb.color[colorIndex + 3] = static_cast<std::uint8_t>(outA * 255.0f);
         }
 
         /// General-purpose triangle fill for the DrawPrimitivesEx/DrawIndexedPrimitivesEx and
@@ -1827,6 +2030,7 @@ namespace CNA::Internal::Backends::Software
         /// engine in v1), so the "lit" base color is just vertexColor*diffuseColor*texture0, the
         /// same simplification already used for the plain BasicEffect path.
         void RasterizeTriangleShaded(SoftwareFramebuffer& fb, const RasterDepthState& depthState,
+                                     const RasterStencilState& stencilState,
                                      const SoftwareBlendState& blendState,
                                      const std::array<float, 4>& blendFactor,
                                      int cullMode, float depthBias, float slopeScaleDepthBias,
@@ -1835,16 +2039,25 @@ namespace CNA::Internal::Backends::Software
                                      int colorWriteMask, unsigned int multiSampleMask,
                                      const SoftwareSamplerState& sampler0,
                                      const SoftwareSamplerState& sampler1,
-                                     bool wireframe = false, unsigned edgeMask = kEdgeAll)
+                                     bool wireframe = false, unsigned edgeMask = kEdgeAll,
+                                     unsigned fillExcludedEdges = 0u)
         {
             // REMED-GFX-124: the cast target is the colour-storage capability, not a concrete
             // backend class, so both a SoftwareTextureBackend and a SoftwareRenderTargetBackend
             // resolve here. A foreign backend still resolves to nullptr exactly as before.
             const auto* texture0 = dynamic_cast<const SoftwareColorSurface*>(params.texture0);
             const auto* texture1 = dynamic_cast<const SoftwareColorSurface*>(params.texture1);
+#ifndef CNA_SOFTWARE_2D_ONLY
             const auto* envMap = dynamic_cast<const SoftwareTextureCubeBackend*>(params.envMap);
+#else
+            const SoftwareTextureCubeBackend* envMap = nullptr;
+#endif
             const bool useDualTexture = params.dualTexture && texture0 != nullptr && texture1 != nullptr;
+#ifndef CNA_SOFTWARE_2D_ONLY
             const bool useEnvMap = params.envMapping && envMap != nullptr;
+#else
+            constexpr bool useEnvMap = false;
+#endif
             const bool needUV = useDualTexture || useEnvMap || (params.textureEnabled && texture0 != nullptr);
             // REMED-GFX-150: classify magnification once per triangle per bound texture. Only XNA
             // filters 5..8 distinguish the two halves, so this is inert for Point, Linear and
@@ -1864,13 +2077,17 @@ namespace CNA::Internal::Backends::Software
             const bool magnify1 = !(rho1 > 1.0f);
             // REMED-GFX-182: the cube's own footprint, resolved once per triangle from the SAME
             // reflection expression the fragment path uses and only when a cube is actually bound.
+#ifndef CNA_SOFTWARE_2D_ONLY
             const float rhoCube = useEnvMap
                 ? TriangleCubeTexelRate(v0, v1, v2, params.eyePositionWorld,
                                         std::max(1, envMap->GetSize()))
                 : 1.0f;
+#else
+            constexpr float rhoCube = 1.0f;
+#endif
             const ShadedContext ctx{params, texture0, texture1, envMap, useDualTexture, useEnvMap,
                                     needUV, blendState, blendFactor,
-                                    depthState, colorWriteMask, multiSampleMask,
+                                    depthState, stencilState, colorWriteMask, multiSampleMask,
                                     sampler0, sampler1, magnify0, magnify1,
                                     LodFromTexelRate(rho0), LodFromTexelRate(rho1),
                                     !(rhoCube > 1.0f), LodFromTexelRate(rhoCube)};
@@ -1883,6 +2100,7 @@ namespace CNA::Internal::Backends::Software
             if (g_samplerTrace.enabled) ++g_samplerTrace.triangles;
             // REMED-GFX-182: stamp BOTH captured slot descriptions, so the cube trace can print the
             // public state this draw carried beside the description its cube sample really ran under.
+#ifndef CNA_SOFTWARE_2D_ONLY
             if (g_cubeTrace.enabled)
             {
                 g_cubeTrace.slot0Filter = sampler0.filter;
@@ -1892,6 +2110,7 @@ namespace CNA::Internal::Backends::Software
                 g_cubeTrace.slot1AddrU = sampler1.addressU;
                 g_cubeTrace.slot1AddrV = sampler1.addressV;
             }
+#endif
 
             // REMED-GFX-083: one polygon-offset value for the whole triangle (after culling). hasBias is
             // 0 for the common zero-bias case, so the depth expressions below stay byte-identical then.
@@ -1902,6 +2121,10 @@ namespace CNA::Internal::Backends::Software
             {
                 // REMED-GFX-082: rasterize the selected edges as perspective-correct shaded lines,
                 // reusing WriteShadedFragment (identical texture/diffuse/env-map/blend + depth path).
+                // GDI-073: the established DDA visits whole pixels and intentionally omits a
+                // geometric coverage mask, so each visited wire pixel writes every sample enabled
+                // by MultiSampleMask when a sample plane is active. This is crisp pixel wireframe,
+                // not subpixel line AA.
                 const auto drawEdge = [&](const RasterVertex& A, const RasterVertex& B) {
                     WalkWireEdge(clip, A, B, [&](int x, int y, float t) {
                         const float invW  = A.invW  + t * (B.invW  - A.invW);
@@ -1930,10 +2153,10 @@ namespace CNA::Internal::Backends::Software
             // REMED-GFX-073: clamp the raster bounding box to the clip rectangle (framebuffer for
             // the 3D path, framebuffer-intersected Viewport for SpriteBatch) instead of the raw
             // framebuffer -- pixels outside the Viewport are never touched.
-            const int minX = std::max(clip.minX, static_cast<int>(std::floor(minXf)));
-            const int maxX = std::min(clip.maxX, static_cast<int>(std::ceil(maxXf)));
-            const int minY = std::max(clip.minY, static_cast<int>(std::floor(minYf)));
-            const int maxY = std::min(clip.maxY, static_cast<int>(std::ceil(maxYf)));
+            int minX = 0, minY = 0, maxX = -1, maxY = -1;
+            if (!CalculateRasterBounds(minXf, minYf, maxXf, maxYf, clip,
+                                       minX, minY, maxX, maxY))
+                return;
 
             for (int y = minY; y <= maxY; ++y)
             {
@@ -1946,10 +2169,42 @@ namespace CNA::Internal::Backends::Software
                     const float w1 = EdgeFunction(v2.x, v2.y, v0.x, v0.y, px, py);
                     const float w2 = EdgeFunction(v0.x, v0.y, v1.x, v1.y, px, py);
 
-                    const bool inside = (w0 >= 0.0f && w1 >= 0.0f && w2 >= 0.0f) ||
-                                        (w0 <= 0.0f && w1 <= 0.0f && w2 <= 0.0f);
-                    if (!inside)
-                        continue;
+                    unsigned int coverageMask = 1u;
+                    if (!fb.HasMultiSampleColor())
+                    {
+                        const bool inside = (w0 >= 0.0f && w1 >= 0.0f && w2 >= 0.0f) ||
+                                            (w0 <= 0.0f && w1 <= 0.0f && w2 <= 0.0f);
+                        if (!inside || IsExcludedFillEdge(fillExcludedEdges, w0, w1, w2, area))
+                            continue;
+                    }
+                    else
+                    {
+                        // Four actual coverage samples at (1/4,1/4), (3/4,1/4),
+                        // (1/4,3/4), (3/4,3/4). A partially covered edge therefore blends only
+                        // its covered samples and ResolveColor() averages them before GDI blits.
+                        coverageMask = 0u;
+                        for (int sample = 0; sample < 4; ++sample)
+                        {
+                            const float sampleX = static_cast<float>(x) +
+                                ((sample & 1) == 0 ? 0.25f : 0.75f);
+                            const float sampleY = static_cast<float>(y) +
+                                (sample < 2 ? 0.25f : 0.75f);
+                            const float sampleW0 = EdgeFunction(v1.x, v1.y, v2.x, v2.y,
+                                                                sampleX, sampleY);
+                            const float sampleW1 = EdgeFunction(v2.x, v2.y, v0.x, v0.y,
+                                                                sampleX, sampleY);
+                            const float sampleW2 = EdgeFunction(v0.x, v0.y, v1.x, v1.y,
+                                                                sampleX, sampleY);
+                            const bool sampleInside =
+                                (sampleW0 >= 0.0f && sampleW1 >= 0.0f && sampleW2 >= 0.0f) ||
+                                (sampleW0 <= 0.0f && sampleW1 <= 0.0f && sampleW2 <= 0.0f);
+                            if (sampleInside && !IsExcludedFillEdge(fillExcludedEdges, sampleW0,
+                                                                    sampleW1, sampleW2, area))
+                                coverageMask |= 1u << sample;
+                        }
+                        if (coverageMask == 0u)
+                            continue;
+                    }
 
                     const float lambda0 = w0 / area;
                     const float lambda1 = w1 / area;
@@ -1970,11 +2225,13 @@ namespace CNA::Internal::Backends::Software
                                         lambda0 * v0.wpz + lambda1 * v1.wpz + lambda2 * v2.wpz,
                                         lambda0 * v0.nx + lambda1 * v1.nx + lambda2 * v2.nx,
                                         lambda0 * v0.ny + lambda1 * v1.ny + lambda2 * v2.ny,
-                                        lambda0 * v0.nz + lambda1 * v1.nz + lambda2 * v2.nz);
+                                        lambda0 * v0.nz + lambda1 * v1.nz + lambda2 * v2.nz,
+                                        coverageMask);
                 }
             }
         }
 
+#ifndef CNA_SOFTWARE_2D_ONLY
         // ---- REMED-GFX-110: indexed addressing and bounds ----
         //
         // Shared by both CPU indexed raster paths so they cannot drift apart again. The public
@@ -2142,40 +2399,12 @@ namespace CNA::Internal::Backends::Software
                         std::to_string(availableVertexCount) + " vertices.");
             }
         }
-    }
-
-    // ---- SoftwareFramebuffer ----
-
-    void SoftwareFramebuffer::Resize(int w, int h)
-    {
-        width = w;
-        height = h;
-        color.assign(static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4u, 0u);
-        depthBuffer.assign(static_cast<std::size_t>(w) * static_cast<std::size_t>(h), 1.0f);
-    }
-
-    void SoftwareFramebuffer::ClearColor(float r, float g, float b, float a)
-    {
-        const std::uint8_t rb = static_cast<std::uint8_t>(std::clamp(r, 0.0f, 1.0f) * 255.0f);
-        const std::uint8_t gb = static_cast<std::uint8_t>(std::clamp(g, 0.0f, 1.0f) * 255.0f);
-        const std::uint8_t bb = static_cast<std::uint8_t>(std::clamp(b, 0.0f, 1.0f) * 255.0f);
-        const std::uint8_t ab = static_cast<std::uint8_t>(std::clamp(a, 0.0f, 1.0f) * 255.0f);
-        const std::size_t pixelCount = static_cast<std::size_t>(width) * static_cast<std::size_t>(height);
-        for (std::size_t i = 0; i < pixelCount; ++i)
-        {
-            color[i * 4 + 0] = rb;
-            color[i * 4 + 1] = gb;
-            color[i * 4 + 2] = bb;
-            color[i * 4 + 3] = ab;
-        }
-    }
-
-    void SoftwareFramebuffer::ClearDepthValue(float depthValue)
-    {
-        std::fill(depthBuffer.begin(), depthBuffer.end(), depthValue);
+#endif
     }
 
     // ---- SoftwareVertexBufferBackend ----
+
+#ifndef CNA_SOFTWARE_2D_ONLY
 
     SoftwareVertexBufferBackend::SoftwareVertexBufferBackend(int vertexCapacity)
         : capacity_(vertexCapacity)
@@ -2228,88 +2457,11 @@ namespace CNA::Internal::Backends::Software
     void SoftwareIndexBufferBackend::SetData32WithOptions(const void* data, int index_count, SetDataOptions)
     { Upload(data, index_count, true); }
 
-    // ---- SoftwareTextureBackend ----
-
-    SoftwareTextureBackend::SoftwareTextureBackend(const ImageData& data)
-        : width_(data.width), height_(data.height)
-        , declaredLevels_(data.mipLevels > 0 ? data.mipLevels : 1)
-    {
-        pixels_.assign(data.pixels.begin(), data.pixels.end());
-    }
-
-    SoftwareTextureBackend::SoftwareTextureBackend(int width, int height)
-        : width_(width), height_(height)
-    {
-        pixels_.assign(static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * 4u, 0u);
-    }
-
-    void SoftwareTextureBackend::UpdatePixels(const uint8_t* rgba, int stride)
-    {
-        if (rgba == nullptr)
-            throw std::runtime_error("SoftwareTextureBackend::UpdatePixels: rgba must not be null");
-        const std::size_t rowBytes = static_cast<std::size_t>(width_) * 4u;
-        const std::size_t effectiveStride = stride > 0 ? static_cast<std::size_t>(stride) : rowBytes;
-        pixels_.resize(rowBytes * static_cast<std::size_t>(height_));
-        for (int y = 0; y < height_; ++y)
-        {
-            std::copy(rgba + static_cast<std::size_t>(y) * effectiveStride,
-                     rgba + static_cast<std::size_t>(y) * effectiveStride + rowBytes,
-                     pixels_.begin() + static_cast<std::ptrdiff_t>(y) * static_cast<std::ptrdiff_t>(rowBytes));
-        }
-    }
-
-    // REMED-GFX-175: mip levels above 0 used to be dropped on the floor here, which is why NO
-    // TextureFilter ordinal could mip-filter on this backend -- not merely ordinals 0 and 1. The
-    // level a caller supplies is now STORED, exactly as given: nothing is downsampled, nothing is
-    // generated, and a level the caller never writes is never invented. `storedLevels_` counts only
-    // the levels held CONTIGUOUSLY from 0, so a chain written out of order, or abandoned half way,
-    // bounds the sampler at the last level that really exists instead of exposing a gap.
-    void SoftwareTextureBackend::UpdatePixelsLevel(int level, const uint8_t* rgba,
-                                                   int levelW, int levelH)
-    {
-        if (level <= 0 || rgba == nullptr) return;
-        if (level >= declaredLevels_) return;
-        if (levelW <= 0 || levelH <= 0) return;
-
-        if (static_cast<int>(mipLevels_.size()) < level)
-            mipLevels_.resize(static_cast<std::size_t>(level));
-
-        MipLevel& dst = mipLevels_[static_cast<std::size_t>(level - 1)];
-        dst.width = levelW;
-        dst.height = levelH;
-        const std::size_t bytes = static_cast<std::size_t>(levelW) *
-                                  static_cast<std::size_t>(levelH) * 4u;
-        dst.pixels.assign(rgba, rgba + bytes);
-
-        // Recount from level 1 upward: a level only counts once every level below it is present.
-        int contiguous = 1;
-        for (std::size_t i = 0; i < mipLevels_.size(); ++i)
-        {
-            if (mipLevels_[i].pixels.empty()) break;
-            ++contiguous;
-        }
-        storedLevels_ = contiguous;
-    }
-
-    int SoftwareTextureBackend::ColorWidth(int level) const
-    {
-        if (level <= 0 || level > static_cast<int>(mipLevels_.size())) return width_;
-        return mipLevels_[static_cast<std::size_t>(level - 1)].width;
-    }
-
-    int SoftwareTextureBackend::ColorHeight(int level) const
-    {
-        if (level <= 0 || level > static_cast<int>(mipLevels_.size())) return height_;
-        return mipLevels_[static_cast<std::size_t>(level - 1)].height;
-    }
-
-    const std::vector<std::uint8_t>& SoftwareTextureBackend::ColorPixels(int level) const
-    {
-        if (level <= 0 || level > static_cast<int>(mipLevels_.size())) return pixels_;
-        return mipLevels_[static_cast<std::size_t>(level - 1)].pixels;
-    }
+#endif
 
     // ---- SoftwareTextureCubeBackend (SOFTWARE-82) ----
+
+#ifndef CNA_SOFTWARE_2D_ONLY
 
     // REMED-GFX-135: mirrors TextureCube.cpp's CalculateMipLevels(size,size) -- cube faces are
     // square, so the chain length is driven by a single edge.
@@ -2432,80 +2584,11 @@ namespace CNA::Internal::Backends::Software
         return true;
     }
 
-    // ---- SoftwareRenderTargetBackend ----
-
-    SoftwareRenderTargetBackend::SoftwareRenderTargetBackend(int w, int h, int depthFormat, bool mipMap,
-                                                             int multiSampleCount)
-        : depthFormat_(depthFormat), mipMap_(mipMap), multiSampleCount_(multiSampleCount)
-    {
-        framebuffer_.Resize(w, h);
-    }
-
-    void SoftwareRenderTargetBackend::UpdatePixels(const uint8_t* rgba, int)
-    {
-        if (rgba == nullptr) return;
-        const std::size_t byteCount = static_cast<std::size_t>(framebuffer_.width) *
-                                       static_cast<std::size_t>(framebuffer_.height) * 4u;
-        framebuffer_.color.assign(rgba, rgba + byteCount);
-    }
-
-    bool SoftwareRenderTargetBackend::GetData(int level, int x, int y, int w, int h,
-                                              void* data, int dataLength) const
-    {
-        ++readbackCallCount_;
-        if (data == nullptr)
-            throw System::ArgumentNullException("data");
-        if (level < 0)
-            throw System::ArgumentOutOfRangeException(
-                "level", std::to_string(level), "level must not be negative.");
-        // Software stores level 0 only (no mip generation in v1 -- SoftwareTextureBackend::
-        // UpdatePixelsLevel sets the same precedent). Reject rather than return the caller's
-        // buffer unchanged, so a mip request is never mistaken for a successful readback.
-        if (level > 0)
-            throw System::NotSupportedException(
-                "SoftwareRenderTargetBackend::GetData: the Software backend stores mip level 0 "
-                "only; level " + std::to_string(level) + " was requested.");
-        if (w <= 0 || h <= 0)
-            throw System::ArgumentOutOfRangeException(
-                "w", std::to_string(w) + "x" + std::to_string(h),
-                "The requested rectangle must have a positive width and height.");
-        // 64-bit throughout, so a rectangle near INT_MAX cannot wrap into an apparently valid one.
-        const std::int64_t right = static_cast<std::int64_t>(x) + static_cast<std::int64_t>(w);
-        const std::int64_t bottom = static_cast<std::int64_t>(y) + static_cast<std::int64_t>(h);
-        if (x < 0 || y < 0 ||
-            right > static_cast<std::int64_t>(framebuffer_.width) ||
-            bottom > static_cast<std::int64_t>(framebuffer_.height))
-            throw System::ArgumentOutOfRangeException(
-                "rect",
-                std::to_string(x) + "," + std::to_string(y) + "," + std::to_string(w) + "," +
-                    std::to_string(h),
-                "The requested rectangle leaves the " + std::to_string(framebuffer_.width) + "x" +
-                    std::to_string(framebuffer_.height) + " render target.");
-        const std::int64_t requiredBytes =
-            static_cast<std::int64_t>(w) * static_cast<std::int64_t>(h) * 4;
-        if (static_cast<std::int64_t>(dataLength) < requiredBytes)
-            throw System::ArgumentOutOfRangeException(
-                "dataLength", std::to_string(dataLength),
-                "The destination holds fewer than the " + std::to_string(requiredBytes) +
-                    " bytes the requested rectangle needs.");
-
-        // The colour attachment is the ONLY storage read here -- framebuffer_.depthBuffer is never
-        // consulted, so depth/stencil content can never leak through a colour readback.
-        auto* dst = static_cast<std::uint8_t*>(data);
-        const std::size_t rowBytes = static_cast<std::size_t>(w) * 4u;
-        for (int row = 0; row < h; ++row)
-        {
-            const std::size_t srcOffset =
-                (static_cast<std::size_t>(y + row) * static_cast<std::size_t>(framebuffer_.width) +
-                 static_cast<std::size_t>(x)) * 4u;
-            std::copy(framebuffer_.color.begin() + static_cast<std::ptrdiff_t>(srcOffset),
-                      framebuffer_.color.begin() + static_cast<std::ptrdiff_t>(srcOffset + rowBytes),
-                      dst + static_cast<std::size_t>(row) * rowBytes);
-        }
-        return true;
-    }
+#endif
 
     // ---- SoftwareEffectBackend ----
+
+#ifndef CNA_SOFTWARE_2D_ONLY
 
     bool SoftwareEffectBackend::CompileProgram(const std::string& vertSrc, const std::string& fragSrc)
     {
@@ -2515,132 +2598,53 @@ namespace CNA::Internal::Backends::Software
         return true;
     }
 
-    // ---- SoftwareSpriteBatchBackend ----
-    // Phase S6 (SOFTWARE-51): a SpriteBatch::Draw() call is just a textured quad (2 triangles)
-    // placed directly in screen-pixel space (SpriteBatch never goes through World*View*Projection,
-    // unlike 3D draws) -- reuses RasterizeTriangleShaded, the same rasterizer core DrawPrimitivesEx
-    // uses. The quad-corner construction (destinationRectangle/sourceRectangle/origin/rotation/
-    // SpriteEffects) mirrors EasyGLGraphicsBackend::EasyGLSpriteBatchBackend::Draw()'s own proven
-    // formula, adapted to feed this backend's rasterizer directly instead of a GPU vertex buffer.
+#endif
 
-    SoftwareSpriteBatchBackend::SoftwareSpriteBatchBackend(SoftwareGraphicsBackend& owner) : owner_(owner) {}
-
-    void SoftwareSpriteBatchBackend::Begin()
+    void SoftwareGraphicsBackend::RasterizeSpriteQuad(
+        const ITextureBackend& texture,
+        const Vector2& c0, const Vector2& c1, const Vector2& c2, const Vector2& c3,
+        float layerDepth, float r, float g, float b, float a,
+        float u1, float v1, float u2, float v2,
+        Effect* customEffect, const SoftwareSamplerState& spriteSampler)
     {
-        if (begun_)
-            throw std::runtime_error("SoftwareSpriteBatchBackend::Begin: Begin() called without a matching End()");
-        begun_ = true;
-    }
-
-    void SoftwareSpriteBatchBackend::End()
-    {
-        if (!begun_)
-            throw std::runtime_error("SoftwareSpriteBatchBackend::End: End() called without a matching Begin()");
-        begun_ = false;
-    }
-
-    void SoftwareSpriteBatchBackend::Draw(const ITextureBackend& texture, float x, float y)
-    {
-        Draw(texture, Rectangle(static_cast<int>(x), static_cast<int>(y), texture.GetWidth(), texture.GetHeight()),
-             Rectangle(0, 0, texture.GetWidth(), texture.GetHeight()), Color(255, 255, 255, 255),
-             0.0f, Vector2(0.0f, 0.0f), SpriteEffects::None, 0.0f);
-    }
-
-    void SoftwareSpriteBatchBackend::Draw(const ITextureBackend& texture, const Rectangle& destinationRectangle,
-                                          const Rectangle& sourceRectangle, const Color& color)
-    {
-        Draw(texture, destinationRectangle, sourceRectangle, color, 0.0f, Vector2(0.0f, 0.0f),
-             SpriteEffects::None, 0.0f);
-    }
-
-    void SoftwareSpriteBatchBackend::Draw(const ITextureBackend& texture, const Rectangle& destinationRectangle,
-                                          const Rectangle& sourceRectangle, const Color& color, float rotation,
-                                          const Vector2& origin, SpriteEffects effects, float layerDepth)
-    {
-        if (!begun_)
-            throw std::runtime_error("SoftwareSpriteBatchBackend::Draw: Draw() called before Begin()");
-
-        const float texW = static_cast<float>(std::max(1, texture.GetWidth()));
-        const float texH = static_cast<float>(std::max(1, texture.GetHeight()));
-        float u1 = static_cast<float>(sourceRectangle.X) / texW;
-        float v1 = static_cast<float>(sourceRectangle.Y) / texH;
-        float u2 = static_cast<float>(sourceRectangle.X + sourceRectangle.Width) / texW;
-        float v2 = static_cast<float>(sourceRectangle.Y + sourceRectangle.Height) / texH;
-        if ((static_cast<int>(effects) & static_cast<int>(SpriteEffects::FlipHorizontally)) != 0) std::swap(u1, u2);
-        if ((static_cast<int>(effects) & static_cast<int>(SpriteEffects::FlipVertically)) != 0) std::swap(v1, v2);
-
-        const float r = color.getRProperty() / 255.0f;
-        const float g = color.getGProperty() / 255.0f;
-        const float b = color.getBProperty() / 255.0f;
-        const float a = color.getAProperty() / 255.0f;
-
-        const float dx = static_cast<float>(destinationRectangle.X);
-        const float dy = static_cast<float>(destinationRectangle.Y);
-        const float dw = static_cast<float>(destinationRectangle.Width);
-        const float dh = static_cast<float>(destinationRectangle.Height);
-        const float sw = static_cast<float>(std::max(1, sourceRectangle.Width));
-        const float sh = static_cast<float>(std::max(1, sourceRectangle.Height));
-        const float ox = origin.X;
-        const float oy = origin.Y;
-        const float scaleX = dw / sw;
-        const float scaleY = dh / sh;
-
-        const float p0x = (0.0f - ox) * scaleX, p0y = (0.0f - oy) * scaleY;
-        const float p1x = (sw - ox) * scaleX, p1y = (0.0f - oy) * scaleY;
-        const float p2x = (sw - ox) * scaleX, p2y = (sh - oy) * scaleY;
-        const float p3x = (0.0f - ox) * scaleX, p3y = (sh - oy) * scaleY;
-
-        const float cosR = std::cos(rotation);
-        const float sinR = std::sin(rotation);
-
-        SoftwareFramebuffer& fb = owner_.CurrentFramebuffer();
-
-        // REMED-GFX-073: SpriteBatch coordinates are VIEWPORT-LOCAL. FNA builds the sprite ortho
-        // from Viewport.Width/Height (sprite (0,0) = the viewport's top-left), and the rasterizer
-        // viewport then positions the [-1,1] result at Viewport.X/Y. The Software backend places
-        // quads directly in pixel space, so the equivalent is: build the viewport-local corner
-        // (destinationRectangle/origin/rotation/scale + the SpriteBatch transformMatrix, all in
-        // viewport-local space), then add the Viewport origin. Viewport.X/Y are NOT transformed by
-        // transformMatrix (they position the already-transformed result), and pixels outside the
-        // viewport are clipped by RasterizeTriangleShaded via `clip` below.
+        SoftwareFramebuffer& fb = CurrentFramebuffer();
         int vpX = 0, vpY = 0, vpW = 0, vpH = 0;
-        owner_.GetActiveViewport(vpX, vpY, vpW, vpH);
-
-        const auto placeCorner = [&](float px, float py) -> Vector2 {
-            const float rx = dx + px * cosR - py * sinR;
-            const float ry = dy + px * sinR + py * cosR;
-            // SpriteBatch::SetTransformMatrix()'s optional 2D transform, applied as a point
-            // transform (z=0) on the viewport-local corner...
-            const Vector3 transformed = Vector3::Transform(Vector3(rx, ry, 0.0f), transformMatrix_);
-            // ...then position at the viewport origin (added AFTER transformMatrix).
-            return Vector2(transformed.X + static_cast<float>(vpX),
-                           transformed.Y + static_cast<float>(vpY));
-        };
-
-        const Vector2 c0 = placeCorner(p0x, p0y);
-        const Vector2 c1 = placeCorner(p1x, p1y);
-        const Vector2 c2 = placeCorner(p2x, p2y);
-        const Vector2 c3 = placeCorner(p3x, p3y);
-
+        GetActiveViewport(vpX, vpY, vpW, vpH);
         const RasterVertex rv0 = MakeScreenSpaceVertex(c0.X, c0.Y, layerDepth, r, g, b, a, u1, v1);
         const RasterVertex rv1 = MakeScreenSpaceVertex(c1.X, c1.Y, layerDepth, r, g, b, a, u2, v1);
         const RasterVertex rv2 = MakeScreenSpaceVertex(c2.X, c2.Y, layerDepth, r, g, b, a, u2, v2);
         const RasterVertex rv3 = MakeScreenSpaceVertex(c3.X, c3.Y, layerDepth, r, g, b, a, u1, v2);
 
         // REMED-GFX-030: snapshot the complete depth tuple for this submitted sprite draw.
-        const RasterDepthState depthState{owner_.IsDepthTestEnabled(),
-                                          owner_.IsDepthWriteEnabled(),
-                                          owner_.GetDepthCompareFunction()};
-        const SoftwareBlendState blendState = owner_.GetBlendState();
-        const std::array<float, 4> blendFactor = owner_.GetBlendFactor();
-        const int cullMode = owner_.GetCullMode();
+        const RasterDepthState depthState{IsDepthTestEnabled(),
+                                          IsDepthWriteEnabled(), GetDepthCompareFunction()};
+        const RasterStencilState stencilState{
+            IsStencilTestEnabled(), GetStencilCompareFunction(),
+            GetStencilPassOperation(), GetStencilFailOperation(),
+            GetStencilDepthFailOperation(),
+            static_cast<std::uint8_t>(GetStencilReadMask()),
+            static_cast<std::uint8_t>(GetStencilWriteMask()),
+            static_cast<std::uint8_t>(GetReferenceStencil())};
+        const SoftwareBlendState blendState = GetBlendState();
+        const std::array<float, 4> blendFactor = GetBlendFactor();
+        const int cullMode = GetCullMode();
         // REMED-GFX-080: effective raster clip = framebuffer ∩ Viewport ∩ (ScissorRectangle when
         // RasterizerState.ScissorTestEnable). The scissor is framebuffer-space, intersected after
         // the viewport clip (not viewport-local); disabled scissor leaves the viewport clip intact.
         int scX = 0, scY = 0, scW = 0, scH = 0;
-        owner_.GetActiveScissor(scX, scY, scW, scH);
+        GetActiveScissor(scX, scY, scW, scH);
         const RasterClipRect clip = ScissorClip(ViewportClip(fb, vpX, vpY, vpW, vpH),
-                                                owner_.IsScissorTestEnabled(), scX, scY, scW, scH);
+                                                IsScissorTestEnabled(), scX, scY, scW, scH);
+        const float quadMinX = std::min({c0.X, c1.X, c2.X, c3.X});
+        const float quadMinY = std::min({c0.Y, c1.Y, c2.Y, c3.Y});
+        const float quadMaxX = std::max({c0.X, c1.X, c2.X, c3.X});
+        const float quadMaxY = std::max({c0.Y, c1.Y, c2.Y, c3.Y});
+        int damageMinX = 0, damageMinY = 0, damageMaxX = -1, damageMaxY = -1;
+        if (CalculateRasterBounds(quadMinX, quadMinY, quadMaxX, quadMaxY, clip,
+                                  damageMinX, damageMinY, damageMaxX, damageMaxY))
+        {
+            OnSpriteRasterBounds(damageMinX, damageMinY, damageMaxX, damageMaxY);
+        }
         GpuDrawParams spriteParams;
         // REMED-GFX-124: hand the sprite's texture on as the plain backend handle and let
         // RasterizeTriangleShaded resolve the colour-storage capability, so this path has no second,
@@ -2648,392 +2652,106 @@ namespace CNA::Internal::Backends::Software
         // the shared one already accepted it.
         spriteParams.texture0 = &texture;
         spriteParams.textureEnabled = true;
+        // A `ColorMatrixEffect` is the sole custom Effect GDI/SOFTWARE accepts for SpriteBatch.
+        // ShaderEffect stays rejected by GDI; every unrelated Effect keeps the regular sprite
+        // path rather than being misidentified as a programmable shader.
+        if (const auto* colorMatrix =
+                dynamic_cast<const Microsoft::Xna::Framework::Graphics::ColorMatrixEffect*>(customEffect))
+            colorMatrix->FillSpriteDrawParams(spriteParams);
         // REMED-GFX-082: honor RasterizerState.FillMode for the sprite's two quad triangles too. Each
         // draws ALL THREE of its edges (kEdgeAll), so a wireframe sprite shows its quad outline plus
         // the internal triangle-split diagonal -- real submitted geometry, matching D3D11/FNA (not
         // suppressed like the 3D near-plane clip diagonal). Passed THROUGH SpriteBatch.Begin's
         // RasterizerState via GraphicsDevice (REMED-GFX-081).
-        const bool wire = (owner_.GetFillMode() == 1);
+        const bool wire = (GetFillMode() == 1);
         // REMED-GFX-083: SpriteBatch's two quad triangles honor RasterizerState.DepthBias /
         // SlopeScaleDepthBias too (a bias supplied through SpriteBatch.Begin's RasterizerState, GFX-081).
         // A quad is flat (constant layerDepth -> zero depth slope), so only the constant term applies.
-        const float depthBias = owner_.GetDepthBias();
-        const float slopeScaleDepthBias = owner_.GetSlopeScaleDepthBias();
+        const float depthBias = GetDepthBias();
+        const float slopeScaleDepthBias = GetSlopeScaleDepthBias();
         // REMED-GFX-150: the sprite quad samples through the SamplerState SpriteBatch.Begin
         // resolved for THIS batch, not the device's 3D slot state -- SpriteBatch has its own sampler
         // channel (SetSamplerFilter/SetSamplerAddressMode), exactly as it does on every GPU backend.
         // Begin always re-applies it, so it cannot leak in from a previous batch, and passing it
         // here rather than through the device slots means a sprite batch cannot leak it out either.
-        const SoftwareSamplerState spriteSampler = GetSamplerState();
-        RasterizeTriangleShaded(fb, depthState, blendState, blendFactor,
+        RasterizeTriangleShaded(fb, depthState, stencilState, blendState, blendFactor,
                                 cullMode, depthBias, slopeScaleDepthBias,
                                 spriteParams, clip, rv0, rv1, rv2,
-                                owner_.GetColorWriteMask(), owner_.GetMultiSampleMask(),
-                                spriteSampler, spriteSampler, wire, kEdgeAll);
-        RasterizeTriangleShaded(fb, depthState, blendState, blendFactor,
+                                GetColorWriteMask(), GetMultiSampleMask(),
+                                spriteSampler, spriteSampler, wire, kEdgeAll, kEdgeV2V0);
+        RasterizeTriangleShaded(fb, depthState, stencilState, blendState, blendFactor,
                                 cullMode, depthBias, slopeScaleDepthBias,
                                 spriteParams, clip, rv2, rv3, rv0,
-                                owner_.GetColorWriteMask(), owner_.GetMultiSampleMask(),
+                                GetColorWriteMask(), GetMultiSampleMask(),
                                 spriteSampler, spriteSampler, wire, kEdgeAll);
-    }
-
-    // ---- SoftwareGraphicsBackend ----
-
-    SoftwareGraphicsBackend::SoftwareGraphicsBackend(int virtualWidth, int virtualHeight)
-        : virtualWidth_(virtualWidth), virtualHeight_(virtualHeight)
-    {
-        backbuffer_.Resize(virtualWidth > 0 ? virtualWidth : 1024, virtualHeight > 0 ? virtualHeight : 768);
-    }
-
-    SoftwareGraphicsBackend::~SoftwareGraphicsBackend() = default;
-
-    SoftwareFramebuffer& SoftwareGraphicsBackend::CurrentFramebuffer()
-    {
-        return currentRenderTarget_ != nullptr ? currentRenderTarget_->Framebuffer() : backbuffer_;
-    }
-
-    const SoftwareFramebuffer& SoftwareGraphicsBackend::CurrentFramebuffer() const
-    {
-        return currentRenderTarget_ != nullptr ? currentRenderTarget_->Framebuffer() : backbuffer_;
-    }
-
-    void SoftwareGraphicsBackend::Clear(float r, float g, float b, float a)
-    {
-        CurrentFramebuffer().ClearColor(r, g, b, a);
-    }
-
-    void SoftwareGraphicsBackend::Present() {}
-
-    void SoftwareGraphicsBackend::GetViewportSize(int& width, int& height)
-    {
-        const SoftwareFramebuffer& fb = CurrentFramebuffer();
-        width = fb.width;
-        height = fb.height;
-    }
-
-    void SoftwareGraphicsBackend::SetVirtualResolution(int width, int height)
-    {
-        virtualWidth_ = width;
-        virtualHeight_ = height;
-        if (currentRenderTarget_ == nullptr)
-            backbuffer_.Resize(width, height);
-    }
-
-    void SoftwareGraphicsBackend::SetPresentationMode(int) {}
-
-    void SoftwareGraphicsBackend::ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels)
-    {
-        if (w < 0 || h < 0)
-            throw std::runtime_error("SoftwareGraphicsBackend::ReadBackbuffer: negative width/height");
-
-        const SoftwareFramebuffer& fb = CurrentFramebuffer();
-        for (int row = 0; row < h; ++row)
-        {
-            const int srcY = y + row;
-            for (int col = 0; col < w; ++col)
-            {
-                const int srcX = x + col;
-                const std::size_t dstIndex = (static_cast<std::size_t>(row) * static_cast<std::size_t>(w) +
-                                              static_cast<std::size_t>(col)) * 4u;
-                if (srcX < 0 || srcX >= fb.width || srcY < 0 || srcY >= fb.height)
-                {
-                    pixels[dstIndex + 0] = 0;
-                    pixels[dstIndex + 1] = 0;
-                    pixels[dstIndex + 2] = 0;
-                    pixels[dstIndex + 3] = 0;
-                    continue;
-                }
-                const std::size_t srcIndex = (static_cast<std::size_t>(srcY) * static_cast<std::size_t>(fb.width) +
-                                              static_cast<std::size_t>(srcX)) * 4u;
-                pixels[dstIndex + 0] = fb.color[srcIndex + 0];
-                pixels[dstIndex + 1] = fb.color[srcIndex + 1];
-                pixels[dstIndex + 2] = fb.color[srcIndex + 2];
-                pixels[dstIndex + 3] = fb.color[srcIndex + 3];
-            }
-        }
-    }
-
-    std::unique_ptr<ITextureBackend> SoftwareGraphicsBackend::CreateTexture(const ImageData& data)
-    {
-        return std::make_unique<SoftwareTextureBackend>(data);
     }
 
     std::unique_ptr<ITextureCubeBackend> SoftwareGraphicsBackend::CreateTextureCube(int size, bool mipMap, int)
     {
+#ifdef CNA_SOFTWARE_2D_ONLY
+        (void)size;
+        (void)mipMap;
+        throw System::NotSupportedException(
+            "Software's GDI 2D compilation unit does not include TextureCube resources.");
+#else
         // REMED-GFX-135: `mipMap` used to be discarded here, so a mipmapped TextureCube reported a
         // LevelCount whose storage did not exist and every mip upload was dropped in silence.
         return std::make_unique<SoftwareTextureCubeBackend>(size, mipMap);
-    }
-
-    bool SoftwareGraphicsBackend::SupportsCapability(CNA::GraphicsCapability capability) const
-    {
-        switch (capability)
-        {
-            // REMED-CONTENT-004: Texture3D remains an explicit, documented v1 scope boundary for
-            // this backend (see this header's own "Boundaries" comment) -- CreateTexture3D() keeps
-            // IGraphicsBackend's shared default (returns nullptr). Reported here so Texture3D's own
-            // constructor can fail cleanly instead of silently discarding every SetData()/GetData()
-            // call.
-            case CNA::GraphicsCapability::Texture3D:
-                return false;
-            case CNA::GraphicsCapability::MultiStreamVertexInput:
-                // REMED-GFX-201: implemented -- the vertex reader resolves each combined-layout
-                // byte offset to the stream that owns it, so every attribute is fetched from its
-                // own buffer with that buffer's own stride and binding offset, with no interleaved
-                // temporary and no per-vertex allocation.
-                return true;
-            case CNA::GraphicsCapability::Instancing:
-                // Not implemented: this backend does not override DrawInstancedPrimitivesEx, so
-                // an instanced draw is the shared base-class refusal -- reported honestly instead
-                // of inherited as the blanket true below.
-                return false;
-            default:
-                return true;
-        }
-    }
-
-    std::unique_ptr<ISpriteBatchBackend> SoftwareGraphicsBackend::CreateSpriteBatch()
-    {
-        return std::make_unique<SoftwareSpriteBatchBackend>(*this);
-    }
-
-    std::unique_ptr<IRenderTargetBackend> SoftwareGraphicsBackend::CreateRenderTarget2D(
-        int w, int h, int depthFormat, bool, bool mipMap, int multiSampleCount)
-    {
-        return std::make_unique<SoftwareRenderTargetBackend>(w, h, depthFormat, mipMap, multiSampleCount);
-    }
-
-    void SoftwareGraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt)
-    {
-        if (currentRenderTarget_ != nullptr)
-            currentRenderTarget_->UnbindAsRenderTarget();
-        currentRenderTarget_ = static_cast<SoftwareRenderTargetBackend*>(rt);
-        if (currentRenderTarget_ != nullptr)
-            currentRenderTarget_->BindAsRenderTarget();
-    }
-
-    void SoftwareGraphicsBackend::SetRenderTargets(
-        const RenderTargetBindingDescriptor* renderTargets, int count)
-    {
-        if (!renderTargets || count <= 0)
-        {
-            SetRenderTarget2D(nullptr);
-            return;
-        }
-        if (count > 1)
-            throw std::runtime_error(
-                "SoftwareGraphicsBackend does not support multiple simultaneous render targets.");
-        if (renderTargets[0].IsRenderTargetCubeFace())
-            throw std::runtime_error(
-                "SoftwareGraphicsBackend does not support RenderTargetCube face bindings.");
-        SetRenderTarget2D(renderTargets[0].GetRenderTarget2D());
+#endif
     }
 
     std::unique_ptr<IEffectBackend> SoftwareGraphicsBackend::CreateEffectBackend(const std::string& vertSrc,
                                                                                 const std::string& fragSrc)
     {
+#ifdef CNA_SOFTWARE_2D_ONLY
+        (void)vertSrc;
+        (void)fragSrc;
+        throw System::NotSupportedException(
+            "Software's GDI 2D compilation unit does not include programmable effect resources.");
+#else
         auto effect = std::make_unique<SoftwareEffectBackend>();
         effect->CompileProgram(vertSrc, fragSrc);
         return effect;
+#endif
     }
-
-    void SoftwareGraphicsBackend::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
-                                                  int colorDstBlend, int alphaDstBlend,
-                                                  int colorBlendFunc, int alphaBlendFunc,
-                                                  const BlendWriteState& writeState)
-    {
-        // REMED-GFX-148: retain the complete state instead of reducing it to Opaque/non-Opaque.
-        // Reject unknown ordinals at state application so no fragment can fail halfway through a
-        // draw. Public Blend and BlendFunction currently define exactly 0..12 and 0..4.
-        const auto validFactor = [](int value) { return value >= 0 && value <= 12; };
-        if (!validFactor(colorSrcBlend) || !validFactor(alphaSrcBlend) ||
-            !validFactor(colorDstBlend) || !validFactor(alphaDstBlend))
-            throw std::runtime_error(
-                "SoftwareGraphicsBackend::ApplyBlendState: unsupported Blend factor ordinal");
-        if (colorBlendFunc < 0 || colorBlendFunc > 4 ||
-            alphaBlendFunc < 0 || alphaBlendFunc > 4)
-            throw std::runtime_error(
-                "SoftwareGraphicsBackend::ApplyBlendState: unsupported BlendFunction ordinal");
-        blendState_ = SoftwareBlendState{colorSrcBlend, alphaSrcBlend,
-                                         colorDstBlend, alphaDstBlend,
-                                         colorBlendFunc, alphaBlendFunc};
-        // REMED-GFX-077: Software has one active colour buffer (no MRT), so only slot-0's write mask
-        // applies; the CPU fragment writers (WriteColoredFragment/WriteShadedFragment) gate each
-        // channel by it. Single-sample ⇒ only MultiSampleMask bit 0 is meaningful.
-        colorWriteMask_  = writeState.colorWriteChannels[0];
-        multiSampleMask_ = writeState.multiSampleMask;
-    }
-
-    void SoftwareGraphicsBackend::SetBlendFactor(float r, float g, float b, float a)
-    {
-        blendFactor_ = {std::clamp(r, 0.0f, 1.0f), std::clamp(g, 0.0f, 1.0f),
-                        std::clamp(b, 0.0f, 1.0f), std::clamp(a, 0.0f, 1.0f)};
-    }
-
-    void SoftwareGraphicsBackend::ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable, int depthFunc,
-                                                         bool, int, int, int, int, int, int, int, bool,
-                                                         int, int, int, int)
-    {
-        // REMED-GFX-030: every public CompareFunction has ordinal 0..7. Reject an invalid value at
-        // state application rather than carrying it into the hot fragment path or approximating it.
-        if (depthFunc < 0 || depthFunc > 7)
-            throw std::runtime_error(
-                "SoftwareGraphicsBackend::ApplyDepthStencilState: unsupported depth CompareFunction ordinal");
-        depthTestEnabled_ = depthEnable;
-        depthWriteEnabled_ = depthWriteEnable;
-        depthCompareFunction_ = depthFunc;
-    }
-
-    void SoftwareGraphicsBackend::ApplyRasterizerState(int cullMode, int fillMode, bool scissorTestEnable,
-                                                       float depthBias, float slopeScaleDepthBias)
-    {
-        cullMode_ = cullMode;
-        // REMED-GFX-082: capture FillMode (previously discarded). 0=Solid, 1=WireFrame -- the raster
-        // paths render only triangle edges when WireFrame. Independent of CullMode/ScissorTestEnable.
-        fillMode_ = fillMode;
-        // REMED-GFX-080: capture ScissorTestEnable (previously discarded). Independent of the stored
-        // ScissorRectangle -- toggling this on/off enables/disables the same stored rectangle.
-        scissorTestEnable_ = scissorTestEnable;
-        // REMED-GFX-083: capture DepthBias / SlopeScaleDepthBias (both previously discarded). Folded into
-        // the post-viewport per-fragment depth by the rasterizer via ComputeDepthBiasOffset; 0/0 (the
-        // default) is a byte-identical no-op. Same unscaled units GraphicsDevice forwards to every backend.
-        depthBias_ = depthBias;
-        slopeScaleDepthBias_ = slopeScaleDepthBias;
-    }
-
-    // REMED-GFX-150: store the SamplerState so the rasterizer's sampler can honor it. Previously
-    // every parameter but `slot` was unnamed and discarded, so TextureFilter and TextureAddressMode
-    // never reached a single textured fragment and every draw filtered LinearClamp. maxAnisotropy is
-    // still not consumed: this backend has no anisotropic filter, and TextureFilter::Anisotropic
-    // already resolves to Linear through the same min/mag table the other ordinals use.
-    void SoftwareGraphicsBackend::ApplySamplerState(int slot, int filter, int addressU, int addressV, int)
-    {
-        if (slot < 0 || slot >= kMaxSamplerSlots)
-            throw std::runtime_error("SoftwareGraphicsBackend::ApplySamplerState: slot must be 0..15");
-        SoftwareSamplerState& s = samplerSlots_[static_cast<std::size_t>(slot)];
-        s.filter = filter;
-        s.addressU = addressU;
-        s.addressV = addressV;
-    }
-
-    // REMED-GFX-080: store the ScissorRectangle so the raster paths can intersect it into their
-    // effective clip when scissor testing is enabled (previously a no-op, so ScissorRectangle never
-    // clipped anything). GraphicsDevice pushes this on every setScissorRectangleProperty() and
-    // resets it to the full target on each RenderTarget transition, so this single field is always
-    // relative to the currently active target. The rectangle is stored regardless of the current
-    // ScissorTestEnable flag -- it becomes active if a later RasterizerState enables scissor testing.
-    void SoftwareGraphicsBackend::SetScissorRect(int x, int y, int w, int h)
-    {
-        scissorSet_ = true;
-        scissorX_ = x;
-        scissorY_ = y;
-        scissorWidth_ = w;
-        scissorHeight_ = h;
-    }
-
-    // REMED-GFX-073: store the viewport so the SpriteBatch path can place its viewport-local quads
-    // at (x,y) and clip them to (x,y,w,h). GraphicsDevice pushes this on every setViewportProperty()
-    // and resets it to the full target on each RenderTarget transition, so this single field is
-    // always relative to the currently active target. (The 3D DrawPrimitivesEx path still maps NDC
-    // over the full framebuffer -- a separate, non-SpriteBatch viewport gap; see the remediation
-    // notes.)
-    void SoftwareGraphicsBackend::SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth)
-    {
-        viewportSet_ = true;
-        viewportX_ = x;
-        viewportY_ = y;
-        viewportWidth_ = w;
-        viewportHeight_ = h;
-        viewportMinDepth_ = minDepth;
-        viewportMaxDepth_ = maxDepth;
-    }
-
-    void SoftwareGraphicsBackend::GetActiveViewport(int& x, int& y, int& w, int& h) const
-    {
-        if (!viewportSet_)
-        {
-            const SoftwareFramebuffer& fb = CurrentFramebuffer();
-            x = 0;
-            y = 0;
-            w = fb.width;
-            h = fb.height;
-            return;
-        }
-        x = viewportX_;
-        y = viewportY_;
-        w = viewportWidth_;
-        h = viewportHeight_;
-    }
-
-    // REMED-GFX-080: mirrors GetActiveViewport -- returns the stored ScissorRectangle, or the full
-    // current framebuffer when none was set (so enabling scissor testing without an explicit
-    // rectangle is an inert clip, matching XNA's default full-target ScissorRectangle).
-    void SoftwareGraphicsBackend::GetActiveScissor(int& x, int& y, int& w, int& h) const
-    {
-        if (!scissorSet_)
-        {
-            const SoftwareFramebuffer& fb = CurrentFramebuffer();
-            x = 0;
-            y = 0;
-            w = fb.width;
-            h = fb.height;
-            return;
-        }
-        x = scissorX_;
-        y = scissorY_;
-        w = scissorWidth_;
-        h = scissorHeight_;
-    }
-
-    void SoftwareGraphicsBackend::GetActiveViewportRaster(int& x, int& y, int& w, int& h,
-                                                          float& minDepth, float& maxDepth) const
-    {
-        GetActiveViewport(x, y, w, h);
-        // The depth range defaults to the full [0,1] until a custom viewport is set (matching
-        // GetActiveViewport's full-framebuffer x/y/w/h fallback); once SetViewport has run, the
-        // stored MinDepth/MaxDepth apply. This is the single point where the 3D path resolves its
-        // viewport, so all four draw entry points stay consistent.
-        minDepth = viewportSet_ ? viewportMinDepth_ : 0.0f;
-        maxDepth = viewportSet_ ? viewportMaxDepth_ : 1.0f;
-    }
-
-    void SoftwareGraphicsBackend::ClearColorAndDepth(float r, float g, float b, float a, float depth)
-    {
-        SoftwareFramebuffer& fb = CurrentFramebuffer();
-        fb.ClearColor(r, g, b, a);
-        fb.ClearDepthValue(depth);
-    }
-
-    void SoftwareGraphicsBackend::ClearDepth(float depth) { CurrentFramebuffer().ClearDepthValue(depth); }
-    void SoftwareGraphicsBackend::ClearStencil(int) {}
-    void SoftwareGraphicsBackend::ClearDepthAndStencil(float depth, int) { CurrentFramebuffer().ClearDepthValue(depth); }
-    void SoftwareGraphicsBackend::ClearColorAndStencil(float r, float g, float b, float a, int)
-    { CurrentFramebuffer().ClearColor(r, g, b, a); }
-    void SoftwareGraphicsBackend::ClearColorDepthAndStencil(float r, float g, float b, float a, float depth, int)
-    { ClearColorAndDepth(r, g, b, a, depth); }
-
-    void SoftwareGraphicsBackend::SetDepthTestEnabled(bool enabled) { depthTestEnabled_ = enabled; }
-    void SoftwareGraphicsBackend::SetBlendEnabled(bool) {}
-    void SoftwareGraphicsBackend::SetDepthWriteEnabled(bool enabled) { depthWriteEnabled_ = enabled; }
 
     std::unique_ptr<IVertexBufferBackend> SoftwareGraphicsBackend::CreateVertexBuffer(int vertex_capacity)
     {
+#ifdef CNA_SOFTWARE_2D_ONLY
+        (void)vertex_capacity;
+        throw System::NotSupportedException(
+            "Software's GDI 2D compilation unit does not include vertex buffers.");
+#else
         return std::make_unique<SoftwareVertexBufferBackend>(vertex_capacity);
+#endif
     }
 
     std::unique_ptr<IIndexBufferBackend> SoftwareGraphicsBackend::CreateIndexBuffer16(int index_capacity)
     {
+#ifdef CNA_SOFTWARE_2D_ONLY
+        (void)index_capacity;
+        throw System::NotSupportedException(
+            "Software's GDI 2D compilation unit does not include index buffers.");
+#else
         return std::make_unique<SoftwareIndexBufferBackend>(index_capacity, false);
+#endif
     }
 
     std::unique_ptr<IIndexBufferBackend> SoftwareGraphicsBackend::CreateIndexBuffer32(int index_capacity)
     {
+#ifdef CNA_SOFTWARE_2D_ONLY
+        (void)index_capacity;
+        throw System::NotSupportedException(
+            "Software's GDI 2D compilation unit does not include index buffers.");
+#else
         return std::make_unique<SoftwareIndexBufferBackend>(index_capacity, true);
+#endif
     }
 
     // Phase S4 (SOFTWARE-30..34): real transform/rasterize/depth-test pipeline. TriangleList only
     // in v1 (the owner's own stated minimal first-version scope) -- other PrimitiveType values
     // throw rather than silently misrendering.
+#ifndef CNA_SOFTWARE_2D_ONLY
     void SoftwareGraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend& vb, const Matrix& world,
                                                         const Matrix& view, const Matrix& projection,
                                                         PrimitiveType primitive, int primitiveCount)
@@ -3107,7 +2825,8 @@ namespace CNA::Internal::Backends::Software
             const bool wire = (fillMode_ == 1);
             const unsigned mask0 = (clippedCount == 4) ? (kEdgeV0V1 | kEdgeV1V2) : kEdgeAll;
             RasterizeTriangle(fb, depthState, cullMode_, depthBias_, slopeScaleDepthBias_, clip,
-                              rv[0], rv[1], rv[2], colorWriteMask_, multiSampleMask_, wire, mask0);
+                              rv[0], rv[1], rv[2], colorWriteMask_, multiSampleMask_, wire, mask0,
+                              clippedCount == 4 ? kEdgeV2V0 : 0u);
             if (clippedCount == 4)
                 RasterizeTriangle(fb, depthState, cullMode_, depthBias_, slopeScaleDepthBias_, clip,
                                   rv[0], rv[2], rv[3], colorWriteMask_, multiSampleMask_, wire, kEdgeV1V2 | kEdgeV2V0);
@@ -3191,7 +2910,8 @@ namespace CNA::Internal::Backends::Software
             const bool wire = (fillMode_ == 1);
             const unsigned mask0 = (clippedCount == 4) ? (kEdgeV0V1 | kEdgeV1V2) : kEdgeAll;
             RasterizeTriangle(fb, depthState, cullMode_, depthBias_, slopeScaleDepthBias_, clip,
-                              rv[0], rv[1], rv[2], colorWriteMask_, multiSampleMask_, wire, mask0);
+                              rv[0], rv[1], rv[2], colorWriteMask_, multiSampleMask_, wire, mask0,
+                              clippedCount == 4 ? kEdgeV2V0 : 0u);
             if (clippedCount == 4)
                 RasterizeTriangle(fb, depthState, cullMode_, depthBias_, slopeScaleDepthBias_, clip,
                                   rv[0], rv[2], rv[3], colorWriteMask_, multiSampleMask_, wire, kEdgeV1V2 | kEdgeV2V0);
@@ -3333,12 +3053,15 @@ namespace CNA::Internal::Backends::Software
             // triangles of a near-plane clipped quad mask their shared rv0-rv2 diagonal edge.
             const bool wire = (fillMode_ == 1);
             const unsigned mask0 = (clippedCount == 4) ? (kEdgeV0V1 | kEdgeV1V2) : kEdgeAll;
-            RasterizeTriangleShaded(fb, depthState, blendState, blendFactor, cullMode_,
+            RasterizeTriangleShaded(fb, depthState, RasterStencilState{}, blendState, blendFactor,
+                                    cullMode_,
                                     depthBias_, slopeScaleDepthBias_, params,
                                     clip, rv[0], rv[1], rv[2], colorWriteMask_, multiSampleMask_,
-                                    GetSamplerState(0), GetSamplerState(1), wire, mask0);
+                                    GetSamplerState(0), GetSamplerState(1), wire, mask0,
+                                    clippedCount == 4 ? kEdgeV2V0 : 0u);
             if (clippedCount == 4)
-                RasterizeTriangleShaded(fb, depthState, blendState, blendFactor, cullMode_,
+                RasterizeTriangleShaded(fb, depthState, RasterStencilState{}, blendState, blendFactor,
+                                        cullMode_,
                                         depthBias_, slopeScaleDepthBias_, params,
                                         clip, rv[0], rv[2], rv[3], colorWriteMask_, multiSampleMask_,
                                         GetSamplerState(0), GetSamplerState(1), wire, kEdgeV1V2 | kEdgeV2V0);
@@ -3464,23 +3187,60 @@ namespace CNA::Internal::Backends::Software
             // triangles of a near-plane clipped quad mask their shared rv0-rv2 diagonal edge.
             const bool wire = (fillMode_ == 1);
             const unsigned mask0 = (clippedCount == 4) ? (kEdgeV0V1 | kEdgeV1V2) : kEdgeAll;
-            RasterizeTriangleShaded(fb, depthState, blendState, blendFactor, cullMode_,
+            RasterizeTriangleShaded(fb, depthState, RasterStencilState{}, blendState, blendFactor,
+                                    cullMode_,
                                     depthBias_, slopeScaleDepthBias_, params,
                                     clip, rv[0], rv[1], rv[2], colorWriteMask_, multiSampleMask_,
-                                    GetSamplerState(0), GetSamplerState(1), wire, mask0);
+                                    GetSamplerState(0), GetSamplerState(1), wire, mask0,
+                                    clippedCount == 4 ? kEdgeV2V0 : 0u);
             if (clippedCount == 4)
-                RasterizeTriangleShaded(fb, depthState, blendState, blendFactor, cullMode_,
+                RasterizeTriangleShaded(fb, depthState, RasterStencilState{}, blendState, blendFactor,
+                                        cullMode_,
                                         depthBias_, slopeScaleDepthBias_, params,
                                         clip, rv[0], rv[2], rv[3], colorWriteMask_, multiSampleMask_,
                                         GetSamplerState(0), GetSamplerState(1), wire, kEdgeV1V2 | kEdgeV2V0);
         }
     }
+#else
+    void SoftwareGraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend&, const Matrix&,
+                                                         const Matrix&, const Matrix&, PrimitiveType, int)
+    {
+        throw System::NotSupportedException(
+            "Software's GDI 2D compilation unit does not include 3D primitive drawing.");
+    }
+
+    void SoftwareGraphicsBackend::DrawIndexedColoredPrimitives(
+        const IVertexBufferBackend&, const IIndexBufferBackend&, const Matrix&, const Matrix&,
+        const Matrix&, PrimitiveType, int)
+    {
+        throw System::NotSupportedException(
+            "Software's GDI 2D compilation unit does not include indexed 3D primitive drawing.");
+    }
+
+    void SoftwareGraphicsBackend::DrawPrimitivesEx(const IVertexBufferBackend&, const Matrix&,
+                                                    const Matrix&, const Matrix&, PrimitiveType, int,
+                                                    const GpuDrawParams&)
+    {
+        throw System::NotSupportedException(
+            "Software's GDI 2D compilation unit does not include effect-aware 3D drawing.");
+    }
+
+    void SoftwareGraphicsBackend::DrawIndexedPrimitivesEx(
+        const IVertexBufferBackend&, const IIndexBufferBackend&, const Matrix&, const Matrix&,
+        const Matrix&, PrimitiveType, int, const GpuDrawParams&)
+    {
+        throw System::NotSupportedException(
+            "Software's GDI 2D compilation unit does not include indexed effect-aware 3D drawing.");
+    }
+#endif
 }
 
 namespace CNA::Internal::Backends
 {
+#ifdef CNA_BACKEND_SOFTWARE
     std::unique_ptr<IGraphicsBackend> CreateGraphicsBackend(const GraphicsBackendCreateArgs& args)
     {
         return std::make_unique<Software::SoftwareGraphicsBackend>(args.virtualWidth, args.virtualHeight);
     }
+#endif
 }

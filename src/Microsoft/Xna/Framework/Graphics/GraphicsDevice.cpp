@@ -83,6 +83,18 @@ namespace Microsoft::Xna::Framework::Graphics
             }
         }
 
+        void NormalizeAppliedPresentationFormats(
+            CNA::Internal::Backends::IGraphicsBackend& backend,
+            PresentationParameters& parameters)
+        {
+            parameters.setBackBufferFormatProperty(static_cast<SurfaceFormat>(
+                backend.GetAppliedBackBufferFormatEXT(
+                    static_cast<int>(parameters.getBackBufferFormatProperty()))));
+            parameters.setDepthStencilFormatProperty(static_cast<DepthFormat>(
+                backend.GetAppliedDepthStencilFormatEXT(
+                    static_cast<int>(parameters.getDepthStencilFormatProperty()))));
+        }
+
         [[nodiscard]] bool hasClearFlag(ClearOptions options, ClearOptions flag)
         {
             return (static_cast<int>(options) & static_cast<int>(flag)) != 0;
@@ -382,47 +394,46 @@ namespace Microsoft::Xna::Framework::Graphics
                     "'depth' must be between 0.0 and 1.0.");
         }
 
-        // Matches FNA's own GraphicsDevice.Clear(ClearOptions, ...), which masks DepthBuffer/
-        // Stencil out of `options` when the currently active target has no real depth-stencil
-        // buffer, rather than forwarding a clear request the backend cannot honor. Ask the
-        // BACKEND (Task 708's own precedent for RenderTarget2D), not the merely-requested XNA-
-        // level format, since a backend may honor no depth/stencil buffer at all regardless of
-        // what was requested (SDL_Renderer is entirely 2D-only and never has one). Without this,
-        // GraphicsDevice::Clear(const Color&) -- which unconditionally requests
-        // Target|DepthBuffer|Stencil, matching FNA's own single-argument overload -- crashes on
-        // SDL_RENDERER instead of degrading to a color-only clear.
-        bool hasRealDepthBuffer;
-        bool hasRealStencilBuffer;
+        // GDI-050: depth and stencil are independent attachment decisions. Historically this used
+        // one SupportsDepthStencil()/HasRealDepthBuffer() answer and reduced a target with no depth
+        // to ClearOptions::Target, silently deleting Stencil too. That made GDI's real standalone
+        // CPU stencil plane unreachable through the public GraphicsDevice API. Ask for each aspect
+        // independently and mask only the unsupported flag. Combined depth/stencil backends retain
+        // their prior behavior through the interface's compatibility defaults.
+        bool hasRealDepthBuffer = false;
+        bool hasRealStencilBuffer = false;
         if (!currentRenderTargets_.empty())
         {
             // REMED-GFX-142: a bound RenderTargetCube has to be asked too. This branch only ever
-            // recognized RenderTarget2D, so a cube binding fell through to `rt == nullptr` ->
-            // `hasRealDepthBuffer == false` -> `options &= ClearOptions::Target` -- every
-            // ClearOptions::DepthBuffer and ClearOptions::Stencil issued while a cube face was
-            // bound was silently dropped, on every backend, whatever depth format the cube
-            // actually had. SetRenderTargets already asks both target kinds (see its own
-            // `IsRenderTarget2D()` branch); this is the same question at the other call site.
+            // recognized RenderTarget2D, so a cube binding fell through to `rt == nullptr` and
+            // both attachment flags were silently dropped, on every backend, whatever depth
+            // format the cube actually had. SetRenderTargets already asks both target kinds (see
+            // its own `IsRenderTarget2D()` branch); this is the same question at the other call
+            // site.
             Texture* bound = currentRenderTargets_[0].getRenderTargetProperty();
             const auto* rt = dynamic_cast<RenderTarget2D*>(bound);
             const auto* cube = (rt == nullptr) ? dynamic_cast<RenderTargetCube*>(bound) : nullptr;
             if (cube != nullptr)
             {
-                const bool depthFormatRequested =
-                    cube->getDepthStencilFormatProperty() != DepthFormat::None;
+                const DepthFormat depthFormat = cube->getDepthStencilFormatProperty();
+                const bool depthFormatRequested = depthFormat != DepthFormat::None;
+                const bool stencilFormatRequested = depthFormat == DepthFormat::Depth24Stencil8;
                 const auto* cubeBackend = cube->GetRenderTargetCubeBackend();
                 hasRealDepthBuffer =
                     cubeBackend && cubeBackend->HasRealDepthBuffer(depthFormatRequested);
-                // Render-target backends currently expose depth as one allocation contract. A
-                // default backbuffer may be depth-only (notably Glide), which is handled by the
-                // independent backend queries below.
-                hasRealStencilBuffer = hasRealDepthBuffer;
+                hasRealStencilBuffer =
+                    cubeBackend && cubeBackend->HasRealStencilBuffer(stencilFormatRequested);
             }
             else
             {
-                const bool depthFormatRequested = rt && rt->getDepthStencilFormatProperty() != DepthFormat::None;
+                const DepthFormat depthFormat =
+                    rt ? rt->getDepthStencilFormatProperty() : DepthFormat::None;
+                const bool depthFormatRequested = depthFormat != DepthFormat::None;
+                const bool stencilFormatRequested = depthFormat == DepthFormat::Depth24Stencil8;
                 const auto* rtBackend = rt ? rt->GetRenderTargetBackend() : nullptr;
                 hasRealDepthBuffer = rtBackend && rtBackend->HasRealDepthBuffer(depthFormatRequested);
-                hasRealStencilBuffer = hasRealDepthBuffer;
+                hasRealStencilBuffer =
+                    rtBackend && rtBackend->HasRealStencilBuffer(stencilFormatRequested);
             }
         }
         else
@@ -513,7 +524,10 @@ namespace Microsoft::Xna::Framework::Graphics
 
         DeviceResetting.Raise(this, System::EventArgs::Empty);
 
-        presentationParameters_ = presentationParameters;
+        PresentationParameters appliedPresentationParameters = presentationParameters.Clone();
+        if (backend_ != nullptr)
+            NormalizeAppliedPresentationFormats(*backend_, appliedPresentationParameters);
+        presentationParameters_ = appliedPresentationParameters;
         if (adapter != nullptr)
         {
             adapter_ = adapter;
@@ -783,10 +797,35 @@ namespace Microsoft::Xna::Framework::Graphics
     }
 
     void GraphicsDevice::FillVertexStreamBindings(
-        CNA::Internal::Backends::GpuDrawParams& p, int foldedOffset) const
+        CNA::Internal::Backends::GpuDrawParams& p, int foldedOffset,
+        bool allowLegacyEmptyDeclarationFallback) const
     {
         p.vertexStreamCount = 0;
         p.combinedVertexStride = 0;
+
+        // REMED-GFX-233: the NOXNA VertexBuffer(device, count) convenience constructor has an
+        // intentionally empty declaration. Its typed SetData overload still uploads a real,
+        // backend-known packed stride, but there is no declared stride to put in a stream tuple.
+        // Describing that one legacy buffer as a zero-stride stream makes a stream-aware CPU
+        // reader fetch record zero for every vertex, producing a degenerate triangle. Keep this
+        // exact single, per-vertex, empty-declaration shape on the pre-REMED-GFX-201 contract: the
+        // Draw*PrimitivesEx `vb` argument is authoritative and vertexStreamCount==0 selects its
+        // backend upload stride. FoldedVertexStreamOffset() has already carried any binding offset
+        // through vertexStart/baseVertex. Nonzero declarations and every multi-stream shape keep
+        // the immutable stream-array path below unchanged.
+        if (allowLegacyEmptyDeclarationFallback && currentVertexBuffers_.size() == 1)
+        {
+            const VertexBufferBinding& legacyBinding = currentVertexBuffers_[0];
+            const VertexBuffer* legacyBuffer = legacyBinding.getVertexBufferProperty();
+            if (legacyBuffer != nullptr && legacyBuffer == currentVertexBuffer_ &&
+                legacyBinding.getInstanceFrequencyProperty() == 0 &&
+                legacyBuffer->getVertexDeclarationProperty().GetVertexElements().empty() &&
+                legacyBuffer->getVertexDeclarationProperty().getVertexStrideProperty() == 0)
+            {
+                return;
+            }
+        }
+
         if (currentVertexBuffers_.empty() ||
             currentVertexBuffers_[0].getVertexBufferProperty() != currentVertexBuffer_)
         {
@@ -1023,7 +1062,8 @@ namespace Microsoft::Xna::Framework::Graphics
         // remainder is 0, which is exactly what REMED-GFX-200 measured.
         const int foldedOffset = FoldedVertexStreamOffset();
         p.vertexStart = vertexStart + foldedOffset;
-        FillVertexStreamBindings(p, foldedOffset);
+        FillVertexStreamBindings(
+            p, foldedOffset, /*allowLegacyEmptyDeclarationFallback=*/true);
         // Argument validation first, capability second: an out-of-range request is wrong on every
         // backend, so it must report the same public exception everywhere.
         ValidateVertexStreamRanges(
@@ -1109,7 +1149,8 @@ namespace Microsoft::Xna::Framework::Graphics
         p.baseVertex = baseVertex + foldedOffset;
         p.minVertexIndex = minVertexIndex;
         p.numVertices = numVertices;
-        FillVertexStreamBindings(p, foldedOffset);
+        FillVertexStreamBindings(
+            p, foldedOffset, /*allowLegacyEmptyDeclarationFallback=*/true);
         // The declared window is [baseVertex + minVertexIndex, + numVertices) in every stream's
         // own elements, so every stream must hold it -- not only the one named by `vb`. Argument
         // validation precedes the capability gate for the reason DrawPrimitives states.
@@ -1213,7 +1254,8 @@ namespace Microsoft::Xna::Framework::Graphics
         // passed separately to DrawIndexedInstanced. Folding here would additionally be wrong,
         // because baseVertex must NOT advance a per-instance stream and the smallest offset among
         // the per-vertex streams has no reason to be shared with them.
-        FillVertexStreamBindings(p, /*foldedOffset=*/0);
+        FillVertexStreamBindings(
+            p, /*foldedOffset=*/0, /*allowLegacyEmptyDeclarationFallback=*/false);
         // The declared window is [baseVertex + minVertexIndex, + numVertices) in every per-vertex
         // stream's own elements, and every per-instance stream owes one record per complete
         // frequency-sized group of instances. Argument validation precedes the capability gate for
@@ -2138,9 +2180,18 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::SetPresentationParameters(const PresentationParameters& pp)
     {
-        presentationParameters_ = pp;
+        PresentationParameters applied = pp.Clone();
         if (backend_)
+        {
+            NormalizeAppliedPresentationFormats(*backend_, applied);
+#ifdef CNA_BACKEND_GDI
+            // This NOXNA store-only path does not reconfigure MSAA. Keep reporting the currently
+            // active GDI sample storage instead of echoing a request that was never applied.
+            applied.setMultiSampleCountProperty(backend_->GetMultiSampleCount());
+#endif
             backend_->SetSwapInterval(toSwapInterval(pp.getPresentationIntervalProperty()));
+        }
+        presentationParameters_ = applied;
     }
 
     void GraphicsDevice::RecreateBackendForMultiSampleCount(int multiSampleCount)
@@ -2190,6 +2241,15 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             window_ = reinterpret_cast<SDL_Window*>(requestedHandle);
             ownsWindow_ = false;
+
+            // An attached window is just as much the active input surface as a CNA-owned one.
+            // Publishing only windows created below left Mouse::SetPosition and TextInputEXT
+            // targeting an older/focused window, and could leave that stale handle behind after
+            // the GraphicsDevice was destroyed.
+            Microsoft::Xna::Framework::Input::TextInputEXT::setWindowHandleProperty(
+                reinterpret_cast<std::uintptr_t>(window_));
+            Microsoft::Xna::Framework::Input::Mouse::setWindowHandleProperty(
+                reinterpret_cast<std::uintptr_t>(window_));
             return;
         }
 
@@ -2308,6 +2368,14 @@ namespace Microsoft::Xna::Framework::Graphics
         if (backend_ != nullptr)
         {
             backend_->SetVirtualResolution(virtualWidth_, virtualHeight_);
+            NormalizeAppliedPresentationFormats(*backend_, presentationParameters_);
+#ifdef CNA_BACKEND_GDI
+            // The GDI factory clamps to its one real optional mode (4x) during construction.
+            // Surface that result immediately; Reset() already performs the same write-back via
+            // ApplyMultiSampleCount(), but direct construction previously retained 2x/8x requests.
+            presentationParameters_.setMultiSampleCountProperty(
+                backend_->GetMultiSampleCount());
+#endif
             if (!backendStartupNameLogged_)
             {
                 std::cout << "CNA: graphics backend: "
@@ -2321,10 +2389,10 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         backend_.reset();
 
-        if (window_ != nullptr && ownsWindow_)
+        if (window_ != nullptr)
         {
-            // Clear the text-input window handle if it points at this window
-            // (mirrors FNA DisposeWindow, SDL3_FNAPlatform.cs:463-466).
+            // Clear shared input handles for both owned and caller-provided windows when they
+            // still point at this device. The ownership flag controls only SDL_DestroyWindow.
             if (Microsoft::Xna::Framework::Input::TextInputEXT::getWindowHandleProperty()
                 == reinterpret_cast<std::uintptr_t>(window_))
             {
@@ -2335,7 +2403,8 @@ namespace Microsoft::Xna::Framework::Graphics
             {
                 Microsoft::Xna::Framework::Input::Mouse::setWindowHandleProperty(0);
             }
-            SDL_DestroyWindow(window_);
+            if (ownsWindow_)
+                SDL_DestroyWindow(window_);
         }
 
         window_ = nullptr;
@@ -2773,26 +2842,30 @@ namespace Microsoft::Xna::Framework::Graphics
         if (renderTarget &&
             renderTarget->getRenderTargetUsageProperty() == RenderTargetUsage::DiscardContents)
         {
-            // Only ask for a depth-buffer clear when the target actually has one. A requested
-            // DepthFormat::None never has one; beyond that, ask the BACKEND (Task 708) rather
-            // than trusting the merely-requested XNA-level format, since a backend may honor no
-            // depth format at all regardless of what was requested (SDL_Renderer's 2D-only
-            // render targets never allocate real depth-buffer storage).
-            const bool depthFormatRequested =
-                renderTarget->getDepthStencilFormatProperty() != DepthFormat::None;
+            // GDI-050: discard every attachment that this target really owns. Depth and stencil
+            // are separate because GDI's 2D render target has a standalone stencil plane but no
+            // depth plane. Other backends preserve their combined-attachment behavior through
+            // HasRealStencilBuffer's compatibility default.
+            const DepthFormat depthFormat = renderTarget->getDepthStencilFormatProperty();
+            const bool depthFormatRequested = depthFormat != DepthFormat::None;
+            const bool stencilFormatRequested = depthFormat == DepthFormat::Depth24Stencil8;
             const auto* rtBackend = renderTarget->GetRenderTargetBackend();
             const bool hasDepthBuffer =
                 rtBackend && rtBackend->HasRealDepthBuffer(depthFormatRequested);
+            const bool hasStencilBuffer =
+                rtBackend && rtBackend->HasRealStencilBuffer(stencilFormatRequested);
             // REMED-GFX-142: ClearOptions::Stencil belongs here. FNA's own SetRenderTargets ends
             // with Clear(Target | DepthBuffer | Stencil, DiscardColor, Viewport.MaxDepth, 0), and
             // FNA3D documents `preserveTargetContents` as storing the "color/depth/stencil"
             // contents -- so DiscardContents has a DETERMINISTIC replacement for all three
             // aspects, not two. Without the flag a DiscardContents target kept its previous
             // stencil for ever, which is neither preservation nor discard.
-            Clear(hasDepthBuffer
-                      ? (ClearOptions::Target | ClearOptions::DepthBuffer | ClearOptions::Stencil)
-                      : ClearOptions::Target,
-                  Color(0, 0, 0, 255), 1.0f, 0);
+            ClearOptions discardOptions = ClearOptions::Target;
+            if (hasDepthBuffer)
+                discardOptions |= ClearOptions::DepthBuffer;
+            if (hasStencilBuffer)
+                discardOptions |= ClearOptions::Stencil;
+            Clear(discardOptions, Color(0, 0, 0, 255), 1.0f, 0);
         }
     }
 
@@ -2937,19 +3010,26 @@ namespace Microsoft::Xna::Framework::Graphics
             first->getWidthProperty(), first->getHeightProperty());
         if (first->getRenderTargetUsageProperty() == RenderTargetUsage::DiscardContents)
         {
-            // See SetRenderTarget(RenderTarget2D*)'s identical guard for the rationale.
-            const bool depthFormatRequested =
-                first->getDepthStencilFormatProperty() != DepthFormat::None;
+            // See SetRenderTarget(RenderTarget2D*)'s independent attachment rationale.
+            const DepthFormat depthFormat = first->getDepthStencilFormatProperty();
+            const bool depthFormatRequested = depthFormat != DepthFormat::None;
+            const bool stencilFormatRequested = depthFormat == DepthFormat::Depth24Stencil8;
             const auto& firstDescriptor = descriptors[0];
             const bool hasDepthBuffer = firstDescriptor.IsRenderTarget2D()
                 ? firstDescriptor.GetRenderTarget2D()->HasRealDepthBuffer(depthFormatRequested)
                 : firstDescriptor.GetRenderTargetCube()->HasRealDepthBuffer(
                     depthFormatRequested);
+            const bool hasStencilBuffer = firstDescriptor.IsRenderTarget2D()
+                ? firstDescriptor.GetRenderTarget2D()->HasRealStencilBuffer(stencilFormatRequested)
+                : firstDescriptor.GetRenderTargetCube()->HasRealStencilBuffer(
+                    stencilFormatRequested);
             // REMED-GFX-142: see the singular overload's identical Stencil rationale.
-            Clear(hasDepthBuffer
-                      ? (ClearOptions::Target | ClearOptions::DepthBuffer | ClearOptions::Stencil)
-                      : ClearOptions::Target,
-                  Color(0, 0, 0, 255), 1.0f, 0);
+            ClearOptions discardOptions = ClearOptions::Target;
+            if (hasDepthBuffer)
+                discardOptions |= ClearOptions::DepthBuffer;
+            if (hasStencilBuffer)
+                discardOptions |= ClearOptions::Stencil;
+            Clear(discardOptions, Color(0, 0, 0, 255), 1.0f, 0);
         }
     }
 

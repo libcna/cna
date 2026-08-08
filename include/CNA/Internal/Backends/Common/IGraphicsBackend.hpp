@@ -441,7 +441,23 @@ namespace CNA::Internal::Backends
         /// RenderTarget2D.MultiSampleCount reflects the real clamped value, not the raw
         /// constructor request (FNA3D_GetMaxMultiSampleCount).
         [[nodiscard]] virtual int GetMultiSampleCount() const { return 0; }
-        /// Returns whether this specific target instance actually has a real depth-stencil
+        /**
+         * @brief Returns the depth/stencil format actually backing this target.
+         *
+         * The default preserves the requested ordinal because most render-target backends create
+         * exactly that attachment. A backend that normalizes or rejects attachment types can
+         * override this so RenderTarget2D.DepthStencilFormat never reports storage that does not
+         * exist. The integer convention avoids coupling this backend interface to the XNA enum.
+         *
+         * @param requestedDepthStencilFormat Requested DepthFormat ordinal.
+         * @return Applied DepthFormat ordinal.
+         */
+        [[nodiscard]] virtual int GetAppliedDepthStencilFormatEXT(
+            int requestedDepthStencilFormat) const
+        {
+            return requestedDepthStencilFormat;
+        }
+        /// Returns whether this specific target instance actually has a real depth
         /// buffer backing it, as opposed to merely being requested via DepthFormat at
         /// construction time. Most backends honor whatever DepthFormat was requested, so the
         /// default mirrors that (via @p depthFormatWasRequested, computed by the caller from
@@ -449,6 +465,14 @@ namespace CNA::Internal::Backends
         /// 2D-only render targets never allocate real depth-buffer storage regardless of what
         /// format was requested, and overrides this to always return false (Task 708).
         [[nodiscard]] virtual bool HasRealDepthBuffer(bool depthFormatWasRequested) const { return depthFormatWasRequested; }
+        /// Returns whether this target has a real stencil plane. The caller passes true only for
+        /// Depth24Stencil8. Most backends allocate depth and stencil together, so the compatibility
+        /// default delegates to HasRealDepthBuffer(); a backend with standalone stencil storage
+        /// (GDI's CPU 2D extension) overrides this independently.
+        [[nodiscard]] virtual bool HasRealStencilBuffer(bool stencilFormatWasRequested) const
+        {
+            return HasRealDepthBuffer(stencilFormatWasRequested);
+        }
     };
 
     /// Backend handle for a cube-map render target.
@@ -473,6 +497,11 @@ namespace CNA::Internal::Backends
         [[nodiscard]] virtual bool HasRealDepthBuffer(bool depthFormatWasRequested) const
         {
             return depthFormatWasRequested;
+        }
+        /// Cube equivalent of IRenderTargetBackend::HasRealStencilBuffer.
+        [[nodiscard]] virtual bool HasRealStencilBuffer(bool stencilFormatWasRequested) const
+        {
+            return HasRealDepthBuffer(stencilFormatWasRequested);
         }
 
         /**
@@ -510,7 +539,7 @@ namespace CNA::Internal::Backends
         // is the one `RenderTarget2D::GetData` already established: top row first.
         //
         // Headless keeps the inherited refusal because it rasterizes nothing, and the backends
-        // that create no cube render target at all (Software, SDL_Renderer, ASCII, Canvas, DX3)
+        // that create no cube render target at all (Software, SDL_Renderer, ASCII, Canvas, DX3, GDI)
         // never reach this class -- `GraphicsDevice::SetRenderTargets` refuses to bind one and
         // `TextureCube::GetData` refuses a null backend one step earlier. Every remaining boundary
         // (a multisampled or mipped cube target on bgfx, a mip level D3D9 never allocated, WebGPU's
@@ -803,6 +832,14 @@ namespace CNA::Internal::Backends
         const ITextureBackend*     texture1 = nullptr;      ///< Texture unit 1 (DualTextureEffect second layer), or null
         const ITextureCubeBackend* envMap   = nullptr;      ///< Cube map for EnvironmentMapEffect, or null
         float diffuseColor[4]  = {1,1,1,1};                ///< RGBA 0..1
+        /// CNA's fixed ColorMatrixEffect, used only by the shared CPU SpriteBatch path. The
+        /// matrix is row-major and transforms the post-texture/post-tint source before blending:
+        /// out[row] = dot(colorMatrix[row], sourceRGBA) + colorOffset[row], clamped to [0,1].
+        /// Other backends deliberately leave this false rather than pretending to execute it.
+        bool cpu2DColorMatrixEnabled = false;
+        float cpu2DColorMatrix[16] = {
+            1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1};
+        float cpu2DColorOffset[4] = {0,0,0,0};
         float ambientColor[3]  = {0,0,0};                   ///< RGB 0..1 (BasicEffect path)
         float light0Dir[3]     = {0,-1,0};                  ///< World-space, pre-normalized
         float light0Diffuse[3] = {1,1,1};                   ///< RGB 0..1
@@ -903,20 +940,26 @@ namespace CNA::Internal::Backends
         bool pbr                 = false;
         /// Number of instances to draw (1 = non-instanced).
         int instanceCount = 1;
-        /// REMED-GFX-201/202: every active `VertexBufferBinding`, in public slot order, captured by
-        /// value -- per-vertex and per-instance alike, on EVERY draw route. `vertexStreams[0]` is
-        /// always the stream `Draw*PrimitivesEx`'s own `vb` argument refers to, so a backend that
-        /// reads only `vb` still sees exactly what it saw before this field existed. Entries at or
-        /// past `vertexStreamCount` are unset and must not be read.
+        /// REMED-GFX-201/202: every active declared `VertexBufferBinding`, in public slot order,
+        /// captured by value -- per-vertex and per-instance alike, on every draw route.
+        /// `vertexStreams[0]` is always the stream `Draw*PrimitivesEx`'s own `vb` argument refers
+        /// to, so a backend that reads only `vb` still sees exactly what it saw before this field
+        /// existed. REMED-GFX-233's one legacy empty-declaration buffer is the sole public-binding
+        /// exception and deliberately leaves this array empty (see `vertexStreamCount`). Entries
+        /// at or past `vertexStreamCount` are unset and must not be read.
         ///
-        /// This is CNA's `FNA3D_VertexBufferBinding` array, and like FNA's own
-        /// `PrepareVertexBindingArray` it is prepared identically for `DrawPrimitives`,
+        /// For declared layouts this is CNA's `FNA3D_VertexBufferBinding` array, and like FNA's
+        /// own `PrepareVertexBindingArray` it is prepared identically for `DrawPrimitives`,
         /// `DrawIndexedPrimitives` and `DrawInstancedPrimitives`. An instance stream is simply an
         /// entry whose `instanceFrequency` is greater than zero; there is no second representation
         /// of "the instance buffer" anywhere.
         std::array<GpuVertexStreamBinding, kMaxVertexStreams> vertexStreams{};
-        /// Active entries in `vertexStreams`. 0 only on the internal routes that bind no public
-        /// buffer at all (SpriteBatch, `DrawUser*`); 1 for every single-stream draw.
+        /// Active entries in `vertexStreams`. 0 on internal routes that bind no public buffer
+        /// (SpriteBatch, `DrawUser*`) and on REMED-GFX-233's legacy ordinary single-buffer route
+        /// whose intentionally empty VertexDeclaration has no stride to describe; that route uses
+        /// the Draw*PrimitivesEx `vb` argument and its backend upload stride. 1 for every declared
+        /// single-stream draw. Nonzero declared streams, instanced submission, and multi-stream
+        /// draws are never folded into this compatibility representation.
         int vertexStreamCount = 0;
         /// Sum of the per-vertex (`instanceFrequency == 0`) streams' strides -- the byte stride of
         /// the *combined* vertex the shader sees, and therefore the key a stride-dispatched
@@ -1002,7 +1045,9 @@ namespace CNA::Internal::Backends
      * routes that stage their own temporary buffer -- `DrawUser*`, SpriteBatch,
      * `DrawColoredPrimitives` -- bind no public `VertexBufferBinding` at all and leave
      * `vertexStreamCount` at 0; they keep dispatching on @p fallbackStride, the stride of the one
-     * buffer they built, so their behaviour is untouched by this feature.
+     * buffer they built, so their behaviour is untouched by this feature. REMED-GFX-233's legacy
+     * empty-declaration single-buffer route likewise leaves the count at 0 because only the
+     * backend resource knows its typed-upload stride; @p fallbackStride is authoritative there.
      *
      * @param params         The draw being dispatched.
      * @param fallbackStride The named `vb`'s own stride.
@@ -1316,16 +1361,33 @@ namespace CNA::Internal::Backends
         /// (immediately reconstructing a device from inside this call is not required).
         virtual void UpdatePresentationFormatEXT(int /*backBufferFormat*/, int /*depthStencilFormat*/,
                                                   bool /*isFullScreen*/) {}
+        /**
+         * @brief Maps a requested backbuffer format ordinal to the backend's applied format.
+         *
+         * Backends that honor the request use the identity default. Fixed-format backends override
+         * this so GraphicsDevice can expose the real format after construction/reset without
+         * coupling this interface to SurfaceFormat.
+         */
+        [[nodiscard]] virtual int GetAppliedBackBufferFormatEXT(int requestedFormat) const
+        {
+            return requestedFormat;
+        }
+        /** @brief Depth/stencil counterpart of GetAppliedBackBufferFormatEXT(). */
+        [[nodiscard]] virtual int GetAppliedDepthStencilFormatEXT(int requestedFormat) const
+        {
+            return requestedFormat;
+        }
         /// Returns the backbuffer's actual (device-clamped) MSAA sample count; 0 if none/unsupported.
         [[nodiscard]] virtual int GetMultiSampleCount() const { return 0; }
-        /// Converts a point from physical window coordinates to logical (virtual)
-        /// game coordinates. Returns true on success. Default: no-op (returns false).
+        /// Converts a point from SDL window-coordinate space to logical (virtual) game
+        /// coordinates. A backend whose drawable pixel size differs from SDL_GetWindowSize()
+        /// must account for that density internally. Returns true on success. Default: no-op.
         virtual bool TransformWindowToLogical(float windowX, float windowY,
                                               float& logX, float& logY) const { return false; }
-        /// Converts a point from logical (virtual) game coordinates to physical window
-        /// coordinates — the inverse of TransformWindowToLogical. Returns true on success.
-        /// Default: no-op (returns false), i.e. window == logical (no scaling). Used by
-        /// Mouse::SetPosition to place the OS cursor correctly on a scaled/letterboxed window.
+        /// Converts a point from logical (virtual) game coordinates to SDL window-coordinate
+        /// space — the inverse of TransformWindowToLogical. Returns true on success. Default:
+        /// no-op (returns false), i.e. window == logical (no scaling). Used by Mouse::SetPosition
+        /// to place the OS cursor correctly on a scaled/letterboxed window.
         virtual bool TransformLogicalToWindow(float logX, float logY,
                                               float& windowX, float& windowY) const { return false; }
         // TODO: SDL dependency should be abstracted later
@@ -1493,7 +1555,7 @@ namespace CNA::Internal::Backends
         // ---- 3D pipeline ----
 
         /**
-         * @brief Whether this backend can maintain a real depth/stencil buffer at all, for the
+         * @brief Whether this backend can maintain a complete depth/stencil buffer at all, for the
          * default back buffer (as opposed to an explicit RenderTarget2D, which has its own
          * per-instance IRenderTargetBackend::HasRealDepthBuffer() query).
          *
@@ -1739,10 +1801,12 @@ namespace CNA::Internal::Backends
         /// Returns whether this backend (and, for device-dependent entries, the current runtime
         /// device/driver) supports the given CNA::GraphicsCapability. Default implementation
         /// returns true for everything -- most backends are fully 3D-capable, so only backends
-        /// with a genuine, known gap (SDL_Renderer/DX3/Canvas's 2D-only design, or a specific
+        /// with a genuine, known gap (SDL_Renderer/DX3/Canvas/GDI's 2D-only design, or a specific
         /// device-dependent feature like anisotropic filtering) need to override this.
         [[nodiscard]] virtual bool SupportsCapability(CNA::GraphicsCapability capability) const
         {
+            if (capability == CNA::GraphicsCapability::StencilBuffer)
+                return SupportsStencilBuffer();
             // REMED-GFX-201: MultiStreamVertexInput is the one entry whose default is FALSE. A
             // backend derives its native input elements from a single byte stride, so binding a
             // second per-vertex stream is real work it must opt into by name; defaulting to true

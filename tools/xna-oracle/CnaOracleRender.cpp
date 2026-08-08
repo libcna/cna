@@ -115,6 +115,8 @@ namespace
         return "SDL_RENDERER";
 #elif defined(CNA_BACKEND_SKIA)
         return "SKIA";
+#elif defined(CNA_BACKEND_GDI)
+        return "GDI";
 #else
         return "UNKNOWN";
 #endif
