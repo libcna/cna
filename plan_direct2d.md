@@ -16,8 +16,8 @@
 Zmrazený plán z 2026-08-03 obsahoval přesně **128 řádků: 32 `✅`, 35 `🟨` a 61 `⬜`**, tedy
 **96 neúplných**, nikoli dříve uváděných 88. Adaptace na současnou integrační architekturu uzavírá
 podporované produkční cesty opravou nebo poctivým odmítnutím; nezaměňuje však Wine za fyzické
-Windows a nemění výkonové, CI a refaktorové náměty na release blokery. Nové nálezy D2D-134 a
-D2D-135 jsou vedeny odděleně pod tabulkou jako post-freeze opravy.
+Windows a nemění výkonové, CI a refaktorové náměty na release blokery. Nové nálezy D2D-134 až
+D2D-136 jsou vedeny odděleně pod tabulkou jako post-freeze opravy.
 
 MinGW GCC 14 x64 Release build se sestavil s `CNA_ENABLE_NET=OFF` a limitem dvou jobů. Dedikovaný
 label nyní obsahuje `Direct2D_Smoke`, `Direct2D_2DParity`, `Direct2D_Lifetime` a `Direct2D_Unit`;
@@ -287,6 +287,7 @@ Historické potvrzené chyby jsou zachovány jako provenance, ale už nejsou akt
 |---|---|---|---|
 | D2D-134 | Oprav dangling device-event callback v parity testu. | ✅ | Callbacky zachycují `eventOrder` referencí. V historickém testu lokální vector zanikl dříve než dlouho žijící `GraphicsDevice`, takže pozdější device-loss callback zapisoval do zrušeného objektu a Wine skončilo page faultem. `eventOrder_` je nyní member deklarovaný před `GraphicsDeviceManager`, takže manager/device se zničí jako první. Celý parity test včetně lost/resetting/reset cyklu a všech následujících kontrol proběhl bez pádu. Jde o test-lifetime opravu, nikoli maskování produkční device-loss chyby. |
 | D2D-135 | Zachovej native blend stav při odmítnutém embedded `BlendFactor`. | ✅ | `GraphicsDevice` volá `ApplyBlendState` před `SetBlendFactor`; Direct2D dříve publikoval první polovinu a při ne-bílém faktoru vyhodil výjimku až ve druhé, takže veřejná cache a native stav se rozešly. Backend nyní drží odvozený blend jako pending a publikuje jej až po úspěšné validaci faktoru. Veřejný cache oracle a přímý backend SpriteBatch pixel dokazují, že odmítnutý `AlphaBlend` ponechá aktivní předchozí `NonPremultiplied`. Pending stav se při každém odmítnutí i teardownu zahodí. |
+| D2D-136 | Zahrň Direct2D do oracle počtu compile-time backend maker. | ✅ | Sdílený `GraphicsBackendCompileDefinitionsTest.ExactlyOneGraphicsBackendIsSelected` nepočítal `CNA_BACKEND_DIRECT2D`, takže skutečný Direct2D build hlásil nula vybraných backendů. Přidán je pouze chybějící arm; Direct2D test nyní hlásí přesně jeden a OPENGLES control zůstává zelený. |
 
 ## Klasifikace zbývajících položek po adaptaci
 
