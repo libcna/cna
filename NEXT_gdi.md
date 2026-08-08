@@ -22,6 +22,9 @@
 - REMED-GFX-230 makes Software `RenderTarget2D::UpdatePixels` consume its stride row by row and
   apply the same pre-mutation lower bound; the existing 2D regression covers exact padded-row
   readback and retained pixels after rejection.
+- REMED-GFX-231 corrects the supported `SourceAlphaSaturation` CPU blend factor to use
+  `min(sourceAlpha, 1-destinationAlpha)` for RGB and one for alpha; an asymmetric/nontrivial-alpha
+  2D regression is committed, with adapted execution pending.
 - REMED-BUILD-017 corrects the manual native-MSVC workflow and command inventory to build all
   **seventeen** correctness executables before running the **nineteen** registered GDI cases. The
   omitted targets were presentation-mode transaction, DC-release transaction, and texture

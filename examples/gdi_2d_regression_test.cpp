@@ -206,6 +206,21 @@ namespace
         ok &= ExpectPixel("separate blend functions add/reverse subtract", ReadPixel(backend, 2, 2),
                           Pixel{ 250, 250, 0, 0 }, 1);
 
+        // REMED-GFX-231: SourceAlphaSaturation is min(source alpha, 1-destination alpha) for
+        // colour and One for alpha. These nontrivial, deliberately different alphas distinguish
+        // the destination-alpha term from the former erroneous 1-source-alpha calculation.
+        SetBlend(backend, /*SourceAlphaSaturation*/ 12, /*One*/ 0,
+                 /*Zero*/ 1, /*Zero*/ 1);
+        backend.Clear(17.0f / 255.0f, 83.0f / 255.0f, 149.0f / 255.0f,
+                      223.0f / 255.0f);
+        const ImageData saturationSourceData = MakeImage(1, 1, { 201, 111, 37, 63 });
+        std::unique_ptr<ITextureBackend> saturationSource =
+            backend.CreateTexture(saturationSourceData);
+        Draw(backend, *saturationSource, Rectangle(2, 2, 1, 1),
+             Rectangle(0, 0, 1, 1), Color::White);
+        ok &= ExpectPixel("SourceAlphaSaturation uses inverse destination alpha",
+                          ReadPixel(backend, 2, 2), Pixel{ 25, 13, 4, 63 }, 1);
+
         // BlendFactor is dynamic state, independent of ApplyBlendState. A white source exposes
         // the per-channel constant exactly; destination is zero for colour and alpha.
         SetBlend(backend, /*BlendFactor*/ 10, /*One*/ 0, /*Zero*/ 1, /*Zero*/ 1);

@@ -88,7 +88,7 @@ namespace CNA::Internal::Backends::Software
                 case 11: return 1.0f - constant[channel];         // InverseBlendFactor
                 case 12: return channel == 3                      // SourceAlphaSaturation
                     ? 1.0f
-                    : std::min(source[3], 1.0f - source[3]);
+                    : std::min(source[3], 1.0f - destination[3]);
                 default:
                     throw std::runtime_error(
                         "SoftwareGraphicsBackend: unsupported Blend factor ordinal");

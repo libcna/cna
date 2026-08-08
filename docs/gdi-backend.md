@@ -134,6 +134,10 @@ as a release baseline.
   its stride and treated every source as tight. It now copies only the RGBA bytes from each valid
   padded row and rejects a positive pitch below `width * 4` before changing color, MSAA, or mip
   state. The 2D regression covers exact readback and transactional rejection on a 3×2 target.
+- REMED-GFX-231 restores the XNA `SourceAlphaSaturation` source factor for the private CPU lane:
+  RGB uses `min(sourceAlpha, 1-destinationAlpha)` and alpha uses one. The 2D regression uses
+  asymmetric RGB plus distinct nontrivial source/destination alpha values so substituting inverse
+  source alpha cannot pass. Adapted execution remains pending.
 - A custom `ShaderEffect` throws `System::NotSupportedException` during construction on GDI. GDI
   does not create an invalid placeholder, accept shader source or uniforms, and then ignore them.
   `ColorMatrixEffect` is the sole fixed non-shader exception; every other custom `SpriteBatch`
