@@ -1,20 +1,27 @@
 # Glide backend continuity
 
-## Session status
+## Post-audit integration continuity (2026-08-08)
 
-- **Branch:** `feature/glide`.
-- **Authoritative plan:** [`plan_glide.md`](plan_glide.md).
-- **Scope:** authentic 32-bit Windows/x86 Glide 3.x backend only. Do not add a software or modern-API fallback.
-- **Session focus:** closed every item in plan_glide.md's "Next implementation work" section that
-  does not require the external i686 `sharp-runtime`/dgVoodoo dependency: GLIDE-AUD-004, -009,
-  -010, -011, -012, -013, -014, -015. The only items still open there (GLIDE-AUD-006 follow-up,
-  GLIDE-AUD-007 execution, the sub-texel LOD phase validation) are explicitly blocked by that
-  dependency and were not touched. After that batch, the project owner asked to hear the "Future
-  authentic Glide capability roadmap" section read back, then picked "the most valuable
-  non-blocked items" for implementation: **GLIDE-FUT-004, -007, -011, -013, -015** are now all
-  `[x]` in `plan_glide.md`. GLIDE-FUT-004 (second TMU / `DualTextureEffect`) was explicitly scoped
-  down to single-tile texture0/texture1 of identical dimensions after a mid-task scope check with
-  the project owner; see its plan entry for the full justification.
+- **Original branch:** `feature/glide` at
+  `2f9b47e1281590e6735b5f76ef1e13dd781d8981`; preserve it unchanged.
+- **Adaptation branch:** `adapt/glide`, based on `integration/post-audit-phase1` at
+  `0a51f8647eb4ddf2fdcd2102756ea79bb49625b7`.
+- **Archive:** annotated `archive/preintegration/glide-20260804`, preserving the original head,
+  fork `a7a49e3dc135cd3394b04dbc761123584b4e1d45`, and all 32 unique commits.
+- **Authoritative plan:** [`plan_glide.md`](plan_glide.md), especially its post-audit adaptation
+  record and capability boundaries.
+- **Scope:** authentic 32-bit Windows/x86 Glide 3.x only. Never add a software or modern-API
+  fallback. The host had neither physical Voodoo hardware nor an external `glide3x.dll`; the
+  production renderer is build-only here, while the fake-DLL ABI contract is a test-double wrapper
+  result, not a rendering result.
+- **Adaptation findings:** `REMED-GFX-226`, `REMED-GFX-227`, and `REMED-GFX-228` are MEDIUM and
+  resolved. The current stream-array contract, separate depth/stencil truth, texture pitch units,
+  deferred lifetime, TMU residency, and per-slot sampler behavior are recorded in the plan.
+- **Validated:** 78/78 portable tests, 13/13 shared contracts, 39-export x86 ABI contract,
+  i686 whole-backend syntax, 78/78 ASan/UBSan, and five serial OPENGLES pixel/state controls.
+- **Remaining external boundary:** a full CNA i686 executable remains unavailable until the
+  sibling `sharp-runtime` can satisfy its i686 ZLIB and `__int128` requirements. A real emulator
+  or hardware rendering matrix remains unexecuted and must never be inferred from the ABI test.
 
 ## Established state
 
@@ -140,7 +147,7 @@ batch, all passing after every commit.
   established test infra — not a "large dependency" re-clone).
 - `git diff --check` clean at every commit.
 
-## Next action
+## Future backend work
 
 All five items the project owner picked as "most valuable non-blocked" from the Future roadmap
 (GLIDE-FUT-004, -007, -011, -013, -015) are now `[x]`. What remains open in that section is either

@@ -1,7 +1,9 @@
 #include "CNA/Internal/Backends/Glide/GlideGraphicsBackend.hpp"
 #include "CNA/Internal/Backends/Glide/GlideAbi.hpp"
 #include "CNA/Internal/Backends/Glide/GlideBlendFactor.hpp"
+#include "CNA/Internal/Backends/Glide/GlideCapability.hpp"
 #include "CNA/Internal/Backends/Glide/GlideDisplayModeSelection.hpp"
+#include "CNA/Internal/Backends/Glide/GlideDrawValidation.hpp"
 #include "CNA/Internal/Backends/Glide/GlideExtensionCapabilities.hpp"
 #include "CNA/Internal/Backends/Glide/GlideLighting.hpp"
 #include "CNA/Internal/Backends/Glide/GlidePrimitiveClip.hpp"
@@ -516,7 +518,13 @@ namespace CNA::Internal::Backends::Glide
         {
             if (context != nullptr)
             {
+                // REMED-GFX-227: a final SpriteBatch may still be staged in CNA memory even
+                // though no more Present() call will occur. Submit and fence it before closing
+                // the context so device teardown preserves deferred command ordering.
+                FlushSpriteBatch();
+                api.grFinish();
                 api.grSstWinClose(context);
+                context = nullptr;
             }
             if (glideInitialized)
             {
@@ -958,10 +966,13 @@ namespace CNA::Internal::Backends::Glide
         FxI32 depthCompare = kDepthCompareGreater;
         FxBool colorMaskRgb = kFxTrue;
         FxBool colorMaskAlpha = kFxTrue;
-        int samplerFilter = 0;
-        int samplerAddressU = 1;
-        int samplerAddressV = 1;
-        float samplerLodBias = 0.0f;
+        // REMED-GFX-226: DualTextureEffect must retain and submit each public sampler slot's
+        // independent filter/LOD state. Addressing is also retained independently, then the
+        // shared-coordinate limitation is validated explicitly before a dual-TMU draw.
+        std::array<int, 2> samplerFilter{0, 0};
+        std::array<int, 2> samplerAddressU{1, 1};
+        std::array<int, 2> samplerAddressV{1, 1};
+        std::array<float, 2> samplerLodBias{0.0f, 0.0f};
         int scissorX = 0;
         int scissorY = 0;
         int scissorWidth = 640;
@@ -1076,6 +1087,10 @@ namespace CNA::Internal::Backends::Glide
         {
             if (const std::shared_ptr<GlideGraphicsBackend::Impl> impl = impl_.lock())
             {
+                // REMED-GFX-227: SpriteBatch is deferred in CNA-owned memory. grFinish() alone
+                // fences only commands already submitted to Glide, so submit pending geometry
+                // before this texture's TMU ranges can be returned to the allocator.
+                impl->FlushSpriteBatch();
                 auto& residents = impl->residentTexturesByTmu[0];
                 residents.erase(std::remove(residents.begin(), residents.end(), this), residents.end());
                 // A source command can remain in Glide's FIFO after the C++ texture dies. Do
@@ -1122,21 +1137,7 @@ namespace CNA::Internal::Backends::Glide
 
         void UpdatePixels(const std::uint8_t* rgba, int stride) override
         {
-            if (rgba == nullptr)
-            {
-                throw std::runtime_error("GLIDE texture update received null pixel data");
-            }
-            const std::size_t rowBytes = static_cast<std::size_t>(width_) * 4u;
-            const std::size_t sourceStride = stride > 0 ? static_cast<std::size_t>(stride) : rowBytes;
-            if (sourceStride < rowBytes)
-            {
-                throw std::runtime_error("GLIDE texture update stride is shorter than one RGBA8 row");
-            }
-            for (int row = 0; row < height_; ++row)
-            {
-                std::memcpy(rgba_.data() + static_cast<std::size_t>(row) * rowBytes,
-                            rgba + static_cast<std::size_t>(row) * sourceStride, rowBytes);
-            }
+            CopyGlideRgba8Rows(rgba_, width_, height_, rgba, stride);
             // A pending SpriteBatch quad was already computed against this texture's current
             // tile content; submit it before that content changes underneath it.
             GetImpl().FlushSpriteBatch();
@@ -1931,10 +1932,10 @@ namespace CNA::Internal::Backends::Glide
 
     bool GlideGraphicsBackend::SupportsCapability(CNA::GraphicsCapability capability) const
     {
-        // The auxiliary plane is a real 16-bit depth buffer, but historical Glide has no stencil
-        // plane. Keep the aggregate DepthStencilBuffer capability false rather than promising
-        // stencil operations that the hardware cannot provide.
-        return capability == CNA::GraphicsCapability::ThreeD;
+        // The auxiliary plane is a real 16-bit depth buffer, but Glide has no stencil plane, so
+        // the aggregate capability remains false; SupportsDepthBuffer()/SupportsStencilBuffer()
+        // carry that split to Clear routing.
+        return SupportsGlideCapability(capability);
     }
 
     void GlideGraphicsBackend::ReadBackbuffer(int x, int y, int w, int h, std::uint8_t* pixels)
@@ -2187,10 +2188,10 @@ namespace CNA::Internal::Backends::Glide
         {
             throw std::runtime_error("GLIDE backend received a negative texture slot");
         }
-        // GraphicsDevice commits all 16 public sampler slots. Glide only has TMU0 in the
-        // supported pipeline, so unused higher slots are deliberately inert rather than making
-        // an otherwise valid single-texture draw fail during state synchronization.
-        if (slot != 0)
+        // GraphicsDevice commits all 16 public sampler slots. Glide's implemented pipeline uses
+        // TMU0 and, for DualTextureEffect, TMU1. Higher unused slots are deliberately inert rather
+        // than making an otherwise valid draw fail during state synchronization.
+        if (slot > 1)
         {
             return;
         }
@@ -2198,9 +2199,9 @@ namespace CNA::Internal::Backends::Glide
         static_cast<void>(maxAnisotropy);
         static_cast<void>(ToGlideTextureAddress(addressU));
         static_cast<void>(ToGlideTextureAddress(addressV));
-        impl_->samplerFilter = filter;
-        impl_->samplerAddressU = addressU;
-        impl_->samplerAddressV = addressV;
+        impl_->samplerFilter[static_cast<std::size_t>(slot)] = filter;
+        impl_->samplerAddressU[static_cast<std::size_t>(slot)] = addressU;
+        impl_->samplerAddressV[static_cast<std::size_t>(slot)] = addressV;
     }
 
     void GlideGraphicsBackend::ApplySamplerMipState(int slot, int maxMipLevel, float lodBias)
@@ -2209,26 +2210,21 @@ namespace CNA::Internal::Backends::Glide
         {
             throw std::runtime_error("GLIDE backend received a negative texture slot");
         }
-        if (slot != 0)
+        if (slot > 1)
         {
             return;
         }
         // Glide's fixed-function LOD selector has a native bias control but no per-sampler
         // maximum-mip clamp. Keep the unsupported half explicit rather than silently applying a
         // different texture level than CNA requested.
-        if (maxMipLevel != 0)
+        ValidateGlideSamplerMipState(maxMipLevel, lodBias);
+        // DrawSprite() reads slot 0's bias too; a mid-batch change must not be silently skipped for
+        // sprites already queued under the old bias. Slot 1 never participates in SpriteBatch.
+        if (slot == 0)
         {
-            throw std::runtime_error("GLIDE backend cannot represent SamplerState::MaxMipLevel");
+            impl_->FlushSpriteBatch();
         }
-        if (!std::isfinite(lodBias) || lodBias < -8.0f || lodBias > 7.75f)
-        {
-            throw std::runtime_error("GLIDE SamplerState LOD bias must be finite and within [-8, 7.75]");
-        }
-        // DrawSprite() reads samplerLodBias too; a mid-batch change must not be silently skipped
-        // for sprites already queued under the old bias (sameBinding does not compare it, since
-        // it is not one of the SpriteBatch-owned sampler parameters).
-        impl_->FlushSpriteBatch();
-        impl_->samplerLodBias = lodBias;
+        impl_->samplerLodBias[static_cast<std::size_t>(slot)] = lodBias;
     }
 
     int GlideGraphicsBackend::GetMaxTextureDimension() const
@@ -2351,7 +2347,7 @@ namespace CNA::Internal::Backends::Glide
                 // or Mirror escape into its power-of-two padding would sample a wrong logical tile.
                 impl_->api.grTexClampMode(0, kTexClampClamp, kTexClampClamp);
                 impl_->api.grTexMipMapMode(0, kMipMapNearest, sampler.lodBlend);
-                impl_->api.grTexLodBiasValue(0, impl_->samplerLodBias);
+                impl_->api.grTexLodBiasValue(0, impl_->samplerLodBias[0]);
                 impl_->spriteBatchBound = true;
                 impl_->spriteBoundTmuAddress = tile.range.address;
                 impl_->spriteSamplerFilter = textureFilter;
@@ -2577,7 +2573,7 @@ namespace CNA::Internal::Backends::Glide
         void ValidateFixedFunctionDrawParams(const GpuDrawParams& params)
         {
             if (params.envMap != nullptr || params.envMapping || params.pbr || params.skinned ||
-                params.instanceCount != 1 || params.instanceVb != nullptr || params.customEffectBackend != nullptr)
+                params.instanceCount != 1 || params.customEffectBackend != nullptr)
             {
                 throw std::runtime_error(
                     "GLIDE 3D supports the fixed-function BasicEffect/DualTextureEffect subset only; "
@@ -2654,6 +2650,8 @@ namespace CNA::Internal::Backends::Glide
         {
             throw std::runtime_error("GLIDE 3D received a vertex buffer created by a different backend");
         }
+        ValidateGlideVertexStreams(params, &vbIn, static_cast<int>(vb->Stride()),
+                                   vb->GetVertexCount());
         const int vertexCount = VertexCountForGlidePrimitives(primitive, primitiveCount);
         if (vertexStart < 0 || vertexStart > vb->GetVertexCount() - vertexCount)
         {
@@ -2713,11 +2711,14 @@ namespace CNA::Internal::Backends::Glide
                     "GLIDE DualTextureEffect requires both textures to have identical dimensions: this "
                     "backend shares one texture-coordinate channel between TMU0 and TMU1");
             }
+            ValidateGlideDualSamplerAddressModes(
+                impl_->samplerAddressU[0], impl_->samplerAddressV[0],
+                impl_->samplerAddressU[1], impl_->samplerAddressV[1]);
         }
         if (textured)
         {
             const_cast<GlideTextureBackend*>(texture)->EnsureAddressMode(
-                impl_->samplerAddressU, impl_->samplerAddressV);
+                impl_->samplerAddressU[0], impl_->samplerAddressV[0]);
             if (params.dualTexture)
             {
                 // texture0 has no reason to reject being tiled on its own (that is its normal,
@@ -2732,7 +2733,19 @@ namespace CNA::Internal::Backends::Glide
                         "one physical tile at the runtime's reported GR_MAX_TEXTURE_SIZE");
                 }
                 const_cast<GlideTextureBackend*>(dualTexture1)->EnsureTmu1Resident(
-                    impl_->samplerAddressU, impl_->samplerAddressV);
+                    impl_->samplerAddressU[1], impl_->samplerAddressV[1]);
+                // REMED-GFX-228: EnsureTmu1Resident currently prepares texture1's logical
+                // pyramid through its ordinary TMU0 residency path. Under TMU0 pressure that
+                // allocation may evict texture0 after we validated it above. Restore texture0 as
+                // the final TMU0 requester; evicting texture1's now-unneeded TMU0 copy leaves its
+                // independent TMU1 allocation intact.
+                const_cast<GlideTextureBackend*>(texture)->EnsureAddressMode(
+                    impl_->samplerAddressU[0], impl_->samplerAddressV[0]);
+                if (texture->IsTiled())
+                {
+                    throw std::runtime_error(
+                        "GLIDE DualTextureEffect cannot restore its first texture as one native tile");
+                }
             }
         }
         const Matrix wvp = world * view * projection;
@@ -2939,7 +2952,7 @@ namespace CNA::Internal::Backends::Glide
             if (textured)
             {
                 impl_->ConfigureSpriteCombiner();
-                const GlideSamplerSettings sampler = ToGlideSamplerSettings(impl_->samplerFilter);
+                const GlideSamplerSettings sampler = ToGlideSamplerSettings(impl_->samplerFilter[0]);
                 // Traversal must stay primitive-major so two primitives whose tiled fragments
                 // interleave (A samples tile1 where B samples tile0 at the same pixel, or vice
                 // versa) still submit in their original relative order. Rebinding/flushing only
@@ -2958,7 +2971,7 @@ namespace CNA::Internal::Backends::Glide
                     impl_->api.grTexFilterMode(0, sampler.minFilter, sampler.magFilter);
                     impl_->api.grTexClampMode(0, kTexClampClamp, kTexClampClamp);
                     impl_->api.grTexMipMapMode(0, kMipMapNearest, sampler.lodBlend);
-                    impl_->api.grTexLodBiasValue(0, impl_->samplerLodBias);
+                    impl_->api.grTexLodBiasValue(0, impl_->samplerLodBias[0]);
                     boundTile = &tile;
                 };
                 if (pointPrimitive)
@@ -2970,8 +2983,8 @@ namespace CNA::Internal::Backends::Glide
                         {
                             continue;
                         }
-                        input.u = MapGlideTextureCoordinateToUnit(input.u, impl_->samplerAddressU);
-                        input.v = MapGlideTextureCoordinateToUnit(input.v, impl_->samplerAddressV);
+                        input.u = MapGlideTextureCoordinateToUnit(input.u, impl_->samplerAddressU[0]);
+                        input.v = MapGlideTextureCoordinateToUnit(input.v, impl_->samplerAddressV[0]);
                         for (const GlideTextureBackend::Tile& tile : texture->Tiles())
                         {
                             if (TileOwnsGlideTextureCoordinate(tile, *texture, input.u, input.v))
@@ -3002,10 +3015,10 @@ namespace CNA::Internal::Backends::Glide
                             const float v0 = static_cast<float>(tile.sourceY) / texture->GetHeight();
                             const float v1 = static_cast<float>(tile.sourceY + tile.sourceHeight) / texture->GetHeight();
                             const std::vector<TextureAddressSegment> uSegments = MakeTextureAddressSegments(
-                                impl_->samplerAddressU, std::min(frustumSegment->first.u, frustumSegment->second.u),
+                                impl_->samplerAddressU[0], std::min(frustumSegment->first.u, frustumSegment->second.u),
                                 std::max(frustumSegment->first.u, frustumSegment->second.u), u0, u1);
                             const std::vector<TextureAddressSegment> vSegments = MakeTextureAddressSegments(
-                                impl_->samplerAddressV, std::min(frustumSegment->first.v, frustumSegment->second.v),
+                                impl_->samplerAddressV[0], std::min(frustumSegment->first.v, frustumSegment->second.v),
                                 std::max(frustumSegment->first.v, frustumSegment->second.v), v0, v1);
                             for (const TextureAddressSegment& uSegment : uSegments)
                             {
@@ -3126,7 +3139,8 @@ namespace CNA::Internal::Backends::Glide
             {
                 impl_->ConfigureSpriteCombiner();
             }
-            const GlideSamplerSettings sampler = ToGlideSamplerSettings(impl_->samplerFilter);
+            const GlideSamplerSettings sampler0 = ToGlideSamplerSettings(impl_->samplerFilter[0]);
+            const GlideSamplerSettings sampler1 = ToGlideSamplerSettings(impl_->samplerFilter[1]);
             // Traversal is primitive-major, not tile-major: a tile-major outer loop would emit
             // every triangle's tile-0 fragment before any triangle's tile-1 fragment, silently
             // reordering two triangles whenever one samples tile-1 where the other samples tile-0
@@ -3141,22 +3155,22 @@ namespace CNA::Internal::Backends::Glide
                 }
                 flushTriangleBatch();
                 impl_->api.grTexSource(0, tile.range.address, kMipMapBoth, const_cast<GlideTexInfo*>(&tile.nativeInfo));
-                impl_->api.grTexFilterMode(0, sampler.minFilter, sampler.magFilter);
+                impl_->api.grTexFilterMode(0, sampler0.minFilter, sampler0.magFilter);
                 // CPU partitions the logical image at every tile and address-mode boundary, so
                 // each submitted polygon is sampled only from its selected native tile.
                 impl_->api.grTexClampMode(0, kTexClampClamp, kTexClampClamp);
-                impl_->api.grTexMipMapMode(0, kMipMapNearest, sampler.lodBlend);
-                impl_->api.grTexLodBiasValue(0, impl_->samplerLodBias);
+                impl_->api.grTexMipMapMode(0, kMipMapNearest, sampler0.lodBlend);
+                impl_->api.grTexLodBiasValue(0, impl_->samplerLodBias[0]);
                 if (params.dualTexture && dualTexture1 != nullptr)
                 {
                     // texture0 is validated single-tile whenever dualTexture is set, so this runs
                     // at most once per draw call -- TMU1's single tile never changes mid-loop.
                     impl_->api.grTexSource(1, dualTexture1->Tmu1TextureAddress(), kMipMapBoth,
                                             const_cast<GlideTexInfo*>(&dualTexture1->Tmu1NativeInfo()));
-                    impl_->api.grTexFilterMode(1, sampler.minFilter, sampler.magFilter);
+                    impl_->api.grTexFilterMode(1, sampler1.minFilter, sampler1.magFilter);
                     impl_->api.grTexClampMode(1, kTexClampClamp, kTexClampClamp);
-                    impl_->api.grTexMipMapMode(1, kMipMapNearest, sampler.lodBlend);
-                    impl_->api.grTexLodBiasValue(1, impl_->samplerLodBias);
+                    impl_->api.grTexMipMapMode(1, kMipMapNearest, sampler1.lodBlend);
+                    impl_->api.grTexLodBiasValue(1, impl_->samplerLodBias[1]);
                 }
                 boundTile = &tile;
             };
@@ -3184,9 +3198,9 @@ namespace CNA::Internal::Backends::Glide
                         return left.v < right.v;
                     });
                 const std::vector<TextureAddressSegment> uSegments = MakeTextureAddressSegments(
-                    impl_->samplerAddressU, minMaxU.first->u, minMaxU.second->u, u0, u1);
+                    impl_->samplerAddressU[0], minMaxU.first->u, minMaxU.second->u, u0, u1);
                 const std::vector<TextureAddressSegment> vSegments = MakeTextureAddressSegments(
-                    impl_->samplerAddressV, minMaxV.first->v, minMaxV.second->v, v0, v1);
+                    impl_->samplerAddressV[0], minMaxV.first->v, minMaxV.second->v, v0, v1);
                 for (const TextureAddressSegment& uSegment : uSegments)
                 {
                     std::vector<CpuVertex> uPolygon = ClipGlidePolygonToHalfSpace(
@@ -3278,6 +3292,8 @@ namespace CNA::Internal::Backends::Glide
         {
             throw std::runtime_error("GLIDE 3D received a buffer created by a different backend");
         }
+        ValidateGlideVertexStreams(params, &vbIn, static_cast<int>(vb->Stride()),
+                                   vb->GetVertexCount());
         const int indexCount = VertexCountForGlidePrimitives(primitive, primitiveCount);
         if (startIndex < 0 || startIndex > ib->GetIndexCount() - indexCount)
         {
@@ -3300,7 +3316,9 @@ namespace CNA::Internal::Backends::Glide
         // stride that matches a built-in packed layout while arranging its fields differently, and
         // guessing from stride would silently decode this expanded copy with the wrong offsets.
         expanded.SetDataWithLayout(ordered.data(), indexCount, vb->Layout());
-        DrawPrimitiveRange(expanded, world, view, projection, primitive, primitiveCount, 0, params);
+        const GpuDrawParams expandedParams = MakeGlideExpandedIndexedDrawParams(params);
+        DrawPrimitiveRange(expanded, world, view, projection, primitive, primitiveCount, 0,
+                           expandedParams);
     }
 
     void GlideGraphicsBackend::DrawPrimitivesEx(const IVertexBufferBackend& vb,

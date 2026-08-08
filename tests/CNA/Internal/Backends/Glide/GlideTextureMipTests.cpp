@@ -7,6 +7,7 @@
 
 using CNA::Internal::Backends::Glide::AddressGlideTextureTexel;
 using CNA::Internal::Backends::Glide::BuildAddressedGlideArgb4444Mip;
+using CNA::Internal::Backends::Glide::CopyGlideRgba8Rows;
 using CNA::Internal::Backends::Glide::GlideMipLevelCountForDimensions;
 using CNA::Internal::Backends::Glide::MapGlideTextureCoordinateToUnit;
 using CNA::Internal::Backends::Glide::RgbaToGlideArgb4444;
@@ -24,6 +25,35 @@ TEST(GlideTextureMipTest, ConvertsRgba8ToNativeArgb4444)
     EXPECT_EQ(RgbaToGlideArgb4444(kThreeTexels.data()), 0xff00u);
     EXPECT_EQ(RgbaToGlideArgb4444(kThreeTexels.data() + 4), 0xf0f0u);
     EXPECT_EQ(RgbaToGlideArgb4444(kThreeTexels.data() + 8), 0xf00fu);
+}
+
+TEST(GlideTextureMipTest, CopiesNontrivialWidthFromBytePitchWithoutCopyingPadding)
+{
+    constexpr int kWidth = 3;
+    constexpr int kHeight = 2;
+    constexpr int kRowBytes = kWidth * 4;
+    constexpr int kPitch = 16;
+    const std::array<std::uint8_t, kPitch * kHeight> source{
+        1, 2, 3, 4,   5, 6, 7, 8,   9, 10, 11, 12,   201, 202, 203, 204,
+        21, 22, 23, 24,   25, 26, 27, 28,   29, 30, 31, 32,   211, 212, 213, 214};
+    std::vector<std::uint8_t> destination(kRowBytes * kHeight, 0);
+
+    CopyGlideRgba8Rows(destination, kWidth, kHeight, source.data(), kPitch);
+
+    const std::vector<std::uint8_t> expected{
+        1, 2, 3, 4,   5, 6, 7, 8,   9, 10, 11, 12,
+        21, 22, 23, 24,   25, 26, 27, 28,   29, 30, 31, 32};
+    EXPECT_EQ(destination, expected);
+}
+
+TEST(GlideTextureMipTest, RejectsPitchShorterThanOneRgba8Row)
+{
+    std::array<std::uint8_t, 24> source{};
+    std::vector<std::uint8_t> destination(24, 0);
+    EXPECT_THROW(CopyGlideRgba8Rows(destination, 3, 2, source.data(), 11),
+                 std::runtime_error);
+    EXPECT_THROW(CopyGlideRgba8Rows(destination, 3, 2, source.data(), -1),
+                 std::runtime_error);
 }
 
 TEST(GlideTextureMipTest, CountsFullLogicalMipChains)

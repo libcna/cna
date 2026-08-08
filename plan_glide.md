@@ -10,15 +10,72 @@ Glide is a fixed-function Voodoo-era API. CNA therefore exposes a small, reliabl
 for functionality with no faithful native counterpart instead of silently falling back to a different
 renderer.
 
+## Post-audit adaptation record (2026-08-08)
+
+- Provenance: `feature/glide` at `2f9b47e1281590e6735b5f76ef1e13dd781d8981`, forked from
+  `a7a49e3dc135cd3394b04dbc761123584b4e1d45`, contains 32 unique commits. The immutable annotated
+  archive is `archive/preintegration/glide-20260804`; adaptation is on `adapt/glide` from
+  `integration/post-audit-phase1` at `0a51f8647eb4ddf2fdcd2102756ea79bb49625b7`.
+- Runtime identity: CNA's public backend is exactly `GLIDE`; it dynamically resolves the native
+  32-bit 3dfx Glide 3.x ABI from `CNA_GLIDE3X_DLL` or Windows DLL lookup. There is no OpenGL,
+  EasyGL, SDL_Renderer, or software fallback. CNA has no link-time Glide dependency and vendors no
+  compatibility runtime. dgVoodoo2 is only an example caller-supplied binary runtime: this lane
+  deliberately pins no dgVoodoo version/commit, does not build it, and does not redistribute or
+  relicense it. CNA's own code remains Ms-PL.
+- Host classification: the production backend is **build-only / runtime unavailable** on this host.
+  No physical Voodoo hardware and no compatible `glide3x.dll` were present. The independent x86
+  fake-DLL test exercised all 39 required ABI exports under Wine, but that test double is only a
+  wrapper-contract oracle and is not native-hardware or emulator rendering validation. Full i686
+  CNA linkage stops in the sibling `sharp-runtime`: its i686 dependency path first lacks ZLIB and
+  its accepted `__int128` use is unsupported by `i686-w64-mingw32-g++`.
+- Current draw contract: one ordinary stream is supported. Its public `VertexOffset` is consumed
+  through the already-folded `vertexStart`/`baseVertex`; `startIndex` selects index elements and
+  each decoded index receives `baseVertex`. Residual per-stream offsets, duplicate semantics,
+  multi-stream input, all per-instance streams/frequencies, and instancing are rejected
+  deterministically. Indexed expansion preserves the resolved declaration and clears only the
+  addressing already consumed before entering the common non-indexed submitter.
+- Shared adaptations are limited to additive default hooks for sampler mip state and independent
+  depth/stencil-plane queries, `GraphicsDevice` forwarding/masking for those hooks, and
+  `ClearOptions` complement support. Current integration remains authoritative for every other
+  shared interface; in particular, its stream-array `GpuDrawParams` shape is retained and
+  `Texture2D` is byte-identical to the pre-Glide integration tree.
+- Capability truth: `ThreeD` is true. `DepthStencilBuffer` is false because the backbuffer has
+  depth but no stencil. MSAA, MRT, anisotropy, wireframe, occlusion query, custom effects,
+  Texture3D, multi-stream input, and instancing are false. PBR is explicitly rejected through draw
+  validation; it is not a member of the current common capability enumeration.
+- Texture units are explicit: dimensions are texels; retained images, row lengths, and pitch are
+  bytes. Pitched RGBA8 rows are bounds/overflow checked and tested at width 3 with padding. CNA
+  retains RGBA8, builds address-aware logical mips, and converts to ARGB4444; opt-in adaptive
+  conversion can choose RGB565 or ARGB1555 after full-chain alpha classification. No shared
+  `Texture2D` cache-authority path or unconditional backend reconstruction hook was added.
+- Supported-path findings resolved during adaptation:
+  - `REMED-GFX-226` (MEDIUM): TMU1 reused slot 0 filter/address/LOD state. Slots 0 and 1 now retain
+    independent filter/LOD state; the one shared s/t channel requires equal address modes and
+    rejects a mismatch.
+  - `REMED-GFX-227` (MEDIUM): a texture or device could release/close native state while a final
+    CNA-owned SpriteBatch remained unsubmitted. Destruction now flushes and fences in order before
+    TMU reuse or context shutdown.
+  - `REMED-GFX-228` (MEDIUM): preparing texture 1 for TMU1 could evict the already-validated TMU0
+    texture. The first texture is restored as the final TMU0 requester and revalidated before any
+    native submission.
+- Focused validation: 78/78 portable Glide tests across 12 suites, 13/13 shared identity/clear
+  contracts, the 39-export x86 fake-DLL ABI contract under Wine, and i686 whole-backend syntax all
+  pass. The same 78/78 pass with linked ASan and UBSan runtimes and leak detection enabled, with no
+  CNA-originating report. Five serial OPENGLES pixel/state controls pass under Xvfb (textured quad,
+  linear filtering, depth-write behavior, culling, and viewport/scissor reset). Sokol, Diligent,
+  and Skia need no separate build because no backend-local or texture-cache code changed and the
+  additive shared default path is exercised by OPENGLES.
+
 ## Completed
 
 - [x] Native `grSstWinOpen`, back-buffer clear/present, LFB readback, and loader support for both
   undecorated and x86 stdcall-exported Glide DLLs.
-- [x] `SpriteBatch` texture upload and quad submission through TMU0 plus `grDrawTriangle`, with
+- [x] `SpriteBatch` texture upload through TMU0 and compatible quad batching through
+  `grDrawVertexArrayContiguous`, with
   native `0..256`-per-repeat texture-coordinate unit conversion (GLIDE-AUD-010).
 - [x] Fixed-function `VertexPositionColor` triangle lists/strips, including indexed draws and CPU
   `world * view * projection` transforms. Compatible clipped triangle runs are batched through
-  native `grDrawVertexArray(GR_TRIANGLES)`; SpriteBatch remains two direct `grDrawTriangle` calls.
+  native `grDrawVertexArray(GR_TRIANGLES)`.
 - [x] Native 16-bit Z buffer, depth clear/test/write state, initial alpha-blend state plumbing, and
   a manual dgVoodoo smoke target. Exact XNA-to-Glide blend-factor fidelity remains open under
   GLIDE-AUD-011 because Glide restricts factors by argument position and alpha factors more

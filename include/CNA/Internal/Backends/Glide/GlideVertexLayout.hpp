@@ -58,15 +58,14 @@ namespace CNA::Internal::Backends::Glide
         return layout;
     }
 
-    [[nodiscard]] inline GlideVertexLayout ParseGlideVertexDeclaration(
-        const Microsoft::Xna::Framework::Graphics::VertexDeclaration& declaration)
+    [[nodiscard]] inline GlideVertexLayout ParseGlideVertexElements(
+        int declaredStride,
+        const std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>& elements)
     {
-        using Microsoft::Xna::Framework::Graphics::VertexDeclaration;
         using Microsoft::Xna::Framework::Graphics::VertexElement;
         using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
         using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 
-        const int declaredStride = declaration.getVertexStrideProperty();
         if (declaredStride <= 0)
         {
             throw std::runtime_error("GLIDE 3D VertexDeclaration must have a positive vertex stride");
@@ -100,7 +99,7 @@ namespace CNA::Internal::Backends::Glide
             destination = offset;
         };
 
-        for (const VertexElement& element : declaration.GetVertexElements())
+        for (const VertexElement& element : elements)
         {
             const VertexElementUsage usage = element.getVertexElementUsageProperty();
             const int usageIndex = element.getUsageIndexProperty();
@@ -134,5 +133,12 @@ namespace CNA::Internal::Backends::Glide
             throw std::runtime_error("GLIDE 3D VertexDeclaration requires a Vector3 Position0 element");
         }
         return layout;
+    }
+
+    [[nodiscard]] inline GlideVertexLayout ParseGlideVertexDeclaration(
+        const Microsoft::Xna::Framework::Graphics::VertexDeclaration& declaration)
+    {
+        return ParseGlideVertexElements(declaration.getVertexStrideProperty(),
+                                        declaration.GetVertexElements());
     }
 } // namespace CNA::Internal::Backends::Glide

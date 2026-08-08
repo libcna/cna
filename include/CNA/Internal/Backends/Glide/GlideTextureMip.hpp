@@ -3,11 +3,65 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
+#include <limits>
 #include <stdexcept>
 #include <vector>
 
 namespace CNA::Internal::Backends::Glide
 {
+    /**
+     * Copies a pitched RGBA8 image into Glide's tightly packed retained source image.
+     * Width is measured in texels; stride and all vector sizes are measured in bytes.
+     */
+    inline void CopyGlideRgba8Rows(std::vector<std::uint8_t>& destination,
+                                   int width, int height,
+                                   const std::uint8_t* source, int sourceStrideBytes)
+    {
+        if (source == nullptr || width <= 0 || height <= 0)
+        {
+            throw std::runtime_error("GLIDE texture update received invalid RGBA8 dimensions or data");
+        }
+        const std::size_t widthInTexels = static_cast<std::size_t>(width);
+        const std::size_t heightInRows = static_cast<std::size_t>(height);
+        if (widthInTexels > std::numeric_limits<std::size_t>::max() / 4u)
+        {
+            throw std::runtime_error("GLIDE texture update row-byte count overflows size_t");
+        }
+        const std::size_t rowBytes = widthInTexels * 4u;
+        if (heightInRows > std::numeric_limits<std::size_t>::max() / rowBytes)
+        {
+            throw std::runtime_error("GLIDE texture update byte count overflows size_t");
+        }
+        if (sourceStrideBytes < 0)
+        {
+            throw std::runtime_error("GLIDE texture update received a negative RGBA8 byte stride");
+        }
+        const std::size_t stride = sourceStrideBytes > 0
+            ? static_cast<std::size_t>(sourceStrideBytes)
+            : rowBytes;
+        if (stride < rowBytes)
+        {
+            throw std::runtime_error("GLIDE texture update stride is shorter than one RGBA8 row");
+        }
+        if (heightInRows > 1u &&
+            heightInRows - 1u > (std::numeric_limits<std::size_t>::max() - rowBytes) / stride)
+        {
+            throw std::runtime_error("GLIDE texture update pitched source span overflows size_t");
+        }
+        const std::size_t requiredBytes = rowBytes * heightInRows;
+        if (destination.size() < requiredBytes)
+        {
+            throw std::runtime_error("GLIDE retained texture storage is shorter than its RGBA8 image");
+        }
+        for (int row = 0; row < height; ++row)
+        {
+            std::memcpy(destination.data() + static_cast<std::size_t>(row) * rowBytes,
+                        source + static_cast<std::size_t>(row) * stride,
+                        rowBytes);
+        }
+    }
+
     /** Returns the full XNA-compatible mip count for positive two-dimensional dimensions. */
     [[nodiscard]] inline int GlideMipLevelCountForDimensions(int width, int height)
     {
