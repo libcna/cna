@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// REMED-CONTENT-002: unit tests for the shared containment helper used by
-// StorageDevice::DeleteContainer, ContentReader::ReadExternalReference, and
-// PlaylistParser::Parse.
+// REMED-CONTENT-002/-007/-008: unit tests for the shared containment helpers.
 
 #include <filesystem>
 #include <fstream>
@@ -11,6 +9,8 @@
 #include "CNA/Internal/PathContainment.hpp"
 
 using CNA::Internal::ResolveContainedPath;
+using CNA::Internal::ResolveContainedPathFromBase;
+using CNA::Internal::ResolveContainedPathRelativeToFile;
 
 namespace
 {
@@ -177,6 +177,34 @@ TEST(PathContainmentTest, DotDotCharactersInsideFilenameAreNotTraversal)
         "/base/dir", "music/track..mix.ogg", /*canonicalize=*/false);
     ASSERT_TRUE(result.ok);
     EXPECT_EQ(result.resolvedPath, "/base/dir/music/track..mix.ogg");
+}
+
+TEST(PathContainmentTest, NestedJoinBaseMayClimbWithinAuthorizedRoot)
+{
+    const auto result = ResolveContainedPathFromBase(
+        "/content", "/content/music/album", "../shared/song.ogg", /*canonicalize=*/false);
+    ASSERT_TRUE(result.ok);
+    EXPECT_EQ(result.resolvedPath, "/content/music/shared/song.ogg");
+}
+
+TEST(PathContainmentTest, NestedJoinBaseCannotClimbPastAuthorizedRoot)
+{
+    const auto result = ResolveContainedPathFromBase(
+        "/content", "/content/music/album", "../../../content-evil/song.ogg",
+        /*canonicalize=*/false);
+    EXPECT_FALSE(result.ok);
+}
+
+TEST(PathContainmentTest, ExplicitExternalReferringFileIsConfinedToItsBundle)
+{
+    const auto child = ResolveContainedPathRelativeToFile(
+        "/content", "/external/bundle/media.xnb", "audio/song.ogg", /*canonicalize=*/false);
+    ASSERT_TRUE(child.ok);
+    EXPECT_EQ(child.resolvedPath, "/external/bundle/audio/song.ogg");
+
+    const auto escape = ResolveContainedPathRelativeToFile(
+        "/content", "/external/bundle/media.xnb", "../secret.ogg", /*canonicalize=*/false);
+    EXPECT_FALSE(escape.ok);
 }
 
 TEST(PathContainmentTest, EmptyBaseDirTreatsCurrentDirectoryAsBase)

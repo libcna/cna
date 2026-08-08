@@ -6,6 +6,7 @@
 #include "CNA/Internal/CnjSourceFile.hpp"
 #include "CNA/Internal/GltfImport/GltfImportCore.hpp"
 #include "CNA/Internal/Json.hpp"
+#include "CNA/Internal/PathContainment.hpp"
 #include "CNA/Internal/Xnb/XnbTypeReaderTable.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
@@ -339,6 +340,67 @@ namespace Microsoft::Xna::Framework::Content
                                      std::size_t expectedCount, std::vector<float>& out,
                                      const std::string& path);
 
+        std::string RequireContainedSidecarPath(
+            const CNA::Internal::ContainedPathResult& result,
+            const std::string& manifestPath, const char* field)
+        {
+            if (!result.ok)
+            {
+                throw ContentLoadException(
+                    "ContentManager: manifest '" + manifestPath + "' field '" + field +
+                    "' must be a non-empty relative path contained within its authorized "
+                    "content root or explicit external bundle.");
+            }
+            return result.resolvedPath;
+        }
+
+        std::string ResolveRootRelativeSidecarPath(
+            const ContentManager& cm, const std::string& manifestPath,
+            const char* field, const std::string& relativePath)
+        {
+            const std::string& root = cm.getRootDirectoryProperty();
+            return RequireContainedSidecarPath(
+                CNA::Internal::ResolveContainedPath(root, relativePath), manifestPath, field);
+        }
+
+        std::string ResolveManifestRelativeSidecarPath(
+            const ContentManager& cm, const std::string& manifestPath,
+            const char* field, const std::string& relativePath)
+        {
+            return RequireContainedSidecarPath(
+                CNA::Internal::ResolveContainedPathRelativeToFile(
+                    cm.getRootDirectoryProperty(), manifestPath, relativePath),
+                manifestPath, field);
+        }
+
+        // ContentManager::Load() accepts a root-relative logical name and, by established
+        // contract, an explicit absolute outside-root asset. Keep in-root cache identity in the
+        // usual root-relative form; preserve an explicitly external bundle as an absolute path.
+        std::string ToContentManagerAssetName(const std::string& root,
+                                              const std::string& resolvedPath)
+        {
+            namespace fs = std::filesystem;
+            if (!CNA::Internal::ValidateContainedPath(root, resolvedPath, false).ok)
+            {
+                return fs::path(resolvedPath).lexically_normal().string();
+            }
+
+            const fs::path rootPath =
+                (root.empty() ? fs::path(".") : fs::path(root)).lexically_normal();
+            return fs::path(resolvedPath).lexically_normal()
+                .lexically_relative(rootPath)
+                .generic_string();
+        }
+
+        std::string ResolveRootRelativeAssetName(
+            const ContentManager& cm, const std::string& manifestPath,
+            const char* field, const std::string& relativePath)
+        {
+            return ToContentManagerAssetName(
+                cm.getRootDirectoryProperty(),
+                ResolveRootRelativeSidecarPath(cm, manifestPath, field, relativePath));
+        }
+
         // plan_cnj.md CNB-34: SpriteFont/Effect/Model .cnj documents are self-contained
         // descriptors -- unlike Texture2D/SoundEffect/TextureCube, they have no meaning for a
         // "sourceFile" field. Reject it explicitly with a clear error instead of silently
@@ -521,7 +583,6 @@ namespace Microsoft::Xna::Framework::Content
             // a bare value.
             std::shared_ptr<Graphics::Texture3D> Read(const std::string& path, ContentManager& cm) override
             {
-                namespace fs = std::filesystem;
                 using CNA::Internal::JsonValue;
 
                 const std::string json = ReadTextFile(path);
@@ -557,7 +618,9 @@ namespace Microsoft::Xna::Framework::Content
                         "Texture3D .cnj '" + path + "' has a non-positive 'width'/'height'/'depth'.");
                 }
 
-                const auto bytes = ReadBinaryFile((fs::path(cm.getRootDirectoryProperty()) / dataField->stringValue).string());
+                const std::string dataPath = ResolveRootRelativeSidecarPath(
+                    cm, path, "data", dataField->stringValue);
+                const auto bytes = ReadBinaryFile(dataPath);
                 const std::size_t expectedBytes =
                     static_cast<std::size_t>(width) * static_cast<std::size_t>(height) *
                     static_cast<std::size_t>(depth) * 4;
@@ -774,10 +837,10 @@ namespace Microsoft::Xna::Framework::Content
                         "ShaderEffect descriptor missing 'vertex' or 'fragment' field: " + jsonPath);
                 }
 
-                namespace fs = std::filesystem;
-                const std::string root = cm.getRootDirectoryProperty();
-                const std::string vertPath = (fs::path(root) / vertRel).string();
-                const std::string fragPath = (fs::path(root) / fragRel).string();
+                const std::string vertPath = ResolveRootRelativeSidecarPath(
+                    cm, jsonPath, "vertex", vertRel);
+                const std::string fragPath = ResolveRootRelativeSidecarPath(
+                    cm, jsonPath, "fragment", fragRel);
 
                 return std::make_shared<Graphics::ShaderEffect>(
                     cm.getGraphicsDeviceInternal(),
@@ -786,7 +849,8 @@ namespace Microsoft::Xna::Framework::Content
             }
 
             static std::optional<Graphics::Texture2D> LoadOptionalTexture2D(
-                const CNA::Internal::JsonValue& root, const char* field, ContentManager& cm)
+                const CNA::Internal::JsonValue& root, const char* field,
+                const std::string& jsonPath, ContentManager& cm)
             {
                 const CNA::Internal::JsonValue* v = root.FindMember(field);
                 if (v == nullptr) { return std::nullopt; }
@@ -794,7 +858,8 @@ namespace Microsoft::Xna::Framework::Content
                 {
                     throw ContentLoadException(std::string("Effect .cnj: '") + field + "' must be a non-empty string.");
                 }
-                return cm.Load<Graphics::Texture2D>(v->stringValue);
+                return cm.Load<Graphics::Texture2D>(ResolveRootRelativeAssetName(
+                    cm, jsonPath, field, v->stringValue));
             }
 
             static std::shared_ptr<Graphics::Effect> ReadStockEffect(
@@ -807,7 +872,7 @@ namespace Microsoft::Xna::Framework::Content
                 if (type == "BasicEffect")
                 {
                     auto effect = std::make_shared<BasicEffect>(gd);
-                    if (auto tex = LoadOptionalTexture2D(root, "texture", cm))
+                    if (auto tex = LoadOptionalTexture2D(root, "texture", jsonPath, cm))
                     {
                         effect->SetOwnedTexture(std::make_shared<Texture2D>(std::move(*tex)));
                         effect->setTextureEnabledProperty(true);
@@ -823,7 +888,7 @@ namespace Microsoft::Xna::Framework::Content
                 if (type == "AlphaTestEffect")
                 {
                     auto effect = std::make_shared<AlphaTestEffect>(gd);
-                    if (auto tex = LoadOptionalTexture2D(root, "texture", cm))
+                    if (auto tex = LoadOptionalTexture2D(root, "texture", jsonPath, cm))
                     {
                         effect->SetOwnedTexture(std::make_shared<Texture2D>(std::move(*tex)));
                     }
@@ -842,11 +907,11 @@ namespace Microsoft::Xna::Framework::Content
                 if (type == "DualTextureEffect")
                 {
                     auto effect = std::make_shared<DualTextureEffect>(gd);
-                    if (auto tex = LoadOptionalTexture2D(root, "texture", cm))
+                    if (auto tex = LoadOptionalTexture2D(root, "texture", jsonPath, cm))
                     {
                         effect->SetOwnedTexture(std::make_shared<Texture2D>(std::move(*tex)));
                     }
-                    if (auto tex2 = LoadOptionalTexture2D(root, "texture2", cm))
+                    if (auto tex2 = LoadOptionalTexture2D(root, "texture2", jsonPath, cm))
                     {
                         effect->SetOwnedTexture2(std::make_shared<Texture2D>(std::move(*tex2)));
                     }
@@ -858,7 +923,7 @@ namespace Microsoft::Xna::Framework::Content
                 if (type == "EnvironmentMapEffect")
                 {
                     auto effect = std::make_shared<EnvironmentMapEffect>(gd);
-                    if (auto tex = LoadOptionalTexture2D(root, "texture", cm))
+                    if (auto tex = LoadOptionalTexture2D(root, "texture", jsonPath, cm))
                     {
                         effect->SetOwnedTexture(std::make_shared<Texture2D>(std::move(*tex)));
                     }
@@ -869,7 +934,9 @@ namespace Microsoft::Xna::Framework::Content
                             throw ContentLoadException(
                                 "Effect .cnj '" + jsonPath + "': 'environmentMap' must be a non-empty string.");
                         }
-                        Graphics::TextureCube cube = cm.Load<Graphics::TextureCube>(envMap->stringValue);
+                        Graphics::TextureCube cube = cm.Load<Graphics::TextureCube>(
+                            ResolveRootRelativeAssetName(
+                                cm, jsonPath, "environmentMap", envMap->stringValue));
                         effect->SetOwnedEnvironmentMap(std::make_shared<TextureCube>(std::move(cube)));
                     }
                     effect->setEnvironmentMapAmountProperty(ReadFloatFieldEXT(root, "environmentMapAmount", 1.0f, jsonPath));
@@ -882,7 +949,7 @@ namespace Microsoft::Xna::Framework::Content
                 }
                 // SkinnedEffect (the only remaining branch this method is ever called with).
                 auto effect = std::make_shared<SkinnedEffect>(gd);
-                if (auto tex = LoadOptionalTexture2D(root, "texture", cm))
+                if (auto tex = LoadOptionalTexture2D(root, "texture", jsonPath, cm))
                 {
                     effect->SetOwnedTexture(std::make_shared<Texture2D>(std::move(*tex)));
                 }
@@ -1036,7 +1103,8 @@ namespace Microsoft::Xna::Framework::Content
                     defChar = static_cast<charcs>(static_cast<unsigned char>(defCharStr[0]));
 
                 // Atlas texture — loaded and cached via ContentManager so it stays alive.
-                Graphics::Texture2D atlas = cm.Load<Graphics::Texture2D>(textureName);
+                Graphics::Texture2D atlas = cm.Load<Graphics::Texture2D>(
+                    ResolveRootRelativeAssetName(cm, path, "texture", textureName));
 
                 std::vector<Rectangle>          glyphBounds;
                 std::vector<Rectangle>          cropping;
@@ -1263,23 +1331,20 @@ namespace Microsoft::Xna::Framework::Content
         // a standalone .cnj AnimationClip asset (Phase 10) -- letting multiple Models/
         // SkinnedModels share one clip (e.g. a common "Idle"/"Walk" library) instead of
         // duplicating the binary per model. Dispatched by extension. The .cnj branch goes
-        // through ContentManager (real caching), so @p baseDir must be re-expressed relative to
-        // @p root first -- cm.Load<T>() always resolves relative to the content root, not
-        // @p baseDir, mirroring SkinnedModelTypeReader's own existing texRootRelative pattern for
-        // textures. The binary branch is unaffected by that distinction (it never goes through
-        // ContentManager) and keeps resolving directly against @p baseDir, exactly as before this
-        // task.
+        // through ContentManager (real caching), so a previously containment-checked filesystem
+        // path is re-expressed as a root-relative asset name when it is inside the content root;
+        // an explicitly loaded outside-root bundle remains absolute. Callers resolve and validate
+        // their own root-relative versus manifest-relative contract before entering this helper.
         Graphics::AnimationClipEXT ReadAnimationClipRefEXT(
-            const std::string& clipFile, const std::filesystem::path& baseDir,
-            const std::string& root, ContentManager& cm)
+            const std::string& resolvedClipPath, const std::string& root, ContentManager& cm)
         {
             namespace fs = std::filesystem;
-            if (fs::path(clipFile).extension() == ".cnj")
+            if (fs::path(resolvedClipPath).extension() == ".cnj")
             {
-                const std::string rootRelative = fs::relative(baseDir / clipFile, root).string();
-                return cm.Load<Graphics::AnimationClipEXT>(rootRelative);
+                return cm.Load<Graphics::AnimationClipEXT>(
+                    ToContentManagerAssetName(root, resolvedClipPath));
             }
-            return ReadAnimationClipFileEXT((baseDir / clipFile).string());
+            return ReadAnimationClipFileEXT(resolvedClipPath);
         }
 
         // Reads a fixed-length JSON numeric array field (e.g. "translation": [x,y,z]) from a
@@ -1332,7 +1397,6 @@ namespace Microsoft::Xna::Framework::Content
 
             Graphics::AnimationClipEXT Read(const std::string& path, ContentManager& cm) override
             {
-                namespace fs = std::filesystem;
                 using CNA::Internal::JsonType;
                 using CNA::Internal::JsonValue;
 
@@ -1360,8 +1424,8 @@ namespace Microsoft::Xna::Framework::Content
                         throw ContentLoadException(
                             "AnimationClip .cnj '" + path + "' has a non-string or empty 'clipFile'.");
                     }
-                    return ReadAnimationClipFileEXT(
-                        (fs::path(cm.getRootDirectoryProperty()) / clipFileField->stringValue).string());
+                    return ReadAnimationClipFileEXT(ResolveRootRelativeSidecarPath(
+                        cm, path, "clipFile", clipFileField->stringValue));
                 }
 
                 const JsonValue* durationField = root.FindMember("duration");
@@ -2164,7 +2228,9 @@ namespace Microsoft::Xna::Framework::Content
                 const std::string skeletonRel = ExtractJsonStringField(json, "skeleton");
                 if (!skeletonRel.empty())
                 {
-                    const auto skelBytes = ReadBinaryFile((fs::path(root) / skeletonRel).string());
+                    const std::string skeletonPath = ResolveRootRelativeSidecarPath(
+                        cm, path, "skeleton", skeletonRel);
+                    const auto skelBytes = ReadBinaryFile(skeletonPath);
                     BinReaderEXT skelReader{skelBytes};
                     const int boneCount = skelReader.Read<std::int32_t>();
                     // Mirrors SkinnedModelTypeReader's own identical bone-count sanity check
@@ -2195,8 +2261,10 @@ namespace Microsoft::Xna::Framework::Content
                         const std::string name     = ExtractJsonStringField(ag, "name");
                         const std::string clipFile = ExtractJsonStringField(ag, "clip");
                         if (name.empty() || clipFile.empty()) { continue; }
+                        const std::string clipPath = ResolveRootRelativeSidecarPath(
+                            cm, path, "clip", clipFile);
                         skinningData->AnimationClips[name] =
-                            ReadAnimationClipRefEXT(clipFile, fs::path(root), root, cm);
+                            ReadAnimationClipRefEXT(clipPath, root, cm);
                     }
 
                     res->skinningData = std::move(skinningData);
@@ -2263,10 +2331,19 @@ namespace Microsoft::Xna::Framework::Content
                             if (vertFile.empty() || idxFile.empty())
                                 continue;
 
-                            const auto vertBytes = ReadBinaryFile(
-                                (fs::path(root) / vertFile).string());
-                            const auto idxBytes  = ReadBinaryFile(
-                                (fs::path(root) / idxFile).string());
+                            const std::string vertPath = ResolveRootRelativeSidecarPath(
+                                cm, path, "vertices", vertFile);
+                            const std::string idxPath = ResolveRootRelativeSidecarPath(
+                                cm, path, "indices", idxFile);
+                            std::optional<std::string> morphTargetsPath;
+                            if (!morphTargetsFile.empty())
+                            {
+                                morphTargetsPath = ResolveRootRelativeSidecarPath(
+                                    cm, path, "morphTargets", morphTargetsFile);
+                            }
+
+                            const auto vertBytes = ReadBinaryFile(vertPath);
+                            const auto idxBytes  = ReadBinaryFile(idxPath);
 
                             if (stride <= 0) continue;
                             const int numVertices = static_cast<int>(vertBytes.size()) / stride;
@@ -2306,10 +2383,9 @@ namespace Microsoft::Xna::Framework::Content
                             // real XNA Tag property, mirroring ReadGltfModel()'s identical
                             // MorphTargetDataEXT wiring for the runtime glTF path (see
                             // MorphTargetEXT.hpp's own doc comments).
-                            if (!morphTargetsFile.empty())
+                            if (morphTargetsPath.has_value())
                             {
-                                const auto morphBytes = ReadBinaryFile(
-                                    (fs::path(root) / morphTargetsFile).string());
+                                const auto morphBytes = ReadBinaryFile(*morphTargetsPath);
                                 BinReaderEXT morphReader{morphBytes};
                                 const int targetCount = morphReader.Read<std::int32_t>();
                                 constexpr int kMaxSaneTargetCount = 100000;
@@ -2441,7 +2517,9 @@ namespace Microsoft::Xna::Framework::Content
                                 // same as SkinnedEffect above -- not through this reader.
                                 fx = std::make_shared<Graphics::SkinnedPbrEffect>(device);
                             } else {
-                                fx = cm.Load<std::shared_ptr<Graphics::Effect>>(effectStr);
+                                fx = cm.Load<std::shared_ptr<Graphics::Effect>>(
+                                    ResolveRootRelativeAssetName(
+                                        cm, path, "effect", effectStr));
                             }
 
                             // Task 932: bind a per-mesh diffuse texture, if the descriptor names
@@ -2452,7 +2530,9 @@ namespace Microsoft::Xna::Framework::Content
                             // via "effect" has no standard texture slot to bind through here.
                             if (!textureFile.empty()) {
                                 auto tex = std::make_unique<Graphics::Texture2D>(
-                                    cm.Load<Graphics::Texture2D>(textureFile));
+                                    cm.Load<Graphics::Texture2D>(
+                                        ResolveRootRelativeAssetName(
+                                            cm, path, "texture", textureFile)));
                                 if (auto* basicFx = dynamic_cast<Graphics::BasicEffect*>(fx.get())) {
                                     basicFx->setTextureProperty(tex.get());
                                     basicFx->setTextureEnabledProperty(true);
@@ -2478,7 +2558,9 @@ namespace Microsoft::Xna::Framework::Content
                             if (!texture2File.empty()) {
                                 if (auto* dualFx = dynamic_cast<Graphics::DualTextureEffect*>(fx.get())) {
                                     auto tex2 = std::make_unique<Graphics::Texture2D>(
-                                        cm.Load<Graphics::Texture2D>(texture2File));
+                                        cm.Load<Graphics::Texture2D>(
+                                            ResolveRootRelativeAssetName(
+                                                cm, path, "texture2", texture2File)));
                                     dualFx->setTexture2Property(tex2.get());
                                     res->textureOwners.push_back(std::move(tex2));
                                 }
@@ -2486,42 +2568,50 @@ namespace Microsoft::Xna::Framework::Content
 
                             // CNB-59 (Phase 13A): PbrEffect's own 4 maps + factor values.
                             if (auto* pbrFx = dynamic_cast<Graphics::PbrEffect*>(fx.get())) {
-                                auto loadPbrMap = [&](const std::string& file) -> Graphics::Texture2D* {
+                                auto loadPbrMap = [&](const std::string& file,
+                                                      const char* field) -> Graphics::Texture2D* {
                                     if (file.empty()) { return nullptr; }
                                     auto tex = std::make_unique<Graphics::Texture2D>(
-                                        cm.Load<Graphics::Texture2D>(file));
+                                        cm.Load<Graphics::Texture2D>(
+                                            ResolveRootRelativeAssetName(
+                                                cm, path, field, file)));
                                     Graphics::Texture2D* texPtr = tex.get();
                                     res->textureOwners.push_back(std::move(tex));
                                     return texPtr;
                                 };
-                                if (Graphics::Texture2D* t = loadPbrMap(normalMapFile))
+                                if (Graphics::Texture2D* t = loadPbrMap(normalMapFile, "normalMap"))
                                     pbrFx->setNormalMapProperty(t);
-                                if (Graphics::Texture2D* t = loadPbrMap(metallicRoughnessMapFile))
+                                if (Graphics::Texture2D* t = loadPbrMap(
+                                        metallicRoughnessMapFile, "metallicRoughnessMap"))
                                     pbrFx->setMetallicRoughnessMapProperty(t);
-                                if (Graphics::Texture2D* t = loadPbrMap(emissiveMapFile))
+                                if (Graphics::Texture2D* t = loadPbrMap(emissiveMapFile, "emissiveMap"))
                                     pbrFx->setEmissiveMapProperty(t);
-                                if (Graphics::Texture2D* t = loadPbrMap(occlusionMapFile))
+                                if (Graphics::Texture2D* t = loadPbrMap(occlusionMapFile, "occlusionMap"))
                                     pbrFx->setOcclusionMapProperty(t);
                                 pbrFx->setMetallicFactorProperty(metallicFactor);
                                 pbrFx->setRoughnessFactorProperty(roughnessFactor);
                                 pbrFx->setEmissiveFactorProperty(Vector3(
                                     emissiveFactorArr[0], emissiveFactorArr[1], emissiveFactorArr[2]));
                             } else if (auto* skinnedPbrFx = dynamic_cast<Graphics::SkinnedPbrEffect*>(fx.get())) {
-                                auto loadPbrMap = [&](const std::string& file) -> Graphics::Texture2D* {
+                                auto loadPbrMap = [&](const std::string& file,
+                                                      const char* field) -> Graphics::Texture2D* {
                                     if (file.empty()) { return nullptr; }
                                     auto tex = std::make_unique<Graphics::Texture2D>(
-                                        cm.Load<Graphics::Texture2D>(file));
+                                        cm.Load<Graphics::Texture2D>(
+                                            ResolveRootRelativeAssetName(
+                                                cm, path, field, file)));
                                     Graphics::Texture2D* texPtr = tex.get();
                                     res->textureOwners.push_back(std::move(tex));
                                     return texPtr;
                                 };
-                                if (Graphics::Texture2D* t = loadPbrMap(normalMapFile))
+                                if (Graphics::Texture2D* t = loadPbrMap(normalMapFile, "normalMap"))
                                     skinnedPbrFx->setNormalMapProperty(t);
-                                if (Graphics::Texture2D* t = loadPbrMap(metallicRoughnessMapFile))
+                                if (Graphics::Texture2D* t = loadPbrMap(
+                                        metallicRoughnessMapFile, "metallicRoughnessMap"))
                                     skinnedPbrFx->setMetallicRoughnessMapProperty(t);
-                                if (Graphics::Texture2D* t = loadPbrMap(emissiveMapFile))
+                                if (Graphics::Texture2D* t = loadPbrMap(emissiveMapFile, "emissiveMap"))
                                     skinnedPbrFx->setEmissiveMapProperty(t);
-                                if (Graphics::Texture2D* t = loadPbrMap(occlusionMapFile))
+                                if (Graphics::Texture2D* t = loadPbrMap(occlusionMapFile, "occlusionMap"))
                                     skinnedPbrFx->setOcclusionMapProperty(t);
                                 skinnedPbrFx->setMetallicFactorProperty(metallicFactor);
                                 skinnedPbrFx->setRoughnessFactorProperty(roughnessFactor);
@@ -2592,15 +2682,12 @@ namespace Microsoft::Xna::Framework::Content
             std::shared_ptr<Graphics::SkinnedModelEXT> Read(const std::string& path,
                                                              ContentManager& cm) override
             {
-                namespace fs = std::filesystem;
-
                 const std::string json = ReadTextFile(path);
                 const std::string root = cm.getRootDirectoryProperty();
                 // Every path the manifest references (skeleton/vertices/indices/texture/clip) is
                 // relative to the manifest's own directory, not the content root — so a bundle
                 // like Content/avatar/male/ is self-contained and relocatable without rewriting
                 // any of its internal paths.
-                const fs::path manifestDir = fs::path(path).parent_path();
                 Graphics::GraphicsDevice& device = cm.getGraphicsDeviceInternal();
 
                 auto model = std::make_shared<Graphics::SkinnedModelEXT>();
@@ -2613,7 +2700,9 @@ namespace Microsoft::Xna::Framework::Content
                         "SkinnedModel descriptor missing 'skeleton' field: " + path);
                 }
 
-                const auto skelBytes = ReadBinaryFile((manifestDir / skeletonRel).string());
+                const std::string skeletonPath = ResolveManifestRelativeSidecarPath(
+                    cm, path, "skeleton", skeletonRel);
+                const auto skelBytes = ReadBinaryFile(skeletonPath);
                 BinReaderEXT skelReader{skelBytes};
                 const int boneCount = skelReader.Read<std::int32_t>();
                 // Task 11.8: boneCount is a raw int32_t from file content with no validation
@@ -2662,8 +2751,19 @@ namespace Microsoft::Xna::Framework::Content
                     if (vertFile.empty() || idxFile.empty()) { continue; }
                     if (stride <= 0) { continue; }
 
-                    const auto vertBytes = ReadBinaryFile((manifestDir / vertFile).string());
-                    const auto idxBytes  = ReadBinaryFile((manifestDir / idxFile).string());
+                    const std::string vertPath = ResolveManifestRelativeSidecarPath(
+                        cm, path, "vertices", vertFile);
+                    const std::string idxPath = ResolveManifestRelativeSidecarPath(
+                        cm, path, "indices", idxFile);
+                    std::optional<std::string> texturePath;
+                    if (!texFile.empty())
+                    {
+                        texturePath = ResolveManifestRelativeSidecarPath(
+                            cm, path, "texture", texFile);
+                    }
+
+                    const auto vertBytes = ReadBinaryFile(vertPath);
+                    const auto idxBytes  = ReadBinaryFile(idxPath);
 
                     // Task 11.9: numVertices/numIndices below used to truncate silently if the
                     // byte counts weren't exact multiples of stride/sizeof(uint16_t), and index
@@ -2710,13 +2810,10 @@ namespace Microsoft::Xna::Framework::Content
                         vb.get(), ib.get(), numVertices, primCount, 0, 0);
 
                     Graphics::Texture2D texture;
-                    if (!texFile.empty())
+                    if (texturePath.has_value())
                     {
-                        // cm.Load<T>() always resolves its argument relative to the content
-                        // root, not the manifest's directory — re-express texFile (manifest-
-                        // relative, like every other path here) as root-relative first.
-                        const std::string texRootRelative = fs::relative(manifestDir / texFile, root).string();
-                        texture = cm.Load<Graphics::Texture2D>(texRootRelative);
+                        texture = cm.Load<Graphics::Texture2D>(
+                            ToContentManagerAssetName(root, *texturePath));
                     }
 
                     model->AddPartEXT(name, std::move(vb), std::move(ib), std::move(part),
@@ -2729,13 +2826,15 @@ namespace Microsoft::Xna::Framework::Content
                     const std::string name     = ExtractJsonStringField(ag, "name");
                     const std::string clipFile = ExtractJsonStringField(ag, "clip");
                     if (name.empty() || clipFile.empty()) { continue; }
+                    const std::string clipPath = ResolveManifestRelativeSidecarPath(
+                        cm, path, "clip", clipFile);
 
                     // Task 941: extracted into the shared ReadAnimationClipFileEXT() helper
                     // (also used by ModelTypeReader's own new .model.json "animations" support).
                     // plan_cnj.md CNB-48: ReadAnimationClipRefEXT additionally lets "clip" name a
                     // standalone, shareable .cnj AnimationClip asset instead of only a raw
                     // .clip.bin blob.
-                    model->Clips[name] = ReadAnimationClipRefEXT(clipFile, manifestDir, root, cm);
+                    model->Clips[name] = ReadAnimationClipRefEXT(clipPath, root, cm);
                 }
 
                 return model;

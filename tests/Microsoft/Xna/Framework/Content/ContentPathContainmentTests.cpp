@@ -30,6 +30,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Model.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedModelEXT.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteFont.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
 #include "Microsoft/Xna/Framework/Media/Song.hpp"
@@ -49,6 +50,7 @@ using Microsoft::Xna::Framework::Graphics::Effect;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::Model;
 using Microsoft::Xna::Framework::Graphics::SkinnedModelEXT;
+using Microsoft::Xna::Framework::Graphics::SpriteFont;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
 using Microsoft::Xna::Framework::Graphics::Texture3D;
 using Microsoft::Xna::Framework::Media::Song;
@@ -264,6 +266,13 @@ void main() { FragColor = vec4(1.0); }
         std::string indices = "safe.idx.bin";
         std::string morphTargets;
         std::string clip;
+        std::string effect = "BasicEffect";
+        std::string texture;
+        std::string texture2;
+        std::string normalMap;
+        std::string metallicRoughnessMap;
+        std::string emissiveMap;
+        std::string occlusionMap;
     };
 
     void WriteModelManifest(const fs::path& path, const ModelPaths& paths)
@@ -279,13 +288,27 @@ void main() { FragColor = vec4(1.0); }
         {
             morph = ",\n      \"morphTargets\": \"" + paths.morphTargets + "\"";
         }
+        std::string material;
+        const auto appendField = [&](const char* name, const std::string& value)
+        {
+            if (!value.empty())
+            {
+                material += ",\n      \"" + std::string(name) + "\": \"" + value + "\"";
+            }
+        };
+        appendField("texture", paths.texture);
+        appendField("texture2", paths.texture2);
+        appendField("normalMap", paths.normalMap);
+        appendField("metallicRoughnessMap", paths.metallicRoughnessMap);
+        appendField("emissiveMap", paths.emissiveMap);
+        appendField("occlusionMap", paths.occlusionMap);
         WriteText(path,
                   "{\n  \"cnjVersion\": 1,\n  \"type\": \"Model\",\n  \"skeleton\": \"" +
                       paths.skeleton + "\"," + animation +
                       "\n  \"meshes\": [{\n      \"name\": \"Triangle\",\n      \"vertices\": \"" +
                       paths.vertices + "\",\n      \"indices\": \"" + paths.indices +
-                      "\",\n      \"vertexStride\": 32,\n      \"effect\": \"BasicEffect\"" +
-                      morph + "\n  }]\n}\n");
+                      "\",\n      \"vertexStride\": 32,\n      \"effect\": \"" + paths.effect + "\"" +
+                      morph + material + "\n  }]\n}\n");
     }
 
     struct SkinnedModelPaths
@@ -399,6 +422,40 @@ TEST_F(ContentPathContainmentTest, SongXnbAbsoluteEmbeddedPathIsRejected)
     EXPECT_NE(message.find("SongReader"), std::string::npos) << message;
 }
 
+TEST_F(ContentPathContainmentTest, SongExtensionProbeCannotSelectOutsideSymlink)
+{
+    ScratchTree tree;
+    const fs::path outside = tree.sibling() / "probe.ogg";
+    WriteText(outside, "SONG_PROBE_OUTSIDE_SENTINEL");
+    fs::create_directories(tree.root() / "music");
+    std::error_code ec;
+    fs::create_symlink(outside, tree.root() / "music" / "probe.ogg", ec);
+    if (ec)
+    {
+        GTEST_SKIP() << "symlink creation not permitted in this environment";
+    }
+    WriteBytes(tree.root() / "music" / "probe_asset.xnb", BuildSongXnb("probe.wav"));
+
+    ContentManager cm(nullptr, tree.root().string());
+    const std::string message = RequireContainmentRejection(
+        [&] { (void)cm.Load<Song>("music/probe_asset"); }, outside.string());
+    EXPECT_NE(message.find("SongReader"), std::string::npos) << message;
+    EXPECT_EQ(message.find("SONG_PROBE_OUTSIDE_SENTINEL"), std::string::npos) << message;
+}
+
+TEST_F(ContentPathContainmentTest, ExplicitExternalSongXnbRemainsConfinedAndLoadable)
+{
+    ScratchTree tree;
+    const fs::path bundle = tree.sibling() / "song_bundle";
+    WriteText(bundle / "song.ogg", "EXTERNAL_SONG_BUNDLE_SENTINEL");
+    WriteBytes(bundle / "song_asset.xnb", BuildSongXnb("audio/../song.ogg"));
+
+    ContentManager cm(nullptr, tree.root().string());
+    const Song song = cm.Load<Song>((bundle / "song_asset").string());
+    EXPECT_EQ(fs::path(song.getHandle()).lexically_normal(),
+              (bundle / "song.ogg").lexically_normal());
+}
+
 #ifdef CNA_FFMPEG_AVAILABLE
 TEST_F(ContentPathContainmentTest, VideoXnbTraversalRejectsBeforeCreationAndDoesNotPoisonCache)
 {
@@ -443,6 +500,42 @@ TEST_F(ContentPathContainmentTest, VideoXnbAbsoluteEmbeddedPathIsRejected)
     const std::string message = RequireContainmentRejection(
         [&] { (void)cm.Load<Video>("absolute_video"); }, outside.string());
     EXPECT_NE(message.find("VideoReader"), std::string::npos) << message;
+}
+
+TEST_F(ContentPathContainmentTest, VideoExtensionProbeCannotSelectOutsideSymlink)
+{
+    ScratchTree tree;
+    const fs::path outside = tree.sibling() / "probe.ogv";
+    WriteText(outside, "VIDEO_PROBE_OUTSIDE_SENTINEL");
+    fs::create_directories(tree.root() / "movies");
+    std::error_code ec;
+    fs::create_symlink(outside, tree.root() / "movies" / "probe.ogv", ec);
+    if (ec)
+    {
+        GTEST_SKIP() << "symlink creation not permitted in this environment";
+    }
+    WriteBytes(tree.root() / "movies" / "probe_asset.xnb", BuildVideoXnb("probe.wmv"));
+
+    ContentManager cm(nullptr, tree.root().string());
+    cm.setGraphicsDevice(gd);
+    const std::string message = RequireContainmentRejection(
+        [&] { (void)cm.Load<Video>("movies/probe_asset"); }, outside.string());
+    EXPECT_NE(message.find("VideoReader"), std::string::npos) << message;
+    EXPECT_EQ(message.find("VIDEO_PROBE_OUTSIDE_SENTINEL"), std::string::npos) << message;
+}
+
+TEST_F(ContentPathContainmentTest, ExplicitExternalVideoXnbRemainsConfinedAndLoadable)
+{
+    ScratchTree tree;
+    const fs::path bundle = tree.sibling() / "video_bundle";
+    WriteText(bundle / "video.ogv", "EXTERNAL_VIDEO_BUNDLE_SENTINEL");
+    WriteBytes(bundle / "video_asset.xnb", BuildVideoXnb("clips/../video.ogv"));
+
+    ContentManager cm(nullptr, tree.root().string());
+    cm.setGraphicsDevice(gd);
+    const Video video = cm.Load<Video>((bundle / "video_asset").string());
+    EXPECT_EQ(fs::path(video.getFileNameProperty()).lexically_normal(),
+              (bundle / "video.ogv").lexically_normal());
 }
 #endif
 
@@ -505,6 +598,108 @@ TEST_F(ContentPathContainmentTest, EffectFragmentAbsolutePathIsRejectedBeforeSha
         [&] { (void)cm.Load<std::shared_ptr<Effect>>("effect"); }, outside.string());
     EXPECT_NE(message.find("fragment"), std::string::npos) << message;
     EXPECT_EQ(message.find("SECRET_FRAGMENT_SHADER_MARKER"), std::string::npos) << message;
+}
+
+TEST_F(ContentPathContainmentTest, IndirectContentAssetReferencesCannotEscapeContentRoot)
+{
+    ScratchTree tree;
+    const fs::path outsideTexture = tree.sibling() / "outside.png";
+    WriteTinyPng(gd, outsideTexture);
+    WriteText(tree.sibling() / "custom_effect.cnj",
+              R"({"cnjVersion":1,"type":"BasicEffect","marker":"INDIRECT_OUTSIDE_SENTINEL"})");
+
+    struct EffectCase
+    {
+        const char* asset;
+        const char* type;
+        const char* field;
+    };
+    for (const EffectCase& testCase : {
+             EffectCase{"stock_texture", "BasicEffect", "texture"},
+             EffectCase{"stock_texture2", "DualTextureEffect", "texture2"},
+             EffectCase{"stock_environment", "EnvironmentMapEffect", "environmentMap"},
+         })
+    {
+        WriteText(tree.root() / (std::string(testCase.asset) + ".cnj"),
+                  "{\"cnjVersion\":1,\"type\":\"" + std::string(testCase.type) +
+                      "\",\"" + testCase.field +
+                      "\":\"../content-evil/outside.png\"}");
+        ContentManager cm(nullptr, tree.root().string());
+        cm.setGraphicsDevice(gd);
+        const std::string message = RequireContainmentRejection(
+            [&] { (void)cm.Load<std::shared_ptr<Effect>>(testCase.asset); },
+            outsideTexture.string());
+        EXPECT_NE(message.find(testCase.field), std::string::npos) << message;
+        EXPECT_EQ(message.find("INDIRECT_OUTSIDE_SENTINEL"), std::string::npos) << message;
+    }
+
+    WriteText(tree.root() / "font.cnj", R"({
+        "cnjVersion": 1,
+        "type": "SpriteFont",
+        "texture": "../content-evil/outside.png",
+        "lineSpacing": 1,
+        "spacing": 0,
+        "glyphs": [
+            {"char": 65, "source": [0,0,1,1], "crop": [0,0,1,1], "kerning": [0,1,0]}
+        ]
+    })");
+    {
+        ContentManager cm(nullptr, tree.root().string());
+        cm.setGraphicsDevice(gd);
+        const std::string message = RequireContainmentRejection(
+            [&] { (void)cm.Load<SpriteFont>("font"); }, outsideTexture.string());
+        EXPECT_NE(message.find("texture"), std::string::npos) << message;
+    }
+
+    WriteZeroBoneSkeleton(tree.root() / "safe.skeleton.bin");
+    WriteTriangle(tree.root() / "safe.verts.bin", tree.root() / "safe.idx.bin", 32);
+
+    struct ModelCase
+    {
+        std::string asset;
+        std::string field;
+        ModelPaths paths;
+        fs::path outside;
+    };
+    std::vector<ModelCase> modelCases;
+
+    ModelPaths customEffect;
+    customEffect.effect = "../content-evil/custom_effect";
+    modelCases.push_back({"indirect_effect", "effect", customEffect,
+                          tree.sibling() / "custom_effect.cnj"});
+
+    ModelPaths texture;
+    texture.texture = "../content-evil/outside.png";
+    modelCases.push_back({"indirect_texture", "texture", texture, outsideTexture});
+
+    ModelPaths texture2;
+    texture2.effect = "DualTextureEffect";
+    texture2.texture2 = "../content-evil/outside.png";
+    modelCases.push_back({"indirect_texture2", "texture2", texture2, outsideTexture});
+
+    for (const char* field : {"normalMap", "metallicRoughnessMap", "emissiveMap", "occlusionMap"})
+    {
+        ModelPaths map;
+        map.effect = "PbrEffect";
+        if (std::string(field) == "normalMap") map.normalMap = "../content-evil/outside.png";
+        if (std::string(field) == "metallicRoughnessMap")
+            map.metallicRoughnessMap = "../content-evil/outside.png";
+        if (std::string(field) == "emissiveMap") map.emissiveMap = "../content-evil/outside.png";
+        if (std::string(field) == "occlusionMap") map.occlusionMap = "../content-evil/outside.png";
+        modelCases.push_back({"indirect_" + std::string(field), field, map, outsideTexture});
+    }
+
+    for (const ModelCase& testCase : modelCases)
+    {
+        WriteModelManifest(
+            tree.root() / (std::string(testCase.asset) + ".cnj"), testCase.paths);
+        ContentManager cm(nullptr, tree.root().string());
+        cm.setGraphicsDevice(gd);
+        const std::string message = RequireContainmentRejection(
+            [&] { (void)cm.Load<Model>(testCase.asset); }, testCase.outside.string());
+        EXPECT_NE(message.find(testCase.field), std::string::npos) << message;
+        EXPECT_EQ(message.find("INDIRECT_OUTSIDE_SENTINEL"), std::string::npos) << message;
+    }
 }
 
 TEST_F(ContentPathContainmentTest, AnimationClipTraversalRejectsDeterministicallyWithoutCachePoisoning)

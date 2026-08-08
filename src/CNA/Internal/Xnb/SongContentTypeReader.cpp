@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Xnb/SongContentTypeReader.hpp"
 
-#include <algorithm>
 #include <array>
 #include <filesystem>
 
+#include "CNA/Internal/PathContainment.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
@@ -21,23 +21,19 @@ namespace CNA::Internal::Xnb
         // FNA's SongReader.supportedExtensions.
         constexpr std::array<const char*, 3> kSupportedExtensions{".ogg", ".oga", ".qoa"};
 
-        // Mirrors FNA's MonoGame.Utilities.FileHelpers.ResolveRelativePath (see also
-        // ContentReader.cpp's identically-purposed helper for ReadExternalReference<T>()): resolves
-        // relativeFile as a sibling of filePath, then collapses "."/".." segments. Duplicated
-        // (rather than shared) because ContentReader.cpp's copy is file-local and this reader
-        // needs a real filesystem path (for File::exists probing), not a ContentManager-relative
-        // logical asset name.
-        std::string ResolveRelativeFilePath(const std::string& filePath, const std::string& relativeFile)
+        std::string ResolveRelativeFilePath(const std::string& contentRoot,
+                                            const std::string& filePath,
+                                            const std::string& relativeFile)
         {
-            namespace fs = std::filesystem;
-            auto normalizeSeparators = [](std::string s)
+            const auto result = CNA::Internal::ResolveContainedPathRelativeToFile(
+                contentRoot, filePath, relativeFile);
+            if (!result.ok)
             {
-                std::replace(s.begin(), s.end(), '\\', '/');
-                return s;
-            };
-            const fs::path base = fs::path(normalizeSeparators(filePath)).parent_path();
-            const fs::path combined = base / normalizeSeparators(relativeFile);
-            return combined.lexically_normal().generic_string();
+                throw ContentLoadException(
+                    "SongReader: embedded media path must be a non-empty relative path contained "
+                    "within the authorized content root or explicit external bundle.");
+            }
+            return result.resolvedPath;
         }
 
         // FNA's SongReader.Normalize(): returns fileName unchanged if it already names a real
@@ -72,10 +68,12 @@ namespace CNA::Internal::Xnb
                 "SongReader: no ContentManager available (ContentReader has no owning ContentManager).");
         }
 
-        const std::string assetPath =
-            (std::filesystem::path(contentManager->getRootDirectoryProperty()) / input.getAssetNameProperty())
-                .generic_string();
-        std::string path = ResolveRelativeFilePath(assetPath, input.ReadString());
+        namespace fs = std::filesystem;
+        const std::string& contentRoot = contentManager->getRootDirectoryProperty();
+        fs::path assetPath = fs::path(contentRoot) / input.getAssetNameProperty();
+        assetPath += ".xnb";
+        std::string path = ResolveRelativeFilePath(
+            contentRoot, assetPath.string(), input.ReadString());
 
         if (path.size() > 4)
         {
@@ -86,6 +84,13 @@ namespace CNA::Internal::Xnb
                 path = normalized;
             }
         }
+
+        // Normalize() may select an extension-probed sibling that is a symlink, so validate the
+        // final selected candidate as well as the embedded spelling before constructing Song.
+        const fs::path selectedRelative =
+            fs::path(path).lexically_relative(assetPath.parent_path());
+        path = ResolveRelativeFilePath(
+            contentRoot, assetPath.string(), selectedRelative.generic_string());
 
         const int32_t durationMs = input.ReadInt32();
         return Song(path, input.getAssetNameProperty(), durationMs);

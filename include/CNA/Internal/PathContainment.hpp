@@ -35,7 +35,7 @@ namespace CNA::Internal
         return looksLikeDriveLetter || looksLikeUnc;
     }
 
-    /** @brief Result of ResolveContainedPath(). */
+    /** @brief Result of the shared path-containment helpers. */
     struct ContainedPathResult
     {
         /** @brief True if the input resolved within the given base directory. */
@@ -43,6 +43,105 @@ namespace CNA::Internal
         /** @brief The resolved path, valid only when @c ok is true. */
         std::string resolvedPath;
     };
+
+    /**
+     * @brief Verifies that an already-constructed @p candidate path is a child of @p rootDir.
+     *
+     * This is the component-aware check shared by ResolveContainedPath() and
+     * ResolveContainedPathFromBase(). It deliberately compares path components after lexical
+     * normalization instead of using a string prefix, so a sibling such as `content-evil` is not
+     * considered a child of `content`.
+     *
+     * @param rootDir      The authorized root directory.
+     * @param candidate    An already-constructed path to validate. Unlike untrusted input to the
+     *                     resolving helpers, this may be absolute.
+     * @param canonicalize When true (the default), additionally use `weakly_canonical` for the
+     *                     check so existing symlink components cannot redirect outside the root.
+     * @return `{true, normalizedCandidate}` when @p candidate is a non-root child of @p rootDir;
+     *         `{false, {}}` otherwise.
+     */
+    inline ContainedPathResult ValidateContainedPath(const std::string& rootDir,
+                                                       const std::string& candidate,
+                                                       bool canonicalize = true)
+    {
+        namespace fs = std::filesystem;
+
+        if (candidate.empty())
+        {
+            return {};
+        }
+
+        const fs::path lexicalRoot =
+            (rootDir.empty() ? fs::path(".") : fs::path(rootDir)).lexically_normal();
+        const fs::path lexicalCandidate = fs::path(candidate).lexically_normal();
+
+        fs::path checkedRoot = lexicalRoot;
+        fs::path checkedCandidate = lexicalCandidate;
+        if (canonicalize)
+        {
+            std::error_code rootEc;
+            std::error_code candidateEc;
+            checkedRoot = fs::weakly_canonical(lexicalRoot, rootEc);
+            checkedCandidate = fs::weakly_canonical(lexicalCandidate, candidateEc);
+            if (rootEc || candidateEc)
+            {
+                return {};
+            }
+        }
+
+        // lexically_relative(), not relative(): the latter always canonicalizes both arguments
+        // internally regardless of what this function already did above, which would silently
+        // force real filesystem access even when canonicalize=false was requested. Both operands
+        // are already in comparable form by this point (either both lexically normalized only,
+        // or both already weakly_canonical'd above), so a pure component comparison is correct.
+        const fs::path rel = checkedCandidate.lexically_relative(checkedRoot);
+        if (rel.empty() || rel == "." || *rel.begin() == "..")
+        {
+            return {};
+        }
+
+        return {true, lexicalCandidate.string()};
+    }
+
+    /**
+     * @brief Joins @p relativeOrAbsolute onto @p baseDir and verifies the result stays within
+     *        @p rootDir.
+     *
+     * This variant is for references whose join base is below their authorization root, such as
+     * a media filename relative to an XNB file's directory while still confined to the enclosing
+     * ContentManager root.
+     *
+     * @param rootDir            The directory the resolved path must stay within.
+     * @param baseDir            The directory @p relativeOrAbsolute is relative to.
+     * @param relativeOrAbsolute Caller-/file-supplied path, untrusted and required to be relative.
+     * @param canonicalize       When true (the default), existing symlink components are resolved
+     *                           for the containment check only.
+     * @return `{true, resolvedPath}` if contained; `{false, {}}` for empty, absolute/rooted,
+     *         root-equal, or escaping input.
+     */
+    inline ContainedPathResult ResolveContainedPathFromBase(
+        const std::string& rootDir, const std::string& baseDir,
+        const std::string& relativeOrAbsolute, bool canonicalize = true)
+    {
+        namespace fs = std::filesystem;
+
+        if (relativeOrAbsolute.empty())
+        {
+            return {};
+        }
+
+        std::string normalized = relativeOrAbsolute;
+        std::replace(normalized.begin(), normalized.end(), '\\', '/');
+
+        if (IsDisallowedAbsolutePath(normalized))
+        {
+            return {};
+        }
+
+        const fs::path base = baseDir.empty() ? fs::path(".") : fs::path(baseDir);
+        const fs::path lexicalJoined = (base / fs::path(normalized)).lexically_normal();
+        return ValidateContainedPath(rootDir, lexicalJoined.string(), canonicalize);
+    }
 
     /**
      * @brief Joins @p relativeOrAbsolute onto @p baseDir and verifies the result stays within
@@ -85,50 +184,51 @@ namespace CNA::Internal
                                                       const std::string& relativeOrAbsolute,
                                                       bool canonicalize = true)
     {
+        return ResolveContainedPathFromBase(
+            baseDir, baseDir, relativeOrAbsolute, canonicalize);
+    }
+
+    /**
+     * @brief Resolves an untrusted path relative to the directory containing @p referringFile.
+     *
+     * A referring file lexically inside @p contentRoot is confined to that content root, allowing
+     * legitimate `..` segments that merely move between directories within it. A referring file
+     * loaded through an explicit outside-root API is instead confined to its own containing
+     * directory, preserving supported external bundles without granting their embedded paths
+     * access to arbitrary sibling directories. Canonical checking of the resolved candidate is
+     * still enabled by default, so a lexically in-root symlink is not reclassified as an explicit
+     * external bundle.
+     *
+     * @param contentRoot        The ContentManager root.
+     * @param referringFile      The XNB/manifest path that contains the untrusted reference.
+     * @param relativeOrAbsolute The embedded path, required to be relative and non-empty.
+     * @param canonicalize       When true (the default), existing symlink components are resolved
+     *                           for the containment check only.
+     * @return The same result shape as ResolveContainedPathFromBase().
+     */
+    inline ContainedPathResult ResolveContainedPathRelativeToFile(
+        const std::string& contentRoot, const std::string& referringFile,
+        const std::string& relativeOrAbsolute, bool canonicalize = true)
+    {
         namespace fs = std::filesystem;
 
-        if (relativeOrAbsolute.empty())
+        if (referringFile.empty())
         {
             return {};
         }
 
-        std::string normalized = relativeOrAbsolute;
-        std::replace(normalized.begin(), normalized.end(), '\\', '/');
+        const fs::path referringPath = fs::path(referringFile).lexically_normal();
+        const fs::path baseDir = referringPath.parent_path().empty()
+                                     ? fs::path(".")
+                                     : referringPath.parent_path();
+        const bool referringFileIsLexicallyInRoot =
+            ValidateContainedPath(contentRoot, referringPath.string(), false).ok;
+        const fs::path authorizedRoot = referringFileIsLexicallyInRoot
+                                            ? (contentRoot.empty() ? fs::path(".")
+                                                                   : fs::path(contentRoot))
+                                            : baseDir;
 
-        if (IsDisallowedAbsolutePath(normalized))
-        {
-            return {};
-        }
-
-        const fs::path base = baseDir.empty() ? fs::path(".") : fs::path(baseDir);
-        const fs::path lexicalJoined = (base / fs::path(normalized)).lexically_normal();
-
-        fs::path checkedBase = base;
-        fs::path checkedJoined = lexicalJoined;
-        if (canonicalize)
-        {
-            std::error_code baseEc;
-            std::error_code joinedEc;
-            checkedBase = fs::weakly_canonical(base, baseEc);
-            checkedJoined = fs::weakly_canonical(lexicalJoined, joinedEc);
-            if (baseEc || joinedEc)
-            {
-                return {};
-            }
-        }
-
-        // lexically_relative(), not relative(): the latter always canonicalizes both arguments
-        // internally regardless of what this function already did above, which would silently
-        // force real filesystem access even when canonicalize=false was requested. Both operands
-        // are already in comparable form by this point (either both lexically normalized only,
-        // or both already weakly_canonical'd above), so a pure lexical comparison is correct and
-        // sufficient here.
-        const fs::path rel = checkedJoined.lexically_relative(checkedBase);
-        if (rel.empty() || rel == "." || *rel.begin() == "..")
-        {
-            return {};
-        }
-
-        return {true, lexicalJoined.string()};
+        return ResolveContainedPathFromBase(
+            authorizedRoot.string(), baseDir.string(), relativeOrAbsolute, canonicalize);
     }
 }
