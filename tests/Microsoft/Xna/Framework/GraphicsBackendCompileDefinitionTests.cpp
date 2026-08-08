@@ -59,6 +59,9 @@ TEST(GraphicsBackendCompileDefinitionsTest, ExactlyOneGraphicsBackendIsSelected)
 #ifdef CNA_BACKEND_D3D12
     ++enabled;
 #endif
+#ifdef CNA_BACKEND_DIRECT2D
+    ++enabled;
+#endif
 #ifdef CNA_BACKEND_FREEDIRECT
     ++enabled;
 #endif

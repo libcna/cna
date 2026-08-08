@@ -56,6 +56,11 @@ option(CNA_BUILD_TESTS "Build CNA tests" ON)
 option(CNA_NOXNA "Enable CNA NOXNA extended graphics layer (beyond XNA 4.0)" OFF)
 option(CNA_DEVICES "Enable CNA-specific device/sensor extensions beyond XNA 4.0 (battery, camera, clipboard, ...)" OFF)
 option(CNA_ENABLE_NET "Build CNA networking (GamerServices + Net, requires ENet)" ON)
+# On a Linux cross-build, Direct2D tests normally use the project's dedicated system-Wine prefix.
+# PROTON is an opt-in DXVK-backed alternative for a local Steam Proton installation; native
+# Windows configurations still execute the .exe directly.
+set(CNA_DIRECT2D_TEST_RUNTIME "WINE" CACHE STRING "Cross-compiled Direct2D test runtime (WINE or PROTON)")
+set_property(CACHE CNA_DIRECT2D_TEST_RUNTIME PROPERTY STRINGS WINE PROTON)
 
 # DISPLAY value baked into every GPU/window-creating ctest's ENVIRONMENT property (SDL_VIDEODRIVER=x11).
 # Defaults to :0 for backward compatibility; override with e.g. -DCNA_TEST_DISPLAY=:99 to run the full
@@ -184,6 +189,10 @@ include(cmake/Tests/D3D11Tests.cmake)
 # .exe directly; a Linux-hosted cross-compile wraps it with scripts/run-wine-vkd3d.sh, DX-100's own
 # Wine+vkd3d-proton dev loop, a distinct Wine prefix from D3D11's DXVK one).
 include(cmake/Tests/D3D12Tests.cmake)
+
+# Direct2D 1.1 is a Windows-only 2D backend. Its tests use the same native-Windows/Wine+DXVK
+# execution model as D3D11 because Direct2D owns a real D3D11/DXGI presentation surface.
+include(cmake/Tests/Direct2DTests.cmake)
 
 # plan_canvas.md CANVAS-15: structural smoke-test build for the CANVAS (HTML Canvas 2D) backend.
 # Deliberately NOT registered as a CTest (mirrors cna_diag_software's/d3d12_swapchain_diag's own

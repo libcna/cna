@@ -54,15 +54,30 @@ if(CNA_BUILD_TESTS)
     # with its own bundled assets. Not part of the Task 6.2/6.4 verification filters
     # (*Network*:*Gamer*:*ENet*:*Packet*) either, since its suite name is TwoProcessLoopbackTest.
     # plan_dx1.md DX1-88 regression pass: found and fixed a pre-existing, not-DX1-specific gap --
-    # this glob picks up tests/CNA/Internal/Net/ENet*Tests.cpp unconditionally, but those files
-    # #include <enet/enet.h> directly, which only resolves when CNA_ENABLE_NET actually configured
+    # this glob picks up ENet-specific tests unconditionally, but those files include
+    # <enet/enet.h> directly, which only resolves when CNA_ENABLE_NET actually configured
     # the vendored ENet target (cmake/ThirdPartyENet.cmake). CNA_ENABLE_NET=OFF is a real,
     # supported configuration (CMakeLists.txt's own option default is ON, but OFF is explicitly
     # supported for builds that don't need Net/GamerServices) -- this was simply never exercised
     # against a from-scratch full CnaTests build before. Excluded the same way the WIN32/
     # EMSCRIPTEN/ANDROID-specific files just below already are.
     if(NOT CNA_ENABLE_NET)
-        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Net/ENet[A-Za-z]*Tests\\.cpp$")
+        # REMED-BUILD-019: NET=OFF omits both CNA_Net and CNA_GamerServices, so every test whose
+        # implementation lives in either disabled optional module must also leave CnaTests. This
+        # exact root-based boundary includes direct and transitive ENet-header consumers without
+        # suppressing any test outside the two disabled modules.
+        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Net/.*\\.cpp$")
+        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/Microsoft/Xna/Framework/Net/.*\\.cpp$")
+        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/Microsoft/Xna/Framework/GamerServices/.*\\.cpp$")
+
+        # Keep the source-list contract executable: future glob/filter changes must fail at
+        # configure time rather than compiling a disabled-module test into an un-linkable target.
+        foreach(_cna_disabled_net_test IN LISTS CNA_TEST_SOURCES)
+            if(_cna_disabled_net_test MATCHES "/(CNA/Internal/Net|Microsoft/Xna/Framework/(Net|GamerServices))/")
+                message(FATAL_ERROR "NET=OFF left disabled-module test selected: ${_cna_disabled_net_test}")
+            endif()
+        endforeach()
+        unset(_cna_disabled_net_test)
     endif()
 
     if(WIN32 OR EMSCRIPTEN OR ANDROID)
@@ -260,7 +275,7 @@ if(CNA_BUILD_TESTS)
     endif()
 
     # plan_dx.md DX-15 follow-up + plan_dx9.md D9-123 follow-up (merge-reconciled 2026-07-16):
-    # now that CnaTests.exe genuinely builds under the D3D9/D3D11/D3D12 MinGW cross-targets,
+    # now that CnaTests.exe genuinely builds under the D3D9/D3D11/D3D12/Direct2D MinGW cross-targets,
     # gtest_discover_tests(DISCOVERY_MODE PRE_TEST) below executes it directly to enumerate tests
     # -- and any add_test(COMMAND CnaTests ...) test (e.g. CnaInputTests, further below) does the
     # same at run time. All three need the same Wine wrapper D3D9_Smoke/D3D11_Smoke/D3D12_Smoke
@@ -327,6 +342,12 @@ if(CNA_BUILD_TESTS)
             # real D3D10 device (e.g. a bare --gtest_list_tests call).
             set_target_properties(CnaTests PROPERTIES
                 CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_D3D10_SKIP_DXVK_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-d3d10.sh")
+        elseif(CNA_GRAPHICS_BACKEND STREQUAL "DIRECT2D")
+            # Direct2D needs the normal/dedicated prefix selected by run-wine-direct2d.sh, not the
+            # D3D11-only DXVK prefix (which may not contain Wine's d2d1 runtime). Pure unit tests
+            # do not create a device, so skip the unrelated DXVK renderer-log gate.
+            set_target_properties(CnaTests PROPERTIES
+                CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_D3D11_SKIP_DXVK_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-direct2d.sh")
         endif()
     endif()
 
@@ -337,6 +358,14 @@ if(CNA_BUILD_TESTS)
     # directly from the repo root. Mirrors the already-correct pattern in
     # cmake/Tests/EasyGLTests.cmake / VulkanTests.cmake.
     gtest_discover_tests(CnaTests DISCOVERY_MODE PRE_TEST WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+    # D2D-118/D2D-119: a stable label and one explicit runner make the backend's device-free
+    # capability, blend, mip-policy, HRESULT and pixel-conversion contract independently runnable.
+    if(CNA_GRAPHICS_BACKEND STREQUAL "DIRECT2D")
+        cna_register_backend_test(NAME Direct2D_Unit
+            COMMAND CnaTests --gtest_filter=Direct2D*
+            TIMEOUT 60 LABELS "Direct2D;Unit" WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+    endif()
 
     # INPUT-BUILD-003: canonical Input-test selector — SINGLE SOURCE OF TRUTH.
     # The input subset used to be selected by a long --gtest_filter string copy-pasted across the docs

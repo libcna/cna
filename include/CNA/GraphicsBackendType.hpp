@@ -49,6 +49,9 @@ namespace CNA
         /** @brief Direct3D 12. */
         D3D12,
 
+        /** @brief Direct2D 1.1 (Windows, 2D-only). */
+        Direct2D,
+
         /** @brief HTML Canvas 2D (Emscripten). */
         Canvas,
 
@@ -168,6 +171,8 @@ namespace CNA
         return GraphicsBackendType::D3D11;
 #elif defined(CNA_BACKEND_D3D12)
         return GraphicsBackendType::D3D12;
+#elif defined(CNA_BACKEND_DIRECT2D)
+        return GraphicsBackendType::Direct2D;
 #elif defined(CNA_BACKEND_CANVAS)
         return GraphicsBackendType::Canvas;
 #elif defined(CNA_BACKEND_HTML_DOM)
@@ -249,6 +254,7 @@ namespace CNA
             case GraphicsBackendType::Stub:          return "STUB";
             case GraphicsBackendType::D3D11:        return "D3D11";
             case GraphicsBackendType::D3D12:        return "D3D12";
+            case GraphicsBackendType::Direct2D:     return "DIRECT2D";
             case GraphicsBackendType::Canvas:       return "CANVAS";
             case GraphicsBackendType::HtmlDom:      return "HTML_DOM";
             case GraphicsBackendType::Skia:         return "SKIA";
