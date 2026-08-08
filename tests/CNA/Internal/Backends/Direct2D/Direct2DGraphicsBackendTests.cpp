@@ -1,18 +1,27 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
 
+#include <array>
 #include <cmath>
+#include <cstdint>
 #include <limits>
+#include <vector>
 
 #if defined(CNA_BACKEND_DIRECT2D)
 #include "CNA/Internal/Backends/Direct2D/Direct2DGraphicsBackend.hpp"
+#include "System/NotSupportedException.hpp"
 
 using CNA::Internal::Backends::Direct2D::BlendStateToDirect2DBlendMode;
+using CNA::Internal::Backends::Direct2D::CheckedRgbaByteCount;
+using CNA::Internal::Backends::Direct2D::CopyBgraToTightRgba;
+using CNA::Internal::Backends::Direct2D::CopyRgbaToTightBgra;
 using CNA::Internal::Backends::Direct2D::Direct2DBlendMode;
 using CNA::Internal::Backends::Direct2D::FractionalMipLevelForTransform;
 using CNA::Internal::Backends::Direct2D::IsDeviceLossHResult;
 using CNA::Internal::Backends::Direct2D::MapSourceRectangleToMip;
 using CNA::Internal::Backends::Direct2D::PreferredMipLevelForTransform;
+using CNA::Internal::Backends::Direct2D::SupportsDirect2DCapability;
+using CNA::GraphicsCapability;
 using Microsoft::Xna::Framework::Matrix;
 using XnaRectangle = Microsoft::Xna::Framework::Rectangle;
 
@@ -33,12 +42,12 @@ TEST(Direct2DDeviceLossClassification, DoesNotFlagOrdinaryFailuresOrSuccess)
     EXPECT_FALSE(IsDeviceLossHResult(DXGI_ERROR_INVALID_CALL));
 }
 
-TEST(Direct2DBlendStateMapping, StandardSpriteBatchPresetsMapToNativePrimitiveBlends)
+TEST(Direct2DBlendStateMapping, SupportedStandardSpriteBatchPresetsMapToNativePrimitiveBlends)
 {
     EXPECT_EQ(BlendStateToDirect2DBlendMode(0, 0, 1, 1, 0, 0), Direct2DBlendMode::Copy);
     EXPECT_EQ(BlendStateToDirect2DBlendMode(0, 0, 5, 5, 0, 0), Direct2DBlendMode::SourceOver);
     EXPECT_EQ(BlendStateToDirect2DBlendMode(4, 4, 5, 5, 0, 0), Direct2DBlendMode::SourceOver);
-    EXPECT_EQ(BlendStateToDirect2DBlendMode(4, 4, 0, 0, 0, 0), Direct2DBlendMode::Add);
+    EXPECT_THROW(BlendStateToDirect2DBlendMode(4, 4, 0, 0, 0, 0), System::NotSupportedException);
 }
 
 TEST(Direct2DBlendStateMapping, UnsupportedFactorOrEquationFailsExplicitly)
@@ -50,7 +59,7 @@ TEST(Direct2DBlendStateMapping, UnsupportedFactorOrEquationFailsExplicitly)
 
 TEST(Direct2DBlendStateMapping, ExactSymmetricPorterDuffFactorsMapToCompositeModes)
 {
-    EXPECT_EQ(BlendStateToDirect2DBlendMode(0, 0, 0, 0, 0, 0), Direct2DBlendMode::Add);
+    EXPECT_THROW(BlendStateToDirect2DBlendMode(0, 0, 0, 0, 0, 0), System::NotSupportedException);
     EXPECT_EQ(BlendStateToDirect2DBlendMode(9, 9, 0, 0, 0, 0), Direct2DBlendMode::DestinationOver);
     EXPECT_EQ(BlendStateToDirect2DBlendMode(8, 8, 1, 1, 0, 0), Direct2DBlendMode::SourceIn);
     EXPECT_EQ(BlendStateToDirect2DBlendMode(1, 1, 4, 4, 0, 0), Direct2DBlendMode::DestinationIn);
@@ -59,6 +68,82 @@ TEST(Direct2DBlendStateMapping, ExactSymmetricPorterDuffFactorsMapToCompositeMod
     EXPECT_EQ(BlendStateToDirect2DBlendMode(8, 8, 5, 5, 0, 0), Direct2DBlendMode::SourceAtop);
     EXPECT_EQ(BlendStateToDirect2DBlendMode(9, 9, 4, 4, 0, 0), Direct2DBlendMode::DestinationAtop);
     EXPECT_EQ(BlendStateToDirect2DBlendMode(9, 9, 5, 5, 0, 0), Direct2DBlendMode::Xor);
+}
+
+TEST(Direct2DCapabilityContract, IsExhaustiveForAllThirteenCapabilities)
+{
+    struct CapabilityExpectation
+    {
+        GraphicsCapability capability;
+        bool supported;
+    };
+    constexpr std::array<CapabilityExpectation, 13> expectations{{
+        {GraphicsCapability::ThreeD, false},
+        {GraphicsCapability::DepthStencilBuffer, false},
+        {GraphicsCapability::MultiSampleAntiAliasing, false},
+        {GraphicsCapability::MultipleRenderTargets, false},
+        {GraphicsCapability::AnisotropicFiltering, true},
+        {GraphicsCapability::WireFrame, false},
+        {GraphicsCapability::OcclusionQuery, false},
+        {GraphicsCapability::CustomEffects, false},
+        {GraphicsCapability::Texture3D, false},
+        {GraphicsCapability::MultiStreamVertexInput, false},
+        {GraphicsCapability::Instancing, false},
+        {GraphicsCapability::StencilBuffer, false},
+        {GraphicsCapability::AdditiveBlending, false},
+    }};
+
+    for (const auto& expectation : expectations)
+        EXPECT_EQ(SupportsDirect2DCapability(expectation.capability), expectation.supported);
+}
+
+TEST(Direct2DPixelConversion, ConvertsOddWidthPitchedRgbaToTightBgraWithoutLosingAlpha)
+{
+    constexpr int width = 3;
+    constexpr int height = 2;
+    constexpr int pitch = 16;
+    const std::array<std::uint8_t, pitch * height> rgba{{
+        1, 2, 3, 4,       10, 20, 30, 40,    101, 102, 103, 104,  0xEE, 0xEE, 0xEE, 0xEE,
+        5, 6, 7, 8,       50, 60, 70, 80,    201, 202, 203, 204,  0xDD, 0xDD, 0xDD, 0xDD,
+    }};
+    const std::vector<std::uint8_t> expected{
+        3, 2, 1, 4,       30, 20, 10, 40,    103, 102, 101, 104,
+        7, 6, 5, 8,       70, 60, 50, 80,    203, 202, 201, 204,
+    };
+
+    EXPECT_EQ(CheckedRgbaByteCount(width, height), expected.size());
+    EXPECT_EQ(CopyRgbaToTightBgra(rgba.data(), pitch, width, height), expected);
+}
+
+TEST(Direct2DPixelConversion, ConvertsPitchedBgraToTightRgbaAndIgnoresPadding)
+{
+    constexpr int width = 3;
+    constexpr int height = 2;
+    constexpr int pitch = 16;
+    const std::array<std::uint8_t, pitch * height> bgra{{
+        3, 2, 1, 4,       30, 20, 10, 40,    103, 102, 101, 104,  0xA1, 0xA2, 0xA3, 0xA4,
+        7, 6, 5, 8,       70, 60, 50, 80,    203, 202, 201, 204,  0xB1, 0xB2, 0xB3, 0xB4,
+    }};
+    const std::vector<std::uint8_t> expected{
+        1, 2, 3, 4,       10, 20, 30, 40,    101, 102, 103, 104,
+        5, 6, 7, 8,       50, 60, 70, 80,    201, 202, 203, 204,
+    };
+
+    EXPECT_EQ(CopyBgraToTightRgba(bgra.data(), pitch, width, height), expected);
+}
+
+TEST(Direct2DPixelConversion, RejectsInvalidDimensionsPointersAndShortPitches)
+{
+    const std::array<std::uint8_t, 16> pixels{};
+    EXPECT_THROW({ (void)CheckedRgbaByteCount(0, 1); }, std::exception);
+    EXPECT_THROW({ (void)CheckedRgbaByteCount(1, 0); }, std::exception);
+    EXPECT_THROW({ (void)CheckedRgbaByteCount(-1, 1); }, std::exception);
+    EXPECT_THROW({ (void)CheckedRgbaByteCount(std::numeric_limits<int>::max(), 1); }, std::exception);
+    EXPECT_THROW({ (void)CheckedRgbaByteCount(1, std::numeric_limits<int>::max()); }, std::exception);
+    EXPECT_THROW({ (void)CopyRgbaToTightBgra(nullptr, 4, 1, 1); }, std::exception);
+    EXPECT_THROW({ (void)CopyBgraToTightRgba(nullptr, 4, 1, 1); }, std::exception);
+    EXPECT_THROW({ (void)CopyRgbaToTightBgra(pixels.data(), 11, 3, 1); }, std::exception);
+    EXPECT_THROW({ (void)CopyBgraToTightRgba(pixels.data(), -1, 1, 1); }, std::exception);
 }
 
 TEST(Direct2DMipPolicy, MapsNpotSourceCoordinatesUsingActualLevelDimensions)
@@ -85,7 +170,7 @@ TEST(Direct2DMipPolicy, RejectsUnrepresentableOrNonPositiveSourceRectangles)
         MapSourceRectangleToMip(XnaRectangle(maximum - 1, 0, maximum, 1), 1, 1, 1, 1),
         std::exception);
     EXPECT_THROW(
-        MapSourceRectangleToMip(XnaRectangle(minimum, 0, maximum, 1), 1, 1, 1, 1),
+        MapSourceRectangleToMip(XnaRectangle(minimum, 0, 1, 1), 1, 1, maximum, 1),
         std::exception);
     EXPECT_THROW(
         MapSourceRectangleToMip(XnaRectangle(0, 0, 0, 1), 4, 4, 2, 2),

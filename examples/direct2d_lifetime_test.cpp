@@ -49,7 +49,7 @@ protected:
         sprites_ = std::make_unique<SpriteBatch>(device);
         white_ = std::make_unique<Texture2D>(Texture2D::CreateFromPixels(
             device, 1, 1, std::vector<uint8_t>{255, 255, 255, 255}));
-        target_ = std::make_unique<RenderTarget2D>(device, 16, 16, true,
+        target_ = std::make_unique<RenderTarget2D>(device, 16, 16, false,
                                                    SurfaceFormat::Color, DepthFormat::None);
     }
 
@@ -81,9 +81,9 @@ protected:
         if ((frame_ & 1) == 0)
         {
             // Forces EndDraw and target switching while image resources are live.
-            Color mipPixel(0, 0, 0, 0);
+            Color targetPixel(0, 0, 0, 0);
             const Rectangle texel(0, 0, 1, 1);
-            target_->GetData(1, &texel, &mipPixel, 0, 1);
+            target_->GetData(0, &texel, &targetPixel, 0, 1);
         }
 
         device.SetRenderTarget(nullptr);

@@ -2766,12 +2766,10 @@ namespace Microsoft::Xna::Framework::Graphics
             y = rect->Y;
             w = rect->Width;
             h = rect->Height;
-            const std::int64_t right = static_cast<std::int64_t>(x) + w;
-            const std::int64_t bottom = static_cast<std::int64_t>(y) + h;
             // A rectangle is validated against the REAL backbuffer bounds, before any native copy, so
             // an out-of-range request fails deterministically rather than reading outside the resource.
             if (w <= 0 || h <= 0 || x < 0 || y < 0 ||
-                right > backBufferWidth || bottom > backBufferHeight)
+                x + w > backBufferWidth || y + h > backBufferHeight)
                 throw std::out_of_range(
                     "GetBackBufferData: rectangle is outside the backbuffer bounds");
         }
@@ -2796,10 +2794,7 @@ namespace Microsoft::Xna::Framework::Graphics
             std::fflush(stderr);
         }
 
-        if (startIndex < 0)
-            throw std::out_of_range("GetBackBufferData: startIndex must not be negative");
-        const std::int64_t requiredElements = static_cast<std::int64_t>(w) * h;
-        if (elementCount < requiredElements)
+        if (elementCount < w * h)
             throw std::runtime_error("GetBackBufferData: data array too small for requested region");
         Texture::ValidateGetDataFormat(presentationParameters_.getBackBufferFormatProperty(), 4);
 
@@ -2826,9 +2821,6 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (renderTarget && renderTarget->getIsDisposedProperty())
             throw System::ObjectDisposedException(renderTarget->getNameProperty());
-        if (renderTarget && renderTarget->getGraphicsDeviceProperty() != this)
-            throw std::invalid_argument(
-                "SetRenderTarget: the render target belongs to a different GraphicsDevice.");
         if (backend_)
             backend_->SetRenderTarget2D(renderTarget ? renderTarget->GetRenderTargetBackend() : nullptr);
 
@@ -2946,10 +2938,6 @@ namespace Microsoft::Xna::Framework::Graphics
                     + " has a null render target.");
             if (texture->getIsDisposedProperty())
                 throw System::ObjectDisposedException(texture->getNameProperty());
-            if (texture->getGraphicsDeviceProperty() != this)
-                throw std::invalid_argument(
-                    "SetRenderTargets: binding " + std::to_string(i)
-                    + " belongs to a different GraphicsDevice.");
 
             if (auto* rt2D = dynamic_cast<RenderTarget2D*>(texture))
             {

@@ -8,6 +8,7 @@
 #include <dxgi1_2.h>
 #include <wrl/client.h>
 
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -21,60 +22,168 @@ namespace CNA::Internal::Backends::Direct2D
     /**
      * @brief The exact Direct2D primitive/image composite selected from CNA BlendState.
      *
-     * Primitive blend represents source-over, copy and additive composition; DrawImage adds the
-     * exact Porter-Duff modes below. Direct2D still has no general source/destination-factor
-     * blend-equation interface. Keeping this mapping device-free makes the contract unit-testable.
+     * Primitive blend represents source-over and copy composition; DrawImage adds the exact
+     * Porter-Duff modes below. Direct2D still has no general source/destination-factor blend-
+     * equation interface. Keeping this mapping device-free makes the contract unit-testable.
      */
     enum class Direct2DBlendMode
     {
+        /** @brief Premultiplied source-over composition. */
         SourceOver,
+        /** @brief Bounded source-copy composition. */
         Copy,
-        Add,
+        /** @brief Destination-over Porter-Duff composition. */
         DestinationOver,
+        /** @brief Source-in Porter-Duff composition. */
         SourceIn,
+        /** @brief Destination-in Porter-Duff composition. */
         DestinationIn,
+        /** @brief Source-out Porter-Duff composition. */
         SourceOut,
+        /** @brief Destination-out Porter-Duff composition. */
         DestinationOut,
+        /** @brief Source-atop Porter-Duff composition. */
         SourceAtop,
+        /** @brief Destination-atop Porter-Duff composition. */
         DestinationAtop,
+        /** @brief Exclusive-or Porter-Duff composition. */
         Xor
     };
 
-    Direct2DBlendMode BlendStateToDirect2DBlendMode(int colorSrcBlend, int alphaSrcBlend,
-                                                    int colorDstBlend, int alphaDstBlend,
-                                                    int colorBlendFunc, int alphaBlendFunc);
+    /**
+     * @brief Maps an exact CNA blend-factor tuple to a native Direct2D composition mode.
+     *
+     * @param colorSrcBlend Source color blend-factor ordinal.
+     * @param alphaSrcBlend Source alpha blend-factor ordinal.
+     * @param colorDstBlend Destination color blend-factor ordinal.
+     * @param alphaDstBlend Destination alpha blend-factor ordinal.
+     * @param colorBlendFunc Color blend-function ordinal.
+     * @param alphaBlendFunc Alpha blend-function ordinal.
+     * @return The exact Direct2D composition mode.
+     * @throws std::runtime_error If Direct2D cannot express the requested tuple exactly.
+     */
+    Direct2DBlendMode BlendStateToDirect2DBlendMode(
+        int colorSrcBlend, int alphaSrcBlend, int colorDstBlend, int alphaDstBlend,
+        int colorBlendFunc, int alphaBlendFunc);
 
-    /// D2D-69: classifies whether @p hr means the Direct2D/D3D11/DXGI device itself was lost and
-    /// must be recreated (not just this one call retried). Centralizes every device-loss HRESULT
-    /// this backend recognizes -- D2DERR_RECREATE_TARGET plus DXGI_ERROR_DEVICE_REMOVED/RESET/
-    /// HUNG/DRIVER_INTERNAL_ERROR -- so ThrowIfFailed, EndDrawing and Present all agree instead of
-    /// each hand-checking a different subset.
+    /**
+     * @brief Classifies a Direct2D, D3D11, or DXGI device-loss result.
+     *
+     * The recognized set is shared by EndDraw, presentation, and effect probes so every native
+     * entry point makes the same recovery decision.
+     *
+     * @param hr Native result code to classify.
+     * @return True for a result that requires complete device recreation.
+     */
     [[nodiscard]] bool IsDeviceLossHResult(HRESULT hr);
 
-    /** Pure helpers kept public to make Direct2D's manually managed mip policy unit-testable. */
-    int PreferredMipLevelForTransform(int sourceWidth, int sourceHeight,
-                                      int destinationWidth, int destinationHeight,
-                                      float rotation, const Matrix& batchTransform,
-                                      float presentationScaleX, float presentationScaleY,
-                                      bool* minifying = nullptr);
-    /// D2D-74: the continuous (unfloored) LOD PreferredMipLevelForTransform derives its integer
-    /// result from. 0.0 when not minifying; +infinity for a singular (zero-area) transform,
-    /// matching PreferredMipLevelForTransform's INT_MAX sentinel for that same case.
-    double FractionalMipLevelForTransform(int sourceWidth, int sourceHeight,
-                                          int destinationWidth, int destinationHeight,
-                                          float rotation, const Matrix& batchTransform,
-                                          float presentationScaleX, float presentationScaleY,
-                                          bool* minifying = nullptr);
-    Rectangle MapSourceRectangleToMip(const Rectangle& sourceRectangle,
-                                      int baseWidth, int baseHeight,
-                                      int mipWidth, int mipHeight);
+    /**
+     * @brief Returns Direct2D's truthful answer for one graphics capability.
+     *
+     * @param capability Capability to query.
+     * @return True only for the native 2D anisotropic sampler mode.
+     */
+    [[nodiscard]] bool SupportsDirect2DCapability(CNA::GraphicsCapability capability) noexcept;
+
+    /**
+     * @brief Computes a bounded tightly packed RGBA8 byte count with checked arithmetic.
+     *
+     * @param width Image width in pixels.
+     * @param height Image height in pixels.
+     * @return The exact width * height * 4 byte count within D3D11's texture ceiling.
+     */
+    [[nodiscard]] std::size_t CheckedRgbaByteCount(int width, int height);
+
+    /**
+     * @brief Copies pitched RGBA8 rows into tightly packed native BGRA8 storage.
+     *
+     * @param rgba Source pixels.
+     * @param stride Source row pitch in bytes.
+     * @param width Image width in pixels.
+     * @param height Image height in pixels.
+     * @return Tightly packed BGRA8 bytes.
+     */
+    [[nodiscard]] std::vector<std::uint8_t> CopyRgbaToTightBgra(
+        const std::uint8_t* rgba, int stride, int width, int height);
+
+    /**
+     * @brief Copies pitched native BGRA8 rows into tightly packed RGBA8 storage.
+     *
+     * @param bgra Source pixels.
+     * @param stride Source row pitch in bytes.
+     * @param width Image width in pixels.
+     * @param height Image height in pixels.
+     * @return Tightly packed RGBA8 bytes.
+     */
+    [[nodiscard]] std::vector<std::uint8_t> CopyBgraToTightRgba(
+        const std::uint8_t* bgra, int stride, int width, int height);
+
+    /**
+     * @brief Selects the preferred authored mip level for a complete 2D transform.
+     *
+     * @param sourceWidth Source rectangle width.
+     * @param sourceHeight Source rectangle height.
+     * @param destinationWidth Destination rectangle width.
+     * @param destinationHeight Destination rectangle height.
+     * @param rotation Sprite rotation in radians.
+     * @param batchTransform SpriteBatch transform.
+     * @param presentationScaleX Horizontal presentation scale.
+     * @param presentationScaleY Vertical presentation scale.
+     * @param minifying Optional output set when the transform minifies either axis.
+     * @return The nonnegative preferred level, or `INT_MAX` for a singular transform.
+     */
+    [[nodiscard]] int PreferredMipLevelForTransform(
+        int sourceWidth, int sourceHeight, int destinationWidth, int destinationHeight,
+        float rotation, const Matrix& batchTransform, float presentationScaleX,
+        float presentationScaleY, bool* minifying = nullptr);
+
+    /**
+     * @brief Computes the continuous mip LOD for a complete 2D transform.
+     *
+     * @param sourceWidth Source rectangle width.
+     * @param sourceHeight Source rectangle height.
+     * @param destinationWidth Destination rectangle width.
+     * @param destinationHeight Destination rectangle height.
+     * @param rotation Sprite rotation in radians.
+     * @param batchTransform SpriteBatch transform.
+     * @param presentationScaleX Horizontal presentation scale.
+     * @param presentationScaleY Vertical presentation scale.
+     * @param minifying Optional output set when the transform minifies either axis.
+     * @return Zero for magnification, a positive fractional LOD for minification, or positive
+     * infinity for a singular transform.
+     */
+    [[nodiscard]] double FractionalMipLevelForTransform(
+        int sourceWidth, int sourceHeight, int destinationWidth, int destinationHeight,
+        float rotation, const Matrix& batchTransform, float presentationScaleX,
+        float presentationScaleY, bool* minifying = nullptr);
+
+    /**
+     * @brief Maps a base-level source rectangle into one authored mip level.
+     *
+     * @param sourceRectangle Rectangle expressed in base-level texels.
+     * @param baseWidth Base-level width.
+     * @param baseHeight Base-level height.
+     * @param mipWidth Selected mip-level width.
+     * @param mipHeight Selected mip-level height.
+     * @return The corresponding rectangle expressed in selected-level texels.
+     */
+    Rectangle MapSourceRectangleToMip(
+        const Rectangle& sourceRectangle, int baseWidth, int baseHeight,
+        int mipWidth, int mipHeight);
 
     /** A device-dependent Direct2D bitmap plus the source RGBA8 shadow required for CPU-side tint,
      *  flip, wrap/mirror, and non-premultiplied SpriteBatch variants. */
     class Direct2DTextureBackend final : public ITextureBackend
     {
     public:
+        /**
+         * @brief Creates a device-owned bitmap and recoverable RGBA shadow.
+         *
+         * @param owner Owning Direct2D graphics backend.
+         * @param data Initial level-zero image data.
+         */
         Direct2DTextureBackend(Direct2DGraphicsBackend& owner, const ImageData& data);
+        /** @brief Releases the native bitmap and unregisters its recovery record. */
         ~Direct2DTextureBackend() override;
 
         [[nodiscard]] int GetWidth() const override { return width_; }
@@ -82,19 +191,52 @@ namespace CNA::Internal::Backends::Direct2D
         [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
         void UpdatePixels(const uint8_t* rgba, int stride) override;
         void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) override;
+        [[nodiscard]] bool HasDefinedMipLevel(int level) const noexcept override;
+        [[nodiscard]] bool GetData(int level, int x, int y, int w, int h,
+                                   void* data, int dataLength) const override;
 
+        /**
+         * @brief Returns the validated level-zero native bitmap.
+         *
+         * @return Non-owning bitmap pointer valid for the current device generation.
+         */
         [[nodiscard]] ID2D1Bitmap1* Bitmap() const;
+        /**
+         * @brief Returns one validated authored mip bitmap.
+         *
+         * @param level Mip level to retrieve.
+         * @return Non-owning bitmap pointer valid for the current device generation.
+         */
         [[nodiscard]] ID2D1Bitmap1* BitmapForLevel(int level) const;
-        /// Returns the greatest initialized mip level not exceeding @p preferredLevel. A texture
-        /// with no uploaded lower levels deliberately falls back to level zero instead of
-        /// sampling black/uninitialized storage during minification.
+        /**
+         * @brief Selects the greatest initialized mip not exceeding a preferred level.
+         *
+         * An incomplete authored chain falls back toward level zero rather than sampling
+         * uninitialized storage.
+         *
+         * @param preferredLevel Preferred mip level.
+         * @return An initialized mip-level index.
+         */
         [[nodiscard]] int SelectAvailableMipLevel(int preferredLevel) const;
+        /**
+         * @brief Returns the RGBA shadow for one initialized authored mip.
+         *
+         * @param level Mip level to retrieve.
+         * @return RGBA bytes for the complete selected level.
+         */
         [[nodiscard]] const std::vector<uint8_t>& RgbaPixelsForLevel(int level) const;
-        /// D2D-74: whether @p level has actually been uploaded (level 0 always has; a lower level
-        /// only if Texture2D::SetData(level, ...) wrote it). Used to decide whether the two levels
-        /// bracketing a fractional LOD are both available to interpolate between.
+        /**
+         * @brief Reports whether an authored mip has actually been uploaded.
+         *
+         * @param level Mip level to query.
+         * @return True for initialized storage; level zero is initialized at construction.
+         */
         [[nodiscard]] bool IsMipLevelInitialized(int level) const;
-        /// Highest valid mip level index (0 for a non-mipmapped texture).
+        /**
+         * @brief Returns the highest valid mip-level index.
+         *
+         * @return Zero for a non-mipmapped texture, otherwise the last allocated level index.
+         */
         [[nodiscard]] int MaxMipLevel() const { return static_cast<int>(mipBitmaps_.size()); }
 
     private:
@@ -115,7 +257,16 @@ namespace CNA::Internal::Backends::Direct2D
     class Direct2DRenderTargetBackend final : public IRenderTargetBackend
     {
     public:
+        /**
+         * @brief Creates a non-mipmapped GPU-resident Direct2D render target.
+         *
+         * @param owner Owning Direct2D graphics backend.
+         * @param width Width in physical pixels.
+         * @param height Height in physical pixels.
+         * @param mipMap Must be false; mipmapped targets are rejected.
+         */
         Direct2DRenderTargetBackend(Direct2DGraphicsBackend& owner, int width, int height, bool mipMap);
+        /** @brief Releases the native target and unregisters its recovery record. */
         ~Direct2DRenderTargetBackend() override;
 
         [[nodiscard]] int GetWidth() const override { return width_; }
@@ -123,6 +274,7 @@ namespace CNA::Internal::Backends::Direct2D
         [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
         void UpdatePixels(const uint8_t* rgba, int stride) override;
         void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) override;
+        [[nodiscard]] bool HasDefinedMipLevel(int level) const noexcept override;
         [[nodiscard]] bool GetData(int level, int x, int y, int w, int h,
                                    void* data, int dataLength) const override;
 
@@ -132,30 +284,49 @@ namespace CNA::Internal::Backends::Direct2D
         {
             return false;
         }
+        [[nodiscard]] bool HasRealStencilBuffer(bool /*stencilFormatWasRequested*/) const override
+        {
+            return false;
+        }
+        [[nodiscard]] int GetAppliedDepthStencilFormatEXT(int /*requestedDepthStencilFormat*/) const override
+        {
+            return 0;
+        }
 
+        /**
+         * @brief Returns the validated level-zero native target bitmap.
+         *
+         * @return Non-owning bitmap pointer valid for the current device generation.
+         */
         [[nodiscard]] ID2D1Bitmap1* Bitmap() const;
+        /**
+         * @brief Returns the validated target bitmap for level zero.
+         *
+         * @param level Must be zero because mipmapped render targets are unsupported.
+         * @return Non-owning level-zero bitmap pointer.
+         */
         [[nodiscard]] ID2D1Bitmap1* BitmapForLevel(int level) const;
-        [[nodiscard]] int SelectAvailableMipLevel(int preferredLevel) const;
 
     private:
         friend class Direct2DGraphicsBackend;
         void RecreateBitmap();
-        void MarkMipLevelsDirty();
-        void EnsureMipLevelsCurrent();
 
         Direct2DGraphicsBackend* owner_ = nullptr;
         Microsoft::WRL::ComPtr<ID2D1Bitmap1> bitmap_;
-        std::vector<Microsoft::WRL::ComPtr<ID2D1Bitmap1>> mipBitmaps_;
         int width_ = 0;
         int height_ = 0;
-        bool mipMap_ = false;
-        bool mipLevelsDirty_ = false;
         std::uint64_t deviceGeneration_ = 0;
     };
 
+    /** @brief Direct2D implementation of CNA's backend-facing SpriteBatch command sink. */
     class Direct2DSpriteBatchBackend final : public ISpriteBatchBackend
     {
     public:
+        /**
+         * @brief Creates a SpriteBatch command sink owned by one Direct2D backend.
+         *
+         * @param owner Owning Direct2D graphics backend.
+         */
         explicit Direct2DSpriteBatchBackend(Direct2DGraphicsBackend& owner) : owner_(&owner) {}
 
         void Begin() override;
@@ -192,10 +363,27 @@ namespace CNA::Internal::Backends::Direct2D
     class Direct2DGraphicsBackend final : public IGraphicsBackend
     {
     public:
+        /**
+         * @brief Creates the Direct2D device, pixel-space logical target, and flip-model swap chain.
+         *
+         * @param window SDL3 window whose Win32 HWND receives presentation.
+         * @param virtualWidth Requested logical width, or zero with `virtualHeight` for automatic sizing.
+         * @param virtualHeight Requested logical height, or zero with `virtualWidth` for automatic sizing.
+         * @param presentationMode Initial CNA presentation mode.
+         * @param swapInterval Presentation interval from zero through two.
+         * @param contextRecoveryEnabled Whether newly created 2D resources register for recovery.
+         * @param deviceEventCallback Device lost/reset lifecycle callback.
+         * @param backBufferFormat Must identify `SurfaceFormat::Color`.
+         * @param depthStencilFormat Must identify `DepthFormat::None`.
+         * @param multiSampleCount Must request a non-multisampled surface.
+         */
         Direct2DGraphicsBackend(SDL_Window* window, int virtualWidth, int virtualHeight,
                                 CnaPresentationMode presentationMode, int swapInterval,
                                 bool contextRecoveryEnabled = true,
-                                std::function<void(BackendDeviceEvent)> deviceEventCallback = nullptr);
+                                std::function<void(BackendDeviceEvent)> deviceEventCallback = nullptr,
+                                int backBufferFormat = 0, int depthStencilFormat = 0,
+                                int multiSampleCount = 0);
+        /** @brief Releases Direct2D, DXGI, and D3D11 presentation resources without throwing. */
         ~Direct2DGraphicsBackend() override;
 
         void Clear(float r, float g, float b, float a) override;
@@ -220,6 +408,9 @@ namespace CNA::Internal::Backends::Direct2D
                                                                     bool preserveContents = false,
                                                                     bool mipMap = false,
                                                                     int multiSampleCount = 0) override;
+        std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2DEXT(
+            int width, int height, int depthFormat, bool preserveContents,
+            bool mipMap, int multiSampleCount, int surfaceFormat) override;
         void SetRenderTarget2D(IRenderTargetBackend* renderTarget) override;
         void SetRenderTargets(const RenderTargetBindingDescriptor* renderTargets, int count) override;
         void SetContextRecoveryEnabled(bool enabled) override { contextRecoveryEnabled_ = enabled; }
@@ -243,12 +434,20 @@ namespace CNA::Internal::Backends::Direct2D
         void SetBlendFactor(float r, float g, float b, float a) override;
 
         [[nodiscard]] bool SupportsDepthStencil() const override { return false; }
+        [[nodiscard]] bool SupportsDepthBuffer() const override { return false; }
+        [[nodiscard]] bool SupportsStencilBuffer() const override { return false; }
         [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
+        void Ensure3DSupported(const char* operation) const override;
         [[nodiscard]] int ApplyMultiSampleCount(int requestedMultiSampleCount) override;
-        /// D2D-77: the active device's real reported limit (ID2D1DeviceContext::
-        /// GetMaximumBitmapSize()), not the base class's platform-wide 16384 default -- lets
-        /// Texture2D's own creation-time validation reject an oversized request before any CPU
-        /// pixel buffer is allocated.
+        [[nodiscard]] int GetAppliedBackBufferFormatEXT(int /*requestedFormat*/) const override { return 0; }
+        [[nodiscard]] int GetAppliedDepthStencilFormatEXT(int /*requestedFormat*/) const override { return 0; }
+        void UpdatePresentationFormatEXT(int backBufferFormat, int depthStencilFormat,
+                                         bool isFullScreen) override;
+        /**
+         * @brief Returns the active Direct2D device's maximum bitmap dimension.
+         *
+         * @return `ID2D1DeviceContext::GetMaximumBitmapSize()` for the live device.
+         */
         [[nodiscard]] int GetMaxTextureDimension() const override;
 
         void ClearColorAndDepth(float r, float g, float b, float a, float depth) override;
@@ -262,6 +461,13 @@ namespace CNA::Internal::Backends::Direct2D
         void SetDepthWriteEnabled(bool enabled) override;
         std::unique_ptr<IVertexBufferBackend> CreateVertexBuffer(int vertexCapacity) override;
         std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer16(int indexCapacity) override;
+        std::unique_ptr<ITexture3DBackend> CreateTexture3D(
+            int width, int height, int depth, bool mipMap, int surfaceFormat) override;
+        std::unique_ptr<ITextureCubeBackend> CreateTextureCube(
+            int size, bool mipMap, int surfaceFormat) override;
+        std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(
+            int size, int depthFormat, bool preserveContents = false,
+            bool mipMap = false, int multiSampleCount = 0) override;
         std::unique_ptr<IOcclusionQueryBackend> CreateOcclusionQuery() override;
         void DrawColoredPrimitives(const IVertexBufferBackend& vb, const Matrix& world,
                                    const Matrix& view, const Matrix& projection,
@@ -271,12 +477,46 @@ namespace CNA::Internal::Backends::Direct2D
                                           const Matrix& projection, PrimitiveType primitive,
                                           int primitiveCount) override;
 
-        // Called by the concrete texture, target, and SpriteBatch handles above.
+        /**
+         * @brief Creates a native bitmap from tightly described RGBA pixels.
+         *
+         * @param rgba Source RGBA bytes.
+         * @param width Width in pixels.
+         * @param height Height in pixels.
+         * @param ignoreAlpha Whether Direct2D should treat alpha as opaque.
+         * @return A caller-owned native bitmap pointer.
+         */
         [[nodiscard]] ID2D1Bitmap1* CreateBitmapFromRgba(const uint8_t* rgba, int width, int height,
                                                           bool ignoreAlpha = false) const;
+        /**
+         * @brief Binds a validated Direct2D render target, or the logical backbuffer for null.
+         *
+         * @param renderTarget Target to bind, or null to return to the logical backbuffer.
+         */
         void BindRenderTarget(Direct2DRenderTargetBackend* renderTarget);
+        /**
+         * @brief Unbinds a target if it is currently active.
+         *
+         * @param renderTarget Target whose native lifetime is ending.
+         */
         void ReleaseRenderTarget(Direct2DRenderTargetBackend* renderTarget);
+        /** @brief Begins a Direct2D command batch on the current validated application target. */
         void EnsureDrawing();
+        /**
+         * @brief Draws one validated 2D sprite through Direct2D 1.1.
+         *
+         * @param texture Device-owned ordinary texture or render target source.
+         * @param destinationRectangle Destination rectangle in SpriteBatch coordinates.
+         * @param sourceRectangle Source rectangle in base-level texels.
+         * @param color Independent RGBA modulation color.
+         * @param rotation Rotation in radians.
+         * @param origin Source-space rotation and scale origin.
+         * @param effects Supported horizontal and vertical flip flags.
+         * @param batchTransform SpriteBatch transform matrix.
+         * @param textureFilter TextureFilter ordinal.
+         * @param addressU Horizontal TextureAddressMode ordinal.
+         * @param addressV Vertical TextureAddressMode ordinal.
+         */
         void DrawSprite(const ITextureBackend& texture, const Rectangle& destinationRectangle,
                         const Rectangle& sourceRectangle, const Color& color, float rotation,
                         const Vector2& origin, SpriteEffects effects, const Matrix& batchTransform,
@@ -306,6 +546,7 @@ namespace CNA::Internal::Backends::Direct2D
         [[nodiscard]] bool IsRegisteredRenderTarget(const Direct2DRenderTargetBackend* renderTarget) const;
         void EnsureResourceGeneration(std::uint64_t generation, const char* resourceKind) const;
         void CreateBackBufferTarget();
+        [[nodiscard]] HWND GetWindowHandle() const;
         void CreateLogicalTarget();
         /// D2D-50/D2D-52: creates a logical-target-sized bitmap without touching logicalTarget_ or
         /// the device context's current target, so a resize can create-then-swap instead of
@@ -317,7 +558,6 @@ namespace CNA::Internal::Backends::Direct2D
         /// Copies a render target through a temporary Direct2D CPU-readable bitmap. This is a
         /// 2D-only path: CopyFromRenderTarget is the native route; CopyFromBitmap is a narrower
         /// fallback for a runtime that exposes the current target bitmap but not the former call.
-        void GenerateRenderTargetMipLevels(Direct2DRenderTargetBackend& renderTarget);
         void ReadRenderTargetPixels(const Direct2DRenderTargetBackend& renderTarget, int level, int x, int y,
                                     int width, int height, uint8_t* pixels);
         void ReadCurrentTargetPixels(int x, int y, int width, int height,
@@ -330,9 +570,9 @@ namespace CNA::Internal::Backends::Direct2D
         [[nodiscard]] D2D1_MATRIX_3X2_F ViewportMatrix() const;
         void ApplyOutputClips();
         void ClearOutputClips();
+        [[nodiscard]] bool ProbeEffectSupport(REFCLSID effectId, const char* operation);
         [[nodiscard]] bool SupportsColorMatrixEffect();
         [[nodiscard]] bool SupportsPremultiplyEffect();
-        void MarkActiveRenderTargetMipLevelsDirty();
         [[nodiscard]] std::vector<uint8_t> MakeSpritePixels(const Direct2DTextureBackend& texture,
                                                              const Rectangle& sourceRectangle,
                                                              const Color& color, SpriteEffects effects,
@@ -369,12 +609,9 @@ namespace CNA::Internal::Backends::Direct2D
         bool viewportPushed_ = false;
         bool scissorPushed_ = false;
         Rectangle scissorRect_{};
+        bool initialDeviceDefaultDepthStatePending_ = true;
         Direct2DBlendMode blendMode_ = Direct2DBlendMode::SourceOver;
         bool nonPremultipliedSource_ = false;
-        // GraphicsDevice always forwards BlendState.BlendFactor immediately after ApplyBlendState,
-        // even when the accepted Direct2D preset cannot consume a constant blend factor. Consume
-        // that bookkeeping write once; later standalone non-white BlendFactor requests fail.
-        bool pendingBlendStateFactorWrite_ = false;
         bool diagnosticsEnabled_ = false;
         bool debugLayerEnabled_ = false;
         bool usingWarp_ = false;
