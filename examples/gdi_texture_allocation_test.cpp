@@ -11,10 +11,13 @@
 
 #include <SDL3/SDL.h>
 
+#include <array>
+#include <cstdint>
 #include <cstdio>
 #include <exception>
 #include <memory>
 #include <string>
+#include <vector>
 
 using namespace CNA::Internal::Backends;
 using namespace CNA::Internal::Backends::Gdi;
@@ -96,6 +99,37 @@ namespace
         auto* softwareTexture = dynamic_cast<SoftwareTextureBackend*>(texture.get());
         ok &= Expect(softwareTexture != nullptr && softwareTexture->ColorPixels().size() == 16u,
                      "an ordinary small texture creates real checked CPU storage");
+
+        // REMED-GFX-229: use an odd width and deliberately asymmetric channels so a tight-row
+        // assumption, padding copy, channel swap, or row overlap cannot accidentally pass.
+        ImageData stridedData;
+        stridedData.width = 3;
+        stridedData.height = 2;
+        stridedData.pixels.assign(3u * 2u * 4u, 0u);
+        std::unique_ptr<ITextureBackend> strided = backend.CreateTexture(stridedData);
+        auto* softwareStrided = dynamic_cast<SoftwareTextureBackend*>(strided.get());
+        const std::array<std::uint8_t, 32> paddedUpload{
+            1, 17, 33, 49,  65, 81, 97, 113,  129, 145, 161, 177,
+            0xDE, 0xAD, 0xBE, 0xEF,
+            2, 19, 37, 53,  71, 89, 107, 127,  149, 167, 191, 211,
+            0xCA, 0xFE, 0xBA, 0xBE,
+        };
+        const std::vector<std::uint8_t> expectedRows{
+            1, 17, 33, 49,  65, 81, 97, 113,  129, 145, 161, 177,
+            2, 19, 37, 53,  71, 89, 107, 127,  149, 167, 191, 211,
+        };
+        strided->UpdatePixels(paddedUpload.data(), 16);
+        ok &= Expect(softwareStrided != nullptr &&
+                         softwareStrided->ColorPixels() == expectedRows,
+                     "odd-width texture upload consumes each padded RGBA row without padding");
+
+        ok &= ExpectThrows<System::ArgumentOutOfRangeException>(
+            [&] { strided->UpdatePixels(paddedUpload.data(), 11); },
+            "at least 12",
+            "a positive texture stride shorter than width*4 is rejected before copying");
+        ok &= Expect(softwareStrided != nullptr &&
+                         softwareStrided->ColorPixels() == expectedRows,
+                     "a rejected short texture stride leaves the prior pixels unchanged");
 
         // An oversized caller-supplied buffer must be truncated to exactly width*height*4, not
         // retained verbatim -- avoids paying for and keeping bytes the resource never reports.

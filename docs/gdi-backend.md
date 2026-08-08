@@ -118,6 +118,11 @@ compatibility backend under validation, not yet as a release baseline.
   (used identically by every CNA backend) still allocate their own first `width*height*4` vector
   before that boundary is reached, so an over-budget request still pays for one wasted transient
   allocation before being rejected; closing that remains open, cross-backend scope.
+- REMED-GFX-229 closes the supported CPU upload-pitch gap: a positive `Texture2D` stride must be
+  at least `width * 4`, while zero or a negative value retains the established tight-row default.
+  Padded rows are copied without their padding, and a rejected short stride leaves the previous
+  texture bytes unchanged. The texture-allocation executable covers an odd three-pixel width with
+  asymmetric RGBA channels so row overlap, padding ingestion, and channel swaps are observable.
 - A custom `ShaderEffect` throws `System::NotSupportedException` during construction on GDI. GDI
   does not create an invalid placeholder, accept shader source or uniforms, and then ignore them.
   `ColorMatrixEffect` is the sole fixed non-shader exception; every other custom `SpriteBatch`

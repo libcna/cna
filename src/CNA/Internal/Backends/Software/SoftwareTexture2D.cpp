@@ -3,11 +3,14 @@
 #include "CNA/Internal/Backends/Software/SoftwareGraphicsBackend.hpp"
 #include "SoftwareTextureErrors.hpp"
 
+#include "System/ArgumentOutOfRangeException.hpp"
+
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <new>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 namespace CNA::Internal::Backends::Software
@@ -74,6 +77,15 @@ namespace CNA::Internal::Backends::Software
         if (rgba == nullptr)
             throw std::runtime_error("SoftwareTextureBackend::UpdatePixels: rgba must not be null");
         const std::size_t rowBytes = static_cast<std::size_t>(width_) * 4u;
+        // REMED-GFX-229: a positive pitch smaller than one complete RGBA8 row makes the
+        // row-by-row copy overlap the prior row and read past the caller's final row. Validate it
+        // before resizing or changing the authoritative texture bytes. Zero/negative retains the
+        // existing backend contract of selecting a tightly packed upload.
+        if (stride > 0 && static_cast<std::size_t>(stride) < rowBytes)
+            throw System::ArgumentOutOfRangeException(
+                "stride", std::to_string(stride),
+                "A positive texture upload stride must be at least " +
+                    std::to_string(rowBytes) + " bytes (width * 4 for RGBA8).");
         const std::size_t effectiveStride = stride > 0 ? static_cast<std::size_t>(stride) : rowBytes;
         try
         {
