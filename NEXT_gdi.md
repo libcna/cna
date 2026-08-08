@@ -36,6 +36,9 @@
   **seventeen** correctness executables before running the **nineteen** registered GDI cases. The
   omitted targets were presentation-mode transaction, DC-release transaction, and texture
   allocation.
+- REMED-BUILD-018 adds the direct `IGraphicsBackend.hpp` include required by the shared
+  `SupportsStencilBuffer` consistency test; the native sanitizer object rebuild that exposed the
+  incomplete-type error remains pending.
 - Adapted MinGW/Wine execution is intentionally pending the root-owned validation pass. The manual
   native-MSVC workflow and visible native-Windows lifecycle/DPI checks remain external gates.
 

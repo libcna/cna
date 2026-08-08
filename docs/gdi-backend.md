@@ -142,6 +142,9 @@ as a release baseline.
   the standalone stencil hook: `SupportsStencilBuffer()` now returns false, matching its
   `GraphicsCapability::StencilBuffer` answer and documented lack of a stencil plane. The focused
   DX3 capability executable compares the two answers directly; adapted execution remains pending.
+- REMED-BUILD-018 makes the shared capability test self-contained by directly including
+  `IGraphicsBackend.hpp` before invoking `GetBackend().SupportsStencilBuffer()`; the native
+  sanitizer object rebuild that found the incomplete-type error remains pending.
 - A custom `ShaderEffect` throws `System::NotSupportedException` during construction on GDI. GDI
   does not create an invalid placeholder, accept shader source or uniforms, and then ignore them.
   `ColorMatrixEffect` is the sole fixed non-shader exception; every other custom `SpriteBatch`
