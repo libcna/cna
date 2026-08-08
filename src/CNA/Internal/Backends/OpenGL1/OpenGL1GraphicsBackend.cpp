@@ -492,7 +492,9 @@ void OpenGL1GraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend&v,
   // Real fixed-function 3D pipeline, real 24/8 depth/stencil, real glPolygonMode(GL_LINE).
   case CNA::GraphicsCapability::ThreeD:
   case CNA::GraphicsCapability::DepthStencilBuffer:
-  case CNA::GraphicsCapability::WireFrame: return true;
+  case CNA::GraphicsCapability::WireFrame:
+  case CNA::GraphicsCapability::StencilBuffer:
+  case CNA::GraphicsCapability::AdditiveBlending: return true;
   // Runtime-detected GL_EXT_texture_filter_anisotropic (phase 1).
   case CNA::GraphicsCapability::AnisotropicFiltering: return caps_.anisotropicFiltering;
   // What the driver GENUINELY granted for the window's visual (item 22), not what was requested.

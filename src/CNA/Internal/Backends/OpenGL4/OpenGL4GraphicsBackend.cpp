@@ -2555,6 +2555,8 @@ void main()
         // Real hardware instancing (GL4-33): glDrawElementsInstanced/glVertexAttribDivisor are
         // core in every 4.x context, and DrawInstancedPrimitivesEx drives them unconditionally.
         case CNA::GraphicsCapability::Instancing: return true;
+        case CNA::GraphicsCapability::StencilBuffer: return true;
+        case CNA::GraphicsCapability::AdditiveBlending: return true;
         }
         // Unreachable for current members; a future member lands here (after the -Wswitch
         // warning above) and is reported unsupported until this backend explicitly claims it.

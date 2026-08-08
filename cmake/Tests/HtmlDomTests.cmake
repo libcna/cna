@@ -79,3 +79,24 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "HTML_DOM")
         cna_test_htmldom_dispose
         cna_test_htmldom_memory)
 endif()
+
+# Post-audit host-side contract coverage.  This deliberately compiles the HTML DOM implementation
+# itself into a native GTest executable, where every EM_JS body is excluded by __EMSCRIPTEN__.
+# It is not browser/runtime coverage; it exists so configurations without an Emscripten SDK can
+# still exercise the CNA-owned validation, row-packing, draw-command and wrapper-lifetime code.
+option(CNA_BUILD_HTML_DOM_HOST_TESTS
+    "Build native host-side HTML DOM backend contract tests" OFF)
+
+if(CNA_BUILD_TESTS AND CNA_BUILD_HTML_DOM_HOST_TESTS AND NOT EMSCRIPTEN)
+    add_executable(cna_test_htmldom_host
+        tests/CNA/Internal/Backends/HtmlDom/HtmlDomGraphicsBackendTests.cpp
+        src/CNA/Internal/Backends/HtmlDom/HtmlDomGraphicsBackend.cpp
+        src/CNA/Internal/Backends/HtmlDom/HtmlDomRenderTargetBackend.cpp
+        src/CNA/Internal/Backends/HtmlDom/HtmlDomSpriteBatchBackend.cpp
+        src/CNA/Internal/Backends/HtmlDom/HtmlDomState.cpp
+        src/CNA/Internal/Backends/HtmlDom/HtmlDomTextureBackend.cpp)
+    target_compile_definitions(cna_test_htmldom_host PRIVATE CNA_HTML_DOM_HOST_TESTS=1)
+    target_link_libraries(cna_test_htmldom_host PRIVATE CNA SHARP_RUNTIME gtest_main SDL3::SDL3)
+    add_test(NAME HtmlDomHostContracts COMMAND cna_test_htmldom_host)
+    set_tests_properties(HtmlDomHostContracts PROPERTIES LABELS "HTML_DOM;host-only")
+endif()

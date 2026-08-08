@@ -102,6 +102,13 @@ namespace CNA::Internal::Backends::HtmlDom
          */
         [[nodiscard]] bool HasRealDepthBuffer(bool /*depthFormatWasRequested*/) const override { return false; }
 
+        /** @brief The only applied depth format is DepthFormat::None. */
+        [[nodiscard]] int GetAppliedDepthStencilFormatEXT(
+            int /*requestedDepthStencilFormat*/) const override
+        {
+            return 0;
+        }
+
         /**
          * @brief NOXNA. Returns this target's id into `Module['cnaDomTextures']`.
          *

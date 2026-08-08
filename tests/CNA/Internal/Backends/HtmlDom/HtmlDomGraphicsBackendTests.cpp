@@ -12,7 +12,7 @@
 // rather than against whatever the implementation happens to produce.
 #include <gtest/gtest.h>
 
-#if defined(CNA_BACKEND_HTML_DOM)
+#if defined(CNA_BACKEND_HTML_DOM) || defined(CNA_HTML_DOM_HOST_TESTS)
 #include "CNA/Internal/Backends/HtmlDom/HtmlDomGraphicsBackend.hpp"
 #include "CNA/Internal/Backends/HtmlDom/HtmlDomRenderTargetBackend.hpp"
 #include "CNA/Internal/Backends/HtmlDom/HtmlDomSpriteBatchBackend.hpp"
@@ -24,6 +24,7 @@
 #include "System/ArgumentNullException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 
+#include <limits>
 #include <string>
 
 using namespace CNA::Internal::Backends;
@@ -160,19 +161,12 @@ TEST(HtmlDomAddressModes, MirrorMixedWithADifferentAxisModeThrowsOutOfBounds)
     EXPECT_THROW(ValidateAddressModes(1, 2, true), std::runtime_error);
 }
 
-// plan_html_dom.md HTMLDOM-120: an out-of-range TextureAddressMode ordinal (neither 0=Wrap,
-// 1=Clamp nor 2=Mirror) is never validated by SetSamplerAddressMode itself (it just stores the raw
-// ints -- see the SetSamplerAddressMode test below), and this function's own mismatch check
-// (`addressU != addressV && (addressU==2 || addressV==2)`) can only ever fire when one of the two
-// values IS 2 (Mirror) -- so neither a matched (999,999) nor a mismatched-but-neither-Mirror
-// (999,5) pair trips it. Documenting the CURRENT, accepted behaviour (falls through to Clamp-like
-// edge-padding, same as this repo's other backends' own unchecked address-mode translators -- see
-// this task's own plan_html_dom.md row for the cross-backend survey) rather than silently leaving
-// it unverified.
-TEST(HtmlDomAddressModes, OutOfRangeOrdinalsNeverThrowRegardlessOfMatch)
+// HTMLDOM-121: invalid public enum ordinals must not fall through to a Clamp-like approximation.
+TEST(HtmlDomAddressModes, OutOfRangeOrdinalsThrowRegardlessOfMatch)
 {
-    EXPECT_NO_THROW(ValidateAddressModes(999, 999, true));
-    EXPECT_NO_THROW(ValidateAddressModes(999, 5, true));
+    EXPECT_THROW(ValidateAddressModes(999, 999, true), std::runtime_error);
+    EXPECT_THROW(ValidateAddressModes(999, 5, true), std::runtime_error);
+    EXPECT_THROW(ValidateAddressModes(-1, 1, false), std::runtime_error);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -412,43 +406,44 @@ TEST(HtmlDomSpriteBatch, CustomEffectThrowsButNullIsAccepted)
     EXPECT_THROW(batch.SetCustomEffect(reinterpret_cast<Effect*>(0x1)), std::runtime_error);
 }
 
-TEST(HtmlDomSpriteBatch, SamplerFilterMapsMagnificationToSmoothing)
+TEST(HtmlDomSpriteBatch, SamplerFilterSupportsOnlyExactLinearAndPointModes)
 {
     HtmlDomSpriteBatchBackend batch;
-    // Every filter whose magnification component is Linear turns smoothing on; Point-magnifying
-    // ones turn it off. Checked through the encoder, which is where the flag actually lands.
-    for (int linear : {0, 2, 3, 7, 8})
-    {
-        batch.SetSamplerFilter(linear);
-        batch.Begin();
-        EXPECT_TRUE(batch.GetCommandsEXT().empty());
-        batch.End();
-    }
+    EXPECT_NO_THROW(batch.SetSamplerFilter(0));
     EXPECT_NO_THROW(batch.SetSamplerFilter(1));
+    for (int unsupported : {2, 3, 4, 5, 6, 7, 8, -1, 999})
+        EXPECT_THROW(batch.SetSamplerFilter(unsupported), std::runtime_error);
 }
 
-// plan_html_dom.md HTMLDOM-120: an out-of-range TextureFilter ordinal is not a silent capability
-// drop -- ISpriteBatchBackend::SetSamplerFilter's own doc comment specifies the fallback
-// explicitly ("others map to nearest"), and this backend's `default:` case does exactly that.
-// Confirmed here rather than left unverified: it must not throw for a value outside the documented
-// 0-8 range.
-TEST(HtmlDomSpriteBatch, SamplerFilterOutOfRangeOrdinalFallsBackToPointRatherThanThrowing)
+TEST(HtmlDomSpriteBatch, SamplerAddressModeRejectsOutOfRangeOrdinals)
 {
     HtmlDomSpriteBatchBackend batch;
-    EXPECT_NO_THROW(batch.SetSamplerFilter(-1));
-    EXPECT_NO_THROW(batch.SetSamplerFilter(999));
+    EXPECT_NO_THROW(batch.SetSamplerAddressMode(0, 2));
+    EXPECT_THROW(batch.SetSamplerAddressMode(999, 999), std::runtime_error);
+    EXPECT_THROW(batch.SetSamplerAddressMode(-1, 1), std::runtime_error);
 }
 
-// plan_html_dom.md HTMLDOM-120: unlike SetSamplerFilter, SetSamplerAddressMode stores its raw
-// ints completely unvalidated -- confirming the CURRENT, accepted behaviour (see
-// HtmlDomAddressModes.OutOfRangeOrdinalsNeverThrowRegardlessOfMatch for why an out-of-range value
-// can never trip ValidateAddressModes' own mismatch check either), matching every other CNA
-// backend's own unchecked address-mode translator, not a HTML_DOM-specific gap this task fixes
-// unilaterally.
-TEST(HtmlDomSpriteBatch, SamplerAddressModeOutOfRangeOrdinalDoesNotThrow)
+TEST(HtmlDomTextureRows, PitchedRgbaUploadsArePackedWithoutPadding)
 {
-    HtmlDomSpriteBatchBackend batch;
-    EXPECT_NO_THROW(batch.SetSamplerAddressMode(999, 999));
+    const std::uint8_t pitched[24] = {
+        1, 2, 3, 4, 5, 6, 7, 8, 0xEE, 0xEE, 0xEE, 0xEE,
+        9, 10, 11, 12, 13, 14, 15, 16, 0xDD, 0xDD, 0xDD, 0xDD,
+    };
+    const auto tight = TightenTextureRowsEXT(pitched, 2, 2, 12);
+    ASSERT_EQ(tight.size(), 16u);
+    for (std::size_t i = 0; i < tight.size(); ++i)
+        EXPECT_EQ(tight[i], static_cast<std::uint8_t>(i + 1));
+    EXPECT_THROW((void)TightenTextureRowsEXT(pitched, 2, 2, 7),
+                 System::ArgumentOutOfRangeException);
+}
+
+TEST(HtmlDomTextureRows, WidthOverflowIsRejectedBeforeReadingTheSource)
+{
+    const std::uint8_t byte = 0;
+    EXPECT_THROW(
+        (void)TightenTextureRowsEXT(
+            &byte, std::numeric_limits<int>::max(), 1, std::numeric_limits<int>::max()),
+        System::ArgumentOutOfRangeException);
 }
 
 TEST(HtmlDomSpriteBatch, BeginClearsCommandsFromAPreviousBatch)
@@ -530,6 +525,28 @@ TEST_F(HtmlDom3DSurfaceTest, BufferCreationAndDrawCallsThrow)
                  std::runtime_error);
 }
 
+TEST_F(HtmlDom3DSurfaceTest, UnsupportedResourceFactoriesAndShared3DGateThrow)
+{
+    EXPECT_THROW((void)backend.CreateTexture3D(2, 2, 2, false, 0), std::runtime_error);
+    EXPECT_THROW((void)backend.CreateTextureCube(2, false, 0), std::runtime_error);
+    EXPECT_THROW((void)backend.CreateRenderTargetCube(2, 0, false, false, 0), std::runtime_error);
+    EXPECT_THROW((void)backend.CreateOcclusionQuery(), std::runtime_error);
+    EXPECT_THROW((void)backend.CreateEffectBackend("void main(){}", "void main(){}"),
+                 std::runtime_error);
+    EXPECT_THROW(backend.Ensure3DSupported("GraphicsDevice::DrawPrimitives"), std::runtime_error);
+}
+
+TEST_F(HtmlDom3DSurfaceTest, RenderTarget2DRejectsUnsupportedResourceOptions)
+{
+    EXPECT_NO_THROW((void)backend.CreateRenderTarget2D(4, 4, 0, false, false, 0));
+    EXPECT_THROW((void)backend.CreateRenderTarget2D(4, 4, 1, false, false, 0), std::runtime_error);
+    EXPECT_THROW((void)backend.CreateRenderTarget2D(4, 4, 0, false, true, 0), std::runtime_error);
+    EXPECT_THROW((void)backend.CreateRenderTarget2D(4, 4, 0, false, false, 4), std::runtime_error);
+    EXPECT_THROW((void)backend.CreateRenderTarget2DEXT(4, 4, 0, false, false, 0, 1),
+                 std::runtime_error);
+    EXPECT_EQ(backend.GetAppliedDepthStencilFormatEXT(3), 0);
+}
+
 TEST_F(HtmlDom3DSurfaceTest, ThrownMessagesNameTheBackendAndTheMissingCapability)
 {
     try
@@ -550,6 +567,16 @@ TEST_F(HtmlDom3DSurfaceTest, CapabilityQueriesReportTheTwoDimensionalBoundaryUpF
     // A caller should be able to find out without provoking an exception.
     EXPECT_FALSE(backend.SupportsDepthStencil());
     EXPECT_FALSE(backend.SupportsCapability(CNA::GraphicsCapability::ThreeD));
+    EXPECT_FALSE(backend.SupportsCapability(CNA::GraphicsCapability::DepthStencilBuffer));
+    EXPECT_FALSE(backend.SupportsCapability(CNA::GraphicsCapability::MultiSampleAntiAliasing));
+    EXPECT_FALSE(backend.SupportsCapability(CNA::GraphicsCapability::MultipleRenderTargets));
+    EXPECT_FALSE(backend.SupportsCapability(CNA::GraphicsCapability::AnisotropicFiltering));
+    EXPECT_FALSE(backend.SupportsCapability(CNA::GraphicsCapability::OcclusionQuery));
+    EXPECT_FALSE(backend.SupportsCapability(CNA::GraphicsCapability::CustomEffects));
+    EXPECT_FALSE(backend.SupportsCapability(CNA::GraphicsCapability::Texture3D));
+    EXPECT_FALSE(backend.SupportsCapability(CNA::GraphicsCapability::Instancing));
+    EXPECT_FALSE(backend.SupportsCapability(CNA::GraphicsCapability::MultiStreamVertexInput));
+    EXPECT_FALSE(backend.SupportsCapability(CNA::GraphicsCapability::WireFrame));
     EXPECT_EQ(backend.GetRendererInternal(), nullptr);
     EXPECT_EQ(backend.GetWindowInternal(), FakeWindow());
 }
@@ -593,6 +620,7 @@ TEST_F(HtmlDom3DSurfaceTest, MultipleRenderTargetsAndCubeFacesThrow)
 TEST_F(HtmlDom3DSurfaceTest, SetRenderTargetsNullArrayWithPositiveCountThrows)
 {
     EXPECT_THROW(backend.SetRenderTargets(nullptr, 1), System::ArgumentNullException);
+    EXPECT_THROW(backend.SetRenderTargets(nullptr, -1), System::ArgumentOutOfRangeException);
 }
 
 TEST_F(HtmlDom3DSurfaceTest, BackbufferReadbackThrowsWithAnActionableMessage)
@@ -639,6 +667,16 @@ TEST_F(HtmlDom3DSurfaceTest, ApplyBlendStateAcceptsPresetsAndRejectsCustomOnes)
     EXPECT_EQ(GetCurrentCompositeOpEXT(), DomCompositeOp::NonPremultiplied);
     EXPECT_NO_THROW(backend.ApplyBlendState(4, 4, 0, 0, 0, 0, writeState));
     EXPECT_EQ(GetCurrentCompositeOpEXT(), DomCompositeOp::Additive);
+    BlendWriteState masked{};
+    masked.colorWriteChannels[0] = 7;
+    EXPECT_THROW(backend.ApplyBlendState(4, 4, 0, 0, 0, 0, masked), std::runtime_error);
+    BlendWriteState sampleMasked{};
+    sampleMasked.multiSampleMask = 0x7FFFFFFFu;
+    EXPECT_THROW(backend.ApplyBlendState(4, 4, 0, 0, 0, 0, sampleMasked), std::runtime_error);
+    BlendWriteState inactiveTargetMasked{};
+    inactiveTargetMasked.colorWriteChannels[2] = 7;
+    EXPECT_THROW(backend.ApplyBlendState(4, 4, 0, 0, 0, 0, inactiveTargetMasked),
+                 std::runtime_error);
     EXPECT_THROW(backend.ApplyBlendState(3, 3, 3, 3, 0, 0, writeState), std::runtime_error);
     // A rejected state must not have changed the one in effect.
     EXPECT_EQ(GetCurrentCompositeOpEXT(), DomCompositeOp::Additive);
@@ -671,30 +709,27 @@ TEST_F(HtmlDom3DSurfaceTest, NegativeVirtualResolutionBehavesLikeUnsetRatherThan
     backend.SetVirtualResolution(0, 0);
 }
 
-// plan_html_dom.md HTMLDOM-91: ApplyRasterizerState/ApplyDepthStencilState/SetBlendFactor/
-// SetReferenceStencil are all inherited IGraphicsBackend no-ops on this backend, never audited.
-// Verified reasoning (see the task's own note): ApplyDepthStencilState/SetReferenceStencil are
-// meaningless because SupportsDepthStencil() is unconditionally false (no depth/stencil buffer
-// exists to configure); SetBlendFactor's constant colour can only matter for
-// Blend.BlendFactor/InverseBlendFactor, and BlendStateToDomCompositeOp already throws for both
-// before ApplyBlendState could ever consume that colour; ApplyRasterizerState's CullMode/FillMode/
-// depth-bias fields are 3D-only concepts with no 2D SpriteBatch analogue, and its one 2D-relevant
-// field (scissorTestEnable) is deliberately not wired up (HTMLDOM-80's whole-surface scissor
-// mirrors SDL_RENDERER's own behaviour of ignoring this flag too -- SdlGraphicsBackend.cpp never
-// overrides ApplyRasterizerState either). These tests turn that reasoning into a checked fact:
-// each setter is called with a deliberately non-default value and must neither throw nor change
-// any state a caller could observe afterwards.
-TEST_F(HtmlDom3DSurfaceTest, InertStateSettersAcceptArbitraryValuesWithNoObservableEffect)
+// HTMLDOM-121: unsupported depth/stencil, wireframe, and depth-bias state must not be accepted as
+// inert success.  The all-default two-dimensional subset remains valid, while a caller that asks
+// for a state this DOM/CSS implementation cannot represent receives a deterministic failure.
+TEST_F(HtmlDom3DSurfaceTest, StateSettersAcceptOnlyTheTruthfulTwoDimensionalSubset)
 {
     EXPECT_FALSE(backend.SupportsDepthStencil());
 
     EXPECT_NO_THROW(backend.ApplyDepthStencilState(
-        /*depthEnable=*/true, /*depthWriteEnable=*/true, /*depthFunc=*/3,
-        /*stencilEnable=*/true, /*stencilFunc=*/5, /*stencilPass=*/2, /*stencilFail=*/1,
-        /*stencilDepthFail=*/1, /*stencilMask=*/0xFF, /*stencilWriteMask=*/0xFF,
-        /*referenceStencil=*/42, /*twoSidedStencilMode=*/true,
-        /*ccwStencilFunc=*/5, /*ccwStencilPass=*/2, /*ccwStencilFail=*/1, /*ccwStencilDepthFail=*/1));
-    EXPECT_NO_THROW(backend.SetReferenceStencil(42));
+        /*depthEnable=*/false, /*depthWriteEnable=*/false, /*depthFunc=*/0,
+        /*stencilEnable=*/false, /*stencilFunc=*/0, /*stencilPass=*/0, /*stencilFail=*/0,
+        /*stencilDepthFail=*/0, /*stencilMask=*/0, /*stencilWriteMask=*/0,
+        /*referenceStencil=*/0, /*twoSidedStencilMode=*/false,
+        /*ccwStencilFunc=*/0, /*ccwStencilPass=*/0, /*ccwStencilFail=*/0, /*ccwStencilDepthFail=*/0));
+    EXPECT_THROW(backend.ApplyDepthStencilState(
+        true, false, 0, false, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 0),
+        std::runtime_error);
+    EXPECT_THROW(backend.ApplyDepthStencilState(
+        false, false, 0, true, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 0),
+        std::runtime_error);
+    EXPECT_NO_THROW(backend.SetReferenceStencil(0));
+    EXPECT_THROW(backend.SetReferenceStencil(42), std::runtime_error);
 
     // SetBlendFactor's colour must not leak into -- or otherwise disturb -- the composite op an
     // ApplyBlendState call already selected: it is only ever consumed for a BlendFactor blend
@@ -704,13 +739,14 @@ TEST_F(HtmlDom3DSurfaceTest, InertStateSettersAcceptArbitraryValuesWithNoObserva
     EXPECT_EQ(GetCurrentCompositeOpEXT(), DomCompositeOp::Additive);
     SetCurrentCompositeOpEXT(DomCompositeOp::NonPremultiplied);
 
-    // Non-default cull/fill/depth-bias values: still genuinely inert (no 2D analogue). scissorTestEnable
-    // (HTMLDOM-102) is NOT inert any more -- see ApplyRasterizerStateReadsScissorTestEnable below for
-    // its own real, observable effect -- but this call must still leave ApplyBlendState's own
-    // composite-op state completely undisturbed regardless of what scissorTestEnable was set to.
+    // Cull mode has no 2D analogue and remains harmless; scissor enable is represented.  Wireframe
+    // and depth bias cannot be represented and are rejected instead of silently disappearing.
     EXPECT_NO_THROW(backend.ApplyRasterizerState(
-        /*cullMode=*/2, /*fillMode=*/1, /*scissorTestEnable=*/true,
-        /*depthBias=*/0.5f, /*slopeScaleDepthBias=*/0.25f));
+        /*cullMode=*/2, /*fillMode=*/0, /*scissorTestEnable=*/true,
+        /*depthBias=*/0.0f, /*slopeScaleDepthBias=*/0.0f));
+    EXPECT_THROW(backend.ApplyRasterizerState(1, 0, false, 0.0f, 0.0f), std::runtime_error);
+    EXPECT_THROW(backend.ApplyRasterizerState(0, 1, false, 0.0f, 0.0f), std::runtime_error);
+    EXPECT_THROW(backend.ApplyRasterizerState(0, 0, false, 0.5f, 0.0f), std::runtime_error);
     const BlendWriteState writeState{};
     EXPECT_NO_THROW(backend.ApplyBlendState(4, 4, 5, 5, 0, 0, writeState));
     EXPECT_EQ(GetCurrentCompositeOpEXT(), DomCompositeOp::NonPremultiplied);
@@ -789,6 +825,8 @@ TEST(HtmlDomTextureBackendSizeValidation, ZeroOrNegativeDimensionsThrowFromTheRe
 {
     EXPECT_THROW((HtmlDomTextureBackend{0, 4}), System::ArgumentOutOfRangeException);
     EXPECT_THROW((HtmlDomTextureBackend{4, -1}), System::ArgumentOutOfRangeException);
+    EXPECT_THROW((HtmlDomTextureBackend{std::numeric_limits<int>::max(), 1}),
+                 System::ArgumentOutOfRangeException);
     EXPECT_NO_THROW((HtmlDomTextureBackend{4, 4}));
 }
 
@@ -815,4 +853,4 @@ TEST(HtmlDomTextureBackendSizeValidation, RenderTargetGetDataWithNullDestination
     EXPECT_NO_THROW(result = rt.GetData(0, 0, 0, 2, 2, nullptr, 2 * 2 * 4));
     EXPECT_FALSE(result);
 }
-#endif // CNA_BACKEND_HTML_DOM
+#endif // CNA_BACKEND_HTML_DOM || CNA_HTML_DOM_HOST_TESTS

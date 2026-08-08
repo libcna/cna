@@ -99,8 +99,10 @@ namespace CNA
         StencilBuffer,
 
         /**
-         * @brief `BlendState.Additive` composites via genuine additive math, rather than silently
-         * degrading to normal alpha blending. HTML_DOM support is browser-version-dependent
+         * @brief `BlendState.Additive` uses the backend's documented additive colour path, rather
+         * than silently degrading to normal alpha blending. This flag does not widen that
+         * backend's documented alpha-channel contract or imply arbitrary custom BlendState
+         * support. HTML_DOM support is browser-version-dependent
          * (plan_html_dom.md HTMLDOM-117):
          * on an engine without `plus-lighter`, the CSS value is simply ignored before any CNA code
          * can observe it, and `Additive` silently renders as ordinary source-over blending instead

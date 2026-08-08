@@ -12,6 +12,7 @@ namespace CNA::Internal::Backends::Glide
         switch (capability)
         {
             case CNA::GraphicsCapability::ThreeD:
+            case CNA::GraphicsCapability::AdditiveBlending:
                 return true;
             case CNA::GraphicsCapability::DepthStencilBuffer:
             case CNA::GraphicsCapability::MultiSampleAntiAliasing:
@@ -23,6 +24,7 @@ namespace CNA::Internal::Backends::Glide
             case CNA::GraphicsCapability::Texture3D:
             case CNA::GraphicsCapability::MultiStreamVertexInput:
             case CNA::GraphicsCapability::Instancing:
+            case CNA::GraphicsCapability::StencilBuffer:
                 return false;
         }
         return false;

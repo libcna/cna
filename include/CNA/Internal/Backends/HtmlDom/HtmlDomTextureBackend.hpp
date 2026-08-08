@@ -3,8 +3,15 @@
 
 #include "../Common/IGraphicsBackend.hpp"
 
+#include <cstdint>
+#include <vector>
+
 namespace CNA::Internal::Backends::HtmlDom
 {
+    /** @brief Copies pitched RGBA8 rows into the tightly packed representation browser APIs need. */
+    [[nodiscard]] std::vector<std::uint8_t> TightenTextureRowsEXT(
+        const std::uint8_t* rgba, int width, int height, int stride);
+
     /**
      * @brief Texture backed by a private off-screen canvas plus a cache of CSS-usable data URLs.
      *
@@ -54,7 +61,7 @@ namespace CNA::Internal::Backends::HtmlDom
          * @brief Replaces the whole level-0 image and invalidates every cached variant URL.
          *
          * @param rgba   Tightly packed RGBA8 rows, top row first; ignored when null.
-         * @param stride Row pitch in bytes; unused, the upload is always a full-width image.
+         * @param stride Row pitch in bytes; padding is removed row by row when present.
          */
         void UpdatePixels(const uint8_t* rgba, int stride) override;
 

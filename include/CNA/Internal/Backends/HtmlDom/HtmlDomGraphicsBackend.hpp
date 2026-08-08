@@ -138,6 +138,12 @@ namespace CNA::Internal::Backends::HtmlDom
         /** @brief Always null -- no `SDL_Renderer` exists on this backend, as on EASYGL. */
         [[nodiscard]] SDL_Renderer* GetRendererInternal() const override { return nullptr; }
 
+        /** @brief Always reports DepthFormat::None; no HTML DOM target owns depth/stencil storage. */
+        [[nodiscard]] int GetAppliedDepthStencilFormatEXT(int /*requestedFormat*/) const override
+        {
+            return 0;
+        }
+
         /**
          * @brief Clips subsequent rendering to the given rectangle, in logical game pixels.
          *
@@ -220,21 +226,37 @@ namespace CNA::Internal::Backends::HtmlDom
          */
         std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;
 
+        /** @brief Unsupported resource factories reject directly instead of returning null. */
+        std::unique_ptr<IOcclusionQueryBackend> CreateOcclusionQuery() override;
+        std::unique_ptr<ITexture3DBackend> CreateTexture3D(
+            int w, int h, int depth, bool mipMap, int surfaceFormat) override;
+        std::unique_ptr<ITextureCubeBackend> CreateTextureCube(
+            int size, bool mipMap, int surfaceFormat) override;
+        std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(
+            int size, int depthFormat, bool preserveContents = false,
+            bool mipMap = false, int multiSampleCount = 0) override;
+        std::unique_ptr<IEffectBackend> CreateEffectBackend(
+            const std::string& vertSrc, const std::string& fragSrc) override;
+
         /**
          * @brief Creates an off-screen render target backed by a real canvas.
          *
          * @param w                Width in pixels.
          * @param h                Height in pixels.
-         * @param depthFormat      Ignored -- no target here has depth storage.
-         * @param preserveContents  Ignored -- handled entirely in the shared GraphicsDevice layer.
-         * @param mipMap           Ignored -- no mip chain exists on this backend.
-         * @param multiSampleCount Ignored -- no MSAA exists on this backend.
+         * @param depthFormat      Must be DepthFormat::None.
+         * @param preserveContents Honoured by the shared GraphicsDevice layer.
+         * @param mipMap           Must be false; no mip chain exists on this backend.
+         * @param multiSampleCount Must be zero; no MSAA exists on this backend.
          * @return The new render target backend.
+         * @throws std::runtime_error when an unsupported attachment, mip chain or MSAA is requested.
          */
         std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2D(int w, int h, int depthFormat,
                                                                    bool preserveContents = false,
                                                                    bool mipMap = false,
                                                                    int multiSampleCount = 0) override;
+        std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2DEXT(
+            int w, int h, int depthFormat, bool preserveContents, bool mipMap,
+            int multiSampleCount, int surfaceFormat) override;
 
         /**
          * @brief Binds a render target, or restores the DOM backbuffer.
@@ -287,20 +309,35 @@ namespace CNA::Internal::Backends::HtmlDom
                              int colorBlendFunc, int alphaBlendFunc,
                              const BlendWriteState& writeState) override;
 
+        /** @brief Accepts only the fully disabled depth/stencil state used by 2D SpriteBatch. */
+        void ApplyDepthStencilState(
+            bool depthEnable, bool depthWriteEnable, int depthFunc,
+            bool stencilEnable, int stencilFunc, int stencilPass, int stencilFail,
+            int stencilDepthFail, int stencilMask, int stencilWriteMask, int referenceStencil,
+            bool twoSidedStencilMode, int ccwStencilFunc, int ccwStencilPass,
+            int ccwStencilFail, int ccwStencilDepthFail) override;
+
+        /** @brief Zero is inert; a non-zero stencil reference is unsupported and rejected. */
+        void SetReferenceStencil(int value) override;
+
         /**
          * @brief Records whether subsequent draws should honour the scissor rect.
          *
-         * plan_html_dom.md HTMLDOM-102: `cullMode`/`fillMode`/`depthBias`/`slopeScaleDepthBias`
-         * have no 2D analogue (HTMLDOM-91's own inert-state-setter audit already covers why), so
-         * only `scissorTestEnable` is read. Stored via `SetCurrentScissorEnableEXT` -- the same
-         * plain-C++, per-batch-captured shape `ApplyBlendState` already uses for `BlendState`.
+         * plan_html_dom.md HTMLDOM-102: `CullMode::None` and SpriteBatch's default
+         * `CullCounterClockwiseFace` both preserve the backend's ordinary sprite path;
+         * `CullClockwiseFace` is rejected because this retained DOM renderer cannot cull by
+         * post-transform winding;
+         * `scissorTestEnable` is stored via `SetCurrentScissorEnableEXT` -- the same plain-C++,
+         * per-batch-captured shape `ApplyBlendState` uses for `BlendState`. HTMLDOM-121 rejects
+         * wireframe and non-zero depth bias because accepting them would claim state this CSS/DOM
+         * renderer cannot represent.
          *
-         * @param cullMode Ignored -- no 2D analogue.
-         * @param fillMode Ignored -- no 2D analogue.
+         * @param cullMode `None` or SpriteBatch's default `CullCounterClockwiseFace`.
+         * @param fillMode Must be `FillMode::Solid`; wireframe is unsupported.
          * @param scissorTestEnable Whether `SetScissorRect`'s recorded rectangle should clip
          *                          subsequent draws.
-         * @param depthBias Ignored -- no depth buffer exists on this backend.
-         * @param slopeScaleDepthBias Ignored -- no depth buffer exists on this backend.
+         * @param depthBias Must be zero; no depth buffer exists on this backend.
+         * @param slopeScaleDepthBias Must be zero; no depth buffer exists on this backend.
          */
         void ApplyRasterizerState(int cullMode, int fillMode, bool scissorTestEnable,
                                   float depthBias = 0.0f, float slopeScaleDepthBias = 0.0f) override;
@@ -321,6 +358,9 @@ namespace CNA::Internal::Backends::HtmlDom
          *         `mix-blend-mode: plus-lighter`; `false` for every other capability.
          */
         [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
+
+        /** @brief Rejects every shared public 3D draw route before it can consume backend state. */
+        void Ensure3DSupported(const char* operation) const override;
 
         /** @brief 3D: not yet implemented. @param r,g,b,a Clear colour. @param depth Depth value. */
         void ClearColorAndDepth(float r, float g, float b, float a, float depth) override;

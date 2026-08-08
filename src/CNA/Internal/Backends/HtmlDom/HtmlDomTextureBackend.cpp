@@ -3,6 +3,8 @@
 
 #include "System/ArgumentOutOfRangeException.hpp"
 
+#include <cstring>
+#include <limits>
 #include <stdexcept>
 #include <string>
 
@@ -357,6 +359,41 @@ EM_JS(void, CNA_HtmlDom_DestroyTexture, (int id), {
 
 namespace CNA::Internal::Backends::HtmlDom
 {
+    std::vector<std::uint8_t> TightenTextureRowsEXT(
+        const std::uint8_t* rgba, int width, int height, int stride)
+    {
+        if (rgba == nullptr) return {};
+        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(width, "width");
+        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(height, "height");
+        if (width > std::numeric_limits<int>::max() / 4)
+            throw System::ArgumentOutOfRangeException(
+                "width", std::to_string(width), "width * 4 must fit the row-pitch contract.");
+        const int rowBytes = width * 4;
+        if (stride < rowBytes)
+            throw System::ArgumentOutOfRangeException(
+                "stride", std::to_string(stride),
+                "stride must contain at least width * 4 RGBA8 bytes per row.");
+
+        const std::uint64_t tightBytes = static_cast<std::uint64_t>(rowBytes)
+            * static_cast<std::uint64_t>(height);
+        const std::uint64_t sourceBytes = static_cast<std::uint64_t>(height - 1)
+            * static_cast<std::uint64_t>(stride) + static_cast<std::uint64_t>(rowBytes);
+        if (tightBytes > std::numeric_limits<std::size_t>::max() ||
+            sourceBytes > std::numeric_limits<std::size_t>::max())
+            throw System::ArgumentOutOfRangeException(
+                "dimensions", std::to_string(width) + "x" + std::to_string(height),
+                "pitched RGBA8 storage must fit the platform address space.");
+
+        std::vector<std::uint8_t> tight(static_cast<std::size_t>(tightBytes));
+        for (int row = 0; row < height; ++row)
+        {
+            std::memcpy(tight.data() + static_cast<std::size_t>(row) * rowBytes,
+                        rgba + static_cast<std::size_t>(row) * static_cast<std::size_t>(stride),
+                        static_cast<std::size_t>(rowBytes));
+        }
+        return tight;
+    }
+
     namespace
     {
         int NextTextureId()
@@ -378,6 +415,22 @@ namespace CNA::Internal::Backends::HtmlDom
         // Caught here instead, at this backend's own JS-crossing boundary, with an actionable error.
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(width_, "width");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(height_, "height");
+        if (width_ > std::numeric_limits<int>::max() / 4)
+            throw System::ArgumentOutOfRangeException(
+                "width", std::to_string(width_), "width * 4 must fit the row-pitch contract.");
+        if (data.mipLevels != 1)
+            throw std::runtime_error(
+                "HTML_DOM backend: Texture2D mip chains are unsupported; request mipMap=false.");
+        if (data.surfaceFormat != 0)
+            throw std::runtime_error(
+                "HTML_DOM backend: Texture2D supports only SurfaceFormat::Color (RGBA8).");
+        const std::uint64_t requiredBytes = static_cast<std::uint64_t>(width_)
+            * static_cast<std::uint64_t>(height_) * 4u;
+        if (requiredBytes > std::numeric_limits<std::size_t>::max() ||
+            data.pixels.size() != static_cast<std::size_t>(requiredBytes))
+            throw System::ArgumentOutOfRangeException(
+                "pixels", std::to_string(data.pixels.size()),
+                "pixel storage must contain exactly width * height * 4 RGBA8 bytes.");
 #if defined(__EMSCRIPTEN__)
         CNA_HtmlDom_CreateTexture(id_, width_, height_, data.pixels.data(), 0);
         CNA_HtmlDom_InstallTextureHelpers();
@@ -395,6 +448,15 @@ namespace CNA::Internal::Backends::HtmlDom
         // CreateRenderTarget2D, so this is the only place in the whole chain that can catch it.
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(width_, "width");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(height_, "height");
+        if (width_ > std::numeric_limits<int>::max() / 4)
+            throw System::ArgumentOutOfRangeException(
+                "width", std::to_string(width_), "width * 4 must fit the row-pitch contract.");
+        const std::uint64_t requiredBytes = static_cast<std::uint64_t>(width_)
+            * static_cast<std::uint64_t>(height_) * 4u;
+        if (requiredBytes > std::numeric_limits<std::size_t>::max())
+            throw System::ArgumentOutOfRangeException(
+                "dimensions", std::to_string(width_) + "x" + std::to_string(height_),
+                "RGBA8 render-target storage must fit the platform address space.");
 #if defined(__EMSCRIPTEN__)
         // plan_html_dom.md HTMLDOM-106: isRenderTarget=1 -- this constructor is used exclusively by
         // HtmlDomRenderTargetBackend (see this class's own header comment), never for a plain
@@ -411,11 +473,21 @@ namespace CNA::Internal::Backends::HtmlDom
 #endif
     }
 
-    void HtmlDomTextureBackend::UpdatePixels(const uint8_t* rgba, int /*stride*/)
+    void HtmlDomTextureBackend::UpdatePixels(const uint8_t* rgba, int stride)
     {
         if (!rgba) return;
+        const int rowBytes = width_ * 4;
+        const std::uint8_t* upload = rgba;
+        std::vector<std::uint8_t> tight;
+        if (stride != rowBytes)
+        {
+            tight = TightenTextureRowsEXT(rgba, width_, height_, stride);
+            upload = tight.data();
+        }
 #if defined(__EMSCRIPTEN__)
-        CNA_HtmlDom_UpdateTexture(id_, width_, height_, rgba);
+        CNA_HtmlDom_UpdateTexture(id_, width_, height_, upload);
+#else
+        (void)upload;
 #endif
     }
 
@@ -427,7 +499,10 @@ namespace CNA::Internal::Backends::HtmlDom
                 ") is not yet implemented. Neither CSS background painting nor this backend's "
                 "texture canvases have a mip chain or per-level LOD selection -- the same boundary "
                 "CANVAS and SDL_RENDERER draw. Use Texture2D::SetData(level=0, ...).");
-        (void)levelW; (void)levelH;
+        if (levelW != width_ || levelH != height_)
+            throw System::ArgumentOutOfRangeException(
+                "levelSize", std::to_string(levelW) + "x" + std::to_string(levelH),
+                "level 0 dimensions must match the texture dimensions.");
         UpdatePixels(rgba, width_ * 4);
     }
 }

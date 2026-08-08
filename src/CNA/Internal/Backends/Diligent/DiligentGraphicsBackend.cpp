@@ -2646,6 +2646,7 @@ namespace CNA::Internal::Backends::Diligent
             case CNA::GraphicsCapability::ThreeD:
             case CNA::GraphicsCapability::DepthStencilBuffer:
             case CNA::GraphicsCapability::Texture3D:
+            case CNA::GraphicsCapability::AdditiveBlending:
                 return true;
             case CNA::GraphicsCapability::WireFrame:
                 return features.WireframeFill == Dg::DEVICE_FEATURE_STATE_ENABLED;
@@ -2676,6 +2677,8 @@ namespace CNA::Internal::Backends::Diligent
             // IDeviceContext::DrawIndexed with NumInstances. Structural to the backend rather than
             // device-variable: every Diligent device type CNA can select supports instanced draws.
             case CNA::GraphicsCapability::Instancing:
+                return true;
+            case CNA::GraphicsCapability::StencilBuffer:
                 return true;
         }
         // No default arm: every GraphicsCapability member is answered above, so adding one to the

@@ -5576,6 +5576,9 @@ namespace CNA::Internal::Backends::Sokol
             // core, not extensions.
             case CNA::GraphicsCapability::Instancing:
                 return true;
+            case CNA::GraphicsCapability::StencilBuffer:
+            case CNA::GraphicsCapability::AdditiveBlending:
+                return true;
         }
         // Every enumerator above is answered explicitly and there is no default arm, so a
         // capability added to CNA::GraphicsCapability after this backend was written is a compiler

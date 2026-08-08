@@ -114,6 +114,9 @@ namespace CNA::Internal::Backends::HtmlDom
 
     void ValidateAddressModes(int addressU, int addressV, bool exceedsBounds)
     {
+        if (addressU < 0 || addressU > 2 || addressV < 0 || addressV > 2)
+            throw std::runtime_error(
+                "HTML_DOM backend: TextureAddressMode must be Wrap, Clamp, or Mirror.");
         // Clamp is exact (the source rect is clamped into the texture before it ever reaches CSS),
         // and an in-bounds source rect makes every mode indistinguishable, so neither case can be
         // wrong regardless of what was requested.

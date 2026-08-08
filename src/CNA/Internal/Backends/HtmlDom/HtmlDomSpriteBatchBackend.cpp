@@ -508,24 +508,23 @@ namespace CNA::Internal::Backends::HtmlDom
 
     void HtmlDomSpriteBatchBackend::SetSamplerFilter(int textureFilter)
     {
-        // Magnification-dominant grouping, the same one SDL_RENDERER (Task 701) and CANVAS
-        // (CANVAS-42) apply to their own single smoothing toggle: SpriteBatch draws are
-        // near-universally magnifying, so the "expand" component of TextureFilter is what visibly
-        // matters. Linear=0, Anisotropic=2, LinearMipPoint=3, MinPointMagLinearMipLinear=7 and
-        // MinPointMagLinearMipPoint=8 all magnify linearly; everything else magnifies by point.
         switch (textureFilter)
         {
-            case 0: case 2: case 3: case 7: case 8:
-                smoothingEnabled_ = true;
-                break;
+            case 0: smoothingEnabled_ = true; break;  // Linear
+            case 1: smoothingEnabled_ = false; break; // Point
             default:
-                smoothingEnabled_ = false;
-                break;
+                throw std::runtime_error(
+                    "HTML_DOM backend: only TextureFilter::Linear and TextureFilter::Point are "
+                    "supported. Anisotropic and mip/min-mag-split filters cannot be represented "
+                    "by one CSS/Canvas2D smoothing toggle.");
         }
     }
 
     void HtmlDomSpriteBatchBackend::SetSamplerAddressMode(int addressU, int addressV)
     {
+        if (addressU < 0 || addressU > 2 || addressV < 0 || addressV > 2)
+            throw std::runtime_error(
+                "HTML_DOM backend: TextureAddressMode must be Wrap, Clamp, or Mirror.");
         addressU_ = addressU;
         addressV_ = addressV;
     }

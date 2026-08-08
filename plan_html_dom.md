@@ -469,3 +469,37 @@ point of running this in an actual browser instead of trusting a structural revi
    necessarily interleaved per-frame draw order across regions — an accepted trade-off for actually
    keeping different scissor rects from clipping each other's sprites, which the backend could not
    do at all before HTMLDOM-94.
+
+## Post-audit integration stabilization — 2026-08-08
+
+The historical lane was replayed onto `integration/post-audit-phase1` without copying stale shared
+interfaces wholesale. The current integration architecture remains authoritative. The public
+backend is still the distinct Emscripten-only `HTML_DOM` identity: sprites are pooled real `<div>`
+elements styled with CSS, while `RenderTarget2D` uses a private Canvas2D surface. Browser glue is
+handwritten `EM_JS`; the backend is not an alias for `CANVAS`, `EASYGL`, `SOFTWARE`, or `STUB`.
+
+| Finding | Status | Post-audit result |
+|---|---|---|
+| HTMLDOM-121 | ✅ resolved | Closed silent-success gaps at the current `IGraphicsBackend` boundary. Unsupported 3D/effect/query factories, render-target options, depth/stencil state, wireframe/depth-bias rasterizer state, colour-write masks, multisample masks, invalid sampler ordinals, and foreign render targets now reject deterministically. The implemented 2D subset remains accepted. |
+| HTMLDOM-122 | ✅ resolved | Texture uploads now require one RGBA8 level, exact storage, positive dimensions, and pitch at least `width*4`; padded rows are copied row-by-row. Width, total destination size, and pitched source-span arithmetic are checked before allocation/copy, including the 32-bit WebAssembly address-space case. |
+| HTMLDOM-123 | ✅ resolved | The recursive native `CnaTests` glob no longer includes the two standalone Win32 Glide ABI-loader sources. They remain in their dedicated target; native OPENGLES/EasyGL testing no longer collides with duplicate test mains or Win32-only fixtures. |
+
+Runtime classification for this integration is deliberately split. The clean historical tree's
+recorded Emscripten/browser evidence remains 69/69 smoke plus two screenshot checks, 35/35 pixel
+plus two screenshot checks, 10/10 stress, 17/17 dispose, 2/2 host-integration, 6/6 memory, and its
+54/54 browser GTest suite. This host has Chrome and Xvfb but no `emcc`, `em++`, `emcmake`, Node, npm, or
+npx, so the adapted WebAssembly page could not truthfully be rebuilt or executed here. Native
+selection of `HTML_DOM` was rechecked and fails deterministically with the Emscripten-only CMake
+gate. Current CNA-owned host code passed 57/57 contract tests and the same 57/57 under linked
+ASan+UBSan runtimes; the browser/JS lifetime claims therefore retain historical runtime evidence
+plus current static review, not a newly claimed browser run.
+
+Post-audit controls: the full native OPENGLES/EasyGL production and `CnaTests` build passed; the
+focused EasyGL/Glide/SpriteBatch/cache selection passed 147 tests with one expected EasyGL
+wireframe skip; `CnjCacheIsolationTest` and texture-cache reconstruction remained green. Seven GDI
+executables passed under Wine/Xvfb, covering its 2D, ColorMatrix, public stencil/API/state,
+unsupported-feature and exact-4x-MSAA contracts. Glide capability/unit tests and its 32-bit ABI
+loader passed; the full i686 Glide backend remains externally blocked by the already-recorded
+sharp-runtime `__int128` toolchain limitation. Diligent, Skia and Sokol changed capability switches
+passed representative backend-specific syntax compilation. No supported HTML DOM path remains
+open from this stabilization.

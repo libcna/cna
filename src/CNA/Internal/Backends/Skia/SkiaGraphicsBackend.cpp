@@ -880,6 +880,9 @@ namespace CNA::Internal::Backends::Skia
             case CNA::GraphicsCapability::Texture3D:
                 return true;
 
+            case CNA::GraphicsCapability::AdditiveBlending:
+                return true;
+
             case CNA::GraphicsCapability::ThreeD:
             case CNA::GraphicsCapability::DepthStencilBuffer:
             case CNA::GraphicsCapability::MultiSampleAntiAliasing:
@@ -894,6 +897,7 @@ namespace CNA::Internal::Backends::Skia
             case CNA::GraphicsCapability::CustomEffects:
             case CNA::GraphicsCapability::MultiStreamVertexInput:
             case CNA::GraphicsCapability::Instancing:
+            case CNA::GraphicsCapability::StencilBuffer:
                 return false;
         }
         return false;

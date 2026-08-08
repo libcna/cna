@@ -3521,6 +3521,8 @@ namespace CNA::Internal::Backends::Wicked
             case CNA::GraphicsCapability::DepthStencilBuffer:
             case CNA::GraphicsCapability::WireFrame:
             case CNA::GraphicsCapability::OcclusionQuery:
+            case CNA::GraphicsCapability::StencilBuffer:
+            case CNA::GraphicsCapability::AdditiveBlending:
                 return true;
             case CNA::GraphicsCapability::MultiSampleAntiAliasing:
                 return true;

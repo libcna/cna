@@ -815,18 +815,69 @@ namespace CNA::Internal::Backends::HtmlDom
         return std::make_unique<HtmlDomSpriteBatchBackend>();
     }
 
-    std::unique_ptr<IRenderTargetBackend> HtmlDomGraphicsBackend::CreateRenderTarget2D(
-        int w, int h, int /*depthFormat*/, bool /*preserveContents*/, bool /*mipMap*/, int /*multiSampleCount*/)
+    std::unique_ptr<IOcclusionQueryBackend> HtmlDomGraphicsBackend::CreateOcclusionQuery()
     {
-        // depthFormat/mipMap/multiSampleCount are all ignored, the same as SDL_RENDERER and CANVAS:
-        // this backend has no depth storage, no mip chain and no MSAA to configure.
+        ThrowNo3D("CreateOcclusionQuery");
+    }
+
+    std::unique_ptr<ITexture3DBackend> HtmlDomGraphicsBackend::CreateTexture3D(
+        int, int, int, bool, int)
+    {
+        ThrowNo3D("CreateTexture3D");
+    }
+
+    std::unique_ptr<ITextureCubeBackend> HtmlDomGraphicsBackend::CreateTextureCube(int, bool, int)
+    {
+        ThrowNo3D("CreateTextureCube");
+    }
+
+    std::unique_ptr<IRenderTargetCubeBackend> HtmlDomGraphicsBackend::CreateRenderTargetCube(
+        int, int, bool, bool, int)
+    {
+        ThrowNo3D("CreateRenderTargetCube");
+    }
+
+    std::unique_ptr<IEffectBackend> HtmlDomGraphicsBackend::CreateEffectBackend(
+        const std::string&, const std::string&)
+    {
+        ThrowNo3D("CreateEffectBackend (custom programmable effects)");
+    }
+
+    std::unique_ptr<IRenderTargetBackend> HtmlDomGraphicsBackend::CreateRenderTarget2D(
+        int w, int h, int depthFormat, bool /*preserveContents*/, bool mipMap, int multiSampleCount)
+    {
+        if (depthFormat != 0)
+            throw std::runtime_error(
+                "HTML_DOM backend: RenderTarget2D depth/stencil attachments are unsupported; "
+                "request DepthFormat::None.");
+        if (mipMap)
+            throw std::runtime_error(
+                "HTML_DOM backend: mipmapped RenderTarget2D resources are unsupported.");
+        if (multiSampleCount != 0)
+            throw std::runtime_error(
+                "HTML_DOM backend: multisampled RenderTarget2D resources are unsupported; "
+                "request a zero sample count.");
         return std::make_unique<HtmlDomRenderTargetBackend>(w, h);
+    }
+
+    std::unique_ptr<IRenderTargetBackend> HtmlDomGraphicsBackend::CreateRenderTarget2DEXT(
+        int w, int h, int depthFormat, bool preserveContents, bool mipMap,
+        int multiSampleCount, int surfaceFormat)
+    {
+        if (surfaceFormat != 0)
+            throw std::runtime_error(
+                "HTML_DOM backend: RenderTarget2D supports only SurfaceFormat::Color.");
+        return CreateRenderTarget2D(
+            w, h, depthFormat, preserveContents, mipMap, multiSampleCount);
     }
 
     void HtmlDomGraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt)
     {
         if (rt)
         {
+            if (dynamic_cast<HtmlDomRenderTargetBackend*>(rt) == nullptr)
+                throw std::runtime_error(
+                    "HTML_DOM backend: refusing to bind a render target owned by another backend.");
             rt->BindAsRenderTarget();
         }
         else
@@ -838,6 +889,9 @@ namespace CNA::Internal::Backends::HtmlDom
     void HtmlDomGraphicsBackend::SetRenderTargets(
         const RenderTargetBindingDescriptor* renderTargets, int count)
     {
+        if (count < 0)
+            throw System::ArgumentOutOfRangeException(
+                "count", std::to_string(count), "count must not be negative.");
         // plan_html_dom.md HTMLDOM-120: GraphicsDevice::SetRenderTargets (the shared layer, the
         // only caller a real game ever goes through) always passes count=0 for a null pointer
         // (GraphicsDevice.cpp), so this can only fire via a direct call to this backend bypassing
@@ -921,21 +975,54 @@ namespace CNA::Internal::Backends::HtmlDom
     void HtmlDomGraphicsBackend::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
                                                  int colorDstBlend, int alphaDstBlend,
                                                  int colorBlendFunc, int alphaBlendFunc,
-                                                 const BlendWriteState& /*writeState*/)
+                                                 const BlendWriteState& writeState)
     {
-        // REMED-GFX-077: CSS compositing has neither per-channel colour write masks nor any
-        // coverage-sample-mask concept, so BlendState.ColorWriteChannels* and
-        // BlendState.MultiSampleMask are inexpressible here -- a documented capability gap
-        // (docs/html-dom-backend.md), not a silent drop.
+        for (int target = 0; target < 4; ++target)
+        {
+            if (writeState.colorWriteChannels[target] != 15)
+                throw std::runtime_error(
+                    "HTML_DOM backend: non-default ColorWriteChannels on render target " +
+                    std::to_string(target) + " are unsupported by CSS compositing.");
+        }
+        if (writeState.multiSampleMask != 0xFFFFFFFFu)
+            throw std::runtime_error(
+                "HTML_DOM backend: BlendState.MultiSampleMask is unsupported (this backend has "
+                "no multisample storage).");
         SetCurrentCompositeOpEXT(BlendStateToDomCompositeOp(
             colorSrcBlend, alphaSrcBlend, colorDstBlend, alphaDstBlend, colorBlendFunc, alphaBlendFunc));
     }
 
-    void HtmlDomGraphicsBackend::ApplyRasterizerState(int /*cullMode*/, int /*fillMode*/,
-                                                      bool scissorTestEnable,
-                                                      float /*depthBias*/, float /*slopeScaleDepthBias*/)
+    void HtmlDomGraphicsBackend::ApplyDepthStencilState(
+        bool depthEnable, bool depthWriteEnable, int,
+        bool stencilEnable, int, int, int, int, int, int, int,
+        bool, int, int, int, int)
     {
+        if (depthEnable || depthWriteEnable || stencilEnable)
+            ThrowNo3D("ApplyDepthStencilState");
+    }
+
+    void HtmlDomGraphicsBackend::SetReferenceStencil(int value)
+    {
+        if (value != 0)
+            ThrowNo3D("SetReferenceStencil");
+    }
+
+    void HtmlDomGraphicsBackend::ApplyRasterizerState(int cullMode, int fillMode,
+                                                      bool scissorTestEnable,
+                                                      float depthBias, float slopeScaleDepthBias)
+    {
+        if (cullMode != 0 && cullMode != 2)
+            ThrowNo3D("RasterizerState.CullMode::CullClockwiseFace");
+        if (fillMode != 0)
+            ThrowNo3D("RasterizerState.FillMode::WireFrame");
+        if (depthBias != 0.0f || slopeScaleDepthBias != 0.0f)
+            ThrowNo3D("RasterizerState depth bias");
         SetCurrentScissorEnableEXT(scissorTestEnable);
+    }
+
+    void HtmlDomGraphicsBackend::Ensure3DSupported(const char* operation) const
+    {
+        ThrowNo3D(operation ? operation : "3D operation");
     }
 
     void HtmlDomGraphicsBackend::ClearColorAndDepth(float, float, float, float, float) { ThrowNo3D("ClearColorAndDepth (3D)"); }

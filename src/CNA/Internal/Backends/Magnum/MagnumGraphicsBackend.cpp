@@ -218,6 +218,9 @@ namespace CNA::Internal::Backends::Magnum
                 // Real instanced draws: per-instance streams bind through addVertexBufferInstanced
                 // with their own divisors and the draw carries a real instance count.
                 return true;
+            case CNA::GraphicsCapability::StencilBuffer:
+            case CNA::GraphicsCapability::AdditiveBlending:
+                return true;
         }
         return false;
     }

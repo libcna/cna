@@ -119,11 +119,11 @@ namespace CNA::Internal::Backends::Dx1
         // corrected pattern). SupportsCapability() lets callers check ahead of time instead of
         // relying on the throw.
         [[nodiscard]] bool SupportsDepthStencil() const override { return false; }
-        [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability /*capability*/) const override
+        [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override
         {
-            // 2D-only by design: none of the capabilities CNA::GraphicsCapability currently
-            // enumerates are supported on this backend.
-            return false;
+            // The 3D surface is unavailable, but the CPU 2D compositor has a distinct, exact
+            // Dx1BlendMode::Additive path.
+            return capability == CNA::GraphicsCapability::AdditiveBlending;
         }
         void ClearColorAndDepth(float r, float g, float b, float a, float depth) override;
         void ClearDepth(float depth) override;

@@ -85,11 +85,11 @@ namespace CNA::Internal::Backends::Canvas
         [[nodiscard]] bool SupportsDepthStencil() const override { return false; }
         // SupportsCapability() lets callers check ahead of time; the policy controls what
         // happens if an unsupported call is nevertheless made.
-        [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability /*capability*/) const override
+        [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override
         {
-            // 2D-only by design: none of the capabilities CNA::GraphicsCapability currently
-            // enumerates are supported on this backend.
-            return false;
+            // Canvas is 2D-only, but its `lighter` composite operation is the backend's explicit
+            // and tested mapping for BlendState::Additive.
+            return capability == CNA::GraphicsCapability::AdditiveBlending;
         }
 
         void ClearColorAndDepth(float r, float g, float b, float a, float depth) override;

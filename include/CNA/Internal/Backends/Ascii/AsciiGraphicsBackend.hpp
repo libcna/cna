@@ -118,9 +118,11 @@ namespace CNA::Internal::Backends::Ascii
          *
          * @return Always false.
          */
-        [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability /*capability*/) const override
+        [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override
         {
-            return false;
+            // Game rendering is performed by the wrapped SDL_RENDERER target, whose custom blend
+            // mode implements the standard Additive preset faithfully before ASCII quantization.
+            return capability == CNA::GraphicsCapability::AdditiveBlending;
         }
 
         // 3D pipeline: NOT supported, same as the wrapped SDL_RENDERER backend. Calls throw by
