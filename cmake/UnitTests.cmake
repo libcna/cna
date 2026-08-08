@@ -343,11 +343,11 @@ if(CNA_BUILD_TESTS)
             set_target_properties(CnaTests PROPERTIES
                 CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_D3D10_SKIP_DXVK_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-d3d10.sh")
         elseif(CNA_GRAPHICS_BACKEND STREQUAL "DIRECT2D")
-            # Direct2D creates its own D3D11 device internally.  Use the established Wine+DXVK
-            # prefix, but skip the D3D11-specific log gate: d2d1.dll, not this test executable,
-            # owns the native device creation and decides its concrete renderer.
+            # Direct2D needs the normal/dedicated prefix selected by run-wine-direct2d.sh, not the
+            # D3D11-only DXVK prefix (which may not contain Wine's d2d1 runtime). Pure unit tests
+            # do not create a device, so skip the unrelated DXVK renderer-log gate.
             set_target_properties(CnaTests PROPERTIES
-                CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_D3D11_SKIP_DXVK_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-dxvk.sh")
+                CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_D3D11_SKIP_DXVK_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-direct2d.sh")
         endif()
     endif()
 
@@ -358,6 +358,14 @@ if(CNA_BUILD_TESTS)
     # directly from the repo root. Mirrors the already-correct pattern in
     # cmake/Tests/EasyGLTests.cmake / VulkanTests.cmake.
     gtest_discover_tests(CnaTests DISCOVERY_MODE PRE_TEST WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+    # D2D-118/D2D-119: a stable label and one explicit runner make the backend's device-free
+    # capability, blend, mip-policy, HRESULT and pixel-conversion contract independently runnable.
+    if(CNA_GRAPHICS_BACKEND STREQUAL "DIRECT2D")
+        cna_register_backend_test(NAME Direct2D_Unit
+            COMMAND CnaTests --gtest_filter=Direct2D*
+            TIMEOUT 60 LABELS "Direct2D;Unit" WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+    endif()
 
     # INPUT-BUILD-003: canonical Input-test selector — SINGLE SOURCE OF TRUTH.
     # The input subset used to be selected by a long --gtest_filter string copy-pasted across the docs
