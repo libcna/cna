@@ -54,15 +54,30 @@ if(CNA_BUILD_TESTS)
     # with its own bundled assets. Not part of the Task 6.2/6.4 verification filters
     # (*Network*:*Gamer*:*ENet*:*Packet*) either, since its suite name is TwoProcessLoopbackTest.
     # plan_dx1.md DX1-88 regression pass: found and fixed a pre-existing, not-DX1-specific gap --
-    # this glob picks up tests/CNA/Internal/Net/ENet*Tests.cpp unconditionally, but those files
-    # #include <enet/enet.h> directly, which only resolves when CNA_ENABLE_NET actually configured
+    # this glob picks up ENet-specific tests unconditionally, but those files include
+    # <enet/enet.h> directly, which only resolves when CNA_ENABLE_NET actually configured
     # the vendored ENet target (cmake/ThirdPartyENet.cmake). CNA_ENABLE_NET=OFF is a real,
     # supported configuration (CMakeLists.txt's own option default is ON, but OFF is explicitly
     # supported for builds that don't need Net/GamerServices) -- this was simply never exercised
     # against a from-scratch full CnaTests build before. Excluded the same way the WIN32/
     # EMSCRIPTEN/ANDROID-specific files just below already are.
     if(NOT CNA_ENABLE_NET)
-        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Net/ENet[A-Za-z]*Tests\\.cpp$")
+        # REMED-BUILD-019: NET=OFF omits both CNA_Net and CNA_GamerServices, so every test whose
+        # implementation lives in either disabled optional module must also leave CnaTests. This
+        # exact root-based boundary includes direct and transitive ENet-header consumers without
+        # suppressing any test outside the two disabled modules.
+        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Net/.*\\.cpp$")
+        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/Microsoft/Xna/Framework/Net/.*\\.cpp$")
+        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/Microsoft/Xna/Framework/GamerServices/.*\\.cpp$")
+
+        # Keep the source-list contract executable: future glob/filter changes must fail at
+        # configure time rather than compiling a disabled-module test into an un-linkable target.
+        foreach(_cna_disabled_net_test IN LISTS CNA_TEST_SOURCES)
+            if(_cna_disabled_net_test MATCHES "/(CNA/Internal/Net|Microsoft/Xna/Framework/(Net|GamerServices))/")
+                message(FATAL_ERROR "NET=OFF left disabled-module test selected: ${_cna_disabled_net_test}")
+            endif()
+        endforeach()
+        unset(_cna_disabled_net_test)
     endif()
 
     if(WIN32 OR EMSCRIPTEN OR ANDROID)
