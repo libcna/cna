@@ -138,6 +138,10 @@ as a release baseline.
   RGB uses `min(sourceAlpha, 1-destinationAlpha)` and alpha uses one. The 2D regression uses
   asymmetric RGB plus distinct nontrivial source/destination alpha values so substituting inverse
   source alpha cannot pass. Adapted execution remains pending.
+- REMED-GFX-232 keeps the integration branch's depth-only DX3 backend truthful after introducing
+  the standalone stencil hook: `SupportsStencilBuffer()` now returns false, matching its
+  `GraphicsCapability::StencilBuffer` answer and documented lack of a stencil plane. The focused
+  DX3 capability executable compares the two answers directly; adapted execution remains pending.
 - A custom `ShaderEffect` throws `System::NotSupportedException` during construction on GDI. GDI
   does not create an invalid placeholder, accept shader source or uniforms, and then ignore them.
   `ColorMatrixEffect` is the sole fixed non-shader exception; every other custom `SpriteBatch`

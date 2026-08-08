@@ -25,6 +25,9 @@
 - REMED-GFX-231 corrects the supported `SourceAlphaSaturation` CPU blend factor to use
   `min(sourceAlpha, 1-destinationAlpha)` for RGB and one for alpha; an asymmetric/nontrivial-alpha
   2D regression is committed, with adapted execution pending.
+- REMED-GFX-232 makes DX3's standalone stencil hook report false, consistent with its depth-only
+  production path and `GraphicsCapability::StencilBuffer` answer; the focused DX3 capability
+  regression now compares both paths directly, with adapted execution pending.
 - REMED-BUILD-017 corrects the manual native-MSVC workflow and command inventory to build all
   **seventeen** correctness executables before running the **nineteen** registered GDI cases. The
   omitted targets were presentation-mode transaction, DC-release transaction, and texture

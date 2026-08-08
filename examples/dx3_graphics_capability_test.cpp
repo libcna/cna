@@ -60,6 +60,9 @@ protected:
         check(dev.SupportsCapability(GraphicsCapability::ThreeD), "ThreeD supported");
         check(dev.SupportsCapability(GraphicsCapability::DepthStencilBuffer), "DepthStencilBuffer supported");
         check(!dev.SupportsCapability(GraphicsCapability::StencilBuffer), "StencilBuffer not supported");
+        check(!backend.SupportsStencilBuffer(), "standalone stencil hook reports depth-only DX3 truthfully");
+        check(dev.SupportsCapability(GraphicsCapability::StencilBuffer) == backend.SupportsStencilBuffer(),
+              "StencilBuffer capability and standalone hook agree");
 
         // Genuinely unavailable at this DirectX era.
         check(!dev.SupportsCapability(GraphicsCapability::MultiSampleAntiAliasing), "MultiSampleAntiAliasing not supported");

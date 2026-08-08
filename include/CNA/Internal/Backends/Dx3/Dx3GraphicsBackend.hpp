@@ -156,6 +156,7 @@ namespace CNA::Internal::Backends::Dx3
         // textures/custom-effects either accepted-and-ignored or genuinely unavailable at this
         // DirectX era, not "not yet implemented"). ----
         [[nodiscard]] bool SupportsDepthStencil() const override { return true; }
+        [[nodiscard]] bool SupportsStencilBuffer() const override { return false; }
         [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override
         {
             // Phase O6 completes the bundle CNA::GraphicsCapability::ThreeD's own doc comment
