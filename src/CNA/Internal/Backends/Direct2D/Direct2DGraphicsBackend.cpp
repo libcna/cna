@@ -1059,6 +1059,8 @@ namespace CNA::Internal::Backends::Direct2D
             d2dContext_->EndDraw();
         }
         drawing_ = false;
+        pendingBlendMode_.reset();
+        pendingNonPremultipliedSource_ = false;
         viewportPushed_ = false;
         scissorPushed_ = false;
         transientBitmaps_.clear();
@@ -2075,6 +2077,8 @@ namespace CNA::Internal::Backends::Direct2D
         int colorSrcBlend, int alphaSrcBlend, int colorDstBlend, int alphaDstBlend,
         int colorBlendFunc, int alphaBlendFunc, const BlendWriteState& writeState)
     {
+        pendingBlendMode_.reset();
+        pendingNonPremultipliedSource_ = false;
         for (int target = 0; target < 4; ++target)
         {
             if (writeState.colorWriteChannels[target] != 15)
@@ -2088,12 +2092,13 @@ namespace CNA::Internal::Backends::Direct2D
             throw std::runtime_error(
                 "Direct2D does not support BlendState.MultiSampleMask; the coverage mask must enable every sample.");
         }
-        blendMode_ = BlendStateToDirect2DBlendMode(colorSrcBlend, alphaSrcBlend, colorDstBlend,
-                                                   alphaDstBlend, colorBlendFunc, alphaBlendFunc);
+        const Direct2DBlendMode candidateMode = BlendStateToDirect2DBlendMode(
+            colorSrcBlend, alphaSrcBlend, colorDstBlend, alphaDstBlend,
+            colorBlendFunc, alphaBlendFunc);
         // NonPremultiplied differs from AlphaBlend only in the source pixel convention.  A
         // transient CPU-generated premultiplied bitmap is used for it on each affected draw.
-        nonPremultipliedSource_ = colorSrcBlend == 4 && colorDstBlend == 5;
-        if (drawing_) d2dContext_->SetPrimitiveBlend(ToPrimitiveBlend(blendMode_));
+        pendingBlendMode_ = candidateMode;
+        pendingNonPremultipliedSource_ = colorSrcBlend == 4 && colorDstBlend == 5;
     }
 
     void Direct2DGraphicsBackend::SetBlendFactor(float r, float g, float b, float a)
@@ -2101,6 +2106,8 @@ namespace CNA::Internal::Backends::Direct2D
         constexpr float epsilon = 0.0001f;
         if (!std::isfinite(r) || !std::isfinite(g) || !std::isfinite(b) || !std::isfinite(a))
         {
+            pendingBlendMode_.reset();
+            pendingNonPremultipliedSource_ = false;
             throw System::ArgumentOutOfRangeException(
                 "blendFactor", "non-finite",
                 "Direct2D GraphicsDevice.BlendFactor components must be finite.");
@@ -2111,7 +2118,17 @@ namespace CNA::Internal::Backends::Direct2D
             std::ostringstream message;
             message << "Direct2D does not support GraphicsDevice.BlendFactor; only Color::White is valid "
                     << "(received " << r << ", " << g << ", " << b << ", " << a << ").";
+            pendingBlendMode_.reset();
+            pendingNonPremultipliedSource_ = false;
             throw std::runtime_error(message.str());
+        }
+        if (pendingBlendMode_)
+        {
+            blendMode_ = *pendingBlendMode_;
+            nonPremultipliedSource_ = pendingNonPremultipliedSource_;
+            pendingBlendMode_.reset();
+            pendingNonPremultipliedSource_ = false;
+            if (drawing_) d2dContext_->SetPrimitiveBlend(ToPrimitiveBlend(blendMode_));
         }
     }
 

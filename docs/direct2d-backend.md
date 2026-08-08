@@ -31,7 +31,8 @@ WIC, SDL_Renderer, or a hidden 3D/compositing pass. Use `CNA_GRAPHICS_BACKEND=D3
   transforms fail before native state changes.
 - `Opaque`, `AlphaBlend`, and `NonPremultiplied` are supported. Exact symmetric Porter-Duff tuples
   map to Direct2D image-composite modes. Blend tuples without an exact Direct2D representation,
-  channel masks, coverage masks, and non-white blend factors are rejected. In particular,
+  channel masks, coverage masks, and non-white blend factors are rejected transactionally, with
+  the previously accepted blend remaining active. In particular,
   `BlendState::Additive` is XNA `SourceAlpha/One`; it is not Direct2D `One/One`. Because the backend
   cannot implement that contract for every source type, `AdditiveBlending` is reported false and
   Additive is rejected consistently rather than approximated.

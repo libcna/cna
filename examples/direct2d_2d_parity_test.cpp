@@ -1927,11 +1927,32 @@ protected:
         expectNamedBlendRejection("Direct2D rejects XNA BlendState::Additive (SourceAlpha/One)", [&] {
             device.setBlendStateProperty(BlendState::Additive);
         });
-        BlendState embeddedBlendFactor = BlendState::Opaque;
+        // D2D-135: ApplyBlendState and the embedded BlendFactor validation are one transaction.
+        // Keep a supported state active, reject a different candidate, then bypass SpriteBatch's
+        // front-end state setup for one draw so the pixel proves the native backend did not
+        // partially publish the rejected candidate.
+        device.Clear(blendBackground);
+        device.setBlendStateProperty(BlendState::NonPremultiplied);
+        BlendState embeddedBlendFactor = BlendState::AlphaBlend;
         embeddedBlendFactor.setBlendFactorProperty(Color(64, 255, 255, 255));
         expectNamedBlendRejection("Direct2D rejects BlendState.BlendFactor", [&] {
             device.setBlendStateProperty(embeddedBlendFactor);
         });
+        const bool blendCachePreserved =
+            device.getBlendStateProperty().getColorSourceBlendProperty() == Blend::SourceAlpha &&
+            device.getBlendStateProperty().getColorDestinationBlendProperty() ==
+                Blend::InverseSourceAlpha;
+        std::printf("[%s] rejected BlendState preserves the public state cache\n",
+                    blendCachePreserved ? "PASS" : "FAIL");
+        passed = passed && blendCachePreserved;
+        auto transactionalBatch = device.GetBackend().CreateSpriteBatch();
+        transactionalBatch->SetSamplerFilter(1);
+        transactionalBatch->Begin();
+        transactionalBatch->Draw(straightHalfRed.GetBackend(), Rectangle(0, 0, 4, 4),
+                                  Rectangle(0, 0, 1, 1), Color::White);
+        transactionalBatch->End();
+        check("rejected BlendState preserves Direct2D blend pixels", 1, 1,
+              halfRedOverBackground);
         device.setBlendStateProperty(BlendState::Opaque);
         expectNamedBlendRejection("Direct2D rejects GraphicsDevice.BlendFactor", [&] {
             device.setBlendFactorProperty(Color(64, 255, 255, 255));

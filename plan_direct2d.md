@@ -16,13 +16,14 @@
 Zmrazený plán z 2026-08-03 obsahoval přesně **128 řádků: 32 `✅`, 35 `🟨` a 61 `⬜`**, tedy
 **96 neúplných**, nikoli dříve uváděných 88. Adaptace na současnou integrační architekturu uzavírá
 podporované produkční cesty opravou nebo poctivým odmítnutím; nezaměňuje však Wine za fyzické
-Windows a nemění výkonové, CI a refaktorové náměty na release blokery. Nový nález D2D-134 je veden
-odděleně pod tabulkou jako post-freeze test-lifetime oprava.
+Windows a nemění výkonové, CI a refaktorové náměty na release blokery. Nové nálezy D2D-134 a
+D2D-135 jsou vedeny odděleně pod tabulkou jako post-freeze opravy.
 
 MinGW GCC 14 x64 Release build se sestavil s `CNA_ENABLE_NET=OFF` a limitem dvou jobů. Dedikovaný
 label nyní obsahuje `Direct2D_Smoke`, `Direct2D_2DParity`, `Direct2D_Lifetime` a `Direct2D_Unit`;
-všechny čtyři prošly ve Wine 10.0 pod Xvfb (4/4; součet CTest testů 11,50 s, reálný čas 14,18 s), včetně 19 testů ze 6 Direct2D unit
-suite. REMED-BUILD-019 opravuje přesnou hranici NET=OFF testů, takže `CnaTests.exe` už nekompiluje
+všechny čtyři prošly ve Wine 10.0 pod Xvfb (4/4; součet CTest testů 11,11 s, CTest reálný
+čas 13,66 s; vnější `/usr/bin/time` 13,71 s), včetně 19 testů ze 6 Direct2D unit suite.
+REMED-BUILD-019 opravuje přesnou hranici NET=OFF testů, takže `CnaTests.exe` už nekompiluje
 zdroje modulů Net/GamerServices, které sestavení záměrně vynechalo. REMED-GFX-224 zůstává
 `MEDIUM/OPEN` a tato adaptace jej nepovažuje za opravený.
 
@@ -158,7 +159,7 @@ Historické potvrzené chyby jsou zachovány jako provenance, ale už nejsou akt
 | D2D-40 | Přidej nezávislou algebraickou Porter–Duff oracle pro D2D-33. | ⬜ | Každý podporovaný composite mode je porovnán s CPU referencí na netriviálních RGBA dvojicích, nejen s Direct2D větví proti sobě. |
 | D2D-41 | Dokonči `Opaque` s nezávislým RGB/A tintem pro texture i RT. | ⬜ | `Color.A` ovlivní kopírovanou alpha, nikoli RGB; test projde přes native effect bez compatibility skipu. |
 | D2D-42 | Odmítej blend kombinace, které nelze přesně vyjádřit, ještě před zahájením nebo změnou draw stavu. | ✅ | Mapping validates the complete tuple before publishing `blendMode_`; unsupported tuple tests and subsequent control draws pass. |
-| D2D-43 | Zvaliduj blend vstupy včetně neznámých enum hodnot a neplatného blend factoru transakčně. | ✅ | Unknown tuples, masks, Additive, embedded/public non-white factor and non-finite factor are rejected; supported drawing remains usable afterward. |
+| D2D-43 | Zvaliduj blend vstupy včetně neznámých enum hodnot a neplatného blend factoru transakčně. | ✅ | Unknown tuples, masks, Additive, embedded/public non-white factor and non-finite factor are rejected; D2D-135 additionally proves that embedded-factor failure preserves both the public cache and prior native blend pixels. |
 | D2D-44 | Zdokumentuj alpha reprezentaci každé upload/readback/RT/effect hranice. | ⬜ | Dokumentace a komentáře uvádějí straight/premultiplied/ignored alpha i místo každé konverze a odpovídají testům. |
 | D2D-45 | Vytvoř úplnou golden matici blend × source typ × tint × alpha reprezentace. | ⬜ | Matici generuje datově řízený test s CPU referencí; běží ve Wine i nativně a runtime skip je povolen pouze pro konkrétní nedostupný effect. |
 
@@ -285,6 +286,7 @@ Historické potvrzené chyby jsou zachovány jako provenance, ale už nejsou akt
 | # | Úkol | Stav | Akceptace |
 |---|---|---|---|
 | D2D-134 | Oprav dangling device-event callback v parity testu. | ✅ | Callbacky zachycují `eventOrder` referencí. V historickém testu lokální vector zanikl dříve než dlouho žijící `GraphicsDevice`, takže pozdější device-loss callback zapisoval do zrušeného objektu a Wine skončilo page faultem. `eventOrder_` je nyní member deklarovaný před `GraphicsDeviceManager`, takže manager/device se zničí jako první. Celý parity test včetně lost/resetting/reset cyklu a všech následujících kontrol proběhl bez pádu. Jde o test-lifetime opravu, nikoli maskování produkční device-loss chyby. |
+| D2D-135 | Zachovej native blend stav při odmítnutém embedded `BlendFactor`. | ✅ | `GraphicsDevice` volá `ApplyBlendState` před `SetBlendFactor`; Direct2D dříve publikoval první polovinu a při ne-bílém faktoru vyhodil výjimku až ve druhé, takže veřejná cache a native stav se rozešly. Backend nyní drží odvozený blend jako pending a publikuje jej až po úspěšné validaci faktoru. Veřejný cache oracle a přímý backend SpriteBatch pixel dokazují, že odmítnutý `AlphaBlend` ponechá aktivní předchozí `NonPremultiplied`. Pending stav se při každém odmítnutí i teardownu zahodí. |
 
 ## Klasifikace zbývajících položek po adaptaci
 

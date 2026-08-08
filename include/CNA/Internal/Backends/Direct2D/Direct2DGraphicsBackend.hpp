@@ -612,6 +612,8 @@ namespace CNA::Internal::Backends::Direct2D
         bool initialDeviceDefaultDepthStatePending_ = true;
         Direct2DBlendMode blendMode_ = Direct2DBlendMode::SourceOver;
         bool nonPremultipliedSource_ = false;
+        std::optional<Direct2DBlendMode> pendingBlendMode_;
+        bool pendingNonPremultipliedSource_ = false;
         bool diagnosticsEnabled_ = false;
         bool debugLayerEnabled_ = false;
         bool usingWarp_ = false;
