@@ -1679,10 +1679,20 @@ protected:
         // DebugSimulateContextLoss() call is expected to fire all three events exactly once each,
         // in order.
         {
-            std::vector<std::string> eventOrder;
-            device.DeviceLost += [&](System::Object*, const System::EventArgs&) { eventOrder.emplace_back("Lost"); };
-            device.DeviceResetting += [&](System::Object*, const System::EventArgs&) { eventOrder.emplace_back("Resetting"); };
-            device.DeviceReset += [&](System::Object*, const System::EventArgs&) { eventOrder.emplace_back("Reset"); };
+            // D2D-134: callbacks remain subscribed until GraphicsDevice destruction. Their state
+            // is therefore a test-object member declared before manager_, so manager_/device and
+            // its callbacks are destroyed first; a later D2D-63 recovery cannot capture a dead
+            // block-local vector by reference.
+            deviceEventOrder_.clear();
+            device.DeviceLost += [this](System::Object*, const System::EventArgs&) {
+                deviceEventOrder_.emplace_back("Lost");
+            };
+            device.DeviceResetting += [this](System::Object*, const System::EventArgs&) {
+                deviceEventOrder_.emplace_back("Resetting");
+            };
+            device.DeviceReset += [this](System::Object*, const System::EventArgs&) {
+                deviceEventOrder_.emplace_back("Reset");
+            };
 
             const bool statusStartedNormal =
                 device.getGraphicsDeviceStatusProperty() == GraphicsDeviceStatus::Normal;
@@ -1691,8 +1701,9 @@ protected:
 
             direct2dBackend.DebugSimulateContextLoss();
 
-            const bool orderCorrect = eventOrder.size() == 3 &&
-                eventOrder[0] == "Lost" && eventOrder[1] == "Resetting" && eventOrder[2] == "Reset";
+            const bool orderCorrect = deviceEventOrder_.size() == 3 &&
+                deviceEventOrder_[0] == "Lost" && deviceEventOrder_[1] == "Resetting" &&
+                deviceEventOrder_[2] == "Reset";
             std::printf("[%s] Direct2D fires DeviceLost/DeviceResetting/DeviceReset exactly once each, in order\n",
                         orderCorrect ? "PASS" : "FAIL");
             passed = passed && orderCorrect;
@@ -2189,6 +2200,7 @@ protected:
     }
 
 private:
+    std::vector<std::string> deviceEventOrder_;
     std::unique_ptr<GraphicsDeviceManager> manager_;
     std::unique_ptr<SpriteBatch> sprites_;
     std::unique_ptr<Texture2D> white_;
