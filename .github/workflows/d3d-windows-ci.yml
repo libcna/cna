@@ -8,7 +8,7 @@
 # translation layers. This job builds with native MSVC (a completely different compiler) and runs
 # the backend's off-screen smoke/common CTest suites directly against real Windows D3D11/D3D12
 # runtime DLLs (no Wine involved at all). The Direct2D leg additionally runs the public 2D parity
-# executable with ColorMatrix/Premultiply and BOUNDED_SOURCE_COPY/PLUS enabled; it is a native-runtime
+# executable with ColorMatrix/Premultiply and bounded-copy/Porter-Duff composites enabled; it is a native-runtime
 # regression gate, not a claim of physical-display, DPI, or driver-parity coverage. The D3D legs
 # also recompile every checked-in HLSL shader against a real D3DCOMPILER_47.dll.
 #

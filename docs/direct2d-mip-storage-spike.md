@@ -1,48 +1,37 @@
-# Direct2D mip storage spike
+# Direct2D mip storage outcome
 
-This spike defines the 2D-only storage model for the follow-up mip work. It intentionally does
-not introduce a D3D11 texture, shader resource view, or D3D11 sampler: Direct2D remains the only
-application drawing API.
+This document records the final outcome of the earlier storage spike. Direct2D remains the only
+application drawing API; no D3D11 texture, shader-resource view, sampler, or hidden 3D pass was
+introduced.
 
-## Proven level-0 path
+## Ordinary Texture2D: accepted
 
-`Direct2D_2DParity` already renders into a level-0 `RenderTarget2D`, unbinds it, samples it through
-`SpriteBatch`, and reads it through the normal public CPU-readback route. Native Direct2D uses
-`CopyFromRenderTarget`; WineD3D returns `E_NOTIMPL` there but implements `CopyFromBitmap`, so the
-backend falls back to that current-target bitmap route before mapping the CPU-readable bitmap. That
-makes the existing bitmap/target/readback lifetime a suitable level-0 foundation; mips must extend
-it rather than replace it.
+`Direct2DTextureBackend` stores level zero plus independently authored lower mip levels. Every
+initialized level has an `ID2D1Bitmap1` and an RGBA shadow. `Texture2D::SetData(level, ...)` creates
+or replaces exactly that level after validating its expected dimensions. Recovery reconstructs
+all initialized levels from the matching shadows.
 
-## Chosen storage model
+SpriteBatch computes a continuous LOD from source size, destination size, rotation, batch
+transform, and presentation scale. Point-mip filters choose an initialized authored level;
+mip-linear families blend the two bracketing initialized levels. An incomplete chain falls back
+toward level zero. Unit tests cover NPOT coordinate mapping and transform mathematics, while the
+Wine pixel gate covers authored levels 0/1/2, tint, non-premultiplied sampling, recovery, and an
+exact fractional mip-linear blend.
 
-`Direct2DTextureBackend` owns a vector indexed by mip level. Each entry contains the level's
-dimensions, `ID2D1Bitmap1`, and the RGBA shadow used to restore an ordinary `Texture2D`. Level zero
-continues to be the primary bitmap. `Texture2D::SetData(level, ...)` already passes an exact level
-dimension to `ITextureBackend::UpdatePixelsLevel`, so the Direct2D implementation can allocate or
-replace precisely that one bitmap without changing the public API.
+## RenderTarget2D generated mips: rejected
 
-For a mipmapped `RenderTarget2D`, the backend owns a separate target-capable
-`ID2D1Bitmap1` for every level. Drawing binds only level zero. On unbind, Direct2D will draw each
-level into the next smaller target bitmap with its linear interpolation mode; the previous level is
-only an image source while the next level is the active target. `GetData(level, ...)` selects the
-requested level, temporarily binds it, then uses the same CPU-readable-bitmap copy and BGRA-to-RGBA
-conversion as level-zero readback.
+The spike originally proposed one target-capable `ID2D1Bitmap1` per level and a Direct2D linear
+downsample on unbind. The D2D-78 7x5 NPOT oracle disproved that proposal: successive bilinear draws
+aliased spatially and the final 1x1 level omitted entire source quadrants. That is not an acceptable
+generated-mip contract.
 
-## Sampling and lifecycle decisions
+The production backend therefore supports only RenderTarget2D level zero. Creation with
+`mipMap=true` fails before native allocation, level values other than zero fail deterministically,
+and all generated-mip storage/dirty-state code has been removed. Applications that require
+mipmapped render targets must use a 3D backend such as D3D11. This deliberate rejection closes the
+supported-path defect without pretending nearest-level sampling is mip-linear or retaining an
+unreachable flawed algorithm.
 
-- Direct2D does not select a mip level implicitly for `DrawBitmap`. SpriteBatch therefore selects
-  the nearest initialized Texture2D level, or the generated RenderTarget2D level, from the
-  source-to-destination minification ratio; magnification, and Texture2D minification with no
-  initialized lower level, select level zero. Point/linear filtering and Clamp/Wrap/Mirror then
-  apply to that selected bitmap.
-- A recovered ordinary `Texture2D` rebuilds every allocated level from its matching CPU shadow.
-  A recovered `RenderTarget2D` recreates every target bitmap as transparent, exactly as its current
-  level-zero recovery contract does; pre-loss rendered content and generated mips are invalid.
-- Non-mip textures and render targets retain exactly one bitmap, so D2D-11/D2D-12 cannot regress
-  current level-zero sampling, readback, clipping, or recovery behavior.
-- The same image-brush/effect path used for decorated render-target sprites will consume the
-  selected per-level `ID2D1Bitmap1`; it remains a Direct2D effect graph, never a D3D11 compositor.
-
-`Direct2D_2DParity` covers level 0/1/2 RenderTarget2D sampling after unbind and exact `GetData` of
-generated lower levels. The `CopyFromBitmap` fallback keeps those readback checks active under
-WineD3D too.
+Level-zero rendering, sampling after unbind, `SetData`, `GetData`, recovery-to-transparent, and
+`CopyFromRenderTarget`/Wine `CopyFromBitmap` readback remain fully exercised by the Direct2D parity
+and lifetime gates.

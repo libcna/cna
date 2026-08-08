@@ -1,114 +1,125 @@
 # Direct2D 1.1 backend
 
-`CNA_GRAPHICS_BACKEND=DIRECT2D` selects CNA's Windows-only, hardware-accelerated **2D** backend.
-It uses an `ID2D1DeviceContext` for all application drawing. A BGRA-capable D3D11 device and a
-DXGI flip-model swap chain exist only to host that Direct2D context and present the window; they
-do not expose a D3D11 draw pipeline to the game.
+`CNA_GRAPHICS_BACKEND=DIRECT2D` is CNA's Windows-only, SpriteBatch-oriented 2D backend. It is
+graphics-backend identity 39 and never falls back to another backend. CMake rejects the selection
+deterministically on non-Windows targets.
 
-Use `CNA_GRAPHICS_BACKEND=D3D11` when an application needs 3D rendering. Direct2D intentionally
-does not grow a parallel 3D implementation.
+Application drawing is issued through `ID2D1DeviceContext`. A BGRA-capable D3D11 device and a DXGI
+1.2 flip-sequential swap chain exist only to create the Direct2D device/surfaces and present an
+HWND. They are not an application-visible D3D11 renderer. The backend does not use DirectWrite,
+WIC, SDL_Renderer, or a hidden 3D/compositing pass. Use `CNA_GRAPHICS_BACKEND=D3D11` for 3D.
 
-## Current 2D surface
+## Supported 2D contract
 
-- `Texture2D`, including explicitly uploaded mip levels, SpriteBatch drawing, point/linear/native
-  Direct2D anisotropic filtering and normal 2D source rectangles. Minification selects the nearest
-  initialized mip from the complete sprite/batch/presentation transform; an uninitialized lower
-  level safely falls back to level zero. Mixed min/mag `TextureFilter` values select the requested
-  spatial filter for the actual direction. `TextureFilter` values whose mip component is Linear
-  (`Linear`, `PointMipLinear`, `MinLinearMagPointMipLinear`, `MinPointMagLinearMipLinear`)
-  independently sample and linearly blend the two mip levels bracketing the fractional LOD (a
-  CPU-side blend, since the backend stores independent Direct2D bitmaps rather than a native
-  mip-chain resource) when both bracketing levels are actually initialized; an incomplete mip
-  chain still falls back to the nearest available level. `RenderTarget2D` mip-linear interpolation
-  is not yet implemented (its mips are GPU-only, with no CPU-side pixel data to blend) and still
-  selects the nearest level.
-- `RenderTarget2D` rendering, sampling after unbind, and CPU readback. Native Direct2D uses
-  `CopyFromRenderTarget`; if a runtime exposes the target bitmap but returns `E_NOTIMPL` there,
-  the backend uses `CopyFromBitmap` into the same CPU-readable Direct2D bitmap. GPU-only
-  tint/flip/Wrap/Mirror decoration applies when a render target is a SpriteBatch source. A target
-  created with `mipMap=true` owns target-capable Direct2D bitmaps down to 1x1; lower levels are
-  generated GPU-only on unbind and can be sampled or read through `GetData(level, ...)`.
-  `SetData(level, ...)` updates the named GPU bitmap as well; partial writes preserve neighboring
-  GPU pixels by readback and never leave a stale RenderTarget2D CPU shadow.
-- Source rectangles may extend beyond a 2D image. `SamplerState` controls those coordinates just
-  as in EasyGL: `Clamp` is clamp-to-edge, while `Wrap` and `Mirror` repeat or reflect. The
-  shared image-brush path compensates for Direct2D's clipped negative source origin, so it has the
-  same Point result in both axes (including FlipH/FlipV) and the same tested linear
-  Clamp/Wrap/Mirror result in both axes for ordinary textures and render targets.
-- The standard `Opaque`, `AlphaBlend`, `NonPremultiplied`, and `Additive` SpriteBatch blend modes,
-  plus symmetric Add factor tuples that exactly match Direct2D's DestinationOver, Source/Destination
-  In/Out/Atop and Xor Porter-Duff modes. Image sprites use Direct2D's explicit composite modes,
-  rather than treating the presentation D3D11 device as an application compositing pass. Sprite
-  `Color` modulates RGBA, including `Color.A`. `Additive` is `BlendState`'s `SourceAlpha/One`, not
-  Direct2D's unconditional `PLUS` (`One/One`): since Direct2D has no general blend-factor API, an
-  ordinary `Texture2D` source under `Additive` always goes through a CPU pixel pass that folds the
-  source's own resulting alpha into itself (squaring alpha, premultiplying RGB by it) before
-  `PLUS`'s implicit `*1` reproduces the real factor exactly. A render target source under
-  `Additive` has no CPU shadow to fold and remains on the unmodified `PLUS` path (a tracked,
-  native-Windows-gated limitation); every other blend mode's render targets remain GPU image
-  sources rather than being copied through CPU memory. A decorated Porter-Duff source is
-  materialized in a Direct2D command list before the same image composite mode is applied. A
-  transformed rectangle geometry layer bounds every non-source-over image composite to the
-  rasterized sprite quad, preventing Direct2D's transparent extension to the current clip from
-  changing unrelated destination pixels.
-- Scissor enable/rectangle and a 2D viewport transform+clip. SpriteBatch coordinates are local to
-  the viewport. The scene is rendered into a logical Direct2D target, then `Present` composites it
-  into the physical swap-chain bitmap using the selected presentation transform. Consequently
-  `GetBackBufferData` remains exact in Letterbox, Overscan, Stretch, NativeBackBuffer and
-  FixedHeightDynamicWidth instead of sampling presentation-scaled physical pixels.
-- Device recovery for registered 2D resources: ordinary textures are rebuilt from their RGBA CPU
-  shadow; render targets are reallocated as transparent, so their former contents are invalid.
-- Render targets and sampled textures are device-owned. Public bind calls, the concrete Direct2D
-  entry points, and SpriteBatch reject resources from a different `GraphicsDevice` before changing
-  native state; disposed targets are likewise rejected. Source/readback rectangle endpoint checks
-  use widened arithmetic, including deterministic extreme-coordinate regression coverage.
+- The only texture, render-target, and backbuffer format is XNA `SurfaceFormat::Color`. Public RGBA
+  bytes are converted byte-exactly to Direct2D's native `DXGI_FORMAT_B8G8R8A8_UNORM` storage and
+  back on readback. Odd widths, padded row pitches, asymmetric RGB channels, nontrivial alpha,
+  repeated updates, and short-pitch rejection have independent tests.
+- `Texture2D` supports level zero and explicitly authored mip levels. `SetData`, `GetData`, device
+  recovery, and SpriteBatch sampling use the selected authored level. Mip-linear filter families
+  interpolate between two initialized authored levels; an incomplete chain falls back toward the
+  nearest initialized level instead of sampling undefined data.
+- `RenderTarget2D` supports one color target at level zero, rendering, full/partial readback,
+  level-zero upload, sampling after unbind, all three `RenderTargetUsage` values, and transparent
+  reallocation after recovery. Mipmapped render targets are deliberately unsupported and fail at
+  construction. The former generated-mip path was removed because its NPOT downsample omitted
+  source quadrants (D2D-78).
+- SpriteBatch supports crop, origin, positive or negative source rectangles, horizontal/vertical
+  flips, rotation, nonuniform scale, batch transforms, viewport transforms, scissor clipping,
+  `Clamp`/`Wrap`/`Mirror`, and all nine `TextureFilter` values within the authored-Texture2D
+  contract. Unknown filter, address, presentation, or `SpriteEffects` values and non-finite
+  transforms fail before native state changes.
+- `Opaque`, `AlphaBlend`, and `NonPremultiplied` are supported. Exact symmetric Porter-Duff tuples
+  map to Direct2D image-composite modes. Blend tuples without an exact Direct2D representation,
+  channel masks, coverage masks, and non-white blend factors are rejected. In particular,
+  `BlendState::Additive` is XNA `SourceAlpha/One`; it is not Direct2D `One/One`. Because the backend
+  cannot implement that contract for every source type, `AdditiveBlending` is reported false and
+  Additive is rejected consistently rather than approximated.
+- A render target used as a SpriteBatch source stays GPU-resident. Native Direct2D built-in
+  `ColorMatrix`/`Premultiply` effects provide supported tint/straight-alpha decoration when the
+  runtime exposes them. A runtime that reports the effects unregistered receives a named
+  `NotSupportedException` for that exact decorated path; unexpected or device-loss HRESULTs are
+  never converted into a compatibility skip.
+- Sampling the currently bound render target is rejected as a read/write alias. `Present` while a
+  render target remains bound is also rejected; callers must unbind explicitly. `SetData` during
+  active drawing commits outstanding commands first, so an Immediate-mode draw keeps the old
+  bitmap snapshot and the next draw observes the successful update.
+- The logical framebuffer implements Letterbox, Overscan, Stretch, NativeBackBuffer, and
+  FixedHeightDynamicWidth. Backbuffer readback remains in logical coordinates. Empty-frame
+  `Present` still observes an SDL client resize. Final presentation uses linear Direct2D
+  interpolation.
+- CNA's 2D coordinate domain is physical client pixels. The Direct2D context and every bitmap are
+  forced to 96 DPI so Direct2D DIPs equal CNA pixels. SDL3's Win32 HWND property supplies the
+  native target. Deterministic conversion/resize tests run under Wine; physical multi-monitor DPI
+  and desktop-capture validation remain an external Windows gate.
+- `SpriteSortMode::Immediate` issues each sprite during `Draw`. Present interval zero calls the
+  flip-model swap chain with `Present(0, 0)`; CNA does not advertise a tearing capability or add
+  `DXGI_PRESENT_ALLOW_TEARING`. Intervals one and two use the corresponding synchronized interval.
+- Registered ordinary textures recover from their RGBA shadows. Render targets are recreated
+  transparent. Device loss is classified consistently across Direct2D, D3D11, and DXGI HRESULTs;
+  public lost/resetting/reset events fire once in order. Unregistered stale resources fail instead
+  of being used on a new device generation.
 
-The routine test trio is `Direct2D_Smoke`, `Direct2D_2DParity`, and `Direct2D_Lifetime`. The
-parity test validates partial and full RT readback plus mip readback under Wine through the
-`CopyFromBitmap` fallback; the lifetime smoke repeats target switches, readback, recovery and
-resize across multiple frames. A Linux cross-build can use the default
-`-DCNA_DIRECT2D_TEST_RUNTIME=WINE`, which calls `scripts/run-wine-direct2d.sh` and defaults to
-Wine's normal prefix (or `CNA_DIRECT2D_WINEPREFIX`), rather than borrowing D3D11's potentially
-Direct2D-incomplete prefix. It can alternatively use the opt-in
-`-DCNA_DIRECT2D_TEST_RUNTIME=PROTON`; the latter calls `scripts/run-proton-direct2d.sh`, detects
-Steam's Proton Experimental installation (including Debian's `~/.steam/debian-installation`), and
-uses a dedicated compat-data directory. WineD3D and Proton's Wine Direct2D do not register the
-built-in `ColorMatrix`/`Premultiply` effects and ignore `PLUS`/`BOUNDED_SOURCE_COPY` image composite modes,
-so only those decorated and Additive/Opaque pixel probes remain native-Windows branches.
+## Capability boundary
 
-The manual `Windows graphics CI` workflow runs the native MSVC Direct2D suite with no compatibility
-skips. It enables both D3D11 and Direct2D debug layers, records Windows/runtime DLL and adapter-driver
-versions, captures `ReportLiveDeviceObjects`, transient-resource high-water and lifetime timing, and
-runs a second lifetime pass with WARP forced. The resulting `direct2d-native-debug-*` artifact is the
-audit record. The same modes are available locally through `CNA_DIRECT2D_DEBUG_LAYER=1`,
-`CNA_DIRECT2D_DIAGNOSTICS=1`, and `CNA_DIRECT2D_FORCE_WARP=1`.
+The capability query is an exhaustive switch over all 13 current `GraphicsCapability` values:
 
-## Explicit limits
+| Capability | Direct2D |
+|---|---:|
+| `ThreeD` | false |
+| `DepthStencilBuffer` | false |
+| `MultiSampleAntiAliasing` | false |
+| `MultipleRenderTargets` | false |
+| `AnisotropicFiltering` | true |
+| `WireFrame` | false |
+| `OcclusionQuery` | false |
+| `CustomEffects` | false |
+| `Texture3D` | false |
+| `MultiStreamVertexInput` | false |
+| `Instancing` | false |
+| `StencilBuffer` | false |
+| `AdditiveBlending` | false |
 
-`GraphicsDevice::SupportsCapability()` returns `true` for `AnisotropicFiltering` and `false` for
-`ThreeD`, `DepthStencilBuffer`, `MultiSampleAntiAliasing`, `MultipleRenderTargets`, `WireFrame`,
-`OcclusionQuery`, `CustomEffects`, and `Texture3D`. Color-write masks, coverage masks, blend
-factor/equation tuples without an exact Direct2D Porter-Duff equivalent,
-`GraphicsDevice.BlendFactor`, and `DepthStencilState.StencilEnable` are rejected with named
-exceptions rather than silently ignored. `DepthStencilState.DepthBufferEnable`/`WriteEnable`/
-`Function` are accepted but always inert: Direct2D never allocates a depth buffer, so unlike
-stencil there is no observable behavior to silently get wrong, and `GraphicsDevice`'s constructor
-applies `DepthStencilState.Default` (`DepthBufferEnable=true`) unconditionally before any game
-code runs. `RasterizerState.FillMode.WireFrame` and a nonzero `DepthBias`/`SlopeScaleDepthBias`
-are likewise rejected; `CullMode` is accepted regardless of value, since Direct2D's SpriteBatch
-never receives user-supplied triangle winding to cull (every draw is a fixed, internally
-generated quad) and the constructor also unconditionally applies
-`RasterizerState.CullCounterClockwise`.
+The fixed depth format is `DepthFormat::None`; no real depth or stencil buffer exists. A
+multisample request other than the non-multisampled `0`/`1` convention is rejected. Multiple render
+targets, vertex/index buffers, ordinary/indexed/instanced 3D draws, cube/volume textures and
+targets, queries, wireframe, depth bias, custom effects, and 3D clear/state operations are outside
+this backend. The policy-aware 3D entry points throw by default and return only inert safe handles
+when `Unsupported3DGraphicsCallBehavior::WarnAndStub` was explicitly selected.
 
-Accordingly, Direct2D rejects 3D vertex/index-buffer creation and draw calls, stencil testing,
-multiple render targets, 3D/cube textures, occlusion queries, custom `Effect` rendering,
-wireframe, depth bias, general blend equations/factors, write masks, and 3D MSAA.
-Those are named errors rather than approximate D3D11 fallback passes. This keeps the backend's
-behavior honest and prevents a D3D11 presentation detail from being mistaken for 3D support.
+## Validation gates
 
-`MultiSampleCount` is consequently always `0` for both the swap chain and `RenderTarget2D`.
-Direct2D's per-primitive antialiasing is not a sample-count surface, and DXGI multisampling would
-need a D3D multisampled backing surface plus a resolve path. The Direct2D backend does not create
-that pipeline; applications that require MSAA use `CNA_GRAPHICS_BACKEND=D3D11`.
+The Direct2D CTest label contains four sequential tests:
 
-The remaining 2D compatibility work is tracked in [`plan_direct2d.md`](../plan_direct2d.md).
+- `Direct2D_Smoke`: HWND, D3D11 staging readback, and point SpriteBatch draw.
+- `Direct2D_2DParity`: public pixel, transform, update, render-target, presentation, recovery,
+  capability, and deterministic-rejection oracles.
+- `Direct2D_Lifetime`: repeated target switching, readback, recovery, resize, and resource churn.
+- `Direct2D_Unit`: the `Direct2D*` GoogleTest subset from `CnaTests`, run through the dedicated
+  Direct2D Wine/Proton runner and prefix.
+
+A bounded cross-build and run uses:
+
+```bash
+cmake --build cmake-build-direct2d-integration --parallel 2 \
+  --target CnaTests cna_test_direct2d_smoke cna_test_direct2d_2d_parity \
+  cna_test_direct2d_lifetime
+xvfb-run -a ctest --test-dir cmake-build-direct2d-integration -L Direct2D -V
+```
+
+`scripts/verify-direct2d-parallel-jobs.sh` rejects missing, nonnumeric, or greater-than-two build
+parallelism in the Direct2D workflow/helpers. `CNA_ENABLE_NET=OFF` excludes only tests belonging to
+the omitted Net and GamerServices modules; it retains the Direct2D unit subset.
+
+Wine 10.0 is useful evidence for the supported portable/native-API surface but is not physical
+Windows. WineD3D does not register Direct2D's built-in ColorMatrix effect and does not implement
+the bounded-copy image composite used by the Opaque pixel oracle. The compatibility run therefore
+sets only the narrow `CNA_DIRECT2D_SKIP_RENDER_TARGET_DECORATION` and
+`CNA_DIRECT2D_SKIP_ADVANCED_BLEND` branches. Those skips do not claim native coverage.
+
+The manual Windows graphics workflow is prepared to run MSVC with the Direct2D/D3D11 debug layers,
+hardware and WARP lifetime passes, diagnostics, and live-object output. Native built-in-effect and
+composite pixels, physical display/DPI/presentation capture, adapter-specific behavior, and
+debug-layer/live-object acceptance remain external evidence limits until a real x64 Windows run is
+recorded. See [`plan_direct2d.md`](../plan_direct2d.md) for that evidence backlog and nonblocking
+performance/process work.
