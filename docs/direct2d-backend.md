@@ -49,10 +49,12 @@ WIC, SDL_Renderer, or a hidden 3D/compositing pass. Use `CNA_GRAPHICS_BACKEND=D3
   FixedHeightDynamicWidth. Backbuffer readback remains in logical coordinates. Empty-frame
   `Present` still observes an SDL client resize. Final presentation uses linear Direct2D
   interpolation.
-- CNA's 2D coordinate domain is physical client pixels. The Direct2D context and every bitmap are
-  forced to 96 DPI so Direct2D DIPs equal CNA pixels. SDL3's Win32 HWND property supplies the
-  native target. Deterministic conversion/resize tests run under Wine; physical multi-monitor DPI
-  and desktop-capture validation remain an external Windows gate.
+- CNA sprite, viewport, and scissor coordinates are logical-framebuffer pixel units, not Windows
+  DIPs. The Direct2D context and every bitmap are forced to 96 DPI so one Direct2D unit equals one
+  logical target pixel. `NativeBackBuffer` is 1:1 with client pixels; the other presentation modes
+  map the logical framebuffer into the client-pixel swap chain. SDL3's Win32 HWND property supplies
+  the native target. Deterministic conversion/resize tests run under Wine; physical multi-monitor
+  DPI and desktop-capture validation remain an external Windows gate.
 - `SpriteSortMode::Immediate` issues each sprite during `Draw`. Present interval zero calls the
   flip-model swap chain with `Present(0, 0)`; CNA does not advertise a tearing capability or add
   `DXGI_PRESENT_ALLOW_TEARING`. Intervals one and two use the corresponding synchronized interval.
