@@ -33,38 +33,88 @@ namespace
                actual.width == expected.width && actual.height == expected.height;
     }
 
+    enum class MemorySurfaceFailurePoint
+    {
+        None,
+        AfterCreateCompatibleDC,
+        AfterCreateDIBSection,
+        AfterSelectObject,
+    };
+
+    struct MemorySurfaceLifetimeCounters
+    {
+        int dcCreated = 0;
+        int bitmapCreated = 0;
+        int bitmapSelected = 0;
+        int previousRestored = 0;
+        int bitmapDeleted = 0;
+        int dcDeleted = 0;
+    };
+
+    bool SameLifetimeCounters(const MemorySurfaceLifetimeCounters& actual,
+                              const MemorySurfaceLifetimeCounters& expected)
+    {
+        return actual.dcCreated == expected.dcCreated &&
+               actual.bitmapCreated == expected.bitmapCreated &&
+               actual.bitmapSelected == expected.bitmapSelected &&
+               actual.previousRestored == expected.previousRestored &&
+               actual.bitmapDeleted == expected.bitmapDeleted &&
+               actual.dcDeleted == expected.dcDeleted;
+    }
+
     class MemorySurface final
     {
     public:
-        MemorySurface(int width, int height) : width_(width), height_(height)
+        MemorySurface(int width, int height,
+                      MemorySurfaceLifetimeCounters* lifetimeCounters = nullptr,
+                      MemorySurfaceFailurePoint failurePoint = MemorySurfaceFailurePoint::None)
+            : width_(width), height_(height), lifetimeCounters_(lifetimeCounters)
         {
-            context_ = CreateCompatibleDC(nullptr);
-            if (context_ == nullptr)
-                throw std::runtime_error("CreateCompatibleDC failed");
+            try
+            {
+                context_ = CreateCompatibleDC(nullptr);
+                if (context_ == nullptr)
+                    throw std::runtime_error("CreateCompatibleDC failed");
+                if (lifetimeCounters_ != nullptr)
+                    ++lifetimeCounters_->dcCreated;
+                if (failurePoint == MemorySurfaceFailurePoint::AfterCreateCompatibleDC)
+                    throw std::runtime_error("injected failure after CreateCompatibleDC");
 
-            BITMAPINFO info{};
-            info.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-            info.bmiHeader.biWidth = width_;
-            info.bmiHeader.biHeight = -height_;
-            info.bmiHeader.biPlanes = 1;
-            info.bmiHeader.biBitCount = 32;
-            info.bmiHeader.biCompression = BI_RGB;
-            bitmap_ = CreateDIBSection(context_, &info, DIB_RGB_COLORS,
-                                       reinterpret_cast<void**>(&pixels_), nullptr, 0);
-            if (bitmap_ == nullptr || pixels_ == nullptr)
-                throw std::runtime_error("CreateDIBSection failed");
-            previous_ = SelectObject(context_, bitmap_);
-            if (previous_ == nullptr || previous_ == HGDI_ERROR)
-                throw std::runtime_error("SelectObject(DIBSection) failed");
+                BITMAPINFO info{};
+                info.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+                info.bmiHeader.biWidth = width_;
+                info.bmiHeader.biHeight = -height_;
+                info.bmiHeader.biPlanes = 1;
+                info.bmiHeader.biBitCount = 32;
+                info.bmiHeader.biCompression = BI_RGB;
+                bitmap_ = CreateDIBSection(context_, &info, DIB_RGB_COLORS,
+                                           reinterpret_cast<void**>(&pixels_), nullptr, 0);
+                if (bitmap_ != nullptr && lifetimeCounters_ != nullptr)
+                    ++lifetimeCounters_->bitmapCreated;
+                if (bitmap_ == nullptr || pixels_ == nullptr)
+                    throw std::runtime_error("CreateDIBSection failed");
+                if (failurePoint == MemorySurfaceFailurePoint::AfterCreateDIBSection)
+                    throw std::runtime_error("injected failure after CreateDIBSection");
+
+                previous_ = SelectObject(context_, bitmap_);
+                if (previous_ == nullptr || previous_ == HGDI_ERROR)
+                {
+                    previous_ = nullptr;
+                    throw std::runtime_error("SelectObject(DIBSection) failed");
+                }
+                if (lifetimeCounters_ != nullptr)
+                    ++lifetimeCounters_->bitmapSelected;
+                if (failurePoint == MemorySurfaceFailurePoint::AfterSelectObject)
+                    throw std::runtime_error("injected failure after SelectObject");
+            }
+            catch (...)
+            {
+                Release();
+                throw;
+            }
         }
 
-        ~MemorySurface()
-        {
-            if (context_ != nullptr && previous_ != nullptr && previous_ != HGDI_ERROR)
-                (void)SelectObject(context_, previous_);
-            if (bitmap_ != nullptr) (void)DeleteObject(bitmap_);
-            if (context_ != nullptr) (void)DeleteDC(context_);
-        }
+        ~MemorySurface() { Release(); }
 
         MemorySurface(const MemorySurface&) = delete;
         MemorySurface& operator=(const MemorySurface&) = delete;
@@ -98,6 +148,30 @@ namespace
         }
 
     private:
+        void Release() noexcept
+        {
+            if (context_ != nullptr && previous_ != nullptr && previous_ != HGDI_ERROR)
+            {
+                const HGDIOBJ restored = SelectObject(context_, previous_);
+                if (restored != nullptr && restored != HGDI_ERROR && lifetimeCounters_ != nullptr)
+                    ++lifetimeCounters_->previousRestored;
+                previous_ = nullptr;
+            }
+            if (bitmap_ != nullptr)
+            {
+                if (DeleteObject(bitmap_) != 0 && lifetimeCounters_ != nullptr)
+                    ++lifetimeCounters_->bitmapDeleted;
+                bitmap_ = nullptr;
+                pixels_ = nullptr;
+            }
+            if (context_ != nullptr)
+            {
+                if (DeleteDC(context_) != 0 && lifetimeCounters_ != nullptr)
+                    ++lifetimeCounters_->dcDeleted;
+                context_ = nullptr;
+            }
+        }
+
         [[nodiscard]] std::uint8_t* Pixel(int x, int y)
         {
             return pixels_ + (static_cast<std::size_t>(y) * width_ + x) * 4u;
@@ -113,6 +187,7 @@ namespace
         HBITMAP bitmap_ = nullptr;
         HGDIOBJ previous_ = nullptr;
         std::uint8_t* pixels_ = nullptr;
+        MemorySurfaceLifetimeCounters* lifetimeCounters_ = nullptr;
     };
 
     std::vector<std::uint8_t> FourColors()
@@ -133,11 +208,96 @@ namespace
             surface.IsRgb(surface.Width() - 1, surface.Height() - 1, 255, 255, 0);
         return Expect(ok, label);
     }
+
+    bool CheckMemorySurfaceLifetime()
+    {
+        bool ok = true;
+
+        using GetGuiResourcesFunction = DWORD (WINAPI*)(HANDLE, DWORD);
+        const HMODULE user32 = GetModuleHandleW(L"user32.dll");
+        const auto getGuiResources = user32 == nullptr
+            ? nullptr
+            : reinterpret_cast<GetGuiResourcesFunction>(
+                  GetProcAddress(user32, "GetGuiResources"));
+
+        DWORD baseline = 0;
+        bool resourceCounterReliable = false;
+        if (getGuiResources != nullptr)
+        {
+            {
+                MemorySurface warmup(2, 2);
+            }
+            const DWORD baselineAgain = getGuiResources(GetCurrentProcess(), 0u);
+            baseline = getGuiResources(GetCurrentProcess(), 0u);
+            DWORD liveCount = 0;
+            {
+                MemorySurface liveProbe(3, 3);
+                liveCount = getGuiResources(GetCurrentProcess(), 0u);
+            }
+            const DWORD afterProbe = getGuiResources(GetCurrentProcess(), 0u);
+            resourceCounterReliable = baseline != 0 && baseline == baselineAgain &&
+                                      liveCount >= baseline + 2u && afterProbe == baseline;
+        }
+
+        MemorySurfaceLifetimeCounters repeated{};
+        constexpr int repeatCount = 64;
+        for (int index = 0; index < repeatCount; ++index)
+        {
+            MemorySurface surface(3 + index % 3, 5 + index % 2, &repeated);
+        }
+        ok &= Expect(SameLifetimeCounters(
+                         repeated,
+                         {repeatCount, repeatCount, repeatCount,
+                          repeatCount, repeatCount, repeatCount}),
+                     "repeated memory surfaces restore selections and delete every bitmap/DC");
+
+        const auto expectInjectedCleanup = [&](MemorySurfaceFailurePoint failurePoint,
+                                               const MemorySurfaceLifetimeCounters& expected,
+                                               const char* label) {
+            MemorySurfaceLifetimeCounters actual{};
+            bool threw = false;
+            try
+            {
+                MemorySurface surface(3, 5, &actual, failurePoint);
+            }
+            catch (const std::runtime_error&)
+            {
+                threw = true;
+            }
+            return Expect(threw && SameLifetimeCounters(actual, expected), label);
+        };
+        ok &= expectInjectedCleanup(MemorySurfaceFailurePoint::AfterCreateCompatibleDC,
+                                    {1, 0, 0, 0, 0, 1},
+                                    "DC-only constructor failure deletes the compatible DC");
+        ok &= expectInjectedCleanup(MemorySurfaceFailurePoint::AfterCreateDIBSection,
+                                    {1, 1, 0, 0, 1, 1},
+                                    "DIB constructor failure deletes the bitmap and compatible DC");
+        ok &= expectInjectedCleanup(MemorySurfaceFailurePoint::AfterSelectObject,
+                                    {1, 1, 1, 1, 1, 1},
+                                    "selected-DIB failure restores and deletes every GDI handle");
+
+        if (resourceCounterReliable)
+        {
+            const DWORD afterFirst = getGuiResources(GetCurrentProcess(), 0u);
+            const DWORD afterSecond = getGuiResources(GetCurrentProcess(), 0u);
+            ok &= Expect(afterFirst == baseline && afterSecond == baseline,
+                         "GetGuiResources returns to baseline after repeated/failing surfaces");
+        }
+        else
+        {
+            std::printf("[SKIP] GetGuiResources did not expose a stable live DC/DIB delta; "
+                        "operation counters remain authoritative.\n");
+        }
+
+        return ok;
+    }
 }
 
 int main()
 {
     bool ok = true;
+
+    ok &= CheckMemorySurfaceLifetime();
 
     ok &= Expect(SameRect(CalculateGdiPresentationDestination(
                             CnaPresentationMode::NativeBackBuffer, 7, 9, 3, 5),

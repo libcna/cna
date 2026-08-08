@@ -387,7 +387,10 @@ minimize/restore round-trip, no-draw retained repaint, zero-line DIB failure dia
 retention and successful retry. `cna_test_gdi_presentation_oracle` uses a real memory DC/DIBSection
 to verify RGBA channel order, top-down rows, both filters and DIB paths, presentation geometry,
 bars/cropping, clipping, an exact non-zero-Y dirty band, and deterministic SDL/drawable coordinate
-conversion at 100%, 150%, and 200% pixel-density ratios. `cna_test_gdi_window_metrics` adds a live
+conversion at 100%, 150%, and 200% pixel-density ratios. Its adapted handle-lifetime checks restore
+the prior selected object, delete each bitmap/DC across repeated construction and injected failure
+checkpoints, and compare `GetGuiResources` before/after only when the API first demonstrates a
+stable live DC/DIB delta; adapted execution remains pending. `cna_test_gdi_window_metrics` adds a live
 SDL/Win32 client: it checks external-window input ownership, repeated odd resizes, all presentation
 mode round-trips and bars, drawable/client agreement, fullscreen entry/exit where the display
 session permits it, and retained pixels across minimize/restore. These automated checks do not

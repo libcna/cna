@@ -28,6 +28,10 @@
 - REMED-GFX-232 makes DX3's standalone stencil hook report false, consistent with its depth-only
   production path and `GraphicsCapability::StencilBuffer` answer; the focused DX3 capability
   regression now compares both paths directly, with adapted execution pending.
+- The GDI memory-DC oracle now exercises selection restoration and bitmap/DC deletion across 64
+  create/destroy cycles plus three injected constructor-failure checkpoints. It also checks
+  `GetGuiResources` return-to-baseline only after proving that API's live DC/DIB count is stable;
+  adapted execution remains pending and the executable/case inventory is unchanged.
 - REMED-BUILD-017 corrects the manual native-MSVC workflow and command inventory to build all
   **seventeen** correctness executables before running the **nineteen** registered GDI cases. The
   omitted targets were presentation-mode transaction, DC-release transaction, and texture

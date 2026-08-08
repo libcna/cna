@@ -701,6 +701,13 @@ means only the narrowed statement in this table, not overall release readiness.
 | REMED-GFX-232 | Align DX3's standalone stencil hook with its capability answer. | 🟨 | DX3 has a real depth-only surface and no stencil plane: `SupportsStencilBuffer()` returns false while `SupportsDepthStencil()` remains true, matching `SupportsCapability(StencilBuffer)`. The focused DX3 capability regression compares both production answers directly. Implementation/test are committed; adapted execution is pending. |
 | REMED-BUILD-017 | Reconcile native GDI build target inventory. | 🟨 | The manual MSVC workflow and documented native/Wine command lists cover all seventeen correctness executables before the nineteen registered cases run, including the three GDI-075/076/077 executables formerly omitted. Structural inspection is complete; the manual native workflow remains pending. |
 
+Test-only adaptation hardening extends the existing GDI-054 presentation oracle without adding an
+executable or registered case: its memory surface restores the prior selected object and deletes
+the bitmap/DC on normal destruction and every injected post-allocation failure path, repeats the
+cycle 64 times, and asserts `GetGuiResources` return-to-baseline only when a stable live DC/DIB
+delta proves that API reliable in the current Windows/Wine environment. Adapted execution remains
+pending.
+
 REMED-GFX-224 remains open exactly as recorded in `plan_skia.md`: it concerns EasyGL render-target
 `SetData`, not GDI's private Software-2D upload path, and this adaptation does not alter its status.
 
