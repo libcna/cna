@@ -1,5 +1,11 @@
 # GDI backend
 
+> **Adaptation status (2026-08-08):** the meaningful 34-commit `feature/gdi` history has been
+> replayed onto the current integration architecture. All MinGW/Wine pass results recorded below
+> are preserved historical feature-branch evidence; this adapted branch has not yet been built or
+> run. Its pending gates are the root-owned adapted MinGW/Wine validation, the manual native-MSVC
+> workflow, and the visible native-Windows lifecycle/DPI matrix.
+
 `CNA_GRAPHICS_BACKEND=GDI` selects CNA's Windows-only, 2D-only GDI presentation backend.
 
 It privately composes the CPU SpriteBatch/textures/render-target services shared with `SOFTWARE`,
@@ -7,9 +13,10 @@ then presents the main RGBA8 backbuffer into SDL's native Win32 `HWND` with GDI 
 (`SetDIBitsToDevice` for a 1:1 blit and `StretchDIBits` when scaling is needed). This is a real GDI
 display path; it does not create an SDL renderer, D3D device, OpenGL context or GPU swap chain.
 
-The focused automated correctness suite passes in the MinGW/Wine configuration documented below,
-but the native visible Windows lifecycle/DPI gate in `plan_gdi.md` is still open. Treat GDI as a
-compatibility backend under validation, not yet as a release baseline.
+The historical feature branch passed the focused MinGW/Wine configuration documented below. The
+adapted branch's corresponding run is still pending, and the native visible Windows lifecycle/DPI
+gate in `plan_gdi.md` remains open. Treat GDI as a compatibility backend under validation, not yet
+as a release baseline.
 
 ## Scope
 
@@ -258,16 +265,18 @@ including separate default, dirty and halftone configurations; run them with
 `ctest -L GDI --output-on-failure`.
 
 The GitHub Actions workflow `GDI Windows CI (MSVC)` is deliberately manual (`workflow_dispatch`).
-Its one Windows job builds only CNA plus these focused executables and runs the complete `GDI`
-CTest label with native MSVC. It is a compiler and hidden-window correctness gate; it does not
-replace the visible lifecycle/DPI checklist required by GDI-061.
+Its one Windows job builds only CNA plus all seventeen focused correctness executables and runs the
+nineteen-case `GDI` CTest label with native MSVC. REMED-BUILD-017 added the presentation-mode
+transaction, DC-release transaction, and texture-allocation executables that the explicit workflow
+list formerly omitted. This is a compiler and hidden-window correctness gate; it does not replace
+the visible lifecycle/DPI checklist required by GDI-061.
 
 GDI and the shared CPU sources live in one backend archive. CMake declares the real static-library
 cycle between that archive and `CNA`, so GNU/MinGW emits a portable repeated-archive link line
 without a third archive. The standalone SOFTWARE configuration declares its corresponding cycle
 centrally as well; its focused tests no longer depend on a GNU-only `--start-group` workaround.
-The local GCC and MinGW gates pass, but GDI-071 remains provisional until the first manual workflow
-run confirms this layout with native MSVC.
+The preserved feature-branch GCC and MinGW gates passed, but the adapted equivalents have not yet
+run. GDI-071 remains provisional until the manual workflow confirms this layout with native MSVC.
 
 Cross-built PE files are intentionally not registered as Linux CTest commands, so run the produced
 executables under a Wine setup with an available display:
@@ -287,6 +296,9 @@ build-gdi\cna_test_gdi_presentation_oracle.exe
 build-gdi\cna_test_gdi_window_metrics.exe
 build-gdi\cna_test_gdi_framebuffer_allocation.exe
 build-gdi\cna_test_gdi_msaa_contract.exe
+build-gdi\cna_test_gdi_presentation_mode_transaction.exe
+build-gdi\cna_test_gdi_dc_release_transaction.exe
+build-gdi\cna_test_gdi_texture_allocation.exe
 build-gdi\cna_bench_gdi_2d.exe --frames 4
 build-gdi\cna_demo_2d.exe
 
@@ -304,6 +316,9 @@ wine build-gdi/cna_test_gdi_presentation_oracle.exe
 wine build-gdi/cna_test_gdi_window_metrics.exe
 wine build-gdi/cna_test_gdi_framebuffer_allocation.exe
 wine build-gdi/cna_test_gdi_msaa_contract.exe
+wine build-gdi/cna_test_gdi_presentation_mode_transaction.exe
+wine build-gdi/cna_test_gdi_dc_release_transaction.exe
+wine build-gdi/cna_test_gdi_texture_allocation.exe
 wine build-gdi/cna_bench_gdi_2d.exe --frames 4
 wine build-gdi/cna_demo_2d.exe
 ```
@@ -386,6 +401,15 @@ high mask bits, crisp wireframe behavior, per-pixel stencil operations, zero-sam
 suppression, and all-active-sample gating after a matching or failing stencil comparison. It also
 proves that render targets remain single-sampled and disabling backbuffer MSAA releases the sample
 plane.
+
+`cna_test_gdi_presentation_mode_transaction` fault-injects an allocation-rejected valid mode
+change and proves dimensions, pixels, transforms, damage, and later presentation remain on the
+last committed state. `cna_test_gdi_dc_release_transaction` covers checked `ReleaseDC` success,
+repeated forced failure, exactly-once release attempts, retained damage/generation, retry, and the
+non-throwing fallback destructor. `cna_test_gdi_texture_allocation` covers the CPU texture planner,
+malformed/over-budget creation, the REMED-GFX-229 pitched upload contract, and retained pixels.
+Together these are the last three of the seventeen correctness executables that REMED-BUILD-017
+restored to the native workflow and manual command lists.
 
 `cna_bench_gdi_2d` is a short, manual benchmark (four measured frames by default) that reports
 CPU raster time and GDI `Present()` time separately for 800×600 and 1280×720 scenes. Always run

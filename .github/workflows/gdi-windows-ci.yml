@@ -69,6 +69,8 @@ jobs:
       - name: Build CNA and focused GDI test executables
         working-directory: cna_graphics
         run: |
+          # REMED-BUILD-017: build all 17 correctness executables before asking CTest to run its
+          # 19 registered cases (16 one-to-one cases plus 3 presentation-policy variants).
           cmake --build build --parallel 2 --target \
             CNA \
             cna_test_gdi_smoke \
@@ -84,7 +86,10 @@ jobs:
             cna_test_gdi_presentation_configuration \
             cna_test_gdi_window_metrics \
             cna_test_gdi_framebuffer_allocation \
-            cna_test_gdi_msaa_contract
+            cna_test_gdi_msaa_contract \
+            cna_test_gdi_presentation_mode_transaction \
+            cna_test_gdi_dc_release_transaction \
+            cna_test_gdi_texture_allocation
 
       - name: Run focused GDI CTest suite
         working-directory: cna_graphics

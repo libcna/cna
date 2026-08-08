@@ -1,5 +1,13 @@
 # Win32 GDI Graphics Backend — Audit and Remediation Plan
 
+> **Integration adaptation (2026-08-08):** the meaningful 34-commit `feature/gdi` history was
+> recreated on `adapt/gdi` from integration base
+> `677f4c59e066fc9a7ed79430d0fee5ffd69b531c`. The dated MinGW/Wine results below are historical
+> feature-branch evidence, not results for this adapted branch; its root-owned build/runtime pass is
+> still pending. REMED-GFX-229 and REMED-GFX-230 add focused odd-width pitched-upload regressions,
+> and REMED-BUILD-017 corrects native CI/docs to all seventeen correctness executables/nineteen
+> registered cases. Manual native MSVC plus visible Windows lifecycle/DPI gates remain open.
+
 > **Audit snapshot:** 2026-08-01, commit `56bd8961` (`feature/gdi`).
 >
 > **Follow-up re-audit:** 2026-08-03, commit `83194d58` (`feature/gdi`). A fresh MinGW-w64
@@ -176,10 +184,12 @@ ResolveColor -> GdiPresentation planner -> scoped GetDC
 [`cmake/Tests/GdiTests.cmake`](cmake/Tests/GdiTests.cmake) builds smoke, CPU 2D regression,
 ColorMatrix integration, public-stencil, complete public-API, applied-state, unsupported-feature,
 dirty-damage, repaint/failure, presentation-oracle, presentation-configuration, window-metrics,
-framebuffer-allocation, MSAA-contract, and benchmark executables. It registers sixteen cases
-(thirteen focused cases plus three environment configurations) as CTests only for a native Windows
-build. The manual `gdi-windows-ci.yml` workflow configures the backend with MSVC, builds only CNA
-plus those focused tests, and runs the `GDI` CTest label.
+framebuffer-allocation, MSAA-contract, presentation-mode transaction, DC-release transaction,
+texture-allocation, and benchmark executables. That is seventeen correctness executables plus one
+non-CTest benchmark. It registers nineteen cases (sixteen one-to-one cases plus three environment
+configurations) as CTests only for a native Windows build. The manual `gdi-windows-ci.yml` workflow
+configures the backend with MSVC, builds only CNA plus all seventeen focused tests, and runs the
+`GDI` CTest label.
 
 ---
 
@@ -218,9 +228,10 @@ These passes prove CPU raster/readback behavior and that GDI calls do not fail i
 Wine window. They do **not** prove channel order, orientation, scaling, clipping, damage, black bars,
 or repaint behavior in a visible native Windows client.
 
-### Current Phase G5/G6 validation
+### Historical Phase G5/G6 validation
 
-The working tree builds all fourteen correctness executables together with MinGW-w64/Ninja at `-j2`.
+At the 2026-08-01 milestone, the feature working tree built all fourteen then-current correctness
+executables together with MinGW-w64/Ninja at `-j2`.
 Under Wine, smoke, 2D regression, ColorMatrix, public stencil, the complete public API matrix, dirty
 damage, unsupported-feature rejection, framebuffer allocation, the 19-check MSAA contract,
 repaint/failure, and the memory-DC presentation oracle all pass. The window-metrics integration
@@ -230,8 +241,9 @@ presentation configuration also passes in its default, dirty, and halftone envir
 pixels on a deterministic selected bitmap. It still does not replace the visible native Windows
 lifecycle/DPI gate.
 
-The 2026-08-03 follow-up independently repeated the focused Release configure/build and the complete
-sixteen-case Wine matrix under `xvfb-run`, again at `-j2`; all cases pass. This is strong evidence for
+The first 2026-08-03 follow-up independently repeated the focused Release configure/build and the
+then-complete sixteen-case Wine matrix under `xvfb-run`, again at `-j2`; all cases passed. This is
+strong evidence for
 the paths they exercise, but the suite has no fault-injected valid-mode allocation rollback, no
 ordinary `Texture2D` allocation-boundary matrix, and no observable `ReleaseDC` result. Those omissions
 correspond directly to F9 through F11 below rather than weakening unrelated passing assertions.
@@ -346,9 +358,11 @@ GDI behavior, and the registered `GDI` label unobserved.
 
 **Resolution:** a separate owner-approved, `workflow_dispatch`-only workflow uses one
 `windows-latest` MSVC/Ninja job. It checks out only the required sibling dependency, caches the
-vendored SDL build, builds CNA plus the fourteen focused executables at two-way parallelism, runs all
-sixteen native `GDI` CTest cases, and uploads CTest/CMake diagnostics on failure. It remains a
-compiler/hidden-window gate and explicitly does not close the visible GDI-061 gate.
+vendored SDL build, builds CNA plus all seventeen focused correctness executables at two-way
+parallelism, runs the nineteen native `GDI` CTest cases, and uploads CTest/CMake diagnostics on
+failure. REMED-BUILD-017 supplied the three follow-up targets omitted from the original explicit
+list. It remains a compiler/hidden-window gate and explicitly does not close the visible GDI-061
+gate.
 
 ### F7 — public configuration and rejection semantics are not consistently honest (P1,
 resolved by GDI-058 and GDI-059)
@@ -521,7 +535,7 @@ to exactly `width*height*4` instead of retaining the excess, and translate
 `std::bad_alloc`/`std::length_error` to `System::OutOfMemoryException`. `GdiGraphicsBackend::
 CreateTexture` forwards directly into this checked constructor, so the direct backend entry and the
 GDI/Software CPU-texture boundary are the same call. This deliberately stops at that boundary: the
-shared `Texture2D.cpp` public constructors (identical across all fourteen CNA backends) still
+shared `Texture2D.cpp` public constructors (identical across all configured CNA backends) still
 allocate their own first `width*height*4` vector before ever reaching it, so an over-budget public
 request still pays for one wasted transient allocation before GDI/Software's own rejection is
 reached -- eliminating that is a cross-backend change this GDI-only task deliberately leaves open
@@ -586,6 +600,12 @@ shared/eleven-total file count and nineteen-case CTest registration (GDI-076's
 record the 2026-08-03 clean MinGW-w64 Release `-j2` reconfigure/build plus the full nineteen-case
 Wine/Xvfb rerun with `CNA_GDI_DWM_FLUSH=0`.
 
+**REMED-BUILD-017 adaptation correction:** registration was complete, but the manual native-MSVC
+workflow and the native/Wine command inventory still stopped at the pre-follow-up fourteen-target
+list. They now include all seventeen correctness executables, specifically adding the
+presentation-mode transaction, DC-release transaction, and texture-allocation targets before the
+nineteen-case CTest run. This edit is structural only; no adapted CI/runtime result is claimed.
+
 ---
 
 ## 5. Reclassification of the existing roadmap
@@ -597,7 +617,7 @@ means only the narrowed statement in this table, not overall release readiness.
 |---|---:|---|
 | GDI-001 | ✅ | Windows selection, factory, SDL3/`gdi32` linkage, and MinGW build integration work. |
 | GDI-002 | ✅ | A real GDI display path exists, using `SetDIBitsToDevice` at 1:1 and `StretchDIBits` when scaled. |
-| GDI-003 | ✅ | Focused Release cross-build passed; all fourteen current GDI correctness executables pass under Wine, with the configuration executable exercised in all three variants. |
+| GDI-003 | ✅ | Historical feature-branch focused Release evidence ultimately covered all seventeen GDI correctness executables/nineteen runs under Wine, including all three configuration variants. Adapted execution is pending. |
 | GDI-004 | 🟨 | Native visible demo/lifecycle inspection is still required and its checklist must be expanded. |
 | GDI-005 | ✅ | CPU 2D raster/readback regression is substantial; it is not a GDI-output regression. |
 | GDI-006 | 🟨 | Build/run and corrected stencil/dirty/test documentation exist; release and native-performance claims still require GDI-061/062. |
@@ -635,7 +655,7 @@ means only the narrowed statement in this table, not overall release readiness.
 |---|---|---:|---|
 | GDI-055 | Add high-level GDI API coverage. | ✅ | `gdi_public_api_test` drives `GraphicsDevice`, `PresentationParameters`, `Texture2D` upload/readback, `SpriteBatch`, `RenderTarget2D` binding/preservation/sampling, viewport/scissor, 4x and rejected 2x MSAA reset, backbuffer readback, resize, and the complete capability matrix. `gdi_public_stencil_test` covers stencil clear/use on the backbuffer and a depthless target. Low-level raster details remain in `gdi_2d_regression_test`; every advertised feature now has a public-path assertion. |
 | GDI-056 | Register meaningful configuration variants. | ✅ | Native CTest has distinct default, `CNA_GDI_DIRTY_PRESENTATION=1`, and scaled `CNA_GDI_PRESENT_FILTER=halftone` cases. The variants assert NativeFull/None/Stretch and filter selection through GDI-054 telemetry, while the oracle verifies corresponding pixels. Every case explicitly disables `DwmFlush` so CI cannot block on a compositor. |
-| GDI-057 | Add a manual native-Windows GDI workflow. | ✅ | `.github/workflows/gdi-windows-ci.yml` is a one-job, `workflow_dispatch`-only MSVC/Ninja gate. It builds only CNA plus the fourteen focused GDI executables with `--parallel 2`, runs all sixteen `GDI` CTest cases, and uploads CTest/CMake diagnostics on failure. Its header and documentation explicitly retain GDI-061 as the separate visible lifecycle/DPI gate. |
+| GDI-057 | Add a manual native-Windows GDI workflow. | ✅ | `.github/workflows/gdi-windows-ci.yml` is a one-job, `workflow_dispatch`-only MSVC/Ninja gate. With REMED-BUILD-017 it builds only CNA plus all seventeen focused GDI correctness executables with `--parallel 2`, runs the nineteen-case `GDI` CTest label, and uploads CTest/CMake diagnostics on failure. Its header and documentation explicitly retain GDI-061 as the separate visible lifecycle/DPI gate; the adapted/native result remains pending. |
 | GDI-058 | Make applied presentation/resource state honest. | ✅ | Presentation-mode ordinals outside 0–4 throw before state mutation. Backbuffer format/depth normalize to `Color`/`None`, and both construction and reset expose only actual 0x/4x MSAA. `RenderTarget2D` rejects non-`Color`, reports actual `None` depth and 0x MSAA while retaining the separately advertised stencil plane, and preserves `PreserveContents`/`PlatformContents` while deterministically clearing `DiscardContents`. `gdi_applied_state_test` compares every property with color readback/mip/rebind storage; the public stencil test verifies the same three rebind policies for stencil. |
 | GDI-059 | Normalize unsupported-feature failures. | ✅ | Every excluded GDI factory/backend entry throws `System::NotSupportedException`. Public construction rejects TextureCube, Texture3D, RenderTargetCube, ShaderEffect, occlusion queries, vertex buffers, and 16/32-bit index buffers (including dynamic wrappers) before a null or private-core Software resource can escape. The focused public test also covers depth state and indexed/non-indexed user draws, and confirms `SupportsCapability(ThreeD)==false` plus the resource-specific false answers. |
 | GDI-060 | Audit DPI, fullscreen, resize, and input transforms. | ✅ | `SDL_GetWindowSizeInPixels()` is authoritative for backbuffer/presentation pixels; SDL input/warp coordinates are converted via `SDL_GetWindowSize()`. Pure tests cover 100/150/200% ratios and edge/bar rejection. A live SDL/Win32 test covers caller-owned windows and input-handle cleanup, all modes, three repeated odd resizes, drawable/client agreement, fullscreen round-trip, and exact logical/pixel retention across minimize/restore. Minimized state is explicitly non-drawable even when a platform reports a misleading cached pixel size. Physical multi-DPI observation remains GDI-061. |
@@ -657,7 +677,7 @@ means only the narrowed statement in this table, not overall release readiness.
 | # | Task | Status | Acceptance criteria |
 |---|---|---:|---|
 | GDI-070 | Replace inheritance from the whole Software 3D backend with an explicit CPU-2D component, or prove a guarded equivalent. | ✅ | GDI now derives directly from `IGraphicsBackend` and privately composes `GdiSoftware2DCore`; only reviewed 2D services are forwarded. A compile-time non-inheritance assertion plus a 42-check public/direct boundary test cover all resource factories, bindings, depth operations, and draw entries, so new Software virtuals cannot enter GDI implicitly. |
-| GDI-071 | Make the shared-core build boundary explicit. | 🟨 | The GDI Software glob and intermediate archive are gone: one GDI archive uses a reviewed seven-file list, and future Software files cannot enter implicitly. The GNU/MinGW cycle is now only `CNA` ↔ GDI; the independently discovered `CNA` ↔ SOFTWARE edge is declared centrally and the per-test GNU linker group is gone. Full GCC SOFTWARE linking, focused MinGW GDI linking, and all sixteen Wine/Xvfb cases pass. The list includes independently built framebuffer/texture/RT resources, 2D state, SpriteBatch frontend, and the 2D-only raster wrapper (GDI-074); raster helper source text remains monolithic and the manual native-MSVC workflow must still pass before this task becomes ✅. |
+| GDI-071 | Make the shared-core build boundary explicit. | 🟨 | The GDI Software glob and intermediate archive are gone: one GDI archive uses the reviewed eight-file list (including GDI-076's texture-allocation planner), and future Software files cannot enter implicitly. The GNU/MinGW cycle is now only `CNA` ↔ GDI; the independently discovered `CNA` ↔ SOFTWARE edge is declared centrally and the per-test GNU linker group is gone. Historical full GCC SOFTWARE linking, focused MinGW GDI linking, and the nineteen-case feature-branch matrix passed. The list includes allocation planners, independently built framebuffer/texture/RT resources, 2D state, SpriteBatch frontend, and the 2D-only raster wrapper (GDI-074); raster helper source text remains monolithic, adapted validation is pending, and the manual native-MSVC workflow must still pass before this task becomes ✅. |
 | GDI-072 | Capture typed GDI configuration once. | ✅ | `GdiConfiguration` captures filter/dirty/DWM once at construction; its pure strict parser aggregates sanitized invalid values into one warning and preserves safe defaults. Typed constructor-override and post-construction environment-mutation tests prove `Present()` uses only the immutable snapshot. |
 | GDI-073 | Finish the advertised 4x MSAA semantics. | ✅ | The capability is explicitly narrowed and tested: filled backbuffer triangles have four 2x2-grid colour samples; mask bits 0–3 intersect geometric coverage and high bits are ignored; wireframe is a crisp full-enabled-sample DDA path without line AA; stencil is one value and one operation per covered pixel fragment that gates active colour samples. A 19-check pixel test covers every rule, and render targets remain single-sampled. |
 | GDI-074 | Physically split the reusable Software 2D implementation. | 🟨 | GDI now independently builds `SoftwareFramebuffer.cpp`, `SoftwareTexture2D.cpp`, `SoftwareRenderTarget2D.cpp`, `SoftwareGraphicsBackend2DState.cpp`, and `SoftwareSpriteBatch.cpp`, then uses `SoftwareGraphicsBackend2D.cpp` for the shared triangle-raster bridge. Cube, vertex/index-buffer, generic-effect, and general-3D draw bodies are compiled out and retained only by the full SOFTWARE build. Archive/symbol inspection proves GDI has no cube implementation or its allocation warning; focused GDI MinGW/Wine plus native SOFTWARE build/smoke/rasterizer/SpriteBatch gates pass. The shared raster helpers and bridge remain in `SoftwareGraphicsBackend.cpp` through the wrapper, so extracting them and validating native MSVC are the remaining completion criteria. |
@@ -669,7 +689,18 @@ means only the narrowed statement in this table, not overall release readiness.
 | GDI-075 | Make valid presentation-mode changes transactional. | ✅ | Validate the requested ordinal, calculate the prospective logical size, and complete any fallible framebuffer replacement before committing `presentationMode_`, damage, or coordinate policy; alternatively restore every prior field on failure. Add a deterministic test that starts from a valid retained framebuffer, switches to `FixedHeightDynamicWidth` with an aspect/virtual-height combination that exceeds the axis or byte budget, and verifies the exception family/diagnostic, old mode transforms, dimensions, pixels, damage, and a subsequent successful `Present()`. Cover both direct backend and public `GraphicsDevice::SetPresentationMode` paths. |
 | GDI-076 | Give CPU `Texture2D` the same allocation discipline as GDI framebuffers. | 🟨 | Define a checked CPU-texture layout contract for positive dimensions, base RGBA8 bytes, declared/supplied mip levels, every `size_t` operation, and a documented per-resource byte budget. Enforce it before public constructors allocate their first large vector and again in `GdiGraphicsBackend::CreateTexture`/the shared CPU texture boundary so decoded and direct `ImageData` cannot bypass it. Make `GetMaxTextureDimension()` and the byte budget jointly honest, validate source pixel lengths before sampling, eliminate avoidable full-size transient copies where practical, and translate `bad_alloc`/`length_error` to `System::OutOfMemoryException`. Add public/direct, malformed-data, over-budget, mip-budget, and genuine 32-bit planner tests; rejected creation must not alter existing resources. The GDI/Software CPU-texture boundary itself is fully checked, including a genuine i686-w64-mingw32 32-bit `size_t` harness (`tools/graphics/texture_allocation_32bit_check.cpp`, mirroring GDI-067's framebuffer one); the shared `Texture2D.cpp` public constructors' own first `width*height*4` allocation remains open, deliberately cross-backend, scope before this task becomes ✅. |
 | GDI-077 | Include DC release in the checked presentation transaction. | ✅ | Refactor scoped DC ownership to support an explicit checked close before `ResetBackbufferDamage()` and invalidation acknowledgement, with a non-throwing destructor fallback for exceptional paths. A zero `ReleaseDC` result must identify `ReleaseDC` in telemetry/diagnostics and conservatively retain pending damage/generation. Add deterministic failure injection or a DC-provider seam plus success/failure count assertions proving exactly one release attempt and no leak/double release. Do not make a destructor throw. |
-| GDI-078 | Reconcile handoff/build evidence with the actual archive boundary. | ✅ | Update `NEXT_gdi.md`, `docs/gdi-backend.md`, and this plan from one CMake/source-of-truth inspection: seven reviewed shared CPU-2D sources plus the GDI-owned units, sixteen focused test cases, and at most `-j2`. Remove obsolete "two translation units", "five-object archive", and `-j8` claims. Record the 2026-08-03 clean MinGW Release plus Xvfb/Wine result and add a lightweight configure/archive assertion for boundary facts that should not rely on manually copied counts. |
+| GDI-078 | Reconcile handoff/build evidence with the actual archive boundary. | ✅ | `NEXT_gdi.md`, `docs/gdi-backend.md`, and this plan follow the CMake source of truth: eight reviewed shared CPU-2D sources plus three GDI-owned units, seventeen correctness executables, nineteen registered cases, and at most `-j2`. Obsolete "two translation units", "five-object archive", and `-j8` claims are removed; configure reports the archive count. REMED-BUILD-017 separately corrected the workflow/manual target inventory that the original reconciliation missed. |
+
+### Phase G10 — 2026-08-08 integration-adaptation corrections
+
+| # | Task | Status | Acceptance criteria |
+|---|---|---:|---|
+| REMED-GFX-229 | Reject undersized positive Software texture upload pitch. | 🟨 | Validate `stride >= width * 4` before mutation whenever the caller supplies a positive stride; retain the established tight-row default for non-positive values. The existing texture-allocation executable uses a 3×2 padded source with asymmetric RGBA channels, proves exact rows, rejects stride 11 for a 12-byte row, and proves retained prior pixels. Implementation/test are committed; adapted execution is pending. |
+| REMED-GFX-230 | Honor Software render-target upload pitch. | 🟨 | `SoftwareRenderTargetBackend::UpdatePixels` copies only each row's RGBA bytes using a valid supplied pitch, rejects a positive short pitch before color/MSAA/mip state changes, and retains the non-positive tight-row default. The existing 2D regression provides the same odd-width/asymmetric/padded/readback/rejection coverage. Implementation/test are committed; adapted execution is pending. |
+| REMED-BUILD-017 | Reconcile native GDI build target inventory. | 🟨 | The manual MSVC workflow and documented native/Wine command lists cover all seventeen correctness executables before the nineteen registered cases run, including the three GDI-075/076/077 executables formerly omitted. Structural inspection is complete; the manual native workflow remains pending. |
+
+REMED-GFX-224 remains open exactly as recorded in `plan_skia.md`: it concerns EasyGL render-target
+`SetData`, not GDI's private Software-2D upload path, and this adaptation does not alter its status.
 
 ---
 
