@@ -10,8 +10,9 @@
 ## 2026-08-08 integration adaptation
 
 - The meaningful 34-commit `feature/gdi` sequence has been recreated chronologically on the current
-  integration architecture. Historical hashes and validation entries below remain provenance for
-  the source branch; they are not claims that this adapted branch has been built or run.
+  integration architecture. Historical hashes and dated validation entries below remain
+  provenance for the source branch; the separate final-validation entry in this section records
+  the current adapted tree.
 - Current shared interfaces remain authoritative: `GpuDrawParams::vertexStreams` plus per-binding
   offsets/strides are preserved, removed instance-buffer fields were not restored, and
   REMED-GFX-223 keeps shared cache reconstruction authoritative. REMED-GFX-224 remains an open,
@@ -24,32 +25,84 @@
   readback and retained pixels after rejection.
 - REMED-GFX-231 corrects the supported `SourceAlphaSaturation` CPU blend factor to use
   `min(sourceAlpha, 1-destinationAlpha)` for RGB and one for alpha; an asymmetric/nontrivial-alpha
-  2D regression is committed, with adapted execution pending.
+  2D regression and the current Software blend controls pass.
 - REMED-GFX-232 makes DX3's standalone stencil hook report false, consistent with its depth-only
   production path and `GraphicsCapability::StencilBuffer` answer; the focused DX3 capability
-  regression now compares both paths directly, with adapted execution pending.
+  regression compares both paths directly and passes 1/1 through Wine/Xvfb after the x64 MinGW
+  build, with the DirectDraw engagement wrapper active.
 - REMED-GFX-233 fixes the shared Software persistent-buffer failure exposed by adaptation
   validation. `VertexBuffer(device, count)` intentionally has an empty, zero-stride declaration;
   REMED-GFX-201 had copied that zero into the one-stream snapshot, so every vertex fetch reused
   record zero and produced a degenerate primitive. Only that exact legacy single-buffer shape now
   uses the named-`vb` backend-stride fallback. Nonzero declared streams and multistream semantics
   remain unchanged. The Additive contract pins the empty-declaration precondition plus exact
-  non-indexed/indexed pixels; root-owned Software effects/Additive/scissor reruns are pending. The
-  mechanism is unchanged from integration base `677f4c59`, so this is an integration-lane closure
-  of a newly exercised pre-existing defect, not a defect introduced by the GDI replay.
+  non-indexed/indexed pixels. Current Software effects 7/7, Additive 29/29, and scissor 44/44
+  controls pass. The mechanism is unchanged from integration base `677f4c59`, so this is an
+  integration-lane closure of a newly exercised pre-existing defect, not a defect introduced by
+  the GDI replay.
 - The GDI memory-DC oracle now exercises selection restoration and bitmap/DC deletion across 64
   create/destroy cycles plus three injected constructor-failure checkpoints. It also checks
   `GetGuiResources` return-to-baseline only after proving that API's live DC/DIB count is stable;
-  adapted execution remains pending and the executable/case inventory is unchanged.
+  repeated normal/failure cleanup and operation-counter checks pass. The `GetGuiResources`
+  live-delta subcheck skips under Wine because the API is not stable/available there, so this does
+  not claim physical-Windows kernel-object leak proof. The executable/case inventory is unchanged.
 - REMED-BUILD-017 corrects the manual native-MSVC workflow and command inventory to build all
   **seventeen** correctness executables before running the **nineteen** registered GDI cases. The
   omitted targets were presentation-mode transaction, DC-release transaction, and texture
   allocation.
 - REMED-BUILD-018 adds the direct `IGraphicsBackend.hpp` include required by the shared
-  `SupportsStencilBuffer` consistency test; the native sanitizer object rebuild that exposed the
-  incomplete-type error remains pending.
-- Adapted MinGW/Wine execution is intentionally pending the root-owned validation pass. The manual
-  native-MSVC workflow and visible native-Windows lifecycle/DPI checks remain external gates.
+  `SupportsStencilBuffer` consistency test. The current native ASan/UBSan focused harness compiles
+  and runs, closing the incomplete-type error.
+- Final adapted MinGW/Wine and native Software sanitizer/control validation is complete as recorded
+  below. The manual native-MSVC workflow, visible native-Windows lifecycle/DPI checks, and physical
+  Windows handle observation remain external gates.
+
+### Final adapted validation
+
+- Current x64 MinGW Release GDI built all **seventeen** focused correctness executables. CTest
+  registered **nineteen** cases, including the three presentation variants, and all **19/19**
+  passed serially through Wine 10 on Linux Xvfb display `:104`. `cna_demo_2d` was compile-covered
+  only. The benchmark completed four frames per case and passed, but quota-constrained timings are
+  not comparable and are not retained as performance evidence.
+- The PE32 Intel i386 allocation planners both passed under Wine: framebuffer **5/5**, texture
+  **7/7**. Pixel/oracle coverage passed asymmetric RGBA channels, a top-down negative-height DIB,
+  corner/orientation probes, nonzero-Y dirty-band clipping, odd-width row padding, and short-stride
+  rejection with retained pixels. CPU alpha/blend checks, including corrected
+  `SourceAlphaSaturation`, passed. Window presentation remains opaque GDI `SRCCOPY`.
+- Repeated handle create/destroy and injected `GetDC`, `CreateDIBSection`, and `SelectObject`
+  failures passed with selected-object restoration and authoritative operation counters. The
+  Wine-skipped `GetGuiResources` live-delta check is not physical-Windows leak proof.
+- Native SOFTWARE Debug ASan+UBSan was proven active by `ldd` (`libasan.so.8`, `libubsan.so.1`).
+  The focused harness selected 151 tests: **149 pass, 2 intentional skips, zero CNA ASan/UBSan**.
+  Standalone controls pass: effects **7/7**, Additive **29/29**, scissor **44/44**, render-target
+  readback **102/102**, SpriteBatch viewport **19/19**, and Texture2D GetData **40/40**.
+  LeakSanitizer `detect_leaks=1` is unusable under ptrace, so the valid run used
+  `detect_leaks=0`. Full native `CnaTests` compilation remains blocked by the accepted Glide
+  `FakeGlide3xDll` fixture's `windows.h`; no Glide finding was opened. The unrelated baseline
+  Software `SetRenderTargets_FourTargets` expectation mismatch and Pulse-sensitive capability
+  matrix were excluded from the focused set and are not GDI findings.
+- REMED-GFX-223's principal current OPENGLES/EasyGL control passed **8/8** runtime pixel/state
+  tests (TexturedQuad, Additive BlendState, RT2D readback, render-target viewport/scissor reset,
+  InstancedModel, MRT, Additive contract, Texture2D GetData) plus the actual
+  `CnjCacheIsolationTest` **2/2** on Mesa OpenGL ES 3.2 llvmpipe/Xvfb `:105`. Shared Texture2D
+  cache code is unchanged: REMED-GFX-223 is preserved and REMED-GFX-224 remains open.
+- DX3 x64 MinGW plus the capability runtime passed as described above. Sokol at pinned `27b4960`
+  built from current sources for native GLCORE and passed Smoke, Instanced3D, and WireFrame **3/3**
+  on llvmpipe/Xvfb. Diligent pinned v2.5.6 `b036337` passed generated compile probes for current
+  `DiligentGraphicsBackend.cpp` and shared `GraphicsDevice.cpp` under
+  `CNA_BACKEND_DILIGENT`; this was compile-only, with no current runtime or full DiligentCore
+  rebuild. Skia pinned `ebf5052` with matching local raster archives passed equivalent current-source
+  compile probes under `CNA_BACKEND_SKIA`; only external Skia `clang::reinitializes` warnings were
+  emitted under GCC. Current i686 MinGW Glide backend/shared-device compile probes passed under
+  `CNA_BACKEND_GLIDE`; Glide remained compile-only because `glide3x.dll` was unavailable.
+- All compilation used explicit numeric parallelism at or below two across the session. The final
+  current-tree runs used `j1` under `CPUQuota=50%`; no helper was unbounded, `j8` was never reached,
+  and compilation never exceeded two jobs.
+
+REMED-GFX-229 through REMED-GFX-233, REMED-BUILD-017/018, and GDI-054's handle-oracle hardening are
+resolved for their automated scope. No unresolved GDI supported-path finding remains. The evidence
+is Linux cross/Wine plus native Linux sanitizer/control coverage, not native MSVC, physical-Windows
+lifecycle/DPI, or physical-Windows kernel-object-leak proof.
 
 ## Current focus
 
@@ -134,7 +187,8 @@
 - GDI-057/REMED-BUILD-017: an owner-approved one-job, manual-only MSVC/Ninja workflow builds CNA
   plus all seventeen focused GDI correctness executables at `--parallel 2`, runs all nineteen
   `GDI` CTest cases, and uploads native diagnostics on failure. It intentionally does not claim the
-  visible GDI-061 gate; its first adapted/native result remains pending.
+  visible GDI-061 gate. The equivalent adapted MinGW/Wine matrix passes 19/19; the first native-MSVC
+  result remains pending.
 - GDI-058: applied backbuffer format/depth/MSAA are normalized on construction, reset, and the
   store-only update path; invalid presentation modes throw transactionally. Render targets expose
   actual RGBA8/depthless/single-sample storage, reject other color formats, and have verified
@@ -262,12 +316,11 @@ baseline. All later tasks use one task per commit.
 - Preserve XNA/FNA public API compatibility; backend-specific unsupported behavior must fail
   clearly without broadening the GDI 2D contract.
 
-## Validation status
+## Historical validation status
 
-Unless an entry explicitly says otherwise, the results in this section are preserved historical
-`feature/gdi` evidence from 2026-08-01 through 2026-08-03. No adapted build or runtime result has
-been recorded yet. Counts below fourteen/seventeen describe the suite at that historical milestone;
-the current inventory is seventeen correctness executables and nineteen registered cases.
+The results in this section are preserved historical `feature/gdi` evidence from 2026-08-01 through
+2026-08-03. Counts below fourteen/seventeen describe the suite at that historical milestone. See
+**Final adapted validation** above for the current seventeen-executable/nineteen-case result.
 
 - Fresh MinGW-w64 Release configure in `cmake-build-gdi/`: pass.
 - `CNA`, all fourteen focused GDI correctness executables, the presentation benchmark and 2D demo:
@@ -367,15 +420,14 @@ cmake -S . -B cmake-build-gdi -G Ninja \
 CMAKE_BUILD_PARALLEL_LEVEL=2 cmake --build cmake-build-gdi -j2
 ```
 
-Cross-built GDI tests are intentionally not registered as Linux-host CTests. Run their `.exe`
-files under Wine with an available display and `CNA_GDI_DWM_FLUSH=0`; the exact focused commands
-are maintained in `docs/gdi-backend.md`.
+Ordinary cross configurations do not register PE executables as Linux-host CTests. The final
+validation harness exposed the complete nineteen-case inventory and ran it serially through Wine;
+for a normal cross build, run the `.exe` files manually with an available display and
+`CNA_GDI_DWM_FLUSH=0`. Exact focused commands are maintained in `docs/gdi-backend.md`.
 
 ## Immediate next step
 
-Run the root-owned adapted MinGW/Wine validation for all seventeen correctness executables and all
-nineteen cases, including the REMED-GFX-229/230 pitch assertions; then record those results in a
-follow-up rather than retroactively attributing historical evidence to this branch. Afterward,
-finish GDI-074 by extracting the reusable 2D triangle-raster helpers without changing either
-backend's behavior. GDI-071 remains provisional until its manual native-MSVC workflow passes;
-GDI-061 and GDI-062 remain native visible-Windows gates.
+Dispatch the manual native-MSVC workflow and complete GDI-061's visible physical-Windows
+lifecycle/DPI and handle-lifetime observation. GDI-062 still owns native visible performance
+measurement, and GDI-074 still requires extracting the reusable 2D triangle-raster helpers without
+changing either backend's behavior. REMED-GFX-224 remains open in its EasyGL render-target scope.
