@@ -63,12 +63,28 @@ namespace CNA::Internal::Backends::Software
         }
     }
 
-    void SoftwareRenderTargetBackend::UpdatePixels(const uint8_t* rgba, int)
+    void SoftwareRenderTargetBackend::UpdatePixels(const uint8_t* rgba, int stride)
     {
         if (rgba == nullptr) return;
-        const std::size_t byteCount = static_cast<std::size_t>(framebuffer_.width) *
-                                       static_cast<std::size_t>(framebuffer_.height) * 4u;
-        framebuffer_.color.assign(rgba, rgba + byteCount);
+        const std::size_t rowBytes = static_cast<std::size_t>(framebuffer_.width) * 4u;
+        // REMED-GFX-230: RenderTarget2D uploads used to ignore the supplied pitch and read one
+        // tight height*width*4 span. That ingested padding into later rows and skipped the real
+        // source pixels. Validate before changing storage, then copy only each row's RGBA bytes.
+        if (stride > 0 && static_cast<std::size_t>(stride) < rowBytes)
+            throw System::ArgumentOutOfRangeException(
+                "stride", std::to_string(stride),
+                "A positive render-target upload stride must be at least " +
+                    std::to_string(rowBytes) + " bytes (width * 4 for RGBA8).");
+        const std::size_t effectiveStride =
+            stride > 0 ? static_cast<std::size_t>(stride) : rowBytes;
+        for (int row = 0; row < framebuffer_.height; ++row)
+        {
+            std::copy(rgba + static_cast<std::size_t>(row) * effectiveStride,
+                      rgba + static_cast<std::size_t>(row) * effectiveStride + rowBytes,
+                      framebuffer_.color.begin() +
+                          static_cast<std::ptrdiff_t>(row) *
+                              static_cast<std::ptrdiff_t>(rowBytes));
+        }
         framebuffer_.CopyResolvedColorToMultiSample();
         mipLevelsReady_ = false;
         // A direct CPU upload is already complete unless this target is actively being rendered.

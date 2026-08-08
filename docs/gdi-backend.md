@@ -123,6 +123,10 @@ compatibility backend under validation, not yet as a release baseline.
   Padded rows are copied without their padding, and a rejected short stride leaves the previous
   texture bytes unchanged. The texture-allocation executable covers an odd three-pixel width with
   asymmetric RGBA channels so row overlap, padding ingestion, and channel swaps are observable.
+- REMED-GFX-230 applies the same contract to `RenderTarget2D::UpdatePixels`, which formerly ignored
+  its stride and treated every source as tight. It now copies only the RGBA bytes from each valid
+  padded row and rejects a positive pitch below `width * 4` before changing color, MSAA, or mip
+  state. The 2D regression covers exact readback and transactional rejection on a 3×2 target.
 - A custom `ShaderEffect` throws `System::NotSupportedException` during construction on GDI. GDI
   does not create an invalid placeholder, accept shader source or uniforms, and then ignore them.
   `ColorMatrixEffect` is the sole fixed non-shader exception; every other custom `SpriteBatch`

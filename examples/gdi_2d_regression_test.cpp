@@ -436,6 +436,52 @@ namespace
                               Pixel{ 127, 127, 63, 255 }, 1);
         }
 
+        // REMED-GFX-230: RenderTarget2D must honor a caller's row pitch just like Texture2D. Use
+        // an odd width, padding that looks nothing like the pixels, and asymmetric RGBA channels
+        // so a tight-row assumption, padding ingestion, row overlap, or channel swap is visible.
+        std::unique_ptr<IRenderTargetBackend> stridedTarget =
+            backend.CreateRenderTarget2D(3, 2, /*DepthFormat::None*/ 0,
+                                         /*preserveContents*/ false, /*mipMap*/ false);
+        ok &= Expect(stridedTarget != nullptr,
+                     "GDI must create an odd-width target for pitched upload coverage.");
+        if (stridedTarget != nullptr)
+        {
+            const std::array<std::uint8_t, 32> paddedUpload{
+                3, 21, 39, 57,  75, 93, 111, 129,  147, 165, 183, 201,
+                0xDE, 0xAD, 0xBE, 0xEF,
+                5, 25, 45, 65,  85, 105, 125, 145,  165, 185, 205, 225,
+                0xCA, 0xFE, 0xBA, 0xBE,
+            };
+            const std::array<std::uint8_t, 24> expectedRows{
+                3, 21, 39, 57,  75, 93, 111, 129,  147, 165, 183, 201,
+                5, 25, 45, 65,  85, 105, 125, 145,  165, 185, 205, 225,
+            };
+            stridedTarget->UpdatePixels(paddedUpload.data(), 16);
+            std::array<std::uint8_t, 24> readback{};
+            ok &= Expect(stridedTarget->GetData(0, 0, 0, 3, 2, readback.data(),
+                                                static_cast<int>(readback.size())),
+                         "pitched render-target readback must report success.");
+            ok &= Expect(readback == expectedRows,
+                         "odd-width render-target upload consumes rows without their padding.");
+
+            bool rejectedShortStride = false;
+            try
+            {
+                stridedTarget->UpdatePixels(paddedUpload.data(), 11);
+            }
+            catch (const System::ArgumentOutOfRangeException&)
+            {
+                rejectedShortStride = true;
+            }
+            ok &= Expect(rejectedShortStride,
+                         "a positive render-target stride shorter than width*4 must be rejected.");
+            readback.fill(0);
+            ok &= Expect(stridedTarget->GetData(0, 0, 0, 3, 2, readback.data(),
+                                                static_cast<int>(readback.size())) &&
+                             readback == expectedRows,
+                         "a rejected render-target stride leaves the prior pixels unchanged.");
+        }
+
         // A non-power-of-two target must use the same floor-halved dimensions as Texture2D:
         // 3x5 -> 1x2 -> 1x1. Its odd source extent is resolved by the clamped 2x2 box filter,
         // not by allocating a differently shaped chain or reading outside its pixels.
