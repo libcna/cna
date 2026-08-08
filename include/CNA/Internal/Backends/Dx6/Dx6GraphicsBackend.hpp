@@ -196,6 +196,7 @@ namespace CNA::Internal::Backends::Dx6
                 case GraphicsCapability::ThreeD:
                 case GraphicsCapability::DepthStencilBuffer:
                 case GraphicsCapability::WireFrame:
+                case GraphicsCapability::AdditiveBlending:
                     return true;
                 default:
                     return false;

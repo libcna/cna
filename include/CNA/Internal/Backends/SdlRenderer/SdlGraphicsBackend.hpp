@@ -176,11 +176,11 @@ namespace CNA::Internal::Backends::SdlRenderer
         // no-op/null object when the caller explicitly selects
         // Unsupported3DGraphicsCallBehavior::WarnAndStub.
         [[nodiscard]] bool SupportsDepthStencil() const override { return false; }
-        [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability /*capability*/) const override
+        [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override
         {
-            // 2D-only by design (Tasks 720-729's own exhaustive audit): none of the capabilities
-            // CNA::GraphicsCapability currently enumerates are supported on this backend.
-            return false;
+            // The backend is 2D-only, but SDL_ComposeCustomBlendMode represents the standard
+            // Additive preset with independent colour/alpha factors and operations exactly.
+            return capability == CNA::GraphicsCapability::AdditiveBlending;
         }
         void ClearColorAndDepth(float r, float g, float b, float a, float depth) override;
         void ClearDepth(float depth) override;

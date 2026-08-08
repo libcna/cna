@@ -650,6 +650,7 @@ namespace CNA::Internal::Backends::Headless
             // kind by design. Reported here so Texture3D's own constructor can fail cleanly instead
             // of silently discarding every SetData()/GetData() call.
             case CNA::GraphicsCapability::Texture3D:
+            case CNA::GraphicsCapability::AdditiveBlending:
                 return false;
             case CNA::GraphicsCapability::MultiStreamVertexInput:
                 // REMED-GFX-201: Headless rasterizes nothing, so claiming this would fabricate

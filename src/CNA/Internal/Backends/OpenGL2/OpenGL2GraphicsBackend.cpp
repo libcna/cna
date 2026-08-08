@@ -3843,6 +3843,9 @@ namespace CNA::Internal::Backends::OpenGL2
                 // unconditionally from the constructor) -- DrawInstancedPrimitivesEx's own guard
                 // checks the same condition before using either.
                 return glDrawElementsInstancedARB != nullptr && glVertexAttribDivisorARB != nullptr;
+            case CNA::GraphicsCapability::StencilBuffer:
+            case CNA::GraphicsCapability::AdditiveBlending:
+                return true;
         }
         // Unreachable for current members; a future member lands here (after the -Wswitch
         // warning above) and is reported unsupported until this backend explicitly claims it.

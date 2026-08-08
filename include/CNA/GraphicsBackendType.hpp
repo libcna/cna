@@ -52,6 +52,9 @@ namespace CNA
         /** @brief HTML Canvas 2D (Emscripten). */
         Canvas,
 
+        /** @brief HTML DOM elements composited by CSS (Emscripten). */
+        HtmlDom,
+
         /** @brief Skia 2D raster backend. */
         Skia,
 
@@ -167,6 +170,8 @@ namespace CNA
         return GraphicsBackendType::D3D12;
 #elif defined(CNA_BACKEND_CANVAS)
         return GraphicsBackendType::Canvas;
+#elif defined(CNA_BACKEND_HTML_DOM)
+        return GraphicsBackendType::HtmlDom;
 #elif defined(CNA_BACKEND_SKIA)
         return GraphicsBackendType::Skia;
 #elif defined(CNA_BACKEND_ASCII)
@@ -245,6 +250,7 @@ namespace CNA
             case GraphicsBackendType::D3D11:        return "D3D11";
             case GraphicsBackendType::D3D12:        return "D3D12";
             case GraphicsBackendType::Canvas:       return "CANVAS";
+            case GraphicsBackendType::HtmlDom:      return "HTML_DOM";
             case GraphicsBackendType::Skia:         return "SKIA";
             case GraphicsBackendType::Ascii:        return "ASCII";
             case GraphicsBackendType::FreeDirect:           return "FREEDIRECT";

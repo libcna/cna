@@ -176,11 +176,11 @@ namespace CNA::Internal::Backends::FreeDirect
         // Calls preserve their established throw/null behavior by default. WarnAndStub converts
         // them to warn-once no-ops backed by safe null-object resources.
         [[nodiscard]] bool SupportsDepthStencil() const override { return false; }
-        [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability /*capability*/) const override
+        [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override
         {
-            // 2D-only by design: none of the capabilities CNA::GraphicsCapability currently
-            // enumerates are supported on this backend.
-            return false;
+            // The backend is 2D-only; its CPU compositor nevertheless has a distinct, exact
+            // FreeDirectBlendMode::Additive path.
+            return capability == CNA::GraphicsCapability::AdditiveBlending;
         }
         void ClearColorAndDepth(float r, float g, float b, float a, float depth) override;
         void ClearDepth(float depth) override;

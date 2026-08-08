@@ -48,6 +48,9 @@ on it) rather than assuming either way.
 - **[`glide-backend.md`](glide-backend.md)** — build/runtime setup and current native
   fixed-function 2D plus constrained color/textured-vertex 3D scope of the Windows-only historical
   Glide 3.x backend, which dynamically loads an external emulator DLL.
+- **[`html-dom-backend.md`](html-dom-backend.md)** — current status for the Emscripten-only HTML DOM
+  backend, which renders SpriteBatch output as pooled CSS-transformed `<div>` elements instead of
+  rasterizing into a canvas; detailed task breakdown is in `../plan_html_dom.md`.
 - **`xna-4-api-coverage.md`** — current per-class Graphics coverage table plus the overall
   per-namespace XNA 4.0 API-surface numbers (227/245 = 92.7%, computed 2026-07-11).
 - **[`migration-guide.md`](migration-guide.md)** — practical guide for porting an existing XNA/FNA
@@ -109,6 +112,8 @@ Kept for their investigation methodology and root-cause detail, not as current s
 - `canvas-backend.md` — the CANVAS (HTML Canvas 2D) backend's own completeness status; unlike the
   others here, its ✅ marks mean "implemented and structurally reviewed," not "pixel-verified" — see
   the doc's own caveat.
+- `html-dom-backend.md` — the HTML_DOM (DOM/CSS) backend's own capability status; its ✅ marks are
+  backed by a real headless-browser run, not only a structural review.
 - **[`ascii-backend.md`](ascii-backend.md)** — current status for the `ASCII` (SDL-windowed retro
   glyph-grid) backend; see `../plan_ascii.md` for full task-by-task detail.
 - `freedirect-backend.md` — FreeDirect (formerly `DX3`; DirectDraw via the `../free-direct` sibling)'s own completeness status,

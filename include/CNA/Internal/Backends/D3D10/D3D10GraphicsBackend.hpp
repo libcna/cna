@@ -122,6 +122,7 @@ namespace CNA::Internal::Backends::D3D10
                 case GraphicsCapability::WireFrame:
                 case GraphicsCapability::AnisotropicFiltering:
                 case GraphicsCapability::MultipleRenderTargets:
+                case GraphicsCapability::AdditiveBlending:
                     return true;
                 default:
                     return false;

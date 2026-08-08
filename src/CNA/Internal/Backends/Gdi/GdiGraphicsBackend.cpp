@@ -931,7 +931,8 @@ namespace CNA::Internal::Backends::Gdi
         // depth+stencil attachment and remains false because GDI has no depth.
         return capability == CNA::GraphicsCapability::StencilBuffer ||
                capability == CNA::GraphicsCapability::WireFrame ||
-               capability == CNA::GraphicsCapability::MultiSampleAntiAliasing;
+               capability == CNA::GraphicsCapability::MultiSampleAntiAliasing ||
+               capability == CNA::GraphicsCapability::AdditiveBlending;
     }
 
     int GdiGraphicsBackend::GetMaxTextureDimension() const

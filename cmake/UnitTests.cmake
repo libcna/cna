@@ -22,6 +22,14 @@ if(CNA_BUILD_TESTS)
             "tests/*.cpp"
     )
 
+    # HTMLDOM-123: these two files are complete standalone Win32 programs used only by the
+    # dedicated GLIDE ABI DLL/loader targets in cmake/Tests/GlideTests.cmake.  They are not GTest
+    # translation units: one exports a DLL and the other defines its own main().  Letting the
+    # recursive test glob add them to CnaTests breaks every non-Windows configuration (including
+    # HTML_DOM/Emscripten) at <windows.h>, and would duplicate main in a Windows CnaTests link.
+    list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX
+        ".*/CNA/Internal/Backends/Glide/(FakeGlide3xDll|GlideAbiLoaderTests)\\.cpp$")
+
     # REMED-BUILD-013 (discovered while verifying it): mirrors CnaLibrary.cmake's own
     # CNA_FFMPEG_AVAILABLE exclusion for VideoDecoder.cpp/VideoPlayer.cpp/Video.cpp/
     # VideoContentTypeReader.cpp -- these 4 test files exercise exactly those classes, which do not

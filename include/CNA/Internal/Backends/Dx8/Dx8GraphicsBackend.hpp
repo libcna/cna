@@ -163,6 +163,7 @@ namespace CNA::Internal::Backends::Dx8
                 case GraphicsCapability::DepthStencilBuffer:
                 case GraphicsCapability::WireFrame:
                 case GraphicsCapability::AnisotropicFiltering:
+                case GraphicsCapability::AdditiveBlending:
                     return true;
                 default:
                     return false;

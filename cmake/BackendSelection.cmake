@@ -12,8 +12,8 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
 else()
     set(_cna_default_backend "SDL_RENDERER")
 endif()
-set(CNA_GRAPHICS_BACKEND "${_cna_default_backend}" CACHE STRING "Graphics backend to use (SDL_RENDERER, OPENGLES, OPENGL33, WEBGL1, WEBGL2, BGFX, VULKAN, WEBGPU, MAGNUM, HEADLESS, SOFTWARE, STUB, D3D11, D3D12, CANVAS, SKIA, ASCII, FREEDIRECT, D3D9, DX1, DX2, DX3, DX5, DX6, DX7, DX8, D3D10, OPENGLES1, OPENGL4, OPENGL1, OPENGL2, SDL_GPU, WICKED, SOKOL, DILIGENT, GLIDE, or GDI)")
-set_property(CACHE CNA_GRAPHICS_BACKEND PROPERTY STRINGS "SDL_RENDERER" "OPENGLES" "OPENGL33" "WEBGL1" "WEBGL2" "BGFX" "VULKAN" "WEBGPU" "MAGNUM" "HEADLESS" "SOFTWARE" "STUB" "D3D11" "D3D12" "CANVAS" "SKIA" "ASCII" "FREEDIRECT" "D3D9" "DX1" "DX2" "DX3" "DX5" "DX6" "DX7" "DX8" "D3D10" "OPENGLES1" "OPENGL4" "OPENGL1" "OPENGL2" "SDL_GPU" "WICKED" "SOKOL" "DILIGENT" "GLIDE" "GDI")
+set(CNA_GRAPHICS_BACKEND "${_cna_default_backend}" CACHE STRING "Graphics backend to use (SDL_RENDERER, OPENGLES, OPENGL33, WEBGL1, WEBGL2, BGFX, VULKAN, WEBGPU, MAGNUM, HEADLESS, SOFTWARE, STUB, D3D11, D3D12, CANVAS, HTML_DOM, SKIA, ASCII, FREEDIRECT, D3D9, DX1, DX2, DX3, DX5, DX6, DX7, DX8, D3D10, OPENGLES1, OPENGL4, OPENGL1, OPENGL2, SDL_GPU, WICKED, SOKOL, DILIGENT, GLIDE, or GDI)")
+set_property(CACHE CNA_GRAPHICS_BACKEND PROPERTY STRINGS "SDL_RENDERER" "OPENGLES" "OPENGL33" "WEBGL1" "WEBGL2" "BGFX" "VULKAN" "WEBGPU" "MAGNUM" "HEADLESS" "SOFTWARE" "STUB" "D3D11" "D3D12" "CANVAS" "HTML_DOM" "SKIA" "ASCII" "FREEDIRECT" "D3D9" "DX1" "DX2" "DX3" "DX5" "DX6" "DX7" "DX8" "D3D10" "OPENGLES1" "OPENGL4" "OPENGL1" "OPENGL2" "SDL_GPU" "WICKED" "SOKOL" "DILIGENT" "GLIDE" "GDI")
 
 option(CNA_BACKEND_SDL_RENDERER "Enable SDL_Renderer graphics backend" OFF)
 option(CNA_BACKEND_OPENGLES "Enable OpenGL ES graphics backend (internally: EasyGL)" OFF)
@@ -38,6 +38,9 @@ option(CNA_BACKEND_D3D12 "Enable Direct3D 12 graphics backend (Windows only)" OF
 # plan_canvas.md: HTML Canvas 2D backend -- Emscripten-only (design decision 1), a browser-native,
 # GPU-free 2D-only backend using canvas.getContext('2d') instead of WEBGL2's WebGL context.
 option(CNA_BACKEND_CANVAS "Enable HTML Canvas 2D graphics backend (Emscripten only)" OFF)
+# plan_html_dom.md: HTML DOM backend -- Emscripten-only (design decision 1), 2D-only, rendering
+# SpriteBatch output as pooled CSS-transformed <div> elements instead of rasterizing into a canvas.
+option(CNA_BACKEND_HTML_DOM "Enable HTML DOM (CSS-composited) graphics backend (Emscripten only)" OFF)
 option(CNA_BACKEND_SKIA "Enable Skia 2D raster graphics backend" OFF)
 # plan_ascii.md: SDL-windowed retro text/glyph-grid backend -- a thin decorator around
 # SDL_RENDERER's own SdlGraphicsBackend (see the shared cna_backend_graphics_sdl_renderer_core
@@ -143,7 +146,7 @@ option(CNA_BACKEND_GLIDE "Enable Glide 3.x graphics backend (Windows, external g
 option(CNA_BACKEND_GDI "Enable classic Win32 GDI (2D-only) graphics backend" OFF)
 
 set(_cna_explicit_backend_selection OFF)
-if(CNA_BACKEND_SDL_RENDERER OR CNA_BACKEND_OPENGLES OR CNA_BACKEND_OPENGL33 OR CNA_BACKEND_WEBGL1 OR CNA_BACKEND_WEBGL2 OR CNA_BACKEND_BGFX OR CNA_BACKEND_VULKAN OR CNA_BACKEND_WEBGPU OR CNA_BACKEND_MAGNUM OR CNA_BACKEND_HEADLESS OR CNA_BACKEND_SOFTWARE OR CNA_BACKEND_STUB OR CNA_BACKEND_D3D11 OR CNA_BACKEND_D3D12 OR CNA_BACKEND_CANVAS OR CNA_BACKEND_SKIA OR CNA_BACKEND_ASCII OR CNA_BACKEND_FREEDIRECT OR CNA_BACKEND_D3D9 OR CNA_BACKEND_DX1 OR CNA_BACKEND_DX2 OR CNA_BACKEND_DX3 OR CNA_BACKEND_DX5 OR CNA_BACKEND_DX6 OR CNA_BACKEND_DX7 OR CNA_BACKEND_DX8 OR CNA_BACKEND_D3D10 OR CNA_BACKEND_OPENGLES1 OR CNA_BACKEND_OPENGL4 OR CNA_BACKEND_OPENGL1 OR CNA_BACKEND_OPENGL2 OR CNA_BACKEND_SDL_GPU OR CNA_BACKEND_WICKED OR CNA_BACKEND_SOKOL OR CNA_BACKEND_DILIGENT OR CNA_BACKEND_GLIDE OR CNA_BACKEND_GDI)
+if(CNA_BACKEND_SDL_RENDERER OR CNA_BACKEND_OPENGLES OR CNA_BACKEND_OPENGL33 OR CNA_BACKEND_WEBGL1 OR CNA_BACKEND_WEBGL2 OR CNA_BACKEND_BGFX OR CNA_BACKEND_VULKAN OR CNA_BACKEND_WEBGPU OR CNA_BACKEND_MAGNUM OR CNA_BACKEND_HEADLESS OR CNA_BACKEND_SOFTWARE OR CNA_BACKEND_STUB OR CNA_BACKEND_D3D11 OR CNA_BACKEND_D3D12 OR CNA_BACKEND_CANVAS OR CNA_BACKEND_HTML_DOM OR CNA_BACKEND_SKIA OR CNA_BACKEND_ASCII OR CNA_BACKEND_FREEDIRECT OR CNA_BACKEND_D3D9 OR CNA_BACKEND_DX1 OR CNA_BACKEND_DX2 OR CNA_BACKEND_DX3 OR CNA_BACKEND_DX5 OR CNA_BACKEND_DX6 OR CNA_BACKEND_DX7 OR CNA_BACKEND_DX8 OR CNA_BACKEND_D3D10 OR CNA_BACKEND_OPENGLES1 OR CNA_BACKEND_OPENGL4 OR CNA_BACKEND_OPENGL1 OR CNA_BACKEND_OPENGL2 OR CNA_BACKEND_SDL_GPU OR CNA_BACKEND_WICKED OR CNA_BACKEND_SOKOL OR CNA_BACKEND_DILIGENT OR CNA_BACKEND_GLIDE OR CNA_BACKEND_GDI)
     set(_cna_explicit_backend_selection ON)
 endif()
 
@@ -193,6 +196,9 @@ if(_cna_explicit_backend_selection)
     endif()
     if(CNA_BACKEND_CANVAS)
         list(APPEND _cna_enabled_backends "CANVAS")
+    endif()
+    if(CNA_BACKEND_HTML_DOM)
+        list(APPEND _cna_enabled_backends "HTML_DOM")
     endif()
     if(CNA_BACKEND_SKIA)
         list(APPEND _cna_enabled_backends "SKIA")
@@ -304,6 +310,14 @@ if(CNA_GRAPHICS_BACKEND STREQUAL "CANVAS" AND NOT EMSCRIPTEN)
         "CNA: CANVAS backend only builds when targeting Emscripten (HTML Canvas is a browser DOM "
         "API). Configure with -DCMAKE_TOOLCHAIN_FILE=\$EMSDK/upstream/emscripten/cmake/Modules/"
         "Platform/Emscripten.cmake (or use emcmake).")
+endif()
+
+# plan_html_dom.md design decision 1: document, HTMLDivElement and CSS only exist inside a browser.
+if(CNA_GRAPHICS_BACKEND STREQUAL "HTML_DOM" AND NOT EMSCRIPTEN)
+    message(FATAL_ERROR
+        "CNA: HTML_DOM backend only builds when targeting Emscripten (it renders through real DOM "
+        "elements and CSS). Configure with -DCMAKE_TOOLCHAIN_FILE=\$EMSDK/upstream/emscripten/"
+        "cmake/Modules/Platform/Emscripten.cmake (or use emcmake).")
 endif()
 
 # plan_magnum.md design decision 2: Magnum's Platform::GLContext takes its OpenGL entry points
@@ -544,6 +558,12 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "CANVAS")
     set(BACKEND_TARGET "cna_backend_graphics_canvas")
     add_compile_definitions(CNA_BACKEND_CANVAS)
     set(CNA_BACKEND_DEFINE "CNA_BACKEND_CANVAS")
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "HTML_DOM")
+    message(STATUS "CNA: Using HTML_DOM (CSS-composited DOM elements) graphics backend")
+    set(BACKEND_DIR "src/CNA/Internal/Backends/HtmlDom")
+    set(BACKEND_TARGET "cna_backend_graphics_html_dom")
+    add_compile_definitions(CNA_BACKEND_HTML_DOM)
+    set(CNA_BACKEND_DEFINE "CNA_BACKEND_HTML_DOM")
 elseif(CNA_GRAPHICS_BACKEND STREQUAL "SKIA")
     # SKIA-160: CNA_SKIA_MODE is a sub-selector of CNA_GRAPHICS_BACKEND=SKIA, not a separate
     # backend identity -- RASTER (default) and GANESH are two mutually exclusive GN builds of the

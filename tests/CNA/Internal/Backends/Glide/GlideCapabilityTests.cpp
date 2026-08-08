@@ -10,6 +10,7 @@ using CNA::Internal::Backends::Glide::SupportsGlideCapability;
 TEST(GlideCapabilityTest, ReportsImplementedThreeDPath)
 {
     EXPECT_TRUE(SupportsGlideCapability(GraphicsCapability::ThreeD));
+    EXPECT_TRUE(SupportsGlideCapability(GraphicsCapability::AdditiveBlending));
 }
 
 TEST(GlideCapabilityTest, RejectsEveryUnimplementedCurrentCapability)
@@ -25,6 +26,7 @@ TEST(GlideCapabilityTest, RejectsEveryUnimplementedCurrentCapability)
         GraphicsCapability::Texture3D,
         GraphicsCapability::MultiStreamVertexInput,
         GraphicsCapability::Instancing,
+        GraphicsCapability::StencilBuffer,
     };
     for (const GraphicsCapability capability : unsupported)
     {

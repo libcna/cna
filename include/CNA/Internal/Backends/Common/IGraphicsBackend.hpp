@@ -726,6 +726,23 @@ namespace CNA::Internal::Backends
          * @param addressV Raw TextureAddressMode int value for V (0=Wrap, 1=Clamp, 2=Mirror).
          */
         virtual void SetSamplerAddressMode(int /*addressU*/, int /*addressV*/) {}
+        /**
+         * @brief NOXNA. Tells the backend whether the batch SpriteBatch::Begin() just started is
+         *        SpriteSortMode::Immediate.
+         *
+         * Called once per Begin(), before Begin() itself, with the sort mode actually requested for
+         * that batch -- SpriteBatch.cpp's own shared layer already forwards each Immediate Draw()
+         * straight to the backend the instant it is called (bypassing its sprite queue entirely), so
+         * a backend that internally batches/defers its own JS/GPU work across Draw() calls (unlike
+         * one that is already synchronous per Draw(), which needs no signal at all) can use this to
+         * flush per-draw instead, so that device state changed BETWEEN two Draw() calls in the same
+         * Begin/End block is honestly reflected per sprite rather than only as of whichever state was
+         * current when the whole batch was eventually flushed. Default: no-op, preserving every
+         * existing backend's current (already-established) behavior unless it opts in.
+         *
+         * @param immediate True when SpriteSortMode::Immediate is active for this batch.
+         */
+        virtual void SetImmediateMode(bool /*immediate*/) {}
         virtual void Draw(const ITextureBackend& texture, float x, float y) = 0;
         virtual void Draw(const ITextureBackend& texture,
                           const Rectangle& destinationRectangle,
