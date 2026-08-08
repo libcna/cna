@@ -44,6 +44,31 @@ TEST(PathContainmentTest, SimpleRelativeSubpathIsContained)
 {
     const auto result = ResolveContainedPath("/base/dir", "sub/file.txt", /*canonicalize=*/false);
     EXPECT_TRUE(result.ok);
+    EXPECT_EQ(result.resolvedPath, "/base/dir/sub/file.txt");
+}
+
+TEST(PathContainmentTest, NestedRelativeSubpathIsContained)
+{
+    const auto result = ResolveContainedPath(
+        "/base/dir", "music/album/song.ext", /*canonicalize=*/false);
+    ASSERT_TRUE(result.ok);
+    EXPECT_EQ(result.resolvedPath, "/base/dir/music/album/song.ext");
+}
+
+TEST(PathContainmentTest, CurrentDirectorySegmentIsNormalizedWithinBase)
+{
+    const auto result = ResolveContainedPath(
+        "/base/dir", "./textures/a.png", /*canonicalize=*/false);
+    ASSERT_TRUE(result.ok);
+    EXPECT_EQ(result.resolvedPath, "/base/dir/textures/a.png");
+}
+
+TEST(PathContainmentTest, InternalParentSegmentIsNormalizedWithinBase)
+{
+    const auto result = ResolveContainedPath(
+        "/base/dir", "textures/../textures/a.png", /*canonicalize=*/false);
+    ASSERT_TRUE(result.ok);
+    EXPECT_EQ(result.resolvedPath, "/base/dir/textures/a.png");
 }
 
 TEST(PathContainmentTest, AbsoluteRhsIsRejected)
@@ -52,9 +77,30 @@ TEST(PathContainmentTest, AbsoluteRhsIsRejected)
     EXPECT_FALSE(result.ok);
 }
 
+TEST(PathContainmentTest, AbsolutePathInsideBaseIsStillRejectedAsUntrustedInput)
+{
+    const auto result = ResolveContainedPath(
+        "/base/dir", "/base/dir/textures/a.png", /*canonicalize=*/false);
+    EXPECT_FALSE(result.ok);
+}
+
 TEST(PathContainmentTest, DotDotTraversalEscapingBaseIsRejected)
 {
     const auto result = ResolveContainedPath("/base/dir", "../../etc/passwd", /*canonicalize=*/false);
+    EXPECT_FALSE(result.ok);
+}
+
+TEST(PathContainmentTest, DeepDotDotTraversalEscapingBaseIsRejected)
+{
+    const auto result = ResolveContainedPath(
+        "/base/dir", "a/b/../../../outside", /*canonicalize=*/false);
+    EXPECT_FALSE(result.ok);
+}
+
+TEST(PathContainmentTest, SiblingPrefixIsNotMistakenForContainedDirectory)
+{
+    const auto result = ResolveContainedPath(
+        "/base/content", "../content-evil/secret.bin", /*canonicalize=*/false);
     EXPECT_FALSE(result.ok);
 }
 
@@ -90,10 +136,47 @@ TEST(PathContainmentTest, WindowsBackslashDriveLetterIsRejected)
     EXPECT_FALSE(result.ok);
 }
 
+TEST(PathContainmentTest, WindowsDriveRelativeFormIsRejectedEvenOnPosix)
+{
+    const auto result = ResolveContainedPath(
+        "/base/dir", "C:Windows\\System32", /*canonicalize=*/false);
+    EXPECT_FALSE(result.ok);
+}
+
+TEST(PathContainmentTest, WindowsRootedBackslashFormIsRejectedEvenOnPosix)
+{
+    const auto result = ResolveContainedPath(
+        "/base/dir", "\\Windows\\System32", /*canonicalize=*/false);
+    EXPECT_FALSE(result.ok);
+}
+
 TEST(PathContainmentTest, UncPathIsRejected)
 {
     const auto result = ResolveContainedPath("/base/dir", "\\\\server\\share\\file", /*canonicalize=*/false);
     EXPECT_FALSE(result.ok);
+}
+
+TEST(PathContainmentTest, RepeatedAndMixedSeparatorsNormalizeWithinBase)
+{
+    const auto result = ResolveContainedPath(
+        "/base/dir", "textures//nested\\a.png", /*canonicalize=*/false);
+    ASSERT_TRUE(result.ok);
+    EXPECT_EQ(result.resolvedPath, "/base/dir/textures/nested/a.png");
+}
+
+TEST(PathContainmentTest, TrailingSeparatorBelowBaseRemainsContained)
+{
+    const auto result = ResolveContainedPath(
+        "/base/dir", "textures/", /*canonicalize=*/false);
+    EXPECT_TRUE(result.ok);
+}
+
+TEST(PathContainmentTest, DotDotCharactersInsideFilenameAreNotTraversal)
+{
+    const auto result = ResolveContainedPath(
+        "/base/dir", "music/track..mix.ogg", /*canonicalize=*/false);
+    ASSERT_TRUE(result.ok);
+    EXPECT_EQ(result.resolvedPath, "/base/dir/music/track..mix.ogg");
 }
 
 TEST(PathContainmentTest, EmptyBaseDirTreatsCurrentDirectoryAsBase)
