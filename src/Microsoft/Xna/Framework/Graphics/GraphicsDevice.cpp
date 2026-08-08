@@ -392,6 +392,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // Target|DepthBuffer|Stencil, matching FNA's own single-argument overload -- crashes on
         // SDL_RENDERER instead of degrading to a color-only clear.
         bool hasRealDepthBuffer;
+        bool hasRealStencilBuffer;
         if (!currentRenderTargets_.empty())
         {
             // REMED-GFX-142: a bound RenderTargetCube has to be asked too. This branch only ever
@@ -411,21 +412,31 @@ namespace Microsoft::Xna::Framework::Graphics
                 const auto* cubeBackend = cube->GetRenderTargetCubeBackend();
                 hasRealDepthBuffer =
                     cubeBackend && cubeBackend->HasRealDepthBuffer(depthFormatRequested);
+                // Render-target backends currently expose depth as one allocation contract. A
+                // default backbuffer may be depth-only (notably Glide), which is handled by the
+                // independent backend queries below.
+                hasRealStencilBuffer = hasRealDepthBuffer;
             }
             else
             {
                 const bool depthFormatRequested = rt && rt->getDepthStencilFormatProperty() != DepthFormat::None;
                 const auto* rtBackend = rt ? rt->GetRenderTargetBackend() : nullptr;
                 hasRealDepthBuffer = rtBackend && rtBackend->HasRealDepthBuffer(depthFormatRequested);
+                hasRealStencilBuffer = hasRealDepthBuffer;
             }
         }
         else
         {
-            hasRealDepthBuffer = backend_->SupportsDepthStencil();
+            hasRealDepthBuffer = backend_->SupportsDepthBuffer();
+            hasRealStencilBuffer = backend_->SupportsStencilBuffer();
         }
         if (!hasRealDepthBuffer)
         {
-            options &= ClearOptions::Target;
+            options &= ~ClearOptions::DepthBuffer;
+        }
+        if (!hasRealStencilBuffer)
+        {
+            options &= ~ClearOptions::Stencil;
         }
 
         const float r = static_cast<float>(color.getRProperty()) / 255.0f;
@@ -2448,6 +2459,8 @@ namespace Microsoft::Xna::Framework::Graphics
                 (int)ss.getAddressUProperty(),
                 (int)ss.getAddressVProperty(),
                 ss.getMaxAnisotropyProperty());
+            backend_->ApplySamplerMipState(i, ss.getMaxMipLevelProperty(),
+                                           ss.getMipMapLevelOfDetailBiasProperty());
         }
     }
 

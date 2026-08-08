@@ -38,3 +38,10 @@ TEST(ClearOptionsTest, AllThreeCombined)
     ClearOptions all = ClearOptions::Target | ClearOptions::DepthBuffer | ClearOptions::Stencil;
     EXPECT_EQ(static_cast<int>(all), 7);
 }
+
+TEST(ClearOptionsTest, ComplementCanRemoveOnlyStencil)
+{
+    ClearOptions all = ClearOptions::Target | ClearOptions::DepthBuffer | ClearOptions::Stencil;
+    EXPECT_EQ(all & ~ClearOptions::Stencil,
+              ClearOptions::Target | ClearOptions::DepthBuffer);
+}

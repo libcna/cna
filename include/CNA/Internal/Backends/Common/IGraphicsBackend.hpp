@@ -1469,6 +1469,10 @@ namespace CNA::Internal::Backends
                                        int addressU, int addressV,
                                        int maxAnisotropy) {}
 
+        /// Applies sampler controls not represented by filter/address mode. Defaults to no-op
+        /// so existing backends can adopt each field independently and explicitly.
+        virtual void ApplySamplerMipState(int slot, int maxMipLevel, float lodBias) {}
+
         /// Sets the constant blend color used with the BlendFactor blend mode.
         /// Maps to glBlendColor on GL backends. Default: no-op.
         virtual void SetBlendFactor(float r, float g, float b, float a) {}
@@ -1501,6 +1505,16 @@ namespace CNA::Internal::Backends
          * ClearColorDepthAndStencil()-style method this backend cannot honor.
          */
         [[nodiscard]] virtual bool SupportsDepthStencil() const { return true; }
+
+        /// Returns whether the default back buffer has a usable depth plane. Backends with a
+        /// depth-only surface override this independently of SupportsDepthStencil().
+        [[nodiscard]] virtual bool SupportsDepthBuffer() const { return SupportsDepthStencil(); }
+
+        /// Returns whether the default back buffer has a usable stencil plane. Kept separate
+        /// from SupportsDepthBuffer() because historical APIs such as Glide expose Z but no
+        /// stencil; GraphicsDevice::Clear must then retain a requested depth clear and discard
+        /// only the impossible stencil portion.
+        [[nodiscard]] virtual bool SupportsStencilBuffer() const { return SupportsDepthStencil(); }
 
         /**
          * Backend boundary used by common public draw/model entry points before they inspect,

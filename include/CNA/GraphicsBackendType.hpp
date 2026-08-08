@@ -111,7 +111,10 @@ namespace CNA
         Sokol,
 
         /** @brief Diligent Engine (experimental; picks its own native API at runtime). */
-        Diligent
+        Diligent,
+
+        /** @brief 3dfx Glide 3.x, dynamically loaded from glide3x.dll. */
+        Glide
     };
 
     /**
@@ -201,6 +204,8 @@ namespace CNA
         return GraphicsBackendType::Sokol;
 #elif defined(CNA_BACKEND_DILIGENT)
         return GraphicsBackendType::Diligent;
+#elif defined(CNA_BACKEND_GLIDE)
+        return GraphicsBackendType::Glide;
 #else
 #error "CNA: no CNA_BACKEND_* compile definition set -- graphics backend selection (cmake/BackendSelection.cmake) is broken"
 #endif
@@ -255,6 +260,7 @@ namespace CNA
             case GraphicsBackendType::Wicked:        return "WICKED";
             case GraphicsBackendType::Sokol:         return "SOKOL";
             case GraphicsBackendType::Diligent:      return "DILIGENT";
+            case GraphicsBackendType::Glide:         return "GLIDE";
         }
         return "UNKNOWN";
     }
