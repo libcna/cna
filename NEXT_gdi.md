@@ -28,6 +28,15 @@
 - REMED-GFX-232 makes DX3's standalone stencil hook report false, consistent with its depth-only
   production path and `GraphicsCapability::StencilBuffer` answer; the focused DX3 capability
   regression now compares both paths directly, with adapted execution pending.
+- REMED-GFX-233 fixes the shared Software persistent-buffer failure exposed by adaptation
+  validation. `VertexBuffer(device, count)` intentionally has an empty, zero-stride declaration;
+  REMED-GFX-201 had copied that zero into the one-stream snapshot, so every vertex fetch reused
+  record zero and produced a degenerate primitive. Only that exact legacy single-buffer shape now
+  uses the named-`vb` backend-stride fallback. Nonzero declared streams and multistream semantics
+  remain unchanged. The Additive contract pins the empty-declaration precondition plus exact
+  non-indexed/indexed pixels; root-owned Software effects/Additive/scissor reruns are pending. The
+  mechanism is unchanged from integration base `677f4c59`, so this is an integration-lane closure
+  of a newly exercised pre-existing defect, not a defect introduced by the GDI replay.
 - The GDI memory-DC oracle now exercises selection restoration and bitmap/DC deletion across 64
   create/destroy cycles plus three injected constructor-failure checkpoints. It also checks
   `GetGuiResources` return-to-baseline only after proving that API's live DC/DIB count is stable;

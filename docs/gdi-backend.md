@@ -142,6 +142,15 @@ as a release baseline.
   the standalone stencil hook: `SupportsStencilBuffer()` now returns false, matching its
   `GraphicsCapability::StencilBuffer` answer and documented lack of a stencil plane. The focused
   DX3 capability executable compares the two answers directly; adapted execution remains pending.
+- REMED-GFX-233 restores shared Software's legacy persistent-buffer compatibility. The NOXNA
+  `VertexBuffer(device, count)` constructor deliberately carries an empty, zero-stride public
+  declaration while typed `SetData` uploads real packed records. The immutable stream snapshot
+  introduced before this adaptation copied that zero stride and repeatedly fetched record zero,
+  leaving classic non-indexed/indexed draws empty. That exact one-buffer shape now uses the
+  existing named-`vb` backend-stride fallback; all declared and multistream bindings retain the
+  current authoritative stream semantics. The shared Additive contract asserts the legacy
+  declaration precondition and exact pixels for both persistent routes. Root-owned Software
+  effects/Additive/scissor reruns remain pending.
 - REMED-BUILD-018 makes the shared capability test self-contained by directly including
   `IGraphicsBackend.hpp` before invoking `GetBackend().SupportsStencilBuffer()`; the native
   sanitizer object rebuild that found the incomplete-type error remains pending.

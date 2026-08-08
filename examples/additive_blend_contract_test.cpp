@@ -10,6 +10,10 @@
 // from the GPU controls' UNORM stores. Saturating cases are paired with unsaturated cases so a
 // source-only equation cannot hide behind white, and the partial-alpha cases distinguish a second
 // source-alpha multiplication from premultiplied AlphaBlend input.
+//
+// REMED-GFX-233 also makes the persistent Position+Color cases a compatibility oracle for
+// VertexBuffer(device, count): that legacy convenience buffer has an empty public declaration but
+// a real 16-byte typed-upload stride, which ordinary submission must not replace with zero.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
@@ -180,7 +184,8 @@ class AdditiveBlendContractTest final : public Game
         DrawUserIndexedPrimitives,
     };
 
-    void DrawDirect(GraphicsDevice& dev, DirectPath path, const Color& source)
+    void DrawDirect(GraphicsDevice& dev, DirectPath path, const Color& source,
+                    bool* usedLegacyEmptyDeclaration = nullptr)
     {
         const VertexPositionColor vertices[3] = {
             {Vector3(-2.0f,  2.0f, 0.5f), source},
@@ -209,6 +214,12 @@ class AdditiveBlendContractTest final : public Game
         }
 
         VertexBuffer vb(dev, 3);
+        if (usedLegacyEmptyDeclaration != nullptr)
+        {
+            const VertexDeclaration& declaration = vb.getVertexDeclarationProperty();
+            *usedLegacyEmptyDeclaration = declaration.GetVertexElements().empty() &&
+                                          declaration.getVertexStrideProperty() == 0;
+        }
         vb.SetData(vertices, 3);
         dev.SetVertexBuffer(&vb);
         if (path == DirectPath::DrawPrimitives)
@@ -226,7 +237,8 @@ class AdditiveBlendContractTest final : public Game
         dev.SetVertexBuffer(nullptr);
     }
 
-    Color RunDirectTarget(GraphicsDevice& dev, DirectPath path)
+    Color RunDirectTarget(GraphicsDevice& dev, DirectPath path,
+                          bool* usedLegacyEmptyDeclaration = nullptr)
     {
         RenderTarget2D target(dev, kW, kH, false, SurfaceFormat::Color, DepthFormat::None, 0,
                               RenderTargetUsage::DiscardContents);
@@ -234,7 +246,7 @@ class AdditiveBlendContractTest final : public Game
         SetOrdinaryDrawState(dev);
         dev.Clear(kDestination);
         dev.setBlendStateProperty(BlendState::Additive);
-        DrawDirect(dev, path, kPartialSource);
+        DrawDirect(dev, path, kPartialSource, usedLegacyEmptyDeclaration);
         dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
         return ReadTarget(target);
     }
@@ -387,14 +399,23 @@ class AdditiveBlendContractTest final : public Game
         }
 
         // All effect-aware public primitive entry points share the same blend stage.
-        CheckColor(RunDirectTarget(dev, DirectPath::DrawPrimitives), kPartialAdditive,
-                   "G1 non-indexed VertexBuffer DrawPrimitives path");
+        // REMED-GFX-233: the persistent-buffer pair deliberately uses CNA's legacy convenience
+        // constructor, whose public declaration is empty even though typed SetData uploads packed
+        // 16-byte Position+Color records. Pin that precondition as well as the rendered pixels so
+        // replacing the fixture with an explicit declaration cannot hide a zero-stride regression.
+        bool usedLegacyEmptyDeclaration = false;
+        const Color legacyNonIndexed = RunDirectTarget(
+            dev, DirectPath::DrawPrimitives, &usedLegacyEmptyDeclaration);
+        Check(usedLegacyEmptyDeclaration,
+              "G1 persistent VertexBuffer fixture has the legacy empty/zero-stride declaration");
+        CheckColor(legacyNonIndexed, kPartialAdditive,
+                   "G2 legacy empty-declaration VertexBuffer DrawPrimitives path");
         CheckColor(RunDirectTarget(dev, DirectPath::DrawIndexedPrimitives), kPartialAdditive,
-                   "G2 indexed VertexBuffer DrawIndexedPrimitives path");
+                   "G3 legacy empty-declaration VertexBuffer DrawIndexedPrimitives path");
         CheckColor(RunDirectTarget(dev, DirectPath::DrawUserPrimitives), kPartialAdditive,
-                   "G3 DrawUserPrimitives path");
+                   "G4 DrawUserPrimitives path");
         CheckColor(RunDirectTarget(dev, DirectPath::DrawUserIndexedPrimitives), kPartialAdditive,
-                   "G4 DrawUserIndexedPrimitives path");
+                   "G5 DrawUserIndexedPrimitives path");
 
         // Explicit resource disposal is exercised after a real producer/readback cycle. Reaching
         // main's return then exercises SpriteBatch/effect/device teardown under the sanitizers.

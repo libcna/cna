@@ -797,10 +797,35 @@ namespace Microsoft::Xna::Framework::Graphics
     }
 
     void GraphicsDevice::FillVertexStreamBindings(
-        CNA::Internal::Backends::GpuDrawParams& p, int foldedOffset) const
+        CNA::Internal::Backends::GpuDrawParams& p, int foldedOffset,
+        bool allowLegacyEmptyDeclarationFallback) const
     {
         p.vertexStreamCount = 0;
         p.combinedVertexStride = 0;
+
+        // REMED-GFX-233: the NOXNA VertexBuffer(device, count) convenience constructor has an
+        // intentionally empty declaration. Its typed SetData overload still uploads a real,
+        // backend-known packed stride, but there is no declared stride to put in a stream tuple.
+        // Describing that one legacy buffer as a zero-stride stream makes a stream-aware CPU
+        // reader fetch record zero for every vertex, producing a degenerate triangle. Keep this
+        // exact single, per-vertex, empty-declaration shape on the pre-REMED-GFX-201 contract: the
+        // Draw*PrimitivesEx `vb` argument is authoritative and vertexStreamCount==0 selects its
+        // backend upload stride. FoldedVertexStreamOffset() has already carried any binding offset
+        // through vertexStart/baseVertex. Nonzero declarations and every multi-stream shape keep
+        // the immutable stream-array path below unchanged.
+        if (allowLegacyEmptyDeclarationFallback && currentVertexBuffers_.size() == 1)
+        {
+            const VertexBufferBinding& legacyBinding = currentVertexBuffers_[0];
+            const VertexBuffer* legacyBuffer = legacyBinding.getVertexBufferProperty();
+            if (legacyBuffer != nullptr && legacyBuffer == currentVertexBuffer_ &&
+                legacyBinding.getInstanceFrequencyProperty() == 0 &&
+                legacyBuffer->getVertexDeclarationProperty().GetVertexElements().empty() &&
+                legacyBuffer->getVertexDeclarationProperty().getVertexStrideProperty() == 0)
+            {
+                return;
+            }
+        }
+
         if (currentVertexBuffers_.empty() ||
             currentVertexBuffers_[0].getVertexBufferProperty() != currentVertexBuffer_)
         {
@@ -1037,7 +1062,8 @@ namespace Microsoft::Xna::Framework::Graphics
         // remainder is 0, which is exactly what REMED-GFX-200 measured.
         const int foldedOffset = FoldedVertexStreamOffset();
         p.vertexStart = vertexStart + foldedOffset;
-        FillVertexStreamBindings(p, foldedOffset);
+        FillVertexStreamBindings(
+            p, foldedOffset, /*allowLegacyEmptyDeclarationFallback=*/true);
         // Argument validation first, capability second: an out-of-range request is wrong on every
         // backend, so it must report the same public exception everywhere.
         ValidateVertexStreamRanges(
@@ -1123,7 +1149,8 @@ namespace Microsoft::Xna::Framework::Graphics
         p.baseVertex = baseVertex + foldedOffset;
         p.minVertexIndex = minVertexIndex;
         p.numVertices = numVertices;
-        FillVertexStreamBindings(p, foldedOffset);
+        FillVertexStreamBindings(
+            p, foldedOffset, /*allowLegacyEmptyDeclarationFallback=*/true);
         // The declared window is [baseVertex + minVertexIndex, + numVertices) in every stream's
         // own elements, so every stream must hold it -- not only the one named by `vb`. Argument
         // validation precedes the capability gate for the reason DrawPrimitives states.
@@ -1227,7 +1254,8 @@ namespace Microsoft::Xna::Framework::Graphics
         // passed separately to DrawIndexedInstanced. Folding here would additionally be wrong,
         // because baseVertex must NOT advance a per-instance stream and the smallest offset among
         // the per-vertex streams has no reason to be shared with them.
-        FillVertexStreamBindings(p, /*foldedOffset=*/0);
+        FillVertexStreamBindings(
+            p, /*foldedOffset=*/0, /*allowLegacyEmptyDeclarationFallback=*/false);
         // The declared window is [baseVertex + minVertexIndex, + numVertices) in every per-vertex
         // stream's own elements, and every per-instance stream owes one record per complete
         // frequency-sized group of instances. Argument validation precedes the capability gate for

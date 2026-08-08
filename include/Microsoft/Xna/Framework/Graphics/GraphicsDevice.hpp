@@ -1177,12 +1177,16 @@ namespace Microsoft::Xna::Framework::Graphics
         // giving each stream `binding.VertexOffset + vertexStart` of its own elements.
         [[nodiscard]] int FoldedVertexStreamOffset() const;
 
-        // REMED-GFX-201: copies every active VertexBufferBinding into `p.vertexStreams`, in public
-        // slot order, and computes `p.combinedVertexStride`. `foldedOffset` is subtracted from each
-        // per-vertex stream's VertexOffset (see FoldedVertexStreamOffset above). Captured by value:
-        // a deferred backend replays a draw long after currentVertexBuffers_ has been reassigned.
+        // REMED-GFX-201: copies every active declared VertexBufferBinding into `p.vertexStreams`,
+        // in public slot order, and computes `p.combinedVertexStride`. `foldedOffset` is subtracted
+        // from each per-vertex stream's VertexOffset (see FoldedVertexStreamOffset above). Captured
+        // by value: a deferred backend replays a draw long after currentVertexBuffers_ has been
+        // reassigned. On ordinary draws, REMED-GFX-233's exact one-buffer empty-declaration
+        // compatibility shape leaves the stream list empty so the named backend buffer's uploaded
+        // stride remains authoritative; instanced submission retains its complete stream contract.
         void FillVertexStreamBindings(
-            CNA::Internal::Backends::GpuDrawParams& p, int foldedOffset) const;
+            CNA::Internal::Backends::GpuDrawParams& p, int foldedOffset,
+            bool allowLegacyEmptyDeclarationFallback) const;
 
         // REMED-GFX-201/202: rejects a draw whose binding set is wider than the running backend can
         // express -- more than one per-vertex stream, more than one per-instance stream, or more

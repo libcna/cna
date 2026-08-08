@@ -4,9 +4,11 @@
 > recreated on `adapt/gdi` from integration base
 > `677f4c59e066fc9a7ed79430d0fee5ffd69b531c`. The dated MinGW/Wine results below are historical
 > feature-branch evidence, not results for this adapted branch; its root-owned build/runtime pass is
-> still pending. REMED-GFX-229 and REMED-GFX-230 add focused odd-width pitched-upload regressions,
-> and REMED-BUILD-017 corrects native CI/docs to all seventeen correctness executables/nineteen
-> registered cases. Manual native MSVC plus visible Windows lifecycle/DPI gates remain open.
+> still pending. REMED-GFX-229 and REMED-GFX-230 add focused odd-width pitched-upload regressions;
+> REMED-GFX-233 restores the legacy empty-declaration persistent-buffer path exposed by shared
+> Software validation; and REMED-BUILD-017 corrects native CI/docs to all seventeen correctness
+> executables/nineteen registered cases. Manual native MSVC plus visible Windows lifecycle/DPI
+> gates remain open.
 
 > **Audit snapshot:** 2026-08-01, commit `56bd8961` (`feature/gdi`).
 >
@@ -699,6 +701,7 @@ means only the narrowed statement in this table, not overall release readiness.
 | REMED-GFX-230 | Honor Software render-target upload pitch. | 🟨 | `SoftwareRenderTargetBackend::UpdatePixels` copies only each row's RGBA bytes using a valid supplied pitch, rejects a positive short pitch before color/MSAA/mip state changes, and retains the non-positive tight-row default. The existing 2D regression provides the same odd-width/asymmetric/padded/readback/rejection coverage. Implementation/test are committed; adapted execution is pending. |
 | REMED-GFX-231 | Restore `SourceAlphaSaturation` destination-alpha semantics. | 🟨 | The shared CPU blend factor uses `min(sourceAlpha, 1-destinationAlpha)` for RGB and one for alpha, matching XNA and the replayed GDI contract. The existing 2D regression uses asymmetric source channels and distinct nontrivial source/destination alphas to reject the former inverse-source-alpha calculation. Implementation/test are committed; adapted execution is pending. |
 | REMED-GFX-232 | Align DX3's standalone stencil hook with its capability answer. | 🟨 | DX3 has a real depth-only surface and no stencil plane: `SupportsStencilBuffer()` returns false while `SupportsDepthStencil()` remains true, matching `SupportsCapability(StencilBuffer)`. The focused DX3 capability regression compares both production answers directly. Implementation/test are committed; adapted execution is pending. |
+| REMED-GFX-233 | Preserve legacy empty-declaration single-buffer submission. | 🟨 | `VertexBuffer(device, count)` intentionally exposes an empty declaration while typed `SetData` gives its backend a real packed stride. REMED-GFX-201's immutable binding snapshot copied the public zero stride, so Software advanced every persistent vertex by zero bytes and rasterized a degenerate primitive. The exact one-buffer legacy shape now retains the named-`vb`/backend-stride fallback; every nonzero declared stream and every multistream shape stays on the authoritative stream array. The shared Additive contract pins the empty/zero declaration and exact non-indexed/indexed pixels. This mechanism already existed at integration base `677f4c59`; the adaptation lane closes the newly executed supported-path defect, with root-owned reruns pending. |
 | REMED-BUILD-017 | Reconcile native GDI build target inventory. | 🟨 | The manual MSVC workflow and documented native/Wine command lists cover all seventeen correctness executables before the nineteen registered cases run, including the three GDI-075/076/077 executables formerly omitted. Structural inspection is complete; the manual native workflow remains pending. |
 | REMED-BUILD-018 | Include the complete graphics-backend type in the capability test. | 🟨 | `GraphicsDeviceCapabilityTests.cpp` directly includes `IGraphicsBackend.hpp` before calling `GetBackend().SupportsStencilBuffer()`, instead of relying on `GraphicsDevice.hpp`'s intentional forward declaration. The native sanitizer object rebuild that exposed the incomplete-type error remains pending. |
 

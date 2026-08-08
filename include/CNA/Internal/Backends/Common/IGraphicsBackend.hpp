@@ -940,20 +940,26 @@ namespace CNA::Internal::Backends
         bool pbr                 = false;
         /// Number of instances to draw (1 = non-instanced).
         int instanceCount = 1;
-        /// REMED-GFX-201/202: every active `VertexBufferBinding`, in public slot order, captured by
-        /// value -- per-vertex and per-instance alike, on EVERY draw route. `vertexStreams[0]` is
-        /// always the stream `Draw*PrimitivesEx`'s own `vb` argument refers to, so a backend that
-        /// reads only `vb` still sees exactly what it saw before this field existed. Entries at or
-        /// past `vertexStreamCount` are unset and must not be read.
+        /// REMED-GFX-201/202: every active declared `VertexBufferBinding`, in public slot order,
+        /// captured by value -- per-vertex and per-instance alike, on every draw route.
+        /// `vertexStreams[0]` is always the stream `Draw*PrimitivesEx`'s own `vb` argument refers
+        /// to, so a backend that reads only `vb` still sees exactly what it saw before this field
+        /// existed. REMED-GFX-233's one legacy empty-declaration buffer is the sole public-binding
+        /// exception and deliberately leaves this array empty (see `vertexStreamCount`). Entries
+        /// at or past `vertexStreamCount` are unset and must not be read.
         ///
-        /// This is CNA's `FNA3D_VertexBufferBinding` array, and like FNA's own
-        /// `PrepareVertexBindingArray` it is prepared identically for `DrawPrimitives`,
+        /// For declared layouts this is CNA's `FNA3D_VertexBufferBinding` array, and like FNA's
+        /// own `PrepareVertexBindingArray` it is prepared identically for `DrawPrimitives`,
         /// `DrawIndexedPrimitives` and `DrawInstancedPrimitives`. An instance stream is simply an
         /// entry whose `instanceFrequency` is greater than zero; there is no second representation
         /// of "the instance buffer" anywhere.
         std::array<GpuVertexStreamBinding, kMaxVertexStreams> vertexStreams{};
-        /// Active entries in `vertexStreams`. 0 only on the internal routes that bind no public
-        /// buffer at all (SpriteBatch, `DrawUser*`); 1 for every single-stream draw.
+        /// Active entries in `vertexStreams`. 0 on internal routes that bind no public buffer
+        /// (SpriteBatch, `DrawUser*`) and on REMED-GFX-233's legacy ordinary single-buffer route
+        /// whose intentionally empty VertexDeclaration has no stride to describe; that route uses
+        /// the Draw*PrimitivesEx `vb` argument and its backend upload stride. 1 for every declared
+        /// single-stream draw. Nonzero declared streams, instanced submission, and multi-stream
+        /// draws are never folded into this compatibility representation.
         int vertexStreamCount = 0;
         /// Sum of the per-vertex (`instanceFrequency == 0`) streams' strides -- the byte stride of
         /// the *combined* vertex the shader sees, and therefore the key a stride-dispatched
@@ -1039,7 +1045,9 @@ namespace CNA::Internal::Backends
      * routes that stage their own temporary buffer -- `DrawUser*`, SpriteBatch,
      * `DrawColoredPrimitives` -- bind no public `VertexBufferBinding` at all and leave
      * `vertexStreamCount` at 0; they keep dispatching on @p fallbackStride, the stride of the one
-     * buffer they built, so their behaviour is untouched by this feature.
+     * buffer they built, so their behaviour is untouched by this feature. REMED-GFX-233's legacy
+     * empty-declaration single-buffer route likewise leaves the count at 0 because only the
+     * backend resource knows its typed-upload stride; @p fallbackStride is authoritative there.
      *
      * @param params         The draw being dispatched.
      * @param fallbackStride The named `vb`'s own stride.
