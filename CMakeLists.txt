@@ -303,3 +303,6 @@ include(cmake/Harnesses.cmake)
 include(cmake/ToolGltfToCnj.cmake)
 
 include(cmake/UnitTests.cmake)
+
+# Minimal-link module probes + renderer-identity registry gate (MODULARIZATION_PLAN.md §4).
+include(cmake/Tests/ModuleProbes.cmake)

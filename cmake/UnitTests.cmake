@@ -30,6 +30,11 @@ if(CNA_BUILD_TESTS)
     list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX
         ".*/CNA/Internal/Backends/Glide/(FakeGlide3xDll|GlideAbiLoaderTests)\\.cpp$")
 
+    # The minimal-link module probes (tests/modules/*.cpp, cmake/Tests/ModuleProbes.cmake) are
+    # standalone executables with their own main(), not GTest translation units -- same reason
+    # as the Glide ABI programs just above.
+    list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/tests/modules/.*\\.cpp$")
+
     # REMED-BUILD-013 (discovered while verifying it): mirrors CnaLibrary.cmake's own
     # CNA_FFMPEG_AVAILABLE exclusion for VideoDecoder.cpp/VideoPlayer.cpp/Video.cpp/
     # VideoContentTypeReader.cpp -- these 4 test files exercise exactly those classes, which do not
