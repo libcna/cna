@@ -74,6 +74,7 @@ These IDs continue the existing `plan_metal.md` sequence without changing any hi
 | `METAL-278` — command failure/readback ordering could return stale data | High | Errors were not latched, and active RT readback waited only for the later blit. | Common abandon/reset teardown surfaces async failure; exact sync commands are checked; active RT source render completes successfully before readback conversion/output. |
 | `METAL-279` — empty logical scissor was illegal natively | High | Metal rejects zero native scissor extent. | Empty state submits a legal placeholder and suppresses draws, persisting across toggles/encoders. |
 | `METAL-280` — Metal static archive reverse edge was undeclared | High | Objective-C++ calls CNA-owned Effect/math/color symbols. | METAL joins the existing backend→CNA cycle declaration; native tests assert ordinary-link coverage. |
+| `METAL-281` — retained texture/render-target backends dereferenced a destroyed owner | High | Plain texture callbacks captured raw `Impl*`; RT2D/RTCube stored raw `Impl&`. Copyable/movable texture wrappers and public backend handles can legally retain those backends after `GraphicsDevice` tears down its Metal `Impl`. | A shared health token becomes inactive before native teardown. Resources hold only a weak owner, route live pending failures through the common consume/abandon path, reject operations after owner death, and RT destructors skip owner-state cleanup when the weak lock is gone while still releasing independently owned native textures. Portable lifetime/retry/escape tests pass; native lifetime proof remains pending. |
 
 ## Current capability contract
 
@@ -154,9 +155,19 @@ Asynchronous command failures are recorded through a lifetime-safe latch and con
 synchronous backend entry. Consumption abandons any uncommitted command/encoder and resets cached
 frame state before throwing; synchronous mip/readback operations check the exact command they
 submitted rather than treating a later queue operation as proof that the source work succeeded.
+Texture and render-target backends share an owner-health token but retain only a weak `Impl`
+reference, so copied/moved wrappers or a retained public backend handle do not prolong the graphics
+device. A live resource operation locks the owner for common failure cleanup and can retry after
+that one failure is consumed; after teardown begins it rejects before dereferencing the owner.
+Render-target destruction conditionally cleans active binding state only while the weak owner can
+be locked, then releases its independently owned native attachments in either case.
 
 Metal window creation adds `SDL_WINDOW_METAL | SDL_WINDOW_HIGH_PIXEL_DENSITY` only in the Metal
 selection branch, leaving other backend window flags unchanged.
+This is also the post-audit correction to historical `METAL-257`: its claim that CNA never set
+`SDL_WINDOW_HIGH_PIXEL_DENSITY` was false. The Metal branch has requested both flags since the
+initial replay, so that finding's Retina-window premise was already satisfied rather than an open
+cross-backend fix.
 
 MSL is embedded in `MetalGraphicsBackend.mm` and compiled at runtime with
 `newLibraryWithSource:`. The CPU-side matrix, uniform, enum, vertex-layout, capability, format,
@@ -179,8 +190,8 @@ env -u DISPLAY ctest --test-dir cmake-build-headless -R '^Metal' \
   --output-on-failure -j4
 ```
 
-At the 2026-08-09 adaptation checkpoint, both targets built successfully and all 199 unique
-Metal-prefixed portable tests passed. CTest reports 200/200 because it registers those 199 tests
+At the 2026-08-09 adaptation checkpoint, both targets built successfully and all 206 unique
+Metal-prefixed portable tests passed. CTest reports 207/207 because it registers those 206 tests
 individually and also registers the same set once as the `Metal_PortableHelpers` aggregate. The
 HEADLESS build graph contained no `MetalGraphicsBackend.mm` reference. A Linux configure with
 `-DCNA_GRAPHICS_BACKEND=METAL` failed at the intended macOS-only gate and never enabled
@@ -194,11 +205,10 @@ CMAKE_CXX_FLAGS=-fsanitize=address,undefined -fno-omit-frame-pointer -fno-saniti
 CMAKE_EXE_LINKER_FLAGS=-fsanitize=address,undefined
 ```
 
-`cna_test_metal_portable` built with `-j4` and passed 199/199 tests under
+`cna_test_metal_portable` built with `-j4` and passed 206/206 tests under
 `ASAN_OPTIONS=detect_leaks=1:halt_on_error=1:strict_string_checks=1` and
-`UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1`. Its registered aggregate passed 1/1, and a
-complete scan of the build, direct-test, and CTest logs found no AddressSanitizer,
-LeakSanitizer, UndefinedBehaviorSanitizer, or runtime-error diagnostic.
+`UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1`. A complete scan of the saved direct-test log
+found no AddressSanitizer, LeakSanitizer, UndefinedBehaviorSanitizer, or runtime-error diagnostic.
 
 These checks cover interface shape and portable logic, not Objective-C++ syntax, Apple framework
 linking, native Objective-C object lifetime, runtime MSL compilation, native resource validation,

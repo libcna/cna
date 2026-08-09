@@ -35,18 +35,25 @@ diagnostic, or handoff-only commits. `docs/metal-history-map.tsv` is the authori
 machine-readable disposition map, including the recreated commit for every retained original.
 
 Portable Linux evidence at this checkpoint: the stable HEADLESS `CnaTests` and dedicated portable
-Metal target build with `-j4`, all 199 unique `^Metal` tests pass with `DISPLAY` unset (CTest shows
-200/200 because it also runs the aggregate), the build graph contains no Objective-C++ source,
+Metal target build with `-j4`, all 206 unique `^Metal` tests pass with `DISPLAY` unset (CTest shows
+207/207 because it also runs the aggregate), the build graph contains no Objective-C++ source,
 and a Linux `METAL` configure fails at the intended macOS-only gate. The helper-only GNU 14.2
-ASan+UBSan target also passes 199/199 with no sanitizer finding in the complete logs; it does not
-cover Objective-C++ or native Metal lifetime. A fresh successful macOS workflow run remains the
-required external validation boundary before claiming adapted native compile/runtime evidence; it
-is not an integration blocker under the repository's authoritative source-continuity policy.
+ASan+UBSan target also passes 206/206 with no sanitizer finding in the complete direct-test log; it
+does not cover Objective-C++ or native Metal lifetime. A fresh successful macOS workflow run
+remains the required external validation boundary before claiming adapted native compile/runtime
+evidence; it is not an integration blocker under the repository's authoritative source-continuity
+policy.
 
 ### Post-audit findings (continuing after `METAL-257`)
 
 The following IDs are new adaptation findings. They do not absorb, rename, or change the status of
 any historical task/finding below.
+
+Post-audit correction for historical `METAL-257`: its repeated claim that CNA's Metal window path
+never requested `SDL_WINDOW_HIGH_PIXEL_DENSITY` was false. The Metal branch has used
+`SDL_WINDOW_METAL | SDL_WINDOW_HIGH_PIXEL_DENSITY` since the initial replay. The historical prose
+below is retained as lane evidence, but its Retina-window premise was already satisfied and is not
+an open finding.
 
 | Finding | Severity | Evidence | Disposition |
 |---|---|---|---|
@@ -73,6 +80,7 @@ any historical task/finding below.
 | `METAL-278` — command failures and render-target readback ordering could return stale results | High | Asynchronous command errors were not surfaced; readback committed an active source render then waited only for a later blit, allowing failed source work to appear as successful stale pixels. | **Implementation fixed:** a lifetime-safe latch is checked at command-producing/readback entries; consuming it ends/releases encoder and abandons the uncommitted command without commit; synchronous operations wait/check the exact command; active RT readback verifies its exact source command before blit; older failures retain a distinct diagnostic. Portable lifecycle policy tests pass; native execution remains pending. |
 | `METAL-279` — empty logical scissor submitted an illegal zero native rectangle | High | Metal rejects zero-width/height scissors, while fully outside/zero requests are valid logical empty intersections. | **Implementation fixed:** an empty intersection keeps its logical meaning, installs a legal 1x1 native placeholder, and suppresses every draw until state/extent makes it non-empty; Clear remains independent. Portable extreme/toggle/recreation tests pass. |
 | `METAL-280` — CNA and Metal static archives had an undeclared reverse dependency | High | `MetalGraphicsBackend.mm` calls CNA-owned Effect/math/color symbols, so a one-pass CNA→backend archive link is order-dependent like the existing Sokol/LLGL/D3D cases. | **Build integration fixed:** `METAL` joins the backend→CNA reverse-edge condition; native Metal test configuration asserts the edge and uses ordinary target linking rather than a test-only group. Native Apple link verification remains external. |
+| `METAL-281` — retained texture/render-target backends dereferenced a destroyed owner | High | Plain Texture2D/Cube/3D callbacks captured raw `Impl*`; RT2D/RTCube stored raw `Impl&`. Copy/move and public weak/shared backend access can retain a backend beyond `GraphicsDevice`/Metal `Impl` teardown, including a `RenderTargetCube` moved into its `TextureCube` base. | **Implementation fixed:** `Impl` publishes a shared health token and marks it inactive before native teardown; resources keep only a weak owner, route live pending failures through common consume/abandon cleanup so retry succeeds, and reject post-owner operations before dereference. RT destructors weak-lock for active-target cleanup and otherwise release their independently owned native textures without owner access. Portable alive/failed/inactive, retry, copy/move/backend-escape, and ownerless-cleanup tests pass; native lifetime validation remains external. |
 
 ## Historical record below
 

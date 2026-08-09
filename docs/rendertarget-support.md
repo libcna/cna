@@ -144,9 +144,10 @@ the backbuffer's size when unbinding) — CNA never touched either property at a
 real GPU-level proof (`ScissorRectangle` is wired to the backend's scissor test on all 3 backends).
 
 Found and deliberately deferred a much larger, separate gap discovered along the way:
-`GraphicsDevice.Viewport` has **zero GPU wiring on any of the 3 backends** — every backend
-hardcodes its actual viewport to the full render-target/window size. Not specific to render-target
-switching (a pre-existing, broader gap) — tracked as **Task 880**.
+`GraphicsDevice.Viewport` had **zero GPU wiring on the 3 backends audited in that phase** — EasyGL,
+Vulkan, and Bgfx hardcoded the full render-target/window size. Metal joined this document later;
+its post-audit adaptation now preserves and submits the requested viewport (`METAL-265`), so Task
+880's historical statement does not describe the current Metal backend.
 
 ## 10. Multiple render targets with mixed formats (Task 339) — audit only, no bug
 
@@ -186,14 +187,14 @@ zero CNA-level cross-target validation — matching FNA's own delegate-to-native
 | Feature | EasyGL | Vulkan | Bgfx | Metal |
 |---|---|---|---|---|
 | `RenderTarget2D`/`RenderTargetCube` constructors, properties, `IsContentLost`/`ContentLost` | ✅ | ✅ | ✅ | ✅ (shared `GraphicsDevice`-level code, backend-independent) |
-| `RenderTarget2D` sampling after unbind (`SpriteBatch`) | ✅ | ✅ | ❌ wrong-handle-cast bug (Task 873) | 🔍¹ real code path (`MetalRenderTargetBackend::colorTexture()`, always the resolved single-sample texture), CI-confirmed to compile/run/draw with zero Metal API validation errors — pixel-level proof blocked |
+| `RenderTarget2D` sampling after unbind (`SpriteBatch`) | ✅ | ✅ | ❌ wrong-handle-cast bug (Task 873) | 🔍¹ adapted source has a real `MetalRenderTargetBackend::colorTexture()` path to the resolved single-sample texture. Only the historical predecessor compiled/ran on macOS; the adapted Objective-C++ has no Apple compile/runtime or pixel proof. |
 | `RenderTargetCube` sampling after unbind (`EnvironmentMapEffect`) | ✅ | ❌ renders black (Task 876) | ❌ wrong-handle-cast bug (Task 874) | 🔍 source-complete (`plan_metal.md` Phase 6/11, `METAL-64`–`71`/`120`ff), never pixel-tested on real hardware — no dedicated `CTest` exists yet |
 | Depth buffer functionality (does depth testing work inside an RT) | ✅ | ✅ | 🔍 not pixel-verified (no GPU readback) | 🔶 a real single-sample depth32+stencil8 texture is allocated and bound as the render pass's depth attachment — GPU-level depth-test *gating* itself is not independently pixel-verified after adaptation |
 | Depth/stencil format fidelity (exact `DepthFormat` honored) | ❌ always `DepthComponent24`, no stencil (Task 877) | ❌ `hasDepth` ignored, always allocates (Task 877) | ❌ always `D24S8` (Task 877) | ❌ always `Depth32Float_Stencil8` regardless of requested `DepthFormat` — deliberate, documented simplification (`plan_metal.md METAL-101`), matching Vulkan's own precedent exactly |
-| Mipmap generation (`LevelCount`, real GPU mips) | ✅ (fixed, Task 336) | 🔶 `LevelCount` correct, no real GPU mips (Task 878) | 🔶 same as Vulkan (Task 878) | 🔶 real `generateMipmapsForTexture:` regeneration on every unbind (`plan_metal.md METAL-103`), source-complete and CI-compiles — no dedicated pixel test yet (`METAL-117`, still open) |
+| Mipmap generation (`LevelCount`, real GPU mips) | ✅ (fixed, Task 336) | 🔶 `LevelCount` correct, no real GPU mips (Task 878) | 🔶 same as Vulkan (Task 878) | 🔍 adapted source encodes `generateMipmapsForTexture:` on every unbind (`plan_metal.md METAL-103`) and tracks defined levels only after successful completion. Only the historical predecessor compiled on Apple; the adapted path has no Apple compile/runtime or pixel proof (`METAL-117` remains open). |
 | MSAA (`MultiSampleCount`, real resolve) | ✅ (fixed, Task 337) | 🔶 honestly reports `0`, not implemented (Task 879) | 🔶 same as Vulkan (Task 879) | ❌ deliberately unsupported: requested counts clamp to `0`, capability is false, and native attachments remain single-sample; the historical sample-count-four path produced a binary edge |
 | `SetRenderTarget`/`SetRenderTargets` Viewport/ScissorRectangle reset | ✅ (fixed, Task 338) | ✅ (fixed, Task 338) | ✅ (fixed, Task 338; shared code, not independently pixel-tested) | ✅ shared `GraphicsDevice`-level code, backend-independent |
-| `Viewport`'s actual GPU effect (any sub-region viewport) | ❌ zero wiring (Task 880) | ❌ zero wiring (Task 880) | ❌ zero wiring (Task 880) | ❌ same gap — `[encoder setViewport:...]` is always derived from the active render target's own full size, never a game-requested `GraphicsDevice.Viewport` sub-rectangle (Task 880, pre-existing/cross-backend, not Metal-specific) |
+| `Viewport`'s actual GPU effect (any sub-region viewport) | ❌ zero wiring (Task 880) | ❌ zero wiring (Task 880) | ❌ zero wiring (Task 880) | 🔍 adapted source preserves and submits the requested `GraphicsDevice.Viewport` unchanged on every encoder (`METAL-265`); portable state tests pass, but adapted Apple compile/runtime evidence is absent. |
 | MRT (2+ same-size/format targets) | ❌ `EasyGL_MRT_TwoAttachments`, attachment 1 stays black (Task 145) | 🔍 not independently re-verified this phase | 🔍 not independently re-verified this phase | ❌ deliberately unsupported: count greater than one throws before active-target state changes; capability is false |
 | MRT count cap matches FNA's `MAX_RENDERTARGET_BINDINGS=4` | ❌ caps at 8 instead (Task 881) | ❌ uncapped at CNA level (Task 881) | ❌ caps at 8 instead (Task 881) | ❌ supported-contract cap is one; zero restores the backbuffer and one binds a normalized 2D/cube-face descriptor |
 | Vulkan `Clear()`-only RT (no draw) gets a render pass recorded | ❌ (Task 875) | N/A | N/A | N/A (Vulkan-specific) |
@@ -204,7 +205,8 @@ support lags) · 🔍 not empirically verified this phase.
 ¹ The historical Metal run returned only the clear color for every backbuffer-readback test. The
 adapted backend therefore throws for backbuffer readback and does not register those pixel tests.
 Historical Objective-C++ build evidence predates the current interfaces; a fresh macOS workflow
-result remains required. See `docs/metal-backend.md`.
+result is the external support-confidence boundary, not an integration blocker under the
+repository's authoritative source-continuity policy. See `docs/metal-backend.md`.
 
 ## Open, tracked follow-up work
 
@@ -219,8 +221,9 @@ Phase 39 opened 9 new tracked tasks while auditing/fixing `RenderTarget2D`/`Rend
 - **Task 877** — no backend honors the exact requested `DepthStencilFormat`.
 - **Task 878** — Vulkan/Bgfx render target mip support (EasyGL already fixed).
 - **Task 879** — Vulkan/Bgfx render target MSAA support (EasyGL already fixed).
-- **Task 880** — `GraphicsDevice.Viewport` has zero GPU wiring on any backend (large, pre-existing,
-  broader than render targets specifically).
+- **Task 880** — `GraphicsDevice.Viewport` still has zero GPU wiring on EasyGL, Vulkan, and Bgfx
+  (large, pre-existing, broader than render targets specifically); Metal's adapted path is closed
+  separately by `METAL-265`, pending native Apple confidence evidence.
 - **Task 881** — `SetRenderTargets`'s per-backend MRT cap doesn't match FNA's real limit of 4.
 
 Pre-existing, not opened this phase, still blocking deeper MRT work: `EasyGL_MRT_TwoAttachments`
