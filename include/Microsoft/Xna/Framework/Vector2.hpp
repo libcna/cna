@@ -40,7 +40,7 @@ namespace Microsoft::Xna::Framework
          * @param x The X component.
          * @param y The Y component.
          */
-        Vector2(float x, float y);
+        constexpr Vector2(float x, float y) : X(x), Y(y) {}
 
         /**
          * @brief Creates a vector whose components are both set to the same value.

@@ -1,26 +1,29 @@
 # NEXT.md
 
-## FINAL RECONCILIATION — **BLOCKED FOR DEVELOP MERGE** (2026-08-09)
+## FINAL RECONCILIATION — **READY FOR DEVELOP MERGE** (2026-08-09)
 
 The post-audit integration campaign remains complete at **21/21 accepted lanes, 0 pending**, with
-Batch 0 through Batch 6 checkpoint history intact and **41 public renderer identities**. Final
-campaign-wide stabilization did not authorize a `develop` merge because the current candidate has
-three reproducible gate failures grouped into one bounded follow-up task, **`FINAL-STAB-001`**:
+Batch 0 through Batch 6 checkpoint history intact and **41 public renderer identities**.
+**`FINAL-STAB-001` is complete:** sharp-runtime commit `1e51c2d869697fd827af7ca342ffabf77d30faf8`
+publishes the native-128 capability boundary and CNA uses it for Decimal XNB support; the full
+Glide i686 graph and its PE32 fake-ABI control pass; HEADLESS now declares its real reverse link to
+CNA so the canonical sanitizer harness graph links without a generated-tree rescan; and
+`Vector2::Zero` plus its sibling constants are truly constant-initialized, closing
+`REMED-GFX-221` without a `GestureDetector` special case.
 
-1. restore the accepted 32-bit Windows Glide compile boundary by removing or correctly gating the
-   unsupported `__int128` use reached from current `sharp-runtime` under i686 MinGW;
-2. correct the canonical sanitizer target's static-library link order so
-   `cna_audio_mixer_destroy_active_dynamic_voice_harness` links without a build-tree-only rescan
-   workaround; and
-3. close `REMED-GFX-221`, which strict ASan initialization-order checking now reproduces before
-   test execution in `GestureDetector.cpp`.
-
-After those three exact repairs, rerun the bounded Glide build, strict ASan+UBSan corpus, principal
-native smoke matrix, and read-only `develop` merge simulation. Do **not** merge into `develop`
-before that retake. The external MetaGL/EasyGL rewrite has already happened and is accepted; no
-further history rewrite or force-push is planned. Modularization and all future renderer expansion
-remain future work and have not begun. The complete evidence is in
-`integration/FINAL_RECONCILIATION.md`.
+The bounded retake passes the strict, unsuppressed ASan+UBSan+float-cast-overflow corpus, affected
+audio harnesses/tests, Glide portable/shared/ABI controls, native HEADLESS shared core, and serial
+OPENGLES/EasyGL smoke/corpus. The current OPEN-finding inventory contains **no HIGH/P1 mandatory
+final-development blocker**; `REMED-GFX-217/-218` remain HIGH/OPEN only for their accepted deferred
+full-translator scope after the dangerous checkpoint paths were guarded. Other accepted
+nonblocking residuals and external native-runtime gates retain their recorded scope. `develop`
+remains the candidate's ancestor, so the committed branch is a fast-forward shape, but the actual
+merge was not performed and the owner's pre-existing dirty `develop` files must be preserved
+first. The exact owner-controlled next action is to preserve those files, fast-forward `develop`
+to the signed integration tip, then run the bounded post-merge smoke gate. The external
+MetaGL/EasyGL rewrite is accepted; no further history rewrite or force-push is planned.
+Modularization and future renderer expansion remain future work and have not begun. Complete
+evidence is in `integration/FINAL_RECONCILIATION.md`.
 
 ## CURRENT — **`metal` READY / INTEGRATED ✅ · BATCH 6 CHECKPOINT COMPLETE ✅** · 21 integrated / 0 pending (2026-08-09, `debian`)
 

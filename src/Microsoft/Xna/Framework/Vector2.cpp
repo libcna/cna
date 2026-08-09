@@ -85,16 +85,12 @@ namespace Microsoft::Xna::Framework
         }
     }
 
-    const Vector2 Vector2::Zero(0.0f, 0.0f);
-    const Vector2 Vector2::One(1.0f, 1.0f);
-    const Vector2 Vector2::UnitX(1.0f, 0.0f);
-    const Vector2 Vector2::UnitY(0.0f, 1.0f);
+    constinit const Vector2 Vector2::Zero(0.0f, 0.0f);
+    constinit const Vector2 Vector2::One(1.0f, 1.0f);
+    constinit const Vector2 Vector2::UnitX(1.0f, 0.0f);
+    constinit const Vector2 Vector2::UnitY(0.0f, 1.0f);
 
     Vector2::Vector2() : X(0.0f), Y(0.0f)
-    {
-    }
-
-    Vector2::Vector2(float x, float y) : X(x), Y(y)
     {
     }
 

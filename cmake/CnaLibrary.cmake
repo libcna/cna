@@ -150,6 +150,9 @@ target_link_libraries(CNA
 # archive cycle. SOFTWARE inherits IGraphicsBackend's default instanced-draw method, whose
 # permanently-2D guard shares that diagnostic helper (the guard is inactive on SOFTWARE because
 # ThreeD is supported, but the static object still contains the symbol reference).
+# HEADLESS's concrete backend object instantiates the same default method and therefore carries the
+# same reverse reference to CNA::Logger::Warn. The dynamic-voice harness exposed the missing edge:
+# its ordinary CNA link scanned libCNA.a before the HEADLESS archive created the logger reference.
 #
 # GDI's private Software CPU rasterizer is now compiled directly into the GDI archive and also
 # calls CNA-owned math and colour implementations. Without the declared cycle MinGW scans
@@ -176,6 +179,7 @@ if(CNA_GRAPHICS_BACKEND STREQUAL "D3D11"
    OR CNA_GRAPHICS_BACKEND STREQUAL "FREEDIRECT"
    OR CNA_GRAPHICS_BACKEND STREQUAL "CANVAS"
    OR CNA_GRAPHICS_BACKEND STREQUAL "SOFTWARE"
+   OR CNA_GRAPHICS_BACKEND STREQUAL "HEADLESS"
    OR CNA_GRAPHICS_BACKEND STREQUAL "OPENGLES"
    OR CNA_GRAPHICS_BACKEND STREQUAL "OPENGL33"
    OR CNA_GRAPHICS_BACKEND STREQUAL "WEBGL1"

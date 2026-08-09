@@ -1901,14 +1901,15 @@ gated only by link order. Every Batch 1 lane merge is unrelated to it.
 
 ## 18. `REMED-GFX-221` — `GestureDetector` statics copy `Vector2::Zero` across translation units
 
-**Status:** OPEN · **Severity:** LOW · **Discovered:** 2026-08-05, by the `REMED-GFX-220`
-same-pattern scan · **Owner lane:** core Input (`src/CNA/Internal/Input/`), not Graphics
+**Status:** **DONE — RESOLVED by `FINAL-STAB-001`, 2026-08-09** · **Severity:** LOW ·
+**Discovered:** 2026-08-05, by the `REMED-GFX-220` same-pattern scan · **Owner lane:** core Input
+(`src/CNA/Internal/Input/`), not Graphics
 
 > **Numbering note.** Filed in this plan's `REMED-GFX-*` series because it was found by §17's scan
 > and shares its exact root cause, but the defect is in Input. Renumber under a CORE/INPUT prefix if
 > the campaign prefers subsystem-accurate IDs.
 
-### Finding
+### Historical finding and strict reproduction
 
 `src/CNA/Internal/Input/GestureDetector.cpp` defines namespace-scope state at lines 51-63, five
 members of which are copy-initialized from `Vector2::Zero`:
@@ -1918,30 +1919,47 @@ Vector2 activeFingerPosition = Vector2::Zero;   // and lastUpdatePosition, press
                                                 // secondFingerPosition, velocity
 ```
 
-`Vector2::Zero` is defined in `src/Microsoft/Xna/Framework/Vector2.cpp:88` as
-`const Vector2 Vector2::Zero(0.0f, 0.0f)`, has no `constexpr` constructor, and `nm` reports it as
-type `B` — zero-initialized `.bss` completed by dynamic initialization. Relative initialization
-order across translation units is unspecified, so these five reads may observe an object whose
-lifetime has not begun. This is the same defect class as §17.
+Before the fix, `Vector2::Zero` was defined at
+`src/Microsoft/Xna/Framework/Vector2.cpp:88` as
+`const Vector2 Vector2::Zero(0.0f, 0.0f)`, its two-component constructor was not `constexpr`, and
+`nm` reported `Zero`, `One`, `UnitX`, and `UnitY` as type `B`. Relative initialization order across
+translation units was therefore unspecified. The original LOW assessment correctly noted that
+the all-zero bits happened to produce the intended value and that UBSan's vptr mechanism could not
+see a non-polymorphic `Vector2`; it did not establish that the lifetime violation was safe.
 
-### Why it is LOW, and why no sanitizer caught it
+`FINAL-STAB-001` enabled ASan's dedicated initialization-order detector without a suppression:
+`ASAN_OPTIONS=check_initialization_order=1:strict_init_order=1`. It failed before `main()` with an
+`initialization-order-fiasco`, an 8-byte read at `GestureDetector.cpp:52`, naming
+`Vector2::Zero` and its definition in `Vector2.cpp:88`. The linked binary placed
+`GestureDetector`'s translation-unit initializer before `Vector2`'s, so the previously source-only
+finding became a reproducible final gate failure.
 
-`Vector2` is **not polymorphic** (zero `virtual` members), so there is no vptr for UBSan's `vptr`
-check to invalidate — the mechanism that exposed §17 cannot fire here. And the value is benign by
-coincidence: `Vector2::Zero` is `(0.0f, 0.0f)`, which is bit-identical to the zeroed `.bss` the
-read would observe. **Every possible initialization order produces the correct value today.**
+### Root fix
 
-It is therefore latent UB with no reachable wrong-value consequence, not a live defect — the
-opposite of §17, where the zeroed source produced transparent black instead of opaque white.
+The two-component `Vector2(float, float)` constructor is now `constexpr` and defined inline where
+constant evaluation can see it. All four value-type constants are defined as `constinit const`
+objects. `constinit` is the permanent compile-time regression gate: a future change that makes any
+initializer dynamic fails compilation instead of recreating an order dependency. Post-fix `nm`
+reports all four constants as type `R`, each 8 bytes, and the Vector2 object contains no global
+constructor for them.
 
-### Suggested fix (not applied)
+The earlier suggested `GestureDetector`-local construction would have hidden only these five
+reads while leaving the same vulnerable public-constant pattern intact. The implemented fix owns
+the root cause at `Vector2` and preserves the public `Vector2::Zero` API.
 
-Replace the five initializers with in-place construction, `Vector2(0.0f, 0.0f)`, mirroring §17's
-remedy exactly.
+### Same-pattern audit and evidence
 
-**Deliberately out of scope for `REMED-GFX-220`.** It is a different subsystem and a different type
-pair, its consequence is benign, and the session that fixed §17 was bounded to that ticket. Recorded
-here rather than folded in silently.
+A bounded relocation/call-closure scan covered all 255 CNA objects in the fresh sanitizer graph:
+36 translation units had static-initialization seeds and 355 functions were reachable from them.
+Only two cross-translation-unit data references remained: `GestureDetector` to
+`Vector2::Zero`, now read-only/type `R`, and `BlendState` to the loader-provided `Color` vtable,
+type `V`. No `B`/`D` XNA value-type constant remained reachable during another translation unit's
+static initialization, so there is no independent ticket.
+
+Under strict initialization order, leak detection, ASan, UBSan, and float-cast-overflow, the four
+Vector2 constant/constructor tests pass 4/4 and the exact representative corpus passes
+215 = 214 pass + 1 intentional HEADLESS no-pixel-route skip. The affected audio slice passes 8/8,
+the dynamic/static/no-hardware harnesses each exit zero, and no sanitizer report remains.
 
 ---
 

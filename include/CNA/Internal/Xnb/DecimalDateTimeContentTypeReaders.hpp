@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include "SharpRuntime/SharpRuntimeHelper.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentReader.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReader.hpp"
 #include "System/DateTime.hpp"
@@ -9,10 +10,9 @@
 // plan_xnb.md XNB-18B/18C: Decimal/DateTime/TimeSpan .xnb readers -- see
 // PrimitiveContentTypeReaders.hpp's own note on why these live in CNA::Internal::Xnb.
 //
-// System::Decimal requires unsigned __int128 (GCC/Clang only) and is MSVC-unsupported; DecimalReader
-// (and its registration) are guarded out on MSVC to match, rather than making this whole file
-// MSVC-unsupported over one reader.
-#if !defined(_MSC_VER)
+// System::Decimal requires a native 128-bit integer. Keep its reader on sharp-runtime's public
+// compiler-capability boundary rather than making TimeSpanReader and DateTimeReader depend on it.
+#if SHARP_RUNTIME_HAS_NATIVE_INT128
 #include "System/Decimal.hpp"
 #endif
 
@@ -21,7 +21,7 @@ namespace CNA::Internal::Xnb
     using Microsoft::Xna::Framework::Content::ContentReader;
     using Microsoft::Xna::Framework::Content::ContentTypeReader;
 
-#if !defined(_MSC_VER)
+#if SHARP_RUNTIME_HAS_NATIVE_INT128
     class DecimalReader : public ContentTypeReader<System::Decimal>
     {
     public:

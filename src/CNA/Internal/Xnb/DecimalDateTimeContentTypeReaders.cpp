@@ -9,7 +9,7 @@ namespace CNA::Internal::Xnb
 
     void RegisterDecimalDateTimeXnbReaders()
     {
-#if !defined(_MSC_VER)
+#if SHARP_RUNTIME_HAS_NATIVE_INT128
         ContentTypeReaderManager::AddTypeCreator(
             "Microsoft.Xna.Framework.Content.DecimalReader", [] { return std::make_unique<DecimalReader>(); });
 #endif

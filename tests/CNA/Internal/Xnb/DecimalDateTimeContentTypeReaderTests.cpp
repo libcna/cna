@@ -53,14 +53,14 @@ namespace
 
 TEST_F(DecimalDateTimeReaderTest, AllThreeReadersAreRegistered)
 {
-#if !defined(_MSC_VER)
+#if SHARP_RUNTIME_HAS_NATIVE_INT128
     EXPECT_TRUE(ContentTypeReaderManager::IsRegistered("Microsoft.Xna.Framework.Content.DecimalReader"));
 #endif
     EXPECT_TRUE(ContentTypeReaderManager::IsRegistered("Microsoft.Xna.Framework.Content.TimeSpanReader"));
     EXPECT_TRUE(ContentTypeReaderManager::IsRegistered("Microsoft.Xna.Framework.Content.DateTimeReader"));
 }
 
-#if !defined(_MSC_VER)
+#if SHARP_RUNTIME_HAS_NATIVE_INT128
 TEST_F(DecimalDateTimeReaderTest, DecimalReaderRoundTrips)
 {
     auto reader = MakeReader([](auto& w) {

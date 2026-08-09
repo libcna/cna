@@ -4,13 +4,13 @@ Date: 2026-08-09
 
 Candidate branch: `integration/post-audit-phase1`
 
-Decision: **BLOCKED FOR DEVELOP MERGE**
+Decision: **READY FOR DEVELOP MERGE**
 
 The integration campaign itself is complete: exactly 21 accepted lane merges are present, no lane
 is missing or duplicated, Batch 0 through Batch 6 history is intact, and the public registry has
-exactly 41 identities. Promotion is blocked by final-tree build/sanitizer failures, not by a
-missing lane. No merge into `develop`, push, force operation, history rewrite, stash operation,
-new renderer work, modularization, or `audit/` change occurred.
+exactly 41 identities. `FINAL-STAB-001` closed the three final-tree build/sanitizer failures and
+the bounded retake is green. No merge into `develop`, push, force operation, history rewrite,
+stash operation, new renderer work, modularization, or `audit/` change occurred.
 
 ## 1. Starting state and safety
 
@@ -37,6 +37,12 @@ remained exactly:
 GPG preflight succeeded for fingerprint
 `255C69CC1D09CA54EF0CC9DFFB9CE8E20AADA55F`.
 
+The bounded `FINAL-STAB-001` continuation began from exact CNA head
+`b6ea782fdc35ea02ceba755a48cf8a17e30c9112`, with a tracked-clean index, no lock/writer, and the
+same `audit/` subtree. Its sibling sharp-runtime prerequisite is signed commit
+`1e51c2d869697fd827af7ca342ffabf77d30faf8`; that worktree was clean and the commit verified Good
+under the same fingerprint before CNA consumed its public capability macro.
+
 ## 2. Exact lane inventory
 
 Notation: O = original ref/head; AR = signed CNA archive tag object → original; AD = adaptation
@@ -59,7 +65,7 @@ head; M = accepted first-parent integration merge. All 21 rows are **accepted**.
 | 13 | diligent | B3 / D | `feature/diligent@1ab12b505e40e61101a260ae43d3b9911f219e8a` | `archive/preintegration/diligent-20260804@ca46449c72c1004cd4712e8d1297fd6122d25c2f` → O | `27f7dcefedf4b5e3183b1ec76ab96f1801c8413b` | `aa9f3fb51b79882334fc2e8c40ffe05faa08d1b4` | DILIGENT-66/69 and retained limits; external/future |
 | 14 | skia | B6 / G (early) | `feature/skia@ca046f013bfd9797aab0292194e547d1caa4fef8` | `archive/preintegration/skia-20260804@9ff0170382732ae1c1eeb6f6b563962fe8f692b4` → O | `a071e1e23120a142840d54777d41c4e58fc2345c` | `1381ff930a88cdda2a17a25136a1b1fd93b3adcf` | REMED-GFX-224 accepted residual; Ganesh/future |
 | 15 | gl | B4 / E | `feature/gl@f8efb9b46f7b0d516eaf150e7e8e93f2bd74e795` | `archive/preintegration/gl-20260804@650dbbfb787605aaf7fe8d2ff7d7537adaf95464` → O | `a8c32a67c76200c60aa0be6878dfa0b5ddcc513f` | `0a51f8647eb4ddf2fdcd2102756ea79bb49625b7` | browser/WebGL external; carried global findings |
-| 16 | glide | B5 / F | `feature/glide@2f9b47e1281590e6735b5f76ef1e13dd781d8981` | `archive/preintegration/glide-20260804@8e96bb5648333797c895611bb2f9a2ad92755484` → O | `e891e105dd2567dd5bd8397996cb8c830c127b18` | `677f4c59e066fc9a7ed79430d0fee5ffd69b531c` | **mandatory: current i686 build fails before Glide compilation**; hardware runtime external |
+| 16 | glide | B5 / F | `feature/glide@2f9b47e1281590e6735b5f76ef1e13dd781d8981` | `archive/preintegration/glide-20260804@8e96bb5648333797c895611bb2f9a2ad92755484` → O | `e891e105dd2567dd5bd8397996cb8c830c127b18` | `677f4c59e066fc9a7ed79430d0fee5ffd69b531c` | i686 compile/link and fake-ABI gates PASS; hardware runtime external |
 | 17 | gdi | B5 / F | `feature/gdi@adc9cc2a2e496d162202733b05ab659199a857b8` | `archive/preintegration/gdi-20260804@efa3cedc153d118dd44c5b683c82a2f2c85f4358` → O | `625f4ad59c9d898eb01a50e22dc872447590989a` | `ba5fa60166bef2214a4c08b64d50570d1120b7b9` | physical Windows/MSVC; external |
 | 18 | html-dom | B5 / F | `claude/html-dom-cna-backend-xefzwf@8e4e42935a0962bd5eb6178fe4698334075f94ee` | `archive/preintegration/html-dom-20260804@cb73cb0b541ffdd3ded44e16df278cacb813e087` → O | `a32977f397da0c667a4162ee73f9d2363e4981d2` | `24bf4786af1ff6b1cf86640e85a22f76c7315818` | Emscripten/browser/DPR; external |
 | 19 | direct2d | B6 / G | `feature/direct2d@9b17e783e74e87a3f23b9cc47bd3c7cd6dad9d81` | `archive/preintegration/direct2d-20260804@e16c478dae4f37cb77449c98826a0c184598709e` → O | `1b740d962d85bb648d6ae2997bba9b1ba09dfd87` | `7af760bee2896960270cfd7bd6c822b96c13be94` | REMED-GFX-224 carried; physical Windows/COM external |
@@ -223,22 +229,33 @@ its conservative no-Mac-claim boundary.
 
 ## 7. OPEN finding reconciliation
 
-### A — mandatory before develop merge
+### A — mandatory set closed by `FINAL-STAB-001`
 
-- **Glide current-tree compile gate:** i686 MinGW fails in the current sibling
-  `sharp-runtime/include/System/Int128.hpp` / `Int64.hpp` because that route uses unsupported
-  `__int128`, before Glide source compiles.
-- **Sanitizer build graph:** the canonical sanitizer build cannot link
-  `cna_audio_mixer_destroy_active_dynamic_voice_harness` because static-library order leaves
-  `CNA::Logger::Warn` unresolved from the selected backend. A build-tree-only library-rescan
-  workaround was diagnostic evidence, not an accepted source fix.
-- **REMED-GFX-221:** strict ASan initialization-order checking reports
-  `GestureDetector.cpp:52` reading `Vector2::Zero` before its dynamic initialization. The
-  previously accepted LOW/source-only item now fails the explicit final sanitizer gate.
+- **Glide current-tree compile gate — DONE.** Sharp-runtime now publishes
+  `SHARP_RUNTIME_HAS_NATIVE_INT128` from a compiler capability probe. CNA directly includes that
+  public definition and gates only Decimal reader declaration, registration, and Decimal-specific
+  tests on it; TimeSpan and DateTime remain available. The exact i686 GLIDE graph selects value 0,
+  compiles the Decimal reader translation unit, completes its 540-step Release build, and links
+  the real Glide smoke executable. The PE32 i386 fake DLL/loader builds and its 39-export contract
+  exits zero under Wine. This is compile/ABI evidence, not a rendering claim.
+- **Sanitizer build graph — DONE.** The unchanged canonical dynamic-voice target originally linked
+  `libCNA.a`, then `libSHARP_RUNTIME.a`, then `libcna_backend_graphics_headless.a` and failed on
+  `CNA::Logger::Warn` referenced by `HeadlessGraphicsBackend.cpp.o`. CNA publicly owns the selected
+  backend, while HEADLESS's concrete object instantiates an interface default with the reverse
+  Logger edge. A prior `CMAKE_CXX_STANDARD_LIBRARIES=<absolute libCNA.a>` diagnostic merely placed
+  another scan after the backend. The tracked fix adds HEADLESS to the existing backend-private-CNA
+  ownership rule, so CMake emits the real static-library component twice. Fresh and incremental
+  canonical graphs now link dynamic/static/no-hardware audio harnesses in the component order
+  `libCNA.a` → `libcna_backend_graphics_headless.a` → `libCNA.a` →
+  `libcna_backend_graphics_headless.a`, without a generated-tree edit or whole-archive.
+- **`REMED-GFX-221` — DONE.** Strict ASan reproduced an initialization-order-fiasco before
+  `main()` at `GestureDetector.cpp:52`, reading `Vector2::Zero` while its old definition still
+  required dynamic initialization. `Vector2(float,float)` is now `constexpr`, and Zero/One/UnitX/
+  UnitY are `constinit const`. They reside in read-only data and have no dynamic initializer; the
+  fix removes the root cross-translation-unit order dependency rather than special-casing the five
+  GestureDetector initializers.
 
-These three failures form exactly one bounded next task, **FINAL-STAB-001**: fix only those three
-root causes, add their narrow regressions, and retake Glide + canonical strict sanitizer + bounded
-principal smoke/readiness gates.
+All three mandatory failures are resolved and their bounded retakes pass.
 
 ### B — accepted nonblocking residuals
 
@@ -256,13 +273,20 @@ principal smoke/readiness gates.
 
 These are not silently called fixed and were not remediated merely to green the campaign.
 
+The current authoritative OPEN inventory was rechecked after the dated phase-1 records and later
+post-campaign closures were reconciled. `REMED-CONTENT-007/-008` and `REMED-GFX-223` are closed;
+`REMED-GFX-217/-218` remain HIGH/OPEN only for their accepted deferred full-translator scope after
+the dangerous checkpoint paths were guarded; the items in B–D retain their recorded nonblocking,
+external, or future dispositions. There is **no HIGH/P1 mandatory final-development blocker**.
+
 ### C — external validation gates
 
 - adapted Metal: real macOS Objective-C++/framework link, MSL, validation, pixels, lifetime,
   Retina/frame pacing, and Intel/Apple-Silicon;
 - Direct2D/GDI/D3D family: native MSVC/physical Windows, DPI, COM/debug-layer/live-object and
   device-lost behavior as applicable;
-- Glide: caller-supplied runtime or physical hardware after its compile gate is restored;
+- Glide: caller-supplied runtime or physical hardware; the restored compile/fake-ABI gates do not
+  substitute for rendering;
 - WEBGL1/WEBGL2/CANVAS/HTML_DOM: Emscripten/browser, JavaScript lifetime, and DPR > 1;
 - OpenGLES1 and real-GPU/display gates for Magnum, Sokol GLCORE, Wicked, Diligent, LLGL and other
   hardware-dependent routes;
@@ -283,7 +307,7 @@ No Linux sanitizer claim is extended to Metal or Win32 COM runtime behavior.
 
 ### E — stale/closed records
 
-`REMED-GFX-219`, `-223`, `-225` through `-233`, `REMED-BUILD-011`, `-017`, `-018`,
+`REMED-GFX-219`, `-221`, `-223`, `-225` through `-233`, `REMED-BUILD-011`, `-017`, `-018`,
 `REMED-CONTENT-007`, `-008`, `-011`, `REMED-GFX-172`, and `WICKED-80` are resolved.
 `REMED-GFX-055` duplicates `-054`; `REMED-GFX-184` duplicates `-163`; the historical
 Metal findings have their accepted implemented/disabled/external dispositions. Historical prose
@@ -308,7 +332,7 @@ jobs. Stable in-repository `cmake-build-<variant>` trees and ccache were used.
 | D3D11 x64 MinGW | 487-step target build PASS | representative historical Windows backend |
 | DIRECT2D x64 MinGW | 221-step backend build PASS | accepted cross-build boundary |
 | GDI x64 MinGW | 483-step backend build PASS | accepted cross-build boundary |
-| GLIDE i686 MinGW | configure PASS, build **FAIL** in sharp-runtime `__int128` | mandatory blocker |
+| GLIDE i686 MinGW | configure PASS; 540-step Release build PASS; PE32 smoke + fake-ABI clients link; Wine ABI 1/1 PASS | compile/ABI only; runtime rendering external |
 | HTML_DOM on native host | expected configure rejection PASS | Emscripten required |
 | METAL on non-Darwin host | expected configure rejection PASS | macOS required |
 
@@ -328,12 +352,17 @@ total.
 | Vulkan forced isolated focus | 201 = 200 pass + 1 intentional skip + 0 fail | PASS |
 | WebGPU isolated backend/registry | 26/26 | PASS |
 | LLGL forced X11/Xvfb focus | 31/31 | PASS |
-| Sanitizer representative corpus with only known init-order check suppressed | 215 = 214 pass + 1 intentional skip | no additional sanitizer report |
+| FINAL-STAB strict sanitizer representative corpus | 215 = 214 pass + 1 intentional HEADLESS skip | PASS; initialization-order check enabled, no suppression/report |
+| FINAL-STAB strict focused regressions | Vector2 4/4; Decimal/DateTime 4/4; audio 8/8; 3/3 harness exits | PASS |
+| FINAL-STAB Glide continuity | portable 78/78; shared identity/clear 14/14; Wine fake-ABI 1/1 | PASS; compile/ABI only |
+| FINAL-STAB OPENGLES affected smoke | 9/9 serial CTests under isolated Xvfb | PASS |
+| FINAL-STAB OPENGLES representative corpus | 217 = 216 pass + 1 intentional non-rejection-arm skip | PASS; SDL reported `x11` |
 
 The selected corpus covers Texture2D authority/cache, Content containment, draw/stream/declaration,
 Basic/Sprite effects and VertexColor, resource lifetime/order, renderer registration/capabilities,
-Content/Audio/Input/platform shared changes, and representative device/smoke lifecycle. Final
-windowed evidence used forced isolated X11 through Xvfb, not the owner's real desktop display.
+Content/Audio/Input/platform shared changes, and representative device/smoke lifecycle. The strict
+215-case filter includes both registry suites. Final windowed evidence used forced isolated X11
+through Xvfb, not the owner's real desktop display.
 
 ## 10. Sanitizer gate
 
@@ -341,45 +370,70 @@ The stable `cmake-build-headless-asan-ubsan` tree used Debug, ccache and
 `address,undefined,float-cast-overflow`. `ldd CnaTests` proves both `libasan.so.8` and
 `libubsan.so.1` are linked.
 
-The canonical target graph first fails to link the dynamic-voice harness as recorded above. A
-build-tree-only rescan allowed the diagnostic test binary to link, after which strict
-`ASAN_OPTIONS=check_initialization_order=1:strict_init_order=1` fails before tests at
-`GestureDetector.cpp:52` on `Vector2::Zero`. With only that known check disabled, the same
-representative 215-case corpus has zero additional CNA-originating ASan/UBSan diagnostics.
+The unchanged baseline was reproduced first. The dynamic-voice harness link line scanned
+`libCNA.a`, `libSHARP_RUNTIME.a`, then `libcna_backend_graphics_headless.a` and failed on
+`CNA::Logger::Warn` from `HeadlessGraphicsBackend.cpp.o`. Removing the old diagnostic
+`CMAKE_CXX_STANDARD_LIBRARIES` cache entry removed the accidental second absolute `libCNA.a` scan
+that had made the generated tree appear green. After the tracked ownership correction, both a
+fresh canonical configuration and the stable incremental configuration generate the component
+order `libCNA.a` → `libcna_backend_graphics_headless.a` → `libCNA.a` →
+`libcna_backend_graphics_headless.a`; dynamic/static/no-hardware harnesses link, and the immediate
+rebuild reports no work.
 
-Therefore the required sanitizer result is **FAIL**, not PASS. Existing Mesa/driver leak
-classifications remain external; they do not excuse the CNA initialization-order finding.
+The second unchanged baseline ran with
+`ASAN_OPTIONS=check_initialization_order=1:strict_init_order=1` and failed before `main()` at
+`GestureDetector.cpp:52` on the dynamically initialized `Vector2::Zero`. After the constant-
+initialization fix, every accepted runtime gate used the exact unsuppressed environment
+`ASAN_OPTIONS=detect_leaks=1:halt_on_error=1:check_initialization_order=1:strict_init_order=1` and
+`UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1`. The representative corpus is
+**215 = 214 pass + 1 intentional HEADLESS no-pixel-route skip**, with zero sanitizer report.
+Vector2 is 4/4, Decimal/DateTime is 4/4, affected audio is 8/8, and each audio harness exits zero.
+
+The post-fix binary still places GestureDetector's translation-unit initializer before Vector2's,
+which proves the result is not link-order masking. `nm` instead reports Zero/One/UnitX/UnitY as
+8-byte read-only (`R`) objects and no dynamic initializer for those constants. A bounded scan of
+255 CNA objects, 36 static-initializer seed objects and 355 reachable functions found no remaining
+`B`/`D` XNA value-type constant read across translation units. The required sanitizer result is
+therefore **PASS**.
 
 ## 11. Documentation result and develop merge simulation
 
 Current documentation now states 21/21 integrated, 0 pending, Batch 0–6 complete, exactly 41 public
 identities, the current rewritten MetaGL/EasyGL heads and sibling dependency chain, remaining
-findings/external gates, and **BLOCKED** develop readiness. Modularization and every additional
+findings/external gates, and **READY** develop readiness. Modularization and every additional
 renderer remain future work. Historical lane/Batch evidence and BLOCKED → READY transitions remain.
 
 Before the final reconciliation commit, the read-only merge shape was:
 
 - `develop`: `ac3aaaeb2a5ba27dbd9e22e782c7041e6e40947c`;
 - merge-base: that same commit;
-- ahead/behind: integration 1,678 ahead, 0 behind;
+- ahead/behind: integration 1,679 ahead, 0 behind before this final commit;
 - graph: `develop` is an ancestor, so a future committed-tree merge is a fast-forward;
-- conflicts: none in `git merge-tree`;
-- prospective tree: the integration candidate tree, containing all 21 lanes, reconciled current
-  docs and dependency references, with no planning-only code or `audit/` delta.
+- prospective tree: the integration candidate tree, containing all 21 lanes, the bounded
+  `FINAL-STAB-001` repairs, reconciled current docs and dependency references, with no
+  planning-only code or `audit/` delta.
 
-The final signed reconciliation commit advances only the integration side; the exact final
-ahead count/tree are recorded in the session report after committing. The pre-existing tracked
-`develop` worktree changes overlap files changed by integration, so they must be preserved and
-resolved by their owner before running the eventual fast-forward command.
+The final signed `FINAL-STAB-001` commit advances only the integration side; its exact SHA,
+signature, final ahead count and tree are recorded in the session handoff after committing. The
+pre-existing dirty `develop` worktree remained exactly:
+
+- tracked owner-local edits to `cmake/Tests/EasyGLTests.cmake` and
+  `cmake/Tests/SdlRendererTests.cmake`; and
+- untracked owner-local `AGENTS.md` and `examples/xvfb_screenshot_demo.cpp`.
+
+The tracked files overlap integration history. All four paths must be preserved, and any overlap
+must be resolved by their owner before running the eventual fast-forward command.
 
 No final campaign checkpoint tag is created: the repository convention has per-Batch checkpoints,
-Batch 6 already exists, and a blocked reconciliation does not justify inventing another tag.
+Batch 6 already exists, and the bounded stabilization follow-up does not justify inventing another
+tag.
 
 ## 12. Decision and exact next action
 
-**BLOCKED FOR DEVELOP MERGE.**
+**READY FOR DEVELOP MERGE.**
 
-Exact next action: complete the single bounded task **FINAL-STAB-001** (the i686 Glide
-`__int128` compile boundary, sanitizer harness link order, and REMED-GFX-221 initialization
-order), then rerun only the named Glide/sanitizer/principal-smoke/readiness gates. Do not merge
-`integration/post-audit-phase1` into `develop` before that retake.
+Exact next action: preserve the owner's pre-existing dirty `develop` worktree changes, then
+fast-forward `develop` to the signed `integration/post-audit-phase1` tip, then run the bounded
+post-merge smoke gate. Keep every accepted nonblocker and external native-runtime gate in its
+recorded scope; do not fold modularization, new renderer work, a history rewrite, or a force-push
+into that owner-controlled promotion.
