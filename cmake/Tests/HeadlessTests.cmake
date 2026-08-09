@@ -5,7 +5,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "HEADLESS")
         add_executable(${target} ${src})
         if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
             target_link_libraries(${target} PRIVATE
-                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                CNA
                 SHARP_RUNTIME SDL3::SDL3)
         else()
             target_link_libraries(${target} PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)

@@ -12,7 +12,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_BACKEND STREQUAL "MAGNUM"
             # one group rather than in a single pass -- the same shape every other backend's own
             # test macro uses here.
             target_link_libraries(${target} PRIVATE
-                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                CNA
                 SHARP_RUNTIME SDL3::SDL3)
         else()
             target_link_libraries(${target} PRIVATE CNA ${BACKEND_TARGET} SHARP_RUNTIME SDL3::SDL3)

@@ -27,7 +27,7 @@ if(CNA_BUILD_EXAMPLES)
     else()
         if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32 AND NOT APPLE)
             target_link_libraries(cna_demo_2d PRIVATE
-                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                CNA
                 SHARP_RUNTIME)
         else()
             target_link_libraries(cna_demo_2d PRIVATE CNA SHARP_RUNTIME)
@@ -92,7 +92,7 @@ if(CNA_BUILD_EXAMPLES)
     else()
         if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32 AND NOT APPLE)
             target_link_libraries(cna_demo_sound PRIVATE
-                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                CNA
                 SHARP_RUNTIME)
         else()
             target_link_libraries(cna_demo_sound PRIVATE CNA SHARP_RUNTIME)
@@ -122,7 +122,7 @@ if(CNA_BUILD_EXAMPLES)
     )
     if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32 AND NOT APPLE)
         target_link_libraries(cna_demo_xact PRIVATE
-            -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+            CNA
             SHARP_RUNTIME)
     else()
         target_link_libraries(cna_demo_xact PRIVATE CNA SHARP_RUNTIME)
@@ -162,7 +162,7 @@ if(CNA_BUILD_EXAMPLES)
     else()
         if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32 AND NOT APPLE)
             target_link_libraries(cna_demo_input PRIVATE
-                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                CNA
                 SHARP_RUNTIME)
         else()
             target_link_libraries(cna_demo_input PRIVATE CNA SHARP_RUNTIME)
@@ -212,7 +212,7 @@ if(CNA_BUILD_EXAMPLES)
     else()
         if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32 AND NOT APPLE)
             target_link_libraries(cna_demo_devices PRIVATE
-                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                CNA
                 SHARP_RUNTIME)
         else()
             target_link_libraries(cna_demo_devices PRIVATE CNA SHARP_RUNTIME)
@@ -248,7 +248,7 @@ if(CNA_BUILD_EXAMPLES AND NOT EMSCRIPTEN AND NOT ANDROID)
     add_executable(cna_input_smoke examples/input_smoke/InputSmoke.cpp)
     if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32 AND NOT APPLE)
         target_link_libraries(cna_input_smoke PRIVATE
-            -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group SHARP_RUNTIME)
+            CNA SHARP_RUNTIME)
     else()
         target_link_libraries(cna_input_smoke PRIVATE CNA SHARP_RUNTIME)
     endif()
@@ -282,7 +282,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_NOXNA AND (CNA_GRAPHICS_BACKEND STREQUAL "OPENGLES
         CNA_DEPTH_EFFECT_DEMO_CONTENT_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/examples/demo_2d/Content")
     if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
         target_link_libraries(cna_depth_effect_demo PRIVATE
-            -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group SHARP_RUNTIME)
+            CNA SHARP_RUNTIME)
     else()
         target_link_libraries(cna_depth_effect_demo PRIVATE CNA SHARP_RUNTIME)
     endif()
@@ -303,7 +303,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_NOXNA AND (CNA_GRAPHICS_BACKEND STREQUAL "OPENGLES
         CNA_CRT_EFFECT_DEMO_CONTENT_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/examples/demo_2d/Content")
     if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
         target_link_libraries(cna_crt_effect_demo PRIVATE
-            -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group SHARP_RUNTIME)
+            CNA SHARP_RUNTIME)
     else()
         target_link_libraries(cna_crt_effect_demo PRIVATE CNA SHARP_RUNTIME)
     endif()
@@ -372,7 +372,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "OPENGLES" OR CNA_GRAPH
         # interfaces); wrap them in a linker group so GNU ld resolves both.
         if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32 AND NOT APPLE)
             target_link_libraries(cna_house3d_demo PRIVATE
-                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                CNA
                 SHARP_RUNTIME)
         else()
             target_link_libraries(cna_house3d_demo PRIVATE CNA SHARP_RUNTIME)
@@ -404,7 +404,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "OPENGLES" OR CNA_GRAPH
 
         if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32 AND NOT APPLE)
             target_link_libraries(cna_demo_avatar PRIVATE
-                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                CNA
                 SHARP_RUNTIME)
         else()
             target_link_libraries(cna_demo_avatar PRIVATE CNA SHARP_RUNTIME)
@@ -440,7 +440,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "OPENGLES" OR CNA_GRAPH
 
         if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32 AND NOT APPLE)
             target_link_libraries(cna_demo_net_client_server_arena PRIVATE
-                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                CNA
                 SHARP_RUNTIME)
         else()
             target_link_libraries(cna_demo_net_client_server_arena PRIVATE CNA SHARP_RUNTIME)
@@ -490,7 +490,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "OPENGLES" OR CNA_GRAPH
 
         if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32 AND NOT APPLE)
             target_link_libraries(cna_demo_simulated_network_conditions PRIVATE
-                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                CNA
                 SHARP_RUNTIME)
         else()
             target_link_libraries(cna_demo_simulated_network_conditions PRIVATE CNA SHARP_RUNTIME)
@@ -520,7 +520,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "OPENGLES" OR CNA_GRAPH
 
         if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32 AND NOT APPLE)
             target_link_libraries(cna_demo_session_browser PRIVATE
-                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                CNA
                 SHARP_RUNTIME)
         else()
             target_link_libraries(cna_demo_session_browser PRIVATE CNA SHARP_RUNTIME)
@@ -550,7 +550,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "OPENGLES" OR CNA_GRAPH
 
         if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32 AND NOT APPLE)
             target_link_libraries(cna_demo_gamer_roster_hud PRIVATE
-                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                CNA
                 SHARP_RUNTIME)
         else()
             target_link_libraries(cna_demo_gamer_roster_hud PRIVATE CNA SHARP_RUNTIME)
@@ -591,7 +591,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "OPENGLES" OR CNA_GRAPH
 
         if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32 AND NOT APPLE)
             target_link_libraries(cna_demo_gamerservices_signin_presence PRIVATE
-                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                CNA
                 SHARP_RUNTIME)
         else()
             target_link_libraries(cna_demo_gamerservices_signin_presence PRIVATE CNA SHARP_RUNTIME)
@@ -620,7 +620,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "OPENGLES" OR CNA_GRAPH
 
         if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32 AND NOT APPLE)
             target_link_libraries(cna_demo_achievement_showcase PRIVATE
-                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                CNA
                 SHARP_RUNTIME)
         else()
             target_link_libraries(cna_demo_achievement_showcase PRIVATE CNA SHARP_RUNTIME)
@@ -650,7 +650,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "OPENGLES" OR CNA_GRAPH
 
         if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32 AND NOT APPLE)
             target_link_libraries(cna_demo_leaderboard_viewer PRIVATE
-                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                CNA
                 SHARP_RUNTIME)
         else()
             target_link_libraries(cna_demo_leaderboard_viewer PRIVATE CNA SHARP_RUNTIME)
@@ -690,7 +690,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "OPENGLES" OR CNA_GRAPH
 
         if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32 AND NOT APPLE)
             target_link_libraries(cna_demo_gamerservices_dispatcher_watchdog PRIVATE
-                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                CNA
                 SHARP_RUNTIME)
         else()
             target_link_libraries(cna_demo_gamerservices_dispatcher_watchdog PRIVATE CNA SHARP_RUNTIME)
@@ -719,7 +719,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "OPENGLES" OR CNA_GRAPH
 
         if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32 AND NOT APPLE)
             target_link_libraries(cna_demo_gamer_profile_privileges PRIVATE
-                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                CNA
                 SHARP_RUNTIME)
         else()
             target_link_libraries(cna_demo_gamer_profile_privileges PRIVATE CNA SHARP_RUNTIME)
@@ -748,7 +748,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "OPENGLES" OR CNA_GRAPH
 
         if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32 AND NOT APPLE)
             target_link_libraries(cna_demo_friends_and_gamercard PRIVATE
-                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                CNA
                 SHARP_RUNTIME)
         else()
             target_link_libraries(cna_demo_friends_and_gamercard PRIVATE CNA SHARP_RUNTIME)
@@ -778,7 +778,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "OPENGLES" OR CNA_GRAPH
 
         if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32 AND NOT APPLE)
             target_link_libraries(cna_demo_avatar_animation_gallery PRIVATE
-                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                CNA
                 SHARP_RUNTIME)
         else()
             target_link_libraries(cna_demo_avatar_animation_gallery PRIVATE CNA SHARP_RUNTIME)
@@ -813,7 +813,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "OPENGLES" OR CNA_GRAPH
 
         if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32 AND NOT APPLE)
             target_link_libraries(cna_demo_avatar_wardrobe_hotswap PRIVATE
-                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                CNA
                 SHARP_RUNTIME)
         else()
             target_link_libraries(cna_demo_avatar_wardrobe_hotswap PRIVATE CNA SHARP_RUNTIME)
@@ -847,7 +847,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "OPENGLES" OR CNA_GRAPH
 
         if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32 AND NOT APPLE)
             target_link_libraries(cna_demo_avatar_appearance_tint_studio PRIVATE
-                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                CNA
                 SHARP_RUNTIME)
         else()
             target_link_libraries(cna_demo_avatar_appearance_tint_studio PRIVATE CNA SHARP_RUNTIME)
@@ -881,7 +881,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "OPENGLES" OR CNA_GRAPH
 
         if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32 AND NOT APPLE)
             target_link_libraries(cna_demo_avatar_dual_compare PRIVATE
-                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                CNA
                 SHARP_RUNTIME)
         else()
             target_link_libraries(cna_demo_avatar_dual_compare PRIVATE CNA SHARP_RUNTIME)
@@ -916,7 +916,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "OPENGLES" OR CNA_GRAPH
 
         if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32 AND NOT APPLE)
             target_link_libraries(cna_demo_avatar_multi_attach_stress PRIVATE
-                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                CNA
                 SHARP_RUNTIME)
         else()
             target_link_libraries(cna_demo_avatar_multi_attach_stress PRIVATE CNA SHARP_RUNTIME)
@@ -951,7 +951,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "OPENGLES" OR CNA_GRAPH
 
         if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32 AND NOT APPLE)
             target_link_libraries(cna_demo_avatar_bone_state_boundary PRIVATE
-                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                CNA
                 SHARP_RUNTIME)
         else()
             target_link_libraries(cna_demo_avatar_bone_state_boundary PRIVATE CNA SHARP_RUNTIME)
@@ -987,7 +987,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "OPENGLES" OR CNA_GRAPH
 
         if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32 AND NOT APPLE)
             target_link_libraries(cna_demo_net_avatar_sync PRIVATE
-                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                CNA
                 SHARP_RUNTIME)
         else()
             target_link_libraries(cna_demo_net_avatar_sync PRIVATE CNA SHARP_RUNTIME)

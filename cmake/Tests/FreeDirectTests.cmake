@@ -7,7 +7,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         add_executable(${target} ${src})
         if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
             target_link_libraries(${target} PRIVATE
-                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                CNA
                 SHARP_RUNTIME)
         else()
             target_link_libraries(${target} PRIVATE CNA SHARP_RUNTIME)

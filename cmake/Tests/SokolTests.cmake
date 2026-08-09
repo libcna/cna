@@ -10,7 +10,7 @@ if(CNA_BUILD_TESTS AND CNA_BUILD_EXAMPLES
         target_include_directories(${target} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/examples)
         if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
             target_link_libraries(${target} PRIVATE
-                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                CNA
                 SHARP_RUNTIME SDL3::SDL3)
         else()
             target_link_libraries(${target} PRIVATE CNA ${BACKEND_TARGET} SHARP_RUNTIME SDL3::SDL3)

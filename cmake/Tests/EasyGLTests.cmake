@@ -16,7 +16,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             # propagation through CNA cannot be relied on (REMED-BUILD-005's finding).
             if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
                 target_link_libraries(${target} PRIVATE
-                    -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                    CNA
                     SHARP_RUNTIME SDL3::SDL3)
             else()
                 target_link_libraries(${target} PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)

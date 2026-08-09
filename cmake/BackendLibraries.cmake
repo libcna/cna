@@ -190,15 +190,16 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "SKIA")
     # mutually exclusive GN builds of the same checkout and cannot be linked into one binary.
     target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 ${CNA_SKIA_LINK_TARGET})
     # SKIA-140/141: SkiaTextureBackend.cpp calls CNA::Internal::Graphics::DxtUtil/Bc7Util, which
-    # live in the main CNA library, not this backend target. CNA already PUBLIC-links
-    # ${BACKEND_TARGET} above (CnaLibrary.cmake), so a plain executable's link command scans
-    # libCNA.a before this target's archive; a single-pass linker cannot resolve a symbol defined
-    # in the earlier archive from a reference in the later one. Declaring the reverse edge here
-    # makes the mutual dependency explicit so CMake's own generator repeats/groups the two
-    # archives correctly, instead of leaving it to accidental transitive link order (found via a
-    # real "undefined reference to Bc7Util::DecompressBc7" failure on cna_reference_dump, which
-    # has no other path that happens to pull DxtUtil/Bc7Util's translation unit in first).
-    target_link_libraries(${BACKEND_TARGET} PRIVATE CNA)
+    # live in the CNA graphics core module, not this backend target. The umbrella CNA target
+    # links ${BACKEND_TARGET} (CnaLibrary.cmake), so a plain executable's link command scans
+    # the graphics-core archive before this target's archive; a single-pass linker cannot resolve
+    # a symbol defined in the earlier archive from a reference in the later one. Declaring the
+    # reverse edge here makes the mutual dependency explicit so CMake's own generator repeats/
+    # groups the two archives correctly, instead of leaving it to accidental transitive link
+    # order (found via a real "undefined reference to Bc7Util::DecompressBc7" failure on
+    # cna_reference_dump, which has no other path that happens to pull DxtUtil/Bc7Util's
+    # translation unit in first).
+    target_link_libraries(${BACKEND_TARGET} PRIVATE cna_graphics_core)
     # The pinned upstream raster archives are built with `skia_enable_ganesh=false` and RTTI
     # disabled. GCC/Clang's broad `undefined` group otherwise instruments virtual calls made by
     # this adapter with `vptr` checks and then requires typeinfo symbols (for example SkCanvas)

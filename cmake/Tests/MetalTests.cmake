@@ -9,7 +9,7 @@ if(CNA_BUILD_TESTS)
     add_executable(cna_test_metal_portable ${CNA_METAL_PORTABLE_TEST_SOURCES})
     if(UNIX AND NOT APPLE)
         target_link_libraries(cna_test_metal_portable PRIVATE
-            -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+            CNA
             SHARP_RUNTIME gtest_main SDL3::SDL3)
     else()
         target_link_libraries(cna_test_metal_portable
