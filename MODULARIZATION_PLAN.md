@@ -392,6 +392,40 @@ updated with evidence as phases complete.
   sites; must be adapted together with the sharp-runtime develop merge (not now — the branch API
   is still moving and CNA's Net public surface must not chase an unmerged contract).
 
+### P3 — representative configurations (commits ede258a35 + 08224fe9a)
+- **HEADLESS (canonical):** modular full ctest = 6130 tests (pristine control 6118 + exactly the
+  12 new module gates; name diff shows additions only); serial rerun leaves exactly the control's
+  2 deterministic pristine residuals (REMED-GFX-133 `SetRenderTargets_FourTargets`,
+  `Headless_Smoke` primitive-range abort). `ModuleLinkClosure_GraphicsNativeSdkFree` passes —
+  graphics-core's closure carries no native renderer SDK.
+- **VULKAN (native family):** full tree builds after two findings: (1) the backend reverse edge
+  is structural for every backend (unconditional declaration replaced the observed-only 19-entry
+  list); (2) a pre-existing latent gap — the Vulkan test macro alone never linked SDL3::SDL3
+  while 63 example TUs include SDL directly; the same TU fails in the pristine tree (verified by
+  a single-object pristine build). Focused Xvfb run: 222 registrations, 221 pass; the single
+  failure `Vulkan_DepthBias` (llvmpipe constant-bias arm, no DRI3 under Xvfb) reproduces
+  **identically (3/4, same arm) with the pristine-built binary** — pre-existing environmental
+  residual on this display route. probe_graphics's VULKAN closure is exactly the backend archive
+  + libvulkan.so — no other native SDK.
+- Renderer identity gate green in every configuration (41 preserved).
+
+### P6 — sanitizers (HEADLESS, `address,undefined,float-cast-overflow`, Debug, ccache)
+- `ldd CnaTests` links `libasan.so.8` + `libubsan.so.1`; all five module probes run clean under
+  the strict environment.
+- Strict curated corpus (`ASAN_OPTIONS=detect_leaks=1:halt_on_error=1:check_initialization_order=1:strict_init_order=1`,
+  `UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1`; Vector2/Decimal/DateTime/audio/registry/
+  capability areas): **650 = 647 pass + 3 skip + 0 fail, zero reports** — the REMED-GFX-221
+  initialization-order coverage is retained and green.
+- A broader full-suite sweep (beyond any previously gated sanitizer scope) additionally surfaced
+  **pre-existing** findings in unchanged code, each proven present in the pristine tree:
+  (a) the four Net subprocess-harness tests fail under leak checking because the harness children
+  leak the `NetworkSession::EndCreate` allocation at exit (`NetworkSession.cpp:762`; reproduced
+  against the pristine control binary via standalone-LSan preload, identical stack);
+  (b) `Vector3::GetHashCode` has signed-int overflow hashing non-finite component bit patterns
+  (`Vector3.cpp:117`; reproduced by compiling the pristine worktree's own sources standalone
+  under UBSan). Zero NEW CNA-originating sanitizer defects; the pre-existing findings are
+  recorded for their own future remediation, not reopened here.
+
 ### Physical source moves — decision
 Deferred (plan §6): the target graph, parity gates and probe contracts are the campaign's
 substantive modularization; a later pure-`git mv` phase can relocate sources without touching

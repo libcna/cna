@@ -1,5 +1,39 @@
 # NEXT.md
 
+## MODULARIZATION CAMPAIGN — **target-graph modularization complete on `feature/modularization`** (2026-08-10)
+
+> FUTURE.md Phase 1 work, on branch `feature/modularization` from base `5f2c4e941`. The
+> authoritative plan, evidence ledger, and deferred-scope record are in
+> **`MODULARIZATION_PLAN.md`**; the machine-readable no-loss baseline is in
+> `modularization/baseline/`.
+>
+> **Done and proven:** the monolithic CNA library is split into twelve subsystem STATIC modules
+> (+ the existing GamerServices/Net) with explicit derived link edges, `CNA::<Name>` aliases, a
+> configure-time source-partition validator, and `CNA` preserved as the compatible INTERFACE
+> umbrella — no file moved, no header changed, public behavior parity proven against pristine
+> controls on OPENGLES (full-corpus A/B, identical per-test outcomes), HEADLESS (canonical
+> suite; identical deterministic residuals) and VULKAN (focused Xvfb suite; the single
+> llvmpipe DepthBias residual reproduces identically with a pristine-built binary). All 41
+> public renderer identities are pinned by the new `RendererIdentityRegistry` gate; five
+> minimal-link probes + link-closure gates make each module's real dependency closure a
+> permanent contract, including the HEADLESS proof that graphics-core carries no native
+> renderer SDK. Every CNA module declares its specific sharp-runtime components
+> (`cmake/SharpRuntimeConsumption.cmake` seam: monolithic archive today, per-component against
+> the modular runtime), validated against a local read-only merge preview of the completed
+> sharp-runtime modularization — `probe_math`'s sharp closure is the single
+> `libsharp_runtime_core.a`, and the Decimal XNB readers survive (the FINAL-STAB-001 INT128
+> define ported to the modular headers surface).
+>
+> **Gated remaining work:** the history-preserving merge of
+> `claude/remediation-batch-1804-namespace-b1yjh5` into sharp-runtime develop waits for that
+> branch's audit-remediation campaign to reach an accepted checkpoint (it moved three times
+> during this session); the merge-preview resolution recipe and the one Net-only CNA
+> adaptation (`NetworkSessionProperties::operator[]` vs the new `IList<T>` ElementReference
+> contract) are recorded in MODULARIZATION_PLAN.md. Physical source moves are deliberately
+> deferred (plan §6). The pre-existing environmental residuals recorded during control runs
+> (REMED-GFX-133, `Headless_Smoke` primitive-range abort, llvmpipe `Vulkan_DepthBias`) are
+> unchanged by modularization and remain open findings of their own.
+
 ## FINAL RECONCILIATION — **READY FOR DEVELOP MERGE** (2026-08-09)
 
 The post-audit integration campaign remains complete at **21/21 accepted lanes, 0 pending**, with
