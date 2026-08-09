@@ -8,12 +8,17 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         # --- helper macro: build a headless Vulkan test exe ----------------------
         macro(cna_vulkan_test target src)
             add_executable(${target} ${src})
+            # SDL3::SDL3 is linked explicitly like every other backend's test macro already
+            # does: several of these example TUs include <SDL3/SDL.h> directly, and nothing on
+            # the CNA surface propagates SDL's include directories (SDL has always been a
+            # PRIVATE implementation dependency). This was a latent pre-existing gap unique to
+            # the Vulkan macro -- the same TU fails to compile in the pristine tree too.
             if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
                 target_link_libraries(${target} PRIVATE
                     CNA
-                    SHARP_RUNTIME)
+                    SHARP_RUNTIME SDL3::SDL3)
             else()
-                target_link_libraries(${target} PRIVATE CNA SHARP_RUNTIME)
+                target_link_libraries(${target} PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
             endif()
             if(TARGET SDL3::SDL3main)
                 target_link_libraries(${target} PRIVATE SDL3::SDL3main)
