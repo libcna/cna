@@ -1,0 +1,87 @@
+name: Native Metal backend (macOS)
+
+on:
+  push:
+    paths:
+      - '.github/workflows/metal-macos-ci.yml'
+      - 'CMakeLists.txt'
+      - 'cmake/BackendLibraries.cmake'
+      - 'cmake/BackendSelection.cmake'
+      - 'cmake/CnaLibrary.cmake'
+      - 'cmake/Examples.cmake'
+      - 'cmake/Tests/MetalTests.cmake'
+      - 'examples/metal_capabilities_test.cpp'
+      - 'examples/metal_smoke_test.cpp'
+      - 'include/CNA/GraphicsCapability.hpp'
+      - 'include/CNA/GraphicsBackendType.hpp'
+      - 'include/CNA/Internal/Backends/Common/IGraphicsBackend.hpp'
+      - 'include/CNA/Internal/Backends/Metal/**'
+      - 'include/Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp'
+      - 'src/CNA/Internal/Backends/Metal/**'
+      - 'src/Microsoft/Xna/Framework/Graphics/GraphicsDevice.cpp'
+      - 'tests/CNA/Internal/Backends/Metal/**'
+      - 'tests/Microsoft/Xna/Framework/GraphicsBackendCompileDefinitionTests.cpp'
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: metal-macos-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  metal-build:
+    runs-on: macos-14
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout CNA
+        uses: actions/checkout@v4
+        with:
+          path: cna
+          submodules: true
+
+      - name: Checkout sharp-runtime sibling
+        uses: actions/checkout@v4
+        with:
+          repository: openeggbert/sharp-runtime
+          path: sharp-runtime
+
+      - name: Install build dependencies
+        run: brew install ccache ffmpeg
+
+      - name: Configure native Metal backend
+        working-directory: cna
+        run: >
+          cmake -S . -B cmake-build-metal
+          -DCNA_GRAPHICS_BACKEND=METAL
+          -DCNA_BUILD_TESTS=ON
+          -DCNA_USE_CCACHE=ON
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          -DCNA_MAX_VENDORED_BUILD_JOBS=2
+          -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+
+      - name: Build native Metal backend
+        working-directory: cna
+        run: cmake --build cmake-build-metal --parallel 3
+
+      - name: Run supported Metal contract tests
+        working-directory: cna
+        env:
+          MTL_SHADER_VALIDATION: '1'
+          MTL_DEBUG_LAYER: '1'
+        run: >
+          ctest --test-dir cmake-build-metal
+          -R '^Metal'
+          --output-on-failure
+          --parallel 3
+
+      - name: Run backend compile-definition control
+        working-directory: cna
+        run: >
+          ctest --test-dir cmake-build-metal
+          -R '^GraphicsBackendCompileDefinitionsTest\.'
+          --output-on-failure
+          --parallel 3

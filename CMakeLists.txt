@@ -295,6 +295,9 @@ include(cmake/Tests/DiligentTests.cmake)
 # LLGL itself, so the same binaries exercise whichever module was selected.
 include(cmake/Tests/LlglTests.cmake)
 
+# Native Apple Metal backend smoke test.
+include(cmake/Tests/MetalTests.cmake)
+
 include(cmake/Harnesses.cmake)
 
 include(cmake/ToolGltfToCnj.cmake)

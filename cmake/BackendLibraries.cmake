@@ -62,6 +62,10 @@ endif()
 
 # Backend target
 file(GLOB BACKEND_SOURCES "${BACKEND_DIR}/*.cpp")
+if(CNA_GRAPHICS_BACKEND STREQUAL "METAL")
+    file(GLOB CNA_METAL_OBJCXX_SOURCES "${BACKEND_DIR}/*.mm")
+    list(APPEND BACKEND_SOURCES ${CNA_METAL_OBJCXX_SOURCES})
+endif()
 if(CNA_GRAPHICS_BACKEND STREQUAL "SOFTWARE")
     # This wrapper includes SoftwareGraphicsBackend.cpp with CNA_SOFTWARE_2D_ONLY for the GDI
     # archive. The complete SOFTWARE archive compiles the implementation directly, once.
@@ -276,6 +280,8 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "DILIGENT")
     # cna_configure_diligent() actually built for this platform.
     target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3)
     cna_link_diligent(${BACKEND_TARGET})
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "METAL")
+    target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 "-framework Metal" "-framework QuartzCore" "-framework Foundation")
 elseif(CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU")
     # plan_sdlgpu.md SDLGPU-1: SDL_gpu.h is part of SDL3 itself (SDL_gpu.c is already compiled
     # into the same SDL3 library every other backend links against) -- no separate find_package

@@ -126,7 +126,10 @@ namespace CNA
         Gdi,
 
         /** @brief LLGL rendering abstraction; CNA's supported runtime uses its OpenGL module. */
-        Llgl
+        Llgl,
+
+        /** @brief Native Apple Metal. */
+        Metal
     };
 
     /**
@@ -226,6 +229,8 @@ namespace CNA
         return GraphicsBackendType::Gdi;
 #elif defined(CNA_BACKEND_LLGL)
         return GraphicsBackendType::Llgl;
+#elif defined(CNA_BACKEND_METAL)
+        return GraphicsBackendType::Metal;
 #else
 #error "CNA: no CNA_BACKEND_* compile definition set -- graphics backend selection (cmake/BackendSelection.cmake) is broken"
 #endif
@@ -285,6 +290,7 @@ namespace CNA
             case GraphicsBackendType::Glide:         return "GLIDE";
             case GraphicsBackendType::Gdi:           return "GDI";
             case GraphicsBackendType::Llgl:          return "LLGL";
+            case GraphicsBackendType::Metal:          return "METAL";
         }
         return "UNKNOWN";
     }

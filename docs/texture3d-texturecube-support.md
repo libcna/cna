@@ -1,10 +1,20 @@
 # Texture3D / TextureCube Backend Support — CNA
 
+> **Metal adaptation note (2026-08-09):** the current Metal factory rejects every format except
+> `SurfaceFormat::Color`; it no longer silently accepts and ignores unsupported format requests.
+> The adapted Objective-C++ path still needs fresh macOS compile/runtime evidence. See
+> `docs/metal-backend.md`.
+
 > Source-inspected against Tasks 271–279 (Phase 33).
 > Covers: EasyGL, Vulkan, Bgfx backends. SDL_Renderer has no 3D texture support at all
 > (2D-only backend, `CreateTexture3D`/`CreateTextureCube` are unreachable from any XNA-level
 > API — `Texture3D`/`TextureCube` construction goes through `GraphicsDevice::GetBackend()`,
 > and SDL_Renderer's 3D-facing factory methods throw `ThrowNo3D` the same way vertex buffers do).
+>
+> Metal column added later (`plan_metal.md METAL-129`, Phase 11: `METAL-120`–`129`). The historical
+> predecessor compiled on Apple Clang, but the post-audit adaptation changes the interfaces and has
+> no fresh Apple compile. Metal remains marked 🔍 where only source inspection and portable helper
+> tests exist; there is still no dedicated native TextureCube/Texture3D round-trip test.
 
 ---
 
@@ -26,10 +36,10 @@
 | EasyGL  | ⚠️ `TextureCube` only (Task 276 fix) — see "Mip levels" below | ❌ always `Rgba8`, `format` parameter ignored |
 | Vulkan  | ❌ dropped in the factory itself — `CreateTexture3D`/`CreateTextureCube` take `bool /*mipMap*/` (commented out) | ❌ always `VK_FORMAT_R8G8B8A8_UNORM` |
 | Bgfx    | ⚠️ `TextureCube` — parameter is received but the constructor still hardcodes `bgfx::createTextureCube(size, /*hasMips=*/false, ...)`, so it does nothing today (🔍 same class of bug as Task 276, not yet fixed for Bgfx) | ❌ always `bgfx::TextureFormat::RGBA8` |
+| Metal   | 🔍 both `Texture3D`/`TextureCube` honor `mipMap` (`mipmapped:mipMap` for `TextureCube`; a computed level count for `Texture3D`) — full chain allocated up front | ⚠️ accepts only `SurfaceFormat::Color` and rejects every other request; both plain texture types use `MTLPixelFormatRGBA8Unorm` |
 
-No backend implements `SurfaceFormat` for `Texture3D`/`TextureCube` — every format request silently
-becomes 32-bit RGBA. This is a pre-existing, cross-backend limitation, not something introduced or
-fixed this session.
+EasyGL, Vulkan, and Bgfx still silently reduce every format request to 32-bit RGBA. Metal's adapted
+boundary instead accepts Color and throws for unsupported formats.
 
 ---
 
@@ -45,6 +55,7 @@ boxes all round-trip correctly through **EasyGL**.
 | EasyGL  | ✅ | `glTexSubImage3D`/`glTexSubImage2D` per-face, pixel-verified (Tasks 273–275) |
 | Vulkan  | 🔍 | `vkCmdCopyBufferToImage` with `imageOffset`/`imageExtent` set from `x,y,z,w,h,depth` — code inspection shows this is correct, but not independently pixel-verified this session (Vulkan has no `GetData` readback to verify against — see below) |
 | Bgfx    | 🔍 | `bgfx::updateTexture3D`/`updateTextureCube` forward the same offsets — code inspection only; Bgfx has no readback API to verify against either |
+| Metal   | 🔍 | Adapted SetData validates face/level/region/length with overflow-safe helpers, allocates a replacement texture, blit-preserves every untouched face/mip/slice, writes only the requested region in the replacement, then swaps after completion (`METAL-264`). This avoids in-place mutation while prior draws may sample the old object. Source/portable-policy evidence only; no adapted Apple compile/runtime or native round-trip exists. |
 
 ---
 
@@ -59,6 +70,7 @@ backend's `ITexture3DBackend`/`ITextureCubeBackend::GetData` implementation.
 | EasyGL  | ✅ — per-slice (`Texture3D`) or per-face (`TextureCube`) temporary FBO + `glReadPixels`. Pixel-verified round-trip (Tasks 273–275). |
 | Vulkan  | ❌ **total no-op.** Neither `VulkanTexture3DBackend` nor `VulkanTextureCubeBackend` overrides `GetData` — both fall through to `ITexture3DBackend`/`ITextureCubeBackend`'s base-class default (`virtual void GetData(...) const {}`, an empty body). Calling `Texture3D::GetData`/`TextureCube::GetData` on Vulkan silently leaves the caller's output buffer **completely untouched** — not zeroed, just whatever was already there. No exception, no error, no log message. |
 | Bgfx    | ❌ **total no-op**, same reason (no override, falls through to the same empty base-class default). Consistent with Bgfx's already-documented project-wide "no GPU readback API" limitation, but this is the first place that limitation is confirmed to apply specifically to `Texture3D`/`TextureCube`. |
+| Metal   | 🔍 real, not a no-op — both override `GetData` via the aligned `blitTextureToClientBuffer()` staging helper shared with Metal render targets. Backbuffer readback is a separate deliberately unsupported path and throws rather than using this helper. Cube/3D readback pads Metal buffer rows to 256 bytes, then de-pads RGBA rows/slices after synchronous completion (`METAL-264`). The historical predecessor compiled on Apple, but the adapted Objective-C++ has no Apple compile/runtime evidence and no dedicated native round-trip pixel test (`METAL-127`/`128` remain open). |
 
 **Why the existing test suite didn't already catch this:** `Texture3DTests.cpp`/`TextureCubeTests.cpp`'s
 `GetData*` unit tests are argument-guard tests only (null data throws, negative `startIndex` throws,
@@ -82,6 +94,7 @@ new `plan_graphics.md` Task 865.
 | EasyGL  | 🔍 same bug class as the confirmed `TextureCube` bug below, not yet fixed — tracked as Task 862 | ✅ fixed and pixel-verified (Task 276): constructor now pre-allocates every mip level per face |
 | Vulkan  | 🔍 `imgInfo.mipLevels = 1` hardcoded at image creation, `mipMap` param dropped by the factory | 🔍 same — `imgInfo.mipLevels = 1` hardcoded |
 | Bgfx    | 🔍 `bgfx::createTexture3D(..., /*hasMips=*/false, ...)` — `mipMap` param received but ignored | 🔍 same — `bgfx::createTextureCube(..., /*hasMips=*/false, ...)` |
+| Metal   | 🔍 the public XNA mip chain is computed from width/height only; depth halves inside those existing levels but never creates extra levels (so mipmapped `1x1x8` has only level 0). The descriptor allocates exactly that count. | 🔍 real allocation via `mipmapped:mipMap`'s full-chain behavior; neither cell has adapted native pixel proof. |
 
 Task 276 confirmed (via a failing-then-fixed test) that this exact bug shape — "constructor never
 allocates GPU storage past level 0, so a sub-image write to `level>0` silently goes nowhere" —
@@ -100,16 +113,17 @@ an out-of-range `CubeMapFace` value, at the public API layer, on all backends (t
 `TextureCube.cpp`, above the backend dispatch). FNA itself never validates this — confirmed via
 `TextureCube.cs` — so this is a CNA safety extra. All 3 backends already guarded against an invalid
 face internally too (`if (face < 0 || face >= 6) return;`), so this was already memory-safe before
-Task 279; the fix only changes silent-no-op into a clear exception.
+Task 279; the fix only changes silent-no-op into a clear exception. Applies to Metal automatically
+(shared `TextureCube.cpp` code, above any per-backend dispatch — no Metal-specific work needed).
 
 ---
 
 ## Sampling in shaders
 
-| Use case | EasyGL | Vulkan | Bgfx |
-|---|:---:|:---:|:---:|
-| `TextureCube` in `EnvironmentMapEffect` | ✅ (pre-existing, reconfirmed) | ✅ (pre-existing, reconfirmed) | ✅ (Task 278 — was a silent no-reflection fallback, now fixed) |
-| `Texture3D` in any effect, stock or custom | ❌ | ❌ | ❌ |
+| Use case | EasyGL | Vulkan | Bgfx | Metal |
+|---|:---:|:---:|:---:|:---:|
+| `TextureCube` in `EnvironmentMapEffect` | ✅ (pre-existing, reconfirmed) | ✅ (pre-existing, reconfirmed) | ✅ (Task 278 — was a silent no-reflection fallback, now fixed) | 🔍 real, world-space cube-map reflection (flat + Fresnel-weighted blend, lit+fogged), landed and source-complete (`plan_metal.md` Phase 6, `METAL-64`–`71`) — not independently pixel-verified against a known-reflective scene |
+| `Texture3D` in any effect, stock or custom | ❌ | ❌ | ❌ | ❌ same structural gap |
 
 `Texture3D` sampling is not implemented on any backend for a structural reason, not a per-backend
 gap: `Texture3D`/`TextureCube` don't inherit `Texture` in CNA (unlike FNA's `Texture3D : Texture`),
@@ -118,7 +132,8 @@ texture-binding API of any kind (Task 277 finding, tracked as Task 863). `Textur
 *does* work for `EnvironmentMapEffect` specifically because that stock effect bypasses
 `GraphicsDevice.Textures` entirely via a dedicated `GpuDrawParams::envMap` field that every backend's
 draw dispatch consumes directly — but no stock effect needs `Texture3D`, and no custom-effect
-workaround exists for it.
+workaround exists for it. Metal custom effects are deliberately unsupported after adaptation, so
+they provide no alternate binding route.
 
 ---
 
@@ -126,7 +141,8 @@ workaround exists for it.
 
 Confirmed non-functional stub on all backends (it's implemented once, in the shared XNA-layer
 `TextureCube.cpp`, not per-backend): ignores the `stream` argument entirely and always returns a
-blank 1×1 `Color` cube map. Task 272 finding, tracked as `plan_graphics.md` Task 663.
+blank 1×1 `Color` cube map. Task 272 finding, tracked as `plan_graphics.md` Task 663. Applies to
+Metal too, same shared code, no per-backend work possible until Task 663 lands.
 
 ---
 
@@ -139,3 +155,5 @@ blank 1×1 `Color` cube map. Task 272 finding, tracked as `plan_graphics.md` Tas
 | Fix Vulkan's and Bgfx's mip-level allocation for both `Texture3D` and `TextureCube` (`mipLevels`/`hasMips` hardcoded to 1/false) | Task 864 (new) |
 | Implement real GPU readback for `Texture3D`/`TextureCube::GetData` on Vulkan (staging-buffer `vkCmdCopyImageToBuffer`); document Bgfx's as an accepted no-readback limitation | Task 865 (new) |
 | Implement `TextureCube::DDSFromStreamEXT` for real (DDS header parsing + per-face/per-level DXT decode) | Task 663 |
+
+Metal's own remaining `Texture3D`/`TextureCube` work (real `CTest`s for `SetData`/`GetData` round-trips and cube-face sampling) is tracked directly in `plan_metal.md` Phase 11 (`METAL-126`–`129`), not duplicated here as a separate task list.
