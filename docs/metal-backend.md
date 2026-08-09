@@ -41,8 +41,9 @@ GPU-capture artifact. The attempted GPU-trace capture was unsupported on the hos
 
 The post-audit adaptation changes interfaces and supported behavior after that run. Therefore the
 historical successful compile is not compile or runtime evidence for the adapted `.mm` source. A
-fresh macOS workflow result is mandatory before claiming the adaptation itself compiles or runs on
-Metal.
+fresh macOS workflow result is required before claiming the adaptation itself compiles or runs on
+Metal; under the repository's authoritative source-continuity policy it is an external validation
+and support-confidence boundary, not an integration blocker.
 
 ### Post-audit findings
 
@@ -55,6 +56,24 @@ These IDs continue the existing `plan_metal.md` sequence without changing any hi
 | `METAL-260` — cached `CAMetalDrawable` lacked an owned reference | High | MRR source audit found a `nextDrawable` (+0) result stored across calls and mid-frame commits without retain/release ownership. | Implementation fixed: a portable-tested retained owner keeps it alive, mid-frame commits preserve it, and presentation releases it after command commit. Adapted-Mac validation remains pending. |
 | `METAL-261` — partial backend construction had no MRR rollback | Medium | Source audit showed that a throw after device/view/layer/queue acquisition (including runtime MSL-library failure) destroyed `impl_` but `Impl` had no destructor. | Implementation fixed: `Impl` now owns bounded teardown for constructor failure and normal destruction, with drawable/layer/view ordering explicit. Adapted-Mac validation remains pending. |
 | `METAL-262` — default device was retained twice | Medium | `MTLCreateSystemDefaultDevice()` supplied the create-rule ownership reference and the constructor immediately sent an additional `retain`. | Implementation fixed: the redundant retain is removed; stored create/`new*` objects each have exactly one owning reference. Adapted-Mac validation remains pending. |
+| `METAL-263` — fixed-stride draws ignored declaration meaning | High | All native routes selected descriptors only by stride, so same-stride semantic/offset/format mismatches could silently reinterpret bytes. | Every indexed/non-indexed ordinary/direct route calls the shared declaration-fidelity oracle before submission; portable canonical/mismatch tests pass. |
+| `METAL-264` — cube/3D transfers were unchecked, tightly pitched, and mutated in flight | High | Face/mip/range/length arithmetic was incomplete, buffer blits used tight rows, and SetData mutated resources prior draws could still sample. | Overflow-safe transfer layouts use a macOS-safe 256-byte staging-row alignment; readback de-pads; SetData preserves untouched subresources and swaps a completed replacement. Native pixel proof remains pending. |
+| `METAL-265` — Clear/encoder recreation lost viewport and scissor | High | Attachment setup overwrote requested state and fresh encoders omitted effective scissor state. | Requested state is separate from extent and preserved across encoders; the requested viewport is applied unchanged, while the enabled scissor is intersected with the attachment and rasterizer enable toggles apply immediately. |
+| `METAL-266` — OcclusionQuery overclaimed split/exhausting code | High | Clear split query commands and slots were never recycled. | Capability false, factory throws, visibility allocation omitted. |
+| `METAL-267` — BGRA targets returned swapped RGBA channels | High | Raw BGRA target bytes were copied into CNA RGBA Color storage. | Format-aware padded-row conversion swizzles target data; RGBA cube/3D remains unchanged. |
+| `METAL-268` — RenderTarget2D uploads silently no-op'd | High | Public inherited Texture2D.SetData reached inherited empty void hooks. | RGBA→BGRA reallocate/copy/swap uploads are implemented; invalid input rejects before mutation. |
+| `METAL-269` — missing stock textures carried stale encoder bindings | High | Null slots were not rebound, making output draw-order dependent. | Every used slot binds native or owned white/flat-normal/white-cube fallback; foreign non-null resources reject. |
+| `METAL-270` — MRR wrapper/cache/state allocation was not transactional | High | Throw-after-retain, nil, release-before-new, cache-emplace, and logical/native divergence paths were found by source audit. | Scoped rollback owners, checked allocation/multiplication, ownership-through-emplace, and depth-state rollback close those paths; native lifetime proof remains pending. |
+| `METAL-271` — texture pointer truthiness selected pipeline shape | High | Null untextured lit BasicEffect fell to Colored16 instead of the lit stride-32 pipeline. | Effect flags/canonical stride select shape; neutral textures represent absent stock samples. |
+| `METAL-272` — Texture2D ignored ImageData format/shape | High | Every ImageData was treated as RGBA8 Color. | Only positive Color-format complete mip shape with exact base RGBA bytes is accepted. |
+| `METAL-273` — SetBlendEnabled violated last-writer state | Medium | The control was inert and an intermediate latch model retained older state. | False installs opaque, true installs straight alpha, and later Set/Apply completely replaces it. |
+| `METAL-274` — disabled depth still wrote storage | High | Always-compare state retained native depth writes. | Effective native write is `depthEnabled && requestedWrite`; requested state survives re-enable. |
+| `METAL-275` — lighting-disabled uniforms retained light contributions | High | Metal diverged from EasyGL's accepted unlit normalization. | Ambient is one and directional diffuse/specular is zeroed where represented. |
+| `METAL-276` — generated RT2D mips were reported undefined | High | Partial SetData could seed untouched generated texels from zero. | Levels become defined only after full upload or successful generation; uninitialized levels remain false. |
+| `METAL-277` — expected nil drawable threw/retried | Medium | Background/minimized `nextDrawable=nil` reached an uncaught frame error. | One attempt per frame; backbuffer Clear/draw/marker/Present skip, RT work proceeds, Present resets. |
+| `METAL-278` — command failure/readback ordering could return stale data | High | Errors were not latched, and active RT readback waited only for the later blit. | Common abandon/reset teardown surfaces async failure; exact sync commands are checked; active RT source render completes successfully before readback conversion/output. |
+| `METAL-279` — empty logical scissor was illegal natively | High | Metal rejects zero native scissor extent. | Empty state submits a legal placeholder and suppresses draws, persisting across toggles/encoders. |
+| `METAL-280` — Metal static archive reverse edge was undeclared | High | Objective-C++ calls CNA-owned Effect/math/color symbols. | METAL joins the existing backend→CNA cycle declaration; native tests assert ordinary-link coverage. |
 
 ## Current capability contract
 
@@ -68,7 +87,7 @@ Every current `CNA::GraphicsCapability` is handled explicitly. There is no permi
 | `MultipleRenderTargets` | false | More than one descriptor is rejected before binding state changes. |
 | `AnisotropicFiltering` | true | Native sampler-state mapping. |
 | `WireFrame` | true | `FillMode::WireFrame` maps to `MTLTriangleFillModeLines`. |
-| `OcclusionQuery` | true | Native visibility-result buffer and query objects. |
+| `OcclusionQuery` | false | Creation throws until command-boundary completion and slot recycling are fixed. |
 | `CustomEffects` | false | Effect creation and non-null SpriteBatch custom effects throw. |
 | `Texture3D` | true | Color-format native 3D textures. |
 | `MultiStreamVertexInput` | false | More than one per-vertex stream is rejected. |
@@ -108,7 +127,18 @@ draw argument; the documented legacy empty-stream route remains valid. Pipeline 
 Render-target type, descriptor, slice, cube-face, and foreign-backend checks occur before changing
 the active target. Backend resources retain their native device/queue dependencies, active target
 destructors end encoders before releasing attachments, and render-target switches end encoding
-without presenting. Presentation remains an explicit end-of-frame action.
+without presenting. A transient `nextDrawable=nil` is a one-attempt, non-error backbuffer-frame
+skip: Clear, draw, marker, and Present do not retry during that logical frame, while offscreen
+render-target work remains available. Presentation resets availability for the next frame and
+remains the only action that presents a drawable.
+
+Requested viewport/scissor state is independent of attachment extent and survives Clear and
+encoder recreation. Each new encoder applies the requested viewport unchanged and intersects only
+the enabled scissor with its current target; disabled scissoring uses the full attachment, and a
+logically empty enabled scissor installs a legal native placeholder
+while suppressing draw submission. Texture transfers validate face, mip, coordinates, extents, and
+length before native work; buffer readback uses padded 256-byte rows on macOS and converts/de-pads
+only after the exact source/blit commands have completed successfully.
 
 The Objective-C++ file uses manual retain/release. `MTLCreateSystemDefaultDevice()` and stored
 `new*` results each contribute their one create-rule ownership reference; borrowed layer,
@@ -120,6 +150,10 @@ destroys the SDL Metal view after drawable/layer use has ended. This follows App
 [manual memory-management rules](https://developer.apple.com/library/archive/documentation/General/Conceptual/DevPedia-CocoaCore/MemoryManagement.html)
 and Clang's documented
 [retained-return conventions](https://clang.llvm.org/docs/AutomaticReferenceCounting.html#retained-return-values).
+Asynchronous command failures are recorded through a lifetime-safe latch and consumed at the next
+synchronous backend entry. Consumption abandons any uncommitted command/encoder and resets cached
+frame state before throwing; synchronous mip/readback operations check the exact command they
+submitted rather than treating a later queue operation as proof that the source work succeeded.
 
 Metal window creation adds `SDL_WINDOW_METAL | SDL_WINDOW_HIGH_PIXEL_DENSITY` only in the Metal
 selection branch, leaving other backend window flags unchanged.
@@ -145,8 +179,8 @@ env -u DISPLAY ctest --test-dir cmake-build-headless -R '^Metal' \
   --output-on-failure -j4
 ```
 
-At the 2026-08-09 adaptation checkpoint, both targets built successfully and all 143 unique
-Metal-prefixed portable tests passed. CTest reports 144/144 because it registers those 143 tests
+At the 2026-08-09 adaptation checkpoint, both targets built successfully and all 199 unique
+Metal-prefixed portable tests passed. CTest reports 200/200 because it registers those 199 tests
 individually and also registers the same set once as the `Metal_PortableHelpers` aggregate. The
 HEADLESS build graph contained no `MetalGraphicsBackend.mm` reference. A Linux configure with
 `-DCNA_GRAPHICS_BACKEND=METAL` failed at the intended macOS-only gate and never enabled
@@ -160,19 +194,19 @@ CMAKE_CXX_FLAGS=-fsanitize=address,undefined -fno-omit-frame-pointer -fno-saniti
 CMAKE_EXE_LINKER_FLAGS=-fsanitize=address,undefined
 ```
 
-`cna_test_metal_portable` built with `-j4` and passed 143/143 tests under
+`cna_test_metal_portable` built with `-j4` and passed 199/199 tests under
 `ASAN_OPTIONS=detect_leaks=1:halt_on_error=1:strict_string_checks=1` and
 `UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1`. Its registered aggregate passed 1/1, and a
 complete scan of the build, direct-test, and CTest logs found no AddressSanitizer,
-LeakSanitizer, UndefinedBehaviorSanitizer, or runtime-error diagnostic. The broader sanitizer
-`CnaTests` target is not evidence here: its link was stopped by an unrelated existing
-Headless/audio-harness `CNA::Logger::Warn` static-library ordering failure.
+LeakSanitizer, UndefinedBehaviorSanitizer, or runtime-error diagnostic.
 
 These checks cover interface shape and portable logic, not Objective-C++ syntax, Apple framework
 linking, native Objective-C object lifetime, runtime MSL compilation, native resource validation,
 or pixels. The macOS workflow builds the backend with at most three parallel jobs, enables Metal
 validation, and runs the supported native smoke/capability checks plus the portable Metal suites.
-Its result is the remaining delivery gate.
+Its result is the external validation and support-confidence boundary before claiming adapted
+native compile/runtime evidence; authoritative source continuity does not make it an integration
+blocker.
 
 ## Historical record
 
