@@ -235,7 +235,7 @@ target_link_libraries(cna_core PRIVATE SDL3::SDL3)
 
 cna_add_module(cna_graphics_core GraphicsCore ${CNA_GRAPHICS_CORE_SOURCES})
 target_link_libraries(cna_graphics_core PUBLIC cna_math cna_core)
-cna_link_sharp_runtime(cna_graphics_core PUBLIC Core.Base IO Collections.ObjectModel)
+cna_link_sharp_runtime(cna_graphics_core PUBLIC Core.Base IO Collections.Core Text)
 # GraphicsDevice.cpp/GraphicsAdapter.cpp/Texture2D.cpp query SDL video state directly;
 # ImageLoader.cpp decodes through SDL3_image.
 target_link_libraries(cna_graphics_core PRIVATE SDL3::SDL3 SDL3_image::SDL3_image)
@@ -258,7 +258,7 @@ target_link_libraries(cna_input PRIVATE SDL3::SDL3)
 
 cna_add_module(cna_audio Audio ${CNA_AUDIO_SOURCES})
 target_link_libraries(cna_audio PUBLIC cna_core cna_math)
-cna_link_sharp_runtime(cna_audio PUBLIC Core.Base IO Threading)
+cna_link_sharp_runtime(cna_audio PUBLIC Core.Base IO Runtime)
 target_link_libraries(cna_audio PRIVATE SDL3::SDL3 SDL3_mixer::SDL3_mixer)
 # Genuine XNA-semantic static-archive cycle (kept, not redesigned): FrameworkDispatcher.Update()
 # pumps both the audio streams and MediaPlayer (MediaPlayer::Update/OnActiveSongChanged/
@@ -268,12 +268,12 @@ target_link_libraries(cna_audio PRIVATE cna_media)
 
 cna_add_module(cna_media Media ${CNA_MEDIA_SOURCES})
 target_link_libraries(cna_media PUBLIC cna_audio cna_graphics_core)
-cna_link_sharp_runtime(cna_media PUBLIC Core.Base IO Threading Collections.ObjectModel)
+cna_link_sharp_runtime(cna_media PUBLIC Core.Base IO)
 target_link_libraries(cna_media PRIVATE SDL3::SDL3 SDL3_mixer::SDL3_mixer)
 
 cna_add_module(cna_content Content ${CNA_CONTENT_SOURCES})
 target_link_libraries(cna_content PUBLIC cna_graphics_core cna_audio cna_media cna_math cna_core)
-cna_link_sharp_runtime(cna_content PUBLIC Core.Base IO Collections.ObjectModel Globalization)
+cna_link_sharp_runtime(cna_content PUBLIC Core.Base IO)
 target_link_libraries(cna_content PRIVATE SDL3::SDL3 SDL3_mixer::SDL3_mixer)
 # plan_cnj.md CNB-70 (Phase 13D): CNA::Internal::GltfImport::GltfImportCore (used by both
 # ContentManager.cpp's GltfModelTypeReader and tools/gltf_to_cnj) needs cgltf.h.
@@ -288,7 +288,7 @@ if(CNA_DRACO_AVAILABLE)
 endif()
 
 cna_add_module(cna_storage Storage ${CNA_STORAGE_SOURCES})
-cna_link_sharp_runtime(cna_storage PUBLIC Core.Base IO Threading Storage)
+cna_link_sharp_runtime(cna_storage PUBLIC Core.Base IO Runtime Threading)
 target_link_libraries(cna_storage PRIVATE SDL3::SDL3)
 
 cna_add_module(cna_runtime Runtime ${CNA_RUNTIME_ROOT_SOURCES})
@@ -437,7 +437,7 @@ if(CNA_ENABLE_NET)
     # The public dependency is the runtime layer (Guide/SignedInGamer use Game, graphics,
     # input, audio through it) plus Storage (device selector flows).
     target_link_libraries(CNA_GamerServices PUBLIC cna_runtime cna_storage PRIVATE SDL3::SDL3)
-    cna_link_sharp_runtime(CNA_GamerServices PUBLIC Core.Base IO Collections.ObjectModel Threading)
+    cna_link_sharp_runtime(CNA_GamerServices PUBLIC Core.Base IO Collections.Core Globalization Runtime Threading)
 
     file(GLOB_RECURSE CNA_NET_SOURCES CONFIGURE_DEPENDS
         "src/Microsoft/Xna/Framework/Net/*.cpp"
@@ -453,5 +453,5 @@ if(CNA_ENABLE_NET)
         CNA_GamerServices
         enet
     )
-    cna_link_sharp_runtime(CNA_Net PUBLIC Core.Base IO Collections.ObjectModel Threading)
+    cna_link_sharp_runtime(CNA_Net PUBLIC Core.Base IO Collections.Core Runtime Threading)
 endif()
