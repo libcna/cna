@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #pragma once
 
 // plan_metal.md METAL-34-style extraction: this formula is pure C++ (plain float arrays, basic
@@ -14,7 +15,16 @@ namespace CNA::Internal::Backends::Metal
     // shared XNA-facing effect layer) rather than re-deriving a world matrix independently, so
     // there is no separate risk of a row-major/column-major mixup here. Output is 3 separate
     // 4-float "columns" (xyz + unused pad), matching LitTransform's own layout.
-    inline void ComputeMetalNormalMatrixCols(const float* w, float col0[4], float col1[4], float col2[4])
+    /**
+     * @brief Computes the inverse-transpose normal matrix from a column-major world matrix.
+     *
+     * @param w Source column-major four-by-four world matrix.
+     * @param col0 Receives the first padded normal-matrix column.
+     * @param col1 Receives the second padded normal-matrix column.
+     * @param col2 Receives the third padded normal-matrix column.
+     */
+    inline void ComputeMetalNormalMatrixCols(const float* w, float col0[4],
+                                              float col1[4], float col2[4])
     {
         const float a=w[0], d=w[1], g=w[2];
         const float b=w[4], e=w[5], h=w[6];

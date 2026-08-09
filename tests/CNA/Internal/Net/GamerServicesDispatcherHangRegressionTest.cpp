@@ -16,7 +16,6 @@
 #include <gtest/gtest.h>
 
 #include <chrono>
-#include <csignal>
 #include <cstring>
 #include <spawn.h>
 #include <sys/wait.h>

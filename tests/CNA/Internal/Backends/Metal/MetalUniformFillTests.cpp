@@ -74,11 +74,10 @@ namespace
         p.weightsPerVertex = 2;
         p.fogEnabled = true;
         p.fogColor[0]=54; p.fogColor[1]=55; p.fogColor[2]=56;
-        p.fogStart = 57;
-        p.fogEnd = 58;
+        p.fogVector[0]=57; p.fogVector[1]=58; p.fogVector[2]=59; p.fogVector[3]=60;
         p.vertexColorEnabled = true;
-        p.pbrMetallicFactor = 59;
-        p.pbrRoughnessFactor = 60;
+        p.pbrMetallicFactor = 61;
+        p.pbrRoughnessFactor = 62;
         return p;
     }
 
@@ -129,7 +128,7 @@ TEST(MetalUniformFill, LitUniformsMapEveryFieldCorrectly)
     ExpectVec4Eq(lu.emissiveColor, 30,31,32,0);
     ExpectVec4Eq(lu.alphaTest, 26,27,28,29);
     ExpectVec4Eq(lu.fogColorEnabled, 54,55,56,1);
-    ExpectVec4Eq(lu.fogStartEnd, 57,58,0,0);
+    ExpectVec4Eq(lu.fogVector, 57,58,59,60);
 }
 
 TEST(MetalUniformFill, LitUniformsFogDisabledZeroesFogEnabledFlagOnly)
@@ -167,7 +166,7 @@ TEST(MetalUniformFill, EnvUniformsMapEveryFieldCorrectly)
     ExpectVec4Eq(eu.envParams, 52,1,53,0);
     ExpectVec4Eq(eu.alphaTest, 26,27,28,29);
     ExpectVec4Eq(eu.fogColorEnabled, 54,55,56,1);
-    ExpectVec4Eq(eu.fogStartEnd, 57,58,0,0);
+    ExpectVec4Eq(eu.fogVector, 57,58,59,60);
 }
 
 TEST(MetalUniformFill, EnvUniformsFresnelDisabledZeroesFresnelFlagOnly)
@@ -209,7 +208,7 @@ TEST(MetalUniformFill, SkinnedUniformsMapEveryFieldCorrectly)
     ExpectVec4Eq(su.eyePosition, 36,37,38,0);
     ExpectVec4Eq(su.alphaTest, 26,27,28,29);
     ExpectVec4Eq(su.fogColorEnabled, 54,55,56,1);
-    ExpectVec4Eq(su.fogStartEnd, 57,58,0,0);
+    ExpectVec4Eq(su.fogVector, 57,58,59,60);
     ExpectVec4Eq(su.vertexColorEnabled, 1,0,0,0);
 }
 
@@ -246,10 +245,10 @@ TEST(MetalUniformFill, PbrUniformsMapEveryFieldCorrectly)
     ExpectVec4Eq(pu.light2Dir, 20,21,22,0);
     ExpectVec4Eq(pu.light2Diffuse, 23,24,25,0);
     ExpectVec4Eq(pu.eyePosition, 36,37,38,0);
-    ExpectVec4Eq(pu.pbrFactors, 59,60,0,0);
+    ExpectVec4Eq(pu.pbrFactors, 61,62,0,0);
     ExpectVec4Eq(pu.alphaTest, 26,27,28,29);
     ExpectVec4Eq(pu.fogColorEnabled, 54,55,56,1);
-    ExpectVec4Eq(pu.fogStartEnd, 57,58,0,0);
+    ExpectVec4Eq(pu.fogVector, 57,58,59,60);
 }
 
 TEST(MetalUniformFill, SkinnedPbrUniformsDelegatesFragmentFieldsAndFillsOwnTransform)

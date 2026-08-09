@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #pragma once
 
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
@@ -12,16 +13,24 @@
 // here locks that fix in against a future regression.
 namespace CNA::Internal::Backends::Metal
 {
-    inline int ComputeMetalPrimitiveVertexCount(Microsoft::Xna::Framework::Graphics::PrimitiveType p, int count)
+    /**
+     * @brief Computes the number of vertices required by a non-indexed primitive draw.
+     *
+     * @param primitiveType XNA primitive topology.
+     * @param primitiveCount Number of primitives requested by the draw.
+     * @return Number of vertices consumed by the topology.
+     */
+    [[nodiscard]] inline int ComputeMetalPrimitiveVertexCount(
+        Microsoft::Xna::Framework::Graphics::PrimitiveType primitiveType, int primitiveCount)
     {
         using PT = Microsoft::Xna::Framework::Graphics::PrimitiveType;
-        switch (p) {
-            case PT::TriangleList: return count * 3;
-            case PT::TriangleStrip: return count + 2;
-            case PT::LineList: return count * 2;
-            case PT::LineStrip: return count + 1;
-            case PT::PointListEXT: return count; // plan_metal.md METAL-13: was falling to the *3 default
-            default: return count * 3;
+        switch (primitiveType) {
+            case PT::TriangleList: return primitiveCount * 3;
+            case PT::TriangleStrip: return primitiveCount + 2;
+            case PT::LineList: return primitiveCount * 2;
+            case PT::LineStrip: return primitiveCount + 1;
+            case PT::PointListEXT: return primitiveCount;
+            default: return primitiveCount * 3;
         }
     }
 }

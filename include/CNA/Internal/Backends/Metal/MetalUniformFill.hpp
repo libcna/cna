@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #pragma once
 
 #include "CNA/Internal/Backends/Metal/MetalMat4.hpp"
@@ -23,33 +24,39 @@ namespace CNA::Internal::Backends::Metal
     // Plain C++ mirrors of kMetalShaderSource's `LitTransform`/`LitUniforms` -- every logical vec3 is
     // carried as a 4-float (xyz+pad) group and the normal matrix as 3 separate 4-float "columns"
     // rather than a 3x3 or float3-containing type, matching MSL's own std140-like packing rules.
+    /** @brief CPU mirror of the built-in lit shader's transform constants. */
     struct MetalLitTransform { float wvp[16]; float world[16]; float normalCol0[4]; float normalCol1[4]; float normalCol2[4]; };
+    /** @brief CPU mirror of the built-in lit shader's material and lighting constants. */
     struct MetalLitUniforms {
         float diffuseColor[4], ambientColor[4];
         float light0Dir[4], light0Diffuse[4], light0Specular[4];
         float light1Dir[4], light1Diffuse[4], light1Specular[4];
         float light2Dir[4], light2Diffuse[4], light2Specular[4];
         float specularColorPower[4], eyePosition[4], emissiveColor[4], alphaTest[4];
-        float fogColorEnabled[4], fogStartEnd[4];
+        float fogColorEnabled[4], fogVector[4];
     };
 
     // Plain C++ mirrors of kMetalShaderSource's `EnvTransform`/`EnvUniforms` -- real XNA
     // EnvironmentMapEffect has no separate ambient uniform (see the .mm's own BindDrawParams
     // finding), so unlike LitUniforms there is no `ambientColor` field here.
+    /** @brief CPU mirror of the environment-map shader's transform constants. */
     struct MetalEnvTransform { float wvp[16]; float world[16]; float normalCol0[4]; float normalCol1[4]; float normalCol2[4]; };
+    /** @brief CPU mirror of the environment-map shader's material and lighting constants. */
     struct MetalEnvUniforms {
         float diffuseColor[4], emissiveColor[4];
         float light0Dir[4], light0Diffuse[4];
         float light1Dir[4], light1Diffuse[4];
         float light2Dir[4], light2Diffuse[4];
         float envMapSpecular[4], eyePosition[4], envParams[4], alphaTest[4];
-        float fogColorEnabled[4], fogStartEnd[4];
+        float fogColorEnabled[4], fogVector[4];
     };
 
     // Plain C++ mirrors of kMetalShaderSource's `SkinnedTransform`/`SkinnedUniforms` -- unlike
     // LitTransform/EnvTransform/PbrTransform, the skinned shader has no world-normal-matrix step at
     // all (see cna_skin_common's own comment), so SkinnedTransform has no normalCol0/1/2 fields.
+    /** @brief CPU mirror of the skinned shader's transform and skinning constants. */
     struct MetalSkinnedTransform { float wvp[16]; float world[16]; float skinParams[4]; };
+    /** @brief CPU mirror of the skinned shader's material and lighting constants. */
     struct MetalSkinnedUniforms {
         float diffuseColor[4], emissiveColor[4];
         float light0Dir[4], light0Diffuse[4], light0Specular[4];
@@ -58,12 +65,14 @@ namespace CNA::Internal::Backends::Metal
         float specularColorPower[4];
         float eyePosition[4];
         float alphaTest[4];
-        float fogColorEnabled[4], fogStartEnd[4];
+        float fogColorEnabled[4], fogVector[4];
         float vertexColorEnabled[4];
     };
 
     // Plain C++ mirrors of kMetalShaderSource's `PbrTransform`/`PbrUniforms`.
+    /** @brief CPU mirror of the PBR shader's transform constants. */
     struct MetalPbrTransform { float wvp[16]; float world[16]; float normalCol0[4]; float normalCol1[4]; float normalCol2[4]; };
+    /** @brief CPU mirror of the PBR shader's material and lighting constants. */
     struct MetalPbrUniforms {
         float diffuseColor[4];
         float ambientColor[4];
@@ -74,18 +83,32 @@ namespace CNA::Internal::Backends::Metal
         float eyePosition[4];
         float pbrFactors[4];   // x=MetallicFactor, y=RoughnessFactor
         float alphaTest[4];
-        float fogColorEnabled[4], fogStartEnd[4];
+        float fogColorEnabled[4], fogVector[4];
     };
 
     // Plain C++ mirror of kMetalShaderSource's `SkinnedPbrTransform` (reuses `MetalPbrUniforms`
     // as-is -- the fragment-side uniforms are identical between skinned and unskinned PBR).
+    /** @brief CPU mirror of the skinned-PBR shader's transform and skinning constants. */
     struct MetalSkinnedPbrTransform { float wvp[16]; float world[16]; float skinParams[4]; };
 
     // plan_metal.md METAL-38-47: fills LitTransform/LitUniforms from GpuDrawParams, field-for-field
     // matching EasyGLGraphicsBackend::BindDrawParams()'s own real mapping (ground truth, ported not
     // redesigned).
-    inline void FillMetalLitUniforms(MetalLitTransform& t, MetalLitUniforms& lu, const MetalMat4& wvp, const CNA::Internal::Backends::GpuDrawParams& params)
+    /**
+     * @brief Fills the lit shader's CPU-side constant structures from normalized draw state.
+     *
+     * @param transform Receives transform and normal-matrix constants.
+     * @param uniforms Receives material, lighting, alpha-test, and fog constants.
+     * @param wvp Precomputed world-view-projection matrix.
+     * @param params Normalized backend draw parameters.
+     */
+    inline void FillMetalLitUniforms(MetalLitTransform& transform,
+                                     MetalLitUniforms& uniforms,
+                                     const MetalMat4& wvp,
+                                     const CNA::Internal::Backends::GpuDrawParams& params)
     {
+        auto& t = transform;
+        auto& lu = uniforms;
         std::memcpy(t.wvp, wvp.m, sizeof(t.wvp));
         std::memcpy(t.world, params.worldColMajor, sizeof(t.world));
         ComputeMetalNormalMatrixCols(params.worldColMajor, t.normalCol0, t.normalCol1, t.normalCol2);
@@ -106,14 +129,27 @@ namespace CNA::Internal::Backends::Metal
         lu.emissiveColor[0]=params.emissiveColor[0]; lu.emissiveColor[1]=params.emissiveColor[1]; lu.emissiveColor[2]=params.emissiveColor[2]; lu.emissiveColor[3]=0;
         std::memcpy(lu.alphaTest, params.alphaTest, sizeof(lu.alphaTest));
         lu.fogColorEnabled[0]=params.fogColor[0]; lu.fogColorEnabled[1]=params.fogColor[1]; lu.fogColorEnabled[2]=params.fogColor[2]; lu.fogColorEnabled[3]=params.fogEnabled?1.0f:0.0f;
-        lu.fogStartEnd[0]=params.fogStart; lu.fogStartEnd[1]=params.fogEnd; lu.fogStartEnd[2]=0; lu.fogStartEnd[3]=0;
+        std::memcpy(lu.fogVector, params.fogVector, sizeof(lu.fogVector));
     }
 
     // plan_metal.md METAL-66-68: fills EnvTransform/EnvUniforms, field-for-field matching
     // EasyGLGraphicsBackend::BindDrawParams()'s real EnvironmentMapEffect-specific mapping (the
     // `p.loc_ambient < 0` gated block -- ground truth, ported not redesigned).
-    inline void FillMetalEnvUniforms(MetalEnvTransform& t, MetalEnvUniforms& eu, const MetalMat4& wvp, const CNA::Internal::Backends::GpuDrawParams& params)
+    /**
+     * @brief Fills the environment-map shader's CPU-side constants from normalized draw state.
+     *
+     * @param transform Receives transform and normal-matrix constants.
+     * @param uniforms Receives material, lighting, environment-map, alpha-test, and fog constants.
+     * @param wvp Precomputed world-view-projection matrix.
+     * @param params Normalized backend draw parameters.
+     */
+    inline void FillMetalEnvUniforms(MetalEnvTransform& transform,
+                                     MetalEnvUniforms& uniforms,
+                                     const MetalMat4& wvp,
+                                     const CNA::Internal::Backends::GpuDrawParams& params)
     {
+        auto& t = transform;
+        auto& eu = uniforms;
         std::memcpy(t.wvp, wvp.m, sizeof(t.wvp));
         std::memcpy(t.world, params.worldColMajor, sizeof(t.world));
         ComputeMetalNormalMatrixCols(params.worldColMajor, t.normalCol0, t.normalCol1, t.normalCol2);
@@ -131,7 +167,7 @@ namespace CNA::Internal::Backends::Metal
         eu.envParams[0]=params.envMapAmount; eu.envParams[1]=params.fresnelEnabled?1.0f:0.0f; eu.envParams[2]=params.fresnelFactor; eu.envParams[3]=0;
         std::memcpy(eu.alphaTest, params.alphaTest, sizeof(eu.alphaTest));
         eu.fogColorEnabled[0]=params.fogColor[0]; eu.fogColorEnabled[1]=params.fogColor[1]; eu.fogColorEnabled[2]=params.fogColor[2]; eu.fogColorEnabled[3]=params.fogEnabled?1.0f:0.0f;
-        eu.fogStartEnd[0]=params.fogStart; eu.fogStartEnd[1]=params.fogEnd; eu.fogStartEnd[2]=0; eu.fogStartEnd[3]=0;
+        std::memcpy(eu.fogVector, params.fogVector, sizeof(eu.fogVector));
     }
 
     // plan_metal.md METAL-73/74/76-78: fills SkinnedTransform/SkinnedUniforms, field-for-field
@@ -139,8 +175,21 @@ namespace CNA::Internal::Backends::Metal
     // unlike FillMetalLitUniforms/FillMetalEnvUniforms, this deliberately does NOT call
     // ComputeMetalNormalMatrixCols -- the skinned shader has no world-normal-matrix step at all (see
     // cna_skin_common's own comment), so MetalSkinnedTransform has no normalCol0/1/2 fields to fill.
-    inline void FillMetalSkinnedUniforms(MetalSkinnedTransform& t, MetalSkinnedUniforms& su, const MetalMat4& wvp, const CNA::Internal::Backends::GpuDrawParams& params)
+    /**
+     * @brief Fills the skinned shader's CPU-side constants from normalized draw state.
+     *
+     * @param transform Receives transform and skinning constants.
+     * @param uniforms Receives material, lighting, alpha-test, fog, and vertex-color constants.
+     * @param wvp Precomputed world-view-projection matrix.
+     * @param params Normalized backend draw parameters.
+     */
+    inline void FillMetalSkinnedUniforms(MetalSkinnedTransform& transform,
+                                         MetalSkinnedUniforms& uniforms,
+                                         const MetalMat4& wvp,
+                                         const CNA::Internal::Backends::GpuDrawParams& params)
     {
+        auto& t = transform;
+        auto& su = uniforms;
         std::memcpy(t.wvp, wvp.m, sizeof(t.wvp));
         std::memcpy(t.world, params.worldColMajor, sizeof(t.world));
         t.skinParams[0]=(float)params.weightsPerVertex; t.skinParams[1]=t.skinParams[2]=t.skinParams[3]=0;
@@ -160,14 +209,27 @@ namespace CNA::Internal::Backends::Metal
         su.eyePosition[0]=params.eyePositionWorld[0]; su.eyePosition[1]=params.eyePositionWorld[1]; su.eyePosition[2]=params.eyePositionWorld[2]; su.eyePosition[3]=0;
         std::memcpy(su.alphaTest, params.alphaTest, sizeof(su.alphaTest));
         su.fogColorEnabled[0]=params.fogColor[0]; su.fogColorEnabled[1]=params.fogColor[1]; su.fogColorEnabled[2]=params.fogColor[2]; su.fogColorEnabled[3]=params.fogEnabled?1.0f:0.0f;
-        su.fogStartEnd[0]=params.fogStart; su.fogStartEnd[1]=params.fogEnd; su.fogStartEnd[2]=0; su.fogStartEnd[3]=0;
+        std::memcpy(su.fogVector, params.fogVector, sizeof(su.fogVector));
         su.vertexColorEnabled[0]=params.vertexColorEnabled?1.0f:0.0f; su.vertexColorEnabled[1]=su.vertexColorEnabled[2]=su.vertexColorEnabled[3]=0;
     }
 
     // plan_metal.md METAL-81/83-86: fills PbrTransform/PbrUniforms from GpuDrawParams, field-for-field
     // matching EasyGLGraphicsBackend::BindDrawParams()'s real PBR-specific mapping (ground truth).
-    inline void FillMetalPbrUniforms(MetalPbrTransform& t, MetalPbrUniforms& pu, const MetalMat4& wvp, const CNA::Internal::Backends::GpuDrawParams& params)
+    /**
+     * @brief Fills the PBR shader's CPU-side constants from normalized draw state.
+     *
+     * @param transform Receives transform and normal-matrix constants.
+     * @param uniforms Receives PBR material, lighting, alpha-test, and fog constants.
+     * @param wvp Precomputed world-view-projection matrix.
+     * @param params Normalized backend draw parameters.
+     */
+    inline void FillMetalPbrUniforms(MetalPbrTransform& transform,
+                                     MetalPbrUniforms& uniforms,
+                                     const MetalMat4& wvp,
+                                     const CNA::Internal::Backends::GpuDrawParams& params)
     {
+        auto& t = transform;
+        auto& pu = uniforms;
         std::memcpy(t.wvp, wvp.m, sizeof(t.wvp));
         std::memcpy(t.world, params.worldColMajor, sizeof(t.world));
         ComputeMetalNormalMatrixCols(params.worldColMajor, t.normalCol0, t.normalCol1, t.normalCol2);
@@ -185,7 +247,7 @@ namespace CNA::Internal::Backends::Metal
         pu.pbrFactors[0]=params.pbrMetallicFactor; pu.pbrFactors[1]=params.pbrRoughnessFactor; pu.pbrFactors[2]=0; pu.pbrFactors[3]=0;
         std::memcpy(pu.alphaTest, params.alphaTest, sizeof(pu.alphaTest));
         pu.fogColorEnabled[0]=params.fogColor[0]; pu.fogColorEnabled[1]=params.fogColor[1]; pu.fogColorEnabled[2]=params.fogColor[2]; pu.fogColorEnabled[3]=params.fogEnabled?1.0f:0.0f;
-        pu.fogStartEnd[0]=params.fogStart; pu.fogStartEnd[1]=params.fogEnd; pu.fogStartEnd[2]=0; pu.fogStartEnd[3]=0;
+        std::memcpy(pu.fogVector, params.fogVector, sizeof(pu.fogVector));
     }
 
     // plan_metal.md METAL-82: fills SkinnedPbrTransform/PbrUniforms from GpuDrawParams. The uniform
@@ -194,8 +256,21 @@ namespace CNA::Internal::Backends::Metal
     // this delegates the uniform fill to FillMetalPbrUniforms via a throwaway MetalPbrTransform and
     // copies just the shared fields across, rather than duplicating every uniform assignment a third
     // time.
-    inline void FillMetalSkinnedPbrUniforms(MetalSkinnedPbrTransform& t, MetalPbrUniforms& pu, const MetalMat4& wvp, const CNA::Internal::Backends::GpuDrawParams& params)
+    /**
+     * @brief Fills the skinned-PBR shader's CPU-side constants from normalized draw state.
+     *
+     * @param transform Receives transform and skinning constants.
+     * @param uniforms Receives PBR material, lighting, alpha-test, and fog constants.
+     * @param wvp Precomputed world-view-projection matrix.
+     * @param params Normalized backend draw parameters.
+     */
+    inline void FillMetalSkinnedPbrUniforms(MetalSkinnedPbrTransform& transform,
+                                            MetalPbrUniforms& uniforms,
+                                            const MetalMat4& wvp,
+                                            const CNA::Internal::Backends::GpuDrawParams& params)
     {
+        auto& t = transform;
+        auto& pu = uniforms;
         MetalPbrTransform unusedT{};
         FillMetalPbrUniforms(unusedT, pu, wvp, params);
         std::memcpy(t.wvp, wvp.m, sizeof(t.wvp));

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #pragma once
 
 #include "CNA/Internal/Backends/Metal/MetalVertexAttribFormat.hpp"
@@ -15,6 +16,7 @@
 namespace CNA::Internal::Backends::Metal
 {
     // One real Metal vertex-attribute binding, still in neutral (pre-MTLVertexDescriptor) form.
+    /** @brief One portable vertex attribute binding for a future MTLVertexDescriptor. */
     struct MetalVertexAttributePlan
     {
         int location;                     // Attribute index in the shader's [[stage_in]] struct.
@@ -23,6 +25,7 @@ namespace CNA::Internal::Backends::Metal
         int bufferIndex;                   // Vertex buffer slot (always 0 for a single, non-instanced stream).
     };
 
+    /** @brief Portable attribute list and stride for a Metal vertex descriptor. */
     struct MetalVertexDescriptorPlan
     {
         std::vector<MetalVertexAttributePlan> attributes;
@@ -37,7 +40,14 @@ namespace CNA::Internal::Backends::Metal
     // matching every other call site in this backend (GpuDrawParams/IVertexBufferBackend::SetData
     // never derive stride from a VertexDeclaration either) -- the caller (a VertexBuffer's own
     // SetData) is always the authority on the real per-vertex byte size.
-    inline MetalVertexDescriptorPlan BuildMetalVertexDescriptorPlan(
+    /**
+     * @brief Builds a portable Metal vertex descriptor from an XNA declaration.
+     *
+     * @param stride Vertex stride in bytes supplied by the bound vertex buffer.
+     * @param elements Ordered XNA vertex declaration elements.
+     * @return The portable attribute bindings and stride.
+     */
+    [[nodiscard]] inline MetalVertexDescriptorPlan BuildMetalVertexDescriptorPlan(
         int stride, const std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>& elements)
     {
         MetalVertexDescriptorPlan plan;

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #pragma once
 
 #include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
@@ -14,32 +15,54 @@ namespace CNA::Internal::Backends::Metal
     // <Metal/Metal.h>, unavailable on this Linux machine. Every enumerator name matches its
     // intended MTLVertexFormat target 1:1 so the .mm-side translation switch is a trivial,
     // low-risk rename, not a re-derivation.
+    /** @brief Backend-neutral classifications of Metal vertex attribute formats. */
     enum class MetalVertexAttribKind
     {
+        /** @brief One 32-bit floating-point component. */
         Float1,
+        /** @brief Two 32-bit floating-point components. */
         Float2,
+        /** @brief Three 32-bit floating-point components. */
         Float3,
+        /** @brief Four 32-bit floating-point components. */
         Float4,
+        /** @brief Four normalized unsigned-byte components. */
         UChar4Normalized,
+        /** @brief Four raw unsigned-byte components. */
         UChar4,
+        /** @brief Two signed 16-bit components. */
         Short2,
+        /** @brief Four signed 16-bit components. */
         Short4,
+        /** @brief Two normalized signed 16-bit components. */
         Short2Normalized,
+        /** @brief Four normalized signed 16-bit components. */
         Short4Normalized,
+        /** @brief Two 16-bit floating-point components. */
         Half2,
+        /** @brief Four 16-bit floating-point components. */
         Half4,
     };
 
     // componentCount is carried alongside kind for documentation/test purposes -- the kind alone
     // is sufficient to pick the real MTLVertexFormat, since each MetalVertexAttribKind value
     // already implies its own component count.
+    /** @brief Metal vertex attribute format and its component count. */
     struct MetalVertexAttribFormat
     {
         MetalVertexAttribKind kind;
         int componentCount;
     };
 
-    inline bool operator==(const MetalVertexAttribFormat& a, const MetalVertexAttribFormat& b)
+    /**
+     * @brief Compares two vertex attribute formats.
+     *
+     * @param a Left-hand vertex attribute format.
+     * @param b Right-hand vertex attribute format.
+     * @return True when both the native format kind and component count match.
+     */
+    [[nodiscard]] inline bool operator==(const MetalVertexAttribFormat& a,
+                                         const MetalVertexAttribFormat& b)
     {
         return a.kind == b.kind && a.componentCount == b.componentCount;
     }
@@ -51,7 +74,14 @@ namespace CNA::Internal::Backends::Metal
     // raw-integer intent (XNA's BLENDINDICES-style usage) survives via the format choice itself,
     // not a separate boolean, matching this file's own existing hand-written stride-52/56/68
     // descriptors' UChar4 (not UChar4Normalized) choice for boneIndices.
-    inline MetalVertexAttribFormat DescribeMetalVertexElementFormat(Microsoft::Xna::Framework::Graphics::VertexElementFormat format)
+    /**
+     * @brief Translates an XNA vertex-element format to Metal's portable description.
+     *
+     * @param format XNA vertex-element format to translate.
+     * @return The corresponding Metal attribute kind and component count.
+     */
+    [[nodiscard]] inline MetalVertexAttribFormat DescribeMetalVertexElementFormat(
+        Microsoft::Xna::Framework::Graphics::VertexElementFormat format)
     {
         using VEF = Microsoft::Xna::Framework::Graphics::VertexElementFormat;
         switch (format)

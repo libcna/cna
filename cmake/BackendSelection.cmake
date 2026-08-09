@@ -317,7 +317,7 @@ if(CNA_GRAPHICS_BACKEND STREQUAL "GLIDE" AND NOT CMAKE_SIZEOF_VOID_P EQUAL 4)
         "Windows toolchain, for example cmake/toolchains/mingw-w64-i686.cmake.")
 endif()
 
-# Native Metal is only available when targeting an Apple platform. SDL is used only for
+# Native Metal is currently available only when targeting macOS. SDL is used only for
 # window/CAMetalLayer integration; all rendering is performed directly through Metal.
 if(CNA_GRAPHICS_BACKEND STREQUAL "METAL" AND NOT CMAKE_SYSTEM_NAME STREQUAL "Darwin")
     message(FATAL_ERROR

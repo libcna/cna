@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #pragma once
 
 #include "Microsoft/Xna/Framework/Graphics/Blend.hpp"
@@ -10,14 +11,44 @@
 // established CNA backend already made this same simplifying choice, not just this one.
 namespace CNA::Internal::Backends::Metal
 {
+    /** @brief Backend-neutral Metal blend-factor classifications. */
     enum class MetalBlendFactorKind
     {
-        One, Zero, SourceColor, OneMinusSourceColor, SourceAlpha, OneMinusSourceAlpha,
-        DestinationColor, OneMinusDestinationColor, DestinationAlpha, OneMinusDestinationAlpha,
-        BlendColor, OneMinusBlendColor, SourceAlphaSaturated
+        /** @brief Constant factor one. */
+        One,
+        /** @brief Constant factor zero. */
+        Zero,
+        /** @brief Source RGB components. */
+        SourceColor,
+        /** @brief One minus the source RGB components. */
+        OneMinusSourceColor,
+        /** @brief Source alpha component. */
+        SourceAlpha,
+        /** @brief One minus the source alpha component. */
+        OneMinusSourceAlpha,
+        /** @brief Destination RGB components. */
+        DestinationColor,
+        /** @brief One minus the destination RGB components. */
+        OneMinusDestinationColor,
+        /** @brief Destination alpha component. */
+        DestinationAlpha,
+        /** @brief One minus the destination alpha component. */
+        OneMinusDestinationAlpha,
+        /** @brief Constant blend color. */
+        BlendColor,
+        /** @brief One minus the constant blend color. */
+        OneMinusBlendColor,
+        /** @brief Saturated source-alpha factor. */
+        SourceAlphaSaturated
     };
 
-    inline MetalBlendFactorKind DescribeMetalBlendFactor(int xnaBlend)
+    /**
+     * @brief Translates an XNA blend-factor ordinal to its Metal classification.
+     *
+     * @param xnaBlend Raw Microsoft.Xna.Framework.Graphics.Blend ordinal.
+     * @return The corresponding backend-neutral Metal blend factor.
+     */
+    [[nodiscard]] inline MetalBlendFactorKind DescribeMetalBlendFactor(int xnaBlend)
     {
         using B = Microsoft::Xna::Framework::Graphics::Blend;
         switch (static_cast<B>(xnaBlend)) {

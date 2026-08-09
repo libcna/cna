@@ -31,14 +31,14 @@ TEST(MetalSelectPipelineKind, NullParamsFallsBackToColored16AtStride16)
 
 TEST(MetalSelectPipelineKind, NullParamsThrowsForAnyOtherStride)
 {
-    EXPECT_THROW(SelectMetalPipelineKind(20, nullptr), std::runtime_error);
+    EXPECT_THROW((void)SelectMetalPipelineKind(20, nullptr), std::runtime_error);
 }
 
 TEST(MetalSelectPipelineKind, ColoredRequiresExactlyStride16)
 {
     GpuDrawParams p;
     EXPECT_EQ(SelectMetalPipelineKind(16, &p), MetalPipelineKind::Colored16);
-    EXPECT_THROW(SelectMetalPipelineKind(17, &p), std::runtime_error);
+    EXPECT_THROW((void)SelectMetalPipelineKind(17, &p), std::runtime_error);
 }
 
 TEST(MetalSelectPipelineKind, TexturedSelectsByStrideWithoutLighting)
@@ -47,7 +47,7 @@ TEST(MetalSelectPipelineKind, TexturedSelectsByStrideWithoutLighting)
     EXPECT_EQ(SelectMetalPipelineKind(20, &p), MetalPipelineKind::Textured20);
     EXPECT_EQ(SelectMetalPipelineKind(24, &p), MetalPipelineKind::ColorTex24);
     EXPECT_EQ(SelectMetalPipelineKind(32, &p), MetalPipelineKind::LitTex32);
-    EXPECT_THROW(SelectMetalPipelineKind(28, &p), std::runtime_error);
+    EXPECT_THROW((void)SelectMetalPipelineKind(28, &p), std::runtime_error);
 }
 
 TEST(MetalSelectPipelineKind, Stride32SelectsVertexLitOnlyWhenLightingOnAndNotPreferPerPixel)
@@ -74,13 +74,13 @@ TEST(MetalSelectPipelineKind, DualTextureRequiresTextureAndSelectsByStride)
     GpuDrawParams p; p.dualTexture = true; p.texture0 = FakeTexture();
     EXPECT_EQ(SelectMetalPipelineKind(20, &p), MetalPipelineKind::DualTex20);
     EXPECT_EQ(SelectMetalPipelineKind(24, &p), MetalPipelineKind::DualTex24Colored);
-    EXPECT_THROW(SelectMetalPipelineKind(16, &p), std::runtime_error);
+    EXPECT_THROW((void)SelectMetalPipelineKind(16, &p), std::runtime_error);
 }
 
 TEST(MetalSelectPipelineKind, DualTextureWithoutATextureThrows)
 {
     GpuDrawParams p; p.dualTexture = true; p.texture0 = nullptr;
-    EXPECT_THROW(SelectMetalPipelineKind(20, &p), std::runtime_error);
+    EXPECT_THROW((void)SelectMetalPipelineKind(20, &p), std::runtime_error);
 }
 
 TEST(MetalSelectPipelineKind, DualTextureTakesPrecedenceOverPlainTextured)
@@ -96,7 +96,7 @@ TEST(MetalSelectPipelineKind, EnvironmentMapRequiresStride32)
 {
     GpuDrawParams p; p.envMapping = true;
     EXPECT_EQ(SelectMetalPipelineKind(32, &p), MetalPipelineKind::EnvMap32);
-    EXPECT_THROW(SelectMetalPipelineKind(20, &p), std::runtime_error);
+    EXPECT_THROW((void)SelectMetalPipelineKind(20, &p), std::runtime_error);
 }
 
 TEST(MetalSelectPipelineKind, EnvironmentMapTakesPrecedenceOverDualTextureAndTextured)
@@ -110,7 +110,7 @@ TEST(MetalSelectPipelineKind, SkinnedSelectsByStrideAndVertexLitGate)
     GpuDrawParams p; p.skinned = true;
     EXPECT_EQ(SelectMetalPipelineKind(52, &p), MetalPipelineKind::Skinned52);
     EXPECT_EQ(SelectMetalPipelineKind(56, &p), MetalPipelineKind::Skinned56);
-    EXPECT_THROW(SelectMetalPipelineKind(20, &p), std::runtime_error);
+    EXPECT_THROW((void)SelectMetalPipelineKind(20, &p), std::runtime_error);
 
     p.lightingEnabled = true; p.preferPerPixelLighting = false;
     EXPECT_EQ(SelectMetalPipelineKind(52, &p), MetalPipelineKind::Skinned52VertexLit);
@@ -128,14 +128,14 @@ TEST(MetalSelectPipelineKind, PbrUnskinnedRequiresStride48)
 {
     GpuDrawParams p; p.pbr = true;
     EXPECT_EQ(SelectMetalPipelineKind(48, &p), MetalPipelineKind::Pbr48);
-    EXPECT_THROW(SelectMetalPipelineKind(52, &p), std::runtime_error);
+    EXPECT_THROW((void)SelectMetalPipelineKind(52, &p), std::runtime_error);
 }
 
 TEST(MetalSelectPipelineKind, PbrSkinnedRequiresStride68)
 {
     GpuDrawParams p; p.pbr = true; p.skinned = true;
     EXPECT_EQ(SelectMetalPipelineKind(68, &p), MetalPipelineKind::SkinnedPbr68);
-    EXPECT_THROW(SelectMetalPipelineKind(52, &p), std::runtime_error);
+    EXPECT_THROW((void)SelectMetalPipelineKind(52, &p), std::runtime_error);
 }
 
 TEST(MetalSelectPipelineKind, PbrTakesPrecedenceOverEverythingElseIncludingSkinnedAloneCheck)

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #pragma once
 
 #include <cstddef>
@@ -26,10 +27,39 @@ namespace CNA::Internal::Backends::Metal
     // light's diffuse/specular contribution in that case, which makes the lit formula degenerate
     // to the exact same "just DiffuseColor * texture" result an unlit shader would produce --
     // verified by reading that exact branch, not assumed).
+    /** @brief Built-in Metal shader and vertex-layout variants. */
     enum class MetalPipelineKind : uint8_t
     {
-        Colored16, Textured20, ColorTex24, LitTex32, LitTex32VertexLit, DualTex20, DualTex24Colored, EnvMap32,
-        Skinned52, Skinned56, Skinned52VertexLit, Skinned56VertexLit, Pbr48, SkinnedPbr68, Sprite2D
+        /** @brief Position-and-color input with a 16-byte stride. */
+        Colored16,
+        /** @brief Position-and-texture input with a 20-byte stride. */
+        Textured20,
+        /** @brief Position, color, and texture input with a 24-byte stride. */
+        ColorTex24,
+        /** @brief Per-pixel-lit normal-and-texture input with a 32-byte stride. */
+        LitTex32,
+        /** @brief Per-vertex-lit normal-and-texture input with a 32-byte stride. */
+        LitTex32VertexLit,
+        /** @brief Dual-texture input with a 20-byte stride. */
+        DualTex20,
+        /** @brief Colored dual-texture input with a 24-byte stride. */
+        DualTex24Colored,
+        /** @brief Environment-map input with a 32-byte stride. */
+        EnvMap32,
+        /** @brief Per-pixel-lit skinned input with a 52-byte stride. */
+        Skinned52,
+        /** @brief Colored per-pixel-lit skinned input with a 56-byte stride. */
+        Skinned56,
+        /** @brief Per-vertex-lit skinned input with a 52-byte stride. */
+        Skinned52VertexLit,
+        /** @brief Colored per-vertex-lit skinned input with a 56-byte stride. */
+        Skinned56VertexLit,
+        /** @brief Physically based unskinned input with a 48-byte stride. */
+        Pbr48,
+        /** @brief Physically based skinned input with a 68-byte stride. */
+        SkinnedPbr68,
+        /** @brief Built-in two-dimensional SpriteBatch pipeline. */
+        Sprite2D
     };
 
     // Metal bakes blend factors/operations into MTLRenderPipelineState (unlike depth/stencil/
@@ -38,15 +68,23 @@ namespace CNA::Internal::Backends::Metal
     // match Blend::One=0/Blend::Zero=1/BlendFunction::Add=0 for both channels, i.e. BlendState.
     // Opaque's own real values -- the correct answer for "no ApplyBlendState call happened yet"
     // (matches GraphicsDevice's own real XNA default BlendState).
+    /** @brief Blend state baked into a Metal render-pipeline cache key. */
     struct MetalBlendKey
     {
         uint8_t colorSrc=0, colorDst=1, alphaSrc=0, alphaDst=1, colorFunc=0, alphaFunc=0;
         bool enabled=false;
-        bool operator==(const MetalBlendKey& o) const
+        /**
+         * @brief Compares every baked blend-state field.
+         *
+         * @param other Blend key to compare.
+         * @return True when both keys describe identical blend state.
+         */
+        [[nodiscard]] bool operator==(const MetalBlendKey& other) const
         {
-            return colorSrc==o.colorSrc && colorDst==o.colorDst && alphaSrc==o.alphaSrc &&
-                   alphaDst==o.alphaDst && colorFunc==o.colorFunc && alphaFunc==o.alphaFunc &&
-                   enabled==o.enabled;
+            return colorSrc==other.colorSrc && colorDst==other.colorDst &&
+                   alphaSrc==other.alphaSrc && alphaDst==other.alphaDst &&
+                   colorFunc==other.colorFunc && alphaFunc==other.alphaFunc &&
+                   enabled==other.enabled;
         }
     };
     // plan_metal.md METAL-33: no eviction is implemented, and none is needed for a v1 backend --
@@ -85,28 +123,43 @@ namespace CNA::Internal::Backends::Metal
     // error, exactly the same class of constraint `colorAttachmentCount` above already documents,
     // now for the orthogonal MSAA axis instead of the MRT one. Defaults to `1` (no MSAA) so every
     // pre-MSAA call site is unaffected.
+    /** @brief Complete identity of one cached Metal render pipeline. */
     struct MetalPipelineCacheKey
     {
         MetalPipelineKind kind; MetalBlendKey blend; uint8_t colorAttachmentCount = 1; uint8_t sampleCount = 1;
-        bool operator==(const MetalPipelineCacheKey& o) const
+        /**
+         * @brief Compares every field that affects Metal render-pipeline compatibility.
+         *
+         * @param other Pipeline key to compare.
+         * @return True when both keys identify the same pipeline state.
+         */
+        [[nodiscard]] bool operator==(const MetalPipelineCacheKey& other) const
         {
-            return kind==o.kind && blend==o.blend && colorAttachmentCount==o.colorAttachmentCount &&
-                   sampleCount==o.sampleCount;
+            return kind==other.kind && blend==other.blend &&
+                   colorAttachmentCount==other.colorAttachmentCount &&
+                   sampleCount==other.sampleCount;
         }
     };
+    /** @brief Hash functor for Metal render-pipeline cache keys. */
     struct MetalPipelineCacheKeyHash
     {
-        std::size_t operator()(const MetalPipelineCacheKey& k) const
+        /**
+         * @brief Hashes every field in a Metal render-pipeline cache key.
+         *
+         * @param key Pipeline key to hash.
+         * @return Hash value suitable for an unordered associative container.
+         */
+        [[nodiscard]] std::size_t operator()(const MetalPipelineCacheKey& key) const
         {
-            uint64_t h = (uint64_t)k.kind
-                | ((uint64_t)k.blend.colorSrc  << 8)
-                | ((uint64_t)k.blend.colorDst  << 16)
-                | ((uint64_t)k.blend.alphaSrc  << 24)
-                | ((uint64_t)k.blend.alphaDst  << 32)
-                | ((uint64_t)k.blend.colorFunc << 40)
-                | ((uint64_t)k.blend.alphaFunc << 48)
-                | ((uint64_t)(k.blend.enabled ? 1 : 0) << 56)
-                | ((uint64_t)k.colorAttachmentCount << 57);
+            uint64_t h = (uint64_t)key.kind
+                | ((uint64_t)key.blend.colorSrc  << 8)
+                | ((uint64_t)key.blend.colorDst  << 16)
+                | ((uint64_t)key.blend.alphaSrc  << 24)
+                | ((uint64_t)key.blend.alphaDst  << 32)
+                | ((uint64_t)key.blend.colorFunc << 40)
+                | ((uint64_t)key.blend.alphaFunc << 48)
+                | ((uint64_t)(key.blend.enabled ? 1 : 0) << 56)
+                | ((uint64_t)key.colorAttachmentCount << 57);
             // plan_metal.md METAL-104: sampleCount combined via a second, independent hash (the
             // standard hash_combine formula) rather than packed into the same 64-bit word as
             // everything above -- colorAttachmentCount already occupies bits 57-60 (4 bits, enough
@@ -114,7 +167,7 @@ namespace CNA::Internal::Backends::Metal
             // range -- XOR-combining avoids reshuffling every existing field's bit offset (needless
             // churn/regression risk for an already-working scheme) just to make room.
             std::size_t hh = std::hash<uint64_t>()(h);
-            hh ^= std::hash<uint8_t>()(k.sampleCount) + 0x9e3779b97f4a7c15ULL + (hh<<6) + (hh>>2);
+            hh ^= std::hash<uint8_t>()(key.sampleCount) + 0x9e3779b97f4a7c15ULL + (hh<<6) + (hh>>2);
             return hh;
         }
     };

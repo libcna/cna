@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #pragma once
 
 #include "Microsoft/Xna/Framework/Graphics/StencilOperation.hpp"
@@ -9,12 +10,34 @@
 // confirmed against VulkanGraphicsBackend's own already-tested ToVkStencilOp.
 namespace CNA::Internal::Backends::Metal
 {
+    /** @brief Backend-neutral Metal stencil-operation classifications. */
     enum class MetalStencilOperationKind
     {
-        Keep, Zero, Replace, IncrementWrap, DecrementWrap, IncrementClamp, DecrementClamp, Invert
+        /** @brief Keeps the existing stencil value. */
+        Keep,
+        /** @brief Writes zero. */
+        Zero,
+        /** @brief Writes the stencil reference value. */
+        Replace,
+        /** @brief Increments and wraps on overflow. */
+        IncrementWrap,
+        /** @brief Decrements and wraps on underflow. */
+        DecrementWrap,
+        /** @brief Increments and clamps at the maximum. */
+        IncrementClamp,
+        /** @brief Decrements and clamps at zero. */
+        DecrementClamp,
+        /** @brief Bitwise-inverts the existing stencil value. */
+        Invert
     };
 
-    inline MetalStencilOperationKind DescribeMetalStencilOperation(int xnaOp)
+    /**
+     * @brief Translates an XNA stencil-operation ordinal to its Metal classification.
+     *
+     * @param xnaOp Raw Microsoft.Xna.Framework.Graphics.StencilOperation ordinal.
+     * @return The corresponding backend-neutral Metal stencil operation.
+     */
+    [[nodiscard]] inline MetalStencilOperationKind DescribeMetalStencilOperation(int xnaOp)
     {
         using SO = Microsoft::Xna::Framework::Graphics::StencilOperation;
         switch (static_cast<SO>(xnaOp)) {

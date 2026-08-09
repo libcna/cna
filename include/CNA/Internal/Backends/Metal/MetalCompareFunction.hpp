@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #pragma once
 
 #include "Microsoft/Xna/Framework/Graphics/CompareFunction.hpp"
@@ -15,12 +16,34 @@
 // the one part of this that genuinely needs the Apple SDK.
 namespace CNA::Internal::Backends::Metal
 {
+    /** @brief Backend-neutral Metal comparison-function classifications. */
     enum class MetalCompareFunctionKind
     {
-        Never, Less, LessEqual, Equal, GreaterEqual, Greater, NotEqual, Always
+        /** @brief Never passes. */
+        Never,
+        /** @brief Passes when the incoming value is less. */
+        Less,
+        /** @brief Passes when the incoming value is less than or equal. */
+        LessEqual,
+        /** @brief Passes when both values are equal. */
+        Equal,
+        /** @brief Passes when the incoming value is greater than or equal. */
+        GreaterEqual,
+        /** @brief Passes when the incoming value is greater. */
+        Greater,
+        /** @brief Passes when the values differ. */
+        NotEqual,
+        /** @brief Always passes. */
+        Always
     };
 
-    inline MetalCompareFunctionKind DescribeMetalCompareFunction(int xnaCompare)
+    /**
+     * @brief Translates an XNA comparison ordinal to its Metal classification.
+     *
+     * @param xnaCompare Raw Microsoft.Xna.Framework.Graphics.CompareFunction ordinal.
+     * @return The corresponding backend-neutral Metal comparison function.
+     */
+    [[nodiscard]] inline MetalCompareFunctionKind DescribeMetalCompareFunction(int xnaCompare)
     {
         using CF = Microsoft::Xna::Framework::Graphics::CompareFunction;
         switch (static_cast<CF>(xnaCompare)) {

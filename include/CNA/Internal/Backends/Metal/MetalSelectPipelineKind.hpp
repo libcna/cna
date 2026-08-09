@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #pragma once
 
 #include "CNA/Internal/Backends/Metal/MetalPipelineKey.hpp"
@@ -31,7 +32,14 @@ namespace CNA::Internal::Backends::Metal
     //
     // Precedence order, matching EasyGLGraphicsBackend::SelectProgram()'s own real precedence
     // exactly: pbr (+skinned) > skinned > envMapping > dualTexture > textured > colored.
-    inline CNA::Internal::Backends::Metal::MetalPipelineKind SelectMetalPipelineKind(
+    /**
+     * @brief Chooses the built-in Metal pipeline variant for one normalized draw.
+     *
+     * @param stride Combined vertex stride in bytes.
+     * @param params Optional normalized draw parameters; null selects legacy colored input.
+     * @return The required built-in Metal pipeline variant.
+     */
+    [[nodiscard]] inline CNA::Internal::Backends::Metal::MetalPipelineKind SelectMetalPipelineKind(
         std::size_t stride, const CNA::Internal::Backends::GpuDrawParams* params)
     {
         using PipelineKind = MetalPipelineKind;

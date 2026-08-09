@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #pragma once
 
 #include "Microsoft/Xna/Framework/Graphics/BlendFunction.hpp"
@@ -7,12 +8,28 @@
 // ToEasyGLBlendEquation / Vulkan's ToVkBlendOp exactly.
 namespace CNA::Internal::Backends::Metal
 {
+    /** @brief Backend-neutral Metal blend-operation classifications. */
     enum class MetalBlendOperationKind
     {
-        Add, Subtract, ReverseSubtract, Max, Min
+        /** @brief Adds the weighted source and destination. */
+        Add,
+        /** @brief Subtracts the destination from the source. */
+        Subtract,
+        /** @brief Subtracts the source from the destination. */
+        ReverseSubtract,
+        /** @brief Selects the component-wise maximum. */
+        Max,
+        /** @brief Selects the component-wise minimum. */
+        Min
     };
 
-    inline MetalBlendOperationKind DescribeMetalBlendOperation(int xnaBlendFunc)
+    /**
+     * @brief Translates an XNA blend-operation ordinal to its Metal classification.
+     *
+     * @param xnaBlendFunc Raw Microsoft.Xna.Framework.Graphics.BlendFunction ordinal.
+     * @return The corresponding backend-neutral Metal blend operation.
+     */
+    [[nodiscard]] inline MetalBlendOperationKind DescribeMetalBlendOperation(int xnaBlendFunc)
     {
         using BF = Microsoft::Xna::Framework::Graphics::BlendFunction;
         switch (static_cast<BF>(xnaBlendFunc)) {

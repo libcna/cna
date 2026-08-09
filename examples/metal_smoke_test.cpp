@@ -1,25 +1,8 @@
 // SPDX-License-Identifier: MS-PL
-// plan_metal.md: native Metal end-to-end smoke: end-to-end smoke test for the Metal graphics backend's
-// device/window/swapchain lifecycle and color+depth+stencil clear/present. Real window, real
-// MetalDevice, a real 60-frame Clear()+Present() loop -- this is the backend's first genuine
-// proof gate (SDLGPU-12's own bar). Texture2D/VertexBuffer/SpriteBatch are not yet implemented on
-// this backend (later phases), so this test deliberately does not touch them beyond confirming
-// they still throw (rather than silently no-op).
-//
-// Check A -- GetWindowInternal() returns a real, non-null SDL_Window.
-// Check B -- GetRendererInternal() is null (this backend does not use SDL_Renderer).
-// Check C -- GetViewportSize() reports a positive width/height matching the real window.
-// Check D -- a real MetalVertexBufferBackend/MetalIndexBufferBackend round-trip: SetData()
-//   followed by GetVertexCount()/GetIndexCount() reports the exact count uploaded (Phase SDLGPU-5,
-//   SDLGPU-23) -- see metal_2d_test.cpp for the fuller Texture2D/SpriteBatch vertical-slice proof.
-// Check E -- 60 frames of Clear(Target|DepthBuffer|Stencil, color, depth, stencil) + the automatic
-//   end-of-frame Present() complete with no exception.
-// Check F/G -- SetDataWithOptions()/SetData16WithOptions() with both Discard and NoOverwrite hints
-//   (SDLGPU-23) round-trip the exact byte data either way -- these are real overrides now (they
-//   used to silently fall through to IGraphicsBackend's default, which ignores the hint entirely),
-//   A full-buffer overwrite's correctness is identical either way (cycle only affects whether the
-//   GPU stalls on in-flight reads of the old backing memory, not what ends up readable afterward),
-//   so this is a real-API-usage/no-longer-silently-ignored proof, not a visually distinguishing one.
+// Supported-contract macOS smoke test. It exercises native device/window/view creation, confirms
+// that no SDL_Renderer is involved, uploads vertex and index buffers through the normal and
+// SetDataOptions routes, and completes 60 color/depth/stencil clear-and-present frames. It avoids
+// backbuffer readback and every capability that is deliberately reported unsupported.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 

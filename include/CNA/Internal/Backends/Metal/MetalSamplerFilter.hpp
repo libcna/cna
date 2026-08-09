@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #pragma once
 
 #include "Microsoft/Xna/Framework/Graphics/TextureFilter.hpp"
@@ -22,6 +23,7 @@
 // silently drift out of sync with the enum the way the old literal-based version could have.
 namespace CNA::Internal::Backends::Metal
 {
+    /** @brief Point-versus-linear choices for each Metal sampler filter axis. */
     struct MetalSamplerFilterPlan
     {
         bool minIsPoint;
@@ -29,12 +31,26 @@ namespace CNA::Internal::Backends::Metal
         bool mipIsPoint;
     };
 
-    inline bool operator==(const MetalSamplerFilterPlan& a, const MetalSamplerFilterPlan& b)
+    /**
+     * @brief Compares two sampler-filter plans field by field.
+     *
+     * @param a Left-hand sampler-filter plan.
+     * @param b Right-hand sampler-filter plan.
+     * @return True when every minification, magnification, and mip choice matches.
+     */
+    [[nodiscard]] inline bool operator==(const MetalSamplerFilterPlan& a,
+                                         const MetalSamplerFilterPlan& b)
     {
         return a.minIsPoint == b.minIsPoint && a.magIsPoint == b.magIsPoint && a.mipIsPoint == b.mipIsPoint;
     }
 
-    inline MetalSamplerFilterPlan DescribeMetalSamplerFilter(int xnaFilter)
+    /**
+     * @brief Translates an XNA texture-filter ordinal into a Metal sampler plan.
+     *
+     * @param xnaFilter Raw Microsoft.Xna.Framework.Graphics.TextureFilter ordinal.
+     * @return The corresponding minification, magnification, and mip-filter plan.
+     */
+    [[nodiscard]] inline MetalSamplerFilterPlan DescribeMetalSamplerFilter(int xnaFilter)
     {
         using TF = Microsoft::Xna::Framework::Graphics::TextureFilter;
         switch (static_cast<TF>(xnaFilter)) {
