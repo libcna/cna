@@ -1,17 +1,20 @@
 # Texture3D / TextureCube Backend Support — CNA
 
+> **Metal adaptation note (2026-08-09):** the current Metal factory rejects every format except
+> `SurfaceFormat::Color`; it no longer silently accepts and ignores unsupported format requests.
+> The adapted Objective-C++ path still needs fresh macOS compile/runtime evidence. See
+> `docs/metal-backend.md`.
+
 > Source-inspected against Tasks 271–279 (Phase 33).
 > Covers: EasyGL, Vulkan, Bgfx backends. SDL_Renderer has no 3D texture support at all
 > (2D-only backend, `CreateTexture3D`/`CreateTextureCube` are unreachable from any XNA-level
 > API — `Texture3D`/`TextureCube` construction goes through `GraphicsDevice::GetBackend()`,
 > and SDL_Renderer's 3D-facing factory methods throw `ThrowNo3D` the same way vertex buffers do).
 >
-> Metal column added later (`plan_metal.md METAL-129`, Phase 11: `METAL-120`–`129`). Metal's own
-> row in every table below is source-complete and CI-confirmed to compile on real Apple Clang, but
-> — unlike EasyGL's own pixel-verified rows — has no dedicated `Metal_TextureCube`/`Metal_Texture3D`
-> `CTest` yet (`METAL-127`/`128`, still open), so it is marked 🔍 (code-inspected, not independently
-> tested) rather than ✅ almost everywhere, matching this doc's own existing legend rather than a
-> new one invented for Metal specifically.
+> Metal column added later (`plan_metal.md METAL-129`, Phase 11: `METAL-120`–`129`). The historical
+> predecessor compiled on Apple Clang, but the post-audit adaptation changes the interfaces and has
+> no fresh Apple compile. Metal remains marked 🔍 where only source inspection and portable helper
+> tests exist; there is still no dedicated native TextureCube/Texture3D round-trip test.
 
 ---
 
@@ -33,11 +36,10 @@
 | EasyGL  | ⚠️ `TextureCube` only (Task 276 fix) — see "Mip levels" below | ❌ always `Rgba8`, `format` parameter ignored |
 | Vulkan  | ❌ dropped in the factory itself — `CreateTexture3D`/`CreateTextureCube` take `bool /*mipMap*/` (commented out) | ❌ always `VK_FORMAT_R8G8B8A8_UNORM` |
 | Bgfx    | ⚠️ `TextureCube` — parameter is received but the constructor still hardcodes `bgfx::createTextureCube(size, /*hasMips=*/false, ...)`, so it does nothing today (🔍 same class of bug as Task 276, not yet fixed for Bgfx) | ❌ always `bgfx::TextureFormat::RGBA8` |
-| Metal   | 🔍 both `Texture3D`/`TextureCube` honor `mipMap` (`mipmapped:mipMap` for `TextureCube`'s convenience initializer; `Texture3D`'s own manual `while(m>1)` level-count loop) — full chain allocated up front, no post-construction retrofit needed the way EasyGL's Task 276 fix was | ❌ always `MTLPixelFormatBGRA8Unorm` (`TextureCube`, matching every render-target-compatible pipeline's own hardcoded format) / `MTLPixelFormatRGBA8Unorm` (`Texture3D`, a plain sampled texture with no render-target-compatibility need) — consistent with every other backend's own "always RGBA-shaped" simplification, `format` parameter ignored either way |
+| Metal   | 🔍 both `Texture3D`/`TextureCube` honor `mipMap` (`mipmapped:mipMap` for `TextureCube`; a computed level count for `Texture3D`) — full chain allocated up front | ⚠️ accepts only `SurfaceFormat::Color` and rejects every other request; both plain texture types use `MTLPixelFormatRGBA8Unorm` |
 
-No backend implements `SurfaceFormat` for `Texture3D`/`TextureCube` — every format request silently
-becomes 32-bit RGBA. This is a pre-existing, cross-backend limitation, not something introduced or
-fixed this session.
+EasyGL, Vulkan, and Bgfx still silently reduce every format request to 32-bit RGBA. Metal's adapted
+boundary instead accepts Color and throws for unsupported formats.
 
 ---
 
@@ -130,9 +132,8 @@ texture-binding API of any kind (Task 277 finding, tracked as Task 863). `Textur
 *does* work for `EnvironmentMapEffect` specifically because that stock effect bypasses
 `GraphicsDevice.Textures` entirely via a dedicated `GpuDrawParams::envMap` field that every backend's
 draw dispatch consumes directly — but no stock effect needs `Texture3D`, and no custom-effect
-workaround exists for it. Metal's own Phase 14 custom-`ShaderEffect` facility (landed this session,
-`plan_metal.md` narrative item 83) doesn't change this either — it is `SpriteBatch`-scoped, not a
-general `Texture3D`/`TextureCube`-binding path.
+workaround exists for it. Metal custom effects are deliberately unsupported after adaptation, so
+they provide no alternate binding route.
 
 ---
 

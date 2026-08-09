@@ -1,290 +1,182 @@
 # Metal graphics backend
 
-`METAL` is CNA's native Apple graphics backend (macOS/iOS/tvOS), selected via
-`-DCNA_GRAPHICS_BACKEND=METAL`. It fronts `id<MTLDevice>`/`id<MTLCommandQueue>`/`CAMetalLayer`
-directly through Objective-C++ (`.mm`) source files — no intermediate abstraction library (unlike
-`BGFX`) and no cross-platform shader translation (unlike `WEBGPU`'s WGSL or `VULKAN`'s SPIR-V):
-shaders are Metal Shading Language (MSL), compiled at runtime from an embedded C++ raw string via
-`MTLDevice::newLibraryWithSource:`.
+## Supported target
 
-Full task-by-task history, every phase's design rationale, and the authoritative "what's actually
-left" summary live in `plan_metal.md` (`METAL-1`–`METAL-257`, 30 phases). This document is the
-durable capability-boundary reference `CLAUDE.md`'s `docs/webgpu-backend.md` precedent points to —
-kept current at the end of each session, not a full narrative retelling.
+`METAL` is CNA's direct native Metal backend, selected with
+`-DCNA_GRAPHICS_BACKEND=METAL`. SDL3 owns the window and supplies
+`SDL_Metal_CreateView`/`SDL_Metal_GetLayer`; rendering goes directly through
+`MTLDevice`, `MTLCommandQueue`, `MTLRenderCommandEncoder`, and `CAMetalLayer`. It does not route
+draws through SDL_Renderer, SDL_GPU, or a third-party graphics abstraction.
 
-## Current verification status (updated 2026-07-21)
+The supported platform contract is **macOS only**. CMake rejects `METAL` unless
+`CMAKE_SYSTEM_NAME` is `Darwin`, before enabling Objective-C++ or collecting `.mm` sources. iOS
+and tvOS are unvalidated and are not claimed. CNA does not set an explicit macOS deployment
+target; compatibility below the SDK and deployment defaults used by a successful build is not
+established.
 
-Every development *session* on this backend still runs on Linux (Debian 13), which has no Apple
-Clang, no Metal framework headers, and no Metal-capable GPU — every line of `.mm` code is still
-written and self-reviewed without ever compiling it locally. But since `.github/workflows/
-metal-macos-ci.yml` started actually building this backend on a real `macos-14` GitHub Actions
-runner, that is no longer the whole story:
+## Evidence boundary
 
-- **This backend genuinely compiles cleanly on real Apple Clang.** Confirmed across many separate
-  CI runs (e.g. `29800865929`, `29801955085`, `29804175429`, `29804647754`), including every
-  Objective-C++ change landed to date — resource-lifetime fixes (`METAL-256`), enum-table
-  extractions (`METAL-19`), and the full custom-`ShaderEffect`/MSL facility (Phase 14). "Never
-  compiled" is no longer an accurate description of this backend as a whole.
-- **Most of its `ctest` suite passes on real Apple hardware.** As of the CI run above: `132` total
-  Metal-labeled tests, `128` passing (`97%`).
-- **A specific, confirmed, unresolved bug accounts for every current failure.** `Metal_PbrEffect_
-  Golden`/`Metal_SkinnedPbrEffect_Golden`/`Metal_DrawUserPrimitives_VPC`/`Metal_SpriteBatch_
-  CustomEffect` all fail for the *same* underlying reason: `GraphicsDevice::GetBackBufferData()`
-  (via `ReadBackbuffer()`) reads back only the `Clear()` color, never the content of a real draw
-  that ran before it — confirmed (not just suspected) by printing the actual observed pixel values,
-  which are byte-for-byte each test's own `Clear` color. This reproduces for both 2D (`SpriteBatch`)
-  and 3D draws, ruling out `PipelineKind`/shader-specific causes, and is **not** attributable to
-  either of two real, already-found-and-fixed bugs from the same investigation (a `vertexStart`
-  offset bug, a premature-`presentDrawable:` bug). Root cause remains undetermined — the
-  investigation is paused, not abandoned: pending either a physical Mac (for `Xcode`/`MTLCaptureManager`-
-  based GPU debugging — attempted once via CI, the specific `macos-14` runner's own GPU does not
-  support `MTLCaptureDestinationGPUTraceDocument`) or a `MTLCommandBuffer` runtime-error check
-  (already added, came back clean — rules out a GPU-side execution error too). See `plan_metal.md`
-  narrative items 67–76/82/84/85 for the full investigation history.
+The immutable historical lane is `feature/metal` through `48928d113cb864f78d754256d2d559d914d4f1a7`.
+Its latest production-changing commit is `e0f42426836ce9f2d4823d50732850877020aef1`;
+the final four commits only change `NEXT.md` or `plan_metal.md`.
 
-Every "landed" phase below was written by careful, line-by-line comparison against
-`EasyGLGraphicsBackend`'s already-shipping, already-tested equivalent logic (CNA's most mature 3D
-backend) before ever reaching a compiler — but treat the distinction below (🟨 vs. ✅) as the
-authoritative word on what's actually been machine-checked, not the prose.
+GitHub Actions run `29814126178` built `e0f42426836ce9f2d4823d50732850877020aef1`
+successfully on `macos-14` with Xcode 15.4 and Metal validation enabled. It then passed 136 of
+143 tests. The seven failures were:
 
-## Status legend
-
-- ✅ — **real, machine-verified**: actually compiled and executed by a real test binary on some
-  real machine (Linux for the plain-C++ subset, real Apple hardware via CI for everything else),
-  with the specific `ctest`/CI evidence cited. Never claimed on inspection alone.
-- 🟨 — source-complete: written and reviewed line-by-line against the FNA/EasyGL reference. Split
-  into two sub-cases, not distinguished further below (check `plan_metal.md`'s own per-task table
-  for the specific CI run backing any given 🟨 item): (a) genuinely CI-confirmed to *compile and
-  pass its own test* on real Apple hardware, just not yet promoted to ✅ in this summary doc, or
-  (b) written but not yet pushed/exercised by any CI run at all. Never treat a 🟨 row here as
-  functionally verified correct beyond what its own cited evidence says.
-- ⬜ — not started.
-
-One exception predates real CI entirely: 15 pieces of this backend's logic touch *no* Objective-C or
-Metal-framework types at all (they only read/write plain C++ structs, XNA framework types, and
-`float` arrays) — see "Real, machine-verified subset" below. Those pieces carry a genuine ✅ from a
-plain Linux build, no Apple hardware required.
-
-## Implemented baseline (🟨 unless noted otherwise)
-
-- Compile-time backend selection (`CNA_GRAPHICS_BACKEND=METAL`, `CNA_BACKEND_METAL`), Apple-only
-  CMake hard gate, Objective-C++ enablement only when selected.
-- Native device/window/swapchain bring-up: `MTLDevice`, `MTLCommandQueue`, `CAMetalLayer`,
-  drawable acquisition and presentation, BGRA8 swapchain, native depth32+stencil8 attachment,
-  color/depth/stencil clear combinations (Phase 1).
-- Pipeline-state cache keyed by a `PipelineKind` enum (one entry per concrete shader+vertex-layout
-  combination this backend emits — a fixed-variant simplification of the fully generic
-  `VertexElement`-driven descriptor builder `METAL-26`/`27` still describe and leave open) (Phase 2).
-- `BasicEffect` full shader parity: colored/textured/lit 3D draw paths, per-pixel *and* per-vertex
-  (Gouraud) lighting selected by the real XNA `PreferPerPixelLighting` default, fog, specular,
-  emissive (Phase 3).
-- `AlphaTestEffect`/`DualTextureEffect` (Phase 4/5).
-- `EnvironmentMapEffect`: world-space cube-map reflection, flat + Fresnel-weighted blend, lit+fogged,
-  built on real `TextureCube`/`Texture3D` backends (Phase 6, 11).
-- `SkinnedEffect`: 72-bone GPU skinning via a real `MTLBuffer`, `WeightsPerVertex` branching, a
-  NaN-safety guard for near-180°-relative-bone-rotation blends, per-pixel and per-vertex lit
-  variants, lit/fog/specular/emissive (Phase 7).
-- `PbrEffect`/`SkinnedPbrEffect` (NOXNA): glTF 2.0 metallic-roughness Cook-Torrance BRDF,
-  tangent-space normal mapping, 4 optional PBR maps with safe default-texture fallbacks (Phase 8).
-  Cross-backend PBR support/verification status lives in `plan_cnj.md`'s `CNB-103`–`111` table
-  (one row per backend), not duplicated here.
-- Custom `ShaderEffect`/MSL contract (Phase 14) — a `SpriteBatch`-scoped facility (fixed 32-byte
-  `Sprite2DVertex`-shaped contract, matching the exact scope `VulkanEffectBackend`/
-  `D3D11EffectBackend`/`D3D12EffectBackend` already commit to, not the arbitrary-3D-vertex-layout
-  facility only `EasyGLGraphicsBackend` supports): runtime-compiled MSL vertex+fragment pair via
-  two separate `MTLLibrary` objects, fixed-slot uniform contract (`docs/metal-shader-effect-
-  contract.md`), real per-`BlendState` pipeline selection (an improvement over the Vulkan/D3D11/
-  D3D12 precedent's own hardcoded blend). `SupportsCapability(CustomEffects)` is real (`true`).
-- Instancing (Phase 9) — still blocked, on the general 3D `GpuDrawParams::customEffectBackend`
-  bypass (`METAL-148`) and the generic `VertexElement`-driven descriptor builder specifically, not
-  on Phase 14 as a whole (Phase 14's own landed scope is `SpriteBatch`-only and does not touch
-  this). No established structured-pipeline backend (Vulkan/D3D11/D3D12) wires `customEffectBackend`
-  into its general 3D draw path either — only `EasyGLGraphicsBackend` does, since GL's attribute
-  binding needs no rigid vertex descriptor.
-- `RenderTarget2D`/`RenderTargetCube` bind/unbind, sampleable afterward, `DiscardContents`/
-  `PreserveContents`, mip regeneration on unbind, `GetColorGLHandle`-equivalent accessor (Phase 10;
-  MRT and MSAA remain ⬜, see Known limitations).
-- GPU readback (`ReadBackbuffer`, `RenderTarget2D`/`Cube`/`Texture3D`/`TextureCube::GetData()` via a
-  shared `blitTextureToClientBuffer` helper) and real occlusion queries
-  (`MTLVisibilityResultBuffer`, genuine `uint64_t` pixel counts — a real capability advantage over
-  EasyGL's GLES3 boolean) (Phase 12/13).
-- Letterbox/overscan/stretch/native/fixed-height-dynamic-width logical-viewport transform
-  (Phase 15) — the CPU-side formula is in the real ✅ subset below.
-- Resize/HiDPI research, frame pacing/`swapInterval`, resource-lifetime/command-buffer audit,
-  `SupportsCapability` accuracy review (Phases 16–18, 20).
-- `SpriteBatch` parity: transform matrix, real blend state (Phase 19).
-- iOS/tvOS buildability audited from source (no macOS-only API spotted; SDL3's own generic
-  `uikit` Metal driver already covers it) — likely true, not just aspirational, but genuinely
-  unverified until a real build-only CI job exists (Phase 29, partial).
-
-## Real, machine-verified subset (✅, verified on Linux — see caveat on scope)
-
-15 pieces of this backend's logic are plain C++ with zero Objective-C/Metal-framework
-dependency — extracted out of `MetalGraphicsBackend.mm` into standalone headers under
-`include/CNA/Internal/Backends/Metal/`, with `MetalGraphicsBackend.mm` reduced to thin same-name
-aliases/wrappers (or, for the enum-mapping headers, a trivial 1:1 final switch onto the real
-`MTL*` enum) so every call site is unaffected. Each has a dedicated GoogleTest suite under
-`tests/CNA/Internal/Backends/Metal/` that carries **no** `#if defined(CNA_BACKEND_METAL)` gate
-(deliberately — unlike every other backend's own tests, these must run under whichever backend
-this machine can actually build, e.g. `HEADLESS`). All 127 tests pass under a real
-`-DCNA_GRAPHICS_BACKEND=HEADLESS -DCNA_BUILD_TESTS=ON` `CnaTests` build and `ctest -R "^Metal"` run
-on Linux (`ctest --test-dir cmake-build-headless -R "^Metal" -N` reports `Total Tests: 127`); an
-independent adversarial audit separately re-derived every expected value against the real source
-structs/functions for the first 7 and found no functional defects (see `plan_metal.md`'s narrative
-items 29–35 for that audit's full detail).
-
-| Header | What it covers |
+| Test | Historical result |
 |---|---|
-| `MetalPipelineKey.hpp` | `MetalPipelineKind` enum, `MetalBlendKey`, `MetalPipelineCacheKey`/Hash |
-| `MetalNormalMatrix.hpp` | `ComputeMetalNormalMatrixCols` — `transpose(inverse(world3x3))` shortcut |
-| `MetalPrimitiveVertexCount.hpp` | `ComputeMetalPrimitiveVertexCount` — `PrimitiveType` → vertex count |
-| `MetalLogicalViewport.hpp` | `ComputeMetalLogicalViewport` — letterbox/overscan/etc. formula |
-| `MetalMat4.hpp` | `MetalMat4Multiply`/`FromXna`/`Transpose` — the WVP matrix helper set |
-| `MetalSelectPipelineKind.hpp` | `SelectMetalPipelineKind` — the shader-variant dispatch decision |
-| `MetalUniformFill.hpp` | `FillMetal{Lit,Env,Skinned,Pbr,SkinnedPbr}Uniforms` — `GpuDrawParams` → GPU uniform mapping |
-| `MetalSamplerFilter.hpp` | `DescribeMetalSamplerFilter` — `TextureFilter` → min/mag/mip-is-point plan |
-| `MetalVertexAttribFormat.hpp` | `MetalVertexAttribKind` — all 12 `VertexElementFormat` values, neutral (non-`MTL`) form |
-| `MetalVertexDescriptorPlan.hpp` | `BuildMetalVertexDescriptorPlan` — arbitrary-`VertexElement`-list attribute-layout building (`METAL-26`/`27`'s core logic; not yet wired into any live draw path, see Known limitations) |
-| `MetalCompareFunction.hpp` | `DescribeMetalCompareFunction` — `CompareFunction` → `MetalCompareFunctionKind` |
-| `MetalStencilOperation.hpp` | `DescribeMetalStencilOperation` — `StencilOperation` → `MetalStencilOperationKind` |
-| `MetalBlend.hpp` | `DescribeMetalBlendFactor` — `Blend` → `MetalBlendFactorKind` |
-| `MetalBlendFunction.hpp` | `DescribeMetalBlendOperation` — `BlendFunction` → `MetalBlendOperationKind` |
-| `MetalCullMode.hpp` | `DescribeMetalCullMode` — `CullMode` → `MetalCullModeKind` |
+| `Metal_PbrEffect_Golden` | Backbuffer readback contained only the clear color. |
+| `Metal_SkinnedPbrEffect_Golden` | Backbuffer readback contained only the clear color. |
+| `Metal_DrawUserPrimitives_VPC` | Backbuffer readback contained only the clear color. |
+| `Metal_SpriteBatch_CustomEffect` | Backbuffer readback contained only the clear color. |
+| `Metal_MultipleRenderTargets` | Backbuffer readback contained only the clear color. |
+| `Metal_Backbuffer_MSAA` | Backbuffer readback contained only the clear color. |
+| `Metal_RenderTarget2D_MSAA` | Applied sample count four, but the rendered edge remained binary. |
 
-The last 5 rows (`METAL-19`) switch on the real XNA enumerator name rather than a raw `int`
-literal, so a future reordering of any of those 5 XNA enums' declarations is compile-time-
-irrelevant here — the only part that still needs the Apple SDK is each header's own thin `.mm`-side
-final translation to the matching `MTL*` enum (a trivial 1:1 name match, CI-confirmed to compile
-correctly, see `plan_metal.md` narrative items 81/82).
+`Metal_Capabilities` passed in that run, but it only asserted a small boolean set and did not
+prove the advertised rendering paths. The repository records the run number and conclusions in
+prose; it does not contain downloaded Actions logs, artifact checksums, a git note, or a usable
+GPU-capture artifact. The attempted GPU-trace capture was unsupported on the hosted runner.
 
-This subset does not include anything that constructs or issues real Metal API calls
-(`vertexDescriptorForStride`, `makePipeline`, the `metalPrimitive`/etc. final enum-translation
-switches, all real command-encoder work) — those return or consume genuine `MTL*` types declared
-only in Apple's Metal framework headers and cannot be extracted the same way without either the
-framework itself or hardcoding Apple's numeric enum values as an out-of-pattern risk. That
-remaining surface stays 🟨 (or ✅ per-item once its own CI evidence is checked, see the status
-legend above) pending real hardware for anything not yet exercised by a passing CI run.
+The post-audit adaptation changes interfaces and supported behavior after that run. Therefore the
+historical successful compile is not compile or runtime evidence for the adapted `.mm` source. A
+fresh macOS workflow result is mandatory before claiming the adaptation itself compiles or runs on
+Metal.
 
-## Known limitations / explicitly open
+### Post-audit findings
 
-- **The confirmed readback bug** — see "Current verification status" above. The single largest
-  known issue: any real draw (2D `SpriteBatch` or 3D) followed by a same-process
-  `GetBackBufferData()`/`ReadBackbuffer()` call reads back only the `Clear()` color. Affects 4
-  `CTest`s today (`Metal_PbrEffect_Golden`/`Metal_SkinnedPbrEffect_Golden`/`Metal_
-  DrawUserPrimitives_VPC`/`Metal_SpriteBatch_CustomEffect`) and will affect any *future* golden-
-  image/readback-based `CTest` too, until resolved. Root cause undetermined; investigation paused
-  pending a physical Mac (see `plan_metal.md` narrative items 67–76/82/84/85 for what has already
-  been ruled out).
-- **Fully generic `VertexElement`-driven descriptor builder** (`METAL-26`/`27`) — the current
-  pipeline cache uses a fixed `PipelineKind` enum (one entry per concrete shader+layout this
-  backend actually emits) rather than a hashed arbitrary-`VertexElement`-list key. Lower risk to
-  get right without a compiler than inventing the generic version blind; blocks the general 3D
-  `GpuDrawParams::customEffectBackend` bypass (`METAL-148`) and, transitively, Phase 9 (Instancing)
-  — no longer blocks Phase 14 as a whole, whose own landed scope (`SpriteBatch`-only custom
-  effects) needed no dependency on this builder (see Phase 14's bullet above).
-- **MRT / MSAA** (`METAL-104`/`105`/`112`/`113`) — the rest of Phase 10.
-- **`METAL-147`** — `IEffectBackend::BindTexture`/`BindTextureCube`/`BindTexture3D` for *extra*
-  sampler units on a custom `ShaderEffect` are not implemented (inherit the no-op default), matching
-  `VulkanEffectBackend`/`D3D11EffectBackend`'s own identical scope boundary — texture unit 0 is
-  always driven by the caller (`SpriteBatch`'s own texture parameter).
-- **`METAL-257`** — a cross-backend missing-`SDL_WINDOW_HIGH_PIXEL_DENSITY` gap Phase 16's research
-  found; deliberately left for a cross-backend task since it isn't Metal-specific (confirmed to
-  also affect iOS/tvOS, not just macOS).
-- **Phases 21–24** (argument buffers/bindless, indirect command buffers, MetalFX upscaling, GPU
-  counters/Xcode frame capture) — all NOXNA extensions requiring real hardware/Xcode to design
-  meaningfully, not attempted.
-- **Phase 28** (cross-backend pixel parity) and the rest of Phase 29 (a real iOS/tvOS build-only CI
-  job and everything downstream of it) — ⬜.
-- **Every 🟨 row above not otherwise called out with its own CI evidence** — see "Current
-  verification status": source-complete, and possibly already CI-compiled (check `plan_metal.md`'s
-  own per-task table for the specific run), but not yet promoted to ✅ in this summary doc.
+These IDs continue the existing `plan_metal.md` sequence without changing any historical finding:
 
-## Verification methodology
+| Finding | Severity | Evidence | Disposition |
+|---|---|---|---|
+| `METAL-258` — backbuffer readback returned successful clear-only pixels | High | Historical run `29814126178`: six draw/readback tests observed only the clear color. | Supported contract disabled: `ReadBackbuffer` throws `NotSupportedException`; dependent native tests are not registered as supported gates. |
+| `METAL-259` — RenderTarget2D MSAA reported four samples without edge coverage | High | The same run applied sample count four but its diagonal edge remained binary. | Supported contract disabled: MSAA capability is false and every requested sample count clamps/reports zero. |
+| `METAL-260` — cached `CAMetalDrawable` lacked an owned reference | High | MRR source audit found a `nextDrawable` (+0) result stored across calls and mid-frame commits without retain/release ownership. | Implementation fixed: a portable-tested retained owner keeps it alive, mid-frame commits preserve it, and presentation releases it after command commit. Adapted-Mac validation remains pending. |
+| `METAL-261` — partial backend construction had no MRR rollback | Medium | Source audit showed that a throw after device/view/layer/queue acquisition (including runtime MSL-library failure) destroyed `impl_` but `Impl` had no destructor. | Implementation fixed: `Impl` now owns bounded teardown for constructor failure and normal destruction, with drawable/layer/view ordering explicit. Adapted-Mac validation remains pending. |
+| `METAL-262` — default device was retained twice | Medium | `MTLCreateSystemDefaultDevice()` supplied the create-rule ownership reference and the constructor immediately sent an additional `retain`. | Implementation fixed: the redundant retain is removed; stored create/`new*` objects each have exactly one owning reference. Adapted-Mac validation remains pending. |
 
-Two genuinely different tiers of evidence exist for this backend, and neither should be
-represented as the other:
+## Current capability contract
 
-1. **Real ✅ on Linux (the extracted plain-C++ subset only)**:
-   ```
-   cmake -S . -B cmake-build-debug -DCNA_GRAPHICS_BACKEND=HEADLESS -DCNA_BUILD_TESTS=ON
-   cmake --build cmake-build-debug --target CnaTests -j4
-   cd cmake-build-debug && ctest -R "^Metal" --output-on-failure
-   ```
-   (Anchored `-R "^Metal"`, not a bare `Metal` substring match — an unanchored filter also matches
-   6 unrelated `PbrEffectDefaultsTest.Metallic*`/`SkinnedPbrEffectDefaultsTest.Metallic*` tests.)
+Every current `CNA::GraphicsCapability` is handled explicitly. There is no permissive default.
 
-2. **Real ✅ on macOS (per-item, once each specific item's own evidence is checked)**:
-   `.github/workflows/metal-macos-ci.yml` on a `macos-14` GitHub Actions runner — configures with
-   `-DCNA_GRAPHICS_BACKEND=METAL -DCNA_BUILD_TESTS=ON`, builds, then runs `ctest -R "^Metal"
-   --output-on-failure`, which covers `Metal_Smoke` (the real end-to-end device/window/swapchain/
-   draw smoke test), the 132-and-growing full Metal `CTest` suite (SpriteBatch, custom effects,
-   golden-image, readback, occlusion queries, etc.), and the tier-1 extraction tests again (this
-   time on real Apple Clang, not just Linux). **This tier is real and has been observed passing for
-   most of the suite on multiple separate runs** — do not read this doc's own age as evidence
-   nothing has changed; check `plan_metal.md`'s narrative for the specific run ID behind any given
-   claim. The one standing exception is the confirmed readback bug in "Current verification status"
-   above, which currently keeps the overall `ctest` exit code nonzero (`Errors while running CTest`)
-   even though the great majority of individual tests pass — a job showing `conclusion: failure`
-   in `gh run list` does **not** by itself mean nothing works; always check the actual `ctest`
-   pass/fail line, not just the job's aggregate GitHub Actions conclusion.
+| Capability | Reported | Boundary |
+|---|---:|---|
+| `ThreeD` | true | Built-in fixed-layout Metal pipelines only. |
+| `DepthStencilBuffer` | true | Native combined depth/stencil attachments. |
+| `MultiSampleAntiAliasing` | false | Every requested public sample count is clamped to zero. |
+| `MultipleRenderTargets` | false | More than one descriptor is rejected before binding state changes. |
+| `AnisotropicFiltering` | true | Native sampler-state mapping. |
+| `WireFrame` | true | `FillMode::WireFrame` maps to `MTLTriangleFillModeLines`. |
+| `OcclusionQuery` | true | Native visibility-result buffer and query objects. |
+| `CustomEffects` | false | Effect creation and non-null SpriteBatch custom effects throw. |
+| `Texture3D` | true | Color-format native 3D textures. |
+| `MultiStreamVertexInput` | false | More than one per-vertex stream is rejected. |
+| `Instancing` | false | Instance streams and instance counts other than one are rejected. |
+| `StencilBuffer` | true | Native stencil plane and state mapping. |
+| `AdditiveBlending` | true | Native blend factors and operations. |
 
-**Runtime validation** (`METAL-218`/`229`): `MTL_SHADER_VALIDATION=1` and `MTL_DEBUG_LAYER=1` are
-Apple's own documented runtime validation environment variables — the Metal-side equivalent of
-Vulkan's `VK_LAYER_KHRONOS_validation` already used elsewhere in this project. They surface real
-API misuse (out-of-bounds shader access, invalid resource binding, mismatched attachment formats,
-etc.) as a clear diagnostic instead of silent undefined behavior or a hard-to-diagnose GPU hang.
-Set for the `metal-macos-ci.yml` job's test-running step (read at runtime by whatever process
-creates the `MTLDevice`, not needed at build time). Anyone reproducing a CI failure locally on a
-real Mac should set both before running `Metal_Smoke`/`CnaTests` by hand, for the same reason.
+The following boundaries are deterministic rather than silent degradation:
 
-## Command-buffer / encoder lifecycle model (`METAL-181`)
+- `ReadBackbuffer` throws `System::NotSupportedException`; it never returns known-wrong pixels.
+- backbuffer and render-target MSAA report zero and allocate single-sample attachments;
+- `SetRenderTargets` accepts zero descriptors (restore backbuffer) or one normalized 2D/cube-face
+  descriptor and throws for MRT;
+- custom effect construction, non-null `SpriteBatch::SetCustomEffect`, and a non-null
+  `GpuDrawParams::customEffectBackend` throw;
+- malformed stream metadata throws `std::invalid_argument`; multistream and instancing throw
+  `System::NotSupportedException`;
+- TextureCube, Texture3D, and `CreateRenderTarget2DEXT` accept only
+  `SurfaceFormat::Color`; unsupported formats throw;
+- non-default per-target color-write masks, multisample coverage masks, sampler maximum mip level,
+  and sampler LOD bias throw instead of being ignored.
 
-One `id<MTLCommandQueue>` for the backend's lifetime. Within a single logical frame, zero or more
-`id<MTLCommandBuffer>`/`id<MTLRenderCommandEncoder>` pairs may be created and ended — a fresh pair
-is created lazily by `ensureFrame()` whenever none is active, and `endActiveEncoding(bool
-presentBackbuffer)` is the *only* function allowed to end one: it always commits (a Metal command
-buffer cannot be resumed once an encoder ends), but only presents+releases `drawable` when
-`presentBackbuffer` is `true`.
+## Adapted architecture
 
-Exactly one call site passes `true`: `endFrame()`, itself only reachable from the public
-`Present()`. Every other encoder-ending call site (`clear()` starting a fresh pass,
-`MetalRenderTargetBackend::BindAsRenderTarget()`/`UnbindAsRenderTarget()`/its own destructor)
-passes `false`. The backbuffer's `drawable` is acquired at most once per real frame (lazily, the
-first time `resolveActiveAttachments()` needs it with no `RenderTarget2D` bound) and persists
-across any number of mid-frame encoder boundaries until genuinely presented — a `Clear()` call or a
-render-target switch mid-frame does **not** present a partial backbuffer, matching
-`GraphicsDevice.Present()`'s real XNA contract regardless of how many render-target switches
-happened in between a game's `Begin`/`End` frame.
+The backend implements the current `IGraphicsBackend` surface, including normalized
+`RenderTargetBindingDescriptor`, `BlendWriteState`, applied format/depth queries, depth/stencil
+capability queries, and boolean texture transfer contracts. A portable compile-time test asserts
+that `MetalGraphicsBackend` is not abstract, catching future pure-virtual interface drift without
+requiring Apple headers.
 
-`ReadBackbuffer()` is the one documented exception: it deliberately forces an early, self-contained
-end-of-frame (ends encoder, blits, presents, commits, waits, all as one unit) because once a
-command buffer is committed it cannot be resumed for a later, separate `Present()` — the game's own
-subsequent `Present()` call becomes a safe no-op via `endFrame()`'s `if (!command) return;` guard
-rather than a double-present.
+Ordinary draws consume current `GpuDrawParams::vertexStreams` metadata. The supported shape is
+exactly one valid per-vertex stream whose buffer, slot, stride, and combined stride agree with the
+draw argument; the documented legacy empty-stream route remains valid. Pipeline selection uses
+`CombinedVertexStrideOr`, and fog uniforms use the current FNA-compatible four-component
+`fogVector` dot-product contract.
 
-This model replaced an earlier, genuinely buggy version: `endActiveEncoding()` originally
-unconditionally called `presentDrawable:` on every encoder-ending call, so any mid-frame
-render-target switch would present a partial backbuffer (visible tearing/flicker) and re-acquire a
-fresh drawable on the next backbuffer touch — a single logical frame with N target switches could
-present up to N+1 times instead of exactly once. Found and fixed during Phase 18's audit, after
-Phase 10 (render targets) had already shipped and been self-reviewed once without catching it.
+Render-target type, descriptor, slice, cube-face, and foreign-backend checks occur before changing
+the active target. Backend resources retain their native device/queue dependencies, active target
+destructors end encoders before releasing attachments, and render-target switches end encoding
+without presenting. Presentation remains an explicit end-of-frame action.
 
-## Architecture notes
+The Objective-C++ file uses manual retain/release. `MTLCreateSystemDefaultDevice()` and stored
+`new*` results each contribute their one create-rule ownership reference; borrowed layer,
+command-buffer, encoder, and drawable results are retained only when they outlive the acquiring
+call. A retained `CAMetalDrawable` survives mid-frame command commits, then is released exactly
+once after `presentDrawable:` is encoded and the presenting command buffer is committed. `Impl`
+owns cleanup, so a constructor exception rolls back every partially acquired native object and
+destroys the SDL Metal view after drawable/layer use has ended. This follows Apple's
+[manual memory-management rules](https://developer.apple.com/library/archive/documentation/General/Conceptual/DevPedia-CocoaCore/MemoryManagement.html)
+and Clang's documented
+[retained-return conventions](https://clang.llvm.org/docs/AutomaticReferenceCounting.html#retained-return-values).
 
-- **MSL is embedded, not vendored as separate `.metal` files**: `kMetalShaderSource` is a single
-  raw C++ string compiled at runtime via `newLibraryWithSource:`. Keeps the shader source
-  co-located with the C++ structs it must byte-layout-match (`LitUniforms`/`EnvUniforms`/etc.).
-- **Plain-C++ mirror structs**: every MSL uniform struct (`LitTransform`/`LitUniforms`/...) has a
-  hand-written C++ mirror with identical field layout (`float[4]`-padded vec3s, 3 separate
-  `float[4]` "columns" for a normal matrix rather than a 3x3) so `std::memcpy` into a real
-  `MTLBuffer` is safe. These mirrors are part of the real ✅ subset (`MetalUniformFill.hpp`).
-  Changing MSL-side layout without updating the mirror (or vice versa) is the single easiest way to
-  silently corrupt every draw of that shader family — there is no compiler-enforced link between
-  the two representations, which is exactly why `MetalUniformFillTests.cpp` exists.
-- **Extraction pattern for future plain-C++ candidates**: if a future phase adds another
-  `static`/free function or type in `MetalGraphicsBackend.mm` that touches only plain C++ (no
-  `id<MTL...>`, no Objective-C), the established pattern is: move the logic verbatim into
-  `include/CNA/Internal/Backends/Metal/MetalXxx.hpp` (same names, `Metal`-prefixed), replace the
-  original inline definition in the `.mm` with a `using`/one-line wrapper so every existing call
-  site is unaffected, write a real GoogleTest suite with no `CNA_BACKEND_METAL` gate, and verify via
-  the tier-1 Linux build above before claiming ✅.
+Metal window creation adds `SDL_WINDOW_METAL | SDL_WINDOW_HIGH_PIXEL_DENSITY` only in the Metal
+selection branch, leaving other backend window flags unchanged.
+
+MSL is embedded in `MetalGraphicsBackend.mm` and compiled at runtime with
+`newLibraryWithSource:`. The CPU-side matrix, uniform, enum, vertex-layout, capability, format,
+sample, and stream-policy helpers remain plain C++ so they can be compiled and tested off Apple
+platforms. Historical MRT, MSAA, and custom-effect implementation scaffolding is not reachable
+through the supported contract and must not be re-enabled merely by changing a capability bit.
+
+## Validation
+
+Portable validation on Linux uses a stable in-repository HEADLESS build with `DISPLAY` unset:
+
+```sh
+env -u DISPLAY cmake -S . -B cmake-build-headless \
+  -DCNA_GRAPHICS_BACKEND=HEADLESS -DCNA_BUILD_TESTS=ON \
+  -DCNA_USE_CCACHE=ON -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+  -DCNA_MAX_VENDORED_BUILD_JOBS=2
+env -u DISPLAY cmake --build cmake-build-headless \
+  --target CnaTests cna_test_metal_portable -j4
+env -u DISPLAY ctest --test-dir cmake-build-headless -R '^Metal' \
+  --output-on-failure -j4
+```
+
+At the 2026-08-09 adaptation checkpoint, both targets built successfully and all 143 unique
+Metal-prefixed portable tests passed. CTest reports 144/144 because it registers those 143 tests
+individually and also registers the same set once as the `Metal_PortableHelpers` aggregate. The
+HEADLESS build graph contained no `MetalGraphicsBackend.mm` reference. A Linux configure with
+`-DCNA_GRAPHICS_BACKEND=METAL` failed at the intended macOS-only gate and never enabled
+Objective-C++.
+
+The helper-only sanitizer checkpoint used the stable `cmake-build-asan` directory, GNU C++ 14.2.0,
+`Debug`, HEADLESS, ccache, vendored job limit two, and these exact sanitizer flags:
+
+```text
+CMAKE_CXX_FLAGS=-fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=all
+CMAKE_EXE_LINKER_FLAGS=-fsanitize=address,undefined
+```
+
+`cna_test_metal_portable` built with `-j4` and passed 143/143 tests under
+`ASAN_OPTIONS=detect_leaks=1:halt_on_error=1:strict_string_checks=1` and
+`UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1`. Its registered aggregate passed 1/1, and a
+complete scan of the build, direct-test, and CTest logs found no AddressSanitizer,
+LeakSanitizer, UndefinedBehaviorSanitizer, or runtime-error diagnostic. The broader sanitizer
+`CnaTests` target is not evidence here: its link was stopped by an unrelated existing
+Headless/audio-harness `CNA::Logger::Warn` static-library ordering failure.
+
+These checks cover interface shape and portable logic, not Objective-C++ syntax, Apple framework
+linking, native Objective-C object lifetime, runtime MSL compilation, native resource validation,
+or pixels. The macOS workflow builds the backend with at most three parallel jobs, enables Metal
+validation, and runs the supported native smoke/capability checks plus the portable Metal suites.
+Its result is the remaining delivery gate.
+
+## Historical record
+
+`plan_metal.md` retains the original task-by-task narrative as historical evidence. It is not the
+current support matrix. `docs/metal-history-map.tsv` accounts for all 99 commits in the historical
+lane and maps the 88 chronological signed replays plus 11 documented omissions onto this
+adaptation.

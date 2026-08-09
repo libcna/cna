@@ -1,19 +1,65 @@
 # Native Metal Graphics Backend
 
-## Scope
+## Post-audit adaptation (2026-08-09)
 
-`METAL` is a native Apple Metal backend. SDL is used only for CNA's existing window lifecycle and
-`SDL_Metal_CreateView` / `SDL_Metal_GetLayer` platform glue. Rendering itself must never be routed
-through SDL_Renderer or SDL_GPU. Per `cmake/BackendSelection.cmake`'s own gate message ("METAL
-backend only builds when targeting macOS/iOS/tvOS"), the intended platform scope is all three Apple
-OS families, not macOS alone — see Phase 29 below, which this document's previous revision did not
-mention at all.
+This file preserves the historical `feature/metal` task narrative. Its older status rows and
+platform statements are evidence of what that lane attempted; they are not the current support
+matrix. The current contract and validation boundary are maintained in
+`docs/metal-backend.md`.
 
-**Status legend** (matches this project's established convention in `plan_dx3.md`/`plan_webgpu.md`):
-✅ implemented *and verified against its stated acceptance criteria* (a real CTest passing on the
-macOS CI job or a physical Mac); 🟨 code exists and is believed correct by source-level review, but
-has **not** been build- or runtime-verified — this Linux machine has no Apple toolchain, so nothing
-in this backend can honestly be marked ✅ from here; ⬜ not implemented.
+The adaptation onto `integration/post-audit-phase1` makes these binding decisions:
+
+- Metal remains a genuine direct Objective-C++/MSL backend; SDL3 supplies only the macOS window,
+  high-pixel-density Metal view, and `CAMetalLayer` integration.
+- Supported target: macOS only. iOS and tvOS have no build evidence and are rejected by the current
+  CMake platform gate.
+- The backend implements the current `IGraphicsBackend`, normalized render-target descriptor,
+  `BlendWriteState`, boolean transfer, `GpuDrawParams::vertexStreams`, and FNA-compatible
+  `fogVector` contracts.
+- MSAA, MRT, custom effects, multistream input, instancing, and backbuffer readback are deliberately
+  unsupported. Capabilities report false, requests clamp or throw deterministically, and known-
+  wrong pixels are never returned as successful output.
+- All current capabilities are enumerated explicitly; unknown values return false. Supported
+  formats and stream shapes are validated before native binding state is mutated.
+
+Historical GitHub Actions run `29814126178` at the latest production commit
+`e0f42426836ce9f2d4823d50732850877020aef1` built on macOS 14/Xcode 15.4 and passed 136 of 143
+tests. Six failures read only the clear color; the RenderTarget2D MSAA failure applied sample count
+four but produced a binary edge. The final four historical commits through
+`48928d113cb864f78d754256d2d559d914d4f1a7` changed only handoff/plan prose. No post-adaptation
+Objective-C++ compile or Mac runtime result exists yet, so the old run cannot be inherited as
+evidence for the adapted source.
+
+The chronological replay retained 88 signed commits and omitted 11 superseded, temporary-
+diagnostic, or handoff-only commits. `docs/metal-history-map.tsv` is the authoritative 99-row
+machine-readable disposition map, including the recreated commit for every retained original.
+
+Portable Linux evidence at this checkpoint: the stable HEADLESS `CnaTests` and dedicated portable
+Metal target build with `-j4`, all 143 unique `^Metal` tests pass with `DISPLAY` unset (CTest shows
+144/144 because it also runs the aggregate), the build graph contains no Objective-C++ source,
+and a Linux `METAL` configure fails at the intended macOS-only gate. The helper-only GNU 14.2
+ASan+UBSan target also passes 143/143 with no sanitizer finding in the complete logs; it does not
+cover Objective-C++ or native Metal lifetime. A fresh successful macOS workflow run remains
+mandatory.
+
+### Post-audit findings (continuing after `METAL-257`)
+
+The following IDs are new adaptation findings. They do not absorb, rename, or change the status of
+any historical task/finding below.
+
+| Finding | Severity | Evidence | Disposition |
+|---|---|---|---|
+| `METAL-258` — backbuffer readback returned successful clear-only pixels | High | Historical macOS run `29814126178`: PBR, SkinnedPBR, DrawUser VPC, SpriteBatch custom effect, MRT, and backbuffer MSAA read only the clear color. | **Supported contract disabled:** `ReadBackbuffer` throws `NotSupportedException`; readback-dependent native cases are not registered as supported gates. |
+| `METAL-259` — RenderTarget2D MSAA reported four samples without edge coverage | High | Run `29814126178` applied sample count four, but the diagonal edge was binary rather than partially covered. | **Supported contract disabled:** MSAA capability is false; backbuffer and render-target requests clamp and report zero. |
+| `METAL-260` — cached `CAMetalDrawable` lacked an owned reference | High | MRR source audit: the `nextDrawable` (+0) result was stored across calls and mid-frame command commits without retain/release ownership. | **Implementation fixed:** a portable-tested retained owner retains on acquisition, preserves ownership across non-presenting commits, and releases after present encoding plus commit. Native adapted-Mac validation remains pending. |
+| `METAL-261` — partial backend construction had no MRR rollback | Medium | Source audit: constructor throws after device/view/layer/queue acquisition (notably runtime MSL-library failure) destroy `impl_`, but the historical `Impl` had no destructor and the backend destructor never runs for a failed construction. | **Implementation fixed:** `Impl` now performs bounded, nil-safe cleanup for failure and normal teardown, releasing the drawable before the layer and destroying the SDL Metal view in order. Native adapted-Mac validation remains pending. |
+| `METAL-262` — default device was retained twice | Medium | `MTLCreateSystemDefaultDevice()` already contributes the create-rule +1 reference; the historical constructor immediately sent a second `retain`. | **Implementation fixed:** the redundant retain is removed. Create/`new*` results remain single-owned; only borrowed results retained beyond their call scope receive an explicit retain. Native adapted-Mac validation remains pending. |
+
+## Historical record below
+
+The historical legend was: ✅ meant verified against the acceptance criteria then in force; 🟨
+meant source-complete or partially exercised; ⬜ meant not started. Later evidence and the current
+conservative support boundary override those historical marks.
 
 ## 2026-07-19 revision — why this document changed
 

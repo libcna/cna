@@ -3,93 +3,85 @@ name: Native Metal backend (macOS)
 on:
   push:
     paths:
-      - 'src/CNA/Internal/Backends/Metal/**'
-      - 'include/CNA/Internal/Backends/Metal/**'
-      - 'tests/CNA/Internal/Backends/Metal/**'
-      - 'include/CNA/GraphicsBackendType.hpp'
-      - 'cmake/BackendSelection.cmake'
+      - '.github/workflows/metal-macos-ci.yml'
+      - 'CMakeLists.txt'
       - 'cmake/BackendLibraries.cmake'
+      - 'cmake/BackendSelection.cmake'
       - 'cmake/CnaLibrary.cmake'
       - 'cmake/Examples.cmake'
       - 'cmake/Tests/MetalTests.cmake'
+      - 'examples/metal_capabilities_test.cpp'
       - 'examples/metal_smoke_test.cpp'
-      - 'examples/metal_spritebatch_customeffect_test.cpp'
-      - 'CMakeLists.txt'
-      - '.github/workflows/metal-macos-ci.yml'
+      - 'include/CNA/GraphicsCapability.hpp'
+      - 'include/CNA/GraphicsBackendType.hpp'
+      - 'include/CNA/Internal/Backends/Common/IGraphicsBackend.hpp'
+      - 'include/CNA/Internal/Backends/Metal/**'
+      - 'include/Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp'
+      - 'src/CNA/Internal/Backends/Metal/**'
+      - 'src/Microsoft/Xna/Framework/Graphics/GraphicsDevice.cpp'
+      - 'tests/CNA/Internal/Backends/Metal/**'
+      - 'tests/Microsoft/Xna/Framework/GraphicsBackendCompileDefinitionTests.cpp'
   pull_request:
   workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: metal-macos-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   metal-build:
     runs-on: macos-14
+    timeout-minutes: 60
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout CNA
+        uses: actions/checkout@v4
         with:
           path: cna
-          submodules: true # non-recursive on purpose (DEV-BUILD-001, matching every other CI
-                            # workflow in this repo) -- initializes vendor/googletest and
-                            # third_party/SDL/SDL_image/SDL_mixer without their own nested
-                            # SDL_image/SDL_mixer codec submodules, which this project's CMake
-                            # args disable anyway
+          submodules: true
+
       - name: Checkout sharp-runtime sibling
         uses: actions/checkout@v4
         with:
           repository: openeggbert/sharp-runtime
           path: sharp-runtime
-          # TEMPORARY: pinned to a fix branch, not develop, until
-          # openeggbert/sharp-runtime#fix/clang-format-truncation-flag is merged -- develop's
-          # CMakeLists.txt unconditionally adds -Wno-format-truncation (a GCC-only diagnostic;
-          # Clang treats the unrecognized flag as a hard -Werror build failure under
-          # -Wunknown-warning-option), found via a real CI run compiling StoragePaths.cpp on this
-          # runner. Revert this `ref:` to develop's default once that branch merges.
-          ref: fix/clang-format-truncation-flag
-      - name: Install FFmpeg (Homebrew)
-        # cmake/CnaLibrary.cmake requires libavcodec/libavformat/libavutil/libswresample via
-        # pkg-config on every non-Windows/Emscripten/Android target (VideoPlayer decoding) --
-        # CLAUDE.md's own "System Dependencies (Linux)" section documents the apt-get equivalent,
-        # but this is the first macOS CI job in this repo, so there was no Homebrew install step
-        # yet. A single `ffmpeg` formula provides all 4 required pkg-config modules.
-        run: brew install ffmpeg
+
+      - name: Install build dependencies
+        run: brew install ccache ffmpeg
+
       - name: Configure native Metal backend
         working-directory: cna
-        # CMAKE_POLICY_VERSION_MINIMUM=3.5: third_party/enet/CMakeLists.txt (vendored, not a
-        # submodule) declares cmake_minimum_required(VERSION 2.6) -- tolerated as a deprecation
-        # warning by this project's usual CMake (3.31 on this Linux dev machine), but hard-rejected
-        # by CMake >=4.0, which this macos-14 runner's own toolchain provides (confirmed by a real
-        # CI run: "Compatibility with CMake < 3.5 has been removed from CMake", CMake's own
-        # suggested fix). Scoped to this workflow's own configure step rather than editing the
-        # vendored file, matching this plan's own stay-in-Metal's-lane discipline.
-        run: cmake -S . -B build-metal -DCNA_GRAPHICS_BACKEND=METAL -DCNA_BUILD_TESTS=ON -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+        run: >
+          cmake -S . -B cmake-build-metal
+          -DCNA_GRAPHICS_BACKEND=METAL
+          -DCNA_BUILD_TESTS=ON
+          -DCNA_USE_CCACHE=ON
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          -DCNA_MAX_VENDORED_BUILD_JOBS=2
+          -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+
       - name: Build native Metal backend
         working-directory: cna
-        run: cmake --build build-metal --parallel 3
-      - name: Run Metal tests
-        working-directory: cna/build-metal
-        # Anchored at the start so this also covers every plain-C++ logic extraction under
-        # include/CNA/Internal/Backends/Metal/ (MetalPipelineKey/MetalNormalMatrix/
-        # MetalPrimitiveVertexCount/MetalLogicalViewport/MetalMat4/MetalSelectPipelineKind/
-        # MetalUniformFill -- previously only real-build-verified on Linux HEADLESS, since they
-        # carry no CNA_BACKEND_METAL gate) in addition to Metal_Smoke, on real Apple hardware.
-        # An unanchored `-R Metal` also matches unrelated PbrEffectDefaultsTest.Metallic*/
-        # SkinnedPbrEffectDefaultsTest.Metallic* tests -- anchoring avoids that collision.
-        #
-        # METAL-218/229: MTL_SHADER_VALIDATION/MTL_DEBUG_LAYER are Apple's own runtime validation
-        # env vars, the Metal-side equivalent of Vulkan's VK_LAYER_KHRONOS_validation already used
-        # elsewhere in this project -- they surface real API misuse (out-of-bounds shader access,
-        # invalid resource binding, etc.) as clear diagnostics instead of silent undefined behavior
-        # or a hard-to-diagnose GPU hang. Set only for this step since they're read at runtime by
-        # whatever process creates the MTLDevice, not at compile/link time.
+        run: cmake --build cmake-build-metal --parallel 3
+
+      - name: Run supported Metal contract tests
+        working-directory: cna
         env:
-          MTL_SHADER_VALIDATION: "1"
-          MTL_DEBUG_LAYER: "1"
-        run: ctest -R "^Metal" --output-on-failure
-      - name: Run backend compile-definition sanity check
-        working-directory: cna/build-metal
-        # METAL-232: GraphicsBackendCompileDefinitionsTest.ExactlyOneGraphicsBackendIsSelected
-        # asserts exactly one CNA_BACKEND_* macro is defined -- doesn't match the `^Metal` filter
-        # above (its own name doesn't start with "Metal"), but is exactly the kind of check a real
-        # CNA_GRAPHICS_BACKEND=METAL build needs to actually exercise: a missing #ifdef
-        # CNA_BACKEND_METAL branch in this test was found and fixed on 2026-07-20 by reading the
-        # source alone (this file's own comment already documents an identical past gap for
-        # CNA_BACKEND_D3D9), but was never actually run under a real METAL build until this step.
-        run: ctest -R "GraphicsBackendCompileDefinitionsTest" --output-on-failure
+          MTL_SHADER_VALIDATION: '1'
+          MTL_DEBUG_LAYER: '1'
+        run: >
+          ctest --test-dir cmake-build-metal
+          -R '^Metal'
+          --output-on-failure
+          --parallel 3
+
+      - name: Run backend compile-definition control
+        working-directory: cna
+        run: >
+          ctest --test-dir cmake-build-metal
+          -R '^GraphicsBackendCompileDefinitionsTest\.'
+          --output-on-failure
+          --parallel 3
