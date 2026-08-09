@@ -392,27 +392,14 @@ target_link_libraries(CNA INTERFACE
 # Modularization note: the reverse edges land on the specific modules that define the symbols
 # (Effect/VertexDeclaration/DxtUtil -> cna_graphics_core, Logger -> cna_core, named math/colour
 # values -> cna_math) instead of the former monolith; the declared cycle semantics are unchanged.
-if(CNA_GRAPHICS_BACKEND STREQUAL "D3D11"
-   OR CNA_GRAPHICS_BACKEND STREQUAL "D3D12"
-   OR CNA_GRAPHICS_BACKEND STREQUAL "D3D9"
-   OR CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU"
-   OR CNA_GRAPHICS_BACKEND STREQUAL "SOKOL"
-   OR CNA_GRAPHICS_BACKEND STREQUAL "DILIGENT"
-   OR CNA_GRAPHICS_BACKEND STREQUAL "SDL_RENDERER"
-   OR CNA_GRAPHICS_BACKEND STREQUAL "ASCII"
-   OR CNA_GRAPHICS_BACKEND STREQUAL "FREEDIRECT"
-   OR CNA_GRAPHICS_BACKEND STREQUAL "CANVAS"
-   OR CNA_GRAPHICS_BACKEND STREQUAL "SOFTWARE"
-   OR CNA_GRAPHICS_BACKEND STREQUAL "HEADLESS"
-   OR CNA_GRAPHICS_BACKEND STREQUAL "OPENGLES"
-   OR CNA_GRAPHICS_BACKEND STREQUAL "OPENGL33"
-   OR CNA_GRAPHICS_BACKEND STREQUAL "WEBGL1"
-   OR CNA_GRAPHICS_BACKEND STREQUAL "WEBGL2"
-   OR CNA_GRAPHICS_BACKEND STREQUAL "GDI"
-   OR CNA_GRAPHICS_BACKEND STREQUAL "METAL"
-   OR CNA_GRAPHICS_BACKEND STREQUAL "LLGL")
-    target_link_libraries(${BACKEND_TARGET} PRIVATE cna_graphics_core cna_core cna_math)
-endif()
+# Modularization note: the reverse edge was historically declared only for the 19 backends where
+# a single-pass link failure had been OBSERVED -- the monolith masked it elsewhere because some
+# earlier-needed object in libCNA.a always happened to pull Logger.cpp.o (and friends) before the
+# backend archive created the reference. The header-inlined IGraphicsBackend defaults
+# (HandleUnsupported3DCall -> CNA::Logger::Warn, the default instanced-draw guard, ...) give EVERY
+# backend the same structural reverse edge, and the module split surfaces it deterministically
+# (first hit for real: VULKAN's cna_reference_dump link). Declared unconditionally.
+target_link_libraries(${BACKEND_TARGET} PRIVATE cna_graphics_core cna_core cna_math)
 
 # D9-112: D3D9GraphicsBackend::CreateEffectBackend() (below) needs to construct a real
 # D3D9EffectBackend, so ${BACKEND_TARGET} now links the isolated, d3dcompiler-carrying
