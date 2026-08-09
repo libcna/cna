@@ -1,24 +1,1686 @@
 # NEXT.md
 
-## CURRENT — `feature/audit` post-audit remediation **phase-1 checkpoint TAKEN** (2026-08-04)
+## FINAL RECONCILIATION — **BLOCKED FOR DEVELOP MERGE** (2026-08-09)
 
-> **STATUS: OUTCOME A — READY. Checkpoint-blocker set is EMPTY.**
-> Signed annotated tag **`cna-post-audit-remediation-phase1`** on `feature/audit`, **local only,
-> not pushed**. **This is phase 1, not the completion of all CNA work.**
+The post-audit integration campaign remains complete at **21/21 accepted lanes, 0 pending**, with
+Batch 0 through Batch 6 checkpoint history intact and **41 public renderer identities**. Final
+campaign-wide stabilization did not authorize a `develop` merge because the current candidate has
+three reproducible gate failures grouped into one bounded follow-up task, **`FINAL-STAB-001`**:
 
-**Read first:** `remediation/REMEDIATION_EXIT.md` (authoritative exit record) and
-`remediation/INTEGRATION_BRANCH_INVENTORY.md` (**21 logical lanes**, re-derived after a fetch).
+1. restore the accepted 32-bit Windows Glide compile boundary by removing or correctly gating the
+   unsupported `__int128` use reached from current `sharp-runtime` under i686 MinGW;
+2. correct the canonical sanitizer target's static-library link order so
+   `cna_audio_mixer_destroy_active_dynamic_voice_harness` links without a build-tree-only rescan
+   workaround; and
+3. close `REMED-GFX-221`, which strict ASan initialization-order checking now reproduces before
+   test execution in `GestureDetector.cpp`.
 
-### The next single task — freeze Direct2D, then begin integration preparation
+After those three exact repairs, rerun the bounded Glide build, strict ASan+UBSan corpus, principal
+native smoke matrix, and read-only `develop` merge simulation. Do **not** merge into `develop`
+before that retake. The external MetaGL/EasyGL rewrite has already happened and is accepted; no
+further history rewrite or force-push is planned. Modularization and all future renderer expansion
+remain future work and have not begun. The complete evidence is in
+`integration/FINAL_RECONCILIATION.md`.
 
-**Do not begin branch integration yet.** `feature/direct2d` is the **final actively-developed lane**:
-its head moved from `f6edeb7c` to `6cd6ad06` *during* the exit-reconciliation session, last commit
-`2026-08-04T11:27:08Z`, and its local ref is 34 commits ahead of `origin`. Integrating a moving
-branch converts one adaptation into a recurring one.
+## CURRENT — **`metal` READY / INTEGRATED ✅ · BATCH 6 CHECKPOINT COMPLETE ✅** · 21 integrated / 0 pending (2026-08-09, `debian`)
 
-**Entry conditions before the first adaptation branch** (inventory §8.4): the checkpoint tag exists
-(done), Direct2D is frozen at an owner-confirmed head, the lane's archive tag is created, and its
-`GpuDrawParams` adaptation is planned per §10 below.
+> **Metal landed as signed `--no-ff` merge `012b158eb8246ce267887acbd4fc7a2468d89e52`**
+> with parents `4ac696c748fb18eef7dd06cca82a0486549bcd5d` and
+> `e2ffe7290ddf5aab5c211b1fc2c00f0e09bd42f1`; the merge and adaptation trees are byte-identical
+> at `31200b608cd2a4c8ccd0f7cb9d6325540cec9458`. The unchanged original local and remote
+> `feature/metal` head `48928d113cb864f78d754256d2d559d914d4f1a7`, based at `ac3aaaeb`, remains
+> preserved by the sole signed annotated `archive/preintegration/metal-20260804` tag (object
+> `43f6eab8d40c6006265cd4e19223cdd3d68c1fc3`, GPG-good). Full record:
+> `integration/lanes/metal.md`.
+>
+> **History and adaptation.** The 99-row history map retains 88 original commits as signed
+> chronological replays and records 11 omissions: five temporary diagnostics, two superseded
+> changes, two changes already integrated, and two session handoffs. Replay range-diff is
+> **76 `=` / 12 `!` / 11 omitted**. Six post-audit commits close or conservatively disable
+> `METAL-258` through `METAL-281`, producing 94 signed adaptation commits at `e2ffe7290`.
+> Together with the merge, the final Metal range is 95/95 GPG-good and Robert-authored/committed;
+> attribution and trailer sweeps are empty.
+>
+> **Identity and support boundary.** `METAL` is CNA's genuine 41st public backend, direct native
+> Objective-C++/MSL over Metal/QuartzCore/Foundation with SDL3 used only for the macOS window,
+> high-pixel-density Metal view, and `CAMetalLayer`. There is no SDL_Renderer, SDL_GPU, or other
+> renderer fallback. The supported target is macOS only; iOS/tvOS are unvalidated and rejected,
+> and no minimum macOS deployment target is claimed. ThreeD, DepthStencilBuffer,
+> AnisotropicFiltering, WireFrame, Texture3D storage, StencilBuffer, and AdditiveBlending report
+> true. MSAA, MRT, OcclusionQuery, CustomEffects, MultiStreamVertexInput, and Instancing report
+> false and reject or clamp deterministically. Backbuffer readback throws rather than returning
+> the historically known-wrong clear-only pixels.
+>
+> **No-Mac evidence boundary.** Historical Actions run `29814126178` built the latest production
+> commit `e0f424268` on macOS 14/Xcode 15.4 with Metal validation and passed **136/143**. Six
+> failures returned only the clear color; `Metal_RenderTarget2D_MSAA` separately applied four
+> samples but produced a binary edge. That run predates the adapted interfaces and support
+> narrowing, so it is historical evidence only. No adapted Objective-C++ compile, native link,
+> MSL compile, resource-lifetime run, or pixel result exists. A fresh successful macOS workflow
+> remains the external support-confidence boundary, not an integration blocker under the
+> authorized source-continuity policy.
+>
+> **Current validation.** Stable HEADLESS/ccache builds pass **206/206** unique portable Metal
+> tests and **207/207** `ctest -R '^Metal'` registrations (the aggregate is the extra entry), with
+> `DISPLAY` unset and no Objective-C++ in the graph. GNU 14.2 ASan+UBSan passes 206/206 with no
+> sanitizer diagnostic in the complete log. Non-Darwin `METAL` configure rejects at the intended
+> macOS-only gate. Post-merge OPENGLES/EasyGL controls are **124 pass + 1 intentional skip** and
+> **2/2** real render-target/readback/viewport-scissor checks; LLGL continuity is **48/48 + 3/3**.
+> Every build used stable in-repository directories, ccache, vendored job limit two, and `-j4` or
+> lower.
+>
+> **Findings and safety.** `METAL-258/-259/-266` close by truthful feature disablement;
+> `METAL-260` through `-265`, `-267` through `-280`, and retained-resource boundary `-281` close
+> through implementation plus portable policy/oracle coverage. Native proof remains external
+> where the lane card says so. Public Texture wrappers are not claimed safe after their
+> `GraphicsDevice`; the lifetime guarantee is limited to independently retained backend handles
+> and native resources. `audit/` remains tree `168c9b668763b78e63106e27d942a76d2457f41d`; the
+> four protected stash objects and all original lane refs/tags remain unchanged; nothing was
+> pushed.
+>
+> **Batch 6 / campaign boundary.** Group G is now **4/4** (Skia, Direct2D, LLGL, Metal) and the
+> authoritative inventory is **21/21 integrated, 0 pending**. Technical stabilization is READY.
+> The fresh checkpoint retake passed and signed annotated tag
+> `integration/checkpoint-batch6-20260809` was created once without force with exact message
+> `CNA integration Batch 6 checkpoint`. Annotated tag object
+> `8d347c933a3da3c39f22711e40e80cf7a29c4682` peels to `012b158e`; `git tag -v` exits 0 with a Good
+> signature from Robert Vokac under fingerprint
+> `255C69CC1D09CA54EF0CC9DFFB9CE8E20AADA55F`. The tag is local only and nothing was pushed.
+> **Batch 6 checkpoint status: COMPLETE.** This does not itself claim final campaign or `develop`
+> readiness; that is a separate owner decision after the external Metal boundary and campaign-wide
+> review.
+
+## Previous — **`llgl` READY / INTEGRATED ✅** · 20 integrated / 1 pending (2026-08-09, `debian`)
+
+> **LLGL landed as signed `--no-ff` merge `4ac696c748fb18eef7dd06cca82a0486549bcd5d`**
+> with parents `21b1fcd1` and `c74fbaeb`. The unchanged original `feature/llgl` head
+> `fa26e72dcda612de2a8cff814e748c7479e45836`, based at `1eb22c11`, remains preserved by the sole
+> signed annotated `archive/preintegration/llgl-20260804` tag. `adapt/llgl` contains 69 signed
+> commits: all 68 meaningful historical commits replayed chronologically plus one stabilization
+> commit, head `c74fbaebb93745de08130d050e11230639df3259`. Range-diff accounts every commit 1:1
+> (20 `=`, 48 `!`); 47 non-equal pairs include patch/context adaptation, 47 include required author
+> cleanup, and 46 overlap. Author dates and technical subjects match, and attribution/trailer
+> sweeps are empty. Full record: `integration/lanes/llgl.md`.
+>
+> **The i686 blocker is classification A, non-gating.** The exact compiler failure is
+> `sharp-runtime/include/System/Int128.hpp:31:9: error: expected unqualified-id before '__int128'`
+> from `i686-w64-mingw32-g++`, first reached through `BitConverter.cpp`. The only concrete preserved
+> CNA route is Glide's required x86 ABI probe. Historical CNA LLGL has no i686/Windows/MinGW route,
+> test, option or public contract; it is Linux/X11 native x86_64. Upstream LLGL's Win32/MSVC support
+> does not create one. Owner disposition: preserve the record, leave sharp-runtime unchanged, and
+> validate LLGL on its truthful x86_64 route.
+>
+> **Identity and runtime.** `LLGL` is CNA's genuine 40th public backend identity. The supported
+> chain is CNA LLGL -> pinned LLGL `Release-v0.04b`
+> (`1e78d8fa497f5cab76b231ba13f4d6249dac0e7e`) OpenGL RenderSystem -> native OpenGL/GLX on
+> Linux/X11 x86_64. OpenGL is required and is the only automatic/supported renderer. Vulkan remains
+> compile coverage but explicit selection rejects after native validation exposed descriptor,
+> image-layout and teardown violations. Null is explicit lifecycle diagnostics only. There is no
+> silent fallback or extra public identity for an internal LLGL module.
+>
+> **Truthful boundary.** 3D, depth, MRT in the documented 2-4 `RenderTarget2D` SpriteBatch/custom-
+> effect scope, anisotropy where reported, occlusion, custom SpriteBatch effects, Texture3D
+> transfer, wireframe where reported and Additive are supported. Back-buffer MSAA, stencil,
+> multistream, instancing, constant blend factor and non-zero depth bias are false/rejected.
+> TextureCube is exact transfer-only storage; cube sampling and RenderTargetCube reject. Mip-MRT
+> and cube-face MRT compositions reject. The current stream arrays remain authoritative; the one
+> geometry stream honours `VertexOffset`, `vertexStart`, `startIndex` and `baseVertex`.
+>
+> **Validation.** Debug x86_64/ccache builds compile LLGL Null/OpenGL/Vulkan at `-j4` maximum.
+> Dedicated LLGL CTest on Xvfb `:98` is **145 registered / 137 passed / 8 disabled / 0 failed**;
+> full `CnaTests` is **5210 / 5203 passed / 7 skipped / 0 failed**. ASan+UBSan are proven linked and
+> pass **9/9** strict focused controls; LeakSanitizer's 482104 bytes/2147 allocations root in pinned
+> LLGL/SDL/Mesa GLX visual selection, not CNA. OPENGLES/EasyGL passes **9/9 + 15/15**, including
+> cache isolation; accepted Direct2D passes **4/4**. Every final runtime gate used dedicated Xvfb
+> with explicit X11. An earlier accidental `DISPLAY=:0` run opened windows on the owner's desktop;
+> it was acknowledged, discarded as final evidence and not repeated.
+>
+> **Findings and carried state.** `LLGL-48/-52` are resolved; `LLGL-53/-54` close by measured
+> implementation or deterministic narrowing. New `LLGL-57` (first-frame swap-chain extent drift)
+> and `LLGL-58` (zero-count clear-value pointer reaching pinned LLGL UB) are resolved without a
+> dependency patch. `REMED-GFX-223` remains resolved; `REMED-GFX-224` remains MEDIUM/OPEN;
+> `REMED-CONTENT-007/-008/-011`, `REMED-BUILD-019`, and `D2D-134/-135/-136` retain their accepted
+> states. `audit/` is untouched.
+>
+> **Group result.** Batch 6 / Group G remains exactly Skia, Direct2D, LLGL and Metal. The first
+> three are integrated, so Group G is **3/4** and the inventory is **20/21**. Metal alone remains
+> pending and did not begin. No Group G checkpoint is defined or eligible while Metal remains, and
+> none was created. Recommended next action: Metal, respecting its no-Mac validation boundary. Do
+> not begin it from this record.
+
+## Previous — **`direct2d` READY / INTEGRATED ✅** · 19 integrated / 2 pending (2026-08-08, `debian`)
+
+> **Direct2D landed as signed `--no-ff` merge `7af760bee`** with parents `c805fd73` and
+> `1b740d96`; the merge and `adapt/direct2d` trees are byte-identical. The unchanged original
+> `feature/direct2d` head `9b17e783`, based at `a7a49e3d`, remains preserved by the sole signed
+> `archive/preintegration/direct2d-20260804` tag. The adaptation contains 55 signed commits:
+> 48 chronological replays plus seven current-contract, test, documentation, and finding commits.
+> Range-diff is 44 exact pairs plus four explained semantic adaptations; original author, email,
+> date, subject, and body sequences match. Signed documentation-only `D2D-54` precision commit
+> `21b1fcd17` is the current integration head. Full record: `integration/lanes/direct2d.md`.
+>
+> **Bounded owner authorization.** The historical owner freeze is preserved as history and the
+> original ref was not modified. Its exact frozen plan recount was 128 rows = 32 complete + 35
+> yellow + 61 blank, therefore **96 incomplete**, not the stale 88. Recorded freeze reasons are
+> classified and disposed on the lane card; no unrecorded motive is invented. The remaining plan
+> rows are explicitly native/external evidence, stronger fault coverage, or nonblocking
+> process/performance/refactor work—not a concealed supported-path production defect.
+>
+> **Implementation.** `DIRECT2D` is CNA's genuine 39th public backend identity: Windows-only
+> Direct2D 1.1 `ID2D1DeviceContext` application drawing, with D3D11 BGRA and DXGI 1.2 used only for
+> device/surface/swap-chain presentation. There is no GDI, Software, SDL Renderer, EasyGL, D3D, or
+> other-backend fallback; DirectWrite and WIC are unused. SDL3 supplies the HWND. Sprite, viewport,
+> and scissor coordinates are logical framebuffer pixels, not Windows DIPs; forced 96 DPI makes
+> D2D units numerically equal to target pixels, then presentation maps them to client pixels.
+>
+> **Truthful boundary.** Only `AnisotropicFiltering` is true in the exhaustive 13-capability
+> switch. Direct2D remains 2D/SpriteBatch-only. Unsupported 3D, depth/stencil, MSAA, MRT,
+> wireframe, queries, custom effects, Texture3D, multistream, instancing, Additive, mipmapped RTs,
+> unsupported formats, and active-RT presentation reject deterministically. Texture2D authored
+> mips/MipLinear, single Color RT level zero, RGBA↔BGRA pitch-aware upload/readback, supported
+> alpha modes, viewport/scissor, transforms, resize, recovery, and lifetime are covered.
+>
+> **Validation.** MinGW GCC 14 x64 Release built the four Direct2D targets at `--parallel 2`.
+> Wine 10.0/Xvfb passed **4/4**: Smoke 2.43 s, Parity 4.04 s, Lifetime 2.67 s, Unit 1.97 s;
+> unit subset **19/19**. Post-D2D-136 focus passed 26/26. OPENGLES/EasyGL identity/capability and
+> exact textured-pixel controls, GDI Wine smoke, and HTML DOM host **57/57** passed. Native
+> Windows built-in-effect/composite, physical display/DPI/capture, adapter/debug-layer/live-object,
+> and longer performance/soak evidence remain external. Wine is not called physical Windows.
+>
+> **Findings and carried state.** `REMED-BUILD-019`, `D2D-134`, `D2D-135`, and `D2D-136` are
+> resolved. D2D-82's flipped-origin transform is fixed with an eight-point pixel oracle;
+> D2D-78's flawed NPOT RT mip generator is removed behind tested rejection. `REMED-GFX-223`
+> remains resolved and shared Texture2D authority code is unchanged. `REMED-GFX-224` remains
+> **MEDIUM/OPEN**. `REMED-CONTENT-007/-008/-011` remain DONE; `audit/` is untouched.
+>
+> **Group result.** Authoritative Batch 6 / Group G remains exactly `direct2d`, `llgl`, `metal`,
+> `skia` (4 lanes / 356 historical commits). Skia and Direct2D are integrated, so it is **2/4**.
+> Pending is exactly `llgl` and `metal`; neither began. Direct2D alone does not complete the group,
+> `INTEGRATION_ORDER.md` defines no Batch 6/per-Direct2D checkpoint, and **no checkpoint was
+> created**. Next action: owner decision on the next remaining lane. Do not begin it from this
+> record.
+
+## Previous — **BATCH 5 CHECKPOINT READY ✅ · SIGNED LOCAL TAG TAKEN** · 18 integrated / 3 deferred pending (2026-08-08, `debian`)
+
+> **The required checkpoint retake passed.** `REMED-CONTENT-007` and `REMED-CONTENT-008` are DONE
+> with independent Song, Video, and ContentManager public-caller evidence; bounded same-pattern
+> finding `REMED-CONTENT-011` is also DONE. Signed integration test/fix commits `2d795473` and
+> `c805fd73` move `integration/post-audit-phase1` from `24bf4786` to `c805fd73` without changing a
+> Graphics/backend/audit path.
+>
+> **Containment result.** Embedded/manifest references must be non-empty and relative; POSIX
+> absolute, Windows drive/root/UNC, deep traversal, sibling-prefix, and existing-symlink escapes
+> reject before file access. `.`, repeated/mixed separators, and `..` that normalizes inside remain
+> accepted; ordinary filenames containing `..` remain valid. In-root paths retain normalized
+> root-relative cache identity. Explicit external Content/media bundles retain their established
+> API but are confined to their own bundle. Existing-symlink checking is not claimed as a
+> race-proof filesystem sandbox.
+>
+> **Validation.** Final integration HEAD passes containment **46/46**, relevant
+> Content/Song/Video **116/116**, Glide portable **78/78**, and the exact HTML DOM native host target
+> **57/57**, with ASan + UBSan linked and LeakSanitizer enabled. No CNA-originating report. The
+> accepted GDI 19/19 Wine record remains intact; no lane was reopened. Four stash IDs and the
+> `audit/` tree hash are unchanged; 18 first-parent lane merges remain; no nineteenth lane began.
+>
+> **Checkpoint.** Local signed annotated tag `integration/checkpoint-batch5-20260808`, object
+> `307c9ad511015c64ce55184cdf0d5ebd7b1cb575`, peels to
+> `c805fd737f4321568fba378e8d1b8fe5b5270666` and verifies Good. Nothing was pushed. Full records:
+> `integration/BATCH_5_STABILIZATION.md` §7 and `remediation/REMEDIATION_PROGRESS.md`.
+>
+> **Next in the authoritative order is Direct2D, but Batch 6 / Group G remains unscheduled and
+> requires the recorded owner decision.** Do not begin Direct2D, LLGL, or Metal without that
+> decision. None was begun by this retake.
+
+## Previous — **`html-dom` ACCEPTED ✅ · BATCH 5 COMPLETE 3/3 · CHECKPOINT BLOCKED** · 18 integrated / 3 pending (2026-08-08, `debian`)
+
+> **HTML DOM landed as signed `--no-ff` merge `24bf4786`** with parents `ba5fa601` and
+> `a32977f3`; the merge and `adapt/html-dom` trees are byte-identical. Original branch
+> `claude/html-dom-cna-backend-xefzwf` remains unchanged at `8e4e4293`, based at `f5645c64`; its
+> sole signed annotated archive still peels exactly to that head. The adaptation is 50 signed
+> linear commits: 49 chronological meaningful replays plus one post-audit stabilization commit.
+> Six pure Canvas commits and the Canvas-only hunk of one mixed commit were omitted and fully
+> accounted for. Full records: **`integration/lanes/html-dom.md`** and
+> **`integration/BATCH_5_STABILIZATION.md`**.
+>
+> **Implementation.** Public identities move token-exact **37 → 38**, adding only genuine
+> `HTML_DOM`. This Emscripten-only 2D backend uses pooled browser `<div>` elements and CSS to
+> composite the backbuffer over the SDL canvas, private Canvas2D surfaces for bounded
+> `RenderTarget2D`, and handwritten `EM_JS` glue. It is not a Canvas, WebGL, EasyGL, Software, or
+> Stub alias and has no fallback. Unsupported resource, 3D, effect, render-target, state, sampler,
+> and blend variants reject deterministically.
+>
+> **Runtime and validation.** This host has no Emscripten or Node toolchain, so no adapted-browser
+> rebuild/run is claimed. Current native host contracts pass **57/57**, including **57/57** with
+> linked ASan/UBSan and leak detection. The unchanged implementation retains the original lane's
+> recorded real-browser smoke 69/69, pixel 35/35, stress 10/10, dispose 17/17, host-integration
+> 2/2, memory 6/6, and GTest 54/54 evidence. OPENGLES/EasyGL continuity is **109 pass + 1
+> intentional skip**; seven focused GDI executables exit 0 through Wine/Xvfb; Glide unit,
+> capability, and i686 fake-ABI controls pass; Diligent, Skia, and Sokol changed capability units
+> compile under their own backend definitions. `REMED-GFX-223` cache controls remain green.
+>
+> **Semantics and lifetime.** CNA top-left coordinates map to CSS pixels; per-batch viewport,
+> scissor regions, shared sorting, Immediate per-draw flush, z-order, transforms, presentation
+> modes, resize, texture pitch, RGBA8 conversion, alpha/blend subset, owner-scoped texture-variant
+> LRU, sprite-pool shrink/regrowth, multi-device teardown, and event-listener cleanup are explicitly
+> bounded and documented. There is no direct DPR query, so DPR>1 is not independently claimed.
+> Custom effects/blends, live-DOM backbuffer readback, depth/stencil, MSAA, MRT, 3D, instancing,
+> multistream, wireframe, and anisotropic filtering remain unsupported and truthful.
+>
+> **Findings.** `HTMLDOM-121/-122/-123` are resolved; no HTML DOM supported-path defect remains.
+> `REMED-GFX-223` remains resolved, `REMED-GFX-224` remains MEDIUM/OPEN, and all other carried
+> findings keep their existing IDs/states. No shared Texture2D authority code changed.
+>
+> **Batch result.** Batch 5 remains exactly `glide` → `gdi` → `html-dom`; all three are accepted
+> and technical stabilization passes. The inventory is **18/21**, with only `direct2d`, `llgl`, and
+> `metal` pending. No nineteenth lane began.
+>
+> **Checkpoint decision: BLOCKED, no tag.** `INTEGRATION_ORDER.md` explicitly requires the still-
+> open HIGH/P1 `REMED-CONTENT-007/-008` path-containment findings to close before the Batch 5
+> checkpoint. They are outside this lane and this session's allowed scope, so
+> `integration/checkpoint-batch5-20260808` was not created. **Exactly one next task:** close those
+> two findings together as the existing bounded Content safety task, then retake the checkpoint
+> decision. Do not start that task or any later graphics lane from this record.
+
+## Previous — **`gdi` ACCEPTED ✅ · BATCH 5 OPEN 2/3** · 17 integrated / 4 pending (2026-08-08, EliteBook 840 G9)
+
+> **GDI landed as signed `--no-ff` merge `ba5fa601`** with parents `677f4c59` and `625f4ad5`;
+> the merge and `adapt/gdi` trees are byte-identical. The unchanged original `feature/gdi` head is
+> `adc9cc2a`, based at `a7a49e3d`; its sole signed annotated archive
+> `archive/preintegration/gdi-20260804` still peels exactly to that head. The adaptation is 43
+> signed linear commits: 34 chronological replays plus 9 follow-ups. All 34 map 1:1 by range-diff
+> (18 `=`, 16 `!`) with matching author/name/email/date/subject metadata and no omission. Full
+> record: **`integration/lanes/gdi.md`**.
+>
+> **Implementation.** This is the Windows-only private CPU Software-2D core presented to a Win32
+> `HWND` through classic `SetDIBitsToDevice`/`StretchDIBits`. It has no GDI+, D2D, D3D, GL, or SDL
+> Renderer fallback. True capabilities are exactly `StencilBuffer`, `WireFrame`, and
+> `MultiSampleAntiAliasing`; 3D, aggregate depth/stencil, MRT, anisotropic filtering, occlusion,
+> custom effects, Texture3D, multistream, and instancing remain false. PBR is unsupported and is not
+> a capability-enum member.
+>
+> **Validation.** Historical and current focused GDI matrices both pass **19/19** through Wine;
+> current evidence is x64 MinGW GCC 14 Release plus Wine 10/Xvfb. The genuine PE32 i386 allocation
+> planners pass **12/12**; this is planner-only i686 evidence. Native Software ASan/UBSan selected
+> 151 tests (**149 pass + 2 intentional skips**, zero CNA report), with standalone effects 7/7,
+> Additive 29/29, scissor 44/44, render-target 102/102, viewport 19/19, and Texture2D 40/40.
+> Leak detection was disabled only because the supervising ptrace boundary makes LeakSanitizer
+> unusable. EasyGL runtime controls pass 8/8 and `CnjCacheIsolationTest` 2/2; DX3 passes 1/1; Sokol
+> passes 3/3; Diligent, Skia, and Glide current-source probes are compile-only and pass. No physical
+> Windows or native-MSVC result is claimed. All compilation was explicitly bounded at two jobs or
+> fewer; final current-tree runs used one job under `CPUQuota=50%`.
+>
+> **Pixel and lifetime result.** Tight top-down RGBA8 reaches a negative-height 32-bit
+> `BI_BITFIELDS` DIB with explicit RGB masks. Odd widths, pitch, asymmetric channels, orientation,
+> dirty clipping, and short-stride retention pass. Alpha is consumed by CPU blending and the final
+> presentation is opaque `SRCCOPY`. No persistent HDC/HBITMAP is retained; repeated cleanup and
+> injected `GetDC`/`CreateDIBSection`/`SelectObject` failures pass. `GetGuiResources` skipped under
+> Wine, so physical-Windows kernel-object leak absence is not claimed.
+>
+> **Findings.** New `REMED-GFX-229` through `-233`, `REMED-BUILD-017/-018`, and GDI-054 lifetime
+> hardening are resolved for their automated scope. GFX-233 was pre-existing at the integration
+> base and is closed by the narrow empty-declaration persistent-buffer fallback; declared,
+> multistream, and instanced authority remains intact. No unresolved supported-path GDI defect
+> remains. `REMED-GFX-223` is preserved; `REMED-GFX-224` remains MEDIUM/OPEN; `-225` through
+> `-228` remain resolved; `REMED-CORE-015` and `REMED-CONTENT-010` remain LOW/OPEN.
+>
+> **Batch status.** Batch 5 remains exactly `glide` → `gdi` → `html-dom`: Glide and GDI are accepted,
+> HTML DOM is pending, and no Batch 5 checkpoint exists. Pending lanes are `html-dom`, `direct2d`,
+> `llgl`, and `metal`. **Next is Batch 5 / HTML DOM; do not start it from this reconciliation.**
+
+## Previous — **`glide` ACCEPTED ✅ · BATCH 5 OPEN 1/3** · 16 integrated / 5 pending (2026-08-08, EliteBook 840 G9)
+
+> **Glide landed as signed `--no-ff` merge `677f4c59`**; integration moved
+> `0a51f8647` → `677f4c59`. `adapt/glide` is `e891e105` (32 chronological signed replays plus one
+> signed stabilization commit) and its tree is byte-identical to the merge. `feature/glide` remains
+> unchanged at `2f9b47e1`; annotated archive `archive/preintegration/glide-20260804` still peels to
+> that exact head and verifies good. Nothing was pushed; `audit/` and the four stash objects remain
+> unchanged. Full record: **`integration/lanes/glide.md`**.
+>
+> **Identity and runtime.** Public identities move token-exact **35 → 36**, adding only `GLIDE`.
+> This is CNA's native 32-bit 3dfx Glide 3.x ABI path, dynamically loading a caller-supplied
+> `glide3x.dll`; no OpenGL, EasyGL, SDL_Renderer, or software fallback exists. CNA has no linked
+> Glide dependency and pins no emulator. No physical Voodoo hardware or compatibility runtime was
+> available, so production rendering is truthfully **build-only/runtime unavailable**. The x86
+> fake DLL is a 39-export ABI test double under Wine, not an emulator or rendering oracle.
+>
+> **Adaptation.** Three conflict stops produced 10 file-conflict events across 9 unique files.
+> Current stream-array `GpuDrawParams`, folded ordinary `VertexOffset`, indexed `startIndex`/
+> `baseVertex`, declaration validation, duplicate-semantic rejection, deferred lifetime, and
+> Texture2D cache authority were preserved. Shared production changes are additive default sampler
+> mip and depth/stencil-plane hooks plus their `GraphicsDevice` routing and `ClearOptions`
+> complement. `Texture2D` is byte-identical to the prior integration tree.
+>
+> **Findings.** `REMED-GFX-226` (TMU1 ignored sampler slot 1), `REMED-GFX-227` (deferred sprites
+> could survive texture/device teardown), and `REMED-GFX-228` (TMU1 preparation could evict the
+> already-validated TMU0 texture) are MEDIUM and resolved in-lane. `REMED-GFX-224` remains OPEN;
+> `REMED-GFX-225` remains RESOLVED; `REMED-CORE-015` and `REMED-CONTENT-010` remain LOW/OPEN.
+>
+> **Validation.** Historical baseline: 65/65 portable tests plus the fake ABI contract; full i686
+> CNA configuration blocked in the sibling dependency path (missing i686 ZLIB, then the accepted
+> `sharp-runtime` `__int128` target limitation). Adapted: 78/78 portable, 13/13 shared contracts,
+> 39-export ABI contract, whole-backend i686 syntax, 78/78 with linked ASan/UBSan and leak detection,
+> and five serial OPENGLES Xvfb pixel/state controls. No Glide image result is claimed.
+>
+> **Batch status.** Batch 5 membership remains exactly `glide` → `gdi` → `html-dom`; GDI and HTML
+> DOM remain pending, so no Batch 5 checkpoint was created. No seventeenth lane began.
+>
+> **Procedural reconciliation.** The historical SDL helper violated the explicit bounded-parallelism
+> rule by invoking `cmake --build … --parallel` without a job count; actual parallelism at or below
+> eight cannot be claimed. Classification B is accepted as a recorded process deviation because
+> the operation supplied only original-branch dependency/configure baseline evidence. Later
+> monitored `-j4` builds independently supplied every final Glide engineering gate. The next lane
+> is **GDI**; do not start it from this reconciliation and do not start HTML DOM first.
+
+## Previous — **`gl` INTEGRATED ✅ · BATCH 4 CHECKPOINT ✅ READY** · 15 integrated / 6 pending (2026-08-07, EliteBook 840 G9)
+
+> **The cross-repository `feature/gl` lane landed as merge `0a51f8647`** (signed, `--no-ff`,
+> merged tree byte-identical to `adapt/gl` — 30 signed commits, worktree `cnaintegration-gl`
+> retained), and **Batch 4 was stabilized and its checkpoint taken: local signed annotated tag
+> `integration/checkpoint-batch4-20260807` → `0a51f8647`, verified.**
+> `integration/post-audit-phase1` moved `1381ff93` → `0a51f864`. **Nothing pushed in any
+> repository. `audit/` untouched. The four user stashes are intact** (restored byte-identically
+> from dangling objects after an accidental owner-side `git stash clear` mid-session). Full
+> records: **`integration/lanes/gl.md`**, **`integration/BATCH_4_STABILIZATION.md`**.
+>
+> **All nine inventory-§7.4 steps ran in order under direct owner instruction.** MetaGL develop
+> `d51fcd7f` → **`c964e736`** and EasyGL develop `62c0a248` → **`9b831dee`** — both as
+> **trailer-stripped replays** (trees byte-identical to `d5bc155f`/`b52f6713`): the HISTORY CLEAN
+> classification missed `Co-authored-by: Junie` trailers on 15/16 + 5/5 completed commits, the
+> cleanliness guarantee is owner-scoped to the newly integrated ranges, published ancestry keeps
+> its historical Claude trailers un-rewritten, and the owner's global MetaGL/EasyGL history
+> rewrite is a separate post-integration operation. The missing EasyGL archive tag exists
+> (`archive/preintegration/easygl-rvc-20260807`). GLB-38 done — a configure references no
+> `easy-glrvc`; final chain `CNA -> ../easy-gl @ 9b831dee -> ../meta-gl @ c964e736`.
+>
+> **Public identities 32 → 35.** `EASYGL` withdrawn from public selection (EasyGL stays internal,
+> §7.0); `OPENGLES` (Linux default), `OPENGL33`, `WEBGL1`, `WEBGL2` (Emscripten default) added as
+> the four public GL-family backends over one shared implementation. **REMED-GFX-219 RESOLVED**
+> (WireFrame true, backed by the shared pixel oracle's own measurement; the designed tripwire arm
+> moved as its message instructs). **REMED-GFX-224 remains OPEN and visible.** New pre-existing
+> findings, control-proven at the previous head: **`REMED-CORE-015`** (Vector3/Matrix GetHashCode
+> signed-overflow UB) and **`REMED-CONTENT-010`** (vendored cgltf misaligned load).
+>
+> **Validation.** OPENGLES corpus **5906 · 5900 · 0 failed · 6 truthful skips** (first principal
+> run of the campaign with zero failures); OPENGL33 corpus identical; the lane's 236/241
+> instrument (grown to 293) at **292/293** on both native profiles, the single failure documented
+> pre-existing (plan_graphics Task 872); pre-adaptation baseline at the fork reproduced 237/241
+> against the recorded 236/241 with the difference explained; WEBGL1/WEBGL2 native rejection
+> proven, runtime truthfully unavailable (no Emscripten SDK on this host); 15 per-backend compile
+> probes all OK; Sokol focused control 37/37; ASan/UBSan zero lane-originating findings with
+> leaks 100 % `libGLX_mesa`-rooted.
+>
+> **Next: Batch 5 opens with `glide`** (then `gdi`, `html-dom`). Remaining 6: `glide`, `gdi`,
+> `html-dom`, `direct2d`, `llgl`, `metal`.
+
+## Previous — **`skia` INTEGRATED ✅** · 14 integrated / 7 pending (2026-08-07, EliteBook 840 G9)
+
+> **`skia` landed as merge `1381ff93`** — signed, `--no-ff`, merged tree byte-identical to
+> `adapt/skia` (**151** signed commits, head `a071e1e2`, worktree `cnaintegration-skia` retained).
+> CNA's **thirty-second** public backend identity and the first deliberately **2D-only** one.
+> **`integration/post-audit-phase1` moved `aa9f3fb5` → `1381ff93`. Nothing was pushed. `audit/`
+> untouched. The four user stashes are untouched.** Full record: **`integration/lanes/skia.md`**.
+>
+> **This is the first lane to be blocked, recorded as blocked, and then merged.** The BLOCKED event
+> is preserved above, not rewritten. Two defects stopped it — both in **shared** code, both fixed
+> here, and **neither reachable from any Skia test**:
+>
+> **`REMED-GFX-223` (HIGH, RESOLVED, `9dbdd4cf`).** `Texture2D::gpuOnlyContent_` conflates two
+> claims: the weak *"an absent CPU shadow is normal here — fall back to the backend"* and the strong
+> *"the live backend is the sole authority, never trust the shadow"*. At the head it only ever meant
+> the weak one — **both** of its readers sat inside an `if (!cpuPixels_)` branch — and
+> `ReconstructFromCache`, which borrows `RenderTarget2D`'s constructor, inherited it for an ordinary
+> cached texture. First bad transition: `gpuOnlyContent_ = true` at `Texture2D.cpp:356` reached from
+> `:2703`. **The previous session's diagnosis was right but incomplete:** it did not identify that
+> the lane's in-place `SetData` writes through a backend `ContentManager`'s weak cache **shares**
+> with every other wrapper — the CNB-33 aliasing `CnjCacheIsolationTests` exists to pin, whose own
+> header comment predicted it verbatim. **Clearing the flag alone would have turned both tests green
+> and left that aliasing live.** The repair is two-sided: clear the flag in `ReconstructFromCache`,
+> and gate the in-place backend update to real render targets. 31 insertions / 17 deletions,
+> 13 new regression tests.
+>
+> **`REMED-GFX-225` (HIGH, RESOLVED, `8bd8bc09`).** `SKIA-149` added
+> `virtual int GetSizeEXT() const noexcept` to `ITextureCubeBackend`; four cube backends already had
+> a same-named accessor **without** `noexcept`, so each silently became an override with a looser
+> exception specification. **`CNA_GRAPHICS_BACKEND=SOKOL` did not build at all.** Fixed with
+> `noexcept override` on Sokol, D3D11, D3D12 and D3D9 (the three D3D ones by inspection — none
+> builds on this host). **No test run could have found this**: it is a compile error in a backend
+> nobody had compiled.
+>
+> **`REMED-GFX-224` (MEDIUM, OPEN, not a blocker).** An EasyGL render target silently discards
+> `SetData`, because `ITextureBackend::UpdatePixels` is a defaulted no-op
+> `EasyGLRenderTargetBackend` never overrides. Pre-existing; masked at the head by `SetData`
+> replacing a render target's backend and leaving a shadow `GetData` read first.
+>
+> **Controls, all from the adapted sources.** Skia focused **172/172**; row-stride **8/8**;
+> `CnaTests` under `SKIA` **5746 · 5611 · 124 failed** against the fork point's **125** — the figure
+> the previous session left explicitly unmeasured, now measured and *better*: **8 fixed, 7 new**,
+> and the 7 are exactly the `Ordinary`/`InstancedDrawMultiStream` rows already classified as the
+> shared 2D-only class. EasyGL principal control **5912 registered · 5911 passed** (the one failure
+> is `easy-gl-resource-smoke-tests`, a sibling-repo binary with **zero** CNA symbols). Sokol
+> **37/37** + **34/34**. Diligent **169/169**. **ASan + UBSan: 0 and 0** — the gate the previous
+> session never reached — with all 15 382 736 leaked bytes accounted for by three `libGLX_mesa`
+> blocks containing no CNA, Skia or SDL frame.
+>
+> **No checkpoint was taken.** `INTEGRATION_ORDER.md` §3 gives Batch 6 / Group G **four** members —
+> `direct2d`, `llgl`, `metal`, `skia` — and three remain, so Skia alone does not complete it. **No
+> Batch 4 checkpoint was created or considered:** Batch 4 is `feature/gl` alone and has not been
+> started.
+>
+> **Next: `feature/gl` (Batch 4), not started.** Remaining 7: `direct2d`, `gl`, `gdi`, `glide`,
+> `llgl`, `html-dom`, `metal`.
+
+## Previous — **`skia` ADAPTED, VALIDATED, ⛔ NOT MERGED** · still 13 integrated / 8 pending (2026-08-07, EliteBook 840 G9)
+
+> **The Skia lane adapts cleanly and its own backend is in good shape; it is not merged because it
+> regresses a control backend.** 141 commits replayed onto `adapt/skia` with **zero interface
+> drift** — the third lane after `wicked`/`magnum` to need none, because it forked at `a7a49e3d`,
+> 707 commits past the stale-fork set — and the full Skia suite passes **172/172**. Running the
+> shared `CnaTests` corpus under **`EASYGL`** from the adapted sources, which this lane had **never**
+> been subjected to, found **two regressions in shared `Texture2D` code that merely branches on a
+> Skia condition**. One is fixed and verified. The other, **`REMED-GFX-223`**, is open and blocks
+> the merge. Full record: **`integration/lanes/skia.md`**.
+>
+> **`integration/post-audit-phase1` is untouched at `aa9f3fb5`. No merge commit was created.
+> Nothing was pushed. `audit/` untouched. The four user stashes are untouched.**
+>
+> **`REMED-GFX-223` (HIGH, OPEN).** `ContentManager`'s texture cache reconstructs through
+> `Texture2D::ReconstructFromCache`, which builds via the `RenderTarget2D` constructor and so
+> inherits `gpuOnlyContent_ = true` for an ordinary content texture — a **pre-existing mislabel at
+> the head** that was inert because both readers consulted the CPU shadow first. This lane's new
+> `SetData` branch now resets that shadow and its reordered `GetData` sends the read to a backend
+> that cannot serve it, so `CnjCacheIsolationTest` fails under `EASYGL`. Traced on both trees with
+> `CNA_TEXTURE_TRANSFER_TRACE=1`: the head reads `source=cpuPixels_` and passes, the lane reads
+> `source=backend` and throws. Recorded with its measurement in `plan_skia.md` rather than repaired
+> unverified — the repair changes shared semantics every backend depends on.
+>
+> **Fixed in-lane:** `IsColorTransferFormatEXT` had narrowed the `Color*` overloads from "any
+> 4-byte format" to `SurfaceFormat::Color` alone on every non-Skia backend, withdrawing the working
+> `ColorSrgbEXT` route `MouseCursor::FromTexture2D` uses. `MouseCursorTest` is 14/14 again. Also
+> `bb8e6430`: the three-way merge had cleanly, silently reverted `REMED-GFX-222`'s own fixture
+> update, because the lane rewrote the same region — a conflict resolved correctly by content and
+> wrong by meaning, exposed only by running the suite.
+>
+> **SKIA = a CPU-raster 2D identity, the 32nd, aliasing nothing.** Raster `SkSurface` presented
+> through an SDL streaming texture; `ctest -N -L Accelerated` reports **0**. Dependency **Skia
+> `ebf50520d720a1ce9d842d942d04c6c39c3fbc7b`** (BSD-3-Clause), GN-built outside the tree, six static
+> archives, **nothing vendored and no carried patch**. The Ganesh artifact is carried but has no
+> `IGraphicsBackend` and is unreachable from backend selection — it is **not** a second identity.
+> All three §1.1 obligations paid: an exhaustive **eleven-member** capability switch with no
+> `default` arm, truthful `WireFrame=false` whose refusal half is satisfied more strongly than the
+> rule asks, and a declaration guard **decided** not-applicable on `stub`'s precedent.
+>
+> **Sanitizers were never reached** — the gate stops at the EasyGL control. Everything is preserved:
+> `adapt/skia` (**148** signed commits, head `75b1b903`), worktree `cnaintegration-skia`, and the
+> `cmake-build-skia`/`-pre`/`-easygl` trees.
+>
+> **Note on batch membership.** `INTEGRATION_ORDER.md` §3 defines **Batch 4 as `feature/gl` alone**
+> (cross-repository, gated by C1) and places `skia` in **Batch 6 / Group G**, deferred, "best
+> sequenced after modularization". Skia was integrated ahead of that order by direct instruction.
+> **No Batch 4 checkpoint was created or considered**, since Batch 4's own member has not been
+> started and Skia is not part of it.
+
+## Previous — **BATCH 3 CHECKPOINT ✅ READY · `diligent` INTEGRATED (2 of 2)** · 13 integrated / 8 pending (2026-08-07, EliteBook 840 G9)
+
+> **`diligent` landed by ADAPTATION as merge `aa9f3fb5`** (signed, `--no-ff`, the thirteenth lane;
+> adaptation head `27f7dcef`, **70** signed commits, worktree `cnaintegration-diligent` retained),
+> and **Batch 3 was stabilized and its checkpoint taken: OUTCOME READY — local signed annotated tag
+> `integration/checkpoint-batch3-20260807` → `aa9f3fb51`, created and verified.** **Nothing was
+> pushed; no fourteenth lane was begun; `audit/` untouched.** Full records:
+> **`integration/lanes/diligent.md`** and **`integration/BATCH_3_STABILIZATION.md`**.
+>
+> **DILIGENT = the 31st public identity, and the first backend whose native graphics API is chosen
+> at RUN TIME**, not by the CMake option — DiligentCore is itself an abstraction over
+> D3D11/D3D12/Vulkan/OpenGL/Metal, so CNA sits on two stacked abstraction layers. Selection walks
+> `D3D12 → Vulkan → D3D11 → OpenGL` filtered to the engines built, `CNA_DILIGENT_DEVICE` pins one,
+> and an unrecognised value **throws** rather than falling back. Measured here on **both** device
+> types the platform builds: Vulkan on lavapipe and OpenGL 4.5 on llvmpipe. Dependency
+> **DiligentCore `v2.5.6`**, fetched and built from source, **nothing vendored and no carried
+> patch**; `~/deps/DiligentCore` at that exact tag serves offline builds. Registration union #10 —
+> the campaign's widest, 17 conflicted files on the first commit alone.
+>
+> **This lane started from a proven baseline.** A pre-adaptation build at its own fork point
+> returned **61 registered / 53 passed / 7 failed / 1 skipped**, the seven being precisely the
+> lane's own documented open set. **Interface drift against the head was one reference** to the
+> removed `GpuDrawParams::instanceVb`, and nothing else.
+>
+> **Three §1.1 obligations paid at adaptation.** REMED-GFX-201/202: `MultiStreamVertexInput`
+> **false**, `Instancing` **true**, exhaustive eleven-member switch with no `default` arm; the
+> instanced route reads `FirstInstanceStream()` and honours `InstanceFrequency` (into
+> `LayoutElement::InstanceDataStepRate` *and* the pipeline key) and each binding's own
+> `VertexOffset`. REMED-GFX-DECL-GUARD: the shared `RequireFaithfulVertexDeclaration()` is
+> **reused**, not re-derived — unlike `sokol`, this backend genuinely does infer its layout from the
+> buffer stride, which is the mechanism that helper models. REMED-GFX-209: `WireFrame` reported from
+> the live device's own `DeviceFeatures::WireframeFill` and measured against the shared oracle.
+>
+> **Validation, all green:** dedicated suites **78 registered / 69 passed / 8 failed / 1 skipped**,
+> with **7 of the 8 being the pre-adaptation baseline's exact set — zero regressions** — and the 8th
+> the new instancing test's OpenGL variant joining the same already-root-caused Mesa divisor class
+> (`DILIGENT-69`); corpus **5816 / 5800 passed / 8 failed / 7 truthful skips**, with **no
+> non-Diligent failure in the run**; sanitizers **0 ASan, 0 CNA-originating UBSan, 0 CNA-owned
+> leaks** over a representative 13-harness subset, `detect_leaks=0` control 23/25; **Sokol focused
+> control 37/37**; EasyGL continuity **5894 executed, 5893 passed**, its single failure the known
+> networking flake, **3/3 green in isolation**.
+>
+> **Four defects found and fixed in-lane, all adaptation-owned**: a dropped `endif()` in the
+> registration union (broke `cmake` configure in *every* configuration), two orphaned `#endif`s
+> caught by an explicit balance check at conflict resolution, and a wrong expected-check count in
+> the session's own new test. **No lane-owned supported-path defect was found.**
+>
+> **`SOKOL` was missing from the in-repo `CLAUDE.md` backend list** — the twelfth lane's own
+> registration-union gap, found while adding `DILIGENT` beside it and corrected here as a genuine
+> Batch 3 stabilization fact. `MAGNUM`'s absence from `README.md` is Batch 2's and was left alone.
+>
+> **Thermal note for future sessions on this host.** `powerprofilesctl launch -p power-saver -- cmd`
+> holds the profile **only for that command**; between commands the machine reverts to `balanced`,
+> where this i7-1260P reaches **95–100 °C within ~2 minutes** of load. Every excursion above 84 °C
+> this session happened in exactly such a gap. Use a **persistent** `powerprofilesctl set
+> power-saver` instead — under it, `-j6`/`-j8` sustain **48–60 °C**. Max parallelism used **`-j8`**,
+> once, for the sanitizer build only; eight was never exceeded.
+>
+> **Next task, exactly one, not begun: open Batch 4.** Eight lanes remain — `direct2d` (owner-frozen),
+> `gl` (cross-repository), `gdi`, `glide`, `llgl` (blocked), `skia`, `html-dom`, `metal` (unbuildable
+> here). `INTEGRATION_ORDER.md` §2 puts `gdi`/`glide`/`html-dom` in the high-conflict Group F.
+
+## Earlier — **BATCH 3 OPEN · `sokol` INTEGRATED (1 of 2)** · 12 integrated / 9 pending (2026-08-07, EliteBook 840 G9)
+
+> **`sokol` landed by ADAPTATION as merge `37066e45`** (signed, `--no-ff`, the twelfth lane;
+> adaptation head `9fb83a99`, **44** signed commits, worktree `cnaintegration-sokol` retained).
+> **Nothing was pushed; no other lane was begun; `audit/` untouched; the Batch 3 checkpoint was NOT
+> taken** — Batch 3 is `sokol` → `diligent`, and the checkpoint belongs after `diligent`. Full
+> record: **`integration/lanes/sokol.md`**.
+>
+> **SOKOL = the 30th public identity** — sokol_gfx on a **desktop OpenGL 4.1-core** context created
+> through `SDL_GL_CreateContext` on the window CNA already owns (`sokol_app` deliberately unused).
+> Dependency pinned at `27b49604b19be8cee0dcc6b2bbfe803dd9517585` (zlib/libpng, 2026-07-30),
+> **fetched and never vendored, no carried patch**; `~/deps/sokol` at that exact commit serves
+> offline builds through CMake's own `FETCHCONTENT_SOURCE_DIR_SOKOL`. `CNA_SOKOL_API=GLCORE` is the
+> default and the only implemented value, so backend selection is deterministic. Registration union
+> #9: 29 existing identities kept token-exact.
+>
+> **This lane started from a proven baseline, not an unknown.** Unlike `wicked`/`magnum`, a
+> pre-adaptation build straight from the historical worktree at `261ea700` reproduced the lane's own
+> recorded results exactly — `Sokol_Smoke` 13/13, `Sokol_2D` 15/15, `Sokol_3D` 10/10, `Sokol_Lit3D`
+> 10/10, **48 checks / 0 failures** — so everything measured afterwards is attributable to
+> adaptation. **Interface drift against 376 commits of head movement was two references** to the
+> removed `GpuDrawParams::instanceVb`, and nothing else.
+>
+> **Three §1.1 obligations paid at adaptation, one of which changed an answer.**
+> REMED-GFX-201/202: `MultiStreamVertexInput` **false**, `Instancing` **true**, exhaustive
+> eleven-member switch with no `default` arm; both routes refuse a split declaration or a second
+> per-instance stream outright (`InstancedDrawMultiStreamTest`+`OrdinaryDrawMultiStreamTest` **8/8**,
+> both deterministic-rejection cases included). REMED-GFX-DECL-GUARD: a header-only draw-time guard
+> that **deliberately does not reuse** the shared stride-inferring helper — this backend programs its
+> layout from the declaration's own offsets and formats, so the stride-table rule would refuse
+> correct draws. **REMED-GFX-209: `WireFrame` corrected `false` → `true` on measurement** — the
+> shared asymmetric-triangle oracle read `interior 0/1089` under WireFrame against `1089/1089` under
+> Solid with all three edge probes lit; it does not copy EasyGL's `false`, the one report this
+> repository already records as wrong (`REMED-GFX-219`).
+>
+> **Validation on Mesa 25.0.7 llvmpipe (LLVM 19.1.7), a real GL 4.5 core context on Xvfb `:101`,
+> all green:** dedicated suites **37/37**; corpus **5776 registered · 5768 passed · 1 failed · 7
+> truthful skips · 0 aborts** (697 s), the one failure being the pre-existing networking Outcome-C
+> flake (**3/3 green** re-run in isolation, and passed outright in the discovery run); sanitizers
+> **0 ASan + 0 UBSan** across all 37 suites with every leak rooted in `libGLX_mesa` and
+> `detect_leaks=0` control **37/37**; EasyGL control from the adapted sources **6190 registered,
+> 5894 executed, 5894 passed, 0 genuine failures, 7 skips**.
+>
+> **Three defects found and fixed in-lane**: a dropped `#endif` in a conflict resolution (adaptation-
+> owned, caught by the first `CnaTests` build); a missing `ExpectedNameFor()` arm in the identity
+> guard (adaptation-owned, caught by the first corpus run — the same gap class D3D9/DX2/OPENGL1/
+> WICKED already record); and a raw-`new`ed `GraphicsDeviceManager` in one harness (lane-owned,
+> caught by ASan, the only file in `examples/` not using the `unique_ptr` idiom).
+>
+> **Two pre-existing conditions recorded, neither caused by this lane and neither fixed here:** the
+> EasyGL *dedicated harnesses* do not compile in this environment (`PixelTestGame.hpp` cannot
+> resolve `SDL3/SDL.h` under the EasyGL configuration) — **control-proven identical** on the
+> pre-Sokol tree at the integration head, which is why the EasyGL instrument is its gtest corpus;
+> and **`MAGNUM` is missing from `README.md`'s `CNA_GRAPHICS_BACKEND` list**, a gap in the eleventh
+> lane's own registration union noticed while adding the SOKOL entry beside it.
+>
+> **Build trees (owner-designated partition `/media/robertvokac/claude/tmp/cna/`):** created
+> `cmake-build-sokol-pre` (711 M, the pre-adaptation baseline), `cmake-build-sokol` (2.9 G),
+> `cmake-build-sokol-asan` (6.4 G) and `cmake-build-sokol-easygl` (control); reused the shared
+> `ccache/` and `~/deps` (sokol cloned once at its pin, 11 M). Max parallelism **`-j6`**; the 8-job
+> ceiling was never approached. Package id 0 stayed **50–61 °C** throughout under
+> `powerprofilesctl launch -p power-saver`; RAM never dropped below ~10.8 G available and swap use
+> never moved off its 521 M starting value.
+>
+> **Next task, exactly one, not begun: the `diligent` lane** — Batch 3's second and last. Only after
+> it does the Batch 3 checkpoint become due.
+
+## Previous — **BATCH 2 CHECKPOINT ✅ ACCEPTED (reconciled) · `WICKED-80` RESOLVED** · 11 integrated / 10 pending (2026-08-06, EliteBook 840 G9)
+
+> **`WICKED-80` is resolved and the Batch 2 checkpoint was retaken: OUTCOME READY — local signed
+> annotated tag `integration/checkpoint-batch2-20260806` created and verified, nothing pushed.**
+> Full record: **`integration/BATCH_2_STABILIZATION.md` §12** (the §11 BLOCKED decision stands
+> unchanged as history). First CNA session on the migrated HP EliteBook 840 G9; migration
+> validation passed every git-integrity item (HEADs `cbdab0c5`/`7dc2be5b`, 11 lane merges, tags +
+> signatures Good, four stashes untouched, deps pins exact). **Deviation: no CNA build tree
+> survived the migration** — both preserved reproducer directories included; the probes were
+> rebuilt from their documented specs. Fresh trees live on the owner-designated build partition
+> **`/media/robertvokac/claude/tmp/cna/`** (`cmake-build-wicked` + `wicked-repro/` evidence,
+> `cmake-build-wicked-asan`, `cmake-build-magnum`, `cmake-build-noxna`, shared `ccache/` — export
+> `CCACHE_DIR=/media/robertvokac/claude/tmp/cna/ccache` or everything recompiles cold). The
+> in-repo `.sdl-prebuilt-Linux-x86_64` survived and is reused.
+>
+> **Ownership settled by the prescribed raw control: classification B — pinned upstream Wicked
+> defect.** `GraphicsDevice_Vulkan::CreateTexture` sizes UPLOAD/READBACK staging buffers tight
+> (`ComputeTextureMemorySizeInBytes`) while the mapped layout and `CopyTexture` addressing consume
+> `optimalBufferCopyRowPitchAlignment`-aligned pitches (128 here) — every narrow staging transfer
+> addressed out of bounds (`VUID-…CopyBufferToImage-pRegions-00171`/`…ImageToBuffer-00183`,
+> CNA-free on lavapipe AND Intel ANV; 5×5×3 = 300-byte buffer vs 1920-byte footprint). Corruption
+> was a suballocation-adjacency lottery — which also explains WICKED-79's "two staged copies
+> interfere" and covered narrow 2D/cube/mip staging. **Fix: the third carried patch
+> `cmake/patches/wicked-staging-footprint.patch`** (applies cleanly on pristine `27c0df16` after
+> SDL3+teardown; auto-applied/marker-checked by `ThirdPartyWicked.cmake`). **Regression:
+> `Wicked_Texture3DStagedTransfer`** — byte-exact index-encoded matrix; its sequenced narrow leg
+> fails 3/3 on the pre-fix engine (fixture-per-test legs pass pre-fix — measured, so the sequenced
+> leg is the load-bearing discriminator); 11/11 ×3 with the fix.
+>
+> **Validation, all green:** WICKED corpus **5789 · 5783 · 0 failed · 6 skips · 0 aborts**
+> (1700 s — the campaign's first zero-failure corpus on this backend; networking + audio classes
+> passed naturally, classifications unchanged); W77 5/5 · W78 6/6 · W79 carriers 13/13 · W80
+> 11/11; probes CNA 14/14 ×3 and raw 18/18 post-fix (zero under-allocation, zero OOB VUIDs; 3
+> lavapipe-only pre-existing `pRegions-00173` overlap reports recorded); Magnum controls **8/8**;
+> EasyGL continuity **5910 · run 1: 5903/1/6 (the failure isolated 3/3 green — §6.1 blip class) ·
+> run 2: 5904/0/6**; sanitizers **0 ASan + 0 UBSan CNA-originating**, driver-rooted leaks only,
+> `detect_leaks=0` controls 5/5. Registration arithmetic: 5789 = official 5780 + 1 (GFX-222
+> ceiling, name-verified) + 12 (W80 suite, name-verified) − 4; continuity 5910 = 5913 + 1 − 4 —
+> the identical −4 in both configs from git-identical sources is a host-conditional discovery
+> delta of the migrated instrument (ThinkPad name lists did not survive; this host's lists are
+> preserved). Residual classes unchanged: networking Outcome C, wall-clock audio, Task 872,
+> easy-gl sibling, `REMED-GFX-221` LOW, **`CONTENT-007`/`-008` OPEN HIGH/P1**.
+>
+> **EliteBook host notes:** cooling is healthy but HP's `balanced` profile turbos P-cores to
+> 95–100 °C at any load — run every heavy command under
+> `powerprofilesctl launch -p power-saver -- …` (plain `set` reverted once mid-session); `-j6`
+> then holds 50–76 °C. Max parallelism used `-j6`; the 8-job ceiling was never exceeded; peak RAM
+> comfortable (≥11 G available throughout); GPU tests serial on Xvfb `:101` + lavapipe.
+>
+> **Nothing was pushed; no twelfth lane begun; `audit/` untouched; published history not
+> rewritten; the four user stashes untouched. Direct2D stays owner-frozen for later completion
+> before modularization; OpenVG + SVG DOM remain planned texture-only 2D backends; FNA3D remains
+> a proposed additional public wrapper backend, not yet tasked; `feature/gl` remains
+> MetaGL → EasyGL → CNA with EasyGL hidden; modularization only after all required integrations,
+> backend completion/expansion and final stabilization.**
+>
+> **Migration-gate reconciliation (later the same day, code-free): Batch 2 ACCEPTED WITH RECORDED
+> MIGRATION DEVIATION.** Full record: **`integration/BATCH_2_STABILIZATION.md` §13**. The Phase 0
+> gate that opened the retake session required the retained `WICKED-80` reproducer and retained raw
+> evidence and prescribed `MIGRATION BLOCKED` + stop on failure; both directories were absent, so
+> **that instruction should have caused MIGRATION BLOCKED at that moment** rather than a self-granted
+> deviation — recorded permanently as process non-conformance. Separately adjudicated: the code is
+> correct on its own merits. **No unique source was lost** — everything defining the checkpoint
+> (`wicked-staging-footprint.patch`, the `cna_wicked_check_staging_footprint_fix` gate, the 362-line
+> `WickedTexture3DStagedTransferTest.cpp`, the docs) is committed in `ebd04ae3`; the losses were
+> untracked derived build output, with the ThinkPad raw logs the only genuinely lost evidence class
+> (**C**). The retained EliteBook evidence **independently proves `WICKED-80`** — the CNA-free raw
+> control, both VUIDs, the 300-vs-1920 arithmetic, the pre-fix 3/3 sequenced discriminator, the
+> post-fix 18/18 raw control, the 0-failure corpus and the CNA-clean sanitizer logs are all
+> post-migration artifacts, none routed through ThinkPad material. Two sub-items are **C**: the
+> Intel ANV transcript and the standalone post-fix CNA-probe log — the ANV fact was re-verified
+> instead (`optimalBufferCopyRowPitchAlignment = 0x80` on **both** Iris Xe/ANV and llvmpipe, so the
+> under-allocation arithmetic holds on ANV by construction), and the post-fix CNA leg is superseded
+> by the committed 11/11 regression inside the zero-failure corpus. **The existing tag was not
+> moved, deleted or recreated, and no replacement tag was created.** Caution: the retained logs live
+> on the untracked build partition and remain exposed to the same loss class — commit load-bearing
+> raw observations when measured.
+>
+> **Next task, exactly one, not begun: Batch 3 — the `sokol` lane** (then `diligent`).
+> **Recommended: Opus first** for the sokol lane read/adaptation, **escalate to Fable on
+> evidence** (the campaign's standing model guidance for lane work; this session's Fable+max was
+> for the copy-footprint arithmetic and fresh-host gate).
+
+## Previous — **BATCH 2 STABILIZED · checkpoint BLOCKED on `WICKED-80`** · 11 integrated / 10 pending (2026-08-06)
+
+> **The Batch 2 stabilization ran to completion on the integrated HEAD and its checkpoint
+> decision is OUTCOME B — BLOCKED, no tag created.** Full record:
+> **`integration/BATCH_2_STABILIZATION.md`**. Nothing was pushed; no twelfth lane was begun;
+> `audit/` untouched; published history not rewritten; the four user stashes untouched.
+>
+> **Everything except one gate passed.** Both lanes' provenance re-verified clean (10→17 and
+> 13→19, all `U`, range-diffs 1:1, merged trees byte-identical, archive tags and original refs
+> unchanged; the wicked card's citation sweep found zero stale SHAs). Zero Batch 2 integration
+> regressions on every instrument: Wicked corpus **5780 · 5771 · 3 failed (networking flip +
+> two audio-class) · 6 skips · 0 aborts**; Magnum corpus **5843 · 5830 · 7 failed (networking +
+> six audio-class) · 6 skips**; EasyGL full ctest **6212 · 6196 · 9 failed · 7 skips** and the
+> 5913-case continuity instrument **5913 · 5906 · 1 failed (networking) · 6 skips — the exact
+> Batch-1-comparable set, zero regressions**. The 5913→6212 delta is an instrument change,
+> derived exactly (5913 gtest cases + 292 `EasyGL_*` + 3 easy-gl sibling + 4 named others).
+> Probes 17/17 and 4/4; sanitizers zero CNA-originating findings with driver-rooted leaks and
+> `detect_leaks=0` controls green.
+>
+> **The three newly measured EasyGL failures were adjudicated individually:**
+> `EasyGL_DeviceValidation` = **REMED-GFX-222** (GFX-039 over-reached its own "per FNA" charter;
+> **discovered and resolved in-stabilization** — fix on the integration branch, plan_postaudit.md
+> §19); `EasyGL_GraphicsDevice_ReferenceStencil` = the pre-existing **documented known failure
+> Task 872** (AUDIT.md:128), carried visible; `easy-gl-resource-smoke-tests` = **upstream easy-gl
+> defect** (its own mock-GL assert, `SmokeResourceTests.cpp:336`, repo unmoved since 07-19),
+> recorded with reproducer, sibling untouched. The wall-clock audio class spent the afternoon in
+> a measured environmental failure window (PipeWire sink SUSPENDED; same binaries passed the same
+> tests in the morning run and in-process) — classification unchanged, tests unmodified.
+>
+> **The blocker: `WICKED-80`** — the stabilization's new sanitized narrow-width transfer probe
+> found `Texture3D` staged transfers corrupting dimension-dependent tail rows (recycled staging
+> bytes where the copy never wrote; deterministic per allocation sequence; invisible to all 13
+> corpus transfer tests; ASan-silent because the bytes are in-bounds). Latent lane content, not
+> an integration regression — but an open production defect on a supported path, so the tag was
+> withheld under the same literal criterion that blocked Batch 1 on REMED-GFX-220. Reproducer
+> preserved in `cnaintegration/cmake-build-wicked/wicked-repro/`; OPEN row in `plan_wicked.md`.
+>
+> **Next task, exactly one, not begun — owner-decided: resolve `WICKED-80` in the next session
+> on the new machine** (the /rv tree migrates to the HP EliteBook 840 G9 first; the T14 goes to
+> cooling service). First step: the raw-`wi::graphics` control from the preserved reproducer to
+> settle CNA-versus-upstream ownership, then the bounded fix, probe + Wicked corpus re-run, and
+> re-take the Batch 2 checkpoint decision. After it: Batch 3 (`sokol` → `diligent`).
+> **Recommended: Fable, effort max** for the WICKED-80 session (GPU copy-footprint arithmetic
+> plus a fresh-host validation gate); Batch 3's `sokol` afterwards: Opus first, escalate on
+> evidence.
+
+## Previous — **BATCH 2 ✅ COMPLETE · `magnum` INTEGRATED (2 of 2)** · 11 integrated / 10 pending (2026-08-06)
+
+> **`magnum` landed by ADAPTATION as merge `e7d46c4c`** (signed, `--no-ff`, eleventh lane;
+> adaptation head `b7fe9b24`, 19 signed commits, worktree `cnaintegration-magnum` retained).
+> **Nothing was pushed; no other lane was begun; `audit/` untouched; Batch 2 stabilization NOT
+> begun.** Full record: **`integration/lanes/magnum.md`**.
+>
+> **The lane's first-ever build and execution resolved UNKNOWN to green.** MAGNUM = the 29th
+> public identity, Magnum::GL typed wrappers over desktop GL 3.3 core on the shared SDL3 window;
+> Corrade pin `783e4e48` + Magnum pin `5a742464`, both MIT and both proven = upstream master tips
+> (`~/deps` clones; offline `FETCHCONTENT_SOURCE_DIR_*` route verified). Compile probe: **zero
+> drift** (same post-drift fork as wicked). Registration union #8: 28 identities kept token-exact,
+> MAGNUM added. §1.1 proven at runtime: 17/17 guard/capability probe, WICKED-78 teardown class
+> measured absent (4/4 lifecycle legs).
+>
+> **Two real defects found by validation, both fixed in-lane:** the adaptation's own
+> declaration-guard compared split multi-stream declarations in the wrong space (armed shared
+> oracles caught it: 9 failures → 9/9); and **MAGNUM-65** — the sprite flush sized its Corrade
+> `ArrayView<const void>` views in bytes where the typed-pointer constructor takes ELEMENT counts
+> and scales by `sizeof(T)`, a `sizeof(Vertex)`-fold heap overread on every flush since the
+> lane's first commit that **rendered correctly everywhere** (GL stored the oversized copy) until
+> radeonsi's allocator faulted it (deterministic Guide-test SIGSEGV, three coredumps) and ASan
+> flagged it on the first sanitized flush. **Pixel oracles cannot see a defect that renders
+> correctly; the sanitizer leg caught it.**
+>
+> **Official corpus (fixed content): 5843 · 5835 · 2 failed · 6 truthful skips · 0 aborts**; both
+> failures control-classified pre-existing (networking Outcome C; the wall-clock audio class —
+> 2/12 shuffling control failures on the pre-Magnum principal binary). ASan+UBSan 8/8 suites:
+> zero findings post-fix, leaks 100 % `libGLX_mesa`-rooted, `detect_leaks=0` controls green.
+> **Principal EasyGL control at the merged head: 6212 · 6203 · 5 failed · 4 skipped — zero
+> regressions in the baseline-comparable range** (its two failures = the known networking and
+> audio classes). The fresh reconfigure surfaced +299 never-measured EasyGL dedicated
+> registrations; three of them fail for EasyGL-owned/upstream reasons orthogonal to this lane
+> (`EasyGL_DeviceValidation` SetVertexBuffers(16) not throwing,
+> `EasyGL_GraphicsDevice_ReferenceStencil` reference-override not rejected,
+> `easy-gl-resource-smoke-tests` asserting inside the easy-gl sibling project) — **all three are
+> Batch 2 stabilization inbox items**, alongside the citation sweep the wicked card handed over.
+> Session thermal note: the machine could not hold one full-boost core
+> (88.8 °C in 19 s); all heavy work ran under a proven `systemd-run` CPUQuota=40 % scope
+> (58–73 °C), max parallelism `-j2` momentarily, `-j1`+quota otherwise; corpus run 1 unwittingly
+> inherited `DISPLAY=:0` for tests without a display property (recorded as a breach; runs 2/3
+> forced `:101`).
+>
+> **Next task, exactly one, not begun: the Batch 2 stabilization checkpoint** — re-derive the
+> integrated/pending counts, run the consolidated baseline, decide and take the
+> `integration/checkpoint-batch2-<date>` tag. The `ext`-renumbering citation sweep handed to this
+> checkpoint by the wicked card and the "rebase 24" phrasing corrections are its inbox. After it:
+> Batch 3 (`sokol` → `diligent`). **Recommended: Fable, effort max** for the checkpoint (it
+> weighs evidence across eleven lanes); Batch 3's `sokol` is a mixed-history medium backend —
+> Opus first, escalate on evidence.
+
+## Previous — **BATCH 2 · `wicked` ✅ INTEGRATED (1 of 2)** · 10 integrated / 11 pending (2026-08-05)
+
+> **The two blockers below were repaired in-lane the same day, and the lane merged as
+> `683a00a5`** (signed, `--no-ff`, tenth lane; adaptation head `97d5a644`, 17 signed commits).
+> **Nothing was pushed; Magnum was not begun; `audit/` untouched.** Full record:
+> **`integration/lanes/wicked.md` §15**.
+>
+> **`WICKED-77`** was the instanced route dropping the geometry stream's whole `VertexOffset` at
+> bind time (that route deliberately does not fold it into `baseVertex`); one binding-site fix,
+> five-case regression pinned. **`WICKED-78` was upstream twice over** at pin `27c0df16`: the
+> Vulkan device destructor never destroys its three null images (VMA asserts on every
+> never-rendering device) and never frees its pooled command lists (a drawing device leaked its
+> whole `VkInstance`/`VkDevice`/allocator instead — masking the assertion). Fixed by a second
+> carried dependency patch, `wicked-device-teardown.patch`, proven with a CNA-free reproducer.
+>
+> **The first full corpus run this unblocked found two more, also fixed in-lane:** `WICKED-79`
+> (staged uploads smeared at narrow widths — upstream repacks initial data at tight pitches while
+> `CopyTexture` reads the aligned mapped ones; staging is now written through its own mapped
+> layout, one submit per staged upload) and the lane's backend-local test directory globbed into
+> every OTHER backend's `CnaTests` (caught by the principal control; excluded by the glob file's
+> own convention). Plus three shared contract tables gained truthful WICKED arms.
+>
+> **Validation at the merged content:** corpus **5780 · 5774 · 0 failed · 6 truthful skips**
+> (no abort — the corpus was UNRUNNABLE under this backend before `WICKED-78`); dedicated suites
+> 14/14 · 6/6 · 5/5 · smoke; ASan+UBSan **zero CNA-originating findings** (vptr kept via
+> upstream's `WICKED_ENABLE_RTTI=ON`), leaks 100 % `libvulkan_lvp`-rooted with `detect_leaks=0`
+> controls; principal EasyGL **5913/5907/0/6 — exactly the Batch 1 baseline**. Networking
+> Outcome C: incidentally passed; remains open as a class. Hardware/real-display verification
+> (`WICKED-18`/`74`) remains the lane's declared open boundary — everything ran on lavapipe.
+>
+> **Next task, exactly one, not begun: `magnum`** — Batch 2's second lane (13 own commits,
+> `GD`+`IGB`, total history recreation, NEEDS VALIDATION). Re-fetch and re-derive its row first;
+> expect the C2 behind-count to have grown past 230. **Recommended: Fable, effort max** — the lane
+> is small but touches two shared interfaces and has never been built; the Wicked precedent says
+> first execution is where the real defects surface.
+
+## Previous — **BATCH 2 · `wicked` ⛔ MERGE BLOCKED** · still 9 integrated / 12 pending (2026-08-05)
+
+> **The adaptation is complete and clean. The backend is not ready, and it was not merged.**
+> `adapt/wicked` holds **12 signed commits** (10 replayed originals + 1 post-audit obligation + 1
+> oracle arming), worktree `cnaintegration-wicked`, all preserved. **No merge, no push, no tenth
+> lane. `audit/` untouched.** Full record: **`integration/lanes/wicked.md`**.
+>
+> **The "24-commit history recreation" classification below was wrong, and the correction matters.**
+> Measured: the lane has **10** own commits (`2338b44f..91d8587e`). The 24 is the *behind-count* to
+> the phase-1 checkpoint — the `behind` half of `git rev-list --left-right --count`, read as if it
+> were work. Full arithmetic: **755 inherited (already integrated) + 10 own = 765 ahead of
+> `develop`**. And 24 is itself stale: after Batch 0 and Batch 1 the lane is **230 behind the head
+> it merges into**, not 24.
+>
+> **What this session established that nobody had.** The backend had never been checked out, built
+> or run. It now **builds against a real Wicked Engine (MIT, pin `27c0df16`, verified = upstream
+> master tip), creates a real Vulkan device, and compiles all 22 of its HLSL shaders** — falsifying
+> the original commits' own "nothing run on real hardware / no shader has seen a compiler" caveat.
+> `Wicked_PipelineKey` **14/14**; `cna_demo_2d --smoke 3` **4/4**; a bounded 1-TU probe **14/14**
+> proving the declaration guard refuses correctly, does **not** over-refuse, and that all 11
+> capabilities answer truthfully.
+>
+> **Then two independent production defects appeared on first contact with the shared oracles:**
+>
+> | ID | Severity | What |
+> |---|---|---|
+> | **`WICKED-77`** | HIGH | Instanced draws ignore the geometry `VertexOffset` — the 4th record's quad never appears, while the identical data renders correctly through the ordinary indexed route |
+> | **`WICKED-78`** | HIGH, **validation-blocking** | `GraphicsDevice` teardown leaves GPU allocations live; Wicked's VMA assertion fires and **aborts the process**. Deterministic on a single device. Every shared test constructs a device, so **`CnaTests` cannot complete under this backend at all** |
+>
+> **`WICKED-78` is why this is BLOCKED rather than merged with a boundary.** It is not a missing
+> measurement — it is a reproducible abort that contradicts the resource-disposal contract.
+>
+> **A second, unrelated boundary is declared rather than hidden:** `CnaTests` reached only 244 of
+> 1047 objects. The machine carried sustained external load (load ≈ 2 with this session's build
+> fully stopped); a thermal regulator over this session's own process group still saw **90.5 °C**
+> peaks, and finishing would have meant knowingly exceeding the 84 °C ceiling for ~2 hours. No
+> sanitizer tree and no principal control were run. **None of it is claimed.**
+>
+> **Next task, exactly one, not begun:** decide `wicked`'s disposition — fix `WICKED-77`/`-78` in
+> the preserved worktree, or move the lane to **Group G** per this card's own criterion 8. Either
+> needs a machine with real thermal headroom. **Recommended: Fable, effort max** — the remaining
+> work is GPU resource-lifetime debugging, not the bounded replay this session performed.
+
+## Previous — **BATCH 1 COMPLETE AND STABILIZED · ✅ READY** · 9 integrated / 12 pending (2026-08-05)
+
+> **`REMED-GFX-220` is fixed; the Batch 1 checkpoint decision was retaken and the tag created.**
+> Signed annotated tag **`integration/checkpoint-batch1-20260805`** on
+> `integration/post-audit-phase1`, **local only, not pushed**. No tenth lane was begun; `audit/`
+> untouched; no history was rewritten. Full record: **`integration/BATCH_1_STABILIZATION.md` §11**
+> (the earlier BLOCKED decision remains in §10, unrevised).
+>
+> **The blocker is closed, and it was never ours.** A static initialization order fiasco:
+> `BlendState.cpp`'s four namespace-scope presets copied `Color::White` from another translation
+> unit. Introduced **2026-06-06** by `2345f8fc`, proven an ancestor of the phase-1 checkpoint.
+> Fixed by constructing the value in place — `blendFactor_(255, 255, 255, 255)`, which packs to the
+> byte-identical `0xFFFFFFFF`. Ticket: `plan_postaudit.md` §17.
+>
+> **Two things the original ticket got wrong, found by not trusting it.** Its suggested fix
+> `Color(UInt32{0xFFFFFFFFU})` **does not compile** — that constructor is private. And the wrong
+> *value* it recorded as "not proven" **is now proven**: a probe that forces the link order (the same
+> source linked twice, `BlendState.cpp.o` ahead of and behind `Color.cpp.o`) reads `0x00000000` from
+> all four presets pre-fix and `0xFFFFFFFF` post-fix. No `gdb` required. Decoding `.init_array`
+> showed the hazard sits in **exactly one of 38** OpenGL 1 binaries, which is why one latent defect
+> produced one UBSan line.
+>
+> **Re-validated:** GL1 reproducer clean **with its hazardous link order still intact**; GL1 matrix
+> 38/38 with **0 UBSan (was 1)**, 0 ASan, all 114 leaks in `libGLX_mesa.so.0`; Batch 1 dedicated
+> **119/119**; principal EasyGL **5913 / 5907 / 6 / 0** — exactly +1 registered/+1 passed versus the
+> 5912 baseline, being the one new regression test; plus two sanitizer controls, one of them the
+> fixed code under ASan+UBSan *in the hazardous order itself*.
+>
+> **Networking is unchanged.** It **passed** this run — which is exactly what a ~50 % coin flip does
+> half the time and is **not** evidence the cause was fixed. Still **Outcome C**, unresolved, not
+> modified, skipped or weakened.
+>
+> **One new finding, non-blocking: `REMED-GFX-221`** (`plan_postaudit.md` §18) — `GestureDetector.cpp`
+> statics copy `Vector2::Zero` cross-unit, found by the same-pattern scan. LOW: `Vector2` is not
+> polymorphic so no sanitizer can see it, and `Vector2::Zero` is `(0,0)`, which is what the zeroed
+> `.bss` already holds — latent UB with no reachable wrong value. Deliberately not folded into
+> `REMED-GFX-220`.
+>
+> **Next task, exactly one, not begun:** the **Wicked** lane (re-fetch and re-derive it first).
+> Recommended: **Opus, effort max, fresh context, no ultracode** — escalate to Fable only if fresh
+> inspection proves it broader than its current 24-commit history-recreation classification.
+>
+> **Superseded 2026-08-05 — and the classification in that sentence was wrong.** The lane is a
+> **10**-commit history recreation; 24 was the behind-count to the phase-1 checkpoint (now 230
+> against the current head). Opus was the right call and the escalation trigger never fired: the
+> lane is bounded and additive, and its compile probe found **zero** interface drift. It is
+> nonetheless **MERGE BLOCKED** on two runtime defects — see the CURRENT section above.
+
+---
+
+## Previous — **BATCH 1 ✅ COMPLETE · `opengl2` INTEGRATED (5 of 5)** · 9 integrated / 12 pending (2026-08-05)
+
+> **STATUS: DONE for this lane — and Batch 1 closes.** `feature/opengl2` landed by
+> **ADAPTATION** as merge **`9e6d62ed`** (signed, `--no-ff`, parents `c0876fca` + `289410a6`).
+> **Nothing was pushed.** Full record: **`integration/lanes/opengl2.md`**.
+>
+> ### HISTORY CLEAN re-verified — and the narrative sweep needed to go multiline
+>
+> 40/40 maintainer PGP, zero trailers, zero attribution, exactly as inventoried. **Nine** commit
+> bodies carried session narrative (opengl1 had three) and **two were caught only by a
+> multiline-aware sweep** — `this\nsession` wrapped across a line defeats a line-based grep.
+> Reworded at replay, patches untouched; "(plan_opengl2.md session N)" subject citations kept
+> (the plan is organized by Session-N headings — factual references, not narration). Adapted as
+> **47 signed commits**: 40 replayed (27 byte-identical by range-diff, 0 lost, all 40
+> TRANSFERRED) + interface adaptation + capability + shared-table arming + build fix + two
+> harness-contract adaptations + the production fix below + docs.
+>
+> ### The probe found 14 drifts — two of them the lane's OWN interface additions
+>
+> The familiar set (descriptor SetRenderTargets, BlendWriteState, six void→bool readbacks,
+> preserveContents, VertexDeclaration propagation, fc0dd2a2 unified instanced transport, FNA
+> fog vector consumed directly — shader backend, post-skin in the two skinned programs) plus
+> `IGraphicsBackend::GetDefaultViewportRect` (its real Letterbox/Overscan/Stretch machinery)
+> and **`GraphicsCapability::Instancing` — the enum's 11th member**, restored by the lane's own
+> replayed commits. Growing the enum obligated **four truthful arms in other backends**:
+> OPENGL4 true, OPENGLES1 false (its surviving `default: return true` would have falsely
+> claimed instancing — the ES1 hazard's fourth appearance), OPENGL1 false, Software false; all
+> 22 other identities measured already-truthful by shape. Also paid: **software base-vertex**
+> (GL 2.1 has no glDrawElementsBaseVertex; the head folds real offsets into baseVertex, which
+> the lane's own comment admitted silently falling back to 0) and §1.1's guard satisfied **by
+> translation** (this backend name-binds custom declarations faithfully — its tested Task-1080
+> capability — so the refusal-style guard would delete working draws).
+>
+> ### The campaign's first genuine new production finding — found by the armed oracle
+>
+> **Both RenderTarget2D round trips rendered vertically flipped** (GetData AND
+> sampled-RT-to-screen — the post-processing round trip every XNA game uses), masked by the
+> lane's orientation-insensitive RT assertions, exposed by the newly-armed shared wireframe
+> pixel oracle ("edge BC missing" → frame dump → two probe measurements). Fixed in-lane
+> (`289410a6`) as FNA's own convention: render-time clip-Y flip while a 2D target is bound,
+> glFrontFace winding compensation, direct viewport/scissor/ReadBackbuffer mapping, cube faces
+> deliberately excluded. **The three prior lanes' oracle-arming precedent is what caught it.**
+>
+> **The registration union, a sixth time** — all 26 identities kept exact token counts,
+> `OPENGL2` added as the 27th (+5 tokens in BackendSelection.cmake).
+>
+> **Validation** on the real llvmpipe `4.5 (Compatibility Profile)` context (`:101`) — the
+> backend's own path is GL 2.1 entry points + GLSL 1.10 **by construction** (zero `#version`
+> directives): **48/48** lane suites (first run 44/48 — the predicted GFX-165 harness class);
+> `CnaTests` **5737 · 5730 · 6 skipped · 1 failed** (the networking flake — now **2/6 in
+> isolation**, a worsening trend for the stabilization watch item); **ASan/UBSan over eleven
+> suites: zero findings**, every leak libGLX_mesa-rooted, detect_leaks=0 control all-green.
+> **EasyGL principal control at the merged head: 5912 · 5904 · 6 · 2 — zero regressions**
+> (both failures are the two documented environmental classes; the x11 blip's victim 3/3 in
+> isolation).
+>
+> ### Next — **Batch 1 stabilization checkpoint. SELECTED, NOT BEGUN.**
+>
+> The four carry-forward items now have owners-in-waiting: the README compact-selector
+> `OPENGLES1` omission, the `NameMatchesTypeForEveryBackend` missing arms (every backend since
+> SDL_GPU), the networking flake (now with a measured worsening trend: ES1-era 3/3 → GL1-era
+> 2/3 → today 2/6 in isolation), and the consolidated Batch-1 full-tree baseline across all
+> five GL-family backends plus a signed `integration/checkpoint-batch1-<date>` tag.
+> **Model recommendation: Fable** — the checkpoint is measurement, table-arming and
+> documentation, with no history recreation and no contested design; reserve Opus for Batch 2's
+> rebase-first lanes (`wicked`/`magnum`) if their NEEDS-VALIDATION status turns contentious.
+>
+> **Carried forward unchanged:** `REMED-CONTENT-007`/`-008` **OPEN, HIGH/P1** — `opengl2` adds
+> no path-resolution code and touches none of their files. Direct2D **OWNER-FROZEN, FROZEN
+> INCOMPLETE/EXPERIMENTAL**. `feature/gl` order MetaGL → EasyGL → CNA, EasyGL
+> **internal/hidden**, public backends exactly OpenGL ES 3 / OpenGL 3 / WebGL 1 / WebGL 2 —
+> the four integrated GL lanes (`OPENGLES1`/`OPENGL4`/`OPENGL1`/`OPENGL2`) are independent
+> public backends, not part of that set. Modularization only after all 21 lanes are integrated
+> and the tree is stabilized.
+
+---
+
+## Previous — **BATCH 1 · `opengl1` INTEGRATED (4 of 5)** · 8 integrated / 13 pending (2026-08-05)
+
+> **STATUS: DONE for this lane.** `feature/opengl1` landed by **ADAPTATION** as merge
+> **`c0876fca`** (signed, `--no-ff`, parents `bc29a976` + `91344935`). **Nothing was pushed.**
+> Full record: **`integration/lanes/opengl1.md`**.
+>
+> ### The first HISTORY CLEAN lane of Batch 1 — and it still could not direct-merge
+>
+> The 31/31 maintainer-PGP classification re-verified exactly at the object level (zero SSH,
+> zero unsigned, zero trailers, zero attribution). Direct merge still failed on: **three commit
+> bodies with session narrative** (reworded at replay, patches untouched) and **10
+> probe-established content drifts** (the ES1 set plus the lane's own
+> `ITextureCubeBackend::ShareCpuPixels` interface hook the head never adopted — restored by the
+> lane's own replayed commit). `fc0dd2a2` cost zero; `alphaTest` byte-identical fork→head.
+> Adapted as **37 signed commits** — 31 replayed (24 byte-identical by range-diff, 0 lost,
+> all 31 TRANSFERRED) + interface adaptation + explicit exhaustive capability switch + shared
+> test arming + fog oracle + harness adaptation + docs.
+>
+> ### The capability default hazard broke its streak — three lanes for four
+>
+> The fork-era switch had **no default case and a trailing `return false`**, so `Texture3D` and
+> `MultiStreamVertexInput` already fell through to a truthful false by accident of shape. Made
+> explicit as the ten-member no-default GL4-convention switch regardless.
+>
+> ### Fog: the ES1 inversion verbatim, now with a three-pair oracle
+>
+> Scale recovered by projecting the fog vector onto the modelview eye-Z row; the degenerate
+> `{0,0,0,1}` lands on the fully-fogged ramp. The oracle's three pairs — before-ramp, **exact
+> mid-ramp ~50/50**, degenerate — each pin their own expected value; monotonicity alone cannot
+> tell a wrong sign from a right one.
+>
+> ### A new failure class: the lane's own harnesses vs post-fork device contracts
+>
+> First run 35/38; every failure mechanism-diagnosed with production code proven correct:
+> **REMED-GFX-081** (SpriteBatch::Begin's FNA-faithful CullCounterClockwise **persists after
+> End()** — real XNA semantics — silently culling 3D quads authored under a one-time CullNone;
+> instrumented to zero-fragments-with-perfect-state before touching the test), **GFX-165**
+> (GetBackBufferData validates against PresentationParameters, which raw SDL_SetWindowSize
+> deliberately does not update; the test now reads via the backend's own ReadBackbuffer), and a
+> **control-proven environment regression** (the sandbox's GLX no longer exposes swap control —
+> a CNA-independent raw-SDL probe fails for interval 0 and 1 alike; the vsync check is now an
+> honest skip). **Expect this class on every remaining stale-fork lane.**
+>
+> **The registration union, a fifth time** — six files, token-verified: all 25 pre-existing
+> identities keep exact counts, `OPENGL1` adds 13 tokens as the 26th.
+>
+> **Validation** on the real `4.5 (Compatibility Profile) Mesa 25.0.7` llvmpipe context (`:101`)
+> — reported as the driver's identity, not the backend's API level; the fixed-function path is
+> proven by construction (zero shader entry points, immediate-mode emission): **38/38** lane
+> suites; `CnaTests` **5737 run · 5692 passed · 44 skipped · 1 failed** (the 44 = 39 positive
+> `Texture3DTest` + 4 sensor + 1 WireFrame-refusal skip, all correct for this backend; the 1 =
+> the known pre-existing `TwoProcessLoopbackTest.HostMigration…` networking flake, 2/3 in
+> isolation). **ASan/UBSan over nine representative suites: zero findings**, every leak
+> `libGLX_mesa`-rooted, `detect_leaks=0` control all-green. **Principal EasyGL control at the merged head: 5912 · 5904 · 6 · 2 — zero regressions**; both
+> failures are the two documented environmental flakes (networking + the transient x11 blip,
+> 3/3 in isolation), nothing new.
+>
+> ### Next — **Batch 1, fifth and final lane `opengl2`. NOT BEGUN.**
+>
+> 40 commits, 63 files, 11 drifted, all three shared interfaces (`GraphicsDevice.cpp` +
+> `IGraphicsBackend.hpp` + `GraphicsCapability.hpp` — the batch's first `GraphicsCapability`
+> lane, so the registration union grows a file). History class **HISTORY CLEAN — 40/40
+> maintainer PGP** per the inventory (re-derive at the object level regardless; expect the
+> session-narrative sweep to matter — it caught three bodies on this equally-clean lane). A
+> shader-era-adjacent desktop GL 2.x backend: derive the fog treatment from what the backend
+> actually is (consume the vector directly if it has shaders, invert if fixed-function), check
+> the capability switch against the current ten members, and expect the harness-vs-post-fork
+> contract collisions this lane just catalogued. **Batch 1 stabilization follows `opengl2`.**
+> **Model: Fable** — the playbook is now proven on both fixed-function shapes and no history
+> recreation is needed.
+>
+> **Carried forward unchanged:** `REMED-CONTENT-007`/`-008` **OPEN, HIGH/P1** — `opengl1` adds
+> no path-resolution code and touches none of their files. Direct2D **OWNER-FROZEN, FROZEN
+> INCOMPLETE/EXPERIMENTAL**. `feature/gl` order MetaGL → EasyGL → CNA, EasyGL
+> **internal/hidden**, public backends exactly OpenGL ES 3 / OpenGL 3 / WebGL 1 / WebGL 2 —
+> `OpenGL1` and `OpenGL4` are independent public backends, not part of that set. Modularization
+> only after all 21 lanes are integrated and the tree is stabilized.
+
+---
+
+## Previous — **BATCH 1 · `opengl4` INTEGRATED (3 of 5)** · 7 integrated / 14 pending (2026-08-05)
+
+> **STATUS: DONE for this lane.** `feature/opengl4` landed by **ADAPTATION** as merge
+> **`bc29a976`** (signed, `--no-ff`, parents `df6b7cc6` + `3f1035de`). **Nothing was pushed.**
+> Full record: **`integration/lanes/opengl4.md`**.
+>
+> ### The history half alone was disqualifying
+>
+> All 28 commits authored **and** committed under a non-human identity, all 28 SSH-signed by the
+> campaign's known non-maintainer key — **0 PGP, 0 genuinely unsigned**, the inventory row
+> re-verified with `git cat-file -p`. The first 8 carry both prohibited trailers across two
+> session IDs. Four per-session `NEXT.md` status commits were **OMITTED with justification**
+> (session narrative; `plan_opengl4.md` carries the technical record); the other 24 replayed with
+> 32/41 files byte-identical at the replay boundary, 0 missing.
+>
+> ### The probe earned its place a third time — 23 errors, 13 drifts, two paid first here
+>
+> The `opengles1` drift set recurred (seven `void→bool` readbacks, pure-virtual
+> `SetVertexDeclaration`/`SetRenderTargets`, `preserveContents`, `BlendWriteState`), plus two no
+> prior lane had to pay: the **`fc0dd2a2` unified instanced transport** (this lane's GL4-33
+> hardware instancing read the removed `instanceVb`; rewritten to `FirstInstanceStream()`, the
+> divisor = the stream's own `InstanceFrequency`, offsets per GFX-211) and the **FNA fog vector
+> across ten GLSL programs** — consumed directly, no inversion (shader backend, unlike the
+> fixed-function ES1 lane), skinned programs dotting the POST-skin position as FNA's `Skin()`
+> order requires.
+>
+> ### The capability default hazard recurred, exactly as predicted
+>
+> `SupportsCapability` was never overridden — inherited `true` for enum members the fork
+> predates. Now an exhaustive ten-member switch with **no default case**; nine truthful `true`s,
+> `MultiStreamVertexInput` false (shared negative oracles pass without trusting the answer),
+> `AnisotropicFiltering` from the driver-granted ceiling (core only in GL 4.6). **Check the
+> catch-all default on every remaining lane** — three for three so far.
+>
+> **The registration union was needed a fourth time** — six files; token-by-token, all 24
+> pre-existing identities keep their exact counts, `OPENGL4` only added.
+>
+> **Validation on a real `OpenGL 4.5 (Core Profile)` context** (Mesa llvmpipe, GLSL 4.50,
+> `:101`, reported honestly as software rasterization): **25/25** dedicated pixel suites;
+> `CnaTests` **5737 run · 5730 passed · 6 skipped · 1 failed** (transient x11-connect blip,
+> different victim each run, 3/3 in isolation); **principal EasyGL control at the merged head
+> 5912 · 5905 · 6 · 1** — zero regressions, the 1 being the pre-existing
+> `TwoProcessLoopbackTest.HostMigration…` networking flake (measurably flakier under load now:
+> 1-of-3 clean isolation batches — watch at the Batch-1 checkpoint). ASan/UBSan over nine
+> representative suites: **zero findings**; all leaks control-classified to Mesa driver or
+> harness-owned allocations. WireFrame is now **pixel-oracle-proven** in the shared suite.
+> `docs/opengl4-backend.md` + README entries added (README's compact list was found to omit
+> `OPENGLES1` — pre-existing, handed to the Batch-1 checkpoint, not widened into this lane).
+>
+> ### Next — **Batch 1, fourth lane `opengl1`. NOT BEGUN.**
+>
+> 31 commits, 43 files, 11 drifted, `GraphicsDevice.cpp` + `IGraphicsBackend.hpp`. History class
+> **HISTORY CLEAN — 31/31 maintainer PGP** per the inventory (re-derive at the object level
+> regardless). A fixed-function desktop GL 1.x backend, so expect the ES1-shaped adaptation:
+> the same 13-drift set, the **fog inversion** (not direct vector consumption), and the
+> capability-default check. **Model: Fable** — no history recreation is needed and the
+> adaptation playbook is now twice-proven on both the shader (opengl4) and fixed-function
+> (opengles1) shapes; nothing here turns on contested design.
+>
+> **Carried forward unchanged:** `REMED-CONTENT-007`/`-008` **OPEN, HIGH/P1** — untouched by
+> `opengl4`, which adds no path-resolution code and touches none of their files. Direct2D
+> **OWNER-FROZEN, FROZEN INCOMPLETE/EXPERIMENTAL**. `feature/gl` order MetaGL → EasyGL → CNA,
+> EasyGL **internal/hidden**, public backends exactly OpenGL ES 3 / OpenGL 3 / WebGL 1 /
+> WebGL 2 — and `OpenGL4` is an independent public backend, not part of that set. Modularization
+> only after all 21 lanes are integrated and the tree is stabilized.
+
+---
+
+## Previous — **BATCH 1 · `opengles1` INTEGRATED (2 of 5)** · 6 integrated / 15 pending (2026-08-05)
+
+> **STATUS: DONE for this lane.** `feature/opengles1` landed by **ADAPTATION** as merge
+> **`df6b7cc6`** (signed, `--no-ff`, parents `99ae7d11` + `b811d76d`). **Nothing was
+> pushed.** Full record: **`integration/lanes/opengles1.md`**.
+>
+> ### It failed the direct-merge conditions on BOTH halves
+>
+> **History.** 26 own commits: **24 maintainer-PGP with zero trailers**, and **2 SSH-signed by a
+> non-maintainer key**, authored *and* committed under a non-human identity with two prohibited
+> trailers each. **Zero genuinely unsigned.** Those two are the lane's **first** commits, so all 24
+> clean commits descend from them — there was no way to take the good history without the bad.
+> `%G?` reported `N` for both; the `gpg.ssh.allowedSignersFile` error firing exactly twice is the
+> real tell. The `ext` lesson held a second time.
+>
+> **Content.** Forked at `ac3aaaeb`, **835 commits behind**. Source inspection found the two
+> now-pure virtuals (`SetVertexDeclaration`, `SetRenderTargets`, both also changed parameter type).
+> **The compile probe found four more that no grep could have** — `GetData`/`SetData` changing
+> return type `void` → `bool` on four interfaces — plus `CreateRenderTargetCube`'s
+> `preserveContents`, `ApplyBlendState`'s `BlendWriteState`, and `fogStart`/`fogEnd` becoming the
+> FNA fog vector. `IGraphicsBackend.hpp` grew **1023 → 1788 lines** across the gap.
+>
+> **Lesson for every remaining lane: a probe is the only thing that sees a changed return type.**
+> A signature grep, however careful, cannot.
+>
+> ### The fog inversion
+>
+> A fixed-function pipeline has no dot product to evaluate a fog vector with, so `glFog` needs the
+> scalars back. They are **recovered exactly, not approximated** — the vector is built from those
+> scalars and the same `world*view` matrix the draw loads immediately before `ApplyFog`, so
+> projecting it back onto that matrix's eye-Z row recovers them. Proven by **three distinct
+> `FogStart`/`FogEnd` pairs** each producing their own correct result on a real driver, XNA's
+> degenerate `FogStart == FogEnd` among them.
+>
+> ### One independent production defect — found by the drift, not introduced by it
+>
+> `GraphicsCapability` grew from **8 members to 10** after the fork, and `SupportsCapability` ends
+> in `default: return true` — so **`Texture3D` and `MultiStreamVertexInput` were both answered
+> `true`**. `Texture3DUnsupportedBackendTest`, which exists precisely to catch this, **skipped**:
+> the false claim silenced its own detector. Fixed in-lane. **Check any catch-all `default` against
+> the current enum on every remaining lane** — all of them fork from bases the head has outgrown.
+>
+> ### `TextureCube` readback implemented rather than declared absent
+>
+> The backend genuinely owns cube pixels, so inheriting "cannot read a cube face" was untrue. Level
+> 0 reads back exactly; above it is a real ES 1.1 boundary (`GL_OES_framebuffer_object` requires an
+> attachment's level to be 0). The readback deliberately does **not** flip Y, because this class's
+> `SetData` works in GL's bottom-up space — measured, not assumed: the flip failed three
+> sub-rectangle tests that pass without it.
+>
+> ### §1.1 decided on evidence
+>
+> The **declaration guard applies** — this backend dispatches by vertex stride, exactly the case it
+> exists for — and is wired into all four draw routes, header-only, asymmetric. Truthful `WireFrame`
+> was already satisfied and genuinely implemented via `GL_LINES` re-expansion.
+>
+> **The registration union was needed a third time.** Taking the incoming side of
+> `BackendSelection.cmake` would have deleted `STUB`, `FREEDIRECT`, `DX1/2/5/6/7/8` and `D3D10` —
+> and the lane's own `DX3` token means *free-direct*, not the head's real DirectX 3.
+>
+> **Validation on a real `OpenGL ES-CM 1.1` driver** (Mesa 25.0.7 softpipe, `DISPLAY=:101`), never a
+> desktop-GL fallback: **63/63** across all seven lane harnesses; `CnaTests` **5733 run · 5689
+> passed · 43 skipped · 1 failed** *(corrected 2026-08-05 — the "87 skipped" first recorded here was
+> a log-line count, each skip printing twice plus the aggregate header: 43 × 2 + 1 = 87; see
+> `integration/lanes/opengles1.md` §12.1 for the per-run reconciliation and the explicit sanitizer
+> disposition, which is: sanitizers did not run for that lane)*. Failures went **22 → 1** — the last
+> is a two-process networking test that times out under load and passes 3/3 in isolation. Seven shared **test** files were armed (the
+> `stub` precedent); no production defect in any of them.
+>
+> ### Next — **Batch 1, third lane `opengl4`. NOT BEGUN.**
+>
+> 28 commits, 41 files, 9 drifted, and the batch's first lane to touch **two** shared interfaces
+> (`GraphicsDevice.cpp` **+ `IGraphicsBackend.hpp`**). History class is **total cleanup — 0 PGP, 28
+> SSH** per the inventory, which `opengles1` has just shown must be **re-derived with
+> `git cat-file -p`** rather than trusted: "28 unsigned" and "28 SSH-signed by a non-maintainer key"
+> need the same action but are not the same fact. **Model: Opus** — every commit needs re-authoring,
+> it is the first two-interface lane, and both Batch 1 lanes so far have broken their cheap-looking
+> classification on contact.
+>
+> **Carried forward unchanged:** `REMED-CONTENT-007`/`-008` **OPEN, HIGH/P1** — untouched by
+> `opengles1`, which adds no path-resolution code and touches none of their files. Direct2D
+> **OWNER-FROZEN, FROZEN INCOMPLETE/EXPERIMENTAL**. `feature/gl` order MetaGL → EasyGL → CNA, EasyGL
+> **internal/hidden**, public backends exactly OpenGL ES 3 / OpenGL 3 / WebGL 1 / WebGL 2 — and
+> `OpenGLES1` is **not** an EasyGL alias, it is its own public enum member and build option, with
+> zero EasyGL/MetaGL files touched. Modularization only after all 21 lanes are integrated and the
+> tree is stabilized.
+
+---
+
+## Previous — **BATCH 1 OPEN · `stub` INTEGRATED (1 of 5)** · 5 integrated / 16 pending (2026-08-04)
+
+> **STATUS: DONE for this lane.** `feature/stub` landed by **ADAPTATION** as merge **`99ae7d11`**
+> (signed, `--no-ff`, parents `990d6b8a` + `c29ef117`). **Nothing was pushed.** Full record:
+> **`integration/lanes/stub.md`**.
+>
+> ### The direct-merge classification was re-derived and did not hold
+>
+> Batch 0's closeout named `stub` a **direct-merge candidate**. Every *history* claim behind that
+> re-verified true — 5 own commits, 5/5 maintainer-authored **and** committed, 5/5 maintainer PGP,
+> zero attribution, zero merges, zero WIP, `GpuDrawParams` cost zero. **The lane needed no history
+> work at all.**
+>
+> **Its content did.** The lane forked at `ac3aaaeb` and is 827 commits behind, predating two
+> `IGraphicsBackend` members that are now **pure virtual** — `SetVertexDeclaration` and
+> `SetRenderTargets`, both pure *by design* so a new backend cannot inherit a wrong default. A
+> compiler probe (not an inference) proved `StubVertexBufferBackend` and `StubGraphicsBackend`
+> **abstract** against the current tree: **a direct merge would have produced a non-compiling
+> integration head.** Direct-merge conditions 7, 8 and 10 fail; the rest hold.
+>
+> **Lesson worth carrying to every remaining lane: a clean history is not a compatible tree.** All
+> 16 pending lanes fork from a base that is now hundreds of commits stale. Re-derive *content*
+> compatibility separately from *history* class — a compile probe is cheap and decisive.
+>
+> ### §1.1 was decided on evidence
+>
+> - **Truthful `WireFrame` reporting — already satisfied, and stricter than Headless**, which
+>   reaches `true` only by inheriting the default. Stub reports `false` for everything.
+> - **Declaration-fidelity guard — no subject.** The obligation is scoped to backends with a native
+>   vertex layout; `RequireFaithfulDeclarationEXT` is measurably called only by those. Stub, like
+>   Headless, has none, and takes Headless's explicit empty override.
+> - **"Refuse polygon topologies" — does not apply.** It exists to stop a backend returning a frame
+>   that silently lies. Stub returns no frame; refusing would break its own contract that a `Game`
+>   loop completes without throwing.
+>
+> ### Two shared tests needed a STUB arm, neither a production defect
+>
+> `WireFrameCapabilityReportIsThisBackendsOwn`'s default arm expects `true`, and
+> `SetRenderTargets_{One,Four}Target*` default to expecting no throw. Stub reports `false` and
+> refuses render-target binds it cannot honour — **both correct** — so the contracts are now asserted
+> rather than left as standing reds. `#elif defined(CNA_BACKEND_STUB)` only; no other backend
+> affected.
+>
+> ### The predicted "boilerplate" conflict required a union
+>
+> `cmake/BackendSelection.cmake` conflicted twice. Taking the incoming side would have **deleted
+> `dxold`'s eight backends and reverted the `DX3 → FREEDIRECT` rename** — and the lane's own `DX3`
+> token means *free-direct*, a different backend from the head's real DirectX 3. Verified by counting
+> every `dxold` token before and after: all unchanged.
+>
+> **Validation:** `Stub_Smoke` **7/7 with no display present**; `CnaTests` **5693/5737 (99 %)** under
+> `CNA_GRAPHICS_BACKEND=STUB`. All 44 failures classified, none a regression: 5 are the lane's own
+> pre-existing capability residuals (already failing at `ac3aaaeb`), 14 are the documented
+> `TextureCube`/custom-`Effect` gap, 24 are environment-dependent audio/network/media, 1 not run.
+>
+> **New findings: none.** No independent production defect was found in this lane.
+>
+> ### Next — **Batch 1, second lane `opengles1`. NOT BEGUN.**
+>
+> 26 commits, 23 files, 6 drifted, `GraphicsDevice.cpp` only, mixed history (**24 PGP, 2 SSH** — the
+> SSH pair must be resolved, not counted as either). **Model: Opus** — unlike `stub` this lane has a
+> genuine history-class decision (the two SSH-signed commits) on top of a real backend, and `stub`
+> has just shown that the cheap-looking classification is the one that breaks. Reserve nothing here.
+>
+> **Carried forward unchanged:** `REMED-CONTENT-007`/`-008` **OPEN, HIGH/P1** — untouched by `stub`,
+> which adds no path-resolution code and touches none of their files. Direct2D **OWNER-FROZEN,
+> FROZEN INCOMPLETE/EXPERIMENTAL**. `feature/gl` order MetaGL → EasyGL → CNA, EasyGL internal/hidden,
+> public backends exactly OpenGL ES 3 / OpenGL 3 / WebGL 1 / WebGL 2. Modularization only after all
+> 21 lanes are integrated and the tree is stabilized.
+
+---
+
+## Previous — **BATCH 0 CLOSED · FINAL FOUR-LANE CHECKPOINT TAKEN** · 4 integrated / 17 pending (2026-08-04)
+
+> **STATUS: DONE.** Batch 0 is closed and verified. Signed annotated tag
+> **`integration/checkpoint-batch0-complete-20260804`** → **`990d6b8a`**, **local only, not pushed**.
+> Full record: **`integration/BATCH_0_COMPLETE.md`**.
+>
+> **Closeout only — no lane integrated, no production/test file modified, `audit/` untouched.**
+>
+> ### Batch 0 has TWO checkpoints. They are not interchangeable.
+>
+> | | Tag | Target | Lanes | Record |
+> |---|---|---|---|---|
+> | **A — intermediate** | `integration/checkpoint-batch0-20260804` | `e0332214` | **3** | `integration/BATCH_0_STABILIZATION.md` |
+> | **B — final** | `integration/checkpoint-batch0-complete-20260804` | `990d6b8a` | **4** | `integration/BATCH_0_COMPLETE.md` |
+>
+> **A is correct and must never be moved, recreated, retargeted or deleted.** It marks the state
+> after `depthcrt` + `gltf` + `ext` and deliberately predates `dxold`, which was sequenced after it.
+> Read its §11 *"Batch 0 complete"* as scoped to the batch's **process-validation objective**, not
+> its lane set — the same document names `dxold` as the remaining lane five sections earlier.
+>
+> | Gate | Result |
+> |---|---|
+> | Fetch | `--all --prune --tags` exit 0, **nothing moved** |
+> | Four lanes | `depthcrt` `61bd1a1b` · `gltf` `722a2f5a` · `ext` `8a374b9f` · `dxold` `990d6b8a` — all four original heads unmoved, all four archive tags verify good, each merge's tree delta is exactly its own lane's scope |
+> | Ancestry | all six anchors verified — `d79214e7`, `e0332214`, and all four lane merges |
+> | Signatures | **48 / 48 `U`** over `d79214e7..HEAD` — 41 adapted + 4 merges + 2 stabilization + 1 direct-merged original. Zero `N`, zero `E` |
+> | Attribution | **zero** prohibited hits. One sweep match, the tracked filename `docs(CLAUDE.md):` — explicitly non-violating (policy §2.1); body read in full and clean. One author, one committer, **no trailers anywhere** |
+> | `dxold` losslessness | **210 / 210 lane-added files byte-identical at the replay boundary** (`c0cad202`), 0 missing at the adapted head — the card's claim verified where it is made |
+> | `dxold` backend delta | **+8** measured: CMake selectors 14 → 22, enum 14 → 22. `FREEDIRECT` is the **renamed** free-direct backend, not a ninth. No live `DX30` selector, option or enumerator survives |
+> | No fifth lane | verified two ways — no pending lane head is an ancestor; no pending lane marker path in the tree; exactly three `adapt/*` branches for the three *adapted* lanes |
+> | Worktrees · `git diff --check` · `audit/` | clean · clean · **0 files changed** |
+>
+> ### One campaign-wide correction: **"204 unsigned" is wrong**
+>
+> `INTEGRATION_BRANCH_INVENTORY.md` §5's *"204 carry no signature at all"* was re-derived at the
+> object level **for all 21 lanes** (the inventory had flagged three as owing this). Of 796 own
+> commits: **592 maintainer PGP · 204 SSH · 0 genuinely unsigned**, and all 204 carry the *identical*
+> non-maintainer `ssh-ed25519` key first seen on `ext`. **No required action changes** — an SSH
+> signature from a foreign key never satisfied policy A4 — but the `SIGNATURE-ONLY CLEANUP` label is
+> a misnomer for `html-dom`'s 17, and `%G?` must never be used to derive a signature class again.
+>
+> ### Corrections recorded, not silently applied
+>
+> - **`990d6b8a`'s merge body says "32 signed commits"; the range is 35.** The merge object is
+>   **deliberately left unmodified** — signed, published-in-spirit integration history. Authoritative
+>   count 35.
+> - **`integration/lanes/dxold.md` enumerated only 34 of its 35** — `618afbcf` was missing from the
+>   mapping table and the record paragraph. **Corrected in place** (a lane card is living doc).
+> - **A false positive, dismissed:** `docs/graphics-backend-feature-matrix.md` lists none of the
+>   eight new backends, but it is byte-identical across `develop`/checkpoint/HEAD and its title
+>   scopes it to *established* backends. Never covered old `DX3` either. Not a `dxold` gap.
+>
+> ### Next — **Batch 1, first lane `stub`. SELECTED, NOT BEGUN.**
+>
+> The proposed order (`stub` → `opengles1` → `opengl4` → `opengl1` → `opengl2`) was **re-derived
+> against the current head, not assumed, and `stub` holds**: it is the batch's only lane needing no
+> history work (5/5 Robert-authored, 5/5 maintainer PGP — the `gltf` class, so **test it against the
+> nine direct-merge conditions first**), its `GpuDrawParams` cost is **zero** (newly measured — it
+> is a fifth zero-cost lane, not a fourth), and it is smallest by every measure (5 commits, 15 files,
+> +685/−9). `opengles1` has marginally less drift (6 vs 8) but 5× the commits and a mixed history.
+>
+> **`dxold` raised `stub`'s conflict surface**: 5 of its 8 drifted files drifted *because of* `dxold`
+> — `CMakeLists.txt`, `README.md`, `GraphicsBackendType.hpp` and the two backend-registration test
+> files. That is C4 behaving as predicted, and an argument for taking `stub` **now**.
+>
+> **Must not be waved through:** `stub` adds a backend, so the §1.1 post-audit obligations apply.
+> Its final commit is already *"`SupportsCapability` should return false"*. Decide and **record**
+> what truthful `WireFrame=false` reporting and the declaration-fidelity guard mean for a backend
+> whose draw routes are all no-ops — do not skip it because nothing renders.
+>
+> **Model: Fable** for `stub` — small, clean, mechanical, conflicts confined to registration
+> boilerplate `dxold` just demonstrated on the same files. **Reserve Opus for `opengl4`** (28/28
+> non-maintainer-signed total history recreation across two shared interfaces).
+>
+> Carried forward unchanged: **`REMED-CONTENT-007`/`-008` OPEN HIGH/P1** — re-checked, none of the
+> four integrated lanes touches any file they live in; required before any public security-clean
+> claim; best run as a **parallel safety lane during Batch 0–1**. **Direct2D OWNER-FROZEN
+> INCOMPLETE @ `9b17e783`** (corrected recount: 96 of 128 incomplete; this historical record
+> originally said 88). **`feature/gl`** cross-repository sequence —
+> EasyGL **internal and hidden**, public backends exactly **OpenGL ES 3, OpenGL 3, WebGL 1,
+> WebGL 2**; its one open provenance gap (the EasyGL `rvc` archive tag) is blocked only on a
+> one-line worktree cleanup. **Nothing was pushed.**
+
+
+## Previous — **BATCH 0 COMPLETE: `dxold` LANDED (4 of 4 lanes)** · 4 integrated / 17 pending (2026-08-04)
+
+> **STATUS: DONE.** The `dxold` lane — the legacy DirectX backend family — is integrated.
+> Merge **`990d6b8a`** (signed, `--no-ff`, parents `e0332214` + `9256e606`), extending the Batch 0
+> checkpoint. Full record: **`integration/lanes/dxold.md`**.
+>
+> | Gate | Result |
+> |---|---|
+> | Original provenance | `feature/dxold` and `archive/preintegration/dxold-20260804` both still `36289bb2`, tag verifies good |
+> | Adapted range | **35 commits on `adapt/dxold`**, 35/35 GPG-signed `U`, 35/35 Robert-authored, zero prohibited attribution; 28 replayed originals (210/210 added files byte-identical), 1 interface-adaptation commit, 2 owner-ordered rename commits, 3 validation-driven completion fixes |
+> | Public backends added | **+8, Historical class:** `DX1 DX2 DX3 DX5 DX6 DX7 DX8 D3D10` — Route B (real MinGW-w64 headers + era-correct COM + Wine/DXVK); era-accurate capability reporting; REMED-GFX-DECL-GUARD on all six stride-dispatching backends |
+> | **Naming transition (owner instruction, live)** | executed inside the lane: free-direct `DX3` → **`FREEDIRECT`** (`8a1e801e`), then `DX30` → **`DX3`** (`dd4806f0`). Task IDs `DX3-*`/`DX30-*` kept verbatim; `audit/`/`remediation/` untouched. The DirectX 3 generation now has two distinct public implementations |
+> | Validation | dedicated Wine suites **137/137** (DX1 10, DX2 19, DX3 19, DX5 19, DX6 20, DX7 20, DX8 20, D3D10 10, on `:99`); FREEDIRECT native **19/20** on `:101` — the one red (`FreeDirect_SpriteBatch`) reproduces identically on the checkpoint's own pre-rename binaries (known pre-existing defect pair, deliberately untouched); D3D9 modern-control cross-build exit 0; post-merge EasyGL principal suite green on the merged tree |
+> | Batch 0 ancestry | phase-1 checkpoint, `integration/checkpoint-batch0-20260804`, and all three prior lane merges verified ancestors; merged tree byte-identical to `adapt/dxold` |
+>
+> **Next recommended action: Batch 1** (`stub` → `opengles1` → `opengl4` → `opengl1` → `opengl2`,
+> `INTEGRATION_ORDER.md` §3). `stub` is the natural opener: 5 commits / 15 files, GraphicsDevice.cpp
+> only. Model recommendation: **Sonnet or Fable** for `stub`/`opengles1` (small, mechanical);
+> reserve Opus-class reasoning for `opengl4` (28/28 total history recreation, per-object signature
+> re-derivation needed first — the `%G?` blind spot is now confirmed on two lanes).
+>
+> Carried forward unchanged: **`REMED-CONTENT-007`/`-008` OPEN HIGH/P1** (dxold touches no
+> path-resolution code — re-checked); **Direct2D OWNER-FROZEN INCOMPLETE @ `9b17e783`**;
+> **`feature/gl`** cross-repository sequence (EasyGL hidden; public backends exactly OpenGL ES 3,
+> OpenGL 3, WebGL 1, WebGL 2). Nothing was pushed by this session.
+
+
+## Previous — **BATCH 0 STABILIZATION CHECKPOINT TAKEN** · Batch 0 was 3 of 4 lanes + checkpoint (2026-08-04)
+
+> **STATUS: OUTCOME A — READY.** Signed annotated tag
+> **`integration/checkpoint-batch0-20260804`**, **local only, not pushed**.
+> Full record: **`integration/BATCH_0_STABILIZATION.md`**.
+>
+> | Gate | Result |
+> |---|---|
+> | Provenance, all three lanes | clean — 21 archive tags verify, originals unmoved, each merge's tree delta is exactly its lane's scope |
+> | Full `CnaTests` at the integration HEAD | **5912 run · 5906 passed · 6 skipped · 0 failed** (was 5904/13/**2** at `61bd1a1b`) |
+> | depthcrt lane tests · demos · screenshots | 19/19 · both demos exit 0 · 18 PNGs, 18 distinct, visually verified |
+> | `XnbContainerFuzzTest` | **resolved, test-only** — and the exit record's `REMED-GFX-DECL-GUARD` attribution is **wrong**, see below |
+> | NOXNA cross-references | 4 repaired on the integration branch; 3 under frozen `audit/` deliberately untouched |
+> | Signatures / attribution | all `U`, zero attribution hits |
+>
+> **The next lane is `dxold`** (28 commits, 225 files) — it closes Batch 0. **Not begun.**
+>
+> **One correction worth carrying forward.** `remediation/REMEDIATION_EXIT.md:238` names
+> `REMED-GFX-DECL-GUARD` as the cause of the `XnbContainerFuzzTest` failure. It is not. The throw is
+> `System::ArgumentException` from `VertexBuffer::SetData` (`VertexBuffer.cpp:183`) — XNA-layer
+> argument validation at **upload**, during `ContentManager::Load<Model>()`. The decl guard lives in
+> backend **draw** paths and throws `System::NotSupportedException`. The exit record's *conclusion*
+> (stale test expectation, not a production defect) was right; its named mechanism was not. The exit
+> record is deliberately left unmodified — it is the frozen statement attached to
+> `cna-post-audit-remediation-phase1`.
+
+## Previous — **third integration lane LANDED: `ext`** · Batch 0 is 3 of 4 (2026-08-04)
+
+> **Remediation phase-1 checkpoint: TAKEN. Direct2D: FROZEN INCOMPLETE (owner-confirmed).
+> Integration bootstrap: COMPLETE. Three feature lanes integrated: `depthcrt` (adapted),
+> `gltf` (direct merge) and `ext` (adapted).**
+>
+> Signed annotated tag **`cna-post-audit-remediation-phase1`** → `d79214e7` on `feature/audit`,
+> **local only, not pushed**. **This is phase 1, not the completion of all CNA work.**
+
+**Read first:** `integration/INTEGRATION_BRANCH_INVENTORY.md` (authoritative lane inventory,
+**18 pending lanes** after `depthcrt`, `gltf` and `ext`, re-derive after a fetch),
+`integration/INTEGRATION_ORDER.md` (batches and lane selection),
+`integration/INTEGRATION_HISTORY_POLICY.md` (how commits are adapted),
+`integration/lanes/depthcrt.md`, `integration/lanes/gltf.md` and `integration/lanes/ext.md` (the
+three completed lanes' full records), and `remediation/REMEDIATION_EXIT.md` (authoritative
+remediation exit record).
+
+`remediation/INTEGRATION_BRANCH_INVENTORY.md` is **superseded** — retained as a labelled historical
+snapshot.
+
+### State
+
+| Item | Value |
+|---|---|
+| Integration branch | **`integration/post-audit-phase1`** @ **`8a374b9f`** — checkpoint + the `depthcrt`, `gltf` and `ext` merges |
+| Integration worktree | **`/rv/data/development/github.com/openeggbert/cnaintegration`** — clean |
+| Adaptation branches / worktrees | `adapt/depthcrt` @ `3cca0b19` · `.../cnaintegration-depthcrt` and `adapt/ext` @ `c6a28036` · `.../cnaintegration-ext` — both **retained** for post-merge review, not deleted. `gltf` needed none |
+| `feature/direct2d` | **FROZEN INCOMPLETE / EXPERIMENTAL @ `9b17e783`** — not actively developed, not automatically integration-ready, does **not** block other lanes |
+| Archive tags | **22**, all annotated, GPG-signed, verified, **local only** — 21 CNA lanes + MetaGL `feature/followup-audit`. The 23rd (EasyGL `rvc`) is outstanding and is blocked only on a one-line worktree cleanup — see `INTEGRATION_BRANCH_INVENTORY.md` §7.5 |
+| Feature lanes integrated | **3 of 21 — `depthcrt`** (adapted, merge `61bd1a1b`), **`gltf`** (direct merge `722a2f5a`) and **`ext`** (adapted `c6a28036`, merge `8a374b9f`) |
+| Pending lanes | **18** — freshly derived 2026-08-04 after `git fetch --all --prune --tags`, with all 21 lane heads confirmed unmoved; re-derive after any fetch |
+| Signatures over `d79214e7..8a374b9f` | **10 / 10 `U`** — no `N`, no `E` |
+| Pushed | **this session pushed nothing.** But the blanket "nothing is pushed" claim is now **false** and was corrected: `feature/audit` (`047c254a`), `integration/post-audit-phase1` (`61bd1a1b`) and `adapt/depthcrt` (`3cca0b19`) are **on `origin`**, pushed by the owner at 2026-08-04 16:54:40. **All 21 archive tags remain local only.** The `gltf` merge `722a2f5a`, the `ext` merge `8a374b9f`, `adapt/ext`, and this documentation commit are local. Measure with `git ls-remote` — do not restate this line forward |
+
+### Do not infer lane completion from ancestry
+
+The campaign now uses **both** integration paths. A direct merge preserves the original commit
+object, so `feature/gltf`'s head **is** an ancestor of the integration branch. An adaptation replays
+commits as new objects, so `feature/depthcrt`'s head is **not** — correctly.
+
+A `git merge-base --is-ancestor <lane-head> integration/post-audit-phase1` sweep over all 21 lanes
+therefore reports **1 integrated, 20 pending** — only `gltf`, the one direct merge. That is a
+property of the measurement. Read lane completion from the lane cards and `INTEGRATION_ORDER.md` §3.
+**The correct count is 3 integrated, 18 pending.**
+
+### What landed — `ext`
+
+`NOXNA.md` rewritten as the authoritative extended-graphics design (`+568, −241`, one file). Its
+central contribution is a boundary that had never been written down: the **always-compiled
+`NOXNA`/`*EXT` marker convention** in `Microsoft::Xna::Framework::Graphics` versus the
+**`CNA_NOXNA`-gated `CNA::Graphics` engine layer**. It records what already ships, corrects four
+stale claims, specifies the remaining classes/enums/backend virtuals, and renumbers the backlog.
+
+**Adapted, not direct-merged.** The original `05ab5d3d` needed four of the five cleanup classes at
+once: author, committer, trailers and signature. Landed as **one** GPG-signed, Robert-authored commit
+`c6a28036` with both prohibited trailers stripped and the technical body preserved verbatim; signed
+`--no-ff` merge `8a374b9f`. `range-diff` is 38 lines and shows only author, trailers/message, and the
+one recorded adaptation.
+
+**Documentation only — nothing was built, and that is measured rather than assumed.** The commit
+changes no build input; tree-hash equality outside `NOXNA.md` proves every other tracked path is
+byte-identical. Every testable claim the document makes was checked against the integration head and
+**holds**. Full record: `integration/lanes/ext.md`.
+
+#### Two lessons this lane produced
+
+1. **A one-file lane is not a zero-conflict lane.** `ext` renumbers the same `NOXNA.md` backlog table
+   `depthcrt` had appended `N26`–`N29` to, and was authored against a base predating them. Resolving
+   in favour of the incoming side would have **silently deleted four rows of already-integrated
+   work**. They were preserved verbatim — the renumbering leaves `N26`–`N29` free, so they kept both
+   their numbers and their position. `depthcrt`'s *diff the lane against the checkpoint, per shared
+   file* lesson is what caught it.
+2. **`%G?` cannot distinguish "unsigned" from "SSH-signed and uncheckable".** `05ab5d3d` is **not**
+   unsigned as the inventory records — it carries an SSH signature from a non-maintainer key, and
+   `%G?` still reports `N` (not the `E` the policy predicts). The required action was unchanged, but
+   `opengl4` (28), `magnum` (13) and `wicked` (10) should be re-derived with `git cat-file -p`.
+
+#### One consequence deliberately left open — for the Batch 0 checkpoint
+
+The renumbering **invalidates four cross-references from files outside the lane**:
+`include/CNA/Graphics/PbrMaterial.hpp:19` and `noxna_devices.md:93` (cite `N11`, which no longer
+means `PbrEffect`), `docs/surface-format-support.md:184,220` (cite `N20` for float render targets,
+now `N11`/`N12`), and `plan_postaudit.md:1572-74` (quotes the old `N50`/`N51`/`N52` titles and an old
+section number). Two more live under `audit/`, which is frozen. `DitherMode.hpp:14`'s `N70` still
+resolves.
+
+**Not fixed in the lane, on purpose** — it means editing four files outside a one-file lane and
+touching `audit/`. **No remediation ticket was opened: this is not an independent production defect**
+(no compiled behaviour changes, and it is *caused by* this integration rather than independent of
+it). Owner: the Batch 0 stabilization checkpoint.
+
+### What landed — `gltf`
+
+One root-level document, `gltfissues.md` (`+451, −0`): a dated (2026-07-28) root-cause analysis of
+incorrect glTF rendering, attributing each defect to a layer — discarded glTF node transforms, lost
+`baseColorFactor` with a map-gated PBR selection condition, black PBR surfaces from absent default
+lighting, ignored `KHR_materials_transmission`, plus sampler, multi-UV-set, rigid-node-animation,
+material-variant and sRGB losses.
+
+**Integrated by DIRECT MERGE — the first of the campaign.** Its single commit `86ada7a7` is
+`HISTORY CLEAN` (authored *and* committed by Robert Vokac, GPG-signed, empty body, empty trailer
+set) and its merge base was already an ancestor, so all nine direct-merge conditions held. The
+commit was **preserved as the same object, not recreated**; losslessness is structural rather than
+measured. Signed `--no-ff` merge `722a2f5a`.
+
+**This lane implements nothing.** The document's *Recommended Repair Order* (P0–P2) and its twelve
+*Missing Regression Tests* are proposals; none exists at the integration head. It closes no ticket
+and adds no glTF capability — it adds a description of open defects.
+
+Staleness was measured, not assumed: **eight of the nine source files it cites are byte-identical**
+between its own declared baseline `32639a13` and the integration head, so its findings still
+describe current behaviour. The ninth, `EasyGLGraphicsBackend.cpp`, was rewritten by the remediation
+campaign and its cited PBR shader line `4121` now sits at `4948`; the quoted expression is unchanged,
+so the citation was **retained as historical** rather than rewritten to a line that did not exist on
+the analysis date. Full record: `integration/lanes/gltf.md`.
+
+### `feature/gl` adds four public backends — EasyGL is not one of them
+
+**OpenGL ES 3, OpenGL 3, WebGL 1, WebGL 2.** EasyGL is internal and hidden, a support library rather
+than a user-selectable CNA backend. Do not count or expose it as a fifth (inventory §7.0).
+
+The `easy-glrvc` worktree's uncommitted `CMakeLists.txt` redirect is **temporary local build
+configuration** — not feature work, and **not provenance to preserve**. Restore or remove it
+(`git restore` / `git checkout --`; **never `git stash`**), then create the outstanding EasyGL `rvc`
+archive tag. The earlier "discard or commit — the owner's call" framing was wrong and is corrected in
+inventory §7.5; owner-only still applies to the cross-repository *merges* and `GLB-38`, not to this
+file.
+
+### What landed — `depthcrt`
+
+`CNA::Graphics::DepthEffect` (colour-depth reduction, Bayer dithering, Palette256/Palette16) and
+`CNA::Graphics::CRTEffect` (scanlines, RGB sub-pixel mask, curvature, vignette), both NOXNA,
+EasyGL-targeted, with 18 unit tests and two manual verification demos.
+
+Adapted from `archive/preintegration/depthcrt-20260804` (`f4804469`) as **5 GPG-signed,
+human-authored commits** plus one signed `--no-ff` merge `61bd1a1b`. The five replayed patches are
+**byte-identical** to the originals; `git range-diff` differs only in author, trailers and the one
+dropped commit. `f05e07c8` was dropped as superseded by `REMED-BUILD-005` after direct comparison,
+not on the plan's word.
+
+Validation: 19/19 effect tests; full `CnaTests` 5904/5912 with both failures reproduced on the
+checkpoint **without** the lane; both demos render and capture correctly under Xvfb; ASAN+UBSAN
+clean apart from a Mesa GLX driver leak baseline also present without the lane. Full record:
+`integration/lanes/depthcrt.md`.
+
+### One test failing on the integration base itself — owner triage
+
+`XnbContainerFuzzTest.MutatedRealModelFixtureNeverCrashesAndOnlyFailsCleanly` fails on
+`integration/post-audit-phase1`, and failed on the checkpoint before `depthcrt` landed. The escaping
+exception is the `REMED-GFX-DECL-GUARD` rejection — *"The VertexDeclaration contains an element
+outside the uploaded vertex stride"* — which is **correct production behaviour**; the fuzz test's
+expected-exception set simply predates the guard. A test-side gap, not a production defect, so no
+remediation ticket was opened for it. It deserves an owner decision on whether to ticket it in
+`plan_postaudit.md`.
+
+**Still open and unchanged after `gltf` and `ext`.** Neither lane was its cause or its fix: each
+changes one Markdown file and no compiled source, so neither can have affected this test in either
+direction. Neither ran it, because a documentation-only lane gives nothing to run it against. The
+residual remains exactly as recorded above — a pre-existing property of the checkpoint. **It is a
+named item in the Batch 0 checkpoint scope below.**
+
+`TwoProcessLoopbackTest.HostMigrationPromotesOneSurvivorAndTheOtherReconnectsAcrossRealProcesses`
+also fails on the base — a 30 s timeout in a real two-process networking test, environment-dependent.
+
+### The next single task — **Batch 0 stabilization / provenance checkpoint**, not another lane
+
+Batch 0 has landed 3 of 4 lanes and has now exercised **all three principal history classes**:
+
+| Class | Lane | Path |
+|---|---|---|
+| Reconstructed multi-commit lane | `depthcrt` | 6 originals → 5 adapted, 1 dropped as superseded |
+| Clean direct-merge lane | `gltf` | original object preserved, nothing recreated |
+| Single-commit metadata-cleanup lane | `ext` | 1 → 1, author + committer + trailers + signature |
+
+The process the batch exists to validate is proven. **Checkpoint it before taking `dxold`** (28
+commits, 225 files — the last Batch-0 lane, and an order of magnitude larger than anything landed so
+far). Recommended checkpoint scope:
+
+- **A full build + `CnaTests` run on `8a374b9f`.** No lane since `depthcrt` has compiled anything —
+  `gltf` and `ext` are both documentation-only — so the last *measured* build state of the
+  integration branch is `61bd1a1b`. Two documentation merges later, that should be re-established
+  rather than assumed.
+- **The `NOXNA.md` cross-reference repair** `ext` deliberately left open, including the two `audit/`
+  citations, which need an owner decision a lane session cannot make.
+- **An owner decision on `XnbContainerFuzzTest`**, failing on the base since before `depthcrt`.
+- **A signed checkpoint tag** (`integration/checkpoint-batch0-<date>`, `INTEGRATION_ORDER.md` §5).
+
+`INTEGRATION_ORDER.md` §4 carries `depthcrt`'s five process lessons and §4.2 carries `ext`'s two;
+read both before starting the next lane.
+
+**Direct2D is deliberately NOT first.** It is frozen *mid-backlog* — `plan_direct2d.md` records 128
+`D2D-*` rows with **96 not complete** (32 complete + 35 yellow + 61 blank; corrected from the
+historical stale count 88). Frozen is not complete. It sits in the deferred group pending
+an owner scope decision (`integration/lanes/direct2d.md`).
+
+### One open provenance gap
+
+**EasyGL `rvc` @ `b52f671379…` has no archive tag**, because the `easy-glrvc` worktree carries an
+uncommitted `CMakeLists.txt` MetaGL redirect and Phase 2's precondition requires a clean worktree.
+Deliberate omission, not an oversight. Closed by one owner decision — discard or commit the redirect.
+`feature/gl` step 5 must not begin before it is closed.
 
 ### The strongest *substantive* next task — `REMED-CONTENT-007` / `-008`
 
@@ -36,6 +1698,28 @@ already hardened via `CnjSourceFile.hpp` — the fix is mechanical. These do **n
 checkpoint (they fall outside its blocker classes — `REMEDIATION_EXIT.md` §2.1, §4.4) but they are
 the **highest-severity open items in the entire inventory**. This checkpoint does not claim security
 is clean.
+
+**Carried into the integration campaign, still open (`INTEGRATION_ORDER.md` §6):**
+
+- **HIGH / P1 security follow-up.** Non-blocking for the phase-1 checkpoint that already exists.
+- **Required before any public security-clean claim or release.**
+- **Recommended placement: a parallel safety lane during Batch 0–1.** The fix touches `Content/`
+  only, and **no integration lane touches any file either finding lives in** — not
+  `ContentManager.cpp`, `ContentReader.cpp`, `SongContentTypeReader.cpp`,
+  `VideoContentTypeReader.cpp` or `PathContainment.hpp` — so it cannot conflict with the campaign.
+  The alternative is the first post-integration stabilization batch.
+- **Conditional integration blocker.** Five lanes touch Content-*adjacent* files (`skia` in
+  production, `html-dom`/`gdi`/`sokol`/`diligent` in tests only). `skia`'s
+  `Texture2DContentTypeReader.cpp` change was inspected and contains no path-resolution logic, so it
+  is not a blocker today — but re-check per lane at adaptation time rather than trusting this
+  sentence.
+- **Must be closed before the Batch-5 stabilization checkpoint.**
+- **Re-checked per lane, three times so far, and still not blockers.** `depthcrt` touches no content
+  path resolution; `gltf` and `ext` change no code at all. All three re-checks are recorded on their
+  lane cards. `gltf` is the case worth naming explicitly: `gltfissues.md` *discusses* the glTF import
+  path at length, but discussing a code path introduces no path-resolution code — and `ext` is the
+  same shape, a design document that names `IGraphicsBackend` additions without adding any. **Both
+  findings remain OPEN, HIGH / P1, and visible.**
 
 ### `WEBGPU-115` — closed and re-verified in source
 

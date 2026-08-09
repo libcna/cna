@@ -13,8 +13,9 @@ static_assert(getCurrentGraphicsBackendType() == getCurrentGraphicsBackendType()
 static_assert(!getCurrentGraphicsBackendName().empty());
 constexpr GraphicsBackendType kCompileTimeType = getCurrentGraphicsBackendType();
 constexpr std::string_view kCompileTimeName = getCurrentGraphicsBackendName();
-static_assert(static_cast<int>(GraphicsBackendType::Llgl) + 1 == 40,
-              "GraphicsBackendType must expose all 40 genuine backend identities");
+constexpr int kPublicBackendCount = static_cast<int>(GraphicsBackendType::Metal) + 1;
+static_assert(kPublicBackendCount == 41,
+              "GraphicsBackendType must expose all 41 genuine backend identities");
 
 TEST(GraphicsBackendTypeTest, GetCurrentGraphicsBackendTypeDoesNotThrow)
 {
@@ -89,15 +90,33 @@ namespace
             case GraphicsBackendType::Glide:       return "GLIDE";
             case GraphicsBackendType::Gdi:         return "GDI";
             case GraphicsBackendType::Llgl:        return "LLGL";
+            case GraphicsBackendType::Metal:       return "METAL";
         }
         return {};
+    }
+}
+
+TEST(GraphicsBackendTypeTest, EveryPublicBackendHasOneUniqueCanonicalName)
+{
+    for (int i = 0; i < kPublicBackendCount; ++i)
+    {
+        const auto type = static_cast<GraphicsBackendType>(i);
+        const auto name = ExpectedNameFor(type);
+        ASSERT_FALSE(name.empty()) << "missing name for GraphicsBackendType value " << i;
+
+        for (int j = i + 1; j < kPublicBackendCount; ++j)
+        {
+            EXPECT_NE(name, ExpectedNameFor(static_cast<GraphicsBackendType>(j)))
+                << "duplicate public backend name at values " << i << " and " << j;
+        }
     }
 }
 
 TEST(GraphicsBackendTypeTest, NameMatchesTypeForEveryBackend)
 {
     // Every call in this build returns the SAME compile-time-selected backend, so one build
-    // checks one arm; the 39 backend builds between them cover the whole enum. What this asserts
+    // checks one active arm; EveryPublicBackendHasOneUniqueCanonicalName covers the complete
+    // 41-identity enum in every build. What this asserts
     // is that the (type, name) pair is internally consistent AND that the active backend has an
     // expected-name arm at all -- a backend with no arm fails here instead of passing vacuously.
     const auto type = getCurrentGraphicsBackendType();

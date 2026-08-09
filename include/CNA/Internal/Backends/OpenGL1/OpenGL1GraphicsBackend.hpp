@@ -17,7 +17,7 @@ class OpenGL1VertexBufferBackend final : public IVertexBufferBackend {
 public:
  explicit OpenGL1VertexBufferBackend(int capacity):capacity_(capacity){}
  void SetData(const void*,int,std::size_t) override;
- void SetDataWithOptions(const void* d,int c,std::size_t s,SetDataOptions) override {SetData(d,c,s);} 
+ void SetDataWithOptions(const void* d,int c,std::size_t s,SetDataOptions) override {SetData(d,c,s);}
  // REMED-GFX-DECL-GUARD: this backend selects its immediate-mode emit layout from the vertex
  // stride alone (16/20/24/32 -- DrawInternal's own dispatch), so the declaration is remembered
  // rather than discarded and a draw can refuse one the stride table would silently reinterpret.

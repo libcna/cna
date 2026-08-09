@@ -421,14 +421,17 @@ individual task. Do not push unless the user explicitly asks to push.
 |---------------------------|-----------------------------------------------|--------------------------------|
 | XNA public API            | `include/Microsoft/Xna/Framework/…`           | Game-facing, must match XNA    |
 | Backend contracts         | `include/CNA/Internal/Backends/Common/…`      | `IGraphicsBackend` etc.        |
-| Backend implementations   | `src/CNA/Internal/Backends/{SDL,EasyGL,Vulkan,Skia}` | Hidden from XNA API           |
+| Backend implementations   | `src/CNA/Internal/Backends/<backend>/`        | Hidden from XNA API           |
 | CNA utilities             | `include/CNA/`, `src/CNA/`                    | NOXNA helpers, logging, etc.   |
 
 Backend selection is compile-time via `CNA_GRAPHICS_BACKEND` CMake option
-(`SDL_RENDERER` | `EASYGL` | `BGFX` | `VULKAN` | `WEBGPU` | `MAGNUM` | `HEADLESS` | `SOFTWARE` |
-`STUB` | `D3D11` | `D3D12` | `CANVAS` | `SKIA` | `ASCII` | `FREEDIRECT` | `D3D9` | `DX1` | `DX2` | `DX3` |
-`DX5` | `DX6` | `DX7` | `DX8` | `D3D10` | `OPENGLES1` | `OPENGL4` | `OPENGL1` | `OPENGL2` |
-`SDL_GPU` | `WICKED` | `SOKOL` | `DILIGENT`). `WEBGPU` is experimental and has a functional native
+(`SDL_RENDERER` | `OPENGLES` | `OPENGL33` | `WEBGL1` | `WEBGL2` | `BGFX` | `VULKAN` | `WEBGPU` |
+`MAGNUM` | `HEADLESS` | `SOFTWARE` | `STUB` | `D3D11` | `D3D12` | `DIRECT2D` | `CANVAS` |
+`HTML_DOM` | `SKIA` | `ASCII` | `FREEDIRECT` | `D3D9` | `DX1` | `DX2` | `DX3` | `DX5` | `DX6` |
+`DX7` | `DX8` | `D3D10` | `SDL_GPU` | `OPENGLES1` | `OPENGL4` | `OPENGL1` | `OPENGL2` |
+`WICKED` | `SOKOL` | `DILIGENT` | `GLIDE` | `GDI` | `LLGL` | `METAL`). These are exactly 41
+public identities; EasyGL remains an internal implementation shared by four GL profiles. `WEBGPU`
+is experimental and has a functional native
 2D baseline, not yet the 3D/effect parity of the established GPU backends.
 `MAGNUM` is a desktop-OpenGL backend built on mosra/magnum -- see `docs/magnum-backend.md` and
 `plan_magnum.md` for its own capability boundary.

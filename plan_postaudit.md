@@ -1700,3 +1700,624 @@ Recorded here and mirrored in `remediation/REMEDIATION_PROGRESS.md`:
 
 **The remediation campaign is not declared complete by this document.** No checkpoint has been taken
 and no tag has been created.
+
+---
+
+## 17. `REMED-GFX-220` — static initialization order fiasco between `BlendState` and `Color`
+
+**Status:** **DONE** (fixed 2026-08-05, see *Resolution* below) · **Severity:** HIGH ·
+**Discovered:** 2026-08-05, Batch 1 stabilization ·
+**Introduced:** 2026-06-06 by `2345f8fc` — re-verified by pickaxe (`git log -S`), and
+`git merge-base --is-ancestor 2345f8fc d79214e7` confirms it predates
+`cna-post-audit-remediation-phase1` · **Owner lane:** core Graphics, not a backend lane
+
+### Finding
+
+`src/Microsoft/Xna/Framework/Graphics/BlendState.cpp` defines four namespace-scope `BlendState`
+constants (`Additive`, `AlphaBlend`, `NonPremultiplied`, `Opaque`, lines 6-9). Their constructor
+chain reaches the default constructor, whose member init list contains:
+
+```cpp
+// BlendState.cpp:22
+, blendFactor_(Color::White)
+```
+
+`Color::White` is a namespace-scope constant defined in a **different translation unit**
+(`src/Microsoft/Xna/Framework/Color.cpp:113+`). The relative order of dynamic initialization across
+translation units is unspecified, so when `BlendState.cpp`'s initializers run first, `Color::White`
+is still zeroed `.bss` and the copy reads an object whose lifetime has not begun.
+
+`Color` is polymorphic (it derives from `IPackedVectorT<UInt32>` and `IEquatable<Color>`), so the
+read is detectable, and UBSan's vptr check catches it exactly:
+
+```
+include/Microsoft/Xna/Framework/Color.hpp:22:12: runtime error: member access within address
+0x... which does not point to an object of type 'Color'
+0x...: note: object has invalid vptr        <-- memory is all zeros
+
+#0 Color::Color(Color const&)                     Color.hpp:22
+#1 BlendState::BlendState()                       BlendState.cpp:22
+#2 BlendState::BlendState(name, ...)              BlendState.cpp:28
+#3 __static_initialization_and_destruction_0      BlendState.cpp:6
+#4 _GLOBAL__sub_I__ZN...BlendState8AdditiveE      BlendState.cpp:74
+```
+
+### Why it was not seen before
+
+The manifestation depends on link order, which differs per backend. In the Batch 1 sanitizer matrix
+it fires under **OPENGL1** and not under OPENGL4 or OPENGL2, though all three link the same two
+translation units. It is latent in every configuration, not an OPENGL1 defect.
+
+### Consequence
+
+The four static presets receive `blendFactor_ = Color(0,0,0,0)` (transparent black) instead of
+`Color::White`. `GraphicsDevice::setBlendStateProperty` consumes that value
+(`GraphicsDevice.cpp:2448-2456`) and forwards it to the backend as the blend colour, so applying a
+stock preset writes a wrong device blend factor, and a subsequent user `BlendState` selecting
+`Blend::BlendFactor` / `Blend::InverseBlendFactor` blends against the wrong colour.
+
+**No test covers this.** `BlendStateTest.DefaultBlendFactorWhite` constructs a `BlendState` at
+runtime, after static initialization has completed, so it exercises the constructor and passes even
+in an affected binary. Nothing asserts the *static* presets' `BlendFactor`.
+
+### Evidence boundary — what is and is not proven
+
+- **Proven:** the UB itself (UBSan vptr violation), that the source object is all zeros at copy
+  time, and that production forwards the value to the backend. Reproduced 2/2.
+- **Not proven:** an observably different rendered frame. `gdb` is unavailable in this environment,
+  so the stored value was not read back after initialization, and no pixel oracle was run against a
+  `Blend::BlendFactor` blend mode. Whether this satisfies exit criterion **E3** (supported-path
+  silent wrong result) is therefore **arguable, not demonstrated**.
+
+### Suggested fix, as originally filed (superseded — see *Resolution*)
+
+Remove the cross-translation-unit static dependency rather than reorder anything: construct the
+value directly, e.g. `blendFactor_(Color(UInt32{0xFFFFFFFFU}))`, or give `Color::White` a
+function-local-static accessor. Then add a test asserting each static preset's `BlendFactor`, since
+that is the coverage gap that let a two-month-old defect survive.
+
+Fixing it was out of scope for the Batch 1 stabilization session, which was bounded to stabilization
+and forbidden from broad remediation.
+
+---
+
+### Resolution (2026-08-05)
+
+#### Which binary, and why only one
+
+The manifestation was pinned without guesswork by decoding `.init_array` — the execution order of
+each translation unit's `_GLOBAL__sub_I_*` — in all 38 OpenGL 1 sanitizer executables and comparing
+the index of `BlendState`'s initializer against `Color`'s:
+
+| OpenGL 1 sanitizer binaries | Order | Result |
+|---|---|---|
+| `cna_test_opengl1_anisotropic_gl_state` | BlendState **#167** before Color **#185** | **hazardous — reproduces** |
+| the other 37 | Color before BlendState | unaffected |
+
+That is the whole reason a two-month-old latent defect produced exactly *one* UBSan line in the
+Batch 1 matrix. The same decode over the non-OpenGL-1 executables found none hazardous — including
+`CnaTests`, where Color is **#1008** and BlendState **#1011**, which matters for the regression test
+below.
+
+#### Reproducer (execution proof, not inspection)
+
+- Tree `cmake-build-opengl1-asan` — `OPENGL1`, `Debug`, `CNA_SANITIZE=address,undefined`,
+  GCC 14.2.0, `CMAKE_CXX_COMPILER_LAUNCHER=ccache`, `CNA_TEST_DISPLAY=:101`, Unix Makefiles.
+- Binary `./cna_test_opengl1_anisotropic_gl_state`; CTest name `OpenGL1_Anisotropic_GlState`.
+- Environment `ASAN_OPTIONS=detect_leaks=0`, `UBSAN_OPTIONS=print_stacktrace=1`, `DISPLAY=:101`,
+  `SDL_VIDEODRIVER=x11`; working directory the build tree.
+- Mechanism is **UBSan's `vptr` check**, not ASan's initialization-order detector. The process
+  **exits 0** — the diagnostic never failed a test, which is why only a log scan surfaced it.
+
+Reproduced verbatim, including the all-zero memory dump and `note: object has invalid vptr`, with
+frames `#0 Color::Color(Color const&) Color.hpp:22` → `#1 BlendState::BlendState()
+BlendState.cpp:22` → `#3 __static_initialization_and_destruction_0` → `#4 _GLOBAL__sub_I_…`.
+
+#### The originally suggested form does not compile
+
+`Color(UInt32)` is **private** (`Color.hpp:557`); only `Color.cpp` may use it. `blendFactor_(Color(
+UInt32{0xFFFFFFFFU}))` fails with *"is private within this context"*. The applied fix therefore uses
+the XNA-public component constructor:
+
+```cpp
+, blendFactor_(255, 255, 255, 255)
+```
+
+`Color(intcs,intcs,intcs,intcs)` delegates to `Color(bytecs,…)`, whose body packs
+`(A<<24)|(B<<16)|(G<<8)|R`; `ToByte(255) = clamp(255,0,255) = 255` and
+`ToPackedComponent(255) = 255 & 0xFF = 255`, so the result is `0xFFFFFFFF` — **byte-identical to
+`Color::White`** (`Color.cpp:250`). Public API, ABI and every other `BlendState` default are
+untouched; no lazy initialization, no function-local static, and no new ordering dependency is
+introduced. A *call* into another translation unit is always safe during static initialization; only
+*reading another unit's object* is not, and that is what was removed.
+
+#### The evidence boundary is now closed
+
+§17 originally recorded the wrong rendered/stored value as **not proven**, because `gdb` is
+unavailable here. A deterministic probe settles it without a debugger: the same source linked twice
+against the real `libCNA.a`, once with `BlendState.cpp.o` ahead of `Color.cpp.o` on the link line and
+once behind, which forces the `.init_array` order instead of accepting whatever the build produced.
+
+| | hazardous order | safe order |
+|---|---|---|
+| **pre-fix** | `Additive` / `AlphaBlend` / `NonPremultiplied` / `Opaque` all `0x00000000` — **PROBE FAIL** | all `0xFFFFFFFF` |
+| **post-fix** | all `0xFFFFFFFF` — **PROBE PASS** | all `0xFFFFFFFF` |
+
+So the four presets really did carry **transparent black** instead of opaque white in the hazardous
+order, and `GraphicsDevice::setBlendStateProperty` forwards exactly that value to the backend as the
+blend colour. The consequence is a **silent wrong value on a supported path**, no longer an
+arguable one. (Probe sources live under the shared `build-probe/` tree and its binaries are
+disposable; the commands and both outcomes are recorded here, which is the durable record.)
+
+#### Post-fix verification
+
+- The reproducer binary is clean — **0 runtime errors** — while its **hazardous link order is
+  unchanged** (`BlendState #167` still precedes `Color #185`). The diagnostic disappeared because the
+  dependency was removed, not because the link order shifted; that control matters.
+- `BlendState.cpp.o` no longer carries an undefined reference to
+  `_ZN9Microsoft3Xna9Framework5Color5WhiteE` at all — the cross-unit read is gone from the object
+  code, independently of any link order.
+- Full OpenGL 1 sanitizer matrix: **38/38 pass**, **0 UBSan runtime errors** (was 1), **0 ASan
+  errors**, 114 leak reports of which **114 name `libGLX_mesa.so.0` at frame `#1`** and **0 name
+  `src/`** — the same driver profile §8 recorded, with the finding removed.
+
+#### Regression test — and an honest limit
+
+`BlendStateTest.PredefinedBlendFactorIsOpaqueWhite` asserts all four presets' `BlendFactor`
+packed value is `0xFFFFFFFF`, comparing against the packed literal rather than `Color::White` so the
+oracle does not itself depend on another translation unit's static object. This closes the coverage
+gap that let the defect survive: `DefaultBlendFactorWhite` only ever constructed a `BlendState` at
+run time, after static initialization had completed.
+
+**It is not, by itself, a detector for this defect.** In `CnaTests` the link order is Color-first,
+so it passes against the pre-fix code too. The deterministic pre-fix/post-fix oracle is the forced
+link-order probe above; the gtest is the permanent value contract, and it *will* fail in any future
+binary that links hazardously. Recording that distinction rather than claiming a fail-then-pass the
+test cannot deliver.
+
+#### Same-pattern scan
+
+Mechanical, not grep-based: for each of the 253 CNA objects, start at
+`_GLOBAL__sub_I_*` / `__static_initialization_and_destruction_*`, take the transitive closure of
+calls to functions defined in the same object, and report relocations against symbols undefined
+there but defined as data elsewhere. (A direct-reference-only scan misses this very defect — the
+read sits two frames deep inside `BlendState::BlendState()`, not in the static-init body. A source
+grep misses it too.)
+
+| Site | Reads | Verdict |
+|---|---|---|
+| `BlendState.cpp` | `Color::White` (`nm` type `B`, dynamically initialized) | this defect — **fixed** |
+| `GestureDetector.cpp` | `Vector2::Zero` (`nm` type `B`, dynamically initialized) | **second instance — see §18** |
+| `GraphicsAdapter.cpp`, `MediaPlayer.cpp`, `BlendState.cpp` | vtable symbols (`nm` type `V`) | **benign**: vtables are `PROGBITS` in `.data.rel.ro`, relocated by the dynamic linker before any static initializer runs |
+
+No other cross-translation-unit static-initialization read exists in the CNA library.
+
+#### Not a Batch 1 regression
+
+Introduced 2026-06-06, an ancestor of the phase-1 checkpoint, latent in every configuration and
+gated only by link order. Every Batch 1 lane merge is unrelated to it.
+
+---
+
+## 18. `REMED-GFX-221` — `GestureDetector` statics copy `Vector2::Zero` across translation units
+
+**Status:** OPEN · **Severity:** LOW · **Discovered:** 2026-08-05, by the `REMED-GFX-220`
+same-pattern scan · **Owner lane:** core Input (`src/CNA/Internal/Input/`), not Graphics
+
+> **Numbering note.** Filed in this plan's `REMED-GFX-*` series because it was found by §17's scan
+> and shares its exact root cause, but the defect is in Input. Renumber under a CORE/INPUT prefix if
+> the campaign prefers subsystem-accurate IDs.
+
+### Finding
+
+`src/CNA/Internal/Input/GestureDetector.cpp` defines namespace-scope state at lines 51-63, five
+members of which are copy-initialized from `Vector2::Zero`:
+
+```cpp
+Vector2 activeFingerPosition = Vector2::Zero;   // and lastUpdatePosition, pressPosition,
+                                                // secondFingerPosition, velocity
+```
+
+`Vector2::Zero` is defined in `src/Microsoft/Xna/Framework/Vector2.cpp:88` as
+`const Vector2 Vector2::Zero(0.0f, 0.0f)`, has no `constexpr` constructor, and `nm` reports it as
+type `B` — zero-initialized `.bss` completed by dynamic initialization. Relative initialization
+order across translation units is unspecified, so these five reads may observe an object whose
+lifetime has not begun. This is the same defect class as §17.
+
+### Why it is LOW, and why no sanitizer caught it
+
+`Vector2` is **not polymorphic** (zero `virtual` members), so there is no vptr for UBSan's `vptr`
+check to invalidate — the mechanism that exposed §17 cannot fire here. And the value is benign by
+coincidence: `Vector2::Zero` is `(0.0f, 0.0f)`, which is bit-identical to the zeroed `.bss` the
+read would observe. **Every possible initialization order produces the correct value today.**
+
+It is therefore latent UB with no reachable wrong-value consequence, not a live defect — the
+opposite of §17, where the zeroed source produced transparent black instead of opaque white.
+
+### Suggested fix (not applied)
+
+Replace the five initializers with in-place construction, `Vector2(0.0f, 0.0f)`, mirroring §17's
+remedy exactly.
+
+**Deliberately out of scope for `REMED-GFX-220`.** It is a different subsystem and a different type
+pair, its consequence is benign, and the session that fixed §17 was bounded to that ticket. Recorded
+here rather than folded in silently.
+
+---
+
+## 19. `REMED-GFX-222` — `SetVertexBuffers` rejected FNA-legal null vertex-buffer bindings
+
+**Status:** **CLOSED — DISCOVERED AND RESOLVED in the Batch 2 stabilization, 2026-08-06** ·
+**Severity:** MEDIUM · **Introduced:** 2026-07-25 by `8a308f3d` (`REMED-GFX-039`), before the
+phase-1 checkpoint
+
+**Defect.** `GraphicsDevice::SetVertexBuffers` threw `System::ArgumentNullException` for any
+binding whose vertex buffer is null. FNA performs no per-element null check
+(`FNA/src/Graphics/GraphicsDevice.cs:1143`): a null *array* unbinds every slot, more than 16
+bindings throws `ArgumentOutOfRangeException`, and a null-buffer *element* is a legal unused
+slot — FNA itself assigns `VertexBufferBinding.None` into the same array, and CNA's own draw
+dispatch already skips a defaulted binding as unused. GFX-039's master-plan strategy is "Add each
+validation per FNA"; every other validation in its progress record has an FNA counterpart — this
+one contradicts FNA and documented no deviation. One unit test added by the same commit
+(`SetVertexBuffers_DefaultNullBindingThrows`) encoded the same over-reach.
+
+**How it surfaced.** The Batch 2 stabilization's widened EasyGL principal control counted
+`EasyGL_DeviceValidation` (Task 202, 2026-06-26) for the first time; its check 2 binds 16
+default-constructed bindings asserting XNA's count-boundary contract and failed 3/3
+deterministically — including on the binary built at Batch-1-checkpoint content, so the defect
+predates both Batch 2 lanes and is not an integration regression.
+
+**Fix** (integration branch, Batch 2 stabilization): the element null-throw loop removed from
+`GraphicsDevice.cpp` (the FNA-faithful 16-binding ceiling, empty-vector unbind and null-safe
+current-buffer assignment stay; the now-unused `ArgumentNullException` include dropped); the
+header's `@throws` contract corrected to the FNA semantics; the unit test replaced by
+`SetVertexBuffers_DefaultNullBindingIsAccepted` (acceptance + storage + null slot retrievable)
+plus a new `SetVertexBuffers_SeventeenBindingsThrow` ceiling test. The `VertexBufferBinding`
+parameterized-constructor validation (also GFX-039, XNA-documented) is deliberately untouched.
+
+**Evidence.** Pre-fix: `EasyGL_DeviceValidation` 3/3 failed, "SetVertexBuffers(16) does not
+throw". Post-fix: 3/3 pass; `GraphicsDeviceValidationTest` + `TextureCollectionValidationTest`
+20/20 (the 17-binding mutation control throws); full post-fix EasyGL principal corpus and the
+Wicked/Magnum focused controls recorded in `integration/BATCH_2_STABILIZATION.md` §6/§11.
+
+---
+
+## 20. `REMED-GFX-223` — a cache-reconstructed texture claimed to be a render target
+
+**Status:** **CLOSED — DISCOVERED in the `skia` adaptation 2026-08-07, RESOLVED the same day** ·
+**Severity:** HIGH · **Latent at the head; made live by the `skia` lane**
+
+**Defect.** `Texture2D::gpuOnlyContent_` carries two different claims:
+
+| | Claim | Consequences |
+|---|---|---|
+| **B** (weak) | an absent CPU shadow is normal here — fall back to the backend rather than throwing | `GetData` reads the backend *only when there is no shadow* |
+| **A** (strong) | the live backend is the sole authority; the shadow is never trusted | `GetData` prefers the backend always; `SetData` drops the shadow and updates the existing backend **in place** instead of replacing it |
+
+At the phase-1 head the flag only ever meant **B** — both of its readers
+(`Texture2D.cpp:434` and `:509` at `aa9f3fb5`) sit *inside* an
+`if (!cpuPixels_ || cpuPixels_->empty())` branch. `Texture2D::ReconstructFromCache` builds through
+the protected constructor `RenderTarget2D` owns, inheriting `gpuOnlyContent_ = true` for an ordinary
+content texture whose very next statement installs a CPU shadow. It only ever needed **B**, so the
+mislabel was inert.
+
+The `skia` lane promoted the same flag to **A**, correctly, for real render targets — at which point
+every one of A's consequences became a false statement about a cache hit:
+
+1. `SetData(const Color*, int)` began writing through the backend. An ordinary texture's backend is
+   **shared**: `ContentManager`'s weak texture cache hands the same `ITextureBackend` to every
+   wrapper reconstructed from a hit, so the upload was published into every other holder — the
+   CNB-33 aliasing `CnjCacheIsolationTests` exists to pin, whose own header comment predicted it
+   ("if a future change to `SetData` ever starts mutating in place instead of reassigning, these
+   tests will catch it"). It also kept the cache entry's `weak_ptr` alive, turning what the head
+   resolves as a *miss* (reload from disk) into a *hit* on mutated pixels.
+2. `GetData(Color*, int, int)` moved its delegation above the shadow check, so a plain texture's
+   read went to a backend that cannot serve it.
+
+**First incorrect state transition.** `gpuOnlyContent_ = true` at `Texture2D.cpp:356`, executed on
+behalf of `ReconstructFromCache` (`:2703`), producing the contradictory state
+`gpuOnlyContent_ == true && cpuPixels_ != nullptr`. Everything else is downstream of that one store.
+
+**How it surfaced.** The `skia` lane had never been run under the EasyGL principal control — its own
+validation has always been the Skia suite. Running it failed
+`CnjCacheIsolationTest.SidecarLoadedFirstDoesNotCorruptLaterNativeLoad` and
+`.NativeLoadedFirstWithLiveHandleUnaffectedBySidecar`, in isolation and in the corpus. Traced with
+`CNA_TEXTURE_TRANSFER_TRACE=1`: the head reads `source=cpuPixels_` and passes; the lane reads
+`source=backend` and raises *"this graphics backend cannot read a render target's colour attachment
+back to the CPU"* — for a texture that is not a render target.
+
+**Fix** (`adapt/skia`, `9dbdd4cf`; 31 insertions / 17 deletions across two files):
+`ReconstructFromCache` clears `gpuOnlyContent_`, and the in-place backend update in
+`SetData(const Color*, int)` is gated on `gpuOnlyContent_` — that branch exists solely so a render
+target does not have its backend swapped for an ordinary texture backend, leaving `RenderTarget2D`'s
+cached `IRenderTargetBackend` view dangling, and that reason applies only to render targets. Every
+ordinary texture returns to the head's behaviour, where a full-level upload builds a fresh backend
+and thereby detaches from anything sharing the old one. The member's documentation now states
+contract **A** and records that sharing the constructor is not the same as being a render target.
+
+Relative to the head: ordinary textures are behaviourally identical; render targets keep the lane's
+improvement; a cache hit whose shadow has legitimately expired now raises the ordinary-`Texture2D`
+refusal instead of attempting a backend readback, matching the contract `ContextRecoveryTest`
+already documents for every other plain texture. The in-place upload is deliberately **not**
+extended to ordinary textures — making it safe there needs the weak texture cache invalidated or
+made copy-on-write, which is a design change rather than a bug fix.
+
+**Evidence.** Pre-fix: 2/2 `CnjCacheIsolationTest` failures under `EASYGL`, reproduced on demand.
+Post-fix: EasyGL principal control **5911/5912** (the sole failure is `easy-gl-resource-smoke-tests`,
+a sibling-repository binary containing zero CNA symbols); thirteen new cache/lifetime regression
+tests **13/13**; Skia focused suite **172/172**; `Skia_Texture_RowStride` **8/8**; `CnaTests` under
+`SKIA` **124 failures against the fork point's 125** — 8 fixed, 7 new, the 7 being exactly the
+`OrdinaryDrawMultiStreamTest`/`InstancedDrawMultiStreamTest` rows already classified as the shared
+2D-only class. The transfer trace shows the cache-hit path **lost** two failed backend readbacks and
+gained none. Full record in `integration/lanes/skia.md` and `plan_skia.md`.
+
+---
+
+## 21. `REMED-GFX-224` — an EasyGL render target silently discards `SetData`
+
+**Status:** OPEN · **Severity:** MEDIUM · **Discovered:** 2026-08-07, while resolving
+`REMED-GFX-223` · **Pre-existing; not introduced by any integration lane**
+
+**Defect.** `ITextureBackend::UpdatePixels` is declared with an **empty default body**, and
+`EasyGLRenderTargetBackend` does not override it. Uploading to an EasyGL `RenderTarget2D` therefore
+writes nothing to the GPU resource, and a subsequent `GetData` returns the target's cleared surface.
+
+**Why it was invisible.** At the head, `SetData(const Color*, int)` replaced the render target's
+backend with an ordinary texture backend and left a CPU shadow that `GetData` consulted first — so
+the read returned the last *upload* rather than the target's real content. That is its own defect,
+and the one the `skia` lane's in-place branch was written to remove. With `REMED-GFX-223` fixed the
+render-target path is honest, and the backend gap became visible.
+
+**Not a regression.** No test, example or documented contract depends on the round trip, and the
+partial-rectangle `SetData` overload has always gone straight to the same no-op `UpdatePixels`, so
+this is a pre-existing gap now correctly attributed.
+`Texture2DCacheReconstructionTest.RenderTargetReadbackComesFromTheSurfaceNotAnUploadShadow`
+deliberately does not pin the round trip, and says so in the source.
+
+**To fix.** Implement `UpdatePixels`/`UpdatePixelsLevel` on `EasyGLRenderTargetBackend`, then audit
+every other backend's render-target backend for the same missing override. Deliberately out of scope
+for `REMED-GFX-223`, which is a shared-layer state-ownership defect in a different subsystem.
+
+---
+
+## 22. `REMED-GFX-225` — the `skia` lane's new `ITextureCubeBackend::GetSizeEXT` broke four backends
+
+**Status:** **CLOSED — DISCOVERED AND RESOLVED in the `skia` stabilization, 2026-08-07** ·
+**Severity:** HIGH · **Introduced by the `skia` lane** (`SKIA-149` area), never built before the
+cross-backend control ran
+
+**Defect.** The lane added `[[nodiscard]] virtual int GetSizeEXT() const noexcept { return 0; }` to
+`ITextureCubeBackend` in the shared `IGraphicsBackend.hpp`, because `SkiaEffectBackend` needs the
+cube edge length through the interface. At the phase-1 head that interface had **no** `GetSizeEXT`
+at all — but four concrete cube backends already carried a same-named non-virtual accessor declared
+**without** `noexcept`:
+
+| Backend | Declaration site |
+|---|---|
+| `SokolTextureCubeBackend` | `Sokol/SokolGraphicsBackend.hpp:524` |
+| `D3D11TextureCubeBackend` | `D3D11/D3D11Textures.hpp:76` |
+| `D3D12TextureCubeBackend` | `D3D12/D3D12TextureCube.hpp:63` |
+| `D3D9TextureCubeBackend` | `D3D9/D3D9Textures.hpp:79` |
+
+All four derive from `ITextureCubeBackend`, so adding the base virtual silently turned each accessor
+into an override with a **looser exception specification** — a hard compile error, not a warning:
+
+```
+error: looser exception specification on overriding virtual function
+       'virtual int CNA::Internal::Backends::Sokol::SokolTextureCubeBackend::GetSizeEXT() const'
+note:  overridden function is 'virtual int ITextureCubeBackend::GetSizeEXT() const noexcept'
+```
+
+**`CNA_GRAPHICS_BACKEND=SOKOL` did not build at all** from the adapted sources. `D3D11`, `D3D12` and
+`D3D9` carry the identical break on Windows.
+
+**How it surfaced.** The `skia` lane's Sokol cross-backend control — built from the adapted sources
+per the precedent `integration/lanes/diligent.md` set — failed at 47%, in
+`cna_backend_graphics_sokol`. No Skia test, and no EasyGL control, can reach it: EasyGL's cube
+backend never had a `GetSizeEXT`, so the collision does not exist there. This is the second defect
+in this lane that only a *different backend's* build could find, after `REMED-GFX-223`.
+
+**Fix** (`adapt/skia`): `noexcept override` added to all four declarations. `override` is the part
+that matters going forward — it makes the now-virtual relationship explicit and turns any future
+signature drift back into an error at the derived class rather than a silent re-binding. Each body
+is `return size_;` and cannot throw, so conforming to the base's `noexcept` is free.
+
+The lane's five other new shared-interface virtuals — `GetDimensionsEXT`, `HasDefinedMipLevel`,
+`DrawMeshEXT`, `CreateRenderTarget2DEXT`, `Ensure3DSupported` — were checked for the same hazard by
+grepping every backend header for same-named members. **None collides**; only `GetSizeEXT` did.
+
+**Evidence.** Pre-fix: `SOKOL` build fails at 47%, deterministic. Post-fix: `SOKOL` builds clean and
+its dedicated suite and the shared cache controls are recorded in `integration/lanes/skia.md`.
+**`D3D11`/`D3D12`/`D3D9` are corrected by inspection but not compiled** — none of the three builds on
+this Linux host, and that limitation is stated rather than papered over.
+
+---
+
+## 23. `REMED-GFX-226` — Glide DualTexture ignored sampler slot 1
+
+**Status:** **CLOSED — DISCOVERED AND RESOLVED in the Glide adaptation, 2026-08-08** ·
+**Severity:** MEDIUM · **Historical lane defect**
+
+**Defect.** The lane stored one filter/address/LOD tuple and submitted it to both TMU0 and TMU1.
+`DualTextureEffect` therefore silently ignored `SamplerStates[1]`: a supported two-texture draw
+could filter or select mip LOD with slot 0's state even when the caller supplied a distinct slot 1.
+
+**Fix.** Glide retains slots 0 and 1 independently. Each TMU receives its own filter and LOD bias.
+The implementation has only one native s/t vertex channel and performs wrap/mirror segmentation on
+the CPU, so differing address modes cannot be represented; that combination now rejects before
+native submission instead of silently choosing slot 0. Higher unused public slots remain inert.
+
+**Evidence boundary.** Portable tests cover both equal/mismatched address decisions and the exact
+representable MaxMipLevel/LOD-bias range; i686 whole-backend syntax and ASan/UBSan pass. No real
+Glide runtime was present, so native call/value and image validation remain unavailable rather than
+being inferred from the compatibility API.
+
+---
+
+## 24. `REMED-GFX-227` — Glide could release deferred SpriteBatch resources before submission
+
+**Status:** **CLOSED — DISCOVERED AND RESOLVED in the Glide adaptation, 2026-08-08** ·
+**Severity:** MEDIUM · **Historical lane defect**
+
+**Defect.** The historical texture destructor called `grFinish`, but that fences only commands
+already submitted to Glide. A final SpriteBatch can still exist solely in CNA-owned deferred vertex
+storage. Destroying its texture could return the TMU range for reuse before those vertices were
+submitted; destroying the device could close the context and drop them entirely.
+
+**Fix.** Texture destruction flushes the CNA-owned SpriteBatch before unregistering, fencing, and
+releasing TMU ranges. Backend destruction flushes and fences before `grSstWinClose`, preserving
+command order and teardown lifetime. The weak backend reference still makes backend-first teardown
+safe.
+
+**Evidence boundary.** Ordering and ownership were audited over every queue-flushing entry point;
+portable helpers pass under ASan/UBSan and the whole backend passes i686 syntax. Runtime teardown
+capture remains unavailable without an external `glide3x.dll` and a linkable i686 CNA executable.
+
+---
+
+## 25. `REMED-GFX-228` — Glide TMU1 preparation could evict the active TMU0 texture
+
+**Status:** **CLOSED — DISCOVERED AND RESOLVED in the Glide adaptation, 2026-08-08** ·
+**Severity:** MEDIUM · **Historical lane defect**
+
+**Defect.** `EnsureTmu1Resident(texture1)` first prepared texture 1 through its ordinary TMU0
+residency path. Under TMU0 pressure, that allocation could evict texture 0 after texture 0 had
+already been validated for the draw. The draw could then continue with an empty/stale first
+texture while its independent TMU1 allocation remained valid.
+
+**Fix.** After TMU1 upload, texture 0 is restored as the final TMU0 requester and its required
+single-tile shape is revalidated before any native draw state is committed. Evicting texture 1's
+temporary TMU0 copy does not affect its independently allocated TMU1 range.
+
+**Evidence boundary.** The allocator/LRU pure tests and ASan/UBSan suite are green, and the entire
+backend passes i686 syntax. The exact memory-pressure native sequence is build-covered only because
+no production Glide runtime was available.
+
+---
+
+> **Classification note for §§26–32.** The synchronized GDI adaptation commits, plan, and backend
+> documentation assign no separate severity or scheduling priority to these already-closed findings.
+> None is invented here; each entry records only its exact ID, resolved mechanism, and evidence.
+
+## 26. `REMED-GFX-229` — Software texture uploads accepted an undersized positive pitch
+
+**Status:** **CLOSED — DISCOVERED AND RESOLVED in the GDI adaptation, 2026-08-08** ·
+**Shared Software-2D supported-path defect**
+
+**Defect.** `SoftwareTextureBackend` accepted a positive upload stride below `width * 4`, then copied
+one complete RGBA8 row. The row contract was therefore internally contradictory and could consume
+bytes beyond the caller-declared row or overlap the following row. This was distinct from the
+established non-positive-stride convention, which deliberately requests a tight row.
+
+**Fix.** Validate `stride >= width * 4` before resizing or mutating texture storage when the stride
+is positive. Preserve the tight-row default for non-positive values and consume only the RGBA bytes
+from each valid padded row.
+
+**Evidence.** The current GDI/Software texture-allocation executable passes odd-width padded rows
+with asymmetric RGBA channels, exact readback, stride-11 rejection for a 12-byte row, and retention
+of the prior pixels after rejection. The current x64 MinGW/Wine GDI matrix passes 19/19 and the
+native Texture2D control passes 40/40.
+
+---
+
+## 27. `REMED-GFX-230` — Software render-target uploads ignored row pitch
+
+**Status:** **CLOSED — DISCOVERED AND RESOLVED in the GDI adaptation, 2026-08-08** ·
+**Shared Software-2D supported-path defect**
+
+**Defect.** `SoftwareRenderTargetBackend::UpdatePixels` treated every source as tightly packed even
+when the caller supplied a valid padded positive pitch. Rows after the first therefore began at the
+wrong byte, while an undersized positive pitch was not rejected transactionally.
+
+**Fix.** Copy each row's `width * 4` RGBA bytes from the supplied pitch, retain the non-positive tight
+default, and reject a short positive pitch before changing colour, multisample, mip, or retained
+render-target state.
+
+**Evidence.** Current 3×2 odd-width/asymmetric/padded exact-readback coverage passes, as does rejection
+with prior-pixel retention. The native render-target readback control passes 102/102.
+
+---
+
+## 28. `REMED-GFX-231` — CPU `SourceAlphaSaturation` used source alpha twice
+
+**Status:** **CLOSED — DISCOVERED AND RESOLVED in the GDI adaptation, 2026-08-08** ·
+**Shared Software-2D supported-path defect**
+
+**Defect.** The RGB `SourceAlphaSaturation` factor used inverse source alpha instead of inverse
+destination alpha. Supported draws with distinct nontrivial source/destination alpha silently
+produced the wrong colour. The alpha factor must remain one.
+
+**Fix.** Compute the RGB factor as `min(sourceAlpha, 1-destinationAlpha)` and the alpha factor as one.
+
+**Evidence.** Asymmetric source channels and distinct source/destination-alpha coverage pass in the
+current GDI 2D regression. Native Software blend controls pass, including Additive 29/29.
+
+---
+
+## 29. `REMED-GFX-232` — DX3's standalone stencil hook contradicted its depth-only surface
+
+**Status:** **CLOSED — DISCOVERED AND RESOLVED in the GDI adaptation, 2026-08-08** ·
+**Pre-existing capability-reporting defect**
+
+**Defect.** DX3 implements a real depth plane but no stencil plane. Its standalone stencil hook
+nevertheless inherited an aggregate answer inconsistent with both its production surface and
+`GraphicsCapability::StencilBuffer`, after the current integration architecture split stencil from
+the aggregate depth/stencil question.
+
+**Fix.** Override `SupportsStencilBuffer()` to return false while retaining DX3's real depth support.
+
+**Evidence.** The x64 MinGW DX3 build and focused capability runtime pass 1/1 through Wine/Xvfb with
+the DirectDraw-engagement wrapper active; the regression compares the hook and capability answer.
+
+---
+
+## 30. `REMED-GFX-233` — legacy empty-declaration persistent buffers reused vertex zero
+
+**Status:** **CLOSED — EXPOSED AND RESOLVED in the GDI adaptation, 2026-08-08** ·
+**Pre-existing at integration base `677f4c59`; not introduced by the GDI replay**
+
+**Defect.** `VertexBuffer(device, count)` intentionally has an empty, zero-stride public declaration,
+while typed `SetData` gives its backend buffer a real packed stride. The immutable one-stream
+snapshot introduced by REMED-GFX-201 copied the public zero stride, so Software fetched record zero
+for every vertex and submitted a degenerate primitive.
+
+**Fix.** Only the exact legacy ordinary single-buffer/empty-declaration shape uses the named backend
+buffer's stride fallback. Any nonzero declaration and every multistream or instanced route remains
+on the authoritative current stream description; no removed `GpuDrawParams` field or blanket
+fallback was restored.
+
+**Evidence.** The Additive contract pins the empty-declaration precondition and exact indexed and
+non-indexed pixels. Current native Software effects 7/7, Additive 29/29, and scissor 44/44 pass.
+
+---
+
+## 31. `REMED-BUILD-017` — the native GDI workflow omitted three correctness targets
+
+**Status:** **CLOSED — DISCOVERED AND RESOLVED in the GDI adaptation, 2026-08-08** ·
+**Build/evidence inventory defect, not a renderer defect**
+
+**Defect.** The manual native-MSVC workflow and copied command inventory named only fourteen focused
+correctness executables. They omitted the presentation-mode transaction, DC-release transaction,
+and texture-allocation targets added by GDI-075/076/077, despite CMake's authoritative inventory
+containing seventeen executables and nineteen registered cases.
+
+**Fix and evidence.** The workflow and GDI documentation now name all seventeen correctness targets
+before running the nineteen-case label. The current x64 MinGW build produced all seventeen and all
+19/19 cases passed through Wine 10/Xvfb. Native MSVC remains an external manual gate, not an open
+inventory defect.
+
+---
+
+## 32. `REMED-BUILD-018` — the capability test used an incomplete backend type
+
+**Status:** **CLOSED — DISCOVERED AND RESOLVED in the GDI adaptation, 2026-08-08** ·
+**Shared test-build defect, not a renderer defect**
+
+**Defect.** `GraphicsDeviceCapabilityTests.cpp` called `SupportsStencilBuffer()` through
+`GraphicsDevice::GetBackend()` without directly including the complete `IGraphicsBackend` type.
+The focused native sanitizer object build exposed the incomplete-type compile failure.
+
+**Fix and evidence.** The test now includes `IGraphicsBackend.hpp` directly. The current native
+ASan/UBSan focused harness compiled with the sanitizers proven active and selected 151 tests:
+149 passed, 2 intentionally skipped, and zero CNA sanitizer report was emitted. LeakSanitizer used
+`detect_leaks=0` only because the supervising ptrace environment makes its leak mode unusable.

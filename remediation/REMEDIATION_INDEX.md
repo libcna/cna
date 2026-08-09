@@ -16,10 +16,15 @@ plus the audit's 6 synthesis documents. Full detail for every ID is in `MASTER_R
 > on `feature/audit` @ `2338b44f7`), not develop-forked backends. `feature/direct2d` is the **final
 > actively-developed lane** and must be frozen at a known head before integration begins.
 >
-> **Highest-severity open items: `REMED-CONTENT-007` and `REMED-CONTENT-008`** — two HIGH/P1
-> path-containment findings, re-verified as still present in current source. They fall outside the
-> checkpoint's blocker classes (§2.1 of the exit record) but are the **recommended first substantive
-> post-checkpoint task**. This checkpoint does not claim security is clean.
+> **Post-exit update 2026-08-08: `REMED-CONTENT-007` and `REMED-CONTENT-008` are DONE.** The two
+> HIGH/P1 content-root-containment findings named here at phase-1 exit were reproduced with
+> synthetic red-first public-caller tests, fixed through the shared component-aware path primitive,
+> and verified on the final integration tree. The bounded same-pattern audit found and closed
+> **`REMED-CONTENT-011`** for additional omitted Model/SkinnedModel and indirect manifest fields.
+> Full contract, symlink boundary, oracles, caller coverage, audit classification, and sanitizer
+> evidence are in `REMEDIATION_PROGRESS.md`. The frozen 105-task/15-no-action counts below predate
+> these discovered-during-remediation IDs and are deliberately not renumbered. The historical
+> phase-1 statement that no security-clean claim was made remains true for that earlier checkpoint.
 >
 > **`WEBGPU-115` — RESOLVED 2026-08-04.** It was the last recorded checkpoint blocker: WebGPU
 > reported `GraphicsCapability::WireFrame` as `true` (inherited `IGraphicsBackend` default; the

@@ -1817,9 +1817,9 @@ namespace CNA::Internal::Backends
 
         /// Returns whether this backend (and, for device-dependent entries, the current runtime
         /// device/driver) supports the given CNA::GraphicsCapability. Default implementation
-        /// returns true for everything -- most backends are fully 3D-capable, so only backends
-        /// with a genuine, known gap (SDL_Renderer/DX3/Canvas/GDI's 2D-only design, or a specific
-        /// device-dependent feature like anisotropic filtering) need to override this.
+        /// returns true except for multi-stream input. Every backend with a narrower contract --
+        /// including no-renderer, 2D-only, fixed-function, experimental, or device-dependent
+        /// capability gaps -- must override the applicable entries truthfully.
         [[nodiscard]] virtual bool SupportsCapability(CNA::GraphicsCapability capability) const
         {
             if (capability == CNA::GraphicsCapability::StencilBuffer)

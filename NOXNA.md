@@ -524,10 +524,10 @@ documented message (compute) — never an unchecked GL/VK error.
 
 ```cmake
 # Engine layer ON (float RTs, RenderPipeline, post-processing, shadows, IBL, compute)
-cmake -B cmake-build-noxna -DCNA_GRAPHICS_BACKEND=EASYGL -DCNA_NOXNA=ON -DCNA_BUILD_TESTS=ON
+cmake -B cmake-build-noxna -DCNA_GRAPHICS_BACKEND=OPENGLES -DCNA_NOXNA=ON -DCNA_BUILD_TESTS=ON
 
 # Pure XNA + always-compiled NOXNA markers only (engine layer off — the default)
-cmake -B cmake-build-debug -DCNA_GRAPHICS_BACKEND=EASYGL
+cmake -B cmake-build-debug -DCNA_GRAPHICS_BACKEND=OPENGLES
 ```
 
 `CNA_NOXNA` defaults **OFF**. Note the marker‑convention extensions (`PbrEffect`, `ShaderEffect`,
@@ -693,11 +693,11 @@ interface.
 
 ```bash
 # Engine layer build (once N05/N10–N20 land)
-cmake -B cmake-build-noxna -DCNA_GRAPHICS_BACKEND=EASYGL -DCNA_NOXNA=ON -DCNA_BUILD_TESTS=ON
+cmake -B cmake-build-noxna -DCNA_GRAPHICS_BACKEND=OPENGLES -DCNA_NOXNA=ON -DCNA_BUILD_TESTS=ON
 cmake --build cmake-build-noxna
 DISPLAY=:0 SDL_VIDEODRIVER=x11 ./cmake-build-noxna/cna_example_noxna_settings
 
 # Standard build — NOXNA markers (PBR, glTF, morphs) already work here, engine layer off
-cmake -B cmake-build-debug -DCNA_GRAPHICS_BACKEND=EASYGL -DCNA_BUILD_TESTS=ON
+cmake -B cmake-build-debug -DCNA_GRAPHICS_BACKEND=OPENGLES -DCNA_BUILD_TESTS=ON
 cmake --build cmake-build-debug
 ```

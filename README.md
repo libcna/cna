@@ -36,8 +36,8 @@ ctest --test-dir build --output-on-failure
 - **`OPENGL1` backend:** Historical-class legacy desktop OpenGL 1.x **fixed-function** backend — immediate-mode vertex emission, `GL_MODELVIEW`/`GL_PROJECTION` matrices, `glLight*` lighting (3 directional lights + specular + emissive), `glTexEnv*` combiners (`DualTextureEffect`, `EnvironmentMapEffect` reflection subset), real `GL_FOG` driven by an exact inversion of the FNA fog vector, `glAlphaFunc` alpha-test approximation. Runtime-discovers 1.2–1.5-era features via `SDL_GL_GetProcAddress` (FBO render targets 2D+cube with readback and mip regeneration, backbuffer + RT MSAA, `ARB_occlusion_query` with exact `GL_SAMPLES_PASSED` counts, extended blend, anisotropy, cube maps) — no GL loader library, no shaders anywhere, zero new third-party dependency. No custom effects, no MRT, no `Texture3D`, no instancing/multi-stream — all reported truthfully and refused deterministically. 38 dedicated CTest suites. See [`docs/opengl1-backend.md`](docs/opengl1-backend.md) and `plan_opengl1.md`.
 - **`OPENGL2` backend:** Native desktop OpenGL 2.1 **compatibility-profile** backend, GLSL 1.10 throughout (runtime-compiled inline programs, attribute names bound via `glBindAttribLocation`), deliberately independent of the EasyGL-implemented GL family and of the other GL backends. All five stock effects plus `PbrEffect`/`SkinnedPbrEffect`, FNA fog-vector fog, real FBO render targets (2D incl. MSAA + cube), real MRT (up to 8 targets with real depth/MSAA resolve), real `GL_SAMPLES_PASSED` occlusion queries, `Texture3D`/`TextureCube` with readback, 16/32-bit indices, software `baseVertex` (pointer re-base -- no `glDrawElementsBaseVertex` on 2.1), full custom `VertexDeclaration` support (name-driven binding reads exactly the declared bytes), custom GLSL 1.10 `ShaderEffect` (3D + SpriteBatch), real Letterbox/Overscan/Stretch presentation modes, context-loss recovery, and hardware instancing when the driver grants `GL_ARB_draw_instanced`/`GL_ARB_instanced_arrays` -- the driver-dependence is why this lane added `GraphicsCapability::Instancing`. Multi-stream vertex input reported unsupported and refused deterministically. 48 dedicated CTest suites. See [`docs/opengl2-backend.md`](docs/opengl2-backend.md) and `plan_opengl2.md`.
 - **`OPENGLES1` backend:** Genuine **OpenGL ES 1.1 fixed-function** backend ("Common"/CM profile), deliberately independent of the EasyGL-implemented GL family — EasyGL targets shader-based ES 3.0/GL 3.3/WebGL pipelines and cannot create an ES 1.1 context at all, so the two share no code. No shaders anywhere (zero `#version` directives, zero shader entry points); fixed-function matrices, `glLight*` lighting, `glTexEnv*` multitexture combiners, `GL_FOG`, alpha test, FBO render targets via `GL_OES_framebuffer_object`, and `WireFrame` emulated by re-expanding triangles to `GL_LINES`. Multiple render targets, occlusion queries, custom effects, `Texture3D`, multi-stream vertex input and instancing are all reported `false` and refused deterministically. Requires a **real system OpenGL ES 1.1 library** (`libGLESv1_CM` plus `GLES/gl.h`/`GLES/glext.h`; Debian `libgles1`, `libgles-dev`), gated at configure time with a `FATAL_ERROR` — nothing vendored or downloaded. Note that Debian builds Mesa with `-Dgles1=disabled`, so its stock driver cannot create an ES 1.1 context on **any** device; the backend is validated against a locally built ES1-capable Mesa driven by `scripts/opengles1-test-env.sh` (verified runtime identity: `OpenGL ES-CM 1.1 Mesa 25.0.7`, softpipe). 7 dedicated pixel-readback CTest suites. See [`docs/opengles1-backend.md`](docs/opengles1-backend.md) and `plan_opengles1.md`.
-- **`MAGNUM` backend:** Desktop OpenGL 3.3 core backend expressed through [Magnum](https://github.com/mosra/magnum)'s typed `Magnum::GL` wrappers, on the same SDL3 window every other windowed backend uses. Covers clear/present, `Texture2D`/`TextureCube`/`Texture3D`, `RenderTarget2D`/`RenderTargetCube` (incl. MSAA resolve, mip regeneration and up to 4 simultaneous targets), `SpriteBatch`, runtime-compiled `ShaderEffect` GLSL, the full render-state set (incl. real wireframe fill, which the GLES-profile `OPENGLES` backend cannot do), occlusion queries, and indexed/instanced/multi-stream draws with per-binding offsets and instance frequencies. All seven stock effects are generated and pixel-verified (`BasicEffect`/`AlphaTestEffect`/`DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect`/`PbrEffect`/`SkinnedPbrEffect`, including both `PreferPerPixelLighting` families), the draw-time declaration-fidelity guard refuses layouts the stride-keyed stock route would misread, and `WireFrame=true` is pixel-oracle-proven. Verified end-to-end against Mesa `llvmpipe` under `Xvfb` (eight pixel-asserting CTests plus a GTest suite), so it needs no GPU to check. Only `SurfaceFormat::Color` storage is allocated, and a non-default `BlendState.MultiSampleMask` applies as its default — Magnum's wrappers expose no sample-mask state. See [`docs/magnum-backend.md`](docs/magnum-backend.md) and `plan_magnum.md`.
-- **`LLGL` backend:** Experimental backend on [LLGL](https://github.com/LukasBanana/LLGL), the only CNA backend that picks its native API at **runtime** rather than at build time (`CNA_LLGL_RENDERER=auto|vulkan|opengl|null`, default Vulkan then OpenGL). The current baseline covers 2D (swap chain and clears, virtual-resolution presentation, `Texture2D` upload/readback, `SpriteBatch` with real blend and sampler state) plus the 3D path (vertex/index buffer draws with depth test, cull mode and fill mode) and `BasicEffect` with one texture, tint, alpha, vertex-colour modulation and fog, plus `AlphaTestEffect` — pixel-verified end to end on **both** renderer modules, with every test registered separately per module so neither can silently rot (12 CTests). Lighting, the remaining stock effects, render targets, cube/volume textures and custom effects are not implemented and fail loudly rather than silently. Verified against a software rasterizer, not yet on real GPU hardware. See [`docs/llgl-backend.md`](docs/llgl-backend.md) and `plan_llgl.md`.
+- **`MAGNUM` backend:** Desktop OpenGL 3.3 core through Magnum's typed GL wrappers. It provides native polygon-mode wireframe while the EasyGL profiles provide their own measured line-expansion emulation. Its accepted capability and validation boundary is recorded in [`docs/magnum-backend.md`](docs/magnum-backend.md), `plan_magnum.md`, and `integration/lanes/magnum.md`.
+- **`LLGL` backend:** Experimental backend on [LLGL](https://github.com/LukasBanana/LLGL). CNA's accepted support route is LLGL's OpenGL module on Linux/X11/x86_64; it is the only automatic choice. Explicit Vulkan selection is rejected after native validation exposed descriptor, image-layout, and teardown violations, and Null is diagnostics-only. The current accepted boundary is recorded in [`docs/llgl-backend.md`](docs/llgl-backend.md), `plan_llgl.md`, and `integration/lanes/llgl.md`.
 - **`D3D9` backend:** Windows-only native Direct3D 9 backend targeting real **XNA 4.0 pixel authenticity**, not just feature parity — it runs Microsoft's own vendored Stock Effects HLSL bytecode, cross-compiled via MinGW-w64 and verified through Wine+DXVK on a real GPU (14 CTest binaries). A checked-in 31-scene oracle corpus diffs CNA's render against the **real XNA 4.0 runtime's own render** of the same scene at `--tolerance 0`: **0/31 scenes currently diverge.** `GraphicsProfile.Reach`/`.HiDef` enforcement is real (the only CNA backend where it is). Render targets sampled as textures, non-`Color` `SurfaceFormat`, and real-Windows hardware verification are still open. See [`docs/d3d9-backend.md`](docs/d3d9-backend.md), [`docs/d3d9-divergence-report.md`](docs/d3d9-divergence-report.md), and `plan_dx9.md`.
 - **`D3D11` backend:** Windows-only native Direct3D 11 backend, cross-compiled via MinGW-w64 and verified through Wine+DXVK on a real GPU (6 CTest binaries, 96+ checks) — all 10 stock HLSL shader variants (`BasicEffect`/`AlphaTestEffect`/`DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect`), textures/render targets (MRT/MSAA/occlusion queries), state objects, SpriteBatch, and a runtime-`D3DCompile()` custom `ShaderEffect` path are real and pixel-verified. Real-Windows hardware verification (device-lost recovery, WARP fallback, driver-specific parity) is still open. See [`docs/d3d11-backend.md`](docs/d3d11-backend.md) and `plan_dx.md`.
 - **`DIRECT2D` backend:** Windows-only hardware-accelerated **2D-only** backend using `ID2D1DeviceContext`; D3D11/DXGI only host the Direct2D device and flip-model swap chain. Authored `Texture2D` mips, non-mipmapped `RenderTarget2D`, SpriteBatch transforms/tint/flip/addressing, native anisotropic filtering, exact supported Direct2D Porter–Duff modes, logical presentation/readback, resize and 2D resource recovery are implemented. Additive blending, mipmapped render targets, and every 3D path are rejected rather than approximated. Wine covers the compatibility matrix; built-in effects, selected image composites, physical display/DPI output, and debug-layer evidence remain native-Windows gates. See [`docs/direct2d-backend.md`](docs/direct2d-backend.md) and `plan_direct2d.md`.
@@ -166,7 +166,9 @@ EasyGL, Vulkan, Skia, and the other selected paths.
 
 ## 6. 🔌 Backend System
 
-CNA supports backend selection at build-time via `CNA_GRAPHICS_BACKEND` (choose one backend per build configuration):
+CNA exposes **41 public renderer identities** through `CNA_GRAPHICS_BACKEND` (choose one per build
+configuration). The canonical registration, implementation-sharing, capability, and platform-gate
+inventory is [`docs/renderer-registry.md`](docs/renderer-registry.md).
 
 - `SDL_RENDERER`
 - `SDL_GPU`
@@ -177,6 +179,7 @@ CNA supports backend selection at build-time via `CNA_GRAPHICS_BACKEND` (choose 
 - `BGFX`
 - `VULKAN`
 - `WEBGPU`
+- `MAGNUM`
 - `SKIA`
 - `HEADLESS`
 - `SOFTWARE`
@@ -206,7 +209,7 @@ CNA supports backend selection at build-time via `CNA_GRAPHICS_BACKEND` (choose 
 - `DILIGENT` (experimental)
 - `GLIDE` (32-bit Windows-only; requires external `glide3x.dll` at runtime)
 - `GDI` (Windows-only, 2D-only)
-- `LLGL` (experimental; selects OpenGL or Vulkan at runtime)
+- `LLGL` (experimental; accepted support is OpenGL on Linux/X11/x86_64)
 - `METAL` (macOS only, experimental — see [`docs/metal-backend.md`](docs/metal-backend.md))
 
 ### Tradeoffs
@@ -299,9 +302,8 @@ Beyond graphics, CNA ports the XNA 4.0 `GamerServices` and `Net` namespaces (and
 - **Language:** C++23
 - **Core platform/runtime library:** SDL3 (vendored via Git submodule at `third_party/SDL`)
 - **Media integration:** `SDL3_image`, `SDL3_mixer` (vendored via Git submodules)
-- **Graphics dependency:** `easy-gl` (for the `OPENGLES`/`OPENGL33`/`WEBGL1`/`WEBGL2` backends —
-  temporarily built against the `easy-glrvc` sibling checkout, branch `rvc`, while WebGL1 support
-  lands there; see `plan_glbackends.md`)
+- **Graphics dependency:** `easy-gl` (for the `OPENGLES`/`OPENGL33`/`WEBGL1`/`WEBGL2` backends),
+  resolved from the canonical `../easy-gl` sibling; EasyGL in turn resolves `../meta-gl`
 - **Networking:** [ENet](http://enet.bespin.org/) (vendored directly at `third_party/enet`) —
   reliable-UDP transport backing `Microsoft::Xna::Framework::Net`'s `SystemLink` sessions
 - **Utility/runtime layer:** `sharp-runtime`
@@ -316,8 +318,8 @@ Beyond graphics, CNA ports the XNA 4.0 `GamerServices` and `Net` namespaces (and
 - C++23-capable compiler (GCC 12+ or Clang 15+)
 - Dependency directories available to CMake:
     - `../sharp-runtime`
-    - `../easy-glrvc` (temporarily; only needed for the `OPENGLES`/`OPENGL33`/`WEBGL1`/`WEBGL2`
-      backends — see `plan_glbackends.md` GLB-7/GLB-38 for the switch back to `../easy-gl`)
+    - `../easy-gl` and `../meta-gl` (needed for the `OPENGLES`/`OPENGL33`/`WEBGL1`/`WEBGL2`
+      backends)
 - SDL3, SDL3_image, and SDL3_mixer are built from vendored submodules by default — no system SDL packages required.
 
 ### Prerequisites (Windows)

@@ -1,5 +1,28 @@
 # INTEGRATION_BRANCH_INVENTORY.md — dynamic pending-branch inventory
 
+> ## ⚠ SUPERSEDED — HISTORICAL SNAPSHOT
+>
+> **Superseded on 2026-08-04 by `integration/INTEGRATION_BRANCH_INVENTORY.md`**, re-derived after a
+> fresh fetch against the finalized checkpoint `d79214e7`. Read that document for current data.
+>
+> **What this snapshot got right and keeps:** the lane count (21), the deduplication method, the
+> `feature/gl` three-repository chain, and the audit-stacked re-classification of Magnum and Wicked.
+>
+> **What is superseded:** every per-lane `Ahead` figure and every HIGH/LOW conflict class in §3.
+> They were measured against `origin/develop`, which attributes the remediation campaign's own
+> commits to the lane. Re-measured from each lane's real merge base with the checkpoint, **eleven**
+> lanes are audit-stacked, not two — `feature/gltf` contributes **1** commit rather than 555,
+> `feature/direct2d` **48** rather than 752, `feature/skia` **141** rather than 848. See
+> `integration/INTEGRATION_BRANCH_INVENTORY.md` §3.
+>
+> **Also superseded:** §5's description of `feature/direct2d` as *"the final actively-developed
+> lane"* with a moving head. The owner has since **frozen it at `9b17e783`**.
+>
+> The counts below are **retained deliberately as the snapshot they were**, per the rule that
+> obsolete current-count claims are labelled rather than erased.
+
+---
+
 > **Current inventory as of the 2026-08-04 exit-reconciliation fetch (checkpoint candidate on
 > `feature/audit` @ `765335f5`): 21 logical pending integration lanes.**
 >

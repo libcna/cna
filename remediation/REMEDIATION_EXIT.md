@@ -13,6 +13,15 @@
 > backends exist, and not that every deferred ticket is unimportant. §4 names what remains,
 > including **two open HIGH path-containment findings** (`REMED-CONTENT-007`/`-008`) that were
 > re-verified as still present in current source by this session.
+>
+> **Post-exit addendum — 2026-08-08:** those two findings are now **DONE**. Red-first synthetic
+> fixtures proved the Song/Video and ContentManager escape routes; signed production commits route
+> every affected caller through a shared component-aware containment primitive; focused and broad
+> Content shards pass with ASan, UBSan, and LeakSanitizer. The bounded same-pattern audit also
+> created and closed `REMED-CONTENT-011`. This does not rewrite the dated 2026-08-04 judgement:
+> every statement below describing `-007`/`-008` as open is retained as historical phase-1 exit
+> evidence. Current technical detail is in `REMEDIATION_PROGRESS.md`; the separate Batch 5
+> checkpoint retake is recorded in `integration/BATCH_5_STABILIZATION.md`.
 
 ---
 

@@ -7,9 +7,10 @@ downstream task that owns its promotion (or its continued rejection).
 
 ## Scope
 
-"EasyGL" here means CNA's own `CNA_GRAPHICS_BACKEND=EASYGL` backend selection -- a real, full
-3D-capable OpenGL ES 3.00 backend, not the separate sibling `easy-gl` GL-wrapper library it links
-against (that library owns no shader source of its own; it is a thin Shader/Program/Buffer wrapper).
+"EasyGL" here means CNA's internal implementation selected publicly as `OPENGLES`, `OPENGL33`,
+`WEBGL1`, or `WEBGL2` -- a real, full 3D-capable GL backend, not the separate sibling `easy-gl`
+GL-wrapper library it links against (that library owns no shader source of its own; it is a thin
+Shader/Program/Buffer wrapper).
 This is the same "EasyGL" `docs/skia-3d-emulation-adr.md` and its companion matrices measure Skia's
 own 3D-refusal decisions against.
 

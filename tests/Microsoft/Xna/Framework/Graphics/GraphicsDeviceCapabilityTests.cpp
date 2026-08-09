@@ -44,9 +44,8 @@
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using CNA::GraphicsCapability;
 
-// This test target only ever builds against a fully 3D-capable backend (EasyGL by default on
-// Linux) -- SDL_Renderer/DX3/Canvas each have their own dedicated
-// *_graphics_capability_test.cpp example asserting the opposite (nothing supported).
+// This test target is built for multiple renderer families. Per-backend arms below preserve each
+// accepted capability boundary rather than assuming one principal backend's answers are universal.
 //
 // plan_opengl1.md phase 12 finding: OPENGL1 is a SECOND genuinely-3D-capable backend this file's
 // original "only ever builds against EasyGL" assumption did not anticipate -- and its real,
@@ -54,9 +53,9 @@ using CNA::GraphicsCapability;
 // phase 11) legitimately differs from EasyGL's on 3 of these checks: OPENGL1 has no
 // ARB_multitexture-based MRT or custom-shader Effect pipeline (this backend's own design rule:
 // "No GLSL/custom ShaderEffect pipeline in the strict OPENGL1 backend"), but DOES support
-// wireframe via real glPolygonMode(GL_LINE) -- the opposite of GLES3's own total lack of a
-// wireframe fill mode. Neither backend is "wrong"; both are honestly reporting a real, different
-// fixed-function feature set. OcclusionQuery (plan_opengl1.md item 23, EasyGL parity, added
+// wireframe via real glPolygonMode(GL_LINE); EasyGL instead uses measured triangle-edge
+// re-expansion because GLES3 has no polygon mode. Both report working wireframe through different
+// implementations. OcclusionQuery (plan_opengl1.md item 23, EasyGL parity, added
 // 2026-07-20) is no longer one of the differing checks -- both backends now genuinely support it
 // (OPENGL1 via real ARB_occlusion_query/core-1.5 GL_SAMPLES_PASSED queries).
 
@@ -219,7 +218,7 @@ TEST(GraphicsDeviceCapabilityTest, GetMaxTextureDimensionReturnsSanePositiveValu
 // oracle in this file, not a reading of the source:
 //
 //   Software, Vulkan, bgfx, SDL_GPU, D3D9, D3D11  reports true, renders a real wireframe
-//   EasyGL                                        reports FALSE, renders a real wireframe anyway
+//   EasyGL                                        reports true, renders line-expansion wireframe
 //   WebGPU                                        reports FALSE, refuses the draw (WEBGPU-115)
 //   Headless                                      reports true, rasterizes nothing at all
 //   D3D12                                         maps FILL_WIREFRAME through the shared
@@ -241,13 +240,9 @@ TEST(GraphicsDeviceCapabilityTest, GetMaxTextureDimensionReturnsSanePositiveValu
 // matrix for that boundary lives in WebGpuWireFrameContractTests.cpp; this file keeps the
 // per-backend shape of the contract.
 //
-// EASYGL'S REPORT CONTRADICTS ITS OWN RENDERING. `EasyGLGraphicsBackend::SupportsCapability`
-// returns false for WireFrame, but `ApplyRasterizerState` sets `wireframe_` and every triangle
-// draw re-expands into GL_LINES through `DrawWireframe` -- and the oracle below measures a
-// correct wireframe there. The capability report is the stale side, not the renderer. That is a
-// production defect, it is outside this task's scope, and it is recorded as REMED-GFX-219; the
-// arm below asserts the CURRENT measured value so the baseline is truthful, and fails the moment
-// REMED-GFX-219 lands.
+// HISTORICAL EASYGL FINDING, NOW RESOLVED. Before REMED-GFX-219 the implementation rendered a
+// measured-correct GL_LINES wireframe while the capability under-reported false. The current
+// report is true and the oracle below preserves that correction.
 // ============================================================================
 
 // The oracle itself -- geometry, probes, colours, the Solid control and the single-draw renderer

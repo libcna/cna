@@ -41,6 +41,10 @@ disproved finding is a real result and should be recorded with the same rigor as
 | P3 | 28 | 0 | 0 | 0 | 28 |
 | **Total** | **105** | **22** | **0** | **1** | **82** |
 
+*The 2026-08-08 closure of `REMED-CONTENT-007`, `-008`, and newly identified `-011` does not alter
+this frozen 105-task arithmetic: all three are in “Discovered during remediation,” following the
+existing `REMED-CORE-014` convention.*
+
 *P1's Done count 5→6 reflects `REMED-GFX-008` closing (SkinnedEffect ambient/emissive + AvatarRenderer
 recalibration; verified on Vulkan/EasyGL/Bgfx/D3D11/D3D9-custom, D3D12 source-verified).*
 
@@ -1488,8 +1492,94 @@ triaged in.
 |---|---|---|---|---|
 | REMED-CONTENT-009 | DONE | | feature/audit | Signed int64 overflow in `REMED-CONTENT-001`'s own decoded-byte-size arithmetic, plus 2 sibling readers + 1 additional int32_t overflow found via root-cause sweep — see detail below. Commit `c5ed8dd1`. |
 | REMED-CONTENT-004 | DONE | | feature/audit | Texture3D silently discarded all SetData/GetData calls on Software/Headless instead of failing cleanly — root cause differs from the plan's own hypothesis, see detail below. Commit `fa804b7d`. |
-| REMED-CONTENT-007 | DEFERRED | | | Not placed in Wave 2 by either frozen dependency doc or prior Wave-2 recommendation — see scope determination above. Remains `NOT STARTED`. |
-| REMED-CONTENT-008 | DEFERRED | | | Same as `-007`. Remains `NOT STARTED`. |
+| REMED-CONTENT-007 | DONE | | feature/audit | Closed 2026-08-08: Song/Video XNB-embedded media references now use the shared component-aware containment primitive before media-resource construction and again after extension probing. Independent public-caller regressions cover each reader; see detail below. |
+| REMED-CONTENT-008 | DONE | | feature/audit | Closed 2026-08-08: every affected ContentManager manifest/sidecar route now validates the caller-supplied relative path before file access or recursive `Load`; see detail below. |
+
+### REMED-CONTENT-007 / REMED-CONTENT-008 detail — content-root containment (2026-08-08)
+
+**Status: DONE.** Planning commits are signed test commit `569beedd` and signed fix commit
+`062ca70c`; their signed integration equivalents are `2d795473` and `c805fd73` on
+`integration/post-audit-phase1`.
+
+**Confirmed root causes.** `SongContentTypeReader.cpp` and `VideoContentTypeReader.cpp` joined the
+untrusted string embedded in an XNB directly to the XNB directory, then allowed extension probing
+to select the result, with no authorized-root check. `ContentManager.cpp` likewise passed manifest
+fields through raw `fs::path(root) / suppliedPath` joins (or equivalent manifest-directory joins)
+before binary/text reads or recursive `ContentManager::Load` calls. `fs::path::operator/` discards
+its left operand for a rooted right operand; lexical `..` could also leave the root. No subsequent
+caller restored confinement, and a raw string-prefix test would have confused `content` with the
+sibling `content-evil`.
+
+**Authoritative contract.** File-/manifest-supplied references on these routes must be non-empty,
+relative paths. `/...`, `\...`, UNC, and Windows drive-rooted or drive-relative spellings are
+rejected portably. Backslashes are normalized to separators; repeated separators, `.`, and
+in-root `..` components are normalized and accepted; a filename merely containing `..` remains a
+normal filename. The normalized result must be a component-wise non-root child of the authorized
+directory. Root equality and escapes reject with `ContentLoadException`. Native component/case
+semantics are retained—no artificial case fold is invented. ContentManager manifest fields are
+root-relative except the established SkinnedModel/media external-bundle forms: a referring file
+lexically inside the Content root is confined to that root, while a referring file deliberately
+loaded through the existing explicit absolute API is confined to its own bundle directory. The
+public explicit-external `ContentManager::BuildAssetPath`/`Load` contract and direct Song/Video
+constructors are unchanged.
+
+**Filesystem boundary.** The component check is lexical and does not require the target to exist.
+For the default production call, `weakly_canonical` is additionally used for the check only, so an
+existing symlink component or extension-probed symlink that resolves outside is rejected while a
+nonexistent tail remains valid. The returned path remains lexically normalized for cache identity.
+This is check-time symlink awareness, **not** an `openat`-style race-proof sandbox: a concurrent
+symlink replacement between validation and open is outside the current Content abstraction and no
+TOCTOU-safe filesystem confinement is claimed.
+
+**Red-first controlled oracles.** Only synthetic temporary trees were used; no arbitrary user file
+was inspected.
+
+| Caller | Root / supplied input | Pre-fix normalized candidate and result |
+|---|---|---|
+| Song XNB | `TMP/content`; XNB `content/music/album/escape.xnb`; `../../../content-evil/secret..mix.ogg` | `TMP/content-evil/secret..mix.ogg`; outside media handle was constructed and the cache retained it |
+| Video XNB | `TMP/content`; XNB `content/movies/set/escape.xnb`; `../../../content-evil/secret.mkv` | `TMP/content-evil/secret.mkv`; outside filename was selected |
+| Texture3D / Effect | `TMP/content`; JSON-decoded `\u002e\u002e\u002fcontent-evil/volume.bin`, traversal vertex, or absolute fragment | outside controlled file was read/selected; Texture3D reached the later backend error and shaders selected the sentinel files |
+| AnimationClip / Model / SkinnedModel | `TMP/content`; traversal, absolute, sibling-prefix, Unicode-decoded, or symlinked sidecar fields | outside controlled duration/binary/texture was selected, including repeated cache requests |
+
+Before production changed, the signed regression commit ran 38 selected tests: all 25 pre-existing
+helper cases remained green while **12 of 13** new public-caller cases failed, independently proving
+both tickets. The expected result in every red case was rejection before access; the actual result
+was the controlled outside selection above. Absolute Song/Video inputs failed the same way. A
+sentinel in each outside fixture proved that the post-fix exception does not disclose file content.
+
+**Fix and caller coverage.** `PathContainment.hpp` now supplies the single shared
+`ValidateContainedPath`, `ResolveContainedPathFromBase`, and
+`ResolveContainedPathRelativeToFile` implementation; the existing `ResolveContainedPath` delegates
+to it. Song and Video independently validate the initial embedded reference and the final
+extension-probed candidate before constructing their resource. ContentManager validates Texture3D
+`data`; custom Effect `vertex`/`fragment`; AnimationClip `clipFile`; Model `skeleton`, `vertices`,
+`indices`, `morphTargets`, and `clip`; SkinnedModel `skeleton`, `vertices`, `indices`, `texture`, and
+`clip`; and every affected indirect asset name before recursive `Load`. In-root names are
+re-expressed in normalized root-relative form so equivalent spellings preserve cache identity;
+rejected requests do not populate caches. Independent Song, Video, and ContentManager public-call
+tests prove the helper cannot be bypassed.
+
+**Bounded same-pattern audit.** Classification A: Cnj `sourceFile`, ContentReader external
+references, PlaylistParser, StorageDevice, and all routes listed above are protected by the shared
+primitive. B: Saved Pictures/GamerServices and application-root construction use trusted internal
+names. C: `ContentManager::BuildAssetPath`, TitleContainer, StorageContainer, direct Song/Video
+constructors, and explicit external bundles intentionally retain their separate outside-root
+contract. D: Model/SkinnedModel `clip`, SkinnedModel binary/texture fields, and indirect Effect,
+SpriteFont, and Model asset fields were genuine same-family omissions. They received the explicit
+new ID **REMED-CONTENT-011** and were fixed and tested in this bounded change. No D hit remains and
+no other finding was created.
+
+**Verification.** On the final integration tree, the focused containment suite is **46/46** and
+the broader Content/Song/Video shard is **116/116 across 18 suites**. Both run from
+`build-asan` (HEADLESS, Debug, ccache) with linked ASan + UBSan and LeakSanitizer enabled; there is
+no CNA-originating sanitizer or leak report. Portable unit cases cover POSIX absolute paths,
+Windows drive/root/UNC spellings, mixed/repeated/trailing separators, root equality, sibling
+prefixes, deep traversal, ordinary `..` filename characters, and symlink escape. Existing valid
+Song, Video, Model, shared clip, SpriteFont, Effect, Texture3D, and external SkinnedModel/media
+bundle cases remain green. MinGW/Wine was not invoked because the implementation uses no Windows
+filesystem API and the Windows syntax contract is exercised deterministically in portable tests.
+All compilation was explicitly bounded at `--parallel 3` (below both the repository cap and the
+session ceiling of 8); `audit/` was untouched.
 
 ### REMED-CONTENT-009 detail — signed int64 overflow in XNB texture decoded-size arithmetic
 
@@ -2412,8 +2502,9 @@ existing task.
 |---|---|---|---|---|---|
 | REMED-BUILD-010 | `EasyGL_RealWindowResize` hangs the full 60s CTest `TIMEOUT` under a real desktop compositor (`DISPLAY` = a real logged-in GNOME/Mutter session, not an isolated Xvfb) | MEDIUM | P2 | REMED-BUILD-001 (full unfiltered `ctest` baseline run) | **DONE** — investigated and given a deterministic wall-clock watchdog. See "Wave 2 — BUILD_TEST_CI lane" below; **this session's own re-investigation found the hang does NOT reproduce reliably** (20/20 clean runs under the real GNOME/Mutter `:0` session that previously produced a 100%-reproducible hang) — re-classified from "deterministic environment incompatibility" to "real but state/focus-dependent compositor timing sensitivity," and fixed at the root (the test's own reliance on an unbounded frame-count loop) rather than by asserting Xvfb-only. |
 | REMED-BUILD-011 | `CMakePresets.json`'s `devices-asan`/`devices-tsan`/`devices-ubsan` configure presets (description explicitly says "Microsoft::Devices hardening") never set `CNA_DEVICES=ON` in their own `cacheVariables` — configuring with any of the three as documented (`cmake --preset devices-asan`) silently builds with the entire `CNA::Devices`/`Microsoft::Devices::Sensors` surface compiled out, so none of the sanitizer coverage the preset names promise actually exists unless the caller separately remembers `-DCNA_DEVICES=ON` | MEDIUM | P2 | REMED-DEVICES-001 (setting up ASan/TSan runs for the new concurrent tests) | NOT STARTED — recorded, not fixed (out of DEVICES-001's scope; worked around this task's own verification by passing `-DCNA_DEVICES=ON` on the configure command line into ad hoc `cmake-build-devices-asan`/`cmake-build-devices-tsan` build dirs rather than the named presets — a BUILD_TEST_CI-lane fix, not a DEVICES one) |
-| REMED-CONTENT-007 | `VideoContentTypeReader.cpp`/`SongContentTypeReader.cpp` each duplicate a `ResolveRelativeFilePath()` helper with **zero** containment check (not even the partial one `ContentReader.cpp` had before this task) — a `Video`/`Song` `.xnb`'s own embedded filename field can be absolute or `..`-escaping and is joined onto the content root unchecked | HIGH | P1 | REMED-CONTENT-002 (repo-wide sweep) | NOT STARTED — recorded, not fixed (out of `-002`'s 3-site scope; same root cause, same fix shape — reuse `CNA::Internal::IsDisallowedAbsolutePath`/the `ResolveRelativeAssetPath` pattern) |
-| REMED-CONTENT-008 | `ContentManager.cpp` joins 8 `.cnj`/JSON-manifest-supplied path fields (`dataField->stringValue` for `Texture3D`; `vertRel`/`fragRel` for `ShaderEffect`; `clipFileField->stringValue` for `AnimationClip`; `skeletonRel`, `vertFile`/`idxFile`, `morphTargetsFile` for skinned-model morph/animation data) onto the content root with no containment check — same `fs::path::operator/` pitfall as the 3 sites `-002` fixed, at file-supplied (not caller-supplied) untrusted strings | HIGH | P1 | REMED-CONTENT-002 (repo-wide sweep) | NOT STARTED — recorded, not fixed (out of `-002`'s 3-site scope; notably, this is the *same* `.cnj`-manifest subsystem that already has one field, `sourceFile`, correctly hardened via `CnjSourceFile.hpp` — these 8 fields were simply never given the same treatment) |
+| REMED-CONTENT-007 | `VideoContentTypeReader.cpp`/`SongContentTypeReader.cpp` each duplicated a `ResolveRelativeFilePath()` helper with zero containment check, allowing an XNB-embedded filename to be absolute or escape by `..` before media-resource construction | HIGH | P1 | REMED-CONTENT-002 (repo-wide sweep) | **DONE 2026-08-08** — both independent callers use the shared component-aware lexical + existing-symlink check before resource creation and after extension probing; public red-first tests are permanent. Signed planning test/fix `569beedd`/`062ca70c`; signed integration equivalents `2d795473`/`c805fd73`. |
+| REMED-CONTENT-008 | `ContentManager.cpp` joined the recorded Texture3D, Effect, AnimationClip, and Model manifest-supplied sidecar fields onto the content root without containment | HIGH | P1 | REMED-CONTENT-002 (repo-wide sweep) | **DONE 2026-08-08** — every recorded field rejects traversal/rooted/sibling-prefix/symlink escape before read/open or recursive load while normalized in-root content remains green; independent ContentManager caller coverage is permanent. Same signed commits as `-007`. |
+| REMED-CONTENT-011 | The required same-pattern audit found additional ContentManager omissions beyond `-008`'s recorded eight fields: Model/SkinnedModel `clip`, SkinnedModel `skeleton`/`vertices`/`indices`/`texture`, and indirect Effect/SpriteFont/Model asset fields passed to recursive `ContentManager::Load` | HIGH | P1 | REMED-CONTENT-007/-008 bounded same-pattern audit | **DONE 2026-08-08** — fixed in the same shared primitive/caller-routing change because it is the identical bounded root-cause family; aggregate public tests exercise every field and prove outside sentinels are never selected. No same-pattern D hit remains. |
 | REMED-NET-008 | A "client"-role `NetworkSession`'s own incidental listening `ENetHost` (bound on every non-Emscripten `ConnectToHost()` call, so a peer can be promoted to host later via migration without rebinding — see `ENetHostHandle`'s own doc comment) still accepts and fully processes `ClientHello` from *any* third party that connects to it, not just its real host — `HandleClientHello` has no "am I actually supposed to be hosting anyone" check. A rogue peer can connect directly to a client's own bound port (`ENetBackend::GetBoundPort()` is non-zero for a client-role session too) and get a real `ServerWelcomeMessage` snapshotting that peer's own roster, plus get added as a real `NetworkGamer`/fire a real `GamerJoined` event on that peer's session — despite that peer never intending to host anyone | MEDIUM | P2 | REMED-NET-001 (host-authority audit sweep) | NOT STARTED — recorded, not fixed (distinct root cause from NET-001: `ClientHello` is not one of the four host-authoritative broadcast types NET-001 covers; this is a missing role-check on the *accept* side of a client-scoped session, not a missing sender-authority check on a broadcast-only message. Confirmed real via manual reasoning about `ConnectToHost`'s own non-Emscripten `StartHosting()` call and `HandleClientHello`'s unconditional accept — not separately reproduced with a new test, since fixing/proving it is out of this task's scope; the closest existing coverage is `ClientRejectsForgedGamerLeaveBroadcastFromRogueThirdPartyPeer`, new in this task, which proves the same rogue-third-party-on-a-client-socket attack surface is real for the four NET-001 message types specifically) |
 | REMED-TEST-008 | `DynamicSoundEffectInstanceTest.BufferNeededFiresExactlyTheStarvedCount` fails under a full unfiltered `ctest -j4` run but passes 10/10 in isolation (`--gtest_filter` + `--gtest_repeat=10`) — a real-time audio buffer-starvation-count assertion is timing-sensitive under heavy 4-way parallel CPU load on this sandbox. Extends `REMED-NET-001`'s already-documented `ctest -j4` transient-failure finding (previously only `ENetDiscoveryServiceTest.*` ×4 and 2 `TwoProcessLoopbackTest`/`NetworkSessionTest` cases, all network-port contention) to a second, previously-undocumented flakiness class (audio timing, not networking) | LOW | P3 | REMED-BUILD-004 (establishing a full local `ctest -j4` baseline before designing the new CI job) | NOT STARTED — recorded, not fixed (test-reliability finding, not a production defect; `REMED-BUILD-004`'s own new CI job runs `ctest` serially specifically to avoid this and the already-known network-port class, rather than allowlisting either) |
 | REMED-CORE-014 | `GraphicsDeviceManager`'s private `ownsGraphicsDevice_` flag is initialized `false` in both constructors and never set `true` anywhere in `GraphicsDeviceManager.cpp` (confirmed by grep of the whole file, and independently by a live probe program: construct `Game` + `GraphicsDeviceManager(&game)`, subscribe to `getDeviceDisposingEvent()`, call `gdm->Dispose()` — the subscriber never fires). Both of `Dispose()`'s and `CreateDevice()`'s only conditional branches that raise `DeviceDisposing` and release the owned `GraphicsDevice` are therefore permanently dead code, for **every** `GraphicsDeviceManager` instance, not only the `Game`-attached case this entire codebase always constructs. This directly compounds `REMED-CORE-006`: even after `Game::Initialize()` subscribes to `DeviceDisposing` (that task's own stated fix strategy), a real `GraphicsDeviceManager::Dispose()` call on a `Game`-attached manager still would not raise the event without this dead-code path also being addressed — the CORE-lane owner should know this before scoping `REMED-CORE-006`'s fix as "just add the subscription" | HIGH | P1 | REMED-TEST-002 (investigating how to trigger `REMED-CORE-006`'s own required test, "dispose the device, assert `UnloadContent()` was called") | **DONE** — fixed atomically with `REMED-CORE-006`/`-007`, same root cause, same files. See "Wave 1 (parallel) — CORE lane" above. The `Game`-attached (non-owning) path's `DeviceDisposing` raise is no longer gated on `ownsGraphicsDevice_`; the standalone-owned-device path (still unreachable — `CreateDevice()` still throws when `game_ == nullptr`) remains a separate, unimplemented future feature, noted in that section. |
