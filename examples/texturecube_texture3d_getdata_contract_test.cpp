@@ -1067,7 +1067,20 @@ protected:
         std::printf("REMED-GFX-130 TextureCube/Texture3D GetData contract -- backend %s\n",
                     kContract.name);
 
-        RunCubeChecks(dev);
+        if (kContract.cubeHasBackend)
+        {
+            RunCubeChecks(dev);
+        }
+        else
+        {
+            const bool rejected = Throws<System::NotSupportedException>([&]
+            {
+                TextureCube cube(dev, kCube, /*mipMap=*/true, SurfaceFormat::Color);
+            });
+            check(rejected,
+                  "C0 cube: TextureCube construction is refused deterministically when the "
+                  "backend declares no validated cube storage");
+        }
         RunVolumeChecks(dev);
 
         std::printf("%d/%d checks passed on %s\n", passCount_, totalCount_, kContract.name);

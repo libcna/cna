@@ -34,7 +34,8 @@ namespace CNA::Internal::Backends::Llgl
          * @param renderSystem Render system that created @p texture and will release it.
          * @param owner        Backend to defer this texture's release through (see the destructor's
          *                     own comment); null falls back to releasing immediately.
-         * @param texture      The texture resource; must not be null.
+         * @param texture      The texture resource, or null for the supported OpenGL contract's
+         *                     transfer-only CPU storage.
          * @param width        Width in pixels of mip level 0.
          * @param height       Height in pixels of mip level 0.
          * @param mipLevels    Number of mip levels the texture was created with.
@@ -107,7 +108,7 @@ namespace CNA::Internal::Backends::Llgl
         [[nodiscard]] bool GetData(int level, int x, int y, int w, int h,
                                    void* data, int dataLength) const override;
 
-        /** @brief Returns the underlying LLGL texture. */
+        /** @brief Returns the underlying LLGL texture, or null for a transfer-only cube. */
         [[nodiscard]] LLGL::Texture* GetLlglTexture() const { return texture_; }
 
     private:
@@ -174,6 +175,10 @@ namespace CNA::Internal::Backends::Llgl
         LLGL::Texture*       texture_      = nullptr;
         int                  size_         = 0;
         int                  mipLevels_    = 1;
+        /// Six tightly-packed RGBA8 faces per mip when `texture_` is null. This preserves the
+        /// XNA TextureCube construction/upload/readback contract without pretending the validated
+        /// OpenGL runtime can sample a cube texture in a shader.
+        std::vector<std::vector<std::uint8_t>> cpuFaces_;
     };
 
     /**
@@ -1697,6 +1702,9 @@ namespace CNA::Internal::Backends::Llgl
          */
         [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
 
+        /** @brief Reports the validated LLGL OpenGL stencil boundary to legacy capability users. */
+        [[nodiscard]] bool SupportsStencilBuffer() const override { return false; }
+
         /** @brief Returns the largest single-axis texture dimension the device reports. */
         [[nodiscard]] int GetMaxTextureDimension() const override;
 
@@ -2394,7 +2402,8 @@ namespace CNA::Internal::Backends::Llgl
 
         std::map<std::uint64_t, LLGL::PipelineState*> pipelineCache_;
         std::map<std::uint64_t, LLGL::Sampler*>       samplerCache_;
-        /// LLGL-53: widened from a single `std::uint64_t` to a 4-way tuple. Folding depth bias's
+        /// LLGL-48/LLGL-53: widened from a single `std::uint64_t` to a 5-way tuple. Folding blend
+        /// state, depth bias's
         /// two floats and the full front/back stencil state's ~10 fields into the SAME single
         /// `std::uint64_t` the rest of this key already used (via more multiply-add steps) was
         /// tried and MEASURED BROKEN: the cumulative multiplier of everything folded in AFTER
@@ -2402,14 +2411,17 @@ namespace CNA::Internal::Backends::Llgl
         /// floats' bits away to nothing -- `rasterizerstate_depthbias_test.cpp`'s own A1 check
         /// (`DepthBias=3000000` vs `DepthBias=0`) computed the IDENTICAL key for both, reusing the
         /// zero-bias pipeline for the biased draw. `std::tuple` gets `std::map`'s ordering for
-        /// free, so each of the 3 new elements can use its OWN full 64-bit budget instead of
+        /// free, so each of the 4 new elements can use its OWN full 64-bit budget instead of
         /// competing for bits with the original single-`uint64_t` key or with each other: element
-        /// 1 is the ORIGINAL key computation unchanged, element 2 packs both depth-bias floats
-        /// losslessly (32+32 bits, zero collision risk), element 3 packs both stencil masks
-        /// losslessly (32+32 bits), element 4 packs the 8 stencil op/function fields plus the 2
+        /// 1 is the ORIGINAL key computation unchanged, element 2 is the complete blend-state
+        /// key (preventing the old low-16-bit ColorWriteChannels/blend-factor collision), element
+        /// 3 packs both depth-bias floats losslessly (32+32 bits, zero collision risk), element 4
+        /// packs both stencil masks losslessly (32+32 bits), element 5 packs the 8 stencil
+        /// op/function fields plus the 2
         /// stencil bools (comfortably under 64 bits with the same small-multiplier style already
         /// used elsewhere in this file).
-        std::map<std::tuple<std::uint64_t, std::uint64_t, std::uint64_t, std::uint64_t>,
+        std::map<std::tuple<std::uint64_t, std::uint64_t, std::uint64_t, std::uint64_t,
+                            std::uint64_t>,
                  LLGL::PipelineState*> primitivePipelineCache_;
         /// One `AttachmentLoadOp::Load` render pass per distinct (colour-attachment-count,
         /// has-depth-stencil, sample-count) shape, shared by every render target AND the swap

@@ -149,6 +149,11 @@ target_link_libraries(CNA
 # GDI's private Software CPU rasterizer is now compiled directly into the GDI archive and also
 # calls CNA-owned math and colour implementations. Without the declared cycle MinGW scans
 # libCNA.a before that rasterizer exposes its references.
+#
+# LLGL stores VertexDeclaration values in its backend archive and uses CNA::Logger from the shared
+# unsupported-call guard. Its archive therefore has the same real reverse references to CNA as
+# Sokol and SDL_GPU; declaring the cycle lets ordinary consumers such as cna_reference_dump link
+# without relying on a test-only --start-group wrapper.
 if(CNA_GRAPHICS_BACKEND STREQUAL "D3D11"
    OR CNA_GRAPHICS_BACKEND STREQUAL "D3D12"
    OR CNA_GRAPHICS_BACKEND STREQUAL "D3D9"
@@ -164,7 +169,8 @@ if(CNA_GRAPHICS_BACKEND STREQUAL "D3D11"
    OR CNA_GRAPHICS_BACKEND STREQUAL "OPENGL33"
    OR CNA_GRAPHICS_BACKEND STREQUAL "WEBGL1"
    OR CNA_GRAPHICS_BACKEND STREQUAL "WEBGL2"
-   OR CNA_GRAPHICS_BACKEND STREQUAL "GDI")
+   OR CNA_GRAPHICS_BACKEND STREQUAL "GDI"
+   OR CNA_GRAPHICS_BACKEND STREQUAL "LLGL")
     target_link_libraries(${BACKEND_TARGET} PRIVATE CNA)
 endif()
 

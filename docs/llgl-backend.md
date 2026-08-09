@@ -1,5 +1,71 @@
 # LLGL graphics backend
 
+## Authoritative post-audit contract (2026-08-09)
+
+This section is the integration contract for `integration/post-audit-phase1` and supersedes the
+broader historical implementation diary below wherever the two disagree. The diary is retained as
+provenance for the original 68-commit lane; it is not a current capability claim.
+
+- CNA exposes exactly one public backend identity: `LLGL`.
+- The supported route is `LLGL -> LLGL OpenGL RenderSystem -> native OpenGL/GLX`, on Linux/X11
+  x86_64. It was runtime-tested on a dedicated Xvfb X11 server with Mesa llvmpipe.
+- LLGL is pinned to `Release-v0.04b`, commit
+  `1e78d8fa497f5cab76b231ba13f4d6249dac0e7e` (BSD-3-Clause). OpenGL is a required LLGL module.
+  Vulkan and Null may remain compiled for coverage/diagnostics, but neither is a supported rendering
+  fallback. `CNA_LLGL_RENDERER=auto` and `opengl` select OpenGL; an explicit `vulkan` request is
+  rejected because the pinned path produced native validation errors. Null remains explicit
+  lifecycle diagnostics and is never selected automatically.
+- Platform scope is Linux/X11 only. Wayland, Windows and 32-bit architectures are not claimed by
+  this CNA backend. In particular, the historical i686 MinGW `__int128` failure came from Glide's
+  mandatory x86 compatibility probe, not from an LLGL configure, build or test route. It is
+  non-gating classification A; sharp-runtime is unchanged.
+
+Current capabilities are deliberately narrower than upstream LLGL's API surface:
+
+| Capability | Current LLGL contract |
+| --- | --- |
+| `ThreeD` | Supported and runtime-tested, including vertex/index offsets and stock effects. |
+| `DepthStencilBuffer` | Depth attachment/test/write supported and runtime-tested. |
+| `StencilBuffer` | Unsupported; enabling stencil rejects deterministically. |
+| `MultiSampleAntiAliasing` | Not advertised. Back-buffer MSAA is clamped off on the supported OpenGL path. |
+| `MultipleRenderTargets` | Runtime-tested for 2-4 `RenderTarget2D` slots through SpriteBatch/custom effects. Cube-face and mip-mapped MRT compositions reject. |
+| `AnisotropicFiltering` | Supported when the measured LLGL device limit is greater than one. |
+| `OcclusionQuery` | Supported and runtime-tested. |
+| `CustomEffects` | Supported for the documented SpriteBatch GLSL path. |
+| `Texture3D` | Upload/readback storage supported; shader sampling is not claimed. |
+| `MultiStreamVertexInput` | Unsupported; more than one vertex stream rejects before submission. |
+| `Instancing` | Unsupported; instance-frequency/instanced draws reject before submission. |
+| `WireFrame` | Device-dependent and reported only when the active module exposes it. |
+| `AdditiveBlending` | Supported and runtime-tested. Constant blend-factor states remain unsupported. |
+
+`Texture2D` upload/readback, odd-width row handling, render-target sampling after unbind, mip-mapped
+`RenderTarget2D`, MRT, viewport/scissor, ordered clears and deferred resource lifetime are gating
+runtime paths. Plain `TextureCube` has exact per-face/per-mip transfer storage; cube shader sampling
+and `RenderTargetCube` are outside the supported path and reject deterministically. `PbrEffect` is
+runtime-covered; shader generation continues to use the checked-in authoritative GLSL sources and
+the repository generator, with no generated artifact edited during integration.
+
+The post-audit stream-array architecture is authoritative. LLGL consumes one geometry stream and
+honours `VertexOffset`, `vertexStart`, `startIndex` and `baseVertex`; it does not restore removed
+`GpuDrawParams` fields. Ordinary multistream and classic 1+1 instancing are unsupported and reject.
+
+Post-audit findings:
+
+- `LLGL-48`: resolved by retaining the complete blend-state identity in the primitive pipeline key;
+  the shared colour-write-channel oracle is gating.
+- `LLGL-52`: resolved on the supported OpenGL path; orthographic/CreateLookAt and indexed
+  BasicEffect camera controls are gating.
+- `LLGL-53`: resolved by a truthful boundary. Viewport/depth/render-target controls pass; non-zero
+  depth bias and stencil are deliberately unsupported and reject instead of silently no-oping.
+- `LLGL-54`: supported MRT compositions pass; cube-face and mip-mapped MRT combinations reject.
+- `LLGL-55`/`LLGL-56`: X11/Xvfb and CNA-owned lifetime routes are covered. LeakSanitizer still
+  reports narrowly classified allocations in pinned LLGL/SDL/Mesa GLX visual selection, not CNA.
+- `LLGL-57`: resolved first-frame swap-chain/back-buffer extent drift after
+  `GraphicsDevice::Reset` by synchronizing LLGL resolution at virtual-resolution and capture
+  boundaries and invalidating readback cache on resize.
+- `LLGL-58`: resolved a sanitizer finding in pinned LLGL's deferred OpenGL command buffer by
+  supplying a valid pointer for its zero-count clear-value copy at both CNA render-pass call sites.
+
 ## Status
 
 An **experimental** CNA graphics backend built on [LLGL](https://github.com/LukasBanana/LLGL),

@@ -1,5 +1,46 @@
 # LLGL Graphics Backend — Implementation Plan
 
+> **Authoritative post-audit integration disposition (2026-08-09).** This block supersedes stale
+> status cells and broad capability claims in the historical diary below while preserving that
+> diary as the original lane record. The supported public contract is one backend identity,
+> `LLGL`, routed through LLGL `Release-v0.04b`
+> (`1e78d8fa497f5cab76b231ba13f4d6249dac0e7e`) to its OpenGL RenderSystem and native OpenGL/GLX on
+> Linux/X11 x86_64. OpenGL is a required build module and the only automatic/runtime-supported
+> renderer. Explicit Vulkan selection now rejects: the module remains compile-covered, but native
+> validation exposed descriptor/layout and teardown violations at the pinned revision. Null is
+> explicit diagnostics only. Wayland, Windows and i686 are not part of the CNA LLGL contract.
+>
+> The recorded i686 MinGW `__int128` failure is **classification A, non-gating**. Its concrete route
+> is Glide's x86 ABI probe; no historical LLGL i686 configure, test, platform claim or public option
+> exists. The first diagnostic is `sharp-runtime/include/System/Int128.hpp:31:9: error: expected
+> unqualified-id before '__int128'` from `i686-w64-mingw32-g++`. Owner disposition: preserve the
+> historical record, do not modify sharp-runtime, and validate LLGL on its truthful native x86_64
+> X11 route.
+>
+> **Supported-path disposition:** `LLGL-48` and `LLGL-52` are resolved and have gating runtime
+> oracles. `LLGL-53` is closed by measured capability narrowing: custom viewport/depth/render-target
+> controls pass, while non-zero depth bias and stencil reject deterministically. `LLGL-54` keeps
+> proven 2-4-slot `RenderTarget2D` MRT; cube-face and mip-mapped MRT compositions reject.
+> `LLGL-55` is satisfied for the supported OpenGL/Xvfb route with `CNA_ENABLE_NET=OFF`; its proposed
+> Vulkan-only lane is superseded by the explicit unsupported boundary. `LLGL-56` retains X11-only
+> scope; sanitizer allocations rooted in pinned LLGL/SDL/Mesa GLX visual selection are external.
+> `LLGL-38` remains non-gating external/hardware coverage, not an unresolved supported-path defect.
+>
+> Two independent post-audit findings were added and resolved. `LLGL-57` synchronized the LLGL
+> swap-chain extent during virtual-resolution/reset and first readback, fixing constructor-size
+> pixels leaking into the first resized frame. `LLGL-58` supplies a valid address for LLGL 0.04b's
+> zero-count clear-value copy in both deferred render-pass routes, eliminating the CNA-reachable
+> UBSan report without patching the dependency. No shader source or generated shader artifact was
+> changed.
+>
+> The authoritative stream-array architecture is preserved. One geometry stream supports
+> `VertexOffset`, `vertexStart`, `startIndex` and `baseVertex`; multistream, instance-frequency and
+> instanced combinations reject. Texture2D/readback, RenderTarget2D, MRT, stock BasicEffect paths,
+> SpriteBatch custom effects, Texture3D transfer, occlusion, wireframe where reported, additive
+> blending and PBR are covered. Plain TextureCube is transfer-only; cube sampling and
+> RenderTargetCube reject. Back-buffer MSAA, stencil, constant blend factor and non-zero depth bias
+> are not advertised.
+
 > **Audit update (2026-08-03, revision `212cb62c`): functionally broad, but not yet production-ready
 > or at unqualified EasyGL parity.** The current backend builds with both LLGL Vulkan and OpenGL
 > modules and the core OpenGL pixel tests (`Smoke`, `2D`, `TextureReadback`, `Presentation`, `3D`,

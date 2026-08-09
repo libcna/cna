@@ -125,7 +125,7 @@ namespace CNA
         /** @brief Classic Win32 GDI with private CPU 2D rasterization. */
         Gdi,
 
-        /** @brief LLGL, which itself selects OpenGL or Vulkan at runtime. */
+        /** @brief LLGL rendering abstraction; CNA's supported runtime uses its OpenGL module. */
         Llgl
     };
 

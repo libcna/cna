@@ -211,9 +211,8 @@ namespace
                                  true, Support::Exact, Support::Exact,
                                  Support::Unsupported, false};
 #elif defined(CNA_BACKEND_LLGL)
-    // TextureCube and Texture3D both have a real, fully mip-chained upload/readback path here
-    // (LLGL-21/LLGL-31). Like Vulkan/BGFX/WebGPU/SDL_GPU, LlglRenderTargetCubeBackend only overrides
-    // GetData -- it inherits ITextureCubeBackend's default SetData refusal, so rtCube is Unsupported.
+    // The pinned OpenGL render system cannot sample cubes, so LLGL keeps exact transfer-only CPU
+    // face storage; Texture3D remains a native LLGL texture with exact mip transfers.
     constexpr Contract kContract{"LLGL", true, Support::Exact, Support::Exact,
                                  true, Support::Exact, Support::Exact,
                                  Support::Unsupported, false};
@@ -1348,7 +1347,20 @@ protected:
         std::printf("REMED-GFX-135 TextureCube/Texture3D SetData contract -- backend %s\n",
                     kContract.name);
 
-        RunCubeChecks(dev);
+        if (kContract.cubeHasBackend)
+        {
+            RunCubeChecks(dev);
+        }
+        else
+        {
+            const bool rejected = Throws<System::NotSupportedException>([&]
+            {
+                TextureCube cube(dev, kCube, /*mipMap=*/true, SurfaceFormat::Color);
+            });
+            check(rejected,
+                  "C0 cube: TextureCube construction is refused deterministically when the "
+                  "backend declares no validated cube storage");
+        }
         RunRenderTargetCubeCheck(dev);
         RunVolumeChecks(dev);
 

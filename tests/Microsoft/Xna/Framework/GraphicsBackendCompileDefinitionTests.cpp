@@ -175,7 +175,8 @@ TEST(GraphicsBackendCompileDefinitionsTest, LlglDefaultRendererPreferenceIsRealA
     namespace Detail = CNA::Internal::Backends::Llgl::Detail;
 
     const auto preference = Detail::GetDefaultRendererPreference();
-    ASSERT_FALSE(preference.empty());
+    ASSERT_EQ(preference.size(), 1u);
+    EXPECT_EQ(preference[0], Detail::RendererModule::OpenGL);
 
     // The Null module renders nothing, so it must never be reachable without being asked for by
     // name: an automatic fallback onto it would turn "no usable GPU" into a silent black screen.
@@ -204,9 +205,7 @@ TEST(GraphicsBackendCompileDefinitionsTest, LlglRendererOverrideParsingWorks)
 
     if (Detail::IsRendererModuleCompiledIn(Detail::RendererModule::Vulkan))
     {
-        const auto parsed = Detail::ParseRendererModuleOverride("vulkan");
-        ASSERT_EQ(parsed.size(), 1u);
-        EXPECT_EQ(parsed[0], Detail::RendererModule::Vulkan);
+        EXPECT_THROW((void)Detail::ParseRendererModuleOverride("vulkan"), std::runtime_error);
     }
 }
 
@@ -214,7 +213,7 @@ TEST(GraphicsBackendCompileDefinitionsTest, LlglRendererOverrideRejectsInvalidVa
 {
     namespace Detail = CNA::Internal::Backends::Llgl::Detail;
 
-    EXPECT_THROW(Detail::ParseRendererModuleOverride("invalid-renderer"), std::runtime_error);
+    EXPECT_THROW((void)Detail::ParseRendererModuleOverride("invalid-renderer"), std::runtime_error);
 }
 
 TEST(GraphicsBackendCompileDefinitionsTest, LlglModuleNamesMatchLlglsOwnModuleNames)

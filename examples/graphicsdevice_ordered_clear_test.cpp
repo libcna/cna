@@ -221,18 +221,15 @@ namespace
                                  true, true, true,
                                  true, true, true, true, false, true, false};
 #elif defined(CNA_BACKEND_LLGL)
-    // `stencilBuffer3D` true (LLGL-53): ApplyDepthStencilState()'s full front/back stencil state is
-    // now wired into the 3D pipeline (`AcquirePrimitivePipeline()`'s own `pipelineDesc.stencil`),
-    // not just recorded -- the buffer exists, ClearStencil() works, AND a stencil-gated 3D draw is
-    // now gated by the stored stencil too. `rendertarget_depthstencil_usage_test.cpp`'s own Contract
-    // declares the SAME gap and should be revisited too, though that file is not touched here.
+    // Cube targets and stencil testing are deliberately unsupported on the validated OpenGL path;
+    // their dedicated LLGL checks require deterministic NotSupportedException instead.
     // `preferMultiSampling` false: measured -- RenderTarget2D.MultiSampleCount applies regardless of
     // whether the device itself was constructed with PreferMultiSampling (LLGL reads a render
     // target's own requested sample count at ITS OWN construction, not the swap chain's).
     // `orderedClear`/`clearOnPreserveTarget` true: every command this backend queues, including
     // Clear(), replays in original public order within its own target's bucket.
-    constexpr Contract kContract{"LLGL", true, true, true, true, true,
-                                 true, true, true,
+    constexpr Contract kContract{"LLGL", true, true, true, false, false,
+                                 true, true, false,
                                  true, true, true, true, false, true, false};
 #else
 #error "REMED-GFX-129: this backend has no declared ordered-Clear contract."
@@ -1352,6 +1349,24 @@ class OrderedClearTest : public Game
     /// P3 -- the blend constant (GraphicsDevice.BlendFactor) still reaches the reopened pass.
     void RunBlendFactorAcrossClearBoundary(GraphicsDevice& dev)
     {
+#if defined(CNA_BACKEND_LLGL)
+        bool rejected = false;
+        try
+        {
+            BlendState factored;
+            factored.setColorSourceBlendProperty(Blend::BlendFactor);
+            dev.setBlendStateProperty(factored);
+        }
+        catch (const System::NotSupportedException&)
+        {
+            rejected = true;
+        }
+        check(rejected,
+              "P3 BlendFactor: LLGL OpenGL rejects the unsupported constant-blend-factor route "
+              "deterministically");
+        return;
+#endif
+
         ExpectClearBoundaryParity(
             dev, "P3 BlendFactor survives a Clear boundary",
             [this](GraphicsDevice& d)

@@ -230,7 +230,7 @@ namespace
     constexpr const char* kBackendName = "CANVAS";
 #elif defined(CNA_BACKEND_LLGL)
     constexpr RtContract kRtContract = RtContract::Exact;
-    constexpr bool kCubeSupported = true;
+    constexpr bool kCubeSupported = false;
     constexpr RtSampleOrientation kRtSampleOrientation = RtSampleOrientation::TopDown;
     constexpr AdditiveContract kAdditiveContract = AdditiveContract::SourcePlusDestination;
     constexpr const char* kBackendName = "LLGL";

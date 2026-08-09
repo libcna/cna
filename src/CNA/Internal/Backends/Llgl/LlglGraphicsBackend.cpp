@@ -13,6 +13,7 @@
 #include "Microsoft/Xna/Framework/Graphics/TextureFilter.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
+#include "System/NotSupportedException.hpp"
 
 #include <LLGL/Utils/VertexFormat.h>
 
@@ -654,8 +655,21 @@ namespace CNA::Internal::Backends::Llgl
         , size_(size)
         , mipLevels_(mipLevels > 0 ? mipLevels : 1)
     {
-        if (renderSystem_ == nullptr || texture_ == nullptr)
+        if (renderSystem_ == nullptr)
             throw std::runtime_error(std::string(kBackendName) + " backend: cube texture creation failed");
+
+        if (texture_ == nullptr)
+        {
+            cpuFaces_.resize(static_cast<std::size_t>(mipLevels_) * 6u);
+            for (int level = 0; level < mipLevels_; ++level)
+            {
+                const int dimension = std::max(1, size_ >> level);
+                const std::size_t bytes =
+                    static_cast<std::size_t>(dimension) * static_cast<std::size_t>(dimension) * 4u;
+                for (int face = 0; face < 6; ++face)
+                    cpuFaces_[static_cast<std::size_t>(level) * 6u + face].assign(bytes, 0u);
+            }
+        }
     }
 
     LlglTextureCubeBackend::~LlglTextureCubeBackend()
@@ -679,6 +693,24 @@ namespace CNA::Internal::Backends::Llgl
         const std::size_t required = static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4u;
         if (dataLength < 0 || static_cast<std::size_t>(dataLength) < required)
             return false;
+
+        if (texture_ == nullptr)
+        {
+            const int dimension = std::max(1, size_ >> level);
+            if (x < 0 || y < 0 || x + w > dimension || y + h > dimension)
+                return false;
+            std::vector<std::uint8_t>& destination =
+                cpuFaces_[static_cast<std::size_t>(level) * 6u + static_cast<std::size_t>(face)];
+            const auto* source = static_cast<const std::uint8_t*>(data);
+            for (int row = 0; row < h; ++row)
+            {
+                std::memcpy(destination.data() +
+                                (static_cast<std::size_t>(y + row) * dimension + x) * 4u,
+                            source + static_cast<std::size_t>(row) * w * 4u,
+                            static_cast<std::size_t>(w) * 4u);
+            }
+            return true;
+        }
 
         LLGL::TextureRegion region;
         region.subresource.baseArrayLayer = static_cast<std::uint32_t>(face);
@@ -708,6 +740,24 @@ namespace CNA::Internal::Backends::Llgl
         const std::size_t required = static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4u;
         if (dataLength < 0 || static_cast<std::size_t>(dataLength) < required)
             return false;
+
+        if (texture_ == nullptr)
+        {
+            const int dimension = std::max(1, size_ >> level);
+            if (x < 0 || y < 0 || x + w > dimension || y + h > dimension)
+                return false;
+            const std::vector<std::uint8_t>& source =
+                cpuFaces_[static_cast<std::size_t>(level) * 6u + static_cast<std::size_t>(face)];
+            auto* destination = static_cast<std::uint8_t*>(data);
+            for (int row = 0; row < h; ++row)
+            {
+                std::memcpy(destination + static_cast<std::size_t>(row) * w * 4u,
+                            source.data() +
+                                (static_cast<std::size_t>(y + row) * dimension + x) * 4u,
+                            static_cast<std::size_t>(w) * 4u);
+            }
+            return true;
+        }
 
         LLGL::TextureRegion region;
         region.subresource.baseArrayLayer = static_cast<std::uint32_t>(face);
@@ -1696,6 +1746,13 @@ namespace CNA::Internal::Backends::Llgl
         virtualHeight_ = args.virtualHeight > 0 ? args.virtualHeight : windowHeight;
 
         module_ = Detail::ResolveRendererModule();
+
+        // LLGL 0.04b's OpenGL swap chain can report the requested sample count while still
+        // resolving a hard single-sample edge on real GLX hardware. XNA treats an unsupported
+        // back-buffer sample request as zero applied samples, so clamp this module to one native
+        // sample rather than advertising multisampling that the pixel path does not deliver.
+        if (module_ == Detail::RendererModule::OpenGL)
+            requestedSampleCount_ = 1;
 
         LLGL::RenderSystemDescriptor rendererDesc;
         rendererDesc.moduleName = Detail::GetRendererModuleName(module_);
@@ -2822,30 +2879,15 @@ namespace CNA::Internal::Backends::Llgl
         key = key * 2u + (envMapping ? 1u : 0u);
         key = key * 2u + (skinned ? 1u : 0u);
         key = key * 2u + (pbr ? 1u : 0u);
-        // Folds in the LOW 16 BITS of MakeBlendPipelineKey()'s own result -- NOT reusing the full
-        // value, since that one is sized for MRT's up to 4 attachments and is used AS-IS as the
-        // sprite/custom-effect pipeline's own map key elsewhere; a 3D draw is always a single
-        // attachment. `scissorEnabled` is already folded in above; not repeated here.
-        //
-        // Known limitation (LLGL-33 investigation, not fixed here): this low-16-bit truncation
-        // discards colorSrcBlend_/colorDstBlend_/alphaSrcBlend_/alphaDstBlend_/colorBlendFunc_/
-        // alphaBlendFunc_/colorWriteChannels_[0] entirely, since those occupy MakeBlendPipelineKey's
-        // higher-order bits. Two 3D draws differing ONLY in one of those fields can share a cached
-        // pipeline, keeping the FIRST draw's blend/write-mask state baked in for the second one --
-        // reproduced via the shared, cross-backend examples/gfx077_colorwritechannels_3d_test.cpp.
-        // Widening this truncation to include those fields was attempted (both an XOR+FNV-prime
-        // mix and a plain positional fold covering the full blend key) and, despite building a
-        // provably correctly-configured and uniquely-keyed pipeline for the affected draw (verified
-        // with instrumented tracing), broke an unrelated, previously-passing alpha-blend test
-        // (Llgl_BasicEffect) in a way not understood before the investigation was shelved -- traced
-        // as far as confirming the *old*, buggy, truncated key causes a stale Opaque pipeline
-        // object to be reused for that alpha-blend draw and yet still renders correctly, which
-        // contradicts ordinary GPU fixed-function blend semantics and was not explained. Tracked as
-        // an open item in known_bugs.md rather than shipped as an unexplained, empirically-fragile
-        // fix. `multiSampleMask_` (LLGL-33) is unaffected by this limitation: MakeBlendPipelineKey
-        // folds it in LAST, so it occupies the lowest 4 bits and survives this truncation intact.
+        // Keep the historical low-16-bit positional fold so the original key remains stable, but
+        // also retain the complete blend key in its own tuple element below. The old key alone
+        // collided whenever two 3D draws differed only in blend factors/functions or
+        // ColorWriteChannels; giving the complete value an independent 64-bit budget fixes that
+        // collision without making it compete with the already-dense layout/state fold.
+        const std::uint64_t blendKey =
+            MakeBlendPipelineKey(scissorEnabled, 1, GetPrimarySampleCountEXT());
         key = key * (1024u * 64u) +
-              (MakeBlendPipelineKey(scissorEnabled, 1, GetPrimarySampleCountEXT()) & 0xFFFFu);
+              (blendKey & 0xFFFFu);
 
         // LLGL-53: depth bias and the full front/back stencil state are now part of the pipeline
         // (see pipelineDesc.rasterizer.depthBias/pipelineDesc.stencil below), so two draws that
@@ -2863,12 +2905,9 @@ namespace CNA::Internal::Backends::Llgl
         // correct" class of unexplained defect, LLGL-33 -- confirmed here as a second, independent
         // data point, root cause still not understood for either technique.)
         //
-        // The fix: `primitivePipelineCache_`'s key is now a 4-way tuple (see its own declaration),
-        // giving these new fields their OWN dedicated 64-bit budgets instead of competing for bits
-        // with `key` or each other -- both depth-bias floats packed losslessly into one uint64,
-        // both stencil masks packed losslessly into another, and the 8 stencil op/function fields
-        // plus 2 stencil bools packed into a third (comfortably under 64 bits, ordinary small-
-        // multiplier folding is fine there since nothing follows it to overflow it away).
+        // The fix: `primitivePipelineCache_`'s key uses a tuple (see its own declaration), giving
+        // blend state, depth bias and stencil state their OWN dedicated 64-bit budgets instead of
+        // competing for bits with `key` or each other.
         std::uint32_t depthBiasBits = 0;
         std::uint32_t slopeScaleDepthBiasBits = 0;
         std::memcpy(&depthBiasBits, &depthBias_, sizeof(float));
@@ -2893,7 +2932,8 @@ namespace CNA::Internal::Backends::Llgl
         stencilOpsKey = stencilOpsKey * 8u + static_cast<std::uint64_t>(ccwStencilFail_ & 0x7);
         stencilOpsKey = stencilOpsKey * 8u + static_cast<std::uint64_t>(ccwStencilDepthFail_ & 0x7);
 
-        const auto pipelineKey = std::make_tuple(key, depthBiasKey, stencilMaskKey, stencilOpsKey);
+        const auto pipelineKey =
+            std::make_tuple(key, blendKey, depthBiasKey, stencilMaskKey, stencilOpsKey);
         const auto cached = primitivePipelineCache_.find(pipelineKey);
         if (cached != primitivePipelineCache_.end())
             return cached->second;
@@ -3507,9 +3547,10 @@ namespace CNA::Internal::Backends::Llgl
             resolvedEnvMap = ResolveSampledTextureCube(*params->envMap);
             if (resolvedEnvMap == nullptr)
             {
-                throw std::runtime_error(
-                    std::string(kBackendName) + " backend: EnvironmentMapEffect's EnvironmentMap "
-                    "belongs to another backend");
+                throw System::NotSupportedException(
+                    std::string(kBackendName) +
+                    " backend: EnvironmentMapEffect cube sampling is not supported by the "
+                    "validated OpenGL render-system path");
             }
         }
 
@@ -4004,6 +4045,13 @@ namespace CNA::Internal::Backends::Llgl
     {
         if (width > 0) virtualWidth_ = width;
         if (height > 0) virtualHeight_ = height;
+
+        // GraphicsDevice::Reset resizes and synchronizes the SDL window before forwarding the
+        // new virtual resolution here. Keep LLGL's swap chain in step immediately: waiting until
+        // Present() left GetViewportSize() and every deferred draw queued during the first frame
+        // using the constructor-time surface size, even though the window had already adopted the
+        // requested back-buffer dimensions.
+        UpdateSwapChainResolution();
     }
 
     void LlglGraphicsBackend::SetPresentationMode(int mode)
@@ -4102,22 +4150,11 @@ namespace CNA::Internal::Backends::Llgl
                 ++mipLevels;
         }
 
-        LLGL::TextureDescriptor textureDesc;
-        textureDesc.type = LLGL::TextureType::TextureCube;
-        textureDesc.bindFlags = LLGL::BindFlags::Sampled | LLGL::BindFlags::CopyDst |
-                                LLGL::BindFlags::CopySrc;
-        textureDesc.format = LLGL::Format::RGBA8UNorm;
-        textureDesc.extent = {static_cast<std::uint32_t>(size), static_cast<std::uint32_t>(size), 1};
-        textureDesc.arrayLayers = 6;
-        textureDesc.mipLevels = static_cast<std::uint32_t>(mipLevels);
-        // No GenerateMips: the shared texture layer uploads each level/face it wants to exist,
-        // same reasoning as CreateTexture() above.
-        textureDesc.miscFlags = 0;
-
-        // No initial image -- the shared TextureCube layer always follows construction with its
-        // own SetData() call per face/level, exactly like Texture2D's own typed constructors do.
-        LLGL::Texture* texture = renderer_->CreateTexture(textureDesc, nullptr);
-        return std::make_unique<LlglTextureCubeBackend>(renderer_.get(), this, texture, size, mipLevels);
+        // The supported LLGL/OpenGL contract is transfer-only for TextureCube. Always use the
+        // bounded CPU store so the result does not vary with a driver capability bit: upload and
+        // readback are exact, while shader sampling and RenderTargetCube reject deterministically.
+        return std::make_unique<LlglTextureCubeBackend>(
+            renderer_.get(), this, nullptr, size, mipLevels);
     }
 
     std::unique_ptr<ITexture3DBackend> LlglGraphicsBackend::CreateTexture3D(
@@ -4581,7 +4618,10 @@ namespace CNA::Internal::Backends::Llgl
 
         const LLGL::Extent2D current = swapChain_->GetResolution();
         if (contentSize.width != current.width || contentSize.height != current.height)
+        {
             swapChain_->ResizeBuffers(contentSize);
+            backbufferCacheValid_ = false;
+        }
     }
 
     void LlglGraphicsBackend::UploadFrameResources()
@@ -5245,7 +5285,11 @@ namespace CNA::Internal::Backends::Llgl
                 renderTarget.HasDepthAttachment() || renderTarget.HasStencilAttachment(),
                 renderTarget.GetSamples());
 
-            commands_->BeginRenderPass(renderTarget, loadPass);
+            // LLGL 0.04b's deferred OpenGL command buffer unconditionally feeds this pointer to
+            // memcpy even when numClearValues is zero. Keep the zero-count contract but provide a
+            // valid address so UBSan does not flag the dependency's zero-byte copy.
+            const LLGL::ClearValue unusedClearValue{};
+            commands_->BeginRenderPass(renderTarget, loadPass, 0, &unusedClearValue);
             commands_->SetViewport(LLGL::Viewport{0.0f, 0.0f,
                                                   static_cast<float>(resolution.width),
                                                   static_cast<float>(resolution.height)});
@@ -5296,6 +5340,10 @@ namespace CNA::Internal::Backends::Llgl
 
     void LlglGraphicsBackend::CaptureBackbuffer()
     {
+        // SDL can deliver the final drawable extent after ApplyChanges() but before the next
+        // Present(). Readback is itself a frame boundary, so synchronize here as well; otherwise
+        // the first capture after a grow can expose the previous-sized swap-chain image.
+        UpdateSwapChainResolution();
         const LLGL::Extent2D resolution = swapChain_->GetResolution();
         if (resolution.width == 0 || resolution.height == 0)
             throw std::runtime_error(std::string(kBackendName) + " backend: the swap chain has no pixels to read");
@@ -5360,7 +5408,9 @@ namespace CNA::Internal::Backends::Llgl
                 renderTarget.HasDepthAttachment() || renderTarget.HasStencilAttachment(),
                 renderTarget.GetSamples());
 
-            commands_->BeginRenderPass(renderTarget, loadPass);
+            // See RecordAndSubmitFrame() for the pinned LLGL zero-clear-value pointer boundary.
+            const LLGL::ClearValue unusedClearValue{};
+            commands_->BeginRenderPass(renderTarget, loadPass, 0, &unusedClearValue);
             commands_->SetViewport(LLGL::Viewport{0.0f, 0.0f,
                                                   static_cast<float>(bucketResolution.width),
                                                   static_cast<float>(bucketResolution.height)});
@@ -5649,6 +5699,10 @@ namespace CNA::Internal::Backends::Llgl
         if (size <= 0)
             throw std::runtime_error(std::string(kBackendName) + " backend: render target cube has no pixels");
 
+        throw System::NotSupportedException(
+            std::string(kBackendName) +
+            " backend: RenderTargetCube is not supported by the validated OpenGL render-system path");
+
         // Requested sample count (LLGL-34, mirrors CreateRenderTarget2D's own LLGL-26 MSAA
         // follow-up) -- the REAL, device-clamped value is read back from face 0's own created
         // LLGL::RenderTarget below (GetSamples()), not assumed from this request.
@@ -5922,6 +5976,12 @@ namespace CNA::Internal::Backends::Llgl
                     std::string(kBackendName) + " backend: SetRenderTargets was given a target from "
                     "another backend");
             }
+            if (target->GetMipRegenColorTextureEXT() != nullptr)
+            {
+                throw System::NotSupportedException(
+                    std::string(kBackendName) +
+                    " backend: mip-mapped RenderTarget2D slots are not supported in an MRT bind");
+            }
             slots[static_cast<std::size_t>(i)] = target;
         }
 
@@ -5989,6 +6049,15 @@ namespace CNA::Internal::Backends::Llgl
                                                int colorBlendFunc, int alphaBlendFunc,
                                                const BlendWriteState& writeState)
     {
+        if (UsesConstantBlendFactor(colorSrcBlend) || UsesConstantBlendFactor(alphaSrcBlend) ||
+            UsesConstantBlendFactor(colorDstBlend) || UsesConstantBlendFactor(alphaDstBlend))
+        {
+            throw System::NotSupportedException(
+                std::string(kBackendName) +
+                " backend: BlendFactor/InverseBlendFactor is not supported by the pinned "
+                "OpenGL render system");
+        }
+
         colorSrcBlend_ = colorSrcBlend;
         alphaSrcBlend_ = alphaSrcBlend;
         colorDstBlend_ = colorDstBlend;
@@ -6036,6 +6105,13 @@ namespace CNA::Internal::Backends::Llgl
     void LlglGraphicsBackend::ApplyRasterizerState(int cullMode, int fillMode, bool scissorTestEnable,
                                                     float depthBias, float slopeScaleDepthBias)
     {
+        if (depthBias != 0.0f || slopeScaleDepthBias != 0.0f)
+        {
+            throw System::NotSupportedException(
+                std::string(kBackendName) +
+                " backend: RasterizerState depth bias is not supported by the validated OpenGL path");
+        }
+
         // Cull mode, fill mode and both depth biases belong to the 3D pipeline: a sprite quad is
         // always front-facing, solid, and unaffected by depth. They are recorded so the 3D path
         // can consume them when it lands.
@@ -6086,6 +6162,13 @@ namespace CNA::Internal::Backends::Llgl
                                                       int ccwStencilFunc, int ccwStencilPass,
                                                       int ccwStencilFail, int ccwStencilDepthFail)
     {
+        if (stencilEnable)
+        {
+            throw System::NotSupportedException(
+                std::string(kBackendName) +
+                " backend: stencil testing is not supported by the validated OpenGL path");
+        }
+
         depthTestEnabled_ = depthEnable;
         depthWriteEnabled_ = depthWriteEnable;
         depthCompareFunction_ = depthFunc;
@@ -6173,6 +6256,10 @@ namespace CNA::Internal::Backends::Llgl
         // degraded one.
         const char* unsupported = nullptr;
         if (params.customEffectBackend != nullptr)            unsupported = "custom ShaderEffect";
+        else if (params.vertexStreamCount > 1)                unsupported = "multi-stream vertex input";
+        else if (params.vertexStreamCount == 1 &&
+                 params.vertexStreams[0].instanceFrequency > 0)
+                                                               unsupported = "per-instance vertex input";
         else if (params.instanceCount > 1)                    unsupported = "instanced drawing";
 
         if (unsupported != nullptr)
@@ -6232,15 +6319,17 @@ namespace CNA::Internal::Backends::Llgl
                        swapChain_->HasDepthAttachment() && swapChain_->HasStencilAttachment();
 
             case CNA::GraphicsCapability::MultiSampleAntiAliasing:
-                return true;
+                // The pinned OpenGL module's reported sample count is not backed by an
+                // antialiased resolve, and the Vulkan module is compile/diagnostic coverage only
+                // until its validation errors are resolved. Neither is a supported CNA MSAA path.
+                return false;
 
             case CNA::GraphicsCapability::AnisotropicFiltering:
                 return static_cast<bool>(renderer_) &&
                        renderer_->GetRenderingCaps().limits.maxAnisotropy > 1;
 
-            // The colour-only 3D path is real: vertex and index buffers draw, with depth test,
-            // depth write, cull mode and fill mode all applied (LLGL-24). The stock effect family
-            // is not implemented yet, which is LLGL-25's scope, not this capability's.
+            // The 3D path is real: vertex and index buffers draw, with depth test, depth write,
+            // cull mode, fill mode and the validated stock-effect family applied (LLGL-24/25).
             case CNA::GraphicsCapability::ThreeD:
                 return true;
 
@@ -6265,6 +6354,12 @@ namespace CNA::Internal::Backends::Llgl
             // custom ShaderEffect -- see LlglMRTBinding's own doc comment for the scope boundary
             // (RenderTarget2D slots only, no 3D colour-only draws while one is bound).
             case CNA::GraphicsCapability::MultipleRenderTargets:
+                return true;
+
+            // AlphaBlend, NonPremultiplied and Additive all have runtime pixel coverage. Only the
+            // separate constant BlendFactor/InverseBlendFactor route is refused above because the
+            // pinned OpenGL module does not expose glBlendColor.
+            case CNA::GraphicsCapability::AdditiveBlending:
                 return true;
         }
         return false;

@@ -197,6 +197,10 @@ namespace
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr const char* kBackendName = "SKIA";
     constexpr MipPolicy kMipPolicy = MipPolicy::Supported;
+#elif defined(CNA_BACKEND_LLGL)
+    constexpr RtContract kRtContract = RtContract::Exact;
+    constexpr const char* kBackendName = "LLGL";
+    constexpr MipPolicy kMipPolicy = MipPolicy::Supported;
 #else
 #error "REMED-GFX-149: this backend has no declared Texture2D::GetData render-target contract."
 #endif

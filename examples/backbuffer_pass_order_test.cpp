@@ -273,7 +273,7 @@ namespace
     // ComputeEffectiveScissor intersects the effective scissor with both the Viewport and any
     // explicit ScissorRectangle, captured per FrameCommand at queue time).
     constexpr Contract kContract{"LLGL", Support::Exact, true, Support::Exact,
-                                 true, true, true, true, true, true, true, true, true, false};
+                                 false, true, true, true, true, true, true, true, true, false};
 #else
 #error "REMED-GFX-143: this backend has no declared backbuffer command-order contract."
 #endif

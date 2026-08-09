@@ -1,5 +1,29 @@
 # CNA Known Bugs
 
+## LLGL post-audit disposition (2026-08-09)
+
+This is the authoritative disposition for LLGL entries later in this historical ledger. It does
+not rename or absorb them:
+
+- `LLGL-48` is resolved by a collision-free complete blend-state pipeline-key element.
+- `LLGL-52` is resolved on the supported LLGL/OpenGL path; its camera and indexed-effect oracles
+  are registered and pass.
+- `LLGL-53` is resolved for the supported contract by measured narrowing: viewport/depth/render-
+  target cases pass, while non-zero depth bias and stencil reject deterministically and their
+  capabilities are false.
+- `LLGL-54` retains the proven `RenderTarget2D` MRT shape; cube-face and mip-mapped MRT binds reject.
+- `LLGL-55`'s OpenGL/Xvfb build/runtime route is green. Vulkan is compile coverage only and an
+  explicit Vulkan runtime request rejects, so historical Vulkan-WSI infrastructure gaps do not
+  gate this contract.
+- `LLGL-56` remains X11-only. LeakSanitizer allocations rooted in pinned LLGL/SDL/Mesa GLX visual
+  selection are classified external rather than hidden or patched in CNA.
+- `LLGL-57` (new) fixed first-frame swap-chain/back-buffer extent drift after reset/resize.
+- `LLGL-58` (new) fixed the CNA-reachable zero-count clear-value pointer passed into pinned LLGL's
+  deferred OpenGL command buffer. ASan/UBSan reports no CNA-owned error after the fix.
+
+The original detailed entries remain below as evidence of discovery and prior experiments. Their
+old `OPEN` headings are historical where this disposition explicitly supersedes them.
+
 ## Multiple SpriteBatch Begin/End in one frame discards all but the last
 
 **Backend:** Vulkan (confirmed), others unknown.

@@ -85,6 +85,9 @@ namespace
 #elif defined(CNA_BACKEND_SKIA)
     constexpr const char* kBackendName = "SKIA";
     constexpr bool kRasterizes = true;
+#elif defined(CNA_BACKEND_LLGL)
+    constexpr const char* kBackendName = "LLGL";
+    constexpr bool kRasterizes = true;
 #else
 #error "REMED-GFX-162: this backend has no declared backbuffer-readback capability contract."
 #endif

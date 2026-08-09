@@ -191,7 +191,10 @@ public:
         effect.setDiffuseColorProperty(Vector3(1.0f, 1.0f, 1.0f));
 
         // --- Check C: Alpha blends against the background ---------------------------------------
-        device.setBlendStateProperty(BlendState::NonPremultiplied);
+        // BasicEffect premultiplies DiffuseColor by Alpha before it reaches the shader. Its
+        // matching XNA blend state is therefore AlphaBlend (One/InverseSourceAlpha); using
+        // NonPremultiplied here would multiply the half-alpha RGB by SourceAlpha a second time.
+        device.setBlendStateProperty(BlendState::AlphaBlend);
         effect.setAlphaProperty(0.5f);
         device.Clear(kClear);
         DrawQuad(device, effect, VertexPositionTexture::getVertexDeclarationStatic(),

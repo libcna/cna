@@ -21,6 +21,8 @@
 //   ColorWriteChannels (LLGL-21 follow-up): the SAME 2-output draw with ColorWriteChannels=All /
 //   ColorWriteChannels1=None writes slot 0 normally while slot 1's pre-cleared sentinel colour
 //   survives completely untouched -- not just "didn't crash".
+// Check F -- binding mip-mapped RenderTarget2D slots as MRT rejects deterministically instead of
+//   accepting a combination whose per-slot mip chains the pinned path cannot regenerate.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
@@ -294,6 +296,22 @@ public:
                         maskedSlot1Result.getRProperty(), maskedSlot1Result.getGProperty(),
                         maskedSlot1Result.getBProperty(), maskedSlot1Result.getAProperty());
         }
+
+        // --- Check F: unsupported MRT+mip composition rejects before native allocation --------
+        RenderTarget2D mip0(device, kRTSize, kRTSize, true,
+                            SurfaceFormat::Color, DepthFormat::None);
+        RenderTarget2D mip1(device, kRTSize, kRTSize, true,
+                            SurfaceFormat::Color, DepthFormat::None);
+        bool mipMrtRejected = false;
+        try
+        {
+            device.SetRenderTargets({RenderTargetBinding(&mip0), RenderTargetBinding(&mip1)});
+        }
+        catch (const std::exception&)
+        {
+            mipMrtRejected = true;
+        }
+        ExpectTrue("mip-mapped RenderTarget2D slots reject in an MRT bind", mipMrtRejected);
     }
 };
 

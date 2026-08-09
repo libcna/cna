@@ -25,6 +25,7 @@
 #include "Microsoft/Xna/Framework/Graphics/StencilOperation.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
+#include "System/NotSupportedException.hpp"
 
 #include "common/PixelTestGame.hpp"
 
@@ -102,6 +103,21 @@ public:
     void RunTest() override
     {
         auto& device = getGraphicsDeviceProperty();
+
+        bool rejected = false;
+        try
+        {
+            DepthStencilState state = WriteState(7);
+            device.setDepthStencilStateProperty(state);
+        }
+        catch (const System::NotSupportedException&)
+        {
+            rejected = true;
+        }
+        ExpectTrue("stencil-enabled DepthStencilState is rejected deterministically on LLGL OpenGL",
+                   rejected);
+        return;
+
         BasicEffect effect(device);
         effect.setWorldProperty(Matrix::getIdentityProperty());
         effect.setViewProperty(Matrix::getIdentityProperty());

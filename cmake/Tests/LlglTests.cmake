@@ -271,16 +271,14 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "LLGL")
         TIMEOUT 90 LABELS "Llgl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # LLGL-33 investigation: examples/gfx077_colorwritechannels_3d_test.cpp (shared, cross-backend,
-    # already registered on SdlGpu/WebGpu) was tried here too, and its very first check found a
-    # real, pre-existing bug -- AcquirePrimitivePipeline's own 3D pipeline cache key truncates
-    # MakeBlendPipelineKey's result to its low 16 bits, silently discarding
-    # BlendState.ColorWriteChannels (slot 0) and all four blend factors for 3D (BasicEffect +
-    # DrawPrimitives) draws. Every attempted fix for that truncation destabilized an unrelated,
-    # previously-passing test (Llgl_BasicEffect's own alpha-blend check) in a way not understood
-    # (see AcquirePrimitivePipeline's own doc comment in LlglGraphicsBackend.cpp). Deliberately NOT
-    # registered as a CTest while unfixed -- see known_bugs.md for the open item -- rather than
-    # shipping a known-failing test or an unexplained, empirically-fragile fix.
+    # LLGL-48: the complete blend state now has an independent primitive-pipeline cache-key
+    # element, so per-channel write masks cannot collide with a previously cached Opaque pipeline.
+    # This shared oracle also exercises A(Red)->B(Green)->A(Red) within one frame.
+    cna_llgl_test(cna_test_llgl_colorwritechannels examples/gfx077_colorwritechannels_3d_test.cpp)
+    cna_register_backend_test(NAME Llgl_ColorWriteChannels_3D
+        COMMAND cna_test_llgl_colorwritechannels
+        TIMEOUT 90 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_LLGL_RENDERER=opengl")
 
     # LLGL-33: BlendState.MultiSampleMask -- a real per-sample coverage bitmask on a genuinely
     # multisampled RenderTarget2D. Module-dependent (see the test's own header comment): the
@@ -410,54 +408,26 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "LLGL")
         TIMEOUT 90 LABELS "Llgl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # LLGL-52: rasterizerstate_cullmode_camera_test.cpp is deliberately NOT registered as a CTest
-    # case here: scenario (b) "Orthographic + CreateLookAt" alone fails -- its second triangle (a
-    # world-scale CCW-basis triangle 80 units to the +camRight side of the LookAt target) never
-    # appears anywhere in the framebuffer, even under CullMode::None (which cannot cull by winding
-    # at all). Every other scenario in the same file passes on this backend, including (c)
-    # Perspective + the SAME LookAt view/camera/basis-relative construction with the SAME two
-    # triangles just re-projected, and (a) Identity with axis-aligned triangles. Measured, not
-    # guessed: instrumenting the vertex data directly with CNA's own Vector4::Transform(vertex, wvp)
-    # shows both triangles' clip-space coordinates are unremarkable and entirely valid -- W=1.0
-    # exactly (a true orthographic projection, no perspective skew), X/Y well inside [-1,1], Z=0.1051
-    # identical for BOTH triangles (they sit at the same camera-space depth, only offset along
-    # camRight) comfortably inside [0,1]. Swapping which triangle is drawn first rules out ordering/
-    # leftover-state; a full-framebuffer scan (not just near the predicted pixel) finds zero non-
-    # black pixels anywhere for the failing triangle, so this is a real non-render, not a
-    # miscoloured or mislocated one. The one GL-vs-D3D depth-range compensation this backend applies
-    # (QueuePrimitives' `clippingRange == MinusOneToOne` correction, LlglGraphicsBackend.cpp) folds
-    # into the shared world*view*projection matrix BEFORE the textured/lit branch, applies
-    # identically to both triangles (same matrix, same Z), and cannot by itself explain an
-    # asymmetry between them. Root cause not yet identified -- this reproduces only when Orthographic
-    # projection is combined with a non-identity CreateLookAt view; Perspective+the identical view
-    # does not reproduce it. The binary is still built so it stays available for further
-    # investigation (see known_bugs.md).
+    # LLGL-52: the post-audit stream/pipeline adaptation resolves the historical orthographic
+    # CreateLookAt failure. Both the camera and indexed BasicEffect controls are now gating CTests.
     cna_llgl_test(cna_test_llgl_rasterizerstate_cullmode_camera
                   examples/rasterizerstate_cullmode_camera_test.cpp)
+    cna_register_backend_test(NAME Llgl_RasterizerState_CullMode_Camera
+        COMMAND cna_test_llgl_rasterizerstate_cullmode_camera
+        TIMEOUT 90 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # LLGL-53: RasterizerState.DepthBias/SlopeScaleDepthBias, verbatim reuse of the shared,
-    # backend-agnostic source already registered on the Software backend (no CNA_BACKEND_
-    # conditionals, no Software-specific casts -- the large integer-valued bias magnitudes are
-    # deliberately chosen to be unambiguous across depth-buffer precisions/formats, per the file's
-    # own header comment). 12/17 PASS on this backend: the core constant-DepthBias mechanism is
-    # real and verified (A/B/C/E/G all flip correctly), but D1 (SlopeScaleDepthBias alone), H0/H1
-    # (a custom Viewport.MinDepth/MaxDepth) and I0/I1 (a bound RenderTarget2D) each reproduce a
-    # genuine, currently-unexplained failure -- see known_bugs.md. Registered anyway, matching this
-    # file's own established precedent for other partially-passing suites (e.g.
-    # Llgl_Deferred_Viewport at 37/39): a documented partial pass is a real regression trip-wire,
-    # not a silently-skipped one.
+    # LLGL-53: the pinned OpenGL module cannot provide a truthful non-zero depth-bias contract.
+    # The shared test therefore gates deterministic NotSupported rejection rather than accepting
+    # a silent state no-op; ordinary depth testing remains covered by the render-target suite.
     cna_llgl_test(cna_test_llgl_rasterizerstate_depthbias examples/software_depthbias_test.cpp)
     cna_register_backend_test(NAME Llgl_RasterizerState_DepthBias
         COMMAND cna_test_llgl_rasterizerstate_depthbias
         TIMEOUT 90 LABELS "Llgl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # LLGL-53: DepthStencilState's full front/back stencil test, exercised directly (write a
-    # reference value, gate a later draw on it) without touching RenderTargetCube at all -- this
-    # sandbox's OpenGL module has no hasCubeTextures support (a pre-existing, unrelated,
-    # already-documented environment limitation), which otherwise blocks
-    # graphicsdevice_ordered_clear_test.cpp's own stencil checks (now enabled via its
-    # `stencilBuffer3D` Contract flag, see that file) from ever being reached in THIS sandbox.
+    # LLGL-53: stencil is deliberately unsupported on the measured OpenGL path. This test gates
+    # the capability report and deterministic rejection boundary.
     cna_llgl_test(cna_test_llgl_stencil examples/llgl_stencil_test.cpp)
     cna_register_backend_test(NAME Llgl_Stencil COMMAND cna_test_llgl_stencil
         TIMEOUT 90 LABELS "Llgl"
@@ -810,5 +780,20 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "LLGL")
     cna_register_backend_test(NAME Llgl_StockEffectSampler COMMAND cna_test_llgl_stock_effect_sampler
         TIMEOUT 120 LABELS "Llgl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # The validated CNA LLGL runtime is OpenGL, whose pinned LLGL module exposes no usable cube
+    # sampling/RenderTargetCube path here. Plain TextureCube keeps exact transfer-only CPU storage
+    # (covered by both CubeVolume suites); keep the historical positive rendering binaries
+    # build-covered, but do not execute them as supported-path tests.
+    set_tests_properties(
+        Llgl_EnvironmentMapEffect_AlphaScaledLerp
+        Llgl_RenderTargetCube
+        Llgl_Msaa_RenderTargetCube
+        Llgl_Mip_RenderTargetCube
+        Llgl_RenderTargetCube_GetDataContract
+        Llgl_RenderTargetCube_Usage
+        Llgl_RenderTargetCube_MsaaFace
+        Llgl_RenderTargetCube_PluralBinding
+        PROPERTIES DISABLED TRUE)
 
 endif()

@@ -89,7 +89,10 @@ namespace CNA::Internal::Backends::Llgl::Detail
     std::vector<RendererModule> GetDefaultRendererPreference()
     {
         std::vector<RendererModule> preference;
-        for (const RendererModule module : {RendererModule::Vulkan, RendererModule::OpenGL})
+        // OpenGL is CNA's supported LLGL runtime on Linux/X11. The pinned Vulkan module remains
+        // buildable for compile coverage, but cannot be selected: its native validation route
+        // currently reports image-layout and teardown violations.
+        for (const RendererModule module : {RendererModule::OpenGL})
         {
             if (IsRendererModuleCompiledIn(module))
                 preference.push_back(module);
@@ -126,6 +129,14 @@ namespace CNA::Internal::Backends::Llgl::Detail
                 "' requests the " + GetRendererModuleName(*requested) +
                 " module, which this build does not contain (built modules: " +
                 DescribeCompiledInModules() + ")");
+        }
+
+        if (*requested == RendererModule::Vulkan)
+        {
+            throw std::runtime_error(
+                std::string(kRendererOverrideEnvVar) + "='" + (value != nullptr ? value : "") +
+                "' requests LLGL Vulkan, which is compile-covered but not a supported CNA runtime "
+                "path at this pinned dependency revision; use 'opengl'");
         }
 
         return {*requested};

@@ -353,8 +353,9 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "LLGL")
     # the linker rescan the set until it converges -- the same mechanism the per-backend test
     # macros already use for the CNA/backend cycle.
     if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
+        string(JOIN "," CNA_LLGL_LINK_GROUP_MEMBERS ${CNA_LLGL_LIBRARIES})
         target_link_libraries(${BACKEND_TARGET} PUBLIC
-            -Wl,--start-group ${CNA_LLGL_LIBRARIES} -Wl,--end-group)
+            "$<LINK_GROUP:RESCAN,${CNA_LLGL_LINK_GROUP_MEMBERS}>")
     else()
         target_link_libraries(${BACKEND_TARGET} PUBLIC ${CNA_LLGL_LIBRARIES})
     endif()

@@ -177,6 +177,9 @@ namespace
     // file measures -- and, as of this task, every one of its 53 checks passes for real.
     constexpr bool kRasterizes = true;
     constexpr const char* kBackendName = "SOKOL";
+#elif defined(CNA_BACKEND_LLGL)
+    constexpr bool kRasterizes = true;
+    constexpr const char* kBackendName = "LLGL";
 #else
 #error "REMED-GFX-147: this backend has no declared render-target orientation contract."
 #endif

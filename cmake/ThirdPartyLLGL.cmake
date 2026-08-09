@@ -27,7 +27,8 @@ else()
     set(_cna_llgl_vulkan_default OFF)
 endif()
 
-option(CNA_LLGL_BUILD_RENDERER_OPENGL "Build LLGL's OpenGL renderer module" ON)
+option(CNA_LLGL_BUILD_RENDERER_OPENGL
+       "Build LLGL's required OpenGL renderer module (the supported CNA LLGL runtime)" ON)
 option(CNA_LLGL_BUILD_RENDERER_VULKAN "Build LLGL's Vulkan renderer module (experimental in LLGL)"
        ${_cna_llgl_vulkan_default})
 # The Null module renders nothing at all. It is built so CNA_LLGL_RENDERER=Null can be requested
@@ -58,11 +59,11 @@ function(cna_configure_llgl)
     set(LLGL_BUILD_RENDERER_OPENGL ${CNA_LLGL_BUILD_RENDERER_OPENGL} CACHE BOOL "" FORCE)
     set(LLGL_BUILD_RENDERER_VULKAN ${CNA_LLGL_BUILD_RENDERER_VULKAN} CACHE BOOL "" FORCE)
 
-    if(NOT CNA_LLGL_BUILD_RENDERER_OPENGL AND NOT CNA_LLGL_BUILD_RENDERER_VULKAN)
+    if(NOT CNA_LLGL_BUILD_RENDERER_OPENGL)
         message(FATAL_ERROR
-            "CNA: the LLGL backend needs at least one real renderer module -- enable "
-            "CNA_LLGL_BUILD_RENDERER_OPENGL and/or CNA_LLGL_BUILD_RENDERER_VULKAN. The Null module "
-            "draws nothing and is never selected automatically.")
+            "CNA: the supported LLGL contract requires the OpenGL renderer module. "
+            "CNA_LLGL_BUILD_RENDERER_VULKAN is compile coverage only at the pinned dependency "
+            "revision, and the Null module draws nothing; neither is an automatic fallback.")
     endif()
 
     # LLGL's internal LLGL_VA_ARGS macro is built on `, ## __VA_ARGS__`, a GNU extension that
