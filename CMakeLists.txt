@@ -93,16 +93,26 @@ set(SHARP_RUNTIME_BUILD_TESTS OFF CACHE BOOL "Build sharp-runtime tests" FORCE)
 # repo (Task DEV-BUILD-001) -- `git submodule update --init` cannot fetch it.
 # It must be cloned next to this repo's own directory, so that
 # "${CMAKE_CURRENT_SOURCE_DIR}/../sharp-runtime" resolves to a real checkout.
-if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../sharp-runtime/CMakeLists.txt")
+# CNA_SHARP_RUNTIME_ROOT (MODULARIZATION_PLAN.md §3) points builds at a different
+# checkout -- e.g. a pinned read-only worktree of the modular sharp-runtime --
+# without moving worktrees around.
+set(CNA_SHARP_RUNTIME_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../sharp-runtime" CACHE PATH
+    "Path to the sharp-runtime checkout consumed by this build (sibling by default)")
+if(NOT EXISTS "${CNA_SHARP_RUNTIME_ROOT}/CMakeLists.txt")
     message(FATAL_ERROR
-        "CNA: Missing sibling repository 'sharp-runtime' at "
-        "${CMAKE_CURRENT_SOURCE_DIR}/../sharp-runtime -- this is a separate git "
-        "checkout expected next to this repo's own directory, not a git "
-        "submodule (git submodule update --init will not fetch it). Fix: "
+        "CNA: Missing sharp-runtime checkout at ${CNA_SHARP_RUNTIME_ROOT} -- "
+        "this is a separate git checkout (sibling '../sharp-runtime' by "
+        "default, overridable with -DCNA_SHARP_RUNTIME_ROOT=<path>), not a "
+        "git submodule (git submodule update --init will not fetch it). Fix: "
         "cd ${CMAKE_CURRENT_SOURCE_DIR}/.. && "
         "git clone https://github.com/openeggbert/sharp-runtime.git")
 endif()
-add_subdirectory(../sharp-runtime SHARP_RUNTIME)
+add_subdirectory("${CNA_SHARP_RUNTIME_ROOT}" SHARP_RUNTIME)
+
+# Detect which sharp-runtime shape this build consumes (monolithic archive vs modular
+# components) and provide cna_link_sharp_runtime() for the CNA module targets.
+include(cmake/SharpRuntimeConsumption.cmake)
+cna_detect_sharp_runtime_shape()
 
 #find_package(SDL3_ttf REQUIRED)
 

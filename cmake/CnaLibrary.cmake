@@ -226,15 +226,16 @@ unset(_cna_unknown)
 # see MODULARIZATION_PLAN.md §1.4 for the mechanical include-graph evidence) ---
 
 cna_add_module(cna_math Math ${CNA_MATH_ROOT_SOURCES})
-target_link_libraries(cna_math PUBLIC SHARP_RUNTIME)
+cna_link_sharp_runtime(cna_math PUBLIC Core.Base)
 
 cna_add_module(cna_core Core ${CNA_CORE_SOURCES})
-target_link_libraries(cna_core PUBLIC SHARP_RUNTIME)
+cna_link_sharp_runtime(cna_core PUBLIC Core.Base)
 # Logger.cpp logs through SDL; the dependency is an implementation detail, not API surface.
 target_link_libraries(cna_core PRIVATE SDL3::SDL3)
 
 cna_add_module(cna_graphics_core GraphicsCore ${CNA_GRAPHICS_CORE_SOURCES})
-target_link_libraries(cna_graphics_core PUBLIC cna_math cna_core SHARP_RUNTIME)
+target_link_libraries(cna_graphics_core PUBLIC cna_math cna_core)
+cna_link_sharp_runtime(cna_graphics_core PUBLIC Core.Base IO Collections.ObjectModel)
 # GraphicsDevice.cpp/GraphicsAdapter.cpp/Texture2D.cpp query SDL video state directly;
 # ImageLoader.cpp decodes through SDL3_image.
 target_link_libraries(cna_graphics_core PRIVATE SDL3::SDL3 SDL3_image::SDL3_image)
@@ -251,11 +252,13 @@ target_link_libraries(cna_graphics_core PRIVATE cna_input)
 target_link_libraries(cna_graphics_core PRIVATE ${BACKEND_TARGET})
 
 cna_add_module(cna_input Input ${CNA_INPUT_SOURCES})
-target_link_libraries(cna_input PUBLIC cna_graphics_core cna_math cna_core SHARP_RUNTIME)
+target_link_libraries(cna_input PUBLIC cna_graphics_core cna_math cna_core)
+cna_link_sharp_runtime(cna_input PUBLIC Core.Base)
 target_link_libraries(cna_input PRIVATE SDL3::SDL3)
 
 cna_add_module(cna_audio Audio ${CNA_AUDIO_SOURCES})
-target_link_libraries(cna_audio PUBLIC cna_core cna_math SHARP_RUNTIME)
+target_link_libraries(cna_audio PUBLIC cna_core cna_math)
+cna_link_sharp_runtime(cna_audio PUBLIC Core.Base IO Threading)
 target_link_libraries(cna_audio PRIVATE SDL3::SDL3 SDL3_mixer::SDL3_mixer)
 # Genuine XNA-semantic static-archive cycle (kept, not redesigned): FrameworkDispatcher.Update()
 # pumps both the audio streams and MediaPlayer (MediaPlayer::Update/OnActiveSongChanged/
@@ -264,11 +267,13 @@ target_link_libraries(cna_audio PRIVATE SDL3::SDL3 SDL3_mixer::SDL3_mixer)
 target_link_libraries(cna_audio PRIVATE cna_media)
 
 cna_add_module(cna_media Media ${CNA_MEDIA_SOURCES})
-target_link_libraries(cna_media PUBLIC cna_audio cna_graphics_core SHARP_RUNTIME)
+target_link_libraries(cna_media PUBLIC cna_audio cna_graphics_core)
+cna_link_sharp_runtime(cna_media PUBLIC Core.Base IO Threading Collections.ObjectModel)
 target_link_libraries(cna_media PRIVATE SDL3::SDL3 SDL3_mixer::SDL3_mixer)
 
 cna_add_module(cna_content Content ${CNA_CONTENT_SOURCES})
-target_link_libraries(cna_content PUBLIC cna_graphics_core cna_audio cna_media cna_math cna_core SHARP_RUNTIME)
+target_link_libraries(cna_content PUBLIC cna_graphics_core cna_audio cna_media cna_math cna_core)
+cna_link_sharp_runtime(cna_content PUBLIC Core.Base IO Collections.ObjectModel Globalization)
 target_link_libraries(cna_content PRIVATE SDL3::SDL3 SDL3_mixer::SDL3_mixer)
 # plan_cnj.md CNB-70 (Phase 13D): CNA::Internal::GltfImport::GltfImportCore (used by both
 # ContentManager.cpp's GltfModelTypeReader and tools/gltf_to_cnj) needs cgltf.h.
@@ -283,20 +288,23 @@ if(CNA_DRACO_AVAILABLE)
 endif()
 
 cna_add_module(cna_storage Storage ${CNA_STORAGE_SOURCES})
-target_link_libraries(cna_storage PUBLIC SHARP_RUNTIME)
+cna_link_sharp_runtime(cna_storage PUBLIC Core.Base IO Threading Storage)
 target_link_libraries(cna_storage PRIVATE SDL3::SDL3)
 
 cna_add_module(cna_runtime Runtime ${CNA_RUNTIME_ROOT_SOURCES})
 target_link_libraries(cna_runtime PUBLIC
-        cna_graphics_core cna_input cna_content cna_audio cna_media cna_core cna_math SHARP_RUNTIME)
+        cna_graphics_core cna_input cna_content cna_audio cna_media cna_core cna_math)
+cna_link_sharp_runtime(cna_runtime PUBLIC Core.Base IO)
 target_link_libraries(cna_runtime PRIVATE SDL3::SDL3 SDL3_mixer::SDL3_mixer)
 
 cna_add_module(cna_devices Devices ${CNA_DEVICES_SOURCES})
-target_link_libraries(cna_devices PUBLIC cna_runtime cna_graphics_core cna_core cna_math SHARP_RUNTIME)
+target_link_libraries(cna_devices PUBLIC cna_runtime cna_graphics_core cna_core cna_math)
+cna_link_sharp_runtime(cna_devices PUBLIC Core.Base)
 target_link_libraries(cna_devices PRIVATE SDL3::SDL3)
 
 cna_add_module(cna_noxna NoXna ${CNA_NOXNA_SOURCES})
-target_link_libraries(cna_noxna PUBLIC cna_graphics_core SHARP_RUNTIME)
+target_link_libraries(cna_noxna PUBLIC cna_graphics_core)
+cna_link_sharp_runtime(cna_noxna PUBLIC Core.Base)
 
 if(ANDROID)
     # Detail::AndroidSensorBridge (Microsoft::Devices::Sensors) calls the NDK's
@@ -429,6 +437,7 @@ if(CNA_ENABLE_NET)
     # The public dependency is the runtime layer (Guide/SignedInGamer use Game, graphics,
     # input, audio through it) plus Storage (device selector flows).
     target_link_libraries(CNA_GamerServices PUBLIC cna_runtime cna_storage PRIVATE SDL3::SDL3)
+    cna_link_sharp_runtime(CNA_GamerServices PUBLIC Core.Base IO Collections.ObjectModel Threading)
 
     file(GLOB_RECURSE CNA_NET_SOURCES CONFIGURE_DEPENDS
         "src/Microsoft/Xna/Framework/Net/*.cpp"
@@ -444,4 +453,5 @@ if(CNA_ENABLE_NET)
         CNA_GamerServices
         enet
     )
+    cna_link_sharp_runtime(CNA_Net PUBLIC Core.Base IO Collections.ObjectModel Threading)
 endif()
