@@ -78,6 +78,7 @@ namespace
         p.vertexColorEnabled = true;
         p.pbrMetallicFactor = 61;
         p.pbrRoughnessFactor = 62;
+        p.lightingEnabled = true;
         return p;
     }
 
@@ -140,6 +141,26 @@ TEST(MetalUniformFill, LitUniformsFogDisabledZeroesFogEnabledFlagOnly)
     FillMetalLitUniforms(t, lu, MakeDistinctWvp(), p);
     // fogColor xyz still copied even when disabled -- only the w flag changes.
     ExpectVec4Eq(lu.fogColorEnabled, 54,55,56,0);
+}
+
+TEST(MetalUniformFill, LightingDisabledNormalizesBasicLitUniformsLikeEasyGL)
+{
+    GpuDrawParams p = MakeDistinctParams();
+    p.lightingEnabled = false;
+    MetalLitTransform transform{};
+    MetalLitUniforms uniforms{};
+    FillMetalLitUniforms(transform, uniforms, MakeDistinctWvp(), p);
+
+    ExpectVec4Eq(uniforms.ambientColor, 1,1,1,0);
+    ExpectVec4Eq(uniforms.light0Dir, 0,-1,0,0);
+    ExpectVec4Eq(uniforms.light1Dir, 0,-1,0,0);
+    ExpectVec4Eq(uniforms.light2Dir, 0,-1,0,0);
+    ExpectVec4Eq(uniforms.light0Diffuse, 0,0,0,0);
+    ExpectVec4Eq(uniforms.light1Diffuse, 0,0,0,0);
+    ExpectVec4Eq(uniforms.light2Diffuse, 0,0,0,0);
+    ExpectVec4Eq(uniforms.light0Specular, 0,0,0,0);
+    ExpectVec4Eq(uniforms.light1Specular, 0,0,0,0);
+    ExpectVec4Eq(uniforms.light2Specular, 0,0,0,0);
 }
 
 TEST(MetalUniformFill, EnvUniformsMapEveryFieldCorrectly)
@@ -278,4 +299,21 @@ TEST(MetalUniformFill, SkinnedPbrUniformsDelegatesFragmentFieldsAndFillsOwnTrans
     // PbrTransform has no equivalent of).
     ExpectWvpAndWorldCopiedVerbatim(t.wvp, t.world, wvp, p);
     ExpectVec4Eq(t.skinParams, 2,0,0,0);
+}
+
+TEST(MetalUniformFill, LightingDisabledNormalizesPbrAmbientAndDirectionalDiffuse)
+{
+    GpuDrawParams p = MakeDistinctParams();
+    p.lightingEnabled = false;
+    MetalPbrTransform transform{};
+    MetalPbrUniforms uniforms{};
+    FillMetalPbrUniforms(transform, uniforms, MakeDistinctWvp(), p);
+
+    ExpectVec4Eq(uniforms.ambientColor, 1,1,1,0);
+    ExpectVec4Eq(uniforms.light0Dir, 0,-1,0,0);
+    ExpectVec4Eq(uniforms.light1Dir, 0,-1,0,0);
+    ExpectVec4Eq(uniforms.light2Dir, 0,-1,0,0);
+    ExpectVec4Eq(uniforms.light0Diffuse, 0,0,0,0);
+    ExpectVec4Eq(uniforms.light1Diffuse, 0,0,0,0);
+    ExpectVec4Eq(uniforms.light2Diffuse, 0,0,0,0);
 }

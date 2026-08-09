@@ -87,6 +87,20 @@ namespace CNA::Internal::Backends::Metal
                    enabled==other.enabled;
         }
     };
+
+    /**
+     * @brief Returns the complete last-writer state installed by SetBlendEnabled.
+     *
+     * Enabling selects CNA's established straight-alpha factors; disabling selects opaque. A later
+     * ApplyBlendState replaces this complete key rather than being AND-latched by an older toggle.
+     *
+     * @param enabled True for straight-alpha blending; false for opaque blending.
+     * @return Complete blend key to install as the current state.
+     */
+    [[nodiscard]] constexpr MetalBlendKey MetalBlendKeyForSetBlendEnabled(bool enabled) noexcept
+    {
+        return enabled ? MetalBlendKey{4, 5, 4, 5, 0, 0, true} : MetalBlendKey{};
+    }
     // plan_metal.md METAL-33: no eviction is implemented, and none is needed for a v1 backend --
     // the key space is small and effectively bounded, the same reasoning EasyGLGraphicsBackend's
     // own Prog3D relies on implicitly (a fixed struct field per shader variant instead of a hashed

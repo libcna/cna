@@ -43,7 +43,7 @@ protected:
         check(!dev.SupportsCapability(GraphicsCapability::MultipleRenderTargets), "MultipleRenderTargets unsupported");
         check(dev.SupportsCapability(GraphicsCapability::AnisotropicFiltering), "AnisotropicFiltering supported");
         check(dev.SupportsCapability(GraphicsCapability::WireFrame), "WireFrame supported");
-        check(dev.SupportsCapability(GraphicsCapability::OcclusionQuery), "OcclusionQuery supported");
+        check(!dev.SupportsCapability(GraphicsCapability::OcclusionQuery), "OcclusionQuery unsupported");
         check(!dev.SupportsCapability(GraphicsCapability::CustomEffects), "CustomEffects unsupported");
         check(dev.SupportsCapability(GraphicsCapability::Texture3D), "Texture3D supported");
         check(!dev.SupportsCapability(GraphicsCapability::MultiStreamVertexInput), "MultiStreamVertexInput unsupported");

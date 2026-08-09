@@ -71,6 +71,42 @@ namespace CNA::Internal::Backends::Metal
         }
 
         /**
+         * @brief Adopts an already-owned replacement without retaining it again.
+         *
+         * Use this for Objective-C Create/Copy/`new*` results that already carry a +1 reference.
+         * Adopting the same handle consumes its additional incoming +1 by releasing it once, while
+         * preserving the owner's existing +1. Passing null releases the current resource.
+         *
+         * @param replacement Owned resource handle, or null to clear the owner.
+         */
+        void Adopt(Resource replacement = Resource{})
+        {
+            if (replacement == resource_)
+            {
+                if (replacement)
+                    releaseFunction_(replacement);
+                return;
+            }
+
+            const Resource previous = resource_;
+            resource_ = replacement;
+            if (previous)
+                releaseFunction_(previous);
+        }
+
+        /**
+         * @brief Relinquishes ownership without releasing the resource.
+         *
+         * @return The previously owned resource handle, or null when empty.
+         */
+        [[nodiscard]] Resource ReleaseOwnership() noexcept
+        {
+            const Resource released = resource_;
+            resource_ = Resource{};
+            return released;
+        }
+
+        /**
          * @brief Returns the retained resource without transferring ownership.
          *
          * @return The retained resource handle, or null when empty.
@@ -95,4 +131,31 @@ namespace CNA::Internal::Backends::Metal
         ReleaseFunction releaseFunction_;
         Resource resource_{};
     };
+
+    /**
+     * @brief Inserts an owned resource into a cache without exposing an exception-time leak gap.
+     *
+     * The owner keeps its Create-rule reference while the cache allocates or rehashes. Ownership
+     * is relinquished only after a confirmed insertion; a duplicate key leaves the replacement
+     * owned by the caller so its destructor releases that unused reference.
+     *
+     * @tparam Cache Associative cache whose mapped type matches the owned resource handle.
+     * @tparam Key Cache key type.
+     * @tparam Owner Resource owner exposing Get() and ReleaseOwnership().
+     * @param cache Cache receiving the resource.
+     * @param key Key under which the resource is inserted.
+     * @param owner Owner of the Create-rule resource being offered to the cache.
+     * @return Iterator to either the newly inserted entry or the pre-existing entry.
+     */
+    template<typename Cache, typename Key, typename Owner>
+    [[nodiscard]] typename Cache::iterator EmplaceMetalOwnedResource(
+        Cache& cache,
+        const Key& key,
+        Owner& owner)
+    {
+        auto [iterator, inserted] = cache.emplace(key, owner.Get());
+        if (inserted)
+            static_cast<void>(owner.ReleaseOwnership());
+        return iterator;
+    }
 }

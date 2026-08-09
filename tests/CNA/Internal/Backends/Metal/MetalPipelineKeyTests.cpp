@@ -45,6 +45,21 @@ TEST(MetalBlendKey, UnequalWhenAnySingleFieldDiffers)
     EXPECT_FALSE(base == (MetalBlendKey{5, 6, 7, 8, 2, 3, false}));  // enabled
 }
 
+TEST(MetalBlendKey, SetBlendEnabledUsesLastWriterStraightAlphaOrOpaqueState)
+{
+    MetalBlendKey current{};
+    current = MetalBlendKeyForSetBlendEnabled(true);
+    EXPECT_TRUE(current == (MetalBlendKey{4, 5, 4, 5, 0, 0, true}));
+
+    current = MetalBlendKey{4, 5, 4, 5, 0, 0, true};
+    current = MetalBlendKeyForSetBlendEnabled(false);
+    EXPECT_TRUE(current == MetalBlendKey{});
+
+    current = MetalBlendKeyForSetBlendEnabled(false);
+    current = MetalBlendKey{4, 5, 4, 5, 0, 0, true};
+    EXPECT_TRUE(current.enabled);
+}
+
 TEST(MetalPipelineCacheKey, EqualOnlyWhenKindAndBlendBothMatch)
 {
     MetalPipelineCacheKey a{MetalPipelineKind::LitTex32, MetalBlendKey{}};

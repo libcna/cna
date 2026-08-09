@@ -159,6 +159,12 @@ target_link_libraries(CNA
 # unsupported-call guard. Its archive therefore has the same real reverse references to CNA as
 # Sokol and SDL_GPU; declaring the cycle lets ordinary consumers such as cna_reference_dump link
 # without relying on a test-only --start-group wrapper.
+#
+# The Metal Objective-C++ archive has the same reverse edge: its out-of-line implementation calls
+# CNA-owned Effect methods and named math/color values while CNA owns the public objects that call
+# into the backend. Declaring that cycle here keeps ordinary macOS consumers independent of static
+# archive ordering; native Metal tests intentionally rely on this target-level relationship rather
+# than adding a test-only linker group.
 if(CNA_GRAPHICS_BACKEND STREQUAL "D3D11"
    OR CNA_GRAPHICS_BACKEND STREQUAL "D3D12"
    OR CNA_GRAPHICS_BACKEND STREQUAL "D3D9"
@@ -175,6 +181,7 @@ if(CNA_GRAPHICS_BACKEND STREQUAL "D3D11"
    OR CNA_GRAPHICS_BACKEND STREQUAL "WEBGL1"
    OR CNA_GRAPHICS_BACKEND STREQUAL "WEBGL2"
    OR CNA_GRAPHICS_BACKEND STREQUAL "GDI"
+   OR CNA_GRAPHICS_BACKEND STREQUAL "METAL"
    OR CNA_GRAPHICS_BACKEND STREQUAL "LLGL")
     target_link_libraries(${BACKEND_TARGET} PRIVATE CNA)
 endif()

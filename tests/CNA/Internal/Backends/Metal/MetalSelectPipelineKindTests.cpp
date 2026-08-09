@@ -20,7 +20,8 @@ using CNA::Internal::Backends::ITextureBackend;
 
 namespace
 {
-    // Never dereferenced by SelectMetalPipelineKind -- only its truthiness is read (params->texture0).
+    // Never dereferenced by SelectMetalPipelineKind; it exists only to populate unrelated captured
+    // state while tests prove that effect flags and stride, not texture-pointer presence, dispatch.
     const ITextureBackend* FakeTexture() { return reinterpret_cast<const ITextureBackend*>(0x1); }
 }
 
@@ -41,9 +42,9 @@ TEST(MetalSelectPipelineKind, ColoredRequiresExactlyStride16)
     EXPECT_THROW((void)SelectMetalPipelineKind(17, &p), std::runtime_error);
 }
 
-TEST(MetalSelectPipelineKind, TexturedSelectsByStrideWithoutLighting)
+TEST(MetalSelectPipelineKind, CanonicalStockPipelineSelectsByStrideNotTexturePointer)
 {
-    GpuDrawParams p; p.texture0 = FakeTexture();
+    GpuDrawParams p;
     EXPECT_EQ(SelectMetalPipelineKind(20, &p), MetalPipelineKind::Textured20);
     EXPECT_EQ(SelectMetalPipelineKind(24, &p), MetalPipelineKind::ColorTex24);
     EXPECT_EQ(SelectMetalPipelineKind(32, &p), MetalPipelineKind::LitTex32);
@@ -52,7 +53,7 @@ TEST(MetalSelectPipelineKind, TexturedSelectsByStrideWithoutLighting)
 
 TEST(MetalSelectPipelineKind, Stride32SelectsVertexLitOnlyWhenLightingOnAndNotPreferPerPixel)
 {
-    GpuDrawParams p; p.texture0 = FakeTexture();
+    GpuDrawParams p;
 
     p.lightingEnabled = false; p.preferPerPixelLighting = false;
     EXPECT_EQ(SelectMetalPipelineKind(32, &p), MetalPipelineKind::LitTex32);
@@ -69,18 +70,19 @@ TEST(MetalSelectPipelineKind, Stride32SelectsVertexLitOnlyWhenLightingOnAndNotPr
     EXPECT_EQ(SelectMetalPipelineKind(32, &p), MetalPipelineKind::LitTex32);
 }
 
-TEST(MetalSelectPipelineKind, DualTextureRequiresTextureAndSelectsByStride)
+TEST(MetalSelectPipelineKind, DualTextureSelectsByFlagAndStrideWithNeutralTextureFallbacks)
 {
-    GpuDrawParams p; p.dualTexture = true; p.texture0 = FakeTexture();
+    GpuDrawParams p; p.dualTexture = true;
     EXPECT_EQ(SelectMetalPipelineKind(20, &p), MetalPipelineKind::DualTex20);
     EXPECT_EQ(SelectMetalPipelineKind(24, &p), MetalPipelineKind::DualTex24Colored);
     EXPECT_THROW((void)SelectMetalPipelineKind(16, &p), std::runtime_error);
 }
 
-TEST(MetalSelectPipelineKind, DualTextureWithoutATextureThrows)
+TEST(MetalSelectPipelineKind, DualTextureWithoutTexturesStillSelectsItsPipeline)
 {
     GpuDrawParams p; p.dualTexture = true; p.texture0 = nullptr;
-    EXPECT_THROW((void)SelectMetalPipelineKind(20, &p), std::runtime_error);
+    p.texture1 = nullptr;
+    EXPECT_EQ(SelectMetalPipelineKind(20, &p), MetalPipelineKind::DualTex20);
 }
 
 TEST(MetalSelectPipelineKind, DualTextureTakesPrecedenceOverPlainTextured)
@@ -97,6 +99,18 @@ TEST(MetalSelectPipelineKind, EnvironmentMapRequiresStride32)
     GpuDrawParams p; p.envMapping = true;
     EXPECT_EQ(SelectMetalPipelineKind(32, &p), MetalPipelineKind::EnvMap32);
     EXPECT_THROW((void)SelectMetalPipelineKind(20, &p), std::runtime_error);
+}
+
+TEST(MetalSelectPipelineKind, UntexturedLitBasicEffectUsesLitPipeline)
+{
+    GpuDrawParams p;
+    p.textureEnabled = false;
+    p.texture0 = nullptr;
+    p.lightingEnabled = true;
+    p.preferPerPixelLighting = false;
+    EXPECT_EQ(SelectMetalPipelineKind(32, &p), MetalPipelineKind::LitTex32VertexLit);
+    p.preferPerPixelLighting = true;
+    EXPECT_EQ(SelectMetalPipelineKind(32, &p), MetalPipelineKind::LitTex32);
 }
 
 TEST(MetalSelectPipelineKind, EnvironmentMapTakesPrecedenceOverDualTextureAndTextured)

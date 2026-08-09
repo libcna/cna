@@ -187,9 +187,9 @@ namespace CNA::Internal::Backends::Metal
          */
         std::unique_ptr<ITextureCubeBackend> CreateTextureCube(int size, bool mipMap, int surfaceFormat) override;
         /**
-         * @brief Creates a native Metal occlusion query.
+         * @brief Rejects occlusion queries until command splitting and slot reuse are fixed.
          *
-         * @return The newly allocated occlusion-query backend.
+         * @return No value; the method always throws a not-supported exception.
          */
         std::unique_ptr<IOcclusionQueryBackend> CreateOcclusionQuery() override;
         /**

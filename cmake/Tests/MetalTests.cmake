@@ -7,14 +7,28 @@ if(CNA_BUILD_TESTS)
     file(GLOB CNA_METAL_PORTABLE_TEST_SOURCES CONFIGURE_DEPENDS
         "${CMAKE_CURRENT_SOURCE_DIR}/tests/CNA/Internal/Backends/Metal/*.cpp")
     add_executable(cna_test_metal_portable ${CNA_METAL_PORTABLE_TEST_SOURCES})
-    target_link_libraries(cna_test_metal_portable
-        PRIVATE CNA SHARP_RUNTIME gtest_main SDL3::SDL3)
+    if(UNIX AND NOT APPLE)
+        target_link_libraries(cna_test_metal_portable PRIVATE
+            -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+            SHARP_RUNTIME gtest_main SDL3::SDL3)
+    else()
+        target_link_libraries(cna_test_metal_portable
+            PRIVATE CNA SHARP_RUNTIME gtest_main SDL3::SDL3)
+    endif()
     cna_register_backend_test(NAME Metal_PortableHelpers COMMAND cna_test_metal_portable
         TIMEOUT 30 LABELS "Metal;Portable")
 endif()
 
 if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "METAL")
     enable_testing()
+
+    # Configure-time control for Metal's real CNA<->backend static-archive cycle. Native test
+    # executables below use ordinary target links, not a test-only --start-group workaround.
+    get_target_property(CNA_METAL_BACKEND_LINKS ${BACKEND_TARGET} LINK_LIBRARIES)
+    if(NOT "CNA" IN_LIST CNA_METAL_BACKEND_LINKS)
+        message(FATAL_ERROR
+            "METAL backend must retain its reverse CNA link for out-of-line Effect/math symbols")
+    endif()
 
     # Supported-contract smoke: real macOS device/window/view, buffer uploads, combined
     # color/depth/stencil clears, and presentation. It deliberately performs no backbuffer

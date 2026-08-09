@@ -12,8 +12,8 @@
 // C++, zero Objective-C dependency) and a stride, so unlike drawMetal3D() itself (which also issues
 // real Metal API calls) this dispatch decision can be genuinely unit-tested on any platform without
 // an Apple toolchain. MetalGraphicsBackend.mm includes this header instead of defining the function
-// inline; logic (including precedence order and every error message) is unchanged from the original
-// inline definition.
+// inline, keeping precedence, conservative stride rejection, and texture-independent stock dispatch
+// in one portable source of truth.
 namespace CNA::Internal::Backends::Metal
 {
     // plan_metal.md Phase 2 (simplified for a first, hardware-unverified pass -- a fully generic
@@ -43,7 +43,6 @@ namespace CNA::Internal::Backends::Metal
         std::size_t stride, const CNA::Internal::Backends::GpuDrawParams* params)
     {
         using PipelineKind = MetalPipelineKind;
-        const bool textured = params && params->texture0;
         const bool pbr = params && params->pbr;
         const bool skinned = params && params->skinned;
         const bool envMapping = params && params->envMapping;
@@ -72,12 +71,15 @@ namespace CNA::Internal::Backends::Metal
             return PipelineKind::EnvMap32;
         }
         if (dual) {
-            if (!textured) throw std::runtime_error("Metal: DualTextureEffect requires Texture to be set");
             if (stride == 24) return PipelineKind::DualTex24Colored;
             if (stride == 20) return PipelineKind::DualTex20;
             throw std::runtime_error("Metal: DualTextureEffect requires stride 20 or 24");
         }
-        if (textured) {
+        // METAL-271: pipeline shape comes from the captured effect flags and canonical vertex
+        // stride, never from whether a texture pointer happens to be null. Every stock 2D sample
+        // has an owned white fallback, so an untextured BasicEffect/AlphaTestEffect remains a
+        // valid draw instead of falling through to the unrelated Colored16 route.
+        if (params) {
             switch (stride) {
                 case 20: return PipelineKind::Textured20;
                 case 24: return PipelineKind::ColorTex24;
@@ -90,7 +92,8 @@ namespace CNA::Internal::Backends::Metal
                     if (params && params->lightingEnabled && !params->preferPerPixelLighting)
                         return PipelineKind::LitTex32VertexLit;
                     return PipelineKind::LitTex32;
-                default: throw std::runtime_error("Metal: textured 3D requires stride 20, 24, or 32 until generic VertexDeclaration pipeline cache is implemented");
+                case 16: return PipelineKind::Colored16;
+                default: throw std::runtime_error("Metal: stock 3D requires stride 16, 20, 24, or 32 until generic VertexDeclaration pipeline cache is implemented");
             }
         }
         if (stride != 16) throw std::runtime_error("Metal: colored 3D currently requires VertexPositionColor stride 16");

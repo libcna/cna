@@ -1,9 +1,15 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Backends/Metal/MetalGraphicsBackend.hpp"
 #include "CNA/Internal/Backends/Metal/MetalPipelineKey.hpp"
+#include "CNA/Internal/Backends/Metal/MetalCommandFailure.hpp"
 #include "CNA/Internal/Backends/Metal/MetalNormalMatrix.hpp"
 #include "CNA/Internal/Backends/Metal/MetalPrimitiveVertexCount.hpp"
 #include "CNA/Internal/Backends/Metal/MetalRetainedResource.hpp"
+#include "CNA/Internal/Backends/Metal/MetalRasterState.hpp"
+#include "CNA/Internal/Backends/Metal/MetalResourcePolicy.hpp"
+#include "CNA/Internal/Backends/Metal/MetalTextureBindingPolicy.hpp"
+#include "CNA/Internal/Backends/Metal/MetalTextureTransfer.hpp"
+#include "CNA/Internal/Backends/Metal/MetalVertexDeclarationPolicy.hpp"
 #include "CNA/Internal/Backends/Metal/MetalLogicalViewport.hpp"
 #include "CNA/Internal/Backends/Metal/MetalMat4.hpp"
 #include "CNA/Internal/Backends/Metal/MetalSelectPipelineKind.hpp"
@@ -16,6 +22,7 @@
 #include "CNA/Internal/Backends/Metal/MetalBlend.hpp"
 #include "CNA/Internal/Backends/Metal/MetalBlendFunction.hpp"
 #include "CNA/Internal/Backends/Metal/MetalCullMode.hpp"
+#include "CNA/Internal/Backends/Metal/MetalDepthPolicy.hpp"
 #include "CNA/Internal/Backends/Metal/MetalPolicy.hpp"
 // plan_metal.md Phase 14 (METAL-142-152): needs Effect's complete type (not just
 // IGraphicsBackend.hpp's own forward declaration) to call Apply()/GetEffectBackendPtr() from
@@ -37,9 +44,11 @@
 #include <cstdint>
 #include <cstring>
 #include <functional>
+#include <limits>
 #include <memory>
 #include <stdexcept>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace CNA::Internal::Backends::Metal
@@ -51,10 +60,28 @@ namespace CNA::Internal::Backends::Metal
 // here too or it would silently become a different, unrelated, unlinkable declaration. Needs only
 // ordinary Metal types, not MetalGraphicsBackend::Impl, so unlike nativeTextureFor()/
 // resolveActiveAttachments() this one has no incomplete-type ordering constraint of its own.
-static void blitTextureToClientBuffer(id<MTLDevice> device, id<MTLCommandQueue> queue, id<MTLTexture> src, NSUInteger slice, int level, int x, int y, int z, int w, int h, int depth, void* data, int dataLength);
+static void blitTextureToClientBuffer(id<MTLDevice> device, id<MTLCommandQueue> queue,
+                                      id<MTLTexture> src, NSUInteger slice, int level,
+                                      int x, int y, int z, int w, int h, int depth,
+                                      const MetalTextureTransferLayout& layout,
+                                      MetalTransferPixelOrder pixelOrder, void* data,
+                                      const std::function<void()>& commandHealthCheck);
 
 namespace
 {
+    static id retainMetalObject(id value)
+    {
+        [value retain];
+        return value;
+    }
+
+    static void releaseMetalObject(id value)
+    {
+        [value release];
+    }
+
+    using MetalObjectOwner = MetalRetainedResource<id>;
+
     static const char* kMetalShaderSource = R"MSL(
 #include <metal_stdlib>
 using namespace metal;
@@ -127,14 +154,9 @@ fragment float4 cna_f3d_dualtex(V3Out in [[stage_in]], texture2d<float> tex0 [[t
 // address space); the normal matrix crosses the CPU/GPU boundary as 3 separate float4 columns and
 // is reassembled into a real float3x3 inside the shader instead.
 //
-// Deliberately NOT ported this pass: the fog-factor formula below uses raw OBJECT-SPACE vertex Z
-// (`in.position.z`), an already-known, already-documented EasyGL simplification (only exactly
-// correct when World/View are identity) -- copied here bug-for-bug to match the established
-// cross-backend reference exactly, not "improved," per this project's own match-the-reference
-// discipline. The per-vertex (Gouraud) lit variant (EnsureLit3DVertexLitProgram(), selected when
-// lightingEnabled && !preferPerPixelLighting) is NOT ported this pass -- every draw with lighting
-// on always takes the per-pixel path here, the same accepted, already-documented divergence
-// GpuDrawParams::preferPerPixelLighting's own doc comment describes for "every backend except D3D9".
+// Fog uses the current FNA-derived fogVector dot product, and both per-pixel and per-vertex
+// (Gouraud) lighting variants are present. Pipeline dispatch selects the latter when lighting is
+// enabled and PreferPerPixelLighting is false.
 struct LitTransform { float4x4 wvp; float4x4 world; float4 normalCol0; float4 normalCol1; float4 normalCol2; };
 struct LitUniforms {
     float4 diffuseColor;
@@ -706,6 +728,7 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
     static MTLVertexDescriptor* vertexDescriptorForStride(std::size_t stride)
     {
         MTLVertexDescriptor* vd = [MTLVertexDescriptor vertexDescriptor];
+        if(!vd) throw std::runtime_error("Metal: failed to allocate vertex descriptor");
         switch (stride) {
             case 16:
                 vd.attributes[0].format=MTLVertexFormatFloat3; vd.attributes[0].offset=0; vd.attributes[0].bufferIndex=0;
@@ -814,6 +837,7 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
     {
         const MetalVertexDescriptorPlan plan = BuildMetalVertexDescriptorPlan(stride, elements);
         MTLVertexDescriptor* vd = [MTLVertexDescriptor vertexDescriptor];
+        if(!vd) throw std::runtime_error("Metal: failed to allocate generic vertex descriptor");
         for (const auto& attr : plan.attributes) {
             vd.attributes[attr.location].format = metalVertexFormat(attr.kind);
             vd.attributes[attr.location].offset = attr.offset;
@@ -843,10 +867,17 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
     static id<MTLRenderPipelineState> makePipeline(id<MTLDevice> dev, id<MTLLibrary> lib,
                                                     NSString* vs, NSString* fs,
                                                     MTLVertexDescriptor* vd, const BlendKey& blend,
-                                                    int colorCount=1, int sampleCount=1)
+        int colorCount=1, int sampleCount=1)
     {
         MTLRenderPipelineDescriptor* d=[[MTLRenderPipelineDescriptor alloc] init];
-        d.vertexFunction=[lib newFunctionWithName:vs]; d.fragmentFunction=[lib newFunctionWithName:fs]; d.vertexDescriptor=vd;
+        if(!d) throw std::runtime_error("Metal: failed to allocate render-pipeline descriptor");
+        d.vertexFunction=[lib newFunctionWithName:vs];
+        d.fragmentFunction=[lib newFunctionWithName:fs];
+        if(!d.vertexFunction||!d.fragmentFunction){
+            [d.vertexFunction release]; [d.fragmentFunction release]; [d release];
+            throw std::runtime_error("Metal: built-in shader function lookup failed");
+        }
+        d.vertexDescriptor=vd;
         d.depthAttachmentPixelFormat=MTLPixelFormatDepth32Float_Stencil8; d.stencilAttachmentPixelFormat=MTLPixelFormatDepth32Float_Stencil8;
         d.sampleCount=(NSUInteger)sampleCount;
         for (int i=0;i<colorCount;++i) {
@@ -906,18 +937,29 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
     class MetalTexture final : public ITextureBackend
     {
     public:
-        MetalTexture(id<MTLDevice> dev, id<MTLCommandQueue> queue, const ImageData& data) : dev_(dev), queue_(queue), w_(data.width), h_(data.height)
+        MetalTexture(id<MTLDevice> dev, id<MTLCommandQueue> queue, const ImageData& data,
+                     std::function<void()> commandHealthCheck)
+            : w_(data.width), h_(data.height), commandHealthCheck_(std::move(commandHealthCheck))
         {
-            [dev_ retain]; [queue_ retain];
+            MetalObjectOwner deviceOwner(retainMetalObject, releaseMetalObject);
+            MetalObjectOwner queueOwner(retainMetalObject, releaseMetalObject);
+            MetalObjectOwner textureOwner(retainMetalObject, releaseMetalObject);
+            deviceOwner.Reset(dev);
+            queueOwner.Reset(queue);
             MTLTextureDescriptor* d=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm
                 width:w_ height:h_ mipmapped:(data.mipLevels > 1)];
+            if(!d) throw std::runtime_error("Metal: failed to allocate texture descriptor");
             d.usage=MTLTextureUsageShaderRead | MTLTextureUsageRenderTarget;
-            texture_=[dev newTextureWithDescriptor:d];
-            if (!texture_) throw std::runtime_error("Metal: failed to create texture");
+            textureOwner.Adopt([dev newTextureWithDescriptor:d]);
+            if (!textureOwner.HasValue()) throw std::runtime_error("Metal: failed to create texture");
             if (!data.pixels.empty()) {
                 MTLRegion r=MTLRegionMake2D(0,0,w_,h_);
-                [texture_ replaceRegion:r mipmapLevel:0 withBytes:data.pixels.data() bytesPerRow:w_*4];
+                [(id<MTLTexture>)textureOwner.Get() replaceRegion:r mipmapLevel:0
+                    withBytes:data.pixels.data() bytesPerRow:(NSUInteger)w_*4];
             }
+            dev_=(id<MTLDevice>)deviceOwner.ReleaseOwnership();
+            queue_=(id<MTLCommandQueue>)queueOwner.ReleaseOwnership();
+            texture_=(id<MTLTexture>)textureOwner.ReleaseOwnership();
         }
         ~MetalTexture() override { [texture_ release]; [queue_ release]; [dev_ release]; }
         int GetWidth() const override { return w_; }
@@ -950,12 +992,19 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
             const NSUInteger levelCount = texture_.mipmapLevelCount;
             MTLTextureDescriptor* d=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm
                 width:(NSUInteger)w_ height:(NSUInteger)h_ mipmapped:(levelCount>1)];
+            if(!d) throw std::runtime_error("Metal: failed to allocate replacement texture descriptor");
             d.usage=MTLTextureUsageShaderRead | MTLTextureUsageRenderTarget;
-            id<MTLTexture> newTex=[dev_ newTextureWithDescriptor:d];
-            if (!newTex) throw std::runtime_error("Metal: failed to allocate replacement texture for UpdatePixels");
+            MetalObjectOwner newTextureOwner(retainMetalObject, releaseMetalObject);
+            newTextureOwner.Adopt([dev_ newTextureWithDescriptor:d]);
+            if (!newTextureOwner.HasValue()) throw std::runtime_error("Metal: failed to allocate replacement texture for UpdatePixels");
+            id<MTLTexture> newTex=(id<MTLTexture>)newTextureOwner.Get();
             if (levelCount>1) {
-                id<MTLCommandBuffer> cmd=[queue_ commandBuffer];
+                MetalObjectOwner commandOwner(retainMetalObject, releaseMetalObject);
+                commandOwner.Reset([queue_ commandBuffer]);
+                if (!commandOwner.HasValue()) throw std::runtime_error("Metal: failed to allocate mip-preservation command buffer");
+                id<MTLCommandBuffer> cmd=(id<MTLCommandBuffer>)commandOwner.Get();
                 id<MTLBlitCommandEncoder> blit=[cmd blitCommandEncoder];
+                if (!blit) throw std::runtime_error("Metal: failed to allocate mip-preservation blit encoder");
                 for (NSUInteger lvl=0; lvl<levelCount; ++lvl) {
                     if ((int)lvl==targetLevel) continue;
                     const NSUInteger lw=std::max<NSUInteger>(1,(NSUInteger)w_>>lvl);
@@ -967,22 +1016,40 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
                 [blit endEncoding];
                 [cmd commit];
                 [cmd waitUntilCompleted];
+                if (cmd.status!=MTLCommandBufferStatusCompleted)
+                    throw std::runtime_error("Metal: mip-preservation blit failed");
+                commandHealthCheck_();
             }
             MTLRegion r=MTLRegionMake2D(0,0,(NSUInteger)levelW,(NSUInteger)levelH);
             [newTex replaceRegion:r mipmapLevel:(NSUInteger)targetLevel withBytes:rgba bytesPerRow:(NSUInteger)bytesPerRow];
             [texture_ release];
-            texture_=newTex;
+            texture_=(id<MTLTexture>)newTextureOwner.ReleaseOwnership();
         }
         void UpdatePixels(const uint8_t* rgba, int stride) override {
+            commandHealthCheck_();
+            MetalTextureTransferLayout layout{};
+            if(!rgba||w_>std::numeric_limits<int>::max()/4||
+               !TryBuildMetalTextureTransferLayout(w_,h_,1,1,layout)||
+               stride!=static_cast<int>(static_cast<std::size_t>(w_)*4u))
+                throw std::invalid_argument("Metal: invalid Texture2D level-zero upload");
             reallocateAndUpdate(0, rgba, stride, w_, h_);
+            commandHealthCheck_();
         }
         void UpdatePixelsLevel(int level, const uint8_t* rgba, int lw, int lh) override {
+            commandHealthCheck_();
+            if(!rgba||level<0||level>=(int)texture_.mipmapLevelCount||
+               lw!=MetalTextureTransferDetail::MipDimension(w_,level)||
+               lh!=MetalTextureTransferDetail::MipDimension(h_,level)||
+               static_cast<std::size_t>(lw)>static_cast<std::size_t>(std::numeric_limits<int>::max()/4))
+                throw std::invalid_argument("Metal: invalid Texture2D mip upload");
             reallocateAndUpdate(level, rgba, lw*4, lw, lh);
+            commandHealthCheck_();
         }
         id<MTLTexture> native() const { return texture_; }
     private:
         id<MTLDevice> dev_=nil; id<MTLCommandQueue> queue_=nil;
         int w_, h_; id<MTLTexture> texture_ = nil;
+        std::function<void()> commandHealthCheck_;
     };
 
     // The factory validates SurfaceFormat::Color before construction. Metal allocates its RGBA8
@@ -997,39 +1064,101 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
         // 2D case, a plain (non-render-target) cube texture's GetData() genuinely reaches the
         // backend for every call, so this was a real, previously-shipping gap, not a deliberate
         // scope match to Texture2D's own precedent.
-        MetalTextureCube(id<MTLDevice> dev, id<MTLCommandQueue> queue, int size, bool mipMap)
-            : dev_(dev), queue_(queue), size_(size)
+        MetalTextureCube(id<MTLDevice> dev, id<MTLCommandQueue> queue, int size, bool mipMap,
+                         std::function<void()> commandHealthCheck)
+            : size_(size), mipMap_(mipMap), levelCount_(MetalMipLevelCount(size, size, mipMap)),
+              commandHealthCheck_(std::move(commandHealthCheck))
         {
-            [dev_ retain]; [queue_ retain];
+            MetalObjectOwner deviceOwner(retainMetalObject, releaseMetalObject);
+            MetalObjectOwner queueOwner(retainMetalObject, releaseMetalObject);
+            MetalObjectOwner textureOwner(retainMetalObject, releaseMetalObject);
+            deviceOwner.Reset(dev);
+            queueOwner.Reset(queue);
             MTLTextureDescriptor* d=[MTLTextureDescriptor textureCubeDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm size:(NSUInteger)size mipmapped:mipMap];
+            if(!d) throw std::runtime_error("Metal: failed to allocate cube texture descriptor");
             d.usage=MTLTextureUsageShaderRead;
-            texture_=[dev newTextureWithDescriptor:d];
-            if(!texture_) throw std::runtime_error("Metal: failed to create cube texture");
+            textureOwner.Adopt([dev newTextureWithDescriptor:d]);
+            if(!textureOwner.HasValue()) throw std::runtime_error("Metal: failed to create cube texture");
+            dev_=(id<MTLDevice>)deviceOwner.ReleaseOwnership();
+            queue_=(id<MTLCommandQueue>)queueOwner.ReleaseOwnership();
+            texture_=(id<MTLTexture>)textureOwner.ReleaseOwnership();
         }
         ~MetalTextureCube() override { [texture_ release]; [queue_ release]; [dev_ release]; }
         // Face ordinals (0=+X,1=-X,2=+Y,3=-Y,4=+Z,5=-Z) already match Metal's own cube `slice`
         // ordering directly -- same convention documented on IRenderTargetCubeBackend and already
         // relied upon, unchanged, by every other backend (confirmed against
         // EasyGLTextureCubeBackend's own kCubeFaceTargets order).
-        bool SetData(int face,int level,int x,int y,int w,int h,const void* data,int /*dataLength*/) override
+        bool SetData(int face,int level,int x,int y,int w,int h,const void* data,int dataLength) override
         {
+            commandHealthCheck_();
             if(face<0||face>=6) return false;
-            MTLRegion r=MTLRegionMake2D((NSUInteger)x,(NSUInteger)y,(NSUInteger)w,(NSUInteger)h);
-            [texture_ replaceRegion:r mipmapLevel:(NSUInteger)level slice:(NSUInteger)face withBytes:data bytesPerRow:(NSUInteger)(w*4) bytesPerImage:0];
+            MetalTextureTransferLayout layout{};
+            if (!TryPrepareMetalTextureTransfer(
+                    size_,size_,1,levelCount_,level,x,y,0,w,h,1,data,dataLength,
+                    MetalTransferLengthRule::AtLeastTightBytes,1,layout)) return false;
+            reallocateAndUpdate(face,level,x,y,w,h,data,layout);
+            commandHealthCheck_();
             return true;
         }
         bool GetData(int face,int level,int x,int y,int w,int h,void* data,int dataLength) const override
         {
+            commandHealthCheck_();
             if(face<0||face>=6) return false;
-            blitTextureToClientBuffer(dev_, queue_, texture_, (NSUInteger)face, level, x, y, 0, w, h, 1, data, dataLength);
+            MetalTextureTransferLayout layout{};
+            if (!TryPrepareMetalTextureTransfer(
+                    size_,size_,1,levelCount_,level,x,y,0,w,h,1,data,dataLength,
+                    MetalTransferLengthRule::ExactlyTightBytes,
+                    MetalMacOsTextureBufferRowAlignment,layout)) return false;
+            blitTextureToClientBuffer(dev_,queue_,texture_,(NSUInteger)face,level,x,y,0,w,h,1,
+                                      layout,MetalTransferPixelOrder::Rgba,data,
+                                      commandHealthCheck_);
+            commandHealthCheck_();
             return true;
         }
         int GetSizeEXT() const noexcept override { return size_; }
         id<MTLTexture> native() const { return texture_; }
     private:
+        void reallocateAndUpdate(int face,int level,int x,int y,int w,int h,const void* data,
+                                 const MetalTextureTransferLayout& layout)
+        {
+            MetalObjectOwner replacementOwner(retainMetalObject,releaseMetalObject);
+            MTLTextureDescriptor* d=[MTLTextureDescriptor textureCubeDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm size:(NSUInteger)size_ mipmapped:mipMap_];
+            if(!d) throw std::runtime_error("Metal: failed to allocate replacement cube texture descriptor");
+            d.usage=MTLTextureUsageShaderRead;
+            replacementOwner.Adopt([dev_ newTextureWithDescriptor:d]);
+            if(!replacementOwner.HasValue()) throw std::runtime_error("Metal: failed to allocate replacement cube texture");
+            id<MTLTexture> replacement=(id<MTLTexture>)replacementOwner.Get();
+            MetalObjectOwner commandOwner(retainMetalObject,releaseMetalObject);
+            commandOwner.Reset([queue_ commandBuffer]);
+            if(!commandOwner.HasValue()) throw std::runtime_error("Metal: failed to allocate cube preservation command buffer");
+            id<MTLCommandBuffer> command=(id<MTLCommandBuffer>)commandOwner.Get();
+            id<MTLBlitCommandEncoder> blit=[command blitCommandEncoder];
+            if(!blit) throw std::runtime_error("Metal: failed to allocate cube preservation blit encoder");
+            for(int mip=0;mip<levelCount_;++mip){
+                const NSUInteger dimension=(NSUInteger)MetalTextureTransferDetail::MipDimension(size_,mip);
+                for(int slice=0;slice<6;++slice){
+                    const bool replacesWholeSubresource=slice==face&&mip==level&&x==0&&y==0&&
+                        (NSUInteger)w==dimension&&(NSUInteger)h==dimension;
+                    if(replacesWholeSubresource) continue;
+                    [blit copyFromTexture:texture_ sourceSlice:(NSUInteger)slice sourceLevel:(NSUInteger)mip
+                              sourceOrigin:MTLOriginMake(0,0,0) sourceSize:MTLSizeMake(dimension,dimension,1)
+                                 toTexture:replacement destinationSlice:(NSUInteger)slice destinationLevel:(NSUInteger)mip
+                        destinationOrigin:MTLOriginMake(0,0,0)];
+                }
+            }
+            [blit endEncoding]; [command commit]; [command waitUntilCompleted];
+            if(command.status!=MTLCommandBufferStatusCompleted) throw std::runtime_error("Metal: cube preservation blit failed");
+            commandHealthCheck_();
+            MTLRegion r=MTLRegionMake2D((NSUInteger)x,(NSUInteger)y,(NSUInteger)w,(NSUInteger)h);
+            [replacement replaceRegion:r mipmapLevel:(NSUInteger)level slice:(NSUInteger)face
+                             withBytes:data bytesPerRow:(NSUInteger)layout.tightRowBytes bytesPerImage:0];
+            [texture_ release];
+            texture_=(id<MTLTexture>)replacementOwner.ReleaseOwnership();
+        }
         id<MTLDevice> dev_=nil; id<MTLCommandQueue> queue_=nil;
-        int size_=0;
+        int size_=0; bool mipMap_=false; int levelCount_=1;
         id<MTLTexture> texture_=nil;
+        std::function<void()> commandHealthCheck_;
     };
 
     class MetalTexture3D final : public ITexture3DBackend
@@ -1039,25 +1168,37 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
         // Texture3D.cpp's real code always calls backend_->GetData() unconditionally, no CPU-side
         // shadow shortcut, so this was a real, previously-shipping gap for any Texture3D, not just
         // a render-target-only concern.
-        MetalTexture3D(id<MTLDevice> dev, id<MTLCommandQueue> queue, int w,int h,int depth,bool mipMap)
-            : dev_(dev), queue_(queue), w_(w), h_(h), depth_(depth)
+        MetalTexture3D(id<MTLDevice> dev, id<MTLCommandQueue> queue, int w,int h,int depth,bool mipMap,
+                       std::function<void()> commandHealthCheck)
+            : w_(w), h_(h), depth_(depth), levelCount_(MetalMipLevelCount(w,h,mipMap)),
+              commandHealthCheck_(std::move(commandHealthCheck))
         {
-            [dev_ retain]; [queue_ retain];
+            MetalObjectOwner deviceOwner(retainMetalObject,releaseMetalObject);
+            MetalObjectOwner queueOwner(retainMetalObject,releaseMetalObject);
+            MetalObjectOwner textureOwner(retainMetalObject,releaseMetalObject);
+            deviceOwner.Reset(dev); queueOwner.Reset(queue);
             MTLTextureDescriptor* d=[[MTLTextureDescriptor alloc] init];
+            if(!d) throw std::runtime_error("Metal: failed to allocate 3D texture descriptor");
             d.textureType=MTLTextureType3D; d.pixelFormat=MTLPixelFormatRGBA8Unorm;
             d.width=(NSUInteger)w; d.height=(NSUInteger)h; d.depth=(NSUInteger)depth;
-            NSUInteger levels=1;
-            if(mipMap){ int m=std::max({w,h,depth}); while(m>1){ m/=2; ++levels; } }
-            d.mipmapLevelCount=levels;
+            d.mipmapLevelCount=(NSUInteger)levelCount_;
             d.usage=MTLTextureUsageShaderRead;
-            texture_=[dev newTextureWithDescriptor:d]; [d release];
-            if(!texture_) throw std::runtime_error("Metal: failed to create 3D texture");
+            textureOwner.Adopt([dev newTextureWithDescriptor:d]); [d release];
+            if(!textureOwner.HasValue()) throw std::runtime_error("Metal: failed to create 3D texture");
+            dev_=(id<MTLDevice>)deviceOwner.ReleaseOwnership();
+            queue_=(id<MTLCommandQueue>)queueOwner.ReleaseOwnership();
+            texture_=(id<MTLTexture>)textureOwner.ReleaseOwnership();
         }
         ~MetalTexture3D() override { [texture_ release]; [queue_ release]; [dev_ release]; }
-        bool SetData(int level,int x,int y,int z,int w,int h,int depth,const void* data,int /*dataLength*/) override
+        bool SetData(int level,int x,int y,int z,int w,int h,int depth,const void* data,int dataLength) override
         {
-            MTLRegion r=MTLRegionMake3D((NSUInteger)x,(NSUInteger)y,(NSUInteger)z,(NSUInteger)w,(NSUInteger)h,(NSUInteger)depth);
-            [texture_ replaceRegion:r mipmapLevel:(NSUInteger)level slice:0 withBytes:data bytesPerRow:(NSUInteger)(w*4) bytesPerImage:(NSUInteger)(w*4*h)];
+            commandHealthCheck_();
+            MetalTextureTransferLayout layout{};
+            if(!TryPrepareMetalTextureTransfer(
+                    w_,h_,depth_,levelCount_,level,x,y,z,w,h,depth,data,dataLength,
+                    MetalTransferLengthRule::AtLeastTightBytes,1,layout)) return false;
+            reallocateAndUpdate(level,x,y,z,w,h,depth,data,layout);
+            commandHealthCheck_();
             return true;
         }
         // plan_metal.md METAL-125: real per-level readback via the shared blit helper -- slice is
@@ -1065,7 +1206,15 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
         // `z`/`depth` address the volume directly within slice 0).
         bool GetData(int level,int x,int y,int z,int w,int h,int depth,void* data,int dataLength) const override
         {
-            blitTextureToClientBuffer(dev_, queue_, texture_, 0, level, x, y, z, w, h, depth, data, dataLength);
+            commandHealthCheck_();
+            MetalTextureTransferLayout layout{};
+            if(!TryPrepareMetalTextureTransfer(
+                    w_,h_,depth_,levelCount_,level,x,y,z,w,h,depth,data,dataLength,
+                    MetalTransferLengthRule::ExactlyTightBytes,
+                    MetalMacOsTextureBufferRowAlignment,layout)) return false;
+            blitTextureToClientBuffer(dev_,queue_,texture_,0,level,x,y,z,w,h,depth,layout,
+                                      MetalTransferPixelOrder::Rgba,data,commandHealthCheck_);
+            commandHealthCheck_();
             return true;
         }
         void GetDimensionsEXT(int& width, int& height, int& depth) const noexcept override
@@ -1074,9 +1223,50 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
         }
         id<MTLTexture> native() const { return texture_; }
     private:
+        void reallocateAndUpdate(int level,int x,int y,int z,int w,int h,int depth,const void* data,
+                                 const MetalTextureTransferLayout& layout)
+        {
+            MetalObjectOwner replacementOwner(retainMetalObject,releaseMetalObject);
+            MTLTextureDescriptor* descriptor=[[MTLTextureDescriptor alloc] init];
+            if(!descriptor) throw std::runtime_error("Metal: failed to allocate replacement 3D texture descriptor");
+            descriptor.textureType=MTLTextureType3D; descriptor.pixelFormat=MTLPixelFormatRGBA8Unorm;
+            descriptor.width=(NSUInteger)w_; descriptor.height=(NSUInteger)h_; descriptor.depth=(NSUInteger)depth_;
+            descriptor.mipmapLevelCount=(NSUInteger)levelCount_; descriptor.usage=MTLTextureUsageShaderRead;
+            replacementOwner.Adopt([dev_ newTextureWithDescriptor:descriptor]); [descriptor release];
+            if(!replacementOwner.HasValue()) throw std::runtime_error("Metal: failed to allocate replacement 3D texture");
+            id<MTLTexture> replacement=(id<MTLTexture>)replacementOwner.Get();
+            MetalObjectOwner commandOwner(retainMetalObject,releaseMetalObject);
+            commandOwner.Reset([queue_ commandBuffer]);
+            if(!commandOwner.HasValue()) throw std::runtime_error("Metal: failed to allocate 3D preservation command buffer");
+            id<MTLCommandBuffer> command=(id<MTLCommandBuffer>)commandOwner.Get();
+            id<MTLBlitCommandEncoder> blit=[command blitCommandEncoder];
+            if(!blit) throw std::runtime_error("Metal: failed to allocate 3D preservation blit encoder");
+            for(int mip=0;mip<levelCount_;++mip){
+                const NSUInteger mw=(NSUInteger)MetalTextureTransferDetail::MipDimension(w_,mip);
+                const NSUInteger mh=(NSUInteger)MetalTextureTransferDetail::MipDimension(h_,mip);
+                const NSUInteger md=(NSUInteger)MetalTextureTransferDetail::MipDimension(depth_,mip);
+                const bool replacesWholeSubresource=mip==level&&x==0&&y==0&&z==0&&
+                    (NSUInteger)w==mw&&(NSUInteger)h==mh&&(NSUInteger)depth==md;
+                if(replacesWholeSubresource) continue;
+                [blit copyFromTexture:texture_ sourceSlice:0 sourceLevel:(NSUInteger)mip
+                          sourceOrigin:MTLOriginMake(0,0,0) sourceSize:MTLSizeMake(mw,mh,md)
+                             toTexture:replacement destinationSlice:0 destinationLevel:(NSUInteger)mip
+                    destinationOrigin:MTLOriginMake(0,0,0)];
+            }
+            [blit endEncoding]; [command commit]; [command waitUntilCompleted];
+            if(command.status!=MTLCommandBufferStatusCompleted) throw std::runtime_error("Metal: 3D preservation blit failed");
+            commandHealthCheck_();
+            MTLRegion region=MTLRegionMake3D((NSUInteger)x,(NSUInteger)y,(NSUInteger)z,
+                                             (NSUInteger)w,(NSUInteger)h,(NSUInteger)depth);
+            [replacement replaceRegion:region mipmapLevel:(NSUInteger)level slice:0 withBytes:data
+                           bytesPerRow:(NSUInteger)layout.tightRowBytes
+                         bytesPerImage:(NSUInteger)layout.tightImageBytes];
+            [texture_ release]; texture_=(id<MTLTexture>)replacementOwner.ReleaseOwnership();
+        }
         id<MTLDevice> dev_=nil; id<MTLCommandQueue> queue_=nil;
-        int w_=0, h_=0, depth_=0;
+        int w_=0, h_=0, depth_=0; int levelCount_=1;
         id<MTLTexture> texture_=nil;
+        std::function<void()> commandHealthCheck_;
     };
 
     class MetalVertexBuffer final : public IVertexBufferBackend
@@ -1085,9 +1275,13 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
         explicit MetalVertexBuffer(id<MTLDevice> dev, int cap) : dev_(dev), capacity_(cap) { [dev_ retain]; }
         ~MetalVertexBuffer() override { [buffer_ release]; [dev_ release]; }
         void SetData(const void* data,int count,std::size_t stride) override {
-            count_=count; stride_=stride; const NSUInteger bytes=(NSUInteger)count*stride;
-            [buffer_ release]; buffer_=[dev_ newBufferWithBytes:data length:bytes options:MTLResourceStorageModeShared];
-            if(!buffer_) throw std::runtime_error("Metal: failed to create vertex buffer");
+            std::size_t bytes=0;
+            if(!data||stride>static_cast<std::size_t>(std::numeric_limits<int>::max())||
+               !TryMetalBufferByteCount(count,stride,bytes))
+                throw std::invalid_argument("Metal: invalid vertex buffer upload");
+            id<MTLBuffer> replacement=[dev_ newBufferWithBytes:data length:(NSUInteger)bytes options:MTLResourceStorageModeShared];
+            if(!replacement) throw std::runtime_error("Metal: failed to create vertex buffer");
+            [buffer_ release]; buffer_=replacement; count_=count; stride_=stride;
         }
         int GetVertexCount() const override { return count_; }
         id<MTLBuffer> native() const { return buffer_; }
@@ -1095,23 +1289,17 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
         // plan_metal.md METAL-26: generic-layout hook (IVertexBufferBackend's own doc comment,
         // Task 1080) -- just stores the declaration, mirroring
         // EasyGLVertexBufferBackend::SetVertexDeclaration()'s own identical trivial-storage
-        // pattern exactly. No consumer reads this yet: the fixed-stride PipelineKind shaders
-        // (Phases 3-8) all pair with one of the 8 hand-written vertexDescriptorForStride() cases,
-        // and a genuinely arbitrary declaration has no matching MSL shader to draw with until
-        // Phase 14 (custom ShaderEffect) exists -- storing it now is still correct and safe
-        // (matches the interface contract, callable regardless of what reads it later), it just
-        // has no live effect on any draw today.
+        // pattern exactly. Every native draw route now validates this captured declaration against
+        // the canonical layout selected by its stock pipeline before submission; declarations not
+        // faithfully representable by that fixed pipeline are rejected deterministically.
         void SetVertexDeclaration(const VertexDeclaration& declaration) override
         {
-            declarationElements_ = declaration.GetVertexElements();
-            declarationStride_ = declaration.getVertexStrideProperty();
+            declaration_.Remember(declaration);
         }
-        const std::vector<VertexElement>& declarationElements() const { return declarationElements_; }
-        int declarationStride() const { return declarationStride_; }
+        const CNA::Internal::Graphics::DeclaredVertexLayout& declaration() const { return declaration_; }
     private:
         id<MTLDevice> dev_; id<MTLBuffer> buffer_=nil; int capacity_=0,count_=0; std::size_t stride_=0;
-        int declarationStride_=0;
-        std::vector<VertexElement> declarationElements_;
+        CNA::Internal::Graphics::DeclaredVertexLayout declaration_;
     };
 
     class MetalIndexBuffer final : public IIndexBufferBackend
@@ -1125,7 +1313,13 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
         bool IsThirtyTwoBit() const override{return is32_;}
         id<MTLBuffer> native() const{return buffer_;}
     private:
-        void upload(const void* d,int n,int sz,bool v32){is32_=v32;count_=n;[buffer_ release];buffer_=[dev_ newBufferWithBytes:d length:n*sz options:MTLResourceStorageModeShared];}
+        void upload(const void* d,int n,int sz,bool v32){
+            std::size_t bytes=0;
+            if(!d||!TryMetalBufferByteCount(n,(std::size_t)sz,bytes)) throw std::invalid_argument("Metal: invalid index buffer upload");
+            id<MTLBuffer> replacement=[dev_ newBufferWithBytes:d length:(NSUInteger)bytes options:MTLResourceStorageModeShared];
+            if(!replacement) throw std::runtime_error("Metal: failed to create index buffer");
+            [buffer_ release];buffer_=replacement;is32_=v32;count_=n;
+        }
         id<MTLDevice> dev_; id<MTLBuffer> buffer_=nil; bool is32_; int count_=0;
     };
 }
@@ -1185,6 +1379,7 @@ static void releaseMetalDrawable(id<CAMetalDrawable> value)
 static id<MTLTexture> makeMultisampleTexture(id<MTLDevice> dev, MTLPixelFormat fmt, NSUInteger w, NSUInteger h, NSUInteger samples, MTLTextureUsage usage)
 {
     MTLTextureDescriptor* d=[[MTLTextureDescriptor alloc] init];
+    if(!d) throw std::runtime_error("Metal: failed to allocate multisample texture descriptor");
     d.textureType=MTLTextureType2DMultisample; d.pixelFormat=fmt; d.width=w; d.height=h;
     d.sampleCount=samples; d.mipmapLevelCount=1; d.storageMode=MTLStorageModePrivate; d.usage=usage;
     id<MTLTexture> t=[dev newTextureWithDescriptor:d];
@@ -1212,6 +1407,9 @@ struct MetalGraphicsBackend::Impl
     id<MTLCommandBuffer> command=nil;
     id<MTLRenderCommandEncoder> encoder=nil;
     MetalRetainedResource<id<CAMetalDrawable>> drawable{retainMetalDrawable, releaseMetalDrawable};
+    std::shared_ptr<MetalCommandFailureLatch> commandFailureLatch=
+        std::make_shared<MetalCommandFailureLatch>();
+    MetalFrameAvailabilityState frameAvailability{};
     id<MTLTexture> depthTexture=nil;
     // plan_metal.md METAL-104/105: real backbuffer MSAA. `deviceSampleCount` is the real,
     // device-clamped sample count (1 = no MSAA) -- set at construction from
@@ -1232,10 +1430,9 @@ struct MetalGraphicsBackend::Impl
     int deviceSampleCount=1;
     int activeSampleCount=1;
     int virtualW=0,virtualH=0,presentationMode=0,swapInterval=1;
-    bool depthEnabled=true,depthWrite=true,blendEnabled=true,scissorEnabled=false;
+    bool depthEnabled=true,depthWrite=true;
     int refStencil=0;
-    MTLViewport viewport{0,0,1,1,0,1};
-    MTLScissorRect scissor{0,0,1,1};
+    MetalRasterState rasterState{};
     MTLCullMode cull=MTLCullModeNone;
     MTLTriangleFillMode fill=MTLTriangleFillModeFill;
     float depthBias=0,slopeBias=0;
@@ -1249,6 +1446,45 @@ struct MetalGraphicsBackend::Impl
     bool twoSidedStencil=false;
     int ccwStencilFunc=0, ccwStencilPass=0, ccwStencilFail=0, ccwStencilDepthFail=0;
     float blendColor[4]={1,1,1,1}; // BlendState.BlendFactor default == Color.White
+
+    struct DepthStateSnapshot
+    {
+        bool depthEnabled;
+        bool depthWrite;
+        int depthFunc;
+        bool stencilEnabled;
+        int stencilFunc;
+        int stencilPass;
+        int stencilFail;
+        int stencilDepthFail;
+        int stencilMask;
+        int stencilWriteMask;
+        bool twoSidedStencil;
+        int ccwStencilFunc;
+        int ccwStencilPass;
+        int ccwStencilFail;
+        int ccwStencilDepthFail;
+        int refStencil;
+    };
+
+    [[nodiscard]] DepthStateSnapshot captureDepthState() const noexcept
+    {
+        return {depthEnabled,depthWrite,depthFunc,stencilEnabled,stencilFunc,stencilPass,
+            stencilFail,stencilDepthFail,stencilMask,stencilWriteMask,twoSidedStencil,
+            ccwStencilFunc,ccwStencilPass,ccwStencilFail,ccwStencilDepthFail,refStencil};
+    }
+
+    void restoreDepthState(const DepthStateSnapshot& state) noexcept
+    {
+        depthEnabled=state.depthEnabled; depthWrite=state.depthWrite; depthFunc=state.depthFunc;
+        stencilEnabled=state.stencilEnabled; stencilFunc=state.stencilFunc;
+        stencilPass=state.stencilPass; stencilFail=state.stencilFail;
+        stencilDepthFail=state.stencilDepthFail; stencilMask=state.stencilMask;
+        stencilWriteMask=state.stencilWriteMask; twoSidedStencil=state.twoSidedStencil;
+        ccwStencilFunc=state.ccwStencilFunc; ccwStencilPass=state.ccwStencilPass;
+        ccwStencilFail=state.ccwStencilFail; ccwStencilDepthFail=state.ccwStencilDepthFail;
+        refStencil=state.refStencil;
+    }
 
     // plan_metal.md METAL-136/137: real occlusion queries via MTLVisibilityResultBuffer. This
     // buffer must be attached to the MTLRenderPassDescriptor at render-pass-creation time (Metal
@@ -1302,6 +1538,7 @@ struct MetalGraphicsBackend::Impl
     // normal map specifically.
     id<MTLTexture> defaultWhiteTexture=nil;
     id<MTLTexture> defaultFlatNormalTexture=nil;
+    id<MTLTexture> defaultWhiteCubeTexture=nil;
 
     // Re-applies every piece of encoder-scoped dynamic state this backend tracks. Metal has no
     // persistent-across-encoders state at all (unlike, say, retained GL context state) -- a fresh
@@ -1322,7 +1559,15 @@ struct MetalGraphicsBackend::Impl
         // been burned by before (see Vulkan's own front/back stencil swap, discovered the hard way).
         // Setting it explicitly here removes that risk permanently.
         [encoder setFrontFacingWinding:MTLWindingClockwise];
-        [encoder setViewport:viewport]; [encoder setCullMode:cull]; [encoder setTriangleFillMode:fill];
+        const MetalViewportState requestedViewport=rasterState.EffectiveViewport();
+        const MTLViewport nativeViewport={requestedViewport.x,requestedViewport.y,
+            requestedViewport.width,requestedViewport.height,
+            requestedViewport.minDepth,requestedViewport.maxDepth};
+        const MetalScissorState requestedScissor=rasterState.NativeScissor();
+        const MTLScissorRect nativeScissor={(NSUInteger)requestedScissor.x,(NSUInteger)requestedScissor.y,
+            (NSUInteger)requestedScissor.width,(NSUInteger)requestedScissor.height};
+        [encoder setViewport:nativeViewport]; [encoder setScissorRect:nativeScissor];
+        [encoder setCullMode:cull]; [encoder setTriangleFillMode:fill];
         [encoder setDepthBias:depthBias slopeScale:slopeBias clamp:0]; [encoder setDepthStencilState:depthState];
         [encoder setStencilReferenceValue:(uint32_t)refStencil];
         [encoder setBlendColorRed:blendColor[0] green:blendColor[1] blue:blendColor[2] alpha:blendColor[3]];
@@ -1341,12 +1586,9 @@ struct MetalGraphicsBackend::Impl
     // pipeline/render-pass format mismatch, not just a missed optimization.
     //
     // Returns false only for the backbuffer case where nextDrawable legitimately returns nil (e.g.
-    // a minimized/occluded window) -- returns a bool rather than throwing itself so each caller can
-    // keep its own pre-existing, DELIBERATELY different response to that failure: ensureFrame()
-    // already threw on it before this refactor, clear() already silently no-op'd on it before this
-    // refactor -- preserved exactly as each caller's own choice below, not unified into one
-    // behavior (which would have been a real, unintended regression for whichever caller didn't
-    // already do that).
+    // a minimized/background window). That failed acquisition is latched for the rest of the
+    // logical frame: Clear, draws, markers, and Present skip without throwing or retrying, while
+    // offscreen render-target work remains available. Present resets the latch for the next frame.
     // plan_metal.md METAL-109/110: sliceOut is always 0 except when a RenderTargetCube face is the
     // active target (MTLRenderPassColorAttachmentDescriptor.slice selects which cube face/array
     // layer of colorOut a render pass actually writes to; 0 is simply ignored/inert for a plain 2D
@@ -1401,6 +1643,11 @@ struct MetalGraphicsBackend::Impl
         const bool releaseDrawable = presentBackbuffer && drawable.HasValue();
         if (command) {
             if (releaseDrawable) [command presentDrawable:drawable.Get()];
+            auto failureLatch=commandFailureLatch;
+            [command addCompletedHandler:^(id<MTLCommandBuffer> completed) {
+                if (completed.status==MTLCommandBufferStatusError)
+                    failureLatch->RecordFailure();
+            }];
             [command commit];
             [command release]; command=nil;
         }
@@ -1411,88 +1658,174 @@ struct MetalGraphicsBackend::Impl
         if (releaseDrawable) drawable.Reset();
     }
 
-    void ensureFrame()
+    void abandonCommandState()
     {
-        if (encoder) return;
-        std::vector<id<MTLTexture>> colors, resolves; id<MTLTexture> depthTex=nil; NSUInteger slice=0; int sampleCount=1;
-        if (!resolveActiveColorAttachments(colors, resolves, depthTex, slice, sampleCount)) throw std::runtime_error("Metal: CAMetalLayer returned no drawable");
-        command=[queue commandBuffer]; [command retain];
-        MTLRenderPassDescriptor* rp=[MTLRenderPassDescriptor renderPassDescriptor];
-        // plan_metal.md METAL-112: loop bound is 1 outside MRT (colors.size()==1, identical to the
-        // original single-attachment code this replaced), up to Metal's own 8-attachment hardware
-        // limit during real SetRenderTargets() MRT.
-        //
-        // plan_metal.md METAL-104: a non-nil resolves[i] means colors[i] is this frame's
-        // multisampled render target -- StoreAndMultisampleResolve both keeps colors[i]'s own
-        // content (needed across this file's own mid-frame encoder boundaries, see
-        // msaaColorTexture's field comment) and resolves it into resolves[i] (the real drawable/
-        // RT's single-sample texture) every time this encoder ends.
-        for (NSUInteger i=0;i<colors.size();++i) {
-            rp.colorAttachments[i].texture=colors[i]; rp.colorAttachments[i].slice=slice;
-            rp.colorAttachments[i].loadAction=MTLLoadActionLoad;
-            if (resolves[i]) { rp.colorAttachments[i].resolveTexture=resolves[i]; rp.colorAttachments[i].storeAction=MTLStoreActionStoreAndMultisampleResolve; }
-            else { rp.colorAttachments[i].storeAction=MTLStoreActionStore; }
+        if(encoder){[encoder endEncoding];[encoder release];encoder=nil;}
+        if(command){[command release];command=nil;}
+        drawable.Reset();
+        activeColorAttachmentCount=1;
+        activeSampleCount=1;
+        frameAvailability.ResetAfterCommandFailure();
+    }
+
+    [[noreturn]] void abandonCommandStateAndThrow(const char* message)
+    {
+        abandonCommandState();
+        throw std::runtime_error(message);
+    }
+
+    void throwPendingCommandFailure()
+    {
+        if(!commandFailureLatch->ConsumeFailure()) return;
+        abandonCommandStateAndThrow("Metal: a previously submitted command buffer failed");
+    }
+
+    void finishActiveCommandSynchronously(const char* failureMessage)
+    {
+        // A failure already known before this operation belongs to an older submission. Surface it
+        // through the common abandonment diagnostic instead of mislabeling it as this mip/readback
+        // command's failure.
+        throwPendingCommandFailure();
+        if(!command) {
+            throwPendingCommandFailure();
+            return;
         }
-        rp.depthAttachment.texture=depthTex; rp.depthAttachment.loadAction=MTLLoadActionLoad; rp.depthAttachment.storeAction=MTLStoreActionStore;
-        rp.stencilAttachment.texture=depthTex; rp.stencilAttachment.loadAction=MTLLoadActionLoad; rp.stencilAttachment.storeAction=MTLStoreActionStore;
-        rp.visibilityResultBuffer=visibilityBuffer;
-        encoder=[command renderCommandEncoderWithDescriptor:rp]; [encoder retain];
-        const NSUInteger w=colors[0].width,h=colors[0].height;
-        viewport={0,0,(double)w,(double)h,0,1}; scissor={0,0,w,h};
-        activeColorAttachmentCount=(int)colors.size();
-        activeSampleCount=sampleCount;
-        applyTrackedEncoderState();
+        id<MTLCommandBuffer> submitted=command;
+        [submitted retain];
+        if(encoder){[encoder endEncoding];[encoder release];encoder=nil;}
+        [submitted commit];
+        [command release]; command=nil;
+        [submitted waitUntilCompleted];
+        const bool completed=submitted.status==MTLCommandBufferStatusCompleted;
+        [submitted release];
+        switch(DescribeMetalSynchronousCommandResult(
+            completed,commandFailureLatch->HasFailure()))
+        {
+            case MetalSynchronousCommandResult::ExactSubmissionFailed:
+                abandonCommandStateAndThrow(failureMessage);
+            case MetalSynchronousCommandResult::OlderSubmissionFailed:
+                // A separately committed older command can finish while this exact command is
+                // awaited. It remains an older asynchronous failure and gets the common diagnostic.
+                throwPendingCommandFailure();
+                break;
+            case MetalSynchronousCommandResult::Complete:
+                break;
+        }
+    }
+
+    bool ensureFrame()
+    {
+        throwPendingCommandFailure();
+        if (encoder) return true;
+        try {
+            std::vector<id<MTLTexture>> colors, resolves; id<MTLTexture> depthTex=nil; NSUInteger slice=0; int sampleCount=1;
+            if(DescribeMetalFrameEntryPolicy(resolveActiveColorAttachments(
+                   colors,resolves,depthTex,slice,sampleCount))==
+               MetalFrameEntryPolicy::SkipUnavailableBackbuffer)
+                return false;
+            command=[queue commandBuffer];
+            if(!command) throw std::runtime_error("Metal: failed to create render command buffer");
+            [command retain];
+            MTLRenderPassDescriptor* rp=[MTLRenderPassDescriptor renderPassDescriptor];
+            if(!rp) throw std::runtime_error("Metal: failed to allocate render-pass descriptor");
+            // plan_metal.md METAL-112: loop bound is 1 outside MRT (colors.size()==1, identical to the
+            // original single-attachment code this replaced), up to Metal's own 8-attachment hardware
+            // limit during real SetRenderTargets() MRT.
+            //
+            // plan_metal.md METAL-104: a non-nil resolves[i] means colors[i] is this frame's
+            // multisampled render target -- StoreAndMultisampleResolve both keeps colors[i]'s own
+            // content (needed across this file's own mid-frame encoder boundaries, see
+            // msaaColorTexture's field comment) and resolves it into resolves[i] (the real drawable/
+            // RT's single-sample texture) every time this encoder ends.
+            for (NSUInteger i=0;i<colors.size();++i) {
+                rp.colorAttachments[i].texture=colors[i]; rp.colorAttachments[i].slice=slice;
+                rp.colorAttachments[i].loadAction=MTLLoadActionLoad;
+                if (resolves[i]) { rp.colorAttachments[i].resolveTexture=resolves[i]; rp.colorAttachments[i].storeAction=MTLStoreActionStoreAndMultisampleResolve; }
+                else { rp.colorAttachments[i].storeAction=MTLStoreActionStore; }
+            }
+            rp.depthAttachment.texture=depthTex; rp.depthAttachment.loadAction=MTLLoadActionLoad; rp.depthAttachment.storeAction=MTLStoreActionStore;
+            rp.stencilAttachment.texture=depthTex; rp.stencilAttachment.loadAction=MTLLoadActionLoad; rp.stencilAttachment.storeAction=MTLStoreActionStore;
+            rp.visibilityResultBuffer=visibilityBuffer;
+            encoder=[command renderCommandEncoderWithDescriptor:rp];
+            if(!encoder) throw std::runtime_error("Metal: failed to create render command encoder");
+            [encoder retain];
+            const NSUInteger w=colors[0].width,h=colors[0].height;
+            rasterState.BeginEncoder((std::size_t)w,(std::size_t)h);
+            activeColorAttachmentCount=(int)colors.size();
+            activeSampleCount=sampleCount;
+            applyTrackedEncoderState();
+            return true;
+        } catch (...) {
+            // Allocation/attachment resolution failed before native submission. Drop every
+            // partially acquired frame object, including a retained drawable, without committing
+            // an incomplete command and preserve the original deterministic diagnostic.
+            abandonCommandState();
+            throw;
+        }
     }
 
     void endFrame()
     {
+        frameAvailability.EndLogicalFrame();
+        throwPendingCommandFailure();
         if(!command && !drawable.HasValue()) return;
-        // plan_metal.md: real bug found and fixed 2026-07-20, alongside ReadBackbuffer()'s own
-        // fix (see its note) -- ReadBackbuffer() deliberately commits and releases `command`
-        // (single-use, cannot be resumed) while keeping `drawable` alive so the frame it already
-        // rendered can still be presented normally. Without this, `command` being nil here would
-        // skip presenting entirely (leaving that frame never shown) and, worse, the NEXT frame's
-        // ensureFrame() would incorrectly reuse the same already-should-have-been-presented
-        // drawable instead of fetching a fresh one. Reacquire a fresh command buffer bound to that
-        // same drawable (ensureFrame()'s own existing `if (!drawable) ...nextDrawable` reuse logic
-        // already does the right thing here unmodified) so it can actually be presented below.
-        if(!command) ensureFrame();
+        // A non-presenting encoder boundary commits and releases its single-use command while
+        // deliberately retaining the frame's drawable. If no later backbuffer work created a new
+        // command, Present still needs one in order to encode presentation of that same drawable.
+        // ensureFrame() reuses the retained drawable without another nextDrawable attempt, then the
+        // sole presenting boundary below commits and releases it exactly once.
+        if(!command && !ensureFrame()) return;
         endActiveEncoding(true); // real end-of-frame -- the only call site allowed to present.
     }
 
     void clear(bool color,float r,float g,float b,float a,bool depth,float dv,bool stencil,int sv)
     {
+        throwPendingCommandFailure();
         endActiveEncoding(false); // mid-frame boundary only -- see endActiveEncoding()'s own METAL-180 note.
-        std::vector<id<MTLTexture>> colors, resolves; id<MTLTexture> depthTex=nil; NSUInteger slice=0; int sampleCount=1;
-        if (!resolveActiveColorAttachments(colors, resolves, depthTex, slice, sampleCount)) return;
-        command=[queue commandBuffer]; [command retain];
-        MTLRenderPassDescriptor* rp=[MTLRenderPassDescriptor renderPassDescriptor];
-        // plan_metal.md METAL-112: Clear()'s own real XNA contract clears every currently-bound
-        // render target to the same color -- matches GraphicsDevice.Clear(color)'s documented
-        // behavior regardless of how many targets SetRenderTargets() bound.
-        //
-        // plan_metal.md METAL-104: same StoreAndMultisampleResolve reasoning as ensureFrame() above.
-        for (NSUInteger i=0;i<colors.size();++i) {
-            rp.colorAttachments[i].texture=colors[i]; rp.colorAttachments[i].slice=slice; rp.colorAttachments[i].loadAction=color?MTLLoadActionClear:MTLLoadActionLoad; rp.colorAttachments[i].clearColor=MTLClearColorMake(r,g,b,a);
-            if (resolves[i]) { rp.colorAttachments[i].resolveTexture=resolves[i]; rp.colorAttachments[i].storeAction=MTLStoreActionStoreAndMultisampleResolve; }
-            else { rp.colorAttachments[i].storeAction=MTLStoreActionStore; }
+        try {
+            std::vector<id<MTLTexture>> colors, resolves; id<MTLTexture> depthTex=nil; NSUInteger slice=0; int sampleCount=1;
+            if (!resolveActiveColorAttachments(colors, resolves, depthTex, slice, sampleCount)) return;
+            command=[queue commandBuffer];
+            if(!command) throw std::runtime_error("Metal: failed to create clear command buffer");
+            [command retain];
+            MTLRenderPassDescriptor* rp=[MTLRenderPassDescriptor renderPassDescriptor];
+            if(!rp) throw std::runtime_error("Metal: failed to allocate clear render-pass descriptor");
+            // plan_metal.md METAL-112: Clear()'s own real XNA contract clears every currently-bound
+            // render target to the same color -- matches GraphicsDevice.Clear(color)'s documented
+            // behavior regardless of how many targets SetRenderTargets() bound.
+            //
+            // plan_metal.md METAL-104: same StoreAndMultisampleResolve reasoning as ensureFrame() above.
+            for (NSUInteger i=0;i<colors.size();++i) {
+                rp.colorAttachments[i].texture=colors[i]; rp.colorAttachments[i].slice=slice; rp.colorAttachments[i].loadAction=color?MTLLoadActionClear:MTLLoadActionLoad; rp.colorAttachments[i].clearColor=MTLClearColorMake(r,g,b,a);
+                if (resolves[i]) { rp.colorAttachments[i].resolveTexture=resolves[i]; rp.colorAttachments[i].storeAction=MTLStoreActionStoreAndMultisampleResolve; }
+                else { rp.colorAttachments[i].storeAction=MTLStoreActionStore; }
+            }
+            rp.depthAttachment.texture=depthTex; rp.depthAttachment.loadAction=depth?MTLLoadActionClear:MTLLoadActionLoad; rp.depthAttachment.storeAction=MTLStoreActionStore; rp.depthAttachment.clearDepth=dv;
+            rp.stencilAttachment.texture=depthTex; rp.stencilAttachment.loadAction=stencil?MTLLoadActionClear:MTLLoadActionLoad; rp.stencilAttachment.storeAction=MTLStoreActionStore; rp.stencilAttachment.clearStencil=sv;
+            rp.visibilityResultBuffer=visibilityBuffer;
+            encoder=[command renderCommandEncoderWithDescriptor:rp];
+            if(!encoder) throw std::runtime_error("Metal: failed to create clear render encoder");
+            [encoder retain];
+            const NSUInteger w=colors[0].width,h=colors[0].height;
+            rasterState.BeginEncoder((std::size_t)w,(std::size_t)h);
+            activeColorAttachmentCount=(int)colors.size();
+            activeSampleCount=sampleCount;
+            applyTrackedEncoderState();
+        } catch (...) {
+            abandonCommandState();
+            throw;
         }
-        rp.depthAttachment.texture=depthTex; rp.depthAttachment.loadAction=depth?MTLLoadActionClear:MTLLoadActionLoad; rp.depthAttachment.storeAction=MTLStoreActionStore; rp.depthAttachment.clearDepth=dv;
-        rp.stencilAttachment.texture=depthTex; rp.stencilAttachment.loadAction=stencil?MTLLoadActionClear:MTLLoadActionLoad; rp.stencilAttachment.storeAction=MTLStoreActionStore; rp.stencilAttachment.clearStencil=sv;
-        rp.visibilityResultBuffer=visibilityBuffer;
-        encoder=[command renderCommandEncoderWithDescriptor:rp]; [encoder retain];
-        const NSUInteger w=colors[0].width,h=colors[0].height;
-        viewport={0,0,(double)w,(double)h,0,1}; scissor={0,0,w,h};
-        activeColorAttachmentCount=(int)colors.size();
-        activeSampleCount=sampleCount;
-        applyTrackedEncoderState();
     }
 
     void rebuildDepthState()
     {
-        MTLDepthStencilDescriptor* d=[[MTLDepthStencilDescriptor alloc] init];
+        MetalObjectOwner descriptorOwner(retainMetalObject,releaseMetalObject);
+        descriptorOwner.Adopt([[MTLDepthStencilDescriptor alloc] init]);
+        if(!descriptorOwner.HasValue())
+            throw std::runtime_error("Metal: failed to allocate depth/stencil descriptor");
+        MTLDepthStencilDescriptor* d=(MTLDepthStencilDescriptor*)descriptorOwner.Get();
         d.depthCompareFunction = depthEnabled ? metalCompareFunction(depthFunc) : MTLCompareFunctionAlways;
-        d.depthWriteEnabled=depthWrite;
+        d.depthWriteEnabled=MetalEffectiveDepthWriteEnabled(depthEnabled,depthWrite);
         // plan_metal.md METAL-9/10: real front/back stencil test, replacing the previous
         // reference-value-only plumbing. Front face carries XNA's "normal" stencil fields; back
         // face carries the CounterClockwise fields when TwoSidedStencilMode is set, else mirrors
@@ -1506,7 +1839,11 @@ struct MetalGraphicsBackend::Impl
         // on real Metal hardware and must be treated as unproven until it is (plan_metal.md
         // Testing strategy tier 2/3).
         if (stencilEnabled) {
-            MTLStencilDescriptor* front=[[MTLStencilDescriptor alloc] init];
+            MetalObjectOwner frontOwner(retainMetalObject,releaseMetalObject);
+            frontOwner.Adopt([[MTLStencilDescriptor alloc] init]);
+            if(!frontOwner.HasValue())
+                throw std::runtime_error("Metal: failed to allocate front stencil descriptor");
+            MTLStencilDescriptor* front=(MTLStencilDescriptor*)frontOwner.Get();
             front.stencilCompareFunction = metalCompareFunction(stencilFunc);
             front.stencilFailureOperation = metalStencilOp(stencilFail);
             front.depthFailureOperation = metalStencilOp(stencilDepthFail);
@@ -1515,7 +1852,11 @@ struct MetalGraphicsBackend::Impl
             front.writeMask = (uint32_t)stencilWriteMask;
             d.frontFaceStencil = front;
             if (twoSidedStencil) {
-                MTLStencilDescriptor* back=[[MTLStencilDescriptor alloc] init];
+                MetalObjectOwner backOwner(retainMetalObject,releaseMetalObject);
+                backOwner.Adopt([[MTLStencilDescriptor alloc] init]);
+                if(!backOwner.HasValue())
+                    throw std::runtime_error("Metal: failed to allocate back stencil descriptor");
+                MTLStencilDescriptor* back=(MTLStencilDescriptor*)backOwner.Get();
                 back.stencilCompareFunction = metalCompareFunction(ccwStencilFunc);
                 back.stencilFailureOperation = metalStencilOp(ccwStencilFail);
                 back.depthFailureOperation = metalStencilOp(ccwStencilDepthFail);
@@ -1523,16 +1864,17 @@ struct MetalGraphicsBackend::Impl
                 back.readMask = (uint32_t)stencilMask;
                 back.writeMask = (uint32_t)stencilWriteMask;
                 d.backFaceStencil = back;
-                [back release];
             } else {
                 d.backFaceStencil = front;
             }
-            [front release];
         }
         // else: leave frontFaceStencil/backFaceStencil nil (MTLDepthStencilDescriptor's default),
         // which Metal treats as "stencil test always passes, no writes" -- correct for
         // DepthStencilState.StencilEnable=false.
-        id<MTLDepthStencilState> s=[device newDepthStencilStateWithDescriptor:d]; [d release]; [depthState release]; depthState=s;
+        MetalObjectOwner stateOwner(retainMetalObject,releaseMetalObject);
+        stateOwner.Adopt([device newDepthStencilStateWithDescriptor:d]);
+        if(!stateOwner.HasValue()) throw std::runtime_error("Metal: failed to create depth/stencil state");
+        [depthState release]; depthState=(id<MTLDepthStencilState>)stateOwner.ReleaseOwnership();
         if(encoder) [encoder setDepthStencilState:depthState];
     }
 
@@ -1578,9 +1920,11 @@ struct MetalGraphicsBackend::Impl
         // this was compiled for the first time ever on real Apple hardware -- Clang's own "type
         // argument 'MTLVertexDescriptor' must be a pointer (requires a '*')" error.
         MTLVertexDescriptor* vd = (kind==PipelineKind::Sprite2D) ? nil : vertexDescriptorForStride(stride);
-        id<MTLRenderPipelineState> pipe = makePipeline(device, library, vs, fs, vd, currentBlend, colorCount, sampleCountKey);
-        pipelineCache.emplace(key, pipe);
-        return pipe;
+        MetalObjectOwner pipelineOwner(retainMetalObject,releaseMetalObject);
+        pipelineOwner.Adopt(makePipeline(device, library, vs, fs, vd, currentBlend, colorCount,
+                                         sampleCountKey));
+        const auto inserted=EmplaceMetalOwnedResource(pipelineCache,key,pipelineOwner);
+        return inserted->second;
     }
 
     // Builds (or reuses) a cached MTLSamplerState for the given raw XNA TextureFilter/
@@ -1593,12 +1937,15 @@ struct MetalGraphicsBackend::Impl
         auto it=samplerCache.find(key);
         if(it!=samplerCache.end()) return it->second;
         MTLSamplerDescriptor* sd=[[MTLSamplerDescriptor alloc] init];
+        if(!sd) throw std::runtime_error("Metal: failed to allocate sampler descriptor");
         sd.minFilter=metalMinFilter(filter); sd.magFilter=metalMagFilter(filter); sd.mipFilter=metalMipFilter(filter);
         sd.sAddressMode=metalAddressMode(addressU); sd.tAddressMode=metalAddressMode(addressV);
         if(filter==2) sd.maxAnisotropy=aniso;
-        id<MTLSamplerState> s=[device newSamplerStateWithDescriptor:sd]; [sd release];
-        samplerCache.emplace(key,s);
-        return s;
+        MetalObjectOwner samplerOwner(retainMetalObject,releaseMetalObject);
+        samplerOwner.Adopt([device newSamplerStateWithDescriptor:sd]); [sd release];
+        if(!samplerOwner.HasValue()) throw std::runtime_error("Metal: failed to create sampler state");
+        const auto inserted=EmplaceMetalOwnedResource(samplerCache,key,samplerOwner);
+        return inserted->second;
     }
 
     // plan_metal.md Phase 15 (METAL-153/155/156/158/159): the shared letterbox/overscan/stretch/
@@ -1677,6 +2024,7 @@ MetalGraphicsBackend::Impl::~Impl()
     samplerCache.clear();
     for (auto& entry : pipelineCache) [entry.second release];
     pipelineCache.clear();
+    [defaultWhiteCubeTexture release]; defaultWhiteCubeTexture=nil;
     [defaultFlatNormalTexture release]; defaultFlatNormalTexture=nil;
     [defaultWhiteTexture release]; defaultWhiteTexture=nil;
     [visibilityBuffer release]; visibilityBuffer=nil;
@@ -1915,7 +2263,8 @@ public:
         // plan_metal.md Phase 10: nativeTextureFor() (not a bare MetalTexture dynamic_cast) so
         // drawing a previously-rendered-to RenderTarget2D as a sprite works, not just a plain Texture2D.
         id<MTLTexture> nativeTex=nativeTextureFor(&t); if(!nativeTex) throw std::runtime_error("Metal: foreign texture backend");
-        auto& p=b_.impl(); p.ensureFrame();
+        auto& p=b_.impl();
+        if(!p.ensureFrame()||p.rasterState.ShouldSkipDraw()) return;
         struct V{float x,y,u,v,r,g,b,a;}; V q[6];
         // plan_metal.md: real bug found and fixed 2026-07-20 -- Rectangle/Vector2 in this codebase
         // use plain public fields (X/Y/Width/Height), matching real XNA's own struct convention,
@@ -1985,7 +2334,7 @@ public:
     MetalOcclusionQueryBackend(MetalGraphicsBackend::Impl& owner, int slot) : owner_(owner), slot_(slot) {}
     void Begin() override
     {
-        owner_.ensureFrame();
+        if(!owner_.ensureFrame()) return;
         [owner_.encoder setVisibilityResultMode:MTLVisibilityResultModeCounting offset:(NSUInteger)(slot_*8)];
         completed_ = std::make_shared<std::atomic<bool>>(false);
         auto flag = completed_;
@@ -2016,12 +2365,11 @@ private:
 // GetData() overrides instead of four near-duplicate implementations (matching the task's own
 // "sharing one helper" framing). Uses an independent, freshly-created command buffer rather than
 // the frame's own in-flight one -- correct because callers are responsible for ensuring the source
-// texture's content is actually GPU-complete first (see each render-target GetData() override's
-// own "if still the active render target, end its encoding first" guard, mirroring
-// ReadBackbuffer()'s identical established reasoning; plain SetData()-populated textures have no
-// such concern since nothing ever renders into them) -- Metal command buffers on one queue execute
-// in submission order, so a blit submitted after the writes it depends on have already been
-// committed is guaranteed to see their result.
+// texture's content is actually GPU-complete first: an active render target synchronously verifies
+// its exact source-render command, while an already-committed source relies on same-queue ordering
+// plus the shared asynchronous failure latch. Plain SetData-populated textures have no render-source
+// command of their own. Metal command buffers on one queue execute in submission order, so the blit
+// sees every successfully completed write submitted before it.
 //
 // depth defaults to 1 (an ordinary 2D-region copy: RenderTarget2D, one RenderTargetCube/
 // TextureCube face, or one Texture3D Z-slice at a time is still just a 2D blit region with a fixed
@@ -2030,32 +2378,40 @@ private:
 // multi-image copy (depth>1); passing a non-zero-but-otherwise-correct value for a single-image
 // copy risks Metal's debug/validation layer flagging it as unused-but-invalid, so 0 is the
 // unambiguously safe choice here rather than reusing the same byte count as destinationBytesPerRow.
-static void blitTextureToClientBuffer(id<MTLDevice> device, id<MTLCommandQueue> queue, id<MTLTexture> src, NSUInteger slice, int level, int x, int y, int z, int w, int h, int depth, void* data, int dataLength)
+static void blitTextureToClientBuffer(id<MTLDevice> device, id<MTLCommandQueue> queue,
+                                      id<MTLTexture> src, NSUInteger slice, int level,
+                                      int x, int y, int z, int w, int h, int depth,
+                                      const MetalTextureTransferLayout& layout,
+                                      MetalTransferPixelOrder pixelOrder, void* data,
+                                      const std::function<void()>& commandHealthCheck)
 {
-    if (w<=0 || h<=0 || depth<=0) return;
-    const NSUInteger bytesPerRow=(NSUInteger)w*4;
-    const NSUInteger bytesPerImage=bytesPerRow*(NSUInteger)h;
-    const NSUInteger length=bytesPerImage*(NSUInteger)depth;
-    if ((int)length > dataLength) throw std::runtime_error("Metal: GetData buffer too small for the requested region");
-    id<MTLBuffer> staging=[device newBufferWithLength:length options:MTLResourceStorageModeShared];
-    if(!staging) throw std::runtime_error("Metal: GetData failed to allocate staging buffer");
-    // Explicitly retained/released like every other command buffer in this file (p.command's own
-    // convention), even though a purely local, synchronously-used-and-discarded command buffer would
-    // be safe unretained too (autorelease pools only drain at pool-scope boundaries, never mid-call)
-    // -- consistency over relying on that more subtle argument.
-    id<MTLCommandBuffer> cmd=[queue commandBuffer]; [cmd retain];
+    MetalObjectOwner stagingOwner(retainMetalObject,releaseMetalObject);
+    stagingOwner.Adopt([device newBufferWithLength:(NSUInteger)layout.stagingTotalBytes
+                                           options:MTLResourceStorageModeShared]);
+    if(!stagingOwner.HasValue()) throw std::runtime_error("Metal: GetData failed to allocate staging buffer");
+    id<MTLBuffer> staging=(id<MTLBuffer>)stagingOwner.Get();
+    MetalObjectOwner commandOwner(retainMetalObject,releaseMetalObject);
+    commandOwner.Reset([queue commandBuffer]);
+    if(!commandOwner.HasValue()) throw std::runtime_error("Metal: GetData failed to allocate command buffer");
+    id<MTLCommandBuffer> cmd=(id<MTLCommandBuffer>)commandOwner.Get();
     id<MTLBlitCommandEncoder> blit=[cmd blitCommandEncoder];
+    if(!blit) throw std::runtime_error("Metal: GetData failed to allocate blit encoder");
     [blit copyFromTexture:src sourceSlice:slice sourceLevel:(NSUInteger)level
               sourceOrigin:MTLOriginMake((NSUInteger)x,(NSUInteger)y,(NSUInteger)z)
                 sourceSize:MTLSizeMake((NSUInteger)w,(NSUInteger)h,(NSUInteger)depth)
                   toBuffer:staging destinationOffset:0
-    destinationBytesPerRow:bytesPerRow destinationBytesPerImage:(depth>1?bytesPerImage:0)];
+    destinationBytesPerRow:(NSUInteger)layout.alignedRowBytes
+  destinationBytesPerImage:(depth>1?(NSUInteger)layout.alignedImageBytes:0)];
     [blit endEncoding];
     [cmd commit];
     [cmd waitUntilCompleted]; // plan_metal.md METAL-133: same intentional correctness-over-throughput stall as ReadBackbuffer().
-    std::memcpy(data,[staging contents],length);
-    [staging release];
-    [cmd release];
+    if(cmd.status!=MTLCommandBufferStatusCompleted) throw std::runtime_error("Metal: GetData blit command failed");
+    commandHealthCheck();
+    const auto* stagingBytes=static_cast<const std::uint8_t*>([staging contents]);
+    if(!CopyMetalTextureReadbackToTightRgba(
+            stagingBytes,layout,w,h,depth,pixelOrder,static_cast<std::uint8_t*>(data),
+            layout.tightTotalBytes))
+        throw std::runtime_error("Metal: GetData staging layout conversion failed");
 }
 
 // RenderTarget2D backend. Mips are supported, while requested MSAA is clamped to zero and reported
@@ -2073,8 +2429,12 @@ public:
     // count 4 but its rendered edge was binary. The target therefore reports the applied value 0.
     MetalRenderTargetBackend(MetalGraphicsBackend::Impl& owner, int w, int h, bool mipMap, int /*requestedMultiSampleCount*/=0)
         : owner_(owner), w_(w), h_(h), mipMap_(mipMap),
-          appliedSampleCount_(0)
+          levelCount_(MetalMipLevelCount(w,h,mipMap)), appliedSampleCount_(0),
+          definedMipLevels_(levelCount_)
     {
+        MetalObjectOwner colorOwner(retainMetalObject,releaseMetalObject);
+        MetalObjectOwner msaaOwner(retainMetalObject,releaseMetalObject);
+        MetalObjectOwner depthOwner(retainMetalObject,releaseMetalObject);
         // plan_metal.md METAL-101: MUST be BGRA8Unorm, matching every pipeline's own hardcoded
         // colorAttachments[0].pixelFormat (makePipeline(), keyed to the backbuffer's own format) --
         // Metal requires a render pipeline's declared color-attachment pixel format to exactly
@@ -2090,9 +2450,10 @@ public:
         // the full mip chain (mipmapLevelCount = floor(log2(max(w,h)))+1) when requested, matching
         // MTLTextureDescriptor's own documented behavior for this factory method.
         MTLTextureDescriptor* cd=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatBGRA8Unorm width:(NSUInteger)w height:(NSUInteger)h mipmapped:mipMap];
+        if(!cd) throw std::runtime_error("Metal: failed to allocate RenderTarget2D color descriptor");
         cd.usage=MTLTextureUsageRenderTarget|MTLTextureUsageShaderRead;
-        colorTexture_=[owner_.device newTextureWithDescriptor:cd];
-        if(!colorTexture_) throw std::runtime_error("Metal: failed to create RenderTarget2D color texture");
+        colorOwner.Adopt([owner_.device newTextureWithDescriptor:cd]);
+        if(!colorOwner.HasValue()) throw std::runtime_error("Metal: failed to create RenderTarget2D color texture");
         // plan_metal.md METAL-104: engaging MSAA needs a SECOND color texture -- colorTexture_
         // above stays the single-sample, sampleable, GetData()-readable texture every existing
         // caller already expects (unaffected either way); msaaColorTexture_ is the real multisampled
@@ -2100,8 +2461,8 @@ public:
         // >0, resolved into colorTexture_ at every encoder boundary (see msaaColorTexture's own
         // field comment on Impl for why StoreAndMultisampleResolve, not plain MultisampleResolve).
         if (appliedSampleCount_ > 0) {
-            msaaColorTexture_=makeMultisampleTexture(owner_.device, MTLPixelFormatBGRA8Unorm, (NSUInteger)w, (NSUInteger)h, (NSUInteger)appliedSampleCount_, MTLTextureUsageRenderTarget);
-            if(!msaaColorTexture_) throw std::runtime_error("Metal: failed to create RenderTarget2D MSAA color texture");
+            msaaOwner.Adopt(makeMultisampleTexture(owner_.device, MTLPixelFormatBGRA8Unorm, (NSUInteger)w, (NSUInteger)h, (NSUInteger)appliedSampleCount_, MTLTextureUsageRenderTarget));
+            if(!msaaOwner.HasValue()) throw std::runtime_error("Metal: failed to create RenderTarget2D MSAA color texture");
         }
         // plan_metal.md METAL-104: the depth attachment's own sample count must match the color
         // attachment it's paired with in the same render pass -- a real Metal API constraint, not a
@@ -2110,13 +2471,17 @@ public:
         // VulkanRenderTargetBackend's own identical "depthView_ is never sampled externally" note),
         // so there is no separate depth-resolve concern to handle the way color has one.
         if (appliedSampleCount_ > 0) {
-            depthTexture_=makeMultisampleTexture(owner_.device, MTLPixelFormatDepth32Float_Stencil8, (NSUInteger)w, (NSUInteger)h, (NSUInteger)appliedSampleCount_, MTLTextureUsageRenderTarget);
+            depthOwner.Adopt(makeMultisampleTexture(owner_.device, MTLPixelFormatDepth32Float_Stencil8, (NSUInteger)w, (NSUInteger)h, (NSUInteger)appliedSampleCount_, MTLTextureUsageRenderTarget));
         } else {
             MTLTextureDescriptor* dd=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatDepth32Float_Stencil8 width:(NSUInteger)w height:(NSUInteger)h mipmapped:NO];
+            if(!dd) throw std::runtime_error("Metal: failed to allocate RenderTarget2D depth descriptor");
             dd.storageMode=MTLStorageModePrivate; dd.usage=MTLTextureUsageRenderTarget;
-            depthTexture_=[owner_.device newTextureWithDescriptor:dd];
+            depthOwner.Adopt([owner_.device newTextureWithDescriptor:dd]);
         }
-        if(!depthTexture_) throw std::runtime_error("Metal: failed to create RenderTarget2D depth texture");
+        if(!depthOwner.HasValue()) throw std::runtime_error("Metal: failed to create RenderTarget2D depth texture");
+        colorTexture_=(id<MTLTexture>)colorOwner.ReleaseOwnership();
+        msaaColorTexture_=(id<MTLTexture>)msaaOwner.ReleaseOwnership();
+        depthTexture_=(id<MTLTexture>)depthOwner.ReleaseOwnership();
     }
     ~MetalRenderTargetBackend() override
     {
@@ -2180,10 +2545,22 @@ public:
         // drawn/cleared this bind session owner_.command is still nil (ensureFrame() was
         // never called) -- create one just for the blit, mirroring ReadBackbuffer()'s own
         // precedent of using a small standalone command buffer for a one-off GPU operation.
-        if (!owner_.command) { owner_.command=[owner_.queue commandBuffer]; [owner_.command retain]; }
-        id<MTLBlitCommandEncoder> blit=[owner_.command blitCommandEncoder];
-        [blit generateMipmapsForTexture:colorTexture_];
-        [blit endEncoding];
+        try {
+            if (!owner_.command) {
+                owner_.command=[owner_.queue commandBuffer];
+                if(!owner_.command) throw std::runtime_error("Metal: failed to create mip-generation command buffer");
+                [owner_.command retain];
+            }
+            id<MTLBlitCommandEncoder> blit=[owner_.command blitCommandEncoder];
+            if(!blit) throw std::runtime_error("Metal: failed to create mip-generation blit encoder");
+            [blit generateMipmapsForTexture:colorTexture_];
+            [blit endEncoding];
+            owner_.finishActiveCommandSynchronously("Metal: RenderTarget2D mip generation failed");
+            definedMipLevels_.MarkGenerated();
+        } catch (...) {
+            owner_.endActiveEncoding(false);
+            throw;
+        }
     }
     void UnbindAsRenderTarget() override
     {
@@ -2192,16 +2569,56 @@ public:
             owner_.endActiveEncoding(false); owner_.currentRenderTarget=nullptr;
         }
     }
+    void UpdatePixels(const uint8_t* rgba,int stride) override
+    {
+        owner_.throwPendingCommandFailure();
+        if(!rgba||w_>std::numeric_limits<int>::max()/4||
+           stride!=static_cast<int>(static_cast<std::size_t>(w_)*4u))
+            throw std::invalid_argument("Metal: invalid RenderTarget2D level-zero upload");
+        MetalTextureTransferLayout layout{};
+        if(!TryBuildMetalTextureTransferLayout(w_,h_,1,1,layout))
+            throw std::invalid_argument("Metal: invalid RenderTarget2D level-zero upload size");
+        reallocateAndUploadRgba(0,rgba,w_,h_,layout);
+        owner_.throwPendingCommandFailure();
+    }
+    void UpdatePixelsLevel(int level,const uint8_t* rgba,int levelWidth,int levelHeight) override
+    {
+        owner_.throwPendingCommandFailure();
+        if(!rgba||level<0||level>=levelCount_||
+           levelWidth!=MetalTextureTransferDetail::MipDimension(w_,level)||
+           levelHeight!=MetalTextureTransferDetail::MipDimension(h_,level))
+            throw std::invalid_argument("Metal: invalid RenderTarget2D mip upload");
+        MetalTextureTransferLayout layout{};
+        if(!TryBuildMetalTextureTransferLayout(levelWidth,levelHeight,1,1,layout))
+            throw std::invalid_argument("Metal: invalid RenderTarget2D mip upload size");
+        reallocateAndUploadRgba(level,rgba,levelWidth,levelHeight,layout);
+        owner_.throwPendingCommandFailure();
+    }
+    bool HasDefinedMipLevel(int level) const noexcept override
+    {
+        return definedMipLevels_.IsDefined(level);
+    }
     // plan_metal.md METAL-131: real readback via the shared blit helper, replacing ITextureBackend's
     // inherited no-op default. If this target is still the currently active render target, its
-    // pending command buffer is forced to actually execute first -- same reasoning as
-    // ReadBackbuffer()'s own established "end the current encoder before blitting" pattern (a fresh,
-    // independent command buffer's blit could otherwise run before the still-uncommitted render pass
-    // that wrote this content, reading stale/undefined data instead of what was just rendered).
+    // pending source-render command is committed, awaited, and checked exactly before the later
+    // independent blit. Otherwise the blit could run before a still-uncommitted render pass, or a
+    // failed source command could be mistaken for successful current pixels.
     bool GetData(int level,int x,int y,int w,int h,void* data,int dataLength) const override
     {
-        if (owner_.currentRenderTarget==this) owner_.endActiveEncoding(false);
-        blitTextureToClientBuffer(owner_.device, owner_.queue, colorTexture_, 0, level, x, y, 0, w, h, 1, data, dataLength);
+        owner_.throwPendingCommandFailure();
+        MetalTextureTransferLayout layout{};
+        if(!TryPrepareMetalTextureTransfer(
+                w_,h_,1,levelCount_,level,x,y,0,w,h,1,data,dataLength,
+                MetalTransferLengthRule::ExactlyTightBytes,
+                MetalMacOsTextureBufferRowAlignment,layout)) return false;
+        if (DescribeMetalReadbackSourcePolicy(owner_.currentRenderTarget==this)==
+            MetalReadbackSourcePolicy::SynchronizeActiveSource)
+            owner_.finishActiveCommandSynchronously(
+                "Metal: RenderTarget2D source render command failed before readback");
+        blitTextureToClientBuffer(owner_.device,owner_.queue,colorTexture_,0,level,x,y,0,w,h,1,
+                                  layout,MetalTransferPixelOrder::Bgra,data,
+                                  [this] { owner_.throwPendingCommandFailure(); });
+        owner_.throwPendingCommandFailure();
         return true;
     }
     // plan_metal.md METAL-104: colorTexture() is UNCHANGED -- still always the single-sample,
@@ -2218,10 +2635,53 @@ public:
     id<MTLTexture> resolveTargetForRenderPass() const { return msaaColorTexture_ ? colorTexture_ : nil; }
     id<MTLTexture> depthTextureNative() const { return depthTexture_; }
 private:
+    void reallocateAndUploadRgba(int targetLevel,const uint8_t* rgba,int levelWidth,int levelHeight,
+                                 const MetalTextureTransferLayout& layout)
+    {
+        if(owner_.currentRenderTarget==this) owner_.endActiveEncoding(false);
+        MetalObjectOwner replacementOwner(retainMetalObject,releaseMetalObject);
+        MTLTextureDescriptor* descriptor=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatBGRA8Unorm
+            width:(NSUInteger)w_ height:(NSUInteger)h_ mipmapped:mipMap_];
+        if(!descriptor) throw std::runtime_error("Metal: failed to allocate replacement RenderTarget2D descriptor");
+        descriptor.usage=MTLTextureUsageRenderTarget|MTLTextureUsageShaderRead;
+        replacementOwner.Adopt([owner_.device newTextureWithDescriptor:descriptor]);
+        if(!replacementOwner.HasValue()) throw std::runtime_error("Metal: failed to allocate replacement RenderTarget2D texture");
+        id<MTLTexture> replacement=(id<MTLTexture>)replacementOwner.Get();
+        if(levelCount_>1){
+            MetalObjectOwner commandOwner(retainMetalObject,releaseMetalObject);
+            commandOwner.Reset([owner_.queue commandBuffer]);
+            if(!commandOwner.HasValue()) throw std::runtime_error("Metal: failed to create RenderTarget2D preservation command buffer");
+            id<MTLCommandBuffer> command=(id<MTLCommandBuffer>)commandOwner.Get();
+            id<MTLBlitCommandEncoder> blit=[command blitCommandEncoder];
+            if(!blit) throw std::runtime_error("Metal: failed to create RenderTarget2D preservation blit encoder");
+            for(int level=0;level<levelCount_;++level){
+                if(level==targetLevel) continue;
+                const NSUInteger width=(NSUInteger)MetalTextureTransferDetail::MipDimension(w_,level);
+                const NSUInteger height=(NSUInteger)MetalTextureTransferDetail::MipDimension(h_,level);
+                [blit copyFromTexture:colorTexture_ sourceSlice:0 sourceLevel:(NSUInteger)level
+                          sourceOrigin:MTLOriginMake(0,0,0) sourceSize:MTLSizeMake(width,height,1)
+                             toTexture:replacement destinationSlice:0 destinationLevel:(NSUInteger)level
+                    destinationOrigin:MTLOriginMake(0,0,0)];
+            }
+            [blit endEncoding];[command commit];[command waitUntilCompleted];
+            if(command.status!=MTLCommandBufferStatusCompleted) throw std::runtime_error("Metal: RenderTarget2D preservation blit failed");
+            owner_.throwPendingCommandFailure();
+        }
+        std::vector<std::uint8_t> bgra(layout.tightTotalBytes);
+        if(!CopyMetalTightRgbaToTextureBytes(rgba,layout,MetalTransferPixelOrder::Bgra,bgra.data(),bgra.size()))
+            throw std::runtime_error("Metal: RenderTarget2D upload conversion failed");
+        [replacement replaceRegion:MTLRegionMake2D(0,0,(NSUInteger)levelWidth,(NSUInteger)levelHeight)
+                      mipmapLevel:(NSUInteger)targetLevel withBytes:bgra.data()
+                      bytesPerRow:(NSUInteger)layout.tightRowBytes];
+        [colorTexture_ release];colorTexture_=(id<MTLTexture>)replacementOwner.ReleaseOwnership();
+        definedMipLevels_.MarkUploaded(targetLevel);
+    }
     MetalGraphicsBackend::Impl& owner_;
     int w_, h_;
     bool mipMap_;
+    int levelCount_=1;
     int appliedSampleCount_=0;
+    MetalMipDefinitionState definedMipLevels_;
     id<MTLTexture> colorTexture_=nil;
     id<MTLTexture> msaaColorTexture_=nil;
     id<MTLTexture> depthTexture_=nil;
@@ -2240,16 +2700,24 @@ private:
 class MetalRenderTargetCubeBackend final : public IRenderTargetCubeBackend
 {
 public:
-    MetalRenderTargetCubeBackend(MetalGraphicsBackend::Impl& owner, int size, bool mipMap) : owner_(owner), size_(size), mipMap_(mipMap)
+    MetalRenderTargetCubeBackend(MetalGraphicsBackend::Impl& owner, int size, bool mipMap)
+        : owner_(owner), size_(size), mipMap_(mipMap),
+          levelCount_(MetalMipLevelCount(size,size,mipMap))
     {
+        MetalObjectOwner colorOwner(retainMetalObject,releaseMetalObject);
+        MetalObjectOwner depthOwner(retainMetalObject,releaseMetalObject);
         MTLTextureDescriptor* cd=[MTLTextureDescriptor textureCubeDescriptorWithPixelFormat:MTLPixelFormatBGRA8Unorm size:(NSUInteger)size mipmapped:mipMap];
+        if(!cd) throw std::runtime_error("Metal: failed to allocate RenderTargetCube color descriptor");
         cd.usage=MTLTextureUsageRenderTarget|MTLTextureUsageShaderRead;
-        colorTexture_=[owner_.device newTextureWithDescriptor:cd];
-        if(!colorTexture_) throw std::runtime_error("Metal: failed to create RenderTargetCube color texture");
+        colorOwner.Adopt([owner_.device newTextureWithDescriptor:cd]);
+        if(!colorOwner.HasValue()) throw std::runtime_error("Metal: failed to create RenderTargetCube color texture");
         MTLTextureDescriptor* dd=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatDepth32Float_Stencil8 width:(NSUInteger)size height:(NSUInteger)size mipmapped:NO];
+        if(!dd) throw std::runtime_error("Metal: failed to allocate RenderTargetCube depth descriptor");
         dd.storageMode=MTLStorageModePrivate; dd.usage=MTLTextureUsageRenderTarget;
-        depthTexture_=[owner_.device newTextureWithDescriptor:dd];
-        if(!depthTexture_) throw std::runtime_error("Metal: failed to create RenderTargetCube depth texture");
+        depthOwner.Adopt([owner_.device newTextureWithDescriptor:dd]);
+        if(!depthOwner.HasValue()) throw std::runtime_error("Metal: failed to create RenderTargetCube depth texture");
+        colorTexture_=(id<MTLTexture>)colorOwner.ReleaseOwnership();
+        depthTexture_=(id<MTLTexture>)depthOwner.ReleaseOwnership();
     }
     ~MetalRenderTargetCubeBackend() override
     {
@@ -2280,24 +2748,54 @@ public:
             // call over the whole cube map, not a separate call per face).
             if (mipMap_) {
                 if (owner_.encoder) { [owner_.encoder endEncoding]; [owner_.encoder release]; owner_.encoder=nil; }
-                if (!owner_.command) { owner_.command=[owner_.queue commandBuffer]; [owner_.command retain]; }
-                id<MTLBlitCommandEncoder> blit=[owner_.command blitCommandEncoder];
-                [blit generateMipmapsForTexture:colorTexture_];
-                [blit endEncoding];
+                try {
+                    if (!owner_.command) {
+                        owner_.command=[owner_.queue commandBuffer];
+                        if(!owner_.command) throw std::runtime_error("Metal: failed to create cube mip-generation command buffer");
+                        [owner_.command retain];
+                    }
+                    id<MTLBlitCommandEncoder> blit=[owner_.command blitCommandEncoder];
+                    if(!blit) throw std::runtime_error("Metal: failed to create cube mip-generation blit encoder");
+                    [blit generateMipmapsForTexture:colorTexture_];
+                    [blit endEncoding];
+                    owner_.finishActiveCommandSynchronously("Metal: RenderTargetCube mip generation failed");
+                } catch (...) {
+                    owner_.endActiveEncoding(false);
+                    throw;
+                }
             }
             owner_.endActiveEncoding(false);
             owner_.currentRenderTargetCube=nullptr;
         }
     }
-    // plan_metal.md METAL-131 (cube analog): same shared-helper readback and same "flush pending
-    // encoding first if still active" guard as MetalRenderTargetBackend::GetData() -- checked
-    // against currentRenderTargetCube==this regardless of which face, since every face shares the
-    // same underlying MTLTexture object and command-buffer ordering concern.
+    bool SetData(int face,int level,int x,int y,int w,int h,
+                 const void* data,int dataLength) override
+    {
+        (void)face; (void)level; (void)x; (void)y; (void)w; (void)h;
+        (void)data; (void)dataLength;
+        return MetalRenderTargetCubeUploadSupported();
+    }
+    // plan_metal.md METAL-131 (cube analog): same shared-helper readback and exact source-command
+    // verification as MetalRenderTargetBackend::GetData() -- checked against
+    // currentRenderTargetCube==this regardless of which face, since every face shares the same
+    // underlying MTLTexture object and command-buffer ordering concern.
     bool GetData(int face,int level,int x,int y,int w,int h,void* data,int dataLength) const override
     {
+        owner_.throwPendingCommandFailure();
         if (face<0||face>=6) return false;
-        if (owner_.currentRenderTargetCube==this) owner_.endActiveEncoding(false);
-        blitTextureToClientBuffer(owner_.device, owner_.queue, colorTexture_, (NSUInteger)face, level, x, y, 0, w, h, 1, data, dataLength);
+        MetalTextureTransferLayout layout{};
+        if(!TryPrepareMetalTextureTransfer(
+                size_,size_,1,levelCount_,level,x,y,0,w,h,1,data,dataLength,
+                MetalTransferLengthRule::ExactlyTightBytes,
+                MetalMacOsTextureBufferRowAlignment,layout)) return false;
+        if (DescribeMetalReadbackSourcePolicy(owner_.currentRenderTargetCube==this)==
+            MetalReadbackSourcePolicy::SynchronizeActiveSource)
+            owner_.finishActiveCommandSynchronously(
+                "Metal: RenderTargetCube source render command failed before readback");
+        blitTextureToClientBuffer(owner_.device,owner_.queue,colorTexture_,(NSUInteger)face,level,
+                                  x,y,0,w,h,1,layout,MetalTransferPixelOrder::Bgra,data,
+                                  [this] { owner_.throwPendingCommandFailure(); });
+        owner_.throwPendingCommandFailure();
         return true;
     }
     id<MTLTexture> colorTexture() const { return colorTexture_; }
@@ -2306,6 +2804,7 @@ private:
     MetalGraphicsBackend::Impl& owner_;
     int size_;
     bool mipMap_;
+    int levelCount_=1;
     id<MTLTexture> colorTexture_=nil;
     id<MTLTexture> depthTexture_=nil;
 };
@@ -2332,7 +2831,11 @@ bool MetalGraphicsBackend::Impl::resolveActiveAttachments(id<MTLTexture>& colorO
         sliceOut = currentRenderTargetCubeFace;
         return true;
     }
-    if (!drawable.HasValue()) drawable.Reset([layer nextDrawable]);
+    if(!drawable.HasValue()){
+        if(!frameAvailability.ShouldAttemptBackbufferAcquisition()) return false;
+        drawable.Reset([layer nextDrawable]);
+        frameAvailability.RecordBackbufferAcquisition(drawable.HasValue());
+    }
     if (!drawable.HasValue()) return false;
     const id<CAMetalDrawable> activeDrawable=drawable.Get();
     const NSUInteger w=activeDrawable.texture.width, h=activeDrawable.texture.height;
@@ -2340,8 +2843,11 @@ bool MetalGraphicsBackend::Impl::resolveActiveAttachments(id<MTLTexture>& colorO
     // a width/height change exactly like depthTexture below already was, just for a second texture.
     if (deviceSampleCount > 1) {
         if (!msaaColorTexture || msaaColorTexture.width!=w || msaaColorTexture.height!=h) {
-            [msaaColorTexture release];
-            msaaColorTexture = makeMultisampleTexture(device, MTLPixelFormatBGRA8Unorm, w, h, (NSUInteger)deviceSampleCount, MTLTextureUsageRenderTarget);
+            id<MTLTexture> replacement=makeMultisampleTexture(
+                device,MTLPixelFormatBGRA8Unorm,w,h,(NSUInteger)deviceSampleCount,
+                MTLTextureUsageRenderTarget);
+            if(!replacement) throw std::runtime_error("Metal: failed to allocate backbuffer MSAA texture");
+            [msaaColorTexture release]; msaaColorTexture=replacement;
         }
         colorOut = msaaColorTexture;
         resolveOut = activeDrawable.texture;
@@ -2350,17 +2856,21 @@ bool MetalGraphicsBackend::Impl::resolveActiveAttachments(id<MTLTexture>& colorO
         colorOut = activeDrawable.texture;
     }
     if(!depthTexture || depthTexture.width!=w || depthTexture.height!=h){
-        [depthTexture release];
+        id<MTLTexture> replacement=nil;
         // plan_metal.md METAL-104: same "depth sample count must match its paired color attachment"
         // constraint MetalRenderTargetBackend's own constructor comment documents, applied to the
         // backbuffer's own depth texture.
         if (deviceSampleCount > 1) {
-            depthTexture = makeMultisampleTexture(device, MTLPixelFormatDepth32Float_Stencil8, w, h, (NSUInteger)deviceSampleCount, MTLTextureUsageRenderTarget);
+            replacement=makeMultisampleTexture(device,MTLPixelFormatDepth32Float_Stencil8,w,h,
+                (NSUInteger)deviceSampleCount,MTLTextureUsageRenderTarget);
         } else {
             MTLTextureDescriptor* dd=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatDepth32Float_Stencil8 width:w height:h mipmapped:NO];
+            if(!dd) throw std::runtime_error("Metal: failed to allocate backbuffer depth descriptor");
             dd.storageMode=MTLStorageModePrivate; dd.usage=MTLTextureUsageRenderTarget;
-            depthTexture=[device newTextureWithDescriptor:dd];
+            replacement=[device newTextureWithDescriptor:dd];
         }
+        if(!replacement) throw std::runtime_error("Metal: failed to allocate backbuffer depth texture");
+        [depthTexture release]; depthTexture=replacement;
     }
     depthOut = depthTexture;
     return true;
@@ -2465,6 +2975,51 @@ static id<MTLTexture> nativeCubeTextureFor(const ITextureCubeBackend* t)
     return nil;
 }
 
+static id<MTLTexture> resolveMetal2DTextureBinding(
+    MetalGraphicsBackend::Impl& owner,
+    const ITextureBackend* captured,
+    MetalStockTextureSlot slot)
+{
+    const id<MTLTexture> native=nativeTextureFor(captured);
+    switch(DescribeMetalStockTextureBinding(slot,captured!=nullptr,native!=nil))
+    {
+        case MetalTextureBindingDecision::BindNative:
+            return native;
+        case MetalTextureBindingDecision::BindNeutralFallback:
+        {
+            id<MTLTexture> fallback=MetalNeutralTextureForSlot(slot)==MetalNeutralTextureKind::FlatNormal2D
+                ? owner.defaultFlatNormalTexture : owner.defaultWhiteTexture;
+            if(!fallback) throw std::runtime_error("Metal: required neutral 2D texture is unavailable");
+            return fallback;
+        }
+        case MetalTextureBindingDecision::Reject:
+            throw System::NotSupportedException(
+                "Metal: a stock draw captured a non-Metal 2D texture backend.");
+    }
+    throw std::runtime_error("Metal: invalid stock 2D texture binding decision");
+}
+
+static id<MTLTexture> resolveMetalCubeTextureBinding(
+    MetalGraphicsBackend::Impl& owner,
+    const ITextureCubeBackend* captured,
+    MetalStockTextureSlot slot)
+{
+    const id<MTLTexture> native=nativeCubeTextureFor(captured);
+    switch(DescribeMetalStockTextureBinding(slot,captured!=nullptr,native!=nil))
+    {
+        case MetalTextureBindingDecision::BindNative:
+            return native;
+        case MetalTextureBindingDecision::BindNeutralFallback:
+            if(!owner.defaultWhiteCubeTexture)
+                throw std::runtime_error("Metal: required neutral cube texture is unavailable");
+            return owner.defaultWhiteCubeTexture;
+        case MetalTextureBindingDecision::Reject:
+            throw System::NotSupportedException(
+                "Metal: a stock draw captured a non-Metal cube texture backend.");
+    }
+    throw std::runtime_error("Metal: invalid stock cube texture binding decision");
+}
+
 MetalGraphicsBackend::MetalGraphicsBackend(const GraphicsBackendCreateArgs& args):impl_(std::make_unique<Impl>())
 {
     auto& p=*impl_; p.window=args.window; p.virtualW=args.virtualWidth; p.virtualH=args.virtualHeight; p.swapInterval=args.swapInterval;
@@ -2503,22 +3058,37 @@ MetalGraphicsBackend::MetalGraphicsBackend(const GraphicsBackendCreateArgs& args
     if(!p.library) throw std::runtime_error(std::string("Metal shader compile failed: ")+([[err localizedDescription] UTF8String]?:"unknown"));
     // plan_metal.md METAL-23: pipelines are no longer built eagerly here -- getOrCreatePipeline()
     // lazily builds+caches each (PipelineKind, BlendKey) combination on first use instead.
-    MTLSamplerDescriptor* sd=[[MTLSamplerDescriptor alloc]init];sd.minFilter=MTLSamplerMinMagFilterLinear;sd.magFilter=MTLSamplerMinMagFilterLinear;sd.sAddressMode=MTLSamplerAddressModeClampToEdge;sd.tAddressMode=MTLSamplerAddressModeClampToEdge;p.sampler=[p.device newSamplerStateWithDescriptor:sd];[sd release];
-    // plan_metal.md METAL-136: visibility-result buffer for real occlusion queries, attached to
-    // every render pass from here on (must exist at render-pass-creation time, see its own field
-    // comment on Impl).
-    p.visibilityBuffer=[p.device newBufferWithLength:(NSUInteger)(MetalGraphicsBackend::Impl::kMaxOcclusionQuerySlots*8) options:MTLResourceStorageModeShared];
+    MTLSamplerDescriptor* sd=[[MTLSamplerDescriptor alloc]init];
+    if(!sd) throw std::runtime_error("Metal: failed to allocate default sampler descriptor");
+    sd.minFilter=MTLSamplerMinMagFilterLinear;sd.magFilter=MTLSamplerMinMagFilterLinear;
+    sd.sAddressMode=MTLSamplerAddressModeClampToEdge;sd.tAddressMode=MTLSamplerAddressModeClampToEdge;
+    p.sampler=[p.device newSamplerStateWithDescriptor:sd];[sd release];
+    if(!p.sampler) throw std::runtime_error("Metal: failed to create default sampler state");
+    // METAL-266: occlusion queries remain dormant and capability-false, so no visibility buffer
+    // is allocated or attached as supported state.
+    p.visibilityBuffer=nil;
     // plan_metal.md METAL-87: PbrEffect's 4 optional-map fallback textures (see Impl's own field
     // comment for why these exact 2 colors).
     {
         MTLTextureDescriptor* td=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm width:1 height:1 mipmapped:NO];
+        if(!td) throw std::runtime_error("Metal: failed to allocate neutral 2D texture descriptor");
         td.usage=MTLTextureUsageShaderRead;
         p.defaultWhiteTexture=[p.device newTextureWithDescriptor:td];
+        if(!p.defaultWhiteTexture) throw std::runtime_error("Metal: failed to create neutral white texture");
         const uint8_t white[4]={255,255,255,255};
         [p.defaultWhiteTexture replaceRegion:MTLRegionMake2D(0,0,1,1) mipmapLevel:0 withBytes:white bytesPerRow:4];
         p.defaultFlatNormalTexture=[p.device newTextureWithDescriptor:td];
+        if(!p.defaultFlatNormalTexture) throw std::runtime_error("Metal: failed to create neutral flat-normal texture");
         const uint8_t flatNormal[4]={128,128,255,255};
         [p.defaultFlatNormalTexture replaceRegion:MTLRegionMake2D(0,0,1,1) mipmapLevel:0 withBytes:flatNormal bytesPerRow:4];
+        MTLTextureDescriptor* cubeDescriptor=[MTLTextureDescriptor textureCubeDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm size:1 mipmapped:NO];
+        if(!cubeDescriptor) throw std::runtime_error("Metal: failed to allocate neutral cube texture descriptor");
+        cubeDescriptor.usage=MTLTextureUsageShaderRead;
+        p.defaultWhiteCubeTexture=[p.device newTextureWithDescriptor:cubeDescriptor];
+        if(!p.defaultWhiteCubeTexture) throw std::runtime_error("Metal: failed to create neutral white cube texture");
+        for(NSUInteger face=0;face<6;++face)
+            [p.defaultWhiteCubeTexture replaceRegion:MTLRegionMake2D(0,0,1,1) mipmapLevel:0
+                slice:face withBytes:white bytesPerRow:4 bytesPerImage:0];
     }
     p.rebuildDepthState();
 }
@@ -2573,18 +3143,37 @@ bool MetalGraphicsBackend::TransformLogicalToWindow(float logX,float logY,float&
 // operation until a replacement has adapted build and pixel proof instead of returning wrong data.
 void MetalGraphicsBackend::ReadBackbuffer(int x,int y,int w,int h,uint8_t* pixels)
 {
+    impl_->throwPendingCommandFailure();
     (void)x; (void)y; (void)w; (void)h; (void)pixels;
     throw System::NotSupportedException(
         "GraphicsDevice::GetBackBufferData: Metal backbuffer readback is disabled because the "
         "historical macOS test run returned clear-color-only data after real draws.");
 }
 SDL_Window* MetalGraphicsBackend::GetWindowInternal()const{return impl_->window;} SDL_Renderer* MetalGraphicsBackend::GetRendererInternal()const{return nullptr;}
-std::unique_ptr<ITextureBackend> MetalGraphicsBackend::CreateTexture(const ImageData& d){return std::make_unique<MetalTexture>(impl_->device,impl_->queue,d);} std::unique_ptr<ISpriteBatchBackend> MetalGraphicsBackend::CreateSpriteBatch(){return std::make_unique<MetalSpriteBatch>(*this);}
+std::unique_ptr<ITextureBackend> MetalGraphicsBackend::CreateTexture(const ImageData& d)
+{
+    switch(DescribeMetalTexture2DImagePolicy(d.surfaceFormat,d.width,d.height,d.mipLevels,d.pixels.size())){
+        case MetalTexture2DImagePolicy::Supported: break;
+        case MetalTexture2DImagePolicy::UnsupportedFormat:
+            throw System::NotSupportedException("Metal Texture2D supports only SurfaceFormat::Color.");
+        case MetalTexture2DImagePolicy::InvalidDimensionsOrMipCount:
+            throw std::invalid_argument("Metal Texture2D dimensions or mip count are invalid.");
+        case MetalTexture2DImagePolicy::InvalidBaseByteCount:
+            throw std::invalid_argument("Metal Texture2D level-zero RGBA byte count is invalid.");
+    }
+    auto* owner=impl_.get();
+    return std::make_unique<MetalTexture>(impl_->device,impl_->queue,d,
+        [owner] { owner->throwPendingCommandFailure(); });
+}
+std::unique_ptr<ISpriteBatchBackend> MetalGraphicsBackend::CreateSpriteBatch(){return std::make_unique<MetalSpriteBatch>(*this);}
 std::unique_ptr<ITextureCubeBackend> MetalGraphicsBackend::CreateTextureCube(int size,bool mipMap,int surfaceFormat)
 {
     if (!MetalSupportsSurfaceFormat(surfaceFormat))
         throw System::NotSupportedException("Metal TextureCube supports only SurfaceFormat::Color.");
-    return std::make_unique<MetalTextureCube>(impl_->device,impl_->queue,size,mipMap);
+    if(size<=0) throw std::invalid_argument("Metal TextureCube size must be positive.");
+    auto* owner=impl_.get();
+    return std::make_unique<MetalTextureCube>(impl_->device,impl_->queue,size,mipMap,
+        [owner] { owner->throwPendingCommandFailure(); });
 }
 std::unique_ptr<IEffectBackend> MetalGraphicsBackend::CreateEffectBackend(const std::string& vertSrc,const std::string& fragSrc)
 {
@@ -2595,22 +3184,25 @@ std::unique_ptr<IEffectBackend> MetalGraphicsBackend::CreateEffectBackend(const 
 }
 std::unique_ptr<IOcclusionQueryBackend> MetalGraphicsBackend::CreateOcclusionQuery()
 {
-    auto& p=*impl_;
-    if(p.nextQuerySlot>=MetalGraphicsBackend::Impl::kMaxOcclusionQuerySlots)
-        throw std::runtime_error("Metal: exceeded the maximum number of live OcclusionQuery slots (plan_metal.md METAL-136)");
-    return std::make_unique<MetalOcclusionQueryBackend>(p, p.nextQuerySlot++);
+    throw System::NotSupportedException(
+        "Metal OcclusionQuery is disabled until command-boundary completion and slot recycling "
+        "have adapted macOS proof.");
 }
 std::unique_ptr<ITexture3DBackend> MetalGraphicsBackend::CreateTexture3D(int w,int h,int depth,bool mipMap,int surfaceFormat)
 {
     if (!MetalSupportsSurfaceFormat(surfaceFormat))
         throw System::NotSupportedException("Metal Texture3D supports only SurfaceFormat::Color.");
-    return std::make_unique<MetalTexture3D>(impl_->device,impl_->queue,w,h,depth,mipMap);
+    if(w<=0||h<=0||depth<=0) throw std::invalid_argument("Metal Texture3D dimensions must be positive.");
+    auto* owner=impl_.get();
+    return std::make_unique<MetalTexture3D>(impl_->device,impl_->queue,w,h,depth,mipMap,
+        [owner] { owner->throwPendingCommandFailure(); });
 }
 // Preserve/discard behavior remains owned by the shared GraphicsDevice binding path. Requested
 // multisampling is deliberately clamped to zero at this boundary.
 std::unique_ptr<IRenderTargetBackend> MetalGraphicsBackend::CreateRenderTarget2D(int w,int h,int /*depthFormat*/,bool /*preserveContents*/,bool mipMap,int multiSampleCount)
 {
     (void)multiSampleCount;
+    if(w<=0||h<=0) throw std::invalid_argument("Metal RenderTarget2D dimensions must be positive.");
     return std::make_unique<MetalRenderTargetBackend>(*impl_, w, h, mipMap, 0);
 }
 std::unique_ptr<IRenderTargetBackend> MetalGraphicsBackend::CreateRenderTarget2DEXT(
@@ -2623,6 +3215,7 @@ std::unique_ptr<IRenderTargetBackend> MetalGraphicsBackend::CreateRenderTarget2D
 std::unique_ptr<IRenderTargetCubeBackend> MetalGraphicsBackend::CreateRenderTargetCube(
     int size,int /*depthFormat*/,bool /*preserveContents*/,bool mipMap,int /*multiSampleCount*/)
 {
+    if(size<=0) throw std::invalid_argument("Metal RenderTargetCube size must be positive.");
     return std::make_unique<MetalRenderTargetCubeBackend>(*impl_, size, mipMap);
 }
 // plan_metal.md METAL-109/110/111 (real bug fixed alongside RenderTargetCube's own addition): both
@@ -2686,7 +3279,23 @@ void MetalGraphicsBackend::SetRenderTargets(const RenderTargetBindingDescriptor*
     throw std::invalid_argument("Metal: unknown render-target descriptor type");
 }
 void MetalGraphicsBackend::ClearColorAndDepth(float r,float g,float b,float a,float d){impl_->clear(true,r,g,b,a,true,d,false,0);} void MetalGraphicsBackend::ClearDepth(float d){impl_->clear(false,0,0,0,0,true,d,false,0);} void MetalGraphicsBackend::ClearStencil(int s){impl_->clear(false,0,0,0,0,false,1,true,s);} void MetalGraphicsBackend::ClearDepthAndStencil(float d,int s){impl_->clear(false,0,0,0,0,true,d,true,s);} void MetalGraphicsBackend::ClearColorAndStencil(float r,float g,float b,float a,int s){impl_->clear(true,r,g,b,a,false,1,true,s);} void MetalGraphicsBackend::ClearColorDepthAndStencil(float r,float g,float b,float a,float d,int s){impl_->clear(true,r,g,b,a,true,d,true,s);}
-void MetalGraphicsBackend::SetDepthTestEnabled(bool e){impl_->depthEnabled=e;impl_->rebuildDepthState();} void MetalGraphicsBackend::SetBlendEnabled(bool e){impl_->blendEnabled=e;} void MetalGraphicsBackend::SetDepthWriteEnabled(bool e){impl_->depthWrite=e;impl_->rebuildDepthState();}
+void MetalGraphicsBackend::SetDepthTestEnabled(bool e)
+{
+    auto& p=*impl_;
+    const auto previous=p.captureDepthState();
+    p.depthEnabled=e;
+    try { p.rebuildDepthState(); }
+    catch (...) { p.restoreDepthState(previous); throw; }
+}
+void MetalGraphicsBackend::SetBlendEnabled(bool e){impl_->currentBlend=MetalBlendKeyForSetBlendEnabled(e);}
+void MetalGraphicsBackend::SetDepthWriteEnabled(bool e)
+{
+    auto& p=*impl_;
+    const auto previous=p.captureDepthState();
+    p.depthWrite=e;
+    try { p.rebuildDepthState(); }
+    catch (...) { p.restoreDepthState(previous); throw; }
+}
 void MetalGraphicsBackend::ApplyBlendState(int colorSrcBlend,int alphaSrcBlend,int colorDstBlend,int alphaDstBlend,int colorBlendFunc,int alphaBlendFunc,const BlendWriteState& writeState)
 {
     if (!MetalSupportsBlendWriteState(writeState))
@@ -2712,6 +3321,7 @@ void MetalGraphicsBackend::ApplyDepthStencilState(bool depthEnable,bool depthWri
     // the previous depthEnable/depthWrite/referenceStencil-only plumbing (depthFunc and all 8
     // stencil-op/mask/twoSided fields were silently ignored before this).
     auto& p=*impl_;
+    const auto previous=p.captureDepthState();
     p.depthEnabled=depthEnable; p.depthWrite=depthWriteEnable; p.depthFunc=depthFunc;
     p.stencilEnabled=stencilEnable; p.stencilFunc=stencilFunc; p.stencilPass=stencilPass;
     p.stencilFail=stencilFail; p.stencilDepthFail=stencilDepthFail;
@@ -2719,7 +3329,8 @@ void MetalGraphicsBackend::ApplyDepthStencilState(bool depthEnable,bool depthWri
     p.twoSidedStencil=twoSidedStencilMode; p.ccwStencilFunc=ccwStencilFunc; p.ccwStencilPass=ccwStencilPass;
     p.ccwStencilFail=ccwStencilFail; p.ccwStencilDepthFail=ccwStencilDepthFail;
     p.refStencil=referenceStencil;
-    p.rebuildDepthState();
+    try { p.rebuildDepthState(); }
+    catch (...) { p.restoreDepthState(previous); throw; }
     if(p.encoder)[p.encoder setStencilReferenceValue:referenceStencil];
 }
 // plan_metal.md METAL-19: the `c==1?...:(c==2?...:...)` ternary chain this replaced switched on raw
@@ -2736,7 +3347,24 @@ static MTLCullMode metalCullMode(int c)
     }
 }
 
-void MetalGraphicsBackend::ApplyRasterizerState(int c,int f,bool se,float db,float sb){impl_->cull=metalCullMode(c);impl_->fill=f==1?MTLTriangleFillModeLines:MTLTriangleFillModeFill;impl_->scissorEnabled=se;impl_->depthBias=db;impl_->slopeBias=sb;if(impl_->encoder){[impl_->encoder setFrontFacingWinding:MTLWindingClockwise];[impl_->encoder setCullMode:impl_->cull];[impl_->encoder setTriangleFillMode:impl_->fill];[impl_->encoder setDepthBias:db slopeScale:sb clamp:0];}}
+void MetalGraphicsBackend::ApplyRasterizerState(int c,int f,bool se,float db,float sb)
+{
+    impl_->cull=metalCullMode(c);
+    impl_->fill=f==1?MTLTriangleFillModeLines:MTLTriangleFillModeFill;
+    impl_->rasterState.SetScissorEnabled(se);
+    impl_->depthBias=db;
+    impl_->slopeBias=sb;
+    if(impl_->encoder){
+        [impl_->encoder setFrontFacingWinding:MTLWindingClockwise];
+        [impl_->encoder setCullMode:impl_->cull];
+        [impl_->encoder setTriangleFillMode:impl_->fill];
+        [impl_->encoder setDepthBias:db slopeScale:sb clamp:0];
+        const MetalScissorState s=impl_->rasterState.NativeScissor();
+        const MTLScissorRect native={(NSUInteger)s.x,(NSUInteger)s.y,
+            (NSUInteger)s.width,(NSUInteger)s.height};
+        [impl_->encoder setScissorRect:native];
+    }
+}
 void MetalGraphicsBackend::ApplySamplerState(int slot,int filter,int addressU,int addressV,int maxAnisotropy)
 {
     if (slot<0 || slot>=16) throw std::out_of_range("Metal: sampler slot must be in [0, 15]");
@@ -2751,8 +3379,25 @@ void MetalGraphicsBackend::ApplySamplerMipState(int slot,int maxMipLevel,float l
 }
 void MetalGraphicsBackend::SetBlendFactor(float r,float g,float b,float a){impl_->blendColor[0]=r;impl_->blendColor[1]=g;impl_->blendColor[2]=b;impl_->blendColor[3]=a;if(impl_->encoder)[impl_->encoder setBlendColorRed:r green:g blue:b alpha:a];}
 void MetalGraphicsBackend::SetReferenceStencil(int v){impl_->refStencil=v;if(impl_->encoder)[impl_->encoder setStencilReferenceValue:v];}
-void MetalGraphicsBackend::SetScissorRect(int x,int y,int w,int h){impl_->scissor={(NSUInteger)std::max(0,x),(NSUInteger)std::max(0,y),(NSUInteger)std::max(0,w),(NSUInteger)std::max(0,h)};if(impl_->encoder)[impl_->encoder setScissorRect:impl_->scissor];}
-void MetalGraphicsBackend::SetViewport(int x,int y,int w,int h,float mn,float mx){impl_->viewport={(double)x,(double)y,(double)w,(double)h,mn,mx};if(impl_->encoder)[impl_->encoder setViewport:impl_->viewport];}
+void MetalGraphicsBackend::SetScissorRect(int x,int y,int w,int h)
+{
+    impl_->rasterState.SetScissor(x,y,w,h);
+    if(impl_->encoder&&impl_->rasterState.IsScissorEnabled()){
+        const MetalScissorState s=impl_->rasterState.NativeScissor();
+        const MTLScissorRect native={(NSUInteger)s.x,(NSUInteger)s.y,
+            (NSUInteger)s.width,(NSUInteger)s.height};
+        [impl_->encoder setScissorRect:native];
+    }
+}
+void MetalGraphicsBackend::SetViewport(int x,int y,int w,int h,float mn,float mx)
+{
+    impl_->rasterState.SetViewport(x,y,w,h,mn,mx);
+    if(impl_->encoder){
+        const MetalViewportState v=impl_->rasterState.EffectiveViewport();
+        const MTLViewport native={v.x,v.y,v.width,v.height,v.minDepth,v.maxDepth};
+        [impl_->encoder setViewport:native];
+    }
+}
 std::unique_ptr<IVertexBufferBackend> MetalGraphicsBackend::CreateVertexBuffer(int c){return std::make_unique<MetalVertexBuffer>(impl_->device,c);} std::unique_ptr<IIndexBufferBackend> MetalGraphicsBackend::CreateIndexBuffer16(int){return std::make_unique<MetalIndexBuffer>(impl_->device,false);} std::unique_ptr<IIndexBufferBackend> MetalGraphicsBackend::CreateIndexBuffer32(int){return std::make_unique<MetalIndexBuffer>(impl_->device,true);}
 
 // plan_metal.md METAL-34-style extraction: this dispatch logic's real body now lives in the
@@ -2769,8 +3414,8 @@ static PipelineKind selectPipelineKind(std::size_t stride, const GpuDrawParams* 
 // MetalUniformFill.hpp (no Objective-C, buildable and unit-tested on any platform without an Apple
 // toolchain) -- kept as thin same-signature wrappers here so every existing call site in this file
 // is unaffected. `params` is never null at any of these call sites -- each PipelineKind reaching
-// them is only selected when selectPipelineKind()'s own corresponding gate (`textured`/`envMapping`/
-// `skinned`/`pbr`, each requiring a non-null `params`) already held.
+// them is only selected when selectPipelineKind()'s corresponding stride/effect gate requires a
+// non-null `params`; texture pointer presence never decides pipeline shape.
 static void fillLitUniforms(LitTransform& t, LitUniforms& lu, const Mat4& wvp, const GpuDrawParams& params)
 {
     FillMetalLitUniforms(t, lu, wvp, params);
@@ -2798,11 +3443,65 @@ static void fillSkinnedPbrUniforms(SkinnedPbrTransform& t, PbrUniforms& pu, cons
 
 static void drawMetal3D(MetalGraphicsBackend::Impl& p,const MetalVertexBuffer& vb,const MetalIndexBuffer* ib,const Matrix&w,const Matrix&v,const Matrix&pr,PrimitiveType pt,int pc,const GpuDrawParams* params)
 {
-    p.ensureFrame(); Mat4 wvp=transpose(multiply(multiply(fromXna(w),fromXna(v)),fromXna(pr)));
-    const bool textured = params && params->texture0;
-    const bool dual = params && params->dualTexture;
+    Mat4 wvp=transpose(multiply(multiply(fromXna(w),fromXna(v)),fromXna(pr)));
     const std::size_t drawStride=params ? CombinedVertexStrideOr(*params,vb.stride()) : vb.stride();
     const PipelineKind kind = selectPipelineKind(drawStride, params);
+
+    id<MTLTexture> texture0=nil;
+    id<MTLTexture> texture1=nil;
+    id<MTLTexture> environmentCube=nil;
+    id<MTLTexture> normalMap=nil;
+    id<MTLTexture> metallicRoughnessMap=nil;
+    id<MTLTexture> emissiveMap=nil;
+    id<MTLTexture> occlusionMap=nil;
+    switch(kind)
+    {
+        case PipelineKind::Textured20:
+        case PipelineKind::ColorTex24:
+        case PipelineKind::LitTex32:
+        case PipelineKind::LitTex32VertexLit:
+            texture0=resolveMetal2DTextureBinding(
+                p,params->texture0,MetalStockTextureSlot::BasicDiffuse);
+            break;
+        case PipelineKind::DualTex20:
+        case PipelineKind::DualTex24Colored:
+            texture0=resolveMetal2DTextureBinding(
+                p,params->texture0,MetalStockTextureSlot::DualFirst);
+            texture1=resolveMetal2DTextureBinding(
+                p,params->texture1,MetalStockTextureSlot::DualSecond);
+            break;
+        case PipelineKind::EnvMap32:
+            texture0=resolveMetal2DTextureBinding(
+                p,params->texture0,MetalStockTextureSlot::EnvironmentDiffuse);
+            environmentCube=resolveMetalCubeTextureBinding(
+                p,params->envMap,MetalStockTextureSlot::EnvironmentCube);
+            break;
+        case PipelineKind::Skinned52:
+        case PipelineKind::Skinned56:
+        case PipelineKind::Skinned52VertexLit:
+        case PipelineKind::Skinned56VertexLit:
+            texture0=resolveMetal2DTextureBinding(
+                p,params->texture0,MetalStockTextureSlot::SkinnedDiffuse);
+            break;
+        case PipelineKind::Pbr48:
+        case PipelineKind::SkinnedPbr68:
+            texture0=resolveMetal2DTextureBinding(
+                p,params->texture0,MetalStockTextureSlot::PbrBaseColor);
+            normalMap=resolveMetal2DTextureBinding(
+                p,params->pbrNormalMap,MetalStockTextureSlot::PbrNormal);
+            metallicRoughnessMap=resolveMetal2DTextureBinding(
+                p,params->pbrMetallicRoughnessMap,MetalStockTextureSlot::PbrMetallicRoughness);
+            emissiveMap=resolveMetal2DTextureBinding(
+                p,params->pbrEmissiveMap,MetalStockTextureSlot::PbrEmissive);
+            occlusionMap=resolveMetal2DTextureBinding(
+                p,params->pbrOcclusionMap,MetalStockTextureSlot::PbrOcclusion);
+            break;
+        case PipelineKind::Colored16:
+        case PipelineKind::Sprite2D:
+            break;
+    }
+
+    if(!p.ensureFrame()||p.rasterState.ShouldSkipDraw()) return;
     id<MTLRenderPipelineState> pipeline = p.getOrCreatePipeline(kind);
     [p.encoder setRenderPipelineState:pipeline]; [p.encoder setVertexBuffer:vb.native() offset:0 atIndex:0];
     [p.encoder setDepthStencilState:p.depthState]; [p.encoder setFrontFacingWinding:MTLWindingClockwise]; [p.encoder setCullMode:p.cull]; [p.encoder setTriangleFillMode:p.fill];
@@ -2818,8 +3517,7 @@ static void drawMetal3D(MetalGraphicsBackend::Impl& p,const MetalVertexBuffer& v
         [p.encoder setVertexBytes:&t length:sizeof(t) atIndex:1];
         [p.encoder setVertexBytes:&lu length:sizeof(lu) atIndex:2];
         [p.encoder setFragmentBytes:&lu length:sizeof(lu) atIndex:2];
-        id<MTLTexture> tex0=nativeTextureFor(params->texture0);
-        if(tex0)[p.encoder setFragmentTexture:tex0 atIndex:0];
+        [p.encoder setFragmentTexture:texture0 atIndex:0];
         [p.encoder setFragmentSamplerState:(p.samplerSlots[0]?p.samplerSlots[0]:p.sampler) atIndex:0];
     } else if (kind == PipelineKind::EnvMap32) {
         // plan_metal.md METAL-64/66-68: real cube-map reflection/Fresnel path.
@@ -2828,17 +3526,9 @@ static void drawMetal3D(MetalGraphicsBackend::Impl& p,const MetalVertexBuffer& v
         [p.encoder setVertexBytes:&t length:sizeof(t) atIndex:1];
         [p.encoder setVertexBytes:&eu length:sizeof(eu) atIndex:2];
         [p.encoder setFragmentBytes:&eu length:sizeof(eu) atIndex:2];
-        id<MTLTexture> tex0=nativeTextureFor(params->texture0);
-        if(tex0)[p.encoder setFragmentTexture:tex0 atIndex:0];
+        [p.encoder setFragmentTexture:texture0 atIndex:0];
         [p.encoder setFragmentSamplerState:(p.samplerSlots[0]?p.samplerSlots[0]:p.sampler) atIndex:0];
-        // plan_metal.md: same established null-envMap fallback gap as texture0/texture1 (leaves
-        // whatever a prior draw last bound at unit 1) -- not a new class of gap, matches the
-        // existing DualTexture-null-Texture2 precedent exactly. Resolved through
-        // nativeCubeTextureFor() (METAL-109) rather than a bare dynamic_cast<MetalTextureCube*>, so
-        // a RenderTargetCube just rendered into (a real-time-reflection-probe pattern -- arguably
-        // RenderTargetCube's single most common real use) can be sampled here too.
-        id<MTLTexture> envMapTex=nativeCubeTextureFor(params->envMap);
-        if(envMapTex)[p.encoder setFragmentTexture:envMapTex atIndex:1];
+        [p.encoder setFragmentTexture:environmentCube atIndex:1];
         [p.encoder setFragmentSamplerState:(p.samplerSlots[1]?p.samplerSlots[1]:p.sampler) atIndex:1];
     } else if (kind == PipelineKind::Skinned52 || kind == PipelineKind::Skinned56
             || kind == PipelineKind::Skinned52VertexLit || kind == PipelineKind::Skinned56VertexLit) {
@@ -2861,10 +3551,10 @@ static void drawMetal3D(MetalGraphicsBackend::Impl& p,const MetalVertexBuffer& v
         // audit). GpuDrawParams::boneTransforms is already column-major (its own doc comment),
         // matching worldColMajor's convention, so no per-bone transpose is needed before upload.
         id<MTLBuffer> bonesBuf = [p.device newBufferWithBytes:params->boneTransforms length:sizeof(float)*72*16 options:MTLResourceStorageModeShared];
+        if(!bonesBuf) throw std::runtime_error("Metal: failed to create skinned bone buffer");
         [p.encoder setVertexBuffer:bonesBuf offset:0 atIndex:3];
         [bonesBuf release];
-        id<MTLTexture> tex0=nativeTextureFor(params->texture0);
-        if(tex0)[p.encoder setFragmentTexture:tex0 atIndex:0];
+        [p.encoder setFragmentTexture:texture0 atIndex:0];
         [p.encoder setFragmentSamplerState:(p.samplerSlots[0]?p.samplerSlots[0]:p.sampler) atIndex:0];
     } else if (kind == PipelineKind::Pbr48) {
         // plan_metal.md METAL-81/83-86: real metallic-roughness PBR path.
@@ -2873,17 +3563,6 @@ static void drawMetal3D(MetalGraphicsBackend::Impl& p,const MetalVertexBuffer& v
         [p.encoder setVertexBytes:&t length:sizeof(t) atIndex:1];
         [p.encoder setVertexBytes:&pu length:sizeof(pu) atIndex:2];
         [p.encoder setFragmentBytes:&pu length:sizeof(pu) atIndex:2];
-        // plan_metal.md METAL-87: a null map falls back to the shared default white / flat-normal
-        // 1x1 textures (mirrors EnsureDefaultWhiteTexture()/EnsureDefaultFlatNormalTexture()
-        // exactly) -- unlike texture0/texture1's own established "leave whatever was bound before"
-        // gap elsewhere in this file, PBR's 4 optional maps are given real, always-correct
-        // fallbacks, since the constant-cost 1x1-texture-per-unbound-map approach is cheap and
-        // there is no equivalent "correct default" for the 2D case's leave-it-alone convention.
-        id<MTLTexture> tex0=nativeTextureFor(params->texture0);
-        id<MTLTexture> normalMap=nativeTextureFor(params->pbrNormalMap);
-        id<MTLTexture> mrMap=nativeTextureFor(params->pbrMetallicRoughnessMap);
-        id<MTLTexture> emissiveMap=nativeTextureFor(params->pbrEmissiveMap);
-        id<MTLTexture> occlusionMap=nativeTextureFor(params->pbrOcclusionMap);
         // plan_metal.md METAL-3: each of the 5 PBR texture units gets its own SamplerState slot
         // (samplerSlots[0..4]), matching EasyGLGraphicsBackend's own real PBR binding exactly
         // (each map bound to its own GL texture unit, each unit sampled through its own
@@ -2891,15 +3570,15 @@ static void drawMetal3D(MetalGraphicsBackend::Impl& p,const MetalVertexBuffer& v
         // broadcast across all 5 units, which this block previously did (a real, silent divergence:
         // a game setting a distinct SamplerState on, say, the metallic-roughness slot would have
         // been ignored, since every unit sampled through whatever was set on slot 0 instead).
-        [p.encoder setFragmentTexture:(tex0?tex0:p.defaultWhiteTexture) atIndex:0];
+        [p.encoder setFragmentTexture:texture0 atIndex:0];
         [p.encoder setFragmentSamplerState:(p.samplerSlots[0]?p.samplerSlots[0]:p.sampler) atIndex:0];
-        [p.encoder setFragmentTexture:(normalMap?normalMap:p.defaultFlatNormalTexture) atIndex:1];
+        [p.encoder setFragmentTexture:normalMap atIndex:1];
         [p.encoder setFragmentSamplerState:(p.samplerSlots[1]?p.samplerSlots[1]:p.sampler) atIndex:1];
-        [p.encoder setFragmentTexture:(mrMap?mrMap:p.defaultWhiteTexture) atIndex:2];
+        [p.encoder setFragmentTexture:metallicRoughnessMap atIndex:2];
         [p.encoder setFragmentSamplerState:(p.samplerSlots[2]?p.samplerSlots[2]:p.sampler) atIndex:2];
-        [p.encoder setFragmentTexture:(emissiveMap?emissiveMap:p.defaultWhiteTexture) atIndex:3];
+        [p.encoder setFragmentTexture:emissiveMap atIndex:3];
         [p.encoder setFragmentSamplerState:(p.samplerSlots[3]?p.samplerSlots[3]:p.sampler) atIndex:3];
-        [p.encoder setFragmentTexture:(occlusionMap?occlusionMap:p.defaultWhiteTexture) atIndex:4];
+        [p.encoder setFragmentTexture:occlusionMap atIndex:4];
         [p.encoder setFragmentSamplerState:(p.samplerSlots[4]?p.samplerSlots[4]:p.sampler) atIndex:4];
     } else if (kind == PipelineKind::SkinnedPbr68) {
         // plan_metal.md METAL-82: real SkinnedPbrEffect path -- same bone-buffer handling as
@@ -2910,23 +3589,19 @@ static void drawMetal3D(MetalGraphicsBackend::Impl& p,const MetalVertexBuffer& v
         [p.encoder setVertexBytes:&pu length:sizeof(pu) atIndex:2];
         [p.encoder setFragmentBytes:&pu length:sizeof(pu) atIndex:2];
         id<MTLBuffer> bonesBuf = [p.device newBufferWithBytes:params->boneTransforms length:sizeof(float)*72*16 options:MTLResourceStorageModeShared];
+        if(!bonesBuf) throw std::runtime_error("Metal: failed to create skinned PBR bone buffer");
         [p.encoder setVertexBuffer:bonesBuf offset:0 atIndex:3];
         [bonesBuf release];
-        id<MTLTexture> tex0=nativeTextureFor(params->texture0);
-        id<MTLTexture> normalMap=nativeTextureFor(params->pbrNormalMap);
-        id<MTLTexture> mrMap=nativeTextureFor(params->pbrMetallicRoughnessMap);
-        id<MTLTexture> emissiveMap=nativeTextureFor(params->pbrEmissiveMap);
-        id<MTLTexture> occlusionMap=nativeTextureFor(params->pbrOcclusionMap);
         // plan_metal.md METAL-3: same per-slot sampler fix as Pbr48 above, see its own comment.
-        [p.encoder setFragmentTexture:(tex0?tex0:p.defaultWhiteTexture) atIndex:0];
+        [p.encoder setFragmentTexture:texture0 atIndex:0];
         [p.encoder setFragmentSamplerState:(p.samplerSlots[0]?p.samplerSlots[0]:p.sampler) atIndex:0];
-        [p.encoder setFragmentTexture:(normalMap?normalMap:p.defaultFlatNormalTexture) atIndex:1];
+        [p.encoder setFragmentTexture:normalMap atIndex:1];
         [p.encoder setFragmentSamplerState:(p.samplerSlots[1]?p.samplerSlots[1]:p.sampler) atIndex:1];
-        [p.encoder setFragmentTexture:(mrMap?mrMap:p.defaultWhiteTexture) atIndex:2];
+        [p.encoder setFragmentTexture:metallicRoughnessMap atIndex:2];
         [p.encoder setFragmentSamplerState:(p.samplerSlots[2]?p.samplerSlots[2]:p.sampler) atIndex:2];
-        [p.encoder setFragmentTexture:(emissiveMap?emissiveMap:p.defaultWhiteTexture) atIndex:3];
+        [p.encoder setFragmentTexture:emissiveMap atIndex:3];
         [p.encoder setFragmentSamplerState:(p.samplerSlots[3]?p.samplerSlots[3]:p.sampler) atIndex:3];
-        [p.encoder setFragmentTexture:(occlusionMap?occlusionMap:p.defaultWhiteTexture) atIndex:4];
+        [p.encoder setFragmentTexture:occlusionMap atIndex:4];
         [p.encoder setFragmentSamplerState:(p.samplerSlots[4]?p.samplerSlots[4]:p.sampler) atIndex:4];
     } else {
         // plan_metal.md METAL-35/36/37/51-63: DiffuseColor/VertexColorEnabled/AlphaTest now
@@ -2947,19 +3622,11 @@ static void drawMetal3D(MetalGraphicsBackend::Impl& p,const MetalVertexBuffer& v
         }
         [p.encoder setVertexBytes:&wvp length:sizeof(wvp) atIndex:1];
         [p.encoder setFragmentBytes:&mp length:sizeof(mp) atIndex:2];
-        if(textured){
-            id<MTLTexture> tex0=nativeTextureFor(params->texture0);
-            if(tex0)[p.encoder setFragmentTexture:tex0 atIndex:0];
+        if(kind!=PipelineKind::Colored16){
+            [p.encoder setFragmentTexture:texture0 atIndex:0];
             [p.encoder setFragmentSamplerState:(p.samplerSlots[0]?p.samplerSlots[0]:p.sampler) atIndex:0];
-            if(dual){
-                // plan_metal.md: EasyGL/Vulkan/Bgfx fall back to a 1x1 opaque white texture when
-                // Texture2 is left null (docs/dualtextureeffect-support.md Task 386/387); Metal does
-                // not yet have that fallback mechanism (a real, tracked follow-up gap, not silently
-                // dropped), so a null Texture2 here leaves texture unit 1 holding whatever a prior
-                // draw last bound there -- matches this same function's own pre-existing texture0
-                // null-handling pattern exactly, not a new class of gap introduced by DualTexture.
-                id<MTLTexture> tex1=nativeTextureFor(params->texture1);
-                if(tex1)[p.encoder setFragmentTexture:tex1 atIndex:1];
+            if(kind==PipelineKind::DualTex20||kind==PipelineKind::DualTex24Colored){
+                [p.encoder setFragmentTexture:texture1 atIndex:1];
                 [p.encoder setFragmentSamplerState:(p.samplerSlots[1]?p.samplerSlots[1]:p.sampler) atIndex:1];
             }
         }
@@ -2984,8 +3651,29 @@ static void drawMetal3D(MetalGraphicsBackend::Impl& p,const MetalVertexBuffer& v
         [p.encoder drawPrimitives:metalPrimitive(pt) vertexStart:vertexStart vertexCount:n];
     }
 }
-void MetalGraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend&v,const Matrix&w,const Matrix&vi,const Matrix&p,PrimitiveType pt,int pc){auto*vb=dynamic_cast<const MetalVertexBuffer*>(&v);if(!vb)throw std::runtime_error("Metal: foreign vertex buffer");drawMetal3D(*impl_,*vb,nullptr,w,vi,p,pt,pc,nullptr);}
-void MetalGraphicsBackend::DrawIndexedColoredPrimitives(const IVertexBufferBackend&v,const IIndexBufferBackend&i,const Matrix&w,const Matrix&vi,const Matrix&p,PrimitiveType pt,int pc){auto*vb=dynamic_cast<const MetalVertexBuffer*>(&v);auto*ib=dynamic_cast<const MetalIndexBuffer*>(&i);if(!vb||!ib)throw std::runtime_error("Metal: foreign buffer");drawMetal3D(*impl_,*vb,ib,w,vi,p,pt,pc,nullptr);}
+void MetalGraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend& v,const Matrix& w,
+                                                  const Matrix& vi,const Matrix& p,
+                                                  PrimitiveType pt,int pc)
+{
+    const auto* vb=dynamic_cast<const MetalVertexBuffer*>(&v);
+    if(!vb) throw std::runtime_error("Metal: foreign vertex buffer");
+    RequireFaithfulDeclarationEXT(vb->declaration(),static_cast<int>(vb->stride()),
+                                  "colored-nonindexed");
+    drawMetal3D(*impl_,*vb,nullptr,w,vi,p,pt,pc,nullptr);
+}
+
+void MetalGraphicsBackend::DrawIndexedColoredPrimitives(const IVertexBufferBackend& v,
+                                                         const IIndexBufferBackend& i,
+                                                         const Matrix& w,const Matrix& vi,
+                                                         const Matrix& p,PrimitiveType pt,int pc)
+{
+    const auto* vb=dynamic_cast<const MetalVertexBuffer*>(&v);
+    const auto* ib=dynamic_cast<const MetalIndexBuffer*>(&i);
+    if(!vb||!ib) throw std::runtime_error("Metal: foreign buffer");
+    RequireFaithfulDeclarationEXT(vb->declaration(),static_cast<int>(vb->stride()),
+                                  "colored-indexed");
+    drawMetal3D(*impl_,*vb,ib,w,vi,p,pt,pc,nullptr);
+}
 static void ValidateMetalDrawParams(const GpuDrawParams& gp,const MetalVertexBuffer& vb)
 {
     switch (DescribeMetalDrawStreamPolicy(gp)) {
@@ -2999,15 +3687,44 @@ static void ValidateMetalDrawParams(const GpuDrawParams& gp,const MetalVertexBuf
             throw System::NotSupportedException(
                 "Metal instancing is disabled until it has adapted macOS proof.");
     }
-    if (gp.vertexStreamCount==1 && gp.vertexStreams[0].buffer!=&vb)
-        throw std::invalid_argument("Metal: GpuDrawParams stream 0 does not name the draw vertex buffer");
+    if (!MetalSingleStreamMatchesUploadedBuffer(gp,vb,vb.stride()))
+        throw std::invalid_argument(
+            "Metal: GpuDrawParams stream 0 must name the draw vertex buffer and match its uploaded stride");
     if (gp.customEffectBackend)
         throw System::NotSupportedException(
             "Metal custom-effect 3D draws are disabled until they have adapted macOS proof.");
 }
-void MetalGraphicsBackend::DrawPrimitivesEx(const IVertexBufferBackend&v,const Matrix&w,const Matrix&vi,const Matrix&p,PrimitiveType pt,int pc,const GpuDrawParams&gp){auto*vb=dynamic_cast<const MetalVertexBuffer*>(&v);if(!vb)throw std::runtime_error("Metal: foreign vertex buffer");ValidateMetalDrawParams(gp,*vb);drawMetal3D(*impl_,*vb,nullptr,w,vi,p,pt,pc,&gp);}
-void MetalGraphicsBackend::DrawIndexedPrimitivesEx(const IVertexBufferBackend&v,const IIndexBufferBackend&i,const Matrix&w,const Matrix&vi,const Matrix&p,PrimitiveType pt,int pc,const GpuDrawParams&gp){auto*vb=dynamic_cast<const MetalVertexBuffer*>(&v);auto*ib=dynamic_cast<const MetalIndexBuffer*>(&i);if(!vb||!ib)throw std::runtime_error("Metal: foreign buffer");ValidateMetalDrawParams(gp,*vb);drawMetal3D(*impl_,*vb,ib,w,vi,p,pt,pc,&gp);}
-void MetalGraphicsBackend::SetStringMarkerEXT(const char* m){impl_->ensureFrame();if(m)[impl_->encoder insertDebugSignpost:[NSString stringWithUTF8String:m]];}
+void MetalGraphicsBackend::DrawPrimitivesEx(const IVertexBufferBackend& v,const Matrix& w,
+                                             const Matrix& vi,const Matrix& p,
+                                             PrimitiveType pt,int pc,const GpuDrawParams& gp)
+{
+    const auto* vb=dynamic_cast<const MetalVertexBuffer*>(&v);
+    if(!vb) throw std::runtime_error("Metal: foreign vertex buffer");
+    ValidateMetalDrawParams(gp,*vb);
+    RequireFaithfulDeclarationEXT(vb->declaration(),static_cast<int>(vb->stride()),
+                                  "ordinary-nonindexed");
+    drawMetal3D(*impl_,*vb,nullptr,w,vi,p,pt,pc,&gp);
+}
+
+void MetalGraphicsBackend::DrawIndexedPrimitivesEx(const IVertexBufferBackend& v,
+                                                    const IIndexBufferBackend& i,
+                                                    const Matrix& w,const Matrix& vi,
+                                                    const Matrix& p,PrimitiveType pt,int pc,
+                                                    const GpuDrawParams& gp)
+{
+    const auto* vb=dynamic_cast<const MetalVertexBuffer*>(&v);
+    const auto* ib=dynamic_cast<const MetalIndexBuffer*>(&i);
+    if(!vb||!ib) throw std::runtime_error("Metal: foreign buffer");
+    ValidateMetalDrawParams(gp,*vb);
+    RequireFaithfulDeclarationEXT(vb->declaration(),static_cast<int>(vb->stride()),
+                                  "ordinary-indexed");
+    drawMetal3D(*impl_,*vb,ib,w,vi,p,pt,pc,&gp);
+}
+void MetalGraphicsBackend::SetStringMarkerEXT(const char* m)
+{
+    if(!impl_->ensureFrame()) return;
+    if(m) [impl_->encoder insertDebugSignpost:[NSString stringWithUTF8String:m]];
+}
 
 bool MetalGraphicsBackend::SupportsCapability(CNA::GraphicsCapability capability) const
 {

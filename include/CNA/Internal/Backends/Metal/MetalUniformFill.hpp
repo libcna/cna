@@ -17,8 +17,8 @@
 // needs it: with dozens of individual field assignments per function, a single copy-paste mistake
 // (e.g. `light1Diffuse` accidentally reading `params.light2Diffuse`) would silently render wrong
 // lighting rather than fail to compile or crash. MetalGraphicsBackend.mm includes this header instead
-// of defining these structs/functions inline; logic (including every field mapping and comment) is
-// unchanged from the original inline definitions.
+// of defining these structs/functions inline, so field mapping and the accepted lighting-disabled
+// normalization share one portable source of truth.
 namespace CNA::Internal::Backends::Metal
 {
     // Plain C++ mirrors of kMetalShaderSource's `LitTransform`/`LitUniforms` -- every logical vec3 is
@@ -124,6 +124,18 @@ namespace CNA::Internal::Backends::Metal
         lu.light2Dir[0]=params.light2Dir[0]; lu.light2Dir[1]=params.light2Dir[1]; lu.light2Dir[2]=params.light2Dir[2]; lu.light2Dir[3]=0;
         lu.light2Diffuse[0]=params.light2Diffuse[0]; lu.light2Diffuse[1]=params.light2Diffuse[1]; lu.light2Diffuse[2]=params.light2Diffuse[2]; lu.light2Diffuse[3]=0;
         lu.light2Specular[0]=params.light2Specular[0]; lu.light2Specular[1]=params.light2Specular[1]; lu.light2Specular[2]=params.light2Specular[2]; lu.light2Specular[3]=0;
+        if (!params.lightingEnabled)
+        {
+            lu.ambientColor[0]=lu.ambientColor[1]=lu.ambientColor[2]=1.0f;
+            lu.light0Dir[0]=lu.light1Dir[0]=lu.light2Dir[0]=0.0f;
+            lu.light0Dir[1]=lu.light1Dir[1]=lu.light2Dir[1]=-1.0f;
+            lu.light0Dir[2]=lu.light1Dir[2]=lu.light2Dir[2]=0.0f;
+            for (int component=0; component<3; ++component)
+            {
+                lu.light0Diffuse[component]=lu.light1Diffuse[component]=lu.light2Diffuse[component]=0.0f;
+                lu.light0Specular[component]=lu.light1Specular[component]=lu.light2Specular[component]=0.0f;
+            }
+        }
         lu.specularColorPower[0]=params.specularColor[0]; lu.specularColorPower[1]=params.specularColor[1]; lu.specularColorPower[2]=params.specularColor[2]; lu.specularColorPower[3]=params.specularPower;
         lu.eyePosition[0]=params.eyePositionWorld[0]; lu.eyePosition[1]=params.eyePositionWorld[1]; lu.eyePosition[2]=params.eyePositionWorld[2]; lu.eyePosition[3]=0;
         lu.emissiveColor[0]=params.emissiveColor[0]; lu.emissiveColor[1]=params.emissiveColor[1]; lu.emissiveColor[2]=params.emissiveColor[2]; lu.emissiveColor[3]=0;
@@ -243,6 +255,15 @@ namespace CNA::Internal::Backends::Metal
         pu.light1Diffuse[0]=params.light1Diffuse[0]; pu.light1Diffuse[1]=params.light1Diffuse[1]; pu.light1Diffuse[2]=params.light1Diffuse[2]; pu.light1Diffuse[3]=0;
         pu.light2Dir[0]=params.light2Dir[0]; pu.light2Dir[1]=params.light2Dir[1]; pu.light2Dir[2]=params.light2Dir[2]; pu.light2Dir[3]=0;
         pu.light2Diffuse[0]=params.light2Diffuse[0]; pu.light2Diffuse[1]=params.light2Diffuse[1]; pu.light2Diffuse[2]=params.light2Diffuse[2]; pu.light2Diffuse[3]=0;
+        if (!params.lightingEnabled)
+        {
+            pu.ambientColor[0]=pu.ambientColor[1]=pu.ambientColor[2]=1.0f;
+            pu.light0Dir[0]=pu.light1Dir[0]=pu.light2Dir[0]=0.0f;
+            pu.light0Dir[1]=pu.light1Dir[1]=pu.light2Dir[1]=-1.0f;
+            pu.light0Dir[2]=pu.light1Dir[2]=pu.light2Dir[2]=0.0f;
+            for (int component=0; component<3; ++component)
+                pu.light0Diffuse[component]=pu.light1Diffuse[component]=pu.light2Diffuse[component]=0.0f;
+        }
         pu.eyePosition[0]=params.eyePositionWorld[0]; pu.eyePosition[1]=params.eyePositionWorld[1]; pu.eyePosition[2]=params.eyePositionWorld[2]; pu.eyePosition[3]=0;
         pu.pbrFactors[0]=params.pbrMetallicFactor; pu.pbrFactors[1]=params.pbrRoughnessFactor; pu.pbrFactors[2]=0; pu.pbrFactors[3]=0;
         std::memcpy(pu.alphaTest, params.alphaTest, sizeof(pu.alphaTest));
