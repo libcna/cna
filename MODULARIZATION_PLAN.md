@@ -425,6 +425,11 @@ updated with evidence as phases complete.
   (`Vector3.cpp:117`; reproduced by compiling the pristine worktree's own sources standalone
   under UBSan). Zero NEW CNA-originating sanitizer defects; the pre-existing findings are
   recorded for their own future remediation, not reopened here.
+- Collect-all sweep (halt off, full 6066-test suite): 6019 pass / 3 fail (the Net harness-child
+  leak tests); the remaining report inventory is a Net/GamerServices object-lifetime vptr family
+  (`SignedInGamer`/`NetworkSessionAction`/`NetworkSessionProperties`/`IAsyncResult` "does not
+  point to an object of type" during session teardown paths) — all in pristine-identical
+  sources, useful input for the merge-time Net adaptation.
 
 ### Physical source moves — decision
 Deferred (plan §6): the target graph, parity gates and probe contracts are the campaign's
