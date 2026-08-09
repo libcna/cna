@@ -340,4 +340,69 @@ updated with evidence as phases complete.
 
 ## 8. PROVEN — evidence ledger (updated during the campaign)
 
-- (empty at plan commit; filled per phase)
+### P1 — baseline (commit 9bd90c2f2)
+- Pristine OPENGLES config: 6526 ctest registrations, full gtest list, file hashes, API decls
+  captured under `modularization/baseline/`.
+- Pristine full-suite single-process OPENGLES run segfaults in `MetalResourceHealth` device churn
+  under Xvfb (environmental; per-test ctest processes pass) — recorded in the baseline README.
+- Pristine HEADLESS control (built from the untouched `cna` develop worktree, same commit):
+  6118 ctest tests at `-j4`: 11 failed → serial rerun: 9 were parallel flakes (ENet×6,
+  audio-timing×3), leaving exactly 2 deterministic pristine failures:
+  `GraphicsDeviceValidationTest.SetRenderTargets_FourTargets_DoesNotThrow` (the accepted
+  REMED-GFX-133 residual) and `Headless_Smoke` (aborts with an index-buffer primitive-range
+  throw in this environment). This is the control profile the modular build must match.
+
+### P2 — module split (commits 268d3b962 + 6c9a64da3)
+- Full OPENGLES tree builds with the 12 module targets + INTERFACE umbrella; 12 `libcna_*.a`
+  module archives produced.
+- ctest registration names and normalized gtest list **byte-identical** to baseline.
+- A/B behavior run (identical command, `--gtest_filter=-MetalResourceHealth.*`, Xvfb, dummy
+  audio): pristine binary 6218 = 6212 pass + 6 skip; modular binary 6218 = 6212 pass + 6 skip;
+  per-test outcome sets identical; both exit 0.
+- Configure-time source-partition validator active (no unowned/doubly-owned production TUs).
+- All five module probes run; all link-closure gates pass on OPENGLES; `probe_math`'s build
+  closure is exactly sharp-runtime + `cna_math`; `probe_core` adds only `cna_core`.
+- `RendererIdentityRegistry` gate: 41 identities preserved in both registries (enum order exact;
+  cmake STRINGS as a set — the two registries' orderings differ pre-existing).
+
+### P5 (in progress) — sharp-runtime consumption seam (commit 5b9746d32)
+- Seam verified behavior-neutral against monolithic develop: OPENGLES reconfigure + rebuild is a
+  no-op.
+- Local read-only **merge preview** built at `../sharp-runtime-merge-preview`
+  (branch `preview/modularization-develop-merge`, base `e8340b33` + develop `1e51c2d8`, never to
+  be pushed): 5 conflicts total (.gitignore, root CMakeLists, NEXT.md, README.md,
+  BitConverter.hpp); FINAL-STAB-001's `SHARP_RUNTIME_HAS_NATIVE_INT128` re-published on the
+  `sharp_runtime_headers` INTERFACE; Decimal.cpp i686 exclusion ported into the Core.Base setup;
+  BitConverter keeps both the audit bounds-checks and the native-int128 guard. Merged tree builds;
+  `SharpRuntimeTests_Core_Base` passes 5586/5586.
+- The remote branch remains ACTIVE during this campaign (observed movement
+  `894135fd → e8340b33 → accee955` across the session); the develop merge gate is therefore not
+  eligible yet.
+- **CNA × modular sharp-runtime (commit 139730119):** per-module component sets corrected to the
+  mechanically derived closures; the complete non-Net CNA tree (HEADLESS, `CNA_ENABLE_NET=OFF`)
+  compiles and links against the merge preview; all 12 module gates pass; the Decimal XNB reader
+  tests are present exactly as on the monolith (3 = 3 — the INT128 define port works);
+  `probe_math`'s sharp closure is the single `libsharp_runtime_core.a` archive.
+- **Merge-time CNA adaptation list (Net-only, upstream-driven):**
+  `System::Collections::Generic::IList<T>::operator[]` on the modular branch returns
+  `System::Collections::detail::ElementReference<T>` (audit remediation); CNA's
+  `NetworkSessionProperties::operator[]` (`include/Microsoft/Xna/Framework/Net/NetworkSessionProperties.hpp:66`)
+  still returns `std::optional<int>&`, making the type abstract at
+  `AvailableNetworkSession.hpp:144`, `NetworkSession.hpp:843/884`. One root cause, four error
+  sites; must be adapted together with the sharp-runtime develop merge (not now — the branch API
+  is still moving and CNA's Net public surface must not chase an unmerged contract).
+
+### Physical source moves — decision
+Deferred (plan §6): the target graph, parity gates and probe contracts are the campaign's
+substantive modularization; a later pure-`git mv` phase can relocate sources without touching
+`include/` (public include paths are unaffected) once the owner settles the final directory
+blueprint. No file was moved in this campaign; the no-loss reconciliation therefore reduces to
+hash-identity for all production sources plus enumerated additions.
+
+### Cycles (final observed list)
+1. graphics-core ↔ input — XNA-semantic, declared. 2. graphics-core ↔ selected backend —
+factory + reverse symbol edges, declared per-module. 3. audio ↔ media — FrameworkDispatcher
+pumps MediaPlayer while MediaPlayer plays through the audio mixer; declared. (The planned
+"runtime ↔ audio via FrameworkDispatcher" cycle dissolved by assigning the dispatcher TU to
+audio; the audio↔media coupling replaced it as the true minimal form.) No other link-level
+cycle exists.
