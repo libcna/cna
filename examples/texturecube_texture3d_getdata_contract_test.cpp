@@ -174,6 +174,9 @@ namespace
 #elif defined(CNA_BACKEND_D3D12)
     constexpr Contract kContract{"D3D12", true, Support::Exact, Support::Exact,
                                  true, Support::Exact, Support::Exact, false};
+#elif defined(CNA_BACKEND_LLGL)
+    constexpr Contract kContract{"LLGL", true, Support::Exact, Support::Exact,
+                                 true, Support::Exact, Support::Exact, false};
 #else
 #error "REMED-GFX-130: this backend has no declared TextureCube/Texture3D GetData contract."
 #endif
@@ -1064,7 +1067,20 @@ protected:
         std::printf("REMED-GFX-130 TextureCube/Texture3D GetData contract -- backend %s\n",
                     kContract.name);
 
-        RunCubeChecks(dev);
+        if (kContract.cubeHasBackend)
+        {
+            RunCubeChecks(dev);
+        }
+        else
+        {
+            const bool rejected = Throws<System::NotSupportedException>([&]
+            {
+                TextureCube cube(dev, kCube, /*mipMap=*/true, SurfaceFormat::Color);
+            });
+            check(rejected,
+                  "C0 cube: TextureCube construction is refused deterministically when the "
+                  "backend declares no validated cube storage");
+        }
         RunVolumeChecks(dev);
 
         std::printf("%d/%d checks passed on %s\n", passCount_, totalCount_, kContract.name);

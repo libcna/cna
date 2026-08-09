@@ -13,8 +13,8 @@ static_assert(getCurrentGraphicsBackendType() == getCurrentGraphicsBackendType()
 static_assert(!getCurrentGraphicsBackendName().empty());
 constexpr GraphicsBackendType kCompileTimeType = getCurrentGraphicsBackendType();
 constexpr std::string_view kCompileTimeName = getCurrentGraphicsBackendName();
-static_assert(static_cast<int>(GraphicsBackendType::Gdi) + 1 == 39,
-              "GraphicsBackendType must expose all 39 genuine backend identities");
+static_assert(static_cast<int>(GraphicsBackendType::Llgl) + 1 == 40,
+              "GraphicsBackendType must expose all 40 genuine backend identities");
 
 TEST(GraphicsBackendTypeTest, GetCurrentGraphicsBackendTypeDoesNotThrow)
 {
@@ -88,6 +88,7 @@ namespace
             case GraphicsBackendType::Diligent:    return "DILIGENT";
             case GraphicsBackendType::Glide:       return "GLIDE";
             case GraphicsBackendType::Gdi:         return "GDI";
+            case GraphicsBackendType::Llgl:        return "LLGL";
         }
         return {};
     }

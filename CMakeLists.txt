@@ -290,6 +290,11 @@ include(cmake/Tests/SokolTests.cmake)
 # native API at runtime and a headless machine may have none of them.
 include(cmake/Tests/DiligentTests.cmake)
 
+# plan_llgl.md: LLGL backend CTest registration. Like the Vulkan/Bgfx/SDL_GPU entries above these
+# need a real (or virtual) display; unlike them, the native API underneath is decided at runtime by
+# LLGL itself, so the same binaries exercise whichever module was selected.
+include(cmake/Tests/LlglTests.cmake)
+
 include(cmake/Harnesses.cmake)
 
 include(cmake/ToolGltfToCnj.cmake)

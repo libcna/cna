@@ -215,6 +215,11 @@ namespace
     constexpr bool kReadsBackbuffer = true;
     constexpr bool kDraws3D = true;
     constexpr const char* kBackendName = "D3D12";
+#elif defined(CNA_BACKEND_LLGL)
+    constexpr bool kRasterizes = true;
+    constexpr bool kReadsBackbuffer = true;
+    constexpr bool kDraws3D = true;
+    constexpr const char* kBackendName = "LLGL";
 #else
 #error "REMED-GFX-157: this backend has no declared SpriteBatch/3D ordering contract."
 #endif

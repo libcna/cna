@@ -52,6 +52,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
+#include "System/NotSupportedException.hpp"
 
 #include <algorithm>
 #include <cstdint>
@@ -218,6 +219,26 @@ class SoftwareDepthBiasTest : public Game
         if (done_) return;
         done_ = true;
         auto& dev = getGraphicsDeviceProperty();
+
+#if defined(CNA_BACKEND_LLGL)
+        bool rejected = false;
+        try
+        {
+            SetRaster(dev, FillMode::Solid, kBias, 0.0f);
+        }
+        catch (const System::NotSupportedException&)
+        {
+            rejected = true;
+        }
+        check(rejected,
+              "LLGL: non-zero RasterizerState.DepthBias is rejected deterministically on the "
+              "validated OpenGL path");
+        std::printf("=== %d/%d PASS ===\n", passCount_, totalCount_);
+        result_ = (passCount_ == totalCount_) ? 0 : 1;
+        Exit();
+        return;
+#endif
+
         const Color red(255, 0, 0, 255);
         const Color green(0, 255, 0, 255);
         const Color blue(0, 0, 255, 255);

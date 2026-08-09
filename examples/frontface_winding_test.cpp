@@ -161,6 +161,11 @@ namespace
     constexpr bool kReadsBackbuffer = true;
     constexpr bool kDraws3D = true;
     constexpr const char* kBackendName = "D3D12";
+#elif defined(CNA_BACKEND_LLGL)
+    constexpr bool kRasterizes = true;
+    constexpr bool kReadsBackbuffer = true;
+    constexpr bool kDraws3D = true;
+    constexpr const char* kBackendName = "LLGL";
 #else
 #error "REMED-GFX-160: this backend has no declared winding contract."
 #endif

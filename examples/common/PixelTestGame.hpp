@@ -51,6 +51,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <stdexcept>
 #include <string>
 #include <type_traits>
 #include <vector>
@@ -79,6 +80,18 @@ namespace CNA::Examples
         // pass a non-zero tolerance only for scenarios that are known to legitimately vary.
         // Prints a "[PASS]"/"[FAIL]" line naming label, and marks the overall result as failed
         // if this check does not match. Returns true if this specific check passed.
+        // Records a non-pixel precondition -- e.g. "the texture this test draws was actually
+        // created" -- in the same PASS/FAIL stream as the pixel checks, so a test whose setup
+        // failed reports that instead of silently checking pixels no draw ever produced.
+        // Returns the condition, so a caller can bail out of RunTest() when it is false.
+        bool ExpectTrue(const char* label, bool condition)
+        {
+            std::printf("[%s] %s\n", condition ? "PASS" : "FAIL", label);
+            if (!condition)
+                result_ = 1;
+            return condition;
+        }
+
         bool ExpectPixel(const char* label,
                           const Microsoft::Xna::Framework::Rectangle& region,
                           const Microsoft::Xna::Framework::Color& expectedColor,
@@ -308,8 +321,35 @@ namespace CNA::Examples
         // this leaves it exactly as this function found it).
         SDL_QuitSubSystem(SDL_INIT_VIDEO);
 
-        TGame game;
-        game.Run();
-        return game.getResultProperty();
+        // LLGL-55: a real display is present (the probe above succeeded), but the LLGL Vulkan
+        // module still cannot actually PRESENT on it when the X server has no DRI3 support --
+        // confirmed, not guessed: LLGL::VKSwapChain's own surface creation throws
+        // "failed to create Vulkan swap-chain (error code = VK_ERROR_SURFACE_LOST_KHR)" out of
+        // the GraphicsDevice/Game constructor itself, well after this function's own display
+        // probe already passed. Uncaught, this used to abort the whole test process (every
+        // Vulkan-selecting LLGL test on a DRI3-less Xvfb) instead of reporting a clean result --
+        // this is a genuine infrastructure gap (this backend's OWN choice of renderer module vs.
+        // what the X server actually supports), not a rendering defect, so it is reported the
+        // same way "no display at all" already is: SKIPPED, not FAILED, and NOT silently treated
+        // as a pass. The substring match is deliberately narrow (this exact LLGL/Vulkan surface
+        // error, not `std::exception` in general) so a genuine Vulkan pipeline/rendering bug
+        // still surfaces as an uncaught exception -- a real crash, correctly reported as FAILED.
+        try
+        {
+            TGame game;
+            game.Run();
+            return game.getResultProperty();
+        }
+        catch (const std::exception& ex)
+        {
+            const std::string what = ex.what();
+            if (what.find("VK_ERROR_SURFACE_LOST_KHR") != std::string::npos)
+            {
+                std::printf("[SKIP] Vulkan WSI unavailable on this display (no DRI3?): %s\n",
+                            ex.what());
+                return kSkipExitCode;
+            }
+            throw;
+        }
     }
 }

@@ -2,12 +2,15 @@
 #include <gtest/gtest.h>
 #include "CNA/GraphicsBackendType.hpp"
 
-#include "CNA/GraphicsBackendType.hpp"
-
 #if defined(CNA_BACKEND_BGFX) && __has_include(<bgfx/bgfx.h>)
 #define CNA_TEST_BGFX_AVAILABLE 1
 #include <bgfx/bgfx.h>
 #include "CNA/Internal/Backends/Bgfx/BgfxGraphicsBackend.hpp"
+#endif
+
+#ifdef CNA_BACKEND_LLGL
+#include "CNA/Internal/Backends/Llgl/LlglRendererSelection.hpp"
+#include <stdexcept>
 #endif
 
 TEST(GraphicsBackendCompileDefinitionsTest, ExactlyOneGraphicsBackendIsSelected)
@@ -140,6 +143,9 @@ TEST(GraphicsBackendCompileDefinitionsTest, ExactlyOneGraphicsBackendIsSelected)
 #ifdef CNA_BACKEND_GDI
     ++enabled;
 #endif
+#ifdef CNA_BACKEND_LLGL
+    ++enabled;
+#endif
 
     EXPECT_EQ(enabled, 1);
 }
@@ -160,6 +166,72 @@ TEST(GraphicsBackendCompileDefinitionsTest, SkiaMacroMatchesPublicBackendIdentit
 {
     EXPECT_EQ(CNA::getCurrentGraphicsBackendType(), CNA::GraphicsBackendType::Skia);
     EXPECT_EQ(CNA::getCurrentGraphicsBackendName(), "SKIA");
+}
+#endif
+
+#ifdef CNA_BACKEND_LLGL
+TEST(GraphicsBackendCompileDefinitionsTest, LlglDefaultRendererPreferenceIsRealAndDrawing)
+{
+    namespace Detail = CNA::Internal::Backends::Llgl::Detail;
+
+    const auto preference = Detail::GetDefaultRendererPreference();
+    ASSERT_EQ(preference.size(), 1u);
+    EXPECT_EQ(preference[0], Detail::RendererModule::OpenGL);
+
+    // The Null module renders nothing, so it must never be reachable without being asked for by
+    // name: an automatic fallback onto it would turn "no usable GPU" into a silent black screen.
+    for (const auto module : preference)
+    {
+        EXPECT_NE(module, Detail::RendererModule::Null);
+        EXPECT_TRUE(Detail::IsRendererModuleCompiledIn(module));
+    }
+}
+
+TEST(GraphicsBackendCompileDefinitionsTest, LlglRendererOverrideParsingWorks)
+{
+    namespace Detail = CNA::Internal::Backends::Llgl::Detail;
+
+    EXPECT_EQ(Detail::ParseRendererModuleOverride("auto"), Detail::GetDefaultRendererPreference());
+    EXPECT_EQ(Detail::ParseRendererModuleOverride(nullptr), Detail::GetDefaultRendererPreference());
+    EXPECT_EQ(Detail::ParseRendererModuleOverride(""), Detail::GetDefaultRendererPreference());
+
+    if (Detail::IsRendererModuleCompiledIn(Detail::RendererModule::OpenGL))
+    {
+        const auto parsed = Detail::ParseRendererModuleOverride("OpenGL");
+        ASSERT_EQ(parsed.size(), 1u);
+        EXPECT_EQ(parsed[0], Detail::RendererModule::OpenGL);
+        EXPECT_EQ(Detail::ParseRendererModuleOverride("gl"), parsed);
+    }
+
+    if (Detail::IsRendererModuleCompiledIn(Detail::RendererModule::Vulkan))
+    {
+        EXPECT_THROW((void)Detail::ParseRendererModuleOverride("vulkan"), std::runtime_error);
+    }
+}
+
+TEST(GraphicsBackendCompileDefinitionsTest, LlglRendererOverrideRejectsInvalidValue)
+{
+    namespace Detail = CNA::Internal::Backends::Llgl::Detail;
+
+    EXPECT_THROW((void)Detail::ParseRendererModuleOverride("invalid-renderer"), std::runtime_error);
+}
+
+TEST(GraphicsBackendCompileDefinitionsTest, LlglModuleNamesMatchLlglsOwnModuleNames)
+{
+    namespace Detail = CNA::Internal::Backends::Llgl::Detail;
+
+    EXPECT_STREQ(Detail::GetRendererModuleName(Detail::RendererModule::OpenGL), "OpenGL");
+    EXPECT_STREQ(Detail::GetRendererModuleName(Detail::RendererModule::Vulkan), "Vulkan");
+    EXPECT_STREQ(Detail::GetRendererModuleName(Detail::RendererModule::Null), "Null");
+}
+
+TEST(GraphicsBackendCompileDefinitionsTest, LlglOnlyOpenGLNeedsAnOpenGLWindow)
+{
+    namespace Detail = CNA::Internal::Backends::Llgl::Detail;
+
+    EXPECT_TRUE(Detail::RendererModuleNeedsOpenGLWindow(Detail::RendererModule::OpenGL));
+    EXPECT_FALSE(Detail::RendererModuleNeedsOpenGLWindow(Detail::RendererModule::Vulkan));
+    EXPECT_FALSE(Detail::RendererModuleNeedsOpenGLWindow(Detail::RendererModule::Null));
 }
 #endif
 

@@ -163,6 +163,9 @@ namespace
     // RenderTarget2D::GetData) round-trips real content, so `kRasterizes = true` is accurate.
     constexpr bool kRasterizes = true;
     constexpr const char* kBackendName = "SOKOL";
+#elif defined(CNA_BACKEND_LLGL)
+    constexpr bool kRasterizes = true;
+    constexpr const char* kBackendName = "LLGL";
 #else
 #error "REMED-GFX-155: this backend has no declared backbuffer-consumer contract."
 #endif

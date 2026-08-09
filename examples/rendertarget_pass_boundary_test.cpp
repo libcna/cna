@@ -265,6 +265,11 @@ namespace
     // command-ordered semantics exactly.
     constexpr Contract kContract{"SOKOL", true, Support::Exact, true, Support::Exact,
                                  true, true, false, true, true, true, false, false};
+#elif defined(CNA_BACKEND_LLGL)
+    // Commands are segmented in public target-transition order. Clear is an explicit ordered LLGL
+    // command, and both 2D and cube targets resolve to textures with exact readback.
+    constexpr Contract kContract{"LLGL", true, Support::Exact, false, Support::Unsupported,
+                                 true, true, false, true, true, true, true, false};
 #else
 #error "REMED-GFX-140: this backend has no declared render-target pass-boundary contract."
 #endif

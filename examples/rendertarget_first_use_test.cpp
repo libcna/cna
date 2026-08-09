@@ -176,6 +176,9 @@ namespace
     // throwaway GL FBO around the raw texture handle `sg_gl_query_image_info()` exposes.
     constexpr bool kRasterizes = true;
     constexpr const char* kBackendName = "SOKOL";
+#elif defined(CNA_BACKEND_LLGL)
+    constexpr bool kRasterizes = true;
+    constexpr const char* kBackendName = "LLGL";
 #else
 #error "REMED-GFX-158: this backend has no declared first-use contract."
 #endif

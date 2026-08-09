@@ -123,7 +123,10 @@ namespace CNA
         Glide,
 
         /** @brief Classic Win32 GDI with private CPU 2D rasterization. */
-        Gdi
+        Gdi,
+
+        /** @brief LLGL rendering abstraction; CNA's supported runtime uses its OpenGL module. */
+        Llgl
     };
 
     /**
@@ -221,6 +224,8 @@ namespace CNA
         return GraphicsBackendType::Glide;
 #elif defined(CNA_BACKEND_GDI)
         return GraphicsBackendType::Gdi;
+#elif defined(CNA_BACKEND_LLGL)
+        return GraphicsBackendType::Llgl;
 #else
 #error "CNA: no CNA_BACKEND_* compile definition set -- graphics backend selection (cmake/BackendSelection.cmake) is broken"
 #endif
@@ -279,6 +284,7 @@ namespace CNA
             case GraphicsBackendType::Diligent:      return "DILIGENT";
             case GraphicsBackendType::Glide:         return "GLIDE";
             case GraphicsBackendType::Gdi:           return "GDI";
+            case GraphicsBackendType::Llgl:          return "LLGL";
         }
         return "UNKNOWN";
     }

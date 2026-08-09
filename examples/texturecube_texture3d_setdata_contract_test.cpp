@@ -210,6 +210,12 @@ namespace
     constexpr Contract kContract{"D3D12", true, Support::Exact, Support::Unsupported,
                                  true, Support::Exact, Support::Exact,
                                  Support::Unsupported, false};
+#elif defined(CNA_BACKEND_LLGL)
+    // The pinned OpenGL render system cannot sample cubes, so LLGL keeps exact transfer-only CPU
+    // face storage; Texture3D remains a native LLGL texture with exact mip transfers.
+    constexpr Contract kContract{"LLGL", true, Support::Exact, Support::Exact,
+                                 true, Support::Exact, Support::Exact,
+                                 Support::Unsupported, false};
 #else
 #error "REMED-GFX-135: this backend has no declared TextureCube/Texture3D SetData contract."
 #endif
@@ -1341,7 +1347,20 @@ protected:
         std::printf("REMED-GFX-135 TextureCube/Texture3D SetData contract -- backend %s\n",
                     kContract.name);
 
-        RunCubeChecks(dev);
+        if (kContract.cubeHasBackend)
+        {
+            RunCubeChecks(dev);
+        }
+        else
+        {
+            const bool rejected = Throws<System::NotSupportedException>([&]
+            {
+                TextureCube cube(dev, kCube, /*mipMap=*/true, SurfaceFormat::Color);
+            });
+            check(rejected,
+                  "C0 cube: TextureCube construction is refused deterministically when the "
+                  "backend declares no validated cube storage");
+        }
         RunRenderTargetCubeCheck(dev);
         RunVolumeChecks(dev);
 

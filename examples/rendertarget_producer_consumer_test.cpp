@@ -170,6 +170,9 @@ namespace
     // (docs/sokol-backend.md), so `kRasterizes = true` is accurate for this file's contract too.
     constexpr bool kRasterizes = true;
     constexpr const char* kBackendName = "SOKOL";
+#elif defined(CNA_BACKEND_LLGL)
+    constexpr bool kRasterizes = true;
+    constexpr const char* kBackendName = "LLGL";
 #else
 #error "REMED-GFX-151: this backend has no declared render-target producer/consumer contract."
 #endif
