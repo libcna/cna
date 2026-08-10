@@ -2,7 +2,7 @@
 // plan_software.md Phase S9 (SOFTWARE-81): empirical verification of backface culling.
 //
 // Two triangles cover the exact same screen region but have opposite vertex winding:
-//   frontCW  = (TL, TR, BL) -- clockwise as displayed (this backend's screen space is Y-down).
+//   frontCW  = (TL, TR, BL) -- clockwise as displayed (this renderer's screen space is Y-down).
 //   backCCW  = (TL, BL, TR) -- the same 3 corners, counter-clockwise as displayed.
 // Since World/View/Projection are identity, NDC coordinates equal the raw vertex positions, so
 // winding can be reasoned about directly from the vertex list above.

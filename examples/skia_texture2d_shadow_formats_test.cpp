@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 // SKIA-139: exact Bgra5551/SNORM shadows, deterministic mips and RGBA32F sampling.
 
-#include "CNA/Internal/Backends/Skia/SkiaGraphicsBackend.hpp"
-#include "CNA/Internal/Backends/Skia/SkiaTextureBackend.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaRenderer.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaTextureRenderer.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
@@ -33,10 +33,10 @@
 #include <type_traits>
 #include <vector>
 
-using CNA::Internal::Backends::Skia::SkiaGraphicsBackend;
-using CNA::Internal::Backends::Skia::SkiaResourceStats;
-using CNA::Internal::Backends::Skia::SkiaSourceAlphaConvention;
-using CNA::Internal::Backends::Skia::SkiaTextureBackend;
+using CNA::Internal::Renderers::Skia::SkiaRenderer;
+using CNA::Internal::Renderers::Skia::SkiaResourceStats;
+using CNA::Internal::Renderers::Skia::SkiaSourceAlphaConvention;
+using CNA::Internal::Renderers::Skia::SkiaTextureRenderer;
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
 using namespace Microsoft::Xna::Framework::Graphics::PackedVector;
@@ -142,7 +142,7 @@ namespace
     [[nodiscard]] bool SameStats(const SkiaResourceStats& left,
                                  const SkiaResourceStats& right) noexcept
     {
-        return left.textureBackends == right.textureBackends
+        return left.textureRenderers == right.textureRenderers
             && left.textureImageViews == right.textureImageViews
             && left.textureImageBytes == right.textureImageBytes
             && left.mipChains2D == right.mipChains2D
@@ -157,9 +157,9 @@ class InspectableShadowTexture2D final : public Texture2D
 public:
     using Texture2D::Texture2D;
 
-    [[nodiscard]] SkiaTextureBackend* SkiaBackend() const
+    [[nodiscard]] SkiaTextureRenderer* SkiaRenderer() const
     {
-        return dynamic_cast<SkiaTextureBackend*>(GetBackendRaw());
+        return dynamic_cast<SkiaTextureRenderer*>(GetRendererRaw());
     }
 };
 
@@ -189,28 +189,28 @@ protected:
         done_ = true;
 
         auto& device = getGraphicsDeviceProperty();
-        auto* graphicsBackend = dynamic_cast<SkiaGraphicsBackend*>(&device.GetBackend());
-        Check(graphicsBackend != nullptr, "public GraphicsDevice owns the Skia backend");
-        if (!graphicsBackend)
+        auto* graphicsRenderer = dynamic_cast<SkiaRenderer*>(&device.GetRenderer());
+        Check(graphicsRenderer != nullptr, "public GraphicsDevice owns the Skia renderer");
+        if (!graphicsRenderer)
         {
             Exit();
             return;
         }
 
-        const SkiaResourceStats baseline = graphicsBackend->GetResourceStatsEXT();
+        const SkiaResourceStats baseline = graphicsRenderer->GetResourceStatsEXT();
         ExercisePacked<std::uint16_t, Bgra5551>(
-            device, *graphicsBackend, SurfaceFormat::Bgra5551, "Bgra5551",
+            device, *graphicsRenderer, SurfaceFormat::Bgra5551, "Bgra5551",
             {0xFC00u, 0x83E0u, 0x801Fu, 0xFFFFu, 0x0000u, 0xE210u},
             {0x9123u, 0xE456u}, AverageBgra5551, 14u);
         ExercisePacked<std::uint16_t, NormalizedByte2>(
-            device, *graphicsBackend, SurfaceFormat::NormalizedByte2, "NormalizedByte2",
+            device, *graphicsRenderer, SurfaceFormat::NormalizedByte2, "NormalizedByte2",
             {0x007Fu, 0x7F00u, 0x0081u, 0x8100u, 0x8181u, 0x4080u},
             {0x2040u, 0xE0C0u},
             [](const std::vector<std::uint16_t>& words) {
                 return AverageSnorm<std::uint16_t, 2>(words);
             }, 14u);
         ExercisePacked<std::uint32_t, NormalizedByte4>(
-            device, *graphicsBackend, SurfaceFormat::NormalizedByte4, "NormalizedByte4",
+            device, *graphicsRenderer, SurfaceFormat::NormalizedByte4, "NormalizedByte4",
             {0x7F00007Fu, 0x7F007F00u, 0x7F7F0000u, 0x7F404040u, 0x81818181u,
              0x4080817Fu},
             {0x10203040u, 0xE0D0C0B0u},
@@ -219,8 +219,8 @@ protected:
             }, 28u);
         CheckExactDecodeAndMetadata(device);
         CheckPublicSampling(device);
-        CheckTypedAndTargetRefusal(device, *graphicsBackend);
-        Check(SameStats(graphicsBackend->GetResourceStatsEXT(), baseline),
+        CheckTypedAndTargetRefusal(device, *graphicsRenderer);
+        Check(SameStats(graphicsRenderer->GetResourceStatsEXT(), baseline),
               "all shadow-format fixtures return Skia resource counters to baseline");
 
         std::printf("=== %d/%d PASS ===\n", checks_ - failures_, checks_);
@@ -229,21 +229,21 @@ protected:
 
 private:
     template<typename Word, typename Packed, typename Average>
-    void ExercisePacked(GraphicsDevice& device, SkiaGraphicsBackend& graphicsBackend,
+    void ExercisePacked(GraphicsDevice& device, SkiaRenderer& graphicsRenderer,
                         SurfaceFormat format, const char* name,
                         std::vector<Word> expected, const std::vector<Word>& patch,
                         Average&& average, std::size_t expectedMipBytes)
     {
         static_assert(std::is_unsigned_v<Word>);
-        const SkiaResourceStats before = graphicsBackend.GetResourceStatsEXT();
+        const SkiaResourceStats before = graphicsRenderer.GetResourceStatsEXT();
         {
             InspectableShadowTexture2D texture(device, 3, 2, true, format);
-            SkiaTextureBackend* backend = texture.SkiaBackend();
-            const SkiaResourceStats allocated = graphicsBackend.GetResourceStatsEXT();
+            SkiaTextureRenderer* renderer = texture.SkiaRenderer();
+            const SkiaResourceStats allocated = graphicsRenderer.GetResourceStatsEXT();
             Check(texture.getFormatProperty() == format && texture.getLevelCountProperty() == 2
-                      && backend && backend->FormatEXT() == format,
+                      && renderer && renderer->FormatEXT() == format,
                   std::string(name) + " constructs exact format and complete mip chain");
-            Check(allocated.textureBackends == before.textureBackends + 1u
+            Check(allocated.textureRenderers == before.textureRenderers + 1u
                       && allocated.textureImageViews == before.textureImageViews + 2u
                       && allocated.textureImageBytes == before.textureImageBytes + 192u
                       && allocated.mipChains2D == before.mipChains2D + 1u
@@ -264,10 +264,10 @@ private:
                       && read.back().getPackedValueProperty() == guard,
                   std::string(name) + " full transfer preserves exact words and caller guards");
 
-            bool littleEndian = backend != nullptr;
-            if (backend)
+            bool littleEndian = renderer != nullptr;
+            if (renderer)
             {
-                const std::uint8_t* raw = backend->MipChainEXT().LevelData(0);
+                const std::uint8_t* raw = renderer->MipChainEXT().LevelData(0);
                 for (std::size_t index = 0; index < expected.size(); ++index)
                 {
                     for (std::size_t byte = 0; byte < sizeof(Word); ++byte)
@@ -283,7 +283,7 @@ private:
             Packed generated{};
             texture.GetData(1, nullptr, &generated, 0, 1);
             Check(generated.getPackedValueProperty() == average(expected)
-                      && backend && backend->MipGenerationCountEXT(1) == 1u,
+                      && renderer && renderer->MipGenerationCountEXT(1) == 1u,
                   std::string(name) + " generated mip averages native normalized components");
 
             const Rectangle patchRectangle(1, 0, 1, 2);
@@ -309,7 +309,7 @@ private:
             texture.GetData(1, nullptr, &generated, 0, 1);
             Check(SameWords<Packed>(whole, expected)
                       && generated.getPackedValueProperty() == average(expected)
-                      && backend && backend->MipGenerationCountEXT(1) == 2u,
+                      && renderer && renderer->MipGenerationCountEXT(1) == 2u,
                   std::string(name) + " partial write preserves neighbours and regenerates mip"
                       + " (expected=" + std::to_string(average(expected))
                       + ", actual="
@@ -323,7 +323,7 @@ private:
             Check(rejected && whole == beforeFailure,
                   std::string(name) + " undersized upload is failure-atomic");
         }
-        Check(SameStats(graphicsBackend.GetResourceStatsEXT(), before),
+        Check(SameStats(graphicsRenderer.GetResourceStatsEXT(), before),
               std::string(name) + " destruction releases shadow and working views");
     }
 
@@ -344,7 +344,7 @@ private:
         norm4.SetData(&norm4Value, 1);
 
         const auto image = [](InspectableShadowTexture2D& texture) {
-            return texture.SkiaBackend()->SnapshotImage(SkiaSourceAlphaConvention::Straight);
+            return texture.SkiaRenderer()->SnapshotImage(SkiaSourceAlphaConvention::Straight);
         };
         Check(image(bgra)->colorType() == kRGBA_F32_SkColorType
                   && image(norm2)->colorType() == kRGBA_F32_SkColorType
@@ -430,7 +430,7 @@ private:
     }
 
     void CheckTypedAndTargetRefusal(GraphicsDevice& device,
-                                    SkiaGraphicsBackend& graphicsBackend)
+                                    SkiaRenderer& graphicsRenderer)
     {
         Texture2D texture(device, 1, 1, false, SurfaceFormat::NormalizedByte2);
         const NormalizedByte2 original =
@@ -443,7 +443,7 @@ private:
         Check(rejected && unchanged == original,
               "mismatched typed upload rejects before mutating the exact SNORM shadow");
 
-        const SkiaResourceStats before = graphicsBackend.GetResourceStatsEXT();
+        const SkiaResourceStats before = graphicsRenderer.GetResourceStatsEXT();
         const std::array formats{
             SurfaceFormat::Bgra5551,
             SurfaceFormat::NormalizedByte2,
@@ -457,7 +457,7 @@ private:
                 (void)target;
             });
         }
-        Check(allRejected && SameStats(graphicsBackend.GetResourceStatsEXT(), before),
+        Check(allRejected && SameStats(graphicsRenderer.GetResourceStatsEXT(), before),
               "Bgra5551/NormalizedByte2/NormalizedByte4 RenderTarget2D requests reject "
               "transactionally (not FNA-renderable)");
     }

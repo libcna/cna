@@ -3,7 +3,7 @@
 // (GraphicsDeviceManager.PreferredBackBufferWidth/Height + ApplyChanges()), followed by real GPU
 // pixel reads at the new resolution -- not just a check that the bookkeeping numbers changed.
 //
-// UpdateSwapChainResolution() (LlglGraphicsBackend.cpp) only runs at the top of Present(), so
+// UpdateSwapChainResolution() (LlglRenderer.cpp) only runs at the top of Present(), so
 // every resize step below is followed by SyncWindowAndPresent() before any pixel is read --
 // without it the swap chain itself never actually resizes, only ApplyChanges()'s own presentation
 // parameters would appear to have changed. SDL_SetWindowSize() is not guaranteed synchronous under
@@ -32,7 +32,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 
-#include "CNA/Internal/Backends/Llgl/LlglGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Llgl/LlglRenderer.hpp"
 
 #include "common/PixelTestGame.hpp"
 
@@ -44,8 +44,8 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::Llgl;
-using CNA::Internal::Backends::CnaPresentationMode;
+using namespace CNA::Internal::Renderers::Llgl;
+using CNA::Internal::Renderers::CnaPresentationMode;
 
 namespace
 {
@@ -113,7 +113,7 @@ protected:
         done_ = true;
 
         auto& device = getGraphicsDeviceProperty();
-        auto& backend = static_cast<LlglGraphicsBackend&>(device.GetBackend());
+        auto& renderer = static_cast<LlglRenderer&>(device.GetRenderer());
 
         // The very first CreateDevice() already issued its own SDL_SetWindowSize() (for
         // kInitialWidth/kInitialHeight) before this Draw() ever ran; settle it the same way every
@@ -123,13 +123,13 @@ protected:
         // --- Check A: the initial size ------------------------------------------------------------
         {
             int width = 0, height = 0;
-            backend.GetViewportSize(width, height);
+            renderer.GetViewportSize(width, height);
             check(width == kInitialWidth && height == kInitialHeight,
                   "initial viewport matches the configured back buffer size");
 
             device.Clear(Color(255, 0, 0, 255));
             std::uint8_t rgba[4] = {0, 0, 0, 0};
-            backend.ReadBackbuffer(kInitialWidth / 2, kInitialHeight / 2, 1, 1, rgba);
+            renderer.ReadBackbuffer(kInitialWidth / 2, kInitialHeight / 2, 1, 1, rgba);
             check(IsColor(rgba, 255, 0, 0), "the initial clear reads back red at the centre");
         }
 
@@ -141,14 +141,14 @@ protected:
             SyncWindowAndPresent();   // drives UpdateSwapChainResolution() -- the real resize happens here
 
             int width = 0, height = 0;
-            backend.GetViewportSize(width, height);
+            renderer.GetViewportSize(width, height);
             check(width == kGrownWidth && height == kGrownHeight,
                   "GetViewportSize follows the real resize when the window grows");
 
             device.Clear(Color(0, 255, 0, 255));
             std::uint8_t rgba[4] = {0, 0, 0, 0};
             // Out of bounds at the OLD 640x480 resolution, inside the new, bigger one.
-            backend.ReadBackbuffer(kGrownWidth - 10, kGrownHeight - 10, 1, 1, rgba);
+            renderer.ReadBackbuffer(kGrownWidth - 10, kGrownHeight - 10, 1, 1, rgba);
             check(IsColor(rgba, 0, 255, 0),
                   "a pixel only reachable in the grown area reads back correctly -- the swap "
                   "chain's own backing store was resized, not just the reported numbers");
@@ -162,13 +162,13 @@ protected:
             SyncWindowAndPresent();
 
             int width = 0, height = 0;
-            backend.GetViewportSize(width, height);
+            renderer.GetViewportSize(width, height);
             check(width == kShrunkWidth && height == kShrunkHeight,
                   "GetViewportSize follows the real resize when the window shrinks");
 
             device.Clear(Color(0, 0, 255, 255));
             std::uint8_t rgba[4] = {0, 0, 0, 0};
-            backend.ReadBackbuffer(kShrunkWidth - 1, kShrunkHeight - 1, 1, 1, rgba);
+            renderer.ReadBackbuffer(kShrunkWidth - 1, kShrunkHeight - 1, 1, 1, rgba);
             check(IsColor(rgba, 0, 0, 255),
                   "the bottom-right corner of the shrunk back buffer reads back correctly");
 
@@ -177,7 +177,7 @@ protected:
             {
                 // The old 640x480 bottom-right corner is now well outside the shrunk 320x240
                 // back buffer.
-                backend.ReadBackbuffer(kInitialWidth - 1, kInitialHeight - 1, 1, 1, rgba);
+                renderer.ReadBackbuffer(kInitialWidth - 1, kInitialHeight - 1, 1, 1, rgba);
             }
             catch (const std::exception&)
             {
@@ -191,11 +191,11 @@ protected:
         // --- Check D: the presentation rect follows the CURRENT resolution, not a cached one ------
         {
             // Applied AFTER the shrink above: GraphicsDeviceManager.ApplyChanges() resets the
-            // backend's virtual resolution to match the (physical) back buffer size on every call
+            // renderer's virtual resolution to match the (physical) back buffer size on every call
             // (GraphicsDevice::Reset()), so a custom virtual canvas only survives if set afterward
             // -- exactly what a real game's own post-resize logic would have to do too.
-            backend.SetPresentationMode(static_cast<int>(CnaPresentationMode::Letterbox));
-            backend.SetVirtualResolution(kLogicalSize, kLogicalSize);
+            renderer.SetPresentationMode(static_cast<int>(CnaPresentationMode::Letterbox));
+            renderer.SetVirtualResolution(kLogicalSize, kLogicalSize);
 
             device.Clear(Color(0, 0, 0, 255));
             spriteBatch_->Begin();
@@ -209,15 +209,15 @@ protected:
             // switch to a 1:1 window-sized presentation purely for reading back: the sprite
             // geometry was already baked into window pixels when Draw() ran above, so this switch
             // does not change what was drawn, only how ReadBackbuffer's coordinates are addressed.
-            backend.SetPresentationMode(static_cast<int>(CnaPresentationMode::NativeBackBuffer));
-            backend.SetVirtualResolution(kShrunkWidth, kShrunkHeight);
+            renderer.SetPresentationMode(static_cast<int>(CnaPresentationMode::NativeBackBuffer));
+            renderer.SetVirtualResolution(kShrunkWidth, kShrunkHeight);
 
             // 320x240 letterboxing a square 100x100 canvas fits a 240x240 square centred at
             // x = 40..280; x = 5 and x = 315 stay in the side bars.
             std::uint8_t centre[4] = {0, 0, 0, 0};
             std::uint8_t bar[4] = {0, 0, 0, 0};
-            backend.ReadBackbuffer(kShrunkWidth / 2, kShrunkHeight / 2, 1, 1, centre);
-            backend.ReadBackbuffer(5, kShrunkHeight / 2, 1, 1, bar);
+            renderer.ReadBackbuffer(kShrunkWidth / 2, kShrunkHeight / 2, 1, 1, centre);
+            renderer.ReadBackbuffer(5, kShrunkHeight / 2, 1, 1, bar);
             check(IsColor(centre, 255, 255, 255) && IsColor(bar, 0, 0, 0),
                   "Letterbox centres the canvas within the CURRENT (shrunk) window, not a stale "
                   "resolution, and the side bars still show the clear colour");

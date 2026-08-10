@@ -19,7 +19,7 @@
 //   task has no mandate to modify just to add a counter. Only wall-clock latency percentiles are
 //   reported. Flagged as a real, named gap, not silently dropped -- see this task's own
 //   plan_devices.md resolution note for the follow-up scope.
-// - Every benchmark here runs against synthetic/fake backends (this host has no real
+// - Every benchmark here runs against synthetic/fake renderers (this host has no real
 //   accelerometer/gyroscope/haptic/compass/motion hardware) -- "distinguish host fake paths from
 //   real devices" (this task's own acceptance criterion) is satisfied by every result implicitly
 //   being a fake-path measurement; there is no real-device measurement to compare against in
@@ -201,7 +201,7 @@ int main()
             }));
 
     // 6. Compass fusion (the pure quaternion-to-heading computation itself -- the actual
-    // numerical "fusion" cost, independent of any specific backend's sample-delivery
+    // numerical "fusion" cost, independent of any specific renderer's sample-delivery
     // machinery).
     PrintResult(
         "Compass.HeadingFusion",

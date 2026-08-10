@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MS-PL
-// OPENGL1 backend: constant blend color (plan_opengl1.md item 17, EasyGL parity).
+// OPENGL1 renderer: constant blend color (plan_opengl1.md item 17, EasyGL parity).
 //
 // Before this, SetBlendFactor() was a no-op and Blend.BlendFactor/InverseBlendFactor mapped to
 // GL_ONE/GL_ZERO in BlendF() -- not a degraded case, a silently WRONG color: a game using
 // GraphicsDevice.BlendFactor got GL_ONE (i.e. as if it had asked for Blend.One) instead.
 //
 // Uses the 3D draw path (BasicEffect + DrawUserPrimitives), not SpriteBatch --
-// OpenGL1SpriteBatchBackend::Begin() hardcodes its own glBlendFunc(GL_SRC_ALPHA,
+// OpenGL1SpriteBatchRenderer::Begin() hardcodes its own glBlendFunc(GL_SRC_ALPHA,
 // GL_ONE_MINUS_SRC_ALPHA) independent of whatever BlendState a game passes to SpriteBatch.Begin(),
 // a separate pre-existing limitation unrelated to this item that would otherwise mask the very
 // thing being tested here (confirmed empirically: an earlier version of this test using

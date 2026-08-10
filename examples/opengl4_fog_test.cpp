@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl4.md GL4-25: real fog for the OpenGL4 graphics backend -- adds fog uniforms
+// plan_opengl4.md GL4-25: real fog for the OpenGL4 graphics renderer -- adds fog uniforms
 // (uFogEnabled/uFogColor/uFogStart/uFogEnd) and Task 1111's own already-verified fog-factor
 // formula (matches FNA's EffectHelpers.SetFogVector/Common.fxh ComputeFogFactor exactly when
 // World=View=Identity) to all 7 GpuDrawParams-driven stride/dispatch shaders: the new
@@ -14,7 +14,7 @@
 // colored3DProgram_, which stays reserved for DrawColoredPrimitives's own params-free callers)
 // closes that gap.
 //
-// Checks A-C port easygl_basiceffect_fog_test.cpp's own already-cross-backend-verified oracle
+// Checks A-C port easygl_basiceffect_fog_test.cpp's own already-cross-renderer-verified oracle
 // verbatim for the new coloredParams3d (stride 16) program: fog disabled -> pure geometry colour;
 // 50% fog (Z=0 with FogStart=-0.9/FogEnd=0.9) -> an exact purple blend; full fog (Z=FogStart)
 // -> exact fog colour.
@@ -68,7 +68,7 @@ namespace
     constexpr float kFogEnd = 0.9f;
     const Color kFogCyan(0, 255, 255, 255);
 
-    // Skinned vertex: matches OpenGL4VertexBufferBackend::ApplyLayout's stride-52 case.
+    // Skinned vertex: matches OpenGL4VertexBufferRenderer::ApplyLayout's stride-52 case.
     struct SkinnedGpuVertex
     {
         float px, py, pz;
@@ -79,7 +79,7 @@ namespace
     };
     static_assert(sizeof(SkinnedGpuVertex) == 52, "skinned vertex must be 52 bytes");
 
-    // PBR vertex: matches OpenGL4VertexBufferBackend::ApplyLayout's stride-48 case.
+    // PBR vertex: matches OpenGL4VertexBufferRenderer::ApplyLayout's stride-48 case.
     struct PbrGpuVertex
     {
         float px, py, pz;

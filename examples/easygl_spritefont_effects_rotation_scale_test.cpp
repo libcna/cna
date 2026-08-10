@@ -3,7 +3,7 @@
 //
 // EasyGL port of Task 694's SDL_Renderer "Test 2": a code path already correct BEFORE Task 694's
 // own flip fix (untouched by that fix) -- this test independently confirms it also renders
-// correctly through EasyGL's own draw backend.
+// correctly through EasyGL's own draw renderer.
 //
 // Single glyph 'A' (White, 8x8), origin=(4,4) (centers the pivot on the unscaled glyph),
 // scale=(2,2), rotation=0, position=(10,10). Per SpriteBatch::DrawString's shared formula:

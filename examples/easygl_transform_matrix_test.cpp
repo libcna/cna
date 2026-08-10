@@ -2,7 +2,7 @@
 // Task 168: EasyGL SpriteBatch::Begin transformMatrix pixel integration test.
 //
 // Verifies that the transformMatrix parameter passed to SpriteBatch::Begin is
-// correctly applied to sprite positions by the EasyGL backend.
+// correctly applied to sprite positions by the EasyGL renderer.
 //
 // Design:
 //   Viewport 400×200, black background.

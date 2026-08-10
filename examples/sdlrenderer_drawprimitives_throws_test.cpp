@@ -2,16 +2,16 @@
 // Task 720: Verify DrawPrimitives/DrawIndexedPrimitives/DrawInstancedPrimitives throw the
 // correct exception TYPE and MESSAGE on SDL_Renderer -- not just "throws something".
 //
-// SDL_Renderer is intentionally 2D-only: SdlGraphicsBackend::CreateVertexBuffer and
+// SDL_Renderer is intentionally 2D-only: SdlRenderer::CreateVertexBuffer and
 // CreateIndexBuffer16 (and, by default delegation, CreateIndexBuffer32) both throw
 // std::runtime_error("SDL_Renderer does not support 3D: ...") unconditionally, and this
 // happens INSIDE VertexBuffer's/IndexBuffer's own constructor (their member-initializer
-// list calls GraphicsDevice::GetBackend().CreateVertexBuffer/CreateIndexBuffer16 directly) --
+// list calls GraphicsDevice::GetRenderer().CreateVertexBuffer/CreateIndexBuffer16 directly) --
 // meaning a valid VertexBuffer/IndexBuffer object can never exist bound to an SDL_Renderer
 // GraphicsDevice in the first place. As a result, GraphicsDevice::DrawPrimitives/
 // DrawIndexedPrimitives/DrawInstancedPrimitives -- which each check "is a vertex buffer bound"
-// BEFORE ever reaching the backend's own 3D-draw entry points -- always throw at that first,
-// shared (not SDL_Renderer-specific) check with currentVertexBuffer_ == nullptr on this backend.
+// BEFORE ever reaching the renderer's own 3D-draw entry points -- always throw at that first,
+// shared (not SDL_Renderer-specific) check with currentVertexBuffer_ == nullptr on this renderer.
 // This test confirms that chain end to end: the exact exception type (std::runtime_error) and
 // exact message text for all 3 draw entry points, plus the underlying construction throws that
 // explain why the "no effect applied"/"no index buffer" branches are unreachable here.
@@ -91,7 +91,7 @@ protected:
                   "GraphicsDevice::DrawInstancedPrimitives: no vertex buffer is bound."),
               "DrawInstancedPrimitives with no bound vertex buffer throws std::runtime_error with the exact expected message");
 
-        // --- Why the above is the ONLY reachable state on this backend: a VertexBuffer/
+        // --- Why the above is the ONLY reachable state on this renderer: a VertexBuffer/
         //     IndexBuffer can never be successfully constructed here in the first place. ---
         check(ThrowsExactRuntimeError(
                   [&] { VertexBuffer vb(dev, 4); (void)vb; },

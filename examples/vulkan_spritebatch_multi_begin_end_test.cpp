@@ -2,11 +2,11 @@
 // Task 664: Vulkan SpriteBatch multi-Begin/End-per-frame regression test.
 //
 // Confirmed bug (session 2026-07-02, tracked in plan_graphics.md/NEXT.md §5): on the Vulkan
-// backend, if a single SpriteBatch object runs multiple independent Begin()/Draw()/End() cycles
+// renderer, if a single SpriteBatch object runs multiple independent Begin()/Draw()/End() cycles
 // within one frame, only the LAST cycle's draws ever end up on screen -- earlier cycles vanish.
 //
 // Root cause (see plan_graphics.md Task 664's write-up for the full trace): the old
-// VulkanSpriteBatchBackend::Begin() unconditionally cleared its own vertices_/indices_/draws_
+// VulkanSpriteBatchRenderer::Begin() unconditionally cleared its own vertices_/indices_/draws_
 // vectors -- the SAME storage a prior End() had just finished populating -- and activeBatches_
 // tracked entries by raw pointer to that single mutable object. A 2nd Begin() call destroyed the
 // 1st cycle's already-completed geometry before the once-per-frame harvest in

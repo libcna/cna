@@ -1,7 +1,7 @@
 # XNA 4.0 Depth Occlusion Compatibility Audit
 
 **Status: RESOLVED.** A freshly-constructed `GraphicsDevice`'s own default `BlendState`/
-`DepthStencilState` were never pushed to the backend's real GPU state -- only `RasterizerState`
+`DepthStencilState` were never pushed to the renderer's real GPU state -- only `RasterizerState`
 was (Task 896). On EasyGL this left OpenGL's raw depth-test state (disabled) in effect for any
 game that never explicitly calls `GraphicsDevice.DepthStencilState = ...` itself -- exactly what
 `../cna-samples`'s `SimpleAnimation` sample does (mirroring real XNA's own `Tank.cs`). Fixed by
@@ -73,17 +73,17 @@ setRasterizerStateProperty(rasterizerState_);   // Task 896 -- RasterizerState o
 ```
 
 `blendState_`/`depthStencilState_` were initialized as C++ fields (`BlendState::Opaque`,
-`DepthStencilState::Default`) but **never applied to the backend** -- `GraphicsDevice::
+`DepthStencilState::Default`) but **never applied to the renderer** -- `GraphicsDevice::
 setBlendStateProperty()`/`setDepthStencilStateProperty()` are the only call sites for
-`IGraphicsBackend::ApplyBlendState()`/`ApplyDepthStencilState()`, and neither is called from the
+`IGraphicsRenderer::ApplyBlendState()`/`ApplyDepthStencilState()`, and neither is called from the
 constructor. Task 896 (2026-07-10ish) found and fixed this exact class of bug for
 `RasterizerState` alone; `BlendState`/`DepthStencilState` were left with the same gap.
 
-**Per-backend own hardcoded defaults, audited directly against XNA's real defaults**
+**Per-renderer own hardcoded defaults, audited directly against XNA's real defaults**
 (`BlendState.Opaque`: no blending; `DepthStencilState.Default`: depth test ON, depth write ON,
 `LessEqual`):
 
-| Backend | Depth test default (own member/GL state) | Blend default (own member/GL state) | Matches XNA before this fix? |
+| Renderer | Depth test default (own member/GL state) | Blend default (own member/GL state) | Matches XNA before this fix? |
 |---|---|---|---|
 | EasyGL | Plain OpenGL raw default: **disabled** (`easygl::Device::initialize()` never calls `set_depth_test_enabled(true)`) | Plain OpenGL raw default: **disabled** (behaviourally equivalent to Opaque, since Opaque = One/Zero = no-op blend) | **Depth: NO. Blend: coincidentally yes** (raw-disabled happens to look like Opaque). |
 | Vulkan | `depthTestEnabled_ = true`, `depthWriteEnabled_ = true` (own C++ member defaults) | `blendEnabled_ = false` (own C++ member default) | **Yes, by coincidence of its own member initializers** -- unaffected by this bug either way. |
@@ -162,17 +162,17 @@ setDepthStencilStateProperty(depthStencilState_);
 setRasterizerStateProperty(rasterizerState_);   // Task 896, already present
 ```
 
-Mirrors FNA's own `GraphicsDevice.cs` constructor line-for-line (§3). No backend-specific patch,
+Mirrors FNA's own `GraphicsDevice.cs` constructor line-for-line (§3). No renderer-specific patch,
 no `cna-samples` change, no `Tank.hpp`/`SimpleAnimationGame.hpp` change of any kind -- the fix is
 entirely at the true ownership boundary (`GraphicsDevice` construction), matching how real XNA
-itself guarantees every backend starts in the documented default state regardless of whether game
+itself guarantees every renderer starts in the documented default state regardless of whether game
 code ever explicitly sets it.
 
 ---
 
 ## 7. Regression testing
 
-New shared (3-backend) regression test: `examples/graphicsdevice_default_state_occlusion_test.cpp`,
+New shared (3-renderer) regression test: `examples/graphicsdevice_default_state_occlusion_test.cpp`,
 registered as `EasyGL_GraphicsDevice_DefaultStateOcclusion` / `Vulkan_GraphicsDevice_
 DefaultStateOcclusion` / `Bgfx_GraphicsDevice_DefaultStateOcclusion`.
 
@@ -194,7 +194,7 @@ depth-test correctness, proving the quad/colour/pixel-readback pipeline itself i
 reverted state reproduced the exact predicted failure (Check A: FAIL, centre=(255,0,0)
 instead of (0,255,0); Check B: PASS, as expected) on EasyGL. Restored and reconfirmed 2/2 PASS.
 
-**Full regression, 0 new failures on any backend:**
+**Full regression, 0 new failures on any renderer:**
 - EasyGL: `ctest -R "^EasyGL_"` 188/190 (2 already-documented pre-existing: `EasyGL_MRT_
   TwoAttachments` Task 145, `EasyGL_GraphicsDevice_ReferenceStencil` Task 872) + `CnaTests`
   4371/4373 (2 hardware skips, exact baseline).
@@ -208,19 +208,19 @@ instead of (0,255,0); Check B: PASS, as expected) on EasyGL. Restored and reconf
 
 While confirming `DrawHelpOverlay()`'s `SpriteBatch` couldn't be the cause of the reported bug
 (it early-returns and was never invoked in either the static-pose or animated repro), a real,
-separate bug was found: `EasyGLSpriteBatchBackend::Begin()` unconditionally enabled blending
+separate bug was found: `EasyGLSpriteBatchRenderer::Begin()` unconditionally enabled blending
 (`set_blend_enabled(true)` + `SrcAlpha`/`OneMinusSrcAlpha`), but `End()`/`FlushBatch()` never
 restored the prior blend state. Any 3D draw issued after a `SpriteBatch.Begin()`/`End()` pair in
 the same or a later frame -- without that game explicitly resetting `BlendState` itself -- inherited
 `SpriteBatch`'s own hardcoded blend state instead of whatever `GraphicsDevice.BlendState` actually
-claimed was active. Confirmed via direct source read (`EasyGLGraphicsBackend.cpp`), not observed
+claimed was active. Confirmed via direct source read (`EasyGLRenderer.cpp`), not observed
 in SimpleAnimation itself (its `DrawHelpOverlay()` never actually runs in the automated repro), but
 a real, XNA-incompatible gap in the same "state doesn't reset the way a game implicitly expects"
 family as this document's own fix. **Deliberately not fixed here** -- out of this task's own scope
 (a `SpriteBatch`-to-3D state transition issue, not a `GraphicsDevice`-construction-default issue)
 and not implicated in the reported bug. Tracked as a new follow-up, **Task 956 — fixed 2026-07-11**
 by removing the hardcoded blend call entirely (`SpriteBatch::Begin()` already applies the real
-requested `BlendState` correctly before the backend's own `Begin()` runs); see `NEXT.md` §3 for
+requested `BlendState` correctly before the renderer's own `Begin()` runs); see `NEXT.md` §3 for
 the full write-up and the new `EasyGL_SpriteBatch_BlendStateLeak` regression test.
 
 ---
@@ -231,7 +231,7 @@ the full write-up and the new `EasyGL_SpriteBatch_BlendStateLeak` regression tes
 
 - `src/Microsoft/Xna/Framework/Graphics/GraphicsDevice.cpp`: the 2-line constructor fix (§6).
 - **New**: `examples/graphicsdevice_default_state_occlusion_test.cpp` (§7), registered on all 3
-  backends.
+  renderers.
 - `CMakeLists.txt`: 3 new test registrations.
 - **New**: this document + `docs/xna_depth_occlusion_compatibility_audit_images/`.
 
@@ -246,7 +246,7 @@ the full write-up and the new `EasyGL_SpriteBatch_BlendStateLeak` regression tes
 ## 10. Summary for future readers
 
 - `GraphicsDevice`'s constructor must sync **all 3** of `BlendState`/`DepthStencilState`/
-  `RasterizerState` to the backend, not just `RasterizerState` (Task 896's own original fix was
+  `RasterizerState` to the renderer, not just `RasterizerState` (Task 896's own original fix was
   incomplete in scope, not wrong). If a 4th state object is ever added to `GraphicsDevice`
   (unlikely -- XNA only has these 3), check whether FNA's own constructor sets it too.
 - Any game/sample that never explicitly sets one of these 3 properties (correct, idiomatic XNA
@@ -257,7 +257,7 @@ the full write-up and the new `EasyGL_SpriteBatch_BlendStateLeak` regression tes
   it that way if it's ever "cleaned up" to match the other tests' style.
 - Bgfx's own default blend state was ALSO wrong (`BGFX_STATE_BLEND_ALPHA` instead of no-blend) --
   fixed as a side effect of the same constructor change, not a coincidence: same root cause,
-  different backend, different one of the 3 states.
+  different renderer, different one of the 3 states.
 - A second, unrelated, still-open state-leak bug (`SpriteBatch`'s blend state not restored after
   `End()`, EasyGL) was found and documented (§8) but deliberately not fixed here -- Task 956.
 - This is unrelated to `docs/xna_culling_compatibility_audit.md`'s own winding/CullMode

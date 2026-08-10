@@ -7,10 +7,10 @@
 //   - BufferUsage::None      → buffer may be written and read back.
 //
 // CNA deviations (documented here):
-//   1. GL usage hint is NOT forwarded to the backend at buffer creation time;
+//   1. GL usage hint is NOT forwarded to the renderer at buffer creation time;
 //      all buffers use GL_DYNAMIC_DRAW regardless of the XNA flag.
 //      Impact: minor performance difference only; correctness is unaffected.
-//   2. GetData() is not implemented in CNA (no IVertexBufferBackend readback
+//   2. GetData() is not implemented in CNA (no IVertexBufferRenderer readback
 //      method exists).  The WriteOnly restriction therefore cannot be enforced
 //      at runtime.  This is tracked in docs/easygl_bugs.md.
 //

@@ -2,7 +2,7 @@
 
 This began as the SKIA-95 decision input and is now the live vocabulary audited by the accepted
 SKIA-101 2D-only ADR. It refines the `3d` section of
-`skia-easygl-test-matrix.md`; it does not claim that the raster backend implements a 3D
+`skia-easygl-test-matrix.md`; it does not claim that the raster renderer implements a 3D
 pipeline. Run
 
 ```sh
@@ -28,7 +28,7 @@ stock-effect fixture may map only to its effect family and validation. The mappi
 uses both the stable entry name and the existing route/evidence text, so human rationale and the
 machine audit stay adjacent.
 
-"Unsupported" below means unsupported by the current public Skia backend, not impossible in
+"Unsupported" below means unsupported by the current public Skia renderer, not impossible in
 principle. CPU cube/volume storage, fragment-only SkSL and atomic MRT/MSAA refusals already exist,
 but none supplies the missing vertex/depth pipeline. The accepted
 `docs/skia-3d-emulation-adr.md` rejects public 3D support; no row permits setting

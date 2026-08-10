@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // SKIA-92: exact reflected uniform setters and bounded additional 2D SkSL child snapshots.
 
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
@@ -128,12 +128,12 @@ protected:
         Check(ThrowsContaining([&] { effect.SetUniformVec2Array("uVectors", nullptr, 2); }, "null"),
               "null vector-array data rejects");
 
-        auto* backend = effect.GetEffectBackendPtr();
-        Check(ThrowsContaining([&] { backend->BindTexture(0, &primary_->GetBackend()); }, "reserved"),
+        auto* renderer = effect.GetEffectRendererPtr();
+        Check(ThrowsContaining([&] { renderer->BindTexture(0, &primary_->GetRenderer()); }, "reserved"),
               "unit zero remains SpriteBatch-reserved");
-        Check(ThrowsContaining([&] { backend->BindTexture(2, &primary_->GetBackend()); }, "does not declare"),
+        Check(ThrowsContaining([&] { renderer->BindTexture(2, &primary_->GetRenderer()); }, "does not declare"),
               "undeclared additional 2D child rejects");
-        Check(ThrowsContaining([&] { backend->BindTexture(1, nullptr); }, "null"),
+        Check(ThrowsContaining([&] { renderer->BindTexture(1, nullptr); }, "null"),
               "null additional Texture2D rejects");
 
         // SKIA-149: this effect's own source never calls cnaSampleCubeEXT/cnaSampleVolumeEXT, so
@@ -187,7 +187,7 @@ protected:
             half4 main(float2 p) { return cnaTexture0.eval(p); }
         )");
         Check(!unsupportedUniform.IsEffectValid()
-              && unsupportedUniform.GetEffectBackendPtr()->GetCompileError().find("unsupportedMatrix")
+              && unsupportedUniform.GetEffectRendererPtr()->GetCompileError().find("unsupportedMatrix")
                   != std::string::npos,
               "unsupported reflected type rejects at compile/ABI validation");
 
@@ -198,7 +198,7 @@ protected:
             half4 main(float2 p) { return cnaTexture0.eval(p) + cnaTexture8.eval(p); }
         )");
         Check(!unsupportedChild.IsEffectValid()
-              && unsupportedChild.GetEffectBackendPtr()->GetCompileError().find("cnaTexture7")
+              && unsupportedChild.GetEffectRendererPtr()->GetCompileError().find("cnaTexture7")
                   != std::string::npos,
               "child outside the bounded cnaTexture0..7 namespace rejects");
 

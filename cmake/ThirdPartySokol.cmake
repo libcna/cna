@@ -1,8 +1,8 @@
 # --- sokol (single-header GPU abstraction, https://github.com/floooh/sokol) ---
 #
 # plan_sokol.md SOKOL-2 / design decision 3: sokol_gfx.h is fetched at configure time from the
-# upstream repository at a pinned commit, in the same spirit as the BGFX backend's own
-# FetchContent block in BackendSelection.cmake. Unlike bgfx there is nothing to build -- sokol is
+# upstream repository at a pinned commit, in the same spirit as the BGFX renderer's own
+# FetchContent block in RendererSelection.cmake. Unlike bgfx there is nothing to build -- sokol is
 # a set of STB-style single-file headers, so this only needs to put a directory on the include
 # path; the one translation unit that instantiates the implementation is CNA's own
 # modules/renderers/sokol/src/SokolImpl.cpp.
@@ -17,13 +17,13 @@
 # variable is needed.
 
 set(CNA_SOKOL_GIT_REPOSITORY "https://github.com/floooh/sokol.git"
-    CACHE STRING "Upstream sokol repository fetched for the SOKOL graphics backend")
+    CACHE STRING "Upstream sokol repository fetched for the SOKOL graphics renderer")
 set(CNA_SOKOL_GIT_TAG "27b49604b19be8cee0dcc6b2bbfe803dd9517585"
-    CACHE STRING "Pinned sokol commit used by the SOKOL graphics backend")
+    CACHE STRING "Pinned sokol commit used by the SOKOL graphics renderer")
 
 # Maps CNA_SOKOL_API onto the SOKOL_* compile definition sokol_gfx.h dispatches on, plus the
 # system libraries that API needs. Only GLCORE is verified on this project's Linux dev machine
-# (design decision 2) -- the other values exist so the backend's own code stays API-agnostic and
+# (design decision 2) -- the other values exist so the renderer's own code stays API-agnostic and
 # a platform owner can enable one without editing C++.
 function(cna_configure_sokol)
     include(FetchContent)

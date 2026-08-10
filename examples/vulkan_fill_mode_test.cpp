@@ -2,7 +2,7 @@
 // Task 327: Vulkan FillMode::WireFrame integration test.
 //
 // Verifies that setting RasterizerState.FillMode = FillMode::WireFrame causes the
-// Vulkan backend to use VK_POLYGON_MODE_LINE, so triangle interiors are not
+// Vulkan renderer to use VK_POLYGON_MODE_LINE, so triangle interiors are not
 // rasterized.
 //
 // Triangle geometry (input NDC, Y is flipped by the vertex shader):

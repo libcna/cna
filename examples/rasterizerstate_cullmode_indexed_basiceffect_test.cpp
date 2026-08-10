@@ -7,7 +7,7 @@
 // the pre-existing examples/easygl_rasterizerstate_cullmode_test.cpp) uses
 // GraphicsDevice::DrawUserPrimitives(type, vertexData, ...), a SEPARATE, simpler
 // VertexPositionColor-only "legacy" dispatch path (GraphicsDevice::DrawUserPrimitives ->
-// IGraphicsBackend::DrawColoredPrimitives) that every existing CullMode test happens to use.
+// IGraphicsRenderer::DrawColoredPrimitives) that every existing CullMode test happens to use.
 //
 // Uses the SAME NDC-signed-area-prediction methodology as rasterizerstate_cullmode_camera_test.cpp
 // (see that file's own header for the full rationale) but drives the real
@@ -188,7 +188,7 @@ protected:
         // "vertices"/"indices" .bin pair, never a shared buffer with per-part offsets) --
         // NOT one shared buffer read at two different startIndex offsets. The latter was
         // tried first and found a genuine, separate, confirmed bug (not this task's own root
-        // cause): BgfxGraphicsBackend::DrawIndexedPrimitivesEx's non-wireframe path calls
+        // cause): BgfxRenderer::DrawIndexedPrimitivesEx's non-wireframe path calls
         // bgfx::setIndexBuffer(ib.handle) with no offset/count, silently ignoring
         // GpuDrawParams::startIndex entirely -- see the audit doc's own dedicated section.
         const Vector3 dummyNormal(0.0f, 0.0f, 1.0f);
@@ -214,7 +214,7 @@ protected:
         fx.VertexColorEnabled = false;
         // Matches SimpleAnimation's own Tank::Draw(), which calls this every frame for every
         // mesh part -- diagnostic check for whether lighting activation itself (a totally
-        // different shader-selection path in every backend) has any bearing on CullMode.
+        // different shader-selection path in every renderer) has any bearing on CullMode.
         fx.EnableDefaultLighting();
 
         auto findOne = [&](VertexBuffer& vb, IndexBuffer& ib, Vector3 diffuse, bool wantRed) -> std::optional<Rectangle>

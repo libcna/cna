@@ -18,8 +18,8 @@
 //       stream at the declared stride" contract, so a correctly packed custom POD vertex is the
 //       control that proves the fix did not double-pack anything
 //
-// Section A (layout) needs no rendering and runs on every backend. Section B renders the same
-// public fixture through every DrawUser path on the backends that raster 3D triangles and can
+// Section A (layout) needs no rendering and runs on every renderer. Section B renders the same
+// public fixture through every DrawUser path on the renderers that raster 3D triangles and can
 // read the backbuffer back; Section C is the SDL_GPU equivalent through its render-target oracle.
 // Section D pins the declaration/range validation contract and needs only a device.
 
@@ -100,7 +100,7 @@ using Microsoft::Xna::Framework::Graphics::VertexPositionTexture;
 namespace
 {
     // =====================================================================================
-    // Section A support — the public layout facts, independent of any backend
+    // Section A support — the public layout facts, independent of any renderer
     // =====================================================================================
 
     int FormatSize(VertexElementFormat format)
@@ -143,7 +143,7 @@ namespace
     {
         const char* name;
         const VertexDeclaration* declaration;
-        /// The stride XNA/CNA publish for this layout: what every backend, shader and content
+        /// The stride XNA/CNA publish for this layout: what every renderer, shader and content
         /// path in this repository already assumes for it.
         int gpuStride;
         std::size_t objectSize;
@@ -429,7 +429,7 @@ namespace
         void RequireLayoutRendering()
         {
             if (!device.SupportsCapability(GraphicsCapability::ThreeD))
-                GTEST_SKIP() << "Backend explicitly does not support 3D rendering";
+                GTEST_SKIP() << "Renderer explicitly does not support 3D rendering";
             device.setRasterizerStateProperty(RasterizerState::CullNone);
             device.setDepthStencilStateProperty(DepthStencilState::None);
             device.setBlendStateProperty(BlendState::Opaque);
@@ -488,7 +488,7 @@ namespace
 }
 
 // =========================================================================================
-// Section A — the public layout contract (no rendering, every backend)
+// Section A — the public layout contract (no rendering, every renderer)
 // =========================================================================================
 
 TEST(BuiltInVertexLayout, DeclaredStrideIsThePackedGpuStride)
@@ -564,13 +564,13 @@ TEST(BuiltInVertexLayout, ObjectMemberOffsetsDoNotMatchTheDeclaredElementOffsets
 }
 
 // =========================================================================================
-// Section B — the public DrawUser paths, on the backends that raster and read back
+// Section B — the public DrawUser paths, on the renderers that raster and read back
 // =========================================================================================
 
-#if defined(CNA_BACKEND_BGFX) || defined(CNA_BACKEND_EASYGL) || \
-    defined(CNA_BACKEND_WEBGPU) || defined(CNA_BACKEND_VULKAN) || \
-    defined(CNA_BACKEND_D3D9) || defined(CNA_BACKEND_D3D11) || \
-    defined(CNA_BACKEND_SOFTWARE)
+#if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_EASYGL) || \
+    defined(CNA_RENDERER_WEBGPU) || defined(CNA_RENDERER_VULKAN) || \
+    defined(CNA_RENDERER_D3D9) || defined(CNA_RENDERER_D3D11) || \
+    defined(CNA_RENDERER_SOFTWARE)
 
 // The core reproduction. An array of the built-in objects plus that same type's own public
 // static declaration is the most ordinary thing a game can write, and it must render the exact
@@ -807,7 +807,7 @@ TEST_F(BuiltInVertexLayoutTest, PositionNormalTextureObjectsWithTheirOwnStaticDe
             vertices.emplace_back(corner, Vector3(0.0f, 0.0f, 1.0f), Vector2(0.5f, 0.5f));
 
     // A normal-bearing vertex belongs to the lit layout: the position/normal/texcoord stream is
-    // the one every backend exposes with lighting on, and D3D9 exposes it only that way. Ambient
+    // the one every renderer exposes with lighting on, and D3D9 exposes it only that way. Ambient
     // alone keeps the lit colour independent of any light direction.
     device.getSamplerStatesProperty()[0] = SamplerState::PointClamp;
     BasicEffect effect(device);
@@ -886,7 +886,7 @@ TEST_F(BuiltInVertexLayoutTest, ExplicitDeclarationIndexedRendersEveryTexturedFa
         CaptureBackbuffer(device, layout.width, layout.height), layout, 2, 1,
         "VertexPositionColorTexture indexed, stride 24", true);
 
-    // The position/normal/texcoord stream is the lit layout on every backend, and D3D9 exposes it
+    // The position/normal/texcoord stream is the lit layout on every renderer, and D3D9 exposes it
     // only with lighting enabled; ambient alone keeps the result light-direction independent.
     effect.VertexColorEnabled = false;
     effect.setLightingEnabledProperty(true);
@@ -977,13 +977,13 @@ TEST_F(BuiltInVertexLayoutTest, VertexBufferPathIsUnchangedByTheCorrectedDeclara
     device.SetVertexBuffer(nullptr);
 }
 
-#endif  // rendering backends
+#endif  // rendering renderers
 
 // =========================================================================================
 // Section C — SDL_GPU, whose only exact-pixel oracle is a render target
 // =========================================================================================
 
-#ifdef CNA_BACKEND_SDL_GPU
+#ifdef CNA_RENDERER_SDL_GPU
 
 TEST_F(BuiltInVertexLayoutTest, SdlGpuObjectArrayWithStaticDeclarationRendersIntoATarget)
 {
@@ -1016,10 +1016,10 @@ TEST_F(BuiltInVertexLayoutTest, SdlGpuObjectArrayWithStaticDeclarationRendersInt
         "SDL_GPU object array + static declaration", true);
 }
 
-#endif  // CNA_BACKEND_SDL_GPU
+#endif  // CNA_RENDERER_SDL_GPU
 
 // =========================================================================================
-// Section D — declaration and range validation (device only, every backend)
+// Section D — declaration and range validation (device only, every renderer)
 // =========================================================================================
 
 namespace
@@ -1042,7 +1042,7 @@ namespace
     };
 }
 
-// An element that reaches past its own declared stride would make the backend read the next
+// An element that reaches past its own declared stride would make the renderer read the next
 // vertex's bytes. Rejected deterministically, before anything is uploaded.
 TEST_F(BuiltInVertexValidationTest, ElementBeyondTheDeclaredStrideIsRejected)
 {
@@ -1150,7 +1150,7 @@ TEST_F(BuiltInVertexValidationTest, TypedObjectArrayRejectsAForeignStride)
 TEST_F(BuiltInVertexValidationTest, RawUploadMatchesTheBuiltInStaticDeclarationStride)
 {
     if (!device.SupportsCapability(GraphicsCapability::ThreeD))
-        GTEST_SKIP() << "Backend explicitly does not support vertex buffers";
+        GTEST_SKIP() << "Renderer explicitly does not support vertex buffers";
     VertexBuffer buffer(
         device, VertexPositionColor::getVertexDeclarationStatic(), 3, BufferUsage::None);
     std::array<PackedPositionColor, 3> packed{};
@@ -1180,7 +1180,7 @@ TEST_F(BuiltInVertexValidationTest, RawUploadMatchesTheBuiltInStaticDeclarationS
 TEST_F(BuiltInVertexValidationTest, EveryBuiltInDeclarationAcceptsARawUploadAtItsOwnStride)
 {
     if (!device.SupportsCapability(GraphicsCapability::ThreeD))
-        GTEST_SKIP() << "Backend explicitly does not support vertex buffers";
+        GTEST_SKIP() << "Renderer explicitly does not support vertex buffers";
     for (const BuiltInLayout& row : BuiltInLayouts())
     {
         const int stride = row.declaration->getVertexStrideProperty();
@@ -1209,7 +1209,7 @@ TEST_F(BuiltInVertexValidationTest, EveryBuiltInDeclarationAcceptsARawUploadAtIt
 TEST_F(BuiltInVertexValidationTest, SkinnedVertexBufferRoundTripsEveryElementFamily)
 {
     if (!device.SupportsCapability(GraphicsCapability::ThreeD))
-        GTEST_SKIP() << "Backend explicitly does not support vertex buffers";
+        GTEST_SKIP() << "Renderer explicitly does not support vertex buffers";
     const std::array<VertexPositionNormalTextureSkinned, 2> source{
         VertexPositionNormalTextureSkinned(
             Vector3(1.0f, 2.0f, 3.0f), Vector3(0.0f, 1.0f, 0.0f), Vector2(0.25f, 0.75f),

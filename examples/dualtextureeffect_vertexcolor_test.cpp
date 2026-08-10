@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Task 889: DualTextureEffect.VertexColorEnabled, verified on all 3 backends (EasyGL/Vulkan/Bgfx
+// Task 889: DualTextureEffect.VertexColorEnabled, verified on all 3 renderers (EasyGL/Vulkan/Bgfx
 // share this exact source, mirroring Task 950's graphicsdevice_clear_depth_test.cpp pattern).
 //
 // FNA reference (Graphics/Effect/StockEffects/HLSL/DualTextureEffect.fx): `VSDualTextureVc`
@@ -13,11 +13,11 @@
 // so this discriminates VertexColorEnabled's effect directly without needing an alpha-test/discard
 // trick (DualTextureEffect has no alpha test at all).
 //
-// Bug this closes (Task 889, opened by Task 389's cross-backend capstone test): before this fix,
-// all 3 backends' dual-texture vertex shaders declared only position+UV (no color attribute at
+// Bug this closes (Task 889, opened by Task 389's cross-renderer capstone test): before this fix,
+// all 3 renderers' dual-texture vertex shaders declared only position+UV (no color attribute at
 // all) and never read VertexColorEnabled, so both cases below produced the SAME
 // "DiffuseColor*Alpha only" output — this test would have failed the VertexColorEnabled=true case
-// on every backend prior to the fix.
+// on every renderer prior to the fix.
 //
 // Uses VertexColor RGB=(200,100,50) Alpha=200, DiffuseColor=(0.6,0.4,0.8), effect Alpha=0.8
 // (identical constants to Task 377/887's AlphaTestEffect vertex-color tests, so the expected

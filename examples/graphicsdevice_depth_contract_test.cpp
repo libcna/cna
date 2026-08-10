@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-089: backend-neutral public GraphicsDevice depth contract.
+// REMED-GFX-089: renderer-neutral public GraphicsDevice depth contract.
 //
 // Uses only normal XNA/CNA objects and draw calls: DepthStencilState, GraphicsDevice,
 // BasicEffect, DrawUserPrimitives, and backbuffer readback. The canonical state is
@@ -12,7 +12,7 @@
 // B: DepthRead, same order -> GREEN (near did not write depth, so far also passes clear depth=1).
 // C: None, same order -> GREEN (depth disabled; painter's order).
 // A2: Default again -> RED (A->B->C->A state restoration).
-// REMED-GFX-030 closes Software's former fixed-LessEqual/write-on-pass boundary, so all backends
+// REMED-GFX-030 closes Software's former fixed-LessEqual/write-on-pass boundary, so all renderers
 // registered for this shared public contract now assert all four outcomes without a skip.
 //
 // Identity World/View/Projection means clip-space W=1 and post-divide depths remain 0.2/0.8;

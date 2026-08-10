@@ -2,7 +2,7 @@
 // REMED-GFX-072 (Phase 9): within a single frame/target, each SpriteBatch Begin/End must use the
 // GraphicsDevice.Viewport that was active for THAT batch -- not merely the last viewport set.
 //
-// This is the per-batch requirement for the deferred/per-draw/immediate backends (Vulkan captures
+// This is the per-batch requirement for the deferred/per-draw/immediate renderers (Vulkan captures
 // the viewport per BatchSnapshot at End(); SdlGpu captures it per QueuedDrawRef at enqueue; EasyGL
 // flushes per End() and reads the live viewport). A fix that threads only the final viewport into
 // the sprite clip-space bake would place the first batch wrong.
@@ -10,7 +10,7 @@
 // (Bgfx accumulates into one view, so two different viewports in one frame there is a separate
 // per-view last-wins limitation and this test is not registered for it. WebGPU used to be in the
 // same sentence: it accumulated all backbuffer sprites into one render pass whose viewport was
-// resolved live at flush time. REMED-GFX-116 made the viewport per-draw state on that backend, so
+// resolved live at flush time. REMED-GFX-116 made the viewport per-draw state on that renderer, so
 // this file IS registered for WebGPU now.)
 //
 // Scene: backbuffer 96x72, Clear Black, two independent Begin/Draw/End cycles, read once via

@@ -20,7 +20,7 @@ only remaining compressed row, refused pending a task that scopes it. SKIA-142 p
 `HalfVector4`, `HdrBlendable`, `ColorSrgbEXT`, `ByteEXT`, `UShortEXT`); every remaining format
 (packed 16-bit colours, all compressed formats, both SNORM formats, `Alpha8`, `ColorBgraEXT`) stays
 permanently refused as a render target -- these are real non-renderable formats on actual XNA/FNA
-hardware, not a gap this backend still has to close.
+hardware, not a gap this renderer still has to close.
 
 All multi-byte words and IEEE values below use the little-endian host layout required by the
 pinned Skia raster artifact. A future big-endian build must add explicit byte conversion or refuse
@@ -30,7 +30,7 @@ range to `[0, 1]`. SNORM raw `-128` and `-127` both sample as exactly `-1`; gene
 canonicalize that endpoint to `-127` and average canonical signed integers with nearest ties away
 from zero. sRGB conversion applies to RGB only; alpha remains linear.
 
-`FNA/Skia RT decision` distinguishes FNA texture semantics from this backend's deliberate target
+`FNA/Skia RT decision` distinguishes FNA texture semantics from this renderer's deliberate target
 policy. FNA makes the listed formats renderable and coerces the others to `Color`; Skia mirrors
 that decision exactly (SKIA-142): the thirteen FNA-renderable non-`Color` formats construct a real
 native-format `SkSurface` per level, and every other format rejects before allocation, because

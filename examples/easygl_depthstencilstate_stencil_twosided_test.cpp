@@ -40,7 +40,7 @@
 //      buffer is 0x04, not 0x06) -- proving TwoSidedStencilMode is what changed the outcome, not
 //      some other confound.
 //
-// NOTE: this project's Vulkan backend (VulkanGraphicsBackend::ApplyDepthStencilState, tracked as
+// NOTE: this project's Vulkan renderer (VulkanRenderer::ApplyDepthStencilState, tracked as
 // Task 870) discards twoSidedStencilMode/ccwStencilFunc/ccwStencilPass/ccwStencilFail/
 // ccwStencilDepthFail entirely and never enables the stencil test at all, so neither column's
 // operation draw ever actually modifies the stencil buffer, and every read-back trivially passes

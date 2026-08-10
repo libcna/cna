@@ -4,10 +4,10 @@
 // MinLinearMagPointMipLinear, MinLinearMagPointMipPoint, MinPointMagLinearMipLinear,
 // MinPointMagLinearMipPoint) -- not just Linear/Point/Anisotropic.
 //
-// Real finding (this task's own audit): BgfxGraphicsBackend::ApplySamplerState's filter switch
+// Real finding (this task's own audit): BgfxRenderer::ApplySamplerState's filter switch
 // previously handled only Point and Anisotropic explicitly; all 6 split values fell through to the
 // `default` (plain Linear, no flags) branch, silently discarding the Min/Mag/Point-vs-Linear
-// distinction entirely. EasyGLGraphicsBackend::ApplySamplerState already maps all 9 XNA
+// distinction entirely. EasyGLRenderer::ApplySamplerState already maps all 9 XNA
 // TextureFilter values correctly via GL's combined min-filter enum (NearestMipmapLinear etc.) --
 // cross-referenced against real XNA semantics (name encodes Min/Mag/Mip in that order) to derive
 // the equivalent bgfx per-axis flag combination for each of the 6 previously-unhandled values.

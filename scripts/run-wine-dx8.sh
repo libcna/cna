@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# plan_dx8.md DX8-0/design decision 2: run a Windows cross-compiled .exe (DX8 backend) under Wine
+# plan_dx8.md DX8-0/design decision 2: run a Windows cross-compiled .exe (DX8 renderer) under Wine
 # with DXVK, using this project's own dedicated Wine prefix.
 #
 # Usage: scripts/run-wine-dx8.sh <path-to.exe> [args...]
 #
 # This is a NEW script, deliberately not a shared edit to scripts/run-wine-dxvk.sh/
-# run-wine-dxvk9.sh (this repo's own convention keeps every backend's runtime wrapper independent).
+# run-wine-dxvk9.sh (this repo's own convention keeps every renderer's runtime wrapper independent).
 #
 # Set CNA_DX8_WINEPREFIX to point at a different prefix; defaults to ~/.wine-cna-dx8 -- a DEDICATED
 # prefix, deliberately NOT the shared ~/.wine-cna-d3d11 that D3D9/D3D11/D3D12 use. Real, spike-
-# confirmed finding (this session): SDL3's own Windows video backend does its own internal, dynamic
+# confirmed finding (this session): SDL3's own Windows video renderer does its own internal, dynamic
 # `LoadLibrary("dxgi.dll")` probe during SDL_InitSubSystem(SDL_INIT_VIDEO) (for HDR/colorimetry
 # capability detection), entirely independent of whether the game itself ever touches D3D. Under
 # Xvfb (no real monitor EDID available), DXVK 2.6.0's own EDID/colorimetry-fallback code path hits a
@@ -59,7 +59,7 @@ export WINEDEBUG="${WINEDEBUG:--all}"
 # reproduced even in a minimal, CNA/SDL-free raw D3D8 program (two Clear()+Present() calls, no
 # resize, no message-pump gap). Forcing DXVK onto the llvmpipe (software) Vulkan device instead of
 # the real RADV GPU avoids the bug entirely (confirmed: 3 consecutive Present() calls all succeed).
-# This is an environment/driver workaround, not a defect in Dx8GraphicsBackend -- every DX8 test's
+# This is an environment/driver workaround, not a defect in Dx8Renderer -- every DX8 test's
 # Draw() calls Present() once explicitly and the framework calls it again automatically afterward
 # (EndDraw()), so this is hit by every test in this suite, not just a specific one.
 export DXVK_FILTER_DEVICE_NAME="${DXVK_FILTER_DEVICE_NAME:-llvmpipe}"

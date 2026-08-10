@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // REMED-GFX-099 minimal regression: creating a mipmapped public Texture3D must not make SDL_GPU's
-// Vulkan backend create an invalid image view. The original defect occurs during construction,
+// Vulkan renderer create an invalid image view. The original defect occurs during construction,
 // before any SetData/GetData call: an 8x8x2, four-level SDL_GPU_TEXTURETYPE_3D texture created
 // with COLOR_TARGET usage makes SDL create 2D depth-plane views for every base-depth plane at
 // every mip. Plane 1 is out of range once mip depth shrinks to 1.

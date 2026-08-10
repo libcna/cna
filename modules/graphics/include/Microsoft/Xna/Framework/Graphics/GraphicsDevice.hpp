@@ -35,7 +35,7 @@
 #include "System/IDisposable.hpp"
 #include "System/Object.hpp"
 #include "CNA/CNAHelper.hpp"
-#include "CNA/GraphicsBackendType.hpp"
+#include "CNA/GraphicsRendererType.hpp"
 #include "CNA/GraphicsCapability.hpp"
 #include "CNA/Unsupported3DGraphicsCallBehavior.hpp"
 
@@ -58,9 +58,9 @@ namespace Microsoft::Xna::Framework::Graphics
     class RenderTargetCube;
 }
 
-namespace CNA::Internal::Backends
+namespace CNA::Internal::Renderers
 {
-    class IGraphicsBackend;
+    class IGraphicsRenderer;
     struct GpuDrawParams;
 }
 
@@ -451,7 +451,7 @@ namespace Microsoft::Xna::Framework::Graphics
          *        VertexDeclaration.
          *
          * The vertex values are converted into the GPU stream @p vertexDeclaration describes, so
-         * no object-model byte ever reaches a backend.
+         * no object-model byte ever reaches a renderer.
          *
          * @param primitiveType      The type of primitive to draw.
          * @param vertexData         Pointer to the vertex array.
@@ -694,7 +694,7 @@ namespace Microsoft::Xna::Framework::Graphics
          *        (16-bit indices).
          *
          * The vertex values are converted into the GPU stream @p vertexDeclaration describes, so
-         * no object-model byte ever reaches a backend.
+         * no object-model byte ever reaches a renderer.
          *
          * @param primitiveType      The type of primitive to draw.
          * @param vertexData         Pointer to the vertex array.
@@ -804,7 +804,7 @@ namespace Microsoft::Xna::Framework::Graphics
          *        (32-bit indices).
          *
          * The vertex values are converted into the GPU stream @p vertexDeclaration describes, so
-         * no object-model byte ever reaches a backend.
+         * no object-model byte ever reaches a renderer.
          *
          * @param primitiveType      The type of primitive to draw.
          * @param vertexData         Pointer to the vertex array.
@@ -919,7 +919,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Registers a resource for tracking.
          *
          * Called by GraphicsResource constructor. The device will dispose registered
-         * resources before its own backend is destroyed, preventing use-after-free.
+         * resources before its own renderer is destroyed, preventing use-after-free.
          * @param resource The resource to track.
          */
         NOXNA void AddResourceReference(GraphicsResource* resource);
@@ -957,7 +957,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * way to make the FIRST real device creation honor a non-Reach request at all: a game's
          * `graphics.GraphicsProfile = GraphicsProfile.HiDef; graphics.ApplyChanges();` would
          * silently keep using Reach. Called once, internally, from
-         * GraphicsDeviceManager::applyToExistingBackend() right before Reset() -- not exposed as
+         * GraphicsDeviceManager::applyToExistingRenderer() right before Reset() -- not exposed as
          * a general public runtime profile-switch (real XNA has none either).
          */
         NOXNA void SetGraphicsProfileEXT(GraphicsProfile profile);
@@ -976,64 +976,64 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * On Vulkan with VK_EXT_debug_utils, calls vkCmdInsertDebugUtilsLabelEXT so the
          * label appears in GPU profilers (RenderDoc, NVIDIA Nsight, etc.).
-         * On all other backends this is a no-op.
+         * On all other renderers this is a no-op.
          *
          * @param marker The label string to insert.
          */
         NOXNA void SetStringMarkerEXT(const std::string& marker);
 
-        /** @brief Returns a reference to the active graphics backend. */
-        NOXNA [[nodiscard]] CNA::Internal::Backends::IGraphicsBackend& GetBackend() const;
+        /** @brief Returns a reference to the active graphics renderer. */
+        NOXNA [[nodiscard]] CNA::Internal::Renderers::IGraphicsRenderer& GetRenderer() const;
 
-        /** @brief Returns which graphics backend was compiled into this build (see CNA_GRAPHICS_BACKEND). */
-        NOXNA [[nodiscard]] inline constexpr CNA::GraphicsBackendType GetGraphicsBackendType() const
+        /** @brief Returns which graphics renderer was compiled into this build (see CNA_GRAPHICS_RENDERER). */
+        NOXNA [[nodiscard]] inline constexpr CNA::GraphicsRendererType GetGraphicsRendererType() const
         {
-            return CNA::getCurrentGraphicsBackendType();
+            return CNA::getCurrentGraphicsRendererType();
         }
 
         /**
-         * @brief Returns the human-readable name of the graphics backend compiled into this build.
+         * @brief Returns the human-readable name of the graphics renderer compiled into this build.
          *
-         * Matches the CNA_GRAPHICS_BACKEND CMake option value exactly (e.g. "EASYGL", "D3D9").
-         * Doesn't depend on `this` -- delegates to CNA::getCurrentGraphicsBackendName(), a pure
-         * compile-time constant -- so, like GetGraphicsBackendType(), this is `constexpr`.
+         * Matches the CNA_GRAPHICS_RENDERER CMake option value exactly (e.g. "EASYGL", "D3D9").
+         * Doesn't depend on `this` -- delegates to CNA::getCurrentGraphicsRendererName(), a pure
+         * compile-time constant -- so, like GetGraphicsRendererType(), this is `constexpr`.
          *
-         * @return The active backend's name.
+         * @return The active renderer's name.
          */
-        NOXNA [[nodiscard]] inline constexpr std::string_view GetGraphicsBackendName() const
+        NOXNA [[nodiscard]] inline constexpr std::string_view GetGraphicsRendererName() const
         {
-            return CNA::getCurrentGraphicsBackendName();
+            return CNA::getCurrentGraphicsRendererName();
         }
 
         /**
-         * @brief Returns whether the active backend (and, for device-dependent entries, the
+         * @brief Returns whether the active renderer (and, for device-dependent entries, the
          * current runtime device/driver) supports the given CNA::GraphicsCapability.
          *
          * Query this before relying on a feature that isn't universally supported (e.g. 3D on
-         * the 2D-only SDL_Renderer/DX3/Canvas/GDI backends), instead of calling it and handling the
+         * the 2D-only SDL_Renderer/DX3/Canvas/GDI renderers), instead of calling it and handling the
          * resulting exception.
          *
          * @param capability The capability to check.
-         * @return True if supported by the active backend/device.
+         * @return True if supported by the active renderer/device.
          */
         NOXNA [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const;
 
         /**
-         * @brief Returns the active backend's real maximum single-axis texture dimension.
+         * @brief Returns the active renderer's real maximum single-axis texture dimension.
          *
          * REMED-CONTENT-001: query this before creating or accepting a texture of
          * caller-/file-supplied size, instead of trusting the value and letting the native
-         * graphics API fail (or, on some backends, corrupt memory) at creation time.
+         * graphics API fail (or, on some renderers, corrupt memory) at creation time.
          *
-         * @return The maximum width or height, in pixels, this device's backend supports.
+         * @return The maximum width or height, in pixels, this device's renderer supports.
          */
         NOXNA [[nodiscard]] int GetMaxTextureDimension() const;
 
         /**
          * @brief Configures how permanently unsupported 3D calls are handled by a 2D-only
-         * graphics backend.
+         * graphics renderer.
          *
-         * Throw is the default and preserves the backend's established exceptions/null results.
+         * Throw is the default and preserves the renderer's established exceptions/null results.
          * WarnAndStub logs each unsupported operation once and substitutes a safe no-op or
          * null-object resource. This setting does not change SupportsCapability() results and
          * does not suppress argument, lifetime, driver, or implementation errors.
@@ -1049,7 +1049,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Sets the currently active Effect for draw calls.
          *
          * Called automatically by Effect::Apply(). Accepts any Effect subclass;
-         * the backend uses virtual dispatch via FillGpuDrawParams() to obtain
+         * the renderer uses virtual dispatch via FillGpuDrawParams() to obtain
          * shader parameters for the specific effect type.
          *
          * @param effect The effect to use, or nullptr.
@@ -1070,7 +1070,7 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Stores the given presentation parameters without triggering a full device reset.
          *
-         * Used by GraphicsDeviceManager::applyToExistingBackend so that callers can
+         * Used by GraphicsDeviceManager::applyToExistingRenderer so that callers can
          * read the current parameters back via getPresentationParametersProperty() after
          * applying preferred settings.
          *
@@ -1079,9 +1079,9 @@ namespace Microsoft::Xna::Framework::Graphics
         NOXNA void SetPresentationParameters(const PresentationParameters& pp);
 
         /**
-         * @brief Test-only: tears down and rebuilds the active graphics backend (same window)
-         * with a new PresentationParameters.MultiSampleCount, so a backend-level property
-         * (e.g. Vulkan's own backbuffer sampleCount_, picked once at backend-construction time)
+         * @brief Test-only: tears down and rebuilds the active graphics renderer (same window)
+         * with a new PresentationParameters.MultiSampleCount, so a renderer-level property
+         * (e.g. Vulkan's own backbuffer sampleCount_, picked once at renderer-construction time)
          * can be changed after the device already exists.
          *
          * This exists because GraphicsDeviceManager.PreferMultiSampling/ApplyChanges() does NOT
@@ -1091,21 +1091,21 @@ namespace Microsoft::Xna::Framework::Graphics
          * apply path calls) deliberately does not trigger a full device reset either — real
          * mid-game device reset/recreation (FNA's GraphicsDevice.Reset) is a separate, not-yet-
          * implemented feature (see the commented-out Reset() call in
-         * GraphicsDeviceManager::applyToExistingBackend). This method is a narrow, test-scoped
+         * GraphicsDeviceManager::applyToExistingRenderer). This method is a narrow, test-scoped
          * substitute for that missing feature: safe only when called before any GPU resources
-         * (textures, buffers, render targets) have been created against the current backend, since
-         * it destroys and replaces backend_ outright rather than performing a real, resource-
+         * (textures, buffers, render targets) have been created against the current renderer, since
+         * it destroys and replaces renderer_ outright rather than performing a real, resource-
          * preserving device reset.
          *
-         * @param multiSampleCount The new preferred MultiSampleCount to request from the backend.
+         * @param multiSampleCount The new preferred MultiSampleCount to request from the renderer.
          */
-        NOXNA void RecreateBackendForMultiSampleCount(int multiSampleCount);
+        NOXNA void RecreateRendererForMultiSampleCount(int multiSampleCount);
 
     private:
         SDL_Window* window_;
         bool ownsWindow_;
-        std::unique_ptr<CNA::Internal::Backends::IGraphicsBackend> backend_;
-        bool backendStartupNameLogged_ = false;
+        std::unique_ptr<CNA::Internal::Renderers::IGraphicsRenderer> renderer_;
+        bool rendererStartupNameLogged_ = false;
         Viewport viewport_;
         const VertexBuffer* currentVertexBuffer_;
         const IndexBuffer* currentIndexBuffer_;
@@ -1128,9 +1128,9 @@ namespace Microsoft::Xna::Framework::Graphics
         GraphicsProfile graphicsProfile_;
         PresentationParameters presentationParameters_;
         bool isDisposed_;
-        /// plan_dx9.md D9-34: tracks the real device-lifecycle state reported by a backend via
-        /// GraphicsBackendCreateArgs::deviceEventCallback (BackendDeviceEvent::Lost -> Lost,
-        /// Resetting -> NotReset, Reset -> Normal). Every backend except D3D9 never calls that
+        /// plan_dx9.md D9-34: tracks the real device-lifecycle state reported by a renderer via
+        /// GraphicsRendererCreateArgs::deviceEventCallback (RendererDeviceEvent::Lost -> Lost,
+        /// Resetting -> NotReset, Reset -> Normal). Every renderer except D3D9 never calls that
         /// callback, so this stays Normal there, matching the pre-existing hardcoded behavior.
         GraphicsDeviceStatus deviceStatus_ = GraphicsDeviceStatus::Normal;
 
@@ -1161,7 +1161,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
         // REMED-GFX-200: the per-vertex geometry stream's VertexBufferBinding.VertexOffset, in
         // vertex ELEMENTS. Binding 0 is that stream on every draw route -- SetVertexBuffer() and
-        // SetVertexBuffers() both make it so, and Draw*PrimitivesEx hand the backend exactly one
+        // SetVertexBuffers() both make it so, and Draw*PrimitivesEx hand the renderer exactly one
         // per-vertex stream -- so a later binding never supplies this offset. Returns 0 when no
         // binding describes the bound buffer, which is the only value that leaves a
         // no-VertexBufferBinding draw byte-identical to its pre-REMED-GFX-200 behavior.
@@ -1170,7 +1170,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // REMED-GFX-201: the element offset shared by every per-vertex stream of the current
         // binding set -- the smallest VertexBufferBinding.VertexOffset among them, 0 when none.
         // The ordinary routes fold this into vertexStart/baseVertex, the element-unit channel each
-        // backend already multiplies by *each stream's own* stride exactly once, and hand every
+        // renderer already multiplies by *each stream's own* stride exactly once, and hand every
         // stream the non-negative remainder. With one stream the fold is the whole offset and the
         // remainder is 0, which is byte-for-byte REMED-GFX-200's behaviour; with several it is the
         // only split that keeps every per-stream native byte offset non-negative while still
@@ -1180,23 +1180,23 @@ namespace Microsoft::Xna::Framework::Graphics
         // REMED-GFX-201: copies every active declared VertexBufferBinding into `p.vertexStreams`,
         // in public slot order, and computes `p.combinedVertexStride`. `foldedOffset` is subtracted
         // from each per-vertex stream's VertexOffset (see FoldedVertexStreamOffset above). Captured
-        // by value: a deferred backend replays a draw long after currentVertexBuffers_ has been
+        // by value: a deferred renderer replays a draw long after currentVertexBuffers_ has been
         // reassigned. On ordinary draws, REMED-GFX-233's exact one-buffer empty-declaration
-        // compatibility shape leaves the stream list empty so the named backend buffer's uploaded
+        // compatibility shape leaves the stream list empty so the named renderer buffer's uploaded
         // stride remains authoritative; instanced submission retains its complete stream contract.
         void FillVertexStreamBindings(
-            CNA::Internal::Backends::GpuDrawParams& p, int foldedOffset,
+            CNA::Internal::Renderers::GpuDrawParams& p, int foldedOffset,
             bool allowLegacyEmptyDeclarationFallback) const;
 
-        // REMED-GFX-201/202: rejects a draw whose binding set is wider than the running backend can
+        // REMED-GFX-201/202: rejects a draw whose binding set is wider than the running renderer can
         // express -- more than one per-vertex stream, more than one per-instance stream, or more
         // per-vertex streams than its native input-slot ceiling. Deterministic and before native
-        // submission: a backend that has not been taught to re-slot its stride-derived input
+        // submission: a renderer that has not been taught to re-slot its stride-derived input
         // elements across several bindings would otherwise render from a subset of them, which
         // looks like a correct draw of the wrong data. The classic shapes -- one per-vertex stream,
         // and one per-vertex plus one per-instance stream -- never reach any of these checks.
         void ValidateVertexStreamCapability(
-            const CNA::Internal::Backends::GpuDrawParams& p) const;
+            const CNA::Internal::Renderers::GpuDrawParams& p) const;
 
         // REMED-GFX-201: REMED-GFX-113's range gate widened from stream 0 to every per-vertex
         // stream. `startElement` is vertexStart for the non-indexed route and
@@ -1204,7 +1204,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // vertex count or numVertices respectively. A stream too short for the requested window is
         // rejected here even when stream 0 is long enough, naming the offending slot.
         void ValidateVertexStreamRanges(
-            const CNA::Internal::Backends::GpuDrawParams& p,
+            const CNA::Internal::Renderers::GpuDrawParams& p,
             int startElement,
             int elementCount,
             const char* parameterName,
@@ -1217,7 +1217,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // declaration, never bytes. A stream too short is rejected here, naming the offending slot,
         // even when another per-instance stream is long enough.
         void ValidateInstanceStreamRanges(
-            const CNA::Internal::Backends::GpuDrawParams& p,
+            const CNA::Internal::Renderers::GpuDrawParams& p,
             int instanceCount) const;
 
         // The one object-to-GPU-stream conversion behind every built-in vertex type's explicit
@@ -1238,13 +1238,13 @@ namespace Microsoft::Xna::Framework::Graphics
         [[nodiscard]] SDL_Window* GetWindowInternal() const;
 
         void createOrAttachWindow();
-        void createBackend();
+        void createRenderer();
         void destroyNativeResources();
         void UpdateViewportFromWindow();
         void SetVirtualResolution(int width, int height);
         void SetPresentationMode(int mode);
         void applyPresentationParametersToWindow();
-        void applySamplerStatesToBackend();
+        void applySamplerStatesToRenderer();
 
         /**
          * @brief Resets Viewport and ScissorRectangle to (0, 0, width, height).

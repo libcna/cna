@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Task 189: BasicEffect pixel integration tests — EasyGL backend.
+// Task 189: BasicEffect pixel integration tests — EasyGL renderer.
 //
 // Tests 5 rendering combinations via BasicEffect + DrawUserPrimitives + pixel readback:
 //   (a) Vertex color only   — VertexPositionColor (stride 16), red vertices → red pixel

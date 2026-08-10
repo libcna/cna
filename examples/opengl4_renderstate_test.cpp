@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // plan_opengl4.md GL4-16: real dynamic BlendState/DepthStencilState/RasterizerState mapping for
-// the OpenGL4 graphics backend -- previously every 3D draw used whatever GL's own defaults were;
+// the OpenGL4 graphics renderer -- previously every 3D draw used whatever GL's own defaults were;
 // GraphicsDevice.BlendState/DepthStencilState/RasterizerState assignments had no effect at all.
 //
 // BlendState (ApplyBlendState):
@@ -33,7 +33,7 @@
 //   already empirically verified (there, its "DrawQuadCW" -- negative NDC signed area) survives
 //   XNA's own default RasterizerState.CullCounterClockwise and is culled by CullClockwise; this
 //   test's triangle has the identical negative-signed-area winding, so the same two outcomes are
-//   the correct, authoritative expectation here too (not merely "whatever this backend happens to
+//   the correct, authoritative expectation here too (not merely "whatever this renderer happens to
 //   do").
 // Check G -- RasterizerState::CullCounterClockwise (XNA's own default) keeps the triangle visible.
 // Check H -- RasterizerState::CullClockwise culls that same triangle.

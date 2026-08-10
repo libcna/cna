@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx9.md Phase D9-9 (D9-90/D9-91/D9-92/D9-93): real D3D9 SpriteBatch backend, tested
+// plan_dx9.md Phase D9-9 (D9-90/D9-91/D9-92/D9-93): real D3D9 SpriteBatch renderer, tested
 // through the real public SpriteBatch/Texture2D API (D9-93's own explicit requirement), not the
-// raw ISpriteBatchBackend interface.
+// raw ISpriteBatchRenderer interface.
 //
 // Every check's expected pixel values were independently hand-derived BEFORE running, then
 // separately confirmed pixel-for-pixel identical against the real XNA 4.0 oracle
@@ -51,14 +51,14 @@
 //   instead of batching until End()) is not pixel-observable by this oracle methodology, and
 //   Texture requires a genuinely different multi-texture scene design -- both explicitly scoped
 //   out, not silently assumed passing (see plan_dx9.md D9-93's own closure note). This IS the
-//   check that caught a real D3D9 backend bug: D3D9SpriteBatchBackend::BuildMatrixTransformEXT's
+//   check that caught a real D3D9 renderer bug: D3D9SpriteBatchRenderer::BuildMatrixTransformEXT's
 //   projection previously used zFarPlane=1, which maps any layerDepth > 0 to an invalid
 //   (negative) Direct3D 9 clip-space Z and gets the sprite silently clipped away entirely --
 //   undetected until this was the first scene in the whole D9-A5 corpus to ever draw with a
 //   nonzero layerDepth. Fixed by using zFarPlane=-1 instead (see that function's own comment for
 //   the derivation).
 // Check I -- multi-texture batching: D9-90's own explicitly-named "known, explicitly-scoped-out
-//   gap" (no earlier scene/check ever forced D3D9SpriteBatchBackend::Draw() to see a genuine
+//   gap" (no earlier scene/check ever forced D3D9SpriteBatchRenderer::Draw() to see a genuine
 //   texture-identity change mid-batch). Three non-overlapping sprites, interleaved RED-texture/
 //   BLUE-texture/RED-texture, proves FlushBatch()-on-texture-change rebinds correctly on a SECOND
 //   flush, not just a one-shot first one -- a stale-binding bug would show BLUE leaking into the
@@ -262,7 +262,7 @@ protected:
         // real TextureAddressMode, not silently clamped/ignored. Wrap tiles the pattern
         // (RED,GREEN,RED,GREEN across 4 bands); Mirror folds it symmetrically around the U=1
         // boundary (RED,GREEN,GREEN,RED) -- genuinely different, discriminating patterns from
-        // the identical source data and geometry (a backend that silently treated every address
+        // the identical source data and geometry (a renderer that silently treated every address
         // mode as Clamp, or ignored the mode entirely, would fail both in a DIFFERENT way,
         // proving these checks are not redundant with each other).
         {

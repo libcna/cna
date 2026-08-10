@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Public Texture2D refusal matrix for the SKIA raster backend. Color, the three SKIA-135 packed
+// Public Texture2D refusal matrix for the SKIA raster renderer. Color, the three SKIA-135 packed
 // formats, and the two SKIA-136 colour formats have dedicated positive fixtures; every other
 // format remains a creation-time refusal, while valid dimensions reach the declared device limit.
 
@@ -67,11 +67,11 @@ protected:
                       Texture2D texture(d, 2, 2, false, formatCase.format);
                       (void)texture;
                   }, device),
-                  std::string(formatCase.name) + " is rejected before backend allocation");
+                  std::string(formatCase.name) + " is rejected before renderer allocation");
         }
 
         const int maxDimension = device.GetMaxTextureDimension();
-        Check(maxDimension > 0, "backend reports a positive maximum texture dimension");
+        Check(maxDimension > 0, "renderer reports a positive maximum texture dimension");
         Check(Throws([&](GraphicsDevice& d) {
                   Texture2D texture(d, maxDimension + 1, 1, false, SurfaceFormat::Color);
                   (void)texture;

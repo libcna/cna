@@ -340,7 +340,7 @@ TEST_F(EffectApplyTest, ApplyIsConsistentAcrossInterleavedTechniqueSwitches)
 // Confirms FNA's CurrentTechnique.set (Effect.cs) has no additional hidden
 // state beyond the plain pointer swap CNA already performs: FNA's setter also
 // calls FNA3D_SetEffectTechnique, a native call into the compiled-effect
-// backend with no C#-observable side effect beyond what INTERNAL_applyEffect
+// renderer with no C#-observable side effect beyond what INTERNAL_applyEffect
 // later reads — CNA has no compiled-technique GPU representation yet
 // (Phase 74), so the plain pointer swap already provides the complete
 // C#-visible contract.
@@ -444,12 +444,12 @@ TEST(EffectTest, CloneGetsIndependentTechniqueNotAliasedToOriginal)
 TEST(EffectTest, CloneAfterDisposeDoesNotThrow)
 {
     // Unlike Apply() (which CNA deliberately guards with ObjectDisposedException,
-    // a documented safety improvement over FNA's UB), Clone() touches no backend
+    // a documented safety improvement over FNA's UB), Clone() touches no renderer
     // GPU handle at all in CNA's implementation — there is nothing for disposal
     // to invalidate, so cloning a disposed effect is well-defined and safe.
     // Matches every currently-shipped concrete Clone() (none of which guard on
     // IsDisposed either); if a future Clone() implementation starts touching
-    // backend state, this expectation should be revisited.
+    // renderer state, this expectation should be revisited.
     GraphicsDevice gd;
     TestEffect fx(gd);
     fx.Dispose();

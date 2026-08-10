@@ -7,7 +7,7 @@
 # changes -- this deliberately FLIPS every texel's pass/fail relative to that scene:
 #   Equal (alphatest_equal_quad.scene):    alpha=128 (exact match) PASSES; 127/129/1 all FAIL.
 #   NotEqual (this scene):                 alpha=128 (exact match) FAILS; 127/129/1 all PASS.
-# A backend that silently ignored the Equal/NotEqual distinction (e.g. always using Equal's
+# A renderer that silently ignored the Equal/NotEqual distinction (e.g. always using Equal's
 # branch targets) would still pass alphatest_equal_quad.scene but fail this one -- this scene
 # exists specifically to close that verification gap, completing coverage of both
 # AlphaTestEffect compare-function directions (Greater/Less on PSAlphaTestLtGt,

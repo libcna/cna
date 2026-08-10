@@ -2,14 +2,14 @@
 // REMED-GFX-062: Vulkan GraphicsDevice.Viewport must be honored for draws issued while a
 // RenderTarget2D is bound — not hardcoded to the render target's full extent.
 //
-// Before the fix, VulkanGraphicsBackend::RecordCommandBuffer()'s render-target pass (Phase 1)
+// Before the fix, VulkanRenderer::RecordCommandBuffer()'s render-target pass (Phase 1)
 // hardcoded a full-target viewport (VkViewport{0,0,rtW,rtH,0,1}) at render-pass begin and never
 // read the captured viewportSet_/viewportX_/Y_/W_/H_/minDepth/maxDepth state, so a custom
 // sub-region Viewport set while a render target was bound was a silent no-op — even though the
 // backbuffer pass (Phase 2) honored it correctly (Task 880).
 //
 // This is the exact same deferred-model root cause GFX-013 fixed for ScissorRectangle: the Vulkan
-// backend defers every draw to a single Present()-time record, and SetRenderTarget resets the
+// renderer defers every draw to a single Present()-time record, and SetRenderTarget resets the
 // Viewport to the target's full size (GraphicsDevice::ResetViewportAndScissorForRenderTarget, the
 // FNA-parity analog of Task 338's scissor reset). So the frame-global viewport at record time is
 // never the sub-region each RT draw was issued under. The fix snapshots the viewport per draw/batch

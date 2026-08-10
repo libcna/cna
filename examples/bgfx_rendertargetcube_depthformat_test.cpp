@@ -2,7 +2,7 @@
 //
 // REMED-GFX-197 / historical Task 952: functional Bgfx RenderTargetCube depth/stencil coverage.
 //
-// The recorded test's PRODUCER was already correct on the current backend: direct GetData returned
+// The recorded test's PRODUCER was already correct on the current renderer: direct GetData returned
 // the far red quad for DepthFormat::None and the near green quad for Depth24Stencil8. Its observer
 // nevertheless reported the backbuffer clear colour because Matrix::CreateLookAt(eye z=5) was
 // paired with an Identity projection, putting the whole sampling quad outside the clip volume.
@@ -16,7 +16,7 @@
 // sampling before any public readback, direct GetData, A/B/A face cycles, native attachment sample
 // compatibility, disposal/recreation/handle reuse, and explicit device teardown with a live cube.
 
-#include "CNA/Internal/Backends/Bgfx/BgfxGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Bgfx/BgfxRenderer.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GameTime.hpp"
@@ -58,13 +58,13 @@
 #include <string>
 #include <vector>
 
-#ifndef CNA_BACKEND_BGFX
+#ifndef CNA_RENDERER_BGFX
 #error "REMED-GFX-197's focused Task 952 regression is Bgfx-only."
 #endif
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using CNA::Internal::Backends::Bgfx::BgfxRenderTargetCubeBackend;
+using CNA::Internal::Renderers::Bgfx::BgfxRenderTargetCubeRenderer;
 
 namespace
 {
@@ -372,18 +372,18 @@ class BgfxRenderTargetCubeDepthFormatTest final : public Game
         device.DrawUserPrimitives(PrimitiveType::TriangleList, vertices, 0, 2);
     }
 
-    void CheckNativeAttachments(BgfxRenderTargetCubeBackend& backend, DepthFormat depth,
+    void CheckNativeAttachments(BgfxRenderTargetCubeRenderer& renderer, DepthFormat depth,
                                 int applied, const std::string& label)
     {
-        Check(bgfx::isValid(backend.cubeTex), label + ": public cube colour handle is valid");
-        Check((depth == DepthFormat::None) == !bgfx::isValid(backend.depthTex),
+        Check(bgfx::isValid(renderer.cubeTex), label + ": public cube colour handle is valid");
+        Check((depth == DepthFormat::None) == !bgfx::isValid(renderer.depthTex),
               label + ": depth attachment presence matches the requested public format");
         const uint64_t producerSamples =
-            backend.msaaProducerCreationFlags_ & BGFX_TEXTURE_RT_MSAA_MASK;
+            renderer.msaaProducerCreationFlags_ & BGFX_TEXTURE_RT_MSAA_MASK;
         const uint64_t depthSamples =
-            backend.depthCreationFlags_ & BGFX_TEXTURE_RT_MSAA_MASK;
+            renderer.depthCreationFlags_ & BGFX_TEXTURE_RT_MSAA_MASK;
         const uint64_t directColourSamples =
-            backend.creationFlags_ & BGFX_TEXTURE_RT_MSAA_MASK;
+            renderer.creationFlags_ & BGFX_TEXTURE_RT_MSAA_MASK;
         if (applied > 0)
         {
             Check(producerSamples != 0, label + ": colour producer carries applied MSAA bits");
@@ -427,9 +427,9 @@ class BgfxRenderTargetCubeDepthFormatTest final : public Game
         if (requestedSamples > 0)
             Check(applied > 0, label + ": the supported MSAA route genuinely engages");
 
-        auto* backend = dynamic_cast<BgfxRenderTargetCubeBackend*>(
-            cube->GetRenderTargetCubeBackend());
-        Check(backend != nullptr, label + ": concrete Bgfx cube diagnostics are available");
+        auto* renderer = dynamic_cast<BgfxRenderTargetCubeRenderer*>(
+            cube->GetRenderTargetCubeRenderer());
+        Check(renderer != nullptr, label + ": concrete Bgfx cube diagnostics are available");
 
         const bool depthEnabled = depth != DepthFormat::None;
         for (int face : kProduceOrder)
@@ -452,11 +452,11 @@ class BgfxRenderTargetCubeDepthFormatTest final : public Game
         DrawBand(device, 0, 0.50f, kMarker);
         device.SetRenderTargets({});
 
-        if (backend != nullptr)
+        if (renderer != nullptr)
         {
-            CheckNativeAttachments(*backend, depth, applied, label);
+            CheckNativeAttachments(*renderer, depth, applied, label);
             bool allFaceFbos = true;
-            for (const bgfx::FrameBufferHandle handle : backend->faceFbos_)
+            for (const bgfx::FrameBufferHandle handle : renderer->faceFbos_)
                 allFaceFbos = allFaceFbos && bgfx::isValid(handle);
             Check(allFaceFbos, label + ": all six face framebuffers were constructed and retained");
         }
@@ -602,10 +602,10 @@ class BgfxRenderTargetCubeDepthFormatTest final : public Game
                 device, kCubeSize, false, SurfaceFormat::Color,
                 DepthFormat::Depth24Stencil8, kMsaaRequest,
                 RenderTargetUsage::PreserveContents);
-            auto* backend = dynamic_cast<BgfxRenderTargetCubeBackend*>(
-                cube->GetRenderTargetCubeBackend());
-            Check(backend != nullptr, "lifecycle round " + std::to_string(round) +
-                  ": concrete backend exists");
+            auto* renderer = dynamic_cast<BgfxRenderTargetCubeRenderer*>(
+                cube->GetRenderTargetCubeRenderer());
+            Check(renderer != nullptr, "lifecycle round " + std::to_string(round) +
+                  ": concrete renderer exists");
             const Color colour = kNearColours[static_cast<std::size_t>(round % 6)];
             RenderOneLifecycleFace(device, *cube, colour);
             const auto bands = ReadBands(*cube, 0,
@@ -614,19 +614,19 @@ class BgfxRenderTargetCubeDepthFormatTest final : public Game
                         "lifecycle round " + std::to_string(round) +
                         ": recreated target has only its own depth-tested output");
 
-            if (backend != nullptr)
+            if (renderer != nullptr)
             {
-                cubeReuse = !cubeIds.insert(backend->cubeTex.idx).second || cubeReuse;
-                depthReuse = !depthIds.insert(backend->depthTex.idx).second || depthReuse;
-                producerReuse = !producerIds.insert(backend->msaaFaceColorTex_[0].idx).second ||
+                cubeReuse = !cubeIds.insert(renderer->cubeTex.idx).second || cubeReuse;
+                depthReuse = !depthIds.insert(renderer->depthTex.idx).second || depthReuse;
+                producerReuse = !producerIds.insert(renderer->msaaFaceColorTex_[0].idx).second ||
                                 producerReuse;
-                framebufferReuse = !framebufferIds.insert(backend->faceFbos_[0].idx).second ||
+                framebufferReuse = !framebufferIds.insert(renderer->faceFbos_[0].idx).second ||
                                    framebufferReuse;
             }
             cube->Dispose();
-            Check(cube->getIsDisposedProperty() && cube->GetRenderTargetCubeBackend() == nullptr,
+            Check(cube->getIsDisposedProperty() && cube->GetRenderTargetCubeRenderer() == nullptr,
                   "lifecycle round " + std::to_string(round) +
-                  ": explicit disposal clears the public backend alias");
+                  ": explicit disposal clears the public renderer alias");
         }
         Check(cubeReuse && depthReuse && producerReuse && framebufferReuse,
               "native cube/depth/MSAA-producer/framebuffer handle IDs are all reclaimed and reused");
@@ -725,7 +725,7 @@ int main()
     {
         game.DisposeGraphicsDeviceForTeardown();
         const bool disposed = game.TeardownDisposedHeldCube();
-        std::printf("[%s] device teardown disposed the retained cube before backend destruction\n",
+        std::printf("[%s] device teardown disposed the retained cube before renderer destruction\n",
                     disposed ? "PASS" : "FAIL");
         if (!disposed) result = 1;
         game.Dispose();

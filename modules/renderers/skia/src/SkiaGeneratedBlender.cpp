@@ -1,4 +1,4 @@
-#include "CNA/Internal/Backends/Skia/SkiaGeneratedBlender.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaGeneratedBlender.hpp"
 
 #include "include/core/SkString.h"
 #include "include/effects/SkRuntimeEffect.h"
@@ -6,7 +6,7 @@
 #include <cmath>
 #include <string>
 
-namespace CNA::Internal::Backends::Skia
+namespace CNA::Internal::Renderers::Skia
 {
     namespace
     {
@@ -191,4 +191,4 @@ namespace CNA::Internal::Backends::Skia
         (void)GeneratedBlendEffect();
         return 1u;
     }
-} // namespace CNA::Internal::Backends::Skia
+} // namespace CNA::Internal::Renderers::Skia

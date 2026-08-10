@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // SKIA-15: selected raster present-interval policy and presenter-recovery persistence.
 
-#include "CNA/Internal/Backends/Skia/SkiaGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaRenderer.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
@@ -17,7 +17,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using CNA::Internal::Backends::Skia::SkiaGraphicsBackend;
+using CNA::Internal::Renderers::Skia::SkiaRenderer;
 
 namespace
 {
@@ -57,9 +57,9 @@ protected:
         finished_ = true;
 
         auto& device = getGraphicsDeviceProperty();
-        auto* backend = dynamic_cast<SkiaGraphicsBackend*>(&device.GetBackend());
-        Check(backend != nullptr, "GraphicsDevice owns SkiaGraphicsBackend for interval diagnostics");
-        if (!backend)
+        auto* renderer = dynamic_cast<SkiaRenderer*>(&device.GetRenderer());
+        Check(renderer != nullptr, "GraphicsDevice owns SkiaRenderer for interval diagnostics");
+        if (!renderer)
         {
             Exit();
             return;
@@ -86,7 +86,7 @@ protected:
             Check(device.getPresentationParametersProperty().getPresentationIntervalProperty()
                       == interval.value,
                   interval.name, "PresentationParameters round-trips the request");
-            const int actual = backend->GetSwapIntervalEXT();
+            const int actual = renderer->GetSwapIntervalEXT();
             const bool actualAccepted = interval.value == PresentInterval::Two
                 ? (actual == 2 || actual == 1)
                 : actual == interval.exactOrPreferred;
@@ -96,9 +96,9 @@ protected:
                       : "actual interval matches the requested raster policy");
         }
 
-        const int intervalBeforeRecovery = backend->GetSwapIntervalEXT();
-        backend->DebugSimulateContextLoss();
-        Check(backend->GetSwapIntervalEXT() == intervalBeforeRecovery,
+        const int intervalBeforeRecovery = renderer->GetSwapIntervalEXT();
+        renderer->DebugSimulateContextLoss();
+        Check(renderer->GetSwapIntervalEXT() == intervalBeforeRecovery,
               "presenter recovery reapplies the actual selected interval");
 
         device.Clear(Color(255, 128, 0, 255));

@@ -6,7 +6,7 @@
 // DrawIndexedPrimitive(BaseVertexIndex, MinIndex, NumVertices, StartIndex, PrimitiveCount) calls.
 //
 // This is the D3D9 counterpart of the D3D11/D3D12 fix REMED-GFX-020 already landed. It was split
-// out from GFX-020 (its own Phase-12 cross-backend sweep confirmed D3D9 had the identical
+// out from GFX-020 (its own Phase-12 cross-renderer sweep confirmed D3D9 had the identical
 // hardcoded-zero defect class spread across several draw sites, out of GFX-020's D3D11/D3DCommon
 // scope). D3D9 runtime is verifiable via Wine + DXVK9, so unlike the build-only D3D12 half of
 // GFX-020 these are genuine pixel regressions.
@@ -45,9 +45,9 @@
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 
-#include "CNA/Internal/Backends/D3D9/D3D9GraphicsBackend.hpp"
-#include "CNA/Internal/Backends/D3D9/D3D9Textures.hpp"
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/D3D9/D3D9Renderer.hpp"
+#include "CNA/Internal/Renderers/D3D9/D3D9Textures.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Graphics/ImageData.hpp"
 
 #include <cstdint>
@@ -56,9 +56,9 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::D3D9;
-using CNA::Internal::Backends::GpuDrawParams;
-using CNA::Internal::Backends::ImageData;
+using namespace CNA::Internal::Renderers::D3D9;
+using CNA::Internal::Renderers::GpuDrawParams;
+using CNA::Internal::Renderers::ImageData;
 
 namespace
 {
@@ -110,14 +110,14 @@ namespace
         return VPNTWC{x, y, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, {0, 0, 0, 0}, {255, 0, 0, 255}};
     }
 
-    std::unique_ptr<CNA::Internal::Backends::ITextureBackend> Make1x1Texture(
-        D3D9GraphicsBackend& backend, uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255)
+    std::unique_ptr<CNA::Internal::Renderers::ITextureRenderer> Make1x1Texture(
+        D3D9Renderer& renderer, uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255)
     {
         ImageData img;
         img.width = 1;
         img.height = 1;
         img.pixels = {r, g, b, a};
-        return backend.CreateTexture(img);
+        return renderer.CreateTexture(img);
     }
 
     Color ReadPixel(GraphicsDevice& dev, int x, int y)
@@ -154,12 +154,12 @@ class D3D9DrawOffsetTest : public Game
     std::unique_ptr<GraphicsDeviceManager> gdm_;
     int frame_ = 0;
 
-    void CommonState(D3D9GraphicsBackend& backend)
+    void CommonState(D3D9Renderer& renderer)
     {
-        backend.ApplyBlendState(0, 0, 1, 1, 0, 0, CNA::Internal::Backends::BlendWriteState{}); // REMED-GFX-077 default write state
-        backend.ApplyDepthStencilState(false, false, 0, false, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 0);
-        backend.ApplyRasterizerState(0 /*CullMode::None*/, 0 /*FillMode::Solid*/, false, 0.0f, 0.0f);
-        backend.ApplySamplerState(0, 1 /*TextureFilter::Point*/, 0, 0, 1);
+        renderer.ApplyBlendState(0, 0, 1, 1, 0, 0, CNA::Internal::Renderers::BlendWriteState{}); // REMED-GFX-077 default write state
+        renderer.ApplyDepthStencilState(false, false, 0, false, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 0);
+        renderer.ApplyRasterizerState(0 /*CullMode::None*/, 0 /*FillMode::Solid*/, false, 0.0f, 0.0f);
+        renderer.ApplySamplerState(0, 1 /*TextureFilter::Point*/, 0, 0, 1);
     }
 
 protected:
@@ -168,15 +168,15 @@ protected:
         if (frame_++ < 1) return;
 
         auto& dev = getGraphicsDeviceProperty();
-        auto& backend = static_cast<D3D9GraphicsBackend&>(dev.GetBackend());
-        CommonState(backend);
+        auto& renderer = static_cast<D3D9Renderer&>(dev.GetRenderer());
+        CommonState(renderer);
 
-        auto redTex = Make1x1Texture(backend, 255, 0, 0);   // painted color for the textured paths
-        auto whiteTex = Make1x1Texture(backend, 255, 255, 255);
+        auto redTex = Make1x1Texture(renderer, 255, 0, 0);   // painted color for the textured paths
+        auto whiteTex = Make1x1Texture(renderer, 255, 255, 255);
 
         const Matrix I = Matrix::getIdentityProperty();
 
-        auto basicParams = [&](CNA::Internal::Backends::ITextureBackend* tex) {
+        auto basicParams = [&](CNA::Internal::Renderers::ITextureRenderer* tex) {
             GpuDrawParams p;
             p.textureEnabled = true;
             p.vertexColorEnabled = false; // stride-20 BasicEffect combo requires this false
@@ -187,42 +187,42 @@ protected:
 
         // Check A: DrawPrimitives, non-zero vertexStart (BasicEffect unlit+textured).
         {
-            auto vb = backend.CreateVertexBuffer(6);
+            auto vb = renderer.CreateVertexBuffer(6);
             vb->SetData(kLeftRightTx, 6, sizeof(VPT));
             GpuDrawParams p = basicParams(redTex.get());
             p.vertexStart = 3; // select verts 3..5 = RIGHT triangle
             dev.Clear(Color(0, 0, 255, 255));
-            backend.DrawPrimitivesEx(*vb, I, I, I, PrimitiveType::TriangleList, 1, p);
+            renderer.DrawPrimitivesEx(*vb, I, I, I, PrimitiveType::TriangleList, 1, p);
             check(OffsetHonored(ReadPixel(dev, kRightX, kProbeY), ReadPixel(dev, kLeftX, kProbeY)),
                   "DrawPrimitives vertexStart=3 (BasicEffect): RIGHT triangle drawn, not vertices 0..2");
         }
 
         // Check B: DrawIndexedPrimitives, non-zero startIndex.
         {
-            auto vb = backend.CreateVertexBuffer(6);
+            auto vb = renderer.CreateVertexBuffer(6);
             vb->SetData(kLeftRightTx, 6, sizeof(VPT));
             const uint16_t idx[6] = {0, 1, 2, 3, 4, 5};
-            auto ib = backend.CreateIndexBuffer16(6);
+            auto ib = renderer.CreateIndexBuffer16(6);
             ib->SetData16(idx, 6);
             GpuDrawParams p = basicParams(redTex.get());
             p.startIndex = 3; // read indices at IB position 3..5 -> verts 3..5 = RIGHT
             dev.Clear(Color(0, 0, 255, 255));
-            backend.DrawIndexedPrimitivesEx(*vb, *ib, I, I, I, PrimitiveType::TriangleList, 1, p);
+            renderer.DrawIndexedPrimitivesEx(*vb, *ib, I, I, I, PrimitiveType::TriangleList, 1, p);
             check(OffsetHonored(ReadPixel(dev, kRightX, kProbeY), ReadPixel(dev, kLeftX, kProbeY)),
                   "DrawIndexedPrimitives startIndex=3 (BasicEffect): reads IB from index 3, RIGHT drawn");
         }
 
         // Check C: DrawIndexedPrimitives, non-zero baseVertex.
         {
-            auto vb = backend.CreateVertexBuffer(6);
+            auto vb = renderer.CreateVertexBuffer(6);
             vb->SetData(kLeftRightTx, 6, sizeof(VPT));
             const uint16_t idx[3] = {0, 1, 2};
-            auto ib = backend.CreateIndexBuffer16(3);
+            auto ib = renderer.CreateIndexBuffer16(3);
             ib->SetData16(idx, 3);
             GpuDrawParams p = basicParams(redTex.get());
             p.baseVertex = 3; // each index + 3 -> verts 3..5 = RIGHT
             dev.Clear(Color(0, 0, 255, 255));
-            backend.DrawIndexedPrimitivesEx(*vb, *ib, I, I, I, PrimitiveType::TriangleList, 1, p);
+            renderer.DrawIndexedPrimitivesEx(*vb, *ib, I, I, I, PrimitiveType::TriangleList, 1, p);
             check(OffsetHonored(ReadPixel(dev, kRightX, kProbeY), ReadPixel(dev, kLeftX, kProbeY)),
                   "DrawIndexedPrimitives baseVertex=3 (BasicEffect): index+baseVertex -> RIGHT drawn");
         }
@@ -231,16 +231,16 @@ protected:
         // lands on the RIGHT triangle (verts 6..8); the middle range (verts 3..5) is off-screen, so
         // any single-offset behavior draws nothing at either probe and zero-offset draws the LEFT.
         {
-            auto vb = backend.CreateVertexBuffer(9);
+            auto vb = renderer.CreateVertexBuffer(9);
             vb->SetData(kLeftOffRightTx, 9, sizeof(VPT));
             const uint16_t idx[6] = {0, 1, 2, 3, 4, 5};
-            auto ib = backend.CreateIndexBuffer16(6);
+            auto ib = renderer.CreateIndexBuffer16(6);
             ib->SetData16(idx, 6);
             GpuDrawParams p = basicParams(redTex.get());
             p.startIndex = 3; // IB[3..5] = indices 3,4,5
             p.baseVertex = 3; //   + 3 -> verts 6,7,8 = RIGHT
             dev.Clear(Color(0, 0, 255, 255));
-            backend.DrawIndexedPrimitivesEx(*vb, *ib, I, I, I, PrimitiveType::TriangleList, 1, p);
+            renderer.DrawIndexedPrimitivesEx(*vb, *ib, I, I, I, PrimitiveType::TriangleList, 1, p);
             check(OffsetHonored(ReadPixel(dev, kRightX, kProbeY), ReadPixel(dev, kLeftX, kProbeY)),
                   "DrawIndexedPrimitives startIndex=3 + baseVertex=3 (BasicEffect): BOTH offsets -> RIGHT drawn");
         }
@@ -252,7 +252,7 @@ protected:
                 PbrVert(-3.0f, -3.0f), PbrVert(-3.0f, 3.0f), PbrVert(0.0f, 0.0f), // LEFT
                 PbrVert( 3.0f, -3.0f), PbrVert( 3.0f, 3.0f), PbrVert(0.0f, 0.0f), // RIGHT
             };
-            auto vb = backend.CreateVertexBuffer(6);
+            auto vb = renderer.CreateVertexBuffer(6);
             vb->SetData(verts, 6, sizeof(VPNTanT));
             GpuDrawParams p;
             p.pbr = true;
@@ -267,7 +267,7 @@ protected:
             p.pbrRoughnessFactor = 1.0f;
             p.vertexStart = 3; // verts 3..5 = RIGHT
             dev.Clear(Color(0, 0, 255, 255));
-            backend.DrawPrimitivesEx(*vb, I, I, I, PrimitiveType::TriangleList, 1, p);
+            renderer.DrawPrimitivesEx(*vb, I, I, I, PrimitiveType::TriangleList, 1, p);
             check(OffsetHonored(ReadPixel(dev, kRightX, kProbeY), ReadPixel(dev, kLeftX, kProbeY)),
                   "DrawPrimitives vertexStart=3 (PbrEffect, D3D9PbrDraw): RIGHT triangle drawn");
         }
@@ -278,10 +278,10 @@ protected:
                 SkinnedVert(-3.0f, -3.0f), SkinnedVert(-3.0f, 3.0f), SkinnedVert(0.0f, 0.0f), // LEFT
                 SkinnedVert( 3.0f, -3.0f), SkinnedVert( 3.0f, 3.0f), SkinnedVert(0.0f, 0.0f), // RIGHT
             };
-            auto vb = backend.CreateVertexBuffer(6);
+            auto vb = renderer.CreateVertexBuffer(6);
             vb->SetData(verts, 6, sizeof(VPNTWC));
             const uint16_t idx[3] = {0, 1, 2};
-            auto ib = backend.CreateIndexBuffer16(3);
+            auto ib = renderer.CreateIndexBuffer16(3);
             ib->SetData16(idx, 3);
             GpuDrawParams p;
             p.skinned = true;
@@ -299,7 +299,7 @@ protected:
             for (int i = 0; i < 16; ++i) p.boneTransforms[i] = ident[i];
             p.baseVertex = 3; // index + 3 -> verts 3..5 = RIGHT
             dev.Clear(Color(0, 0, 255, 255));
-            backend.DrawIndexedPrimitivesEx(*vb, *ib, I, I, I, PrimitiveType::TriangleList, 1, p);
+            renderer.DrawIndexedPrimitivesEx(*vb, *ib, I, I, I, PrimitiveType::TriangleList, 1, p);
             check(OffsetHonored(ReadPixel(dev, kRightX, kProbeY), ReadPixel(dev, kLeftX, kProbeY)),
                   "DrawIndexedPrimitives baseVertex=3 (SkinnedVertexColor3D, D3D9SkinnedVertexColorDraw): RIGHT drawn");
         }
@@ -315,15 +315,15 @@ protected:
                 { 5.0f,  5.0f, 0.0f}, { 6.0f,  5.0f, 0.0f}, { 5.0f, 6.0f, 0.0f}, // off-screen
                 { 0.4f, -0.1f, 0.0f}, { 0.6f, -0.1f, 0.0f}, { 0.4f, 0.1f, 0.0f}, // B (right)
             };
-            auto vb = backend.CreateVertexBuffer(9);
+            auto vb = renderer.CreateVertexBuffer(9);
             vb->SetData(verts, 9, sizeof(VP));
             const uint16_t idx[6] = {0, 1, 2, 3, 4, 5};
-            auto ib = backend.CreateIndexBuffer16(6);
+            auto ib = renderer.CreateIndexBuffer16(6);
             ib->SetData16(idx, 6);
 
             struct InstanceRow { float row0[4], row1[4], row2[4], row3[4]; };
             const InstanceRow instances[1] = {{{1,0,0,0}, {0,1,0,0}, {0,0,1,0}, {0,0,0,1}}}; // identity
-            auto instVb = backend.CreateVertexBuffer(1);
+            auto instVb = renderer.CreateVertexBuffer(1);
             instVb->SetData(instances, 1, sizeof(InstanceRow));
 
             GpuDrawParams p;
@@ -336,7 +336,7 @@ protected:
             p.startIndex = 3; // IB[3..5] = indices 3,4,5
             p.baseVertex = 3; //   + 3 -> verts 6,7,8 = B (right)
             dev.Clear(Color(0, 0, 255, 255));
-            backend.DrawInstancedPrimitivesEx(*vb, *ib, I, I, I, PrimitiveType::TriangleList, 1, 1, p);
+            renderer.DrawInstancedPrimitivesEx(*vb, *ib, I, I, I, PrimitiveType::TriangleList, 1, 1, p);
             check(OffsetHonored(ReadPixel(dev, kInstRightX, kInstProbeY), ReadPixel(dev, kInstLeftX, kInstProbeY)),
                   "DrawInstancedPrimitivesEx startIndex=3 + baseVertex=3 (D3D9InstancedDraw): instance B drawn");
         }

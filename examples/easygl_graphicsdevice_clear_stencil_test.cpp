@@ -5,10 +5,10 @@
 // Confirmed gap: `GraphicsDevice::Clear(ClearOptions options, const Color& color, float depth,
 // int stencil)` discarded its own `stencil` parameter entirely (`(void)stencil;`) and never
 // checked `hasClearFlag(options, ClearOptions::Stencil)` -- no code path cleared the stencil
-// buffer to any value, requested or not, on any backend.
+// buffer to any value, requested or not, on any renderer.
 //
 // Checks A and B are spread across separate frames, one step per Draw() call. That was originally
-// described as unavoidable: Vulkan's backend deferred every frame's draws into one render pass
+// described as unavoidable: Vulkan's renderer deferred every frame's draws into one render pass
 // whose clear ran before ALL of them regardless of where Clear() sat in the public call order, so a
 // same-frame "stamp, then Clear(), then compare" would always have seen the stamp win.
 //
@@ -24,18 +24,18 @@
 // GraphicsDevice::Clear() under test, then a StencilFunction::Equal test draw comparing against
 // the value the clear was supposed to establish.
 //
-// Check A -- ClearOptions::Stencil alone (exercises IGraphicsBackend::ClearStencil): clear
+// Check A -- ClearOptions::Stencil alone (exercises IGraphicsRenderer::ClearStencil): clear
 //   stencil to 0x03 (NOT Target/DepthBuffer). Test draw with ReferenceStencil=0x03. If the clear
 //   took effect, buffer=0x03 matches -> GREEN; if it silently did nothing, buffer is still the
 //   stamped 0x07 -> mismatch -> BACKGROUND.
 // Check B -- Target|DepthBuffer|Stencil together with a non-zero stencil value (exercises
-//   IGraphicsBackend::ClearColorDepthAndStencil): re-stamp to 0x07, clear to 0x09, then test draw
+//   IGraphicsRenderer::ClearColorDepthAndStencil): re-stamp to 0x07, clear to 0x09, then test draw
 //   with ReferenceStencil=0x09. Deliberately non-zero (unlike the plain single-arg Clear(Color)
 //   overload, which always implies stencil=0) so a broken dispatch that leaves the stencil clear
 //   value at its uninitialized/leftover-default 0 cannot coincidentally still match the expected
 //   value and mask the bug.
 // Check C -- REMED-GFX-129: the whole stamp / ClearOptions::Stencil / compare sequence inside ONE
-//   frame, with nothing between the three steps. A backend that delivers a stencil clear only
+//   frame, with nothing between the three steps. A renderer that delivers a stencil clear only
 //   through the render-pass load action runs it before the stamp, so the buffer still holds the
 //   stamped 0x05 and the Equal-0x0c test draw finds nothing -- BACKGROUND. Measured red on Vulkan
 //   before REMED-GFX-129 and green after; values distinct from A and B so a leftover clear value

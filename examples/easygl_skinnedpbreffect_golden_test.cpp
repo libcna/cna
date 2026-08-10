@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // PBR + skinning combo golden-image test for SkinnedPbrEffect's shader
-// (EasyGLGraphicsBackend::EnsurePbrSkinnedProgram()) -- proves the stride-68
+// (EasyGLRenderer::EnsurePbrSkinnedProgram()) -- proves the stride-68
 // VertexPositionNormalTangentTextureSkinned layout, the bone-palette skin transform applied to
 // Position/Normal/Tangent, and the PBR BRDF fragment stage all work end-to-end via a real GPU
 // draw.

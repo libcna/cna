@@ -4,7 +4,7 @@
 #include <algorithm>
 #include <cstdint>
 
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Graphics/DxtUtil.hpp"
 #include "CNA/Internal/Xnb/XnbArithmetic.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"

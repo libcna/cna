@@ -3,7 +3,7 @@
 // per-vertex by default (PreferPerPixelLighting == false). Skinning math is unchanged; the
 // Blinn-Phong lighting evaluation (identical to skinned3d.frag.hlsl's own) moves into this vertex
 // stage instead, interpolated across the triangle rather than recomputed per pixel. Only selected
-// when lighting is already known enabled (see each backend's own dispatch site), so -- like
+// when lighting is already known enabled (see each renderer's own dispatch site), so -- like
 // lit_textured3d_vertexlit.vert.hlsl -- this shader is unconditionally lit.
 // Stride 52: VertexPositionNormalTextureSkinned.
 

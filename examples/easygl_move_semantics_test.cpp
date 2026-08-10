@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MS-PL
-// Task 216: Moved C++ resources must not double-free backend handles.
+// Task 216: Moved C++ resources must not double-free renderer handles.
 //
 // After std::move(src) into dst:
-//   - src.HasBackend() == false  (handle ownership transferred)
-//   - dst.HasBackend() == true
+//   - src.HasRenderer() == false  (handle ownership transferred)
+//   - dst.HasRenderer() == true
 // When both go out of scope: only dst frees the handle (no double-free).
 //
 // Covered types: VertexBuffer, IndexBuffer, Texture2D (move-construct + move-assign).
@@ -46,12 +46,12 @@ protected:
         // ── VertexBuffer move-construct ────────────────────────────────────
         {
             VertexBuffer src(dev, 8);
-            check(src.HasBackend(), "VB move-construct: src.HasBackend true before move");
+            check(src.HasRenderer(), "VB move-construct: src.HasRenderer true before move");
 
             VertexBuffer dst(std::move(src));
 
-            check(!src.HasBackend(), "VB move-construct: src.HasBackend false after move");
-            check(dst.HasBackend(),  "VB move-construct: dst.HasBackend true after move");
+            check(!src.HasRenderer(), "VB move-construct: src.HasRenderer false after move");
+            check(dst.HasRenderer(),  "VB move-construct: dst.HasRenderer true after move");
             // Both go out of scope here — only dst frees the handle (no double-free)
         }
 
@@ -59,61 +59,61 @@ protected:
         {
             VertexBuffer src(dev, 4);
             VertexBuffer dst(dev, 4);    // dst already holds a handle (handle1)
-            check(src.HasBackend(), "VB move-assign: src.HasBackend true before move");
-            check(dst.HasBackend(), "VB move-assign: dst.HasBackend true before move");
+            check(src.HasRenderer(), "VB move-assign: src.HasRenderer true before move");
+            check(dst.HasRenderer(), "VB move-assign: dst.HasRenderer true before move");
 
             dst = std::move(src);        // handle1 freed, src's handle transferred to dst
 
-            check(!src.HasBackend(), "VB move-assign: src.HasBackend false after move");
-            check(dst.HasBackend(),  "VB move-assign: dst.HasBackend true after move");
+            check(!src.HasRenderer(), "VB move-assign: src.HasRenderer false after move");
+            check(dst.HasRenderer(),  "VB move-assign: dst.HasRenderer true after move");
         }
 
         // ── IndexBuffer move-construct ─────────────────────────────────────
         {
             IndexBuffer src(dev, 12);
-            check(src.HasBackend(), "IB move-construct: src.HasBackend true before move");
+            check(src.HasRenderer(), "IB move-construct: src.HasRenderer true before move");
 
             IndexBuffer dst(std::move(src));
 
-            check(!src.HasBackend(), "IB move-construct: src.HasBackend false after move");
-            check(dst.HasBackend(),  "IB move-construct: dst.HasBackend true after move");
+            check(!src.HasRenderer(), "IB move-construct: src.HasRenderer false after move");
+            check(dst.HasRenderer(),  "IB move-construct: dst.HasRenderer true after move");
         }
 
         // ── IndexBuffer move-assign ────────────────────────────────────────
         {
             IndexBuffer src(dev, 6);
             IndexBuffer dst(dev, 6);
-            check(src.HasBackend(), "IB move-assign: src.HasBackend true before move");
-            check(dst.HasBackend(), "IB move-assign: dst.HasBackend true before move");
+            check(src.HasRenderer(), "IB move-assign: src.HasRenderer true before move");
+            check(dst.HasRenderer(), "IB move-assign: dst.HasRenderer true before move");
 
             dst = std::move(src);
 
-            check(!src.HasBackend(), "IB move-assign: src.HasBackend false after move");
-            check(dst.HasBackend(),  "IB move-assign: dst.HasBackend true after move");
+            check(!src.HasRenderer(), "IB move-assign: src.HasRenderer false after move");
+            check(dst.HasRenderer(),  "IB move-assign: dst.HasRenderer true after move");
         }
 
         // ── Texture2D move-construct ───────────────────────────────────────
         {
             Texture2D src(dev, 4, 4);
-            check(src.HasBackend(), "Tex2D move-construct: src.HasBackend true before move");
+            check(src.HasRenderer(), "Tex2D move-construct: src.HasRenderer true before move");
 
             Texture2D dst(std::move(src));
 
-            check(!src.HasBackend(), "Tex2D move-construct: src.HasBackend false after move");
-            check(dst.HasBackend(),  "Tex2D move-construct: dst.HasBackend true after move");
+            check(!src.HasRenderer(), "Tex2D move-construct: src.HasRenderer false after move");
+            check(dst.HasRenderer(),  "Tex2D move-construct: dst.HasRenderer true after move");
         }
 
         // ── Texture2D move-assign ──────────────────────────────────────────
         {
             Texture2D src(dev, 2, 2);
             Texture2D dst(dev, 2, 2);
-            check(src.HasBackend(), "Tex2D move-assign: src.HasBackend true before move");
-            check(dst.HasBackend(), "Tex2D move-assign: dst.HasBackend true before move");
+            check(src.HasRenderer(), "Tex2D move-assign: src.HasRenderer true before move");
+            check(dst.HasRenderer(), "Tex2D move-assign: dst.HasRenderer true before move");
 
             dst = std::move(src);
 
-            check(!src.HasBackend(), "Tex2D move-assign: src.HasBackend false after move");
-            check(dst.HasBackend(),  "Tex2D move-assign: dst.HasBackend true after move");
+            check(!src.HasRenderer(), "Tex2D move-assign: src.HasRenderer false after move");
+            check(dst.HasRenderer(),  "Tex2D move-assign: dst.HasRenderer true after move");
         }
 
         std::printf("=== %d/%d PASS ===\n", pass_, pass_ + fail_);

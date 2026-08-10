@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Task 498 (sample 4 of 4 new samples; EasyGL backend): a "layered UI/fade" demo -- a classic
+// Task 498 (sample 4 of 4 new samples; EasyGL renderer): a "layered UI/fade" demo -- a classic
 // XNA 2D compositing pattern where an opaque background sprite is drawn first, then a
 // semi-transparent white overlay sprite is drawn on top with BlendState::NonPremultiplied, and
 // the overlay's alpha is driven by Update()-based game state (a fade-in effect), proving the
@@ -115,7 +115,7 @@ protected:
         // no-arg overload's own implicit BlendState::AlphaBlend argument immediately re-applies
         // and clobbers whatever was just set (SpriteBatch::Begin() always calls
         // GraphicsDevice.setBlendStateProperty(blendState) itself, see SpriteBatch.cpp). This test
-        // previously only passed because EasyGLSpriteBatchBackend::Begin() separately hardcoded
+        // previously only passed because EasyGLSpriteBatchRenderer::Begin() separately hardcoded
         // SrcAlpha/OneMinusSrcAlpha blend factors regardless of any of this -- coincidentally the
         // same factors BlendState::NonPremultiplied needs -- masking the fact that the explicit
         // NonPremultiplied request below was never actually reaching the GPU.

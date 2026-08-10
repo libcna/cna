@@ -4,10 +4,10 @@
 // Task 424 (this row's own "mirrors" reference, the EasyGL original) is itself not yet
 // implemented (still ⬜ in plan_graphics.md's Phase 48) -- there is no existing test to port
 // here. This is a NEW, first-of-its-kind SpriteFont pixel test, designed directly from FNA's
-// real SpriteBatch::DrawString contract (traced in the shared, backend-agnostic
+// real SpriteBatch::DrawString contract (traced in the shared, renderer-agnostic
 // SpriteBatch.cpp: per-glyph destination rect = position + accumulated kerning/cropping
 // offset, sized by the glyph's own bounds, sampling the glyph's source rect from the font's
-// atlas texture via the same pushSprite()/backend_->Draw() path already extensively verified
+// atlas texture via the same pushSprite()/renderer_->Draw() path already extensively verified
 // correct on SDL_Renderer across Tasks 671-685).
 //
 // Since CNA has no XNB content pipeline, SpriteFont exposes its raw glyph/cropping/kerning
@@ -25,7 +25,7 @@
 // exactly the expected position and size, not offset or oversized in any direction.
 //
 // Requires PresentationMode::NativeBackBuffer (Task 915 finding): SDL_RenderReadPixels operates
-// in physical output coordinates, while this backend's default presentation mode
+// in physical output coordinates, while this renderer's default presentation mode
 // (FixedHeightDynamicWidth) does not map logical pixels 1:1 to physical ones.
 //
 // Exit code 0 = all PASS, 1 = at least one FAIL.

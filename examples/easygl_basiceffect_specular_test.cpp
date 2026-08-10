@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Task 886: BasicEffect pixel test — real specular highlights (EasyGL backend).
+// Task 886: BasicEffect pixel test — real specular highlights (EasyGL renderer).
 //
 // FNA reference (Graphics/Effect/StockEffects/HLSL/Lighting.fxh's ComputeLights): specular uses
 // the half-vector Blinn-Phong model, not reflect-vector. Per light: `halfVector =

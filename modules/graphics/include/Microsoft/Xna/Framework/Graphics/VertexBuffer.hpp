@@ -18,9 +18,9 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTextureSkinned.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 
-namespace CNA::Internal::Backends
+namespace CNA::Internal::Renderers
 {
-    class IVertexBufferBackend;
+    class IVertexBufferRenderer;
 }
 
 namespace Microsoft::Xna::Framework::Graphics
@@ -356,28 +356,28 @@ namespace Microsoft::Xna::Framework::Graphics
         NOXNA void SetDataRaw(const void* data, int count, int stride);
 
         /**
-         * @brief Internal accessor used by the backend draw paths.
+         * @brief Internal accessor used by the renderer draw paths.
          */
-        NOXNA [[nodiscard]] CNA::Internal::Backends::IVertexBufferBackend& GetBackend() const { return *backend_; }
+        NOXNA [[nodiscard]] CNA::Internal::Renderers::IVertexBufferRenderer& GetRenderer() const { return *renderer_; }
 
         /**
          * @brief Returns true while the GPU buffer handle is allocated.
          *
          * Becomes false immediately after `Dispose()` is called.
          */
-        NOXNA [[nodiscard]] bool HasBackend() const { return backend_ != nullptr; }
+        NOXNA [[nodiscard]] bool HasRenderer() const { return renderer_ != nullptr; }
 
     protected:
         /**
          * @brief Uploads typed vertex data with a streaming hint.
          *
-         * Called by DynamicVertexBuffer to forward `SetDataOptions` to the backend.
+         * Called by DynamicVertexBuffer to forward `SetDataOptions` to the renderer.
          * Packs the typed struct into the compact GPU layout before uploading.
          *
          * @param data         Source vertex array.
          * @param startIndex   First element to read from @p data.
          * @param elementCount Number of vertices to upload.
-         * @param options      Streaming hint passed to the backend.
+         * @param options      Streaming hint passed to the renderer.
          */
         void SetDataWithOptions(const VertexPositionColor* data, int startIndex,
                                 int elementCount, SetDataOptions options);
@@ -395,7 +395,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Protected constructor used by DynamicVertexBuffer to pass the dynamic flag.
          *
          * The @p dynamic hint is accepted for XNA API conformance but is currently
-         * ignored by all CNA backends — static and dynamic VBOs use the same GPU path.
+         * ignored by all CNA renderers — static and dynamic VBOs use the same GPU path.
          *
          * @param device            Owning graphics device.
          * @param vertexDeclaration Vertex layout description.
@@ -451,12 +451,12 @@ namespace Microsoft::Xna::Framework::Graphics
                              SetDataOptions options,
                              bool useOptions);
 
-        std::unique_ptr<CNA::Internal::Backends::IVertexBufferBackend> backend_;
+        std::unique_ptr<CNA::Internal::Renderers::IVertexBufferRenderer> renderer_;
         VertexDeclaration vertexDeclaration_;
         BufferUsage bufferUsage_{BufferUsage::None};
         int vertexCount_{0};
         // Task 930: CPU-side shadow of the most recent SetData call's compact GPU-layout bytes,
-        // enabling GetData() without a real per-backend GPU readback path (mirrors Texture2D's
+        // enabling GetData() without a real per-renderer GPU readback path (mirrors Texture2D's
         // own SetData/GetData shadow-buffer precedent) -- nothing in the XNA 4.0 pipeline writes
         // back into a VertexBuffer from the GPU side, so a CPU shadow is a fully faithful
         // implementation, not an approximation.

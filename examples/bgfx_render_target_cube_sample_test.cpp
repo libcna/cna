@@ -3,13 +3,13 @@
 // on Bgfx.
 //
 // This mirrors Task 333's bgfx_render_target_sample_test.cpp finding (Task 873): confirmed by
-// direct layout analysis that BgfxGraphicsBackend's EnvironmentMapEffect path has the exact same
-// unsafe-cast bug, one level over. `static_cast<const BgfxTextureCubeBackend&>(*params.envMap)`
+// direct layout analysis that BgfxRenderer's EnvironmentMapEffect path has the exact same
+// unsafe-cast bug, one level over. `static_cast<const BgfxTextureCubeRenderer&>(*params.envMap)`
 // (in DrawPrimitivesEx's envMapping branch) assumes params.envMap is always a
-// BgfxTextureCubeBackend, but a RenderTargetCube's backend is a BgfxRenderTargetCubeBackend —
-// an unrelated sibling class (inherits only IRenderTargetCubeBackend/ITextureCubeBackend).
-// BgfxTextureCubeBackend's first data member is `bgfx::TextureHandle handle`;
-// BgfxRenderTargetCubeBackend's first data member is `bgfx::FrameBufferHandle fbo` (its actual
+// BgfxTextureCubeRenderer, but a RenderTargetCube's renderer is a BgfxRenderTargetCubeRenderer —
+// an unrelated sibling class (inherits only IRenderTargetCubeRenderer/ITextureCubeRenderer).
+// BgfxTextureCubeRenderer's first data member is `bgfx::TextureHandle handle`;
+// BgfxRenderTargetCubeRenderer's first data member is `bgfx::FrameBufferHandle fbo` (its actual
 // colour texture, `cubeTex`, is the SECOND member) — both handle structs are
 // `struct { uint16_t idx; }` (see bgfx.h's BGFX_HANDLE macro), so the cast compiles and reads
 // `fbo` where `handle` should be: a framebuffer-pool handle passed where a texture-pool handle
@@ -70,7 +70,7 @@ protected:
 
         auto& device = getGraphicsDeviceProperty();
         // Note: SetDepthTestEnabled/setBlendStateProperty are not exercised here — the Bgfx
-        // backend does not yet wire 3D depth/blend state changes (see bgfx_render_target_usage_test.cpp).
+        // renderer does not yet wire 3D depth/blend state changes (see bgfx_render_target_usage_test.cpp).
 
         // --- Phase 1: bind/clear each cube face, then unbind ---
         const CubeMapFace faces[6] = {
@@ -86,8 +86,8 @@ protected:
         }
 
         // --- Phase 2: sample the unbound RenderTargetCube via EnvironmentMapEffect ---
-        // If BgfxGraphicsBackend's static_cast<BgfxTextureCubeBackend&> on a
-        // BgfxRenderTargetCubeBackend is truly unrelated-type UB, this call is where it manifests.
+        // If BgfxRenderer's static_cast<BgfxTextureCubeRenderer&> on a
+        // BgfxRenderTargetCubeRenderer is truly unrelated-type UB, this call is where it manifests.
         device.Clear(Color(0, 0, 0, 255));
 
         EnvironmentMapEffect fx(device);

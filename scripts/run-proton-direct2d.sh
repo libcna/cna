@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Run a Windows cross-compiled Direct2D test through Steam's Proton runtime.
 #
-# Direct2D is still a 2D-only CNA backend: Proton supplies Wine's Direct2D runtime and DXVK's
-# D3D11/DXGI implementation only for the backend's private presentation device.  This script
+# Direct2D is still a 2D-only CNA renderer: Proton supplies Wine's Direct2D runtime and DXVK's
+# D3D11/DXGI implementation only for the renderer's private presentation device.  This script
 # does not install native DLL overrides and does not turn application drawing into D3D11.
 #
 # Usage: scripts/run-proton-direct2d.sh <path-to.exe> [args...]

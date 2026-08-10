@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl4.md GL4-13: real proof for the OpenGL4 backend's DrawPrimitivesEx/
+// plan_opengl4.md GL4-13: real proof for the OpenGL4 renderer's DrawPrimitivesEx/
 // DrawIndexedPrimitivesEx stride dispatch -- textured3d (VertexPositionTexture, stride 20),
 // colored_textured3d (VertexPositionColorTexture, stride 24), and lit_textured3d
 // (VertexPositionNormalTexture, stride 32, BasicEffect.EnableDefaultLighting()) -- verified via
 // real pixel readback, not just "didn't throw" (unlike opengl4_3d_test.cpp's own colored3d-only
-// scope note, this backend now genuinely samples textures and applies lighting).
+// scope note, this renderer now genuinely samples textures and applies lighting).
 //
 // Check A -- textured3d: a solid-orange texture sampled through BasicEffect.TextureEnabled is
 //   visible at its exact color (proves real sampling, not a texture-ignored/diffuse-only path).

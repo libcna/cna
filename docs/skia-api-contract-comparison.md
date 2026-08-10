@@ -1,7 +1,7 @@
 # Skia and EasyGL API-contract comparison
 
 SKIA-109 compares public API contracts only where the asserted operation can be preserved by the
-accepted raster 2D backend. It compiles the same source against Skia and EasyGL; backend names and
+accepted raster 2D renderer. It compiles the same source against Skia and EasyGL; renderer names and
 explicit capability branches may differ, but exception precedence, caller-buffer integrity,
 observable state, pixels, and object lifetime must not differ without a recorded reason.
 
@@ -18,9 +18,9 @@ the remaining disposal and transfer requirements. All 13 pairs pass in both Debu
 | `sprite_font_test.cpp` | `Skia_Contract_SpriteFontProperties` | `EasyGL_SpriteFont_Properties` | Exact metrics, fallback validation, setters, and character list. Rendering is intentionally not needed. |
 | `viewport_reset_after_resize_test.cpp` | `Skia_Contract_ViewportResetAfterResize` | `EasyGL_ViewportResetAfterResize` | Custom viewport survives Present without resize and resets after the real SDL resize settles. |
 | `backbuffer_first_read_test.cpp` | `Skia_Contract_BackbufferFirstRead` | `EasyGL_BackbufferFirstRead` | Every fork-isolated first read synchronously replaces poison and returns the exact 37x23 pattern, including subrect and guarded destination windows. |
-| `backbuffer_headless_reject_test.cpp` | `Skia_Contract_BackbufferReject` | `EasyGL_BackbufferReject` | Both raster backends take the success branch while preserving validation precedence and caller guards. |
+| `backbuffer_headless_reject_test.cpp` | `Skia_Contract_BackbufferReject` | `EasyGL_BackbufferReject` | Both raster renderers take the success branch while preserving validation precedence and caller guards. |
 | `rendertarget_pass_boundary_test.cpp` | `Skia_Contract_RenderTargetPassBoundary` | `EasyGL_RenderTarget_PassBoundary` | Exact 2D/cube Preserve/Discard, ordered Clear, viewport/scissor, switching, and readback results. EasyGL additionally runs real-MSAA legs; Skia declares and skips them because requests above one sample are rejected. |
-| `easygl_disposed_resource_test.cpp` | `Skia_EasyGL_DisposedResource` | `EasyGL_DisposedResource` | Exact disposed-object exception behavior, including shared pre-backend validation. |
+| `easygl_disposed_resource_test.cpp` | `Skia_EasyGL_DisposedResource` | `EasyGL_DisposedResource` | Exact disposed-object exception behavior, including shared pre-renderer validation. |
 | `texture2d_getdata_contract_test.cpp` | `Skia_Texture2D_GetDataContract` | `EasyGL_Texture2D_GetDataContract` | Exact element-size, rectangle, capacity, level, and destination-integrity matrix. |
 | `texture2d_getdata_transfer_range_test.cpp` | `Skia_Texture2D_GetDataTransferRange` | `EasyGL_Texture2D_GetDataTransferRange` | Exact `startIndex`/`elementCount` destination-window behavior. |
 | `texturecube_texture3d_getdata_contract_test.cpp` | `Skia_TextureStorage_GetDataContract` | `EasyGL_CubeVolume_GetDataContract` | All 56 cube/volume readback and rejection checks pass. Skia supplies the previously accepted bounded CPU transfer store, not sampling. |
@@ -54,7 +54,7 @@ the EasyGL expectation.
 objects and expected no exception. Every entry was null, so the shared API correctly threw
 `ArgumentNullException`; both EasyGL and Skia failed the same stale assertion. The fixture now
 separates three cases: 17 entries throw `ArgumentOutOfRangeException`, 16 null entries throw
-`ArgumentNullException`, and 16 live entries either succeed on a 3D backend or reach Skia's
+`ArgumentNullException`, and 16 live entries either succeed on a 3D renderer or reach Skia's
 explicit 3D resource boundary. This restores a real validation-precedence test instead of hiding
 the null-entry contract.
 

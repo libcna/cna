@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MS-PL
-// OPENGL1 backend: automatic mipmap generation (plan_opengl1.md phase 6).
+// OPENGL1 renderer: automatic mipmap generation (plan_opengl1.md phase 6).
 //
-// OpenGL1TextureBackend regenerates every mip level whenever level 0 is (re)uploaded and the
+// OpenGL1TextureRenderer regenerates every mip level whenever level 0 is (re)uploaded and the
 // texture was created with mipMap=true, via (in priority order) an explicit glGenerateMipmap()
 // call, the older GL_GENERATE_MIPMAP/SGIS_generate_mipmap texture parameter, or a CPU box-filter
-// fallback -- see OpenGL1GraphicsBackend.cpp's RegenerateMips()/GenerateMipsCPU(). ApplySamplerState
+// fallback -- see OpenGL1Renderer.cpp's RegenerateMips()/GenerateMipsCPU(). ApplySamplerState
 // also now maps XNA's full 9-value TextureFilter enum to the matching GL min/mag filter (including
-// the _MIPMAP_ variants), the same mapping EasyGLGraphicsBackend already uses.
+// the _MIPMAP_ variants), the same mapping EasyGLRenderer already uses.
 //
 // This test cannot inspect the GPU-side mip levels directly (no public Texture2D API exposes a
 // driver-auto-generated level's content -- Texture2D::GetData(level>0) only ever returns what a

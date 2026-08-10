@@ -2,9 +2,9 @@
 //
 // plan_diligent.md DILIGENT-53: real-device SpriteFont glyph placement/spacing/newline/flip pixel
 // test, mirroring D3D11's own already-closed DX-127 (examples/d3d11_smoke_test.cpp) and D3D12's
-// DX-132/DX-148, and EasyGL's established fixture (Tasks 424-429). Shared, backend-agnostic C++
+// DX-132/DX-148, and EasyGL's established fixture (Tasks 424-429). Shared, renderer-agnostic C++
 // (SpriteFont/SpriteBatch) has been pixel-verified on EasyGL, D3D11 and D3D12 already, per
-// docs/graphics-backend-feature-matrix.md, but no Diligent equivalent existed before this task.
+// docs/graphics-renderer-feature-matrix.md, but no Diligent equivalent existed before this task.
 //
 // An 8x8 solid-white atlas per glyph, zero cropping offset, zero left/right kerning bearing, so a
 // glyph's destination rect maps exactly and any placement error is a hard pixel difference.

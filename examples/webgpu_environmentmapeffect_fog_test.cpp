@@ -195,7 +195,7 @@ class WebGpuEnvironmentMapEffectFogTest final : public Game
 
     Vector3 ComposedRgb() const
     {
-        // EnvironmentMapEffect's established ordering, matching the already-correct backends:
+        // EnvironmentMapEffect's established ordering, matching the already-correct renderers:
         // (directional*Diffuse*Alpha + (Emissive + Ambient*Diffuse)*Alpha) * Texture;
         // then environment blend/specular.  Fog is deliberately not included here.
         const Vector3 lit = Scale(Add(Multiply(directional_, diffuse_),

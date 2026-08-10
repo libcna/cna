@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // SKIA-16/SKIA-28/SKIA-65: reset the SDL presenter without losing CPU-raster Skia resources.
 
-#include "CNA/Internal/Backends/Skia/SkiaGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaRenderer.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
@@ -25,8 +25,8 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using CNA::Internal::Backends::Skia::SkiaGraphicsBackend;
-using CNA::Internal::Backends::Skia::SkiaResourceStats;
+using CNA::Internal::Renderers::Skia::SkiaRenderer;
+using CNA::Internal::Renderers::Skia::SkiaResourceStats;
 
 namespace
 {
@@ -45,10 +45,10 @@ namespace
 
     [[nodiscard]] bool SameStats(const SkiaResourceStats& left, const SkiaResourceStats& right)
     {
-        return left.textureBackends == right.textureBackends
+        return left.textureRenderers == right.textureRenderers
             && left.textureImageViews == right.textureImageViews
-            && left.cpuTextureCubeBackends == right.cpuTextureCubeBackends
-            && left.cpuTexture3DBackends == right.cpuTexture3DBackends
+            && left.cpuTextureCubeRenderers == right.cpuTextureCubeRenderers
+            && left.cpuTexture3DRenderers == right.cpuTexture3DRenderers
             && left.renderTargets == right.renderTargets
             && left.renderTargetCubes == right.renderTargetCubes
             && left.targetSnapshots == right.targetSnapshots
@@ -107,9 +107,9 @@ protected:
         finished_ = true;
 
         auto& device = getGraphicsDeviceProperty();
-        auto* backend = dynamic_cast<SkiaGraphicsBackend*>(&device.GetBackend());
-        Check(backend != nullptr, "GraphicsDevice owns SkiaGraphicsBackend for presentation recovery");
-        if (!backend)
+        auto* renderer = dynamic_cast<SkiaRenderer*>(&device.GetRenderer());
+        Check(renderer != nullptr, "GraphicsDevice owns SkiaRenderer for presentation recovery");
+        if (!renderer)
         {
             Exit();
             return;
@@ -121,19 +121,19 @@ protected:
         device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
         device.Clear(kBlack);
         DrawSprite(*target_, Rectangle(3, 0, 2, 2));
-        const SkiaResourceStats beforeRecovery = backend->GetResourceStatsEXT();
-        Check(beforeRecovery.textureBackends == 1 && beforeRecovery.textureImageViews == 2
+        const SkiaResourceStats beforeRecovery = renderer->GetResourceStatsEXT();
+        Check(beforeRecovery.textureRenderers == 1 && beforeRecovery.textureImageViews == 2
                   && beforeRecovery.renderTargets == 1 && beforeRecovery.targetSnapshots == 1,
               "live source, target, and cached target snapshot exist before presenter recovery");
 
         // The debug seam rebuilds only SDL's renderer/streaming texture. It must emit a reset
         // pair, not DeviceLost, because Skia's selected CPU-raster images never became invalid.
-        backend->DebugSimulateContextLoss();
+        renderer->DebugSimulateContextLoss();
         Check(lostCount_ == 0 && resettingCount_ == 1 && resetCount_ == 1 && sequence_ == "Rr",
               "presenter recovery raises exactly DeviceResetting then DeviceReset, without DeviceLost");
         Check(device.getGraphicsDeviceStatusProperty() == GraphicsDeviceStatus::Normal,
               "GraphicsDevice returns to Normal after synchronous presenter recovery");
-        Check(SameStats(beforeRecovery, backend->GetResourceStatsEXT()),
+        Check(SameStats(beforeRecovery, renderer->GetResourceStatsEXT()),
               "recovery leaves CPU-raster texture, surface, and snapshot ownership bounded and intact");
 
         std::vector<Color> targetPixels(4, kBlack);
@@ -156,10 +156,10 @@ protected:
         CheckBackbufferPixel(device, 4, 0, kRed,
                              "rebuilt SDL presenter displays without changing the raster backbuffer");
 
-        backend->DebugRestoreContext();
+        renderer->DebugRestoreContext();
         Check(lostCount_ == 0 && resettingCount_ == 2 && resetCount_ == 2 && sequence_ == "RrRr",
               "DebugRestoreContext performs a second synchronous presenter reset pair");
-        Check(SameStats(beforeRecovery, backend->GetResourceStatsEXT()),
+        Check(SameStats(beforeRecovery, renderer->GetResourceStatsEXT()),
               "DebugRestoreContext also preserves CPU-raster resource ownership");
         device.Present();
         CheckBackbufferPixel(device, 4, 0, kRed,

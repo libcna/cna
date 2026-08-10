@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Task 191: DualTextureEffect pixel integration test — EasyGL backend.
+// Task 191: DualTextureEffect pixel integration test — EasyGL renderer.
 //
 // The dual-texture shader computes:
 //   FragColor = texture(uTexture, vUV) * texture(uTexture2, vUV) * uDiffuseColor

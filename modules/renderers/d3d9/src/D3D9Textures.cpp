@@ -1,11 +1,11 @@
-#include "CNA/Internal/Backends/D3D9/D3D9Textures.hpp"
+#include "CNA/Internal/Renderers/D3D9/D3D9Textures.hpp"
 
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
 #include <stdexcept>
 
-namespace CNA::Internal::Backends::D3D9
+namespace CNA::Internal::Renderers::D3D9
 {
     namespace
     {
@@ -31,10 +31,10 @@ namespace CNA::Internal::Backends::D3D9
     }
 
     // -------------------------------------------------------------------------
-    // D3D9TextureBackend
+    // D3D9TextureRenderer
     // -------------------------------------------------------------------------
 
-    D3D9TextureBackend::D3D9TextureBackend(IDirect3DDevice9* device, const ImageData& data)
+    D3D9TextureRenderer::D3D9TextureRenderer(IDirect3DDevice9* device, const ImageData& data)
         : device_(device)
         , width_(data.width), height_(data.height)
         , mipLevels_(data.mipLevels > 0 ? data.mipLevels : 1)
@@ -43,20 +43,20 @@ namespace CNA::Internal::Backends::D3D9
             static_cast<UINT>(width_), static_cast<UINT>(height_), static_cast<UINT>(mipLevels_),
             0, D3DFMT_A8B8G8R8, D3DPOOL_MANAGED, texture_.GetAddressOf(), nullptr);
         if (FAILED(hr))
-            throw std::runtime_error("D3D9TextureBackend: CreateTexture failed, hr=" + FormatHr(hr));
+            throw std::runtime_error("D3D9TextureRenderer: CreateTexture failed, hr=" + FormatHr(hr));
 
         if (!data.pixels.empty())
             UpdatePixels(data.pixels.data(), width_ * 4);
     }
 
-    void D3D9TextureBackend::UpdatePixels(const uint8_t* rgba, int stride)
+    void D3D9TextureRenderer::UpdatePixels(const uint8_t* rgba, int stride)
     {
         const std::size_t rowBytes = stride > 0 ? static_cast<std::size_t>(stride)
                                                   : static_cast<std::size_t>(width_) * 4;
         D3DLOCKED_RECT locked{};
         const HRESULT hr = texture_->LockRect(0, &locked, nullptr, 0);
         if (FAILED(hr))
-            throw std::runtime_error("D3D9TextureBackend::UpdatePixels: LockRect failed, hr=" + FormatHr(hr));
+            throw std::runtime_error("D3D9TextureRenderer::UpdatePixels: LockRect failed, hr=" + FormatHr(hr));
 
         auto* dst = static_cast<uint8_t*>(locked.pBits);
         for (int row = 0; row < height_; ++row)
@@ -68,14 +68,14 @@ namespace CNA::Internal::Backends::D3D9
         texture_->UnlockRect(0);
     }
 
-    void D3D9TextureBackend::UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH)
+    void D3D9TextureRenderer::UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH)
     {
         if (level < 0 || level >= mipLevels_) return;
 
         D3DLOCKED_RECT locked{};
         const HRESULT hr = texture_->LockRect(static_cast<UINT>(level), &locked, nullptr, 0);
         if (FAILED(hr))
-            throw std::runtime_error("D3D9TextureBackend::UpdatePixelsLevel: LockRect failed, hr=" + FormatHr(hr));
+            throw std::runtime_error("D3D9TextureRenderer::UpdatePixelsLevel: LockRect failed, hr=" + FormatHr(hr));
 
         auto* dst = static_cast<uint8_t*>(locked.pBits);
         const std::size_t rowBytes = static_cast<std::size_t>(levelW) * 4;
@@ -88,10 +88,10 @@ namespace CNA::Internal::Backends::D3D9
     }
 
     // -------------------------------------------------------------------------
-    // D3D9TextureCubeBackend
+    // D3D9TextureCubeRenderer
     // -------------------------------------------------------------------------
 
-    D3D9TextureCubeBackend::D3D9TextureCubeBackend(
+    D3D9TextureCubeRenderer::D3D9TextureCubeRenderer(
         IDirect3DDevice9* device, int size, bool mipMap, int /*surfaceFormat*/)
         : device_(device)
         , size_(size), mipLevels_(mipMap ? CalculateMipLevels(size, size) : 1)
@@ -100,10 +100,10 @@ namespace CNA::Internal::Backends::D3D9
             static_cast<UINT>(size_), static_cast<UINT>(mipLevels_), 0,
             D3DFMT_A8B8G8R8, D3DPOOL_MANAGED, texture_.GetAddressOf(), nullptr);
         if (FAILED(hr))
-            throw std::runtime_error("D3D9TextureCubeBackend: CreateCubeTexture failed, hr=" + FormatHr(hr));
+            throw std::runtime_error("D3D9TextureCubeRenderer: CreateCubeTexture failed, hr=" + FormatHr(hr));
     }
 
-    bool D3D9TextureCubeBackend::SetData(int face, int level, int x, int y, int w, int h,
+    bool D3D9TextureCubeRenderer::SetData(int face, int level, int x, int y, int w, int h,
                                          const void* data, int dataLength)
     {
         // REMED-GFX-135: these used to be a silent `return` the shared layer read as a completed
@@ -119,7 +119,7 @@ namespace CNA::Internal::Backends::D3D9
         const HRESULT hr = texture_->LockRect(static_cast<D3DCUBEMAP_FACES>(face),
                                               static_cast<UINT>(level), &locked, &rect, 0);
         if (FAILED(hr))
-            throw std::runtime_error("D3D9TextureCubeBackend::SetData: LockRect failed, hr=" + FormatHr(hr));
+            throw std::runtime_error("D3D9TextureCubeRenderer::SetData: LockRect failed, hr=" + FormatHr(hr));
 
         const auto* src = static_cast<const uint8_t*>(data);
         auto* dst = static_cast<uint8_t*>(locked.pBits);
@@ -133,7 +133,7 @@ namespace CNA::Internal::Backends::D3D9
         return true;
     }
 
-    bool D3D9TextureCubeBackend::GetData(int face, int level, int x, int y, int w, int h,
+    bool D3D9TextureCubeRenderer::GetData(int face, int level, int x, int y, int w, int h,
                                          void* data, int dataLength) const
     {
         // REMED-GFX-130: each silent `return` here became a complete transparent-black face once
@@ -160,10 +160,10 @@ namespace CNA::Internal::Backends::D3D9
     }
 
     // -------------------------------------------------------------------------
-    // D3D9Texture3DBackend
+    // D3D9Texture3DRenderer
     // -------------------------------------------------------------------------
 
-    D3D9Texture3DBackend::D3D9Texture3DBackend(
+    D3D9Texture3DRenderer::D3D9Texture3DRenderer(
         IDirect3DDevice9* device, int w, int h, int depth, bool mipMap, int /*surfaceFormat*/)
         : device_(device)
         , width_(w), height_(h), depth_(depth)
@@ -174,13 +174,13 @@ namespace CNA::Internal::Backends::D3D9
             static_cast<UINT>(mipLevels_), 0, D3DFMT_A8B8G8R8, D3DPOOL_MANAGED,
             texture_.GetAddressOf(), nullptr);
         if (FAILED(hr))
-            throw std::runtime_error("D3D9Texture3DBackend: CreateVolumeTexture failed, hr=" + FormatHr(hr));
+            throw std::runtime_error("D3D9Texture3DRenderer: CreateVolumeTexture failed, hr=" + FormatHr(hr));
     }
 
-    bool D3D9Texture3DBackend::SetData(int level, int x, int y, int z, int w, int h, int depth,
+    bool D3D9Texture3DRenderer::SetData(int level, int x, int y, int z, int w, int h, int depth,
                                        const void* data, int dataLength)
     {
-        // REMED-GFX-135: see D3D9TextureCubeBackend::SetData -- silent returns looked like writes.
+        // REMED-GFX-135: see D3D9TextureCubeRenderer::SetData -- silent returns looked like writes.
         if (level < 0 || level >= mipLevels_) return false;
         if (data == nullptr || w <= 0 || h <= 0 || depth <= 0) return false;
         const int levelW = std::max(1, width_ >> level);
@@ -201,7 +201,7 @@ namespace CNA::Internal::Backends::D3D9
         D3DLOCKED_BOX locked{};
         const HRESULT hr = texture_->LockBox(static_cast<UINT>(level), &locked, &box, 0);
         if (FAILED(hr))
-            throw std::runtime_error("D3D9Texture3DBackend::SetData: LockBox failed, hr=" + FormatHr(hr));
+            throw std::runtime_error("D3D9Texture3DRenderer::SetData: LockBox failed, hr=" + FormatHr(hr));
 
         const auto* src = static_cast<const uint8_t*>(data);
         auto* dst = static_cast<uint8_t*>(locked.pBits);
@@ -222,10 +222,10 @@ namespace CNA::Internal::Backends::D3D9
         return true;
     }
 
-    bool D3D9Texture3DBackend::GetData(int level, int x, int y, int z, int w, int h, int depth,
+    bool D3D9Texture3DRenderer::GetData(int level, int x, int y, int z, int w, int h, int depth,
                                        void* data, int dataLength) const
     {
-        // REMED-GFX-130: see D3D9TextureCubeBackend::GetData above.
+        // REMED-GFX-130: see D3D9TextureCubeRenderer::GetData above.
         if (level < 0 || level >= mipLevels_ || w <= 0 || h <= 0 || depth <= 0) return false;
         if (data == nullptr || dataLength < w * h * depth * 4) return false;
 

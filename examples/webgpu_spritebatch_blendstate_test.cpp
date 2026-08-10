@@ -9,7 +9,7 @@
 // bit, all enabled states use one hardcoded straight-alpha equation, and blend constants are
 // frame-final rather than per batch.
 //
-// REMED-GFX-131: SurfaceFormat::Color is a plain 8-bit UNORM byte format on every backend, so the
+// REMED-GFX-131: SurfaceFormat::Color is a plain 8-bit UNORM byte format on every renderer, so the
 // shader output, the clear value, the native blend result and the byte GetData() returns are all
 // the same value. Expected RGBA values below are therefore analytically blended and converted with
 // one plain UNORM rounding, for colour and alpha alike. This file previously sRGB-encoded its RGB
@@ -17,7 +17,7 @@
 //
 // Permanent coverage also records cache cardinality, proves dynamic constants and object
 // identities are not keys, exercises RT -> backbuffer -> RT reuse, checks post-Begin mutation,
-// independent channel masks, and verifies MultiSampleMask on the backend's supported 4x target.
+// independent channel masks, and verifies MultiSampleMask on the renderer's supported 4x target.
 // The MSAA capability path runs WebGPU's existing validation error scope; the final native
 // uncaptured-error count must remain zero.
 
@@ -38,7 +38,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
-#include "CNA/Internal/Backends/WebGPU/WebGPUGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/WebGPU/WebGPURenderer.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -50,7 +50,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using CNA::Internal::Backends::WebGPU::WebGPUGraphicsBackend;
+using CNA::Internal::Renderers::WebGPU::WebGPURenderer;
 
 namespace
 {
@@ -193,11 +193,11 @@ protected:
         const float dg = Unit(kDestination.getGProperty());
         const float db = Unit(kDestination.getBProperty());
         const float da = Unit(kDestination.getAProperty());
-        auto& backend = static_cast<WebGPUGraphicsBackend&>(device.GetBackend());
+        auto& renderer = static_cast<WebGPURenderer&>(device.GetRenderer());
 
-        Check(backend.GetSpritePipelineCacheSizeEXT() == 0,
+        Check(renderer.GetSpritePipelineCacheSizeEXT() == 0,
               "SpriteBatch pipeline cache begins empty (lazy creation)");
-        Check(backend.GetUncapturedErrorCountEXT() == 0,
+        Check(renderer.GetUncapturedErrorCountEXT() == 0,
               "WebGPU validation callback begins with zero uncaptured errors");
 
         CheckLinear(RenderSingle(device, BlendState::Opaque),
@@ -314,7 +314,7 @@ protected:
             factorState.setColorDestinationBlendProperty(Blend::Zero);
             factorState.setAlphaSourceBlendProperty(Blend::One);
             factorState.setAlphaDestinationBlendProperty(Blend::Zero);
-            const std::size_t before = backend.GetSpritePipelineCacheSizeEXT();
+            const std::size_t before = renderer.GetSpritePipelineCacheSizeEXT();
             Color finalFactor(0, 0, 0, 255);
             device.SetRenderTarget(target_.get());
             device.Clear(Color::Black);
@@ -329,7 +329,7 @@ protected:
             }
             device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
             const Color actual = At(ReadTarget(), 32, 32);
-            const std::size_t after = backend.GetSpritePipelineCacheSizeEXT();
+            const std::size_t after = renderer.GetSpritePipelineCacheSizeEXT();
             CheckLinear(actual, Unit(finalFactor.getRProperty()), Unit(finalFactor.getGProperty()),
                         Unit(finalFactor.getBProperty()), 1.0f,
                         "64 BlendFactor RGBA changes preserve the final per-batch value");
@@ -399,19 +399,19 @@ protected:
                 device, kRtW, kRtH, false, SurfaceFormat::Color, DepthFormat::None, 0,
                 RenderTargetUsage::DiscardContents);
 
-            const std::size_t before = backend.GetSpritePipelineCacheSizeEXT();
+            const std::size_t before = renderer.GetSpritePipelineCacheSizeEXT();
             device.SetRenderTarget(&first);
             device.Clear(kDestination);
             DrawSprite(device, Rectangle(0, 0, 32, 64), kSource, compatibility);
             device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
-            const std::size_t afterFirstTarget = backend.GetSpritePipelineCacheSizeEXT();
+            const std::size_t afterFirstTarget = renderer.GetSpritePipelineCacheSizeEXT();
 
             device.Clear(kDestination);
             DrawSprite(device, Rectangle(0, 0, 64, 64), kSource, compatibility);
             Color backbufferPixel(0, 0, 0, 0);
             const Rectangle backbufferRegion(32, 32, 1, 1);
             device.GetBackBufferData(&backbufferRegion, &backbufferPixel, 0, 1);
-            const std::size_t afterBackbuffer = backend.GetSpritePipelineCacheSizeEXT();
+            const std::size_t afterBackbuffer = renderer.GetSpritePipelineCacheSizeEXT();
             CheckLinear(backbufferPixel, sr * dr, sg * dg, sb * db, sa,
                         "backbuffer uses the same custom sprite blend equation");
 
@@ -424,7 +424,7 @@ protected:
                         "target -> backbuffer -> target preserves first target region");
             CheckLinear(At(firstPixels, 48, 32), sr * dr, sg * dg, sb * db, sa,
                         "target -> backbuffer -> target renders return region");
-            const std::size_t afterReturn = backend.GetSpritePipelineCacheSizeEXT();
+            const std::size_t afterReturn = renderer.GetSpritePipelineCacheSizeEXT();
 
             device.SetRenderTarget(&second);
             device.Clear(kDestination);
@@ -433,7 +433,7 @@ protected:
             device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
             CheckLinear(At(ReadTarget(second), 32, 32), sr * dr, sg * dg, sb * db, sa,
                         "second compatible RenderTarget2D is pixel-correct");
-            const std::size_t afterSecondTarget = backend.GetSpritePipelineCacheSizeEXT();
+            const std::size_t afterSecondTarget = renderer.GetSpritePipelineCacheSizeEXT();
 
             Check(afterFirstTarget == before + 1,
                   "new static blend compatibility creates exactly one sprite pipeline");
@@ -445,8 +445,8 @@ protected:
                         before, afterFirstTarget, afterBackbuffer, afterReturn, afterSecondTarget);
         }
 
-        // The preceding checks are the ordinary 1x control. Engage the backend's supported 4x
-        // route once; Supports4xMsaa performs the backend's existing WGPU validation error-scope
+        // The preceding checks are the ordinary 1x control. Engage the renderer's supported 4x
+        // route once; Supports4xMsaa performs the renderer's existing WGPU validation error-scope
         // round trip. No GFX-102 production submission/wait/frame/Present workaround is added.
         graphics_->setPreferMultiSamplingProperty(true);
         graphics_->ApplyChanges();
@@ -464,7 +464,7 @@ protected:
                 RenderTargetUsage::DiscardContents);
             Check(msaaTarget.getMultiSampleCountProperty() == 4,
                   "supported RenderTarget2D reports the applied 4x sample count");
-            Check(backend.GetSpritePipelineCacheSizeEXT() == 0,
+            Check(renderer.GetSpritePipelineCacheSizeEXT() == 0,
                   "sample-count reconfiguration invalidates old sprite compatibility entries");
 
             const Color msaaSource(196, 80, 40, 255);
@@ -497,10 +497,10 @@ protected:
             CheckLinear(At(ReadTarget(msaaTarget), 32, 32),
                         0.0f, 0.0f, 0.0f, 1.0f,
                         "4x MultiSampleMask zero preserves every destination sample");
-            Check(backend.GetSpritePipelineCacheSizeEXT() == 3,
+            Check(renderer.GetSpritePipelineCacheSizeEXT() == 3,
                   "4x sample-mask static states create exactly three cache entries");
             std::printf("[INFO] 4x SpriteBatch pipeline-cache cardinality: %zu\n",
-                        backend.GetSpritePipelineCacheSizeEXT());
+                        renderer.GetSpritePipelineCacheSizeEXT());
         }
         else
         {
@@ -508,7 +508,7 @@ protected:
                         "MultiSampleMask runtime assertion not applicable\n");
         }
 
-        const std::size_t validationErrors = backend.GetUncapturedErrorCountEXT();
+        const std::size_t validationErrors = renderer.GetUncapturedErrorCountEXT();
         std::printf("[INFO] WebGPU uncaptured validation/device error count: %zu\n",
                     validationErrors);
         Check(validationErrors == 0,

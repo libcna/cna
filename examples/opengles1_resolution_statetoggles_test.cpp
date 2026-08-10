@@ -21,7 +21,7 @@
 //   for (OPENGLES1-87).
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs. Requires a genuine OpenGL ES 1.1 driver; see
-// docs/opengles1-backend.md.
+// docs/opengles1-renderer.md.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
@@ -37,7 +37,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
-#include "CNA/Internal/Backends/OpenGLES1/OpenGLES1GraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/OpenGLES1/OpenGLES1Renderer.hpp"
 #include "CNA/GraphicsCapability.hpp"
 
 #include <cmath>
@@ -112,8 +112,8 @@ protected:
         done_ = true;
 
         auto& dev = getGraphicsDeviceProperty();
-        auto& backend = static_cast<CNA::Internal::Backends::OpenGLES1::OpenGLES1GraphicsBackend&>(
-            dev.GetBackend());
+        auto& renderer = static_cast<CNA::Internal::Renderers::OpenGLES1::OpenGLES1Renderer&>(
+            dev.GetRenderer());
         const int mid = kSize / 2;
 
         dev.setRasterizerStateProperty(RasterizerState::CullNone);
@@ -123,26 +123,26 @@ protected:
         // ---- Checks A/B: virtual resolution and coordinate transforms --------------------
         {
             int logicalW = 0, logicalH = 0;
-            backend.SetVirtualResolution(kSize * 2, kSize * 2);
-            backend.GetLogicalSize(logicalW, logicalH);
+            renderer.SetVirtualResolution(kSize * 2, kSize * 2);
+            renderer.GetLogicalSize(logicalW, logicalH);
             std::printf("       (logical size after SetVirtualResolution = %dx%d)\n",
                         logicalW, logicalH);
             check(logicalH == kSize * 2,
-                  "SetVirtualResolution -- the backend reports the requested logical height");
+                  "SetVirtualResolution -- the renderer reports the requested logical height");
 
-            // The two transforms must be inverses of each other whenever the backend implements
-            // them; a backend that declines both is reporting "window == logical", which is also
+            // The two transforms must be inverses of each other whenever the renderer implements
+            // them; a renderer that declines both is reporting "window == logical", which is also
             // self-consistent -- so require agreement, not a particular scale factor.
             float logX = 0.0f, logY = 0.0f, backX = 0.0f, backY = 0.0f;
-            const bool toLogical = backend.TransformWindowToLogical(32.0f, 16.0f, logX, logY);
-            const bool toWindow  = backend.TransformLogicalToWindow(logX, logY, backX, backY);
+            const bool toLogical = renderer.TransformWindowToLogical(32.0f, 16.0f, logX, logY);
+            const bool toWindow  = renderer.TransformLogicalToWindow(logX, logY, backX, backY);
             std::printf("       (window 32,16 -> logical %.1f,%.1f -> window %.1f,%.1f)\n",
                         logX, logY, backX, backY);
             check(toLogical == toWindow &&
                       (!toLogical || (std::fabs(backX - 32.0f) < 1.0f && std::fabs(backY - 16.0f) < 1.0f)),
                   "window->logical->window round-trips back to the original point");
 
-            backend.SetVirtualResolution(0, 0);   // back to native for the pixel checks below
+            renderer.SetVirtualResolution(0, 0);   // back to native for the pixel checks below
         }
 
         // ---- Checks C/D/E: the direct depth toggles ---------------------------------------
@@ -258,7 +258,7 @@ protected:
 
         // ---- Check I: MSAA is reported honestly ------------------------------------------
         {
-            const int samples = backend.GetMultiSampleCount();
+            const int samples = renderer.GetMultiSampleCount();
             const bool claims = dev.SupportsCapability(CNA::GraphicsCapability::MultiSampleAntiAliasing);
             std::printf("       (backbuffer MSAA samples = %d, SupportsCapability = %s)\n",
                         samples, claims ? "true" : "false");

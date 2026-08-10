@@ -23,7 +23,7 @@
 // Check D -- deep inside the triangle, well away from the edge, the resolved render target still
 //   returns a sane, fully-opaque pixel -- the resolve path returns real pixels, not garbage.
 // Check E (module-dependent, skipped if this module does not apply MultiSampleCount to a render
-//   target at all) -- GetMultiSampleCount() reports a real, backend-applied sample count.
+//   target at all) -- GetMultiSampleCount() reports a real, renderer-applied sample count.
 // Check F (same gate as E) -- with MSAA on, the SAME diagonal edge produces at least one genuinely
 //   blended, mid-tone pixel -- real multisample antialiasing into a render target, not merely
 //   "didn't crash".
@@ -167,7 +167,7 @@ public:
         // does not apply it, rather than papered over.
         if (msaa.appliedSampleCount > 1)
         {
-            ExpectTrue("GetMultiSampleCount() reports a real, backend-applied sample count once "
+            ExpectTrue("GetMultiSampleCount() reports a real, renderer-applied sample count once "
                       "MultiSampleCount is requested for a RenderTarget2D", true);
 
             bool blended = false;

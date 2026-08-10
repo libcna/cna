@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MS-PL
-// plan_freedirect.md Phase X3 (DX3-20..DX3-28): texture and render-target backend tests for the DX3
-// (DirectDraw, via the ../free-direct sibling) graphics backend.
+// plan_freedirect.md Phase X3 (DX3-20..DX3-28): texture and render-target renderer tests for the DX3
+// (DirectDraw, via the ../free-direct sibling) graphics renderer.
 //
 // Check A -- Texture2D construction (CreateTexture, a real offscreen surface) + SetData(level=0,
-//   ...) round-trips through FreeDirectTextureBackend::UpdatePixels (Lock()/memcpy/Unlock()) without
+//   ...) round-trips through FreeDirectTextureRenderer::UpdatePixels (Lock()/memcpy/Unlock()) without
 //   throwing (DX3-20/21).
 // Check B -- Texture2D::SetData(level=1, ...) throws: no native mip chain on IDirectDrawSurface
 //   (DX3-22).
@@ -169,7 +169,7 @@ protected:
 
         // Check H (DX3-28): free-direct's CreateSurface enforces a fixed 4096x4096 cap
         // (DDERR_INVALIDPARAMS outside 1..4096 per dimension); confirm CNA doesn't silently
-        // truncate an oversized request before it reaches the backend -- it must surface as a
+        // truncate an oversized request before it reaches the renderer -- it must surface as a
         // real, honest throw instead.
         {
             bool threw = false;

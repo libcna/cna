@@ -4,9 +4,9 @@
 # tearing/device-lost/driver-parity verification on a machine with a real display and a real GPU
 # driver (a typical CI runner doesn't reliably provide either). What this job DOES provide is
 # genuinely new, real information no amount of Wine+DXVK/vkd3d-proton testing could: the D3D11/
-# D3D12 backends have, until now, only ever been built with MinGW-w64 g++ and run through Wine's
+# D3D12 renderers have, until now, only ever been built with MinGW-w64 g++ and run through Wine's
 # translation layers. This job builds with native MSVC (a completely different compiler) and runs
-# the backend's off-screen smoke/common CTest suites directly against real Windows D3D11/D3D12
+# the renderer's off-screen smoke/common CTest suites directly against real Windows D3D11/D3D12
 # runtime DLLs (no Wine involved at all). The Direct2D leg additionally runs the public 2D parity
 # executable with ColorMatrix/Premultiply and bounded-copy/Porter-Duff composites enabled; it is a native-runtime
 # regression gate, not a claim of physical-display, DPI, or driver-parity coverage. The D3D legs
@@ -22,7 +22,7 @@
 # Windows toolchain, MSVC included -- roughly 10 test files call POSIX-only ::setenv(), which MSVC
 # also lacks (see plan_dx.md DX-15's own row; fixing this project-wide is a separate, much larger
 # task, not attempted here). This job does not build or run CnaTests -- only the D3D11/D3D12
-# backends' own self-contained smoke/common CTest executables (registered by the cna_d3d11_test()/
+# renderers' own self-contained smoke/common CTest executables (registered by the cna_d3d11_test()/
 # cna_d3d12_test() CMake macros), which do not depend on CnaTests at all.
 
 name: Windows graphics CI (D3D11/D3D12/Direct2D, MSVC)
@@ -32,13 +32,13 @@ on:
 
 jobs:
   msvc-build-and-test:
-    name: ${{ matrix.backend }} (native MSVC, windows-latest)
+    name: ${{ matrix.renderer }} (native MSVC, windows-latest)
     runs-on: windows-latest
     timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
-        backend: [D3D11, D3D12, DIRECT2D]
+        renderer: [D3D11, D3D12, DIRECT2D]
     defaults:
       run:
         shell: bash
@@ -96,31 +96,31 @@ jobs:
           key: sdl-prebuilt-windows-msvc-${{ steps.sdlsha.outputs.sha }}
 
       # D2D-123: fail fast, before spending any build time, if a Direct2D-relevant build command
-      # regresses to an unbounded (or >2) parallel job count. Runs once regardless of matrix.backend
-      # since the checked files are not backend-specific.
+      # regresses to an unbounded (or >2) parallel job count. Runs once regardless of matrix.renderer
+      # since the checked files are not renderer-specific.
       - name: Verify Direct2D build commands cap parallelism at 2
-        if: matrix.backend == 'DIRECT2D'
+        if: matrix.renderer == 'DIRECT2D'
         working-directory: cna_graphics
         run: bash scripts/verify-direct2d-parallel-jobs.sh
 
       # CNA_BUILD_EXAMPLES=OFF / CNA_ENABLE_NET=OFF: keeps this job scoped to exactly what it's
-      # meant to verify (CNA core + the D3D11/D3D12 backend + their own CTest executables) --
+      # meant to verify (CNA core + the D3D11/D3D12 renderer + their own CTest executables) --
       # demos/tools (cna_reference_dump, cna_demo_2d, ...) and networking are real, separate parts
       # of this project not relevant to a D3D11/D3D12 MSVC-verification job, and needlessly widen
       # the surface a first-ever native-MSVC configure could fail on for unrelated reasons.
-      - name: Configure (native MSVC, ${{ matrix.backend }})
+      - name: Configure (native MSVC, ${{ matrix.renderer }})
         working-directory: cna_graphics
         run: |
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-            -DCNA_GRAPHICS_BACKEND=${{ matrix.backend }} \
+            -DCNA_GRAPHICS_RENDERER=${{ matrix.renderer }} \
             -DCNA_BUILD_TESTS=ON \
             -DCNA_BUILD_EXAMPLES=OFF \
             -DCNA_ENABLE_NET=OFF
 
       # D2D-123: never an unbounded job count, even on a dedicated hosted runner -- capped the same
       # as every locally documented Direct2D build command.
-      - name: Build CNA + ${{ matrix.backend }} backend + CTest executables
+      - name: Build CNA + ${{ matrix.renderer }} renderer + CTest executables
         working-directory: cna_graphics
         run: cmake --build build --parallel 2
 
@@ -128,7 +128,7 @@ jobs:
       # contents change over time, so make the native audit deterministic instead of assuming the
       # SDK layers happen to be preinstalled on the current windows-latest image.
       - name: Ensure DirectX Graphics Tools debug layers
-        if: matrix.backend == 'DIRECT2D'
+        if: matrix.renderer == 'DIRECT2D'
         shell: pwsh
         run: |
           $graphicsTools = Get-WindowsCapability -Online |
@@ -142,7 +142,7 @@ jobs:
           }
 
       - name: Record native Direct2D runtime and adapter environment
-        if: matrix.backend == 'DIRECT2D'
+        if: matrix.renderer == 'DIRECT2D'
         shell: pwsh
         working-directory: cna_graphics
         run: |
@@ -162,18 +162,18 @@ jobs:
           $output | Tee-Object -FilePath build/direct2d-native-diagnostics/environment.txt
 
       # CMAKE_CROSSCOMPILING is false here (native MSVC, not the MinGW cross-compile toolchain
-      # file), so every backend's registered CTest executable runs directly against Windows DLLs
+      # file), so every renderer's registered CTest executable runs directly against Windows DLLs
       # with no Wine wrapper. Direct2D consequently does not set its Wine/Proton skip variables.
-      - name: Run ${{ matrix.backend }} CTest suite (real Windows, no Wine)
-        if: matrix.backend != 'DIRECT2D'
+      - name: Run ${{ matrix.renderer }} CTest suite (real Windows, no Wine)
+        if: matrix.renderer != 'DIRECT2D'
         working-directory: cna_graphics
-        run: ctest --test-dir build -L ${{ matrix.backend }} --output-on-failure
+        run: ctest --test-dir build -L ${{ matrix.renderer }} --output-on-failure
 
       # D2D-22/D2D-27: require the native debug layers instead of silently dropping their flags.
       # Verbose output preserves effect/composite probes, adapter selection, transient-resource
       # high-water counts and ReportLiveDeviceObjects messages in the uploaded audit artifact.
       - name: Run Direct2D native debug-layer suite (no compatibility skips)
-        if: matrix.backend == 'DIRECT2D'
+        if: matrix.renderer == 'DIRECT2D'
         working-directory: cna_graphics
         run: |
           CNA_DIRECT2D_DEBUG_LAYER=1 \
@@ -185,7 +185,7 @@ jobs:
       # documented hardware->WARP fallback is not merely dead code and gives its own timing/live-
       # object log without doubling every pixel test in the main native gate.
       - name: Run Direct2D lifetime audit on forced WARP
-        if: matrix.backend == 'DIRECT2D'
+        if: matrix.renderer == 'DIRECT2D'
         working-directory: cna_graphics
         run: |
           CNA_DIRECT2D_DEBUG_LAYER=1 \
@@ -195,7 +195,7 @@ jobs:
             | tee build/direct2d-native-diagnostics/warp-debug-lifetime-ctest.log
 
       - name: Upload Direct2D native validation artifact
-        if: always() && matrix.backend == 'DIRECT2D'
+        if: always() && matrix.renderer == 'DIRECT2D'
         uses: actions/upload-artifact@v4
         with:
           name: direct2d-native-debug-${{ github.run_id }}-${{ github.run_attempt }}
@@ -205,9 +205,9 @@ jobs:
             cna_graphics/build/Testing/Temporary/LastTest.log
 
       # DX-90/DX-114's own "shader-generation check" -- only needs to run once (the HLSL sources
-      # and hlsl_compiler_tool.cpp are shared D3DCommon content, not backend-specific), so gated to
+      # and hlsl_compiler_tool.cpp are shared D3DCommon content, not renderer-specific), so gated to
       # the D3D11 matrix leg to avoid doing it twice.
       - name: Verify all 20 HLSL shaders against a real D3DCOMPILER_47.dll
-        if: matrix.backend == 'D3D11'
+        if: matrix.renderer == 'D3D11'
         working-directory: cna_graphics
         run: python scripts/verify_hlsl_shaders_native_msvc.py

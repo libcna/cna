@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // Task 880: GraphicsDevice.Viewport GPU wiring — sub-region (split-screen) viewport.
 //
-// GraphicsDevice.Viewport previously had zero GPU backend effect: every backend hardcoded its
+// GraphicsDevice.Viewport previously had zero GPU renderer effect: every renderer hardcoded its
 // actual viewport to the full render-target/window size regardless of what Viewport was set to.
 // This test proves a genuine sub-region Viewport (e.g. the left half of the window, as in a
 // split-screen layout) now actually clips/scales rendering to that region: a full-NDC-range quad
@@ -12,7 +12,7 @@
 // GPU/FNA semantics — glClear ignores the viewport, only the scissor rect if enabled). Then set
 // Viewport to the LEFT HALF of the window and draw a full-NDC red quad. If Viewport has real GPU
 // effect, the right half (outside the custom Viewport) stays the earlier black clear; the left
-// half becomes red. Pre-fix, since the backend always used the full window regardless of
+// half becomes red. Pre-fix, since the renderer always used the full window regardless of
 // Viewport, BOTH halves would show red.
 //
 // Exit code 0 = PASS, 1 = FAIL.

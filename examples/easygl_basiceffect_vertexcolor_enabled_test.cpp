@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // Task 365: BasicEffect pixel test — VertexColorEnabled=true, no texture, vertex color
-// multiplication (EasyGL backend).
+// multiplication (EasyGL renderer).
 //
 // FNA reference (Graphics/Effect/StockEffects/BasicEffect.cs OnApply() + HLSL/BasicEffect.fx +
 // Common.fxh): with LightingEnabled=false (default), TextureEnabled=false (default) and

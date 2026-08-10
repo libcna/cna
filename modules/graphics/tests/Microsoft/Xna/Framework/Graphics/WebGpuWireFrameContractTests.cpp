@@ -4,12 +4,12 @@
 // WEBGPU-115 -- WebGPU's FillMode::WireFrame contract, measured end to end.
 //
 // wgpu-native has no polygon-mode API at all: `WGPUPrimitiveState` has no field a wireframe fill
-// could reach. What the backend did with the request was therefore the whole question, and this
+// could reach. What the renderer did with the request was therefore the whole question, and this
 // file answers it by measurement rather than by reading the source or the documentation.
 //
 // The reading this file was written against, taken on the pre-fix tree:
 //
-//     SupportsCapability(WireFrame) == true          (inherited IGraphicsBackend default)
+//     SupportsCapability(WireFrame) == true          (inherited IGraphicsRenderer default)
 //     ApplyRasterizerState           accepted        (no throw, no warning, no log)
 //     queued draw commands           +1
 //     Colored3D pipeline cache       +1              (`wireframe` is folded into the key)
@@ -24,10 +24,10 @@
 // diagnostic anywhere on the path. The commit that added this file asserts exactly those numbers;
 // it is the A/B evidence, and `git show` on it is where the old behaviour lives.
 //
-// THE CONTRACT THIS FILE NOW MEASURES. A backend must not report a capability as supported while
+// THE CONTRACT THIS FILE NOW MEASURES. A renderer must not report a capability as supported while
 // silently substituting a different rendering mode, so:
 //
-//     SupportsCapability(WireFrame) == false        asserted by the backend, not inherited
+//     SupportsCapability(WireFrame) == false        asserted by the renderer, not inherited
 //     a RasterizerState carrying WireFrame          still a legal state operation
 //     the first draw that would consume it          throws System::NotSupportedException
 //     queued draw commands                          +0
@@ -42,11 +42,11 @@
 // applied to SetVertexDeclaration.
 //
 // The geometry is REMED-GFX-209's asymmetric triangle, shared through WireFrameTriangleOracle.hpp
-// rather than copied, so these readings are directly comparable with the per-backend contract
+// rather than copied, so these readings are directly comparable with the per-renderer contract
 // suite's own.
 // ============================================================================
 
-#ifdef CNA_BACKEND_WEBGPU
+#ifdef CNA_RENDERER_WEBGPU
 
 #include <array>
 #include <cstddef>
@@ -69,7 +69,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBufferBinding.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColorTexture.hpp"
-#include "CNA/Internal/Backends/WebGPU/WebGPUGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/WebGPU/WebGPURenderer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 
 #include "WireFrameTriangleOracle.hpp"
@@ -78,10 +78,10 @@ namespace
 {
     using namespace CnaTest::WireFrameOracle;   // NOLINT(google-build-using-namespace)
     using CNA::GraphicsCapability;
-    using CNA::Internal::Backends::WebGPU::WebGPUGraphicsBackend;
+    using CNA::Internal::Renderers::WebGPU::WebGPURenderer;
     using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 
-    /// Every cardinality this ticket has to account for, read from the backend's own NOXNA
+    /// Every cardinality this ticket has to account for, read from the renderer's own NOXNA
     /// diagnostics. All seven are cumulative since device creation, so a difference between two
     /// readings is exactly what happened in between -- nothing here is reset by a flush.
     struct Counters
@@ -94,16 +94,16 @@ namespace
         std::size_t queueSubmits = 0;
         std::size_t uncapturedErrors = 0;
 
-        static Counters Read(const WebGPUGraphicsBackend& backend)
+        static Counters Read(const WebGPURenderer& renderer)
         {
             Counters c;
-            c.queuedCommands = backend.GetQueuedDrawCommandCountEXT();
-            c.nativeDraws = backend.GetNativeDrawIssueCountEXT();
-            c.coloredPipelines = backend.GetColoredPipelineCacheSizeEXT();
-            c.instancedPipelines = backend.GetInstancedPipelineCacheSizeEXT();
-            c.renderPasses = backend.GetRenderPassCountEXT();
-            c.queueSubmits = backend.GetQueueSubmitCountEXT();
-            c.uncapturedErrors = backend.GetUncapturedErrorCountEXT();
+            c.queuedCommands = renderer.GetQueuedDrawCommandCountEXT();
+            c.nativeDraws = renderer.GetNativeDrawIssueCountEXT();
+            c.coloredPipelines = renderer.GetColoredPipelineCacheSizeEXT();
+            c.instancedPipelines = renderer.GetInstancedPipelineCacheSizeEXT();
+            c.renderPasses = renderer.GetRenderPassCountEXT();
+            c.queueSubmits = renderer.GetQueueSubmitCountEXT();
+            c.uncapturedErrors = renderer.GetUncapturedErrorCountEXT();
             return c;
         }
 
@@ -118,13 +118,13 @@ namespace
         }
     };
 
-    WebGPUGraphicsBackend& BackendOf(GraphicsDevice& device)
+    WebGPURenderer& RendererOf(GraphicsDevice& device)
     {
-        auto* backend = dynamic_cast<WebGPUGraphicsBackend*>(&device.GetBackend());
-        // This whole file is gated on CNA_BACKEND_WEBGPU, so the cast cannot legitimately fail.
-        if (backend == nullptr)
-            throw std::runtime_error("CNA_BACKEND_WEBGPU build has no WebGPUGraphicsBackend");
-        return *backend;
+        auto* renderer = dynamic_cast<WebGPURenderer*>(&device.GetRenderer());
+        // This whole file is gated on CNA_RENDERER_WEBGPU, so the cast cannot legitimately fail.
+        if (renderer == nullptr)
+            throw std::runtime_error("CNA_RENDERER_WEBGPU build has no WebGPURenderer");
+        return *renderer;
     }
 
     /// One route, measured at the three points that matter: before the public draw call, straight
@@ -175,7 +175,7 @@ namespace
     RouteRun RunOrdinaryRoute(GraphicsDevice& device, FillMode fill)
     {
         RouteRun run;
-        WebGPUGraphicsBackend& backend = BackendOf(device);
+        WebGPURenderer& renderer = RendererOf(device);
         RenderTarget2D target(device, kSize, kSize, false, SurfaceFormat::Color,
                               DepthFormat::None, 0, RenderTargetUsage::PreserveContents);
         try
@@ -197,7 +197,7 @@ namespace
 
             // The window opens here, one statement before the public draw: everything above is
             // resource setup, and the deferred Clear queues no draw command of its own.
-            run.before = Counters::Read(backend);
+            run.before = Counters::Read(renderer);
             try
             {
                 device.DrawPrimitives(PrimitiveType::TriangleList, 0, 1);
@@ -207,12 +207,12 @@ namespace
             {
                 run.rejection = e.what();
             }
-            run.afterDraw = Counters::Read(backend);
+            run.afterDraw = Counters::Read(renderer);
 
             device.SetVertexBuffer(nullptr);
             device.SetRenderTarget(nullptr);
             ReadTarget(target, run.frame);
-            run.afterFlush = Counters::Read(backend);
+            run.afterFlush = Counters::Read(renderer);
         }
         catch (const std::exception& e)
         {
@@ -233,7 +233,7 @@ namespace
         EXPECT_NE(std::string::npos, message.find("WireFrame"))
             << "the refusal does not name FillMode::WireFrame: \"" << message << '"';
         EXPECT_NE(std::string::npos, message.find("WebGPU"))
-            << "the refusal does not name the backend: \"" << message << '"';
+            << "the refusal does not name the renderer: \"" << message << '"';
         EXPECT_NE(std::string::npos, message.find("SupportsCapability"))
             << "the refusal does not point at the capability query: \"" << message << '"';
     }
@@ -253,7 +253,7 @@ namespace
 }   // namespace
 
 // ---------------------------------------------------------------------------
-// 1. THE CAPABILITY QUERY. The public contract for "can this backend do X", and the reason the
+// 1. THE CAPABILITY QUERY. The public contract for "can this renderer do X", and the reason the
 //    silent substitution below is a false claim rather than an undocumented gap.
 // ---------------------------------------------------------------------------
 TEST(WebGpuWireFrameContract, CapabilityQueryAnswersForWireFrame)
@@ -264,8 +264,8 @@ TEST(WebGpuWireFrameContract, CapabilityQueryAnswersForWireFrame)
     std::cout << "[WEBGPU-115] SupportsCapability(WireFrame) == "
               << (reported ? "true" : "false") << std::endl;
 
-    // WEBGPU-115: false, and asserted by WebGPUGraphicsBackend::SupportsCapability rather than
-    // inherited from IGraphicsBackend's permissive default. The renderer has no polygon mode to
+    // WEBGPU-115: false, and asserted by WebGPURenderer::SupportsCapability rather than
+    // inherited from IGraphicsRenderer's permissive default. The renderer has no polygon mode to
     // back a `true` with, and the query is the public contract for that fact.
     EXPECT_FALSE(reported)
         << "WebGPU claims WireFrame support again -- the capability override is gone, and the "
@@ -435,7 +435,7 @@ namespace
         virtual void Draw(GraphicsDevice& device) = 0;
         /// Which pipeline cache this route's family lands in, so the "+0 pipelines" assertion is
         /// made against the cache the accepted leg actually grows.
-        [[nodiscard]] virtual std::size_t PipelineCacheSize(const WebGPUGraphicsBackend& b) const
+        [[nodiscard]] virtual std::size_t PipelineCacheSize(const WebGPURenderer& b) const
         {
             return b.GetColoredPipelineCacheSizeEXT();
         }
@@ -581,7 +581,7 @@ namespace
         }
     };
 
-    /// The raw `const void*` overloads, which are the ONLY callers of the backend's
+    /// The raw `const void*` overloads, which are the ONLY callers of the renderer's
     /// DrawColoredPrimitives / DrawIndexedColoredPrimitives entry points -- a different pair of
     /// guarded entry points from every route above.
     struct UserRawNonIndexed : Route
@@ -634,7 +634,7 @@ namespace
         std::unique_ptr<Texture2D> texture;
         std::unique_ptr<BasicEffect> effect;
         [[nodiscard]] const char* Name() const override { return "textured effect family"; }
-        [[nodiscard]] std::size_t PipelineCacheSize(const WebGPUGraphicsBackend&) const override
+        [[nodiscard]] std::size_t PipelineCacheSize(const WebGPURenderer&) const override
         {
             // The textured family has no EXT accessor of its own; the Colored3D cache is asserted
             // instead, and must not grow either -- a refused draw creates no pipeline anywhere.
@@ -682,7 +682,7 @@ namespace
         std::unique_ptr<VertexBuffer> instances;
         std::unique_ptr<BasicEffect> effect;
         [[nodiscard]] const char* Name() const override { return "instanced"; }
-        [[nodiscard]] std::size_t PipelineCacheSize(const WebGPUGraphicsBackend& b) const override
+        [[nodiscard]] std::size_t PipelineCacheSize(const WebGPURenderer& b) const override
         {
             return b.GetInstancedPipelineCacheSizeEXT();
         }
@@ -727,10 +727,10 @@ namespace
     RouteRun RunRoute(GraphicsDevice& device, FillMode fill, Route& route)
     {
         RouteRun run;
-        WebGPUGraphicsBackend& backend = BackendOf(device);
+        WebGPURenderer& renderer = RendererOf(device);
         RenderTarget2D target(device, kSize, kSize, false, SurfaceFormat::Color,
                               DepthFormat::None, 0, RenderTargetUsage::PreserveContents);
-        const std::size_t pipelinesBefore = route.PipelineCacheSize(backend);
+        const std::size_t pipelinesBefore = route.PipelineCacheSize(renderer);
         std::size_t pipelinesAfter = pipelinesBefore;
         try
         {
@@ -740,7 +740,7 @@ namespace
             device.Clear(Color(kClear[0], kClear[1], kClear[2], kClear[3]));
             route.Setup(device);
 
-            run.before = Counters::Read(backend);
+            run.before = Counters::Read(renderer);
             try
             {
                 route.Draw(device);
@@ -750,14 +750,14 @@ namespace
             {
                 run.rejection = e.what();
             }
-            run.afterDraw = Counters::Read(backend);
+            run.afterDraw = Counters::Read(renderer);
 
             device.SetVertexBuffers({});
             device.SetIndexBuffer(nullptr);
             device.SetRenderTarget(nullptr);
             ReadTarget(target, run.frame);
-            run.afterFlush = Counters::Read(backend);
-            pipelinesAfter = route.PipelineCacheSize(backend);
+            run.afterFlush = Counters::Read(renderer);
+            pipelinesAfter = route.PipelineCacheSize(renderer);
         }
         catch (const std::exception& e)
         {
@@ -935,16 +935,16 @@ namespace
         state.completed = true;
     }
 
-    void PopAndExpectClean(WebGPUGraphicsBackend& backend, const char* what)
+    void PopAndExpectClean(WebGPURenderer& renderer, const char* what)
     {
         ErrorScopeState state;
         WGPUPopErrorScopeCallbackInfo callback{};
         callback.mode = WGPUCallbackMode_AllowProcessEvents;
         callback.callback = OnErrorScope;
         callback.userdata1 = &state;
-        wgpuDevicePopErrorScope(backend.Device(), callback);
+        wgpuDevicePopErrorScope(renderer.Device(), callback);
         for (int attempt = 0; attempt < 10000 && !state.completed; ++attempt)
-            wgpuInstanceProcessEvents(backend.Instance());
+            wgpuInstanceProcessEvents(renderer.Instance());
 
         ASSERT_TRUE(state.completed) << what << ": wgpu-native did not complete the error scope";
         ASSERT_EQ(WGPUPopErrorScopeStatus_Success, state.status)
@@ -959,10 +959,10 @@ namespace
 TEST(WebGpuWireFrameContract, RefusalAndRecoveryAreNativelyClean)
 {
     GraphicsDevice gd;
-    WebGPUGraphicsBackend& backend = BackendOf(gd);
-    const std::size_t uncapturedBefore = backend.GetUncapturedErrorCountEXT();
-    wgpuDevicePushErrorScope(backend.Device(), WGPUErrorFilter_OutOfMemory);
-    wgpuDevicePushErrorScope(backend.Device(), WGPUErrorFilter_Validation);
+    WebGPURenderer& renderer = RendererOf(gd);
+    const std::size_t uncapturedBefore = renderer.GetUncapturedErrorCountEXT();
+    wgpuDevicePushErrorScope(renderer.Device(), WGPUErrorFilter_OutOfMemory);
+    wgpuDevicePushErrorScope(renderer.Device(), WGPUErrorFilter_Validation);
 
     OrdinaryNonIndexed route(0);
     const RouteRun refused = RunRoute(gd, FillMode::WireFrame, route);
@@ -974,22 +974,22 @@ TEST(WebGpuWireFrameContract, RefusalAndRecoveryAreNativelyClean)
     ASSERT_TRUE(recovered.accepted) << recovered.rejection;
     EXPECT_EQ(kInteriorArea, recovered.frame.LitIn(kInterior)) << recovered.frame.Describe();
 
-    PopAndExpectClean(backend, "validation scope");
-    PopAndExpectClean(backend, "out-of-memory scope");
-    EXPECT_EQ(uncapturedBefore, backend.GetUncapturedErrorCountEXT())
+    PopAndExpectClean(renderer, "validation scope");
+    PopAndExpectClean(renderer, "out-of-memory scope");
+    EXPECT_EQ(uncapturedBefore, renderer.GetUncapturedErrorCountEXT())
         << "the refusal/recovery sequence produced uncaptured native errors";
 }
 
 // ---------------------------------------------------------------------------
 // 9. THE TOPOLOGY BOUNDARY. A fill mode describes how a POLYGON's interior is rasterized, so a
 //    line or point list has nothing for it to select and Solid/WireFrame are the same request.
-//    This backend substitutes nothing there, so refusing those draws would delete a draw that is
+//    This renderer substitutes nothing there, so refusing those draws would delete a draw that is
 //    already correct -- an over-wide guard, not a safety property. The claim is MEASURED here, not
 //    reasoned about: each non-polygon topology is drawn under both fill modes and the two frames
 //    must be byte-identical.
 //
 //    This is what PointListPrimitiveTest.PointListIsNotAffectedByTriangleCulling found: the first
-//    version of the guard refused a WireFrame point-list draw that every other backend renders,
+//    version of the guard refused a WireFrame point-list draw that every other renderer renders,
 //    identically, under either fill mode.
 // ---------------------------------------------------------------------------
 namespace
@@ -1001,7 +1001,7 @@ namespace
                          int primitiveCount)
     {
         RouteRun run;
-        WebGPUGraphicsBackend& backend = BackendOf(device);
+        WebGPURenderer& renderer = RendererOf(device);
         RenderTarget2D target(device, kSize, kSize, false, SurfaceFormat::Color,
                               DepthFormat::None, 0, RenderTargetUsage::PreserveContents);
         try
@@ -1020,7 +1020,7 @@ namespace
             effect.Apply();
             device.SetVertexBuffer(&vb);
 
-            run.before = Counters::Read(backend);
+            run.before = Counters::Read(renderer);
             try
             {
                 device.DrawPrimitives(primitive, 0, primitiveCount);
@@ -1030,12 +1030,12 @@ namespace
             {
                 run.rejection = e.what();
             }
-            run.afterDraw = Counters::Read(backend);
+            run.afterDraw = Counters::Read(renderer);
 
             device.SetVertexBuffer(nullptr);
             device.SetRenderTarget(nullptr);
             ReadTarget(target, run.frame);
-            run.afterFlush = Counters::Read(backend);
+            run.afterFlush = Counters::Read(renderer);
         }
         catch (const std::exception& e)
         {
@@ -1104,4 +1104,4 @@ TEST(WebGpuWireFrameContract, OnlyPolygonTopologiesAreRefused)
     }
 }
 
-#endif  // CNA_BACKEND_WEBGPU
+#endif  // CNA_RENDERER_WEBGPU

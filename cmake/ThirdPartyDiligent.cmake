@@ -1,14 +1,14 @@
-# DiligentCore integration for the CNA Diligent graphics backend (plan_diligent.md DILIGENT-1/2).
+# DiligentCore integration for the CNA Diligent graphics renderer (plan_diligent.md DILIGENT-1/2).
 #
 # DiligentCore is itself a graphics abstraction layer over D3D11/D3D12/Vulkan/OpenGL/Metal, so this
-# module's job is only to make its engine factories available; which of them the backend actually
-# uses is a RUNTIME decision (see DiligentGraphicsBackend::SelectRenderDevice).
+# module's job is only to make its engine factories available; which of them the renderer actually
+# uses is a RUNTIME decision (see DiligentRenderer::SelectRenderDevice).
 #
 # Source acquisition is FetchContent with a pinned tag. To build against a local checkout instead
 # (offline, or to avoid re-cloning ~200 MB per fresh build tree), use FetchContent's own standard
 # override rather than a CNA-specific option:
 #
-#   cmake -DCNA_GRAPHICS_BACKEND=DILIGENT \
+#   cmake -DCNA_GRAPHICS_RENDERER=DILIGENT \
 #         -DFETCHCONTENT_SOURCE_DIR_DILIGENTCORE=$HOME/deps/DiligentCore ...
 #
 # That checkout must be a recursive clone of the same tag (DiligentCore vendors glslang,
@@ -31,7 +31,7 @@ function(cna_configure_diligent)
     set(DILIGENT_NO_ARCHIVER ON CACHE BOOL "" FORCE)
     set(DILIGENT_INSTALL_CORE OFF CACHE BOOL "" FORCE)
 
-    # HLSL is CNA's single shader source language on this backend (design decision 4), including on
+    # HLSL is CNA's single shader source language on this renderer (design decision 4), including on
     # the non-Direct3D device types, so Diligent's HLSL front end must stay enabled: it is what
     # cross-compiles CNA's HLSL to SPIR-V (Vulkan) and to GLSL (OpenGL).
     set(DILIGENT_NO_HLSL OFF CACHE BOOL "" FORCE)
@@ -96,14 +96,14 @@ function(cna_configure_diligent)
 endfunction()
 
 # Links the Diligent engine targets that actually got built into @p target, and defines one
-# CNA_DILIGENT_HAS_<ENGINE> macro per engine so the backend's runtime device selection can be
+# CNA_DILIGENT_HAS_<ENGINE> macro per engine so the renderer's runtime device selection can be
 # compiled against exactly the set that exists.
 function(cna_link_diligent target)
     target_include_directories(${target} PRIVATE "${CNA_DILIGENT_SOURCE_DIR}")
 
     # Diligent-BuildSettings defines a bare `DEBUG` in Debug configurations, which collides with
     # CNA's own `CNA::LogLevel::DEBUG` enumerator and turns every translation unit that includes
-    # CNA/LogLevel.hpp into a syntax error (found empirically on the first build of this backend).
+    # CNA/LogLevel.hpp into a syntax error (found empirically on the first build of this renderer).
     # Diligent's own code uses DILIGENT_DEBUG, which is set separately and left alone; the bare
     # spelling exists only for third-party compatibility, so undefining it costs nothing. This has
     # to be a compile option rather than a definition: CMake emits COMPILE_DEFINITIONS before

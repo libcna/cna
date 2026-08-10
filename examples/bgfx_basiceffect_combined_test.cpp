@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Task 370: BasicEffect cross-backend image comparison suite — closes Phase 42 (Bgfx backend).
+// Task 370: BasicEffect cross-renderer image comparison suite — closes Phase 42 (Bgfx renderer).
 //
 // See examples/easygl_basiceffect_combined_test.cpp for the full FNA-derived expected-output
 // derivation. Summary: TextureEnabled+VertexColorEnabled+DiffuseColor+EmissiveColor combined
@@ -9,7 +9,7 @@
 // permanently unbound for this stride, invisible with 1×1 textures).
 //
 // Per Task 364's finding (tracked as Task 884, not fixed there or here): Bgfx's default
-// RasterizerState cull state (`BGFX_STATE_CULL_CCW`) is the only one of the 3 backends that
+// RasterizerState cull state (`BGFX_STATE_CULL_CCW`) is the only one of the 3 renderers that
 // actually matches FNA's real `CullCounterClockwiseFace` default, so it silently culls the
 // standard NDC quad winding used throughout this pixel-test family unless `RasterizerState::
 // CullNone` is set explicitly — worked around here identically to Tasks 364-369's own Bgfx tests.

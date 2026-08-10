@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 // Task 395: verify EnvironmentMapEffect's EnvironmentMapSpecular contribution
-// (Vulkan backend). See examples/easygl_environmentmapeffect_specular_test.cpp for the full
+// (Vulkan renderer). See examples/easygl_environmentmapeffect_specular_test.cpp for the full
 // derivation and the real bug this test found and fixed: CNA's env-map fragment shaders (all
-// 3 backends) added `EnvironmentMapSpecular` as a flat constant instead of FNA's real
+// 3 renderers) added `EnvironmentMapSpecular` as a flat constant instead of FNA's real
 // `EnvironmentMapSpecular * envmap.a` (scaled by the cube map's alpha channel, further scaled
 // by the combined texture/diffuse alpha).
 //

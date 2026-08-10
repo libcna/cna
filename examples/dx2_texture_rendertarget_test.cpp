@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx2.md Phase O2 (DX2-11, 2D layer ported from DX1-20..DX1-28): texture and render-target backend tests for the DX2
-// (real DirectDraw v1, run under Wine -- no ../free-direct anywhere in this backend) graphics
-// backend.
+// plan_dx2.md Phase O2 (DX2-11, 2D layer ported from DX1-20..DX1-28): texture and render-target renderer tests for the DX2
+// (real DirectDraw v1, run under Wine -- no ../free-direct anywhere in this renderer) graphics
+// renderer.
 //
 // Check A -- Texture2D construction (CreateTexture, a real offscreen surface) + SetData(level=0,
-//   ...) round-trips through Dx2TextureBackend::UpdatePixels (Lock()/memcpy/Unlock()) without
+//   ...) round-trips through Dx2TextureRenderer::UpdatePixels (Lock()/memcpy/Unlock()) without
 //   throwing (DX2-20/21).
 // Check B -- Texture2D::SetData(level=1, ...) throws: no native mip chain on IDirectDrawSurface
 //   (DX2-22).
@@ -176,8 +176,8 @@ protected:
         // 65536x65536 (E_INVALIDARG). So a 4096x4096 Texture2D -- XNA's own real HiDef-profile
         // ceiling -- must succeed without throwing here, the opposite assertion from DX3's own
         // equivalent check. CNA does not enforce any GraphicsProfile-based size ceiling outside the
-        // D3D9 backend (Texture2D.cpp's own ValidateTextureSizeForProfileEXT is #ifdef
-        // CNA_BACKEND_D3D9-only) -- an honest, documented gap for DX2, not silently dropped.
+        // D3D9 renderer (Texture2D.cpp's own ValidateTextureSizeForProfileEXT is #ifdef
+        // CNA_RENDERER_D3D9-only) -- an honest, documented gap for DX2, not silently dropped.
         {
             bool threw = false;
             try { Texture2D large(dev, 4096, 4096); }

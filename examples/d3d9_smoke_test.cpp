@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx9.md Phase D9-3 (D9-30/D9-31): smoke test for the D3D9 graphics backend's device
+// plan_dx9.md Phase D9-3 (D9-30/D9-31): smoke test for the D3D9 graphics renderer's device
 // creation + Clear/Present/ReadBackbuffer foundation. Real window, real Direct3DCreate9/
 // CreateDevice, real Clear()+Present()+readback through the actual public GraphicsDevice API --
-// this backend's first genuine pixel-correctness proof.
+// this renderer's first genuine pixel-correctness proof.
 //
 // Per plan_dx9.md's own "Definition of done": each of the 6 Clear* combo variants needs its own
 // passing pixel-verified check here, not just "compiles" -- D3D11 shipped these implemented-but-
@@ -39,28 +39,28 @@
 //   both report Lost; Clear() throws DeviceLostException while lost; DebugRestoreContext() fires
 //   DeviceResetting then DeviceReset (each exactly once) via a REAL Reset() call, status returns
 //   to Normal, and the device genuinely works again afterward (Clear()+readback exact).
-// Check N -- a real D3D9VertexBufferBackend round-trips known bytes (D9-40): SetData() through
+// Check N -- a real D3D9VertexBufferRenderer round-trips known bytes (D9-40): SetData() through
 //   the public interface, then a direct Lock(READONLY) confirms the GPU buffer holds them exactly.
-// Check O -- same round-trip proof for a 16-bit AND a 32-bit D3D9IndexBufferBackend (D9-41),
+// Check O -- same round-trip proof for a 16-bit AND a 32-bit D3D9IndexBufferRenderer (D9-41),
 //   confirming CreateIndexBuffer32() creates a genuinely distinct D3DFMT_INDEX32 buffer rather
 //   than silently delegating to the 16-bit path (the trap D3D11's own DX-31 found).
 // Check P -- a device-lost/recover cycle genuinely releases and lazily recreates a registered
 //   D3DPOOL_DEFAULT vertex buffer's underlying COM object (D9-40's device-lost hook, proven for
 //   real, not just "didn't crash") -- matches real XNA/D3D9 behavior where a DYNAMIC buffer's
 //   content does not survive DeviceReset.
-// Check Q -- a real D3D9TextureBackend round-trips exact RGBA8 bytes (D9-50): constructor upload
+// Check Q -- a real D3D9TextureRenderer round-trips exact RGBA8 bytes (D9-50): constructor upload
 //   and a later UpdatePixelsLevel() replacement are both confirmed via a direct LockRect(READONLY)
 //   on the D3DPOOL_MANAGED texture (no staging-texture dance needed, D9-4's own confirmed payoff).
-// Check R -- D3D9TextureCubeBackend/D3D9Texture3DBackend SetData()+GetData() round-trip exact
+// Check R -- D3D9TextureCubeRenderer/D3D9Texture3DRenderer SetData()+GetData() round-trip exact
 //   bytes for a sub-region/sub-volume (D9-51), gated on the real D3DCAPS9 the device reports
 //   (D3DPTEXTURECAPS_CUBEMAP / MaxVolumeExtent) rather than assumed universal.
-// Check S -- a real D3D9RenderTargetBackend (D9-53): bind, Clear() through the public
+// Check S -- a real D3D9RenderTargetRenderer (D9-53): bind, Clear() through the public
 //   GraphicsDevice API, read back the render target's OWN surface (GetRenderTargetData(), since a
 //   render-target texture is not directly Lockable) for an exact color match, confirm a real
 //   depth-stencil surface exists, then unbind and confirm the back buffer is genuinely restored.
-// Check T -- D3D9RenderTargetCubeBackend (D9-53): bind one face, Clear(), read back that face's
+// Check T -- D3D9RenderTargetCubeRenderer (D9-53): bind one face, Clear(), read back that face's
 //   own surface for an exact match, then confirm unbinding restores the back buffer.
-// Check U -- an MSAA D3D9RenderTargetBackend (D9-53), gated on the real device-reported sample
+// Check U -- an MSAA D3D9RenderTargetRenderer (D9-53), gated on the real device-reported sample
 //   support (IDirect3D9::CheckDeviceMultiSampleType()): Clear() into the multisampled surface,
 //   unbind (StretchRect-resolves into the sampleable texture), confirm the resolved texture holds
 //   the exact color.
@@ -68,14 +68,14 @@
 //   color into BOTH targets' own surfaces, unbind restores the back buffer, and requesting more
 //   targets than D3DCAPS9::NumSimultaneousRTs throws a real, named error instead of silently
 //   degrading (design decision 13).
-// Check W -- a real D3D9OcclusionQueryBackend (D9-55): Begin()/End() issue real
+// Check W -- a real D3D9OcclusionQueryRenderer (D9-55): Begin()/End() issue real
 //   D3DISSUE_BEGIN/D3DISSUE_END commands, IsComplete() eventually reports true (polled), and
 //   PixelCount() reads back 0 for a query that only wraps a Clear() (no draw path exists yet,
 //   D9-82 -- a real, honest result, not a stand-in for tested geometry).
 // Check X -- NPOT capability (D9-56), surfaced from the real D3DCAPS9
 //   (RequiresPowerOfTwoTexturesEXT()/NonPowerOfTwoRequiresClampAddressingEXT()), not assumed. When
 //   the device reports full NPOT support (true here), a genuinely non-power-of-two (5x3) texture
-//   is created and round-tripped for real, proving this backend adds no artificial restriction.
+//   is created and round-tripped for real, proving this renderer adds no artificial restriction.
 // Check Y -- a real ApplySamplerState() (D9-63): SetSamplerState() values read back directly from
 //   the device via GetSamplerState() (no draw call needed) exactly match TextureFilter::Point/
 //   TextureAddressMode::Clamp/MaxAnisotropy=4's own D3D9StateMapping translation; an out-of-range
@@ -101,11 +101,11 @@
 #include "Microsoft/Xna/Framework/Graphics/DeviceLostException.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDeviceStatus.hpp"
 
-#include "CNA/Internal/Backends/D3D9/D3D9GraphicsBackend.hpp"
-#include "CNA/Internal/Backends/D3D9/D3D9Buffers.hpp"
-#include "CNA/Internal/Backends/D3D9/D3D9Textures.hpp"
-#include "CNA/Internal/Backends/D3D9/D3D9RenderTargets.hpp"
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/D3D9/D3D9Renderer.hpp"
+#include "CNA/Internal/Renderers/D3D9/D3D9Buffers.hpp"
+#include "CNA/Internal/Renderers/D3D9/D3D9Textures.hpp"
+#include "CNA/Internal/Renderers/D3D9/D3D9RenderTargets.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Graphics/ImageData.hpp"
 
 #include <SDL3/SDL.h>
@@ -116,11 +116,11 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::D3D9;
-using CNA::Internal::Backends::ImageData;
-using CNA::Internal::Backends::IRenderTargetBackend;
-using CNA::Internal::Backends::RenderTargetBindingDescriptor;
-using CNA::Internal::Backends::GpuDrawParams;
+using namespace CNA::Internal::Renderers::D3D9;
+using CNA::Internal::Renderers::ImageData;
+using CNA::Internal::Renderers::IRenderTargetRenderer;
+using CNA::Internal::Renderers::RenderTargetBindingDescriptor;
+using CNA::Internal::Renderers::GpuDrawParams;
 
 namespace
 {
@@ -136,9 +136,9 @@ namespace
 
     /// D9-53 test helper: reads back an arbitrary render-target IDirect3DSurface9* as RGBA8, via
     /// the same CreateOffscreenPlainSurface(SYSTEMMEM)+GetRenderTargetData()+LockRect(READONLY)
-    /// dance D3D9GraphicsBackend::ReadBackbuffer() already uses for the back buffer itself -- this
+    /// dance D3D9Renderer::ReadBackbuffer() already uses for the back buffer itself -- this
     /// is a genuine D3D9 requirement (a D3DUSAGE_RENDERTARGET/D3DPOOL_DEFAULT surface is generally
-    /// not directly Lockable), not a test-only shortcut. Assumes D3DFMT_A8B8G8R8 (this backend's own
+    /// not directly Lockable), not a test-only shortcut. Assumes D3DFMT_A8B8G8R8 (this renderer's own
     /// RGBA8-storage convention -- see D3D9Textures.hpp/D3D9RenderTargets.hpp), so no swapRB needed.
     /// Returns an empty vector on any failure.
     std::vector<uint8_t> ReadRenderTargetSurfaceD3D9(IDirect3DDevice9* device, IDirect3DSurface9* surface)
@@ -181,14 +181,14 @@ protected:
         if (frame_++ < 1) return;
 
         auto& dev = getGraphicsDeviceProperty();
-        auto& backend = static_cast<D3D9GraphicsBackend&>(dev.GetBackend());
+        auto& renderer = static_cast<D3D9Renderer&>(dev.GetRenderer());
 
         // Check A: real device created, real D3DCAPS9.
-        check(backend.GetCapsEXT().VertexShaderVersion != 0 && backend.GetCapsEXT().PixelShaderVersion != 0,
+        check(renderer.GetCapsEXT().VertexShaderVersion != 0 && renderer.GetCapsEXT().PixelShaderVersion != 0,
               "real device created, D3DCAPS9 reports nonzero VertexShaderVersion/PixelShaderVersion");
         std::printf("    VertexShaderVersion=0x%08lx PixelShaderVersion=0x%08lx\n",
-                    static_cast<unsigned long>(backend.GetCapsEXT().VertexShaderVersion),
-                    static_cast<unsigned long>(backend.GetCapsEXT().PixelShaderVersion));
+                    static_cast<unsigned long>(renderer.GetCapsEXT().VertexShaderVersion),
+                    static_cast<unsigned long>(renderer.GetCapsEXT().PixelShaderVersion));
 
         // Check B: exact pixel readback after Clear().
         {
@@ -238,7 +238,7 @@ protected:
                            pixels[0].getBProperty() == 30 && pixels[0].getAProperty() == 255;
 
             Microsoft::WRL::ComPtr<IDirect3DSurface9> dsSurface;
-            HRESULT hr = backend.GetDeviceEXT()->GetDepthStencilSurface(dsSurface.ReleaseAndGetAddressOf());
+            HRESULT hr = renderer.GetDeviceEXT()->GetDepthStencilSurface(dsSurface.ReleaseAndGetAddressOf());
             bool dsReal = false;
             if (SUCCEEDED(hr) && dsSurface)
             {
@@ -358,7 +358,7 @@ protected:
         }
 
         // Check M (D9-34) -- the real XNA device-lost lifecycle, driven through the pre-existing
-        // GraphicsDevice-calls-into-backend test channel (DebugSimulateContextLoss()/
+        // GraphicsDevice-calls-into-renderer test channel (DebugSimulateContextLoss()/
         // DebugRestoreContext()) since DXVK will rarely lose the device naturally under this dev
         // loop (design decision 2's own documented cost) -- this exercises the REAL event sequence
         // and a REAL Reset() call, even though the "loss" itself is simulated, not driver-detected.
@@ -371,23 +371,23 @@ protected:
             check(dev.getGraphicsDeviceStatusProperty() == GraphicsDeviceStatus::Normal,
                   "D9-34: GraphicsDeviceStatus starts Normal");
 
-            backend.DebugSimulateContextLoss();
+            renderer.DebugSimulateContextLoss();
             check(lostCount == 1 && resettingCount == 0 && resetCount == 0,
                   "D9-34: DebugSimulateContextLoss() fires DeviceLost exactly once, nothing else yet");
-            check(backend.IsDeviceLostEXT() &&
+            check(renderer.IsDeviceLostEXT() &&
                   dev.getGraphicsDeviceStatusProperty() == GraphicsDeviceStatus::Lost,
-                  "D9-34: backend.IsDeviceLostEXT() and GraphicsDeviceStatus both report Lost");
+                  "D9-34: renderer.IsDeviceLostEXT() and GraphicsDeviceStatus both report Lost");
 
             bool threwWhileLost = false;
             try { dev.Clear(Color(1, 2, 3, 255)); } catch (const DeviceLostException&) { threwWhileLost = true; }
             check(threwWhileLost, "D9-34: Clear() throws DeviceLostException while the device is lost");
 
-            backend.DebugRestoreContext();
+            renderer.DebugRestoreContext();
             check(resettingCount == 1 && resetCount == 1,
                   "D9-34: DebugRestoreContext() fires DeviceResetting then DeviceReset, each exactly once");
-            check(!backend.IsDeviceLostEXT() &&
+            check(!renderer.IsDeviceLostEXT() &&
                   dev.getGraphicsDeviceStatusProperty() == GraphicsDeviceStatus::Normal,
-                  "D9-34: backend.IsDeviceLostEXT() and GraphicsDeviceStatus both report recovered/Normal");
+                  "D9-34: renderer.IsDeviceLostEXT() and GraphicsDeviceStatus both report recovered/Normal");
 
             dev.Clear(Color(6, 7, 8, 255));
             const Microsoft::Xna::Framework::Rectangle postRecoveryRegion(0, 0, 2, 2);
@@ -399,14 +399,14 @@ protected:
                   "D9-34: the device genuinely works again after recovery -- Clear()+readback exact");
         }
 
-        // Check N (D9-40) -- a real D3D9VertexBufferBackend round-trips known bytes: SetData()
-        // through the public IVertexBufferBackend interface, then a direct Lock(READONLY) on the
+        // Check N (D9-40) -- a real D3D9VertexBufferRenderer round-trips known bytes: SetData()
+        // through the public IVertexBufferRenderer interface, then a direct Lock(READONLY) on the
         // real IDirect3DVertexBuffer9 (test-only, bypassing the write-only public interface, which
         // has no GetData()) confirms the GPU buffer holds the exact bytes -- a genuine write+
         // readback, not just "SetData() didn't throw".
         {
-            auto vb = backend.CreateVertexBuffer(3);
-            auto& d3d9Vb = static_cast<D3D9VertexBufferBackend&>(*vb);
+            auto vb = renderer.CreateVertexBuffer(3);
+            auto& d3d9Vb = static_cast<D3D9VertexBufferRenderer&>(*vb);
             const float knownData[9] = {1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 7.0f, 8.0f, 9.0f};
             vb->SetData(knownData, 3, sizeof(float) * 3);
 
@@ -419,15 +419,15 @@ protected:
                 d3d9Vb.GetBufferEXT()->Unlock();
             }
             check(vb->GetVertexCount() == 3 && bytesMatch,
-                  "D9-40: D3D9VertexBufferBackend::SetData() genuinely writes exact bytes to the GPU buffer");
+                  "D9-40: D3D9VertexBufferRenderer::SetData() genuinely writes exact bytes to the GPU buffer");
         }
 
         // Check O (D9-41) -- same round-trip proof for both a 16-bit and a 32-bit
-        // D3D9IndexBufferBackend, via the explicitly-overridden CreateIndexBuffer32() (D3D11's own
+        // D3D9IndexBufferRenderer, via the explicitly-overridden CreateIndexBuffer32() (D3D11's own
         // DX-31 caught the silent-16-bit-only-default trap this explicitly avoids).
         {
-            auto ib16 = backend.CreateIndexBuffer16(4);
-            auto& d3d9Ib16 = static_cast<D3D9IndexBufferBackend&>(*ib16);
+            auto ib16 = renderer.CreateIndexBuffer16(4);
+            auto& d3d9Ib16 = static_cast<D3D9IndexBufferRenderer&>(*ib16);
             const uint16_t indices16[4] = {0, 1, 2, 3};
             ib16->SetData16(indices16, 4);
 
@@ -441,10 +441,10 @@ protected:
             }
             check(!ib16->IsThirtyTwoBit() && d3d9Ib16.GetFormatEXT() == D3DFMT_INDEX16 &&
                   ib16->GetIndexCount() == 4 && bytes16Match,
-                  "D9-41: a 16-bit D3D9IndexBufferBackend genuinely writes exact bytes (D3DFMT_INDEX16)");
+                  "D9-41: a 16-bit D3D9IndexBufferRenderer genuinely writes exact bytes (D3DFMT_INDEX16)");
 
-            auto ib32 = backend.CreateIndexBuffer32(4);
-            auto& d3d9Ib32 = static_cast<D3D9IndexBufferBackend&>(*ib32);
+            auto ib32 = renderer.CreateIndexBuffer32(4);
+            auto& d3d9Ib32 = static_cast<D3D9IndexBufferRenderer&>(*ib32);
             const uint32_t indices32[4] = {100, 200, 300, 400};
             ib32->SetData32(indices32, 4);
 
@@ -468,13 +468,13 @@ protected:
         // "didn't crash") -- real XNA/D3D9 behavior: a DYNAMIC buffer's content does not survive
         // DeviceReset, so the caller is expected to SetData() again afterward, which this does.
         {
-            auto vb = backend.CreateVertexBuffer(1);
-            auto& d3d9Vb = static_cast<D3D9VertexBufferBackend&>(*vb);
+            auto vb = renderer.CreateVertexBuffer(1);
+            auto& d3d9Vb = static_cast<D3D9VertexBufferRenderer&>(*vb);
             const float before[3] = {11.0f, 22.0f, 33.0f};
             vb->SetData(before, 1, sizeof(before));
 
-            backend.DebugSimulateContextLoss();
-            backend.DebugRestoreContext();
+            renderer.DebugSimulateContextLoss();
+            renderer.DebugRestoreContext();
 
             check(d3d9Vb.GetBufferEXT() == nullptr,
                   "D9-40: ReleaseDefaultPoolResourceEXT() genuinely released the buffer across Reset() "
@@ -498,7 +498,7 @@ protected:
             check(matches, "D9-40: the recreated buffer genuinely holds the post-recovery data");
         }
 
-        // Check Q (D9-50) -- D3D9TextureBackend round-trips exact RGBA8 bytes, both at
+        // Check Q (D9-50) -- D3D9TextureRenderer round-trips exact RGBA8 bytes, both at
         // construction (level 0 from ImageData) and via a later UpdatePixelsLevel() replacement.
         // Since this is D3DPOOL_MANAGED (not DEFAULT), the constructed texture is directly
         // LockRect(READONLY)-able for verification -- no staging-texture dance needed, unlike
@@ -515,8 +515,8 @@ protected:
                 img.pixels[static_cast<std::size_t>(i) * 4 + 2] = static_cast<uint8_t>(i * 30);
                 img.pixels[static_cast<std::size_t>(i) * 4 + 3] = 255;
             }
-            auto tex = backend.CreateTexture(img);
-            auto& d3d9Tex = static_cast<D3D9TextureBackend&>(*tex);
+            auto tex = renderer.CreateTexture(img);
+            auto& d3d9Tex = static_cast<D3D9TextureRenderer&>(*tex);
 
             auto lockAndCompare = [&](const std::vector<uint8_t>& expected)
             {
@@ -536,23 +536,23 @@ protected:
             };
 
             check(tex->GetWidth() == 4 && tex->GetHeight() == 4 && lockAndCompare(img.pixels),
-                  "D9-50: D3D9TextureBackend constructor upload round-trips exact RGBA8 bytes");
+                  "D9-50: D3D9TextureRenderer constructor upload round-trips exact RGBA8 bytes");
 
             std::vector<uint8_t> replacement(4 * 4 * 4, 77);
             tex->UpdatePixelsLevel(0, replacement.data(), 4, 4);
             check(lockAndCompare(replacement),
-                  "D9-50: D3D9TextureBackend::UpdatePixelsLevel() round-trips exact replacement bytes");
+                  "D9-50: D3D9TextureRenderer::UpdatePixelsLevel() round-trips exact replacement bytes");
         }
 
         // Check R (D9-51) -- cube-map and volume texture SetData()/GetData() round-trip exact
         // bytes for a sub-region, gated on the real D3DCAPS9 the device reports (D9-51's own plan
         // note: volume-texture support is a genuine capability, not assumed universal).
         {
-            if (backend.GetCapsEXT().TextureCaps & D3DPTEXTURECAPS_CUBEMAP)
+            if (renderer.GetCapsEXT().TextureCaps & D3DPTEXTURECAPS_CUBEMAP)
             {
-                auto cube = backend.CreateTextureCube(8, false, 0);
+                auto cube = renderer.CreateTextureCube(8, false, 0);
                 check(cube != nullptr,
-                      "D9-51: D3D9TextureCubeBackend created (device reports D3DPTEXTURECAPS_CUBEMAP)");
+                      "D9-51: D3D9TextureCubeRenderer created (device reports D3DPTEXTURECAPS_CUBEMAP)");
                 if (cube)
                 {
                     uint8_t known[2 * 2 * 4];
@@ -567,7 +567,7 @@ protected:
                     uint8_t readBack[2 * 2 * 4] = {};
                     cube->GetData(2, 0, 1, 1, 2, 2, readBack, sizeof(readBack));
                     check(std::memcmp(known, readBack, sizeof(known)) == 0,
-                          "D9-51: D3D9TextureCubeBackend::SetData()/GetData() round-trip exact bytes "
+                          "D9-51: D3D9TextureCubeRenderer::SetData()/GetData() round-trip exact bytes "
                           "for one face's sub-region");
                 }
             }
@@ -576,11 +576,11 @@ protected:
                 std::printf("    (skipped: device does not report D3DPTEXTURECAPS_CUBEMAP)\n");
             }
 
-            if (backend.GetCapsEXT().MaxVolumeExtent > 0)
+            if (renderer.GetCapsEXT().MaxVolumeExtent > 0)
             {
-                auto vol = backend.CreateTexture3D(4, 4, 4, false, 0);
+                auto vol = renderer.CreateTexture3D(4, 4, 4, false, 0);
                 check(vol != nullptr,
-                      "D9-51: D3D9Texture3DBackend created (device reports MaxVolumeExtent > 0)");
+                      "D9-51: D3D9Texture3DRenderer created (device reports MaxVolumeExtent > 0)");
                 if (vol)
                 {
                     uint8_t known[2 * 2 * 2 * 4];
@@ -595,7 +595,7 @@ protected:
                     uint8_t readBack[2 * 2 * 2 * 4] = {};
                     vol->GetData(0, 1, 1, 1, 2, 2, 2, readBack, sizeof(readBack));
                     check(std::memcmp(known, readBack, sizeof(known)) == 0,
-                          "D9-51: D3D9Texture3DBackend::SetData()/GetData() round-trip exact bytes "
+                          "D9-51: D3D9Texture3DRenderer::SetData()/GetData() round-trip exact bytes "
                           "for a sub-volume");
                 }
             }
@@ -605,7 +605,7 @@ protected:
             }
         }
 
-        // Check S (D9-53) -- a real D3D9RenderTargetBackend: bind, Clear() through the real public
+        // Check S (D9-53) -- a real D3D9RenderTargetRenderer: bind, Clear() through the real public
         // GraphicsDevice API, read back the render target's OWN color surface (not the back
         // buffer) via GetRenderTargetData() (a render-target texture is not directly Lockable, a
         // real D3D9 restriction -- ReadRenderTargetSurfaceD3D9() above uses the same dance
@@ -614,20 +614,20 @@ protected:
         // clearable/readable (proves RestoreBackBufferRenderTargetEXT() actually works, not just
         // "didn't crash").
         {
-            auto rt = backend.CreateRenderTarget2D(8, 8, static_cast<int>(DepthFormat::Depth24Stencil8),
+            auto rt = renderer.CreateRenderTarget2D(8, 8, static_cast<int>(DepthFormat::Depth24Stencil8),
                                                    false, false, 0);
-            auto& d3d9Rt = static_cast<D3D9RenderTargetBackend&>(*rt);
+            auto& d3d9Rt = static_cast<D3D9RenderTargetRenderer&>(*rt);
 
             check(rt->GetWidth() == 8 && rt->GetHeight() == 8 &&
                   d3d9Rt.GetDepthStencilSurfaceEXT() != nullptr &&
                   rt->HasRealDepthBuffer(true),
-                  "D9-53: D3D9RenderTargetBackend created with the requested size and a real depth-stencil surface");
+                  "D9-53: D3D9RenderTargetRenderer created with the requested size and a real depth-stencil surface");
 
-            backend.SetRenderTarget2D(rt.get());
+            renderer.SetRenderTarget2D(rt.get());
             dev.Clear(Color(90, 100, 110, 255));
-            backend.SetRenderTarget2D(nullptr);
+            renderer.SetRenderTarget2D(nullptr);
 
-            const auto rtPixels = ReadRenderTargetSurfaceD3D9(backend.GetDeviceEXT(), d3d9Rt.GetColorSurfaceEXT());
+            const auto rtPixels = ReadRenderTargetSurfaceD3D9(renderer.GetDeviceEXT(), d3d9Rt.GetColorSurfaceEXT());
             bool rtMatch = rtPixels.size() == static_cast<std::size_t>(8 * 8 * 4);
             for (std::size_t i = 0; rtMatch && i < rtPixels.size(); i += 4)
             {
@@ -670,9 +670,9 @@ protected:
         // REMED-GFX-077 support matrix. ----
         {
             struct Px { uint8_t r, g, b, a; };
-            auto rt = backend.CreateRenderTarget2D(64, 64, static_cast<int>(DepthFormat::Depth24Stencil8),
+            auto rt = renderer.CreateRenderTarget2D(64, 64, static_cast<int>(DepthFormat::Depth24Stencil8),
                                                    false, false, 0);
-            auto& d3d9Rt = static_cast<D3D9RenderTargetBackend&>(*rt);
+            auto& d3d9Rt = static_cast<D3D9RenderTargetRenderer&>(*rt);
 
             struct VPC { float x, y, z; uint32_t color; };
             // Full-NDC quad, flat source colour S=(200,100,50,220); packed R8G8B8A8 = 0xDC3264C8.
@@ -681,22 +681,22 @@ protected:
                 { 1.0f, -1.0f, 0.0f, 0xDC3264C8u}, {-1.0f,  1.0f, 0.0f, 0xDC3264C8u},
                 { 1.0f, -1.0f, 0.0f, 0xDC3264C8u}, { 1.0f,  1.0f, 0.0f, 0xDC3264C8u},
             };
-            auto vbCw = backend.CreateVertexBuffer(6);
+            auto vbCw = renderer.CreateVertexBuffer(6);
             vbCw->SetData(kQuad, 6, sizeof(VPC));
             const Matrix Id = Matrix::getIdentityProperty();
 
             auto renderMask = [&](int cwc) -> Px
             {
-                CNA::Internal::Backends::BlendWriteState ws;
+                CNA::Internal::Renderers::BlendWriteState ws;
                 ws.colorWriteChannels[0] = cwc;
-                backend.SetRenderTarget2D(rt.get());
-                backend.ApplyDepthStencilState(false, false, 0, false, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 0);
-                backend.ApplyRasterizerState(0 /*CullMode::None*/, 0 /*FillMode::Solid*/, false, 0.0f, 0.0f);
-                backend.ApplyBlendState(0, 0, 1, 1, 0, 0, ws);          // Opaque + mask
+                renderer.SetRenderTarget2D(rt.get());
+                renderer.ApplyDepthStencilState(false, false, 0, false, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 0);
+                renderer.ApplyRasterizerState(0 /*CullMode::None*/, 0 /*FillMode::Solid*/, false, 0.0f, 0.0f);
+                renderer.ApplyBlendState(0, 0, 1, 1, 0, 0, ws);          // Opaque + mask
                 dev.Clear(Color(10, 20, 30, 40));                      // destination D
-                backend.DrawColoredPrimitives(*vbCw, Id, Id, Id, PrimitiveType::TriangleList, 2);
-                backend.SetRenderTarget2D(nullptr);
-                const auto p = ReadRenderTargetSurfaceD3D9(backend.GetDeviceEXT(), d3d9Rt.GetColorSurfaceEXT());
+                renderer.DrawColoredPrimitives(*vbCw, Id, Id, Id, PrimitiveType::TriangleList, 2);
+                renderer.SetRenderTarget2D(nullptr);
+                const auto p = ReadRenderTargetSurfaceD3D9(renderer.GetDeviceEXT(), d3d9Rt.GetColorSurfaceEXT());
                 if (p.size() < static_cast<std::size_t>(64 * 64 * 4)) return Px{0, 0, 0, 0};
                 const std::size_t idx = (static_cast<std::size_t>(32) * 64 + 32) * 4;
                 return Px{p[idx], p[idx + 1], p[idx + 2], p[idx + 3]};
@@ -732,19 +732,19 @@ protected:
             // it on the last mask applied (Red only). Restore the All-channels default so later
             // direct-DrawPrimitivesEx checks (the SetDepthTestEnabled block) don't silently inherit a
             // partial write mask (which zeroed G/B and made their exact-colour assertions fail).
-            backend.ApplyBlendState(0, 0, 1, 1, 0, 0, CNA::Internal::Backends::BlendWriteState{});
+            renderer.ApplyBlendState(0, 0, 1, 1, 0, 0, CNA::Internal::Renderers::BlendWriteState{});
         }
 
-        // Check T (D9-53) -- D3D9RenderTargetCubeBackend: bind one face, Clear(), read back that
+        // Check T (D9-53) -- D3D9RenderTargetCubeRenderer: bind one face, Clear(), read back that
         // face's own surface, unbind, confirm the back buffer is restored again.
         {
-            auto cubeRt = backend.CreateRenderTargetCube(8, static_cast<int>(DepthFormat::None));
-            auto& d3d9CubeRt = static_cast<D3D9RenderTargetCubeBackend&>(*cubeRt);
+            auto cubeRt = renderer.CreateRenderTargetCube(8, static_cast<int>(DepthFormat::None));
+            auto& d3d9CubeRt = static_cast<D3D9RenderTargetCubeRenderer&>(*cubeRt);
 
             constexpr int kFace = 2; // +Y (D3DCUBEMAP_FACE_POSITIVE_Y == 2)
-            backend.SetRenderTargetCubeFace(cubeRt.get(), kFace);
-            // Target-only clear: calling SetRenderTargetCubeFace() directly on the backend (to
-            // test D3D9RenderTargetCubeBackend itself) bypasses GraphicsDevice's own
+            renderer.SetRenderTargetCubeFace(cubeRt.get(), kFace);
+            // Target-only clear: calling SetRenderTargetCubeFace() directly on the renderer (to
+            // test D3D9RenderTargetCubeRenderer itself) bypasses GraphicsDevice's own
             // currentRenderTargets_ tracking, so its Clear(Color) overload's depth/stencil-presence
             // heuristic would incorrectly assume the SWAP CHAIN's own depth-stencil format (this
             // cube render target genuinely has none, DepthFormat::None above) -- an explicit
@@ -753,9 +753,9 @@ protected:
 
             ComPtr<IDirect3DSurface9> faceSurface;
             d3d9CubeRt.GetTextureEXT()->GetCubeMapSurface(static_cast<D3DCUBEMAP_FACES>(kFace), 0, faceSurface.GetAddressOf());
-            const auto facePixels = ReadRenderTargetSurfaceD3D9(backend.GetDeviceEXT(), faceSurface.Get());
+            const auto facePixels = ReadRenderTargetSurfaceD3D9(renderer.GetDeviceEXT(), faceSurface.Get());
 
-            backend.SetRenderTargetCubeFace(nullptr, 0);
+            renderer.SetRenderTargetCubeFace(nullptr, 0);
 
             bool faceMatch = facePixels.size() == static_cast<std::size_t>(8 * 8 * 4);
             for (std::size_t i = 0; faceMatch && i < facePixels.size(); i += 4)
@@ -767,7 +767,7 @@ protected:
                 }
             }
             check(cubeRt->GetSize() == 8 && faceMatch,
-                  "D9-53: D3D9RenderTargetCubeBackend::BindAsRenderTargetFace()+Clear() writes the exact color into that face");
+                  "D9-53: D3D9RenderTargetCubeRenderer::BindAsRenderTargetFace()+Clear() writes the exact color into that face");
 
             dev.Clear(Color(11, 12, 13, 255));
             const Microsoft::Xna::Framework::Rectangle backBufferRegion2(0, 0, 4, 4);
@@ -789,28 +789,28 @@ protected:
         }
 
         // Check U (D9-53) -- MSAA render target, gated on the real device-reported support
-        // (D3D9GraphicsBackend::ClampMultiSampleCountEXT(), backed by
+        // (D3D9Renderer::ClampMultiSampleCountEXT(), backed by
         // IDirect3D9::CheckDeviceMultiSampleType()) rather than assumed: Clear() into the
         // multisampled offscreen surface, unbind (which StretchRect-resolves into the sampleable
         // texture), and confirm the RESOLVED texture holds the exact clear color.
         {
-            const int clamped = backend.ClampMultiSampleCountEXT(D3DFMT_A8B8G8R8, 4);
+            const int clamped = renderer.ClampMultiSampleCountEXT(D3DFMT_A8B8G8R8, 4);
             if (clamped > 1)
             {
-                auto msaaRt = backend.CreateRenderTarget2D(8, 8, static_cast<int>(DepthFormat::None), false, false, 4);
-                auto& d3d9MsaaRt = static_cast<D3D9RenderTargetBackend&>(*msaaRt);
+                auto msaaRt = renderer.CreateRenderTarget2D(8, 8, static_cast<int>(DepthFormat::None), false, false, 4);
+                auto& d3d9MsaaRt = static_cast<D3D9RenderTargetRenderer&>(*msaaRt);
                 check(d3d9MsaaRt.GetMultiSampleCount() > 1,
-                      "D9-53: MSAA D3D9RenderTargetBackend reports a real, device-clamped sample count > 1");
+                      "D9-53: MSAA D3D9RenderTargetRenderer reports a real, device-clamped sample count > 1");
 
-                backend.SetRenderTarget2D(msaaRt.get());
+                renderer.SetRenderTarget2D(msaaRt.get());
                 // Target-only clear -- same reasoning as Check T: this MSAA target has
-                // DepthFormat::None, and binding it via the backend directly bypasses
+                // DepthFormat::None, and binding it via the renderer directly bypasses
                 // GraphicsDevice's own currentRenderTargets_ tracking that Clear(Color)'s
                 // depth/stencil-presence heuristic relies on.
                 dev.Clear(ClearOptions::Target, Color(200, 210, 220, 255), 1.0f, 0);
-                backend.SetRenderTarget2D(nullptr);
+                renderer.SetRenderTarget2D(nullptr);
 
-                const auto resolved = ReadRenderTargetSurfaceD3D9(backend.GetDeviceEXT(), d3d9MsaaRt.GetColorSurfaceEXT());
+                const auto resolved = ReadRenderTargetSurfaceD3D9(renderer.GetDeviceEXT(), d3d9MsaaRt.GetColorSurfaceEXT());
                 bool resolvedMatch = resolved.size() == static_cast<std::size_t>(8 * 8 * 4);
                 for (std::size_t i = 0; resolvedMatch && i < resolved.size(); i += 4)
                 {
@@ -835,24 +835,24 @@ protected:
         // the back buffer, and requesting more targets than D3DCAPS9::NumSimultaneousRTs throws a
         // named error rather than silently degrading (design decision 13).
         {
-            const int maxRTs = static_cast<int>(backend.GetCapsEXT().NumSimultaneousRTs);
+            const int maxRTs = static_cast<int>(renderer.GetCapsEXT().NumSimultaneousRTs);
             if (maxRTs >= 2)
             {
-                auto rt0 = backend.CreateRenderTarget2D(8, 8, static_cast<int>(DepthFormat::None));
-                auto rt1 = backend.CreateRenderTarget2D(8, 8, static_cast<int>(DepthFormat::None));
+                auto rt0 = renderer.CreateRenderTarget2D(8, 8, static_cast<int>(DepthFormat::None));
+                auto rt1 = renderer.CreateRenderTarget2D(8, 8, static_cast<int>(DepthFormat::None));
                 const RenderTargetBindingDescriptor rts[2] = {
                     RenderTargetBindingDescriptor::ForRenderTarget2D(
                         rt0.get(), 0, 8, 8, rt0->GetMultiSampleCount()),
                     RenderTargetBindingDescriptor::ForRenderTarget2D(
                         rt1.get(), 0, 8, 8, rt1->GetMultiSampleCount()),
                 };
-                backend.SetRenderTargets(rts, 2);
+                renderer.SetRenderTargets(rts, 2);
                 dev.Clear(ClearOptions::Target, Color(60, 70, 80, 255), 1.0f, 0);
 
-                auto& d3d9Rt0 = static_cast<D3D9RenderTargetBackend&>(*rt0);
-                auto& d3d9Rt1 = static_cast<D3D9RenderTargetBackend&>(*rt1);
-                const auto pixels0 = ReadRenderTargetSurfaceD3D9(backend.GetDeviceEXT(), d3d9Rt0.GetColorSurfaceEXT());
-                const auto pixels1 = ReadRenderTargetSurfaceD3D9(backend.GetDeviceEXT(), d3d9Rt1.GetColorSurfaceEXT());
+                auto& d3d9Rt0 = static_cast<D3D9RenderTargetRenderer&>(*rt0);
+                auto& d3d9Rt1 = static_cast<D3D9RenderTargetRenderer&>(*rt1);
+                const auto pixels0 = ReadRenderTargetSurfaceD3D9(renderer.GetDeviceEXT(), d3d9Rt0.GetColorSurfaceEXT());
+                const auto pixels1 = ReadRenderTargetSurfaceD3D9(renderer.GetDeviceEXT(), d3d9Rt1.GetColorSurfaceEXT());
 
                 auto matchesColor = [](const std::vector<uint8_t>& px, uint8_t r, uint8_t g, uint8_t b, uint8_t a)
                 {
@@ -866,7 +866,7 @@ protected:
                 check(matchesColor(pixels0, 60, 70, 80, 255) && matchesColor(pixels1, 60, 70, 80, 255),
                       "D9-54: SetRenderTargets() MRT bind -- a single Clear() writes the exact color into BOTH targets' own surfaces");
 
-                backend.SetRenderTargets(nullptr, 0);
+                renderer.SetRenderTargets(nullptr, 0);
                 dev.Clear(Color(14, 15, 16, 255));
                 const Microsoft::Xna::Framework::Rectangle backBufferRegion3(0, 0, 4, 4);
                 std::vector<Color> backBufferPixels3(4 * 4, Color(0, 0, 0, 0));
@@ -886,19 +886,19 @@ protected:
 
                 // Over-request: build maxRTs+1 targets and confirm a real, named exception -- not a
                 // silent clamp to maxRTs (design decision 13's own point).
-                std::vector<std::unique_ptr<IRenderTargetBackend>> tooMany;
+                std::vector<std::unique_ptr<IRenderTargetRenderer>> tooMany;
                 std::vector<RenderTargetBindingDescriptor> tooManyBindings;
                 tooManyBindings.reserve(static_cast<std::size_t>(maxRTs + 1));
                 for (int i = 0; i < maxRTs + 1; ++i)
                 {
-                    tooMany.push_back(backend.CreateRenderTarget2D(4, 4, static_cast<int>(DepthFormat::None)));
+                    tooMany.push_back(renderer.CreateRenderTarget2D(4, 4, static_cast<int>(DepthFormat::None)));
                     tooManyBindings.push_back(RenderTargetBindingDescriptor::ForRenderTarget2D(
                         tooMany.back().get(), 0, 4, 4, tooMany.back()->GetMultiSampleCount()));
                 }
                 bool threw = false;
                 try
                 {
-                    backend.SetRenderTargets(tooManyBindings.data(), static_cast<int>(tooManyBindings.size()));
+                    renderer.SetRenderTargets(tooManyBindings.data(), static_cast<int>(tooManyBindings.size()));
                 }
                 catch (const std::runtime_error&)
                 {
@@ -906,7 +906,7 @@ protected:
                 }
                 check(threw,
                       "D9-54: requesting more render targets than D3DCAPS9::NumSimultaneousRTs throws, does not silently degrade");
-                backend.SetRenderTargets(nullptr, 0); // clean up in case the (unexpected) non-throwing path left something bound
+                renderer.SetRenderTargets(nullptr, 0); // clean up in case the (unexpected) non-throwing path left something bound
             }
             else
             {
@@ -914,15 +914,15 @@ protected:
             }
         }
 
-        // Check W (D9-55) -- a real D3D9OcclusionQueryBackend: Begin()/End() genuinely issue real
+        // Check W (D9-55) -- a real D3D9OcclusionQueryRenderer: Begin()/End() genuinely issue real
         // D3DISSUE_BEGIN/D3DISSUE_END query commands, IsComplete() eventually reports true (polled,
         // bounded), and PixelCount() reads back a real GetData() result. No draw path exists yet
         // (D9-82), so this Begin/End wraps a Clear() rather than actual geometry -- Clear() does not
         // count as occlusion-testable rendering, so PixelCount()==0 is the correct, real result
         // here, not a stand-in for "draws 100 pixels" (that proof is D9-82's own job).
         {
-            auto query = backend.CreateOcclusionQuery();
-            check(query != nullptr, "D9-55: D3D9OcclusionQueryBackend created (device supports D3DQUERYTYPE_OCCLUSION)");
+            auto query = renderer.CreateOcclusionQuery();
+            check(query != nullptr, "D9-55: D3D9OcclusionQueryRenderer created (device supports D3DQUERYTYPE_OCCLUSION)");
             if (query)
             {
                 query->Begin();
@@ -950,15 +950,15 @@ protected:
         // environment's DXVK device reports full, unconditional NPOT support (D9-3's own original
         // caps dump: POW2=0, NONPOW2CONDITIONAL=0) -- when that's what RequiresPowerOfTwoTexturesEXT()/
         // NonPowerOfTwoRequiresClampAddressingEXT() report, a genuinely non-power-of-two
-        // D3D9TextureBackend must actually work, not just be assumed to: create one and round-trip
-        // exact bytes, proving this backend doesn't add an artificial POW2 restriction on top of
+        // D3D9TextureRenderer must actually work, not just be assumed to: create one and round-trip
+        // exact bytes, proving this renderer doesn't add an artificial POW2 restriction on top of
         // real, more permissive hardware. Enforcing the Reach-profile "no Wrap on NPOT" restriction
         // itself against a real SamplerState/draw call is D9-10/D9-82's own job -- no draw/sampler
         // path exists yet to enforce it against; an honest gap, not a hidden one.
         {
-            const bool requiresPow2 = backend.RequiresPowerOfTwoTexturesEXT();
-            const bool clampOnlyNpot = backend.NonPowerOfTwoRequiresClampAddressingEXT();
-            std::printf("    D3D9GraphicsBackend::RequiresPowerOfTwoTexturesEXT()=%d "
+            const bool requiresPow2 = renderer.RequiresPowerOfTwoTexturesEXT();
+            const bool clampOnlyNpot = renderer.NonPowerOfTwoRequiresClampAddressingEXT();
+            std::printf("    D3D9Renderer::RequiresPowerOfTwoTexturesEXT()=%d "
                         "NonPowerOfTwoRequiresClampAddressingEXT()=%d\n",
                         requiresPow2 ? 1 : 0, clampOnlyNpot ? 1 : 0);
             check(!requiresPow2 && !clampOnlyNpot,
@@ -978,8 +978,8 @@ protected:
                     npotImg.pixels[static_cast<std::size_t>(i) * 4 + 2] = static_cast<uint8_t>(i * 13);
                     npotImg.pixels[static_cast<std::size_t>(i) * 4 + 3] = 255;
                 }
-                auto npotTex = backend.CreateTexture(npotImg);
-                auto& d3d9NpotTex = static_cast<D3D9TextureBackend&>(*npotTex);
+                auto npotTex = renderer.CreateTexture(npotImg);
+                auto& d3d9NpotTex = static_cast<D3D9TextureRenderer&>(*npotTex);
 
                 D3DLOCKED_RECT locked{};
                 HRESULT hr = d3d9NpotTex.GetTextureEXT()->LockRect(0, &locked, nullptr, D3DLOCK_READONLY);
@@ -997,7 +997,7 @@ protected:
                     d3d9NpotTex.GetTextureEXT()->UnlockRect(0);
                 }
                 check(npotTex->GetWidth() == 5 && npotTex->GetHeight() == 3 && npotMatch,
-                      "D9-56: a genuinely non-power-of-two (5x3) D3D9TextureBackend round-trips exact bytes "
+                      "D9-56: a genuinely non-power-of-two (5x3) D3D9TextureRenderer round-trips exact bytes "
                       "(matches this device's real, unconditional NPOT support)");
             }
             else
@@ -1017,17 +1017,17 @@ protected:
             using Microsoft::Xna::Framework::Graphics::TextureFilter;
             using Microsoft::Xna::Framework::Graphics::TextureAddressMode;
 
-            backend.ApplySamplerState(0, static_cast<int>(TextureFilter::Point),
+            renderer.ApplySamplerState(0, static_cast<int>(TextureFilter::Point),
                                       static_cast<int>(TextureAddressMode::Clamp),
                                       static_cast<int>(TextureAddressMode::Clamp), 4);
 
             DWORD minFilter = 0, magFilter = 0, mipFilter = 0, addrU = 0, addrV = 0, maxAniso = 0;
-            backend.GetDeviceEXT()->GetSamplerState(0, D3DSAMP_MINFILTER, &minFilter);
-            backend.GetDeviceEXT()->GetSamplerState(0, D3DSAMP_MAGFILTER, &magFilter);
-            backend.GetDeviceEXT()->GetSamplerState(0, D3DSAMP_MIPFILTER, &mipFilter);
-            backend.GetDeviceEXT()->GetSamplerState(0, D3DSAMP_ADDRESSU, &addrU);
-            backend.GetDeviceEXT()->GetSamplerState(0, D3DSAMP_ADDRESSV, &addrV);
-            backend.GetDeviceEXT()->GetSamplerState(0, D3DSAMP_MAXANISOTROPY, &maxAniso);
+            renderer.GetDeviceEXT()->GetSamplerState(0, D3DSAMP_MINFILTER, &minFilter);
+            renderer.GetDeviceEXT()->GetSamplerState(0, D3DSAMP_MAGFILTER, &magFilter);
+            renderer.GetDeviceEXT()->GetSamplerState(0, D3DSAMP_MIPFILTER, &mipFilter);
+            renderer.GetDeviceEXT()->GetSamplerState(0, D3DSAMP_ADDRESSU, &addrU);
+            renderer.GetDeviceEXT()->GetSamplerState(0, D3DSAMP_ADDRESSV, &addrV);
+            renderer.GetDeviceEXT()->GetSamplerState(0, D3DSAMP_MAXANISOTROPY, &maxAniso);
 
             check(minFilter == D3DTEXF_POINT && magFilter == D3DTEXF_POINT && mipFilter == D3DTEXF_POINT &&
                   addrU == D3DTADDRESS_CLAMP && addrV == D3DTADDRESS_CLAMP && maxAniso == 4,
@@ -1037,7 +1037,7 @@ protected:
             bool threwOnOutOfRange = false;
             try
             {
-                backend.ApplySamplerState(static_cast<int>(backend.GetCapsEXT().MaxSimultaneousTextures) + 5,
+                renderer.ApplySamplerState(static_cast<int>(renderer.GetCapsEXT().MaxSimultaneousTextures) + 5,
                                           static_cast<int>(TextureFilter::Linear), 0, 0, 1);
             }
             catch (...)
@@ -1050,7 +1050,7 @@ protected:
 
         // Check Z (D9-64 / REMED-GFX-089) -- the helper setters change exactly one field of the
         // CURRENT depth state. The old fixture did not establish that current state: GFX077's
-        // direct-backend renderMask() left ZFUNC=D3DCMP_ALWAYS, then this block changed only
+        // direct-renderer renderMask() left ZFUNC=D3DCMP_ALWAYS, then this block changed only
         // ZENABLE/ZWRITEENABLE and incorrectly expected DepthStencilState.Default behavior. That
         // made the far draw pass correctly under Always and was a test-harness defect, not a
         // production depth defect. Establish the reachable public XNA state first, then prove the
@@ -1066,9 +1066,9 @@ protected:
             static const VPCd kFar[3] = {
                 {-1.0f, -1.0f, 0.8f, kGreenD}, {3.0f, -1.0f, 0.8f, kGreenD}, {-1.0f, 3.0f, 0.8f, kGreenD}};
 
-            auto vbNear = backend.CreateVertexBuffer(3);
+            auto vbNear = renderer.CreateVertexBuffer(3);
             vbNear->SetData(kNear, 3, sizeof(VPCd));
-            auto vbFar = backend.CreateVertexBuffer(3);
+            auto vbFar = renderer.CreateVertexBuffer(3);
             vbFar->SetData(kFar, 3, sizeof(VPCd));
 
             GpuDrawParams dp;
@@ -1085,8 +1085,8 @@ protected:
             auto drawNearThenFar = [&]() {
                 dev.Clear(ClearOptions::Target | ClearOptions::DepthBuffer,
                           Color(10, 10, 10, 255), 1.0f, 0);
-                backend.DrawPrimitivesEx(*vbNear, I, I, I, PrimitiveType::TriangleList, 1, dp);
-                backend.DrawPrimitivesEx(*vbFar, I, I, I, PrimitiveType::TriangleList, 1, dp);
+                renderer.DrawPrimitivesEx(*vbNear, I, I, I, PrimitiveType::TriangleList, 1, dp);
+                renderer.DrawPrimitivesEx(*vbFar, I, I, I, PrimitiveType::TriangleList, 1, dp);
                 Color px(0, 0, 0, 0);
                 dev.GetBackBufferData(&probe, &px, 0, 1);
                 return px;
@@ -1095,7 +1095,7 @@ protected:
             auto drawSingle = [&](const auto& vb, float clearDepth) {
                 dev.Clear(ClearOptions::Target | ClearOptions::DepthBuffer,
                           Color(10, 10, 10, 255), clearDepth, 0);
-                backend.DrawPrimitivesEx(vb, I, I, I, PrimitiveType::TriangleList, 1, dp);
+                renderer.DrawPrimitivesEx(vb, I, I, I, PrimitiveType::TriangleList, 1, dp);
                 Color px(0, 0, 0, 0);
                 dev.GetBackBufferData(&probe, &px, 0, 1);
                 return px;
@@ -1136,32 +1136,32 @@ protected:
             // Authoritative public contract:
             // DepthBufferEnable=true, DepthBufferWriteEnable=true, Function=LessEqual.
             dev.setDepthStencilStateProperty(DepthStencilState::Default);
-            backend.SetDepthTestEnabled(false);
-            backend.SetDepthTestEnabled(true);
-            backend.SetDepthWriteEnabled(true);
+            renderer.SetDepthTestEnabled(false);
+            renderer.SetDepthTestEnabled(true);
+            renderer.SetDepthWriteEnabled(true);
 
             DWORD zEnable = 0, zWrite = 0, zFunc = 0;
             const HRESULT getZEnableHr =
-                backend.GetDeviceEXT()->GetRenderState(D3DRS_ZENABLE, &zEnable);
+                renderer.GetDeviceEXT()->GetRenderState(D3DRS_ZENABLE, &zEnable);
             const HRESULT getZWriteHr =
-                backend.GetDeviceEXT()->GetRenderState(D3DRS_ZWRITEENABLE, &zWrite);
+                renderer.GetDeviceEXT()->GetRenderState(D3DRS_ZWRITEENABLE, &zWrite);
             const HRESULT getZFuncHr =
-                backend.GetDeviceEXT()->GetRenderState(D3DRS_ZFUNC, &zFunc);
+                renderer.GetDeviceEXT()->GetRenderState(D3DRS_ZFUNC, &zFunc);
 
             ComPtr<IDirect3DSurface9> activeDepth;
             const HRESULT getDepthHr =
-                backend.GetDeviceEXT()->GetDepthStencilSurface(activeDepth.GetAddressOf());
+                renderer.GetDeviceEXT()->GetDepthStencilSurface(activeDepth.GetAddressOf());
             D3DSURFACE_DESC depthDesc{};
             const HRESULT getDepthDescHr =
                 activeDepth ? activeDepth->GetDesc(&depthDesc) : E_POINTER;
             ComPtr<IDirect3DSurface9> activeColor;
             const HRESULT getColorHr =
-                backend.GetDeviceEXT()->GetRenderTarget(0, activeColor.GetAddressOf());
+                renderer.GetDeviceEXT()->GetRenderTarget(0, activeColor.GetAddressOf());
             D3DSURFACE_DESC colorDesc{};
             const HRESULT getColorDescHr =
                 activeColor ? activeColor->GetDesc(&colorDesc) : E_POINTER;
             D3DVIEWPORT9 activeViewport{};
-            const HRESULT getViewportHr = backend.GetDeviceEXT()->GetViewport(&activeViewport);
+            const HRESULT getViewportHr = renderer.GetDeviceEXT()->GetViewport(&activeViewport);
 
             const Color withDepth = drawNearThenFar();
             const Color clearFarPass = drawSingle(*vbNear, 0.9f);
@@ -1169,36 +1169,36 @@ protected:
 
             // Depth write OFF: both fragments compare against the untouched clear depth=1, so the
             // far/green second draw wins. Re-enable writes before the depth-test-off control.
-            backend.SetDepthWriteEnabled(false);
+            renderer.SetDepthWriteEnabled(false);
             const Color withoutWrite = drawNearThenFar();
-            backend.SetDepthWriteEnabled(true);
+            renderer.SetDepthWriteEnabled(true);
 
             // Depth test OFF: painter's order wins. Then restore A and prove it is byte-identical
             // to the first A (state A -> B -> A within one frame).
-            backend.SetDepthTestEnabled(false);
+            renderer.SetDepthTestEnabled(false);
             DWORD zEnableOff = D3DZB_TRUE;
             const HRESULT getZEnableOffHr =
-                backend.GetDeviceEXT()->GetRenderState(D3DRS_ZENABLE, &zEnableOff);
+                renderer.GetDeviceEXT()->GetRenderState(D3DRS_ZENABLE, &zEnableOff);
             const Color withoutDepth = drawNearThenFar();
-            backend.SetDepthTestEnabled(true);
+            renderer.SetDepthTestEnabled(true);
             const Color restoredDepth = drawNearThenFar();
 
             // Backbuffer-vs-offscreen discriminator. Bind a single-sample 64x64 D24S8 target,
             // introspect the actually-bound depth surface, run the same near/far sequence, then
             // read its color surface directly (no SpriteBatch sampling/readback dependency).
             auto offscreen =
-                backend.CreateRenderTarget2D(64, 64, static_cast<int>(DepthFormat::Depth24Stencil8));
-            auto& offscreenD3D9 = static_cast<D3D9RenderTargetBackend&>(*offscreen);
-            backend.SetRenderTarget2D(offscreen.get());
+                renderer.CreateRenderTarget2D(64, 64, static_cast<int>(DepthFormat::Depth24Stencil8));
+            auto& offscreenD3D9 = static_cast<D3D9RenderTargetRenderer&>(*offscreen);
+            renderer.SetRenderTarget2D(offscreen.get());
             dev.setDepthStencilStateProperty(DepthStencilState::Default);
             dev.Clear(ClearOptions::Target | ClearOptions::DepthBuffer,
                       Color(10, 10, 10, 255), 1.0f, 0);
-            backend.DrawPrimitivesEx(*vbNear, I, I, I, PrimitiveType::TriangleList, 1, dp);
-            backend.DrawPrimitivesEx(*vbFar, I, I, I, PrimitiveType::TriangleList, 1, dp);
+            renderer.DrawPrimitivesEx(*vbNear, I, I, I, PrimitiveType::TriangleList, 1, dp);
+            renderer.DrawPrimitivesEx(*vbFar, I, I, I, PrimitiveType::TriangleList, 1, dp);
 
             ComPtr<IDirect3DSurface9> offscreenBoundDepth;
             const HRESULT getOffscreenDepthHr =
-                backend.GetDeviceEXT()->GetDepthStencilSurface(
+                renderer.GetDeviceEXT()->GetDepthStencilSurface(
                     offscreenBoundDepth.GetAddressOf());
             D3DSURFACE_DESC offscreenDepthDesc{};
             const HRESULT getOffscreenDepthDescHr =
@@ -1210,11 +1210,11 @@ protected:
                 offscreenD3D9.GetActiveColorSurfaceEXT()->GetDesc(&offscreenColorDesc);
             D3DVIEWPORT9 offscreenViewport{};
             const HRESULT getOffscreenViewportHr =
-                backend.GetDeviceEXT()->GetViewport(&offscreenViewport);
+                renderer.GetDeviceEXT()->GetViewport(&offscreenViewport);
 
-            backend.SetRenderTarget2D(nullptr);
+            renderer.SetRenderTarget2D(nullptr);
             const auto offscreenPixels = ReadRenderTargetSurfaceD3D9(
-                backend.GetDeviceEXT(), offscreenD3D9.GetColorSurfaceEXT());
+                renderer.GetDeviceEXT(), offscreenD3D9.GetColorSurfaceEXT());
             Color offscreenPixel(0, 0, 0, 0);
             if (offscreenPixels.size() == static_cast<std::size_t>(64 * 64 * 4))
             {
@@ -1226,10 +1226,10 @@ protected:
                     offscreenPixels[offscreenIndex + 2],
                     offscreenPixels[offscreenIndex + 3]);
             }
-            // Direct backend binds do not update GraphicsDevice's public Viewport bookkeeping;
+            // Direct renderer binds do not update GraphicsDevice's public Viewport bookkeeping;
             // restore its still-current backbuffer viewport explicitly for clean test hygiene.
             const Viewport& publicViewport = dev.getViewportProperty();
-            backend.SetViewport(
+            renderer.SetViewport(
                 publicViewport.getXProperty(), publicViewport.getYProperty(),
                 publicViewport.getWidthProperty(), publicViewport.getHeightProperty(),
                 publicViewport.getMinDepthProperty(), publicViewport.getMaxDepthProperty());
@@ -1256,8 +1256,8 @@ protected:
                 D3DPCMPCAPS_ALWAYS | D3DPCMPCAPS_LESS |
                 D3DPCMPCAPS_LESSEQUAL | D3DPCMPCAPS_GREATER;
             const bool capsOk =
-                (backend.GetCapsEXT().RasterCaps & D3DPRASTERCAPS_ZTEST) != 0 &&
-                (backend.GetCapsEXT().ZCmpCaps & requiredCmpCaps) == requiredCmpCaps;
+                (renderer.GetCapsEXT().RasterCaps & D3DPRASTERCAPS_ZTEST) != 0 &&
+                (renderer.GetCapsEXT().ZCmpCaps & requiredCmpCaps) == requiredCmpCaps;
             const bool compareControlsOk =
                 isGreen(alwaysFar) &&
                 isRed(lessNear) && isClear(lessFar) &&
@@ -1322,7 +1322,7 @@ protected:
                   "red rejects far green on both backbuffer and offscreen RT, depth clear values "
                   "gate draws, write-off differs, and A->B->A restores identical depth behavior");
             check(isGreen(withoutDepth),
-                  "D3D9GraphicsBackend::SetDepthTestEnabled(false): the SAME farther quad now genuinely "
+                  "D3D9Renderer::SetDepthTestEnabled(false): the SAME farther quad now genuinely "
                   "OVERWRITES the nearer one (green wins) -- only the SetDepthTestEnabled() call differs "
                   "between the two, so a no-op implementation cannot pass both checks");
 
@@ -1345,15 +1345,15 @@ public:
 
 namespace
 {
-    // Check J: a raw (non-Game) backend with DepthFormat::None has genuinely no depth-stencil
+    // Check J: a raw (non-Game) renderer with DepthFormat::None has genuinely no depth-stencil
     // surface, and ClearDepth()/ClearStencil() silently no-op on it. A manually-created SDL
     // window is used here (not GraphicsDeviceManager) since this needs a *different*
     // PresentationParameters than the main Game's own device.
     void RunNoDepthBufferCheck()
     {
-        // D3D9GraphicsBackend needs a real SDL_Window* (it reads the win32 HWND back out via
+        // D3D9Renderer needs a real SDL_Window* (it reads the win32 HWND back out via
         // SDL_GetWindowProperties) -- a plain SDL window, same as GraphicsDeviceManager itself
-        // would create, just constructed directly here since this backend intentionally needs
+        // would create, just constructed directly here since this renderer intentionally needs
         // different PresentationParameters (DepthFormat::None) than the main Game's own device.
         SDL_Window* sdlWindow = SDL_CreateWindow("d9smoke_nodepth", 64, 64, 0);
         if (!sdlWindow)
@@ -1362,25 +1362,25 @@ namespace
             return;
         }
 
-        CNA::Internal::Backends::GraphicsBackendCreateArgs createArgs;
+        CNA::Internal::Renderers::GraphicsRendererCreateArgs createArgs;
         createArgs.window = sdlWindow;
         createArgs.virtualWidth = 64;
         createArgs.virtualHeight = 64;
         createArgs.depthStencilFormat = 0;  // DepthFormat::None
 
-        D3D9GraphicsBackend backend(createArgs);
+        D3D9Renderer renderer(createArgs);
 
         Microsoft::WRL::ComPtr<IDirect3DSurface9> dsSurface;
-        HRESULT hr = backend.GetDeviceEXT()->GetDepthStencilSurface(dsSurface.ReleaseAndGetAddressOf());
+        HRESULT hr = renderer.GetDeviceEXT()->GetDepthStencilSurface(dsSurface.ReleaseAndGetAddressOf());
         check(FAILED(hr) || !dsSurface,
               "Check J: a device created with DepthFormat::None genuinely has no depth-stencil surface");
 
         bool threw = false;
-        try { backend.ClearDepth(0.5f); } catch (...) { threw = true; }
+        try { renderer.ClearDepth(0.5f); } catch (...) { threw = true; }
         check(!threw, "Check J: ClearDepth() silently no-ops (does not throw) with no depth buffer");
 
         threw = false;
-        try { backend.ClearStencil(3); } catch (...) { threw = true; }
+        try { renderer.ClearStencil(3); } catch (...) { threw = true; }
         check(!threw, "Check J: ClearStencil() silently no-ops (does not throw) with no depth buffer");
 
         SDL_DestroyWindow(sdlWindow);
@@ -1402,7 +1402,7 @@ namespace
             return;
         }
 
-        CNA::Internal::Backends::GraphicsBackendCreateArgs createArgs;
+        CNA::Internal::Renderers::GraphicsRendererCreateArgs createArgs;
         createArgs.window = sdlWindow;
         createArgs.virtualWidth = 64;
         createArgs.virtualHeight = 64;
@@ -1411,9 +1411,9 @@ namespace
         bool threw = false;
         try
         {
-            D3D9GraphicsBackend backend(createArgs);
-            check(backend.GetCapsEXT().VertexShaderVersion >= static_cast<DWORD>(D3DVS_VERSION(3, 0)) &&
-                  backend.GetCapsEXT().PixelShaderVersion >= static_cast<DWORD>(D3DPS_VERSION(3, 0)),
+            D3D9Renderer renderer(createArgs);
+            check(renderer.GetCapsEXT().VertexShaderVersion >= static_cast<DWORD>(D3DVS_VERSION(3, 0)) &&
+                  renderer.GetCapsEXT().PixelShaderVersion >= static_cast<DWORD>(D3DPS_VERSION(3, 0)),
                   "Check K: HiDef construction succeeds on a real vs_3_0/ps_3_0-capable device");
         }
         catch (const std::exception&)

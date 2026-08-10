@@ -18,7 +18,7 @@ an unbounded cache.
 - Add, Subtract and ReverseSubtract operate on independently weighted source/destination terms and
   clamp to the normalized target range.
 - EasyGL maps Max and Min to OpenGL `GL_MAX`/`GL_MIN`, for which source/destination factors are
-  ignored. The generated route matches that actual backend behavior rather than applying the stale
+  ignored. The generated route matches that actual renderer behavior rather than applying the stale
   weighted wording formerly present in the planning matrix.
 - The destination supplied by Skia is premultiplied surface storage. The generator recovers logical
   RGB, evaluates the EasyGL formula, then re-encodes the result for SkSurface. Generated routes use
@@ -31,7 +31,7 @@ failure is cached with its diagnostic, so repeated calls cannot trigger a compil
 
 ## Public state integration
 
-`SkiaGraphicsBackend::ApplyBlendState` keeps the five established preset/runtime mappings on their
+`SkiaRenderer::ApplyBlendState` keeps the five established preset/runtime mappings on their
 pixel-proven routes. Every other valid six-selector tuple constructs the generic blender with the
 current `GraphicsDevice.BlendFactor`. `SetBlendFactor` rebuilds that fixed uniform block
 transactionally, so a live A→B→A change cannot reuse stale constants or grow a selector cache.

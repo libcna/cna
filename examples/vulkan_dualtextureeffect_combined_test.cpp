@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
-// Task 389: DualTextureEffect cross-backend image comparison suite — closes out Phase 44's
-// pixel-verification work (Vulkan backend).
+// Task 389: DualTextureEffect cross-renderer image comparison suite — closes out Phase 44's
+// pixel-verification work (Vulkan renderer).
 //
 // See examples/easygl_dualtextureeffect_combined_test.cpp for the full derivation. Summary:
 // combines the `color.rgb *= 2` doubling factor (Task 383), two-texture multiply, and

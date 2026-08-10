@@ -6,19 +6,19 @@
 // a diagnostic trail), always reporting back 0 for the real, device-clamped value. Rationale for
 // accepting rather than throwing: SpriteBatch's 2D draws have no anti-aliasing seams to smooth
 // over in the first place (unlike 3D geometry edges), so a caller requesting MSAA purely for
-// portability with the other 3 MSAA-capable backends, without depending on any particular sample
-// count actually being honored, hits no functional difference on this backend and should not be
+// portability with the other 3 MSAA-capable renderers, without depending on any particular sample
+// count actually being honored, hits no functional difference on this renderer and should not be
 // penalized with a throw for an inert, unactionable request -- the same reasoning shape as Task
 // 708's DepthFormat decision.
 //
 // GraphicsDevice::Reset() already writes ApplyMultiSampleCount()'s return value back into
 // PresentationParameters.MultiSampleCount (Task 902's FNA3D_GetMaxMultiSampleCount write-back
-// convention), so this decision needed only a real IGraphicsBackend::ApplyMultiSampleCount
-// override on SdlGraphicsBackend (previously relying on the shared default, which already
+// convention), so this decision needed only a real IGraphicsRenderer::ApplyMultiSampleCount
+// override on SdlRenderer (previously relying on the shared default, which already
 // returned 0 -- this override adds the diagnostic log without changing the returned value).
 //
 // Requires PresentationMode::NativeBackBuffer (Task 915 finding): SDL_RenderReadPixels operates
-// in physical output coordinates, while this backend's default presentation mode
+// in physical output coordinates, while this renderer's default presentation mode
 // (FixedHeightDynamicWidth) does not map logical pixels 1:1 to physical ones.
 //
 // Exit code 0 = all checks PASS, 1 = at least one FAIL.

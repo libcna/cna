@@ -125,7 +125,7 @@ namespace
 
     struct FaceSample final { int face; float dx, dy, dz; int r, g, b; const char* label; };
 
-    // Face order matches DDSFromStreamEXT's own face loop / ITextureCubeBackend::SetData/CubeMapFace
+    // Face order matches DDSFromStreamEXT's own face loop / ITextureCubeRenderer::SetData/CubeMapFace
     // (0=+X,1=-X,2=+Y,3=-Y,4=+Z,5=-Z), and SkiaCubeSampling.hpp's dominant-axis face-centre directions.
     constexpr std::array<FaceSample, 6> kFaces{{
         {0, 1.0f, 0.0f, 0.0f, 255, 0, 0, "+X decodes to Red"},

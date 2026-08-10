@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MS-PL
 // CNA::GraphicsCapability: verifies GraphicsDevice::SupportsCapability() correctly reports DX7's
-// capability set. Unlike an earlier version of this test (mirroring a 2D-only backend's
+// capability set. Unlike an earlier version of this test (mirroring a 2D-only renderer's
 // capability test, matching DX1/SDL_RENDERER/CANVAS), DX7's 3D pipeline is now genuinely real
 // end-to-end (Phase O3-O6, plan_dx2.md) -- ThreeD and DepthStencilBuffer both report true. What
 // remains false is genuinely unavailable at this DirectX era (MSAA/MRT/occlusion query/custom
 // effects), or empirically confirmed absent on this software RGB device (AnisotropicFiltering,
 // Phase O9's dx2_spike10 Test E). WireFrame reports true as of Phase O9 -- the same spike's Test D
-// confirmed D3DFILL_WIREFRAME genuinely renders edge-only output here (see Dx7GraphicsBackend.hpp's
+// confirmed D3DFILL_WIREFRAME genuinely renders edge-only output here (see Dx7Renderer.hpp's
 // own SupportsCapability() comment for the full rationale).
 //
 // Exit code 0 = PASS, 1 = FAIL.
@@ -16,7 +16,7 @@
 #include "CNA/GraphicsCapability.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 
-#include "CNA/Internal/Backends/Dx7/Dx7GraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Dx7/Dx7Renderer.hpp"
 
 #include <cstdio>
 #include <memory>
@@ -24,8 +24,8 @@
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
 using CNA::GraphicsCapability;
-using CNA::Internal::Backends::IRenderTargetBackend;
-using CNA::Internal::Backends::RenderTargetBindingDescriptor;
+using CNA::Internal::Renderers::IRenderTargetRenderer;
+using CNA::Internal::Renderers::RenderTargetBindingDescriptor;
 
 class Dx7GraphicsCapabilityTest : public Game
 {
@@ -54,7 +54,7 @@ protected:
         done_ = true;
 
         auto& dev = getGraphicsDeviceProperty();
-        auto& backend = static_cast<CNA::Internal::Backends::Dx7::Dx7GraphicsBackend&>(dev.GetBackend());
+        auto& renderer = static_cast<CNA::Internal::Renderers::Dx7::Dx7Renderer&>(dev.GetRenderer());
 
         // Phase O6 completes the real 3D pipeline -- both report true now.
         check(dev.SupportsCapability(GraphicsCapability::ThreeD), "ThreeD supported");
@@ -79,7 +79,7 @@ protected:
         const RenderTargetBindingDescriptor twoTargets[2] = {
             RenderTargetBindingDescriptor::ForRenderTarget2D(nullptr, 0, 4, 4, 0),
             RenderTargetBindingDescriptor::ForRenderTarget2D(nullptr, 0, 4, 4, 0)};
-        check(Throws([&] { backend.SetRenderTargets(twoTargets, 2); }),
+        check(Throws([&] { renderer.SetRenderTargets(twoTargets, 2); }),
               "SetRenderTargets(count=2) still throws (no MRT support)");
 
         std::printf("=== %d/%d PASS ===\n", pass_, pass_ + fail_);

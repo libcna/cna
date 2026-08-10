@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 //
 // REMED-GFX-078: a RenderTarget2D used as a GENERIC 3D-EFFECT texture (effect.Texture = rt) must
-// (1) bind its real handle without the former UB static_cast<const BgfxTextureBackend&> — a
-// RenderTarget2D's backend is BgfxRenderTargetBackend, an unrelated sibling of BgfxTextureBackend —
+// (1) bind its real handle without the former UB static_cast<const BgfxTextureRenderer&> — a
+// RenderTarget2D's renderer is BgfxRenderTargetRenderer, an unrelated sibling of BgfxTextureRenderer —
 // and (2) sample UPRIGHT (XNA top-left convention) on BOTH bgfx renderers, exactly as REMED-GFX-067
 // established for SpriteBatch. The generic-effect path receives mesh UVs (not SpriteBatch-generated
 // UVs), so the originBottomLeft (OpenGL/GLES/WebGL) bottom-up-FBO compensation is applied in the

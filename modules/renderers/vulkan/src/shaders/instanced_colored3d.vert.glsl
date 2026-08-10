@@ -37,7 +37,7 @@ layout(push_constant) uniform PC {
 void main() {
     mat4 world = mat4(aInstCol0, aInstCol1, aInstCol2, aInstCol3);
     gl_Position = pc.vp * world * vec4(aPos, 1.0);
-    // REMED-GFX-011: backend-wide Vulkan NDC Y-flip -- see pbr3d.vert.glsl.
+    // REMED-GFX-011: renderer-wide Vulkan NDC Y-flip -- see pbr3d.vert.glsl.
     gl_Position.y = -gl_Position.y;
     fragColor   = (pc.vertexColorEnabled > 0.5) ? aColor * pc.diffuseColor : pc.diffuseColor;
 }

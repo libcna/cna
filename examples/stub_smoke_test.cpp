@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MS-PL
-// plan_stub.md STUB-4: end-to-end smoke test for the Stub (no-op) graphics backend. Constructs a
+// plan_stub.md STUB-4: end-to-end smoke test for the Stub (no-op) graphics renderer. Constructs a
 // real Game (VertexBuffer, IndexBuffer, Texture2D, SpriteBatch, a custom Effect), runs a few
-// frames entirely under CNA_GRAPHICS_BACKEND=STUB, and asserts:
+// frames entirely under CNA_GRAPHICS_RENDERER=STUB, and asserts:
 //
 // Check A -- SDL's video subsystem was never initialized (SDL_WasInit(SDL_INIT_VIDEO) == 0) --
-//   proves this backend genuinely needs no display server at all, not just a hidden window.
+//   proves this renderer genuinely needs no display server at all, not just a hidden window.
 // Check B -- GetWindowInternal() returns nullptr -- no window object exists anywhere.
 // Check C -- a plain 3D DrawPrimitives call (VertexBuffer + BasicEffect) does not throw.
 // Check D -- an indexed 3D DrawIndexedPrimitives call (VertexBuffer + IndexBuffer + BasicEffect)
@@ -33,7 +33,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 
-#include "CNA/Internal/Backends/Stub/StubGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Stub/StubRenderer.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -44,7 +44,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::Stub;
+using namespace CNA::Internal::Renderers::Stub;
 
 namespace
 {
@@ -85,14 +85,14 @@ protected:
     {
         ++frame_;
         auto& dev = getGraphicsDeviceProperty();
-        auto& backend = static_cast<StubGraphicsBackend&>(dev.GetBackend());
+        auto& renderer = static_cast<StubRenderer&>(dev.GetRenderer());
 
         if (frame_ == 1)
         {
             // Check A/B: no real window/video subsystem anywhere.
             check(SDL_WasInit(SDL_INIT_VIDEO) == 0,
-                  "SDL_INIT_VIDEO was never initialized under the Stub backend");
-            check(backend.GetWindowInternal() == nullptr, "GraphicsDevice has no real window under the Stub backend");
+                  "SDL_INIT_VIDEO was never initialized under the Stub renderer");
+            check(renderer.GetWindowInternal() == nullptr, "GraphicsDevice has no real window under the Stub renderer");
         }
 
         dev.Clear(Color::Black);

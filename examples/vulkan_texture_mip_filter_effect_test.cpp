@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // Task 298/925: verify mipmap filter behavior (MipPoint/MipLinear/etc.) on a 3D stock effect
-// (DualTextureEffect), Vulkan backend.
+// (DualTextureEffect), Vulkan renderer.
 //
 // Vulkan-specific adaptation of examples/easygl_texture_mip_filter_effect_test.cpp (Task 298).
 // Not a verbatim reuse: that file's own "Point" check asserts Point NEVER selects a higher mip
@@ -15,7 +15,7 @@
 // both hardcoded to 1 regardless of the texture's real level count, so there was no higher level
 // for the sampler to select even though its own mapping already asked for one. Task 925 fixed
 // that image-side allocation gap, which makes Point's pre-existing mip-aware mapping actually
-// take effect for the first time — a genuine improvement in XNA-faithfulness on this backend,
+// take effect for the first time — a genuine improvement in XNA-faithfulness on this renderer,
 // not a regression to paper over. Both checks below therefore expect GREEN (real mip selection).
 //
 // Exit code 0 = PASS (both expectations hold), 1 = FAIL.

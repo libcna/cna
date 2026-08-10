@@ -2,11 +2,11 @@
 // REMED-GFX-117: SDL_GPU indexed draws must propagate the public startIndex/baseVertex arguments
 // to the native SDL_DrawGPUIndexedPrimitives first_index/vertex_offset parameters.
 //
-// SDL_GPU implements no backbuffer readback at all, so RenderTarget2D::GetData is this backend's
+// SDL_GPU implements no backbuffer readback at all, so RenderTarget2D::GetData is this renderer's
 // exact-pixel oracle (the same control REMED-GFX-111 established). Every test in this file renders
 // into a render target, unbinds it, and reads the target's own pixels back.
 
-#ifdef CNA_BACKEND_SDL_GPU
+#ifdef CNA_RENDERER_SDL_GPU
 
 #include <algorithm>
 #include <array>
@@ -340,7 +340,7 @@ namespace
         void RequireIndexedRendering()
         {
             if (!device.SupportsCapability(GraphicsCapability::ThreeD))
-                GTEST_SKIP() << "Backend explicitly does not support indexed rendering";
+                GTEST_SKIP() << "Renderer explicitly does not support indexed rendering";
             device.setRasterizerStateProperty(RasterizerState::CullNone);
             device.setDepthStencilStateProperty(DepthStencilState::None);
         }
@@ -736,7 +736,7 @@ TEST_F(SdlGpuIndexedDrawRangeTest, IndexedPointListHonorsOffsets)
 }
 
 // ---------------------------------------------------------------------------
-// Deferred capture: this backend queues draw commands and submits them at frame end, so each
+// Deferred capture: this renderer queues draw commands and submits them at frame end, so each
 // queued draw must carry its own offsets rather than reading a live "last set" value.
 // ---------------------------------------------------------------------------
 TEST_F(SdlGpuIndexedDrawRangeTest, DeferredIndexedDrawsKeepTheirOwnOffsets)
@@ -931,7 +931,7 @@ TEST_F(SdlGpuIndexedDrawRangeTest, DisposingSourceBuffersAfterQueuingRemainsSafe
 // caller's vertex and index data into temporary buffers first, so passing the public offsets
 // through a second time would apply them twice.
 // ---------------------------------------------------------------------------
-TEST_F(SdlGpuIndexedDrawRangeTest, DrawUserIndexedPrimitivesRebasesBeforeTheBackendSeesIt)
+TEST_F(SdlGpuIndexedDrawRangeTest, DrawUserIndexedPrimitivesRebasesBeforeTheRendererSeesIt)
 {
     RequireIndexedRendering();
 
@@ -1442,7 +1442,7 @@ TEST_F(SdlGpuIndexedDrawRangeTest, PbrFamilyHonorsIndexedOffsets)
 }
 
 // ---------------------------------------------------------------------------
-// Target and state coverage: none of the per-draw dynamic state this backend captures may disturb
+// Target and state coverage: none of the per-draw dynamic state this renderer captures may disturb
 // indexed addressing, and the offsets must work against a depth-backed target too.
 // ---------------------------------------------------------------------------
 TEST_F(SdlGpuIndexedDrawRangeTest, IndexedOffsetsHoldOnADepthBackedTarget)
@@ -1497,7 +1497,7 @@ TEST_F(SdlGpuIndexedDrawRangeTest, IndexedOffsetsAreIndependentOfViewportScissor
         DepthFormat::Depth24Stencil8, 0, RenderTargetUsage::PreserveContents);
     BasicEffect effect(device);
 
-    // Explicit, non-default state on every axis the backend captures per draw. The scissor keeps
+    // Explicit, non-default state on every axis the renderer captures per draw. The scissor keeps
     // both candidate triangles inside it, so it cannot itself decide which one is visible.
     RasterizerState rasterizer;
     rasterizer.setCullModeProperty(CullMode::None);
@@ -1526,4 +1526,4 @@ TEST_F(SdlGpuIndexedDrawRangeTest, IndexedOffsetsAreIndependentOfViewportScissor
     ExpectColorAbsent(pixels, Color::Magenta, "explicit render state decoy");
 }
 
-#endif  // CNA_BACKEND_SDL_GPU
+#endif  // CNA_RENDERER_SDL_GPU

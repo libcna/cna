@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: MS-PL
 // Task 726: Verify all 5 stock 3D effects' Apply()+property setters do NOT throw on
-// SDL_Renderer, but drawing with them DOES -- matches FNA: effects are backend-agnostic data
+// SDL_Renderer, but drawing with them DOES -- matches FNA: effects are renderer-agnostic data
 // objects until actually used to draw. Covers BasicEffect, AlphaTestEffect, DualTextureEffect,
 // EnvironmentMapEffect, SkinnedEffect (SpriteEffect is the 2D sprite effect, not one of the 5
 // stock 3D effects, and is out of scope here).
 //
-// Each effect's OnApply() only ever calls Texture2D::GetBackend() for an assigned texture (guarded
-// by "if texture is set"), never GraphicsDevice::GetBackend() directly -- and Texture2D itself
+// Each effect's OnApply() only ever calls Texture2D::GetRenderer() for an assigned texture (guarded
+// by "if texture is set"), never GraphicsDevice::GetRenderer() directly -- and Texture2D itself
 // works fine on SDL_Renderer (only Texture3D/TextureCube/VertexBuffer/IndexBuffer are 3D-
 // unsupported, Tasks 720-725). So property setters + Apply() never touch anything that could
-// throw on this backend, REGARDLESS of whether a Texture2D is assigned.
+// throw on this renderer, REGARDLESS of whether a Texture2D is assigned.
 //
 // Deliberately does NOT assign EnvironmentMapEffect::EnvironmentMap (a TextureCube*) -- that
 // type's own construction behavior on SDL_Renderer is a separate, currently-BLOCKED architecture

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectParameter.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectParameterCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectParameterClass.hpp"
@@ -317,7 +317,7 @@ namespace Microsoft::Xna::Framework::Graphics
         return bones;
     }
 
-    void SkinnedEffect::FillGpuDrawParams(CNA::Internal::Backends::GpuDrawParams& p) const
+    void SkinnedEffect::FillGpuDrawParams(CNA::Internal::Renderers::GpuDrawParams& p) const
     {
         p.skinned            = true;
         p.textureEnabled     = true;
@@ -325,7 +325,7 @@ namespace Microsoft::Xna::Framework::Graphics
         p.vertexColorEnabled = VertexColorEnabled;
         p.preferPerPixelLighting = preferPerPixelLighting_;
 
-        if (texture_) p.texture0 = &texture_->GetBackend();
+        if (texture_) p.texture0 = &texture_->GetRenderer();
 
         p.diffuseColor[0] = diffuseColor_.X * alpha_;
         p.diffuseColor[1] = diffuseColor_.Y * alpha_;

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // plan_sdlgpu.md SDLGPU-11: proves the hard-swapchain-acquisition-failure path is genuinely
-// recoverable, not just "throws and leaves the backend in an unknown state" -- a real gap this
+// recoverable, not just "throws and leaves the renderer in an unknown state" -- a real gap this
 // row's own Notes column flagged as "not yet proven recoverable in practice".
 //
 // SDL_WaitAndAcquireGPUSwapchainTexture returning false (as opposed to filling a null texture,
@@ -15,11 +15,11 @@
 // Check B -- releasing the window from the GPU device, then forcing a Present() while a frame is
 //   pending, throws (the hard-acquisition-failure path is real and reachable).
 // Check C -- SDL_ClaimWindowForGPUDevice re-claims the window successfully.
-// Check D -- a subsequent Present() succeeds with no exception -- the backend recovers cleanly,
+// Check D -- a subsequent Present() succeeds with no exception -- the renderer recovers cleanly,
 //   not left in a broken state by the thrown exception (framePending_ correctly stays set across
 //   the failed attempt, so the same frame's queued Clear() is not lost).
 // Check E -- many further frames after the recovery continue to render with no exception --
-//   the backend remains fully usable, not just "didn't crash immediately".
+//   the renderer remains fully usable, not just "didn't crash immediately".
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
@@ -29,7 +29,7 @@
 #include "Microsoft/Xna/Framework/Graphics/ClearOptions.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 
-#include "CNA/Internal/Backends/SdlGpu/SdlGpuGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/SdlGpu/SdlGpuRenderer.hpp"
 
 #include "common/PixelTestGame.hpp"
 
@@ -41,7 +41,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::SdlGpu;
+using namespace CNA::Internal::Renderers::SdlGpu;
 
 namespace
 {
@@ -67,7 +67,7 @@ protected:
     {
         ++frame_;
         auto& dev = getGraphicsDeviceProperty();
-        auto& backend = static_cast<SdlGpuGraphicsBackend&>(dev.GetBackend());
+        auto& renderer = static_cast<SdlGpuRenderer&>(dev.GetRenderer());
 
         dev.Clear(ClearOptions::Target | ClearOptions::DepthBuffer | ClearOptions::Stencil,
                   Color::CornflowerBlue, 1.0f, 0);
@@ -76,8 +76,8 @@ protected:
         {
             Check(true, "frames 1.." + std::to_string(kInduceFailureFrame - 1) + " rendered with no exception");
 
-            SDL_GPUDevice* device = backend.Device();
-            SDL_Window* window = backend.GetWindowInternal();
+            SDL_GPUDevice* device = renderer.Device();
+            SDL_Window* window = renderer.GetWindowInternal();
 
             // Un-claims the window from the GPU device -- the next
             // SDL_WaitAndAcquireGPUSwapchainTexture call on it now genuinely fails (returns false),
@@ -111,14 +111,14 @@ protected:
                 std::printf("       unexpected exception after recovery: %s\n", e.what());
             }
             Check(!threwAfterRecovery, "Present() succeeds again after re-claiming the window -- "
-                                       "the backend genuinely recovers, not left in a broken state");
+                                       "the renderer genuinely recovers, not left in a broken state");
         }
 
         if (frame_ == kTotalFrames)
         {
             Check(true, std::to_string(kTotalFrames - kInduceFailureFrame) +
                         " further frames after recovery rendered with no exception -- "
-                        "the backend remains fully usable, not just \"didn't crash immediately\"");
+                        "the renderer remains fully usable, not just \"didn't crash immediately\"");
             std::printf("=== %d/5 PASS ===\n", passCount_);
             result_ = (passCount_ == 5) ? 0 : 1;
             Exit();

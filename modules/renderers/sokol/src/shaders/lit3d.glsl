@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_sokol.md SOKOL-21: the Sokol backend's lit 3D program -- BasicEffect with
+// plan_sokol.md SOKOL-21: the Sokol renderer's lit 3D program -- BasicEffect with
 // LightingEnabled=true (ambient + up to 3 directional lights, Blinn-Phong specular, emissive,
-// fog, alpha test). Always samples a texture: SokolGraphicsBackend binds a real one when
+// fog, alpha test). Always samples a texture: SokolRenderer binds a real one when
 // TextureEnabled is true and a 1x1 opaque-white fallback otherwise, so this one shader serves
 // both "textured and lit" and "vertex-coloured and lit" without a second variant -- the same
-// convention the EasyGL backend's own default-white-texture fallback uses.
+// convention the EasyGL renderer's own default-white-texture fallback uses.
 //
 // This is real per-pixel (Blinn-Phong) lighting, computed in the fragment stage from an
 // interpolated world-space normal -- not per-vertex/Gouraud shading. FNA's BasicEffect selects a
-// per-vertex-lit shader when PreferPerPixelLighting is false (its own default); this backend
+// per-vertex-lit shader when PreferPerPixelLighting is false (its own default); this renderer
 // renders per-pixel unconditionally regardless of that flag, matching every established CNA
-// backend except D3D9 (see GpuDrawParams::preferPerPixelLighting's own doc).
+// renderer except D3D9 (see GpuDrawParams::preferPerPixelLighting's own doc).
 
 @module cna
 

@@ -105,7 +105,7 @@ def parse_registers(disassembly: str):
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output", type=Path, default=SCRIPT_DIR.parents[1] / "include/CNA/Internal/Backends/D3D9/shaders/D3D9ShaderRegisters.hpp")
+    parser.add_argument("--output", type=Path, default=SCRIPT_DIR.parents[1] / "include/CNA/Internal/Renderers/D3D9/shaders/D3D9ShaderRegisters.hpp")
     parser.add_argument("--wineprefix", type=Path, default=DEFAULT_WINEPREFIX)
     args = parser.parse_args()
 
@@ -135,7 +135,7 @@ def main() -> None:
             "// script (not hand-edit) after any vendored .fx change or compile-flag change.\n"
             "#pragma once\n"
             "#include <cstdint>\n\n"
-            "namespace CNA::Internal::Backends::D3D9::Shaders {\n\n"
+            "namespace CNA::Internal::Renderers::D3D9::Shaders {\n\n"
             "/// One named HLSL constant's real register slot within a single compiled shader.\n"
             "/// `space` is 'v' for a vs_2_0 constant register (SetVertexShaderConstantF) or 'p' for\n"
             "/// a ps_2_0 one (SetPixelShaderConstantF) -- never both; D3D9 vertex and pixel shader\n"
@@ -171,7 +171,7 @@ def main() -> None:
                     f"static constexpr D3D9ShaderConstantSlot* {array_name} = nullptr; // no named constants\n\n"
                 )
 
-        parts.append("} // namespace CNA::Internal::Backends::D3D9::Shaders\n")
+        parts.append("} // namespace CNA::Internal::Renderers::D3D9::Shaders\n")
 
         args.output.write_text("".join(parts))
         print(f"Written: {args.output} ({len(entries)} shaders)")

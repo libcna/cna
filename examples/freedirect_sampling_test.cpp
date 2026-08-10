@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // plan_freedirect.md Phase X5 (DX3-45/DX3-46): TextureFilter (nearest vs. bilinear) and
 // TextureAddressMode (Wrap/Mirror/Clamp) sampling tests for the DX3 (DirectDraw, via the
-// ../free-direct sibling) graphics backend.
+// ../free-direct sibling) graphics renderer.
 //
 // All draws use BlendState::AlphaBlend with a fully-opaque (alpha=255) source texture: under
 // AlphaBlend's premultiplied formula (out = src + dst*(1-srcAlpha)), srcAlpha=255 makes

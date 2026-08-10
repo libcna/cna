@@ -84,9 +84,9 @@ protected:
             TextureCube t(dev, 2, false, SurfaceFormat::Color);
         });
 
-        // ── sRGB / EXT formats follow backend-specific promotion gates ──────
+        // ── sRGB / EXT formats follow renderer-specific promotion gates ──────
 
-#if defined(CNA_BACKEND_SKIA)
+#if defined(CNA_RENDERER_SKIA)
         expectNoThrow("Texture2D ColorSrgbEXT", [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::ColorSrgbEXT);
         });
@@ -95,7 +95,7 @@ protected:
             Texture2D t(dev, 2, 2, false, SurfaceFormat::ColorSrgbEXT);
         });
 #endif
-#if defined(CNA_BACKEND_SKIA)
+#if defined(CNA_RENDERER_SKIA)
         // SKIA-141 promotes Bc7EXT/Bc7SrgbEXT with a native BC7 decoder (no third-party decoder
         // dependency). Dxt5SrgbEXT below remains refused pending a task that scopes it.
         expectNoThrow("Texture2D Bc7EXT", [&]{
@@ -115,7 +115,7 @@ protected:
         expectThrows("Texture2D Dxt5SrgbEXT", [&]{
             Texture2D t(dev, 4, 4, false, SurfaceFormat::Dxt5SrgbEXT);
         });
-#if defined(CNA_BACKEND_SKIA)
+#if defined(CNA_RENDERER_SKIA)
         expectNoThrow("Texture2D ColorBgraEXT", [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::ColorBgraEXT);
         });
@@ -133,7 +133,7 @@ protected:
 
         // ── Other unsupported formats must throw ─────────────────────────────
 
-#if defined(CNA_BACKEND_SKIA)
+#if defined(CNA_RENDERER_SKIA)
         expectNoThrow("Texture2D Bgra5551", [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::Bgra5551);
         });
@@ -196,7 +196,7 @@ protected:
             Texture2D t(dev, 2, 2, false, SurfaceFormat::HdrBlendable);
         });
 #endif
-#if defined(CNA_BACKEND_SKIA)
+#if defined(CNA_RENDERER_SKIA)
         // SKIA-140 promotes Dxt1/Dxt3/Dxt5 with preserved compressed CPU blocks; Dxt5SrgbEXT
         // above remains refused pending a task that scopes it.
         expectNoThrow("Texture2D Dxt1", [&]{
@@ -213,10 +213,10 @@ protected:
             Texture2D t(dev, 4, 4, false, SurfaceFormat::Dxt1);
         });
 #endif
-#if defined(CNA_BACKEND_SKIA)
+#if defined(CNA_RENDERER_SKIA)
         // SKIA-135–139 promote these exact transfer/sampling formats for Texture2D only.
         // The SKIA-136 colour, SKIA-138 float and SKIA-139 shadow formats were handled above;
-        // render targets remain independently gated and other backends retain Color-only.
+        // render targets remain independently gated and other renderers retain Color-only.
         expectNoThrow("Texture2D Bgr565", [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::Bgr565);
         });

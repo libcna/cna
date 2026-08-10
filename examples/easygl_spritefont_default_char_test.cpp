@@ -2,7 +2,7 @@
 // Task 427: Pixel test -- default character fallback renders the expected glyph on EasyGL.
 //
 // Direct EasyGL port of Task 693's SDL_Renderer test, building on Task 424's fixture pattern to
-// exercise the shared, backend-agnostic SpriteBatch::DrawString's unknown-character fallback
+// exercise the shared, renderer-agnostic SpriteBatch::DrawString's unknown-character fallback
 // branch:
 //   auto it = spriteFont.characterIndexMap_.find(c);
 //   if (it == spriteFont.characterIndexMap_.end())

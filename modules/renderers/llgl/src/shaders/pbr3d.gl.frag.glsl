@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // PbrEffect fragment shader, OpenGL flavour. See pbr3d.frag.glsl for the Vulkan flavour and the
-// formula this mirrors (transliterated from the Vulkan backend's own pbr3d.frag.glsl).
+// formula this mirrors (transliterated from the Vulkan renderer's own pbr3d.frag.glsl).
 
 #version 450 core
 

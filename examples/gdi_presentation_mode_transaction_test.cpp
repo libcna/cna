@@ -3,14 +3,14 @@
 // framebuffer's axis or byte budget. The mode/size/damage transition must commit or roll back as
 // one operation rather than leaving presentationMode_ pointed at a mode that keeps failing.
 //
-// The bug and its fix live entirely in GdiGraphicsBackend::SetPresentationMode, exercised here
+// The bug and its fix live entirely in GdiRenderer::SetPresentationMode, exercised here
 // directly. Microsoft::Xna::Framework::Graphics::GraphicsDevice::SetPresentationMode(int) is a
-// private, single-line, stateless forward (`if (backend_) backend_->SetPresentationMode(mode);`)
-// reachable only through GraphicsDeviceManager, which in this CNA backend requires a live Game
+// private, single-line, stateless forward (`if (renderer_) renderer_->SetPresentationMode(mode);`)
+// reachable only through GraphicsDeviceManager, which in this CNA renderer requires a live Game
 // (GraphicsDeviceManager::CreateDevice() throws otherwise) -- so it adds no state of its own for
-// this backend-level regression test to duplicate.
+// this renderer-level regression test to duplicate.
 
-#include "CNA/Internal/Backends/Gdi/GdiGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Gdi/GdiRenderer.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 
 #include <SDL3/SDL.h>
@@ -20,8 +20,8 @@
 #include <cstdio>
 #include <exception>
 
-using namespace CNA::Internal::Backends;
-using namespace CNA::Internal::Backends::Gdi;
+using namespace CNA::Internal::Renderers;
+using namespace CNA::Internal::Renderers::Gdi;
 
 namespace
 {
@@ -59,33 +59,33 @@ namespace
         return resized;
     }
 
-    bool ExerciseDirectBackend(SDL_Window* window)
+    bool ExerciseDirectRenderer(SDL_Window* window)
     {
         bool ok = true;
-        GdiGraphicsBackend backend(window, 40, 100, CnaPresentationMode::Letterbox);
+        GdiRenderer renderer(window, 40, 100, CnaPresentationMode::Letterbox);
 
-        backend.Clear(0.2f, 0.4f, 0.6f, 1.0f);
-        backend.Present();
-        backend.DebugResetBackbufferDamage();
+        renderer.Clear(0.2f, 0.4f, 0.6f, 1.0f);
+        renderer.Present();
+        renderer.DebugResetBackbufferDamage();
 
         int widthBefore = 0, heightBefore = 0;
-        backend.GetViewportSize(widthBefore, heightBefore);
+        renderer.GetViewportSize(widthBefore, heightBefore);
         std::array<std::uint8_t, 4> pixelBefore{};
-        backend.ReadBackbuffer(0, 0, 1, 1, pixelBefore.data());
+        renderer.ReadBackbuffer(0, 0, 1, 1, pixelBefore.data());
         Rectangle damageBefore;
         bool fullyDirtyBefore = false;
         const bool damageValidBefore =
-            backend.DebugGetBackbufferDamage(damageBefore, fullyDirtyBefore);
+            renderer.DebugGetBackbufferDamage(damageBefore, fullyDirtyBefore);
 
         ok &= Expect(widthBefore == 40 && heightBefore == 100,
-                     "backend starts from a valid retained Letterbox framebuffer");
+                     "renderer starts from a valid retained Letterbox framebuffer");
 
         ok &= Expect(ForceSkewedAspect(window),
                      "test window resizes to an extreme drawable aspect ratio");
 
         ok &= ExpectArgumentOutOfRange(
             [&] {
-                backend.SetPresentationMode(
+                renderer.SetPresentationMode(
                     static_cast<int>(CnaPresentationMode::FixedHeightDynamicWidth));
             },
             "switching to FixedHeightDynamicWidth against an impossible aspect throws");
@@ -97,7 +97,7 @@ namespace
         bool viewportThrew = false;
         try
         {
-            backend.GetViewportSize(widthAfter, heightAfter);
+            renderer.GetViewportSize(widthAfter, heightAfter);
         }
         catch (...)
         {
@@ -107,14 +107,14 @@ namespace
                      "rejected mode switch rolls back to the old mode's dimensions");
 
         std::array<std::uint8_t, 4> pixelAfter{};
-        backend.ReadBackbuffer(0, 0, 1, 1, pixelAfter.data());
+        renderer.ReadBackbuffer(0, 0, 1, 1, pixelAfter.data());
         ok &= Expect(pixelAfter == pixelBefore,
                      "rejected mode switch leaves retained pixels untouched");
 
         Rectangle damageAfter;
         bool fullyDirtyAfter = false;
         const bool damageValidAfter =
-            backend.DebugGetBackbufferDamage(damageAfter, fullyDirtyAfter);
+            renderer.DebugGetBackbufferDamage(damageAfter, fullyDirtyAfter);
         ok &= Expect(damageValidAfter == damageValidBefore &&
                          fullyDirtyAfter == fullyDirtyBefore &&
                          damageAfter.X == damageBefore.X && damageAfter.Y == damageBefore.Y &&
@@ -125,7 +125,7 @@ namespace
         bool presentThrew = false;
         try
         {
-            backend.Present();
+            renderer.Present();
         }
         catch (...)
         {
@@ -157,7 +157,7 @@ int main()
     }
     try
     {
-        ok &= ExerciseDirectBackend(window);
+        ok &= ExerciseDirectRenderer(window);
     }
     catch (const std::exception& error)
     {

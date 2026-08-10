@@ -1,19 +1,19 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl4.md GL4-21: EnvironmentMapEffect for the OpenGL4 graphics backend -- adds a
+// plan_opengl4.md GL4-21: EnvironmentMapEffect for the OpenGL4 graphics renderer -- adds a
 // dedicated env_map3d GLSL 410 core program (stride 32, VertexPositionNormalTexture), selected
 // by BindProgramForStride instead of lit_textured3d when GpuDrawParams::envMapping is set. Ported
-// from EasyGLGraphicsBackend::EnsureEnvMapped3DProgram (near-verbatim GLSL ES 300 -> 410 core
-// translation), cross-verified against VulkanGraphicsBackend's env_map3d.frag.glsl formula:
+// from EasyGLRenderer::EnsureEnvMapped3DProgram (near-verbatim GLSL ES 300 -> 410 core
+// translation), cross-verified against VulkanRenderer's env_map3d.frag.glsl formula:
 // reflection vector reflect(-eyeVector, worldNormal), Fresnel blend factor
 // pow(max(1-|dot(eye,normal)|,0), FresnelFactor)*EnvironmentMapAmount, final colour a LERP (not
 // additive) between lit diffuse*texture and the alpha-scaled cubemap sample, plus a separately
 // alpha-scaled specular term (see docs/environmentmapeffect-support.md for the two real formula
 // bugs -- additive-not-lerp, missing alpha scaling -- found and fixed while porting this to 3
-// other backends; this OpenGL4 port uses the already-corrected formula from day one).
+// other renderers; this OpenGL4 port uses the already-corrected formula from day one).
 //
-// Check A reuses Task 399's own cross-backend-verified combined-scene oracle verbatim (see
+// Check A reuses Task 399's own cross-renderer-verified combined-scene oracle verbatim (see
 // examples/easygl_environmentmapeffect_golden_test.cpp) -- the strongest possible correctness
-// check for a 4th backend port: if the same scene produces the same pixel value FNA-independently
+// check for a 4th renderer port: if the same scene produces the same pixel value FNA-independently
 // derived math predicts, the whole formula chain (reflection, Fresnel, lerp, alpha scaling,
 // specular) is correct end-to-end, not just "didn't throw".
 // Check B -- EnvironmentMapAmount=0 makes the rendered pixel identical regardless of the cube
@@ -100,7 +100,7 @@ protected:
         dev.setBlendStateProperty(BlendState::Opaque);
         dev.setRasterizerStateProperty(RasterizerState::CullNone);
 
-        // --- Check A: Task 399's own cross-backend-verified combined scene ---
+        // --- Check A: Task 399's own cross-renderer-verified combined scene ---
         {
             const Color kTex(200, 100, 50, 255);
             const Color kTranslucentCube(0, 0, 0, 128);
@@ -123,7 +123,7 @@ protected:
             fx.Apply();
             dev.DrawUserPrimitives(PrimitiveType::TriangleList, kQuad, 0, 2);
 
-            ExpectPixel("Check A: Task-399 combined-scene oracle (formula cross-verified against 3 other backends)",
+            ExpectPixel("Check A: Task-399 combined-scene oracle (formula cross-verified against 3 other renderers)",
                         Rectangle(kSize / 2, kSize / 2, 1, 1), Color(151, 101, 76, 255), /*tolerance=*/20);
         }
 

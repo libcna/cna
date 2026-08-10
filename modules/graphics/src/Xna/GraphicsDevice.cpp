@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Graphics/BuiltInVertexStreams.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
@@ -17,31 +17,31 @@
 #include "Microsoft/Xna/Framework/Input/TextInputEXT.hpp"
 #include "Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp"
 
-#ifdef CNA_BACKEND_BGFX
-#include "CNA/Internal/Backends/Bgfx/BgfxGraphicsBackend.hpp"
+#ifdef CNA_RENDERER_BGFX
+#include "CNA/Internal/Renderers/Bgfx/BgfxRenderer.hpp"
 #endif
 
-#ifdef CNA_BACKEND_DILIGENT
+#ifdef CNA_RENDERER_DILIGENT
 // The minimal, DiligentCore-independent header -- GraphicsDevice.cpp is part of the CNA target,
-// which (unlike the Diligent backend target itself) has no DiligentCore include path wired up.
-#include "CNA/Internal/Backends/Diligent/DiligentDeviceSelection.hpp"
+// which (unlike the Diligent renderer target itself) has no DiligentCore include path wired up.
+#include "CNA/Internal/Renderers/Diligent/DiligentDeviceSelection.hpp"
 #endif
 
-// plan_llgl.md: only the renderer-selection header, deliberately not the backend header -- the
+// plan_llgl.md: only the renderer-selection header, deliberately not the renderer header -- the
 // window flags below need the runtime module choice, and this header is free of LLGL (and
 // therefore of Xlib) includes.
-#ifdef CNA_BACKEND_LLGL
-#include "CNA/Internal/Backends/Llgl/LlglRendererSelection.hpp"
+#ifdef CNA_RENDERER_LLGL
+#include "CNA/Internal/Renderers/Llgl/LlglRendererSelection.hpp"
 #endif
 
 // plan_dx9.md Phase D9-10 (D9-103 follow-up): GraphicsProfile.Reach's own MaxRenderTargets=1
-// ceiling, real on this backend only -- matches Texture2D.cpp's own #ifdef CNA_BACKEND_D3D9
+// ceiling, real on this renderer only -- matches Texture2D.cpp's own #ifdef CNA_RENDERER_D3D9
 // convention exactly. Distinct from MAX_RENDERTARGET_BINDINGS below (XNA's own general 4-target
-// ceiling, backend-agnostic) and from D9-54's own NumSimultaneousRTs hardware-cap enforcement
-// inside D3D9GraphicsBackend::SetRenderTargets() -- this is the profile's own, separately lower,
+// ceiling, renderer-agnostic) and from D9-54's own NumSimultaneousRTs hardware-cap enforcement
+// inside D3D9Renderer::SetRenderTargets() -- this is the profile's own, separately lower,
 // software-imposed ceiling.
-#ifdef CNA_BACKEND_D3D9
-#include "CNA/Internal/Backends/D3D9/D3D9ProfileCapabilities.hpp"
+#ifdef CNA_RENDERER_D3D9
+#include "CNA/Internal/Renderers/D3D9/D3D9ProfileCapabilities.hpp"
 #endif
 
 #include <SDL3/SDL.h>
@@ -66,9 +66,9 @@
 
 namespace Microsoft::Xna::Framework::Graphics
 {
-    using CNA::Internal::Backends::CreateGraphicsBackend;
-    using CNA::Internal::Backends::GraphicsBackendCreateArgs;
-    using CNA::Internal::Backends::RenderTargetBindingDescriptor;
+    using CNA::Internal::Renderers::CreateGraphicsRenderer;
+    using CNA::Internal::Renderers::GraphicsRendererCreateArgs;
+    using CNA::Internal::Renderers::RenderTargetBindingDescriptor;
 
     namespace
     {
@@ -91,14 +91,14 @@ namespace Microsoft::Xna::Framework::Graphics
         }
 
         void NormalizeAppliedPresentationFormats(
-            CNA::Internal::Backends::IGraphicsBackend& backend,
+            CNA::Internal::Renderers::IGraphicsRenderer& renderer,
             PresentationParameters& parameters)
         {
             parameters.setBackBufferFormatProperty(static_cast<SurfaceFormat>(
-                backend.GetAppliedBackBufferFormatEXT(
+                renderer.GetAppliedBackBufferFormatEXT(
                     static_cast<int>(parameters.getBackBufferFormatProperty()))));
             parameters.setDepthStencilFormatProperty(static_cast<DepthFormat>(
-                backend.GetAppliedDepthStencilFormatEXT(
+                renderer.GetAppliedDepthStencilFormatEXT(
                     static_cast<int>(parameters.getDepthStencilFormatProperty()))));
         }
 
@@ -128,19 +128,19 @@ namespace Microsoft::Xna::Framework::Graphics
             );
         }
 
-        [[nodiscard]] SDL_WindowFlags getBackendWindowFlags()
+        [[nodiscard]] SDL_WindowFlags getRendererWindowFlags()
         {
             SDL_WindowFlags windowFlags = SDL_WINDOW_RESIZABLE;
 
-#if defined(CNA_BACKEND_EASYGL) || defined(CNA_BACKEND_OPENGL1) || defined(CNA_BACKEND_OPENGL2)
+#if defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_OPENGL1) || defined(CNA_RENDERER_OPENGL2)
             windowFlags |= SDL_WINDOW_OPENGL;
 #endif
 
-#ifdef CNA_BACKEND_OPENGLES1
+#ifdef CNA_RENDERER_OPENGLES1
             windowFlags |= SDL_WINDOW_OPENGL;
 #endif
 
-#ifdef CNA_BACKEND_OPENGL4
+#ifdef CNA_RENDERER_OPENGL4
             windowFlags |= SDL_WINDOW_OPENGL;
 #endif
 
@@ -148,34 +148,34 @@ namespace Microsoft::Xna::Framework::Graphics
             // this same SDL window, so the window needs the identical OpenGL flag EasyGL asks for
             // just above -- SDL cannot attach a GL context to a window that was not created with
             // it.
-#ifdef CNA_BACKEND_MAGNUM
+#ifdef CNA_RENDERER_MAGNUM
             windowFlags |= SDL_WINDOW_OPENGL;
 #endif
 
-#ifdef CNA_BACKEND_VULKAN
+#ifdef CNA_RENDERER_VULKAN
             windowFlags |= SDL_WINDOW_VULKAN;
 #endif
 
             // plan_sokol.md SOKOL-4: sokol_gfx does not create its own window or context -- the
-            // SOKOL backend calls SDL_GL_CreateContext on this window (design decision 1), which
+            // SOKOL renderer calls SDL_GL_CreateContext on this window (design decision 1), which
             // SDL rejects outright unless the window was created with SDL_WINDOW_OPENGL. The GL
             // APIs are the only ones CNA_SOKOL_API can currently reach (see that option's own
             // configure-time warning), so the flag is unconditional here.
-#ifdef CNA_BACKEND_SOKOL
+#ifdef CNA_RENDERER_SOKOL
             windowFlags |= SDL_WINDOW_OPENGL;
 #endif
 
-#ifdef CNA_BACKEND_DILIGENT
+#ifdef CNA_RENDERER_DILIGENT
             // Diligent picks its concrete device type (D3D12/Vulkan/D3D11/OpenGL) at RUNTIME, after
-            // this window already exists -- but unlike CNA_BACKEND_BGFX's identical problem below,
+            // this window already exists -- but unlike CNA_RENDERER_BGFX's identical problem below,
             // SDL3 rejects a window created with BOTH SDL_WINDOW_VULKAN and SDL_WINDOW_OPENGL set
             // ("Conflicting window graphics flags specified"), so only one can be requested.
             //
             // DILIGENT-57: this used to re-parse CNA_DILIGENT_DEVICE with its own narrow
             // "opengl"/"gl"-only check, silently disagreeing with
-            // DiligentGraphicsBackend::ParseDeviceTypeOverride()'s own full alias set (gles, vk,
+            // DiligentRenderer::ParseDeviceTypeOverride()'s own full alias set (gles, vk,
             // dx11/direct3d11, dx12/direct3d12, ...) -- e.g. CNA_DILIGENT_DEVICE=gles created a
-            // Vulkan-flagged window here, then DiligentGraphicsBackend::TryCreateDevice() correctly
+            // Vulkan-flagged window here, then DiligentRenderer::TryCreateDevice() correctly
             // resolved "gles" to OpenGL and failed with "the specified window isn't an OpenGL
             // window". Calling the SAME shared parser here closes that gap for every alias.
             //
@@ -187,11 +187,11 @@ namespace Microsoft::Xna::Framework::Graphics
             // tries every candidate and reports each failure, but a Vulkan/OpenGL crossing specifically
             // is a known, explicitly documented limitation (plan_diligent.md DILIGENT-57), not a
             // silently broken promise: recreating the window mid-construction would need
-            // DiligentGraphicsBackend to own (not just borrow) it, a larger change out of this
+            // DiligentRenderer to own (not just borrow) it, a larger change out of this
             // task's scope.
             windowFlags |= [] {
-                using CNA::Internal::Backends::Diligent::DiligentDeviceType;
-                using CNA::Internal::Backends::Diligent::ParseDeviceTypeOverride;
+                using CNA::Internal::Renderers::Diligent::DiligentDeviceType;
+                using CNA::Internal::Renderers::Diligent::ParseDeviceTypeOverride;
 
                 const char* override = SDL_getenv("CNA_DILIGENT_DEVICE");
                 const std::vector<DiligentDeviceType> resolved =
@@ -202,12 +202,12 @@ namespace Microsoft::Xna::Framework::Graphics
             }();
 #endif
 
-#ifdef CNA_BACKEND_METAL
+#ifdef CNA_RENDERER_METAL
             windowFlags |= SDL_WINDOW_METAL | SDL_WINDOW_HIGH_PIXEL_DENSITY;
 #endif
 
-#ifdef CNA_BACKEND_BGFX
-            const auto rendererType = CNA::Internal::Backends::Bgfx::Detail::ResolveRendererType(
+#ifdef CNA_RENDERER_BGFX
+            const auto rendererType = CNA::Internal::Renderers::Bgfx::Detail::ResolveRendererType(
                 SDL_getenv("CNA_BGFX_RENDERER"));
             switch (rendererType)
             {
@@ -226,15 +226,15 @@ namespace Microsoft::Xna::Framework::Graphics
             }
 #endif
 
-#ifdef CNA_BACKEND_LLGL
+#ifdef CNA_RENDERER_LLGL
             // LLGL picks its renderer module at runtime, so the window flag has to follow that
-            // decision rather than the compile-time backend choice. Only the OpenGL module needs
+            // decision rather than the compile-time renderer choice. Only the OpenGL module needs
             // one: it creates a GL context on this very window, which therefore has to have been
             // created with a visual that can carry one. LLGL's Vulkan module builds its surface
             // from the native window handle alone and needs no SDL flag at all -- which is just as
             // well, since SDL refuses to create a window that is both.
-            if (CNA::Internal::Backends::Llgl::Detail::RendererModuleNeedsOpenGLWindow(
-                    CNA::Internal::Backends::Llgl::Detail::ResolveRendererModule()))
+            if (CNA::Internal::Renderers::Llgl::Detail::RendererModuleNeedsOpenGLWindow(
+                    CNA::Internal::Renderers::Llgl::Detail::ResolveRendererModule()))
             {
                 windowFlags |= SDL_WINDOW_OPENGL;
             }
@@ -260,7 +260,7 @@ namespace Microsoft::Xna::Framework::Graphics
     )
         : window_(nullptr),
           ownsWindow_(false),
-          backend_(nullptr),
+          renderer_(nullptr),
           viewport_(),
           currentVertexBuffer_(nullptr),
           currentIndexBuffer_(nullptr),
@@ -283,12 +283,12 @@ namespace Microsoft::Xna::Framework::Graphics
 #endif
 
         // plan_headless.md design decision 2 / plan_software.md design decision 4 / plan_stub.md
-        // design decision 1: the Headless, Software, and Stub backends never create a real window
+        // design decision 1: the Headless, Software, and Stub renderers never create a real window
         // and never touch SDL's video subsystem at all, so all three can run in CI containers with
         // no display server present -- not just a headless-but-present one.
-#if !defined(CNA_BACKEND_HEADLESS) && !defined(CNA_BACKEND_SOFTWARE) && !defined(CNA_BACKEND_STUB)
+#if !defined(CNA_RENDERER_HEADLESS) && !defined(CNA_RENDERER_SOFTWARE) && !defined(CNA_RENDERER_STUB)
         // PresentationParameters::HeadlessEXT is the runtime opt-in equivalent of the compile-time
-        // guard above: a backend that normally wants a window (D3D12) can be asked for a genuinely
+        // guard above: a renderer that normally wants a window (D3D12) can be asked for a genuinely
         // off-screen device instead. Skipping SDL_INIT_VIDEO is the point -- it is what lets such a
         // device run with no display server at all, not merely without a visible window.
         if (!presentationParameters_.getHeadlessEXTProperty())
@@ -306,12 +306,12 @@ namespace Microsoft::Xna::Framework::Graphics
 
         createOrAttachWindow();
         applyPresentationParametersToWindow();
-        createBackend();
+        createRenderer();
         UpdateViewportFromWindow();
 
         // Task 896/955: blendState_/depthStencilState_/rasterizerState_ above were only ever
-        // set as C++-level fields, never pushed to the backend's actual GPU state — every
-        // backend started from its own hardcoded internal default (e.g. EasyGL's depth test is
+        // set as C++-level fields, never pushed to the renderer's actual GPU state — every
+        // renderer started from its own hardcoded internal default (e.g. EasyGL's depth test is
         // plain OpenGL, which defaults to disabled, until something explicitly enables it) until
         // a game explicitly set one of these 3 state properties itself. Real FNA's own
         // GraphicsDevice constructor does exactly this same 3-line sync unconditionally
@@ -319,10 +319,10 @@ namespace Microsoft::Xna::Framework::Graphics
         // DepthStencilState.Default; RasterizerState = RasterizerState.CullCounterClockwise;") —
         // Task 896 ported only the 3rd line; this now ports the other 2 as well, matching FNA.
         setBlendStateProperty(blendState_);
-        // A 2D-only backend has no native depth/stencil state to initialize. Skipping this one
-        // constructor-time synchronization lets such a backend reject every later public state
+        // A 2D-only renderer has no native depth/stencil state to initialize. Skipping this one
+        // constructor-time synchronization lets such a renderer reject every later public state
         // assignment consistently, instead of needing a special first-call exception.
-        if (backend_->SupportsDepthStencil())
+        if (renderer_->SupportsDepthStencil())
             setDepthStencilStateProperty(depthStencilState_);
         setRasterizerStateProperty(rasterizerState_);
     }
@@ -359,11 +359,11 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::setViewportProperty(const Viewport& value)
     {
-        if (backend_)
-            backend_->SetViewport(value.getXProperty(), value.getYProperty(),
+        if (renderer_)
+            renderer_->SetViewport(value.getXProperty(), value.getYProperty(),
                                    value.getWidthProperty(), value.getHeightProperty(),
                                    value.getMinDepthProperty(), value.getMaxDepthProperty());
-        // Commit the public cache only after the native/backend operation succeeds.  In particular,
+        // Commit the public cache only after the native/renderer operation succeeds.  In particular,
         // D3D9's checked SetViewport path may reject a bad/lost device; retaining the old viewport
         // prevents CNA from claiming the failed dimensions are active.
         viewport_ = value;
@@ -398,15 +398,15 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::Clear(float r, float g, float b, float a)
     {
-        if (backend_ != nullptr)
+        if (renderer_ != nullptr)
         {
-            backend_->Clear(r, g, b, a);
+            renderer_->Clear(r, g, b, a);
         }
     }
 
     void GraphicsDevice::Clear(ClearOptions options, const Color& color, float depth, int stencil)
     {
-        if (backend_ == nullptr)
+        if (renderer_ == nullptr)
         {
             return;
         }
@@ -423,7 +423,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // one SupportsDepthStencil()/HasRealDepthBuffer() answer and reduced a target with no depth
         // to ClearOptions::Target, silently deleting Stencil too. That made GDI's real standalone
         // CPU stencil plane unreachable through the public GraphicsDevice API. Ask for each aspect
-        // independently and mask only the unsupported flag. Combined depth/stencil backends retain
+        // independently and mask only the unsupported flag. Combined depth/stencil renderers retain
         // their prior behavior through the interface's compatibility defaults.
         bool hasRealDepthBuffer = false;
         bool hasRealStencilBuffer = false;
@@ -431,7 +431,7 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             // REMED-GFX-142: a bound RenderTargetCube has to be asked too. This branch only ever
             // recognized RenderTarget2D, so a cube binding fell through to `rt == nullptr` and
-            // both attachment flags were silently dropped, on every backend, whatever depth
+            // both attachment flags were silently dropped, on every renderer, whatever depth
             // format the cube actually had. SetRenderTargets already asks both target kinds (see
             // its own `IsRenderTarget2D()` branch); this is the same question at the other call
             // site.
@@ -443,11 +443,11 @@ namespace Microsoft::Xna::Framework::Graphics
                 const DepthFormat depthFormat = cube->getDepthStencilFormatProperty();
                 const bool depthFormatRequested = depthFormat != DepthFormat::None;
                 const bool stencilFormatRequested = depthFormat == DepthFormat::Depth24Stencil8;
-                const auto* cubeBackend = cube->GetRenderTargetCubeBackend();
+                const auto* cubeRenderer = cube->GetRenderTargetCubeRenderer();
                 hasRealDepthBuffer =
-                    cubeBackend && cubeBackend->HasRealDepthBuffer(depthFormatRequested);
+                    cubeRenderer && cubeRenderer->HasRealDepthBuffer(depthFormatRequested);
                 hasRealStencilBuffer =
-                    cubeBackend && cubeBackend->HasRealStencilBuffer(stencilFormatRequested);
+                    cubeRenderer && cubeRenderer->HasRealStencilBuffer(stencilFormatRequested);
             }
             else
             {
@@ -455,16 +455,16 @@ namespace Microsoft::Xna::Framework::Graphics
                     rt ? rt->getDepthStencilFormatProperty() : DepthFormat::None;
                 const bool depthFormatRequested = depthFormat != DepthFormat::None;
                 const bool stencilFormatRequested = depthFormat == DepthFormat::Depth24Stencil8;
-                const auto* rtBackend = rt ? rt->GetRenderTargetBackend() : nullptr;
-                hasRealDepthBuffer = rtBackend && rtBackend->HasRealDepthBuffer(depthFormatRequested);
+                const auto* rtRenderer = rt ? rt->GetRenderTargetRenderer() : nullptr;
+                hasRealDepthBuffer = rtRenderer && rtRenderer->HasRealDepthBuffer(depthFormatRequested);
                 hasRealStencilBuffer =
-                    rtBackend && rtBackend->HasRealStencilBuffer(stencilFormatRequested);
+                    rtRenderer && rtRenderer->HasRealStencilBuffer(stencilFormatRequested);
             }
         }
         else
         {
-            hasRealDepthBuffer = backend_->SupportsDepthBuffer();
-            hasRealStencilBuffer = backend_->SupportsStencilBuffer();
+            hasRealDepthBuffer = renderer_->SupportsDepthBuffer();
+            hasRealStencilBuffer = renderer_->SupportsStencilBuffer();
         }
         if (!hasRealDepthBuffer)
         {
@@ -483,37 +483,37 @@ namespace Microsoft::Xna::Framework::Graphics
         const bool clearTarget  = hasClearFlag(options, ClearOptions::Target);
         const bool clearDepth   = hasClearFlag(options, ClearOptions::DepthBuffer);
         // Task 871: ClearOptions::Stencil was previously entirely ignored here -- neither checked
-        // against `options` nor threaded through to any backend, so a requested stencil clear
-        // silently did nothing on every backend.
+        // against `options` nor threaded through to any renderer, so a requested stencil clear
+        // silently did nothing on every renderer.
         const bool clearStencil = hasClearFlag(options, ClearOptions::Stencil);
 
         if (clearTarget && clearDepth && clearStencil)
         {
-            backend_->ClearColorDepthAndStencil(r, g, b, a, depth, stencil);
+            renderer_->ClearColorDepthAndStencil(r, g, b, a, depth, stencil);
         }
         else if (clearTarget && clearDepth)
         {
-            backend_->ClearColorAndDepth(r, g, b, a, depth);
+            renderer_->ClearColorAndDepth(r, g, b, a, depth);
         }
         else if (clearTarget && clearStencil)
         {
-            backend_->ClearColorAndStencil(r, g, b, a, stencil);
+            renderer_->ClearColorAndStencil(r, g, b, a, stencil);
         }
         else if (clearDepth && clearStencil)
         {
-            backend_->ClearDepthAndStencil(depth, stencil);
+            renderer_->ClearDepthAndStencil(depth, stencil);
         }
         else if (clearTarget)
         {
-            backend_->Clear(r, g, b, a);
+            renderer_->Clear(r, g, b, a);
         }
         else if (clearDepth)
         {
-            backend_->ClearDepth(depth);
+            renderer_->ClearDepth(depth);
         }
         else if (clearStencil)
         {
-            backend_->ClearStencil(stencil);
+            renderer_->ClearStencil(stencil);
         }
     }
 
@@ -527,9 +527,9 @@ namespace Microsoft::Xna::Framework::Graphics
         if (renderTargetBound_)
             throw System::InvalidOperationException("Cannot present while render targets are bound");
 
-        if (backend_ != nullptr)
+        if (renderer_ != nullptr)
         {
-            backend_->Present();
+            renderer_->Present();
             UpdateViewportFromWindow();
         }
     }
@@ -550,8 +550,8 @@ namespace Microsoft::Xna::Framework::Graphics
         DeviceResetting.Raise(this, System::EventArgs::Empty);
 
         PresentationParameters appliedPresentationParameters = presentationParameters.Clone();
-        if (backend_ != nullptr)
-            NormalizeAppliedPresentationFormats(*backend_, appliedPresentationParameters);
+        if (renderer_ != nullptr)
+            NormalizeAppliedPresentationFormats(*renderer_, appliedPresentationParameters);
         presentationParameters_ = appliedPresentationParameters;
         if (adapter != nullptr)
         {
@@ -569,12 +569,12 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             applyPresentationParametersToWindow();
 
-            if (backend_ != nullptr)
-                backend_->SetVirtualResolution(virtualWidth_, virtualHeight_);
+            if (renderer_ != nullptr)
+                renderer_->SetVirtualResolution(virtualWidth_, virtualHeight_);
         }
         catch (...)
         {
-            // REMED-GFX-029: a backend resize is a failed Reset, not a partially successful one.
+            // REMED-GFX-029: a renderer resize is a failed Reset, not a partially successful one.
             // Restore all public presentation bookkeeping before rethrowing the original native
             // diagnostic. Viewport/scissor, active target, and depth state have not been touched
             // yet at this point. The DX3 transaction guarantees its native A surface set is still
@@ -602,28 +602,28 @@ namespace Microsoft::Xna::Framework::Graphics
             std::rethrow_exception(resizeFailure);
         }
 
-        if (backend_ != nullptr)
+        if (renderer_ != nullptr)
         {
-            // Task 902: reconfigure the backend's actual MSAA sample count in place, mirroring
+            // Task 902: reconfigure the renderer's actual MSAA sample count in place, mirroring
             // FNA's own PresentationParameters.MultiSampleCount = FNA3D_GetMaxMultiSampleCount(...)
             // write-back of the real, device-clamped value after FNA3D_ResetBackbuffer().
-            const int appliedMultiSampleCount = backend_->ApplyMultiSampleCount(
+            const int appliedMultiSampleCount = renderer_->ApplyMultiSampleCount(
                 presentationParameters_.getMultiSampleCountProperty());
             presentationParameters_.setMultiSampleCountProperty(appliedMultiSampleCount);
 
             // Previously missing: this Reset() overload never forwarded PresentationInterval to
-            // the backend, unlike SetPresentationParameters()'s own identical field -- meaning
+            // the renderer, unlike SetPresentationParameters()'s own identical field -- meaning
             // GraphicsDeviceManager.SynchronizeWithVerticalRetrace/ApplyChanges() (which always
             // goes through this path, not SetPresentationParameters()) never actually reached
-            // IGraphicsBackend::SetSwapInterval() on any backend. Matches SetPresentationParameters()'s
+            // IGraphicsRenderer::SetSwapInterval() on any renderer. Matches SetPresentationParameters()'s
             // own forwarding exactly.
-            backend_->SetSwapInterval(toSwapInterval(presentationParameters_.getPresentationIntervalProperty()));
+            renderer_->SetSwapInterval(toSwapInterval(presentationParameters_.getPresentationIntervalProperty()));
 
-            // plan_dx9.md D9-30/D9-33: same "actually reach the backend" rationale as
+            // plan_dx9.md D9-30/D9-33: same "actually reach the renderer" rationale as
             // ApplyMultiSampleCount above, for back-buffer/depth-stencil format and fullscreen --
-            // needed because Game commonly constructs this GraphicsDevice (and its backend) with
+            // needed because Game commonly constructs this GraphicsDevice (and its renderer) with
             // default PresentationParameters before GraphicsDeviceManager.ApplyChanges() ever runs.
-            backend_->UpdatePresentationFormatEXT(
+            renderer_->UpdatePresentationFormatEXT(
                 static_cast<int>(presentationParameters_.getBackBufferFormatProperty()),
                 static_cast<int>(presentationParameters_.getDepthStencilFormatProperty()),
                 presentationParameters_.getIsFullScreenProperty());
@@ -688,17 +688,17 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::SetDepthTestEnabled(bool enabled)
     {
-        if (backend_ != nullptr) backend_->SetDepthTestEnabled(enabled);
+        if (renderer_ != nullptr) renderer_->SetDepthTestEnabled(enabled);
     }
 
     void GraphicsDevice::SetBlendEnabled(bool enabled)
     {
-        if (backend_ != nullptr) backend_->SetBlendEnabled(enabled);
+        if (renderer_ != nullptr) renderer_->SetBlendEnabled(enabled);
     }
 
     void GraphicsDevice::SetDepthWriteEnabled(bool enabled)
     {
-        if (backend_ != nullptr) backend_->SetDepthWriteEnabled(enabled);
+        if (renderer_ != nullptr) renderer_->SetDepthWriteEnabled(enabled);
     }
 
     void GraphicsDevice::SetGraphicsProfileEXT(GraphicsProfile profile)
@@ -822,7 +822,7 @@ namespace Microsoft::Xna::Framework::Graphics
     }
 
     void GraphicsDevice::FillVertexStreamBindings(
-        CNA::Internal::Backends::GpuDrawParams& p, int foldedOffset,
+        CNA::Internal::Renderers::GpuDrawParams& p, int foldedOffset,
         bool allowLegacyEmptyDeclarationFallback) const
     {
         p.vertexStreamCount = 0;
@@ -830,12 +830,12 @@ namespace Microsoft::Xna::Framework::Graphics
 
         // REMED-GFX-233: the NOXNA VertexBuffer(device, count) convenience constructor has an
         // intentionally empty declaration. Its typed SetData overload still uploads a real,
-        // backend-known packed stride, but there is no declared stride to put in a stream tuple.
+        // renderer-known packed stride, but there is no declared stride to put in a stream tuple.
         // Describing that one legacy buffer as a zero-stride stream makes a stream-aware CPU
         // reader fetch record zero for every vertex, producing a degenerate triangle. Keep this
         // exact single, per-vertex, empty-declaration shape on the pre-REMED-GFX-201 contract: the
         // Draw*PrimitivesEx `vb` argument is authoritative and vertexStreamCount==0 selects its
-        // backend upload stride. FoldedVertexStreamOffset() has already carried any binding offset
+        // renderer upload stride. FoldedVertexStreamOffset() has already carried any binding offset
         // through vertexStart/baseVertex. Nonzero declarations and every multi-stream shape keep
         // the immutable stream-array path below unchanged.
         if (allowLegacyEmptyDeclarationFallback && currentVertexBuffers_.size() == 1)
@@ -855,18 +855,18 @@ namespace Microsoft::Xna::Framework::Graphics
             currentVertexBuffers_[0].getVertexBufferProperty() != currentVertexBuffer_)
         {
             // Same pre-VertexBufferBinding contract as FoldedVertexStreamOffset(): describe the
-            // one bound buffer so a backend never has to fall back to reading public state.
+            // one bound buffer so a renderer never has to fall back to reading public state.
             if (currentVertexBuffer_ == nullptr)
                 return;
             auto& only = p.vertexStreams[0];
             only.slot = 0;
-            only.buffer = &currentVertexBuffer_->GetBackend();
+            only.buffer = &currentVertexBuffer_->GetRenderer();
             only.strideInBytes =
                 currentVertexBuffer_->getVertexDeclarationProperty().getVertexStrideProperty();
             only.combinedByteBase = 0;
             only.vertexOffset = 0;
             only.instanceFrequency = 0;
-            only.vertexCount = currentVertexBuffer_->GetBackend().GetVertexCount();
+            only.vertexCount = currentVertexBuffer_->GetRenderer().GetVertexCount();
             p.vertexStreamCount = 1;
             p.combinedVertexStride = only.strideInBytes;
             return;
@@ -874,7 +874,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
         const int bindingCount = std::min<int>(
             static_cast<int>(currentVertexBuffers_.size()),
-            CNA::Internal::Backends::kMaxVertexStreams);
+            CNA::Internal::Renderers::kMaxVertexStreams);
         int combinedByteBase = 0;
         // REMED-GFX-201: XNA composes the bound declarations by SEMANTIC, not by position. FNA3D's
         // drivers walk the bindings in slot order tracking every (usage, usageIndex) pair already
@@ -923,11 +923,11 @@ namespace Microsoft::Xna::Framework::Graphics
 
             auto& stream = p.vertexStreams[static_cast<std::size_t>(p.vertexStreamCount)];
             stream.slot = slot;
-            stream.buffer = &buffer->GetBackend();
+            stream.buffer = &buffer->GetRenderer();
             stream.strideInBytes =
                 buffer->getVertexDeclarationProperty().getVertexStrideProperty();
             stream.instanceFrequency = binding.getInstanceFrequencyProperty();
-            stream.vertexCount = buffer->GetBackend().GetVertexCount();
+            stream.vertexCount = buffer->GetRenderer().GetVertexCount();
             if (stream.instanceFrequency == 0)
             {
                 stream.combinedByteBase = combinedByteBase;
@@ -947,25 +947,25 @@ namespace Microsoft::Xna::Framework::Graphics
     }
 
     void GraphicsDevice::ValidateVertexStreamCapability(
-        const CNA::Internal::Backends::GpuDrawParams& p) const
+        const CNA::Internal::Renderers::GpuDrawParams& p) const
     {
-        const bool multipleVertexStreams = CNA::Internal::Backends::HasMultipleVertexStreams(p);
+        const bool multipleVertexStreams = CNA::Internal::Renderers::HasMultipleVertexStreams(p);
         const bool multipleInstanceStreams =
-            CNA::Internal::Backends::HasMultipleInstanceStreams(p);
+            CNA::Internal::Renderers::HasMultipleInstanceStreams(p);
         if (!multipleVertexStreams && !multipleInstanceStreams)
-            return;   // the classic shapes every backend has always had
+            return;   // the classic shapes every renderer has always had
 
-        const int perVertexStreams = CNA::Internal::Backends::PerVertexStreamCount(p);
-        const int instanceStreams = CNA::Internal::Backends::InstanceStreamCount(p);
+        const int perVertexStreams = CNA::Internal::Renderers::PerVertexStreamCount(p);
+        const int instanceStreams = CNA::Internal::Renderers::InstanceStreamCount(p);
 
-        if (!backend_->SupportsCapability(CNA::GraphicsCapability::MultiStreamVertexInput))
+        if (!renderer_->SupportsCapability(CNA::GraphicsCapability::MultiStreamVertexInput))
         {
             // REMED-GFX-202: one capability, one message, whichever rate is over-wide -- both are
-            // the same native gap (the backend derives its input elements from a single byte
+            // the same native gap (the renderer derives its input elements from a single byte
             // stride and binds one per-instance buffer), and both would otherwise be rendered from
             // a subset of the bound streams.
             throw System::NotSupportedException(
-                "This graphics backend cannot bind more than one VertexBufferBinding of the same "
+                "This graphics renderer cannot bind more than one VertexBufferBinding of the same "
                 "input rate (" + std::to_string(perVertexStreams) + " per-vertex and " +
                 std::to_string(instanceStreams) + " per-instance streams were bound). Query "
                 "GraphicsDevice::SupportsCapability(GraphicsCapability::MultiStreamVertexInput) "
@@ -973,11 +973,11 @@ namespace Microsoft::Xna::Framework::Graphics
                 "per-instance streams.");
         }
 
-        const int backendMaximum = backend_->GetMaxVertexStreams();
-        if (perVertexStreams > backendMaximum || instanceStreams > backendMaximum)
+        const int rendererMaximum = renderer_->GetMaxVertexStreams();
+        if (perVertexStreams > rendererMaximum || instanceStreams > rendererMaximum)
         {
             throw System::NotSupportedException(
-                "This graphics backend supports at most " + std::to_string(backendMaximum) +
+                "This graphics renderer supports at most " + std::to_string(rendererMaximum) +
                 " vertex streams of one input rate, but " + std::to_string(perVertexStreams) +
                 " per-vertex and " + std::to_string(instanceStreams) +
                 " per-instance streams were bound. The binding list is never silently truncated.");
@@ -985,7 +985,7 @@ namespace Microsoft::Xna::Framework::Graphics
     }
 
     void GraphicsDevice::ValidateInstanceStreamRanges(
-        const CNA::Internal::Backends::GpuDrawParams& p, int instanceCount) const
+        const CNA::Internal::Renderers::GpuDrawParams& p, int instanceCount) const
     {
         for (int i = 0; i < p.vertexStreamCount; ++i)
         {
@@ -1011,7 +1011,7 @@ namespace Microsoft::Xna::Framework::Graphics
     }
 
     void GraphicsDevice::ValidateVertexStreamRanges(
-        const CNA::Internal::Backends::GpuDrawParams& p,
+        const CNA::Internal::Renderers::GpuDrawParams& p,
         int startElement,
         int elementCount,
         const char* parameterName,
@@ -1040,9 +1040,9 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::DrawPrimitives(PrimitiveType primitiveType, int vertexStart, int primitiveCount)
     {
-        if (backend_ == nullptr)
+        if (renderer_ == nullptr)
             return;
-        backend_->Ensure3DSupported("GraphicsDevice::DrawPrimitives");
+        renderer_->Ensure3DSupported("GraphicsDevice::DrawPrimitives");
 
         if (currentVertexBuffer_ == nullptr)
             throw std::runtime_error("GraphicsDevice::DrawPrimitives: no vertex buffer is bound.");
@@ -1055,11 +1055,11 @@ namespace Microsoft::Xna::Framework::Graphics
 
         // REMED-GFX-113: vertexStart is a vertex-element offset and primitiveCount fixes the exact
         // topology-derived vertex count, so the pair [vertexStart, vertexStart + consumed) must fit
-        // the bound buffer. Rejecting here keeps every backend's native binding an exact range: a
+        // the bound buffer. Rejecting here keeps every renderer's native binding an exact range: a
         // request that leaves the buffer is an error, never a silently clamped or widened draw.
         const int consumedVertexCount =
             CheckedPrimitiveElementCount(primitiveType, primitiveCount);
-        const int availableVertexCount = currentVertexBuffer_->GetBackend().GetVertexCount();
+        const int availableVertexCount = currentVertexBuffer_->GetRenderer().GetVertexCount();
         // REMED-GFX-200: the binding offset moves the whole range, so it is part of what must fit.
         const int bindingVertexOffset = CurrentVertexBufferOffset();
         if (bindingVertexOffset > availableVertexCount ||
@@ -1073,12 +1073,12 @@ namespace Microsoft::Xna::Framework::Graphics
 
         Matrix world, view, proj;
         ExtractMatrices(currentEffect_, world, view, proj);
-        CNA::Internal::Backends::GpuDrawParams p;
+        CNA::Internal::Renderers::GpuDrawParams p;
         currentEffect_->FillGpuDrawParams(p);
         // REMED-GFX-200: VertexBufferBinding.VertexOffset shifts a stream's base, and vertexStart
         // indexes that stream -- both in vertex elements, against that stream's own declaration
         // stride. Their sum is the first record fetched, so carrying the shared part in vertexStart
-        // delivers it through the element-unit channel every backend already converts to bytes
+        // delivers it through the element-unit channel every renderer already converts to bytes
         // exactly once with the stream's own stride, and applies each of the two exactly once.
         // p.vertexBufferOffset is deliberately left at 0 here: it is the instanced route's separate
         // per-stream channel (REMED-GFX-122/123), and populating it as well would double the offset.
@@ -1090,14 +1090,14 @@ namespace Microsoft::Xna::Framework::Graphics
         FillVertexStreamBindings(
             p, foldedOffset, /*allowLegacyEmptyDeclarationFallback=*/true);
         // Argument validation first, capability second: an out-of-range request is wrong on every
-        // backend, so it must report the same public exception everywhere.
+        // renderer, so it must report the same public exception everywhere.
         ValidateVertexStreamRanges(
             p, p.vertexStart, consumedVertexCount,
             "primitiveCount", std::to_string(primitiveCount));
         ValidateVertexStreamCapability(p);
-        applySamplerStatesToBackend();
-        backend_->DrawPrimitivesEx(
-            currentVertexBuffer_->GetBackend(),
+        applySamplerStatesToRenderer();
+        renderer_->DrawPrimitivesEx(
+            currentVertexBuffer_->GetRenderer(),
             world, view, proj,
             primitiveType, primitiveCount, p
         );
@@ -1112,9 +1112,9 @@ namespace Microsoft::Xna::Framework::Graphics
         int primitiveCount
     )
     {
-        if (backend_ == nullptr)
+        if (renderer_ == nullptr)
             return;
-        backend_->Ensure3DSupported("GraphicsDevice::DrawIndexedPrimitives");
+        renderer_->Ensure3DSupported("GraphicsDevice::DrawIndexedPrimitives");
 
         if (currentVertexBuffer_ == nullptr)
             throw std::runtime_error("GraphicsDevice::DrawIndexedPrimitives: no vertex buffer is bound.");
@@ -1133,7 +1133,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
         const int consumedIndexCount =
             CheckedPrimitiveElementCount(primitiveType, primitiveCount);
-        const int availableIndexCount = currentIndexBuffer_->GetBackend().GetIndexCount();
+        const int availableIndexCount = currentIndexBuffer_->GetRenderer().GetIndexCount();
         if (startIndex > availableIndexCount ||
             consumedIndexCount > availableIndexCount - startIndex)
         {
@@ -1142,7 +1142,7 @@ namespace Microsoft::Xna::Framework::Graphics
                 "The requested primitive range exceeds the bound index buffer.");
         }
 
-        const int availableVertexCount = currentVertexBuffer_->GetBackend().GetVertexCount();
+        const int availableVertexCount = currentVertexBuffer_->GetRenderer().GetVertexCount();
         // REMED-GFX-200: the binding offset moves the whole declared range, so it is part of what
         // must fit -- exactly as DrawInstancedPrimitives below has counted it since REMED-GFX-118.
         const int bindingVertexOffset = CurrentVertexBufferOffset();
@@ -1158,13 +1158,13 @@ namespace Microsoft::Xna::Framework::Graphics
 
         Matrix world, view, proj;
         ExtractMatrices(currentEffect_, world, view, proj);
-        CNA::Internal::Backends::GpuDrawParams p;
+        CNA::Internal::Renderers::GpuDrawParams p;
         currentEffect_->FillGpuDrawParams(p);
         p.startIndex = startIndex;
         // REMED-GFX-200: VertexBufferBinding.VertexOffset shifts a stream's base and baseVertex is
         // added to every decoded index -- both in vertex elements, against that stream's own
         // declaration stride. Their sum is what each decoded index is displaced by, so carrying the
-        // shared part in baseVertex delivers it through the element-unit channel every backend
+        // shared part in baseVertex delivers it through the element-unit channel every renderer
         // already converts to bytes exactly once with the stream's own stride, and applies each of
         // the two exactly once. startIndex is untouched: it selects index elements, which a binding
         // offset never displaces. p.vertexBufferOffset stays 0 here -- see DrawPrimitives above.
@@ -1183,10 +1183,10 @@ namespace Microsoft::Xna::Framework::Graphics
             p, p.baseVertex + minVertexIndex, numVertices,
             "numVertices", std::to_string(numVertices));
         ValidateVertexStreamCapability(p);
-        applySamplerStatesToBackend();
-        backend_->DrawIndexedPrimitivesEx(
-            currentVertexBuffer_->GetBackend(),
-            currentIndexBuffer_->GetBackend(),
+        applySamplerStatesToRenderer();
+        renderer_->DrawIndexedPrimitivesEx(
+            currentVertexBuffer_->GetRenderer(),
+            currentIndexBuffer_->GetRenderer(),
             world, view, proj,
             primitiveType, primitiveCount, p
         );
@@ -1202,9 +1202,9 @@ namespace Microsoft::Xna::Framework::Graphics
         int instanceCount
     )
     {
-        if (backend_ == nullptr)
+        if (renderer_ == nullptr)
             return;
-        backend_->Ensure3DSupported("GraphicsDevice::DrawInstancedPrimitives");
+        renderer_->Ensure3DSupported("GraphicsDevice::DrawInstancedPrimitives");
 
         if (currentVertexBuffer_ == nullptr)
             throw std::runtime_error(
@@ -1229,12 +1229,12 @@ namespace Microsoft::Xna::Framework::Graphics
         // DrawIndexedPrimitives above -- startIndex is an index-element offset, primitiveCount
         // fixes the exact topology-derived index count, baseVertex is added to every decoded index
         // once, and minVertexIndex/numVertices declare the referenced vertex window. Rejecting a
-        // request that leaves either bound buffer here keeps every backend's native binding an
+        // request that leaves either bound buffer here keeps every renderer's native binding an
         // exact range instead of a silently widened or clamped draw. instanceCount is validated
         // independently: it never widens or narrows the geometry range.
         const int consumedIndexCount =
             CheckedPrimitiveElementCount(primitiveType, primitiveCount);
-        const int availableIndexCount = currentIndexBuffer_->GetBackend().GetIndexCount();
+        const int availableIndexCount = currentIndexBuffer_->GetRenderer().GetIndexCount();
         if (startIndex > availableIndexCount ||
             consumedIndexCount > availableIndexCount - startIndex)
         {
@@ -1246,7 +1246,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // REMED-GFX-200: the same binding-0 rule the ordinary routes above now use, single-sourced.
         const int vertexBufferOffset = CurrentVertexBufferOffset();
 
-        const int availableVertexCount = currentVertexBuffer_->GetBackend().GetVertexCount();
+        const int availableVertexCount = currentVertexBuffer_->GetRenderer().GetVertexCount();
         if (vertexBufferOffset > availableVertexCount ||
             baseVertex > availableVertexCount - vertexBufferOffset ||
             minVertexIndex > availableVertexCount - vertexBufferOffset - baseVertex ||
@@ -1259,7 +1259,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
         Matrix world, view, proj;
         ExtractMatrices(currentEffect_, world, view, proj);
-        CNA::Internal::Backends::GpuDrawParams p;
+        CNA::Internal::Renderers::GpuDrawParams p;
         currentEffect_->FillGpuDrawParams(p);
         p.instanceCount = instanceCount;
         p.startIndex    = startIndex;
@@ -1270,9 +1270,9 @@ namespace Microsoft::Xna::Framework::Graphics
         // the same helper -- FNA prepares one binding array for all three draw routes and an
         // instance stream is simply an entry whose InstanceFrequency is greater than zero.
         //
-        // The fold is 0 here, unlike the ordinary routes. Those fold because their backends have
+        // The fold is 0 here, unlike the ordinary routes. Those fold because their renderers have
         // no per-binding native offset channel at all and must deliver the offset through
-        // vertexStart/baseVertex (REMED-GFX-200); this route's backends do have one -- that is what
+        // vertexStart/baseVertex (REMED-GFX-200); this route's renderers do have one -- that is what
         // REMED-GFX-122/123 built -- so every stream carries its whole public VertexOffset and
         // baseVertex stays exactly the caller's value. That is also FNA3D's own D3D11 driver:
         // `offset = binding.vertexOffset * stride` per binding, with `BaseVertexLocation`
@@ -1284,16 +1284,16 @@ namespace Microsoft::Xna::Framework::Graphics
         // The declared window is [baseVertex + minVertexIndex, + numVertices) in every per-vertex
         // stream's own elements, and every per-instance stream owes one record per complete
         // frequency-sized group of instances. Argument validation precedes the capability gate for
-        // the reason DrawPrimitives states: an out-of-range request is wrong on every backend.
+        // the reason DrawPrimitives states: an out-of-range request is wrong on every renderer.
         ValidateVertexStreamRanges(
             p, baseVertex + minVertexIndex, numVertices,
             "numVertices", std::to_string(numVertices));
         ValidateInstanceStreamRanges(p, instanceCount);
         ValidateVertexStreamCapability(p);
-        applySamplerStatesToBackend();
-        backend_->DrawInstancedPrimitivesEx(
-            currentVertexBuffer_->GetBackend(),
-            currentIndexBuffer_->GetBackend(),
+        applySamplerStatesToRenderer();
+        renderer_->DrawInstancedPrimitivesEx(
+            currentVertexBuffer_->GetRenderer(),
+            currentIndexBuffer_->GetRenderer(),
             world, view, proj,
             primitiveType, primitiveCount, instanceCount, p
         );
@@ -1306,9 +1306,9 @@ namespace Microsoft::Xna::Framework::Graphics
         int primitiveCount
     )
     {
-        if (backend_ == nullptr)
+        if (renderer_ == nullptr)
             return;
-        backend_->Ensure3DSupported("GraphicsDevice::DrawUserPrimitives");
+        renderer_->Ensure3DSupported("GraphicsDevice::DrawUserPrimitives");
 
         if (currentEffect_ == nullptr)
             throw std::runtime_error("GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
@@ -1339,13 +1339,13 @@ namespace Microsoft::Xna::Framework::Graphics
             packed[i] = CNA::Internal::Graphics::Pack(vertices[i]);
 
         // Upload to a temporary vertex buffer and draw.
-        auto tmpVb = backend_->CreateVertexBuffer(totalVerts);
+        auto tmpVb = renderer_->CreateVertexBuffer(totalVerts);
         tmpVb->SetData(packed.data(), totalVerts, sizeof(GpuVertex));
 
         Matrix world, view, proj;
         ExtractMatrices(currentEffect_, world, view, proj);
-        applySamplerStatesToBackend();
-        backend_->DrawColoredPrimitives(*tmpVb, world, view, proj, primitiveType, primitiveCount);
+        applySamplerStatesToRenderer();
+        renderer_->DrawColoredPrimitives(*tmpVb, world, view, proj, primitiveType, primitiveCount);
     }
 
     void GraphicsDevice::DrawUserIndexedPrimitives(
@@ -1358,9 +1358,9 @@ namespace Microsoft::Xna::Framework::Graphics
         int primitiveCount
     )
     {
-        if (backend_ == nullptr)
+        if (renderer_ == nullptr)
             return;
-        backend_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
+        renderer_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
 
         if (currentEffect_ == nullptr)
             throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
@@ -1394,16 +1394,16 @@ namespace Microsoft::Xna::Framework::Graphics
         for (int i = 0; i < indexCount; ++i)
             indexCopy[i] = indices[i];
 
-        auto tmpVb = backend_->CreateVertexBuffer(numVertices);
+        auto tmpVb = renderer_->CreateVertexBuffer(numVertices);
         tmpVb->SetData(packed.data(), numVertices, sizeof(GpuVertex));
 
-        auto tmpIb = backend_->CreateIndexBuffer16(indexCount);
+        auto tmpIb = renderer_->CreateIndexBuffer16(indexCount);
         tmpIb->SetData16(indexCopy.data(), indexCount);
 
         Matrix world, view, proj;
         ExtractMatrices(currentEffect_, world, view, proj);
-        applySamplerStatesToBackend();
-        backend_->DrawIndexedColoredPrimitives(*tmpVb, *tmpIb, world, view, proj, primitiveType, primitiveCount);
+        applySamplerStatesToRenderer();
+        renderer_->DrawIndexedColoredPrimitives(*tmpVb, *tmpIb, world, view, proj, primitiveType, primitiveCount);
     }
 
     // -----------------------------------------------------------------------
@@ -1538,8 +1538,8 @@ namespace Microsoft::Xna::Framework::Graphics
     void GraphicsDevice::DrawUserPrimitives(PrimitiveType type,
                                             const VertexPositionColor* data, int offset, int count)
     {
-        if (!backend_) return;
-        backend_->Ensure3DSupported("GraphicsDevice::DrawUserPrimitives");
+        if (!renderer_) return;
+        renderer_->Ensure3DSupported("GraphicsDevice::DrawUserPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(count, "primitiveCount");
@@ -1549,21 +1549,21 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             packed[i] = CNA::Internal::Graphics::Pack(data[offset + i]);
         }
-        auto vb = backend_->CreateVertexBuffer(n);
+        auto vb = renderer_->CreateVertexBuffer(n);
         vb->SetData(packed, n, sizeof(GpuVPC));
         { Matrix world, view, proj;
           ExtractMatrices(currentEffect_, world, view, proj);
-          CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
-          applySamplerStatesToBackend();
-          backend_->DrawPrimitivesEx(*vb, world, view, proj, type, count, p); }
+          CNA::Internal::Renderers::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+          applySamplerStatesToRenderer();
+          renderer_->DrawPrimitivesEx(*vb, world, view, proj, type, count, p); }
     }
 
     // DrawUserPrimitives — VertexPositionTexture
     void GraphicsDevice::DrawUserPrimitives(PrimitiveType type,
                                             const VertexPositionTexture* data, int offset, int count)
     {
-        if (!backend_) return;
-        backend_->Ensure3DSupported("GraphicsDevice::DrawUserPrimitives");
+        if (!renderer_) return;
+        renderer_->Ensure3DSupported("GraphicsDevice::DrawUserPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(count, "primitiveCount");
@@ -1573,21 +1573,21 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             packed[i] = CNA::Internal::Graphics::Pack(data[offset + i]);
         }
-        auto vb = backend_->CreateVertexBuffer(n);
+        auto vb = renderer_->CreateVertexBuffer(n);
         vb->SetData(packed, n, sizeof(GpuVPT));
         { Matrix world, view, proj;
           ExtractMatrices(currentEffect_, world, view, proj);
-          CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
-          applySamplerStatesToBackend();
-          backend_->DrawPrimitivesEx(*vb, world, view, proj, type, count, p); }
+          CNA::Internal::Renderers::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+          applySamplerStatesToRenderer();
+          renderer_->DrawPrimitivesEx(*vb, world, view, proj, type, count, p); }
     }
 
     // DrawUserPrimitives — VertexPositionColorTexture
     void GraphicsDevice::DrawUserPrimitives(PrimitiveType type,
                                             const VertexPositionColorTexture* data, int offset, int count)
     {
-        if (!backend_) return;
-        backend_->Ensure3DSupported("GraphicsDevice::DrawUserPrimitives");
+        if (!renderer_) return;
+        renderer_->Ensure3DSupported("GraphicsDevice::DrawUserPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(count, "primitiveCount");
@@ -1597,21 +1597,21 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             packed[i] = CNA::Internal::Graphics::Pack(data[offset + i]);
         }
-        auto vb = backend_->CreateVertexBuffer(n);
+        auto vb = renderer_->CreateVertexBuffer(n);
         vb->SetData(packed, n, sizeof(GpuVPCT));
         { Matrix world, view, proj;
           ExtractMatrices(currentEffect_, world, view, proj);
-          CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
-          applySamplerStatesToBackend();
-          backend_->DrawPrimitivesEx(*vb, world, view, proj, type, count, p); }
+          CNA::Internal::Renderers::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+          applySamplerStatesToRenderer();
+          renderer_->DrawPrimitivesEx(*vb, world, view, proj, type, count, p); }
     }
 
     // DrawUserPrimitives — VertexPositionNormalTexture
     void GraphicsDevice::DrawUserPrimitives(PrimitiveType type,
                                             const VertexPositionNormalTexture* data, int offset, int count)
     {
-        if (!backend_) return;
-        backend_->Ensure3DSupported("GraphicsDevice::DrawUserPrimitives");
+        if (!renderer_) return;
+        renderer_->Ensure3DSupported("GraphicsDevice::DrawUserPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(count, "primitiveCount");
@@ -1621,13 +1621,13 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             packed[i] = CNA::Internal::Graphics::Pack(data[offset + i]);
         }
-        auto vb = backend_->CreateVertexBuffer(n);
+        auto vb = renderer_->CreateVertexBuffer(n);
         vb->SetData(packed, n, sizeof(GpuVPNT));
         { Matrix world, view, proj;
           ExtractMatrices(currentEffect_, world, view, proj);
-          CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
-          applySamplerStatesToBackend();
-          backend_->DrawPrimitivesEx(*vb, world, view, proj, type, count, p); }
+          CNA::Internal::Renderers::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+          applySamplerStatesToRenderer();
+          renderer_->DrawPrimitivesEx(*vb, world, view, proj, type, count, p); }
     }
 
     // DrawUserPrimitives — explicit VertexDeclaration (FNA second generic overload)
@@ -1641,8 +1641,8 @@ namespace Microsoft::Xna::Framework::Graphics
                                             int primitiveCount,
                                             const VertexDeclaration& vertexDeclaration)
     {
-        if (!backend_) return;
-        backend_->Ensure3DSupported("GraphicsDevice::DrawUserPrimitives");
+        if (!renderer_) return;
+        renderer_->Ensure3DSupported("GraphicsDevice::DrawUserPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primitiveCount, "primitiveCount");
@@ -1652,14 +1652,14 @@ namespace Microsoft::Xna::Framework::Graphics
         // Apply vertexOffset in bytes then upload n vertices worth of raw data.
         const auto* src = static_cast<const std::uint8_t*>(vertexData)
                           + static_cast<std::ptrdiff_t>(vertexOffset) * stride;
-        auto vb = backend_->CreateVertexBuffer(n);
+        auto vb = renderer_->CreateVertexBuffer(n);
         vb->SetVertexDeclaration(vertexDeclaration);
         vb->SetData(src, n, static_cast<std::size_t>(stride));
         Matrix world, view, proj;
         ExtractMatrices(currentEffect_, world, view, proj);
-        CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
-        applySamplerStatesToBackend();
-        backend_->DrawPrimitivesEx(*vb, world, view, proj, type, primitiveCount, p);
+        CNA::Internal::Renderers::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+        applySamplerStatesToRenderer();
+        renderer_->DrawPrimitivesEx(*vb, world, view, proj, type, primitiveCount, p);
     }
 
     // The object-to-stream conversion for the explicit-declaration draws. It runs here and only
@@ -1671,8 +1671,8 @@ namespace Microsoft::Xna::Framework::Graphics
         const VertexDeclaration& vertexDeclaration)
     {
         using Stream = CNA::Internal::Graphics::VertexStream<VertexT>;
-        if (!backend_) return;
-        backend_->Ensure3DSupported("GraphicsDevice::DrawUserPrimitives");
+        if (!renderer_) return;
+        renderer_->Ensure3DSupported("GraphicsDevice::DrawUserPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primitiveCount, "primitiveCount");
@@ -1756,8 +1756,8 @@ namespace Microsoft::Xna::Framework::Graphics
                                                    const VertexPositionColor* vertices, int vOffset, int numVerts,
                                                    const std::uint16_t* indices, int iOffset, int primCount)
     {
-        if (!backend_) return;
-        backend_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
+        if (!renderer_) return;
+        renderer_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primCount, "primitiveCount");
@@ -1769,23 +1769,23 @@ namespace Microsoft::Xna::Framework::Graphics
         }
         auto* idx = static_cast<std::uint16_t*>(AcquireUserIndexScratch(static_cast<std::size_t>(ic) * sizeof(std::uint16_t)));
         std::copy(indices + iOffset, indices + iOffset + ic, idx);
-        auto vb = backend_->CreateVertexBuffer(numVerts);
+        auto vb = renderer_->CreateVertexBuffer(numVerts);
         vb->SetData(packed, numVerts, sizeof(GpuVPC));
-        auto ib = backend_->CreateIndexBuffer16(ic);
+        auto ib = renderer_->CreateIndexBuffer16(ic);
         ib->SetData16(idx, ic);
         { Matrix world, view, proj;
           ExtractMatrices(currentEffect_, world, view, proj);
-          CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
-          applySamplerStatesToBackend();
-          backend_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p); }
+          CNA::Internal::Renderers::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+          applySamplerStatesToRenderer();
+          renderer_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p); }
     }
 
     void GraphicsDevice::DrawUserIndexedPrimitives(PrimitiveType type,
                                                    const VertexPositionTexture* vertices, int vOffset, int numVerts,
                                                    const std::uint16_t* indices, int iOffset, int primCount)
     {
-        if (!backend_) return;
-        backend_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
+        if (!renderer_) return;
+        renderer_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primCount, "primitiveCount");
@@ -1797,23 +1797,23 @@ namespace Microsoft::Xna::Framework::Graphics
         }
         auto* idx = static_cast<std::uint16_t*>(AcquireUserIndexScratch(static_cast<std::size_t>(ic) * sizeof(std::uint16_t)));
         std::copy(indices + iOffset, indices + iOffset + ic, idx);
-        auto vb = backend_->CreateVertexBuffer(numVerts);
+        auto vb = renderer_->CreateVertexBuffer(numVerts);
         vb->SetData(packed, numVerts, sizeof(GpuVPT));
-        auto ib = backend_->CreateIndexBuffer16(ic);
+        auto ib = renderer_->CreateIndexBuffer16(ic);
         ib->SetData16(idx, ic);
         { Matrix world, view, proj;
           ExtractMatrices(currentEffect_, world, view, proj);
-          CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
-          applySamplerStatesToBackend();
-          backend_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p); }
+          CNA::Internal::Renderers::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+          applySamplerStatesToRenderer();
+          renderer_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p); }
     }
 
     void GraphicsDevice::DrawUserIndexedPrimitives(PrimitiveType type,
                                                    const VertexPositionColorTexture* vertices, int vOffset, int numVerts,
                                                    const std::uint16_t* indices, int iOffset, int primCount)
     {
-        if (!backend_) return;
-        backend_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
+        if (!renderer_) return;
+        renderer_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primCount, "primitiveCount");
@@ -1825,23 +1825,23 @@ namespace Microsoft::Xna::Framework::Graphics
         }
         auto* idx = static_cast<std::uint16_t*>(AcquireUserIndexScratch(static_cast<std::size_t>(ic) * sizeof(std::uint16_t)));
         std::copy(indices + iOffset, indices + iOffset + ic, idx);
-        auto vb = backend_->CreateVertexBuffer(numVerts);
+        auto vb = renderer_->CreateVertexBuffer(numVerts);
         vb->SetData(packed, numVerts, sizeof(GpuVPCT));
-        auto ib = backend_->CreateIndexBuffer16(ic);
+        auto ib = renderer_->CreateIndexBuffer16(ic);
         ib->SetData16(idx, ic);
         { Matrix world, view, proj;
           ExtractMatrices(currentEffect_, world, view, proj);
-          CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
-          applySamplerStatesToBackend();
-          backend_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p); }
+          CNA::Internal::Renderers::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+          applySamplerStatesToRenderer();
+          renderer_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p); }
     }
 
     void GraphicsDevice::DrawUserIndexedPrimitives(PrimitiveType type,
                                                    const VertexPositionNormalTexture* vertices, int vOffset, int numVerts,
                                                    const std::uint16_t* indices, int iOffset, int primCount)
     {
-        if (!backend_) return;
-        backend_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
+        if (!renderer_) return;
+        renderer_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primCount, "primitiveCount");
@@ -1853,15 +1853,15 @@ namespace Microsoft::Xna::Framework::Graphics
         }
         auto* idx = static_cast<std::uint16_t*>(AcquireUserIndexScratch(static_cast<std::size_t>(ic) * sizeof(std::uint16_t)));
         std::copy(indices + iOffset, indices + iOffset + ic, idx);
-        auto vb = backend_->CreateVertexBuffer(numVerts);
+        auto vb = renderer_->CreateVertexBuffer(numVerts);
         vb->SetData(packed, numVerts, sizeof(GpuVPNT));
-        auto ib = backend_->CreateIndexBuffer16(ic);
+        auto ib = renderer_->CreateIndexBuffer16(ic);
         ib->SetData16(idx, ic);
         { Matrix world, view, proj;
           ExtractMatrices(currentEffect_, world, view, proj);
-          CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
-          applySamplerStatesToBackend();
-          backend_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p); }
+          CNA::Internal::Renderers::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+          applySamplerStatesToRenderer();
+          renderer_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p); }
     }
 
     // DrawUserIndexedPrimitives — 32-bit index overloads
@@ -1870,8 +1870,8 @@ namespace Microsoft::Xna::Framework::Graphics
                                                    const VertexPositionColor* vertices, int vOffset, int numVerts,
                                                    const std::uint32_t* indices, int iOffset, int primCount)
     {
-        if (!backend_) return;
-        backend_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
+        if (!renderer_) return;
+        renderer_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primCount, "primitiveCount");
@@ -1883,23 +1883,23 @@ namespace Microsoft::Xna::Framework::Graphics
         }
         auto* idx = static_cast<std::uint32_t*>(AcquireUserIndexScratch(static_cast<std::size_t>(ic) * sizeof(std::uint32_t)));
         std::copy(indices + iOffset, indices + iOffset + ic, idx);
-        auto vb = backend_->CreateVertexBuffer(numVerts);
+        auto vb = renderer_->CreateVertexBuffer(numVerts);
         vb->SetData(packed, numVerts, sizeof(GpuVPC));
-        auto ib = backend_->CreateIndexBuffer32(ic);
+        auto ib = renderer_->CreateIndexBuffer32(ic);
         ib->SetData32(idx, ic);
         { Matrix world, view, proj;
           ExtractMatrices(currentEffect_, world, view, proj);
-          CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
-          applySamplerStatesToBackend();
-          backend_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p); }
+          CNA::Internal::Renderers::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+          applySamplerStatesToRenderer();
+          renderer_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p); }
     }
 
     void GraphicsDevice::DrawUserIndexedPrimitives(PrimitiveType type,
                                                    const VertexPositionTexture* vertices, int vOffset, int numVerts,
                                                    const std::uint32_t* indices, int iOffset, int primCount)
     {
-        if (!backend_) return;
-        backend_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
+        if (!renderer_) return;
+        renderer_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primCount, "primitiveCount");
@@ -1911,23 +1911,23 @@ namespace Microsoft::Xna::Framework::Graphics
         }
         auto* idx = static_cast<std::uint32_t*>(AcquireUserIndexScratch(static_cast<std::size_t>(ic) * sizeof(std::uint32_t)));
         std::copy(indices + iOffset, indices + iOffset + ic, idx);
-        auto vb = backend_->CreateVertexBuffer(numVerts);
+        auto vb = renderer_->CreateVertexBuffer(numVerts);
         vb->SetData(packed, numVerts, sizeof(GpuVPT));
-        auto ib = backend_->CreateIndexBuffer32(ic);
+        auto ib = renderer_->CreateIndexBuffer32(ic);
         ib->SetData32(idx, ic);
         { Matrix world, view, proj;
           ExtractMatrices(currentEffect_, world, view, proj);
-          CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
-          applySamplerStatesToBackend();
-          backend_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p); }
+          CNA::Internal::Renderers::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+          applySamplerStatesToRenderer();
+          renderer_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p); }
     }
 
     void GraphicsDevice::DrawUserIndexedPrimitives(PrimitiveType type,
                                                    const VertexPositionColorTexture* vertices, int vOffset, int numVerts,
                                                    const std::uint32_t* indices, int iOffset, int primCount)
     {
-        if (!backend_) return;
-        backend_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
+        if (!renderer_) return;
+        renderer_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primCount, "primitiveCount");
@@ -1939,23 +1939,23 @@ namespace Microsoft::Xna::Framework::Graphics
         }
         auto* idx = static_cast<std::uint32_t*>(AcquireUserIndexScratch(static_cast<std::size_t>(ic) * sizeof(std::uint32_t)));
         std::copy(indices + iOffset, indices + iOffset + ic, idx);
-        auto vb = backend_->CreateVertexBuffer(numVerts);
+        auto vb = renderer_->CreateVertexBuffer(numVerts);
         vb->SetData(packed, numVerts, sizeof(GpuVPCT));
-        auto ib = backend_->CreateIndexBuffer32(ic);
+        auto ib = renderer_->CreateIndexBuffer32(ic);
         ib->SetData32(idx, ic);
         { Matrix world, view, proj;
           ExtractMatrices(currentEffect_, world, view, proj);
-          CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
-          applySamplerStatesToBackend();
-          backend_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p); }
+          CNA::Internal::Renderers::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+          applySamplerStatesToRenderer();
+          renderer_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p); }
     }
 
     void GraphicsDevice::DrawUserIndexedPrimitives(PrimitiveType type,
                                                    const VertexPositionNormalTexture* vertices, int vOffset, int numVerts,
                                                    const std::uint32_t* indices, int iOffset, int primCount)
     {
-        if (!backend_) return;
-        backend_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
+        if (!renderer_) return;
+        renderer_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primCount, "primitiveCount");
@@ -1967,15 +1967,15 @@ namespace Microsoft::Xna::Framework::Graphics
         }
         auto* idx = static_cast<std::uint32_t*>(AcquireUserIndexScratch(static_cast<std::size_t>(ic) * sizeof(std::uint32_t)));
         std::copy(indices + iOffset, indices + iOffset + ic, idx);
-        auto vb = backend_->CreateVertexBuffer(numVerts);
+        auto vb = renderer_->CreateVertexBuffer(numVerts);
         vb->SetData(packed, numVerts, sizeof(GpuVPNT));
-        auto ib = backend_->CreateIndexBuffer32(ic);
+        auto ib = renderer_->CreateIndexBuffer32(ic);
         ib->SetData32(idx, ic);
         { Matrix world, view, proj;
           ExtractMatrices(currentEffect_, world, view, proj);
-          CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
-          applySamplerStatesToBackend();
-          backend_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p); }
+          CNA::Internal::Renderers::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+          applySamplerStatesToRenderer();
+          renderer_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p); }
     }
 
     // DrawUserIndexedPrimitives — explicit VertexDeclaration (FNA second generic overloads)
@@ -1988,8 +1988,8 @@ namespace Microsoft::Xna::Framework::Graphics
                                                    const std::uint16_t* indexData, int iOffset, int primCount,
                                                    const VertexDeclaration& vd)
     {
-        if (!backend_) return;
-        backend_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
+        if (!renderer_) return;
+        renderer_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primCount, "primitiveCount");
@@ -2000,18 +2000,18 @@ namespace Microsoft::Xna::Framework::Graphics
                                 "indexOffset", "primitiveCount");
         const auto* src  = static_cast<const std::uint8_t*>(vertexData)
                            + static_cast<std::ptrdiff_t>(vOffset) * stride;
-        auto vb = backend_->CreateVertexBuffer(numVerts);
+        auto vb = renderer_->CreateVertexBuffer(numVerts);
         vb->SetVertexDeclaration(vd);
         vb->SetData(src, numVerts, static_cast<std::size_t>(stride));
         auto* idx = static_cast<std::uint16_t*>(AcquireUserIndexScratch(static_cast<std::size_t>(ic) * sizeof(std::uint16_t)));
         std::copy(indexData + iOffset, indexData + iOffset + ic, idx);
-        auto ib = backend_->CreateIndexBuffer16(ic);
+        auto ib = renderer_->CreateIndexBuffer16(ic);
         ib->SetData16(idx, ic);
         Matrix world, view, proj;
         ExtractMatrices(currentEffect_, world, view, proj);
-        CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
-        applySamplerStatesToBackend();
-        backend_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p);
+        CNA::Internal::Renderers::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+        applySamplerStatesToRenderer();
+        renderer_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p);
     }
 
     void GraphicsDevice::DrawUserIndexedPrimitives(PrimitiveType type,
@@ -2019,8 +2019,8 @@ namespace Microsoft::Xna::Framework::Graphics
                                                    const std::uint32_t* indexData, int iOffset, int primCount,
                                                    const VertexDeclaration& vd)
     {
-        if (!backend_) return;
-        backend_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
+        if (!renderer_) return;
+        renderer_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primCount, "primitiveCount");
@@ -2031,18 +2031,18 @@ namespace Microsoft::Xna::Framework::Graphics
                                 "indexOffset", "primitiveCount");
         const auto* src  = static_cast<const std::uint8_t*>(vertexData)
                            + static_cast<std::ptrdiff_t>(vOffset) * stride;
-        auto vb = backend_->CreateVertexBuffer(numVerts);
+        auto vb = renderer_->CreateVertexBuffer(numVerts);
         vb->SetVertexDeclaration(vd);
         vb->SetData(src, numVerts, static_cast<std::size_t>(stride));
         auto* idx = static_cast<std::uint32_t*>(AcquireUserIndexScratch(static_cast<std::size_t>(ic) * sizeof(std::uint32_t)));
         std::copy(indexData + iOffset, indexData + iOffset + ic, idx);
-        auto ib = backend_->CreateIndexBuffer32(ic);
+        auto ib = renderer_->CreateIndexBuffer32(ic);
         ib->SetData32(idx, ic);
         Matrix world, view, proj;
         ExtractMatrices(currentEffect_, world, view, proj);
-        CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
-        applySamplerStatesToBackend();
-        backend_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p);
+        CNA::Internal::Renderers::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+        applySamplerStatesToRenderer();
+        renderer_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p);
     }
 
     // The indexed object-to-stream conversion. Like its non-indexed sibling it packs the source
@@ -2056,8 +2056,8 @@ namespace Microsoft::Xna::Framework::Graphics
         const VertexDeclaration& vertexDeclaration)
     {
         using Stream = CNA::Internal::Graphics::VertexStream<VertexT>;
-        if (!backend_) return;
-        backend_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
+        if (!renderer_) return;
+        renderer_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primitiveCount, "primitiveCount");
@@ -2160,36 +2160,36 @@ namespace Microsoft::Xna::Framework::Graphics
                                              vertexDeclaration);
     }
 
-    CNA::Internal::Backends::IGraphicsBackend& GraphicsDevice::GetBackend() const
+    CNA::Internal::Renderers::IGraphicsRenderer& GraphicsDevice::GetRenderer() const
     {
-        if (backend_ == nullptr)
+        if (renderer_ == nullptr)
         {
-            throw std::runtime_error("GraphicsDevice backend is not available.");
+            throw std::runtime_error("GraphicsDevice renderer is not available.");
         }
 
-        return *backend_;
+        return *renderer_;
     }
 
     bool GraphicsDevice::SupportsCapability(CNA::GraphicsCapability capability) const
     {
-        return GetBackend().SupportsCapability(capability);
+        return GetRenderer().SupportsCapability(capability);
     }
 
     int GraphicsDevice::GetMaxTextureDimension() const
     {
-        return GetBackend().GetMaxTextureDimension();
+        return GetRenderer().GetMaxTextureDimension();
     }
 
     void GraphicsDevice::SetUnsupported3DGraphicsCallBehavior(
         CNA::Unsupported3DGraphicsCallBehavior behavior)
     {
-        GetBackend().SetUnsupported3DGraphicsCallBehavior(behavior);
+        GetRenderer().SetUnsupported3DGraphicsCallBehavior(behavior);
     }
 
     CNA::Unsupported3DGraphicsCallBehavior
     GraphicsDevice::GetUnsupported3DGraphicsCallBehavior() const
     {
-        return GetBackend().GetUnsupported3DGraphicsCallBehavior();
+        return GetRenderer().GetUnsupported3DGraphicsCallBehavior();
     }
 
     void GraphicsDevice::SetCurrentEffect(Effect* effect)
@@ -2206,54 +2206,54 @@ namespace Microsoft::Xna::Framework::Graphics
     void GraphicsDevice::SetPresentationParameters(const PresentationParameters& pp)
     {
         PresentationParameters applied = pp.Clone();
-        if (backend_)
+        if (renderer_)
         {
-            NormalizeAppliedPresentationFormats(*backend_, applied);
-#ifdef CNA_BACKEND_GDI
+            NormalizeAppliedPresentationFormats(*renderer_, applied);
+#ifdef CNA_RENDERER_GDI
             // This NOXNA store-only path does not reconfigure MSAA. Keep reporting the currently
             // active GDI sample storage instead of echoing a request that was never applied.
-            applied.setMultiSampleCountProperty(backend_->GetMultiSampleCount());
+            applied.setMultiSampleCountProperty(renderer_->GetMultiSampleCount());
 #endif
-            backend_->SetSwapInterval(toSwapInterval(pp.getPresentationIntervalProperty()));
+            renderer_->SetSwapInterval(toSwapInterval(pp.getPresentationIntervalProperty()));
         }
         presentationParameters_ = applied;
     }
 
-    void GraphicsDevice::RecreateBackendForMultiSampleCount(int multiSampleCount)
+    void GraphicsDevice::RecreateRendererForMultiSampleCount(int multiSampleCount)
     {
         presentationParameters_.setMultiSampleCountProperty(multiSampleCount);
-        backend_.reset();
-        createBackend();
+        renderer_.reset();
+        createRenderer();
         UpdateViewportFromWindow();
     }
 
     SDL_Renderer* GraphicsDevice::GetRendererInternal() const
     {
-        return backend_ != nullptr ? backend_->GetRendererInternal() : nullptr;
+        return renderer_ != nullptr ? renderer_->GetRendererInternal() : nullptr;
     }
 
     SDL_Window* GraphicsDevice::GetWindowInternal() const
     {
-        return backend_ != nullptr ? backend_->GetWindowInternal() : window_;
+        return renderer_ != nullptr ? renderer_->GetWindowInternal() : window_;
     }
 
     void GraphicsDevice::createOrAttachWindow()
     {
-#if defined(CNA_BACKEND_HEADLESS) || defined(CNA_BACKEND_SOFTWARE) || defined(CNA_BACKEND_STUB)
+#if defined(CNA_RENDERER_HEADLESS) || defined(CNA_RENDERER_SOFTWARE) || defined(CNA_RENDERER_STUB)
         // No real window, ever -- see the constructor's matching guard above.
-        // GraphicsBackendCreateArgs::window stays nullptr; UpdateViewportFromWindow() already
-        // falls back to the backend's own GetViewportSize() first and only touches window_ if
+        // GraphicsRendererCreateArgs::window stays nullptr; UpdateViewportFromWindow() already
+        // falls back to the renderer's own GetViewportSize() first and only touches window_ if
         // that yields nothing, and applyPresentationParametersToWindow() already early-returns
         // when window_ is null, so neither needs its own guard.
         window_ = nullptr;
         ownsWindow_ = false;
 #else
-        // Runtime opt-in, same effect as the compile-time branch above. Only backends that can
+        // Runtime opt-in, same effect as the compile-time branch above. Only renderers that can
         // genuinely run without a swap chain support this (D3D12 today) -- see
-        // PresentationParameters::getHeadlessEXTProperty()'s own doc comment. A backend that cannot
+        // PresentationParameters::getHeadlessEXTProperty()'s own doc comment. A renderer that cannot
         // (D3D11's constructor always creates a swap chain; EasyGL's GL context is bound to a
         // window) will throw from its own constructor, which is the honest outcome: it is a real
-        // "this backend cannot do that" error, not something GraphicsDevice should paper over.
+        // "this renderer cannot do that" error, not something GraphicsDevice should paper over.
         if (presentationParameters_.getHeadlessEXTProperty())
         {
             window_ = nullptr;
@@ -2278,25 +2278,25 @@ namespace Microsoft::Xna::Framework::Graphics
             return;
         }
 
-        SDL_WindowFlags windowFlags = getBackendWindowFlags();
+        SDL_WindowFlags windowFlags = getRendererWindowFlags();
 
         // OPENGL1 requests a legacy/compatibility (non-ES) GL context, which on X11 goes through
         // GLX rather than EasyGL's EGL path (SDL_GL_CONTEXT_PROFILE_MASK=ES steers SDL to EGL,
         // where the framebuffer config can still be chosen at SDL_GL_CreateContext() time). GLX
         // fixes the window's X visual -- and therefore its depth/stencil buffer bits -- at
         // SDL_CreateWindow() time; setting SDL_GL_STENCIL_SIZE afterward (as
-        // OpenGL1GraphicsBackend's own constructor also does, for self-containment) is too late
+        // OpenGL1Renderer's own constructor also does, for self-containment) is too late
         // and silently produces a 0-bit stencil buffer, making every DepthStencilState.
         // StencilEnable a permanent no-op. Confirmed empirically: GL_STENCIL_BITS read back 0
         // without this block and 8 with it. Must run before SDL_CreateWindow() below.
-#if defined(CNA_BACKEND_OPENGL1)
+#if defined(CNA_RENDERER_OPENGL1)
         SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
         SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
         SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
         // plan_opengl1.md item 22 (EasyGL parity): same GLX-visual-fixed-at-window-creation-time
         // constraint as the depth/stencil attributes above -- SDL_GL_MULTISAMPLEBUFFERS/SAMPLES
         // must also be requested before SDL_CreateWindow() below, or the window's X visual is
-        // fixed without a multisample buffer and OpenGL1GraphicsBackend's own constructor (which
+        // fixed without a multisample buffer and OpenGL1Renderer's own constructor (which
         // runs after the window already exists) can never recover it.
         if (presentationParameters_.getMultiSampleCountProperty() > 1)
         {
@@ -2342,77 +2342,77 @@ namespace Microsoft::Xna::Framework::Graphics
     void GraphicsDevice::SetContextRecoveryEnabled(bool enabled)
     {
         contextRecoveryEnabled_ = enabled;
-        if (backend_)
-            backend_->SetContextRecoveryEnabled(enabled);
+        if (renderer_)
+            renderer_->SetContextRecoveryEnabled(enabled);
     }
 
     void GraphicsDevice::SetStringMarkerEXT(const std::string& marker)
     {
-        if (backend_)
-            backend_->SetStringMarkerEXT(marker.c_str());
+        if (renderer_)
+            renderer_->SetStringMarkerEXT(marker.c_str());
     }
 
-    void GraphicsDevice::createBackend()
+    void GraphicsDevice::createRenderer()
     {
-        GraphicsBackendCreateArgs args;
+        GraphicsRendererCreateArgs args;
         args.window = window_;
         args.virtualWidth = virtualWidth_;
         args.virtualHeight = virtualHeight_;
         args.contextRecoveryEnabled = contextRecoveryEnabled_;
         args.multiSampleCount = presentationParameters_.getMultiSampleCountProperty();
         args.swapInterval = toSwapInterval(presentationParameters_.getPresentationIntervalProperty());
-        // plan_dx9.md D9-30: real presentation-parameter fidelity for backends that need it (D3D9);
-        // every other backend continues to ignore these exactly as before the fields existed.
+        // plan_dx9.md D9-30: real presentation-parameter fidelity for renderers that need it (D3D9);
+        // every other renderer continues to ignore these exactly as before the fields existed.
         args.backBufferFormat = static_cast<int>(presentationParameters_.getBackBufferFormatProperty());
         args.depthStencilFormat = static_cast<int>(presentationParameters_.getDepthStencilFormatProperty());
         args.isFullScreen = presentationParameters_.getIsFullScreenProperty();
         args.graphicsProfile = static_cast<int>(graphicsProfile_);
-        // plan_dx9.md D9-34: forward a REAL, backend-detected device-lost/reset event to this
-        // GraphicsDevice's own public XNA events. Nine of the ten backends never call this.
-        args.deviceEventCallback = [this](CNA::Internal::Backends::BackendDeviceEvent event)
+        // plan_dx9.md D9-34: forward a REAL, renderer-detected device-lost/reset event to this
+        // GraphicsDevice's own public XNA events. Nine of the ten renderers never call this.
+        args.deviceEventCallback = [this](CNA::Internal::Renderers::RendererDeviceEvent event)
         {
             switch (event)
             {
-                case CNA::Internal::Backends::BackendDeviceEvent::Lost:
+                case CNA::Internal::Renderers::RendererDeviceEvent::Lost:
                     deviceStatus_ = GraphicsDeviceStatus::Lost;
                     DeviceLost.Raise(this, System::EventArgs::Empty);
                     break;
-                case CNA::Internal::Backends::BackendDeviceEvent::Resetting:
+                case CNA::Internal::Renderers::RendererDeviceEvent::Resetting:
                     deviceStatus_ = GraphicsDeviceStatus::NotReset;
                     DeviceResetting.Raise(this, System::EventArgs::Empty);
                     break;
-                case CNA::Internal::Backends::BackendDeviceEvent::Reset:
+                case CNA::Internal::Renderers::RendererDeviceEvent::Reset:
                     deviceStatus_ = GraphicsDeviceStatus::Normal;
                     DeviceReset.Raise(this, System::EventArgs::Empty);
                     break;
             }
         };
 
-        backend_ = CreateGraphicsBackend(args);
+        renderer_ = CreateGraphicsRenderer(args);
 
-        if (backend_ != nullptr)
+        if (renderer_ != nullptr)
         {
-            backend_->SetVirtualResolution(virtualWidth_, virtualHeight_);
-            NormalizeAppliedPresentationFormats(*backend_, presentationParameters_);
-#ifdef CNA_BACKEND_GDI
+            renderer_->SetVirtualResolution(virtualWidth_, virtualHeight_);
+            NormalizeAppliedPresentationFormats(*renderer_, presentationParameters_);
+#ifdef CNA_RENDERER_GDI
             // The GDI factory clamps to its one real optional mode (4x) during construction.
             // Surface that result immediately; Reset() already performs the same write-back via
             // ApplyMultiSampleCount(), but direct construction previously retained 2x/8x requests.
             presentationParameters_.setMultiSampleCountProperty(
-                backend_->GetMultiSampleCount());
+                renderer_->GetMultiSampleCount());
 #endif
-            if (!backendStartupNameLogged_)
+            if (!rendererStartupNameLogged_)
             {
-                std::cout << "CNA: graphics backend: "
-                          << CNA::getCurrentGraphicsBackendName() << std::endl;
-                backendStartupNameLogged_ = true;
+                std::cout << "CNA: graphics renderer: "
+                          << CNA::getCurrentGraphicsRendererName() << std::endl;
+                rendererStartupNameLogged_ = true;
             }
         }
     }
 
     void GraphicsDevice::destroyNativeResources()
     {
-        backend_.reset();
+        renderer_.reset();
 
         if (window_ != nullptr)
         {
@@ -2441,9 +2441,9 @@ namespace Microsoft::Xna::Framework::Graphics
         int width = 0;
         int height = 0;
 
-        if (backend_ != nullptr)
+        if (renderer_ != nullptr)
         {
-            backend_->GetViewportSize(width, height);
+            renderer_->GetViewportSize(width, height);
         }
 
         if ((width <= 0 || height <= 0) && window_ != nullptr)
@@ -2456,15 +2456,15 @@ namespace Microsoft::Xna::Framework::Graphics
             return;
         }
 
-        // The PHYSICAL rectangle actually pushed to the backend's GL/GPU viewport -- distinct
+        // The PHYSICAL rectangle actually pushed to the renderer's GL/GPU viewport -- distinct
         // from `width`/`height` above (the LOGICAL size GraphicsDevice.Viewport.Width/Height
-        // exposes to game code). Equal to (0, 0, width, height) for every backend that doesn't
-        // override GetDefaultViewportRect() (i.e. every backend before this method existed, and
-        // every backend except OpenGL2 today) -- only a backend implementing real
+        // exposes to game code). Equal to (0, 0, width, height) for every renderer that doesn't
+        // override GetDefaultViewportRect() (i.e. every renderer before this method existed, and
+        // every renderer except OpenGL2 today) -- only a renderer implementing real
         // Letterbox/Overscan/Stretch returns something else.
         int physX = 0, physY = 0, physWidth = width, physHeight = height;
-        if (backend_)
-            backend_->GetDefaultViewportRect(physX, physY, physWidth, physHeight);
+        if (renderer_)
+            renderer_->GetDefaultViewportRect(physX, physY, physWidth, physHeight);
 
         // Compared against the last size *this method itself* produced, not against
         // viewport_'s current width/height: viewport_ may hold a game-set custom
@@ -2498,12 +2498,12 @@ namespace Microsoft::Xna::Framework::Graphics
 
         // Mutates viewport_'s fields directly (not via setViewportProperty(), to preserve the
         // "compared against lastKnownViewportWidth/Height_, not viewport_" semantics above) --
-        // push the reset value to the backend explicitly (Task 880) so a window resize actually
+        // push the reset value to the renderer explicitly (Task 880) so a window resize actually
         // updates the GPU-side viewport too, not just the C++-side Viewport property. Pushes the
         // PHYSICAL rectangle (physX/Y/Width/Height), not the logical width/height -- see
         // GetDefaultViewportRect()'s own doc comment for why those can legitimately differ.
-        if (backend_)
-            backend_->SetViewport(physX, physY, physWidth, physHeight, 0.0f, 1.0f);
+        if (renderer_)
+            renderer_->SetViewport(physX, physY, physWidth, physHeight, 0.0f, 1.0f);
 
         // A real backbuffer-size change resets both rectangles to the complete new target. Keep
         // the no-size-change early return above so a normal Present() and a same-dimension reset
@@ -2518,12 +2518,12 @@ namespace Microsoft::Xna::Framework::Graphics
             return;
         }
 
-        if (backend_ != nullptr)
+        if (renderer_ != nullptr)
         {
-            backend_->SetVirtualResolution(width, height);
+            renderer_->SetVirtualResolution(width, height);
         }
 
-        // Commit public dimensions only after the backend has accepted its complete replacement
+        // Commit public dimensions only after the renderer has accepted its complete replacement
         // set. A throwing resize therefore cannot make PresentationParameters report dimensions
         // that the live native surfaces do not have.
         virtualWidth_ = width;
@@ -2536,24 +2536,24 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::SetPresentationMode(int mode)
     {
-        if (backend_ != nullptr)
+        if (renderer_ != nullptr)
         {
-            backend_->SetPresentationMode(mode);
+            renderer_->SetPresentationMode(mode);
         }
     }
 
-    void GraphicsDevice::applySamplerStatesToBackend()
+    void GraphicsDevice::applySamplerStatesToRenderer()
     {
-        if (!backend_) return;
+        if (!renderer_) return;
         for (int i = 0; i < SamplerStateCollection::MaxSamplers; ++i)
         {
             const SamplerState& ss = samplerStates_[i];
-            backend_->ApplySamplerState(i,
+            renderer_->ApplySamplerState(i,
                 (int)ss.getFilterProperty(),
                 (int)ss.getAddressUProperty(),
                 (int)ss.getAddressVProperty(),
                 ss.getMaxAnisotropyProperty());
-            backend_->ApplySamplerMipState(i, ss.getMaxMipLevelProperty(),
+            renderer_->ApplySamplerMipState(i, ss.getMaxMipLevelProperty(),
                                            ss.getMipMapLevelOfDetailBiasProperty());
         }
     }
@@ -2567,8 +2567,8 @@ namespace Microsoft::Xna::Framework::Graphics
 
         // Task 902: fullscreen switching may not be available in headless / virtual-display
         // test environments (Xvfb). The PP value is already stored above this call, so a
-        // backend that cannot actually switch fullscreen still has the correct stored state --
-        // matches GraphicsDeviceManager::applyToExistingBackend()'s identical non-fatal handling
+        // renderer that cannot actually switch fullscreen still has the correct stored state --
+        // matches GraphicsDeviceManager::applyToExistingRenderer()'s identical non-fatal handling
         // (Task 224), which this method now supersedes as the single fullscreen-application path.
         const bool fullScreen = presentationParameters_.getIsFullScreenProperty();
         if (!SDL_SetWindowFullscreen(window_, fullScreen))
@@ -2592,7 +2592,7 @@ namespace Microsoft::Xna::Framework::Graphics
             // Xvfb) -- SDL_GetWindowSize()/SDL_GetWindowSizeInPixels() can keep reporting the OLD
             // size for a short window afterward. UpdateViewportFromWindow() (called right after
             // this by every Reset()/ApplyChanges() path) needs the NEW size immediately: it feeds
-            // backend_->SetViewport(), and nothing re-issues that call later purely because the
+            // renderer_->SetViewport(), and nothing re-issues that call later purely because the
             // physical size changed (INTERNAL_OnClientSizeChanged's own re-trigger is keyed off
             // the LOGICAL/virtual viewport size, which does not change across this resize) -- so a
             // stale read here would bake a wrong glViewport-equivalent in for the rest of the
@@ -2611,8 +2611,8 @@ namespace Microsoft::Xna::Framework::Graphics
 
     GraphicsDeviceStatus GraphicsDevice::getGraphicsDeviceStatusProperty() const
     {
-        // plan_dx9.md D9-34: tracks the real backend-reported status via deviceStatus_ (updated by
-        // the deviceEventCallback lambda in createBackend()). Every backend except D3D9 never calls
+        // plan_dx9.md D9-34: tracks the real renderer-reported status via deviceStatus_ (updated by
+        // the deviceEventCallback lambda in createRenderer()). Every renderer except D3D9 never calls
         // that callback, so this stays Normal for them -- identical behavior to before this field
         // existed.
         return deviceStatus_;
@@ -2623,7 +2623,7 @@ namespace Microsoft::Xna::Framework::Graphics
         if (presentationParameters_.getIsFullScreenProperty())
         {
             int w = 0, h = 0;
-            if (backend_) backend_->GetViewportSize(w, h);
+            if (renderer_) renderer_->GetViewportSize(w, h);
             return DisplayMode(w, h, SurfaceFormat::Color);
         }
         return getAdapterProperty().getCurrentDisplayModeProperty();
@@ -2638,17 +2638,17 @@ namespace Microsoft::Xna::Framework::Graphics
     const BlendState& GraphicsDevice::getBlendStateProperty() const { return blendState_; }
     void GraphicsDevice::setBlendStateProperty(const BlendState& value)
     {
-        if (backend_)
+        if (renderer_)
         {
             // REMED-GFX-077: the four per-MRT colour write masks + the coverage sample mask travel
             // alongside the six blend factor/function ordinals (previously dropped here entirely).
-            CNA::Internal::Backends::BlendWriteState writeState;
+            CNA::Internal::Renderers::BlendWriteState writeState;
             writeState.colorWriteChannels[0] = (int)value.getColorWriteChannelsProperty();
             writeState.colorWriteChannels[1] = (int)value.getColorWriteChannels1Property();
             writeState.colorWriteChannels[2] = (int)value.getColorWriteChannels2Property();
             writeState.colorWriteChannels[3] = (int)value.getColorWriteChannels3Property();
             writeState.multiSampleMask = static_cast<unsigned int>(value.getMultiSampleMaskProperty());
-            backend_->ApplyBlendState(
+            renderer_->ApplyBlendState(
                 (int)value.getColorSourceBlendProperty(),
                 (int)value.getAlphaSourceBlendProperty(),
                 (int)value.getColorDestinationBlendProperty(),
@@ -2656,7 +2656,7 @@ namespace Microsoft::Xna::Framework::Graphics
                 (int)value.getColorBlendFunctionProperty(),
                 (int)value.getAlphaBlendFunctionProperty(),
                 writeState);
-            backend_->SetBlendFactor(
+            renderer_->SetBlendFactor(
                 value.getBlendFactorProperty().getRProperty() / 255.0f,
                 value.getBlendFactorProperty().getGProperty() / 255.0f,
                 value.getBlendFactorProperty().getBProperty() / 255.0f,
@@ -2672,9 +2672,9 @@ namespace Microsoft::Xna::Framework::Graphics
     const DepthStencilState& GraphicsDevice::getDepthStencilStateProperty() const { return depthStencilState_; }
     void GraphicsDevice::setDepthStencilStateProperty(const DepthStencilState& value)
     {
-        if (backend_)
+        if (renderer_)
         {
-            backend_->ApplyDepthStencilState(
+            renderer_->ApplyDepthStencilState(
                 value.getDepthBufferEnableProperty(),
                 value.getDepthBufferWriteEnableProperty(),
                 (int)value.getDepthBufferFunctionProperty(),
@@ -2691,10 +2691,10 @@ namespace Microsoft::Xna::Framework::Graphics
                 (int)value.getCounterClockwiseStencilPassProperty(),
                 (int)value.getCounterClockwiseStencilFailProperty(),
                 (int)value.getCounterClockwiseStencilDepthBufferFailProperty());
-            backend_->SetReferenceStencil(value.getReferenceStencilProperty());
+            renderer_->SetReferenceStencil(value.getReferenceStencilProperty());
         }
         // Commit only after both native operations succeed, so the public cache never describes a
-        // depth/stencil configuration that a failed backend update did not install.
+        // depth/stencil configuration that a failed renderer update did not install.
         depthStencilState_ = value;
         referenceStencil_ = value.getReferenceStencilProperty();
     }
@@ -2703,8 +2703,8 @@ namespace Microsoft::Xna::Framework::Graphics
     const RasterizerState& GraphicsDevice::getRasterizerStateProperty() const { return rasterizerState_; }
     void GraphicsDevice::setRasterizerStateProperty(const RasterizerState& value)
     {
-        if (backend_)
-            backend_->ApplyRasterizerState(
+        if (renderer_)
+            renderer_->ApplyRasterizerState(
                 (int)value.getCullModeProperty(),
                 (int)value.getFillModeProperty(),
                 value.getScissorTestEnableProperty(),
@@ -2716,8 +2716,8 @@ namespace Microsoft::Xna::Framework::Graphics
     Rectangle GraphicsDevice::getScissorRectangleProperty() const { return scissorRectangle_; }
     void GraphicsDevice::setScissorRectangleProperty(const Rectangle& value)
     {
-        if (backend_)
-            backend_->SetScissorRect(value.X, value.Y, value.Width, value.Height);
+        if (renderer_)
+            renderer_->SetScissorRect(value.X, value.Y, value.Width, value.Height);
         scissorRectangle_ = value;
     }
 
@@ -2725,8 +2725,8 @@ namespace Microsoft::Xna::Framework::Graphics
     void GraphicsDevice::setBlendFactorProperty(const Color& value)
     {
         blendFactor_ = value;
-        if (backend_)
-            backend_->SetBlendFactor(
+        if (renderer_)
+            renderer_->SetBlendFactor(
                 value.getRProperty() / 255.0f,
                 value.getGProperty() / 255.0f,
                 value.getBProperty() / 255.0f,
@@ -2739,9 +2739,9 @@ namespace Microsoft::Xna::Framework::Graphics
     int GraphicsDevice::getReferenceStencilProperty() const { return referenceStencil_; }
     void GraphicsDevice::setReferenceStencilProperty(int value)
     {
-        if (backend_)
-            backend_->SetReferenceStencil(value);
-        // Match the other state setters: a backend rejection must not leave the public cache
+        if (renderer_)
+            renderer_->SetReferenceStencil(value);
+        // Match the other state setters: a renderer rejection must not leave the public cache
         // describing state that was never installed.
         referenceStencil_ = value;
     }
@@ -2772,14 +2772,14 @@ namespace Microsoft::Xna::Framework::Graphics
             throw std::invalid_argument("data");
 
         // REMED-GFX-165: the read region is derived from the AUTHORITATIVE backbuffer description --
-        // PresentationParameters -- never from the backend's live viewport. A rectangle-less call
+        // PresentationParameters -- never from the renderer's live viewport. A rectangle-less call
         // addresses the COMPLETE logical backbuffer (W x H pixels), independent of any sub-viewport,
-        // scissor, previously bound render target or aspect-scaled/stale drawable size the backend may
-        // currently report. Previously this path sized itself from backend_->GetViewportSize(), which
+        // scissor, previously bound render target or aspect-scaled/stale drawable size the renderer may
+        // currently report. Previously this path sized itself from renderer_->GetViewportSize(), which
         // under the default FixedHeightDynamicWidth presentation mode is height-locked to the virtual
         // resolution and width-scaled by the window's aspect (and, before the window is realised,
         // derived from a stale physical size) -- so on WebGPU and SDL_GPU a correctly sized W x H read
-        // was rejected as "too small" while it was byte-exact on the backends whose viewport happened
+        // was rejected as "too small" while it was byte-exact on the renderers whose viewport happened
         // to equal the backbuffer.
         const int backBufferWidth = presentationParameters_.getBackBufferWidthProperty();
         const int backBufferHeight = presentationParameters_.getBackBufferHeightProperty();
@@ -2809,8 +2809,8 @@ namespace Microsoft::Xna::Framework::Graphics
         if (const char* trace = std::getenv("CNA_BACKBUFFER_READ_TRACE"); trace != nullptr && *trace != '\0')
         {
             int viewportW = -1, viewportH = -1;
-            if (backend_ != nullptr)
-                backend_->GetViewportSize(viewportW, viewportH);
+            if (renderer_ != nullptr)
+                renderer_->GetViewportSize(viewportW, viewportH);
             std::fprintf(stderr,
                          "[GFX-165] GetBackBufferData rect=%d backbuffer=%dx%d viewport=%dx%d "
                          "region=(%d,%d,%dx%d) elementCount=%d startIndex=%d\n",
@@ -2828,7 +2828,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // into a Color(r, g, b, a) to avoid writing into the vtable pointer.
         const int pixelCount = w * h;
         std::vector<uint8_t> buf(static_cast<std::size_t>(pixelCount) * 4);
-        backend_->ReadBackbuffer(x, y, w, h, buf.data());
+        renderer_->ReadBackbuffer(x, y, w, h, buf.data());
         for (int i = 0; i < pixelCount; ++i)
         {
             const uint8_t* p = buf.data() + i * 4;
@@ -2846,8 +2846,8 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (renderTarget && renderTarget->getIsDisposedProperty())
             throw System::ObjectDisposedException(renderTarget->getNameProperty());
-        if (backend_)
-            backend_->SetRenderTarget2D(renderTarget ? renderTarget->GetRenderTargetBackend() : nullptr);
+        if (renderer_)
+            renderer_->SetRenderTarget2D(renderTarget ? renderTarget->GetRenderTargetRenderer() : nullptr);
 
         currentRenderTargets_.clear();
         renderTargetBound_ = (renderTarget != nullptr);
@@ -2869,16 +2869,16 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             // GDI-050: discard every attachment that this target really owns. Depth and stencil
             // are separate because GDI's 2D render target has a standalone stencil plane but no
-            // depth plane. Other backends preserve their combined-attachment behavior through
+            // depth plane. Other renderers preserve their combined-attachment behavior through
             // HasRealStencilBuffer's compatibility default.
             const DepthFormat depthFormat = renderTarget->getDepthStencilFormatProperty();
             const bool depthFormatRequested = depthFormat != DepthFormat::None;
             const bool stencilFormatRequested = depthFormat == DepthFormat::Depth24Stencil8;
-            const auto* rtBackend = renderTarget->GetRenderTargetBackend();
+            const auto* rtRenderer = renderTarget->GetRenderTargetRenderer();
             const bool hasDepthBuffer =
-                rtBackend && rtBackend->HasRealDepthBuffer(depthFormatRequested);
+                rtRenderer && rtRenderer->HasRealDepthBuffer(depthFormatRequested);
             const bool hasStencilBuffer =
-                rtBackend && rtBackend->HasRealStencilBuffer(stencilFormatRequested);
+                rtRenderer && rtRenderer->HasRealStencilBuffer(stencilFormatRequested);
             // REMED-GFX-142: ClearOptions::Stencil belongs here. FNA's own SetRenderTargets ends
             // with Clear(Target | DepthBuffer | Stencil, DiscardColor, Viewport.MaxDepth, 0), and
             // FNA3D documents `preserveTargetContents` as storing the "color/depth/stencil"
@@ -2914,14 +2914,14 @@ namespace Microsoft::Xna::Framework::Graphics
             throw std::invalid_argument("SetRenderTargets: at most " +
                 std::to_string(MAX_RENDERTARGET_BINDINGS) + " render targets may be bound at once.");
 
-#ifdef CNA_BACKEND_D3D9
+#ifdef CNA_RENDERER_D3D9
         // D9-103 follow-up: GraphicsProfile.Reach's own MaxRenderTargets=1 ceiling (D9-100's own
         // table) -- a SEPARATE, lower, software-imposed limit from MAX_RENDERTARGET_BINDINGS
         // above (XNA's own general 4-target ceiling) and from D9-54's own hardware-cap
-        // enforcement inside the backend (NumSimultaneousRTs, which could be higher).
+        // enforcement inside the renderer (NumSimultaneousRTs, which could be higher).
         {
             const int profile = static_cast<int>(graphicsProfile_);
-            const int maxForProfile = CNA::Internal::Backends::D3D9::MaxRenderTargetsForProfileEXT(profile);
+            const int maxForProfile = CNA::Internal::Renderers::D3D9::MaxRenderTargetsForProfileEXT(profile);
             if (static_cast<int>(renderTargets.size()) > maxForProfile)
             {
                 throw System::NotSupportedException(
@@ -2935,9 +2935,9 @@ namespace Microsoft::Xna::Framework::Graphics
 
         if (renderTargets.empty())
         {
-            if (backend_)
-                backend_->SetRenderTargets(nullptr, 0);
-            // The backend transition is checked/transactional on D3D9.  Do not claim the
+            if (renderer_)
+                renderer_->SetRenderTargets(nullptr, 0);
+            // The renderer transition is checked/transactional on D3D9.  Do not claim the
             // backbuffer or its dimensions until that native restoration actually succeeds.
             currentRenderTargets_.clear();
             renderTargetBound_ = false;
@@ -2946,8 +2946,8 @@ namespace Microsoft::Xna::Framework::Graphics
             return;
         }
 
-        // REMED-GFX-096: normalize each public binding into one slot-aligned backend-neutral
-        // descriptor. The old vector<IRenderTargetBackend*> dynamic-cast every entry only to
+        // REMED-GFX-096: normalize each public binding into one slot-aligned renderer-neutral
+        // descriptor. The old vector<IRenderTargetRenderer*> dynamic-cast every entry only to
         // RenderTarget2D, turning every cube into nullptr and discarding its selected face.
         std::vector<RenderTargetBindingDescriptor> descriptors;
         descriptors.reserve(renderTargets.size());
@@ -2970,12 +2970,12 @@ namespace Microsoft::Xna::Framework::Graphics
                     throw System::NotSupportedException(
                         "SetRenderTargets: RenderTarget2D array slices are not supported; "
                         "arraySlice must be 0.");
-                auto* targetBackend = rt2D->GetRenderTargetBackend();
-                if (!targetBackend)
+                auto* targetRenderer = rt2D->GetRenderTargetRenderer();
+                if (!targetRenderer)
                     throw System::NotSupportedException(
-                        "SetRenderTargets: this backend does not support RenderTarget2D.");
+                        "SetRenderTargets: this renderer does not support RenderTarget2D.");
                 descriptors.push_back(RenderTargetBindingDescriptor::ForRenderTarget2D(
-                    targetBackend, 0, rt2D->getWidthProperty(), rt2D->getHeightProperty(),
+                    targetRenderer, 0, rt2D->getWidthProperty(), rt2D->getHeightProperty(),
                     rt2D->getMultiSampleCountProperty()));
                 publicTargets.push_back(rt2D);
             }
@@ -2985,13 +2985,13 @@ namespace Microsoft::Xna::Framework::Graphics
                 if (face < static_cast<int>(CubeMapFace::PositiveX)
                     || face > static_cast<int>(CubeMapFace::NegativeZ))
                     throw System::ArgumentOutOfRangeException("cubeMapFace");
-                auto* targetBackend = cube->GetRenderTargetCubeBackend();
-                if (!targetBackend)
+                auto* targetRenderer = cube->GetRenderTargetCubeRenderer();
+                if (!targetRenderer)
                     throw System::NotSupportedException(
-                        "SetRenderTargets: this backend does not support RenderTargetCube.");
+                        "SetRenderTargets: this renderer does not support RenderTargetCube.");
                 descriptors.push_back(
                     RenderTargetBindingDescriptor::ForRenderTargetCubeFace(
-                        targetBackend, face, cube->getWidthProperty(),
+                        targetRenderer, face, cube->getWidthProperty(),
                         cube->getMultiSampleCountProperty()));
                 publicTargets.push_back(cube);
             }
@@ -3023,8 +3023,8 @@ namespace Microsoft::Xna::Framework::Graphics
                         "to more than one slot.");
         }
 
-        if (backend_)
-            backend_->SetRenderTargets(
+        if (renderer_)
+            renderer_->SetRenderTargets(
                 descriptors.data(), static_cast<int>(descriptors.size()));
 
         currentRenderTargets_ = renderTargets;

@@ -12,10 +12,10 @@
 //   * call wgpuRenderPassEncoderSetScissorRect per draw   -> unbounded redundant native calls;
 //   * keep a heap-allocated snapshot per queued draw      -> per-frame allocation growth.
 //
-// Every count below is read from the live backend, before and after a known public sequence, so
+// Every count below is read from the live renderer, before and after a known public sequence, so
 // each expectation is an exact number rather than a trend. The viewport counter is read alongside
 // it: REMED-GFX-116's mechanism must be untouched, so a sequence that changes only the rectangle
-// must issue exactly ONE native setViewport (the one that opens the pass). The backend's
+// must issue exactly ONE native setViewport (the one that opens the pass). The renderer's
 // uncaptured-error callback count is also reported: WebGPU validation must stay silent through
 // every rectangle used here, including the boundary ones (final row/column, 1x1, degenerate,
 // hanging off the target).
@@ -46,7 +46,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
-#include "CNA/Internal/Backends/WebGPU/WebGPUGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/WebGPU/WebGPURenderer.hpp"
 
 #include <array>
 #include <cstdint>
@@ -57,7 +57,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using CNA::Internal::Backends::WebGPU::WebGPUGraphicsBackend;
+using CNA::Internal::Renderers::WebGPU::WebGPURenderer;
 
 namespace
 {
@@ -148,7 +148,7 @@ class WebGpuScissorCardinalityTest : public Game
         phase_ = 2;
 
         auto& dev = getGraphicsDeviceProperty();
-        auto& backend = static_cast<WebGPUGraphicsBackend&>(dev.GetBackend());
+        auto& renderer = static_cast<WebGPURenderer&>(dev.GetRenderer());
         std::printf("REMED-GFX-146 scissor state cardinality -- WEBGPU\n");
 
         // Warm-up cycle: creates the one Colored3D and the one sprite pipeline this file's draws
@@ -176,11 +176,11 @@ class WebGpuScissorCardinalityTest : public Game
             dev.SetRenderTarget(rt.get());
             // Baseline INSIDE the cycle: binding a target flushes whatever the backbuffer had
             // pending, which is not what this check is measuring.
-            const std::size_t pass0 = backend.GetRenderPassCountEXT();
-            const std::size_t submit0 = backend.GetQueueSubmitCountEXT();
-            const std::size_t ss0 = backend.GetSetScissorCallCountEXT();
-            const std::size_t sv0 = backend.GetSetViewportCallCountEXT();
-            const std::size_t pipe0 = backend.GetColoredPipelineCacheSizeEXT();
+            const std::size_t pass0 = renderer.GetRenderPassCountEXT();
+            const std::size_t submit0 = renderer.GetQueueSubmitCountEXT();
+            const std::size_t ss0 = renderer.GetSetScissorCallCountEXT();
+            const std::size_t sv0 = renderer.GetSetViewportCallCountEXT();
+            const std::size_t pipe0 = renderer.GetColoredPipelineCacheSizeEXT();
 
             dev.Clear(kBlack);
             for (int i = 0; i < 4; ++i)
@@ -191,18 +191,18 @@ class WebGpuScissorCardinalityTest : public Game
             SetScissor(dev, 0, 0, kRT, kRT);
             dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
 
-            checkCount(backend.GetRenderPassCountEXT() - pass0, 1,
+            checkCount(renderer.GetRenderPassCountEXT() - pass0, 1,
                        "S1 four rectangles in one cycle: render passes");
-            checkCount(backend.GetQueueSubmitCountEXT() - submit0, 1,
+            checkCount(renderer.GetQueueSubmitCountEXT() - submit0, 1,
                        "S1 four rectangles in one cycle: queue submits");
             // One pass-opening call plus one per genuine rectangle transition.
-            checkCount(backend.GetSetScissorCallCountEXT() - ss0, 5,
+            checkCount(renderer.GetSetScissorCallCountEXT() - ss0, 5,
                        "S1 four rectangles in one cycle: native setScissorRect calls");
             // REMED-GFX-116 is untouched: the viewport never changed, so only the pass-opening
             // call is issued.
-            checkCount(backend.GetSetViewportCallCountEXT() - sv0, 1,
+            checkCount(renderer.GetSetViewportCallCountEXT() - sv0, 1,
                        "S1 four rectangles in one cycle: native setViewport calls");
-            checkCount(backend.GetColoredPipelineCacheSizeEXT() - pipe0, 0,
+            checkCount(renderer.GetColoredPipelineCacheSizeEXT() - pipe0, 0,
                        "S1 four rectangles in one cycle: new Colored3D pipeline variants");
         }
 
@@ -210,8 +210,8 @@ class WebGpuScissorCardinalityTest : public Game
         {
             auto rt = MakeTarget(dev);
             dev.SetRenderTarget(rt.get());
-            const std::size_t ss0 = backend.GetSetScissorCallCountEXT();
-            const std::size_t pipe0 = backend.GetColoredPipelineCacheSizeEXT();
+            const std::size_t ss0 = renderer.GetSetScissorCallCountEXT();
+            const std::size_t pipe0 = renderer.GetColoredPipelineCacheSizeEXT();
 
             dev.Clear(kBlack);
             SetScissor(dev, 4, 4, kRT / 2, kRT / 2);
@@ -220,9 +220,9 @@ class WebGpuScissorCardinalityTest : public Game
             SetScissor(dev, 0, 0, kRT, kRT);
             dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
 
-            checkCount(backend.GetSetScissorCallCountEXT() - ss0, 2,
+            checkCount(renderer.GetSetScissorCallCountEXT() - ss0, 2,
                        "S2 four draws sharing one rectangle: native setScissorRect calls");
-            checkCount(backend.GetColoredPipelineCacheSizeEXT() - pipe0, 0,
+            checkCount(renderer.GetColoredPipelineCacheSizeEXT() - pipe0, 0,
                        "S2 four draws sharing one rectangle: new pipeline variants");
         }
 
@@ -230,9 +230,9 @@ class WebGpuScissorCardinalityTest : public Game
         {
             auto rt = MakeTarget(dev);
             dev.SetRenderTarget(rt.get());
-            const std::size_t pipe0 = backend.GetColoredPipelineCacheSizeEXT();
-            const std::size_t sprite0 = backend.GetSpritePipelineCacheSizeEXT();
-            const std::size_t pass0 = backend.GetRenderPassCountEXT();
+            const std::size_t pipe0 = renderer.GetColoredPipelineCacheSizeEXT();
+            const std::size_t sprite0 = renderer.GetSpritePipelineCacheSizeEXT();
+            const std::size_t pass0 = renderer.GetRenderPassCountEXT();
 
             dev.Clear(kBlack);
             for (int i = 0; i < 32; ++i)
@@ -244,11 +244,11 @@ class WebGpuScissorCardinalityTest : public Game
             SetScissor(dev, 0, 0, kRT, kRT);
             dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
 
-            checkCount(backend.GetColoredPipelineCacheSizeEXT() - pipe0, 0,
+            checkCount(renderer.GetColoredPipelineCacheSizeEXT() - pipe0, 0,
                        "S3 32 distinct rectangles: new Colored3D pipeline variants");
-            checkCount(backend.GetSpritePipelineCacheSizeEXT() - sprite0, 0,
+            checkCount(renderer.GetSpritePipelineCacheSizeEXT() - sprite0, 0,
                        "S3 32 distinct rectangles: new sprite pipeline variants");
-            checkCount(backend.GetRenderPassCountEXT() - pass0, 1,
+            checkCount(renderer.GetRenderPassCountEXT() - pass0, 1,
                        "S3 32 distinct rectangles: render passes");
         }
 
@@ -256,9 +256,9 @@ class WebGpuScissorCardinalityTest : public Game
         {
             auto rt = MakeTarget(dev);
             dev.SetRenderTarget(rt.get());
-            const std::size_t pipe0 = backend.GetColoredPipelineCacheSizeEXT();
-            const std::size_t pass0 = backend.GetRenderPassCountEXT();
-            const std::size_t submit0 = backend.GetQueueSubmitCountEXT();
+            const std::size_t pipe0 = renderer.GetColoredPipelineCacheSizeEXT();
+            const std::size_t pass0 = renderer.GetRenderPassCountEXT();
+            const std::size_t submit0 = renderer.GetQueueSubmitCountEXT();
 
             dev.Clear(kBlack);
             SetScissor(dev, kRT - 1, kRT - 1, 1, 1);          // final row and column
@@ -272,11 +272,11 @@ class WebGpuScissorCardinalityTest : public Game
             SetScissor(dev, 0, 0, kRT, kRT);
             dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
 
-            checkCount(backend.GetColoredPipelineCacheSizeEXT() - pipe0, 0,
+            checkCount(renderer.GetColoredPipelineCacheSizeEXT() - pipe0, 0,
                        "S4 boundary rectangles: new pipeline variants");
-            checkCount(backend.GetRenderPassCountEXT() - pass0, 1,
+            checkCount(renderer.GetRenderPassCountEXT() - pass0, 1,
                        "S4 boundary rectangles: render passes");
-            checkCount(backend.GetQueueSubmitCountEXT() - submit0, 1,
+            checkCount(renderer.GetQueueSubmitCountEXT() - submit0, 1,
                        "S4 boundary rectangles: queue submits");
         }
 
@@ -284,9 +284,9 @@ class WebGpuScissorCardinalityTest : public Game
         {
             auto rt = MakeTarget(dev);
             dev.SetRenderTarget(rt.get());
-            const std::size_t ss0 = backend.GetSetScissorCallCountEXT();
-            const std::size_t pipe0 = backend.GetColoredPipelineCacheSizeEXT();
-            const std::size_t pass0 = backend.GetRenderPassCountEXT();
+            const std::size_t ss0 = renderer.GetSetScissorCallCountEXT();
+            const std::size_t pipe0 = renderer.GetColoredPipelineCacheSizeEXT();
+            const std::size_t pass0 = renderer.GetRenderPassCountEXT();
 
             dev.Clear(kBlack);
             SetScissor(dev, 8, 8, 8, 8);
@@ -297,11 +297,11 @@ class WebGpuScissorCardinalityTest : public Game
             dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
 
             // Pass opens at the whole target, then rect -> full -> rect: three transitions.
-            checkCount(backend.GetSetScissorCallCountEXT() - ss0, 4,
+            checkCount(renderer.GetSetScissorCallCountEXT() - ss0, 4,
                        "S5 enable transitions: native setScissorRect calls");
-            checkCount(backend.GetColoredPipelineCacheSizeEXT() - pipe0, 0,
+            checkCount(renderer.GetColoredPipelineCacheSizeEXT() - pipe0, 0,
                        "S5 enable transitions: new pipeline variants");
-            checkCount(backend.GetRenderPassCountEXT() - pass0, 1,
+            checkCount(renderer.GetRenderPassCountEXT() - pass0, 1,
                        "S5 enable transitions: render passes");
         }
 
@@ -314,8 +314,8 @@ class WebGpuScissorCardinalityTest : public Game
             for (int frame = 0; frame < 3; ++frame)
             {
                 dev.SetRenderTarget(rt.get());
-                const std::size_t pass0 = backend.GetRenderPassCountEXT();
-                const std::size_t ss0 = backend.GetSetScissorCallCountEXT();
+                const std::size_t pass0 = renderer.GetRenderPassCountEXT();
+                const std::size_t ss0 = renderer.GetSetScissorCallCountEXT();
                 dev.Clear(kBlack);
                 for (int i = 0; i < 8; ++i)
                 {
@@ -324,8 +324,8 @@ class WebGpuScissorCardinalityTest : public Game
                 }
                 SetScissor(dev, 0, 0, kRT, kRT);
                 dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
-                const std::size_t usedPasses = backend.GetRenderPassCountEXT() - pass0;
-                const std::size_t usedScissors = backend.GetSetScissorCallCountEXT() - ss0;
+                const std::size_t usedPasses = renderer.GetRenderPassCountEXT() - pass0;
+                const std::size_t usedScissors = renderer.GetSetScissorCallCountEXT() - ss0;
                 if (frame > 0 && (usedPasses != previousPasses || usedScissors != previousScissors))
                     stable = false;
                 previousPasses = usedPasses;
@@ -343,8 +343,8 @@ class WebGpuScissorCardinalityTest : public Game
         {
             auto rt = MakeTarget(dev);
             dev.SetRenderTarget(rt.get());
-            const std::size_t ss0 = backend.GetSetScissorCallCountEXT();
-            const std::size_t sprite0 = backend.GetSpritePipelineCacheSizeEXT();
+            const std::size_t ss0 = renderer.GetSetScissorCallCountEXT();
+            const std::size_t sprite0 = renderer.GetSpritePipelineCacheSizeEXT();
 
             dev.Clear(kBlack);
             SamplerState point = SamplerState::PointClamp;
@@ -360,17 +360,17 @@ class WebGpuScissorCardinalityTest : public Game
             SetScissor(dev, 0, 0, kRT, kRT);
             dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
 
-            checkCount(backend.GetSetScissorCallCountEXT() - ss0, 4,
+            checkCount(renderer.GetSetScissorCallCountEXT() - ss0, 4,
                        "S7 three sprite rectangles: native setScissorRect calls");
-            check(backend.GetSpritePipelineCacheSizeEXT() - sprite0 <= 1,
+            check(renderer.GetSpritePipelineCacheSizeEXT() - sprite0 <= 1,
                   "S7 three sprite rectangles: at most one new sprite pipeline");
         }
 
         // ---- S8: the BACKBUFFER pass follows the same rules ----
         {
-            const std::size_t ss0 = backend.GetSetScissorCallCountEXT();
-            const std::size_t pass0 = backend.GetRenderPassCountEXT();
-            const std::size_t submit0 = backend.GetQueueSubmitCountEXT();
+            const std::size_t ss0 = renderer.GetSetScissorCallCountEXT();
+            const std::size_t pass0 = renderer.GetRenderPassCountEXT();
+            const std::size_t submit0 = renderer.GetQueueSubmitCountEXT();
 
             dev.Clear(kBlack);
             for (int i = 0; i < 4; ++i)
@@ -383,15 +383,15 @@ class WebGpuScissorCardinalityTest : public Game
             const Rectangle whole(0, 0, kBBW, kBBH);
             dev.GetBackBufferData(&whole, pixels.data(), 0, static_cast<int>(pixels.size()));
 
-            checkCount(backend.GetSetScissorCallCountEXT() - ss0, 5,
+            checkCount(renderer.GetSetScissorCallCountEXT() - ss0, 5,
                        "S8 four backbuffer rectangles: native setScissorRect calls");
-            checkCount(backend.GetRenderPassCountEXT() - pass0, 1,
+            checkCount(renderer.GetRenderPassCountEXT() - pass0, 1,
                        "S8 four backbuffer rectangles: render passes");
-            checkCount(backend.GetQueueSubmitCountEXT() - submit0, 1,
+            checkCount(renderer.GetQueueSubmitCountEXT() - submit0, 1,
                        "S8 four backbuffer rectangles: queue submits");
         }
 
-        const std::size_t errors = backend.GetUncapturedErrorCountEXT();
+        const std::size_t errors = renderer.GetUncapturedErrorCountEXT();
         check(errors == 0, errors == 0
                   ? "S9 WebGPU validation stayed silent through every rectangle"
                   : "S9 WebGPU reported " + std::to_string(errors) + " uncaptured errors");

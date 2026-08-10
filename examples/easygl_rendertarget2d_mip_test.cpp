@@ -12,7 +12,7 @@
 // doesn't require raw GL access from the test.
 //
 // Method: fill a mipMap=true RenderTarget2D with solid blue at level 0, unbind it (this is where
-// EasyGLRenderTargetBackend::UnbindAsRenderTarget now calls generate_mipmap — the Task 336 fix),
+// EasyGLRenderTargetRenderer::UnbindAsRenderTarget now calls generate_mipmap — the Task 336 fix),
 // then sample the unbound RT via SpriteBatch with TextureFilter::Anisotropic. If the fix works,
 // the result is blue (mip-complete). If the mip chain were still absent/incomplete (the
 // pre-Task-336 state — LevelCount claims >1 mip levels exist, but no storage was ever allocated

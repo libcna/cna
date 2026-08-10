@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MS-PL
 // SKIA-96: headless feasibility spike for one projected VertexPositionColorTexture TriangleList.
 //
-// This deliberately stays below GraphicsDevice and the public Skia backend. EasyGL's corresponding
+// This deliberately stays below GraphicsDevice and the public Skia renderer. EasyGL's corresponding
 // GLSL path computes gl_Position=uWVP*vec4(aPos,1) and exports unqualified colour/UV varyings, so
 // rasterization performs homogeneous clipping and perspective-correct interpolation. SkVertices
 // accepts only post-projection SkPoint positions and has no per-vertex clip W. The checks below
 // separate the bounded equal-W case from those missing semantics; expected mismatches are evidence,
 // not support claims.
 
-#include "CNA/Internal/Backends/Skia/SkiaSurface.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaSurface.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
@@ -28,7 +28,7 @@
 #include <cstdio>
 #include <vector>
 
-using CNA::Internal::Backends::Skia::SkiaSurface;
+using CNA::Internal::Renderers::Skia::SkiaSurface;
 using Microsoft::Xna::Framework::Matrix;
 using Microsoft::Xna::Framework::Vector3;
 using Microsoft::Xna::Framework::Vector4;

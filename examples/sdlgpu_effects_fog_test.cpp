@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // REMED-GFX-009 (SdlGpu slice): stock-effect fog for the AlphaTestEffect, DualTextureEffect and
-// EnvironmentMapEffect shader families (all previously fog-free on this backend).
+// EnvironmentMapEffect shader families (all previously fog-free on this renderer).
 //
 //   alpha_test3d          (AlphaTestEffect,       VertexPositionTexture, stride 20)
 //   alpha_test_colored3d  (AlphaTestEffect,       VertexPositionColorTexture, stride 24)  [smoke]

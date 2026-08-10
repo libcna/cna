@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: MS-PL
 // plan_software.md Phase S1/S2/S3 (SOFTWARE-1..14, 20..22): smoke test for the Software
-// (CPU rasterizer) graphics backend's foundation -- no window, real framebuffer, real pixel
+// (CPU rasterizer) graphics renderer's foundation -- no window, real framebuffer, real pixel
 // readback, real vertex/index storage. Draw calls do not yet rasterize (Phase S4).
 //
 // Check A -- SDL's video subsystem was never initialized (SDL_WasInit(SDL_INIT_VIDEO) == 0) and
 //   there is no real window -- matches HEADLESS's own "no display server needed at all" promise.
 // Check B -- Clear(r,g,b,a) followed by GetBackBufferData() reads back the EXACT clear color --
-//   this is the whole point of this backend: real, correct pixels, not a fiction.
+//   this is the whole point of this renderer: real, correct pixels, not a fiction.
 // Check C -- binding a RenderTarget2D and clearing it does not affect the backbuffer's own
 //   pixels -- proves per-target framebuffers are genuinely independent.
-// Check D -- a VertexBuffer's raw bytes round-trip through SoftwareVertexBufferBackend
+// Check D -- a VertexBuffer's raw bytes round-trip through SoftwareVertexBufferRenderer
 //   (capacity/stride tracked correctly) -- verified indirectly via a successful SetData call at
 //   each of the three v1-supported strides (16/20/24).
 // Check E -- an IndexBuffer (both 16- and 32-bit) round-trips real data without throwing.
@@ -31,7 +31,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColorTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 
-#include "CNA/Internal/Backends/Software/SoftwareGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Software/SoftwareRenderer.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -42,7 +42,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::Software;
+using namespace CNA::Internal::Renderers::Software;
 
 class SoftwareSmokeTest : public Game
 {
@@ -60,11 +60,11 @@ protected:
     void Draw(const GameTime&) override
     {
         auto& dev = getGraphicsDeviceProperty();
-        auto& backend = static_cast<SoftwareGraphicsBackend&>(dev.GetBackend());
+        auto& renderer = static_cast<SoftwareRenderer&>(dev.GetRenderer());
 
         // Check A: no real window/video subsystem anywhere.
-        check(SDL_WasInit(SDL_INIT_VIDEO) == 0, "SDL_INIT_VIDEO was never initialized under the Software backend");
-        check(backend.GetWindowInternal() == nullptr, "GraphicsDevice has no real window under the Software backend");
+        check(SDL_WasInit(SDL_INIT_VIDEO) == 0, "SDL_INIT_VIDEO was never initialized under the Software renderer");
+        check(renderer.GetWindowInternal() == nullptr, "GraphicsDevice has no real window under the Software renderer");
 
         // Check B: real, correct pixel readback after Clear().
         {

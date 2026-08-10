@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SKIA-108: render every SpriteBatch-only real-XNA oracle scene through the Skia backend and
+# SKIA-108: render every SpriteBatch-only real-XNA oracle scene through the Skia renderer and
 # enforce tools/xna-oracle/skia-2d-policy.tsv. The policy is intentionally not a blanket fuzzy
 # threshold: seven scenes are exact, while two linear-filter scenes permit only measured RGB
 # rounding variance, with exact alpha plus a fixed pixel-count and footprint bound.

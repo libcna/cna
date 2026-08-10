@@ -8,9 +8,9 @@ Output: spirv_shaders.hpp  (next to this script unless --output given)
 
 Note: these shaders follow SDL_gpu's SPIR-V resource-binding convention for graphics
 pipelines (SDL_gpu.h, SDL_CreateGPUShader doc comment), NOT the plain Vulkan convention
-this project's VulkanGraphicsBackend shaders use -- vertex-stage textures/storage are set 0,
+this project's VulkanRenderer shaders use -- vertex-stage textures/storage are set 0,
 vertex-stage uniform buffers are set 1, fragment-stage textures/storage are set 2, and
-fragment-stage uniform buffers are set 3. Do not copy a VulkanGraphicsBackend shader's
+fragment-stage uniform buffers are set 3. Do not copy a VulkanRenderer shader's
 compiled SPIR-V here without re-checking its set numbers against this convention.
 """
 
@@ -178,7 +178,7 @@ def main():
         "#pragma once\n"
         "#include <cstddef>\n"
         "#include <cstdint>\n\n"
-        "namespace CNA::Internal::Backends::SdlGpu::Shaders {\n\n"
+        "namespace CNA::Internal::Renderers::SdlGpu::Shaders {\n\n"
     ]
 
     for filename, kind, cname in shaders:
@@ -192,7 +192,7 @@ def main():
         print(f"OK ({len(spv)} bytes, {len(spv)//4} words)")
         parts.append(spv_to_cpp_array(cname, spv) + "\n")
 
-    parts.append("} // namespace CNA::Internal::Backends::SdlGpu::Shaders\n")
+    parts.append("} // namespace CNA::Internal::Renderers::SdlGpu::Shaders\n")
 
     output_path.write_text("".join(parts))
     print(f"Written: {output_path}")

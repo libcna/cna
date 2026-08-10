@@ -27,7 +27,7 @@ import tempfile
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-SHADERS_DIR = REPO_ROOT / "src" / "CNA" / "Internal" / "Backends" / "D3DCommon" / "shaders"
+SHADERS_DIR = REPO_ROOT / "src" / "CNA" / "Internal" / "Renderers" / "D3DCommon" / "shaders"
 sys.path.insert(0, str(SHADERS_DIR))
 from compile_shaders_hlsl import SHADERS  # noqa: E402  (reuses the one canonical shader list)
 

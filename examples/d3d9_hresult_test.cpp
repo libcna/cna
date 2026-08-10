@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MS-PL
 // REMED-GFX-092: deterministic first-failure coverage for D3D9 state, render-target, depth-
 // stencil, and depth-surface-allocation HRESULT handling.  This deliberately uses the real
-// Wine/DXVK9 device; the narrow backend-local one-shot injection only substitutes a single
+// Wine/DXVK9 device; the narrow renderer-local one-shot injection only substitutes a single
 // checked HRESULT before that one native call, rather than attempting to destabilize the driver.
 
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
-#include "CNA/Internal/Backends/D3D9/D3D9GraphicsBackend.hpp"
-#include "CNA/Internal/Backends/D3D9/D3D9RenderTargets.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/Internal/Renderers/D3D9/D3D9Renderer.hpp"
+#include "CNA/Internal/Renderers/D3D9/D3D9RenderTargets.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Blend.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendFunction.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
@@ -19,8 +19,8 @@
 #include <memory>
 #include <string>
 
-using namespace CNA::Internal::Backends;
-using namespace CNA::Internal::Backends::D3D9;
+using namespace CNA::Internal::Renderers;
+using namespace CNA::Internal::Renderers::D3D9;
 using namespace Microsoft::Xna::Framework::Graphics;
 
 namespace
@@ -38,22 +38,22 @@ namespace
     class ScopedNativeFailure
     {
     public:
-        ScopedNativeFailure(D3D9GraphicsBackend& backend, D3D9NativeOperationEXT operation, HRESULT result)
-            : backend_(backend)
+        ScopedNativeFailure(D3D9Renderer& renderer, D3D9NativeOperationEXT operation, HRESULT result)
+            : renderer_(renderer)
         {
-            backend_.InjectNextNativeFailureEXT(operation, result);
+            renderer_.InjectNextNativeFailureEXT(operation, result);
         }
 
         ~ScopedNativeFailure()
         {
-            backend_.ClearNativeFailureInjectionEXT();
+            renderer_.ClearNativeFailureInjectionEXT();
         }
 
         ScopedNativeFailure(const ScopedNativeFailure&) = delete;
         ScopedNativeFailure& operator=(const ScopedNativeFailure&) = delete;
 
     private:
-        D3D9GraphicsBackend& backend_;
+        D3D9Renderer& renderer_;
     };
 
     BlendWriteState AllWrites()
@@ -61,17 +61,17 @@ namespace
         return {};
     }
 
-    void ApplyBlendA(D3D9GraphicsBackend& backend)
+    void ApplyBlendA(D3D9Renderer& renderer)
     {
-        backend.ApplyBlendState(static_cast<int>(Blend::One), static_cast<int>(Blend::One),
+        renderer.ApplyBlendState(static_cast<int>(Blend::One), static_cast<int>(Blend::One),
                                 static_cast<int>(Blend::Zero), static_cast<int>(Blend::Zero),
                                 static_cast<int>(BlendFunction::Add),
                                 static_cast<int>(BlendFunction::Add), AllWrites());
     }
 
-    void ApplyBlendB(D3D9GraphicsBackend& backend)
+    void ApplyBlendB(D3D9Renderer& renderer)
     {
-        backend.ApplyBlendState(static_cast<int>(Blend::Zero), static_cast<int>(Blend::Zero),
+        renderer.ApplyBlendState(static_cast<int>(Blend::Zero), static_cast<int>(Blend::Zero),
                                 static_cast<int>(Blend::One), static_cast<int>(Blend::One),
                                 static_cast<int>(BlendFunction::Add),
                                 static_cast<int>(BlendFunction::Add), AllWrites());
@@ -83,70 +83,70 @@ namespace
         return message.find(operation) != std::string::npos && message.find(result) != std::string::npos;
     }
 
-    bool IsBound(D3D9GraphicsBackend& backend, IDirect3DSurface9* color, IDirect3DSurface9* depth)
+    bool IsBound(D3D9Renderer& renderer, IDirect3DSurface9* color, IDirect3DSurface9* depth)
     {
         Microsoft::WRL::ComPtr<IDirect3DSurface9> activeColor;
         Microsoft::WRL::ComPtr<IDirect3DSurface9> activeDepth;
-        const HRESULT colorHr = backend.GetDeviceEXT()->GetRenderTarget(0, activeColor.GetAddressOf());
-        const HRESULT depthHr = backend.GetDeviceEXT()->GetDepthStencilSurface(activeDepth.GetAddressOf());
+        const HRESULT colorHr = renderer.GetDeviceEXT()->GetRenderTarget(0, activeColor.GetAddressOf());
+        const HRESULT depthHr = renderer.GetDeviceEXT()->GetDepthStencilSurface(activeDepth.GetAddressOf());
         return SUCCEEDED(colorHr) && SUCCEEDED(depthHr) &&
                activeColor.Get() == color && activeDepth.Get() == depth;
     }
 
-    bool ClearSucceeds(D3D9GraphicsBackend& backend)
+    bool ClearSucceeds(D3D9Renderer& renderer)
     {
         try
         {
-            backend.Clear(0.1f, 0.2f, 0.3f, 1.0f);
+            renderer.Clear(0.1f, 0.2f, 0.3f, 1.0f);
             return true;
         }
         catch (...) { return false; }
     }
 
-    void RunChecks(D3D9GraphicsBackend& backend)
+    void RunChecks(D3D9Renderer& renderer)
     {
         // State A -> injected first native SetRenderState failure while requesting B -> A.  The
         // native source blend remains A, rendering is blocked while the category is unsafe, and a
         // complete successful A application retries the whole sequence before Clear is permitted.
-        ApplyBlendA(backend);
+        ApplyBlendA(renderer);
         DWORD sourceBlend = 0;
-        const HRESULT baselineHr = backend.GetDeviceEXT()->GetRenderState(D3DRS_SRCBLEND, &sourceBlend);
+        const HRESULT baselineHr = renderer.GetDeviceEXT()->GetRenderState(D3DRS_SRCBLEND, &sourceBlend);
         const std::uint64_t before =
-            backend.GetNativeCallCountEXT(D3D9NativeOperationEXT::SetRenderState);
+            renderer.GetNativeCallCountEXT(D3D9NativeOperationEXT::SetRenderState);
 
         bool stateThrew = false;
         bool stateDiagnostic = false;
         {
-            ScopedNativeFailure failure(backend, D3D9NativeOperationEXT::SetRenderState,
+            ScopedNativeFailure failure(renderer, D3D9NativeOperationEXT::SetRenderState,
                                         D3DERR_INVALIDCALL);
-            try { ApplyBlendB(backend); }
+            try { ApplyBlendB(renderer); }
             catch (const std::exception& exception)
             {
                 stateThrew = true;
                 stateDiagnostic = HasDiagnostic(exception, "IDirect3DDevice9::SetRenderState",
                                                 "D3DERR_INVALIDCALL");
             }
-            Check(!backend.HasNativeFailureInjectionEXT(),
+            Check(!renderer.HasNativeFailureInjectionEXT(),
                   "GFX-092 fixture consumes exactly the injected SetRenderState failure");
         }
         const std::uint64_t afterFailure =
-            backend.GetNativeCallCountEXT(D3D9NativeOperationEXT::SetRenderState);
+            renderer.GetNativeCallCountEXT(D3D9NativeOperationEXT::SetRenderState);
         DWORD afterFailureSourceBlend = 0;
         const HRESULT afterFailureHr =
-            backend.GetDeviceEXT()->GetRenderState(D3DRS_SRCBLEND, &afterFailureSourceBlend);
-        const bool clearBlocked = !ClearSucceeds(backend);
+            renderer.GetDeviceEXT()->GetRenderState(D3DRS_SRCBLEND, &afterFailureSourceBlend);
+        const bool clearBlocked = !ClearSucceeds(renderer);
 
-        ApplyBlendA(backend);
+        ApplyBlendA(renderer);
         const std::uint64_t afterRetry =
-            backend.GetNativeCallCountEXT(D3D9NativeOperationEXT::SetRenderState);
+            renderer.GetNativeCallCountEXT(D3D9NativeOperationEXT::SetRenderState);
         DWORD afterRetrySourceBlend = 0;
         const HRESULT afterRetryHr =
-            backend.GetDeviceEXT()->GetRenderState(D3DRS_SRCBLEND, &afterRetrySourceBlend);
+            renderer.GetDeviceEXT()->GetRenderState(D3DRS_SRCBLEND, &afterRetrySourceBlend);
         Check(stateThrew && stateDiagnostic && SUCCEEDED(baselineHr) &&
                   sourceBlend == D3DBLEND_ONE && SUCCEEDED(afterFailureHr) &&
                   afterFailureSourceBlend == D3DBLEND_ONE && clearBlocked &&
                   SUCCEEDED(afterRetryHr) && afterRetrySourceBlend == D3DBLEND_ONE &&
-                  afterFailure == before && afterRetry > afterFailure && ClearSucceeds(backend),
+                  afterFailure == before && afterRetry > afterFailure && ClearSucceeds(renderer),
               "GFX-092 state INVALIDCALL blocks rendering, retains A, and A->failure->A retries");
 
         // The same state boundary maps both device-lost HRESULTs into the pre-existing D9-34 Lost
@@ -156,14 +156,14 @@ namespace
         {
             bool lostException = false;
             {
-                ScopedNativeFailure failure(backend, D3D9NativeOperationEXT::SetRenderState, lostResult);
-                try { ApplyBlendB(backend); }
+                ScopedNativeFailure failure(renderer, D3D9NativeOperationEXT::SetRenderState, lostResult);
+                try { ApplyBlendB(renderer); }
                 catch (const DeviceLostException&) { lostException = true; }
             }
-            const bool markedLost = backend.IsDeviceLostEXT();
-            backend.DebugRestoreContext();
-            ApplyBlendA(backend);
-            Check(lostException && markedLost && !backend.IsDeviceLostEXT() && ClearSucceeds(backend),
+            const bool markedLost = renderer.IsDeviceLostEXT();
+            renderer.DebugRestoreContext();
+            ApplyBlendA(renderer);
+            Check(lostException && markedLost && !renderer.IsDeviceLostEXT() && ClearSucceeds(renderer),
                   lostResult == D3DERR_DEVICELOST
                       ? "GFX-092 SetRenderState DEVICELOST follows D9-34 lost/reset lifecycle"
                       : "GFX-092 SetRenderState DEVICENOTRESET follows D9-34 lost/reset lifecycle");
@@ -175,11 +175,11 @@ namespace
         bool allocationThrew = false;
         bool allocationDiagnostic = false;
         {
-            ScopedNativeFailure failure(backend, D3D9NativeOperationEXT::CreateDepthStencilSurface,
+            ScopedNativeFailure failure(renderer, D3D9NativeOperationEXT::CreateDepthStencilSurface,
                                         D3DERR_OUTOFVIDEOMEMORY);
             try
             {
-                auto discarded = backend.CreateRenderTarget2D(
+                auto discarded = renderer.CreateRenderTarget2D(
                     32, 32, static_cast<int>(DepthFormat::Depth24Stencil8));
                 (void)discarded;
             }
@@ -190,23 +190,23 @@ namespace
                     exception, "IDirect3DDevice9::CreateDepthStencilSurface", "D3DERR_OUTOFVIDEOMEMORY");
             }
         }
-        auto a = backend.CreateRenderTarget2D(32, 32, static_cast<int>(DepthFormat::Depth24Stencil8));
-        auto b = backend.CreateRenderTarget2D(32, 32, static_cast<int>(DepthFormat::Depth24Stencil8));
-        auto& a9 = static_cast<D3D9RenderTargetBackend&>(*a);
-        auto& b9 = static_cast<D3D9RenderTargetBackend&>(*b);
-        backend.SetRenderTarget2D(a.get());
-        Check(allocationThrew && allocationDiagnostic && !backend.HasNativeFailureInjectionEXT() &&
-                  IsBound(backend, a9.GetActiveColorSurfaceEXT(), a9.GetDepthStencilSurfaceEXT()),
+        auto a = renderer.CreateRenderTarget2D(32, 32, static_cast<int>(DepthFormat::Depth24Stencil8));
+        auto b = renderer.CreateRenderTarget2D(32, 32, static_cast<int>(DepthFormat::Depth24Stencil8));
+        auto& a9 = static_cast<D3D9RenderTargetRenderer&>(*a);
+        auto& b9 = static_cast<D3D9RenderTargetRenderer&>(*b);
+        renderer.SetRenderTarget2D(a.get());
+        Check(allocationThrew && allocationDiagnostic && !renderer.HasNativeFailureInjectionEXT() &&
+                  IsBound(renderer, a9.GetActiveColorSurfaceEXT(), a9.GetDepthStencilSurfaceEXT()),
               "GFX-092 depth allocation OOM is diagnostic, consumes no output, and later allocation is usable");
 
-        // First color-bind failure: A remains both native and backend-authoritative.  A valid B
+        // First color-bind failure: A remains both native and renderer-authoritative.  A valid B
         // transition immediately afterwards proves no target cache was committed on the failure.
         bool targetThrew = false;
         bool targetDiagnostic = false;
         {
-            ScopedNativeFailure failure(backend, D3D9NativeOperationEXT::SetRenderTarget,
+            ScopedNativeFailure failure(renderer, D3D9NativeOperationEXT::SetRenderTarget,
                                         D3DERR_INVALIDCALL);
-            try { backend.SetRenderTarget2D(b.get()); }
+            try { renderer.SetRenderTarget2D(b.get()); }
             catch (const std::exception& exception)
             {
                 targetThrew = true;
@@ -214,11 +214,11 @@ namespace
                                                  "D3DERR_INVALIDCALL");
             }
         }
-        const bool targetRollback = IsBound(backend, a9.GetActiveColorSurfaceEXT(),
-                                            a9.GetDepthStencilSurfaceEXT()) && ClearSucceeds(backend);
-        backend.SetRenderTarget2D(b.get());
-        const bool targetRetry = IsBound(backend, b9.GetActiveColorSurfaceEXT(),
-                                         b9.GetDepthStencilSurfaceEXT()) && ClearSucceeds(backend);
+        const bool targetRollback = IsBound(renderer, a9.GetActiveColorSurfaceEXT(),
+                                            a9.GetDepthStencilSurfaceEXT()) && ClearSucceeds(renderer);
+        renderer.SetRenderTarget2D(b.get());
+        const bool targetRetry = IsBound(renderer, b9.GetActiveColorSurfaceEXT(),
+                                         b9.GetDepthStencilSurfaceEXT()) && ClearSucceeds(renderer);
         Check(targetThrew && targetDiagnostic && targetRollback && targetRetry,
               "GFX-092 target INVALIDCALL restores A and a later A->B transition succeeds");
 
@@ -227,9 +227,9 @@ namespace
         bool depthThrew = false;
         bool depthDiagnostic = false;
         {
-            ScopedNativeFailure failure(backend, D3D9NativeOperationEXT::SetDepthStencilSurface,
+            ScopedNativeFailure failure(renderer, D3D9NativeOperationEXT::SetDepthStencilSurface,
                                         D3DERR_INVALIDCALL);
-            try { backend.SetRenderTarget2D(a.get()); }
+            try { renderer.SetRenderTarget2D(a.get()); }
             catch (const std::exception& exception)
             {
                 depthThrew = true;
@@ -237,13 +237,13 @@ namespace
                                                 "D3DERR_INVALIDCALL");
             }
         }
-        const bool depthRollback = IsBound(backend, b9.GetActiveColorSurfaceEXT(),
-                                           b9.GetDepthStencilSurfaceEXT()) && ClearSucceeds(backend);
-        backend.SetRenderTarget2D(a.get());
-        const bool depthRetry = IsBound(backend, a9.GetActiveColorSurfaceEXT(),
-                                        a9.GetDepthStencilSurfaceEXT()) && ClearSucceeds(backend);
-        backend.SetRenderTarget2D(nullptr);
-        Check(depthThrew && depthDiagnostic && depthRollback && depthRetry && ClearSucceeds(backend),
+        const bool depthRollback = IsBound(renderer, b9.GetActiveColorSurfaceEXT(),
+                                           b9.GetDepthStencilSurfaceEXT()) && ClearSucceeds(renderer);
+        renderer.SetRenderTarget2D(a.get());
+        const bool depthRetry = IsBound(renderer, a9.GetActiveColorSurfaceEXT(),
+                                        a9.GetDepthStencilSurfaceEXT()) && ClearSucceeds(renderer);
+        renderer.SetRenderTarget2D(nullptr);
+        Check(depthThrew && depthDiagnostic && depthRollback && depthRetry && ClearSucceeds(renderer),
               "GFX-092 depth INVALIDCALL rolls back B, retries B->A, and restores the backbuffer");
     }
 }
@@ -266,13 +266,13 @@ int main()
 
     try
     {
-        GraphicsBackendCreateArgs args;
+        GraphicsRendererCreateArgs args;
         args.window = window;
         args.virtualWidth = 64;
         args.virtualHeight = 64;
         args.depthStencilFormat = static_cast<int>(DepthFormat::Depth24Stencil8);
-        D3D9GraphicsBackend backend(args);
-        RunChecks(backend);
+        D3D9Renderer renderer(args);
+        RunChecks(renderer);
     }
     catch (const std::exception& exception)
     {

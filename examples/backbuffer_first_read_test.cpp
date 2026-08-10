@@ -61,60 +61,60 @@ using namespace Microsoft::Xna::Framework::Graphics;
 
 namespace
 {
-#if defined(CNA_BACKEND_HEADLESS)
-    constexpr const char* kBackendName = "HEADLESS";
+#if defined(CNA_RENDERER_HEADLESS)
+    constexpr const char* kRendererName = "HEADLESS";
     constexpr bool kRasterizes = false;
-#elif defined(CNA_BACKEND_SOFTWARE)
-    constexpr const char* kBackendName = "SOFTWARE";
+#elif defined(CNA_RENDERER_SOFTWARE)
+    constexpr const char* kRendererName = "SOFTWARE";
     constexpr bool kRasterizes = true;
-#elif defined(CNA_BACKEND_EASYGL)
-    constexpr const char* kBackendName = "EASYGL";
+#elif defined(CNA_RENDERER_EASYGL)
+    constexpr const char* kRendererName = "EASYGL";
     constexpr bool kRasterizes = true;
-#elif defined(CNA_BACKEND_BGFX)
-    constexpr const char* kBackendName = "BGFX";
+#elif defined(CNA_RENDERER_BGFX)
+    constexpr const char* kRendererName = "BGFX";
     constexpr bool kRasterizes = true;
-#elif defined(CNA_BACKEND_VULKAN)
-    constexpr const char* kBackendName = "VULKAN";
+#elif defined(CNA_RENDERER_VULKAN)
+    constexpr const char* kRendererName = "VULKAN";
     constexpr bool kRasterizes = true;
-#elif defined(CNA_BACKEND_WEBGPU)
-    constexpr const char* kBackendName = "WEBGPU";
+#elif defined(CNA_RENDERER_WEBGPU)
+    constexpr const char* kRendererName = "WEBGPU";
     constexpr bool kRasterizes = true;
-#elif defined(CNA_BACKEND_SDL_GPU)
-    constexpr const char* kBackendName = "SDL_GPU";
+#elif defined(CNA_RENDERER_SDL_GPU)
+    constexpr const char* kRendererName = "SDL_GPU";
     constexpr bool kRasterizes = true;
-#elif defined(CNA_BACKEND_SDL_RENDERER)
-    constexpr const char* kBackendName = "SDL_RENDERER";
+#elif defined(CNA_RENDERER_SDL_RENDERER)
+    constexpr const char* kRendererName = "SDL_RENDERER";
     constexpr bool kRasterizes = true;
-#elif defined(CNA_BACKEND_SKIA)
-    constexpr const char* kBackendName = "SKIA";
+#elif defined(CNA_RENDERER_SKIA)
+    constexpr const char* kRendererName = "SKIA";
     constexpr bool kRasterizes = true;
-#elif defined(CNA_BACKEND_D3D9)
-    constexpr const char* kBackendName = "D3D9";
+#elif defined(CNA_RENDERER_D3D9)
+    constexpr const char* kRendererName = "D3D9";
     constexpr bool kRasterizes = true;
-#elif defined(CNA_BACKEND_D3D11)
-    constexpr const char* kBackendName = "D3D11";
+#elif defined(CNA_RENDERER_D3D11)
+    constexpr const char* kRendererName = "D3D11";
     constexpr bool kRasterizes = true;
-#elif defined(CNA_BACKEND_D3D12)
-    constexpr const char* kBackendName = "D3D12";
+#elif defined(CNA_RENDERER_D3D12)
+    constexpr const char* kRendererName = "D3D12";
     constexpr bool kRasterizes = true;
-#elif defined(CNA_BACKEND_LLGL)
-    constexpr const char* kBackendName = "LLGL";
+#elif defined(CNA_RENDERER_LLGL)
+    constexpr const char* kRendererName = "LLGL";
     constexpr bool kRasterizes = true;
 #else
-#error "REMED-GFX-161: this backend has no declared first-read contract."
+#error "REMED-GFX-161: this renderer has no declared first-read contract."
 #endif
 
     // BGFX honours only a full-surface backbuffer read; a sub-rectangle reads back zeros (a
     // pre-existing gap declared by REMED-GFX-165, NOT this task's subject). The rectangle legs
     // declare it as a boundary rather than failing it.
-#if defined(CNA_BACKEND_BGFX)
+#if defined(CNA_RENDERER_BGFX)
     constexpr bool kSupportsSubRectangleBackbufferRead = false;
 #else
     constexpr bool kSupportsSubRectangleBackbufferRead = true;
 #endif
 
     // The distinctive poison the caller pre-fills every destination element with. Every channel is
-    // 0xCD -- distinct from every quadrant colour below, and A=0xCD so a backend that writes RGB but
+    // 0xCD -- distinct from every quadrant colour below, and A=0xCD so a renderer that writes RGB but
     // forgets A cannot masquerade as intact poison. "Unwritten" is localised by this sentinel, so the
     // content pattern's job is only to catch an orientation flip / mirror / garbage read.
     const Color kSentinel(0xCD, 0xCD, 0xCD, 0xCD);
@@ -132,7 +132,7 @@ namespace
     /** @brief The four asymmetric quadrant colours (REMED-GFX-165's proven-byte-exact palette):
      *  every corner distinct, top != bottom (an orientation flip is caught), left != right (a mirror
      *  is caught), one mid-tone. None equals the 0xCD sentinel. A piecewise-constant fill is the only
-     *  pattern a 1:1 point-clamp blit reproduces byte-exact on EVERY backend (the Software sprite
+     *  pattern a 1:1 point-clamp blit reproduces byte-exact on EVERY renderer (the Software sprite
      *  sampler bleeds ~1 LSB across any interior colour boundary at a fractional position). */
     const Color kTL(220, 40, 40, 255);
     const Color kTR(40, 200, 60, 255);
@@ -301,7 +301,7 @@ class BackbufferFirstReadTest : public Game
         }
         if (r.threwNotSupported)
         {
-            boundary(label + ": oracle unavailable on " + kBackendName + " (NotSupportedException)");
+            boundary(label + ": oracle unavailable on " + kRendererName + " (NotSupportedException)");
             return false;
         }
         if (r.threwSomethingElse)
@@ -393,7 +393,7 @@ class BackbufferFirstReadTest : public Game
 
     /// A3 -- first-vs-second: read #1 is discarded, then a fresh frame is drawn and read #2 (still the
     /// same process, REUSING the readback staging created on read #1) must be exact. The redraw makes
-    /// this backend-neutral: a double-buffered backbuffer (Bgfx) hands back the swapped/empty buffer on
+    /// this renderer-neutral: a double-buffered backbuffer (Bgfx) hands back the swapped/empty buffer on
     /// a second read that has no new frame -- a pre-existing property, not this task's subject.
     void LegSecondRead(GraphicsDevice& dev)
     {
@@ -457,7 +457,7 @@ class BackbufferFirstReadTest : public Game
         if (!kSupportsSubRectangleBackbufferRead)
         {
             boundary("B2: sub-rectangle backbuffer read is a pre-existing gap on " +
-                     std::string(kBackendName) + " -- recorded, not exercised");
+                     std::string(kRendererName) + " -- recorded, not exercised");
             return;
         }
         step("B2: first read of a one-row rectangle");
@@ -473,7 +473,7 @@ class BackbufferFirstReadTest : public Game
         if (!kSupportsSubRectangleBackbufferRead)
         {
             boundary("B3: sub-rectangle backbuffer read is a pre-existing gap on " +
-                     std::string(kBackendName) + " -- recorded, not exercised");
+                     std::string(kRendererName) + " -- recorded, not exercised");
             return;
         }
         step("B3: first read of the final-row rectangle");
@@ -489,7 +489,7 @@ class BackbufferFirstReadTest : public Game
         if (!kSupportsSubRectangleBackbufferRead)
         {
             boundary("B4: sub-rectangle backbuffer read is a pre-existing gap on " +
-                     std::string(kBackendName) + " -- recorded, not exercised");
+                     std::string(kRendererName) + " -- recorded, not exercised");
             return;
         }
         step("B4: first read of a one-pixel rectangle");
@@ -579,7 +579,7 @@ class BackbufferFirstReadTest : public Game
 
     void Finish()
     {
-        std::printf("[INFO] %s: %d/%d checks passed\n", kBackendName, passCount_, totalCount_);
+        std::printf("[INFO] %s: %d/%d checks passed\n", kRendererName, passCount_, totalCount_);
         std::fflush(stdout);
         result_ = (passCount_ == totalCount_ && (totalCount_ > 0 || boundaryDeclared_)) ? 0 : 1;
         Exit();

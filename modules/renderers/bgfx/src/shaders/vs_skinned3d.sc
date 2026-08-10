@@ -42,7 +42,7 @@ void main()
     // CNB-67 (Phase 13C) Bgfx port: stride-56 SkinnedEffect+Color vertex color, kept in its own
     // varying (see varying.def.sc's v_vertexColor0 comment) so it can be gated by
     // u_vertexColorEnabled3D and multiplied into the final combined diffuse+specular output in
-    // the fragment stage, mirroring EasyGLGraphicsBackend::EnsureSkinnedProgram()'s vColor.
+    // the fragment stage, mirroring EasyGLRenderer::EnsureSkinnedProgram()'s vColor.
     v_vertexColor0 = a_color0;
     v_worldPos   = mul(u_world, skinnedPos).xyz;
     // REMED-GFX-005: fog factor from raw PRE-SKIN object-space Z (aPos.z, not the skinned

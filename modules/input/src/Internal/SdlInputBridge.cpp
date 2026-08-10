@@ -3,7 +3,7 @@
 
 #include "CNA/Input/InputDevices.hpp"
 #include "CNA/Input/Joysticks.hpp"
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Input/InputManager.hpp"
 #include "CNA/Internal/Input/SdlGamepadBackend.hpp"
 #include "CNA/Internal/Input/SdlJoystickBackend.hpp"
@@ -510,7 +510,7 @@ namespace
     {
         if (window != nullptr)
         {
-            // SDL_renderer backend: use SDL's built-in logical-presentation transform.
+            // SDL_Renderer path: use SDL's built-in logical-presentation transform.
             SDL_Renderer* renderer = SDL_GetRenderer(window);
             if (renderer != nullptr)
             {
@@ -520,12 +520,12 @@ namespace
                     return Microsoft::Xna::Framework::Vector2(logX, logY);
                 }
             }
-            // Other backends (e.g. EasyGL): use the backend's own transform if registered.
-            auto* backend = CNA::Internal::Backends::IGraphicsBackend::GetForWindow(window);
-            if (backend != nullptr)
+            // Other renderers (e.g. EasyGL): use the renderer's own transform if registered.
+            auto* graphicsRenderer = CNA::Internal::Renderers::IGraphicsRenderer::GetForWindow(window);
+            if (graphicsRenderer != nullptr)
             {
                 float logX = windowX, logY = windowY;
-                if (backend->TransformWindowToLogical(windowX, windowY, logX, logY))
+                if (graphicsRenderer->TransformWindowToLogical(windowX, windowY, logX, logY))
                     return Microsoft::Xna::Framework::Vector2(logX, logY);
             }
         }

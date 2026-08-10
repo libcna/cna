@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // plan_opengl2.md: verify real mipmap upload + mip-aware filter selection on OpenGL2 (Texture2D
-// mip levels beyond 0 previously never reached the GPU at all -- IGraphicsBackend::
+// mip levels beyond 0 previously never reached the GPU at all -- IGraphicsRenderer::
 // UpdatePixelsLevel() was never overridden on OpenGL2's Tex class, so it silently no-op'd via the
 // shared base-class default; and GL_TEXTURE_MAX_LEVEL was never clamped to the texture's real
 // level count, so even a correctly-uploaded mip chain would render solid black under a

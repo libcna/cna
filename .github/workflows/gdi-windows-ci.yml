@@ -1,4 +1,4 @@
-# GDI-057: native MSVC compiler/hidden-window correctness gate for the Windows-only GDI backend.
+# GDI-057: native MSVC compiler/hidden-window correctness gate for the Windows-only GDI renderer.
 # This does not replace GDI-061's visible Windows lifecycle and DPI inspection: GitHub-hosted
 # runners do not provide a representative interactive desktop/compositor environment.
 #
@@ -60,7 +60,7 @@ jobs:
         run: |
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-            -DCNA_GRAPHICS_BACKEND=GDI \
+            -DCNA_GRAPHICS_RENDERER=GDI \
             -DCNA_BUILD_TESTS=ON \
             -DCNA_BUILD_EXAMPLES=OFF \
             -DCNA_ENABLE_NET=OFF \

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Task 899: DualTextureEffect linear fog pixel integration test — Vulkan backend.
+// Task 899: DualTextureEffect linear fog pixel integration test — Vulkan renderer.
 //
 // dual_texture3d was one of 5 Vulkan pipelines sharing FillExtPushConst()'s fully-packed
 // 128-byte push constant (zero spare bytes for fog). Fixed here by extending
@@ -54,9 +54,9 @@ static const Color kBlack(0, 0, 0, 255);
 static const Color kBlue(0, 0, 255, 255);
 static const Color kRed(255, 0, 0, 255);
 
-#if defined(CNA_BACKEND_D3D9)
+#if defined(CNA_RENDERER_D3D9)
 // D3D9's stock DualTextureEffect declaration includes both texture-coordinate channels.
-// Keeping the two channels equal makes this reachable public fixture backend-independent.
+// Keeping the two channels equal makes this reachable public fixture renderer-independent.
 struct DualTextureGpuVertex
 {
     float px, py, pz;
@@ -124,7 +124,7 @@ class DualTextureFogVulkanTest : public Game
         const Vector3 tl(-1.0f,  1.0f, z), bl(-1.0f, -1.0f, z);
         const Vector3 br( 1.0f, -1.0f, z), tr( 1.0f,  1.0f, z);
         const Vector2 uv0(0.0f, 0.0f), uv1(0.0f, 1.0f), uv2(1.0f, 1.0f), uv3(1.0f, 0.0f);
-#if defined(CNA_BACKEND_D3D9)
+#if defined(CNA_RENDERER_D3D9)
         const DualTextureGpuVertex quad[6] = {
             { -1.0f,  1.0f, z, 0.0f, 0.0f, 0.0f, 0.0f },
             { -1.0f, -1.0f, z, 0.0f, 1.0f, 0.0f, 1.0f },
@@ -151,7 +151,7 @@ class DualTextureFogVulkanTest : public Game
             // winding is culled under FNA's real default RasterizerState.
             dev.setRasterizerStateProperty(RasterizerState::CullNone);
             dev.setDepthStencilStateProperty(DepthStencilState::None);
-#if defined(CNA_BACKEND_D3D9)
+#if defined(CNA_RENDERER_D3D9)
             dev.SetVertexBuffer(&vb);
             dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
 #else

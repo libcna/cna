@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // plan_sdlgpu.md SDLGPU-18/19/20: real dynamic BlendState/DepthStencilState/RasterizerState proof
-// for the SDL_GPU graphics backend -- before this task every pipeline hardcoded Opaque blending,
+// for the SDL_GPU graphics renderer -- before this task every pipeline hardcoded Opaque blending,
 // CullMode::None, FillMode::Solid, and no stencil test at all; GraphicsDevice.BlendState/
 // DepthStencilState/RasterizerState assignments never reached SDL_gpu's own pipeline-baked state.
 //
@@ -31,7 +31,7 @@
 //   draw with a left-half scissor rect must only affect the left half, leaving the right half as
 //   background -- proves SetScissorRect/ApplyScissorForRef genuinely clip.
 //
-// REMED-GFX-180 (fixture defect, not a backend one): Check E's triangle buffer holds THREE
+// REMED-GFX-180 (fixture defect, not a renderer one): Check E's triangle buffer holds THREE
 // vertices and used to be drawn through a helper that hardcoded two primitives -- a request for six.
 // REMED-GFX-113's range guard rejected it, the rejection unwound past RunFillModeChecks' unbind, and
 // the frame then ended with a render target still bound, which Game::EndDraw's Present rightly
@@ -60,7 +60,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 
-#include "CNA/Internal/Backends/SdlGpu/SdlGpuGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/SdlGpu/SdlGpuRenderer.hpp"
 
 #include "common/PixelTestGame.hpp"
 
@@ -73,7 +73,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::SdlGpu;
+using namespace CNA::Internal::Renderers::SdlGpu;
 
 namespace
 {
@@ -389,7 +389,7 @@ class SdlGpuRenderStateTest : public Game
 
     // Check F: RasterizerState.ScissorTestEnable + GraphicsDevice.ScissorRectangle. Since
     // REMED-GFX-068 the scissor is captured PER DRAW at enqueue time (into each QueuedDrawRef) and
-    // applied via SDL_SetGPUScissor at replay (see SdlGpuGraphicsBackend::ApplyScissorForRef), so
+    // applied via SDL_SetGPUScissor at replay (see SdlGpuRenderer::ApplyScissorForRef), so
     // this readback would clip correctly even after SetRenderTarget(nullptr) resets ScissorRectangle
     // -- but it is deliberately kept BEFORE the unbind (the pre-GFX-068 requirement) as a stricter,
     // still-valid exercise of the live-then-flush path.

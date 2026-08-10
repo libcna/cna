@@ -6,7 +6,7 @@
 // every public buffer/Draw/effect/capability path unchanged. The closed requirement inventory at
 // the end prevents the successful route from being mistaken for the other stock-effect families.
 
-#include "CNA/Internal/Backends/Skia/SkiaSurface.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaSurface.hpp"
 
 #include <algorithm>
 #include <array>
@@ -19,7 +19,7 @@
 #include <string_view>
 #include <vector>
 
-using CNA::Internal::Backends::Skia::SkiaSurface;
+using CNA::Internal::Renderers::Skia::SkiaSurface;
 
 namespace
 {

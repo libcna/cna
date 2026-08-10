@@ -3,14 +3,14 @@
 // or crash an earlier, still-queued draw against that same buffer object's SMALLER, PREVIOUS
 // content.
 //
-// Before LLGL-46, LlglVertexBufferBackend::SetData()/LlglIndexBufferBackend::Upload() released
+// Before LLGL-46, LlglVertexBufferRenderer::SetData()/LlglIndexBufferRenderer::Upload() released
 // the buffer's existing LLGL::Buffer IMMEDIATELY and allocated a bigger one whenever the new
 // upload exceeded the current byte capacity -- regardless of whether an earlier, not-yet-replayed
 // FrameCommand still held that exact (now-freed) LLGL::Buffer* by raw pointer (frame commands only
 // replay at Present()/FlushPendingFrameEXT() time, not when queued). That is a genuine
 // use-after-free once the earlier draw finally replays, not merely a wrong-pixel bug: known_bugs.md
 // documents a reverted fix attempt that reproduced exactly this shape of crash
-// ("free(): invalid pointer" inside the Vulkan module) elsewhere in this backend.
+// ("free(): invalid pointer" inside the Vulkan module) elsewhere in this renderer.
 //
 // This file draws a SMALL triangle from a VertexBuffer/IndexBuffer pair, queues that draw, THEN
 // grows the SAME buffer objects (SetData() with more vertices/indices than were ever uploaded
@@ -38,7 +38,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 
-#include "CNA/Internal/Backends/Llgl/LlglGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Llgl/LlglRenderer.hpp"
 
 #include "common/PixelTestGame.hpp"
 
@@ -90,9 +90,9 @@ class LlglVertexIndexBufferGrowTest : public CNA::Examples::PixelTestGame
 
     void SetUpEffect(GraphicsDevice& device)
     {
-        auto& backend = static_cast<CNA::Internal::Backends::Llgl::LlglGraphicsBackend&>(
-            device.GetBackend());
-        backend.GetViewportSize(logicalWidth_, logicalHeight_);
+        auto& renderer = static_cast<CNA::Internal::Renderers::Llgl::LlglRenderer&>(
+            device.GetRenderer());
+        renderer.GetViewportSize(logicalWidth_, logicalHeight_);
 
         effect_ = std::make_unique<BasicEffect>(device);
         effect_->VertexColorEnabled = true;
@@ -123,7 +123,7 @@ public:
         // --- Check A: VertexBuffer grows mid-frame, IndexBuffer absent -------------------------
         device.Clear(kClear);
         {
-            // Declared capacity 6 (a quad's worth); the backend's own underlying LLGL::Buffer is
+            // Declared capacity 6 (a quad's worth); the renderer's own underlying LLGL::Buffer is
             // only ever sized from what SetData() ACTUALLY uploads, so the first, 3-vertex upload
             // below leaves it sized for 3 vertices -- the second, 6-vertex upload then genuinely
             // exceeds that and must grow.
@@ -171,7 +171,7 @@ public:
             vertexBuffer.SetData(corners.data(), static_cast<int>(corners.size()));
 
             // Declared capacity 6 (two triangles); the first upload below is only 3 indices (one
-            // triangle, the RED corners 0-2), so the backend's own buffer starts sized for 3
+            // triangle, the RED corners 0-2), so the renderer's own buffer starts sized for 3
             // indices and must grow when the second upload asks for 6.
             IndexBuffer indexBuffer(device, IndexElementSize::SixteenBits, 6, BufferUsage::None);
             const std::vector<std::uint16_t> oneTriangle{0, 1, 2};

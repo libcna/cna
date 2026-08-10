@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // Task 767: verify RasterizerState.DepthBias is applied on Bgfx via the new vertex-shader
 // Z-offset emulation (bgfx has no native polygon-offset mechanism, unlike D3D9/Vulkan/GL --
-// see BgfxGraphicsBackend::SetDepthBiasUniform and the u_depthBias uniform added to every 3D
+// see BgfxRenderer::SetDepthBiasUniform and the u_depthBias uniform added to every 3D
 // vertex shader). SlopeScaleDepthBias is deliberately NOT emulated (project-owner decision,
 // 2026-07-10, following the constant-DepthBias-only scope agreed for Bgfx specifically) --
 // this file's 3rd check documents that gap as informational only, matching this project's

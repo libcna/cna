@@ -8,11 +8,11 @@ audit phase (Phase 70, 15 real bugs found and fixed), EasyGL/Vulkan/Bgfx gap-clo
 (Phases 71–73), the Model/OcclusionQuery correctness audits (Phases 49–50), a new golden-image
 pixel-testing infrastructure, and a new FNA-vs-CNA JSON comparison harness — §7/§8 and the Stock
 Effects/Recommended-next-steps sections below were stale by this entire stretch of work; see
-`docs/graphics-backend-feature-matrix.md` for the authoritative, currently-maintained per-backend
+`docs/graphics-renderer-feature-matrix.md` for the authoritative, currently-maintained per-renderer
 detail this file now points to instead of duplicating; updated 2026-07-09 — Task 482 added the
 "Coverage axes" section (Present/Implemented/Tested/FNA-compatible/Intentionally-unsupported as
 independent questions); Task 483 added a dense per-class Graphics coverage table; Task 484 added
-the complementary per-backend Graphics support summary; Task 485 added a consolidated "Known
+the complementary per-renderer Graphics support summary; Task 485 added a consolidated "Known
 deviations from XNA/FNA" list, closing the Tasks 481-485 documentation arc; Task 490 added a
 release checklist gating 90%/95%/100% compatibility milestone claims against concrete criteria,
 closing Phase 54 in full, Tasks 481-490; updated 2026-07-17 — `plan_net.md` Task 9.1: GamerServices
@@ -58,7 +58,7 @@ orthogonal axes instead of a single blended number:
 | **Implemented** | Does that declaration have a real `.cpp` body that does the actual thing, not a stub/no-op/throw? | `ResourceContentManager::OpenStream` — header and class exist, but the body unconditionally throws `std::runtime_error` (`// CNA_STUB:`, not implemented). `INTERNAL_applyReverb` is a second example — present, but a documented no-op (no aux-send bus in SDL3_mixer). |
 | **Tested** | Does at least one automated test (`tests/`) or example (`examples/`) exercise this specific member, such that a regression would be caught? | Several `Microphone`/`BufferReady` real-hardware-capture-exceeds-threshold paths — implemented, but only the below-threshold case is tested (`NEXT.md`'s own documented gap). |
 | **FNA-compatible** | Has the implemented behavior been directly checked against FNA's own source or real running output — not just "looks reasonable," but verified value-by-value or line-by-line? | `IndexElementSize`'s numeric values — implemented, tested (the test itself was what was wrong), but at the time NOT FNA-compatible: CNA used `16`/`32`, real FNA uses `0`/`1` (found by literally running FNA and diffing the output, Task 479; **fixed, Task 921, 2026-07-09** — CNA now uses `0`/`1` too). |
-| **Intentionally unsupported** | Is a specific deviation from FNA behavior a deliberate, documented decision — not a "not yet done" gap? | Audio reverb, 3D HRTF/elevation — SDL3_mixer has no backend primitive for either; documented in `CHECKLIST.md`, not tracked as an open bug. |
+| **Intentionally unsupported** | Is a specific deviation from FNA behavior a deliberate, documented decision — not a "not yet done" gap? | Audio reverb, 3D HRTF/elevation — SDL3_mixer has no renderer primitive for either; documented in `CHECKLIST.md`, not tracked as an open bug. |
 
 These axes are not mutually exclusive tiers on one scale. A member is typically
 Present+Implemented+Tested well before anyone directly re-verifies it against FNA line-by-line —
@@ -73,8 +73,8 @@ present, implemented, and already tested for years.
 
 The tables above rate coverage per-namespace and per-subsystem; this table rates the ~26 major
 `Microsoft::Xna::Framework::Graphics` classes individually against the 5 axes above. It is
-deliberately dense, not exhaustive — for full per-backend/per-feature detail behind any ⚠️/❌/⛔
-below, see `docs/graphics-backend-feature-matrix.md` (Task 451, the authoritative current source)
+deliberately dense, not exhaustive — for full per-renderer/per-feature detail behind any ⚠️/❌/⛔
+below, see `docs/graphics-renderer-feature-matrix.md` (Task 451, the authoritative current source)
 and `AUDIT.md`'s own per-class FNA-vs-CNA rows (`AUDIT.md` lines ~110–1341); this table does not
 re-derive either, only summarizes and points to them. Legend matches the feature matrix: ✅ correct/
 verified · ⚠️ partial/emulated/known gap · ❌ known gap, not fixed · ⛔ BLOCKED (needs a
@@ -85,17 +85,17 @@ that check matters).
 
 | Class | Present | Implemented | Tested | FNA-compatible | Key gaps (task #) |
 |---|---|---|---|---|---|
-| `GraphicsDevice` | ✅ | ✅ (some overloads stub) | ✅ | ⚠️ | `ReferenceStencil` unconnected on EasyGL/Bgfx — **Vulkan fixed** (872, corrected 2026-07-09: an undocumented side effect of Task 870); `Clear` ignores `ClearOptions::Stencil` on all backends (871) |
-| `Texture2D` | ✅ | ⚠️ Partial (🔄 in AUDIT.md) | ✅ | ✅ core | Mip-level `SetData(level>0)` now real GPU upload on all 3 hardware backends (867 split into 924 EasyGL/925 Vulkan/926 Bgfx, all closed 2026-07-09); still throws on SDL_Renderer (681, by design — 2D-only backend); missing `SetDataPointerEXT`/`GetDataPointerEXT`/`TextureDataFromStreamEXT`; Color-only format |
-| `Texture3D` | ✅ | ✅ (EasyGL/Vulkan/Bgfx) | ✅ | ✅ | ⛔ SDL_Renderer construction silently null-backed (725); not sampled in shaders on any backend, architectural (863) |
+| `GraphicsDevice` | ✅ | ✅ (some overloads stub) | ✅ | ⚠️ | `ReferenceStencil` unconnected on EasyGL/Bgfx — **Vulkan fixed** (872, corrected 2026-07-09: an undocumented side effect of Task 870); `Clear` ignores `ClearOptions::Stencil` on all renderers (871) |
+| `Texture2D` | ✅ | ⚠️ Partial (🔄 in AUDIT.md) | ✅ | ✅ core | Mip-level `SetData(level>0)` now real GPU upload on all 3 hardware renderers (867 split into 924 EasyGL/925 Vulkan/926 Bgfx, all closed 2026-07-09); still throws on SDL_Renderer (681, by design — 2D-only renderer); missing `SetDataPointerEXT`/`GetDataPointerEXT`/`TextureDataFromStreamEXT`; Color-only format |
+| `Texture3D` | ✅ | ✅ (EasyGL/Vulkan/Bgfx) | ✅ | ✅ | ⛔ SDL_Renderer construction silently null-backed (725); not sampled in shaders on any renderer, architectural (863) |
 | `TextureCube` | ✅ | ✅ (EasyGL/Vulkan/Bgfx) | ✅ | ✅ | Same ⛔ 725 as `Texture3D`; `DDSFromStreamEXT` real DXT1/3/5 decode (663) |
 | `RenderTarget2D` | ✅ | ✅ | ✅ | ✅ | `DepthStencilFormat` fidelity real on EasyGL/Vulkan(911)/Bgfx; SDL_Renderer emulates (echoes format, no real backing store) |
 | `RenderTargetCube` | ✅ | ✅ | ✅ | ✅ | Same shape as `RenderTarget2D` |
-| `SpriteBatch` | ✅ | ✅ | ✅ | ⚠️ | `TextureAddressMode::Wrap`/`Mirror` ⛔ BLOCKED on SDL_Renderer (686/687); all other backends correct |
+| `SpriteBatch` | ✅ | ✅ | ✅ | ⚠️ | `TextureAddressMode::Wrap`/`Mirror` ⛔ BLOCKED on SDL_Renderer (686/687); all other renderers correct |
 | `SpriteFont` | ✅ | ✅ | ✅ | ✅ | `MeasureString(StringBuilder)` overload added (423); glyph placement/spacing/flip pixel-verified (424-429, 690-694) |
-| `BasicEffect` | ✅ | ✅ | ✅ | ✅ | Core MVP/lighting/texture/specular pixel-verified on all 3 3D backends, no open gaps |
+| `BasicEffect` | ✅ | ✅ | ✅ | ✅ | Core MVP/lighting/texture/specular pixel-verified on all 3 3D renderers, no open gaps |
 | `AlphaTestEffect` | ✅ | ✅ | ✅ | ⚠️ | `VertexColorEnabled` missing on Vulkan/Bgfx (887) |
-| `DualTextureEffect` | ✅ | ✅ | ✅ | ⚠️ | `VertexColorEnabled` missing on all 3 3D backends (889) |
+| `DualTextureEffect` | ✅ | ✅ | ✅ | ⚠️ | `VertexColorEnabled` missing on all 3 3D renderers (889) |
 | `EnvironmentMapEffect` | ✅ | ✅ | ✅ | ⚠️ | `DirectionalLight1`/`2` (890) and base-lerp alpha scaling (891) missing on Vulkan/Bgfx |
 | `SkinnedEffect` | ✅ | ✅ | ✅ | ⚠️ | `DirectionalLight1`/`2` (893), `SpecularColor`/`Power` (894), `WeightsPerVertex` GPU enforcement (895) missing on Vulkan/Bgfx |
 | `ShaderEffect` (NOXNA) | ✅ | ⚠️ | ✅ | N/A — not XNA API | Only EasyGL honors the documented "load from GLSL source" contract; Vulkan/Bgfx expect pre-compiled SPIR-V/binary despite the shared constructor signature |
@@ -112,20 +112,20 @@ that check matters).
 | `PresentationParameters` | ✅ | ✅ | ✅ | ✅ | No open gaps |
 | `GraphicsAdapter` | ✅ | ✅ | ✅ | ✅ | No open gaps |
 
-### Per-backend Graphics support (Task 484, 2026-07-09)
+### Per-renderer Graphics support (Task 484, 2026-07-09)
 
-The table above rates coverage per-class, across backends; this one flips the axis — one row per
-backend, summarizing overall Graphics maturity at a glance. For full per-feature detail behind any
-row below, see `docs/graphics-backend-feature-matrix.md` (Task 451, the authoritative source this
-table summarizes, not duplicates) and its own per-backend known-failure-count section; this table
+The table above rates coverage per-class, across renderers; this one flips the axis — one row per
+renderer, summarizing overall Graphics maturity at a glance. For full per-feature detail behind any
+row below, see `docs/graphics-renderer-feature-matrix.md` (Task 451, the authoritative source this
+table summarizes, not duplicates) and its own per-renderer known-failure-count section; this table
 adds nothing that source doesn't already contain in more detail.
 
-| Backend | Overall maturity | Fully correct | Partial / emulated | Architecturally blocked (⛔) | Known pre-existing test-failure baseline |
+| Renderer | Overall maturity | Fully correct | Partial / emulated | Architecturally blocked (⛔) | Known pre-existing test-failure baseline |
 |---|---|---|---|---|---|
-| **EasyGL** | Most mature — the primary backend; nearly everything below is ✅ | All 5 stock effects (core+lighting+specular+fog), `SpriteBatch`/`SpriteFont`, all 4 state classes, `RenderTarget2D`/`Cube` (MSAA/mip/depth-format), `Texture2D/3D/Cube` `SetData`/`GetData` (incl. real mip-level upload, Task 924), `OcclusionQuery` (both directions verified), `VertexBuffer`/`IndexBuffer`/`VertexDeclaration`, real `TextureFilter::Anisotropic` (918) | `Texture3D`/`TextureCube` don't inherit `Texture` so can't be sampled in shaders (863, architectural, **NEEDS_HUMAN**) | Non-`Color` `SurfaceFormat` GPU forwarding (732 — conflicts with the already-shipped `Texture::ValidateFormat` contract, Task 176) | 3 — `EasyGL_MRT_TwoAttachments`, `EasyGL_GraphicsDevice_ReferenceStencil`, `easy-gl-resource-smoke-tests` (Task 449's regression, 4510/4513); reconfirmed 4535/4539 as of Task 924, 2026-07-09 |
+| **EasyGL** | Most mature — the primary renderer; nearly everything below is ✅ | All 5 stock effects (core+lighting+specular+fog), `SpriteBatch`/`SpriteFont`, all 4 state classes, `RenderTarget2D`/`Cube` (MSAA/mip/depth-format), `Texture2D/3D/Cube` `SetData`/`GetData` (incl. real mip-level upload, Task 924), `OcclusionQuery` (both directions verified), `VertexBuffer`/`IndexBuffer`/`VertexDeclaration`, real `TextureFilter::Anisotropic` (918) | `Texture3D`/`TextureCube` don't inherit `Texture` so can't be sampled in shaders (863, architectural, **NEEDS_HUMAN**) | Non-`Color` `SurfaceFormat` GPU forwarding (732 — conflicts with the already-shipped `Texture::ValidateFormat` contract, Task 176) | 3 — `EasyGL_MRT_TwoAttachments`, `EasyGL_GraphicsDevice_ReferenceStencil`, `easy-gl-resource-smoke-tests` (Task 449's regression, 4510/4513); reconfirmed 4535/4539 as of Task 924, 2026-07-09 |
 | **Vulkan** | Second-most mature — most rendering correct; `BlendState` closed 2026-07-09 (868), `ReferenceStencil` also confirmed already-fixed (872, corrected 2026-07-09), only one isolated `DepthBias` sub-case remains as a real state-class gap | All 5 stock effects (core+lighting+specular+fog on every Vulkan 3D pipeline, including `colored3d`/`textured3d`/`colored_textured3d`/`dual_texture3d`/`skinned3d`/`env_map3d` — Task 899 closed this fully on 2026-07-07, predating this table; **correction (2026-07-09, caught while writing Task 488):** this row previously and incorrectly claimed these pipelines "still lack fog," which was already stale when this table was first written), `RenderTarget2D`/`Cube` (MSAA/mip/per-instance `DepthStencilFormat` fidelity via Task 911's format-keyed pipeline cache), `Texture2D/3D/Cube` `SetData`/`GetData` (incl. Task 865's real GPU readback, and real mip-level upload as of Task 925), `OcclusionQuery` — real per-draw-call query correlation implemented, both directions plus multi-draw-span pixel-verified (Task 447/854, 2026-07-10), `SamplerState`, `VertexBuffer`/`IndexBuffer`/`VertexDeclaration`, **`BlendState`** — real per-`Blend`/`BlendFunction` mapping across all 9 3D pipeline-creation sites (Task 868, closed 2026-07-09) | `DepthStencilState` compare-op + stencil ops now real (Task 870), `ReferenceStencil` also confirmed already-connected via `vkCmdSetStencilReference` (872, corrected 2026-07-09 — was undocumented since Task 870); one isolated `RasterizerState.DepthBias=-1e6` sub-case unresolved | none remaining (`OcclusionQuery`'s own former BLOCKED status, 447, was resolved 2026-07-10 — see the ✅ column) | **Updated 2026-07-11, per `NEXT.md`:** 1 — `Vulkan_DepthBias` only. The 3 `ContentManagerSkinnedModelTest.*` segfaults previously counted here (Xvfb/llvmpipe environment issue) were fixed by Task 953 (closed 2026-07-11), no exclusions needed anymore. Current confirmed run: `CnaTests` 4371/4373 (2 hardware skips), `ctest` 126/127. **Historical note:** prior to Task 868's fix this baseline was 9 (5× `BlendState` failures included, fixed 2026-07-09). |
-| **Bgfx** | Third — broad 2D+3D functionality with extensive pixel verification as of Phase 72, but not full parity: occlusion-query correctness can't be confirmed in this sandbox, and 2 named RenderTarget failures plus a `RenderTargetCube` depth-output bug (Task 952, deferred) remain open — see the last column | All 5 stock effects (core+lighting+specular+fog), `RenderTarget2D`/`Cube` (MSAA/mip/depth), `Texture2D/3D/Cube` `SetData`/`GetData` (incl. Task 914's blit-based readback), all 4 state classes, `SpriteBatch` `SamplerState` (Task 750) | `OcclusionQuery` Begin/End wiring is real (Task 448) but correctness (visible vs. occluded pixel counts) can't be pixel-verified under this sandbox's software GL 2.1 driver — dedicated-view architecture gap open (917); `ShaderEffect` custom-source loading unsupported (`CreateEffectBackend` returns `nullptr`) | None | **Updated 2026-07-11, per `NEXT.md`:** 2 remaining — `Bgfx_RenderTarget2D_MsaaResolve` (this sandbox's Xvfb has no DRI3 support; a documented environment limitation, not a code bug) and `Bgfx_RenderTargetCube_DepthFormat` (Task 952, **DEFERRED** — a `Depth24Stencil8`-attached `RenderTargetCube` face produces no colour output, root cause still not found after 3 investigation rounds). Task 951 (closed 2026-07-11) fixed 5 other pre-existing `RenderTarget2D`/`RenderTargetCube` `glReadPixels` crashes (including the `MipChain` flake previously tracked here) via a dedicated always-last-processed bgfx "flush" view. Current confirmed run: `CnaTests` 4375/4377 (2 hardware skips), `ctest` 103/105. |
-| **SDL_Renderer** | Deliberately 2D-only by design — not a maturity gap, an architectural scope boundary; its own 2D path is comprehensively audited and pixel-verified (`docs/sdl-renderer-2d-completeness.md`, Phase 70, 15 real bugs found and fixed) | All `SpriteBatch`/`SpriteFont` draw paths, all `BlendState`/`SamplerState` behavior, `RenderTarget2D` basic round-trip, `GetBackBufferData` (Task 915) | `RenderTarget2D`'s `DepthStencilFormat` is emulated — echoes the requested format back with no real backing store; `ClearOptions::Stencil` is emulated too | `TextureAddressMode::Wrap`/`Mirror` via `SpriteBatch` (686/687 — no native support in the `Draw()` path used, 3 unpicked design options); `Texture3D`/`TextureCube` construction succeeds silently with a null backend, a 94-existing-test blast radius if changed (725) | 11 — all throwing/exercising `"SDL_Renderer does not support 3D"` (`EffectApplyTest`×2, `SkinnedModelEXTPartTest.*`×6, `ContentManagerSkinnedModelTest.*`×3), matching this backend's accepted 2D-only scope exactly. Corrected from an original 13 by Task 709's own fix; reconfirmed via Task 915/456. |
+| **Bgfx** | Third — broad 2D+3D functionality with extensive pixel verification as of Phase 72, but not full parity: occlusion-query correctness can't be confirmed in this sandbox, and 2 named RenderTarget failures plus a `RenderTargetCube` depth-output bug (Task 952, deferred) remain open — see the last column | All 5 stock effects (core+lighting+specular+fog), `RenderTarget2D`/`Cube` (MSAA/mip/depth), `Texture2D/3D/Cube` `SetData`/`GetData` (incl. Task 914's blit-based readback), all 4 state classes, `SpriteBatch` `SamplerState` (Task 750) | `OcclusionQuery` Begin/End wiring is real (Task 448) but correctness (visible vs. occluded pixel counts) can't be pixel-verified under this sandbox's software GL 2.1 driver — dedicated-view architecture gap open (917); `ShaderEffect` custom-source loading unsupported (`CreateEffectRenderer` returns `nullptr`) | None | **Updated 2026-07-11, per `NEXT.md`:** 2 remaining — `Bgfx_RenderTarget2D_MsaaResolve` (this sandbox's Xvfb has no DRI3 support; a documented environment limitation, not a code bug) and `Bgfx_RenderTargetCube_DepthFormat` (Task 952, **DEFERRED** — a `Depth24Stencil8`-attached `RenderTargetCube` face produces no colour output, root cause still not found after 3 investigation rounds). Task 951 (closed 2026-07-11) fixed 5 other pre-existing `RenderTarget2D`/`RenderTargetCube` `glReadPixels` crashes (including the `MipChain` flake previously tracked here) via a dedicated always-last-processed bgfx "flush" view. Current confirmed run: `CnaTests` 4375/4377 (2 hardware skips), `ctest` 103/105. |
+| **SDL_Renderer** | Deliberately 2D-only by design — not a maturity gap, an architectural scope boundary; its own 2D path is comprehensively audited and pixel-verified (`docs/sdl-renderer-2d-completeness.md`, Phase 70, 15 real bugs found and fixed) | All `SpriteBatch`/`SpriteFont` draw paths, all `BlendState`/`SamplerState` behavior, `RenderTarget2D` basic round-trip, `GetBackBufferData` (Task 915) | `RenderTarget2D`'s `DepthStencilFormat` is emulated — echoes the requested format back with no real backing store; `ClearOptions::Stencil` is emulated too | `TextureAddressMode::Wrap`/`Mirror` via `SpriteBatch` (686/687 — no native support in the `Draw()` path used, 3 unpicked design options); `Texture3D`/`TextureCube` construction succeeds silently with a null renderer, a 94-existing-test blast radius if changed (725) | 11 — all throwing/exercising `"SDL_Renderer does not support 3D"` (`EffectApplyTest`×2, `SkinnedModelEXTPartTest.*`×6, `ContentManagerSkinnedModelTest.*`×3), matching this renderer's accepted 2D-only scope exactly. Corrected from an original 13 by Task 709's own fix; reconfirmed via Task 915/456. |
 
 ### Known deviations from XNA/FNA (Task 485, 2026-07-09)
 
@@ -146,7 +146,7 @@ historical reference (what was found and how), not as a current "still open" lis
 |---|---|---|---|
 | `IndexElementSize` numeric values | `SixteenBits=16`, `ThirtyTwoBits=32` (apparently assumed the enum encodes a literal bit-width) | Implicit, sequential `SixteenBits=0`, `ThirtyTwoBits=1` | Task 921 — **CLOSED**, this Tasks 479-485 arc's own headline finding, from running real `FNA.dll` and diffing its output |
 | Vulkan `BlendState` | Hardcoded one blend equation (`NonPremultiplied`'s) for anything other than `Opaque`, ignoring the actual requested `Blend`/`BlendFunction` values entirely | Applies the exact requested blend factors/functions per `BlendState` | Task 868 — **CLOSED**, confirmed 5× via pixel tests on real hardware, now fixed with real per-pipeline blend-state mapping |
-| EasyGL `TextureFilter::Anisotropic` | Silently fell back to plain trilinear filtering — no `GL_EXT_texture_filter_anisotropic` call anywhere in the backend | Applies real anisotropic filtering (Vulkan/Bgfx both do too) | Task 918 — **CLOSED**, real GL call now wired, clamped to the live driver cap |
+| EasyGL `TextureFilter::Anisotropic` | Silently fell back to plain trilinear filtering — no `GL_EXT_texture_filter_anisotropic` call anywhere in the renderer | Applies real anisotropic filtering (Vulkan/Bgfx both do too) | Task 918 — **CLOSED**, real GL call now wired, clamped to the live driver cap |
 | `Model`'s non-default constructor | Auto-defaulted `Root` to `bones[0]`, with no parameter to specify a different root bone index | Never sets `Root` in the constructor at all — `ModelReader` assigns it externally from an explicit `rootBoneIndex` naming any bone | Task 916 — **CLOSED**, additive optional `rootBoneIndex` param added, default `0` matches prior behavior |
 
 #### Intentional, permanent deviations
@@ -178,17 +178,17 @@ new percentage from this checklist — use it to gate whether a round-number mil
 (90%/95%/100%) is honest, using the counts already tracked in this file and `plan_graphics.md`.**
 
 **Before claiming any milestone at all**, the counts below must be pulled fresh from the real
-current state of Task 483's per-class table, Task 484's per-backend table, and Task 485's known-
+current state of Task 483's per-class table, Task 484's per-renderer table, and Task 485's known-
 deviations list plus any newer findings (e.g. Task 922, found by Task 487 after Task 485's table
 was written and not yet folded into it) — do not reuse cached numbers from an old audit.
 
 #### Before claiming "Graphics is ~90% XNA/FNA-compatible"
 
 - [ ] Every class in Task 483's per-class table is rated Present ✅ and Implemented ✅ on **at least
-      one** backend (no class is entirely ❌/missing).
-- [ ] Every class is rated Tested ✅ on at least one backend (no class has zero automated coverage).
-- [ ] At least one backend (currently EasyGL) has zero ❌-rated classes in Task 483's table.
-- [ ] The BLOCKED-task count (Task 484's per-backend table; currently 4: 686, 687, 725, 732 — 447
+      one** renderer (no class is entirely ❌/missing).
+- [ ] Every class is rated Tested ✅ on at least one renderer (no class has zero automated coverage).
+- [ ] At least one renderer (currently EasyGL) has zero ❌-rated classes in Task 483's table.
+- [ ] The BLOCKED-task count (Task 484's per-renderer table; currently 4: 686, 687, 725, 732 — 447
       was resolved 2026-07-10) is stable and each one has a written, current rationale — not
       silently stale.
 - [ ] `docs/migration-guide.md`'s "what doesn't work at all yet" list matches the current BLOCKED
@@ -199,7 +199,7 @@ was written and not yet folded into it) — do not reuse cached numbers from an 
 - [ ] All "before 90%" items above still hold.
 - [ ] Every stock Effect (`BasicEffect`/`AlphaTestEffect`/`DualTextureEffect`/`EnvironmentMapEffect`/
       `SkinnedEffect`) has its core rendering (MVP, lighting, texture, fog) pixel-verified on
-      **all three** 3D backends (EasyGL, Vulkan, Bgfx), not just EasyGL.
+      **all three** 3D renderers (EasyGL, Vulkan, Bgfx), not just EasyGL.
   - Currently true per Task 483/484's tables; the residual gaps are named per-effect secondary
     features (887, 889, 890, 891, 893–895), not core rendering.
 - [ ] The "Confirmed bugs, not yet fixed" list (Task 485) has a hard ceiling — **update (2026-07-09):
@@ -222,7 +222,7 @@ was written and not yet folded into it) — do not reuse cached numbers from an 
 - [ ] Zero BLOCKED tasks remain (currently 5) — each has either shipped a real implementation or an
       explicit, project-owner-approved permanent exclusion moved into the "Intentional, permanent
       deviations" list instead of staying BLOCKED indefinitely.
-- [ ] Every class in Task 483's table is ✅ across Present/Implemented/Tested **on every backend**
+- [ ] Every class in Task 483's table is ✅ across Present/Implemented/Tested **on every renderer**
       that supports that class's feature domain at all (SDL_Renderer is exempt for 3D-only classes,
       per its own documented 2D-only architectural scope).
 - [ ] The FNA-compatible axis (Task 482) has been **independently verified**, not assumed, for every
@@ -233,10 +233,10 @@ was written and not yet folded into it) — do not reuse cached numbers from an 
       equally-direct FNA source line-by-line comparison is the floor, not "looks reasonable."
 - [ ] Every "Intentional, permanent deviation" (Task 485's second table) has been re-confirmed as
       still permanent, not just carried forward from an old audit — a deviation accepted 6 months
-      ago may no longer be the right call once a backend's real capabilities change.
-- [ ] Full regression suite passes on all 4 backends (not run concurrently, per this project's own
+      ago may no longer be the right call once a renderer's real capabilities change.
+- [ ] Full regression suite passes on all 4 renderers (not run concurrently, per this project's own
       established convention) with **zero** known-pre-existing-failure carve-outs left unexplained
-      by an environment-limitation note (e.g. `docs/xna-4-api-coverage.md`'s per-backend table's own
+      by an environment-limitation note (e.g. `docs/xna-4-api-coverage.md`'s per-renderer table's own
       "known pre-existing test-failure baseline" column must read 0 for a genuine 100% claim, not
       just "documented and accepted").
 
@@ -244,13 +244,13 @@ was written and not yet folded into it) — do not reuse cached numbers from an 
 claim):** the ~90% bar looks achievable soon (all classes already rate ✅/⚠️ rather than ❌ per Task
 483); the ~95% bar is blocked on the 5-item confirmed-bugs list above; 100% additionally requires
 closing all 5 currently-BLOCKED tasks, which each need a project-owner architecture decision first
-(see `docs/graphics-backend-feature-matrix.md`'s BLOCKED-task table) — none are silent gaps, but
+(see `docs/graphics-renderer-feature-matrix.md`'s BLOCKED-task table) — none are silent gaps, but
 none are trivial engineering either.
 
 ### What counts as "public XNA 4.0 API"
 
 - `public` and `protected` members of non-internal classes/structs/enums in the `Microsoft.Xna.*` namespace.
-- FNA-internal helper classes, platform backends, `internal` C# classes, and Xbox-Live–specific runtime classes that were never meaningful on PC are **excluded** from this audit.
+- FNA-internal helper classes, platform renderers, `internal` C# classes, and Xbox-Live–specific runtime classes that were never meaningful on PC are **excluded** from this audit.
 
 ---
 
@@ -335,13 +335,13 @@ the full `Avatar*` real-rendering extension (`AvatarRenderer`, `AvatarAppearance
 
 ### `Microsoft::Xna::Framework::Graphics::GraphicsDevice`
 
-- All public methods are declared. Some behaviors are backend-dependent and may be no-ops.
+- All public methods are declared. Some behaviors are renderer-dependent and may be no-ops.
 - **Status:** Partial (functionally working for 2D and 3D; some query methods return stubs)
 
 ### `Microsoft::Xna::Framework::Graphics` — Stock Effects
 
-- `BasicEffect`, `AlphaTestEffect`, `DualTextureEffect`, `EnvironmentMapEffect`, `SkinnedEffect`: API surface complete on all 4 backends. **Stale claim corrected 2026-07-09 (Task 481):** Bgfx is no longer blocked on depth/blend state — Phase 72 ("Bgfx: full 2D+3D pixel-verified parity") closed that gap; all 5 stock effects' core rendering (MVP, lighting, texture, fog) now works and is pixel-verified on EasyGL, Vulkan, **and** Bgfx. Remaining per-effect gaps are narrow and tracked individually (e.g. `AlphaTestEffect.VertexColorEnabled` on Vulkan/Bgfx, Task 887; `EnvironmentMapEffect`'s `DirectionalLight1`/`2`, Task 890) — see `docs/graphics-backend-feature-matrix.md`'s "Stock Effects" table for the full, currently-accurate per-feature/per-backend breakdown. `ShaderEffect` (custom GLSL/SPIR-V) works on EasyGL/Vulkan; Bgfx's `CreateEffectBackend` still returns `nullptr` for it.
-- **Status:** Implemented (EasyGL, Vulkan, Bgfx — core rendering); a handful of named secondary-light/vertex-color extras remain per-backend gaps, see the feature matrix.
+- `BasicEffect`, `AlphaTestEffect`, `DualTextureEffect`, `EnvironmentMapEffect`, `SkinnedEffect`: API surface complete on all 4 renderers. **Stale claim corrected 2026-07-09 (Task 481):** Bgfx is no longer blocked on depth/blend state — Phase 72 ("Bgfx: full 2D+3D pixel-verified parity") closed that gap; all 5 stock effects' core rendering (MVP, lighting, texture, fog) now works and is pixel-verified on EasyGL, Vulkan, **and** Bgfx. Remaining per-effect gaps are narrow and tracked individually (e.g. `AlphaTestEffect.VertexColorEnabled` on Vulkan/Bgfx, Task 887; `EnvironmentMapEffect`'s `DirectionalLight1`/`2`, Task 890) — see `docs/graphics-renderer-feature-matrix.md`'s "Stock Effects" table for the full, currently-accurate per-feature/per-renderer breakdown. `ShaderEffect` (custom GLSL/SPIR-V) works on EasyGL/Vulkan; Bgfx's `CreateEffectRenderer` still returns `nullptr` for it.
+- **Status:** Implemented (EasyGL, Vulkan, Bgfx — core rendering); a handful of named secondary-light/vertex-color extras remain per-renderer gaps, see the feature matrix.
 
 ### `Microsoft::Xna::Framework::Graphics::PackedVector::*`
 
@@ -383,7 +383,7 @@ All 17 XNA 4.0 PackedVector types are fully implemented:
   variation selection (weighted lottery, matching FAudio), category volume/pause/resume/stop, 3D
   pan/attenuation, natural-completion state reconciliation, and fire-and-forget lifecycle are all
   real, including real Doppler pitch shift (`P9-3D-004/005`). Not FAudio/FACT — SDL3_mixer is the
-  backend, so 3D HRTF/elevation and streaming-wavebank offset/packetSize params are documented
+  renderer, so 3D HRTF/elevation and streaming-wavebank offset/packetSize params are documented
   accepted deviations, not stubs (`CHECKLIST.md`).
 - `Microphone`: **Implemented.** Real SDL3 capture device enumeration, `Start()`/`Stop()`,
   `GetData()`/`GetQueuedBytes()`, `BufferReady` event.
@@ -398,7 +398,7 @@ All 17 XNA 4.0 PackedVector types are fully implemented:
   (no reverb/HRTF/elevation, `QUEUE`/`REPLACE_OLDEST`/
   `REPLACE_QUIETEST` instance-limit behaviors all collapsing to "evict oldest," a cue-level
   instanceLimit eviction's victim search having no category/same-cue-definition filter at all) —
-  none of these are "unimplemented," they are deliberate, reasoned SDL3_mixer-backend trade-offs
+  none of these are "unimplemented," they are deliberate, reasoned SDL3_mixer-renderer trade-offs
   (or, for the `maxInstanceBehavior` collapse and the unfiltered victim search, matching FAudio's
   own acknowledged/shipped behavior exactly, quirks included). `Cue::IsPlaying`/`IsPaused` mutual
   exclusivity was one such deviation but is now fixed (`P9-LIFECYCLE-013`, resolved) — pausing no
@@ -430,7 +430,7 @@ follow-up (`P9-3D-010`) have landed. Per-property breakdown:
 | Distance attenuation | **Exact** | Matches FAudio's `F3DAudio.c` `ComputeDistanceAttenuation` no-custom-curve formula precisely: full volume within `SoundEffect.DistanceScale`, inverse-distance falloff (`gain = DistanceScale/distance`) only strictly beyond it (`P9-3D-003`). |
 | Doppler pitch shift | **Exact** | Matches FAudio's `F3DAudio.c` `CalculateDoppler` precisely: relative-velocity projection onto the emitter-to-listener axis, `SpeedOfSound`/`DopplerScale` clamping, NaN guard, `[0.5, 4.0]` output clamp (`P9-3D-004/005`). Needed no native 3D audio API — pure math over `Position`/`Velocity`, applied via the same `MIX_SetTrackFrequencyRatio` the plain `Pitch` property already uses. |
 | Pan | **Approximate** | Linear projection onto the listener's own right axis (`Cross(Forward, Up)`, normalized) over distance, clamped to `[-1,1]` — orientation-aware since `P9-3D-010` (previously raw world-space `(emitter.X - listener.X) / distance`, ignoring listener orientation entirely; found during the `P9-3D-009` audit and implemented as a user-directed follow-up). One remaining known gap vs. real X3DAudio: still a single linear axis, not X3DAudio's full multi-speaker energy-diffusion azimuth pipeline (no equivalent in SDL3_mixer's single stereo-gain-pair model, `CP-19`) — elevation/vertical displacement plays no role, matching CNA's documented no-HRTF/elevation limitation. Stereo sources now crossfeed-blend on a hard pan (`Pan`=±1) instead of eliminating the opposite channel outright, matching FNA's `SetPanMatrixCoefficients` exactly (`P11-PAN-001`, RFC-1 — previously a real gap here, fixed after this row was first written; mono sources are bit-exact either way). The **emitter's** own `Forward`/`Up` remain unread — matching real X3DAudio, where emitter orientation only affects multi-channel emitter configurations, not a mono source's pan. |
-| Elevation / true HRTF | **Not supported** | SDL3_mixer has no positional-audio DSP graph or head-related transfer function; no plan to implement (would need a different backend entirely). |
+| Elevation / true HRTF | **Not supported** | SDL3_mixer has no positional-audio DSP graph or head-related transfer function; no plan to implement (would need a different renderer entirely). |
 | Reverb (aux-send routing) | **Not supported** | Confirmed by the `P9-XACT-010` audit to be FACT's sound-level `SOUND_FLAG_HAS_DSP` reverb-send-enable flag, not something `Apply3D` itself touches; SDL3_mixer has no aux-send/return bus for it to route to. |
 
 **Bottom line:** of `Apply3D`'s three positional effects (pan, distance attenuation, Doppler),
@@ -441,7 +441,7 @@ remaining named gap rather than a vague "not fully implemented" (stereo hard-pan
 crossfeed gap was fixed by `P11-PAN-001`). Elevation/HRTF and reverb aux-send remain out of scope,
 since both would require a fundamentally different audio backend than SDL3_mixer.
 
-#### SDL3_mixer vs FAudio/FACT backend limitations (`P9-DOCS-006`)
+#### SDL3_mixer vs FAudio/FACT renderer limitations (`P9-DOCS-006`)
 
 CNA's audio backend is **SDL3_mixer**, not FAudio/FACT — XACT content (`.xgs`/`.xsb`/`.xwb`) is
 parsed by a hand-written `CNA::Internal::Audio::XactParser` and played through SDL3_mixer's own
@@ -449,7 +449,7 @@ mixing graph, which is structurally different from FAudio's XAudio2-derived voic
 consequences, all downstream of this one architectural choice:
 
 - **No `F3DAudio` equivalent.** SDL3_mixer has no positional-audio DSP graph; pan and distance
-  attenuation are approximated at the CNA layer, not computed by the backend. Doppler pitch shift
+  attenuation are approximated at the CNA layer, not computed by the renderer. Doppler pitch shift
   is the exception: it's a closed-form formula over `Position`/`Velocity` needing no native 3D
   audio API at all, so CNA computes it exactly (matching FAudio's `F3DAudio.c`
   `CalculateDoppler`, `P9-3D-004/005`) and applies it via `MIX_SetTrackFrequencyRatio` (the same
@@ -457,7 +457,7 @@ consequences, all downstream of this one architectural choice:
   dedicated 3D application from `Cue` also is not the same call path — CNA approximates it via
   `SoundEffectInstance::Apply3D` on every playing wave.
 - **No aux-send/return bus.** FAudio (like XAudio2) supports a shared reverb submix voice;
-  SDL3_mixer has no equivalent routing concept, so reverb has no backend primitive to attach to.
+  SDL3_mixer has no equivalent routing concept, so reverb has no renderer primitive to attach to.
 - **Only one "cooked" (post-mix, pre-output) callback slot per track.** This is why the DSP filter
   (`T-4C`) and a hypothetical stereo-crossfeed pan implementation (`CP-19`) can't coexist without a
   real redesign — SDL3_mixer's per-track callback isn't a chain, it's a single slot.
@@ -486,7 +486,7 @@ which one a given deviation is:
 1. **Deliberate CNA-specific compromises**, forced by the SDL3_mixer backend choice — the entire
    "SDL3_mixer vs FAudio/FACT" list above. These are documented in `CHECKLIST.md` precisely because
    they are permanent, reasoned trade-offs, not bugs to eventually fix. (The interactive-variation
-   selection used to be a uniform-pick fallback here, but that was a real gap, not a backend
+   selection used to be a uniform-pick fallback here, but that was a real gap, not a renderer
    compromise — it's been variable-range-driven since `P9-XACT-002/003/004`, see Implemented above;
    this stale claim was corrected during the `P10-AUDIT` pass, `plan_audio.md`.)
 2. **Bugs that were fixed to *actually* match FNA**, not compromises — e.g. every `P9-LIFECYCLE`/
@@ -501,7 +501,7 @@ which one a given deviation is:
 
 When in doubt about which category a future finding falls into: if fixing it would require
 touching SDL3_mixer's actual capabilities, it's category 1 (document in `CHECKLIST.md`). If it's
-purely a CNA-side logic bug independent of the backend, it's category 2 (just fix it).
+purely a CNA-side logic bug independent of the renderer, it's category 2 (just fix it).
 
 #### Full per-member cross-reference (`P10-AUDIT-002/003`)
 
@@ -622,7 +622,7 @@ both but never throws either from its own Audio source either), not a gap.
 ### `Microsoft::Xna::Framework::Input::Touch`
 
 - `TouchPanel`, `TouchPanelCapabilities`, `TouchCollection`, `TouchLocation`, `TouchLocationState`, `GestureSample`, `GestureType`: headers exist, full API surface.
-- SDL3 touch backend is wired up (`feature/input` branch, `plan_input.md` Phase I2, INPUT-TOUCH-*/INPUT-GESTURE-* cluster): `SDL_EVENT_FINGER_*` feeds `TouchPanel::INTERNAL_onTouchEvent`, `TouchDeviceExists`, and `DisplayWidth`/`DisplayHeight` (from the real back-buffer size). Gestures (Tap, DoubleTap, Hold, Horizontal/Vertical/Free drag, Flick, Pinch, PinchComplete) are recognized end-to-end by `GestureDetector` and covered by a dedicated test suite.
+- SDL3 touch renderer is wired up (`feature/input` branch, `plan_input.md` Phase I2, INPUT-TOUCH-*/INPUT-GESTURE-* cluster): `SDL_EVENT_FINGER_*` feeds `TouchPanel::INTERNAL_onTouchEvent`, `TouchDeviceExists`, and `DisplayWidth`/`DisplayHeight` (from the real back-buffer size). Gestures (Tap, DoubleTap, Hold, Horizontal/Vertical/Free drag, Flick, Pinch, PinchComplete) are recognized end-to-end by `GestureDetector` and covered by a dedicated test suite.
 - **Input member-level parity (2026-07-06):** the full public Input surface is now mechanically parity-checked against FNA — member/signature parity via the generated `docs/input-member-parity-matrix.md` (INPUT-API-027) + the compile-time signature freeze (INPUT-API-031), and enum values byte-pinned (INPUT-API-034). Keyboard keycode/scancode maps are byte-identical to FNA (INPUT-KBD-009/010). See `plan_input.md` for the per-type task status.
 - Gesture recognition is a byte-faithful port of FNA's `GestureDetector.cs` (audited, task 829) with deterministic clock-injected tests (task 830); multi-touch edge cases + coordinate scaling covered (tasks 825–828).
 - Known deviation: `TouchPanel::GetState()` falls back to an event-driven `InputManager` snapshot rather than FNA's per-frame poll population of `touches_` (documented in-source, task 714) — CNA's input bridge is event-driven, not poll-driven, throughout. The event-driven `InputManager` map is internally unbounded, but `TouchPanel::GetState()` caps the public snapshot at `MAX_TOUCHES` (8) to match FNA (DEC-10, 2026-07-05).
@@ -634,7 +634,7 @@ both but never throws either from its own Audio source either), not a gap.
 - `Song`, `SongCollection`, `MediaPlayer`, `MediaQueue`: implemented with SDL_mixer.
 - `Album`, `Artist`, `Genre`, `Picture`, `Playlist` and their collections: stub.
 - `MediaLibrary`: stub.
-- `Video`, `VideoPlayer`: implemented (FFmpeg backend).
+- `Video`, `VideoPlayer`: implemented (FFmpeg renderer).
 - **Status:** Partial
 
 ### `Microsoft::Xna::Framework::Storage`
@@ -677,7 +677,7 @@ implementations:
   `NetworkGamer`, etc.) is real, ENet-backed transport, not a stub. `NetworkSessionType::SystemLink`
   (LAN-style local play, including real host migration and simulated latency/packet-loss testing
   hooks — `plan_net.md` Phases 5/6) is fully implemented; `PlayerMatch`/`Ranked`/session invites
-  remain documented stubs (no matchmaking backend exists to implement them against — see §9 for
+  remain documented stubs (no matchmaking renderer exists to implement them against — see §9 for
   the current per-feature breakdown).
 
 ---
@@ -718,7 +718,7 @@ no implementation exists or is scheduled.
 
 | Class | Reason |
 |-------|--------|
-| `FNA3D` | FNA private GPU backend |
+| `FNA3D` | FNA private GPU renderer |
 | `PipelineCache` | FNA internal shader cache |
 | `ProfileCapabilities` | FNA internal feature detection |
 | `VertexDeclarationCache` | FNA internal |
@@ -726,22 +726,22 @@ no implementation exists or is scheduled.
 | `EffectHelpers`, `EffectMaterial`, `Resources` | FNA internal effect helpers |
 | `GestureDetector` | FNA internal touch gesture FSM |
 | `FNALoggerEXT` | FNA-specific logging extension |
-| `BaseYUVPlayer`, `IVideoPlayerCodec`, `VideoPlayerAV1`, `VideoPlayerTheora` | FNA internal video codec backends |
+| `BaseYUVPlayer`, `IVideoPlayerCodec`, `VideoPlayerAV1`, `VideoPlayerTheora` | FNA internal video codec renderers |
 | All `FNAPlatform/*`, `Utilities/*` | FNA platform glue |
 
 ---
 
-## 7. Stock Effect Backend Parity
+## 7. Stock Effect Renderer Parity
 
 **Rewritten 2026-07-09 (Task 481) — the previous version of this section (dated 2026-06-26, Task
 196) was stale by an entire session's worth of work** (`plan_graphics.md` Phases 71–73: EasyGL
 final gap closure, Bgfx full 2D+3D pixel-verified parity, Vulkan gap closure) and its central claim
 — "Bgfx `SetDepthTestEnabled`/`SetBlendEnabled` still throw, no 3D pixel tests possible" — is no
-longer true. Rather than re-duplicate detailed per-effect/per-backend tables here (which drift
+longer true. Rather than re-duplicate detailed per-effect/per-renderer tables here (which drift
 stale again the same way), this section now points at the single, currently-maintained source:
 
-**See `docs/graphics-backend-feature-matrix.md`** (Task 451) for the authoritative "Stock Effects"
-table (all 5 stock effects × 4 backends, per-feature rows down to `DirectionalLight1`/`2`,
+**See `docs/graphics-renderer-feature-matrix.md`** (Task 451) for the authoritative "Stock Effects"
+table (all 5 stock effects × 4 renderers, per-feature rows down to `DirectionalLight1`/`2`,
 `SpecularColor`/`Power`, `VertexColorEnabled`, `WeightsPerVertex`), the "2D SpriteBatch/SpriteFont"
 table, and the full list of currently-BLOCKED tasks (686/687 SDL_Renderer `Wrap`/`Mirror`, 725
 SDL_Renderer `Texture3D`/`TextureCube`, 732 EasyGL non-`Color` `SurfaceFormat` — Task 447 Vulkan
@@ -750,9 +750,9 @@ OcclusionQuery is no longer on this list, see the 2026-07-10 update below).
 **Update (2026-07-10, Task 823) — Phase 72 (Bgfx full 2D+3D pixel-verified parity) is now closed
 in full**: of the 38 real gaps found in a first-ever complete row-by-row triage of that phase's 85
 rows, 37 are now ✅ closed this session (2 real, previously-undiscovered bugs found and fixed along
-the way — `BgfxGraphicsBackend::ApplySamplerState`'s incomplete `TextureFilter` split-Min/Mag/Mip
+the way — `BgfxRenderer::ApplySamplerState`'s incomplete `TextureFilter` split-Min/Mag/Mip
 mapping, Task 743; `RenderTarget2D`/`RenderTargetCube`'s missing `SurfaceFormat` validation, Task
-774, both shared-code fixes affecting all 4 backends) and 1 remains explicitly `NEEDS_HUMAN`
+774, both shared-code fixes affecting all 4 renderers) and 1 remains explicitly `NEEDS_HUMAN`
 (Task 767, depth bias/slope-scale depth bias — bgfx has zero depth-bias mechanism at the API
 level, a permanent ceiling needing a project-owner decision on shader-level Z-offset emulation).
 Every `GraphicsDevice` state-object category (`DepthStencilState`/`RasterizerState`/`BlendState`/
@@ -790,20 +790,20 @@ full detail.
   implemented and pixel-verified on **EasyGL, Vulkan, and Bgfx** — Bgfx's own 3D pipeline (depth
   test, blend state) is real and working, not the blocked stub the previous version of this
   section described.
-- Remaining gaps are narrow, named, per-feature items, not whole-backend blockers: e.g.
+- Remaining gaps are narrow, named, per-feature items, not whole-renderer blockers: e.g.
   `AlphaTestEffect.VertexColorEnabled` (Vulkan/Bgfx, Task 887), `DualTextureEffect.
   VertexColorEnabled` (all 3, Task 889), `EnvironmentMapEffect`'s secondary directional lights and
   base-lerp alpha scaling (Vulkan/Bgfx, Tasks 890/891), `SkinnedEffect`'s secondary lights/specular/
   `WeightsPerVertex` enforcement (Vulkan/Bgfx, Tasks 893-895).
 - `ShaderEffect` (custom shader source): implemented and pixel-tested on EasyGL (GLSL) and Vulkan
-  (SPIR-V); Bgfx's `CreateEffectBackend` still returns `nullptr` for it — the one remaining
+  (SPIR-V); Bgfx's `CreateEffectRenderer` still returns `nullptr` for it — the one remaining
   whole-feature gap in this section.
-- **SDL_Renderer** is a 2D-only backend by design (stock 3D effects are N/A there) — but its own 2D
+- **SDL_Renderer** is a 2D-only renderer by design (stock 3D effects are N/A there) — but its own 2D
   path (`SpriteBatch`/`SpriteFont`/`BlendState`/etc.) went through a full, dedicated audit phase
   this session (`plan_graphics.md` Phase 70, 15 real bugs found and fixed) and is now comprehensively
   pixel-verified; see `docs/sdl-renderer-2d-completeness.md`.
 - `GraphicsDevice` state objects (`BlendState`/`DepthStencilState`/`RasterizerState`/`SamplerState`)
-  have their own per-backend correctness table in the feature matrix, separate from the stock-effect
+  have their own per-renderer correctness table in the feature matrix, separate from the stock-effect
   table above. **Update (2026-07-09):** Vulkan's `BlendState` (previously "almost entirely fake" —
   hardcoded one blend equation regardless of request) is now fixed (Task 868), as is Bgfx's own
   narrower version of the same gap (Task 923) — the stock effects themselves always rendered
@@ -814,16 +814,16 @@ full detail.
 ## 8. Overall Coverage Estimate
 
 Coverage is estimated as the fraction of public XNA 4.0 API surface that is usable
-(not merely declared) in a typical 2D or 3D game on the EasyGL backend.
+(not merely declared) in a typical 2D or 3D game on the EasyGL renderer.
 
 **Note (2026-07-09, Task 481; updated Task 739):** this table's own framing is EasyGL-scoped by
 design (see line above) and its Graphics-related rows are still broadly accurate for that one
-backend. It does **not** describe Vulkan/Bgfx/SDL_Renderer coverage — those differ meaningfully
+renderer. It does **not** describe Vulkan/Bgfx/SDL_Renderer coverage — those differ meaningfully
 per feature (Vulkan's `BlendState` was almost entirely fake, now fixed, Task 868; Bgfx's own
 narrower version of the same gap also fixed, Task 923; SDL_Renderer is comprehensively
 pixel-verified for 2D but has 5+ named BLOCKED/architectural gaps). See
-`docs/graphics-backend-feature-matrix.md` for the current, per-backend, per-feature breakdown
-rather than relying on a single blended percentage across 4 backends with genuinely different
+`docs/graphics-renderer-feature-matrix.md` for the current, per-renderer, per-feature breakdown
+rather than relying on a single blended percentage across 4 renderers with genuinely different
 maturity levels.
 
 | Subsystem | Estimated coverage | Notes |
@@ -846,14 +846,14 @@ maturity levels.
 | `MediaPlayer / VideoPlayer` | ~85 % | FFmpeg video; SDL_mixer audio; Album/Artist/Genre stub |
 | `ContentManager` | ~65 % | File-extension readers; no XNB; no ServiceProvider property |
 | `StorageDevice / StorageContainer` | ~90 % | Native filesystem; full XNA API shape |
-| `GamePad / Keyboard / Mouse` (XNA 4.0 core) | ~100 % behavior | SDL3 backend; FNA-faithful `GetHashCode`/`ToString`/ordering, keycode/scancode maps, dead-zone math, button/axis mapping — all wired and tested (`feature/input` Phases I3–I5, I9–I10). `Mouse::SetPosition` now converts logical→window for scaled/letterboxed windows (a-0001, task 846) — no remaining input-layer gap; residual items are platform/hardware-gated only. |
+| `GamePad / Keyboard / Mouse` (XNA 4.0 core) | ~100 % behavior | SDL3 renderer; FNA-faithful `GetHashCode`/`ToString`/ordering, keycode/scancode maps, dead-zone math, button/axis mapping — all wired and tested (`feature/input` Phases I3–I5, I9–I10). `Mouse::SetPosition` now converts logical→window for scaled/letterboxed windows (a-0001, task 846) — no remaining input-layer gap; residual items are platform/hardware-gated only. |
 | `TextInputEXT` / `Mouse`+`GamePad` EXT / `Keyboard` scancode EXT | ~95 % behavior | FNA extensions, all implemented and FNA-faithful (`feature/input` Phases I1, I3–I5, I9): `TextInputEXT` is `char16_t`/UTF-16 with Unicode/IME tests; relative mouse, `ClickedEXT`, rumble, `GetGUIDEXT` (format fixed, task 816), gyro/accel. Untested slice is hardware/IME-gated. |
 | `MouseCursor` (MonoGame-inspired, `NOXNA`) | ~100 % of exposed surface | 12 stock cursors, `FromTexture2D`, `IDisposable` singleton-safe dispose; no XNA/FNA equivalent. |
 | `Input::Touch` | ~98 % behavior | Gesture pipeline (Tap…PinchComplete) byte-faithful FNA port, wired end-to-end and tested with a deterministic clock (`feature/input` Phase I2, I9). Documented deviations only: event-driven vs. poll-based `GetState()`. `MaximumTouchCount` reports 4 and `GetState()` caps at `MAX_TOUCHES` (8), both matching FNA (DEC-09/DEC-10). |
 | `GamerServices` | ~85 % | **Updated (`feature/net`):** real implementation across Achievements/Avatar/Friends/Presence/Leaderboards/Privileges/Profile/SignedInGamer; see §9 for the per-feature breakdown. `Guide` itself remains a minimal stub (no system UI exists to show). |
 | `Audio (XACT)` — AudioEngine/SoundBank/WaveBank/Cue | ~97 % | Real `.xgs`/`.xsb`/`.xwb` parser + SDL3_mixer playback; category/lifecycle/3D/instance-limit+fade (both category- and cue-level)/continuous RPC volume+pitch all real, including the built-in `AttackTime`/`ReleaseTime` envelope variables (`P10-RPC-002/003/004`); gaps are documented accepted deviations (no HRTF/elevation, no DSP-preset RPC destination), not missing implementation |
-| `Framework.Net` (NetworkSession, etc.) | ~80 % | **Updated (`feature/net`):** real ENet-backed transport, not excluded. `SystemLink` (LAN-style local play, host migration, simulated latency/packet-loss) is fully implemented; `PlayerMatch`/`Ranked`/invites remain documented stubs (no matchmaking backend to implement them against). See §9 for the per-feature breakdown. |
-| **Overall (EasyGL backend, 2D+3D game)** | **~85 %** | Main gap now: XNB content pipeline (GamerServices/Net no longer main gaps — see updated rows above). (Touch and XACT were main gaps as of this table's original estimate; Touch closed by `feature/input` Phase I2, XACT closed by `feature/audio` — see the `Input::Touch` and Audio rows above.) **Note (2026-07-09, Task 739; GamerServices/Net rows updated `feature/net`):** this is an old, informal, blended (2D+3D+GamerServices+content-pipeline) estimate, not re-derived from a checklist — per this file's own stated policy, informal percentages are "color commentary," not a gate. For the Graphics-only subsystem specifically, `docs/graphics-compatibility-report.md`'s Task 500 milestone (a real, test-execution-verified ~90%, not estimated) supersedes this row for that scope; this ~85% figure has not been recomputed and should not be read as still-current without redoing the underlying count. |
+| `Framework.Net` (NetworkSession, etc.) | ~80 % | **Updated (`feature/net`):** real ENet-backed transport, not excluded. `SystemLink` (LAN-style local play, host migration, simulated latency/packet-loss) is fully implemented; `PlayerMatch`/`Ranked`/invites remain documented stubs (no matchmaking renderer to implement them against). See §9 for the per-feature breakdown. |
+| **Overall (EasyGL renderer, 2D+3D game)** | **~85 %** | Main gap now: XNB content pipeline (GamerServices/Net no longer main gaps — see updated rows above). (Touch and XACT were main gaps as of this table's original estimate; Touch closed by `feature/input` Phase I2, XACT closed by `feature/audio` — see the `Input::Touch` and Audio rows above.) **Note (2026-07-09, Task 739; GamerServices/Net rows updated `feature/net`):** this is an old, informal, blended (2D+3D+GamerServices+content-pipeline) estimate, not re-derived from a checklist — per this file's own stated policy, informal percentages are "color commentary," not a gate. For the Graphics-only subsystem specifically, `docs/graphics-compatibility-report.md`'s Task 500 milestone (a real, test-execution-verified ~90%, not estimated) supersedes this row for that scope; this ~85% figure has not been recomputed and should not be read as still-current without redoing the underlying count. |
 
 ---
 
@@ -893,8 +893,8 @@ behavior or a genuinely unimplemented feature).
 | `SimulatedLatency` / `SimulatedPacketLoss` | Implemented | Phase 6 — a real receive-side delayed-delivery queue / probabilistic drop on real ENet traffic, deterministic under test (injectable clock/seeded RNG); scoped to AppData delivered to local gamers, not session-management/relay traffic. |
 | `LocalNetworkGamer.SendData`/`ReceiveData`, `PacketReader`/`PacketWriter` | Implemented | Real serialization over the real transport. |
 | `NetworkSession.Dispose()` / lifecycle | Implemented | Phases 2, 12-14 — several confirmed real bugs (double-dispose use-after-free, async callbacks never invoked, enumerator null-deref after Dispose) found and fixed. |
-| `NetworkSessionType::PlayerMatch` / `Ranked` | Documented stub | No matchmaking backend exists to implement them against; out of scope for a local/LAN-focused transport. |
-| Session invites (`InviteAcceptedEventArgs`, invite-based join) | Documented stub | Same reason as PlayerMatch/Ranked — no online invite backend exists. |
+| `NetworkSessionType::PlayerMatch` / `Ranked` | Documented stub | No matchmaking renderer exists to implement them against; out of scope for a local/LAN-focused transport. |
+| Session invites (`InviteAcceptedEventArgs`, invite-based join) | Documented stub | Same reason as PlayerMatch/Ranked — no online invite renderer exists. |
 
 ---
 
@@ -927,7 +927,7 @@ behavior or a genuinely unimplemented feature).
    SignedInGamer, `GamerServicesComponent`/`GamerServicesNotAvailableException`) and Net (real
    ENet-backed `SystemLink` transport, host migration, simulated latency/packet-loss). See §9 for
    the per-feature breakdown; `Guide.Show` (no system UI) and `PlayerMatch`/`Ranked`/invites (no
-   matchmaking backend) remain documented stubs.
+   matchmaking renderer) remain documented stubs.
 
 ---
 
@@ -943,7 +943,7 @@ behavior or a genuinely unimplemented feature).
 - `include/Microsoft/Xna/Framework/GamerServices/GamerServicesNotAvailableException.hpp` — stub
 - All 17 PackedVector types fully implemented with correct FNA Pack/Unpack math (Tasks 197–199)
 - `tests/PackedVectorGolden.md` — FNA bit-packing reference table for all 17 types
-- §7 Stock Effect Backend Parity table (Task 196)
+- §7 Stock Effect Renderer Parity table (Task 196)
 - §8 Overall Coverage Estimate table (Task 200)
 
 ### What remains missing or incomplete
@@ -953,7 +953,7 @@ behavior or a genuinely unimplemented feature).
 - `ContentSerializerAttribute` family (intentionally excluded)
 - **Updated 2026-07-09 (Task 481):** the 2 items previously listed here ("Vulkan pixel tests for
   BasicEffect/AlphaTestEffect/SkinnedEffect", "Bgfx 3D state blocks all Bgfx 3D pixel tests") are
-  now DONE — see Phases 71–73 in `plan_graphics.md` and `docs/graphics-backend-feature-matrix.md`.
+  now DONE — see Phases 71–73 in `plan_graphics.md` and `docs/graphics-renderer-feature-matrix.md`.
   Current real Graphics gaps, all individually tracked (not silently missing). **Updated
   2026-07-09**: Vulkan's `BlendState` (868), Bgfx's narrower `BlendState` gap (923), EasyGL's
   `Anisotropic` fallback (918), `Model`'s missing `rootBoneIndex` (916), `IndexElementSize`'s
@@ -965,10 +965,10 @@ behavior or a genuinely unimplemented feature).
     shader-sampling architecture) and 869 (`GraphicsDevice` state value-vs-reference semantics) —
     both NEEDS_HUMAN, neither picked. **447 (Vulkan OcclusionQuery) was resolved 2026-07-10** —
     removed from this list, see `docs/occlusionquery-support.md`.
-  - `GraphicsDevice.ReferenceStencil` has no backend connection on EasyGL/Bgfx (Vulkan confirmed
+  - `GraphicsDevice.ReferenceStencil` has no renderer connection on EasyGL/Bgfx (Vulkan confirmed
     already-fixed, corrected 2026-07-09, Task 872); `Clear` ignores `ClearOptions::Stencil` on all
-    3 3D backends (Task 871). Both confirmed real, scoped (touches new backend virtual methods
-    across the remaining hardware backends plus a genuinely new
+    3 3D renderers (Task 871). Both confirmed real, scoped (touches new renderer virtual methods
+    across the remaining hardware renderers plus a genuinely new
     stencil-verification pixel test), not yet started.
   - A first-ever full row-by-row triage of `plan_graphics.md` Phases 72/73 (2026-07-09) found
     Bgfx is dramatically less pixel-test-covered than Vulkan for `DepthStencilState`/`SpriteFont`/
@@ -990,7 +990,7 @@ behavior or a genuinely unimplemented feature).
 **No longer excluded (decision 1a, `feature/net`):** GamerServices and Avatar API (Xbox 360
 exclusive, but implemented anyway against the real Xbox 360 reference behavior — see §9) and Net
 (`Microsoft.Xna.Framework.Net`, real ENet-backed `SystemLink` transport — see §9). `PlayerMatch`/
-`Ranked`/session invites remain stubs, but for a different reason: no matchmaking/invite backend
+`Ranked`/session invites remain stubs, but for a different reason: no matchmaking/invite renderer
 exists to implement them against, not because the namespace itself is excluded.
 
 ### Build status
@@ -1005,9 +1005,9 @@ half of item 3 are now ALSO done. **Updated 2026-07-10**: item 3 (Phase 72) is n
 too, and item 1's BLOCKED-task count dropped from 7 to 6 (447 resolved). Current real next steps:
 
 1. Resolve the 6 currently-BLOCKED/NEEDS_HUMAN architecture decisions (686, 687, 725, 732,
-   863, 869 — see `docs/graphics-backend-feature-matrix.md`'s own BLOCKED-task table) — each needs
+   863, 869 — see `docs/graphics-renderer-feature-matrix.md`'s own BLOCKED-task table) — each needs
    a project-owner call, not more investigation.
-2. Fix `ClearOptions::Stencil` (all 3 3D backends, Task 871) and `ReferenceStencil` (EasyGL/Bgfx
+2. Fix `ClearOptions::Stencil` (all 3 3D renderers, Task 871) and `ReferenceStencil` (EasyGL/Bgfx
    only — Vulkan confirmed already-fixed 2026-07-09, Task 872) — confirmed real, scoped, not yet
    started.
 3. ~~Close Phase 72 (Bgfx)'s 38 confirmed real pixel-test gaps~~ — **DONE 2026-07-10**, see the

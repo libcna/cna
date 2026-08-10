@@ -1,7 +1,7 @@
-# Android Graphics Backend — Status and Limitations
+# Android Graphics Renderer — Status and Limitations
 
-CNA defaults to the `SDL_RENDERER` graphics backend on Android (confirmed directly: `CMakeLists.txt`'s
-backend-selection logic is `if(EMSCRIPTEN) WEBGL2 elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux") OPENGLES else
+CNA defaults to the `SDL_RENDERER` graphics renderer on Android (confirmed directly: `CMakeLists.txt`'s
+renderer-selection logic is `if(EMSCRIPTEN) WEBGL2 elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux") OPENGLES else
 SDL_RENDERER` — Android's `CMAKE_SYSTEM_NAME` is `"Android"`, not `"Linux"`, even under the NDK
 toolchain, so it falls into the `SDL_RENDERER` branch). This document is the Task 460 status
 write-up for Android graphics support specifically — audio, input, and sensor/device support on
@@ -22,9 +22,9 @@ cmake --build cmake-build-android --target CNA -j"$(nproc)"
 ```
 
 Configure succeeds and confirms `SDL_RENDERER` is selected, as expected. **The build itself fails**
-— not in any CNA or graphics-backend source file, but in 2 unrelated files belonging to the sibling
+— not in any CNA or graphics-renderer source file, but in 2 unrelated files belonging to the sibling
 `sharp-runtime` repository, before the `SHARP_RUNTIME` target (a hard dependency of `CNA`) can even
-finish, so **`SdlGraphicsBackend.cpp`'s own Android buildability is currently unverified** — the
+finish, so **`SdlRenderer.cpp`'s own Android buildability is currently unverified** — the
 build never gets far enough to attempt it:
 
 1. `sharp-runtime/src/System/IO/FileStream.cpp` (via `FileStream.hpp:25`): `error: private field
@@ -52,14 +52,14 @@ there since has broken NDK compatibility. This document does not attempt to iden
 ## What is and isn't verified as a result
 
 - **Verified**: `SDL_RENDERER` is genuinely selected as the Android default (configure-time
-  confirmation, `-- CNA: Using SDL_RENDERER graphics backend`).
-- **NOT verified, currently unknown**: whether `SdlGraphicsBackend.cpp` (or any other CNA graphics
+  confirmation, `-- CNA: Using SDL_RENDERER graphics renderer`).
+- **NOT verified, currently unknown**: whether `SdlRenderer.cpp` (or any other CNA graphics
   source file) compiles cleanly for `arm64-v8a`/Android at all — the build fails one dependency
   layer before ever reaching it. Every claim in `docs/sdl-renderer-2d-completeness.md` (the detailed
   Tasks 666–731 audit) was verified against the **desktop Linux/X11 build only**; none of it has
   been re-verified against a real Android device/emulator, or even a successful Android
   cross-compile.
-- **NOT verified**: whether SDL3's own Android renderer driver selection (`SDL_RENDERER` backend,
+- **NOT verified**: whether SDL3's own Android renderer driver selection (`SDL_RENDERER` renderer,
   Android side) actually uses OpenGL ES as this document's title assumes, versus some other
   driver SDL3 might pick on a given device — this project has never run far enough on Android to
   check `SDL_GetRendererInfo` there, unlike the desktop build's own confirmed `SDL_Renderer uses
@@ -78,14 +78,14 @@ there since has broken NDK compatibility. This document does not attempt to iden
 
 | Area | Status |
 |---|---|
-| Default backend selection (`SDL_RENDERER`) | Confirmed correct at CMake configure time |
+| Default renderer selection (`SDL_RENDERER`) | Confirmed correct at CMake configure time |
 | `CNA`/`SHARP_RUNTIME` Android cross-compile | **Currently broken** — 2 unrelated `sharp-runtime` NDK-portability bugs (Task 920, not fixed here) |
-| `SdlGraphicsBackend.cpp` Android buildability | Unknown — build never reaches it |
+| `SdlRenderer.cpp` Android buildability | Unknown — build never reaches it |
 | Real device/emulator graphics execution | Never attempted in this project's history |
 | Android graphics demo (Gradle/NDK project) | Does not exist (only the devices demo does) |
 | CI coverage | None |
 
 **Recommendation for whoever picks up Task 920** (fixing the 2 `sharp-runtime` bugs): once fixed,
-re-run this exact cross-compile command and confirm `SdlGraphicsBackend.cpp` itself compiles cleanly
+re-run this exact cross-compile command and confirm `SdlRenderer.cpp` itself compiles cleanly
 before drawing any further conclusions about Android graphics readiness — this document intentionally
 stops at "currently blocked" rather than guessing at what would happen next.

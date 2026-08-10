@@ -7,8 +7,8 @@
 // read-back point, same PointWrap-vs-PointClamp comparison. See those files' header comments for
 // the full rationale.
 //
-// Before this task's fix, BgfxSpriteBatchBackend didn't override SetSamplerFilter/
-// SetSamplerAddressMode at all (silent no-op via the base ISpriteBatchBackend's default empty
+// Before this task's fix, BgfxSpriteBatchRenderer didn't override SetSamplerFilter/
+// SetSamplerAddressMode at all (silent no-op via the base ISpriteBatchRenderer's default empty
 // bodies) — SpriteBatch::Begin()'s SamplerState had zero effect, same bug shape already fixed on
 // EasyGL (Task 269) and Vulkan (Task 665).
 //

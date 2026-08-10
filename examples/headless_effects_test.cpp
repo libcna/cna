@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // plan_headless.md HEADLESS-51/64: exercises AlphaTestEffect, DualTextureEffect,
-// EnvironmentMapEffect, SkinnedEffect, and Model.Draw() end-to-end against the HEADLESS backend
+// EnvironmentMapEffect, SkinnedEffect, and Model.Draw() end-to-end against the HEADLESS renderer
 // (through real GraphicsDevice::DrawPrimitives/DrawIndexedPrimitives calls, not just constructing
 // the effect and calling Apply() in isolation). Previously these were only an inference from
 // "they share the same DrawPrimitivesEx/DrawIndexedPrimitivesEx path already proven for
@@ -8,7 +8,7 @@
 //
 // Each of DualTextureEffect/EnvironmentMapEffect/SkinnedEffect unconditionally sets
 // TextureEnabled (plus its own extra flag) in FillGpuDrawParams() regardless of whether a texture
-// was actually assigned -- so HeadlessGraphicsBackend::DrawPrimitivesEx's HEADLESS-22 validation
+// was actually assigned -- so HeadlessRenderer::DrawPrimitivesEx's HEADLESS-22 validation
 // (Require(!(textureEnabled && texture0==nullptr), ...) etc.) genuinely trips if the game forgot
 // to set one, and does not trip once it's set. AlphaTestEffect only sets TextureEnabled when a
 // texture was actually assigned, so it degrades gracefully either way.
@@ -60,7 +60,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTextureSkinned.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 
-#include "CNA/Internal/Backends/Headless/HeadlessGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Headless/HeadlessRenderer.hpp"
 
 #include <cstdint>
 #include <cstdio>
@@ -70,7 +70,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::Headless;
+using namespace CNA::Internal::Renderers::Headless;
 
 class HeadlessEffectsTest : public Game
 {
@@ -101,7 +101,7 @@ protected:
     void Draw(const GameTime&) override
     {
         auto& dev = getGraphicsDeviceProperty();
-        auto& backend = static_cast<HeadlessGraphicsBackend&>(dev.GetBackend());
+        auto& renderer = static_cast<HeadlessRenderer&>(dev.GetRenderer());
         dev.Clear(Color::Black);
 
         Texture2D tex = Texture2D::CreateFromPixels(dev, 1, 1, std::vector<std::uint8_t>{255, 255, 255, 255});
@@ -236,14 +236,14 @@ protected:
 
             Model model(&dev, {&bone0, &bone1}, {&mesh});
 
-            const std::uint64_t before = backend.GetStatistics().drawCallCount;
+            const std::uint64_t before = renderer.GetStatistics().drawCallCount;
             bool threw = false;
             try
             {
                 model.Draw(Matrix::getIdentityProperty(), Matrix::getIdentityProperty(), Matrix::getIdentityProperty());
             }
             catch (const HeadlessValidationException&) { threw = true; }
-            const std::uint64_t after = backend.GetStatistics().drawCallCount;
+            const std::uint64_t after = renderer.GetStatistics().drawCallCount;
             check(!threw && after == before + 1,
                   "a procedurally-built Model draws via Model::Draw() with exactly 1 draw call, no throw");
         }

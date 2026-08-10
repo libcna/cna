@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MS-PL
-// SKIA-39: Complete the public SpriteBatch overload audit under the Skia backend.
+// SKIA-39: Complete the public SpriteBatch overload audit under the Skia renderer.
 //
 // The shared sdlrenderer_spritebatch_overloads_test.cpp already executes the first nine public
-// Texture2D Draw overloads through this backend. This focused Skia test covers the remaining
+// Texture2D Draw overloads through this renderer. This focused Skia test covers the remaining
 // optional-source-rectangle overload and every DrawString overload: std::string and StringBuilder,
 // in their basic, uniform-scale, and non-uniform-scale forms. A hand-built atlas keeps the test on
 // the common SpriteFont/SpriteBatch path rather than invoking Skia text rendering.

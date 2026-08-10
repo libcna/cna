@@ -2,7 +2,7 @@
 // REMED-GFX-068: SdlGpu GraphicsDevice.ScissorRectangle must clip draws issued while a
 // RenderTarget2D is bound — even though the draws are replayed at Present-time.
 //
-// SdlGpu is a DEFERRED backend: every draw is queued (drawOrder_) and replayed at Present-time
+// SdlGpu is a DEFERRED renderer: every draw is queued (drawOrder_) and replayed at Present-time
 // inside a per-target render pass. Before this fix the scissor was applied ONCE PER PASS
 // (ApplyScissorForPass) from the live member state at Present() time, unlike the per-draw viewport
 // GFX-064 wired. GraphicsDevice::SetRenderTarget resets ScissorRectangle to the target's full size

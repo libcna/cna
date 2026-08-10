@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 //
 // REMED-GFX-177, the native half. examples/descriptor_capacity_contract_test.cpp proves through the
-// public XNA API that a high-cardinality workload renders correctly on every backend; this fixture
+// public XNA API that a high-cardinality workload renders correctly on every renderer; this fixture
 // proves the D3D12-specific CARDINALITY and LIFETIME claims that a rendered pixel cannot show:
 //
 //   * a freed slot is REISSUED rather than consumed forever -- the exact defect, measured as a
@@ -17,19 +17,19 @@
 //   * no heap object is created per draw, and no wait, idle or extra submit was added to make any
 //     of the above true.
 //
-// This is deliberately an off-screen backend fixture (args.window == nullptr), for the reason
+// This is deliberately an off-screen renderer fixture (args.window == nullptr), for the reason
 // examples/d3d12_smoke_test.cpp's own header records: GraphicsDevice's constructor creates a real
-// window for any non-Headless backend, and this dev loop's Wine dxgi.dll crashes in
+// window for any non-Headless renderer, and this dev loop's Wine dxgi.dll crashes in
 // d3d12_swapchain_init. Everything measured here is device-level, so no swap chain is involved.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
-#include "CNA/Internal/Backends/D3D12/D3D12GraphicsBackend.hpp"
-#include "CNA/Internal/Backends/D3D12/D3D12DescriptorHeaps.hpp"
-#include "CNA/Internal/Backends/D3D12/D3D12RenderTargets.hpp"
-#include "CNA/Internal/Backends/D3D12/D3D12TextureCube.hpp"
-#include "CNA/Internal/Backends/D3D12/D3D12Textures.hpp"
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/D3D12/D3D12Renderer.hpp"
+#include "CNA/Internal/Renderers/D3D12/D3D12DescriptorHeaps.hpp"
+#include "CNA/Internal/Renderers/D3D12/D3D12RenderTargets.hpp"
+#include "CNA/Internal/Renderers/D3D12/D3D12TextureCube.hpp"
+#include "CNA/Internal/Renderers/D3D12/D3D12Textures.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Graphics/ImageData.hpp"
 
 #include <cstdint>
@@ -38,8 +38,8 @@
 #include <string>
 #include <vector>
 
-using namespace CNA::Internal::Backends::D3D12;
-using CNA::Internal::Backends::GraphicsBackendCreateArgs;
+using namespace CNA::Internal::Renderers::D3D12;
+using CNA::Internal::Renderers::GraphicsRendererCreateArgs;
 using CNA::Internal::Graphics::ImageData;
 
 namespace
@@ -89,14 +89,14 @@ namespace
 
 int main()
 {
-    GraphicsBackendCreateArgs args;
+    GraphicsRendererCreateArgs args;
     args.window = nullptr; // off-screen, deliberately -- see file header comment.
     args.virtualWidth = 64;
     args.virtualHeight = 64;
 
-    D3D12GraphicsBackend backend(args);
-    ID3D12Device* device = backend.GetDeviceEXT();
-    const std::shared_ptr<D3D12DescriptorHeaps>& heaps = backend.GetDescriptorHeapsEXT();
+    D3D12Renderer renderer(args);
+    ID3D12Device* device = renderer.GetDeviceEXT();
+    const std::shared_ptr<D3D12DescriptorHeaps>& heaps = renderer.GetDescriptorHeapsEXT();
 
     Check(device != nullptr && heaps != nullptr, "A1: device and descriptor allocator set exist");
     std::printf("=== REMED-GFX-177 D3D12 descriptor allocator ===\n");
@@ -120,12 +120,12 @@ int main()
         const std::uint32_t liveBefore = heaps->cbvSrvUav.GetStatsEXT().live;
         std::uint32_t indexOfDoomed = D3D12ShaderVisibleDescriptorAllocator::kInvalidIndex;
         {
-            D3D12TextureBackend tex(&backend, TinyImage());
+            D3D12TextureRenderer tex(&renderer, TinyImage());
             indexOfDoomed = tex.GetShaderResourceViewIndexEXT();
             const D3D12DescriptorHeapStats s = heaps->cbvSrvUav.GetStatsEXT();
             Check(s.allocations == before + 1 && s.live == liveBefore + 1,
                   "B1: a Texture2D takes exactly one CBV/SRV/UAV descriptor");
-            Check(backend.GetCbvSrvUavGpuHandleEXT(indexOfDoomed).ptr != 0,
+            Check(renderer.GetCbvSrvUavGpuHandleEXT(indexOfDoomed).ptr != 0,
                   "B2: its index resolves to a real shader-visible GPU handle");
         }
         const D3D12DescriptorHeapStats after = heaps->cbvSrvUav.GetStatsEXT();
@@ -135,7 +135,7 @@ int main()
 
         // Submission here is synchronous, so the fence stamp taken at Free() has already completed
         // and the next allocation may take the slot back with no wait of any kind.
-        D3D12TextureBackend replacement(&backend, TinyImage());
+        D3D12TextureRenderer replacement(&renderer, TinyImage());
         Check(replacement.GetShaderResourceViewIndexEXT() == indexOfDoomed,
               "B4: the very next texture is given the freed slot back (index " +
                   std::to_string(indexOfDoomed) + ")");
@@ -154,7 +154,7 @@ int main()
         {
             for (int i = 0; i < 200; ++i)
             {
-                D3D12TextureBackend tex(&backend, TinyImage());
+                D3D12TextureRenderer tex(&renderer, TinyImage());
                 const std::uint32_t idx = tex.GetShaderResourceViewIndexEXT();
                 if (idx != lastIndex) ++distinctIndices;
                 lastIndex = idx;
@@ -180,20 +180,20 @@ int main()
     // ---- D: growth on genuine simultaneous demand -------------------------------------------------
     {
         const D3D12DescriptorHeapStats before = heaps->cbvSrvUav.GetStatsEXT();
-        ID3D12DescriptorHeap* heapBefore = backend.GetCbvSrvUavHeapEXT();
+        ID3D12DescriptorHeap* heapBefore = renderer.GetCbvSrvUavHeapEXT();
 
-        std::vector<std::unique_ptr<D3D12TextureBackend>> live;
+        std::vector<std::unique_ptr<D3D12TextureRenderer>> live;
         std::vector<std::uint32_t> indices;
         std::vector<D3D12_GPU_DESCRIPTOR_HANDLE> handlesAtBirth;
         for (int i = 0; i < 300; ++i)
         {
-            live.push_back(std::make_unique<D3D12TextureBackend>(&backend, TinyImage()));
+            live.push_back(std::make_unique<D3D12TextureRenderer>(&renderer, TinyImage()));
             indices.push_back(live.back()->GetShaderResourceViewIndexEXT());
             handlesAtBirth.push_back(live.back()->GetShaderResourceViewGpuHandleEXT());
         }
 
         const D3D12DescriptorHeapStats after = heaps->cbvSrvUav.GetStatsEXT();
-        ID3D12DescriptorHeap* heapAfter = backend.GetCbvSrvUavHeapEXT();
+        ID3D12DescriptorHeap* heapAfter = renderer.GetCbvSrvUavHeapEXT();
 
         Check(after.capacity >= 300 && after.growths >= 2,
               "D1: 300 simultaneously live textures grew the heap past its starting 64 (" +
@@ -249,9 +249,9 @@ int main()
 
         // And the reclaimed capacity is genuinely reusable: the next 300 must come entirely from the
         // free list, with no further growth.
-        std::vector<std::unique_ptr<D3D12TextureBackend>> again;
+        std::vector<std::unique_ptr<D3D12TextureRenderer>> again;
         for (int i = 0; i < 300; ++i)
-            again.push_back(std::make_unique<D3D12TextureBackend>(&backend, TinyImage()));
+            again.push_back(std::make_unique<D3D12TextureRenderer>(&renderer, TinyImage()));
         const D3D12DescriptorHeapStats reused = heaps->cbvSrvUav.GetStatsEXT();
         Check(reused.growths == released.growths && reused.capacity == released.capacity,
               "D10: a second wave of 300 needs NO further growth (grow=" +
@@ -266,14 +266,14 @@ int main()
     {
         // Prime: a moderate live set, then 500 cycles of destroy-one/create-one around it. Capacity
         // and the bump cursor must both stop moving; only the recycle count may rise.
-        std::vector<std::unique_ptr<D3D12TextureBackend>> live;
+        std::vector<std::unique_ptr<D3D12TextureRenderer>> live;
         for (int i = 0; i < 50; ++i)
-            live.push_back(std::make_unique<D3D12TextureBackend>(&backend, TinyImage()));
+            live.push_back(std::make_unique<D3D12TextureRenderer>(&renderer, TinyImage()));
 
         const D3D12DescriptorHeapStats primed = heaps->cbvSrvUav.GetStatsEXT();
         for (int step = 0; step < 500; ++step)
             live[static_cast<std::size_t>(step % 50)] =
-                std::make_unique<D3D12TextureBackend>(&backend, TinyImage());
+                std::make_unique<D3D12TextureRenderer>(&renderer, TinyImage());
         const D3D12DescriptorHeapStats churned = heaps->cbvSrvUav.GetStatsEXT();
 
         Check(churned.capacity == primed.capacity && churned.growths == primed.growths,
@@ -297,12 +297,12 @@ int main()
 
         // A render target with depth takes one RTV, one DSV and one SRV. 100 live is past the RTV
         // heap's own starting 64 and far past the DSV heap's 8.
-        std::vector<std::unique_ptr<D3D12RenderTargetBackend>> targets;
+        std::vector<std::unique_ptr<D3D12RenderTargetRenderer>> targets;
         std::vector<D3D12_CPU_DESCRIPTOR_HANDLE> rtvs;
         for (int i = 0; i < 100; ++i)
         {
-            targets.push_back(std::make_unique<D3D12RenderTargetBackend>(
-                &backend, device, 4, 4, /*depthFormat=*/1, /*mipMap=*/false, /*multiSampleCount=*/0));
+            targets.push_back(std::make_unique<D3D12RenderTargetRenderer>(
+                &renderer, device, 4, 4, /*depthFormat=*/1, /*mipMap=*/false, /*multiSampleCount=*/0));
             rtvs.push_back(targets.back()->GetRtvEXT());
         }
         const D3D12DescriptorHeapStats rtvLive = heaps->rtv.GetStatsEXT();
@@ -313,7 +313,7 @@ int main()
               "F2: and 100 DSVs, past the DSV heap's own starting 8 (" + Describe("dsv", dsvLive) + ")");
 
         // The RTV/DSV allocators grow by APPENDING a block, so an already-issued handle never moves.
-        // That is the property that lets D3D12RenderTargetBackend keep storing a raw CPU handle.
+        // That is the property that lets D3D12RenderTargetRenderer keep storing a raw CPU handle.
         std::uint32_t movedRtvs = 0;
         for (std::size_t i = 0; i < rtvs.size(); ++i)
             if (targets[i]->GetRtvEXT().ptr != rtvs[i].ptr) ++movedRtvs;
@@ -335,7 +335,7 @@ int main()
         const D3D12DescriptorHeapStats beforeCycles = heaps->rtv.GetStatsEXT();
         for (int i = 0; i < 300; ++i)
         {
-            D3D12RenderTargetBackend rt(&backend, device, 4, 4, 1, false, 0);
+            D3D12RenderTargetRenderer rt(&renderer, device, 4, 4, 1, false, 0);
             (void)rt.GetRtvEXT();
         }
         const D3D12DescriptorHeapStats afterCycles = heaps->rtv.GetStatsEXT();
@@ -348,7 +348,7 @@ int main()
     {
         const D3D12DescriptorHeapStats before = heaps->rtv.GetStatsEXT();
         {
-            D3D12RenderTargetCubeBackend cube(&backend, device, 4, /*depthFormat=*/1, false, 0);
+            D3D12RenderTargetCubeRenderer cube(&renderer, device, 4, /*depthFormat=*/1, false, 0);
             const D3D12DescriptorHeapStats live = heaps->rtv.GetStatsEXT();
             Check(live.live == before.live + 6,
                   "G1: a RenderTargetCube takes exactly six RTVs, one per face (live delta=" +
@@ -369,8 +369,8 @@ int main()
         for (int filter = 0; filter < 9; ++filter)
             for (int addr = 0; addr < 3; ++addr)
             {
-                backend.ApplySamplerState(0, filter, addr, (addr + 1) % 3, 4);
-                (void)backend.GetSamplerGpuHandleEXT(0);
+                renderer.ApplySamplerState(0, filter, addr, (addr + 1) % 3, 4);
+                (void)renderer.GetSamplerGpuHandleEXT(0);
             }
         const D3D12DescriptorHeapStats distinct = heaps->sampler.GetStatsEXT();
         Check(distinct.capacity > 16 && distinct.growths >= 1,
@@ -385,8 +385,8 @@ int main()
             for (int filter = 0; filter < 9; ++filter)
                 for (int addr = 0; addr < 3; ++addr)
                 {
-                    backend.ApplySamplerState(0, filter, addr, (addr + 1) % 3, 4);
-                    (void)backend.GetSamplerGpuHandleEXT(0);
+                    renderer.ApplySamplerState(0, filter, addr, (addr + 1) % 3, 4);
+                    (void)renderer.GetSamplerGpuHandleEXT(0);
                 }
         const D3D12DescriptorHeapStats repeated = heaps->sampler.GetStatsEXT();
         Check(repeated.allocations == distinct.allocations,
@@ -401,8 +401,8 @@ int main()
         for (int filter = 0; filter < 9; ++filter)
             for (int addr = 0; addr < 3; ++addr)
             {
-                backend.ApplySamplerState(0, filter, addr, (addr + 1) % 3, 4);
-                if (backend.GetSamplerGpuHandleEXT(0).ptr == 0) ++nullHandles;
+                renderer.ApplySamplerState(0, filter, addr, (addr + 1) % 3, 4);
+                if (renderer.GetSamplerGpuHandleEXT(0).ptr == 0) ++nullHandles;
             }
         Check(nullHandles == 0,
               "H5: every cached sampler still resolves after the heap grew (null handles=" +
@@ -414,19 +414,19 @@ int main()
         // The clock must have advanced past zero -- every submit above signalled it. A freed slot is
         // stamped against it, so a fence that never moved would mean the deferral is vacuous.
         Check(heaps->clock.lastSubmitted > 0 && heaps->clock.fence != nullptr,
-              "I1: the allocator set shares the backend's real fence and sees submissions (last=" +
+              "I1: the allocator set shares the renderer's real fence and sees submissions (last=" +
                   std::to_string(heaps->clock.lastSubmitted) + ")");
         Check(heaps->clock.Completed() >= heaps->clock.lastSubmitted,
-              "I2: this backend submits synchronously, so every stamp is already complete when it is "
+              "I2: this renderer submits synchronously, so every stamp is already complete when it is "
               "taken -- the deferral is correct rather than merely unused (completed=" +
                   std::to_string(heaps->clock.Completed()) + ")");
     }
 
     // ---- I2: multi-frame reclamation across REAL submissions --------------------------------------
     //
-    // The public fixture cannot cross a public frame boundary on this backend (no swap chain under
+    // The public fixture cannot cross a public frame boundary on this renderer (no swap chain under
     // this dev loop, DX-100/DX-102), so the frames-in-flight half of the contract is measured here,
-    // against the backend's own real per-frame fence primitive. Each round: create a live set,
+    // against the renderer's own real per-frame fence primitive. Each round: create a live set,
     // record and submit a real command list, signal that frame's fence, release the set. A freed
     // slot must be stamped against the submission that could still reference it, and must come back
     // once -- and only once -- that fence has completed.
@@ -437,19 +437,19 @@ int main()
 
         for (int frame = 0; frame < 8; ++frame)
         {
-            std::vector<std::unique_ptr<D3D12TextureBackend>> perFrame;
+            std::vector<std::unique_ptr<D3D12TextureRenderer>> perFrame;
             for (int i = 0; i < 40; ++i)
-                perFrame.push_back(std::make_unique<D3D12TextureBackend>(&backend, TinyImage()));
+                perFrame.push_back(std::make_unique<D3D12TextureRenderer>(&renderer, TinyImage()));
 
-            ID3D12CommandAllocator* allocator = backend.GetCommandAllocatorEXT(frame % 2);
-            ID3D12GraphicsCommandList* cmdList = backend.GetCommandListEXT();
+            ID3D12CommandAllocator* allocator = renderer.GetCommandAllocatorEXT(frame % 2);
+            ID3D12GraphicsCommandList* cmdList = renderer.GetCommandListEXT();
             allocator->Reset();
             cmdList->Reset(allocator, nullptr);
-            ID3D12DescriptorHeap* bound[] = {backend.GetCbvSrvUavHeapEXT(), backend.GetSamplerHeapEXT()};
+            ID3D12DescriptorHeap* bound[] = {renderer.GetCbvSrvUavHeapEXT(), renderer.GetSamplerHeapEXT()};
             cmdList->SetDescriptorHeaps(2, bound);
             cmdList->Close();
-            backend.ExecuteCommandListAndWaitEXT(cmdList);
-            lastFrameFence = backend.SignalAndWaitForFrameEXT(frame % 2);
+            renderer.ExecuteCommandListAndWaitEXT(cmdList);
+            lastFrameFence = renderer.SignalAndWaitForFrameEXT(frame % 2);
 
             // Release the whole frame's set. Every slot is stamped against a fence value that is at
             // least the submission above.
@@ -499,14 +499,14 @@ int main()
         // A resource created against the OLD device must still be destructible after the device is
         // recreated: it holds its own reference to the old allocator set, so freeing its slot cannot
         // touch the new device's index space.
-        auto survivor = std::make_unique<D3D12TextureBackend>(&backend, TinyImage());
-        const std::shared_ptr<D3D12DescriptorHeaps> oldHeaps = backend.GetDescriptorHeapsEXT();
+        auto survivor = std::make_unique<D3D12TextureRenderer>(&renderer, TinyImage());
+        const std::shared_ptr<D3D12DescriptorHeaps> oldHeaps = renderer.GetDescriptorHeapsEXT();
         const std::uint32_t survivorIndex = survivor->GetShaderResourceViewIndexEXT();
 
         bool recreated = true;
         try
         {
-            backend.RecreateDeviceEXT();
+            renderer.RecreateDeviceEXT();
         }
         catch (const std::exception& e)
         {
@@ -520,7 +520,7 @@ int main()
         }
         else
         {
-            const std::shared_ptr<D3D12DescriptorHeaps>& newHeaps = backend.GetDescriptorHeapsEXT();
+            const std::shared_ptr<D3D12DescriptorHeaps>& newHeaps = renderer.GetDescriptorHeapsEXT();
             Check(newHeaps != oldHeaps,
                   "K1: device recreation builds a brand-new allocator set");
             Check(newHeaps->cbvSrvUav.GetStatsEXT().capacity == 64 &&
@@ -537,7 +537,7 @@ int main()
                   "K4: and left the new device's index space untouched");
 
             // The recreated device must be usable.
-            D3D12TextureBackend fresh(&backend, TinyImage());
+            D3D12TextureRenderer fresh(&renderer, TinyImage());
             Check(fresh.GetShaderResourceViewGpuHandleEXT().ptr != 0,
                   "K5: a texture created after recreation resolves in the new heap");
         }

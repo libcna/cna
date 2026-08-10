@@ -4,16 +4,16 @@
 // GraphicsDevice::applyPresentationParametersToWindow() calls SDL_SetWindowFullscreen(window_,
 // fullScreen); Task 902's own comment on that call already documents that fullscreen switching
 // may not actually be available in headless/virtual-display test environments (Xvfb) -- the
-// PresentationParameters value is stored regardless, and a backend that can't actually switch
+// PresentationParameters value is stored regardless, and a renderer that can't actually switch
 // fullscreen still ends up with the correct XNA-level state (SDL_ClearError() swallows the
-// failure non-fatally, matching GraphicsDeviceManager::applyToExistingBackend()'s identical
+// failure non-fatally, matching GraphicsDeviceManager::applyToExistingRenderer()'s identical
 // handling). This test therefore verifies the XNA-level contract this project can actually
 // guarantee under Xvfb: PresentationParameters.IsFullScreen round-trips correctly through
 // Reset() in both directions, the toggle never throws, and the device remains fully functional
 // (a normal draw+readback still works) after toggling fullscreen on and back off.
 //
 // Requires PresentationMode::NativeBackBuffer (Task 915 finding): SDL_RenderReadPixels operates
-// in physical output coordinates, while this backend's default presentation mode
+// in physical output coordinates, while this renderer's default presentation mode
 // (FixedHeightDynamicWidth) does not map logical pixels 1:1 to physical ones.
 //
 // Exit code 0 = all checks PASS, 1 = at least one FAIL.

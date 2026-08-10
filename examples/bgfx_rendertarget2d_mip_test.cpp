@@ -18,7 +18,7 @@
 // makes bgfx call the platform's own mip-generation primitive (e.g. glGenerateMipmap on the GL
 // renderer, confirmed in renderer_gl.cpp's TextureGL::resolve()) automatically, every time bgfx
 // switches away from that framebuffer -- exactly the trigger point RenderTarget2D's own
-// SetRenderTarget(nullptr) call reaches. No custom shader or geometry needed on this backend,
+// SetRenderTarget(nullptr) call reaches. No custom shader or geometry needed on this renderer,
 // unlike Vulkan's Task 878 fix -- a correction to that task's own research finding ("bgfx has no
 // glGenerateMipmap equivalent"), which was only true of bgfx::blit() (a same-size copy, still not
 // a resize/filter primitive), not of the framebuffer-resolve path.
@@ -69,7 +69,7 @@ class BgfxRenderTarget2DMipTest : public Game
     // own auto-mip-regeneration), then draws it back scaled to destW x destH and reads back a
     // single column of destH pixels at column sampleX. REMED-GFX-158: this used to retry the read
     // up to twenty times, breaking out on the first non-black result, on the belief that this
-    // backend only produced fresh data on the first read of a frame. The single read here is
+    // renderer only produced fresh data on the first read of a frame. The single read here is
     // deliberate -- a retry loop cannot distinguish "eventually correct" from "correct", so it
     // would hide exactly the kind of first-use loss that task fixed.
     std::vector<Color> RenderIntoRTAndReadColumn(GraphicsDevice& device, SamplerState& sampler,
@@ -125,7 +125,7 @@ protected:
         // REMED-GFX-158: this file used to open with a warm-up cycle -- a throwaway RenderTarget2D,
         // a Clear and a one-pixel GetBackBufferData -- because check 1 otherwise read solid black on
         // all 20 retries. That was not a property of mip chains: `bgfx::reset()` discards every
-        // view's framebuffer binding, and this backend calls it the first time the window's real
+        // view's framebuffer binding, and this renderer calls it the first time the window's real
         // size differs from the size bgfx was initialised with, which lands between check 1's bind
         // and its draw. The warm-up worked only because it absorbed that reset while no render
         // target was bound. The binding is now restored at the reset itself, so check 1 measures the

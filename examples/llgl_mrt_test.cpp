@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // plan_llgl.md LLGL-26 follow-up: Multiple Render Targets (MRT) proof for the LLGL graphics
-// backend, scoped to this backend's own first cut -- see LlglMRTBinding's doc comment in
-// LlglGraphicsBackend.hpp for the full boundary. RenderTarget2D slots only (no RenderTargetCube
+// renderer, scoped to this renderer's own first cut -- see LlglMRTBinding's doc comment in
+// LlglRenderer.hpp for the full boundary. RenderTarget2D slots only (no RenderTargetCube
 // faces), and 3D colour-only draws are refused while an MRT set is bound: real XNA MRT is
 // meaningfully useful only through a custom multi-output ShaderEffect drawn via SpriteBatch, which
 // is the one path this first cut supports.
@@ -85,7 +85,7 @@ void main() {
     // llgl_shadereffect_test.cpp already proves is genuinely read from pc.uColor); outColorB is a
     // channel-swapped derivative of the SAME value, computed by the SAME fragment invocation --
     // objectively different from outColorA, and only reaches its own distinct render target if
-    // this backend's render pass genuinely has 2 simultaneous colour attachments.
+    // this renderer's render pass genuinely has 2 simultaneous colour attachments.
     const char* kMrtFragSrc = R"GLSL(
 #version 450 core
 layout(binding = 2) uniform sampler2D colorMap;
@@ -230,8 +230,8 @@ public:
 
         // --- Check E: BlendState.ColorWriteChannels1 masks slot 1 independently of slot 0 ------
         // Both draws below run inside the SAME MRT bind/render-pass cycle (no SetRenderTargets in
-        // between) -- this backend's own render passes use Undefined/DONT_CARE load semantics
-        // (see LlglRenderTargetBackend's own doc comment), so content is only ever guaranteed to
+        // between) -- this renderer's own render passes use Undefined/DONT_CARE load semantics
+        // (see LlglRenderTargetRenderer's own doc comment), so content is only ever guaranteed to
         // survive WITHIN one bind cycle, never across a later, separate rebind.
         BlendState maskSlot1;
         maskSlot1.setColorWriteChannelsProperty(ColorWriteChannels::All);

@@ -4,7 +4,7 @@
 //
 //   (1) VISIBILITY -- RenderTarget2D::GetData() called after SpriteBatch.End()/unbind but BEFORE
 //       Present() must return the RENDERED content, not the cleared target. Pre-fix Vulkan had no
-//       RenderTarget2D readback at all (the base ITextureBackend::GetData no-op), so it returned
+//       RenderTarget2D readback at all (the base ITextureRenderer::GetData no-op), so it returned
 //       all-zeros, and even conceptually the deferred sprite batch was never flushed into the RT.
 //
 //   (2) LIFETIME -- destroying a RenderTarget2D after queuing work into it but before Present()
@@ -60,7 +60,7 @@ namespace
     bool IsBlue(const Color& c)  { return c.getBProperty() >= 200 && c.getRProperty() <= 60 && c.getGProperty() <= 60; }
     // REMED-GFX-127 false-positive audit: this predicate used to ignore alpha entirely, so a pixel
     // GetData never wrote -- the fabricated transparent black the shared layer produced from a
-    // backend with no readback -- satisfied it just as well as the opaque Color::Black clear it is
+    // renderer with no readback -- satisfied it just as well as the opaque Color::Black clear it is
     // meant to recognise. Every clear this file performs is opaque, so requiring alpha 255 costs
     // nothing and makes "an unwritten readback" fail here.
     bool IsBlack(const Color& c) { return c.getRProperty() < 40 && c.getGProperty() < 40 && c.getBProperty() < 40
@@ -216,7 +216,7 @@ protected:
         }
 
         // --- Scene 5: mixed 3D + 2D into one RT, both flushed & visible before Present. -------
-        // Non-overlapping regions: the deferred backend replays all sprite batches before all 3D
+        // Non-overlapping regions: the deferred renderer replays all sprite batches before all 3D
         // draws within one target's pass (a pre-existing 2D-before-3D characteristic, unchanged by
         // this fix), so this asserts BOTH classes of work reach the readback, not their z-order.
         // The 3D quad fills the LEFT half (NDC x in [-1,0]); the 2D sprite sits on the RIGHT half.

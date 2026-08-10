@@ -4,7 +4,7 @@
 // projection + Matrix::CreateLookAt), extending the existing identity-transform-only coverage
 // in examples/easygl_rasterizerstate_cullmode_test.cpp (Tasks 323-325/765, reused verbatim on
 // Vulkan as Vulkan_RasterizerState_CullMode). That existing test already establishes, empirically,
-// pixel-verified, on all 3 backends: under XNA's default CullCounterClockwiseFace RasterizerState,
+// pixel-verified, on all 3 renderers: under XNA's default CullCounterClockwiseFace RasterizerState,
 // a triangle whose raw NDC-space vertex order has signed area < 0 (by the standard shoelace
 // formula, Y-up) SURVIVES; one with signed area > 0 is CULLED. This file checks whether that same
 // rule still holds once a real World/View/Projection chain is involved -- the identity-only test
@@ -16,7 +16,7 @@
 // this investigation must not rely on): for every scenario below,
 //   1. Render each of the 2 test triangles ALONE, under CullMode::None (so it is visible if it is
 //      on screen at all, regardless of the "true" convention), and scan the ENTIRE framebuffer for
-//      its own unique color to find a real, backend-reported sample pixel for it. This never
+//      its own unique color to find a real, renderer-reported sample pixel for it. This never
 //      hardcodes an expected screen coordinate.
 //   2. Compute each triangle's NDC-space signed area directly via CNA's own
 //      Vector4::Transform(vertex, World*View*Projection) followed by a manual perspective divide
@@ -29,7 +29,7 @@
 //
 // If a scenario's actual result disagrees with its own NDC-signed-area prediction, that is a
 // genuine, precisely-located inconsistency between CNA's CPU-side matrix pipeline and its
-// backend's actual rasterizer cull decision for that specific View/Projection/World combination
+// renderer's actual rasterizer cull decision for that specific View/Projection/World combination
 // -- not a guess based on enum names or native API documentation.
 //
 // Scenarios (Phase 1 of the audit):

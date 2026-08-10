@@ -3,7 +3,7 @@
 // demo, specifically targeting SDL_Renderer. Exercises Update()-driven frame-index selection
 // feeding SpriteBatch::Draw's sourceRectangle parameter over multiple real frames, proving
 // spritesheet-style animation (a very common 2D XNA idiom) works correctly end to end on this
-// backend -- a different code path from Tasks 667-729's single-frame API checks.
+// renderer -- a different code path from Tasks 667-729's single-frame API checks.
 //
 // Uses a FIXED per-Update() frame-index increment (not real elapsed-time-based animation timing)
 // so the outcome is fully deterministic regardless of wall-clock frame speed -- appropriate for a

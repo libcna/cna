@@ -111,39 +111,39 @@ using namespace Microsoft::Xna::Framework::Graphics;
 
 namespace
 {
-#if defined(CNA_BACKEND_HEADLESS)
+#if defined(CNA_RENDERER_HEADLESS)
     constexpr bool kRasterizes = false;
-    constexpr const char* kBackendName = "HEADLESS";
-#elif defined(CNA_BACKEND_SOFTWARE)
+    constexpr const char* kRendererName = "HEADLESS";
+#elif defined(CNA_RENDERER_SOFTWARE)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "SOFTWARE";
-#elif defined(CNA_BACKEND_EASYGL)
+    constexpr const char* kRendererName = "SOFTWARE";
+#elif defined(CNA_RENDERER_EASYGL)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "EASYGL";
-#elif defined(CNA_BACKEND_BGFX)
+    constexpr const char* kRendererName = "EASYGL";
+#elif defined(CNA_RENDERER_BGFX)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "BGFX";
-#elif defined(CNA_BACKEND_VULKAN)
+    constexpr const char* kRendererName = "BGFX";
+#elif defined(CNA_RENDERER_VULKAN)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "VULKAN";
-#elif defined(CNA_BACKEND_WEBGPU)
+    constexpr const char* kRendererName = "VULKAN";
+#elif defined(CNA_RENDERER_WEBGPU)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "WEBGPU";
-#elif defined(CNA_BACKEND_SDL_GPU)
+    constexpr const char* kRendererName = "WEBGPU";
+#elif defined(CNA_RENDERER_SDL_GPU)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "SDL_GPU";
-#elif defined(CNA_BACKEND_D3D9)
+    constexpr const char* kRendererName = "SDL_GPU";
+#elif defined(CNA_RENDERER_D3D9)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "D3D9";
-#elif defined(CNA_BACKEND_D3D11)
+    constexpr const char* kRendererName = "D3D9";
+#elif defined(CNA_RENDERER_D3D11)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "D3D11";
-#elif defined(CNA_BACKEND_D3D12)
+    constexpr const char* kRendererName = "D3D11";
+#elif defined(CNA_RENDERER_D3D12)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "D3D12";
+    constexpr const char* kRendererName = "D3D12";
 #else
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "UNKNOWN";
+    constexpr const char* kRendererName = "UNKNOWN";
 #endif
 
     constexpr int kBBW = 128;
@@ -310,7 +310,7 @@ class DualTextureSlotSamplerContractTest : public Game
 
     /// Builds a palette in which no two entries are closer than kSep and no midpoint of two
     /// entries is within kMidSep of any entry, with every channel inside [kChanLo, kChanHi].
-    /// Deterministic (a fixed LCG, no <random>), so the same colours are measured on every backend
+    /// Deterministic (a fixed LCG, no <random>), so the same colours are measured on every renderer
     /// and in every run.
     static std::vector<Color> BuildPalette()
     {
@@ -701,7 +701,7 @@ class DualTextureSlotSamplerContractTest : public Game
             }
             case Path::DynamicNonIndexed:
             {
-                // A dynamic buffer written twice, so the draw reads the SECOND write -- a backend
+                // A dynamic buffer written twice, so the draw reads the SECOND write -- a renderer
                 // that shadows vertex data at creation time cannot pass this by accident.
                 std::vector<VtxPT> decoy(quad.size(), quad.front());
                 VertexBuffer vb(dev, static_cast<int>(quad.size()));
@@ -1160,7 +1160,7 @@ class DualTextureSlotSamplerContractTest : public Game
     void RunF(GraphicsDevice& dev)
     {
         // Draw A queued under (Point, Point); the public pair is then changed twice before the
-        // frame is flushed. A backend that resolves samplers at replay shows the LAST pair on both.
+        // frame is flushed. A renderer that resolves samplers at replay shows the LAST pair on both.
         SetPair(dev, 1, 1);
         const std::vector<Color> pix = RenderTwo(
             dev, Sep(), Sep(),
@@ -1312,7 +1312,7 @@ class DualTextureSlotSamplerContractTest : public Game
         // Minify: an 8x8 chain drawn into an 8x8 target forces a lambda of log2(uvMax). uvMax is 3,
         // NOT a power of two, deliberately -- at an integer lambda mip-POINT and mip-LINEAR select
         // and blend the same single level and agree by definition, which would make the mip legs
-        // pass on a backend that ignores the mipmap component entirely.
+        // pass on a renderer that ignores the mipmap component entirely.
         Cfg m1 = OnlySlot1(mipB_.get());
         m1.uvMax = 3.0f;
         Cfg m0 = OnlySlot0(mipA_.get());
@@ -1439,7 +1439,7 @@ class DualTextureSlotSamplerContractTest : public Game
         }
         catch (const std::exception& e)
         {
-            skip(std::string("L: this backend does not implement the vertex-colour DualTexture "
+            skip(std::string("L: this renderer does not implement the vertex-colour DualTexture "
                              "variant (") + e.what() + ")");
             SetPair(dev, 0, 0);
             return;
@@ -1514,7 +1514,7 @@ protected:
         GraphicsDevice& dev = getGraphicsDeviceProperty();
 
         std::printf("=== REMED-GFX-172 DualTextureEffect independent slot samplers on %s ===\n",
-                    kBackendName);
+                    kRendererName);
         std::fflush(stdout);
 
         palette_ = BuildPalette();
@@ -1530,7 +1530,7 @@ protected:
             try { rt.GetData(pix.data(), 0, static_cast<int>(pix.size())); }
             catch (const System::Exception&) { threw = true; }
             catch (const std::exception&) { threw = true; }
-            check(threw, "Z1: a non-rasterizing backend rejects the readback instead of fabricating "
+            check(threw, "Z1: a non-rasterizing renderer rejects the readback instead of fabricating "
                          "a sampled image");
             Finish();
             return;
@@ -1544,7 +1544,7 @@ protected:
         }
         catch (const std::exception& e)
         {
-            skip(std::string("A..M: this backend does not implement DualTextureEffect (") +
+            skip(std::string("A..M: this renderer does not implement DualTextureEffect (") +
                  e.what() + ")");
             Finish();
             return;

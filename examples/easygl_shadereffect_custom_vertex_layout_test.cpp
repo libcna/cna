@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // Task 1080: proves EasyGL's 3D `ShaderEffect` draw path (Task 1079) can bind a genuinely
-// custom vertex layout -- not just the 5 fixed byte-strides (16/20/24/32/52) the backend's
+// custom vertex layout -- not just the 5 fixed byte-strides (16/20/24/32/52) the renderer's
 // pre-existing `ApplyLayout()` switch recognizes (one stock `VertexPositionXxx` type per case).
 //
 // Background: Task 1079 wired `ShaderEffect` into the 3D draw path, but scoped it to those 5
@@ -16,10 +16,10 @@
 // and a total stride (48 bytes) that matches none of the 5 built-in cases, binds and reads back
 // correctly through `ShaderEffect`'s custom-program 3D draw path.
 //
-// Implementation (see EasyGLGraphicsBackend.cpp): `VertexBuffer::SetDataRaw()` now pushes its
-// own `VertexDeclaration`'s element list down to the backend via the new
-// `IVertexBufferBackend::SetVertexDeclaration()` (default no-op, so Vulkan/Bgfx/SDL_RENDERER
-// need zero changes). `EasyGLVertexBufferBackend::ApplyLayout()` binds generically from that
+// Implementation (see EasyGLRenderer.cpp): `VertexBuffer::SetDataRaw()` now pushes its
+// own `VertexDeclaration`'s element list down to the renderer via the new
+// `IVertexBufferRenderer::SetVertexDeclaration()` (default no-op, so Vulkan/Bgfx/SDL_RENDERER
+// need zero changes). `EasyGLVertexBufferRenderer::ApplyLayout()` binds generically from that
 // list when non-empty: GLSL attribute location = the element's own index within the declaration
 // (matching this session's established "layout(location=N) == Nth field of the ported HLSL
 // input struct" convention), and a `VertexElementFormat`->GL-attribdescription table covers

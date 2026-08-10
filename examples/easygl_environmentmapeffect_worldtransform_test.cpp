@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MS-PL
 // Task 398: verify EnvironmentMapEffect's normal transform under a non-uniform-scale World
-// matrix (EasyGL backend).
+// matrix (EasyGL renderer).
 //
 // XNA content ships `WorldInverseTranspose` for exactly this reason: transforming a normal by
 // the World matrix directly is only correct when World is a pure rotation/uniform-scale/
 // translation. Under NON-UNIFORM scale, the correct normal transform is
 // `transpose(inverse(World3x3))`, not `World3x3` directly.
 //
-// Auditing CNA's actual dispatch found this bug is real and confirmed on 2 of 3 backends:
+// Auditing CNA's actual dispatch found this bug is real and confirmed on 2 of 3 renderers:
 //   - EasyGL: computed the "normal matrix" as the raw upper-left 3x3 of World on the CPU side
 //     (`BindDrawParams()`), never inverting/transposing it -- WRONG under non-uniform scale.
 //   - Vulkan: computes `transpose(inverse(mat3(world)))` directly in the vertex shader --
@@ -17,7 +17,7 @@
 // Notably, `EnvironmentMapEffect::OnApply()` ALREADY computes the correct
 // `WorldInverseTranspose` and stores it in its own `EffectParameter` (for API/content-pipeline
 // fidelity) -- but this correct value was never forwarded into the actual GPU dispatch path on
-// either buggy backend, which independently (and incorrectly) derived their own "normal
+// either buggy renderer, which independently (and incorrectly) derived their own "normal
 // matrix" from the raw World matrix instead.
 //
 // To discriminate the two formulas, this test assigns every vertex a NON-axis-aligned normal
@@ -144,7 +144,7 @@ protected:
         dev.SetDepthTestEnabled(false);
         dev.setBlendStateProperty(BlendState::Opaque);
         // Task 896 finding (mirrors the Bgfx sibling's Task 364/884 fix): once
-        // GraphicsDevice's real default RasterizerState is pushed to every backend,
+        // GraphicsDevice's real default RasterizerState is pushed to every renderer,
         // this quad's winding is culled unless explicitly disabled.
         dev.setRasterizerStateProperty(RasterizerState::CullNone);
 

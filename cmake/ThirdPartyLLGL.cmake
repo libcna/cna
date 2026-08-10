@@ -1,8 +1,8 @@
 include_guard(GLOBAL)
 
-# LLGL (https://github.com/LukasBanana/LLGL) integration for the LLGL graphics backend.
+# LLGL (https://github.com/LukasBanana/LLGL) integration for the LLGL graphics renderer.
 #
-# LLGL is itself an abstraction over OpenGL/Vulkan/Direct3D/Metal, so unlike every other backend in
+# LLGL is itself an abstraction over OpenGL/Vulkan/Direct3D/Metal, so unlike every other renderer in
 # this project CNA does not talk to a native graphics API here -- it talks to LLGL, and LLGL picks
 # the native API at RUNTIME (see LlglRendererSelection.cpp). That makes the module set compiled in
 # here a real capability boundary: a renderer module that was not built cannot be selected at
@@ -33,8 +33,8 @@ option(CNA_LLGL_BUILD_RENDERER_VULKAN "Build LLGL's Vulkan renderer module (expe
        ${_cna_llgl_vulkan_default})
 # The Null module renders nothing at all. It is built so CNA_LLGL_RENDERER=Null can be requested
 # EXPLICITLY for API-lifecycle diagnostics, and it is deliberately excluded from the automatic
-# fallback chain -- a backend that silently "succeeds" while drawing nothing is exactly the kind of
-# fabricated success this project's backends must never produce.
+# fallback chain -- a renderer that silently "succeeds" while drawing nothing is exactly the kind of
+# fabricated success this project's renderers must never produce.
 option(CNA_LLGL_BUILD_RENDERER_NULL "Build LLGL's Null renderer module (explicit opt-in only)" ON)
 
 # Configures LLGL and publishes the target list every consumer must link.
@@ -51,7 +51,7 @@ function(cna_configure_llgl)
     set(LLGL_BUILD_WRAPPER_C99 OFF CACHE BOOL "" FORCE)
     set(LLGL_BUILD_WRAPPER_CSHARP OFF CACHE BOOL "" FORCE)
     # LLGL reports unrecoverable errors through LLGL_TRAP(), which aborts the process outright
-    # unless exceptions are enabled. CNA surfaces backend failures as exceptions everywhere else
+    # unless exceptions are enabled. CNA surfaces renderer failures as exceptions everywhere else
     # (GraphicsDevice constructors, Texture2D uploads), so an abort would replace a reportable
     # failure with a crash.
     set(LLGL_ENABLE_EXCEPTIONS ON CACHE BOOL "" FORCE)
@@ -113,7 +113,7 @@ function(cna_configure_llgl)
     message(STATUS "CNA: LLGL modules linked: ${_cna_llgl_modules}")
     set(CNA_LLGL_LIBRARIES ${_cna_llgl_modules} PARENT_SCOPE)
 
-    # Mirrors the module set into compile definitions so the backend's runtime renderer selection
+    # Mirrors the module set into compile definitions so the renderer's runtime renderer selection
     # can refuse a module that was never built instead of failing deep inside LLGL::RenderSystem.
     if(CNA_LLGL_BUILD_RENDERER_OPENGL)
         add_compile_definitions(CNA_LLGL_HAS_OPENGL)

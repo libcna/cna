@@ -2,7 +2,7 @@
 // CRTEffect is a NOXNA CNA extension (no XNA/FNA precedent) — like ShaderEffectTests.cpp and
 // DepthEffectTests.cpp, these tests exercise the structural contract (parameter round-trip,
 // clamping, Clone() independence, GetTypeName()) against a default-constructed GraphicsDevice
-// with no real backend, not GLSL compile/render correctness.
+// with no real renderer, not GLSL compile/render correctness.
 
 #ifdef CNA_NOXNA
 
@@ -109,7 +109,7 @@ TEST(CRTEffectTest, SetMaskTypeRoundTripsForEveryType)
     }
 }
 
-TEST(CRTEffectTest, ApplyDoesNotCrashWithoutABackend)
+TEST(CRTEffectTest, ApplyDoesNotCrashWithoutARenderer)
 {
     GraphicsDevice gd;
     CRTEffect fx(gd);

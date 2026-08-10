@@ -8,7 +8,7 @@
 // The whole matrix runs inside one ordinary Game frame. It calls neither Present nor a retry;
 // readback closes only the pending off-screen producer work needed by the requested face.
 
-#include "CNA/Internal/Backends/Vulkan/VulkanGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Vulkan/VulkanRenderer.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GameTime.hpp"
@@ -40,13 +40,13 @@
 #include <string>
 #include <vector>
 
-#ifndef CNA_BACKEND_VULKAN
+#ifndef CNA_RENDERER_VULKAN
 #error "REMED-GFX-194's cube-face dependency matrix is Vulkan-only."
 #endif
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using CNA::Internal::Backends::Vulkan::VulkanGraphicsBackend;
+using CNA::Internal::Renderers::Vulkan::VulkanRenderer;
 
 namespace
 {
@@ -99,7 +99,7 @@ class VulkanCubeFaceReadbackDependencyTest final : public Game
     std::unique_ptr<RenderTargetCube> heldCubeA_;
     std::unique_ptr<RenderTargetCube> heldCubeB_;
     std::unique_ptr<RenderTarget2D> heldCompanion_;
-    VulkanGraphicsBackend* vk_ = nullptr;
+    VulkanRenderer* vk_ = nullptr;
     uint64_t presentCountAtDraw_ = 0;
     uint64_t submitCountAtDraw_ = 0;
     int passed_ = 0;
@@ -462,8 +462,8 @@ protected:
     {
         try
         {
-            vk_ = dynamic_cast<VulkanGraphicsBackend*>(&getGraphicsDeviceProperty().GetBackend());
-            Check(vk_ != nullptr, "Vulkan backend is reachable from GraphicsDevice");
+            vk_ = dynamic_cast<VulkanRenderer*>(&getGraphicsDeviceProperty().GetRenderer());
+            Check(vk_ != nullptr, "Vulkan renderer is reachable from GraphicsDevice");
             if (!vk_)
             {
                 Exit();
@@ -491,7 +491,7 @@ protected:
     {
         if (vk_)
         {
-            Check(VulkanGraphicsBackend::IsValidationActiveEXT(),
+            Check(VulkanRenderer::IsValidationActiveEXT(),
                   "VK_LAYER_KHRONOS_validation is active");
             const auto& messages = vk_->GetValidationMessagesEXT();
             if (!messages.empty())

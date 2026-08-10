@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-077 runtime verification (generic 3D path, backend-agnostic).
+// REMED-GFX-077 runtime verification (generic 3D path, renderer-agnostic).
 //
 // Verifies that BlendState.ColorWriteChannels (RT0 per-channel colour write mask) and
-// BlendState.MultiSampleMask are honoured by the backend selected at compile time, now that both
-// are plumbed through IGraphicsBackend::ApplyBlendState (REMED-GFX-077). Unlike the canonical
+// BlendState.MultiSampleMask are honoured by the renderer selected at compile time, now that both
+// are plumbed through IGraphicsRenderer::ApplyBlendState (REMED-GFX-077). Unlike the canonical
 // *_colorwritechannels_test.cpp harnesses (which drive SpriteBatch), this test draws a full-screen
 // coloured quad through the generic 3D pipeline (DrawPrimitives + BasicEffect) into an off-screen
-// RenderTarget2D and reads it back with GetData(). That is deliberate: on some backends (notably
+// RenderTarget2D and reads it back with GetData(). That is deliberate: on some renderers (notably
 // WebGPU) the fixed internal SpriteBatch pipeline does NOT consume ColorWriteChannels, so only the
-// keyed 3D pipeline path actually exercises the GFX-077 fix. The 3D path is common to every backend
+// keyed 3D pipeline path actually exercises the GFX-077 fix. The 3D path is common to every renderer
 // this harness is compiled for (SDL_GPU / WEBGPU / D3D11 / D3D9), so one scene verifies them all.
 //
 // Isolation strategy: the quad is drawn with Opaque blend (SrcBlend=One, DstBlend=Zero -> blend
@@ -21,19 +21,19 @@
 // "nothing written" value (ColorWriteChannels.None -> dst) and the "everything written" value
 // (ColorWriteChannels.All -> src). Every other mask is then checked channel-by-channel against
 // those two baselines (masked-in channel == src, masked-out channel == dst). This is invariant to
-// any monotonic colour transform the backend applies on the render-target path -- e.g. WebGPU
+// any monotonic colour transform the renderer applies on the render-target path -- e.g. WebGPU
 // resolves SurfaceFormat.Color to an sRGB wgpu format, so its stored RGB is gamma-encoded (10->56,
 // 200->229) while alpha stays linear; an absolute (200,20,30,40)-style expectation would spuriously
 // fail there even though the write mask is perfect. What GFX-077 must guarantee is that the mask
 // gates exactly the right channels, which the differential check verifies directly and portably.
 //
-//   D (clear/destination) = (10, 20, 30, 40)   [as stored/read: backend colour space may transform]
+//   D (clear/destination) = (10, 20, 30, 40)   [as stored/read: renderer colour space may transform]
 //   S (quad source)       = (200, 100, 50, 220)
 //
 // A(Red)->B(Green)->A(Red) within one frame proves each draw selects its own pipeline/blend state
 // (no stale keyed pipeline / no last-wins).
 //
-// When GFX077_MULTISAMPLEMASK_SUPPORTED is defined (backends whose native API exposes a functional
+// When GFX077_MULTISAMPLEMASK_SUPPORTED is defined (renderers whose native API exposes a functional
 // sample coverage mask), a 4x MSAA RenderTarget is used to prove MultiSampleMask=0 discards all
 // coverage (resolves to the clear colour) while the default mask renders normally. This block is
 // wrapped so a runtime that cannot create/resolve an MSAA RT reports a NOTE rather than crashing.
@@ -162,10 +162,10 @@ class Gfx077ColorWriteChannels3DTest : public Game
         DrawQuad(dev);
         dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
         // Full-texture readback (rect==nullptr, elementCount==total): the portable path that hits
-        // every backend's RenderTarget2D GPU-readback fallback. This comment previously recorded
+        // every renderer's RenderTarget2D GPU-readback fallback. This comment previously recorded
         // that a 1x1-rect read "reads back all zeros on D3D11/D3D9" -- that was the REMED-GFX-127
         // fabrication, not a property of the rectangle overload: the rectangle path does reach the
-        // backend, it simply had no readback to reach on those backends. Both now return real
+        // renderer, it simply had no readback to reach on those renderers. Both now return real
         // content; the whole-level read is kept here because it is what this GFX-077 scene asserts.
         std::vector<Color> pix(static_cast<std::size_t>(kRtW) * kRtH, Color(0, 0, 0, 0));
         target->GetData(0, nullptr, pix.data(), 0, static_cast<int>(pix.size()));

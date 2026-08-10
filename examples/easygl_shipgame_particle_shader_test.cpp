@@ -12,7 +12,7 @@
 // shader output, pixels) and `gl_PointCoord` (fragment shader input, `[0,1]^2`) -- are native to
 // GLSL ES 3.00 with no special enable needed (unlike desktop GL's `GL_PROGRAM_POINT_SIZE`), and
 // `PrimitiveType::PointListEXT` was already wired to `GL_POINTS` in the existing primitive-type
-// dispatch -- so this port needed **no new backend capability at all**, just point-sprite-shaped
+// dispatch -- so this port needed **no new renderer capability at all**, just point-sprite-shaped
 // GLSL, confirmed by this test actually rendering and reading back real point-sprite pixels.
 //
 // FNA reference (`ShipGame_4_0/ShipGame/Content/shaders/Particle.fx`):

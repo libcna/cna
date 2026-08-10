@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Task 366: BasicEffect pixel test — TextureEnabled=true, no vertex color (EasyGL backend).
+// Task 366: BasicEffect pixel test — TextureEnabled=true, no vertex color (EasyGL renderer).
 //
 // FNA reference (Graphics/Effect/StockEffects/BasicEffect.cs OnApply() + HLSL/BasicEffect.fx +
 // Common.fxh): with LightingEnabled=false (default), VertexColorEnabled=false (default, per Task

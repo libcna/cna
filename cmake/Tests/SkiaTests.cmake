@@ -3,7 +3,7 @@
 # tests require a real X11/virtual display. The accelerated helper is deliberately distinct so a
 # future Ganesh/Graphite path cannot accidentally inherit raster-only registration.
 if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
-   AND CNA_GRAPHICS_BACKEND STREQUAL "SKIA")
+   AND CNA_GRAPHICS_RENDERER STREQUAL "SKIA")
     enable_testing()
 
     macro(cna_skia_test target src)
@@ -28,17 +28,17 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     endmacro()
 
     function(cna_register_skia_raster_test name)
-        cna_register_backend_test(NAME ${name} COMMAND ${ARGN} TIMEOUT 30 LABELS "Skia;Raster")
+        cna_register_renderer_test(NAME ${name} COMMAND ${ARGN} TIMEOUT 30 LABELS "Skia;Raster")
     endfunction()
 
     function(cna_register_skia_display_test name)
-        cna_register_backend_test(NAME ${name} COMMAND ${ARGN} TIMEOUT 30
+        cna_register_renderer_test(NAME ${name} COMMAND ${ARGN} TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
             LABELS "Skia;Display")
     endfunction()
 
     function(cna_register_skia_accelerated_test name)
-        cna_register_backend_test(NAME ${name} COMMAND ${ARGN} TIMEOUT 30
+        cna_register_renderer_test(NAME ${name} COMMAND ${ARGN} TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
             LABELS "Skia;Accelerated;Display")
     endfunction()
@@ -46,42 +46,42 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # SKIA-1: standard-library source audit. Keep it separate from Raster because it neither links
     # Skia nor exercises pixels; it verifies that every current graphics API entry is classified.
     find_program(CNA_SKIA_LEDGER_PYTHON NAMES python3 REQUIRED)
-    cna_register_backend_test(
+    cna_register_renderer_test(
         NAME Skia_ParityLedger_Audit
         COMMAND "${CNA_SKIA_LEDGER_PYTHON}"
                 "${CMAKE_SOURCE_DIR}/scripts/validate_skia_parity_ledger.py"
                 "${CMAKE_SOURCE_DIR}"
         TIMEOUT 30
         LABELS "Skia;Audit")
-    cna_register_backend_test(
+    cna_register_renderer_test(
         NAME Skia_TestMatrix_Audit
         COMMAND "${CNA_SKIA_LEDGER_PYTHON}"
                 "${CMAKE_SOURCE_DIR}/scripts/validate_skia_test_matrix.py"
                 "${CMAKE_SOURCE_DIR}"
         TIMEOUT 30
         LABELS "Skia;Audit")
-    cna_register_backend_test(
+    cna_register_renderer_test(
         NAME Skia_3DDecision_Audit
         COMMAND "${CNA_SKIA_LEDGER_PYTHON}"
                 "${CMAKE_SOURCE_DIR}/scripts/validate_skia_3d_decision.py"
                 "${CMAKE_SOURCE_DIR}"
         TIMEOUT 30
         LABELS "Skia;Audit")
-    cna_register_backend_test(
+    cna_register_renderer_test(
         NAME Skia_ReleaseGate_Audit
         COMMAND "${CNA_SKIA_LEDGER_PYTHON}"
                 "${CMAKE_SOURCE_DIR}/scripts/validate_skia_release_gate.py"
                 "${CMAKE_SOURCE_DIR}"
         TIMEOUT 30
         LABELS "Skia;Audit")
-    cna_register_backend_test(
+    cna_register_renderer_test(
         NAME Skia_SuccessorContracts_Audit
         COMMAND "${CNA_SKIA_LEDGER_PYTHON}"
                 "${CMAKE_SOURCE_DIR}/scripts/validate_skia_successor_contracts.py"
                 "${CMAKE_SOURCE_DIR}"
         TIMEOUT 30
         LABELS "Skia;Audit")
-    cna_register_backend_test(
+    cna_register_renderer_test(
         NAME Skia_SurfaceFormats_Audit
         COMMAND "${CNA_SKIA_LEDGER_PYTHON}"
                 "${CMAKE_SOURCE_DIR}/scripts/validate_skia_surface_formats.py"
@@ -155,7 +155,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # comparison gate below runs only scene files whose own spritebatchmode=true bypasses every
     # stock-effect/3D path; the renderer remains shared with D3D9 and EasyGL.
     cna_skia_test(cna_oracle_render_skia tools/xna-oracle/CnaOracleRender.cpp)
-    cna_register_backend_test(
+    cna_register_renderer_test(
         NAME Skia_XNA_2D_Oracle
         COMMAND "${CMAKE_SOURCE_DIR}/scripts/run-skia-2d-oracle-diff.sh"
                 $<TARGET_FILE:cna_oracle_render_skia>
@@ -163,7 +163,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
         LABELS "Skia;Display")
 
-    # SKIA-109: compile the exact EasyGL sources for backend-independent API contracts. These
+    # SKIA-109: compile the exact EasyGL sources for renderer-independent API contracts. These
     # fixtures assert shared validation precedence, transfer windows, first-read completion,
     # SpriteFont validation, resize state, and immediate target pass boundaries without invoking
     # a 3D draw. Mixed VertexBuffer/IndexBuffer lifecycle fixtures remain at the SKIA-102 boundary.
@@ -194,7 +194,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
 
     cna_skia_test(cna_test_skia_contract_backbuffer_first_read
                   examples/backbuffer_first_read_test.cpp)
-    cna_register_backend_test(
+    cna_register_renderer_test(
         NAME Skia_Contract_BackbufferFirstRead
         COMMAND cna_test_skia_contract_backbuffer_first_read
         TIMEOUT 300
@@ -203,7 +203,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
 
     cna_skia_test(cna_test_skia_contract_backbuffer_reject
                   examples/backbuffer_headless_reject_test.cpp)
-    cna_register_backend_test(
+    cna_register_renderer_test(
         NAME Skia_Contract_BackbufferReject
         COMMAND cna_test_skia_contract_backbuffer_reject
         TIMEOUT 300
@@ -212,7 +212,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
 
     cna_skia_test(cna_test_skia_contract_rendertarget_pass_boundary
                   examples/rendertarget_pass_boundary_test.cpp)
-    cna_register_backend_test(
+    cna_register_renderer_test(
         NAME Skia_Contract_RenderTargetPassBoundary
         COMMAND cna_test_skia_contract_rendertarget_pass_boundary
         TIMEOUT 90
@@ -226,7 +226,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_skia_test(cna_test_skia_graphics_capability examples/skia_graphics_capability_test.cpp)
     cna_register_skia_display_test(Skia_GraphicsCapability cna_test_skia_graphics_capability)
 
-    # SKIA-89: keep untagged backend-specific ShaderEffect strings outside the SkSL path and prove
+    # SKIA-89: keep untagged renderer-specific ShaderEffect strings outside the SkSL path and prove
     # that rejection cannot poison the following built-in SpriteBatch session.
     cna_skia_test(cna_test_skia_effect_boundary examples/skia_effect_boundary_test.cpp)
     cna_register_skia_display_test(Skia_Effect_Boundary cna_test_skia_effect_boundary)
@@ -261,14 +261,14 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # SKIA-150: public sampling oracles for the three input shapes SKIA-149's own test never
     # covered (a real DXT1-DDS-decoded TextureCube, a RenderTargetCube drawn through the public
     # SpriteBatch API, a real hand-constructed-XNB-decoded Texture3D), plus a regression test for
-    # SKIA-150's new SkiaEffectBackend::BindTexture3D volume-atlas resource budget check.
+    # SKIA-150's new SkiaEffectRenderer::BindTexture3D volume-atlas resource budget check.
     cna_skia_test(cna_test_skia_cube_volume_sampling_oracle
                   examples/skia_cube_volume_sampling_oracle_test.cpp)
     cna_register_skia_display_test(Skia_CubeVolume_Sampling_Oracle
                                    cna_test_skia_cube_volume_sampling_oracle)
 
     # SKIA-153: headless spike proving SkVertices (not SkMeshSpecification, which cannot draw at
-    # all on this backend's raster SkBitmapDevice -- see docs/skia-vertices-2d-effect-contract.md)
+    # all on this renderer's raster SkBitmapDevice -- see docs/skia-vertices-2d-effect-contract.md)
     # reproduces BasicEffect/DualTextureEffect-style vertex/fragment combines, has no back-face
     # culling, blends straight-alpha vertex colour correctly, and preserves painter's order when
     # interleaved with ordinary canvas draws.
@@ -414,7 +414,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_skia_raster_test(Skia_CpuStockEffect_Spike
                                   cna_test_skia_cpu_stock_effect_spike)
 
-    # SKIA-102: accepted 2D-only ADR enforcement. One target-atomic fixture covers every backend
+    # SKIA-102: accepted 2D-only ADR enforcement. One target-atomic fixture covers every renderer
     # 3D family and the public buffer/draw/effect/model/query routes, then proves retained 2D and
     # CPU cube/volume transfer behavior still works.
     cna_skia_test(cna_test_skia_3d_refusal examples/skia_3d_refusal_test.cpp)
@@ -710,14 +710,14 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # presenter may pace those frames, so the common 30-second smoke-test limit is too short even
     # though the deterministic workload completes normally (about 61 seconds on the release-gate
     # host). Keep the workload intact and give only this stress test a bounded larger window.
-    cna_register_backend_test(
+    cna_register_renderer_test(
         NAME Skia_SpriteBatch_Stress
         COMMAND cna_test_skia_spritebatch_stress
         TIMEOUT 120
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
         LABELS "Skia;Display")
 
-    # These three presets establish the alpha convention used by the raster backend:
+    # These three presets establish the alpha convention used by the raster renderer:
     # opaque source replacement, premultiplied-alpha source-over, and straight-alpha source-over.
     cna_skia_test(cna_test_skia_blend_opaque examples/sdlrenderer_blendstate_opaque_test.cpp)
     cna_register_skia_display_test(Skia_BlendState_Opaque cna_test_skia_blend_opaque)

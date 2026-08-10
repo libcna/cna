@@ -12,12 +12,12 @@
 //   * build a fresh pipeline or shader module per draw        -> unbounded growth;
 //   * expand the colour with a second draw, pass or submit    -> extra passes and submits.
 //
-// CNA-side counts come from the backend's own cumulative EXT counters and native counts from
+// CNA-side counts come from the renderer's own cumulative EXT counters and native counts from
 // wgpu-native's `wgpuGenerateReport()` live-object registry, before and after a known public
 // sequence, so each expectation is an exact number rather than a trend.
 //
 // What the native counts do and do not measure, stated because a boundary that overclaims is worse
-// than none: this backend releases a queued draw's transient buffers inside the same flush that
+// than none: this renderer releases a queued draw's transient buffers inside the same flush that
 // creates them, so a delta taken across a whole render-target cycle is a NET LIVE count, not a
 // created count. `nativePipelines` is the one that matters here and is genuinely cumulative for
 // this file's purpose -- a render pipeline is retained by the cache for the device's lifetime.
@@ -45,7 +45,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
-#include "CNA/Internal/Backends/WebGPU/WebGPUGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/WebGPU/WebGPURenderer.hpp"
 
 #if __has_include(<webgpu/wgpu.h>)
 #include <webgpu/wgpu.h>
@@ -59,7 +59,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using CNA::Internal::Backends::WebGPU::WebGPUGraphicsBackend;
+using CNA::Internal::Renderers::WebGPU::WebGPURenderer;
 
 namespace
 {
@@ -140,16 +140,16 @@ namespace
         std::size_t uncapturedErrors = 0;
     };
 
-    Cost Snapshot(WebGPUGraphicsBackend& backend)
+    Cost Snapshot(WebGPURenderer& renderer)
     {
         Cost cost;
-        cost.passes = backend.GetRenderPassCountEXT();
-        cost.submits = backend.GetQueueSubmitCountEXT();
-        cost.instancedPipelines = backend.GetInstancedPipelineCacheSizeEXT();
-        cost.uncapturedErrors = backend.GetUncapturedErrorCountEXT();
+        cost.passes = renderer.GetRenderPassCountEXT();
+        cost.submits = renderer.GetQueueSubmitCountEXT();
+        cost.instancedPipelines = renderer.GetInstancedPipelineCacheSizeEXT();
+        cost.uncapturedErrors = renderer.GetUncapturedErrorCountEXT();
 #ifdef CNA_HAVE_WGPU_NATIVE_REPORT
         WGPUGlobalReport report{};
-        wgpuGenerateReport(backend.Instance(), &report);
+        wgpuGenerateReport(renderer.Instance(), &report);
         cost.nativePipelines = report.hub.renderPipelines.numAllocated;
 #endif
         return cost;
@@ -172,10 +172,10 @@ namespace
             GraphicsDevice dev;
             if (!dev.SupportsCapability(CNA::GraphicsCapability::ThreeD))
             {
-                std::printf("SKIP: backend does not support 3D rendering\n");
+                std::printf("SKIP: renderer does not support 3D rendering\n");
                 return;
             }
-            auto& backend = static_cast<WebGPUGraphicsBackend&>(dev.GetBackend());
+            auto& renderer = static_cast<WebGPURenderer&>(dev.GetRenderer());
 
             dev.setRasterizerStateProperty(RasterizerState::CullNone);
             dev.setDepthStencilStateProperty(DepthStencilState::None);
@@ -233,9 +233,9 @@ namespace
             };
 
             const auto measure = [&](const char* label, auto&& body) {
-                const Cost before = Snapshot(backend);
+                const Cost before = Snapshot(renderer);
                 body();
-                const Cost d = Delta(before, Snapshot(backend));
+                const Cost d = Delta(before, Snapshot(renderer));
                 std::printf("  %-46s passes=+%zu submits=+%zu instancedPipelines=+%zu "
                             "nativePipelines=+%zu uncapturedErrors=+%zu\n",
                             label, d.passes, d.submits, d.instancedPipelines, d.nativePipelines,
@@ -270,7 +270,7 @@ namespace
                 dev.SetRenderTarget(nullptr);
             }
             Check("the warm-up ordinary draw built no Instanced3D variant",
-                  backend.GetInstancedPipelineCacheSizeEXT() == 0);
+                  renderer.GetInstancedPipelineCacheSizeEXT() == 0);
 
             const Cost first = measure("1 draw, VertexColorEnabled=false (cold)",
                                        [&] { cycle(vb16, 1, false, false); });
@@ -314,9 +314,9 @@ namespace
             Check("repeating four cycles costs exactly four submits", repeat.submits == 4);
 
             Check("the whole run built exactly 2 Instanced3D variants",
-                  backend.GetInstancedPipelineCacheSizeEXT() == 2);
+                  renderer.GetInstancedPipelineCacheSizeEXT() == 2);
             Check("WebGPU validation stayed silent across the whole matrix",
-                  backend.GetUncapturedErrorCountEXT() == 0);
+                  renderer.GetUncapturedErrorCountEXT() == 0);
 
             std::printf("%d/%d checks passed\n", passed_, passed_ + failed_);
         }

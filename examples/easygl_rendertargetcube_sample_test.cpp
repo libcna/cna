@@ -13,10 +13,10 @@
 //      content (not stale/garbage data) was sampled.
 //
 // Confirms the RenderTargetCube-as-TextureCube path is architecturally sound on EasyGL:
-// EnvironmentMapEffect::FillGpuDrawParams reads envMap via TextureCube::GetBackend() (shared
-// by RenderTargetCube), and EasyGLGraphicsBackend calls params.envMap->BindGL() through virtual
-// dispatch — both EasyGLTextureCubeBackend and EasyGLRenderTargetCubeBackend override BindGL()
-// correctly (confirmed by code reading), so no backend-specific cast bug exists here unlike the
+// EnvironmentMapEffect::FillGpuDrawParams reads envMap via TextureCube::GetRenderer() (shared
+// by RenderTargetCube), and EasyGLRenderer calls params.envMap->BindGL() through virtual
+// dispatch — both EasyGLTextureCubeRenderer and EasyGLRenderTargetCubeRenderer override BindGL()
+// correctly (confirmed by code reading), so no renderer-specific cast bug exists here unlike the
 // Bgfx SpriteBatch/EnvironmentMapEffect issues found in Tasks 873/874.
 //
 // Exit code 0 = PASS, 1 = FAIL.

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Phase 58/59/63: verify WebGPUGraphicsBackend's textured3d.wgsl / GetOrCreatePipelineTextured3D()
+// Phase 58/59/63: verify WebGPURenderer's textured3d.wgsl / GetOrCreatePipelineTextured3D()
 // / DrawPrimitivesEx() dispatch for stride-20 (VertexPositionTexture) draws -- the next WGSL
 // shader variant after colored3d.wgsl, reusing the same UBO/bind-group-0 (WEBGPU-13) and adding a
 // second bind group (group 1: sampler + texture, mirrors the SpriteBatch layout).

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // plan_opengl2.md: proof for TextureCube (GL_TEXTURE_CUBE_MAP) on the native OpenGL 2.1 graphics
-// backend. No stock effect samples a cube map yet on this backend (EnvironmentMapEffect is still
+// renderer. No stock effect samples a cube map yet on this renderer (EnvironmentMapEffect is still
 // a follow-up item), so this verifies the storage/upload/readback round-trip directly through
 // TextureCube::SetData()/GetData() rather than a rendered pixel.
 //
@@ -21,7 +21,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 
-#include "CNA/Internal/Backends/OpenGL2/OpenGL2GraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/OpenGL2/OpenGL2Renderer.hpp"
 
 #include "common/PixelTestGame.hpp"
 
@@ -34,7 +34,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::OpenGL2;
+using namespace CNA::Internal::Renderers::OpenGL2;
 
 namespace
 {

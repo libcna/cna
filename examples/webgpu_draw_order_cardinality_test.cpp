@@ -3,16 +3,16 @@
 // REMED-GFX-159's STRUCTURAL half: interleaving the two draw families in public order must cost
 // nothing but the interleaving.
 //
-// `spritebatch_3d_order_test.cpp` proves the ORDER is right, by pixels, on every backend. It cannot
-// prove the order is right for the right reasons: a backend could deliver the same picture by
+// `spritebatch_3d_order_test.cpp` proves the ORDER is right, by pixels, on every renderer. It cannot
+// prove the order is right for the right reasons: a renderer could deliver the same picture by
 // closing and reopening a render pass at every family change, by submitting a command buffer per
 // transition, by baking the draw's ordinal into its pipeline key, or by re-issuing the whole
 // captured state for every draw. Each of those is a correct-looking regression that this file
 // fails and that one cannot see.
 //
-// The measured quantities are the backend's own native counters (the same ones REMED-GFX-116 and
+// The measured quantities are the renderer's own native counters (the same ones REMED-GFX-116 and
 // REMED-GFX-146 already gate on), sampled INSIDE a bind cycle so that binding the target -- itself
-// a flush on this backend -- is never counted as part of the sequence under test:
+// a flush on this renderer -- is never counted as part of the sequence under test:
 //
 //   * render passes begun          -- must be exactly 1 for one bind cycle, whatever the mix
 //   * queue submits                -- must be exactly 1, so no family transition submits or waits
@@ -56,7 +56,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
-#include "CNA/Internal/Backends/WebGPU/WebGPUGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/WebGPU/WebGPURenderer.hpp"
 
 #include <array>
 #include <cstdint>
@@ -67,7 +67,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using CNA::Internal::Backends::WebGPU::WebGPUGraphicsBackend;
+using CNA::Internal::Renderers::WebGPU::WebGPURenderer;
 
 namespace
 {
@@ -160,7 +160,7 @@ class WebGpuDrawOrderCardinalityTest : public Game
         std::size_t passes, submits, pipelines, viewports, scissors;
     };
 
-    static Counters Sample(const WebGPUGraphicsBackend& b)
+    static Counters Sample(const WebGPURenderer& b)
     {
         return Counters{ b.GetRenderPassCountEXT(), b.GetQueueSubmitCountEXT(),
                          b.GetColoredPipelineCacheSizeEXT(), b.GetSetViewportCallCountEXT(),
@@ -180,7 +180,7 @@ class WebGpuDrawOrderCardinalityTest : public Game
         phase_ = 2;
 
         auto& dev = getGraphicsDeviceProperty();
-        auto& backend = static_cast<WebGPUGraphicsBackend&>(dev.GetBackend());
+        auto& renderer = static_cast<WebGPURenderer&>(dev.GetRenderer());
         std::printf("REMED-GFX-159 cross-family draw order cardinality -- WEBGPU\n");
         std::fflush(stdout);
 
@@ -201,11 +201,11 @@ class WebGpuDrawOrderCardinalityTest : public Game
         {
             auto rt = MakeTarget(dev);
             dev.SetRenderTarget(rt.get());
-            const Counters before = Sample(backend);
+            const Counters before = Sample(renderer);
             dev.Clear(kBlack);
             for (int i = 0; i < 4; ++i) { DrawSprite(kRed); Draw3D(dev, kRed); }
             dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
-            d1 = Delta(before, Sample(backend));
+            d1 = Delta(before, Sample(renderer));
 
             checkCount(d1.passes, 1, "D1 eight alternating draws in one cycle: render passes");
             checkCount(d1.submits, 1, "D1 eight alternating draws in one cycle: queue submits");
@@ -224,12 +224,12 @@ class WebGpuDrawOrderCardinalityTest : public Game
         {
             auto rt = MakeTarget(dev);
             dev.SetRenderTarget(rt.get());
-            const Counters before = Sample(backend);
+            const Counters before = Sample(renderer);
             dev.Clear(kBlack);
             for (int i = 0; i < 4; ++i) DrawSprite(kRed);
             for (int i = 0; i < 4; ++i) Draw3D(dev, kRed);
             dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
-            d2 = Delta(before, Sample(backend));
+            d2 = Delta(before, Sample(renderer));
 
             checkCount(d2.passes, 1, "D2 eight grouped draws in one cycle: render passes");
             checkCount(d2.submits, 1, "D2 eight grouped draws in one cycle: queue submits");
@@ -255,11 +255,11 @@ class WebGpuDrawOrderCardinalityTest : public Game
         {
             auto rt = MakeTarget(dev);
             dev.SetRenderTarget(rt.get());
-            const Counters before = Sample(backend);
+            const Counters before = Sample(renderer);
             dev.Clear(kBlack);
             for (int i = 0; i < 8; ++i) { DrawSprite(kRed); Draw3D(dev, kRed); }
             dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
-            const Counters d = Delta(before, Sample(backend));
+            const Counters d = Delta(before, Sample(renderer));
 
             checkCount(d.passes, 1, "D4 sixteen alternating draws in one cycle: render passes");
             checkCount(d.submits, 1, "D4 sixteen alternating draws in one cycle: queue submits");
@@ -269,16 +269,16 @@ class WebGpuDrawOrderCardinalityTest : public Game
 
         // ---- D5: the backbuffer recorder pays the same as the render-target one ----
         //
-        // All three of this backend's pass recorders shared the fixed per-family replay list and all
+        // All three of this renderer's pass recorders shared the fixed per-family replay list and all
         // three now share the ordered walk; if only the render-target path had been corrected, this
         // is where the backbuffer's cost would diverge.
         {
-            const Counters before = Sample(backend);
+            const Counters before = Sample(renderer);
             dev.Clear(kBlack);
             for (int i = 0; i < 4; ++i) { DrawSprite(kRed); Draw3D(dev, kRed); }
             std::vector<Color> pixels(static_cast<std::size_t>(kBBW) * kBBH, kBlack);
             dev.GetBackBufferData(pixels.data(), 0, static_cast<int>(pixels.size()));
-            const Counters d = Delta(before, Sample(backend));
+            const Counters d = Delta(before, Sample(renderer));
 
             checkCount(d.passes, 1, "D5 eight alternating draws on the BACKBUFFER: render passes");
             checkCount(d.submits, 1, "D5 eight alternating draws on the BACKBUFFER: queue submits");
@@ -288,8 +288,8 @@ class WebGpuDrawOrderCardinalityTest : public Game
 
         // ---- D7: the RenderTargetCube FACE recorder, by pixels ----
         //
-        // This backend has three pass recorders and all three shared the fixed per-family replay
-        // list. The cross-backend pixel oracle in spritebatch_3d_order_test.cpp reaches the
+        // This renderer has three pass recorders and all three shared the fixed per-family replay
+        // list. The cross-renderer pixel oracle in spritebatch_3d_order_test.cpp reaches the
         // backbuffer and RenderTarget2D; the cube-face recorder is WebGPU-shaped and lives here,
         // so its ordering is measured here rather than left as "the same code path, presumed
         // covered". Both directions are run: a fixed replay list renders one of the two correctly
@@ -306,12 +306,12 @@ class WebGpuDrawOrderCardinalityTest : public Game
             for (const Leg& leg : legs)
             {
                 dev.SetRenderTarget(&cube, CubeMapFace::PositiveX);
-                const Counters before = Sample(backend);
+                const Counters before = Sample(renderer);
                 dev.Clear(kBlack);
                 if (leg.spriteFirst) { DrawSprite(kRed);   Draw3D(dev, kBlue); }
                 else                 { Draw3D(dev, kBlue); DrawSprite(kRed);   }
                 dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
-                const Counters d = Delta(before, Sample(backend));
+                const Counters d = Delta(before, Sample(renderer));
 
                 checkCount(d.passes, 1, std::string(leg.name) + ": render passes");
                 checkCount(d.submits, 1, std::string(leg.name) + ": queue submits");
@@ -343,7 +343,7 @@ class WebGpuDrawOrderCardinalityTest : public Game
 
         // ---- D6: validation stayed silent through every family transition ----
         {
-            const std::size_t errors = backend.GetUncapturedErrorCountEXT();
+            const std::size_t errors = renderer.GetUncapturedErrorCountEXT();
             check(errors == 0, errors == 0
                       ? "D6 WebGPU validation stayed silent through every family transition"
                       : "D6 WebGPU reported " + std::to_string(errors) + " uncaptured errors");

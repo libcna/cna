@@ -3,7 +3,7 @@
 // render target's own pixel dimensions, NOT the backbuffer's.
 //
 // Pre-fix defect (independently confirmed against production source and self-disclosed by
-// webgpu_rendertargetcube_test.cpp's own Check-C comment): WebGPUGraphicsBackend::QueueSprite()
+// webgpu_rendertargetcube_test.cpp's own Check-C comment): WebGPURenderer::QueueSprite()
 // converts a SpriteBatch destination rectangle to clip space via ComputeLogicalViewport() +
 // physicalWidth_/physicalHeight_, all of which are backbuffer-scoped. When a RenderTarget2D (or
 // cube face) of a different size than the backbuffer is bound, every sprite's destination
@@ -226,7 +226,7 @@ protected:
 
         // ---------------------------------------------------------------------------------------
         // Check C -- two DIFFERENT-sized render targets, SAME pixel-space destination rectangle.
-        // Both must place the sprite at the same RT pixels [7,24)x[5,16). A backend that cached
+        // Both must place the sprite at the same RT pixels [7,24)x[5,16). A renderer that cached
         // the first target's 48x32 dimensions would mis-scale the sprite in the 64x40 target.
         // ---------------------------------------------------------------------------------------
         {

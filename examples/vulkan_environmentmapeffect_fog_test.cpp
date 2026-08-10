@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Task 899: EnvironmentMapEffect linear fog pixel integration test — Vulkan backend.
+// Task 899: EnvironmentMapEffect linear fog pixel integration test — Vulkan renderer.
 //
 // env_map3d was Task 899's own noted cheap leftover, deliberately left out of the task's title
 // scope (5 pipelines sharing FillExtPushConst()'s fully-packed push constant) since its existing
@@ -22,7 +22,7 @@
 // REMED-GFX-011: this test previously omitted RasterizerState::CullNone, justified by a comment
 // claiming Vulkan's default cull state is effectively no-culling and that no sibling test sets it.
 // Both claims were false -- all nine other Vulkan EnvironmentMapEffect pixel tests do set it. The
-// quad survived only because env_map3d.vert.glsl was missing the backend-wide NDC Y-flip, and that
+// quad survived only because env_map3d.vert.glsl was missing the renderer-wide NDC Y-flip, and that
 // omission also inverted the effective winding. With the flip restored this quad is back-facing
 // under the real default state and is culled to black, exactly as in REMED-GFX-052.
 //

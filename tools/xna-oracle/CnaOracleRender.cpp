@@ -1,9 +1,9 @@
 // plan_dx9.md Phase D9-A (D9-A3): scene-driven CNA renderer -- the "CNA" half of the D9-A4 diff
 // harness. Reads the SAME ".scene" file format tools/xna-oracle/Oracle.cs reads (see that file's
 // own header comment) and renders it through CNA's real public Game/GraphicsDeviceManager/
-// GraphicsDevice/BasicEffect API on whichever backend this binary was built against (originally
-// CNA_GRAPHICS_BACKEND=D3D9; D9-A6 additionally builds this SAME file, unmodified in substance,
-// under EASYGL -- see OracleBackendName() below), saving the result as a PNG. Do not
+// GraphicsDevice/BasicEffect API on whichever renderer this binary was built against (originally
+// CNA_GRAPHICS_RENDERER=D3D9; D9-A6 additionally builds this SAME file, unmodified in substance,
+// under EASYGL -- see OracleRendererName() below), saving the result as a PNG. Do not
 // hand-transcribe scene data here -- every scene lives in tools/xna-oracle/scenes/*.scene, or the
 // harness drifts.
 //
@@ -11,7 +11,7 @@
 //
 // Deliberately renders straight to the back buffer rather than mirroring Oracle.cs's own
 // RenderTarget2D indirection: RenderTarget2D::GetData()'s own CPU readback path is not proven on
-// this backend yet (every existing render-target test reads back via GetBackBufferData() after
+// this renderer yet (every existing render-target test reads back via GetBackBufferData() after
 // blitting, not RenderTarget2D::GetData() directly), while GetBackBufferData() is exercised by
 // every D3D9 CTest already. The back buffer is the same size as the scene and is never presented
 // before being read, so the two approaches are pixel-equivalent for what this tool needs to prove.
@@ -85,37 +85,37 @@ namespace
         return s.substr(start, end - start + 1);
     }
 
-    // D9-A6: the "backend=..." tag in this tool's own stdout line below was hardcoded to "D3D9"
-    // (D9-A3's original, single-backend assumption) -- now derived from whichever of CMakeLists.txt's
-    // own add_compile_definitions(CNA_BACKEND_*) macros is actually active, so the same stdout line
-    // stays accurate as this file is built against additional backends (EASYGL first, D9-A6).
-    const char* OracleBackendName()
+    // D9-A6: the "renderer=..." tag in this tool's own stdout line below was hardcoded to "D3D9"
+    // (D9-A3's original, single-renderer assumption) -- now derived from whichever of CMakeLists.txt's
+    // own add_compile_definitions(CNA_RENDERER_*) macros is actually active, so the same stdout line
+    // stays accurate as this file is built against additional renderers (EASYGL first, D9-A6).
+    const char* OracleRendererName()
     {
-#if defined(CNA_BACKEND_D3D9)
+#if defined(CNA_RENDERER_D3D9)
         return "D3D9";
-#elif defined(CNA_BACKEND_EASYGL)
+#elif defined(CNA_RENDERER_EASYGL)
         return "EASYGL";
-#elif defined(CNA_BACKEND_VULKAN)
+#elif defined(CNA_RENDERER_VULKAN)
         return "VULKAN";
-#elif defined(CNA_BACKEND_D3D11)
+#elif defined(CNA_RENDERER_D3D11)
         return "D3D11";
-#elif defined(CNA_BACKEND_D3D12)
+#elif defined(CNA_RENDERER_D3D12)
         return "D3D12";
-#elif defined(CNA_BACKEND_BGFX)
+#elif defined(CNA_RENDERER_BGFX)
         return "BGFX";
-#elif defined(CNA_BACKEND_WEBGPU)
+#elif defined(CNA_RENDERER_WEBGPU)
         return "WEBGPU";
-#elif defined(CNA_BACKEND_OPENGLES1)
+#elif defined(CNA_RENDERER_OPENGLES1)
         return "OPENGLES1";
-#elif defined(CNA_BACKEND_SOFTWARE)
+#elif defined(CNA_RENDERER_SOFTWARE)
         return "SOFTWARE";
-#elif defined(CNA_BACKEND_HEADLESS)
+#elif defined(CNA_RENDERER_HEADLESS)
         return "HEADLESS";
-#elif defined(CNA_BACKEND_SDL_RENDERER)
+#elif defined(CNA_RENDERER_SDL_RENDERER)
         return "SDL_RENDERER";
-#elif defined(CNA_BACKEND_SKIA)
+#elif defined(CNA_RENDERER_SKIA)
         return "SKIA";
-#elif defined(CNA_BACKEND_GDI)
+#elif defined(CNA_RENDERER_GDI)
         return "GDI";
 #else
         return "UNKNOWN";
@@ -201,7 +201,7 @@ namespace
         // D9-90..93: a scene with spriteBatchMode=true bypasses the entire effect/vertex-format
         // draw path below and instead drives the real public SpriteBatch/Texture2D API -- a
         // genuinely different draw model (no vertex declaration, no Effect, real orthographic +
-        // half-pixel MatrixTransform construction happens entirely inside D3D9SpriteBatchBackend
+        // half-pixel MatrixTransform construction happens entirely inside D3D9SpriteBatchRenderer
         // itself), so it gets its own top-level scene keys rather than overloading the
         // effect-draw ones.
         bool spriteBatchMode = false;
@@ -586,7 +586,7 @@ protected:
         if (scene_.spriteBatchMode)
         {
             // D9-90..93: the real public SpriteBatch/Texture2D API, not the raw
-            // ISpriteBatchBackend interface -- matches D9-93's own explicit requirement.
+            // ISpriteBatchRenderer interface -- matches D9-93's own explicit requirement.
             Texture2D spriteTexture(dev, scene_.textureWidth, scene_.textureHeight);
             spriteTexture.SetData(scene_.texturePixels.data(), static_cast<int>(scene_.texturePixels.size()));
 
@@ -649,7 +649,7 @@ protected:
             out.SetData(pixels.data(), pixelCount);
             out.SaveAsPng(outputPath_);
 
-            std::printf("CNA-XNA-ORACLE-OK backend=%s out=%s\n", OracleBackendName(), outputPath_.c_str());
+            std::printf("CNA-XNA-ORACLE-OK renderer=%s out=%s\n", OracleRendererName(), outputPath_.c_str());
             Exit();
             return;
         }
@@ -867,7 +867,7 @@ protected:
         out.SetData(pixels.data(), pixelCount);
         out.SaveAsPng(outputPath_);
 
-        std::printf("CNA-XNA-ORACLE-OK backend=%s out=%s\n", OracleBackendName(), outputPath_.c_str());
+        std::printf("CNA-XNA-ORACLE-OK renderer=%s out=%s\n", OracleRendererName(), outputPath_.c_str());
         Exit();
     }
 

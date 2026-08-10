@@ -5,13 +5,13 @@
 // The FrontToBack scenario is a direct port of Task 420's EasyGL test
 // (examples/easygl_spritebatch_layerdepth_test.cpp) -- same methodology, same geometry, same
 // expected pixel outcomes. See that file's header comment for the full rationale (SpriteBatch.cpp's
-// shared, backend-agnostic sort logic; painter's-algorithm overlap resolution since sprite
+// shared, renderer-agnostic sort logic; painter's-algorithm overlap resolution since sprite
 // vertices carry no Z component). The BackToFront scenario is new for this task -- no existing
-// test in this project (on any backend) exercises SpriteSortMode::BackToFront with a real pixel
+// test in this project (on any renderer) exercises SpriteSortMode::BackToFront with a real pixel
 // verification.
 //
 // Requires PresentationMode::NativeBackBuffer (Task 915 finding): SDL_RenderReadPixels operates
-// in physical output coordinates, while this backend's default presentation mode
+// in physical output coordinates, while this renderer's default presentation mode
 // (FixedHeightDynamicWidth) does not map logical pixels 1:1 to physical ones.
 //
 // --- FrontToBack (top row, y=100): 2 overlapping 60x60 opaque sprites. ---

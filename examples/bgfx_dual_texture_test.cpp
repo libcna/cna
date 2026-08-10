@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Task 384: DualTextureEffect integration test — Bgfx backend.
+// Task 384: DualTextureEffect integration test — Bgfx renderer.
 //
 // Mirrors Task 133 (EasyGL) / Task 135 (Vulkan): magenta x yellow = red.
 //   texture 0 = solid magenta (1, 0, 1, 1)

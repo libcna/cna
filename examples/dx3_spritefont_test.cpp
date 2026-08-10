@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: MS-PL
 // plan_dx2.md Phase O2 (DX2-13, 2D layer ported from DX1-50..DX1-54): SpriteFont / DrawString tests for the DX3 (real
-// DirectDraw v1, run under Wine -- no ../free-direct anywhere in this backend) graphics backend.
+// DirectDraw v1, run under Wine -- no ../free-direct anywhere in this renderer) graphics renderer.
 //
-// SpriteBatch::DrawString (shared, backend-agnostic SpriteBatch.cpp) lays out each glyph as a
-// destination rectangle and calls pushSprite() -> backend_->Draw(), the EXACT same
-// ISpriteBatchBackend::Draw() overload Phase O4/O5 already implemented and pixel-verified for
-// plain sprites. This phase therefore needs no new backend code (DX2-50/51 confirm this
+// SpriteBatch::DrawString (shared, renderer-agnostic SpriteBatch.cpp) lays out each glyph as a
+// destination rectangle and calls pushSprite() -> renderer_->Draw(), the EXACT same
+// ISpriteBatchRenderer::Draw() overload Phase O4/O5 already implemented and pixel-verified for
+// plain sprites. This phase therefore needs no new renderer code (DX2-50/51 confirm this
 // directly); it exists to prove that claim empirically rather than merely assert it.
 //
 // A 2-glyph atlas is used throughout: glyph 'A' = solid Red 8x8 at atlas (0,0,8,8), glyph 'B' =
 // solid Green 8x8 at atlas (8,0,8,8). Unlike the existing SDL_Renderer SpriteFont tests (which use
-// a color-match tolerance to work around that backend's own physical/logical scaling), DX3's CPU
+// a color-match tolerance to work around that renderer's own physical/logical scaling), DX3's CPU
 // compositor is exact-pixel, so every check here asserts an exact color match.
 //
 // Check A (DX2-50) -- a single glyph lands at exactly the expected destination rect.

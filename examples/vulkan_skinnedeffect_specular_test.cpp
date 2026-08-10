@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MS-PL
-// Task 894: SkinnedEffect pixel test — real specular highlights (Vulkan backend). See
+// Task 894: SkinnedEffect pixel test — real specular highlights (Vulkan renderer). See
 // examples/easygl_basiceffect_specular_test.cpp for the full FNA-reference half-vector
 // Blinn-Phong derivation (Lighting.fxh's ComputeLights) — SkinnedEffect uses the exact same
 // formula and (with an identity bone palette + identity World) the exact same expected numbers.
 //
 // Before this task, SkinnedEffect had zero specular infrastructure: no SpecularColor/SpecularPower
 // forwarding, no per-light SpecularColor forwarding, no EyePosition/world-position plumbing in any
-// backend's skinned shader at all.
+// renderer's skinned shader at all.
 //
 // Uses an identity bone palette (weight=1 on bone 0, which defaults to Identity), isolating
 // skinning from the specular formula under test.
@@ -71,7 +71,7 @@ static const Vector3 kEyeOffAxis(3.0f, 0.0f, 1.0f);
 // interpolating the specular VALUE across the quad's two triangles differs from evaluating
 // pow(dot(H,N),power) fresh at each fragment, the same reasoning
 // vulkan_basiceffect_specular_test.cpp's own Task 1103 update documents in full. 125 is the real,
-// measured value on this backend (confirmed against the actual render, not copied from EasyGL's
+// measured value on this renderer (confirmed against the actual render, not copied from EasyGL's
 // own close-but-not-identical 126 for the same scene) -- 155 (below) was the OLD, always-per-pixel
 // value this scene incorrectly asserted before this fix.
 static const Color kExpectedStraightOn(125, 125, 125, 255);   // dotH=0.9732, spec=0.4199 (per-pixel; superseded by Task 1103)

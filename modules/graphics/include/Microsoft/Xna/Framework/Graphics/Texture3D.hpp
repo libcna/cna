@@ -7,9 +7,9 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 
-namespace CNA::Internal::Backends
+namespace CNA::Internal::Renderers
 {
-    class ITexture3DBackend;
+    class ITexture3DRenderer;
 }
 
 namespace Microsoft::Xna::Framework::Graphics
@@ -38,7 +38,7 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Copying is not allowed.
          *
-         * NOXNA, explicit for clarity: `backend_`'s `std::unique_ptr` member already makes this
+         * NOXNA, explicit for clarity: `renderer_`'s `std::unique_ptr` member already makes this
          * implicit, but plan_xnb.md XNB-25 needed a real move path added (see below) and every
          * other similarly-shaped GPU-resource class in this codebase (`VertexBuffer`,
          * `IndexBuffer`, `TextureCube`) already declares both explicitly rather than relying on
@@ -111,7 +111,7 @@ namespace Microsoft::Xna::Framework::Graphics
          *                     number of voxels in the requested box, of which exactly that many
          *                     are read starting at @p startIndex.
          * @throws System::ObjectDisposedException if this Texture3D has been disposed.
-         * @throws System::NotSupportedException if this backend cannot store the requested mip
+         * @throws System::NotSupportedException if this renderer cannot store the requested mip
          *         level or box.
          * @throws std::invalid_argument if @p data is null.
          * @throws std::out_of_range for an invalid level, startIndex, elementCount or box.
@@ -135,7 +135,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param data       Pointer to the raw byte data.
          * @param dataLength Size of the data in bytes.
          * @throws System::ObjectDisposedException if this Texture3D has been disposed.
-         * @throws System::NotSupportedException if this backend did not store the whole box.
+         * @throws System::NotSupportedException if this renderer did not store the whole box.
          * @throws std::invalid_argument if @p data is null.
          */
         NOXNA void SetDataPointerEXT(int level, int left, int top, int right, int bottom, int front, int back,
@@ -180,8 +180,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param elementCount Number of Color elements to read; must be at least the number of
          *                     voxels in the requested box.
          * @throws System::ObjectDisposedException if this texture has been disposed.
-         * @throws System::NotSupportedException if this graphics backend cannot read the requested
-         *         volume/mip level back to the CPU (including backends that create no volume
+         * @throws System::NotSupportedException if this graphics renderer cannot read the requested
+         *         volume/mip level back to the CPU (including renderers that create no volume
          *         resource at all).
          * @throws std::invalid_argument if @p data is null.
          * @throws std::out_of_range if @p level, @p startIndex, @p elementCount or the box is out
@@ -191,24 +191,24 @@ namespace Microsoft::Xna::Framework::Graphics
                      Color* data, int startIndex, int elementCount) const;
 
         /**
-         * @brief Returns a reference to the backend implementation object.
+         * @brief Returns a reference to the renderer implementation object.
          *
-         * @return Reference to the backend ITexture3DBackend.
+         * @return Reference to the renderer ITexture3DRenderer.
          */
-        NOXNA [[nodiscard]] CNA::Internal::Backends::ITexture3DBackend& GetBackend() const { return *backend_; }
+        NOXNA [[nodiscard]] CNA::Internal::Renderers::ITexture3DRenderer& GetRenderer() const { return *renderer_; }
 
     protected:
-        /** @brief Releases the backend 3D texture handle when the resource is disposed. */
+        /** @brief Releases the renderer 3D texture handle when the resource is disposed. */
         void Dispose(bool disposing) override;
 
     private:
         int width_;
         int height_;
         int depth_;
-        // SKIA-149: shared (not unique) ownership so a SkiaEffectBackend can hold a weak_ptr for
-        // volume-sampling lifetime tracking, matching Texture2D's identical ITextureBackend
+        // SKIA-149: shared (not unique) ownership so a SkiaEffectRenderer can hold a weak_ptr for
+        // volume-sampling lifetime tracking, matching Texture2D's identical ITextureRenderer
         // pattern. Texture3D itself remains non-copyable; this only lets a second, weak observer
         // outlive a single call without becoming the resource's owner.
-        std::shared_ptr<CNA::Internal::Backends::ITexture3DBackend> backend_;
+        std::shared_ptr<CNA::Internal::Renderers::ITexture3DRenderer> renderer_;
     };
 }

@@ -96,14 +96,14 @@ New `cmake/ThirdPartySkiaGanesh.cmake`, parallel to and independent of the exist
   file existing.
 - `CNA_SKIA_ROOT` is declared defensively in this file too (a repeated `CACHE` declaration of the
   same variable name is a CMake no-op that preserves any already-set value), so
-  `cna_configure_skia_ganesh()` works standalone even when `CNA_GRAPHICS_BACKEND` is not `SKIA`.
+  `cna_configure_skia_ganesh()` works standalone even when `CNA_GRAPHICS_RENDERER` is not `SKIA`.
 - `cna_configure_skia_ganesh()` defines `CNA::SkiaGanesh`, an `INTERFACE` target linking the same
   `LINK_GROUP:RESCAN` archive-group pattern the raster target already uses (needed for the same
   reason: the six archives are mutually dependent, and CMake may otherwise reorder them away from
   each other while flattening an `INTERFACE` dependency into a consuming executable), plus
   `Threads::Threads`, `OpenGL::GL` (via `find_package(OpenGL REQUIRED)`), and `${CMAKE_DL_LIBS}`.
-- **Nothing in `cmake/BackendSelection.cmake` or `cmake/BackendLibraries.cmake` changed.**
-  `CNA_GRAPHICS_BACKEND=SKIA` still links only `CNA::Skia` (raster); `CNA::SkiaGanesh` is not linked
+- **Nothing in `cmake/RendererSelection.cmake` or `cmake/BackendLibraries.cmake` changed.**
+  `CNA_GRAPHICS_RENDERER=SKIA` still links only `CNA::Skia` (raster); `CNA::SkiaGanesh` is not linked
   by any existing target. Construction-time mode selection between the two is explicitly SKIA-160's
   job, not this task's.
 
@@ -128,13 +128,13 @@ raster target's existing diagnostics in `cmake/ThirdPartySkia.cmake`, for each o
 
 Skia (both the raster and Ganesh/GL artifacts -- one shared upstream project) is BSD-3-Clause,
 copyright Google Inc. Neither artifact vendors Skia source into this repository; both are external,
-separately built dependencies consumed the same way `wgpu-native` already is for the WebGPU backend.
+separately built dependencies consumed the same way `wgpu-native` already is for the WebGPU renderer.
 See `THIRD_PARTY_NOTICES.md`'s new "Skia" section (added by this task -- Skia previously had no
 NOTICE entry at all, a pre-existing gap this task closes for both artifacts, not just the new one).
 
 ## Functional verification
 
-A below-the-API probe, matching this backend's established "prove it below the API first" sequencing
+A below-the-API probe, matching this renderer's established "prove it below the API first" sequencing
 (SKIA-93/145/147/153-156): `tools/skia/skia_ganesh_artifact_probe.cpp`, a small standalone (non-GTest)
 executable that creates a real SDL `SDL_GLContext`, makes it current, and calls
 `GrDirectContexts::MakeGL()` (Skia's zero-argument overload, which internally resolves the native GL
@@ -143,7 +143,7 @@ interface -- on this GN configuration, the GLX path described above).
 Registered in `cmake/Harnesses.cmake` as `cna_skia_ganesh_artifact_probe`, gated entirely behind
 `if(CNA_SKIA_GANESH_BUILD_DIR)` -- it does not exist as a build target in any configuration that
 does not explicitly request it, including every already-configured raster build. **Not** registered
-as a CTest test: SKIA-160/161 own the real construction-time mode selection and backend integration
+as a CTest test: SKIA-160/161 own the real construction-time mode selection and renderer integration
 this probe deliberately does not attempt.
 
 Built by reconfiguring the existing `cmake-build-skia` directory in place (adding
@@ -180,14 +180,14 @@ was simply what was used at the time. See SKIA-161's own section below.
 ## What SKIA-159 explicitly did not do
 
 - No construction-time raster/Ganesh mode selector -- SKIA-160, see below.
-- No backend-owned Ganesh `SkSurface`/context wrapping, flush/submit, swap, resize, or
-  context-loss handling inside `SkiaGraphicsBackend` (SKIA-161/162).
+- No renderer-owned Ganesh `SkSurface`/context wrapping, flush/submit, swap, resize, or
+  context-loss handling inside `SkiaRenderer` (SKIA-161/162).
 - No MSAA or anisotropy probing on the Ganesh device (SKIA-164/165) -- `docs/skia-surface-mode-adr.md`
   is explicit that a future GPU mode "must probe its native maximum" rather than inherit the raster
   policy blindly; this task does not attempt that probe.
 - No CTest-registered, CI-running Ganesh test -- the probe was a one-off, manually-run,
   real-display-only proof, deleted after its result was recorded above.
-- `docs/skia-backend.md` and `docs/skia-release-gate.md` are deliberately untouched, per their
+- `docs/skia-renderer.md` and `docs/skia-release-gate.md` are deliberately untouched, per their
   existing freeze-until-SKIA-170 policy (same precedent SKIA-158 already followed) -- also true of
   SKIA-160 below.
 
@@ -198,7 +198,7 @@ works, not that CNA has a reusable, testable way to select it. SKIA-160 formaliz
 staying inside the boundary SKIA-159 already drew: it does **not** wrap a presentable backbuffer,
 implement flush/submit/swap/resize, or probe MSAA/anisotropy -- those remain SKIA-161/162/164/165.
 
-### `CNA_SKIA_MODE`: a sub-selector of `CNA_GRAPHICS_BACKEND=SKIA`, not a new backend identity
+### `CNA_SKIA_MODE`: a sub-selector of `CNA_GRAPHICS_RENDERER=SKIA`, not a new renderer identity
 
 Raster and Ganesh/GL are **mutually exclusive GN builds of the same Skia checkout** (SKIA-159): they
 define the identical `libskia.a` symbol set with different internal capabilities compiled in, so
@@ -207,12 +207,12 @@ selection" therefore cannot mean a true single-binary runtime toggle between two
 implementations -- there is only ever one linked at a time. What SKIA-160 actually adds is:
 
 1. A new CMake cache option, `CNA_SKIA_MODE` (`RASTER`, the default, or `GANESH`), read only when
-   `CNA_GRAPHICS_BACKEND=SKIA` is selected. `RASTER` calls the unchanged `cna_configure_skia()` and
+   `CNA_GRAPHICS_RENDERER=SKIA` is selected. `RASTER` calls the unchanged `cna_configure_skia()` and
    links `CNA::Skia`; `GANESH` calls `cna_configure_skia_ganesh()` and links `CNA::SkiaGanesh`
    instead, plus defines the `CNA_SKIA_MODE_GANESH` compile definition. Neither
    `cmake/ThirdPartySkia.cmake` nor the existing raster call site changed.
-2. A new class, `CNA::Internal::Backends::Skia::SkiaGaneshContext` (deliberately **not** an
-   `IGraphicsBackend` implementation -- SKIA-161 owns that), whose constructor is where "no silent
+2. A new class, `CNA::Internal::Renderers::Skia::SkiaGaneshContext` (deliberately **not** an
+   `IGraphicsRenderer` implementation -- SKIA-161 owns that), whose constructor is where "no silent
    runtime fallback" actually lives:
    - Compiled in a `RASTER`-mode build (no `CNA_SKIA_MODE_GANESH` defined, `CNA::Skia` linked, zero
      Ganesh/GL object code present at all), its constructor throws `std::runtime_error`
@@ -221,7 +221,7 @@ implementations -- there is only ever one linked at a time. What SKIA-160 actual
    - Compiled in a `GANESH`-mode build, its constructor performs the exact sequence SKIA-159's
      probe already proved works (a real SDL `SDL_GLContext`, made current, handed to
      `GrDirectContexts::MakeGL()`), and throws immediately if any step fails, unwinding every
-     acquired resource first -- matching `SkiaGraphicsBackend`'s own established constructor
+     acquired resource first -- matching `SkiaRenderer`'s own established constructor
      try/catch-and-unwind pattern exactly. On success it exposes a real, runtime-computed
      diagnostic (`surface=ganesh-gl`, the pinned revision, and a genuinely queried
      `max-texture-size`, unlike raster's fixed `constexpr` diagnostic string, since this value is
@@ -246,7 +246,7 @@ recreated per ticket:
 ```sh
 cmake -S . -B cmake-build-skia-ganesh -G Ninja \
   -DCMAKE_BUILD_TYPE=Debug \
-  -DCNA_GRAPHICS_BACKEND=SKIA \
+  -DCNA_GRAPHICS_RENDERER=SKIA \
   -DCNA_SKIA_MODE=GANESH \
   -DCNA_SKIA_ROOT=~/deps/skia \
   -DCNA_SKIA_GANESH_BUILD_DIR=~/deps/skia-out/ganesh \
@@ -276,7 +276,7 @@ confirmed:
   leaks between instances. The negative case (null window) still throws in `GANESH` mode too.
 - The full pre-existing raster suite (171 tests, +1 for the new mode-refusal registration) passes
   unchanged in this same Ganesh-linked build directory -- proving the Ganesh archive being linked in
-  place of the raster one changes nothing about `SkiaGraphicsBackend`'s own raster behavior (the
+  place of the raster one changes nothing about `SkiaRenderer`'s own raster behavior (the
   Ganesh GN build is a strict superset of the raster APIs, not a divergent implementation of them).
 - Back in the original `cmake-build-skia` (still `RASTER`, the default): the new test registers as
   `Skia_Ganesh_ModeRefusal_Raster` under `Skia;Raster`, passes, and `ctest -N -L Accelerated`
@@ -286,14 +286,14 @@ confirmed:
 
 `SkiaGaneshContext` (SKIA-160) deliberately stopped at "a `GrDirectContext` exists" -- it wraps no
 surface at all. SKIA-161 is the first task to actually draw and read back a pixel through the
-Ganesh path. It stays inside the same boundary every prior below-the-API Skia task in this backend
-has: no `IGraphicsBackend` implementation, no wiring into `SpriteBatch`/`GraphicsDevice`, no
+Ganesh path. It stays inside the same boundary every prior below-the-API Skia task in this renderer
+has: no `IGraphicsRenderer` implementation, no wiring into `SpriteBatch`/`GraphicsDevice`, no
 resize/loss/recovery *policy* (SKIA-162 -- `Resize()` here is a mechanism the caller must invoke
 explicitly, not an automatic reaction to a window event).
 
 ### `SkiaGaneshSurface`: composes, does not duplicate, `SkiaGaneshContext`
 
-New `CNA::Internal::Backends::Skia::SkiaGaneshSurface` owns a `SkiaGaneshContext` by value (not by
+New `CNA::Internal::Renderers::Skia::SkiaGaneshSurface` owns a `SkiaGaneshContext` by value (not by
 inheritance or duplicated construction logic) and wraps its `GrDirectContext` around the real
 window-system default framebuffer:
 
@@ -302,7 +302,7 @@ window-system default framebuffer:
 - `GrBackendRenderTargets::MakeGL(width, height, sampleCnt=1, stencilBits, fbInfo)`, where
   `stencilBits` is queried live via `glGetIntegerv(GL_STENCIL_BITS, ...)` rather than assumed --
   `SkiaGaneshContext`'s GL context creation was extended (SKIA-160's own file) to request an 8-bit
-  stencil buffer, matching `SkiaGraphicsBackend`'s EasyGL sibling's established precedent, since
+  stencil buffer, matching `SkiaRenderer`'s EasyGL sibling's established precedent, since
   Skia's own header requires this value be exactly 0, 8, or 16.
 - `kBottomLeft_GrSurfaceOrigin` -- the real GL default framebuffer's row 0 is the bottom row in
   device memory. `SkSurface`/`SkCanvas` hide this from every caller (draws and `readPixels()` both
@@ -360,7 +360,7 @@ a real desktop display, so neither is specifically required:
   destroyed also wraps, draws, and reads back correctly (including the mid-tone colour that caught
   the colour-space bug above), proving no state leaked across instances;
 - structurally, `SkiaGaneshSurface`/`SkiaGaneshContext` and their tests contain zero references to
-  `src/CNA/Internal/Backends/EasyGL/` (checked directly) -- the "absence of EasyGL delegation" this
+  `src/CNA/Internal/Renderers/EasyGL/` (checked directly) -- the "absence of EasyGL delegation" this
   task's acceptance text asks for.
 
 The same binary also serves as this task's "visible smoke" proof -- the other half of the
@@ -402,15 +402,15 @@ SKIA-159 correction note above).
 SKIA-161 deliberately proved only the happy path: construct once, draw, resize, done. SKIA-162
 closes gate 3 ("wrap and present the real backbuffer, including resize and loss/recovery") by
 adding the loss/recovery half, using the real, already-established precedent
-`EasyGLGraphicsBackend::DebugSimulateContextLoss()` set for this exact architecture (a GL-based
-backend on desktop Linux/Mesa), not inventing a new approach.
+`EasyGLRenderer::DebugSimulateContextLoss()` set for this exact architecture (a GL-based
+renderer on desktop Linux/Mesa), not inventing a new approach.
 
 ### `DebugSimulateContextLossEXT()`: a genuine destroy+recreate, mirroring EasyGL exactly
 
 A real GL context loss cannot be safely forced on this platform (no portable way exists to make a
-healthy Mesa/GLX driver actually lose a context on demand). `SkiaGraphicsBackend`'s own raster
+healthy Mesa/GLX driver actually lose a context on demand). `SkiaRenderer`'s own raster
 `DebugSimulateContextLoss()` does not attempt one either -- it reconstructs the SDL presenter while
-keeping CPU-owned resources live. `EasyGLGraphicsBackend::DebugSimulateContextLoss()`, the closer
+keeping CPU-owned resources live. `EasyGLRenderer::DebugSimulateContextLoss()`, the closer
 architectural sibling (also GL-based), goes further because it has to: it does a real
 `SDL_GL_DestroyContext`/`SDL_GL_CreateContext` cycle, reloads GL function pointers, and notifies a
 resource registry to recreate every GL-backed resource (shaders/textures/buffers/VAOs) from its
@@ -428,12 +428,12 @@ exactly, adapted to what actually exists in this path:
 
 Step 4 is the one genuine simplification versus EasyGL's own "notify a resource registry" step:
 there is no resource registry here because no textures/targets/effects exist in the Ganesh path at
-all yet (`SkiaGaneshSurface` is not an `IGraphicsBackend`) -- the wrapped backbuffer surface is the
+all yet (`SkiaGaneshSurface` is not an `IGraphicsRenderer`) -- the wrapped backbuffer surface is the
 *only* thing that depends on the context, and rewrapping it is the complete recreate. This is a
 declared, not silent, scope boundary: "live textures/targets/effects survive or report deterministic
 loss/reset events" (this task's own acceptance text) is vacuously true today because none exist to
 fail to survive; a real, non-vacuous version of that claim is real, open, un-vacuous scope for
-whichever task first gives Ganesh an `IGraphicsBackend` (SKIA-163+), not attempted here.
+whichever task first gives Ganesh an `IGraphicsRenderer` (SKIA-163+), not attempted here.
 
 `context_` changed from a plain `SkiaGaneshContext` value member to `std::optional<SkiaGaneshContext>`
 specifically to support this in-place destroy+reconstruct -- `SkiaGaneshContext` itself remains a
@@ -459,15 +459,15 @@ thoroughly, not changing its mechanism. `examples/skia_ganesh_backbuffer_test.cp
 No new "presentation mapping" concept (`CnaPresentationMode`-equivalent virtual resolution,
 letterbox, or overscan) was added -- `SkiaGaneshSurface` still uses the window's raw drawable pixels
 1:1, exactly as SKIA-161 left it. This is a declared boundary, not an oversight: building a parallel
-presentation-mapping system for a component with no `IGraphicsBackend`/`GraphicsDeviceManager` to
+presentation-mapping system for a component with no `IGraphicsRenderer`/`GraphicsDeviceManager` to
 actually drive it would be speculative scope with nothing real to test it against; the real system
 already exists for raster (`CnaPresentationMode`) and is the one any future Ganesh
-`IGraphicsBackend` should reuse or mirror once that integration genuinely happens.
+`IGraphicsRenderer` should reuse or mirror once that integration genuinely happens.
 
 "Resource synchronization" (also named in this task's acceptance text) is likewise vacuously
 satisfied today: `SkiaGaneshSurface` owns exactly one GL context, used from exactly one thread, with
 no concurrent or shared resources to synchronize -- there is nothing for this task to add there
-either, until real backend integration introduces some.
+either, until real renderer integration introduces some.
 
 ### Verification
 
@@ -487,18 +487,18 @@ repository's own established transient-Xvfb-under-parallel-load pattern; none is
 SKIA-163's row text is "Run complete raster-versus-Ganesh 2D parity, lifecycle, resource-budget,
 performance, Release, and sanitizer suites," accepted by "Exact/toleranced oracle results,
 ownership, state leakage, repeated reconstruction, and platform boundaries pass before Ganesh is
-advertised." Taken literally, this assumes Ganesh already has a working `IGraphicsBackend` capable
+advertised." Taken literally, this assumes Ganesh already has a working `IGraphicsRenderer` capable
 of drawing real 2D scenes through `SpriteBatch`/`Texture2D` -- otherwise there is no "2D parity"
-corpus to run, and no "performance" to compare. **No such backend exists.** SKIA-159-162, entirely
+corpus to run, and no "performance" to compare. **No such renderer exists.** SKIA-159-162, entirely
 deliberately, all stayed below the public API (`SkiaGaneshContext`/`SkiaGaneshSurface` are not
-`IGraphicsBackend` implementations); nothing in the current `plan_skia.md` task list under any
+`IGraphicsRenderer` implementations); nothing in the current `plan_skia.md` task list under any
 number actually builds one. This is a genuine gap in Phase S17's own sequencing, discovered while
 scoping this task, not a shortfall in how it was executed -- there is no task between SKIA-162 and
 SKIA-163 that was supposed to close it.
 
 Given that, this task is **not marked complete** in `plan_skia.md`. What follows is the honest
 subset of SKIA-163's acceptance text that genuinely can be satisfied at the level that exists
-today, delivered as real, verified work -- not a substitute for the missing backend integration,
+today, delivered as real, verified work -- not a substitute for the missing renderer integration,
 and not claimed as one.
 
 ### What was delivered
@@ -518,7 +518,7 @@ and not claimed as one.
     Byte-level leak counting across 128 real GL context create/destroy cycles was not attempted --
     the known baseline noise (confirmed non-zero and non-deterministic in earlier tasks) would make
     any such count meaningless without also isolating the host GLX presenter (dummy/software SDL
-    driver), which does not work for a GL-context-requiring backend the way it does for raster.
+    driver), which does not work for a GL-context-requiring renderer the way it does for raster.
 - **First-ever Ganesh-mode Release build and verification**: a new permanent
   `cmake-build-skia-ganesh-release` directory (mirroring `cmake-build-skia-ganesh`/`-asan`'s
   existing convention), 173/173. SKIA-160-162 each verified Ganesh in Debug (and, from SKIA-161
@@ -536,10 +536,10 @@ and not claimed as one.
 
 - A real 2D-scene "parity" oracle (rendering the same `SpriteBatch` scene through raster and
   through Ganesh and comparing pixels) cannot exist until some task gives Ganesh an
-  `IGraphicsBackend`. No such task currently has a number in `plan_skia.md`.
+  `IGraphicsRenderer`. No such task currently has a number in `plan_skia.md`.
   `docs/skia-3d-emulation-adr.md`-style architecture-decision framing might be the right vehicle
-  for scoping that work properly (a full `IGraphicsBackend` is a materially larger undertaking than
-  any single SKIA-159-163 task, closer in scope to the entire raster `SkiaGraphicsBackend`
+  for scoping that work properly (a full `IGraphicsRenderer` is a materially larger undertaking than
+  any single SKIA-159-163 task, closer in scope to the entire raster `SkiaRenderer`
   implementation) rather than assuming it fits inside the next available task number.
 - "Performance" comparison has no meaning without that same scene-rendering path.
 - Full LSan byte-level leak counting across GL context churn remains undemonstrated for the reason
@@ -548,5 +548,5 @@ and not claimed as one.
 Verified: `cmake-build-skia-ganesh`, `-asan`, and the new `-release` are all 173/173 (up from 172,
 +1 -- `Skia_Ganesh_ResourceBudget`), zero sanitizer findings; the raster builds
 (`cmake-build-skia`/`-release`/`-asan`, still default) are unchanged at 171/171 in all three, zero
-sanitizer findings, `Accelerated` still 0 there. `docs/skia-backend.md`/`docs/skia-release-gate.md`
+sanitizer findings, `Accelerated` still 0 there. `docs/skia-renderer.md`/`docs/skia-release-gate.md`
 deliberately untouched, per their existing freeze-until-SKIA-170 policy.

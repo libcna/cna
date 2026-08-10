@@ -15,7 +15,7 @@
 #include <tuple>
 #include <vector>
 
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
@@ -35,12 +35,12 @@ using System::IO::MemoryStream;
 
 namespace
 {
-    using CNA::Internal::Backends::ITextureBackend;
+    using CNA::Internal::Renderers::ITextureRenderer;
 
-    class RecordingMipTextureBackend final : public ITextureBackend
+    class RecordingMipTextureRenderer final : public ITextureRenderer
     {
     public:
-        explicit RecordingMipTextureBackend(int width, int height)
+        explicit RecordingMipTextureRenderer(int width, int height)
             : width_(width), height_(height)
         {
         }
@@ -235,8 +235,8 @@ TEST_F(LevelCountTest, MipMapTrueNonPowerOfTwo)
 
 // -----------------------------------------------------------------------
 // REMED-GFX-192 -- one shared [0, LevelCount) validation path must run before mip dimensions,
-// CPU shadows, allocation, or backend dispatch. A real mipmapped Texture2D proves every valid
-// level's dimensions and bytes, while the existing CPU-only recording-backend factory proves that
+// CPU shadows, allocation, or renderer dispatch. A real mipmapped Texture2D proves every valid
+// level's dimensions and bytes, while the existing CPU-only recording-renderer factory proves that
 // rejected SetData calls never dispatch even on the single-level boundary.
 // -----------------------------------------------------------------------
 
@@ -259,13 +259,13 @@ TEST(Texture2DMipLevelValidationTest, RejectedSetDataLeavesEveryValidMipAndItsSo
     constexpr int kWidth = 13;
     constexpr int kHeight = 7;
     constexpr int kLevelCount = 1;
-    auto backend = std::make_shared<RecordingMipTextureBackend>(kWidth, kHeight);
-    Texture2D texture = Texture2D::CreateWithBackendForTests(kWidth, kHeight, backend);
+    auto renderer = std::make_shared<RecordingMipTextureRenderer>(kWidth, kHeight);
+    Texture2D texture = Texture2D::CreateWithRendererForTests(kWidth, kHeight, renderer);
     const std::vector<std::vector<Color>> expected =
         PopulateEveryMip(texture, kWidth, kHeight);
 
-    const int levelZeroUpdatesBefore = backend->levelZeroUpdates;
-    const std::vector<std::tuple<int, int, int>> levelUpdatesBefore = backend->levelUpdates;
+    const int levelZeroUpdatesBefore = renderer->levelZeroUpdates;
+    const std::vector<std::tuple<int, int, int>> levelUpdatesBefore = renderer->levelUpdates;
     const std::array<int, 4> invalidLevels = {
         -1, kLevelCount, 1000, std::numeric_limits<int>::max()
     };
@@ -276,23 +276,23 @@ TEST(Texture2DMipLevelValidationTest, RejectedSetDataLeavesEveryValidMipAndItsSo
         const std::vector<Color> sourceBefore = source;
         EXPECT_THROW(texture.SetData(level, nullptr, source.data(), 2, 1), std::out_of_range);
         EXPECT_EQ(source, sourceBefore);
-        EXPECT_EQ(backend->levelZeroUpdates, levelZeroUpdatesBefore);
-        EXPECT_EQ(backend->levelUpdates, levelUpdatesBefore);
+        EXPECT_EQ(renderer->levelZeroUpdates, levelZeroUpdatesBefore);
+        EXPECT_EQ(renderer->levelUpdates, levelUpdatesBefore);
     }
 
     ExpectEveryMipExact(texture, kWidth, kHeight, expected);
-    EXPECT_EQ(backend->levelZeroUpdates, levelZeroUpdatesBefore);
-    EXPECT_EQ(backend->levelUpdates, levelUpdatesBefore);
-    EXPECT_EQ(backend->getDataCalls, 0);
+    EXPECT_EQ(renderer->levelZeroUpdates, levelZeroUpdatesBefore);
+    EXPECT_EQ(renderer->levelUpdates, levelUpdatesBefore);
+    EXPECT_EQ(renderer->getDataCalls, 0);
 }
 
-TEST(Texture2DMipLevelValidationTest, RejectedGetDataLeavesDestinationAndBackendUntouched)
+TEST(Texture2DMipLevelValidationTest, RejectedGetDataLeavesDestinationAndRendererUntouched)
 {
     constexpr int kWidth = 13;
     constexpr int kHeight = 7;
     constexpr int kLevelCount = 1;
-    auto backend = std::make_shared<RecordingMipTextureBackend>(kWidth, kHeight);
-    Texture2D texture = Texture2D::CreateWithBackendForTests(kWidth, kHeight, backend);
+    auto renderer = std::make_shared<RecordingMipTextureRenderer>(kWidth, kHeight);
+    Texture2D texture = Texture2D::CreateWithRendererForTests(kWidth, kHeight, renderer);
     const Color sentinel(7, 3, 11, 199);
     const Rectangle one(0, 0, 1, 1);
     const std::array<int, 4> invalidLevels = {
@@ -307,15 +307,15 @@ TEST(Texture2DMipLevelValidationTest, RejectedGetDataLeavesDestinationAndBackend
         const Rectangle* rect = (request % 2 == 0) ? &one : nullptr;
         EXPECT_THROW(texture.GetData(level, rect, destination.data(), 3, 1), std::out_of_range);
         for (const Color& value : destination) ExpectExactColor(value, sentinel);
-        EXPECT_EQ(backend->getDataCalls, 0);
+        EXPECT_EQ(renderer->getDataCalls, 0);
     }
 }
 
 TEST(Texture2DMipLevelValidationTest, ExistingDataAndStartIndexValidationStillPrecedeLevelValidation)
 {
     constexpr int kLevelCount = 1;
-    auto backend = std::make_shared<RecordingMipTextureBackend>(13, 7);
-    Texture2D texture = Texture2D::CreateWithBackendForTests(13, 7, backend);
+    auto renderer = std::make_shared<RecordingMipTextureRenderer>(13, 7);
+    Texture2D texture = Texture2D::CreateWithRendererForTests(13, 7, renderer);
     Color value(1, 2, 3, 4);
 
     EXPECT_THROW(texture.GetData(kLevelCount, nullptr, nullptr, -1, 0), std::invalid_argument);
@@ -339,9 +339,9 @@ TEST(Texture2DMipLevelValidationTest, ExistingDataAndStartIndexValidationStillPr
     {
         EXPECT_NE(std::string(e.what()).find("startIndex"), std::string::npos);
     }
-    EXPECT_EQ(backend->getDataCalls, 0);
-    EXPECT_EQ(backend->levelZeroUpdates, 0);
-    EXPECT_TRUE(backend->levelUpdates.empty());
+    EXPECT_EQ(renderer->getDataCalls, 0);
+    EXPECT_EQ(renderer->levelZeroUpdates, 0);
+    EXPECT_TRUE(renderer->levelUpdates.empty());
 }
 
 // -----------------------------------------------------------------------
@@ -358,7 +358,7 @@ protected:
 
 TEST_F(UnsupportedFormatConstructionTest, NormalizedByte2Throws)
 {
-#ifdef CNA_BACKEND_SKIA
+#ifdef CNA_RENDERER_SKIA
     EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::NormalizedByte2));
 #else
     EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::NormalizedByte2), std::runtime_error);
@@ -367,7 +367,7 @@ TEST_F(UnsupportedFormatConstructionTest, NormalizedByte2Throws)
 
 TEST_F(UnsupportedFormatConstructionTest, NormalizedByte4Throws)
 {
-#ifdef CNA_BACKEND_SKIA
+#ifdef CNA_RENDERER_SKIA
     EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::NormalizedByte4));
 #else
     EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::NormalizedByte4), std::runtime_error);
@@ -376,7 +376,7 @@ TEST_F(UnsupportedFormatConstructionTest, NormalizedByte4Throws)
 
 TEST_F(UnsupportedFormatConstructionTest, Bgra5551Throws)
 {
-#ifdef CNA_BACKEND_SKIA
+#ifdef CNA_RENDERER_SKIA
     EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Bgra5551));
 #else
     EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Bgra5551), std::runtime_error);
@@ -385,7 +385,7 @@ TEST_F(UnsupportedFormatConstructionTest, Bgra5551Throws)
 
 TEST_F(UnsupportedFormatConstructionTest, SingleThrows)
 {
-#ifdef CNA_BACKEND_SKIA
+#ifdef CNA_RENDERER_SKIA
     EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Single));
 #else
     EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Single), std::runtime_error);
@@ -394,7 +394,7 @@ TEST_F(UnsupportedFormatConstructionTest, SingleThrows)
 
 TEST_F(UnsupportedFormatConstructionTest, Vector2Throws)
 {
-#ifdef CNA_BACKEND_SKIA
+#ifdef CNA_RENDERER_SKIA
     EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Vector2));
 #else
     EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Vector2), std::runtime_error);
@@ -403,7 +403,7 @@ TEST_F(UnsupportedFormatConstructionTest, Vector2Throws)
 
 TEST_F(UnsupportedFormatConstructionTest, Vector4Throws)
 {
-#ifdef CNA_BACKEND_SKIA
+#ifdef CNA_RENDERER_SKIA
     EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Vector4));
 #else
     EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Vector4), std::runtime_error);
@@ -412,7 +412,7 @@ TEST_F(UnsupportedFormatConstructionTest, Vector4Throws)
 
 TEST_F(UnsupportedFormatConstructionTest, HalfSingleThrows)
 {
-#ifdef CNA_BACKEND_SKIA
+#ifdef CNA_RENDERER_SKIA
     EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfSingle));
 #else
     EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfSingle), std::runtime_error);
@@ -421,7 +421,7 @@ TEST_F(UnsupportedFormatConstructionTest, HalfSingleThrows)
 
 TEST_F(UnsupportedFormatConstructionTest, HalfVector2Throws)
 {
-#ifdef CNA_BACKEND_SKIA
+#ifdef CNA_RENDERER_SKIA
     EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfVector2));
 #else
     EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfVector2), std::runtime_error);
@@ -430,7 +430,7 @@ TEST_F(UnsupportedFormatConstructionTest, HalfVector2Throws)
 
 TEST_F(UnsupportedFormatConstructionTest, HalfVector4Throws)
 {
-#ifdef CNA_BACKEND_SKIA
+#ifdef CNA_RENDERER_SKIA
     EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfVector4));
 #else
     EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfVector4), std::runtime_error);
@@ -439,7 +439,7 @@ TEST_F(UnsupportedFormatConstructionTest, HalfVector4Throws)
 
 TEST_F(UnsupportedFormatConstructionTest, HdrBlendableThrows)
 {
-#ifdef CNA_BACKEND_SKIA
+#ifdef CNA_RENDERER_SKIA
     EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HdrBlendable));
 #else
     EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HdrBlendable), std::runtime_error);
@@ -448,7 +448,7 @@ TEST_F(UnsupportedFormatConstructionTest, HdrBlendableThrows)
 
 TEST_F(UnsupportedFormatConstructionTest, Rgba1010102Throws)
 {
-#ifdef CNA_BACKEND_SKIA
+#ifdef CNA_RENDERER_SKIA
     EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Rgba1010102));
 #else
     EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Rgba1010102), std::runtime_error);
@@ -457,7 +457,7 @@ TEST_F(UnsupportedFormatConstructionTest, Rgba1010102Throws)
 
 TEST_F(UnsupportedFormatConstructionTest, Rgba64Throws)
 {
-#ifdef CNA_BACKEND_SKIA
+#ifdef CNA_RENDERER_SKIA
     EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Rgba64));
 #else
     EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Rgba64), std::runtime_error);
@@ -501,7 +501,7 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
     for (SurfaceFormat format : kAllFormats)
     {
         const bool supported = format == SurfaceFormat::Color
-#ifdef CNA_BACKEND_SKIA
+#ifdef CNA_RENDERER_SKIA
             || format == SurfaceFormat::Bgr565
             || format == SurfaceFormat::Bgra5551
             || format == SurfaceFormat::Bgra4444
@@ -728,7 +728,7 @@ TEST(Texture2DTest, GetDataLevelNoCpuPixelsThrowsRuntimeError)
 }
 
 // -----------------------------------------------------------------------
-// SetData(const Color*, int) — no backend, returns early (no throw)
+// SetData(const Color*, int) — no renderer, returns early (no throw)
 // -----------------------------------------------------------------------
 
 TEST(Texture2DTest, SetDataSimpleWithNullDataDoesNotThrow)
@@ -857,8 +857,8 @@ TEST(Texture2DTest, SetDataLevelRectWithinBoundsDoesNotThrow)
 // Fixes a heap buffer overflow read: prior to this guard, calling SetData
 // with fewer elements than width*height built an ImageData that claimed the
 // full texture dimensions over an undersized pixel buffer, which the EasyGL
-// backend's set_image_2d then over-read (found in the Task 261 audit).
-// Requires a real GraphicsDevice + backend, since the guard only runs when
+// renderer's set_image_2d then over-read (found in the Task 261 audit).
+// Requires a real GraphicsDevice + renderer, since the guard only runs when
 // graphicsDevice_ is non-null.
 // -----------------------------------------------------------------------
 
@@ -1172,7 +1172,7 @@ TEST_F(SaveAsPngTest, NullStreamThrowsInvalidArgument)
 
 TEST_F(SaveAsPngTest, NoCpuPixelDataThrowsRuntimeError)
 {
-    Texture2D tex; // no SetData / backend -> cpuPixels_ is empty
+    Texture2D tex; // no SetData / renderer -> cpuPixels_ is empty
     MemoryStream stream;
     EXPECT_THROW(tex.SaveAsPng(&stream, 0, 0), std::runtime_error);
 }

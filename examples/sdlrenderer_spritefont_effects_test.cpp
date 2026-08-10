@@ -3,8 +3,8 @@
 // Mirrors Tasks 428-429 (both still ⬜ in plan_graphics.md's Phase 48 -- no existing EasyGL
 // test to port, same situation as Tasks 690-693; this is a NEW test).
 //
-// REAL BUG FOUND AND FIXED (shared, backend-agnostic SpriteBatch.cpp, not SDL_Renderer-specific
-// -- affects every backend): SpriteBatch::DrawString previously forwarded `effects` straight to
+// REAL BUG FOUND AND FIXED (shared, renderer-agnostic SpriteBatch.cpp, not SDL_Renderer-specific
+// -- affects every renderer): SpriteBatch::DrawString previously forwarded `effects` straight to
 // pushSprite() for each glyph, which only flips that glyph's OWN texture sampling in place --
 // the glyph SEQUENCE/POSITION was never mirrored at all, unlike FNA's real algorithm (traced in
 // FNA's SpriteBatch.cs DrawString: axisDirectionX/Y + axisIsMirroredX/Y lookup tables, indexed
@@ -30,7 +30,7 @@
 // scaledX = -4*2 = -8; dest.X = round(10-8) = 2; dest.Width = round(8*2) = 16 -> dest=(2,2,16,16).
 //
 // Requires PresentationMode::NativeBackBuffer (Task 915 finding): SDL_RenderReadPixels operates
-// in physical output coordinates, while this backend's default presentation mode
+// in physical output coordinates, while this renderer's default presentation mode
 // (FixedHeightDynamicWidth) does not map logical pixels 1:1 to physical ones.
 //
 // Exit code 0 = all PASS, 1 = at least one FAIL.

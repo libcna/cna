@@ -25,8 +25,8 @@ layout(set = 1, binding = 0) uniform PC {
 // plan_sdlgpu.md: DirectionalLight1/DirectionalLight2 + EmissiveColor + specular + the World
 // matrix (needed here to compute a world-space normal/position), forwarded via a second
 // vertex-stage UBO (set 1, binding 1) since the primary 128-byte UBO above is already fully
-// packed -- mirrors VulkanGraphicsBackend/WebGPUGraphicsBackend's own lit_textured3d second-UBO
-// precedent (field names kept identical to those backends' for easier cross-reference).
+// packed -- mirrors VulkanRenderer/WebGPURenderer's own lit_textured3d second-UBO
+// precedent (field names kept identical to those renderers' for easier cross-reference).
 layout(set = 1, binding = 1) uniform LitLightParams {
     vec4 light1Dir_pad;
     vec4 light1Diffuse_pad;
@@ -43,7 +43,7 @@ layout(set = 1, binding = 1) uniform LitLightParams {
 
 // REMED-GFX-009: fog forwarded to the fragment stage as a varying (the shared PC block is fully
 // packed, no spare bytes). Keep-factor computed from raw object-space Z, matching
-// VulkanGraphicsBackend's FogParams shape byte-for-byte.
+// VulkanRenderer's FogParams shape byte-for-byte.
 layout(set = 1, binding = 2) uniform FogParams {
     vec4 fogColorEnabled;  // xyz = FogColor, w = fogEnabled
     vec4 fogVector;        // REMED-GFX-010: FNA fog vector (dot with object/skin pos)
@@ -53,7 +53,7 @@ void main() {
     gl_Position = pc.mvp * vec4(inPos, 1.0);
     fragUV = inUV;
     // GLSL has a built-in inverse(), unlike WGSL -- no need for WebGPU's CPU-precomputed normal
-    // matrix workaround; this mirrors VulkanGraphicsBackend's own lit_textured3d.vert.glsl exactly.
+    // matrix workaround; this mirrors VulkanRenderer's own lit_textured3d.vert.glsl exactly.
     mat3 normalMatrix = transpose(inverse(mat3(lp.world)));
     fragNormal = normalize(normalMatrix * inNormal);
     fragWorldPos = (lp.world * vec4(inPos, 1.0)).xyz;

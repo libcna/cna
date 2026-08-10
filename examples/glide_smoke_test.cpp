@@ -6,9 +6,9 @@
 // the sprite as two Glide triangles, submits clipped colored and perspective-textured 3D triangles,
 // and reads the physical Glide backbuffer through grLfbReadRegion.
 
-#include "CNA/GraphicsBackendType.hpp"
+#include "CNA/GraphicsRendererType.hpp"
 #include "CNA/GraphicsCapability.hpp"
-#include "CNA/Internal/Backends/Glide/GlideGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Glide/GlideRenderer.hpp"
 #include "CNA/Internal/Graphics/BuiltInVertexStreams.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
@@ -62,11 +62,11 @@ namespace
             completed_ = true;
 
             auto& device = getGraphicsDeviceProperty();
-            auto& backend = static_cast<CNA::Internal::Backends::Glide::GlideGraphicsBackend&>(
-                device.GetBackend());
-            Check(CNA::getCurrentGraphicsBackendType() == CNA::GraphicsBackendType::Glide,
-                  "the GLIDE backend is selected at compile time");
-            Check(backend.GetWindowInternal() != nullptr,
+            auto& renderer = static_cast<CNA::Internal::Renderers::Glide::GlideRenderer&>(
+                device.GetRenderer());
+            Check(CNA::getCurrentGraphicsRendererType() == CNA::GraphicsRendererType::Glide,
+                  "the GLIDE renderer is selected at compile time");
+            Check(renderer.GetWindowInternal() != nullptr,
                   "the Glide context uses CNA's real SDL/Win32 window");
             Check(device.SupportsCapability(CNA::GraphicsCapability::ThreeD),
                   "GLIDE reports its fixed-function colored 3D capability");
@@ -94,15 +94,15 @@ namespace
                 { 0.75f, -0.75f, 0.25f, 0, 255, 0, 255},
                 { 0.00f,  0.75f, 0.25f, 0, 255, 0, 255},
             }};
-            auto vertexBuffer = backend.CreateVertexBuffer(static_cast<int>(triangle.size()));
+            auto vertexBuffer = renderer.CreateVertexBuffer(static_cast<int>(triangle.size()));
             vertexBuffer->SetData(triangle.data(), static_cast<int>(triangle.size()), sizeof(Vertex));
-            backend.ClearColorAndDepth(0.0f, 0.0f, 0.0f, 1.0f, 1.0f);
-            backend.SetDepthTestEnabled(true);
-            backend.SetDepthWriteEnabled(true);
-            backend.DrawColoredPrimitives(*vertexBuffer, Matrix::getIdentityProperty(),
+            renderer.ClearColorAndDepth(0.0f, 0.0f, 0.0f, 1.0f, 1.0f);
+            renderer.SetDepthTestEnabled(true);
+            renderer.SetDepthWriteEnabled(true);
+            renderer.DrawColoredPrimitives(*vertexBuffer, Matrix::getIdentityProperty(),
                                           Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                           PrimitiveType::TriangleList, 1);
-            backend.SetDepthTestEnabled(false);
+            renderer.SetDepthTestEnabled(false);
 
             Color triangleProbe(0, 0, 0, 0);
             const Rectangle triangleProbeRegion(32, 32, 1, 1);
@@ -114,9 +114,9 @@ namespace
             // A non-full viewport must affect both NDC-to-window conversion and Glide's native
             // clip rectangle. The same triangle's centroid moves from the 64x64 centre to the
             // centre of this 32x32 viewport.
-            backend.ClearColorAndDepth(0.0f, 0.0f, 0.0f, 1.0f, 1.0f);
-            backend.SetViewport(0, 0, 32, 32, 0.0f, 1.0f);
-            backend.DrawColoredPrimitives(*vertexBuffer, Matrix::getIdentityProperty(),
+            renderer.ClearColorAndDepth(0.0f, 0.0f, 0.0f, 1.0f, 1.0f);
+            renderer.SetViewport(0, 0, 32, 32, 0.0f, 1.0f);
+            renderer.DrawColoredPrimitives(*vertexBuffer, Matrix::getIdentityProperty(),
                                           Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                           PrimitiveType::TriangleList, 1);
             Color viewportProbe(0, 0, 0, 0);
@@ -125,7 +125,7 @@ namespace
             Check(viewportProbe.getGProperty() > 200 && viewportProbe.getRProperty() < 40 &&
                       viewportProbe.getBProperty() < 40,
                   "Viewport maps fixed-function NDC geometry and clips through Glide");
-            backend.SetViewport(0, 0, kCanvasSize, kCanvasSize, 0.0f, 1.0f);
+            renderer.SetViewport(0, 0, kCanvasSize, kCanvasSize, 0.0f, 1.0f);
 
             // The upper vertex lies beyond XNA's near plane. The CPU clipper must split the
             // triangle before Glide sees it rather than dropping the whole primitive or emitting
@@ -135,10 +135,10 @@ namespace
                 { 0.75f, -0.75f,  0.25f, 0, 0, 255, 255},
                 { 0.00f,  0.75f, -0.25f, 0, 0, 255, 255},
             }};
-            auto clippingBuffer = backend.CreateVertexBuffer(static_cast<int>(crossingTriangle.size()));
+            auto clippingBuffer = renderer.CreateVertexBuffer(static_cast<int>(crossingTriangle.size()));
             clippingBuffer->SetData(crossingTriangle.data(), static_cast<int>(crossingTriangle.size()), sizeof(Vertex));
-            backend.ClearColorAndDepth(0.0f, 0.0f, 0.0f, 1.0f, 1.0f);
-            backend.DrawColoredPrimitives(*clippingBuffer, Matrix::getIdentityProperty(),
+            renderer.ClearColorAndDepth(0.0f, 0.0f, 0.0f, 1.0f, 1.0f);
+            renderer.DrawColoredPrimitives(*clippingBuffer, Matrix::getIdentityProperty(),
                                           Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                           PrimitiveType::TriangleList, 1);
             Color clippedProbe(0, 0, 0, 0);
@@ -153,15 +153,15 @@ namespace
                 { 0.75f, -0.75f, 0.25f, 2.25f, 1.25f},
                 { 0.00f,  0.75f, 0.25f, 1.25f, 2.25f},
             }};
-            auto texturedBuffer = backend.CreateVertexBuffer(static_cast<int>(texturedTriangle.size()));
+            auto texturedBuffer = renderer.CreateVertexBuffer(static_cast<int>(texturedTriangle.size()));
             texturedBuffer->SetData(texturedTriangle.data(), static_cast<int>(texturedTriangle.size()), sizeof(TexturedVertex));
-            CNA::Internal::Backends::GpuDrawParams texturedParams{};
-            texturedParams.texture0 = &texture_->GetBackend();
+            CNA::Internal::Renderers::GpuDrawParams texturedParams{};
+            texturedParams.texture0 = &texture_->GetRenderer();
             texturedParams.textureEnabled = true;
             texturedParams.vertexColorEnabled = false;
-            backend.ApplySamplerState(0, 0, 0, 0, 4); // LinearWrap: crosses two U/V intervals.
-            backend.ClearColorAndDepth(0.0f, 0.0f, 0.0f, 1.0f, 1.0f);
-            backend.DrawPrimitivesEx(*texturedBuffer, Matrix::getIdentityProperty(),
+            renderer.ApplySamplerState(0, 0, 0, 0, 4); // LinearWrap: crosses two U/V intervals.
+            renderer.ClearColorAndDepth(0.0f, 0.0f, 0.0f, 1.0f, 1.0f);
+            renderer.DrawPrimitivesEx(*texturedBuffer, Matrix::getIdentityProperty(),
                                      Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                      PrimitiveType::TriangleList, 1, texturedParams);
             Color texturedProbe(0, 0, 0, 0);
@@ -171,9 +171,9 @@ namespace
                       texturedProbe.getBProperty() < 40,
                   "VertexPositionTexture wraps across texture-address intervals through TMU0");
 
-            backend.ApplySamplerState(0, 0, 2, 2, 4); // LinearMirror over the same out-of-range UVs.
-            backend.ClearColorAndDepth(0.0f, 0.0f, 0.0f, 1.0f, 1.0f);
-            backend.DrawPrimitivesEx(*texturedBuffer, Matrix::getIdentityProperty(),
+            renderer.ApplySamplerState(0, 0, 2, 2, 4); // LinearMirror over the same out-of-range UVs.
+            renderer.ClearColorAndDepth(0.0f, 0.0f, 0.0f, 1.0f, 1.0f);
+            renderer.DrawPrimitivesEx(*texturedBuffer, Matrix::getIdentityProperty(),
                                      Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                      PrimitiveType::TriangleList, 1, texturedParams);
             Color mirroredProbe(0, 0, 0, 0);

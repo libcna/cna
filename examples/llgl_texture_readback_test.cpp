@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MS-PL
-// plan_llgl.md LLGL-19: byte-exact round-trip through the LLGL backend's own texture upload and
+// plan_llgl.md LLGL-19: byte-exact round-trip through the LLGL renderer's own texture upload and
 // readback path.
 //
-// This deliberately drives ITextureBackend directly rather than going through Texture2D. The
+// This deliberately drives ITextureRenderer directly rather than going through Texture2D. The
 // public Texture2D::GetData() answers from its own CPU-side pixel shadow whenever it has one, so a
 // test written against the public API would pass without the GPU ever being asked anything -- it
-// would prove the shadow works, not the backend. The backend path this test does exercise is the
+// would prove the shadow works, not the renderer. The renderer path this test does exercise is the
 // one RenderTarget2D readback will depend on (LLGL-26).
 //
 // Check A -- a full-surface upload reads back byte-for-byte identical.
@@ -14,7 +14,7 @@
 // Check D -- UpdatePixelsLevel() writes a specific mip level, and that level reads back
 //   independently of level 0 (which must keep its own, different content).
 // Check E -- a destination buffer too small for the requested region is refused, not partially
-//   filled: the shared layer treats false as "read nothing", so a backend that wrote half a buffer
+//   filled: the shared layer treats false as "read nothing", so a renderer that wrote half a buffer
 //   and returned true would hand the caller fabricated pixels.
 // Check F -- a mip level the texture does not have is refused.
 //
@@ -25,7 +25,7 @@
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 
-#include "CNA/Internal/Backends/Llgl/LlglGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Llgl/LlglRenderer.hpp"
 #include "CNA/Internal/Graphics/ImageData.hpp"
 
 #include "common/PixelTestGame.hpp"
@@ -37,7 +37,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::Llgl;
+using namespace CNA::Internal::Renderers::Llgl;
 using CNA::Internal::Graphics::ImageData;
 
 namespace
@@ -85,7 +85,7 @@ protected:
             return;
         done_ = true;
 
-        auto& backend = static_cast<LlglGraphicsBackend&>(getGraphicsDeviceProperty().GetBackend());
+        auto& renderer = static_cast<LlglRenderer&>(getGraphicsDeviceProperty().GetRenderer());
 
         // --- Check A: full-surface round-trip -------------------------------------------------
         ImageData image;
@@ -94,7 +94,7 @@ protected:
         image.mipLevels = 2;
         image.pixels = MakeGradientPixels(4, 4, 10);
 
-        auto texture = backend.CreateTexture(image);
+        auto texture = renderer.CreateTexture(image);
         std::vector<std::uint8_t> readback(4 * 4 * 4, 0);
         bool ok = texture->GetData(0, 0, 0, 4, 4, readback.data(), static_cast<int>(readback.size()));
         check(ok && readback == image.pixels, "a full-surface upload reads back byte-for-byte");

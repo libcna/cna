@@ -11,14 +11,14 @@
 // averaged sub-pixel coverage.
 //
 // Vulkan-specific scaffolding requirement (see plan_graphics.md Task 878/879's Vulkan scope
-// decision): per-RT MSAA on this backend piggybacks on the Vulkan backend's own already-picked
-// sampleCount_ (VulkanGraphicsBackend::sampleCount_, picked once at backend-construction time
+// decision): per-RT MSAA on this renderer piggybacks on the Vulkan renderer's own already-picked
+// sampleCount_ (VulkanRenderer::sampleCount_, picked once at renderer-construction time
 // from PresentationParameters.MultiSampleCount). That only becomes > 1 when the game requested
-// backbuffer multisampling BEFORE the backend was constructed.
+// backbuffer multisampling BEFORE the renderer was constructed.
 //
 // Verification uncovered a real, separate, pre-existing bug while wiring this test up:
 // GraphicsDeviceManager.PreferMultiSampling/ApplyChanges() does NOT actually reach the Vulkan
-// backend at all -- Game's own GraphicsDevice member is unconditionally default-constructed
+// renderer at all -- Game's own GraphicsDevice member is unconditionally default-constructed
 // (MultiSampleCount=0) in Game::Game()'s member-initializer list, before any derived Game
 // subclass (or GraphicsDeviceManager preference-setting) can run, and GraphicsDeviceManager's
 // existing apply path only calls GraphicsDevice::SetPresentationParameters(), which deliberately
@@ -28,15 +28,15 @@
 // solid-red-quad assertion passes identically whether or not MSAA is active, so the gap was
 // invisible until this test's differential (binary-vs-blended) methodology could not pass no
 // matter what GraphicsDeviceManager preference was requested. Confirmed directly: temporarily
-// forcing VulkanGraphicsBackend::sampleCount_ > 1 makes this test pass cleanly (both checks,
+// forcing VulkanRenderer::sampleCount_ > 1 makes this test pass cleanly (both checks,
 // zero Vulkan validation errors) on the first attempt, proving the actual Task 878/879 RT-MSAA
 // implementation is correct once real backbuffer MSAA is engaged.
 //
 // Fixing GraphicsDeviceManager's device-reset plumbing generally is out of scope here (a
 // separate, large, not-yet-scoped architectural task, mirroring Task 896's precedent for a
 // similarly deep pre-existing gap) -- so this test instead uses a new, narrow, NOXNA test-only
-// hook, GraphicsDevice::RecreateBackendForMultiSampleCount(), added specifically to unblock this
-// verification: it tears down and rebuilds the backend (same window) with the requested
+// hook, GraphicsDevice::RecreateRendererForMultiSampleCount(), added specifically to unblock this
+// verification: it tears down and rebuilds the renderer (same window) with the requested
 // MultiSampleCount, called from Initialize() before any GPU resources exist yet.
 //
 // No RasterizerState::CullNone override needed — confirmed empirically in every other Vulkan
@@ -148,9 +148,9 @@ protected:
         Game::Initialize();
         auto& device = getGraphicsDeviceProperty();
         // See this file's header comment: GraphicsDeviceManager.PreferMultiSampling never
-        // actually reaches the Vulkan backend, so force it directly here, before any GPU
+        // actually reaches the Vulkan renderer, so force it directly here, before any GPU
         // resources (including the SpriteBatch created right below) exist.
-        device.RecreateBackendForMultiSampleCount(8);
+        device.RecreateRendererForMultiSampleCount(8);
         sb_ = std::make_unique<SpriteBatch>(device);
     }
 
@@ -192,7 +192,7 @@ public:
     RenderTarget2DMsaaTest()
     {
         // Only used for backbuffer size here -- see this file's header comment for why actually
-        // engaging backbuffer MSAA needs the RecreateBackendForMultiSampleCount() call in
+        // engaging backbuffer MSAA needs the RecreateRendererForMultiSampleCount() call in
         // Initialize() instead of GraphicsDeviceManager.PreferMultiSampling.
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
         gdm_->setPreferredBackBufferWidthProperty(320);

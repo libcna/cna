@@ -3,7 +3,7 @@
 //
 // With a vertex buffer bound (so the VB-null guard passes), both
 // DrawIndexedPrimitives and DrawInstancedPrimitives must throw before
-// reaching the GPU backend when currentIndexBuffer_ is null.
+// reaching the GPU renderer when currentIndexBuffer_ is null.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // REMED-GFX-104/105/106/108/109/112: deferred indexed-draw correctness, native alignment,
-// native index width, triangle-strip pipeline compatibility, buffer versions, and backend parity.
+// native index width, triangle-strip pipeline compatibility, buffer versions, and renderer parity.
 
 #include <algorithm>
 #include <array>
@@ -44,14 +44,14 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 
-#ifdef CNA_BACKEND_BGFX
-#include "CNA/Internal/Backends/Bgfx/BgfxGraphicsBackend.hpp"
+#ifdef CNA_RENDERER_BGFX
+#include "CNA/Internal/Renderers/Bgfx/BgfxRenderer.hpp"
 #endif
-#ifdef CNA_BACKEND_WEBGPU
-#include "CNA/Internal/Backends/WebGPU/WebGPUGraphicsBackend.hpp"
+#ifdef CNA_RENDERER_WEBGPU
+#include "CNA/Internal/Renderers/WebGPU/WebGPURenderer.hpp"
 #endif
-#ifdef CNA_BACKEND_VULKAN
-#include "CNA/Internal/Backends/Vulkan/VulkanGraphicsBackend.hpp"
+#ifdef CNA_RENDERER_VULKAN
+#include "CNA/Internal/Renderers/Vulkan/VulkanRenderer.hpp"
 #endif
 
 using CNA::GraphicsCapability;
@@ -327,7 +327,7 @@ namespace
         void RequireIndexedRendering()
         {
             if (!device.SupportsCapability(GraphicsCapability::ThreeD))
-                GTEST_SKIP() << "Backend explicitly does not support indexed rendering";
+                GTEST_SKIP() << "Renderer explicitly does not support indexed rendering";
             device.setRasterizerStateProperty(RasterizerState::CullNone);
             device.setDepthStencilStateProperty(DepthStencilState::None);
         }
@@ -339,18 +339,18 @@ namespace
         }
     };
 
-#ifdef CNA_BACKEND_BGFX
-    CNA::Internal::Backends::Bgfx::BgfxIndexBufferBackend* GetBgfxIndexBackend(
+#ifdef CNA_RENDERER_BGFX
+    CNA::Internal::Renderers::Bgfx::BgfxIndexBufferRenderer* GetBgfxIndexRenderer(
         IndexBuffer& buffer)
     {
         return dynamic_cast<
-            CNA::Internal::Backends::Bgfx::BgfxIndexBufferBackend*>(
-                &buffer.GetBackend());
+            CNA::Internal::Renderers::Bgfx::BgfxIndexBufferRenderer*>(
+                &buffer.GetRenderer());
     }
 
     void ExpectExactBgfxIndexFlags(IndexBuffer& buffer, bool thirtyTwoBit)
     {
-        auto* native = GetBgfxIndexBackend(buffer);
+        auto* native = GetBgfxIndexRenderer(buffer);
         ASSERT_NE(nullptr, native);
         const std::uint16_t expected =
             BGFX_BUFFER_ALLOW_RESIZE |
@@ -363,7 +363,7 @@ namespace
     }
 #endif
 
-#ifdef CNA_BACKEND_WEBGPU
+#ifdef CNA_RENDERER_WEBGPU
     struct WebGpuErrorScopeState
     {
         bool completed = false;
@@ -392,16 +392,16 @@ namespace
     }
 
     void PopAndExpectClean(
-        CNA::Internal::Backends::WebGPU::WebGPUGraphicsBackend& backend)
+        CNA::Internal::Renderers::WebGPU::WebGPURenderer& renderer)
     {
         WebGpuErrorScopeState state;
         WGPUPopErrorScopeCallbackInfo callback{};
         callback.mode = WGPUCallbackMode_AllowProcessEvents;
         callback.callback = OnWebGpuErrorScope;
         callback.userdata1 = &state;
-        wgpuDevicePopErrorScope(backend.Device(), callback);
+        wgpuDevicePopErrorScope(renderer.Device(), callback);
         for (int attempt = 0; attempt < 10000 && !state.completed; ++attempt)
-            wgpuInstanceProcessEvents(backend.Instance());
+            wgpuInstanceProcessEvents(renderer.Instance());
 
         ASSERT_TRUE(state.completed) << "wgpu-native did not complete the error scope";
         ASSERT_EQ(WGPUPopErrorScopeStatus_Success, state.status)
@@ -420,23 +420,23 @@ namespace
     void ExpectExactWebGpuIndexShadow(IndexBuffer& buffer,
                                       const std::vector<T>& indices)
     {
-        auto* backend =
-            dynamic_cast<CNA::Internal::Backends::WebGPU::WebGPUIndexBufferBackend*>(
-                &buffer.GetBackend());
-        ASSERT_NE(nullptr, backend);
+        auto* renderer =
+            dynamic_cast<CNA::Internal::Renderers::WebGPU::WebGPUIndexBufferRenderer*>(
+                &buffer.GetRenderer());
+        ASSERT_NE(nullptr, renderer);
         ASSERT_EQ(
             indices.size() * sizeof(T),
-            backend->ShadowData().size());
+            renderer->ShadowData().size());
         EXPECT_EQ(0, std::memcmp(
-            indices.data(), backend->ShadowData().data(),
-            backend->ShadowData().size()));
-        EXPECT_EQ(static_cast<int>(indices.size()), backend->GetIndexCount());
+            indices.data(), renderer->ShadowData().data(),
+            renderer->ShadowData().size()));
+        EXPECT_EQ(static_cast<int>(indices.size()), renderer->GetIndexCount());
     }
 #endif
 
-#ifdef CNA_BACKEND_VULKAN
+#ifdef CNA_RENDERER_VULKAN
     void AssertNoNewVulkanValidationMessages(
-        const CNA::Internal::Backends::Vulkan::VulkanGraphicsBackend& backend,
+        const CNA::Internal::Renderers::Vulkan::VulkanRenderer& renderer,
         std::size_t firstMessage)
     {
         // REMED-GFX-144: an empty message list means "no validation problem" ONLY if the layer is
@@ -445,15 +445,15 @@ namespace
         // so every assertion below would pass vacuously. Fail loudly on that instead.
         //
         // This helper deliberately keeps STANDARD validation only. The Khronos synchronization
-        // checks are a separate opt-in (VulkanGraphicsBackend::SetSyncValidationEnabledEXT) whose
+        // checks are a separate opt-in (VulkanRenderer::SetSyncValidationEnabledEXT) whose
         // hazards belong to whichever pass records them; REMED-GFX-144's acquire hazard was
         // invisible here for exactly that reason, and examples/vulkan_swapchain_sync_test.cpp is
         // the file that enforces it.
-        ASSERT_TRUE(CNA::Internal::Backends::Vulkan::VulkanGraphicsBackend::IsValidationActiveEXT())
+        ASSERT_TRUE(CNA::Internal::Renderers::Vulkan::VulkanRenderer::IsValidationActiveEXT())
             << "Vulkan validation layer is not active, so a zero message count proves nothing "
                "(REMED-GFX-112 made these messages fatal; REMED-GFX-144 made their absence "
                "meaningful)";
-        const auto& messages = backend.GetValidationMessagesEXT();
+        const auto& messages = renderer.GetValidationMessagesEXT();
         std::string completeMessages;
         for (std::size_t i = firstMessage; i < messages.size(); ++i)
         {
@@ -467,13 +467,13 @@ namespace
 #endif
 }
 
-// REMED-GFX-110 adds CNA_BACKEND_SOFTWARE: the CPU raster paths owe the same public addressing
-// contract as the GPU backends -- startIndex as an index-element offset, baseVertex added exactly
+// REMED-GFX-110 adds CNA_RENDERER_SOFTWARE: the CPU raster paths owe the same public addressing
+// contract as the GPU renderers -- startIndex as an index-element offset, baseVertex added exactly
 // once, primitiveCount limiting the consumed range, and hints that never change addressing.
-#if defined(CNA_BACKEND_BGFX) || defined(CNA_BACKEND_WEBGPU) || \
-    defined(CNA_BACKEND_VULKAN) || defined(CNA_BACKEND_EASYGL) || \
-    defined(CNA_BACKEND_D3D9) || defined(CNA_BACKEND_D3D11) || \
-    defined(CNA_BACKEND_SOFTWARE)
+#if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_WEBGPU) || \
+    defined(CNA_RENDERER_VULKAN) || defined(CNA_RENDERER_EASYGL) || \
+    defined(CNA_RENDERER_D3D9) || defined(CNA_RENDERER_D3D11) || \
+    defined(CNA_RENDERER_SOFTWARE)
 TEST_F(IndexedDrawDeferredTest, PersistentDrawHonorsNonzeroStartIndex)
 {
     RequireIndexedRendering();
@@ -657,10 +657,10 @@ TEST_F(IndexedDrawDeferredTest, PersistentDrawTreatsVertexRangesAsHints)
 }
 #endif
 
-#if defined(CNA_BACKEND_BGFX) || defined(CNA_BACKEND_WEBGPU) || \
-    defined(CNA_BACKEND_VULKAN) || \
-    defined(CNA_BACKEND_EASYGL) || defined(CNA_BACKEND_D3D9) || \
-    defined(CNA_BACKEND_D3D11) || defined(CNA_BACKEND_SOFTWARE)
+#if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_WEBGPU) || \
+    defined(CNA_RENDERER_VULKAN) || \
+    defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_D3D9) || \
+    defined(CNA_RENDERER_D3D11) || defined(CNA_RENDERER_SOFTWARE)
 TEST_F(IndexedDrawDeferredTest, PersistentDrawHonorsThirtyTwoBitIndexElements)
 {
     RequireIndexedRendering();
@@ -697,10 +697,10 @@ TEST_F(IndexedDrawDeferredTest, PersistentDrawHonorsThirtyTwoBitIndexElements)
 }
 #endif
 
-#if defined(CNA_BACKEND_BGFX) || defined(CNA_BACKEND_WEBGPU) || \
-    defined(CNA_BACKEND_VULKAN) || defined(CNA_BACKEND_EASYGL) || \
-    defined(CNA_BACKEND_D3D9) || defined(CNA_BACKEND_D3D11) || \
-    defined(CNA_BACKEND_SDL_GPU) || defined(CNA_BACKEND_SOFTWARE)
+#if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_WEBGPU) || \
+    defined(CNA_RENDERER_VULKAN) || defined(CNA_RENDERER_EASYGL) || \
+    defined(CNA_RENDERER_D3D9) || defined(CNA_RENDERER_D3D11) || \
+    defined(CNA_RENDERER_SDL_GPU) || defined(CNA_RENDERER_SOFTWARE)
 TEST_F(IndexedDrawDeferredTest, PublicStaticThirtyTwoBitIndicesAbove65535RenderExactGeometry)
 {
     RequireIndexedRendering();
@@ -742,10 +742,10 @@ TEST_F(IndexedDrawDeferredTest, PublicStaticThirtyTwoBitIndicesAbove65535RenderE
     indexBuffer.GetData(shadow.data(), 3);
     EXPECT_EQ(indices, shadow);
 
-#ifdef CNA_BACKEND_BGFX
+#ifdef CNA_RENDERER_BGFX
     auto* native =
-        dynamic_cast<CNA::Internal::Backends::Bgfx::BgfxIndexBufferBackend*>(
-            &indexBuffer.GetBackend());
+        dynamic_cast<CNA::Internal::Renderers::Bgfx::BgfxIndexBufferRenderer*>(
+            &indexBuffer.GetRenderer());
     ASSERT_NE(nullptr, native);
     static_assert(std::is_same_v<
                   decltype(native->handle),
@@ -781,7 +781,7 @@ TEST_F(IndexedDrawDeferredTest, PublicStaticThirtyTwoBitIndicesAbove65535RenderE
         0,
         1);
 
-#ifndef CNA_BACKEND_SDL_GPU
+#ifndef CNA_RENDERER_SDL_GPU
     ExpectExactColor(
         ReadCenter(device),
         Color::Blue,
@@ -790,7 +790,7 @@ TEST_F(IndexedDrawDeferredTest, PublicStaticThirtyTwoBitIndicesAbove65535RenderE
 }
 #endif
 
-#ifdef CNA_BACKEND_BGFX
+#ifdef CNA_RENDERER_BGFX
 TEST_F(IndexedDrawDeferredTest, PublicBufferKindsUseExactFixedBgfxIndexFlags)
 {
     RequireIndexedRendering();
@@ -825,10 +825,10 @@ TEST_F(IndexedDrawDeferredTest, PublicBufferKindsUseExactFixedBgfxIndexFlags)
     static32.SetData(source32.data(), 1);
     dynamic32.SetData(source32.data(), 0, 1, SetDataOptions::Discard);
 
-    auto* static16Native = GetBgfxIndexBackend(static16);
-    auto* dynamic16Native = GetBgfxIndexBackend(dynamic16);
-    auto* static32Native = GetBgfxIndexBackend(static32);
-    auto* dynamic32Native = GetBgfxIndexBackend(dynamic32);
+    auto* static16Native = GetBgfxIndexRenderer(static16);
+    auto* dynamic16Native = GetBgfxIndexRenderer(dynamic16);
+    auto* static32Native = GetBgfxIndexRenderer(static32);
+    auto* dynamic32Native = GetBgfxIndexRenderer(dynamic32);
     ASSERT_NE(nullptr, static16Native);
     ASSERT_NE(nullptr, dynamic16Native);
     ASSERT_NE(nullptr, static32Native);
@@ -854,7 +854,7 @@ TEST_F(IndexedDrawDeferredTest, PublicBufferKindsUseExactFixedBgfxIndexFlags)
     EXPECT_EQ(0, std::memcmp(
         source32.data(), dynamic32Native->cpuData.data(), sizeof(source32)));
 
-    // GFX-054's public empty-upload contract returns before backend dispatch. It therefore
+    // GFX-054's public empty-upload contract returns before renderer dispatch. It therefore
     // preserves the one-index shadow, handle identity, element width, and exact native flags.
     static16.SetData(static_cast<const std::uint16_t*>(nullptr), 0);
     dynamic16.SetData(
@@ -888,7 +888,7 @@ TEST_F(IndexedDrawDeferredTest, PublicBufferKindsUseExactFixedBgfxIndexFlags)
     dynamic32.GetData(shadow32.data(), 1);
     EXPECT_EQ(source32, shadow32);
 
-    // Backend misuse is rejected instead of truncating 32-bit values or widening 16-bit data.
+    // Renderer misuse is rejected instead of truncating 32-bit values or widening 16-bit data.
     EXPECT_THROW(static16Native->SetData32(source32.data(), 1), std::runtime_error);
     EXPECT_THROW(static32Native->SetData16(source16.data(), 1), std::runtime_error);
 
@@ -903,7 +903,7 @@ TEST_F(IndexedDrawDeferredTest, PublicBufferKindsUseExactFixedBgfxIndexFlags)
 }
 #endif
 
-#ifdef CNA_BACKEND_BGFX
+#ifdef CNA_RENDERER_BGFX
 TEST_F(IndexedDrawDeferredTest, PublicThirtyTwoBitDrawHonorsCompleteRangeBaseCountAndHints)
 {
     RequireIndexedRendering();
@@ -957,7 +957,7 @@ TEST_F(IndexedDrawDeferredTest, PublicThirtyTwoBitDrawHonorsCompleteRangeBaseCou
         rangedIndices.data(), 0, 9, SetDataOptions::Discard);
     hintBuffer.SetData(hintIndices.data(), 3);
 
-#ifdef CNA_BACKEND_BGFX
+#ifdef CNA_RENDERER_BGFX
     ExpectExactBgfxIndexFlags(rangedBuffer, true);
     ExpectExactBgfxIndexFlags(hintBuffer, true);
 #endif
@@ -1049,21 +1049,21 @@ TEST_F(IndexedDrawDeferredTest, PublicThirtyTwoBitDrawHonorsCompleteRangeBaseCou
 
 TEST_F(IndexedDrawDeferredTest, BasicIndexedTriangleStripSupportsBothIndexWidths)
 {
-#ifdef CNA_BACKEND_SOFTWARE
+#ifdef CNA_RENDERER_SOFTWARE
     GTEST_SKIP() << "Software v1 intentionally supports indexed TriangleList only";
 #else
     if (!device.SupportsCapability(GraphicsCapability::ThreeD))
-        GTEST_SKIP() << "Backend explicitly does not support indexed triangle strips";
+        GTEST_SKIP() << "Renderer explicitly does not support indexed triangle strips";
     device.setRasterizerStateProperty(RasterizerState::CullNone);
     device.setDepthStencilStateProperty(DepthStencilState::None);
 
-#ifdef CNA_BACKEND_VULKAN
-    auto* vulkanBackend =
-        dynamic_cast<CNA::Internal::Backends::Vulkan::VulkanGraphicsBackend*>(
-            &device.GetBackend());
-    ASSERT_NE(nullptr, vulkanBackend);
+#ifdef CNA_RENDERER_VULKAN
+    auto* vulkanRenderer =
+        dynamic_cast<CNA::Internal::Renderers::Vulkan::VulkanRenderer*>(
+            &device.GetRenderer());
+    ASSERT_NE(nullptr, vulkanRenderer);
     const std::size_t validationMessageStart =
-        vulkanBackend->GetValidationMessagesEXT().size();
+        vulkanRenderer->GetValidationMessagesEXT().size();
 #endif
 
     std::vector<VertexPositionColor> vertices;
@@ -1092,24 +1092,24 @@ TEST_F(IndexedDrawDeferredTest, BasicIndexedTriangleStripSupportsBothIndexWidths
     EXPECT_NO_THROW(device.DrawIndexedPrimitives(
         PrimitiveType::TriangleStrip, 0, 4, 4, 1, 2));
 
-#if defined(CNA_BACKEND_BGFX) || defined(CNA_BACKEND_WEBGPU) || \
-    defined(CNA_BACKEND_VULKAN) || \
-    defined(CNA_BACKEND_EASYGL) || defined(CNA_BACKEND_D3D9) || \
-    defined(CNA_BACKEND_D3D11)
+#if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_WEBGPU) || \
+    defined(CNA_RENDERER_VULKAN) || \
+    defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_D3D9) || \
+    defined(CNA_RENDERER_D3D11)
     const BackbufferSnapshot pixels = ReadBackbufferOnce(device);
     ExpectExactColor(pixels.AtNdc(-0.5f), Color::Red, "basic Uint16 strip");
     ExpectExactColor(pixels.AtNdc(0.5f), Color::Blue, "basic Uint32 strip");
 #endif
-#ifdef CNA_BACKEND_VULKAN
-    AssertNoNewVulkanValidationMessages(*vulkanBackend, validationMessageStart);
+#ifdef CNA_RENDERER_VULKAN
+    AssertNoNewVulkanValidationMessages(*vulkanRenderer, validationMessageStart);
 #endif
 #endif
 }
 
-#if defined(CNA_BACKEND_BGFX) || defined(CNA_BACKEND_WEBGPU) || \
-    defined(CNA_BACKEND_VULKAN) || \
-    defined(CNA_BACKEND_EASYGL) || defined(CNA_BACKEND_D3D9) || \
-    defined(CNA_BACKEND_D3D11) || defined(CNA_BACKEND_SOFTWARE)
+#if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_WEBGPU) || \
+    defined(CNA_RENDERER_VULKAN) || \
+    defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_D3D9) || \
+    defined(CNA_RENDERER_D3D11) || defined(CNA_RENDERER_SOFTWARE)
 TEST_F(IndexedDrawDeferredTest, DeferredAtoBtoACapturesDataCountsAndLifetimes)
 {
     RequireIndexedRendering();
@@ -1144,7 +1144,7 @@ TEST_F(IndexedDrawDeferredTest, DeferredAtoBtoACapturesDataCountsAndLifetimes)
     device.Clear(Color::Black);
     device.SetVertexBuffer(&vertexBuffer);
 
-    // Queue A, mutate its backend shadow, queue B, restore A with different data, then queue A
+    // Queue A, mutate its renderer shadow, queue B, restore A with different data, then queue A
     // again. Each deferred command must retain its own bytes, logical count, and buffer identity.
     device.SetIndexBuffer(&staticA);
     device.DrawIndexedPrimitives(
@@ -1232,7 +1232,7 @@ TEST_F(IndexedDrawDeferredTest, DeferredStaticVertexAtoBtoAPreservesEveryQueuedV
     ExpectExactColor(pixels.AtNdc(0.68f), Color::Red, "static vertex A restore");
 }
 
-#if !defined(CNA_BACKEND_D3D9) && !defined(CNA_BACKEND_D3D11)
+#if !defined(CNA_RENDERER_D3D9) && !defined(CNA_RENDERER_D3D11)
 TEST_F(IndexedDrawDeferredTest, DeferredDynamicVertexAtoBtoAPreservesEveryQueuedVersion)
 {
     RequireIndexedRendering();
@@ -1316,7 +1316,7 @@ TEST_F(IndexedDrawDeferredTest, DeferredDistinctIdenticalVertexBuffersRemainInde
     ExpectExactColor(pixels.AtNdc(0.55f), Color::Blue, "independent identical buffer");
 }
 
-#if !defined(CNA_BACKEND_D3D9) && !defined(CNA_BACKEND_D3D11)
+#if !defined(CNA_RENDERER_D3D9) && !defined(CNA_RENDERER_D3D11)
 TEST_F(IndexedDrawDeferredTest, DeferredDynamicIndexAtoBtoAPreservesEveryQueuedVersion)
 {
     RequireIndexedRendering();
@@ -1376,7 +1376,7 @@ TEST_F(IndexedDrawDeferredTest, DeferredDynamicIndexAtoBtoAPreservesEveryQueuedV
 
 #endif
 
-#ifdef CNA_BACKEND_BGFX
+#ifdef CNA_RENDERER_BGFX
 TEST_F(IndexedDrawDeferredTest, BgfxIndexedAtoBtoACapturesEveryRangeAndBufferVersion)
 {
     RequireIndexedRendering();
@@ -1487,14 +1487,14 @@ TEST_F(IndexedDrawDeferredTest, BgfxPublicThirtyTwoBitBuffersPreserveAtoBtoAVers
 
     // Repeated ordinary updates before a draw retain one writable native allocation.
     staticBuffer.SetData(indicesB.data(), 3);
-    auto* staticNative = GetBgfxIndexBackend(staticBuffer);
+    auto* staticNative = GetBgfxIndexRenderer(staticBuffer);
     ASSERT_NE(nullptr, staticNative);
     const std::uint16_t staticWritableHandle = staticNative->handle.idx;
     staticBuffer.SetData(indicesA.data(), 3);
     EXPECT_EQ(staticWritableHandle, staticNative->handle.idx);
 
     dynamicBuffer.SetData(indicesB.data(), 0, 3, SetDataOptions::NoOverwrite);
-    auto* dynamicNative = GetBgfxIndexBackend(dynamicBuffer);
+    auto* dynamicNative = GetBgfxIndexRenderer(dynamicBuffer);
     ASSERT_NE(nullptr, dynamicNative);
     const std::uint16_t dynamicWritableHandle = dynamicNative->handle.idx;
     dynamicBuffer.SetData(indicesA.data(), 0, 3, SetDataOptions::Discard);
@@ -1637,7 +1637,7 @@ TEST_F(IndexedDrawDeferredTest, BgfxPublicThirtyTwoBitBuffersPreserveAtoBtoAVers
     ExpectExactColor(pixels.AtNdc(0.65f, -0.5f), Color::Red, "dynamic Uint32 A restore");
 }
 
-TEST_F(IndexedDrawDeferredTest, BgfxThirtyTwoBitBackendAtoBtoARendersExactPixels)
+TEST_F(IndexedDrawDeferredTest, BgfxThirtyTwoBitRendererAtoBtoARendersExactPixels)
 {
     RequireIndexedRendering();
 
@@ -1676,15 +1676,15 @@ TEST_F(IndexedDrawDeferredTest, BgfxThirtyTwoBitBackendAtoBtoARendersExactPixels
 
     auto sourceA = std::array<std::uint32_t, 3>{0, 1, 2};
     auto sourceB = std::array<std::uint32_t, 3>{3, 4, 5};
-    CNA::Internal::Backends::Bgfx::BgfxVertexBufferBackend vertexBuffer(6);
-    CNA::Internal::Backends::Bgfx::BgfxIndexBufferBackend indexBuffer(3, true);
+    CNA::Internal::Renderers::Bgfx::BgfxVertexBufferRenderer vertexBuffer(6);
+    CNA::Internal::Renderers::Bgfx::BgfxIndexBufferRenderer indexBuffer(3, true);
     vertexBuffer.SetData(vertices.data(), 6, sizeof(PackedPositionColor));
     indexBuffer.SetData32(sourceA.data(), 3);
 
-    auto* backend =
-        dynamic_cast<CNA::Internal::Backends::Bgfx::BgfxGraphicsBackend*>(
-            &device.GetBackend());
-    ASSERT_NE(nullptr, backend);
+    auto* renderer =
+        dynamic_cast<CNA::Internal::Renderers::Bgfx::BgfxRenderer*>(
+            &device.GetRenderer());
+    ASSERT_NE(nullptr, renderer);
     ASSERT_TRUE(indexBuffer.IsThirtyTwoBit());
     EXPECT_EQ(
         BGFX_BUFFER_INDEX32 | BGFX_BUFFER_ALLOW_RESIZE,
@@ -1693,7 +1693,7 @@ TEST_F(IndexedDrawDeferredTest, BgfxThirtyTwoBitBackendAtoBtoARendersExactPixels
     const auto identity = Microsoft::Xna::Framework::Matrix::getIdentityProperty();
     device.Clear(Color::Black);
     const std::uint16_t versionA = indexBuffer.handle.idx;
-    backend->DrawIndexedColoredPrimitives(
+    renderer->DrawIndexedColoredPrimitives(
         vertexBuffer,
         indexBuffer,
         Microsoft::Xna::Framework::Matrix::CreateTranslation(-0.68f, 0.0f, 0.0f),
@@ -1709,7 +1709,7 @@ TEST_F(IndexedDrawDeferredTest, BgfxThirtyTwoBitBackendAtoBtoARendersExactPixels
     EXPECT_EQ(
         BGFX_BUFFER_INDEX32 | BGFX_BUFFER_ALLOW_RESIZE,
         indexBuffer.GetNativeCreationFlagsEXT());
-    backend->DrawIndexedColoredPrimitives(
+    renderer->DrawIndexedColoredPrimitives(
         vertexBuffer,
         indexBuffer,
         identity,
@@ -1726,7 +1726,7 @@ TEST_F(IndexedDrawDeferredTest, BgfxThirtyTwoBitBackendAtoBtoARendersExactPixels
     EXPECT_EQ(
         BGFX_BUFFER_INDEX32 | BGFX_BUFFER_ALLOW_RESIZE,
         indexBuffer.GetNativeCreationFlagsEXT());
-    backend->DrawIndexedColoredPrimitives(
+    renderer->DrawIndexedColoredPrimitives(
         vertexBuffer,
         indexBuffer,
         Microsoft::Xna::Framework::Matrix::CreateTranslation(0.68f, 0.0f, 0.0f),
@@ -1745,7 +1745,7 @@ TEST_F(IndexedDrawDeferredTest, BgfxThirtyTwoBitBackendAtoBtoARendersExactPixels
     ExpectExactColor(pixels.AtNdc(0.68f), Color::Red, "native Uint32 A restore");
 }
 
-TEST_F(IndexedDrawDeferredTest, BgfxThirtyTwoBitBackendHonorsRangeBaseAndCount)
+TEST_F(IndexedDrawDeferredTest, BgfxThirtyTwoBitRendererHonorsRangeBaseAndCount)
 {
     RequireIndexedRendering();
 
@@ -1785,8 +1785,8 @@ TEST_F(IndexedDrawDeferredTest, BgfxThirtyTwoBitBackendHonorsRangeBaseAndCount)
         6, 7, 8,
     };
 
-    CNA::Internal::Backends::Bgfx::BgfxVertexBufferBackend vertexBuffer(12);
-    CNA::Internal::Backends::Bgfx::BgfxIndexBufferBackend indexBuffer(9, true);
+    CNA::Internal::Renderers::Bgfx::BgfxVertexBufferRenderer vertexBuffer(12);
+    CNA::Internal::Renderers::Bgfx::BgfxIndexBufferRenderer indexBuffer(9, true);
     vertexBuffer.SetData(vertices.data(), 12, sizeof(PackedPositionColor));
     indexBuffer.SetData32(indices.data(), 9);
     ASSERT_TRUE(indexBuffer.IsThirtyTwoBit());
@@ -1794,11 +1794,11 @@ TEST_F(IndexedDrawDeferredTest, BgfxThirtyTwoBitBackendHonorsRangeBaseAndCount)
         BGFX_BUFFER_INDEX32 | BGFX_BUFFER_ALLOW_RESIZE,
         indexBuffer.GetNativeCreationFlagsEXT());
 
-    auto* backend =
-        dynamic_cast<CNA::Internal::Backends::Bgfx::BgfxGraphicsBackend*>(
-            &device.GetBackend());
-    ASSERT_NE(nullptr, backend);
-    CNA::Internal::Backends::GpuDrawParams params;
+    auto* renderer =
+        dynamic_cast<CNA::Internal::Renderers::Bgfx::BgfxRenderer*>(
+            &device.GetRenderer());
+    ASSERT_NE(nullptr, renderer);
+    CNA::Internal::Renderers::GpuDrawParams params;
     params.startIndex = 3;
     params.baseVertex = 3;
     params.minVertexIndex = 3;
@@ -1806,7 +1806,7 @@ TEST_F(IndexedDrawDeferredTest, BgfxThirtyTwoBitBackendHonorsRangeBaseAndCount)
     const auto identity = Microsoft::Xna::Framework::Matrix::getIdentityProperty();
 
     device.Clear(Color::Black);
-    backend->DrawIndexedPrimitivesEx(
+    renderer->DrawIndexedPrimitivesEx(
         vertexBuffer,
         indexBuffer,
         identity,
@@ -1968,7 +1968,7 @@ TEST_F(IndexedDrawDeferredTest, BgfxPublicThirtyTwoBitRangesSurviveTargetSegment
         RenderTargetUsage::PreserveContents);
     vertexBuffer.SetData(vertices.data(), static_cast<int>(vertices.size()));
     indexBuffer.SetData(targetFirst.data(), 9);
-    auto* native = GetBgfxIndexBackend(indexBuffer);
+    auto* native = GetBgfxIndexRenderer(indexBuffer);
     ASSERT_NE(nullptr, native);
     ExpectExactBgfxIndexFlags(indexBuffer, true);
     const std::uint16_t targetFirstVersion = native->handle.idx;
@@ -2235,9 +2235,9 @@ TEST_F(IndexedDrawDeferredTest, BgfxNativeBufferVersionCountsRemainBounded)
 }
 #endif
 
-#if defined(CNA_BACKEND_WEBGPU) || defined(CNA_BACKEND_VULKAN) || \
-    defined(CNA_BACKEND_EASYGL) || defined(CNA_BACKEND_D3D9) || \
-    defined(CNA_BACKEND_D3D11) || defined(CNA_BACKEND_SOFTWARE)
+#if defined(CNA_RENDERER_WEBGPU) || defined(CNA_RENDERER_VULKAN) || \
+    defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_D3D9) || \
+    defined(CNA_RENDERER_D3D11) || defined(CNA_RENDERER_SOFTWARE)
 TEST_F(IndexedDrawDeferredTest, DrawUserIndexedCapturesOddOffsetsWidthsAndDeclaration)
 {
     RequireIndexedRendering();
@@ -2291,7 +2291,7 @@ TEST_F(IndexedDrawDeferredTest, DrawUserIndexedCapturesOddOffsetsWidthsAndDeclar
         right.data(), 0, 3,
         indices32.data(), 2, 1);
 
-    // The temporary public arrays and temporary backend buffers are not live at replay time.
+    // The temporary public arrays and temporary renderer buffers are not live at replay time.
     left = CenterTriangle(Color::Black);
     center = CenterTriangle(Color::Black);
     right = CenterTriangle(Color::Black);
@@ -2307,20 +2307,20 @@ TEST_F(IndexedDrawDeferredTest, DrawUserIndexedCapturesOddOffsetsWidthsAndDeclar
 }
 #endif
 
-#if defined(CNA_BACKEND_WEBGPU) || defined(CNA_BACKEND_VULKAN) || \
-    defined(CNA_BACKEND_EASYGL) || defined(CNA_BACKEND_D3D9) || \
-    defined(CNA_BACKEND_D3D11)
+#if defined(CNA_RENDERER_WEBGPU) || defined(CNA_RENDERER_VULKAN) || \
+    defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_D3D9) || \
+    defined(CNA_RENDERER_D3D11)
 TEST_F(IndexedDrawDeferredTest, DrawUserIndexedTriangleStripsPreserveWidthsOffsetsAndSources)
 {
     RequireIndexedRendering();
 
-#ifdef CNA_BACKEND_VULKAN
-    auto* vulkanBackend =
-        dynamic_cast<CNA::Internal::Backends::Vulkan::VulkanGraphicsBackend*>(
-            &device.GetBackend());
-    ASSERT_NE(nullptr, vulkanBackend);
+#ifdef CNA_RENDERER_VULKAN
+    auto* vulkanRenderer =
+        dynamic_cast<CNA::Internal::Renderers::Vulkan::VulkanRenderer*>(
+            &device.GetRenderer());
+    ASSERT_NE(nullptr, vulkanRenderer);
     const std::size_t validationMessageStart =
-        vulkanBackend->GetValidationMessagesEXT().size();
+        vulkanRenderer->GetValidationMessagesEXT().size();
 #endif
 
     auto left = StripTriangleAt(-0.5f, Color::Red);
@@ -2375,37 +2375,37 @@ TEST_F(IndexedDrawDeferredTest, DrawUserIndexedTriangleStripsPreserveWidthsOffse
     ExpectExactColor(pixels.AtNdc(0.5f), Color::Blue, "DrawUser Uint32 strip");
     ExpectExactColor(pixels.AtNdc(0.0f), Color::Black, "DrawUser strip padding/background");
 
-#ifdef CNA_BACKEND_VULKAN
-    AssertNoNewVulkanValidationMessages(*vulkanBackend, validationMessageStart);
+#ifdef CNA_RENDERER_VULKAN
+    AssertNoNewVulkanValidationMessages(*vulkanRenderer, validationMessageStart);
 #endif
 }
 #endif
 
-#if defined(CNA_BACKEND_BGFX) || defined(CNA_BACKEND_WEBGPU) || \
-    defined(CNA_BACKEND_VULKAN) || \
-    defined(CNA_BACKEND_EASYGL) || defined(CNA_BACKEND_D3D9) || \
-    defined(CNA_BACKEND_D3D11)
+#if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_WEBGPU) || \
+    defined(CNA_RENDERER_VULKAN) || \
+    defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_D3D9) || \
+    defined(CNA_RENDERER_D3D11)
 TEST_F(IndexedDrawDeferredTest, IndexedTriangleStripAtoBtoAPreservesWidthsRangesAndPixels)
 {
     RequireIndexedRendering();
 
-#ifdef CNA_BACKEND_WEBGPU
-    auto* backend =
-        dynamic_cast<CNA::Internal::Backends::WebGPU::WebGPUGraphicsBackend*>(
-            &device.GetBackend());
-    ASSERT_NE(nullptr, backend);
-    EXPECT_EQ(0u, backend->GetColoredPipelineCacheSizeEXT());
-    const std::size_t uncapturedBefore = backend->GetUncapturedErrorCountEXT();
-    wgpuDevicePushErrorScope(backend->Device(), WGPUErrorFilter_OutOfMemory);
-    wgpuDevicePushErrorScope(backend->Device(), WGPUErrorFilter_Validation);
+#ifdef CNA_RENDERER_WEBGPU
+    auto* renderer =
+        dynamic_cast<CNA::Internal::Renderers::WebGPU::WebGPURenderer*>(
+            &device.GetRenderer());
+    ASSERT_NE(nullptr, renderer);
+    EXPECT_EQ(0u, renderer->GetColoredPipelineCacheSizeEXT());
+    const std::size_t uncapturedBefore = renderer->GetUncapturedErrorCountEXT();
+    wgpuDevicePushErrorScope(renderer->Device(), WGPUErrorFilter_OutOfMemory);
+    wgpuDevicePushErrorScope(renderer->Device(), WGPUErrorFilter_Validation);
 #endif
-#ifdef CNA_BACKEND_VULKAN
-    auto* vulkanBackend =
-        dynamic_cast<CNA::Internal::Backends::Vulkan::VulkanGraphicsBackend*>(
-            &device.GetBackend());
-    ASSERT_NE(nullptr, vulkanBackend);
+#ifdef CNA_RENDERER_VULKAN
+    auto* vulkanRenderer =
+        dynamic_cast<CNA::Internal::Renderers::Vulkan::VulkanRenderer*>(
+            &device.GetRenderer());
+    ASSERT_NE(nullptr, vulkanRenderer);
     const std::size_t validationMessageStart =
-        vulkanBackend->GetValidationMessagesEXT().size();
+        vulkanRenderer->GetValidationMessagesEXT().size();
 #endif
 
     std::vector<VertexPositionColor> vertices;
@@ -2469,32 +2469,32 @@ TEST_F(IndexedDrawDeferredTest, IndexedTriangleStripAtoBtoAPreservesWidthsRanges
     ExpectExactColor(pixels.AtNdc(0.65f), Color::Blue, "odd Uint16/baseVertex strip");
     ExpectExactColor(pixels.AtNdc(-0.98f), Color::Black, "strip padding/background");
 
-#ifdef CNA_BACKEND_WEBGPU
+#ifdef CNA_RENDERER_WEBGPU
     // Two format-compatible Uint16 buffer objects reuse one pipeline; the intervening Uint32
     // command creates the sole required additional variant.
-    EXPECT_EQ(2u, backend->GetColoredPipelineCacheSizeEXT());
-    PopAndExpectClean(*backend);
-    PopAndExpectClean(*backend);
-    EXPECT_EQ(uncapturedBefore, backend->GetUncapturedErrorCountEXT());
+    EXPECT_EQ(2u, renderer->GetColoredPipelineCacheSizeEXT());
+    PopAndExpectClean(*renderer);
+    PopAndExpectClean(*renderer);
+    EXPECT_EQ(uncapturedBefore, renderer->GetUncapturedErrorCountEXT());
 #endif
-#ifdef CNA_BACKEND_VULKAN
-    AssertNoNewVulkanValidationMessages(*vulkanBackend, validationMessageStart);
+#ifdef CNA_RENDERER_VULKAN
+    AssertNoNewVulkanValidationMessages(*vulkanRenderer, validationMessageStart);
 #endif
 }
 #endif
 
-#if defined(CNA_BACKEND_BGFX) || defined(CNA_BACKEND_VULKAN)
+#if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_VULKAN)
 TEST_F(IndexedDrawDeferredTest, IndexedTopologiesRenderExactDistinctGeometry)
 {
     RequireIndexedRendering();
 
-#ifdef CNA_BACKEND_VULKAN
-    auto* vulkanBackend =
-        dynamic_cast<CNA::Internal::Backends::Vulkan::VulkanGraphicsBackend*>(
-            &device.GetBackend());
-    ASSERT_NE(nullptr, vulkanBackend);
+#ifdef CNA_RENDERER_VULKAN
+    auto* vulkanRenderer =
+        dynamic_cast<CNA::Internal::Renderers::Vulkan::VulkanRenderer*>(
+            &device.GetRenderer());
+    ASSERT_NE(nullptr, vulkanRenderer);
     const std::size_t validationMessageStart =
-        vulkanBackend->GetValidationMessagesEXT().size();
+        vulkanRenderer->GetValidationMessagesEXT().size();
 #endif
 
     std::vector<VertexPositionColor> vertices;
@@ -2554,8 +2554,8 @@ TEST_F(IndexedDrawDeferredTest, IndexedTopologiesRenderExactDistinctGeometry)
     ExpectExactColorNear(
         pixels, 0.85f, 0.0f, Color::Yellow, "indexed line strip second segment");
 
-#ifdef CNA_BACKEND_VULKAN
-    AssertNoNewVulkanValidationMessages(*vulkanBackend, validationMessageStart);
+#ifdef CNA_RENDERER_VULKAN
+    AssertNoNewVulkanValidationMessages(*vulkanRenderer, validationMessageStart);
 #endif
 }
 
@@ -2563,13 +2563,13 @@ TEST_F(IndexedDrawDeferredTest, PublicThirtyTwoBitTopologiesRenderExactDistinctG
 {
     RequireIndexedRendering();
 
-#ifdef CNA_BACKEND_VULKAN
-    auto* vulkanBackend =
-        dynamic_cast<CNA::Internal::Backends::Vulkan::VulkanGraphicsBackend*>(
-            &device.GetBackend());
-    ASSERT_NE(nullptr, vulkanBackend);
+#ifdef CNA_RENDERER_VULKAN
+    auto* vulkanRenderer =
+        dynamic_cast<CNA::Internal::Renderers::Vulkan::VulkanRenderer*>(
+            &device.GetRenderer());
+    ASSERT_NE(nullptr, vulkanRenderer);
     const std::size_t validationMessageStart =
-        vulkanBackend->GetValidationMessagesEXT().size();
+        vulkanRenderer->GetValidationMessagesEXT().size();
 #endif
 
     std::vector<VertexPositionColor> vertices;
@@ -2604,7 +2604,7 @@ TEST_F(IndexedDrawDeferredTest, PublicThirtyTwoBitTopologiesRenderExactDistinctG
     lineStripBuffer.SetData(
         lineStrip.data(), 0, 3, SetDataOptions::NoOverwrite);
 
-#ifdef CNA_BACKEND_BGFX
+#ifdef CNA_RENDERER_BGFX
     ExpectExactBgfxIndexFlags(triangleListBuffer, true);
     ExpectExactBgfxIndexFlags(triangleStripBuffer, true);
     ExpectExactBgfxIndexFlags(lineListBuffer, true);
@@ -2638,14 +2638,14 @@ TEST_F(IndexedDrawDeferredTest, PublicThirtyTwoBitTopologiesRenderExactDistinctG
     ExpectExactColorNear(
         pixels, 0.85f, 0.0f, Color::Yellow, "Uint32 line strip second segment");
 
-#ifdef CNA_BACKEND_VULKAN
-    AssertNoNewVulkanValidationMessages(*vulkanBackend, validationMessageStart);
+#ifdef CNA_RENDERER_VULKAN
+    AssertNoNewVulkanValidationMessages(*vulkanRenderer, validationMessageStart);
 #endif
 }
 
 #endif
 
-#ifdef CNA_BACKEND_SOFTWARE
+#ifdef CNA_RENDERER_SOFTWARE
 TEST_F(IndexedDrawDeferredTest, SoftwareExplicitlyRejectsUnsupportedIndexedTopologies)
 {
     RequireIndexedRendering();
@@ -2865,7 +2865,7 @@ TEST_F(IndexedDrawDeferredTest, PublicContractValidatesEveryIndexedRangeBeforeSu
 TEST_F(IndexedDrawDeferredTest, PublicContractRejectsNegativeIndexedBaseVertex)
 {
     if (!device.SupportsCapability(GraphicsCapability::ThreeD))
-        GTEST_SKIP() << "Backend explicitly does not support indexed rendering";
+        GTEST_SKIP() << "Renderer explicitly does not support indexed rendering";
 
     const auto vertices = StripTriangleAt(0.0f, Color::White);
     const std::array<std::uint16_t, 3> indices{0, 1, 2};
@@ -2880,7 +2880,7 @@ TEST_F(IndexedDrawDeferredTest, PublicContractRejectsNegativeIndexedBaseVertex)
     device.SetVertexBuffer(&vertexBuffer);
     device.SetIndexBuffer(&indexBuffer);
 
-    // CNA's current public contract rejects every negative baseVertex before backend dispatch;
+    // CNA's current public contract rejects every negative baseVertex before renderer dispatch;
     // positive baseVertex behavior is exercised by the rendering test above.
     EXPECT_THROW(
         device.DrawIndexedPrimitives(
@@ -2888,19 +2888,19 @@ TEST_F(IndexedDrawDeferredTest, PublicContractRejectsNegativeIndexedBaseVertex)
         System::ArgumentOutOfRangeException);
 }
 
-#ifdef CNA_BACKEND_WEBGPU
+#ifdef CNA_RENDERER_WEBGPU
 TEST_F(IndexedDrawDeferredTest, WebGpuIndexedTriangleStripMatchesBoundIndexFormat)
 {
     RequireIndexedRendering();
 
-    auto* backend =
-        dynamic_cast<CNA::Internal::Backends::WebGPU::WebGPUGraphicsBackend*>(
-            &device.GetBackend());
-    ASSERT_NE(nullptr, backend);
-    EXPECT_EQ(0u, backend->GetColoredPipelineCacheSizeEXT());
-    const std::size_t uncapturedBefore = backend->GetUncapturedErrorCountEXT();
-    wgpuDevicePushErrorScope(backend->Device(), WGPUErrorFilter_OutOfMemory);
-    wgpuDevicePushErrorScope(backend->Device(), WGPUErrorFilter_Validation);
+    auto* renderer =
+        dynamic_cast<CNA::Internal::Renderers::WebGPU::WebGPURenderer*>(
+            &device.GetRenderer());
+    ASSERT_NE(nullptr, renderer);
+    EXPECT_EQ(0u, renderer->GetColoredPipelineCacheSizeEXT());
+    const std::size_t uncapturedBefore = renderer->GetUncapturedErrorCountEXT();
+    wgpuDevicePushErrorScope(renderer->Device(), WGPUErrorFilter_OutOfMemory);
+    wgpuDevicePushErrorScope(renderer->Device(), WGPUErrorFilter_Validation);
 
     const std::array<VertexPositionColor, 4> vertices{
         VertexPositionColor(Vector3(-0.6f, -0.6f, 0.5f), Color::Lime),
@@ -2925,23 +2925,23 @@ TEST_F(IndexedDrawDeferredTest, WebGpuIndexedTriangleStripMatchesBoundIndexForma
         PrimitiveType::TriangleStrip, 0, 0, 4, 0, 2);
 
     ExpectExactColor(ReadCenter(device), Color::Lime, "minimal Uint16 indexed strip");
-    EXPECT_EQ(1u, backend->GetColoredPipelineCacheSizeEXT());
-    PopAndExpectClean(*backend);
-    PopAndExpectClean(*backend);
-    EXPECT_EQ(uncapturedBefore, backend->GetUncapturedErrorCountEXT());
+    EXPECT_EQ(1u, renderer->GetColoredPipelineCacheSizeEXT());
+    PopAndExpectClean(*renderer);
+    PopAndExpectClean(*renderer);
+    EXPECT_EQ(uncapturedBefore, renderer->GetUncapturedErrorCountEXT());
 }
 
 TEST_F(IndexedDrawDeferredTest, WebGpuUserAndNonIndexedStripsUseExactPipelineVariants)
 {
     RequireIndexedRendering();
 
-    auto* backend =
-        dynamic_cast<CNA::Internal::Backends::WebGPU::WebGPUGraphicsBackend*>(
-            &device.GetBackend());
-    ASSERT_NE(nullptr, backend);
-    const std::size_t uncapturedBefore = backend->GetUncapturedErrorCountEXT();
-    wgpuDevicePushErrorScope(backend->Device(), WGPUErrorFilter_OutOfMemory);
-    wgpuDevicePushErrorScope(backend->Device(), WGPUErrorFilter_Validation);
+    auto* renderer =
+        dynamic_cast<CNA::Internal::Renderers::WebGPU::WebGPURenderer*>(
+            &device.GetRenderer());
+    ASSERT_NE(nullptr, renderer);
+    const std::size_t uncapturedBefore = renderer->GetUncapturedErrorCountEXT();
+    wgpuDevicePushErrorScope(renderer->Device(), WGPUErrorFilter_OutOfMemory);
+    wgpuDevicePushErrorScope(renderer->Device(), WGPUErrorFilter_Validation);
 
     auto listVertices = TriangleAt(-0.75f, Color::Red);
     auto nonIndexedStrip = StripQuadAt(-0.25f, Color::Yellow);
@@ -3015,23 +3015,23 @@ TEST_F(IndexedDrawDeferredTest, WebGpuUserAndNonIndexedStripsUseExactPipelineVar
     ExpectExactColor(pixels.AtNdc(0.75f), Color::Blue, "DrawUser Uint32 strip");
 
     // One list/Undefined pipeline plus TriangleStrip Undefined, Uint16, and Uint32.
-    EXPECT_EQ(4u, backend->GetColoredPipelineCacheSizeEXT());
-    PopAndExpectClean(*backend);
-    PopAndExpectClean(*backend);
-    EXPECT_EQ(uncapturedBefore, backend->GetUncapturedErrorCountEXT());
+    EXPECT_EQ(4u, renderer->GetColoredPipelineCacheSizeEXT());
+    PopAndExpectClean(*renderer);
+    PopAndExpectClean(*renderer);
+    EXPECT_EQ(uncapturedBefore, renderer->GetUncapturedErrorCountEXT());
 }
 
 TEST_F(IndexedDrawDeferredTest, WebGpuIndexedListPipelinesIgnoreIndexWidth)
 {
     RequireIndexedRendering();
 
-    auto* backend =
-        dynamic_cast<CNA::Internal::Backends::WebGPU::WebGPUGraphicsBackend*>(
-            &device.GetBackend());
-    ASSERT_NE(nullptr, backend);
-    const std::size_t uncapturedBefore = backend->GetUncapturedErrorCountEXT();
-    wgpuDevicePushErrorScope(backend->Device(), WGPUErrorFilter_OutOfMemory);
-    wgpuDevicePushErrorScope(backend->Device(), WGPUErrorFilter_Validation);
+    auto* renderer =
+        dynamic_cast<CNA::Internal::Renderers::WebGPU::WebGPURenderer*>(
+            &device.GetRenderer());
+    ASSERT_NE(nullptr, renderer);
+    const std::size_t uncapturedBefore = renderer->GetUncapturedErrorCountEXT();
+    wgpuDevicePushErrorScope(renderer->Device(), WGPUErrorFilter_OutOfMemory);
+    wgpuDevicePushErrorScope(renderer->Device(), WGPUErrorFilter_Validation);
 
     const auto left = TriangleAt(-0.5f, Color::Red);
     const auto right = TriangleAt(0.5f, Color::Blue);
@@ -3081,23 +3081,23 @@ TEST_F(IndexedDrawDeferredTest, WebGpuIndexedListPipelinesIgnoreIndexWidth)
     ExpectExactColor(pixels.AtNdc(0.5f), Color::Blue, "Uint32 triangle list");
 
     // Width is irrelevant to list topology: one TriangleList and one LineList pipeline.
-    EXPECT_EQ(2u, backend->GetColoredPipelineCacheSizeEXT());
-    PopAndExpectClean(*backend);
-    PopAndExpectClean(*backend);
-    EXPECT_EQ(uncapturedBefore, backend->GetUncapturedErrorCountEXT());
+    EXPECT_EQ(2u, renderer->GetColoredPipelineCacheSizeEXT());
+    PopAndExpectClean(*renderer);
+    PopAndExpectClean(*renderer);
+    EXPECT_EQ(uncapturedBefore, renderer->GetUncapturedErrorCountEXT());
 }
 
 TEST_F(IndexedDrawDeferredTest, WebGpuTriangleStripAlternatesWindingBeforeCulling)
 {
     RequireIndexedRendering();
 
-    auto* backend =
-        dynamic_cast<CNA::Internal::Backends::WebGPU::WebGPUGraphicsBackend*>(
-            &device.GetBackend());
-    ASSERT_NE(nullptr, backend);
-    const std::size_t uncapturedBefore = backend->GetUncapturedErrorCountEXT();
-    wgpuDevicePushErrorScope(backend->Device(), WGPUErrorFilter_OutOfMemory);
-    wgpuDevicePushErrorScope(backend->Device(), WGPUErrorFilter_Validation);
+    auto* renderer =
+        dynamic_cast<CNA::Internal::Renderers::WebGPU::WebGPURenderer*>(
+            &device.GetRenderer());
+    ASSERT_NE(nullptr, renderer);
+    const std::size_t uncapturedBefore = renderer->GetUncapturedErrorCountEXT();
+    wgpuDevicePushErrorScope(renderer->Device(), WGPUErrorFilter_OutOfMemory);
+    wgpuDevicePushErrorScope(renderer->Device(), WGPUErrorFilter_Validation);
 
     std::vector<VertexPositionColor> vertices;
     AppendVertices(vertices, StripQuadAt(-0.5f, Color::Lime));
@@ -3141,22 +3141,22 @@ TEST_F(IndexedDrawDeferredTest, WebGpuTriangleStripAlternatesWindingBeforeCullin
         pixels.AtNdc(0.58f, -0.20f), Color::Black,
         "clockwise-cull strip second triangle");
 
-    PopAndExpectClean(*backend);
-    PopAndExpectClean(*backend);
-    EXPECT_EQ(uncapturedBefore, backend->GetUncapturedErrorCountEXT());
+    PopAndExpectClean(*renderer);
+    PopAndExpectClean(*renderer);
+    EXPECT_EQ(uncapturedBefore, renderer->GetUncapturedErrorCountEXT());
 }
 
 TEST_F(IndexedDrawDeferredTest, WebGpuIndexedStripsRenderToTargetAndBackbuffer)
 {
     RequireIndexedRendering();
 
-    auto* backend =
-        dynamic_cast<CNA::Internal::Backends::WebGPU::WebGPUGraphicsBackend*>(
-            &device.GetBackend());
-    ASSERT_NE(nullptr, backend);
-    const std::size_t uncapturedBefore = backend->GetUncapturedErrorCountEXT();
-    wgpuDevicePushErrorScope(backend->Device(), WGPUErrorFilter_OutOfMemory);
-    wgpuDevicePushErrorScope(backend->Device(), WGPUErrorFilter_Validation);
+    auto* renderer =
+        dynamic_cast<CNA::Internal::Renderers::WebGPU::WebGPURenderer*>(
+            &device.GetRenderer());
+    ASSERT_NE(nullptr, renderer);
+    const std::size_t uncapturedBefore = renderer->GetUncapturedErrorCountEXT();
+    wgpuDevicePushErrorScope(renderer->Device(), WGPUErrorFilter_OutOfMemory);
+    wgpuDevicePushErrorScope(renderer->Device(), WGPUErrorFilter_Validation);
 
     auto vertices = StripQuadAt(0.0f, Color::Red);
     const std::array<std::uint16_t, 4> indices16{0, 1, 2, 3};
@@ -3202,24 +3202,24 @@ TEST_F(IndexedDrawDeferredTest, WebGpuIndexedStripsRenderToTargetAndBackbuffer)
     ExpectExactColor(
         pixels.AtNdc(0.0f), Color::Blue,
         "backbuffer Uint32 strip");
-    EXPECT_EQ(2u, backend->GetColoredPipelineCacheSizeEXT());
+    EXPECT_EQ(2u, renderer->GetColoredPipelineCacheSizeEXT());
 
-    PopAndExpectClean(*backend);
-    PopAndExpectClean(*backend);
-    EXPECT_EQ(uncapturedBefore, backend->GetUncapturedErrorCountEXT());
+    PopAndExpectClean(*renderer);
+    PopAndExpectClean(*renderer);
+    EXPECT_EQ(uncapturedBefore, renderer->GetUncapturedErrorCountEXT());
 }
 
 TEST_F(IndexedDrawDeferredTest, WebGpuNativeScopesCoverLogicalCountsAndInternalPadding)
 {
     RequireIndexedRendering();
 
-    auto* backend =
-        dynamic_cast<CNA::Internal::Backends::WebGPU::WebGPUGraphicsBackend*>(
-            &device.GetBackend());
-    ASSERT_NE(nullptr, backend);
-    const std::size_t uncapturedBefore = backend->GetUncapturedErrorCountEXT();
-    wgpuDevicePushErrorScope(backend->Device(), WGPUErrorFilter_OutOfMemory);
-    wgpuDevicePushErrorScope(backend->Device(), WGPUErrorFilter_Validation);
+    auto* renderer =
+        dynamic_cast<CNA::Internal::Renderers::WebGPU::WebGPURenderer*>(
+            &device.GetRenderer());
+    ASSERT_NE(nullptr, renderer);
+    const std::size_t uncapturedBefore = renderer->GetUncapturedErrorCountEXT();
+    wgpuDevicePushErrorScope(renderer->Device(), WGPUErrorFilter_OutOfMemory);
+    wgpuDevicePushErrorScope(renderer->Device(), WGPUErrorFilter_Validation);
 
     const auto vertices = CenterTriangle(Color::White);
     VertexBuffer vertexBuffer(
@@ -3288,8 +3288,8 @@ TEST_F(IndexedDrawDeferredTest, WebGpuNativeScopesCoverLogicalCountsAndInternalP
     vertexBuffer.Dispose();
     device.Present();
 
-    PopAndExpectClean(*backend);
-    PopAndExpectClean(*backend);
-    EXPECT_EQ(uncapturedBefore, backend->GetUncapturedErrorCountEXT());
+    PopAndExpectClean(*renderer);
+    PopAndExpectClean(*renderer);
+    EXPECT_EQ(uncapturedBefore, renderer->GetUncapturedErrorCountEXT());
 }
 #endif

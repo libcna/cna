@@ -4,8 +4,8 @@
 // GetData, decoded public sampling, malformed-data rejection, memory accounting, and continued
 // RenderTarget2D refusal pending SKIA-142.
 
-#include "CNA/Internal/Backends/Skia/SkiaGraphicsBackend.hpp"
-#include "CNA/Internal/Backends/Skia/SkiaTextureBackend.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaRenderer.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaTextureRenderer.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
@@ -29,9 +29,9 @@
 #include <string>
 #include <vector>
 
-using CNA::Internal::Backends::Skia::SkiaGraphicsBackend;
-using CNA::Internal::Backends::Skia::SkiaResourceStats;
-using CNA::Internal::Backends::Skia::SkiaTextureBackend;
+using CNA::Internal::Renderers::Skia::SkiaRenderer;
+using CNA::Internal::Renderers::Skia::SkiaResourceStats;
+using CNA::Internal::Renderers::Skia::SkiaTextureRenderer;
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
 
@@ -91,7 +91,7 @@ namespace
     [[nodiscard]] bool SameStats(const SkiaResourceStats& left,
                                  const SkiaResourceStats& right) noexcept
     {
-        return left.textureBackends == right.textureBackends
+        return left.textureRenderers == right.textureRenderers
             && left.textureImageViews == right.textureImageViews
             && left.textureImageBytes == right.textureImageBytes
             && left.mipChains2D == right.mipChains2D
@@ -106,9 +106,9 @@ class InspectableCompressedTexture2D final : public Texture2D
 public:
     using Texture2D::Texture2D;
 
-    [[nodiscard]] SkiaTextureBackend* SkiaBackend() const
+    [[nodiscard]] SkiaTextureRenderer* SkiaRenderer() const
     {
-        return dynamic_cast<SkiaTextureBackend*>(GetBackendRaw());
+        return dynamic_cast<SkiaTextureRenderer*>(GetRendererRaw());
     }
 };
 
@@ -138,12 +138,12 @@ protected:
         done_ = true;
 
         auto& device = getGraphicsDeviceProperty();
-        auto* graphicsBackend = dynamic_cast<SkiaGraphicsBackend*>(&device.GetBackend());
-        Check(checks_, failures_, graphicsBackend != nullptr,
-              "public GraphicsDevice owns the Skia backend");
-        if (!graphicsBackend) { Exit(); return; }
+        auto* graphicsRenderer = dynamic_cast<SkiaRenderer*>(&device.GetRenderer());
+        Check(checks_, failures_, graphicsRenderer != nullptr,
+              "public GraphicsDevice owns the Skia renderer");
+        if (!graphicsRenderer) { Exit(); return; }
 
-        const SkiaResourceStats baseline = graphicsBackend->GetResourceStatsEXT();
+        const SkiaResourceStats baseline = graphicsRenderer->GetResourceStatsEXT();
 
         CheckExactTransferAndMetadata(device);
         CheckAlphaModes(device);
@@ -152,9 +152,9 @@ protected:
         CheckAuthoredMipChain(device);
         CheckDecodedSampling(device);
         CheckMalformedData(device);
-        CheckTargetRefusal(device, *graphicsBackend);
+        CheckTargetRefusal(device, *graphicsRenderer);
 
-        Check(checks_, failures_, SameStats(graphicsBackend->GetResourceStatsEXT(), baseline),
+        Check(checks_, failures_, SameStats(graphicsRenderer->GetResourceStatsEXT(), baseline),
               "every compressed texture releases its exact resource accounting on disposal");
         Exit();
     }
@@ -169,10 +169,10 @@ private:
             texture.GetData(readback.data(), static_cast<int>(readback.size()));
             Check(checks_, failures_, readback == kDxt1SolidRed,
                   "Dxt1 4x4 SetData/GetData round-trips the exact 8-byte block");
-            auto* backend = texture.SkiaBackend();
+            auto* renderer = texture.SkiaRenderer();
             Check(checks_, failures_,
-                  backend && backend->SnapshotImage(
-                                 CNA::Internal::Backends::Skia::SkiaSourceAlphaConvention::Straight)
+                  renderer && renderer->SnapshotImage(
+                                 CNA::Internal::Renderers::Skia::SkiaSourceAlphaConvention::Straight)
                                  ->colorType() == kRGBA_8888_SkColorType,
                   "Dxt1 exposes a decoded kRGBA_8888 sampling image");
         }
@@ -195,10 +195,10 @@ private:
     }
 
     [[nodiscard]] static std::array<std::uint8_t, 4> ReadTexel(
-        SkiaTextureBackend& backend, int x, int y)
+        SkiaTextureRenderer& renderer, int x, int y)
     {
-        auto image = backend.SnapshotImage(
-            CNA::Internal::Backends::Skia::SkiaSourceAlphaConvention::Straight);
+        auto image = renderer.SnapshotImage(
+            CNA::Internal::Renderers::Skia::SkiaSourceAlphaConvention::Straight);
         std::array<std::uint8_t, 4> pixel{};
         const SkImageInfo info =
             SkImageInfo::Make(1, 1, kRGBA_8888_SkColorType, kUnpremul_SkAlphaType);
@@ -211,8 +211,8 @@ private:
         {
             InspectableCompressedTexture2D opaque(device, 4, 4, false, SurfaceFormat::Dxt1);
             opaque.SetData(kDxt1SolidRed.data(), static_cast<int>(kDxt1SolidRed.size()));
-            auto* backend = opaque.SkiaBackend();
-            const auto pixel = ReadTexel(*backend, 0, 0);
+            auto* renderer = opaque.SkiaRenderer();
+            const auto pixel = ReadTexel(*renderer, 0, 0);
             Check(checks_, failures_,
                   pixel[0] == 255 && pixel[1] == 0 && pixel[2] == 0 && pixel[3] == 255,
                   "Dxt1 4-colour opaque mode decodes RGBA(255,0,0,255)");
@@ -221,8 +221,8 @@ private:
             InspectableCompressedTexture2D transparent(device, 4, 4, false, SurfaceFormat::Dxt1);
             transparent.SetData(kDxt1Transparent.data(),
                                 static_cast<int>(kDxt1Transparent.size()));
-            auto* backend = transparent.SkiaBackend();
-            const auto pixel = ReadTexel(*backend, 0, 0);
+            auto* renderer = transparent.SkiaRenderer();
+            const auto pixel = ReadTexel(*renderer, 0, 0);
             Check(checks_, failures_, pixel[3] == 0,
                   "Dxt1 index-3 in 3-colour mode decodes exactly alpha 0 (one-bit alpha)");
         }
@@ -230,16 +230,16 @@ private:
             InspectableCompressedTexture2D average(device, 4, 4, false, SurfaceFormat::Dxt1);
             average.SetData(kDxt1AverageOpaque.data(),
                             static_cast<int>(kDxt1AverageOpaque.size()));
-            auto* backend = average.SkiaBackend();
-            const auto pixel = ReadTexel(*backend, 0, 0);
+            auto* renderer = average.SkiaRenderer();
+            const auto pixel = ReadTexel(*renderer, 0, 0);
             Check(checks_, failures_, pixel[3] == 255,
                   "Dxt1 index-2 average colour in 3-colour mode stays fully opaque");
         }
         {
             InspectableCompressedTexture2D texture(device, 4, 4, false, SurfaceFormat::Dxt3);
             texture.SetData(kDxt3HalfAlpha.data(), static_cast<int>(kDxt3HalfAlpha.size()));
-            auto* backend = texture.SkiaBackend();
-            const auto pixel = ReadTexel(*backend, 0, 0);
+            auto* renderer = texture.SkiaRenderer();
+            const auto pixel = ReadTexel(*renderer, 0, 0);
             Check(checks_, failures_, pixel[3] == 0x88,
                   "Dxt3 explicit 4-bit alpha nibble 0x8 decodes to replicated byte 0x88");
         }
@@ -249,10 +249,10 @@ private:
                             static_cast<int>(kDxt5InterpolatedAlpha.size()));
             // Texel (x,y) maps to alpha-mask linear position p = 4y + x; the packed mask below
             // sets alphaIndex = p mod 8, so (0,0)->0, (2,1)->6, (3,1)->7.
-            auto* backend = texture.SkiaBackend();
-            const auto index0 = ReadTexel(*backend, 0, 0);
-            const auto index6 = ReadTexel(*backend, 2, 1);
-            const auto index7 = ReadTexel(*backend, 3, 1);
+            auto* renderer = texture.SkiaRenderer();
+            const auto index0 = ReadTexel(*renderer, 0, 0);
+            const auto index6 = ReadTexel(*renderer, 2, 1);
+            const auto index7 = ReadTexel(*renderer, 3, 1);
             Check(checks_, failures_,
                   index0[3] == 0 && index6[3] == 0 && index7[3] == 255,
                   "Dxt5 alpha0<alpha1 mode decodes explicit index 6->0 and index 7->255");
@@ -364,12 +364,12 @@ private:
         Check(checks_, failures_, authoredReadback == kDxt1SolidGreen,
               "explicitly authoring a descendant mip level makes it exactly readable");
 
-        auto* backend = texture.SkiaBackend();
+        auto* renderer = texture.SkiaRenderer();
         Check(checks_, failures_,
-              backend && backend->MipGenerationCountEXT(0) == 0
-                  && backend->MipGenerationCountEXT(1) == 0
-                  && backend->MipGenerationCountEXT(2) == 0
-                  && backend->MipGenerationCountEXT(3) == 0,
+              renderer && renderer->MipGenerationCountEXT(0) == 0
+                  && renderer->MipGenerationCountEXT(1) == 0
+                  && renderer->MipGenerationCountEXT(2) == 0
+                  && renderer->MipGenerationCountEXT(3) == 0,
               "no compressed mip level is ever counted as generated");
     }
 
@@ -427,9 +427,9 @@ private:
               "a negative rect origin is rejected");
     }
 
-    void CheckTargetRefusal(GraphicsDevice& device, SkiaGraphicsBackend& graphicsBackend)
+    void CheckTargetRefusal(GraphicsDevice& device, SkiaRenderer& graphicsRenderer)
     {
-        const SkiaResourceStats before = graphicsBackend.GetResourceStatsEXT();
+        const SkiaResourceStats before = graphicsRenderer.GetResourceStatsEXT();
         const std::array formats{SurfaceFormat::Dxt1, SurfaceFormat::Dxt3, SurfaceFormat::Dxt5};
         bool allRejected = true;
         for (const SurfaceFormat format : formats)
@@ -440,7 +440,7 @@ private:
             });
         }
         Check(checks_, failures_,
-              allRejected && SameStats(graphicsBackend.GetResourceStatsEXT(), before),
+              allRejected && SameStats(graphicsRenderer.GetResourceStatsEXT(), before),
               "Dxt1/Dxt3/Dxt5 RenderTarget2D construction rejects transactionally "
               "(block-compressed formats are never FNA-renderable)");
     }

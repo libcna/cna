@@ -2,24 +2,24 @@
 // Task 689: Verify Texture2D::Dispose releases the underlying SDL_Texture exactly once on
 // SDL_Renderer -- no double-free.
 //
-// Texture2D::Dispose(bool) calls backend_.reset() unconditionally, then Texture::Dispose(bool)
-// (which itself guards on the shared, backend-agnostic isDisposed_ flag). Since backend_ is a
-// std::shared_ptr<ITextureBackend>, calling .reset() on an already-null shared_ptr is a
+// Texture2D::Dispose(bool) calls renderer_.reset() unconditionally, then Texture::Dispose(bool)
+// (which itself guards on the shared, renderer-agnostic isDisposed_ flag). Since renderer_ is a
+// std::shared_ptr<ITextureRenderer>, calling .reset() on an already-null shared_ptr is a
 // well-defined, safe no-op (not a double-free) -- so calling Dispose() twice on the same
-// Texture2D cannot double-free the real SdlTextureBackend/SDL_Texture*, regardless of the
-// isDisposed_ guard's own placement relative to backend_.reset().
+// Texture2D cannot double-free the real SdlTextureRenderer/SDL_Texture*, regardless of the
+// isDisposed_ guard's own placement relative to renderer_.reset().
 //
 // The genuinely CNA-specific (not XNA-standard) wrinkle worth verifying on SDL_Renderer
 // specifically: Texture2D is a copyable VALUE type here (backed by a shared_ptr), unlike XNA's
 // reference-type Texture2D (a single C# object, where "copies" are just aliases to the one
 // object and Disposing it disposes that one shared instance for every alias). Copying a
 // Texture2D in CNA creates a second, independent GraphicsResource (its own isDisposed_), but
-// BOTH copies share the same backend_ shared_ptr -- so Disposing one copy only decrements the
-// backend's refcount; the real SdlTextureBackend (and its real SDL_Texture*) is only actually
+// BOTH copies share the same renderer_ shared_ptr -- so Disposing one copy only decrements the
+// renderer's refcount; the real SdlTextureRenderer (and its real SDL_Texture*) is only actually
 // destroyed, calling SDL_DestroyTexture exactly once, when the LAST copy releases it.
 //
-// This test exercises that exact scenario against the real SDL_Renderer backend:
-//   1. Create tex1 (2x1 Red|Blue), copy it to tex2 (shares backend_).
+// This test exercises that exact scenario against the real SDL_Renderer renderer:
+//   1. Create tex1 (2x1 Red|Blue), copy it to tex2 (shares renderer_).
 //   2. Draw tex1, read back real pixels -- confirm correct.
 //   3. Dispose tex1. Confirm tex1.IsDisposed == true.
 //   4. Draw tex2 (the surviving copy) again, read back real pixels -- confirm STILL correct: the
@@ -27,11 +27,11 @@
 //      use-after-free), and was not corrupted by tex1's Dispose (no double-free artifact).
 //   5. Dispose tex2 too -- now the real SDL_Texture is genuinely released (last owner gone).
 //   6. Dispose tex1 AGAIN (double-Dispose on an already-disposed instance) -- must not crash.
-//   7. Dispose tex2 AGAIN (double-Dispose via the OTHER copy, after the shared backend is
+//   7. Dispose tex2 AGAIN (double-Dispose via the OTHER copy, after the shared renderer is
 //      already fully released) -- must not crash either.
 //
 // Requires PresentationMode::NativeBackBuffer (Task 915 finding): SDL_RenderReadPixels operates
-// in physical output coordinates, while this backend's default presentation mode
+// in physical output coordinates, while this renderer's default presentation mode
 // (FixedHeightDynamicWidth) does not map logical pixels 1:1 to physical ones.
 //
 // A crash (segfault / ASAN double-free abort) is the only realistic failure mode this test can
@@ -116,7 +116,7 @@ protected:
         const std::vector<Color> px = { kRed, kBlue };
         Texture2D tex1(dev, 2, 1);
         tex1.SetData(px.data(), 2);
-        Texture2D tex2 = tex1; // shares backend_ (shared_ptr) with tex1
+        Texture2D tex2 = tex1; // shares renderer_ (shared_ptr) with tex1
 
         check(colourMatch(DrawAndSample(tex1), kRed), "tex1 draws correctly before Dispose");
 
@@ -134,7 +134,7 @@ protected:
         tex2.Dispose();
         check(tex2.getIsDisposedProperty(), "tex2.IsDisposed == true after its own Dispose()");
 
-        // No crash on double-Dispose of tex2, now that the shared backend is fully released.
+        // No crash on double-Dispose of tex2, now that the shared renderer is fully released.
         tex2.Dispose();
         check(true, "tex2.Dispose() called a second time did not crash");
 

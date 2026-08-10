@@ -11,7 +11,7 @@
 //   solid blue background renders as pure opaque red.
 // Check D -- BlendState::AlphaBlend actually blends: the same half-alpha red quad over the same
 //   blue background renders as a real mix of red and blue, not pure red.
-// Check E -- SpriteBatch::Draw() (going through ISpriteBatchBackend, not DrawPrimitivesEx)
+// Check E -- SpriteBatch::Draw() (going through ISpriteBatchRenderer, not DrawPrimitivesEx)
 //   renders a solid-color 1x1 texture at the exact requested screen position.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
@@ -95,7 +95,7 @@ protected:
             Texture2D checker = Texture2D::CreateFromPixels(dev, 2, 2, checkerPixels);
             // REMED-GFX-150: this check is titled "nearest-neighbor texture sampling", so it must
             // SELECT nearest-neighbor sampling. It used to leave SamplerState implicit, which means
-            // the device default -- SamplerState.LinearWrap -- and passed only because the backend
+            // the device default -- SamplerState.LinearWrap -- and passed only because the renderer
             // discarded the filter and the address mode alike. Two of the three probes below are
             // additionally in the texture's corner cells, where clamping collapses both bilinear
             // endpoints onto one texel, so the original pair could not have seen the defect even
@@ -128,7 +128,7 @@ protected:
 
             // REMED-GFX-150: the probe that can actually fail. Pixel (31,31) is the last pixel of
             // the texture's top-left cell, so point sampling owes exactly Red -- while bilinear
-            // filtering there is a near-even blend of all four texels, which is what this backend
+            // filtering there is a near-even blend of all four texels, which is what this renderer
             // used to return whatever SamplerState was selected. (2,2) and (61,61) above sit where
             // clamping collapses the interpolation, so they agree either way.
             const Color interior = ReadPixel(dev, 31, 31);
@@ -136,7 +136,7 @@ protected:
                   "PointClamp selects ONE texel away from the clamped corners: (31,31) is Red, not a "
                   "blend of the four checker texels");
 
-            // The differential, so "Red" above cannot be satisfied by a backend that ignores the
+            // The differential, so "Red" above cannot be satisfied by a renderer that ignores the
             // sampler and happens to clamp: with LinearClamp the SAME pixel must NOT be pure Red.
             dev.getSamplerStatesProperty()[0] = SamplerState::LinearClamp;
             fx.Apply();

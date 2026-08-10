@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 // GDI-067: optional attachment storage and overflow-/budget-safe framebuffer allocation.
 
-#include "CNA/Internal/Backends/Gdi/GdiGraphicsBackend.hpp"
-#include "CNA/Internal/Backends/Software/SoftwareGraphicsBackend.hpp"
-#include "CNA/Internal/Backends/Software/SoftwareFramebufferAllocation.hpp"
+#include "CNA/Internal/Renderers/Gdi/GdiRenderer.hpp"
+#include "CNA/Internal/Renderers/Software/SoftwareRenderer.hpp"
+#include "CNA/Internal/Renderers/Software/SoftwareFramebufferAllocation.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 
 #include <SDL3/SDL.h>
@@ -16,9 +16,9 @@
 #include <memory>
 #include <string>
 
-using namespace CNA::Internal::Backends;
-using namespace CNA::Internal::Backends::Gdi;
-using namespace CNA::Internal::Backends::Software;
+using namespace CNA::Internal::Renderers;
+using namespace CNA::Internal::Renderers::Gdi;
+using namespace CNA::Internal::Renderers::Software;
 
 namespace
 {
@@ -116,28 +116,28 @@ namespace
     bool ExerciseLiveStorage(SDL_Window* window)
     {
         bool ok = true;
-        GdiGraphicsBackend backend(window, 8, 6, CnaPresentationMode::Stretch);
+        GdiRenderer renderer(window, 8, 6, CnaPresentationMode::Stretch);
 
-        GdiFramebufferStorageTelemetry storage = backend.DebugGetBackbufferStorage();
+        GdiFramebufferStorageTelemetry storage = renderer.DebugGetBackbufferStorage();
         ok &= Expect(storage.colorBytes == 8u * 6u * 4u && storage.depthBytes == 0u &&
                          storage.stencilBytes == 8u * 6u && storage.multiSampleBytes == 0u &&
                          storage.TotalBytes() == 8u * 6u * 5u,
                      "live GDI backbuffer allocates RGBA8 plus stencil and no depth");
 
-        ok &= Expect(backend.ApplyMultiSampleCount(4) == 4,
+        ok &= Expect(renderer.ApplyMultiSampleCount(4) == 4,
                      "live GDI backbuffer enables its supported 4x storage");
-        storage = backend.DebugGetBackbufferStorage();
+        storage = renderer.DebugGetBackbufferStorage();
         ok &= Expect(storage.depthBytes == 0u &&
                          storage.multiSampleBytes == 8u * 6u * 16u &&
                          storage.TotalBytes() == 8u * 6u * 21u,
                      "live 4x GDI backbuffer matches the twenty-one-byte layout");
-        ok &= Expect(backend.ApplyMultiSampleCount(2) == 0 &&
-                         backend.DebugGetBackbufferStorage().multiSampleBytes == 0u,
+        ok &= Expect(renderer.ApplyMultiSampleCount(2) == 0 &&
+                         renderer.DebugGetBackbufferStorage().multiSampleBytes == 0u,
                      "unsupported MSAA disables and releases optional sample storage");
 
-        std::unique_ptr<IRenderTargetBackend> target =
-            backend.CreateRenderTarget2D(7, 5, 0, true, false, 0);
-        auto* softwareTarget = dynamic_cast<SoftwareRenderTargetBackend*>(target.get());
+        std::unique_ptr<IRenderTargetRenderer> target =
+            renderer.CreateRenderTarget2D(7, 5, 0, true, false, 0);
+        auto* softwareTarget = dynamic_cast<SoftwareRenderTargetRenderer*>(target.get());
         ok &= Expect(softwareTarget != nullptr &&
                          softwareTarget->Framebuffer().color.size() == 7u * 5u * 4u &&
                          softwareTarget->Framebuffer().depthBuffer.empty() &&
@@ -146,38 +146,38 @@ namespace
                      "GDI render target follows its RGBA8/stencil-only/single-sample contract");
 
         ok &= ExpectArgumentOutOfRange(
-            [&] { (void)backend.CreateRenderTarget2D(0, 5, 0, true, false, 0); },
+            [&] { (void)renderer.CreateRenderTarget2D(0, 5, 0, true, false, 0); },
             "dimensions must be positive",
             "zero-sized render target fails clearly before allocation");
         ok &= ExpectArgumentOutOfRange(
-            [&] { (void)backend.CreateRenderTarget2D(11000, 11000, 0, true, false, 0); },
+            [&] { (void)renderer.CreateRenderTarget2D(11000, 11000, 0, true, false, 0); },
             "framebuffer byte budget exceeded",
             "oversized render target fails at the documented byte budget");
         ok &= ExpectArgumentOutOfRange(
             [&] {
-                GdiGraphicsBackend invalid(
+                GdiRenderer invalid(
                     window, 0, 6, CnaPresentationMode::Stretch);
             },
             "must be positive",
             "GDI constructor rejects a non-positive backbuffer dimension");
 
-        backend.Clear(0.25f, 0.5f, 0.75f, 1.0f);
+        renderer.Clear(0.25f, 0.5f, 0.75f, 1.0f);
         std::array<std::uint8_t, 4> pixelBefore{};
-        backend.ReadBackbuffer(0, 0, 1, 1, pixelBefore.data());
+        renderer.ReadBackbuffer(0, 0, 1, 1, pixelBefore.data());
         ok &= ExpectArgumentOutOfRange(
-            [&] { backend.SetVirtualResolution(11000, 11000); },
+            [&] { renderer.SetVirtualResolution(11000, 11000); },
             "framebuffer byte budget exceeded",
             "oversized virtual resize fails before attempting allocation");
         int widthAfterFailure = 0;
         int heightAfterFailure = 0;
-        backend.GetViewportSize(widthAfterFailure, heightAfterFailure);
+        renderer.GetViewportSize(widthAfterFailure, heightAfterFailure);
         std::array<std::uint8_t, 4> pixelAfterFailure{};
-        backend.ReadBackbuffer(0, 0, 1, 1, pixelAfterFailure.data());
+        renderer.ReadBackbuffer(0, 0, 1, 1, pixelAfterFailure.data());
         ok &= Expect(widthAfterFailure == 8 && heightAfterFailure == 6 &&
                          pixelAfterFailure == pixelBefore,
                      "rejected resize preserves prior dimensions and color storage transactionally");
         ok &= ExpectArgumentOutOfRange(
-            [&] { backend.SetVirtualResolution(-1, 6); },
+            [&] { renderer.SetVirtualResolution(-1, 6); },
             "must be positive",
             "negative virtual dimension fails before mutating requested state");
         return ok;

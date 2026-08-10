@@ -17,7 +17,7 @@
 //   VertexColorEnabled = false -> the vertex COLOR0 stream must NOT modulate the diffuse result;
 //   VertexColorEnabled = true  -> the bound per-vertex COLOR0 semantic multiplies it.
 //
-// This file measures that on the ONE thing that needs no reference at runtime: the same backend's
+// This file measures that on the ONE thing that needs no reference at runtime: the same renderer's
 // own ordinary route, under identical effect state, with identical buffers and identical geometry.
 // Every leg renders the frame twice -- once through `DrawIndexedPrimitives`, once through
 // `DrawInstancedPrimitives` with a single identity per-instance record -- and compares them
@@ -99,27 +99,27 @@ using Microsoft::Xna::Framework::Graphics::VertexElement;
 using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
 using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 
-// The backends whose stock instanced path rasterizes and whose RenderTarget2D::GetData reads the
+// The renderers whose stock instanced path rasterizes and whose RenderTarget2D::GetData reads the
 // result back -- InstancedDrawMultiStreamTests.cpp's own permanent suite set, for the same reason.
-#if defined(CNA_BACKEND_BGFX) || defined(CNA_BACKEND_EASYGL) || \
-    defined(CNA_BACKEND_WEBGPU) || defined(CNA_BACKEND_VULKAN) || \
-    defined(CNA_BACKEND_D3D9) || defined(CNA_BACKEND_D3D11) || \
-    defined(CNA_BACKEND_D3D12)
+#if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_EASYGL) || \
+    defined(CNA_RENDERER_WEBGPU) || defined(CNA_RENDERER_VULKAN) || \
+    defined(CNA_RENDERER_D3D9) || defined(CNA_RENDERER_D3D11) || \
+    defined(CNA_RENDERER_D3D12)
 #define CNA_INSTANCED_VERTEX_COLOR_ORACLE 1
 #endif
 
-// The backends whose instanced route this file has MEASURED on a real display, and which therefore
+// The renderers whose instanced route this file has MEASURED on a real display, and which therefore
 // carry an assertion in one direction or the other. D3D9/D3D11/D3D12 stay outside it because no
 // D3D display was reachable (SDL reports "x11 not available" under Wine on the Xvfb displays this
 // environment permits) -- REMED-GFX-212 identifies D3D11/D3D12 from source as colouring the
-// instanced route from DiffuseColor, but an unmeasured backend must not be asserted in either
-// direction. Every leg still PRINTS its reading there, which is the evidence those backends lack.
-#if defined(CNA_BACKEND_EASYGL) || defined(CNA_BACKEND_BGFX) || \
-    defined(CNA_BACKEND_VULKAN) || defined(CNA_BACKEND_WEBGPU)
+// instanced route from DiffuseColor, but an unmeasured renderer must not be asserted in either
+// direction. Every leg still PRINTS its reading there, which is the evidence those renderers lack.
+#if defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_BGFX) || \
+    defined(CNA_RENDERER_VULKAN) || defined(CNA_RENDERER_WEBGPU)
 #define CNA_INSTANCED_VERTEX_COLOR_MEASURED 1
 #endif
 
-// The backends whose instanced route was measured obeying the PUBLIC CONTRACT: EasyGL always did,
+// The renderers whose instanced route was measured obeying the PUBLIC CONTRACT: EasyGL always did,
 // Vulkan and WebGPU were corrected by REMED-GFX-212, and bgfx by REMED-GFX-215.
 //
 // bgfx was outside this set until REMED-GFX-215. Its instanced route consumed COLOR0 -- which is
@@ -133,9 +133,9 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 // that asserted bgfx's measured defect did what it was written to do: it failed the moment bgfx was
 // corrected and forced its own removal. `InstancedDiffuseColorTests.cpp` is that ticket's permanent
 // non-neutral-DiffuseColor oracle, and it is what keeps this file's white-DiffuseColor blind spot
-// from ever certifying a backend again.
-#if defined(CNA_BACKEND_EASYGL) || defined(CNA_BACKEND_VULKAN) || \
-    defined(CNA_BACKEND_WEBGPU) || defined(CNA_BACKEND_BGFX)
+// from ever certifying a renderer again.
+#if defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_VULKAN) || \
+    defined(CNA_RENDERER_WEBGPU) || defined(CNA_RENDERER_BGFX)
 #define CNA_INSTANCED_VERTEX_COLOR_CONTRACT 1
 #endif
 
@@ -143,20 +143,20 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 
 namespace
 {
-    constexpr const char* kBackendName =
-#if defined(CNA_BACKEND_EASYGL)
+    constexpr const char* kRendererName =
+#if defined(CNA_RENDERER_EASYGL)
         "EasyGL";
-#elif defined(CNA_BACKEND_VULKAN)
+#elif defined(CNA_RENDERER_VULKAN)
         "Vulkan";
-#elif defined(CNA_BACKEND_BGFX)
+#elif defined(CNA_RENDERER_BGFX)
         "bgfx";
-#elif defined(CNA_BACKEND_WEBGPU)
+#elif defined(CNA_RENDERER_WEBGPU)
         "WebGPU";
-#elif defined(CNA_BACKEND_D3D9)
+#elif defined(CNA_RENDERER_D3D9)
         "D3D9";
-#elif defined(CNA_BACKEND_D3D11)
+#elif defined(CNA_RENDERER_D3D11)
         "D3D11";
-#elif defined(CNA_BACKEND_D3D12)
+#elif defined(CNA_RENDERER_D3D12)
         "D3D12";
 #else
         "unknown";
@@ -243,14 +243,14 @@ namespace
     }
 
     /// Which of the two routes a measurement came from. The contract is the same for both, but a
-    /// backend may be correct on one and not the other, so a measured-defect arm has to say which.
+    /// renderer may be correct on one and not the other, so a measured-defect arm has to say which.
     enum class Route
     {
         Ordinary,
         Instanced,
     };
 
-    /// What THIS backend is asserted to produce. Every measured backend is now held to the public
+    /// What THIS renderer is asserted to produce. Every measured renderer is now held to the public
     /// contract on both routes: the bgfx instanced exemption this function used to carry was
     /// removed when REMED-GFX-215 fixed the defect it recorded.
     Rgba AssertedColor(const Rgba& color0, bool vertexColorEnabled, Route route)
@@ -259,11 +259,11 @@ namespace
         return ExpectedColor(color0, vertexColorEnabled);
     }
 
-    /// The suffix a measured-defect message would carry. No backend carries one any more.
+    /// The suffix a measured-defect message would carry. No renderer carries one any more.
     constexpr const char* kAssertionBasis = "";
 
 
-    /// Slot 0's record: the packed 16-byte position+colour vertex every instancing backend
+    /// Slot 0's record: the packed 16-byte position+colour vertex every instancing renderer
     /// recognizes -- XNA's VertexPositionColor layout.
     struct PackedVertex
     {
@@ -305,7 +305,7 @@ namespace
     }
 
     /// The per-instance record: the whole world matrix in one binding, the classic shape every
-    /// CNA instancing backend already renders.
+    /// CNA instancing renderer already renders.
     struct MatrixRecord
     {
         float c0[4];
@@ -496,7 +496,7 @@ namespace
     }
 
     /// Every column's reading in one line, printed by every leg whether it passes or fails --
-    /// a gate that merely excludes a backend records only that somebody once believed it broken.
+    /// a gate that merely excludes a renderer records only that somebody once believed it broken.
     std::string DescribeFrame(const FrameSnapshot& snapshot)
     {
         std::ostringstream os;
@@ -513,7 +513,7 @@ namespace
 
     void PrintMeasurement(const char* leg, const FrameSnapshot& snapshot)
     {
-        std::cout << "[ GFX-212  ] " << kBackendName << ' ' << leg << ':'
+        std::cout << "[ GFX-212  ] " << kRendererName << ' ' << leg << ':'
                   << DescribeFrame(snapshot) << std::endl;
     }
 
@@ -538,7 +538,7 @@ protected:
     void RequireInstancedRendering()
     {
         if (!device.SupportsCapability(GraphicsCapability::ThreeD))
-            GTEST_SKIP() << "Backend explicitly does not support 3D rendering";
+            GTEST_SKIP() << "Renderer explicitly does not support 3D rendering";
         device.setRasterizerStateProperty(RasterizerState::CullNone);
         device.setDepthStencilStateProperty(DepthStencilState::None);
         device.setBlendStateProperty(BlendState::Opaque);
@@ -578,8 +578,8 @@ protected:
         effect.Apply();
     }
 
-    /// Asserts every column against what this backend is asserted to produce, and prints the whole
-    /// frame either way -- a gate that merely excludes a backend records only that somebody once
+    /// Asserts every column against what this renderer is asserted to produce, and prints the whole
+    /// frame either way -- a gate that merely excludes a renderer records only that somebody once
     /// believed it broken.
     static void ExpectColumns(
         const FrameSnapshot& snapshot, bool vertexColorEnabled, Route route, const char* leg)
@@ -818,7 +818,7 @@ TEST_F(InstancedVertexColorTest, PackedColorTextureStrideConsumesGeometryColorOn
     }
     else
     {
-        std::cout << "[ GFX-212  ] " << kBackendName
+        std::cout << "[ GFX-212  ] " << kRendererName
                   << " stride24/ordinary-route: REJECTED -- " << ordinaryRejection
                   << " (REMED-GFX-214, an ordinary-route boundary this leg does not close)"
                   << std::endl;

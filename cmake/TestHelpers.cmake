@@ -1,13 +1,13 @@
 include_guard(GLOBAL)
 
 # Collapses the add_test() + set_tests_properties() pair repeated at every one of CNA's
-# ~600 per-backend CTest registrations into a single call. Each backend keeps its own
-# cna_<backend>_test(target src) macro for add_executable()+target_link_libraries() --
-# linking differs enough per backend (Wine/DXVK wrapping, -Wl,--start-group circular-
+# ~600 per-renderer CTest registrations into a single call. Each renderer keeps its own
+# cna_<renderer>_test(target src) macro for add_executable()+target_link_libraries() --
+# linking differs enough per renderer (Wine/DXVK wrapping, -Wl,--start-group circular-
 # dependency links, extra libs) that unifying it isn't worth the risk -- this only
-# unifies the registration half, which is identical logic across every backend.
+# unifies the registration half, which is identical logic across every renderer.
 #
-# cna_register_backend_test(NAME <ctest-name> COMMAND <command...>
+# cna_register_renderer_test(NAME <ctest-name> COMMAND <command...>
 #                            [TIMEOUT <seconds>] [LABELS <label...>]
 #                            [ENVIRONMENT <NAME=value;...>] [WORKING_DIRECTORY <dir>]
 #                            [SKIP_REGULAR_EXPRESSION <pattern>])
@@ -18,7 +18,7 @@ include_guard(GLOBAL)
 # list(APPEND) flattens them into extra list elements and the final
 # set_tests_properties(... PROPERTIES ${_cna_test_props}) call receives a
 # corrupted, unbalanced argument list.
-function(cna_register_backend_test)
+function(cna_register_renderer_test)
     cmake_parse_arguments(T "" "NAME;TIMEOUT;WORKING_DIRECTORY;SKIP_REGULAR_EXPRESSION" "COMMAND;LABELS;ENVIRONMENT" ${ARGN})
 
     add_test(NAME ${T_NAME} COMMAND ${T_COMMAND})

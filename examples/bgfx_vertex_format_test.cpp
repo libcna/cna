@@ -31,7 +31,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 
-#include "CNA/Internal/Backends/Bgfx/BgfxVertexFormatHelper.hpp"
+#include "CNA/Internal/Renderers/Bgfx/BgfxVertexFormatHelper.hpp"
 
 #include <cstdint>
 #include <cstdio>
@@ -39,7 +39,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::Bgfx;
+using namespace CNA::Internal::Renderers::Bgfx;
 
 // ── Compact GPU vertex structs (packed, no vtable) ───────────────────────────
 
@@ -201,7 +201,7 @@ class BgfxVertexFormatTest : public Game
         try
         {
             VertexBuffer vb(dev, decl, vertexCount, BufferUsage::None);
-            // SetData<T> is a template; use the raw backend path via SetData(void*,...) equivalent.
+            // SetData<T> is a template; use the raw renderer path via SetData(void*,...) equivalent.
             // VertexBuffer stores data via SetData overloads — use the typed overload indirectly
             // by re-packaging as a byte span stored in a local array.  Since VertexBuffer::SetData
             // is templated on T, we cannot call it with void*.  Instead create a typed VPC buffer

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // plan_dx2.md Phase O4 (DX2-30, DX2-39): near-plane clipping (Dx6ClipTriangleNearPlane, ported
-// verbatim from SoftwareGraphicsBackend.cpp's SOFTWARE-83) -- a triangle straddling the near plane
+// verbatim from SoftwareRenderer.cpp's SOFTWARE-83) -- a triangle straddling the near plane
 // renders its visible portion only, with no crash or garbage output.
 //
 // Uses a real perspective projection (not identity, unlike the other Phase O4 tests) so a vertex

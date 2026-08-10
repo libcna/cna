@@ -5,7 +5,7 @@
 // remain in gdi_2d_regression_test; this test proves that the same supported behavior is reachable
 // through GraphicsDevice and its public resources.
 
-#include "CNA/GraphicsBackendType.hpp"
+#include "CNA/GraphicsRendererType.hpp"
 #include "CNA/GraphicsCapability.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
@@ -105,8 +105,8 @@ namespace
         const PresentationParameters& parameters = device.getPresentationParametersProperty();
         const Rectangle initialBounds(0, 0, kInitialWidth, kInitialHeight);
 
-        ok &= Expect(CNA::getCurrentGraphicsBackendType() == CNA::GraphicsBackendType::Gdi,
-                     "test executable uses the GDI backend");
+        ok &= Expect(CNA::getCurrentGraphicsRendererType() == CNA::GraphicsRendererType::Gdi,
+                     "test executable uses the GDI renderer");
         ok &= Expect(parameters.getBackBufferWidthProperty() == kInitialWidth &&
                          parameters.getBackBufferHeightProperty() == kInitialHeight,
                      "PresentationParameters exposes the configured backbuffer dimensions");

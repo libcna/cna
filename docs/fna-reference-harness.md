@@ -57,7 +57,7 @@ cmake --build cmake-build-debug --target cna_reference_dump
 ```
 
 `cna_reference_dump` is a normal CMake target (built whenever `CNA_BUILD_EXAMPLES` is on, any
-graphics backend) — no special setup needed beyond a normal CNA build.
+graphics renderer) — no special setup needed beyond a normal CNA build.
 
 ### 4. Compare
 

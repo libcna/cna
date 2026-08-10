@@ -1,6 +1,6 @@
-#include "CNA/Internal/Backends/Skia/SkiaMipChain2D.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaMipChain2D.hpp"
 
-#include "CNA/Internal/Backends/Skia/SkiaResourcePolicy.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaResourcePolicy.hpp"
 #include "System/NotSupportedException.hpp"
 
 #include <algorithm>
@@ -8,7 +8,7 @@
 #include <string>
 #include <utility>
 
-namespace CNA::Internal::Backends::Skia
+namespace CNA::Internal::Renderers::Skia
 {
     bool TryBuildSkiaMipChain2DLayout(
         int width, int height, bool mipMap, std::size_t bytesPerTexel,
@@ -181,4 +181,4 @@ namespace CNA::Internal::Backends::Skia
             }
         }
     }
-} // namespace CNA::Internal::Backends::Skia
+} // namespace CNA::Internal::Renderers::Skia

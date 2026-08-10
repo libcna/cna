@@ -2,32 +2,32 @@
 // plan_sokol.md SOKOL-44: a custom ShaderEffect's deferred texture bindings must survive the
 // bound texture being re-uploaded between ShaderEffect::SetTexture() and the eventual draw.
 //
-// SokolEffectBackend::BindTexture()/BindTextureCube() only RECORD a pending bind (see
+// SokolEffectRenderer::BindTexture()/BindTextureCube() only RECORD a pending bind (see
 // ApplyPendingTextureBindsEXT()'s own doc comment for why -- it must be realized after
 // BeginPassIfNeeded()/sg_reset_state_cache(), right before the draw). Before this fix, the pending
-// record stored the resolved sg_image id at BindTexture() time. SokolTextureBackend::RecreateImage()
+// record stored the resolved sg_image id at BindTexture() time. SokolTextureRenderer::RecreateImage()
 // (and the TextureCube/SOKOL-34 equivalent) destroy the old sg_image and allocate a brand new one on
 // every SetData() -- so `effect.SetTexture(unit, tex); tex.SetData(...); draw;` would sample a
 // stale, already-destroyed image (or nothing at all).
 //
 // Both sub-tests: bind a texture showing colour A, upload colour B to the SAME texture object
-// (recreating its underlying GPU image, but not the C++ backend object itself -- see below), then
+// (recreating its underlying GPU image, but not the C++ renderer object itself -- see below), then
 // draw and read back -- correct behaviour is colour B.
 //
 // Check A -- 2D: a full-screen quad sampling a re-uploaded Texture2D reads back the NEW colour.
 //   Deliberately uses the SetData(level, rect, data, startIndex, count) overload, which updates
-//   the SAME SokolTextureBackend object's image in place (Texture2D.cpp: `backend_->UpdatePixels`
+//   the SAME SokolTextureRenderer object's image in place (Texture2D.cpp: `renderer_->UpdatePixels`
 //   for a full level-0 update) -- the case SOKOL-44 actually fixes. Texture2D's OTHER
-//   SetData(const Color*, int) overload replaces `Texture2D::backend_` with an entirely new
-//   backend object instead of mutating the existing one; a pending bind captured before that call
-//   cannot follow it without a stable indirection IEffectBackend::BindTexture()'s interface does
-//   not carry (SokolEffectBackend's own LiveSampledBackendRegistryEXT() safely detects this and
+//   SetData(const Color*, int) overload replaces `Texture2D::renderer_` with an entirely new
+//   renderer object instead of mutating the existing one; a pending bind captured before that call
+//   cannot follow it without a stable indirection IEffectRenderer::BindTexture()'s interface does
+//   not carry (SokolEffectRenderer's own LiveSampledRendererRegistryEXT() safely detects this and
 //   skips re-binding rather than dereferencing the now-gone object, matching this same overload's
 //   pre-SOKOL-44 behaviour of silently sampling nothing rather than crashing) -- a known,
 //   documented residual boundary, not attempted here; plan_sokol.md SOKOL-44's own remediation
-//   note explains why fixing it would require a cross-backend IEffectBackend interface change.
+//   note explains why fixing it would require a cross-renderer IEffectRenderer interface change.
 // Check B -- Cube: a full-screen quad sampling a re-uploaded TextureCube face reads back the NEW
-//   colour (TextureCube::SetData always mutates the same backend object in place).
+//   colour (TextureCube::SetData always mutates the same renderer object in place).
 //
 // Exit code 0 = PASS, 1 = FAIL.
 
@@ -149,8 +149,8 @@ class CustomEffectTextureReuploadTest : public Game
         // Bind while the texture shows RED -- only recorded, not resolved yet (SOKOL-44).
         fx.SetTexture(0, tex);
 
-        // Recreates the underlying sg_image in place, on the SAME SokolTextureBackend object
-        // (SokolTextureBackend::RecreateImage() via Texture2D.cpp's UpdatePixels path for a full
+        // Recreates the underlying sg_image in place, on the SAME SokolTextureRenderer object
+        // (SokolTextureRenderer::RecreateImage() via Texture2D.cpp's UpdatePixels path for a full
         // level-0 update) -- the pending bind above must not still point at the now-destroyed RED
         // image. Deliberately the level/rect overload, not SetData(const Color*, int) -- see this
         // file's own top comment for why that other overload is a separate, undoable boundary.

@@ -55,7 +55,7 @@ protected:
             RenderTarget2D target(device, 4, 4);
             device.SetRenderTarget(&target);
             device.Clear(Color(220, 30, 40, 255));
-        } // The target is gone while the backend still considers it the active destination.
+        } // The target is gone while the renderer still considers it the active destination.
 
         device.Clear(Color(20, 70, 180, 255));
         spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::Opaque);

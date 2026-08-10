@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 //
 // plan_diligent.md DILIGENT-50: real-device proof that GraphicsDevice.ReferenceStencil is used by
-// the Diligent backend independently of the currently-assigned DepthStencilState's own
-// ReferenceStencil field, mirroring Task 319's cross-backend test
+// the Diligent renderer independently of the currently-assigned DepthStencilState's own
+// ReferenceStencil field, mirroring Task 319's cross-renderer test
 // (examples/easygl_graphicsdevice_reference_stencil_test.cpp).
 //
 // FNA's GraphicsDevice.ReferenceStencil is a real, independent device property
@@ -19,10 +19,10 @@
 // setReferenceStencilProperty has no real effect, the compare still uses the state's own baked-in
 // 0x05 vs buffer 0x05 -> PASSES -> incorrectly shows GREEN.
 //
-// Unlike EasyGL/Bgfx (Task 872's still-open, universal "no backend connection at all" gap), this
-// backend's DiligentGraphicsBackend::SetReferenceStencil() writes the same referenceStencil_ member
+// Unlike EasyGL/Bgfx (Task 872's still-open, universal "no renderer connection at all" gap), this
+// renderer's DiligentRenderer::SetReferenceStencil() writes the same referenceStencil_ member
 // every draw path re-reads into IDeviceContext::SetStencilRef() before each draw (see
-// DiligentGraphicsBackend.cpp), so this test is expected to genuinely PASS here, not just document
+// DiligentRenderer.cpp), so this test is expected to genuinely PASS here, not just document
 // a known-broken gap the way the EasyGL version of this test does.
 //
 // Exit code 0 = PASS (correct override behavior), 1 = FAIL, 77 = no usable device.

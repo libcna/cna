@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MS-PL
-// OPENGL1 backend: backbuffer MSAA (plan_opengl1.md item 22, EasyGL parity).
+// OPENGL1 renderer: backbuffer MSAA (plan_opengl1.md item 22, EasyGL parity).
 //
-// Before this, GraphicsBackendCreateArgs::multiSampleCount was read by nothing --
+// Before this, GraphicsRendererCreateArgs::multiSampleCount was read by nothing --
 // SDL_GL_MULTISAMPLEBUFFERS/SAMPLES were never requested, GetMultiSampleCount() always returned
 // 0, and SupportsCapability(MultiSampleAntiAliasing) was hardcoded false regardless of what a
 // game requested. Fixed by requesting the context attributes in GraphicsDevice.cpp before
 // SDL_CreateWindow() (same GLX-visual-fixed-at-window-creation-time constraint the existing
 // depth/stencil block already documents), then reading back whatever the driver genuinely granted
-// in OpenGL1GraphicsBackend's own constructor (OpenGL1GraphicsBackend::DetectMultiSampleCount()).
+// in OpenGL1Renderer's own constructor (OpenGL1Renderer::DetectMultiSampleCount()).
 //
 // IMPORTANT scoping note, found while writing this test: GraphicsDeviceManager.PreferMultiSampling
 // (the common Game-based idiom every other OPENGL1 test in this suite uses) CANNOT reach this
@@ -18,7 +18,7 @@
 // CreateDevice() later tries to push its computed MultiSampleCount into the ALREADY-CONSTRUCTED
 // device via Reset()/ApplyMultiSampleCount(), the window (and its GLX visual) already exists
 // without a multisample buffer -- a window-visual-based mechanism cannot be reconfigured in place
-// (RecreateBackendForMultiSampleCount() only recreates the GL context, not the window itself).
+// (RecreateRendererForMultiSampleCount() only recreates the GL context, not the window itself).
 // This is a pre-existing Game/GraphicsDeviceManager construction-order constraint, not something
 // introduced by or fixable within this OPENGL1-scoped change -- see plan_opengl1.md item 22.
 //
@@ -28,15 +28,15 @@
 // own (adapter, profile, presentationParameters) constructor -- a real, valid XNA construction
 // path independent of Game/GraphicsDeviceManager.
 //
-// Also found while writing this test: GraphicsDevice::createBackend() (the path used by the
-// INITIAL construction) never writes the backend's honestly-applied MultiSampleCount back into
-// PresentationParameters the way GraphicsDevice::Reset()/RecreateBackendForMultiSampleCount()
+// Also found while writing this test: GraphicsDevice::createRenderer() (the path used by the
+// INITIAL construction) never writes the renderer's honestly-applied MultiSampleCount back into
+// PresentationParameters the way GraphicsDevice::Reset()/RecreateRendererForMultiSampleCount()
 // does via ApplyMultiSampleCount() -- so PresentationParameters.MultiSampleCount after initial
 // construction is only ever an echo of what was requested, not proof of what was granted. The
-// backend's own GetMultiSampleCount() (reachable via the NOXNA GraphicsDevice::GetBackend()) is
+// renderer's own GetMultiSampleCount() (reachable via the NOXNA GraphicsDevice::GetRenderer()) is
 // the only authoritative source for the initial-construction case; this test uses that, not the
 // PresentationParameters echo, as its primary check. (A pre-existing GraphicsDevice-level gap,
-// cross-backend, out of scope for this OPENGL1-specific item.)
+// cross-renderer, out of scope for this OPENGL1-specific item.)
 //
 // Pixel-level antialiasing proof: this test also draws a filled triangle whose hypotenuse is the
 // exact line x+y=65 in screen-pixel space and reads back the row straddling where it crosses
@@ -58,7 +58,7 @@
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "CNA/GraphicsCapability.hpp"
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsAdapter.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
@@ -103,15 +103,15 @@ int main()
     dev.SetDepthTestEnabled(false);
     dev.setRasterizerStateProperty(RasterizerState::CullNone);
 
-    const int backendMultiSampleCount = dev.GetBackend().GetMultiSampleCount();
-    std::printf("IGraphicsBackend::GetMultiSampleCount()=%d, PresentationParameters.MultiSampleCount=%d "
+    const int rendererMultiSampleCount = dev.GetRenderer().GetMultiSampleCount();
+    std::printf("IGraphicsRenderer::GetMultiSampleCount()=%d, PresentationParameters.MultiSampleCount=%d "
                 "(echo of request, see file header), SupportsCapability(MSAA)=%s\n",
-                backendMultiSampleCount,
+                rendererMultiSampleCount,
                 dev.getPresentationParametersProperty().getMultiSampleCountProperty(),
                 dev.SupportsCapability(CNA::GraphicsCapability::MultiSampleAntiAliasing) ? "true" : "false");
-    Check(backendMultiSampleCount == kRequestedMultiSampleCount,
-          "backend genuinely granted the requested MultiSampleCount (queried directly from "
-          "IGraphicsBackend::GetMultiSampleCount(), not the PresentationParameters echo)");
+    Check(rendererMultiSampleCount == kRequestedMultiSampleCount,
+          "renderer genuinely granted the requested MultiSampleCount (queried directly from "
+          "IGraphicsRenderer::GetMultiSampleCount(), not the PresentationParameters echo)");
     Check(dev.SupportsCapability(CNA::GraphicsCapability::MultiSampleAntiAliasing),
           "SupportsCapability(MultiSampleAntiAliasing) reflects the genuinely-applied MSAA state");
 

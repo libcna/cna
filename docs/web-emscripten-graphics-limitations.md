@@ -1,26 +1,26 @@
-# Web (Emscripten/WebGL 2) Graphics Backend — Status and Limitations
+# Web (Emscripten/WebGL 2) Graphics Renderer — Status and Limitations
 
 CNA has real, substantial CMake scaffolding for building against the Emscripten toolchain, targeting
-the browser via the `EasyGL` backend running over WebGL 2 (= OpenGL ES 3.0). This document is the
-Task 459 status write-up for that path, scoped to the **graphics backend specifically** — audio,
+the browser via the `EasyGL` renderer running over WebGL 2 (= OpenGL ES 3.0). This document is the
+Task 459 status write-up for that path, scoped to the **graphics renderer specifically** — audio,
 input, and device support under Emscripten are already covered elsewhere (`NEXTdevices.md`,
 `noxna_devices.md`) and are out of scope here.
 
 **This document covers only the existing EasyGL-over-WebGL2 browser path.** The project owner
-activated the native `wgpu-native` backend on 2026-07-12, but browser/Emscripten WebGPU remains a
+activated the native `wgpu-native` renderer on 2026-07-12, but browser/Emscripten WebGPU remains a
 separate unimplemented workstream tracked in `plan_webgpu.md`. Nothing below should be read as a
-status report for the native WebGPU backend.
+status report for the native WebGPU renderer.
 
-> **2026-07-15 update, scoped to the new `CANVAS` backend (`plan_canvas.md`), not EasyGL**: this
+> **2026-07-15 update, scoped to the new `CANVAS` renderer (`plan_canvas.md`), not EasyGL**: this
 > document's own "no `.sdl-prebuilt-emscripten` directory... no `cmake-build-*emscripten*` directory
 > has ever existed" claim below is now out of date in one narrow respect — bringing up `CANVAS` on
 > `feature/canvas` required a real `emcmake`/`emcc` 6.0.2 configure+build, which succeeded and
 > produced exactly such a directory (`cmake-build-canvas`) for the first time in this project's
 > history, confirming `emsdk` is genuinely available in this dev environment. `CnaTests` links and a
-> real, backend-agnostic GTest suite genuinely passes under `node CnaTests.js` for `CANVAS`. This
+> real, renderer-agnostic GTest suite genuinely passes under `node CnaTests.js` for `CANVAS`. This
 > does **not** extend to `EasyGL`/WebGL2 specifically — nothing below about that path has been
 > re-verified — but the *tooling* premise ("no one has ever actually run `emcc` here") no longer
-> holds project-wide. See `docs/canvas-backend.md` and `plan_canvas.md` for what was actually
+> holds project-wide. See `docs/canvas-renderer.md` and `plan_canvas.md` for what was actually
 > verified.
 
 ## Status headline: real build scaffolding, zero verified execution
@@ -34,7 +34,7 @@ The CMake/link-flag infrastructure below is real, non-trivial engineering — no
   the `cna_easygl_test()`/`cna_vulkan_test()`/etc. CMake macros) is **explicitly excluded on
   Emscripten** (`CMakeLists.txt`: `if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32 ...)`, 4 call
   sites). None of this project's hundreds of pixel-correctness tests — the actual mechanism this
-  whole session's graphics audit has relied on to verify every backend — have ever run, or could
+  whole session's graphics audit has relied on to verify every renderer — have ever run, or could
   currently run, under Emscripten.
 - `CnaTests` (the shared gtest unit-test binary, containing e.g. `TextureCubeTests.cpp`) **is**
   Emscripten-buildable and has real, evidently-exercised link-time tuning (`-sASYNCIFY=1`,
@@ -42,7 +42,7 @@ The CMake/link-flag infrastructure below is real, non-trivial engineering — no
   see `CMakeLists.txt` around the `CnaTests` `add_executable` call). That empirical confirmation is
   documented in the context of the `SystemLink`/networking test suite, not graphics — Node.js (the
   usual local Emscripten test runner) has no WebGL/canvas implementation at all, so even if
-  `CnaTests` links successfully against the `EasyGL` backend for Emscripten, any test that
+  `CnaTests` links successfully against the `EasyGL` renderer for Emscripten, any test that
   default-constructs a real `GraphicsDevice` would need an actual browser (or a headless-browser
   harness this project does not have) to run at all.
 - **Conclusion**: every claim below about WebGL2/GLES3 behavior is a **design-time expectation**,
@@ -52,8 +52,8 @@ The CMake/link-flag infrastructure below is real, non-trivial engineering — no
 
 ## What already exists (real CMake/build-system work)
 
-- **`EasyGL` is the default backend on Emscripten** (and Linux) — `CMakeLists.txt`: "Emscripten uses
-  WebGL 2 (= OpenGL ES 3.0), which the EasyGL backend targets." No other backend (`SDL_RENDERER`,
+- **`EasyGL` is the default renderer on Emscripten** (and Linux) — `CMakeLists.txt`: "Emscripten uses
+  WebGL 2 (= OpenGL ES 3.0), which the EasyGL renderer targets." No other renderer (`SDL_RENDERER`,
   `VULKAN`, `BGFX`) has any Emscripten-specific wiring at all; selecting one of those for an
   Emscripten build is untested and not a supported configuration today.
 - **C++ exceptions are force-enabled globally for Emscripten** (`-fexceptions
@@ -69,11 +69,11 @@ The CMake/link-flag infrastructure below is real, non-trivial engineering — no
   would silently run against a different (and lesser) capability set than `EasyGL`'s desktop-GL
   code assumes.
 - **`cna_demo_xact` is excluded on Emscripten** (and Android) — XACT audio is a Windows/Xbox-specific
-  content pipeline with no web equivalent, unrelated to the graphics backend itself.
+  content pipeline with no web equivalent, unrelated to the graphics renderer itself.
 
 ## Real, previously-undocumented WebGL-aware graphics code
 
-`EasyGLGraphicsBackend.cpp` has genuine, non-trivial `#if defined(__EMSCRIPTEN__)` handling for
+`EasyGLRenderer.cpp` has genuine, non-trivial `#if defined(__EMSCRIPTEN__)` handling for
 **WebGL context loss** — a real browser behavior (the GPU driver/compositor can invalidate a page's
 WebGL context at any time, e.g. after a tab is backgrounded for too long or the GPU process
 crashes) that has no equivalent on desktop GL:
@@ -81,7 +81,7 @@ crashes) that has no equivalent on desktop GL:
 - `CNA_DebugLoseWebGLContext()`/`CNA_DebugRestoreWebGLContext()` (`EM_JS` — real inline JavaScript)
   call the actual `WEBGL_lose_context` browser extension to simulate a real context loss/restore for
   testing purposes.
-- `metagl::InstallEmscriptenContextLossCallbacks()` is installed once at backend construction,
+- `metagl::InstallEmscriptenContextLossCallbacks()` is installed once at renderer construction,
   wiring the browser's asynchronous `webglcontextlost`/`webglcontextrestored` canvas events to
   `metagl::NotifyContextLost()`/`NotifyContextRestored()`.
 - `DebugSimulateContextLoss()`/`DebugRestoreContext()` branch into two structurally different code
@@ -119,7 +119,7 @@ in this project**:
 - **Texture format support is narrower** than desktop GL's — WebGL 2 guarantees a smaller baseline
   set of internal formats and compressed-texture extensions vary significantly by browser/GPU. CNA's
   own `SurfaceFormat::Color`-only constraint (Task 176, already enforced identically on every
-  backend) means this is currently a non-issue in practice for the same reason as above.
+  renderer) means this is currently a non-issue in practice for the same reason as above.
 - **A browser that only supports WebGL 1 (not WebGL 2) has no fallback path today.** `-sMIN_WEBGL_VERSION=2
   -sMAX_WEBGL_VERSION=2` (where set, see above) makes Emscripten refuse to negotiate WebGL 1 at all,
   rather than degrading — the correct choice for `cna_house3d_demo` given GLES 3.0 is baked into
@@ -132,18 +132,18 @@ The browser sandbox has no OS-level display-mode list to enumerate or switch —
 effectively the `<canvas>` element, sized by CSS/JS rather than a hardware `DisplayMode`. This is
 already documented in `docs/viewport-displaymode-adapter-support.md` (`GraphicsAdapter`/`Viewport`
 behavior on Web/Emscripten) — cross-referenced here rather than duplicated, since it's a
-device/adapter-model concern rather than a rendering-backend one.
+device/adapter-model concern rather than a rendering-renderer one.
 
 ## Summary
 
 | Area | Status |
 |---|---|
-| CMake/link-flag scaffolding (backend selection, exception handling, memory/preload flags, WebGL version pin on the 3D demo) | Real, present, never exercised end-to-end |
+| CMake/link-flag scaffolding (renderer selection, exception handling, memory/preload flags, WebGL version pin on the 3D demo) | Real, present, never exercised end-to-end |
 | `CnaTests` Emscripten build | Links (with real Asyncify tuning for the networking suite); cannot meaningfully run graphics-touching tests without a real browser/WebGL context |
 | Graphics integration/pixel tests (`examples/*_test.cpp`) | Explicitly excluded on Emscripten — zero coverage |
-| WebGL context-loss handling (`EasyGLGraphicsBackend.cpp`) | Real, non-trivial code; never run against a real browser |
+| WebGL context-loss handling (`EasyGLRenderer.cpp`) | Real, non-trivial code; never run against a real browser |
 | GLES3/WebGL2 capability gaps vs. desktop GL | Anticipated only, not verified; current `SurfaceFormat`/anisotropy constraints happen to sidestep most of them today |
-| WebGPU | Native `wgpu-native` backend is now active and experimental; browser/Emscripten WebGPU remains unimplemented and is tracked separately in `plan_webgpu.md` |
+| WebGPU | Native `wgpu-native` renderer is now active and experimental; browser/Emscripten WebGPU remains unimplemented and is tracked separately in `plan_webgpu.md` |
 
 **Recommendation for whoever eventually does the first real Emscripten build**: start by getting
 `cna_house3d_demo` (the one target with a WebGL version pin already) running in an actual browser

@@ -97,7 +97,7 @@ protected:
         dev.SetDepthTestEnabled(false);
         dev.setBlendStateProperty(BlendState::Opaque);
         // Task 896 finding (mirrors the Bgfx sibling's Task 364/884 fix): once
-        // GraphicsDevice's real default RasterizerState is pushed to every backend,
+        // GraphicsDevice's real default RasterizerState is pushed to every renderer,
         // this quad's winding is culled unless explicitly disabled.
         dev.setRasterizerStateProperty(RasterizerState::CullNone);
 

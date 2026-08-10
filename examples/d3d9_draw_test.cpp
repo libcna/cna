@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx9.md Phase D9-8 (D9-82): this backend's first real 3D triangle. Proves
+// plan_dx9.md Phase D9-8 (D9-82): this renderer's first real 3D triangle. Proves
 // DrawColoredPrimitives()/DrawIndexedColoredPrimitives() -- the real BasicEffect
 // VertexColorEnabled-only path (ShaderIndex 3, "BasicEffect_VSBasicVcNoFog"/
 // "BasicEffect_PSBasicNoFog") -- through the real public Game/GraphicsDeviceManager/
@@ -61,8 +61,8 @@
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 
-#include "CNA/Internal/Backends/D3D9/D3D9GraphicsBackend.hpp"
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/D3D9/D3D9Renderer.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 
 #include <cstdint>
 #include <cstdio>
@@ -70,7 +70,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::D3D9;
+using namespace CNA::Internal::Renderers::D3D9;
 
 namespace
 {
@@ -138,27 +138,27 @@ protected:
         if (frame_++ < 1) return;
 
         auto& dev = getGraphicsDeviceProperty();
-        auto& backend = static_cast<D3D9GraphicsBackend&>(dev.GetBackend());
+        auto& renderer = static_cast<D3D9Renderer&>(dev.GetRenderer());
 
         // Known-safe baseline, matching D3D11_Smoke's own Check P discipline: opaque blend, no
         // depth/stencil, no culling (so this basic check does not depend on D9-21's still-open
         // D3DCULL winding proof).
-        backend.ApplyBlendState(0, 0, 1, 1, 0, 0, CNA::Internal::Backends::BlendWriteState{}); // REMED-GFX-077 default write state
-        backend.ApplyDepthStencilState(false, false, 0, false, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 0);
-        backend.ApplyRasterizerState(0 /*CullMode::None*/, 0 /*FillMode::Solid*/, false, 0.0f, 0.0f);
+        renderer.ApplyBlendState(0, 0, 1, 1, 0, 0, CNA::Internal::Renderers::BlendWriteState{}); // REMED-GFX-077 default write state
+        renderer.ApplyDepthStencilState(false, false, 0, false, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 0);
+        renderer.ApplyRasterizerState(0 /*CullMode::None*/, 0 /*FillMode::Solid*/, false, 0.0f, 0.0f);
 
         const Microsoft::Xna::Framework::Rectangle centerRegion(28, 28, 4, 4);
 
         // Check A: DrawColoredPrimitives (non-indexed).
         {
-            auto vb = backend.CreateVertexBuffer(3);
+            auto vb = renderer.CreateVertexBuffer(3);
             vb->SetData(kTri, 3, sizeof(VPC));
 
             dev.Clear(Color(0, 0, 255, 255));
             std::vector<Color> before(4 * 4, Color(0, 0, 0, 0));
             dev.GetBackBufferData(&centerRegion, before.data(), 0, static_cast<int>(before.size()));
 
-            backend.DrawColoredPrimitives(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+            renderer.DrawColoredPrimitives(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                           Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1);
 
             std::vector<Color> after(4 * 4, Color(0, 0, 0, 0));
@@ -172,23 +172,23 @@ protected:
                 if (p.getRProperty() != 255 || p.getGProperty() != 0 || p.getBProperty() != 0 || p.getAProperty() != 255)
                     afterIsRed = false;
             check(beforeIsBlue && afterIsRed,
-                  "D3D9GraphicsBackend::DrawColoredPrimitives(): real BasicEffect-VertexColor draw paints "
+                  "D3D9Renderer::DrawColoredPrimitives(): real BasicEffect-VertexColor draw paints "
                   "the EXACT vertex color (R,G,B channels in the correct order, not swapped) over the "
                   "Clear() background at the same readback location");
         }
 
         // Check B: DrawIndexedColoredPrimitives (indexed).
         {
-            auto vb = backend.CreateVertexBuffer(3);
+            auto vb = renderer.CreateVertexBuffer(3);
             vb->SetData(kTri, 3, sizeof(VPC));
-            auto ib = backend.CreateIndexBuffer16(3);
+            auto ib = renderer.CreateIndexBuffer16(3);
             ib->SetData16(kTriIdx, 3);
 
             dev.Clear(Color(0, 0, 255, 255));
             std::vector<Color> before(4 * 4, Color(0, 0, 0, 0));
             dev.GetBackBufferData(&centerRegion, before.data(), 0, static_cast<int>(before.size()));
 
-            backend.DrawIndexedColoredPrimitives(*vb, *ib, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+            renderer.DrawIndexedColoredPrimitives(*vb, *ib, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                                  Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1);
 
             std::vector<Color> after(4 * 4, Color(0, 0, 0, 0));
@@ -202,7 +202,7 @@ protected:
                 if (p.getRProperty() != 255 || p.getGProperty() != 0 || p.getBProperty() != 0 || p.getAProperty() != 255)
                     afterIsRed = false;
             check(beforeIsBlue && afterIsRed,
-                  "D3D9GraphicsBackend::DrawIndexedColoredPrimitives(): real indexed draw paints the "
+                  "D3D9Renderer::DrawIndexedColoredPrimitives(): real indexed draw paints the "
                   "exact vertex color over the Clear() background at the same readback location");
         }
 
@@ -212,12 +212,12 @@ protected:
         // full-NDC-covering triangle geometry would still paint the whole viewport regardless of
         // World, and this check would (correctly) fail.
         {
-            auto vb = backend.CreateVertexBuffer(3);
+            auto vb = renderer.CreateVertexBuffer(3);
             vb->SetData(kTri, 3, sizeof(VPC));
 
             dev.Clear(Color(0, 0, 255, 255));
             const Matrix farAway = Matrix::CreateTranslation(1000.0f, 0.0f, 0.0f);
-            backend.DrawColoredPrimitives(*vb, farAway, Matrix::getIdentityProperty(),
+            renderer.DrawColoredPrimitives(*vb, farAway, Matrix::getIdentityProperty(),
                                           Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1);
 
             std::vector<Color> after(4 * 4, Color(0, 0, 0, 0));
@@ -227,17 +227,17 @@ protected:
                 if (p.getRProperty() != 0 || p.getGProperty() != 0 || p.getBProperty() != 255 || p.getAProperty() != 255)
                     stillBlue = false;
             check(stillBlue,
-                  "D3D9GraphicsBackend::DrawColoredPrimitives(): WorldViewProj constant upload is real -- "
+                  "D3D9Renderer::DrawColoredPrimitives(): WorldViewProj constant upload is real -- "
                   "translating World far outside the NDC cube genuinely leaves the background unpainted");
         }
 
         // Check D: PrimitiveType.TriangleStrip -- see this file's own header comment.
         {
-            auto vb = backend.CreateVertexBuffer(4);
+            auto vb = renderer.CreateVertexBuffer(4);
             vb->SetData(kStrip, 4, sizeof(VPC));
 
             dev.Clear(Color(0, 0, 255, 255));
-            backend.DrawColoredPrimitives(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+            renderer.DrawColoredPrimitives(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                           Matrix::getIdentityProperty(), PrimitiveType::TriangleStrip, 2);
 
             const Microsoft::Xna::Framework::Rectangle topLeftRegion(4, 4, 4, 4);
@@ -254,7 +254,7 @@ protected:
                 if (p.getRProperty() != 255 || p.getGProperty() != 0 || p.getBProperty() != 0 || p.getAProperty() != 255)
                     brIsRed = false;
             check(tlIsRed && brIsRed,
-                  "D3D9GraphicsBackend::DrawColoredPrimitives(..., PrimitiveType.TriangleStrip, primitiveCount=2): "
+                  "D3D9Renderer::DrawColoredPrimitives(..., PrimitiveType.TriangleStrip, primitiveCount=2): "
                   "a 4-vertex strip genuinely paints BOTH triangles -- the top-left corner (covered by triangle 0 "
                   "alone) AND the bottom-right corner (covered ONLY by triangle 1) are both the vertex color, "
                   "proving the vertex-count<->primitiveCount conversion for TriangleStrip is correct, not just "
@@ -285,11 +285,11 @@ protected:
         // a broken conversion that mistreated this as a single connected polyline, i.e.
         // LineStrip's own semantics, would paint a connecting line straight through this row).
         {
-            auto vb = backend.CreateVertexBuffer(4);
+            auto vb = renderer.CreateVertexBuffer(4);
             vb->SetData(kLineList, 4, sizeof(VPC));
 
             dev.Clear(Color(0, 0, 255, 255));
-            backend.DrawColoredPrimitives(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+            renderer.DrawColoredPrimitives(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                           Matrix::getIdentityProperty(), PrimitiveType::LineList, 2);
 
             const bool redFound = regionContains(28, 14, 8, 4, Color(255, 0, 0, 255));
@@ -303,7 +303,7 @@ protected:
                     betweenIsBackground = false;
 
             check(redFound && greenFound && betweenIsBackground,
-                  "D3D9GraphicsBackend::DrawColoredPrimitives(..., PrimitiveType.LineList, primitiveCount=2): "
+                  "D3D9Renderer::DrawColoredPrimitives(..., PrimitiveType.LineList, primitiveCount=2): "
                   "two independent line segments each paint their own color, with nothing connecting them -- "
                   "confirmed pixel-for-pixel identical to real XNA 4.0 via "
                   "tools/xna-oracle/scenes/colored_linelist_quad.scene");
@@ -315,18 +315,18 @@ protected:
         // Sampling BOTH segments proves the vertex-count<->primitiveCount conversion resolved to
         // primitiveCount=2 (n-1), not a degenerate single segment or a silent drop.
         {
-            auto vb = backend.CreateVertexBuffer(3);
+            auto vb = renderer.CreateVertexBuffer(3);
             vb->SetData(kLineStrip, 3, sizeof(VPC));
 
             dev.Clear(Color(0, 0, 255, 255));
-            backend.DrawColoredPrimitives(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+            renderer.DrawColoredPrimitives(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                           Matrix::getIdentityProperty(), PrimitiveType::LineStrip, 2);
 
             const bool horizontalFound = regionContains(28, 17, 8, 4, Color(255, 0, 0, 255));
             const bool verticalFound = regionContains(48, 30, 4, 8, Color(255, 0, 0, 255));
 
             check(horizontalFound && verticalFound,
-                  "D3D9GraphicsBackend::DrawColoredPrimitives(..., PrimitiveType.LineStrip, primitiveCount=2): "
+                  "D3D9Renderer::DrawColoredPrimitives(..., PrimitiveType.LineStrip, primitiveCount=2): "
                   "a 3-vertex strip genuinely paints BOTH connected segments (the horizontal V0->V1 leg AND the "
                   "vertical V1->V2 leg sharing the corner vertex), confirmed pixel-for-pixel identical to real "
                   "XNA 4.0 via tools/xna-oracle/scenes/colored_linestrip_quad.scene");

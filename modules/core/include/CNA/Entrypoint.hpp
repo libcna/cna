@@ -19,7 +19,7 @@
 
 #if defined(SDL_PLATFORM_ANDROID) || defined(__ANDROID__)
 #  include <SDL3/SDL_main.h>
-#elif defined(CNA_BACKEND_SDL) || defined(SDL_h_)
+#elif defined(CNA_RENDERER_SDL) || defined(SDL_h_)
 // Non-Android SDL builds: include SDL_main.h for completeness; it is a no-op there.
 #  include <SDL3/SDL_main.h>
 #endif

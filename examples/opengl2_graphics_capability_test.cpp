@@ -4,8 +4,8 @@
 // GraphicsDeviceCapabilityTests.cpp's own DoesNotSupportWireFrame), desktop GL 2.1's
 // compatibility profile genuinely supports glPolygonMode(GL_FRONT_AND_BACK, GL_LINE), already
 // wired in ApplyRasterizerState() -- so unlike that shared, EasyGL-specific gtest (whose own
-// header comment says it "only ever builds against a fully 3D-capable backend (EasyGL by default
-// on Linux)"), this backend-specific test asserts WireFrame=true instead.
+// header comment says it "only ever builds against a fully 3D-capable renderer (EasyGL by default
+// on Linux)"), this renderer-specific test asserts WireFrame=true instead.
 //
 // MultiSampleAntiAliasing/AnisotropicFiltering/Instancing are genuinely device/driver-dependent --
 // same treatment as GraphicsDeviceCapabilityTests.cpp's own
@@ -14,7 +14,7 @@
 // presence -- see opengl2_instancedmodel_test.cpp for the actual hardware-instancing proof.
 //
 // MultipleRenderTargets: real MRT via a shared FBO (glFramebufferTexture2D per target +
-// glDrawBuffers), see OpenGL2GraphicsBackend::SetRenderTargets -- asserted true below; see
+// glDrawBuffers), see OpenGL2Renderer::SetRenderTargets -- asserted true below; see
 // opengl2_mrt_test.cpp for the actual multi-attachment rendering proof.
 //
 // Exit code 0 = PASS, 1 = FAIL.

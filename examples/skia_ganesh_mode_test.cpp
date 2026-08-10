@@ -10,8 +10,8 @@
 //   giving that label its first real member. The negative (null window) case is proven here too,
 //   so the transactional-failure contract is checked in both directions within the same mode.
 
-#include "CNA/Internal/Backends/Skia/SkiaGaneshContext.hpp"
-#include "CNA/Internal/Backends/Skia/SkiaStartupDiagnostic.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaGaneshContext.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaStartupDiagnostic.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -19,8 +19,8 @@
 #include <exception>
 #include <string_view>
 
-using CNA::Internal::Backends::Skia::SkiaGaneshContext;
-using CNA::Internal::Backends::Skia::kSkiaPinnedRevision;
+using CNA::Internal::Renderers::Skia::SkiaGaneshContext;
+using CNA::Internal::Renderers::Skia::kSkiaPinnedRevision;
 
 namespace
 {

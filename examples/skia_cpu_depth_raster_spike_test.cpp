@@ -5,7 +5,7 @@
 // This test therefore owns coverage, perspective interpolation and depth in CPU memory. It hands
 // Skia only a completed opaque RGBA8 image and remains deliberately disconnected from public Draw*.
 
-#include "CNA/Internal/Backends/Skia/SkiaSurface.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaSurface.hpp"
 
 #include <algorithm>
 #include <array>
@@ -18,7 +18,7 @@
 #include <stdexcept>
 #include <vector>
 
-using CNA::Internal::Backends::Skia::SkiaSurface;
+using CNA::Internal::Renderers::Skia::SkiaSurface;
 
 namespace
 {

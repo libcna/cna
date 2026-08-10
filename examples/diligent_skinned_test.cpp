@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_diligent.md DILIGENT-35: real-device proof for SkinnedEffect on the Diligent backend,
+// plan_diligent.md DILIGENT-35: real-device proof for SkinnedEffect on the Diligent renderer,
 // through the public XNA API only.
 //
 // The scene is a quad covering the LEFT half of the screen, every vertex bound to bone 0.
@@ -9,7 +9,7 @@
 //   and the right half keeps the background. This is the "skinning did not corrupt anything" case.
 // Check B -- with bone 0 set to a translation of +1 along X, the very same vertex buffer moves to
 //   the RIGHT half. Only a shader that actually reads the bone palette can do this, and A alone
-//   would pass on a backend that ignores bones entirely.
+//   would pass on a renderer that ignores bones entirely.
 // Check C -- the background on the far left is exposed by that move, so B is a real translation
 //   rather than the quad having grown to cover everything.
 // Check D -- WeightsPerVertex = 1 means only the first weight/index pair is summed: a second pair

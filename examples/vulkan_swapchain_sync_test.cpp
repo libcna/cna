@@ -35,7 +35,7 @@
 //      participating API names, never by one full diagnostic sentence.
 //
 //   2. THE FRAME MODEL. Zero hazards is worthless if the run never wrapped a frame slot, never
-//      re-entered a swapchain image and never recreated the swapchain. The backend's bounded
+//      re-entered a swapchain image and never recreated the swapchain. The renderer's bounded
 //      counters make that measurable: every frame slot used, more than one distinct swapchain
 //      image acquired, one acquire / one frame submit / one present per rendered frame, at most
 //      one extra CPU fence wait per frame, and no growth at all in semaphores, fences or command
@@ -68,7 +68,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
-#include "CNA/Internal/Backends/Vulkan/VulkanGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Vulkan/VulkanRenderer.hpp"
 
 #include <array>
 #include <cstdio>
@@ -78,7 +78,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using CNA::Internal::Backends::Vulkan::VulkanGraphicsBackend;
+using CNA::Internal::Renderers::Vulkan::VulkanRenderer;
 
 namespace
 {
@@ -133,7 +133,7 @@ namespace
         }
     };
 
-    /// A snapshot of every bounded synchronization object the backend owns.
+    /// A snapshot of every bounded synchronization object the renderer owns.
     struct Cardinality
     {
         int imageAvailable = 0;
@@ -193,19 +193,19 @@ class VulkanSwapchainSyncTest : public Game
     }
 
     // ---------------------------------------------------------------------
-    // Backend access
+    // Renderer access
     // ---------------------------------------------------------------------
 
-    VulkanGraphicsBackend& Backend()
+    VulkanRenderer& Renderer()
     {
-        auto* vk = dynamic_cast<VulkanGraphicsBackend*>(&getGraphicsDeviceProperty().GetBackend());
-        // The target is registered only for CNA_GRAPHICS_BACKEND=VULKAN, so this cannot be null.
+        auto* vk = dynamic_cast<VulkanRenderer*>(&getGraphicsDeviceProperty().GetRenderer());
+        // The target is registered only for CNA_GRAPHICS_RENDERER=VULKAN, so this cannot be null.
         return *vk;
     }
 
     [[nodiscard]] Cardinality Cardinalities()
     {
-        auto& b = Backend();
+        auto& b = Renderer();
         return Cardinality{ b.GetImageAvailableSemaphoreCountEXT(),
                             b.GetRenderFinishedSemaphoreCountEXT(),
                             b.GetFrameFenceCountEXT(),
@@ -221,8 +221,8 @@ class VulkanSwapchainSyncTest : public Game
      */
     void JudgeNewValidation(const std::string& label)
     {
-        const auto& all  = Backend().GetValidationMessagesEXT();
-        const auto& ids  = Backend().GetValidationMessageIdNamesEXT();
+        const auto& all  = Renderer().GetValidationMessagesEXT();
+        const auto& ids  = Renderer().GetValidationMessageIdNamesEXT();
         int syncHazards = 0;
         int acquireHazards = 0;
         int other = 0;
@@ -474,7 +474,7 @@ protected:
     void Draw(const GameTime&) override
     {
         auto& dev = getGraphicsDeviceProperty();
-        auto& backend = Backend();
+        auto& renderer = Renderer();
 
         // ---- frame 0: warm-up and the liveness assertions -----------------
         if (frame_ == 0)
@@ -482,21 +482,21 @@ protected:
             SyncViewport(dev);
             std::printf("REMED-GFX-144 Vulkan swapchain synchronization -- backbuffer %dx%d, "
                         "frame slots %d, swapchain images %d\n",
-                        bbW_, bbH_, VulkanGraphicsBackend::GetFramesInFlightEXT(),
-                        backend.GetSwapchainImageCountEXT());
+                        bbW_, bbH_, VulkanRenderer::GetFramesInFlightEXT(),
+                        renderer.GetSwapchainImageCountEXT());
 
             // A zero hazard count means nothing if the layer never loaded. Fail loudly instead.
-            check(VulkanGraphicsBackend::IsValidationActiveEXT(),
+            check(VulkanRenderer::IsValidationActiveEXT(),
                   "L1 validation layer active: VK_LAYER_KHRONOS_validation is loaded, so a zero "
                   "hazard count is a measurement and not an absence of measurement");
-            check(backend.GetSwapchainImageCountEXT() >= 2,
+            check(renderer.GetSwapchainImageCountEXT() >= 2,
                   "L2 swapchain has at least two images, so an image index can actually vary "
-                  "(got " + std::to_string(backend.GetSwapchainImageCountEXT()) + ")");
+                  "(got " + std::to_string(renderer.GetSwapchainImageCountEXT()) + ")");
             baseline_ = Cardinalities();
-            check(baseline_ == (Cardinality{ VulkanGraphicsBackend::GetFramesInFlightEXT(),
-                                             VulkanGraphicsBackend::GetFramesInFlightEXT(),
-                                             VulkanGraphicsBackend::GetFramesInFlightEXT(),
-                                             VulkanGraphicsBackend::GetFramesInFlightEXT() }),
+            check(baseline_ == (Cardinality{ VulkanRenderer::GetFramesInFlightEXT(),
+                                             VulkanRenderer::GetFramesInFlightEXT(),
+                                             VulkanRenderer::GetFramesInFlightEXT(),
+                                             VulkanRenderer::GetFramesInFlightEXT() }),
                   "L3 one image-available semaphore, one render-finished semaphore, one fence and "
                   "one command buffer per frame slot: " + baseline_.Text());
 
@@ -518,31 +518,31 @@ protected:
         {
             // Judged AFTER the plain run, so the hazard had every chance to appear on an ordinary
             // one-segment frame, on two consecutive frames and on a full wrap of the frame slots.
-            const std::uint64_t acquires = backend.GetAcquireCountEXT();
+            const std::uint64_t acquires = renderer.GetAcquireCountEXT();
             acquiresAtPlainEnd_ = acquires;
             check(acquires >= static_cast<std::uint64_t>(kPlainFrames),
                   "A1 " + std::to_string(acquires) + " acquires over " +
                       std::to_string(kPlainFrames) + " consecutive plain frames");
-            check(backend.GetUsedFrameSlotCountEXT() ==
-                      VulkanGraphicsBackend::GetFramesInFlightEXT(),
+            check(renderer.GetUsedFrameSlotCountEXT() ==
+                      VulkanRenderer::GetFramesInFlightEXT(),
                   "A2 every frame slot was used, so the run wrapped the in-flight ring (" +
-                      std::to_string(backend.GetUsedFrameSlotCountEXT()) + "/" +
-                      std::to_string(VulkanGraphicsBackend::GetFramesInFlightEXT()) + ")");
-            check(backend.GetDistinctAcquiredImageCountEXT() >= 2,
+                      std::to_string(renderer.GetUsedFrameSlotCountEXT()) + "/" +
+                      std::to_string(VulkanRenderer::GetFramesInFlightEXT()) + ")");
+            check(renderer.GetDistinctAcquiredImageCountEXT() >= 2,
                   "A3 more than one distinct swapchain image index was acquired, so the acquire "
                   "dependency was exercised against different images (" +
-                      std::to_string(backend.GetDistinctAcquiredImageCountEXT()) + " of " +
-                      std::to_string(backend.GetSwapchainImageCountEXT()) + ")");
-            check(backend.GetPresentCountEXT() == acquires &&
-                      backend.GetFrameSubmitCountEXT() == acquires,
+                      std::to_string(renderer.GetDistinctAcquiredImageCountEXT()) + " of " +
+                      std::to_string(renderer.GetSwapchainImageCountEXT()) + ")");
+            check(renderer.GetPresentCountEXT() == acquires &&
+                      renderer.GetFrameSubmitCountEXT() == acquires,
                   "A4 exactly one frame submit and one present per acquire -- no extra frame, no "
                   "extra present, no per-segment submission (acquire=" + std::to_string(acquires) +
-                      " submit=" + std::to_string(backend.GetFrameSubmitCountEXT()) +
-                      " present=" + std::to_string(backend.GetPresentCountEXT()) + ")");
-            check(backend.GetFrameFenceWaitCountEXT() <= acquires + 1,
+                      " submit=" + std::to_string(renderer.GetFrameSubmitCountEXT()) +
+                      " present=" + std::to_string(renderer.GetPresentCountEXT()) + ")");
+            check(renderer.GetFrameFenceWaitCountEXT() <= acquires + 1,
                   "A5 at most one frame-fence wait per acquire, so nothing serializes the renderer "
                   "beyond the one wait the frame ring needs (waits=" +
-                      std::to_string(backend.GetFrameFenceWaitCountEXT()) + " acquires=" +
+                      std::to_string(renderer.GetFrameFenceWaitCountEXT()) + " acquires=" +
                       std::to_string(acquires) + ")");
             JudgeNewValidation("A6 plain frames");
 
@@ -592,7 +592,7 @@ protected:
         // ---- phase C: swapchain recreation ---------------------------------
         if (frame_ == kPlainFrames + 2 + kInterleavedFrames + kClearFrames)
         {
-            recreatesBeforeResize_ = backend.GetSwapchainRecreateCountEXT();
+            recreatesBeforeResize_ = renderer.GetSwapchainRecreateCountEXT();
             gdm_->setPreferredBackBufferWidthProperty(kBBW * 2);
             gdm_->setPreferredBackBufferHeightProperty(kBBH * 2);
             gdm_->ApplyChanges();
@@ -617,14 +617,14 @@ protected:
         CheckStripes(f, { kRed, kRed, kGreen, kGreen },
                      "C1 the same interleaving still renders exactly after the swapchain was "
                      "recreated at " + std::to_string(bbW_) + "x" + std::to_string(bbH_));
-        check(backend.GetSwapchainRecreateCountEXT() > recreatesBeforeResize_,
+        check(renderer.GetSwapchainRecreateCountEXT() > recreatesBeforeResize_,
               "C2 the resize really recreated the swapchain (" +
                   std::to_string(recreatesBeforeResize_) + " -> " +
-                  std::to_string(backend.GetSwapchainRecreateCountEXT()) + ")");
-        check(backend.GetDistinctAcquiredImageCountEXT() >= 2,
+                  std::to_string(renderer.GetSwapchainRecreateCountEXT()) + ")");
+        check(renderer.GetDistinctAcquiredImageCountEXT() >= 2,
               "C3 the new swapchain's images are re-entered too (" +
-                  std::to_string(backend.GetDistinctAcquiredImageCountEXT()) + " of " +
-                  std::to_string(backend.GetSwapchainImageCountEXT()) + ")");
+                  std::to_string(renderer.GetDistinctAcquiredImageCountEXT()) + " of " +
+                  std::to_string(renderer.GetSwapchainImageCountEXT()) + ")");
         JudgeNewValidation("C4 resize and post-resize frames");
 
         const Cardinality after = Cardinalities();
@@ -632,24 +632,24 @@ protected:
               "D1 no synchronization object was created per frame or per recreation: " +
                   after.Text() + (after == baseline_ ? "" : " (baseline " + baseline_.Text() + ")"));
 
-        const std::uint64_t acquires = backend.GetAcquireCountEXT();
+        const std::uint64_t acquires = renderer.GetAcquireCountEXT();
         check(acquires > acquiresAtPlainEnd_ + static_cast<std::uint64_t>(kInterleavedFrames),
               "D2 the whole run rendered " + std::to_string(acquires) +
                   " acquired frames, well past a full wrap of the frame ring");
-        check(backend.GetPresentCountEXT() == acquires &&
-                  backend.GetFrameSubmitCountEXT() == acquires,
+        check(renderer.GetPresentCountEXT() == acquires &&
+                  renderer.GetFrameSubmitCountEXT() == acquires,
               "D3 one acquire, one frame submit and one present per rendered frame holds across "
               "interleaving, readback and recreation (acquire=" + std::to_string(acquires) +
-                  " submit=" + std::to_string(backend.GetFrameSubmitCountEXT()) +
-                  " present=" + std::to_string(backend.GetPresentCountEXT()) + ")");
+                  " submit=" + std::to_string(renderer.GetFrameSubmitCountEXT()) +
+                  " present=" + std::to_string(renderer.GetPresentCountEXT()) + ")");
         // Every SubmitFrame waits once; a deferred-readback submit waits a second time and an
         // out-of-date acquire waits without acquiring. Anything beyond that would be a new
         // per-frame CPU stall.
-        check(backend.GetFrameFenceWaitCountEXT() <=
+        check(renderer.GetFrameFenceWaitCountEXT() <=
                   acquires + static_cast<std::uint64_t>(readbacks_) + 4,
               "D4 fence waits stay bounded by one per frame plus one per deferred readback -- no "
               "device-wide or per-segment wait was introduced (waits=" +
-                  std::to_string(backend.GetFrameFenceWaitCountEXT()) + " acquires=" +
+                  std::to_string(renderer.GetFrameFenceWaitCountEXT()) + " acquires=" +
                   std::to_string(acquires) + " readbacks=" + std::to_string(readbacks_) + ")");
 
         std::printf("%d/%d checks passed on VULKAN\n", passCount_, totalCount_);
@@ -663,12 +663,12 @@ public:
 
 int main()
 {
-    // BEFORE the Game is constructed: the backend creates its VkInstance during Game construction,
+    // BEFORE the Game is constructed: the renderer creates its VkInstance during Game construction,
     // well before Initialize() runs, and VkValidationFeaturesEXT can only be supplied there. Asking
     // any later silently produces an instance WITHOUT synchronization validation, which would make
     // every hazard check in this file pass for the wrong reason -- measured, and the reason L1
     // asserts the layer separately from the hazard counts.
-    VulkanGraphicsBackend::SetSyncValidationEnabledEXT(true);
+    VulkanRenderer::SetSyncValidationEnabledEXT(true);
     VulkanSwapchainSyncTest test;
     test.Run();
     return test.Result();

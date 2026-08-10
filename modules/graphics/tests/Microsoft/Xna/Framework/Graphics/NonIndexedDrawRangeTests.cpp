@@ -23,7 +23,7 @@
 // keeps its exact range therefore leaves both outer regions at the clear colour, while a draw that
 // binds a wider vertex range necessarily lights them.
 //
-// Backend scope. Bgfx, EasyGL, WebGPU, Vulkan, D3D9, D3D11 and Software raster render 3D triangles
+// Renderer scope. Bgfx, EasyGL, WebGPU, Vulkan, D3D9, D3D11 and Software raster render 3D triangles
 // and support backbuffer readback, so they carry the permanent TriangleList coverage. The full
 // five-topology sweep additionally needs PointListEXT, which Vulkan/D3D9/D3D11/D3D12 still route
 // through their triangle-list default (the independent REMED-GFX-114), so that sweep runs on Bgfx,
@@ -74,8 +74,8 @@
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 
-#ifdef CNA_BACKEND_BGFX
-#include "CNA/Internal/Backends/Bgfx/BgfxGraphicsBackend.hpp"
+#ifdef CNA_RENDERER_BGFX
+#include "CNA/Internal/Renderers/Bgfx/BgfxRenderer.hpp"
 #endif
 
 using CNA::GraphicsCapability;
@@ -364,9 +364,9 @@ namespace
     }
 
     /// "Did any geometry render here?" compares RGB only. Every primitive in this fixture has a
-    /// non-black colour, so RGB alone answers the question — while the alpha a backend leaves in a
+    /// non-black colour, so RGB alone answers the question — while the alpha a renderer leaves in a
     /// *cleared* render target it later samples back is its own convention (Vulkan resolves the
-    /// black clear to alpha 0, the OpenGL-family backends to alpha 255) and has nothing to do with
+    /// black clear to alpha 0, the OpenGL-family renderers to alpha 255) and has nothing to do with
     /// which vertices a draw consumed. The intended primitives are still matched on exact RGBA.
     bool HasSameRgb(const Color& left, const Color& right)
     {
@@ -480,9 +480,9 @@ namespace
         FrameSnapshot snapshot;
         snapshot.width = width;
         snapshot.height = height;
-        // REMED-GFX-124: NOT Color::Transparent. A backend whose render-target readback does
+        // REMED-GFX-124: NOT Color::Transparent. A renderer whose render-target readback does
         // nothing still returns a fully written all-zero frame, because Texture2D::GetData hands
-        // the backend a scratch buffer it zero-initialized itself -- so a transparent-black
+        // the renderer a scratch buffer it zero-initialized itself -- so a transparent-black
         // pre-fill is byte-identical to that fabricated result, and the exclusivity assertions
         // below (which treat RGB 0,0,0 as "not lit" and look for an absent decoy colour) would all
         // pass on an empty frame. A pre-fill that matches no rendered colour makes an unwritten
@@ -498,7 +498,7 @@ namespace
     }
 
     /// Every intended primitive rendered at its own pixel. The 5x5 probe absorbs the one-pixel
-    /// differences each backend's own pixel-centre convention legitimately allows without
+    /// differences each renderer's own pixel-centre convention legitimately allows without
     /// accepting a different pixel.
     void ExpectIntendedPrimitivesRendered(
         const FrameSnapshot& snapshot, const RangePlan& plan, const char* label)
@@ -644,7 +644,7 @@ namespace
         void RequireRangeRendering()
         {
             if (!device.SupportsCapability(GraphicsCapability::ThreeD))
-                GTEST_SKIP() << "Backend explicitly does not support 3D rendering";
+                GTEST_SKIP() << "Renderer explicitly does not support 3D rendering";
             device.setRasterizerStateProperty(RasterizerState::CullNone);
             device.setDepthStencilStateProperty(DepthStencilState::None);
             device.setBlendStateProperty(BlendState::Opaque);
@@ -675,10 +675,10 @@ namespace
     };
 }
 
-#if defined(CNA_BACKEND_BGFX) || defined(CNA_BACKEND_EASYGL) || \
-    defined(CNA_BACKEND_WEBGPU) || defined(CNA_BACKEND_VULKAN) || \
-    defined(CNA_BACKEND_D3D9) || defined(CNA_BACKEND_D3D11) || \
-    defined(CNA_BACKEND_SOFTWARE)
+#if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_EASYGL) || \
+    defined(CNA_RENDERER_WEBGPU) || defined(CNA_RENDERER_VULKAN) || \
+    defined(CNA_RENDERER_D3D9) || defined(CNA_RENDERER_D3D11) || \
+    defined(CNA_RENDERER_SOFTWARE)
 
 // Proof 1 of the range contract, isolated: primitiveCount alone must limit the consumed vertex
 // range. vertexStart is zero, so nothing here depends on the offset half of the contract; every
@@ -813,7 +813,7 @@ TEST_F(NonIndexedDrawRangeTest, PersistentDynamicDrawHonorsRangeAndCount)
 }
 
 // A -> B -> A in one frame with three different ranges, then one readback. Each queued draw must
-// keep its own vertexStart/primitiveCount; a backend that resolves either from live state at flush
+// keep its own vertexStart/primitiveCount; a renderer that resolves either from live state at flush
 // time would render the last range three times.
 TEST_F(NonIndexedDrawRangeTest, DeferredNonIndexedRangesAtoBtoAKeepTheirOwnRange)
 {
@@ -957,7 +957,7 @@ TEST_F(NonIndexedDrawRangeTest, NonIndexedRangeHoldsOnRenderTargetAndBackbuffer)
     // Rendered target pixels live only on the GPU; sample the finished target through the ordinary
     // texture path. REMED-GFX-124 restored this half on Software too -- the target's colour storage
     // is now reachable through the same capability every other texture is sampled through, so this
-    // is no longer a per-backend carve-out.
+    // is no longer a per-renderer carve-out.
     device.SetVertexBuffer(nullptr);
     SampleTargetToBackbuffer(device, target);
     const FrameSnapshot fromTarget =
@@ -1005,7 +1005,7 @@ TEST_F(NonIndexedDrawRangeTest, DrawUserPrimitivesKeepsItsCopiedExactRange)
     ExpectRangeExclusive(pixels, plan, Color::Black, "DrawUserPrimitives copied range");
 }
 
-// The untyped DrawUserPrimitives overload is the only caller of the backend's
+// The untyped DrawUserPrimitives overload is the only caller of the renderer's
 // DrawColoredPrimitives entry point, which takes no vertexStart at all. It owes the same result
 // through a different mechanism: the temporary buffer it uploads holds exactly
 // PrimitiveVerts(type, primitiveCount) vertices copied from vertexOffset, so binding that whole
@@ -1071,15 +1071,15 @@ TEST_F(NonIndexedDrawRangeTest, RejectedNonIndexedRangesRenderNothing)
     const FrameSnapshot pixels =
         CaptureBackbuffer(device, layout.width, layout.height);
     EXPECT_EQ(0, pixels.CountLitInColumns(0, layout.width, Color::Black))
-        << "a rejected non-indexed draw still reached the backend -- "
+        << "a rejected non-indexed draw still reached the renderer -- "
         << pixels.DescribeFirstLitInColumns(0, layout.width, Color::Black);
 }
 
 #endif
 
-// The public non-indexed range contract is owed by every backend, including the ones that
+// The public non-indexed range contract is owed by every renderer, including the ones that
 // render nothing: an out-of-buffer range must be rejected deterministically, before anything
-// reaches a backend at all. Deliberately unguarded, exactly like its indexed sibling in
+// reaches a renderer at all. Deliberately unguarded, exactly like its indexed sibling in
 // IndexedDrawDeferredTests.cpp. The rendered counterpart -- a rejected draw leaves the frame
 // untouched -- is RejectedNonIndexedRangesRenderNothing above.
 TEST_F(NonIndexedDrawRangeTest, PublicContractValidatesEveryNonIndexedRangeBeforeSubmission)
@@ -1175,11 +1175,11 @@ TEST_F(NonIndexedDrawRangeTest, PublicContractValidatesEveryNonIndexedRangeBefor
 }
 
 
-#if defined(CNA_BACKEND_BGFX) || defined(CNA_BACKEND_EASYGL) || \
-    defined(CNA_BACKEND_WEBGPU)
+#if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_EASYGL) || \
+    defined(CNA_RENDERER_WEBGPU)
 // Every supported topology owes the same exact range, with valid decoy geometry before and after
 // the requested vertices. The per-topology vertex counts are the public formulas themselves, so a
-// backend that consumed 3*primitiveCount vertices for a strip, or bound the whole buffer for any
+// renderer that consumed 3*primitiveCount vertices for a strip, or bound the whole buffer for any
 // topology, fails here.
 TEST_F(NonIndexedDrawRangeTest, EverySupportedTopologyHonorsVertexStartAndExactCount)
 {
@@ -1234,7 +1234,7 @@ TEST_F(NonIndexedDrawRangeTest, EverySupportedTopologyHonorsVertexStartAndExactC
     }
 }
 
-// The same range, drawn once per topology into one frame at non-overlapping slots. A backend that
+// The same range, drawn once per topology into one frame at non-overlapping slots. A renderer that
 // let one draw's topology or range leak into another would put geometry in a neighbour's region.
 TEST_F(NonIndexedDrawRangeTest, TopologySwitchesKeepTheirOwnRangesInOneFrame)
 {
@@ -1294,9 +1294,9 @@ TEST_F(NonIndexedDrawRangeTest, TopologySwitchesKeepTheirOwnRangesInOneFrame)
 }
 #endif
 
-#ifdef CNA_BACKEND_BGFX
+#ifdef CNA_RENDERER_BGFX
 // The exact native binding, not just its pixels. bgfx offers no way to read a submitted draw's
-// stream range back, so BgfxGraphicsBackend records the (startVertex, numVertices) pair it handed
+// stream range back, so BgfxRenderer records the (startVertex, numVertices) pair it handed
 // to bgfx::setVertexBuffer; this asserts that pair equals the public element offset and the
 // topology-derived vertex count for every topology. The whole-buffer overload this replaced passed
 // (0, UINT32_MAX) and let bgfx clamp to the buffer's own allocated size.
@@ -1304,9 +1304,9 @@ TEST_F(NonIndexedDrawRangeTest, BgfxNonIndexedBindingIsTheExactElementRange)
 {
     RequireRangeRendering();
 
-    auto* backend =
-        dynamic_cast<CNA::Internal::Backends::Bgfx::BgfxGraphicsBackend*>(&device.GetBackend());
-    ASSERT_NE(nullptr, backend);
+    auto* renderer =
+        dynamic_cast<CNA::Internal::Renderers::Bgfx::BgfxRenderer*>(&device.GetRenderer());
+    ASSERT_NE(nullptr, renderer);
 
     const SlotLayout layout = BackbufferLayout();
     struct BindingCase
@@ -1346,14 +1346,14 @@ TEST_F(NonIndexedDrawRangeTest, BgfxNonIndexedBindingIsTheExactElementRange)
 
         EXPECT_EQ(
             static_cast<std::uint32_t>(bindingCase.vertexStart),
-            backend->lastNonIndexedBindStartEXT_)
+            renderer->lastNonIndexedBindStartEXT_)
             << TopologyName(bindingCase.primitive)
             << ": native startVertex is not the public vertexStart element offset";
-        EXPECT_EQ(bindingCase.expectedCount, backend->lastNonIndexedBindCountEXT_)
+        EXPECT_EQ(bindingCase.expectedCount, renderer->lastNonIndexedBindCountEXT_)
             << TopologyName(bindingCase.primitive)
             << ": native numVertices is not the topology-derived consumed count";
         EXPECT_LE(
-            backend->lastNonIndexedBindStartEXT_ + backend->lastNonIndexedBindCountEXT_,
+            renderer->lastNonIndexedBindStartEXT_ + renderer->lastNonIndexedBindCountEXT_,
             static_cast<std::uint32_t>(vertexCount))
             << TopologyName(bindingCase.primitive)
             << ": native binding leaves the logical vertex buffer";
@@ -1368,9 +1368,9 @@ TEST_F(NonIndexedDrawRangeTest, BgfxWireframeNonIndexedRangeStillHonorsVertexSta
 {
     RequireRangeRendering();
 
-    auto* backend =
-        dynamic_cast<CNA::Internal::Backends::Bgfx::BgfxGraphicsBackend*>(&device.GetBackend());
-    ASSERT_NE(nullptr, backend);
+    auto* renderer =
+        dynamic_cast<CNA::Internal::Renderers::Bgfx::BgfxRenderer*>(&device.GetRenderer());
+    ASSERT_NE(nullptr, renderer);
 
     const SlotLayout layout = BackbufferLayout();
     const RangePlan plan =
@@ -1393,10 +1393,10 @@ TEST_F(NonIndexedDrawRangeTest, BgfxWireframeNonIndexedRangeStillHonorsVertexSta
     device.DrawPrimitives(PrimitiveType::TriangleList, 6, 3);
 
     // The expanded indices are absolute (vertexStart + local), so the stream must start at zero.
-    EXPECT_EQ(0u, backend->lastNonIndexedBindStartEXT_)
+    EXPECT_EQ(0u, renderer->lastNonIndexedBindStartEXT_)
         << "the wireframe path's absolute expanded indices need a zero-based vertex binding";
     EXPECT_EQ(
-        static_cast<std::uint32_t>(vertexCount), backend->lastNonIndexedBindCountEXT_)
+        static_cast<std::uint32_t>(vertexCount), renderer->lastNonIndexedBindCountEXT_)
         << "the wireframe path must keep every vertex its expanded indices can address bound";
 
     const FrameSnapshot pixels =
@@ -1494,7 +1494,7 @@ TEST_F(NonIndexedDrawRangeTest, BgfxDisposingAfterQueuedRangedDrawsIsSafe)
 }
 #endif
 
-#ifdef CNA_BACKEND_SOFTWARE
+#ifdef CNA_RENDERER_SOFTWARE
 // REMED-GFX-119. Software raster's non-indexed paths address the bound buffer with the raw loop
 // ordinal, so `vertexStart` never selects the first consumed vertex. The three tests below separate
 // the two halves of the public contract from each other and from every render state that could
@@ -1590,7 +1590,7 @@ TEST_F(NonIndexedDrawRangeTest, SoftwareNonIndexedRangeIsIndependentOfRenderStat
         /// The round trip is what this case is about; the target's own content and the
         /// producer-to-consumer sampling assertion live in
         /// NonIndexedRangeHoldsOnRenderTargetAndBackbuffer, which REMED-GFX-124 restored on every
-        /// backend including Software.
+        /// renderer including Software.
         bool renderTargetRoundTrip;
         /// False only for the cull mode that removes this fixture's winding outright. Stating it
         /// per case is what stops a state that silently renders nothing from passing the range
@@ -1857,7 +1857,7 @@ TEST_F(NonIndexedDrawRangeTest, SoftwareNonIndexedVertexStartScalesByTheDeclared
     }
 
     // The explicit-VertexDeclaration DrawUserPrimitives overload (REMED-GFX-043) reaches the same
-    // backend entry point with a rebased copy and vertexStart 0, so it must light the same slots
+    // renderer entry point with a rebased copy and vertexStart 0, so it must light the same slots
     // from the same source offset -- the double-apply guard at a non-16-byte stride.
     //
     // Its source array is packed by hand rather than reusing positionColorTexture above: this

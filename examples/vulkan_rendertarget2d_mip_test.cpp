@@ -3,7 +3,7 @@
 // downsampled content on Vulkan (not just present-but-undefined storage).
 //
 // Method: render a 7:1 asymmetric split (top 7/8 red, bottom 1/8 blue) into a mipMap=true
-// RenderTarget2D via SpriteBatch, unbind (triggers VulkanRenderTargetBackend::MaybeGenerateMips'
+// RenderTarget2D via SpriteBatch, unbind (triggers VulkanRenderTargetRenderer::MaybeGenerateMips'
 // vkCmdBlitImage cascade -- the Task 878 fix), then sample the unbound RT back two ways:
 //   1. At its native 1:1 size (no minification -- only mip level 0 is ever selected): a point well
 //      inside the red region and a point well inside the blue region must both read back crisp

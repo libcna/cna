@@ -1,5 +1,5 @@
 // plan_dx9.md Phase D9-2 (D9-21).
-#include "CNA/Internal/Backends/D3D9/D3D9StateMapping.hpp"
+#include "CNA/Internal/Renderers/D3D9/D3D9StateMapping.hpp"
 
 #include "Microsoft/Xna/Framework/Graphics/Blend.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendFunction.hpp"
@@ -10,7 +10,7 @@
 #include "Microsoft/Xna/Framework/Graphics/TextureAddressMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureFilter.hpp"
 
-namespace CNA::Internal::Backends::D3D9
+namespace CNA::Internal::Renderers::D3D9
 {
     using namespace Microsoft::Xna::Framework::Graphics;
 

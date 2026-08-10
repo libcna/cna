@@ -3,27 +3,27 @@
 //
 // SDL_Renderer's SDL_Texture has no native mip chain and no per-level LOD sampling in its
 // 2D blit pipeline (unlike EasyGL, which is real OpenGL and genuinely implements
-// ITextureBackend::UpdatePixelsLevel via glTexImage2D for a real, sampled mip chain).
+// ITextureRenderer::UpdatePixelsLevel via glTexImage2D for a real, sampled mip chain).
 // Texture2D::SetData(level, rect, data, startIndex, elementCount)'s level>0 path (shared,
-// backend-agnostic Texture2D.cpp) unconditionally calls backend_->UpdatePixelsLevel() --
+// renderer-agnostic Texture2D.cpp) unconditionally calls renderer_->UpdatePixelsLevel() --
 // whose interface default is a silent no-op (`virtual void UpdatePixelsLevel(...) {}`).
-// SdlTextureBackend never overrode it, so a level>0 SetData call previously silently did
+// SdlTextureRenderer never overrode it, so a level>0 SetData call previously silently did
 // nothing to the real GPU texture -- exactly the "must not silently no-op" gap this task
 // warns about.
 //
 // Decision: throw std::runtime_error for any level>0 SetData on SDL_Renderer, mirroring
-// this backend's established "throw for what can't be honored" convention (Task 676's
+// this renderer's established "throw for what can't be honored" convention (Task 676's
 // SetCustomEffect). A single-level-only software fallback was considered and rejected:
 // SDL_Renderer's 2D renderer never samples from anything but the base level when drawing,
 // so silently "succeeding" at storing mip data that can never affect a single rendered
 // pixel would be equally misleading, just less loudly.
 //
 // Known, accepted, documented deviation: Texture2D::SetData's level>0 path merges the
-// sub-rect into the per-level CPU shadow buffer BEFORE calling backend_->UpdatePixelsLevel(),
+// sub-rect into the per-level CPU shadow buffer BEFORE calling renderer_->UpdatePixelsLevel(),
 // so the CPU-side buffer is already updated by the time the exception is thrown (this
 // mirrors the existing validation-order shape of the shared Texture2D.cpp code and was not
-// restructured, since doing so would touch the shared layer all 4 backends depend on --
-// out of scope for this single-backend decision task). This is inert in practice: SDL_Renderer
+// restructured, since doing so would touch the shared layer all 4 renderers depend on --
+// out of scope for this single-renderer decision task). This is inert in practice: SDL_Renderer
 // never reads from a mip level's CPU/GPU state when rendering, so no rendered pixel is ever
 // affected by it either way.
 //
@@ -97,7 +97,7 @@ protected:
         }
 
         // level>0 GetData remains a pure CPU-side cache read (Task 678 architecture) and
-        // must not throw merely because level>0 SetData is unsupported on this backend.
+        // must not throw merely because level>0 SetData is unsupported on this renderer.
         {
             std::vector<Color> lvl1(4, kRed);
             bool threw = false;

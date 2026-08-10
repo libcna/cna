@@ -885,7 +885,7 @@ namespace CNA::Internal::GltfImport
         // imported through DualTextureEffect (Texture=base color, Texture2=occlusion) instead of
         // BasicEffect -- real XNA's DualTextureEffect always samples both texture slots (no
         // TextureEnabled-style toggle) via a single shared UV set at vertex attribute locations
-        // 0/1 with no Normal in between (see EasyGLGraphicsBackend::ApplyLayout's stride==20
+        // 0/1 with no Normal in between (see EasyGLRenderer::ApplyLayout's stride==20
         // case), so this reuses the plain VertexPositionTexture layout rather than a new
         // Position+Normal+Texture+Texture2 vertex format. Skinned/colored meshes keep their
         // existing effect (SkinnedEffect has no Texture2 slot; the colored VertexPositionColor
@@ -960,7 +960,7 @@ namespace CNA::Internal::GltfImport
         }
         // Unskinned colored meshes reuse the real XNA VertexPositionColorTexture layout (stride
         // 24, Position+Color+TextureCoordinate, no Normal) -- already fully supported end-to-end
-        // by ModelTypeReader and every graphics backend's existing VertexColorEnabled shader path.
+        // by ModelTypeReader and every graphics renderer's existing VertexColorEnabled shader path.
         // Skinned colored meshes use the stride-56 layout instead (Position+Normal+
         // TextureCoordinate+BlendWeight+BlendIndices+Color). Skinned + PBR meshes use the new
         // stride-68 layout (Position+Normal+Tangent+TextureCoordinate+BlendWeight+BlendIndices).

@@ -34,7 +34,7 @@ protected Effect(Effect cloneSource)
 
 All real work — parsing the compiled-effect container, extracting parameter/technique/pass
 reflection metadata, and translating the embedded Direct3D9 Shader Model 2/3 bytecode into a
-GPU-runnable shader for the active backend — happens inside **FNA3D**, which delegates to
+GPU-runnable shader for the active renderer — happens inside **FNA3D**, which delegates to
 **MojoShader** (`FNA3D_CreateEffect`/`FNA3D_CloneEffect` are thin wrappers around
 `MOJOSHADER_compileEffect`/`MOJOSHADER_cloneEffect` in FNA3D's own driver code). FNA3D's local
 checkout in this environment (`/rv/data/library/github.com/FNA-XNA/FNA3D`) is an uninitialized
@@ -77,7 +77,7 @@ needs the extra glslang hop; Bgfx uses neither GLSL nor raw SPIR-V as its native
 and needs its own feasibility investigation before any implementation work is scheduled), the
 `Effect`/`EffectPass`/`EffectParameter`/`EffectTechnique` wiring, `Clone()` (Task 883, opened by
 Task 351), real test fixtures, and developer docs. That is the same shape and scale as the
-WebGPU backend (Phases 56–69), which is why it gets its own dedicated phase and task-number block
+WebGPU renderer (Phases 56–69), which is why it gets its own dedicated phase and task-number block
 (`10200`+) rather than being squeezed into Phase 41 alongside Tasks 355–360's narrower
 `EffectPass`/`EffectTechnique` verification work.
 
@@ -112,7 +112,7 @@ Summary:
    its own `shaderc`/binary-shader pipeline, not raw GLSL or SPIR-V source — determine whether
    bgfx's runtime APIs can consume MojoShader/glslang output at all before committing to an
    approach.
-7. Wire parsed reflection data + compiled per-backend programs into `Effect`, add the real
+7. Wire parsed reflection data + compiled per-renderer programs into `Effect`, add the real
    `Effect(GraphicsDevice*, bytecs bytecode[])` constructor and `Clone()` (folding in Task 883's
    already-identified `EffectPass::owner_` aliasing hazard).
 8. Test fixtures: since this project has no XNA Content Pipeline tooling to compile a real `.fx`

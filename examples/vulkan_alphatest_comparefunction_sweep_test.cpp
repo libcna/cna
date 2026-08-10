@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Task 374: AlphaTestEffect all CompareFunction modes — threshold sweep (Vulkan backend).
+// Task 374: AlphaTestEffect all CompareFunction modes — threshold sweep (Vulkan renderer).
 //
 // See examples/easygl_alphatest_comparefunction_sweep_test.cpp for the full derivation. This is
 // the first AlphaTestEffect CompareFunction pixel test on Vulkan at all (Task 190 was EasyGL-only).

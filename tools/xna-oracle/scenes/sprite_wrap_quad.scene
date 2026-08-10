@@ -11,7 +11,7 @@
 # pattern rather than clamping: U in [0,0.5)=texel0(RED), [0.5,1)=texel1(GREEN), [1,1.5)=texel0
 # AGAIN (wrapped, RED), [1.5,2)=texel1 AGAIN (wrapped, GREEN) -- a genuine RED,GREEN,RED,GREEN
 # 4-band pattern across the destination, not a 2-band RED,GREEN pattern stretched/clamped to fill
-# the space (which is what Clamp addressing, or a backend that silently ignores the address mode
+# the space (which is what Clamp addressing, or a renderer that silently ignores the address mode
 # entirely, would produce instead).
 #
 # destinationRectangle=(64,108,128,40) maps this 4-band UV range linearly onto screen X: each

@@ -1,4 +1,4 @@
-if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "DIRECT2D")
+if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECT2D")
     macro(cna_direct2d_test target source)
         add_executable(${target} ${source})
         target_link_libraries(${target} PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
@@ -33,7 +33,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "DIRECT2D")
         set(_direct2d_smoke_command $<TARGET_FILE:cna_test_direct2d_smoke>)
         unset(_direct2d_smoke_environment)
     endif()
-    cna_register_backend_test(NAME Direct2D_Smoke COMMAND ${_direct2d_smoke_command}
+    cna_register_renderer_test(NAME Direct2D_Smoke COMMAND ${_direct2d_smoke_command}
         TIMEOUT 60 LABELS "Direct2D" ENVIRONMENT "${_direct2d_smoke_environment}")
 
     # D2D-1: baseline 2D parity matrix.  Keep this separate from the minimal construction smoke:
@@ -64,7 +64,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "DIRECT2D")
         set(_direct2d_2d_parity_command $<TARGET_FILE:cna_test_direct2d_2d_parity>)
         unset(_direct2d_2d_parity_environment)
     endif()
-    cna_register_backend_test(NAME Direct2D_2DParity COMMAND ${_direct2d_2d_parity_command}
+    cna_register_renderer_test(NAME Direct2D_2DParity COMMAND ${_direct2d_2d_parity_command}
         TIMEOUT 60 LABELS "Direct2D;2D" ENVIRONMENT "${_direct2d_2d_parity_environment}")
 
     # D2D-27: transient bitmaps/effects/image brushes must survive and then release correctly at
@@ -87,6 +87,6 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "DIRECT2D")
         set(_direct2d_lifetime_command $<TARGET_FILE:cna_test_direct2d_lifetime>)
         unset(_direct2d_lifetime_environment)
     endif()
-    cna_register_backend_test(NAME Direct2D_Lifetime COMMAND ${_direct2d_lifetime_command}
+    cna_register_renderer_test(NAME Direct2D_Lifetime COMMAND ${_direct2d_lifetime_command}
         TIMEOUT 60 LABELS "Direct2D;2D;Lifetime" ENVIRONMENT "${_direct2d_lifetime_environment}")
 endif()

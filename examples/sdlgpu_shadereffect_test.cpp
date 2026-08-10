@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MS-PL
-// plan_sdlgpu.md SDLGPU-42/43: custom ShaderEffect proof for the SDL_GPU graphics backend -- a
+// plan_sdlgpu.md SDLGPU-42/43: custom ShaderEffect proof for the SDL_GPU graphics renderer -- a
 // REAL runtime GLSL->SPIR-V compile via libshaderc (SDL_gpu only accepts precompiled bytecode),
 // not just a "didn't throw" smoke test. Verified end-to-end through the public XNA API:
 // SpriteBatch.Begin(effect) -> Draw() -> End(), reading back the actual rendered pixel via
-// RenderTarget2D::GetData() (RenderTarget2D::GetData() is real, SDLGPU-39; this backend's
+// RenderTarget2D::GetData() (RenderTarget2D::GetData() is real, SDLGPU-39; this renderer's
 // swapchain-download path segfaults, see that row).
 //
 // Check A -- IsEffectValid() is true after CompileProgram() -- proves the runtime libshaderc
@@ -33,7 +33,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 
-#include "CNA/Internal/Backends/SdlGpu/SdlGpuGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/SdlGpu/SdlGpuRenderer.hpp"
 
 #include "common/PixelTestGame.hpp"
 
@@ -43,13 +43,13 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::SdlGpu;
+using namespace CNA::Internal::Renderers::SdlGpu;
 
 namespace
 {
     constexpr int kRTSize = 64;
 
-    // Pixel-space -> NDC, same technique as sprite2d.vert.glsl (this backend's stock sprite
+    // Pixel-space -> NDC, same technique as sprite2d.vert.glsl (this renderer's stock sprite
     // shader) -- proves this custom shader isn't just piggybacking on the stock one.
     const char* kVertSrc = R"GLSL(
 #version 450

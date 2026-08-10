@@ -4,7 +4,7 @@ Status: implemented guardrail for SKIA-119
 
 XNA `BlendState` contains factors and functions, not a flag saying whether a caller's texture
 bytes are straight or already premultiplied. Skia, however, evaluates image shaders and blenders
-in premultiplied working colour. The backend therefore declares the conversion for every accepted
+in premultiplied working colour. The renderer therefore declares the conversion for every accepted
 route; it never infers one from the numeric relationship between RGB and alpha.
 
 ## Storage-to-working-colour table
@@ -16,7 +16,7 @@ route; it never infers one from the numeric relationship between RGB and alpha.
 | `RenderTarget2D` | Premultiplied `SkSurface`; public readback unpremultiplies. | Either | Reuse the one premultiplied snapshot. Relabelling it as straight would multiply alpha twice. |
 | Tagged `CNA_SKIA_SKSL_V1` effect | Premultiplied child values and reflected uniforms. | Explicit ABI | `main` returns one premultiplied colour. The effect cannot silently change the following blender's source contract. |
 
-`SkiaSourceStorageAlpha`, `ResolveSkiaWorkingSourceRoute`, and each image backend's
+`SkiaSourceStorageAlpha`, `ResolveSkiaWorkingSourceRoute`, and each image renderer's
 `StorageAlphaEXT()` encode this table. `Texture2D::SnapshotImage()` selects its two labelled views;
 `RenderTarget2D::SnapshotImage()` proves both requested routes resolve to its existing surface.
 

@@ -94,7 +94,7 @@ document's other sections use.
 
 ```bash
 cmake -S . -B cmake-build-debug \
-      -DCNA_GRAPHICS_BACKEND=OPENGLES -DCNA_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Debug
+      -DCNA_GRAPHICS_RENDERER=OPENGLES -DCNA_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Debug
 
 cmake --build cmake-build-debug --target CNA -j"$(nproc)"
 cmake --build cmake-build-debug --target CnaTests -j"$(nproc)"

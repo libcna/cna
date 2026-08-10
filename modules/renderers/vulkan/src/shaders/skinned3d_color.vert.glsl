@@ -1,7 +1,7 @@
 #version 450
 
 // SkinnedEffect stride-56 variant (SkinnedVertex with a per-vertex Color appended at offset 52,
-// CNB-67) — see EasyGLGraphicsBackend.cpp's ApplyLayout stride==56 case for the canonical layout
+// CNB-67) — see EasyGLRenderer.cpp's ApplyLayout stride==56 case for the canonical layout
 // this mirrors. Skinning/fog math is byte-for-byte identical to skinned3d.vert.glsl; the only
 // addition is the aColor attribute (location 5) and its vColor varying.
 layout(location = 0) in vec3  aPos;

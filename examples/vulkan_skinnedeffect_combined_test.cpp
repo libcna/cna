@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Task 409: cross-backend SkinnedEffect capstone (Vulkan backend). See
+// Task 409: cross-renderer SkinnedEffect capstone (Vulkan renderer). See
 // examples/easygl_skinnedeffect_combined_test.cpp for the full derivation.
 //
 // Exit code 0 = PASS, 1 = FAIL.

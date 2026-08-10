@@ -17,10 +17,10 @@ namespace Microsoft::Xna::Framework::Graphics
     };
 
     /**
-     * @brief The single mapping from a public RenderTargetUsage to the backend's `preserveContents`
+     * @brief The single mapping from a public RenderTargetUsage to the renderer's `preserveContents`
      *        flag.
      *
-     * REMED-GFX-136. Every render target that reaches a backend goes through this one function --
+     * REMED-GFX-136. Every render target that reaches a renderer goes through this one function --
      * `RenderTarget2D` and `RenderTargetCube` alike -- so the two cannot drift apart, and a reader
      * has exactly one place to look for what `PlatformContents` means in this project.
      *
@@ -28,8 +28,8 @@ namespace Microsoft::Xna::Framework::Graphics
      * `GraphicsDevice::SetRenderTargets` has always done at the shared layer, where only a
      * `DiscardContents` target is cleared on bind (FNA's `if (clearTarget == DiscardContents)
      * Clear(...)`); before this helper existed the two public targets passed `usage ==
-     * PreserveContents` instead, so the shared layer and the backend disagreed about
-     * `PlatformContents` and whichever one a given backend happened to honour decided the result.
+     * PreserveContents` instead, so the shared layer and the renderer disagreed about
+     * `PlatformContents` and whichever one a given renderer happened to honour decided the result.
      *
      * @par What is preserved
      * REMED-GFX-142: **colour, depth AND stencil** -- all three, not colour alone. FNA3D's public
@@ -49,7 +49,7 @@ namespace Microsoft::Xna::Framework::Graphics
      * Not "undefined": `GraphicsDevice::SetRenderTargets` clears a `DiscardContents` target on every
      * bind, mirroring FNA's own `Clear(ClearOptions.Target | ClearOptions.DepthBuffer |
      * ClearOptions.Stencil, DiscardColor, Viewport.MaxDepth, 0)` -- colour to `(0, 0, 0, 255)`,
-     * depth to 1.0, stencil to 0. A backend is free to deliver that through a native clear load
+     * depth to 1.0, stencil to 0. A renderer is free to deliver that through a native clear load
      * action, but the observable result is that deterministic triple.
      *
      * An explicit `Clear()` issued inside a bind cycle is a separate, ordered command that always
@@ -60,10 +60,10 @@ namespace Microsoft::Xna::Framework::Graphics
      * preserving target has no previous content to preserve. Nothing survives device recreation.
      * Depth and stencil are observable only indirectly, through what a later depth-tested or
      * stencil-tested draw does; `examples/rendertarget_depthstencil_usage_test` is the oracle that
-     * enforces every clause above on all fourteen backends.
+     * enforces every clause above on all fourteen renderers.
      *
      * @param usage The public usage the render target was constructed with.
-     * @return True when the backend must load this target's existing colour, depth and stencil
+     * @return True when the renderer must load this target's existing colour, depth and stencil
      *         contents when it is bound.
      */
     NOXNA [[nodiscard]] constexpr bool RenderTargetUsagePreservesContentsEXT(RenderTargetUsage usage) noexcept

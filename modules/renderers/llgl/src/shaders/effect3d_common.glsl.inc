@@ -2,7 +2,7 @@
 // Reference copy of the uniform block every 3D shader in this directory shares. It is NOT included
 // by the shaders (glslangValidator would need an include path, and the OpenGL flavours are embedded
 // as plain source), so it exists to keep one authoritative description of the layout next to the
-// shaders that must all agree with it, and with LlglGraphicsBackend::FillEffectUniforms.
+// shaders that must all agree with it, and with LlglRenderer::FillEffectUniforms.
 //
 // std140, 144 bytes:
 //   offset   0  mat4  mvpMatrix             world * view * projection, already transposed for GLSL

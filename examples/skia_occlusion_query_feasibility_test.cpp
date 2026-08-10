@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // SKIA-104: prove that raster framebuffer differences cannot emulate samples-passed queries.
 
-#include "CNA/Internal/Backends/Skia/SkiaSurface.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaSurface.hpp"
 
 #include "include/core/SkBlendMode.h"
 #include "include/core/SkCanvas.h"
@@ -14,7 +14,7 @@
 #include <cstdio>
 #include <vector>
 
-using CNA::Internal::Backends::Skia::SkiaSurface;
+using CNA::Internal::Renderers::Skia::SkiaSurface;
 
 namespace
 {

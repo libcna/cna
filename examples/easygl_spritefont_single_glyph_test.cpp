@@ -3,7 +3,7 @@
 //
 // Direct EasyGL port of Task 690's SDL_Renderer test (which itself was the first-of-its-kind
 // SpriteFont pixel test in this project, designed directly from FNA's real SpriteBatch::DrawString
-// contract -- traced in the shared, backend-agnostic SpriteBatch.cpp: per-glyph destination rect
+// contract -- traced in the shared, renderer-agnostic SpriteBatch.cpp: per-glyph destination rect
 // = position + accumulated kerning/cropping offset, sized by the glyph's own bounds, sampling the
 // glyph's source rect from the font's atlas texture).
 //

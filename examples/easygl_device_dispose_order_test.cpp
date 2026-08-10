@@ -4,7 +4,7 @@
 // Verified:
 //   1. Resources created with a device are tracked.
 //   2. When GraphicsDevice::Dispose() is called, all tracked resources are disposed
-//      BEFORE the backend (GL context) is destroyed — no use-after-free.
+//      BEFORE the renderer (GL context) is destroyed — no use-after-free.
 //   3. Dispose() on an already-disposed resource is a no-op (no double-free).
 //   4. Resources disposed explicitly before device disposal are removed from the
 //      tracking list so device disposal does not try to dispose them again.
@@ -47,27 +47,27 @@ protected:
 
         auto& dev = getGraphicsDeviceProperty();
 
-        // ── 1. Device disposes tracked resources before backend ────────────
+        // ── 1. Device disposes tracked resources before renderer ────────────
         // Heap-allocate so resources live past this scope's end.
         auto* vb  = new VertexBuffer(dev, 8);
         auto* ib  = new IndexBuffer(dev, 8);
         auto* tex = new Texture2D(dev, 4, 4);
 
-        check(vb->HasBackend(),  "VB has backend before device dispose");
-        check(ib->HasBackend(),  "IB has backend before device dispose");
-        check(tex->HasBackend(), "Tex has backend before device dispose");
+        check(vb->HasRenderer(),  "VB has renderer before device dispose");
+        check(ib->HasRenderer(),  "IB has renderer before device dispose");
+        check(tex->HasRenderer(), "Tex has renderer before device dispose");
 
-        // Dispose the device — must dispose resources first, then destroy backend.
+        // Dispose the device — must dispose resources first, then destroy renderer.
         dev.Dispose();
 
-        // All three must be disposed now (backend freed before GL context gone).
+        // All three must be disposed now (renderer freed before GL context gone).
         check(vb->getIsDisposedProperty(),  "VB disposed by device.Dispose()");
         check(ib->getIsDisposedProperty(),  "IB disposed by device.Dispose()");
         check(tex->getIsDisposedProperty(), "Tex disposed by device.Dispose()");
 
-        check(!vb->HasBackend(),  "VB backend freed by device.Dispose()");
-        check(!ib->HasBackend(),  "IB backend freed by device.Dispose()");
-        check(!tex->HasBackend(), "Tex backend freed by device.Dispose()");
+        check(!vb->HasRenderer(),  "VB renderer freed by device.Dispose()");
+        check(!ib->HasRenderer(),  "IB renderer freed by device.Dispose()");
+        check(!tex->HasRenderer(), "Tex renderer freed by device.Dispose()");
 
         // ── 2. Calling Dispose() on already-disposed resources is a no-op ─
         bool noThrow = true;

@@ -2,7 +2,7 @@
 // Pixel-level contract for the window-independent SkiaSurface boundary. This is deliberately
 // separate from Game/SDL tests so the raster core keeps a deterministic, headless oracle.
 
-#include "CNA/Internal/Backends/Skia/SkiaSurface.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaSurface.hpp"
 
 #include <array>
 #include <cstdint>
@@ -10,7 +10,7 @@
 #include <type_traits>
 #include <vector>
 
-using CNA::Internal::Backends::Skia::SkiaSurface;
+using CNA::Internal::Renderers::Skia::SkiaSurface;
 
 namespace
 {

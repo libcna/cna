@@ -3,17 +3,17 @@
 // call (not just SpriteBatch) -- a genuine engine capability, not a shader-conversion proof.
 //
 // Before this task, ShaderEffect::FillGpuDrawParams() had no override (the Effect base no-op
-// ran), so GpuDrawParams stayed default/zero, and EasyGLGraphicsBackend::DrawIndexedPrimitivesEx
+// ran), so GpuDrawParams stayed default/zero, and EasyGLRenderer::DrawIndexedPrimitivesEx
 // always dispatched to one of its own built-in stride-selected shaders regardless of any bound
 // custom effect -- a ShaderEffect applied via EffectPass-style code before a 3D draw call was
-// silently ignored. Fixed by: (1) GpuDrawParams gained a `customEffectBackend` field; (2)
+// silently ignored. Fixed by: (1) GpuDrawParams gained a `customEffectRenderer` field; (2)
 // ShaderEffect now implements IEffectMatrices (World/View/Projection, extracted by
 // GraphicsDevice::ExtractMatrices() the same way every stock effect already works) and overrides
-// FillGpuDrawParams() to set customEffectBackend; (3) EasyGLGraphicsBackend::DrawPrimitivesEx()/
+// FillGpuDrawParams() to set customEffectRenderer; (3) EasyGLRenderer::DrawPrimitivesEx()/
 // DrawIndexedPrimitivesEx() check it first and, when set, bind the custom program + its
 // World/View/Projection uniforms directly instead of selecting a built-in shader.
 //
-// Scope (deliberate, documented): this proves the wiring for vertex formats CNA's backend
+// Scope (deliberate, documented): this proves the wiring for vertex formats CNA's renderer
 // ALREADY supports (VertexPositionNormalTexture, stride 32) -- the vertex ATTRIBUTE layout
 // itself (locations 0/1/2 = Position/Normal/TexCoord) is unchanged, already proven by every
 // existing stride-32 test in this repo. A genuinely custom vertex format (e.g. NormalMapping.fx's
@@ -81,7 +81,7 @@ namespace
     }
 
     // Position (loc0) + Normal (loc1) + TexCoord (loc2) -- matches the existing stride-32
-    // VertexPositionNormalTexture attribute layout exactly (EasyGLVertexBufferBackend::ApplyLayout
+    // VertexPositionNormalTexture attribute layout exactly (EasyGLVertexBufferRenderer::ApplyLayout
     // case 32), not a new layout.
     const char* kVertSrc = R"(#version 300 es
 precision highp float;

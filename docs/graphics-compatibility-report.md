@@ -10,7 +10,7 @@
 > as current** — they are a dated snapshot of Task 500's 2026-07-09 milestone declaration, kept
 > below for its methodology (how the numbers were computed), not as a live status. For current
 > status, see `NEXT.md` §5 (the actively maintained bug list) and
-> `docs/graphics-backend-feature-matrix.md`.
+> `docs/graphics-renderer-feature-matrix.md`.
 
 **Written for Task 499 (`plan_graphics.md` Phase 55).** This project has historically described
 Graphics maturity with informal, hand-derived percentages (e.g. `docs/xna-4-api-coverage.md`'s
@@ -18,37 +18,37 @@ older §8 table — "~98%", "~85%" — acknowledged in Task 490's own "Release c
 color commentary, not a rigorous measurement). This report replaces that with numbers computed
 directly from real `ctest` runs and the real per-class table (Task 483), each shown with its
 arithmetic. It does not re-derive the qualitative detail in `docs/xna-4-api-coverage.md` (Tasks
-482–485), `docs/graphics-backend-feature-matrix.md` (Task 451), or `docs/migration-guide.md`
+482–485), `docs/graphics-renderer-feature-matrix.md` (Task 451), or `docs/migration-guide.md`
 (Tasks 486–489) — see those for the "why", this report is the "how many."
 
 All figures below are pulled from `plan_graphics.md`'s own Task 493–498 rows (re-read directly,
 not from memory, before writing this report).
 
-## 1. Per-backend test pass rate
+## 1. Per-renderer test pass rate
 
-Two different numbers per backend, since Task 497 showed they can diverge meaningfully:
-**"integration-only"** (the `examples/`-sourced, `<Backend>_`-prefixed `add_test()` set — real
+Two different numbers per renderer, since Task 497 showed they can diverge meaningfully:
+**"integration-only"** (the `examples/`-sourced, `<Renderer>_`-prefixed `add_test()` set — real
 window/GPU pixel-readback tests) vs. **"full suite"** (integration tests plus the ~4357
-backend-agnostic `tests/` unit pool, which includes generic 3D-object-construction tests with no
-per-backend awareness).
+renderer-agnostic `tests/` unit pool, which includes generic 3D-object-construction tests with no
+per-renderer awareness).
 
-| Backend | Integration-only | Full suite | Source |
+| Renderer | Integration-only | Full suite | Source |
 |---|---|---|---|
 | EasyGL | 166/168 = **98.81%** | 4522/4525 = **99.93%** (4527/4530 = **99.93%** after Task 498's 5 new tests) | Tasks 493/494/498 |
 | Vulkan | 87/93 = **93.55%** | 4369/4378 = **99.79%** | Task 495, cross-checked against Task 911's baseline |
 | Bgfx | 54/56 = **96.43%** | 4413/4414 = **99.98%** baseline, but see correction below | Task 496, cross-checked against Task 448's baseline |
 | SDL_Renderer | 67/67 = **100.00%** (2D-only, by design) | 4410/4421 = **99.75%** (11 failures, all by-design "3D not supported" throws, not bugs) | Task 497 |
 
-**Correction found while cross-checking (2026-07-09):** `docs/xna-4-api-coverage.md`'s per-backend
+**Correction found while cross-checking (2026-07-09):** `docs/xna-4-api-coverage.md`'s per-renderer
 table (Task 484) cited Bgfx's known baseline as "1" pre-existing failure
 (`Bgfx_RenderTarget2D_MsaaResolve`), but Task 496's own integration-only rerun found 2 —
 `Bgfx_RenderTarget2D_MipChain` is *also* an already-documented pre-existing flake (Tasks
 455/877/906/912, ~1-in-8 rate), just never folded into that row's own count. Fixed inline in
-`docs/xna-4-api-coverage.md`'s per-backend table as part of this task. The corrected Bgfx
+`docs/xna-4-api-coverage.md`'s per-renderer table as part of this task. The corrected Bgfx
 full-suite baseline is **4412/4414 = 99.95%**, not 99.98% — a small but real correction, exactly
 the kind of drift this task exists to catch.
 
-**Vulkan is the clear low point** among the 4 backends at 93.55% integration-only, entirely
+**Vulkan is the clear low point** among the 4 renderers at 93.55% integration-only, entirely
 attributable to 2 already-tracked, named issues (Task 868's fake `BlendState`, 5 of the 6 failures;
 1 isolated `RasterizerState.DepthBias` sub-case) — not a diffuse reliability problem.
 
@@ -62,15 +62,15 @@ directly from the table's own ✅/⚠️/❌/N/A marks (not from memory):
 |---|---|---|---|---|---|
 | Present | 26 | 0 | 0 | 0 | 26/26 = **100%** |
 | Implemented | 22 | 4 (`Texture2D`, `ShaderEffect`, `BlendState`, `OcclusionQuery`) | 0 | 0 | 22/26 = **84.6%** fully clean, 4/26 = 15.4% partial |
-| Tested | 26 | 0 | 0 | 0 | 26/26 = **100%** (tested on *at least one* backend — see caveat below) |
+| Tested | 26 | 0 | 0 | 0 | 26/26 = **100%** (tested on *at least one* renderer — see caveat below) |
 | FNA-compatible | 12 | 11 | 2 (`BlendState`, `IndexBuffer`) | 1 (`ShaderEffect`, NOXNA) | 12/26 = **46.2%** fully clean, 11/26 = 42.3% partial, 2/26 = 7.7% confirmed bug |
 
 **Important honest caveat, not glossed over**: the "Tested" axis in Task 483's table is a single
-blended column — "is this class exercised by at least one automated test on at least one backend"
-— it does **not** decompose into a per-class-per-backend cross-tabulation (e.g. "is `SkinnedEffect`
+blended column — "is this class exercised by at least one automated test on at least one renderer"
+— it does **not** decompose into a per-class-per-renderer cross-tabulation (e.g. "is `SkinnedEffect`
 tested on Bgfx specifically"). That finer-grained data doesn't exist as a single queryable table
-anywhere in this project today; the closest real proxy is Task 484's per-backend table's own
-"Fully correct" / "Partial" prose columns, which are backend-scoped but not a strict per-class
+anywhere in this project today; the closest real proxy is Task 484's per-renderer table's own
+"Fully correct" / "Partial" prose columns, which are renderer-scoped but not a strict per-class
 matrix. **This is a real gap in this project's own tracking granularity, not something this report
 can compute honestly from existing data** — flagging it here rather than inventing a number.
 
@@ -100,7 +100,7 @@ against.
 ## 4. One honest combined figure — clearly labeled, not blended across unlike things
 
 **"46.2% of major Graphics classes (12/26) have zero known FNA-compatibility gap on any tested
-backend; 42.3% (11/26) have a narrow, named partial gap; 7.7% (2/26) have a confirmed bug; the
+renderer; 42.3% (11/26) have a narrow, named partial gap; 7.7% (2/26) have a confirmed bug; the
 remaining 3.8% (1/26) is a NOXNA extension with no FNA-compatible axis at all."** This is the one
 number in this report closest to "how compatible is Graphics," and it is explicitly a percentage of
 **classes**, not of API surface area, lines of code, or test count — those would each give a
@@ -139,7 +139,7 @@ unqualified "1.0"/"100%" claim, which the real numbers in this report do not yet
 **What "~90%, test-execution-verified" means concretely:**
 
 - Tasks 491–499 (this entire Phase 55) all genuinely pass their own stated criteria. Every test
-  failure encountered across all 4 backends — EasyGL, Vulkan, Bgfx, SDL_Renderer, both
+  failure encountered across all 4 renderers — EasyGL, Vulkan, Bgfx, SDL_Renderer, both
   integration-only and full-suite runs (§1 above) — is a previously-documented, understood issue.
   None is an unexplained new regression.
 - Per §2 above, **100% of the 26 major Graphics classes rate ✅ on Present and ✅ on Tested**, and
@@ -159,7 +159,7 @@ unqualified "1.0"/"100%" claim, which the real numbers in this report do not yet
     architecture can't correlate a query's Begin/End span with a specific draw without a design
     decision), Tasks 686/687 (SDL_Renderer `TextureAddressMode::Wrap`/`Mirror` via `SpriteBatch` —
     no native support in the draw path used, 3 unpicked design options), Task 725 (SDL_Renderer
-    `Texture3D`/`TextureCube` construction — touches 94 existing shared tests with zero backend
+    `Texture3D`/`TextureCube` construction — touches 94 existing shared tests with zero renderer
     guards), Task 732 (EasyGL non-`Color` `SurfaceFormat` GPU forwarding — conflicts with the
     already-shipped `Texture::ValidateFormat` contract, Task 176).
 - **Reaching 100%** requires closing all 10 of the above — 5 real (but individually small, already

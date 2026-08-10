@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// OPENGL1 backend: separate alpha blend factors (plan_opengl1.md item 19, EasyGL parity).
+// OPENGL1 renderer: separate alpha blend factors (plan_opengl1.md item 19, EasyGL parity).
 //
 // Before this, ApplyBlendState() reused the color factors for alpha too -- a game with different
 // BlendState.ColorSourceBlend/ColorDestinationBlend vs AlphaSourceBlend/AlphaDestinationBlend
@@ -7,7 +7,7 @@
 //
 // Uses a RenderTarget2D (not the window backbuffer) so the alpha channel can be read back for
 // real -- RenderTarget2D::GetData() reads the FBO's own color attachment directly via glReadPixels
-// (OpenGL1RenderTargetBackend::GetData()), a genuine GPU readback including alpha, not a CPU
+// (OpenGL1RenderTargetRenderer::GetData()), a genuine GPU readback including alpha, not a CPU
 // shadow. Also uses the 3D draw path (BasicEffect + DrawUserPrimitives), not SpriteBatch -- see
 // opengl1_blendfactor_test.cpp's own header for why.
 //

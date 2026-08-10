@@ -9,7 +9,7 @@
 //
 // The bone transform array (72 mat4s, 4608 bytes) is a SEPARATE uniform block (BoneBlock) rather
 // than folded into SkinnedParams: it is far larger than every other per-draw uniform block in this
-// backend, and giving it its own buffer/pool mirrors the Vulkan backend's own BoneBlock/FogParams
+// renderer, and giving it its own buffer/pool mirrors the Vulkan renderer's own BoneBlock/FogParams
 // split (env_map3d takes the opposite, single-buffer approach only because its own field set is
 // small enough to fit comfortably in one).
 
@@ -77,7 +77,7 @@ void main()
     mat3 normalMatrix = transpose(inverse(mat3(worldMatrix)));
     vNormal     = normalize(normalMatrix * (mat3(skinMat) * normal));
     vWorldPos   = (worldMatrix * skinnedPos).xyz;
-    // Fog factor from the POST-skin position, matching this backend's own convention (0 = no fog,
-    // see lit_textured3d.vert.glsl) -- not the Vulkan-standalone backend's opposite convention.
+    // Fog factor from the POST-skin position, matching this renderer's own convention (0 = no fog,
+    // see lit_textured3d.vert.glsl) -- not the Vulkan-standalone renderer's opposite convention.
     vFogFactor  = clamp(dot(skinnedPos, fogVector), 0.0, 1.0) * fogColor.a;
 }

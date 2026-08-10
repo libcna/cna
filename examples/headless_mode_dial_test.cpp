@@ -4,12 +4,12 @@
 // proving the mode dial genuinely gates every rule, not just the one representative case
 // (HEADLESS-21's draw-call index-count check, already covered in Headless_Smoke).
 //
-// Check A/B -- HEADLESS-20: HeadlessVertexBufferBackend::SetData() with vertex_count exceeding
+// Check A/B -- HEADLESS-20: HeadlessVertexBufferRenderer::SetData() with vertex_count exceeding
 //   the buffer's declared capacity -- throws under Validation, does not throw under Fast. Talks
-//   directly to the backend object (via HeadlessGraphicsBackend::SharedState()) rather than
-//   through the XNA VertexBuffer wrapper, since HEADLESS-20 is specifically about the backend's
+//   directly to the renderer object (via HeadlessRenderer::SharedState()) rather than
+//   through the XNA VertexBuffer wrapper, since HEADLESS-20 is specifically about the renderer's
 //   own Require() check, not any XNA-layer bounds check that might exist above it.
-// Check C/D -- HEADLESS-20: HeadlessIndexBufferBackend::SetData16() with index_count exceeding
+// Check C/D -- HEADLESS-20: HeadlessIndexBufferRenderer::SetData16() with index_count exceeding
 //   capacity -- same shape, for the index-buffer side of the same rule.
 // Check E/F -- HEADLESS-22: a DualTextureEffect draw with no Texture2 assigned -- throws under
 //   Validation, does not throw under Fast (the Validation half was already shown once in
@@ -34,7 +34,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 
-#include "CNA/Internal/Backends/Headless/HeadlessGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Headless/HeadlessRenderer.hpp"
 
 #include <cstdint>
 #include <cstdio>
@@ -44,7 +44,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::Headless;
+using namespace CNA::Internal::Renderers::Headless;
 
 class HeadlessModeDialTest : public Game
 {
@@ -62,47 +62,47 @@ protected:
     void Draw(const GameTime&) override
     {
         auto& dev = getGraphicsDeviceProperty();
-        auto& backend = static_cast<HeadlessGraphicsBackend&>(dev.GetBackend());
+        auto& renderer = static_cast<HeadlessRenderer&>(dev.GetRenderer());
         dev.Clear(Color::Black);
 
-        // Checks A/B/C/D: HEADLESS-20, talking directly to the backend objects so this is
-        // specifically a test of the backend's own Require() check.
+        // Checks A/B/C/D: HEADLESS-20, talking directly to the renderer objects so this is
+        // specifically a test of the renderer's own Require() check.
         {
-            HeadlessVertexBufferBackend vbBackend(backend.SharedState(), /*vertexCapacity=*/3);
+            HeadlessVertexBufferRenderer vbRenderer(renderer.SharedState(), /*vertexCapacity=*/3);
             const std::vector<std::uint8_t> junkVerts(5 * 16, 0);
 
-            backend.SetMode(HeadlessMode::Validation);
+            renderer.SetMode(HeadlessMode::Validation);
             bool vbValidationThrew = false;
-            try { vbBackend.SetData(junkVerts.data(), 5, 16); }
+            try { vbRenderer.SetData(junkVerts.data(), 5, 16); }
             catch (const HeadlessValidationException&) { vbValidationThrew = true; }
             check(vbValidationThrew,
                   "HEADLESS-20: VertexBuffer SetData() past capacity throws under HeadlessValidation");
 
-            backend.SetMode(HeadlessMode::Fast);
+            renderer.SetMode(HeadlessMode::Fast);
             bool vbFastThrew = false;
-            try { vbBackend.SetData(junkVerts.data(), 5, 16); }
+            try { vbRenderer.SetData(junkVerts.data(), 5, 16); }
             catch (const HeadlessValidationException&) { vbFastThrew = true; }
             check(!vbFastThrew,
                   "HEADLESS-20: VertexBuffer SetData() past capacity does not throw under HeadlessFast");
 
-            HeadlessIndexBufferBackend ibBackend(backend.SharedState(), /*indexCapacity=*/3, false);
+            HeadlessIndexBufferRenderer ibRenderer(renderer.SharedState(), /*indexCapacity=*/3, false);
             const std::uint16_t junkIndices[5] = {0, 1, 2, 0, 1};
 
-            backend.SetMode(HeadlessMode::Validation);
+            renderer.SetMode(HeadlessMode::Validation);
             bool ibValidationThrew = false;
-            try { ibBackend.SetData16(junkIndices, 5); }
+            try { ibRenderer.SetData16(junkIndices, 5); }
             catch (const HeadlessValidationException&) { ibValidationThrew = true; }
             check(ibValidationThrew,
                   "HEADLESS-20: IndexBuffer SetData16() past capacity throws under HeadlessValidation");
 
-            backend.SetMode(HeadlessMode::Fast);
+            renderer.SetMode(HeadlessMode::Fast);
             bool ibFastThrew = false;
-            try { ibBackend.SetData16(junkIndices, 5); }
+            try { ibRenderer.SetData16(junkIndices, 5); }
             catch (const HeadlessValidationException&) { ibFastThrew = true; }
             check(!ibFastThrew,
                   "HEADLESS-20: IndexBuffer SetData16() past capacity does not throw under HeadlessFast");
 
-            backend.SetMode(HeadlessMode::Validation);
+            renderer.SetMode(HeadlessMode::Validation);
         }
 
         // Checks E/F: HEADLESS-22, via a DualTextureEffect draw missing its second texture.
@@ -126,59 +126,59 @@ protected:
                 dev.SetVertexBuffer(nullptr);
             };
 
-            backend.SetMode(HeadlessMode::Validation);
+            renderer.SetMode(HeadlessMode::Validation);
             bool dualValidationThrew = false;
             try { drawWithMissingTexture2(); }
             catch (const HeadlessValidationException&) { dualValidationThrew = true; }
             check(dualValidationThrew,
                   "HEADLESS-22: DualTextureEffect draw missing Texture2 throws under HeadlessValidation");
 
-            backend.SetMode(HeadlessMode::Fast);
+            renderer.SetMode(HeadlessMode::Fast);
             bool dualFastThrew = false;
             try { drawWithMissingTexture2(); }
             catch (const HeadlessValidationException&) { dualFastThrew = true; }
             check(!dualFastThrew,
                   "HEADLESS-22: DualTextureEffect draw missing Texture2 does not throw under HeadlessFast");
 
-            backend.SetMode(HeadlessMode::Validation);
+            renderer.SetMode(HeadlessMode::Validation);
         }
 
         // Checks G/H: HEADLESS-23, SetScissorRect() with a negative origin.
         {
-            backend.SetMode(HeadlessMode::Validation);
+            renderer.SetMode(HeadlessMode::Validation);
             bool scissorValidationThrew = false;
-            try { backend.SetScissorRect(-1, -1, 4, 4); }
+            try { renderer.SetScissorRect(-1, -1, 4, 4); }
             catch (const HeadlessValidationException&) { scissorValidationThrew = true; }
             check(scissorValidationThrew,
                   "HEADLESS-23: SetScissorRect() with a negative origin throws under HeadlessValidation");
 
-            backend.SetMode(HeadlessMode::Fast);
+            renderer.SetMode(HeadlessMode::Fast);
             bool scissorFastThrew = false;
-            try { backend.SetScissorRect(-1, -1, 4, 4); }
+            try { renderer.SetScissorRect(-1, -1, 4, 4); }
             catch (const HeadlessValidationException&) { scissorFastThrew = true; }
             check(!scissorFastThrew,
                   "HEADLESS-23: SetScissorRect() with a negative origin does not throw under HeadlessFast");
 
-            backend.SetMode(HeadlessMode::Validation);
+            renderer.SetMode(HeadlessMode::Validation);
         }
 
         // Checks I/J: HEADLESS-24, ApplySamplerState() with an out-of-range slot.
         {
-            backend.SetMode(HeadlessMode::Validation);
+            renderer.SetMode(HeadlessMode::Validation);
             bool samplerValidationThrew = false;
-            try { backend.ApplySamplerState(16, 0, 0, 0, 0); }
+            try { renderer.ApplySamplerState(16, 0, 0, 0, 0); }
             catch (const HeadlessValidationException&) { samplerValidationThrew = true; }
             check(samplerValidationThrew,
                   "HEADLESS-24: ApplySamplerState() with slot=16 throws under HeadlessValidation");
 
-            backend.SetMode(HeadlessMode::Fast);
+            renderer.SetMode(HeadlessMode::Fast);
             bool samplerFastThrew = false;
-            try { backend.ApplySamplerState(16, 0, 0, 0, 0); }
+            try { renderer.ApplySamplerState(16, 0, 0, 0, 0); }
             catch (const HeadlessValidationException&) { samplerFastThrew = true; }
             check(!samplerFastThrew,
                   "HEADLESS-24: ApplySamplerState() with slot=16 does not throw under HeadlessFast");
 
-            backend.SetMode(HeadlessMode::Validation);
+            renderer.SetMode(HeadlessMode::Validation);
         }
 
         std::printf("=== %d/%d PASS ===\n", passCount_, 10);

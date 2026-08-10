@@ -1,7 +1,7 @@
-# WebGPU / wgpu-native integration for the CNA WebGPU graphics backend.
+# WebGPU / wgpu-native integration for the CNA WebGPU graphics renderer.
 #
 # The preferred input is an extracted official wgpu-native binary release:
-#   cmake -DCNA_GRAPHICS_BACKEND=WEBGPU \
+#   cmake -DCNA_GRAPHICS_RENDERER=WEBGPU \
 #         -DCNA_WEBGPU_ROOT=/path/to/wgpu-linux-x86_64-release ...
 #
 # When CNA_WEBGPU_ROOT is empty and CNA_WEBGPU_AUTO_DOWNLOAD is ON, CMake

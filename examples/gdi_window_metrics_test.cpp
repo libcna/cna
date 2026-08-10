@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // GDI-060: drawable-pixel sizing, SDL input-coordinate transforms, and window lifecycle.
 
-#include "CNA/Internal/Backends/Gdi/GdiGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Gdi/GdiRenderer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsAdapter.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
@@ -27,8 +27,8 @@
 #include <exception>
 #include <string>
 
-using namespace CNA::Internal::Backends;
-using namespace CNA::Internal::Backends::Gdi;
+using namespace CNA::Internal::Renderers;
+using namespace CNA::Internal::Renderers::Gdi;
 using namespace Microsoft::Xna::Framework::Graphics;
 using Microsoft::Xna::Framework::Input::Mouse;
 using Microsoft::Xna::Framework::Input::TextInputEXT;
@@ -130,7 +130,7 @@ namespace
         return ok;
     }
 
-    bool ExerciseOddResizes(GdiGraphicsBackend& backend, SDL_Window* window)
+    bool ExerciseOddResizes(GdiRenderer& renderer, SDL_Window* window)
     {
         constexpr std::array<std::array<int, 2>, 3> sizes{{
             {{31, 23}},
@@ -161,7 +161,7 @@ namespace
             ok &= ExpectMetricAgreement(metrics, resizeMessage);
             int logicalWidth = 0;
             int logicalHeight = 0;
-            backend.GetViewportSize(logicalWidth, logicalHeight);
+            renderer.GetViewportSize(logicalWidth, logicalHeight);
             const int expectedWidth = std::max(1, static_cast<int>(std::lround(
                 static_cast<double>(metrics.drawableWidth) * 17.0 /
                 metrics.drawableHeight)));
@@ -171,14 +171,14 @@ namespace
                           size[0], size[1]);
             ok &= Expect(logicalWidth == expectedWidth && logicalHeight == 17, logicalMessage);
 
-            backend.Clear(0.1f, 0.2f, 0.3f, 1.0f);
-            backend.Present();
+            renderer.Clear(0.1f, 0.2f, 0.3f, 1.0f);
+            renderer.Present();
             GdiPresentationTelemetry telemetry;
             char destinationMessage[192]{};
             std::snprintf(destinationMessage, sizeof(destinationMessage),
                           "odd resize %dx%d presents to SDL drawable-pixel dimensions",
                           size[0], size[1]);
-            ok &= Expect(backend.DebugGetLastPresentationTelemetry(telemetry) &&
+            ok &= Expect(renderer.DebugGetLastPresentationTelemetry(telemetry) &&
                              telemetry.result.success &&
                              telemetry.plan.destination.width == metrics.drawableWidth &&
                              telemetry.plan.destination.height == metrics.drawableHeight,
@@ -187,7 +187,7 @@ namespace
         return ok;
     }
 
-    bool ExerciseAllTransforms(GdiGraphicsBackend& backend, SDL_Window* window)
+    bool ExerciseAllTransforms(GdiRenderer& renderer, SDL_Window* window)
     {
         struct ModeCase
         {
@@ -209,10 +209,10 @@ namespace
         bool ok = true;
         for (const ModeCase& mode : modes)
         {
-            backend.SetPresentationMode(static_cast<int>(mode.mode));
+            renderer.SetPresentationMode(static_cast<int>(mode.mode));
             int logicalWidth = 0;
             int logicalHeight = 0;
-            backend.GetViewportSize(logicalWidth, logicalHeight);
+            renderer.GetViewportSize(logicalWidth, logicalHeight);
 
             const float expectedX = logicalWidth * 0.5f;
             const float expectedY = logicalHeight * 0.5f;
@@ -220,9 +220,9 @@ namespace
             float windowY = -1.0f;
             float logicalX = -1.0f;
             float logicalY = -1.0f;
-            const bool roundTrip = backend.TransformLogicalToWindow(
+            const bool roundTrip = renderer.TransformLogicalToWindow(
                                        expectedX, expectedY, windowX, windowY) &&
-                                   backend.TransformWindowToLogical(
+                                   renderer.TransformWindowToLogical(
                                        windowX, windowY, logicalX, logicalY);
             char roundTripMessage[192]{};
             std::snprintf(roundTripMessage, sizeof(roundTripMessage),
@@ -268,7 +268,7 @@ namespace
                 char barMessage[192]{};
                 std::snprintf(barMessage, sizeof(barMessage),
                               "%s rejects an SDL coordinate outside presented content", mode.name);
-                ok &= Expect(!backend.TransformWindowToLogical(
+                ok &= Expect(!renderer.TransformWindowToLogical(
                                  uncoveredWindowX, uncoveredWindowY, logicalX, logicalY),
                              barMessage);
             }
@@ -276,7 +276,7 @@ namespace
         return ok;
     }
 
-    bool ExerciseFullscreenRoundTrip(GdiGraphicsBackend& backend, SDL_Window* window)
+    bool ExerciseFullscreenRoundTrip(GdiRenderer& renderer, SDL_Window* window)
     {
         if (!SDL_SetWindowFullscreen(window, true))
         {
@@ -294,20 +294,20 @@ namespace
         if (fullscreenMetrics.drawableWidth > 0)
             ok &= ExpectMetricAgreement(fullscreenMetrics, "fullscreen state");
 
-        backend.SetPresentationMode(
+        renderer.SetPresentationMode(
             static_cast<int>(CnaPresentationMode::FixedHeightDynamicWidth));
-        backend.Clear(0.2f, 0.3f, 0.4f, 1.0f);
-        backend.Present();
+        renderer.Clear(0.2f, 0.3f, 0.4f, 1.0f);
+        renderer.Present();
         int logicalWidth = 0;
         int logicalHeight = 0;
-        backend.GetViewportSize(logicalWidth, logicalHeight);
+        renderer.GetViewportSize(logicalWidth, logicalHeight);
         float windowX = 0.0f;
         float windowY = 0.0f;
         float logicalX = 0.0f;
         float logicalY = 0.0f;
-        ok &= Expect(backend.TransformLogicalToWindow(
+        ok &= Expect(renderer.TransformLogicalToWindow(
                          logicalWidth * 0.5f, logicalHeight * 0.5f, windowX, windowY) &&
-                         backend.TransformWindowToLogical(
+                         renderer.TransformWindowToLogical(
                              windowX, windowY, logicalX, logicalY) &&
                          NearlyEqual(logicalX, logicalWidth * 0.5f) &&
                          NearlyEqual(logicalY, logicalHeight * 0.5f),
@@ -325,30 +325,30 @@ namespace
         return ok;
     }
 
-    bool ExerciseMinimizeRetention(GdiGraphicsBackend& backend, SDL_Window* window)
+    bool ExerciseMinimizeRetention(GdiRenderer& renderer, SDL_Window* window)
     {
         bool ok = Expect(SDL_SetWindowSize(window, 63, 37) && SDL_SyncWindow(window),
                          "retention test restores its final odd window size");
         SDL_PumpEvents();
-        backend.SetPresentationMode(
+        renderer.SetPresentationMode(
             static_cast<int>(CnaPresentationMode::FixedHeightDynamicWidth));
-        backend.Clear(0.125f, 0.25f, 0.5f, 1.0f);
-        backend.Present();
+        renderer.Clear(0.125f, 0.25f, 0.5f, 1.0f);
+        renderer.Present();
 
         int widthBefore = 0;
         int heightBefore = 0;
-        backend.GetViewportSize(widthBefore, heightBefore);
+        renderer.GetViewportSize(widthBefore, heightBefore);
         std::array<std::uint8_t, 4> pixelBefore{};
-        backend.ReadBackbuffer(0, 0, 1, 1, pixelBefore.data());
+        renderer.ReadBackbuffer(0, 0, 1, 1, pixelBefore.data());
 
         ok &= Expect(SDL_MinimizeWindow(window) && SDL_SyncWindow(window),
                      "window enters the minimized state for retention coverage");
         SDL_PumpEvents();
         int widthMinimized = 0;
         int heightMinimized = 0;
-        backend.GetViewportSize(widthMinimized, heightMinimized);
+        renderer.GetViewportSize(widthMinimized, heightMinimized);
         std::array<std::uint8_t, 4> pixelMinimized{};
-        backend.ReadBackbuffer(0, 0, 1, 1, pixelMinimized.data());
+        renderer.ReadBackbuffer(0, 0, 1, 1, pixelMinimized.data());
         if (widthMinimized != widthBefore || heightMinimized != heightBefore ||
             pixelMinimized != pixelBefore)
         {
@@ -374,9 +374,9 @@ namespace
         SDL_PumpEvents();
         int widthRestored = 0;
         int heightRestored = 0;
-        backend.GetViewportSize(widthRestored, heightRestored);
+        renderer.GetViewportSize(widthRestored, heightRestored);
         std::array<std::uint8_t, 4> pixelRestored{};
-        backend.ReadBackbuffer(0, 0, 1, 1, pixelRestored.data());
+        renderer.ReadBackbuffer(0, 0, 1, 1, pixelRestored.data());
         if (widthRestored != widthBefore || heightRestored != heightBefore ||
             pixelRestored != pixelBefore)
         {
@@ -427,7 +427,7 @@ int main()
                      "metrics test shows and synchronizes its native Win32 client");
         SDL_PumpEvents();
 
-        GdiGraphicsBackend backend(
+        GdiRenderer renderer(
             window, 23, 17, CnaPresentationMode::FixedHeightDynamicWidth);
         WindowMetrics initialMetrics;
         ok &= Expect(QueryWindowMetrics(window, initialMetrics),
@@ -435,10 +435,10 @@ int main()
         if (initialMetrics.drawableWidth > 0)
             ok &= ExpectMetricAgreement(initialMetrics, "initial window");
 
-        ok &= ExerciseOddResizes(backend, window);
-        ok &= ExerciseAllTransforms(backend, window);
-        ok &= ExerciseFullscreenRoundTrip(backend, window);
-        ok &= ExerciseMinimizeRetention(backend, window);
+        ok &= ExerciseOddResizes(renderer, window);
+        ok &= ExerciseAllTransforms(renderer, window);
+        ok &= ExerciseFullscreenRoundTrip(renderer, window);
+        ok &= ExerciseMinimizeRetention(renderer, window);
         result = ok ? 0 : 1;
     }
     catch (const std::exception& error)

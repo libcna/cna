@@ -10,7 +10,7 @@
 # for the same reason alphatest_greaterequal_quad.scene does -- it already has a texel at the
 # EXACT boundary. Under LessEqual: alpha=128 (exact match) now PASSES (unlike plain Less, where
 # it would fail); alpha=127 (below) PASSES; alpha=129 (above) FAILS; alpha=1 (far below) PASSES.
-# A backend that silently treated LessEqual identically to Less would incorrectly discard the
+# A renderer that silently treated LessEqual identically to Less would incorrectly discard the
 # alpha=128 texel here -- this scene exists specifically to close that verification gap, and
 # together with alphatest_greaterequal_quad.scene completes coverage of all 6 AlphaFunction
 # values that share the PSAlphaTestLtGt bucket (Less/LessEqual/GreaterEqual/Greater are now all

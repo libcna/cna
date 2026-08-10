@@ -43,7 +43,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp"
 
-#include "CNA/Internal/Backends/Llgl/LlglGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Llgl/LlglRenderer.hpp"
 
 #include "common/PixelTestGame.hpp"
 
@@ -164,9 +164,9 @@ public:
     void RunTest() override
     {
         auto& device = getGraphicsDeviceProperty();
-        auto& backend = static_cast<CNA::Internal::Backends::Llgl::LlglGraphicsBackend&>(
-            device.GetBackend());
-        backend.GetViewportSize(logicalWidth_, logicalHeight_);
+        auto& renderer = static_cast<CNA::Internal::Renderers::Llgl::LlglRenderer&>(
+            device.GetRenderer());
+        renderer.GetViewportSize(logicalWidth_, logicalHeight_);
 
         device.setDepthStencilStateProperty(DepthStencilState::None);
         device.setRasterizerStateProperty(RasterizerState::CullNone);

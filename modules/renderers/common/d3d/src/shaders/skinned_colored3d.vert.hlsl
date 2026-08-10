@@ -1,7 +1,7 @@
 // Shader Model 5.0 (vs_5_0). skinned3d.vert.hlsl's own stride-56 sibling: adds a per-vertex Color
 // (COLOR0) input, matching AlphaTest3d/AlphaTestColored3d's established precedent of a dedicated
 // vertex-color-carrying shader variant selected by stride rather than a runtime branch on the
-// vertex layout. Ported from EasyGLGraphicsBackend::EnsureSkinnedProgram()'s vertex stage (CNB-67,
+// vertex layout. Ported from EasyGLRenderer::EnsureSkinnedProgram()'s vertex stage (CNB-67,
 // Phase 13C) -- identical skinning math, plus Color pass-through.
 // Stride 56: the stride-52 SkinnedVertex layout (VertexPositionNormalTextureSkinned) with a
 // per-vertex Color (normalized ubyte4) appended at offset 52.

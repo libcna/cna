@@ -3,7 +3,7 @@
 // target has no depth/stencil attachment and therefore must not claim or clear one.
 
 #include "CNA/GraphicsCapability.hpp"
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ClearOptions.hpp"
@@ -56,19 +56,19 @@ protected:
         auto& device = getGraphicsDeviceProperty();
         RenderTarget2D target(device, 4, 4, false, SurfaceFormat::Color,
                               DepthFormat::Depth24Stencil8, 0, RenderTargetUsage::PreserveContents);
-        const auto* backend = target.GetRenderTargetBackend();
+        const auto* renderer = target.GetRenderTargetRenderer();
 
         Check(target.getDepthStencilFormatProperty() == DepthFormat::Depth24Stencil8,
               "requested Depth24Stencil8 remains public RenderTarget2D metadata");
         Check(!device.SupportsCapability(CNA::GraphicsCapability::DepthStencilBuffer),
               "raster device does not advertise a depth/stencil buffer");
-        Check(backend != nullptr && !backend->HasRealDepthBuffer(true)
-                  && !backend->HasRealDepthBuffer(false),
+        Check(renderer != nullptr && !renderer->HasRealDepthBuffer(true)
+                  && !renderer->HasRealDepthBuffer(false),
               "Skia target reports no real depth buffer regardless of requested metadata");
 
         device.SetRenderTarget(&target);
         device.Clear(kRed);
-        // GraphicsDevice strips these clear aspects when the bound backend reports no actual
+        // GraphicsDevice strips these clear aspects when the bound renderer reports no actual
         // attachment. If a target fabricated depth/stencil support this would change the colour.
         device.Clear(ClearOptions::DepthBuffer | ClearOptions::Stencil, Color(0, 0, 255, 255), 0.25f, 7);
         device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));

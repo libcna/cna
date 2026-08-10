@@ -103,7 +103,7 @@ jobs:
       - name: Configure
         run: |
           cmake -S . -B build -G Ninja \
-            -DCNA_GRAPHICS_BACKEND=${{ matrix.backend }} \
+            -DCNA_GRAPHICS_RENDERER=${{ matrix.backend }} \
             -DCNA_BUILD_TESTS=ON \
             -DCNA_SANITIZE=${{ matrix.sanitize }}
 

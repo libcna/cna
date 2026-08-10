@@ -2,10 +2,10 @@
 
 SKIA-96 showed that post-projection SkVertices cannot carry reciprocal W, homogeneous clipping
 or culling. This follow-up tests the only bounded alternative still compatible with a raster Skia
-backend: own the 3D colour/depth result in CPU memory and give Skia a completed 2D image.
+renderer: own the 3D colour/depth result in CPU memory and give Skia a completed 2D image.
 
 The implementation remains entirely inside `Skia_CpuDepthRaster_Spike`. It is not a public
-graphics backend, does not change capability reporting and is not reusable production code.
+graphics renderer, does not change capability reporting and is not reusable production code.
 
 ## Prototype boundary
 

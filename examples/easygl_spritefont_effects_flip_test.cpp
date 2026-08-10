@@ -2,13 +2,13 @@
 // Task 428: Verify SpriteEffects (flip) with DrawString on EasyGL.
 //
 // EasyGL port of Task 694's SDL_Renderer "Test 1" (the fix itself): Task 694 found and fixed a
-// real bug in the SHARED, backend-agnostic SpriteBatch.cpp (affects every backend, not just
+// real bug in the SHARED, renderer-agnostic SpriteBatch.cpp (affects every renderer, not just
 // SDL_Renderer) -- DrawString previously forwarded `effects` straight to pushSprite() per glyph,
 // which only flips that glyph's OWN texture sampling in place; the glyph SEQUENCE/POSITION was
 // never mirrored at all, unlike FNA's real algorithm (axisDirectionX/Y + axisIsMirroredX/Y lookup
 // tables, MeasureString(text) called up front to shift `origin` by the measured size on the
 // mirrored axis). This test independently confirms the fix (already shipped, already verified
-// pixel-correct on SDL_Renderer) also renders correctly through EasyGL's own draw backend.
+// pixel-correct on SDL_Renderer) also renders correctly through EasyGL's own draw renderer.
 //
 // Two-glyph font: 'A' (White), 'B' (Green), both 8x8. Drawing "AB" with
 // SpriteEffects::FlipHorizontally, origin=(0,0), position=(4,4), no rotation/scale.

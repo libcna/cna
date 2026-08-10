@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: MS-PL
 // Task 332: RenderTargetCube constructor/property audit against FNA's RenderTargetCube.cs.
 //
-// Backend-agnostic (no pixel readback, no rendering) - just constructs RenderTargetCube via
+// Renderer-agnostic (no pixel readback, no rendering) - just constructs RenderTargetCube via
 // its public constructor and asserts every property getter against the values FNA
 // documents/computes.
 //
 // Task 336 fix: LevelCount now correctly reflects `mipMap`, and EasyGL actually allocates +
 // auto-generates the full mip chain (per-face) on unbind. Holds on Vulkan/Bgfx too (shared,
-// backend-agnostic computation) but only EasyGL's GPU resource is truly mip-complete right now
+// renderer-agnostic computation) but only EasyGL's GPU resource is truly mip-complete right now
 // (Task 878).
 //
-// Task 337 fix: MultiSampleCount now reflects the backend's real, device-clamped value (mirroring
+// Task 337 fix: MultiSampleCount now reflects the renderer's real, device-clamped value (mirroring
 // FNA's MathHelper.ClosestMSAAPower + FNA3D_GetMaxMultiSampleCount), and EasyGL actually creates a
 // shared multisampled color renderbuffer (reused across faces) resolved into the correct face's
 // texture image on unbind. Same Vulkan/Bgfx caveat as LevelCount above (Task 879).
@@ -99,7 +99,7 @@ protected:
                   "mipMap=true: LevelCount == 7 (64x64 full mip chain, Task 336 fix)");
         }
 
-        // --- Task 337 fix: MultiSampleCount reflects the real, per-backend value, never a
+        // --- Task 337 fix: MultiSampleCount reflects the real, per-renderer value, never a
         // blind pass-through (see easygl_rendertarget2d_properties_test.cpp for the full
         // rationale — this test is shared between EasyGL and Vulkan builds). ---
         {

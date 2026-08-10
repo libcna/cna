@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Task 888: AlphaTestEffect linear fog pixel integration test — Vulkan backend.
+// Task 888: AlphaTestEffect linear fog pixel integration test — Vulkan renderer.
 //
 // Fog was a total GPU no-op on Vulkan for AlphaTestEffect (Task 378's finding). Fixed by packing
 // fog data into alpha_test3d's push constant's previously-unused trailing bytes (28 spare bytes

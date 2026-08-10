@@ -3,14 +3,14 @@
 // examples/easygl_texture3d_mip_test.cpp's own scene, mip-level colouring, and expected values
 // verbatim. Unlike Texture2D's own mip test (opengl2_texture_mip_filter_test.cpp's sibling,
 // easygl_texture2d_mip_test.cpp, which is pure CPU-shadow readback), Texture3D::GetData() calls
-// backend_->GetData() directly -- a real glGetTexImage GPU readback -- so this genuinely exercises
-// Texture3DBackend's per-level glTexImage3D storage allocation, not just the CPU-side shadow.
+// renderer_->GetData() directly -- a real glGetTexImage GPU readback -- so this genuinely exercises
+// Texture3DRenderer's per-level glTexImage3D storage allocation, not just the CPU-side shadow.
 //
-// Until this task, Texture3DBackend's constructor only ever allocated level-0 GL storage
+// Until this task, Texture3DRenderer's constructor only ever allocated level-0 GL storage
 // (glTexImage3D called once, level=0) regardless of the mipMap flag, and never clamped
 // GL_TEXTURE_MAX_LEVEL -- SetData(level > 0, ...) wrote via glTexSubImage3D into storage that was
 // never allocated, which is undefined/a GL error, not a working upload. Fixed by allocating every
-// level's storage up front (mirroring TextureCubeBackend's own established per-level loop),
+// level's storage up front (mirroring TextureCubeRenderer's own established per-level loop),
 // confirmed against FNA3D_Driver_OpenGL.c's real OPENGL_CreateTexture3D: depth halves per level
 // (SDL_max(depth >> i, 1)) exactly like width/height, even though Texture3D.cpp's own
 // CalculateMipLevels(width, height) deliberately excludes depth from the LEVEL COUNT formula.

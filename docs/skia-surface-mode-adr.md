@@ -4,8 +4,8 @@ Status: accepted for the CPU-raster release (SKIA-5/6, SKIA-76–79)
 
 ## Decision
 
-`CNA_GRAPHICS_BACKEND=SKIA` has one supported execution mode in this release: an RGBA8888 CPU
-`SkSurface` presented through a backend-owned SDL renderer and streaming texture. It does not
+`CNA_GRAPHICS_RENDERER=SKIA` has one supported execution mode in this release: an RGBA8888 CPU
+`SkSurface` presented through a renderer-owned SDL renderer and streaming texture. It does not
 attempt a Skia GPU context and therefore has no automatic GPU-to-raster fallback. Construction is
 observable as `surface=raster`; a missing pinned artifact or failed presenter is a hard error.
 
@@ -18,10 +18,10 @@ No accelerated code or archive is linked by the current selection.
 
 | Route | Pinned-revision building blocks | Ownership/integration cost | Disposition |
 |---|---|---|---|
-| Raster `SkSurface` + SDL upload | Existing `SkSurfaces::Raster`, exact CPU readback, SDL streaming texture | Skia owns CPU pixels; the backend owns SDL renderer/texture; the caller retains the SDL window. No GPU context crosses the boundary. | Selected and fully tested |
-| Ganesh/OpenGL default framebuffer | `GrDirectContexts::MakeGL`, `GrGLFramebufferInfo`, `GrBackendRenderTarget`, `SkSurfaces::WrapBackendRenderTarget`, `FlushAndSubmit` | Requires a separately pinned Ganesh/GL artifact, backend-owned `SDL_GLContext`, strict current-thread/context rules, top/bottom-origin handling, flush/swap/readback, resize rewrap, and context-loss recovery. | First future accelerated candidate; not enabled |
-| Ganesh/Vulkan | Ganesh Vulkan direct context and backend render-target APIs | CNA/SDL and Skia would need one explicitly shared instance/device/queue, image ownership, layouts, synchronization, swapchain recreation, and readback policy. | Rejected as the first spike; materially broader than GL wrapping |
-| Graphite Vulkan/Dawn/Metal | Graphite context/recorder and backend-texture surface APIs | Requires platform-specific device/queue ownership plus recorder submission and texture/swapchain synchronization. The pinned artifact disables all of these APIs. | Deferred; no advantage established for the first integration |
+| Raster `SkSurface` + SDL upload | Existing `SkSurfaces::Raster`, exact CPU readback, SDL streaming texture | Skia owns CPU pixels; the renderer owns SDL renderer/texture; the caller retains the SDL window. No GPU context crosses the boundary. | Selected and fully tested |
+| Ganesh/OpenGL default framebuffer | `GrDirectContexts::MakeGL`, `GrGLFramebufferInfo`, `GrBackendRenderTarget`, `SkSurfaces::WrapBackendRenderTarget`, `FlushAndSubmit` | Requires a separately pinned Ganesh/GL artifact, renderer-owned `SDL_GLContext`, strict current-thread/context rules, top/bottom-origin handling, flush/swap/readback, resize rewrap, and context-loss recovery. | First future accelerated candidate; not enabled |
+| Ganesh/Vulkan | Ganesh Vulkan direct context and renderer render-target APIs | CNA/SDL and Skia would need one explicitly shared instance/device/queue, image ownership, layouts, synchronization, swapchain recreation, and readback policy. | Rejected as the first spike; materially broader than GL wrapping |
+| Graphite Vulkan/Dawn/Metal | Graphite context/recorder and renderer-texture surface APIs | Requires platform-specific device/queue ownership plus recorder submission and texture/swapchain synchronization. The pinned artifact disables all of these APIs. | Deferred; no advantage established for the first integration |
 
 The comparison uses headers from pinned Skia revision
 `ebf50520d720a1ce9d842d942d04c6c39c3fbc7b`, not an assumed system Skia API. The validated CNA
@@ -36,7 +36,7 @@ package.
   or snapshots; the 64-cycle sanitizer gate directly checks that ownership.
 - A GPU path would add a second artifact ABI, context/device ownership model, sample/filter
   capability set, loss/recovery behavior, and pixel-variance policy. Shipping it without the
-  required comparison suite would weaken rather than extend the verified backend.
+  required comparison suite would weaken rather than extend the verified renderer.
 - SDL may accelerate the final upload internally, but it receives a completed CPU image. That is
   presentation implementation, not a Ganesh/Graphite execution mode.
 
@@ -100,18 +100,18 @@ Gate 3 ("wrap and present the real backbuffer, including resize and loss/recover
 closed: SKIA-161 delivered a real, pixel-proven default-framebuffer wrap, flush/submit, swap,
 readback, and caller-invoked resize (`SkiaGaneshSurface`); SKIA-162 added genuine GL context
 loss/recovery (`DebugSimulateContextLossEXT()`, a real destroy+recreate cycle mirroring
-`EasyGLGraphicsBackend::DebugSimulateContextLoss()`'s own established precedent) and a best-effort
+`EasyGLRenderer::DebugSimulateContextLoss()`'s own established precedent) and a best-effort
 real-fullscreen resize proof on top of it. "Live textures/targets/effects survive... loss/reset
 events" is satisfied vacuously, not yet non-vacuously: none exist in the Ganesh path today (no
-`IGraphicsBackend` wraps it), so there is nothing yet that could fail to survive -- a real,
+`IGraphicsRenderer` wraps it), so there is nothing yet that could fail to survive -- a real,
 non-vacuous version of that proof is genuinely open scope for whichever task first gives Ganesh an
-`IGraphicsBackend` (SKIA-163+), not claimed as closed here.
+`IGraphicsRenderer` (SKIA-163+), not claimed as closed here.
 
 Gate 5 ("add accelerated ASan/UBSan/lifetime coverage where the platform permits it") also has real,
 permanent sanitizer builds (`cmake-build-skia-ganesh-asan`, extended by SKIA-162 to also cover the
 loss/recovery path) exercising everything that exists in this path so far -- but not the full 2D XNA
 oracle/API-contract corpus gate 4 requires, since none of that corpus can run through Ganesh yet.
 
-Gates 2, 4, and 6 remain fully untouched. `CNA_GRAPHICS_BACKEND=SKIA`'s default `RASTER` mode is
-completely unaffected throughout; no `IGraphicsBackend` wraps the Ganesh artifact yet; and this note
+Gates 2, 4, and 6 remain fully untouched. `CNA_GRAPHICS_RENDERER=SKIA`'s default `RASTER` mode is
+completely unaffected throughout; no `IGraphicsRenderer` wraps the Ganesh artifact yet; and this note
 does not itself change the release claim above.

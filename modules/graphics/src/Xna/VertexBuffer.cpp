@@ -2,7 +2,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "CNA/Internal/Graphics/BuiltInVertexStreams.hpp"
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
@@ -18,8 +18,8 @@ namespace Microsoft::Xna::Framework::Graphics
 {
     namespace
     {
-        std::unique_ptr<CNA::Internal::Backends::IVertexBufferBackend>
-        CreateVertexBufferBackend(GraphicsDevice& device, int vertexCount)
+        std::unique_ptr<CNA::Internal::Renderers::IVertexBufferRenderer>
+        CreateVertexBufferRenderer(GraphicsDevice& device, int vertexCount)
         {
             if (vertexCount < 0)
             {
@@ -27,7 +27,7 @@ namespace Microsoft::Xna::Framework::Graphics
                     "vertexCount", std::to_string(vertexCount),
                     "The vertex count must be non-negative.");
             }
-            return device.GetBackend().CreateVertexBuffer(vertexCount);
+            return device.GetRenderer().CreateVertexBuffer(vertexCount);
         }
 
         std::size_t CheckedByteCount(int elementCount,
@@ -112,7 +112,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                BufferUsage bufferUsage,
                                bool /*dynamic*/)
         : GraphicsResource(&device)
-        , backend_(CreateVertexBufferBackend(device, vertexCount))
+        , renderer_(CreateVertexBufferRenderer(device, vertexCount))
         , vertexDeclaration_(vertexDeclaration)
         , bufferUsage_(bufferUsage)
         , vertexCount_(vertexCount)
@@ -125,7 +125,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void VertexBuffer::Dispose(bool disposing)
     {
-        backend_.reset();
+        renderer_.reset();
         GraphicsResource::Dispose(disposing);
     }
 
@@ -212,12 +212,12 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         // GFX-043: propagate this buffer's complete declaration before every real upload. The
         // shared empty branch returns before this method, so even declaration propagation is not
-        // a backend call for an empty operation.
-        backend_->SetVertexDeclaration(vertexDeclaration_);
+        // a renderer call for an empty operation.
+        renderer_->SetVertexDeclaration(vertexDeclaration_);
         if (useOptions)
-            backend_->SetDataWithOptions(data, elementCount, uploadStride, options);
+            renderer_->SetDataWithOptions(data, elementCount, uploadStride, options);
         else
-            backend_->SetData(data, elementCount, uploadStride);
+            renderer_->SetData(data, elementCount, uploadStride);
 
         const std::size_t byteCount =
             CheckedByteCount(elementCount, uploadStride, "elementCount");
@@ -246,7 +246,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         // The C++ object is not the GPU stream: Color inherits a polymorphic IPackedVector
         // base, so a VertexPositionColor carries a vtable pointer and alignment padding that
-        // never reach a backend. Pack into the stream this type's VertexDeclaration describes.
+        // never reach a renderer. Pack into the stream this type's VertexDeclaration describes.
         using GpuVertex = CNA::Internal::Graphics::PositionColorStream;
 
         if (!ValidateSetDataRange(data,
@@ -636,7 +636,7 @@ namespace Microsoft::Xna::Framework::Graphics
             packed[i].u  = data[i].TextureCoordinate.X;
             packed[i].v  = data[i].TextureCoordinate.Y;
         }
-        backend_->SetData(packed.data(), count, sizeof(GpuVertex));
+        renderer_->SetData(packed.data(), count, sizeof(GpuVertex));
 
         cpuShadow_.resize(packed.size() * sizeof(GpuVertex));
         std::memcpy(cpuShadow_.data(), packed.data(), cpuShadow_.size());
@@ -720,7 +720,7 @@ namespace Microsoft::Xna::Framework::Graphics
             packed[i].i2 = data[i].BlendIndices[2];
             packed[i].i3 = data[i].BlendIndices[3];
         }
-        backend_->SetData(packed.data(), count, sizeof(GpuVertex));
+        renderer_->SetData(packed.data(), count, sizeof(GpuVertex));
 
         cpuShadow_.resize(packed.size() * sizeof(GpuVertex));
         std::memcpy(cpuShadow_.data(), packed.data(), cpuShadow_.size());

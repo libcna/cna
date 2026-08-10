@@ -15,7 +15,7 @@ FILES=(
     ".github/workflows/d3d-windows-ci.yml"
     "cmake/Tests/Direct2DTests.cmake"
     "cmake/UnitTests.cmake"
-    "docs/direct2d-backend.md"
+    "docs/direct2d-renderer.md"
     "docs/direct2d-mip-storage-spike.md"
     "plan_direct2d.md"
     "scripts/run-wine-direct2d.sh"

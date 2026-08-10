@@ -8,7 +8,7 @@
 //
 // Unlike Vulkan, Bgfx's per-RT MSAA (BGFX_TEXTURE_RT_MSAA_Xn) is fully independent of any
 // backbuffer MSAA state (same as bgfx_rendertarget2d_msaa_test.cpp) -- no
-// GraphicsDeviceManager.PreferMultiSampling or RecreateBackendForMultiSampleCount workaround is
+// GraphicsDeviceManager.PreferMultiSampling or RecreateRendererForMultiSampleCount workaround is
 // needed here.
 //
 // Bgfx-only conventions mirrored from this test family (Task 364/896/907 findings):

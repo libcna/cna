@@ -7,14 +7,14 @@
 // that slot. It is captured when the draw is issued, so changing it afterwards cannot retroactively
 // alter an already-queued draw, and two draws that share a texture but not a sampler must remain
 // observably different. Texture identity and sampler identity are INDEPENDENT descriptor inputs: a
-// backend that caches descriptor sets must key on both, or the second draw silently inherits the
+// renderer that caches descriptor sets must key on both, or the second draw silently inherits the
 // first one's sampler. An unset slot may use the documented default; an explicit sampler must never
 // be replaced by it.
 //
 // THE DEFECT this reproduces is Vulkan-local and is the stock-3D half of a fix SpriteBatch already
 // received. Vulkan's `ApplySamplerState` is correct -- it builds and caches a per-slot `VkSampler`
 // into `slotSamplers_[slot]` from a complete, correct XNA ordinal mapping -- and SpriteBatch reads
-// it (`VulkanSpriteBatchBackend::FlushTexture`, whose own comment records the identical fix being
+// it (`VulkanSpriteBatchRenderer::FlushTexture`, whose own comment records the identical fix being
 // applied there under Task 665: "previously always used the texture's own pre-baked descriptor set,
 // built once at texture-load time with a fixed default sampler, completely bypassing
 // SetSamplerFilter/SetSamplerAddressMode"). The stock 3D descriptor builders never received that
@@ -51,7 +51,7 @@
 //
 //   P   PointClamp             block-uniform, at most 16 distinct colours
 //   L   LinearClamp            NOT block-uniform -- the differential, so P cannot pass on a
-//                              backend that ignores the sampler and happens to filter linearly...
+//                              renderer that ignores the sampler and happens to filter linearly...
 //                              which is exactly the pre-fix state, and is why P alone is not enough
 //   W   PointWrap vs PointClamp with UVs to 2.0: the two images must DIFFER
 //   K   descriptor-cache key   two draws, ONE frame, SAME texture, different samplers -> the two
@@ -111,42 +111,42 @@ using namespace Microsoft::Xna::Framework::Graphics;
 
 namespace
 {
-#if defined(CNA_BACKEND_HEADLESS)
+#if defined(CNA_RENDERER_HEADLESS)
     constexpr bool kRasterizes = false;
-    constexpr const char* kBackendName = "HEADLESS";
-#elif defined(CNA_BACKEND_SOFTWARE)
+    constexpr const char* kRendererName = "HEADLESS";
+#elif defined(CNA_RENDERER_SOFTWARE)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "SOFTWARE";
-#elif defined(CNA_BACKEND_EASYGL)
+    constexpr const char* kRendererName = "SOFTWARE";
+#elif defined(CNA_RENDERER_EASYGL)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "EASYGL";
-#elif defined(CNA_BACKEND_BGFX)
+    constexpr const char* kRendererName = "EASYGL";
+#elif defined(CNA_RENDERER_BGFX)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "BGFX";
-#elif defined(CNA_BACKEND_VULKAN)
+    constexpr const char* kRendererName = "BGFX";
+#elif defined(CNA_RENDERER_VULKAN)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "VULKAN";
-#elif defined(CNA_BACKEND_WEBGPU)
+    constexpr const char* kRendererName = "VULKAN";
+#elif defined(CNA_RENDERER_WEBGPU)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "WEBGPU";
-#elif defined(CNA_BACKEND_SDL_GPU)
+    constexpr const char* kRendererName = "WEBGPU";
+#elif defined(CNA_RENDERER_SDL_GPU)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "SDL_GPU";
-#elif defined(CNA_BACKEND_D3D9)
+    constexpr const char* kRendererName = "SDL_GPU";
+#elif defined(CNA_RENDERER_D3D9)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "D3D9";
-#elif defined(CNA_BACKEND_D3D11)
+    constexpr const char* kRendererName = "D3D9";
+#elif defined(CNA_RENDERER_D3D11)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "D3D11";
-#elif defined(CNA_BACKEND_D3D12)
+    constexpr const char* kRendererName = "D3D11";
+#elif defined(CNA_RENDERER_D3D12)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "D3D12";
-#elif defined(CNA_BACKEND_LLGL)
+    constexpr const char* kRendererName = "D3D12";
+#elif defined(CNA_RENDERER_LLGL)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "LLGL";
+    constexpr const char* kRendererName = "LLGL";
 #else
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "UNKNOWN";
+    constexpr const char* kRendererName = "UNKNOWN";
 #endif
 
     constexpr int kBBW = 128;
@@ -556,7 +556,7 @@ protected:
         tex2_ = Texture2D::CreateFromPixels(dev, kTex, kTex, Bytes(pattern2_));
         white_ = Texture2D::CreateFromPixels(dev, 1, 1,
                      std::vector<std::uint8_t>{255, 255, 255, 255});
-        // A non-rasterizing backend rejects cube uploads by REMED-GFX-135's contract, and it never
+        // A non-rasterizing renderer rejects cube uploads by REMED-GFX-135's contract, and it never
         // reaches the effect families anyway, so an unavailable cube must not abort the run before
         // the honest-rejection leg gets to assert anything.
         try
@@ -578,7 +578,7 @@ protected:
         done_ = true;
         auto& dev = getGraphicsDeviceProperty();
 
-        std::printf("=== REMED-GFX-169 stock-effect sampler contract on %s ===\n", kBackendName);
+        std::printf("=== REMED-GFX-169 stock-effect sampler contract on %s ===\n", kRendererName);
 
         if (!kRasterizes)
         {
@@ -589,7 +589,7 @@ protected:
             try { rt.GetData(pix.data(), 0, static_cast<int>(pix.size())); }
             catch (const System::Exception&) { threw = true; }
             catch (const std::exception&) { threw = true; }
-            check(threw, "Z1: a non-rasterizing backend rejects the readback instead of fabricating "
+            check(threw, "Z1: a non-rasterizing renderer rejects the readback instead of fabricating "
                          "a sampled image");
             Finish();
             return;
@@ -636,11 +636,11 @@ private:
         // P -- PointClamp must produce exact 4x4 blocks.
         SetSlot(dev, 0, TextureFilter::Point, TextureAddressMode::Clamp);
         SetSlot(dev, 1, TextureFilter::Point, TextureAddressMode::Clamp);
-        // A backend may not implement this family's vertex stride at all -- SOFTWARE, for one,
+        // A renderer may not implement this family's vertex stride at all -- SOFTWARE, for one,
         // documents 16/20/24/32/52 and rejects the PBR strides 48/68. That is a declared capability
         // boundary, not a sampler defect, so it is reported as a skip rather than counted as a
-        // failure; it is NOT a backend-specific exception to the sampler contract, because a
-        // backend that DOES draw the family is still held to every check below.
+        // failure; it is NOT a renderer-specific exception to the sampler contract, because a
+        // renderer that DOES draw the family is still held to every check below.
         std::vector<Color> point;
         try
         {
@@ -648,7 +648,7 @@ private:
         }
         catch (const std::exception& e)
         {
-            std::printf("[SKIP] %s: this backend does not implement the family (%s)\n",
+            std::printf("[SKIP] %s: this renderer does not implement the family (%s)\n",
                         tag.c_str(), e.what());
             std::fflush(stdout);
             return;
@@ -684,7 +684,7 @@ private:
         }
 
         // L -- LinearClamp must NOT be block-uniform. Without this, P1 would also pass on a
-        // backend that ignores the sampler and happens to be filtering linearly is impossible --
+        // renderer that ignores the sampler and happens to be filtering linearly is impossible --
         // but P1 alone WOULD pass on one that ignores it and happens to be filtering by point.
         SetSlot(dev, 0, TextureFilter::Linear, TextureAddressMode::Clamp);
         SetSlot(dev, 1, TextureFilter::Linear, TextureAddressMode::Clamp);
@@ -828,7 +828,7 @@ private:
         {
             // D3D9 declares stride 20 with vertexColor=false unsupported for DualTextureEffect
             // (plan_dx9.md D9-82d), so it has no two-slot stock family to measure here.
-            std::printf("[SKIP] M: this backend does not implement DualTextureEffect (%s)\n", e.what());
+            std::printf("[SKIP] M: this renderer does not implement DualTextureEffect (%s)\n", e.what());
             std::fflush(stdout);
             return;
         }

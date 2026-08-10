@@ -3,7 +3,7 @@
 //
 // A 4x4 TextureCube with mipMap=true has 3 mip levels per face: 4x4 (mip 0), 2x2 (mip 1),
 // 1x1 (mip 2) — mirrors Task 171's Texture2D mip test, but repeated across all six faces so a
-// per-face vs. per-level indexing bug in the backend is also caught.
+// per-face vs. per-level indexing bug in the renderer is also caught.
 //
 // Test plan, for every face:
 //   SetData(face, 0, nullptr, <face colour>, 0, 16) → mip 0: 16 pixels of that face's own colour

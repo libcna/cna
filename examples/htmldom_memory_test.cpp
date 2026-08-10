@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_html_dom.md HTMLDOM-116: measures and bounds the compositor-layer/DOM memory this backend's
+// plan_html_dom.md HTMLDOM-116: measures and bounds the compositor-layer/DOM memory this renderer's
 // sprite pool retains, rather than trusting the "will-change:transform keeps every sprite on its own
 // compositor layer" design decision to be harmless at scale on claims alone. Every pooled sprite
-// element gets its own permanent compositor layer (HtmlDomSpriteBatchBackend.cpp's own comment on
+// element gets its own permanent compositor layer (HtmlDomSpriteBatchRenderer.cpp's own comment on
 // why), and until this task the pool never released one once created -- elements past the current
 // frame's count were only ever hidden via display:none, never removed. This test proves both halves
-// of the age-out fix in CNA_HtmlDom_PresentFrame (HtmlDomGraphicsBackend.cpp): (1) a transient high
-// sprite-count burst (5,000/10,000 sprites, well past this backend's own documented "normal 2D game"
+// of the age-out fix in CNA_HtmlDom_PresentFrame (HtmlDomRenderer.cpp): (1) a transient high
+// sprite-count burst (5,000/10,000 sprites, well past this renderer's own documented "normal 2D game"
 // sweet spot -- HTMLDOM-89's 500-sprite benchmark) does NOT permanently retain that many pool
 // elements once usage genuinely settles back down, and (2) ordinary fluctuating gameplay sprite
 // counts -- which also dip below any past peak, constantly -- never trigger that age-out, so the fix
@@ -40,15 +40,15 @@ namespace
 {
     constexpr int kExpectedChecks = 6;
 
-    // plan_html_dom.md HTMLDOM-116: the ticket's own named stress tiers -- well past this backend's
+    // plan_html_dom.md HTMLDOM-116: the ticket's own named stress tiers -- well past this renderer's
     // documented "normal 2D game" sweet spot (HTMLDOM-89's own 500-sprite benchmark).
     constexpr int kMidBurstSpriteCount = 5000;
     constexpr int kBigBurstSpriteCount = 10000;
 
     // Must match CNA_HtmlDom_PresentFrame's own kIdleShrinkFrames constant in
-    // HtmlDomGraphicsBackend.cpp -- duplicated here deliberately, the same way every test file that
+    // HtmlDomRenderer.cpp -- duplicated here deliberately, the same way every test file that
     // checks the 256-entry variant-cache cap restates that number rather than reading it back from
-    // the backend, since an EM_JS-local constant isn't otherwise observable from C++.
+    // the renderer, since an EM_JS-local constant isn't otherwise observable from C++.
     constexpr int kIdleShrinkFrames = 180;
     constexpr int kIdleSpriteCount = 20;
     // A margin past the exact threshold -- proves the shrink actually fires within this window,

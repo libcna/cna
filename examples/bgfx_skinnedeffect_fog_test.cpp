@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MS-PL
-// Task 899: SkinnedEffect linear fog pixel integration test — Bgfx backend.
+// Task 899: SkinnedEffect linear fog pixel integration test — Bgfx renderer.
 //
 // Bgfx's skinned3d shader pipeline never implemented fog at all (Task 900 fixed the C++-side
-// FillGpuDrawParams() forwarding for SkinnedEffect on all 3 backends, but only added the GPU-side
+// FillGpuDrawParams() forwarding for SkinnedEffect on all 3 renderers, but only added the GPU-side
 // shader fog blend to EasyGL; Vulkan/Bgfx were left for this task). The fog uniforms
 // (u_fogColor/u_fogParams) were already set unconditionally per-draw in DrawPrimitivesEx (Task
 // 888) -- only the shader itself (vs/fs_skinned3d.sc) was missing the fog varying/blend, added

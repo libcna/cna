@@ -191,16 +191,16 @@ TEST_F(CnjCapabilityMatrixTest, SoundEffectDelegatesViaSourceFile)
 }
 
 
-// REMED-GFX-135: does THIS build's backend actually store a cube face? SDL_Renderer, ASCII, Canvas
+// REMED-GFX-135: does THIS build's renderer actually store a cube face? SDL_Renderer, ASCII, Canvas
 // and DX3 create no cube resource at all and Headless stores no pixel data by design, so
 // TextureCube::SetData -- and therefore every content path that uploads a cube -- now refuses
 // deterministically instead of accepting the data and discarding it. Same constant and same
-// reviewed backend set as tests/Microsoft/Xna/Framework/Graphics/TextureCubeTests.cpp.
-// plan_sokol.md SOKOL-27: SokolTextureCubeBackend stores real cube pixels (see
+// reviewed renderer set as tests/Microsoft/Xna/Framework/Graphics/TextureCubeTests.cpp.
+// plan_sokol.md SOKOL-27: SokolTextureCubeRenderer stores real cube pixels (see
 // tests/Microsoft/Xna/Framework/Graphics/TextureCubeTests.cpp for the full contract).
-#if defined(CNA_BACKEND_SDL_RENDERER) || defined(CNA_BACKEND_ASCII) || \
-    defined(CNA_BACKEND_CANVAS) || defined(CNA_BACKEND_HTML_DOM) || \
-    defined(CNA_BACKEND_FREEDIRECT) || defined(CNA_BACKEND_HEADLESS) || defined(CNA_BACKEND_GDI)
+#if defined(CNA_RENDERER_SDL_RENDERER) || defined(CNA_RENDERER_ASCII) || \
+    defined(CNA_RENDERER_CANVAS) || defined(CNA_RENDERER_HTML_DOM) || \
+    defined(CNA_RENDERER_FREEDIRECT) || defined(CNA_RENDERER_HEADLESS) || defined(CNA_RENDERER_GDI)
 constexpr bool kCubeStorageSupported = false;
 #else
 constexpr bool kCubeStorageSupported = true;

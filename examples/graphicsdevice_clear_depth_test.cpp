@@ -10,18 +10,18 @@
 // (depth silently hardcoded to 1.0 regardless of what was cleared), 0.6 IS less than 1.0 — the
 // fragment WRONGLY passes and overwrites the pixel with the test colour. This is a single-frame
 // Clear()-then-Draw() sequence (not a same-frame stamp/clear/compare race) — Clear() legitimately
-// happens once, before the only draw, matching every backend's per-frame clear semantics exactly,
+// happens once, before the only draw, matching every renderer's per-frame clear semantics exactly,
 // so no frame-split is needed (unlike the stamp-based Task 871 stencil test).
 //
-// Check A -- ClearOptions::Target|DepthBuffer (exercises IGraphicsBackend::ClearColorAndDepth):
+// Check A -- ClearOptions::Target|DepthBuffer (exercises IGraphicsRenderer::ClearColorAndDepth):
 //   clear depth to 0.3, draw at z=0.6.
 // Check B -- ClearOptions::Target|DepthBuffer|Stencil (exercises
-//   IGraphicsBackend::ClearColorDepthAndStencil): clear depth to 0.7 (a different value than Check
+//   IGraphicsRenderer::ClearColorDepthAndStencil): clear depth to 0.7 (a different value than Check
 //   A, so a broken dispatch that leaves depth at some other single hardcoded constant can't
 //   coincidentally still pass both checks), draw at z=0.9 (still less than the buggy hardcoded 1.0,
 //   still NOT less than the correctly-cleared 0.7).
 //
-// ClearOptions::DepthBuffer alone (IGraphicsBackend::ClearDepth) was deliberately NOT exercised
+// ClearOptions::DepthBuffer alone (IGraphicsRenderer::ClearDepth) was deliberately NOT exercised
 // here, because Bgfx's ClearDepth() then only stored the new clear value without an immediate
 // EnsureViewState()/touch().
 //
@@ -31,7 +31,7 @@
 // ClearOptions::Target. Bgfx's own gap was closed by REMED-GFX-018 and Vulkan's by REMED-GFX-129;
 // `examples/graphicsdevice_ordered_clear_test.cpp` (checks D1, D5, D6 and D7) now covers a
 // depth-only clear, its value at both ends of the legal range, and its ordering against draws, on
-// every backend that has a depth oracle.
+// every renderer that has a depth oracle.
 //
 // Exit code 0 = both checks PASS, 1 = either FAILs.
 

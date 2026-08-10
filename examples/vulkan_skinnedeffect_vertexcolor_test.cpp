@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // CNB-67 Vulkan port: SkinnedEffect.VertexColorEnabled pixel test -- proves the stride-56
-// SkinnedVertex+Color vertex layout's aColor attribute (VulkanGraphicsBackend::
+// SkinnedVertex+Color vertex layout's aColor attribute (VulkanRenderer::
 // GetOrCreatePipelineSkinned3D/GetOrCreatePipelineSkinned3DVertexLit's stride==56 branch,
 // skinned3d_color.vert/frag.glsl and skinned3d_vertexlit_color.vert/frag.glsl) is actually read
 // and correctly gated by pc.vertexColorEnabled, multiplied into the FINAL combined diffuse+
@@ -12,7 +12,7 @@
 // N=L=V=(0,0,1) and NdotL0=1 -- an analytically exact case, independently re-derived below (not
 // captured-and-pasted). SpecularColor=(0,0,0) and AmbientLightColor=(0,0,0) (the latter sidesteps
 // a separate, pre-existing question of exactly how SkinnedEffect's ambient term reaches this
-// backend's skinned3d shaders -- out of this task's scope; only DirectionalLight0's own diffuse
+// renderer's skinned3d shaders -- out of this task's scope; only DirectionalLight0's own diffuse
 // contribution is exercised here) zero out every other term, isolating VertexColorEnabled's own
 // multiply. weightsPerVertex=1 with a single identity bone isolates skinning from the check.
 //
@@ -46,7 +46,7 @@ using namespace Microsoft::Xna::Framework::Graphics;
 namespace
 {
     // Stride-56: matches skinned3d_color.vert.glsl's attribute layout exactly (SkinnedVertex
-    // with a per-vertex Color appended at offset 52, CNB-67), and EasyGLGraphicsBackend's own
+    // with a per-vertex Color appended at offset 52, CNB-67), and EasyGLRenderer's own
     // ApplyLayout stride==56 case.
     struct SkinnedColorGpuVertex
     {

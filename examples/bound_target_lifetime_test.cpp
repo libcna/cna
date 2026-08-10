@@ -11,14 +11,14 @@
 //     dev.SetRenderTarget(nullptr);            // <-- EASYGL faults HERE, pre-fix
 //
 // THE DEFECT this file reproduces is EasyGL-local and it is an OWNERSHIP defect, not a GL-state one.
-// `EasyGLGraphicsBackend` remembers the bound destination as a raw `IRenderTargetBackend*`
+// `EasyGLRenderer` remembers the bound destination as a raw `IRenderTargetRenderer*`
 // (`currentRt2D_`, and `currentRtCube_` / `currentMrtTargets_` for the other two binding shapes) and
 // the next transition calls a VIRTUAL method on it -- `currentRt2D_->UnbindAsRenderTarget()` -- to
 // perform that target's pending finalization (the MSAA resolve blit and the mip regeneration).
 // Nothing cleared that pointer when the object behind it died, and nothing in the public layer does
 // it either: `RenderTarget2D::Dispose()` refuses to dispose a bound target, but the DESTRUCTOR is
 // `= default` and never routes through Dispose, so a scoped render target that goes out of scope
-// while bound releases its backend silently.
+// while bound releases its renderer silently.
 //
 // It is NOT the destructor that faults, and it is NOT teardown: the fault is inside the next
 // `GraphicsDevice::SetRenderTarget()`, on the main thread, with the leg's own earlier checks already
@@ -44,7 +44,7 @@
 //
 // THE ORACLE is never "did not crash". Every leg that transitions away from a destroyed target then
 // renders a known pattern into the next target and into the backbuffer and compares byte-exactly, so
-// a backend that survives the transition with corrupted framebuffer state fails just as loudly as
+// a renderer that survives the transition with corrupted framebuffer state fails just as loudly as
 // one that faults.
 //
 // PROCESS ISOLATION: the pre-fix failure is a SIGSEGV, not an assertion, so one bad leg would take
@@ -138,46 +138,46 @@ namespace
     constexpr int kPH = 4;    ///< producer pattern height
     /// Backbuffer extent. Each source texel must cover an ODD number of destination pixels, so the
     /// middle pixel of a block lands EXACTLY on that texel's centre; with an even block the centre
-    /// falls between two pixels and a linear-filtering backend returns a blend of two neighbours
+    /// falls between two pixels and a linear-filtering renderer returns a blend of two neighbours
     /// instead of the texel itself. 9 pixels per texel keeps every comparison byte-exact under point
     /// AND linear sampling, rather than needing a tolerance that would also admit a wrong resource.
     constexpr int kBBBlock = 9;
     constexpr int kBBW = kPW * kBBBlock;   ///< 72
     constexpr int kBBH = kPH * kBBBlock;   ///< 36
 
-    /** @brief Whether this backend rasterizes and can read anything back at all. */
-#if defined(CNA_BACKEND_HEADLESS)
+    /** @brief Whether this renderer rasterizes and can read anything back at all. */
+#if defined(CNA_RENDERER_HEADLESS)
     constexpr bool kRasterizes = false;
 #else
     constexpr bool kRasterizes = true;
 #endif
 
-#if defined(CNA_BACKEND_HEADLESS)
-    constexpr const char* kBackendName = "HEADLESS";
-#elif defined(CNA_BACKEND_SOFTWARE)
-    constexpr const char* kBackendName = "SOFTWARE";
-#elif defined(CNA_BACKEND_EASYGL)
-    constexpr const char* kBackendName = "EASYGL";
-#elif defined(CNA_BACKEND_BGFX)
-    constexpr const char* kBackendName = "BGFX";
-#elif defined(CNA_BACKEND_VULKAN)
-    constexpr const char* kBackendName = "VULKAN";
-#elif defined(CNA_BACKEND_WEBGPU)
-    constexpr const char* kBackendName = "WEBGPU";
-#elif defined(CNA_BACKEND_SDL_GPU)
-    constexpr const char* kBackendName = "SDL_GPU";
-#elif defined(CNA_BACKEND_SDL_RENDERER)
-    constexpr const char* kBackendName = "SDL_RENDERER";
-#elif defined(CNA_BACKEND_D3D9)
-    constexpr const char* kBackendName = "D3D9";
-#elif defined(CNA_BACKEND_D3D11)
-    constexpr const char* kBackendName = "D3D11";
-#elif defined(CNA_BACKEND_D3D12)
-    constexpr const char* kBackendName = "D3D12";
-#elif defined(CNA_BACKEND_LLGL)
-    constexpr const char* kBackendName = "LLGL";
+#if defined(CNA_RENDERER_HEADLESS)
+    constexpr const char* kRendererName = "HEADLESS";
+#elif defined(CNA_RENDERER_SOFTWARE)
+    constexpr const char* kRendererName = "SOFTWARE";
+#elif defined(CNA_RENDERER_EASYGL)
+    constexpr const char* kRendererName = "EASYGL";
+#elif defined(CNA_RENDERER_BGFX)
+    constexpr const char* kRendererName = "BGFX";
+#elif defined(CNA_RENDERER_VULKAN)
+    constexpr const char* kRendererName = "VULKAN";
+#elif defined(CNA_RENDERER_WEBGPU)
+    constexpr const char* kRendererName = "WEBGPU";
+#elif defined(CNA_RENDERER_SDL_GPU)
+    constexpr const char* kRendererName = "SDL_GPU";
+#elif defined(CNA_RENDERER_SDL_RENDERER)
+    constexpr const char* kRendererName = "SDL_RENDERER";
+#elif defined(CNA_RENDERER_D3D9)
+    constexpr const char* kRendererName = "D3D9";
+#elif defined(CNA_RENDERER_D3D11)
+    constexpr const char* kRendererName = "D3D11";
+#elif defined(CNA_RENDERER_D3D12)
+    constexpr const char* kRendererName = "D3D12";
+#elif defined(CNA_RENDERER_LLGL)
+    constexpr const char* kRendererName = "LLGL";
 #else
-#error "REMED-GFX-168: this backend has no declared bound-target lifetime contract."
+#error "REMED-GFX-168: this renderer has no declared bound-target lifetime contract."
 #endif
 
     /**
@@ -187,7 +187,7 @@ namespace
      * exactly as the neighbouring render-target fixtures already do.
      */
     constexpr bool kRenderTargetCubeSupported =
-#if defined(CNA_BACKEND_SDL_RENDERER) || defined(CNA_BACKEND_HEADLESS)
+#if defined(CNA_RENDERER_SDL_RENDERER) || defined(CNA_RENDERER_HEADLESS)
         false;
 #else
         true;
@@ -208,7 +208,7 @@ namespace
      * to appear here. Silence is not a declaration, which is why the measured-zero case needs one.
      */
     constexpr bool kRenderTargetMipReadable =
-#if defined(CNA_BACKEND_BGFX)
+#if defined(CNA_RENDERER_BGFX)
         false;
 #else
         true;
@@ -221,12 +221,12 @@ namespace
      * mip chain (leg E1a passes there) but returns all-zero for level 1 of a target bound as part of
      * an MRT set (`L1 the surviving MRT slot's mip chain was still regenerated (0/8) ... got
      * (0,0,0,0)`). Recorded as an independent finding rather than folded into this task's subject;
-     * L1's level-0 check and its backbuffer check stay asserted on every backend. LLGL measures the
+     * L1's level-0 check and its backbuffer check stay asserted on every renderer. LLGL measures the
      * identical (0,0,0,0) result running on its own Vulkan module, unsurprising since that module
      * wraps real Vulkan and shares the same MRT/mip-regeneration path.
      */
     constexpr bool kMrtSlotMipReadable =
-#if defined(CNA_BACKEND_BGFX) || defined(CNA_BACKEND_VULKAN) || defined(CNA_BACKEND_LLGL)
+#if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_VULKAN) || defined(CNA_RENDERER_LLGL)
         false;
 #else
         true;
@@ -237,7 +237,7 @@ namespace
      *
      * Leg D1's control half only. This was declared false on BGFX, where the resolved level 0
      * measured (0,0,0,0) against a flat (70,145,210,255) clear. That gap was REMED-GFX-154 and is
-     * fixed, so the BGFX arm is gone and D1a measures the resolved colour like every other backend.
+     * fixed, so the BGFX arm is gone and D1a measures the resolved colour like every other renderer.
      */
     constexpr bool kMsaaResolveReadable = true;
 
@@ -286,11 +286,11 @@ namespace
     }
 
     /**
-     * @brief Whether @p e is a backend REFUSING mipmapped render targets rather than a real failure.
+     * @brief Whether @p e is a renderer REFUSING mipmapped render targets rather than a real failure.
      *
      * Matched on the message rather than the type on purpose: WebGPU raises a plain
      * `std::runtime_error` here (deliberately, so the XNA layer's promised mip chain cannot silently
-     * be absent -- see WebGPUGraphicsBackend::CreateRenderTarget2D), and narrowing to that type alone
+     * be absent -- see WebGPURenderer::CreateRenderTarget2D), and narrowing to that type alone
      * would swallow every other runtime_error the leg could hit.
      */
     bool MipRefusal(const std::exception& e)
@@ -346,7 +346,7 @@ class BoundTargetLifetimeTest : public Game
         if (ok) ++passCount_;
     }
 
-    /** @brief Records something this backend genuinely cannot measure, and marks the run explained. */
+    /** @brief Records something this renderer genuinely cannot measure, and marks the run explained. */
     void boundary(const std::string& text)
     {
         boundaryDeclared_ = true;
@@ -427,8 +427,8 @@ class BoundTargetLifetimeTest : public Game
      * @brief Reads the kBBW x kBBH backbuffer through the rectangle-LESS overload.
      *
      * REMED-GFX-165 is fixed: a rectangle-less GetBackBufferData now sizes its region from the
-     * authoritative PresentationParameters backbuffer rather than the backend's live viewport, so it
-     * reads the whole backbuffer correctly on every backend. This used to name an explicit rectangle
+     * authoritative PresentationParameters backbuffer rather than the renderer's live viewport, so it
+     * reads the whole backbuffer correctly on every renderer. This used to name an explicit rectangle
      * to avoid that defect; the workaround has been removed now that the overload it worked around is
      * correct.
      */
@@ -445,12 +445,12 @@ class BoundTargetLifetimeTest : public Game
     }
 
     /// True when the caller may assert on @p r. A declared-unreadable oracle is recorded as a
-    /// boundary rather than a failure, so a backend without the oracle still runs its other legs.
+    /// boundary rather than a failure, so a renderer without the oracle still runs its other legs.
     bool Readable(const Readback& r, const std::string& label)
     {
         if (!kRasterizes || !r.ok())
         {
-            boundary(label + ": oracle unavailable on " + kBackendName + " (" +
+            boundary(label + ": oracle unavailable on " + kRendererName + " (" +
                      (!kRasterizes ? "non-rasterizing"
                                    : (r.threwNotSupported ? "NotSupportedException" : r.otherWhat)) +
                      ") -- boundary recorded");
@@ -475,7 +475,7 @@ class BoundTargetLifetimeTest : public Game
             {
                 // The middle pixel of the block this source texel occupies. Every destination size
                 // this fixture uses gives an odd block, so this pixel's texture coordinate is
-                // exactly the texel centre and the comparison is byte-exact whatever the backend
+                // exactly the texel centre and the comparison is byte-exact whatever the renderer
                 // filters with.
                 const int px = (x * r.w) / kPW + (r.w / kPW) / 2;
                 const int py = (y * r.h) / kPH + (r.h / kPH) / 2;
@@ -781,17 +781,17 @@ class BoundTargetLifetimeTest : public Game
         const int applied = probe.getMultiSampleCountProperty();
         if (applied <= 0)
         {
-            boundary(std::string("D1 ") + kBackendName + " applied multisample count " +
+            boundary(std::string("D1 ") + kRendererName + " applied multisample count " +
                      std::to_string(applied) + " for a requested 4 -- no MSAA resolve to measure");
             return;
         }
-        boundary(std::string("D1 ") + kBackendName + " applied multisample count " +
+        boundary(std::string("D1 ") + kRendererName + " applied multisample count " +
                  std::to_string(applied));
 
         // (a) unbound first: the resolve is REQUIRED and its result must be exact.
         if (!kMsaaResolveReadable)
         {
-            boundary(std::string("D1a ") + kBackendName + " cannot read a resolved MSAA render "
+            boundary(std::string("D1a ") + kRendererName + " cannot read a resolved MSAA render "
                      "target back -- the resolve CONTROL is declared, not measured");
         }
         else
@@ -847,7 +847,7 @@ class BoundTargetLifetimeTest : public Game
                 if (Readable(l0, "E1a"))
                     CheckFlat(l0, "E1a a mipmapped target's level 0 is exact", kFlat);
                 if (!kRenderTargetMipReadable)
-                    boundary(std::string("E1a ") + kBackendName + " cannot read a render target's "
+                    boundary(std::string("E1a ") + kRendererName + " cannot read a render target's "
                              "mip level 1 back -- the regeneration CONTROL is declared, not measured");
                 else
                 {
@@ -872,10 +872,10 @@ class BoundTargetLifetimeTest : public Game
         {
             // WebGPU refuses mipMap=true on a render target outright, with a std::runtime_error
             // naming plan_webgpu.md WEBGPU-53/54 -- deliberately, so the XNA layer's promised mip
-            // chain cannot silently be missing. A backend that SAYS so is declared here; one that
+            // chain cannot silently be missing. A renderer that SAYS so is declared here; one that
             // silently returns zeros is not, which is what kRenderTargetMipReadable exists for.
             if (!MipRefusal(e)) throw;
-            boundary(std::string("E1 ") + kBackendName + " has no mipmapped render-target path (" +
+            boundary(std::string("E1 ") + kRendererName + " has no mipmapped render-target path (" +
                      e.what() + ") -- declared, not measured");
             try { dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr)); } catch (...) {}
             return;
@@ -895,7 +895,7 @@ class BoundTargetLifetimeTest : public Game
     {
         if (!kRenderTargetCubeSupported)
         {
-            boundary(std::string("F1 ") + kBackendName + " has no render-into-a-cube path -- "
+            boundary(std::string("F1 ") + kRendererName + " has no render-into-a-cube path -- "
                      "declared, not measured");
             return;
         }
@@ -945,7 +945,7 @@ class BoundTargetLifetimeTest : public Game
                 }
                 catch (const System::NotSupportedException& e)
                 {
-                    boundary(std::string("F1 ") + kBackendName +
+                    boundary(std::string("F1 ") + kRendererName +
                              " cannot read a rendered cube face back (" + e.what() +
                              ") -- process outcome only");
                     readable = false;
@@ -967,7 +967,7 @@ class BoundTargetLifetimeTest : public Game
         }
         catch (const System::NotSupportedException& e)
         {
-            boundary(std::string("F1 ") + kBackendName + " has no RenderTargetCube path (" +
+            boundary(std::string("F1 ") + kRendererName + " has no RenderTargetCube path (" +
                      e.what() + ") -- declared, not measured");
             return;
         }
@@ -984,7 +984,7 @@ class BoundTargetLifetimeTest : public Game
      * InvalidOperationException, never a dereference. That bounds the whole defect to the window
      * between the destructor and the next SetRenderTarget, because a frame boundary cannot be
      * crossed with a target bound at all -- and it is asserted here rather than assumed, since a
-     * future backend-level Present that consulted the binding OBJECT instead of the flag would turn
+     * future renderer-level Present that consulted the binding OBJECT instead of the flag would turn
      * this leg red.
      */
     void LegP1(GraphicsDevice& dev)
@@ -1102,7 +1102,7 @@ class BoundTargetLifetimeTest : public Game
      *
      * A binding recorded as a bare object ADDRESS cannot tell a dead target from a live one that the
      * allocator happened to place at the same address. The public wrapper's address is what this leg
-     * can observe and report; the backend object's address is recorded by CNA_EASYGL_TARGET_TRACE.
+     * can observe and report; the renderer object's address is recorded by CNA_EASYGL_TARGET_TRACE.
      */
     void LegI1(GraphicsDevice& dev)
     {
@@ -1133,7 +1133,7 @@ class BoundTargetLifetimeTest : public Game
      * @brief Leg J1 -- device teardown immediately behind a destroyed-while-bound transition.
      *
      * `heldBound_` is a member of this class, so it is destroyed BEFORE `Game`'s own
-     * `GraphicsDevice_` member; the reverse order -- a render target outliving its graphics backend
+     * `GraphicsDevice_` member; the reverse order -- a render target outliving its graphics renderer
      * -- is therefore not reachable through this harness at all, and is handled by construction
      * rather than measured here (see the record). What this leg does measure is the reachable half:
      * one target dies while bound, the transition runs, and a SECOND target is still alive and
@@ -1199,7 +1199,7 @@ class BoundTargetLifetimeTest : public Game
         catch (const std::exception& e)
         {
             if (!MipRefusal(e)) throw;
-            boundary(std::string("L1 ") + kBackendName + " has no mipmapped render-target path (" +
+            boundary(std::string("L1 ") + kRendererName + " has no mipmapped render-target path (" +
                      e.what() + ") -- declared, not measured");
             return;
         }
@@ -1221,7 +1221,7 @@ class BoundTargetLifetimeTest : public Game
         }
         catch (const std::exception& e)
         {
-            boundary(std::string("L1 ") + kBackendName + " has no usable 2-slot MRT path (" +
+            boundary(std::string("L1 ") + kRendererName + " has no usable 2-slot MRT path (" +
                      e.what() + ") -- declared, not measured");
             try { dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr)); } catch (...) {}
             return;
@@ -1231,7 +1231,7 @@ class BoundTargetLifetimeTest : public Game
         if (Readable(l0, "L1"))
             CheckFlat(l0, "L1 the surviving MRT slot's level 0 is exact", kFlatAlt);
         if (!kMrtSlotMipReadable)
-            boundary(std::string("L1 ") + kBackendName + " cannot read an MRT member's mip level 1 "
+            boundary(std::string("L1 ") + kRendererName + " cannot read an MRT member's mip level 1 "
                      "back -- the survivor's regeneration is declared, not measured");
         else
         {
@@ -1254,7 +1254,7 @@ class BoundTargetLifetimeTest : public Game
     void LegM1(GraphicsDevice& dev)
     {
         constexpr int kRounds = 120;
-        /// The fewest rounds that still forces GL/native name reuse many times over. A backend with a
+        /// The fewest rounds that still forces GL/native name reuse many times over. A renderer with a
         /// documented per-FRAME resource cap (bgfx runs out of ordered view-segment ids past ~190
         /// segments, REMED-GFX-065) cannot reach 120 in one frame; below this many, the leg would not
         /// be measuring repetition at all and is a failure rather than a boundary.
@@ -1277,7 +1277,7 @@ class BoundTargetLifetimeTest : public Game
         }
         catch (const std::exception& e)
         {
-            boundary(std::string("M1 ") + kBackendName + " refused round " +
+            boundary(std::string("M1 ") + kRendererName + " refused round " +
                      std::to_string(completed + 1) + " (" + e.what() + ") -- " +
                      std::to_string(completed) + " rounds measured");
             try { dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr)); } catch (...) {}
@@ -1286,11 +1286,11 @@ class BoundTargetLifetimeTest : public Game
                                        " destroy-while-bound rounds completed");
         if (completed < kRounds)
         {
-            // A backend with a per-FRAME resource cap has nothing left in this frame, so its closing
+            // A renderer with a per-FRAME resource cap has nothing left in this frame, so its closing
             // oracle cannot run either. Declared rather than retried in a second frame: another frame
             // would move the subject from "state after N rounds of churn" to "state after a Present",
             // which is leg G1's subject and not this one's.
-            boundary(std::string("M1 ") + kBackendName + " has no frame budget left after " +
+            boundary(std::string("M1 ") + kRendererName + " has no frame budget left after " +
                      std::to_string(completed) + " rounds -- the closing content oracle is declared, "
                      "not measured");
             return;
@@ -1396,9 +1396,9 @@ class BoundTargetLifetimeTest : public Game
 
     void Finish()
     {
-        std::printf("[INFO] %s: %d/%d checks passed\n", kBackendName, passCount_, totalCount_);
+        std::printf("[INFO] %s: %d/%d checks passed\n", kRendererName, passCount_, totalCount_);
         std::fflush(stdout);
-        // A leg may legitimately have nothing to measure on a backend that lacks the capability --
+        // A leg may legitimately have nothing to measure on a renderer that lacks the capability --
         // but only when it SAID so. A run that measured nothing and explained nothing is a failure.
         result_ = (passCount_ == totalCount_ && (totalCount_ > 0 || boundaryDeclared_)) ? 0 : 1;
         Exit();
@@ -1430,7 +1430,7 @@ public:
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
         gdm_->setPreferredBackBufferWidthProperty(kBBW);
         gdm_->setPreferredBackBufferHeightProperty(kBBH);
-        // Leg D1's subject is a MULTISAMPLED target, and on backends that tie render-target MSAA to
+        // Leg D1's subject is a MULTISAMPLED target, and on renderers that tie render-target MSAA to
         // the device's own sample count a render target can only engage it when the backbuffer was
         // created multisampled. Requested ONLY in D1's own child -- the supervisor runs one leg per
         // child -- so no other leg's measurement moves, and the in-process fallback keeps D1's

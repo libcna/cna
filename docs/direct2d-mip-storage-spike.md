@@ -6,7 +6,7 @@ introduced.
 
 ## Ordinary Texture2D: accepted
 
-`Direct2DTextureBackend` stores level zero plus independently authored lower mip levels. Every
+`Direct2DTextureRenderer` stores level zero plus independently authored lower mip levels. Every
 initialized level has an `ID2D1Bitmap1` and an RGBA shadow. `Texture2D::SetData(level, ...)` creates
 or replaces exactly that level after validating its expected dimensions. Recovery reconstructs
 all initialized levels from the matching shadows.
@@ -25,10 +25,10 @@ downsample on unbind. The D2D-78 7x5 NPOT oracle disproved that proposal: succes
 aliased spatially and the final 1x1 level omitted entire source quadrants. That is not an acceptable
 generated-mip contract.
 
-The production backend therefore supports only RenderTarget2D level zero. Creation with
+The production renderer therefore supports only RenderTarget2D level zero. Creation with
 `mipMap=true` fails before native allocation, level values other than zero fail deterministically,
 and all generated-mip storage/dirty-state code has been removed. Applications that require
-mipmapped render targets must use a 3D backend such as D3D11. This deliberate rejection closes the
+mipmapped render targets must use a 3D renderer such as D3D11. This deliberate rejection closes the
 supported-path defect without pretending nearest-level sampling is mip-linear or retaining an
 unreachable flawed algorithm.
 

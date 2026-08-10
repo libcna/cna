@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // D3D9 PBR porting task: CNA's own NOXNA "Pbr3D" shader -- PbrEffect (unskinned metallic-roughness
-// BRDF), ported line-by-line from EasyGLGraphicsBackend.cpp's EnsurePbrProgram() (GLSL/GLES 3.00)
+// BRDF), ported line-by-line from EasyGLRenderer.cpp's EnsurePbrProgram() (GLSL/GLES 3.00)
 // to HLSL Shader Model 3 (vs_3_0/ps_3_0). Not a Microsoft Stock Effect port: XNA 4.0 has no PBR
 // effect at all -- same "CNA's own minimal stand-in, real XNA has nothing like this" rationale
 // D3D9InstancedDraw.cpp's own header comment already gives for Instanced3D.hlsl.

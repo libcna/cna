@@ -4,7 +4,7 @@
 // per-pixel sibling (FNA's Lighting.fxh ComputeLights()), moved into this vertex stage instead of
 // the pixel shader -- the interpolated result (not the interpolated inputs) is what reaches the
 // pixel shader, giving real Gouraud shading. Only selected when lightingEnabled is already true
-// (see each backend's own dispatch site), so unlike the per-pixel sibling this shader has no
+// (see each renderer's own dispatch site), so unlike the per-pixel sibling this shader has no
 // runtime lightingEnabled branch -- it is unconditionally lit, matching a real XNA compiled
 // shader family's own "one shader per feature combination" model.
 // Stride 32: VertexPositionNormalTexture -- float3 pos + float3 normal + float2 uv.

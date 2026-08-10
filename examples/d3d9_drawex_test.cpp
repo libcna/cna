@@ -53,18 +53,18 @@
 // Check P -- SkinnedEffect, OneLight bucket: ONE active light -- exact readback, different from
 //   Check O, proving correct bucket selection.
 // Check Q -- regression for the NEXT.md-documented "RenderTarget2D sampled as an ordinary
-//   texture crashes on the next draw" bug: a D3D9RenderTargetBackend is created, bound, Clear()ed
+//   texture crashes on the next draw" bug: a D3D9RenderTargetRenderer is created, bound, Clear()ed
 //   to a known color, unbound, then used directly as params.texture0 for an ordinary unlit+
 //   textured BasicEffect draw (same shape as Check A). The real root cause (found and fixed the
 //   same session): every DrawXEffectEXT() texture-binding call site did
-//   `static_cast<const D3D9TextureBackend*>(params.texture0)` unconditionally, silently
-//   reinterpreting a D3D9RenderTargetBackend* (an unrelated sibling class implementing the same
-//   ITextureBackend interface, which GpuDrawParams::texture0 is declared as) as if it were a
-//   D3D9TextureBackend* -- undefined behavior that read garbage where D3D9TextureBackend's own
+//   `static_cast<const D3D9TextureRenderer*>(params.texture0)` unconditionally, silently
+//   reinterpreting a D3D9RenderTargetRenderer* (an unrelated sibling class implementing the same
+//   ITextureRenderer interface, which GpuDrawParams::texture0 is declared as) as if it were a
+//   D3D9TextureRenderer* -- undefined behavior that read garbage where D3D9TextureRenderer's own
 //   `texture_` field would be and handed SetTexture() a bogus IDirect3DTexture9*, which crashed
 //   later when DXVK's async shader-compiler thread tried to actually use it. Fixed with a real
 //   two-concrete-type dynamic_cast resolution (ResolveD3D9TextureEXT), mirroring
-//   D3D11GraphicsBackend.cpp's own established GetSrvForTextureEXT precedent for the identical
+//   D3D11Renderer.cpp's own established GetSrvForTextureEXT precedent for the identical
 //   situation. This check's exact readback (matching Check A's own color) proves the render
 //   target's REAL content is genuinely sampled, not merely "didn't crash".
 // Check R -- BasicEffect PreferPerPixelLighting=true, textured (ShaderIndex 28/29 -- one of the 5
@@ -72,7 +72,7 @@
 //   compiler-version difference the same row demands be PROVEN pixel-equivalent against the real
 //   XNA oracle -- see the new lit_textured_quad_pixellighting.scene oracle scene for that proof; a
 //   flat single-normal triangle like this one cannot itself distinguish vertex-lit from pixel-lit
-//   output, since dot(light,N) is linear in a CONSTANT N -- only that this backend's dispatch and
+//   output, since dot(light,N) is linear in a CONSTANT N -- only that this renderer's dispatch and
 //   constant upload plumbing for the pixel-lighting bucket are wired correctly at all). Same
 //   one-light setup as Check D, same exact expected value (80,48,16) -- proving this. Real bug
 //   found and fixed while adding this bucket (2026-07-16, confirmed independently against the real
@@ -97,10 +97,10 @@
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 
-#include "CNA/Internal/Backends/D3D9/D3D9GraphicsBackend.hpp"
-#include "CNA/Internal/Backends/D3D9/D3D9Textures.hpp"
-#include "CNA/Internal/Backends/D3D9/D3D9RenderTargets.hpp"
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/D3D9/D3D9Renderer.hpp"
+#include "CNA/Internal/Renderers/D3D9/D3D9Textures.hpp"
+#include "CNA/Internal/Renderers/D3D9/D3D9RenderTargets.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Graphics/ImageData.hpp"
 
 #include <algorithm>
@@ -110,9 +110,9 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::D3D9;
-using CNA::Internal::Backends::GpuDrawParams;
-using CNA::Internal::Backends::ImageData;
+using namespace CNA::Internal::Renderers::D3D9;
+using CNA::Internal::Renderers::GpuDrawParams;
+using CNA::Internal::Renderers::ImageData;
 
 namespace
 {
@@ -163,20 +163,20 @@ namespace
         {-1.0f,  3.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, {0, 0, 0, 0}},
     };
 
-    std::unique_ptr<CNA::Internal::Backends::ITextureBackend> Make1x1Texture(
-        D3D9GraphicsBackend& backend, uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255)
+    std::unique_ptr<CNA::Internal::Renderers::ITextureRenderer> Make1x1Texture(
+        D3D9Renderer& renderer, uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255)
     {
         ImageData img;
         img.width = 1;
         img.height = 1;
         img.pixels = {r, g, b, a};
-        return backend.CreateTexture(img);
+        return renderer.CreateTexture(img);
     }
 
-    std::unique_ptr<CNA::Internal::Backends::ITextureCubeBackend> Make1x1CubeTexture(
-        D3D9GraphicsBackend& backend, uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255)
+    std::unique_ptr<CNA::Internal::Renderers::ITextureCubeRenderer> Make1x1CubeTexture(
+        D3D9Renderer& renderer, uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255)
     {
-        auto cube = backend.CreateTextureCube(1, false, 0);
+        auto cube = renderer.CreateTextureCube(1, false, 0);
         const uint8_t pixel[4] = {r, g, b, a};
         for (int face = 0; face < 6; ++face)
             cube->SetData(face, 0, 0, 0, 1, 1, pixel, sizeof(pixel));
@@ -204,18 +204,18 @@ protected:
         if (frame_++ < 1) return;
 
         auto& dev = getGraphicsDeviceProperty();
-        auto& backend = static_cast<D3D9GraphicsBackend&>(dev.GetBackend());
+        auto& renderer = static_cast<D3D9Renderer&>(dev.GetRenderer());
 
-        backend.ApplyBlendState(0, 0, 1, 1, 0, 0, CNA::Internal::Backends::BlendWriteState{}); // REMED-GFX-077 default write state
-        backend.ApplyDepthStencilState(false, false, 0, false, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 0);
-        backend.ApplyRasterizerState(0 /*CullMode::None*/, 0 /*FillMode::Solid*/, false, 0.0f, 0.0f);
-        backend.ApplySamplerState(0, 1 /*TextureFilter::Point*/, 0, 0, 1);
+        renderer.ApplyBlendState(0, 0, 1, 1, 0, 0, CNA::Internal::Renderers::BlendWriteState{}); // REMED-GFX-077 default write state
+        renderer.ApplyDepthStencilState(false, false, 0, false, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 0);
+        renderer.ApplyRasterizerState(0 /*CullMode::None*/, 0 /*FillMode::Solid*/, false, 0.0f, 0.0f);
+        renderer.ApplySamplerState(0, 1 /*TextureFilter::Point*/, 0, 0, 1);
 
-        auto tex = Make1x1Texture(backend, 200, 120, 40);
+        auto tex = Make1x1Texture(renderer, 200, 120, 40);
 
         // Check A: unlit + textured -- exact texture*DiffuseColor.
         {
-            auto vb = backend.CreateVertexBuffer(3);
+            auto vb = renderer.CreateVertexBuffer(3);
             vb->SetData(kTriTx, 3, sizeof(VPT));
 
             GpuDrawParams params;
@@ -225,7 +225,7 @@ protected:
             params.diffuseColor[0] = params.diffuseColor[1] = params.diffuseColor[2] = params.diffuseColor[3] = 1.0f;
 
             dev.Clear(Color(0, 0, 255, 255));
-            backend.DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+            renderer.DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                      Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, params);
             Color px(0, 0, 0, 0);
             ReadCenterPixel(dev, px);
@@ -235,7 +235,7 @@ protected:
 
         // Check B: unlit + vertex-color + textured -- exact texture*vertexColor*DiffuseColor.
         {
-            auto vb = backend.CreateVertexBuffer(3);
+            auto vb = renderer.CreateVertexBuffer(3);
             vb->SetData(kTriColorTx, 3, sizeof(VPCT));
 
             GpuDrawParams params;
@@ -245,7 +245,7 @@ protected:
             params.diffuseColor[0] = params.diffuseColor[1] = params.diffuseColor[2] = params.diffuseColor[3] = 1.0f;
 
             dev.Clear(Color(0, 0, 255, 255));
-            backend.DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+            renderer.DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                      Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, params);
             Color px(0, 0, 0, 0);
             ReadCenterPixel(dev, px);
@@ -258,7 +258,7 @@ protected:
 
         // Check C: lit + textured, VertexLighting bucket -- two active lights.
         {
-            auto vb = backend.CreateVertexBuffer(3);
+            auto vb = renderer.CreateVertexBuffer(3);
             vb->SetData(kTriNormalTx, 3, sizeof(VPNT));
 
             GpuDrawParams params;
@@ -276,7 +276,7 @@ protected:
             // light2 stays at its zero default.
 
             dev.Clear(Color(0, 0, 255, 255));
-            backend.DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+            renderer.DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                      Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, params);
             Color px(0, 0, 0, 0);
             ReadCenterPixel(dev, px);
@@ -288,7 +288,7 @@ protected:
 
         // Check D: lit + textured, OneLight bucket -- one active light (light1/2 zero).
         {
-            auto vb = backend.CreateVertexBuffer(3);
+            auto vb = renderer.CreateVertexBuffer(3);
             vb->SetData(kTriNormalTx, 3, sizeof(VPNT));
 
             GpuDrawParams params;
@@ -303,7 +303,7 @@ protected:
             // light1/light2 stay at their zero defaults -> oneLight must resolve to true.
 
             dev.Clear(Color(0, 0, 255, 255));
-            backend.DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+            renderer.DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                      Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, params);
             Color px(0, 0, 0, 0);
             ReadCenterPixel(dev, px);
@@ -315,7 +315,7 @@ protected:
 
         // Check E: fog -- same unlit+textured setup as Check A, forced to fully-fogged.
         {
-            auto vb = backend.CreateVertexBuffer(3);
+            auto vb = renderer.CreateVertexBuffer(3);
             vb->SetData(kTriTx, 3, sizeof(VPT));
 
             GpuDrawParams params;
@@ -331,7 +331,7 @@ protected:
             params.fogColor[2] = fogC.getBProperty() / 255.0f;
 
             dev.Clear(Color(0, 0, 255, 255));
-            backend.DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+            renderer.DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                      Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, params);
             Color px(0, 0, 0, 0);
             ReadCenterPixel(dev, px);
@@ -341,9 +341,9 @@ protected:
 
         // Check G: AlphaTestEffect, Less compare, PASSES (LtGt bucket, stride 20).
         {
-            auto vb = backend.CreateVertexBuffer(3);
+            auto vb = renderer.CreateVertexBuffer(3);
             vb->SetData(kTriTx, 3, sizeof(VPT));
-            auto atexLowAlpha = Make1x1Texture(backend, 200, 120, 40, 64);
+            auto atexLowAlpha = Make1x1Texture(renderer, 200, 120, 40, 64);
 
             GpuDrawParams params;
             params.textureEnabled = true;
@@ -357,7 +357,7 @@ protected:
             params.alphaTest[2] = 1.0f; params.alphaTest[3] = -1.0f;
 
             dev.Clear(Color(0, 0, 255, 255));
-            backend.DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+            renderer.DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                      Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, params);
             Color px(0, 0, 0, 0);
             ReadCenterPixel(dev, px);
@@ -369,9 +369,9 @@ protected:
 
         // Check H: AlphaTestEffect, Less compare, FAILS -- background left genuinely unpainted.
         {
-            auto vb = backend.CreateVertexBuffer(3);
+            auto vb = renderer.CreateVertexBuffer(3);
             vb->SetData(kTriTx, 3, sizeof(VPT));
-            auto atexLowAlpha = Make1x1Texture(backend, 200, 120, 40, 64);
+            auto atexLowAlpha = Make1x1Texture(renderer, 200, 120, 40, 64);
 
             GpuDrawParams params;
             params.textureEnabled = true;
@@ -383,7 +383,7 @@ protected:
             params.alphaTest[2] = 1.0f; params.alphaTest[3] = -1.0f;
 
             dev.Clear(Color(0, 0, 255, 255));
-            backend.DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+            renderer.DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                      Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, params);
             Color px(0, 0, 0, 0);
             ReadCenterPixel(dev, px);
@@ -394,9 +394,9 @@ protected:
 
         // Check I: AlphaTestEffect, Equal compare, PASSES, vertex-color bucket (stride 24, EqNe PS).
         {
-            auto vb = backend.CreateVertexBuffer(3);
+            auto vb = renderer.CreateVertexBuffer(3);
             vb->SetData(kTriColorTx, 3, sizeof(VPCT)); // opaque white vertex color
-            auto atexMidAlpha = Make1x1Texture(backend, 200, 120, 40, 128);
+            auto atexMidAlpha = Make1x1Texture(renderer, 200, 120, 40, 128);
 
             GpuDrawParams params;
             params.textureEnabled = true;
@@ -410,7 +410,7 @@ protected:
             params.alphaTest[2] = 1.0f; params.alphaTest[3] = -1.0f;
 
             dev.Clear(Color(0, 0, 255, 255));
-            backend.DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+            renderer.DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                      Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, params);
             Color px(0, 0, 0, 0);
             ReadCenterPixel(dev, px);
@@ -421,10 +421,10 @@ protected:
 
         // Check J: DualTextureEffect, no fog, no vertex color (stride 28, D3D9-only layout).
         {
-            auto vb = backend.CreateVertexBuffer(3);
+            auto vb = renderer.CreateVertexBuffer(3);
             vb->SetData(kTriDualTx, 3, sizeof(VPT2));
-            auto texWhite = Make1x1Texture(backend, 255, 255, 255, 255);
-            auto texOverlay = Make1x1Texture(backend, 100, 60, 20, 255);
+            auto texWhite = Make1x1Texture(renderer, 255, 255, 255, 255);
+            auto texOverlay = Make1x1Texture(renderer, 100, 60, 20, 255);
 
             GpuDrawParams params;
             params.dualTexture = true;
@@ -436,7 +436,7 @@ protected:
             params.diffuseColor[3] = 1.0f;
 
             dev.Clear(Color(0, 0, 255, 255));
-            backend.DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+            renderer.DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                      Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, params);
             Color px(0, 0, 0, 0);
             ReadCenterPixel(dev, px);
@@ -450,10 +450,10 @@ protected:
 
         // Check M: EnvironmentMapEffect, "basic" bucket (TWO active lights, non-fresnel, stride 32).
         {
-            auto vb = backend.CreateVertexBuffer(3);
+            auto vb = renderer.CreateVertexBuffer(3);
             vb->SetData(kTriNormalTx, 3, sizeof(VPNT));
-            auto tex = Make1x1Texture(backend, 200, 120, 40, 255);
-            auto cube = Make1x1CubeTexture(backend, 100, 200, 50, 255);
+            auto tex = Make1x1Texture(renderer, 200, 120, 40, 255);
+            auto cube = Make1x1CubeTexture(renderer, 100, 200, 50, 255);
 
             GpuDrawParams params;
             params.envMapping = true;
@@ -470,7 +470,7 @@ protected:
             // light2 stays zero -> oneLight must resolve to false (light1 nonzero).
 
             dev.Clear(Color(0, 0, 255, 255));
-            backend.DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+            renderer.DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                      Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, params);
             Color px(0, 0, 0, 0);
             ReadCenterPixel(dev, px);
@@ -483,10 +483,10 @@ protected:
 
         // Check N: EnvironmentMapEffect, "oneLight" bucket (ONE active light, non-fresnel).
         {
-            auto vb = backend.CreateVertexBuffer(3);
+            auto vb = renderer.CreateVertexBuffer(3);
             vb->SetData(kTriNormalTx, 3, sizeof(VPNT));
-            auto tex = Make1x1Texture(backend, 200, 120, 40, 255);
-            auto cube = Make1x1CubeTexture(backend, 100, 200, 50, 255);
+            auto tex = Make1x1Texture(renderer, 200, 120, 40, 255);
+            auto cube = Make1x1CubeTexture(renderer, 100, 200, 50, 255);
 
             GpuDrawParams params;
             params.envMapping = true;
@@ -501,7 +501,7 @@ protected:
             // light1/light2 stay zero -> oneLight must resolve to true.
 
             dev.Clear(Color(0, 0, 255, 255));
-            backend.DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+            renderer.DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                      Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, params);
             Color px(0, 0, 0, 0);
             ReadCenterPixel(dev, px);
@@ -516,9 +516,9 @@ protected:
         // Identity and every vertex is 100% weighted to it, so skinning is a no-op and the expected
         // math reduces to exactly the same lit-textured formula BasicEffect's own Check C uses.
         {
-            auto vb = backend.CreateVertexBuffer(3);
+            auto vb = renderer.CreateVertexBuffer(3);
             vb->SetData(kTriSkinned, 3, sizeof(VPNTW));
-            auto tex = Make1x1Texture(backend, 200, 120, 40, 255);
+            auto tex = Make1x1Texture(renderer, 200, 120, 40, 255);
 
             GpuDrawParams params;
             params.skinned = true;
@@ -539,7 +539,7 @@ protected:
             // light2 stays zero -> oneLight must resolve to false (light1 nonzero).
 
             dev.Clear(Color(0, 0, 255, 255));
-            backend.DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+            renderer.DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                      Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, params);
             Color px(0, 0, 0, 0);
             ReadCenterPixel(dev, px);
@@ -551,9 +551,9 @@ protected:
 
         // Check P: SkinnedEffect, OneLight bucket (ONE active light).
         {
-            auto vb = backend.CreateVertexBuffer(3);
+            auto vb = renderer.CreateVertexBuffer(3);
             vb->SetData(kTriSkinned, 3, sizeof(VPNTW));
-            auto tex = Make1x1Texture(backend, 200, 120, 40, 255);
+            auto tex = Make1x1Texture(renderer, 200, 120, 40, 255);
 
             GpuDrawParams params;
             params.skinned = true;
@@ -571,7 +571,7 @@ protected:
             // light1/light2 stay zero -> oneLight must resolve to true.
 
             dev.Clear(Color(0, 0, 255, 255));
-            backend.DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+            renderer.DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                      Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, params);
             Color px(0, 0, 0, 0);
             ReadCenterPixel(dev, px);
@@ -583,30 +583,30 @@ protected:
 
         // Check Q: RenderTarget2D sampled as an ordinary texture (NEXT.md's documented crash).
         {
-            auto rt = backend.CreateRenderTarget2D(4, 4, static_cast<int>(DepthFormat::Depth24Stencil8),
+            auto rt = renderer.CreateRenderTarget2D(4, 4, static_cast<int>(DepthFormat::Depth24Stencil8),
                                                    false, false, 0);
-            backend.SetRenderTarget2D(rt.get());
+            renderer.SetRenderTarget2D(rt.get());
             dev.Clear(Color(200, 120, 40, 255));
-            backend.SetRenderTarget2D(nullptr);
+            renderer.SetRenderTarget2D(nullptr);
 
-            auto vb = backend.CreateVertexBuffer(3);
+            auto vb = renderer.CreateVertexBuffer(3);
             vb->SetData(kTriTx, 3, sizeof(VPT));
 
             GpuDrawParams params;
             params.textureEnabled = true;
             params.vertexColorEnabled = false; // GpuDrawParams defaults this to true
-            params.texture0 = rt.get(); // a D3D9RenderTargetBackend*, not a D3D9TextureBackend*
+            params.texture0 = rt.get(); // a D3D9RenderTargetRenderer*, not a D3D9TextureRenderer*
             params.diffuseColor[0] = params.diffuseColor[1] = params.diffuseColor[2] = params.diffuseColor[3] = 1.0f;
 
             dev.Clear(Color(0, 0, 255, 255));
-            backend.DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+            renderer.DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                      Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, params);
             Color px(0, 0, 0, 0);
             ReadCenterPixel(dev, px);
             // Same exact color Check A's own 1x1 texture uses -- proves the render target's real
             // cleared content was sampled, not a garbage/reinterpreted pointer.
             check(px.getRProperty() == 200 && px.getGProperty() == 120 && px.getBProperty() == 40 && px.getAProperty() == 255,
-                  "DrawPrimitivesEx (BasicEffect unlit+textured, texture0 = a RenderTarget2D's own backend): "
+                  "DrawPrimitivesEx (BasicEffect unlit+textured, texture0 = a RenderTarget2D's own renderer): "
                   "exact readback of the render target's real cleared content, no crash");
         }
 
@@ -614,7 +614,7 @@ protected:
         // one-light setup and expected value as Check D, proving the pixel-lighting bucket's own
         // constant upload plumbing (VS+PS both) works, not just the vertex-lighting/one-light ones.
         {
-            auto vb = backend.CreateVertexBuffer(3);
+            auto vb = renderer.CreateVertexBuffer(3);
             vb->SetData(kTriNormalTx, 3, sizeof(VPNT));
 
             GpuDrawParams params;
@@ -630,7 +630,7 @@ protected:
             // light1/light2 stay at their zero defaults.
 
             dev.Clear(Color(0, 0, 255, 255));
-            backend.DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+            renderer.DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                      Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, params);
             Color px(0, 0, 0, 0);
             ReadCenterPixel(dev, px);
@@ -644,7 +644,7 @@ protected:
 
         // Check F: honest-gap / not-yet-implemented reporting.
         {
-            auto vb = backend.CreateVertexBuffer(3);
+            auto vb = renderer.CreateVertexBuffer(3);
             vb->SetData(kTriTx, 3, sizeof(VPT));
 
             // No matching CNA vertex layout: stride 20 (Position+TexCoord) with lightingEnabled=true
@@ -653,7 +653,7 @@ protected:
             badCombo.textureEnabled = true;
             badCombo.lightingEnabled = true;
             bool threw = false;
-            try { backend.DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+            try { renderer.DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                            Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, badCombo); }
             catch (const std::exception&) { threw = true; }
             check(threw, "DrawPrimitivesEx: an unsupported BasicEffect flag/stride combination throws "
@@ -666,7 +666,7 @@ protected:
             dualTexBadCombo.dualTexture = true;
             dualTexBadCombo.vertexColorEnabled = true;
             threw = false;
-            try { backend.DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+            try { renderer.DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                            Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, dualTexBadCombo); }
             catch (const std::exception&) { threw = true; }
             check(threw, "DrawPrimitivesEx: an unsupported DualTextureEffect flag combination throws "
@@ -677,7 +677,7 @@ protected:
             GpuDrawParams envMapParams;
             envMapParams.envMapping = true;
             threw = false;
-            try { backend.DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+            try { renderer.DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                            Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, envMapParams); }
             catch (const std::exception&) { threw = true; }
             check(threw, "DrawPrimitivesEx: an unsupported EnvironmentMapEffect vertex layout throws");
@@ -687,7 +687,7 @@ protected:
             GpuDrawParams skinnedParams;
             skinnedParams.skinned = true;
             threw = false;
-            try { backend.DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+            try { renderer.DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                            Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, skinnedParams); }
             catch (const std::exception&) { threw = true; }
             check(threw, "DrawPrimitivesEx: an unsupported SkinnedEffect vertex layout throws");

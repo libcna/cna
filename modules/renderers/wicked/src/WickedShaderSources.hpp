@@ -3,10 +3,10 @@
 
 #include "CNA/CNAHelper.hpp"
 
-namespace CNA::Internal::Backends::Wicked
+namespace CNA::Internal::Renderers::Wicked
 {
     /**
-     * @brief NOXNA. The HLSL source of every built-in shader this backend compiles.
+     * @brief NOXNA. The HLSL source of every built-in shader this renderer compiles.
      *
      * `wi::shadercompiler::Compile()` reads its input from a file path, so this source is written
      * into a per-process temporary directory at device creation and compiled from there
@@ -19,7 +19,7 @@ namespace CNA::Internal::Backends::Wicked
      *   - The two matrices arrive as their four COLUMNS, so the shader evaluates XNA's own
      *     row-vector product `clip = position * matrix` as four `dot()`s.
      *   - Wicked Engine's Vulkan device binds viewports with a negative height, so clip space is
-     *     D3D-shaped (Y down in window space, Z in [0,1]) on both device backends.
+     *     D3D-shaped (Y down in window space, Z in [0,1]) on both device renderers.
      *   - Vertex colours arrive as `R8G8B8A8_UNORM`, matching XNA's `Color` byte order in memory.
      */
     NOXNA inline constexpr const char* kWickedShaderSource = R"HLSL(
@@ -153,7 +153,7 @@ VSOut Basic32VS(float3 position : POSITION, float3 normal : NORMAL, float2 uv : 
 // blend-index attributes are DECLARED but not consumed: declaring them is what makes the input
 // layout match the buffer, and consuming them is the job of the PbrEffect/SkinnedEffect programs
 // that plan_wicked.md WICKED-56b adds. A draw that actually asks for skinning is refused by the
-// backend rather than silently rendered in bind pose here.
+// renderer rather than silently rendered in bind pose here.
 // ---------------------------------------------------------------------------------------------
 
 // Stride 48 -- VertexPositionNormalTangentTexture.
@@ -311,7 +311,7 @@ VSOut Skinned68VS(float3 position : POSITION, float3 normal : NORMAL,
 
 // ---------------------------------------------------------------------------------------------
 // PbrEffect -- the glTF 2.0 metallic-roughness BRDF (GGX distribution, Smith-Schlick-GGX
-// visibility, Schlick Fresnel), term for term the same reference BRDF the other CNA backends
+// visibility, Schlick Fresnel), term for term the same reference BRDF the other CNA renderers
 // evaluate. Four texture slots beyond the base colour: normal, metallic-roughness (glTF packing,
 // G = roughness, B = metallic), emissive and occlusion.
 //
@@ -463,10 +463,10 @@ float4 PbrPS(PbrVSOut input) : SV_Target
 //
 // The per-instance stream is CNA's established 64-byte layout: a column-major float4x4 world
 // matrix delivered as four float4 attributes at byte offsets 0/16/32/48, identical to the Vulkan
-// backend's own instanced pipeline. `world * position` is therefore the column-vector product
+// renderer's own instanced pipeline. `world * position` is therefore the column-vector product
 // `sum(position[k] * column[k])`, which is exactly XNA's row-vector `position * matrix` once the
 // matrix's raw bytes are read column-wise -- so an unmodified XNA Matrix in the instance buffer
-// means the same thing on both backends.
+// means the same thing on both renderers.
 //
 // On these entry points `cb.mvp` holds VIEW * PROJECTION only; the per-instance matrix supplies
 // the world transform that `cb.world` carries on the non-instanced entry points.

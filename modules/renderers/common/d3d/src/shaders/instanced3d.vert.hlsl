@@ -1,5 +1,5 @@
 // Shader Model 5.0 (vs_5_0). Ported line-by-line from
-// src/CNA/Internal/Backends/Vulkan/shaders/instanced3d.vert.glsl.
+// src/CNA/Internal/Renderers/Vulkan/shaders/instanced3d.vert.glsl.
 //
 // Per-vertex attribute (input slot 0, per-vertex step rate): only Position is consumed by this
 // shader; the per-vertex stride may be 16/20/24/32 -- extra interleaved attributes the input

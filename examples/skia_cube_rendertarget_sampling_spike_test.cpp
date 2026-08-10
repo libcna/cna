@@ -5,10 +5,10 @@
 // ShaderEffect/SetTexture(TextureCube) API, matching the SKIA-93/145 spike precedent; SKIA-149
 // wires the real, weak-lifetime-tracked public path.
 
-#include "CNA/Internal/Backends/Skia/SkiaCubeSampling.hpp"
-#include "CNA/Internal/Backends/Skia/SkiaRenderTargetBinding.hpp"
-#include "CNA/Internal/Backends/Skia/SkiaRenderTargetCubeBackend.hpp"
-#include "CNA/Internal/Backends/Skia/SkiaSurface.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaCubeSampling.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaRenderTargetBinding.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaRenderTargetCubeRenderer.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaSurface.hpp"
 
 #include "include/core/SkCanvas.h"
 #include "include/core/SkData.h"
@@ -26,7 +26,7 @@
 #include <string>
 #include <vector>
 
-using namespace CNA::Internal::Backends::Skia;
+using namespace CNA::Internal::Renderers::Skia;
 
 namespace
 {
@@ -45,7 +45,7 @@ namespace
         }
     )";
 
-    // Face order matches ITextureCubeBackend/CubeMapFace: 0=+X,1=-X,2=+Y,3=-Y,4=+Z,5=-Z.
+    // Face order matches ITextureCubeRenderer/CubeMapFace: 0=+X,1=-X,2=+Y,3=-Y,4=+Z,5=-Z.
     constexpr std::array<std::array<float, 3>, 6> kFaceColors{{
         {1.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f, 1.0f},
         {1.0f, 1.0f, 0.0f}, {1.0f, 0.0f, 1.0f}, {0.0f, 1.0f, 1.0f},
@@ -124,9 +124,9 @@ int main()
     binding->SetBackbuffer(&backbuffer);
 
     {
-        SkiaRenderTargetCubeBackend target(4, true, true, binding, counters);
+        SkiaRenderTargetCubeRenderer target(4, true, true, binding, counters);
 
-        // Render a distinct solid colour into each face, matching CubeMapFace/ITextureCubeBackend
+        // Render a distinct solid colour into each face, matching CubeMapFace/ITextureCubeRenderer
         // order. Each BindAsRenderTargetFace finalizes (syncs + regenerates mips for) the
         // previously bound face; the final UnbindAsRenderTarget finalizes face 5.
         for (int face = 0; face < 6; ++face)

@@ -4,7 +4,7 @@
 // this same CnaTests binary -- Game::Game() unconditionally embeds one of those same GraphicsDevice
 // objects (GraphicsDevice_). Following GameWindowTests.cpp's own skip-when-unavailable precedent,
 // a cheap up-front SDL video probe still guards every TEST() here so a genuinely display-less
-// environment skips rather than fails deep inside Game's own backend construction.
+// environment skips rather than fails deep inside Game's own renderer construction.
 
 #include <gtest/gtest.h>
 

@@ -232,7 +232,7 @@ protected:
         }
 
         // ---- Public state lifetime and boundary contract, one BasicEffect instance ----
-        // All draws occur in this one Draw() callback. This catches backends that retain an old
+        // All draws occur in this one Draw() callback. This catches renderers that retain an old
         // scalar/vector after a public effect mutation, including deferred/snapshotted paths.
         {
             const Matrix I = Matrix::getIdentityProperty();

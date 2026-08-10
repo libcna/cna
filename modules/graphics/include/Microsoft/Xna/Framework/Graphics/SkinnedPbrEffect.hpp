@@ -29,9 +29,9 @@ namespace Microsoft::Xna::Framework::Graphics
      * content loader -- exactly like SkinnedEffect, game code feeds AnimationPlayer::
      * GetSkinTransforms() into SetBoneTransforms() itself, every frame.
      *
-     * Every backend with a real PbrEffect shader also has one for this class (plan_cnj.md
+     * Every renderer with a real PbrEffect shader also has one for this class (plan_cnj.md
      * CNB-75..79, CNB-103..109) except WebGPU, which implements PbrEffect's unskinned case only --
-     * this backend has no skinning shader at all yet for any stock effect, a pre-existing gap
+     * this renderer has no skinning shader at all yet for any stock effect, a pre-existing gap
      * outside PBR's own scope.
      */
     class SkinnedPbrEffect : public Effect, public IEffectMatrices, public IEffectFog, public IEffectLights
@@ -209,12 +209,12 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Fills a GpuDrawParams struct with this effect's current render parameters.
          *
          * Populates all 5 texture slots, base color/metallic/roughness/emissive factors,
-         * lighting, bone palette, and the `pbr`+`skinned` flags so the backend selects the
+         * lighting, bone palette, and the `pbr`+`skinned` flags so the renderer selects the
          * skinned metallic-roughness BRDF shader variant.
          *
          * @param params Output struct to populate.
          */
-        NOXNA void FillGpuDrawParams(CNA::Internal::Backends::GpuDrawParams& params) const override;
+        NOXNA void FillGpuDrawParams(CNA::Internal::Renderers::GpuDrawParams& params) const override;
 
     protected:
         /** @brief Applies shader parameters to the graphics device before drawing. */

@@ -1,6 +1,6 @@
 # OcclusionQuery: support and limitations
 
-Covers `Microsoft::Xna::Framework::Graphics::OcclusionQuery` across the original four-backend
+Covers `Microsoft::Xna::Framework::Graphics::OcclusionQuery` across the original four-renderer
 audit and the later Skia raster decision. Written as the closing documentation task for Phase 50
 (Tasks 441-450), which audited FNA's real API surface,
 verified CNA's own `Begin()`/`End()`/`IsComplete()`/`PixelCount()` behavior against it, added real
@@ -27,32 +27,32 @@ happens for those is entirely up to the native FNA3D library / GPU driver, never
 (Tasks 442-444 were titled "...Match FNA exception" — there is no such exception to match).
 
 CNA's own `OcclusionQuery.hpp`/`.cpp` matches this shape closely and correctly: the constructor
-creates an `IOcclusionQueryBackend` via `device.GetBackend().CreateOcclusionQuery()`,
+creates an `IOcclusionQueryRenderer` via `device.GetRenderer().CreateOcclusionQuery()`,
 `getIsCompleteProperty()`/`getPixelCountProperty()`/`Begin()`/`End()` are all simple forwards with
-a null-`backend_` guard, and CNA also does zero sequence validation — correctly matching FNA's own
+a null-`renderer_` guard, and CNA also does zero sequence validation — correctly matching FNA's own
 lack of one rather than inventing stricter behavior FNA never had (Tasks 442-444, all confirmed via
 sabotage-and-revert).
 
 **`Dispose()` note** (Task 449): CNA's `OcclusionQuery` has no `Dispose(bool)` override of its own
-— the base `GraphicsResource::Dispose(bool)` never touches the backend at all, so real backend
+— the base `GraphicsResource::Dispose(bool)` never touches the renderer at all, so real renderer
 teardown only happens in `~OcclusionQuery()`, not the XNA `Dispose()` method. This is a project-wide
 convention (neither `Texture2D` nor `VertexBuffer` override it either), not an `OcclusionQuery`-
 specific gap. Confirmed safe to destroy a query that's still "active" (`Begin()` called, no
 matching `End()`) via a 50-iteration stress test — no crash, no resource-tracking leak.
 
-## Per-backend support matrix
+## Per-renderer support matrix
 
-| Backend | Attaches to real GPU work? | Sequence validation | Pixel/query correctness | Status |
+| Renderer | Attaches to real GPU work? | Sequence validation | Pixel/query correctness | Status |
 |---|---|---|---|---|
 | **EasyGL** | ✅ Yes — thin `glBeginQuery`/`glEndQuery(GL_ANY_SAMPLES_PASSED)` wrapper | None (matches FNA) | ✅ Verified both directions (Tasks 445/446) | **Fully correct** |
 | **Vulkan** | ✅ Yes (Task 447, 2026-07-10) — real per-draw-call tagging + `vkCmdBeginQuery`/`vkCmdEndQuery` recording | None (matches FNA) | ✅ Verified both directions plus multi-draw-span (Task 854) — genuinely discriminating in this sandbox (Mesa Lavapipe) | **Fully correct** |
 | **Bgfx** | ✅ Yes (Task 448) — real `bgfx::submit(id, program, occlusionQuery)` attachment | None (matches FNA) | ⚠️ Not verifiable in this sandbox (see below); dedicated-view gap open (Task 917) | **Fixed, with caveats** |
-| **SDL_Renderer** | N/A — construction itself throws | N/A | N/A | **Correctly unsupported** (2D-only backend, Task 727) |
+| **SDL_Renderer** | N/A — construction itself throws | N/A | N/A | **Correctly unsupported** (2D-only renderer, Task 727) |
 | **Skia raster** | N/A — no 3D submission/depth surface | N/A | Raster emulation disproved (SKIA-104) | **Correctly unsupported** (SKIA-105) |
 
 ### EasyGL — fully correct
 
-`EasyGLOcclusionQueryBackend` is a thin, unvalidated wrapper over `easygl::Query`'s own
+`EasyGLOcclusionQueryRenderer` is a thin, unvalidated wrapper over `easygl::Query`'s own
 `glBeginQuery`/`glEndQuery(GL_ANY_SAMPLES_PASSED)` calls, with zero internal state tracking — all 3
 invalid call sequences (End-before-Begin, double-Begin, double-End) just produce a silent,
 unchecked `GL_INVALID_OPERATION`, never a crash or C++ exception (Tasks 442-444). Two real pixel/
@@ -60,13 +60,13 @@ query correctness tests prove the query genuinely reports the right answer, not 
 crash": `EasyGL_OcclusionQuery_VisibleQuad` (Task 445, a fully visible quad reports `PixelCount() >
 0`) and `EasyGL_OcclusionQuery_OccludedQuad` (Task 446, a quad hidden behind a nearer opaque
 occluder — rejected by `DepthStencilState::Default`'s `LessEqual` compare — reports `PixelCount()
-<= 0`). Both independently confirmed via sabotage-and-revert. This is the only backend where
+<= 0`). Both independently confirmed via sabotage-and-revert. This is the only renderer where
 occlusion queries are both wired up AND pixel-verified correct.
 
 ### Vulkan — fixed, all 3 design questions resolved (Task 447/854, 2026-07-10)
 
-`VulkanOcclusionQueryBackend::Begin()`/`End()` previously never injected `vkCmdBeginQuery`/
-`vkCmdEndQuery`, because this backend defers ALL 3D and 2D draw calls into `pending3D_`/
+`VulkanOcclusionQueryRenderer::Begin()`/`End()` previously never injected `vkCmdBeginQuery`/
+`vkCmdEndQuery`, because this renderer defers ALL 3D and 2D draw calls into `pending3D_`/
 `activeBatches_` snapshots, recorded into real Vulkan commands only once per frame inside
 `RecordCommandBuffer` — well after `Begin()`/`End()` (called synchronously by game code around a
 draw call) already returned. `Pending3DDraw` had no query-association field at all, so occlusion
@@ -75,8 +75,8 @@ queries on Vulkan always reported 0 visible pixels regardless of real visibility
 Fixing this required resolving 3 genuinely non-obvious design questions, all now implemented per
 the project owner's decision to do the full fix:
 
-1. **Tagging** — a new `VulkanOcclusionQueryBackend* occlusionQuery` field on `Pending3DDraw`, set
-   uniformly by a new `VulkanGraphicsBackend::PushPending3DDraw()` choke point (all 6
+1. **Tagging** — a new `VulkanOcclusionQueryRenderer* occlusionQuery` field on `Pending3DDraw`, set
+   uniformly by a new `VulkanRenderer::PushPending3DDraw()` choke point (all 6
    `pending3D_.push_back` call sites now route through it) from a new `activeOcclusionQuery_`
    member, set by `Begin()` and cleared by `End()` (mirrors Bgfx's own convention).
 2. **Multi-draw-span policy** — a query MAY span multiple draw calls, as long as they all land in
@@ -107,11 +107,11 @@ query-correlation checks failing with `IsComplete()` never becoming true).
 
 ### Bgfx — fixed, with two honestly-documented caveats
 
-Before Task 448, `BgfxOcclusionQueryBackend::Begin()`/`End()` were literal empty no-ops — no
+Before Task 448, `BgfxOcclusionQueryRenderer::Begin()`/`End()` were literal empty no-ops — no
 `bgfx::setCondition()` or occlusion-query `submit()` overload was used anywhere, so the created
 query handle was never wired to any draw call at all.
 
-**Fixed**: `BgfxGraphicsBackend` now tracks an `activeOcclusionQuery_` handle, set by `Begin()` and
+**Fixed**: `BgfxRenderer` now tracks an `activeOcclusionQuery_` handle, set by `Begin()` and
 cleared by `End()`; a new `SubmitViewProgram()` helper routes all 12 3D-draw `submit()` call sites
 through bgfx's own dedicated `submit(id, program, occlusionQuery, depth, flags)` overload whenever
 a query is active — this exactly matches bgfx's documented API contract and its own official
@@ -145,7 +145,7 @@ specific software-rendering sandbox couldn't verify anyway.
 ### SDL_Renderer — correctly unsupported
 
 `CreateOcclusionQuery()` correctly calls `ThrowNo3D("CreateOcclusionQuery")` (Task 727), matching
-this 2D-only backend's established "throw at construction for unsupported 3D constructs" pattern.
+this 2D-only renderer's established "throw at construction for unsupported 3D constructs" pattern.
 Since construction itself throws, `Begin()`/`End()` are unreachable — consistent, no gap.
 
 ### Skia raster — correctly unsupported
@@ -162,10 +162,10 @@ throw the stable Skia 3D diagnostic; capability reporting stays false. The compl
 
 | Area | Status |
 |---|---|
-| FNA API surface + Begin/End sequence behavior | ✅ Fully audited; CNA correctly matches FNA's own lack of validation on every backend that reaches user code (Tasks 441-444) |
+| FNA API surface + Begin/End sequence behavior | ✅ Fully audited; CNA correctly matches FNA's own lack of validation on every renderer that reaches user code (Tasks 441-444) |
 | `Dispose()`/active-query-destruction safety | ✅ Verified safe on EasyGL via 50-iteration stress test (Task 449) |
 | EasyGL pixel/query correctness | ✅ Both directions (visible → positive, occluded → zero) pixel-verified (Tasks 445-446) |
 | Vulkan | ✅ Real per-draw-call query correlation implemented (Task 447/854, 2026-07-10); pixel/query correctness verified both directions plus multi-draw-span, genuinely discriminating in this sandbox |
 | Bgfx | ✅ Wiring fixed per bgfx's documented API (Task 448); pixel-level correctness unverifiable in this sandbox; dedicated-view gap for true scene-depth correctness still open (Task 917) |
-| SDL_Renderer | ✅ Correctly throws at construction (2D-only backend, Task 727) |
+| SDL_Renderer | ✅ Correctly throws at construction (2D-only renderer, Task 727) |
 | Skia raster | ✅ Framebuffer/mask/GPU alternatives audited; deterministic false/zero/throw refusal retained (SKIA-104–105) |

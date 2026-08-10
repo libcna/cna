@@ -5,7 +5,7 @@
 // WebGPU collects a bind cycle's Clear/3D/SpriteBatch work and records ONE native render pass for
 // it later (`EnsureFrameRendered`, `RenderPendingDrawsToRenderTarget`,
 // `RenderPendingDrawsToRenderTargetCubeFace`). Until this task all three applied the viewport once,
-// at the top of that pass, from the LIVE backend members `viewportSet_`/`viewportX_`/`viewportY_`/
+// at the top of that pass, from the LIVE renderer members `viewportSet_`/`viewportX_`/`viewportY_`/
 // `viewportW_`/`viewportH_`/`viewportMinDepth_`/`viewportMaxDepth_`. Deferring the RECORDING is
 // legal; RESOLVING the value late is not. The consequence is that
 //
@@ -33,7 +33,7 @@
 //     (offset added on top of an already-offset rect) and a flipped Y all produce distinct,
 //     asserted pixel layouts.
 //   * MinDepth/MaxDepth are measured through the DEPTH TEST -- which of two overlapping quads
-//     survives -- not by inspecting native arguments, so a backend that accepts the values and
+//     survives -- not by inspecting native arguments, so a renderer that accepts the values and
 //     ignores them still fails.
 //
 // The palette is 0/255-only, an exact fixed point of sRGB encoding, so every comparison is
@@ -123,7 +123,7 @@ namespace
         Unsupported,  ///< Raises; the caller's destination is left untouched.
     };
 
-    /// The complete, reviewed per-backend claim this file enforces.
+    /// The complete, reviewed per-renderer claim this file enforces.
     struct Contract
     {
         const char* name;
@@ -137,13 +137,13 @@ namespace
         bool wantHiDefProfile;
     };
 
-#if defined(CNA_BACKEND_WEBGPU)
+#if defined(CNA_RENDERER_WEBGPU)
     constexpr Contract kContract{"WEBGPU", Support::Exact, Support::Exact, true, true, true, false};
-#elif defined(CNA_BACKEND_VULKAN)
+#elif defined(CNA_RENDERER_VULKAN)
     constexpr Contract kContract{"VULKAN", Support::Exact, Support::Exact, true, true, true, false};
-#elif defined(CNA_BACKEND_EASYGL)
+#elif defined(CNA_RENDERER_EASYGL)
     constexpr Contract kContract{"EASYGL", Support::Exact, Support::Exact, true, true, true, false};
-#elif defined(CNA_BACKEND_BGFX)
+#elif defined(CNA_RENDERER_BGFX)
     // `depthRangeApplies` false: measured here. bgfx has no per-view depth-range call at all --
     // `bgfx::setViewRect` carries no min/max depth and the range is expected to be folded into the
     // projection matrix -- so Viewport.MinDepth/MaxDepth reach nothing. That is a distinct root
@@ -151,30 +151,30 @@ namespace
     // is recorded as its own finding rather than fixed here; checks E1/E2 assert the IGNORED
     // outcome so the declaration is falsifiable in both directions.
     constexpr Contract kContract{"BGFX", Support::Exact, Support::Exact, true, true, false, false};
-#elif defined(CNA_BACKEND_SDL_GPU)
+#elif defined(CNA_RENDERER_SDL_GPU)
     // SdlGpu has no `ReadBackbuffer` override at all, so `GetBackBufferData` raises; its
     // render-target oracle still answers every render-target question in this file.
     constexpr Contract kContract{"SDL_GPU", Support::Unsupported, Support::Exact, true, true, true, false};
-#elif defined(CNA_BACKEND_SOFTWARE)
+#elif defined(CNA_RENDERER_SOFTWARE)
     // `depthRangeApplies` true: measured, not assumed. The software rasterizer's depth COMPARE is a
     // fixed LessEqual (REMED-GFX-083's documented boundary), but it does remap the interpolated
     // depth through Viewport.MinDepth/MaxDepth, so checks E1/E2 assert the honoured outcome here.
     constexpr Contract kContract{"SOFTWARE", Support::Exact, Support::Exact, true, true, true, false};
-#elif defined(CNA_BACKEND_HEADLESS)
+#elif defined(CNA_RENDERER_HEADLESS)
     // Headless rasterizes nothing and its readback is REMED-GFX-127/130's deterministic refusal.
     // Every sequence must still be legal and must not throw.
     constexpr Contract kContract{"HEADLESS", Support::Unsupported, Support::Unsupported, true, true, true, false};
-#elif defined(CNA_BACKEND_D3D11)
+#elif defined(CNA_RENDERER_D3D11)
     constexpr Contract kContract{"D3D11", Support::Exact, Support::Exact, true, true, true, false};
-#elif defined(CNA_BACKEND_D3D9)
+#elif defined(CNA_RENDERER_D3D9)
     constexpr Contract kContract{"D3D9", Support::Exact, Support::Exact, true, true, true, true};
-#elif defined(CNA_BACKEND_LLGL)
+#elif defined(CNA_RENDERER_LLGL)
     // LLGL-53 forwards each deferred command's captured MinDepth/MaxDepth to LLGL::Viewport. The
     // OpenGL module applies the range exactly; keep these checks on the honoured outcome so a
     // future regression cannot silently collapse every draw back to [0,1].
     constexpr Contract kContract{"LLGL", Support::Exact, Support::Exact, true, true, true, false};
 #else
-#error "REMED-GFX-116: this backend has no declared deferred-viewport contract."
+#error "REMED-GFX-116: this renderer has no declared deferred-viewport contract."
 #endif
 
     const Color kBlack  (  0,   0,   0, 255);
@@ -402,7 +402,7 @@ class DeferredViewportCaptureTest : public Game
      *
      * These sequences deliberately queue every draw of a bind cycle before anything flushes, so a
      * buffer destroyed at the end of the calling helper would be gone while the draw is still
-     * pending on backends that do not shadow-copy vertex data at queue time. Each section clears
+     * pending on renderers that do not shadow-copy vertex data at queue time. Each section clears
      * the list on entry, i.e. after the previous section's single observation.
      */
     VertexBuffer& MakeVb(GraphicsDevice& dev, const std::array<VertexPositionColor, 6>& v)
@@ -480,14 +480,14 @@ class DeferredViewportCaptureTest : public Game
      * @brief A1 -- left half red, right half blue, a smaller green quad back in the left half.
      *
      * The viewport is restored to the whole target after the last draw and before the only
-     * readback, so a backend that resolves the viewport when it records the pass paints the whole
+     * readback, so a renderer that resolves the viewport when it records the pass paints the whole
      * target blue with a green centre band instead.
      */
     void RunLeftRightLeft(GraphicsDevice& dev)
     {
         const std::string label = "A1 3D A->B->A in one bind cycle";
         keepAlive_.clear();
-        if (!kContract.draws3D) { skip(label + ": skipped -- no 3D on this backend"); return; }
+        if (!kContract.draws3D) { skip(label + ": skipped -- no 3D on this renderer"); return; }
         auto rt = MakeTarget(dev, kRTW, kRTH);
 
         dev.SetRenderTarget(rt.get());
@@ -531,7 +531,7 @@ class DeferredViewportCaptureTest : public Game
     {
         const std::string label = "A2 three disjoint viewports in one cycle";
         keepAlive_.clear();
-        if (!kContract.draws3D) { skip(label + ": skipped -- no 3D on this backend"); return; }
+        if (!kContract.draws3D) { skip(label + ": skipped -- no 3D on this renderer"); return; }
         auto rt = MakeTarget(dev, kRTW, kRTH);
         const int third = kRTW / 4;   // 16: three bands plus an untouched tail
 
@@ -564,7 +564,7 @@ class DeferredViewportCaptureTest : public Game
     {
         const std::string label = "B1 upper/lower viewports keep public Y orientation";
         keepAlive_.clear();
-        if (!kContract.draws3D) { skip(label + ": skipped -- no 3D on this backend"); return; }
+        if (!kContract.draws3D) { skip(label + ": skipped -- no 3D on this renderer"); return; }
         auto rt = MakeTarget(dev, kRTW, kRTH);
 
         dev.SetRenderTarget(rt.get());
@@ -602,7 +602,7 @@ class DeferredViewportCaptureTest : public Game
                           int x, int y, int w, int h)
     {
         keepAlive_.clear();
-        if (!kContract.draws3D) { skip(label + ": skipped -- no 3D on this backend"); return; }
+        if (!kContract.draws3D) { skip(label + ": skipped -- no 3D on this renderer"); return; }
         auto rt = MakeTarget(dev, kRTW, kRTH);
 
         dev.SetRenderTarget(rt.get());
@@ -649,7 +649,7 @@ class DeferredViewportCaptureTest : public Game
     {
         const std::string label = "D1 odd target dimensions A->B->A";
         keepAlive_.clear();
-        if (!kContract.draws3D) { skip(label + ": skipped -- no 3D on this backend"); return; }
+        if (!kContract.draws3D) { skip(label + ": skipped -- no 3D on this renderer"); return; }
         auto rt = MakeTarget(dev, kOddW, kOddH);
 
         dev.SetRenderTarget(rt.get());
@@ -691,7 +691,7 @@ class DeferredViewportCaptureTest : public Game
     {
         const std::string label = "E1 MinDepth/MaxDepth A->B->A decide the depth test";
         keepAlive_.clear();
-        if (!kContract.draws3D) { skip(label + ": skipped -- no 3D on this backend"); return; }
+        if (!kContract.draws3D) { skip(label + ": skipped -- no 3D on this renderer"); return; }
         auto rt = MakeTarget(dev, kRTW, kRTH, DepthFormat::Depth24Stencil8);
 
         dev.SetRenderTarget(rt.get());
@@ -709,8 +709,8 @@ class DeferredViewportCaptureTest : public Game
         const Image image = ReadTarget(*rt, kRTW, kRTH);
         if (!kContract.depthRangeApplies)
         {
-            // Declared open on this backend, and asserted as the IGNORED outcome so the
-            // declaration turns red the day the backend gains a depth remap: with both ranges
+            // Declared open on this renderer, and asserted as the IGNORED outcome so the
+            // declaration turns red the day the renderer gains a depth remap: with both ranges
             // collapsed to [0,1] the raw clip depths 0.8 / 0.0 / 0.4 make blue win everywhere.
             CheckProbes(image, {
                 {  2,  2, kBlue }, { 61, 45, kBlue },
@@ -733,7 +733,7 @@ class DeferredViewportCaptureTest : public Game
     {
         const std::string label = "E2 depth range travels with the rectangle";
         keepAlive_.clear();
-        if (!kContract.draws3D) { skip(label + ": skipped -- no 3D on this backend"); return; }
+        if (!kContract.draws3D) { skip(label + ": skipped -- no 3D on this renderer"); return; }
         auto rt = MakeTarget(dev, kRTW, kRTH, DepthFormat::Depth24Stencil8);
 
         dev.SetRenderTarget(rt.get());
@@ -778,7 +778,7 @@ class DeferredViewportCaptureTest : public Game
     {
         const std::string label = "F1 target A -> target B -> target A";
         keepAlive_.clear();
-        if (!kContract.draws3D) { skip(label + ": skipped -- no 3D on this backend"); return; }
+        if (!kContract.draws3D) { skip(label + ": skipped -- no 3D on this renderer"); return; }
         auto a = MakeTarget(dev, kRTW, kRTH);
         auto b = MakeTarget(dev, kOddW, kOddH);
 
@@ -814,7 +814,7 @@ class DeferredViewportCaptureTest : public Game
     {
         const std::string label = "F2 target -> backbuffer -> target";
         keepAlive_.clear();
-        if (!kContract.draws3D) { skip(label + ": skipped -- no 3D on this backend"); return; }
+        if (!kContract.draws3D) { skip(label + ": skipped -- no 3D on this renderer"); return; }
         auto rt = MakeTarget(dev, kRTW, kRTH);
 
         dev.SetRenderTarget(rt.get());
@@ -854,7 +854,7 @@ class DeferredViewportCaptureTest : public Game
     {
         const std::string label = "F3 backbuffer A->B->A";
         keepAlive_.clear();
-        if (!kContract.draws3D) { skip(label + ": skipped -- no 3D on this backend"); return; }
+        if (!kContract.draws3D) { skip(label + ": skipped -- no 3D on this renderer"); return; }
         const int third = bbW_ / 3;
 
         dev.Clear(kBlack);
@@ -887,7 +887,7 @@ class DeferredViewportCaptureTest : public Game
     {
         const std::string label = "G1 indexed / non-indexed / dynamic / DrawUser";
         keepAlive_.clear();
-        if (!kContract.draws3D) { skip(label + ": skipped -- no 3D on this backend"); return; }
+        if (!kContract.draws3D) { skip(label + ": skipped -- no 3D on this renderer"); return; }
         auto rt = MakeTarget(dev, kRTW, kRTH);
         const int band = kRTW / 4;
 
@@ -961,7 +961,7 @@ class DeferredViewportCaptureTest : public Game
     {
         const std::string label = "G2 buffer update after queueing keeps the captured viewport";
         keepAlive_.clear();
-        if (!kContract.draws3D) { skip(label + ": skipped -- no 3D on this backend"); return; }
+        if (!kContract.draws3D) { skip(label + ": skipped -- no 3D on this renderer"); return; }
         auto rt = MakeTarget(dev, kRTW, kRTH);
 
         dev.SetRenderTarget(rt.get());
@@ -988,7 +988,7 @@ class DeferredViewportCaptureTest : public Game
 
         if (!CanJudgeTarget(label)) return;
         const Image image = ReadTarget(*rt, kRTW, kRTH);
-        // Whatever this backend's buffer-lifetime rule says about the COLOUR, the RECTANGLE must
+        // Whatever this renderer's buffer-lifetime rule says about the COLOUR, the RECTANGLE must
         // be viewport A: the right half must not have been painted at all.
         CheckProbes(image, {{ 40, 24, kBlack }, { 63, 24, kBlack }}, label);
     }
@@ -1001,7 +1001,7 @@ class DeferredViewportCaptureTest : public Game
      * @brief Runs one effect family twice under two disjoint viewports and asserts both landed.
      *
      * @param drawLeft Issues the family's draw for the left band; @p drawRight for the right band.
-     * A family that raises before drawing (unimplemented on this backend) is reported as a
+     * A family that raises before drawing (unimplemented on this renderer) is reported as a
      * capability boundary rather than a failure -- this task adds no new functionality.
      */
     void RunFamilyCase(GraphicsDevice& dev, const std::string& label,
@@ -1010,7 +1010,7 @@ class DeferredViewportCaptureTest : public Game
                        const Color& leftColour, const Color& rightColour)
     {
         keepAlive_.clear();
-        if (!kContract.draws3D) { skip(label + ": skipped -- no 3D on this backend"); return; }
+        if (!kContract.draws3D) { skip(label + ": skipped -- no 3D on this renderer"); return; }
         auto rt = MakeTarget(dev, kRTW, kRTH);
         bool unsupported = false;
         std::string why;
@@ -1042,13 +1042,13 @@ class DeferredViewportCaptureTest : public Game
         // If the family rasterized nothing at all, the target still holds the clear colour and the
         // viewport question is unanswerable here -- a viewport defect would show the SECOND draw's
         // colour on the left half, never the clear colour on both. Reported as a boundary so a
-        // shading gap on some backend is not silently credited to, or blamed on, this task.
+        // shading gap on some renderer is not silently credited to, or blamed on, this task.
         const bool renderedNothing = !image.threw &&
             Same(image.At(8, 24), kBlack) && Same(image.At(24, 24), kBlack) &&
             Same(image.At(40, 24), kBlack) && Same(image.At(56, 24), kBlack);
         if (renderedNothing)
         {
-            skip(label + ": capability boundary -- this family rasterized nothing on this backend, "
+            skip(label + ": capability boundary -- this family rasterized nothing on this renderer, "
                          "so it cannot answer the viewport question");
             return;
         }
@@ -1345,7 +1345,7 @@ class DeferredViewportCaptureTest : public Game
         keepAlive_.clear();
         if (!kContract.spriteViewportIsLocal)
         {
-            skip(label + ": skipped -- SpriteBatch ignores a sub-Viewport on this backend");
+            skip(label + ": skipped -- SpriteBatch ignores a sub-Viewport on this renderer");
             return;
         }
         auto rt = MakeTarget(dev, kRTW, kRTH);
@@ -1420,7 +1420,7 @@ class DeferredViewportCaptureTest : public Game
     {
         const std::string label = "I3 full-target 3D draw is not squeezed by a later sub-Viewport";
         keepAlive_.clear();
-        if (!kContract.draws3D) { skip(label + ": skipped -- no 3D on this backend"); return; }
+        if (!kContract.draws3D) { skip(label + ": skipped -- no 3D on this renderer"); return; }
         auto rt = MakeTarget(dev, kRTW, kRTH);
 
         dev.SetRenderTarget(rt.get());
@@ -1449,13 +1449,13 @@ class DeferredViewportCaptureTest : public Game
      * @brief J1 -- a stable scissor rectangle narrower than the viewport clips both viewports.
      *
      * This is a CONTROL, not a scissor fix: it only has to show that per-draw viewport capture did
-     * not disturb whatever this backend already did with ScissorRectangle.
+     * not disturb whatever this renderer already did with ScissorRectangle.
      */
     void RunScissorControl(GraphicsDevice& dev)
     {
         const std::string label = "J1 scissor behaviour is unchanged by viewport capture";
         keepAlive_.clear();
-        if (!kContract.draws3D) { skip(label + ": skipped -- no 3D on this backend"); return; }
+        if (!kContract.draws3D) { skip(label + ": skipped -- no 3D on this renderer"); return; }
         auto rt = MakeTarget(dev, kRTW, kRTH);
         RasterizerState scissored = RasterizerState::CullNone;
         scissored.setScissorTestEnableProperty(true);
@@ -1492,7 +1492,7 @@ class DeferredViewportCaptureTest : public Game
         // whole scissor state per draw, and the deliberately deferral-sensitive form of this
         // question now lives in examples/deferred_scissor_capture_test.cpp; the order is kept here
         // so this check keeps measuring what it always measured -- that per-draw VIEWPORT capture
-        // does not disturb whatever the backend does with ScissorRectangle.
+        // does not disturb whatever the renderer does with ScissorRectangle.
         dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
         dev.setRasterizerStateProperty(RasterizerState::CullNone);
         dev.setScissorRectangleProperty(Rectangle(0, 0, kRTW, kRTH));
@@ -1510,7 +1510,7 @@ class DeferredViewportCaptureTest : public Game
     {
         const std::string label = "J2 viewport smaller than the scissor still bounds the draw";
         keepAlive_.clear();
-        if (!kContract.draws3D) { skip(label + ": skipped -- no 3D on this backend"); return; }
+        if (!kContract.draws3D) { skip(label + ": skipped -- no 3D on this renderer"); return; }
         auto rt = MakeTarget(dev, kRTW, kRTH);
         RasterizerState scissored = RasterizerState::CullNone;
         scissored.setScissorTestEnableProperty(true);
@@ -1553,7 +1553,7 @@ class DeferredViewportCaptureTest : public Game
     {
         const std::string label = "K1 eight viewports in one bind cycle";
         keepAlive_.clear();
-        if (!kContract.draws3D) { skip(label + ": skipped -- no 3D on this backend"); return; }
+        if (!kContract.draws3D) { skip(label + ": skipped -- no 3D on this renderer"); return; }
         auto rt = MakeTarget(dev, kRTW, kRTH);
         const std::array<Color, 8> palette{kRed, kGreen, kBlue, kYellow,
                                            kMagenta, kCyan, kWhite, kRed};
@@ -1585,7 +1585,7 @@ class DeferredViewportCaptureTest : public Game
     {
         const std::string label = "K2 same target, two cycles, different viewports";
         keepAlive_.clear();
-        if (!kContract.draws3D) { skip(label + ": skipped -- no 3D on this backend"); return; }
+        if (!kContract.draws3D) { skip(label + ": skipped -- no 3D on this renderer"); return; }
         auto rt = MakeTarget(dev, kRTW, kRTH);
 
         dev.SetRenderTarget(rt.get());
@@ -1653,7 +1653,7 @@ class DeferredViewportCaptureTest : public Game
 
     void Draw(const GameTime&) override
     {
-        // Frame 0 is a warm-up: some backends copy texture payloads only at frame boundaries.
+        // Frame 0 is a warm-up: some renderers copy texture payloads only at frame boundaries.
         if (phase_ == 0)
         {
             phase_ = 1;
@@ -1670,7 +1670,7 @@ class DeferredViewportCaptureTest : public Game
             bbW_ = vp.getWidthProperty();
             bbH_ = vp.getHeightProperty();
         }
-        std::printf("REMED-GFX-116 deferred viewport capture -- backend %s, backbuffer %dx%d\n",
+        std::printf("REMED-GFX-116 deferred viewport capture -- renderer %s, backbuffer %dx%d\n",
                     kContract.name, bbW_, bbH_);
 
         RunLeftRightLeft(dev);

@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/OcclusionQuery.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
 {
     OcclusionQuery::OcclusionQuery(GraphicsDevice& device)
         : GraphicsResource(&device)
-        , backend_(device.GetBackend().CreateOcclusionQuery())
+        , renderer_(device.GetRenderer().CreateOcclusionQuery())
     {
     }
 
@@ -15,30 +15,30 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void OcclusionQuery::Dispose(bool disposing)
     {
-        backend_.reset();
+        renderer_.reset();
         GraphicsResource::Dispose(disposing);
     }
 
     bool OcclusionQuery::getIsCompleteProperty() const
     {
-        if (backend_) return backend_->IsComplete();
+        if (renderer_) return renderer_->IsComplete();
         return false;
     }
 
     int OcclusionQuery::getPixelCountProperty() const
     {
-        if (backend_) return backend_->PixelCount();
+        if (renderer_) return renderer_->PixelCount();
         return 0;
     }
 
     void OcclusionQuery::Begin()
     {
-        if (backend_) backend_->Begin();
+        if (renderer_) renderer_->Begin();
     }
 
     void OcclusionQuery::End()
     {
-        if (backend_) backend_->End();
+        if (renderer_) renderer_->End();
     }
 
     const std::string& OcclusionQuery::GetTypeName() const

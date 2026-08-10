@@ -3,5 +3,5 @@
 # for the GL APIs -- OpenGL::GL, since sokol_gfx.h has no GL loader outside Windows. SDL3
 # supplies the window and, via SDL_GL_CreateContext, the GL context sokol_gfx renders into
 # (design decision 1: CNA keeps owning the window and the game loop, so sokol_app is not used).
-cna_add_renderer_backend()
-target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 cna_sokol_headers)
+cna_add_renderer()
+target_link_libraries(${RENDERER_TARGET} PRIVATE SDL3::SDL3 cna_sokol_headers)

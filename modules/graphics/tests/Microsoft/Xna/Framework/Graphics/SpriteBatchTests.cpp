@@ -16,7 +16,7 @@
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 
-#include "RecordingSpriteBatchBackend.hpp"
+#include "RecordingSpriteBatchRenderer.hpp"
 
 #include <cstddef>
 #include <memory>
@@ -30,8 +30,8 @@ using Microsoft::Xna::Framework::Graphics::SpriteEffects;
 using Microsoft::Xna::Framework::Graphics::SpriteFont;
 using Microsoft::Xna::Framework::Graphics::SpriteSortMode;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
-using CNA::Internal::Backends::DummyTextureBackend;
-using CNA::Internal::Backends::RecordingSpriteBatchBackend;
+using CNA::Internal::Renderers::DummyTextureRenderer;
+using CNA::Internal::Renderers::RecordingSpriteBatchRenderer;
 using System::ArgumentOutOfRangeException;
 
 // -----------------------------------------------------------------------
@@ -93,11 +93,11 @@ TEST(SpriteEffectsTest, NoneIsDifferentFromFlipHorizontally)
 }
 
 // -----------------------------------------------------------------------
-// SpriteBatch — no-backend construction and guard throws
+// SpriteBatch — no-renderer construction and guard throws
 //
-// A default-constructed SpriteBatch has no backend and no graphics device.
+// A default-constructed SpriteBatch has no renderer and no graphics device.
 // Begin/End/Draw overloads that guard on `begun` still fire before any
-// backend or texture access, so these tests do not need a GPU context.
+// renderer or texture access, so these tests do not need a GPU context.
 // -----------------------------------------------------------------------
 
 TEST(SpriteBatchTest, DefaultConstructorDoesNotThrow)
@@ -111,20 +111,20 @@ TEST(SpriteBatchTest, EndWithoutBeginThrows)
     EXPECT_THROW(batch.End(), std::runtime_error);
 }
 
-TEST(SpriteBatchTest, BeginWithoutBackendDoesNotThrow)
+TEST(SpriteBatchTest, BeginWithoutRendererDoesNotThrow)
 {
     SpriteBatch batch;
     EXPECT_NO_THROW(batch.Begin());
 }
 
-TEST(SpriteBatchTest, BeginSortBlendWithoutBackendDoesNotThrow)
+TEST(SpriteBatchTest, BeginSortBlendWithoutRendererDoesNotThrow)
 {
     using Microsoft::Xna::Framework::Graphics::BlendState;
     SpriteBatch batch;
     EXPECT_NO_THROW(batch.Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend));
 }
 
-// --- Draw guard: throws when called before Begin (no-backend batch) ---
+// --- Draw guard: throws when called before Begin (no-renderer batch) ---
 
 TEST(SpriteBatchTest, DrawXYBeforeBeginThrows)
 {
@@ -325,24 +325,24 @@ TEST(SpriteBatchTest, BeginEndBeginEndDoesNotThrow)
 }
 
 // -----------------------------------------------------------------------
-// Task 411: mock/recording ISpriteBatchBackend for deterministic unit tests
+// Task 411: mock/recording ISpriteBatchRenderer for deterministic unit tests
 //
-// Proves the new backend-injecting constructor + RecordingSpriteBatchBackend work end-to-end,
+// Proves the new renderer-injecting constructor + RecordingSpriteBatchRenderer work end-to-end,
 // without a GraphicsDevice or real graphics context. Tasks 412-416 build the actual
 // per-SpriteSortMode assertions (Immediate flush timing, Deferred order preservation, Texture
 // grouping, FrontToBack/BackToFront ordering) on top of this same infrastructure.
 // -----------------------------------------------------------------------
 
-TEST(SpriteBatchBackendInjectionTest, ConstructingWithBackendDoesNotThrow)
+TEST(SpriteBatchRendererInjectionTest, ConstructingWithRendererDoesNotThrow)
 {
-    EXPECT_NO_THROW(SpriteBatch batch(std::make_unique<RecordingSpriteBatchBackend>()));
+    EXPECT_NO_THROW(SpriteBatch batch(std::make_unique<RecordingSpriteBatchRenderer>()));
 }
 
-TEST(SpriteBatchBackendInjectionTest, BeginDispatchesToBackend)
+TEST(SpriteBatchRendererInjectionTest, BeginDispatchesToRenderer)
 {
-    auto backend = std::make_unique<RecordingSpriteBatchBackend>();
-    RecordingSpriteBatchBackend* rec = backend.get();
-    SpriteBatch batch(std::move(backend));
+    auto renderer = std::make_unique<RecordingSpriteBatchRenderer>();
+    RecordingSpriteBatchRenderer* rec = renderer.get();
+    SpriteBatch batch(std::move(renderer));
 
     batch.Begin();
 
@@ -350,11 +350,11 @@ TEST(SpriteBatchBackendInjectionTest, BeginDispatchesToBackend)
     EXPECT_EQ(rec->endCount, 0);
 }
 
-TEST(SpriteBatchBackendInjectionTest, EndDispatchesToBackend)
+TEST(SpriteBatchRendererInjectionTest, EndDispatchesToRenderer)
 {
-    auto backend = std::make_unique<RecordingSpriteBatchBackend>();
-    RecordingSpriteBatchBackend* rec = backend.get();
-    SpriteBatch batch(std::move(backend));
+    auto renderer = std::make_unique<RecordingSpriteBatchRenderer>();
+    RecordingSpriteBatchRenderer* rec = renderer.get();
+    SpriteBatch batch(std::move(renderer));
 
     batch.Begin();
     batch.End();
@@ -363,15 +363,15 @@ TEST(SpriteBatchBackendInjectionTest, EndDispatchesToBackend)
     EXPECT_EQ(rec->endCount, 1);
 }
 
-TEST(SpriteBatchBackendInjectionTest, DrawIsRecordedWithExactParameters)
+TEST(SpriteBatchRendererInjectionTest, DrawIsRecordedWithExactParameters)
 {
-    auto backend = std::make_unique<RecordingSpriteBatchBackend>();
-    RecordingSpriteBatchBackend* rec = backend.get();
-    SpriteBatch batch(std::move(backend));
+    auto renderer = std::make_unique<RecordingSpriteBatchRenderer>();
+    RecordingSpriteBatchRenderer* rec = renderer.get();
+    SpriteBatch batch(std::move(renderer));
 
-    DummyTextureBackend texBackend(16, 16);
-    Texture2D tex = Texture2D::CreateWithBackendForTests(16, 16,
-        std::shared_ptr<CNA::Internal::Backends::ITextureBackend>(&texBackend, [](auto*) {}));
+    DummyTextureRenderer texRenderer(16, 16);
+    Texture2D tex = Texture2D::CreateWithRendererForTests(16, 16,
+        std::shared_ptr<CNA::Internal::Renderers::ITextureRenderer>(&texRenderer, [](auto*) {}));
 
     const Rectangle dest(10, 20, 16, 16);
     const Rectangle src(0, 0, 16, 16);
@@ -384,7 +384,7 @@ TEST(SpriteBatchBackendInjectionTest, DrawIsRecordedWithExactParameters)
 
     ASSERT_EQ(rec->drawCalls.size(), 1u);
     const auto& call = rec->drawCalls[0];
-    EXPECT_EQ(call.texture, &texBackend);
+    EXPECT_EQ(call.texture, &texRenderer);
     EXPECT_EQ(call.destinationRectangle, dest);
     EXPECT_EQ(call.sourceRectangle, src);
     EXPECT_EQ(call.color, color);
@@ -399,15 +399,15 @@ TEST(SpriteBatchBackendInjectionTest, DrawIsRecordedWithExactParameters)
 // takes Rectangle? sourceRectangle (src/Graphics/SpriteBatch.cs); the pre-existing NOXNA overload
 // wrongly required a non-optional Rectangle instead.
 
-TEST(SpriteBatchBackendInjectionTest, DrawRectOptSrcRotOriEffLayerWithSourceIsRecordedWithExactParameters)
+TEST(SpriteBatchRendererInjectionTest, DrawRectOptSrcRotOriEffLayerWithSourceIsRecordedWithExactParameters)
 {
-    auto backend = std::make_unique<RecordingSpriteBatchBackend>();
-    RecordingSpriteBatchBackend* rec = backend.get();
-    SpriteBatch batch(std::move(backend));
+    auto renderer = std::make_unique<RecordingSpriteBatchRenderer>();
+    RecordingSpriteBatchRenderer* rec = renderer.get();
+    SpriteBatch batch(std::move(renderer));
 
-    DummyTextureBackend texBackend(16, 16);
-    Texture2D tex = Texture2D::CreateWithBackendForTests(16, 16,
-        std::shared_ptr<CNA::Internal::Backends::ITextureBackend>(&texBackend, [](auto*) {}));
+    DummyTextureRenderer texRenderer(16, 16);
+    Texture2D tex = Texture2D::CreateWithRendererForTests(16, 16,
+        std::shared_ptr<CNA::Internal::Renderers::ITextureRenderer>(&texRenderer, [](auto*) {}));
 
     const Rectangle dest(10, 20, 16, 16);
     const Rectangle src(2, 3, 8, 8);
@@ -421,7 +421,7 @@ TEST(SpriteBatchBackendInjectionTest, DrawRectOptSrcRotOriEffLayerWithSourceIsRe
 
     ASSERT_EQ(rec->drawCalls.size(), 1u);
     const auto& call = rec->drawCalls[0];
-    EXPECT_EQ(call.texture, &texBackend);
+    EXPECT_EQ(call.texture, &texRenderer);
     EXPECT_EQ(call.destinationRectangle, dest);
     EXPECT_EQ(call.sourceRectangle, src);
     EXPECT_EQ(call.color, color);
@@ -431,15 +431,15 @@ TEST(SpriteBatchBackendInjectionTest, DrawRectOptSrcRotOriEffLayerWithSourceIsRe
     EXPECT_FLOAT_EQ(call.layerDepth, 0.25f);
 }
 
-TEST(SpriteBatchBackendInjectionTest, DrawRectOptSrcRotOriEffLayerWithNulloptDrawsWholeTexture)
+TEST(SpriteBatchRendererInjectionTest, DrawRectOptSrcRotOriEffLayerWithNulloptDrawsWholeTexture)
 {
-    auto backend = std::make_unique<RecordingSpriteBatchBackend>();
-    RecordingSpriteBatchBackend* rec = backend.get();
-    SpriteBatch batch(std::move(backend));
+    auto renderer = std::make_unique<RecordingSpriteBatchRenderer>();
+    RecordingSpriteBatchRenderer* rec = renderer.get();
+    SpriteBatch batch(std::move(renderer));
 
-    DummyTextureBackend texBackend(16, 16);
-    Texture2D tex = Texture2D::CreateWithBackendForTests(16, 16,
-        std::shared_ptr<CNA::Internal::Backends::ITextureBackend>(&texBackend, [](auto*) {}));
+    DummyTextureRenderer texRenderer(16, 16);
+    Texture2D tex = Texture2D::CreateWithRendererForTests(16, 16,
+        std::shared_ptr<CNA::Internal::Renderers::ITextureRenderer>(&texRenderer, [](auto*) {}));
 
     const Rectangle dest(10, 20, 16, 16);
     const Color color(1, 2, 3, 4);
@@ -461,22 +461,22 @@ TEST(SpriteBatchBackendInjectionTest, DrawRectOptSrcRotOriEffLayerWithNulloptDra
     EXPECT_FLOAT_EQ(call.layerDepth, 0.25f);
 }
 
-TEST(SpriteBatchBackendInjectionTest, DistinctTexturesProduceDistinctRecordedPointers)
+TEST(SpriteBatchRendererInjectionTest, DistinctTexturesProduceDistinctRecordedPointers)
 {
     // SpriteSortMode::Texture (Task 414) sorts by the Texture2D*, and flushSingle() forwards
-    // the underlying ITextureBackend& — this test proves 2 distinct Texture2D instances are
-    // observable as 2 distinct backend pointers through the recording backend, the precondition
+    // the underlying ITextureRenderer& — this test proves 2 distinct Texture2D instances are
+    // observable as 2 distinct renderer pointers through the recording renderer, the precondition
     // Task 414's grouping assertion depends on.
-    auto backend = std::make_unique<RecordingSpriteBatchBackend>();
-    RecordingSpriteBatchBackend* rec = backend.get();
-    SpriteBatch batch(std::move(backend));
+    auto renderer = std::make_unique<RecordingSpriteBatchRenderer>();
+    RecordingSpriteBatchRenderer* rec = renderer.get();
+    SpriteBatch batch(std::move(renderer));
 
-    DummyTextureBackend backendA(4, 4);
-    DummyTextureBackend backendB(8, 8);
-    Texture2D texA = Texture2D::CreateWithBackendForTests(4, 4,
-        std::shared_ptr<CNA::Internal::Backends::ITextureBackend>(&backendA, [](auto*) {}));
-    Texture2D texB = Texture2D::CreateWithBackendForTests(8, 8,
-        std::shared_ptr<CNA::Internal::Backends::ITextureBackend>(&backendB, [](auto*) {}));
+    DummyTextureRenderer rendererA(4, 4);
+    DummyTextureRenderer rendererB(8, 8);
+    Texture2D texA = Texture2D::CreateWithRendererForTests(4, 4,
+        std::shared_ptr<CNA::Internal::Renderers::ITextureRenderer>(&rendererA, [](auto*) {}));
+    Texture2D texB = Texture2D::CreateWithRendererForTests(8, 8,
+        std::shared_ptr<CNA::Internal::Renderers::ITextureRenderer>(&rendererB, [](auto*) {}));
 
     batch.Begin();
     batch.Draw(texA, 0.0f, 0.0f);
@@ -484,8 +484,8 @@ TEST(SpriteBatchBackendInjectionTest, DistinctTexturesProduceDistinctRecordedPoi
     batch.End();
 
     ASSERT_EQ(rec->drawCalls.size(), 2u);
-    EXPECT_EQ(rec->drawCalls[0].texture, &backendA);
-    EXPECT_EQ(rec->drawCalls[1].texture, &backendB);
+    EXPECT_EQ(rec->drawCalls[0].texture, &rendererA);
+    EXPECT_EQ(rec->drawCalls[1].texture, &rendererB);
     EXPECT_NE(rec->drawCalls[0].texture, rec->drawCalls[1].texture);
 }
 
@@ -495,7 +495,7 @@ TEST(SpriteBatchBackendInjectionTest, DistinctTexturesProduceDistinctRecordedPoi
 // FNA/XNA's contract for SpriteSortMode::Immediate is that each sprite is submitted to the
 // graphics device the instant Draw() is called, rather than being queued and flushed in a batch
 // at End() (the behaviour every other sort mode uses). This must be observable BEFORE End() is
-// ever called -- a backend that only flushes at End() would pass every other SpriteBatch test in
+// ever called -- a renderer that only flushes at End() would pass every other SpriteBatch test in
 // this file (which all read the recording after End()) while still violating Immediate's actual
 // contract, so the assertion here is placed deliberately between Draw() and End().
 // -----------------------------------------------------------------------
@@ -504,20 +504,20 @@ TEST(SpriteBatchSortModeTest, ImmediateFlushesInsideDrawBeforeEnd)
 {
     using Microsoft::Xna::Framework::Graphics::BlendState;
 
-    auto backend = std::make_unique<RecordingSpriteBatchBackend>();
-    RecordingSpriteBatchBackend* rec = backend.get();
-    SpriteBatch batch(std::move(backend));
+    auto renderer = std::make_unique<RecordingSpriteBatchRenderer>();
+    RecordingSpriteBatchRenderer* rec = renderer.get();
+    SpriteBatch batch(std::move(renderer));
 
-    DummyTextureBackend texBackend(4, 4);
-    Texture2D tex = Texture2D::CreateWithBackendForTests(4, 4,
-        std::shared_ptr<CNA::Internal::Backends::ITextureBackend>(&texBackend, [](auto*) {}));
+    DummyTextureRenderer texRenderer(4, 4);
+    Texture2D tex = Texture2D::CreateWithRendererForTests(4, 4,
+        std::shared_ptr<CNA::Internal::Renderers::ITextureRenderer>(&texRenderer, [](auto*) {}));
 
     batch.Begin(SpriteSortMode::Immediate, BlendState::AlphaBlend);
     batch.Draw(tex, 0.0f, 0.0f);
 
     // The critical assertion: the draw must already be recorded here, before End() runs.
     ASSERT_EQ(rec->drawCalls.size(), 1u);
-    EXPECT_EQ(rec->drawCalls[0].texture, &texBackend);
+    EXPECT_EQ(rec->drawCalls[0].texture, &texRenderer);
 
     batch.End();
 
@@ -529,26 +529,26 @@ TEST(SpriteBatchSortModeTest, ImmediateFlushesEachDrawSeparatelyInCallOrder)
 {
     using Microsoft::Xna::Framework::Graphics::BlendState;
 
-    auto backend = std::make_unique<RecordingSpriteBatchBackend>();
-    RecordingSpriteBatchBackend* rec = backend.get();
-    SpriteBatch batch(std::move(backend));
+    auto renderer = std::make_unique<RecordingSpriteBatchRenderer>();
+    RecordingSpriteBatchRenderer* rec = renderer.get();
+    SpriteBatch batch(std::move(renderer));
 
-    DummyTextureBackend backendA(4, 4);
-    DummyTextureBackend backendB(8, 8);
-    Texture2D texA = Texture2D::CreateWithBackendForTests(4, 4,
-        std::shared_ptr<CNA::Internal::Backends::ITextureBackend>(&backendA, [](auto*) {}));
-    Texture2D texB = Texture2D::CreateWithBackendForTests(8, 8,
-        std::shared_ptr<CNA::Internal::Backends::ITextureBackend>(&backendB, [](auto*) {}));
+    DummyTextureRenderer rendererA(4, 4);
+    DummyTextureRenderer rendererB(8, 8);
+    Texture2D texA = Texture2D::CreateWithRendererForTests(4, 4,
+        std::shared_ptr<CNA::Internal::Renderers::ITextureRenderer>(&rendererA, [](auto*) {}));
+    Texture2D texB = Texture2D::CreateWithRendererForTests(8, 8,
+        std::shared_ptr<CNA::Internal::Renderers::ITextureRenderer>(&rendererB, [](auto*) {}));
 
     batch.Begin(SpriteSortMode::Immediate, BlendState::AlphaBlend);
 
     batch.Draw(texA, 0.0f, 0.0f);
     ASSERT_EQ(rec->drawCalls.size(), 1u);
-    EXPECT_EQ(rec->drawCalls[0].texture, &backendA);
+    EXPECT_EQ(rec->drawCalls[0].texture, &rendererA);
 
     batch.Draw(texB, 0.0f, 0.0f);
     ASSERT_EQ(rec->drawCalls.size(), 2u);
-    EXPECT_EQ(rec->drawCalls[1].texture, &backendB);
+    EXPECT_EQ(rec->drawCalls[1].texture, &rendererB);
 
     batch.End();
     EXPECT_EQ(rec->drawCalls.size(), 2u);
@@ -558,13 +558,13 @@ TEST(SpriteBatchSortModeTest, DeferredDoesNotFlushBeforeEnd)
 {
     // Negative control: proves the test methodology above actually discriminates Immediate from
     // the default (Deferred) mode, rather than every mode happening to flush eagerly.
-    auto backend = std::make_unique<RecordingSpriteBatchBackend>();
-    RecordingSpriteBatchBackend* rec = backend.get();
-    SpriteBatch batch(std::move(backend));
+    auto renderer = std::make_unique<RecordingSpriteBatchRenderer>();
+    RecordingSpriteBatchRenderer* rec = renderer.get();
+    SpriteBatch batch(std::move(renderer));
 
-    DummyTextureBackend texBackend(4, 4);
-    Texture2D tex = Texture2D::CreateWithBackendForTests(4, 4,
-        std::shared_ptr<CNA::Internal::Backends::ITextureBackend>(&texBackend, [](auto*) {}));
+    DummyTextureRenderer texRenderer(4, 4);
+    Texture2D tex = Texture2D::CreateWithRendererForTests(4, 4,
+        std::shared_ptr<CNA::Internal::Renderers::ITextureRenderer>(&texRenderer, [](auto*) {}));
 
     batch.Begin(); // default: SpriteSortMode::Deferred
     batch.Draw(tex, 0.0f, 0.0f);
@@ -579,7 +579,7 @@ TEST(SpriteBatchSortModeTest, DeferredDoesNotFlushBeforeEnd)
 // Task 413: complete tests for SpriteSortMode::Deferred (Task 162 dependency)
 //
 // FNA/XNA's contract for the default SpriteSortMode::Deferred is: no sort at all, sprites are
-// delivered to the backend in exactly their original Draw() submission order. flushBatch() only
+// delivered to the renderer in exactly their original Draw() submission order. flushBatch() only
 // applies std::stable_sort for BackToFront/FrontToBack/Texture -- Deferred deliberately skips
 // straight to iterating spriteQueue_ in insertion order. Task 412's DeferredDoesNotFlushBeforeEnd
 // already covers the "not flushed before End()" half of Deferred's contract; this covers the
@@ -588,17 +588,17 @@ TEST(SpriteBatchSortModeTest, DeferredDoesNotFlushBeforeEnd)
 
 TEST(SpriteBatchSortModeTest, DeferredPreservesSubmissionOrder)
 {
-    auto backend = std::make_unique<RecordingSpriteBatchBackend>();
-    RecordingSpriteBatchBackend* rec = backend.get();
-    SpriteBatch batch(std::move(backend));
+    auto renderer = std::make_unique<RecordingSpriteBatchRenderer>();
+    RecordingSpriteBatchRenderer* rec = renderer.get();
+    SpriteBatch batch(std::move(renderer));
 
-    DummyTextureBackend backendA(1, 1), backendB(2, 2), backendC(3, 3);
-    Texture2D texA = Texture2D::CreateWithBackendForTests(1, 1,
-        std::shared_ptr<CNA::Internal::Backends::ITextureBackend>(&backendA, [](auto*) {}));
-    Texture2D texB = Texture2D::CreateWithBackendForTests(2, 2,
-        std::shared_ptr<CNA::Internal::Backends::ITextureBackend>(&backendB, [](auto*) {}));
-    Texture2D texC = Texture2D::CreateWithBackendForTests(3, 3,
-        std::shared_ptr<CNA::Internal::Backends::ITextureBackend>(&backendC, [](auto*) {}));
+    DummyTextureRenderer rendererA(1, 1), rendererB(2, 2), rendererC(3, 3);
+    Texture2D texA = Texture2D::CreateWithRendererForTests(1, 1,
+        std::shared_ptr<CNA::Internal::Renderers::ITextureRenderer>(&rendererA, [](auto*) {}));
+    Texture2D texB = Texture2D::CreateWithRendererForTests(2, 2,
+        std::shared_ptr<CNA::Internal::Renderers::ITextureRenderer>(&rendererB, [](auto*) {}));
+    Texture2D texC = Texture2D::CreateWithRendererForTests(3, 3,
+        std::shared_ptr<CNA::Internal::Renderers::ITextureRenderer>(&rendererC, [](auto*) {}));
 
     // Deliberately submitted in an order that does NOT match any sort key (not sorted by
     // texture pointer, not sorted by any layerDepth since none is set here) -- if flushBatch()
@@ -610,9 +610,9 @@ TEST(SpriteBatchSortModeTest, DeferredPreservesSubmissionOrder)
     batch.End();
 
     ASSERT_EQ(rec->drawCalls.size(), 3u);
-    EXPECT_EQ(rec->drawCalls[0].texture, &backendC);
-    EXPECT_EQ(rec->drawCalls[1].texture, &backendA);
-    EXPECT_EQ(rec->drawCalls[2].texture, &backendB);
+    EXPECT_EQ(rec->drawCalls[0].texture, &rendererC);
+    EXPECT_EQ(rec->drawCalls[1].texture, &rendererA);
+    EXPECT_EQ(rec->drawCalls[2].texture, &rendererB);
 }
 
 // -----------------------------------------------------------------------
@@ -630,15 +630,15 @@ TEST(SpriteBatchSortModeTest, DeferredPreservesSubmissionOrder)
 
 TEST(SpriteBatchSortModeTest, TextureGroupsDrawsByTextureAndPreservesGroupOrder)
 {
-    auto backend = std::make_unique<RecordingSpriteBatchBackend>();
-    RecordingSpriteBatchBackend* rec = backend.get();
-    SpriteBatch batch(std::move(backend));
+    auto renderer = std::make_unique<RecordingSpriteBatchRenderer>();
+    RecordingSpriteBatchRenderer* rec = renderer.get();
+    SpriteBatch batch(std::move(renderer));
 
-    DummyTextureBackend backendA(1, 1), backendB(2, 2);
-    Texture2D texA = Texture2D::CreateWithBackendForTests(1, 1,
-        std::shared_ptr<CNA::Internal::Backends::ITextureBackend>(&backendA, [](auto*) {}));
-    Texture2D texB = Texture2D::CreateWithBackendForTests(2, 2,
-        std::shared_ptr<CNA::Internal::Backends::ITextureBackend>(&backendB, [](auto*) {}));
+    DummyTextureRenderer rendererA(1, 1), rendererB(2, 2);
+    Texture2D texA = Texture2D::CreateWithRendererForTests(1, 1,
+        std::shared_ptr<CNA::Internal::Renderers::ITextureRenderer>(&rendererA, [](auto*) {}));
+    Texture2D texB = Texture2D::CreateWithRendererForTests(2, 2,
+        std::shared_ptr<CNA::Internal::Renderers::ITextureRenderer>(&rendererB, [](auto*) {}));
 
     // Alternating submission order (A, B, A) -- deliberately interleaved so a no-op/Deferred-like
     // implementation would leave B sandwiched between the 2 A draws. The 2 A draws use distinct
@@ -654,8 +654,8 @@ TEST(SpriteBatchSortModeTest, TextureGroupsDrawsByTextureAndPreservesGroupOrder)
     std::vector<std::size_t> aIndices, bIndices;
     for (std::size_t i = 0; i < rec->drawCalls.size(); ++i)
     {
-        if (rec->drawCalls[i].texture == &backendA) aIndices.push_back(i);
-        else if (rec->drawCalls[i].texture == &backendB) bIndices.push_back(i);
+        if (rec->drawCalls[i].texture == &rendererA) aIndices.push_back(i);
+        else if (rec->drawCalls[i].texture == &rendererB) bIndices.push_back(i);
     }
     ASSERT_EQ(aIndices.size(), 2u);
     ASSERT_EQ(bIndices.size(), 1u);
@@ -682,13 +682,13 @@ TEST(SpriteBatchSortModeTest, FrontToBackSortsByAscendingLayerDepth)
 {
     using Microsoft::Xna::Framework::Graphics::BlendState;
 
-    auto backend = std::make_unique<RecordingSpriteBatchBackend>();
-    RecordingSpriteBatchBackend* rec = backend.get();
-    SpriteBatch batch(std::move(backend));
+    auto renderer = std::make_unique<RecordingSpriteBatchRenderer>();
+    RecordingSpriteBatchRenderer* rec = renderer.get();
+    SpriteBatch batch(std::move(renderer));
 
-    DummyTextureBackend texBackend(4, 4);
-    Texture2D tex = Texture2D::CreateWithBackendForTests(4, 4,
-        std::shared_ptr<CNA::Internal::Backends::ITextureBackend>(&texBackend, [](auto*) {}));
+    DummyTextureRenderer texRenderer(4, 4);
+    Texture2D tex = Texture2D::CreateWithRendererForTests(4, 4,
+        std::shared_ptr<CNA::Internal::Renderers::ITextureRenderer>(&texRenderer, [](auto*) {}));
 
     // plan_graphics.md's own Task 164 example depths (0.5, 0.1, 0.9), deliberately submitted out
     // of order. Each dest-rect X coordinate (50/10/90) mirrors its own depth*100, purely as a
@@ -727,13 +727,13 @@ TEST(SpriteBatchSortModeTest, BackToFrontSortsByDescendingLayerDepth)
 {
     using Microsoft::Xna::Framework::Graphics::BlendState;
 
-    auto backend = std::make_unique<RecordingSpriteBatchBackend>();
-    RecordingSpriteBatchBackend* rec = backend.get();
-    SpriteBatch batch(std::move(backend));
+    auto renderer = std::make_unique<RecordingSpriteBatchRenderer>();
+    RecordingSpriteBatchRenderer* rec = renderer.get();
+    SpriteBatch batch(std::move(renderer));
 
-    DummyTextureBackend texBackend(4, 4);
-    Texture2D tex = Texture2D::CreateWithBackendForTests(4, 4,
-        std::shared_ptr<CNA::Internal::Backends::ITextureBackend>(&texBackend, [](auto*) {}));
+    DummyTextureRenderer texRenderer(4, 4);
+    Texture2D tex = Texture2D::CreateWithRendererForTests(4, 4,
+        std::shared_ptr<CNA::Internal::Renderers::ITextureRenderer>(&texRenderer, [](auto*) {}));
 
     batch.Begin(SpriteSortMode::BackToFront, BlendState::AlphaBlend);
     batch.Draw(tex, Rectangle(50, 0, 1, 1), Rectangle(0, 0, 1, 1), Color::White,
@@ -765,10 +765,10 @@ TEST(SpriteBatchSortModeTest, BackToFrontSortsByDescendingLayerDepth)
 
 namespace
 {
-    SpriteFont makeSingleGlyphFontWithBackend(
-        const std::shared_ptr<CNA::Internal::Backends::ITextureBackend>& texBackend)
+    SpriteFont makeSingleGlyphFontWithRenderer(
+        const std::shared_ptr<CNA::Internal::Renderers::ITextureRenderer>& texRenderer)
     {
-        Texture2D atlas = Texture2D::CreateWithBackendForTests(16, 16, texBackend);
+        Texture2D atlas = Texture2D::CreateWithRendererForTests(16, 16, texRenderer);
         std::vector<Rectangle> glyphs   = { Rectangle(0, 0, 8, 12) };
         std::vector<Rectangle> cropping = { Rectangle(0, 0, 8, 12) };
         std::vector<SharpRuntime::charcs> chars = { u'A' };
@@ -778,12 +778,12 @@ namespace
                           kern, std::nullopt);
     }
 
-    std::vector<RecordingSpriteBatchBackend::DrawCall> drawSingleCharWithEffects(
+    std::vector<RecordingSpriteBatchRenderer::DrawCall> drawSingleCharWithEffects(
         const SpriteFont& font, SpriteEffects effects)
     {
-        auto backend = std::make_unique<RecordingSpriteBatchBackend>();
-        RecordingSpriteBatchBackend* rec = backend.get();
-        SpriteBatch batch(std::move(backend));
+        auto renderer = std::make_unique<RecordingSpriteBatchRenderer>();
+        RecordingSpriteBatchRenderer* rec = renderer.get();
+        SpriteBatch batch(std::move(renderer));
         batch.Begin();
         batch.DrawString(font, std::string("A"), Vector2(10.0f, 20.0f), Color::White,
                          0.0f, Vector2::Zero, 1.0f, effects, 0.0f);
@@ -791,10 +791,10 @@ namespace
         return rec->drawCalls;
     }
 
-    SpriteFont makeUnitGlyphFontWithBackend(
-        const std::shared_ptr<CNA::Internal::Backends::ITextureBackend>& texBackend)
+    SpriteFont makeUnitGlyphFontWithRenderer(
+        const std::shared_ptr<CNA::Internal::Renderers::ITextureRenderer>& texRenderer)
     {
-        Texture2D atlas = Texture2D::CreateWithBackendForTests(16, 16, texBackend);
+        Texture2D atlas = Texture2D::CreateWithRendererForTests(16, 16, texRenderer);
         std::vector<Rectangle> glyphs   = { Rectangle(0, 0, 1, 1) };
         std::vector<Rectangle> cropping = { Rectangle(0, 0, 1, 1) };
         std::vector<SharpRuntime::charcs> chars = { u'A' };
@@ -830,14 +830,14 @@ namespace
 
 TEST(SpriteBatchNumericInputTest, DrawXYDefinesFiniteInt32BoundariesAndTruncation)
 {
-    auto backend = std::make_unique<RecordingSpriteBatchBackend>();
-    RecordingSpriteBatchBackend* rec = backend.get();
-    SpriteBatch batch(std::move(backend));
+    auto renderer = std::make_unique<RecordingSpriteBatchRenderer>();
+    RecordingSpriteBatchRenderer* rec = renderer.get();
+    SpriteBatch batch(std::move(renderer));
 
-    DummyTextureBackend texBackendRaw(16, 16);
-    auto texBackend = std::shared_ptr<CNA::Internal::Backends::ITextureBackend>(
-        &texBackendRaw, [](auto*) {});
-    Texture2D texture = Texture2D::CreateWithBackendForTests(16, 16, texBackend);
+    DummyTextureRenderer texRendererRaw(16, 16);
+    auto texRenderer = std::shared_ptr<CNA::Internal::Renderers::ITextureRenderer>(
+        &texRendererRaw, [](auto*) {});
+    Texture2D texture = Texture2D::CreateWithRendererForTests(16, 16, texRenderer);
 
     const float positiveLimit =
         std::nextafter(2147483648.0f, 0.0f);
@@ -880,14 +880,14 @@ TEST(SpriteBatchNumericInputTest, DrawXYDefinesFiniteInt32BoundariesAndTruncatio
 
 TEST(SpriteBatchNumericInputTest, EveryVectorPositionDrawFamilyRejectsInvalidCoordinates)
 {
-    auto backend = std::make_unique<RecordingSpriteBatchBackend>();
-    RecordingSpriteBatchBackend* rec = backend.get();
-    SpriteBatch batch(std::move(backend));
+    auto renderer = std::make_unique<RecordingSpriteBatchRenderer>();
+    RecordingSpriteBatchRenderer* rec = renderer.get();
+    SpriteBatch batch(std::move(renderer));
 
-    DummyTextureBackend texBackendRaw(16, 16);
-    auto texBackend = std::shared_ptr<CNA::Internal::Backends::ITextureBackend>(
-        &texBackendRaw, [](auto*) {});
-    Texture2D texture = Texture2D::CreateWithBackendForTests(16, 16, texBackend);
+    DummyTextureRenderer texRendererRaw(16, 16);
+    auto texRenderer = std::shared_ptr<CNA::Internal::Renderers::ITextureRenderer>(
+        &texRendererRaw, [](auto*) {});
+    Texture2D texture = Texture2D::CreateWithRendererForTests(16, 16, texRenderer);
     const std::optional<Rectangle> source(Rectangle(2, 3, 8, 6));
 
     batch.Begin();
@@ -936,14 +936,14 @@ TEST(SpriteBatchNumericInputTest, EveryVectorPositionDrawFamilyRejectsInvalidCoo
 
 TEST(SpriteBatchNumericInputTest, ScalarAndVectorScaleDistinguishInvalidFromRepresentableValues)
 {
-    auto backend = std::make_unique<RecordingSpriteBatchBackend>();
-    RecordingSpriteBatchBackend* rec = backend.get();
-    SpriteBatch batch(std::move(backend));
+    auto renderer = std::make_unique<RecordingSpriteBatchRenderer>();
+    RecordingSpriteBatchRenderer* rec = renderer.get();
+    SpriteBatch batch(std::move(renderer));
 
-    DummyTextureBackend texBackendRaw(16, 16);
-    auto texBackend = std::shared_ptr<CNA::Internal::Backends::ITextureBackend>(
-        &texBackendRaw, [](auto*) {});
-    Texture2D texture = Texture2D::CreateWithBackendForTests(16, 16, texBackend);
+    DummyTextureRenderer texRendererRaw(16, 16);
+    auto texRenderer = std::shared_ptr<CNA::Internal::Renderers::ITextureRenderer>(
+        &texRendererRaw, [](auto*) {});
+    Texture2D texture = Texture2D::CreateWithRendererForTests(16, 16, texRenderer);
     const std::optional<Rectangle> source(Rectangle(2, 3, 16, 16));
 
     const float positiveDimensionLimit =
@@ -1027,14 +1027,14 @@ TEST(SpriteBatchNumericInputTest, ScalarAndVectorScaleDistinguishInvalidFromRepr
 
 TEST(SpriteBatchNumericInputTest, EveryDrawStringFamilyRejectsInvalidNumericInputsAndRemainsReusable)
 {
-    auto backend = std::make_unique<RecordingSpriteBatchBackend>();
-    RecordingSpriteBatchBackend* rec = backend.get();
-    SpriteBatch batch(std::move(backend));
+    auto renderer = std::make_unique<RecordingSpriteBatchRenderer>();
+    RecordingSpriteBatchRenderer* rec = renderer.get();
+    SpriteBatch batch(std::move(renderer));
 
-    DummyTextureBackend texBackendRaw(16, 16);
-    auto texBackend = std::shared_ptr<CNA::Internal::Backends::ITextureBackend>(
-        &texBackendRaw, [](auto*) {});
-    SpriteFont font = makeUnitGlyphFontWithBackend(texBackend);
+    DummyTextureRenderer texRendererRaw(16, 16);
+    auto texRenderer = std::shared_ptr<CNA::Internal::Renderers::ITextureRenderer>(
+        &texRendererRaw, [](auto*) {});
+    SpriteFont font = makeUnitGlyphFontWithRenderer(texRenderer);
     System::Text::StringBuilder builder;
     builder.Append("A");
 
@@ -1116,14 +1116,14 @@ TEST(SpriteBatchNumericInputTest, EveryDrawStringFamilyRejectsInvalidNumericInpu
 
 TEST(SpriteBatchNumericInputTest, DrawStringAcceptsExactInt32RoundedBoundaries)
 {
-    auto backend = std::make_unique<RecordingSpriteBatchBackend>();
-    RecordingSpriteBatchBackend* rec = backend.get();
-    SpriteBatch batch(std::move(backend));
+    auto renderer = std::make_unique<RecordingSpriteBatchRenderer>();
+    RecordingSpriteBatchRenderer* rec = renderer.get();
+    SpriteBatch batch(std::move(renderer));
 
-    DummyTextureBackend texBackendRaw(16, 16);
-    auto texBackend = std::shared_ptr<CNA::Internal::Backends::ITextureBackend>(
-        &texBackendRaw, [](auto*) {});
-    SpriteFont font = makeUnitGlyphFontWithBackend(texBackend);
+    DummyTextureRenderer texRendererRaw(16, 16);
+    auto texRenderer = std::shared_ptr<CNA::Internal::Renderers::ITextureRenderer>(
+        &texRendererRaw, [](auto*) {});
+    SpriteFont font = makeUnitGlyphFontWithRenderer(texRenderer);
 
     const float positiveLimit = std::nextafter(2147483648.0f, 0.0f);
     const float negativeLimit = -2147483648.0f;
@@ -1158,10 +1158,10 @@ TEST(SpriteBatchNumericInputTest, DrawStringAcceptsExactInt32RoundedBoundaries)
 
 TEST(SpriteBatchDrawStringSpriteEffectsTest, CombinedFlipMirrorsXLikeHorizontalAlone)
 {
-    DummyTextureBackend texBackendRaw(16, 16);
-    auto texBackend = std::shared_ptr<CNA::Internal::Backends::ITextureBackend>(
-        &texBackendRaw, [](auto*) {});
-    SpriteFont font = makeSingleGlyphFontWithBackend(texBackend);
+    DummyTextureRenderer texRendererRaw(16, 16);
+    auto texRenderer = std::shared_ptr<CNA::Internal::Renderers::ITextureRenderer>(
+        &texRendererRaw, [](auto*) {});
+    SpriteFont font = makeSingleGlyphFontWithRenderer(texRenderer);
 
     auto horiz = drawSingleCharWithEffects(font, SpriteEffects::FlipHorizontally);
     auto both  = drawSingleCharWithEffects(
@@ -1174,10 +1174,10 @@ TEST(SpriteBatchDrawStringSpriteEffectsTest, CombinedFlipMirrorsXLikeHorizontalA
 
 TEST(SpriteBatchDrawStringSpriteEffectsTest, CombinedFlipMirrorsYLikeVerticalAlone)
 {
-    DummyTextureBackend texBackendRaw(16, 16);
-    auto texBackend = std::shared_ptr<CNA::Internal::Backends::ITextureBackend>(
-        &texBackendRaw, [](auto*) {});
-    SpriteFont font = makeSingleGlyphFontWithBackend(texBackend);
+    DummyTextureRenderer texRendererRaw(16, 16);
+    auto texRenderer = std::shared_ptr<CNA::Internal::Renderers::ITextureRenderer>(
+        &texRendererRaw, [](auto*) {});
+    SpriteFont font = makeSingleGlyphFontWithRenderer(texRenderer);
 
     auto vert = drawSingleCharWithEffects(font, SpriteEffects::FlipVertically);
     auto both = drawSingleCharWithEffects(
@@ -1192,10 +1192,10 @@ TEST(SpriteBatchDrawStringSpriteEffectsTest, CombinedFlipDiffersFromNone)
 {
     // Sanity check that the combined value actually changes placement relative to None --
     // guards against a fix that merely avoids the OOB read without applying real flip math.
-    DummyTextureBackend texBackendRaw(16, 16);
-    auto texBackend = std::shared_ptr<CNA::Internal::Backends::ITextureBackend>(
-        &texBackendRaw, [](auto*) {});
-    SpriteFont font = makeSingleGlyphFontWithBackend(texBackend);
+    DummyTextureRenderer texRendererRaw(16, 16);
+    auto texRenderer = std::shared_ptr<CNA::Internal::Renderers::ITextureRenderer>(
+        &texRendererRaw, [](auto*) {});
+    SpriteFont font = makeSingleGlyphFontWithRenderer(texRenderer);
 
     auto none = drawSingleCharWithEffects(font, SpriteEffects::None);
     auto both = drawSingleCharWithEffects(

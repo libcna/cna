@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // plan_opengl2.md: pixel-exact proof for AlphaTestEffect, DualTextureEffect, BasicEffect
-// lighting, and BasicEffect fog on the native OpenGL 2.1 graphics backend. All draws use
+// lighting, and BasicEffect fog on the native OpenGL 2.1 graphics renderer. All draws use
 // World=View=Projection=Identity (vertex XYZ is clip-space XYZ directly), matching this
 // project's own established convention for this kind of test (see opengl2_3d_test.cpp).
 //
@@ -21,7 +21,7 @@
 // Check C2 -- the lighting normal matrix is a real inverse-transpose of World's upper-3x3, not
 //   the raw upper-3x3: under World=Scale(3,1,1) with a 45-degree-tilted normal, the correct
 //   transform gives N.(-L)~=0.95 (near-white); a raw-3x3 bug would give ~=0.32 (dim gray).
-// Check D -- BasicEffect fog (object-space vertex Z, this backend's documented convention --
+// Check D -- BasicEffect fog (object-space vertex Z, this renderer's documented convention --
 //   see plan_opengl2.md): FogStart=-0.8, FogEnd=0.8 (kept within the Identity-projection clip
 //   range [-1,1] so the quad itself is not near/far-clipped). A quad at local Z=-0.8 reads back the fog color
 //   exactly (fully fogged); a quad at local Z=0.8 reads back its own unfogged color exactly (fog
@@ -48,7 +48,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 
-#include "CNA/Internal/Backends/OpenGL2/OpenGL2GraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/OpenGL2/OpenGL2Renderer.hpp"
 
 #include "common/PixelTestGame.hpp"
 
@@ -60,7 +60,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::OpenGL2;
+using namespace CNA::Internal::Renderers::OpenGL2;
 
 namespace
 {

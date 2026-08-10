@@ -24,7 +24,7 @@
 //             device.Clear(Color(255, 0, 0, 255));
 //             // ... draw calls ...
 //             ExpectPixel("centre", Rectangle(W / 2, H / 2, 1, 1), Color(255, 0, 0, 255));
-//             // Or, for a channel known to legitimately vary a little by backend/driver
+//             // Or, for a channel known to legitimately vary a little by renderer/driver
 //             // (Task 462 -- e.g. MSAA edge blending): pass a tolerance explicitly.
 //             ExpectPixel("edge", Rectangle(0, 0, 1, 1), Color(128, 128, 128, 255), /*tolerance=*/20);
 //             // Or, to verify a whole small rendered region at once against a checked-in
@@ -164,7 +164,7 @@ namespace CNA::Examples
         // regenerate the reference, review the new file with `git diff`/an image viewer, then
         // commit it; every subsequent run without the env var compares against it normally.
         //
-        // Exact pixel-perfect reproduction across this project's 4 backends/drivers is already
+        // Exact pixel-perfect reproduction across this project's 4 renderers/drivers is already
         // known unreliable (Task 462's own 98-file tolerance survey) -- pass a non-zero
         // tolerance for any golden image that isn't a single flat, unblended colour.
         bool CompareGoldenImage(const char* label,
@@ -328,7 +328,7 @@ namespace CNA::Examples
         // the GraphicsDevice/Game constructor itself, well after this function's own display
         // probe already passed. Uncaught, this used to abort the whole test process (every
         // Vulkan-selecting LLGL test on a DRI3-less Xvfb) instead of reporting a clean result --
-        // this is a genuine infrastructure gap (this backend's OWN choice of renderer module vs.
+        // this is a genuine infrastructure gap (this renderer's OWN choice of renderer module vs.
         // what the X server actually supports), not a rendering defect, so it is reported the
         // same way "no display at all" already is: SKIPPED, not FAILED, and NOT silently treated
         // as a pass. The substring match is deliberately narrow (this exact LLGL/Vulkan surface

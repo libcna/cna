@@ -12,8 +12,8 @@ layout(location = 0) out vec4 outColor;
 // PbrEffect's base color texture plus the 4 glTF metallic-roughness maps (normal,
 // metallic-roughness [G=roughness,B=metallic], emissive, occlusion). Each aux map falls back to
 // a default texture whose sampled value is the correct "map absent" constant for its own
-// semantic when the effect leaves it unbound (see SdlGpuGraphicsBackend::EnsureDefaultPbrTextures'
-// own doc comment) -- mirrors EasyGLGraphicsBackend::BindDrawParams()'s identical fallback set.
+// semantic when the effect leaves it unbound (see SdlGpuRenderer::EnsureDefaultPbrTextures'
+// own doc comment) -- mirrors EasyGLRenderer::BindDrawParams()'s identical fallback set.
 layout(set = 2, binding = 0) uniform sampler2D uTexture;
 layout(set = 2, binding = 1) uniform sampler2D uNormalMap;
 layout(set = 2, binding = 2) uniform sampler2D uMetallicRoughnessMap;
@@ -46,7 +46,7 @@ layout(set = 3, binding = 1) uniform LitLightParams {
 } lp;
 
 // New tertiary uniform block (PbrEffect-only fields that don't fit the PC/LitLightParams shapes
-// every other SDL_GPU 3D shader in this backend already shares).
+// every other SDL_GPU 3D shader in this renderer already shares).
 layout(set = 3, binding = 2) uniform PbrParams {
     float metallicFactor;
     float roughnessFactor;
@@ -56,7 +56,7 @@ layout(set = 3, binding = 2) uniform PbrParams {
 
 // GGX/Trowbridge-Reitz D, Smith-Schlick-GGX visibility (direct-lighting k=(roughness+1)^2/8), and
 // Schlick Fresnel -- the glTF 2.0 spec's own reference BRDF (Appendix B.3.3/B.3.4/B.3.2). Mirrors
-// EasyGLGraphicsBackend::EnsurePbrProgram()'s PbrLight() formula-for-formula.
+// EasyGLRenderer::EnsurePbrProgram()'s PbrLight() formula-for-formula.
 vec3 PbrLight(vec3 N, vec3 V, vec3 L, vec3 lightColor, vec3 albedo, vec3 F0, float roughness, float metallic) {
     vec3 H = normalize(V + L);
     float NdotL = max(dot(N, L), 0.0);
@@ -77,8 +77,8 @@ vec3 PbrLight(vec3 N, vec3 V, vec3 L, vec3 lightColor, vec3 albedo, vec3 F0, flo
 
 // A disabled/never-configured DirectionalLight can forward Direction=(0,0,0) (matches
 // lit_textured3d.frag.glsl's own established workaround) -- normalize() on a true zero vector is
-// undefined and can poison the whole light sum with NaN. Not present in EasyGLGraphicsBackend's
-// own PbrLight callers (an OpenGL-driver-specific tolerance this Vulkan-backed backend does not
+// undefined and can poison the whole light sum with NaN. Not present in EasyGLRenderer's
+// own PbrLight callers (an OpenGL-driver-specific tolerance this Vulkan-backed renderer does not
 // share) -- a deliberate, documented improvement over the reference, not a behavior change for
 // any enabled light (NdotL already collapses the whole per-light term to zero when L=0).
 vec3 safeNormalize(vec3 v) {

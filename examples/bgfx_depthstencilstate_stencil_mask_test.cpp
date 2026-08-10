@@ -34,8 +34,8 @@
 // BGFX_STENCIL_FUNC_WMASK or any other per-draw stencil write-mask flag anywhere in bgfx's state
 // system) has no way to express a partial stencil write mask at all -- confirmed by grepping bgfx's
 // own defines.h. This is a permanent bgfx API limitation, not a gap in this codebase's own mapping
-// (BgfxGraphicsBackend::BuildBgfxStencil already discards stencilWriteMask with a documented
-// comment). Reported as INFO, matching this project's established precedent for backend
+// (BgfxRenderer::BuildBgfxStencil already discards stencilWriteMask with a documented
+// comment). Reported as INFO, matching this project's established precedent for renderer
 // limitations that cannot be closed by fixing our own code (Task 872, Task 923's alpha-blend half).
 //
 // Exit code 0 = all 4 counted checks (1-4) PASS, 1 = any of them FAILs. Check 5 never affects the

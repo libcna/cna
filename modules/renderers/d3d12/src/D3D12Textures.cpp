@@ -1,12 +1,12 @@
 // plan_dx.md Phase DX12 (DX-109).
-#include "CNA/Internal/Backends/D3D12/D3D12Textures.hpp"
-#include "CNA/Internal/Backends/D3D12/D3D12GraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/D3D12/D3D12Textures.hpp"
+#include "CNA/Internal/Renderers/D3D12/D3D12Renderer.hpp"
 
 #include <cstdio>
 #include <cstring>
 #include <stdexcept>
 
-namespace CNA::Internal::Backends::D3D12
+namespace CNA::Internal::Renderers::D3D12
 {
     namespace
     {
@@ -22,7 +22,7 @@ namespace CNA::Internal::Backends::D3D12
             return (value + alignment - 1) & ~(alignment - 1);
         }
 
-        /// The resting "readable by any shader stage" combined state this backend transitions every
+        /// The resting "readable by any shader stage" combined state this renderer transitions every
         /// texture into once its content is ready -- not D3D12_RESOURCE_STATE_GENERIC_READ (that
         /// combination is meant for buffer-shaped usages like vertex/index/constant reads, not
         /// textures; MSDN's own D3D12_RESOURCE_STATES table lists PIXEL_SHADER_RESOURCE |
@@ -33,8 +33,8 @@ namespace CNA::Internal::Backends::D3D12
                 static_cast<int>(D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE));
     }
 
-    D3D12TextureBackend::D3D12TextureBackend(D3D12GraphicsBackend* backend, const ImageData& data)
-        : backend_(backend)
+    D3D12TextureRenderer::D3D12TextureRenderer(D3D12Renderer* renderer, const ImageData& data)
+        : renderer_(renderer)
         , width_(data.width), height_(data.height)
         , mipLevels_(data.mipLevels > 0 ? data.mipLevels : 1)
     {
@@ -51,17 +51,17 @@ namespace CNA::Internal::Backends::D3D12
         desc.SampleDesc.Count = 1;
         desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN; // driver-chosen tiled layout, standard for TEXTURE2D
 
-        // COPY_DEST is a legal initial state for a DEFAULT-heap texture that (per this backend's own
+        // COPY_DEST is a legal initial state for a DEFAULT-heap texture that (per this renderer's own
         // constructor flow) is about to receive its level-0 upload -- and, when there IS no initial
         // pixel data, gets deliberately transitioned to kTextureShaderReadableState below rather
         // than left here.
-        HRESULT hr = backend_->GetDeviceEXT()->CreateCommittedResource(
+        HRESULT hr = renderer_->GetDeviceEXT()->CreateCommittedResource(
             &heapProps, D3D12_HEAP_FLAG_NONE, &desc,
             D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(texture_.GetAddressOf()));
         if (FAILED(hr))
-            throw std::runtime_error("D3D12TextureBackend: CreateCommittedResource failed, hr=" + FormatHr(hr));
+            throw std::runtime_error("D3D12TextureRenderer: CreateCommittedResource failed, hr=" + FormatHr(hr));
 
-        backend_->GetResourceStateTrackerEXT().TrackResource(texture_.Get(), D3D12_RESOURCE_STATE_COPY_DEST);
+        renderer_->GetResourceStateTrackerEXT().TrackResource(texture_.Get(), D3D12_RESOURCE_STATE_COPY_DEST);
 
         D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc{};
         srvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
@@ -69,11 +69,11 @@ namespace CNA::Internal::Backends::D3D12
         srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
         srvDesc.Texture2D.MipLevels = static_cast<UINT>(mipLevels_);
 
-        heaps_ = backend_->GetDescriptorHeapsEXT();
-        srvIndex_ = backend_->CreateCbvSrvUavDescriptorEXT(
+        heaps_ = renderer_->GetDescriptorHeapsEXT();
+        srvIndex_ = renderer_->CreateCbvSrvUavDescriptorEXT(
             [&](D3D12_CPU_DESCRIPTOR_HANDLE cpu)
             {
-                backend_->GetDeviceEXT()->CreateShaderResourceView(texture_.Get(), &srvDesc, cpu);
+                renderer_->GetDeviceEXT()->CreateShaderResourceView(texture_.Get(), &srvDesc, cpu);
             });
 
         if (!data.pixels.empty())
@@ -86,12 +86,12 @@ namespace CNA::Internal::Backends::D3D12
         }
     }
 
-    D3D12TextureBackend::~D3D12TextureBackend()
+    D3D12TextureRenderer::~D3D12TextureRenderer()
     {
         if (heaps_) heaps_->cbvSrvUav.Free(srvIndex_);
     }
 
-    void D3D12TextureBackend::UploadRegion(
+    void D3D12TextureRenderer::UploadRegion(
         int level, const uint8_t* rgba, int levelW, int levelH, int sourceStrideBytes)
     {
         const UINT rowPitch = AlignUp(static_cast<UINT>(levelW) * 4, D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
@@ -111,17 +111,17 @@ namespace CNA::Internal::Backends::D3D12
         bufDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
 
         ComPtr<ID3D12Resource> staging;
-        HRESULT hr = backend_->GetDeviceEXT()->CreateCommittedResource(
+        HRESULT hr = renderer_->GetDeviceEXT()->CreateCommittedResource(
             &uploadHeapProps, D3D12_HEAP_FLAG_NONE, &bufDesc,
             D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(staging.GetAddressOf()));
         if (FAILED(hr))
-            throw std::runtime_error("D3D12TextureBackend: staging CreateCommittedResource failed, hr=" + FormatHr(hr));
+            throw std::runtime_error("D3D12TextureRenderer: staging CreateCommittedResource failed, hr=" + FormatHr(hr));
 
         uint8_t* mapped = nullptr;
         const D3D12_RANGE readRange{0, 0};
         hr = staging->Map(0, &readRange, reinterpret_cast<void**>(&mapped));
         if (FAILED(hr))
-            throw std::runtime_error("D3D12TextureBackend: staging Map failed, hr=" + FormatHr(hr));
+            throw std::runtime_error("D3D12TextureRenderer: staging Map failed, hr=" + FormatHr(hr));
         for (int row = 0; row < levelH; ++row)
         {
             std::memcpy(mapped + static_cast<std::size_t>(row) * rowPitch,
@@ -149,44 +149,44 @@ namespace CNA::Internal::Backends::D3D12
         src.PlacedFootprint.Footprint.Depth = 1;
         src.PlacedFootprint.Footprint.RowPitch = rowPitch;
 
-        ID3D12CommandAllocator* allocator = backend_->GetCommandAllocatorEXT(0);
-        ID3D12GraphicsCommandList* cmdList = backend_->GetCommandListEXT();
+        ID3D12CommandAllocator* allocator = renderer_->GetCommandAllocatorEXT(0);
+        ID3D12GraphicsCommandList* cmdList = renderer_->GetCommandListEXT();
         allocator->Reset();
         cmdList->Reset(allocator, nullptr);
 
-        auto& tracker = backend_->GetResourceStateTrackerEXT();
+        auto& tracker = renderer_->GetResourceStateTrackerEXT();
         tracker.TransitionTo(cmdList, texture_.Get(), D3D12_RESOURCE_STATE_COPY_DEST);
         cmdList->CopyTextureRegion(&dst, 0, 0, 0, &src, nullptr);
         tracker.TransitionTo(cmdList, texture_.Get(), kTextureShaderReadableState);
 
         hr = cmdList->Close();
         if (FAILED(hr))
-            throw std::runtime_error("D3D12TextureBackend: command list Close failed, hr=" + FormatHr(hr));
-        backend_->ExecuteCommandListAndWaitEXT(cmdList); // synchronous -- staging is safe to release after this
+            throw std::runtime_error("D3D12TextureRenderer: command list Close failed, hr=" + FormatHr(hr));
+        renderer_->ExecuteCommandListAndWaitEXT(cmdList); // synchronous -- staging is safe to release after this
     }
 
-    void D3D12TextureBackend::TransitionToShaderReadableEXT()
+    void D3D12TextureRenderer::TransitionToShaderReadableEXT()
     {
-        ID3D12CommandAllocator* allocator = backend_->GetCommandAllocatorEXT(0);
-        ID3D12GraphicsCommandList* cmdList = backend_->GetCommandListEXT();
+        ID3D12CommandAllocator* allocator = renderer_->GetCommandAllocatorEXT(0);
+        ID3D12GraphicsCommandList* cmdList = renderer_->GetCommandListEXT();
         allocator->Reset();
         cmdList->Reset(allocator, nullptr);
 
-        backend_->GetResourceStateTrackerEXT().TransitionTo(cmdList, texture_.Get(), kTextureShaderReadableState);
+        renderer_->GetResourceStateTrackerEXT().TransitionTo(cmdList, texture_.Get(), kTextureShaderReadableState);
 
         const HRESULT hr = cmdList->Close();
         if (FAILED(hr))
-            throw std::runtime_error("D3D12TextureBackend: command list Close failed, hr=" + FormatHr(hr));
-        backend_->ExecuteCommandListAndWaitEXT(cmdList);
+            throw std::runtime_error("D3D12TextureRenderer: command list Close failed, hr=" + FormatHr(hr));
+        renderer_->ExecuteCommandListAndWaitEXT(cmdList);
     }
 
-    void D3D12TextureBackend::UpdatePixels(const uint8_t* rgba, int stride)
+    void D3D12TextureRenderer::UpdatePixels(const uint8_t* rgba, int stride)
     {
         const int sourceStride = stride > 0 ? stride : width_ * 4;
         UploadRegion(0, rgba, width_, height_, sourceStride);
     }
 
-    void D3D12TextureBackend::UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH)
+    void D3D12TextureRenderer::UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH)
     {
         if (level < 0 || level >= mipLevels_) return;
         UploadRegion(level, rgba, levelW, levelH, levelW * 4);

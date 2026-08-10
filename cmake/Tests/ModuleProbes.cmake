@@ -26,17 +26,17 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
     endfunction()
 
     # Math: nothing but the math archive and sharp-runtime -- no other CNA module, no SDL,
-    # no backend, no networking, no FFmpeg.
+    # no renderer, no networking, no FFmpeg.
     cna_add_module_probe(probe_math CNA::Math
-        "libcna_(?!math)|libCNA_|libSDL3|libenet|libav|cna_backend_")
+        "libcna_(?!math)|libCNA_|libSDL3|libenet|libav|cna_renderer_")
 
     # Core: logging/exceptions only; SDL3 is an accepted PRIVATE implementation detail of
     # Logger.cpp, everything else stays out.
     cna_add_module_probe(probe_core CNA::Core
-        "libcna_(?!core|math)|libCNA_|libenet|libav|cna_backend_")
+        "libcna_(?!core|math)|libCNA_|libenet|libav|cna_renderer_")
 
     # GraphicsCore: may pull math/core/input (declared XNA-semantic cycle) and the selected
-    # backend's archive (factory edge), but no content/media/audio/runtime/devices/NOXNA/net.
+    # renderer's archive (factory edge), but no content/media/audio/runtime/devices/NOXNA/net.
     cna_add_module_probe(probe_graphics CNA::GraphicsCore
         "libcna_(content|media|audio|runtime|devices|noxna|storage)|libCNA_|libenet|libav")
 
@@ -50,7 +50,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
         "libcna_(devices|noxna|storage)|libCNA_|libenet")
 
     # Input: graphics-core/math/core through the declared graphics<->input cycle (plus the
-    # selected backend via the factory edge), but nothing above it.
+    # selected renderer via the factory edge), but nothing above it.
     cna_add_module_probe(probe_input CNA::Input
         "libcna_(content|media|audio|runtime|devices|storage|graphics_ext)|libCNA_|libenet|libav")
 
@@ -67,7 +67,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
     # dependency on the core module is headers-only (cna_core_headers), so even the core
     # archive must stay off the link line.
     cna_add_module_probe(probe_storage CNA::Storage
-        "libcna_(?!storage)|libCNA_|libenet|libav|cna_backend_")
+        "libcna_(?!storage)|libCNA_|libenet|libav|cna_renderer_")
 
     # Devices (XNA base): the runtime stack below it, but never an extension module or
     # networking.
@@ -114,11 +114,11 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
         endif()
     endif()
 
-    # HEADLESS is the configuration that proves backend-neutral graphics needs no native
+    # HEADLESS is the configuration that proves renderer-neutral graphics needs no native
     # renderer SDK: the whole probe closure must stay free of every native graphics library.
     # The same must hold for the content pipeline (no renderer/native SDK through the type
     # readers) and for both extension modules.
-    if(CNA_GRAPHICS_BACKEND STREQUAL "HEADLESS" AND Python3_Interpreter_FOUND)
+    if(CNA_GRAPHICS_RENDERER STREQUAL "HEADLESS" AND Python3_Interpreter_FOUND)
         set(_cna_native_sdk_forbid
             "vulkan|libGL|GLES|EGL|d3d|dxgi|ddraw|d2d1|bgfx|wgpu|webgpu|glide|gdi32|[Mm]agnum|[Dd]iligent|LLGL|skia|sokol|[Ww]icked|shaderc")
         foreach(_cna_sdkfree_probe IN ITEMS probe_graphics probe_content probe_graphics_ext probe_devices_ext)
@@ -139,7 +139,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
     endif()
 
     # VULKAN closure: the selected renderer's native SDK and nothing from any other family.
-    if(CNA_GRAPHICS_BACKEND STREQUAL "VULKAN" AND Python3_Interpreter_FOUND)
+    if(CNA_GRAPHICS_RENDERER STREQUAL "VULKAN" AND Python3_Interpreter_FOUND)
         add_test(NAME ModuleLinkClosure_VulkanRendererClosure
             COMMAND Python3::Interpreter
                 "${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_module_link_closure.py"

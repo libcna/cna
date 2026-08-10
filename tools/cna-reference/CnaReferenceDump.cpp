@@ -6,7 +6,7 @@
 // input values, same Viewport cases -- so scripts/compare-fna-reference.py can diff this tool's
 // JSON output against the real FNA harness's output key-for-key. None of these 4 categories need
 // a live GraphicsDevice (confirmed while building the FNA-side harness, Tasks 472/473/476), so
-// this tool runs standalone with no window/backend initialization.
+// this tool runs standalone with no window/renderer initialization.
 //
 // Usage: cna_reference_dump [output.json]
 // Defaults to writing cna-reference-values.json in the current directory.

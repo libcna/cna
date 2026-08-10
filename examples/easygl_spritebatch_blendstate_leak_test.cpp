@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Task 956: verify EasyGLSpriteBatchBackend::Begin() no longer clobbers the real GL blend state
+// Task 956: verify EasyGLSpriteBatchRenderer::Begin() no longer clobbers the real GL blend state
 // with a hardcoded SrcAlpha/OneMinusSrcAlpha, and that a 3D draw issued after a SpriteBatch
 // Begin()/End() pair -- without the game explicitly reassigning BlendState -- correctly inherits
 // whatever GraphicsDevice.BlendState currently is (matching real FNA: SpriteBatch.Begin() genuinely
@@ -15,14 +15,14 @@
 //   1. Clear to mid-gray background BG=(100,100,100,255).
 //   2. SpriteBatch.Begin(Deferred, BlendState::Additive) -> draw a small opaque sprite in the
 //      corner -> End(). This sets GraphicsDevice.BlendState = Additive as a real, lasting side
-//      effect (matching FNA), NOT the SpriteBatch backend's own now-removed hardcoded blend.
+//      effect (matching FNA), NOT the SpriteBatch renderer's own now-removed hardcoded blend.
 //   3. Without touching BlendState again, draw a full-viewport opaque red 3D quad
 //      (VertexColorEnabled BasicEffect, no explicit BlendState/SetBlendState call).
 //   4. Read back a pixel far from the sprite's corner.
 //
 // Expected math at the readback point, with Additive (colorSrc=colorDst=alphaSrc=alphaDst=One)
 // genuinely still active: result = red(200,0,0) + gray(100,100,100), clamped = (255,100,100).
-// Under the old bug, EasyGLSpriteBatchBackend::Begin() would have hardcoded
+// Under the old bug, EasyGLSpriteBatchRenderer::Begin() would have hardcoded
 // SrcAlpha/OneMinusSrcAlpha regardless of Additive ever being requested; at the 3D quad's
 // alpha=255, that gives dst factor (1-1)=0, dropping the gray background entirely:
 // result = (200,0,0) -- G=0 instead of the correct G=100. G is the clean discriminator.

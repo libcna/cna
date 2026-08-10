@@ -21,8 +21,8 @@
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 
-#include "CNA/Internal/Backends/D3D9/D3D9GraphicsBackend.hpp"
-#include "CNA/Internal/Backends/D3D9/D3D9ShaderCache.hpp"
+#include "CNA/Internal/Renderers/D3D9/D3D9Renderer.hpp"
+#include "CNA/Internal/Renderers/D3D9/D3D9ShaderCache.hpp"
 #include "shaders/d3d9_shaders.hpp"
 
 #include <cstdio>
@@ -30,7 +30,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::D3D9;
+using namespace CNA::Internal::Renderers::D3D9;
 
 namespace
 {
@@ -56,9 +56,9 @@ protected:
         if (frame_++ < 1) return;
 
         auto& dev = getGraphicsDeviceProperty();
-        auto& backend = static_cast<D3D9GraphicsBackend&>(dev.GetBackend());
+        auto& renderer = static_cast<D3D9Renderer&>(dev.GetRenderer());
 
-        D3D9ShaderCache cache(backend.GetDeviceEXT());
+        D3D9ShaderCache cache(renderer.GetDeviceEXT());
 
         // Check A: CreateAllEXT() creates all 66 shaders with zero failures.
         cache.CreateAllEXT();

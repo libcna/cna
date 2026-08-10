@@ -1,12 +1,12 @@
 // plan_dx.md Phase DX13 (DX-119).
-#include "CNA/Internal/Backends/D3D12/D3D12SamplerCache.hpp"
-#include "CNA/Internal/Backends/D3DCommon/D3DStateMapping.hpp"
+#include "CNA/Internal/Renderers/D3D12/D3D12SamplerCache.hpp"
+#include "CNA/Internal/Renderers/D3DCommon/D3DStateMapping.hpp"
 
 #include <algorithm>
 
-namespace CNA::Internal::Backends::D3D12
+namespace CNA::Internal::Renderers::D3D12
 {
-    using namespace CNA::Internal::Backends::D3DCommon;
+    using namespace CNA::Internal::Renderers::D3DCommon;
 
     namespace
     {

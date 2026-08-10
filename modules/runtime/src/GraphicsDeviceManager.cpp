@@ -74,7 +74,7 @@ namespace Microsoft::Xna::Framework
         // device already exists with sane defaults at this point (CNA's Game always pre-owns its
         // GraphicsDevice, unlike real FNA, where GraphicsDeviceManager creates it), and
         // Game::DoInitialize() unconditionally calls CreateDevice() shortly after this
-        // constructor returns -- so calling ApplyChanges() here just did the exact same backend
+        // constructor returns -- so calling ApplyChanges() here just did the exact same renderer
         // reconfiguration (SetPresentationMode + Reset) twice in a row for every Game that owns a
         // GraphicsDeviceManager, causing a visible double-reconfiguration flicker on startup.
         // Matches FNA's own explicit guidance (GraphicsDeviceManager.cs, ApplyChanges()): "Note
@@ -238,12 +238,12 @@ namespace Microsoft::Xna::Framework
             );
         }
 
-        // REMED-CORE-007: applyToExistingBackend() below calls GraphicsDevice::Reset(), which
+        // REMED-CORE-007: applyToExistingRenderer() below calls GraphicsDevice::Reset(), which
         // raises the device's own DeviceResetting/DeviceReset. CreateDevice() subscribes this
         // manager to those events and forwards them via OnDeviceResetting()/OnDeviceReset(), so
         // this method must not raise them a second time itself (matches FNA's own ApplyChanges(),
         // which never calls OnDeviceResetting/OnDeviceReset directly either).
-        applyToExistingBackend(gdi);
+        applyToExistingRenderer(gdi);
 
         prefsChanged_ = false;
     }
@@ -280,7 +280,7 @@ namespace Microsoft::Xna::Framework
         if (graphicsDevice_ == nullptr)
         {
             throw std::runtime_error(
-                "GraphicsDeviceManager cannot create a GraphicsDevice without a Game-owned device in this CNA backend.");
+                "GraphicsDeviceManager cannot create a GraphicsDevice without a Game-owned device in this CNA renderer.");
         }
 
         GraphicsDeviceInformation gdi;
@@ -310,14 +310,14 @@ namespace Microsoft::Xna::Framework
             );
         }
 
-        applyToExistingBackend(gdi);
+        applyToExistingRenderer(gdi);
 
         // REMED-CORE-007: FNA's IGraphicsDeviceManager.CreateDevice() wires
         // graphicsDevice.DeviceResetting += OnDeviceResetting; graphicsDevice.DeviceReset +=
-        // OnDeviceReset; so a real backend-detected device-lost/reset (raised directly on
+        // OnDeviceReset; so a real renderer-detected device-lost/reset (raised directly on
         // GraphicsDevice's own events, e.g. by GraphicsDevice's deviceEventCallback) reaches this
         // manager's own listeners, not just resets this manager itself initiates. Installed after
-        // applyToExistingBackend()'s own settle-in Reset() call above, so that initial device
+        // applyToExistingRenderer()'s own settle-in Reset() call above, so that initial device
         // creation raises only DeviceCreated below, matching FNA (a freshly-constructed FNA
         // GraphicsDevice never raises DeviceResetting/DeviceReset). Guarded so a second
         // CreateDevice() call against the same still-live device (game_-attached case; CreateDevice()
@@ -485,8 +485,8 @@ namespace Microsoft::Xna::Framework
 
         // Do NOT call ApplyChanges() here. ApplyChanges() would forward the
         // new physical window size as the virtual resolution, corrupting the
-        // game's logical coordinate space and breaking scaling on all backends.
-        // Each backend queries SDL_GetWindowSize() dynamically every frame, so
+        // game's logical coordinate space and breaking scaling on all renderers.
+        // Each renderer queries SDL_GetWindowSize() dynamically every frame, so
         // no explicit notification is required — only the XNA Viewport needs
         // to be refreshed so scissor/viewport state stays coherent.
         if (graphicsDevice_ != nullptr)
@@ -596,7 +596,7 @@ namespace Microsoft::Xna::Framework
         return graphicsDevice_->GetWindowInternal();
     }
 
-    void GraphicsDeviceManager::applyToExistingBackend(GraphicsDeviceInformation& gdi)
+    void GraphicsDeviceManager::applyToExistingRenderer(GraphicsDeviceInformation& gdi)
     {
         if (graphicsDevice_ == nullptr)
         {
@@ -621,9 +621,9 @@ namespace Microsoft::Xna::Framework
 
         // Task 902: real in-place device reset -- stores PP, applies fullscreen/window size
         // (non-fatal on fullscreen failure, see applyPresentationParametersToWindow()),
-        // updates virtual resolution, and reconfigures backend-construction-time-only
+        // updates virtual resolution, and reconfigures renderer-construction-time-only
         // properties like MultiSampleCount (GraphicsDeviceManager.PreferMultiSampling) via
-        // IGraphicsBackend::ApplyMultiSampleCount(), writing the real applied value back into
+        // IGraphicsRenderer::ApplyMultiSampleCount(), writing the real applied value back into
         // the stored PresentationParameters. Also raises GraphicsDevice's own
         // DeviceResetting/DeviceReset events (separate from this class's own, raised by the
         // ApplyChanges()/CreateDevice() callers of this method).

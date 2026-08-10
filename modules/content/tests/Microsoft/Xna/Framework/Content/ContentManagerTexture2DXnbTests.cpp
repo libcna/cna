@@ -141,7 +141,7 @@ TEST_F(ContentManagerTexture2DXnbTest, LoadCachesTheXnbTextureLikeAnyOtherTextur
     Texture2D first = cm.Load<Texture2D>("white-1");
     Texture2D second = cm.Load<Texture2D>("white-1");
 
-    EXPECT_EQ(first.GetBackendWeak().lock(), second.GetBackendWeak().lock());
+    EXPECT_EQ(first.GetRendererWeak().lock(), second.GetRendererWeak().lock());
 }
 
 // plan_xnb.md XNB-47: Texture2D uses its own weak-cache mechanism (textureCache_), a genuinely
@@ -161,5 +161,5 @@ TEST_F(ContentManagerTexture2DXnbTest, UnloadClearsTheWeakTextureCache)
     cm.Unload();
     Texture2D second = cm.Load<Texture2D>("white-1");
 
-    EXPECT_NE(first.GetBackendWeak().lock(), second.GetBackendWeak().lock());
+    EXPECT_NE(first.GetRendererWeak().lock(), second.GetRendererWeak().lock());
 }

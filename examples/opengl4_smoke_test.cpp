@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MS-PL
 // plan_opengl4.md GL4-1..GL4-9: end-to-end smoke test for the real desktop OpenGL 4.x
-// core-profile graphics backend's device/window/context lifecycle and color/depth/stencil
+// core-profile graphics renderer's device/window/context lifecycle and color/depth/stencil
 // clear+present. Real window, a real SDL_GLContext requesting SDL_GL_CONTEXT_PROFILE_CORE
 // (unlike EasyGL's SDL_GL_CONTEXT_PROFILE_ES), and a real 60-frame Clear()+Present() loop.
 //
 // Check A -- GetWindowInternal() returns a real, non-null SDL_Window.
-// Check B -- GetRendererInternal() is null (this backend does not use SDL_Renderer).
+// Check B -- GetRendererInternal() is null (this renderer does not use SDL_Renderer).
 // Check C -- GetViewportSize() reports a positive width/height matching the real window.
-// Check D -- a real OpenGL4VertexBufferBackend/OpenGL4IndexBufferBackend round-trip: SetData()
+// Check D -- a real OpenGL4VertexBufferRenderer/OpenGL4IndexBufferRenderer round-trip: SetData()
 //   followed by GetVertexCount()/GetIndexCount() reports the exact count uploaded.
 // Check E -- 60 frames of Clear(Target|DepthBuffer|Stencil, color, depth, stencil) + the
 //   automatic end-of-frame Present() complete with no exception.
@@ -22,7 +22,7 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SetDataOptions.hpp"
 
-#include "CNA/Internal/Backends/OpenGL4/OpenGL4GraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/OpenGL4/OpenGL4Renderer.hpp"
 
 #include "common/PixelTestGame.hpp"
 
@@ -33,7 +33,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::OpenGL4;
+using namespace CNA::Internal::Renderers::OpenGL4;
 
 namespace
 {
@@ -58,20 +58,20 @@ protected:
     {
         ++frame_;
         auto& dev = getGraphicsDeviceProperty();
-        auto& backend = static_cast<OpenGL4GraphicsBackend&>(dev.GetBackend());
+        auto& renderer = static_cast<OpenGL4Renderer&>(dev.GetRenderer());
 
         if (frame_ == 1)
         {
-            check(backend.GetWindowInternal() != nullptr, "GetWindowInternal() returns a real window");
-            check(backend.GetRendererInternal() == nullptr, "GetRendererInternal() is null (no SDL_Renderer)");
+            check(renderer.GetWindowInternal() != nullptr, "GetWindowInternal() returns a real window");
+            check(renderer.GetRendererInternal() == nullptr, "GetRendererInternal() is null (no SDL_Renderer)");
 
             int width = 0;
             int height = 0;
-            backend.GetViewportSize(width, height);
+            renderer.GetViewportSize(width, height);
             check(width > 0 && height > 0, "GetViewportSize() reports a positive size");
 
             struct PackedVertex { float x, y, z; std::uint32_t color; };
-            auto vb = backend.CreateVertexBuffer(3);
+            auto vb = renderer.CreateVertexBuffer(3);
             const PackedVertex verts[3] = {
                 {0, 0, 0, 0xFFFFFFFFu},
                 {1, 0, 0, 0xFFFFFFFFu},
@@ -80,7 +80,7 @@ protected:
             vb->SetData(verts, 3, sizeof(PackedVertex));
             check(vb->GetVertexCount() == 3, "VertexBuffer.SetData()+GetVertexCount() round-trips the exact count");
 
-            auto ib = backend.CreateIndexBuffer16(3);
+            auto ib = renderer.CreateIndexBuffer16(3);
             const std::uint16_t indices[3] = {0, 1, 2};
             ib->SetData16(indices, 3);
             check(ib->GetIndexCount() == 3 && !ib->IsThirtyTwoBit(),

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Task 886: BasicEffect pixel test — real specular highlights (Vulkan backend).
+// Task 886: BasicEffect pixel test — real specular highlights (Vulkan renderer).
 //
 // See examples/easygl_basiceffect_specular_test.cpp for the full FNA-derived half-vector
 // Blinn-Phong formula derivation and the 4 checks' precise expected-value computation.

@@ -3,7 +3,7 @@
 // missing the NDC Y-flip.
 //
 // vulkan_orientation_effects_test.cpp proves the flip is correct when drawing to the BACKBUFFER.
-// That alone does not prove it for render targets: a backend can legitimately use a different
+// That alone does not prove it for render targets: a renderer can legitimately use a different
 // clip-space or row convention when rendering to an offscreen image, and a fix that is right on
 // the backbuffer can be double-flipped on an RT. This test covers that second path.
 //
@@ -13,7 +13,7 @@
 // light the SAME quadrant. This stays valid whether or not RT readback rows run top-first, and it
 // is exactly the property that matters — every effect family must agree with every other one.
 //
-// Readback blits the RT onto the backbuffer with SpriteBatch (the Vulkan backend implements no
+// Readback blits the RT onto the backbuffer with SpriteBatch (the Vulkan renderer implements no
 // GetTextureData, so Texture2D::GetData on an RT reads an unpopulated CPU shadow). SpriteBatch has
 // its own NDC convention, but it applies identically to the reference and to every family under
 // test, so it cancels out of the comparison — see LitQuadrant().
@@ -128,7 +128,7 @@ class VulkanOrientationRenderTargetTest : public Game
 
     // Returns the index of the single lit quadrant, or -1 if not exactly one is lit.
     //
-    // The Vulkan backend implements no GetTextureData, so Texture2D::GetData on a render target
+    // The Vulkan renderer implements no GetTextureData, so Texture2D::GetData on a render target
     // reads an unpopulated CPU shadow. Readback therefore goes the same way every other Vulkan RT
     // test goes: blit the RT 1:1 onto the backbuffer with SpriteBatch and sample that. SpriteBatch
     // carries its own NDC convention, but every family here — including the colored3d reference —

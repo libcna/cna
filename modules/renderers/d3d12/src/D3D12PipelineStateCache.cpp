@@ -1,18 +1,18 @@
 // plan_dx.md Phase DX12 (DX-107).
-#include "CNA/Internal/Backends/D3D12/D3D12PipelineStateCache.hpp"
+#include "CNA/Internal/Renderers/D3D12/D3D12PipelineStateCache.hpp"
 
-#include "CNA/Internal/Backends/D3DCommon/D3DStateMapping.hpp"
-#include "CNA/Internal/Backends/D3DCommon/D3DVertexFormatHelper.hpp"
+#include "CNA/Internal/Renderers/D3DCommon/D3DStateMapping.hpp"
+#include "CNA/Internal/Renderers/D3DCommon/D3DVertexFormatHelper.hpp"
 
-namespace CNA::Internal::Backends::D3D12
+namespace CNA::Internal::Renderers::D3D12
 {
-    using namespace CNA::Internal::Backends::D3DCommon;
+    using namespace CNA::Internal::Renderers::D3DCommon;
 
     namespace
     {
         // Same "BlendEnable disabled only for the exact Blend::One/Blend::Zero Opaque combination"
         // heuristic D3D11BlendStateCache::GetOrCreate already established (D3D11StateObjectCache.cpp)
-        // -- kept consistent across both backends rather than re-derived. XNA Blend::One's real
+        // -- kept consistent across both renderers rather than re-derived. XNA Blend::One's real
         // ordinal is 0, Blend::Zero's is 1 (Blend.hpp) -- matches D3D11StateObjectCache.cpp's own
         // `colorSrcBlend == 0` check exactly.
         bool DeriveBlendEnable(int colorSrcBlend, int colorDstBlend, int alphaSrcBlend, int alphaDstBlend)

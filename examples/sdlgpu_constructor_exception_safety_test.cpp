@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-028: transactional SDL_GPU backend construction and lazy-initialization lifetime
-// regression. Failure injection is per backend instance and still uses real SDL_GPU resources.
+// REMED-GFX-028: transactional SDL_GPU renderer construction and lazy-initialization lifetime
+// regression. Failure injection is per renderer instance and still uses real SDL_GPU resources.
 // Every failed constructor must balance acquisition/release callbacks, leave no window-registry
-// entry, preserve the caller-owned SDL_Window, and permit an immediately succeeding backend.
+// entry, preserve the caller-owned SDL_Window, and permit an immediately succeeding renderer.
 
-#include "CNA/Internal/Backends/SdlGpu/SdlGpuGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/SdlGpu/SdlGpuRenderer.hpp"
 
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 
@@ -19,8 +19,8 @@
 #include <string>
 #include <utility>
 
-using namespace CNA::Internal::Backends;
-using namespace CNA::Internal::Backends::SdlGpu;
+using namespace CNA::Internal::Renderers;
+using namespace CNA::Internal::Renderers::SdlGpu;
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
 
@@ -95,8 +95,8 @@ namespace
         {SdlGpuFailurePointEXT::PbrSkinnedVertexShaderCreation, "skinned PBR vertex shader"},
         {SdlGpuFailurePointEXT::PbrFragmentShaderCreation, "PBR fragment shader"},
         {SdlGpuFailurePointEXT::WindowMetricsInitialization, "window metrics"},
-        {SdlGpuFailurePointEXT::BackendRegistration, "backend registration"},
-        {SdlGpuFailurePointEXT::AfterBackendRegistration, "post-registration commit"}
+        {SdlGpuFailurePointEXT::RendererRegistration, "renderer registration"},
+        {SdlGpuFailurePointEXT::AfterRendererRegistration, "post-registration commit"}
     }};
 
     class TestRun
@@ -128,7 +128,7 @@ namespace
             std::string diagnostic;
             try
             {
-                SdlGpuGraphicsBackend backend(
+                SdlGpuRenderer renderer(
                     window, 64, 64, CnaPresentationMode::FixedHeightDynamicWidth, 0,
                     failedHooks);
             }
@@ -144,8 +144,8 @@ namespace
                   prefix + " preserves stage diagnostic");
             Check(failedTracker.Balanced(),
                   prefix + " releases every acquired device/window/shader resource");
-            Check(IGraphicsBackend::GetForWindow(window) == nullptr,
-                  prefix + " never leaves a usable backend registered");
+            Check(IGraphicsRenderer::GetForWindow(window) == nullptr,
+                  prefix + " never leaves a usable renderer registered");
             Check(SDL_GetWindowID(window) != 0,
                   prefix + " preserves the caller-owned SDL window");
 
@@ -156,31 +156,31 @@ namespace
             try
             {
                 {
-                    SdlGpuGraphicsBackend backend(
+                    SdlGpuRenderer renderer(
                         window, 64, 64, CnaPresentationMode::FixedHeightDynamicWidth, 0,
                         successHooks);
-                    usable = IGraphicsBackend::GetForWindow(window) == &backend &&
-                             backend.Device() != nullptr;
-                    backend.Clear(0.05f, 0.10f, 0.15f, 1.0f);
-                    backend.Present();
+                    usable = IGraphicsRenderer::GetForWindow(window) == &renderer &&
+                             renderer.Device() != nullptr;
+                    renderer.Clear(0.05f, 0.10f, 0.15f, 1.0f);
+                    renderer.Present();
                 }
-                usable = usable && IGraphicsBackend::GetForWindow(window) == nullptr;
+                usable = usable && IGraphicsRenderer::GetForWindow(window) == nullptr;
             }
             catch (const std::exception& exception)
             {
                 usable = false;
                 std::printf("       unexpected recovery exception: %s\n", exception.what());
             }
-            Check(usable, prefix + " permits an immediately usable succeeding backend");
+            Check(usable, prefix + " permits an immediately usable succeeding renderer");
             Check(successTracker.Balanced(),
-                  prefix + " succeeding backend destroys every resource exactly once");
+                  prefix + " succeeding renderer destroys every resource exactly once");
             Check(successTracker.Acquired(SdlGpuResourceKindEXT::Device) == 1 &&
                       successTracker.Released(SdlGpuResourceKindEXT::Device) == 1 &&
                       successTracker.Acquired(SdlGpuResourceKindEXT::WindowClaim) == 1 &&
                       successTracker.Released(SdlGpuResourceKindEXT::WindowClaim) == 1 &&
                       successTracker.Acquired(SdlGpuResourceKindEXT::Shader) == 23 &&
                       successTracker.Released(SdlGpuResourceKindEXT::Shader) == 23,
-                  prefix + " succeeding backend owns one device/claim and 23 shaders");
+                  prefix + " succeeding renderer owns one device/claim and 23 shaders");
         }
 
         void ExerciseLazyFailure(SDL_Window* window, SdlGpuFailurePointEXT point,
@@ -193,7 +193,7 @@ namespace
             try
             {
                 {
-                    SdlGpuGraphicsBackend backend(
+                    SdlGpuRenderer renderer(
                         window, 64, 64, CnaPresentationMode::FixedHeightDynamicWidth, 0,
                         hooks);
 
@@ -201,12 +201,12 @@ namespace
                     {
                         if (point == SdlGpuFailurePointEXT::FrameCommandBufferAcquisition)
                         {
-                            backend.Clear(0.1f, 0.2f, 0.3f, 1.0f);
-                            backend.Present();
+                            renderer.Clear(0.1f, 0.2f, 0.3f, 1.0f);
+                            renderer.Present();
                         }
                         else
                         {
-                            backend.InitializeSpritePipelineAndSamplerForTestEXT();
+                            renderer.InitializeSpritePipelineAndSamplerForTestEXT();
                         }
                     }
                     catch (const std::exception& exception)
@@ -224,13 +224,13 @@ namespace
                         Check(commandBalancedAfterFailure,
                               std::string(label) +
                                   " failure closes/submits its frame command resource");
-                        backend.Present();
+                        renderer.Present();
                     }
                     else
                     {
-                        backend.InitializeSpritePipelineAndSamplerForTestEXT();
+                        renderer.InitializeSpritePipelineAndSamplerForTestEXT();
                     }
-                    recovered = IGraphicsBackend::GetForWindow(window) == &backend;
+                    recovered = IGraphicsRenderer::GetForWindow(window) == &renderer;
                 }
             }
             catch (const std::exception& exception)
@@ -242,7 +242,7 @@ namespace
             Check(recovered, std::string(label) + " failure is one-shot and retryable");
             Check(tracker.Balanced(),
                   std::string(label) + " resources are destroyed exactly once");
-            Check(IGraphicsBackend::GetForWindow(window) == nullptr,
+            Check(IGraphicsRenderer::GetForWindow(window) == nullptr,
                   std::string(label) + " teardown unregisters exactly once");
         }
 
@@ -257,12 +257,12 @@ namespace
             try
             {
                 {
-                    SdlGpuGraphicsBackend backend(
+                    SdlGpuRenderer renderer(
                         window, 64, 64, CnaPresentationMode::FixedHeightDynamicWidth, 0,
                         hooks);
                     ImageData pixels{1, 1, {255, 255, 255, 255}, 1};
-                    auto texture = backend.CreateTexture(pixels);
-                    auto vertices = backend.CreateVertexBuffer(3);
+                    auto texture = renderer.CreateTexture(pixels);
+                    auto vertices = renderer.CreateVertexBuffer(3);
                     std::array<float, 36> vertexData{};
                     vertices->SetData(vertexData.data(), 3, 48);
 
@@ -271,7 +271,7 @@ namespace
                     params.texture0 = texture.get();
                     try
                     {
-                        backend.DrawPrimitivesEx(
+                        renderer.DrawPrimitivesEx(
                             *vertices, Matrix::getIdentityProperty(),
                             Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                             PrimitiveType::TriangleList, 1, params);
@@ -287,11 +287,11 @@ namespace
                         tracker.Acquired(SdlGpuResourceKindEXT::DefaultTexture) ==
                         tracker.Released(SdlGpuResourceKindEXT::DefaultTexture);
 
-                    backend.DrawPrimitivesEx(
+                    renderer.DrawPrimitivesEx(
                         *vertices, Matrix::getIdentityProperty(),
                         Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                         PrimitiveType::TriangleList, 1, params);
-                    backend.Present();
+                    renderer.Present();
                     recovered = true;
                 }
             }
@@ -321,23 +321,23 @@ namespace
             bool independent = false;
             try
             {
-                auto first = std::make_unique<SdlGpuGraphicsBackend>(
+                auto first = std::make_unique<SdlGpuRenderer>(
                     firstWindow, 64, 64, CnaPresentationMode::FixedHeightDynamicWidth, 0,
                     firstHooks);
-                auto second = std::make_unique<SdlGpuGraphicsBackend>(
+                auto second = std::make_unique<SdlGpuRenderer>(
                     secondWindow, 64, 64, CnaPresentationMode::FixedHeightDynamicWidth, 0,
                     secondHooks);
 
                 independent =
                     first->Device() != second->Device() &&
-                    IGraphicsBackend::GetForWindow(firstWindow) == first.get() &&
-                    IGraphicsBackend::GetForWindow(secondWindow) == second.get();
+                    IGraphicsRenderer::GetForWindow(firstWindow) == first.get() &&
+                    IGraphicsRenderer::GetForWindow(secondWindow) == second.get();
 
                 first.reset();
                 independent =
                     independent &&
-                    IGraphicsBackend::GetForWindow(firstWindow) == nullptr &&
-                    IGraphicsBackend::GetForWindow(secondWindow) == second.get();
+                    IGraphicsRenderer::GetForWindow(firstWindow) == nullptr &&
+                    IGraphicsRenderer::GetForWindow(secondWindow) == second.get();
                 second->Clear(0.2f, 0.1f, 0.05f, 1.0f);
                 second->Present();
                 second.reset();
@@ -350,11 +350,11 @@ namespace
             }
 
             Check(independent,
-                  "multiple backends own distinct devices and one teardown leaves the other usable");
+                  "multiple renderers own distinct devices and one teardown leaves the other usable");
             Check(firstTracker.Balanced() && secondTracker.Balanced(),
-                  "multiple backend resource callbacks remain instance-local and balanced");
+                  "multiple renderer resource callbacks remain instance-local and balanced");
             Check(SDL_GetWindowID(firstWindow) != 0 && SDL_GetWindowID(secondWindow) != 0,
-                  "multiple backend teardown preserves both caller-owned windows");
+                  "multiple renderer teardown preserves both caller-owned windows");
         }
 
     private:

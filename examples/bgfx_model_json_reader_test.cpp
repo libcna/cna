@@ -19,15 +19,15 @@
 // (0,0,0) -- black -- instead of the expected White. This is NOT a position bug: the black
 // region is correctly bounded to the quad's own expected screen area (the "outside" check
 // correctly reads the Blue background, not black), meaning Task 927's own vertex-position fix
-// IS working here too. The wrong COLOUR is `BgfxGraphicsBackend` never overriding
-// `DrawIndexedPrimitivesEx` (confirmed via grep -- only the base `IGraphicsBackend` declares it),
+// IS working here too. The wrong COLOUR is `BgfxRenderer` never overriding
+// `DrawIndexedPrimitivesEx` (confirmed via grep -- only the base `IGraphicsRenderer` declares it),
 // so this indexed, Effect-bound draw silently falls back to the default implementation's
 // `DrawIndexedColoredPrimitives(...)` call, which drops the real `GpuDrawParams` (BasicEffect's
 // actual DiffuseColor) entirely and renders via the `colored3D` shader pipeline instead -- a
 // pipeline that expects a bound `a_color0` vertex attribute, which `VertexPositionNormalTexture`
 // (position+normal+texcoord, no colour field) never provides. GL defaults an unbound generic
 // vertex attribute to (0,0,0,1), producing exactly the observed solid black. This is the same
-// class of gap Task 766 already flagged as an adjacent, out-of-scope discovery ("`BgfxGraphicsBackend`
+// class of gap Task 766 already flagged as an adjacent, out-of-scope discovery ("`BgfxRenderer`
 // never overrides `DrawIndexedPrimitivesEx`... losing all `GpuDrawParams`-driven shader features")
 // -- Task 927's own Content.Load<Model> test is simply the first one to demonstrate its real,
 // concrete rendering impact. Tracked as a new, separately-scoped Task 948 (see plan_graphics.md) --

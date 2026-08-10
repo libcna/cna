@@ -1,10 +1,10 @@
-#include "CNA/Internal/Backends/D3D9/D3D9ShaderCache.hpp"
+#include "CNA/Internal/Renderers/D3D9/D3D9ShaderCache.hpp"
 #include "shaders/d3d9_shaders.hpp"
 
 #include <cstdio>
 #include <stdexcept>
 
-namespace CNA::Internal::Backends::D3D9
+namespace CNA::Internal::Renderers::D3D9
 {
     namespace
     {

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MS-PL
-// WEBGPU-41/77/78/79/80/81/82/83: verifies WebGPUGraphicsBackend's real BlendState/
+// WEBGPU-41/77/78/79/80/81/82/83: verifies WebGPURenderer's real BlendState/
 // RasterizerState/scissor/viewport wiring, closing the gap where every 3D draw silently ignored
 // these (ApplyBlendState/ApplyRasterizerState/SetScissorRect/SetViewport had no override at all,
-// falling back to IGraphicsBackend's no-op defaults -- confirmed by grepping this backend's own
+// falling back to IGraphicsRenderer's no-op defaults -- confirmed by grepping this renderer's own
 // .cpp before this task).
 //
 // Check A1/A2 -- CullMode.CullClockwiseFace removes the CLOCKWISE-as-displayed quad and KEEPS the
@@ -10,7 +10,7 @@
 // Check B1/B2 -- CullMode.CullCounterClockwiseFace is the exact complement of that.
 //   (REMED-GFX-160: these four together prove real, direction-correct cull-mode wiring. They used
 //   to be two checks over ONE quad whose winding was labelled by a hand derivation that came out
-//   backwards, which is how this backend's cull mapping ended up inverted -- see the comment above
+//   backwards, which is how this renderer's cull mapping ended up inverted -- see the comment above
 //   DrawWindingQuad(). Both windings are now drawn so no single label can invert it again.)
 // Check C -- BlendState.NonPremultiplied genuinely blends a 50%-alpha red quad over a black
 //   background: the result must land strictly between black and pure red, not either extreme.
@@ -24,7 +24,7 @@
 //   sub-rectangle: a pixel inside the viewport shows the quad colour, a pixel outside it (but
 //   still inside the backbuffer) shows the untouched clear colour.
 // Check G -- FillMode.WireFrame is REFUSED deterministically (WEBGPU-115). wgpu-native has no
-//   polygon-mode API at all, so the backend reports the capability as unsupported and throws
+//   polygon-mode API at all, so the renderer reports the capability as unsupported and throws
 //   System::NotSupportedException at the draw rather than silently rendering a solid fill. The
 //   check asserts the throw, that the backbuffer the refused draw was aimed at still holds the
 //   clear colour, and that an ordinary Solid draw works immediately afterwards.
@@ -103,7 +103,7 @@ namespace
     // NDC. The old comment then argued that raster space mirrors NDC across the X axis, so the
     // triangle is "CLOCKWISE in raster space", and concluded it was "a real, ordinary XNA
     // front-facing quad". The first half is arithmetic and correct; the conclusion is not, and it
-    // is what inverted this backend's cull mapping for real games.
+    // is what inverted this renderer's cull mapping for real games.
     //
     // Flipping to Y-down raster coordinates does flip the SIGN of the computed area -- but the name
     // a GPU API attaches to that sign is defined IN that Y-down space, so "clockwise in raster
@@ -115,14 +115,14 @@ namespace
     //
     // Rather than just flip the two expectations, both windings are now drawn and each cull mode
     // is asserted to be their exact complement, so no future reading of one quad's hand-derived
-    // label can invert this backend again. The FNA-derived contract itself is measured across every
-    // backend by examples/frontface_winding_test.cpp.
+    // label can invert this renderer again. The FNA-derived contract itself is measured across every
+    // renderer by examples/frontface_winding_test.cpp.
     //
     // The DEFAULT is the FRONT-facing (clockwise-as-displayed) quad, deliberately. Checks E and H
     // below construct a fresh `RasterizerState` to turn scissor testing on, and a default-
     // constructed RasterizerState carries XNA's default CullCounterClockwiseFace -- so with a
     // back-facing default quad those checks would silently depend on a BACK face staying visible
-    // under the default cull mode, which is the same false premise that inverted this backend.
+    // under the default cull mode, which is the same false premise that inverted this renderer.
     // They passed only because the mapping was inverted too, and both broke the moment it was
     // corrected. Ordinary front-facing geometry is what a real game draws and what they mean.
     //
@@ -267,8 +267,8 @@ protected:
         // ---- Check H: TWO ScissorRectangles in one bind cycle, read once at the end. ----
         // REMED-GFX-146 false-positive audit. Check E above uses exactly ONE rectangle and reads
         // it back BEFORE restoring, so the live rectangle at flush time is still the one the draw
-        // was issued under -- it passes whether the backend captures the rectangle per draw or
-        // resolves it when it records the pass, and it therefore could not see this backend's
+        // was issued under -- it passes whether the renderer captures the rectangle per draw or
+        // resolves it when it records the pass, and it therefore could not see this renderer's
         // deferred-scissor defect at all. This check issues both draws and only then reads, with
         // the rectangle restored to the whole backbuffer first, so "resolve at flush time"
         // predicts white everywhere and "capture at queue time" predicts two disjoint bands.

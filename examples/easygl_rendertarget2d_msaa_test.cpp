@@ -17,7 +17,7 @@
 //   - Sample the RT 1:1 onto the backbuffer via SpriteBatch with SamplerState.PointClamp (avoids
 //     the *sampling* step itself introducing blur that would contaminate the result).
 //   - Read back the full centre row of pixels. The diagonal crosses this row at the centre
-//     column regardless of any backend Y-flip convention (the hypotenuse is symmetric about the
+//     column regardless of any renderer Y-flip convention (the hypotenuse is symmetric about the
 //     RT's centre point).
 //   - Assert: MultiSampleCount=0's row is purely binary (every pixel near-black or near-white —
 //     hard, aliased edge, no blending pass exists). MultiSampleCount=8's row has at least one
@@ -67,7 +67,7 @@ class RenderTarget2DMsaaTest : public Game
 
         device.setBlendStateProperty(BlendState::Opaque);
         // Task 896 finding (mirrors the Bgfx sibling's Task 364/884 fix): once
-        // GraphicsDevice's real default RasterizerState is pushed to every backend,
+        // GraphicsDevice's real default RasterizerState is pushed to every renderer,
         // this triangle's winding is culled unless explicitly disabled.
         device.setRasterizerStateProperty(RasterizerState::CullNone);
 

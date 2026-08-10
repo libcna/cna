@@ -69,7 +69,7 @@ protected:
         try
         {
             // Note: SetDepthTestEnabled/setBlendStateProperty are not exercised here — the Bgfx
-            // backend does not yet wire 3D depth/blend state changes (see bgfx_render_target_usage_test.cpp).
+            // renderer does not yet wire 3D depth/blend state changes (see bgfx_render_target_usage_test.cpp).
             dev.Clear(Color(0, 0, 0, 255));
             // Task 896 finding: the shared quad's winding is CCW/back-facing under CNA's real
             // default RasterizerState — needs CullNone. Bgfx already culls CCW today, but this

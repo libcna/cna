@@ -4,7 +4,7 @@
 // shaders for the whole batch, driving a deliberate RGB color inversion), adapted to D3D9's own
 // real SM2/SM3 HLSL syntax and its existing stride-24 SpriteVertex contract (POSITION0 FLOAT3,
 // COLOR0 UBYTE4N, TEXCOORD0 FLOAT2) rather than D3D11's own Sprite2DVertex shape -- D9-111's own
-// design note explicitly left vertex-declaration management to this task, since this backend
+// design note explicitly left vertex-declaration management to this task, since this renderer
 // reuses the SAME declaration the stock path already has (D3D9's vertex declaration is a
 // decoupled device state, not baked into the shader like D3D11's InputLayout).
 //
@@ -130,7 +130,7 @@ protected:
             // custom shader's own math ran, not the stock (non-inverting) SpriteEffect pipeline.
             check(insideColor.getRProperty() == 0 && insideColor.getGProperty() == 255 &&
                   insideColor.getBProperty() == 255 && insideColor.getAProperty() == 255,
-                  "D3D9SpriteBatchBackend + SpriteBatch::Begin(effect): sprites draw through the "
+                  "D3D9SpriteBatchRenderer + SpriteBatch::Begin(effect): sprites draw through the "
                   "custom shader's own RGB-inversion math, not the stock (non-inverting) SpriteEffect pipeline");
 
             const Rectangle outside(10, 10, 1, 1);
@@ -139,7 +139,7 @@ protected:
             check(outsideColor.getRProperty() == kClear.getRProperty() &&
                   outsideColor.getGProperty() == kClear.getGProperty() &&
                   outsideColor.getBProperty() == kClear.getBProperty(),
-                  "D3D9SpriteBatchBackend + SpriteBatch::Begin(effect): the custom vertex shader's own "
+                  "D3D9SpriteBatchRenderer + SpriteBatch::Begin(effect): the custom vertex shader's own "
                   "vpSize-driven NDC transform genuinely positions the sprite -- background outside its "
                   "destination rectangle is untouched, not a degenerate full-screen or mispositioned quad");
         }
@@ -157,7 +157,7 @@ protected:
             dev.GetBackBufferData(&inside, &insideColor, 0, 1);
             check(insideColor.getRProperty() == 255 && insideColor.getGProperty() == 0 &&
                   insideColor.getBProperty() == 0 && insideColor.getAProperty() == 255,
-                  "D3D9SpriteBatchBackend: a fresh SpriteBatch::Begin() with no custom effect genuinely "
+                  "D3D9SpriteBatchRenderer: a fresh SpriteBatch::Begin() with no custom effect genuinely "
                   "restores the stock (non-inverting) SpriteEffect pipeline -- the custom shader does not "
                   "stay stuck bound from the previous batch");
         }

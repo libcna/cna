@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# plan_dx9.md D9-5: run a Windows cross-compiled .exe (D3D9 backend) under Wine
+# plan_dx9.md D9-5: run a Windows cross-compiled .exe (D3D9 renderer) under Wine
 # with DXVK, using this project's own dedicated Wine prefix.
 #
 # Usage: scripts/run-wine-dxvk9.sh <path-to.exe> [args...]
 #
 # This is a NEW script, deliberately not a shared edit to scripts/run-wine-dxvk.sh
 # (plan_dx9.md cold-start §4: that file is D3D11/D3D12's, touched only to
-# register tests, and this repo's own convention keeps every backend's runtime
+# register tests, and this repo's own convention keeps every renderer's runtime
 # wrapper independent).
 #
 # Set CNA_D3D9_WINEPREFIX to point at a different prefix; defaults to

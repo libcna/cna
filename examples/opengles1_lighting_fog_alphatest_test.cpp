@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // plan_opengles1.md OPENGLES1-79: runtime coverage for the fixed-function shading rows --
 // OPENGLES1-22 (directional lighting), OPENGLES1-23 (linear fog) and OPENGLES1-24 (alpha test).
-// These are the parts of the backend with no shader to fall back on: everything here is real
+// These are the parts of the renderer with no shader to fall back on: everything here is real
 // glLight*/glFog*/glAlphaFunc state, asserted with GetBackBufferData() pixel readback.
 //
 // Check A -- LightingEnabled with a light aimed straight at the surface lights it up...
@@ -10,7 +10,7 @@
 // Check D -- fog fully applied at the far plane reproduces the fog colour...
 // Check E -- ...while geometry at the near plane is left unfogged.
 // Check F0 -- FogStart == FogEnd is XNA's documented degenerate case: everything 100% fogged.
-//   Fixed-function GL would divide by zero here, so the backend has to emulate it.
+//   Fixed-function GL would divide by zero here, so the renderer has to emulate it.
 // Check F -- AlphaTestEffect rejects fragments below the reference alpha...
 // Check G -- ...keeps fragments above it,
 // Check H -- ...mirrors correctly for CompareFunction::Less,
@@ -21,7 +21,7 @@
 // interpolation, but "lit is brighter than unlit" is unambiguous.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs. Requires a genuine OpenGL ES 1.1 driver; see
-// docs/opengles1-backend.md.
+// docs/opengles1-renderer.md.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"

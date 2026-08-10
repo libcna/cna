@@ -2,17 +2,17 @@
 // plan_opengl2.md: real GPU hardware-instancing proof via DrawInstancedPrimitivesEx -- adapts
 // examples/easygl_instancedmodel_shader_test.cpp's own scene, math derivation, and expected
 // values verbatim to GLSL 1.10 syntax (`attribute`/`varying`, no `#version 300 es`, no explicit
-// `layout(location=N)` -- this backend binds custom-effect attributes by NAME via
-// glGetAttribLocation, same as every other custom ShaderEffect test in this backend).
+// `layout(location=N)` -- this renderer binds custom-effect attributes by NAME via
+// glGetAttribLocation, same as every other custom ShaderEffect test in this renderer).
 //
-// Until this task, IGraphicsBackend::DrawInstancedPrimitivesEx() was not overridden on OpenGL2 --
+// Until this task, IGraphicsRenderer::DrawInstancedPrimitivesEx() was not overridden on OpenGL2 --
 // the shared base-class default threw std::runtime_error unconditionally (the correct, honest
 // behavior for a genuinely unsupported feature, not a bug). GL 2.1 has no instancing in core, but
 // GL_ARB_draw_instanced (glDrawElementsInstancedARB) + GL_ARB_instanced_arrays
 // (glVertexAttribDivisorARB) are widely-supported extensions on real GL2.1-era desktop
 // drivers/GPUs -- the per-instance-attribute-divisor technique needs no gl_InstanceID, so plain
 // GLSL 1.10 is sufficient. Implemented for the custom-ShaderEffect path only (mirrors
-// EasyGLGraphicsBackend::DrawInstancedPrimitivesEx's own identical, documented scope reduction: a
+// EasyGLRenderer::DrawInstancedPrimitivesEx's own identical, documented scope reduction: a
 // non-1 VertexBufferBinding.InstanceFrequency is not threaded through here either).
 //
 // Scene: a single small quad mesh drawn TWICE in one DrawInstancedPrimitives call, with a second,
@@ -96,9 +96,9 @@ namespace
     }
 
     // GLSL 1.10: per-instance attributes are aBoneWeight/aBoneWeight1/aBoneWeight2/aBoneWeight3
-    // (VertexElementUsage::BlendWeight, usage index 0-3 -- this backend's own established
+    // (VertexElementUsage::BlendWeight, usage index 0-3 -- this renderer's own established
     // attribute-name convention for that usage: usage index 0 gets the bare base name, no numeric
-    // suffix, see VertexElementAttribName() in OpenGL2GraphicsBackend.cpp; matches XNA/D3D9's own
+    // suffix, see VertexElementAttribName() in OpenGL2Renderer.cpp; matches XNA/D3D9's own
     // BLENDWEIGHT0-3 hardware-instancing semantic that easygl_instancedmodel_shader_test.cpp's own
     // header comment derives this packing from).
     const char* kVertSrc =
@@ -119,7 +119,7 @@ namespace
         "vec4 viewPosition=View*worldPosition;"
         "gl_Position=Projection*viewPosition;"
         // mat3(mat4) truncation requires GLSL 1.20 (this file targets 1.10, matching every other
-        // shader in this backend's own identical mat3(m[0].xyz,m[1].xyz,m[2].xyz) idiom).
+        // shader in this renderer's own identical mat3(m[0].xyz,m[1].xyz,m[2].xyz) idiom).
         "mat3 instanceTransform3=mat3(instanceTransform[0].xyz,instanceTransform[1].xyz,instanceTransform[2].xyz);"
         "mat3 world3=mat3(World[0].xyz,World[1].xyz,World[2].xyz);"
         "vec3 worldNormal=instanceTransform3*(world3*aNormal);"

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-077: the EasyGL backend must honor BlendState.ColorWriteChannels via glColorMask (a
+// REMED-GFX-077: the EasyGL renderer must honor BlendState.ColorWriteChannels via glColorMask (a
 // global GL device state, GL ES 2.0+), now that the mask is plumbed through
-// IGraphicsBackend::ApplyBlendState. Previously EasyGL never called glColorMask -> the mask was a
+// IGraphicsRenderer::ApplyBlendState. Previously EasyGL never called glColorMask -> the mask was a
 // silent no-op (always full RGBA).
 //
 // This test covers slot 0 on the backbuffer. REMED-GFX-016's EasyGL MRT regression separately

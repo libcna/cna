@@ -4,22 +4,22 @@
 // deterministically. It must never fabricate content out of the shared layer's own scratch memory.
 //
 // This is REMED-GFX-127's finding on the two interfaces that finding deliberately did not cover.
-// The cube defect (shared, backend-neutral, in TextureCube::GetData itself):
+// The cube defect (shared, renderer-neutral, in TextureCube::GetData itself):
 //
 //     std::vector<uint8_t> rgba(elementCount * 4);            // zero-initialized HERE
-//     backend_->GetData(face, level, x, y, w, h, rgba.data(), size);  // interface default = no-op
+//     renderer_->GetData(face, level, x, y, w, h, rgba.data(), size);  // interface default = no-op
 //     rgbaToColors(rgba, data, startIndex, elementCount);      // converted for the caller REGARDLESS
 //
 // and the volume defect, in Texture3D::GetData, byte for byte the same shape:
 //
 //     std::vector<uint8_t> rgba(elementCount * 4);
-//     backend_->GetData(level, left, top, front, w, h, depth, rgba.data(), size);
+//     renderer_->GetData(level, left, top, front, w, h, depth, rgba.data(), size);
 //     rgbaToColors(rgba, data, startIndex, elementCount);
 //
-// A backend that overrides neither therefore does not "leave the caller's buffer untouched": it
+// A renderer that overrides neither therefore does not "leave the caller's buffer untouched": it
 // returns a complete, confidently-wrong, uniformly transparent-black face/volume. Headless goes one
 // step further and actively `std::fill_n`s the caller's destination with zeros while its SetData
-// stores nothing at all -- the same fabrication reached through a different backend behaviour.
+// stores nothing at all -- the same fabrication reached through a different renderer behaviour.
 //
 // That result is strictly worse than an empty one, because
 //   * the obvious oracle "did GetData overwrite my sentinel destination?" PASSES on it, and
@@ -27,16 +27,16 @@
 // Both facts are asserted below (checks Z1/Z2) so this file records WHY sentinel mutation is not a
 // valid success oracle, rather than merely avoiding it.
 //
-// What every backend must satisfy after the fix:
+// What every renderer must satisfy after the fix:
 //   * a TextureCube/Texture3D populated by SetData reads back EXACTLY -- per face, per mip, for an
 //     arbitrary rectangle/box, at an arbitrary destination offset, over repeated calls;
-//   * a resource this backend cannot read back throws a deterministic System::NotSupportedException
+//   * a resource this renderer cannot read back throws a deterministic System::NotSupportedException
 //     WITHOUT having touched one byte of the caller's destination;
 //   * nothing in between: no fabricated face, no fabricated volume, no partially written
 //     destination, no silent success.
 //
-// Each backend's capability is declared here explicitly (kContract) rather than inferred at
-// runtime, so "this backend cannot read a cube face back" is a reviewed claim this test enforces,
+// Each renderer's capability is declared here explicitly (kContract) rather than inferred at
+// runtime, so "this renderer cannot read a cube face back" is a reviewed claim this test enforces,
 // not an escape hatch that lets any result pass.
 //
 // The uploaded pattern deliberately carries a per-face tag in R, an x ramp in G, a y ramp in B and
@@ -82,11 +82,11 @@ namespace
     constexpr int kVolD = 4;   ///< Texture3D depth  at mip 0 (mip 1 = 2).
 
     /**
-     * @brief What one public readback path on this backend is required to do.
+     * @brief What one public readback path on this renderer is required to do.
      *
      * `Exact` -- GetData must return the uploaded content byte for byte.
      * `Unsupported` -- GetData must throw System::NotSupportedException and leave the caller's
-     * destination byte-for-byte untouched. Reserved for a resource/level this backend genuinely
+     * destination byte-for-byte untouched. Reserved for a resource/level this renderer genuinely
      * cannot read back, never for one it merely has not been checked on.
      */
     enum class Support
@@ -95,90 +95,90 @@ namespace
         Unsupported,
     };
 
-    /// The complete, reviewed per-backend claim this file enforces.
+    /// The complete, reviewed per-renderer claim this file enforces.
     struct Contract
     {
         const char* name;
-        bool    cubeHasBackend;    ///< IGraphicsBackend::CreateTextureCube() returns a real object.
+        bool    cubeHasRenderer;    ///< IGraphicsRenderer::CreateTextureCube() returns a real object.
         Support cubeLevel0;        ///< TextureCube::GetData at mip 0.
         Support cubeMip;           ///< TextureCube::GetData at mip > 0.
-        bool    volumeConstructs;  ///< Texture3D's constructor succeeds on this backend/profile.
+        bool    volumeConstructs;  ///< Texture3D's constructor succeeds on this renderer/profile.
         Support volumeLevel0;      ///< Texture3D::GetData at mip 0.
         Support volumeMip;         ///< Texture3D::GetData at mip > 0.
         bool    wantHiDefProfile;  ///< Request GraphicsProfile::HiDef (D3D9's volume-texture gate).
     };
 
-#if defined(CNA_BACKEND_HEADLESS)
+#if defined(CNA_RENDERER_HEADLESS)
     // Headless deliberately executes no rasterization and stores no pixel data: it records API
     // usage and resource state for validation/tracing. Its cube SetData is a trace entry, not a
     // write, so there is no content it could honestly return. Texture3D is refused at construction
     // (REMED-CONTENT-004: it reports no GraphicsCapability::Texture3D).
     constexpr Contract kContract{"HEADLESS", true, Support::Unsupported, Support::Unsupported,
                                  false, Support::Unsupported, Support::Unsupported, false};
-#elif defined(CNA_BACKEND_SOFTWARE)
-    // SOFTWARE-82 gives this backend real 6-face RGBA8 cube storage. REMED-GFX-135 extended it to
+#elif defined(CNA_RENDERER_SOFTWARE)
+    // SOFTWARE-82 gives this renderer real 6-face RGBA8 cube storage. REMED-GFX-135 extended it to
     // every mip level TextureCube declares (previously only level 0 was allocated, so this entry
     // read `Support::Unsupported` for mips), which is what makes a mipmapped cube's LevelCount a
     // claim the storage can actually back. Texture3D is an explicit documented v1 scope boundary,
     // refused at construction.
     constexpr Contract kContract{"SOFTWARE", true, Support::Exact, Support::Exact,
                                  false, Support::Unsupported, Support::Unsupported, false};
-#elif defined(CNA_BACKEND_EASYGL)
+#elif defined(CNA_RENDERER_EASYGL)
     constexpr Contract kContract{"EASYGL", true, Support::Exact, Support::Exact,
                                  true, Support::Exact, Support::Exact, false};
-#elif defined(CNA_BACKEND_BGFX)
+#elif defined(CNA_RENDERER_BGFX)
     constexpr Contract kContract{"BGFX", true, Support::Exact, Support::Exact,
                                  true, Support::Exact, Support::Exact, false};
-#elif defined(CNA_BACKEND_VULKAN)
+#elif defined(CNA_RENDERER_VULKAN)
     constexpr Contract kContract{"VULKAN", true, Support::Exact, Support::Exact,
                                  true, Support::Exact, Support::Exact, false};
-#elif defined(CNA_BACKEND_WEBGPU)
+#elif defined(CNA_RENDERER_WEBGPU)
     constexpr Contract kContract{"WEBGPU", true, Support::Exact, Support::Exact,
                                  true, Support::Exact, Support::Exact, false};
-#elif defined(CNA_BACKEND_SDL_GPU)
+#elif defined(CNA_RENDERER_SDL_GPU)
     constexpr Contract kContract{"SDL_GPU", true, Support::Exact, Support::Exact,
                                  true, Support::Exact, Support::Exact, false};
-#elif defined(CNA_BACKEND_SKIA)
+#elif defined(CNA_RENDERER_SKIA)
     // Skia emulates transfer/readback in bounded CPU RGBA8 storage. This does not advertise cube
     // or volume shader sampling, custom effects, or the 3D pipeline.
     constexpr Contract kContract{"SKIA", true, Support::Exact, Support::Exact,
                                  true, Support::Exact, Support::Exact, false};
-#elif defined(CNA_BACKEND_SDL_RENDERER)
-    // 2D-only by design: CreateTextureCube()/CreateTexture3D() keep IGraphicsBackend's own
+#elif defined(CNA_RENDERER_SDL_RENDERER)
+    // 2D-only by design: CreateTextureCube()/CreateTexture3D() keep IGraphicsRenderer's own
     // nullptr-returning defaults, so a TextureCube here has no storage at all and Texture3D is
-    // refused at construction (this backend reports no GraphicsCapability::Texture3D).
+    // refused at construction (this renderer reports no GraphicsCapability::Texture3D).
     constexpr Contract kContract{"SDL_RENDERER", false, Support::Unsupported, Support::Unsupported,
                                  false, Support::Unsupported, Support::Unsupported, false};
-#elif defined(CNA_BACKEND_ASCII)
+#elif defined(CNA_RENDERER_ASCII)
     // Same 2D-only situation as SDL_RENDERER. Texture3D used to CONSTRUCT here, because this
-    // backend inherits IGraphicsBackend directly and was still answering SupportsCapability's own
+    // renderer inherits IGraphicsRenderer directly and was still answering SupportsCapability's own
     // `return true` default while CreateTexture3D returned nullptr -- a volume resource with no
     // storage behind it. REMED-GFX-130 made that report honest, so construction is now refused
     // exactly as it is on Headless and Software (REMED-CONTENT-004's own mechanism).
     constexpr Contract kContract{"ASCII", false, Support::Unsupported, Support::Unsupported,
                                  false, Support::Unsupported, Support::Unsupported, false};
-#elif defined(CNA_BACKEND_CANVAS)
+#elif defined(CNA_RENDERER_CANVAS)
     constexpr Contract kContract{"CANVAS", false, Support::Unsupported, Support::Unsupported,
                                  false, Support::Unsupported, Support::Unsupported, false};
-#elif defined(CNA_BACKEND_FREEDIRECT)
+#elif defined(CNA_RENDERER_FREEDIRECT)
     constexpr Contract kContract{"FREEDIRECT", false, Support::Unsupported, Support::Unsupported,
                                  false, Support::Unsupported, Support::Unsupported, false};
-#elif defined(CNA_BACKEND_D3D9)
+#elif defined(CNA_RENDERER_D3D9)
     // plan_dx9.md D9-100: GraphicsProfile.Reach does not support volume textures at all, so the
     // Texture3D half of this file needs a HiDef device to have anything to measure.
     constexpr Contract kContract{"D3D9", true, Support::Exact, Support::Exact,
                                  true, Support::Exact, Support::Exact, true};
-#elif defined(CNA_BACKEND_D3D11)
+#elif defined(CNA_RENDERER_D3D11)
     constexpr Contract kContract{"D3D11", true, Support::Exact, Support::Exact,
                                  true, Support::Exact, Support::Exact, false};
-#elif defined(CNA_BACKEND_D3D12)
+#elif defined(CNA_RENDERER_D3D12)
     constexpr Contract kContract{"D3D12", true, Support::Exact, Support::Exact,
                                  true, Support::Exact, Support::Exact, false};
-#elif defined(CNA_BACKEND_LLGL)
+#elif defined(CNA_RENDERER_LLGL)
     constexpr Contract kContract{"LLGL", true, Support::Exact, Support::Exact,
                                  true, Support::Exact, Support::Exact, false};
 #else
-#error "REMED-GFX-130: this backend has no declared TextureCube/Texture3D GetData contract."
+#error "REMED-GFX-130: this renderer has no declared TextureCube/Texture3D GetData contract."
 #endif
 
     /// Two unrelated destination pre-fills. Neither equals any pattern colour, so "still the
@@ -186,7 +186,7 @@ namespace
     Color SentinelCD() { return Color(0xCD, 0xCD, 0xCD, 0xCD); }
     Color SentinelA5() { return Color(0xA5, 0xA5, 0xA5, 0xA5); }
 
-    /// The fabricated content the pre-fix shared layer produces from a no-op backend.
+    /// The fabricated content the pre-fix shared layer produces from a no-op renderer.
     Color Fabricated() { return Color(0, 0, 0, 0); }
 
     /// One pure, fully opaque signature colour per CubeMapFace, written at that face's (0,0).
@@ -303,7 +303,7 @@ class CubeVolumeGetDataContractTest : public Game
     /**
      * @brief Uploads the full pattern for one cube mip level, one face at a time.
      *
-     * REMED-GFX-135 gave SetData the same two-outcome contract GetData has, so on a backend with no
+     * REMED-GFX-135 gave SetData the same two-outcome contract GetData has, so on a renderer with no
      * cube storage this fixture now raises System::NotSupportedException instead of quietly doing
      * nothing. That rejection is the write side's own subject and is asserted in
      * texturecube_texture3d_setdata_contract_test.cpp; here it only means "there is nothing to read
@@ -413,7 +413,7 @@ class CubeVolumeGetDataContractTest : public Game
     }
 
     /**
-     * @brief Judges one probe against this backend's declared contract.
+     * @brief Judges one probe against this renderer's declared contract.
      *
      * `Exact`: no exception, every asserted entry equals its expectation, and every padding entry
      * outside the asserted window is still the sentinel.
@@ -490,7 +490,7 @@ class CubeVolumeGetDataContractTest : public Game
 
         // ---- Z1/Z2: why sentinel mutation is not a success oracle -------------------------
         //
-        // Recorded permanently, on every backend. Z1 states the rule this file enforces; Z2
+        // Recorded permanently, on every renderer. Z1 states the rule this file enforces; Z2
         // states the pre-fix behaviour it exists to rule out.
         {
             const auto expected = ExpectedCubeRect(0, 0, 0, 0, kCube, kCube);
@@ -538,7 +538,7 @@ class CubeVolumeGetDataContractTest : public Game
         }
         else
         {
-            check(true, "C7 cube: face-confusion probe skipped -- this backend rejects cube readback");
+            check(true, "C7 cube: face-confusion probe skipped -- this renderer rejects cube readback");
         }
 
         // ---- C8: one texel, away from every edge ------------------------------------------
@@ -641,7 +641,7 @@ class CubeVolumeGetDataContractTest : public Game
         }
         else
         {
-            check(true, "C17 cube: mip-level distinctness skipped -- this backend stores no cube mips");
+            check(true, "C17 cube: mip-level distinctness skipped -- this renderer stores no cube mips");
         }
 
         // ---- C18: partial SetData, then read that sub-rect and the whole face ----------------
@@ -675,7 +675,7 @@ class CubeVolumeGetDataContractTest : public Game
         }
         else
         {
-            check(true, "C18 cube: partial SetData round-trip skipped -- this backend rejects cube readback");
+            check(true, "C18 cube: partial SetData round-trip skipped -- this renderer rejects cube readback");
         }
 
         // ---- C19: two independent cubes do not alias -----------------------------------------
@@ -695,7 +695,7 @@ class CubeVolumeGetDataContractTest : public Game
         }
         else
         {
-            check(true, "C19 cube: independence probe skipped -- this backend rejects cube readback");
+            check(true, "C19 cube: independence probe skipped -- this renderer rejects cube readback");
         }
 
         // ---- C20: mutating the source array after SetData does not change stored content ------
@@ -713,10 +713,10 @@ class CubeVolumeGetDataContractTest : public Game
         }
         else
         {
-            check(true, "C20 cube: source-mutation probe skipped -- this backend rejects cube readback");
+            check(true, "C20 cube: source-mutation probe skipped -- this renderer rejects cube readback");
         }
 
-        // ---- C21..C26: argument validation is deterministic on every backend -------------------
+        // ---- C21..C26: argument validation is deterministic on every renderer -------------------
         {
             std::vector<Color> buf(static_cast<std::size_t>(kCube) * kCube, SentinelCD());
             check(Throws<std::invalid_argument>([&] {
@@ -768,7 +768,7 @@ class CubeVolumeGetDataContractTest : public Game
             TextureCube dead(dev, kCube, false, SurfaceFormat::Color);
             std::vector<Color> flat(static_cast<std::size_t>(kCube) * kCube, Color(200, 100, 50, 25));
             // REMED-GFX-135: pre-populating the doomed cube is a convenience, not the subject --
-            // a backend with no cube storage now rejects the upload rather than ignoring it.
+            // a renderer with no cube storage now rejects the upload rather than ignoring it.
             try { dead.SetData(CubeMapFace::PositiveX, flat.data(), static_cast<int>(flat.size())); }
             catch (const System::NotSupportedException&) { }
             dead.Dispose();
@@ -799,7 +799,7 @@ class CubeVolumeGetDataContractTest : public Game
             catch (const System::NotSupportedException&) { threw = true; }
             catch (...) {}
             check(threw,
-                  "V0 volume: Texture3D construction is refused deterministically on this backend "
+                  "V0 volume: Texture3D construction is refused deterministically on this renderer "
                   "(no GraphicsCapability::Texture3D) -- there is no readback to fabricate");
             return;
         }
@@ -918,7 +918,7 @@ class CubeVolumeGetDataContractTest : public Game
         }
         else
         {
-            check(true, "V10 volume: slice-order probe skipped -- this backend rejects volume readback");
+            check(true, "V10 volume: slice-order probe skipped -- this renderer rejects volume readback");
         }
 
         // ---- V11: mip level 1 -------------------------------------------------------------------
@@ -962,7 +962,7 @@ class CubeVolumeGetDataContractTest : public Game
         }
         else
         {
-            check(true, "V12 volume: partial SetData round-trip skipped -- this backend rejects volume readback");
+            check(true, "V12 volume: partial SetData round-trip skipped -- this renderer rejects volume readback");
         }
 
         // ---- V13: two independent volumes do not alias ---------------------------------------------
@@ -982,7 +982,7 @@ class CubeVolumeGetDataContractTest : public Game
         }
         else
         {
-            check(true, "V13 volume: independence probe skipped -- this backend rejects volume readback");
+            check(true, "V13 volume: independence probe skipped -- this renderer rejects volume readback");
         }
 
         // ---- V14..V20: argument validation ------------------------------------------------------
@@ -1064,10 +1064,10 @@ protected:
         done_ = true;
 
         auto& dev = getGraphicsDeviceProperty();
-        std::printf("REMED-GFX-130 TextureCube/Texture3D GetData contract -- backend %s\n",
+        std::printf("REMED-GFX-130 TextureCube/Texture3D GetData contract -- renderer %s\n",
                     kContract.name);
 
-        if (kContract.cubeHasBackend)
+        if (kContract.cubeHasRenderer)
         {
             RunCubeChecks(dev);
         }
@@ -1079,7 +1079,7 @@ protected:
             });
             check(rejected,
                   "C0 cube: TextureCube construction is refused deterministically when the "
-                  "backend declares no validated cube storage");
+                  "renderer declares no validated cube storage");
         }
         RunVolumeChecks(dev);
 

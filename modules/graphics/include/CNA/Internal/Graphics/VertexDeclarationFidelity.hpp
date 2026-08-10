@@ -15,17 +15,17 @@
  * @file
  * @brief REMED-GFX-DECL-GUARD -- the declaration-fidelity safety boundary.
  *
- * REMED-GFX-217 records that seven rasterizing backends (Vulkan, Software, WebGPU, SDL_GPU, D3D9,
+ * REMED-GFX-217 records that seven rasterizing renderers (Vulkan, Software, WebGPU, SDL_GPU, D3D9,
  * D3D11, D3D12) do not translate a `VertexDeclaration` at all: they select a native input layout
  * from a canonical byte-stride table and discard everything else the declaration states. A stride
  * does not determine element composition, so two declarations that share a stride share a native
  * layout, and the one that does not match it is read from the wrong bytes -- accepted, submitted,
  * and silently wrong.
  *
- * This file is NOT a translator. Complete per-backend declaration translation stays in
+ * This file is NOT a translator. Complete per-renderer declaration translation stays in
  * `plan_postaudit.md`. What it provides is the boundary that makes the gap safe until then: a pure
  * predicate that decides whether a declaration can be represented faithfully by the layout a
- * backend actually programs, so an unrepresentable one fails deterministically before any native
+ * renderer actually programs, so an unrepresentable one fails deterministically before any native
  * layout, pipeline, command or submission exists instead of rendering the wrong thing.
  *
  * ## The rule is asymmetric, and deliberately so
@@ -50,18 +50,18 @@
  *
  * ## Why this is header-only
  *
- * Each backend is its own static library, linked against `cna_backend_graphics_common` and
+ * Each renderer is its own static library, linked against `cna_renderer_common` and
  * SharpRuntime rather than against the CNA library, so a translation unit under `src/CNA/Internal/
  * Graphics/` is not visible to them. Inline definitions keep the guard available to all seven
- * backends without adding a shared build target, and the whole predicate is a few hundred bytes of
+ * renderers without adding a shared build target, and the whole predicate is a few hundred bytes of
  * branch-free comparison per draw.
  */
 namespace CNA::Internal::Graphics
 {
     /**
-     * @brief One attribute of the native input layout a backend actually programs.
+     * @brief One attribute of the native input layout a renderer actually programs.
      *
-     * This is the backend's own truth, not the public declaration: the semantic, usage index, byte
+     * This is the renderer's own truth, not the public declaration: the semantic, usage index, byte
      * offset and format the native vertex fetch uses.
      */
     struct InferredVertexElement
@@ -77,10 +77,10 @@ namespace CNA::Internal::Graphics
     };
 
     /**
-     * @brief The native input layout a backend infers for one byte stride.
+     * @brief The native input layout a renderer infers for one byte stride.
      *
-     * @c known is false when the backend has no inferred layout for that stride at all. The guard
-     * then abstains: the backend's own out-of-table rejection is already loud and deterministic,
+     * @c known is false when the renderer has no inferred layout for that stride at all. The guard
+     * then abstains: the renderer's own out-of-table rejection is already loud and deterministic,
      * and replacing it would change an established boundary for no safety gain.
      */
     struct InferredVertexLayout
@@ -89,26 +89,26 @@ namespace CNA::Internal::Graphics
         const InferredVertexElement* elements = nullptr;
         /** @brief How many attributes @c elements holds. */
         std::size_t count = 0;
-        /** @brief Whether this backend has an inferred layout for the stride at all. */
+        /** @brief Whether this renderer has an inferred layout for the stride at all. */
         bool known = false;
     };
 
     /**
-     * @brief What a backend's route does with a stride its canonical table does not list.
+     * @brief What a renderer's route does with a stride its canonical table does not list.
      *
-     * Each value is a measured property of one backend's route, not a preference.
+     * Each value is a measured property of one renderer's route, not a preference.
      */
     enum class UnlistedStrideLayout
     {
         /**
-         * @brief The backend refuses the stride itself, before any native work.
+         * @brief The renderer refuses the stride itself, before any native work.
          *
          * Software, WebGPU's ordinary route and D3D9/D3D11/D3D12 all throw on an out-of-table
          * stride today. The guard abstains and leaves that rejection exactly as it is.
          */
-        BackendRefusesIt,
+        RendererRefusesIt,
         /**
-         * @brief The backend falls back to its `VertexPositionColor` layout: Position at offset 0
+         * @brief The renderer falls back to its `VertexPositionColor` layout: Position at offset 0
          * and a packed colour at offset 12, strided by the buffer's own stride.
          *
          * Vulkan's and SDL_GPU's ordinary routes do this. It is why a position-only stride-12
@@ -116,7 +116,7 @@ namespace CNA::Internal::Graphics
          */
         PositionColorFallback,
         /**
-         * @brief The backend falls back to a position-only layout: Position at offset 0 and
+         * @brief The renderer falls back to a position-only layout: Position at offset 0 and
          * nothing else.
          *
          * The instanced modules of Vulkan and WebGPU do this for every stride their packed-colour
@@ -126,9 +126,9 @@ namespace CNA::Internal::Graphics
     };
 
     /**
-     * @brief The declaration a stride-inferring backend must still remember.
+     * @brief The declaration a stride-inferring renderer must still remember.
      *
-     * These backends left `IVertexBufferBackend::SetVertexDeclaration` empty, so the declaration
+     * These renderers left `IVertexBufferRenderer::SetVertexDeclaration` empty, so the declaration
      * that reached them was thrown away and nothing downstream could compare it against anything.
      * Storing it costs one vector per buffer and is what makes the guard possible without widening
      * any interface.
@@ -196,7 +196,7 @@ namespace CNA::Internal::Graphics
         const char* name = "";
     };
 
-    /// Implementation detail of the predicate below; not part of any backend's contract.
+    /// Implementation detail of the predicate below; not part of any renderer's contract.
     namespace VertexDeclarationFidelityDetail
     {
         using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
@@ -275,10 +275,10 @@ namespace CNA::Internal::Graphics
             return aStart < bStart + bSize && bStart < aStart + aSize;
         }
 
-        // THE CANONICAL STRIDE TABLE. Every backend in REMED-GFX-217's scope transcribes exactly
-        // this: D3DVertexFormatHelper's kStride16..kStride68 arrays, EasyGLGraphicsBackend's
-        // ApplyLayout switch, VulkanGraphicsBackend's per-pipeline attribute arrays and
-        // SoftwareGraphicsBackend's BuildGenericClipVertex byte reader. All four agree because all
+        // THE CANONICAL STRIDE TABLE. Every renderer in REMED-GFX-217's scope transcribes exactly
+        // this: D3DVertexFormatHelper's kStride16..kStride68 arrays, EasyGLRenderer's
+        // ApplyLayout switch, VulkanRenderer's per-pipeline attribute arrays and
+        // SoftwareRenderer's BuildGenericClipVertex byte reader. All four agree because all
         // four were derived from the same seven built-in XNA vertex types, whose declarations take
         // their offsets from CNA/Internal/Graphics/BuiltInVertexStreams.hpp.
 
@@ -337,7 +337,7 @@ namespace CNA::Internal::Graphics
             {VertexElementUsage::BlendIndices,      0, 64, VertexElementFormat::Byte4},
         };
 
-        // The two fallbacks a backend uses for a stride the table above does not list. Both are
+        // The two fallbacks a renderer uses for a stride the table above does not list. Both are
         // measured behaviours, not guesses: Vulkan's ordinary route renders a position-only
         // stride-12 buffer correctly through the first, and WebGPU's instanced module renders the
         // same buffer correctly through the second.
@@ -360,9 +360,9 @@ namespace CNA::Internal::Graphics
     /**
      * @brief The canonical native layout for @p strideInBytes, or @p fallback's shape.
      *
-     * @param strideInBytes The record stride the backend strides the buffer by.
-     * @param fallback What this backend's route does with a stride the table does not list.
-     * @return The inferred layout; `known == false` when the backend refuses the stride itself.
+     * @param strideInBytes The record stride the renderer strides the buffer by.
+     * @param fallback What this renderer's route does with a stride the table does not list.
+     * @return The inferred layout; `known == false` when the renderer refuses the stride itself.
      */
     [[nodiscard]] inline InferredVertexLayout InferredLayoutForStride(
         int strideInBytes, UnlistedStrideLayout fallback) noexcept
@@ -386,7 +386,7 @@ namespace CNA::Internal::Graphics
                 return detail::Layout(detail::kPositionColorFallback);
             case UnlistedStrideLayout::PositionOnlyFallback:
                 return detail::Layout(detail::kPositionOnlyFallback);
-            case UnlistedStrideLayout::BackendRefusesIt:
+            case UnlistedStrideLayout::RendererRefusesIt:
                 break;
         }
         return InferredVertexLayout{};
@@ -400,8 +400,8 @@ namespace CNA::Internal::Graphics
      *
      * @param declaredElements The public declaration's elements.
      * @param declaredStride The public declaration's byte stride.
-     * @param nativeRecordStride The stride the backend actually advances records by.
-     * @param inferred The native layout the backend actually programs.
+     * @param nativeRecordStride The stride the renderer actually advances records by.
+     * @param inferred The native layout the renderer actually programs.
      * @return An empty string when the declaration is faithfully representable, otherwise a
      *         diagnostic naming the element and the incompatibility.
      */
@@ -429,7 +429,7 @@ namespace CNA::Internal::Graphics
                    " bytes but the buffer is strided by " + std::to_string(nativeRecordStride) +
                    " bytes, so every record after the first would be read from the wrong address";
 
-        // The backend has no inferred layout at all for this stride and refuses it on its own. Its
+        // The renderer has no inferred layout at all for this stride and refuses it on its own. Its
         // established rejection is already deterministic and pre-native; this guard does not
         // replace it.
         if (!inferred.known) return {};
@@ -479,17 +479,17 @@ namespace CNA::Internal::Graphics
             if (match == nullptr)
                 return "the declaration carries " +
                        detail::Describe(usage, usageIndex, offset, format) +
-                       ", which this backend's native layout for a " +
+                       ", which this renderer's native layout for a " +
                        std::to_string(declaredStride) + "-byte record does not bind at all";
             if (match->offset != offset)
                 return "the declaration places " +
                        detail::Describe(usage, usageIndex, offset, format) +
-                       " but this backend's native layout reads that semantic at offset " +
+                       " but this renderer's native layout reads that semantic at offset " +
                        std::to_string(match->offset);
             if (match->format != format)
                 return "the declaration states " +
                        detail::Describe(usage, usageIndex, offset, format) +
-                       " but this backend's native layout reads that semantic as " +
+                       " but this renderer's native layout reads that semantic as " +
                        detail::FormatName(match->format);
         }
 
@@ -510,7 +510,7 @@ namespace CNA::Internal::Graphics
                     native.offset == e.getOffsetProperty() &&
                     native.format == e.getVertexElementFormatProperty())
                     continue;
-                return "this backend's native layout reads " +
+                return "this renderer's native layout reads " +
                        detail::Describe(native.usage, native.usageIndex, native.offset,
                                         native.format) +
                        " out of the bytes the declaration gave to " +
@@ -524,16 +524,16 @@ namespace CNA::Internal::Graphics
     }
 
     /**
-     * @brief Throws unless @p declared is faithfully representable by @p backendName's layout.
+     * @brief Throws unless @p declared is faithfully representable by @p rendererName's layout.
      *
      * Call this before any native layout or pipeline is created, any command is queued and any
      * draw is submitted. It creates nothing, queues nothing and leaves no partial native object
      * behind, so a rejected draw cannot poison the device and the next valid draw still works.
      *
      * @param declared The declaration the buffer carries, as remembered at propagation time.
-     * @param nativeRecordStride The stride the backend advances records by for this draw.
-     * @param fallback What this backend's route does with an unlisted stride.
-     * @param backendName The backend's public name, for the diagnostic.
+     * @param nativeRecordStride The stride the renderer advances records by for this draw.
+     * @param fallback What this renderer's route does with an unlisted stride.
+     * @param rendererName The renderer's public name, for the diagnostic.
      * @param route The route's name (for example `ordinary-indexed`), for the diagnostic.
      * @throws System::NotSupportedException When the declaration cannot be represented faithfully.
      */
@@ -541,7 +541,7 @@ namespace CNA::Internal::Graphics
         const DeclaredVertexLayout& declared,
         int nativeRecordStride,
         UnlistedStrideLayout fallback,
-        const char* backendName,
+        const char* rendererName,
         const char* route)
     {
         if (declared.IsEmpty()) return;
@@ -551,9 +551,9 @@ namespace CNA::Internal::Graphics
             declared.GetElements(), declared.GetStride(), nativeRecordStride, inferred);
         if (failure.empty()) return;
         throw System::NotSupportedException(
-            std::string(backendName) + ": this VertexDeclaration cannot be represented on the " +
+            std::string(rendererName) + ": this VertexDeclaration cannot be represented on the " +
             route + " route -- " + failure +
-            ". The backend selects its native vertex layout from the buffer stride and does not "
+            ". The renderer selects its native vertex layout from the buffer stride and does not "
             "translate arbitrary declarations yet, so the draw is refused rather than rendered "
             "from the wrong bytes.");
     }
@@ -569,7 +569,7 @@ namespace CNA::Internal::Graphics
      * @param declaredElements The public declaration's elements, in declaration order.
      * @param inputs The selected stock program's inputs, in attribute-location order.
      * @param inputCount How many inputs @p inputs holds.
-     * @param backendName The backend's public name, for the diagnostic.
+     * @param rendererName The renderer's public name, for the diagnostic.
      * @param programName The selected stock program's name, for the diagnostic.
      * @throws System::NotSupportedException When an element would be bound to a location whose
      *         shader input means something else.
@@ -578,7 +578,7 @@ namespace CNA::Internal::Graphics
         const std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>& declaredElements,
         const StockProgramInput* inputs,
         std::size_t inputCount,
-        const char* backendName,
+        const char* rendererName,
         const char* programName)
     {
         namespace detail = VertexDeclarationFidelityDetail;
@@ -596,7 +596,7 @@ namespace CNA::Internal::Graphics
                 in.format == e.getVertexElementFormatProperty())
                 continue;
             throw System::NotSupportedException(
-                std::string(backendName) +
+                std::string(rendererName) +
                 ": this VertexDeclaration cannot be bound to the stock '" + programName +
                 "' program -- element " + std::to_string(i) + " declares " +
                 detail::Describe(e.getVertexElementUsageProperty(), e.getUsageIndexProperty(),

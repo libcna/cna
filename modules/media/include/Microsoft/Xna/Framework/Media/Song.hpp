@@ -192,7 +192,7 @@ namespace Microsoft::Xna::Framework::Media
         [[nodiscard]] std::string ToString() const override;
 
         /**
-         * @brief Gets the backend file path or handle used by this song.
+         * @brief Gets the renderer file path or handle used by this song.
          *
          * @return Handle/path string.
          */

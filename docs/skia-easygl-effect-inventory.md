@@ -8,20 +8,20 @@ downstream task that owns its promotion (or its continued rejection).
 ## Scope
 
 "EasyGL" here means CNA's internal implementation selected publicly as `OPENGLES`, `OPENGL33`,
-`WEBGL1`, or `WEBGL2` -- a real, full 3D-capable GL backend, not the separate sibling `easy-gl`
+`WEBGL1`, or `WEBGL2` -- a real, full 3D-capable GL renderer, not the separate sibling `easy-gl`
 GL-wrapper library it links against (that library owns no shader source of its own; it is a thin
 Shader/Program/Buffer wrapper).
 This is the same "EasyGL" `docs/skia-3d-emulation-adr.md` and its companion matrices measure Skia's
 own 3D-refusal decisions against.
 
-Every embedded shader lives in exactly one file, `src/Graphics/Backends/EasyGL/EasyGLGraphicsBackend.cpp`
+Every embedded shader lives in exactly one file, `src/Graphics/Renderers/EasyGL/EasyGLRenderer.cpp`
 (5748 lines): thirteen `#version 300 es` vertex+fragment program pairs, compiled through a shared
 `CompileAndLink(prog, vsrc, fsrc, label)` helper. `AlphaTestEffect` is not a separate program: a
 `uniform vec4 uAlphaTest` plus an `if(_at<0.0)discard;` clause (reference/tolerance/pass/fail-sentinel
 packed into one vec4) is baked identically into all twelve stock-3D programs; `AlphaTestEffect`
 reuses whichever of `colored`/`textured`/`col_textured` matches its vertex layout, since XNA's
 `AlphaTestEffect` has no lighting or skinning path of its own. Separately,
-`EasyGLEffectBackend::CompileProgram(vertSrc, fragSrc)` (~line 528) is the generic compile path for
+`EasyGLEffectRenderer::CompileProgram(vertSrc, fragSrc)` (~line 528) is the generic compile path for
 arbitrary caller-supplied GLSL (custom `ShaderEffect` content) -- not a fixed source to classify the
 same way, but the compile path SKIA-155's translator will eventually need to intercept.
 
@@ -58,7 +58,7 @@ separable from the vertex-stage 3D work; both are given where that split exists.
 
 | Program | Effect | Language notes | Vertex attrs / varyings | Uniforms | Samplers | 3D dependencies | Disposition |
 |---|---|---|---|---|---|---|---|
-| (inline, `EasyGLSpriteBatchBackend::InitializeResources`) | `SpriteEffect` / built-in SpriteBatch | Trivial: one ortho `projection` mat4, no branching. | in `aPos`(vec2)/`aTexCoord`(vec2)/`aColor`(vec4); out `TexCoord`/`Color`. | `projection`(mat4) | 1x `sampler2D` | None -- pure 2D quad, no perspective. | **already implemented** -- `SpriteBatch::Begin(effect=nullptr)`'s direct `SkCanvas` paint path already reproduces this exactly (`docs/skia-effects.md`); not a Phase S16 target. |
+| (inline, `EasyGLSpriteBatchRenderer::InitializeResources`) | `SpriteEffect` / built-in SpriteBatch | Trivial: one ortho `projection` mat4, no branching. | in `aPos`(vec2)/`aTexCoord`(vec2)/`aColor`(vec4); out `TexCoord`/`Color`. | `projection`(mat4) | 1x `sampler2D` | None -- pure 2D quad, no perspective. | **already implemented** -- `SpriteBatch::Begin(effect=nullptr)`'s direct `SkCanvas` paint path already reproduces this exactly (`docs/skia-effects.md`); not a Phase S16 target. |
 | `prog_colored_` | `BasicEffect` (vertex colour) | Ternary alpha-test, `mix` fog blend. | in `aPos`(vec3)/`aColor`(vec4); out `vColor`/`vFogFactor`. | `uWVP`(mat4), `uDiffuseColor`, `uAlphaTest`, `uFogVector`(vec4), `uFogColor`, `uVertexColorEnabled` | 0 | Vertex: `uWVP*vec4(aPos,1)` clip-space transform. | Fragment **SkMesh** / Vertex **3D-only** -- pure colour combine once WVP-transformed `vColor` exists; the WVP transform itself needs real perspective-correct triangle rasterization. |
 | `prog_textured_` | `BasicEffect` (textured) | Same pattern, one texture sample. | in `aPos`/`aUV`(vec2); out `vUV`/`vFogFactor`. | `uWVP`, `uDiffuseColor`, `uAlphaTest`, `uFogVector`, `uFogColor` | 1x `sampler2D` | Vertex: WVP transform. | Fragment **SkMesh** / Vertex **3D-only** -- same shape as `colored`, texture sample instead of vertex colour. |
 | `prog_col_textured_` | `BasicEffect` (colour+textured) | Same + `uVertexColorEnabled` gate. | `aPos`/`aColor`/`aUV`; out `vColor`/`vUV`/`vFogFactor`. | as above + `uVertexColorEnabled` | 1x `sampler2D` | Vertex: WVP transform. | Fragment **SkMesh** / Vertex **3D-only** -- union of the two above; still a pure per-pixel combine once varyings exist. |
@@ -74,7 +74,7 @@ separable from the vertex-stage 3D work; both are given where that split exists.
 
 A render-target-source flip-V helper (`CNA_GL_RT_SAMPLE_UV_DECL`/`cnaSampleUV(uv, flip)`) is
 preprocessor-injected into every fragment shader's texture-sample call across the corpus. It is a
-backend-specific construct with no SkSL equivalent need (Skia has no analogous render-target-source
+renderer-specific construct with no SkSL equivalent need (Skia has no analogous render-target-source
 V-flip convention to reconcile) -- SKIA-155's translator grammar must recognize and strip/reinterpret
 this macro rather than attempt to translate it literally, for every row where it appears.
 

@@ -9,7 +9,7 @@
 // Opaque / AlphaBlend / Additive / NonPremultiplied / custom factors / custom functions /
 // BlendFactor / separate alpha are all silent no-ops for sprites. The 3D path already honors the
 // BlendState (Task 868 FillBlendAttachmentState + per-draw blendParams). The four "known-correct"
-// backends (EasyGL, D3D11, SdlGpu, Bgfx) DERIVE the sprite blend from the BlendState and thus
+// renderers (EasyGL, D3D11, SdlGpu, Bgfx) DERIVE the sprite blend from the BlendState and thus
 // produce the XNA-correct PREMULTIPLIED AlphaBlend (colorSrc=One) for the default Begin(); Vulkan
 // (and WebGPU) were the outliers hardcoding non-premultiplied SourceAlpha.
 //

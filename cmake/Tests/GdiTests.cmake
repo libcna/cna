@@ -1,4 +1,4 @@
-if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "GDI")
+if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "GDI")
     function(cna_add_gdi_test target source)
         add_executable(${target} ${source})
         target_link_libraries(${target} PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
@@ -49,62 +49,62 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "GDI")
     # developer's chosen Wine/display setup, so it is built but intentionally not registered as a
     # Linux-host CTest command.
     if(NOT CMAKE_CROSSCOMPILING)
-        cna_register_backend_test(NAME GDI_Smoke COMMAND cna_test_gdi_smoke
+        cna_register_renderer_test(NAME GDI_Smoke COMMAND cna_test_gdi_smoke
             TIMEOUT 30 LABELS "GDI")
-        cna_register_backend_test(NAME GDI_2D_Regression COMMAND cna_test_gdi_2d_regression
+        cna_register_renderer_test(NAME GDI_2D_Regression COMMAND cna_test_gdi_2d_regression
             TIMEOUT 30 LABELS "GDI")
-        cna_register_backend_test(NAME GDI_ColorMatrixEffect COMMAND cna_test_gdi_colormatrix_effect
+        cna_register_renderer_test(NAME GDI_ColorMatrixEffect COMMAND cna_test_gdi_colormatrix_effect
             TIMEOUT 30 LABELS "GDI")
-        cna_register_backend_test(NAME GDI_PublicStencil COMMAND cna_test_gdi_public_stencil
+        cna_register_renderer_test(NAME GDI_PublicStencil COMMAND cna_test_gdi_public_stencil
             TIMEOUT 30 LABELS "GDI")
-        cna_register_backend_test(NAME GDI_PublicAPI COMMAND cna_test_gdi_public_api
+        cna_register_renderer_test(NAME GDI_PublicAPI COMMAND cna_test_gdi_public_api
             TIMEOUT 30 LABELS "GDI")
-        cna_register_backend_test(NAME GDI_AppliedState COMMAND cna_test_gdi_applied_state
+        cna_register_renderer_test(NAME GDI_AppliedState COMMAND cna_test_gdi_applied_state
             TIMEOUT 30 LABELS "GDI")
-        cna_register_backend_test(NAME GDI_UnsupportedFeatures
+        cna_register_renderer_test(NAME GDI_UnsupportedFeatures
             COMMAND cna_test_gdi_unsupported_features
             TIMEOUT 30 LABELS "GDI")
-        cna_register_backend_test(NAME GDI_DirtyDamage COMMAND cna_test_gdi_dirty_damage
+        cna_register_renderer_test(NAME GDI_DirtyDamage COMMAND cna_test_gdi_dirty_damage
             TIMEOUT 30 LABELS "GDI")
-        cna_register_backend_test(NAME GDI_RepaintInvalidation COMMAND cna_test_gdi_repaint_invalidation
+        cna_register_renderer_test(NAME GDI_RepaintInvalidation COMMAND cna_test_gdi_repaint_invalidation
             TIMEOUT 30 LABELS "GDI")
-        cna_register_backend_test(NAME GDI_PresentationOracle COMMAND cna_test_gdi_presentation_oracle
+        cna_register_renderer_test(NAME GDI_PresentationOracle COMMAND cna_test_gdi_presentation_oracle
             TIMEOUT 30 LABELS "GDI")
-        cna_register_backend_test(NAME GDI_WindowMetrics COMMAND cna_test_gdi_window_metrics
+        cna_register_renderer_test(NAME GDI_WindowMetrics COMMAND cna_test_gdi_window_metrics
             TIMEOUT 30 LABELS "GDI"
             ENVIRONMENT "CNA_GDI_DWM_FLUSH=0")
-        cna_register_backend_test(NAME GDI_FramebufferAllocation
+        cna_register_renderer_test(NAME GDI_FramebufferAllocation
             COMMAND cna_test_gdi_framebuffer_allocation
             TIMEOUT 30 LABELS "GDI"
             ENVIRONMENT "CNA_GDI_DWM_FLUSH=0")
-        cna_register_backend_test(NAME GDI_MsaaContract
+        cna_register_renderer_test(NAME GDI_MsaaContract
             COMMAND cna_test_gdi_msaa_contract
             TIMEOUT 30 LABELS "GDI"
             ENVIRONMENT "CNA_GDI_DWM_FLUSH=0")
-        cna_register_backend_test(NAME GDI_PresentationModeTransaction
+        cna_register_renderer_test(NAME GDI_PresentationModeTransaction
             COMMAND cna_test_gdi_presentation_mode_transaction
             TIMEOUT 30 LABELS "GDI"
             ENVIRONMENT "CNA_GDI_DWM_FLUSH=0")
-        cna_register_backend_test(NAME GDI_DcReleaseTransaction
+        cna_register_renderer_test(NAME GDI_DcReleaseTransaction
             COMMAND cna_test_gdi_dc_release_transaction
             TIMEOUT 30 LABELS "GDI"
             ENVIRONMENT "CNA_GDI_DWM_FLUSH=0")
-        cna_register_backend_test(NAME GDI_TextureAllocation
+        cna_register_renderer_test(NAME GDI_TextureAllocation
             COMMAND cna_test_gdi_texture_allocation
             TIMEOUT 30 LABELS "GDI"
             ENVIRONMENT "CNA_GDI_DWM_FLUSH=0")
         # GDI-056: keep these as separate tests so dashboards identify the exact configuration.
         # DwmFlush is a potentially blocking compositor hint and is deliberately excluded from
         # deterministic correctness coverage.
-        cna_register_backend_test(NAME GDI_Presentation_Default
+        cna_register_renderer_test(NAME GDI_Presentation_Default
             COMMAND cna_test_gdi_presentation_configuration default
             TIMEOUT 30 LABELS "GDI"
             ENVIRONMENT "CNA_GDI_DIRTY_PRESENTATION=0;CNA_GDI_PRESENT_FILTER=nearest;CNA_GDI_DWM_FLUSH=0")
-        cna_register_backend_test(NAME GDI_Presentation_Dirty
+        cna_register_renderer_test(NAME GDI_Presentation_Dirty
             COMMAND cna_test_gdi_presentation_configuration dirty
             TIMEOUT 30 LABELS "GDI"
             ENVIRONMENT "CNA_GDI_DIRTY_PRESENTATION=1;CNA_GDI_PRESENT_FILTER=nearest;CNA_GDI_DWM_FLUSH=0")
-        cna_register_backend_test(NAME GDI_Presentation_Halftone
+        cna_register_renderer_test(NAME GDI_Presentation_Halftone
             COMMAND cna_test_gdi_presentation_configuration halftone
             TIMEOUT 30 LABELS "GDI"
             ENVIRONMENT "CNA_GDI_DIRTY_PRESENTATION=1;CNA_GDI_PRESENT_FILTER=halftone;CNA_GDI_DWM_FLUSH=0")

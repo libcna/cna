@@ -6,8 +6,8 @@
 // itself, compiled and run against real pixels, exactly as SKIA-93 proved stock-effect fragment
 // pieces before any public integration existed.
 
-#include "CNA/Internal/Backends/Skia/SkiaCubeSampling.hpp"
-#include "CNA/Internal/Backends/Skia/SkiaSurface.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaCubeSampling.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaSurface.hpp"
 
 #include "include/core/SkCanvas.h"
 #include "include/core/SkData.h"
@@ -25,7 +25,7 @@
 #include <string>
 #include <vector>
 
-using CNA::Internal::Backends::Skia::SkiaSurface;
+using CNA::Internal::Renderers::Skia::SkiaSurface;
 
 namespace
 {
@@ -41,7 +41,7 @@ namespace
     // computes whatever direction their effect needs and calls cnaSampleCubeEXT(dir); this test
     // wrapper just forwards a per-draw uniform directly.
     const std::string kCubeSamplingSource = std::string(
-        CNA::Internal::Backends::Skia::kCnaSampleCubePreambleEXT) + R"(
+        CNA::Internal::Renderers::Skia::kCnaSampleCubePreambleEXT) + R"(
         uniform float3 testDirection;
         half4 main(float2 sourcePixel) {
             return cnaSampleCubeEXT(testDirection);

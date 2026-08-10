@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MS-PL
 // Task 369: BasicEffect pixel test — DiffuseColor + EmissiveColor combination with
-// LightingEnabled=false (Vulkan backend).
+// LightingEnabled=false (Vulkan renderer).
 //
 // See examples/easygl_basiceffect_emissive_test.cpp for the full FNA-derived expected-output
 // derivation and for the `EmissiveColor`-dropped bug this test found and fixed in the shared
-// `BasicEffect::FillGpuDrawParams()` (common C++ code — one fix covers all 3 backends, no shader
+// `BasicEffect::FillGpuDrawParams()` (common C++ code — one fix covers all 3 renderers, no shader
 // changes needed for this specific no-lighting case).
 //
 // Exit code 0 = PASS, 1 = FAIL.

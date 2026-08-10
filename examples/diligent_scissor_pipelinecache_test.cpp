@@ -4,7 +4,7 @@
 // is not silently swallowed by the pipeline cache.
 //
 // Diligent pipeline state objects are immutable: RasterizerDesc.ScissorEnable is baked in at
-// creation time, not a per-draw dynamic state. DiligentGraphicsBackend::PipelineKey is the only
+// creation time, not a per-draw dynamic state. DiligentRenderer::PipelineKey is the only
 // thing GetOrCreatePipeline() consults to decide "reuse an existing PSO" vs. "create a new one".
 // Before this task, ScissorEnable was read live off a separate `scissorEnabled_` member at pipeline
 // *build* time but was absent from PipelineKey itself -- so once a pipeline was cached for one

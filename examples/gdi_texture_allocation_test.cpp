@@ -3,9 +3,9 @@
 // a checked layout/byte-budget contract, pixel-data/dimension agreement, and translated
 // bad_alloc/length_error failures, enforced at the GDI/Software CPU texture boundary.
 
-#include "CNA/Internal/Backends/Gdi/GdiGraphicsBackend.hpp"
-#include "CNA/Internal/Backends/Software/SoftwareGraphicsBackend.hpp"
-#include "CNA/Internal/Backends/Software/SoftwareTextureAllocation.hpp"
+#include "CNA/Internal/Renderers/Gdi/GdiRenderer.hpp"
+#include "CNA/Internal/Renderers/Software/SoftwareRenderer.hpp"
+#include "CNA/Internal/Renderers/Software/SoftwareTextureAllocation.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 
@@ -19,9 +19,9 @@
 #include <string>
 #include <vector>
 
-using namespace CNA::Internal::Backends;
-using namespace CNA::Internal::Backends::Gdi;
-using namespace CNA::Internal::Backends::Software;
+using namespace CNA::Internal::Renderers;
+using namespace CNA::Internal::Renderers::Gdi;
+using namespace CNA::Internal::Renderers::Software;
 using namespace CNA::Internal::Graphics;
 
 namespace
@@ -87,7 +87,7 @@ namespace
         return ok;
     }
 
-    bool ExerciseLiveTextureCreation(GdiGraphicsBackend& backend)
+    bool ExerciseLiveTextureCreation(GdiRenderer& renderer)
     {
         bool ok = true;
 
@@ -95,8 +95,8 @@ namespace
         tiny.width = 2;
         tiny.height = 2;
         tiny.pixels = {255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 255, 255};
-        std::unique_ptr<ITextureBackend> texture = backend.CreateTexture(tiny);
-        auto* softwareTexture = dynamic_cast<SoftwareTextureBackend*>(texture.get());
+        std::unique_ptr<ITextureRenderer> texture = renderer.CreateTexture(tiny);
+        auto* softwareTexture = dynamic_cast<SoftwareTextureRenderer*>(texture.get());
         ok &= Expect(softwareTexture != nullptr && softwareTexture->ColorPixels().size() == 16u,
                      "an ordinary small texture creates real checked CPU storage");
 
@@ -106,8 +106,8 @@ namespace
         stridedData.width = 3;
         stridedData.height = 2;
         stridedData.pixels.assign(3u * 2u * 4u, 0u);
-        std::unique_ptr<ITextureBackend> strided = backend.CreateTexture(stridedData);
-        auto* softwareStrided = dynamic_cast<SoftwareTextureBackend*>(strided.get());
+        std::unique_ptr<ITextureRenderer> strided = renderer.CreateTexture(stridedData);
+        auto* softwareStrided = dynamic_cast<SoftwareTextureRenderer*>(strided.get());
         const std::array<std::uint8_t, 32> paddedUpload{
             1, 17, 33, 49,  65, 81, 97, 113,  129, 145, 161, 177,
             0xDE, 0xAD, 0xBE, 0xEF,
@@ -137,8 +137,8 @@ namespace
         oversizedBuffer.width = 2;
         oversizedBuffer.height = 2;
         oversizedBuffer.pixels.assign(64, 7);
-        std::unique_ptr<ITextureBackend> truncated = backend.CreateTexture(oversizedBuffer);
-        auto* softwareTruncated = dynamic_cast<SoftwareTextureBackend*>(truncated.get());
+        std::unique_ptr<ITextureRenderer> truncated = renderer.CreateTexture(oversizedBuffer);
+        auto* softwareTruncated = dynamic_cast<SoftwareTextureRenderer*>(truncated.get());
         ok &= Expect(softwareTruncated != nullptr &&
                          softwareTruncated->ColorPixels().size() == 16u,
                      "a larger-than-required caller buffer is truncated to exactly its own level");
@@ -148,7 +148,7 @@ namespace
         undersizedBuffer.height = 4;
         undersizedBuffer.pixels.assign(8, 0); // Needs 64 bytes; supplies far fewer.
         ok &= ExpectThrows<System::ArgumentException>(
-            [&] { (void)backend.CreateTexture(undersizedBuffer); },
+            [&] { (void)renderer.CreateTexture(undersizedBuffer); },
             "requires at least",
             "an undersized caller buffer is rejected before it can be sampled out of bounds");
 
@@ -158,7 +158,7 @@ namespace
                 huge.width = 11586;
                 huge.height = 11586;
                 huge.pixels.assign(4, 0); // Rejected on layout before this length is even checked.
-                (void)backend.CreateTexture(huge);
+                (void)renderer.CreateTexture(huge);
             },
             "texture byte budget exceeded",
             "a texture request above the documented byte budget fails at the GDI/Software boundary");
@@ -169,7 +169,7 @@ namespace
                 invalidDims.width = 0;
                 invalidDims.height = 4;
                 invalidDims.pixels.assign(16, 0);
-                (void)backend.CreateTexture(invalidDims);
+                (void)renderer.CreateTexture(invalidDims);
             },
             "dimensions must be positive",
             "a non-positive dimension is rejected before allocation");
@@ -199,8 +199,8 @@ int main()
 
     try
     {
-        GdiGraphicsBackend backend(window, 8, 6, CnaPresentationMode::Stretch);
-        ok &= ExerciseLiveTextureCreation(backend);
+        GdiRenderer renderer(window, 8, 6, CnaPresentationMode::Stretch);
+        ok &= ExerciseLiveTextureCreation(renderer);
     }
     catch (const std::exception& error)
     {

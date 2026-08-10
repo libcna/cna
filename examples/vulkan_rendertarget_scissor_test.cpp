@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MS-PL
 // REMED-GFX-013: Vulkan ScissorRectangle must clip draws issued while a RenderTarget2D is bound.
 //
-// Before the fix, VulkanGraphicsBackend::RecordCommandBuffer()'s render-target passes hardcoded a
+// Before the fix, VulkanRenderer::RecordCommandBuffer()'s render-target passes hardcoded a
 // full-target scissor (VkRect2D{{0,0},{rtW,rtH}}) and never read the captured
 // scissorEnabled_/scissorX_/Y_/W_/H_ state, so ScissorRectangle was a silent no-op whenever a
 // render target was bound — even though the backbuffer honored it correctly. (RecordCommandBuffer
 // no longer has the two phases those names referred to: REMED-GFX-140/143 replaced them with one
 // ordered stream of bind cycles, backbuffer cycles included.)
 //
-// Because the Vulkan backend defers every draw to a single Present()-time record, and because
+// Because the Vulkan renderer defers every draw to a single Present()-time record, and because
 // Task 338 (FNA parity) resets ScissorRectangle when a render target is unbound, honoring only the
 // frame-global scissor at record time is NOT enough — by Present() the sub-rect the RT was drawn
 // with has already been overwritten. The fix therefore snapshots the scissor per draw/batch at

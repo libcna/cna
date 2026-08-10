@@ -1,0 +1,142 @@
+#include <gtest/gtest.h>
+#include "CNA/GraphicsRendererType.hpp"
+
+using CNA::GraphicsRendererType;
+using CNA::getCurrentGraphicsRendererType;
+using CNA::getCurrentGraphicsRendererName;
+
+// Both functions are constexpr -- usable directly in a constant expression, not just at
+// runtime. This is the actual point of making them constexpr (they don't take a GraphicsDevice
+// argument, so unlike the GraphicsDevice::GetGraphicsRendererType()/Name() member wrappers,
+// these two are genuinely evaluable at compile time).
+static_assert(getCurrentGraphicsRendererType() == getCurrentGraphicsRendererType());
+static_assert(!getCurrentGraphicsRendererName().empty());
+constexpr GraphicsRendererType kCompileTimeType = getCurrentGraphicsRendererType();
+constexpr std::string_view kCompileTimeName = getCurrentGraphicsRendererName();
+constexpr int kPublicRendererCount = static_cast<int>(GraphicsRendererType::Metal) + 1;
+static_assert(kPublicRendererCount == 41,
+              "GraphicsRendererType must expose all 41 genuine renderer identities");
+
+TEST(GraphicsRendererTypeTest, GetCurrentGraphicsRendererTypeDoesNotThrow)
+{
+    EXPECT_NO_THROW({ (void)getCurrentGraphicsRendererType(); });
+}
+
+TEST(GraphicsRendererTypeTest, GetCurrentGraphicsRendererNameDoesNotThrow)
+{
+    EXPECT_NO_THROW({ (void)getCurrentGraphicsRendererName(); });
+}
+
+TEST(GraphicsRendererTypeTest, GetCurrentGraphicsRendererNameIsNotEmpty)
+{
+    EXPECT_FALSE(getCurrentGraphicsRendererName().empty());
+}
+
+namespace
+{
+    // The one authoritative expected name per public GraphicsRendererType member.
+    //
+    // Deliberately has NO `default:` label, so an enum member with no arm here falls through to
+    // the empty return below, which NameMatchesTypeForEveryRenderer turns into a hard failure
+    // rather than a silent pass. That runtime guard is what this test relies on: the project
+    // compiles with `-g -std=c++23` and does not enable `-Wall`/`-Wswitch`, so a missing arm
+    // produces no compiler diagnostic. Omitting `default:` additionally means the switch WOULD
+    // be flagged at compile time by any build that does turn those warnings on.
+    //
+    // The previous form of this test switched directly on the active renderer with only 15 of the
+    // enum's members listed and no failure arm, so every build selecting one of the other members
+    // executed no assertion at all and reported a vacuous pass.
+    constexpr std::string_view ExpectedNameFor(GraphicsRendererType type)
+    {
+        switch (type)
+        {
+            case GraphicsRendererType::SdlRenderer: return "SDL_RENDERER";
+            case GraphicsRendererType::OpenGLES:    return "OPENGLES";
+            case GraphicsRendererType::OpenGL33:    return "OPENGL33";
+            case GraphicsRendererType::WebGL1:      return "WEBGL1";
+            case GraphicsRendererType::WebGL2:      return "WEBGL2";
+            case GraphicsRendererType::Bgfx:        return "BGFX";
+            case GraphicsRendererType::Vulkan:      return "VULKAN";
+            case GraphicsRendererType::WebGPU:      return "WEBGPU";
+            case GraphicsRendererType::Magnum:      return "MAGNUM";
+            case GraphicsRendererType::Headless:    return "HEADLESS";
+            case GraphicsRendererType::Software:    return "SOFTWARE";
+            case GraphicsRendererType::D3D11:       return "D3D11";
+            case GraphicsRendererType::D3D12:       return "D3D12";
+            case GraphicsRendererType::Direct2D:    return "DIRECT2D";
+            case GraphicsRendererType::Canvas:      return "CANVAS";
+            case GraphicsRendererType::HtmlDom:     return "HTML_DOM";
+            case GraphicsRendererType::Skia:        return "SKIA";
+            case GraphicsRendererType::Ascii:       return "ASCII";
+            case GraphicsRendererType::FreeDirect:  return "FREEDIRECT";
+            case GraphicsRendererType::Stub:        return "STUB";
+            case GraphicsRendererType::D3D9:        return "D3D9";
+            case GraphicsRendererType::Dx1:         return "DX1";
+            case GraphicsRendererType::Dx2:         return "DX2";
+            case GraphicsRendererType::Dx3:         return "DX3";
+            case GraphicsRendererType::Dx5:         return "DX5";
+            case GraphicsRendererType::Dx6:         return "DX6";
+            case GraphicsRendererType::Dx7:         return "DX7";
+            case GraphicsRendererType::Dx8:         return "DX8";
+            case GraphicsRendererType::D3D10:       return "D3D10";
+            case GraphicsRendererType::SdlGpu:      return "SDL_GPU";
+            case GraphicsRendererType::OpenGLES1:   return "OPENGLES1";
+            case GraphicsRendererType::OpenGL4:     return "OPENGL4";
+            case GraphicsRendererType::OpenGL1:     return "OPENGL1";
+            case GraphicsRendererType::OpenGL2:     return "OPENGL2";
+            case GraphicsRendererType::Wicked:      return "WICKED";
+            case GraphicsRendererType::Sokol:       return "SOKOL";
+            case GraphicsRendererType::Diligent:    return "DILIGENT";
+            case GraphicsRendererType::Glide:       return "GLIDE";
+            case GraphicsRendererType::Gdi:         return "GDI";
+            case GraphicsRendererType::Llgl:        return "LLGL";
+            case GraphicsRendererType::Metal:       return "METAL";
+        }
+        return {};
+    }
+}
+
+TEST(GraphicsRendererTypeTest, EveryPublicRendererHasOneUniqueCanonicalName)
+{
+    for (int i = 0; i < kPublicRendererCount; ++i)
+    {
+        const auto type = static_cast<GraphicsRendererType>(i);
+        const auto name = ExpectedNameFor(type);
+        ASSERT_FALSE(name.empty()) << "missing name for GraphicsRendererType value " << i;
+
+        for (int j = i + 1; j < kPublicRendererCount; ++j)
+        {
+            EXPECT_NE(name, ExpectedNameFor(static_cast<GraphicsRendererType>(j)))
+                << "duplicate public renderer name at values " << i << " and " << j;
+        }
+    }
+}
+
+TEST(GraphicsRendererTypeTest, NameMatchesTypeForEveryRenderer)
+{
+    // Every call in this build returns the SAME compile-time-selected renderer, so one build
+    // checks one active arm; EveryPublicRendererHasOneUniqueCanonicalName covers the complete
+    // 41-identity enum in every build. What this asserts
+    // is that the (type, name) pair is internally consistent AND that the active renderer has an
+    // expected-name arm at all -- a renderer with no arm fails here instead of passing vacuously.
+    const auto type = getCurrentGraphicsRendererType();
+    const auto name = getCurrentGraphicsRendererName();
+
+    const std::string_view expected = ExpectedNameFor(type);
+    ASSERT_FALSE(expected.empty())
+        << "no expected-name arm for the active renderer (getCurrentGraphicsRendererName() reports \""
+        << name << "\") -- add it to ExpectedNameFor() in this file";
+    EXPECT_EQ(name, expected);
+}
+
+TEST(GraphicsRendererTypeTest, RepeatedCallsAreStable)
+{
+    EXPECT_EQ(getCurrentGraphicsRendererType(), getCurrentGraphicsRendererType());
+    EXPECT_EQ(getCurrentGraphicsRendererName(), getCurrentGraphicsRendererName());
+}
+
+TEST(GraphicsRendererTypeTest, RuntimeValueMatchesCompileTimeConstant)
+{
+    EXPECT_EQ(getCurrentGraphicsRendererType(), kCompileTimeType);
+    EXPECT_EQ(getCurrentGraphicsRendererName(), kCompileTimeName);
+}

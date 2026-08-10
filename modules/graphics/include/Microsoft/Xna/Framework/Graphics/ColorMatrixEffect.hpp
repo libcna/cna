@@ -7,18 +7,18 @@
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
 
-namespace CNA::Internal::Backends { struct GpuDrawParams; }
+namespace CNA::Internal::Renderers { struct GpuDrawParams; }
 
 namespace Microsoft::Xna::Framework::Graphics
 {
     /**
-     * @brief A fixed CPU colour transform for SpriteBatch on the GDI and SOFTWARE backends.
+     * @brief A fixed CPU colour transform for SpriteBatch on the GDI and SOFTWARE renderers.
      *
      * This is a CNA extension, not an XNA shader effect. It deliberately accepts only a fixed
-     * RGBA colour matrix and offset, so neither backend needs to parse or silently ignore shader
+     * RGBA colour matrix and offset, so neither renderer needs to parse or silently ignore shader
      * source. Pass it to `SpriteBatch::Begin(..., &effect)`; it transforms each sprite's sampled
      * and tinted source colour before ordinary `BlendState` processing. It is unsupported by GPU
-     * backends unless they explicitly add the same contract.
+     * renderers unless they explicitly add the same contract.
      *
      * The matrix is row-major: `out[row] = dot(matrix[row], inRGBA) + offset[row]`. Every output
      * component is clamped to [0,1]. The default is the identity transform.
@@ -53,11 +53,11 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Copies this fixed effect's state into a CPU SpriteBatch draw description.
          *
-         * Backend-private routing point used by the shared GDI/SOFTWARE rasterizer; normal
+         * Renderer-private routing point used by the shared GDI/SOFTWARE rasterizer; normal
          * `Effect::FillGpuDrawParams()` is intentionally not overridden, so this extension cannot
          * accidentally alter a 3D draw.
          */
-        NOXNA void FillSpriteDrawParams(CNA::Internal::Backends::GpuDrawParams& params) const;
+        NOXNA void FillSpriteDrawParams(CNA::Internal::Renderers::GpuDrawParams& params) const;
 
     protected:
         /** @brief No GPU program exists for this fixed CPU effect. */

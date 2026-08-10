@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // Task 367: BasicEffect pixel test — TextureEnabled=true AND VertexColorEnabled=true, the
-// stride-24 VertexPositionColorTexture path (EasyGL backend).
+// stride-24 VertexPositionColorTexture path (EasyGL renderer).
 //
 // FNA reference (Graphics/Effect/StockEffects/BasicEffect.cs OnApply() + HLSL/BasicEffect.fx +
 // Common.fxh): with LightingEnabled=false (default), VertexColorEnabled=true and

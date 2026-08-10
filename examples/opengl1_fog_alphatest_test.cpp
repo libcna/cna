@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MS-PL
-// OPENGL1 backend: qualitative BasicEffect fog + AlphaTestEffect alpha-test coverage
+// OPENGL1 renderer: qualitative BasicEffect fog + AlphaTestEffect alpha-test coverage
 // (tests/opengl1/README.md scenario 7: "fog and alpha-test approximations").
 //
 // OpenGL1 implements XNA's BasicEffect fog via the real fixed-function GL_FOG pipeline
 // (glFogi(GL_FOG_MODE, GL_LINEAR) + glFogf(GL_FOG_START/END, ...)), with the two scalars
 // recovered EXACTLY from the FNA fog vector GpuDrawParams now carries (REMED-GFX-010) by
 // inverting it against the same world*view matrix the draw loads into GL_MODELVIEW -- see
-// ApplyFogFromVector() in OpenGL1GraphicsBackend.cpp. The qualitative monotonic checks below
+// ApplyFogFromVector() in OpenGL1Renderer.cpp. The qualitative monotonic checks below
 // predate that contract and still hold; the three-pair oracle after them pins the inversion
 // itself: three distinct FogStart/FogEnd pairs, each with its own expected pixel result
 // (unfogged / exact mid-ramp blend / the degenerate FogStart == FogEnd full fog), so a wrong
@@ -15,7 +15,7 @@
 //
 // Similarly, AlphaTestEffect's CompareFunction is approximated by a single, always-on
 // glAlphaFunc(GL_GEQUAL, reference) test regardless of the real requested CompareFunction
-// (see OpenGL1GraphicsBackend::DrawInternal's alphaTest[3]<0 check) -- an exact match only for
+// (see OpenGL1Renderer::DrawInternal's alphaTest[3]<0 check) -- an exact match only for
 // CompareFunction::Equal/GreaterEqual-ish cases away from the reference boundary, approximate
 // or inverted for others (documented "coarse alpha testing" limitation, see plan_opengl1.md).
 // This test exercises only what OpenGL1 can honestly claim: Always (never discards) and Equal
@@ -160,7 +160,7 @@ protected:
 
         // Farther geometry must be at least as red (fog-tinted) and at most as green as nearer
         // geometry -- the one basis-independent property any correct linear-fog implementation
-        // guarantees, regardless of this backend's exact eye-space Z convention.
+        // guarantees, regardless of this renderer's exact eye-space Z convention.
         Check(farGot.getRProperty() >= nearGot.getRProperty(),
               "fog: far geometry is at least as red (fog-tinted) as near geometry");
         Check(farGot.getGProperty() <= nearGot.getGProperty(),
@@ -261,7 +261,7 @@ protected:
             Check(alwaysHigh.getRProperty() < 100, "alpha-test Always: high-alpha fragment still drawn (red background occluded)");
 
             // Equal, reference=128: alpha clearly above reference must pass (matches this
-            // backend's real glAlphaFunc(GL_GEQUAL, reference) approximation); alpha clearly
+            // renderer's real glAlphaFunc(GL_GEQUAL, reference) approximation); alpha clearly
             // below reference must be discarded (red background stays visible).
             Color equalAbove = drawWithAlpha(250.0f / 255.0f, CompareFunction::Equal, 128);
             Color equalBelow = drawWithAlpha(10.0f / 255.0f, CompareFunction::Equal, 128);

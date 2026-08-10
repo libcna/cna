@@ -1,6 +1,6 @@
 # MinGW-w64 cross-compilation toolchain for native 32-bit Windows programs.
 #
-# This is the required target ABI for CNA's GLIDE backend.  Glide 3.x represents the native
+# This is the required target ABI for CNA's GLIDE renderer.  Glide 3.x represents the native
 # render-window handle as a 32-bit FxU32, and dgVoodoo2's x86 Glide DLLs are its native-use build.
 
 set(CMAKE_SYSTEM_NAME Windows)

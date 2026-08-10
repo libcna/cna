@@ -2,13 +2,13 @@
 //
 // plan_diligent.md DILIGENT-57: real-device proof that runtime device selection and SDL window API
 // selection are one consistent transaction, through the public XNA API only (GraphicsDeviceManager,
-// not a hand-built IGraphicsBackend -- unlike diligent_backbuffer_readback_bounds_test.cpp, this is
+// not a hand-built IGraphicsRenderer -- unlike diligent_backbuffer_readback_bounds_test.cpp, this is
 // exactly the path a real game takes).
 //
 // Before this task, GraphicsDevice.cpp's own SDL-window-flag selection re-parsed
 // CNA_DILIGENT_DEVICE with a narrow "opengl"/"gl"-only check, disagreeing with
-// DiligentGraphicsBackend::ParseDeviceTypeOverride()'s full alias set -- CNA_DILIGENT_DEVICE=gles
-// created a Vulkan-flagged window, then the backend correctly resolved "gles" to OpenGL and failed
+// DiligentRenderer::ParseDeviceTypeOverride()'s full alias set -- CNA_DILIGENT_DEVICE=gles
+// created a Vulkan-flagged window, then the renderer correctly resolved "gles" to OpenGL and failed
 // with "the specified window isn't an OpenGL window". Both now call the same shared parser.
 //
 // Each leg runs in its own process (fork+exec, matching backbuffer_readback_dimension_test.cpp's

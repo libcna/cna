@@ -5,7 +5,7 @@
 // build (CNA_SKIA_MODE_GANESH); see examples/skia_ganesh_mode_test.cpp for the RASTER-mode
 // refusal proof SkiaGaneshSurface inherits unconditionally from SkiaGaneshContext.
 
-#include "CNA/Internal/Backends/Skia/SkiaGaneshSurface.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaGaneshSurface.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -13,7 +13,7 @@
 #include <cstdint>
 #include <string_view>
 
-using CNA::Internal::Backends::Skia::SkiaGaneshSurface;
+using CNA::Internal::Renderers::Skia::SkiaGaneshSurface;
 
 namespace
 {
@@ -189,7 +189,7 @@ int main(int argc, char** argv)
         surface.Present();
 
         // SKIA-162: DebugSimulateContextLossEXT() is a genuine GL context destroy+recreate
-        // (mirroring EasyGLGraphicsBackend::DebugSimulateContextLoss()'s own real recreate, not a
+        // (mirroring EasyGLRenderer::DebugSimulateContextLoss()'s own real recreate, not a
         // faked one) -- three cycles in a row, proving the recreate path itself is repeatable and
         // leaves no stale GPU object behind each time, not just once.
         for (int cycle = 0; cycle < 3; ++cycle)

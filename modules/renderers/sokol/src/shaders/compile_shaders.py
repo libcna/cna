@@ -4,7 +4,7 @@
 plan_sokol.md SOKOL-14 / design decision 4: shaders are compiled OFFLINE and the generated
 header is checked in, so an ordinary CNA build needs no sokol-shdc binary and no network. Run
 this script only when a .glsl file in this directory changes, then commit the regenerated
-sokol_shaders.hpp alongside it. This mirrors the Bgfx backend's own checked-in
+sokol_shaders.hpp alongside it. This mirrors the Bgfx renderer's own checked-in
 bgfx_shaders.hpp convention.
 
 sokol-shdc is not vendored (it is an 11 MB prebuilt binary per host platform, distributed via
@@ -16,7 +16,7 @@ Usage:
     ./compile_shaders.py --shdc /path/sokol-shdc
     ./compile_shaders.py --check               # fail if the checked-in header is stale
 
-The target shader languages below cover every sokol_gfx backend CNA's CNA_SOKOL_API CMake
+The target shader languages below cover every sokol_gfx renderer CNA's CNA_SOKOL_API CMake
 option can select (design decision 2). --ifdef wraps each language's generated code in the
 matching SOKOL_* guard, so only the selected one is actually compiled.
 """
@@ -38,7 +38,7 @@ SOURCES = ["sprite.glsl", "colored3d.glsl", "textured3d.glsl", "lit3d.glsl", "du
 
 # glsl410 = SOKOL_GLCORE, glsl300es = SOKOL_GLES3, hlsl5 = SOKOL_D3D11,
 # metal_macos = SOKOL_METAL, wgsl = SOKOL_WGPU. spirv_vk (SOKOL_VULKAN) is deliberately
-# excluded: CNA already has a first-class Vulkan backend of its own, and CNA_SOKOL_API does
+# excluded: CNA already has a first-class Vulkan renderer of its own, and CNA_SOKOL_API does
 # not offer VULKAN.
 SLANGS = "glsl410:glsl300es:hlsl5:metal_macos:wgsl"
 

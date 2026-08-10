@@ -3,9 +3,9 @@
 // against a genuinely multisampled RenderTarget2D (LLGL-26 MSAA follow-up), not just a bookkeeping
 // check. Mirrors examples/gfx077_colorwritechannels_3d_test.cpp's own MSAA sub-block technique
 // (full-screen Opaque-blended quad, differential dst/src baselines) but as a dedicated,
-// runtime-gated LLGL test: this backend picks its native module at RUNTIME, so the shared test's
+// runtime-gated LLGL test: this renderer picks its native module at RUNTIME, so the shared test's
 // own GFX077_MULTISAMPLEMASK_SUPPORTED compile-time flag cannot express "the Vulkan module
-// supports it, the OpenGL module does not" the way single-native-API backends can.
+// supports it, the OpenGL module does not" the way single-native-API renderers can.
 //
 // Method: clear a 4x MSAA RenderTarget2D to a destination colour D, then draw a full-target quad
 // in an Opaque-blended source colour S (SrcBlend=One, DstBlend=Zero -> blend disabled, output ==
@@ -23,7 +23,7 @@
 //     Vulkan module applies VkPipelineMultisampleStateCreateInfo::pSampleMask unconditionally
 //     (VKGraphicsPSO.cpp's own CreateMultisampleState); the OpenGL module's own SetSampleMask call
 //     is permanently `#if 0`'d out (GLBlendState.cpp), so it can never apply a sample mask at all
-//     on this backend, on any driver.
+//     on this renderer, on any driver.
 //
 // Exit code 0 = every executed check PASS (or was [SKIP]ped for a confirmed module reason), 1 =
 // any genuine FAIL.

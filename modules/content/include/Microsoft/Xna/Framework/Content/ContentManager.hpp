@@ -32,7 +32,7 @@
 
 namespace Microsoft::Xna::Framework::Audio  { class SoundEffect; }
 namespace Microsoft::Xna::Framework::Graphics { class GraphicsDevice; class Texture2D; class TextureCube; }
-namespace CNA::Internal::Backends { class ITextureBackend; }
+namespace CNA::Internal::Renderers { class ITextureRenderer; }
 
 namespace Microsoft::Xna::Framework::Content
 {
@@ -87,7 +87,7 @@ namespace Microsoft::Xna::Framework::Content
         std::unordered_map<std::type_index, std::unordered_map<std::string, std::any>> cnjNamedLoaders_;
 
         struct WeakTextureEntry {
-            std::weak_ptr<CNA::Internal::Backends::ITextureBackend> backend;
+            std::weak_ptr<CNA::Internal::Renderers::ITextureRenderer> renderer;
             std::weak_ptr<std::vector<uint8_t>> cpuPixels;
             Graphics::SurfaceFormat fmt;
             int levelCount;
@@ -544,7 +544,7 @@ namespace Microsoft::Xna::Framework::Content
     };
 
     // Explicit specialisation: Texture2D assets use a weak cache so that the
-    // GPU backend is freed as soon as the last external Texture2D copy is dropped,
+    // GPU renderer is freed as soon as the last external Texture2D copy is dropped,
     // preventing per-world RAM growth when worlds load unique background textures.
     template<>
     Graphics::Texture2D ContentManager::Load<Graphics::Texture2D>(const std::string& assetName);
@@ -559,7 +559,7 @@ namespace Microsoft::Xna::Framework::Content
     Audio::SoundEffect ContentManager::Load<Audio::SoundEffect>(const std::string& assetName);
 
     // Explicit specialisation: TextureCube is move-only (NOXNA, copy constructor deleted --
-    // unlike Texture2D, which supports reference-counted backend sharing via its own weak-cache
+    // unlike Texture2D, which supports reference-counted renderer sharing via its own weak-cache
     // specialisation above), so it cannot be held in the generic strong (std::any-based) cache
     // either. Mirrors SoundEffect's own identical not-cached specialisation: each call gets its
     // own independently-decoded instance.

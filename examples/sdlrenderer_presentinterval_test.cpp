@@ -2,7 +2,7 @@
 // Task 713: Verify PresentInterval (vsync) mapping to SDL_SetRenderVSync on SDL_Renderer.
 //
 // GraphicsDevice.cpp's own toSwapInterval() maps PresentInterval to an int: Immediate->0,
-// Default/One->1, Two->2. SdlGraphicsBackend::SetSwapInterval previously collapsed ANY positive
+// Default/One->1, Two->2. SdlRenderer::SetSwapInterval previously collapsed ANY positive
 // value down to 1 via `interval > 0 ? 1 : 0` -- silently discarding PresentInterval::Two's own
 // documented semantics ("wait for two vertical retrace periods before updating; frame rate is
 // capped to half the refresh rate"). SDL_SetRenderVSync's own doc comment confirms passing 2
@@ -14,15 +14,15 @@
 // false and leaving the previous value in place; the fallback avoids silently leaving vsync
 // unset in that case).
 //
-// GraphicsDevice/SdlGraphicsBackend expose no public accessor for the real SDL_Renderer's actual
+// GraphicsDevice/SdlRenderer expose no public accessor for the real SDL_Renderer's actual
 // current vsync setting (GetRendererInternal() is private, matching this project's convention of
-// not leaking backend-specific types through the XNA-facing API), so this test verifies what's
+// not leaking renderer-specific types through the XNA-facing API), so this test verifies what's
 // actually observable at the XNA level: every PresentInterval value can be applied via
 // GraphicsDevice::Reset() without throwing, round-trips correctly through
 // PresentationParameters.PresentationInterval, and the device remains fully functional afterward.
 //
 // Requires PresentationMode::NativeBackBuffer (Task 915 finding): SDL_RenderReadPixels operates
-// in physical output coordinates, while this backend's default presentation mode
+// in physical output coordinates, while this renderer's default presentation mode
 // (FixedHeightDynamicWidth) does not map logical pixels 1:1 to physical ones.
 //
 // Exit code 0 = all checks PASS, 1 = at least one FAIL.

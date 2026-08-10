@@ -1,9 +1,9 @@
-#include "CNA/Internal/Backends/Skia/SkiaVolumeSampling.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaVolumeSampling.hpp"
 
 #include <cmath>
 #include <cstring>
 
-namespace CNA::Internal::Backends::Skia
+namespace CNA::Internal::Renderers::Skia
 {
     VolumeAtlasLayoutEXT ComputeVolumeAtlasLayoutEXT(int width, int height, int depth) noexcept
     {
@@ -81,4 +81,4 @@ namespace CNA::Internal::Backends::Skia
         }
         return atlas;
     }
-} // namespace CNA::Internal::Backends::Skia
+} // namespace CNA::Internal::Renderers::Skia

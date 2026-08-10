@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MS-PL
 
-#include "CNA/Internal/Backends/Software/SoftwareFramebufferAllocation.hpp"
+#include "CNA/Internal/Renderers/Software/SoftwareFramebufferAllocation.hpp"
 
 #include <limits>
 
-namespace CNA::Internal::Backends::Software
+namespace CNA::Internal::Renderers::Software
 {
     namespace
     {

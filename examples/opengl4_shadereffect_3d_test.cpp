@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl4.md GL4-30: real custom ShaderEffect (CreateEffectBackend) for the OpenGL4 graphics
-// backend -- CreateEffectBackend() previously wasn't overridden (default returns nullptr), so a
-// caller-supplied GLSL vertex/fragment source pair had no way to compile on this backend at all.
-// Added OpenGL4EffectBackend (a thin IEffectBackend wrapper around one OpenGL4RawProgram, modeled
-// on EasyGLEffectBackend's identical shape) plus a customEffectBackend check at the top of
-// DrawPrimitivesEx/DrawIndexedPrimitivesEx (ported from EasyGLGraphicsBackend's own
+// plan_opengl4.md GL4-30: real custom ShaderEffect (CreateEffectRenderer) for the OpenGL4 graphics
+// renderer -- CreateEffectRenderer() previously wasn't overridden (default returns nullptr), so a
+// caller-supplied GLSL vertex/fragment source pair had no way to compile on this renderer at all.
+// Added OpenGL4EffectRenderer (a thin IEffectRenderer wrapper around one OpenGL4RawProgram, modeled
+// on EasyGLEffectRenderer's identical shape) plus a customEffectRenderer check at the top of
+// DrawPrimitivesEx/DrawIndexedPrimitivesEx (ported from EasyGLRenderer's own
 // BindCustomEffectMatrices helper): when ShaderEffect::FillGpuDrawParams() sets
-// GpuDrawParams::customEffectBackend, the compiled program is bound directly and its
+// GpuDrawParams::customEffectRenderer, the compiled program is bound directly and its
 // World/View/Projection uniforms are set, bypassing BindProgramForStride's built-in
 // stride-dispatched shaders entirely.
 //
@@ -16,11 +16,11 @@
 // needed, since ShaderEffect's own constructor already accepts vertSrc/fragSrc strings).
 //
 // Scope (deliberate, matching the EasyGL precedent this ports from): proves the wiring for a
-// vertex format this backend already supports (VertexPositionNormalTexture, stride 32) -- the
+// vertex format this renderer already supports (VertexPositionNormalTexture, stride 32) -- the
 // vertex ATTRIBUTE layout itself (locations 0/1/2 = Position/Normal/TexCoord) is unchanged,
 // already proven by every existing stride-32 test in this repo. SpriteBatch::SetCustomEffect
-// integration (a separate, larger feature) is out of scope here, same as every other backend that
-// has landed CreateEffectBackend without it.
+// integration (a separate, larger feature) is out of scope here, same as every other renderer that
+// has landed CreateEffectRenderer without it.
 //
 // Check A -- World=Identity (surface faces the camera/light head-on): world normal stays
 //            (0,0,1), N.L = dot((0,0,1),(0,0,1)) = 1 -> full diffuseColor (200,100,50).
@@ -61,7 +61,7 @@ using namespace Microsoft::Xna::Framework::Graphics;
 namespace
 {
     // Position (loc0) + Normal (loc1) + TexCoord (loc2) -- matches the existing stride-32
-    // VertexPositionNormalTexture attribute layout exactly (OpenGL4VertexBufferBackend::ApplyLayout
+    // VertexPositionNormalTexture attribute layout exactly (OpenGL4VertexBufferRenderer::ApplyLayout
     // case 32), not a new layout.
     const char* kVertSrc = R"GLSL(
 #version 410 core

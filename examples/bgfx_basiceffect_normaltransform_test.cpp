@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // Task 892: verify BasicEffect's lit-textured normal transform under a real camera (Bgfx
-// backend). Opened by Task 398's audit of EnvironmentMapEffect's own (separate) normal-matrix
+// renderer). Opened by Task 398's audit of EnvironmentMapEffect's own (separate) normal-matrix
 // bug; confirmed here as a real, independently-verified bug in BasicEffect's lit-textured path.
 //
 // Bug: `vs_lit_textured3d.sc` transformed the vertex normal by the FULL `u_wvp` (World * View *
@@ -23,7 +23,7 @@
 // specular (SpecularColor=0, isolating this test from Task 886's separate specular feature).
 //
 // Per Task 364's finding (tracked as Task 896, not fixed there or here): Bgfx's default
-// RasterizerState cull state is the only one of the 3 backends that actually matches FNA's real
+// RasterizerState cull state is the only one of the 3 renderers that actually matches FNA's real
 // CullCounterClockwiseFace default, so it silently culls the standard NDC quad winding used
 // throughout this pixel-test family unless RasterizerState::CullNone is set explicitly.
 //

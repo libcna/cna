@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-#include "CNA/Internal/Backends/HtmlDom/HtmlDomState.hpp"
+#include "CNA/Internal/Renderers/HtmlDom/HtmlDomState.hpp"
 
 #include <stdexcept>
 #include <string>
@@ -23,8 +23,8 @@
 // global variant cache -- previously just `entry.variants = {}`, which reset the lookup map but left
 // the corresponding global LRU array records behind as orphaned, unreachable-by-owner stale entries.
 //
-// This lives here, behind SetBoundRenderTargetIdEXT, rather than in either backend that needs it:
-// both the graphics backend (SetRenderTarget2D) and the render target itself (Bind/Unbind) switch
+// This lives here, behind SetBoundRenderTargetIdEXT, rather than in either renderer that needs it:
+// both the graphics renderer (SetRenderTarget2D) and the render target itself (Bind/Unbind) switch
 // the binding, and an EM_JS function cannot be called from a translation unit other than the one
 // that defines it -- the import attribute belongs to the definition.
 EM_JS(void, CNA_HtmlDom_SetBoundTarget, (int id), {
@@ -37,14 +37,14 @@ EM_JS(void, CNA_HtmlDom_SetBoundTarget, (int id), {
 });
 #endif
 
-namespace CNA::Internal::Backends::HtmlDom
+namespace CNA::Internal::Renderers::HtmlDom
 {
     DomCompositeOp BlendStateToDomCompositeOp(int colorSrcBlend, int alphaSrcBlend,
                                               int colorDstBlend, int alphaDstBlend,
                                               int colorBlendFunc, int alphaBlendFunc)
     {
-        // Raw Blend/BlendFunction ordinals, the same table SdlGraphicsBackend::ToSdlBlendFactor and
-        // CanvasGraphicsBackend::BlendStateToCompositeOp read: One=0, Zero=1, SourceAlpha=4,
+        // Raw Blend/BlendFunction ordinals, the same table SdlRenderer::ToSdlBlendFactor and
+        // CanvasRenderer::BlendStateToCompositeOp read: One=0, Zero=1, SourceAlpha=4,
         // InverseSourceAlpha=5; Add=0.
         const bool isAdd = colorBlendFunc == 0 && alphaBlendFunc == 0;
         const bool symmetric = colorSrcBlend == alphaSrcBlend && colorDstBlend == alphaDstBlend;
@@ -59,7 +59,7 @@ namespace CNA::Internal::Backends::HtmlDom
             return DomCompositeOp::Additive;
 
         throw std::runtime_error(
-            "HTML_DOM backend: only the 4 standard BlendState presets "
+            "HTML_DOM renderer: only the 4 standard BlendState presets "
             "(Opaque/AlphaBlend/NonPremultiplied/Additive) are supported. CSS compositing exposes "
             "one blend operator and no blend-factor or blend-equation model, so an arbitrary custom "
             "BlendState cannot be expressed here.");
@@ -67,10 +67,10 @@ namespace CNA::Internal::Backends::HtmlDom
 
     namespace
     {
-        // Function-local statics rather than members of HtmlDomGraphicsBackend: the sprite-batch
-        // backend needs both values per draw and has no pointer back to the graphics backend that
-        // created it (ISpriteBatchBackend deliberately carries no such link on any backend). Only
-        // one graphics backend is ever live at a time, so process-wide state is exact here, and
+        // Function-local statics rather than members of HtmlDomRenderer: the sprite-batch
+        // renderer needs both values per draw and has no pointer back to the graphics renderer that
+        // created it (ISpriteBatchRenderer deliberately carries no such link on any renderer). Only
+        // one graphics renderer is ever live at a time, so process-wide state is exact here, and
         // keeping it in plain C++ leaves every decision made from it testable outside a browser.
         DomCompositeOp& CurrentCompositeOp()
         {
@@ -116,7 +116,7 @@ namespace CNA::Internal::Backends::HtmlDom
     {
         if (addressU < 0 || addressU > 2 || addressV < 0 || addressV > 2)
             throw std::runtime_error(
-                "HTML_DOM backend: TextureAddressMode must be Wrap, Clamp, or Mirror.");
+                "HTML_DOM renderer: TextureAddressMode must be Wrap, Clamp, or Mirror.");
         // Clamp is exact (the source rect is clamped into the texture before it ever reaches CSS),
         // and an in-bounds source rect makes every mode indistinguishable, so neither case can be
         // wrong regardless of what was requested.
@@ -129,7 +129,7 @@ namespace CNA::Internal::Backends::HtmlDom
         // built-in SamplerState preset can even produce.
         if (addressU != addressV && (addressU == 2 || addressV == 2))
             throw std::runtime_error(
-                "HTML_DOM backend: TextureAddressMode::Mirror combined with a DIFFERENT mode on the "
+                "HTML_DOM renderer: TextureAddressMode::Mirror combined with a DIFFERENT mode on the "
                 "other axis, with an out-of-bounds sourceRectangle, is not yet implemented "
                 "(addressU=" + std::to_string(addressU) + ", addressV=" + std::to_string(addressV) +
                 "). Use the same mode on both axes, or Clamp/Wrap for the non-Mirror axis.");

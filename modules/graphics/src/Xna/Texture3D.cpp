@@ -3,7 +3,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "CNA/GraphicsCapability.hpp"
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "System/NotSupportedException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
@@ -13,10 +13,10 @@
 #include <vector>
 
 // plan_dx9.md Phase D9-10 (D9-103 follow-up): GraphicsProfile.Reach/HiDef volume-texture
-// ceilings, real on this backend only -- matches Texture2D.cpp's own #ifdef CNA_BACKEND_D3D9
+// ceilings, real on this renderer only -- matches Texture2D.cpp's own #ifdef CNA_RENDERER_D3D9
 // convention exactly.
-#ifdef CNA_BACKEND_D3D9
-#include "CNA/Internal/Backends/D3D9/D3D9ProfileCapabilities.hpp"
+#ifdef CNA_RENDERER_D3D9
+#include "CNA/Internal/Renderers/D3D9/D3D9ProfileCapabilities.hpp"
 #endif
 
 namespace Microsoft::Xna::Framework::Graphics
@@ -30,14 +30,14 @@ namespace Microsoft::Xna::Framework::Graphics
         return levels;
     }
 
-#ifdef CNA_BACKEND_D3D9
+#ifdef CNA_RENDERER_D3D9
     // D9-103 follow-up: D9-100's own table -- GraphicsProfile.Reach does not support volume
     // textures AT ALL (MaxVolumeExtentForProfileEXT returns 0), not merely a small size ceiling;
-    // GraphicsProfile.HiDef caps at 256 in any dimension. Checked BEFORE the backend is created.
+    // GraphicsProfile.HiDef caps at 256 in any dimension. Checked BEFORE the renderer is created.
     static void ValidateVolumeSizeForProfileEXT(const GraphicsDevice& device, int width, int height, int depth)
     {
         const int profile = static_cast<int>(device.getGraphicsProfileProperty());
-        const int maxExtent = CNA::Internal::Backends::D3D9::MaxVolumeExtentForProfileEXT(profile);
+        const int maxExtent = CNA::Internal::Renderers::D3D9::MaxVolumeExtentForProfileEXT(profile);
         if (maxExtent == 0)
         {
             throw System::NotSupportedException(
@@ -62,33 +62,33 @@ namespace Microsoft::Xna::Framework::Graphics
         , width_(width)
         , height_(height)
         , depth_(depth)
-        , backend_(nullptr)
+        , renderer_(nullptr)
     {
-        // REMED-CONTENT-004: Headless and Software both leave IGraphicsBackend::CreateTexture3D()
+        // REMED-CONTENT-004: Headless and Software both leave IGraphicsRenderer::CreateTexture3D()
         // at its shared default (returns nullptr) -- Headless has no real GPU resource of any kind
         // by design; Software's Texture3D support is an explicit, documented v1 scope boundary
-        // (plan_software.md Boundaries), not an oversight. Previously this left backend_ null and
+        // (plan_software.md Boundaries), not an oversight. Previously this left renderer_ null and
         // every subsequent SetData()/GetData() call silently no-op'd instead of failing -- a caller
-        // had no way to know their data was silently discarded. Checked ahead of backend creation,
+        // had no way to know their data was silently discarded. Checked ahead of renderer creation,
         // matching this file's own D3D9 profile-ceiling check immediately below and the
         // GraphicsCapability doc's own "query before relying on the feature" convention.
         if (!device.SupportsCapability(CNA::GraphicsCapability::Texture3D))
         {
             throw System::NotSupportedException(
-                "Texture3D: this backend does not support real volume (3D) texture storage");
+                "Texture3D: this renderer does not support real volume (3D) texture storage");
         }
-#ifdef CNA_BACKEND_D3D9
+#ifdef CNA_RENDERER_D3D9
         ValidateVolumeSizeForProfileEXT(device, width, height, depth);
 #endif
         Texture::ValidateFormat(format);
         format_     = format;
         levelCount_ = mipMap ? CalculateMipLevels(width, height) : 1;
-        backend_ = device.GetBackend().CreateTexture3D(width, height, depth, mipMap, static_cast<int>(format));
+        renderer_ = device.GetRenderer().CreateTexture3D(width, height, depth, mipMap, static_cast<int>(format));
     }
 
     void Texture3D::Dispose(bool disposing)
     {
-        backend_.reset();
+        renderer_.reset();
         Texture::Dispose(disposing);
     }
 
@@ -151,7 +151,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
         // REMED-GFX-135 -- see TextureCube::SetData's identical note: converted to the REQUESTED
         // BOX rather than to elementCount, so the call never reads source elements it does not
-        // upload and the buffer length always matches the region the backend is told to write.
+        // upload and the buffer length always matches the region the renderer is told to write.
         const auto rgba = colorsToRgba(data, startIndex, boxVoxels);
         SetDataPointerEXT(level, left, top, right, bottom, front, back,
                           rgba.data(), static_cast<int>(rgba.size()));
@@ -165,22 +165,22 @@ namespace Microsoft::Xna::Framework::Graphics
         if (!data)
             throw std::invalid_argument("Texture3D::SetDataPointerEXT: data must not be null");
 
-        // REMED-GFX-135: `if (backend_)` used to drop the upload silently. Texture3D's constructor
-        // already refuses a device that reports no GraphicsCapability::Texture3D, so a null backend
-        // here means the resource has been disposed out from under this call or the backend failed
+        // REMED-GFX-135: `if (renderer_)` used to drop the upload silently. Texture3D's constructor
+        // already refuses a device that reports no GraphicsCapability::Texture3D, so a null renderer
+        // here means the resource has been disposed out from under this call or the renderer failed
         // to allocate -- neither of which is a successful store.
-        if (!backend_)
+        if (!renderer_)
         {
             throw System::NotSupportedException(
-                "Texture3D::SetDataPointerEXT: this graphics backend creates no volume texture "
+                "Texture3D::SetDataPointerEXT: this graphics renderer creates no volume texture "
                 "resource, so its content cannot be stored");
         }
-        if (!backend_->SetData(level, left, top, front,
+        if (!renderer_->SetData(level, left, top, front,
                                right - left, bottom - top, back - front,
                                data, dataLength))
         {
             throw System::NotSupportedException(
-                "Texture3D::SetDataPointerEXT: this graphics backend did not store the complete "
+                "Texture3D::SetDataPointerEXT: this graphics renderer did not store the complete "
                 "requested volume region -- the mip level or box is not supported here");
         }
     }
@@ -228,16 +228,16 @@ namespace Microsoft::Xna::Framework::Graphics
         Texture::ValidateGetDataFormat(format_, 4);
 
         // REMED-GFX-130 -- see TextureCube::GetData for the full reasoning. `rgba` is scratch memory
-        // this layer zero-initializes, so it is never handed to the caller unless the backend
+        // this layer zero-initializes, so it is never handed to the caller unless the renderer
         // reports it filled the whole box; otherwise the caller's `data` stays byte-for-byte as it
-        // was and the missing capability is raised. A null backend (ASCII keeps
-        // IGraphicsBackend::CreateTexture3D's nullptr default while still reporting
+        // was and the missing capability is raised. A null renderer (ASCII keeps
+        // IGraphicsRenderer::CreateTexture3D's nullptr default while still reporting
         // GraphicsCapability::Texture3D through SupportsCapability's own `return true` default) is
         // the same answer one step earlier: no volume storage exists, so there is nothing to read.
-        if (!backend_)
+        if (!renderer_)
         {
             throw System::NotSupportedException(
-                "Texture3D::GetData: this graphics backend creates no volume texture resource, so "
+                "Texture3D::GetData: this graphics renderer creates no volume texture resource, so "
                 "its content cannot be read back");
         }
 
@@ -246,11 +246,11 @@ namespace Microsoft::Xna::Framework::Graphics
         std::vector<uint8_t> rgba(
             static_cast<std::size_t>(boxW) * static_cast<std::size_t>(boxH) *
             static_cast<std::size_t>(boxD) * 4, 0);
-        if (!backend_->GetData(level, left, top, front, boxW, boxH, boxD,
+        if (!renderer_->GetData(level, left, top, front, boxW, boxH, boxD,
                                rgba.data(), static_cast<int>(rgba.size())))
         {
             throw System::NotSupportedException(
-                "Texture3D::GetData: this graphics backend cannot read a volume texture back to the "
+                "Texture3D::GetData: this graphics renderer cannot read a volume texture back to the "
                 "CPU at the requested mip level");
         }
         rgbaToColors(rgba, data, startIndex, boxW * boxH * boxD);

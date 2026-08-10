@@ -243,7 +243,7 @@ void DevicesDemo::UpdateWindowTitle()
     // class's own header comment), so the window title remains its one
     // text-output channel for all of this, not a crash or silent blank
     // reading. Task DEVICES-0137: the Compass/Motion note is now dynamic,
-    // not a hardcoded "not supported by SDL backend" claim — both are real,
+    // not a hardcoded "not supported by SDL renderer" claim — both are real,
     // Detail::AndroidCompassBackend/AndroidMotionBackend-backed on Android
     // (this demo's constructor already calls compass_.Start()/motion_.Start(),
     // see the try/catch there), still an honest SDL3-has-no-magnetometer

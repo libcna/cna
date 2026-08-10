@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
-// SKIA-127: exact public and backend Texture2D transfers across every mip level.
+// SKIA-127: exact public and renderer Texture2D transfers across every mip level.
 
-#include "CNA/Internal/Backends/Skia/SkiaTextureBackend.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaTextureRenderer.hpp"
 #include "CNA/Internal/Graphics/ImageData.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
@@ -19,7 +19,7 @@
 #include <stdexcept>
 #include <vector>
 
-using CNA::Internal::Backends::Skia::SkiaTextureBackend;
+using CNA::Internal::Renderers::Skia::SkiaTextureRenderer;
 using CNA::Internal::Graphics::ImageData;
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -184,11 +184,11 @@ protected:
         image.height = 5;
         image.mipLevels = 3;
         image.pixels.assign(7u * 5u * 4u, 0u);
-        SkiaTextureBackend direct(image);
-        std::vector<std::uint8_t> backendLevel1 = ToBytes(expectedLevel1);
-        const std::vector<std::uint8_t> expectedBackendLevel1 = backendLevel1;
-        direct.UpdatePixelsLevel(1, backendLevel1.data(), 3, 2);
-        std::fill(backendLevel1.begin(), backendLevel1.end(), 0xEEu);
+        SkiaTextureRenderer direct(image);
+        std::vector<std::uint8_t> rendererLevel1 = ToBytes(expectedLevel1);
+        const std::vector<std::uint8_t> expectedRendererLevel1 = rendererLevel1;
+        direct.UpdatePixelsLevel(1, rendererLevel1.data(), 3, 2);
+        std::fill(rendererLevel1.begin(), rendererLevel1.end(), 0xEEu);
 
         std::array<std::uint8_t, 16> region{};
         const bool regionRead = direct.GetData(1, 1, 0, 2, 2,
@@ -196,22 +196,22 @@ protected:
         std::array<std::uint8_t, 16> expectedRegion{};
         for (int row = 0; row < 2; ++row)
         {
-            std::copy_n(expectedBackendLevel1.data()
+            std::copy_n(expectedRendererLevel1.data()
                             + (static_cast<std::size_t>(row) * 3u + 1u) * 4u,
                         8u, expectedRegion.data() + static_cast<std::size_t>(row) * 8u);
         }
         Check(regionRead && region == expectedRegion,
-              "backend owns caller bytes and reads a level-1 sub-rectangle with exact row pitch");
+              "renderer owns caller bytes and reads a level-1 sub-rectangle with exact row pitch");
 
         bool wrongDimensionsRejected = false;
-        try { direct.UpdatePixelsLevel(1, expectedBackendLevel1.data(), 2, 3); }
+        try { direct.UpdatePixelsLevel(1, expectedRendererLevel1.data(), 2, 3); }
         catch (const std::runtime_error&) { wrongDimensionsRejected = true; }
-        std::vector<std::uint8_t> fullBackendLevel1(expectedBackendLevel1.size());
+        std::vector<std::uint8_t> fullRendererLevel1(expectedRendererLevel1.size());
         const bool unchangedRead = direct.GetData(1, 0, 0, 3, 2,
-                                                   fullBackendLevel1.data(),
-                                                   fullBackendLevel1.size());
+                                                   fullRendererLevel1.data(),
+                                                   fullRendererLevel1.size());
         Check(wrongDimensionsRejected && unchangedRead
-                  && fullBackendLevel1 == expectedBackendLevel1,
+                  && fullRendererLevel1 == expectedRendererLevel1,
               "wrong upload dimensions reject atomically and preserve the complete level");
 
         region.fill(0xA5u);
@@ -220,7 +220,7 @@ protected:
                   && !direct.GetData(1, 0, 0, 0, 1, region.data(), region.size())
                   && std::all_of(region.begin(), region.end(),
                                  [](std::uint8_t value) { return value == 0xA5u; }),
-              "backend invalid level/region/empty reads return false without touching output");
+              "renderer invalid level/region/empty reads return false without touching output");
 
         Exit();
     }

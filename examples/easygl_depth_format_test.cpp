@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // Task 228: Verify DepthStencilFormat changes store correctly and do not crash.
 //
-// The EasyGL backend does not recreate the depth buffer at runtime; the window-system
+// The EasyGL renderer does not recreate the depth buffer at runtime; the window-system
 // framebuffer has a fixed depth allocation. The important invariants are:
 //   1. The PP field always stores the requested format (field round-trip).
 //   2. Neither GDM::ApplyChanges() nor SetPresentationParameters() throws.

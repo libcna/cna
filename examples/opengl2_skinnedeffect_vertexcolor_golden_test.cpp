@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl2.md: cross-backend visual-parity proof -- reuses
+// plan_opengl2.md: cross-renderer visual-parity proof -- reuses
 // examples/easygl_skinnedeffect_vertexcolor_test.cpp's own SkinnedEffect.VertexColorEnabled scene
 // verbatim: quad A (VertexColorEnabled=false, per-vertex black must be ignored, same red-dominant
 // lit/textured result as the plain SkinnedEffect golden test's identity-bone quad) vs quad B
@@ -27,7 +27,7 @@ namespace
 {
     // Stride-56 GPU-compact skinned+Color vertex: Position(0)+Normal(12)+TexCoord(24)+
     // BoneWeight(32)+BoneIndices(48)+Color(52) -- matches OpenGL2's own BindVertexAttributesForStride
-    // stride==56 case exactly (mirrors EasyGLGraphicsBackend's identical layout).
+    // stride==56 case exactly (mirrors EasyGLRenderer's identical layout).
     struct SkinnedColorGpuVertex
     {
         float px, py, pz;

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-073: the Software (CPU-raster) backend's SpriteBatch must honor a custom
-// GraphicsDevice.Viewport, exactly like the GPU backends corrected by REMED-GFX-072.
+// REMED-GFX-073: the Software (CPU-raster) renderer's SpriteBatch must honor a custom
+// GraphicsDevice.Viewport, exactly like the GPU renderers corrected by REMED-GFX-072.
 //
 // XNA/FNA contract (FNA SpriteBatch.cs PrepRenderState): the sprite projection is
 // CreateOrthographicOffCenter(0, Viewport.Width, Viewport.Height, 0, 0, 1) * transformMatrix, and
@@ -9,16 +9,16 @@
 // define the (1:1 pixel) projection/clip extent, and the rasterizer viewport positions the result
 // at Viewport.X/Y. Viewport.X/Y are NEVER subtracted from sprite coordinates; pixels outside the
 // viewport rectangle are clipped. D3D11 (live RSGetViewports) was the unmodified GFX-072 oracle;
-// every corrected GPU backend renders the canonical scene to the byte-identical footprint
+// every corrected GPU renderer renders the canonical scene to the byte-identical footprint
 // x[24,40] y[15,25] n=187.
 //
-// Pre-fix Software signature (this test FAILS pre-fix): SoftwareSpriteBatchBackend placed sprite
+// Pre-fix Software signature (this test FAILS pre-fix): SoftwareSpriteBatchRenderer placed sprite
 // corners at raw framebuffer pixels (destinationRectangle.X/Y with no viewport offset) and
-// SoftwareGraphicsBackend::SetViewport was a no-op, so a custom Viewport neither positioned nor
+// SoftwareRenderer::SetViewport was a no-op, so a custom Viewport neither positioned nor
 // clipped the sprite -- the canonical sprite landed at raw local (5,4), footprint x[5,21] y[4,14].
 //
 // Testing strategy: read the whole 96x72 backbuffer once per check via GetBackBufferData (which the
-// Software backend serves from its real CPU framebuffer), then probe / bounding-box on the CPU. Only
+// Software renderer serves from its real CPU framebuffer), then probe / bounding-box on the CPU. Only
 // binary/full-intensity colors are used for spatial assertions so no possible encoding can masquerade
 // as a coordinate error.
 //

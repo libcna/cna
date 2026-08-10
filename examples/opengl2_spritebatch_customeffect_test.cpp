@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // plan_opengl2.md: pixel-exact SpriteBatch::Begin(..., Effect*) proof for the native OpenGL 2.1
-// graphics backend -- a user-authored ShaderEffect driving the 2D sprite-batch pipeline instead
+// graphics renderer -- a user-authored ShaderEffect driving the 2D sprite-batch pipeline instead
 // of the built-in sprite shader. Unlike the built-in shader (which pre-transforms every vertex
 // to clip space on the CPU), a custom sprite effect receives RAW screen-space vertex positions
 // and is expected to apply a `MatrixTransform` uniform itself -- the real XNA/FNA
@@ -35,7 +35,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 
-#include "CNA/Internal/Backends/OpenGL2/OpenGL2GraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/OpenGL2/OpenGL2Renderer.hpp"
 
 #include "common/PixelTestGame.hpp"
 
@@ -46,7 +46,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::OpenGL2;
+using namespace CNA::Internal::Renderers::OpenGL2;
 
 namespace
 {

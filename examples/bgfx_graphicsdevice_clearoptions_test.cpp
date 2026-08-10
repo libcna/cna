@@ -62,8 +62,8 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 
-#if defined(CNA_BACKEND_BGFX)
-#include "CNA/Internal/Backends/Bgfx/BgfxGraphicsBackend.hpp"
+#if defined(CNA_RENDERER_BGFX)
+#include "CNA/Internal/Renderers/Bgfx/BgfxRenderer.hpp"
 #endif
 
 #include <algorithm>
@@ -212,13 +212,13 @@ namespace
         // value to +/-0.01 instead of merely distinguishing it from a hardcoded 1.0.
         //
         // REMED-GFX-129 false positive: this used to read `CNA_BGFX_RENDERER` unconditionally, a
-        // variable only the two Bgfx CTest routes ever set. On any OTHER backend it was absent, so
-        // the OpenGL conversion was applied regardless of that backend's real convention -- and on
+        // variable only the two Bgfx CTest routes ever set. On any OTHER renderer it was absent, so
+        // the OpenGL conversion was applied regardless of that renderer's real convention -- and on
         // Vulkan, whose range IS [0,1], both probes then landed on the same side of the cleared
         // value (0.32 and 0.36 against a 0.67 clear), so the "upper bracket rejects" half of every
         // depth-clearing case could never hold. Measured, not assumed: with the correct convention
         // the same probes bracket the value, and with the wrong one they do not.
-#if defined(CNA_BACKEND_BGFX)
+#if defined(CNA_RENDERER_BGFX)
         // REMED-GFX-018 fallback hardening: CNA_BGFX_RENDERER is the REQUEST. bgfx may activate a
         // different renderer when that request cannot initialize (notably Vulkan -> OpenGL on an
         // Xvfb server without DRI3). The active caps are the only authoritative clip-depth
@@ -228,7 +228,7 @@ namespace
         // bgfx names [-1,1] NDC "homogeneous depth". The probe helper needs the inverse:
         // whether the active renderer consumes [0,1] clip depth directly.
         const bool zeroToOneDepth = caps != nullptr && !caps->homogeneousDepth;
-#elif defined(CNA_BACKEND_VULKAN)
+#elif defined(CNA_RENDERER_VULKAN)
         const bool zeroToOneDepth = true;
 #else
         const bool zeroToOneDepth = false;
@@ -325,11 +325,11 @@ class BgfxGraphicsDeviceClearOptionsTest final : public Game
             ++failed_;
     }
 
-#if defined(CNA_BACKEND_BGFX)
+#if defined(CNA_RENDERER_BGFX)
     void RecordRendererSelection()
     {
         const bgfx::RendererType::Enum requested =
-            CNA::Internal::Backends::Bgfx::Detail::ResolveRendererType(
+            CNA::Internal::Renderers::Bgfx::Detail::ResolveRendererType(
                 std::getenv("CNA_BGFX_RENDERER"));
         const bgfx::RendererType::Enum active = bgfx::getRendererType();
 
@@ -1004,7 +1004,7 @@ protected:
     {
         Game::Initialize();
         auto& device = getGraphicsDeviceProperty();
-#if defined(CNA_BACKEND_BGFX)
+#if defined(CNA_RENDERER_BGFX)
         RecordRendererSelection();
 #endif
         effect_ = std::make_unique<BasicEffect>(device);
@@ -1077,7 +1077,7 @@ public:
 
 int main()
 {
-#if defined(CNA_BACKEND_BGFX)
+#if defined(CNA_RENDERER_BGFX)
     constexpr int kLifecycleCount = 2;
 #else
     constexpr int kLifecycleCount = 1;

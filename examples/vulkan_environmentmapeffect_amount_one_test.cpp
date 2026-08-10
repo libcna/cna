@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 // Task 394: verify EnvironmentMapEffect's cube-map contribution at
-// EnvironmentMapAmount=1 (Vulkan backend). See
+// EnvironmentMapAmount=1 (Vulkan renderer). See
 // examples/easygl_environmentmapeffect_amount_one_test.cpp for the full derivation and the
-// real bug this test found and fixed: CNA's env-map fragment shaders (all 3 backends)
+// real bug this test found and fixed: CNA's env-map fragment shaders (all 3 renderers)
 // computed `rgb = litRGB*texColor.rgb + envColor*amount + specular` (additive) instead of
 // FNA's real `lerp(baseColor, envColor, amount)` (interpolate/replace). Fixed by changing
 // to `mix(baseColor, envColor, amount) + specular`.

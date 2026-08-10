@@ -4,9 +4,9 @@
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
-#include "CNA/Internal/Backends/D3D9/D3D9FormatMapping.hpp"
-#include "CNA/Internal/Backends/D3D9/D3D9StateMapping.hpp"
-#include "CNA/Internal/Backends/D3D9/D3D9VertexDeclarations.hpp"
+#include "CNA/Internal/Renderers/D3D9/D3D9FormatMapping.hpp"
+#include "CNA/Internal/Renderers/D3D9/D3D9StateMapping.hpp"
+#include "CNA/Internal/Renderers/D3D9/D3D9VertexDeclarations.hpp"
 
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
@@ -22,7 +22,7 @@
 #include <cstdio>
 
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::D3D9;
+using namespace CNA::Internal::Renderers::D3D9;
 
 static int passCount = 0;
 static int totalCount = 0;

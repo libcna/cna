@@ -1,5 +1,5 @@
 // Shader Model 5.0 (vs_5_0). Ported line-by-line from
-// src/CNA/Internal/Backends/Vulkan/shaders/alpha_test3d.vert.glsl.
+// src/CNA/Internal/Renderers/Vulkan/shaders/alpha_test3d.vert.glsl.
 //
 // AlphaTestEffect vertex shader. Reads position (POSITION0) and UV (TEXCOORD0). UV byte offset
 // varies per stride (20/24/32); D3DVertexFormatHelper.hpp's per-stride D3D11_INPUT_ELEMENT_DESC

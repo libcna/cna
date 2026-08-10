@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl4.md GL4-10: verify OpenGL4GraphicsBackend::ReadBackbuffer()/
+// plan_opengl4.md GL4-10: verify OpenGL4Renderer::ReadBackbuffer()/
 // GraphicsDevice::GetBackBufferData() actually return the pixels that were just drawn -- a real
 // glReadPixels() from the default framebuffer (GL_BACK), Y-flipped to XNA's top-left-origin
-// convention. Adapted from webgpu_clear_readback_test.cpp's own check list (backend-agnostic:
+// convention. Adapted from webgpu_clear_readback_test.cpp's own check list (renderer-agnostic:
 // every check below goes through the public XNA API only, no OpenGL4-specific header needed).
 //
 // Check A -- Clear(Red) is visible via GetBackBufferData() in the same Draw() call.
@@ -20,7 +20,7 @@
 //   match its own shader's straight/non-premultiplied output, so any alpha strictly between 0 and
 //   255 was silently ignored for colour. Fixed to match Vulkan's sprite2d.frag.glsl pairing
 //   (SRC_ALPHA/ONE_MINUS_SRC_ALPHA). The exact resulting value depends on whether the chosen
-//   swapchain format blends in linear or sRGB-encoded space (both are legitimate, backend/
+//   swapchain format blends in linear or sRGB-encoded space (both are legitimate, renderer/
 //   platform-dependent choices), so this asserts direction and magnitude, not an exact value.
 //
 // Checks H/I/J -- sampler address-mode (Wrap/Clamp/Mirror) pixel

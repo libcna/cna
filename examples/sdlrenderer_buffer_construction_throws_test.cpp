@@ -3,20 +3,20 @@
 // SDL_Renderer with Task-261-style rigor (an earlier phase covered this at a lighter pass --
 // this task exercises EVERY construction overload, not just the 2-arg ones, plus edge cases).
 //
-// SdlGraphicsBackend::CreateVertexBuffer/CreateIndexBuffer16 throw
+// SdlRenderer::CreateVertexBuffer/CreateIndexBuffer16 throw
 // std::runtime_error("SDL_Renderer does not support 3D: ...") unconditionally; CreateIndexBuffer32
-// is not separately overridden, so it uses IGraphicsBackend's own default delegation to
+// is not separately overridden, so it uses IGraphicsRenderer's own default delegation to
 // CreateIndexBuffer16 -- meaning a 32-bit IndexBuffer/DynamicIndexBuffer throws the SAME
 // "CreateIndexBuffer16" message as a 16-bit one, not a distinct "CreateIndexBuffer32" message.
 // DynamicVertexBuffer/DynamicIndexBuffer both delegate straight to VertexBuffer's/IndexBuffer's
 // own constructor with their `dynamic` parameter completely unused (an ignored bool) -- so they
-// throw identically to their non-dynamic base types, backend-wise there is no distinction at all.
+// throw identically to their non-dynamic base types, renderer-wise there is no distinction at all.
 //
 // This test exercises all 8 construction overloads/variants (VertexBuffer x2 ctors,
 // DynamicVertexBuffer, IndexBuffer x2 index widths, DynamicIndexBuffer x2 index widths), plus
 // confirms the throw fires unconditionally BEFORE any argument validation -- a zero-count and a
-// negative-count construction both still throw the SAME backend-unsupported message, not an
-// ArgumentOutOfRangeException, since the backend call happens in the member-initializer list
+// negative-count construction both still throw the SAME renderer-unsupported message, not an
+// ArgumentOutOfRangeException, since the renderer call happens in the member-initializer list
 // before the constructor body (where any such validation would live) ever runs.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
@@ -88,12 +88,12 @@ protected:
         check(ThrowsExactRuntimeError([&] { VertexBuffer vb(dev, vertexDecl, 4, BufferUsage::None); }, kNoVb),
               "VertexBuffer(device, VertexDeclaration, count, BufferUsage) throws the exact expected message");
 
-        // --- DynamicVertexBuffer: its `dynamic` flag is unused -- same backend call, same throw. ---
+        // --- DynamicVertexBuffer: its `dynamic` flag is unused -- same renderer call, same throw. ---
         check(ThrowsExactRuntimeError([&] { DynamicVertexBuffer dvb(dev, vertexDecl, 4, BufferUsage::None); }, kNoVb),
               "DynamicVertexBuffer(...) throws the exact expected message, identical to VertexBuffer's");
 
         // --- IndexBuffer: both index widths. CreateIndexBuffer32 is not separately overridden on
-        //     this backend, so it delegates to CreateIndexBuffer16 -- same message, both widths. ---
+        //     this renderer, so it delegates to CreateIndexBuffer16 -- same message, both widths. ---
         check(ThrowsExactRuntimeError([&] { IndexBuffer ib(dev, 4); }, kNoIb),
               "IndexBuffer(device, count) [16-bit default] throws the exact expected message");
         check(ThrowsExactRuntimeError(
@@ -111,15 +111,15 @@ protected:
                   [&] { DynamicIndexBuffer dib(dev, IndexElementSize::ThirtyTwoBits, 4, BufferUsage::None); }, kNoIb),
               "DynamicIndexBuffer(ThirtyTwoBits, ...) throws CreateIndexBuffer16's message");
 
-        // --- Edge case: the backend throw fires BEFORE any argument validation -- zero and
+        // --- Edge case: the renderer throw fires BEFORE any argument validation -- zero and
         //     negative counts still hit the SAME message, not an ArgumentOutOfRangeException,
-        //     since the backend call happens in the member-initializer list. ---
+        //     since the renderer call happens in the member-initializer list. ---
         check(ThrowsExactRuntimeError([&] { VertexBuffer vb(dev, 0); }, kNoVb),
-              "VertexBuffer(device, 0) still throws the backend message, not a validation exception");
+              "VertexBuffer(device, 0) still throws the renderer message, not a validation exception");
         check(ThrowsExactRuntimeError([&] { VertexBuffer vb(dev, -1); }, kNoVb),
-              "VertexBuffer(device, -1) still throws the backend message, not a validation exception");
+              "VertexBuffer(device, -1) still throws the renderer message, not a validation exception");
         check(ThrowsExactRuntimeError([&] { IndexBuffer ib(dev, -1); }, kNoIb),
-              "IndexBuffer(device, -1) still throws the backend message, not a validation exception");
+              "IndexBuffer(device, -1) still throws the renderer message, not a validation exception");
 
         // --- The device must remain fully usable after every throw above. ---
         dev.Clear(Color(0, 255, 255, 255));

@@ -9,7 +9,7 @@
 #include "System/EventHandler.hpp"
 #include "CNA/CNAHelper.hpp"
 
-namespace CNA::Internal::Backends { class IRenderTargetBackend; }
+namespace CNA::Internal::Renderers { class IRenderTargetRenderer; }
 
 namespace Microsoft::Xna::Framework::Graphics
 {
@@ -92,19 +92,19 @@ namespace Microsoft::Xna::Framework::Graphics
         System::EventHandler<System::EventArgs> ContentLost;
 
         /**
-         * @brief Returns the backend render target handle.
+         * @brief Returns the renderer render target handle.
          *
-         * Returns nullptr if the backend does not support off-screen rendering.
-         * @return Pointer to the IRenderTargetBackend, or nullptr.
+         * Returns nullptr if the renderer does not support off-screen rendering.
+         * @return Pointer to the IRenderTargetRenderer, or nullptr.
          */
-        NOXNA [[nodiscard]] CNA::Internal::Backends::IRenderTargetBackend* GetRenderTargetBackend() const;
+        NOXNA [[nodiscard]] CNA::Internal::Renderers::IRenderTargetRenderer* GetRenderTargetRenderer() const;
 
     private:
         DepthFormat depthFormat_      = DepthFormat::None;
         int multiSampleCount_         = 0;
         RenderTargetUsage usage_      = RenderTargetUsage::DiscardContents;
 
-        // Non-owning pointer into Texture2D::backend_ (which holds the shared_ptr).
-        CNA::Internal::Backends::IRenderTargetBackend* rtBackend_ = nullptr;
+        // Non-owning pointer into Texture2D::renderer_ (which holds the shared_ptr).
+        CNA::Internal::Renderers::IRenderTargetRenderer* rtRenderer_ = nullptr;
     };
 }

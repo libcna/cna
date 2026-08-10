@@ -21,7 +21,7 @@
 // read from a SECOND, per-instance vertex stream (4 consecutive Vector4 attributes at
 // BLENDWEIGHT0-3, the classic D3D9 hardware-instancing convention: HLSL reconstructs these 4
 // stream elements into a float4x4 parameter's 4 ROWS, in declaration order). Task 1082 closes the
-// backend gap for this (see EasyGLGraphicsBackend.cpp's `DrawInstancedPrimitivesEx`). REMED-GFX-122
+// renderer gap for this (see EasyGLRenderer.cpp's `DrawInstancedPrimitivesEx`). REMED-GFX-122
 // additionally proves that the custom-effect branch keeps the complete public range: the mesh
 // stream begins at VertexOffset=4, baseVertex=1 selects the real quad after one more decoy vertex,
 // startIndex=3 skips an index-prefix triangle, and the instance stream begins at VertexOffset=1.

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // plan_sokol.md SOKOL-24: VertexBuffer/IndexBuffer SetData() used to unconditionally destroy and
-// recreate the underlying sokol_gfx buffer on every upload. Both SokolVertexBufferBackend and
-// SokolIndexBufferBackend now allocate a dynamic_update buffer once (sized to the owning
+// recreate the underlying sokol_gfx buffer on every upload. Both SokolVertexBufferRenderer and
+// SokolIndexBufferRenderer now allocate a dynamic_update buffer once (sized to the owning
 // VertexBuffer/IndexBuffer's own declared capacity) and reuse it in place via sg_update_buffer()
 // for same-shape re-uploads across frames, only recreating when the data outgrows what is
 // allocated or a second upload lands within the same frame (sokol_gfx allows only one
@@ -43,7 +43,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 
-#include "CNA/Internal/Backends/Sokol/SokolGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Sokol/SokolRenderer.hpp"
 
 #include "common/PixelTestGame.hpp"
 
@@ -91,15 +91,15 @@ class SokolVertexBufferReuploadTest : public CNA::Examples::PixelTestGame
 
     static std::uint32_t VbBufferId(VertexBuffer& vb)
     {
-        return static_cast<CNA::Internal::Backends::Sokol::SokolVertexBufferBackend&>(
-                   vb.GetBackend())
+        return static_cast<CNA::Internal::Renderers::Sokol::SokolVertexBufferRenderer&>(
+                   vb.GetRenderer())
             .GetBufferIdEXT();
     }
 
     static std::uint32_t IbBufferId(IndexBuffer& ib)
     {
-        return static_cast<CNA::Internal::Backends::Sokol::SokolIndexBufferBackend&>(
-                   ib.GetBackend())
+        return static_cast<CNA::Internal::Renderers::Sokol::SokolIndexBufferRenderer&>(
+                   ib.GetRenderer())
             .GetBufferIdEXT();
     }
 

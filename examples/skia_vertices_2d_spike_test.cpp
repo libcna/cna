@@ -7,7 +7,7 @@
 // the public API: SKIA-154-157 own the versioned ABI, translator, hardening, and public
 // ShaderEffect/SpriteBatch integration respectively.
 
-#include "CNA/Internal/Backends/Skia/SkiaSurface.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaSurface.hpp"
 
 #include "include/core/SkBlendMode.h"
 #include "include/core/SkCanvas.h"
@@ -30,7 +30,7 @@
 #include <string>
 #include <vector>
 
-using CNA::Internal::Backends::Skia::SkiaSurface;
+using CNA::Internal::Renderers::Skia::SkiaSurface;
 
 namespace
 {

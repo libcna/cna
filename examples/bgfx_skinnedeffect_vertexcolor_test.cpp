@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // CNB-67 (Phase 13C), Bgfx port: pixel test for SkinnedEffect's NOXNA VertexColorEnabled property
 // (see SkinnedEffect.hpp) -- proves the stride-56 skinned+Color vertex layout's a_color0
-// attribute (BgfxGraphicsBackend's MakeBgfxLayout stride==56 case) is actually read by both
+// attribute (BgfxRenderer's MakeBgfxLayout stride==56 case) is actually read by both
 // vs_skinned3d.sc/fs_skinned3d.sc (per-pixel-lit) and vs_skinned3d_vertexlit.sc/
 // fs_skinned3d_vertexlit.sc (vertex-lit, real XNA's own PreferPerPixelLighting=false default) and
 // correctly gated by the shared u_vertexColorEnabled3D uniform.
@@ -45,7 +45,7 @@ using namespace Microsoft::Xna::Framework::Graphics;
 
 static constexpr int kSize = 64;
 
-// Stride-56 GPU-compact skinned+Color vertex: matches BgfxGraphicsBackend's MakeBgfxLayout
+// Stride-56 GPU-compact skinned+Color vertex: matches BgfxRenderer's MakeBgfxLayout
 // stride==56 case (Color appended after BlendIndices, CNB-67).
 struct SkinnedColorGpuVertex
 {

@@ -1,0 +1,298 @@
+#include "CNA/Internal/Renderers/Ascii/AsciiRenderer.hpp"
+#include "CNA/Internal/Renderers/Ascii/AsciiFontAtlas.hpp"
+#include "CNA/Internal/Renderers/Common/NoOp3DResources.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Blend.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BlendFunction.hpp"
+
+#include <stdexcept>
+#include <vector>
+
+namespace CNA::Internal::Renderers::Ascii
+{
+    using Microsoft::Xna::Framework::Graphics::Blend;
+    using Microsoft::Xna::Framework::Graphics::BlendFunction;
+
+    AsciiRenderer::AsciiRenderer(const GraphicsRendererCreateArgs& args)
+        : inner_(std::make_unique<SdlRenderer::SdlRenderer>(
+              args.window, args.virtualWidth, args.virtualHeight,
+              args.presentationMode, args.swapInterval))
+        , mode_(ParseAsciiModeFromEnvironment())
+    {
+        presentSpriteBatch_ = inner_->CreateSpriteBatch();
+        fontAtlasTexture_ = inner_->CreateTexture(BuildAsciiFontAtlasImageData());
+        RecreateGameTarget(args.virtualWidth, args.virtualHeight);
+    }
+
+    void AsciiRenderer::RecreateGameTarget(int width, int height)
+    {
+        virtualWidth_ = width;
+        virtualHeight_ = height;
+        gameTarget_ = inner_->CreateRenderTarget2D(width, height, /*depthFormat=*/0,
+                                                    /*preserveContents=*/false, /*mipMap=*/false,
+                                                    /*multiSampleCount=*/0);
+        inner_->SetRenderTarget2D(gameTarget_.get());
+    }
+
+    void AsciiRenderer::Clear(float r, float g, float b, float a) { inner_->Clear(r, g, b, a); }
+
+    void AsciiRenderer::SetCellSize(int width, int height)
+    {
+        if (width <= 0 || height <= 0)
+        {
+            throw std::invalid_argument("CNA Ascii: cell size must be positive");
+        }
+        cellWidth_ = width;
+        cellHeight_ = height;
+    }
+
+    void AsciiRenderer::GetCellSize(int& width, int& height) const
+    {
+        width = cellWidth_;
+        height = cellHeight_;
+    }
+
+    // Shared by Present() and DrawQuantizedGridForTesting(): reads gameTarget_ back while it's
+    // still bound (ReadBackbuffer reads whatever's current), quantizes that into a glyph/color
+    // grid, switches to the real backbuffer, and draws the grid there -- one tinted textured
+    // quad per cell (background fill, if any, then the glyph on top), reusing the same
+    // internal-only presentSpriteBatch_ the Phase G3 plain blit used. Deliberately does NOT call
+    // inner_->Present() or rebind gameTarget_ -- callers do that themselves, since a real
+    // double-buffer swap invalidates immediate readback (see DrawQuantizedGridForTesting's own
+    // doc comment for why this split exists at all).
+    void AsciiRenderer::DrawQuantizedGridOntoRealBackbuffer()
+    {
+        std::vector<std::uint8_t> pixels(static_cast<std::size_t>(virtualWidth_) * static_cast<std::size_t>(virtualHeight_) * 4);
+        inner_->ReadBackbuffer(0, 0, virtualWidth_, virtualHeight_, pixels.data());
+
+        const AsciiGrid grid = QuantizeFrameToGrid(pixels.data(), virtualWidth_, virtualHeight_,
+                                                   cellWidth_, cellHeight_, mode_);
+        lastGridColumns_ = grid.columns;
+        lastGridRows_ = grid.rows;
+
+        inner_->SetRenderTarget2D(nullptr);
+
+        int realWidth = 0, realHeight = 0;
+        inner_->GetViewportSize(realWidth, realHeight);
+
+        inner_->Clear(0.0f, 0.0f, 0.0f, 1.0f);
+
+        // presentSpriteBatch_ never goes through GraphicsDevice::BlendState (only real XNA-level
+        // SpriteBatch::Begin() calls do that) -- confirmed empirically (Ascii_Present ctest) that
+        // without this, the renderer's blend mode is whatever it happened to default to, which
+        // isn't guaranteed to be alpha-aware, and glyph "off" pixels (transparent) were seen
+        // silently overwriting the background fill with the texture's stored RGB (black) instead
+        // of leaving it alone. Force real premultiplied AlphaBlend (XNA's own BlendState.AlphaBlend
+        // factors) before drawing, every time, independent of whatever the game's own BlendState is.
+        inner_->ApplyBlendState(static_cast<int>(Blend::One), static_cast<int>(Blend::One),
+                                static_cast<int>(Blend::InverseSourceAlpha), static_cast<int>(Blend::InverseSourceAlpha),
+                                static_cast<int>(BlendFunction::Add), static_cast<int>(BlendFunction::Add),
+                                // REMED-GFX-077: the present blit writes all RGBA channels, all samples
+                                // (default write state) — the migration missed this internal forward call.
+                                BlendWriteState{});
+
+        const Rectangle solidSrc(kAsciiSolidGlyphIndex * kAsciiGlyphWidth, 0, kAsciiGlyphWidth, kAsciiGlyphHeight);
+
+        presentSpriteBatch_->Begin();
+        for (int row = 0; row < grid.rows; ++row)
+        {
+            // Both edges of each cell are computed directly from row/col (not accumulated by
+            // adding a per-cell width/height repeatedly), so adjacent cells' shared edge always
+            // matches exactly -- no rounding-induced gaps or overlaps between cells.
+            const int cellY0 = static_cast<int>((static_cast<long long>(row) * realHeight) / grid.rows);
+            const int cellY1 = static_cast<int>((static_cast<long long>(row + 1) * realHeight) / grid.rows);
+            for (int col = 0; col < grid.columns; ++col)
+            {
+                const int cellX0 = static_cast<int>((static_cast<long long>(col) * realWidth) / grid.columns);
+                const int cellX1 = static_cast<int>((static_cast<long long>(col + 1) * realWidth) / grid.columns);
+                const Rectangle dest(cellX0, cellY0, cellX1 - cellX0, cellY1 - cellY0);
+
+                const AsciiCell& cell = grid.At(col, row);
+                if (cell.hasBackground)
+                {
+                    presentSpriteBatch_->Draw(*fontAtlasTexture_, dest, solidSrc, cell.background);
+                }
+
+                const Rectangle glyphSrc(cell.glyphIndex * kAsciiGlyphWidth, 0, kAsciiGlyphWidth, kAsciiGlyphHeight);
+                presentSpriteBatch_->Draw(*fontAtlasTexture_, dest, glyphSrc, cell.foreground);
+            }
+        }
+        presentSpriteBatch_->End();
+    }
+
+    void AsciiRenderer::Present()
+    {
+        DrawQuantizedGridOntoRealBackbuffer();
+        inner_->Present();
+        inner_->SetRenderTarget2D(gameTarget_.get());
+    }
+
+    // A real double-buffer swap (the inner_->Present() call above) can genuinely invalidate
+    // immediate readback of what was just drawn -- confirmed empirically (Ascii_Present ctest):
+    // reading right after a real Present() returned all-black, because SDL_Renderer/OpenGL
+    // presents by swapping buffers, not copying, so "the current render target" right after a
+    // swap is the *other*, not-yet-drawn-this-frame buffer. This method stops right after
+    // drawing, before any swap, so ReadRealBackbufferForTesting() called immediately afterward
+    // reads the buffer that was actually just drawn into -- exposed only for testing; real game
+    // code must always go through the real Present() instead.
+    void AsciiRenderer::DrawQuantizedGridForTesting()
+    {
+        DrawQuantizedGridOntoRealBackbuffer();
+    }
+
+    void AsciiRenderer::GetLastGridDimensionsForTesting(int& columns, int& rows) const
+    {
+        columns = lastGridColumns_;
+        rows = lastGridRows_;
+    }
+
+    void AsciiRenderer::ReadRealBackbufferForTesting(int x, int y, int w, int h, uint8_t* pixels)
+    {
+        inner_->SetRenderTarget2D(nullptr);
+        inner_->ReadBackbuffer(x, y, w, h, pixels);
+        inner_->SetRenderTarget2D(gameTarget_.get());
+    }
+
+    void AsciiRenderer::GetViewportSize(int& width, int& height) { inner_->GetViewportSize(width, height); }
+    void AsciiRenderer::ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) { inner_->ReadBackbuffer(x, y, w, h, pixels); }
+    // Phase G3: gameTarget_ is sized to the game's own logical/virtual resolution, independent
+    // of the real window's physical size -- a resolution change (unlike a real-window resize,
+    // which SDL's own logical-presentation scaling already absorbs transparently) genuinely needs
+    // a new offscreen target at the new size.
+    void AsciiRenderer::SetVirtualResolution(int width, int height)
+    {
+        inner_->SetVirtualResolution(width, height);
+        RecreateGameTarget(width, height);
+    }
+    void AsciiRenderer::SetPresentationMode(int mode) { inner_->SetPresentationMode(mode); }
+    void AsciiRenderer::SetSwapInterval(int interval) { inner_->SetSwapInterval(interval); }
+    int AsciiRenderer::ApplyMultiSampleCount(int requestedMultiSampleCount) { return inner_->ApplyMultiSampleCount(requestedMultiSampleCount); }
+    SDL_Window* AsciiRenderer::GetWindowInternal() const { return inner_->GetWindowInternal(); }
+    SDL_Renderer* AsciiRenderer::GetRendererInternal() const { return inner_->GetRendererInternal(); }
+
+    std::unique_ptr<ITextureRenderer> AsciiRenderer::CreateTexture(const ImageData& data) { return inner_->CreateTexture(data); }
+    std::unique_ptr<ISpriteBatchRenderer> AsciiRenderer::CreateSpriteBatch() { return inner_->CreateSpriteBatch(); }
+    std::unique_ptr<IRenderTargetRenderer> AsciiRenderer::CreateRenderTarget2D(int w, int h, int depthFormat,
+                                                                                      bool preserveContents,
+                                                                                      bool mipMap,
+                                                                                      int multiSampleCount)
+    {
+        return inner_->CreateRenderTarget2D(w, h, depthFormat, preserveContents, mipMap, multiSampleCount);
+    }
+    // Phase G3: XNA's "target the back buffer" idiom (a null target) is redirected to gameTarget_
+    // instead of being forwarded as a literal nullptr -- the game must never be able to draw
+    // straight onto the real window, only onto its own offscreen target (design decision 2/3).
+    // A genuinely non-null target (the game's own RenderTarget2D) is forwarded unchanged.
+    void AsciiRenderer::SetRenderTarget2D(IRenderTargetRenderer* rt)
+    {
+        inner_->SetRenderTarget2D(rt != nullptr ? rt : gameTarget_.get());
+    }
+    void AsciiRenderer::SetRenderTargets(
+        const RenderTargetBindingDescriptor* renderTargets, int count)
+    {
+        if (count == 0)
+        {
+            inner_->SetRenderTarget2D(gameTarget_.get());
+        }
+        else
+        {
+            inner_->SetRenderTargets(renderTargets, count);
+        }
+    }
+    void AsciiRenderer::SetScissorRect(int x, int y, int w, int h) { inner_->SetScissorRect(x, y, w, h); }
+    void AsciiRenderer::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
+                                                int colorDstBlend, int alphaDstBlend,
+                                                int colorBlendFunc, int alphaBlendFunc,
+                                                const BlendWriteState& writeState)
+    {
+        // REMED-GFX-077: Ascii is a pure wrapper — it forwards the full write state to the inner
+        // renderer, so ColorWriteChannels/MultiSampleMask support is exactly whatever the inner
+        // renderer provides (e.g. Ascii-over-Software honours the per-channel mask exactly).
+        inner_->ApplyBlendState(colorSrcBlend, alphaSrcBlend, colorDstBlend, alphaDstBlend,
+                                colorBlendFunc, alphaBlendFunc, writeState);
+    }
+
+    bool AsciiRenderer::SupportsDepthStencil() const { return inner_->SupportsDepthStencil(); }
+
+    // The ASCII wrapper owns the policy. Do not forward unsupported calls to its inner
+    // SDL_Renderer instance, whose independently stored policy would otherwise stay at Throw.
+    void AsciiRenderer::ClearColorAndDepth(float, float, float, float, float) { HandleUnsupported3DCall("ASCII", "ClearColorAndDepth"); }
+    void AsciiRenderer::ClearDepth(float) { HandleUnsupported3DCall("ASCII", "ClearDepth"); }
+    void AsciiRenderer::ClearStencil(int) { HandleUnsupported3DCall("ASCII", "ClearStencil"); }
+    void AsciiRenderer::ClearDepthAndStencil(float, int) { HandleUnsupported3DCall("ASCII", "ClearDepthAndStencil"); }
+    void AsciiRenderer::ClearColorAndStencil(float, float, float, float, int) { HandleUnsupported3DCall("ASCII", "ClearColorAndStencil"); }
+    void AsciiRenderer::ClearColorDepthAndStencil(float, float, float, float, float, int) { HandleUnsupported3DCall("ASCII", "ClearColorDepthAndStencil"); }
+    void AsciiRenderer::SetDepthTestEnabled(bool) { HandleUnsupported3DCall("ASCII", "SetDepthTestEnabled"); }
+    void AsciiRenderer::SetBlendEnabled(bool) { HandleUnsupported3DCall("ASCII", "SetBlendEnabled"); }
+    void AsciiRenderer::SetDepthWriteEnabled(bool) { HandleUnsupported3DCall("ASCII", "SetDepthWriteEnabled"); }
+
+    std::unique_ptr<IVertexBufferRenderer> AsciiRenderer::CreateVertexBuffer(
+        int vertexCapacity)
+    {
+        HandleUnsupported3DCall("ASCII", "CreateVertexBuffer");
+        return std::make_unique<NoOpVertexBufferRenderer>(vertexCapacity);
+    }
+
+    std::unique_ptr<IIndexBufferRenderer> AsciiRenderer::CreateIndexBuffer16(
+        int indexCapacity)
+    {
+        HandleUnsupported3DCall("ASCII", "CreateIndexBuffer16");
+        return std::make_unique<NoOpIndexBufferRenderer>(indexCapacity);
+    }
+
+    std::unique_ptr<IOcclusionQueryRenderer> AsciiRenderer::CreateOcclusionQuery()
+    {
+        HandleUnsupported3DCall("ASCII", "CreateOcclusionQuery");
+        return std::make_unique<NoOpOcclusionQueryRenderer>();
+    }
+
+    std::unique_ptr<ITexture3DRenderer> AsciiRenderer::CreateTexture3D(
+        int width, int height, int depth, bool, int)
+    {
+        if (!ShouldStubUnsupported3DResource())
+            return nullptr;
+        HandleUnsupported3DCall("ASCII", "CreateTexture3D");
+        return std::make_unique<NoOpTexture3DRenderer>(width, height, depth);
+    }
+
+    std::unique_ptr<ITextureCubeRenderer> AsciiRenderer::CreateTextureCube(
+        int size, bool, int)
+    {
+        if (!ShouldStubUnsupported3DResource())
+            return nullptr;
+        HandleUnsupported3DCall("ASCII", "CreateTextureCube");
+        return std::make_unique<NoOpTextureCubeRenderer>(size);
+    }
+
+    std::unique_ptr<IRenderTargetCubeRenderer> AsciiRenderer::CreateRenderTargetCube(
+        int size, int, bool, bool, int)
+    {
+        if (!ShouldStubUnsupported3DResource())
+            return nullptr;
+        HandleUnsupported3DCall("ASCII", "CreateRenderTargetCube");
+        return std::make_unique<NoOpRenderTargetCubeRenderer>(size);
+    }
+
+    void AsciiRenderer::DrawColoredPrimitives(
+        const IVertexBufferRenderer&, const Matrix&, const Matrix&, const Matrix&,
+        PrimitiveType, int)
+    {
+        HandleUnsupported3DCall("ASCII", "DrawColoredPrimitives");
+    }
+
+    void AsciiRenderer::DrawIndexedColoredPrimitives(
+        const IVertexBufferRenderer&, const IIndexBufferRenderer&,
+        const Matrix&, const Matrix&, const Matrix&, PrimitiveType, int)
+    {
+        HandleUnsupported3DCall("ASCII", "DrawIndexedColoredPrimitives");
+    }
+}
+
+namespace CNA::Internal::Renderers
+{
+#ifdef CNA_RENDERER_ASCII
+    std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
+    {
+        return std::make_unique<Ascii::AsciiRenderer>(args);
+    }
+#endif
+}

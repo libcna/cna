@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Task 399: cross-backend EnvironmentMapEffect capstone (Vulkan backend). See
+// Task 399: cross-renderer EnvironmentMapEffect capstone (Vulkan renderer). See
 // examples/easygl_environmentmapeffect_combined_test.cpp for the full derivation.
 //
 // Exit code 0 = PASS, 1 = FAIL.

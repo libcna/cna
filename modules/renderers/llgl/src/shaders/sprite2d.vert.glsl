@@ -4,10 +4,10 @@
 // syntax differs (Vulkan needs explicit binding numbers and separate texture/sampler objects,
 // desktop GLSL has neither).
 //
-// Positions arrive in the backend's logical (virtual-resolution) pixel space with the origin in
+// Positions arrive in the renderer's logical (virtual-resolution) pixel space with the origin in
 // the top-left, exactly as SpriteBatch produces them. The projection in the Scene block does the
 // whole pixel-space -> clip-space mapping, including the Y flip, so there is no hand-rolled NDC
-// arithmetic here and no per-renderer sign correction: LlglGraphicsBackend builds the matrix from
+// arithmetic here and no per-renderer sign correction: LlglRenderer builds the matrix from
 // the render system's own reported screen origin.
 
 #version 450

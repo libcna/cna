@@ -1,10 +1,10 @@
 # Skia is intentionally an externally prepared dependency rather than a CMake FetchContent
 # download. Upstream Skia uses GN and brings a substantial, revision-locked dependency graph; a
-# normal CNA configure must stay offline and deterministic. See docs/skia-backend.md for the
+# normal CNA configure must stay offline and deterministic. See docs/skia-renderer.md for the
 # exact pinned revision and the minimal raster build command.
 
 set(CNA_SKIA_ROOT "" CACHE PATH
-    "Path to the source checkout of the pinned Skia revision (required for CNA_GRAPHICS_BACKEND=SKIA)")
+    "Path to the source checkout of the pinned Skia revision (required for CNA_GRAPHICS_RENDERER=SKIA)")
 set(CNA_SKIA_BUILD_DIR "" CACHE PATH
     "Path to the GN output directory containing the matching raster libskia.a")
 
@@ -16,13 +16,13 @@ function(cna_configure_skia)
     if(NOT CNA_SKIA_ROOT OR NOT EXISTS "${CNA_SKIA_ROOT}/include/core/SkSurface.h")
         message(FATAL_ERROR
             "CNA: SKIA requires -DCNA_SKIA_ROOT=<Skia source checkout>. "
-            "See docs/skia-backend.md for the pinned revision and build command.")
+            "See docs/skia-renderer.md for the pinned revision and build command.")
     endif()
 
     if(NOT CNA_SKIA_BUILD_DIR OR NOT EXISTS "${CNA_SKIA_BUILD_DIR}/libskia.a")
         message(FATAL_ERROR
             "CNA: SKIA requires -DCNA_SKIA_BUILD_DIR=<matching GN output directory containing libskia.a>. "
-            "See docs/skia-backend.md for the exact raster build command.")
+            "See docs/skia-renderer.md for the exact raster build command.")
     endif()
 
     # The minimal raster GN build currently produces six mutually dependent archives. Keep them
@@ -40,7 +40,7 @@ function(cna_configure_skia)
         if(NOT EXISTS "${_cna_skia_archive}")
             message(FATAL_ERROR
                 "CNA: SKIA build directory is incomplete; missing ${_cna_skia_archive}. "
-                "Rebuild the raster target described in docs/skia-backend.md.")
+                "Rebuild the raster target described in docs/skia-renderer.md.")
         endif()
     endforeach()
 

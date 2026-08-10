@@ -1,9 +1,9 @@
-#include "CNA/Internal/Backends/D3D9/D3D9ShaderDispatch.hpp"
+#include "CNA/Internal/Renderers/D3D9/D3D9ShaderDispatch.hpp"
 
 #include <stdexcept>
 #include <string>
 
-namespace CNA::Internal::Backends::D3D9
+namespace CNA::Internal::Renderers::D3D9
 {
     namespace
     {

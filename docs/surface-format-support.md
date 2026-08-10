@@ -1,9 +1,9 @@
-# SurfaceFormat Backend Support — CNA
+# SurfaceFormat Renderer Support — CNA
 
 > Generated from source inspection against Tasks 174, 281.
-> Covers: EasyGL, Vulkan, Bgfx, SDL_Renderer backends.
+> Covers: EasyGL, Vulkan, Bgfx, SDL_Renderer renderers.
 
-> Skia successor note (SKIA-134): this historical cross-backend document does not define the Skia
+> Skia successor note (SKIA-134): this historical cross-renderer document does not define the Skia
 > implementation routes. The checked, current 27-value Skia contract is
 > [`skia-surface-format-matrix.md`](skia-surface-format-matrix.md). SKIA-135–139 have promoted
 > `Bgr565`, `Bgra4444`, `Rgba1010102`, `Rg32`, `Rgba64`, `Alpha8`, `ColorBgraEXT`,
@@ -17,7 +17,7 @@
 
 The authoritative list, ordinal values, and descriptions below are taken directly from FNA's
 `SurfaceFormat.cs` (`Microsoft.Xna.Framework.Graphics.SurfaceFormat`). Ordinal values are load-bearing
-— every backend does `static_cast<int>(format)` at some point, so CNA's enum must declare these 27
+— every renderer does `static_cast<int>(format)` at some point, so CNA's enum must declare these 27
 values in exactly this order.
 
 **Task 281 finding, fixed:** values 20–26 previously did **not** match FNA at all. CNA's enum instead
@@ -105,7 +105,7 @@ Phase 34 format support.
 
 ## Color format mapping — found and fixed a real Vulkan gamma bug (Task 284)
 
-Task 284 asks to verify RGBA/BGRA channel-order correctness across backends. Channel order itself
+Task 284 asks to verify RGBA/BGRA channel-order correctness across renderers. Channel order itself
 was already correct everywhere (confirmed by the dozens of existing exact-color pixel-readback
 tests across EasyGL and Vulkan) — but those tests all use only saturated 0/255 component values
 (Red/Green/Blue/White/Black/Magenta/Yellow/Cyan), which cannot reveal a **linear-vs-sRGB colorspace**
@@ -113,7 +113,7 @@ bug: both 0 and 255 are fixed points of the sRGB transfer curve, so a wrongly-sR
 still round-trips correctly at the extremes. Testing with a genuine mid-range value (128) instead
 uncovered a real bug on Vulkan.
 
-**Found:** `VulkanTextureBackend` (backing `Texture2D`) created its `VkImage`/`VkImageView` as
+**Found:** `VulkanTextureRenderer` (backing `Texture2D`) created its `VkImage`/`VkImageView` as
 `VK_FORMAT_R8G8B8A8_SRGB` — inconsistent with `Texture3D`/`TextureCube`/`RenderTarget2D`'s
 `VK_FORMAT_R8G8B8A8_UNORM`, and wrong regardless: FNA's `SurfaceFormat.Color` is explicitly linear
 (there's a separate `SurfaceFormat.ColorSrgbEXT` for the gamma-encoded variant — see the canonical
@@ -129,7 +129,7 @@ most of the actual rendering pipeline) only went through the swapchain's encode 
 cancel it, so it came out **badly wrong**: a nominal (128,128,128) vertex color read back as
 (188,188,188), a 60-unit error.
 
-**Fixed both:** `VulkanTextureBackend`'s image/view format to `VK_FORMAT_R8G8B8A8_UNORM`, and the
+**Fixed both:** `VulkanTextureRenderer`'s image/view format to `VK_FORMAT_R8G8B8A8_UNORM`, and the
 swapchain preference to `VK_FORMAT_B8G8R8A8_UNORM`. Added
 `examples/vulkan_texture_srgb_test.cpp` (`Vulkan_Texture2D_ColorFormat_Linear` ctest): renders a
 mid-grey (128,128,128) quad two ways — plain vertex color (no texture) vs. a sampled `Texture2D`
@@ -138,21 +138,21 @@ Before the fix: vertex-color path read 188, textured path read 128 (diff 60, con
 After the fix: both read exactly 128 (diff 0). Full Vulkan ctest suite: 1944/1945 (only the
 pre-existing, already-documented `Vulkan_DepthBias` failure remains; `Vulkan_FillMode_WireFrame`'s
 known order-dependent flakiness is unrelated and unaffected). EasyGL and Bgfx were checked and have
-no equivalent bug — neither has any `SRGB`/`Srgb` format reference anywhere in their backend source.
+no equivalent bug — neither has any `SRGB`/`Srgb` format reference anywhere in their renderer source.
 
 ---
 
 ## How format selection works (current state)
 
 Historically `Texture2D` stored the requested `SurfaceFormat` in `format_` but did not forward it
-to the backends covered by this document. `ImageData` now also carries a format ordinal so the
-Skia backend can implement its promoted packed formats; existing decoders and other backends keep
+to the renderers covered by this document. `ImageData` now also carries a format ordinal so the
+Skia renderer can implement its promoted packed formats; existing decoders and other renderers keep
 the default `Color` value.
 
 `Texture3D` and `TextureCube` receive `surfaceFormat` as an `int` argument in
-`CreateTexture3D` / `CreateTextureCube`, but every backend ignores it (`/* surfaceFormat */`).
+`CreateTexture3D` / `CreateTextureCube`, but every renderer ignores it (`/* surfaceFormat */`).
 
-**Result for the historical backends covered below**: accepted textures are still stored as
+**Result for the historical renderers covered below**: accepted textures are still stored as
 RGBA8 unorm. Skia's current exceptions are documented only in its checked matrix linked above.
 
 ---
@@ -164,7 +164,7 @@ RGBA8 unorm. Skia's current exceptions are documented only in its checked matrix
 | ✅ | Correct GPU format; SetData / GetData round-trip works |
 | ⚠️ | Partially works with caveats documented below |
 | ❌ | Not implemented; silently wrong or rejected |
-| — | Not applicable (backend has no support for this texture type) |
+| — | Not applicable (renderer has no support for this texture type) |
 
 ---
 
@@ -202,9 +202,9 @@ RGBA8 unorm. Skia's current exceptions are documented only in its checked matrix
 
 ---
 
-## Backend GPU format summary
+## Renderer GPU format summary
 
-| Backend | Texture2D | Texture3D | TextureCube | RenderTarget (color) | RenderTarget (depth) |
+| Renderer | Texture2D | Texture3D | TextureCube | RenderTarget (color) | RenderTarget (depth) |
 |---------|-----------|-----------|-------------|----------------------|----------------------|
 | EasyGL | GL_RGBA8 | GL_RGBA8 | GL_RGBA8 | GL_RGBA8 | GL_DEPTH_COMPONENT24 |
 | Vulkan | VK_FORMAT_R8G8B8A8_UNORM | VK_FORMAT_R8G8B8A8_UNORM | VK_FORMAT_R8G8B8A8_UNORM | swapchain format¹ | D32_SFLOAT or D24_UNORM_S8² |
@@ -225,8 +225,8 @@ RGBA8 unorm. Skia's current exceptions are documented only in its checked matrix
 
 | # | Format(s) | Required GL/Vulkan format | Work needed |
 |---|-----------|--------------------------|------------|
-| T176a | ColorSrgbEXT | GL_SRGB8_ALPHA8 / VK_FORMAT_R8G8B8A8_SRGB | Forward `surfaceFormat` to backends; add sRGB branch |
-| T176b | HalfVector4 / HdrBlendable | GL_RGBA16F / VK_FORMAT_R16G16B16A16_SFLOAT | Required for NOXNA HDR render targets (N11 EasyGL, N12 other backends) |
+| T176a | ColorSrgbEXT | GL_SRGB8_ALPHA8 / VK_FORMAT_R8G8B8A8_SRGB | Forward `surfaceFormat` to renderers; add sRGB branch |
+| T176b | HalfVector4 / HdrBlendable | GL_RGBA16F / VK_FORMAT_R16G16B16A16_SFLOAT | Required for NOXNA HDR render targets (N11 EasyGL, N12 other renderers) |
 | T176c | Dxt1/3/5 via SetData | GL_COMPRESSED_RGBA_S3TC_DXT1/3/5_EXT | Native GPU compressed upload path |
 
 ### Medium priority
@@ -255,10 +255,10 @@ RGBA8 unorm. Skia's current exceptions are documented only in its checked matrix
 
 To properly support non-Color formats, the following refactors are needed:
 
-1. **Pass `SurfaceFormat` through `IGraphicsBackend::CreateTexture`** — add it to
+1. **Pass `SurfaceFormat` through `IGraphicsRenderer::CreateTexture`** — add it to
    `ImageData` or add a second overload `CreateTexture2D(w, h, format, mipMap)`.
 
-2. **Add a format dispatch function in each backend** — map `SurfaceFormat` enum to
+2. **Add a format dispatch function in each renderer** — map `SurfaceFormat` enum to
    the native `metagl::InternalFormat` / `VkFormat` / `bgfx::TextureFormat`.
 
 3. **Keep the RGBA8 path as the default fallback** — unknown or unsupported formats

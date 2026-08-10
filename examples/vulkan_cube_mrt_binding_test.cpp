@@ -34,7 +34,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 
-#include "CNA/Internal/Backends/Vulkan/VulkanGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Vulkan/VulkanRenderer.hpp"
 #include "vulkan_mrt_msaa_test_spv.hpp"
 
 #include <array>
@@ -48,10 +48,10 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using CNA::Internal::Backends::Vulkan::VulkanGraphicsBackend;
-using CNA::Internal::Backends::Vulkan::VulkanMRTProxy;
-using CNA::Internal::Backends::Vulkan::VulkanRenderTargetBackend;
-using CNA::Internal::Backends::Vulkan::VulkanRenderTargetCubeBackend;
+using CNA::Internal::Renderers::Vulkan::VulkanRenderer;
+using CNA::Internal::Renderers::Vulkan::VulkanMRTProxy;
+using CNA::Internal::Renderers::Vulkan::VulkanRenderTargetRenderer;
+using CNA::Internal::Renderers::Vulkan::VulkanRenderTargetCubeRenderer;
 
 namespace
 {
@@ -129,22 +129,22 @@ class VulkanCubeMrtBindingTest final : public Game
         if (ok) ++pass_;
     }
 
-    VulkanGraphicsBackend& Backend()
+    VulkanRenderer& Renderer()
     {
-        return static_cast<VulkanGraphicsBackend&>(
-            getGraphicsDeviceProperty().GetBackend());
+        return static_cast<VulkanRenderer&>(
+            getGraphicsDeviceProperty().GetRenderer());
     }
 
-    static VulkanRenderTargetBackend& BackendOf(RenderTarget2D& target)
+    static VulkanRenderTargetRenderer& RendererOf(RenderTarget2D& target)
     {
-        return static_cast<VulkanRenderTargetBackend&>(
-            *target.GetRenderTargetBackend());
+        return static_cast<VulkanRenderTargetRenderer&>(
+            *target.GetRenderTargetRenderer());
     }
 
-    static VulkanRenderTargetCubeBackend& BackendOf(RenderTargetCube& target)
+    static VulkanRenderTargetCubeRenderer& RendererOf(RenderTargetCube& target)
     {
-        return static_cast<VulkanRenderTargetCubeBackend&>(
-            *target.GetRenderTargetCubeBackend());
+        return static_cast<VulkanRenderTargetCubeRenderer&>(
+            *target.GetRenderTargetCubeRenderer());
     }
 
     std::unique_ptr<RenderTarget2D> Make2D(
@@ -283,15 +283,15 @@ class VulkanCubeMrtBindingTest final : public Game
             RenderTargetBinding(rt.get()),
         };
         device.SetRenderTargets(bindings);
-        const VulkanMRTProxy* proxy = Backend().GetCurrentMRTProxyEXT();
+        const VulkanMRTProxy* proxy = Renderer().GetCurrentMRTProxyEXT();
         const bool structure = proxy
             && proxy->GetColorSampleCountEXT() == VK_SAMPLE_COUNT_1_BIT
             && proxy->GetFramebufferAttachmentCountEXT() == 2
             && proxy->GetResolveAttachmentCountEXT() == 0
             && proxy->GetColorAttachmentViewEXT(0)
-                == BackendOf(*cube).GetFaceResolveViewEXT(2)
+                == RendererOf(*cube).GetFaceResolveViewEXT(2)
             && proxy->GetColorAttachmentViewEXT(1)
-                == BackendOf(*rt).GetResolveColorViewEXT();
+                == RendererOf(*rt).GetResolveColorViewEXT();
         const auto current = device.GetRenderTargets();
         Check(structure && current.size() == 2
               && current[0].getRenderTargetProperty() == cube.get()
@@ -314,12 +314,12 @@ class VulkanCubeMrtBindingTest final : public Game
             CubeBinding(*cubeB, CubeMapFace::NegativeZ),
         };
         device.SetRenderTargets(twoCubes);
-        proxy = Backend().GetCurrentMRTProxyEXT();
+        proxy = Renderer().GetCurrentMRTProxyEXT();
         const bool cubeStructure = proxy
             && proxy->GetColorAttachmentViewEXT(0)
-                == BackendOf(*cubeA).GetFaceResolveViewEXT(2)
+                == RendererOf(*cubeA).GetFaceResolveViewEXT(2)
             && proxy->GetColorAttachmentViewEXT(1)
-                == BackendOf(*cubeB).GetFaceResolveViewEXT(5);
+                == RendererOf(*cubeB).GetFaceResolveViewEXT(5);
         device.SetRenderTargets({});
         QueueMrtDraw(twoCubes, effect, BlendState::Opaque);
         const Color aPixel = SampleFace(*cubeA, CubeMapFace::PositiveY);
@@ -335,12 +335,12 @@ class VulkanCubeMrtBindingTest final : public Game
             CubeBinding(*oneCube, CubeMapFace::NegativeX),
         };
         device.SetRenderTargets(twoFaces);
-        proxy = Backend().GetCurrentMRTProxyEXT();
+        proxy = Renderer().GetCurrentMRTProxyEXT();
         const bool faceStructure = proxy
             && proxy->GetColorAttachmentViewEXT(0)
-                == BackendOf(*oneCube).GetFaceResolveViewEXT(0)
+                == RendererOf(*oneCube).GetFaceResolveViewEXT(0)
             && proxy->GetColorAttachmentViewEXT(1)
-                == BackendOf(*oneCube).GetFaceResolveViewEXT(1);
+                == RendererOf(*oneCube).GetFaceResolveViewEXT(1);
         device.SetRenderTargets({});
         QueueMrtDraw(twoFaces, effect, BlendState::Opaque);
         const Color positiveX = SampleFace(*oneCube, CubeMapFace::PositiveX);
@@ -383,7 +383,7 @@ class VulkanCubeMrtBindingTest final : public Game
             CubeBinding(*cube, CubeMapFace::PositiveX),
             RenderTargetBinding(rt.get()),
         });
-        proxy = Backend().GetCurrentMRTProxyEXT();
+        proxy = Renderer().GetCurrentMRTProxyEXT();
         const VkRenderPass renderPassX = proxy ? proxy->GetRenderPass() : VK_NULL_HANDLE;
         const VkFramebuffer framebufferX =
             proxy ? proxy->GetFramebuffer() : VK_NULL_HANDLE;
@@ -392,12 +392,12 @@ class VulkanCubeMrtBindingTest final : public Game
             CubeBinding(*cube, CubeMapFace::NegativeX),
             RenderTargetBinding(rt.get()),
         });
-        proxy = Backend().GetCurrentMRTProxyEXT();
+        proxy = Renderer().GetCurrentMRTProxyEXT();
         const bool identities = proxy
             && proxy->GetRenderPass() == renderPassX
             && proxy->GetFramebuffer() != framebufferX
             && proxy->GetColorAttachmentViewEXT(0)
-                == BackendOf(*cube).GetFaceResolveViewEXT(1);
+                == RendererOf(*cube).GetFaceResolveViewEXT(1);
         device.SetRenderTargets({});
         Check(identities,
               "render pass is face-independent while framebuffer identity follows face view");
@@ -409,25 +409,25 @@ class VulkanCubeMrtBindingTest final : public Game
         auto cube = MakeCube(8);
         auto rt = Make2D(8);
         const int applied = static_cast<int>(
-            BackendOf(*cube).GetColorSampleCountEXT());
+            RendererOf(*cube).GetColorSampleCountEXT());
         const auto bindings = std::vector<RenderTargetBinding>{
             CubeBinding(*cube, CubeMapFace::NegativeZ),
             RenderTargetBinding(rt.get()),
         };
         device.SetRenderTargets(bindings);
-        const VulkanMRTProxy* proxy = Backend().GetCurrentMRTProxyEXT();
+        const VulkanMRTProxy* proxy = Renderer().GetCurrentMRTProxyEXT();
         const bool structure = applied > 1 && proxy
             && static_cast<int>(proxy->GetColorSampleCountEXT()) == applied
             && proxy->GetFramebufferAttachmentCountEXT() == 4
             && proxy->GetResolveAttachmentCountEXT() == 2
             && proxy->GetColorAttachmentViewEXT(0)
-                == BackendOf(*cube).GetMsaaColorViewEXT(5)
+                == RendererOf(*cube).GetMsaaColorViewEXT(5)
             && proxy->GetColorAttachmentViewEXT(1)
-                == BackendOf(*rt).GetMsaaColorViewEXT()
+                == RendererOf(*rt).GetMsaaColorViewEXT()
             && proxy->GetResolveAttachmentViewEXT(0)
-                == BackendOf(*cube).GetFaceResolveViewEXT(5)
+                == RendererOf(*cube).GetFaceResolveViewEXT(5)
             && proxy->GetResolveAttachmentViewEXT(1)
-                == BackendOf(*rt).GetResolveColorViewEXT();
+                == RendererOf(*rt).GetResolveColorViewEXT();
         device.SetRenderTargets({});
         Check(structure,
               "MSAA cube + 2D wires [sourceCube,source2D,resolveFace-5,resolve2D]");
@@ -452,16 +452,16 @@ class VulkanCubeMrtBindingTest final : public Game
             CubeBinding(*cubeB, CubeMapFace::NegativeZ),
         };
         device.SetRenderTargets(twoCubes);
-        proxy = Backend().GetCurrentMRTProxyEXT();
+        proxy = Renderer().GetCurrentMRTProxyEXT();
         const bool twoCubeStructure = proxy
             && proxy->GetColorAttachmentViewEXT(0)
-                == BackendOf(*cubeA).GetMsaaColorViewEXT(2)
+                == RendererOf(*cubeA).GetMsaaColorViewEXT(2)
             && proxy->GetColorAttachmentViewEXT(1)
-                == BackendOf(*cubeB).GetMsaaColorViewEXT(5)
+                == RendererOf(*cubeB).GetMsaaColorViewEXT(5)
             && proxy->GetResolveAttachmentViewEXT(0)
-                == BackendOf(*cubeA).GetFaceResolveViewEXT(2)
+                == RendererOf(*cubeA).GetFaceResolveViewEXT(2)
             && proxy->GetResolveAttachmentViewEXT(1)
-                == BackendOf(*cubeB).GetFaceResolveViewEXT(5);
+                == RendererOf(*cubeB).GetFaceResolveViewEXT(5);
         device.SetRenderTargets({});
         QueueMrtDraw(twoCubes, effect, BlendState::Opaque);
         const Color aPixel = SampleFace(*cubeA, CubeMapFace::PositiveY);
@@ -474,7 +474,7 @@ class VulkanCubeMrtBindingTest final : public Game
         // REMED-GFX-141 turned this case from rejected into correct. It used to throw "Vulkan MRT
         // cannot bind one multisample source subresource to more than one slot (same-cube
         // multi-face MSAA is unsupported)" -- and the guard was right, because
-        // VulkanRenderTargetCubeBackend allocated ONE multisample image for the whole cube, so both
+        // VulkanRenderTargetCubeRenderer allocated ONE multisample image for the whole cube, so both
         // slots really did name the same storage while resolving to different layers. The cube's
         // multisample image now has six array layers and one view per face, so two faces of one
         // cube are two genuinely distinct sources. The guard itself is untouched and still fires
@@ -488,18 +488,18 @@ class VulkanCubeMrtBindingTest final : public Game
         bool sameCubeStructure = false;
         try {
             device.SetRenderTargets(sameCubeFaces);
-            proxy = Backend().GetCurrentMRTProxyEXT();
+            proxy = Renderer().GetCurrentMRTProxyEXT();
             sameCubeAccepted = true;
             sameCubeStructure = proxy
                 && proxy->GetColorAttachmentViewEXT(0)
-                    == BackendOf(*cubeA).GetMsaaColorViewEXT(0)
+                    == RendererOf(*cubeA).GetMsaaColorViewEXT(0)
                 && proxy->GetColorAttachmentViewEXT(1)
-                    == BackendOf(*cubeA).GetMsaaColorViewEXT(1)
+                    == RendererOf(*cubeA).GetMsaaColorViewEXT(1)
                 && proxy->GetColorAttachmentViewEXT(0) != proxy->GetColorAttachmentViewEXT(1)
                 && proxy->GetResolveAttachmentViewEXT(0)
-                    == BackendOf(*cubeA).GetFaceResolveViewEXT(0)
+                    == RendererOf(*cubeA).GetFaceResolveViewEXT(0)
                 && proxy->GetResolveAttachmentViewEXT(1)
-                    == BackendOf(*cubeA).GetFaceResolveViewEXT(1);
+                    == RendererOf(*cubeA).GetFaceResolveViewEXT(1);
         } catch (const std::runtime_error&) {
             sameCubeAccepted = false;
         }
@@ -518,14 +518,14 @@ class VulkanCubeMrtBindingTest final : public Game
             CubeBinding(*depthCube, CubeMapFace::PositiveZ),
             RenderTargetBinding(depthPeer.get()),
         });
-        proxy = Backend().GetCurrentMRTProxyEXT();
+        proxy = Renderer().GetCurrentMRTProxyEXT();
         const bool depthOwner = proxy
-            && proxy->GetDepthFormat() == BackendOf(*depthCube).GetDepthFormatEXT()
+            && proxy->GetDepthFormat() == RendererOf(*depthCube).GetDepthFormatEXT()
             && proxy->GetDepthSampleCountEXT()
-                == BackendOf(*depthCube).GetColorSampleCountEXT()
+                == RendererOf(*depthCube).GetColorSampleCountEXT()
             && proxy->GetFramebufferAttachmentViewEXT(
                    proxy->GetFramebufferAttachmentCountEXT() - 1)
-                == BackendOf(*depthCube).GetDepthViewEXT();
+                == RendererOf(*depthCube).GetDepthViewEXT();
         device.SetRenderTargets({});
         Check(depthOwner,
               "slot-0 cube owns matching shared depth attachment and sample count");
@@ -568,10 +568,10 @@ protected:
     void Initialize() override
     {
         Game::Initialize();
-        getGraphicsDeviceProperty().RecreateBackendForMultiSampleCount(8);
+        getGraphicsDeviceProperty().RecreateRendererForMultiSampleCount(8);
         // Game::Initialize invokes LoadContent before returning. Create this fixture
-        // texture only after the explicit backend recreation so it cannot retain the
-        // just-destroyed pre-MSAA Vulkan backend.
+        // texture only after the explicit renderer recreation so it cannot retain the
+        // just-destroyed pre-MSAA Vulkan renderer.
         white_ = Texture2D::CreateFromPixels(
             getGraphicsDeviceProperty(), 1, 1,
             std::vector<std::uint8_t>{255, 255, 255, 255});

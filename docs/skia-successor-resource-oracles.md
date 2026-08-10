@@ -17,11 +17,11 @@ silently widen one to obtain a passing image.
 | Tagged SkSL source | 64 KiB | Reject before invoking the runtime compiler. |
 | Reflected SkSL uniform block | 16 KiB | Reject the compiled effect before publishing it. |
 | Reflected uniforms / texture children | 64 / 8 | Names and types remain separately validated; these counts are ceilings, not ABI promises. The 8 covers `cnaTexture0`-`7` only -- the reserved `cnaCubeFace0`-`5`/`cnaVolumeAtlas0` children (SKIA-144–151, `docs/skia-cube-volume-sampling-contract.md`) are a separate, orthogonal budget of up to 7 more, present only when an effect's own source calls `cnaSampleCubeEXT`/`cnaSampleVolumeEXT`. |
-| Volume sampling atlas (`SetTexture(1, Texture3D)`) | 256 MiB | Checked once at bind time from the bound `Texture3D`'s fixed dimensions (`SkiaEffectBackend::BindTexture3D`, SKIA-150); can reject even when the volume's own unpadded storage fits, since per-tile padding overhead is proportionally larger for small slices. See `docs/skia-cube-volume-sampling-contract.md`'s "Resource limits" section. |
+| Volume sampling atlas (`SetTexture(1, Texture3D)`) | 256 MiB | Checked once at bind time from the bound `Texture3D`'s fixed dimensions (`SkiaEffectRenderer::BindTexture3D`, SKIA-150); can reject even when the volume's own unpadded storage fits, since per-tile padding overhead is proportionally larger for small slices. See `docs/skia-cube-volume-sampling-contract.md`'s "Resource limits" section. |
 
 `CheckedSizeMultiply`, `CheckedSizeAdd`, `CheckedTexelBytes2D/3D`, and
 `CheckedSkiaResourceAccumulate` preserve their result argument on failure. Constructors must
-preflight the complete resource before registering counters or exposing a backend. Transfer
+preflight the complete resource before registering counters or exposing a renderer. Transfer
 validation must complete before modifying storage or caller memory. `SkiaResourceStats` reports
 exact CNA-owned retained stores; opaque internal Skia/driver allocations are never guessed into
 those counters and accelerated tasks must expose their own separate cache/budget evidence.
@@ -61,7 +61,7 @@ to nearest with `(sum + count/2) / count`; no Skia colour- or alpha-conversion p
 A full or partial public write makes that level caller-authored. It becomes an ownership barrier:
 later changes to an ancestor stop before it, while its own changes may regenerate following
 unauthored descendants until the next authored barrier. A partial first write to a generated level
-seeds its public shadow from the backend's complete defined bytes before patching, preserving every
+seeds its public shadow from the renderer's complete defined bytes before patching, preserving every
 untouched texel. `Skia_Texture2D_MipGeneration` locks exact 7×5→3×2→1×1 bytes, odd-edge updates,
 dirty-only rebuild counts, partial promotion, and two independent barriers.
 
@@ -98,7 +98,7 @@ replaced by a later parent write. Common `Texture2D` target staging is therefore
 
 ## Performance characteristics
 
-- `SkiaEffectBackend::MakeSpriteShaderEXT` repacks the volume sampling atlas and rebuilds all six
+- `SkiaEffectRenderer::MakeSpriteShaderEXT` repacks the volume sampling atlas and rebuilds all six
   `cnaCubeFace0`-`5` cube-face image children fresh on every single draw call that samples a bound
   `TextureCube`/`Texture3D` -- there is no cross-draw cache (SKIA-149/150). This is a deliberate
   trade of draw-call cost for correctness: it is what makes a `SetData()` issued after

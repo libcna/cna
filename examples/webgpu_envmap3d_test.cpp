@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MS-PL
-// WEBGPU-25/36/74: verify WebGPUGraphicsBackend's env_map3d.wgsl / GetOrCreatePipelineEnvMap3D() /
+// WEBGPU-25/36/74: verify WebGPURenderer's env_map3d.wgsl / GetOrCreatePipelineEnvMap3D() /
 // DrawPrimitivesEx()+DrawIndexedPrimitivesEx() dispatch for EnvironmentMapEffect (stride-32
-// VertexPositionNormalTexture, the same vertex layout as lit_textured3d.wgsl) -- this backend's
-// first cube-map shader, ported from VulkanGraphicsBackend's env_map3d.{vert,frag}.glsl (itself
-// cross-checked against EasyGLGraphicsBackend::EnsureEnvMapped3DProgram()'s identical GLSL formula
-// before porting). Also exercises WebGPUTextureCubeBackend (CreateTextureCube()/SetData()), this
-// backend's first cube-map texture support (a minimal, read-only-after-upload implementation --
+// VertexPositionNormalTexture, the same vertex layout as lit_textured3d.wgsl) -- this renderer's
+// first cube-map shader, ported from VulkanRenderer's env_map3d.{vert,frag}.glsl (itself
+// cross-checked against EasyGLRenderer::EnsureEnvMapped3DProgram()'s identical GLSL formula
+// before porting). Also exercises WebGPUTextureCubeRenderer (CreateTextureCube()/SetData()), this
+// renderer's first cube-map texture support (a minimal, read-only-after-upload implementation --
 // see that class's own doc comment for the documented TextureCube/RenderTargetCube parity gaps
 // this does NOT close).
 //
@@ -24,7 +24,7 @@
 //   E = normalize(eyePos - worldPos) = normalize((0,0,-0.5)) = (0,0,-1)
 //   reflDir = reflect(-E, N) = reflect((0,0,1), (0,0,-1)) = (0,0,1) - 2*(-1)*(0,0,-1) = (0,0,-1)
 // (0,0,-1) is exactly the CubeMapFace::NegativeZ sampling direction (face index 5, this project's
-// own "0=+X,1=-X,2=+Y,3=-Y,4=+Z,5=-Z" convention -- see IRenderTargetCubeBackend's doc comment).
+// own "0=+X,1=-X,2=+Y,3=-Y,4=+Z,5=-Z" convention -- see IRenderTargetCubeRenderer's doc comment).
 // The cube map below paints all 6 faces distinct solid colours, with NegativeZ = cyan (0,255,255)
 // -- Check A's expected pixel is exactly that colour, proving the reflection vector direction is
 // really computed and really samples the correct face, not just "some texture, some colour".
@@ -47,7 +47,7 @@
 // Check D -- same scene as Check A (flat blend, full amount) but drawn via
 //   DrawIndexedPrimitivesEx() (GraphicsDevice::DrawIndexedPrimitives(), a real IndexBuffer) instead
 //   of the non-indexed DrawPrimitivesEx() path used by A/B/C: renders cyan -- proves the indexed
-//   dispatch branch (QueueEnvMapDraw() called with a non-null IIndexBufferBackend) also reaches
+//   dispatch branch (QueueEnvMapDraw() called with a non-null IIndexBufferRenderer) also reaches
 //   env_map3d.wgsl correctly, not just the non-indexed one.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.

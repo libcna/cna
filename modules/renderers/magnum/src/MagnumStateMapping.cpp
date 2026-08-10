@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MS-PL
-#include "CNA/Internal/Backends/Magnum/MagnumStateMapping.hpp"
+#include "CNA/Internal/Renderers/Magnum/MagnumStateMapping.hpp"
 
 #include "System/InvalidOperationException.hpp"
 
-namespace CNA::Internal::Backends::Magnum
+namespace CNA::Internal::Renderers::Magnum
 {
     using Renderer = Mg::GL::Renderer;
 

@@ -1,5 +1,5 @@
-#include "CNA/Internal/Backends/Skia/SkiaGlslToSkslTranslatorEXT.hpp"
-#include "CNA/Internal/Backends/Skia/SkiaResourcePolicy.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaGlslToSkslTranslatorEXT.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaResourcePolicy.hpp"
 
 #include <array>
 #include <cctype>
@@ -8,7 +8,7 @@
 #include <unordered_set>
 #include <vector>
 
-namespace CNA::Internal::Backends::Skia
+namespace CNA::Internal::Renderers::Skia
 {
     namespace
     {
@@ -178,7 +178,7 @@ namespace CNA::Internal::Backends::Skia
             std::vector<UniformDeclEXT> uniforms_;
             // Maps each declared `sampler2D` uniform's original GLSL name to the reserved mesh-ABI
             // child name it is renamed to (`cnaTexture0`, `cnaTexture1`, ... in declaration order)
-            // -- the mesh ABI (SkiaMeshEffectBackend, SKIA-154) requires exactly this naming for
+            // -- the mesh ABI (SkiaMeshEffectRenderer, SKIA-154) requires exactly this naming for
             // its shader children, unlike `in`/`out` variables, which keep their own GLSL names
             // (see docs/skia-glsl-to-sksl-translator-contract.md's own rationale for those two).
             std::unordered_map<std::string, std::string> samplerRenames_;
@@ -468,4 +468,4 @@ namespace CNA::Internal::Backends::Skia
         TranslatorEXT translator(std::move(tokens));
         return translator.Run();
     }
-} // namespace CNA::Internal::Backends::Skia
+} // namespace CNA::Internal::Renderers::Skia

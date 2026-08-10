@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // plan_freedirect.md Phase X4 (DX3-30..DX3-39): CPU compositor / SpriteBatch draw path tests for the DX3
-// (DirectDraw, via the ../free-direct sibling) graphics backend.
+// (DirectDraw, via the ../free-direct sibling) graphics renderer.
 //
 // Check A -- Draw() before Begin()/End() without Begin() throw (DX3-30 Begin/End contract).
 // Check B -- Identity draw (BlendState::Opaque, 1:1 scale, no rotation/flip, white tint) is a real
@@ -17,9 +17,9 @@
 // Check H -- SetTransformMatrix() (a translation) shifts an otherwise-identity draw by exactly the
 //   translation offset (DX3-36).
 // Check I -- SpriteSortMode is fully handled by shared SpriteBatch.cpp -- Begin(sortMode, ...)
-//   with a non-Deferred mode draws without throwing or needing backend-specific code (DX3-37).
+//   with a non-Deferred mode draws without throwing or needing renderer-specific code (DX3-37).
 // Check J -- Begin(..., a non-null custom Effect) throws: no programmable shader stage exists on
-//   this backend (DX3-38).
+//   this renderer (DX3-38).
 //
 // Source-rectangle cropping (DX3-39) is exercised implicitly by every Draw() call above (all use
 // an explicit sourceRectangle).
@@ -218,7 +218,7 @@ protected:
                   "SetTransformMatrix() (translation) shifts the draw by exactly the offset");
         }
 
-        // Check I: SpriteSortMode is fully handled by shared SpriteBatch.cpp -- no backend-specific
+        // Check I: SpriteSortMode is fully handled by shared SpriteBatch.cpp -- no renderer-specific
         // code needed; a non-Deferred mode must draw without throwing.
         {
             bool threw = false;

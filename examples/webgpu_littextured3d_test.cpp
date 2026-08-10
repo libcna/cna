@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MS-PL
-// Phase 58/59/63 (WEBGPU-22): verify WebGPUGraphicsBackend's lit_textured3d.wgsl /
+// Phase 58/59/63 (WEBGPU-22): verify WebGPURenderer's lit_textured3d.wgsl /
 // GetOrCreatePipelineLitTextured3D() / DrawPrimitivesEx() dispatch for stride-32
 // (VertexPositionNormalTexture) draws -- the first WebGPU 3D shader with real Blinn-Phong
-// lighting (FNA's Lighting.fxh ComputeLights(), ported from VulkanGraphicsBackend's
+// lighting (FNA's Lighting.fxh ComputeLights(), ported from VulkanRenderer's
 // lit_textured3d.{vert,frag}.glsl), driven by a second UBO (litBindGroupLayout_) alongside the
 // existing 128-byte primary uniforms.
 //
@@ -23,7 +23,7 @@
 //   at all, the surface would otherwise be black). Uses a pure white/black extreme rather than a
 //   mid-tone expected value since the WebGPU surface prefers an sRGB swapchain format, so a raw
 //   readback of a genuinely mid-range linear fragment value comes back gamma-encoded, not linear
-//   (this is a pre-existing WebGPU backend characteristic, not specific to this shader).
+//   (this is a pre-existing WebGPU renderer characteristic, not specific to this shader).
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 

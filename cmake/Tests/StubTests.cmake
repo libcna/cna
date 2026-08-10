@@ -1,4 +1,4 @@
-if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "STUB")
+if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "STUB")
     enable_testing()
 
     macro(cna_stub_test target src)
@@ -16,6 +16,6 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "STUB")
     endmacro()
 
     cna_stub_test(cna_test_stub_smoke examples/stub_smoke_test.cpp)
-    cna_register_backend_test(NAME Stub_Smoke COMMAND cna_test_stub_smoke
+    cna_register_renderer_test(NAME Stub_Smoke COMMAND cna_test_stub_smoke
         TIMEOUT 30 LABELS "Stub")
 endif()

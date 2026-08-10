@@ -1,6 +1,6 @@
 // Shader Model 5.0 (ps_5_0). skinned3d.frag.hlsl's own stride-56 sibling: reads the per-vertex
 // Color varying from skinned_colored3d.vert.hlsl, gated by VertexColorEnabled, ported from
-// EasyGLGraphicsBackend::EnsureSkinnedProgram()'s fragment stage (CNB-67, Phase 13C).
+// EasyGLRenderer::EnsureSkinnedProgram()'s fragment stage (CNB-67, Phase 13C).
 //
 // Vertex color modulates the WHOLE combined diffuse+specular output, not just diffuse alone --
 // applied AFTER the specular add (matches EasyGL's own already-fixed convention; EasyGL's own

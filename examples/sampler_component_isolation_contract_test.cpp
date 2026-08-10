@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MS-PL
 //
 // REMED-GFX-174: a public TextureFilter ordinal names FOUR independent components -- a minification
-// filter, a magnification filter, a mipmap filter and whether anisotropy is enabled -- and a backend
+// filter, a magnification filter, a mipmap filter and whether anisotropy is enabled -- and a renderer
 // must write EVERY one of them on EVERY application. Writing a component only when it is "on" is a
 // defect that no single-draw fixture can see, because the wrong state is left behind by the
 // PREVIOUS draw rather than produced by the current one.
 //
 // THE DEFECT THIS FIXTURE PINS. EasyGL keeps one long-lived GL sampler object per slot
-// (EasyGLGraphicsBackend::samplers_[slot]) and mutates it in place on every ApplySamplerState. Its
+// (EasyGLRenderer::samplers_[slot]) and mutates it in place on every ApplySamplerState. Its
 // min filter, mag filter, wrapS and wrapT were written unconditionally, but GL_TEXTURE_MAX_ANISOTROPY
 // was written ONLY inside the `filter == 2` branch. A write that can only ever RAISE the value
 // leaves it raised forever: the first TextureFilter::Anisotropic draw set it to SamplerState's
@@ -18,7 +18,7 @@
 //
 // WHY THE EXISTING FIXTURES MISSED IT, measured not assumed. REMED-GFX-170's ordinal fixture DOES
 // see it (EasyGL 50/70) but attributes it to two unrelated-looking symptoms. Its SpriteBatch legs
-// all pass, and the reason is ORDERING rather than immunity. EasyGLSpriteBatchBackend calls
+// all pass, and the reason is ORDERING rather than immunity. EasyGLSpriteBatchRenderer calls
 // ApplySamplerState with a HARDCODED maxAnisotropy of 1, so the sprite path can never RAISE the
 // value; only the 3D path forwards the public SamplerState.MaxAnisotropy (default 4). But because
 // the pre-fix write happened only for ordinal 2, a sprite draw could not LOWER the value either --
@@ -38,7 +38,7 @@
 // sample, because an incomplete texture samples as opaque black and no pattern here contains black.
 //
 // MIP BOUNDARY, declared and measured rather than assumed: the legs that need a real chain first ask
-// the public API how many levels it actually got, and assert the backend's declared behaviour when
+// the public API how many levels it actually got, and assert the renderer's declared behaviour when
 // it is one. No mip chain is forced onto any texture by this fixture.
 //
 // ANISOTROPY BOUNDARY, declared: anisotropic output is unspecified per GPU, so no leg requires
@@ -98,39 +98,39 @@ using namespace Microsoft::Xna::Framework::Graphics;
 
 namespace
 {
-#if defined(CNA_BACKEND_HEADLESS)
+#if defined(CNA_RENDERER_HEADLESS)
     constexpr bool kRasterizes = false;
-    constexpr const char* kBackendName = "HEADLESS";
-#elif defined(CNA_BACKEND_SOFTWARE)
+    constexpr const char* kRendererName = "HEADLESS";
+#elif defined(CNA_RENDERER_SOFTWARE)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "SOFTWARE";
-#elif defined(CNA_BACKEND_EASYGL)
+    constexpr const char* kRendererName = "SOFTWARE";
+#elif defined(CNA_RENDERER_EASYGL)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "EASYGL";
-#elif defined(CNA_BACKEND_BGFX)
+    constexpr const char* kRendererName = "EASYGL";
+#elif defined(CNA_RENDERER_BGFX)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "BGFX";
-#elif defined(CNA_BACKEND_VULKAN)
+    constexpr const char* kRendererName = "BGFX";
+#elif defined(CNA_RENDERER_VULKAN)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "VULKAN";
-#elif defined(CNA_BACKEND_WEBGPU)
+    constexpr const char* kRendererName = "VULKAN";
+#elif defined(CNA_RENDERER_WEBGPU)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "WEBGPU";
-#elif defined(CNA_BACKEND_SDL_GPU)
+    constexpr const char* kRendererName = "WEBGPU";
+#elif defined(CNA_RENDERER_SDL_GPU)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "SDL_GPU";
-#elif defined(CNA_BACKEND_D3D9)
+    constexpr const char* kRendererName = "SDL_GPU";
+#elif defined(CNA_RENDERER_D3D9)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "D3D9";
-#elif defined(CNA_BACKEND_D3D11)
+    constexpr const char* kRendererName = "D3D9";
+#elif defined(CNA_RENDERER_D3D11)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "D3D11";
-#elif defined(CNA_BACKEND_D3D12)
+    constexpr const char* kRendererName = "D3D11";
+#elif defined(CNA_RENDERER_D3D12)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "D3D12";
+    constexpr const char* kRendererName = "D3D12";
 #else
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "UNKNOWN";
+    constexpr const char* kRendererName = "UNKNOWN";
 #endif
 
     constexpr int kBBW = 160;
@@ -557,9 +557,9 @@ class SamplerComponentIsolationTest : public Game
     {
         if (mipLevels_ <= 1)
         {
-            note(std::string(kBackendName) +
+            note(std::string(kRendererName) +
                  " allocated ONE level for a mipMap=true Texture2D -- mip level selection is not"
-                 " observable on this backend and is asserted as a declared boundary, not measured");
+                 " observable on this renderer and is asserted as a declared boundary, not measured");
             check(mipTex_->getLevelCountProperty() == 1,
                   "D0 declared boundary: no mip storage, sampling is level 0 only");
             const std::vector<Color> pix = Draw3D(dev, 32, 32, *mipTex_,
@@ -732,7 +732,7 @@ class SamplerComponentIsolationTest : public Game
         white_.SetData(&w, 1);
 
         // A real chain, each level a distinct flat colour so a sampled level names itself. Created
-        // through the public mipMap=true constructor -- nothing here forces storage that the backend
+        // through the public mipMap=true constructor -- nothing here forces storage that the renderer
         // did not already choose to allocate.
         mipTex_ = std::make_unique<Texture2D>(dev, 8, 8, true, SurfaceFormat::Color);
         mipLevels_ = mipTex_->getLevelCountProperty();
@@ -758,7 +758,7 @@ class SamplerComponentIsolationTest : public Game
 
         if (!kRasterizes)
         {
-            note(std::string(kBackendName) + " does not rasterize; asserting the documented"
+            note(std::string(kRendererName) + " does not rasterize; asserting the documented"
                  " rejection instead of sampled pixels");
             bool threw = false;
             try {
@@ -776,7 +776,7 @@ class SamplerComponentIsolationTest : public Game
             RunF(dev);
         }
 
-        std::printf("\n=== %s: %d/%d PASS ===\n", kBackendName, passCount_, totalCount_);
+        std::printf("\n=== %s: %d/%d PASS ===\n", kRendererName, passCount_, totalCount_);
         std::fflush(stdout);
         result_ = (passCount_ == totalCount_) ? 0 : 1;
         Exit();

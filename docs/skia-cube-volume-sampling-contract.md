@@ -20,11 +20,11 @@ which remains exact and unaffected.
   records this as a documented capability limit, not a bug.
 - No native Skia cube/volume image type is used (none exists for a CPU raster surface). Both are
   emulated entirely from ordinary 2D child shaders, matching `skia-texture-storage.md`'s existing
-  "no `BindGL`, no native handle" policy for the plain storage backends.
+  "no `BindGL`, no native handle" policy for the plain storage renderers.
 
 ## Why this needs its own reserved child namespace
 
-`SkiaEffectBackend`'s existing ABI (SKIA-91/92) already fixes `cnaTexture0`–`cnaTexture7`: exactly
+`SkiaEffectRenderer`'s existing ABI (SKIA-91/92) already fixes `cnaTexture0`–`cnaTexture7`: exactly
 8 total `uniform shader` children, `cnaTexture0` reserved for the primary SpriteBatch texture and
 `cnaTexture1`–`cnaTexture7` for `SetTexture(unit, Texture2D)`. Cube sampling alone needs six
 simultaneous child images (SKIA-145's "six 2D child shaders"), which would consume 6 of the
@@ -75,7 +75,7 @@ per-test reimplementation.
 
 ## Cube: direction-to-face/UV formula
 
-Face indexing matches `CubeMapFace`/`ITextureCubeBackend::SetData`'s existing order exactly:
+Face indexing matches `CubeMapFace`/`ITextureCubeRenderer::SetData`'s existing order exactly:
 `0=+X, 1=-X, 2=+Y, 3=-Y, 4=+Z, 5=-Z` (`cnaCubeFace0`=+X … `cnaCubeFace5`=-Z).
 
 Given a (not necessarily normalized) direction `dir = (x, y, z)`, dominant-axis selection picks the
@@ -106,7 +106,7 @@ v = 0.5 * (vc / ma + 1.0)
 Because every `vc` above uses `-y` or `-z` (never `+y`/`+z`), this table already expresses `v` with
 `v=0` at the visual **top** of each face in D3D's native top-down texture convention -- which is
 also CNA's own established top-row-first storage convention for every 2D image, including cube
-faces (`ITextureCubeBackend::SetData`'s own doc comment: "top row first"). No additional V-flip is
+faces (`ITextureCubeRenderer::SetData`'s own doc comment: "top row first"). No additional V-flip is
 applied when sampling a `cnaCubeFace*` child with this `(u, v)`.
 
 **This table is the design hypothesis, not yet proven.** Per this project's established rule that
@@ -121,7 +121,7 @@ patching around a wrong formula at the call site.
 ## Volume: 3D-coordinate-to-atlas formula
 
 `Texture3D` CPU storage is one contiguous `width * height * depth` RGBA8 buffer per level
-(`SkiaTexture3DBackend::Level::voxels`); there is no native Skia 3D image type, so `SetTexture(1,
+(`SkiaTexture3DRenderer::Level::voxels`); there is no native Skia 3D image type, so `SetTexture(1,
 Texture3D)` packs every depth slice of the bound level into one 2D grid atlas image and binds it as
 the single `cnaVolumeAtlas0` child (SKIA-147's "bounded slice atlas").
 
@@ -172,7 +172,7 @@ boundary clamp: at `w=0`, `flooredS0=-1` clamps to `s0=0`, and `clamp(s0+1,...)`
 with `wf=0.5`, incorrectly blending 50% of slice 1 into a sample that should read slice 0 alone.
 Deriving `s1`/`wf` from the unclamped `flooredS0` instead gives `s1=clamp(-1+1,...)=0` (equal to
 `s0`) and the blend of two identical slices is that slice exactly regardless of `wf`. This is the
-standard half-texel-centered mip/slice convention already used elsewhere in this backend
+standard half-texel-centered mip/slice convention already used elsewhere in this renderer
 (`docs/skia-successor-resource-oracles.md`'s mip-selection precedent), so `w=0` samples exactly
 slice 0's centre and `w=1` samples exactly slice `d-1`'s centre with no half-slice bias. Address
 mode determines how `w` itself is derived from a caller value outside `[0, 1]` (`Clamp` clamps `w`
@@ -204,11 +204,11 @@ image binding; `cnaSampleVolumeEXT` reads it to locate tiles. Like `cnaTint`, an
 
 - **Point**: nearest-face (cube) or nearest-slice-pair-collapsed-to-nearest (volume: `wf` rounds to
   0 or 1 instead of blending) sampling, with `SkFilterMode::kNearest` for the underlying 2D atlas
-  sample, matching `TextureFilter::Point`'s existing meaning elsewhere in this backend.
+  sample, matching `TextureFilter::Point`'s existing meaning elsewhere in this renderer.
 - **Linear**: the full formulas above (hardware-bilinear per slice/face, manual `w`-blend for
   volume). This is the default and the only mode SKIA-145/147's initial pixel oracles need to prove
   exactly; `Point` reuses the same face/tile-selection math with interpolation disabled.
-  matching `TextureFilter::Point`'s existing meaning elsewhere in this backend.
+  matching `TextureFilter::Point`'s existing meaning elsewhere in this renderer.
 - **Mip/LOD**: reuses SKIA-129's existing affine-rho LOD selection unchanged for the *face-local* or
   *tile-local* 2D sample -- each mip level of a cube face or volume slice is an ordinary 2D image,
   so within one already-selected face/slice pair, mip selection is not a new formula. Selecting
@@ -218,7 +218,7 @@ image binding; `cnaSampleVolumeEXT` reads it to locate tiles. Like `cnaTint`, an
   atlas/face children -- CNA does not implement continuous inter-mip blending (`GL_LINEAR_MIPMAP_
   LINEAR`-style trilinear-across-levels) for cube/volume in this phase; only inter-mip *selection*
   is in scope, matching `TextureFilter`'s existing documented mip granularity for ordinary
-  `Texture2D` in this backend.
+  `Texture2D` in this renderer.
 
 ## Precision
 
@@ -240,20 +240,20 @@ set, only adds a sampling path for the one format already supported).
   cannot alias it). Atlas bytes = `atlasWidth * atlasHeight * 4` per bound level using the padded
   formula above. SKIA-149 settled a simpler design than this document originally speculated: rather
   than a cached atlas retained (and invalidation-tracked) across draws while a `Texture3D` stays
-  bound, `MakeSpriteShaderEXT` repacks the atlas fresh from the backend's live voxel buffer on
+  bound, `MakeSpriteShaderEXT` repacks the atlas fresh from the renderer's live voxel buffer on
   *every* draw and discards it once that draw's shader is built -- the same choice that makes a
   `SetData` issued after `SetTexture` but before the next draw visible with no separate
   invalidation path (`docs/skia-cube-volume-sampling-contract.md`'s live-reference requirement,
   matching `BindTexture`'s existing contract). Because nothing retains the atlas between draws,
-  there is no live backend-owned object for `SkiaResourceStats` to count in the sense its existing
-  categories all share (`SkiaResourceCounters.hpp`'s own doc comment: "live backend-owned objects,
+  there is no live renderer-owned object for `SkiaResourceStats` to count in the sense its existing
+  categories all share (`SkiaResourceCounters.hpp`'s own doc comment: "live renderer-owned objects,
   not Skia allocator totals") -- SKIA-150 confirmed this by inspection rather than adding a
   same-shaped-but-meaningless always-zero-between-draws counter.
 - A `Texture3D` whose *unpadded* size already sits within the 256 MiB storage limit can still have a
   padded atlas that does not (padding overhead approaches `((w+2)(h+2))/(wh) - 1`, negligible for
   large slices but proportionally large for tiny ones e.g. `w=h=2`). Because the atlas is rebuilt
   fresh every draw rather than once at bind time, the budget check is still performed once, at
-  `SetTexture(1, Texture3D)` time (`SkiaEffectBackend::BindTexture3D`, SKIA-150) using the bound
+  `SetTexture(1, Texture3D)` time (`SkiaEffectRenderer::BindTexture3D`, SKIA-150) using the bound
   `Texture3D`'s fixed dimensions -- `Texture3D` dimensions cannot change after construction, so a
   bind-time check remains valid for every later draw against that same binding. `SetTexture(1,
   Texture3D)` throws `System::NotSupportedException` before storing the new binding if the padded
@@ -279,22 +279,22 @@ in place rather than left as a divergent implementation:
   tracking matching the existing `BindTexture` pattern (SKIA-149, `Skia_CubeVolume_Effect_Binding`)
   -- done, reachable end to end through the real public `ShaderEffect`/`SpriteBatch`/`SetTexture(1,
   TextureCube|Texture3D)` API.
-- Public sampling oracles covering content-loaded and target-produced inputs, cross-backend
+- Public sampling oracles covering content-loaded and target-produced inputs, cross-renderer
   regression evidence, and the volume-atlas resource budget check this document's own "Resource
   limits" section requires (SKIA-150, `Skia_CubeVolume_Sampling_Oracle`) -- done. The speculative
   cached, invalidation-tracked `SkiaResourceStats` volume-atlas counter this section originally
   anticipated was never built: SKIA-149 settled on rebuilding the atlas fresh every draw instead
-  (see "Resource limits" above), so there is no live backend-owned object for such a counter to
+  (see "Resource limits" above), so there is no live renderer-owned object for such a counter to
   represent; SKIA-150 corrected this document rather than adding a counter that would misrepresent
   what is actually retained.
 - Final capability wording distinguishing this bounded sampling subset from general cube/volume/3D
   support (SKIA-151) -- done; see `docs/skia-texture-storage.md`, `docs/skia-3d-emulation-adr.md`,
   `docs/skia-3d-refusal.md`, `docs/skia-3d-call-effect-matrix.md`, `docs/skia-effects.md`,
-  `docs/skia-stock-effect-feasibility.md`, `docs/graphics-backend-feature-matrix.md`,
+  `docs/skia-stock-effect-feasibility.md`, `docs/graphics-renderer-feature-matrix.md`,
   `docs/skia-successor-contract-matrix.md`, `docs/skia-easygl-parity-ledger.md`, and
   `include/CNA/GraphicsCapability.hpp`'s `Texture3D` doc comment, all updated to describe this
   bounded, fragment-only extension precisely rather than either overclaiming general 3D/cube/volume
   sampling support or continuing to describe it as entirely absent.
   `GraphicsCapability::Texture3D`/`ThreeD`/`CustomEffects` reporting itself is unaffected by this
   document alone -- Skia still reports `ThreeD`/`CustomEffects` false and `Texture3D` true for
-  storage only, matching every other backend's meaning for that flag.
+  storage only, matching every other renderer's meaning for that flag.

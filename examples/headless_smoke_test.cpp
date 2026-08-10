@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MS-PL
 // plan_headless.md HEADLESS-50/51/53/60/61/62/64: end-to-end headless smoke test for the Headless graphics
-// backend. Constructs a real Game (VertexBuffer, IndexBuffer, Texture2D, SpriteBatch, a custom
-// Effect), runs a few frames entirely under CNA_GRAPHICS_BACKEND=HEADLESS, and asserts:
+// renderer. Constructs a real Game (VertexBuffer, IndexBuffer, Texture2D, SpriteBatch, a custom
+// Effect), runs a few frames entirely under CNA_GRAPHICS_RENDERER=HEADLESS, and asserts:
 //
 // Check A -- SDL's video subsystem was never initialized (SDL_WasInit(SDL_INIT_VIDEO) == 0) --
-//   proves this backend genuinely needs no display server at all, not just a hidden window.
+//   proves this renderer genuinely needs no display server at all, not just a hidden window.
 // Check B -- GetWindowInternal() returns nullptr -- no window object exists anywhere.
 // Check C -- draw-call/primitive/state-change counters after N frames match the exact expected
 //   values for the fixed sequence of calls this test issues -- proves the counters are real
@@ -36,7 +36,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 
-#include "CNA/Internal/Backends/Headless/HeadlessGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Headless/HeadlessRenderer.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -47,7 +47,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::Headless;
+using namespace CNA::Internal::Renderers::Headless;
 
 namespace
 {
@@ -88,14 +88,14 @@ protected:
     {
         ++frame_;
         auto& dev = getGraphicsDeviceProperty();
-        auto& backend = static_cast<HeadlessGraphicsBackend&>(dev.GetBackend());
+        auto& renderer = static_cast<HeadlessRenderer&>(dev.GetRenderer());
 
         if (frame_ == 1)
         {
             // Check A/B: no real window/video subsystem anywhere.
             check(SDL_WasInit(SDL_INIT_VIDEO) == 0,
-                  "SDL_INIT_VIDEO was never initialized under the Headless backend");
-            check(backend.GetWindowInternal() == nullptr, "GraphicsDevice has no real window under the Headless backend");
+                  "SDL_INIT_VIDEO was never initialized under the Headless renderer");
+            check(renderer.GetWindowInternal() == nullptr, "GraphicsDevice has no real window under the Headless renderer");
         }
 
         dev.Clear(Color::Black);
@@ -130,7 +130,7 @@ protected:
             // deliberately-per-frame VertexBuffer construction above). presentCount is 2, not 3,
             // at this exact point: frame 3's own automatic EndDraw()->Present() call happens AFTER
             // this Draw() call returns, so only frames 1 and 2 have completed it so far.
-            const HeadlessStatistics& stats = backend.GetStatistics();
+            const HeadlessStatistics& stats = renderer.GetStatistics();
             check(stats.drawCallCount == 6, "drawCallCount is exactly 6 after 3 frames of 2 draws each");
             check(stats.clearCount == 3, "clearCount is exactly 3 after 3 Clear() calls");
             check(stats.presentCount == 2, "presentCount is exactly 2 (frames 1/2's automatic EndDraw()) so far");
@@ -141,16 +141,16 @@ protected:
             // this point, so leak-freedom is checked as "back to the pre-leak baseline count", not
             // "zero" -- the correct, general shape of this check when other long-lived resources
             // genuinely exist.
-            const std::size_t baselineAlive = backend.AliveResources().size();
+            const std::size_t baselineAlive = renderer.AliveResources().size();
             {
                 auto leaked = std::make_unique<VertexBuffer>(dev, PosColorDecl(), 3, BufferUsage::None);
                 bool threw = false;
-                try { backend.AssertNoLeaks(); }
+                try { renderer.AssertNoLeaks(); }
                 catch (const HeadlessValidationException&) { threw = true; }
                 check(threw, "AssertNoLeaks() throws while a VertexBuffer is deliberately kept alive");
                 leaked.reset();
             }
-            check(backend.AliveResources().size() == baselineAlive,
+            check(renderer.AliveResources().size() == baselineAlive,
                   "alive-resource count returns to its pre-leak baseline once the resource is disposed");
 
             // Check F: mode dial genuinely changes validation behaviour.
@@ -164,7 +164,7 @@ protected:
                 BasicEffect fx2(dev);
                 fx2.Apply();
 
-                backend.SetMode(HeadlessMode::Validation);
+                renderer.SetMode(HeadlessMode::Validation);
                 bool validationThrew = false;
                 try
                 {
@@ -178,7 +178,7 @@ protected:
                 dev.SetIndexBuffer(nullptr);
                 check(validationThrew, "HeadlessValidation mode rejects an out-of-range DrawIndexedPrimitives call");
 
-                backend.SetMode(HeadlessMode::Fast);
+                renderer.SetMode(HeadlessMode::Fast);
                 bool fastThrew = false;
                 try
                 {
@@ -190,7 +190,7 @@ protected:
                 dev.SetVertexBuffer(nullptr);
                 dev.SetIndexBuffer(nullptr);
                 check(!fastThrew, "HeadlessFast mode accepts the same out-of-range call without throwing");
-                backend.SetMode(HeadlessMode::Validation);
+                renderer.SetMode(HeadlessMode::Validation);
             }
 
             std::printf("=== %d/%d PASS ===\n", passCount_, 10);

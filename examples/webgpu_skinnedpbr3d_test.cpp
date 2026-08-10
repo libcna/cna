@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MS-PL
-// plan_cnj.md Phase 14J WebGPU counterpart: verify WebGPUGraphicsBackend's skinned_pbr3d.wgsl
+// plan_cnj.md Phase 14J WebGPU counterpart: verify WebGPURenderer's skinned_pbr3d.wgsl
 // (GetOrCreatePipelineSkinnedPbr3D()/QueueSkinnedPbrDraw()/DrawPrimitivesEx() dispatch) for
 // SkinnedPbrEffect on stride-68 (VertexPositionNormalTangentTextureSkinned) draws -- the PBR +
-// skinning combo, closing the remaining half of this backend's pre-existing "no skinning shader
+// skinning combo, closing the remaining half of this renderer's pre-existing "no skinning shader
 // at all" gap (webgpu_skinned3d_test.cpp covers plain SkinnedEffect). Ported from
-// EasyGLGraphicsBackend::EnsurePbrSkinnedProgram(), which feeds pbr3d.wgsl's own glTF 2.0
+// EasyGLRenderer::EnsurePbrSkinnedProgram(), which feeds pbr3d.wgsl's own glTF 2.0
 // metallic-roughness BRDF (GGX + Smith-Schlick-GGX + Schlick Fresnel) with a skinned
 // position/normal/tangent instead of an unskinned one.
 //

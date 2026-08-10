@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Task 498 (sample 3 of 4 new samples; EasyGL backend): a "keyboard-driven 3D object" demo --
+// Task 498 (sample 3 of 4 new samples; EasyGL renderer): a "keyboard-driven 3D object" demo --
 // the 3D counterpart to Task 730's SDL_Renderer keyboard-sprite sample. A small unlit,
 // vertex-colored BasicEffect quad moves along the World-space X axis only while
 // Keyboard::GetState().IsKeyDown(Keys::Right) is true, proving the full

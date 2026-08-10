@@ -96,7 +96,7 @@ protected:
         {
             // GraphicsDevice::GetBackBufferData reads whatever is currently bound (here,
             // explicitRt), which is what this check is testing. (The former claim that
-            // Texture2D::GetData "would need a CPU-side shadow copy this backend doesn't populate"
+            // Texture2D::GetData "would need a CPU-side shadow copy this renderer doesn't populate"
             // no longer holds: REMED-GFX-127 gave the wrapped SdlRenderer target a real
             // SDL_RenderReadPixels readback, covered by Ascii_Texture2D_GetDataContract.)
             std::vector<Color> pixel(1, Color(0, 0, 0, 0));

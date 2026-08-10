@@ -1,10 +1,10 @@
-#include "CNA/Internal/Backends/D3D9/D3D9ConstantUpload.hpp"
+#include "CNA/Internal/Renderers/D3D9/D3D9ConstantUpload.hpp"
 
 #include <cstring>
 #include <stdexcept>
 #include <string>
 
-namespace CNA::Internal::Backends::D3D9
+namespace CNA::Internal::Renderers::D3D9
 {
     namespace
     {

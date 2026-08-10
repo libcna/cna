@@ -1,7 +1,7 @@
-#include "CNA/Internal/Backends/OpenGL1/OpenGL1ContextRecovery.hpp"
+#include "CNA/Internal/Renderers/OpenGL1/OpenGL1ContextRecovery.hpp"
 #include <algorithm>
 
-namespace CNA::Internal::Backends::OpenGL1
+namespace CNA::Internal::Renderers::OpenGL1
 {
     void OpenGL1ResourceRegistry::Add(IOpenGL1Recoverable* resource)
     {

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// PbrEffect / SkinnedPbrEffect pixel test (Vulkan backend) -- proves the stride-48
+// PbrEffect / SkinnedPbrEffect pixel test (Vulkan renderer) -- proves the stride-48
 // VertexPositionNormalTangentTexture / stride-68 VertexPositionNormalTangentTextureSkinned
 // pipelines, TBN construction, and the glTF metallic-roughness BRDF fragment stage
 // (pbr3d.vert/frag.glsl, pbr3d_skinned.vert/frag.glsl) work end-to-end via a real GPU draw.
@@ -45,7 +45,7 @@ using namespace Microsoft::Xna::Framework::Graphics;
 
 namespace
 {
-    // Stride-48: matches VulkanGraphicsBackend's pbr3d.vert.glsl attribute layout exactly
+    // Stride-48: matches VulkanRenderer's pbr3d.vert.glsl attribute layout exactly
     // (position/normal/tangent/uv), and ApplyLayout's stride==48 case on EasyGL.
     struct PbrGpuVertex
     {

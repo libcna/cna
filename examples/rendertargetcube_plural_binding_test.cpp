@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-096: backend-neutral public regression for the plural cube-face handoff.
+// REMED-GFX-096: renderer-neutral public regression for the plural cube-face handoff.
 //
 // The singular calls initialize all six faces. The operation under test then binds
 // exactly one RenderTargetBinding selecting NegativeZ through SetRenderTargets,
@@ -105,9 +105,9 @@ namespace
     /**
      * @brief What a cube face must hold after a draw of @p written.
      *
-     * REMED-GFX-131: the stored bytes ARE the written bytes, on every backend. This used to fork
+     * REMED-GFX-131: the stored bytes ARE the written bytes, on every renderer. This used to fork
      * on a WebGPU-only CNA_GFX096_EXPECT_SRGB_ENCODED define that sRGB-encoded the expectation,
-     * because that backend gave its render targets the swapchain's *UnormSrgb format; SurfaceFormat
+     * because that renderer gave its render targets the swapchain's *UnormSrgb format; SurfaceFormat
      * ::Color is a plain UNORM byte format, so that fork encoded a defect into the oracle rather
      * than a platform difference.
      */
@@ -309,7 +309,7 @@ protected:
     {
 #if defined(CNA_GFX096_STAGED_SINGLE_FACE)
         // Bgfx submits one frame/view transition at a time for cube targets. Its
-        // cross-backend contract check therefore stages the singular producer,
+        // cross-renderer contract check therefore stages the singular producer,
         // plural producer, and observers across frames. Vulkan retains the full
         // same-frame all-six/A->B->A battery below.
         auto& stagedDevice = getGraphicsDeviceProperty();

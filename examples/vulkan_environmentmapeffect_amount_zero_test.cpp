@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // Task 393: verify EnvironmentMapEffect ignores the cube map entirely when
-// EnvironmentMapAmount=0 (Vulkan backend). See
+// EnvironmentMapAmount=0 (Vulkan renderer). See
 // examples/easygl_environmentmapeffect_amount_zero_test.cpp for the full derivation and
 // the note on CNA's additive vs. FNA's real lerp-based blend formula (they coincide at
 // EnvironmentMapAmount=0, so this test doesn't discriminate that divergence -- flagged

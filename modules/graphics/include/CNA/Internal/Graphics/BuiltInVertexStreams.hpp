@@ -22,7 +22,7 @@
  * object carries a vtable pointer and places its members at alignment-driven offsets that have
  * nothing to do with the stream.
  *
- * Each structure below is that stream — the exact bytes a backend walks — and is the single
+ * Each structure below is that stream — the exact bytes a renderer walks — and is the single
  * source of truth for the matching type's `VertexDeclaration`: the declaration takes its stride
  * from `sizeof(stream)` and every element offset from `offsetof(stream, member)`, so the two can
  * never drift apart. `Pack()` is the one place where a vertex object becomes stream bytes.
@@ -125,7 +125,7 @@ namespace CNA::Internal::Graphics
      * @brief Maps a built-in vertex structure to the GPU stream that carries its values.
      *
      * Specialised for every built-in type CNA can convert. A type with no specialisation has no
-     * object-to-stream conversion, so it can only reach a backend through a caller-packed stream.
+     * object-to-stream conversion, so it can only reach a renderer through a caller-packed stream.
      */
     template <typename VertexT>
     struct VertexStreamOf;

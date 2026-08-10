@@ -9,15 +9,15 @@ support for one must not be inferred from the other.
 | CNA route | Observable contract | EasyGL route | Current Skia result |
 |---|---|---|---|
 | `SpriteBatch::Begin(..., effect=nullptr)` | Stock textured sprite, vertex tint, transform, sampler, blend, viewport/scissor and ordering semantics. | Built-in GL sprite program. | Direct `SkCanvas` image/paint path; already pixel-proven. It does not construct or compile a `SpriteEffect`. |
-| Explicit `SpriteEffect` | Stock effect type whose `OnApply()` attempts to update `MatrixTransform`; it has no source or backend program. | Falls back to the built-in sprite program because `GetEffectBackendPtr()` is null. | Exact runtime type aliases the already-proven built-in path; clones work identically. Derived types reject so overridden behavior cannot be lost. |
-| `ShaderEffect(device, vert, frag)` | NOXNA pair of backend-specific opaque byte strings retained for cloning and source access. | Treats both as GLSL ES shader source. | Untagged strings still return null. An exact `CNA_SKIA_SKSL_V1` first string opts the fragment string into the bounded SkSL SpriteBatch ABI below. |
-| `Effect(device, effectCode)` | Compiled XNA `.fx` bytecode. | Shared constructor throws; no backend receives it. | Same shared, deterministic `NotImplementedException`; outside the SkSL bridge. |
-| `ContentManager` custom `Effect` | `.cnj`/`.shader.json` names separate `vertex` and `fragment` text files. | Files are GLSL source. | Existing untagged descriptors remain invalid. A deliberately backend-specific descriptor can place the exact marker in its vertex payload, but the format still has no portable language tag. |
+| Explicit `SpriteEffect` | Stock effect type whose `OnApply()` attempts to update `MatrixTransform`; it has no source or renderer program. | Falls back to the built-in sprite program because `GetEffectRendererPtr()` is null. | Exact runtime type aliases the already-proven built-in path; clones work identically. Derived types reject so overridden behavior cannot be lost. |
+| `ShaderEffect(device, vert, frag)` | NOXNA pair of renderer-specific opaque byte strings retained for cloning and source access. | Treats both as GLSL ES shader source. | Untagged strings still return null. An exact `CNA_SKIA_SKSL_V1` first string opts the fragment string into the bounded SkSL SpriteBatch ABI below. |
+| `Effect(device, effectCode)` | Compiled XNA `.fx` bytecode. | Shared constructor throws; no renderer receives it. | Same shared, deterministic `NotImplementedException`; outside the SkSL bridge. |
+| `ContentManager` custom `Effect` | `.cnj`/`.shader.json` names separate `vertex` and `fragment` text files. | Files are GLSL source. | Existing untagged descriptors remain invalid. A deliberately renderer-specific descriptor can place the exact marker in its vertex payload, but the format still has no portable language tag. |
 | Stock 3D effects | XNA properties feed vertex/fragment/depth/cube/lighting pipelines. | Dedicated GL programs. | Outside the 2D effect route; tracked by SKIA-93--103 and never implied by a runtime colour filter. |
 
 `SpriteEffect::CacheEffectParameters()` currently looks up `MatrixTransform` in the base effect's
 empty parameter collection, so its cached pointer is null and `OnApply()` is a no-op in CNA. The
-real default SpriteBatch behavior comes from each backend's built-in sprite implementation. This
+real default SpriteBatch behavior comes from each renderer's built-in sprite implementation. This
 makes exact-type `SpriteEffect` recognition a compatibility alias, not a new programmable shader.
 
 ## Source-language and stage mismatch
@@ -26,7 +26,7 @@ makes exact-type `SpriteEffect` recognition a compatibility alias, not a new pro
 |---|---|---|---|
 | Language identity | Constructor has no language enum. EasyGL examples use `#version 300 es`; Vulkan passes raw SPIR-V bytes in the same `std::string` parameters. | Accepts SkSL text only. | Never auto-detect or feed existing strings to SkSL. A future route needs an explicit SkSL contract. |
 | Vertex stage | Full user vertex shader with named/location attributes, varyings and matrices. | No vertex program. `MakeForShader` requires `vec4 main(vec2 inCoords)`. | A Skia custom sprite subset can replace only fragment colour generation; arbitrary vertex source and all 3D layouts must reject. |
-| Fragment result | GLSL fragment shader can discard, write location 0--3, use derivatives and backend GLSL features. | One premultiplied colour returned from `main`; public options default to SkSL 100 and note that raster remains largely ES3-unaware. | Single-output bounded 2D effects only. MRT, arbitrary discard/coverage and unsupported language features reject at compilation. |
+| Fragment result | GLSL fragment shader can discard, write location 0--3, use derivatives and renderer GLSL features. | One premultiplied colour returned from `main`; public options default to SkSL 100 and note that raster remains largely ES3-unaware. | Single-output bounded 2D effects only. MRT, arbitrary discard/coverage and unsupported language features reject at compilation. |
 | Coordinate model | SpriteBatch provides normalized UV varyings plus pixel-position vertex input. | Runtime shader receives local coordinates; child image shaders are evaluated explicitly. | The Skia adapter must define whether coordinates are source pixels, normalized UVs, or destination local pixels. It may not guess per shader. |
 | Primary texture/tint | EasyGL binds sprite texture at unit 0 and supplies per-vertex `aColor`. | Image input is a `uniform shader` child; per-draw values are uniforms or composed filters. | A proposed SkSL sprite ABI must name the primary child and tint explicitly and preserve premultiplied/straight-alpha rules. |
 
@@ -40,12 +40,12 @@ makes exact-type `SpriteEffect` recognition a compatibility alias, not a new pro
 | `SetUniformMat4` | Column-major 4x4 upload. | Reflected `kFloat4x4` in a packed uniform block. | Implemented; the column-2/row-1 byte position is exercised from caller array through SkSL pixel output. |
 | `SetUniformFloatArray` | Scalar array; caller supplies scalar count. | Reflected array flag/count. | Implemented with non-null data, non-negative count and exact declared-count checks. |
 | `SetUniformVec2Array` | Vec2 array; caller supplies element count. | Reflected array flag/count. | Implemented with the same checks and `count * 2 * sizeof(float)` byte validation. |
-| `SetTexture(unit, Texture2D)` | Binds a numeric sampler unit; GLSL separately names a sampler uniform. | Named `uniform shader` child, no numeric sampler-unit API. | Units 1–7 map exactly to optional `cnaTexture1`–`cnaTexture7`; undeclared/out-of-range/null bindings throw. A weak backend binding observes updates and expires safely on dispose. |
+| `SetTexture(unit, Texture2D)` | Binds a numeric sampler unit; GLSL separately names a sampler uniform. | Named `uniform shader` child, no numeric sampler-unit API. | Units 1–7 map exactly to optional `cnaTexture1`–`cnaTexture7`; undeclared/out-of-range/null bindings throw. A weak renderer binding observes updates and expires safely on dispose. |
 | Primary SpriteBatch texture | Implicit unit 0 (`texture1` by convention in current tests). | Child image shader with chosen sampling/tile matrix. | Reserved `cnaTexture0`; it inherits the active SpriteBatch sampler and source-coordinate mapping. |
-| `SetTexture(unit, TextureCube/Texture3D)` | GLSL `samplerCube`/`sampler3D`. | Runtime-effect children are 2D shader/filter/blender objects. | Implemented as a bounded extension, unit 1 only: reserved `cnaCubeFace0`–`5` (cube, dominant-axis face table) / `cnaVolumeAtlas0` (volume, padded grid atlas) children, reachable through `cnaSampleCubeEXT`/`cnaSampleVolumeEXT` in the author's own SkSL. `BindTextureCube`/`BindTexture3D` reject only unit≠1, an effect that never calls the matching function (no children declared), a null backend, an expired backend, or (volume only) a padded atlas exceeding the 256 MiB budget -- not a blanket "unsupported." Weak-lifetime-tracked exactly like `SetTexture(unit, Texture2D)` above. See `docs/skia-cube-volume-sampling-contract.md` (SKIA-144–151). |
+| `SetTexture(unit, TextureCube/Texture3D)` | GLSL `samplerCube`/`sampler3D`. | Runtime-effect children are 2D shader/filter/blender objects. | Implemented as a bounded extension, unit 1 only: reserved `cnaCubeFace0`–`5` (cube, dominant-axis face table) / `cnaVolumeAtlas0` (volume, padded grid atlas) children, reachable through `cnaSampleCubeEXT`/`cnaSampleVolumeEXT` in the author's own SkSL. `BindTextureCube`/`BindTexture3D` reject only unit≠1, an effect that never calls the matching function (no children declared), a null renderer, an expired renderer, or (volume only) a padded atlas exceeding the 256 MiB budget -- not a blanket "unsupported." Weak-lifetime-tracked exactly like `SetTexture(unit, Texture2D)` above. See `docs/skia-cube-volume-sampling-contract.md` (SKIA-144–151). |
 
-`IEffectBackend` has compatibility no-op defaults and `ShaderEffect` skips setters when backend
-construction returned null. `SkiaEffectBackend` overrides every applicable method: an accepted
+`IEffectRenderer` has compatibility no-op defaults and `ShaderEffect` skips setters when renderer
+construction returned null. `SkiaEffectRenderer` overrides every applicable method: an accepted
 tagged effect reports missing names, wrong reflected types, invalid pointers/counts/units,
 unbound/disposed children and compile errors deterministically.
 
@@ -83,7 +83,7 @@ The selected candidates allocate no intermediate render target, so there is no e
 round-trip between stages. Dual texture performs two child samples in one paint; the colour filter
 performs one source sample plus one filter evaluation. Alpha test is the expensive case: the source
 is evaluated once for binary clip coverage and again for the colour draw, and a clip-stack entry is
-created per draw. The raster backend executes all of this on the owner CPU thread.
+created per draw. The raster renderer executes all of this on the owner CPU thread.
 
 Runtime arithmetic uses Skia's float/half pipeline, while input/output surfaces remain
 premultiplied RGBA8. The alpha oracle uses CNA's `0.5/255` threshold construction and exact stored
@@ -106,7 +106,7 @@ candidate fragment operation.
 - all eight alpha compare modes forward the same 24 below/equal/above decisions proven by the
   SKIA-93 clip spike, while every public draw rejects at `GraphicsDevice::DrawUserPrimitives`;
 - all 16 combinations of dual texture availability, fog and vertex-colour enablement reject at the
-  same boundary; a separate assertion proves both texture backends, premultiplied diffuse/alpha,
+  same boundary; a separate assertion proves both texture renderers, premultiplied diffuse/alpha,
   fog and vertex-colour state were forwarded rather than absent;
 - every refused draw leaves a non-black raster sentinel byte-exactly unchanged;
 - passing either stock 3D effect to SpriteBatch reports that the unsupported 3D primitive route is
@@ -146,11 +146,11 @@ ShaderEffect effect(device, "CNA_SKIA_SKSL_V1", R"(
   require the exact reflected name/type/count and valid data. Half/layout-colour flags and every
   unrepresentable vector/matrix/array type reject during ABI validation.
 - Source is non-empty and at most 65,536 bytes; the reflected uniform block is at most 16,384
-  bytes. Texture/target dimensions retain the backend-wide 16,384-axis and 256 MiB limits. Skia
+  bytes. Texture/target dimensions retain the renderer-wide 16,384-axis and 256 MiB limits. Skia
   exposes no public compile-time or compiler-memory budget, so this prototype makes no stronger
   timeout claim.
-- Wrong markers stay on the historical null-backend path. Tagged syntax errors preserve Skia's
-  compiler text; wrong children/uniforms and size violations keep an invalid backend with a
+- Wrong markers stay on the historical null-renderer path. Tagged syntax errors preserve Skia's
+  compiler text; wrong children/uniforms and size violations keep an invalid renderer with a
   deterministic adapter diagnostic. A failed `Begin` clears pending custom state.
 - Cube/volume sampling is supported as a further bounded extension of this same v1 ABI
   (`cnaSampleCubeEXT`/`cnaSampleVolumeEXT`, reserved `cnaCubeFace0`-`5`/`cnaVolumeAtlas0` children,
@@ -174,7 +174,7 @@ SKIA-152 surveyed every stock EasyGL effect against that limitation and found `S
 programmable-vertex-shader mesh API, the originally planned route to lift it -- to be a non-functional
 stub on raster Skia in the pinned revision (`SkBitmapDevice::drawMesh` is a literal empty function
 body; SKIA-153). SKIA-153 redesigned the approach around `SkVertices`/`SkCanvas::drawVertices`
-instead, Skia's older, simpler mesh API, which genuinely rasterizes on this backend but carries only
+instead, Skia's older, simpler mesh API, which genuinely rasterizes on this renderer but carries only
 a **fixed, non-programmable** per-vertex attribute set: position (no W component -- perspective-
 correct interpolation is architecturally impossible, not just unimplemented), optional texcoord,
 optional colour. No custom vertex attribute, varying, or vertex-stage computation is possible through
@@ -195,7 +195,7 @@ ShaderEffect effect(device, "CNA_SKIA_SKSL_MESH_V1", R"(
 )");
 ```
 
-- The marker must be exactly `CNA_SKIA_SKSL_MESH_V1` (SKIA-154, `SkiaMeshEffectBackend`/
+- The marker must be exactly `CNA_SKIA_SKSL_MESH_V1` (SKIA-154, `SkiaMeshEffectRenderer`/
   `SkiaMeshEffectAdapterEXT`). Unlike v1, there is no mandatory reserved texture/tint: per-vertex
   colour combines with the shader's output externally, through the `SkBlendMode` passed to
   `drawVertices` (`kModulate`), not as a shader input. Optional texture children reuse the same
@@ -225,7 +225,7 @@ ShaderEffect effect(device, "CNA_SKIA_SKSL_MESH_V1", R"(
 
 `Skia_MeshEffect_ABI`/`Skia_MeshEffect_Hardening` prove the ABI in isolation (compilation, uniform
 setters, texture children, cache growth/eviction bounds, oversized-source rejection) below the public
-API, matching this backend's established "prove it below the API first" sequencing. `Skia_Vertices2D_Spike`
+API, matching this renderer's established "prove it below the API first" sequencing. `Skia_Vertices2D_Spike`
 and `Skia_GlslTranslator` prove the `SkVertices` rasterization behaviour and the translator's accepted/
 rejected grammar respectively, also below the public API. `Skia_MeshEffect_PublicApi` is the first and
 only test to exercise the complete real path: raw untranslated GLSL rejected outright, colour-only and

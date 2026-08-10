@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Compile HLSL shaders to DXBC and emit a C++ header with embedded byte arrays.
 
-plan_dx.md DX-14-compile. Mirrors src/CNA/Internal/Backends/Vulkan/shaders/compile_shaders.py's
+plan_dx.md DX-14-compile. Mirrors src/CNA/Internal/Renderers/Vulkan/shaders/compile_shaders.py's
 role (read + compile + emit a checked-in header), but D3DCompile() only exists at runtime inside
 d3dcompiler.dll (design decision 5) -- there is no native-Linux D3D shader compiler to call
 in-process the way libshaderc is called for SPIR-V. So this script:
@@ -125,7 +125,7 @@ def main() -> None:
             "#pragma once\n"
             "#include <cstddef>\n"
             "#include <cstdint>\n\n"
-            "namespace CNA::Internal::Backends::D3DCommon::Shaders {\n\n"
+            "namespace CNA::Internal::Renderers::D3DCommon::Shaders {\n\n"
         ]
 
         for filename, entry, profile, cname in SHADERS:
@@ -139,7 +139,7 @@ def main() -> None:
             print(f"OK ({len(dxbc)} bytes)")
             parts.append(dxbc_to_cpp_array(cname, dxbc) + "\n")
 
-        parts.append("} // namespace CNA::Internal::Backends::D3DCommon::Shaders\n")
+        parts.append("} // namespace CNA::Internal::Renderers::D3DCommon::Shaders\n")
 
         output_path.write_text("".join(parts))
         print(f"Written: {output_path}")

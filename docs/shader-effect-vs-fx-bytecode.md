@@ -3,7 +3,7 @@
 This is a practical, developer-facing guide for anyone porting an XNA/FNA game (or writing a new
 one) against CNA and wondering how custom shaders/effects work today. For the internal audit trail
 behind these decisions, see `plan_graphics.md` Tasks 351–354 and `docs/fx-bytecode-support-plan.md`
-(the Phase 74 implementation plan referenced below). For per-backend pixel-test coverage of every
+(the Phase 74 implementation plan referenced below). For per-renderer pixel-test coverage of every
 stock effect, see `docs/xna-4-api-coverage.md` §7.
 
 ## What works today
@@ -21,7 +21,7 @@ in XNA/FNA:
 | `SpriteEffect` | The default effect `SpriteBatch` uses internally. |
 
 All 6 are implemented natively in C++ (not translated from bytecode) and are pixel-tested on
-EasyGL; see `docs/xna-4-api-coverage.md` §7 for exact per-backend/per-effect status (Vulkan and
+EasyGL; see `docs/xna-4-api-coverage.md` §7 for exact per-renderer/per-effect status (Vulkan and
 Bgfx support varies by effect).
 
 **2. `ShaderEffect`** (`Microsoft::Xna::Framework::Graphics::ShaderEffect`, `NOXNA` — a CNA
@@ -39,7 +39,7 @@ ShaderEffect fx(device, vertSpv, fragSpv);
 ```
 
 (See `examples/easygl_shader_effect_test.cpp` and `examples/vulkan_shader_effect_test.cpp` for
-full working examples.) **Bgfx's `ShaderEffect` backend is currently a no-op stub** — both source
+full working examples.) **Bgfx's `ShaderEffect` renderer is currently a no-op stub** — both source
 strings are accepted but ignored, per `docs/xna-4-api-coverage.md` §7 — so this path is EasyGL/
 Vulkan only today.
 
@@ -112,7 +112,7 @@ full reasoning:
    a GLSL→SPIR-V compiler (glslang is the leading candidate; vendoring it is its own tracked task).
 5. Bgfx path: needs its own feasibility investigation first — bgfx's native shader pipeline isn't
    raw GLSL or SPIR-V source, so there's no default path.
-6. Wire the parsed metadata + compiled per-backend programs into `Effect`, replacing Task 353's
+6. Wire the parsed metadata + compiled per-renderer programs into `Effect`, replacing Task 353's
    throwing constructor with a real one, and implement `Clone()` (Task 883).
 7. Real test fixtures (this project has no XNA Content Pipeline tooling to produce fresh compiled
    bytecode, so sourcing/hand-producing real test blobs is its own tracked step).

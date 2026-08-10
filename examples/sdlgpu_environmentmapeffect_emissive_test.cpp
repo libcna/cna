@@ -162,7 +162,7 @@ protected:
         // Amount=0 suppresses the cube entirely; a bound env map is still required.
         auto cube = MakeSolidCube(dev, Color(0, 255, 0, 255));
 
-        // CW winding + normal (0,0,1): what stays visible under this backend's default
+        // CW winding + normal (0,0,1): what stays visible under this renderer's default
         // RasterizerState.CullCounterClockwise (identical to sdlgpu_envmap_test.cpp's own quad).
         const Vector3 n(0.0f, 0.0f, 1.0f);
         const VertexPositionNormalTexture quad[6] = {

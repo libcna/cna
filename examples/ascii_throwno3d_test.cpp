@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
-// plan_ascii.md Phase G7 (ASCII-60): every 3D-pipeline IGraphicsBackend method on
-// AsciiGraphicsBackend uses the wrapper's own unsupported-3D policy. This test verifies its
+// plan_ascii.md Phase G7 (ASCII-60): every 3D-pipeline IGraphicsRenderer method on
+// AsciiRenderer uses the wrapper's own unsupported-3D policy. This test verifies its
 // default Throw/null behavior; unsupported_3d_call_behavior_test.cpp covers WarnAndStub.
 //
 // Checks A-K -- each of the 11 directly-reachable 3D-pipeline entry points throws
@@ -8,7 +8,7 @@
 //   ClearColorAndStencil, ClearColorDepthAndStencil, SetDepthTestEnabled, SetBlendEnabled,
 //   SetDepthWriteEnabled, CreateVertexBuffer, CreateIndexBuffer16, CreateOcclusionQuery.
 // Check L -- SupportsDepthStencil() is false.
-// Check M -- CreateTexture3D/CreateTextureCube/CreateRenderTargetCube/CreateEffectBackend all
+// Check M -- CreateTexture3D/CreateTextureCube/CreateRenderTargetCube/CreateEffectRenderer all
 //   preserve their established nullptr result under the default policy.
 //
 // DrawColoredPrimitives/DrawIndexedColoredPrimitives/DrawInstancedPrimitivesEx are covered by
@@ -22,7 +22,7 @@
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 
-#include "CNA/Internal/Backends/Ascii/AsciiGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Ascii/AsciiRenderer.hpp"
 
 #include <cstdio>
 #include <memory>
@@ -30,7 +30,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::Ascii;
+using namespace CNA::Internal::Renderers::Ascii;
 
 namespace
 {
@@ -60,27 +60,27 @@ protected:
     void Draw(const GameTime&) override
     {
         auto& dev = getGraphicsDeviceProperty();
-        auto& backend = static_cast<AsciiGraphicsBackend&>(dev.GetBackend());
+        auto& renderer = static_cast<AsciiRenderer&>(dev.GetRenderer());
 
-        check(Throws([&] { backend.ClearColorAndDepth(0, 0, 0, 1, 1.0f); }), "ClearColorAndDepth throws");
-        check(Throws([&] { backend.ClearDepth(1.0f); }), "ClearDepth throws");
-        check(Throws([&] { backend.ClearStencil(0); }), "ClearStencil throws");
-        check(Throws([&] { backend.ClearDepthAndStencil(1.0f, 0); }), "ClearDepthAndStencil throws");
-        check(Throws([&] { backend.ClearColorAndStencil(0, 0, 0, 1, 0); }), "ClearColorAndStencil throws");
-        check(Throws([&] { backend.ClearColorDepthAndStencil(0, 0, 0, 1, 1.0f, 0); }), "ClearColorDepthAndStencil throws");
-        check(Throws([&] { backend.SetDepthTestEnabled(true); }), "SetDepthTestEnabled throws");
-        check(Throws([&] { backend.SetBlendEnabled(true); }), "SetBlendEnabled throws");
-        check(Throws([&] { backend.SetDepthWriteEnabled(true); }), "SetDepthWriteEnabled throws");
-        check(Throws([&] { backend.CreateVertexBuffer(3); }), "CreateVertexBuffer throws");
-        check(Throws([&] { backend.CreateIndexBuffer16(3); }), "CreateIndexBuffer16 throws");
-        check(Throws([&] { backend.CreateOcclusionQuery(); }), "CreateOcclusionQuery throws");
+        check(Throws([&] { renderer.ClearColorAndDepth(0, 0, 0, 1, 1.0f); }), "ClearColorAndDepth throws");
+        check(Throws([&] { renderer.ClearDepth(1.0f); }), "ClearDepth throws");
+        check(Throws([&] { renderer.ClearStencil(0); }), "ClearStencil throws");
+        check(Throws([&] { renderer.ClearDepthAndStencil(1.0f, 0); }), "ClearDepthAndStencil throws");
+        check(Throws([&] { renderer.ClearColorAndStencil(0, 0, 0, 1, 0); }), "ClearColorAndStencil throws");
+        check(Throws([&] { renderer.ClearColorDepthAndStencil(0, 0, 0, 1, 1.0f, 0); }), "ClearColorDepthAndStencil throws");
+        check(Throws([&] { renderer.SetDepthTestEnabled(true); }), "SetDepthTestEnabled throws");
+        check(Throws([&] { renderer.SetBlendEnabled(true); }), "SetBlendEnabled throws");
+        check(Throws([&] { renderer.SetDepthWriteEnabled(true); }), "SetDepthWriteEnabled throws");
+        check(Throws([&] { renderer.CreateVertexBuffer(3); }), "CreateVertexBuffer throws");
+        check(Throws([&] { renderer.CreateIndexBuffer16(3); }), "CreateIndexBuffer16 throws");
+        check(Throws([&] { renderer.CreateOcclusionQuery(); }), "CreateOcclusionQuery throws");
 
-        check(!backend.SupportsDepthStencil(), "SupportsDepthStencil() is false");
+        check(!renderer.SupportsDepthStencil(), "SupportsDepthStencil() is false");
 
-        check(backend.CreateTexture3D(4, 4, 4, false, 0) == nullptr, "CreateTexture3D returns nullptr");
-        check(backend.CreateTextureCube(4, false, 0) == nullptr, "CreateTextureCube returns nullptr");
-        check(backend.CreateRenderTargetCube(4, 0) == nullptr, "CreateRenderTargetCube returns nullptr");
-        check(backend.CreateEffectBackend("vs", "fs") == nullptr, "CreateEffectBackend returns nullptr");
+        check(renderer.CreateTexture3D(4, 4, 4, false, 0) == nullptr, "CreateTexture3D returns nullptr");
+        check(renderer.CreateTextureCube(4, false, 0) == nullptr, "CreateTextureCube returns nullptr");
+        check(renderer.CreateRenderTargetCube(4, 0) == nullptr, "CreateRenderTargetCube returns nullptr");
+        check(renderer.CreateEffectRenderer("vs", "fs") == nullptr, "CreateEffectRenderer returns nullptr");
 
         std::printf("=== %d/%d PASS ===\n", passCount_, 17);
         result_ = (passCount_ == 17) ? 0 : 1;

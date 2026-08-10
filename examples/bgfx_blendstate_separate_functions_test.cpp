@@ -2,13 +2,13 @@
 // Task 923: verify ColorBlendFunction and AlphaBlendFunction operate independently on Bgfx — a
 // Bgfx-specific adaptation of examples/easygl_blendstate_separate_functions_test.cpp (Task 307,
 // already reused verbatim on Vulkan for Task 868). This is genuinely discriminating for Bgfx's
-// own gap (split from Task 868's original diagnosis): BgfxGraphicsBackend::ApplyBlendState always
+// own gap (split from Task 868's original diagnosis): BgfxRenderer::ApplyBlendState always
 // implicitly used BGFX_STATE_BLEND_EQUATION_ADD regardless of the requested colorBlendFunc/
 // alphaBlendFunc, which this test's own Check A (ColorBlendFunction=Subtract) directly exposes.
 //
 // Not a verbatim reuse of the EasyGL source because that file calls the low-level
 // GraphicsDevice.SetDepthTestEnabled(false), which is an unconditional throw on Bgfx
-// (BgfxGraphicsBackend::SetDepthTestEnabled is a deliberate ThrowNo3DState() stub — a pre-existing,
+// (BgfxRenderer::SetDepthTestEnabled is a deliberate ThrowNo3DState() stub — a pre-existing,
 // documented gap, not part of this task's scope). Safely omitted here instead: each DrawAndSample
 // call clears the backbuffer and draws exactly one full-screen quad, so whether depth testing is
 // enabled has no effect on the result regardless.

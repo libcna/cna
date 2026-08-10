@@ -3,7 +3,7 @@
 // SpriteFont" demo, specifically targeting SDL_Renderer. Unlike Task 690's single-glyph pixel
 // test, this draws a genuine two-character STRING ("HI"), proving multi-glyph string layout
 // (kerning-driven horizontal advance placing the second glyph immediately after the first, not
-// just one enlarged glyph or overlapping glyphs) renders correctly on this backend.
+// just one enlarged glyph or overlapping glyphs) renders correctly on this renderer.
 //
 // Since CNA has no XNB content pipeline, SpriteFont exposes its raw glyph/cropping/kerning
 // tables directly (matches Task 690's established "hand-build a minimal fixture" convention):

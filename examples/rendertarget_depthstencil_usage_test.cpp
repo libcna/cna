@@ -2,8 +2,8 @@
 // REMED-GFX-142: RenderTargetUsage's DEPTH and STENCIL half.
 //
 // REMED-GFX-136 established the usage contract as a COLOUR contract and recorded, as an open
-// question, that the three backends with a real load action disagree about depth. This file
-// settles the question from the reference rather than from the backends, and then enforces the
+// question, that the three renderers with a real load action disagree about depth. This file
+// settles the question from the reference rather than from the renderers, and then enforces the
 // answer.
 //
 // ---------------------------------------------------------------------------------------------
@@ -71,12 +71,12 @@
 //             COLOUR CONTROL. Proves colour preservation independently, so "depth was lost" can
 //             never be reported when what actually happened is that colour was lost.
 //   band 2 -- cycle 1 draws colour A at z=0.25, cycle 2 draws colour B at z=0.10 (NEARER).
-//             DRAW CONTROL. B must win here on every backend and in every mode. A second cycle
+//             DRAW CONTROL. B must win here on every renderer and in every mode. A second cycle
 //             that silently did not draw at all would otherwise make band 0 read A and look like
 //             a pass.
 //
-// So a preserving target reads A/A/B; a discarding target reads B/discard-colour/B; a backend that
-// lost colour reads something else in band 1; a backend whose second pass never ran reads A in
+// So a preserving target reads A/A/B; a discarding target reads B/discard-colour/B; a renderer that
+// lost colour reads something else in band 1; a renderer whose second pass never ran reads A in
 // band 2. All four are distinct.
 //
 // Stencil gets its own sequence, with the same three-way separation:
@@ -89,7 +89,7 @@
 // Ignored stencil    -> G, G, G            (the gate passed everywhere)
 // Lost colour        -> band 1 is neither S nor G
 // Those four outcomes are mutually exclusive, so "stencil test unsupported" can never be scored as
-// "stencil preserved" -- which is why checks C1/C2 run first and classify the backend's ability to
+// "stencil preserved" -- which is why checks C1/C2 run first and classify the renderer's ability to
 // depth-test and stencil-test INSIDE a render target at all, in a single bind cycle, before any
 // preservation claim is made about it.
 //
@@ -148,7 +148,7 @@ namespace
     constexpr float kNearer = 0.10f;  ///< Cycle-2 draw control -- must always win.
 
     /**
-     * @brief What a rendered render target's public readback must do on this backend.
+     * @brief What a rendered render target's public readback must do on this renderer.
      *
      * `Exact` -- GetData returns the rendered surface byte for byte.
      * `Unsupported` -- GetData raises System::NotSupportedException with the caller's destination
@@ -160,7 +160,7 @@ namespace
         Unsupported,
     };
 
-    /// The complete, reviewed per-backend claim this file enforces.
+    /// The complete, reviewed per-renderer claim this file enforces.
     struct Contract
     {
         const char* name;
@@ -169,7 +169,7 @@ namespace
         Support cubeReadback;  ///< RenderTargetCube::GetData at level 0.
         /**
          * A depth-tested draw INSIDE a RenderTarget2D really is gated by that target's own depth
-         * buffer. Check C1 enforces this before any depth-preservation claim is made, so a backend
+         * buffer. Check C1 enforces this before any depth-preservation claim is made, so a renderer
          * that cannot depth-test at all is never scored as "preserved".
          */
         bool    depthInRT;
@@ -191,10 +191,10 @@ namespace
         bool    stencilPreserves;
         /**
          * A `Clear()` issued AFTER a draw inside the SAME bind cycle wipes that draw, per XNA's
-         * command order (REMED-GFX-129's subject on Vulkan). False on a backend whose only clear
+         * command order (REMED-GFX-129's subject on Vulkan). False on a renderer whose only clear
          * mechanism is still the pass load action, so a mid-cycle clear is hoisted to the front of
          * the cycle -- check K7 then asserts the COLLAPSED result, which stays falsifiable in both
-         * directions and turns red the day that backend gains ordered clears.
+         * directions and turns red the day that renderer gains ordered clears.
          */
         bool    orderedClearInCycle;
         /**
@@ -217,7 +217,7 @@ namespace
          * The same question for a multisampled RenderTargetCube FACE, declared separately because
          * the two routes diverged. REMED-GFX-154 fixed the RenderTarget2D resolve on bgfx, but a
          * multisampled cube face there is still a deterministic REFUSAL rather than a zero read
-         * (`BgfxRenderTargetCubeBackend::GetData` returns false for any multisampled target) --
+         * (`BgfxRenderTargetCubeRenderer::GetData` returns false for any multisampled target) --
          * REMED-GFX-134's separately recorded boundary, on a different helper path, which
          * REMED-GFX-154 deliberately did not expand into. One field could not describe both once
          * only one of them was fixed, and check U4 turned red saying so.
@@ -225,25 +225,25 @@ namespace
         bool    msaaCubeReadback;
         /**
          * A multisampled RenderTarget2D honours `PreserveContents` at all. False on Vulkan, where
-         * `VulkanRenderTargetBackend::GetRenderPass()` hands its MSAA leg a hardcoded
+         * `VulkanRenderTargetRenderer::GetRenderPass()` hands its MSAA leg a hardcoded
          * `discardContents=true` -- COLOUR and DEPTH alike. That is the multisampled-RT2D
          * preservation finding REMED-GFX-141 recorded and deliberately did not fix (its cube
          * sibling passes `!preserveContents_` and is correct), so check D8 asserts the discarding
-         * outcome there instead of claiming a depth result the backend cannot give.
+         * outcome there instead of claiming a depth result the renderer cannot give.
          */
         bool    msaaRt2dPreserves;
         /**
-         * `DrawUserPrimitives` works at all. False on the 2D-only backends, which throw
+         * `DrawUserPrimitives` works at all. False on the 2D-only renderers, which throw
          * `std::runtime_error("... does not support 3D: CreateVertexBuffer")` from the first draw.
          * Every depth/stencil observation in this file is a depth-tested or stencil-gated DRAW, so
          * where this is false no content can be measured -- but the whole public sequence
          * (construct, bind, Clear, unbind, read, dispose) still runs and still has to be legal,
-         * which is what those backends are registered here to prove.
+         * which is what those renderers are registered here to prove.
          */
         bool    drawsUserPrimitives;
         /**
          * Ask for a multisampled BACKBUFFER. Only true where that is the sole way a render target
-         * can engage MSAA: Vulkan gates its RT MSAA resources on the backend's own sampleCount_.
+         * can engage MSAA: Vulkan gates its RT MSAA resources on the renderer's own sampleCount_.
          */
         bool    preferMultiSampling;
         bool    wantHiDefProfile;  ///< Request GraphicsProfile::HiDef.
@@ -255,29 +255,29 @@ namespace
     //   msaaDepthRT2D, msaaDepthCube, msaaReadback, msaaCubeReadback, msaaRt2dPreserves,
     //   drawsUserPrimitives,
     //   preferMultiSampling, wantHiDefProfile
-#if defined(CNA_BACKEND_HEADLESS)
+#if defined(CNA_RENDERER_HEADLESS)
     // Headless rasterizes nothing, so it owns no colour at all and its readback is
     // REMED-GFX-127/130's deterministic refusal. Every sequence must still be legal.
     constexpr Contract kContract{"HEADLESS", Support::Unsupported, true, Support::Unsupported,
                                  false, false, false, false, true,
                                  true, true, false, false, true, true, false, false};
-#elif defined(CNA_BACKEND_SOFTWARE)
+#elif defined(CNA_RENDERER_SOFTWARE)
     // No RenderTargetCube. A real CPU depth buffer per framebuffer, owned by that framebuffer and
     // never shared, so depth simply persists. NO stencil storage at all
-    // (`SoftwareGraphicsBackend::ClearStencil` is an empty body and nothing rasterises a stencil
+    // (`SoftwareRenderer::ClearStencil` is an empty body and nothing rasterises a stencil
     // test), so C2 declares stencil unsupported and every stencil check reports that boundary
     // instead of a result it cannot have.
     constexpr Contract kContract{"SOFTWARE", Support::Exact, false, Support::Unsupported,
                                  true, false, true, false, true,
                                  true, true, false, false, true, true, false, false};
-#elif defined(CNA_BACKEND_EASYGL)
+#elif defined(CNA_RENDERER_EASYGL)
     // A real depth renderbuffer per target, attached once at construction and never re-attached;
     // no glInvalidateFramebuffer and no clear-on-bind anywhere, so an FBO's depth/stencil simply
     // persists -- exactly FNA3D's OpenGL driver.
     constexpr Contract kContract{"EASYGL", Support::Exact, true, Support::Exact,
                                  true, true, true, true, true,
                                  true, true, true, true, true, true, false, false};
-#elif defined(CNA_BACKEND_BGFX)
+#elif defined(CNA_RENDERER_BGFX)
     // Render-target views are left at BGFX_CLEAR_NONE, so the depth attachment persists.
     // `msaaDepthRT2D` was false while a multisampled depth-backed RenderTarget2D aborted the process
     // here; REMED-GFX-163 fixed that, so check D8 builds the target again. `msaaReadback` was then
@@ -286,14 +286,14 @@ namespace
     constexpr Contract kContract{"BGFX", Support::Exact, true, Support::Exact,
                                  true, true, true, true, true,
                                  true, true, true, false, true, true, false, false};
-#elif defined(CNA_BACKEND_VULKAN)
+#elif defined(CNA_RENDERER_VULKAN)
     // `msaaRt2dPreserves` false: the multisampled RenderTarget2D leg hardcodes
     // `discardContents=true`, discarding colour AND depth -- REMED-GFX-141's recorded finding.
     constexpr Contract kContract{"VULKAN", Support::Exact, true, Support::Exact,
                                  true, true, true, true, true,
                                  true, true, true, true, false, true, true, false};
-#elif defined(CNA_BACKEND_WEBGPU)
-    // `stencilInRT` false: `WebGPUGraphicsBackend::ApplyDepthStencilState` stores the stencil
+#elif defined(CNA_RENDERER_WEBGPU)
+    // `stencilInRT` false: `WebGPURenderer::ApplyDepthStencilState` stores the stencil
     // state and deliberately never bakes it into any pipeline's `WGPUStencilFaceState` (WEBGPU-83),
     // so every fragment passes the stencil test -- check C2 measures exactly that and is the
     // reason no stencil-preservation result is claimed here.
@@ -304,7 +304,7 @@ namespace
     constexpr Contract kContract{"WEBGPU", Support::Exact, true, Support::Exact,
                                  true, false, true, false, true,
                                  true, true, false, false, true, true, false, false};
-#elif defined(CNA_BACKEND_SDL_GPU)
+#elif defined(CNA_RENDERER_SDL_GPU)
     // Already FNA3D-shaped: every depth/stencil target info uses `clearX ? CLEAR : LOAD` with an
     // unconditional STORE, which is what FNA3D's own SDL_GPU driver does.
     // `orderedClearInCycle` was false while REMED-GFX-156 was open, the same boundary as WebGPU
@@ -312,38 +312,38 @@ namespace
     constexpr Contract kContract{"SDL_GPU", Support::Exact, true, Support::Exact,
                                  true, true, true, true, true,
                                  true, true, true, true, true, true, false, false};
-#elif defined(CNA_BACKEND_SDL_RENDERER)
+#elif defined(CNA_RENDERER_SDL_RENDERER)
     constexpr Contract kContract{"SDL_RENDERER", Support::Exact, false, Support::Unsupported,
                                  false, false, false, false, true,
                                  true, true, false, false, true, false, false, false};
-#elif defined(CNA_BACKEND_ASCII)
+#elif defined(CNA_RENDERER_ASCII)
     constexpr Contract kContract{"ASCII", Support::Exact, false, Support::Unsupported,
                                  false, false, false, false, true,
                                  true, true, false, false, true, false, false, false};
-#elif defined(CNA_BACKEND_CANVAS)
+#elif defined(CNA_RENDERER_CANVAS)
     constexpr Contract kContract{"CANVAS", Support::Exact, false, Support::Unsupported,
                                  false, false, false, false, true,
                                  true, true, false, false, true, false, false, false};
-#elif defined(CNA_BACKEND_FREEDIRECT)
+#elif defined(CNA_RENDERER_FREEDIRECT)
     constexpr Contract kContract{"FREEDIRECT", Support::Exact, false, Support::Unsupported,
                                  false, false, false, false, true,
                                  true, true, false, false, true, false, false, false};
-#elif defined(CNA_BACKEND_D3D9)
+#elif defined(CNA_RENDERER_D3D9)
     constexpr Contract kContract{"D3D9", Support::Exact, true, Support::Exact,
                                  true, true, true, true, true,
                                  true, true, false, false, true, true, false, true};
-#elif defined(CNA_BACKEND_D3D11)
+#elif defined(CNA_RENDERER_D3D11)
     constexpr Contract kContract{"D3D11", Support::Exact, true, Support::Exact,
                                  true, true, true, true, true,
                                  true, true, true, true, true, true, false, false};
-#elif defined(CNA_BACKEND_D3D12)
+#elif defined(CNA_RENDERER_D3D12)
     constexpr Contract kContract{"D3D12", Support::Exact, true, Support::Exact,
                                  true, true, true, true, true,
                                  true, true, true, true, true, true, false, false};
-#elif defined(CNA_BACKEND_SOKOL)
+#elif defined(CNA_RENDERER_SOKOL)
     // plan_sokol.md SOKOL-25/26/38: RenderTarget2D AND RenderTargetCube can both be created and
-    // bound, and both now have a working single-sample GetData (SokolRenderTargetBackend/
-    // SokolRenderTargetCubeBackend read back their real colour content via a throwaway GL FBO
+    // bound, and both now have a working single-sample GetData (SokolRenderTargetRenderer/
+    // SokolRenderTargetCubeRenderer read back their real colour content via a throwaway GL FBO
     // around the raw GL texture sg_gl_query_image_info() exposes), so `readback`/`cubeReadback`
     // are Exact and every readback-driven check in this file (U1-U4 in particular) measures real
     // pixels. `msaaReadback` stays false, conservatively unclaimed: a multisampled RenderTarget2D's
@@ -355,7 +355,7 @@ namespace
     // real stencil state into Pipeline3DKey/Get3DPipeline (front/back ops, compare, masks and
     // reference are baked into the sokol_gfx pipeline itself, since sg_stencil_state.ref is
     // pipeline state there, not dynamic). Depth and stencil share the one real depth-stencil image
-    // CreateRenderTarget2D/CreateRenderTargetCube always allocate (docs/sokol-backend.md: every
+    // CreateRenderTarget2D/CreateRenderTargetCube always allocate (docs/sokol-renderer.md: every
     // non-None DepthFormat gets the combined SG_PIXELFORMAT_DEPTH_STENCIL, never a depth-only
     // format -- and for a cube, ONE 2D depth-stencil image shared by all six faces, exactly what
     // U2 measures), and BeginPassIfNeeded's LOAD action applies to both attachments identically,
@@ -376,7 +376,7 @@ namespace
                                  true, true, true, true, true,
                                  true, true, false, false, true, true, false, false};
 #else
-#error "REMED-GFX-142: this backend has no declared render-target depth/stencil contract."
+#error "REMED-GFX-142: this renderer has no declared render-target depth/stencil contract."
 #endif
 
     // --- The palette. 0/255-only, so every comparison is byte-exact even on an sRGB target. ---
@@ -482,7 +482,7 @@ class RenderTargetDepthStencilUsageTest : public Game
         if (ok) ++passCount_;
     }
 
-    /// A boundary this backend genuinely does not have, recorded as a pass with its reason.
+    /// A boundary this renderer genuinely does not have, recorded as a pass with its reason.
     void skip(const std::string& label) { check(true, label + " -- SKIPPED"); }
 
     // -----------------------------------------------------------------------------------------
@@ -502,14 +502,14 @@ class RenderTargetDepthStencilUsageTest : public Game
     /**
      * @brief Fills vertical band @p band (0..2) at clip depth @p z with @p colour.
      *
-     * @p band == -1 covers the whole surface. Bands are X-only on purpose: no backend flips X, so
+     * @p band == -1 covers the whole surface. Bands are X-only on purpose: no renderer flips X, so
      * this file is completely independent of the Y-orientation question REMED-GFX-134 owns.
      */
     void DrawBand(GraphicsDevice& dev, int band, float z, const Color& colour)
     {
-        // A 2D-only backend throws from the first DrawUserPrimitives (see drawsUserPrimitives), so
+        // A 2D-only renderer throws from the first DrawUserPrimitives (see drawsUserPrimitives), so
         // every sequence here degenerates to its bind/Clear/unbind/read skeleton there rather than
-        // being skipped -- that skeleton still has to be legal and is exactly what those backends
+        // being skipped -- that skeleton still has to be legal and is exactly what those renderers
         // are registered to prove.
         if (!kContract.drawsUserPrimitives) return;
         const float x0 = (band < 0) ? -1.0f : (-1.0f + static_cast<float>(band) * (2.0f / 3.0f));
@@ -692,13 +692,13 @@ class RenderTargetDepthStencilUsageTest : public Game
                             "buffer rejects the farther draw and accepts the nearer one");
             else
                 check(!b.threwSomethingElse,
-                      "C1 capability: this backend declares no functional render-target depth "
+                      "C1 capability: this renderer declares no functional render-target depth "
                       "test; the sequence must still be legal" + b.detail);
         }
 
         // C2: the stencil test inside a render target passes exactly where the stamp was, in ONE
         // bind cycle. The band-2 half is the one that catches a fully-bypassed stencil test: a
-        // backend that always passes shows the gate colour there too.
+        // renderer that always passes shows the gate colour there too.
         {
             auto rt = MakeRT(dev, RenderTargetUsage::PreserveContents, DepthFormat::Depth24Stencil8);
             dev.SetRenderTarget(rt.get());
@@ -714,7 +714,7 @@ class RenderTargetDepthStencilUsageTest : public Game
                             "where the stamp was and is rejected everywhere else");
             else
                 check(!b.threwSomethingElse,
-                      "C2 capability: this backend declares no functional render-target stencil "
+                      "C2 capability: this renderer declares no functional render-target stencil "
                       "test; the sequence must still be legal" + b.detail);
         }
     }
@@ -760,7 +760,7 @@ class RenderTargetDepthStencilUsageTest : public Game
         if (kContract.readback != Support::Exact || !kContract.depthInRT)
         {
             check(!b.threwSomethingElse, id + " " + what + " -- no functional render-target depth "
-                  "readback on this backend; the sequence must still be legal" + b.detail);
+                  "readback on this renderer; the sequence must still be legal" + b.detail);
             return;
         }
         ExpectDepthCycleResult(b, usage, id + " " + what + " (" + UsageName(usage) + ")");
@@ -779,7 +779,7 @@ class RenderTargetDepthStencilUsageTest : public Game
         RunDepthCase(dev, RenderTargetUsage::PreserveContents, DepthFormat::Depth16,
                      "D5", "depth survives an unbind/rebind cycle, Depth16");
 
-        // D6: target A -> target B -> target A. Each target must keep its OWN depth; a backend
+        // D6: target A -> target B -> target A. Each target must keep its OWN depth; a renderer
         // that shares one depth attachment between two live targets fails here and nowhere else.
         {
             auto a = MakeRT(dev, RenderTargetUsage::PreserveContents, DepthFormat::Depth24Stencil8);
@@ -821,14 +821,14 @@ class RenderTargetDepthStencilUsageTest : public Game
                  "built here -- see the msaaDepthRT2D contract field)");
         else if (kContract.readback != Support::Exact || !kContract.msaaReadback ||
                  !kContract.depthInRT)
-            skip("D8 multisampled depth (no resolved readback on this backend)");
+            skip("D8 multisampled depth (no resolved readback on this renderer)");
         else
         {
             auto rt = MakeRT(dev, RenderTargetUsage::PreserveContents,
                              DepthFormat::Depth24Stencil8, kMsaaRequest);
             appliedMsaa_ = rt->getMultiSampleCountProperty();
             if (appliedMsaa_ <= 0)
-                skip("D8 multisampled depth (this backend applies no MSAA to a render target, "
+                skip("D8 multisampled depth (this renderer applies no MSAA to a render target, "
                      "applied " + std::to_string(appliedMsaa_) + ")");
             else
             {
@@ -846,7 +846,7 @@ class RenderTargetDepthStencilUsageTest : public Game
                     // so the far draw is accepted and everything it did not cover comes back at
                     // the load action's clear colour -- the last value a Clear() left behind.
                     ExpectBands(ReadTarget(*rt), BColour(), BgColour(), BColour(),
-                                label + " -- declared NOT preserved on this backend");
+                                label + " -- declared NOT preserved on this renderer");
             }
         }
     }
@@ -886,7 +886,7 @@ class RenderTargetDepthStencilUsageTest : public Game
         if (kContract.readback != Support::Exact || !kContract.stencilInRT)
         {
             check(!b.threwSomethingElse, id + " " + what + " -- no functional render-target "
-                  "stencil on this backend; the sequence must still be legal" + b.detail);
+                  "stencil on this renderer; the sequence must still be legal" + b.detail);
             return;
         }
         ExpectStencilCycleResult(b, usage, id + " " + what + " (" + UsageName(usage) + ")");
@@ -1055,7 +1055,7 @@ class RenderTargetDepthStencilUsageTest : public Game
                 // the cycle, so the draw recorded BEFORE it survives in band 1. Depth still ends
                 // up cleared, so band 0 is unchanged -- which is why only band 1 tells them apart.
                 ExpectBands(ReadTarget(*rt), BColour(), StampColour(), BColour(),
-                            "K7 draw -> Clear -> draw: this backend delivers a mid-cycle Clear "
+                            "K7 draw -> Clear -> draw: this renderer delivers a mid-cycle Clear "
                             "through the pass load action, so the earlier draw is NOT wiped "
                             "-- declared, recorded separately");
         }
@@ -1125,7 +1125,7 @@ class RenderTargetDepthStencilUsageTest : public Game
             dev.SetRenderTargets({});
             const Bands b = ReadFace(*cube, 1);
             // Where depth is not preserved at all, face B's bind resets it and the probe lands --
-            // the same observable as a per-face buffer, so this check can only speak on a backend
+            // the same observable as a per-face buffer, so this check can only speak on a renderer
             // that preserves.
             const Color expect = kContract.depthPreserves ? BgColour() : GateColour();
             ExpectBands(b, expect, BgColour(), BgColour(),
@@ -1156,7 +1156,7 @@ class RenderTargetDepthStencilUsageTest : public Game
                  "be built here)");
         else if (!canRead || !kContract.msaaCubeReadback || !kContract.depthInRT)
             skip("U4 multisampled cube depth (no resolved readback of a multisampled cube FACE on "
-                 "this backend -- a different route from the RenderTarget2D one REMED-GFX-154 "
+                 "this renderer -- a different route from the RenderTarget2D one REMED-GFX-154 "
                  "fixed, and REMED-GFX-134's separately recorded boundary)");
         else
         {
@@ -1164,11 +1164,11 @@ class RenderTargetDepthStencilUsageTest : public Game
                                  DepthFormat::Depth24Stencil8, kMsaaRequest);
             const int applied = cube->getMultiSampleCountProperty();
             if (applied <= 0)
-                skip("U4 multisampled cube depth (this backend applies no MSAA to a cube target, "
+                skip("U4 multisampled cube depth (this renderer applies no MSAA to a cube target, "
                      "applied " + std::to_string(applied) + ")");
             else if (!canRead || !kContract.msaaCubeReadback || !kContract.depthInRT)
                 skip("U4 multisampled cube depth (no resolved readback of a multisampled cube "
-                     "FACE on this backend -- REMED-GFX-134's separately recorded boundary)");
+                     "FACE on this renderer -- REMED-GFX-134's separately recorded boundary)");
             else
             {
                 dev.SetRenderTarget(cube.get(), CubeMapFace::PositiveZ);  DepthCycle1(dev);
@@ -1242,7 +1242,7 @@ class RenderTargetDepthStencilUsageTest : public Game
 
         // X4: a disposed target must not be usable, and must not take the device with it. The
         // whole depth sequence runs again afterwards on a fresh target to prove the device is
-        // still healthy -- a backend that left a dangling depth attachment fails there.
+        // still healthy -- a renderer that left a dangling depth attachment fails there.
         {
             bool threw = false;
             {
@@ -1290,8 +1290,8 @@ protected:
         // Frame 0 is a deliberate warm-up, the same one REMED-GFX-134/136/141 use: bgfx's very
         // first readback of a frame reports black regardless of what was rendered, so the first
         // check in the battery -- which is the capability control everything else is gated on --
-        // would measure nothing on that backend. One throwaway backbuffer frame first, then the
-        // whole sequence runs in frame 1. Every other backend is unaffected: nothing here reads
+        // would measure nothing on that renderer. One throwaway backbuffer frame first, then the
+        // whole sequence runs in frame 1. Every other renderer is unaffected: nothing here reads
         // anything back, and frame 1 rebuilds every target it uses from scratch.
         if (!warmedUp_)
         {

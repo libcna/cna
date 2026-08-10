@@ -1,11 +1,11 @@
 // plan_dx.md Phase DX9 (DX-70/DX-71/DX-72).
-#include "CNA/Internal/Backends/D3D11/D3D11SpriteBatch.hpp"
-#include "CNA/Internal/Backends/D3D11/D3D11GraphicsBackend.hpp"
-#include "CNA/Internal/Backends/D3D11/D3D11Textures.hpp"
-#include "CNA/Internal/Backends/D3D11/D3D11RenderTargets.hpp"
-#include "CNA/Internal/Backends/D3D11/D3D11EffectBackend.hpp"
-#include "CNA/Internal/Backends/D3DCommon/D3DShaderCache.hpp"
-#include "CNA/Internal/Backends/D3DCommon/D3DConstantBuffers.hpp"
+#include "CNA/Internal/Renderers/D3D11/D3D11SpriteBatch.hpp"
+#include "CNA/Internal/Renderers/D3D11/D3D11Renderer.hpp"
+#include "CNA/Internal/Renderers/D3D11/D3D11Textures.hpp"
+#include "CNA/Internal/Renderers/D3D11/D3D11RenderTargets.hpp"
+#include "CNA/Internal/Renderers/D3D11/D3D11EffectRenderer.hpp"
+#include "CNA/Internal/Renderers/D3DCommon/D3DShaderCache.hpp"
+#include "CNA/Internal/Renderers/D3DCommon/D3DConstantBuffers.hpp"
 
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
@@ -15,7 +15,7 @@
 #include <stdexcept>
 #include <utility>
 
-namespace CNA::Internal::Backends::D3D11
+namespace CNA::Internal::Renderers::D3D11
 {
     using Microsoft::Xna::Framework::Color;
     using Microsoft::Xna::Framework::Rectangle;
@@ -24,22 +24,22 @@ namespace CNA::Internal::Backends::D3D11
 
     namespace
     {
-        /// Same two-concrete-type SRV resolution as D3D11GraphicsBackend.cpp's own (anonymous-
+        /// Same two-concrete-type SRV resolution as D3D11Renderer.cpp's own (anonymous-
         /// namespace-local, not exported) GetSrvForTextureEXT -- duplicated rather than factored
         /// into a shared header for 6 lines of logic, matching this codebase's existing precedent
         /// (DX-62's own fork report never factored it out either).
-        ID3D11ShaderResourceView* GetSrvForTextureEXT(const ITextureBackend* tex)
+        ID3D11ShaderResourceView* GetSrvForTextureEXT(const ITextureRenderer* tex)
         {
             if (tex == nullptr) return nullptr;
-            if (const auto* t = dynamic_cast<const D3D11TextureBackend*>(tex))
+            if (const auto* t = dynamic_cast<const D3D11TextureRenderer*>(tex))
                 return t->GetShaderResourceViewEXT();
-            if (const auto* rt = dynamic_cast<const D3D11RenderTargetBackend*>(tex))
+            if (const auto* rt = dynamic_cast<const D3D11RenderTargetRenderer*>(tex))
                 return rt->GetShaderResourceViewEXT();
             return nullptr;
         }
     }
 
-    D3D11SpriteBatchBackend::D3D11SpriteBatchBackend(D3D11GraphicsBackend* owner)
+    D3D11SpriteBatchRenderer::D3D11SpriteBatchRenderer(D3D11Renderer* owner)
         : owner_(owner)
         , device_(owner_->GetDeviceEXT())
         , context_(owner_->GetContextEXT())
@@ -48,24 +48,24 @@ namespace CNA::Internal::Backends::D3D11
     {
     }
 
-    void D3D11SpriteBatchBackend::Begin()
+    void D3D11SpriteBatchRenderer::Begin()
     {
         if (begun_) return;
         begun_ = true;
     }
 
-    void D3D11SpriteBatchBackend::End()
+    void D3D11SpriteBatchRenderer::End()
     {
         FlushBatch();
         begun_ = false;
     }
 
-    void D3D11SpriteBatchBackend::SetTransformMatrix(const Matrix& m)
+    void D3D11SpriteBatchRenderer::SetTransformMatrix(const Matrix& m)
     {
         transform_ = m;
     }
 
-    void D3D11SpriteBatchBackend::SetCustomEffect(Effect* effect)
+    void D3D11SpriteBatchRenderer::SetCustomEffect(Effect* effect)
     {
         if (customEffect_ != effect)
         {
@@ -74,18 +74,18 @@ namespace CNA::Internal::Backends::D3D11
         }
     }
 
-    void D3D11SpriteBatchBackend::SetSamplerFilter(int textureFilter)
+    void D3D11SpriteBatchRenderer::SetSamplerFilter(int textureFilter)
     {
         pendingFilter_ = textureFilter;
     }
 
-    void D3D11SpriteBatchBackend::SetSamplerAddressMode(int addressU, int addressV)
+    void D3D11SpriteBatchRenderer::SetSamplerAddressMode(int addressU, int addressV)
     {
         pendingAddressU_ = addressU;
         pendingAddressV_ = addressV;
     }
 
-    void D3D11SpriteBatchBackend::GetCurrentViewportSize(float& width, float& height) const
+    void D3D11SpriteBatchRenderer::GetCurrentViewportSize(float& width, float& height) const
     {
         UINT numViewports = 1;
         D3D11_VIEWPORT vp{};
@@ -94,15 +94,15 @@ namespace CNA::Internal::Backends::D3D11
         height = vp.Height;
     }
 
-    ID3D11InputLayout* D3D11SpriteBatchBackend::GetOrCreateSprite2DInputLayout()
+    ID3D11InputLayout* D3D11SpriteBatchRenderer::GetOrCreateSprite2DInputLayout()
     {
         if (!sprite2DInputLayout_)
         {
-            // Fixed Sprite2DVertex contract -- identical shape to D3D11EffectBackend's own
+            // Fixed Sprite2DVertex contract -- identical shape to D3D11EffectRenderer's own
             // hardcoded custom-shader input layout (POSITION0 R32G32 @0, TEXCOORD0 R32G32 @8,
             // COLOR0 R32G32B32A32 @16), but created against sprite2d.vert.hlsl's own bytecode
             // (CreateInputLayout validates the element array against a specific vertex shader's
-            // real input signature, so this can't be shared with D3D11EffectBackend's layout,
+            // real input signature, so this can't be shared with D3D11EffectRenderer's layout,
             // which is validated against whatever custom HLSL a game compiled at runtime).
             static const D3D11_INPUT_ELEMENT_DESC kElements[] = {
                 { "POSITION", 0, DXGI_FORMAT_R32G32_FLOAT,       0, 0,  D3D11_INPUT_PER_VERTEX_DATA, 0 },
@@ -122,7 +122,7 @@ namespace CNA::Internal::Backends::D3D11
         return sprite2DInputLayout_.Get();
     }
 
-    ID3D11Buffer* D3D11SpriteBatchBackend::GetOrCreatePerDrawBuffer()
+    ID3D11Buffer* D3D11SpriteBatchRenderer::GetOrCreatePerDrawBuffer()
     {
         if (!perDrawBuffer_)
         {
@@ -136,36 +136,36 @@ namespace CNA::Internal::Backends::D3D11
         return perDrawBuffer_.Get();
     }
 
-    void D3D11SpriteBatchBackend::FlushBatch()
+    void D3D11SpriteBatchRenderer::FlushBatch()
     {
         if (pendingVertices_.empty()) return;
 
         float vpW = 0.0f, vpH = 0.0f;
         GetCurrentViewportSize(vpW, vpH);
 
-        D3D11EffectBackend* customBackend = nullptr;
+        D3D11EffectRenderer* customRenderer = nullptr;
         if (customEffect_)
-            customBackend = dynamic_cast<D3D11EffectBackend*>(customEffect_->GetEffectBackendPtr());
+            customRenderer = dynamic_cast<D3D11EffectRenderer*>(customEffect_->GetEffectRendererPtr());
 
-        if (customBackend && customBackend->IsValid())
+        if (customRenderer && customRenderer->IsValid())
         {
-            // DX-71: vpSize is set here, once per flush, mirroring VulkanEffectBackend's own
+            // DX-71: vpSize is set here, once per flush, mirroring VulkanEffectRenderer's own
             // "set automatically by the sprite-batch runtime" convention -- the game/effect
             // author never calls SetViewportSizeEXT() itself.
-            customBackend->SetViewportSizeEXT(vpW, vpH);
+            customRenderer->SetViewportSizeEXT(vpW, vpH);
             customEffect_->Apply();
-            customBackend->Bind();
+            customRenderer->Bind();
         }
         else
         {
             auto vs = D3DCommon::CreateVertexShaderForVariant(device_.Get(), D3DCommon::D3DShaderVariant::Sprite2d);
             auto ps = D3DCommon::CreatePixelShaderForVariant(device_.Get(), D3DCommon::D3DShaderVariant::Sprite2d);
             if (!vs || !ps)
-                throw std::runtime_error("D3D11SpriteBatchBackend: failed to create sprite2d shader objects");
+                throw std::runtime_error("D3D11SpriteBatchRenderer: failed to create sprite2d shader objects");
 
             ID3D11InputLayout* layout = GetOrCreateSprite2DInputLayout();
             if (!layout)
-                throw std::runtime_error("D3D11SpriteBatchBackend: failed to create sprite2d input layout");
+                throw std::runtime_error("D3D11SpriteBatchRenderer: failed to create sprite2d input layout");
 
             D3DCommon::D3DSprite2DConstants c{};
             c.ViewportSize[0] = vpW;
@@ -184,8 +184,8 @@ namespace CNA::Internal::Backends::D3D11
             context_->VSSetConstantBuffers(0, 1, &cb);
         }
 
-        // Texture unit 0 is always driven by the caller for both paths (IEffectBackend::
-        // BindTexture()'s own doc comment; D3D11EffectBackend deliberately doesn't override it).
+        // Texture unit 0 is always driven by the caller for both paths (IEffectRenderer::
+        // BindTexture()'s own doc comment; D3D11EffectRenderer deliberately doesn't override it).
         ID3D11ShaderResourceView* srv = GetSrvForTextureEXT(currentTexture_);
         context_->PSSetShaderResources(0, 1, &srv);
         owner_->ApplySamplerState(0, pendingFilter_, pendingAddressU_, pendingAddressV_, 1);
@@ -206,7 +206,7 @@ namespace CNA::Internal::Backends::D3D11
         currentTexture_ = nullptr;
     }
 
-    void D3D11SpriteBatchBackend::Draw(const ITextureBackend& texture, float x, float y)
+    void D3D11SpriteBatchRenderer::Draw(const ITextureRenderer& texture, float x, float y)
     {
         const int w = texture.GetWidth();
         const int h = texture.GetHeight();
@@ -214,7 +214,7 @@ namespace CNA::Internal::Backends::D3D11
              Color::White);
     }
 
-    void D3D11SpriteBatchBackend::Draw(const ITextureBackend& texture,
+    void D3D11SpriteBatchRenderer::Draw(const ITextureRenderer& texture,
                                        const Rectangle& destinationRectangle,
                                        const Rectangle& sourceRectangle,
                                        const Color& color)
@@ -222,7 +222,7 @@ namespace CNA::Internal::Backends::D3D11
         Draw(texture, destinationRectangle, sourceRectangle, color, 0.0f, Vector2(0, 0), SpriteEffects::None, 0.0f);
     }
 
-    void D3D11SpriteBatchBackend::Draw(const ITextureBackend& texture,
+    void D3D11SpriteBatchRenderer::Draw(const ITextureRenderer& texture,
                                        const Rectangle& destinationRectangle,
                                        const Rectangle& sourceRectangle,
                                        const Color& color,
@@ -231,7 +231,7 @@ namespace CNA::Internal::Backends::D3D11
                                        SpriteEffects effects,
                                        float /*layerDepth*/)
     {
-        if (!begun_) throw std::runtime_error("D3D11SpriteBatchBackend::Draw called before Begin()");
+        if (!begun_) throw std::runtime_error("D3D11SpriteBatchRenderer::Draw called before Begin()");
 
         if (currentTexture_ != nullptr && currentTexture_ != &texture)
             FlushBatch();
@@ -243,7 +243,7 @@ namespace CNA::Internal::Backends::D3D11
         // No [0,1] clamp -- matches FNA (SpriteBatch.cs divides straight through). A
         // sourceRectangle extending past the texture bounds intentionally produces UVs outside
         // [0,1], letting the bound SamplerState's TextureAddressMode (DX-72: Wrap/Mirror/Clamp,
-        // all real on this backend via D3D11SamplerCache) govern edge sampling.
+        // all real on this renderer via D3D11SamplerCache) govern edge sampling.
         float u1 = static_cast<float>(sourceRectangle.X) / texW;
         float v1 = static_cast<float>(sourceRectangle.Y) / texH;
         float u2 = static_cast<float>(sourceRectangle.X + sourceRectangle.Width)  / texW;

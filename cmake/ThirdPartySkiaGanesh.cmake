@@ -1,6 +1,6 @@
 # SKIA-159: a separately pinned Ganesh/OpenGL Skia artifact, additive to and independent of the
 # validated raster artifact in ThirdPartySkia.cmake. This file defines CNA::SkiaGanesh but nothing
-# in the ordinary CNA_GRAPHICS_BACKEND=SKIA selection links it yet -- construction-time mode
+# in the ordinary CNA_GRAPHICS_RENDERER=SKIA selection links it yet -- construction-time mode
 # selection is SKIA-160's job (see docs/skia-surface-mode-adr.md's six reopening requirements).
 # Today this target exists only so a standalone probe (build-probe/) can prove the artifact and
 # link line are genuinely correct; see docs/skia-ganesh-artifact.md.
@@ -11,10 +11,10 @@
 
 # Declared defensively (rather than assumed already-declared by ThirdPartySkia.cmake): this file
 # must work standalone whenever only CNA_SKIA_GANESH_BUILD_DIR is set, regardless of which
-# CNA_GRAPHICS_BACKEND is actually selected. A repeated CACHE declaration of the same variable
+# CNA_GRAPHICS_RENDERER is actually selected. A repeated CACHE declaration of the same variable
 # name is a CMake no-op that preserves any already-set value.
 set(CNA_SKIA_ROOT "" CACHE PATH
-    "Path to the source checkout of the pinned Skia revision (required for CNA_GRAPHICS_BACKEND=SKIA \
+    "Path to the source checkout of the pinned Skia revision (required for CNA_GRAPHICS_RENDERER=SKIA \
 or for CNA_SKIA_GANESH_BUILD_DIR)")
 set(CNA_SKIA_GANESH_BUILD_DIR "" CACHE PATH
     "Path to the GN output directory containing the matching Ganesh/OpenGL libskia.a (optional; \

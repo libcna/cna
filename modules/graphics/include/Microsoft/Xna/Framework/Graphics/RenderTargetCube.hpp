@@ -10,7 +10,7 @@
 #include "CNA/CNAHelper.hpp"
 #include <memory>
 
-namespace CNA::Internal::Backends { class IRenderTargetCubeBackend; }
+namespace CNA::Internal::Renderers { class IRenderTargetCubeRenderer; }
 
 namespace Microsoft::Xna::Framework::Graphics
 {
@@ -71,15 +71,15 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Raised when the render target content is lost (never raised in CNA). */
         System::EventHandler<System::EventArgs> ContentLost;
 
-        /** @brief Returns the backend cube render target handle (CNA extension). */
-        NOXNA [[nodiscard]] CNA::Internal::Backends::IRenderTargetCubeBackend* GetRenderTargetCubeBackend() const;
+        /** @brief Returns the renderer cube render target handle (CNA extension). */
+        NOXNA [[nodiscard]] CNA::Internal::Renderers::IRenderTargetCubeRenderer* GetRenderTargetCubeRenderer() const;
 
     private:
         int size_;
         DepthFormat depthFormat_;
         int multiSampleCount_;
         RenderTargetUsage usage_;
-        // Non-owning pointer into TextureCube::backend_ (which holds unique ownership).
-        CNA::Internal::Backends::IRenderTargetCubeBackend* rtCubeBackend_ = nullptr;
+        // Non-owning pointer into TextureCube::renderer_ (which holds unique ownership).
+        CNA::Internal::Renderers::IRenderTargetCubeRenderer* rtCubeRenderer_ = nullptr;
     };
 }

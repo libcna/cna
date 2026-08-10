@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Task 373: AlphaTestEffect all CompareFunction modes — threshold sweep (EasyGL backend).
+// Task 373: AlphaTestEffect all CompareFunction modes — threshold sweep (EasyGL renderer).
 //
 // Complements Task 190's easygl_alphatest_modes_test.cpp, which only ever tested the exact
 // alpha==reference boundary case. That single point is necessary (it's the only value that can

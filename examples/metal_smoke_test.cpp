@@ -13,7 +13,7 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SetDataOptions.hpp"
 
-#include "CNA/Internal/Backends/Metal/MetalGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Metal/MetalRenderer.hpp"
 
 #include "common/PixelTestGame.hpp"
 
@@ -24,7 +24,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::Metal;
+using namespace CNA::Internal::Renderers::Metal;
 
 namespace
 {
@@ -49,24 +49,24 @@ protected:
     {
         ++frame_;
         auto& dev = getGraphicsDeviceProperty();
-        auto& backend = static_cast<MetalGraphicsBackend&>(dev.GetBackend());
+        auto& renderer = static_cast<MetalRenderer&>(dev.GetRenderer());
 
         if (frame_ == 1)
         {
-            check(backend.GetWindowInternal() != nullptr, "GetWindowInternal() returns a real window");
-            check(backend.GetRendererInternal() == nullptr, "GetRendererInternal() is null (no SDL_Renderer)");
+            check(renderer.GetWindowInternal() != nullptr, "GetWindowInternal() returns a real window");
+            check(renderer.GetRendererInternal() == nullptr, "GetRendererInternal() is null (no SDL_Renderer)");
 
             int width = 0;
             int height = 0;
-            backend.GetViewportSize(width, height);
+            renderer.GetViewportSize(width, height);
             check(width > 0 && height > 0, "GetViewportSize() reports a positive size");
 
-            auto vb = backend.CreateVertexBuffer(3);
+            auto vb = renderer.CreateVertexBuffer(3);
             const float verts[3 * 2] = {0, 0, 1, 0, 0, 1};
             vb->SetData(verts, 3, sizeof(float) * 2);
             check(vb->GetVertexCount() == 3, "VertexBuffer.SetData()+GetVertexCount() round-trips the exact count");
 
-            auto ib = backend.CreateIndexBuffer16(3);
+            auto ib = renderer.CreateIndexBuffer16(3);
             const std::uint16_t indices[3] = {0, 1, 2};
             ib->SetData16(indices, 3);
             check(ib->GetIndexCount() == 3 && !ib->IsThirtyTwoBit(),

@@ -12,7 +12,7 @@ vec4 v_tangent     : TEXCOORD6 = vec4(1.0, 0.0, 0.0, 1.0);
 // Skinned vertex color (stride-56 SkinnedEffect+Color): kept in its own varying slot, distinct
 // from v_color0 (which fs_skinned3d.sc/fs_skinned3d_vertexlit.sc already use to carry
 // u_diffuseColor), so it can be gated by u_vertexColorEnabled3D and multiplied into the final
-// combined diffuse+specular output separately -- mirrors EasyGLGraphicsBackend::
+// combined diffuse+specular output separately -- mirrors EasyGLRenderer::
 // EnsureSkinnedProgram()'s vColor.
 vec4 v_vertexColor0 : COLOR1 = vec4(1.0, 1.0, 1.0, 1.0);
 

@@ -11,25 +11,25 @@
 //
 // THE DEFECT this file reproduces is SDL_GPU-local, and it is a TYPE defect, not a
 // synchronization, ordering, layout or resource-visibility one. A public `Texture2D` and a public
-// `RenderTarget2D` reach every draw as the same static type, `const ITextureBackend*`. Their
-// concrete backends are `SdlGpuTextureBackend` and `SdlGpuRenderTargetBackend` -- unrelated
-// SIBLINGS, both merely deriving from `ITextureBackend`, and the former is even `final`, so a
-// render target can never be one. Thirteen sites in `SdlGpuGraphicsBackend.cpp` nevertheless did
+// `RenderTarget2D` reach every draw as the same static type, `const ITextureRenderer*`. Their
+// concrete renderers are `SdlGpuTextureRenderer` and `SdlGpuRenderTargetRenderer` -- unrelated
+// SIBLINGS, both merely deriving from `ITextureRenderer`, and the former is even `final`, so a
+// render target can never be one. Thirteen sites in `SdlGpuRenderer.cpp` nevertheless did
 //
-//     command.texture = static_cast<const SdlGpuTextureBackend*>(params.texture0);
+//     command.texture = static_cast<const SdlGpuTextureRenderer*>(params.texture0);
 //
 // and read `->Texture()` off the result at render time. For a render target that reads the object's
 // bytes at the offset where a plain texture keeps its `SDL_GPUTexture*`, which in
-// `SdlGpuRenderTargetBackend` is `mipMap_`, three bytes of uninitialised padding, and
+// `SdlGpuRenderTargetRenderer` is `mipMap_`, three bytes of uninitialised padding, and
 // `multiSampleCount_`. The fabricated handle then went straight to `SDL_BindGPUFragmentSamplers`.
 //
 // Measured, not inferred (`cmake-build-sdlgpu-ubsan`, `DISPLAY=:101`):
 //
-//     SdlGpuGraphicsBackend.cpp:3367: runtime error: downcast of address 0x… which does not point
-//         to an object of type 'SdlGpuTextureBackend'
-//         note: object is of type 'CNA::Internal::Backends::SdlGpu::SdlGpuRenderTargetBackend'
-//     SdlGpuGraphicsBackend.cpp:4817: runtime error: member call on address 0x… which does not …
-//     SdlGpuGraphicsBackend.hpp:119:  runtime error: member access within address 0x… which does …
+//     SdlGpuRenderer.cpp:3367: runtime error: downcast of address 0x… which does not point
+//         to an object of type 'SdlGpuTextureRenderer'
+//         note: object is of type 'CNA::Internal::Renderers::SdlGpu::SdlGpuRenderTargetRenderer'
+//     SdlGpuRenderer.cpp:4817: runtime error: member call on address 0x… which does not …
+//     SdlGpuRenderer.hpp:119:  runtime error: member access within address 0x… which does …
 //
 // followed by SIGSEGV (exit 139). SpriteBatch was never affected: its own `Draw` already asked the
 // object with `dynamic_cast`. That asymmetry is the whole finding -- one binding route asked, the
@@ -44,7 +44,7 @@
 //
 //   * TYPE     -- the object decides what it is, by dynamic_cast, at one place;
 //   * LIFETIME -- a command replayed at Present cannot outlive the resource it binds. Ordinary
-//                 textures released their handle IMMEDIATELY in `~SdlGpuTextureBackend`, so a
+//                 textures released their handle IMMEDIATELY in `~SdlGpuTextureRenderer`, so a
 //                 short-lived public Texture2D drawn and then destroyed inside one frame left a
 //                 dangling native handle in a queued command. Render targets already deferred.
 //
@@ -159,59 +159,59 @@ namespace
     constexpr int kPW = 8;   ///< producer pattern width  -- non-square on purpose
     constexpr int kPH = 4;   ///< producer pattern height
 
-    /** @brief Whether this backend rasterizes and can read a render target back at all. */
-#if defined(CNA_BACKEND_HEADLESS)
+    /** @brief Whether this renderer rasterizes and can read a render target back at all. */
+#if defined(CNA_RENDERER_HEADLESS)
     constexpr bool kRasterizes = false;
 #else
     constexpr bool kRasterizes = true;
 #endif
 
-#if defined(CNA_BACKEND_HEADLESS)
-    constexpr const char* kBackendName = "HEADLESS";
-#elif defined(CNA_BACKEND_SOFTWARE)
-    constexpr const char* kBackendName = "SOFTWARE";
-#elif defined(CNA_BACKEND_EASYGL)
-    constexpr const char* kBackendName = "EASYGL";
-#elif defined(CNA_BACKEND_BGFX)
-    constexpr const char* kBackendName = "BGFX";
-#elif defined(CNA_BACKEND_VULKAN)
-    constexpr const char* kBackendName = "VULKAN";
-#elif defined(CNA_BACKEND_WEBGPU)
-    constexpr const char* kBackendName = "WEBGPU";
-#elif defined(CNA_BACKEND_SDL_GPU)
-    constexpr const char* kBackendName = "SDL_GPU";
-#elif defined(CNA_BACKEND_SDL_RENDERER)
-    constexpr const char* kBackendName = "SDL_RENDERER";
-#elif defined(CNA_BACKEND_D3D9)
-    constexpr const char* kBackendName = "D3D9";
-#elif defined(CNA_BACKEND_D3D11)
-    constexpr const char* kBackendName = "D3D11";
-#elif defined(CNA_BACKEND_D3D12)
-    constexpr const char* kBackendName = "D3D12";
-#elif defined(CNA_BACKEND_LLGL)
-    constexpr const char* kBackendName = "LLGL";
+#if defined(CNA_RENDERER_HEADLESS)
+    constexpr const char* kRendererName = "HEADLESS";
+#elif defined(CNA_RENDERER_SOFTWARE)
+    constexpr const char* kRendererName = "SOFTWARE";
+#elif defined(CNA_RENDERER_EASYGL)
+    constexpr const char* kRendererName = "EASYGL";
+#elif defined(CNA_RENDERER_BGFX)
+    constexpr const char* kRendererName = "BGFX";
+#elif defined(CNA_RENDERER_VULKAN)
+    constexpr const char* kRendererName = "VULKAN";
+#elif defined(CNA_RENDERER_WEBGPU)
+    constexpr const char* kRendererName = "WEBGPU";
+#elif defined(CNA_RENDERER_SDL_GPU)
+    constexpr const char* kRendererName = "SDL_GPU";
+#elif defined(CNA_RENDERER_SDL_RENDERER)
+    constexpr const char* kRendererName = "SDL_RENDERER";
+#elif defined(CNA_RENDERER_D3D9)
+    constexpr const char* kRendererName = "D3D9";
+#elif defined(CNA_RENDERER_D3D11)
+    constexpr const char* kRendererName = "D3D11";
+#elif defined(CNA_RENDERER_D3D12)
+    constexpr const char* kRendererName = "D3D12";
+#elif defined(CNA_RENDERER_LLGL)
+    constexpr const char* kRendererName = "LLGL";
 #else
-#error "REMED-GFX-152: this backend has no declared render-target effect-source contract."
+#error "REMED-GFX-152: this renderer has no declared render-target effect-source contract."
 #endif
 
     /**
-     * @brief Whether a custom `ShaderEffect` can be bound to a 3D draw on this backend.
+     * @brief Whether a custom `ShaderEffect` can be bound to a 3D draw on this renderer.
      *
      * SDL_GPU routes a custom effect through `SpriteBatch` only (`SetCustomEffect` lives on its
-     * sprite backend and the pipeline override is carried on `SpriteCommand`); its stock 3D paths
+     * sprite renderer and the pipeline override is carried on `SpriteCommand`); its stock 3D paths
      * have no custom-shader slot at all. That is a real, pre-existing capability boundary of the
-     * backend, not something REMED-GFX-152 introduced or should paper over — so leg C1 exercises a
+     * renderer, not something REMED-GFX-152 introduced or should paper over — so leg C1 exercises a
      * custom effect on the route that HAS one, and says so rather than skipping silently.
      */
     constexpr bool kCustomEffectIn3D =
-#if defined(CNA_BACKEND_SDL_GPU)
+#if defined(CNA_RENDERER_SDL_GPU)
         false;
 #else
         false;   // conservatively declared everywhere; C1's SpriteBatch custom-effect leg still runs
 #endif
 
     /**
-     * @brief Whether this backend can create a `RenderTarget2D` in a second sampleable format.
+     * @brief Whether this renderer can create a `RenderTarget2D` in a second sampleable format.
      *
      * SDL_GPU creates every `Texture2D` and every render target as `R8G8B8A8_UNORM` — one fixed
      * format, chosen at the call to `SDL_CreateGPUTexture` and not derived from the public
@@ -219,7 +219,7 @@ namespace
      * offers, and leg J1 declares that boundary instead of pretending to measure a second one.
      */
     constexpr bool kSecondSampleableFormat =
-#if defined(CNA_BACKEND_SDL_GPU)
+#if defined(CNA_RENDERER_SDL_GPU)
         false;
 #else
         false;
@@ -231,15 +231,15 @@ namespace
      * A vertex-LAYOUT boundary, not a render-to-texture one, and the same shape as REMED-GFX-151's
      * own `kDualTextureAcceptsPositionTexture`. Every family here is fed one stride-20 quad so a
      * single expected image is valid across all of them; SkinnedEffect and the PBR pair genuinely
-     * want normal/tangent-bearing strides, and some backends enforce that where others tolerate it:
+     * want normal/tangent-bearing strides, and some renderers enforce that where others tolerate it:
      * WEBGPU falls through to DrawColoredPrimitives and throws "requires a stride-16
      * (VertexPositionColor) vertex buffer", D3D9 reports "stride 20 has no matching CNA vertex
-     * layout (plan_dx9.md D9-82f)". Their texture SLOT is the same ITextureBackend binding the
+     * layout (plan_dx9.md D9-82f)". Their texture SLOT is the same ITextureRenderer binding the
      * other families use, so the contract is still covered there by the remaining families.
      */
     constexpr bool kSkinnedFamiliesAcceptPositionTexture =
-#if defined(CNA_BACKEND_WEBGPU) || defined(CNA_BACKEND_D3D9) || defined(CNA_BACKEND_D3D11) || \
-    defined(CNA_BACKEND_D3D12) || defined(CNA_BACKEND_LLGL)
+#if defined(CNA_RENDERER_WEBGPU) || defined(CNA_RENDERER_D3D9) || defined(CNA_RENDERER_D3D11) || \
+    defined(CNA_RENDERER_D3D12) || defined(CNA_RENDERER_LLGL)
         false;
 #else
         true;
@@ -253,7 +253,7 @@ namespace
      * how a texture is resolved -- the plain BasicEffect family covers the same binding site there.
      */
     constexpr bool kBasicEffectAcceptsVertexColorWithoutColorStream =
-#if defined(CNA_BACKEND_D3D9)
+#if defined(CNA_RENDERER_D3D9)
         false;
 #else
         true;
@@ -264,11 +264,11 @@ namespace
      *
      * D3D9 rejects it outright -- "stride 20 with vertexColor=false has no matching CNA vertex
      * layout (plan_dx9.md D9-82d)" -- a documented, pre-existing vertex-layout boundary of that
-     * backend and nothing to do with texture resolution. The same declaration REMED-GFX-151's own
+     * renderer and nothing to do with texture resolution. The same declaration REMED-GFX-151's own
      * fixture already carries.
      */
     constexpr bool kDualTextureAcceptsPositionTexture =
-#if defined(CNA_BACKEND_D3D9)
+#if defined(CNA_RENDERER_D3D9)
         false;
 #else
         true;
@@ -283,8 +283,8 @@ namespace
      * sub-check is recorded rather than asserted there, and its face-aliasing checks still run.
      */
     constexpr bool kEnvMapAcceptsPositionTexture =
-#if defined(CNA_BACKEND_D3D9) || defined(CNA_BACKEND_D3D11) || defined(CNA_BACKEND_D3D12) || \
-    defined(CNA_BACKEND_LLGL)
+#if defined(CNA_RENDERER_D3D9) || defined(CNA_RENDERER_D3D11) || defined(CNA_RENDERER_D3D12) || \
+    defined(CNA_RENDERER_LLGL)
         false;
 #else
         true;
@@ -298,7 +298,7 @@ namespace
      * so leg J1 records the boundary there instead of a value.
      */
     constexpr bool kMipmappedRenderTargetSupported =
-#if defined(CNA_BACKEND_WEBGPU)
+#if defined(CNA_RENDERER_WEBGPU)
         false;
 #else
         true;
@@ -387,8 +387,8 @@ namespace
      * `sizeof(VertexPositionTexture)` is 32, not 20: the type derives from the polymorphic
      * `IVertexType`, so it carries a vptr and tail padding (REMED-GFX-125's finding). Handing that
      * to `VertexBuffer::SetDataRaw`, whose stride argument is the GPU stream stride, would declare
-     * a 32-byte stream that some backends then read as VertexPositionNormalTexture. This struct is
-     * the stream layout itself, so stride and contents agree on every backend.
+     * a 32-byte stream that some renderers then read as VertexPositionNormalTexture. This struct is
+     * the stream layout itself, so stride and contents agree on every renderer.
      */
     struct PackedPositionTexture
     {
@@ -492,7 +492,7 @@ class RenderTargetEffectSourceTest : public Game
     }
 
     /**
-     * @brief Records a capability this backend genuinely does not have.
+     * @brief Records a capability this renderer genuinely does not have.
      *
      * Distinct from info() because it also marks the run as having EXPLAINED itself: a leg that
      * measures nothing is a pass only when it said why, never merely because it was empty.
@@ -540,7 +540,7 @@ class RenderTargetEffectSourceTest : public Game
         }
     };
 
-    /// Reads a whole target back, pre-filled with a poison value so a backend that writes nothing
+    /// Reads a whole target back, pre-filled with a poison value so a renderer that writes nothing
     /// cannot be mistaken for one that wrote transparent black.
     static Readback ReadWhole(RenderTarget2D& target, int w, int h)
     {
@@ -558,7 +558,7 @@ class RenderTargetEffectSourceTest : public Game
         return r;
     }
 
-    /// Asserts an unreadable backend rejected, and reports whether the caller should continue.
+    /// Asserts an unreadable renderer rejected, and reports whether the caller should continue.
     bool RequireReadable(const Readback& r, const std::string& label)
     {
         if (!kRasterizes)
@@ -795,7 +795,7 @@ class RenderTargetEffectSourceTest : public Game
             }
             case Family::EnvMapDiffuse:
             {
-                // EnvironmentMapEffect's DIFFUSE slot is an ordinary ITextureBackend binding, the
+                // EnvironmentMapEffect's DIFFUSE slot is an ordinary ITextureRenderer binding, the
                 // same site the crash lived at; its cube slot goes through the separate cube
                 // resolver and is leg L1's subject. A zero environment amount keeps the reflection
                 // out of the result so the diffuse texel survives unchanged.
@@ -925,7 +925,7 @@ class RenderTargetEffectSourceTest : public Game
      *
      * REMED-GFX-166. Identical to CheckConsumer except for one thing: side 0's source render target
      * is destroyed while the destination is STILL BOUND, so no flush can have consumed the queued
-     * work yet on any backend. Side 1 keeps its ordinary Texture2D alive, exactly as before, so the
+     * work yet on any renderer. Side 1 keeps its ordinary Texture2D alive, exactly as before, so the
      * comparison isolates the disposal and nothing else -- whatever a family's shading does to the
      * sampled value, it does to both sides.
      *
@@ -976,7 +976,7 @@ class RenderTargetEffectSourceTest : public Game
         if (lively < kPW * kPH / 4)
         {
             boundary(label + ": the LIVE control rendered nothing (" + std::to_string(lively) + "/" +
-                     std::to_string(kPW * kPH) + " non-black) on " + kBackendName +
+                     std::to_string(kPW * kPH) + " non-black) on " + kRendererName +
                      ", so the destroyed-source comparison would measure nothing here -- recorded, "
                      "not counted");
             return false;
@@ -1040,7 +1040,7 @@ class RenderTargetEffectSourceTest : public Game
             // backbuffer, and WebGPU replayed that command through the freed object's vtable at the
             // next Present(). The boundary is gone because the defect is; the dedicated matrix now
             // lives in deferred_source_lifetime_test.cpp.
-            // The backbuffer destination cannot be read on every backend, so this leg judges what
+            // The backbuffer destination cannot be read on every renderer, so this leg judges what
             // it CAN judge everywhere: the sequence completes, binds a real resource and does not
             // terminate the process. Where the destination is observable the A1/A2 oracle already
             // covers the pixels; the value here is that the crash route is exercised against the
@@ -1075,14 +1075,14 @@ class RenderTargetEffectSourceTest : public Game
             if ((f == Family::DualSlot0 || f == Family::DualSlot1) &&
                 !kDualTextureAcceptsPositionTexture)
             {
-                boundary(std::string("B1 ") + FamilyName(f) + " skipped on " + kBackendName +
+                boundary(std::string("B1 ") + FamilyName(f) + " skipped on " + kRendererName +
                          ": DualTextureEffect rejects this fixture's stride-20 stream "
                          "(plan_dx9.md D9-82d)");
                 continue;
             }
             if (f == Family::BasicVertexColor && !kBasicEffectAcceptsVertexColorWithoutColorStream)
             {
-                boundary(std::string("B1 ") + FamilyName(f) + " skipped on " + kBackendName +
+                boundary(std::string("B1 ") + FamilyName(f) + " skipped on " + kRendererName +
                          ": no vertex layout for a textured, vertex-coloured, unlit stride-20 stream "
                          "(plan_dx9.md D9-82b) -- a vertex-layout boundary, unrelated to how a "
                          "texture is resolved");
@@ -1090,7 +1090,7 @@ class RenderTargetEffectSourceTest : public Game
             }
             if (f == Family::EnvMapDiffuse && !kEnvMapAcceptsPositionTexture)
             {
-                boundary(std::string("B1 ") + FamilyName(f) + " skipped on " + kBackendName +
+                boundary(std::string("B1 ") + FamilyName(f) + " skipped on " + kRendererName +
                          ": EnvironmentMapEffect requires a normal-bearing stream here "
                          "(plan_dx9.md D9-82e)");
                 continue;
@@ -1098,7 +1098,7 @@ class RenderTargetEffectSourceTest : public Game
             if ((f == Family::Skinned || f == Family::Pbr || f == Family::SkinnedPbr) &&
                 !kSkinnedFamiliesAcceptPositionTexture)
             {
-                boundary(std::string("B1 ") + FamilyName(f) + " skipped on " + kBackendName +
+                boundary(std::string("B1 ") + FamilyName(f) + " skipped on " + kRendererName +
                          ": it rejects this fixture's VertexPositionTexture stride (a vertex-layout "
                          "boundary, unrelated to how a texture is resolved)");
                 continue;
@@ -1106,8 +1106,8 @@ class RenderTargetEffectSourceTest : public Game
             if (f == Family::EnvMapDiffuse && envCube_ == nullptr)
             {
                 // The subject here is the effect's ordinary DIFFUSE slot, but the effect still
-                // requires a cube in its cube slot, and this backend could not create one.
-                boundary(std::string("B1 ") + FamilyName(f) + " skipped on " + kBackendName +
+                // requires a cube in its cube slot, and this renderer could not create one.
+                boundary(std::string("B1 ") + FamilyName(f) + " skipped on " + kRendererName +
                          ": no TextureCube could be created for its cube slot, which the effect "
                          "requires even when only its diffuse slot is under test");
                 continue;
@@ -1148,7 +1148,7 @@ class RenderTargetEffectSourceTest : public Game
         // target must reach a user shader as an ordinary sampler2D.
         //
         // Judged DIFFERENTIALLY -- render target versus Texture2D control through the identical
-        // custom shader -- not against the raw pattern. Whatever colour convention this backend's
+        // custom shader -- not against the raw pattern. Whatever colour convention this renderer's
         // custom-sprite route applies (it is not the identity even at uniform 1.0 here; see the
         // independent observation recorded with this task) applies equally to both sides and
         // cancels, leaving only a difference in WHICH RESOURCE was bound. Judging the custom route
@@ -1157,7 +1157,7 @@ class RenderTargetEffectSourceTest : public Game
         ShaderEffect custom(dev, kCustomVertSrc, kCustomFragSrc);
         if (!custom.IsEffectValid())
         {
-            boundary("C1 custom ShaderEffect did not compile on " + std::string(kBackendName) +
+            boundary("C1 custom ShaderEffect did not compile on " + std::string(kRendererName) +
                  " -- custom-effect sub-leg not measured here");
             return;
         }
@@ -1207,14 +1207,14 @@ class RenderTargetEffectSourceTest : public Game
                   std::to_string(kPW * kPH) + ")" + first);
         }
 
-        // Discrimination: the differential check above would also pass on a backend that ignored
+        // Discrimination: the differential check above would also pass on a renderer that ignored
         // the custom effect entirely, so the shader must be shown to be genuinely bound. A halved
         // uniform must visibly darken the sample.
         //
-        // Whether this backend HAS a real compiled custom-shader path is asked first, and asked
-        // with an ordinary Texture2D -- a property of the backend, measurable without any render
+        // Whether this renderer HAS a real compiled custom-shader path is asked first, and asked
+        // with an ordinary Texture2D -- a property of the renderer, measurable without any render
         // target. Only where the answer is yes is the render-target sample then required to darken
-        // too. Otherwise the boundary is declared, rather than either failing a backend for a
+        // too. Otherwise the boundary is declared, rather than either failing a renderer for a
         // capability it never claimed or silently dropping the check where it does matter.
         auto darkenedSample = [&](Texture2D& src, float scale) -> std::optional<Color>
         {
@@ -1243,15 +1243,15 @@ class RenderTargetEffectSourceTest : public Game
         if (!texUnit || !texHalf)
         {
             boundary("C1 custom-effect discrimination could not be read back on " +
-                     std::string(kBackendName) + " -- not measured");
+                     std::string(kRendererName) + " -- not measured");
             return;
         }
         if (texUnit->getRProperty() == texHalf->getRProperty())
         {
-            boundary(std::string("C1 ") + kBackendName + " does not honour a custom ShaderEffect's "
+            boundary(std::string("C1 ") + kRendererName + " does not honour a custom ShaderEffect's "
                      "own uniform even for an ordinary Texture2D (unit and half uniforms both read " +
                      ColorText(*texUnit) + "), so it has no real compiled custom-shader path here -- "
-                     "the render-target/Texture2D equivalence above still stands, but this backend "
+                     "the render-target/Texture2D equivalence above still stands, but this renderer "
                      "cannot discriminate a bound shader from an ignored one");
             return;
         }
@@ -1293,14 +1293,14 @@ class RenderTargetEffectSourceTest : public Game
             if ((f == Family::DualSlot0 || f == Family::DualSlot1) &&
                 !kDualTextureAcceptsPositionTexture)
             {
-                boundary(std::string("M2 ") + FamilyName(f) + " skipped on " + kBackendName +
+                boundary(std::string("M2 ") + FamilyName(f) + " skipped on " + kRendererName +
                          ": DualTextureEffect rejects this fixture's stride-20 stream "
                          "(plan_dx9.md D9-82d)");
                 continue;
             }
             if (f == Family::BasicVertexColor && !kBasicEffectAcceptsVertexColorWithoutColorStream)
             {
-                boundary(std::string("M2 ") + FamilyName(f) + " skipped on " + kBackendName +
+                boundary(std::string("M2 ") + FamilyName(f) + " skipped on " + kRendererName +
                          ": no vertex layout for a textured, vertex-coloured, unlit stride-20 stream "
                          "(plan_dx9.md D9-82b) -- a vertex-layout boundary, unrelated to how a "
                          "texture is resolved");
@@ -1308,7 +1308,7 @@ class RenderTargetEffectSourceTest : public Game
             }
             if (f == Family::EnvMapDiffuse && !kEnvMapAcceptsPositionTexture)
             {
-                boundary(std::string("M2 ") + FamilyName(f) + " skipped on " + kBackendName +
+                boundary(std::string("M2 ") + FamilyName(f) + " skipped on " + kRendererName +
                          ": EnvironmentMapEffect requires a normal-bearing stream here "
                          "(plan_dx9.md D9-82e)");
                 continue;
@@ -1316,7 +1316,7 @@ class RenderTargetEffectSourceTest : public Game
             if ((f == Family::Skinned || f == Family::Pbr || f == Family::SkinnedPbr) &&
                 !kSkinnedFamiliesAcceptPositionTexture)
             {
-                boundary(std::string("M2 ") + FamilyName(f) + " skipped on " + kBackendName +
+                boundary(std::string("M2 ") + FamilyName(f) + " skipped on " + kRendererName +
                          ": it rejects this fixture's VertexPositionTexture stride (a vertex-layout "
                          "boundary, unrelated to how a texture is resolved)");
                 continue;
@@ -1324,8 +1324,8 @@ class RenderTargetEffectSourceTest : public Game
             if (f == Family::EnvMapDiffuse && envCube_ == nullptr)
             {
                 // The subject here is the effect's ordinary DIFFUSE slot, but the effect still
-                // requires a cube in its cube slot, and this backend could not create one.
-                boundary(std::string("M2 ") + FamilyName(f) + " skipped on " + kBackendName +
+                // requires a cube in its cube slot, and this renderer could not create one.
+                boundary(std::string("M2 ") + FamilyName(f) + " skipped on " + kRendererName +
                          ": no TextureCube could be created for its cube slot, which the effect "
                          "requires even when only its diffuse slot is under test");
                 continue;
@@ -1338,7 +1338,7 @@ class RenderTargetEffectSourceTest : public Game
         // point of this leg is coverage across families, and "every family was unmeasurable" would
         // otherwise pass silently on the strength of the declarations alone.
         check(measured > 0, "M2 at least one stock-effect family was actually measurable on " +
-                            std::string(kBackendName) + " (" + std::to_string(measured) + "/" +
+                            std::string(kRendererName) + " (" + std::to_string(measured) + "/" +
                             std::to_string(static_cast<int>(std::size(families))) + ")");
     }
 
@@ -1358,7 +1358,7 @@ class RenderTargetEffectSourceTest : public Game
         {
             if (m == DrawMode::Instanced && !SupportsInstancing(dev))
             {
-                boundary(std::string("M3 ") + kBackendName + " does not implement "
+                boundary(std::string("M3 ") + kRendererName + " does not implement "
                          "DrawInstancedPrimitives at all -- the same pre-existing capability "
                          "boundary leg D1 declares");
                 continue;
@@ -1379,9 +1379,9 @@ class RenderTargetEffectSourceTest : public Game
         {
             if (m == DrawMode::Instanced && !SupportsInstancing(dev))
             {
-                boundary(std::string("D1 ") + kBackendName + " does not implement "
+                boundary(std::string("D1 ") + kRendererName + " does not implement "
                      "DrawInstancedPrimitives at all -- a pre-existing capability boundary of the "
-                     "backend, unrelated to how a texture is resolved; the other four draw modes "
+                     "renderer, unrelated to how a texture is resolved; the other four draw modes "
                      "carry the contract here");
                 continue;
             }
@@ -1390,7 +1390,7 @@ class RenderTargetEffectSourceTest : public Game
     }
 
     /**
-     * @brief Probes once whether this backend implements `DrawInstancedPrimitives`.
+     * @brief Probes once whether this renderer implements `DrawInstancedPrimitives`.
      *
      * Asked with a real draw rather than a capability flag, inside a bind cycle this method opens
      * and closes itself, so a throwing probe cannot leave a target bound for the next leg.
@@ -1608,7 +1608,7 @@ class RenderTargetEffectSourceTest : public Game
 
         {
             // Discrimination: the right-half draw must NOT equal the full-source draw, or the
-            // subregion check above would pass for a backend that ignores UVs entirely.
+            // subregion check above would pass for a renderer that ignores UVs entirely.
             RenderTarget2D a(dev, kPW, kPH, false, SurfaceFormat::Color, DepthFormat::None, 0,
                              RenderTargetUsage::DiscardContents);
             ProduceInto(dev, a, patternTex_);
@@ -1643,7 +1643,7 @@ class RenderTargetEffectSourceTest : public Game
                       DrawMode::UserPrimitives, patternTex_);
 
         if (!kMipmappedRenderTargetSupported)
-            boundary(std::string("J1 ") + kBackendName + " does not implement a mipMap=true "
+            boundary(std::string("J1 ") + kRendererName + " does not implement a mipMap=true "
                      "RenderTarget2D at all (plan_webgpu.md WEBGPU-53/54) -- boundary recorded");
 
         // A mipmapped target must still be sampleable at level 0 through a 3D effect.
@@ -1681,7 +1681,7 @@ class RenderTargetEffectSourceTest : public Game
         }
 
         if (!kSecondSampleableFormat)
-            boundary(std::string("J1 ") + kBackendName + " creates every Texture2D and render target as "
+            boundary(std::string("J1 ") + kRendererName + " creates every Texture2D and render target as "
                  "one fixed native colour format, so SurfaceFormat::Color is the only sampleable "
                  "colour format it offers -- capability boundary, not measured");
     }
@@ -1698,15 +1698,15 @@ class RenderTargetEffectSourceTest : public Game
             // Not a failure: a device may decline multisampling entirely (llvmpipe here reports
             // "MSAA up to 4x" yet applies 0). There is then no resolve to get wrong, so the
             // sub-leg is declared rather than asserted -- the same reading REMED-GFX-151's own E0
-            // check takes. Whether a backend SHOULD apply the requested count is REMED-GFX-154's
+            // check takes. Whether a renderer SHOULD apply the requested count is REMED-GFX-154's
             // question, not this one's.
-            boundary(std::string("K1 ") + kBackendName + " applied multisample count " +
+            boundary(std::string("K1 ") + kRendererName + " applied multisample count " +
                      std::to_string(applied) + " for a requested 4, so there is no MSAA resolve to "
                      "measure here -- capability recorded, not asserted");
             return;
         }
         check(true, "K1 the MSAA sub-leg genuinely applies a multisample count on " +
-                    std::string(kBackendName) + " (applied " + std::to_string(applied) + ")");
+                    std::string(kRendererName) + " (applied " + std::to_string(applied) + ")");
 
         // The multisample attachment is COLOR_TARGET-only and is not a legal sampler binding; the
         // resolve happens at render-pass end, before any consumer. Nothing here waits, presents or
@@ -1760,7 +1760,7 @@ class RenderTargetEffectSourceTest : public Game
         }
         catch (const std::exception& e)
         {
-            boundary(std::string("L1 ") + kBackendName + " cannot create a RenderTargetCube here (" +
+            boundary(std::string("L1 ") + kRendererName + " cannot create a RenderTargetCube here (" +
                  e.what() + ") -- capability boundary recorded");
             return;
         }
@@ -1791,14 +1791,14 @@ class RenderTargetEffectSourceTest : public Game
         if (!produced) return;
 
         // Sampling the cube through EnvironmentMapEffect is the public route that binds an
-        // ITextureCubeBackend. The value judged is that it completes and binds a real resource; the
+        // ITextureCubeRenderer. The value judged is that it completes and binds a real resource; the
         // per-face colour is judged by GetData, which is the cube's own established readback
         // contract (REMED-GFX-134) rather than a new oracle invented here.
         bool threw = false;
         std::string what;
         if (!kEnvMapAcceptsPositionTexture)
         {
-            boundary(std::string("L1 ") + kBackendName + " needs a normal-bearing stream for "
+            boundary(std::string("L1 ") + kRendererName + " needs a normal-bearing stream for "
                      "EnvironmentMapEffect (plan_dx9.md D9-82e), so the cube-slot draw is recorded "
                      "rather than asserted here; the face-aliasing checks below still run");
         }
@@ -1843,7 +1843,7 @@ class RenderTargetEffectSourceTest : public Game
             }
             catch (const System::NotSupportedException&)
             {
-                boundary(std::string("L1 face readback is unsupported on ") + kBackendName +
+                boundary(std::string("L1 face readback is unsupported on ") + kRendererName +
                      " -- aliasing not measured");
                 readOk = false;
             }
@@ -1863,7 +1863,7 @@ class RenderTargetEffectSourceTest : public Game
     /** @brief Leg M1 -- disposal, handle reuse and interleaved lifetimes. */
     void LegM(GraphicsDevice& dev)
     {
-        // The source render target is destroyed BEFORE the frame renders. This backend replays
+        // The source render target is destroyed BEFORE the frame renders. This renderer replays
         // draws at Present, so the queued consumer must still bind a live native handle -- the
         // keepAlive contract, judged by a real sampled result rather than by "did not crash".
         {
@@ -2007,7 +2007,7 @@ class RenderTargetEffectSourceTest : public Game
     {
         // A null texture on a slot that requires one must not be reinterpreted, must not bind a
         // stale handle from a previous draw and must not terminate the process. The public layer
-        // may reject it or the backend may skip the draw; what is forbidden is a crash or a
+        // may reject it or the renderer may skip the draw; what is forbidden is a crash or a
         // silently-wrong resource.
         bool survived = true;
         std::string what;
@@ -2147,12 +2147,12 @@ protected:
 
         done_ = true;
         std::printf("[INFO] REMED-GFX-152 render-target-as-effect-source on %s (%dx%d pattern%s)\n",
-                    kBackendName, kPW, kPH,
+                    kRendererName, kPW, kPH,
                     onlyLeg_.empty() ? "" : (", leg " + onlyLeg_).c_str());
         std::fflush(stdout);
 
         if (!kCustomEffectIn3D)
-            info(std::string("D legs: ") + kBackendName + " has no custom-effect slot on its stock "
+            info(std::string("D legs: ") + kRendererName + " has no custom-effect slot on its stock "
                  "3D paths (a custom ShaderEffect is a SpriteBatch route there) -- leg C1 exercises "
                  "a custom effect on the route that has one");
 
@@ -2207,9 +2207,9 @@ protected:
         runLeg("O1", &RenderTargetEffectSourceTest::LegO);
         runLeg("P1", &RenderTargetEffectSourceTest::LegP);
 
-        std::printf("[INFO] %s: %d/%d checks passed\n", kBackendName, passCount_, totalCount_);
+        std::printf("[INFO] %s: %d/%d checks passed\n", kRendererName, passCount_, totalCount_);
         std::fflush(stdout);
-        // A leg may legitimately have nothing to measure on a backend that lacks the capability --
+        // A leg may legitimately have nothing to measure on a renderer that lacks the capability --
         // but only when it SAID so through boundary(). An empty run that explained nothing is a
         // failure, so a leg cannot pass by quietly doing nothing.
         result_ = (passCount_ == totalCount_ && (totalCount_ > 0 || boundaryDeclared_)) ? 0 : 1;

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // plan_opengl2.md: proof that the default FixedHeightDynamicWidth presentation mode actually
-// adapts to a resized window on the native OpenGL 2.1 graphics backend, mirroring
-// EasyGLGraphicsBackend::getLogicalSize's identical behavior.
+// adapts to a resized window on the native OpenGL 2.1 graphics renderer, mirroring
+// EasyGLRenderer::getLogicalSize's identical behavior.
 //
 // Check A -- GetViewportSize() initially reports the requested 320x240 back buffer.
 // Check B -- after resizing the real SDL window to 640x240 (same height, double width) and
@@ -21,7 +21,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 
-#include "CNA/Internal/Backends/OpenGL2/OpenGL2GraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/OpenGL2/OpenGL2Renderer.hpp"
 
 #include "common/PixelTestGame.hpp"
 
@@ -35,7 +35,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::OpenGL2;
+using namespace CNA::Internal::Renderers::OpenGL2;
 
 namespace
 {
@@ -71,10 +71,10 @@ class OpenGL2PresentationTest : public Game
         // GFX-165: GetBackBufferData validates its rectangle against PresentationParameters'
         // backbuffer size, which this test's own raw SDL_SetWindowSize deliberately does not
         // update -- XNA's backbuffer does not follow the OS window until a device reset. What
-        // this test needs is the REAL framebuffer pixel, which is exactly the backend's own
+        // this test needs is the REAL framebuffer pixel, which is exactly the renderer's own
         // ReadBackbuffer (the same top-down row convention GetBackBufferData itself wraps).
         std::uint8_t px[4] = {0, 0, 0, 0};
-        getGraphicsDeviceProperty().GetBackend().ReadBackbuffer(x, y, 1, 1, px);
+        getGraphicsDeviceProperty().GetRenderer().ReadBackbuffer(x, y, 1, 1, px);
         return Color(px[0], px[1], px[2], px[3]);
     }
 
@@ -91,23 +91,23 @@ protected:
     {
         ++frame_;
         auto& dev = getGraphicsDeviceProperty();
-        auto& backend = static_cast<OpenGL2GraphicsBackend&>(dev.GetBackend());
+        auto& renderer = static_cast<OpenGL2Renderer&>(dev.GetRenderer());
 
         if (frame_ == 1)
         {
             int w = 0, h = 0;
-            backend.GetViewportSize(w, h);
+            renderer.GetViewportSize(w, h);
             Check(w == 320 && h == 240, "GetViewportSize() initially reports 320x240");
         }
         else if (frame_ == 2)
         {
-            SDL_SetWindowSize(backend.GetWindowInternal(), 640, 240);
-            SDL_SyncWindow(backend.GetWindowInternal());
+            SDL_SetWindowSize(renderer.GetWindowInternal(), 640, 240);
+            SDL_SyncWindow(renderer.GetWindowInternal());
         }
         else if (frame_ == 3)
         {
             int w = 0, h = 0;
-            backend.GetViewportSize(w, h);
+            renderer.GetViewportSize(w, h);
             Check(w == 640 && h == 240,
                   "GetViewportSize() adapts width to 640 after resize, height stays 240 (got " +
                   std::to_string(w) + "x" + std::to_string(h) + ")");

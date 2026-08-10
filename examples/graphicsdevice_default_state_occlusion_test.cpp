@@ -5,9 +5,9 @@
 // XNA's Tank.cs) -- actually produces correct opaque depth occlusion.
 //
 // Root cause this guards against: GraphicsDevice's constructor only ever pushed its
-// RasterizerState default to the backend (Task 896). BlendState/DepthStencilState were left as
+// RasterizerState default to the renderer (Task 896). BlendState/DepthStencilState were left as
 // C++-level fields only, never applied via ApplyBlendState()/ApplyDepthStencilState() -- so each
-// backend's OWN internal hardcoded default silently won instead of XNA's real
+// renderer's OWN internal hardcoded default silently won instead of XNA's real
 // DepthStencilState.Default (depth test+write ON, LessEqual). On EasyGL this meant depth testing
 // was plain OpenGL's raw default: DISABLED -- any two overlapping opaque draws simply painted in
 // draw order regardless of Z, which is exactly the "background parts visible through foreground
@@ -22,7 +22,7 @@
 // setRasterizerStateProperty(). Only BasicEffect.Apply() runs, exactly matching Tank.hpp's own
 // draw loop. Correct default behaviour (depth test+write genuinely ON) rejects the far quad's
 // later z=0.8 fragment against the near quad's already-written z=0.2 -- pixel stays GREEN. If the
-// default depth state is not actually reaching the backend (the bug), the far quad is drawn with
+// default depth state is not actually reaching the renderer (the bug), the far quad is drawn with
 // no depth test at all and simply overpaints the near quad in draw order -- pixel goes RED.
 //
 // Check A (the discriminating check): near green drawn first, far red drawn second (reversed vs.
@@ -149,7 +149,7 @@ protected:
             {
                 std::printf("[INFO] RED here means the far quad overpainted the near quad in draw\n"
                             "       order despite being farther away -- GraphicsDevice's default\n"
-                            "       DepthStencilState is not actually reaching the backend.\n");
+                            "       DepthStencilState is not actually reaching the renderer.\n");
             }
             if (ok) ++passCount_;
             break;

@@ -18,7 +18,7 @@ being squeezed into the same shape as `PowerInfo` or `Locale`.
 ## 1. What SDL3 actually provides
 
 Confirmed by reading `third_party/SDL/include/SDL3/SDL_camera.h` and the vendored
-per-platform backends directly (not assumed):
+per-platform renderers directly (not assumed):
 
 - **Enumeration:** `SDL_GetCameras(int* count)` → array of `SDL_CameraID`.
   `SDL_GetCameraName()`/`SDL_GetCameraPosition()` (front/back-facing, relevant on
@@ -46,7 +46,7 @@ per-platform backends directly (not assumed):
   data to the caller via a callback the instant a new sample exists; `Camera` requires
   the caller to actively poll once per frame/tick, closer in spirit to "check this
   every `Update()`" than to an event subscription.
-- **Real per-platform backends confirmed present:** `v4l2` (Linux),
+- **Real per-platform renderers confirmed present:** `v4l2` (Linux),
   `mediafoundation` (Windows), `coremedia` (macOS/iOS), `android`, and
   **`emscripten`** (browser `getUserMedia`) — `pipewire` (newer Linux desktops) and a
   `dummy` fallback also exist. This is the best cross-platform coverage of any
@@ -60,7 +60,7 @@ synchronous yes/no), `Camera` needs a real state enum a consumer can poll or sub
 to, closer in spirit to `Microsoft::Devices::Sensors::SensorState`:
 
 ```
-NotSupported   — no camera hardware/backend on this platform or device
+NotSupported   — no camera hardware/renderer on this platform or device
 Closed         — never opened, or explicitly closed
 Opening        — SDL_OpenCamera() called, permission decision still pending
 Denied         — user (or platform policy) denied camera access
@@ -77,30 +77,30 @@ this right now" rather than finding out by a confusing runtime failure.
 ## 3. The texture-upload bridge — simpler than `noxna_devices.md` originally assumed
 
 `noxna_devices.md`'s original Section 4.9 flagged this as the hardest part, assuming
-it would need graphics-backend-specific code. **Re-reading this codebase's actual
+it would need graphics-renderer-specific code. **Re-reading this codebase's actual
 texture pipeline found it is already solved, generically, by existing infrastructure:**
 
-- `include/CNA/Internal/Backends/Common/IGraphicsBackend.hpp`'s `ITextureBackend`
+- `include/CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp`'s `ITextureRenderer`
   interface already has `virtual void UpdatePixels(const uint8_t* rgba, int stride)`
-  — an in-place, full-level-0 RGBA pixel update, implemented per graphics backend
+  — an in-place, full-level-0 RGBA pixel update, implemented per graphics renderer
   (`OPENGLES`/`SDL_RENDERER`/`VULKAN`/`BGFX`) but exposed through one common,
-  backend-agnostic virtual call.
+  renderer-agnostic virtual call.
 - `Microsoft::Xna::Framework::Graphics::Texture2D` already exposes
   `SetDataRGBA(const uint8_t* data, int pixelCount)` (`Texture2D.hpp:196`, `NOXNA`) as
   a public entry point that (per its own doc comment, "Prefer the Texture2D(device, w,
   h) + SetData pattern for XNA-compatible code") is intended for exactly this kind of
   raw-pixel-source use case.
 - **Conclusion: a `Camera` frame does not need its own bespoke upload path per
-  backend.** The plan is: request an RGBA-compatible `SDL_CameraSpec` when opening the
+  renderer.** The plan is: request an RGBA-compatible `SDL_CameraSpec` when opening the
   camera (or convert the acquired `SDL_Surface` to a known RGBA format if the device
   can't natively produce one — `SDL_Surface` conversion helpers already exist in
   SDL3's own surface API, not camera-specific), then call the existing
-  `Texture2D::SetDataRGBA()`/`ITextureBackend::UpdatePixels()` path once per acquired
+  `Texture2D::SetDataRGBA()`/`ITextureRenderer::UpdatePixels()` path once per acquired
   frame. This still needs to be verified empirically once implementation starts (does
   `SDL_OpenCamera()`'s format negotiation reliably produce RGBA, or does every
   platform hand back a native/YUV format requiring conversion first? — flagged as an
   open question below, not resolved by this document), but the upload mechanism
-  itself requires no new graphics-backend code.
+  itself requires no new graphics-renderer code.
 
 ## 4. Proposed class shape (illustrative, not final)
 
@@ -114,7 +114,7 @@ namespace CNA::Devices {
         static std::vector<CameraDeviceInfo> getAvailableCamerasProperty(); // name, front/back-facing
 
         explicit Camera(/* device selection, or default */);
-        Camera(/* device selection */, std::unique_ptr<Detail::ICameraBackend> backend); // test-only, mirrors SystemTray's constructor-injection pattern
+        Camera(/* device selection */, std::unique_ptr<Detail::ICameraBackend> renderer); // test-only, mirrors SystemTray's constructor-injection pattern
         ~Camera();
 
         [[nodiscard]] CameraState getStateProperty() const;
@@ -135,18 +135,18 @@ that instead of forcing an artificial callback/event model on top of it — a co
 already calls this once per `Game::Update()`/`Draw()` anyway to actually use the
 video feed.
 
-## 5. Testability — same backend-injection lesson from Phases 1-3, applied up front
+## 5. Testability — same renderer-injection lesson from Phases 1-3, applied up front
 
 Both `DEVICES-CNA-008` (`FileDialog`) and `DEVICES-CNA-009` (`SystemTray`) found real
-bugs specifically because their real backends have side effects an automated test
+bugs specifically because their real renderers have side effects an automated test
 cannot safely trigger (an orphaned `zenity` dialog; a real tray icon). `Camera`'s real
-backend is at least as unsafe to exercise in CI — it would either fail loudly (no
+renderer is at least as unsafe to exercise in CI — it would either fail loudly (no
 camera hardware in most CI containers) or, worse, actually request OS camera
 permission and open a real device if one happens to be present. **`Detail::ICameraBackend`
 must exist from the very first line of implementation**, not be retrofitted after an
-incident — following `SystemTray`'s constructor-injection pattern (a fake backend
+incident — following `SystemTray`'s constructor-injection pattern (a fake renderer
 supplied before any real device-opening call happens), not `FileDialog`'s original
-post-construction `SetBackendForTesting()` mistake.
+post-construction `SetRendererForTesting()` mistake.
 
 ## 6. Open questions for whoever implements this
 

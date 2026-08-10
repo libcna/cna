@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl4.md GL4-24: real occlusion queries for the OpenGL4 graphics backend --
-// OpenGL4OcclusionQueryBackend wraps a genuine GL 1.5 core query object using GL_SAMPLES_PASSED
-// (an exact passed-sample count), unlike EasyGLOcclusionQueryBackend's GLES3
+// plan_opengl4.md GL4-24: real occlusion queries for the OpenGL4 graphics renderer --
+// OpenGL4OcclusionQueryRenderer wraps a genuine GL 1.5 core query object using GL_SAMPLES_PASSED
+// (an exact passed-sample count), unlike EasyGLOcclusionQueryRenderer's GLES3
 // GL_ANY_SAMPLES_PASSED (0/1-only) query -- matching real XNA's own desktop OcclusionQuery
-// semantics (see IOcclusionQueryBackend's own doc comment contrasting the two). Ported test
+// semantics (see IOcclusionQueryRenderer's own doc comment contrasting the two). Ported test
 // structure/scenarios from vulkan_occlusionquery_pixelcount_test.cpp (Tasks 447/854), the closest
-// other desktop/exact-count backend with an already cross-verified oracle.
+// other desktop/exact-count renderer with an already cross-verified oracle.
 //
 // Scenario A (visible) -- a full 64x64 quad with nothing hiding it: PixelCount() should be
 //   positive once IsComplete() is true (exact count would be 4096 on an ideal rasterizer; a

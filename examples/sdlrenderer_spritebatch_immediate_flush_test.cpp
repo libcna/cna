@@ -4,13 +4,13 @@
 // FNA/XNA's contract for SpriteSortMode::Immediate is that each sprite is submitted to the
 // graphics device the instant Draw() is called, rather than being queued and flushed in a batch
 // at End() (every other sort mode's behaviour). This dispatch-level contract is already fully
-// covered by the mock-backend Task 412 tests in SpriteBatchTests.cpp
+// covered by the mock-renderer Task 412 tests in SpriteBatchTests.cpp
 // (ImmediateFlushesInsideDrawBeforeEnd / ImmediateFlushesEachDrawSeparatelyInCallOrder), which
-// prove SpriteBatch.cpp calls the backend's Draw() immediately rather than queuing.
+// prove SpriteBatch.cpp calls the renderer's Draw() immediately rather than queuing.
 //
-// What those tests can't prove is whether SDL_Renderer's OWN backend (SdlSpriteBatchBackend)
-// genuinely issues a real SDL render command right there (as opposed to some backend-internal
-// queue of its own) -- confirmed by reading SdlSpriteBatchBackend::Draw() directly: it calls
+// What those tests can't prove is whether SDL_Renderer's OWN renderer (SdlSpriteBatchRenderer)
+// genuinely issues a real SDL render command right there (as opposed to some renderer-internal
+// queue of its own) -- confirmed by reading SdlSpriteBatchRenderer::Draw() directly: it calls
 // SDL_RenderTexture() synchronously with no queue at all, so this holds trivially for SDL_Renderer
 // specifically. This test instead proves the END-TO-END, real-GPU-visible consequence: that a
 // plain GraphicsDevice::Clear() call issued BETWEEN two SpriteBatch operations, all inside one
@@ -18,7 +18,7 @@
 // where it's called -- not deferred until End() alongside the sprites.
 //
 // Requires PresentationMode::NativeBackBuffer (Task 915 finding): SDL_RenderReadPixels operates
-// in physical output coordinates, while this backend's default presentation mode
+// in physical output coordinates, while this renderer's default presentation mode
 // (FixedHeightDynamicWidth) does not map logical pixels 1:1 to physical ones.
 //
 // Sequence, all within ONE Begin(Immediate)/End() session:
@@ -32,7 +32,7 @@
 //
 // If Immediate were silently treated like Deferred (queued, only flushed at End()): step 2's
 // Clear() -- a plain GraphicsDevice call, entirely outside SpriteBatch's own queue -- still
-// executes the instant it's called (SdlGraphicsBackend::Clear() is equally synchronous/unqueued),
+// executes the instant it's called (SdlRenderer::Clear() is equally synchronous/unqueued),
 // but sprite A would not actually render until step 3 (End()), AFTER the clear -- region
 // (100,100,60,60) would incorrectly read RED, since A ends up drawn last regardless of Clear()'s
 // position in the code.

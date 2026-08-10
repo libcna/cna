@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // plan_dx2.md Phase O4 (DX2-34, DX2-38): real Direct3D texture sampling in a 3D draw -- a
-// Dx8TextureBackend surface bound directly via IDirect3DDevice7::SetTexture (plan_dx8.md design
-// decision 6 -- no texture-handle indirection at all, unlike every prior backend in this family;
+// Dx8TextureRenderer surface bound directly via IDirect3DDevice7::SetTexture (plan_dx8.md design
+// decision 6 -- no texture-handle indirection at all, unlike every prior renderer in this family;
 // mirrors DX2-0's own dx2_spike7_full.cpp test B, now through the full XNA public API).
 //
 // Check A -- a full-screen quad sampling a 2x2 checker texture (nearest-neighbor at the corners)

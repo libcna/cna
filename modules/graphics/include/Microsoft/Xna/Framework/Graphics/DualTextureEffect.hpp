@@ -229,11 +229,11 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Fills a GpuDrawParams struct with this effect's current render parameters.
          *
          * Populates both texture slots, diffuse color, vertex-color flag, world matrix,
-         * and the dualTexture flag so the backend selects a two-sampler shader variant.
+         * and the dualTexture flag so the renderer selects a two-sampler shader variant.
          *
          * @param params Output struct to populate.
          */
-        NOXNA void FillGpuDrawParams(CNA::Internal::Backends::GpuDrawParams& params) const override;
+        NOXNA void FillGpuDrawParams(CNA::Internal::Renderers::GpuDrawParams& params) const override;
 
     protected:
         /**

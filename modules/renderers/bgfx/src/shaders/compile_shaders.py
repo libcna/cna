@@ -9,7 +9,7 @@ Usage:
   bgfx-include-dir Path to bgfx/src (contains bgfx_shader.sh)
 
 Typical invocation from the repo root:
-    python3 src/CNA/Internal/Backends/Bgfx/shaders/compile_shaders.py \\
+    python3 src/CNA/Internal/Renderers/Bgfx/shaders/compile_shaders.py \\
         cmake-build-bgfx/_deps/bgfx_cmake-build/cmake/bgfx/shaderc \\
         cmake-build-bgfx/_deps/bgfx_cmake-src/bgfx/src
 """

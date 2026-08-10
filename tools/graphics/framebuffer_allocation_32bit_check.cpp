@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MS-PL
 // GDI-067: genuine 32-bit size_t coverage for CPU framebuffer layout arithmetic.
 
-#include "CNA/Internal/Backends/Software/SoftwareFramebufferAllocation.hpp"
+#include "CNA/Internal/Renderers/Software/SoftwareFramebufferAllocation.hpp"
 
 #include <cstddef>
 #include <cstdio>
 
-using namespace CNA::Internal::Backends::Software;
+using namespace CNA::Internal::Renderers::Software;
 
 namespace
 {

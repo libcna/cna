@@ -1,7 +1,7 @@
 # plan_dx9.md D9-A5 scene corpus: lit_textured_quad_pixellighting
 # First scene to exercise BasicEffect.PreferPerPixelLighting=true (plan_dx9.md D9-81 item 1,
 # resolved 2026-07-16 -- GpuDrawParams now carries a real preferPerPixelLighting field, and this
-# backend's dispatch selects BasicEffect.fx's own VSBasicPixelLightingTx/PSBasicPixelLightingTx --
+# renderer's dispatch selects BasicEffect.fx's own VSBasicPixelLightingTx/PSBasicPixelLightingTx --
 # one of the 5 shader variants D9-73 found do NOT byte-match Microsoft's shipped .fxb (a compiler-
 # version difference, not a flag), so this scene is also D9-73's own outstanding oracle-proof
 # obligation for that specific variant.
@@ -10,7 +10,7 @@
 # (Gouraud-interpolating an already-clamped, already-lit per-vertex color) and per-pixel lighting
 # (interpolating the raw normal, then computing lit color per pixel) produce IDENTICAL output when
 # every vertex shares one normal -- dot(light,N) is linear in a CONSTANT N, so there is nothing to
-# interpolate differently. A scene built that way would "pass" even if this backend's dispatch had
+# interpolate differently. A scene built that way would "pass" even if this renderer's dispatch had
 # a bug that silently kept selecting the vertex-lit shader regardless of the flag -- exactly the
 # kind of degenerate, proves-nothing scene this corpus has hit before (see fog_gradient_quad.scene's
 # own 1st draft, envmap_quad.scene's own accidental-fresnel finding).

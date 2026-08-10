@@ -6,7 +6,7 @@
 #include "Microsoft/Xna/Framework/Graphics/EffectParameterType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 
 #include <stdexcept>
 
@@ -395,17 +395,17 @@ namespace Microsoft::Xna::Framework::Graphics
         }
     }
 
-    void EnvironmentMapEffect::FillGpuDrawParams(CNA::Internal::Backends::GpuDrawParams& p) const
+    void EnvironmentMapEffect::FillGpuDrawParams(CNA::Internal::Renderers::GpuDrawParams& p) const
     {
-        using namespace CNA::Internal::Backends;
+        using namespace CNA::Internal::Renderers;
 
         p.envMapping         = true;
         p.textureEnabled     = true;
         p.lightingEnabled    = true;
         p.vertexColorEnabled = false;
 
-        if (texture_)        p.texture0 = &texture_->GetBackend();
-        if (environmentMap_) p.envMap   = &environmentMap_->GetBackend();
+        if (texture_)        p.texture0 = &texture_->GetRenderer();
+        if (environmentMap_) p.envMap   = &environmentMap_->GetRenderer();
 
         p.envMapAmount      = environmentMapAmount_;
         p.envMapSpecular[0] = environmentMapSpecular_.X;

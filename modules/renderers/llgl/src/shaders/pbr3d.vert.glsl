@@ -9,7 +9,7 @@
 //
 // Needs a `Tangent` vertex element (see MapVertexUsage's own new case) alongside position/normal/
 // texCoord -- the tangent-space TBN basis the fragment stage builds for normal mapping is a
-// per-vertex-attribute concern no other vertex shader in this backend has.
+// per-vertex-attribute concern no other vertex shader in this renderer has.
 
 #version 450
 
@@ -59,7 +59,7 @@ void main()
     mat3 normalMatrix = transpose(inverse(mat3(worldMatrix)));
     vNormal        = normalize(normalMatrix * normal);
     // Tangent transforms as a plain direction under mat3(worldMatrix) (not the normal's inverse-
-    // transpose) -- correct for uniform-scale World transforms, matching the Vulkan backend's own
+    // transpose) -- correct for uniform-scale World transforms, matching the Vulkan renderer's own
     // pbr3d.vert.glsl and its documented simplification.
     vTangent       = mat3(worldMatrix) * tangent.xyz;
     vBitangentSign = tangent.w;

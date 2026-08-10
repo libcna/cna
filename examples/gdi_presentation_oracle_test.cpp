@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // GDI-054: deterministic geometry and RGBA-DIB output oracle using a memory DIBSection.
 
-#include "CNA/Internal/Backends/Gdi/GdiPresentation.hpp"
+#include "CNA/Internal/Renderers/Gdi/GdiPresentation.hpp"
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -16,8 +16,8 @@
 #include <stdexcept>
 #include <vector>
 
-using namespace CNA::Internal::Backends;
-using namespace CNA::Internal::Backends::Gdi;
+using namespace CNA::Internal::Renderers;
+using namespace CNA::Internal::Renderers::Gdi;
 
 namespace
 {

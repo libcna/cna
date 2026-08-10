@@ -10,7 +10,7 @@ Usage:
 Reports the count of differing pixels and the max per-channel delta, and (with --diff-out)
 writes a visual diff image. The legacy mode marks pixels beyond --tolerance; extended-policy mode
 marks every raw difference so tolerated variance remains visible. The optional policy arguments
-support a narrowly bounded backend variance: separate RGB/alpha thresholds, a raw-difference
+support a narrowly bounded renderer variance: separate RGB/alpha thresholds, a raw-difference
 pixel budget, and a rectangle outside which even an otherwise tolerated raw difference is
 forbidden.
 

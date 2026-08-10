@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "System/InvalidOperationException.hpp"
 
 #include <algorithm>
 
 namespace Microsoft::Xna::Framework::Graphics
 {
-    using CNA::Internal::Backends::IRenderTargetCubeBackend;
-    using CNA::Internal::Backends::ITextureCubeBackend;
+    using CNA::Internal::Renderers::IRenderTargetCubeRenderer;
+    using CNA::Internal::Renderers::ITextureCubeRenderer;
 
     // Mirrors TextureCube.cpp's CalculateMipLevels(size,size) — cube faces are square.
     static int CalculateMipLevels(int size)
@@ -42,14 +42,14 @@ namespace Microsoft::Xna::Framework::Graphics
                                        int preferredMultiSampleCount,
                                        RenderTargetUsage usage)
         : TextureCube(device, size, preferredFormat,
-                      // IRenderTargetCubeBackend : ITextureCubeBackend — pass single backend
+                      // IRenderTargetCubeRenderer : ITextureCubeRenderer — pass single renderer
                       // to TextureCube so sampling and rendering share the same GPU image.
-                      std::shared_ptr<ITextureCubeBackend>(
-                          device.backend_ ? device.backend_->CreateRenderTargetCube(
+                      std::shared_ptr<ITextureCubeRenderer>(
+                          device.renderer_ ? device.renderer_->CreateRenderTargetCube(
                                                  size, static_cast<int>(preferredDepthFormat),
                                                  // REMED-GFX-136: `usage` used to stop here. The
-                                                 // backend had to invent its own answer, and both
-                                                 // backends that had to (Vulkan, WebGPU) invented
+                                                 // renderer had to invent its own answer, and both
+                                                 // renderers that had to (Vulkan, WebGPU) invented
                                                  // "always discard".
                                                  RenderTargetUsagePreservesContentsEXT(usage), mipMap,
                                                  ClosestMSAAPower(preferredMultiSampleCount)).release()
@@ -60,15 +60,15 @@ namespace Microsoft::Xna::Framework::Graphics
         , multiSampleCount_(preferredMultiSampleCount)
         , usage_(usage)
     {
-        rtCubeBackend_ = static_cast<IRenderTargetCubeBackend*>(GetBackendRaw());
-        // MultiSampleCount reflects the backend's real, device-clamped value (matching FNA's
+        rtCubeRenderer_ = static_cast<IRenderTargetCubeRenderer*>(GetRendererRaw());
+        // MultiSampleCount reflects the renderer's real, device-clamped value (matching FNA's
         // FNA3D_GetMaxMultiSampleCount), not the raw constructor argument.
-        if (rtCubeBackend_) multiSampleCount_ = rtCubeBackend_->GetMultiSampleCount();
+        if (rtCubeRenderer_) multiSampleCount_ = rtCubeRenderer_->GetMultiSampleCount();
     }
 
-    IRenderTargetCubeBackend* RenderTargetCube::GetRenderTargetCubeBackend() const
+    IRenderTargetCubeRenderer* RenderTargetCube::GetRenderTargetCubeRenderer() const
     {
-        return rtCubeBackend_;
+        return rtCubeRenderer_;
     }
 
     void RenderTargetCube::Dispose(bool disposing)
@@ -82,7 +82,7 @@ namespace Microsoft::Xna::Framework::Graphics
             }
         }
         TextureCube::Dispose(disposing);
-        rtCubeBackend_ = nullptr;
+        rtCubeRenderer_ = nullptr;
     }
 
     const std::string& RenderTargetCube::GetTypeName() const

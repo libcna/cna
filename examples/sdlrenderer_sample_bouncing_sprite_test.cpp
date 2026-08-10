@@ -3,7 +3,7 @@
 // specifically targeting SDL_Renderer. Unlike Tasks 667-729's narrow single-Draw()-call API
 // checks, this exercises a REAL multi-frame Update()+Draw() game loop: a small sprite moves each
 // frame and bounces off the backbuffer edges, proving genuine gameplay-shaped code (not just
-// isolated feature calls) works correctly end-to-end on this backend.
+// isolated feature calls) works correctly end-to-end on this renderer.
 //
 // Uses a FIXED per-Update() logical increment (not real GameTime-elapsed physics) so the outcome
 // is fully deterministic regardless of wall-clock frame timing -- a deliberate simplification
@@ -18,7 +18,7 @@
 // sprite's actual rendered position via pixel readback.
 //
 // Requires PresentationMode::NativeBackBuffer (Task 915 finding): SDL_RenderReadPixels operates
-// in physical output coordinates, while this backend's default presentation mode does not map
+// in physical output coordinates, while this renderer's default presentation mode does not map
 // logical pixels 1:1 to physical ones.
 
 #include "Microsoft/Xna/Framework/Game.hpp"

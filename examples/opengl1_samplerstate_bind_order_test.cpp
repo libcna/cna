@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: MS-PL
-// OPENGL1 backend: SamplerState ordering + per-slot bugs found and fixed while implementing
+// OPENGL1 renderer: SamplerState ordering + per-slot bugs found and fixed while implementing
 // plan_opengl1.md phase 6's mip-aware filtering (see plan_opengl1.md phase 6's own entry for the
 // full writeup).
 //
 // Bug 1 (ordering): ApplySamplerState() used to issue glTexParameteri() directly, called once per
 // draw for every sampler slot BEFORE DrawInternal actually binds the corresponding texture
-// (GraphicsDevice::applySamplerStatesToBackend() fires before DrawPrimitivesEx()). Its writes
+// (GraphicsDevice::applySamplerStatesToRenderer() fires before DrawPrimitivesEx()). Its writes
 // therefore landed on whatever texture happened to be bound at that moment -- which, for a
 // texture whose own SetData() was the most recent GL_TEXTURE_2D-affecting call (the common case
 // for a freshly-created-and-immediately-drawn texture), is frequently the SAME texture anyway,
 // silently masking the bug. XNA's own default SamplerState (AddressU=Wrap) also coincidentally
 // matches the fallback (SamplerStateCollection's unused slots keep that same default, and the
-// LAST slot processed in GraphicsDevice::applySamplerStatesToBackend()'s 16-slot loop is what
+// LAST slot processed in GraphicsDevice::applySamplerStatesToRenderer()'s 16-slot loop is what
 // ends up actually applied under the bug) -- so a naive "request Wrap, check for Wrap" test
 // passes regardless of the bug. This test instead requests the NON-default AddressMode (Clamp),
 // which only a genuinely-slot/texture-correct write can produce.

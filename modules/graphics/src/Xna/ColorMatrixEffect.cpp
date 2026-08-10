@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/ColorMatrixEffect.hpp"
 
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -64,7 +64,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void ColorMatrixEffect::SetGrayscale()
     {
         // Rec. 709 luma. Alpha is intentionally independent, matching the other RGB-only visual
-        // operations in this backend and allowing normal alpha blending after the transform.
+        // operations in this renderer and allowing normal alpha blending after the transform.
         matrix_ = {
             0.2126f, 0.7152f, 0.0722f, 0.0f,
             0.2126f, 0.7152f, 0.0722f, 0.0f,
@@ -82,7 +82,7 @@ namespace Microsoft::Xna::Framework::Graphics
         offset_ = Vector4::Zero;
     }
 
-    void ColorMatrixEffect::FillSpriteDrawParams(CNA::Internal::Backends::GpuDrawParams& params) const
+    void ColorMatrixEffect::FillSpriteDrawParams(CNA::Internal::Renderers::GpuDrawParams& params) const
     {
         params.cpu2DColorMatrixEnabled = true;
         std::copy(matrix_.begin(), matrix_.end(), std::begin(params.cpu2DColorMatrix));

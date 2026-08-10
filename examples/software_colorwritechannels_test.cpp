@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-077: the Software (CPU-raster) backend must honor BlendState.ColorWriteChannels
+// REMED-GFX-077: the Software (CPU-raster) renderer must honor BlendState.ColorWriteChannels
 // (per-channel colour write mask) and BlendState.MultiSampleMask, now that both are plumbed through
-// IGraphicsBackend::ApplyBlendState (the interface previously carried only the 6 blend factor/
-// function ordinals, so both were silent no-ops on every backend).
+// IGraphicsRenderer::ApplyBlendState (the interface previously carried only the 6 blend factor/
+// function ordinals, so both were silent no-ops on every renderer).
 //
 // XNA/FNA contract:
 //   * ColorWriteChannels is a bit flag: None=0, Red=1, Green=2, Blue=4, Alpha=8, All=15. A disabled
@@ -187,7 +187,7 @@ protected:
 
         // ===== Phase 10: mask applies AFTER blending (enabled channels blend, disabled keep dest) =
         // AlphaBlend is premultiplied source + destination*(1-sourceAlpha) on the enabled
-        // channels. Sa=220/255, so the backend clamps in float and converts once at the end:
+        // channels. Sa=220/255, so the renderer clamps in float and converts once at the end:
         //   blended R = 200 + 10*(35/255) -> 201
         //   blended B =  50 + 30*(35/255) ->  54
         // Green/Alpha are masked off -> keep dest 20 / 40 (identity, NOT zeroed). The point is that a

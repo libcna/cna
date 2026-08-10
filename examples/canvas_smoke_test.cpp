@@ -1,8 +1,8 @@
 // plan_canvas.md CANVAS-15: structural smoke test for the CANVAS (HTML Canvas 2D) graphics
-// backend. Constructs a real Game (GraphicsDeviceManager, Clear(), a Texture2D + SpriteBatch draw
+// renderer. Constructs a real Game (GraphicsDeviceManager, Clear(), a Texture2D + SpriteBatch draw
 // with rotation/origin/tint) and runs a couple of frames.
 //
-// Design decision 9 / this file's own empirical finding: this backend is Emscripten-only, and
+// Design decision 9 / this file's own empirical finding: this renderer is Emscripten-only, and
 // SDL_Init(SDL_INIT_VIDEO) itself throws under this repo's `node CnaTests.js` runner (no real
 // browser DOM -- "ReferenceError: window is not defined" comes from SDL3's own Emscripten video
 // driver, before any Canvas-specific code ever runs). So this executable is deliberately NOT
@@ -19,14 +19,14 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 
-#include "CNA/Internal/Backends/Canvas/CanvasGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Canvas/CanvasRenderer.hpp"
 
 #include <cstdio>
 #include <vector>
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::Canvas;
+using namespace CNA::Internal::Renderers::Canvas;
 
 class CanvasSmokeTest : public Game
 {
@@ -59,15 +59,15 @@ protected:
     {
         ++frame_;
         auto& dev = getGraphicsDeviceProperty();
-        auto& backend = static_cast<CanvasGraphicsBackend&>(dev.GetBackend());
+        auto& renderer = static_cast<CanvasRenderer&>(dev.GetRenderer());
 
         if (frame_ == 1)
         {
-            check(backend.GetWindowInternal() != nullptr, "GraphicsDevice has a real SDL_Window under the Canvas backend");
-            check(backend.GetRendererInternal() == nullptr, "GetRendererInternal() is null -- no SDL_Renderer exists on this backend");
+            check(renderer.GetWindowInternal() != nullptr, "GraphicsDevice has a real SDL_Window under the Canvas renderer");
+            check(renderer.GetRendererInternal() == nullptr, "GetRendererInternal() is null -- no SDL_Renderer exists on this renderer");
 
             int w = 0, h = 0;
-            backend.GetViewportSize(w, h);
+            renderer.GetViewportSize(w, h);
             check(w > 0 && h > 0, "GetViewportSize() reports a positive logical size");
         }
 

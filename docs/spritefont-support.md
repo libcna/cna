@@ -52,7 +52,7 @@ reconfirm):
 | Rotation / origin / scale | ✅ Task 694 | ✅ Task 429 |
 
 **One real, previously-undiscovered bug was found and fixed** (Task 694, in the shared,
-backend-agnostic `SpriteBatch.cpp` — affects every backend, not just SDL_Renderer):
+renderer-agnostic `SpriteBatch.cpp` — affects every renderer, not just SDL_Renderer):
 `DrawString` previously forwarded `SpriteEffects` straight to the per-glyph draw call, which only
 flips that glyph's own texture sampling in place. The glyph **sequence and position** were never
 mirrored at all — FNA's real algorithm measures the whole string up front and shifts `origin` by the
@@ -60,7 +60,7 @@ measured size on the mirrored axis, so later characters end up earlier on screen
 FNA's `axisDirectionX/Y`/`axisIsMirroredX/Y` lookup-table algorithm (re-derived in terms of CNA's own
 existing sign convention rather than copying FNA's internal variables verbatim). This closes the
 entire single/multi-glyph/newline/default-char/effects/rotation-scale pixel-verification range on
-both backends (Tasks 424–429 mirroring 690–694).
+both renderers (Tasks 424–429 mirroring 690–694).
 
 ## 5. Content-loading model and testing convention
 
@@ -121,17 +121,17 @@ rather than silently left undocumented.
 | Rotation / origin / scale | ✅ Task 694 | ✅ Task 429 | — not pixel-verified | — not pixel-verified |
 
 Legend: ✅ verified working · ❌ confirmed not implemented/not representable · — not yet exercised
-by a dedicated pixel test on that backend (the underlying logic is shared C++, so it very likely
+by a dedicated pixel test on that renderer (the underlying logic is shared C++, so it very likely
 already works, but has not been independently pixel-verified there the way SDL_Renderer/EasyGL now
 are).
 
 ## Open, tracked follow-up work
 
-- **Vulkan/Bgfx SpriteFont pixel-verification**: neither backend has its own dedicated
+- **Vulkan/Bgfx SpriteFont pixel-verification**: neither renderer has its own dedicated
   single-glyph/multi-glyph/newline/default-char/effects/rotation-scale pixel-test pass the way
   SDL_Renderer (Tasks 690–694) and EasyGL (Tasks 424–429) now do. The underlying `DrawString`
   logic is entirely shared C++, so this is a confidence/coverage gap rather than a known bug, but
-  it has not been closed the same rigorous way for these 2 backends.
+  it has not been closed the same rigorous way for these 2 renderers.
 - **Combined `SpriteEffects` flip** (§7): a genuine, minor API-completeness gap versus FNA's
   `[Flags]` enum. Not scoped to this phase; would need `SpriteEffects` operator overloads plus a
   4th `axisDir`/`axisIsMirrored` table entry in `SpriteBatch.cpp` if ever prioritized.

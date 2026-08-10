@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // Task 369: BasicEffect pixel test — DiffuseColor + EmissiveColor combination with
-// LightingEnabled=false (EasyGL backend).
+// LightingEnabled=false (EasyGL renderer).
 //
 // FNA reference (Graphics/Effect/StockEffects/EffectHelpers.cs SetMaterialColor()): with
 // LightingEnabled=false, ambient/directional lights are never computed at all — FNA folds
@@ -16,7 +16,7 @@
 // all of them left `EmissiveColor` at its default `(0,0,0)`. Fixed by baking `EmissiveColor` into
 // the forwarded diffuse color when `LightingEnabled=false`, matching
 // `EffectHelpers.SetMaterialColor`'s exact branching (this is shared C++ code, so one fix covers
-// all 3 backends — no shader changes needed, since the value is baked into the uniform the
+// all 3 renderers — no shader changes needed, since the value is baked into the uniform the
 // no-lighting shaders already multiply by).
 //
 // Scope note: `LightingEnabled=true`'s own emissive/ambient/specular combination (a much larger,

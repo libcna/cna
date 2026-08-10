@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // Task 890: EnvironmentMapEffect pixel test — DirectionalLight1/DirectionalLight2 forwarded
-// (Bgfx backend). See examples/easygl_environmentmapeffect_multilight_test.cpp for the full
+// (Bgfx renderer). See examples/easygl_environmentmapeffect_multilight_test.cpp for the full
 // FNA-reference derivation and discrimination-trick rationale.
 //
 // Exit code 0 = PASS, 1 = FAIL.

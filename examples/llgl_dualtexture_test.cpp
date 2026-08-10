@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // plan_llgl.md LLGL-25 follow-up: DualTextureEffect, the first of the four still-open BasicEffect-
-// family stock effects to land on the LLGL backend.
+// family stock effects to land on the LLGL renderer.
 //
 // Reuses the plain textured/colored_textured vertex shader as-is: DualTextureEffect samples its
 // second texture through the SAME texture coordinate as the first (no separate UV set), so the
@@ -10,7 +10,7 @@
 // `overlay = SAMPLE(Texture2, uv)` -- constants and expected values below are cross-checkable
 // against examples/dualtextureeffect_vertexcolor_test.cpp (the shared EasyGL/Vulkan/Bgfx source
 // this mirrors; not reused verbatim here because it drives GraphicsDevice::DrawUserPrimitives(),
-// whose internal backend_->CreateVertexBuffer(int)-based buffer carries no attribute layout at
+// whose internal renderer_->CreateVertexBuffer(int)-based buffer carries no attribute layout at
 // all -- a real, pre-existing LLGL gap affecting every DrawUserPrimitives typed overload, not
 // specific to DualTextureEffect, and out of this task's scope).
 //
@@ -38,7 +38,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColorTexture.hpp"
 
-#include "CNA/Internal/Backends/Llgl/LlglGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Llgl/LlglRenderer.hpp"
 
 #include "common/PixelTestGame.hpp"
 
@@ -108,10 +108,10 @@ public:
     void RunTest() override
     {
         auto& device = getGraphicsDeviceProperty();
-        auto& backend = static_cast<CNA::Internal::Backends::Llgl::LlglGraphicsBackend&>(
-            device.GetBackend());
+        auto& renderer = static_cast<CNA::Internal::Renderers::Llgl::LlglRenderer&>(
+            device.GetRenderer());
         int logicalWidth = 0, logicalHeight = 0;
-        backend.GetViewportSize(logicalWidth, logicalHeight);
+        renderer.GetViewportSize(logicalWidth, logicalHeight);
 
         device.setRasterizerStateProperty(RasterizerState::CullNone);
 

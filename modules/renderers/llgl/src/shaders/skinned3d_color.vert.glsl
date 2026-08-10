@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MS-PL
 // SkinnedEffect.VertexColorEnabled vertex shader, Vulkan flavour (SPIR-V). LLGL-37, NOXNA extension
 // property (real XNA's SkinnedEffect has no such property; CNB-66/67 added it for glTF COLOR_0
-// import support, matching every other backend). Selected instead of skinned3d.vert.glsl only when
+// import support, matching every other renderer). Selected instead of skinned3d.vert.glsl only when
 // the bound vertex buffer's own layout carries a colour attribute (stride 56, colour appended at
-// offset 52) -- see LlglGraphicsBackend.cpp's own AcquirePrimitiveSkinnedVertexShader() doc comment
+// offset 52) -- see LlglRenderer.cpp's own AcquirePrimitiveSkinnedVertexShader() doc comment
 // for why this is a SEPARATE shader file rather than an always-declared, conditionally-read
-// attribute the way EasyGL's single shared shader does it: this backend selects a compiled shader
+// attribute the way EasyGL's single shared shader does it: this renderer selects a compiled shader
 // variant per vertex layout SHAPE everywhere else (BasicEffect's own colored3d.vert.glsl vs
 // textured3d.vert.glsl split is the established precedent), and a shader declaring an input the
 // bound buffer does not supply reads undefined data on Vulkan.

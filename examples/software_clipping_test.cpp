@@ -8,7 +8,7 @@
 // clip.W = -position.Z directly (see Matrix::CreatePerspectiveFieldOfView's M34=-1, M44=0), so a
 // vertex at Z<0 is in front of the camera (clip.W>0) and Z>=0 is behind/at the camera (clipped).
 //
-// This backend clips at clip.W <= ~0 -- i.e. at the camera's eye plane, not at the projection's
+// This renderer clips at clip.W <= ~0 -- i.e. at the camera's eye plane, not at the projection's
 // configured near-plane distance. A vertex clipped there necessarily lands at an enormous (but
 // finite) screen position after the perspective divide (dividing by a value forced to be near
 // zero) -- this is correct, unavoidable perspective-projection math for a point that close to the

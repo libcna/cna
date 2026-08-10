@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 //
 // plan_diligent.md DILIGENT-49: real-device proof that RasterizerState.DepthBias and
-// SlopeScaleDepthBias visibly change a depth-test outcome through the Diligent backend, not just
+// SlopeScaleDepthBias visibly change a depth-test outcome through the Diligent renderer, not just
 // "the fields are decoded into Dg::RasterizerStateDesc and never crash".
 //
 // Method (the same "shadow acne"-style coplanar test used by vulkan_depth_bias_test.cpp, Task 328):
@@ -12,7 +12,7 @@
 // RasterizerState. Under LESS, a second draw at equal depth fails (centre stays red) -- unless a
 // negative bias pulls B's depth toward the camera so it passes (centre turns green).
 //
-// plan_diligent.md DILIGENT-64 note: DiligentGraphicsBackend::ApplyRasterizerState() used to pack
+// plan_diligent.md DILIGENT-64 note: DiligentRenderer::ApplyRasterizerState() used to pack
 // DepthBias/SlopeScaleDepthBias into a single signed byte each inside PipelineKey::raster, which
 // silently wrapped sign once a scaled value left [-128, 127] (see
 // DiligentDeviceSelectionTests.cpp's DepthBiasRawUnits* tests for that boundary/sign case, provable
@@ -42,7 +42,7 @@
 //   Strip 5 — tilted, B SlopeScaleDepthBias=0     (B)      → RED (not stuck at strip 4's cached PSO)
 //   Strip 6 — tilted, B SlopeScaleDepthBias=-8.0 (A again) → GREEN (re-visiting A works again)
 //
-// If this backend's constant DepthBias term turns out to produce no visible effect on the software
+// If this renderer's constant DepthBias term turns out to produce no visible effect on the software
 // (lavapipe) device under test -- the same open-gap shape as D3D9's own still-unresolved D9-62 --
 // that is itself the recorded finding; this test does not silently report PASS for that.
 //

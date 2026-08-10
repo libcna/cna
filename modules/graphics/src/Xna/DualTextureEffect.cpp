@@ -6,7 +6,7 @@
 #include "Microsoft/Xna/Framework/Graphics/EffectParameterType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
 {
@@ -245,17 +245,17 @@ namespace Microsoft::Xna::Framework::Graphics
         }
     }
 
-    void DualTextureEffect::FillGpuDrawParams(CNA::Internal::Backends::GpuDrawParams& p) const
+    void DualTextureEffect::FillGpuDrawParams(CNA::Internal::Renderers::GpuDrawParams& p) const
     {
-        using namespace CNA::Internal::Backends;
+        using namespace CNA::Internal::Renderers;
 
         p.dualTexture        = true;
         p.textureEnabled     = true;
         p.vertexColorEnabled = vertexColorEnabled_;
         p.lightingEnabled    = false;
 
-        if (texture_)  p.texture0 = &texture_->GetBackend();
-        if (texture2_) p.texture1 = &texture2_->GetBackend();
+        if (texture_)  p.texture0 = &texture_->GetRenderer();
+        if (texture2_) p.texture1 = &texture2_->GetRenderer();
 
         p.diffuseColor[0] = diffuseColor_.X * alpha_;
         p.diffuseColor[1] = diffuseColor_.Y * alpha_;

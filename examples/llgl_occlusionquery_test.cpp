@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MS-PL
-// plan_llgl.md LLGL-28: real per-draw-call OcclusionQuery for the LLGL graphics backend, asserted
+// plan_llgl.md LLGL-28: real per-draw-call OcclusionQuery for the LLGL graphics renderer, asserted
 // against real pixels AND real pixel counts read back from the GPU.
 //
 // LLGL-specific counterpart of examples/vulkan_occlusionquery_pixelcount_test.cpp: same three
 // scenarios, but the poll-across-multiple-frames loop that test needs is unnecessary here --
-// LlglOcclusionQueryBackend::IsComplete()/PixelCount() force a full submit-and-wait
+// LlglOcclusionQueryRenderer::IsComplete()/PixelCount() force a full submit-and-wait
 // (FlushPendingFrameEXT) the first time either is asked, so the result is always available on the
 // very next call rather than needing to be polled across several Present()s.
 //
@@ -108,8 +108,8 @@ protected:
         BasicEffect effect(device);
         effect.VertexColorEnabled = true;
 
-        // The virtual-resolution letterboxing this backend's presentation layer applies (see
-        // docs/llgl-backend.md) means the GPU actually rasterizes at the real window's PHYSICAL
+        // The virtual-resolution letterboxing this renderer's presentation layer applies (see
+        // docs/llgl-renderer.md) means the GPU actually rasterizes at the real window's PHYSICAL
         // pixel resolution, not at kSize x kSize -- a fully covering quad's own measured count
         // (this check) is the reference the multi-draw check below compares against, rather than
         // a hardcoded kSize * kSize (which would only hold if the window's own physical size

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MS-PL
 // Task 368: BasicEffect pixel test — LightingEnabled=true with a single DirectionalLight
-// (Vulkan backend).
+// (Vulkan renderer).
 //
 // See examples/easygl_basiceffect_one_light_test.cpp for the full FNA-derived expected-output
 // derivation and for the `DirectionalLight0.Enabled` bug this test found and fixed in the shared
-// `BasicEffect::FillGpuDrawParams()` (common C++ code — one fix covers all 3 backends). Summary:
+// `BasicEffect::FillGpuDrawParams()` (common C++ code — one fix covers all 3 renderers). Summary:
 // expected fragment = (AmbientLightColor + DirectionalLight0.DiffuseColor * max(dot(-Light0Direction,
 // N), 0)) * DiffuseColor, texture kept white to isolate the lighting formula.
 //

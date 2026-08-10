@@ -160,7 +160,7 @@ index 642264a..6d42f94 100644
  #endif // __APPLE__
  
 +#if !defined(_WIN32) && !defined(SDL2) && !defined(__APPLE__)
-+	// No cursor backend in this platform build (e.g. the SDL3 platform layer, where the host
++	// No cursor renderer in this platform build (e.g. the SDL3 platform layer, where the host
 +	// application owns input and cursor state). The tables still exist so the shared code below
 +	// compiles and stays inert.
 +	static void* cursor_table_original[CURSOR_COUNT] = {};

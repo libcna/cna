@@ -1,6 +1,6 @@
-#include "CNA/Internal/Backends/D3D9/D3D9RenderTargets.hpp"
-#include "CNA/Internal/Backends/D3D9/D3D9GraphicsBackend.hpp"
-#include "CNA/Internal/Backends/D3D9/D3D9FormatMapping.hpp"
+#include "CNA/Internal/Renderers/D3D9/D3D9RenderTargets.hpp"
+#include "CNA/Internal/Renderers/D3D9/D3D9Renderer.hpp"
+#include "CNA/Internal/Renderers/D3D9/D3D9FormatMapping.hpp"
 
 #include <cstdint>
 #include <cstdio>
@@ -11,7 +11,7 @@
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/NotSupportedException.hpp"
 
-namespace CNA::Internal::Backends::D3D9
+namespace CNA::Internal::Renderers::D3D9
 {
     namespace
     {
@@ -24,11 +24,11 @@ namespace CNA::Internal::Backends::D3D9
     }
 
     // -------------------------------------------------------------------------
-    // D3D9RenderTargetBackend
+    // D3D9RenderTargetRenderer
     // -------------------------------------------------------------------------
 
-    D3D9RenderTargetBackend::D3D9RenderTargetBackend(
-        D3D9GraphicsBackend& owner, IDirect3DDevice9* device,
+    D3D9RenderTargetRenderer::D3D9RenderTargetRenderer(
+        D3D9Renderer& owner, IDirect3DDevice9* device,
         int w, int h, int depthFormat, int multiSampleCount)
         : owner_(&owner), device_(device)
         , width_(w), height_(h), depthFormatOrdinal_(depthFormat)
@@ -39,12 +39,12 @@ namespace CNA::Internal::Backends::D3D9
         owner_->RegisterDefaultPoolResourceEXT(this);
     }
 
-    D3D9RenderTargetBackend::~D3D9RenderTargetBackend()
+    D3D9RenderTargetRenderer::~D3D9RenderTargetRenderer()
     {
         if (owner_) owner_->UnregisterDefaultPoolResourceEXT(this);
     }
 
-    void D3D9RenderTargetBackend::Recreate()
+    void D3D9RenderTargetRenderer::Recreate()
     {
         constexpr D3DFORMAT colorFormat = D3DFMT_A8B8G8R8;
         appliedMultiSampleCount_ = owner_->ClampMultiSampleCountEXT(colorFormat, requestedMultiSampleCount_);
@@ -54,11 +54,11 @@ namespace CNA::Internal::Backends::D3D9
             D3DUSAGE_RENDERTARGET, colorFormat, D3DPOOL_DEFAULT,
             colorTexture_.ReleaseAndGetAddressOf(), nullptr);
         if (FAILED(hr))
-            throw std::runtime_error("D3D9RenderTargetBackend: CreateTexture failed, hr=" + FormatHr(hr));
+            throw std::runtime_error("D3D9RenderTargetRenderer: CreateTexture failed, hr=" + FormatHr(hr));
 
         hr = colorTexture_->GetSurfaceLevel(0, colorSurface_.ReleaseAndGetAddressOf());
         if (FAILED(hr))
-            throw std::runtime_error("D3D9RenderTargetBackend: GetSurfaceLevel failed, hr=" + FormatHr(hr));
+            throw std::runtime_error("D3D9RenderTargetRenderer: GetSurfaceLevel failed, hr=" + FormatHr(hr));
 
         msaaSurface_.Reset();
         if (appliedMultiSampleCount_ > 1)
@@ -68,7 +68,7 @@ namespace CNA::Internal::Backends::D3D9
                 static_cast<D3DMULTISAMPLE_TYPE>(appliedMultiSampleCount_), 0, FALSE,
                 msaaSurface_.ReleaseAndGetAddressOf(), nullptr);
             if (FAILED(hr))
-                throw std::runtime_error("D3D9RenderTargetBackend: CreateRenderTarget (MSAA) failed, hr=" + FormatHr(hr));
+                throw std::runtime_error("D3D9RenderTargetRenderer: CreateRenderTarget (MSAA) failed, hr=" + FormatHr(hr));
         }
 
         depthStencilSurface_.Reset();
@@ -80,11 +80,11 @@ namespace CNA::Internal::Backends::D3D9
             owner_->CreateDepthStencilSurfaceEXT(
                 static_cast<UINT>(width_), static_cast<UINT>(height_), depthFmt, dsMsaa, 0, TRUE,
                 depthStencilSurface_.ReleaseAndGetAddressOf(),
-                "D3D9RenderTargetBackend depth allocation");
+                "D3D9RenderTargetRenderer depth allocation");
         }
     }
 
-    void D3D9RenderTargetBackend::BindAsRenderTarget()
+    void D3D9RenderTargetRenderer::BindAsRenderTarget()
     {
         // D9-40/D9-53: lazily recreate if a prior device-lost recovery released the D3DPOOL_DEFAULT
         // resources (ReleaseDefaultPoolResourceEXT()) -- same "next use recreates" convention D9-40's
@@ -97,7 +97,7 @@ namespace CNA::Internal::Backends::D3D9
                                             "binding RenderTarget2D");
     }
 
-    void D3D9RenderTargetBackend::ResolveForTransitionEXT()
+    void D3D9RenderTargetRenderer::ResolveForTransitionEXT()
     {
         if (appliedMultiSampleCount_ > 1 && msaaSurface_ && colorSurface_)
         {
@@ -105,24 +105,24 @@ namespace CNA::Internal::Backends::D3D9
         }
     }
 
-    void D3D9RenderTargetBackend::UnbindAsRenderTarget()
+    void D3D9RenderTargetRenderer::UnbindAsRenderTarget()
     {
         ResolveForTransitionEXT();
         if (owner_) owner_->RestoreBackBufferRenderTargetEXT();
     }
 
-    bool D3D9RenderTargetBackend::GetData(int level, int x, int y, int w, int h,
+    bool D3D9RenderTargetRenderer::GetData(int level, int x, int y, int w, int h,
                                           void* data, int dataLength) const
     {
         if (level < 0)
             throw System::ArgumentOutOfRangeException(
                 "level", std::to_string(level), "level must not be negative.");
-        // This backend allocates exactly one level (see D3D9RenderTargets.hpp's header note on the
+        // This renderer allocates exactly one level (see D3D9RenderTargets.hpp's header note on the
         // deliberately unimplemented mip-chain generation), so a higher level is rejected rather
         // than answered from level 0.
         if (level > 0)
             throw System::NotSupportedException(
-                "D3D9RenderTargetBackend::GetData: this render target has a single mip level; "
+                "D3D9RenderTargetRenderer::GetData: this render target has a single mip level; "
                 "level " + std::to_string(level) + " was requested.");
         // 64-bit throughout, so a rectangle near INT_MAX is rejected rather than wrapping.
         const std::int64_t right = static_cast<std::int64_t>(x) + static_cast<std::int64_t>(w);
@@ -176,7 +176,7 @@ namespace CNA::Internal::Backends::D3D9
         return true;
     }
 
-    void D3D9RenderTargetBackend::ReleaseDefaultPoolResourceEXT()
+    void D3D9RenderTargetRenderer::ReleaseDefaultPoolResourceEXT()
     {
         colorSurface_.Reset();
         colorTexture_.Reset();
@@ -185,11 +185,11 @@ namespace CNA::Internal::Backends::D3D9
     }
 
     // -------------------------------------------------------------------------
-    // D3D9RenderTargetCubeBackend
+    // D3D9RenderTargetCubeRenderer
     // -------------------------------------------------------------------------
 
-    D3D9RenderTargetCubeBackend::D3D9RenderTargetCubeBackend(
-        D3D9GraphicsBackend& owner, IDirect3DDevice9* device, int size, int depthFormat)
+    D3D9RenderTargetCubeRenderer::D3D9RenderTargetCubeRenderer(
+        D3D9Renderer& owner, IDirect3DDevice9* device, int size, int depthFormat)
         : owner_(&owner), device_(device)
         , size_(size), depthFormatOrdinal_(depthFormat)
         , hasDepth_(DepthFormatToD3D9(depthFormat) != D3DFMT_UNKNOWN)
@@ -198,18 +198,18 @@ namespace CNA::Internal::Backends::D3D9
         owner_->RegisterDefaultPoolResourceEXT(this);
     }
 
-    D3D9RenderTargetCubeBackend::~D3D9RenderTargetCubeBackend()
+    D3D9RenderTargetCubeRenderer::~D3D9RenderTargetCubeRenderer()
     {
         if (owner_) owner_->UnregisterDefaultPoolResourceEXT(this);
     }
 
-    void D3D9RenderTargetCubeBackend::Recreate()
+    void D3D9RenderTargetCubeRenderer::Recreate()
     {
         HRESULT hr = device_->CreateCubeTexture(
             static_cast<UINT>(size_), 1, D3DUSAGE_RENDERTARGET, D3DFMT_A8B8G8R8, D3DPOOL_DEFAULT,
             texture_.ReleaseAndGetAddressOf(), nullptr);
         if (FAILED(hr))
-            throw std::runtime_error("D3D9RenderTargetCubeBackend: CreateCubeTexture failed, hr=" + FormatHr(hr));
+            throw std::runtime_error("D3D9RenderTargetCubeRenderer: CreateCubeTexture failed, hr=" + FormatHr(hr));
 
         depthStencilSurface_.Reset();
         if (hasDepth_)
@@ -218,11 +218,11 @@ namespace CNA::Internal::Backends::D3D9
             owner_->CreateDepthStencilSurfaceEXT(
                 static_cast<UINT>(size_), static_cast<UINT>(size_), depthFmt, D3DMULTISAMPLE_NONE, 0, TRUE,
                 depthStencilSurface_.ReleaseAndGetAddressOf(),
-                "D3D9RenderTargetCubeBackend depth allocation");
+                "D3D9RenderTargetCubeRenderer depth allocation");
         }
     }
 
-    void D3D9RenderTargetCubeBackend::BindAsRenderTargetFace(int face)
+    void D3D9RenderTargetCubeRenderer::BindAsRenderTargetFace(int face)
     {
         if (face < 0 || face >= 6) return;
         if (!texture_) Recreate();
@@ -231,17 +231,17 @@ namespace CNA::Internal::Backends::D3D9
         ComPtr<IDirect3DSurface9> faceSurface;
         HRESULT hr = texture_->GetCubeMapSurface(static_cast<D3DCUBEMAP_FACES>(face), 0, faceSurface.GetAddressOf());
         if (FAILED(hr))
-            throw std::runtime_error("D3D9RenderTargetCubeBackend::BindAsRenderTargetFace: GetCubeMapSurface failed, hr=" + FormatHr(hr));
+            throw std::runtime_error("D3D9RenderTargetCubeRenderer::BindAsRenderTargetFace: GetCubeMapSurface failed, hr=" + FormatHr(hr));
 
         IDirect3DSurface9* color = faceSurface.Get();
         owner_->BindRenderTargetSurfacesEXT(&color, 1, depthStencilSurface_.Get(), size_, size_,
                                             "binding RenderTargetCube face");
     }
 
-    bool D3D9RenderTargetCubeBackend::GetData(int face, int level, int x, int y, int w, int h,
+    bool D3D9RenderTargetCubeRenderer::GetData(int face, int level, int x, int y, int w, int h,
                                               void* data, int dataLength) const
     {
-        // REMED-GFX-134: closes the refusal this class inherited from ITextureCubeBackend's
+        // REMED-GFX-134: closes the refusal this class inherited from ITextureCubeRenderer's
         // `return false` default.
         if (!device_ || !texture_ || data == nullptr) return false;
         if (face < 0 || face >= 6 || w <= 0 || h <= 0) return false;
@@ -255,7 +255,7 @@ namespace CNA::Internal::Backends::D3D9
                                                  faceSurface.GetAddressOf());
         if (FAILED(hr)) return false;
 
-        // Same reason as D3D9RenderTargetBackend::GetData: a D3DUSAGE_RENDERTARGET surface in
+        // Same reason as D3D9RenderTargetRenderer::GetData: a D3DUSAGE_RENDERTARGET surface in
         // D3DPOOL_DEFAULT cannot be locked, and GetRenderTargetData's copy into system memory is
         // also the synchronisation point.
         ComPtr<IDirect3DSurface9> staging;
@@ -284,13 +284,13 @@ namespace CNA::Internal::Backends::D3D9
         return true;
     }
 
-    void D3D9RenderTargetCubeBackend::UnbindAsRenderTarget()
+    void D3D9RenderTargetCubeRenderer::UnbindAsRenderTarget()
     {
         activeFace_ = -1;
         if (owner_) owner_->RestoreBackBufferRenderTargetEXT();
     }
 
-    void D3D9RenderTargetCubeBackend::ReleaseDefaultPoolResourceEXT()
+    void D3D9RenderTargetCubeRenderer::ReleaseDefaultPoolResourceEXT()
     {
         texture_.Reset();
         depthStencilSurface_.Reset();

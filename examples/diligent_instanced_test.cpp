@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MS-PL
 //
 // plan_diligent.md DILIGENT-43: real-device proof that hardware instancing on the Diligent
-// backend renders every instance at its own per-instance world position from a single
+// renderer renders every instance at its own per-instance world position from a single
 // DrawInstancedPrimitives call, through the public XNA API only.
 //
 // A small quad is drawn 3 times via one DrawInstancedPrimitives call, each instance carrying its
 // own translation (left / centre / right) in a per-instance vertex buffer bound with
-// VertexBufferBinding's instanceFrequency. If the backend genuinely consumed per-instance data
+// VertexBufferBinding's instanceFrequency. If the renderer genuinely consumed per-instance data
 // (rather than, say, silently drawing only the first instance 3 times, or ignoring the instance
 // transform and drawing every instance on top of each other), each of the three positions reads
 // back the quad's colour and the untouched background between them stays the clear colour.
@@ -45,7 +45,7 @@ namespace
     constexpr int kSize = 96;
     constexpr int kChecks = 4;
 
-    /// Row-major 4x4 translation matrix, 16 floats: matches this backend's own kInstancedVertexHlsl
+    /// Row-major 4x4 translation matrix, 16 floats: matches this renderer's own kInstancedVertexHlsl
     /// convention (four consecutive float4 rows -- translation lives in the last row, M41-M43,
     /// exactly like Matrix::CreateTranslation and every other CNA-Diligent shader's g_World).
     struct InstanceMatrixRowMajor

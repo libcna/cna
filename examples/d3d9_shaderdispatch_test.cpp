@@ -14,13 +14,13 @@
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
-#include "CNA/Internal/Backends/D3D9/D3D9ShaderDispatch.hpp"
+#include "CNA/Internal/Renderers/D3D9/D3D9ShaderDispatch.hpp"
 
 #include <cstdio>
 #include <cstring>
 #include <stdexcept>
 
-using namespace CNA::Internal::Backends::D3D9;
+using namespace CNA::Internal::Renderers::D3D9;
 
 namespace
 {

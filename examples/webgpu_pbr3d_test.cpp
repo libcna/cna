@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MS-PL
-// plan_cnj.md CNB-58 WebGPU counterpart: verify WebGPUGraphicsBackend's pbr3d.wgsl /
+// plan_cnj.md CNB-58 WebGPU counterpart: verify WebGPURenderer's pbr3d.wgsl /
 // GetOrCreatePipelinePbr3D() / DrawPrimitivesEx() dispatch for stride-48
-// (VertexPositionNormalTangentTexture) PbrEffect draws -- the WebGPU backend's real glTF 2.0
+// (VertexPositionNormalTangentTexture) PbrEffect draws -- the WebGPU renderer's real glTF 2.0
 // metallic-roughness BRDF shader (GGX distribution + Smith-Schlick-GGX visibility + Schlick
-// Fresnel), ported from EasyGLGraphicsBackend::EnsurePbrProgram()'s GLSL shader. UNSKINNED only
-// (SkinnedPbrEffect/stride 68 is a separate, pre-existing, out-of-scope gap -- this backend has no
+// Fresnel), ported from EasyGLRenderer::EnsurePbrProgram()'s GLSL shader. UNSKINNED only
+// (SkinnedPbrEffect/stride 68 is a separate, pre-existing, out-of-scope gap -- this renderer has no
 // skinning shader variant at all yet).
 //
 // All checks use World=View=Projection=Identity, a quad at z=0.5 with Normal=(0,0,-1) (facing the
@@ -14,7 +14,7 @@
 // exact same GGX/Smith-Schlick-GGX/Schlick-Fresnel formulas pbr3d.wgsl implements:
 //   - roughness=1, metallic=0, white albedo, one white light, NdotL=1: D=1/pi, k=0.5, G=1,
 //     F=F0=0.04, Lo = (0.96*1/pi + 0.3183*1*0.04/4) ~= 0.309 (linear) -- a clear, non-near-zero,
-//     non-near-one mid value, deliberately NOT asserted as an exact pixel (this backend's own
+//     non-near-one mid value, deliberately NOT asserted as an exact pixel (this renderer's own
 //     established sRGB-swapchain-gamma caveat, see webgpu_littextured3d_test.cpp's Check D
 //     comment), only as "clearly brighter than black" (Check B) and via a relative comparison
 //     that stays valid under any monotonic gamma encoding (Check E).

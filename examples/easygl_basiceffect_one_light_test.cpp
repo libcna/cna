@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // Task 368: BasicEffect pixel test — LightingEnabled=true with a single DirectionalLight
-// (EasyGL backend). Verifies the normal-dependent per-vertex diffuse lighting formula, not just
+// (EasyGL renderer). Verifies the normal-dependent per-vertex diffuse lighting formula, not just
 // a saturated (NdotL=0/1) degenerate case.
 //
 // FNA reference (Graphics/Effect/StockEffects/BasicEffect.cs OnApply() + HLSL/BasicEffect.fx +
@@ -31,7 +31,7 @@
 // reflection pipeline entirely — Task 351/361 finding), so the gating has to happen in
 // `FillGpuDrawParams()` itself. Fixed by reading `DirectionalLight0.getEnabledProperty()` and
 // substituting `Vector3::Zero` for the forwarded diffuse color when disabled. This bug is common
-// C++ code shared by all 3 backends, so one fix covers all 3.
+// C++ code shared by all 3 renderers, so one fix covers all 3.
 //
 // Uses a non-saturating NdotL=0.5 (45-degree-family angle, not 0 or 1) to prove the actual dot
 // product is computed, not just a boolean lit/unlit check; a back-facing normal to prove the

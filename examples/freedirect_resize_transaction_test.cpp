@@ -7,7 +7,7 @@
 // outcome: the original primary/shadow pair is still the live pair, every temporary is released
 // once, and the original pair is not released until a later successful commit.
 
-#include "CNA/Internal/Backends/FreeDirect/FreeDirectGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/FreeDirect/FreeDirectRenderer.hpp"
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
@@ -34,8 +34,8 @@
 #include <limits>
 #include <string>
 
-using namespace CNA::Internal::Backends;
-using namespace CNA::Internal::Backends::FreeDirect;
+using namespace CNA::Internal::Renderers;
+using namespace CNA::Internal::Renderers::FreeDirect;
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
 
@@ -284,13 +284,13 @@ namespace
 
         FreeDirectTestStateEXT state{};
         {
-            GraphicsBackendCreateArgs args;
+            GraphicsRendererCreateArgs args;
             args.window = window;
             args.virtualWidth = 48;
             args.virtualHeight = 32;
             args.depthStencilFormat = static_cast<int>(depthFormat);
-            FreeDirectGraphicsBackend backend(args, Hooks(tracker));
-            state = backend.GetTestStateEXT();
+            FreeDirectRenderer renderer(args, Hooks(tracker));
+            state = renderer.GetTestStateEXT();
             Check(
                 state.directDraw != nullptr && state.primarySurface != nullptr &&
                     state.shadowBackBuffer != nullptr,
@@ -307,7 +307,7 @@ namespace
                     FreeDirectResourceEventEXT::Acquired, state.shadowBackBuffer) == 1,
                 prefix + " acquires each constructor resource exactly once");
             Check(
-                !backend.SupportsDepthStencil(),
+                !renderer.SupportsDepthStencil(),
                 prefix + " retains DX3's established depthless capability");
         }
 
@@ -344,11 +344,11 @@ namespace
         bool threw = false;
         try
         {
-            GraphicsBackendCreateArgs args;
+            GraphicsRendererCreateArgs args;
             args.window = window;
             args.virtualWidth = 4097;
             args.virtualHeight = 32;
-            FreeDirectGraphicsBackend backend(args, Hooks(tracker));
+            FreeDirectRenderer renderer(args, Hooks(tracker));
         }
         catch (const std::exception&)
         {
@@ -390,7 +390,7 @@ namespace
         GraphicsDevice device(
             GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::Reach,
             Parameters(kWidthA, kHeightA, DepthFormat::Depth24, PresentInterval::Immediate));
-        auto& backend = static_cast<FreeDirectGraphicsBackend&>(device.GetBackend());
+        auto& renderer = static_cast<FreeDirectRenderer&>(device.GetRenderer());
 
         Texture2D texture(device, 1, 1);
         const Color source(220, 40, 90, 255);
@@ -403,8 +403,8 @@ namespace
             device, 19, 15, false, SurfaceFormat::Color, DepthFormat::Depth24, 0,
             RenderTargetUsage::PreserveContents);
         Check(
-            !depthless.GetRenderTargetBackend()->HasRealDepthBuffer(false) &&
-                !depthBacked.GetRenderTargetBackend()->HasRealDepthBuffer(true),
+            !depthless.GetRenderTargetRenderer()->HasRealDepthBuffer(false) &&
+                !depthBacked.GetRenderTargetRenderer()->HasRealDepthBuffer(true),
             prefix + " covers depthless and depth-requested targets without inventing DX3 depth");
 
         device.Clear(Color(11, 22, 33, 255));
@@ -426,15 +426,15 @@ namespace
         customDepth.setReferenceStencilProperty(37);
         device.setDepthStencilStateProperty(customDepth);
 
-        backend.SetPresentationMode(static_cast<int>(CnaPresentationMode::Letterbox));
-        const FreeDirectTestStateEXT before = backend.GetTestStateEXT();
+        renderer.SetPresentationMode(static_cast<int>(CnaPresentationMode::Letterbox));
+        const FreeDirectTestStateEXT before = renderer.GetTestStateEXT();
         const PresentationParameters ppBefore =
             device.getPresentationParametersProperty().Clone();
         const Viewport viewportBefore = device.getViewportProperty();
         const Rectangle scissorBefore = device.getScissorRectangleProperty();
 
         tracker.Clear();
-        backend.SetTestHooksEXT(Hooks(tracker, failure));
+        renderer.SetTestHooksEXT(Hooks(tracker, failure));
 
         PresentationParameters replacement = ppBefore.Clone();
         replacement.setBackBufferWidthProperty(kWidthB);
@@ -454,7 +454,7 @@ namespace
             diagnostic = exception.what();
         }
 
-        const FreeDirectTestStateEXT after = backend.GetTestStateEXT();
+        const FreeDirectTestStateEXT after = renderer.GetTestStateEXT();
         Check(
             threw && diagnostic.find("CNA FreeDirect: injected resize failure during") !=
                          std::string::npos,
@@ -471,7 +471,7 @@ namespace
         Check(
             after.logicalWidth == kWidthA && after.logicalHeight == kHeightA &&
                 after.presentationMode == before.presentationMode,
-            prefix + " preserves backend dimensions and presentation mode");
+            prefix + " preserves renderer dimensions and presentation mode");
         Check(
             after.activeRenderTarget == before.activeRenderTarget &&
                 after.activeRenderTarget != nullptr,
@@ -507,7 +507,7 @@ namespace
 
         device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
         const bool originalSetUsable =
-            SameSurfaceSet(before, backend.GetTestStateEXT()) &&
+            SameSurfaceSet(before, renderer.GetTestStateEXT()) &&
             SameColor(ReadPixel(device, 0, 0), Color(11, 22, 33, 255));
         Check(originalSetUsable, prefix + " proves A -> failed B -> A content remains usable");
         if (originalSetUsable)
@@ -522,31 +522,31 @@ namespace
         GraphicsDevice device(
             GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::Reach,
             Parameters(kWidthA, kHeightA));
-        auto& backend = static_cast<FreeDirectGraphicsBackend&>(device.GetBackend());
-        backend.SetTestHooksEXT(Hooks(tracker));
+        auto& renderer = static_cast<FreeDirectRenderer&>(device.GetRenderer());
+        renderer.SetTestHooksEXT(Hooks(tracker));
 
-        const FreeDirectTestStateEXT initial = backend.GetTestStateEXT();
+        const FreeDirectTestStateEXT initial = renderer.GetTestStateEXT();
         Viewport customViewport(3, 4, 20, 12);
         const Rectangle customScissor(2, 3, 9, 8);
         device.setViewportProperty(customViewport);
         device.setScissorRectangleProperty(customScissor);
 
         tracker.Clear();
-        backend.SetVirtualResolution(kWidthA, kHeightA);
+        renderer.SetVirtualResolution(kWidthA, kHeightA);
         Check(
-            SameSurfaceSet(initial, backend.GetTestStateEXT()) && tracker.count == 0 &&
+            SameSurfaceSet(initial, renderer.GetTestStateEXT()) && tracker.count == 0 &&
                 SameViewport(device.getViewportProperty(), customViewport) &&
                 SameRectangle(device.getScissorRectangleProperty(), customScissor),
             "same-dimension resize is the established no-op and preserves custom state");
 
-        backend.SetVirtualResolution(0, kHeightB);
-        backend.SetVirtualResolution(kWidthB, 0);
-        backend.SetVirtualResolution(-1, kHeightB);
-        backend.SetVirtualResolution(kWidthB, -1);
+        renderer.SetVirtualResolution(0, kHeightB);
+        renderer.SetVirtualResolution(kWidthB, 0);
+        renderer.SetVirtualResolution(-1, kHeightB);
+        renderer.SetVirtualResolution(kWidthB, -1);
         Check(
-            SameSurfaceSet(initial, backend.GetTestStateEXT()) && tracker.count == 0 &&
-                backend.GetTestStateEXT().logicalWidth == kWidthA &&
-                backend.GetTestStateEXT().logicalHeight == kHeightA,
+            SameSurfaceSet(initial, renderer.GetTestStateEXT()) && tracker.count == 0 &&
+                renderer.GetTestStateEXT().logicalWidth == kWidthA &&
+                renderer.GetTestStateEXT().logicalHeight == kHeightA,
             "zero and negative dimensions use existing public no-op validation");
 
         const auto expectNativeRejection = [&](int width, int height, const char* label)
@@ -555,16 +555,16 @@ namespace
             bool threw = false;
             try
             {
-                backend.SetVirtualResolution(width, height);
+                renderer.SetVirtualResolution(width, height);
             }
             catch (const std::exception&)
             {
                 threw = true;
             }
             Check(
-                threw && SameSurfaceSet(initial, backend.GetTestStateEXT()) &&
-                    backend.GetTestStateEXT().logicalWidth == kWidthA &&
-                    backend.GetTestStateEXT().logicalHeight == kHeightA &&
+                threw && SameSurfaceSet(initial, renderer.GetTestStateEXT()) &&
+                    renderer.GetTestStateEXT().logicalWidth == kWidthA &&
+                    renderer.GetTestStateEXT().logicalHeight == kHeightA &&
                     device.getPresentationParametersProperty().getBackBufferWidthProperty() ==
                         kWidthA &&
                     device.getPresentationParametersProperty().getBackBufferHeightProperty() ==
@@ -628,9 +628,9 @@ namespace
         GraphicsDevice device(
             GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::Reach,
             Parameters(kWidthA, kHeightA, DepthFormat::None));
-        auto& backend = static_cast<FreeDirectGraphicsBackend&>(device.GetBackend());
-        backend.SetTestHooksEXT(Hooks(tracker));
-        backend.SetPresentationMode(static_cast<int>(CnaPresentationMode::Letterbox));
+        auto& renderer = static_cast<FreeDirectRenderer&>(device.GetRenderer());
+        renderer.SetTestHooksEXT(Hooks(tracker));
+        renderer.SetPresentationMode(static_cast<int>(CnaPresentationMode::Letterbox));
 
         Texture2D texture(device, 1, 1);
         const Color source(220, 40, 90, 255);
@@ -645,10 +645,10 @@ namespace
         device.setViewportProperty(Viewport(4, 5, 20, 15));
         device.setScissorRectangleProperty(Rectangle(3, 4, 11, 10));
 
-        const FreeDirectTestStateEXT stateA = backend.GetTestStateEXT();
+        const FreeDirectTestStateEXT stateA = renderer.GetTestStateEXT();
         tracker.Clear();
         device.Reset(Parameters(kWidthB, kHeightB, DepthFormat::None));
-        const FreeDirectTestStateEXT stateB = backend.GetTestStateEXT();
+        const FreeDirectTestStateEXT stateB = renderer.GetTestStateEXT();
         CheckSuccessfulCommitEvents(tracker, stateA, stateB, "successful A -> B");
         Check(
             stateB.logicalWidth == kWidthB && stateB.logicalHeight == kHeightB &&
@@ -657,7 +657,7 @@ namespace
                     kWidthB &&
                 device.getPresentationParametersProperty().getBackBufferHeightProperty() ==
                     kHeightB,
-            "successful A -> B updates backend and presentation dimensions consistently");
+            "successful A -> B updates renderer and presentation dimensions consistently");
         Check(
             SameViewport(device.getViewportProperty(), Viewport(0, 0, kWidthB, kHeightB)) &&
                 SameRectangle(
@@ -675,7 +675,7 @@ namespace
 
         tracker.Clear();
         device.Reset(Parameters(kWidthC, kHeightC, DepthFormat::Depth24));
-        const FreeDirectTestStateEXT stateC = backend.GetTestStateEXT();
+        const FreeDirectTestStateEXT stateC = renderer.GetTestStateEXT();
         CheckSuccessfulCommitEvents(tracker, stateB, stateC, "successful B -> C");
         Check(
             stateC.logicalWidth == kWidthC && stateC.logicalHeight == kHeightC &&
@@ -694,9 +694,9 @@ namespace
             "successful B -> C renders and presents at the new extent");
 
         tracker.Clear();
-        backend.SetVirtualResolution(kWidthC, kHeightC);
+        renderer.SetVirtualResolution(kWidthC, kHeightC);
         Check(
-            SameSurfaceSet(stateC, backend.GetTestStateEXT()) && tracker.count == 0,
+            SameSurfaceSet(stateC, renderer.GetTestStateEXT()) && tracker.count == 0,
             "repeated resize to C is a resource-identity-preserving no-op");
 
         RenderTarget2D depthless(
@@ -706,8 +706,8 @@ namespace
             device, 23, 19, false, SurfaceFormat::Color, DepthFormat::Depth24, 0,
             RenderTargetUsage::PreserveContents);
         Check(
-            !depthless.GetRenderTargetBackend()->HasRealDepthBuffer(false) &&
-                !depthBacked.GetRenderTargetBackend()->HasRealDepthBuffer(true),
+            !depthless.GetRenderTargetRenderer()->HasRealDepthBuffer(false) &&
+                !depthBacked.GetRenderTargetRenderer()->HasRealDepthBuffer(true),
             "successful sequence retains honest depthless behavior for both RT configurations");
 
         device.SetRenderTarget(&depthless);

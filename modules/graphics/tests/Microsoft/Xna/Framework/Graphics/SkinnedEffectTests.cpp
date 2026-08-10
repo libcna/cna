@@ -12,7 +12,7 @@
 #include <stdexcept>
 #include <vector>
 
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DirectionalLight.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IEffectLights.hpp"
@@ -21,7 +21,7 @@
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 
-using CNA::Internal::Backends::GpuDrawParams;
+using CNA::Internal::Renderers::GpuDrawParams;
 using Microsoft::Xna::Framework::Matrix;
 using Microsoft::Xna::Framework::Vector3;
 using Microsoft::Xna::Framework::Graphics::DirectionalLight;
@@ -130,7 +130,7 @@ TEST_F(SkinnedEffectDefaultsTest, LightingEnabledFalseThrowsThroughIEffectLights
     EXPECT_TRUE(lights.getLightingEnabledProperty());
 }
 
-// REMED-GFX-088: direct backend tests must use the state tuple that the public
+// REMED-GFX-088: direct renderer tests must use the state tuple that the public
 // SkinnedEffect can actually produce. FNA's always-lit material upload is:
 //   DiffuseShader  = DiffuseColor * Alpha
 //   EmissiveShader = (EmissiveColor + AmbientLightColor * DiffuseColor) * Alpha
@@ -163,7 +163,7 @@ TEST_F(SkinnedEffectDefaultsTest, FillGpuDrawParamsUsesAlwaysLitPrefoldedMateria
     EXPECT_TRUE(params.skinned);
     EXPECT_TRUE(params.textureEnabled);
     EXPECT_TRUE(params.lightingEnabled);
-    EXPECT_EQ(params.texture0, &texture.GetBackend());
+    EXPECT_EQ(params.texture0, &texture.GetRenderer());
 
     EXPECT_FLOAT_EQ(params.diffuseColor[0], 0.25f);
     EXPECT_FLOAT_EQ(params.diffuseColor[1], 0.125f);

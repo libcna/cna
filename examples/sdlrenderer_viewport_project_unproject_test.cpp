@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MS-PL
 // Task 710: Verify Viewport get/set round-trip and Project/Unproject math on SDL_Renderer.
 //
-// Viewport::Project/Unproject are pure, backend-agnostic math (see ViewportTests.cpp's own
+// Viewport::Project/Unproject are pure, renderer-agnostic math (see ViewportTests.cpp's own
 // extensive unit-test coverage — identity/non-identity matrices, round-trips, inverted depth,
 // etc.) with no GPU dependency at all, so this task's genuinely NEW, SDL_Renderer-specific
 // contribution is an INTEGRATION check: tying that already-verified math to the REAL, LIVE
-// GraphicsDevice::Viewport this backend actually reports, using a genuine 2D orthographic
+// GraphicsDevice::Viewport this renderer actually reports, using a genuine 2D orthographic
 // projection (the "2D orthographic case" this row's own hint calls out) — the kind of
 // world<->screen transform a 2D game would actually use for e.g. converting mouse coordinates.
 //

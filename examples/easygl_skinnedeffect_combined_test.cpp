@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Task 409: cross-backend SkinnedEffect capstone (EasyGL backend).
+// Task 409: cross-renderer SkinnedEffect capstone (EasyGL renderer).
 //
 // Combines Tasks 406-408's individually-verified pieces into ONE scene, drawn with a SINGLE
 // bone-palette upload and a SINGLE DrawPrimitives call covering 3 quads whose vertices carry
@@ -104,7 +104,7 @@ protected:
         device.SetDepthTestEnabled(false);
         device.setBlendStateProperty(BlendState::Opaque);
         // Task 896 finding (mirrors the Bgfx sibling's Task 364/884 fix): once
-        // GraphicsDevice's real default RasterizerState is pushed to every backend,
+        // GraphicsDevice's real default RasterizerState is pushed to every renderer,
         // this quad's winding is culled unless explicitly disabled.
         device.setRasterizerStateProperty(RasterizerState::CullNone);
 

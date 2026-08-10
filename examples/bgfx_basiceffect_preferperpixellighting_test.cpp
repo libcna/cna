@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MS-PL
 // Task 1104 (plan_graphics.md Phase 80 / plan_dx9.md Divergence 1): BasicEffect pixel test --
 // PreferPerPixelLighting genuinely selects between two different lighting evaluations (Bgfx
-// backend).
+// renderer).
 //
 // Real XNA 4.0 default: PreferPerPixelLighting=false -> lighting is computed ONCE per vertex
 // (VSBasicVertexLighting*) and Gouraud-interpolated across the triangle. true -> lighting is
 // re-evaluated per fragment (VSBasicPixelLighting*/PSBasicPixelLighting*). Before this task, this
-// backend always evaluated per pixel regardless of this flag's value -- the opposite of XNA's own
+// renderer always evaluated per pixel regardless of this flag's value -- the opposite of XNA's own
 // default -- and GpuDrawParams didn't even carry the flag at all until Task 1100.
 //
 // Reuses the exact scene from bgfx_basiceffect_specular_test.cpp's own "(a) eye straight on" case
@@ -16,14 +16,14 @@
 // diagonal seam between this quad's two triangles -- PreferPerPixelLighting=false reads the
 // Gouraud-interpolated AVERAGE of the two shared vertices' own per-vertex specular terms; =true
 // reads a FRESH per-fragment evaluation at the origin itself. EasyGL/Vulkan (identical scene)
-// measured vertex-lit ~127, pixel-lit ~155 -- confirmed against this backend's own real render
-// below before being accepted (small per-backend rounding is expected, not a bug).
+// measured vertex-lit ~127, pixel-lit ~155 -- confirmed against this renderer's own real render
+// below before being accepted (small per-renderer rounding is expected, not a bug).
 //
 // 3 checks:
 //   (a) Default (PreferPerPixelLighting left at its real XNA default, false): expect the
 //       vertex-lit/Gouraud value.
 //   (b) PreferPerPixelLighting=true: expect the pixel-lit value -- the OLD, pre-Task-1104 value
-//       this backend always produced regardless of the flag.
+//       this renderer always produced regardless of the flag.
 //   (c) (a) != (b): proves the flag is a genuine, live dispatch selector, not a decorative no-op.
 //
 // Exit code 0 = PASS, 1 = FAIL.
@@ -65,7 +65,7 @@ static const Vector3 kNormal(0.0f, 0.0f, 1.0f);
 static const Vector3 kEyeStraightOn(0.0f, 0.0f, 3.0f);
 
 // Same values EasyGL/Vulkan measured for this identical scene (Tasks 1102/1103); confirmed
-// against this backend's own real render before being accepted (see this task's own commit
+// against this renderer's own real render before being accepted (see this task's own commit
 // message for the actual measured numbers).
 static const Color kExpectedVertexLit(127, 127, 127, 255);
 static const Color kExpectedPixelLit(155, 155, 155, 255);

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // plan_dx9.md Phase D9-8 (D9-83): real vs_2_0/ps_2_0 bytecode for CNA's own NOXNA
-// "Instanced3D" shader (src/CNA/Internal/Backends/D3D9/shaders/cna/Instanced3D.hlsl -- see that
+// "Instanced3D" shader (src/CNA/Internal/Renderers/D3D9/shaders/cna/Instanced3D.hlsl -- see that
 // file's own header comment for why this is not a Microsoft Stock Effect port), compiled through
 // the same real d3dcompiler_47.dll (D9-71's own fxc_tool.exe, under Wine) used for the vendored
 // XNA Stock Effects, and register-verified against a real D3DDisassemble() (D9-72's own
@@ -15,7 +15,7 @@
 #include <cstdint>
 #include <cstddef>
 
-namespace CNA::Internal::Backends::D3D9::Shaders
+namespace CNA::Internal::Renderers::D3D9::Shaders
 {
 
 static constexpr uint8_t kInstanced3DVSBytecode[496] = {

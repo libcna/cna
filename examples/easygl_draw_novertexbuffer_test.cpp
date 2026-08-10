@@ -2,7 +2,7 @@
 // Task 203: Verify draw calls throw std::runtime_error when no vertex buffer is bound.
 //
 // DrawPrimitives, DrawIndexedPrimitives, and DrawInstancedPrimitives all guard
-// against a null currentVertexBuffer_ and throw before touching the GPU backend.
+// against a null currentVertexBuffer_ and throw before touching the GPU renderer.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"

@@ -13,7 +13,7 @@
 //     padding (`Position@0 + Color@12` at stride 16 and at stride 32);
 //   * a declaration whose stride is not in any built-in table is still fully specified.
 //
-// A backend that switches on the stride alone is therefore guessing, and its guess is
+// A renderer that switches on the stride alone is therefore guessing, and its guess is
 // unfalsifiable from the stride: `MakeBgfxLayout(12)` fell through to a fallback that appends
 // Position + Color0 and ends at a SIXTEEN-byte native layout, which bgfx then strides through a
 // TWELVE-byte buffer. Every record after the first is read from the wrong address.
@@ -78,9 +78,9 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTextureSkinned.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 
-#ifdef CNA_BACKEND_BGFX
+#ifdef CNA_RENDERER_BGFX
 #include <bgfx/bgfx.h>
-#include "CNA/Internal/Backends/Bgfx/BgfxGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Bgfx/BgfxRenderer.hpp"
 #endif
 
 using Microsoft::Xna::Framework::Color;
@@ -108,22 +108,22 @@ using Microsoft::Xna::Framework::Graphics::VertexElement;
 using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
 using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 
-// The backends that rasterize a stock 3D draw and read the result back through
+// The renderers that rasterize a stock 3D draw and read the result back through
 // RenderTarget2D::GetData -- InstancedDiffuseColorTests.cpp's own suite set.
-#if defined(CNA_BACKEND_BGFX) || defined(CNA_BACKEND_EASYGL) || \
-    defined(CNA_BACKEND_WEBGPU) || defined(CNA_BACKEND_VULKAN) || \
-    defined(CNA_BACKEND_SOFTWARE) || defined(CNA_BACKEND_SDL_GPU) || \
-    defined(CNA_BACKEND_D3D9) || defined(CNA_BACKEND_D3D11) || defined(CNA_BACKEND_D3D12) || \
-    defined(CNA_BACKEND_WICKED)
+#if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_EASYGL) || \
+    defined(CNA_RENDERER_WEBGPU) || defined(CNA_RENDERER_VULKAN) || \
+    defined(CNA_RENDERER_SOFTWARE) || defined(CNA_RENDERER_SDL_GPU) || \
+    defined(CNA_RENDERER_D3D9) || defined(CNA_RENDERER_D3D11) || defined(CNA_RENDERER_D3D12) || \
+    defined(CNA_RENDERER_WICKED)
 #define CNA_DECLARATION_LAYOUT_ORACLE 1
 #endif
 
-// The backends measured on a real display here. D3D9/D3D11/D3D12 stay outside it because no D3D
+// The renderers measured on a real display here. D3D9/D3D11/D3D12 stay outside it because no D3D
 // display is reachable in this environment; every leg still PRINTS its reading there.
-#if defined(CNA_BACKEND_EASYGL) || defined(CNA_BACKEND_BGFX) || \
-    defined(CNA_BACKEND_VULKAN) || defined(CNA_BACKEND_WEBGPU) || \
-    defined(CNA_BACKEND_SOFTWARE) || defined(CNA_BACKEND_SDL_GPU) || \
-    defined(CNA_BACKEND_WICKED)
+#if defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_BGFX) || \
+    defined(CNA_RENDERER_VULKAN) || defined(CNA_RENDERER_WEBGPU) || \
+    defined(CNA_RENDERER_SOFTWARE) || defined(CNA_RENDERER_SDL_GPU) || \
+    defined(CNA_RENDERER_WICKED)
 #define CNA_DECLARATION_LAYOUT_MEASURED 1
 #endif
 
@@ -131,26 +131,26 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 
 namespace
 {
-    constexpr const char* kBackendName =
-#if defined(CNA_BACKEND_EASYGL)
+    constexpr const char* kRendererName =
+#if defined(CNA_RENDERER_EASYGL)
         "EasyGL";
-#elif defined(CNA_BACKEND_VULKAN)
+#elif defined(CNA_RENDERER_VULKAN)
         "Vulkan";
-#elif defined(CNA_BACKEND_BGFX)
+#elif defined(CNA_RENDERER_BGFX)
         "bgfx";
-#elif defined(CNA_BACKEND_WEBGPU)
+#elif defined(CNA_RENDERER_WEBGPU)
         "WebGPU";
-#elif defined(CNA_BACKEND_SOFTWARE)
+#elif defined(CNA_RENDERER_SOFTWARE)
         "Software";
-#elif defined(CNA_BACKEND_SDL_GPU)
+#elif defined(CNA_RENDERER_SDL_GPU)
         "SDL_GPU";
-#elif defined(CNA_BACKEND_D3D9)
+#elif defined(CNA_RENDERER_D3D9)
         "D3D9";
-#elif defined(CNA_BACKEND_D3D11)
+#elif defined(CNA_RENDERER_D3D11)
         "D3D11";
-#elif defined(CNA_BACKEND_D3D12)
+#elif defined(CNA_RENDERER_D3D12)
         "D3D12";
-#elif defined(CNA_BACKEND_WICKED)
+#elif defined(CNA_RENDERER_WICKED)
         "Wicked";
 #else
         "unknown";
@@ -249,7 +249,7 @@ namespace
         int positionOffset;
         int colorOffset;
         int texCoordOffset;
-        /// True when this declaration collides with the byte-stride table every backend other
+        /// True when this declaration collides with the byte-stride table every renderer other
         /// than bgfx still infers its native layout from. bgfx translates the declaration and must
         /// render the contract; the other nine must REFUSE the draw deterministically before any
         /// native work (REMED-GFX-DECL-GUARD), because their inferred layout would read the
@@ -477,7 +477,7 @@ protected:
     void RequireThreeD()
     {
         if (!device.SupportsCapability(GraphicsCapability::ThreeD))
-            GTEST_SKIP() << "Backend explicitly does not support 3D rendering";
+            GTEST_SKIP() << "Renderer explicitly does not support 3D rendering";
         device.setRasterizerStateProperty(RasterizerState::CullNone);
         device.setDepthStencilStateProperty(DepthStencilState::None);
         device.setBlendStateProperty(BlendState::Opaque);
@@ -510,7 +510,7 @@ protected:
         e.Apply();
     }
 
-    /// One rendered frame, or the backend's own refusal. A backend may decline a declaration it
+    /// One rendered frame, or the renderer's own refusal. A renderer may decline a declaration it
     /// cannot express; what it may never do is accept the draw and return wrong geometry.
     struct RouteResult
     {
@@ -620,7 +620,7 @@ protected:
 
     static void Print(const DeclarationCase& c, Route route, const RouteResult& r)
     {
-        std::cout << "[ GFX-216  ] " << kBackendName << ' ' << c.name << '/' << RouteName(route)
+        std::cout << "[ GFX-216  ] " << kRendererName << ' ' << c.name << '/' << RouteName(route)
                   << " stride=" << c.stride;
         if (!r.rendered)
             std::cout << ": REJECTED -- \"" << r.rejection << '"' << std::endl;
@@ -631,10 +631,10 @@ protected:
     /// Asserts the full contract: every column's colour, lit count, top row and flatness.
     ///
     /// REMED-GFX-216 is scoped to bgfx production, and bgfx must therefore render every entry in
-    /// the matrix. The same oracle run on the other backends found the SAME class of defect on all
+    /// the matrix. The same oracle run on the other renderers found the SAME class of defect on all
     /// of them, from two different mechanisms:
     ///
-    ///   * every backend except bgfx and EasyGL left `SetVertexDeclaration` an empty override
+    ///   * every renderer except bgfx and EasyGL left `SetVertexDeclaration` an empty override
     ///     (Vulkan, WebGPU, Software, SdlGpu, D3D9, D3D11, D3D12), so the declaration was discarded
     ///     and a layout selected by stride -- REMED-GFX-217;
     ///   * EasyGL consumes the declaration but assigns each attribute's location from its INDEX in
@@ -644,25 +644,25 @@ protected:
     ///
     /// Neither translator may be written here. REMED-GFX-DECL-GUARD instead makes both safe: a
     /// declaration those inferred layouts cannot represent faithfully is REFUSED deterministically
-    /// before any native layout, command or submission exists. So on those nine backends the three
+    /// before any native layout, command or submission exists. So on those nine renderers the three
     /// colliding declarations assert a REJECTION, not a measured wrong picture -- an arm that
     /// starts rendering again fails whether the picture is right (the translator landed, and the
     /// arm is stale) or wrong (the guard regressed), and the message distinguishes them.
     ///
-    /// Everywhere else the full contract is asserted. A backend that REFUSES a declaration it
+    /// Everywhere else the full contract is asserted. A renderer that REFUSES a declaration it
     /// cannot express is recorded verbatim: refusing is a capability boundary, accepting and
     /// rendering the wrong thing is not.
     static void ExpectStaircase(const DeclarationCase& c, Route route, const RouteResult& r)
     {
         Print(c, route, r);
 #ifdef CNA_DECLARATION_LAYOUT_MEASURED
-#if !defined(CNA_BACKEND_BGFX)
+#if !defined(CNA_RENDERER_BGFX)
         if (c.deviatesElsewhere)
         {
             EXPECT_FALSE(r.rendered)
-                << c.name << '/' << RouteName(route) << " on " << kBackendName
+                << c.name << '/' << RouteName(route) << " on " << kRendererName
                 << " was ACCEPTED. This declaration collides with the byte-stride table this "
-                   "backend infers its native layout from, so REMED-GFX-DECL-GUARD must refuse it "
+                   "renderer infers its native layout from, so REMED-GFX-DECL-GUARD must refuse it "
                    "before any native work. If the picture below is correct, REMED-GFX-217/218's "
                    "real translator has landed and this arm is stale; if it is wrong, the guard "
                    "regressed and a draw is being rendered from the wrong bytes"
@@ -678,7 +678,7 @@ protected:
         {
             EXPECT_FALSE(r.rejection.empty())
                 << c.name << '/' << RouteName(route)
-                << ": the draw was refused without saying why. A backend may decline a declaration "
+                << ": the draw was refused without saying why. A renderer may decline a declaration "
                    "it cannot express, but the refusal has to be legible";
             return;
         }
@@ -818,12 +818,12 @@ TEST_F(VertexDeclarationLayoutTest, DeclarationTransitionsDoNotReuseAStaleLayout
 // ---------------------------------------------------------------------------
 // REMED-GFX-DECL-GUARD. The legs above prove that a colliding declaration no longer renders. These
 // prove the rest of the boundary's contract: that refusing costs the caller nothing, that the
-// refusal happens before anything native is produced, and that every route into the backend goes
+// refusal happens before anything native is produced, and that every route into the renderer goes
 // through it -- not only the one the collision matrix happens to use.
 //
 // bgfx is excluded from the REFUSAL legs and only from those: it has a real declaration translator
 // (REMED-GFX-216), so the same declarations are representable there and must keep rendering. That
-// asymmetry is the point -- the guard is a per-backend capability boundary, not a claim that these
+// asymmetry is the point -- the guard is a per-renderer capability boundary, not a claim that these
 // declarations are globally invalid.
 // ---------------------------------------------------------------------------
 
@@ -923,7 +923,7 @@ protected:
     }
 };
 
-#if !defined(CNA_BACKEND_BGFX)
+#if !defined(CNA_RENDERER_BGFX)
 
 // A refused draw must produce NOTHING: no partial geometry, no half-queued command that a later
 // Present flushes. The target still holds exactly the clear colour it was given.
@@ -932,10 +932,10 @@ TEST_F(DeclarationGuardTest, ARefusedDeclarationRasterizesNothing)
     RequireThreeD();
     RenderTarget2D target = MakeTarget();
     const GuardedDraw got = DrawInto(target, kColorPosition16, false, false);
-    std::cout << "[ DECL-GUARD ] " << kBackendName << " colorPosition16 refusal: "
+    std::cout << "[ DECL-GUARD ] " << kRendererName << " colorPosition16 refusal: "
               << (got.rendered ? std::string("ACCEPTED") : '"' + got.rejection + '"') << std::endl;
     ASSERT_FALSE(got.rendered)
-        << "a declaration this backend infers no faithful layout for was accepted"
+        << "a declaration this renderer infers no faithful layout for was accepted"
         << DescribeFrame(got.frame);
     EXPECT_FALSE(got.rejection.empty()) << "the refusal must say why";
     EXPECT_TRUE(Untouched(got.frame))
@@ -984,7 +984,7 @@ TEST_F(DeclarationGuardTest, EveryUploadAndIndexWidthReachesTheSameBoundary)
         {
             RenderTarget2D target = MakeTarget();
             const GuardedDraw got = DrawInto(target, kColorPosition16, dynamicUpload, use32);
-            std::cout << "[ DECL-GUARD ] " << kBackendName << " colorPosition16 "
+            std::cout << "[ DECL-GUARD ] " << kRendererName << " colorPosition16 "
                       << (dynamicUpload ? "dynamic" : "static") << '/'
                       << (use32 ? "index32" : "index16") << ": "
                       << (got.rendered ? std::string("ACCEPTED") : "refused") << std::endl;
@@ -1028,7 +1028,7 @@ TEST_F(DeclarationGuardTest, DrawUserPrimitivesReachesTheSameBoundary)
     };
 
     const std::string refused = drawUser(kColorPosition16);
-    std::cout << "[ DECL-GUARD ] " << kBackendName << " DrawUser colorPosition16: "
+    std::cout << "[ DECL-GUARD ] " << kRendererName << " DrawUser colorPosition16: "
               << (refused.empty() ? std::string("ACCEPTED") : '"' + refused + '"') << std::endl;
     EXPECT_FALSE(refused.empty())
         << "DrawUserIndexedPrimitives bypassed the declaration guard"
@@ -1042,13 +1042,13 @@ TEST_F(DeclarationGuardTest, DrawUserPrimitivesReachesTheSameBoundary)
         ExpectContract(Capture(target), kPositionColor16, "DrawUser after the refusal");
 }
 
-#else   // CNA_BACKEND_BGFX
+#else   // CNA_RENDERER_BGFX
 
 // The control. bgfx derives its native layout from the declaration (REMED-GFX-216), so the very
-// declarations the other backends now refuse must still render their own contract here -- which is
-// what makes the refusals a per-backend capability boundary rather than a claim that these
+// declarations the other renderers now refuse must still render their own contract here -- which is
+// what makes the refusals a per-renderer capability boundary rather than a claim that these
 // declarations are invalid.
-TEST_F(DeclarationGuardTest, TheTranslatingBackendStillRendersEveryCollidingDeclaration)
+TEST_F(DeclarationGuardTest, TheTranslatingRendererStillRendersEveryCollidingDeclaration)
 {
     RequireThreeD();
     for (const DeclarationCase& c : {kColorPosition16, kPositionTextureColor24,
@@ -1066,9 +1066,9 @@ TEST_F(DeclarationGuardTest, TheTranslatingBackendStillRendersEveryCollidingDecl
     }
 }
 
-#endif  // CNA_BACKEND_BGFX
+#endif  // CNA_RENDERER_BGFX
 
-#ifdef CNA_BACKEND_EASYGL
+#ifdef CNA_RENDERER_EASYGL
 
 // REMED-GFX-218's control. EasyGL's CUSTOM ShaderEffect path documents its own convention --
 // attribute location N is the Nth element of the declaration, exactly as ApplyLayout binds it --
@@ -1155,14 +1155,14 @@ void main() { FragColor = vColor; }
     }
 }
 
-#endif  // CNA_BACKEND_EASYGL
+#endif  // CNA_RENDERER_EASYGL
 
 // ---------------------------------------------------------------------------
 // bgfx-only: the native layout itself. The rendering legs above prove the OUTCOME; this proves the
 // DECISION, which is what REMED-GFX-216 is actually about.
 // ---------------------------------------------------------------------------
 
-#ifdef CNA_BACKEND_BGFX
+#ifdef CNA_RENDERER_BGFX
 
 class BgfxVertexLayoutTest : public VertexDeclarationLayoutTest
 {
@@ -1192,13 +1192,13 @@ protected:
     /// Reads the native layout bgfx actually built for @p buffer.
     static NativeLayout Inspect(VertexBuffer& buffer)
     {
-        auto* backend =
-            dynamic_cast<CNA::Internal::Backends::Bgfx::BgfxVertexBufferBackend*>(
-                &buffer.GetBackend());
+        auto* renderer =
+            dynamic_cast<CNA::Internal::Renderers::Bgfx::BgfxVertexBufferRenderer*>(
+                &buffer.GetRenderer());
         NativeLayout n;
-        if (backend == nullptr)
+        if (renderer == nullptr)
             return n;
-        const bgfx::VertexLayout& l = backend->layout;
+        const bgfx::VertexLayout& l = renderer->layout;
         n.stride = l.getStride();
         n.hasPosition = l.has(bgfx::Attrib::Position);
         n.hasColor = l.has(bgfx::Attrib::Color0);
@@ -1302,9 +1302,9 @@ TEST_F(BgfxVertexLayoutTest, RecycledBufferAddressesDoNotInheritAStaleLayout)
         auto buffer = std::make_unique<VertexBuffer>(
             device, BuildDeclaration(c), kMeshVertexCount, BufferUsage::None);
         buffer->SetDataRaw(bytes.data(), kMeshVertexCount, c.stride);
-        *addressOut = static_cast<const void*>(&buffer->GetBackend());
+        *addressOut = static_cast<const void*>(&buffer->GetRenderer());
         return Inspect(*buffer);
-        // buffer is destroyed here, freeing the backend for the next allocation to reuse.
+        // buffer is destroyed here, freeing the renderer for the next allocation to reuse.
     };
 
     const void* addr1 = nullptr;
@@ -1334,7 +1334,7 @@ TEST_F(BgfxVertexLayoutTest, RecycledBufferAddressesDoNotInheritAStaleLayout)
 // Every built-in vertex type must still get exactly the layout the stride table used to hand it.
 // This is the equivalence proof for REMED-GFX-216's replacement of that table: the expectations
 // below are transcribed from the switch it replaced, so a derived layout that differs from the one
-// the backend shipped before is a regression here rather than a rendering surprise later.
+// the renderer shipped before is a regression here rather than a rendering surprise later.
 TEST_F(BgfxVertexLayoutTest, BuiltInDeclarationsKeepTheirEstablishedLayout)
 {
     RequireThreeD();
@@ -1402,11 +1402,11 @@ TEST_F(BgfxVertexLayoutTest, BuiltInDeclarationsKeepTheirEstablishedLayout)
             static_cast<std::size_t>(kMeshVertexCount) * static_cast<std::size_t>(stride), 0);
         VertexBuffer buffer(device, *b.declaration, kMeshVertexCount, BufferUsage::None);
         buffer.SetDataRaw(bytes.data(), kMeshVertexCount, stride);
-        auto* backend =
-            dynamic_cast<CNA::Internal::Backends::Bgfx::BgfxVertexBufferBackend*>(
-                &buffer.GetBackend());
-        ASSERT_NE(nullptr, backend);
-        const bgfx::VertexLayout& l = backend->layout;
+        auto* renderer =
+            dynamic_cast<CNA::Internal::Renderers::Bgfx::BgfxVertexBufferRenderer*>(
+                &buffer.GetRenderer());
+        ASSERT_NE(nullptr, renderer);
+        const bgfx::VertexLayout& l = renderer->layout;
 
         std::ostringstream got;
         got << "stride=" << l.getStride();
@@ -1432,7 +1432,7 @@ TEST_F(BgfxVertexLayoutTest, BuiltInDeclarationsKeepTheirEstablishedLayout)
     }
 }
 
-// A declaration this backend cannot express natively must be refused before anything is created or
+// A declaration this renderer cannot express natively must be refused before anything is created or
 // submitted -- never replaced by a nearby built-in guess, which is what the stride table did.
 TEST_F(BgfxVertexLayoutTest, UnsupportedDeclarationsAreRejectedDeterministically)
 {
@@ -1478,7 +1478,7 @@ TEST_F(BgfxVertexLayoutTest, UnsupportedDeclarationsAreRejectedDeterministically
         << "a repeated semantic must be refused";
 
     // A supported declaration immediately afterwards must still work -- a rejection may not leave
-    // the buffer or the backend in a state that poisons the next upload.
+    // the buffer or the renderer in a state that poisons the next upload.
     const std::vector<std::uint8_t> mesh = BuildMesh(kPositionColor16, false);
     VertexBuffer good(device, BuildDeclaration(kPositionColor16), kMeshVertexCount,
                       BufferUsage::None);
@@ -1522,6 +1522,6 @@ TEST_F(BgfxVertexLayoutTest, ContentsOnlyRewriteCreatesNoNativeResource)
            "so nothing may be reallocated";
 }
 
-#endif   // CNA_BACKEND_BGFX
+#endif   // CNA_RENDERER_BGFX
 
 #endif   // CNA_DECLARATION_LAYOUT_ORACLE

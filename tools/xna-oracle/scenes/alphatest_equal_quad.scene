@@ -14,7 +14,7 @@
 #   top-right    alpha=127 (off by exactly 1/255 ~= 0.0039)         -> diff > 0.5/255 (0.00196) -> FAIL
 #   bottom-left  alpha=129 (off by exactly 1/255, other direction)  -> diff > 0.5/255           -> FAIL
 #   bottom-right alpha=1   (far off)                                -> diff >> 0.5/255          -> FAIL
-# A backend using a looser or backwards tolerance (e.g. off-by-one passing, or exact match
+# A renderer using a looser or backwards tolerance (e.g. off-by-one passing, or exact match
 # failing) would diverge here even though it might already pass alphatest_quad.scene/
 # alphatest_less_quad.scene (both Less/Greater, a different shader bucket entirely).
 width=256

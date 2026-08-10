@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Task 406: pixel test for SkinnedEffect's identity bone palette (EasyGL backend).
+// Task 406: pixel test for SkinnedEffect's identity bone palette (EasyGL renderer).
 //
 // The first real pixel/rendering test for SkinnedEffect in Phase 46 (Tasks 401-405 were all
 // unit tests/audits, no GPU rendering exercised yet). Confirms the skinning math correctly
@@ -81,7 +81,7 @@ protected:
         device.SetDepthTestEnabled(false);
         device.setBlendStateProperty(BlendState::Opaque);
         // Task 896 finding (mirrors the Bgfx sibling's Task 364/884 fix): once
-        // GraphicsDevice's real default RasterizerState is pushed to every backend,
+        // GraphicsDevice's real default RasterizerState is pushed to every renderer,
         // this quad's winding is culled unless explicitly disabled.
         device.setRasterizerStateProperty(RasterizerState::CullNone);
 

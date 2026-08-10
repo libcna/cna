@@ -2,10 +2,10 @@
 // REMED-GFX-012: Vulkan SpriteBatch::Begin(transformMatrix) pixel integration test.
 //
 // Verifies that the transformMatrix passed to SpriteBatch::Begin is actually applied to sprite
-// positions by the Vulkan backend. The audit found VulkanSpriteBatchBackend never overrode
-// ISpriteBatchBackend::SetTransformMatrix(), so the transform fell through to the shared no-op
+// positions by the Vulkan renderer. The audit found VulkanSpriteBatchRenderer never overrode
+// ISpriteBatchRenderer::SetTransformMatrix(), so the transform fell through to the shared no-op
 // default and sprites rendered as if transformMatrix were always Identity (the only one of the 14
-// backends with this gap). This is the standard XNA idiom for camera-relative 2D (scrolling worlds).
+// renderers with this gap). This is the standard XNA idiom for camera-relative 2D (scrolling worlds).
 //
 // Design (deliberately NOT a pure translation, and with two-sided discrimination so the two ways
 // the bug can manifest cannot cancel):

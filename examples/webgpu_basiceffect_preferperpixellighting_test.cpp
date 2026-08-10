@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Task 1105 (plan_graphics.md Phase 80): WebGPUGraphicsBackend real per-vertex-lit shader
+// Task 1105 (plan_graphics.md Phase 80): WebGPURenderer real per-vertex-lit shader
 // (GetOrCreatePipelineLitTextured3DVertexLit) + BasicEffect.PreferPerPixelLighting dispatch.
 //
 // Same discriminating scene as EasyGL's/Vulkan's/Bgfx's own PreferPerPixelLighting tests
@@ -14,11 +14,11 @@
 //   - PreferPerPixelLighting=true (pixel-lit): the centre reads a FRESH per-fragment evaluation
 //     at that exact point instead.
 // These are provably different values, not the same math evaluated twice. Real XNA/FNA has no
-// PreferPerPixelLighting support on this experimental backend to compare pixel-for-pixel here
-// (this backend has no oracle harness) -- the check is that dispatch genuinely selects a
+// PreferPerPixelLighting support on this experimental renderer to compare pixel-for-pixel here
+// (this renderer has no oracle harness) -- the check is that dispatch genuinely selects a
 // different, real shader per the flag, matching the same discriminating-scene technique already
-// proven on 3 other backends, not that the numeric result matches another backend's raw value:
-// REMED-GFX-131 made this backend's readback directly comparable to the other three: its render
+// proven on 3 other renderers, not that the numeric result matches another renderer's raw value:
+// REMED-GFX-131 made this renderer's readback directly comparable to the other three: its render
 // targets and backbuffer now use a non-sRGB format, matching SurfaceFormat::Color's plain UNORM
 // byte semantics, so the values asserted below are the SAME linear numbers EasyGL/Vulkan/Bgfx read
 // for this identical scene rather than their gamma-encoded counterparts.
@@ -170,8 +170,8 @@ protected:
 
         // REMED-GFX-131: the expected values are now the raw linear ~127/~152 that EasyGL, Vulkan
         // and Bgfx read for this identical scene. They used to be 187/203 -- the sRGB encode of
-        // exactly those numbers -- because this backend rendered into an *UnormSrgb attachment.
-        // Measured post-fix as 127/152, so all four backends agree on the same shader math.
+        // exactly those numbers -- because this renderer rendered into an *UnormSrgb attachment.
+        // Measured post-fix as 127/152, so all four renderers agree on the same shader math.
         const Color vertexLit = renderWith(dev, false);
         std::printf("[INFO] vertex-lit (PreferPerPixelLighting=false) centre = (%d,%d,%d)\n",
                     vertexLit.getRProperty(), vertexLit.getGProperty(), vertexLit.getBProperty());

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // plan_cnj.md CNB-58/60 (Phase 13A): golden-image test for PbrEffect's real glTF metallic-
-// roughness BRDF shader (EasyGLGraphicsBackend::EnsurePbrProgram()) -- proves the stride-48
+// roughness BRDF shader (EasyGLRenderer::EnsurePbrProgram()) -- proves the stride-48
 // VertexPositionNormalTangentTexture layout, TBN construction, and the BRDF math itself all work
 // end-to-end via a real GPU draw, not just "does it link".
 //

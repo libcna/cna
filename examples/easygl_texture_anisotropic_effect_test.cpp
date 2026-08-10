@@ -5,11 +5,11 @@
 // Audit findings this task confirmed via code reading (see plan_graphics.md Task 299 for the
 // full writeup): Vulkan correctly queries the real device anisotropy cap
 // (VkPhysicalDeviceProperties::limits.maxSamplerAnisotropy) and clamps SamplerState.MaxAnisotropy
-// to it before creating the sampler — the only backend where the requested level has any real
+// to it before creating the sampler — the only renderer where the requested level has any real
 // effect. EasyGL's TextureFilter::Anisotropic silently falls back to plain trilinear filtering
 // with NO anisotropic effect at all (the underlying easy-gl library has no anisotropy support
 // whatsoever). Bgfx enables its ANISOTROPIC sampler flags but ignores the requested
-// MaxAnisotropy level entirely (the parameter is unused in BgfxGraphicsBackend::ApplySamplerState).
+// MaxAnisotropy level entirely (the parameter is unused in BgfxRenderer::ApplySamplerState).
 //
 // A true visual anisotropic-quality pixel test (comparing detail preservation under oblique/
 // aspect-skewed minification) is inherently driver-dependent and fragile to assert precisely, so
@@ -25,7 +25,7 @@
 // TextureFilter::Anisotropic renders **solid black**, a GL "mipmap incomplete texture" symptom,
 // because EasyGL never sets GL_TEXTURE_MAX_LEVEL to match each texture's real (here: 1-level)
 // mip count. This is the same root architectural gap as Task 867 (Texture2D mip-level metadata
-// never threaded into backend resource creation) manifesting on EasyGL instead of Vulkan — Task
+// never threaded into renderer resource creation) manifesting on EasyGL instead of Vulkan — Task
 // 867's tracked scope has been extended to cover it. This test does NOT fail on the black result
 // (that's Task 867's fix to make, not this test's job to paper over) — it only fails if the
 // extreme MaxAnisotropy value actually crashes/throws, which is this task's real, literal ask.
@@ -153,7 +153,7 @@ protected:
             }
             else if (isBlended)
             {
-                std::printf("[INFO] Sample is a normal blend - Task 867's finding appears fixed on this backend.\n");
+                std::printf("[INFO] Sample is a normal blend - Task 867's finding appears fixed on this renderer.\n");
             }
         }
 

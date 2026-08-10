@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl2.md: real context-loss recovery proof via IGraphicsBackend::DebugSimulateContextLoss()
+// plan_opengl2.md: real context-loss recovery proof via IGraphicsRenderer::DebugSimulateContextLoss()
 // -- no existing EasyGL reference test exercises this specific channel directly (only
 // dx3_no3d_test.cpp/d3d9_smoke_test.cpp do, for their own very different -- 2D-only no-op, and
 // D3D9's two-phase DeviceLostException -- models), so this scene is authored fresh for OpenGL2's
-// own atomic loss+restore model (matches EasyGLGraphicsBackend::DebugSimulateContextLoss's
+// own atomic loss+restore model (matches EasyGLRenderer::DebugSimulateContextLoss's
 // identical "destroys the SDL GL context and immediately recreates it" design, NOT D3D9's
 // real two-phase Lost/Reset lifecycle -- DebugRestoreContext() simply delegates back to
 // DebugSimulateContextLoss() here, same as EasyGL).
@@ -23,11 +23,11 @@
 //   D -- the SAME Texture2D object (no SetData call after the loss) still renders the correct
 //        green pixel -- proves Texture2D content genuinely survived via ShareCpuPixels().
 //   E -- a BRAND NEW VertexBuffer/IndexBuffer/Texture2D created AFTER the loss also render
-//        correctly -- proves the backend itself (shaders, buffer/texture creation) is fully
+//        correctly -- proves the renderer itself (shaders, buffer/texture creation) is fully
 //        functional post-recovery, not just previously-existing resources.
 //   F -- a RenderTarget2D created AFTER the loss can be rendered into and sampled back correctly
 //        (RenderTarget2D content is NOT expected to survive a loss -- matches
-//        EasyGLRenderTargetBackend's own real, pre-existing limitation -- but the backend must
+//        EasyGLRenderTargetRenderer's own real, pre-existing limitation -- but the renderer must
 //        still be able to create and use a fresh one afterward).
 //
 // Exit code 0 = all PASS, 1 = any FAIL.
@@ -39,7 +39,7 @@
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
@@ -193,7 +193,7 @@ protected:
 
         // --- Check B: DebugSimulateContextLoss() itself doesn't throw ---
         bool threw = false;
-        try { dev.GetBackend().DebugSimulateContextLoss(); }
+        try { dev.GetRenderer().DebugSimulateContextLoss(); }
         catch (const std::exception& e)
         {
             threw = true;

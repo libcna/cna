@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# plan_dx2.md design decision 11: run a Windows cross-compiled .exe (DX2 backend) under Wine
+# plan_dx2.md design decision 11: run a Windows cross-compiled .exe (DX2 renderer) under Wine
 # against real DirectDraw v1, using this project's own dedicated Wine prefix.
 #
 # Usage: scripts/run-wine-dx2.sh <path-to.exe> [args...]
 #
 # Unlike scripts/run-wine-dxvk9.sh/run-wine-dxvk.sh, this deliberately does NOT install or gate on
-# DXVK: docs/directx-legacy-backends-analysis.md section 4 confirms DXVK does not translate
+# DXVK: docs/directx-legacy-renderers-analysis.md section 4 confirms DXVK does not translate
 # DirectDraw at all, so a vanilla Wine prefix's own builtin ddraw.dll IS the real DirectDraw
-# implementation for this backend -- no extra setup beyond `wineboot --init`.
+# implementation for this renderer -- no extra setup beyond `wineboot --init`.
 #
 # Set CNA_DX2_WINEPREFIX to point at a different prefix; defaults to ~/.wine-cna-dx1 -- DX2
 # deliberately REUSES DX1's own already-initialized prefix rather than creating a fresh
@@ -39,7 +39,7 @@ export WINEDEBUG="${CNA_DX2_WINEDEBUG:-+ddraw}"
 # the user's actual desktop instead of the intended virtual/Xvfb display. Unset it here so this
 # wrapper always forces Wine's X11 driver against whatever DISPLAY the caller set (matching this
 # project's own established "prefer Xvfb over the real display" convention for every other
-# Wine-based backend).
+# Wine-based renderer).
 unset WAYLAND_DISPLAY
 
 if [ ! -f "${WINEPREFIX}/system.reg" ]; then

@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: MS-PL
-# plan_opengles1.md OPENGLES1-78: cross-backend pixel-parity measurement for the OpenGL ES 1.1
-# backend -- the OPENGLES1 twin of scripts/run-oracle-corpus-diff-easygl.sh.
+# plan_opengles1.md OPENGLES1-78: cross-renderer pixel-parity measurement for the OpenGL ES 1.1
+# renderer -- the OPENGLES1 twin of scripts/run-oracle-corpus-diff-easygl.sh.
 #
 # Renders every checked-in scene (tools/xna-oracle/scenes/*.scene) through
 # cna_oracle_render_opengles1 -- the SAME tools/xna-oracle/CnaOracleRender.cpp the D3D9 and EasyGL
-# branches already build, just linked against this backend -- and diffs each result against the
+# branches already build, just linked against this renderer -- and diffs each result against the
 # checked-in real XNA 4.0 reference PNG (tools/xna-oracle/reference/*.png).
 #
-# Comparing against the real XNA reference rather than against another CNA backend is deliberate:
+# Comparing against the real XNA reference rather than against another CNA renderer is deliberate:
 # it is the stronger oracle, and it is what the two existing corpus-diff scripts already do.
 #
 # IMPORTANT -- this is a measurement, not a pass/fail gate. OpenGL ES 1.1 is a fixed-function
@@ -18,7 +18,7 @@
 # edge-weighting, the alpha test collapses a tolerance band to a single comparison, per-vertex
 # lighting is interpolated across the primitive rather than evaluated per pixel, and so on. The
 # script therefore reports a per-scene delta table and always exits 0 unless the renderer itself
-# fails; docs/opengles1-backend.md records the measured numbers.
+# fails; docs/opengles1-renderer.md records the measured numbers.
 #
 # Never widen the tolerance to turn a red comparison green without a documented, per-scene reason --
 # the same discipline scripts/xna-diff.py's own header states.
@@ -88,7 +88,7 @@ echo
 echo "=== OPENGLES1 vs real XNA 4.0 (tolerance=$TOLERANCE): ${EXACT}/${TOTAL} exact, ${DIFFERENT} differing, ${RENDER_FAILED} not rendered ==="
 
 # A scene that fails to render at all is a real defect; a scene that renders but differs is a
-# measurement this backend's documented fixed-function limits partly predict.
+# measurement this renderer's documented fixed-function limits partly predict.
 if [ "$RENDER_FAILED" -ne 0 ]; then
     exit 1
 fi

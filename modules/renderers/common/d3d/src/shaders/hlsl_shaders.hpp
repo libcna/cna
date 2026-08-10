@@ -4,7 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 
-namespace CNA::Internal::Backends::D3DCommon::Shaders {
+namespace CNA::Internal::Renderers::D3DCommon::Shaders {
 
 static constexpr uint8_t kColored3dVertDxbc[] = {
     0x44u, 0x58u, 0x42u, 0x43u, 0x85u, 0x9du, 0x22u, 0x18u, 0x71u, 0x1cu, 0x11u, 0x31u,
@@ -38864,4 +38864,4 @@ static constexpr uint8_t kSkinned3dVertexLitColoredFragDxbc[] = {
 };
 static constexpr size_t kSkinned3dVertexLitColoredFragDxbc_size = sizeof(kSkinned3dVertexLitColoredFragDxbc);
 
-} // namespace CNA::Internal::Backends::D3DCommon::Shaders
+} // namespace CNA::Internal::Renderers::D3DCommon::Shaders

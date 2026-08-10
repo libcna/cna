@@ -52,7 +52,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 
-#include "CNA/Internal/Backends/Vulkan/VulkanGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Vulkan/VulkanRenderer.hpp"
 #include "vulkan_mrt_msaa_test_spv.hpp"
 
 #include <array>
@@ -66,9 +66,9 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using CNA::Internal::Backends::Vulkan::VulkanGraphicsBackend;
-using CNA::Internal::Backends::Vulkan::VulkanMRTProxy;
-using CNA::Internal::Backends::Vulkan::VulkanRenderTargetBackend;
+using CNA::Internal::Renderers::Vulkan::VulkanRenderer;
+using CNA::Internal::Renderers::Vulkan::VulkanMRTProxy;
+using CNA::Internal::Renderers::Vulkan::VulkanRenderTargetRenderer;
 
 namespace
 {
@@ -132,14 +132,14 @@ class VulkanMrtMsaaTest final : public Game
         if (ok) ++pass_;
     }
 
-    VulkanGraphicsBackend& Backend()
+    VulkanRenderer& Renderer()
     {
-        return static_cast<VulkanGraphicsBackend&>(getGraphicsDeviceProperty().GetBackend());
+        return static_cast<VulkanRenderer&>(getGraphicsDeviceProperty().GetRenderer());
     }
 
-    static VulkanRenderTargetBackend& BackendOf(RenderTarget2D& target)
+    static VulkanRenderTargetRenderer& RendererOf(RenderTarget2D& target)
     {
-        return static_cast<VulkanRenderTargetBackend&>(*target.GetRenderTargetBackend());
+        return static_cast<VulkanRenderTargetRenderer&>(*target.GetRenderTargetRenderer());
     }
 
     std::unique_ptr<RenderTarget2D> MakeTarget(
@@ -299,15 +299,15 @@ class VulkanMrtMsaaTest final : public Game
         auto one1 = MakeTarget(0);
         auto& device = getGraphicsDeviceProperty();
         device.SetRenderTargets(Bindings({one0.get(), one1.get()}));
-        const VulkanMRTProxy* oneProxy = Backend().GetCurrentMRTProxyEXT();
+        const VulkanMRTProxy* oneProxy = Renderer().GetCurrentMRTProxyEXT();
         const bool oneStructure = oneProxy
             && oneProxy->GetColorSampleCountEXT() == VK_SAMPLE_COUNT_1_BIT
             && oneProxy->GetResolveAttachmentCountEXT() == 0
             && oneProxy->GetFramebufferAttachmentCountEXT() == 2
             && oneProxy->GetColorAttachmentViewEXT(0)
-                == BackendOf(*one0).GetResolveColorViewEXT()
+                == RendererOf(*one0).GetResolveColorViewEXT()
             && oneProxy->GetColorAttachmentViewEXT(1)
-                == BackendOf(*one1).GetResolveColorViewEXT();
+                == RendererOf(*one1).GetResolveColorViewEXT();
         device.SetRenderTargets({});
         QueueMrtDraw(Bindings({one0.get(), one1.get()}), effect, all, kSource);
         const Color non0 = ReadCenter(*one0);
@@ -353,14 +353,14 @@ class VulkanMrtMsaaTest final : public Game
         auto rt1 = MakeTarget(8, DepthFormat::Depth24Stencil8);
         auto& device = getGraphicsDeviceProperty();
         device.SetRenderTargets(Bindings({rt0.get(), rt1.get()}));
-        const VulkanMRTProxy* proxy = Backend().GetCurrentMRTProxyEXT();
+        const VulkanMRTProxy* proxy = Renderer().GetCurrentMRTProxyEXT();
         const bool structure = proxy
             && SampleCount(proxy->GetColorSampleCountEXT()) == appliedSamples
             && proxy->GetDepthFormat() != VK_FORMAT_UNDEFINED
             && SampleCount(proxy->GetDepthSampleCountEXT()) == appliedSamples
             && proxy->GetFramebufferAttachmentCountEXT() == 5
             && proxy->GetFramebufferAttachmentViewEXT(4)
-                == BackendOf(*rt0).GetDepthView();
+                == RendererOf(*rt0).GetDepthView();
         device.SetRenderTargets({});
         QueueMrtDraw(Bindings({rt0.get(), rt1.get()}),
                      effect, BlendState::Opaque, kSource);
@@ -501,7 +501,7 @@ protected:
     {
         Game::Initialize();
         // Engage the highest normally selected count up to 8 before creating GPU resources.
-        getGraphicsDeviceProperty().RecreateBackendForMultiSampleCount(8);
+        getGraphicsDeviceProperty().RecreateRendererForMultiSampleCount(8);
     }
 
     void LoadContent() override
@@ -518,8 +518,8 @@ protected:
 
         auto rt0 = MakeTarget(8);
         auto rt1 = MakeTarget(8);
-        auto& vk0 = BackendOf(*rt0);
-        auto& vk1 = BackendOf(*rt1);
+        auto& vk0 = RendererOf(*rt0);
+        auto& vk1 = RendererOf(*rt1);
         const int applied = SampleCount(vk0.GetColorSampleCountEXT());
         Check(applied > 1 && SampleCount(vk1.GetColorSampleCountEXT()) == applied,
               "requested 8x produced matching per-target applied sample count "
@@ -527,7 +527,7 @@ protected:
 
         auto& device = getGraphicsDeviceProperty();
         device.SetRenderTargets(Bindings({rt0.get(), rt1.get()}));
-        const VulkanMRTProxy* proxy = Backend().GetCurrentMRTProxyEXT();
+        const VulkanMRTProxy* proxy = Renderer().GetCurrentMRTProxyEXT();
         const bool structure = proxy
             && SampleCount(proxy->GetColorSampleCountEXT()) == applied
             && proxy->GetFramebufferAttachmentCountEXT() == 4
@@ -550,10 +550,10 @@ protected:
         device.SetRenderTargets({});
 
         RunPreFixDiscriminator(*rt0, *rt1, applied);
-        Check(SampleCount(Backend().GetLastMRTPipelineSampleCountEXT()) == applied
-              && Backend().GetLastMRTPipelineColorCountEXT() == 2,
+        Check(SampleCount(Renderer().GetLastMRTPipelineSampleCountEXT()) == applied
+              && Renderer().GetLastMRTPipelineColorCountEXT() == 2,
               "MRT graphics pipeline rasterizationSamples="
-              + std::to_string(SampleCount(Backend().GetLastMRTPipelineSampleCountEXT()))
+              + std::to_string(SampleCount(Renderer().GetLastMRTPipelineSampleCountEXT()))
               + " with two color outputs");
 
         // On the known pre-fix code, stop after the clean, validation-safe structural and

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // SKIA-71: public resize/fullscreen/presentation regression with live 2D resources.
 //
-// The raster backend recreates only its backbuffer surface on GraphicsDevice::Reset(). A live
+// The raster renderer recreates only its backbuffer surface on GraphicsDevice::Reset(). A live
 // RenderTarget2D must remain valid (and remain the active canvas until explicitly unbound), while
 // the already-created SpriteBatch must draw correctly into both that target and the replacement
 // backbuffer. Fullscreen is intentionally checked as a stored PresentationParameters contract:

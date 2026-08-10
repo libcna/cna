@@ -13,7 +13,7 @@ namespace CNA::Graphics {
     /**
      * @brief Full-screen colour-depth-reduction post-process effect.
      *
-     * A `ShaderEffect` (GLSL, EasyGL backend) that quantizes the rendered colour to a
+     * A `ShaderEffect` (GLSL, EasyGL renderer) that quantizes the rendered colour to a
      * fixed number of levels per channel, emulating limited-palette display hardware:
      * 16-bit (RGB565) colour, 8-bit (RGB332) colour, 4-bit/2-bit/1-bit greyscale, or a
      * real nearest-colour palette match against a fixed 216-colour "web-safe" palette
@@ -70,9 +70,9 @@ namespace CNA::Graphics {
         /**
          * @brief Lazily builds the Palette256/Palette16 lookup textures on first use.
          *
-         * No-op if the textures already exist or if this effect has no working backend
-         * (mirrors ShaderEffect's own "no device.backend_" tolerance — building a texture
-         * with GraphicsDevice::GetBackend() throws when there is no backend).
+         * No-op if the textures already exist or if this effect has no working renderer
+         * (mirrors ShaderEffect's own "no device.renderer_" tolerance — building a texture
+         * with GraphicsDevice::GetRenderer() throws when there is no renderer).
          */
         void EnsurePaletteTextures();
 

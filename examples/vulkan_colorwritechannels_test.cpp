@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-077: the Vulkan backend must honor BlendState.ColorWriteChannels (per-render-target
+// REMED-GFX-077: the Vulkan renderer must honor BlendState.ColorWriteChannels (per-render-target
 // colour write mask) and BlendState.MultiSampleMask, now that both are plumbed through
-// IGraphicsBackend::ApplyBlendState. Previously the colour attachment hardcoded colorWriteMask=RGBA
+// IGraphicsRenderer::ApplyBlendState. Previously the colour attachment hardcoded colorWriteMask=RGBA
 // and the multisample state hardcoded pSampleMask=all-ones (both silent no-ops).
 //
 // Vulkan mapping (this task): ColorWriteChannels slot i -> VkPipelineColorBlendAttachmentState

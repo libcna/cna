@@ -1,6 +1,6 @@
 # plan_dx9.md D9-A5 scene corpus: envmap_quad
 # The third Stock Effect in the corpus: EnvironmentMapEffect (non-fresnel/non-specular bucket --
-# specularEnabled is always false on this backend, D9-82e's own structurally-unreachable finding,
+# specularEnabled is always false on this renderer, D9-82e's own structurally-unreachable finding,
 # so this never sets environmentmapspecular). Reuses the existing PositionNormalTexture vertex
 # shape (VSInputNmTx, matches the existing stride-32 layout exactly, D9-82e's own "no new vertex
 # declaration needed" finding).

@@ -6,16 +6,16 @@
 // not add an unused "mode" (raster vs. future Ganesh) cache-key axis -- no second mode exists yet
 // to test against; see docs/skia-vertices-2d-effect-contract.md's cache design note.
 
-#include "CNA/Internal/Backends/Skia/SkiaGlslToSkslTranslatorEXT.hpp"
-#include "CNA/Internal/Backends/Skia/SkiaMeshEffectBackend.hpp"
-#include "CNA/Internal/Backends/Skia/SkiaResourcePolicy.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaGlslToSkslTranslatorEXT.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaMeshEffectRenderer.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaResourcePolicy.hpp"
 
 #include <cstdio>
 #include <memory>
 #include <string>
 #include <vector>
 
-using namespace CNA::Internal::Backends::Skia;
+using namespace CNA::Internal::Renderers::Skia;
 
 namespace
 {
@@ -41,13 +41,13 @@ int main()
     // -- bounded cache growth: compiling well past the ceiling never exceeds it --
     {
         SkiaMeshEffectCacheEXT cache;
-        std::vector<std::unique_ptr<SkiaMeshEffectBackend>> backends;
+        std::vector<std::unique_ptr<SkiaMeshEffectRenderer>> renderers;
         for (std::size_t i = 0; i < kSkiaMeshEffectCacheMaxEntriesEXT + 20u; ++i)
         {
-            auto backend = std::make_unique<SkiaMeshEffectBackend>();
-            const bool ok = backend->CompileProgram(kMarker, MakeUniqueColoredSource(static_cast<int>(i)), cache);
+            auto renderer = std::make_unique<SkiaMeshEffectRenderer>();
+            const bool ok = renderer->CompileProgram(kMarker, MakeUniqueColoredSource(static_cast<int>(i)), cache);
             Check(ok, "compile #" + std::to_string(i) + " succeeds");
-            backends.push_back(std::move(backend));
+            renderers.push_back(std::move(renderer));
         }
         Check(cache.SizeEXT() <= kSkiaMeshEffectCacheMaxEntriesEXT,
               "the cache never grows past its declared " + std::to_string(kSkiaMeshEffectCacheMaxEntriesEXT)
@@ -58,12 +58,12 @@ int main()
     // -- least-recently-used eviction: a repeatedly-touched entry survives; an untouched one doesn't --
     {
         SkiaMeshEffectCacheEXT cache;
-        SkiaMeshEffectBackend keptAlive;
+        SkiaMeshEffectRenderer keptAlive;
         Check(keptAlive.CompileProgram(kMarker, MakeUniqueColoredSource(0), cache),
               "the entry meant to survive compiles first");
         const void* originalIdentity = keptAlive.GetCompiledIdentityEXT();
 
-        SkiaMeshEffectBackend earlyVictim;
+        SkiaMeshEffectRenderer earlyVictim;
         Check(earlyVictim.CompileProgram(kMarker, MakeUniqueColoredSource(1), cache),
               "an early entry meant to be evicted compiles second");
 
@@ -71,23 +71,23 @@ int main()
         // iterations to keep it recently used while index 1's source is never touched again.
         for (std::size_t i = 2; i < kSkiaMeshEffectCacheMaxEntriesEXT + 30u; ++i)
         {
-            SkiaMeshEffectBackend filler;
+            SkiaMeshEffectRenderer filler;
             (void)filler.CompileProgram(kMarker, MakeUniqueColoredSource(static_cast<int>(i)), cache);
             if (i % 4 == 0)
             {
-                SkiaMeshEffectBackend touch;
+                SkiaMeshEffectRenderer touch;
                 (void)touch.CompileProgram(kMarker, MakeUniqueColoredSource(0), cache);
             }
         }
 
-        SkiaMeshEffectBackend recheckKept;
+        SkiaMeshEffectRenderer recheckKept;
         Check(recheckKept.CompileProgram(kMarker, MakeUniqueColoredSource(0), cache),
               "recompiling the kept-alive source still succeeds");
         Check(recheckKept.GetCompiledIdentityEXT() == originalIdentity,
               "the repeatedly-touched entry was never evicted -- same compiled-program identity "
               "after far more distinct compiles than the cache ceiling allows");
 
-        SkiaMeshEffectBackend recheckVictim;
+        SkiaMeshEffectRenderer recheckVictim;
         Check(recheckVictim.CompileProgram(kMarker, MakeUniqueColoredSource(1), cache),
               "recompiling the evicted source still succeeds (just not as a cache hit)");
         Check(recheckVictim.GetCompiledIdentityEXT() != originalIdentity,
@@ -99,14 +99,14 @@ int main()
     // -- a failed compile never poisons the cache or a later, different compile --
     {
         SkiaMeshEffectCacheEXT cache;
-        SkiaMeshEffectBackend backend;
-        const bool badOk = backend.CompileProgram(kMarker, "this is not valid SkSL at all {{{", cache);
-        Check(!badOk && !backend.IsValid(), "a genuinely malformed source fails to compile");
+        SkiaMeshEffectRenderer renderer;
+        const bool badOk = renderer.CompileProgram(kMarker, "this is not valid SkSL at all {{{", cache);
+        Check(!badOk && !renderer.IsValid(), "a genuinely malformed source fails to compile");
         Check(cache.SizeEXT() == 0u, "the failed compile inserted nothing into the cache");
 
-        const bool goodOk = backend.CompileProgram(kMarker, MakeUniqueColoredSource(0), cache);
-        Check(goodOk && backend.IsValid(),
-              "the same backend instance recovers and compiles a valid source immediately "
+        const bool goodOk = renderer.CompileProgram(kMarker, MakeUniqueColoredSource(0), cache);
+        Check(goodOk && renderer.IsValid(),
+              "the same renderer instance recovers and compiles a valid source immediately "
               "afterward -- a failure does not poison later use of the same instance");
         Check(cache.SizeEXT() == 1u, "the recovered valid compile is cached normally");
     }
@@ -151,8 +151,8 @@ int main()
         {
             for (std::size_t i = 0; i < kSkiaMeshEffectCacheMaxEntriesEXT * 2u; ++i)
             {
-                SkiaMeshEffectBackend backend;
-                (void)backend.CompileProgram(
+                SkiaMeshEffectRenderer renderer;
+                (void)renderer.CompileProgram(
                     kMarker, MakeUniqueColoredSource(static_cast<int>(round * 1000 + static_cast<int>(i))),
                     stressCache);
                 const GlslToSkslTranslationResultEXT translated = TranslateGlslToSkslEXT(

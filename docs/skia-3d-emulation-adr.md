@@ -1,4 +1,4 @@
-# ADR: Keep the Skia backend 2D-only
+# ADR: Keep the Skia renderer 2D-only
 
 Status: Accepted
 
@@ -25,12 +25,12 @@ coloured triangle as support:
 
 The successful pieces prove that a new software 3D renderer could eventually be written. They do
 not show that Skia provides such a renderer. Completing the bridge would duplicate the existing
-Software/EasyGL renderer responsibilities inside the Skia backend, while adding a second set of
+Software/EasyGL renderer responsibilities inside the Skia renderer, while adding a second set of
 coverage, sampler, shader, state, resource and effect rules to maintain.
 
 ## Decision
 
-The Skia backend remains a deterministic 2D raster backend. It will not expose a CPU-emulated 3D
+The Skia renderer remains a deterministic 2D raster renderer. It will not expose a CPU-emulated 3D
 pipeline and will not advertise `GraphicsCapability::ThreeD`, real depth/stencil, wireframe,
 arbitrary stock 3D effects or custom 3D effects.
 
@@ -45,31 +45,31 @@ capability change.
 
 ## Alternatives considered
 
-### Finish a CPU renderer inside the Skia backend
+### Finish a CPU renderer inside the Skia renderer
 
 Rejected. The remaining work is the renderer itself: homogeneous clipping, production triangle/
 line/point coverage, cube/volume/mip sampling, MSAA, all state interactions, seven stock-effect
 families, arbitrary vertex programs, model/skinning integration, resource lifetime and queries.
 Skia would only receive the finished pixels and would not reduce that complexity.
 
-### Delegate 3D commands to the Software backend and composite into Skia
+### Delegate 3D commands to the Software renderer and composite into Skia
 
-Rejected. CNA constructs one graphics backend and its resource backends have concrete ownership.
-A hidden second backend would require cross-backend texture/buffer/effect mirroring, synchronization
+Rejected. CNA constructs one graphics renderer and its resource renderers have concrete ownership.
+A hidden second renderer would require cross-renderer texture/buffer/effect mirroring, synchronization
 for every upload and target transition, two independent state machines, mixed 2D/3D ordering, and
-new lifetime/error rules. This is broader and less transparent than selecting the Software backend
+new lifetime/error rules. This is broader and less transparent than selecting the Software renderer
 when CPU 3D is desired.
 
 ### Create an EasyGL context for 3D while retaining Skia for 2D
 
-Rejected. That creates a new hybrid accelerated backend with platform context sharing, target
+Rejected. That creates a new hybrid accelerated renderer with platform context sharing, target
 interop and synchronization requirements. Applications that need EasyGL's 3D contract can select
-EasyGL directly; silently embedding it would make the Skia raster backend neither deterministic
+EasyGL directly; silently embedding it would make the Skia raster renderer neither deterministic
 nor dependency-isolated.
 
 ### Keep isolated prototypes but reject public 3D
 
-Accepted. It preserves the verified 2D value of the backend, keeps unsupported behavior explicit,
+Accepted. It preserves the verified 2D value of the renderer, keeps unsupported behavior explicit,
 and avoids advertising a partial 3D surface whose failures depend on layout, effect or state.
 
 ## Requirement decisions
@@ -121,7 +121,7 @@ Dispositions have exact meanings:
 | `3D-FX-CUSTOM` | `2d-only` | Tagged SkSL is fragment-only; arbitrary EasyGL GLSL vertex/fragment programs are incompatible. | Retain explicit 2D SkSL, reject custom 3D effect draws/source assumptions. |
 | `3D-SHADE-LIGHT` | `reject` | Normal transforms and vertex/pixel lighting variants have no CPU pipeline. | Never ignore LightingEnabled, normals, lights or specular settings. |
 | `3D-SHADE-FOG` | `reject` | Fog vectors exist, but pre/post-skin evaluation and interpolation are absent. | Never ignore enabled fog on an attempted 3D draw. |
-| `3D-MODEL-SKIN` | `reject` | Content/property data can load, but model mesh and skeleton rendering is absent. | Model draws fail at the same backend 3D boundary as direct draws. |
+| `3D-MODEL-SKIN` | `reject` | Content/property data can load, but model mesh and skeleton rendering is absent. | Model draws fail at the same renderer 3D boundary as direct draws. |
 | `3D-QUERY-OCCLUSION` | `reject` | Raster Skia has no asynchronous visibility/query lifecycle. | Keep query capability false and Begin/End deterministically unsupported. |
 | `3D-RESOURCE-CONTRACT` | `2d-only` | Proven 2D/transfer resources retain bounded lifetimes; no 3D resource graph exists. | Fail 3D creation/binding atomically without breaking retained resources. |
 | `3D-TARGET-PASS` | `2d-only` | Colour-only 2D/cube-face passes work; depth/MRT/3D producer-consumer passes do not. | Retain those passes and guarantee failed 3D work cannot clear or dirty them. |

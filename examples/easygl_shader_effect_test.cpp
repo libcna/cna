@@ -39,7 +39,7 @@ using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
 
 // ---------------------------------------------------------------------------
-// GLSL ES 3.0 shaders — attribute layout matches EasyGLSpriteBatchBackend.
+// GLSL ES 3.0 shaders — attribute layout matches EasyGLSpriteBatchRenderer.
 // ---------------------------------------------------------------------------
 
 static const char* kVertSrc = R"(#version 300 es

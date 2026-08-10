@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 
-#include "CNA/Internal/Backends/Software/SoftwareGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Software/SoftwareRenderer.hpp"
 #include "SoftwareFramebufferErrors.hpp"
 
 #include <algorithm>
@@ -9,7 +9,7 @@
 #include <utility>
 #include <vector>
 
-namespace CNA::Internal::Backends::Software
+namespace CNA::Internal::Renderers::Software
 {
     void SoftwareFramebuffer::Resize(int w, int h)
     {

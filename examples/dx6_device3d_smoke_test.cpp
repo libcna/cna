@@ -9,7 +9,7 @@
 // this file. Check D below only confirms the simple state-toggle methods don't throw (a
 // smoke-level check).
 //
-// Check A -- backend.SupportsDepthStencil() reports true (device bring-up succeeded; DX1 always
+// Check A -- renderer.SupportsDepthStencil() reports true (device bring-up succeeded; DX1 always
 //   reports false here).
 // Check B -- GraphicsDevice::Clear(color, depth) (the two-arg overload, which requests
 //   Target|DepthBuffer) does not throw and correctly clears the color buffer to the exact
@@ -32,7 +32,7 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ClearOptions.hpp"
 
-#include "CNA/Internal/Backends/Dx6/Dx6GraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Dx6/Dx6Renderer.hpp"
 
 #include <cstdio>
 #include <cstdlib>
@@ -41,7 +41,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::Dx6;
+using namespace CNA::Internal::Renderers::Dx6;
 
 static constexpr int kCanvasSize = 64;
 
@@ -75,10 +75,10 @@ protected:
     void Draw(const GameTime&) override
     {
         auto& dev = getGraphicsDeviceProperty();
-        auto& backend = static_cast<Dx6GraphicsBackend&>(dev.GetBackend());
+        auto& renderer = static_cast<Dx6Renderer&>(dev.GetRenderer());
 
         // Check A: device bring-up succeeded -- SupportsDepthStencil() reports true.
-        check(backend.SupportsDepthStencil(), "SupportsDepthStencil() reports true after Phase O3 device bring-up");
+        check(renderer.SupportsDepthStencil(), "SupportsDepthStencil() reports true after Phase O3 device bring-up");
 
         // Check B: Clear(color, depth) -- the two-arg overload requesting Target|DepthBuffer --
         // does not throw and correctly clears the color buffer to the exact requested color.
@@ -118,8 +118,8 @@ protected:
             bool threw = false;
             try
             {
-                backend.SetDepthTestEnabled(true);
-                backend.SetDepthWriteEnabled(true);
+                renderer.SetDepthTestEnabled(true);
+                renderer.SetDepthWriteEnabled(true);
             }
             catch (const std::exception& e)
             {

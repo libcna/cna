@@ -8,11 +8,11 @@
 // applied" FIRST (shared, not SDL_Renderer-specific) -- with no effect applied, all 10 throw
 // std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.").
 // With a real effect applied, every one of the 10 implementations calls
-// backend_->CreateVertexBuffer(numVertices) BEFORE backend_->CreateIndexBuffer16/32(indexCount) --
+// renderer_->CreateVertexBuffer(numVertices) BEFORE renderer_->CreateIndexBuffer16/32(indexCount) --
 // so CreateVertexBuffer's own std::runtime_error("SDL_Renderer does not support 3D:
 // CreateVertexBuffer") always fires first, for BOTH the 16-bit and 32-bit index overloads alike.
 // This means CreateIndexBuffer16/32's own ThrowNo3D message is never actually reachable through
-// ANY DrawUserIndexedPrimitives call on this backend -- a finding worth confirming explicitly,
+// ANY DrawUserIndexedPrimitives call on this renderer -- a finding worth confirming explicitly,
 // not just assumed.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
@@ -115,13 +115,13 @@ protected:
         check(ThrowsExactRuntimeError([&] { dev.DrawUserIndexedPrimitives(PrimitiveType::TriangleList, vpc, 0, 3, idx32, 0, 1, vertexDecl); }, kNoEffect),
               "DrawUserIndexedPrimitives(raw+VertexDeclaration, 32-bit) with no applied effect throws the exact expected message");
 
-        // --- Apply a real effect (does not throw on SDL_Renderer -- backend-agnostic until draw). ---
+        // --- Apply a real effect (does not throw on SDL_Renderer -- renderer-agnostic until draw). ---
         BasicEffect effect(dev);
         bool effectApplyThrew = false;
         try { effect.Apply(); } catch (const std::exception&) { effectApplyThrew = true; }
         check(!effectApplyThrew, "BasicEffect::Apply() does not throw on SDL_Renderer");
 
-        // --- With an effect applied: all 10 overloads reach backend_->CreateVertexBuffer FIRST
+        // --- With an effect applied: all 10 overloads reach renderer_->CreateVertexBuffer FIRST
         //     (before CreateIndexBuffer16/32), so all 10 -- both 16-bit and 32-bit index variants
         //     alike -- throw the SAME CreateVertexBuffer message, never CreateIndexBuffer16/32's. ---
         check(ThrowsExactRuntimeError([&] { dev.DrawUserIndexedPrimitives(PrimitiveType::TriangleList, vpc, 0, 3, idx16, 0, 1); }, kNo3D),

@@ -5,8 +5,8 @@
 // a methodology that cannot distinguish "MSAA genuinely happened" from "MSAA was silently
 // ignored" (both produce an identical solid-red result). Task 902's investigation confirmed this
 // was a real false positive: GraphicsDeviceManager.PreferMultiSampling never actually reached the
-// Vulkan backend at all (GraphicsDeviceManager::applyToExistingBackend() never called
-// GraphicsDevice::Reset(), so a preference change after the backend's initial construction was
+// Vulkan renderer at all (GraphicsDeviceManager::applyToExistingRenderer() never called
+// GraphicsDevice::Reset(), so a preference change after the renderer's initial construction was
 // silently dropped). This test now does two things Task 147 didn't:
 //
 //   1. Uses the diagonal-edge differential methodology already established for RenderTarget2D/
@@ -15,12 +15,12 @@
 //      a hard binary red/black transition (no AA) vs. genuinely blended intermediate pixels (real
 //      AA) — a signature only a true multisample resolve can produce.
 //   2. Exercises the REAL, now-fixed runtime path: GraphicsDeviceManager.PreferMultiSampling is
-//      toggled and applied via ApplyChanges() *after* the backend already exists (not just before
+//      toggled and applied via ApplyChanges() *after* the renderer already exists (not just before
 //      first construction), which now flows through GraphicsDevice::Reset() ->
-//      IGraphicsBackend::ApplyMultiSampleCount() -> VulkanGraphicsBackend's real in-place
+//      IGraphicsRenderer::ApplyMultiSampleCount() -> VulkanRenderer's real in-place
 //      swapchain/render-pass/pipeline reconfiguration (Task 902). Earlier sibling tests
 //      (vulkan_rendertarget2d_msaa_test.cpp etc.) had to work around the gap this task fixes via
-//      the NOXNA-only GraphicsDevice::RecreateBackendForMultiSampleCount() escape hatch; this test
+//      the NOXNA-only GraphicsDevice::RecreateRendererForMultiSampleCount() escape hatch; this test
 //      deliberately does NOT use that hook, to prove the real GraphicsDeviceManager path works.
 //
 // Exit code 0 = both checks PASS, 1 = either FAILs.
@@ -115,11 +115,11 @@ protected:
         if (done_) return;
         done_ = true;
 
-        // Baseline: preferMultiSampling defaults to false, so the backend has no MSAA engaged.
+        // Baseline: preferMultiSampling defaults to false, so the renderer has no MSAA engaged.
         const std::vector<Color> noMsaaRow = RenderAndReadRow();
 
-        // Task 902: toggle the preference and re-apply on the ALREADY-CONSTRUCTED backend --
-        // this is the exact real GraphicsDeviceManager path (not the RecreateBackendForMultiSampleCount
+        // Task 902: toggle the preference and re-apply on the ALREADY-CONSTRUCTED renderer --
+        // this is the exact real GraphicsDeviceManager path (not the RecreateRendererForMultiSampleCount
         // NOXNA test-only escape hatch other MSAA tests in this family had to use) that was
         // previously a silent no-op and now genuinely reconfigures the Vulkan swapchain/render
         // pass/pipeline in place.
@@ -145,7 +145,7 @@ protected:
         {
             std::printf("[INFO] MultiSampleCount=8 row is purely binary — either "
                         "GraphicsDeviceManager.ApplyChanges() is not really reaching "
-                        "VulkanGraphicsBackend::ApplyMultiSampleCount(), or the device doesn't "
+                        "VulkanRenderer::ApplyMultiSampleCount(), or the device doesn't "
                         "support 8x backbuffer multisampling.\n");
         }
 

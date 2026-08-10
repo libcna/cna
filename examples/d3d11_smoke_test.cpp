@@ -1,25 +1,25 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx.md Phase DX4/DX80: smoke test for the D3D11 graphics backend's device/swap-chain/
+// plan_dx.md Phase DX4/DX80: smoke test for the D3D11 graphics renderer's device/swap-chain/
 // back-buffer foundation. Real window, real DXGI swap chain, real Clear()+Present()+readback --
-// this is the backend's first genuine pixel-correctness proof (DX-28's own bar).
+// this is the renderer's first genuine pixel-correctness proof (DX-28's own bar).
 //
 // Check A -- real device created with feature level >= 11_0 (design decision 12's floor).
 // Check B -- Clear(r,g,b,a) followed by GetBackBufferData() reads back the EXACT clear color.
 // Check C -- a second, different Clear()+readback also matches (not a stale/cached value).
 // Check D (DX-15-embed) -- D3DShaderCache creates a real ID3D11VertexShader+ID3D11PixelShader,
 //   through this same real device, for each of DX-13-hlsl's 10 stock shader variants.
-// Check E (DX-30) -- a real D3D11VertexBufferBackend round-trips known VertexPositionColor data
+// Check E (DX-30) -- a real D3D11VertexBufferRenderer round-trips known VertexPositionColor data
 //   through Map(WRITE_DISCARD)/CopyResource-to-staging/Map(READ) -- a genuine GPU write+readback,
 //   not just "SetData() didn't throw".
-// Check F (DX-31) -- same round-trip proof for both a 16-bit and a 32-bit D3D11IndexBufferBackend.
+// Check F (DX-31) -- same round-trip proof for both a 16-bit and a 32-bit D3D11IndexBufferRenderer.
 // Check G (DX-32) -- D3D11InputLayoutCache actually calls CreateInputLayout() against a real
 //   vertex shader's DXBC input signature for a couple of DX-16-vtx's established strides, and
 //   caching returns the identical object on a second request for the same (variant, stride).
-// Check H (DX-40) -- a real D3D11TextureBackend round-trips known RGBA8 pixel data: constructed
+// Check H (DX-40) -- a real D3D11TextureRenderer round-trips known RGBA8 pixel data: constructed
 //   from an ImageData, then read back via a staging-texture copy and compared byte-for-byte.
-// Check I (DX-41/DX-42) -- D3D11TextureCubeBackend/D3D11Texture3DBackend SetData()+GetData() also
+// Check I (DX-41/DX-42) -- D3D11TextureCubeRenderer/D3D11Texture3DRenderer SetData()+GetData() also
 //   round-trip exact bytes for a sub-region of one cube face / one 3D slice.
-// Check J (DX-43) -- a real offscreen D3D11RenderTargetBackend: BindAsRenderTarget(), Clear() (now
+// Check J (DX-43) -- a real offscreen D3D11RenderTargetRenderer: BindAsRenderTarget(), Clear() (now
 //   routed to whatever's actually bound, not hardcoded to the back buffer), UnbindAsRenderTarget(),
 //   then a direct staging-texture readback of the render target's own color texture confirms the
 //   exact clear color -- and a follow-up back-buffer Clear()+readback confirms Unbind() genuinely
@@ -45,7 +45,7 @@
 //   SetScissorRect()'s direct RSSetViewports()/RSSetScissorRects() round-trip. Behavioral pixel
 //   correctness of blend/stencil *output* needs an actual draw call (Phase DX8), proven exactly
 //   this far, honestly, and no further -- same bar Check N already set for MRT.
-// Check P (DX-60/DX-60a/DX-61) -- the first real 3D triangle this backend has ever drawn: a real
+// Check P (DX-60/DX-60a/DX-61) -- the first real 3D triangle this renderer has ever drawn: a real
 //   colored3d pipeline (D3DPerDrawConstants/D3DFogConstants constant buffers, DX-32's input layout,
 //   DX-15-embed's shaders) actually painted via DrawColoredPrimitives()/DrawIndexedColoredPrimitives()
 //   -- the same screen pixel reads back the Clear() background color before the draw and the exact
@@ -75,8 +75,8 @@
 //   (via the per-instance INSTANCEWORLD0-3 buffer) outputs the exact instance DiffuseColor.
 // Check X (DX-58) -- custom ShaderEffect: runtime D3DCompile() of arbitrary HLSL, driven manually
 //   (SpriteBatch didn't exist yet at the time this check was written).
-// Check Y (DX-70) -- real, end-to-end D3D11SpriteBatchBackend via the actual public
-//   Microsoft::Xna::Framework::Graphics::SpriteBatch/Texture2D classes (not the raw backend
+// Check Y (DX-70) -- real, end-to-end D3D11SpriteBatchRenderer via the actual public
+//   Microsoft::Xna::Framework::Graphics::SpriteBatch/Texture2D classes (not the raw renderer
 //   interface): a 2x2 per-corner-colored texture drawn at a known destination rect reads back the
 //   exact color in each of the 4 quadrants (PointClamp, no filtering ambiguity), and a second draw
 //   with SpriteEffects::FlipHorizontally is confirmed to genuinely swap the top-left/top-right
@@ -88,7 +88,7 @@
 //   not inherit SDL_Renderer's own documented Wrap/Mirror gap.
 // Check AA (DX-71) -- a custom Effect passed to SpriteBatch::Begin(..., effect) draws sprites
 //   through that effect's own compiled shader (a deliberate color inversion) instead of the stock
-//   sprite2d pipeline, proving D3D11EffectBackend::SetViewportSizeEXT()'s automatic vpSize slot
+//   sprite2d pipeline, proving D3D11EffectRenderer::SetViewportSizeEXT()'s automatic vpSize slot
 //   and the shared texture-binding path both work for the custom-effect draw path for real.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
@@ -100,15 +100,15 @@
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 
-#include "CNA/Internal/Backends/D3D11/D3D11GraphicsBackend.hpp"
-#include "CNA/Internal/Backends/D3D11/D3D11Buffers.hpp"
-#include "CNA/Internal/Backends/D3D11/D3D11Textures.hpp"
-#include "CNA/Internal/Backends/D3D11/D3D11RenderTargets.hpp"
-#include "CNA/Internal/Backends/D3D11/D3D11SamplerCache.hpp"
-#include "CNA/Internal/Backends/D3D11/D3D11OcclusionQuery.hpp"
-#include "CNA/Internal/Backends/D3D11/D3D11StateObjectCache.hpp"
-#include "CNA/Internal/Backends/D3D11/D3D11EffectBackend.hpp"
-#include "CNA/Internal/Backends/D3DCommon/D3DShaderCache.hpp"
+#include "CNA/Internal/Renderers/D3D11/D3D11Renderer.hpp"
+#include "CNA/Internal/Renderers/D3D11/D3D11Buffers.hpp"
+#include "CNA/Internal/Renderers/D3D11/D3D11Textures.hpp"
+#include "CNA/Internal/Renderers/D3D11/D3D11RenderTargets.hpp"
+#include "CNA/Internal/Renderers/D3D11/D3D11SamplerCache.hpp"
+#include "CNA/Internal/Renderers/D3D11/D3D11OcclusionQuery.hpp"
+#include "CNA/Internal/Renderers/D3D11/D3D11StateObjectCache.hpp"
+#include "CNA/Internal/Renderers/D3D11/D3D11EffectRenderer.hpp"
+#include "CNA/Internal/Renderers/D3DCommon/D3DShaderCache.hpp"
 #include "CNA/Internal/Graphics/ImageData.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
@@ -139,19 +139,19 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::D3D11;
-using CNA::Internal::Backends::ImageData;
-using CNA::Internal::Backends::IRenderTargetBackend;
-using CNA::Internal::Backends::RenderTargetBindingDescriptor;
-using CNA::Internal::Backends::GpuDrawParams;
-using CNA::Internal::Backends::D3DCommon::D3DShaderVariant;
-using CNA::Internal::Backends::D3DCommon::CreateVertexShaderForVariant;
-using CNA::Internal::Backends::D3DCommon::CreatePixelShaderForVariant;
+using namespace CNA::Internal::Renderers::D3D11;
+using CNA::Internal::Renderers::ImageData;
+using CNA::Internal::Renderers::IRenderTargetRenderer;
+using CNA::Internal::Renderers::RenderTargetBindingDescriptor;
+using CNA::Internal::Renderers::GpuDrawParams;
+using CNA::Internal::Renderers::D3DCommon::D3DShaderVariant;
+using CNA::Internal::Renderers::D3DCommon::CreateVertexShaderForVariant;
+using CNA::Internal::Renderers::D3DCommon::CreatePixelShaderForVariant;
 
 namespace
 {
     /// Copies an ID3D11Buffer to a CPU-readable staging buffer and returns its bytes -- the same
-    /// CopyResource+Map(READ) technique D3D11GraphicsBackend::ReadBackbuffer() already uses for
+    /// CopyResource+Map(READ) technique D3D11Renderer::ReadBackbuffer() already uses for
     /// the back-buffer texture (DX-28), applied to a plain buffer resource instead. Test-only:
     /// production draw-call code never needs to read a vertex/index buffer back.
     std::vector<uint8_t> ReadBufferBytes(ID3D11Device* device, ID3D11DeviceContext* context,
@@ -180,7 +180,7 @@ namespace
 
     /// Reads a w*h RGBA8 region starting at (x,y) out of subresource 0 of an arbitrary
     /// ID3D11Texture2D via the same staging-texture CopyResource+Map(READ) technique
-    /// D3D11GraphicsBackend::ReadBackbuffer() uses for the swap chain's own back buffer --
+    /// D3D11Renderer::ReadBackbuffer() uses for the swap chain's own back buffer --
     /// test-only, since production code never reads a color/render-target texture back this way.
     std::vector<uint8_t> ReadTexture2DRegion(ID3D11Device* device, ID3D11DeviceContext* context,
                                              ID3D11Texture2D* texture, int x, int y, int w, int h)
@@ -259,7 +259,7 @@ namespace
     /// or mip+face for a texture array) of an arbitrary ID3D11Texture2D -- same staging-texture
     /// technique as ReadTexture2DRegion() above, but Map()'d at `subresource` instead of always 0
     /// (NOXNA, test-only -- DX-144's real mip-chain-content proof needs to read back mip levels > 0
-    /// directly, since there is no public sampling path in this raw-backend-level smoke test).
+    /// directly, since there is no public sampling path in this raw-renderer-level smoke test).
     std::vector<uint8_t> ReadTexture2DMipRegion(ID3D11Device* device, ID3D11DeviceContext* context,
                                                 ID3D11Texture2D* texture, UINT subresource,
                                                 int x, int y, int w, int h)
@@ -315,15 +315,15 @@ protected:
         if (frame_++ < 1) return;
 
         auto& dev = getGraphicsDeviceProperty();
-        auto& backend = static_cast<D3D11GraphicsBackend&>(dev.GetBackend());
+        auto& renderer = static_cast<D3D11Renderer&>(dev.GetRenderer());
 
         // Check A: real feature level negotiated, meeting design decision 12's 11_0 floor.
-        check(backend.GetFeatureLevelEXT() >= D3D_FEATURE_LEVEL_11_0,
+        check(renderer.GetFeatureLevelEXT() >= D3D_FEATURE_LEVEL_11_0,
               "device negotiated feature level 11_0 or higher");
         std::printf("    feature level = 0x%04x, debug layer = %s, tearing = %s\n",
-                    static_cast<unsigned>(backend.GetFeatureLevelEXT()),
-                    backend.IsDebugLayerEnabledEXT() ? "enabled" : "disabled",
-                    backend.IsTearingCapableEXT() ? "capable" : "not capable");
+                    static_cast<unsigned>(renderer.GetFeatureLevelEXT()),
+                    renderer.IsDebugLayerEnabledEXT() ? "enabled" : "disabled",
+                    renderer.IsTearingCapableEXT() ? "capable" : "not capable");
 
         // Check B: real, correct pixel readback after Clear().
         {
@@ -381,7 +381,7 @@ protected:
                 {D3DShaderVariant::Instanced3d,       "instanced3d"},
             };
 
-            ID3D11Device* device = backend.GetDeviceEXT();
+            ID3D11Device* device = renderer.GetDeviceEXT();
             for (const auto& v : kVariants)
             {
                 auto vs = CreateVertexShaderForVariant(device, v.variant);
@@ -393,8 +393,8 @@ protected:
             }
         }
 
-        ID3D11Device* device = backend.GetDeviceEXT();
-        ID3D11DeviceContext* context = backend.GetContextEXT();
+        ID3D11Device* device = renderer.GetDeviceEXT();
+        ID3D11DeviceContext* context = renderer.GetContextEXT();
 
         // Check E (DX-30): a real vertex buffer round-trips known VertexPositionColor (stride 16)
         // data through an actual GPU write (Map/WRITE_DISCARD) and read (CopyResource to a
@@ -407,49 +407,49 @@ protected:
                 {1.0f, 1.0f, 0.0f, 0x0000FFFFu},
                 {0.0f, 1.0f, 0.0f, 0xFFFFFFFFu},
             };
-            auto vb = backend.CreateVertexBuffer(4);
+            auto vb = renderer.CreateVertexBuffer(4);
             vb->SetData(kVerts, 4, sizeof(VPC));
-            auto* d3dVb = static_cast<D3D11VertexBufferBackend*>(vb.get());
+            auto* d3dVb = static_cast<D3D11VertexBufferRenderer*>(vb.get());
             const auto readBack = ReadBufferBytes(device, context, d3dVb->GetBufferEXT(),
                                                    static_cast<UINT>(4 * sizeof(VPC)));
             const bool matches = readBack.size() == sizeof(kVerts) &&
                                  std::memcmp(readBack.data(), kVerts, sizeof(kVerts)) == 0;
             check(vb->GetVertexCount() == 4 && matches,
-                  "D3D11VertexBufferBackend: SetData() round-trips exact VertexPositionColor bytes");
+                  "D3D11VertexBufferRenderer: SetData() round-trips exact VertexPositionColor bytes");
         }
 
         // Check F (DX-31): both 16-bit and 32-bit index buffers round-trip the same way.
         {
             static const uint16_t kIdx16[6] = {0, 1, 2, 2, 3, 0};
-            auto ib16 = backend.CreateIndexBuffer16(6);
+            auto ib16 = renderer.CreateIndexBuffer16(6);
             ib16->SetData16(kIdx16, 6);
-            auto* d3dIb16 = static_cast<D3D11IndexBufferBackend*>(ib16.get());
+            auto* d3dIb16 = static_cast<D3D11IndexBufferRenderer*>(ib16.get());
             const auto readBack16 = ReadBufferBytes(device, context, d3dIb16->GetBufferEXT(),
                                                      static_cast<UINT>(sizeof(kIdx16)));
             const bool matches16 = readBack16.size() == sizeof(kIdx16) &&
                                    std::memcmp(readBack16.data(), kIdx16, sizeof(kIdx16)) == 0;
             check(!ib16->IsThirtyTwoBit() && d3dIb16->GetFormatEXT() == DXGI_FORMAT_R16_UINT &&
                       ib16->GetIndexCount() == 6 && matches16,
-                  "D3D11IndexBufferBackend (16-bit): SetData16() round-trips exact index bytes");
+                  "D3D11IndexBufferRenderer (16-bit): SetData16() round-trips exact index bytes");
 
             static const uint32_t kIdx32[6] = {0, 1, 2, 2, 3, 0};
-            auto ib32 = backend.CreateIndexBuffer32(6);
+            auto ib32 = renderer.CreateIndexBuffer32(6);
             ib32->SetData32(kIdx32, 6);
-            auto* d3dIb32 = static_cast<D3D11IndexBufferBackend*>(ib32.get());
+            auto* d3dIb32 = static_cast<D3D11IndexBufferRenderer*>(ib32.get());
             const auto readBack32 = ReadBufferBytes(device, context, d3dIb32->GetBufferEXT(),
                                                      static_cast<UINT>(sizeof(kIdx32)));
             const bool matches32 = readBack32.size() == sizeof(kIdx32) &&
                                    std::memcmp(readBack32.data(), kIdx32, sizeof(kIdx32)) == 0;
             check(ib32->IsThirtyTwoBit() && d3dIb32->GetFormatEXT() == DXGI_FORMAT_R32_UINT &&
                       ib32->GetIndexCount() == 6 && matches32,
-                  "D3D11IndexBufferBackend (32-bit): SetData32() round-trips exact index bytes");
+                  "D3D11IndexBufferRenderer (32-bit): SetData32() round-trips exact index bytes");
         }
 
         // Check G (DX-32): CreateInputLayout() actually succeeds against a real vertex shader's
         // DXBC input signature for two of DX-16-vtx's established strides, and the cache returns
         // the identical object (not just an equal-looking one) on a repeat request.
         {
-            auto& cache = backend.GetInputLayoutCacheEXT();
+            auto& cache = renderer.GetInputLayoutCacheEXT();
             auto layoutColored16 = cache.GetOrCreate(device, D3DShaderVariant::Colored3d, 16);
             auto layoutColored16Again = cache.GetOrCreate(device, D3DShaderVariant::Colored3d, 16);
             check(layoutColored16 != nullptr && layoutColored16.Get() == layoutColored16Again.Get(),
@@ -473,11 +473,11 @@ protected:
                 img.pixels[i * 4 + 0] = 10; img.pixels[i * 4 + 1] = 20;
                 img.pixels[i * 4 + 2] = 30; img.pixels[i * 4 + 3] = 255;
             }
-            auto tex = backend.CreateTexture(img);
-            auto* d3dTex = static_cast<D3D11TextureBackend*>(tex.get());
+            auto tex = renderer.CreateTexture(img);
+            auto* d3dTex = static_cast<D3D11TextureRenderer*>(tex.get());
             const auto readBack = ReadTexture2DRegion(device, context, d3dTex->GetTextureEXT(), 0, 0, 4, 4);
             check(tex->GetWidth() == 4 && tex->GetHeight() == 4 && readBack == img.pixels,
-                  "D3D11TextureBackend: constructor upload round-trips exact RGBA8 pixel bytes");
+                  "D3D11TextureRenderer: constructor upload round-trips exact RGBA8 pixel bytes");
 
             std::vector<uint8_t> newPixels(4 * 4 * 4);
             for (int i = 0; i < 4 * 4; ++i)
@@ -488,13 +488,13 @@ protected:
             tex->UpdatePixelsLevel(0, newPixels.data(), 4, 4);
             const auto readBack2 = ReadTexture2DRegion(device, context, d3dTex->GetTextureEXT(), 0, 0, 4, 4);
             check(readBack2 == newPixels,
-                  "D3D11TextureBackend: UpdatePixelsLevel() round-trips exact replacement bytes");
+                  "D3D11TextureRenderer: UpdatePixelsLevel() round-trips exact replacement bytes");
         }
 
         // Check I (DX-41/DX-42): cube-map and 3D texture SetData()/GetData() round-trip exact
         // bytes for a sub-region -- one face + a sub-volume, not just level 0's full extent.
         {
-            auto cube = backend.CreateTextureCube(8, false, 0);
+            auto cube = renderer.CreateTextureCube(8, false, 0);
             std::vector<uint8_t> faceData(4 * 4 * 4);
             for (int i = 0; i < 4 * 4; ++i)
             {
@@ -505,9 +505,9 @@ protected:
             std::vector<uint8_t> readFace(4 * 4 * 4, 0);
             cube->GetData(2, 0, 2, 2, 4, 4, readFace.data(), static_cast<int>(readFace.size()));
             check(readFace == faceData,
-                  "D3D11TextureCubeBackend: SetData()/GetData() round-trip exact bytes for one face's sub-region");
+                  "D3D11TextureCubeRenderer: SetData()/GetData() round-trip exact bytes for one face's sub-region");
 
-            auto vol = backend.CreateTexture3D(4, 4, 4, false, 0);
+            auto vol = renderer.CreateTexture3D(4, 4, 4, false, 0);
             std::vector<uint8_t> sliceData(2 * 2 * 2 * 4);
             for (int i = 0; i < 2 * 2 * 2; ++i)
             {
@@ -518,18 +518,18 @@ protected:
             std::vector<uint8_t> readSlice(2 * 2 * 2 * 4, 0);
             vol->GetData(0, 1, 1, 1, 2, 2, 2, readSlice.data(), static_cast<int>(readSlice.size()));
             check(readSlice == sliceData,
-                  "D3D11Texture3DBackend: SetData()/GetData() round-trip exact bytes for a sub-volume");
+                  "D3D11Texture3DRenderer: SetData()/GetData() round-trip exact bytes for a sub-volume");
         }
 
         // Check J (DX-43): BindAsRenderTarget()+Clear() (now routed to whatever's bound, not the
         // hardcoded back buffer) writes the exact color into the render target's own texture, and
         // UnbindAsRenderTarget() genuinely restores the back buffer as Clear()'s next target.
         {
-            auto rt = backend.CreateRenderTarget2D(8, 8, 0 /*DepthFormat::None*/, false, false, 0);
-            auto* d3dRt = static_cast<D3D11RenderTargetBackend*>(rt.get());
-            backend.SetRenderTarget2D(rt.get());
+            auto rt = renderer.CreateRenderTarget2D(8, 8, 0 /*DepthFormat::None*/, false, false, 0);
+            auto* d3dRt = static_cast<D3D11RenderTargetRenderer*>(rt.get());
+            renderer.SetRenderTarget2D(rt.get());
             dev.Clear(Color(11, 22, 33, 255));
-            backend.SetRenderTarget2D(nullptr);
+            renderer.SetRenderTarget2D(nullptr);
 
             const auto rtPixels = ReadTexture2DRegion(device, context, d3dRt->GetSampleableTextureEXT(), 0, 0, 4, 4);
             bool rtMatches = true;
@@ -539,7 +539,7 @@ protected:
                            rtPixels[i * 4 + 2] == 33 && rtPixels[i * 4 + 3] == 255;
             }
             check(rtMatches,
-                  "D3D11RenderTargetBackend: BindAsRenderTarget()+Clear() writes the exact color into the RT's own texture");
+                  "D3D11RenderTargetRenderer: BindAsRenderTarget()+Clear() writes the exact color into the RT's own texture");
 
             dev.Clear(Color(44, 55, 66, 255));
             const Microsoft::Xna::Framework::Rectangle bbRegion(0, 0, 4, 4);
@@ -556,20 +556,20 @@ protected:
                 }
             }
             check(bbMatches,
-                  "D3D11RenderTargetBackend: UnbindAsRenderTarget() genuinely restores the back buffer as Clear()'s target");
+                  "D3D11RenderTargetRenderer: UnbindAsRenderTarget() genuinely restores the back buffer as Clear()'s target");
         }
 
         // Check K (DX-45): an MSAA render target's ResolveSubresource()-on-unbind produces the
         // exact clear color in the resolved, sampleable texture. Pass/fail is purely about pixel
         // correctness -- whether the device actually granted real multi-sampling (vs. this
-        // backend's own real, device-queried fallback to single-sample) is printed as
+        // renderer's own real, device-queried fallback to single-sample) is printed as
         // diagnostics, not gated on, since that's real hardware/driver capability, not a bug here.
         {
-            auto rtMsaa = backend.CreateRenderTarget2D(8, 8, 0, false, false, 4);
-            auto* d3dRtMsaa = static_cast<D3D11RenderTargetBackend*>(rtMsaa.get());
-            backend.SetRenderTarget2D(rtMsaa.get());
+            auto rtMsaa = renderer.CreateRenderTarget2D(8, 8, 0, false, false, 4);
+            auto* d3dRtMsaa = static_cast<D3D11RenderTargetRenderer*>(rtMsaa.get());
+            renderer.SetRenderTarget2D(rtMsaa.get());
             dev.Clear(Color(77, 88, 99, 255));
-            backend.SetRenderTarget2D(nullptr);
+            renderer.SetRenderTarget2D(nullptr);
 
             const auto resolved = ReadTexture2DRegion(
                 device, context, d3dRtMsaa->GetSampleableTextureEXT(), 0, 0, 4, 4);
@@ -580,13 +580,13 @@ protected:
                              resolved[i * 4 + 2] == 99 && resolved[i * 4 + 3] == 255;
             }
             check(msaaMatches,
-                  "D3D11RenderTargetBackend (MSAA): Clear()+resolve-on-unbind produces the exact color in the resolved texture");
+                  "D3D11RenderTargetRenderer (MSAA): Clear()+resolve-on-unbind produces the exact color in the resolved texture");
             std::printf("    MSAA: requested 4x, device-applied %dx\n", d3dRtMsaa->GetMultiSampleCount());
         }
 
         // Check L (DX-44): the sampler cache creates a real ID3D11SamplerState, caches it for
         // identical XNA-level state, and creates a distinct object for different state; then
-        // exercise the backend's own ApplySamplerState() (PSSetSamplers wiring) end-to-end.
+        // exercise the renderer's own ApplySamplerState() (PSSetSamplers wiring) end-to-end.
         {
             D3D11SamplerCache cache;
             auto s1 = cache.GetOrCreate(device, 0, 0, 0, 1);
@@ -595,15 +595,15 @@ protected:
             check(s1 != nullptr && s1.Get() == s2.Get() && s3 != nullptr && s3.Get() != s1.Get() &&
                       cache.GetCacheSizeEXT() == 2,
                   "D3D11SamplerCache: caches identical XNA-level state, creates a distinct object for different state");
-            backend.ApplySamplerState(0, 0, 0, 0, 1);
+            renderer.ApplySamplerState(0, 0, 0, 0, 1);
         }
 
         // Check M (DX-47): a real ID3D11Query(D3D11_QUERY_OCCLUSION) completes and reports data.
         // PixelCount() == 0 is expected here (no draws occur between Begin()/End()) -- the point
         // of this check is that the query object is real and GetData() succeeds, not a nonzero
-        // count (this backend has no draw path to exercise until Phase DX8).
+        // count (this renderer has no draw path to exercise until Phase DX8).
         {
-            auto oq = backend.CreateOcclusionQuery();
+            auto oq = renderer.CreateOcclusionQuery();
             oq->Begin();
             oq->End();
             context->Flush();
@@ -615,9 +615,9 @@ protected:
                 if (!completed) std::this_thread::yield();
             }
             check(oq != nullptr && completed,
-                  "D3D11OcclusionQueryBackend: a real ID3D11Query completes and reports data");
+                  "D3D11OcclusionQueryRenderer: a real ID3D11Query completes and reports data");
             check(oq->PixelCount() == 0,
-                  "D3D11OcclusionQueryBackend: PixelCount() is 0 with no draws between Begin()/End()");
+                  "D3D11OcclusionQueryRenderer: PixelCount() is 0 with no draws between Begin()/End()");
         }
 
         // Check N (DX-46): SetRenderTargets() with 2 targets performs one real OMSetRenderTargets
@@ -625,17 +625,17 @@ protected:
         // binding + clear, honestly not a claim about multi-target shader output (no draw path
         // exists yet, Phase DX8).
         {
-            auto rtA = backend.CreateRenderTarget2D(4, 4, 0, false, false, 0);
-            auto rtB = backend.CreateRenderTarget2D(4, 4, 0, false, false, 0);
-            auto* d3dRtA = static_cast<D3D11RenderTargetBackend*>(rtA.get());
-            auto* d3dRtB = static_cast<D3D11RenderTargetBackend*>(rtB.get());
+            auto rtA = renderer.CreateRenderTarget2D(4, 4, 0, false, false, 0);
+            auto rtB = renderer.CreateRenderTarget2D(4, 4, 0, false, false, 0);
+            auto* d3dRtA = static_cast<D3D11RenderTargetRenderer*>(rtA.get());
+            auto* d3dRtB = static_cast<D3D11RenderTargetRenderer*>(rtB.get());
             const RenderTargetBindingDescriptor rts[2] = {
                 RenderTargetBindingDescriptor::ForRenderTarget2D(rtA.get(), 0, 4, 4, rtA->GetMultiSampleCount()),
                 RenderTargetBindingDescriptor::ForRenderTarget2D(rtB.get(), 0, 4, 4, rtB->GetMultiSampleCount()),
             };
-            backend.SetRenderTargets(rts, 2);
+            renderer.SetRenderTargets(rts, 2);
             dev.Clear(Color(123, 45, 67, 255));
-            backend.SetRenderTargets(nullptr, 0);
+            renderer.SetRenderTargets(nullptr, 0);
 
             const auto pixelsA = ReadTexture2DRegion(device, context, d3dRtA->GetSampleableTextureEXT(), 0, 0, 4, 4);
             const auto pixelsB = ReadTexture2DRegion(device, context, d3dRtB->GetSampleableTextureEXT(), 0, 0, 4, 4);
@@ -648,30 +648,30 @@ protected:
                             pixelsB[i * 4 + 2] == 67 && pixelsB[i * 4 + 3] == 255;
             }
             check(mrtMatches,
-                  "D3D11GraphicsBackend::SetRenderTargets() (MRT): one OMSetRenderTargets binds both targets, Clear() writes both");
+                  "D3D11Renderer::SetRenderTargets() (MRT): one OMSetRenderTargets binds both targets, Clear() writes both");
         }
 
         // plan_dx.md DX-143: multi-target (N>1) MRT per-target MSAA-resolve-on-unbind -- the real
-        // gap this task closes. Before this fix, D3D11GraphicsBackend::SetRenderTargets() never
+        // gap this task closes. Before this fix, D3D11Renderer::SetRenderTargets() never
         // called any bound target's own resolve/mip-regen logic when the MRT set was replaced or
         // unbound (only the single-target SetRenderTarget2D() path did, via
-        // D3D11RenderTargetBackend::UnbindAsRenderTarget()) -- so an MSAA MRT target's resolved,
+        // D3D11RenderTargetRenderer::UnbindAsRenderTarget()) -- so an MSAA MRT target's resolved,
         // sampleable texture would have stayed whatever it was before this Clear(), not the real
         // cleared-and-resolved content. Two DIFFERENT MSAA targets bound as MRT, cleared to two
         // DIFFERENT colors, proves each target's OWN resolve ran correctly (not, say, one target's
         // resolve accidentally running twice while the other's never runs).
         {
-            auto rtMsaaA = backend.CreateRenderTarget2D(8, 8, 0, false, false, 4);
-            auto rtMsaaB = backend.CreateRenderTarget2D(8, 8, 0, false, false, 4);
-            auto* d3dRtMsaaA = static_cast<D3D11RenderTargetBackend*>(rtMsaaA.get());
-            auto* d3dRtMsaaB = static_cast<D3D11RenderTargetBackend*>(rtMsaaB.get());
+            auto rtMsaaA = renderer.CreateRenderTarget2D(8, 8, 0, false, false, 4);
+            auto rtMsaaB = renderer.CreateRenderTarget2D(8, 8, 0, false, false, 4);
+            auto* d3dRtMsaaA = static_cast<D3D11RenderTargetRenderer*>(rtMsaaA.get());
+            auto* d3dRtMsaaB = static_cast<D3D11RenderTargetRenderer*>(rtMsaaB.get());
             const RenderTargetBindingDescriptor msaaRts[2] = {
                 RenderTargetBindingDescriptor::ForRenderTarget2D(rtMsaaA.get(), 0, 8, 8, rtMsaaA->GetMultiSampleCount()),
                 RenderTargetBindingDescriptor::ForRenderTarget2D(rtMsaaB.get(), 0, 8, 8, rtMsaaB->GetMultiSampleCount()),
             };
-            backend.SetRenderTargets(msaaRts, 2);
+            renderer.SetRenderTargets(msaaRts, 2);
             dev.Clear(Color(200, 30, 40, 255));
-            backend.SetRenderTargets(nullptr, 0);
+            renderer.SetRenderTargets(nullptr, 0);
 
             const auto resolvedA = ReadTexture2DRegion(device, context, d3dRtMsaaA->GetSampleableTextureEXT(), 0, 0, 4, 4);
             const auto resolvedB = ReadTexture2DRegion(device, context, d3dRtMsaaB->GetSampleableTextureEXT(), 0, 0, 4, 4);
@@ -684,7 +684,7 @@ protected:
                                  resolvedB[i * 4 + 2] == 40 && resolvedB[i * 4 + 3] == 255;
             }
             check(mrtMsaaMatches,
-                  "D3D11GraphicsBackend::SetRenderTargets() (MRT, N=2 MSAA targets): unbinding the "
+                  "D3D11Renderer::SetRenderTargets() (MRT, N=2 MSAA targets): unbinding the "
                   "MRT set now genuinely resolves BOTH targets independently, not silently skipped "
                   "(plan_dx.md DX-143 -- same ResolveAndGenerateMipsEXT() code path also covers "
                   "mip-regeneration for a mipMap=true MRT target, not independently pixel-tested here)");
@@ -692,25 +692,25 @@ protected:
             // A subsequent single-target bind must also trigger the pending MRT flush -- proves
             // FlushPendingMRTResolveEXT() is genuinely called from SetRenderTarget2D() too, not
             // only from SetRenderTargets()'s own unbind-to-back-buffer path.
-            auto rtMsaaC = backend.CreateRenderTarget2D(8, 8, 0, false, false, 4);
-            auto rtMsaaD = backend.CreateRenderTarget2D(8, 8, 0, false, false, 4);
-            auto* d3dRtMsaaC = static_cast<D3D11RenderTargetBackend*>(rtMsaaC.get());
+            auto rtMsaaC = renderer.CreateRenderTarget2D(8, 8, 0, false, false, 4);
+            auto rtMsaaD = renderer.CreateRenderTarget2D(8, 8, 0, false, false, 4);
+            auto* d3dRtMsaaC = static_cast<D3D11RenderTargetRenderer*>(rtMsaaC.get());
             const RenderTargetBindingDescriptor msaaRts2[2] = {
                 RenderTargetBindingDescriptor::ForRenderTarget2D(rtMsaaC.get(), 0, 8, 8, rtMsaaC->GetMultiSampleCount()),
                 RenderTargetBindingDescriptor::ForRenderTarget2D(rtMsaaD.get(), 0, 8, 8, rtMsaaD->GetMultiSampleCount()),
             };
-            backend.SetRenderTargets(msaaRts2, 2);
+            renderer.SetRenderTargets(msaaRts2, 2);
             dev.Clear(Color(5, 6, 7, 255));
-            auto rtPlain = backend.CreateRenderTarget2D(4, 4, 0, false, false, 0);
-            backend.SetRenderTarget2D(rtPlain.get()); // switch straight to a single target, not null
-            backend.SetRenderTarget2D(nullptr);
+            auto rtPlain = renderer.CreateRenderTarget2D(4, 4, 0, false, false, 0);
+            renderer.SetRenderTarget2D(rtPlain.get()); // switch straight to a single target, not null
+            renderer.SetRenderTarget2D(nullptr);
 
             const auto resolvedC = ReadTexture2DRegion(device, context, d3dRtMsaaC->GetSampleableTextureEXT(), 0, 0, 4, 4);
             bool mrtToSingleFlushed = true;
             for (int i = 0; i < 4 * 4 && mrtToSingleFlushed; ++i)
                 mrtToSingleFlushed = resolvedC[i * 4 + 0] == 5 && resolvedC[i * 4 + 1] == 6 && resolvedC[i * 4 + 2] == 7;
             check(mrtToSingleFlushed,
-                  "D3D11GraphicsBackend::SetRenderTarget2D(): switching directly from an MRT set to "
+                  "D3D11Renderer::SetRenderTarget2D(): switching directly from an MRT set to "
                   "a different single target also flushes the prior MRT set's resolve (plan_dx.md DX-143)");
         }
 
@@ -722,14 +722,14 @@ protected:
         // sidesteps needing to replicate exact box-filter math while still being a real,
         // discriminating proof (a zeroed/garbage mip would fail this immediately).
         {
-            auto rtMip = backend.CreateRenderTarget2D(8, 8, 0 /*DepthFormat::None*/, false, true /*mipMap*/, 0);
-            auto* d3dRtMip = static_cast<D3D11RenderTargetBackend*>(rtMip.get());
-            backend.SetRenderTarget2D(rtMip.get());
+            auto rtMip = renderer.CreateRenderTarget2D(8, 8, 0 /*DepthFormat::None*/, false, true /*mipMap*/, 0);
+            auto* d3dRtMip = static_cast<D3D11RenderTargetRenderer*>(rtMip.get());
+            renderer.SetRenderTarget2D(rtMip.get());
             dev.Clear(Color(200, 90, 10, 255));
-            backend.SetRenderTarget2D(nullptr); // UnbindAsRenderTarget() -> GenerateMips()
+            renderer.SetRenderTarget2D(nullptr); // UnbindAsRenderTarget() -> GenerateMips()
 
             check(d3dRtMip->GetLevelCountEXT() == 4,
-                  "D3D11RenderTargetBackend: an 8x8 mipMap=true render target reports the expected "
+                  "D3D11RenderTargetRenderer: an 8x8 mipMap=true render target reports the expected "
                   "4-level mip chain (8x8/4x4/2x2/1x1, plan_dx.md DX-144)");
 
             const auto mip1 = ReadTexture2DMipRegion(device, context, d3dRtMip->GetSampleableTextureEXT(), 1, 0, 0, 4, 4);
@@ -737,7 +737,7 @@ protected:
             for (std::size_t i = 0; i < 4u * 4u && mip1Exact; ++i)
                 mip1Exact = mip1[i * 4 + 0] == 200 && mip1[i * 4 + 1] == 90 && mip1[i * 4 + 2] == 10 && mip1[i * 4 + 3] == 255;
             check(mip1Exact,
-                  "D3D11RenderTargetBackend: GenerateMips()-on-unbind writes the exact box-filtered "
+                  "D3D11RenderTargetRenderer: GenerateMips()-on-unbind writes the exact box-filtered "
                   "(here: solid-color-preserving) content into mip level 1, read back directly from "
                   "the real GPU resource, not zero/garbage (plan_dx.md DX-144)");
 
@@ -746,12 +746,12 @@ protected:
             for (std::size_t i = 0; i < 2u * 2u && mip2Exact; ++i)
                 mip2Exact = mip2[i * 4 + 0] == 200 && mip2[i * 4 + 1] == 90 && mip2[i * 4 + 2] == 10 && mip2[i * 4 + 3] == 255;
             check(mip2Exact,
-                  "D3D11RenderTargetBackend: mip level 2 (2x2) is also exact, confirming the full "
+                  "D3D11RenderTargetRenderer: mip level 2 (2x2) is also exact, confirming the full "
                   "mip chain regenerates correctly, not just level 1 (plan_dx.md DX-144)");
         }
         {
-            auto rtCubeMip = backend.CreateRenderTargetCube(8, 0 /*DepthFormat::None*/, false /*preserveContents*/, true /*mipMap*/);
-            auto* d3dRtCubeMip = static_cast<D3D11RenderTargetCubeBackend*>(rtCubeMip.get());
+            auto rtCubeMip = renderer.CreateRenderTargetCube(8, 0 /*DepthFormat::None*/, false /*preserveContents*/, true /*mipMap*/);
+            auto* d3dRtCubeMip = static_cast<D3D11RenderTargetCubeRenderer*>(rtCubeMip.get());
             rtCubeMip->BindAsRenderTargetFace(0);
             dev.Clear(Color(50, 150, 250, 255));
             rtCubeMip->UnbindAsRenderTarget(); // GenerateMips() on the cube's shared SRV
@@ -764,7 +764,7 @@ protected:
             for (std::size_t i = 0; i < 4u * 4u && cubeMip1Exact; ++i)
                 cubeMip1Exact = cubeMip1[i * 4 + 0] == 50 && cubeMip1[i * 4 + 1] == 150 && cubeMip1[i * 4 + 2] == 250 && cubeMip1[i * 4 + 3] == 255;
             check(cubeMip1Exact,
-                  "D3D11RenderTargetCubeBackend: GenerateMips()-on-unbind also regenerates face 0's "
+                  "D3D11RenderTargetCubeRenderer: GenerateMips()-on-unbind also regenerates face 0's "
                   "own mip chain correctly, read back directly from the real GPU resource "
                   "(plan_dx.md DX-144; D3D12's own render-target mip-chain generation does not exist "
                   "at all yet -- D3D12RenderTargets.hpp's own DX-117 scope note -- so DX-144's D3D12 "
@@ -780,8 +780,8 @@ protected:
         // the one just drawn to, and that a DIFFERENT, previously-untouched face's own base level
         // survives the call.
         {
-            auto rtCubeMip2 = backend.CreateRenderTargetCube(8, 0 /*DepthFormat::None*/, false /*preserveContents*/, true /*mipMap*/);
-            auto* d3dRtCubeMip2 = static_cast<D3D11RenderTargetCubeBackend*>(rtCubeMip2.get());
+            auto rtCubeMip2 = renderer.CreateRenderTargetCube(8, 0 /*DepthFormat::None*/, false /*preserveContents*/, true /*mipMap*/);
+            auto* d3dRtCubeMip2 = static_cast<D3D11RenderTargetCubeRenderer*>(rtCubeMip2.get());
             rtCubeMip2->BindAsRenderTargetFace(2);
             dev.Clear(Color(60, 120, 180, 255));
             rtCubeMip2->UnbindAsRenderTarget(); // GenerateMips() on the cube's shared SRV
@@ -795,7 +795,7 @@ protected:
                 cubeFace2Mip1Exact = cubeFace2Mip1[i * 4 + 0] == 60 && cubeFace2Mip1[i * 4 + 1] == 120 &&
                                      cubeFace2Mip1[i * 4 + 2] == 180 && cubeFace2Mip1[i * 4 + 3] == 255;
             check(cubeFace2Mip1Exact,
-                  "D3D11RenderTargetCubeBackend: GenerateMips()-on-unbind regenerates a NON-zero "
+                  "D3D11RenderTargetCubeRenderer: GenerateMips()-on-unbind regenerates a NON-zero "
                   "face's (face 2) own mip chain correctly, not just face 0's (plan_dx.md DX-153)");
         }
 
@@ -821,30 +821,30 @@ protected:
                 return desc.Format;
             };
 
-            auto rtNone = backend.CreateRenderTarget2D(4, 4, 0 /*DepthFormat::None*/, false, false, 0);
-            auto* d3dRtNone = static_cast<D3D11RenderTargetBackend*>(rtNone.get());
+            auto rtNone = renderer.CreateRenderTarget2D(4, 4, 0 /*DepthFormat::None*/, false, false, 0);
+            auto* d3dRtNone = static_cast<D3D11RenderTargetRenderer*>(rtNone.get());
             check(d3dRtNone->GetDSVEXT() == nullptr,
-                  "D3D11RenderTargetBackend: DepthFormat::None creates no depth-stencil view at all "
+                  "D3D11RenderTargetRenderer: DepthFormat::None creates no depth-stencil view at all "
                   "(plan_dx.md DX-145)");
 
-            auto rtD16 = backend.CreateRenderTarget2D(4, 4, 1 /*DepthFormat::Depth16*/, false, false, 0);
-            auto* d3dRtD16 = static_cast<D3D11RenderTargetBackend*>(rtD16.get());
+            auto rtD16 = renderer.CreateRenderTarget2D(4, 4, 1 /*DepthFormat::Depth16*/, false, false, 0);
+            auto* d3dRtD16 = static_cast<D3D11RenderTargetRenderer*>(rtD16.get());
             check(GetDsvFormat(d3dRtD16->GetDSVEXT()) == DXGI_FORMAT_D16_UNORM,
-                  "D3D11RenderTargetBackend: DepthFormat::Depth16 genuinely creates a "
+                  "D3D11RenderTargetRenderer: DepthFormat::Depth16 genuinely creates a "
                   "DXGI_FORMAT_D16_UNORM depth resource, not silently upgraded to a combined "
                   "depth+stencil format (plan_dx.md DX-145)");
 
-            auto rtD24 = backend.CreateRenderTarget2D(4, 4, 2 /*DepthFormat::Depth24*/, false, false, 0);
-            auto* d3dRtD24 = static_cast<D3D11RenderTargetBackend*>(rtD24.get());
+            auto rtD24 = renderer.CreateRenderTarget2D(4, 4, 2 /*DepthFormat::Depth24*/, false, false, 0);
+            auto* d3dRtD24 = static_cast<D3D11RenderTargetRenderer*>(rtD24.get());
             check(GetDsvFormat(d3dRtD24->GetDSVEXT()) == DXGI_FORMAT_D24_UNORM_S8_UINT,
-                  "D3D11RenderTargetBackend: DepthFormat::Depth24 lands on the documented "
+                  "D3D11RenderTargetRenderer: DepthFormat::Depth24 lands on the documented "
                   "DXGI_FORMAT_D24_UNORM_S8_UINT fallback (D3D11 has no pure 24-bit depth-only "
                   "format, plan_dx.md DX-145)");
 
-            auto rtD24S8 = backend.CreateRenderTarget2D(4, 4, 3 /*DepthFormat::Depth24Stencil8*/, false, false, 0);
-            auto* d3dRtD24S8 = static_cast<D3D11RenderTargetBackend*>(rtD24S8.get());
+            auto rtD24S8 = renderer.CreateRenderTarget2D(4, 4, 3 /*DepthFormat::Depth24Stencil8*/, false, false, 0);
+            auto* d3dRtD24S8 = static_cast<D3D11RenderTargetRenderer*>(rtD24S8.get());
             check(GetDsvFormat(d3dRtD24S8->GetDSVEXT()) == DXGI_FORMAT_D24_UNORM_S8_UINT,
-                  "D3D11RenderTargetBackend: DepthFormat::Depth24Stencil8 also creates "
+                  "D3D11RenderTargetRenderer: DepthFormat::Depth24Stencil8 also creates "
                   "DXGI_FORMAT_D24_UNORM_S8_UINT -- both Depth24 and Depth24Stencil8 genuinely share "
                   "the SAME real DXGI resource format, not just coincidentally 'both work' "
                   "(plan_dx.md DX-145)");
@@ -859,7 +859,7 @@ protected:
         {
             // BlendState: NonPremultiplied-style (SourceAlpha/InvSourceAlpha/Add on both channels)
             // -- deliberately not the Opaque combo, so BlendEnable ends up TRUE.
-            auto& blendCache = backend.GetBlendStateCacheEXT();
+            auto& blendCache = renderer.GetBlendStateCacheEXT();
             // REMED-GFX-077: GetOrCreate gained cw0..cw3 (per-RT write masks); default All (15) here
             // keeps this cache identity/distinctness check about the blend factors, as before.
             auto blendA1 = blendCache.GetOrCreate(device, 4, 4, 5, 5, 0, 0, 15, 15, 15, 15);   // SourceAlpha/InvSourceAlpha/Add
@@ -870,26 +870,26 @@ protected:
             check(blendA1.Get() != blendB.Get(),
                   "D3D11BlendStateCache: different XNA blend params return a different object");
 
-            backend.ApplyBlendState(4, 4, 5, 5, 0, 0, CNA::Internal::Backends::BlendWriteState{}); // REMED-GFX-077 default write state
+            renderer.ApplyBlendState(4, 4, 5, 5, 0, 0, CNA::Internal::Renderers::BlendWriteState{}); // REMED-GFX-077 default write state
             ID3D11BlendState* boundBlend = nullptr;
             float boundBlendFactor[4] = {};
             UINT boundSampleMask = 0;
             context->OMGetBlendState(&boundBlend, boundBlendFactor, &boundSampleMask);
             check(boundBlend == blendA1.Get(),
-                  "D3D11GraphicsBackend::ApplyBlendState(): OMSetBlendState actually bound the cached object");
+                  "D3D11Renderer::ApplyBlendState(): OMSetBlendState actually bound the cached object");
             if (boundBlend) boundBlend->Release();
 
-            backend.SetBlendFactor(0.25f, 0.5f, 0.75f, 1.0f);
+            renderer.SetBlendFactor(0.25f, 0.5f, 0.75f, 1.0f);
             ID3D11BlendState* boundBlend2 = nullptr;
             context->OMGetBlendState(&boundBlend2, boundBlendFactor, &boundSampleMask);
             check(boundBlend2 == blendA1.Get() &&
                   boundBlendFactor[0] == 0.25f && boundBlendFactor[1] == 0.5f &&
                   boundBlendFactor[2] == 0.75f && boundBlendFactor[3] == 1.0f,
-                  "D3D11GraphicsBackend::SetBlendFactor(): re-binds the current blend state with the new factor, standalone");
+                  "D3D11Renderer::SetBlendFactor(): re-binds the current blend state with the new factor, standalone");
             if (boundBlend2) boundBlend2->Release();
 
             // DepthStencilState: depth+stencil enabled, distinct front-face ops.
-            auto& dsCache = backend.GetDepthStencilStateCacheEXT();
+            auto& dsCache = renderer.GetDepthStencilStateCacheEXT();
             auto dsA1 = dsCache.GetOrCreate(device, true, true, 2 /*Less*/, true, 0 /*Always*/,
                                             2 /*Replace*/, 0 /*Keep*/, 0 /*Keep*/, 0xFF, 0xFF,
                                             false, 0, 0, 0, 0);
@@ -902,24 +902,24 @@ protected:
             check(dsA1.Get() != dsB.Get(),
                   "D3D11DepthStencilStateCache: different XNA depth-stencil params return a different object");
 
-            backend.ApplyDepthStencilState(true, true, 2, true, 0, 2, 0, 0, 0xFF, 0xFF, 77,
+            renderer.ApplyDepthStencilState(true, true, 2, true, 0, 2, 0, 0, 0xFF, 0xFF, 77,
                                            false, 0, 0, 0, 0);
             ID3D11DepthStencilState* boundDS = nullptr;
             UINT boundRef = 0;
             context->OMGetDepthStencilState(&boundDS, &boundRef);
             check(boundDS == dsA1.Get() && boundRef == 77,
-                  "D3D11GraphicsBackend::ApplyDepthStencilState(): OMSetDepthStencilState bound the cached object with the reference value");
+                  "D3D11Renderer::ApplyDepthStencilState(): OMSetDepthStencilState bound the cached object with the reference value");
             if (boundDS) boundDS->Release();
 
-            backend.SetReferenceStencil(123);
+            renderer.SetReferenceStencil(123);
             ID3D11DepthStencilState* boundDS2 = nullptr;
             context->OMGetDepthStencilState(&boundDS2, &boundRef);
             check(boundDS2 == dsA1.Get() && boundRef == 123,
-                  "D3D11GraphicsBackend::SetReferenceStencil(): re-binds the current depth-stencil state with the new reference, standalone");
+                  "D3D11Renderer::SetReferenceStencil(): re-binds the current depth-stencil state with the new reference, standalone");
             if (boundDS2) boundDS2->Release();
 
             // RasterizerState: cull-back/solid vs. cull-none/wireframe.
-            auto& rsCache = backend.GetRasterizerStateCacheEXT();
+            auto& rsCache = renderer.GetRasterizerStateCacheEXT();
             auto rsA1 = rsCache.GetOrCreate(device, 2 /*CullCounterClockwiseFace*/, 0 /*Solid*/, false, 0.0f, 0.0f);
             auto rsA2 = rsCache.GetOrCreate(device, 2, 0, false, 0.0f, 0.0f);
             auto rsB = rsCache.GetOrCreate(device, 0 /*None*/, 1 /*WireFrame*/, true, 1.0f, 2.0f);
@@ -928,39 +928,39 @@ protected:
             check(rsA1.Get() != rsB.Get(),
                   "D3D11RasterizerStateCache: different XNA rasterizer params return a different object");
 
-            backend.ApplyRasterizerState(2, 0, false, 0.0f, 0.0f);
+            renderer.ApplyRasterizerState(2, 0, false, 0.0f, 0.0f);
             ID3D11RasterizerState* boundRS = nullptr;
             context->RSGetState(&boundRS);
             check(boundRS == rsA1.Get(),
-                  "D3D11GraphicsBackend::ApplyRasterizerState(): RSSetState actually bound the cached object");
+                  "D3D11Renderer::ApplyRasterizerState(): RSSetState actually bound the cached object");
             if (boundRS) boundRS->Release();
 
             // Viewport / scissor rect round-trip.
-            backend.SetViewport(2, 3, 40, 30, 0.1f, 0.9f);
+            renderer.SetViewport(2, 3, 40, 30, 0.1f, 0.9f);
             UINT vpCount = 1;
             D3D11_VIEWPORT boundVp{};
             context->RSGetViewports(&vpCount, &boundVp);
             check(vpCount == 1 && boundVp.TopLeftX == 2.0f && boundVp.TopLeftY == 3.0f &&
                   boundVp.Width == 40.0f && boundVp.Height == 30.0f &&
                   boundVp.MinDepth == 0.1f && boundVp.MaxDepth == 0.9f,
-                  "D3D11GraphicsBackend::SetViewport(): RSSetViewports round-trips the exact rectangle and depth range");
+                  "D3D11Renderer::SetViewport(): RSSetViewports round-trips the exact rectangle and depth range");
 
-            backend.SetScissorRect(5, 6, 20, 10);
+            renderer.SetScissorRect(5, 6, 20, 10);
             UINT rectCount = 1;
             D3D11_RECT boundRect{};
             context->RSGetScissorRects(&rectCount, &boundRect);
             check(rectCount == 1 && boundRect.left == 5 && boundRect.top == 6 &&
                   boundRect.right == 25 && boundRect.bottom == 16,
-                  "D3D11GraphicsBackend::SetScissorRect(): RSSetScissorRects round-trips as (x,y,x+w,y+h)");
+                  "D3D11Renderer::SetScissorRect(): RSSetScissorRects round-trips as (x,y,x+w,y+h)");
 
             // Restore the window-size viewport so nothing downstream (there is nothing after this
             // check today, but keep the invariant honest) is left with a stale small viewport.
             int vw = 0, vh = 0;
-            backend.GetViewportSize(vw, vh);
-            backend.SetViewport(0, 0, vw, vh, 0.0f, 1.0f);
+            renderer.GetViewportSize(vw, vh);
+            renderer.SetViewport(0, 0, vw, vh, 0.0f, 1.0f);
         }
 
-        // Check P (DX-60/DX-60a/DX-61) -- the first real 3D triangle this backend has ever drawn.
+        // Check P (DX-60/DX-60a/DX-61) -- the first real 3D triangle this renderer has ever drawn.
         // A real colored3d draw (input layout + VS/PS + PerDraw/FogParams constant buffers, all
         // wired for real) paints a known solid-red vertex color over a known-blue-cleared
         // background; reading back the SAME pixel before and after the draw call (blue -> red)
@@ -969,9 +969,9 @@ protected:
         // paths. State is reset to a known-safe baseline first (opaque blend, depth/stencil off,
         // no culling) so this check doesn't depend on whatever Check O happened to leave bound.
         {
-            backend.ApplyBlendState(0, 0, 1, 1, 0, 0, CNA::Internal::Backends::BlendWriteState{}); // Opaque (REMED-GFX-077 default write state)
-            backend.ApplyDepthStencilState(false, false, 0, false, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 0);
-            backend.ApplyRasterizerState(0 /*CullMode::None*/, 0 /*FillMode::Solid*/, false, 0.0f, 0.0f);
+            renderer.ApplyBlendState(0, 0, 1, 1, 0, 0, CNA::Internal::Renderers::BlendWriteState{}); // Opaque (REMED-GFX-077 default write state)
+            renderer.ApplyDepthStencilState(false, false, 0, false, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 0);
+            renderer.ApplyRasterizerState(0 /*CullMode::None*/, 0 /*FillMode::Solid*/, false, 0.0f, 0.0f);
 
             struct VPC { float x, y, z; uint32_t color; };
             // A single triangle covering the entire NDC square (-1..1, -1..1) via the standard
@@ -984,7 +984,7 @@ protected:
                 { 3.0f, -1.0f, 0.0f, 0xFF0000FFu},
                 {-1.0f,  3.0f, 0.0f, 0xFF0000FFu},
             };
-            auto vb = backend.CreateVertexBuffer(3);
+            auto vb = renderer.CreateVertexBuffer(3);
             vb->SetData(kTri, 3, sizeof(VPC));
 
             const Microsoft::Xna::Framework::Rectangle centerRegion(28, 28, 4, 4);
@@ -994,7 +994,7 @@ protected:
             // Non-indexed path.
             dev.Clear(Color(0, 0, 255, 255));
             dev.GetBackBufferData(&centerRegion, before.data(), 0, static_cast<int>(before.size()));
-            backend.DrawColoredPrimitives(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+            renderer.DrawColoredPrimitives(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                           Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1);
             dev.GetBackBufferData(&centerRegion, after.data(), 0, static_cast<int>(after.size()));
 
@@ -1006,19 +1006,19 @@ protected:
                 if (p.getRProperty() != 255 || p.getGProperty() != 0 || p.getBProperty() != 0 || p.getAProperty() != 255)
                     afterIsRed = false;
             check(beforeIsBlue && afterIsRed,
-                  "D3D11GraphicsBackend::DrawColoredPrimitives(): real colored3d draw paints exact "
+                  "D3D11Renderer::DrawColoredPrimitives(): real colored3d draw paints exact "
                   "vertex color over the Clear() background at the same readback location");
 
             // Indexed path: same triangle, via DrawIndexedColoredPrimitives.
             static const uint16_t kTriIdx[3] = {0, 1, 2};
-            auto ib = backend.CreateIndexBuffer16(3);
+            auto ib = renderer.CreateIndexBuffer16(3);
             ib->SetData16(kTriIdx, 3);
 
             dev.Clear(Color(0, 0, 255, 255));
             std::vector<Color> beforeIdx(4 * 4, Color(0, 0, 0, 0));
             std::vector<Color> afterIdx(4 * 4, Color(0, 0, 0, 0));
             dev.GetBackBufferData(&centerRegion, beforeIdx.data(), 0, static_cast<int>(beforeIdx.size()));
-            backend.DrawIndexedColoredPrimitives(*vb, *ib, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+            renderer.DrawIndexedColoredPrimitives(*vb, *ib, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                                  Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1);
             dev.GetBackBufferData(&centerRegion, afterIdx.data(), 0, static_cast<int>(afterIdx.size()));
 
@@ -1030,7 +1030,7 @@ protected:
                 if (p.getRProperty() != 255 || p.getGProperty() != 0 || p.getBProperty() != 0 || p.getAProperty() != 255)
                     afterIdxIsRed = false;
             check(beforeIdxIsBlue && afterIdxIsRed,
-                  "D3D11GraphicsBackend::DrawIndexedColoredPrimitives(): real colored3d indexed draw "
+                  "D3D11Renderer::DrawIndexedColoredPrimitives(): real colored3d indexed draw "
                   "paints exact vertex color over the Clear() background at the same readback location");
         }
 
@@ -1045,11 +1045,11 @@ protected:
         // single-sample, on which OMSetBlendState's SampleMask bit 0 gates the one coverage sample:
         // SampleMask==0 must discard the quad (pixel stays the clear colour). ----
         {
-            auto rt = backend.CreateRenderTarget2D(64, 64, 0 /*DepthFormat::None*/, false, false, 0);
-            auto* d3dRt = static_cast<D3D11RenderTargetBackend*>(rt.get());
+            auto rt = renderer.CreateRenderTarget2D(64, 64, 0 /*DepthFormat::None*/, false, false, 0);
+            auto* d3dRt = static_cast<D3D11RenderTargetRenderer*>(rt.get());
 
-            backend.ApplyDepthStencilState(false, false, 0, false, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 0);
-            backend.ApplyRasterizerState(0 /*CullMode::None*/, 0 /*FillMode::Solid*/, false, 0.0f, 0.0f);
+            renderer.ApplyDepthStencilState(false, false, 0, false, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 0);
+            renderer.ApplyRasterizerState(0 /*CullMode::None*/, 0 /*FillMode::Solid*/, false, 0.0f, 0.0f);
 
             struct VPC { float x, y, z; uint32_t color; };
             // Full-NDC quad, flat source colour S=(200,100,50,220); packed R8G8B8A8 = 0xDC3264C8
@@ -1059,20 +1059,20 @@ protected:
                 { 1.0f, -1.0f, 0.0f, 0xDC3264C8u}, {-1.0f,  1.0f, 0.0f, 0xDC3264C8u},
                 { 1.0f, -1.0f, 0.0f, 0xDC3264C8u}, { 1.0f,  1.0f, 0.0f, 0xDC3264C8u},
             };
-            auto vbCw = backend.CreateVertexBuffer(6);
+            auto vbCw = renderer.CreateVertexBuffer(6);
             vbCw->SetData(kQuad, 6, sizeof(VPC));
             const Matrix Id = Matrix::getIdentityProperty();
 
             auto renderMask = [&](int cwc, unsigned int sampleMask) -> std::array<uint8_t, 4>
             {
-                CNA::Internal::Backends::BlendWriteState ws;
+                CNA::Internal::Renderers::BlendWriteState ws;
                 ws.colorWriteChannels[0] = cwc;
                 ws.multiSampleMask = sampleMask;
-                backend.SetRenderTarget2D(rt.get());
-                backend.ApplyBlendState(0, 0, 1, 1, 0, 0, ws);         // Opaque + mask
+                renderer.SetRenderTarget2D(rt.get());
+                renderer.ApplyBlendState(0, 0, 1, 1, 0, 0, ws);         // Opaque + mask
                 dev.Clear(Color(10, 20, 30, 40));                     // destination D
-                backend.DrawColoredPrimitives(*vbCw, Id, Id, Id, PrimitiveType::TriangleList, 2);
-                backend.SetRenderTarget2D(nullptr);
+                renderer.DrawColoredPrimitives(*vbCw, Id, Id, Id, PrimitiveType::TriangleList, 2);
+                renderer.SetRenderTarget2D(nullptr);
                 const auto px = ReadTexture2DRegion(device, context, d3dRt->GetSampleableTextureEXT(), 30, 30, 2, 2);
                 return {px[0], px[1], px[2], px[3]};
             };
@@ -1117,7 +1117,7 @@ protected:
         // Check Q (DX-62): textured3d (stride 20) + colored_textured3d (stride 24) via real
         // GpuDrawParams, using the same before/after-Clear() discipline Check P established.
         {
-            backend.ApplySamplerState(0, 1 /*TextureFilter::Point*/, 0, 0, 1);
+            renderer.ApplySamplerState(0, 1 /*TextureFilter::Point*/, 0, 0, 1);
 
             struct VPT { float x, y, z; float u, v; };
             static const VPT kTriTex[3] = {
@@ -1125,7 +1125,7 @@ protected:
                 { 3.0f, -1.0f, 0.0f, 2.0f, 1.0f},
                 {-1.0f,  3.0f, 0.0f, 0.0f, -1.0f},
             };
-            auto vbTex = backend.CreateVertexBuffer(3);
+            auto vbTex = renderer.CreateVertexBuffer(3);
             vbTex->SetData(kTriTex, 3, sizeof(VPT));
 
             ImageData img;
@@ -1136,7 +1136,7 @@ protected:
                 img.pixels[i * 4 + 0] = 11; img.pixels[i * 4 + 1] = 22;
                 img.pixels[i * 4 + 2] = 33; img.pixels[i * 4 + 3] = 255;
             }
-            auto tex = backend.CreateTexture(img);
+            auto tex = renderer.CreateTexture(img);
 
             GpuDrawParams tp;
             tp.texture0 = tex.get();
@@ -1147,7 +1147,7 @@ protected:
             std::vector<Color> afterQ(4 * 4, Color(0, 0, 0, 0));
             dev.Clear(Color(0, 255, 0, 255));
             dev.GetBackBufferData(&centerRegion28, beforeQ.data(), 0, static_cast<int>(beforeQ.size()));
-            backend.DrawPrimitivesEx(*vbTex, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+            renderer.DrawPrimitivesEx(*vbTex, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                      Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, tp);
             dev.GetBackBufferData(&centerRegion28, afterQ.data(), 0, static_cast<int>(afterQ.size()));
 
@@ -1159,16 +1159,16 @@ protected:
                 if (p.getRProperty() != 11 || p.getGProperty() != 22 || p.getBProperty() != 33 || p.getAProperty() != 255)
                     afterIsTexColor = false;
             check(beforeIsGreen && afterIsTexColor,
-                  "D3D11GraphicsBackend::DrawPrimitivesEx(): real textured3d draw samples the exact "
+                  "D3D11Renderer::DrawPrimitivesEx(): real textured3d draw samples the exact "
                   "texture color (diffuseColor=white) over the Clear() background (plan_dx.md DX-62)");
 
             // Indexed path, same textured3d draw -- proves DrawIndexedPrimitivesEx shares the same
             // real pipeline (DrawPrimitivesExImpl), not just the non-indexed entry point.
             static const uint16_t kTriTexIdx[3] = {0, 1, 2};
-            auto ibTex = backend.CreateIndexBuffer16(3);
+            auto ibTex = renderer.CreateIndexBuffer16(3);
             ibTex->SetData16(kTriTexIdx, 3);
             dev.Clear(Color(0, 255, 0, 255));
-            backend.DrawIndexedPrimitivesEx(*vbTex, *ibTex, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+            renderer.DrawIndexedPrimitivesEx(*vbTex, *ibTex, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                             Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, tp);
             std::vector<Color> afterQIdx(4 * 4, Color(0, 0, 0, 0));
             dev.GetBackBufferData(&centerRegion28, afterQIdx.data(), 0, static_cast<int>(afterQIdx.size()));
@@ -1177,7 +1177,7 @@ protected:
                 if (p.getRProperty() != 11 || p.getGProperty() != 22 || p.getBProperty() != 33 || p.getAProperty() != 255)
                     afterQIdxIsTexColor = false;
             check(afterQIdxIsTexColor,
-                  "D3D11GraphicsBackend::DrawIndexedPrimitivesEx(): indexed textured3d draw shares "
+                  "D3D11Renderer::DrawIndexedPrimitivesEx(): indexed textured3d draw shares "
                   "the same real pipeline and samples the exact texture color");
 
             // colored_textured3d (stride 24): a white texture tinted by an exact vertex color,
@@ -1188,13 +1188,13 @@ protected:
             kTriColTex[0] = { -1.0f, -1.0f, 0.0f, kVertColor, 0.0f, 1.0f };
             kTriColTex[1] = {  3.0f, -1.0f, 0.0f, kVertColor, 2.0f, 1.0f };
             kTriColTex[2] = { -1.0f,  3.0f, 0.0f, kVertColor, 0.0f, -1.0f };
-            auto vbColTex = backend.CreateVertexBuffer(3);
+            auto vbColTex = renderer.CreateVertexBuffer(3);
             vbColTex->SetData(kTriColTex, 3, sizeof(VPCT));
 
             ImageData whiteImg;
             whiteImg.width = 2; whiteImg.height = 2; whiteImg.mipLevels = 1;
             whiteImg.pixels.assign(2 * 2 * 4, 255);
-            auto whiteTex = backend.CreateTexture(whiteImg);
+            auto whiteTex = renderer.CreateTexture(whiteImg);
 
             GpuDrawParams ctp;
             ctp.texture0 = whiteTex.get();
@@ -1202,7 +1202,7 @@ protected:
             ctp.vertexColorEnabled = true;
 
             dev.Clear(Color(0, 255, 0, 255));
-            backend.DrawPrimitivesEx(*vbColTex, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+            renderer.DrawPrimitivesEx(*vbColTex, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                      Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, ctp);
             std::vector<Color> afterCT(4 * 4, Color(0, 0, 0, 0));
             dev.GetBackBufferData(&centerRegion28, afterCT.data(), 0, static_cast<int>(afterCT.size()));
@@ -1211,7 +1211,7 @@ protected:
                 if (p.getRProperty() != 80 || p.getGProperty() != 160 || p.getBProperty() != 240 || p.getAProperty() != 255)
                     afterCTIsVertColor = false;
             check(afterCTIsVertColor,
-                  "D3D11GraphicsBackend::DrawPrimitivesEx(): real colored_textured3d draw multiplies "
+                  "D3D11Renderer::DrawPrimitivesEx(): real colored_textured3d draw multiplies "
                   "the exact vertex color through a white texture (plan_dx.md DX-62)");
 
             // DX-137: dedicated fog on/off discriminating test for colored_textured3d -- same
@@ -1222,40 +1222,40 @@ protected:
                 kTriColTexFog[0] = { -1.0f, -1.0f, 0.5f, kVertColor, 0.0f, 1.0f };
                 kTriColTexFog[1] = {  3.0f, -1.0f, 0.5f, kVertColor, 2.0f, 1.0f };
                 kTriColTexFog[2] = { -1.0f,  3.0f, 0.5f, kVertColor, 0.0f, -1.0f };
-                auto vbColTexFog = backend.CreateVertexBuffer(3);
+                auto vbColTexFog = renderer.CreateVertexBuffer(3);
                 vbColTexFog->SetData(kTriColTexFog, 3, sizeof(VPCT));
 
                 const Microsoft::Xna::Framework::Rectangle colTexFogRegion(30, 30, 1, 1);
                 ctp.fogEnabled = false;
                 ctp.fogColor[0] = 0.0f; ctp.fogColor[1] = 1.0f; ctp.fogColor[2] = 0.0f;
-                // REMED-GFX-061: direct-backend fixtures obey the same reachable-state invariant
+                // REMED-GFX-061: direct-renderer fixtures obey the same reachable-state invariant
                 // as public stock effects: disabled fog is encoded by an all-zero vector.
                 dev.Clear(Color(10, 10, 10, 255));
-                backend.DrawPrimitivesEx(*vbColTexFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                renderer.DrawPrimitivesEx(*vbColTexFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                          Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, ctp);
                 Color colTexFogOffPixel(0, 0, 0, 0);
                 dev.GetBackBufferData(&colTexFogRegion, &colTexFogOffPixel, 0, 1);
                 check(colTexFogOffPixel.getRProperty() == 80 && colTexFogOffPixel.getGProperty() == 160 &&
                       colTexFogOffPixel.getBProperty() == 240,
-                      "D3D11GraphicsBackend::DrawPrimitivesEx(): colored_textured3d fogEnabled=false "
+                      "D3D11Renderer::DrawPrimitivesEx(): colored_textured3d fogEnabled=false "
                       "leaves the exact vertex*texture color unblended (plan_dx.md DX-137)");
 
                 ctp.fogEnabled = true;
                 ctp.fogVector[2] = 2.0f; // eye-space Z=0.5 -> dot=1 -> fully fogged
                 dev.Clear(Color(10, 10, 10, 255));
-                backend.DrawPrimitivesEx(*vbColTexFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                renderer.DrawPrimitivesEx(*vbColTexFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                          Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, ctp);
                 Color colTexFogOnPixel(0, 0, 0, 0);
                 dev.GetBackBufferData(&colTexFogRegion, &colTexFogOnPixel, 0, 1);
                 check(colTexFogOnPixel.getRProperty() == 0 && colTexFogOnPixel.getGProperty() == 255 &&
                       colTexFogOnPixel.getBProperty() == 0,
-                      "D3D11GraphicsBackend::DrawPrimitivesEx(): colored_textured3d fogEnabled=true "
+                      "D3D11Renderer::DrawPrimitivesEx(): colored_textured3d fogEnabled=true "
                       "with Z at FogEnd genuinely blends all the way to the exact FogColor (plan_dx.md DX-137)");
             }
 
             // DX-137: dedicated fog on/off discriminating test for textured3d -- a representative
             // variant of the 7 fog-capable non-colored3d variants (chosen for its simple, already-
-            // proven fixture above; a full 7-variant x 2-backend sweep is out of this task's own
+            // proven fixture above; a full 7-variant x 2-renderer sweep is out of this task's own
             // scope, documented honestly rather than silently partial). Same Z-at-FogEnd
             // methodology DX-69/DX-81's own colored3d fog test already established -- needs its OWN
             // vertex buffer at Z=0.5 (fogEnd), not the shared vbTex (Z=0, which gives fogFactor=1,
@@ -1265,32 +1265,32 @@ protected:
                 { 3.0f, -1.0f, 0.5f, 2.0f, 1.0f},
                 {-1.0f,  3.0f, 0.5f, 0.0f, -1.0f},
             };
-            auto vbTexFog = backend.CreateVertexBuffer(3);
+            auto vbTexFog = renderer.CreateVertexBuffer(3);
             vbTexFog->SetData(kTriTexFog, 3, sizeof(VPT));
 
             const Microsoft::Xna::Framework::Rectangle texFogRegion(30, 30, 1, 1);
             tp.fogEnabled = false;
             tp.fogColor[0] = 0.0f; tp.fogColor[1] = 1.0f; tp.fogColor[2] = 0.0f;
             dev.Clear(Color(10, 10, 10, 255));
-            backend.DrawPrimitivesEx(*vbTexFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+            renderer.DrawPrimitivesEx(*vbTexFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                      Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, tp);
             Color texFogOffPixel(0, 0, 0, 0);
             dev.GetBackBufferData(&texFogRegion, &texFogOffPixel, 0, 1);
             check(texFogOffPixel.getRProperty() == 11 && texFogOffPixel.getGProperty() == 22 &&
                   texFogOffPixel.getBProperty() == 33,
-                  "D3D11GraphicsBackend::DrawPrimitivesEx(): textured3d fogEnabled=false leaves the "
+                  "D3D11Renderer::DrawPrimitivesEx(): textured3d fogEnabled=false leaves the "
                   "exact sampled texture color unblended (plan_dx.md DX-137)");
 
             tp.fogEnabled = true;
             tp.fogVector[2] = 2.0f;
             dev.Clear(Color(10, 10, 10, 255));
-            backend.DrawPrimitivesEx(*vbTexFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+            renderer.DrawPrimitivesEx(*vbTexFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                      Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, tp);
             Color texFogOnPixel(0, 0, 0, 0);
             dev.GetBackBufferData(&texFogRegion, &texFogOnPixel, 0, 1);
             check(texFogOnPixel.getRProperty() == 0 && texFogOnPixel.getGProperty() == 255 &&
                   texFogOnPixel.getBProperty() == 0,
-                  "D3D11GraphicsBackend::DrawPrimitivesEx(): textured3d fogEnabled=true with Z at "
+                  "D3D11Renderer::DrawPrimitivesEx(): textured3d fogEnabled=true with Z at "
                   "FogEnd genuinely blends all the way to the exact FogColor, distinctly different "
                   "from the fogEnabled=false case above (plan_dx.md DX-137)");
         }
@@ -1305,7 +1305,7 @@ protected:
                 { 3.0f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 2.0f, 1.0f},
                 {-1.0f,  3.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, -1.0f},
             };
-            auto vbLit = backend.CreateVertexBuffer(3);
+            auto vbLit = renderer.CreateVertexBuffer(3);
             vbLit->SetData(kTriLit, 3, sizeof(VPNT));
 
             ImageData img;
@@ -1316,7 +1316,7 @@ protected:
                 img.pixels[i * 4 + 0] = 44; img.pixels[i * 4 + 1] = 55;
                 img.pixels[i * 4 + 2] = 66; img.pixels[i * 4 + 3] = 255;
             }
-            auto tex = backend.CreateTexture(img);
+            auto tex = renderer.CreateTexture(img);
 
             GpuDrawParams unlitP;
             unlitP.texture0 = tex.get();
@@ -1324,7 +1324,7 @@ protected:
             unlitP.lightingEnabled = false;
 
             dev.Clear(Color(0, 0, 255, 255));
-            backend.DrawPrimitivesEx(*vbLit, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+            renderer.DrawPrimitivesEx(*vbLit, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                      Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, unlitP);
             std::vector<Color> unlitResult(4 * 4, Color(0, 0, 0, 0));
             dev.GetBackBufferData(&centerRegion28, unlitResult.data(), 0, static_cast<int>(unlitResult.size()));
@@ -1333,7 +1333,7 @@ protected:
                 if (p.getRProperty() != 44 || p.getGProperty() != 55 || p.getBProperty() != 66 || p.getAProperty() != 255)
                     unlitIsTexColor = false;
             check(unlitIsTexColor,
-                  "D3D11GraphicsBackend::DrawPrimitivesEx(): real lit_textured3d unlit branch samples "
+                  "D3D11Renderer::DrawPrimitivesEx(): real lit_textured3d unlit branch samples "
                   "diffuseColor*texture exactly (plan_dx.md DX-63)");
 
             GpuDrawParams litP = unlitP;
@@ -1342,7 +1342,7 @@ protected:
             litP.specularColor[0] = 0.0f; litP.specularColor[1] = 0.0f; litP.specularColor[2] = 0.0f;
 
             dev.Clear(Color(0, 0, 255, 255));
-            backend.DrawPrimitivesEx(*vbLit, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+            renderer.DrawPrimitivesEx(*vbLit, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                      Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, litP);
             std::vector<Color> litResult(4 * 4, Color(0, 0, 0, 0));
             dev.GetBackBufferData(&centerRegion28, litResult.data(), 0, static_cast<int>(litResult.size()));
@@ -1357,7 +1357,7 @@ protected:
                 if (sameAsUnlit || sameAsBackground) litDiffersFromUnlitAndBackground = false;
             }
             check(litDiffersFromUnlitAndBackground,
-                  "D3D11GraphicsBackend::DrawPrimitivesEx(): real lit_textured3d lit branch genuinely "
+                  "D3D11Renderer::DrawPrimitivesEx(): real lit_textured3d lit branch genuinely "
                   "computes a different color than both the unlit result and the Clear() background "
                   "(plan_dx.md DX-63)");
 
@@ -1370,7 +1370,7 @@ protected:
                     { 3.0f, -1.0f, 0.5f, 0.0f, 0.0f, 1.0f, 2.0f, 1.0f},
                     {-1.0f,  3.0f, 0.5f, 0.0f, 0.0f, 1.0f, 0.0f, -1.0f},
                 };
-                auto vbLitFog = backend.CreateVertexBuffer(3);
+                auto vbLitFog = renderer.CreateVertexBuffer(3);
                 vbLitFog->SetData(kTriLitFog, 3, sizeof(VPNT));
 
                 GpuDrawParams litFogP = unlitP;
@@ -1378,25 +1378,25 @@ protected:
                 litFogP.fogEnabled = false;
                 litFogP.fogColor[0] = 0.0f; litFogP.fogColor[1] = 1.0f; litFogP.fogColor[2] = 0.0f;
                 dev.Clear(Color(10, 10, 10, 255));
-                backend.DrawPrimitivesEx(*vbLitFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                renderer.DrawPrimitivesEx(*vbLitFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                          Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, litFogP);
                 Color litFogOffPixel(0, 0, 0, 0);
                 dev.GetBackBufferData(&litFogRegion, &litFogOffPixel, 0, 1);
                 check(litFogOffPixel.getRProperty() == 44 && litFogOffPixel.getGProperty() == 55 &&
                       litFogOffPixel.getBProperty() == 66,
-                      "D3D11GraphicsBackend::DrawPrimitivesEx(): lit_textured3d fogEnabled=false leaves "
+                      "D3D11Renderer::DrawPrimitivesEx(): lit_textured3d fogEnabled=false leaves "
                       "the exact unlit texture color unblended (plan_dx.md DX-137)");
 
                 litFogP.fogEnabled = true;
                 litFogP.fogVector[2] = 2.0f;
                 dev.Clear(Color(10, 10, 10, 255));
-                backend.DrawPrimitivesEx(*vbLitFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                renderer.DrawPrimitivesEx(*vbLitFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                          Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, litFogP);
                 Color litFogOnPixel(0, 0, 0, 0);
                 dev.GetBackBufferData(&litFogRegion, &litFogOnPixel, 0, 1);
                 check(litFogOnPixel.getRProperty() == 0 && litFogOnPixel.getGProperty() == 255 &&
                       litFogOnPixel.getBProperty() == 0,
-                      "D3D11GraphicsBackend::DrawPrimitivesEx(): lit_textured3d fogEnabled=true with Z "
+                      "D3D11Renderer::DrawPrimitivesEx(): lit_textured3d fogEnabled=true with Z "
                       "at FogEnd genuinely blends all the way to the exact FogColor (plan_dx.md DX-137)");
             }
         }
@@ -1423,13 +1423,13 @@ protected:
                 { 1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f},
                 { 1.0f,  1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f},
             };
-            auto vbPPL = backend.CreateVertexBuffer(6);
+            auto vbPPL = renderer.CreateVertexBuffer(6);
             vbPPL->SetData(kQuad, 6, sizeof(VPNT));
 
             ImageData whiteImg;
             whiteImg.width = 1; whiteImg.height = 1; whiteImg.mipLevels = 1;
             whiteImg.pixels = {255, 255, 255, 255};
-            auto whiteTex = backend.CreateTexture(whiteImg);
+            auto whiteTex = renderer.CreateTexture(whiteImg);
 
             GpuDrawParams pplP;
             pplP.texture0 = whiteTex.get();
@@ -1452,7 +1452,7 @@ protected:
 
             pplP.preferPerPixelLighting = false;
             dev.Clear(Color(0, 0, 0, 255));
-            backend.DrawPrimitivesEx(*vbPPL, Matrix::getIdentityProperty(), pplView, pplProj,
+            renderer.DrawPrimitivesEx(*vbPPL, Matrix::getIdentityProperty(), pplView, pplProj,
                                      PrimitiveType::TriangleList, 2, pplP);
             Color vertexLit(0, 0, 0, 0);
             dev.GetBackBufferData(&centerPixel, &vertexLit, 0, 1);
@@ -1460,13 +1460,13 @@ protected:
                                      std::abs(vertexLit.getGProperty() - 127) <= 10 &&
                                      std::abs(vertexLit.getBProperty() - 127) <= 10;
             check(vertexLitOk,
-                  "D3D11GraphicsBackend::DrawPrimitivesEx(): preferPerPixelLighting=false (XNA's "
+                  "D3D11Renderer::DrawPrimitivesEx(): preferPerPixelLighting=false (XNA's "
                   "real default) genuinely computes the Gouraud-averaged specular result, ~127 "
                   "(Task 1106, plan_graphics.md Phase 80)");
 
             pplP.preferPerPixelLighting = true;
             dev.Clear(Color(0, 0, 0, 255));
-            backend.DrawPrimitivesEx(*vbPPL, Matrix::getIdentityProperty(), pplView, pplProj,
+            renderer.DrawPrimitivesEx(*vbPPL, Matrix::getIdentityProperty(), pplView, pplProj,
                                      PrimitiveType::TriangleList, 2, pplP);
             Color pixelLit(0, 0, 0, 0);
             dev.GetBackBufferData(&centerPixel, &pixelLit, 0, 1);
@@ -1474,12 +1474,12 @@ protected:
                                     std::abs(pixelLit.getGProperty() - 155) <= 10 &&
                                     std::abs(pixelLit.getBProperty() - 155) <= 10;
             check(pixelLitOk,
-                  "D3D11GraphicsBackend::DrawPrimitivesEx(): preferPerPixelLighting=true genuinely "
+                  "D3D11Renderer::DrawPrimitivesEx(): preferPerPixelLighting=true genuinely "
                   "computes a fresh per-fragment specular result, ~155 (Task 1106, plan_graphics.md "
                   "Phase 80)");
 
             check(vertexLit.getRProperty() != pixelLit.getRProperty(),
-                  "D3D11GraphicsBackend::DrawPrimitivesEx(): preferPerPixelLighting is a real "
+                  "D3D11Renderer::DrawPrimitivesEx(): preferPerPixelLighting is a real "
                   "dispatch selector, not a decorative no-op -- the two draws above produce "
                   "genuinely different pixel values (Task 1106, plan_graphics.md Phase 80)");
         }
@@ -1493,7 +1493,7 @@ protected:
                 { 3.0f, -1.0f, 0.0f, 2.0f, 1.0f},
                 {-1.0f,  3.0f, 0.0f, 0.0f, -1.0f},
             };
-            auto vbAT = backend.CreateVertexBuffer(3);
+            auto vbAT = renderer.CreateVertexBuffer(3);
             vbAT->SetData(kTriAT, 3, sizeof(VPT));
 
             ImageData img;
@@ -1504,7 +1504,7 @@ protected:
                 img.pixels[i * 4 + 0] = 200; img.pixels[i * 4 + 1] = 100;
                 img.pixels[i * 4 + 2] = 50;  img.pixels[i * 4 + 3] = 128; // alpha=128/255 ~ 0.502
             }
-            auto tex = backend.CreateTexture(img);
+            auto tex = renderer.CreateTexture(img);
 
             GpuDrawParams atp;
             atp.texture0 = tex.get();
@@ -1517,7 +1517,7 @@ protected:
 
             // Sub-check 1: alpha=128/255 is NOT < 0.5 -> fails -> discard -> background survives.
             dev.Clear(Color(0, 255, 0, 255));
-            backend.DrawPrimitivesEx(*vbAT, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+            renderer.DrawPrimitivesEx(*vbAT, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                      Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, atp);
             std::vector<Color> discardResult(4 * 4, Color(0, 0, 0, 0));
             dev.GetBackBufferData(&centerRegion28, discardResult.data(), 0, static_cast<int>(discardResult.size()));
@@ -1526,7 +1526,7 @@ protected:
                 if (p.getRProperty() != 0 || p.getGProperty() != 255 || p.getBProperty() != 0 || p.getAProperty() != 255)
                     stillGreen = false;
             check(stillGreen,
-                  "D3D11GraphicsBackend::DrawPrimitivesEx(): real alpha_test3d discard() genuinely "
+                  "D3D11Renderer::DrawPrimitivesEx(): real alpha_test3d discard() genuinely "
                   "drops a failing pixel, leaving the Clear() background untouched (plan_dx.md DX-64)");
 
             // Sub-check 2: replace the texture's alpha with 64/255 (< 0.5) -> passes -> drawn exactly.
@@ -1539,7 +1539,7 @@ protected:
             tex->UpdatePixelsLevel(0, passPixels.data(), 2, 2);
 
             dev.Clear(Color(0, 255, 0, 255));
-            backend.DrawPrimitivesEx(*vbAT, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+            renderer.DrawPrimitivesEx(*vbAT, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                      Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, atp);
             std::vector<Color> passResult(4 * 4, Color(0, 0, 0, 0));
             dev.GetBackBufferData(&centerRegion28, passResult.data(), 0, static_cast<int>(passResult.size()));
@@ -1548,7 +1548,7 @@ protected:
                 if (p.getRProperty() != 200 || p.getGProperty() != 100 || p.getBProperty() != 50 || p.getAProperty() != 64)
                     passIsExact = false;
             check(passIsExact,
-                  "D3D11GraphicsBackend::DrawPrimitivesEx(): real alpha_test3d draws the exact texture "
+                  "D3D11Renderer::DrawPrimitivesEx(): real alpha_test3d draws the exact texture "
                   "color (including its own alpha byte) when the test passes (plan_dx.md DX-64)");
 
             // DX-137: dedicated fog on/off discriminating test for alpha_test3d -- reuses the
@@ -1562,7 +1562,7 @@ protected:
                     { 3.0f, -1.0f, 0.5f, 2.0f, 1.0f},
                     {-1.0f,  3.0f, 0.5f, 0.0f, -1.0f},
                 };
-                auto vbATFog = backend.CreateVertexBuffer(3);
+                auto vbATFog = renderer.CreateVertexBuffer(3);
                 vbATFog->SetData(kTriATFog, 3, sizeof(VPT));
 
                 const Microsoft::Xna::Framework::Rectangle atFogRegion(30, 30, 1, 1);
@@ -1571,25 +1571,25 @@ protected:
                 // Every D3DCommon stock shader now uses the same authoritative zero-vector
                 // disabled encoding that AlphaTestEffect already used.
                 dev.Clear(Color(10, 10, 10, 255));
-                backend.DrawPrimitivesEx(*vbATFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                renderer.DrawPrimitivesEx(*vbATFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                          Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, atp);
                 Color atFogOffPixel(0, 0, 0, 0);
                 dev.GetBackBufferData(&atFogRegion, &atFogOffPixel, 0, 1);
                 check(atFogOffPixel.getRProperty() == 200 && atFogOffPixel.getGProperty() == 100 &&
                       atFogOffPixel.getBProperty() == 50,
-                      "D3D11GraphicsBackend::DrawPrimitivesEx(): alpha_test3d fogEnabled=false leaves "
+                      "D3D11Renderer::DrawPrimitivesEx(): alpha_test3d fogEnabled=false leaves "
                       "the exact passing texture color unblended (plan_dx.md DX-137)");
 
                 atp.fogEnabled = true;
                 atp.fogVector[2] = 2.0f;  // REMED-GFX-055: view-space fog vector (see colored_textured3d DX-137 above)
                 dev.Clear(Color(10, 10, 10, 255));
-                backend.DrawPrimitivesEx(*vbATFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                renderer.DrawPrimitivesEx(*vbATFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                          Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, atp);
                 Color atFogOnPixel(0, 0, 0, 0);
                 dev.GetBackBufferData(&atFogRegion, &atFogOnPixel, 0, 1);
                 check(atFogOnPixel.getRProperty() == 0 && atFogOnPixel.getGProperty() == 255 &&
                       atFogOnPixel.getBProperty() == 0,
-                      "D3D11GraphicsBackend::DrawPrimitivesEx(): alpha_test3d fogEnabled=true with Z at "
+                      "D3D11Renderer::DrawPrimitivesEx(): alpha_test3d fogEnabled=true with Z at "
                       "FogEnd genuinely blends all the way to the exact FogColor, and the passing "
                       "fragment survives the alpha test to reach the fog blend at all (plan_dx.md DX-137)");
             }
@@ -1609,13 +1609,13 @@ protected:
                     { 3.0f, -1.0f, 0.0f, kRedVC, 2.0f, 1.0f},
                     {-1.0f,  3.0f, 0.0f, kRedVC, 0.0f, -1.0f},
                 };
-                auto vbAlphaColor = backend.CreateVertexBuffer(3);
+                auto vbAlphaColor = renderer.CreateVertexBuffer(3);
                 vbAlphaColor->SetData(kTriAlphaColor, 3, sizeof(VPCT));
 
                 ImageData whiteImgAC;
                 whiteImgAC.width = 2; whiteImgAC.height = 2; whiteImgAC.mipLevels = 1;
                 whiteImgAC.pixels.assign(2 * 2 * 4, 255);
-                auto whiteTexAC = backend.CreateTexture(whiteImgAC);
+                auto whiteTexAC = renderer.CreateTexture(whiteImgAC);
 
                 GpuDrawParams acp;
                 acp.texture0 = whiteTexAC.get();
@@ -1630,7 +1630,7 @@ protected:
 
                 acp.vertexColorEnabled = true;
                 dev.Clear(Color(0, 0, 255, 255));
-                backend.DrawPrimitivesEx(*vbAlphaColor, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                renderer.DrawPrimitivesEx(*vbAlphaColor, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                          Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, acp);
                 std::vector<Color> acOnResult(4 * 4, Color(0, 0, 0, 0));
                 dev.GetBackBufferData(&centerRegion28, acOnResult.data(), 0, static_cast<int>(acOnResult.size()));
@@ -1639,13 +1639,13 @@ protected:
                     if (p.getRProperty() != 255 || p.getGProperty() != 0 || p.getBProperty() != 0)
                         acOnIsRed = false;
                 check(acOnIsRed,
-                      "D3D11GraphicsBackend::DrawPrimitivesEx(): real alpha_test_colored3d (stride 24) "
+                      "D3D11Renderer::DrawPrimitivesEx(): real alpha_test_colored3d (stride 24) "
                       "with VertexColorEnabled=true multiplies the exact vertex color (red) through a "
                       "white texture (plan_dx.md DX-136)");
 
                 acp.vertexColorEnabled = false;
                 dev.Clear(Color(0, 0, 255, 255));
-                backend.DrawPrimitivesEx(*vbAlphaColor, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                renderer.DrawPrimitivesEx(*vbAlphaColor, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                          Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, acp);
                 std::vector<Color> acOffResult(4 * 4, Color(0, 0, 0, 0));
                 dev.GetBackBufferData(&centerRegion28, acOffResult.data(), 0, static_cast<int>(acOffResult.size()));
@@ -1654,7 +1654,7 @@ protected:
                     if (p.getRProperty() != 255 || p.getGProperty() != 255 || p.getBProperty() != 255)
                         acOffIsWhite = false;
                 check(acOffIsWhite,
-                      "D3D11GraphicsBackend::DrawPrimitivesEx(): the SAME vertex buffer with "
+                      "D3D11Renderer::DrawPrimitivesEx(): the SAME vertex buffer with "
                       "VertexColorEnabled=false genuinely ignores its vertex color -- only "
                       "DiffuseColor (white) survives, distinctly different from the true case above "
                       "(plan_dx.md DX-136)");
@@ -1674,7 +1674,7 @@ protected:
                 whiteTexAC->UpdatePixelsLevel(0, highAlphaPixels.data(), 2, 2);
                 acp.vertexColorEnabled = true;
                 dev.Clear(Color(0, 255, 0, 255));
-                backend.DrawPrimitivesEx(*vbAlphaColor, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                renderer.DrawPrimitivesEx(*vbAlphaColor, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                          Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, acp);
                 std::vector<Color> acDiscardResult(4 * 4, Color(0, 0, 0, 0));
                 dev.GetBackBufferData(&centerRegion28, acDiscardResult.data(), 0, static_cast<int>(acDiscardResult.size()));
@@ -1683,7 +1683,7 @@ protected:
                     if (p.getRProperty() != 0 || p.getGProperty() != 255 || p.getBProperty() != 0)
                         acDiscardIsGreen = false;
                 check(acDiscardIsGreen,
-                      "D3D11GraphicsBackend::DrawPrimitivesEx(): alpha_test_colored3d's alpha-test "
+                      "D3D11Renderer::DrawPrimitivesEx(): alpha_test_colored3d's alpha-test "
                       "discard logic still genuinely works on the new stride-24/vertex-color path -- "
                       "a failing alpha drops the pixel, leaving the Clear() background untouched "
                       "(plan_dx.md DX-136)");
@@ -1694,8 +1694,8 @@ protected:
         // textures are uniform 2x2 so exact texel values are unaffected by bilinear vs. point
         // sampling. tex1=(50,60,70,200), tex2=white -> expected (100,120,140,200).
         {
-            backend.ApplySamplerState(0, 1 /*TextureFilter::Point*/, 0, 0, 1);
-            backend.ApplySamplerState(1, 1 /*TextureFilter::Point*/, 0, 0, 1);
+            renderer.ApplySamplerState(0, 1 /*TextureFilter::Point*/, 0, 0, 1);
+            renderer.ApplySamplerState(1, 1 /*TextureFilter::Point*/, 0, 0, 1);
 
             struct VPT2 { float x, y, z; float u, v; };
             static const VPT2 kTriDT[3] = {
@@ -1703,7 +1703,7 @@ protected:
                 { 3.0f, -1.0f, 0.0f, 2.0f, 1.0f},
                 {-1.0f,  3.0f, 0.0f, 0.0f, -1.0f},
             };
-            auto vbDT = backend.CreateVertexBuffer(3);
+            auto vbDT = renderer.CreateVertexBuffer(3);
             vbDT->SetData(kTriDT, 3, sizeof(VPT2));
 
             ImageData img1;
@@ -1714,12 +1714,12 @@ protected:
                 img1.pixels[i * 4 + 0] = 50; img1.pixels[i * 4 + 1] = 60;
                 img1.pixels[i * 4 + 2] = 70; img1.pixels[i * 4 + 3] = 200;
             }
-            auto tex1 = backend.CreateTexture(img1);
+            auto tex1 = renderer.CreateTexture(img1);
 
             ImageData img2;
             img2.width = 2; img2.height = 2; img2.mipLevels = 1;
             img2.pixels.assign(2 * 2 * 4, 255);
-            auto tex2 = backend.CreateTexture(img2);
+            auto tex2 = renderer.CreateTexture(img2);
 
             GpuDrawParams dtp;
             dtp.texture0 = tex1.get();
@@ -1728,7 +1728,7 @@ protected:
             dtp.textureEnabled = true;
 
             dev.Clear(Color(0, 0, 255, 255));
-            backend.DrawPrimitivesEx(*vbDT, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+            renderer.DrawPrimitivesEx(*vbDT, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                      Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, dtp);
             std::vector<Color> dtResult(4 * 4, Color(0, 0, 0, 0));
             dev.GetBackBufferData(&centerRegion28, dtResult.data(), 0, static_cast<int>(dtResult.size()));
@@ -1737,7 +1737,7 @@ protected:
                 if (p.getRProperty() != 100 || p.getGProperty() != 120 || p.getBProperty() != 140 || p.getAProperty() != 200)
                     dtIsExact = false;
             check(dtIsExact,
-                  "D3D11GraphicsBackend::DrawPrimitivesEx(): real dual_texture3d combines both real "
+                  "D3D11Renderer::DrawPrimitivesEx(): real dual_texture3d combines both real "
                   "SRVs (tex1.rgb*2 * tex2) to the exact expected byte result (plan_dx.md DX-65)");
 
             // DX-137: dedicated fog on/off discriminating test for dual_texture3d -- reuses this
@@ -1749,32 +1749,32 @@ protected:
                     { 3.0f, -1.0f, 0.5f, 2.0f, 1.0f},
                     {-1.0f,  3.0f, 0.5f, 0.0f, -1.0f},
                 };
-                auto vbDTFog = backend.CreateVertexBuffer(3);
+                auto vbDTFog = renderer.CreateVertexBuffer(3);
                 vbDTFog->SetData(kTriDTFog, 3, sizeof(VPT2));
 
                 const Microsoft::Xna::Framework::Rectangle dtFogRegion(30, 30, 1, 1);
                 dtp.fogEnabled = false;
                 dtp.fogColor[0] = 0.0f; dtp.fogColor[1] = 1.0f; dtp.fogColor[2] = 0.0f;
                 dev.Clear(Color(10, 10, 10, 255));
-                backend.DrawPrimitivesEx(*vbDTFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                renderer.DrawPrimitivesEx(*vbDTFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                          Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, dtp);
                 Color dtFogOffPixel(0, 0, 0, 0);
                 dev.GetBackBufferData(&dtFogRegion, &dtFogOffPixel, 0, 1);
                 check(dtFogOffPixel.getRProperty() == 100 && dtFogOffPixel.getGProperty() == 120 &&
                       dtFogOffPixel.getBProperty() == 140,
-                      "D3D11GraphicsBackend::DrawPrimitivesEx(): dual_texture3d fogEnabled=false leaves "
+                      "D3D11Renderer::DrawPrimitivesEx(): dual_texture3d fogEnabled=false leaves "
                       "the exact combined-texture color unblended (plan_dx.md DX-137)");
 
                 dtp.fogEnabled = true;
                 dtp.fogVector[2] = 2.0f;
                 dev.Clear(Color(10, 10, 10, 255));
-                backend.DrawPrimitivesEx(*vbDTFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                renderer.DrawPrimitivesEx(*vbDTFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                          Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, dtp);
                 Color dtFogOnPixel(0, 0, 0, 0);
                 dev.GetBackBufferData(&dtFogRegion, &dtFogOnPixel, 0, 1);
                 check(dtFogOnPixel.getRProperty() == 0 && dtFogOnPixel.getGProperty() == 255 &&
                       dtFogOnPixel.getBProperty() == 0,
-                      "D3D11GraphicsBackend::DrawPrimitivesEx(): dual_texture3d fogEnabled=true with Z "
+                      "D3D11Renderer::DrawPrimitivesEx(): dual_texture3d fogEnabled=true with Z "
                       "at FogEnd genuinely blends all the way to the exact FogColor (plan_dx.md DX-137)");
             }
         }
@@ -1791,15 +1791,15 @@ protected:
                 { 3.0f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 2.0f, 1.0f},
                 {-1.0f,  3.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, -1.0f},
             };
-            auto vbEnv = backend.CreateVertexBuffer(3);
+            auto vbEnv = renderer.CreateVertexBuffer(3);
             vbEnv->SetData(kTriEnv, 3, sizeof(VPNTE));
 
             ImageData whiteImg;
             whiteImg.width = 2; whiteImg.height = 2; whiteImg.mipLevels = 1;
             whiteImg.pixels.assign(2 * 2 * 4, 255);
-            auto whiteTex = backend.CreateTexture(whiteImg);
+            auto whiteTex = renderer.CreateTexture(whiteImg);
 
-            auto cube = backend.CreateTextureCube(8, false, 0);
+            auto cube = renderer.CreateTextureCube(8, false, 0);
             std::vector<uint8_t> blackFace(8 * 8 * 4, 0);
             std::vector<uint8_t> negZFace(8 * 8 * 4);
             for (int i = 0; i < 8 * 8; ++i)
@@ -1822,7 +1822,7 @@ protected:
             ep.eyePositionWorld[0] = 0.0f; ep.eyePositionWorld[1] = 0.0f; ep.eyePositionWorld[2] = -10.0f;
 
             dev.Clear(Color(0, 0, 255, 255));
-            backend.DrawPrimitivesEx(*vbEnv, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+            renderer.DrawPrimitivesEx(*vbEnv, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                      Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, ep);
             std::vector<Color> envResult(4 * 4, Color(0, 0, 0, 0));
             dev.GetBackBufferData(&centerRegion28, envResult.data(), 0, static_cast<int>(envResult.size()));
@@ -1831,7 +1831,7 @@ protected:
                 if (p.getRProperty() != 10 || p.getGProperty() != 20 || p.getBProperty() != 30 || p.getAProperty() != 255)
                     envIsExact = false;
             check(envIsExact,
-                  "D3D11GraphicsBackend::DrawPrimitivesEx(): real env_map3d samples the exact "
+                  "D3D11Renderer::DrawPrimitivesEx(): real env_map3d samples the exact "
                   "distinctly-colored cube face via the real TextureCube SRV (plan_dx.md DX-66)");
 
             // DX-134: same fixture, envMapAmount=0.0 -> blendFactor=0 -> the lerp(baseColor,
@@ -1842,7 +1842,7 @@ protected:
             // graduated, not a fixed always-on reflection.
             ep.envMapAmount = 0.0f;
             dev.Clear(Color(0, 0, 255, 255));
-            backend.DrawPrimitivesEx(*vbEnv, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+            renderer.DrawPrimitivesEx(*vbEnv, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                      Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, ep);
             std::vector<Color> envZeroResult(4 * 4, Color(0, 0, 0, 0));
             dev.GetBackBufferData(&centerRegion28, envZeroResult.data(), 0, static_cast<int>(envZeroResult.size()));
@@ -1851,7 +1851,7 @@ protected:
                 if (p.getRProperty() != 0 || p.getGProperty() != 0 || p.getBProperty() != 0 || p.getAProperty() != 255)
                     envZeroIsExact = false;
             check(envZeroIsExact,
-                  "D3D11GraphicsBackend::DrawPrimitivesEx(): real env_map3d with envMapAmount=0.0 "
+                  "D3D11Renderer::DrawPrimitivesEx(): real env_map3d with envMapAmount=0.0 "
                   "collapses the base-lerp to the pure (unlit) base color, distinctly different from "
                   "the envMapAmount=1.0 reflected-face color above -- proves the lerp is a genuine "
                   "graduated blend control, not just an on/off gate (plan_dx.md DX-134)");
@@ -1866,7 +1866,7 @@ protected:
                     { 3.0f, -1.0f, 0.5f, 0.0f, 0.0f, 1.0f, 2.0f, 1.0f},
                     {-1.0f,  3.0f, 0.5f, 0.0f, 0.0f, 1.0f, 0.0f, -1.0f},
                 };
-                auto vbEnvFog = backend.CreateVertexBuffer(3);
+                auto vbEnvFog = renderer.CreateVertexBuffer(3);
                 vbEnvFog->SetData(kTriEnvFog, 3, sizeof(VPNTE));
 
                 ep.envMapAmount = 1.0f;
@@ -1874,25 +1874,25 @@ protected:
                 ep.fogEnabled = false;
                 ep.fogColor[0] = 0.0f; ep.fogColor[1] = 1.0f; ep.fogColor[2] = 0.0f;
                 dev.Clear(Color(10, 10, 10, 255));
-                backend.DrawPrimitivesEx(*vbEnvFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                renderer.DrawPrimitivesEx(*vbEnvFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                          Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, ep);
                 Color envFogOffPixel(0, 0, 0, 0);
                 dev.GetBackBufferData(&envFogRegion, &envFogOffPixel, 0, 1);
                 check(envFogOffPixel.getRProperty() == 10 && envFogOffPixel.getGProperty() == 20 &&
                       envFogOffPixel.getBProperty() == 30,
-                      "D3D11GraphicsBackend::DrawPrimitivesEx(): env_map3d fogEnabled=false leaves the "
+                      "D3D11Renderer::DrawPrimitivesEx(): env_map3d fogEnabled=false leaves the "
                       "exact reflected cube-face color unblended (plan_dx.md DX-137)");
 
                 ep.fogEnabled = true;
                 ep.fogVector[2] = 2.0f;
                 dev.Clear(Color(10, 10, 10, 255));
-                backend.DrawPrimitivesEx(*vbEnvFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                renderer.DrawPrimitivesEx(*vbEnvFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                          Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, ep);
                 Color envFogOnPixel(0, 0, 0, 0);
                 dev.GetBackBufferData(&envFogRegion, &envFogOnPixel, 0, 1);
                 check(envFogOnPixel.getRProperty() == 0 && envFogOnPixel.getGProperty() == 255 &&
                       envFogOnPixel.getBProperty() == 0,
-                      "D3D11GraphicsBackend::DrawPrimitivesEx(): env_map3d fogEnabled=true with Z at "
+                      "D3D11Renderer::DrawPrimitivesEx(): env_map3d fogEnabled=true with Z at "
                       "FogEnd genuinely blends all the way to the exact FogColor (plan_dx.md DX-137)");
             }
 
@@ -1911,23 +1911,23 @@ protected:
                 ep.light1Dir[0] = 0.0f; ep.light1Dir[1] = 0.0f; ep.light1Dir[2] = -1.0f; // travels -Z -> faces the +Z normal
                 ep.light1Diffuse[0] = 1.0f; ep.light1Diffuse[1] = 0.0f; ep.light1Diffuse[2] = 0.0f;
                 dev.Clear(Color(0, 0, 0, 255));
-                backend.DrawPrimitivesEx(*vbEnv, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                renderer.DrawPrimitivesEx(*vbEnv, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                          Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, ep);
                 Color pp1(0, 0, 0, 0);
                 dev.GetBackBufferData(&ppRegion, &pp1, 0, 1);
                 check(pp1.getRProperty() == 255 && pp1.getGProperty() == 0 && pp1.getBProperty() == 0,
-                      "D3D11GraphicsBackend::DrawPrimitivesEx(): real env_map3d -- DirectionalLight1 "
+                      "D3D11Renderer::DrawPrimitivesEx(): real env_map3d -- DirectionalLight1 "
                       "alone contributes the exact expected red, independent of Light0/Light2 (plan_dx.md DX-149)");
 
                 // PP2: same geometry/light1Dir, but light1Diffuse disabled -> confirms PP1 wasn't a leak.
                 ep.light1Diffuse[0] = 0.0f; ep.light1Diffuse[1] = 0.0f; ep.light1Diffuse[2] = 0.0f;
                 dev.Clear(Color(0, 0, 0, 255));
-                backend.DrawPrimitivesEx(*vbEnv, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                renderer.DrawPrimitivesEx(*vbEnv, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                          Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, ep);
                 Color pp1off(0, 0, 0, 0);
                 dev.GetBackBufferData(&ppRegion, &pp1off, 0, 1);
                 check(pp1off.getRProperty() == 0 && pp1off.getGProperty() == 0 && pp1off.getBProperty() == 0,
-                      "D3D11GraphicsBackend::DrawPrimitivesEx(): disabling env_map3d DirectionalLight1's "
+                      "D3D11Renderer::DrawPrimitivesEx(): disabling env_map3d DirectionalLight1's "
                       "diffuse (zeroed) removes its contribution exactly -- confirms the prior check was "
                       "real, not a leaked default (plan_dx.md DX-149)");
 
@@ -1935,12 +1935,12 @@ protected:
                 ep.light2Dir[0] = 0.0f; ep.light2Dir[1] = 0.0f; ep.light2Dir[2] = -1.0f;
                 ep.light2Diffuse[0] = 0.0f; ep.light2Diffuse[1] = 1.0f; ep.light2Diffuse[2] = 0.0f;
                 dev.Clear(Color(0, 0, 0, 255));
-                backend.DrawPrimitivesEx(*vbEnv, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                renderer.DrawPrimitivesEx(*vbEnv, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                          Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, ep);
                 Color pp2(0, 0, 0, 0);
                 dev.GetBackBufferData(&ppRegion, &pp2, 0, 1);
                 check(pp2.getRProperty() == 0 && pp2.getGProperty() == 255 && pp2.getBProperty() == 0,
-                      "D3D11GraphicsBackend::DrawPrimitivesEx(): real env_map3d -- DirectionalLight2 "
+                      "D3D11Renderer::DrawPrimitivesEx(): real env_map3d -- DirectionalLight2 "
                       "alone contributes the exact expected green, independent of Light0/Light1 (plan_dx.md DX-149)");
             }
         }
@@ -1962,7 +1962,7 @@ protected:
                 { 3.0f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 2.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0},
                 {-1.0f,  3.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, -1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0},
             };
-            auto vbSkin = backend.CreateVertexBuffer(3);
+            auto vbSkin = renderer.CreateVertexBuffer(3);
             vbSkin->SetData(kTriSkin, 3, sizeof(VPNTS));
 
             ImageData img;
@@ -1973,7 +1973,7 @@ protected:
                 img.pixels[i * 4 + 0] = 77; img.pixels[i * 4 + 1] = 88;
                 img.pixels[i * 4 + 2] = 99; img.pixels[i * 4 + 3] = 255;
             }
-            auto tex = backend.CreateTexture(img);
+            auto tex = renderer.CreateTexture(img);
 
             GpuDrawParams sp;
             sp.texture0 = tex.get();
@@ -1990,7 +1990,7 @@ protected:
             sp.eyePositionWorld[0] = 0.0f; sp.eyePositionWorld[1] = 0.0f; sp.eyePositionWorld[2] = -10.0f;
 
             dev.Clear(Color(0, 255, 0, 255));
-            backend.DrawPrimitivesEx(*vbSkin, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+            renderer.DrawPrimitivesEx(*vbSkin, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                      Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, sp);
             std::vector<Color> skinResult(4 * 4, Color(0, 0, 0, 0));
             dev.GetBackBufferData(&centerRegion28, skinResult.data(), 0, static_cast<int>(skinResult.size()));
@@ -1999,7 +1999,7 @@ protected:
                 if (p.getRProperty() != 77 || p.getGProperty() != 88 || p.getBProperty() != 99 || p.getAProperty() != 255)
                     skinIsExact = false;
             check(skinIsExact,
-                  "D3D11GraphicsBackend::DrawPrimitivesEx(): real skinned3d with a genuinely-populated "
+                  "D3D11Renderer::DrawPrimitivesEx(): real skinned3d with a genuinely-populated "
                   "single identity bone samples the exact texture color (plan_dx.md DX-67)");
 
             // DX-135: WeightsPerVertex discriminating test. Real, non-obvious math property found
@@ -2026,14 +2026,14 @@ protected:
                 { 3.0f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 2.0f, 1.0f, 0.5f, 0.5f, 0.0f, 0.0f, 0, 1, 0, 0},
                 {-1.0f,  3.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, -1.0f, 0.5f, 0.5f, 0.0f, 0.0f, 0, 1, 0, 0},
             };
-            auto vbSkin2 = backend.CreateVertexBuffer(3);
+            auto vbSkin2 = renderer.CreateVertexBuffer(3);
             vbSkin2->SetData(kTriSkin2, 3, sizeof(VPNTS2));
 
             const Microsoft::Xna::Framework::Rectangle offCenterPoint(54, 10, 2, 2);
 
             sp.weightsPerVertex = 1;
             dev.Clear(Color(1, 2, 3, 255));
-            backend.DrawPrimitivesEx(*vbSkin2, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+            renderer.DrawPrimitivesEx(*vbSkin2, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                      Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, sp);
             std::vector<Color> w1Result(2 * 2, Color(0, 0, 0, 0));
             dev.GetBackBufferData(&offCenterPoint, w1Result.data(), 0, static_cast<int>(w1Result.size()));
@@ -2042,14 +2042,14 @@ protected:
                 if (p.getRProperty() != 77 || p.getGProperty() != 88 || p.getBProperty() != 99)
                     w1IsTexture = false;
             check(w1IsTexture,
-                  "D3D11GraphicsBackend::DrawPrimitivesEx(): real skinned3d with weightsPerVertex=1 "
+                  "D3D11Renderer::DrawPrimitivesEx(): real skinned3d with weightsPerVertex=1 "
                   "genuinely ignores bone1's contribution -- the probe point still shows bone0's "
                   "unshrunk Identity result, matching Check V's own single-bone precedent "
                   "(plan_dx.md DX-135)");
 
             sp.weightsPerVertex = 2;
             dev.Clear(Color(1, 2, 3, 255));
-            backend.DrawPrimitivesEx(*vbSkin2, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+            renderer.DrawPrimitivesEx(*vbSkin2, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                      Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, sp);
             std::vector<Color> w2Result(2 * 2, Color(0, 0, 0, 0));
             dev.GetBackBufferData(&offCenterPoint, w2Result.data(), 0, static_cast<int>(w2Result.size()));
@@ -2058,7 +2058,7 @@ protected:
                 if (p.getRProperty() != 1 || p.getGProperty() != 2 || p.getBProperty() != 3)
                     w2IsBackground = false;
             check(w2IsBackground,
-                  "D3D11GraphicsBackend::DrawPrimitivesEx(): real skinned3d with weightsPerVertex=2 "
+                  "D3D11Renderer::DrawPrimitivesEx(): real skinned3d with weightsPerVertex=2 "
                   "genuinely includes bone1's contribution -- the blended Scale(0.55) transform "
                   "shrinks the triangle away from this same probe point (Clear() background shows "
                   "through), distinctly different from the weightsPerVertex=1 case above with "
@@ -2075,7 +2075,7 @@ protected:
                     { 3.0f, -1.0f, 0.5f, 0.0f, 0.0f, 1.0f, 2.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0},
                     {-1.0f,  3.0f, 0.5f, 0.0f, 0.0f, 1.0f, 0.0f, -1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0},
                 };
-                auto vbSkinFog = backend.CreateVertexBuffer(3);
+                auto vbSkinFog = renderer.CreateVertexBuffer(3);
                 vbSkinFog->SetData(kTriSkinFog, 3, sizeof(VPNTS));
 
                 GpuDrawParams skinFogP;
@@ -2096,25 +2096,25 @@ protected:
                 skinFogP.fogEnabled = false;
                 skinFogP.fogColor[0] = 0.0f; skinFogP.fogColor[1] = 1.0f; skinFogP.fogColor[2] = 0.0f;
                 dev.Clear(Color(10, 10, 10, 255));
-                backend.DrawPrimitivesEx(*vbSkinFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                renderer.DrawPrimitivesEx(*vbSkinFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                          Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, skinFogP);
                 Color skinFogOffPixel(0, 0, 0, 0);
                 dev.GetBackBufferData(&skinFogRegion, &skinFogOffPixel, 0, 1);
                 check(skinFogOffPixel.getRProperty() == 77 && skinFogOffPixel.getGProperty() == 88 &&
                       skinFogOffPixel.getBProperty() == 99,
-                      "D3D11GraphicsBackend::DrawPrimitivesEx(): skinned3d fogEnabled=false leaves the "
+                      "D3D11Renderer::DrawPrimitivesEx(): skinned3d fogEnabled=false leaves the "
                       "exact single-bone-identity texture color unblended (plan_dx.md DX-137)");
 
                 skinFogP.fogEnabled = true;
                 skinFogP.fogVector[2] = 2.0f;
                 dev.Clear(Color(10, 10, 10, 255));
-                backend.DrawPrimitivesEx(*vbSkinFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                renderer.DrawPrimitivesEx(*vbSkinFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                          Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, skinFogP);
                 Color skinFogOnPixel(0, 0, 0, 0);
                 dev.GetBackBufferData(&skinFogRegion, &skinFogOnPixel, 0, 1);
                 check(skinFogOnPixel.getRProperty() == 0 && skinFogOnPixel.getGProperty() == 255 &&
                       skinFogOnPixel.getBProperty() == 0,
-                      "D3D11GraphicsBackend::DrawPrimitivesEx(): skinned3d fogEnabled=true with Z at "
+                      "D3D11Renderer::DrawPrimitivesEx(): skinned3d fogEnabled=true with Z at "
                       "FogEnd genuinely blends all the way to the exact FogColor (plan_dx.md DX-137)");
             }
 
@@ -2126,7 +2126,7 @@ protected:
                 ImageData whiteImgQQ;
                 whiteImgQQ.width = 2; whiteImgQQ.height = 2; whiteImgQQ.mipLevels = 1;
                 whiteImgQQ.pixels.assign(2 * 2 * 4, 255);
-                auto whiteTexQQ = backend.CreateTexture(whiteImgQQ);
+                auto whiteTexQQ = renderer.CreateTexture(whiteImgQQ);
 
                 GpuDrawParams baseQP;
                 baseQP.texture0 = whiteTexQQ.get();
@@ -2149,24 +2149,24 @@ protected:
                 qp1.light1Dir[0] = 0.0f; qp1.light1Dir[1] = 0.0f; qp1.light1Dir[2] = -1.0f; // travels -Z -> faces the +Z normal
                 qp1.light1Diffuse[0] = 1.0f; qp1.light1Diffuse[1] = 0.0f; qp1.light1Diffuse[2] = 0.0f;
                 dev.Clear(Color(0, 0, 0, 255));
-                backend.DrawPrimitivesEx(*vbSkin, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                renderer.DrawPrimitivesEx(*vbSkin, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                          Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, qp1);
                 Color qq1(0, 0, 0, 0);
                 dev.GetBackBufferData(&qqRegion, &qq1, 0, 1);
                 check(qq1.getRProperty() == 255 && qq1.getGProperty() == 0 && qq1.getBProperty() == 0,
-                      "D3D11GraphicsBackend::DrawPrimitivesEx(): real skinned3d -- DirectionalLight1 "
+                      "D3D11Renderer::DrawPrimitivesEx(): real skinned3d -- DirectionalLight1 "
                       "alone contributes the exact expected red, independent of Light0/Light2 (plan_dx.md DX-150)");
 
                 // QQ2: same geometry/light1Dir, but light1Diffuse disabled -> confirms QQ1 wasn't a leak.
                 GpuDrawParams qp1off = qp1;
                 qp1off.light1Diffuse[0] = 0.0f; qp1off.light1Diffuse[1] = 0.0f; qp1off.light1Diffuse[2] = 0.0f;
                 dev.Clear(Color(0, 0, 0, 255));
-                backend.DrawPrimitivesEx(*vbSkin, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                renderer.DrawPrimitivesEx(*vbSkin, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                          Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, qp1off);
                 Color qq1off(0, 0, 0, 0);
                 dev.GetBackBufferData(&qqRegion, &qq1off, 0, 1);
                 check(qq1off.getRProperty() == 0 && qq1off.getGProperty() == 0 && qq1off.getBProperty() == 0,
-                      "D3D11GraphicsBackend::DrawPrimitivesEx(): disabling skinned3d DirectionalLight1's "
+                      "D3D11Renderer::DrawPrimitivesEx(): disabling skinned3d DirectionalLight1's "
                       "diffuse (zeroed) removes its contribution exactly -- confirms the prior check was "
                       "real, not a leaked default (plan_dx.md DX-150)");
 
@@ -2175,12 +2175,12 @@ protected:
                 qp2.light2Dir[0] = 0.0f; qp2.light2Dir[1] = 0.0f; qp2.light2Dir[2] = -1.0f;
                 qp2.light2Diffuse[0] = 0.0f; qp2.light2Diffuse[1] = 1.0f; qp2.light2Diffuse[2] = 0.0f;
                 dev.Clear(Color(0, 0, 0, 255));
-                backend.DrawPrimitivesEx(*vbSkin, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                renderer.DrawPrimitivesEx(*vbSkin, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                          Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, qp2);
                 Color qq2(0, 0, 0, 0);
                 dev.GetBackBufferData(&qqRegion, &qq2, 0, 1);
                 check(qq2.getRProperty() == 0 && qq2.getGProperty() == 255 && qq2.getBProperty() == 0,
-                      "D3D11GraphicsBackend::DrawPrimitivesEx(): real skinned3d -- DirectionalLight2 "
+                      "D3D11Renderer::DrawPrimitivesEx(): real skinned3d -- DirectionalLight2 "
                       "alone contributes the exact expected green, independent of Light0/Light1 (plan_dx.md DX-150)");
             }
         }
@@ -2190,8 +2190,8 @@ protected:
         // weight keeps skinning a mathematical no-op, isolating the vertex-lit-vs-pixel-lit
         // dispatch difference exactly like Check R2 does. Same scene/values as
         // examples/easygl_skinnedeffect_preferperpixellighting_test.cpp (Task 1102b): ~127
-        // vertex-lit, ~155 pixel-lit (a few units of backend-specific rounding is expected and
-        // fine, per every other backend's own equivalent task).
+        // vertex-lit, ~155 pixel-lit (a few units of renderer-specific rounding is expected and
+        // fine, per every other renderer's own equivalent task).
         {
             struct VPNTS { float x, y, z; float nx, ny, nz; float u, v;
                           float bw0, bw1, bw2, bw3; uint8_t bi0, bi1, bi2, bi3; };
@@ -2203,13 +2203,13 @@ protected:
                 { 1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0},
                 { 1.0f,  1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0},
             };
-            auto vbSkinPPL = backend.CreateVertexBuffer(6);
+            auto vbSkinPPL = renderer.CreateVertexBuffer(6);
             vbSkinPPL->SetData(kSkinQuad, 6, sizeof(VPNTS));
 
             ImageData whiteImg2;
             whiteImg2.width = 1; whiteImg2.height = 1; whiteImg2.mipLevels = 1;
             whiteImg2.pixels = {255, 255, 255, 255};
-            auto whiteTex2 = backend.CreateTexture(whiteImg2);
+            auto whiteTex2 = renderer.CreateTexture(whiteImg2);
 
             GpuDrawParams skPplP;
             skPplP.texture0 = whiteTex2.get();
@@ -2236,7 +2236,7 @@ protected:
 
             skPplP.preferPerPixelLighting = false;
             dev.Clear(Color(0, 0, 0, 255));
-            backend.DrawPrimitivesEx(*vbSkinPPL, Matrix::getIdentityProperty(), skPplView, skPplProj,
+            renderer.DrawPrimitivesEx(*vbSkinPPL, Matrix::getIdentityProperty(), skPplView, skPplProj,
                                      PrimitiveType::TriangleList, 2, skPplP);
             Color skVertexLit(0, 0, 0, 0);
             dev.GetBackBufferData(&skCenterPixel, &skVertexLit, 0, 1);
@@ -2244,13 +2244,13 @@ protected:
                                        std::abs(skVertexLit.getGProperty() - 127) <= 10 &&
                                        std::abs(skVertexLit.getBProperty() - 127) <= 10;
             check(skVertexLitOk,
-                  "D3D11GraphicsBackend::DrawPrimitivesEx(): skinned3d preferPerPixelLighting=false "
+                  "D3D11Renderer::DrawPrimitivesEx(): skinned3d preferPerPixelLighting=false "
                   "(XNA's real default) genuinely computes the Gouraud-averaged specular result, "
                   "~127 (Task 1107, plan_graphics.md Phase 80)");
 
             skPplP.preferPerPixelLighting = true;
             dev.Clear(Color(0, 0, 0, 255));
-            backend.DrawPrimitivesEx(*vbSkinPPL, Matrix::getIdentityProperty(), skPplView, skPplProj,
+            renderer.DrawPrimitivesEx(*vbSkinPPL, Matrix::getIdentityProperty(), skPplView, skPplProj,
                                      PrimitiveType::TriangleList, 2, skPplP);
             Color skPixelLit(0, 0, 0, 0);
             dev.GetBackBufferData(&skCenterPixel, &skPixelLit, 0, 1);
@@ -2258,12 +2258,12 @@ protected:
                                       std::abs(skPixelLit.getGProperty() - 155) <= 10 &&
                                       std::abs(skPixelLit.getBProperty() - 155) <= 10;
             check(skPixelLitOk,
-                  "D3D11GraphicsBackend::DrawPrimitivesEx(): skinned3d preferPerPixelLighting=true "
+                  "D3D11Renderer::DrawPrimitivesEx(): skinned3d preferPerPixelLighting=true "
                   "genuinely computes a fresh per-fragment specular result, ~155 (Task 1107, "
                   "plan_graphics.md Phase 80)");
 
             check(skVertexLit.getRProperty() != skPixelLit.getRProperty(),
-                  "D3D11GraphicsBackend::DrawPrimitivesEx(): skinned3d preferPerPixelLighting is a "
+                  "D3D11Renderer::DrawPrimitivesEx(): skinned3d preferPerPixelLighting is a "
                   "real dispatch selector, not a decorative no-op (Task 1107, plan_graphics.md "
                   "Phase 80)");
         }
@@ -2279,11 +2279,11 @@ protected:
                 { 3.0f, -1.0f, 0.0f},
                 {-1.0f,  3.0f, 0.0f},
             };
-            auto vbInst = backend.CreateVertexBuffer(3);
+            auto vbInst = renderer.CreateVertexBuffer(3);
             vbInst->SetData(kTriInst, 3, sizeof(VP3));
 
             static const uint16_t kTriInstIdx[3] = {0, 1, 2};
-            auto ibInst = backend.CreateIndexBuffer16(3);
+            auto ibInst = renderer.CreateIndexBuffer16(3);
             ibInst->SetData16(kTriInstIdx, 3);
 
             // One identity-transform instance: 4 float4 rows (INSTANCEWORLD0-3).
@@ -2293,7 +2293,7 @@ protected:
                 0.0f, 0.0f, 1.0f, 0.0f,
                 0.0f, 0.0f, 0.0f, 1.0f,
             };
-            auto instVb = backend.CreateVertexBuffer(1);
+            auto instVb = renderer.CreateVertexBuffer(1);
             instVb->SetData(kInstanceWorld, 1, sizeof(kInstanceWorld));
 
             GpuDrawParams ip;
@@ -2306,7 +2306,7 @@ protected:
             ip.diffuseColor[2] = 0.0f; ip.diffuseColor[3] = 1.0f;
 
             dev.Clear(Color(0, 0, 255, 255));
-            backend.DrawInstancedPrimitivesEx(*vbInst, *ibInst, Matrix::getIdentityProperty(),
+            renderer.DrawInstancedPrimitivesEx(*vbInst, *ibInst, Matrix::getIdentityProperty(),
                                               Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                               PrimitiveType::TriangleList, 1, 1, ip);
             std::vector<Color> instResult(4 * 4, Color(0, 0, 0, 0));
@@ -2316,7 +2316,7 @@ protected:
                 if (p.getRProperty() != 255 || p.getGProperty() != 255 || p.getBProperty() != 0 || p.getAProperty() != 255)
                     instIsExact = false;
             check(instIsExact,
-                  "D3D11GraphicsBackend::DrawInstancedPrimitivesEx(): real instanced3d draw with a "
+                  "D3D11Renderer::DrawInstancedPrimitivesEx(): real instanced3d draw with a "
                   "genuine per-instance world buffer outputs the exact instance DiffuseColor (plan_dx.md DX-68)");
         }
 
@@ -2328,9 +2328,9 @@ protected:
         // fails cleanly with a real, non-empty compiler error instead of crashing or silently
         // "succeeding".
         {
-            ID3D11DeviceContext* rawContext = backend.GetContextEXT();
+            ID3D11DeviceContext* rawContext = renderer.GetContextEXT();
 
-            auto effect = backend.CreateEffectBackend(
+            auto effect = renderer.CreateEffectRenderer(
                 "struct VSIn { float2 pos:POSITION0; float2 uv:TEXCOORD0; float4 col:COLOR0; };\n"
                 "struct VSOut { float4 pos:SV_Position; float4 col:TEXCOORD0; };\n"
                 "cbuffer CB : register(b0) { float4 pad0[5]; float4 uColor; float4 uFloat0; };\n"
@@ -2338,7 +2338,7 @@ protected:
                 "struct PSIn { float4 pos:SV_Position; float4 col:TEXCOORD0; };\n"
                 "float4 main(PSIn input):SV_Target { return input.col; }");
             check(effect && effect->IsValid(),
-                  "D3D11GraphicsBackend::CreateEffectBackend(): real runtime D3DCompile() of "
+                  "D3D11Renderer::CreateEffectRenderer(): real runtime D3DCompile() of "
                   "arbitrary HLSL source compiles successfully (plan_dx.md DX-58)");
 
             bool effIsExact = false;
@@ -2353,9 +2353,9 @@ protected:
                     { 3.0f, -1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f},
                     {-1.0f,  3.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f},
                 };
-                auto vbFx = backend.CreateVertexBuffer(3);
+                auto vbFx = renderer.CreateVertexBuffer(3);
                 vbFx->SetData(kTriFx, 3, sizeof(SpriteVtx));
-                auto& d3dVbFx = static_cast<D3D11VertexBufferBackend&>(*vbFx);
+                auto& d3dVbFx = static_cast<D3D11VertexBufferRenderer&>(*vbFx);
 
                 ID3D11Buffer* vbRaw = d3dVbFx.GetBufferEXT();
                 UINT stride = sizeof(SpriteVtx);
@@ -2374,13 +2374,13 @@ protected:
                         effIsExact = false;
             }
             check(effIsExact,
-                  "D3D11EffectBackend::Bind(): a real custom-compiled shader pair, driven by "
+                  "D3D11EffectRenderer::Bind(): a real custom-compiled shader pair, driven by "
                   "SetUniformVec4()'s fixed-slot constant buffer, draws the exact expected color "
                   "(plan_dx.md DX-58)");
 
-            auto badEffect = backend.CreateEffectBackend("this is not valid HLSL {{{", "also not valid ]]]");
+            auto badEffect = renderer.CreateEffectRenderer("this is not valid HLSL {{{", "also not valid ]]]");
             check(badEffect && !badEffect->IsValid() && !badEffect->GetCompileError().empty(),
-                  "D3D11GraphicsBackend::CreateEffectBackend(): a deliberately broken HLSL source "
+                  "D3D11Renderer::CreateEffectRenderer(): a deliberately broken HLSL source "
                   "fails CompileProgram() with a real, non-empty compiler error message (plan_dx.md DX-58)");
         }
 
@@ -2421,7 +2421,7 @@ protected:
 
             const Color tl = readPixel(4, 4), tr = readPixel(20, 4), bl = readPixel(4, 20), br = readPixel(20, 20);
             check(isColor(tl, 255, 0, 0) && isColor(tr, 0, 255, 0) && isColor(bl, 0, 0, 255) && isColor(br, 255, 255, 0),
-                  "D3D11SpriteBatchBackend::Draw(): a real quad-batched sprite2d draw places all 4 "
+                  "D3D11SpriteBatchRenderer::Draw(): a real quad-batched sprite2d draw places all 4 "
                   "corner colors at the exact expected destination pixels (plan_dx.md DX-70)");
 
             dev.Clear(Color(10, 10, 10, 255));
@@ -2432,7 +2432,7 @@ protected:
             batch.End();
             const Color flippedLeft = readPixel(4, 4), flippedRight = readPixel(20, 4);
             check(isColor(flippedLeft, 0, 255, 0) && isColor(flippedRight, 255, 0, 0),
-                  "D3D11SpriteBatchBackend::Draw(): SpriteEffects::FlipHorizontally genuinely swaps "
+                  "D3D11SpriteBatchRenderer::Draw(): SpriteEffects::FlipHorizontally genuinely swaps "
                   "the sampled quadrants, not just accepted without effect (plan_dx.md DX-70)");
         }
 
@@ -2468,7 +2468,7 @@ protected:
             };
             const Color nw = readPixel2(12, 12), ne = readPixel2(28, 12), se = readPixel2(28, 28), sw = readPixel2(12, 28);
             check(isColor2(nw, 0, 0, 255) && isColor2(ne, 255, 0, 0) && isColor2(se, 0, 255, 0) && isColor2(sw, 255, 255, 0),
-                  "D3D11SpriteBatchBackend::Draw(): a real 90-degree rotation around a centered origin "
+                  "D3D11SpriteBatchRenderer::Draw(): a real 90-degree rotation around a centered origin "
                   "permutes the 4 corner colors into the geometrically-predicted screen quadrants -- "
                   "NW=blue(was BL), NE=red(was TL), SE=green(was TR), SW=yellow(was BR) (plan_dx.md DX-131)");
         }
@@ -2499,7 +2499,7 @@ protected:
             const bool outsideOk = outsideSmallOnly.getRProperty() == 10 && outsideSmallOnly.getGProperty() == 10 &&
                                    outsideSmallOnly.getBProperty() == 10;
             check(insideOk && outsideOk,
-                  "D3D11SpriteBatchBackend::Draw(): a real, distinct destRect SIZE genuinely scales the "
+                  "D3D11SpriteBatchRenderer::Draw(): a real, distinct destRect SIZE genuinely scales the "
                   "sprite -- a pixel inside the old (larger) size but outside the new (smaller) one shows "
                   "the clear color, not sprite content (plan_dx.md DX-131)");
         }
@@ -2536,17 +2536,17 @@ protected:
             };
             const Color left = readPixel4(4, 4), right = readPixel4(28, 4);
             check(isColor4(left, 128, 0, 255) && isColor4(right, 0, 255, 255),
-                  "D3D11SpriteBatchBackend::Draw(): sourceRectangle genuinely crops to only the "
+                  "D3D11SpriteBatchRenderer::Draw(): sourceRectangle genuinely crops to only the "
                   "requested sub-region (purple/cyan), never the excluded texels (orange/magenta) "
                   "(plan_dx.md DX-131)");
         }
 
         // Note on SpriteSortMode (DX-131): sort-mode ordering (BackToFront/FrontToBack/Texture) is
-        // implemented entirely in the shared, backend-agnostic Microsoft::Xna::Framework::Graphics::
-        // SpriteBatch.cpp (sorts the pending draw-call list before handing it to the backend's own
-        // Draw() calls, in order) -- there is no D3D11-specific sort behavior to test; the backend
-        // just draws whatever order it's told. A dedicated backend-level sort-mode test would
-        // actually be testing shared C++ code, not this backend, so none is added here.
+        // implemented entirely in the shared, renderer-agnostic Microsoft::Xna::Framework::Graphics::
+        // SpriteBatch.cpp (sorts the pending draw-call list before handing it to the renderer's own
+        // Draw() calls, in order) -- there is no D3D11-specific sort behavior to test; the renderer
+        // just draws whatever order it's told. A dedicated renderer-level sort-mode test would
+        // actually be testing shared C++ code, not this renderer, so none is added here.
 
         // Check Z (DX-72): TextureAddressMode::Wrap/Mirror, each proven with a probe pixel that
         // gives a genuinely different color than the other two address modes would produce there
@@ -2573,7 +2573,7 @@ protected:
             batch.End();
             const Color wrapProbe = readPixel(4, 20); // v~1.28 -> tile-repeat row0 (red); Clamp would give blue here.
             check(isColor(wrapProbe, 255, 0, 0),
-                  "D3D11SpriteBatchBackend: TextureAddressMode::Wrap genuinely tiles past UV 1.0 "
+                  "D3D11SpriteBatchRenderer: TextureAddressMode::Wrap genuinely tiles past UV 1.0 "
                   "instead of clamping to the edge color (plan_dx.md DX-72)");
 
             SamplerState pointMirror;
@@ -2586,14 +2586,14 @@ protected:
             batch.End();
             const Color mirrorProbe = readPixel(4, 28); // v~1.78 -> mirrored back to row0 (red); Wrap/Clamp both give blue here.
             check(isColor(mirrorProbe, 255, 0, 0),
-                  "D3D11SpriteBatchBackend: TextureAddressMode::Mirror genuinely reflects past UV "
+                  "D3D11SpriteBatchRenderer: TextureAddressMode::Mirror genuinely reflects past UV "
                   "1.0 (distinct from both Wrap's repeat and Clamp's edge-extend at the same probe "
                   "point) (plan_dx.md DX-72)");
         }
 
         // Check AA (DX-71): a custom Effect passed to SpriteBatch::Begin(..., effect) draws through
         // that effect's own shader (here, a deliberate RGB color inversion) instead of the stock
-        // sprite2d pipeline -- proving D3D11EffectBackend::SetViewportSizeEXT()'s automatic vpSize
+        // sprite2d pipeline -- proving D3D11EffectRenderer::SetViewportSizeEXT()'s automatic vpSize
         // slot (this custom vertex shader has no other way to map pixel-space Position to NDC) and
         // the shared t0/s0 texture-binding path SpriteBatch drives for both pipelines.
         {
@@ -2635,7 +2635,7 @@ protected:
             // the custom shader itself (not inverted) -- an exact, unambiguous 8-bit round-trip.
             check(inverted.getRProperty() == 0 && inverted.getGProperty() == 255 &&
                   inverted.getBProperty() == 255 && inverted.getAProperty() == 255,
-                  "D3D11SpriteBatchBackend + SpriteBatch::Begin(effect): sprites draw through the "
+                  "D3D11SpriteBatchRenderer + SpriteBatch::Begin(effect): sprites draw through the "
                   "custom Effect's own shader, producing its exact expected (inverted) output "
                   "color, not the stock sprite2d pipeline's (plan_dx.md DX-71)");
         }
@@ -2712,7 +2712,7 @@ protected:
         {
             // REMED-GFX-087: the SpriteBatch checks above (Y/Y2/Y3/Y4/Z/AA) each call Begin(), which
             // since REMED-GFX-081 applies (and, per FNA/XNA semantics, LEAVES) RasterizerState =
-            // CullCounterClockwise on the device. The direct backend.DrawPrimitivesEx() 3D checks
+            // CullCounterClockwise on the device. The direct renderer.DrawPrimitivesEx() 3D checks
             // from here down draw oversized full-screen quads that are back-facing under
             // CullCounterClockwise, so -- like the D3D9 smoke's own SetDepthTestEnabled block already
             // does explicitly -- they must re-establish CullNone first, otherwise every one of them
@@ -2726,7 +2726,7 @@ protected:
                 { 3.0f, -1.0f, 0.5f, kRed},
                 {-1.0f,  3.0f, 0.5f, kRed},
             };
-            auto vbFog = backend.CreateVertexBuffer(3);
+            auto vbFog = renderer.CreateVertexBuffer(3);
             vbFog->SetData(kTriFog, 3, sizeof(VPCz));
 
             GpuDrawParams fogOff;
@@ -2736,13 +2736,13 @@ protected:
 
             const Microsoft::Xna::Framework::Rectangle centerRegionFog(30, 30, 1, 1);
             dev.Clear(Color(10, 10, 10, 255));
-            backend.DrawPrimitivesEx(*vbFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+            renderer.DrawPrimitivesEx(*vbFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                      Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, fogOff);
             Color fogOffPixel(0, 0, 0, 0);
             dev.GetBackBufferData(&centerRegionFog, &fogOffPixel, 0, 1);
             check(fogOffPixel.getRProperty() == 255 && fogOffPixel.getGProperty() == 0 &&
                   fogOffPixel.getBProperty() == 0,
-                  "D3D11GraphicsBackend::DrawPrimitivesEx(): fogEnabled=false leaves colored3d's "
+                  "D3D11Renderer::DrawPrimitivesEx(): fogEnabled=false leaves colored3d's "
                   "exact vertex color unblended (plan_dx.md DX-69/DX-81)");
 
             GpuDrawParams fogOn = fogOff;
@@ -2750,13 +2750,13 @@ protected:
             fogOn.fogVector[2] = 2.0f;
 
             dev.Clear(Color(10, 10, 10, 255));
-            backend.DrawPrimitivesEx(*vbFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+            renderer.DrawPrimitivesEx(*vbFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                      Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, fogOn);
             Color fogOnPixel(0, 0, 0, 0);
             dev.GetBackBufferData(&centerRegionFog, &fogOnPixel, 0, 1);
             check(fogOnPixel.getRProperty() == 0 && fogOnPixel.getGProperty() == 255 &&
                   fogOnPixel.getBProperty() == 0,
-                  "D3D11GraphicsBackend::DrawPrimitivesEx(): fogEnabled=true with Z at FogEnd "
+                  "D3D11Renderer::DrawPrimitivesEx(): fogEnabled=true with Z at FogEnd "
                   "genuinely blends all the way to the exact FogColor (fogFactor=0), distinctly "
                   "different from the fogEnabled=false case above (plan_dx.md DX-69/DX-81)");
 
@@ -2765,13 +2765,13 @@ protected:
             fogOffAgain.fogVector[0] = fogOffAgain.fogVector[1] =
                 fogOffAgain.fogVector[2] = fogOffAgain.fogVector[3] = 0.0f;
             dev.Clear(Color(10, 10, 10, 255));
-            backend.DrawPrimitivesEx(*vbFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+            renderer.DrawPrimitivesEx(*vbFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                      Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, fogOffAgain);
             Color fogOffAgainPixel(0, 0, 0, 0);
             dev.GetBackBufferData(&centerRegionFog, &fogOffAgainPixel, 0, 1);
             check(fogOffAgainPixel.getRProperty() == 255 && fogOffAgainPixel.getGProperty() == 0 &&
                   fogOffAgainPixel.getBProperty() == 0,
-                  "D3D11GraphicsBackend::DrawPrimitivesEx(): fog A(false)->B(true)->A(false) "
+                  "D3D11Renderer::DrawPrimitivesEx(): fog A(false)->B(true)->A(false) "
                   "does not reuse stale scalar or vector state (REMED-GFX-061)");
         }
 
@@ -2788,7 +2788,7 @@ protected:
                 { 3.0f, -1.0f, 0.0f, 2.0f, 1.0f},
                 {-1.0f,  3.0f, 0.0f, 0.0f, -1.0f},
             };
-            auto vbNpot = backend.CreateVertexBuffer(3);
+            auto vbNpot = renderer.CreateVertexBuffer(3);
             vbNpot->SetData(kTriNpot, 3, sizeof(VPT));
 
             ImageData npotImg;
@@ -2799,9 +2799,9 @@ protected:
                 npotImg.pixels[i * 4 + 0] = 123; npotImg.pixels[i * 4 + 1] = 45;
                 npotImg.pixels[i * 4 + 2] = 200; npotImg.pixels[i * 4 + 3] = 255;
             }
-            auto npotTex = backend.CreateTexture(npotImg);
+            auto npotTex = renderer.CreateTexture(npotImg);
             check(npotTex->GetWidth() == 5 && npotTex->GetHeight() == 3,
-                  "D3D11TextureBackend: real construction with a genuinely non-power-of-two 5x3 "
+                  "D3D11TextureRenderer: real construction with a genuinely non-power-of-two 5x3 "
                   "size reports the exact requested dimensions (plan_dx.md DX-140)");
 
             GpuDrawParams npotP;
@@ -2810,7 +2810,7 @@ protected:
 
             std::vector<Color> afterNpot(4 * 4, Color(0, 0, 0, 0));
             dev.Clear(Color(0, 255, 0, 255));
-            backend.DrawPrimitivesEx(*vbNpot, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+            renderer.DrawPrimitivesEx(*vbNpot, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                      Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, npotP);
             dev.GetBackBufferData(&centerRegion28, afterNpot.data(), 0, static_cast<int>(afterNpot.size()));
             bool npotIsExact = true;
@@ -2818,7 +2818,7 @@ protected:
                 if (p.getRProperty() != 123 || p.getGProperty() != 45 || p.getBProperty() != 200 || p.getAProperty() != 255)
                     npotIsExact = false;
             check(npotIsExact,
-                  "D3D11GraphicsBackend::DrawPrimitivesEx(): samples the exact color from a real "
+                  "D3D11Renderer::DrawPrimitivesEx(): samples the exact color from a real "
                   "5x3 NPOT texture upload (plan_dx.md DX-140)");
         }
 
@@ -2830,14 +2830,14 @@ protected:
         // accidental single-slot cache to hide).
         {
             using Microsoft::WRL::ComPtr;
-            ID3D11DeviceContext* ctx = backend.GetContextEXT();
+            ID3D11DeviceContext* ctx = renderer.GetContextEXT();
 
             ComPtr<ID3D11SamplerState> boundAtApplyTime[16];
             for (int slot = 0; slot < 16; ++slot)
             {
                 // Spread across TextureFilter's 6 values and TextureAddressMode's 3 values so
                 // adjacent slots never accidentally share an identical configuration.
-                backend.ApplySamplerState(slot, slot % 6, slot % 3, (slot + 1) % 3, 1);
+                renderer.ApplySamplerState(slot, slot % 6, slot % 3, (slot + 1) % 3, 1);
                 ComPtr<ID3D11SamplerState> s;
                 ctx->PSGetSamplers(static_cast<UINT>(slot), 1, s.GetAddressOf());
                 boundAtApplyTime[slot] = s;
@@ -2873,7 +2873,7 @@ protected:
         // both verify both directions already (Tasks 445/446/854); D3D12's own half was closed by
         // DX-120 (Checks AA3/AA4). This closes D3D11's, using the same methodology: the SAME query
         // object is reused around a genuinely visible draw and a genuinely invisible one, so a
-        // backend that simply returned a constant (or leaked the prior count) cannot pass both.
+        // renderer that simply returned a constant (or leaked the prior count) cannot pass both.
         {
             struct VPCq { float x, y, z; uint32_t color; };
             const uint32_t kRedQ = 0xFF0000FFu;
@@ -2891,19 +2891,19 @@ protected:
                 {10.0f, 14.0f, 0.5f, kRedQ},
             };
 
-            auto vbVisible = backend.CreateVertexBuffer(3);
+            auto vbVisible = renderer.CreateVertexBuffer(3);
             vbVisible->SetData(kTriVisible, 3, sizeof(VPCq));
-            auto vbOffscreen = backend.CreateVertexBuffer(3);
+            auto vbOffscreen = renderer.CreateVertexBuffer(3);
             vbOffscreen->SetData(kTriOffscreen, 3, sizeof(VPCq));
 
             GpuDrawParams qp;
             qp.vertexColorEnabled = true;
 
-            auto oq2 = backend.CreateOcclusionQuery();
+            auto oq2 = renderer.CreateOcclusionQuery();
 
             dev.Clear(Color(10, 10, 10, 255));
             oq2->Begin();
-            backend.DrawPrimitivesEx(*vbVisible, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+            renderer.DrawPrimitivesEx(*vbVisible, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                      Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, qp);
             oq2->End();
             context->Flush();
@@ -2911,7 +2911,7 @@ protected:
             for (int i = 0; i < 1000000 && !done1; ++i) done1 = oq2->IsComplete();
             const int visibleCount = oq2->PixelCount();
             check(done1 && visibleCount > 0,
-                  "D3D11OcclusionQueryBackend: a genuinely VISIBLE (viewport-covering) draw reports a real, "
+                  "D3D11OcclusionQueryRenderer: a genuinely VISIBLE (viewport-covering) draw reports a real, "
                   "POSITIVE PixelCount() -- the count actually tracks rasterized pixels, not a constant "
                   "(plan_dx.md DX-147)");
 
@@ -2919,14 +2919,14 @@ protected:
             // returned a fixed value cannot pass this after passing the check above.
             dev.Clear(Color(10, 10, 10, 255));
             oq2->Begin();
-            backend.DrawPrimitivesEx(*vbOffscreen, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+            renderer.DrawPrimitivesEx(*vbOffscreen, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                      Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, qp);
             oq2->End();
             context->Flush();
             bool done2 = false;
             for (int i = 0; i < 1000000 && !done2; ++i) done2 = oq2->IsComplete();
             check(done2 && oq2->PixelCount() == 0,
-                  "D3D11OcclusionQueryBackend: the SAME query object, reused around fully off-screen "
+                  "D3D11OcclusionQueryRenderer: the SAME query object, reused around fully off-screen "
                   "(clipped) geometry, reports EXACTLY 0 -- a genuine visible-vs-invisible DISCRIMINATING "
                   "result, not just 'the query completed' (plan_dx.md DX-147)");
         }
@@ -2948,9 +2948,9 @@ protected:
             static const VPCd kFar[3] = {
                 {-1.0f, -1.0f, 0.8f, kGreenD}, {3.0f, -1.0f, 0.8f, kGreenD}, {-1.0f, 3.0f, 0.8f, kGreenD}};
 
-            auto vbNear = backend.CreateVertexBuffer(3);
+            auto vbNear = renderer.CreateVertexBuffer(3);
             vbNear->SetData(kNear, 3, sizeof(VPCd));
-            auto vbFar = backend.CreateVertexBuffer(3);
+            auto vbFar = renderer.CreateVertexBuffer(3);
             vbFar->SetData(kFar, 3, sizeof(VPCd));
 
             GpuDrawParams dp;
@@ -2960,39 +2960,39 @@ protected:
 
             auto drawNearThenFar = [&]() {
                 dev.Clear(Color(10, 10, 10, 255));
-                backend.DrawPrimitivesEx(*vbNear, I, I, I, PrimitiveType::TriangleList, 1, dp);
-                backend.DrawPrimitivesEx(*vbFar, I, I, I, PrimitiveType::TriangleList, 1, dp);
+                renderer.DrawPrimitivesEx(*vbNear, I, I, I, PrimitiveType::TriangleList, 1, dp);
+                renderer.DrawPrimitivesEx(*vbFar, I, I, I, PrimitiveType::TriangleList, 1, dp);
                 Color px(0, 0, 0, 0);
                 dev.GetBackBufferData(&probe, &px, 0, 1);
                 return px;
             };
 
             // REMED-GFX-089 sibling-oracle hygiene: establish the complete reachable XNA state
-            // instead of relying on whichever DepthFunc an earlier direct-backend fixture left.
+            // instead of relying on whichever DepthFunc an earlier direct-renderer fixture left.
             // Exercise false->true so SetDepthTestEnabled(true) still has observable work to do.
             dev.setDepthStencilStateProperty(DepthStencilState::Default);
-            backend.SetDepthTestEnabled(false);
+            renderer.SetDepthTestEnabled(false);
 
             // Depth test ON: the far green quad must be REJECTED by the nearer red one already there.
-            backend.SetDepthWriteEnabled(true);
-            backend.SetDepthTestEnabled(true);
+            renderer.SetDepthWriteEnabled(true);
+            renderer.SetDepthTestEnabled(true);
             dev.Clear(Color(10, 10, 10, 255)); // clears depth to 1.0 too
             const Color withDepth = drawNearThenFar();
             check(withDepth.getRProperty() == 255 && withDepth.getGProperty() == 0,
-                  "D3D11GraphicsBackend::SetDepthTestEnabled(true): a FARTHER quad drawn after a nearer "
+                  "D3D11Renderer::SetDepthTestEnabled(true): a FARTHER quad drawn after a nearer "
                   "one is genuinely REJECTED (red survives) -- proves the call really enables the depth "
                   "test, instead of being the silent no-op it used to be");
 
             // Depth test OFF: the same far green quad must now overwrite the red one (painter's order).
-            backend.SetDepthTestEnabled(false);
+            renderer.SetDepthTestEnabled(false);
             const Color withoutDepth = drawNearThenFar();
             check(withoutDepth.getGProperty() == 255 && withoutDepth.getRProperty() == 0,
-                  "D3D11GraphicsBackend::SetDepthTestEnabled(false): the SAME farther quad now genuinely "
+                  "D3D11Renderer::SetDepthTestEnabled(false): the SAME farther quad now genuinely "
                   "OVERWRITES the nearer one (green wins) -- only the SetDepthTestEnabled() call differs "
                   "between the two, so a no-op implementation cannot pass both checks");
 
-            backend.SetDepthTestEnabled(false);
-            backend.SetDepthWriteEnabled(false);
+            renderer.SetDepthTestEnabled(false);
+            renderer.SetDepthWriteEnabled(false);
         }
 
         // plan_dx.md DX-124: multi-light (DirectionalLight1/DirectionalLight2) + EmissiveColor
@@ -3008,13 +3008,13 @@ protected:
                 { 3.0f, -1.0f, 0.0f, 0.0f, 0.0f, -1.0f, 2.0f, 1.0f},
                 {-1.0f,  3.0f, 0.0f, 0.0f, 0.0f, -1.0f, 0.0f, -1.0f},
             };
-            auto vbEE = backend.CreateVertexBuffer(3);
+            auto vbEE = renderer.CreateVertexBuffer(3);
             vbEE->SetData(kTriEE, 3, sizeof(VPNT));
 
             ImageData whiteImg;
             whiteImg.width = 2; whiteImg.height = 2; whiteImg.mipLevels = 1;
             whiteImg.pixels.assign(2 * 2 * 4, 255);
-            auto whiteTexEE = backend.CreateTexture(whiteImg);
+            auto whiteTexEE = renderer.CreateTexture(whiteImg);
 
             GpuDrawParams baseP;
             baseP.texture0 = whiteTexEE.get();
@@ -3032,24 +3032,24 @@ protected:
             p1.light1Dir[0] = 0.0f; p1.light1Dir[1] = 0.0f; p1.light1Dir[2] = 1.0f;
             p1.light1Diffuse[0] = 1.0f; p1.light1Diffuse[1] = 0.0f; p1.light1Diffuse[2] = 0.0f;
             dev.Clear(Color(0, 0, 0, 255));
-            backend.DrawPrimitivesEx(*vbEE, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+            renderer.DrawPrimitivesEx(*vbEE, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                      Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, p1);
             Color r1(0, 0, 0, 0);
             dev.GetBackBufferData(&centerRegionEE, &r1, 0, 1);
             check(r1.getRProperty() == 255 && r1.getGProperty() == 0 && r1.getBProperty() == 0,
-                  "D3D11GraphicsBackend::DrawPrimitivesEx(): real lit_textured3d -- DirectionalLight1 "
+                  "D3D11Renderer::DrawPrimitivesEx(): real lit_textured3d -- DirectionalLight1 "
                   "alone contributes the exact expected red, independent of Light0/Light2 (plan_dx.md DX-124)");
 
             // EE2: same geometry/light1Dir, but light1Diffuse disabled -> confirms EE1 wasn't a leak.
             GpuDrawParams p1off = p1;
             p1off.light1Diffuse[0] = 0.0f; p1off.light1Diffuse[1] = 0.0f; p1off.light1Diffuse[2] = 0.0f;
             dev.Clear(Color(0, 0, 0, 255));
-            backend.DrawPrimitivesEx(*vbEE, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+            renderer.DrawPrimitivesEx(*vbEE, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                      Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, p1off);
             Color r1off(0, 0, 0, 0);
             dev.GetBackBufferData(&centerRegionEE, &r1off, 0, 1);
             check(r1off.getRProperty() == 0 && r1off.getGProperty() == 0 && r1off.getBProperty() == 0,
-                  "D3D11GraphicsBackend::DrawPrimitivesEx(): disabling DirectionalLight1's diffuse "
+                  "D3D11Renderer::DrawPrimitivesEx(): disabling DirectionalLight1's diffuse "
                   "(zeroed) removes its contribution exactly -- confirms the prior check was real, not "
                   "a leaked default (plan_dx.md DX-124)");
 
@@ -3058,12 +3058,12 @@ protected:
             p2.light2Dir[0] = 0.0f; p2.light2Dir[1] = 0.0f; p2.light2Dir[2] = 1.0f;
             p2.light2Diffuse[0] = 0.0f; p2.light2Diffuse[1] = 1.0f; p2.light2Diffuse[2] = 0.0f;
             dev.Clear(Color(0, 0, 0, 255));
-            backend.DrawPrimitivesEx(*vbEE, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+            renderer.DrawPrimitivesEx(*vbEE, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                      Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, p2);
             Color r2(0, 0, 0, 0);
             dev.GetBackBufferData(&centerRegionEE, &r2, 0, 1);
             check(r2.getRProperty() == 0 && r2.getGProperty() == 255 && r2.getBProperty() == 0,
-                  "D3D11GraphicsBackend::DrawPrimitivesEx(): real lit_textured3d -- DirectionalLight2 "
+                  "D3D11Renderer::DrawPrimitivesEx(): real lit_textured3d -- DirectionalLight2 "
                   "alone contributes the exact expected green, independent of Light0/Light1 (plan_dx.md DX-124)");
 
             // EE4: EmissiveColor alone (all lights + ambient off) -> exact (0,0,255), a constant,
@@ -3071,12 +3071,12 @@ protected:
             GpuDrawParams p3 = baseP;
             p3.emissiveColor[0] = 0.0f; p3.emissiveColor[1] = 0.0f; p3.emissiveColor[2] = 1.0f;
             dev.Clear(Color(0, 0, 0, 255));
-            backend.DrawPrimitivesEx(*vbEE, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+            renderer.DrawPrimitivesEx(*vbEE, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                      Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, p3);
             Color r3(0, 0, 0, 0);
             dev.GetBackBufferData(&centerRegionEE, &r3, 0, 1);
             check(r3.getRProperty() == 0 && r3.getGProperty() == 0 && r3.getBProperty() == 255,
-                  "D3D11GraphicsBackend::DrawPrimitivesEx(): real lit_textured3d -- EmissiveColor alone "
+                  "D3D11Renderer::DrawPrimitivesEx(): real lit_textured3d -- EmissiveColor alone "
                   "contributes the exact expected blue with every light off, a constant additive term "
                   "(plan_dx.md DX-124)");
         }
@@ -3097,13 +3097,13 @@ protected:
                 { 3.0f, -1.0f, 0.0f, 0.0f, 0.0f, -1.0f, 2.0f, 1.0f},
                 {-1.0f,  3.0f, 0.0f, 0.0f, 0.0f, -1.0f, 0.0f, -1.0f},
             };
-            auto vbFF = backend.CreateVertexBuffer(3);
+            auto vbFF = renderer.CreateVertexBuffer(3);
             vbFF->SetData(kTriFF, 3, sizeof(VPNT));
 
             ImageData whiteImg;
             whiteImg.width = 2; whiteImg.height = 2; whiteImg.mipLevels = 1;
             whiteImg.pixels.assign(2 * 2 * 4, 255);
-            auto whiteTexFF = backend.CreateTexture(whiteImg);
+            auto whiteTexFF = renderer.CreateTexture(whiteImg);
 
             GpuDrawParams sp;
             sp.texture0 = whiteTexFF.get();
@@ -3130,12 +3130,12 @@ protected:
             const Microsoft::Xna::Framework::Rectangle centerRegionFF(30, 30, 1, 1);
 
             dev.Clear(Color(0, 0, 0, 255));
-            backend.DrawPrimitivesEx(*vbFF, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+            renderer.DrawPrimitivesEx(*vbFF, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                      Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, sp);
             Color specOn(0, 0, 0, 0);
             dev.GetBackBufferData(&centerRegionFF, &specOn, 0, 1);
             check(specOn.getRProperty() == 255 && specOn.getGProperty() == 255 && specOn.getBProperty() == 255,
-                  "D3D11GraphicsBackend::DrawPrimitivesEx(): real lit_textured3d -- Blinn-Phong "
+                  "D3D11Renderer::DrawPrimitivesEx(): real lit_textured3d -- Blinn-Phong "
                   "specular at a geometry deliberately chosen so dot(H,N)=1 exactly contributes the "
                   "exact expected full-white highlight, with diffuse/ambient/emissive all zero "
                   "(plan_dx.md DX-125)");
@@ -3143,12 +3143,12 @@ protected:
             GpuDrawParams spOff = sp;
             spOff.specularColor[0] = 0.0f; spOff.specularColor[1] = 0.0f; spOff.specularColor[2] = 0.0f;
             dev.Clear(Color(0, 0, 0, 255));
-            backend.DrawPrimitivesEx(*vbFF, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+            renderer.DrawPrimitivesEx(*vbFF, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                      Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, spOff);
             Color specOff(0, 0, 0, 0);
             dev.GetBackBufferData(&centerRegionFF, &specOff, 0, 1);
             check(specOff.getRProperty() == 0 && specOff.getGProperty() == 0 && specOff.getBProperty() == 0,
-                  "D3D11GraphicsBackend::DrawPrimitivesEx(): the SAME geometry/light with material "
+                  "D3D11Renderer::DrawPrimitivesEx(): the SAME geometry/light with material "
                   "SpecularColor zeroed produces exact black -- proves the prior check's white came "
                   "genuinely from the specular term, not diffuse/ambient/emissive (plan_dx.md DX-125)");
 
@@ -3161,12 +3161,12 @@ protected:
             GpuDrawParams spRev = sp;
             spRev.light1Dir[2] = -1.0f;  // travels -Z instead of +Z
             dev.Clear(Color(0, 0, 0, 255));
-            backend.DrawPrimitivesEx(*vbFF, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+            renderer.DrawPrimitivesEx(*vbFF, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                      Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, spRev);
             Color specRev(0, 0, 0, 0);
             dev.GetBackBufferData(&centerRegionFF, &specRev, 0, 1);
             check(specRev.getRProperty() == 0 && specRev.getGProperty() == 0 && specRev.getBProperty() == 0,
-                  "D3D11GraphicsBackend::DrawPrimitivesEx(): reversing Light1's direction (now facing "
+                  "D3D11Renderer::DrawPrimitivesEx(): reversing Light1's direction (now facing "
                   "away from the surface) collapses the specular highlight to exact black via the "
                   "shader's facing gate -- pins the light-direction sign convention (plan_dx.md DX-125)");
         }
@@ -3185,13 +3185,13 @@ protected:
                 { 3.0f, -1.0f, 0.0f, 0.0f, 0.0f, -1.0f, 2.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0},
                 {-1.0f,  3.0f, 0.0f, 0.0f, 0.0f, -1.0f, 0.0f, -1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0},
             };
-            auto vbRR = backend.CreateVertexBuffer(3);
+            auto vbRR = renderer.CreateVertexBuffer(3);
             vbRR->SetData(kTriRR, 3, sizeof(VPNTSR));
 
             ImageData whiteImgRR;
             whiteImgRR.width = 2; whiteImgRR.height = 2; whiteImgRR.mipLevels = 1;
             whiteImgRR.pixels.assign(2 * 2 * 4, 255);
-            auto whiteTexRR = backend.CreateTexture(whiteImgRR);
+            auto whiteTexRR = renderer.CreateTexture(whiteImgRR);
 
             GpuDrawParams rp;
             rp.texture0 = whiteTexRR.get();
@@ -3222,24 +3222,24 @@ protected:
             const Microsoft::Xna::Framework::Rectangle rrRegion(30, 30, 1, 1);
 
             dev.Clear(Color(0, 0, 0, 255));
-            backend.DrawPrimitivesEx(*vbRR, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+            renderer.DrawPrimitivesEx(*vbRR, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                      Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, rp);
             Color specOnRR(0, 0, 0, 0);
             dev.GetBackBufferData(&rrRegion, &specOnRR, 0, 1);
             check(specOnRR.getRProperty() == 255 && specOnRR.getGProperty() == 255 && specOnRR.getBProperty() == 255,
-                  "D3D11GraphicsBackend::DrawPrimitivesEx(): real skinned3d -- Blinn-Phong specular at "
+                  "D3D11Renderer::DrawPrimitivesEx(): real skinned3d -- Blinn-Phong specular at "
                   "a geometry deliberately chosen so dot(H,N)=1 exactly contributes the exact expected "
                   "full-white highlight, with diffuse/ambient all zero (plan_dx.md DX-151)");
 
             GpuDrawParams rpOff = rp;
             rpOff.specularColor[0] = 0.0f; rpOff.specularColor[1] = 0.0f; rpOff.specularColor[2] = 0.0f;
             dev.Clear(Color(0, 0, 0, 255));
-            backend.DrawPrimitivesEx(*vbRR, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+            renderer.DrawPrimitivesEx(*vbRR, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                      Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, rpOff);
             Color specOffRR(0, 0, 0, 0);
             dev.GetBackBufferData(&rrRegion, &specOffRR, 0, 1);
             check(specOffRR.getRProperty() == 0 && specOffRR.getGProperty() == 0 && specOffRR.getBProperty() == 0,
-                  "D3D11GraphicsBackend::DrawPrimitivesEx(): the SAME geometry/light with material "
+                  "D3D11Renderer::DrawPrimitivesEx(): the SAME geometry/light with material "
                   "SpecularColor zeroed produces exact black -- proves the prior check's white came "
                   "genuinely from the specular term, not diffuse/ambient (plan_dx.md DX-151)");
         }
@@ -3261,10 +3261,10 @@ protected:
                 mipImg.pixels[i * 4 + 0] = 10; mipImg.pixels[i * 4 + 1] = 20;
                 mipImg.pixels[i * 4 + 2] = 30; mipImg.pixels[i * 4 + 3] = 255;
             }
-            auto mipTex = backend.CreateTexture(mipImg);
-            auto& d3dMipTex = static_cast<D3D11TextureBackend&>(*mipTex);
+            auto mipTex = renderer.CreateTexture(mipImg);
+            auto& d3dMipTex = static_cast<D3D11TextureRenderer&>(*mipTex);
             check(d3dMipTex.GetMipLevelsEXT() == 2,
-                  "D3D11TextureBackend: real construction with mipLevels=2 allocates the exact "
+                  "D3D11TextureRenderer: real construction with mipLevels=2 allocates the exact "
                   "requested mip chain (plan_dx.md DX-126)");
 
             std::vector<uint8_t> level1Data(2 * 2 * 4);
@@ -3275,7 +3275,7 @@ protected:
             }
             mipTex->UpdatePixelsLevel(1, level1Data.data(), 2, 2);
 
-            auto level1Readback = ReadTexture2DMipRegion(backend.GetDeviceEXT(), backend.GetContextEXT(),
+            auto level1Readback = ReadTexture2DMipRegion(renderer.GetDeviceEXT(), renderer.GetContextEXT(),
                                                           d3dMipTex.GetTextureEXT(), 1, 0, 0, 2, 2);
             bool level1Exact = !level1Readback.empty();
             for (std::size_t i = 0; i + 3 < level1Readback.size() && level1Exact; i += 4)
@@ -3283,11 +3283,11 @@ protected:
                     level1Readback[i+2] != 230 || level1Readback[i+3] != 255)
                     level1Exact = false;
             check(level1Exact,
-                  "D3D11TextureBackend::UpdatePixelsLevel(1, ...) round-trips EXACT bytes for a real "
+                  "D3D11TextureRenderer::UpdatePixelsLevel(1, ...) round-trips EXACT bytes for a real "
                   "mip level 1 upload, read back via a direct staging-texture copy of subresource 1 "
                   "(plan_dx.md DX-126)");
 
-            auto level0Readback = ReadTexture2DMipRegion(backend.GetDeviceEXT(), backend.GetContextEXT(),
+            auto level0Readback = ReadTexture2DMipRegion(renderer.GetDeviceEXT(), renderer.GetContextEXT(),
                                                           d3dMipTex.GetTextureEXT(), 0, 0, 0, 4, 4);
             bool level0Exact = !level0Readback.empty();
             for (std::size_t i = 0; i + 3 < level0Readback.size() && level0Exact; i += 4)
@@ -3295,7 +3295,7 @@ protected:
                     level0Readback[i+2] != 30 || level0Readback[i+3] != 255)
                     level0Exact = false;
             check(level0Exact,
-                  "D3D11TextureBackend: level 0's own content is genuinely unaffected by the level-1 "
+                  "D3D11TextureRenderer: level 0's own content is genuinely unaffected by the level-1 "
                   "upload -- proves UpdatePixelsLevel(1, ...) targeted the correct subresource, not "
                   "level 0 (plan_dx.md DX-126)");
         }
@@ -3459,14 +3459,14 @@ protected:
             check(centreM.getRProperty() >= 200 && centreM.getGProperty() <= 60 && centreM.getBProperty() <= 60,
                   "Model::Draw() -> ModelMesh::Draw()'s real orchestration (bone transform + "
                   "SetVertexBuffer + setIndices + DrawIndexedPrimitives + EffectPass::Apply) paints "
-                  "the mesh's exact red over the green clear, through the D3D11 backend (plan_dx.md DX-128)");
+                  "the mesh's exact red over the green clear, through the D3D11 renderer (plan_dx.md DX-128)");
 
             dev.SetDepthTestEnabled(false);
             dev.setRasterizerStateProperty(RasterizerState::CullCounterClockwise);
         }
 
         // plan_dx.md DX-155: Model root-bone-index flexibility (Task 916's own `rootBoneIndex`
-        // constructor parameter) against the real D3D11 backend. Honest scope, confirmed by
+        // constructor parameter) against the real D3D11 renderer. Honest scope, confirmed by
         // reading Model::Draw()/CopyAbsoluteBoneTransformsTo() first: neither actually consults
         // `root_`/`rootBoneIndex` -- Draw() picks each mesh's world transform via
         // `mesh->getParentBoneProperty()` (the `meshParentBones` constructor argument), and
@@ -3528,7 +3528,7 @@ protected:
                   "the NON-zero-indexed boneR1, rootBoneIndex=1) genuinely draws the mesh's exact red "
                   "over the green clear -- proves meshParentBones correctly selected boneR1's own "
                   "Identity transform, not boneR0's off-screen-translating one, through the real D3D11 "
-                  "backend (plan_dx.md DX-155)");
+                  "renderer (plan_dx.md DX-155)");
 
             dev.SetDepthTestEnabled(false);
             dev.setRasterizerStateProperty(RasterizerState::CullCounterClockwise);
@@ -3542,8 +3542,8 @@ protected:
         // aliasing risk a shared 6-slice texture array creates that a single RenderTarget2D never
         // has to prove).
         {
-            auto rtCube = backend.CreateRenderTargetCube(8, 0 /*DepthFormat::None*/, false /*preserveContents*/, false /*mipMap*/);
-            auto* d3dRtCube = static_cast<D3D11RenderTargetCubeBackend*>(rtCube.get());
+            auto rtCube = renderer.CreateRenderTargetCube(8, 0 /*DepthFormat::None*/, false /*preserveContents*/, false /*mipMap*/);
+            auto* d3dRtCube = static_cast<D3D11RenderTargetCubeRenderer*>(rtCube.get());
 
             // (a) Bind face 0, Clear() -> exact color lands in face 0's own texture slice.
             rtCube->BindAsRenderTargetFace(0);
@@ -3555,7 +3555,7 @@ protected:
                 face0Matches = face0Pixels[i * 4 + 0] == 11 && face0Pixels[i * 4 + 1] == 22 &&
                                face0Pixels[i * 4 + 2] == 33 && face0Pixels[i * 4 + 3] == 255;
             check(face0Matches,
-                  "D3D11RenderTargetCubeBackend: BindAsRenderTargetFace(0)+Clear() writes the exact "
+                  "D3D11RenderTargetCubeRenderer: BindAsRenderTargetFace(0)+Clear() writes the exact "
                   "color into face 0's own texture slice (plan_dx.md DX-129)");
 
             // (b) Bind face 1 to a DIFFERENT color, then re-read face 0 -- proves the two faces are
@@ -3575,7 +3575,7 @@ protected:
                 face0StillMatches = face0Again[i * 4 + 0] == 11 && face0Again[i * 4 + 1] == 22 &&
                                     face0Again[i * 4 + 2] == 33 && face0Again[i * 4 + 3] == 255;
             check(face1Matches && face0StillMatches,
-                  "D3D11RenderTargetCubeBackend: face 1 gets its OWN distinct color, and face 0's "
+                  "D3D11RenderTargetCubeRenderer: face 1 gets its OWN distinct color, and face 0's "
                   "earlier content survives completely unchanged -- proves the 6 cube faces are "
                   "genuinely independent texture-array slices, not aliased (plan_dx.md DX-129)");
 
@@ -3590,19 +3590,19 @@ protected:
                 if (p.getRProperty() != 44 || p.getGProperty() != 55 || p.getBProperty() != 66 || p.getAProperty() != 255)
                     bbMatchesCube = false;
             check(bbMatchesCube,
-                  "D3D11RenderTargetCubeBackend: UnbindAsRenderTarget() genuinely restores the back "
+                  "D3D11RenderTargetCubeRenderer: UnbindAsRenderTarget() genuinely restores the back "
                   "buffer as Clear()'s next target (plan_dx.md DX-129)");
         }
 
         // plan_dx.md DX-152: RenderTargetCube MSAA -- a real feature (previously deliberately out
-        // of scope, D3D11RenderTargetCubeBackend's own header comment) landing now, not just a
+        // of scope, D3D11RenderTargetCubeRenderer's own header comment) landing now, not just a
         // test. Same real, device-queried methodology as Check K's own RenderTarget2D MSAA proof
         // (DX-45): pass/fail is purely about pixel correctness of the resolve; whether the device
         // actually granted real multi-sampling is printed as diagnostics, not gated on, since
         // that's real hardware/driver capability.
         {
-            auto rtCubeMsaa = backend.CreateRenderTargetCube(8, 0 /*DepthFormat::None*/, false /*preserveContents*/, false /*mipMap*/, 4);
-            auto* d3dRtCubeMsaa = static_cast<D3D11RenderTargetCubeBackend*>(rtCubeMsaa.get());
+            auto rtCubeMsaa = renderer.CreateRenderTargetCube(8, 0 /*DepthFormat::None*/, false /*preserveContents*/, false /*mipMap*/, 4);
+            auto* d3dRtCubeMsaa = static_cast<D3D11RenderTargetCubeRenderer*>(rtCubeMsaa.get());
             rtCubeMsaa->BindAsRenderTargetFace(0);
             dev.Clear(Color(77, 88, 99, 255));
             rtCubeMsaa->UnbindAsRenderTarget(); // ResolveMsaaEXT() for face 0
@@ -3614,7 +3614,7 @@ protected:
                 msaaCubeMatches = resolvedCube[i * 4 + 0] == 77 && resolvedCube[i * 4 + 1] == 88 &&
                                   resolvedCube[i * 4 + 2] == 99 && resolvedCube[i * 4 + 3] == 255;
             check(msaaCubeMatches,
-                  "D3D11RenderTargetCubeBackend (MSAA): Clear()+resolve-on-unbind produces the exact "
+                  "D3D11RenderTargetCubeRenderer (MSAA): Clear()+resolve-on-unbind produces the exact "
                   "color in the resolved texture, face 0 (plan_dx.md DX-152)");
             std::printf("    RenderTargetCube MSAA: requested 4x, device-applied %dx\n",
                         d3dRtCubeMsaa->GetMultiSampleCount());
@@ -3631,10 +3631,10 @@ protected:
         // the depth value a prior ClearDepth() wrote).
         {
             constexpr int kRtW = 32, kRtH = 32;
-            auto rtCl = backend.CreateRenderTarget2D(kRtW, kRtH, /*depthFormat=*/3 /*Depth24Stencil8*/, false, false, 0);
-            auto* d3dRtCl = static_cast<D3D11RenderTargetBackend*>(rtCl.get());
+            auto rtCl = renderer.CreateRenderTarget2D(kRtW, kRtH, /*depthFormat=*/3 /*Depth24Stencil8*/, false, false, 0);
+            auto* d3dRtCl = static_cast<D3D11RenderTargetRenderer*>(rtCl.get());
             check(d3dRtCl->GetDSVEXT() != nullptr,
-                  "D3D11RenderTargetBackend: Depth24Stencil8 render target with a real depth-stencil "
+                  "D3D11RenderTargetRenderer: Depth24Stencil8 render target with a real depth-stencil "
                   "view created (plan_dx.md DX-130)");
 
             Microsoft::WRL::ComPtr<ID3D11Resource> dsResource;
@@ -3642,14 +3642,14 @@ protected:
             Microsoft::WRL::ComPtr<ID3D11Texture2D> dsTexture;
             dsResource.As(&dsTexture);
 
-            backend.SetRenderTarget2D(rtCl.get());
+            renderer.SetRenderTarget2D(rtCl.get());
 
             // --- ClearColorDepthAndStencil: all three at once. ---
-            backend.ClearColorDepthAndStencil(0.0f, 0.0f, 1.0f, 1.0f, /*depth=*/0.75f, /*stencil=*/0x5A);
+            renderer.ClearColorDepthAndStencil(0.0f, 0.0f, 1.0f, 1.0f, /*depth=*/0.75f, /*stencil=*/0x5A);
             auto stencilAfterAll = ReadDepthStencilPlane(device, context, dsTexture.Get(), kRtW, kRtH);
             const bool stencilPlaneReadable = !stencilAfterAll.empty();
             check(stencilPlaneReadable,
-                  "D3D11RenderTargetBackend: the depth-stencil resource's real bytes are readable "
+                  "D3D11RenderTargetRenderer: the depth-stencil resource's real bytes are readable "
                   "back from the GPU -- the mechanism the stencil proofs below rely on");
 
             if (stencilPlaneReadable)
@@ -3657,16 +3657,16 @@ protected:
                 bool allAre5A = true;
                 for (uint8_t v : stencilAfterAll) if (v != 0x5A) { allAre5A = false; break; }
                 check(allAre5A,
-                      "D3D11GraphicsBackend::ClearColorDepthAndStencil(): genuinely wrote 0x5A into "
+                      "D3D11Renderer::ClearColorDepthAndStencil(): genuinely wrote 0x5A into "
                       "EVERY pixel of the real stencil plane, read straight back off the GPU (plan_dx.md DX-130)");
 
                 // --- ClearStencil alone: must change the stencil (depth verified separately below). ---
-                backend.ClearStencil(0x3C);
+                renderer.ClearStencil(0x3C);
                 auto stencilAfterStencilOnly = ReadDepthStencilPlane(device, context, dsTexture.Get(), kRtW, kRtH);
                 bool allAre3C = !stencilAfterStencilOnly.empty();
                 for (uint8_t v : stencilAfterStencilOnly) if (v != 0x3C) { allAre3C = false; break; }
                 check(allAre3C,
-                      "D3D11GraphicsBackend::ClearStencil(0x3C): alone genuinely overwrites the "
+                      "D3D11Renderer::ClearStencil(0x3C): alone genuinely overwrites the "
                       "stencil plane to 0x3C -- a real, different value than the prior 0x5A, so this "
                       "is a real clear, not a silent no-op (plan_dx.md DX-130)");
             }
@@ -3678,13 +3678,13 @@ protected:
                 { 0.9f,  0.9f, 0.5f, 0xFF0000FFu},
                 { 0.0f, -0.9f, 0.5f, 0xFF0000FFu},
             };
-            auto vbZCl = backend.CreateVertexBuffer(3);
+            auto vbZCl = renderer.CreateVertexBuffer(3);
             vbZCl->SetData(triZCl, /*vertex_count=*/3, /*stride_in_bytes=*/sizeof(VtxZCl));
 
-            backend.ApplyRasterizerState(/*cullMode=*/0 /*None*/, /*fillMode=*/0 /*Solid*/, false, 0.0f, 0.0f);
+            renderer.ApplyRasterizerState(/*cullMode=*/0 /*None*/, /*fillMode=*/0 /*Solid*/, false, 0.0f, 0.0f);
 
             auto drawTriAndSampleCenterCl = [&]() -> Color {
-                backend.DrawColoredPrimitives(*vbZCl, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                renderer.DrawColoredPrimitives(*vbZCl, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                               Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1);
                 const auto px = ReadTexture2DRegion(device, context, d3dRtCl->GetSampleableTextureEXT(),
                                                     kRtW / 2, kRtH / 2, 1, 1);
@@ -3693,45 +3693,45 @@ protected:
 
             // Control: with the depth test OFF, this exact triangle must draw -- isolates "the draw
             // itself works" from "the depth test rejected it".
-            backend.ApplyDepthStencilState(false, false, 2, false, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 0);
-            backend.ClearColorAndDepth(0.0f, 0.0f, 1.0f, 1.0f, 0.9f);
+            renderer.ApplyDepthStencilState(false, false, 2, false, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 0);
+            renderer.ClearColorAndDepth(0.0f, 0.0f, 1.0f, 1.0f, 0.9f);
             const Color ctrlPxCl = drawTriAndSampleCenterCl();
             check(ctrlPxCl.getRProperty() == 255 && ctrlPxCl.getGProperty() == 0,
-                  "D3D11GraphicsBackend: control -- with depth testing OFF, this exact triangle "
+                  "D3D11Renderer: control -- with depth testing OFF, this exact triangle "
                   "genuinely draws its red, so a following failure can only mean the depth test "
                   "rejected it, not that the draw is broken");
-            backend.ApplyDepthStencilState(/*depthEnable=*/true, /*depthWriteEnable=*/true,
+            renderer.ApplyDepthStencilState(/*depthEnable=*/true, /*depthWriteEnable=*/true,
                                            /*depthFunc=*/2 /*Less*/, false, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 0);
 
             // Depth cleared FAR (0.9): the z=0.5 triangle is nearer -> Less passes -> red is drawn.
-            backend.ClearColorAndDepth(0.0f, 0.0f, 1.0f, 1.0f, /*depth=*/0.9f);
+            renderer.ClearColorAndDepth(0.0f, 0.0f, 1.0f, 1.0f, /*depth=*/0.9f);
             const Color passPxCl = drawTriAndSampleCenterCl();
             check(passPxCl.getRProperty() == 255 && passPxCl.getGProperty() == 0,
-                  "D3D11GraphicsBackend::ClearColorAndDepth(depth=0.9): the z=0.5 triangle passes "
+                  "D3D11Renderer::ClearColorAndDepth(depth=0.9): the z=0.5 triangle passes "
                   "depthFunc=Less and draws its exact red, proving the cleared DEPTH value is real "
                   "(plan_dx.md DX-130)");
 
             // Depth cleared NEAR (0.1): the same z=0.5 triangle is farther -> Less fails -> blue survives.
-            backend.ClearColorAndDepth(0.0f, 0.0f, 1.0f, 1.0f, /*depth=*/0.1f);
+            renderer.ClearColorAndDepth(0.0f, 0.0f, 1.0f, 1.0f, /*depth=*/0.1f);
             const Color failPxCl = drawTriAndSampleCenterCl();
             check(failPxCl.getBProperty() == 255 && failPxCl.getRProperty() == 0,
-                  "D3D11GraphicsBackend::ClearColorAndDepth(depth=0.1): the SAME triangle at the SAME "
+                  "D3D11Renderer::ClearColorAndDepth(depth=0.1): the SAME triangle at the SAME "
                   "z=0.5 is now correctly REJECTED by the depth test (background survives) -- only "
                   "the cleared depth value differs, so each Clear* variant genuinely writes the "
                   "depth it was given, not a fixed default (plan_dx.md DX-130)");
 
             // --- ClearDepth alone must NOT touch the color target. ---
-            backend.ClearColorAndDepth(0.0f, 1.0f, 0.0f, 1.0f, /*depth=*/0.9f); // green, far depth
-            backend.ClearDepth(0.1f);                                            // depth only
+            renderer.ClearColorAndDepth(0.0f, 1.0f, 0.0f, 1.0f, /*depth=*/0.9f); // green, far depth
+            renderer.ClearDepth(0.1f);                                            // depth only
             const auto afterDepthOnlyCl = ReadTexture2DRegion(device, context, d3dRtCl->GetSampleableTextureEXT(),
                                                               kRtW / 2, kRtH / 2, 1, 1);
             check(afterDepthOnlyCl.size() >= 4 && afterDepthOnlyCl[1] == 255 && afterDepthOnlyCl[0] == 0,
-                  "D3D11GraphicsBackend::ClearDepth(): alone leaves the COLOR target untouched (the "
+                  "D3D11Renderer::ClearDepth(): alone leaves the COLOR target untouched (the "
                   "prior green survives) -- proves each variant clears only what it was asked for "
                   "(plan_dx.md DX-130)");
 
-            backend.ApplyDepthStencilState(false, false, 2, false, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 0);
-            backend.SetRenderTarget2D(nullptr);
+            renderer.ApplyDepthStencilState(false, false, 2, false, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 0);
+            renderer.SetRenderTarget2D(nullptr);
         }
 
         const int totalChecks = 2 /* SetDepthTestEnabled real, not a no-op */

@@ -159,7 +159,7 @@ TEST_F(ContentManagerTextureCacheCycleTest, UploadThroughOneHandleDoesNotReachAn
 }
 
 // Tearing the ContentManager down while entries are registered, and then the device, must not
-// touch a freed backend or a freed shadow. Meaningful chiefly under ASan/UBSan.
+// touch a freed renderer or a freed shadow. Meaningful chiefly under ASan/UBSan.
 TEST(ContentManagerTextureCacheTeardownTest, TeardownWithLiveCacheEntriesIsClean)
 {
     GraphicsDevice gd;

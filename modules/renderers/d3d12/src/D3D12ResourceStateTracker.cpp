@@ -1,9 +1,9 @@
 // plan_dx.md Phase DX12 (DX-106).
-#include "CNA/Internal/Backends/D3D12/D3D12ResourceStateTracker.hpp"
+#include "CNA/Internal/Renderers/D3D12/D3D12ResourceStateTracker.hpp"
 
 #include <stdexcept>
 
-namespace CNA::Internal::Backends::D3D12
+namespace CNA::Internal::Renderers::D3D12
 {
     void D3D12ResourceStateTracker::TrackResource(ID3D12Resource* resource, D3D12_RESOURCE_STATES initialState)
     {

@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MS-PL
 //
-// REMED-GFX-202: real-device proof that the Diligent backend's instanced route consumes the two
+// REMED-GFX-202: real-device proof that the Diligent renderer's instanced route consumes the two
 // per-binding properties the removed GpuDrawParams::instanceVb/instanceVertexOffset/
 // instanceFrequency trio could not carry, and that the geometry binding's own VertexOffset reaches
 // slot 0 as well. Everything here goes through the public XNA API only.
 //
 // Each leg is written so that "consumed" and "ignored" produce DIFFERENT pixels, and both outcomes
 // are in bounds -- a leg whose failure mode is an out-of-range fetch proves nothing about which
-// value the backend actually used.
+// value the renderer actually used.
 //
 //   Leg A -- the instance binding's VertexOffset. Four instance matrices at x = -0.6/-0.2/0.2/0.6,
 //            bound with VertexOffset = 1, three instances drawn. Consumed: matrices 1..3, so 0.6 is
@@ -57,7 +57,7 @@ namespace
     // 4 (leg A) + 4 (leg B) + 2 (leg C) + 2 capability assertions.
     constexpr int kChecks = 12;
 
-    /// Row-major 4x4, four consecutive float4 rows -- this backend's own kInstancedVertexHlsl
+    /// Row-major 4x4, four consecutive float4 rows -- this renderer's own kInstancedVertexHlsl
     /// convention, identical to diligent_instanced_test.cpp's.
     struct InstanceMatrixRowMajor
     {
@@ -253,7 +253,7 @@ protected:
         Check(ColorNear(cRight, red), "geometry VertexOffset=4: the second quad is drawn");
         Check(ColorNear(cLeft, Color::Lime), "geometry VertexOffset=4: the first quad is NOT drawn");
 
-        // ---- The capability boundary this backend declares, asserted rather than assumed ----
+        // ---- The capability boundary this renderer declares, asserted rather than assumed ----
         Check(!device.SupportsCapability(CNA::GraphicsCapability::MultiStreamVertexInput),
               "MultiStreamVertexInput is reported false");
         Check(device.SupportsCapability(CNA::GraphicsCapability::Instancing),

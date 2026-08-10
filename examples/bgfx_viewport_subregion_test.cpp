@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // Task 880: GraphicsDevice.Viewport GPU wiring — Bgfx sub-region (split-screen) viewport.
 //
-// GraphicsDevice.Viewport previously had zero GPU backend effect on Bgfx: the shared 3D/2D
+// GraphicsDevice.Viewport previously had zero GPU renderer effect on Bgfx: the shared 3D/2D
 // view's rect was always reset to the full window size by EnsureViewState() (called from
 // Clear()/Present()/SubmitSprite()), regardless of what Viewport was set to. This test proves a
 // genuine sub-region Viewport (e.g. the left half of the window, as in a split-screen layout) now

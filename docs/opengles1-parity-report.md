@@ -1,13 +1,13 @@
-# OpenGL ES 1.1 cross-backend pixel-parity measurement (OPENGLES1-78)
+# OpenGL ES 1.1 cross-renderer pixel-parity measurement (OPENGLES1-78)
 
 **Status: 2026-07-22.** Same 39-scene corpus (`tools/xna-oracle/scenes/*.scene`), same
 `tools/xna-oracle/CnaOracleRender.cpp`, same checked-in real XNA 4.0 reference images
 (`tools/xna-oracle/reference/*.png`) and same `scripts/xna-diff.py` that the D3D9 (`D9-A5`) and
-EasyGL (`D9-A6`) measurements already use — now also run through the OpenGL ES 1.1 backend.
+EasyGL (`D9-A6`) measurements already use — now also run through the OpenGL ES 1.1 renderer.
 
-| backend | tolerance 0 | tolerance 1 |
+| renderer | tolerance 0 | tolerance 1 |
 | --- | --- | --- |
-| EasyGL (already-verified GL backend, same machine/driver stack) | 10/39 exact | — |
+| EasyGL (already-verified GL renderer, same machine/driver stack) | 10/39 exact | — |
 | **OPENGLES1** | **6/39 exact** | **11/39 exact** |
 
 Reproduce with:
@@ -24,12 +24,12 @@ fails to *render*, never merely because it differs.
 
 ## What this found
 
-Running the corpus was worth it on its own: it exposed two real backend defects that the seven
+Running the corpus was worth it on its own: it exposed two real renderer defects that the seven
 targeted runtime tests (OPENGLES1-77/79) had all missed.
 
 ### 1. Sampler state was applied to the wrong texture object (3D paths)
 
-`GraphicsDevice::applySamplerStatesToBackend()` pushes sampler state down **before** calling
+`GraphicsDevice::applySamplerStatesToRenderer()` pushes sampler state down **before** calling
 `DrawPrimitivesEx`, but GL keeps filter and wrap mode on the *texture object*, and the 3D draw
 paths bind their textures **inside** that call. The `glTexParameteri` calls therefore landed on
 whatever texture happened to be bound at push time, and the texture the draw actually used kept its
@@ -62,7 +62,7 @@ pixels at delta 255 to **exact**.
 
 ## Where OPENGLES1 now matches EasyGL exactly
 
-For a large part of the corpus the two backends produce byte-identical output, i.e. the residual
+For a large part of the corpus the two renderers produce byte-identical output, i.e. the residual
 difference from XNA is the *shared* GL-versus-XNA divergence rather than anything ES1-specific:
 
 `textured_quad` (459/459), `lit_textured_quad` (459/459), all seven `alphatest_*` scenes,

@@ -57,7 +57,7 @@ layout(set = 1, binding = 1) uniform SkinnedLightParams {
 
 // REMED-GFX-009: fog forwarded to the fragment stage as a varying (the shared PC block is fully
 // packed, no spare bytes). Keep-factor computed from raw object-space Z, matching
-// VulkanGraphicsBackend's FogParams shape byte-for-byte.
+// VulkanRenderer's FogParams shape byte-for-byte.
 layout(set = 1, binding = 2) uniform FogParams {
     vec4 fogColorEnabled;  // xyz = FogColor, w = fogEnabled
     vec4 fogVector;        // REMED-GFX-010: FNA fog vector (dot with object/skin pos)
@@ -78,7 +78,7 @@ void main() {
     // REMED-GFX-006 (Variant B): the normal takes the inverse-transpose world matrix
     // transpose(inverse(mat3(world))), not raw mat3(lp.world). Raw World is correct only for
     // rotation and uniform scale and diverges from FNA's mul(normal, WorldInverseTranspose) under
-    // non-uniform scale; it also contradicted this backend's own unskinned pbr3d.vert.glsl and its
+    // non-uniform scale; it also contradicted this renderer's own unskinned pbr3d.vert.glsl and its
     // (now-fixed) Vulkan sibling pbr3d_skinned.vert.glsl. The tangent stays on raw World: tangents
     // transform as directions, not as normals (glTF convention, unchanged).
     mat3 skinNormalMat = mat3(skinMat);

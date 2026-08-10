@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // GDI-050: public-API coverage for GDI's standalone CPU stencil plane.
 
-#include "CNA/GraphicsBackendType.hpp"
+#include "CNA/GraphicsRendererType.hpp"
 #include "CNA/GraphicsCapability.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
@@ -242,8 +242,8 @@ int main()
                               GraphicsProfile::Reach, parameters);
 
         bool ok = true;
-        ok &= Expect(CNA::getCurrentGraphicsBackendType() == CNA::GraphicsBackendType::Gdi,
-                     "test executable uses the GDI backend");
+        ok &= Expect(CNA::getCurrentGraphicsRendererType() == CNA::GraphicsRendererType::Gdi,
+                     "test executable uses the GDI renderer");
         ok &= Expect(device.SupportsCapability(CNA::GraphicsCapability::StencilBuffer),
                      "GDI advertises its standalone stencil plane");
         ok &= Expect(!device.SupportsCapability(CNA::GraphicsCapability::DepthStencilBuffer),

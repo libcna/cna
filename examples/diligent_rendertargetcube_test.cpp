@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_diligent.md DILIGENT-22: real-device proof that RenderTargetCube on the Diligent backend
+// plan_diligent.md DILIGENT-22: real-device proof that RenderTargetCube on the Diligent renderer
 // renders into individual faces and can be sampled back, through the public XNA API only.
 //
 // Check A -- rendering a distinct clear colour into face 0 (+X) and reading it back via
 //   RenderTargetCube::GetData shows that colour.
 // Check B -- the same for face 2 (+Y), a DIFFERENT colour than face 0's. A and B together prove
-//   per-face storage rather than one shared colour: a backend that aliased every face to one
+//   per-face storage rather than one shared colour: a renderer that aliased every face to one
 //   image would pass either check alone but not both with different colours.
 // Check C -- SpriteBatch drawn into one face covers only its destination rectangle inside that
 //   face, exactly like the RenderTarget2D case, proving ordinary 2D drawing works through the
@@ -14,7 +14,7 @@
 // Check D -- EnvironmentMapEffect sampling this cube (instead of a plain TextureCube, as in
 //   Diligent_DualTextureEnvMap) picks up face 0's rendered colour via reflection. This is the real
 //   point of a cube render target: the whole reason to make one is to sample it back as an
-//   environment map, and this backend's EnvironmentMapEffect dispatch (DILIGENT-34) accepts a
+//   environment map, and this renderer's EnvironmentMapEffect dispatch (DILIGENT-34) accepts a
 //   RenderTargetCube through the same DiligentSampledTexture interface a plain TextureCube uses.
 //
 // Exit code 0 = all checks PASS, 1 = any FAIL, 77 = no usable device.
@@ -148,7 +148,7 @@ protected:
               "SpriteBatch into face +Z covers only its destination rectangle");
 
         // Check D deliberately does not try to predict which XNA CubeMapFace a given reflection
-        // direction samples in this backend's HLSL -- that mapping is real but untested here, and
+        // direction samples in this renderer's HLSL -- that mapping is real but untested here, and
         // getting it wrong would make this check assert a coincidence instead of the thing it is
         // meant to prove. Every face is set to the SAME colour instead, so the check is genuinely
         // "does sampling this render target return rendered content at all", independent of which

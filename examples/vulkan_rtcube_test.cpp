@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // Task 142: Vulkan integration test — RenderTargetCube per-face rendering.
 //
-// Verifies VulkanRenderTargetCubeBackend:
+// Verifies VulkanRenderTargetCubeRenderer:
 //   — 6-face cubemap image allocation and per-face VkFramebuffer
 //   — SetRenderTarget(RenderTargetCube*, CubeMapFace) routing
 //   — SpriteBatch renders into each face (proves per-face framebuffers are distinct)

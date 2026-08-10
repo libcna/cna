@@ -1,12 +1,12 @@
 // plan_dx.md Phase DX7 (DX-50/DX-51/DX-52).
-#include "CNA/Internal/Backends/D3D11/D3D11StateObjectCache.hpp"
-#include "CNA/Internal/Backends/D3DCommon/D3DStateMapping.hpp"
+#include "CNA/Internal/Renderers/D3D11/D3D11StateObjectCache.hpp"
+#include "CNA/Internal/Renderers/D3DCommon/D3DStateMapping.hpp"
 
 #include <cmath>
 #include <cstdio>
 #include <stdexcept>
 
-namespace CNA::Internal::Backends::D3D11
+namespace CNA::Internal::Renderers::D3D11
 {
     namespace
     {
@@ -46,7 +46,7 @@ namespace CNA::Internal::Backends::D3D11
 
         // XNA Blend::One=0, Blend::Zero=1 -- BlendState.Opaque is SrcBlend=One/DestBlend=Zero on
         // both channels, i.e. a mathematical no-op. Matches this project's own already-established
-        // VulkanGraphicsBackend::ApplyBlendState heuristic (Task 868).
+        // VulkanRenderer::ApplyBlendState heuristic (Task 868).
         const bool isOpaque = colorSrcBlend == 0 && colorDstBlend == 1 &&
                               alphaSrcBlend == 0 && alphaDstBlend == 1;
 
@@ -140,9 +140,9 @@ namespace CNA::Internal::Backends::D3D11
     {
         // XNA's RasterizerState.DepthBias is a float already expressed in units of "r", the
         // depth buffer format's minimum resolvable difference -- the exact same convention this
-        // project's own Vulkan backend feeds unscaled into vkCmdSetDepthBias's depthBiasConstantFactor,
+        // project's own Vulkan renderer feeds unscaled into vkCmdSetDepthBias's depthBiasConstantFactor,
         // and EasyGL feeds unscaled into glPolygonOffset's "units" parameter (see
-        // VulkanGraphicsBackend::ApplyRasterizerState / EasyGLGraphicsBackend::ApplyRasterizerState's
+        // VulkanRenderer::ApplyRasterizerState / EasyGLRenderer::ApplyRasterizerState's
         // own comments, Task 767). D3D11_RASTERIZER_DESC::DepthBias is the same "r"-scaled bias,
         // but declared INT rather than FLOAT -- round to the nearest representable integer count
         // rather than truncating.
@@ -161,7 +161,7 @@ namespace CNA::Internal::Backends::D3D11
         desc.SlopeScaledDepthBias = slopeScaleDepthBias;
         desc.DepthClipEnable = TRUE;
         desc.ScissorEnable = scissorTestEnable ? TRUE : FALSE;
-        // IGraphicsBackend::ApplyRasterizerState carries no MultiSampleAntiAlias parameter --
+        // IGraphicsRenderer::ApplyRasterizerState carries no MultiSampleAntiAlias parameter --
         // documented interface limitation; matches D3D11_RASTERIZER_DESC's own FALSE default
         // (this only affects line/point AA algorithm selection, not MSAA render-target sampling,
         // which Phase DX6's DXGI_SAMPLE_DESC already controls independently of rasterizer state).

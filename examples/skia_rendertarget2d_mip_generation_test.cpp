@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MS-PL
 // SKIA-132: deterministic RenderTarget2D mip invalidation and resolve barriers.
 
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
-#include "CNA/Internal/Backends/Skia/SkiaGraphicsBackend.hpp"
-#include "CNA/Internal/Backends/Skia/SkiaRenderTargetBackend.hpp"
-#include "CNA/Internal/Backends/Skia/SkiaRenderTargetBinding.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaRenderer.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaRenderTargetRenderer.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaRenderTargetBinding.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
@@ -27,12 +27,12 @@
 #include <memory>
 #include <vector>
 
-using CNA::Internal::Backends::IRenderTargetBackend;
-using CNA::Internal::Backends::Skia::SkiaGraphicsBackend;
-using CNA::Internal::Backends::Skia::SkiaRenderTargetBackend;
-using CNA::Internal::Backends::Skia::SkiaRenderTargetBinding;
-using CNA::Internal::Backends::Skia::SkiaResourceStats;
-using CNA::Internal::Backends::Skia::SkiaSourceAlphaConvention;
+using CNA::Internal::Renderers::IRenderTargetRenderer;
+using CNA::Internal::Renderers::Skia::SkiaRenderer;
+using CNA::Internal::Renderers::Skia::SkiaRenderTargetRenderer;
+using CNA::Internal::Renderers::Skia::SkiaRenderTargetBinding;
+using CNA::Internal::Renderers::Skia::SkiaResourceStats;
+using CNA::Internal::Renderers::Skia::SkiaSourceAlphaConvention;
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
 
@@ -70,10 +70,10 @@ namespace
 
     [[nodiscard]] bool SameStats(const SkiaResourceStats& left, const SkiaResourceStats& right)
     {
-        return left.textureBackends == right.textureBackends
+        return left.textureRenderers == right.textureRenderers
             && left.textureImageViews == right.textureImageViews
-            && left.cpuTextureCubeBackends == right.cpuTextureCubeBackends
-            && left.cpuTexture3DBackends == right.cpuTexture3DBackends
+            && left.cpuTextureCubeRenderers == right.cpuTextureCubeRenderers
+            && left.cpuTexture3DRenderers == right.cpuTexture3DRenderers
             && left.renderTargets == right.renderTargets
             && left.renderTargetCubes == right.renderTargetCubes
             && left.targetSnapshots == right.targetSnapshots
@@ -147,7 +147,7 @@ namespace
         return target;
     }
 
-    class ForeignRenderTarget final : public IRenderTargetBackend
+    class ForeignRenderTarget final : public IRenderTargetRenderer
     {
     public:
         [[nodiscard]] int GetWidth() const override { return 7; }
@@ -188,22 +188,22 @@ protected:
         finished_ = true;
 
         auto& device = getGraphicsDeviceProperty();
-        auto* graphicsBackend = dynamic_cast<SkiaGraphicsBackend*>(&device.GetBackend());
-        Check(graphicsBackend != nullptr, "Skia backend exposes the target resolve test seams");
-        if (!graphicsBackend)
+        auto* graphicsRenderer = dynamic_cast<SkiaRenderer*>(&device.GetRenderer());
+        Check(graphicsRenderer != nullptr, "Skia renderer exposes the target resolve test seams");
+        if (!graphicsRenderer)
         {
             Exit();
             return;
         }
-        const SkiaResourceStats baseline = graphicsBackend->GetResourceStatsEXT();
+        const SkiaResourceStats baseline = graphicsRenderer->GetResourceStatsEXT();
 
         {
             RenderTarget2D target(device, 7, 5, true, SurfaceFormat::Color, DepthFormat::None,
                                   0, RenderTargetUsage::PreserveContents);
-            auto* backend = dynamic_cast<SkiaRenderTargetBackend*>(target.GetRenderTargetBackend());
-            Check(backend != nullptr && backend->MipLevelCountEXT() == 3,
+            auto* renderer = dynamic_cast<SkiaRenderTargetRenderer*>(target.GetRenderTargetRenderer());
+            Check(renderer != nullptr && renderer->MipLevelCountEXT() == 3,
                   "odd 7x5 target exposes the complete 7x5 -> 3x2 -> 1x1 chain");
-            if (!backend)
+            if (!renderer)
             {
                 Exit();
                 return;
@@ -218,8 +218,8 @@ protected:
             target.GetData(1, nullptr, level1.data(), 0, 6);
             target.GetData(2, nullptr, level2.data(), 0, 1);
             Check(SameColors(level1, expectedLevel1) && SameColors(level2, expectedLevel2)
-                      && backend->MipGenerationCountEXT(1) == 1u
-                      && backend->MipGenerationCountEXT(2) == 1u,
+                      && renderer->MipGenerationCountEXT(1) == 1u
+                      && renderer->MipGenerationCountEXT(2) == 1u,
                   "level-zero SetData eagerly generates the complete odd chain exactly once");
 
             expectedLevel1 = Pattern(3, 2, 91);
@@ -228,8 +228,8 @@ protected:
             target.GetData(1, nullptr, level1.data(), 0, 6);
             target.GetData(2, nullptr, level2.data(), 0, 1);
             Check(SameColors(level1, expectedLevel1) && SameColors(level2, expectedLevel2)
-                      && backend->MipGenerationCountEXT(1) == 1u
-                      && backend->MipGenerationCountEXT(2) == 2u,
+                      && renderer->MipGenerationCountEXT(1) == 1u
+                      && renderer->MipGenerationCountEXT(2) == 2u,
                   "higher-level SetData replaces its level and regenerates only descendants");
 
             const Rectangle patchRect(2, 1, 1, 1);
@@ -240,8 +240,8 @@ protected:
             target.GetData(1, nullptr, level1.data(), 0, 6);
             target.GetData(2, nullptr, level2.data(), 0, 1);
             Check(SameColors(level1, expectedLevel1) && SameColors(level2, expectedLevel2)
-                      && backend->MipGenerationCountEXT(2) == 3u,
-                  "partial target mip upload seeds untouched texels from live backend bytes");
+                      && renderer->MipGenerationCountEXT(2) == 3u,
+                  "partial target mip upload seeds untouched texels from live renderer bytes");
 
             level0 = Pattern(7, 5, 173);
             target.SetData(level0.data(), static_cast<int>(level0.size()));
@@ -250,8 +250,8 @@ protected:
             target.GetData(1, nullptr, level1.data(), 0, 6);
             target.GetData(2, nullptr, level2.data(), 0, 1);
             Check(SameColors(level1, expectedLevel1) && SameColors(level2, expectedLevel2)
-                      && backend->MipGenerationCountEXT(1) == 2u
-                      && backend->MipGenerationCountEXT(2) == 4u,
+                      && renderer->MipGenerationCountEXT(1) == 2u
+                      && renderer->MipGenerationCountEXT(2) == 4u,
                   "later parent upload replaces prior explicit target descendants like EasyGL resolve");
 
             device.SetRenderTarget(&target);
@@ -263,124 +263,124 @@ protected:
             spriteBatch_->Draw(*fill_, Rectangle(0, 0, 7, 5), Color::White);
             spriteBatch_->Draw(*fill_, Rectangle(0, 0, 7, 5), Color::White);
             spriteBatch_->End();
-            Check(backend->MipLevelDirtyEXT(1) && backend->MipLevelDirtyEXT(2)
-                      && backend->MipGenerationCountEXT(1) == 2u
-                      && backend->MipGenerationCountEXT(2) == 4u,
+            Check(renderer->MipLevelDirtyEXT(1) && renderer->MipLevelDirtyEXT(2)
+                      && renderer->MipGenerationCountEXT(1) == 2u
+                      && renderer->MipGenerationCountEXT(2) == 4u,
                   "multiple writes in one pass only mark descendants dirty");
             device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
             target.GetData(1, nullptr, level1.data(), 0, 6);
             target.GetData(2, nullptr, level2.data(), 0, 1);
             Check(AllColor(level1, kGreen) && AllColor(level2, kGreen)
-                      && backend->MipGenerationCountEXT(1) == 3u
-                      && backend->MipGenerationCountEXT(2) == 5u,
+                      && renderer->MipGenerationCountEXT(1) == 3u
+                      && renderer->MipGenerationCountEXT(2) == 5u,
                   "unbind regenerates each dirty descendant exactly once");
 
             device.SetRenderTarget(&target);
             device.Clear(kRed);
             std::vector<Color> renderedLevel0(35, Color::Transparent);
             target.GetData(0, nullptr, renderedLevel0.data(), 0, 35);
-            const std::uint64_t readBarrierLevel1 = backend->MipGenerationCountEXT(1);
-            const std::uint64_t readBarrierLevel2 = backend->MipGenerationCountEXT(2);
+            const std::uint64_t readBarrierLevel1 = renderer->MipGenerationCountEXT(1);
+            const std::uint64_t readBarrierLevel2 = renderer->MipGenerationCountEXT(2);
             target.GetData(2, nullptr, level2.data(), 0, 1);
             device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
             Check(AllColor(renderedLevel0, kRed) && AllColor(level2, kRed)
                       && readBarrierLevel1 == 4u && readBarrierLevel2 == 6u
-                      && backend->MipGenerationCountEXT(1) == readBarrierLevel1
-                      && backend->MipGenerationCountEXT(2) == readBarrierLevel2,
+                      && renderer->MipGenerationCountEXT(1) == readBarrierLevel1
+                      && renderer->MipGenerationCountEXT(2) == readBarrierLevel2,
                   "active-target readback resolves once and later readback/unbind do no duplicate work");
 
             device.SetRenderTarget(&target);
             device.Clear(kBlue);
-            const auto resolvedSnapshot = backend->SnapshotMipLevelEXT(
+            const auto resolvedSnapshot = renderer->SnapshotMipLevelEXT(
                 2, SkiaSourceAlphaConvention::Premultiplied);
-            const std::uint64_t snapshotBarrierLevel1 = backend->MipGenerationCountEXT(1);
-            const std::uint64_t snapshotBarrierLevel2 = backend->MipGenerationCountEXT(2);
+            const std::uint64_t snapshotBarrierLevel1 = renderer->MipGenerationCountEXT(1);
+            const std::uint64_t snapshotBarrierLevel2 = renderer->MipGenerationCountEXT(2);
             device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
             Check(resolvedSnapshot && resolvedSnapshot->width() == 1
                       && resolvedSnapshot->height() == 1
                       && snapshotBarrierLevel1 == 5u && snapshotBarrierLevel2 == 7u
-                      && backend->MipGenerationCountEXT(1) == snapshotBarrierLevel1
-                      && backend->MipGenerationCountEXT(2) == snapshotBarrierLevel2,
+                      && renderer->MipGenerationCountEXT(1) == snapshotBarrierLevel1
+                      && renderer->MipGenerationCountEXT(2) == snapshotBarrierLevel2,
                   "sampling snapshot is the same one-shot resolve barrier as readback and unbind");
 
             device.SetRenderTarget(&target);
             device.Clear(kGreen);
-            const std::uint64_t beforeFailedBind1 = backend->MipGenerationCountEXT(1);
-            const std::uint64_t beforeFailedBind2 = backend->MipGenerationCountEXT(2);
+            const std::uint64_t beforeFailedBind1 = renderer->MipGenerationCountEXT(1);
+            const std::uint64_t beforeFailedBind2 = renderer->MipGenerationCountEXT(2);
             ForeignRenderTarget foreignType;
             bool foreignTypeRejected = false;
             try
             {
-                graphicsBackend->SetRenderTarget2D(&foreignType);
+                graphicsRenderer->SetRenderTarget2D(&foreignType);
             }
             catch (const std::exception&)
             {
                 foreignTypeRejected = true;
             }
             auto foreignBinding = std::make_shared<SkiaRenderTargetBinding>();
-            SkiaRenderTargetBackend foreignDevice(2, 2, true, foreignBinding, {}, true);
+            SkiaRenderTargetRenderer foreignDevice(2, 2, true, foreignBinding, {}, true);
             bool foreignDeviceRejected = false;
             try
             {
-                graphicsBackend->SetRenderTarget2D(&foreignDevice);
+                graphicsRenderer->SetRenderTarget2D(&foreignDevice);
             }
             catch (const std::exception&)
             {
                 foreignDeviceRejected = true;
             }
             Check(foreignTypeRejected && foreignDeviceRejected
-                      && backend->MipLevelDirtyEXT(1) && backend->MipLevelDirtyEXT(2)
-                      && backend->MipGenerationCountEXT(1) == beforeFailedBind1
-                      && backend->MipGenerationCountEXT(2) == beforeFailedBind2,
+                      && renderer->MipLevelDirtyEXT(1) && renderer->MipLevelDirtyEXT(2)
+                      && renderer->MipGenerationCountEXT(1) == beforeFailedBind1
+                      && renderer->MipGenerationCountEXT(2) == beforeFailedBind2,
                   "failed foreign and cross-device binds preserve the active dirty chain");
             device.Clear(kYellow);
             device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
             target.GetData(2, nullptr, level2.data(), 0, 1);
             Check(AllColor(level2, kYellow)
-                      && backend->MipGenerationCountEXT(1) == beforeFailedBind1 + 1u
-                      && backend->MipGenerationCountEXT(2) == beforeFailedBind2 + 1u,
+                      && renderer->MipGenerationCountEXT(1) == beforeFailedBind1 + 1u
+                      && renderer->MipGenerationCountEXT(2) == beforeFailedBind2 + 1u,
                   "the prior target remains selected and resolves normally after failed binds");
 
-            const auto cachedBeforeRecovery = backend->SnapshotMipLevelEXT(
+            const auto cachedBeforeRecovery = renderer->SnapshotMipLevelEXT(
                 2, SkiaSourceAlphaConvention::Premultiplied);
             device.SetRenderTarget(&target);
             device.Clear(kBlue);
-            const SkiaResourceStats beforeRecovery = graphicsBackend->GetResourceStatsEXT();
-            const std::uint64_t beforeRecoveryLevel1 = backend->MipGenerationCountEXT(1);
-            const std::uint64_t beforeRecoveryLevel2 = backend->MipGenerationCountEXT(2);
-            graphicsBackend->DebugSimulateContextLoss();
+            const SkiaResourceStats beforeRecovery = graphicsRenderer->GetResourceStatsEXT();
+            const std::uint64_t beforeRecoveryLevel1 = renderer->MipGenerationCountEXT(1);
+            const std::uint64_t beforeRecoveryLevel2 = renderer->MipGenerationCountEXT(2);
+            graphicsRenderer->DebugSimulateContextLoss();
             Check(cachedBeforeRecovery && SameStats(beforeRecovery,
-                                                    graphicsBackend->GetResourceStatsEXT())
-                      && backend->MipLevelDirtyEXT(1) && backend->MipLevelDirtyEXT(2)
-                      && backend->MipGenerationCountEXT(1) == beforeRecoveryLevel1
-                      && backend->MipGenerationCountEXT(2) == beforeRecoveryLevel2,
+                                                    graphicsRenderer->GetResourceStatsEXT())
+                      && renderer->MipLevelDirtyEXT(1) && renderer->MipLevelDirtyEXT(2)
+                      && renderer->MipGenerationCountEXT(1) == beforeRecoveryLevel1
+                      && renderer->MipGenerationCountEXT(2) == beforeRecoveryLevel2,
                   "presenter recovery preserves a live dirty target without forcing a resolve");
             device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
             target.GetData(1, nullptr, level1.data(), 0, 6);
             target.GetData(2, nullptr, level2.data(), 0, 1);
             Check(AllColor(level1, kBlue) && AllColor(level2, kBlue)
-                      && backend->MipGenerationCountEXT(1) == beforeRecoveryLevel1 + 1u
-                      && backend->MipGenerationCountEXT(2) == beforeRecoveryLevel2 + 1u,
+                      && renderer->MipGenerationCountEXT(1) == beforeRecoveryLevel1 + 1u
+                      && renderer->MipGenerationCountEXT(2) == beforeRecoveryLevel2 + 1u,
                   "target descendants remain exact after presenter recovery and later resolve");
 
             device.SetRenderTarget(&target);
-            const std::uint64_t beforeSelfSampleLevel1 = backend->MipGenerationCountEXT(1);
-            const std::uint64_t beforeSelfSampleLevel2 = backend->MipGenerationCountEXT(2);
+            const std::uint64_t beforeSelfSampleLevel1 = renderer->MipGenerationCountEXT(1);
+            const std::uint64_t beforeSelfSampleLevel2 = renderer->MipGenerationCountEXT(2);
             spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::Opaque,
                                 const_cast<SamplerState*>(&SamplerState::PointClamp),
                                 nullptr, nullptr);
             spriteBatch_->Draw(target, Rectangle(0, 0, 7, 5), Rectangle(0, 0, 7, 5),
                                Color::White);
             spriteBatch_->End();
-            Check(backend->MipLevelDirtyEXT(1) && backend->MipLevelDirtyEXT(2)
-                      && backend->MipGenerationCountEXT(1) == beforeSelfSampleLevel1
-                      && backend->MipGenerationCountEXT(2) == beforeSelfSampleLevel2,
+            Check(renderer->MipLevelDirtyEXT(1) && renderer->MipLevelDirtyEXT(2)
+                      && renderer->MipGenerationCountEXT(1) == beforeSelfSampleLevel1
+                      && renderer->MipGenerationCountEXT(2) == beforeSelfSampleLevel2,
                   "self-sampling resolves its source before marking the destination pass dirty");
             device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
             target.GetData(2, nullptr, level2.data(), 0, 1);
             Check(AllColor(level2, kBlue)
-                      && backend->MipGenerationCountEXT(1) == beforeSelfSampleLevel1 + 1u
-                      && backend->MipGenerationCountEXT(2) == beforeSelfSampleLevel2 + 1u,
+                      && renderer->MipGenerationCountEXT(1) == beforeSelfSampleLevel1 + 1u
+                      && renderer->MipGenerationCountEXT(2) == beforeSelfSampleLevel2 + 1u,
                   "self-sampling draw receives one later descendant regeneration");
 
             device.Clear(kBlack);
@@ -398,7 +398,7 @@ protected:
                   "public minification samples the recovered generated final mip");
         }
 
-        Check(SameStats(graphicsBackend->GetResourceStatsEXT(), baseline),
+        Check(SameStats(graphicsRenderer->GetResourceStatsEXT(), baseline),
               "generated target chain, surfaces, and snapshot return every counter to baseline");
         Exit();
     }

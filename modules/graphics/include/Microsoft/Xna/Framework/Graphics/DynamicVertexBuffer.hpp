@@ -36,7 +36,7 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Uploads VertexPositionColor vertices with streaming semantics.
          *
-         * Most CNA backends honor @p options as a real GPU mapping hint (buffer orphaning for
+         * Most CNA renderers honor @p options as a real GPU mapping hint (buffer orphaning for
          * `Discard`, an unsynchronized write for `NoOverwrite`); a few still ignore it and always
          * behave like `Discard`. Either way the destination write always starts at the buffer's
          * own beginning — @p startIndex only selects where reading from @p data begins.
@@ -57,7 +57,7 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Uploads VertexPositionColorTexture vertices with streaming semantics.
          *
-         * Most CNA backends honor @p options as a real GPU mapping hint (buffer orphaning for
+         * Most CNA renderers honor @p options as a real GPU mapping hint (buffer orphaning for
          * `Discard`, an unsynchronized write for `NoOverwrite`); a few still ignore it and always
          * behave like `Discard`. Either way the destination write always starts at the buffer's
          * own beginning — @p startIndex only selects where reading from @p data begins.
@@ -78,7 +78,7 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Uploads VertexPositionNormalTexture vertices with streaming semantics.
          *
-         * Most CNA backends honor @p options as a real GPU mapping hint (buffer orphaning for
+         * Most CNA renderers honor @p options as a real GPU mapping hint (buffer orphaning for
          * `Discard`, an unsynchronized write for `NoOverwrite`); a few still ignore it and always
          * behave like `Discard`. Either way the destination write always starts at the buffer's
          * own beginning — @p startIndex only selects where reading from @p data begins.
@@ -99,7 +99,7 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Uploads VertexPositionTexture vertices with streaming semantics.
          *
-         * Most CNA backends honor @p options as a real GPU mapping hint (buffer orphaning for
+         * Most CNA renderers honor @p options as a real GPU mapping hint (buffer orphaning for
          * `Discard`, an unsynchronized write for `NoOverwrite`); a few still ignore it and always
          * behave like `Discard`. Either way the destination write always starts at the buffer's
          * own beginning — @p startIndex only selects where reading from @p data begins.

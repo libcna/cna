@@ -44,7 +44,7 @@ void main() {
     //   5 = Palette256    (216-entry web-safe palette, nearest-colour matched via uPalette)
     //   6 = Palette16     (16-entry EGA/CGA palette, nearest-colour matched via uPalette)
     // Luminance uses the BT.601 luma weights, matching this project's other greyscale
-    // conversions (e.g. the ASCII backend).
+    // conversions (e.g. the ASCII renderer).
     //
     // uDither selects an ordered (Bayer matrix) dither threshold added before quantization,
     // matching DitherMode: 0 = None, 1 = Bayer4x4, 2 = Bayer8x8. Error-diffusion dithering

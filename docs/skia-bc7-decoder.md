@@ -33,9 +33,9 @@ decoder against the public format description rather than a vendored library.
 Several public-domain/permissively-licensed BC7 decoders exist (for example Microsoft's MIT-
 licensed DirectXTex, or Rich Geldreich's public-domain `bc7decomp`). None were vendored:
 
-- **No new build/dependency surface.** Every other compressed-format route in this backend
+- **No new build/dependency surface.** Every other compressed-format route in this renderer
   (`DxtUtil`) is already a from-scratch, license-free implementation; adding a vendored BC7
-  decoder would introduce this backend's first third-party codec dependency for a format that is
+  decoder would introduce this renderer's first third-party codec dependency for a format that is
   fully and precisely specified in public documentation, when the specification alone is
   sufficient to implement it correctly.
 - **Exact behavioural control.** CNA's contract requires exact byte-for-byte decode matching the
@@ -52,9 +52,9 @@ licensed DirectXTex, or Rich Geldreich's public-domain `bc7decomp`). None were v
 None. `Bc7Util.cpp`/`Bc7Util.hpp` are plain C++23 translation units alongside the existing
 `DxtUtil.cpp`/`.hpp` in `src/Graphics/Internal/` and `include/CNA/Internal/Graphics/`; they
 compile into the existing `CNA` static library with no new dependency, submodule, or vendored
-directory. `SkiaTextureBackend.cpp` (in the separate `cna_backend_graphics_skia` static library)
+directory. `SkiaTextureRenderer.cpp` (in the separate `cna_renderer_skia` static library)
 calls into `Bc7Util::DecompressBc7`; making that cross-library symbol resolvable required adding
-an explicit `target_link_libraries(${BACKEND_TARGET} PRIVATE CNA)` edge in
+an explicit `target_link_libraries(${RENDERER_TARGET} PRIVATE CNA)` edge in
 `cmake/BackendLibraries.cmake`'s `SKIA` branch (a mutual static-library dependency that
 `CnaLibrary.cmake` did not previously declare in this direction) -- see that file's own comment
 for the empirical link failure that surfaced it.
@@ -64,11 +64,11 @@ for the empirical link failure that surfaced it.
 Because BC7 is unusually easy to get subtly wrong (eight distinct modes with different
 partition/endpoint/index bit layouts), the bit-layout table and all five numeric tables were
 cross-checked field-by-field against the specification text for every mode before being wired
-into the backend, and the parsed partition/anchor tables were validated against the
+into the renderer, and the parsed partition/anchor tables were validated against the
 specification's own worked example (mode 2, partition 6, texel (1,2) resolves to subset 1) before
 use. `Skia_Texture2D_Bc7` additionally exercises a single-subset mode (unique P-bits, exact
 byte-for-byte round trip) and a two-subset mode (shared P-bits, partition-table texel assignment)
-through the live `Bc7Util`/`SkiaTextureBackend` path, not only through the specification
+through the live `Bc7Util`/`SkiaTextureRenderer` path, not only through the specification
 cross-check.
 
 ## Conformance / regression coverage

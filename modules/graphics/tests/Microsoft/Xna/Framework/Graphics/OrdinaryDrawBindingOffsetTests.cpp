@@ -45,13 +45,13 @@
 //   * a stale copy after a buffer update -> band 0 where band 1 was written
 //   * a stale previous binding offset   -> the previous leg's slot
 //
-// Backend scope. The render-target group is the portable one: it runs on every backend that
+// Renderer scope. The render-target group is the portable one: it runs on every renderer that
 // rasterizes 3D triangles and implements RenderTarget2D::GetData, which includes SDL_GPU (whose
 // only exact-pixel oracle that is -- see REMED-GFX-117). The backbuffer group additionally needs
-// GetBackBufferData and therefore carries the backend set REMED-GFX-113 established. The
+// GetBackBufferData and therefore carries the renderer set REMED-GFX-113 established. The
 // ordinary -> instanced -> ordinary transition additionally needs a working instanced route, so it
 // carries REMED-GFX-118's instanced suite set, and asserts the instanced leg's OWN binding offset
-// only on the backends whose instanced path consumes it (EasyGL via REMED-GFX-122, D3D11/D3D12 via
+// only on the renderers whose instanced path consumes it (EasyGL via REMED-GFX-122, D3D11/D3D12 via
 // REMED-GFX-123) -- whether the others honour it there is REMED-GFX-122/123's question, not this
 // file's.
 
@@ -120,32 +120,32 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 using Microsoft::Xna::Framework::Graphics::VertexPositionColor;
 
 // The portable pixel oracle: rasterizes 3D triangles and implements RenderTarget2D::GetData.
-#if defined(CNA_BACKEND_BGFX) || defined(CNA_BACKEND_EASYGL) || \
-    defined(CNA_BACKEND_WEBGPU) || defined(CNA_BACKEND_VULKAN) || \
-    defined(CNA_BACKEND_D3D9) || defined(CNA_BACKEND_D3D11) || \
-    defined(CNA_BACKEND_D3D12) || defined(CNA_BACKEND_SOFTWARE) || \
-    defined(CNA_BACKEND_SDL_GPU)
+#if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_EASYGL) || \
+    defined(CNA_RENDERER_WEBGPU) || defined(CNA_RENDERER_VULKAN) || \
+    defined(CNA_RENDERER_D3D9) || defined(CNA_RENDERER_D3D11) || \
+    defined(CNA_RENDERER_D3D12) || defined(CNA_RENDERER_SOFTWARE) || \
+    defined(CNA_RENDERER_SDL_GPU)
 #define CNA_ORDINARY_BINDING_OFFSET_ORACLE 1
 #endif
 
-// REMED-GFX-113's backend set: the above, minus the backends without backbuffer readback.
-#if defined(CNA_BACKEND_BGFX) || defined(CNA_BACKEND_EASYGL) || \
-    defined(CNA_BACKEND_WEBGPU) || defined(CNA_BACKEND_VULKAN) || \
-    defined(CNA_BACKEND_D3D9) || defined(CNA_BACKEND_D3D11) || \
-    defined(CNA_BACKEND_SOFTWARE)
+// REMED-GFX-113's renderer set: the above, minus the renderers without backbuffer readback.
+#if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_EASYGL) || \
+    defined(CNA_RENDERER_WEBGPU) || defined(CNA_RENDERER_VULKAN) || \
+    defined(CNA_RENDERER_D3D9) || defined(CNA_RENDERER_D3D11) || \
+    defined(CNA_RENDERER_SOFTWARE)
 #define CNA_ORDINARY_BINDING_OFFSET_BACKBUFFER_ORACLE 1
 #endif
 
-// REMED-GFX-118's instanced suite set: the backends whose instanced route renders the geometry.
-#if defined(CNA_BACKEND_BGFX) || defined(CNA_BACKEND_EASYGL) || \
-    defined(CNA_BACKEND_WEBGPU) || defined(CNA_BACKEND_VULKAN) || \
-    defined(CNA_BACKEND_D3D9) || defined(CNA_BACKEND_D3D11) || \
-    defined(CNA_BACKEND_D3D12)
+// REMED-GFX-118's instanced suite set: the renderers whose instanced route renders the geometry.
+#if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_EASYGL) || \
+    defined(CNA_RENDERER_WEBGPU) || defined(CNA_RENDERER_VULKAN) || \
+    defined(CNA_RENDERER_D3D9) || defined(CNA_RENDERER_D3D11) || \
+    defined(CNA_RENDERER_D3D12)
 #define CNA_ORDINARY_BINDING_OFFSET_INSTANCED_TRANSITION 1
 #endif
 
-// The backends whose INSTANCED route consumes VertexBufferBinding.VertexOffset.
-#if defined(CNA_BACKEND_EASYGL) || defined(CNA_BACKEND_D3D11) || defined(CNA_BACKEND_D3D12)
+// The renderers whose INSTANCED route consumes VertexBufferBinding.VertexOffset.
+#if defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_D3D11) || defined(CNA_RENDERER_D3D12)
 #define CNA_ORDINARY_BINDING_OFFSET_INSTANCED_OFFSET_ORACLE 1
 #endif
 
@@ -202,7 +202,7 @@ namespace
     }
 
     /// The per-instance stream used only by the ordinary -> instanced -> ordinary transition: one
-    /// 4x4 column-major world matrix, the layout every CNA instanced backend expects.
+    /// 4x4 column-major world matrix, the layout every CNA instanced renderer expects.
     VertexDeclaration InstanceMatrixDeclaration()
     {
         return VertexDeclaration(
@@ -294,7 +294,7 @@ namespace
     }
 
     /// One slot's triangle, authored inside one band. Colour carries no information in this
-    /// fixture -- the two position axes do -- so a backend whose stock shader colours from
+    /// fixture -- the two position axes do -- so a renderer whose stock shader colours from
     /// DiffuseColor and one that colours from the vertex stream produce the same pixels.
     std::array<VertexPositionColor, kVerticesPerSlot> SlotTriangle(
         const GridLayout& layout, int slot, int band)
@@ -349,7 +349,7 @@ namespace
     }
 
     /// "Did any geometry render here?" compares RGB only: every primitive in this fixture is opaque
-    /// white on a black clear, while the alpha a backend leaves in a cleared target is its own
+    /// white on a black clear, while the alpha a renderer leaves in a cleared target is its own
     /// convention and says nothing about which records a draw consumed.
     bool HasSameRgb(const Color& left, const Color& right)
     {
@@ -448,7 +448,7 @@ namespace
         void RequireOrdinaryRendering()
         {
             if (!device.SupportsCapability(GraphicsCapability::ThreeD))
-                GTEST_SKIP() << "Backend explicitly does not support 3D rendering";
+                GTEST_SKIP() << "Renderer explicitly does not support 3D rendering";
             device.setRasterizerStateProperty(RasterizerState::CullNone);
             device.setDepthStencilStateProperty(DepthStencilState::None);
             device.setBlendStateProperty(BlendState::Opaque);
@@ -515,7 +515,7 @@ namespace
             return snapshot;
         }
 
-        /// Identity transforms and an opaque white diffuse, so every backend's stock path produces
+        /// Identity transforms and an opaque white diffuse, so every renderer's stock path produces
         /// the same white triangle whether it colours from the vertex stream or from DiffuseColor.
         static void ApplyMeshEffect(BasicEffect& effect)
         {
@@ -713,7 +713,7 @@ TEST_F(OrdinaryDrawBindingOffsetTest, NonzeroOffsetCombinesWithStartIndexAndBase
 
 // ---------------------------------------------------------------------------
 // Coverage item 7: 32-bit indices. The index element SIZE must not leak into the vertex stream's
-// element offset -- a backend that scaled the binding offset by the index size would light a
+// element offset -- a renderer that scaled the binding offset by the index size would light a
 // different slot here than with the 16-bit buffer above.
 // ---------------------------------------------------------------------------
 TEST_F(OrdinaryDrawBindingOffsetTest, NonzeroOffsetHonoredWithThirtyTwoBitIndices)
@@ -1092,7 +1092,7 @@ TEST_F(OrdinaryDrawBindingOffsetTest, SetVertexBufferOverloadsCarryAndClearTheOf
 
 // ---------------------------------------------------------------------------
 // Coverage item 14: the BACKBUFFER destination. Same contract, same arithmetic, a different
-// destination and a different readback path -- a backend that applies the offset only while a
+// destination and a different readback path -- a renderer that applies the offset only while a
 // render target is bound (or only while one is not) fails exactly one of these two groups.
 // The zero-offset control runs here too, so the backbuffer group is self-contained.
 // ---------------------------------------------------------------------------
@@ -1163,7 +1163,7 @@ TEST_F(OrdinaryDrawBindingOffsetTest, BackbufferDestinationHonorsTheOffsetOnNonI
 // Coverage item 12: ordinary -> instanced -> ordinary. The two routes populate the shared draw
 // parameters independently, so this pins that neither leaks into the other: the instanced leg
 // binds a second stream and a different offset, and the ordinary legs on either side of it must be
-// pixel-identical. The instanced leg's OWN offset is asserted only on the backends whose instanced
+// pixel-identical. The instanced leg's OWN offset is asserted only on the renderers whose instanced
 // path consumes it (REMED-GFX-122/123); elsewhere the leg still runs, because what this test is
 // about is whether it corrupts the ordinary route around it.
 // ---------------------------------------------------------------------------

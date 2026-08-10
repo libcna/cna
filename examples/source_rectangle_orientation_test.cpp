@@ -55,37 +55,37 @@ using namespace Microsoft::Xna::Framework::Graphics;
 
 namespace
 {
-#if defined(CNA_BACKEND_BGFX)
-    constexpr const char* kBackendName = "BGFX";
+#if defined(CNA_RENDERER_BGFX)
+    constexpr const char* kRendererName = "BGFX";
     constexpr bool kRasterizes = true;
     constexpr bool kBackbufferReadbackRequired = true;
-#elif defined(CNA_BACKEND_EASYGL)
-    constexpr const char* kBackendName = "EASYGL";
+#elif defined(CNA_RENDERER_EASYGL)
+    constexpr const char* kRendererName = "EASYGL";
     constexpr bool kRasterizes = true;
     constexpr bool kBackbufferReadbackRequired = true;
-#elif defined(CNA_BACKEND_VULKAN)
-    constexpr const char* kBackendName = "VULKAN";
+#elif defined(CNA_RENDERER_VULKAN)
+    constexpr const char* kRendererName = "VULKAN";
     constexpr bool kRasterizes = true;
     constexpr bool kBackbufferReadbackRequired = true;
-#elif defined(CNA_BACKEND_WEBGPU)
-    constexpr const char* kBackendName = "WEBGPU";
+#elif defined(CNA_RENDERER_WEBGPU)
+    constexpr const char* kRendererName = "WEBGPU";
     constexpr bool kRasterizes = true;
     constexpr bool kBackbufferReadbackRequired = true;
-#elif defined(CNA_BACKEND_SDL_GPU)
-    constexpr const char* kBackendName = "SDL_GPU";
+#elif defined(CNA_RENDERER_SDL_GPU)
+    constexpr const char* kRendererName = "SDL_GPU";
     constexpr bool kRasterizes = true;
     // REMED-GFX-165 supplies SDL_GPU's lazy readback proxy, so its backbuffer is measurable here.
     constexpr bool kBackbufferReadbackRequired = true;
-#elif defined(CNA_BACKEND_SOFTWARE)
-    constexpr const char* kBackendName = "SOFTWARE";
+#elif defined(CNA_RENDERER_SOFTWARE)
+    constexpr const char* kRendererName = "SOFTWARE";
     constexpr bool kRasterizes = true;
     constexpr bool kBackbufferReadbackRequired = true;
-#elif defined(CNA_BACKEND_HEADLESS)
-    constexpr const char* kBackendName = "HEADLESS";
+#elif defined(CNA_RENDERER_HEADLESS)
+    constexpr const char* kRendererName = "HEADLESS";
     constexpr bool kRasterizes = false;
     constexpr bool kBackbufferReadbackRequired = false;
 #else
-#error "REMED-GFX-153 fixture requires a declared backend contract."
+#error "REMED-GFX-153 fixture requires a declared renderer contract."
 #endif
 
     constexpr int kRowW = 8;
@@ -505,7 +505,7 @@ class SourceRectangleOrientationTest final : public Game
         if (!read.supported)
         {
             Check(!kBackbufferReadbackRequired && !read.wrongException,
-                  std::string(testCase.name) + ": backbuffer readback boundary on " + kBackendName +
+                  std::string(testCase.name) + ": backbuffer readback boundary on " + kRendererName +
                   (read.what.empty() ? "" : " (" + read.what + ")"));
             return;
         }
@@ -640,7 +640,7 @@ class SourceRectangleOrientationTest final : public Game
                                                SpriteEffects::None);
         const auto expected1 = ExpectedRegion(generation1, kRowW, kRowH, sampleRect, scale, scale,
                                                SpriteEffects::None);
-        // Snapshot the swapchain result before target downloads can advance a backend's
+        // Snapshot the swapchain result before target downloads can advance a renderer's
         // readback/presentation machinery. All producer/consumer work is already queued, so this
         // remains a single ordering oracle rather than an intermediate synchronization point.
         const Readback backbuffer = ReadBackbuffer(device);
@@ -690,7 +690,7 @@ class SourceRectangleOrientationTest final : public Game
         else
         {
             Check(!kBackbufferReadbackRequired && !backbuffer.wrongException,
-                  std::string("transition backbuffer readback boundary on ") + kBackendName);
+                  std::string("transition backbuffer readback boundary on ") + kRendererName);
         }
 
         bool disposeClean = true;
@@ -740,7 +740,7 @@ class SourceRectangleOrientationTest final : public Game
 
     void RunAll(GraphicsDevice& device)
     {
-        std::printf("[INFO] REMED-GFX-153 source-rectangle orientation on %s\n", kBackendName);
+        std::printf("[INFO] REMED-GFX-153 source-rectangle orientation on %s\n", kRendererName);
         std::fflush(stdout);
 
         if (!kRasterizes)
@@ -871,7 +871,7 @@ protected:
         {
             Check(false, "uncaught non-std fixture exception");
         }
-        std::printf("[INFO] %s: %d/%d checks passed\n", kBackendName, passed_, total_);
+        std::printf("[INFO] %s: %d/%d checks passed\n", kRendererName, passed_, total_);
         std::fflush(stdout);
         result_ = passed_ == total_ ? 0 : 1;
         Exit();

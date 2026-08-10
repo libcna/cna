@@ -25,7 +25,7 @@
 //
 // So Point must now select the high mip level here too, and this half expects GREEN -- the same
 // expectation the Vulkan and Bgfx variants of this fixture have always had, because those two
-// backends already mapped Point to a mip-aware filter. Asserting RED would pin the defect as the
+// renderers already mapped Point to a mip-aware filter. Asserting RED would pin the defect as the
 // contract.
 //
 // Exit code 0 = PASS (both expectations hold), 1 = FAIL.

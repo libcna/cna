@@ -1,6 +1,6 @@
-#include "CNA/Internal/Backends/Skia/SkiaGaneshContext.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaGaneshContext.hpp"
 
-#include "CNA/Internal/Backends/Skia/SkiaStartupDiagnostic.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaStartupDiagnostic.hpp"
 
 #include <memory>
 #include <stdexcept>
@@ -14,7 +14,7 @@
 #include <cstdio>
 #endif
 
-namespace CNA::Internal::Backends::Skia
+namespace CNA::Internal::Renderers::Skia
 {
 #if defined(CNA_SKIA_MODE_GANESH)
     struct SkiaGaneshContext::Impl
@@ -31,7 +31,7 @@ namespace CNA::Internal::Backends::Skia
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_COMPATIBILITY);
-        // SKIA-161: matches EasyGL's own established precedent (SkiaGraphicsBackend has no GL
+        // SKIA-161: matches EasyGL's own established precedent (SkiaRenderer has no GL
         // context of its own to compare against). Without this, SkiaGaneshSurface's
         // GrBackendRenderTargets::MakeGL wrap would see 0 stencil bits, silently disabling
         // stencil-based SkCanvas clip paths that raster's software clipper never needed to skip.
@@ -121,4 +121,4 @@ namespace CNA::Internal::Backends::Skia
         return nullptr;
     }
 #endif
-} // namespace CNA::Internal::Backends::Skia
+} // namespace CNA::Internal::Renderers::Skia

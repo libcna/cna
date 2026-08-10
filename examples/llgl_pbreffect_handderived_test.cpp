@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MS-PL
-// PbrEffect pixel test (LLGL backend) -- proves the stride-48 VertexPositionNormalTangentTexture
+// PbrEffect pixel test (LLGL renderer) -- proves the stride-48 VertexPositionNormalTangentTexture
 // pipeline, TBN construction, and the glTF metallic-roughness BRDF fragment stage (pbr3d.vert/
 // frag.glsl) work end-to-end via a real GPU draw.
 //
 // Adapted (not verbatim, unlike some other ported LLGL tests) from
-// examples/vulkan_pbreffect_handderived_test.cpp, which is itself already fully backend-agnostic
+// examples/vulkan_pbreffect_handderived_test.cpp, which is itself already fully renderer-agnostic
 // (real public XNA API + VertexBuffer::SetDataRaw, no Vulkan-specific code at all). One
 // deliberate difference from that source:
 //   - Draws into an off-screen RenderTarget2D sized kSize x kSize and reads back with GetData(),
-//     matching this backend's own PixelTestGame convention (see llgl_shadereffect_test.cpp/
+//     matching this renderer's own PixelTestGame convention (see llgl_shadereffect_test.cpp/
 //     llgl_rendertargetcube_test.cpp), rather than the Vulkan source's own hand-rolled Game
 //     subclass that shrinks the WHOLE WINDOW's back buffer to kSize via its own
 //     GraphicsDeviceManager. PixelTestGame's Game construction does not expose a way to override

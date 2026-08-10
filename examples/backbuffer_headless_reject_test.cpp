@@ -15,8 +15,8 @@
 //     std::invalid_argument, an out-of-bounds rectangle throws std::out_of_range and an undersized
 //     element count throws std::runtime_error -- i.e. capability rejection stays LAST, after every
 //     argument check, the same order the Texture path uses;
-//   * on a rasterizing backend the same public calls SUCCEED and write the whole requested range,
-//     so the rejection is specific to the non-rasterizing backend, not a universal break.
+//   * on a rasterizing renderer the same public calls SUCCEED and write the whole requested range,
+//     so the rejection is specific to the non-rasterizing renderer, not a universal break.
 //
 // Each leg runs in its own process (fork+exec) so its first read is genuinely first and a crash or
 // hang is a distinct, attributable result; a leg's exit code is the only PASS/FAIL signal.
@@ -61,41 +61,41 @@ using namespace Microsoft::Xna::Framework::Graphics;
 
 namespace
 {
-#if defined(CNA_BACKEND_HEADLESS)
-    constexpr const char* kBackendName = "HEADLESS";
+#if defined(CNA_RENDERER_HEADLESS)
+    constexpr const char* kRendererName = "HEADLESS";
     constexpr bool kRasterizes = false;
-#elif defined(CNA_BACKEND_SOFTWARE)
-    constexpr const char* kBackendName = "SOFTWARE";
+#elif defined(CNA_RENDERER_SOFTWARE)
+    constexpr const char* kRendererName = "SOFTWARE";
     constexpr bool kRasterizes = true;
-#elif defined(CNA_BACKEND_EASYGL)
-    constexpr const char* kBackendName = "EASYGL";
+#elif defined(CNA_RENDERER_EASYGL)
+    constexpr const char* kRendererName = "EASYGL";
     constexpr bool kRasterizes = true;
-#elif defined(CNA_BACKEND_BGFX)
-    constexpr const char* kBackendName = "BGFX";
+#elif defined(CNA_RENDERER_BGFX)
+    constexpr const char* kRendererName = "BGFX";
     constexpr bool kRasterizes = true;
-#elif defined(CNA_BACKEND_VULKAN)
-    constexpr const char* kBackendName = "VULKAN";
+#elif defined(CNA_RENDERER_VULKAN)
+    constexpr const char* kRendererName = "VULKAN";
     constexpr bool kRasterizes = true;
-#elif defined(CNA_BACKEND_WEBGPU)
-    constexpr const char* kBackendName = "WEBGPU";
+#elif defined(CNA_RENDERER_WEBGPU)
+    constexpr const char* kRendererName = "WEBGPU";
     constexpr bool kRasterizes = true;
-#elif defined(CNA_BACKEND_SDL_GPU)
-    constexpr const char* kBackendName = "SDL_GPU";
+#elif defined(CNA_RENDERER_SDL_GPU)
+    constexpr const char* kRendererName = "SDL_GPU";
     constexpr bool kRasterizes = true;
-#elif defined(CNA_BACKEND_SKIA)
-    constexpr const char* kBackendName = "SKIA";
+#elif defined(CNA_RENDERER_SKIA)
+    constexpr const char* kRendererName = "SKIA";
     constexpr bool kRasterizes = true;
-#elif defined(CNA_BACKEND_LLGL)
-    constexpr const char* kBackendName = "LLGL";
+#elif defined(CNA_RENDERER_LLGL)
+    constexpr const char* kRendererName = "LLGL";
     constexpr bool kRasterizes = true;
 #else
-#error "REMED-GFX-162: this backend has no declared backbuffer-readback capability contract."
+#error "REMED-GFX-162: this renderer has no declared backbuffer-readback capability contract."
 #endif
 
     // BGFX honours only a full-surface backbuffer read; a sub-rectangle reads back zeros (a
     // pre-existing gap declared by REMED-GFX-165). The sub-rectangle success legs declare it as a
     // boundary rather than failing it. It has no bearing on the Headless rejection contract.
-#if defined(CNA_BACKEND_BGFX)
+#if defined(CNA_RENDERER_BGFX)
     constexpr bool kSupportsSubRectangleBackbufferRead = false;
 #else
     constexpr bool kSupportsSubRectangleBackbufferRead = true;
@@ -264,7 +264,7 @@ class BackbufferHeadlessRejectTest : public Game
     }
 
     /// The core capability assertion for a VALID request: Headless must reject (NotSupported) and
-    /// leave [first, first+len) untouched; a rasterizing backend must succeed and fill it with kClear.
+    /// leave [first, first+len) untouched; a rasterizing renderer must succeed and fill it with kClear.
     void AssertValid(const ReadResult& r, std::size_t first, std::size_t len, const std::string& label)
     {
         if (!kRasterizes)
@@ -279,7 +279,7 @@ class BackbufferHeadlessRejectTest : public Game
         else
         {
             check(r.outcome == Outcome::Success,
-                  label + ": rasterizing backend succeeds (got " + OutcomeName(r.outcome) +
+                  label + ": rasterizing renderer succeeds (got " + OutcomeName(r.outcome) +
                       (r.what.empty() ? "" : ": " + r.what) + ")");
             if (r.outcome == Outcome::Success)
                 check(WindowIsColor(r, first, len, kClear, label),
@@ -287,8 +287,8 @@ class BackbufferHeadlessRejectTest : public Game
         }
     }
 
-    /// A precedence assertion for an INVALID request: the argument exception fires on EVERY backend,
-    /// BEFORE the backend capability is consulted -- so Headless must NOT answer NotSupported here.
+    /// A precedence assertion for an INVALID request: the argument exception fires on EVERY renderer,
+    /// BEFORE the renderer capability is consulted -- so Headless must NOT answer NotSupported here.
     void AssertPrecedence(const ReadResult& r, Outcome expected, const std::string& label)
     {
         check(r.outcome == expected,
@@ -331,7 +331,7 @@ class BackbufferHeadlessRejectTest : public Game
         if (kRasterizes && !kSupportsSubRectangleBackbufferRead)
         {
             boundary("R3: sub-rectangle backbuffer read is a pre-existing gap on " +
-                     std::string(kBackendName) + " -- recorded, not exercised");
+                     std::string(kRendererName) + " -- recorded, not exercised");
             return;
         }
         Rectangle sub(3, 5, 20, 11);
@@ -347,7 +347,7 @@ class BackbufferHeadlessRejectTest : public Game
         if (kRasterizes && !kSupportsSubRectangleBackbufferRead)
         {
             boundary("R4: sub-rectangle backbuffer read is a pre-existing gap on " +
-                     std::string(kBackendName) + " -- recorded, not exercised");
+                     std::string(kRendererName) + " -- recorded, not exercised");
             return;
         }
         Rectangle one(kW - 1, kH - 1, 1, 1);
@@ -357,7 +357,7 @@ class BackbufferHeadlessRejectTest : public Game
 
     /// R5 -- rectangle-less read at a NON-ZERO startIndex, with a poison prefix and suffix. The
     /// requested range must land at [prefix, prefix+w*h); prefix and suffix must be untouched on
-    /// every backend, and the range itself follows the capability contract.
+    /// every renderer, and the range itself follows the capability contract.
     void LegPrefixSuffix(GraphicsDevice& dev)
     {
         PrepareFrame(dev);
@@ -366,9 +366,9 @@ class BackbufferHeadlessRejectTest : public Game
         ReadResult r = Read(dev, nullptr, prefix, static_cast<int>(count), prefix + count + suffix);
 
         check(WindowIntact(r, 0, prefix, "R5 prefix"),
-              "R5 destination prefix before startIndex untouched on " + std::string(kBackendName));
+              "R5 destination prefix before startIndex untouched on " + std::string(kRendererName));
         check(WindowIntact(r, prefix + count, suffix, "R5 suffix"),
-              "R5 destination suffix after the range untouched on " + std::string(kBackendName));
+              "R5 destination suffix after the range untouched on " + std::string(kRendererName));
         AssertValid(r, prefix, count, "R5 range at non-zero startIndex");
     }
 
@@ -381,13 +381,13 @@ class BackbufferHeadlessRejectTest : public Game
         const std::size_t extra = 64;
         ReadResult r = Read(dev, nullptr, 0, static_cast<int>(count), count + extra);
         check(WindowIntact(r, count, extra, "R6 tail"),
-              "R6 oversized destination: trailing capacity untouched on " + std::string(kBackendName));
+              "R6 oversized destination: trailing capacity untouched on " + std::string(kRendererName));
         AssertValid(r, 0, count, "R6 exact count into oversized buffer");
     }
 
     /// D1 -- determinism: two rectangle-less reads in one process reach the identical capability
     /// OUTCOME. The first read follows the full contract; the SECOND read's CONTENT is not asserted
-    /// on a rasterizing backend, because a double-buffered backbuffer (bgfx) hands back the
+    /// on a rasterizing renderer, because a double-buffered backbuffer (bgfx) hands back the
     /// swapped/empty buffer on a second read with no new frame (a pre-existing property, GFX-161's
     /// A3). On Headless nothing is ever written, so both reads reject and leave the destination
     /// untouched, which is asserted for both.
@@ -410,7 +410,7 @@ class BackbufferHeadlessRejectTest : public Game
 
     // ------------------------------------------------------------------ legs (validation precedence)
 
-    /// P1 -- null destination -> std::invalid_argument on every backend (before capability).
+    /// P1 -- null destination -> std::invalid_argument on every renderer (before capability).
     void LegNull(GraphicsDevice& dev)
     {
         PrepareFrame(dev);
@@ -470,7 +470,7 @@ class BackbufferHeadlessRejectTest : public Game
 
     /// P5 -- overflow-SHAPED rectangle (INT_MAX extent) -> deterministic std::out_of_range, no crash.
     /// x=0 keeps x+w == INT_MAX (no signed overflow in the bounds test) so the request is cleanly
-    /// rejected as out-of-range rather than reaching w*h or the backend.
+    /// rejected as out-of-range rather than reaching w*h or the renderer.
     void LegOverflowShaped(GraphicsDevice& dev)
     {
         PrepareFrame(dev);
@@ -487,7 +487,7 @@ class BackbufferHeadlessRejectTest : public Game
     void Draw(const GameTime&) override
     {
         auto& dev = getGraphicsDeviceProperty();
-        info(std::string(kBackendName) + ": backbuffer-readback capability = " +
+        info(std::string(kRendererName) + ": backbuffer-readback capability = " +
              (kRasterizes ? "supported" : "UNSUPPORTED (non-rasterizing, GFX-162 rejection)"));
         try
         {
@@ -513,7 +513,7 @@ class BackbufferHeadlessRejectTest : public Game
 
     void Finish()
     {
-        std::printf("[INFO] %s: %d/%d checks passed\n", kBackendName, passCount_, totalCount_);
+        std::printf("[INFO] %s: %d/%d checks passed\n", kRendererName, passCount_, totalCount_);
         std::fflush(stdout);
         result_ = (passCount_ == totalCount_ && (totalCount_ > 0 || boundaryDeclared_)) ? 0 : 1;
         Exit();

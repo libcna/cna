@@ -13,7 +13,7 @@
 // unbound.** The game must not need GetData, Present, a second frame, a manual flush, a fence wait,
 // a device/queue idle or a CPU readback to make the producer's result visible to the consumer.
 //
-// THE DEFECT this file reproduces is Vulkan-local. The Vulkan backend is a whole-frame-deferred
+// THE DEFECT this file reproduces is Vulkan-local. The Vulkan renderer is a whole-frame-deferred
 // recorder: every Clear/sprite/3D call is queued and replayed once, at Present, into one command
 // buffer whose passes are ordered by the public bind-cycle ("segment") id. A GetData readback of a
 // target cannot wait for Present, so REMED-GFX-074 added an early flush that records and submits
@@ -95,12 +95,12 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 #include "System/NotSupportedException.hpp"
 
-#if defined(CNA_BACKEND_VULKAN)
+#if defined(CNA_RENDERER_VULKAN)
 // REMED-GFX-151 is a Vulkan finding, so the Vulkan build of this fixture additionally judges the
 // Khronos validation layer -- standard AND synchronization checks -- over the whole matrix above.
 // The fix reorders when render passes are recorded, which is exactly the kind of change that can
 // introduce a read-after-write hazard without changing a single pixel on a permissive driver.
-#include "CNA/Internal/Backends/Vulkan/VulkanGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Vulkan/VulkanRenderer.hpp"
 #endif
 
 #include <cstdint>
@@ -116,65 +116,65 @@ using namespace Microsoft::Xna::Framework::Graphics;
 namespace
 {
     /**
-     * @brief Whether this backend rasterizes and can read a render target back at all.
+     * @brief Whether this renderer rasterizes and can read a render target back at all.
      *
      * HEADLESS performs no rasterization, so REMED-GFX-127's contract makes its `GetData` reject
      * deterministically. There is no producer result to observe there; the legs below assert the
      * rejection instead of a value.
      */
-#if defined(CNA_BACKEND_HEADLESS)
+#if defined(CNA_RENDERER_HEADLESS)
     constexpr bool kRasterizes = false;
-    constexpr const char* kBackendName = "HEADLESS";
-#elif defined(CNA_BACKEND_SOFTWARE)
+    constexpr const char* kRendererName = "HEADLESS";
+#elif defined(CNA_RENDERER_SOFTWARE)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "SOFTWARE";
-#elif defined(CNA_BACKEND_EASYGL)
+    constexpr const char* kRendererName = "SOFTWARE";
+#elif defined(CNA_RENDERER_EASYGL)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "EASYGL";
-#elif defined(CNA_BACKEND_BGFX)
+    constexpr const char* kRendererName = "EASYGL";
+#elif defined(CNA_RENDERER_BGFX)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "BGFX";
-#elif defined(CNA_BACKEND_VULKAN)
+    constexpr const char* kRendererName = "BGFX";
+#elif defined(CNA_RENDERER_VULKAN)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "VULKAN";
-#elif defined(CNA_BACKEND_WEBGPU)
+    constexpr const char* kRendererName = "VULKAN";
+#elif defined(CNA_RENDERER_WEBGPU)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "WEBGPU";
-#elif defined(CNA_BACKEND_SDL_GPU)
+    constexpr const char* kRendererName = "WEBGPU";
+#elif defined(CNA_RENDERER_SDL_GPU)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "SDL_GPU";
-#elif defined(CNA_BACKEND_SDL_RENDERER)
+    constexpr const char* kRendererName = "SDL_GPU";
+#elif defined(CNA_RENDERER_SDL_RENDERER)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "SDL_RENDERER";
-#elif defined(CNA_BACKEND_ASCII)
+    constexpr const char* kRendererName = "SDL_RENDERER";
+#elif defined(CNA_RENDERER_ASCII)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "ASCII";
-#elif defined(CNA_BACKEND_FREEDIRECT)
+    constexpr const char* kRendererName = "ASCII";
+#elif defined(CNA_RENDERER_FREEDIRECT)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "FREEDIRECT";
-#elif defined(CNA_BACKEND_D3D9)
+    constexpr const char* kRendererName = "FREEDIRECT";
+#elif defined(CNA_RENDERER_D3D9)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "D3D9";
-#elif defined(CNA_BACKEND_D3D11)
+    constexpr const char* kRendererName = "D3D9";
+#elif defined(CNA_RENDERER_D3D11)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "D3D11";
-#elif defined(CNA_BACKEND_D3D12)
+    constexpr const char* kRendererName = "D3D11";
+#elif defined(CNA_RENDERER_D3D12)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "D3D12";
-#elif defined(CNA_BACKEND_CANVAS)
+    constexpr const char* kRendererName = "D3D12";
+#elif defined(CNA_RENDERER_CANVAS)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "CANVAS";
-#elif defined(CNA_BACKEND_SOKOL)
+    constexpr const char* kRendererName = "CANVAS";
+#elif defined(CNA_RENDERER_SOKOL)
     // plan_sokol.md SOKOL-25/38: real geometry really is rasterized into a RenderTarget2D here, and
-    // `SokolRenderTargetBackend::GetData` now round-trips real content via a throwaway GL FBO
-    // (docs/sokol-backend.md), so `kRasterizes = true` is accurate for this file's contract too.
+    // `SokolRenderTargetRenderer::GetData` now round-trips real content via a throwaway GL FBO
+    // (docs/sokol-renderer.md), so `kRasterizes = true` is accurate for this file's contract too.
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "SOKOL";
-#elif defined(CNA_BACKEND_LLGL)
+    constexpr const char* kRendererName = "SOKOL";
+#elif defined(CNA_RENDERER_LLGL)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "LLGL";
+    constexpr const char* kRendererName = "LLGL";
 #else
-#error "REMED-GFX-151: this backend has no declared render-target producer/consumer contract."
+#error "REMED-GFX-151: this renderer has no declared render-target producer/consumer contract."
 #endif
 
     /**
@@ -183,14 +183,14 @@ namespace
      * REMED-GFX-152 CLOSED this (2026-07-29), and the declaration is now unconditionally true.
      *
      * It used to read false on SDL_GPU, whose stock-effect paths
-     * `static_cast<const SdlGpuTextureBackend*>(params.textureN)` onto the unrelated sibling
-     * SdlGpuRenderTargetBackend and died. Leg C (four stock 3D consumers) was skipped there and now
-     * runs: SIGSEGV against the pre-fix backend, 4/4 exact after.
+     * `static_cast<const SdlGpuTextureRenderer*>(params.textureN)` onto the unrelated sibling
+     * SdlGpuRenderTargetRenderer and died. Leg C (four stock 3D consumers) was skipped there and now
+     * runs: SIGSEGV against the pre-fix renderer, 4/4 exact after.
      */
     constexpr bool kStockEffectRtSourceSupported = true;
 
     // kStockEffectRtSourceSupported never gates GetData: it is read only where kRasterizes is
-    // already true, which is never SOKOL's case above, so its value is moot for this backend and
+    // already true, which is never SOKOL's case above, so its value is moot for this renderer and
     // left at the shared default rather than given a branch of its own.
 
     /**
@@ -202,8 +202,8 @@ namespace
      * sampled into another RENDER TARGET was byte-exact (legs D1-D5) and an ordinary Texture2D
      * drawn in the same backbuffer batch was byte-exact too. The cause was neither an empty target
      * nor a broken backbuffer draw: bgfx radix-sorts a frame's draws by their view's sort position,
-     * which defaults to the numeric view id, and that backend's id partition puts the backbuffer at
-     * 0 below every render target -- so the consumer executed BEFORE its producer. The backend now
+     * which defaults to the numeric view id, and that renderer's id partition puts the backbuffer at
+     * 0 below every render target -- so the consumer executed BEFORE its producer. The renderer now
      * records the frame's views in public first-use order and programs it through
      * bgfx::setViewOrder. `rendertarget_backbuffer_consumer_test.cpp` is that contract's own
      * fixture; this declaration is what pins it from here.
@@ -218,7 +218,7 @@ namespace
      * B -- the trailing clear was lost, so `Clear()` was not an ordered command there. Both
      * reported the identical value (20,25,40,255), i.e. the pattern's own texel (0,0), on all three
      * RenderTargetUsage values, which is the SDL_GPU/WebGPU counterpart of REMED-GFX-129 (fixed on
-     * Vulkan and scoped to Vulkan). Both backends now cut their bind cycle into one native render
+     * Vulkan and scoped to Vulkan). Both renderers now cut their bind cycle into one native render
      * pass per observable Clear, so the ordered contract holds everywhere and this declaration is
      * unconditional -- the producer/consumer path being the second, independent witness of it.
      */
@@ -229,15 +229,15 @@ namespace
      *
      * D3D9 rejects it outright -- "stride 20 with vertexColor=false has no matching CNA vertex
      * layout (plan_dx9.md D9-82d)" -- which is a documented, pre-existing vertex-layout boundary of
-     * that backend and nothing to do with render-to-texture. The other three stock-effect cases
+     * that renderer and nothing to do with render-to-texture. The other three stock-effect cases
      * (BasicEffect indexed and non-indexed, AlphaTestEffect) still run there and are what carry the
      * "not SpriteBatch-only" claim on D3D9.
      */
     constexpr bool kDualTextureAcceptsPositionTexture =
-#if defined(CNA_BACKEND_D3D9)
+#if defined(CNA_RENDERER_D3D9)
         false;
-#elif defined(CNA_BACKEND_SOKOL)
-        // Not a vertex-layout rejection: SokolGraphicsBackend::DrawColored3D refuses ANY
+#elif defined(CNA_RENDERER_SOKOL)
+        // Not a vertex-layout rejection: SokolRenderer::DrawColored3D refuses ANY
         // `params.dualTexture` draw outright (plan_sokol.md -- dual-texture 3D is not implemented
         // yet, unlike the single-texture Textured/Lit paths SOKOL-21 landed), so C4 would throw
         // uncaught here rather than reject cleanly. Reusing this flag to skip it is the same
@@ -355,7 +355,7 @@ class RenderTargetProducerConsumerTest : public Game
         }
     };
 
-    /// Reads a whole target back. The destination is pre-filled with a poison value so a backend
+    /// Reads a whole target back. The destination is pre-filled with a poison value so a renderer
     /// that writes nothing cannot be mistaken for one that wrote transparent black.
     static Readback ReadWhole(RenderTarget2D& target, int w, int h)
     {
@@ -373,10 +373,10 @@ class RenderTargetProducerConsumerTest : public Game
         return r;
     }
 
-    /// True when this backend declared it cannot rasterize/read targets at all.
+    /// True when this renderer declared it cannot rasterize/read targets at all.
     static bool Unsupported() { return !kRasterizes; }
 
-    /// Asserts an unreadable backend rejected, and reports whether the caller should continue.
+    /// Asserts an unreadable renderer rejected, and reports whether the caller should continue.
     bool RequireReadable(const Readback& r, const std::string& label)
     {
         if (Unsupported())
@@ -615,7 +615,7 @@ class RenderTargetProducerConsumerTest : public Game
         {
             std::printf("[INFO] C legs: %s cannot hand a RenderTarget2D to a stock 3D effect "
                         "(REMED-GFX-152) -- boundary recorded, SpriteBatch legs still cover the "
-                        "contract here\n", kBackendName);
+                        "contract here\n", kRendererName);
             std::fflush(stdout);
             return;
         }
@@ -627,7 +627,7 @@ class RenderTargetProducerConsumerTest : public Game
                 std::printf("[INFO] %s skipped on %s: DualTextureEffect rejects this fixture's "
                             "VertexPositionTexture stride (plan_dx9.md D9-82d) -- a documented "
                             "vertex-layout boundary, unrelated to render-to-texture\n",
-                            c.name, kBackendName);
+                            c.name, kRendererName);
                 std::fflush(stdout);
                 continue;
             }
@@ -870,7 +870,7 @@ class RenderTargetProducerConsumerTest : public Game
             {
                 std::printf("[INFO] D6 backbuffer consumer oracle unavailable on %s (%s) -- "
                             "boundary recorded; D1-D5 carry the contract\n",
-                            kBackendName, threw ? what.c_str() : "non-rasterizing");
+                            kRendererName, threw ? what.c_str() : "non-rasterizing");
                 std::fflush(stdout);
             }
             else
@@ -899,7 +899,7 @@ class RenderTargetProducerConsumerTest : public Game
                         }
                     check(good < kPW * kPH,
                           std::string("D6 REMED-GFX-155 pinned: a never-read render target reaching "
-                          "a BACKBUFFER consumer does not reproduce the source on ") + kBackendName +
+                          "a BACKBUFFER consumer does not reproduce the source on ") + kRendererName +
                           " (" + std::to_string(good) + "/" + std::to_string(kPW * kPH) +
                           " correct, " + std::to_string(empty) + " entirely empty) while the same "
                           "source into a render target is byte-exact above. Fixing it must flip "
@@ -918,7 +918,7 @@ class RenderTargetProducerConsumerTest : public Game
      * whether a multisampled target's own first readback works (REMED-GFX-154 on bgfx).
      *
      * Whether the requested sample count is genuinely APPLIED is measured, not assumed. Several
-     * backends (Vulkan among them) derive a render target's sample count from the device's own, so
+     * renderers (Vulkan among them) derive a render target's sample count from the device's own, so
      * a run without GraphicsDeviceManager.PreferMultiSampling reports 0 here and this leg is an
      * honest sample-count-one case. The `--msaa` run of this same fixture sets that property, which
      * is what makes "one genuinely applied MSAA count" a measured claim rather than a request.
@@ -932,7 +932,7 @@ class RenderTargetProducerConsumerTest : public Game
                     applied, preferMultiSampling_ ? "PREFERS" : "does not prefer");
         std::fflush(stdout);
         check(!preferMultiSampling_ || applied > 1,
-              "E0 the --msaa run genuinely applies a multisample count on this backend (applied " +
+              "E0 the --msaa run genuinely applies a multisample count on this renderer (applied " +
               std::to_string(applied) + ")");
         ProduceInto(dev, a, patternTex_);
 
@@ -972,7 +972,7 @@ class RenderTargetProducerConsumerTest : public Game
      */
     void LegMips(GraphicsDevice& dev)
     {
-        // Whether a backend supports a mipmapped render target AT ALL is measured, not assumed:
+        // Whether a renderer supports a mipmapped render target AT ALL is measured, not assumed:
         // WebGPU documents the chain regeneration unimplemented and throws from the constructor
         // (plan_webgpu.md WEBGPU-53/54). That is a declared capability boundary, not this finding.
         std::unique_ptr<RenderTarget2D> owner;
@@ -986,7 +986,7 @@ class RenderTargetProducerConsumerTest : public Game
         {
             std::printf("[INFO] F1 mipmapped RenderTarget2D unsupported on %s (%s) -- boundary "
                         "recorded; the sample-count-one legs above carry the contract\n",
-                        kBackendName, e.what());
+                        kRendererName, e.what());
             std::fflush(stdout);
             return;
         }
@@ -1084,7 +1084,7 @@ class RenderTargetProducerConsumerTest : public Game
             }
 
             // G-c: geometry then Clear() -- REMED-GFX-129's ordered clear runs AFTER the draw, so
-            // the consumer must see the CLEAR, not the pattern. A backend that could only deliver a
+            // the consumer must see the CLEAR, not the pattern. A renderer that could only deliver a
             // clear through the pass load action would show the pattern here.
             {
                 RenderTarget2D a(dev, kPW, kPH, false, SurfaceFormat::Color, DepthFormat::None, 0,
@@ -1106,8 +1106,8 @@ class RenderTargetProducerConsumerTest : public Game
                     bool all = true;
                     for (const Color& c : r.pixels) if (!Same(c, clearB)) { all = false; break; }
                     static_assert(kOrderedClearAfterDrawWins,
-                                  "REMED-GFX-156: every backend this fixture runs on delivers an "
-                                  "ordered Clear now; a backend that regresses must re-introduce "
+                                  "REMED-GFX-156: every renderer this fixture runs on delivers an "
+                                  "ordered Clear now; a renderer that regresses must re-introduce "
                                   "the declaration rather than weaken this leg.");
                     check(all, std::string("G3 ") + u.name +
                           ": geometry then Clear() -- the consumer sees the LAST command (want " +
@@ -1229,7 +1229,7 @@ class RenderTargetProducerConsumerTest : public Game
         if (threw || Unsupported())
         {
             std::printf("[INFO] I2 backbuffer oracle unavailable on %s (%s) -- boundary recorded\n",
-                        kBackendName, threw ? what.c_str() : "non-rasterizing");
+                        kRendererName, threw ? what.c_str() : "non-rasterizing");
             std::fflush(stdout);
             return;
         }
@@ -1237,11 +1237,11 @@ class RenderTargetProducerConsumerTest : public Game
         r.w = kBBW; r.h = kBBH; r.pixels = frame;
         if (!kBackbufferConsumerSeesNeverReadTarget)
         {
-            // REMED-GFX-155 owns the backbuffer consumer on this backend, so there is no honest
+            // REMED-GFX-155 owns the backbuffer consumer on this renderer, so there is no honest
             // ordering to measure here until it is fixed -- recorded, not asserted either way.
             std::printf("[INFO] I2 not measurable on %s: REMED-GFX-155 (a never-read target "
                         "reaching a backbuffer consumer) owns this path; got %s\n",
-                        kBackendName, ColorText(r.at(0, 0)).c_str());
+                        kRendererName, ColorText(r.at(0, 0)).c_str());
             std::fflush(stdout);
             return;
         }
@@ -1250,7 +1250,7 @@ class RenderTargetProducerConsumerTest : public Game
                     PatternColor);
     }
 
-#if defined(CNA_BACKEND_VULKAN)
+#if defined(CNA_RENDERER_VULKAN)
     /**
      * @brief Leg V -- Khronos validation over everything the legs above just did.
      *
@@ -1262,11 +1262,11 @@ class RenderTargetProducerConsumerTest : public Game
      */
     void LegValidation()
     {
-        auto* vk = dynamic_cast<CNA::Internal::Backends::Vulkan::VulkanGraphicsBackend*>(
-            &getGraphicsDeviceProperty().GetBackend());
-        check(CNA::Internal::Backends::Vulkan::VulkanGraphicsBackend::IsValidationActiveEXT(),
+        auto* vk = dynamic_cast<CNA::Internal::Renderers::Vulkan::VulkanRenderer*>(
+            &getGraphicsDeviceProperty().GetRenderer());
+        check(CNA::Internal::Renderers::Vulkan::VulkanRenderer::IsValidationActiveEXT(),
               "V1 VK_LAYER_KHRONOS_validation is loaded, so the counts below mean something");
-        if (!vk) { check(false, "V1 Vulkan backend not reachable"); return; }
+        if (!vk) { check(false, "V1 Vulkan renderer not reachable"); return; }
 
         const auto& msgs = vk->GetValidationMessagesEXT();
         const auto& ids  = vk->GetValidationMessageIdNamesEXT();
@@ -1339,7 +1339,7 @@ protected:
         dev.Clear(Color(0, 0, 0, 255));
 
         std::printf("[INFO] REMED-GFX-151 same-frame render-to-texture producer/consumer on %s "
-                    "(%dx%d pattern, %s)\n", kBackendName, kPW, kPH,
+                    "(%dx%d pattern, %s)\n", kRendererName, kPW, kPH,
                     preferMultiSampling_ ? "PreferMultiSampling=true" : "PreferMultiSampling=false");
         std::fflush(stdout);
 
@@ -1352,11 +1352,11 @@ protected:
         LegUsageAndClear(dev);
         LegSpriteBatchKnobs(dev);
         LegBackbufferBoundary(dev);
-#if defined(CNA_BACKEND_VULKAN)
+#if defined(CNA_RENDERER_VULKAN)
         LegValidation();
 #endif
 
-        std::printf("[INFO] %s: %d/%d checks passed\n", kBackendName, passCount_, totalCount_);
+        std::printf("[INFO] %s: %d/%d checks passed\n", kRendererName, passCount_, totalCount_);
         std::fflush(stdout);
         result_ = (passCount_ == totalCount_) ? 0 : 1;
         Exit();
@@ -1366,7 +1366,7 @@ public:
     /**
      * @brief Builds the fixture.
      *
-     * @param preferMultiSampling Requests a multisampled device. Backends that derive a render
+     * @param preferMultiSampling Requests a multisampled device. Renderers that derive a render
      *        target's sample count from the device's own only apply a target MultiSampleCount when
      *        this is set, so the `--msaa` run is what turns leg E into a genuinely multisampled
      *        producer instead of a second sample-count-one case.
@@ -1397,13 +1397,13 @@ int main(int argc, char** argv)
         if (std::string(argv[i]) == "--syncval") syncval = true;
     }
 
-#if defined(CNA_BACKEND_VULKAN)
-    // BEFORE the Game is constructed: the backend creates its VkInstance during construction, and
+#if defined(CNA_RENDERER_VULKAN)
+    // BEFORE the Game is constructed: the renderer creates its VkInstance during construction, and
     // VkValidationFeaturesEXT can only be supplied there. Asking later silently produces an
     // instance WITHOUT synchronization validation, which would make leg V pass for the wrong
     // reason -- which is why V1 asserts the layer's liveness separately from the counts.
     if (syncval)
-        CNA::Internal::Backends::Vulkan::VulkanGraphicsBackend::SetSyncValidationEnabledEXT(true);
+        CNA::Internal::Renderers::Vulkan::VulkanRenderer::SetSyncValidationEnabledEXT(true);
 #endif
 
     RenderTargetProducerConsumerTest test(msaa, syncval);

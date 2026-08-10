@@ -4,8 +4,8 @@
 // REMED-GFX-140 (Vulkan) and REMED-GFX-145 (SdlGpu) made every public render-target bind/unbind
 // cycle its own native render pass, recorded in the order the cycles were opened. Both stopped at
 // the same boundary: the BACKBUFFER stayed a single trailing pass at the end of the command buffer.
-// `VulkanGraphicsBackend::RecordCommandBuffer` records every render-target segment first and then
-// one swapchain pass which is passed `kAllSegments`; `SdlGpuGraphicsBackend::EnsureFrameRendered`
+// `VulkanRenderer::RecordCommandBuffer` records every render-target segment first and then
+// one swapchain pass which is passed `kAllSegments`; `SdlGpuRenderer::EnsureFrameRendered`
 // walks `passSegments_` and then opens one swapchain pass which is passed `kSwapchainSegment`. In
 // both, every backbuffer draw of the frame is replayed inside that one trailing pass regardless of
 // when the game issued it, so the public sequence
@@ -37,13 +37,13 @@
 //      extra frame. The only readback in each check happens after every command of that check has
 //      been queued.
 //
-// Backends whose backbuffer cannot be read publicly (SdlGpu has no `ReadBackbuffer` override at
+// Renderers whose backbuffer cannot be read publicly (SdlGpu has no `ReadBackbuffer` override at
 // all, so `GraphicsDevice::GetBackBufferData` raises) declare `backbufferReadback ==
 // Support::Unsupported` and their checks report an explicit skip naming the reason. That is a real
-// hole in the public oracle for those backends, recorded rather than papered over: their fix is
+// hole in the public oracle for those renderers, recorded rather than papered over: their fix is
 // measured structurally instead (native pass order and load actions under an interposer).
 //
-// Two behaviours that are NOT this task's subject are declared per backend and asserted either
+// Two behaviours that are NOT this task's subject are declared per renderer and asserted either
 // way, so a failure never gets credited to or blamed on pass ordering:
 //
 //   * `mixedQueuesKeepPublicOrder` -- whether a SpriteBatch draw and a 3D draw issued inside ONE
@@ -54,12 +54,12 @@
 //     one unified `drawOrder_`), so check O3 declares it. What segmentation DOES fix is the
 //     cross-segment case, O1/O2, which this file asserts unconditionally.
 //   * `backbufferDepthOnlyClear` -- whether `Clear(ClearOptions::DepthBuffer, ...)` alone reaches
-//     the backbuffer. `VulkanGraphicsBackend::ClearDepth` is the one clear entry point that does
+//     the backbuffer. `VulkanRenderer::ClearDepth` is the one clear entry point that does
 //     not record a clear request at all, so a depth-only clear is dropped there.
 //
 // The palette is 0/255-only, an exact fixed point of sRGB encoding, so every comparison is
-// byte-exact on every backend including sRGB ones. Every asserted region is a full-height VERTICAL
-// stripe, so nothing here depends on whether a backend's backbuffer readback or render-target
+// byte-exact on every renderer including sRGB ones. Every asserted region is a full-height VERTICAL
+// stripe, so nothing here depends on whether a renderer's backbuffer readback or render-target
 // sampling is Y-flipped.
 //
 // Exit code 0 = all checks PASS, 1 = any FAIL.
@@ -113,14 +113,14 @@ namespace
     constexpr int kRT  = 8;   ///< Render-target edge (2D and cube). Every target has this size.
     constexpr int kStripes = 4;  ///< Vertical stripes the backbuffer is divided into.
 
-    /// What a public readback does on this backend.
+    /// What a public readback does on this renderer.
     enum class Support
     {
         Exact,        ///< Returns the rendered surface byte for byte.
         Unsupported,  ///< Raises; the caller's destination is left untouched.
     };
 
-    /// The complete, reviewed per-backend claim this file enforces.
+    /// The complete, reviewed per-renderer claim this file enforces.
     struct Contract
     {
         const char* name;
@@ -131,20 +131,20 @@ namespace
         /**
          * REMED-GFX-143's own subject: backbuffer bind cycles are ordered segments in the same
          * stream as render-target segments. False is a declared, still-open defect on that
-         * backend; check A1 then asserts the COLLAPSED result so the declaration stays falsifiable
+         * renderer; check A1 then asserts the COLLAPSED result so the declaration stays falsifiable
          * in both directions, and every other check that can only distinguish the two shapes
          * reports a skip naming the reason instead of a failure belonging to another task.
          */
         bool    orderedBackbufferSegments;
         /**
          * A SpriteBatch draw and a 3D draw issued inside ONE bind cycle keep their relative public
-         * order. False where the backend holds them in separate queues and replays one family
+         * order. False where the renderer holds them in separate queues and replays one family
          * after the other -- a distinct root cause from segment boundaries (check O3).
          */
         bool    mixedQueuesKeepPublicOrder;
         /**
          * A `Clear()` issued AFTER a draw in the SAME backbuffer cycle wipes that draw. False on a
-         * backend whose only backbuffer clear mechanism is the render-pass load action, which
+         * renderer whose only backbuffer clear mechanism is the render-pass load action, which
          * necessarily runs before every draw of its pass.
          */
         bool    clearAfterDrawWinsOnBackbuffer;
@@ -155,7 +155,7 @@ namespace
         /**
          * A SpriteBatch fill on the BACKBUFFER honours a custom sub-Viewport, i.e. sprite
          * coordinates are viewport-local. Declared separately from the render-target answer
-         * REMED-GFX-140 measures: a backend can honour one and not the other.
+         * REMED-GFX-140 measures: a renderer can honour one and not the other.
          */
         bool    backbufferSpriteViewportIsLocal;
         /// A SpriteBatch fill on the BACKBUFFER honours GraphicsDevice.ScissorRectangle.
@@ -165,18 +165,18 @@ namespace
         bool    wantHiDefProfile;  ///< Request GraphicsProfile::HiDef.
     };
 
-#if defined(CNA_BACKEND_HEADLESS)
+#if defined(CNA_RENDERER_HEADLESS)
     // Headless rasterizes nothing and its readback is REMED-GFX-127/130's deterministic refusal.
     // Every sequence must still be legal and must not throw.
     constexpr Contract kContract{"HEADLESS", Support::Unsupported, true, Support::Unsupported,
                                  true, true, true, true, true, true, true, true, true, false};
-#elif defined(CNA_BACKEND_SOFTWARE)
+#elif defined(CNA_RENDERER_SOFTWARE)
     constexpr Contract kContract{"SOFTWARE", Support::Exact, true, Support::Exact,
                                  false, true, true, true, true, true, true, true, true, false};
-#elif defined(CNA_BACKEND_EASYGL)
+#elif defined(CNA_RENDERER_EASYGL)
     constexpr Contract kContract{"EASYGL", Support::Exact, true, Support::Exact,
                                  true, true, true, true, true, true, true, true, true, false};
-#elif defined(CNA_BACKEND_BGFX)
+#elif defined(CNA_RENDERER_BGFX)
     // `mixedQueuesKeepPublicOrder` was false until REMED-GFX-157. bgfx submits both families
     // immediately into a view, and bgfx's DEFAULT view mode radix-sorts a view's draws by sort key
     // to minimise state changes -- which discards submission order, so within ONE bind cycle a 3D
@@ -185,7 +185,7 @@ namespace
     // and this declaration turned over; it was measured red the moment the fix landed.
     constexpr Contract kContract{"BGFX", Support::Exact, true, Support::Exact,
                                  true, true, true, true, true, true, false, true, true, false};
-#elif defined(CNA_BACKEND_VULKAN)
+#elif defined(CNA_RENDERER_VULKAN)
     // REMED-GFX-143's primary subject. `orderedBackbufferSegments` was false until this task:
     // Phase 2 of RecordCommandBuffer was one trailing swapchain pass passed `kAllSegments`.
     // `mixedQueuesKeepPublicOrder` was false until REMED-GFX-157: `activeBatches_` and
@@ -196,11 +196,11 @@ namespace
     // REMED-GFX-129 was open -- the clear colour reached the swapchain only through the render-pass
     // load op, and `ClearDepth` was the one clear entry point that recorded no clear request at
     // all. REMED-GFX-129 made Clear an ordered vkCmdClearAttachments command, so checks C4 and C6
-    // now assert the correct behaviour on this backend; both were measured red the moment the fix
+    // now assert the correct behaviour on this renderer; both were measured red the moment the fix
     // landed, which is what turned these two declarations over.
     constexpr Contract kContract{"VULKAN", Support::Exact, true, Support::Exact,
                                  true, true, true, true, true, true, true, true, true, false};
-#elif defined(CNA_BACKEND_WEBGPU)
+#elif defined(CNA_RENDERER_WEBGPU)
     // `clearAfterDrawWinsOnBackbuffer` was false while REMED-GFX-156 was open: WebGPU delivered a
     // backbuffer clear colour only through the render-pass load op, the same mechanism
     // REMED-GFX-140 records for its render targets, so a Clear() after a draw inside ONE cycle
@@ -214,7 +214,7 @@ namespace
     // scissor call, it resolved the rectangle from live state when it recorded the pass, and check
     // V2 below restores the full rectangle before its single read -- so every already-queued batch
     // was replayed unclipped. Its RENDER-TARGET scissor looked correct for the same reason in
-    // reverse (a target switch IS the flush on this backend, so live state still matched).
+    // reverse (a target switch IS the flush on this renderer, so live state still matched).
     // REMED-GFX-146 captures the whole scissor state per draw and this declaration turned over;
     // it was measured red the moment the fix landed.
     // `mixedQueuesKeepPublicOrder` was false from REMED-GFX-157 until REMED-GFX-159. WebGPU grouped
@@ -226,35 +226,35 @@ namespace
     // both checks were measured red the moment the fix landed.
     constexpr Contract kContract{"WEBGPU", Support::Exact, true, Support::Exact,
                                  true, true, true, true, true, true, true, true, true, false};
-#elif defined(CNA_BACKEND_SDL_GPU)
+#elif defined(CNA_RENDERER_SDL_GPU)
     // SdlGpu has no `ReadBackbuffer` override, so `GetBackBufferData` raises and this file's
     // backbuffer oracle cannot run here at all. REMED-GFX-143's SdlGpu half is measured
     // structurally instead (native pass order and load actions under an interposer) and the
     // render-target-side checks below still run.
     constexpr Contract kContract{"SDL_GPU", Support::Unsupported, true, Support::Exact,
                                  true, true, true, false, false, true, true, true, true, false};
-#elif defined(CNA_BACKEND_SDL_RENDERER)
+#elif defined(CNA_RENDERER_SDL_RENDERER)
     constexpr Contract kContract{"SDL_RENDERER", Support::Exact, true, Support::Exact,
                                  false, true, true, true, true, false, false, true, false, false};
-#elif defined(CNA_BACKEND_ASCII)
+#elif defined(CNA_RENDERER_ASCII)
     constexpr Contract kContract{"ASCII", Support::Exact, true, Support::Exact,
                                  false, true, true, true, true, false, false, true, false, false};
-#elif defined(CNA_BACKEND_CANVAS)
+#elif defined(CNA_RENDERER_CANVAS)
     constexpr Contract kContract{"CANVAS", Support::Exact, true, Support::Exact,
                                  false, true, true, true, true, true, true, true, true, false};
-#elif defined(CNA_BACKEND_FREEDIRECT)
+#elif defined(CNA_RENDERER_FREEDIRECT)
     constexpr Contract kContract{"FREEDIRECT", Support::Exact, true, Support::Exact,
                                  false, true, true, true, true, false, false, false, false, false};
-#elif defined(CNA_BACKEND_D3D9)
+#elif defined(CNA_RENDERER_D3D9)
     constexpr Contract kContract{"D3D9", Support::Exact, true, Support::Exact,
                                  true, true, true, true, true, true, true, true, true, true};
-#elif defined(CNA_BACKEND_D3D11)
+#elif defined(CNA_RENDERER_D3D11)
     constexpr Contract kContract{"D3D11", Support::Exact, true, Support::Exact,
                                  true, true, true, true, true, true, true, true, true, false};
-#elif defined(CNA_BACKEND_D3D12)
+#elif defined(CNA_RENDERER_D3D12)
     constexpr Contract kContract{"D3D12", Support::Exact, true, Support::Exact,
                                  true, true, true, true, true, true, true, true, true, false};
-#elif defined(CNA_BACKEND_LLGL)
+#elif defined(CNA_RENDERER_LLGL)
     // `orderedBackbufferSegments` is true (LLGL-45, 2026-08-03): GroupFrameCommandsByTargetEXT()
     // now segments `frameCommands_` in TRUE public order -- a new segment starts only when the
     // target actually changes from the immediately preceding command, so a target that is
@@ -264,7 +264,7 @@ namespace
     // (REMED-GFX-143's own original LLGL fix, when this field was still false) is gone entirely --
     // every segment's own BeginRenderPass() reloads its target's real prior content via a real
     // AttachmentLoadOp::Load pass, so revisiting a target mid-frame is genuinely safe now too.
-    // Every other field reflects this backend's own single ordered `frameCommands_` stream: Clear/
+    // Every other field reflects this renderer's own single ordered `frameCommands_` stream: Clear/
     // Sprite/Primitives commands share ONE vector in public queue order (no separate per-family
     // queues), so `mixedQueuesKeepPublicOrder` is real, and a `Clear()` queued after a draw within
     // the SAME bucket replays after it too (`clearAfterDrawWinsOnBackbuffer`).
@@ -275,22 +275,22 @@ namespace
     constexpr Contract kContract{"LLGL", Support::Exact, true, Support::Exact,
                                  false, true, true, true, true, true, true, true, true, false};
 #else
-#error "REMED-GFX-143: this backend has no declared backbuffer command-order contract."
+#error "REMED-GFX-143: this renderer has no declared backbuffer command-order contract."
 #endif
 
     /**
-     * @brief When `mixedQueuesKeepPublicOrder` is false, which family this backend replays FIRST.
+     * @brief When `mixedQueuesKeepPublicOrder` is false, which family this renderer replays FIRST.
      *
      * REMED-GFX-157: "does it keep public order" and "if not, which way does it group" are two
-     * different facts, and O3 alone could only ever see the first. A backend that replays all
+     * different facts, and O3 alone could only ever see the first. A renderer that replays all
      * sprites and then all 3D draws inverts `3D; sprite`; one that replays all 3D draws and then
      * all sprites inverts `sprite; 3D` instead. Only meaningful when the contract above says the
      * order is not public; checks O3 and O4 derive both of their predictions from the pair, so
-     * there is exactly one place to change when a backend is corrected.
+     * there is exactly one place to change when a renderer is corrected.
      *
-     * REMED-GFX-159 turned WEBGPU's `mixedQueuesKeepPublicOrder` over, and it was the last backend
+     * REMED-GFX-159 turned WEBGPU's `mixedQueuesKeepPublicOrder` over, and it was the last renderer
      * declaring anything but public order -- so nothing consults this today. It is kept, rather
-     * than deleted along with the branch it feeds, because a backend that regresses to a grouped
+     * than deleted along with the branch it feeds, because a renderer that regresses to a grouped
      * replay needs somewhere to say WHICH grouping, and rebuilding that distinction after the fact
      * is what cost REMED-GFX-157 its first measurement.
      */
@@ -380,9 +380,9 @@ class BackbufferPassOrderTest : public Game
     void skip(const std::string& label) { check(true, label); }
 
     /**
-     * @brief Whether this backend's own pixels can judge a backbuffer question.
+     * @brief Whether this renderer's own pixels can judge a backbuffer question.
      *
-     * A backend with no public backbuffer readback cannot answer any question in this file about
+     * A renderer with no public backbuffer readback cannot answer any question in this file about
      * backbuffer content. Every check still ISSUES its whole public command sequence there -- that
      * is what a structural oracle (native pass order and load actions under an interposer) needs to
      * observe, and issuing it also proves the sequence is legal and does not throw. Only the pixel
@@ -392,7 +392,7 @@ class BackbufferPassOrderTest : public Game
     bool CanJudgeBackbuffer(const std::string& label)
     {
         if (kContract.backbufferReadback == Support::Exact) return true;
-        skip(label + ": sequence issued, judgement skipped -- this backend has no public backbuffer "
+        skip(label + ": sequence issued, judgement skipped -- this renderer has no public backbuffer "
                      "readback, so backbuffer content cannot be observed at all");
         return false;
     }
@@ -400,14 +400,14 @@ class BackbufferPassOrderTest : public Game
     /**
      * @brief Whether a check that can only distinguish an ordered stream from a trailing pass counts.
      *
-     * Check A1 still runs on a backend that declares the defect and asserts the COLLAPSED shape, so
-     * the declaration turns red the day the backend is fixed; every other such check reports a skip
+     * Check A1 still runs on a renderer that declares the defect and asserts the COLLAPSED shape, so
+     * the declaration turns red the day the renderer is fixed; every other such check reports a skip
      * naming the reason rather than a failure that belongs to a different task.
      */
     bool CanJudgeOrder(const std::string& label)
     {
         if (kContract.orderedBackbufferSegments) return true;
-        skip(label + ": sequence issued, judgement skipped -- this backend replays all backbuffer "
+        skip(label + ": sequence issued, judgement skipped -- this renderer replays all backbuffer "
                      "work in one trailing pass (declared open defect)");
         return false;
     }
@@ -529,7 +529,7 @@ class BackbufferPassOrderTest : public Game
      *
      * `DepthFormat::None` deliberately: a target that owns no depth buffer at all cannot be the
      * source of a depth value, so check D2 -- "a depth write inside a render-target pass does not
-     * reject a later backbuffer draw" -- can only fail if the backend attached the BACKBUFFER's
+     * reject a later backbuffer draw" -- can only fail if the renderer attached the BACKBUFFER's
      * depth attachment to the target's pass, which is exactly the leak worth catching.
      */
     std::unique_ptr<RenderTarget2D> MakeTarget(GraphicsDevice& dev, RenderTargetUsage usage)
@@ -612,7 +612,7 @@ class BackbufferPassOrderTest : public Game
     {
         if (kContract.rtReadback != Support::Exact)
         {
-            skip(label + ": skipped -- no render-target readback on this backend");
+            skip(label + ": skipped -- no render-target readback on this renderer");
             return;
         }
         std::vector<Color> px(static_cast<std::size_t>(kRT) * kRT, Color(0xCD, 0xCD, 0xCD, 0xCD));
@@ -638,8 +638,8 @@ class BackbufferPassOrderTest : public Game
     /**
      * @brief A1 -- target produced, consumed by the backbuffer, produced again, consumed again.
      *
-     * The one check that runs on every backend with a readable backbuffer regardless of the
-     * declaration, so a backend claiming the defect stays falsifiable: it asserts the COLLAPSED
+     * The one check that runs on every renderer with a readable backbuffer regardless of the
+     * declaration, so a renderer claiming the defect stays falsifiable: it asserts the COLLAPSED
      * result there and the correct one everywhere else.
      */
     void RunProduceConsumeProduce(GraphicsDevice& dev)
@@ -660,7 +660,7 @@ class BackbufferPassOrderTest : public Game
                                  "cycle was issued", false);
         else
             CheckStripes(f, { kGreen, kGreen, kGreen, kGreen },
-                         label + ": this backend replays every backbuffer draw AFTER every target "
+                         label + ": this renderer replays every backbuffer draw AFTER every target "
                                  "pass, so both consumers see the FINAL target content (declared "
                                  "open defect)", false);
     }
@@ -726,7 +726,7 @@ class BackbufferPassOrderTest : public Game
     /**
      * @brief A5 -- two targets of IDENTICAL dimensions, so no identity shortcut can pass this.
      *
-     * Both targets are 8x8 with the same format and usage; only the resource differs. A backend
+     * Both targets are 8x8 with the same format and usage; only the resource differs. A renderer
      * that keyed a segment on size, format or "is a render target" rather than on the bind cycle
      * would collapse them.
      */
@@ -871,7 +871,7 @@ class BackbufferPassOrderTest : public Game
                          label + ": a Clear issued after a draw wipes that draw", false);
         else
             CheckStripes(f, { kGreen, kBlue, kBlue, kBlue },
-                         label + ": this backend's only backbuffer clear mechanism is the pass "
+                         label + ": this renderer's only backbuffer clear mechanism is the pass "
                                  "load action, so a Clear cannot wipe a draw issued before it "
                                  "inside the SAME cycle (declared, separate from segmentation)", false);
     }
@@ -924,7 +924,7 @@ class BackbufferPassOrderTest : public Game
                                  "the farther quad is accepted and the first cycle's stripe stays");
         else
             CheckStripes(f, { kRed, kGreen, kBlack, kBlack },
-                         label + ": this backend drops a depth-only Clear entirely, so the farther "
+                         label + ": this renderer drops a depth-only Clear entirely, so the farther "
                                  "quad stays rejected -- what is asserted is that COLOUR was not "
                                  "wiped by it (declared, separate from segmentation)");
     }
@@ -1030,7 +1030,7 @@ class BackbufferPassOrderTest : public Game
                              "draw issued in an earlier one", false);
     }
 
-    /// O3 -- the same pair INSIDE one backbuffer cycle. Declared per backend; not this task.
+    /// O3 -- the same pair INSIDE one backbuffer cycle. Declared per renderer; not this task.
     void RunMixedQueuesInOneCycle(GraphicsDevice& dev)
     {
         const std::string label = "O3 mixed queues in one cycle";
@@ -1048,7 +1048,7 @@ class BackbufferPassOrderTest : public Game
         CheckStripes(f, { SpriteWinsMixedPair(true) ? kBlue : kGreen, kBlack, kBlack, kBlack },
                      label + (kContract.mixedQueuesKeepPublicOrder
                                   ? ": a sprite issued after a 3D draw inside ONE cycle covers it"
-                                  : ": this backend groups a cycle's draws by family, so the winner "
+                                  : ": this renderer groups a cycle's draws by family, so the winner "
                                     "is fixed by the grouping and not by public order (declared "
                                     "open defect with its own root cause, not segmentation)"),
                      false);
@@ -1057,11 +1057,11 @@ class BackbufferPassOrderTest : public Game
     /**
      * @brief O4 -- the OTHER direction of the same pair, which O3 alone could never see.
      *
-     * REMED-GFX-157: O3 only ever measured `3D draw; sprite`. A backend that replays all sprites
+     * REMED-GFX-157: O3 only ever measured `3D draw; sprite`. A renderer that replays all sprites
      * and then all 3D draws produces the CORRECT picture for `sprite; 3D draw` by accident, so half
      * of the mixed-queue contract went unmeasured for as long as O3 was the only check -- and a
-     * backend that groups the other way round (all 3D, then all sprites) passed O3 outright while
-     * inverting this direction. Both directions are now asserted, and the same per-backend
+     * renderer that groups the other way round (all 3D, then all sprites) passed O3 outright while
+     * inverting this direction. Both directions are now asserted, and the same per-renderer
      * declaration governs both, so neither grouping can hide behind the other.
      */
     void RunMixedQueuesInOneCycleReversed(GraphicsDevice& dev)
@@ -1081,7 +1081,7 @@ class BackbufferPassOrderTest : public Game
         CheckStripes(f, { SpriteWinsMixedPair(false) ? kBlue : kGreen, kBlack, kBlack, kBlack },
                      label + (kContract.mixedQueuesKeepPublicOrder
                                   ? ": a 3D draw issued after a sprite inside ONE cycle covers it"
-                                  : ": this backend groups a cycle's draws by family, so the winner "
+                                  : ": this renderer groups a cycle's draws by family, so the winner "
                                     "is fixed by the grouping and not by public order (declared "
                                     "open defect)"),
                      false);
@@ -1134,7 +1134,7 @@ class BackbufferPassOrderTest : public Game
         }
         else
         {
-            skip(label + ": skipped -- this backend's SpriteBatch ignores a sub-Viewport, so the "
+            skip(label + ": skipped -- this renderer's SpriteBatch ignores a sub-Viewport, so the "
                          "three cycles cannot be told apart by position");
         }
     }
@@ -1145,7 +1145,7 @@ class BackbufferPassOrderTest : public Game
         const std::string label = "V2 scissor per cycle";
         if (!kContract.backbufferSpriteScissorApplies)
         {
-            skip(label + ": skipped -- this backend's SpriteBatch ignores ScissorRectangle");
+            skip(label + ": skipped -- this renderer's SpriteBatch ignores ScissorRectangle");
             return;
         }
         auto t = MakeTarget(dev, RenderTargetUsage::PreserveContents);
@@ -1180,7 +1180,7 @@ class BackbufferPassOrderTest : public Game
     /**
      * @brief U1 -- distinctive GEOMETRY, not distinctive colour, across five interleaved cycles.
      *
-     * Every deferred backend copies sprite and 3D vertex data into one per-frame arena while
+     * Every deferred renderer copies sprite and 3D vertex data into one per-frame arena while
      * recording, long before the submit that makes the GPU read it. Splitting the backbuffer into
      * several passes over that one arena is exactly the shape that let REMED-GFX-140's Vulkan
      * arena defect exist: a cursor that restarted per pass made an earlier pass draw a later
@@ -1257,7 +1257,7 @@ class BackbufferPassOrderTest : public Game
         if (!mrtSupported)
         {
             try { dev.SetRenderTargets({}); } catch (...) {}
-            skip(label + ": skipped -- this backend refuses two simultaneous render targets");
+            skip(label + ": skipped -- this renderer refuses two simultaneous render targets");
             return;
         }
         FillTarget(kRed);
@@ -1279,7 +1279,7 @@ class BackbufferPassOrderTest : public Game
         const std::string label = "M2 cube interleaved";
         if (!kContract.cubeTargets)
         {
-            skip(label + ": skipped -- no RenderTargetCube on this backend");
+            skip(label + ": skipped -- no RenderTargetCube on this renderer");
             return;
         }
         auto t = MakeTarget(dev, RenderTargetUsage::PreserveContents);
@@ -1321,7 +1321,7 @@ class BackbufferPassOrderTest : public Game
         }
         else
         {
-            skip(label + ": cube readback half skipped -- no readback on this backend");
+            skip(label + ": cube readback half skipped -- no readback on this renderer");
         }
     }
 
@@ -1387,7 +1387,7 @@ protected:
         white_ = std::make_unique<Texture2D>(Texture2D::CreateFromPixels(
             dev, 1, 1, std::vector<std::uint8_t>{255, 255, 255, 255}));
 
-        // A 2D-only backend raises from VertexBuffer's constructor outright ("SDL_Renderer does not
+        // A 2D-only renderer raises from VertexBuffer's constructor outright ("SDL_Renderer does not
         // support 3D: CreateVertexBuffer"), so the 3D resources are built only where the contract
         // says 3D rasterizes at all. Every check that touches them is gated on the same flag.
         if (kContract.draws3D)
@@ -1432,12 +1432,12 @@ protected:
             bbW_ = vp.getWidthProperty();
             bbH_ = vp.getHeightProperty();
         }
-        std::printf("REMED-GFX-143 backbuffer command order -- backend %s, backbuffer %dx%d\n",
+        std::printf("REMED-GFX-143 backbuffer command order -- renderer %s, backbuffer %dx%d\n",
                     kContract.name, bbW_, bbH_);
 
         if (!kContract.rt2dTargets)
         {
-            skip("no RenderTarget2D on this backend -- nothing to interleave");
+            skip("no RenderTarget2D on this renderer -- nothing to interleave");
         }
         else
         {

@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: MS-PL
 // Task 704: Audit RenderTarget2D construction on SDL_Renderer.
 //
-// SdlRenderTargetBackend's constructor creates its backing texture via
+// SdlRenderTargetRenderer's constructor creates its backing texture via
 // SDL_CreateTexture(..., SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_TARGET, w, h) --
 // SDL_TEXTUREACCESS_TARGET is the one access mode SDL requires for a texture to be a valid
 // SDL_SetRenderTarget() destination. This test audits two things:
 //   1. Property wiring: RenderTarget2D's own constructor (Microsoft::Xna::Framework::Graphics::
 //      RenderTarget2D.cpp) stores DepthStencilFormat/RenderTargetUsage verbatim (matching FNA's
 //      real semantics -- FNA's own constructor just assigns the preferred value directly, no
-//      device-capability clamping for either), while MultiSampleCount reflects the backend's real,
+//      device-capability clamping for either), while MultiSampleCount reflects the renderer's real,
 //      device-clamped value (FNA: FNA3D_GetMaxMultiSampleCount) -- SDL_Renderer's 2D blit pipeline
-//      has no MSAA support at all (IRenderTargetBackend::GetMultiSampleCount defaults to 0 and
-//      SdlRenderTargetBackend never overrides it), so MultiSampleCount must always report 0
+//      has no MSAA support at all (IRenderTargetRenderer::GetMultiSampleCount defaults to 0 and
+//      SdlRenderTargetRenderer never overrides it), so MultiSampleCount must always report 0
 //      regardless of what was requested.
 //   2. Bind/draw/unbind isolation: SDL_SetRenderTarget genuinely redirects drawing to the target's
 //      own off-screen texture -- content drawn while the RT is bound must NOT leak onto the real
@@ -19,7 +19,7 @@
 //      (SetRenderTarget(nullptr)).
 //
 // Requires PresentationMode::NativeBackBuffer (Task 915 finding): SDL_RenderReadPixels operates
-// in physical output coordinates, while this backend's default presentation mode
+// in physical output coordinates, while this renderer's default presentation mode
 // (FixedHeightDynamicWidth) does not map logical pixels 1:1 to physical ones.
 //
 // Exit code 0 = all checks PASS, 1 = at least one FAIL.

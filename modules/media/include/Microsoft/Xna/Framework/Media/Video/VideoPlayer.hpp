@@ -33,7 +33,7 @@ namespace Microsoft::Xna::Framework::Media
      * @brief Controls video playback.
      *
      * Decodes video frames via FFmpeg and renders them through the CNA graphics
-     * backend. Audio is fed to an SDL3 AudioStream.
+     * renderer. Audio is fed to an SDL3 AudioStream.
      */
     class VideoPlayer final : public System::Object, public System::IDisposable
     {

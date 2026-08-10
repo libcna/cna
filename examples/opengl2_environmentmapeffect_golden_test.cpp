@@ -1,19 +1,19 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl2.md: genuine cross-backend visual-parity proof -- reuses
+// plan_opengl2.md: genuine cross-renderer visual-parity proof -- reuses
 // examples/easygl_environmentmapeffect_golden_test.cpp's own combined EnvironmentMapEffect scene
 // verbatim (same texture, cube map, matrices, effect parameters) and its own golden PNG
 // (examples/golden/easygl_environmentmapeffect_golden_test.png, originally captured from the
-// EasyGL/GLES3 backend) via PixelTestGame::CompareGoldenImage(), instead of the single
+// EasyGL/GLES3 renderer) via PixelTestGame::CompareGoldenImage(), instead of the single
 // hand-picked centre pixel opengl2_environmentmapeffect_test.cpp's own Check C already covers.
-// This is the first OpenGL2 test in this backend's suite that compares actual rendered PIXELS,
-// not just a numeric derivation, against another backend's own output -- a real (llvmpipe
+// This is the first OpenGL2 test in this renderer's suite that compares actual rendered PIXELS,
+// not just a numeric derivation, against another renderer's own output -- a real (llvmpipe
 // software rasterizer, direct GL 2.1 shaders) vs (GLES3, EasyGL's own shader family) rendering
-// path comparison, not a same-backend regression check.
+// path comparison, not a same-renderer regression check.
 //
 // See easygl_environmentmapeffect_golden_test.cpp's own header comment for the full per-term
 // derivation of the scene's expected result; this file intentionally keeps the same tolerance=20
 // (Task 462's own project-wide finding: exact pixel-perfect reproduction across this project's
-// backends/drivers is not realistic, only "close enough").
+// renderers/drivers is not realistic, only "close enough").
 //
 // Exit code 0 = PASS, 1 = FAIL.
 

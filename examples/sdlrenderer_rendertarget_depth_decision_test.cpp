@@ -2,33 +2,33 @@
 // Task 708: Decide and document render-target depth-buffer behavior on SDL_Renderer.
 //
 // Decision: SDL_Renderer's render targets SILENTLY IGNORE any requested DepthFormat rather than
-// throwing. SdlGraphicsBackend::CreateRenderTarget2D never allocates real depth-stencil storage
+// throwing. SdlRenderer::CreateRenderTarget2D never allocates real depth-stencil storage
 // regardless of what was requested (Task 704's own finding); RenderTarget2D::DepthStencilFormat
 // still echoes back whatever was requested verbatim, matching FNA's own plain field-store
 // semantics (no device-capability clamping there either -- see RenderTarget2D.cs). Rationale for
 // silently ignoring rather than throwing: SDL_Renderer's 2D sprite pipeline never performs actual
 // depth testing under ANY circumstance regardless of which render target is bound (SpriteBatch
-// never depth-tests on any backend, and this backend's `SetDepthTestEnabled`/`ClearDepth`/
+// never depth-tests on any renderer, and this renderer's `SetDepthTestEnabled`/`ClearDepth`/
 // `ClearColorAndDepth` already throw unconditionally the moment anything actually TRIES to use
 // depth testing) -- so a caller requesting a depth format for portability with the other 3
-// (depth-capable) backends, without ever actually issuing a depth-testing draw call, hits no
-// functional difference on this backend and should not be penalized with a throw for an inert,
+// (depth-capable) renderers, without ever actually issuing a depth-testing draw call, hits no
+// functional difference on this renderer and should not be penalized with a throw for an inert,
 // unactionable request.
 //
 // This task found and fixed a real bug while verifying that decision: GraphicsDevice::
 // SetRenderTarget's Task 704 fix decided whether to include ClearOptions::DepthBuffer in the
 // auto-clear-on-bind by checking the XNA-level REQUESTED DepthStencilFormat property -- which
-// reflects what the CALLER asked for, not whether the backend actually allocated real storage.
+// reflects what the CALLER asked for, not whether the renderer actually allocated real storage.
 // For SDL_Renderer, which NEVER allocates one regardless of request, this meant simply
 // constructing a RenderTarget2D with a real depth format (e.g. Depth24Stencil8) and binding it
 // with the default DiscardContents usage crashed immediately via
 // ClearColorAndDepth's unconditional ThrowNo3D. Fixed by adding
-// IRenderTargetBackend::HasRealDepthBuffer(bool depthFormatWasRequested), defaulting to mirror the
+// IRenderTargetRenderer::HasRealDepthBuffer(bool depthFormatWasRequested), defaulting to mirror the
 // requested format (zero behavior change for EasyGL/Vulkan/Bgfx, which DO honor requested depth
-// formats), with SdlRenderTargetBackend overriding it to always return false.
+// formats), with SdlRenderTargetRenderer overriding it to always return false.
 //
 // Requires PresentationMode::NativeBackBuffer (Task 915 finding): SDL_RenderReadPixels operates
-// in physical output coordinates, while this backend's default presentation mode
+// in physical output coordinates, while this renderer's default presentation mode
 // (FixedHeightDynamicWidth) does not map logical pixels 1:1 to physical ones.
 //
 // Exit code 0 = all checks PASS, 1 = at least one FAIL.
@@ -104,7 +104,7 @@ protected:
 
         // Decision boundary: genuinely ATTEMPTING to use depth testing must still throw --
         // ignoring the requested DepthFormat must not silently unlock functionality that this
-        // 2D-only backend never actually has.
+        // 2D-only renderer never actually has.
         bool clearDepthThrew = false;
         try
         {

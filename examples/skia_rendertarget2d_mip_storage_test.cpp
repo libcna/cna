@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 // SKIA-131: stable, isolated RenderTarget2D surfaces and exact shadows at every mip level.
 
-#include "CNA/Internal/Backends/Skia/SkiaGraphicsBackend.hpp"
-#include "CNA/Internal/Backends/Skia/SkiaRenderTargetBackend.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaRenderer.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaRenderTargetRenderer.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
@@ -30,10 +30,10 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using CNA::Internal::Backends::Skia::SkiaGraphicsBackend;
-using CNA::Internal::Backends::Skia::SkiaRenderTargetBackend;
-using CNA::Internal::Backends::Skia::SkiaResourceStats;
-using CNA::Internal::Backends::Skia::SkiaSourceAlphaConvention;
+using CNA::Internal::Renderers::Skia::SkiaRenderer;
+using CNA::Internal::Renderers::Skia::SkiaRenderTargetRenderer;
+using CNA::Internal::Renderers::Skia::SkiaResourceStats;
+using CNA::Internal::Renderers::Skia::SkiaSourceAlphaConvention;
 
 namespace
 {
@@ -46,10 +46,10 @@ namespace
 
     [[nodiscard]] bool SameStats(const SkiaResourceStats& a, const SkiaResourceStats& b)
     {
-        return a.textureBackends == b.textureBackends
+        return a.textureRenderers == b.textureRenderers
             && a.textureImageViews == b.textureImageViews
-            && a.cpuTextureCubeBackends == b.cpuTextureCubeBackends
-            && a.cpuTexture3DBackends == b.cpuTexture3DBackends
+            && a.cpuTextureCubeRenderers == b.cpuTextureCubeRenderers
+            && a.cpuTexture3DRenderers == b.cpuTexture3DRenderers
             && a.renderTargets == b.renderTargets
             && a.renderTargetCubes == b.renderTargetCubes
             && a.targetSnapshots == b.targetSnapshots
@@ -98,21 +98,21 @@ protected:
         finished_ = true;
 
         auto& device = getGraphicsDeviceProperty();
-        auto* graphicsBackend = dynamic_cast<SkiaGraphicsBackend*>(&device.GetBackend());
-        Check(graphicsBackend != nullptr, "Skia graphics backend exposes resource accounting");
-        if (!graphicsBackend)
+        auto* graphicsRenderer = dynamic_cast<SkiaRenderer*>(&device.GetRenderer());
+        Check(graphicsRenderer != nullptr, "Skia graphics renderer exposes resource accounting");
+        if (!graphicsRenderer)
         {
             Exit();
             return;
         }
-        const SkiaResourceStats baseline = graphicsBackend->GetResourceStatsEXT();
+        const SkiaResourceStats baseline = graphicsRenderer->GetResourceStatsEXT();
 
         {
-            auto counters = std::make_shared<CNA::Internal::Backends::Skia::SkiaResourceCounters>();
+            auto counters = std::make_shared<CNA::Internal::Renderers::Skia::SkiaResourceCounters>();
             bool rejected = false;
             try
             {
-                SkiaRenderTargetBackend overBudget(
+                SkiaRenderTargetRenderer overBudget(
                     8192, 8192, true, {}, counters, false);
                 (void)overBudget;
             }
@@ -129,19 +129,19 @@ protected:
         {
             RenderTarget2D target(device, 8, 8, true, SurfaceFormat::Color, DepthFormat::None,
                                   0, RenderTargetUsage::PreserveContents);
-            auto* backend = dynamic_cast<SkiaRenderTargetBackend*>(target.GetRenderTargetBackend());
-            Check(backend != nullptr && target.getLevelCountProperty() == 4
-                      && backend->MipLevelCountEXT() == 4,
+            auto* renderer = dynamic_cast<SkiaRenderTargetRenderer*>(target.GetRenderTargetRenderer());
+            Check(renderer != nullptr && target.getLevelCountProperty() == 4
+                      && renderer->MipLevelCountEXT() == 4,
                   "8x8 mip target exposes the complete four-level chain");
-            if (!backend)
+            if (!renderer)
             {
                 Exit();
                 return;
             }
 
-            const SkiaResourceStats live = graphicsBackend->GetResourceStatsEXT();
-            Check(backend->SurfaceStorageBytesEXT() == 340u
-                      && backend->MipChainEXT().StorageBytes() == 340u
+            const SkiaResourceStats live = graphicsRenderer->GetResourceStatsEXT();
+            Check(renderer->SurfaceStorageBytesEXT() == 340u
+                      && renderer->MipChainEXT().StorageBytes() == 340u
                       && live.renderTargets == baseline.renderTargets + 1u
                       && live.targetSurfaceBytes == baseline.targetSurfaceBytes + 340u
                       && live.mipChains2D == baseline.mipChains2D + 1u
@@ -165,23 +165,23 @@ protected:
 
             std::vector<Color> publicLevelOne(16, kBlack);
             target.GetData(1, nullptr, publicLevelOne.data(), 0, 16);
-            std::vector<std::uint8_t> backendLevelOne(64u, 0u);
-            const bool backendRead = backend->GetData(
-                1, 0, 0, 4, 4, backendLevelOne.data(),
-                static_cast<int>(backendLevelOne.size()));
-            bool backendExact = backendRead;
-            for (int i = 0; i < 16 && backendExact; ++i)
+            std::vector<std::uint8_t> rendererLevelOne(64u, 0u);
+            const bool rendererRead = renderer->GetData(
+                1, 0, 0, 4, 4, rendererLevelOne.data(),
+                static_cast<int>(rendererLevelOne.size()));
+            bool rendererExact = rendererRead;
+            for (int i = 0; i < 16 && rendererExact; ++i)
             {
-                backendExact = backendLevelOne[static_cast<std::size_t>(i) * 4u + 0u]
+                rendererExact = rendererLevelOne[static_cast<std::size_t>(i) * 4u + 0u]
                                    == levelOne[static_cast<std::size_t>(i)].getRProperty()
-                    && backendLevelOne[static_cast<std::size_t>(i) * 4u + 1u]
+                    && rendererLevelOne[static_cast<std::size_t>(i) * 4u + 1u]
                                    == levelOne[static_cast<std::size_t>(i)].getGProperty()
-                    && backendLevelOne[static_cast<std::size_t>(i) * 4u + 2u]
+                    && rendererLevelOne[static_cast<std::size_t>(i) * 4u + 2u]
                                    == levelOne[static_cast<std::size_t>(i)].getBProperty()
-                    && backendLevelOne[static_cast<std::size_t>(i) * 4u + 3u]
+                    && rendererLevelOne[static_cast<std::size_t>(i) * 4u + 3u]
                                    == levelOne[static_cast<std::size_t>(i)].getAProperty();
             }
-            Check(SameColors(publicLevelOne, levelOne) && backendExact,
+            Check(SameColors(publicLevelOne, levelOne) && rendererExact,
                   "translucent level-1 upload/readback preserves exact canonical bytes");
 
             const Rectangle patchRegion(2, 1, 1, 1);
@@ -192,18 +192,18 @@ protected:
             Check(SameColors(publicLevelOne, levelOne),
                   "partial higher-level upload changes only its addressed texel");
 
-            const auto levelTwoSnapshot = backend->SnapshotMipLevelEXT(
+            const auto levelTwoSnapshot = renderer->SnapshotMipLevelEXT(
                 2, SkiaSourceAlphaConvention::Premultiplied);
-            const auto levelTwoSnapshotAgain = backend->SnapshotMipLevelEXT(
+            const auto levelTwoSnapshotAgain = renderer->SnapshotMipLevelEXT(
                 2, SkiaSourceAlphaConvention::Straight);
             Check(levelTwoSnapshot && levelTwoSnapshot->width() == 2
                       && levelTwoSnapshot->height() == 2
                       && levelTwoSnapshot.get() == levelTwoSnapshotAgain.get(),
                   "snapshot cache identifies and reuses the requested 2x2 level");
-            const SkiaResourceStats snapshotTwoStats = graphicsBackend->GetResourceStatsEXT();
-            const auto levelThreeSnapshot = backend->SnapshotMipLevelEXT(
+            const SkiaResourceStats snapshotTwoStats = graphicsRenderer->GetResourceStatsEXT();
+            const auto levelThreeSnapshot = renderer->SnapshotMipLevelEXT(
                 3, SkiaSourceAlphaConvention::Premultiplied);
-            const SkiaResourceStats snapshotThreeStats = graphicsBackend->GetResourceStatsEXT();
+            const SkiaResourceStats snapshotThreeStats = graphicsRenderer->GetResourceStatsEXT();
             Check(levelThreeSnapshot && levelThreeSnapshot->width() == 1
                       && levelThreeSnapshot->height() == 1
                       && levelThreeSnapshot.get() != levelTwoSnapshot.get()
@@ -274,7 +274,7 @@ protected:
                   "public minification samples the regenerated 1x1 target mip");
         }
 
-        Check(SameStats(graphicsBackend->GetResourceStatsEXT(), baseline),
+        Check(SameStats(graphicsRenderer->GetResourceStatsEXT(), baseline),
               "mip target destruction returns surfaces, chain, and snapshot to baseline");
 
         {
@@ -293,7 +293,7 @@ protected:
                                      [](Color value) { return value == kBlack; }),
                   "DiscardContents replaces level zero and regenerates its higher storage");
         }
-        Check(SameStats(graphicsBackend->GetResourceStatsEXT(), baseline),
+        Check(SameStats(graphicsRenderer->GetResourceStatsEXT(), baseline),
               "discard target release also returns every counter to baseline");
 
         Exit();

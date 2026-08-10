@@ -1,21 +1,21 @@
 // SPDX-License-Identifier: MS-PL
 // Task 229: Verify MSAA MultiSampleCount changes after device creation.
 //
-// MultiSampleCount is applied to the EasyGL backend only at construction time
-// (via GraphicsBackendCreateArgs::multiSampleCount). There is no
-// IGraphicsBackend::SetMultiSampleCount() — changing the sample count at
-// runtime would require recreating the backend, which is not yet implemented.
+// MultiSampleCount is applied to the EasyGL renderer only at construction time
+// (via GraphicsRendererCreateArgs::multiSampleCount). There is no
+// IGraphicsRenderer::SetMultiSampleCount() — changing the sample count at
+// runtime would require recreating the renderer, which is not yet implemented.
 //
-// Task 902: GraphicsDeviceManager::applyToExistingBackend() now calls the real
-// GraphicsDevice::Reset(), which writes the backend's actual, honestly-reported
-// applied MultiSampleCount (IGraphicsBackend::ApplyMultiSampleCount(), which for
+// Task 902: GraphicsDeviceManager::applyToExistingRenderer() now calls the real
+// GraphicsDevice::Reset(), which writes the renderer's actual, honestly-reported
+// applied MultiSampleCount (IGraphicsRenderer::ApplyMultiSampleCount(), which for
 // EasyGL just echoes GetMultiSampleCount() since it can't reconfigure post-
 // construction) back into the stored PresentationParameters — matching real FNA's
 // PresentationParameters.MultiSampleCount = FNA3D_GetMaxMultiSampleCount(...)
 // write-back after FNA3D_ResetBackbuffer(). This means toggling
 // preferMultiSampling via ApplyChanges() on an *already-constructed* EasyGL
 // device can no longer retroactively report MultiSampleCount=8 in the PP: the
-// backend genuinely never engaged MSAA, so honestly reports back 0.
+// renderer genuinely never engaged MSAA, so honestly reports back 0.
 //
 // The invariants this test verifies:
 //   1. GDM with preferMultiSampling=false → device PP stores MultiSampleCount=0.
@@ -30,9 +30,9 @@
 //
 // What is NOT tested: actual MSAA rendering quality (requires pixel readback
 // and a rendered scene with geometry edges — out of scope for this task), nor
-// MultiSampleCount reaching the backend when preferMultiSampling=true is set
+// MultiSampleCount reaching the renderer when preferMultiSampling=true is set
 // *before* the device's first construction (see vulkan_msaa_test.cpp, Task 902,
-// for that scenario on a backend that does support runtime MSAA reconfiguration).
+// for that scenario on a renderer that does support runtime MSAA reconfiguration).
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
@@ -97,7 +97,7 @@ protected:
         checkCount(dev.getPresentationParametersProperty().getMultiSampleCountProperty(),
                    0, "GDM preferMultiSampling=false → MultiSampleCount=0 in PP");
 
-        // Direct path — arbitrary values round-trip in PP; backend is unchanged
+        // Direct path — arbitrary values round-trip in PP; renderer is unchanged
         directSet(dev, 0, "Direct SetPP MultiSampleCount=0 stored");
         directSet(dev, 1, "Direct SetPP MultiSampleCount=1 stored");
         directSet(dev, 2, "Direct SetPP MultiSampleCount=2 stored");

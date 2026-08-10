@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MS-PL
-// Task 215 / REMED-GFX-004: Backend GPU handles are released exactly once.
+// Task 215 / REMED-GFX-004: Renderer GPU handles are released exactly once.
 //
 // For each resource type (VertexBuffer, IndexBuffer, Texture2D, RenderTarget2D):
-//   1. HasBackend() == true  before Dispose()
-//   2. HasBackend() == false after  Dispose()       → handle freed on first Dispose()
-//   3. HasBackend() == false after  second Dispose() → no double-free attempt
+//   1. HasRenderer() == true  before Dispose()
+//   2. HasRenderer() == false after  Dispose()       → handle freed on first Dispose()
+//   3. HasRenderer() == false after  second Dispose() → no double-free attempt
 //
-// RenderTargetCube additionally covers its public cached-backend accessor, bound-target
+// RenderTargetCube additionally covers its public cached-renderer accessor, bound-target
 // rejection, destructor-only cleanup, and both resource/device destruction orders.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
@@ -65,77 +65,77 @@ protected:
         // ── VertexBuffer ──────────────────────────────────────────────────
         {
             VertexBuffer vb(dev, 8);
-            check(vb.HasBackend(),
-                  "VertexBuffer: HasBackend true before Dispose");
+            check(vb.HasRenderer(),
+                  "VertexBuffer: HasRenderer true before Dispose");
 
             disposeVia(vb);
 
-            check(!vb.HasBackend(),
-                  "VertexBuffer: HasBackend false after Dispose (handle freed)");
+            check(!vb.HasRenderer(),
+                  "VertexBuffer: HasRenderer false after Dispose (handle freed)");
             check(vb.getIsDisposedProperty(),
                   "VertexBuffer: IsDisposed true");
 
             disposeVia(vb);  // second call — must not crash
 
-            check(!vb.HasBackend(),
-                  "VertexBuffer: HasBackend still false after second Dispose");
+            check(!vb.HasRenderer(),
+                  "VertexBuffer: HasRenderer still false after second Dispose");
         }
 
         // ── IndexBuffer ───────────────────────────────────────────────────
         {
             IndexBuffer ib(dev, 12);
-            check(ib.HasBackend(),
-                  "IndexBuffer: HasBackend true before Dispose");
+            check(ib.HasRenderer(),
+                  "IndexBuffer: HasRenderer true before Dispose");
 
             disposeVia(ib);
 
-            check(!ib.HasBackend(),
-                  "IndexBuffer: HasBackend false after Dispose (handle freed)");
+            check(!ib.HasRenderer(),
+                  "IndexBuffer: HasRenderer false after Dispose (handle freed)");
             check(ib.getIsDisposedProperty(),
                   "IndexBuffer: IsDisposed true");
 
             disposeVia(ib);
 
-            check(!ib.HasBackend(),
-                  "IndexBuffer: HasBackend still false after second Dispose");
+            check(!ib.HasRenderer(),
+                  "IndexBuffer: HasRenderer still false after second Dispose");
         }
 
         // ── Texture2D ─────────────────────────────────────────────────────
         {
             Texture2D tex(dev, 4, 4);
-            check(tex.HasBackend(),
-                  "Texture2D: HasBackend true before Dispose");
+            check(tex.HasRenderer(),
+                  "Texture2D: HasRenderer true before Dispose");
 
             disposeVia(tex);
 
-            check(!tex.HasBackend(),
-                  "Texture2D: HasBackend false after Dispose (handle freed)");
+            check(!tex.HasRenderer(),
+                  "Texture2D: HasRenderer false after Dispose (handle freed)");
             check(tex.getIsDisposedProperty(),
                   "Texture2D: IsDisposed true");
 
             disposeVia(tex);
 
-            check(!tex.HasBackend(),
-                  "Texture2D: HasBackend still false after second Dispose");
+            check(!tex.HasRenderer(),
+                  "Texture2D: HasRenderer still false after second Dispose");
         }
 
-        // ── RenderTarget2D (via Texture2D::HasBackend) ────────────────────
+        // ── RenderTarget2D (via Texture2D::HasRenderer) ────────────────────
         {
             RenderTarget2D rt(dev, 8, 8);
-            check(rt.HasBackend(),
-                  "RenderTarget2D: HasBackend true before Dispose");
+            check(rt.HasRenderer(),
+                  "RenderTarget2D: HasRenderer true before Dispose");
 
             disposeVia(rt);
 
-            check(!rt.HasBackend(),
-                  "RenderTarget2D: HasBackend false after Dispose (handle freed)");
+            check(!rt.HasRenderer(),
+                  "RenderTarget2D: HasRenderer false after Dispose (handle freed)");
             check(rt.getIsDisposedProperty(),
                   "RenderTarget2D: IsDisposed true");
 
             disposeVia(rt);
 
-            check(!rt.HasBackend(),
-                  "RenderTarget2D: HasBackend still false after second Dispose");
+            check(!rt.HasRenderer(),
+                  "RenderTarget2D: HasRenderer still false after second Dispose");
         }
 
         // ── RenderTargetCube lifecycle parity with RenderTarget2D ─────────
@@ -146,7 +146,7 @@ protected:
             check(throwsInvalidOperation(bound),
                   "RenderTargetCube: disposing while bound throws InvalidOperationException");
             check(!bound.getIsDisposedProperty() &&
-                      bound.GetRenderTargetCubeBackend() != nullptr,
+                      bound.GetRenderTargetCubeRenderer() != nullptr,
                   "RenderTargetCube: rejected disposal leaves the resource live");
             dev.SetRenderTarget(nullptr);
             disposeVia(bound);
@@ -164,20 +164,20 @@ protected:
             RenderTargetCube rt(
                 dev, 4, false, SurfaceFormat::Color, DepthFormat::None);
             rt.setNameProperty("REMED-GFX-004");
-            check(rt.GetRenderTargetCubeBackend() != nullptr,
-                  "RenderTargetCube: backend is live before explicit Dispose");
+            check(rt.GetRenderTargetCubeRenderer() != nullptr,
+                  "RenderTargetCube: renderer is live before explicit Dispose");
 
             disposeVia(rt);
 
             check(rt.getIsDisposedProperty(),
                   "RenderTargetCube: explicit Dispose publishes IsDisposed");
-            check(rt.GetRenderTargetCubeBackend() == nullptr,
-                  "RenderTargetCube: explicit Dispose clears the cached backend pointer");
+            check(rt.GetRenderTargetCubeRenderer() == nullptr,
+                  "RenderTargetCube: explicit Dispose clears the cached renderer pointer");
 
             disposeVia(rt);
 
-            check(rt.GetRenderTargetCubeBackend() == nullptr,
-                  "RenderTargetCube: cached backend stays null after repeated Dispose");
+            check(rt.GetRenderTargetCubeRenderer() == nullptr,
+                  "RenderTargetCube: cached renderer stays null after repeated Dispose");
             check(cubeDestroyCount == 1,
                   "RenderTargetCube: repeated Dispose reports exactly one destruction");
         }
@@ -188,8 +188,8 @@ protected:
             RenderTargetCube rt(
                 dev, 4, false, SurfaceFormat::Color, DepthFormat::None);
             rt.setNameProperty("REMED-GFX-004");
-            check(rt.GetRenderTargetCubeBackend() != nullptr,
-                  "RenderTargetCube: backend is live before destructor-only cleanup");
+            check(rt.GetRenderTargetCubeRenderer() != nullptr,
+                  "RenderTargetCube: renderer is live before destructor-only cleanup");
         }
         check(cubeDestroyCount == 2,
               "RenderTargetCube: destructor-only cleanup reports one destruction");
@@ -197,15 +197,15 @@ protected:
         auto* deviceOwned = new RenderTargetCube(
             dev, 4, false, SurfaceFormat::Color, DepthFormat::None);
         deviceOwned->setNameProperty("REMED-GFX-004");
-        check(deviceOwned->GetRenderTargetCubeBackend() != nullptr,
-              "RenderTargetCube: backend is live before device-first disposal");
+        check(deviceOwned->GetRenderTargetCubeRenderer() != nullptr,
+              "RenderTargetCube: renderer is live before device-first disposal");
 
         dev.Dispose();
 
         check(deviceOwned->getIsDisposedProperty(),
               "RenderTargetCube: device-first disposal publishes IsDisposed");
-        check(deviceOwned->GetRenderTargetCubeBackend() == nullptr,
-              "RenderTargetCube: device-first disposal clears the cached backend pointer");
+        check(deviceOwned->GetRenderTargetCubeRenderer() == nullptr,
+              "RenderTargetCube: device-first disposal clears the cached renderer pointer");
         check(cubeDestroyCount == 3,
               "RenderTargetCube: device-first disposal reports one destruction");
 

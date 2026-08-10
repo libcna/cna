@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Task 319: verify GraphicsDevice.ReferenceStencil is used by all backends, independent of the
+// Task 319: verify GraphicsDevice.ReferenceStencil is used by all renderers, independent of the
 // currently-assigned DepthStencilState's own ReferenceStencil field.
 //
 // IMPORTANT: PresentationParameters.DepthStencilFormat defaults to DepthFormat::Depth24 (no
@@ -19,15 +19,15 @@
 // which should override the ACTIVE reference used by the next draw's stencil compare. Draw a GREEN
 // quad using the SAME (unchanged) DepthStencilState object: if the override genuinely took effect,
 // the compare becomes 0x99 vs buffer 0x05 (Equal, false) -> REJECTED -> stays BACKGROUND. If
-// setReferenceStencilProperty has no real effect (does not reach any backend), the compare still
+// setReferenceStencilProperty has no real effect (does not reach any renderer), the compare still
 // uses the state's own baked-in 0x05 vs buffer 0x05 -> PASSES -> incorrectly shows GREEN.
 //
 // NOTE: this project's GraphicsDevice::setReferenceStencilProperty is confirmed (via code reading)
-// to be a pure local no-op with ZERO backend connection on ALL THREE backends -- there is no
-// SetReferenceStencil method anywhere in IGraphicsBackend at all, so there is no possible code path
-// for this override to ever take effect on ANY backend currently, not just Vulkan (a different,
+// to be a pure local no-op with ZERO renderer connection on ALL THREE renderers -- there is no
+// SetReferenceStencil method anywhere in IGraphicsRenderer at all, so there is no possible code path
+// for this override to ever take effect on ANY renderer currently, not just Vulkan (a different,
 // broader gap than Task 870, tracked separately as Task 872). Expect this test to FAIL on every
-// backend that can run it (EasyGL here) -- this is confirming a real, universal, not-yet-fixed
+// renderer that can run it (EasyGL here) -- this is confirming a real, universal, not-yet-fixed
 // bug, not a regression in this test.
 //
 // Exit code 0 = PASS (correct override behavior), 1 = FAIL (confirms Task 872).

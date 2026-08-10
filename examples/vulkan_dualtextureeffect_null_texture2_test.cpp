@@ -2,7 +2,7 @@
 // Task 387: verify DualTextureEffect's second texture (`Texture2`, slot 1) null behavior on
 // Vulkan. See examples/easygl_dualtextureeffect_null_texture2_test.cpp for the full
 // derivation. Verify-only on Vulkan (the real bug this task found and fixed was Bgfx-only):
-// source-reading confirmed VulkanGraphicsBackend::DrawIndexedPrimitivesEx's dual-texture
+// source-reading confirmed VulkanRenderer::DrawIndexedPrimitivesEx's dual-texture
 // branch already falls back to `defaultWhiteView_` for `params.texture1` when null
 // (`v1 = vs1 ? vs1->GetVkImageView() : defaultWhiteView_;`) -- this test empirically
 // confirms that with a real pixel readback.

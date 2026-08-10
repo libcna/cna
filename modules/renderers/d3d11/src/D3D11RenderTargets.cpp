@@ -1,7 +1,7 @@
 // plan_dx.md Phase DX6 (DX-43/DX-45).
-#include "CNA/Internal/Backends/D3D11/D3D11RenderTargets.hpp"
-#include "CNA/Internal/Backends/D3D11/D3D11GraphicsBackend.hpp"
-#include "CNA/Internal/Backends/D3DCommon/D3DFormatMapping.hpp"
+#include "CNA/Internal/Renderers/D3D11/D3D11RenderTargets.hpp"
+#include "CNA/Internal/Renderers/D3D11/D3D11Renderer.hpp"
+#include "CNA/Internal/Renderers/D3DCommon/D3DFormatMapping.hpp"
 
 #include <algorithm>
 #include <cstdint>
@@ -13,7 +13,7 @@
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/NotSupportedException.hpp"
 
-namespace CNA::Internal::Backends::D3D11
+namespace CNA::Internal::Renderers::D3D11
 {
     namespace
     {
@@ -53,11 +53,11 @@ namespace CNA::Internal::Backends::D3D11
     }
 
     // -------------------------------------------------------------------------
-    // D3D11RenderTargetBackend
+    // D3D11RenderTargetRenderer
     // -------------------------------------------------------------------------
 
-    D3D11RenderTargetBackend::D3D11RenderTargetBackend(
-        D3D11GraphicsBackend* owner, ID3D11Device* device, ID3D11DeviceContext* context,
+    D3D11RenderTargetRenderer::D3D11RenderTargetRenderer(
+        D3D11Renderer* owner, ID3D11Device* device, ID3D11DeviceContext* context,
         int w, int h, int depthFormat, bool mipMap, int multiSampleCount)
         : owner_(owner), device_(device), context_(context)
         , width_(w), height_(h)
@@ -85,11 +85,11 @@ namespace CNA::Internal::Backends::D3D11
 
         HRESULT hr = device_->CreateTexture2D(&colorDesc, nullptr, colorTexture_.GetAddressOf());
         if (FAILED(hr))
-            throw std::runtime_error("D3D11RenderTargetBackend: CreateTexture2D(color) failed, hr=" + FormatHr(hr));
+            throw std::runtime_error("D3D11RenderTargetRenderer: CreateTexture2D(color) failed, hr=" + FormatHr(hr));
 
         hr = device_->CreateRenderTargetView(colorTexture_.Get(), nullptr, rtv_.GetAddressOf());
         if (FAILED(hr))
-            throw std::runtime_error("D3D11RenderTargetBackend: CreateRenderTargetView failed, hr=" + FormatHr(hr));
+            throw std::runtime_error("D3D11RenderTargetRenderer: CreateRenderTargetView failed, hr=" + FormatHr(hr));
 
         if (isMsaa_)
         {
@@ -101,7 +101,7 @@ namespace CNA::Internal::Backends::D3D11
             resolveDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
             hr = device_->CreateTexture2D(&resolveDesc, nullptr, resolveTexture_.GetAddressOf());
             if (FAILED(hr))
-                throw std::runtime_error("D3D11RenderTargetBackend: CreateTexture2D(resolve) failed, hr=" + FormatHr(hr));
+                throw std::runtime_error("D3D11RenderTargetRenderer: CreateTexture2D(resolve) failed, hr=" + FormatHr(hr));
             hr = device_->CreateShaderResourceView(resolveTexture_.Get(), nullptr, srv_.GetAddressOf());
         }
         else
@@ -109,7 +109,7 @@ namespace CNA::Internal::Backends::D3D11
             hr = device_->CreateShaderResourceView(colorTexture_.Get(), nullptr, srv_.GetAddressOf());
         }
         if (FAILED(hr))
-            throw std::runtime_error("D3D11RenderTargetBackend: CreateShaderResourceView failed, hr=" + FormatHr(hr));
+            throw std::runtime_error("D3D11RenderTargetRenderer: CreateShaderResourceView failed, hr=" + FormatHr(hr));
 
         const DXGI_FORMAT depthDxgiFormat = D3DCommon::DepthFormatToDxgi(depthFormat);
         if (depthDxgiFormat != DXGI_FORMAT_UNKNOWN)
@@ -126,14 +126,14 @@ namespace CNA::Internal::Backends::D3D11
 
             hr = device_->CreateTexture2D(&depthDesc, nullptr, depthTexture_.GetAddressOf());
             if (FAILED(hr))
-                throw std::runtime_error("D3D11RenderTargetBackend: CreateTexture2D(depth) failed, hr=" + FormatHr(hr));
+                throw std::runtime_error("D3D11RenderTargetRenderer: CreateTexture2D(depth) failed, hr=" + FormatHr(hr));
             hr = device_->CreateDepthStencilView(depthTexture_.Get(), nullptr, dsv_.GetAddressOf());
             if (FAILED(hr))
-                throw std::runtime_error("D3D11RenderTargetBackend: CreateDepthStencilView failed, hr=" + FormatHr(hr));
+                throw std::runtime_error("D3D11RenderTargetRenderer: CreateDepthStencilView failed, hr=" + FormatHr(hr));
         }
     }
 
-    void D3D11RenderTargetBackend::BindAsRenderTarget()
+    void D3D11RenderTargetRenderer::BindAsRenderTarget()
     {
         ID3D11RenderTargetView* rtv = rtv_.Get();
         context_->OMSetRenderTargets(1, &rtv, dsv_.Get());
@@ -150,7 +150,7 @@ namespace CNA::Internal::Backends::D3D11
         if (owner_) owner_->TrackCurrentRenderTargetEXT(&rtv, 1, dsv_.Get());
     }
 
-    void D3D11RenderTargetBackend::ResolveAndGenerateMipsEXT()
+    void D3D11RenderTargetRenderer::ResolveAndGenerateMipsEXT()
     {
         if (isMsaa_ && resolveTexture_)
         {
@@ -163,13 +163,13 @@ namespace CNA::Internal::Backends::D3D11
         }
     }
 
-    void D3D11RenderTargetBackend::UnbindAsRenderTarget()
+    void D3D11RenderTargetRenderer::UnbindAsRenderTarget()
     {
         ResolveAndGenerateMipsEXT();
         if (owner_) owner_->RestoreBackBufferRenderTargetEXT();
     }
 
-    bool D3D11RenderTargetBackend::GetData(int level, int x, int y, int w, int h,
+    bool D3D11RenderTargetRenderer::GetData(int level, int x, int y, int w, int h,
                                            void* data, int dataLength) const
     {
         if (level < 0)
@@ -177,7 +177,7 @@ namespace CNA::Internal::Backends::D3D11
                 "level", std::to_string(level), "level must not be negative.");
         if (level >= levelCount_)
             throw System::NotSupportedException(
-                "D3D11RenderTargetBackend::GetData: this render target has " +
+                "D3D11RenderTargetRenderer::GetData: this render target has " +
                 std::to_string(levelCount_) + " mip level(s); level " + std::to_string(level) +
                 " was requested.");
 
@@ -243,18 +243,18 @@ namespace CNA::Internal::Backends::D3D11
     }
 
     // -------------------------------------------------------------------------
-    // D3D11RenderTargetCubeBackend
+    // D3D11RenderTargetCubeRenderer
     // -------------------------------------------------------------------------
 
-    D3D11RenderTargetCubeBackend::D3D11RenderTargetCubeBackend(
-        D3D11GraphicsBackend* owner, ID3D11Device* device, ID3D11DeviceContext* context,
+    D3D11RenderTargetCubeRenderer::D3D11RenderTargetCubeRenderer(
+        D3D11Renderer* owner, ID3D11Device* device, ID3D11DeviceContext* context,
         int size, int depthFormat, bool mipMap, int multiSampleCount)
         : owner_(owner), device_(device), context_(context)
         , size_(size)
     {
         appliedMultiSampleCount_ = ClampMultiSampleCount(device_.Get(), DXGI_FORMAT_R8G8B8A8_UNORM, multiSampleCount);
         isMsaa_ = appliedMultiSampleCount_ > 0;
-        // Mutually exclusive on the same attachment, same rationale D3D11RenderTargetBackend's own
+        // Mutually exclusive on the same attachment, same rationale D3D11RenderTargetRenderer's own
         // DX-45 already established -- a full mip chain needs a single-sample source.
         mipMap_ = mipMap && !isMsaa_;
         levelCount_ = mipMap_ ? CalculateMipLevels(size, size) : 1;
@@ -277,7 +277,7 @@ namespace CNA::Internal::Backends::D3D11
 
         HRESULT hr = device_->CreateTexture2D(&desc, nullptr, texture_.GetAddressOf());
         if (FAILED(hr))
-            throw std::runtime_error("D3D11RenderTargetCubeBackend: CreateTexture2D failed, hr=" + FormatHr(hr));
+            throw std::runtime_error("D3D11RenderTargetCubeRenderer: CreateTexture2D failed, hr=" + FormatHr(hr));
 
         for (int face = 0; face < 6; ++face)
         {
@@ -299,7 +299,7 @@ namespace CNA::Internal::Backends::D3D11
 
             hr = device_->CreateRenderTargetView(texture_.Get(), &rtvDesc, rtv_[face].GetAddressOf());
             if (FAILED(hr))
-                throw std::runtime_error("D3D11RenderTargetCubeBackend: CreateRenderTargetView(face) failed, hr=" + FormatHr(hr));
+                throw std::runtime_error("D3D11RenderTargetCubeRenderer: CreateRenderTargetView(face) failed, hr=" + FormatHr(hr));
         }
 
         if (isMsaa_)
@@ -316,7 +316,7 @@ namespace CNA::Internal::Backends::D3D11
             resolveDesc.MiscFlags = D3D11_RESOURCE_MISC_TEXTURECUBE;
             hr = device_->CreateTexture2D(&resolveDesc, nullptr, resolveTexture_.GetAddressOf());
             if (FAILED(hr))
-                throw std::runtime_error("D3D11RenderTargetCubeBackend: CreateTexture2D(resolve) failed, hr=" + FormatHr(hr));
+                throw std::runtime_error("D3D11RenderTargetCubeRenderer: CreateTexture2D(resolve) failed, hr=" + FormatHr(hr));
         }
 
         D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc{};
@@ -326,7 +326,7 @@ namespace CNA::Internal::Backends::D3D11
         srvDesc.TextureCube.MipLevels = static_cast<UINT>(levelCount_);
         hr = device_->CreateShaderResourceView(isMsaa_ ? resolveTexture_.Get() : texture_.Get(), &srvDesc, srv_.GetAddressOf());
         if (FAILED(hr))
-            throw std::runtime_error("D3D11RenderTargetCubeBackend: CreateShaderResourceView failed, hr=" + FormatHr(hr));
+            throw std::runtime_error("D3D11RenderTargetCubeRenderer: CreateShaderResourceView failed, hr=" + FormatHr(hr));
 
         const DXGI_FORMAT depthDxgiFormat = D3DCommon::DepthFormatToDxgi(depthFormat);
         if (depthDxgiFormat != DXGI_FORMAT_UNKNOWN)
@@ -343,14 +343,14 @@ namespace CNA::Internal::Backends::D3D11
 
             hr = device_->CreateTexture2D(&depthDesc, nullptr, depthTexture_.GetAddressOf());
             if (FAILED(hr))
-                throw std::runtime_error("D3D11RenderTargetCubeBackend: CreateTexture2D(depth) failed, hr=" + FormatHr(hr));
+                throw std::runtime_error("D3D11RenderTargetCubeRenderer: CreateTexture2D(depth) failed, hr=" + FormatHr(hr));
             hr = device_->CreateDepthStencilView(depthTexture_.Get(), nullptr, dsv_.GetAddressOf());
             if (FAILED(hr))
-                throw std::runtime_error("D3D11RenderTargetCubeBackend: CreateDepthStencilView failed, hr=" + FormatHr(hr));
+                throw std::runtime_error("D3D11RenderTargetCubeRenderer: CreateDepthStencilView failed, hr=" + FormatHr(hr));
         }
     }
 
-    void D3D11RenderTargetCubeBackend::BindAsRenderTargetFace(int face)
+    void D3D11RenderTargetCubeRenderer::BindAsRenderTargetFace(int face)
     {
         if (face < 0 || face >= 6) return;
         activeFace_ = face;
@@ -369,7 +369,7 @@ namespace CNA::Internal::Backends::D3D11
         if (owner_) owner_->TrackCurrentRenderTargetEXT(&rtv, 1, dsv_.Get());
     }
 
-    void D3D11RenderTargetCubeBackend::ResolveMsaaEXT()
+    void D3D11RenderTargetCubeRenderer::ResolveMsaaEXT()
     {
         if (!isMsaa_ || !resolveTexture_ || activeFace_ < 0) return;
         // Only the currently-active face -- matches this class's own existing "only one face is
@@ -382,11 +382,11 @@ namespace CNA::Internal::Backends::D3D11
                                      DXGI_FORMAT_R8G8B8A8_UNORM);
     }
 
-    bool D3D11RenderTargetCubeBackend::GetData(int face, int level, int x, int y, int w, int h,
+    bool D3D11RenderTargetCubeRenderer::GetData(int face, int level, int x, int y, int w, int h,
                                                void* data, int dataLength) const
     {
-        // REMED-GFX-134: closes the refusal this class inherited from ITextureCubeBackend's
-        // `return false` default. Same staging-copy mechanism as D3D11TextureCubeBackend::GetData.
+        // REMED-GFX-134: closes the refusal this class inherited from ITextureCubeRenderer's
+        // `return false` default. Same staging-copy mechanism as D3D11TextureCubeRenderer::GetData.
         if (!device_ || !context_ || data == nullptr) return false;
         if (face < 0 || face >= 6 || w <= 0 || h <= 0) return false;
         if (level < 0 || level >= levelCount_) return false;
@@ -432,7 +432,7 @@ namespace CNA::Internal::Backends::D3D11
         return true;
     }
 
-    void D3D11RenderTargetCubeBackend::UnbindAsRenderTarget()
+    void D3D11RenderTargetCubeRenderer::UnbindAsRenderTarget()
     {
         ResolveMsaaEXT();
         if (mipMap_ && srv_)

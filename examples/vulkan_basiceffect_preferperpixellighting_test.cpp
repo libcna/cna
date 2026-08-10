@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MS-PL
 // Task 1103 (plan_graphics.md Phase 80 / plan_dx9.md Divergence 1): BasicEffect pixel test --
 // PreferPerPixelLighting genuinely selects between two different lighting evaluations (Vulkan
-// backend).
+// renderer).
 //
 // Real XNA 4.0 default: PreferPerPixelLighting=false -> lighting is computed ONCE per vertex
 // (VSBasicVertexLighting*) and Gouraud-interpolated across the triangle. true -> lighting is
 // re-evaluated per fragment (VSBasicPixelLighting*/PSBasicPixelLighting*). Before this task,
-// this backend always evaluated per pixel regardless of this flag's value -- the opposite of
+// this renderer always evaluated per pixel regardless of this flag's value -- the opposite of
 // XNA's own default -- and GpuDrawParams didn't even carry the flag at all until Task 1100.
 //
 // Reuses the exact scene from vulkan_basiceffect_specular_test.cpp's own "(a) eye straight on"
@@ -19,13 +19,13 @@
 // origin itself. Analytically different (same offline Python re-derivation of FNA's own
 // half-vector Blinn-Phong formula, Lighting.fxh's ComputeLights, that
 // vulkan_basiceffect_specular_test.cpp's own Task 1103 update already confirmed against this
-// backend's real render): vertex-lit ~127, pixel-lit ~155.
+// renderer's real render): vertex-lit ~127, pixel-lit ~155.
 //
 // 3 checks:
 //   (a) Default (PreferPerPixelLighting left at its real XNA default, false): expect the
 //       vertex-lit/Gouraud value (~127).
 //   (b) PreferPerPixelLighting=true: expect the pixel-lit value (~155) -- the OLD, pre-Task-1103
-//       value this backend always produced regardless of the flag.
+//       value this renderer always produced regardless of the flag.
 //   (c) (a) != (b): proves the flag is a genuine, live dispatch selector, not a decorative no-op.
 //
 // Exit code 0 = PASS, 1 = FAIL.
@@ -67,7 +67,7 @@ static const Vector3 kNormal(0.0f, 0.0f, 1.0f);
 static const Vector3 kEyeStraightOn(0.0f, 0.0f, 3.0f);
 
 // Same values as vulkan_basiceffect_specular_test.cpp's own case (a), confirmed against this
-// backend's real render (Task 1103).
+// renderer's real render (Task 1103).
 static const Color kExpectedVertexLit(127, 127, 127, 255);
 static const Color kExpectedPixelLit(155, 155, 155, 255);
 

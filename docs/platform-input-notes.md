@@ -108,7 +108,7 @@ everywhere else, so no browser-specific input code exists in CNA. Browser-specif
   - **SDL_Renderer** — `SDL_RenderCoordinatesToWindow`, which is **offset-aware**, so a true
     letterbox (centering bars) maps correctly, not just scaled (verified with a non-square 200×100
     window in task 858).
-  - **EasyGL** — `IGraphicsBackend::TransformLogicalToWindow`, a uniform height-scale with **no
+  - **EasyGL** — `IGraphicsRenderer::TransformLogicalToWindow`, a uniform height-scale with **no
     offset**. That is exact for EasyGL's default `FixedHeightDynamicWidth` presentation, which fixes
     the logical height and derives the logical *width* from the window aspect — so the viewport
     fills the window and there are no bars to offset. EasyGL does **not** implement true

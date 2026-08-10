@@ -15,7 +15,7 @@
 // what separates real point topology from a triangle-list approximation covering thousands of
 // pixels.
 //
-// Backend scope. Bgfx, EasyGL and WebGPU render points and support backbuffer readback, so they
+// Renderer scope. Bgfx, EasyGL and WebGPU render points and support backbuffer readback, so they
 // carry the permanent pixel coverage here. SDL_GPU maps PointListEXT natively but implements no
 // backbuffer readback, so it is covered by a separate practical control. Software explicitly
 // rejects every non-TriangleList topology (its documented v1 boundary) and is asserted as a
@@ -65,8 +65,8 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 
-#ifdef CNA_BACKEND_BGFX
-#include "CNA/Internal/Backends/Bgfx/BgfxGraphicsBackend.hpp"
+#ifdef CNA_RENDERER_BGFX
+#include "CNA/Internal/Renderers/Bgfx/BgfxRenderer.hpp"
 #endif
 
 using CNA::GraphicsCapability;
@@ -222,7 +222,7 @@ namespace
 
     /// Reads the whole backbuffer. The explicit-size overload exists so a frame drawn under a
     /// custom Viewport can be read back before the Viewport is restored -- restoring it first
-    /// would let a backend that resolves viewport state at replay time rather than per draw
+    /// would let a renderer that resolves viewport state at replay time rather than per draw
     /// silently pass.
     FrameSnapshot CaptureBackbuffer(GraphicsDevice& device, int width, int height)
     {
@@ -249,7 +249,7 @@ namespace
             device, viewport.getWidthProperty(), viewport.getHeightProperty());
     }
 
-    /// Reads a render target's own rendered pixels directly. Used where a backend implements
+    /// Reads a render target's own rendered pixels directly. Used where a renderer implements
     /// render-target readback but no backbuffer readback.
     FrameSnapshot CaptureRenderTarget(RenderTarget2D& target, int width, int height)
     {
@@ -268,7 +268,7 @@ namespace
 
     /// A point is "rendered" when its exact RGBA appears within a small raster probe around its
     /// target pixel. The probe absorbs the one-pixel differences legitimately allowed by each
-    /// backend's own viewport/pixel-centre convention without accepting a different pixel.
+    /// renderer's own viewport/pixel-centre convention without accepting a different pixel.
     void ExpectPointRendered(
         const FrameSnapshot& snapshot, const PointSpec& point, const char* label)
     {
@@ -332,7 +332,7 @@ namespace
         void RequirePointRendering()
         {
             if (!device.SupportsCapability(GraphicsCapability::ThreeD))
-                GTEST_SKIP() << "Backend explicitly does not support 3D rendering";
+                GTEST_SKIP() << "Renderer explicitly does not support 3D rendering";
             device.setRasterizerStateProperty(RasterizerState::CullNone);
             device.setDepthStencilStateProperty(DepthStencilState::None);
             device.setBlendStateProperty(BlendState::Opaque);
@@ -360,8 +360,8 @@ namespace
     };
 }
 
-#if defined(CNA_BACKEND_BGFX) || defined(CNA_BACKEND_EASYGL) || \
-    defined(CNA_BACKEND_WEBGPU)
+#if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_EASYGL) || \
+    defined(CNA_RENDERER_WEBGPU)
 
 // The canonical depthless non-indexed case: four points at distinct pixel centres, four distinct
 // colours, one framebuffer snapshot. A triangle-list approximation of this draw fills the whole
@@ -551,10 +551,10 @@ TEST_F(PointListPrimitiveTest, IndexedPointListHonorsThirtyTwoBitIndexElements)
     vertexBuffer.SetData(vertices.data(), 8);
     indexBuffer.SetData(indices.data(), 8);
 
-#ifdef CNA_BACKEND_BGFX
+#ifdef CNA_RENDERER_BGFX
     auto* nativeIndex =
-        dynamic_cast<CNA::Internal::Backends::Bgfx::BgfxIndexBufferBackend*>(
-            &indexBuffer.GetBackend());
+        dynamic_cast<CNA::Internal::Renderers::Bgfx::BgfxIndexBufferRenderer*>(
+            &indexBuffer.GetRenderer());
     ASSERT_NE(nullptr, nativeIndex);
     EXPECT_TRUE(nativeIndex->IsThirtyTwoBit());
     EXPECT_EQ(
@@ -999,7 +999,7 @@ TEST_F(PointListPrimitiveTest, PointListRespectsDepthTestingBetweenPoints)
     device.SetVertexBuffer(nullptr);
     device.SetIndexBuffer(nullptr);
     // Close the producing frame before the target is read as a texture: a render target sampled in
-    // the same frame that wrote it is not observable on every backend.
+    // the same frame that wrote it is not observable on every renderer.
     device.Present();
     SampleTargetToBackbuffer(device, target);
 
@@ -1161,8 +1161,8 @@ TEST_F(PointListPrimitiveTest, PointListRespectsViewportScissorAndBlendState)
 }
 #endif
 
-#if defined(CNA_BACKEND_BGFX) || defined(CNA_BACKEND_EASYGL) || \
-    defined(CNA_BACKEND_WEBGPU)
+#if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_EASYGL) || \
+    defined(CNA_RENDERER_WEBGPU)
 // Non-indexed point addressing: vertexStart selects the first consumed vertex and primitiveCount
 // limits the consumed range to exactly that many points.
 //
@@ -1213,7 +1213,7 @@ TEST_F(PointListPrimitiveTest, NonIndexedPointListHonorsVertexStartAndExactCount
 }
 #endif
 
-#ifdef CNA_BACKEND_BGFX
+#ifdef CNA_RENDERER_BGFX
 // Bgfx expresses topology as per-submission state (BGFX_STATE_PT_*), not as a cached graphics
 // pipeline object, so switching to and from point topology must not allocate any native resource.
 TEST_F(PointListPrimitiveTest, BgfxPointDrawsAllocateNoPerDrawNativeResources)
@@ -1341,17 +1341,17 @@ TEST_F(PointListPrimitiveTest, BgfxNonIndexedPointRangeCoversExactlyTheRequested
 }
 #endif
 
-#ifdef CNA_BACKEND_SDL_GPU
+#ifdef CNA_RENDERER_SDL_GPU
 // SDL_GPU maps PointListEXT to SDL_GPU_PRIMITIVETYPE_POINTLIST and consumes exactly
 // primitiveCount vertices/indices, but implements no backbuffer readback. Its practical exact-pixel
-// control therefore runs through RenderTarget2D::GetData, which this backend does support.
+// control therefore runs through RenderTarget2D::GetData, which this renderer does support.
 //
 // Indexed addressing is deliberately exercised only at offset zero here: SDL_GPU passes literal
 // 0/0 for first_index and vertex_offset at every SDL_DrawGPUIndexedPrimitives site, so public
 // startIndex/baseVertex do not reach the native draw (the SDL_GPU counterpart of
 // REMED-GFX-020/060/107, recorded separately as REMED-GFX-117). That is an addressing defect, not a
 // topology defect, and is not corrected here. The non-indexed case below does carry a nonzero
-// vertexStart, which this backend honours.
+// vertexStart, which this renderer honours.
 TEST_F(PointListPrimitiveTest, SdlGpuPointListRendersExactRenderTargetPixels)
 {
     RequirePointRendering();
@@ -1425,7 +1425,7 @@ TEST_F(PointListPrimitiveTest, SdlGpuPointListRendersExactRenderTargetPixels)
 }
 #endif
 
-#ifdef CNA_BACKEND_SOFTWARE
+#ifdef CNA_RENDERER_SOFTWARE
 // Software's documented v1 raster boundary is TriangleList only. It must keep rejecting
 // PointListEXT explicitly on every public entry point rather than approximating it.
 TEST_F(PointListPrimitiveTest, SoftwareExplicitlyRejectsPointListTopology)

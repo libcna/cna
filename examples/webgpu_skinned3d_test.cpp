@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MS-PL
-// plan_cnj.md Phase 14J WebGPU counterpart: verify WebGPUGraphicsBackend's skinned3d.wgsl family
+// plan_cnj.md Phase 14J WebGPU counterpart: verify WebGPURenderer's skinned3d.wgsl family
 // (GetOrCreatePipelineSkinned3D()/QueueSkinnedDraw()/DrawPrimitivesEx() dispatch) for SkinnedEffect
 // on stride-52 (VertexPositionNormalTextureSkinned) and stride-56 (with a trailing per-vertex
-// Color, CNB-67) draws -- closing this backend's pre-existing "no skinning shader at all" gap.
-// Ported from EasyGLGraphicsBackend::EnsureSkinnedProgram()/EnsureSkinnedVertexLitProgram().
+// Color, CNB-67) draws -- closing this renderer's pre-existing "no skinning shader at all" gap.
+// Ported from EasyGLRenderer::EnsureSkinnedProgram()/EnsureSkinnedVertexLitProgram().
 //
 // All checks use World=View=Projection=Identity (so NDC == object-space xyz) and a quad at
 // z=0.5 with Normal=(0,0,-1) (facing the camera at the origin, same convention as

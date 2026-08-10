@@ -3,10 +3,10 @@
 // Blend::InverseBlendFactor) actually reaches the GPU on OpenGL2 -- reuses
 // examples/easygl_blendstate_blendfactor_test.cpp's own scene and expected values verbatim.
 //
-// Until this task, OpenGL2GraphicsBackend mapped Blend::BlendFactor/InverseBlendFactor to
+// Until this task, OpenGL2Renderer mapped Blend::BlendFactor/InverseBlendFactor to
 // GL_CONSTANT_COLOR/GL_ONE_MINUS_CONSTANT_COLOR (ToGLBlendFactor) but never called
 // glBlendColor(), so the GL constant-color register stayed at its GL default of (0,0,0,0)
-// regardless of what BlendState.BlendFactor was set to -- IGraphicsBackend::SetBlendFactor()
+// regardless of what BlendState.BlendFactor was set to -- IGraphicsRenderer::SetBlendFactor()
 // was never overridden and silently no-op'd via the shared base-class default. Fixed by
 // overriding SetBlendFactor() to call glBlendColor(r,g,b,a).
 //

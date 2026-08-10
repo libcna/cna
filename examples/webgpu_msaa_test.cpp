@@ -1,19 +1,19 @@
 // SPDX-License-Identifier: MS-PL
 // WEBGPU-58: verify real MSAA support for both the swapchain backbuffer and RenderTarget2D on the
-// WebGPU backend. Before this task every WGPURenderPipeline hardcoded WGPUMultisampleState.count=1
-// and IGraphicsBackend::ApplyMultiSampleCount()/GetMultiSampleCount() were unoverridden (silently
+// WebGPU renderer. Before this task every WGPURenderPipeline hardcoded WGPUMultisampleState.count=1
+// and IGraphicsRenderer::ApplyMultiSampleCount()/GetMultiSampleCount() were unoverridden (silently
 // returning the base no-op 0/"unsupported" default), so GraphicsDeviceManager.PreferMultiSampling
-// had no effect at all on this backend.
+// had no effect at all on this renderer.
 //
-// Architecture note (see WebGPUGraphicsBackend::sampleCount_'s own comment): unlike Vulkan's
-// per-draw MSAA/non-MSAA pipeline selection, this backend treats MSAA as a single BACKEND-GLOBAL
+// Architecture note (see WebGPURenderer::sampleCount_'s own comment): unlike Vulkan's
+// per-draw MSAA/non-MSAA pipeline selection, this renderer treats MSAA as a single RENDERER-GLOBAL
 // sample count -- every one of the ~10 GetOrCreatePipeline*3D() families plus the 2 SpriteBatch
 // pipelines bake the SAME sampleCount_ into their own WGPUMultisampleState.count, invalidated and
 // rebuilt lazily whenever ApplyMultiSampleCount() actually changes it (a rare, not-a-hot-path
-// event -- mirrors VulkanGraphicsBackend::sampleCount_'s own precedent). RenderTarget2D instances
-// (WebGPURenderTargetBackend) unconditionally mirror this global value at CONSTRUCTION time -- see
+// event -- mirrors VulkanRenderer::sampleCount_'s own precedent). RenderTarget2D instances
+// (WebGPURenderTargetRenderer) unconditionally mirror this global value at CONSTRUCTION time -- see
 // that class's own doc comment for why a Vulkan-style per-instance opt-out is not safe given this
-// backend's single shared pipeline sample count.
+// renderer's single shared pipeline sample count.
 //
 // Methodology (matches every other MSAA test in this project family --
 // easygl/vulkan/bgfx_*_msaa_test.cpp): render a diagonal-edged triangle and read back a centre row.
@@ -24,18 +24,18 @@
 // Check A -- backbuffer, MultiSampleCount=0 (the default): diagonal edge is a hard binary
 //   transition.
 // Check B -- backbuffer, PreferMultiSampling toggled + GraphicsDeviceManager.ApplyChanges() called
-//   AFTER the backend already exists (the real runtime-reconfigure path, exactly like
+//   AFTER the renderer already exists (the real runtime-reconfigure path, exactly like
 //   vulkan_msaa_test.cpp's own Task 902 verification -- NOT the NOXNA
-//   GraphicsDevice::RecreateBackendForMultiSampleCount() test-only escape hatch, which does not
-//   work for this backend since WebGPUGraphicsBackend's constructor never reads
-//   GraphicsBackendCreateArgs::multiSampleCount at all, unlike VulkanGraphicsBackend's): diagonal
+//   GraphicsDevice::RecreateRendererForMultiSampleCount() test-only escape hatch, which does not
+//   work for this renderer since WebGPURenderer's constructor never reads
+//   GraphicsRendererCreateArgs::multiSampleCount at all, unlike VulkanRenderer's): diagonal
 //   edge now has genuinely blended pixels.
 // Check C -- ApplyMultiSampleCount()'s clamped-return-value contract: requesting 8 (an unsupported
 //   count -- wgpu-native/WebGPU only has two legal WGPUMultisampleState.count values, 1 and 4,
 //   unlike Vulkan's wider 1/2/4/8/16/32/64 range) must report back exactly 0 or 4 (XNA's own "0 =
 //   disabled" PresentationParameters.MultiSampleCount convention), NEVER the raw unsupported
 //   request (8).
-// Check D -- a RenderTarget2D created AFTER backbuffer MSAA is engaged mirrors the backend's
+// Check D -- a RenderTarget2D created AFTER backbuffer MSAA is engaged mirrors the renderer's
 //   global state: getMultiSampleCountProperty() reports the SAME real applied value as Check C's
 //   backbuffer value (not the RT constructor's own requested value, which is deliberately passed
 //   as 0 here to prove the mirroring is unconditional), and a diagonal-edged triangle drawn into it
@@ -44,7 +44,7 @@
 //   genuinely blended signature as Check B.
 // Check E -- consistency cross-check: Check C's clamped-return value and Check B's direct visual
 //   blending evidence must agree (applied==4 iff blending was actually observed) -- catches a
-//   backend that claims a sample count it never really applies, or vice versa.
+//   renderer that claims a sample count it never really applies, or vice versa.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 //
@@ -53,14 +53,14 @@
 // wrong there -- ApplyMultiSampleCount()'s clamped-return-value contract (Check C),
 // PickSampleCount()/Supports4xMsaa()'s genuine device-capability probe (empirically found this
 // device supports exactly 4x, never assumed), RenderTarget2D's unconditional mirroring of the
-// backend's global sample count (Check D 1/2), and the multisampled colour texture + resolveTarget
+// renderer's global sample count (Check D 1/2), and the multisampled colour texture + resolveTarget
 // wiring on both the backbuffer and RenderTarget2D render passes were all independently confirmed
-// correct. The real root cause was in THIS TEST, not the backend: BasicEffect.Apply() leaves
+// correct. The real root cause was in THIS TEST, not the renderer: BasicEffect.Apply() leaves
 // whatever RasterizerState the device already has (the XNA default, CullCounterClockwiseFace), and
 // this test's diagonal triangle -- unlike every other WebGPU 3D test in this suite
 // (webgpu_colored3d_test.cpp, webgpu_graphicsstate_test.cpp, etc., all of which explicitly set
 // RasterizerState::CullNone before drawing) -- never overrode that default. The triangle's winding
-// is a genuine XNA BACK face under WebGPUGraphicsBackend::ToWGPUCullMode()'s mapping (independently
+// is a genuine XNA BACK face under WebGPURenderer::ToWGPUCullMode()'s mapping (independently
 // verified correct by WebGPU_GraphicsState's own non-vacuous, real differential cull-mode checks),
 // so it was being legitimately backface-culled on EVERY sample count, not just under MSAA -- this
 // has nothing to do with MSAA at all. Check A's own assertion (IsBinary(), which only rejects
@@ -70,7 +70,7 @@
 // exposed it. The fix: both RenderBackbufferRow() and RenderRTRow() now explicitly set
 // RasterizerState::CullNone before drawing, matching the established pattern of every other WebGPU
 // 3D test -- this test's actual subject is MSAA resolve quality, not backface culling (already
-// covered by WebGPU_GraphicsState). No production backend code changed; WebGPUGraphicsBackend.cpp
+// covered by WebGPU_GraphicsState). No production renderer code changed; WebGPURenderer.cpp
 // is untouched by this fix. See plan_webgpu.md's WEBGPU-58 row for the full investigation writeup.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
@@ -159,7 +159,7 @@ class WebGpuMsaaTest : public Game
         device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
         device.setBlendStateProperty(BlendState::Opaque);
         // WEBGPU-58 root-cause fix: this test's diagonal triangle is wound as a genuine XNA
-        // BACK face (verified against WebGPUGraphicsBackend::ToWGPUCullMode()'s own
+        // BACK face (verified against WebGPURenderer::ToWGPUCullMode()'s own
         // empirically-correct, independently-tested mapping in webgpu_graphicsstate_test.cpp --
         // see that test's DrawWindingQuad() derivation). BasicEffect.Apply() otherwise leaves
         // whatever RasterizerState the device already has (default CullCounterClockwiseFace),
@@ -256,10 +256,10 @@ protected:
                       "transition (no AA)");
 
         // Check B: the REAL runtime path -- toggle PreferMultiSampling and re-apply on the
-        // ALREADY-CONSTRUCTED backend (Task 902's own GraphicsDeviceManager plumbing), exactly
+        // ALREADY-CONSTRUCTED renderer (Task 902's own GraphicsDeviceManager plumbing), exactly
         // like vulkan_msaa_test.cpp's own verification. GraphicsDeviceManager's own
         // "PreferMultiSampling==true -> request 8" default (GraphicsDeviceManager.cpp) exercises
-        // this backend's clamp-down-to-4 behaviour, not merely a pass-through of an
+        // this renderer's clamp-down-to-4 behaviour, not merely a pass-through of an
         // already-legal value.
         gdm_->setPreferMultiSamplingProperty(true);
         gdm_->ApplyChanges();
@@ -281,7 +281,7 @@ protected:
                       "never echoes back the raw unsupported request");
 
         // Check D: a RenderTarget2D created AFTER backbuffer MSAA is engaged mirrors the
-        // backend's global sample count (WebGPURenderTargetBackend's own "unconditional mirror"
+        // renderer's global sample count (WebGPURenderTargetRenderer's own "unconditional mirror"
         // design -- see that class's doc comment) even though it deliberately requests
         // multiSampleCount=0 itself here, proving the mirroring really is unconditional, not just
         // a pass-through of a matching per-instance request.
@@ -301,7 +301,7 @@ protected:
                        "actually engaged");
 
         // Check E: consistency cross-check -- the clamped-return-value contract (Check C) and the
-        // actual visual evidence (Check B) must agree; a backend claiming a sample count it never
+        // actual visual evidence (Check B) must agree; a renderer claiming a sample count it never
         // really applies (or vice versa) would fail this even if both individual checks above
         // happened to pass in isolation.
         const bool checkE = (appliedMultiSampleCount == 4) == checkB;
@@ -311,7 +311,7 @@ protected:
         if (!checkB || appliedMultiSampleCount != 4)
         {
             std::printf("[INFO] 4x backbuffer MSAA was not actually engaged on this device/"
-                        "adapter -- either WebGPUGraphicsBackend::Supports4xMsaa()'s probe "
+                        "adapter -- either WebGPURenderer::Supports4xMsaa()'s probe "
                         "reported unsupported, or the resolve did not produce genuine blending.\n");
         }
 

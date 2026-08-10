@@ -4,8 +4,8 @@
 // Color multiplied into the FINAL combined diffuse+specular output, gated by
 // uVertexColorEnabled. The multiply happens AFTER specular is added (not folded into fragTint,
 // which only feeds the diffuse term) -- doing it earlier would leave the specular term
-// unscaled by vertex color, a real bug EasyGLGraphicsBackend's own vertex-color skinned shaders
-// hit once and fixed by moving the multiply here (see that backend's EnsureSkinnedProgram()/
+// unscaled by vertex color, a real bug EasyGLRenderer's own vertex-color skinned shaders
+// hit once and fixed by moving the multiply here (see that renderer's EnsureSkinnedProgram()/
 // EnsureSkinnedVertexLitProgram() doc comments).
 
 layout(location = 0) in vec2  fragUV;

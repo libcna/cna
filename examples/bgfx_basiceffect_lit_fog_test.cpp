@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MS-PL
 // Task 888: BasicEffect linear fog pixel integration test on the lit_textured3d (stride-32)
-// pipeline — Bgfx backend.
+// pipeline — Bgfx renderer.
 //
 // examples/bgfx_basiceffect_fog_test.cpp already proves fog works on Bgfx's colored3d (stride-16)
 // pipeline; this test proves the identical fog code added to vs/fs_lit_textured3d.sc (a
 // completely separate shader pair) is also correct, since BasicEffect draws with
 // VertexPositionNormalTexture route through that pipeline instead. Same formula, same expected
-// values as examples/vulkan_basiceffect_fog_test.cpp (Bgfx's OpenGL backend uses the same [-1,1]
+// values as examples/vulkan_basiceffect_fog_test.cpp (Bgfx's OpenGL renderer uses the same [-1,1]
 // clip-space Z range as EasyGL, unlike Vulkan's [0,1], but the identity World/View/Projection
 // used here makes the Z values chosen safe on both).
 //

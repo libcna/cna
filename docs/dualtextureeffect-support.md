@@ -1,7 +1,7 @@
 # DualTextureEffect Exactness Support Matrix
 
 Phase 44 (`plan_graphics.md` Tasks 381–390) audited and pixel-verified `DualTextureEffect`
-conformance against FNA across all three graphics backends (EasyGL, Vulkan, Bgfx). This document
+conformance against FNA across all three graphics renderers (EasyGL, Vulkan, Bgfx). This document
 summarizes the findings and closes the phase.
 
 ---
@@ -27,14 +27,14 @@ test-authoring.
 
 ## 2. Basic two-texture blend formula (Tasks 383–384)
 
-**Task 383 found and fixed a real bug on all 3 backends.** FNA's `DualTextureEffect.fx`
+**Task 383 found and fixed a real bug on all 3 renderers.** FNA's `DualTextureEffect.fx`
 `PSDualTexture` computes `color = SAMPLE(Texture); color.rgb *= 2; color *= overlay *
 pin.Diffuse;` — a `*2` doubling factor on the first texture's RGB channels (alpha untouched).
 CNA's EasyGL, Vulkan, and Bgfx dual-texture fragment shaders all computed
 `texture0 * texture1 * diffuseColor` directly, silently missing this factor — invisible to every
 prior test (Tasks 133/135/191/293/294/296/297) since they all used pure 0/1-saturated texture
 values, where a missing `*2` clamps right back to the same result. **Fixed** by adding
-`base.rgb *= 2.0` to all 3 backends' dual-texture fragment shaders. Fixing it also required
+`base.rgb *= 2.0` to all 3 renderers' dual-texture fragment shaders. Fixing it also required
 updating a pre-existing test (`TextureFilter::Point vs Linear`, Task 297, shared EasyGL/Vulkan
 source) whose blend-detection thresholds only worked *because of* the missing factor —
 compensated with `DiffuseColor=0.5`. First-ever Bgfx `DualTextureEffect` pixel test written along
@@ -57,7 +57,7 @@ proving the premultiplied RGB blends correctly against a real background. **At t
 would have made the same full RGB-premultiplication test spuriously fail on Vulkan for a reason
 unrelated to `DualTextureEffect` — worked around with a narrower alpha-channel-only pixel test
 there instead. **Task 868 is now fixed (2026-07-09)** — Vulkan applies the real requested blend
-state like every other backend — but the Vulkan test itself is still the narrower alpha-channel-only
+state like every other renderer — but the Vulkan test itself is still the narrower alpha-channel-only
 variant written at the time; it has not been revisited to add the fuller RGB check now that the
 workaround's reason no longer applies.
 
@@ -67,13 +67,13 @@ workaround's reason no longer applies.
 convention (Task 379) is to fall back to a 1×1 opaque white texture when a slot is left null.
 
 Task 386 verified the **first** texture slot (`Texture`) — **zero bugs, already correct on all 3
-backends** (Bgfx's case was already covered by Task 379's general 7-call-site fix).
+renderers** (Bgfx's case was already covered by Task 379's general 7-call-site fix).
 
 Task 387 verified the **second** slot (`Texture2`) and **found and fixed a real bug on Bgfx** —
 exactly the gap Task 379 explicitly predicted and left unfixed: `texColor3DSampler2_`'s binding
 had no else-branch fallback at all. EasyGL and Vulkan were already correct. **Fixed** with the same
 else-branch pattern as slot 0 — a small, single-call-site fix. This closed out
-`DualTextureEffect`'s texture-null coverage entirely across all 3 backends.
+`DualTextureEffect`'s texture-null coverage entirely across all 3 renderers.
 
 ## 5. Fog behavior (Task 388)
 
@@ -87,9 +87,9 @@ both sides: added `uFogEnabled`/`uFogColor`/`uFogStart`/`uFogEnd` uniforms plus 
 then forwarded the 4 fog fields in `FillGpuDrawParams()` (mirroring `AlphaTestEffect`'s Task 378
 C++ pattern). **At the time, not fixed here** (tracked as Task 888): Vulkan and Bgfx had zero fog
 GPU implementation for any 3D effect. **Since fixed by Task 899** (closed 2026-07-07) — real fog is
-now implemented across every 3D shader on both backends, including `DualTextureEffect`'s.
+now implemented across every 3D shader on both renderers, including `DualTextureEffect`'s.
 
-## 6. Cross-backend consistency (Task 389)
+## 6. Cross-renderer consistency (Task 389)
 
 Closed the pixel-verification work with a capstone test combining everything Tasks 383–388
 verified individually — the doubling factor, two-texture multiply, and `DiffuseColor` — to prove
@@ -97,10 +97,10 @@ the fixes compose correctly together, not just in isolation. Used, for the first
 `DualTextureEffect` pixel test, a **real 2×2 multi-texel texture** (every prior task used a 1×1
 solid color) sampled at all 4 texel centers via 4 separate draws.
 
-**Result: all 3 backends produced byte-identical pixel output**, matching the FNA-derived expected
+**Result: all 3 renderers produced byte-identical pixel output**, matching the FNA-derived expected
 formula (`Texture × 2 × Texture2 × DiffuseColor`) at all 4 sample points. No new bugs found in the
 combined assertions — but writing this test surfaced a real, previously-unaudited gap: **found and
-opened Task 889** (`VertexColorEnabled` is a total no-op on all 3 backends — every backend's
+opened Task 889** (`VertexColorEnabled` is a total no-op on all 3 renderers — every renderer's
 dedicated dual-texture shader/pipeline declares only position+texcoord inputs, no color attribute
 at all). Phase 44 never had a dedicated audit task for this property, unlike `AlphaTestEffect`'s
 Task 377.
@@ -117,7 +117,7 @@ Task 377.
 | Second texture (`Texture2`) null-fallback | ✅ Task 387 | ✅ Task 387 | ✅ fixed Task 387 |
 | Fog (`FogEnabled`/`FogColor`/`FogStart`/`FogEnd`) | ✅ fixed Task 388 | ✅ fixed Task 899 (2026-07-07) | ✅ fixed Task 899 (2026-07-07) |
 | `VertexColorEnabled` | ❌ Task 889 | ❌ Task 889 | ❌ Task 889 |
-| Cross-backend pixel consistency | ✅ Task 389 | ✅ Task 389 | ✅ Task 389 |
+| Cross-renderer pixel consistency | ✅ Task 389 | ✅ Task 389 | ✅ Task 389 |
 
 Legend: ✅ verified working · ❌ confirmed not implemented.
 
@@ -131,9 +131,9 @@ Phase 44 opened 1 new tracked task and confirmed 2 already-open ones apply here 
   2026-07-07): real fog now implemented on Vulkan and Bgfx, project-wide, for every 3D effect
   including `DualTextureEffect`.
 - **Task 889** (opened by Task 389) — `DualTextureEffect.VertexColorEnabled` is a total no-op on
-  all 3 backends. Needs a new vertex-color-carrying stride variant and `vin.Color` multiplication
-  into the forwarded diffuse on every backend's dual-texture shader (mirroring FNA's
+  all 3 renderers. Needs a new vertex-color-carrying stride variant and `vin.Color` multiplication
+  into the forwarded diffuse on every renderer's dual-texture shader (mirroring FNA's
   `VSDualTextureVc`/`VSDualTextureVcNoFog` shader variants) — a genuinely new multi-shader-file,
-  multi-backend feature addition, not fixed here.
+  multi-renderer feature addition, not fixed here.
 
 This closes Phase 44 (`plan_graphics.md` Tasks 381–390) in full.

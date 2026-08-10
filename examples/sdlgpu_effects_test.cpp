@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // plan_sdlgpu.md SDLGPU-31/32: AlphaTestEffect and DualTextureEffect proof for the SDL_GPU
-// graphics backend, through the real public XNA API, verified via a real screenshot (same bar
+// graphics renderer, through the real public XNA API, verified via a real screenshot (same bar
 // as sdlgpu_3d_test.cpp).
 //
 // Check A -- AlphaTestEffect (AlphaFunction=Greater, ReferenceAlpha=128) on a texture whose top
@@ -30,7 +30,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 
-#include "CNA/Internal/Backends/SdlGpu/SdlGpuGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/SdlGpu/SdlGpuRenderer.hpp"
 
 #include "common/PixelTestGame.hpp"
 
@@ -41,7 +41,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::SdlGpu;
+using namespace CNA::Internal::Renderers::SdlGpu;
 
 namespace
 {

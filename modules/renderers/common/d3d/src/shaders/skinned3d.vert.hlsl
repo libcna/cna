@@ -1,5 +1,5 @@
 // Shader Model 5.0 (vs_5_0). Ported line-by-line from
-// src/CNA/Internal/Backends/Vulkan/shaders/skinned3d.vert.glsl.
+// src/CNA/Internal/Renderers/Vulkan/shaders/skinned3d.vert.glsl.
 // Stride 52: VertexPositionNormalTextureSkinned.
 
 cbuffer PerDraw : register(b0)

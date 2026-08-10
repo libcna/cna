@@ -3,7 +3,7 @@
 //
 // SDL_SetWindowFullscreen may fail in headless / virtual-display environments.
 // That failure must not throw — the PP value is stored before the SDL call, so
-// a backend that cannot switch fullscreen still has the correct stored state.
+// a renderer that cannot switch fullscreen still has the correct stored state.
 // This test verifies the round-trip via the GDM property + ApplyChanges() path.
 
 #include "Microsoft/Xna/Framework/Game.hpp"

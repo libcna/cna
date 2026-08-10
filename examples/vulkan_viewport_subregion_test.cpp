@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // Task 880: GraphicsDevice.Viewport GPU wiring — Vulkan sub-region (split-screen) viewport.
 //
-// GraphicsDevice.Viewport previously had zero GPU backend effect on Vulkan: the backbuffer pass
+// GraphicsDevice.Viewport previously had zero GPU renderer effect on Vulkan: the backbuffer pass
 // in RecordCommandBuffer always hardcoded vkCmdSetViewport to the full swapchain extent
 // regardless of what Viewport was set to. This test proves a genuine sub-region Viewport (e.g.
 // the left half of the window, as in a split-screen layout) now actually clips/scales rendering

@@ -14,14 +14,14 @@ namespace CNA::Internal::Xnb
     /**
      * @brief FNA's real `Microsoft.Xna.Framework.Content.Texture2DReader`
      *        (`src/Content/ContentReaders/Texture2DReader.cs`), implemented strictly against
-     *        CNA's backend-neutral `Texture2D`/`GraphicsDevice` API (plan_xnb.md XNB-23) --
-     *        never against any one backend's internals directly.
+     *        CNA's renderer-neutral `Texture2D`/`GraphicsDevice` API (plan_xnb.md XNB-23) --
+     *        never against any one renderer's internals directly.
      *
      * **Current coverage** (first pass, scoped to reach the M2 milestone): `SurfaceFormat.Color`
      * uploads raw bytes directly; `Dxt1`/`Dxt3`/`Dxt5` are always software-decompressed to
      * `Color` via the existing `CNA::Internal::Graphics::DxtUtil` (reused, not reimplemented) --
-     * unlike FNA, which only decompresses when the active backend's hardware lacks native
-     * DXT/S3TC support. CNA's own per-backend "does this backend accept compressed data
+     * unlike FNA, which only decompresses when the active renderer's hardware lacks native
+     * DXT/S3TC support. CNA's own per-renderer "does this renderer accept compressed data
      * natively" capability query is plan_xnb.md XNB-24's fuller scope, deferred; always
      * decompressing is always correct, just not always the most efficient path. Every other
      * `SurfaceFormat` (`Bgr565`, `Bgra5551`, `Bgra4444`, `NormalizedByte2/4`, `Rgba1010102`,

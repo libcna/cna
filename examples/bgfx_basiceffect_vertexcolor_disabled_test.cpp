@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // Task 364: BasicEffect pixel test — VertexColorEnabled=false, no texture, diffuse color only
-// (Bgfx backend).
+// (Bgfx renderer).
 //
 // See examples/easygl_basiceffect_vertexcolor_disabled_test.cpp for the full FNA-derived
 // expected-output derivation. Summary: with LightingEnabled=false, TextureEnabled=false and
@@ -9,7 +9,7 @@
 // the vertex buffer.
 //
 // This is the first Bgfx pixel-readback test in this codebase to exercise
-// GraphicsDevice::GetBackBufferData() for a BasicEffect draw (BgfxGraphicsBackend::
+// GraphicsDevice::GetBackBufferData() for a BasicEffect draw (BgfxRenderer::
 // ReadBackbuffer() is implemented via a requestScreenShot()/frame() callback and is
 // otherwise functional but previously unexercised by any BasicEffect pixel test).
 //
@@ -17,14 +17,14 @@
 // Task 884, not fixed in this task): GraphicsDevice's default RasterizerState is
 // CullCounterClockwiseFace (matches FNA — GraphicsDevice.cpp's `rasterizerState_`
 // member is correctly initialized to `RasterizerState::CullCounterClockwise`), but
-// this default is never pushed down to any backend's actual GPU state at device
-// construction — each backend instead starts from its OWN hardcoded internal default,
+// this default is never pushed down to any renderer's actual GPU state at device
+// construction — each renderer instead starts from its OWN hardcoded internal default,
 // independent of the C++-level RasterizerState default, until `setRasterizerStateProperty`
-// is explicitly called. EasyGL's default backend cull state is effectively "no culling"
+// is explicitly called. EasyGL's default renderer cull state is effectively "no culling"
 // (native OpenGL default, `ApplyRasterizerState` only runs on an explicit call).
 // Vulkan's `cullMode_` field is hardcoded to `0` (None). **Bgfx is the only one of the
 // three whose hardcoded field (`cullFlags_ = BGFX_STATE_CULL_CCW`) actually matches
-// FNA's real default** — so Bgfx is the only backend that silently culled every
+// FNA's real default** — so Bgfx is the only renderer that silently culled every
 // full-screen NDC quad used throughout this whole BasicEffect pixel-test family
 // (`tl,bl,br` / `tl,br,tr` winding), while EasyGL/Vulkan's own (FNA-incorrect, but
 // mutually-consistent-with-each-other) "effectively CullNone" default let the exact
@@ -32,8 +32,8 @@
 // untextured BasicEffect `DrawUserPrimitives` draw silently produced zero fragments on
 // Bgfx (GetBackBufferData read back only the clear color) until
 // `RasterizerState::CullNone` was set explicitly, at which point both rendered
-// correctly. Worked around in this test (not fixed in the shared backend, since fixing
-// the 3-way default-sync gap is a bigger, separate cross-backend task) by explicitly
+// correctly. Worked around in this test (not fixed in the shared renderer, since fixing
+// the 3-way default-sync gap is a bigger, separate cross-renderer task) by explicitly
 // setting `RasterizerState::CullNone`, matching what EasyGL/Vulkan already do
 // implicitly by omission.
 //

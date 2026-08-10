@@ -24,14 +24,14 @@
 // Check D -- deep inside the triangle, well away from the edge, the resolved face still returns a
 //   sane, fully-opaque pixel -- the resolve path returns real pixels, not garbage.
 // Check E (module-dependent, skipped if this module does not apply MultiSampleCount to a
-//   RenderTargetCube at all) -- GetMultiSampleCount() reports a real, backend-applied sample count.
+//   RenderTargetCube at all) -- GetMultiSampleCount() reports a real, renderer-applied sample count.
 // Check F (same gate as E) -- with MSAA on, the SAME diagonal edge produces at least one genuinely
 //   blended, mid-tone pixel -- real multisample antialiasing into a cube face, not merely "didn't
 //   crash".
 //
 // No _OpenGL CTest variant is registered for this test: this project's own OpenGL module has no
-// cube-texture support at all (every other RenderTargetCube test on this backend is Vulkan-module
-// only for the same reason -- see docs/llgl-backend.md's "EnvironmentMapEffect" section).
+// cube-texture support at all (every other RenderTargetCube test on this renderer is Vulkan-module
+// only for the same reason -- see docs/llgl-renderer.md's "EnvironmentMapEffect" section).
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
@@ -175,7 +175,7 @@ public:
         // over.
         if (msaa.appliedSampleCount > 1)
         {
-            ExpectTrue("GetMultiSampleCount() reports a real, backend-applied sample count once "
+            ExpectTrue("GetMultiSampleCount() reports a real, renderer-applied sample count once "
                       "MultiSampleCount is requested for a RenderTargetCube", true);
 
             bool blended = false;

@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MS-PL
-// WEBGPU-113: verify WebGPUTextureCubeBackend::GetData() -- real per-face CPU readback, closing
-// this class's former no-op ITextureCubeBackend::GetData() default (WEBGPU-56/74 only added
+// WEBGPU-113: verify WebGPUTextureCubeRenderer::GetData() -- real per-face CPU readback, closing
+// this class's former no-op ITextureCubeRenderer::GetData() default (WEBGPU-56/74 only added
 // SetData(), sufficient for EnvironmentMapEffect.EnvironmentMap but not for reading a TextureCube
 // back). Uses the real Microsoft::Xna::Framework::Graphics::TextureCube API directly --
 // TextureCube::GetData() (unlike Texture2D::GetData()) has no CPU-side pixel shadow of its own at
-// all and always calls straight through to ITextureCubeBackend::GetData(), so this is a genuine
-// end-to-end XNA-layer test, not a backend-only one.
+// all and always calls straight through to ITextureCubeRenderer::GetData(), so this is a genuine
+// end-to-end XNA-layer test, not a renderer-only one.
 //
 // Check A -- each of the 6 faces uploaded a distinct solid colour via SetData(); GetData() on
 //   each face reads back exactly that face's own colour -- proves per-face addressing (origin.z

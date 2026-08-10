@@ -532,7 +532,7 @@ public class Oracle : Game
         if (scene.SpriteBatchMode)
         {
             // D9-90..93: the real public SpriteBatch/Texture2D API, not the raw
-            // ISpriteBatchBackend interface -- matches D9-93's own explicit requirement.
+            // ISpriteBatchRenderer interface -- matches D9-93's own explicit requirement.
             var spriteTexture = new Texture2D(dev, scene.TextureWidth, scene.TextureHeight);
             spriteTexture.SetData(scene.TexturePixels.ToArray());
 

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 //
 // plan_diligent.md DILIGENT-52: real-device proof that SamplerState.MaxAnisotropy reaches the
-// Diligent backend without crashing and is genuinely used to build a real Dg::SamplerDesc, even at
+// Diligent renderer without crashing and is genuinely used to build a real Dg::SamplerDesc, even at
 // an extreme over-cap request.
 //
 // Precedent (Task 299, examples/easygl_texture_anisotropic_effect_test.cpp): a true visual
@@ -9,7 +9,7 @@
 // inherently driver-dependent and fragile to assert precisely across GPUs/software rasterizers, so
 // this project's own established practice for this task is to verify the "caps and fallback" half
 // literally instead: requesting an absurdly over-cap MaxAnisotropy (9999, far beyond any real GPU's
-// limit, and beyond DiligentGraphicsBackend::ApplySamplerState()'s own std::clamp(..., 1, 16)) must
+// limit, and beyond DiligentRenderer::ApplySamplerState()'s own std::clamp(..., 1, 16)) must
 // not crash or throw, and the draw must still produce a real, sampled (non-garbage) result.
 //
 // Uses DualTextureEffect exactly like the EasyGL precedent: a 2-texel red|green Texture2D stretched
@@ -89,7 +89,7 @@ protected:
             anisotropic.setFilterProperty(TextureFilter::Anisotropic);
             anisotropic.setAddressUProperty(TextureAddressMode::Clamp);
             anisotropic.setAddressVProperty(TextureAddressMode::Clamp);
-            anisotropic.setMaxAnisotropyProperty(9999); // far beyond DiligentGraphicsBackend's own cap
+            anisotropic.setMaxAnisotropyProperty(9999); // far beyond DiligentRenderer's own cap
             device.getSamplerStatesProperty()[0] = anisotropic;
 
             DualTextureEffect effect(device);

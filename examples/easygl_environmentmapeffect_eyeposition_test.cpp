@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // Task 397: verify EnvironmentMapEffect's reflection vector responds to EyePosition
-// (EasyGL backend).
+// (EasyGL renderer).
 //
 // EyePosition is derived from the inverse View matrix (`Matrix::Invert(view_).Translation`)
 // and used to compute `eyeVector = normalize(EyePosition - worldPos)`, which in turn drives
@@ -139,7 +139,7 @@ protected:
         dev.SetDepthTestEnabled(false);
         dev.setBlendStateProperty(BlendState::Opaque);
         // Task 896 finding (mirrors the Bgfx sibling's Task 364/884 fix): once
-        // GraphicsDevice's real default RasterizerState is pushed to every backend,
+        // GraphicsDevice's real default RasterizerState is pushed to every renderer,
         // this quad's winding is culled unless explicitly disabled.
         dev.setRasterizerStateProperty(RasterizerState::CullNone);
 

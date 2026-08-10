@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# plan_d3d10.md: run a Windows cross-compiled .exe (D3D10 backend) under Wine with DXVK, using
+# plan_d3d10.md: run a Windows cross-compiled .exe (D3D10 renderer) under Wine with DXVK, using
 # this project's own dedicated Wine prefix.
 #
 # Usage: scripts/run-wine-d3d10.sh <path-to.exe> [args...]
@@ -47,7 +47,7 @@ export DXVK_LOG_LEVEL="${DXVK_LOG_LEVEL:-info}"
 # X11 whenever WAYLAND_DISPLAY is present, regardless of DISPLAY.
 unset WAYLAND_DISPLAY
 
-# See the header comment above for why this differs from every other backend's own wrapper
+# See the header comment above for why this differs from every other renderer's own wrapper
 # (which all default to Xvfb :99): D3D10's real DXGI swap chain hits a DXVK dxgi bug under Xvfb
 # that DISPLAY=:0 avoids.
 export DISPLAY="${CNA_D3D10_DISPLAY:-:0}"

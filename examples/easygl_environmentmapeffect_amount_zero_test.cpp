@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // Task 393: verify EnvironmentMapEffect ignores the cube map entirely when
-// EnvironmentMapAmount=0 (EasyGL backend).
+// EnvironmentMapAmount=0 (EasyGL renderer).
 //
 // CNA's EasyGL env-map shader formula (confirmed against Task 134/192's own derivation):
 //   litRGB = (uEmissiveColor + uLight0Diffuse * NdotL) * uDiffuseColor.rgb
@@ -108,7 +108,7 @@ protected:
         dev.SetDepthTestEnabled(false);
         dev.setBlendStateProperty(BlendState::Opaque);
         // Task 896 finding (mirrors the Bgfx sibling's Task 364/884 fix): once
-        // GraphicsDevice's real default RasterizerState is pushed to every backend,
+        // GraphicsDevice's real default RasterizerState is pushed to every renderer,
         // this quad's winding is culled unless explicitly disabled.
         dev.setRasterizerStateProperty(RasterizerState::CullNone);
 

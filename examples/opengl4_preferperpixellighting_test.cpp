@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MS-PL
 // plan_opengl4.md GL4-29: PreferPerPixelLighting vertex-lit shader variant for the OpenGL4
-// graphics backend -- GpuDrawParams::preferPerPixelLighting was previously read by no shader on
-// this backend; lit_textured3d/skinned3d always rendered per-pixel regardless of its value, the
+// graphics renderer -- GpuDrawParams::preferPerPixelLighting was previously read by no shader on
+// this renderer; lit_textured3d/skinned3d always rendered per-pixel regardless of its value, the
 // opposite of real XNA's own default (BasicEffect/SkinnedEffect both default
 // PreferPerPixelLighting=false, i.e. per-vertex/Gouraud-shaded lighting). Ported
-// EasyGLGraphicsBackend's own EnsureLit3DVertexLitProgram()/EnsureSkinnedVertexLitProgram() GLSL
+// EasyGLRenderer's own EnsureLit3DVertexLitProgram()/EnsureSkinnedVertexLitProgram() GLSL
 // (desktop GLSL 410 core translation only, same Blinn-Phong math moved from the fragment stage
 // into the vertex stage and Gouraud-interpolated via new out vec3 vLitRGB/vSpecularRGB varyings).
 //
@@ -72,7 +72,7 @@ namespace
 
     // Analytically re-derived (same values easygl_basiceffect_preferperpixellighting_test.cpp/
     // easygl_skinnedeffect_preferperpixellighting_test.cpp already established for this exact
-    // scene -- this backend ported the identical Blinn-Phong formula, so the same oracle applies).
+    // scene -- this renderer ported the identical Blinn-Phong formula, so the same oracle applies).
     const Color kExpectedVertexLit(127, 127, 127, 255);
     const Color kExpectedPixelLit(155, 155, 155, 255);
 

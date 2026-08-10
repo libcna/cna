@@ -22,7 +22,7 @@
 //   Verifies the exclusive right/bottom/back bounds are handled correctly at the far edge.
 //
 // No framebuffer/screen readback needed for SetData verification beyond Texture3D::GetData
-// itself (which round-trips through a temporary FBO internally — see EasyGLTexture3DBackend).
+// itself (which round-trips through a temporary FBO internally — see EasyGLTexture3DRenderer).
 // Exit code 0 = all PASS, 1 = at least one FAIL.
 
 #include "Microsoft/Xna/Framework/Game.hpp"

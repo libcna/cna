@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // REMED-GFX-090: WebGPU SkinnedEffect must consume the CPU-pre-folded material exactly like
-// FNA/XNA and CNA's correct backends:
+// FNA/XNA and CNA's correct renderers:
 //
 //   DiffuseShader.rgb = DiffuseColor * Alpha
 //   DiffuseShader.a   = Alpha
@@ -31,7 +31,7 @@
 // without assuming linear or sRGB target encoding.
 //
 // Fog is deliberately not fabricated here: WebGPU's non-environment-map 3D shaders do not yet
-// upload or consume GpuDrawParams::fogVector, an existing backend capability gap recorded before
+// upload or consume GpuDrawParams::fogVector, an existing renderer capability gap recorded before
 // GFX-090. This test changes and verifies only the reachable material path.
 
 #include "Microsoft/Xna/Framework/Game.hpp"

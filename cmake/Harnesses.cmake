@@ -149,15 +149,15 @@ if(CNA_BUILD_TESTS)
     )
 endif()
 
-# --- plan_software.md SOFTWARE-61/84: cross-backend diagnostic comparator ---
-# Standalone, backend-independent (no CNA/SHARP_RUNTIME dependency) tool that diffs two raw
-# 64x64 RGBA8 dumps produced by cross_backend_diagnostic_scene.cpp (built once per backend, see
+# --- plan_software.md SOFTWARE-61/84: cross-renderer diagnostic comparator ---
+# Standalone, renderer-independent (no CNA/SHARP_RUNTIME dependency) tool that diffs two raw
+# 64x64 RGBA8 dumps produced by cross_renderer_diagnostic_scene.cpp (built once per renderer, see
 # the SOFTWARE and EASYGL sections below) within a tolerance. Not wired into a single ctest run --
-# CNA_GRAPHICS_BACKEND is a compile-time choice, so comparing two backends' output needs two
-# separate builds' dumps; see docs/software-backend.md's "Cross-backend diagnostic" section for
+# CNA_GRAPHICS_RENDERER is a compile-time choice, so comparing two renderers' output needs two
+# separate builds' dumps; see docs/software-renderer.md's "Cross-renderer diagnostic" section for
 # the exact manual invocation.
 if(CNA_BUILD_TESTS)
-    add_executable(cna_diag_compare examples/cross_backend_diagnostic_compare.cpp)
+    add_executable(cna_diag_compare examples/cross_renderer_diagnostic_compare.cpp)
 endif()
 
 # --- Task VERIFY-003/DEV-API-002: strict XNA API surface compile check ---
@@ -190,15 +190,15 @@ if(CNA_BUILD_TESTS AND (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang"))
     # cna_strict_xna_api_check never gets a CROSSCOMPILING_EMULATOR target property, so ctest tries
     # to exec the .exe natively on the Linux host ("unable to find an interpreter"). Never creates a
     # D3D9/D3D11/D3D12 device (pure link-time API-surface check, no window/GPU), so it needs the same
-    # *_SKIP_*_GATE=1 each backend's own device-free CnaTests invocation already uses.
+    # *_SKIP_*_GATE=1 each renderer's own device-free CnaTests invocation already uses.
     if(CMAKE_CROSSCOMPILING)
-        if(CNA_GRAPHICS_BACKEND STREQUAL "D3D9")
+        if(CNA_GRAPHICS_RENDERER STREQUAL "D3D9")
             set_target_properties(cna_strict_xna_api_check PROPERTIES CROSSCOMPILING_EMULATOR
                 "env;CNA_D3D9_SKIP_DXVK_GATE=1;${CMAKE_SOURCE_DIR}/scripts/run-wine-dxvk9.sh")
-        elseif(CNA_GRAPHICS_BACKEND STREQUAL "D3D11")
+        elseif(CNA_GRAPHICS_RENDERER STREQUAL "D3D11")
             set_target_properties(cna_strict_xna_api_check PROPERTIES
                 CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_D3D11_SKIP_DXVK_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-dxvk.sh")
-        elseif(CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
+        elseif(CNA_GRAPHICS_RENDERER STREQUAL "D3D12")
             set_target_properties(cna_strict_xna_api_check PROPERTIES
                 CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_D3D12_SKIP_VKD3D_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-vkd3d.sh")
         endif()
@@ -248,11 +248,11 @@ endif()
 # Throwaway (per this project's build-hygiene convention) proof that the separately pinned
 # Ganesh/OpenGL Skia artifact (docs/skia-ganesh-artifact.md) actually links and constructs a real
 # GrDirectContext via GrDirectContexts::MakeGL() over a real SDL GL context. Only built when
-# -DCNA_SKIA_GANESH_BUILD_DIR is explicitly set; the ordinary CNA_GRAPHICS_BACKEND=SKIA (raster)
+# -DCNA_SKIA_GANESH_BUILD_DIR is explicitly set; the ordinary CNA_GRAPHICS_RENDERER=SKIA (raster)
 # build never sets it, so this target does not exist there and the validated raster artifact/build
 # graph is unaffected. Not wired into CTest: SKIA-160/161 own construction-time mode selection and
-# the real backend integration; this is strictly a below-the-API artifact-correctness probe,
-# matching this backend's established "prove it below the API first" sequencing.
+# the real renderer integration; this is strictly a below-the-API artifact-correctness probe,
+# matching this renderer's established "prove it below the API first" sequencing.
 if(CNA_SKIA_GANESH_BUILD_DIR)
     include(cmake/ThirdPartySkiaGanesh.cmake)
     cna_configure_skia_ganesh()

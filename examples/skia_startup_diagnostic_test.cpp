@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MS-PL
 // SKIA-17: stable startup/capability diagnostic for the selected raster mode.
 
-#include "CNA/Internal/Backends/Skia/SkiaStartupDiagnostic.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaStartupDiagnostic.hpp"
 
 #include <cstdio>
 #include <string_view>
 
-using CNA::Internal::Backends::Skia::kSkiaPinnedRevision;
-using CNA::Internal::Backends::Skia::kSkiaStartupDiagnostic;
+using CNA::Internal::Renderers::Skia::kSkiaPinnedRevision;
+using CNA::Internal::Renderers::Skia::kSkiaStartupDiagnostic;
 
 namespace
 {
@@ -25,7 +25,7 @@ int main()
 {
     const std::string_view report = kSkiaStartupDiagnostic;
     Check(report.starts_with("CNA: Skia capabilities -- "),
-          "diagnostic has one stable backend-specific prefix");
+          "diagnostic has one stable renderer-specific prefix");
     Check(report.find(kSkiaPinnedRevision) != std::string_view::npos,
           "diagnostic reports the pinned Skia revision");
     Check(report.find("surface=raster") != std::string_view::npos

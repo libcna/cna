@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
-// Task 389: DualTextureEffect cross-backend image comparison suite — closes out Phase 44's
-// pixel-verification work (EasyGL backend).
+// Task 389: DualTextureEffect cross-renderer image comparison suite — closes out Phase 44's
+// pixel-verification work (EasyGL renderer).
 //
 // Combines everything Tasks 383-388 individually verified into one scene, to prove the fixes
 // compose correctly rather than only working in isolation: the `color.rgb *= 2` doubling factor
@@ -26,10 +26,10 @@
 //
 // Fog is deliberately excluded from this combined test: Task 388 fixed it on EasyGL only, but
 // Vulkan/Bgfx have zero fog GPU implementation (Task 888) — including it here would make this
-// capstone's shared assertions diverge per backend, defeating its own purpose.
+// capstone's shared assertions diverge per renderer, defeating its own purpose.
 //
 // This is the capstone test for Phase 44's pixel-verification work (Tasks 383-388): identical
-// assertions run unmodified (up to standard per-backend workarounds) on Vulkan and Bgfx.
+// assertions run unmodified (up to standard per-renderer workarounds) on Vulkan and Bgfx.
 //
 // Exit code 0 = PASS, 1 = FAIL.
 

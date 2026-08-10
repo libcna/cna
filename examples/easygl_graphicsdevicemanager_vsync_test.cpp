@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: MS-PL
 // Verifies GraphicsDeviceManager.SynchronizeWithVerticalRetrace/ApplyChanges() actually reaches
-// IGraphicsBackend::SetSwapInterval() on a real backend -- a real, backend-independent gap found
-// while working on plan_sdlgpu.md: applyToExistingBackend() calls GraphicsDevice::Reset(pp,
-// adapter), which set every other PresentationParameters field on the backend (virtual resolution,
+// IGraphicsRenderer::SetSwapInterval() on a real renderer -- a real, renderer-independent gap found
+// while working on plan_sdlgpu.md: applyToExistingRenderer() calls GraphicsDevice::Reset(pp,
+// adapter), which set every other PresentationParameters field on the renderer (virtual resolution,
 // MSAA) but never forwarded PresentationInterval, unlike GraphicsDevice::SetPresentationParameters()
 // (a separate, rarely-called method) which already did. Fixed by adding the same
-// backend_->SetSwapInterval(toSwapInterval(...)) forward to Reset(const PresentationParameters&,
+// renderer_->SetSwapInterval(toSwapInterval(...)) forward to Reset(const PresentationParameters&,
 // GraphicsAdapter*) itself, since ApplyChanges() always goes through Reset(), never
 // SetPresentationParameters().
 //
-// Verified end-to-end on EasyGL (the default backend) via SDL_GL_GetSwapInterval() -- a real OS/GL
+// Verified end-to-end on EasyGL (the default renderer) via SDL_GL_GetSwapInterval() -- a real OS/GL
 // query, not a CNA-internal accessor, so this proves the value genuinely reached the driver, not
 // just that CNA's own PresentationParameters field was updated.
 //

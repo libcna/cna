@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-#include "CNA/Internal/Backends/Magnum/MagnumTextures.hpp"
+#include "CNA/Internal/Renderers/Magnum/MagnumTextures.hpp"
 
 #include <Corrade/Containers/Array.h>
 #include <Corrade/Containers/ArrayView.h>
@@ -13,11 +13,11 @@
 #include <algorithm>
 #include <cstring>
 
-namespace CNA::Internal::Backends::Magnum
+namespace CNA::Internal::Renderers::Magnum
 {
     namespace
     {
-        /// Bytes one RGBA8 texel occupies, the only storage format this backend allocates today.
+        /// Bytes one RGBA8 texel occupies, the only storage format this renderer allocates today.
         constexpr int kBytesPerPixel = 4;
 
         Mg::Float ClampAnisotropy(int requested)
@@ -131,7 +131,7 @@ namespace CNA::Internal::Backends::Magnum
         const Mg::GL::SamplerWrapping wrapV = ToSamplerWrapping(state.addressV);
         texture.setMinificationFilter(minification, mipmap)
                .setMagnificationFilter(magnification)
-               // XNA's SamplerState has an AddressW too, but the backend interface carries only U
+               // XNA's SamplerState has an AddressW too, but the renderer interface carries only U
                // and V; the depth axis reuses U's mode, which is what every W-less caller means.
                .setWrapping({wrapU, wrapV, wrapU})
                .setBaseLevel(0)
@@ -139,9 +139,9 @@ namespace CNA::Internal::Backends::Magnum
                .setMaxAnisotropy(state.filter == 2 ? ClampAnisotropy(state.maxAnisotropy) : 1.0f);
     }
 
-    // ---- MagnumTextureBackend ----
+    // ---- MagnumTextureRenderer ----
 
-    MagnumTextureBackend::MagnumTextureBackend(const ImageData& data)
+    MagnumTextureRenderer::MagnumTextureRenderer(const ImageData& data)
         : texture_(std::make_unique<Mg::GL::Texture2D>())
         , width_(data.width)
         , height_(data.height)
@@ -167,12 +167,12 @@ namespace CNA::Internal::Backends::Magnum
         ApplySamplerStateTo(*texture_, MagnumSamplerState{}, levelCount_);
     }
 
-    void MagnumTextureBackend::BindGL(int /*unit*/) const
+    void MagnumTextureRenderer::BindGL(int /*unit*/) const
     {
         texture_->bind(0);
     }
 
-    void MagnumTextureBackend::UpdatePixels(const uint8_t* rgba, int stride)
+    void MagnumTextureRenderer::UpdatePixels(const uint8_t* rgba, int stride)
     {
         if (rgba == nullptr || width_ <= 0 || height_ <= 0)
             return;
@@ -201,7 +201,7 @@ namespace CNA::Internal::Backends::Magnum
             Corrade::Containers::ArrayView<const void>{packed.data(), packed.size()}});
     }
 
-    void MagnumTextureBackend::UpdatePixelsLevel(int level, const uint8_t* rgba,
+    void MagnumTextureRenderer::UpdatePixelsLevel(int level, const uint8_t* rgba,
                                                  int levelW, int levelH)
     {
         if (rgba == nullptr || level < 0 || level >= levelCount_ || levelW <= 0 || levelH <= 0)
@@ -213,7 +213,7 @@ namespace CNA::Internal::Backends::Magnum
                 rgba, static_cast<std::size_t>(levelW) * levelH * kBytesPerPixel}});
     }
 
-    bool MagnumTextureBackend::GetData(int level, int x, int y, int w, int h,
+    bool MagnumTextureRenderer::GetData(int level, int x, int y, int w, int h,
                                        void* data, int dataLength) const
     {
         if (data == nullptr || level < 0 || level >= levelCount_ || w <= 0 || h <= 0)
@@ -235,14 +235,14 @@ namespace CNA::Internal::Backends::Magnum
         return true;
     }
 
-    // ---- MagnumTextureCubeBackend ----
+    // ---- MagnumTextureCubeRenderer ----
 
-    MagnumTextureCubeBackend::MagnumTextureCubeBackend(int size, bool mipMap, int surfaceFormat)
+    MagnumTextureCubeRenderer::MagnumTextureCubeRenderer(int size, bool mipMap, int surfaceFormat)
         : texture_(std::make_unique<Mg::GL::CubeMapTexture>())
         , size_(std::max(1, size))
     {
         // SurfaceFormat is accepted and recorded but every cube face is allocated as RGBA8 -- the
-        // one storage format this backend implements, matching what its 2D textures allocate.
+        // one storage format this renderer implements, matching what its 2D textures allocate.
         (void)surfaceFormat;
 
         levelCount_ = mipMap ? FullMipLevelCount(size_, size_) : 1;
@@ -250,7 +250,7 @@ namespace CNA::Internal::Backends::Magnum
         ApplySamplerStateTo(*texture_, MagnumSamplerState{}, levelCount_);
     }
 
-    bool MagnumTextureCubeBackend::SetData(int face, int level, int x, int y, int w, int h,
+    bool MagnumTextureCubeRenderer::SetData(int face, int level, int x, int y, int w, int h,
                                            const void* data, int dataLength)
     {
         if (data == nullptr || face < 0 || face > 5 || level < 0 || level >= levelCount_)
@@ -269,7 +269,7 @@ namespace CNA::Internal::Backends::Magnum
         return true;
     }
 
-    bool MagnumTextureCubeBackend::GetData(int face, int level, int x, int y, int w, int h,
+    bool MagnumTextureCubeRenderer::GetData(int face, int level, int x, int y, int w, int h,
                                            void* data, int dataLength) const
     {
         if (data == nullptr || face < 0 || face > 5 || level < 0 || level >= levelCount_)
@@ -290,21 +290,21 @@ namespace CNA::Internal::Backends::Magnum
         return true;
     }
 
-    void MagnumTextureCubeBackend::BindGL(int /*unit*/) const
+    void MagnumTextureCubeRenderer::BindGL(int /*unit*/) const
     {
         texture_->bind(0);
     }
 
-    // ---- MagnumTexture3DBackend ----
+    // ---- MagnumTexture3DRenderer ----
 
-    MagnumTexture3DBackend::MagnumTexture3DBackend(int width, int height, int depth,
+    MagnumTexture3DRenderer::MagnumTexture3DRenderer(int width, int height, int depth,
                                                    bool mipMap, int surfaceFormat)
         : texture_(std::make_unique<Mg::GL::Texture3D>())
         , width_(std::max(1, width))
         , height_(std::max(1, height))
         , depth_(std::max(1, depth))
     {
-        // See MagnumTextureCubeBackend's constructor: RGBA8 is the one allocated storage format.
+        // See MagnumTextureCubeRenderer's constructor: RGBA8 is the one allocated storage format.
         (void)surfaceFormat;
 
         levelCount_ = mipMap ? FullMipLevelCount(std::max(width_, depth_), height_) : 1;
@@ -313,7 +313,7 @@ namespace CNA::Internal::Backends::Magnum
         ApplySamplerStateTo(*texture_, MagnumSamplerState{}, levelCount_);
     }
 
-    bool MagnumTexture3DBackend::SetData(int level, int x, int y, int z,
+    bool MagnumTexture3DRenderer::SetData(int level, int x, int y, int z,
                                          int w, int h, int depth,
                                          const void* data, int dataLength)
     {
@@ -337,7 +337,7 @@ namespace CNA::Internal::Backends::Magnum
         return true;
     }
 
-    bool MagnumTexture3DBackend::GetData(int level, int x, int y, int z,
+    bool MagnumTexture3DRenderer::GetData(int level, int x, int y, int z,
                                          int w, int h, int depth,
                                          void* data, int dataLength) const
     {
@@ -370,7 +370,7 @@ namespace CNA::Internal::Backends::Magnum
         return true;
     }
 
-    void MagnumTexture3DBackend::BindGL(int /*unit*/) const
+    void MagnumTexture3DRenderer::BindGL(int /*unit*/) const
     {
         texture_->bind(0);
     }

@@ -3,7 +3,7 @@
 // DRAW/BATCH, not once per frame — the Vulkan analog of GFX-069 (SdlGpu) and the blend-constant
 // counterpart of GFX-062 (Viewport) / GFX-013 (Scissor).
 //
-// Before the fix, VulkanGraphicsBackend::RecordCommandBuffer() called vkCmdSetBlendConstants
+// Before the fix, VulkanRenderer::RecordCommandBuffer() called vkCmdSetBlendConstants
 // EXACTLY ONCE per frame — at the Phase-2 backbuffer pass begin (line ~6926), reading the live
 // frame-global blendFactorR_/G_/B_/A_ members. Consequences:
 //   (a) The Phase-1 render-target passes run BEFORE that single set and never set blend constants
@@ -45,7 +45,7 @@
 //   Frame 4 — A→B→A BlendFactors in ONE render-target pass (the per-draw-capture crux): within one
 //     RT pass, using ONE BlendState instance, draw three white quads into three disjoint horizontal
 //     regions, changing ONLY GraphicsDevice.BlendFactor between them (RED, GREEN, RED constants).
-//     Each region must show the constant active WHEN THAT draw was enqueued. The pre-fix backend
+//     Each region must show the constant active WHEN THAT draw was enqueued. The pre-fix renderer
 //     never sets blend constants in an RT pass at all (all three regions share one undefined/stale
 //     constant); a "read the frame-global factor once at record time" fix would paint all three RED
 //     (last-wins). Only genuine per-draw capture passes. This also proves the constant is dynamic
@@ -76,7 +76,7 @@
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
-#include "CNA/Internal/Backends/Vulkan/VulkanGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Vulkan/VulkanRenderer.hpp"
 
 #include <cstdio>
 #include <cstddef>
@@ -84,7 +84,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using CNA::Internal::Backends::Vulkan::VulkanGraphicsBackend;
+using CNA::Internal::Renderers::Vulkan::VulkanRenderer;
 
 static constexpr int kBBW = 64;   // backbuffer width
 static constexpr int kBBH = 64;   // backbuffer height (!= RT height, to catch dimension leaks)
@@ -378,11 +378,11 @@ protected:
 
         if (frame_ == 6)
         {
-            auto& backend = static_cast<VulkanGraphicsBackend&>(dev.GetBackend());
-            const std::size_t before = backend.GetGraphicsPipelineCacheEntryCountEXT();
+            auto& renderer = static_cast<VulkanRenderer&>(dev.GetRenderer());
+            const std::size_t before = renderer.GetGraphicsPipelineCacheEntryCountEXT();
             renderCacheStress(dev);
             const Color c = readAt(dev, cx, cy);
-            const std::size_t after = backend.GetGraphicsPipelineCacheEntryCountEXT();
+            const std::size_t after = renderer.GetGraphicsPipelineCacheEntryCountEXT();
             check(isGreen(c), "64-draw BlendFactor cache stress final pixel", c, "GREEN");
             const bool stable = before == after;
             std::printf("[%s] BlendFactor RGBA cache cardinality: before=%zu after=%zu\n",

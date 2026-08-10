@@ -11,7 +11,7 @@
 #include <gtest/gtest.h>
 
 #include "CNA/GraphicsCapability.hpp"
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
@@ -37,59 +37,59 @@
 
 #include "WireFrameTriangleOracle.hpp"
 
-#ifdef CNA_BACKEND_HEADLESS
-#include "CNA/Internal/Backends/Headless/HeadlessGraphicsBackend.hpp"
+#ifdef CNA_RENDERER_HEADLESS
+#include "CNA/Internal/Renderers/Headless/HeadlessRenderer.hpp"
 #endif
 
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using CNA::GraphicsCapability;
 
-// This test target is built for multiple renderer families. Per-backend arms below preserve each
-// accepted capability boundary rather than assuming one principal backend's answers are universal.
+// This test target is built for multiple renderer families. Per-renderer arms below preserve each
+// accepted capability boundary rather than assuming one principal renderer's answers are universal.
 //
-// plan_opengl1.md phase 12 finding: OPENGL1 is a SECOND genuinely-3D-capable backend this file's
+// plan_opengl1.md phase 12 finding: OPENGL1 is a SECOND genuinely-3D-capable renderer this file's
 // original "only ever builds against EasyGL" assumption did not anticipate -- and its real,
 // honest capability profile (examples/opengl1_graphics_capability_test.cpp, plan_opengl1.md
 // phase 11) legitimately differs from EasyGL's on 3 of these checks: OPENGL1 has no
-// ARB_multitexture-based MRT or custom-shader Effect pipeline (this backend's own design rule:
-// "No GLSL/custom ShaderEffect pipeline in the strict OPENGL1 backend"), but DOES support
+// ARB_multitexture-based MRT or custom-shader Effect pipeline (this renderer's own design rule:
+// "No GLSL/custom ShaderEffect pipeline in the strict OPENGL1 renderer"), but DOES support
 // wireframe via real glPolygonMode(GL_LINE); EasyGL instead uses measured triangle-edge
 // re-expansion because GLES3 has no polygon mode. Both report working wireframe through different
 // implementations. OcclusionQuery (plan_opengl1.md item 23, EasyGL parity, added
-// 2026-07-20) is no longer one of the differing checks -- both backends now genuinely support it
+// 2026-07-20) is no longer one of the differing checks -- both renderers now genuinely support it
 // (OPENGL1 via real ARB_occlusion_query/core-1.5 GL_SAMPLES_PASSED queries).
 
 // OpenGL ES 1.1 is a fixed-function pipeline with no MRT mechanism, no occlusion-query mechanism
 // anywhere in the CM registry, and no shader compiler at all. Its `false` for these three is the
 // truthful answer, and is asserted here rather than left as a standing red -- the point of the
 // capability query is that a caller can trust it.
-#if defined(CNA_BACKEND_OPENGLES1)
+#if defined(CNA_RENDERER_OPENGLES1)
 constexpr bool kExpectMultipleRenderTargets = false;
 constexpr bool kExpectOcclusionQuery        = false;
 constexpr bool kExpectCustomEffects         = false;
-#elif defined(CNA_BACKEND_OPENGL1)
+#elif defined(CNA_RENDERER_OPENGL1)
 // plan_opengl1.md phase 12: OPENGL1 is a second, legitimately-different, equally-honest
-// 3D-capable backend -- no MRT and no custom-shader support in its fixed-function
+// 3D-capable renderer -- no MRT and no custom-shader support in its fixed-function
 // pipeline, reported truthfully rather than inherited. Occlusion queries became real in
 // item 23 (ARB_occlusion_query/core GL 1.5, GL_SAMPLES_PASSED), so that answer no longer
 // differs from EasyGL's.
 constexpr bool kExpectMultipleRenderTargets = false;
 constexpr bool kExpectOcclusionQuery        = true;
 constexpr bool kExpectCustomEffects         = false;
-#elif defined(CNA_BACKEND_WICKED)
-// plan_wicked.md WICKED-57/68: this backend answers CustomEffects with a truthful false --
-// IEffectBackend addresses shader constants by name, which needs the SPIR-V reflection this
-// backend does not do, so custom effects are refused at the call site rather than approximated.
+#elif defined(CNA_RENDERER_WICKED)
+// plan_wicked.md WICKED-57/68: this renderer answers CustomEffects with a truthful false --
+// IEffectRenderer addresses shader constants by name, which needs the SPIR-V reflection this
+// renderer does not do, so custom effects are refused at the call site rather than approximated.
 // MRT (up to 4 attachments) and occlusion queries (a real GPUQueryHeap with readback) are
 // genuinely implemented, so those two keep the default expectation. This arm became reachable
 // only when WICKED-78 made a bare device's teardown survivable; the catch-all below had been
-// answering for this backend until then.
+// answering for this renderer until then.
 constexpr bool kExpectMultipleRenderTargets = true;
 constexpr bool kExpectOcclusionQuery        = true;
 constexpr bool kExpectCustomEffects         = false;
-#elif defined(CNA_BACKEND_SKIA)
-// The one 2D-only backend in this block. All three answers are structural rather than
-// not-yet-implemented: SkCanvas produces exactly one colour result (docs/skia-backend.md's MRT
+#elif defined(CNA_RENDERER_SKIA)
+// The one 2D-only renderer in this block. All three answers are structural rather than
+// not-yet-implemented: SkCanvas produces exactly one colour result (docs/skia-renderer.md's MRT
 // row, `Skia_MRT_Rejection`), raster final pixels cannot distinguish positive from zero coverage
 // so no samples-passed query is definable at all, and the accepted custom-effect route is the
 // narrow opt-in CNA_SKIA_SKSL_V1 ABI rather than the arbitrary-Effect support a true would
@@ -98,8 +98,8 @@ constexpr bool kExpectCustomEffects         = false;
 constexpr bool kExpectMultipleRenderTargets = false;
 constexpr bool kExpectOcclusionQuery        = false;
 constexpr bool kExpectCustomEffects         = false;
-#elif defined(CNA_BACKEND_DILIGENT)
-// plan_diligent.md DILIGENT-42: a third genuinely 3D-capable backend with its own
+#elif defined(CNA_RENDERER_DILIGENT)
+// plan_diligent.md DILIGENT-42: a third genuinely 3D-capable renderer with its own
 // honest, narrower profile at this point in its implementation -- no custom ShaderEffect
 // compilation. MRT (DILIGENT-24, up to four attachments) and occlusion queries (DILIGENT-41, a
 // real IQuery, exact or binary depending on the device feature) are both real. Each answer
@@ -113,16 +113,16 @@ constexpr bool kExpectOcclusionQuery        = true;
 constexpr bool kExpectCustomEffects         = true;
 #endif
 
-// Both of these assert `true` for every 3D-capable backend. A deliberately 2D-only backend
+// Both of these assert `true` for every 3D-capable renderer. A deliberately 2D-only renderer
 // answers false, and that is the correct answer, not a gap -- so it gets its own arm rather than
-// a standing red. Only the arm for the backend being added is written here; the other 2D-only
+// a standing red. Only the arm for the renderer being added is written here; the other 2D-only
 // identities in this repository are untouched by this file and keep whatever they answer today.
-#if defined(CNA_BACKEND_SKIA)
+#if defined(CNA_RENDERER_SKIA)
 TEST(GraphicsDeviceCapabilityTest, SupportsThreeD)
 {
     GraphicsDevice gd;
     EXPECT_FALSE(gd.SupportsCapability(GraphicsCapability::ThreeD))
-        << "the Skia raster backend claims a 3D pipeline -- every 3D route it owns refuses "
+        << "the Skia raster renderer claims a 3D pipeline -- every 3D route it owns refuses "
            "through Ensure3DSupported(), so a true report cannot be backed by anything";
 }
 
@@ -130,7 +130,7 @@ TEST(GraphicsDeviceCapabilityTest, SupportsDepthStencilBuffer)
 {
     GraphicsDevice gd;
     EXPECT_FALSE(gd.SupportsCapability(GraphicsCapability::DepthStencilBuffer))
-        << "the Skia raster backend claims a depth/stencil buffer -- its SkSurface targets have "
+        << "the Skia raster renderer claims a depth/stencil buffer -- its SkSurface targets have "
            "no attachment, and DepthStencilState::None is accepted only as the absence of one";
 }
 #else
@@ -151,7 +151,7 @@ TEST(GraphicsDeviceCapabilityTest, SupportsStencilBuffer)
 {
     GraphicsDevice gd;
     EXPECT_EQ(gd.SupportsCapability(GraphicsCapability::StencilBuffer),
-              gd.GetBackend().SupportsStencilBuffer());
+              gd.GetRenderer().SupportsStencilBuffer());
 }
 
 TEST(GraphicsDeviceCapabilityTest, SupportsMultipleRenderTargets)
@@ -189,7 +189,7 @@ TEST(GraphicsDeviceCapabilityTest, AnisotropicFilteringQueryDoesNotThrow)
 
 // REMED-CONTENT-001: GetMaxTextureDimension() must report a real, positive, sane ceiling -- shared
 // content-reading code (Texture2DContentTypeReader) relies on this to reject malformed/adversarial
-// XNB dimensions before any backend-specific texture creation is attempted.
+// XNB dimensions before any renderer-specific texture creation is attempted.
 TEST(GraphicsDeviceCapabilityTest, GetMaxTextureDimensionReturnsSanePositiveValue)
 {
     GraphicsDevice gd;
@@ -202,19 +202,19 @@ TEST(GraphicsDeviceCapabilityTest, GetMaxTextureDimensionReturnsSanePositiveValu
 }
 
 // ============================================================================
-// REMED-GFX-209 -- the FillMode::WireFrame contract is per backend, not universal.
+// REMED-GFX-209 -- the FillMode::WireFrame contract is per renderer, not universal.
 //
 // WHAT WAS HERE BEFORE. A single test, `DoesNotSupportWireFrame`, asserting
 //
 //     EXPECT_FALSE(gd.SupportsCapability(GraphicsCapability::WireFrame));
 //
-// in a file that is compiled once per backend and gated on nothing. It encoded ONE backend's
+// in a file that is compiled once per renderer and gated on nothing. It encoded ONE renderer's
 // documented gap -- EasyGL's "GLES3 has no polygon mode" entry in plan_graphics.md's XNA 4.0
-// coverage table -- as though every backend shared it, and therefore failed on Software, Headless,
+// coverage table -- as though every renderer shared it, and therefore failed on Software, Headless,
 // bgfx, WebGPU, Vulkan and SDL_GPU. It could never pass falsely, so it hid nothing; it was simply
 // a standing red in six principal suites.
 //
-// THE MEASURED CONTRACT, one backend at a time. Every row below is a real reading from the pixel
+// THE MEASURED CONTRACT, one renderer at a time. Every row below is a real reading from the pixel
 // oracle in this file, not a reading of the source:
 //
 //   Software, Vulkan, bgfx, SDL_GPU, D3D9, D3D11  reports true, renders a real wireframe
@@ -228,17 +228,17 @@ TEST(GraphicsDeviceCapabilityTest, GetMaxTextureDimensionReturnsSanePositiveValu
 // honest shapes:
 //
 //   * a POSITIVE PIXEL ORACLE where wireframe genuinely renders;
-//   * a NEGATIVE ORACLE where the backend reports the gap and refuses the draw, proving the
+//   * a NEGATIVE ORACLE where the renderer reports the gap and refuses the draw, proving the
 //     refusal mutated nothing and that Solid still works afterwards;
-//   * an HONEST SKIP where the backend has no pixel route to measure at all.
+//   * an HONEST SKIP where the renderer has no pixel route to measure at all.
 //
 // WEBGPU-115 FILLED THE REJECTION ARM. When REMED-GFX-209 measured this contract the arm had an
-// EMPTY registration set -- no backend refused, so the absence was recorded rather than a rejection
+// EMPTY registration set -- no renderer refused, so the absence was recorded rather than a rejection
 // manufactured. WebGPU used to report true, accept the request, build and natively submit a
 // distinct pipeline for it, and return a frame byte-identical to Solid. It now reports false and
 // throws System::NotSupportedException before anything is queued. The full cardinality and route
 // matrix for that boundary lives in WebGpuWireFrameContractTests.cpp; this file keeps the
-// per-backend shape of the contract.
+// per-renderer shape of the contract.
 //
 // HISTORICAL EASYGL FINDING, NOW RESOLVED. Before REMED-GFX-219 the implementation rendered a
 // measured-correct GL_LINES wireframe while the capability under-reported false. The current
@@ -254,7 +254,7 @@ using namespace CnaTest::WireFrameOracle;   // NOLINT(google-build-using-namespa
 #endif
 
 // ---------------------------------------------------------------------------
-// The capability report, per backend. Each arm states what THIS backend answers today; none of
+// The capability report, per renderer. Each arm states what THIS renderer answers today; none of
 // them claims anything about another.
 // ---------------------------------------------------------------------------
 TEST(GraphicsDeviceCapabilityTest, WireFrameCapabilityReportIsThisBackendsOwn)
@@ -263,32 +263,32 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameCapabilityReportIsThisBackendsOwn)
     EXPECT_NO_THROW({ (void)gd.SupportsCapability(GraphicsCapability::WireFrame); });
     const bool reported = gd.SupportsCapability(GraphicsCapability::WireFrame);
 
-#if defined(CNA_BACKEND_EASYGL)
+#if defined(CNA_RENDERER_EASYGL)
     // REMED-GFX-219 landed with the GL-family lane: the EasyGL implementation's GL_LINES
     // re-expansion renders a correct wireframe (the pixel oracle below measures interior 0/1089
-    // with all three edges present), so the report now states the capability the backend
+    // with all three edges present), so the report now states the capability the renderer
     // genuinely has. True for every GL profile (OPENGLES/OPENGL33/WEBGL1/WEBGL2) alike -- the
     // emulation draws line primitives and depends on no polygon-mode API.
     EXPECT_TRUE(reported)
-        << "the EasyGL-family backends under-report WireFrame again -- REMED-GFX-219's corrected "
+        << "the EasyGL-family renderers under-report WireFrame again -- REMED-GFX-219's corrected "
            "report is gone while the GL_LINES emulation still renders a measured-correct wireframe";
-#elif defined(CNA_BACKEND_WEBGPU)
+#elif defined(CNA_RENDERER_WEBGPU)
     // WEBGPU-115: asserted, not inherited. wgpu-native has no polygon mode at all, so
-    // WebGPUGraphicsBackend::SupportsCapability answers false and the draw-time guard refuses.
+    // WebGPURenderer::SupportsCapability answers false and the draw-time guard refuses.
     EXPECT_FALSE(reported)
         << "WebGPU claims WireFrame support again -- WEBGPU-115's capability override is gone, and "
            "the renderer has no polygon mode to back the claim with";
-#elif defined(CNA_BACKEND_DX1)
+#elif defined(CNA_RENDERER_DX1)
     // DX1 is 2D-only by design -- DirectX 1 has no Direct3D at all, so there is no polygon fill
-    // mode to report on and Dx1GraphicsBackend::SupportsCapability answers false for every
+    // mode to report on and Dx1Renderer::SupportsCapability answers false for every
     // capability, WireFrame included. Same truthful-false shape as WebGPU above, for the opposite
     // reason: nothing here could rasterize a triangle in the first place. (DX2..DX8 and D3D10
     // report true and take the default arm below -- their fill mode is real, spike-verified on
     // DX2's own software RGB device and on DX8/D3D10's DXVK GPU path.)
     EXPECT_FALSE(reported)
-        << "DX1 claims WireFrame support -- this backend has no 3D pipeline at all, so a true "
+        << "DX1 claims WireFrame support -- this renderer has no 3D pipeline at all, so a true "
            "report cannot be backed by any rendering path";
-#elif defined(CNA_BACKEND_SKIA)
+#elif defined(CNA_RENDERER_SKIA)
     // Skia's selected artifact is a CPU raster 2D surface: SkCanvas has no polygon fill mode, and
     // there is no vertex/primitive route for one to apply to. The refusal half of REMED-GFX-209 is
     // satisfied more strongly than it asks -- Ensure3DSupported() rejects every 3D draw before any
@@ -297,32 +297,32 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameCapabilityReportIsThisBackendsOwn)
     // to measure, which is why WireFrameTriangleOracle.hpp leaves CNA_WIREFRAME_PIXEL_ORACLE
     // undefined here.
     EXPECT_FALSE(reported)
-        << "Skia claims WireFrame support -- this raster backend has no polygon fill mode and no "
+        << "Skia claims WireFrame support -- this raster renderer has no polygon fill mode and no "
            "3D draw route, so a true report cannot be backed by any rendering path";
-#elif defined(CNA_BACKEND_STUB)
-    // Stub answers false to EVERY capability, WireFrame included: it is a no-op backend that
+#elif defined(CNA_RENDERER_STUB)
+    // Stub answers false to EVERY capability, WireFrame included: it is a no-op renderer that
     // rasterizes nothing and keeps no state, so there is no rendering path a true report could
     // stand on. Same truthful-false shape as DX1 above.
     //
     // Note what this arm is NOT. Stub is not in the rejection set: unlike WebGPU, it does not throw
     // on a WireFrame draw, because its declared contract is that a real Game loop runs to
-    // completion without throwing (docs/stub-backend.md, examples/stub_smoke_test.cpp). The
-    // refusal obligation exists to stop a backend from returning a frame that silently lies -- a
+    // completion without throwing (docs/stub-renderer.md, examples/stub_smoke_test.cpp). The
+    // refusal obligation exists to stop a renderer from returning a frame that silently lies -- a
     // solid fill presented as a wireframe. Stub returns no frame at all, so it has the third shape
     // this file describes: an honest report with no pixel route to measure, which is why
     // WireFrameTriangleOracle.hpp deliberately leaves CNA_WIREFRAME_PIXEL_ORACLE undefined here.
     //
     // Stub is also stricter than Headless, which reaches the default arm below by INHERITING
-    // IGraphicsBackend's true. Stub overrides SupportsCapability to false precisely so a no-op
-    // backend stops claiming a capability it does not have.
+    // IGraphicsRenderer's true. Stub overrides SupportsCapability to false precisely so a no-op
+    // renderer stops claiming a capability it does not have.
     EXPECT_FALSE(reported)
         << "Stub claims WireFrame support -- its SupportsCapability override is gone and it has "
-           "fallen back to IGraphicsBackend's default true, which no no-op backend can back";
+           "fallen back to IGraphicsRenderer's default true, which no no-op renderer can back";
 #else
-    // Every other backend in this file answers true, either because it renders a real wireframe
+    // Every other renderer in this file answers true, either because it renders a real wireframe
     // (Software, Vulkan, bgfx, SDL_GPU, D3D9, D3D11, D3D12, OpenGL4 -- the last via desktop core
     // GL's own glPolygonMode, asserted by the pixel oracle below) or because it inherits
-    // IGraphicsBackend's default (Headless, which rasterizes nothing at all).
+    // IGraphicsRenderer's default (Headless, which rasterizes nothing at all).
     EXPECT_TRUE(reported);
 #endif
 }
@@ -330,18 +330,18 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameCapabilityReportIsThisBackendsOwn)
 #ifdef CNA_WIREFRAME_PIXEL_ORACLE
 
 // ---------------------------------------------------------------------------
-// POSITIVE CONTRACT -- backends that genuinely rasterize a wireframe.
+// POSITIVE CONTRACT -- renderers that genuinely rasterize a wireframe.
 // ---------------------------------------------------------------------------
 
 TEST(GraphicsDeviceCapabilityTest, WireFrameLightsEveryEdgeAndLeavesTheInteriorUnfilled)
 {
 #if !defined(CNA_WIREFRAME_MEASURED)
-    GTEST_SKIP() << kBackendName
+    GTEST_SKIP() << kRendererName
                  << " has no runtime in this environment; the oracle compiles but cannot measure";
 #elif !defined(CNA_WIREFRAME_RENDERS_EDGES)
-    // The rejecting backend gets its own arm below; asserting the positive contract here would
+    // The rejecting renderer gets its own arm below; asserting the positive contract here would
     // only duplicate that arm's failure mode with a worse diagnostic.
-    GTEST_SKIP() << kBackendName
+    GTEST_SKIP() << kRendererName
                  << " does not rasterize wireframe; see the deterministic-rejection arm";
 #else
     GraphicsDevice gd;
@@ -352,11 +352,11 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameLightsEveryEdgeAndLeavesTheInteriorU
 
     ExpectSolidTriangle(solid);
     ASSERT_TRUE(wire.rendered)
-        << kBackendName << " refused a WireFrame draw: " << wire.rejection;
+        << kRendererName << " refused a WireFrame draw: " << wire.rejection;
 
     // 1. THE INTERIOR IS EMPTY. This is what separates a wireframe from a solid fill.
     EXPECT_EQ(0, wire.frame.LitIn(kInterior))
-        << kBackendName << " filled " << wire.frame.LitIn(kInterior)
+        << kRendererName << " filled " << wire.frame.LitIn(kInterior)
         << " interior pixels under FillMode::WireFrame -- that is a solid fill, not a wireframe ("
         << wire.frame.Describe() << ')';
 
@@ -365,41 +365,41 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameLightsEveryEdgeAndLeavesTheInteriorU
     for (std::size_t i = 0; i < kEdgeProbes.size(); ++i)
     {
         EXPECT_GE(wire.frame.LitIn(kEdgeProbes[i]), 8)
-            << kBackendName << " edge " << kEdgeNames[i]
+            << kRendererName << " edge " << kEdgeNames[i]
             << " is missing from the wireframe (" << wire.frame.Describe() << ')';
         EXPECT_TRUE(Frame::NearInk(wire.frame.FirstLitIn(kEdgeProbes[i])))
-            << kBackendName << " edge " << kEdgeNames[i] << " is "
+            << kRendererName << " edge " << kEdgeNames[i] << " is "
             << Describe(wire.frame.FirstLitIn(kEdgeProbes[i])) << ", not the ink colour";
     }
 
     // 3. THE FRAME IS NOT THE CLEAR. A dropped draw lights nothing at all, which the edge probes
     //    already reject; this states the whole-frame form of it so the failure names the cause.
     EXPECT_GT(wire.frame.LitTotal(), 0)
-        << kBackendName << " rendered nothing at all under FillMode::WireFrame";
+        << kRendererName << " rendered nothing at all under FillMode::WireFrame";
 
     // 4. THE TWO MODES DIFFER BY AN ORDER OF MAGNITUDE. Edges of this triangle are ~600 pixels;
-    //    its interior is 18176. A backend that quietly promoted the wireframe to a solid fill --
+    //    its interior is 18176. A renderer that quietly promoted the wireframe to a solid fill --
     //    or that widened lines until they became one -- cannot satisfy this.
     EXPECT_LT(wire.frame.LitTotal() * 4, solid.frame.LitTotal())
-        << kBackendName << " WireFrame covered " << wire.frame.LitTotal()
+        << kRendererName << " WireFrame covered " << wire.frame.LitTotal()
         << " pixels against Solid's " << solid.frame.LitTotal()
         << " -- not a measurably smaller figure";
 
     // 5. NOTHING BUT INK AND CLEAR. A second draw, a retry, or a blend over the first would leave
     //    a third colour somewhere in the frame.
     EXPECT_TRUE(wire.frame.EveryLitPixelIsInk())
-        << kBackendName << " WireFrame produced a lit pixel that is neither ink nor clear";
+        << kRendererName << " WireFrame produced a lit pixel that is neither ink nor clear";
 #endif
 }
 
 TEST(GraphicsDeviceCapabilityTest, WireFrameAndSolidAlternateWithoutStaleRasterizerState)
 {
 #if !defined(CNA_WIREFRAME_MEASURED) || !defined(CNA_WIREFRAME_RENDERS_EDGES)
-    GTEST_SKIP() << kBackendName << " is not in the measured wireframe-rendering set";
+    GTEST_SKIP() << kRendererName << " is not in the measured wireframe-rendering set";
 #else
     GraphicsDevice gd;
-    // WireFrame -> Solid -> WireFrame. A backend that caches a pipeline, a polygon mode or an
-    // expanded index buffer across state changes produces a different third frame; a backend that
+    // WireFrame -> Solid -> WireFrame. A renderer that caches a pipeline, a polygon mode or an
+    // expanded index buffer across state changes produces a different third frame; a renderer that
     // never applied the state in the first place produces three identical solid ones.
     const Result first = RenderTriangle(gd, FillMode::WireFrame);
     PrintReading("wireframe-1", first);
@@ -412,39 +412,39 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameAndSolidAlternateWithoutStaleRasteri
     ASSERT_TRUE(third.rendered);
     ExpectSolidTriangle(solid);
 
-    EXPECT_EQ(0, first.frame.LitIn(kInterior)) << kBackendName << ' ' << first.frame.Describe();
+    EXPECT_EQ(0, first.frame.LitIn(kInterior)) << kRendererName << ' ' << first.frame.Describe();
     EXPECT_EQ(0, third.frame.LitIn(kInterior))
-        << kBackendName << " kept the Solid state after returning to WireFrame -- "
+        << kRendererName << " kept the Solid state after returning to WireFrame -- "
         << third.frame.Describe();
     EXPECT_TRUE(first.frame.pixels == third.frame.pixels)
-        << kBackendName << " did not reproduce its own wireframe after a Solid draw ("
+        << kRendererName << " did not reproduce its own wireframe after a Solid draw ("
         << first.frame.Describe() << " then " << third.frame.Describe() << ')';
     EXPECT_FALSE(first.frame.pixels == solid.frame.pixels)
-        << kBackendName << " produced identical frames for WireFrame and Solid";
+        << kRendererName << " produced identical frames for WireFrame and Solid";
 #endif
 }
 
 // ---------------------------------------------------------------------------
-// RECOVERY -- applies to every measured backend, including the one that ignores the request.
+// RECOVERY -- applies to every measured renderer, including the one that ignores the request.
 // A WireFrame draw must never poison the device, the target or the following frame.
 // ---------------------------------------------------------------------------
 TEST(GraphicsDeviceCapabilityTest, SolidRendersExactlyAfterAWireFrameDraw)
 {
 #ifndef CNA_WIREFRAME_MEASURED
-    GTEST_SKIP() << kBackendName << " has no runtime in this environment";
+    GTEST_SKIP() << kRendererName << " has no runtime in this environment";
 #else
     GraphicsDevice gd;
     const Result wire = RenderTriangle(gd, FillMode::WireFrame);
     PrintReading("wireframe-before-recovery", wire);
 #ifdef CNA_WIREFRAME_REJECTED
-    // A refusal is this backend's correct answer (WEBGPU-115) -- what must still hold is that it
+    // A refusal is this renderer's correct answer (WEBGPU-115) -- what must still hold is that it
     // left nothing behind for the next draw to trip over.
     ASSERT_FALSE(wire.rendered)
-        << kBackendName << " accepted a WireFrame draw again -- " << wire.frame.Describe();
+        << kRendererName << " accepted a WireFrame draw again -- " << wire.frame.Describe();
     ExpectClearOnly(wire.frame, "the refused WireFrame draw");
 #else
     ASSERT_TRUE(wire.rendered)
-        << kBackendName << " refused a WireFrame draw: " << wire.rejection;
+        << kRendererName << " refused a WireFrame draw: " << wire.rejection;
 #endif
 
     const Result recovered = RenderTriangle(gd, FillMode::Solid);
@@ -454,13 +454,13 @@ TEST(GraphicsDeviceCapabilityTest, SolidRendersExactlyAfterAWireFrameDraw)
 }
 
 // ---------------------------------------------------------------------------
-// NEGATIVE CONTRACT -- the backend reports the gap and refuses the draw rather than substituting a
+// NEGATIVE CONTRACT -- the renderer reports the gap and refuses the draw rather than substituting a
 // different rendering mode. WEBGPU-115.
 // ---------------------------------------------------------------------------
-TEST(GraphicsDeviceCapabilityTest, WireFrameIsRefusedDeterministicallyOnThisBackend)
+TEST(GraphicsDeviceCapabilityTest, WireFrameIsRefusedDeterministicallyOnThisRenderer)
 {
 #ifndef CNA_WIREFRAME_REJECTED
-    GTEST_SKIP() << kBackendName << " is not in the WireFrame-rejecting set";
+    GTEST_SKIP() << kRendererName << " is not in the WireFrame-rejecting set";
 #else
     // The whole point of the boundary is that the two frames are NOT the same picture and NOT both
     // produced: Solid renders exactly, WireFrame throws, and the target the refused draw was aimed
@@ -473,39 +473,39 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameIsRefusedDeterministicallyOnThisBack
 
     ExpectSolidTriangle(solid);
     ASSERT_FALSE(wire.rendered)
-        << kBackendName << " accepted a WireFrame draw and produced " << wire.frame.Describe()
-        << ". If real wireframe rendering landed, move this backend into "
+        << kRendererName << " accepted a WireFrame draw and produced " << wire.frame.Describe()
+        << ". If real wireframe rendering landed, move this renderer into "
            "CNA_WIREFRAME_RENDERS_EDGES";
     // The message has to name the thing that was refused -- a bare "not supported" cannot be acted
     // on, and a message that names something else means a different guard fired.
     EXPECT_NE(std::string::npos, wire.rejection.find("WireFrame"))
-        << kBackendName << " refused the draw with a message that does not name FillMode::"
+        << kRendererName << " refused the draw with a message that does not name FillMode::"
         << "WireFrame: \"" << wire.rejection << '"';
     EXPECT_NE(std::string::npos, wire.rejection.find("SupportsCapability"))
-        << kBackendName << " refused the draw without pointing at the capability query: \""
+        << kRendererName << " refused the draw without pointing at the capability query: \""
         << wire.rejection << '"';
     ExpectClearOnly(wire.frame, "the refused WireFrame draw");
     EXPECT_FALSE(wire.frame.pixels == solid.frame.pixels)
-        << kBackendName << " produced the Solid picture for a refused WireFrame draw";
+        << kRendererName << " produced the Solid picture for a refused WireFrame draw";
 
     // The device survives the refusal: a second Solid draw renders exactly, on a new target.
     const Result again = RenderTriangle(gd, FillMode::Solid);
     PrintReading("solid-after-refusal", again);
     ExpectSolidTriangle(again);
     EXPECT_TRUE(again.frame.pixels == solid.frame.pixels)
-        << kBackendName << " did not reproduce its own Solid frame after a refused WireFrame draw";
+        << kRendererName << " did not reproduce its own Solid frame after a refused WireFrame draw";
 #endif
 }
 
 #endif  // CNA_WIREFRAME_PIXEL_ORACLE
 
 // ---------------------------------------------------------------------------
-// HONEST SKIP + EXACT CARDINALITY -- Headless has no pixel route at all, and is the one backend
+// HONEST SKIP + EXACT CARDINALITY -- Headless has no pixel route at all, and is the one renderer
 // that can count native draws exactly.
 // ---------------------------------------------------------------------------
-#ifdef CNA_BACKEND_HEADLESS
+#ifdef CNA_RENDERER_HEADLESS
 
-TEST(GraphicsDeviceCapabilityTest, WireFrameHasNoPixelRouteOnThisBackend)
+TEST(GraphicsDeviceCapabilityTest, WireFrameHasNoPixelRouteOnThisRenderer)
 {
     GTEST_SKIP() << "Headless rasterizes nothing by design -- DrawPrimitivesEx validates its "
                     "arguments and records a trace -- so there is no wireframe to measure. "
@@ -513,7 +513,7 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameHasNoPixelRouteOnThisBackend)
                     "wrong result; the cardinality contract below is asserted instead";
 }
 
-TEST(GraphicsDeviceCapabilityTest, WireFrameReachesTheBackendAsExactlyOneDraw)
+TEST(GraphicsDeviceCapabilityTest, WireFrameReachesTheRendererAsExactlyOneDraw)
 {
     using Microsoft::Xna::Framework::Color;
     using Microsoft::Xna::Framework::Vector3;
@@ -531,9 +531,9 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameReachesTheBackendAsExactlyOneDraw)
     using Microsoft::Xna::Framework::Graphics::VertexPositionColor;
 
     GraphicsDevice gd;
-    auto* backend = dynamic_cast<CNA::Internal::Backends::Headless::HeadlessGraphicsBackend*>(
-        &gd.GetBackend());
-    ASSERT_NE(nullptr, backend);
+    auto* renderer = dynamic_cast<CNA::Internal::Renderers::Headless::HeadlessRenderer*>(
+        &gd.GetRenderer());
+    ASSERT_NE(nullptr, renderer);
 
     const VertexDeclaration decl(
         16,
@@ -556,19 +556,19 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameReachesTheBackendAsExactlyOneDraw)
     effect.Apply();
     gd.SetVertexBuffer(&vb);
 
-    const std::uint64_t rasterBefore = backend->GetStatistics().rasterizerStateChangeCount;
-    const std::uint64_t drawsBefore = backend->GetStatistics().drawCallCount;
+    const std::uint64_t rasterBefore = renderer->GetStatistics().rasterizerStateChangeCount;
+    const std::uint64_t drawsBefore = renderer->GetStatistics().drawCallCount;
     gd.DrawPrimitives(PrimitiveType::TriangleList, 0, 1);
     gd.SetVertexBuffer(nullptr);
 
     // One public draw, one recorded draw -- no retry, no split, no second pass to emulate edges.
-    EXPECT_EQ(drawsBefore + 1, backend->GetStatistics().drawCallCount)
-        << "one public WireFrame DrawPrimitives must reach the backend exactly once";
-    // The rasterizer state reached the backend at least once for this draw; Headless discards its
+    EXPECT_EQ(drawsBefore + 1, renderer->GetStatistics().drawCallCount)
+        << "one public WireFrame DrawPrimitives must reach the renderer exactly once";
+    // The rasterizer state reached the renderer at least once for this draw; Headless discards its
     // contents, which is why this file measures the state's ARRIVAL here and its EFFECT elsewhere.
-    EXPECT_GE(backend->GetStatistics().rasterizerStateChangeCount, rasterBefore);
+    EXPECT_GE(renderer->GetStatistics().rasterizerStateChangeCount, rasterBefore);
     EXPECT_EQ(FillMode::WireFrame, gd.getRasterizerStateProperty().getFillModeProperty())
         << "the device silently replaced the requested FillMode";
 }
 
-#endif  // CNA_BACKEND_HEADLESS
+#endif  // CNA_RENDERER_HEADLESS

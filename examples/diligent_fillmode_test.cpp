@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 //
 // plan_diligent.md DILIGENT-51: real-device proof that RasterizerState.FillMode::WireFrame causes
-// the Diligent backend to rasterize only triangle edges, not interiors, mirroring
+// the Diligent renderer to rasterize only triangle edges, not interiors, mirroring
 // vulkan_fill_mode_test.cpp (Task 327).
 //
 // Triangle geometry (input NDC, Y is flipped by the vertex shader): top (0, 0.8), BR (1,-0.8),

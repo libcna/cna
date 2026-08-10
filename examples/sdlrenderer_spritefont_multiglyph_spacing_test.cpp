@@ -5,7 +5,7 @@
 // implemented (still ⬜ in plan_graphics.md's Phase 48) -- there is no existing test to port
 // here, same situation as Task 690. This is a NEW SpriteFont pixel test, building on Task 690's
 // established single-glyph fixture pattern to additionally exercise the horizontal-advance
-// math in the shared, backend-agnostic SpriteBatch::DrawString: for the 2nd+ glyph in a line,
+// math in the shared, renderer-agnostic SpriteBatch::DrawString: for the 2nd+ glyph in a line,
 // `curOffset.X += spacing + cKern.X` (extra inter-character spacing plus the next glyph's own
 // left-bearing kerning), and after each glyph, `curOffset.X += cKern.Y + cKern.Z` (that glyph's
 // own width plus right-bearing).
@@ -21,7 +21,7 @@
 // index's colour (ruling out an index mix-up between the two glyphs).
 //
 // Requires PresentationMode::NativeBackBuffer (Task 915 finding): SDL_RenderReadPixels operates
-// in physical output coordinates, while this backend's default presentation mode
+// in physical output coordinates, while this renderer's default presentation mode
 // (FixedHeightDynamicWidth) does not map logical pixels 1:1 to physical ones.
 //
 // Exit code 0 = all PASS, 1 = at least one FAIL.

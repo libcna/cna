@@ -45,7 +45,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 
-#include "CNA/Internal/Backends/SdlGpu/SdlGpuGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/SdlGpu/SdlGpuRenderer.hpp"
 #include "common/PixelTestGame.hpp"
 
 #include <SDL3/SDL.h>
@@ -61,7 +61,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::SdlGpu;
+using namespace CNA::Internal::Renderers::SdlGpu;
 
 namespace
 {
@@ -185,7 +185,7 @@ class SdlGpuDepthBiasTest final : public Game
     static std::array<VertexPositionColor, 3> Triangle(
         bool sloped, const Color& color, float flatDepth = 0.5f)
     {
-        // SDL_GPU's cross-backend clip-space depth is 0..1. Keep flat tests at 0.5 so both
+        // SDL_GPU's cross-renderer clip-space depth is 0..1. Keep flat tests at 0.5 so both
         // positive and negative bias have room to move without near/far clamping.
         const float topDepth = sloped ? 0.25f : flatDepth;
         const float bottomDepth = sloped ? 0.75f : flatDepth;
@@ -348,34 +348,34 @@ class SdlGpuDepthBiasTest final : public Game
 
     void RunRenderTargetChecks(GraphicsDevice& device)
     {
-        auto& backend =
-            static_cast<SdlGpuGraphicsBackend&>(device.GetBackend());
+        auto& renderer =
+            static_cast<SdlGpuRenderer&>(device.GetRenderer());
 
         const bool d24 = SDL_GPUTextureSupportsFormat(
-            backend.Device(), SDL_GPU_TEXTUREFORMAT_D24_UNORM_S8_UINT,
+            renderer.Device(), SDL_GPU_TEXTUREFORMAT_D24_UNORM_S8_UINT,
             SDL_GPU_TEXTURETYPE_2D,
             SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET);
         const bool d32 = SDL_GPUTextureSupportsFormat(
-            backend.Device(), SDL_GPU_TEXTUREFORMAT_D32_FLOAT_S8_UINT,
+            renderer.Device(), SDL_GPU_TEXTUREFORMAT_D32_FLOAT_S8_UINT,
             SDL_GPU_TEXTURETYPE_2D,
             SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET);
         std::printf(
             "[INFO] SDL=%d.%d.%d driver=%s D24S8=%d D32FS8=%d\n",
             SDL_MAJOR_VERSION, SDL_MINOR_VERSION, SDL_MICRO_VERSION,
-            SDL_GetGPUDeviceDriver(backend.Device()), d24, d32);
+            SDL_GetGPUDeviceDriver(renderer.Device()), d24, d32);
         Check(
             SDL_MAJOR_VERSION == 3 && SDL_MINOR_VERSION == 5
                 && SDL_MICRO_VERSION == 0,
             "installed SDL headers report exactly 3.5.0");
         Check(d24 || d32, "runtime exposes a depth-backed SDL_GPU target format");
         Check(
-            backend.IsDebugModeEnabledEXT(),
+            renderer.IsDebugModeEnabledEXT(),
             "SDL_GPU debug mode is enabled for validation");
         Check(
-            backend.GetColoredPipelineCacheSizeEXT() == 0,
+            renderer.GetColoredPipelineCacheSizeEXT() == 0,
             "colored pipeline cache starts empty");
         Check(
-            backend.GetSpritePipelineCacheSizeEXT() == 0,
+            renderer.GetSpritePipelineCacheSizeEXT() == 0,
             "stock SpriteBatch pipeline cache starts empty");
 
         RenderTarget2D target(
@@ -402,7 +402,7 @@ class SdlGpuDepthBiasTest final : public Game
                 zero, kRed, zero, kGreen)),
             "zero bias: later coplanar triangle wins LessEqual");
         Check(
-            backend.GetColoredPipelineCacheSizeEXT() == 1,
+            renderer.GetColoredPipelineCacheSizeEXT() == 1,
             "zero bias creates one disabled-bias triangle pipeline");
 
         Check(
@@ -411,7 +411,7 @@ class SdlGpuDepthBiasTest final : public Game
                 zero, kRed, positiveConstant, kGreen)),
             "positive constant bias pushes the later flat triangle away");
         Check(
-            backend.GetColoredPipelineCacheSizeEXT() == 2,
+            renderer.GetColoredPipelineCacheSizeEXT() == 2,
             "positive constant bias creates exactly one pipeline variant");
 
         Check(
@@ -420,7 +420,7 @@ class SdlGpuDepthBiasTest final : public Game
                 negativeConstant, kGreen, zero, kRed)),
             "negative constant bias pulls the first flat triangle forward");
         Check(
-            backend.GetColoredPipelineCacheSizeEXT() == 3,
+            renderer.GetColoredPipelineCacheSizeEXT() == 3,
             "negative constant bias creates exactly one pipeline variant");
 
         Check(
@@ -429,7 +429,7 @@ class SdlGpuDepthBiasTest final : public Game
                 zero, kRed, positiveSlope, kGreen)),
             "positive slope bias pushes the later sloped triangle away");
         Check(
-            backend.GetColoredPipelineCacheSizeEXT() == 4,
+            renderer.GetColoredPipelineCacheSizeEXT() == 4,
             "positive slope bias creates exactly one pipeline variant");
 
         Check(
@@ -438,7 +438,7 @@ class SdlGpuDepthBiasTest final : public Game
                 negativeSlope, kGreen, zero, kRed)),
             "negative slope bias pulls the first sloped triangle forward");
         Check(
-            backend.GetColoredPipelineCacheSizeEXT() == 5,
+            renderer.GetColoredPipelineCacheSizeEXT() == 5,
             "negative slope bias creates exactly one pipeline variant");
 
         Check(
@@ -447,7 +447,7 @@ class SdlGpuDepthBiasTest final : public Game
                 zero, kRed, combined, kGreen)),
             "combined positive constant+slope bias pushes sloped geometry away");
         Check(
-            backend.GetColoredPipelineCacheSizeEXT() == 6,
+            renderer.GetColoredPipelineCacheSizeEXT() == 6,
             "combined constant+slope values create one distinct variant");
 
         Check(
@@ -456,7 +456,7 @@ class SdlGpuDepthBiasTest final : public Game
                 zero, kRed, positiveSlope, kGreen)),
             "slope-only bias contributes zero on flat triangle geometry");
         Check(
-            backend.GetColoredPipelineCacheSizeEXT() == 6,
+            renderer.GetColoredPipelineCacheSizeEXT() == 6,
             "flat use reuses the existing slope-only pipeline");
 
         Check(
@@ -465,7 +465,7 @@ class SdlGpuDepthBiasTest final : public Game
                 zero, kRed, signedZero, kGreen)),
             "negative signed zero remains the exact zero-bias behavior");
         Check(
-            backend.GetColoredPipelineCacheSizeEXT() == 6,
+            renderer.GetColoredPipelineCacheSizeEXT() == 6,
             "signed zero normalizes to the disabled-bias cache entry");
 
         Check(
@@ -484,7 +484,7 @@ class SdlGpuDepthBiasTest final : public Game
                 negativeConstant, positiveSlope, negativeConstant)),
             "A->B->A restores constant-only -> slope-only -> constant-only");
         Check(
-            backend.GetColoredPipelineCacheSizeEXT() == 6,
+            renderer.GetColoredPipelineCacheSizeEXT() == 6,
             "all A->B->A transitions reuse the six legitimate triangle variants");
 
         BeginTarget(device, target, DepthStencilState::Default);
@@ -502,7 +502,7 @@ class SdlGpuDepthBiasTest final : public Game
             IsGreen(ReadCenter(target)),
             "queued draw keeps its complete bias snapshot after source mutation/destruction");
         Check(
-            backend.GetColoredPipelineCacheSizeEXT() == 6,
+            renderer.GetColoredPipelineCacheSizeEXT() == 6,
             "deferred source mutation reuses captured negative/positive variants");
 
         Check(
@@ -512,7 +512,7 @@ class SdlGpuDepthBiasTest final : public Game
                 /*indexedSecond=*/true)),
             "indexed draw path applies positive constant bias");
         Check(
-            backend.GetColoredPipelineCacheSizeEXT() == 6,
+            renderer.GetColoredPipelineCacheSizeEXT() == 6,
             "indexed and non-indexed draws share compatible pipelines");
 
         RenderTarget2D compatibleTarget(
@@ -525,7 +525,7 @@ class SdlGpuDepthBiasTest final : public Game
                 zero, kRed, zero, kGreen)),
             "second compatible RenderTarget2D object renders correctly");
         Check(
-            backend.GetColoredPipelineCacheSizeEXT() == 6,
+            renderer.GetColoredPipelineCacheSizeEXT() == 6,
             "target object identity and dimensions do not fragment the cache");
 
         Check(
@@ -535,7 +535,7 @@ class SdlGpuDepthBiasTest final : public Game
                 /*indexedSecond=*/false, 0.2f, 0.8f)),
             "positive bias remains correct with Viewport.MinDepth/MaxDepth=0.2/0.8");
         Check(
-            backend.GetColoredPipelineCacheSizeEXT() == 6,
+            renderer.GetColoredPipelineCacheSizeEXT() == 6,
             "viewport depth range is dynamic and excluded from pipeline identity");
 
         BeginTarget(device, target, StrictLess());
@@ -549,7 +549,7 @@ class SdlGpuDepthBiasTest final : public Game
             Count(linePixels, IsRed) > 8 && Count(linePixels, IsGreen) == 0,
             "native line-list primitives are not polygon-depth-biased");
         Check(
-            backend.GetColoredPipelineCacheSizeEXT() == 7,
+            renderer.GetColoredPipelineCacheSizeEXT() == 7,
             "line-list bias normalizes out to one topology pipeline");
 
         BeginTarget(device, target, DepthStencilState::DepthRead);
@@ -573,7 +573,7 @@ class SdlGpuDepthBiasTest final : public Game
             IsRed(ReadCenter(target)),
             "DepthRead tests but does not write; later Default draw remains valid");
         Check(
-            backend.GetColoredPipelineCacheSizeEXT() == 8,
+            renderer.GetColoredPipelineCacheSizeEXT() == 8,
             "DepthRead adds only its legitimate depth-write-disabled variant");
 
         RenderTarget2D depthless(
@@ -590,7 +590,7 @@ class SdlGpuDepthBiasTest final : public Game
             IsGreen(ReadCenter(depthless)),
             "depthless pass remains valid and bias cannot change color order");
         Check(
-            backend.GetColoredPipelineCacheSizeEXT() == 10,
+            renderer.GetColoredPipelineCacheSizeEXT() == 10,
             "depthless zero/enabled-bias compatibility adds exactly two variants");
 
         const Color spriteZero =
@@ -599,7 +599,7 @@ class SdlGpuDepthBiasTest final : public Game
             IsGreen(spriteZero),
             "stock SpriteBatch zero bias preserves equal-depth LessEqual draw");
         Check(
-            backend.GetSpritePipelineCacheSizeEXT() == 1,
+            renderer.GetSpritePipelineCacheSizeEXT() == 1,
             "stock SpriteBatch zero bias creates one disabled-bias pipeline");
 
         const Color spritePositive =
@@ -608,65 +608,65 @@ class SdlGpuDepthBiasTest final : public Game
             IsRed(spritePositive),
             "stock SpriteBatch positive constant bias pushes its triangles away");
         Check(
-            backend.GetSpritePipelineCacheSizeEXT() == 2,
+            renderer.GetSpritePipelineCacheSizeEXT() == 2,
             "stock SpriteBatch positive bias creates one enabled-bias variant");
 
         Check(
             IsGreen(RenderSprite(device, target, zero)),
             "stock SpriteBatch A->B->A restores zero bias");
         Check(
-            backend.GetSpritePipelineCacheSizeEXT() == 2,
+            renderer.GetSpritePipelineCacheSizeEXT() == 2,
             "stock SpriteBatch A->B->A reuses both variants");
 
         Check(
             IsGreen(RenderSprite(device, target, positiveSlope)),
             "stock SpriteBatch flat triangles get zero slope contribution");
         Check(
-            backend.GetSpritePipelineCacheSizeEXT() == 3,
+            renderer.GetSpritePipelineCacheSizeEXT() == 3,
             "stock SpriteBatch slope-only state adds one legitimate variant");
 
         Check(
             customEffect_->IsEffectValid(),
             "custom SDL_GPU ShaderEffect compiled for pipeline-family coverage");
-        auto* customBackend = dynamic_cast<SdlGpuEffectBackend*>(
-            customEffect_->GetEffectBackendPtr());
+        auto* customRenderer = dynamic_cast<SdlGpuEffectRenderer*>(
+            customEffect_->GetEffectRendererPtr());
         Check(
-            customBackend != nullptr,
+            customRenderer != nullptr,
             "custom effect exposes the SDL_GPU pipeline family");
-        if (customBackend != nullptr)
+        if (customRenderer != nullptr)
         {
             Check(
                 IsGreen(RenderSprite(
                     device, target, zero, customEffect_.get())),
                 "custom-effect SpriteBatch zero-bias pipeline renders correctly");
             Check(
-                customBackend->GetPipelineCacheSizeEXT() == 1,
+                customRenderer->GetPipelineCacheSizeEXT() == 1,
                 "custom-effect zero bias creates one disabled-bias pipeline");
             Check(
                 IsGreen(RenderSprite(
                     device, target, positiveConstant, customEffect_.get())),
                 "custom-effect enabled-bias pipeline remains validation-clean");
             Check(
-                customBackend->GetPipelineCacheSizeEXT() == 2,
+                customRenderer->GetPipelineCacheSizeEXT() == 2,
                 "custom-effect positive bias creates one cache variant");
             Check(
                 IsGreen(RenderSprite(
                     device, target, zero, customEffect_.get())),
                 "custom-effect A->B->A restores zero bias");
             Check(
-                customBackend->GetPipelineCacheSizeEXT() == 2,
+                customRenderer->GetPipelineCacheSizeEXT() == 2,
                 "custom-effect A->B->A reuses both variants");
         }
 
         Check(
-            backend.GetColoredPipelineCacheSizeEXT() == 10,
+            renderer.GetColoredPipelineCacheSizeEXT() == 10,
             "RT pipeline cardinality is exactly 10: 6 triangle bias, line, DepthRead, and 2 depthless variants");
 
         // Queue one ordinary biased backbuffer draw. Game::Run performs the normal presentation
         // after this Draw override returns; the next frame checks whether the backbuffer format
         // required one additional compatible pipeline. No test-only Present/submission is added.
         beforeBackbufferPipelines_ =
-            backend.GetColoredPipelineCacheSizeEXT();
+            renderer.GetColoredPipelineCacheSizeEXT();
         device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
         device.setDepthStencilStateProperty(DepthStencilState::Default);
         device.setRasterizerStateProperty(positiveConstant);
@@ -690,8 +690,8 @@ protected:
     {
         ++frame_;
         auto& device = getGraphicsDeviceProperty();
-        auto& backend =
-            static_cast<SdlGpuGraphicsBackend&>(device.GetBackend());
+        auto& renderer =
+            static_cast<SdlGpuRenderer&>(device.GetRenderer());
 
         if (frame_ == 1)
         {
@@ -700,7 +700,7 @@ protected:
         }
 
         const std::size_t afterBackbuffer =
-            backend.GetColoredPipelineCacheSizeEXT();
+            renderer.GetColoredPipelineCacheSizeEXT();
         Check(
             afterBackbuffer >= beforeBackbufferPipelines_
                 && afterBackbuffer <= beforeBackbufferPipelines_ + 1,

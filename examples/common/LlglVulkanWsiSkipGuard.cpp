@@ -9,7 +9,7 @@
 // module throws `std::runtime_error("... VK_ERROR_SURFACE_LOST_KHR")` out of GraphicsDevice
 // construction, straight through main(), and `std::terminate()` aborts the process -- a crash ctest
 // reports as FAILED ("Subprocess aborted") for a problem that is neither this test's nor this
-// backend's rendering logic, but the test environment's own display capabilities. (Note:
+// renderer's rendering logic, but the test environment's own display capabilities. (Note:
 // SKIP_REGULAR_EXPRESSION on the ctest registration was tried first and does NOT help here --
 // CTest classifies a signal-terminated process as "Subprocess aborted" before it ever consults that
 // property, regardless of what the crashing process printed.)
@@ -24,7 +24,7 @@
 // handler unchanged, so a real crash still fails loudly.
 //
 // Deliberately test-only: this lives in examples/common/, linked only into test binaries via
-// cna_llgl_test(), never into the LLGL backend library itself. A real game hitting a genuinely lost
+// cna_llgl_test(), never into the LLGL renderer library itself. A real game hitting a genuinely lost
 // Vulkan surface should not have that silently swallowed.
 
 #include <cstdio>

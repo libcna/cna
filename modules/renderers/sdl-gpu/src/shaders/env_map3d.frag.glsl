@@ -64,7 +64,7 @@ void main() {
     vec3 baseColor = litRGB * texColor.rgb;
     float combinedAlpha = fragTint.a * texColor.a;
 
-    // Fresnel-weighted blend factor (matches VulkanGraphicsBackend's env_map3d.frag.glsl and
+    // Fresnel-weighted blend factor (matches VulkanRenderer's env_map3d.frag.glsl and
     // FNA's real PSEnvMap/PSEnvMapSpecular): a flat envMapAmount, or edge-weighted by view angle
     // when FresnelEnabled.
     float viewAngle = dot(E, N);

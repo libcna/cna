@@ -16,7 +16,7 @@
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 
 #include <chrono>
 #include <cstdint>
@@ -113,7 +113,7 @@ protected:
 
         if (frame_ == 2)
         {
-            device.GetBackend().DebugSimulateContextLoss();
+            device.GetRenderer().DebugSimulateContextLoss();
         }
         else if (frame_ == 4)
         {

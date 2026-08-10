@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MS-PL
-// Task 396: verify EnvironmentMapEffect's Fresnel edge-weighting (Vulkan backend). See
+// Task 396: verify EnvironmentMapEffect's Fresnel edge-weighting (Vulkan renderer). See
 // examples/easygl_environmentmapeffect_fresnel_test.cpp for the full derivation and the real
 // gap this test found and fixed: CNA implemented NO Fresnel uniform at all in any of the 3
-// backends -- the env-map blend factor was always the flat EnvironmentMapAmount regardless of
+// renderers -- the env-map blend factor was always the flat EnvironmentMapAmount regardless of
 // view angle, instead of FNA's real per-vertex, view-angle-dependent
 // `pow(max(1-abs(dot(eyeVector,worldNormal)),0),FresnelFactor)*EnvironmentMapAmount` term.
 //

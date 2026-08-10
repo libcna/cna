@@ -12,7 +12,7 @@
 // The application must not need a warm-up frame, a Present, a GetData before the first render, a
 // dummy draw, a bind cycle with no work, a manual frame advance, a sleep, or any CPU/GPU wait.
 //
-// THE DEFECT this file reproduces is bgfx-local. `bgfx::reset()` -- which this backend calls the
+// THE DEFECT this file reproduces is bgfx-local. `bgfx::reset()` -- which this renderer calls the
 // moment it notices the SDL window's size differs from the size bgfx was initialised with -- ends
 // with this loop (bgfx_p.h, `Context::reset`):
 //
@@ -46,7 +46,7 @@
 // genuine window resize, or a vsync change through `SetSwapInterval`, at any point in a program's
 // life. The first frame is merely where a fixture meets it.
 //
-// THE FIX mirrors every view->framebuffer binding this backend programs and replays the mirror
+// THE FIX mirrors every view->framebuffer binding this renderer programs and replays the mirror
 // immediately after any `bgfx::reset()`, restoring exactly what reset discarded. No frame advance,
 // no Present, no readback, no wait and no dummy submission is added anywhere.
 //
@@ -122,65 +122,65 @@ using namespace Microsoft::Xna::Framework::Graphics;
 namespace
 {
     /**
-     * @brief Whether this backend rasterizes at all.
+     * @brief Whether this renderer rasterizes at all.
      *
      * HEADLESS performs no rasterization, so REMED-GFX-127's contract makes every readback reject
      * deterministically. There is no produced content to observe there; the legs below assert the
      * rejection instead of a value.
      */
-#if defined(CNA_BACKEND_HEADLESS)
+#if defined(CNA_RENDERER_HEADLESS)
     constexpr bool kRasterizes = false;
-    constexpr const char* kBackendName = "HEADLESS";
-#elif defined(CNA_BACKEND_SOFTWARE)
+    constexpr const char* kRendererName = "HEADLESS";
+#elif defined(CNA_RENDERER_SOFTWARE)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "SOFTWARE";
-#elif defined(CNA_BACKEND_EASYGL)
+    constexpr const char* kRendererName = "SOFTWARE";
+#elif defined(CNA_RENDERER_EASYGL)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "EASYGL";
-#elif defined(CNA_BACKEND_BGFX)
+    constexpr const char* kRendererName = "EASYGL";
+#elif defined(CNA_RENDERER_BGFX)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "BGFX";
-#elif defined(CNA_BACKEND_VULKAN)
+    constexpr const char* kRendererName = "BGFX";
+#elif defined(CNA_RENDERER_VULKAN)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "VULKAN";
-#elif defined(CNA_BACKEND_WEBGPU)
+    constexpr const char* kRendererName = "VULKAN";
+#elif defined(CNA_RENDERER_WEBGPU)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "WEBGPU";
-#elif defined(CNA_BACKEND_SDL_GPU)
+    constexpr const char* kRendererName = "WEBGPU";
+#elif defined(CNA_RENDERER_SDL_GPU)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "SDL_GPU";
-#elif defined(CNA_BACKEND_SDL_RENDERER)
+    constexpr const char* kRendererName = "SDL_GPU";
+#elif defined(CNA_RENDERER_SDL_RENDERER)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "SDL_RENDERER";
-#elif defined(CNA_BACKEND_ASCII)
+    constexpr const char* kRendererName = "SDL_RENDERER";
+#elif defined(CNA_RENDERER_ASCII)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "ASCII";
-#elif defined(CNA_BACKEND_FREEDIRECT)
+    constexpr const char* kRendererName = "ASCII";
+#elif defined(CNA_RENDERER_FREEDIRECT)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "FREEDIRECT";
-#elif defined(CNA_BACKEND_D3D9)
+    constexpr const char* kRendererName = "FREEDIRECT";
+#elif defined(CNA_RENDERER_D3D9)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "D3D9";
-#elif defined(CNA_BACKEND_D3D11)
+    constexpr const char* kRendererName = "D3D9";
+#elif defined(CNA_RENDERER_D3D11)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "D3D11";
-#elif defined(CNA_BACKEND_D3D12)
+    constexpr const char* kRendererName = "D3D11";
+#elif defined(CNA_RENDERER_D3D12)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "D3D12";
-#elif defined(CNA_BACKEND_CANVAS)
+    constexpr const char* kRendererName = "D3D12";
+#elif defined(CNA_RENDERER_CANVAS)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "CANVAS";
-#elif defined(CNA_BACKEND_SOKOL)
+    constexpr const char* kRendererName = "CANVAS";
+#elif defined(CNA_RENDERER_SOKOL)
     // plan_sokol.md SOKOL-25/38: real geometry is genuinely rasterized, and `RequireReadable`'s
     // direct `ReadWholeTarget` (a RenderTarget2D::GetData) now round-trips real content via a
     // throwaway GL FBO around the raw texture handle `sg_gl_query_image_info()` exposes.
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "SOKOL";
-#elif defined(CNA_BACKEND_LLGL)
+    constexpr const char* kRendererName = "SOKOL";
+#elif defined(CNA_RENDERER_LLGL)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "LLGL";
+    constexpr const char* kRendererName = "LLGL";
 #else
-#error "REMED-GFX-158: this backend has no declared first-use contract."
+#error "REMED-GFX-158: this renderer has no declared first-use contract."
 #endif
 
     /**
@@ -188,15 +188,15 @@ namespace
      *
      * REMED-GFX-152 CLOSED this (2026-07-29), and the declaration is now unconditionally true.
      *
-     * It used to read false on SDL_GPU, whose stock-effect paths cast a RenderTarget2D's backend to
-     * the unrelated `SdlGpuTextureBackend` sibling and died.
+     * It used to read false on SDL_GPU, whose stock-effect paths cast a RenderTarget2D's renderer to
+     * the unrelated `SdlGpuTextureRenderer` sibling and died.
      *
      * Recorded accurately rather than claimed as a crash proof: in THIS file the flag was
      * OVER-APPLIED. Legs J and K carry `needsStockEffectRtSource = true`, but neither hands a
      * render target to an effect -- both bind an ordinary `Texture2D` (`patternTex_`,
      * `altPatternTex_`) and merely RENDER INTO a target, which was never the defect. So the skip
      * cost SDL_GPU three checks of genuine first-use coverage while hiding nothing: both legs were
-     * measured against the pre-fix backend and PASS there (J 1/1, K 2/2). SDL_GPU 17/17 -> 20/20,
+     * measured against the pre-fix renderer and PASS there (J 1/1, K 2/2). SDL_GPU 17/17 -> 20/20,
      * the three newly-enabled checks green on both builds. The legs that really do sample a target
      * through a stock effect live in rendertarget_effect_source_test.cpp, and those are the ones
      * that SIGSEGV pre-fix.
@@ -213,7 +213,7 @@ namespace
      * level 0 via glGenerateMipmap on unbind).
      */
     constexpr bool kMipmappedRenderTargetSupported =
-#if defined(CNA_BACKEND_WEBGPU)
+#if defined(CNA_RENDERER_WEBGPU)
         false;
 #else
         true;
@@ -321,7 +321,7 @@ class RenderTargetFirstUseTest : public Game
         dev.setBlendStateProperty(BlendState::Opaque);
     }
 
-    /** @brief True when this backend declared it cannot rasterize at all. */
+    /** @brief True when this renderer declared it cannot rasterize at all. */
     static bool Unsupported() { return !kRasterizes; }
 
     // ---------------------------------------------------------------- readback
@@ -343,7 +343,7 @@ class RenderTargetFirstUseTest : public Game
         }
     };
 
-    /// Reads a whole render target back, pre-filled with a poison value so a backend that writes
+    /// Reads a whole render target back, pre-filled with a poison value so a renderer that writes
     /// nothing cannot be mistaken for one that wrote transparent black.
     static Readback ReadWholeTarget(RenderTarget2D& target, int w, int h)
     {
@@ -372,7 +372,7 @@ class RenderTargetFirstUseTest : public Game
         return r;
     }
 
-    /// Asserts an unreadable backend rejected, and reports whether the caller should continue.
+    /// Asserts an unreadable renderer rejected, and reports whether the caller should continue.
     bool RequireReadable(const Readback& r, const std::string& label)
     {
         if (Unsupported())
@@ -399,7 +399,7 @@ class RenderTargetFirstUseTest : public Game
         {
             std::printf("[INFO] %s: backbuffer oracle unavailable on %s (%s) -- boundary recorded, "
                         "the render-target oracle carries the contract\n",
-                        label.c_str(), kBackendName,
+                        label.c_str(), kRendererName,
                         out.ok() ? "non-rasterizing"
                                  : (out.threwNotSupported ? "NotSupportedException"
                                                           : out.otherWhat.c_str()));
@@ -713,7 +713,7 @@ class RenderTargetFirstUseTest : public Game
 
         // A SECOND independent Clear + draw + GetBackBufferData cycle over the SAME producer.
         // bgfx_rendertarget2d_mip_test.cpp carried an inherited claim that only the first such
-        // cycle produces fresh data on this backend and that every later one reads solid black
+        // cycle produces fresh data on this renderer and that every later one reads solid black
         // "no matter how many retries", and it kept a 20-attempt retry loop because of it. This
         // measures that claim rather than working around it.
         BeginBackbuffer(dev);
@@ -874,7 +874,7 @@ class RenderTargetFirstUseTest : public Game
             dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
             ResetState(dev);
             check(!what.empty(),
-                  "I " + std::string(kBackendName) +
+                  "I " + std::string(kRendererName) +
                   " declares mipmapped render targets unimplemented and rejects deterministically" +
                   (what.empty() ? "" : " (" + what + ")"));
             return;
@@ -1060,7 +1060,7 @@ class RenderTargetFirstUseTest : public Game
         catch (const std::exception& e)
         {
             std::printf("[INFO] N: %s cannot bind a RenderTargetCube face (%s) -- boundary "
-                        "recorded\n", kBackendName, e.what());
+                        "recorded\n", kRendererName, e.what());
             std::fflush(stdout);
             dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
             return;
@@ -1084,7 +1084,7 @@ class RenderTargetFirstUseTest : public Game
             else
             {
                 std::printf("[INFO] N: cube readback unavailable on %s (%s) -- boundary recorded\n",
-                            kBackendName, what.c_str());
+                            kRendererName, what.c_str());
                 std::fflush(stdout);
             }
             return;
@@ -1137,7 +1137,7 @@ protected:
 
         std::printf("[INFO] REMED-GFX-158 immediate render-target first use on %s "
                     "(%dx%d pattern, %dx%d backbuffer, legs: %s)\n",
-                    kBackendName, kPW, kPH, kBBW, kBBH,
+                    kRendererName, kPW, kPH, kBBW, kBBH,
                     legFilter_.empty() ? "all" : legFilter_.c_str());
         std::fflush(stdout);
 
@@ -1171,7 +1171,7 @@ protected:
             if (leg.needsStockEffectRtSource && !kStockEffectRtSourceSupported)
             {
                 std::printf("[INFO] %s: skipped -- %s cannot use a RenderTarget2D as a stock "
-                            "effect texture (REMED-GFX-152)\n", leg.id, kBackendName);
+                            "effect texture (REMED-GFX-152)\n", leg.id, kRendererName);
                 std::fflush(stdout);
                 continue;
             }
@@ -1180,9 +1180,9 @@ protected:
         if (!matched)
             check(false, "unknown leg filter '" + legFilter_ + "'");
 
-        std::printf("[INFO] %s: %d/%d checks passed\n", kBackendName, passCount_, totalCount_);
+        std::printf("[INFO] %s: %d/%d checks passed\n", kRendererName, passCount_, totalCount_);
         std::fflush(stdout);
-        // A leg that records only a declared backend boundary contributes no checks and is not a
+        // A leg that records only a declared renderer boundary contributes no checks and is not a
         // failure; an unmatched --leg filter adds its own failing check above, so a run that
         // measured nothing at all still cannot pass silently.
         result_ = (passCount_ == totalCount_) ? 0 : 1;

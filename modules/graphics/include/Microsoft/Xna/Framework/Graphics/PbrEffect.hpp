@@ -24,10 +24,10 @@ namespace Microsoft::Xna::Framework::Graphics
      * @note NOXNA — not part of the XNA 4.0 API. Real XNA predates the PBR content pipeline this
      * describes entirely; there is no FNA/XNA equivalent to mirror. Uses the real glTF 2.0 spec's
      * own reference BRDF (GGX distribution + Smith-Schlick-GGX visibility + Schlick Fresnel, see
-     * EasyGLGraphicsBackend::EnsurePbrProgram()'s own doc comment), not image-based lighting (a
-     * separate, much larger feature). Every backend except Software/Canvas/Ascii/Headless/
+     * EasyGLRenderer::EnsurePbrProgram()'s own doc comment), not image-based lighting (a
+     * separate, much larger feature). Every renderer except Software/Canvas/Ascii/Headless/
      * SDL_Renderer/FreeDirect has a real shader for this effect (plan_cnj.md CNB-58, CNB-103..109); those
-     * remaining backends accept a bound PbrEffect without erroring but currently render it as an
+     * remaining renderers accept a bound PbrEffect without erroring but currently render it as an
      * untextured/unlit fallback. WebGPU's shader covers the unskinned case only — see
      * SkinnedPbrEffect's own doc comment.
      */
@@ -207,12 +207,12 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Fills a GpuDrawParams struct with this effect's current render parameters.
          *
          * Populates all 5 texture slots, base color/metallic/roughness/emissive factors,
-         * lighting, world matrix, and the `pbr` flag so the backend selects the
+         * lighting, world matrix, and the `pbr` flag so the renderer selects the
          * metallic-roughness BRDF shader variant.
          *
          * @param params Output struct to populate.
          */
-        NOXNA void FillGpuDrawParams(CNA::Internal::Backends::GpuDrawParams& params) const override;
+        NOXNA void FillGpuDrawParams(CNA::Internal::Renderers::GpuDrawParams& params) const override;
 
     protected:
         /** @brief Applies shader parameters to the graphics device before drawing. */

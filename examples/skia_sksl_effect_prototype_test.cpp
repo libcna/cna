@@ -2,7 +2,7 @@
 // SKIA-91: explicit, bounded SkSL SpriteBatch shader proof. Untagged GLSL remains invalid.
 
 #include "Microsoft/Xna/Framework/Color.hpp"
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
@@ -70,8 +70,8 @@ protected:
 
         auto& device = getGraphicsDeviceProperty();
         ShaderEffect effect(device, kSkiaSkslMarker, kSwapRedGreenSksl);
-        Check(effect.IsEffectValid() && effect.GetEffectBackendPtr() != nullptr,
-              "explicit SkSL marker compiles a real Skia effect backend");
+        Check(effect.IsEffectValid() && effect.GetEffectRendererPtr() != nullptr,
+              "explicit SkSL marker compiles a real Skia effect renderer");
 
         device.Clear(Color(17, 29, 43, 255));
         spriteBatch_->Begin(
@@ -93,8 +93,8 @@ protected:
 
         ShaderEffect malformed(device, kSkiaSkslMarker,
             "uniform shader cnaTexture0; uniform float4 cnaTint; half4 main(");
-        Check(!malformed.IsEffectValid() && malformed.GetEffectBackendPtr() != nullptr,
-              "malformed tagged SkSL retains an invalid backend with compiler diagnostics");
+        Check(!malformed.IsEffectValid() && malformed.GetEffectRendererPtr() != nullptr,
+              "malformed tagged SkSL retains an invalid renderer with compiler diagnostics");
         std::string malformedError;
         try
         {
@@ -112,17 +112,17 @@ protected:
         ShaderEffect wrongAbi(device, kSkiaSkslMarker,
             "uniform float4 cnaTint; half4 main(float2 p) { return half4(cnaTint); }");
         Check(!wrongAbi.IsEffectValid()
-              && wrongAbi.GetEffectBackendPtr()->GetCompileError().find("cnaTexture0")
+              && wrongAbi.GetEffectRendererPtr()->GetCompileError().find("cnaTexture0")
                   != std::string::npos,
               "compiled SkSL with the wrong child ABI is rejected clearly");
 
         ShaderEffect oversized(device, kSkiaSkslMarker, std::string(65537u, ' '));
         Check(!oversized.IsEffectValid()
-              && oversized.GetEffectBackendPtr()->GetCompileError().find("65536-byte")
+              && oversized.GetEffectRendererPtr()->GetCompileError().find("65536-byte")
                   != std::string::npos,
               "source-size limit rejects before invoking the SkSL compiler");
 
-        // A failed Begin clears the backend's pending effect pointer. Prove ordinary rendering is
+        // A failed Begin clears the renderer's pending effect pointer. Prove ordinary rendering is
         // immediately safe and does not accidentally retain the last successful runtime shader.
         device.Clear(Color::Black);
         spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::Opaque);

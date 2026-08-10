@@ -13,9 +13,9 @@
 // Found and fixed a real bug while writing this test: CNA's EasyGL/Vulkan/Bgfx dual-texture
 // shaders all multiplied `texture0 * texture1 * diffuse` directly, silently missing FNA's
 // `*2` factor on texture0's RGB channels entirely -- affecting every non-saturated
-// DualTextureEffect draw across all 3 backends (a real pixel-fidelity gap, not just a test
+// DualTextureEffect draw across all 3 renderers (a real pixel-fidelity gap, not just a test
 // gap). Fixed by adding `base.rgb *= 2.0;` (RGB only, matching FNA's `color.rgb *= 2`,
-// alpha untouched) to all 3 backends' dual-texture fragment shaders.
+// alpha untouched) to all 3 renderers' dual-texture fragment shaders.
 //
 // (a) tex0=gray(100,100,100), tex1=white, diffuse=default(white,alpha=1):
 //     correct: 100/255 * 2 * 1 * 1 = 200/255 -> (200,200,200)

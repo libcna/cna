@@ -3,8 +3,8 @@
 // sampling and resource accounting for the thirteen non-Color FNA-renderable RenderTarget2D
 // formats (Color itself is already covered by the pre-existing Skia_RenderTarget2D_* suite).
 
-#include "CNA/Internal/Backends/Skia/SkiaGraphicsBackend.hpp"
-#include "CNA/Internal/Backends/Skia/SkiaRenderTargetBackend.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaRenderer.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaRenderTargetRenderer.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
@@ -35,9 +35,9 @@
 #include <memory>
 #include <string>
 
-using CNA::Internal::Backends::Skia::SkiaGraphicsBackend;
-using CNA::Internal::Backends::Skia::SkiaRenderTargetBackend;
-using CNA::Internal::Backends::Skia::SkiaResourceStats;
+using CNA::Internal::Renderers::Skia::SkiaRenderer;
+using CNA::Internal::Renderers::Skia::SkiaRenderTargetRenderer;
+using CNA::Internal::Renderers::Skia::SkiaResourceStats;
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
 using namespace Microsoft::Xna::Framework::Graphics::PackedVector;
@@ -63,9 +63,9 @@ namespace
             && left.targetSnapshotBytes == right.targetSnapshotBytes;
     }
 
-    [[nodiscard]] SkiaRenderTargetBackend* SkiaBackend(RenderTarget2D& target)
+    [[nodiscard]] SkiaRenderTargetRenderer* SkiaRenderer(RenderTarget2D& target)
     {
-        return dynamic_cast<SkiaRenderTargetBackend*>(target.GetRenderTargetBackend());
+        return dynamic_cast<SkiaRenderTargetRenderer*>(target.GetRenderTargetRenderer());
     }
 
     template<typename Packed>
@@ -132,17 +132,17 @@ protected:
         done_ = true;
 
         auto& device = getGraphicsDeviceProperty();
-        auto* graphicsBackend = dynamic_cast<SkiaGraphicsBackend*>(&device.GetBackend());
-        Check(graphicsBackend != nullptr, "public GraphicsDevice owns the Skia backend");
-        if (!graphicsBackend)
+        auto* graphicsRenderer = dynamic_cast<SkiaRenderer*>(&device.GetRenderer());
+        Check(graphicsRenderer != nullptr, "public GraphicsDevice owns the Skia renderer");
+        if (!graphicsRenderer)
         {
             Exit();
             return;
         }
 
-        const SkiaResourceStats baseline = graphicsBackend->GetResourceStatsEXT();
+        const SkiaResourceStats baseline = graphicsRenderer->GetResourceStatsEXT();
 
-        CheckConstructionAndTransfer<Rgba1010102>(device, *graphicsBackend,
+        CheckConstructionAndTransfer<Rgba1010102>(device, *graphicsRenderer,
             SurfaceFormat::Rgba1010102, "Rgba1010102", 4u,
             {Rgba1010102(1, 0, 0, 1), Rgba1010102(0, 1, 0, 0), Rgba1010102(0, 0, 1, 1),
              Rgba1010102(1, 1, 1, 0)},
@@ -150,30 +150,30 @@ protected:
         CheckMipGeneration<Rgba1010102>(device, SurfaceFormat::Rgba1010102, "Rgba1010102",
             Rgba1010102(0.5f, 0.25f, 0.75f, 1.0f), SamePackedValue<Rgba1010102>);
 
-        CheckConstructionAndTransfer<Rg32>(device, *graphicsBackend, SurfaceFormat::Rg32, "Rg32",
+        CheckConstructionAndTransfer<Rg32>(device, *graphicsRenderer, SurfaceFormat::Rg32, "Rg32",
             4u, {Rg32(1, 0), Rg32(0, 1), Rg32(0.5f, 0.5f), Rg32(1, 1)}, SamePackedValue<Rg32>);
         CheckMipGeneration<Rg32>(device, SurfaceFormat::Rg32, "Rg32", Rg32(0.3f, 0.7f),
             SamePackedValue<Rg32>);
 
-        CheckConstructionAndTransfer<Rgba64>(device, *graphicsBackend, SurfaceFormat::Rgba64,
+        CheckConstructionAndTransfer<Rgba64>(device, *graphicsRenderer, SurfaceFormat::Rgba64,
             "Rgba64", 8u,
             {Rgba64(1, 0, 0, 1), Rgba64(0, 1, 0, 0), Rgba64(0, 0, 1, 1), Rgba64(1, 1, 1, 0)},
             SamePackedValue<Rgba64>);
         CheckMipGeneration<Rgba64>(device, SurfaceFormat::Rgba64, "Rgba64",
             Rgba64(0.5f, 0.25f, 0.75f, 1.0f), SamePackedValue<Rgba64>);
 
-        CheckConstructionAndTransfer<float>(device, *graphicsBackend, SurfaceFormat::Single,
+        CheckConstructionAndTransfer<float>(device, *graphicsRenderer, SurfaceFormat::Single,
             "Single", 16u, {0.1f, 0.2f, 0.3f, 0.4f}, SameFloat);
         CheckMipGeneration<float>(device, SurfaceFormat::Single, "Single", 0.5f, SameFloat);
 
-        CheckConstructionAndTransfer<Vector2>(device, *graphicsBackend, SurfaceFormat::Vector2,
+        CheckConstructionAndTransfer<Vector2>(device, *graphicsRenderer, SurfaceFormat::Vector2,
             "Vector2", 16u,
             {Vector2(0.1f, 0.9f), Vector2(0.2f, 0.8f), Vector2(0.3f, 0.7f), Vector2(0.4f, 0.6f)},
             SameVector2);
         CheckMipGeneration<Vector2>(device, SurfaceFormat::Vector2, "Vector2",
             Vector2(0.25f, 0.75f), SameVector2);
 
-        CheckConstructionAndTransfer<Vector4>(device, *graphicsBackend, SurfaceFormat::Vector4,
+        CheckConstructionAndTransfer<Vector4>(device, *graphicsRenderer, SurfaceFormat::Vector4,
             "Vector4", 16u,
             {Vector4(0.1f, 0.2f, 0.3f, 0.4f), Vector4(0.4f, 0.3f, 0.2f, 0.1f),
              Vector4(1.0f, 0.0f, 1.0f, 0.0f), Vector4(0.0f, 1.0f, 0.0f, 1.0f)},
@@ -181,14 +181,14 @@ protected:
         CheckMipGeneration<Vector4>(device, SurfaceFormat::Vector4, "Vector4",
             Vector4(0.5f, 0.5f, 0.5f, 0.5f), SameVector4);
 
-        CheckConstructionAndTransfer<HalfSingle>(device, *graphicsBackend,
+        CheckConstructionAndTransfer<HalfSingle>(device, *graphicsRenderer,
             SurfaceFormat::HalfSingle, "HalfSingle", 2u,
             {HalfSingle(0.1f), HalfSingle(0.2f), HalfSingle(0.3f), HalfSingle(0.4f)},
             SamePackedValue<HalfSingle>);
         CheckMipGeneration<HalfSingle>(device, SurfaceFormat::HalfSingle, "HalfSingle",
             HalfSingle(0.5f), SamePackedValue<HalfSingle>);
 
-        CheckConstructionAndTransfer<HalfVector2>(device, *graphicsBackend,
+        CheckConstructionAndTransfer<HalfVector2>(device, *graphicsRenderer,
             SurfaceFormat::HalfVector2, "HalfVector2", 4u,
             {HalfVector2(0.1f, 0.9f), HalfVector2(0.2f, 0.8f), HalfVector2(0.3f, 0.7f),
              HalfVector2(0.4f, 0.6f)},
@@ -196,7 +196,7 @@ protected:
         CheckMipGeneration<HalfVector2>(device, SurfaceFormat::HalfVector2, "HalfVector2",
             HalfVector2(0.25f, 0.75f), SamePackedValue<HalfVector2>);
 
-        CheckConstructionAndTransfer<HalfVector4>(device, *graphicsBackend,
+        CheckConstructionAndTransfer<HalfVector4>(device, *graphicsRenderer,
             SurfaceFormat::HalfVector4, "HalfVector4", 8u,
             {HalfVector4(0.1f, 0.2f, 0.3f, 0.4f), HalfVector4(0.4f, 0.3f, 0.2f, 0.1f),
              HalfVector4(1.0f, 0.0f, 1.0f, 0.0f), HalfVector4(0.0f, 1.0f, 0.0f, 1.0f)},
@@ -204,7 +204,7 @@ protected:
         CheckMipGeneration<HalfVector4>(device, SurfaceFormat::HalfVector4, "HalfVector4",
             HalfVector4(0.5f, 0.5f, 0.5f, 0.5f), SamePackedValue<HalfVector4>);
 
-        CheckConstructionAndTransfer<HalfVector4>(device, *graphicsBackend,
+        CheckConstructionAndTransfer<HalfVector4>(device, *graphicsRenderer,
             SurfaceFormat::HdrBlendable, "HdrBlendable", 8u,
             {HalfVector4(2.0f, -1.0f, 0.5f, 1.0f), HalfVector4(-2.0f, 1.0f, 3.0f, 0.5f),
              HalfVector4(0.0f, 0.0f, 0.0f, 0.0f), HalfVector4(1.0f, 1.0f, 1.0f, 1.0f)},
@@ -212,7 +212,7 @@ protected:
         CheckMipGeneration<HalfVector4>(device, SurfaceFormat::HdrBlendable, "HdrBlendable",
             HalfVector4(2.5f, -0.5f, 0.25f, 1.0f), SamePackedValue<HalfVector4>);
 
-        CheckConstructionAndTransfer<Color>(device, *graphicsBackend, SurfaceFormat::ColorSrgbEXT,
+        CheckConstructionAndTransfer<Color>(device, *graphicsRenderer, SurfaceFormat::ColorSrgbEXT,
             "ColorSrgbEXT", 4u,
             {Color(255, 0, 0, 255), Color(0, 255, 0, 128), Color(0, 0, 255, 64),
              Color(10, 20, 30, 255)},
@@ -220,11 +220,11 @@ protected:
         CheckMipGeneration<Color>(device, SurfaceFormat::ColorSrgbEXT, "ColorSrgbEXT",
             Color(120, 130, 140, 255), SameColor);
 
-        CheckConstructionAndTransfer<std::uint8_t>(device, *graphicsBackend,
+        CheckConstructionAndTransfer<std::uint8_t>(device, *graphicsRenderer,
             SurfaceFormat::ByteEXT, "ByteEXT", 1u, {10u, 20u, 30u, 40u}, SameByte);
         CheckMipGeneration<std::uint8_t>(device, SurfaceFormat::ByteEXT, "ByteEXT", 99u, SameByte);
 
-        CheckConstructionAndTransfer<std::uint16_t>(device, *graphicsBackend,
+        CheckConstructionAndTransfer<std::uint16_t>(device, *graphicsRenderer,
             SurfaceFormat::UShortEXT, "UShortEXT", 2u, {100u, 20000u, 40000u, 60000u},
             SameUShort);
         CheckMipGeneration<std::uint16_t>(device, SurfaceFormat::UShortEXT, "UShortEXT", 5000u,
@@ -232,9 +232,9 @@ protected:
 
         CheckActiveCanvasReadback(device);
         CheckSampling(device);
-        CheckRemainingRefusals(device, *graphicsBackend);
+        CheckRemainingRefusals(device, *graphicsRenderer);
 
-        Check(SameStats(graphicsBackend->GetResourceStatsEXT(), baseline),
+        Check(SameStats(graphicsRenderer->GetResourceStatsEXT(), baseline),
               "all thirteen promoted formats return Skia resource counters to baseline");
 
         std::printf("=== %d/%d PASS ===\n", checks_ - failures_, checks_);
@@ -244,16 +244,16 @@ protected:
 private:
     template<typename Element>
     void CheckConstructionAndTransfer(
-        GraphicsDevice& device, SkiaGraphicsBackend& graphicsBackend, SurfaceFormat format,
+        GraphicsDevice& device, SkiaRenderer& graphicsRenderer, SurfaceFormat format,
         const char* name, std::size_t nativeBytesPerPixel, const std::array<Element, 4>& source,
         bool (*same)(const Element&, const Element&))
     {
-        const SkiaResourceStats before = graphicsBackend.GetResourceStatsEXT();
+        const SkiaResourceStats before = graphicsRenderer.GetResourceStatsEXT();
         {
             RenderTarget2D target(device, 2, 2, false, format, DepthFormat::None);
-            SkiaRenderTargetBackend* backend = SkiaBackend(target);
-            const SkiaResourceStats allocated = graphicsBackend.GetResourceStatsEXT();
-            Check(backend != nullptr && backend->FormatEXT() == format
+            SkiaRenderTargetRenderer* renderer = SkiaRenderer(target);
+            const SkiaResourceStats allocated = graphicsRenderer.GetResourceStatsEXT();
+            Check(renderer != nullptr && renderer->FormatEXT() == format
                       && allocated.renderTargets == before.renderTargets + 1u
                       && allocated.targetSurfaceBytes
                           == before.targetSurfaceBytes + 4u * nativeBytesPerPixel,
@@ -275,7 +275,7 @@ private:
             Check(same(patched[1], source[0]) && same(patched[3], source[3]),
                   std::string(name) + " partial-rectangle SetData replaces only the addressed texel");
         }
-        Check(SameStats(graphicsBackend.GetResourceStatsEXT(), before),
+        Check(SameStats(graphicsRenderer.GetResourceStatsEXT(), before),
               std::string(name) + " RenderTarget2D destruction releases native surface accounting");
     }
 
@@ -367,9 +367,9 @@ private:
               "Vector4 RenderTarget2D samples through public SpriteBatch drawing");
     }
 
-    void CheckRemainingRefusals(GraphicsDevice& device, SkiaGraphicsBackend& graphicsBackend)
+    void CheckRemainingRefusals(GraphicsDevice& device, SkiaRenderer& graphicsRenderer)
     {
-        const SkiaResourceStats before = graphicsBackend.GetResourceStatsEXT();
+        const SkiaResourceStats before = graphicsRenderer.GetResourceStatsEXT();
         const std::array<SurfaceFormat, 12> refused{
             SurfaceFormat::Dxt1, SurfaceFormat::Dxt3, SurfaceFormat::Dxt5,
             SurfaceFormat::Bc7EXT, SurfaceFormat::Bc7SrgbEXT,
@@ -385,7 +385,7 @@ private:
                 (void)target;
             });
         }
-        Check(allRejected && SameStats(graphicsBackend.GetResourceStatsEXT(), before),
+        Check(allRejected && SameStats(graphicsRenderer.GetResourceStatsEXT(), before),
               "every remaining non-FNA-renderable SurfaceFormat still rejects "
               "RenderTarget2D construction");
     }

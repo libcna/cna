@@ -70,7 +70,7 @@ namespace Microsoft::Xna::Framework::Graphics
      * own) -- game code retrieves it via `static_cast<MorphTargetDataEXT*>(part.getTagProperty())`.
      * Blending is CPU-side (re-blend + re-upload the vertex buffer via SetMorphWeightsEXT), not a
      * GPU vertex-shader technique: this works unchanged with every existing effect/shader on
-     * every graphics backend, at the cost of a full vertex-buffer re-upload whenever weights
+     * every graphics renderer, at the cost of a full vertex-buffer re-upload whenever weights
      * change -- a deliberate simplicity-over-throughput tradeoff (see plan_cnj.md CNB-62's own
      * design-decision notes for the full reasoning).
      */

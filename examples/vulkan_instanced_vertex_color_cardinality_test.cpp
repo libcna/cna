@@ -13,10 +13,10 @@
 //   * build a fresh pipeline per draw                    -> unbounded cache growth;
 //   * expand the colour with a second draw or submit     -> extra submits/frames/waits.
 //
-// Every count below is read from the live backend's own cumulative EXT counters before and after a
+// Every count below is read from the live renderer's own cumulative EXT counters before and after a
 // known public sequence, so each expectation is an exact number rather than a trend.
 //
-// WHAT FLUSHES, stated because a boundary that overclaims is worse than none: this backend defers
+// WHAT FLUSHES, stated because a boundary that overclaims is worse than none: this renderer defers
 // its 3D draws and `SetRenderTarget(nullptr)` only closes the segment -- nothing is submitted until
 // something demands the result. Every cycle below therefore ends with the SAME one-pixel
 // `RenderTarget2D::GetData`, which is the harness's flush trigger and not part of what any sequence
@@ -49,7 +49,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
-#include "CNA/Internal/Backends/Vulkan/VulkanGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Vulkan/VulkanRenderer.hpp"
 
 #include <array>
 #include <cstdint>
@@ -59,7 +59,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using CNA::Internal::Backends::Vulkan::VulkanGraphicsBackend;
+using CNA::Internal::Renderers::Vulkan::VulkanRenderer;
 
 namespace
 {
@@ -161,10 +161,10 @@ namespace
             GraphicsDevice dev;
             if (!dev.SupportsCapability(CNA::GraphicsCapability::ThreeD))
             {
-                std::printf("SKIP: backend does not support 3D rendering\n");
+                std::printf("SKIP: renderer does not support 3D rendering\n");
                 return;
             }
-            auto& backend = static_cast<VulkanGraphicsBackend&>(dev.GetBackend());
+            auto& renderer = static_cast<VulkanRenderer&>(dev.GetRenderer());
 
             dev.setRasterizerStateProperty(RasterizerState::CullNone);
             dev.setDepthStencilStateProperty(DepthStencilState::None);
@@ -195,13 +195,13 @@ namespace
 
             BasicEffect effect(dev);
 
-            const auto snapshot = [&backend] {
+            const auto snapshot = [&renderer] {
                 Cost cost;
-                cost.instancedPipelines = backend.GetInstancedPipelineCacheSizeEXT();
-                cost.allPipelines = backend.GetGraphicsPipelineCacheEntryCountEXT();
-                cost.frameSubmits = backend.GetFrameSubmitCountEXT();
-                cost.fenceWaits = backend.GetFrameFenceWaitCountEXT();
-                cost.presents = backend.GetPresentCountEXT();
+                cost.instancedPipelines = renderer.GetInstancedPipelineCacheSizeEXT();
+                cost.allPipelines = renderer.GetGraphicsPipelineCacheEntryCountEXT();
+                cost.frameSubmits = renderer.GetFrameSubmitCountEXT();
+                cost.fenceWaits = renderer.GetFrameFenceWaitCountEXT();
+                cost.presents = renderer.GetPresentCountEXT();
                 return cost;
             };
 
@@ -311,7 +311,7 @@ namespace
 
             // 6. Two distinct declarations, two variants, and nothing else in the whole run.
             Check("the whole run built exactly 2 Instanced3D variants",
-                  backend.GetInstancedPipelineCacheSizeEXT() == 2);
+                  renderer.GetInstancedPipelineCacheSizeEXT() == 2);
 
             std::printf("%d/%d checks passed\n", passed_, passed_ + failed_);
         }

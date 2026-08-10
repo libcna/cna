@@ -9,8 +9,8 @@
 // existing byte layout is untouched by this file's existence.
 //
 // Lighting is evaluated per pixel, not per vertex -- the same choice every other established CNA
-// backend except D3D9 makes (see GpuDrawParams::preferPerPixelLighting's own doc comment); this
-// backend ignores that field identically.
+// renderer except D3D9 makes (see GpuDrawParams::preferPerPixelLighting's own doc comment); this
+// renderer ignores that field identically.
 
 #version 450
 

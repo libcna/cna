@@ -2,7 +2,7 @@
 """Compile the vendored XNA Stock Effects HLSL to real D3D9 (SM2) bytecode and emit a checked-in
 C++ header with embedded byte arrays.
 
-plan_dx9.md Phase D9-7 (D9-71). Mirrors src/CNA/Internal/Backends/D3DCommon/shaders/
+plan_dx9.md Phase D9-7 (D9-71). Mirrors src/CNA/Internal/Renderers/D3DCommon/shaders/
 compile_shaders_hlsl.py's role (cross-build a tiny D3DCompile()-calling .exe, run it once per
 shader through Wine, embed the resulting bytecode as C++ arrays) with three D3D9-specific
 differences:
@@ -150,7 +150,7 @@ def main() -> None:
             "#pragma once\n"
             "#include <cstddef>\n"
             "#include <cstdint>\n\n"
-            "namespace CNA::Internal::Backends::D3D9::Shaders {\n\n"
+            "namespace CNA::Internal::Renderers::D3D9::Shaders {\n\n"
         ]
 
         manifest_rows = []
@@ -184,7 +184,7 @@ def main() -> None:
             f"static constexpr size_t kAllShadersCount = {len(manifest_rows)};\n\n"
         )
 
-        parts.append("} // namespace CNA::Internal::Backends::D3D9::Shaders\n")
+        parts.append("} // namespace CNA::Internal::Renderers::D3D9::Shaders\n")
 
         args.output.write_text("".join(parts))
         print(f"Written: {args.output} ({len(entries)} shaders)")

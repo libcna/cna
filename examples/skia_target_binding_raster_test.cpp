@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: MS-PL
 // SKIA-69: Direct ownership test for the raster target-binding record.  It covers destruction of
-// a target while selected, repeated snapshot release, and the inverse lifetime (backend binding
+// a target while selected, repeated snapshot release, and the inverse lifetime (renderer binding
 // released before a target) without needing an SDL window.
 
-#include "CNA/Internal/Backends/Skia/SkiaRenderTargetBackend.hpp"
-#include "CNA/Internal/Backends/Skia/SkiaRenderTargetBinding.hpp"
-#include "CNA/Internal/Backends/Skia/SkiaSurface.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaRenderTargetRenderer.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaRenderTargetBinding.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaSurface.hpp"
 
 #include <cstdio>
 #include <memory>
 
-using namespace CNA::Internal::Backends::Skia;
+using namespace CNA::Internal::Renderers::Skia;
 
 namespace
 {
@@ -44,7 +44,7 @@ int main()
           "null backbuffer is rejected without changing the active surface");
 
     {
-        auto target = std::make_unique<SkiaRenderTargetBackend>(4, 4, true, binding);
+        auto target = std::make_unique<SkiaRenderTargetRenderer>(4, 4, true, binding);
 
         bool nullTargetRejected = false;
         try
@@ -68,7 +68,7 @@ int main()
             backbufferAliasRejected = true;
         }
         Check(backbufferAliasRejected && binding->ActiveSurface() == &backbuffer,
-              "target cannot claim the backend-owned backbuffer surface");
+              "target cannot claim the renderer-owned backbuffer surface");
 
         binding->Bind(target.get(), &target->Surface());
         Check(binding->ActiveSurface() == &target->Surface(), "bound target becomes active surface");
@@ -83,7 +83,7 @@ int main()
     bool everySnapshotWasReleased = true;
     for (int i = 0; i < 128; ++i)
     {
-        auto target = std::make_unique<SkiaRenderTargetBackend>(2, 2, true, binding);
+        auto target = std::make_unique<SkiaRenderTargetRenderer>(2, 2, true, binding);
         binding->Bind(target.get(), &target->Surface());
         auto snapshot = target->SnapshotImage(SkiaSourceAlphaConvention::Premultiplied);
         everySnapshotWasReleased = everySnapshotWasReleased && snapshot != nullptr;
@@ -91,13 +91,13 @@ int main()
     Check(everySnapshotWasReleased && binding->ActiveSurface() == &backbuffer,
           "repeated target snapshots release with their destroyed targets");
 
-    auto lateTarget = std::make_unique<SkiaRenderTargetBackend>(2, 2, true, binding);
+    auto lateTarget = std::make_unique<SkiaRenderTargetRenderer>(2, 2, true, binding);
     binding->Bind(lateTarget.get(), &lateTarget->Surface());
     std::weak_ptr<SkiaRenderTargetBinding> weakBinding = binding;
-    binding.reset(); // Models graphics-backend destruction before its resource wrapper dies.
-    Check(weakBinding.expired(), "target binding expires when its graphics backend is destroyed");
-    lateTarget.reset(); // Must not access the expired backend binding.
-    Check(true, "target destruction after backend destruction is safe");
+    binding.reset(); // Models graphics-renderer destruction before its resource wrapper dies.
+    Check(weakBinding.expired(), "target binding expires when its graphics renderer is destroyed");
+    lateTarget.reset(); // Must not access the expired renderer binding.
+    Check(true, "target destruction after renderer destruction is safe");
 
     std::printf("=== %d/%d PASS ===\n", 10 - failures, 10);
     return failures == 0 ? 0 : 1;

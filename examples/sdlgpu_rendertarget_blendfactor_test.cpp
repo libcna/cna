@@ -5,10 +5,10 @@
 // SdlGpu maps Blend::BlendFactor(10) -> SDL_GPU_BLENDFACTOR_CONSTANT_COLOR and
 // Blend::InverseBlendFactor(11) -> SDL_GPU_BLENDFACTOR_ONE_MINUS_CONSTANT_COLOR in its pipeline
 // (ToBlendFactor/FillBlendState), but before this fix it never overrode the no-op base
-// IGraphicsBackend::SetBlendFactor and never called SDL_SetGPUBlendConstants, so constant-color
+// IGraphicsRenderer::SetBlendFactor and never called SDL_SetGPUBlendConstants, so constant-color
 // blends used SDL_gpu's default blend constant (0,0,0,0) instead of GraphicsDevice.BlendFactor.
 // This is the blend-constant analog of GFX-064 (Viewport) / GFX-068 (Scissor): the constant must
-// be captured PER DRAW at enqueue and replayed per draw, because SdlGpu is a DEFERRED backend that
+// be captured PER DRAW at enqueue and replayed per draw, because SdlGpu is a DEFERRED renderer that
 // queues every draw and replays it at Present-time — a single stored value read at Present would
 // give every queued draw the LAST BlendFactor set that frame.
 //
@@ -35,7 +35,7 @@
 //     regions, changing ONLY GraphicsDevice.BlendFactor between them (RED, GREEN, BLUE constants).
 //     Each region must show the constant active WHEN THAT draw was enqueued. A solution that stores
 //     one final BlendFactor and reads it at Present would paint all three the same (BLUE), and the
-//     pre-fix backend paints them all BLACK (constant stuck at 0). This simultaneously proves
+//     pre-fix renderer paints them all BLACK (constant stuck at 0). This simultaneously proves
 //     Phase 15 (changing only BlendFactor, not BlendState, changes the output) and Phase 16 (the
 //     constant is dynamic state, NOT baked into the pipeline-cache key — one BlendState instance,
 //     one pipeline, three different constants).

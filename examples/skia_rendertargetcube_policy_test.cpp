@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 // SKIA-85/SKIA-86: direct proof of bounded six-surface RenderTargetCube emulation.
 
-#include "CNA/Internal/Backends/Skia/SkiaRenderTargetBinding.hpp"
-#include "CNA/Internal/Backends/Skia/SkiaRenderTargetCubeBackend.hpp"
-#include "CNA/Internal/Backends/Skia/SkiaSurface.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaRenderTargetBinding.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaRenderTargetCubeRenderer.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaSurface.hpp"
 
 #include <algorithm>
 #include <array>
@@ -12,7 +12,7 @@
 #include <exception>
 #include <memory>
 
-using namespace CNA::Internal::Backends::Skia;
+using namespace CNA::Internal::Renderers::Skia;
 
 namespace
 {
@@ -47,7 +47,7 @@ int main()
     binding->SetBackbuffer(&backbuffer);
 
     {
-        SkiaRenderTargetCubeBackend target(3, true, true, binding, counters);
+        SkiaRenderTargetCubeRenderer target(3, true, true, binding, counters);
         Check(target.GetSize() == 3 && target.GetMultiSampleCount() == 0
                   && !target.HasRealDepthBuffer(true),
               "cube reports exact face size and truthful raster depth/MSAA boundaries");
@@ -110,7 +110,7 @@ int main()
           "cube destruction releases every surface byte and debug counter");
 
     {
-        auto target = std::make_unique<SkiaRenderTargetCubeBackend>(2, false, false,
+        auto target = std::make_unique<SkiaRenderTargetCubeRenderer>(2, false, false,
                                                                     binding, counters);
         target->BindAsRenderTargetFace(5);
         target.reset();
@@ -118,18 +118,18 @@ int main()
               "destroying a selected cube face detaches before its surface is released");
     }
 
-    auto lateTarget = std::make_unique<SkiaRenderTargetCubeBackend>(1, false, false,
+    auto lateTarget = std::make_unique<SkiaRenderTargetCubeRenderer>(1, false, false,
                                                                     binding, counters);
     binding.reset();
     lateTarget.reset();
     Check(counters->GetStats().renderTargetCubes == 0,
           "cube destruction remains safe after its graphics binding has expired");
 
-    Check(Throws([] { SkiaRenderTargetCubeBackend invalid(0, false, false, {}); }),
+    Check(Throws([] { SkiaRenderTargetCubeRenderer invalid(0, false, false, {}); }),
           "zero-sized cube rejects before allocating surfaces");
-    Check(Throws([] { SkiaRenderTargetCubeBackend oversized(4096, false, false, {}); }),
+    Check(Throws([] { SkiaRenderTargetCubeRenderer oversized(4096, false, false, {}); }),
           "cube exceeding 256 MiB rejects before allocating any face");
-    Check(Throws([] { SkiaRenderTargetCubeBackend oversized(16385, false, false, {}); }),
+    Check(Throws([] { SkiaRenderTargetCubeRenderer oversized(16385, false, false, {}); }),
           "cube axis exceeding 16384 rejects independently from the byte budget");
 
     std::printf("=== %d failures ===\n", failures);

@@ -1,4 +1,4 @@
-if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
+if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "D3D12")
     enable_testing()
 
     macro(cna_d3d12_test target src)
@@ -24,7 +24,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
     else()
         set(_d3d12_smoke_cmd cna_test_d3d12_smoke)
     endif()
-    cna_register_backend_test(NAME D3D12_Smoke COMMAND ${_d3d12_smoke_cmd}
+    cna_register_renderer_test(NAME D3D12_Smoke COMMAND ${_d3d12_smoke_cmd}
         TIMEOUT 60 LABELS "D3D12")
 
     # plan_dx.md DX-102: real (window-attached) swap-chain diagnostic -- deliberately NOT
@@ -50,48 +50,48 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
     # undersized one.
     cna_d3d12_test(cna_test_d3d12_texture2d_getdata_transfer_range examples/texture2d_getdata_transfer_range_test.cpp)
 
-    # REMED-GFX-150 cross-backend control: TextureFilter::Point must select exactly ONE texel and
+    # REMED-GFX-150 cross-renderer control: TextureFilter::Point must select exactly ONE texel and
     # TextureAddressMode must decide which one. The defect was Software-local. Built, not
     # ctest-registered, for the DX-100 reason below -- this is a Game-harness test, so it constructs
     # a window and swap chain, which crashes under this dev loop's vanilla Wine dxgi.dll.
     # REMED-GFX-170: every public TextureFilter ordinal names a SEPARATE magnification, a separate
-    # minification and a separate mipmap filter, so a backend may not reduce the ordinal to one
+    # minification and a separate mipmap filter, so a renderer may not reduce the ordinal to one
     # boolean. WebGPU's SpriteBatch sampler and SDL_GPU's ONE shared sampler helper both resolved
     # `textureFilter == 0 ? LINEAR : NEAREST`, and both keyed their sampler cache on
     # `filter == 0 ? 0 : 1`, so Anisotropic, LinearMipPoint, MinPointMagLinearMipLinear and
     # MinPointMagLinearMipPoint all magnified with POINT. This fixture measures the two DIFFERENT
     # partitions of the nine ordinals that magnification and minification induce, on SpriteBatch and
-    # on every textured stock family; the other backends run it as controls.
+    # on every textured stock family; the other renderers run it as controls.
     cna_d3d12_test(cna_test_d3d12_texture_filter_ordinal examples/texture_filter_ordinal_contract_test.cpp)
 
-    # REMED-GFX-173 cross-backend control: EnvironmentMapEffect samples TWO independent
+    # REMED-GFX-173 cross-renderer control: EnvironmentMapEffect samples TWO independent
     # resources -- the ordinary 2D texture through GraphicsDevice.SamplerStates[0] and the
     # reflection cube through SamplerStates[1]. SDL_GPU bound a literal LinearClamp for the cube
     # and captured only slot 0, so slot 1 could not reach replay at all. This fixture makes the
     # two slots independently observable (EnvironmentMapAmount 1 leaves the cube the only
-    # contributor, 0 leaves the 2D texture the only one) and measures what every other backend
+    # contributor, 0 leaves the 2D texture the only one) and measures what every other renderer
     # does with the same public state.
     cna_d3d12_test(cna_test_d3d12_envmap_cube_sampler examples/envmap_cube_sampler_contract_test.cpp)
 
-    # REMED-GFX-172 cross-backend control: DualTextureEffect's two layers have INDEPENDENT public
+    # REMED-GFX-172 cross-renderer control: DualTextureEffect's two layers have INDEPENDENT public
     # sampler slots -- FNA's DualTextureEffect.fx declares DECLARE_TEXTURE(Texture, 0) and
     # DECLARE_TEXTURE(Texture2, 1). Cross-built only; the D3D12 runtime is unavailable here for the
     # pre-existing DX-100 reason.
     cna_d3d12_test(cna_test_d3d12_dualtexture_slot_sampler examples/dualtexture_slot_sampler_contract_test.cpp)
 
-    # REMED-GFX-175 cross-backend control: the MIPMAP component of a TextureFilter ordinal.
+    # REMED-GFX-175 cross-renderer control: the MIPMAP component of a TextureFilter ordinal.
     cna_d3d12_test(cna_test_d3d12_texture_filter_mip_contract examples/texture_filter_mip_contract_test.cpp)
 
-    # REMED-GFX-177: this backend owned four fixed-capacity descriptor heaps with a monotonic bump
+    # REMED-GFX-177: this renderer owned four fixed-capacity descriptor heaps with a monotonic bump
     # cursor and no free list, so the 65th sampleable resource EVER CREATED threw
     # `CBV/SRV/UAV descriptor heap exhausted` even when six were alive -- REMED-GFX-175's contract
     # fixture reached exactly 64 checks here and aborted, having created and destroyed one
     # RenderTarget2D per measurement. The public fixture drives high-cardinality workloads through
-    # the XNA API and checks every draw against a self-identifying oracle; every other backend runs
+    # the XNA API and checks every draw against a self-identifying oracle; every other renderer runs
     # the same file as a control. Built, not ctest-registered, for the DX-100 reason recorded above:
     # it is a Game-harness test, so it constructs a window and swap chain, which crashes under this
     # dev loop's vanilla Wine dxgi.dll. Run it by hand with SDL_VIDEODRIVER=dummy, which leaves the
-    # backend genuinely swap-chain-less and exercises every descriptor path unchanged.
+    # renderer genuinely swap-chain-less and exercises every descriptor path unchanged.
     cna_d3d12_test(cna_test_d3d12_descriptor_capacity examples/descriptor_capacity_contract_test.cpp)
 
     # REMED-GFX-177, the native half: the cardinality and lifetime claims a rendered pixel cannot
@@ -105,16 +105,16 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
     else()
         set(_d3d12_desc_alloc_cmd cna_test_d3d12_descriptor_allocator)
     endif()
-    cna_register_backend_test(NAME D3D12_DescriptorAllocator COMMAND ${_d3d12_desc_alloc_cmd}
+    cna_register_renderer_test(NAME D3D12_DescriptorAllocator COMMAND ${_d3d12_desc_alloc_cmd}
         TIMEOUT 300 LABELS "D3D12")
 
     cna_d3d12_test(cna_test_d3d12_point_sampling examples/point_sampling_contract_test.cpp)
 
 
-    # REMED-GFX-169 cross-backend control: every stock 3D effect must sample through the public
+    # REMED-GFX-169 cross-renderer control: every stock 3D effect must sample through the public
     # GraphicsDevice.SamplerStates[slot]. The defect was Vulkan-local (six stock descriptor builders
     # took no sampler parameter, so all 15 of their bindings used a hardcoded default and the
-    # sampler was absent from their cache keys); this run establishes that this backend already
+    # sampler was absent from their cache keys); this run establishes that this renderer already
     # honoured the contract rather than being made to.
     # Built, not ctest-registered, for the DX-100 reason below.
     cna_d3d12_test(cna_test_d3d12_stock_effect_sampler
@@ -126,10 +126,10 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
     cna_d3d12_test(cna_test_d3d12_cube_volume_getdata_contract
                    examples/texturecube_texture3d_getdata_contract_test.cpp)
 
-    # REMED-GFX-152 cross-backend control: a RenderTarget2D handed to a stock 3D effect as its
+    # REMED-GFX-152 cross-renderer control: a RenderTarget2D handed to a stock 3D effect as its
     # texture must be sampled, not reinterpreted. The defect was SDL_GPU-local and fatal (its
-    # stock-effect paths static_cast an ITextureBackend* to the unrelated sibling
-    # SdlGpuTextureBackend). Built, not ctest-registered, for the same reason as the two above --
+    # stock-effect paths static_cast an ITextureRenderer* to the unrelated sibling
+    # SdlGpuTextureRenderer). Built, not ctest-registered, for the same reason as the two above --
     # this is a Game-harness test, so it constructs a window and swap chain, which DX-100's spike
     # found crashes under this dev loop's vanilla Wine dxgi.dll. The cross-build is the control here.
     cna_d3d12_test(cna_test_d3d12_rt_effect_source
@@ -137,18 +137,18 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
 
     # REMED-GFX-134: `RenderTargetCube::GetData` must return the face that was really rendered or
     # reject the request deterministically. REMED-GFX-130 made the reporting honest but left the
-    # readback itself implemented on only two backends, so a rendered cube face had no byte-exact
+    # readback itself implemented on only two renderers, so a rendered cube face had no byte-exact
     # public oracle anywhere else. Drawn geometry (never Clear -- see REMED-GFX-129) paints an
     # asymmetric five-region pattern whose colours rotate per face, so a flip, a rotation, a wrong
     # array layer/subresource, a stale face or an unresolved multisample surface all fail.
     cna_d3d12_test(cna_test_d3d12_rendertargetcube_getdata_contract
                    examples/rendertargetcube_getdata_contract_test.cpp)
 
-    # REMED-GFX-136: IGraphicsBackend::CreateRenderTargetCube had no `preserveContents` parameter,
+    # REMED-GFX-136: IGraphicsRenderer::CreateRenderTargetCube had no `preserveContents` parameter,
     # unlike CreateRenderTarget2D, so a RenderTargetCube's real RenderTargetUsage never reached the
-    # backend and Vulkan/WebGPU discarded a PreserveContents cube face on every bind cycle. Reuses
+    # renderer and Vulkan/WebGPU discarded a PreserveContents cube face on every bind cycle. Reuses
     # REMED-GFX-134's asymmetric face producer, then rebinds and draws only a small marker: "the
-    # marker landed" is what a discarding backend also achieves, so it can never pass for
+    # marker landed" is what a discarding renderer also achieves, so it can never pass for
     # preservation.
     cna_d3d12_test(cna_test_d3d12_rendertargetcube_usage
                    examples/rendertargetcube_usage_test.cpp)
@@ -172,7 +172,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
                    examples/rendertarget_depthstencil_usage_test.cpp)
 
     # REMED-GFX-140: every public render-target bind/unbind cycle must be its own logical pass.
-    # `VulkanGraphicsBackend::RecordCommandBuffer` collected ONE render pass per unique render-target
+    # `VulkanRenderer::RecordCommandBuffer` collected ONE render pass per unique render-target
     # source per flush and replayed every queued batch for it inside that pass, so two bind cycles of
     # one target within a single flush window shared one load action. The decisive checks all use
     # DiscardContents -- collapsing is invisible on a preserving target, which is why REMED-GFX-136
@@ -192,7 +192,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
                    examples/backbuffer_pass_order_test.cpp)
 
     # REMED-GFX-135: the WRITE half of the same finding. `TextureCube::SetData`/`Texture3D::SetData`
-    # kept the pre-REMED-GFX-127 shape -- a `void` backend method behind `if (backend_)` -- so an
+    # kept the pre-REMED-GFX-127 shape -- a `void` renderer method behind `if (renderer_)` -- so an
     # upload that stored nothing, or only part of the requested region, still returned normally.
     cna_d3d12_test(cna_test_d3d12_cube_volume_setdata_contract
                    examples/texturecube_texture3d_setdata_contract_test.cpp)

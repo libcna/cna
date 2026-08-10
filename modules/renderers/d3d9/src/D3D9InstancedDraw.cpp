@@ -9,12 +9,12 @@
 // Real XNA hardware instancing requires the game author's own custom Effect with a custom vertex
 // shader that reads the extra per-instance stream -- there is no "instanced BasicEffect" in real
 // XNA. This shader is CNA's own minimal stand-in for that custom-Effect role, matching every other
-// backend's own identical choice (D3D11/Vulkan/Bgfx each authored their own equivalent
+// renderer's own identical choice (D3D11/Vulkan/Bgfx each authored their own equivalent
 // "instanced3d" shader rather than attempting to instance a stock effect) -- so this file does NOT
 // dispatch through D3D9EffectDraw.cpp's DrawPrimitivesExImpl(), by design.
 
-#include "CNA/Internal/Backends/D3D9/D3D9GraphicsBackend.hpp"
-#include "CNA/Internal/Backends/D3D9/D3D9Buffers.hpp"
+#include "CNA/Internal/Renderers/D3D9/D3D9Renderer.hpp"
+#include "CNA/Internal/Renderers/D3D9/D3D9Buffers.hpp"
 #include "shaders/d3d9_instanced3d_shader.hpp"
 
 #include "Microsoft/Xna/Framework/Matrix.hpp"
@@ -23,7 +23,7 @@
 #include <stdexcept>
 #include <string>
 
-namespace CNA::Internal::Backends::D3D9
+namespace CNA::Internal::Renderers::D3D9
 {
     using Microsoft::Xna::Framework::Matrix;
 
@@ -49,7 +49,7 @@ namespace CNA::Internal::Backends::D3D9
         }
     }
 
-    IDirect3DVertexDeclaration9* D3D9GraphicsBackend::GetOrCreateInstancedVertexDeclarationEXT()
+    IDirect3DVertexDeclaration9* D3D9Renderer::GetOrCreateInstancedVertexDeclarationEXT()
     {
         if (instancedVertexDecl_) return instancedVertexDecl_.Get();
 
@@ -64,16 +64,16 @@ namespace CNA::Internal::Backends::D3D9
 
         const HRESULT hr = device_->CreateVertexDeclaration(kElements, instancedVertexDecl_.GetAddressOf());
         if (FAILED(hr))
-            throw std::runtime_error("D3D9GraphicsBackend: instanced CreateVertexDeclaration failed, hr=" + FormatHr(hr));
+            throw std::runtime_error("D3D9Renderer: instanced CreateVertexDeclaration failed, hr=" + FormatHr(hr));
         return instancedVertexDecl_.Get();
     }
 
-    void D3D9GraphicsBackend::DrawInstancedPrimitivesEx(
-        const IVertexBufferBackend& vb, const IIndexBufferBackend& ib,
+    void D3D9Renderer::DrawInstancedPrimitivesEx(
+        const IVertexBufferRenderer& vb, const IIndexBufferRenderer& ib,
         const Matrix& world, const Matrix& view, const Matrix& projection,
         PrimitiveType primitive, int primitiveCount, int instanceCount, const GpuDrawParams& params)
     {
-        // D9-83: matches D3D11GraphicsBackend::DrawInstancedPrimitivesEx's own fallback -- no
+        // D9-83: matches D3D11Renderer::DrawInstancedPrimitivesEx's own fallback -- no
         // per-instance VB means this isn't really an instanced draw at all.
         const auto* instanceStream = FirstInstanceStream(params);
         if (instanceStream == nullptr)
@@ -84,16 +84,16 @@ namespace CNA::Internal::Backends::D3D9
 
         EnsureRenderReadyEXT();
 
-        const auto& d3dVb     = static_cast<const D3D9VertexBufferBackend&>(vb);
-        const auto& d3dIb     = static_cast<const D3D9IndexBufferBackend&>(ib);
+        const auto& d3dVb     = static_cast<const D3D9VertexBufferRenderer&>(vb);
+        const auto& d3dIb     = static_cast<const D3D9IndexBufferRenderer&>(ib);
         // REMED-GFX-202: one stream of each rate (REMED-GFX-208 tracks widening it).
-        RejectUnsupportedStreamCombination(params, "The D3D9 backend");
+        RejectUnsupportedStreamCombination(params, "The D3D9 renderer");
         // REMED-GFX-DECL-GUARD: the geometry stream's declaration, same stride table.
         RequireFaithfulDeclarationEXT(vb, "instanced");
         const auto& d3dInstVb =
-            static_cast<const D3D9VertexBufferBackend&>(*instanceStream->buffer);
+            static_cast<const D3D9VertexBufferRenderer&>(*instanceStream->buffer);
         const std::size_t perVertexStride = d3dVb.GetStrideEXT() > 0 ? d3dVb.GetStrideEXT() : 16;
-        constexpr UINT kInstanceStride = 64; // 4 x float4 rows (matches every other backend's own convention)
+        constexpr UINT kInstanceStride = 64; // 4 x float4 rows (matches every other renderer's own convention)
 
         if (!instancedVS_)
         {
@@ -113,9 +113,9 @@ namespace CNA::Internal::Backends::D3D9
         device_->SetPixelShader(instancedPS_.Get());
 
         // ViewProj: per-instance world comes from the instance stream instead, so (unlike every
-        // other draw path in this backend) the `world` parameter is deliberately unused here --
-        // matches D3D11GraphicsBackend::DrawInstancedPrimitivesEx's own identical choice. Same
-        // register=column transpose convention used everywhere else in this backend.
+        // other draw path in this renderer) the `world` parameter is deliberately unused here --
+        // matches D3D11Renderer::DrawInstancedPrimitivesEx's own identical choice. Same
+        // register=column transpose convention used everywhere else in this renderer.
         const Matrix vpT = Matrix::Transpose(view * projection);
         float vpRegs[16];
         vpT.ToColumnMajor(vpRegs);
@@ -142,7 +142,7 @@ namespace CNA::Internal::Backends::D3D9
                                       static_cast<UINT>(params.startIndex), static_cast<UINT>(primitiveCount));
 
         // D3D9 stream-frequency state persists on the device until explicitly changed, and every
-        // OTHER draw path in this backend reuses stream 0 -- leaving instancing semantics active
+        // OTHER draw path in this renderer reuses stream 0 -- leaving instancing semantics active
         // here would silently corrupt every subsequent non-instanced draw call. Reset immediately,
         // not deferred.
         device_->SetStreamSourceFreq(0, 1);

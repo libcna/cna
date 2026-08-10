@@ -4,7 +4,7 @@
 // bound vertex/instance stream strides instead of a hardcoded slot-0 stride 16 / an
 // AUTO_STRIDE-derived slot-1 stride 64.
 //
-// Before this task, DiligentGraphicsBackend::GetOrCreatePipeline()'s Instanced3D layout hardcoded
+// Before this task, DiligentRenderer::GetOrCreatePipeline()'s Instanced3D layout hardcoded
 // slot 0's LayoutElement::Stride to the literal 16 (assuming every caller's per-vertex stream was a
 // real VertexPositionColor buffer) and let LAYOUT_ELEMENT_AUTO_STRIDE derive slot 1's stride purely
 // from the four float4 rows this shader declares (64), regardless of what the caller's real buffers

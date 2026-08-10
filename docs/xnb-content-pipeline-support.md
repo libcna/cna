@@ -49,7 +49,7 @@ below) — both need their own explicit registration.
 | Math (`Vector2/3/4`, `Matrix`, `Quaternion`, `Color`, `Plane`, `Point`, `Rectangle`, `BoundingBox`, `BoundingSphere`, `BoundingFrustum`, `Ray`) | ✅ Full | |
 | `Decimal`/`DateTime`/`TimeSpan` | ✅ Full | Faithful field-for-field decoding, not a lossy `double` shortcut |
 | `Curve` | ✅ Full | |
-| `Texture2DReader` | ✅ `SurfaceFormat.Color`/`Dxt1`/`Dxt3`/`Dxt5` only | Compressed formats are always software-decompressed to `Color` on load (matches this project's existing `SurfaceFormat: Color only` GPU-upload policy — see the EasyGL backend's own startup log line) |
+| `Texture2DReader` | ✅ `SurfaceFormat.Color`/`Dxt1`/`Dxt3`/`Dxt5` only | Compressed formats are always software-decompressed to `Color` on load (matches this project's existing `SurfaceFormat: Color only` GPU-upload policy — see the EasyGL renderer's own startup log line) |
 | `Texture3DReader` | ✅ Same scope as `Texture2DReader` | No real fixture exists anywhere in the available test-asset library (volume textures are rare in real XNA content) — verified via a hand-constructed stream instead, field-by-field against FNA's own `Texture3DReader.cs` |
 | `TextureCubeReader` | ✅ Same scope as `Texture2DReader` | Verified against a real MonoGame fixture covering all 6 faces and a full DXT1 mip chain (including the sub-4×4 block-rounding edge cases) |
 | `SpriteFontReader` | ✅ Full | Depends on `Texture2DReader` and 3 closed generic-collection readers (see below) |

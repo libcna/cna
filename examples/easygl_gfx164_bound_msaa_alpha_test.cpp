@@ -4,7 +4,7 @@
 // colour attachment to GetData without requiring the caller to unbind it first.
 //
 // The ticket's original fixture reads the target while it is still bound.  Before the fix,
-// EasyGLRenderTargetBackend::GetData read the single-sample resolve texture, but the only resolve
+// EasyGLRenderTargetRenderer::GetData read the single-sample resolve texture, but the only resolve
 // lived in UnbindAsRenderTarget.  The active target therefore returned the untouched resolve
 // storage -- observed as (0,0,0,0) -- even though its multisample renderbuffer held the requested
 // opaque black Clear and the rendered triangles.  Explicitly unbinding, or switching to a target
@@ -13,10 +13,10 @@
 // This fixture keeps those stages discriminating.  Its colours distinguish transparent black,
 // opaque black, zero-RGB/nonzero-alpha, several nonzero RGB/alpha combinations, an untouched
 // destination sentinel, and a loss of RGB as well as alpha.  It also compares EasyGL's raw RGBA
-// backend bytes with public Color delivery so a native-transfer failure cannot be mistaken for a
+// renderer bytes with public Color delivery so a native-transfer failure cannot be mistaken for a
 // BGRA conversion failure.
 
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GameTime.hpp"
@@ -55,7 +55,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using CNA::Internal::Backends::IRenderTargetBackend;
+using CNA::Internal::Renderers::IRenderTargetRenderer;
 
 namespace
 {
@@ -253,7 +253,7 @@ namespace
                   "creation: requested 4x selects supported multisample storage",
                   "applied=" + std::to_string(msaa->getMultiSampleCountProperty()));
 
-            auto& native = dynamic_cast<IRenderTargetBackend&>(msaa->GetBackend());
+            auto& native = dynamic_cast<IRenderTargetRenderer&>(msaa->GetRenderer());
             using GenFramebuffers = void (APIENTRY*)(GLsizei, GLuint*);
             using DeleteFramebuffers = void (APIENTRY*)(GLsizei, const GLuint*);
             using BindFramebuffer = void (APIENTRY*)(GLenum, GLuint);
@@ -348,7 +348,7 @@ namespace
             NeutralState(dev);
             dev.Clear(expected);
 
-            auto& native = dynamic_cast<IRenderTargetBackend&>(target->GetBackend());
+            auto& native = dynamic_cast<IRenderTargetRenderer&>(target->GetRenderer());
             std::vector<std::uint8_t> raw(static_cast<std::size_t>(kCount) * 4, 0xCD);
             const bool delivered = native.GetData(0, 0, 0, kW, kH, raw.data(),
                                                    static_cast<int>(raw.size()));
@@ -363,7 +363,7 @@ namespace
                     ++rawExact;
             }
             Check(delivered && rawExact == kCount,
-                  "native transfer: backend glReadPixels delivers exact RGBA bytes",
+                  "native transfer: renderer glReadPixels delivers exact RGBA bytes",
                   std::to_string(rawExact) + "/" + std::to_string(kCount));
             ReadFull(*target, expected,
                      "GetData delivery: public Color bytes match the native RGBA transfer");

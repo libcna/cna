@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // Task 367: BasicEffect pixel test — TextureEnabled=true AND VertexColorEnabled=true, the
-// stride-24 VertexPositionColorTexture path (Bgfx backend).
+// stride-24 VertexPositionColorTexture path (Bgfx renderer).
 //
 // See examples/easygl_basiceffect_texture_vertexcolor_enabled_test.cpp for the full FNA-derived
 // expected-output derivation and for the DiffuseColor-dropping bug this test found (also present,
@@ -8,11 +8,11 @@
 // `v_color0 = a_color0` with no `u_diffuseColor` multiply and no `u_vertexColorEnabled3D` gate at
 // all — fixed to mirror `vs_colored3d.sc`'s Task-364 pattern:
 // `v_color0 = (u_vertexColorEnabled3D.x>0.5 ? a_color0 : vec4(1)) * u_diffuseColor`, with the
-// BgfxGraphicsBackend draw path now setting both uniforms before submitting
+// BgfxRenderer draw path now setting both uniforms before submitting
 // `coloredTextured3DProgram_`).
 //
 // Per Task 364's finding (tracked as Task 884, not fixed there or here): Bgfx's default
-// RasterizerState cull state (`BGFX_STATE_CULL_CCW`) is the only one of the 3 backends that
+// RasterizerState cull state (`BGFX_STATE_CULL_CCW`) is the only one of the 3 renderers that
 // actually matches FNA's real `CullCounterClockwiseFace` default, so it silently culls the
 // standard NDC quad winding used throughout this pixel-test family unless `RasterizerState::
 // CullNone` is set explicitly — worked around here identically to Task 364-366's own Bgfx tests.

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // plan_opengl2.md: proof for Texture3D (GL_TEXTURE_3D, core desktop GL since 1.2) on the native
-// OpenGL 2.1 graphics backend. Verified via SetData()/GetData() round-trips across multiple
+// OpenGL 2.1 graphics renderer. Verified via SetData()/GetData() round-trips across multiple
 // depth slices, since no stock effect samples a volume texture.
 //
 // Check A -- Texture3D construction succeeds.
@@ -19,7 +19,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
 
-#include "CNA/Internal/Backends/OpenGL2/OpenGL2GraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/OpenGL2/OpenGL2Renderer.hpp"
 
 #include "common/PixelTestGame.hpp"
 
@@ -31,7 +31,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::OpenGL2;
+using namespace CNA::Internal::Renderers::OpenGL2;
 
 namespace
 {

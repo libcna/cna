@@ -321,7 +321,7 @@ protected:
 // now (only ever exercised inside 3 GPU-dependent examples/ integration tests) - this and the
 // tests below it in this fixture close that gap using a plain, headless GraphicsDevice rather
 // than a separate GPU integration test binary. Covers both the texture-ownership branch
-// (HasBackend() true vs. false) and growth of all 4 private ownership vectors.
+// (HasRenderer() true vs. false) and growth of all 4 private ownership vectors.
 TEST_F(SkinnedModelEXTPartTest, AddPartWithTextureRecordsOwnershipAndPartFields)
 {
     SkinnedModelEXT model;
@@ -344,9 +344,9 @@ TEST_F(SkinnedModelEXTPartTest, AddPartWithTextureRecordsOwnershipAndPartFields)
     EXPECT_EQ(1u, model.GetOwnedTextureCountForTesting());
 }
 
-// Task 13.3: a default-constructed Texture2D() (HasBackend() == false, the "no texture supplied"
+// Task 13.3: a default-constructed Texture2D() (HasRenderer() == false, the "no texture supplied"
 // case) must leave PartEXT::Texture null and add nothing to the owned texture vector, rather than
-// taking ownership of a backend-less placeholder.
+// taking ownership of a renderer-less placeholder.
 TEST_F(SkinnedModelEXTPartTest, AddPartWithoutTextureLeavesTextureNullAndOwnsNoTexture)
 {
     SkinnedModelEXT model;

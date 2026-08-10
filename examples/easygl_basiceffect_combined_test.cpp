@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Task 370: BasicEffect cross-backend image comparison suite — closes Phase 42 (EasyGL backend).
+// Task 370: BasicEffect cross-renderer image comparison suite — closes Phase 42 (EasyGL renderer).
 //
 // Combines everything Tasks 364-369 individually verified into one scene, to prove the fixes
 // compose correctly rather than only working in isolation: TextureEnabled=true (Task 366/367),
@@ -20,8 +20,8 @@
 // expected value — this is also a genuine "does per-vertex UV reach the right texel" check.
 //
 // This is the capstone test for Phase 42 (Tasks 361-370): identical assertions run unmodified (up
-// to the standard per-backend workarounds) on Vulkan and Bgfx, so a 3-way match against the same
-// FNA-derived expected values *is* the cross-backend image comparison this task calls for.
+// to the standard per-renderer workarounds) on Vulkan and Bgfx, so a 3-way match against the same
+// FNA-derived expected values *is* the cross-renderer image comparison this task calls for.
 //
 // Exit code 0 = PASS, 1 = FAIL.
 

@@ -10,7 +10,7 @@
 // `InstanceFrequency` is greater than zero. The reconciled CNA contract this file locks down is
 // therefore:
 //
-//   every bound stream reaches the backend, per-vertex and per-instance alike
+//   every bound stream reaches the renderer, per-vertex and per-instance alike
 //   each stream keeps its OWN slot, declaration, stride, VertexOffset and InstanceFrequency
 //   VertexOffset is a vertex-ELEMENT offset, converted with that stream's own stride, exactly once
 //   InstanceFrequency == 0 advances per vertex; > 0 advances once per that many instances, so the
@@ -33,8 +33,8 @@
 //
 // The two per-vertex streams are the REMED-GFX-201 arrangement: slot 0 is POSITION ONLY (12 bytes)
 // and slot 1 is COLOUR ONLY (4 bytes), so their concatenation is the packed 16-byte
-// position+colour vertex every backend already recognizes but neither stream alone is a layout any
-// backend has. The two per-instance streams split the 4x4 world matrix the stock instanced shader
+// position+colour vertex every renderer already recognizes but neither stream alone is a layout any
+// renderer has. The two per-instance streams split the 4x4 world matrix the stock instanced shader
 // reads: slot 2 supplies its first three columns (stride 48) and slot 3 supplies the fourth
 // (stride 16). With every vertex at z = 0.5 the transformed position is
 //
@@ -64,18 +64,18 @@
 // Colour codes are the {0,255} RGB corners, so a nearest-corner classifier is exact rather than
 // tolerant, and black is the background and never a code.
 //
-// Backend scope. Three groups, each with its own declared boundary rather than a silent skip:
+// Renderer scope. Three groups, each with its own declared boundary rather than a silent skip:
 //
 //   1. the PUBLIC TRANSPORT group -- validation, slot identity, capability rejection. Runs on
-//      EVERY backend, needs no rasterizer, and is where the red-first reproduction lives: before
+//      EVERY renderer, needs no rasterizer, and is where the red-first reproduction lives: before
 //      this task a secondary per-vertex stream and every per-instance stream past the first
-//      reached no validation and no backend at all.
+//      reached no validation and no renderer at all.
 //   2. the PRESERVATION group -- the classic one-per-vertex + one-per-instance shape every
-//      instancing backend already renders. Must stay byte-identical.
+//      instancing renderer already renders. Must stay byte-identical.
 //   3. the MIXED-STREAM PIXEL group -- gated at RUNTIME on
 //      GraphicsCapability::MultiStreamVertexInput, with
-//      UnsupportedBackendRejectsMixedStreamInstancingDeterministically asserting the opposite
-//      arm on every backend that does not claim it, so the skip cannot outlive the gap.
+//      UnsupportedRendererRejectsMixedStreamInstancingDeterministically asserting the opposite
+//      arm on every renderer that does not claim it, so the skip cannot outlive the gap.
 
 #include <algorithm>
 #include <array>
@@ -140,35 +140,35 @@ using Microsoft::Xna::Framework::Graphics::VertexElement;
 using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
 using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 
-// The backends whose stock instanced path actually rasterizes and whose RenderTarget2D::GetData
-// reads the result back -- REMED-GFX-118's own permanent suite set. A backend outside it has no
-// instanced draw implementation at all (`IGraphicsBackend::DrawInstancedPrimitivesEx`'s default
+// The renderers whose stock instanced path actually rasterizes and whose RenderTarget2D::GetData
+// reads the result back -- REMED-GFX-118's own permanent suite set. A renderer outside it has no
+// instanced draw implementation at all (`IGraphicsRenderer::DrawInstancedPrimitivesEx`'s default
 // throws), which is a pre-existing capability boundary this task neither creates nor closes; the
 // public transport group below still runs there and still asserts the shared validation contract.
-#if defined(CNA_BACKEND_BGFX) || defined(CNA_BACKEND_EASYGL) || \
-    defined(CNA_BACKEND_WEBGPU) || defined(CNA_BACKEND_VULKAN) || \
-    defined(CNA_BACKEND_D3D9) || defined(CNA_BACKEND_D3D11) || \
-    defined(CNA_BACKEND_D3D12) || defined(CNA_BACKEND_MAGNUM)
+#if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_EASYGL) || \
+    defined(CNA_RENDERER_WEBGPU) || defined(CNA_RENDERER_VULKAN) || \
+    defined(CNA_RENDERER_D3D9) || defined(CNA_RENDERER_D3D11) || \
+    defined(CNA_RENDERER_D3D12) || defined(CNA_RENDERER_MAGNUM)
 #define CNA_INSTANCED_MULTI_STREAM_ORACLE 1
 #endif
 
-// The backends whose instanced path was corrected to consume VertexBufferBinding.VertexOffset AND
+// The renderers whose instanced path was corrected to consume VertexBufferBinding.VertexOffset AND
 // InstanceFrequency -- EasyGL (REMED-GFX-122), D3D11/D3D12 (REMED-GFX-123), Vulkan, bgfx and
 // WebGPU (REMED-GFX-211/213). InstancedDrawRangeTests.cpp uses exactly this set for the same
 // reason.
 //
-// This is now every backend that rasterizes an instanced draw at all EXCEPT D3D9, so the triage
+// This is now every renderer that rasterizes an instanced draw at all EXCEPT D3D9, so the triage
 // group at the bottom of this file no longer carries a measured-defect arm. It carried one for as
-// long as a backend was known to drop both offsets and render InstanceFrequency 2 at an effective
+// long as a renderer was known to drop both offsets and render InstanceFrequency 2 at an effective
 // divisor of one: Vulkan, then bgfx, then WebGPU, each asserting its own pixel measurement until
 // its correction landed and made that assertion fail, which is what forced the arm's removal. The
-// legs themselves stay -- they still print what every backend consumed -- and their remaining
+// legs themselves stay -- they still print what every renderer consumed -- and their remaining
 // `#else` arm covers D3D9, which is outside this set only because no D3D display was reachable to
-// measure it, and an unmeasured backend must not be asserted either way.
-#if defined(CNA_BACKEND_EASYGL) || defined(CNA_BACKEND_D3D11) || \
-    defined(CNA_BACKEND_D3D12) || defined(CNA_BACKEND_VULKAN) || \
-    defined(CNA_BACKEND_BGFX) || defined(CNA_BACKEND_WEBGPU) || \
-    defined(CNA_BACKEND_MAGNUM)
+// measure it, and an unmeasured renderer must not be asserted either way.
+#if defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_D3D11) || \
+    defined(CNA_RENDERER_D3D12) || defined(CNA_RENDERER_VULKAN) || \
+    defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_WEBGPU) || \
+    defined(CNA_RENDERER_MAGNUM)
 #define CNA_INSTANCED_BINDING_OFFSET_ORACLE 1
 #endif
 
@@ -190,7 +190,7 @@ namespace
     constexpr int kPositionPrefix = kVerticesPerSlot;
 
     /// The colour stream's decoy prefix -- deliberately DIFFERENT from the position stream's, so a
-    /// backend that applies one binding's offset to both streams cannot land on the right record.
+    /// renderer that applies one binding's offset to both streams cannot land on the right record.
     constexpr int kColorPrefix = 2 * kVerticesPerSlot;
 
     constexpr int kPositionElementCount = kPositionPrefix + kMeshElementCount;
@@ -215,7 +215,7 @@ namespace
     constexpr int kColumnStreamFrequency = 1;
 
     /// Slot 3's InstanceFrequency: one record per TWO instances -- the ">1 advances once every
-    /// frequency instances" half of the contract, which a backend that hardcodes a step rate of
+    /// frequency instances" half of the contract, which a renderer that hardcodes a step rate of
     /// one cannot reproduce.
     constexpr int kBandStreamFrequency = 2;
 
@@ -232,7 +232,7 @@ namespace
     };
     static_assert(sizeof(PositionRecord) == 12);
 
-    /// Slot 1's record: colour only, in the R8G8B8A8 memory order every backend's `Color`
+    /// Slot 1's record: colour only, in the R8G8B8A8 memory order every renderer's `Color`
     /// VertexElementFormat reads.
     struct ColorRecord
     {
@@ -277,7 +277,7 @@ namespace
 
     /// The stock instanced shader reads the per-instance world matrix as four consecutive
     /// `Vector4`s carrying TextureCoordinate usage indices 1..4, which is the layout every CNA
-    /// instanced backend already expects. Splitting them across two bindings keeps those usages
+    /// instanced renderer already expects. Splitting them across two bindings keeps those usages
     /// and their order exactly, and changes only WHICH buffer each column comes from.
     VertexDeclaration ColumnStreamDeclaration()
     {
@@ -302,7 +302,7 @@ namespace
     }
 
     /// The complete four-column matrix in ONE binding: the classic per-instance stream every
-    /// backend already renders, used by the preservation group and by every leg that varies only
+    /// renderer already renders, used by the preservation group and by every leg that varies only
     /// the per-vertex side.
     VertexDeclaration WholeMatrixDeclaration()
     {
@@ -688,7 +688,7 @@ namespace
         void RequireInstancedRendering()
         {
             if (!device.SupportsCapability(GraphicsCapability::ThreeD))
-                GTEST_SKIP() << "Backend explicitly does not support 3D rendering";
+                GTEST_SKIP() << "Renderer explicitly does not support 3D rendering";
             device.setRasterizerStateProperty(RasterizerState::CullNone);
             device.setDepthStencilStateProperty(DepthStencilState::None);
             device.setBlendStateProperty(BlendState::Opaque);
@@ -762,13 +762,13 @@ namespace
         }
 
         /// The same assertion WITHOUT the colour axis, for the legs that run on every instancing
-        /// backend. EasyGL, bgfx, Vulkan and WebGPU all colour the instanced route from the
+        /// renderer. EasyGL, bgfx, Vulkan and WebGPU all colour the instanced route from the
         /// per-vertex stream now (REMED-GFX-212 corrected the last two), but D3D11's and D3D12's
         /// stock instanced shaders are still identified from source as taking `DiffuseColor`
-        /// instead, and no D3D display was reachable to measure them. A cross-backend preservation
+        /// instead, and no D3D display was reachable to measure them. A cross-renderer preservation
         /// gate must therefore assert WHICH RECORDS each stream supplied, which the cell positions
         /// alone already say, and leave the colour axis to the mixed-stream group and to
-        /// InstancedVertexColorTests.cpp, which measures it directly on every backend it runs on.
+        /// InstancedVertexColorTests.cpp, which measures it directly on every renderer it runs on.
         static void ExpectExactlyTheseCellsIgnoringColour(
             const FrameSnapshot& snapshot, const GridLayout& layout,
             const std::vector<ExpectedCell>& expected, const char* label)
@@ -789,11 +789,11 @@ namespace
     };
 }
 
-/// REMED-GFX-202: a DECLARED boundary, not a silent skip. A backend that has not yet been taught to
+/// REMED-GFX-202: a DECLARED boundary, not a silent skip. A renderer that has not yet been taught to
 /// re-slot its stride-derived input elements across several bindings reports the capability as
 /// false and is rejected deterministically by GraphicsDevice;
-/// UnsupportedBackendRejectsMixedStreamInstancingDeterministically below asserts exactly that on
-/// every backend, and flips to the positive assertion the moment one claims the capability, so this
+/// UnsupportedRendererRejectsMixedStreamInstancingDeterministically below asserts exactly that on
+/// every renderer, and flips to the positive assertion the moment one claims the capability, so this
 /// skip cannot outlive the gap it describes. A macro rather than a helper because GTEST_SKIP()
 /// returns from the function it is written in.
 #define CNA_REQUIRE_MIXED_STREAM_INSTANCING()                                                \
@@ -801,12 +801,12 @@ namespace
         if (!device.SupportsCapability(GraphicsCapability::MultiStreamVertexInput))           \
         {                                                                                    \
             GTEST_SKIP()                                                                     \
-                << "Backend reports GraphicsCapability::MultiStreamVertexInput = false: "     \
+                << "Renderer reports GraphicsCapability::MultiStreamVertexInput = false: "     \
                    "mixed-frequency multi-stream vertex input is not implemented on this "    \
-                   "backend (REMED-GFX-203..208). The draw is rejected with "                 \
+                   "renderer (REMED-GFX-203..208). The draw is rejected with "                 \
                    "System::NotSupportedException rather than rendered from a subset of the " \
                    "bound streams -- see "                                                    \
-                   "UnsupportedBackendRejectsMixedStreamInstancingDeterministically.";        \
+                   "UnsupportedRendererRejectsMixedStreamInstancingDeterministically.";        \
         }                                                                                    \
     } while (false)
 
@@ -1078,7 +1078,7 @@ TEST_F(InstancedDrawMultiStreamTest, ReplacingOneStreamAtATimeAndReturningKeepsE
 
 // ---------------------------------------------------------------------------
 // Coverage items 18, 23: draw A under bindings X, draw B under bindings Y, into the same target,
-// then an ORDINARY draw between two instanced ones. A deferred backend that re-reads the live
+// then an ORDINARY draw between two instanced ones. A deferred renderer that re-reads the live
 // binding state at replay renders both instanced draws with whichever set was bound last.
 // ---------------------------------------------------------------------------
 TEST_F(InstancedDrawMultiStreamTest, QueuedDrawsUnderDifferentBindingSetsKeepTheirOwn)
@@ -1132,7 +1132,7 @@ TEST_F(InstancedDrawMultiStreamTest, QueuedDrawsUnderDifferentBindingSetsKeepThe
         PrimitiveType::TriangleList, 0, 0, kVerticesPerSlot, 0, 1, kInstanceCount);
 
     // An ORDINARY multi-stream draw between the two instanced ones, into the decoy band, so a
-    // backend that leaves a divisor or an instance binding enabled cannot pass this test.
+    // renderer that leaves a divisor or an instance binding enabled cannot pass this test.
     device.SetVertexBuffers({
         VertexBufferBinding(&positionBuffer, 0, 0),
         VertexBufferBinding(&colorBuffer, 0, 0),
@@ -1301,19 +1301,19 @@ TEST_F(InstancedDrawMultiStreamTest, RepeatedFramesReproduceTheSameMixedStreamFr
 // Coverage item 2: the existing supported instanced baseline, expressed through this file's own
 // geometry so a regression in the unified transport shows here as well as in
 // InstancedDrawRangeTests. ONE per-vertex stream (the packed 16-byte vertex) plus ONE per-instance
-// stream carrying the whole matrix -- the shape every instancing backend already renders, so this
+// stream carrying the whole matrix -- the shape every instancing renderer already renders, so this
 // leg is NOT gated on MultiStreamVertexInput.
 //
 // Measured boundaries this leg deliberately stays inside, so that it is a preservation gate on
-// EVERY instancing backend rather than a restatement of open findings:
+// EVERY instancing renderer rather than a restatement of open findings:
 //
 //   * the per-instance VertexOffset is 0 here. Vulkan, bgfx and WebGPU ignore a nonzero one --
 //     REMED-GFX-122/123 corrected only EasyGL and D3D11/D3D12 -- which is recorded as
-//     REMED-GFX-211 and asserted separately below on the backends that do honour it.
+//     REMED-GFX-211 and asserted separately below on the renderers that do honour it.
 //   * the colour axis is not asserted here -- only D3D11/D3D12 are still identified as colouring
 //     the instanced route from DiffuseColor and neither could be measured (REMED-GFX-212; see
 //     ExpectExactlyTheseCellsIgnoringColour, and InstancedVertexColorTests.cpp for the direct
-//     per-backend measurement).
+//     per-renderer measurement).
 //   * the instance frequency is 1. bgfx implements no per-instance divisor at all
 //     (REMED-GFX-213).
 // ---------------------------------------------------------------------------
@@ -1325,7 +1325,7 @@ TEST_F(InstancedDrawMultiStreamTest, ClassicSingleVertexAndSingleInstanceStreamI
     const std::vector<PositionRecord> positions = BuildPositionStream(layout);
     const std::vector<ColorRecord> colors = BuildColorStream();
 
-    // The packed position+colour vertex every backend recognizes, built from the same records the
+    // The packed position+colour vertex every renderer recognizes, built from the same records the
     // split streams carry so the two arrangements are directly comparable.
     struct PackedVertex { PositionRecord position; ColorRecord color; };
     static_assert(sizeof(PackedVertex) == 16);
@@ -1386,15 +1386,15 @@ TEST_F(InstancedDrawMultiStreamTest, ClassicSingleVertexAndSingleInstanceStreamI
 
 // ---------------------------------------------------------------------------
 // Coverage items 21 and 22: command-container growth, and destroying a stream's public wrapper
-// after its draw has been queued but BEFORE the deferred backends replay it.
+// after its draw has been queued but BEFORE the deferred renderers replay it.
 //
 // Twelve mixed-stream draws are queued into one bind cycle, alternating between two colour
-// streams, which grows every deferred backend's command container past its initial capacity -- a
+// streams, which grows every deferred renderer's command container past its initial capacity -- a
 // container that stored a pointer INTO itself, or into GraphicsDevice's live binding state, breaks
 // exactly here. Then both replaceable wrappers are destroyed while the draws are still queued and
-// the readback triggers the replay. The array is captured BY VALUE and every backend copies the
+// the readback triggers the replay. The array is captured BY VALUE and every renderer copies the
 // concrete native handle, so each draw must still render its own bindings; under ASan this leg is
-// a direct use-after-free detector for a stale IVertexBufferBackend pointer.
+// a direct use-after-free detector for a stale IVertexBufferRenderer pointer.
 // ---------------------------------------------------------------------------
 TEST_F(InstancedDrawMultiStreamTest, QueuedMixedStreamDrawsSurviveContainerGrowthAndWrapperDeath)
 {
@@ -1464,7 +1464,7 @@ TEST_F(InstancedDrawMultiStreamTest, QueuedMixedStreamDrawsSurviveContainerGrowt
     }
 
     // The wrappers die while every one of those draws is still queued. Unbinding first is what the
-    // established lifetime contract requires; the backends must already hold their own handles.
+    // established lifetime contract requires; the renderers must already hold their own handles.
     device.SetVertexBuffers({});
     device.SetVertexBuffer(nullptr);
     colorBuffer.reset();
@@ -1488,7 +1488,7 @@ TEST_F(InstancedDrawMultiStreamTest, QueuedMixedStreamDrawsSurviveContainerGrowt
 
 #ifdef CNA_INSTANCED_BINDING_OFFSET_ORACLE
 // ---------------------------------------------------------------------------
-// The same classic shape WITH a nonzero per-instance VertexOffset, on the backends REMED-GFX-122,
+// The same classic shape WITH a nonzero per-instance VertexOffset, on the renderers REMED-GFX-122,
 // REMED-GFX-123 and REMED-GFX-211 corrected. A prefix decoy record displacing five columns and
 // three bands sits in front of the live records, so a dropped instance offset lights column 5
 // band 3 and loses the last live record -- which is exactly what Vulkan, bgfx and WebGPU each did
@@ -1562,16 +1562,16 @@ TEST_F(InstancedDrawMultiStreamTest, ClassicInstanceStreamHonoursItsOwnVertexOff
 // ===========================================================================
 // The CHECKPOINT TRIAGE group (REMED-GFX-211, REMED-GFX-213).
 //
-// The legs above are gated to the backends already known to honour the contract they assert. These
-// four run on EVERY backend that rasterizes an instanced draw at all -- the three that were never
+// The legs above are gated to the renderers already known to honour the contract they assert. These
+// four run on EVERY renderer that rasterizes an instanced draw at all -- the three that were never
 // taught to consume `VertexBufferBinding.VertexOffset` on this route included -- and instead of
 // asserting one expected frame they CLASSIFY the frame against every reading a defect of this class
 // can produce, then print the reading and the full cell map unconditionally. A gate that merely
-// excludes a backend records that somebody once believed it was broken; a leg that names which
-// records the backend actually consumed records what it does, and stays useful when it is fixed.
+// excludes a renderer records that somebody once believed it was broken; a leg that names which
+// records the renderer actually consumed records what it does, and stays useful when it is fixed.
 //
 // The shape is deliberately the CLASSIC one: exactly one per-vertex stream and exactly one
-// per-instance stream, the arrangement every instancing backend already accepts and which reaches
+// per-instance stream, the arrangement every instancing renderer already accepts and which reaches
 // no `MultiStreamVertexInput` capability check by design. Whatever these legs measure is therefore
 // measured on a SUPPORTED public path, which is what separates a checkpoint blocker from deferred
 // capability work.
@@ -1579,22 +1579,22 @@ TEST_F(InstancedDrawMultiStreamTest, ClassicInstanceStreamHonoursItsOwnVertexOff
 
 namespace
 {
-    /// The compile-time backend identity, so a printed measurement names its own backend rather
+    /// The compile-time renderer identity, so a printed measurement names its own renderer rather
     /// than relying on the reader to remember which build directory produced the log.
-    constexpr const char* kTriageBackendName =
-#if defined(CNA_BACKEND_EASYGL)
+    constexpr const char* kTriageRendererName =
+#if defined(CNA_RENDERER_EASYGL)
         "EasyGL";
-#elif defined(CNA_BACKEND_VULKAN)
+#elif defined(CNA_RENDERER_VULKAN)
         "Vulkan";
-#elif defined(CNA_BACKEND_BGFX)
+#elif defined(CNA_RENDERER_BGFX)
         "bgfx";
-#elif defined(CNA_BACKEND_WEBGPU)
+#elif defined(CNA_RENDERER_WEBGPU)
         "WebGPU";
-#elif defined(CNA_BACKEND_D3D9)
+#elif defined(CNA_RENDERER_D3D9)
         "D3D9";
-#elif defined(CNA_BACKEND_D3D11)
+#elif defined(CNA_RENDERER_D3D11)
         "D3D11";
-#elif defined(CNA_BACKEND_D3D12)
+#elif defined(CNA_RENDERER_D3D12)
         "D3D12";
 #else
         "unknown";
@@ -1618,7 +1618,7 @@ namespace
     /// The triage mesh's decoy prefix, and therefore its "skip the decoy" VertexOffset.
     constexpr int kTriageMeshPrefix = kVerticesPerSlot;
 
-    /// The packed 16-byte position+colour vertex every instancing backend recognizes -- the classic
+    /// The packed 16-byte position+colour vertex every instancing renderer recognizes -- the classic
     /// single per-vertex stream, so nothing here depends on multi-stream input.
     struct TriagePackedVertex
     {
@@ -1738,7 +1738,7 @@ namespace
         const char* ticket, const char* leg, const std::string& reading,
         const FrameSnapshot& snapshot, const GridLayout& layout)
     {
-        std::cout << "[  TRIAGE  ] " << ticket << ' ' << kTriageBackendName << ' ' << leg
+        std::cout << "[  TRIAGE  ] " << ticket << ' ' << kTriageRendererName << ' ' << leg
                   << ": reading = " << reading << DescribeFrame(snapshot, layout) << std::endl;
     }
 
@@ -1766,7 +1766,7 @@ namespace
 // in front of the four live ones, so dropping the offset lights the decoy's own cell (5, 3) and
 // loses the last live record's (3, 1).
 // ---------------------------------------------------------------------------
-TEST_F(InstancedDrawMultiStreamTest, ClassicInstanceStreamOffsetIsReadOnEveryInstancingBackend)
+TEST_F(InstancedDrawMultiStreamTest, ClassicInstanceStreamOffsetIsReadOnEveryInstancingRenderer)
 {
     RequireInstancedRendering();
 
@@ -1818,12 +1818,12 @@ TEST_F(InstancedDrawMultiStreamTest, ClassicInstanceStreamOffsetIsReadOnEveryIns
 
 #ifdef CNA_INSTANCED_BINDING_OFFSET_ORACLE
     EXPECT_EQ(std::string("instance-offset-honoured"), reading)
-        << "REMED-GFX-122/123/211/213 corrected this backend: the per-instance binding's own VertexOffset "
+        << "REMED-GFX-122/123/211/213 corrected this renderer: the per-instance binding's own VertexOffset "
            "must select records 1..4, not 0..3"
         << DescribeFrame(snapshot, layout);
 #else
     EXPECT_NE(std::string("UNCLASSIFIED"), reading)
-        << "REMED-GFX-211 triage on " << kTriageBackendName << ": the frame matched no reading "
+        << "REMED-GFX-211 triage on " << kTriageRendererName << ": the frame matched no reading "
            "this leg can name, so the measurement is not decisive and the ticket cannot be "
            "classified from it"
         << DescribeFrame(snapshot, layout);
@@ -1836,7 +1836,7 @@ TEST_F(InstancedDrawMultiStreamTest, ClassicInstanceStreamOffsetIsReadOnEveryIns
 // leg A -- whether the geometry binding's own offset survives. The ticket asserts "the per-vertex
 // side is equally affected"; nothing in the record measured it.
 // ---------------------------------------------------------------------------
-TEST_F(InstancedDrawMultiStreamTest, ClassicPerVertexStreamOffsetIsReadOnEveryInstancingBackend)
+TEST_F(InstancedDrawMultiStreamTest, ClassicPerVertexStreamOffsetIsReadOnEveryInstancingRenderer)
 {
     RequireInstancedRendering();
 
@@ -1890,12 +1890,12 @@ TEST_F(InstancedDrawMultiStreamTest, ClassicPerVertexStreamOffsetIsReadOnEveryIn
 
 #ifdef CNA_INSTANCED_BINDING_OFFSET_ORACLE
     EXPECT_EQ(std::string("vertex-offset-honoured"), reading)
-        << "REMED-GFX-122/123/211/213 corrected this backend: the geometry binding's own VertexOffset must "
+        << "REMED-GFX-122/123/211/213 corrected this renderer: the geometry binding's own VertexOffset must "
            "skip the decoy triangle on the instanced route too"
         << DescribeFrame(snapshot, layout);
 #else
     EXPECT_NE(std::string("UNCLASSIFIED"), reading)
-        << "REMED-GFX-211 triage on " << kTriageBackendName << ": the frame matched no reading "
+        << "REMED-GFX-211 triage on " << kTriageRendererName << ": the frame matched no reading "
            "this leg can name, so the per-vertex side cannot be classified from it"
         << DescribeFrame(snapshot, layout);
 #endif
@@ -1907,7 +1907,7 @@ TEST_F(InstancedDrawMultiStreamTest, ClassicPerVertexStreamOffsetIsReadOnEveryIn
 // streams, the instance offset applied twice, and both offsets lost together. Two tail records past
 // the live four give the double-application reading somewhere real to land.
 // ---------------------------------------------------------------------------
-TEST_F(InstancedDrawMultiStreamTest, ClassicBothStreamOffsetsAreReadOnEveryInstancingBackend)
+TEST_F(InstancedDrawMultiStreamTest, ClassicBothStreamOffsetsAreReadOnEveryInstancingRenderer)
 {
     RequireInstancedRendering();
 
@@ -1973,12 +1973,12 @@ TEST_F(InstancedDrawMultiStreamTest, ClassicBothStreamOffsetsAreReadOnEveryInsta
 
 #ifdef CNA_INSTANCED_BINDING_OFFSET_ORACLE
     EXPECT_EQ(std::string("both-offsets-honoured"), reading)
-        << "REMED-GFX-122/123/211/213 corrected this backend: each binding's own VertexOffset applies to "
+        << "REMED-GFX-122/123/211/213 corrected this renderer: each binding's own VertexOffset applies to "
            "its own stream, exactly once"
         << DescribeFrame(snapshot, layout);
 #else
     EXPECT_NE(std::string("UNCLASSIFIED"), reading)
-        << "REMED-GFX-211 triage on " << kTriageBackendName << ": the frame matched none of the "
+        << "REMED-GFX-211 triage on " << kTriageRendererName << ": the frame matched none of the "
            "six readings this leg can name"
         << DescribeFrame(snapshot, layout);
 #endif
@@ -1986,16 +1986,16 @@ TEST_F(InstancedDrawMultiStreamTest, ClassicBothStreamOffsetsAreReadOnEveryInsta
 
 // ---------------------------------------------------------------------------
 // REMED-GFX-213: the per-instance DIVISOR on the classic 1+1 shape. Six instances at
-// InstanceFrequency 2 must consume records 0,0,1,1,2,2; a backend that has no divisor consumes
+// InstanceFrequency 2 must consume records 0,0,1,1,2,2; a renderer that has no divisor consumes
 // 0,1,2,3,4,5 and one that collapses the stream consumes 0 six times, and the three light three
 // visibly different cell sets. The instance buffer holds SIX records -- twice the three a correct
-// divisor needs -- so neither the shared range gate nor a backend sizing its own copy by
+// divisor needs -- so neither the shared range gate nor a renderer sizing its own copy by
 // `instanceCount` can refuse the draw, which is the exact inference the ticket records as unmeasured.
 //
 // A frequency-1 control on the same buffer proves the leg can see the divisor-1 sequence at all,
 // and a return to frequency 2 afterwards proves the first reading was not stale state.
 // ---------------------------------------------------------------------------
-TEST_F(InstancedDrawMultiStreamTest, ClassicInstanceFrequencyDivisorIsReadOnEveryInstancingBackend)
+TEST_F(InstancedDrawMultiStreamTest, ClassicInstanceFrequencyDivisorIsReadOnEveryInstancingRenderer)
 {
     RequireInstancedRendering();
 
@@ -2063,31 +2063,31 @@ TEST_F(InstancedDrawMultiStreamTest, ClassicInstanceFrequencyDivisorIsReadOnEver
     const std::string atTwoAgain =
         drawAtFrequency(kDivisor, "frequency=2(after-frequency-1)", divisorReadings);
 
-    // The control is the leg's own calibration: a backend that cannot even advance one record per
+    // The control is the leg's own calibration: a renderer that cannot even advance one record per
     // instance says nothing about a divisor of two.
     EXPECT_EQ(std::string("divisor-1-honoured"), atOne)
-        << "the frequency-1 control must consume one record per instance on any backend that "
+        << "the frequency-1 control must consume one record per instance on any renderer that "
            "rasterizes an instanced draw at all; without it the frequency-2 reading means nothing";
     EXPECT_EQ(atTwo, atTwoAgain)
-        << "the frequency-2 reading changed after an intervening frequency-1 draw, so the backend "
+        << "the frequency-2 reading changed after an intervening frequency-1 draw, so the renderer "
            "carries stale per-instance step state across draws";
 
 #ifdef CNA_INSTANCED_BINDING_OFFSET_ORACLE
     EXPECT_EQ(std::string("divisor-2-honoured"), atTwo)
-        << "this backend implements the per-instance divisor -- REMED-GFX-123 by keying D3D11/D3D12's "
+        << "this renderer implements the per-instance divisor -- REMED-GFX-123 by keying D3D11/D3D12's "
            "input layout on the step rate, EasyGL through glVertexAttribDivisor, REMED-GFX-213 by "
            "expanding the grouping into Vulkan's and bgfx's own instance staging copies: six "
            "instances at InstanceFrequency 2 must consume records 0,0,1,1,2,2";
 #else
     EXPECT_NE(std::string("UNCLASSIFIED"), atTwo)
-        << "REMED-GFX-213 triage on " << kTriageBackendName << ": the frequency-2 frame matched "
+        << "REMED-GFX-213 triage on " << kTriageRendererName << ": the frequency-2 frame matched "
            "no reading this leg can name, so the ticket cannot be classified from it";
 #endif
 }
 
 // ---------------------------------------------------------------------------
 // REMED-GFX-212: what `BasicEffect.VertexColorEnabled` means on the instanced route, measured
-// against the ONE thing that needs no reference at all -- the same backend's own ordinary route,
+// against the ONE thing that needs no reference at all -- the same renderer's own ordinary route,
 // same effect state, same buffer, same triangle, same cell.
 //
 // The reference makes this draw-call-independent. FNA's `GraphicsDevice.DrawInstancedPrimitives`
@@ -2095,7 +2095,7 @@ TEST_F(InstancedDrawMultiStreamTest, ClassicInstanceFrequencyDivisorIsReadOnEver
 // effect state; `BasicEffect.OnApply` derives its shader index from fog, vertex colour, texture and
 // lighting only, with no instancing term; and every vertex-colour permutation in BasicEffect.fx
 // multiplies `vout.Diffuse *= vin.Color`. The same vertex shader therefore runs for both routes,
-// so a backend whose instanced permutation substitutes DiffuseColor for the bound COLOR0 stream
+// so a renderer whose instanced permutation substitutes DiffuseColor for the bound COLOR0 stream
 // disagrees with the reference AND with itself.
 //
 // One instance, an identity per-instance record and VertexOffset zero everywhere: nothing this leg
@@ -2168,15 +2168,15 @@ TEST_F(InstancedDrawMultiStreamTest, OrdinaryAndInstancedRoutesAgreeOnVertexColo
         << "VertexColorEnabled = true with a bound COLOR0 stream and a white DiffuseColor must "
            "produce the stream's own colour on the ORDINARY route";
 
-#if defined(CNA_BACKEND_EASYGL) || defined(CNA_BACKEND_BGFX) || \
-    defined(CNA_BACKEND_VULKAN) || defined(CNA_BACKEND_WEBGPU)
+#if defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_BGFX) || \
+    defined(CNA_RENDERER_VULKAN) || defined(CNA_RENDERER_WEBGPU)
     // EasyGL and bgfx always honoured it; Vulkan and WebGPU were corrected by REMED-GFX-212, which
     // is why the measured-defect arm this leg used to carry for those two is gone. It carried one
-    // for as long as either backend was known to substitute DiffuseColor for the bound COLOR0
+    // for as long as either renderer was known to substitute DiffuseColor for the bound COLOR0
     // stream on this route, asserting that pixel measurement until the correction landed and made
     // the assertion fail -- which is what forced its removal.
     EXPECT_EQ(ordinary, instanced)
-        << "REMED-GFX-212: this backend was measured honouring VertexColorEnabled on BOTH routes, "
+        << "REMED-GFX-212: this renderer was measured honouring VertexColorEnabled on BOTH routes, "
            "which is the reference contract -- BasicEffect's shader index has no instancing term, "
            "so the same vertex shader runs for both";
 #else
@@ -2184,8 +2184,8 @@ TEST_F(InstancedDrawMultiStreamTest, OrdinaryAndInstancedRoutesAgreeOnVertexColo
     // instanced route from DiffuseColor, but no D3D display was reachable from the triage session
     // (SDL reports "x11 not available" under Wine on the Xvfb displays this environment permits),
     // so neither arm above may claim them. The measurement above still prints on any host that can
-    // run this backend, which is the whole evidence the ticket is missing for them.
-    SUCCEED() << "unmeasured backend: ordinary=" << ordinary << " instanced=" << instanced;
+    // run this renderer, which is the whole evidence the ticket is missing for them.
+    SUCCEED() << "unmeasured renderer: ordinary=" << ordinary << " instanced=" << instanced;
 #endif
 }
 
@@ -2193,7 +2193,7 @@ TEST_F(InstancedDrawMultiStreamTest, OrdinaryAndInstancedRoutesAgreeOnVertexColo
 
 // ===========================================================================
 // The PUBLIC TRANSPORT group. No rasterizer, no capability: every one of these runs on EVERY
-// backend, because a range that leaves a bound buffer is wrong everywhere and must report the same
+// renderer, because a range that leaves a bound buffer is wrong everywhere and must report the same
 // public exception everywhere. This is where REMED-GFX-202's red-first reproduction lives.
 // ===========================================================================
 
@@ -2201,7 +2201,7 @@ TEST_F(InstancedDrawMultiStreamTest, OrdinaryAndInstancedRoutesAgreeOnVertexColo
 // Coverage item 19: a SHORT SECONDARY PER-VERTEX stream. The position stream is long enough for
 // the requested window and the colour stream is not. Before REMED-GFX-202 the instanced route
 // validated only the buffer named by `currentVertexBuffer_` and the first per-instance binding, so
-// this request was ACCEPTED and every backend was free to read past the colour buffer's end.
+// this request was ACCEPTED and every renderer was free to read past the colour buffer's end.
 // ---------------------------------------------------------------------------
 TEST_F(InstancedDrawMultiStreamTest, ShortSecondaryPerVertexStreamIsRejected)
 {
@@ -2296,7 +2296,7 @@ TEST_F(InstancedDrawMultiStreamTest, ShortSecondPerInstanceStreamIsRejected)
 // The instance-frequency arithmetic, asserted without a rasterizer. `instanceCount` instances at
 // frequency `f` consume exactly `1 + (instanceCount - 1) / f` records, starting at the binding's
 // own VertexOffset. One record fewer must be rejected and exactly enough must be accepted, for
-// both frequencies -- so a backend that reads the frequency as a byte stride, ignores it, or
+// both frequencies -- so a renderer that reads the frequency as a byte stride, ignores it, or
 // treats it as one cannot satisfy both halves.
 // ---------------------------------------------------------------------------
 TEST_F(InstancedDrawMultiStreamTest, InstanceFrequencyFixesTheExactConsumedRecordCount)
@@ -2345,7 +2345,7 @@ TEST_F(InstancedDrawMultiStreamTest, InstanceFrequencyFixesTheExactConsumedRecor
         VertexBufferBinding(&exactBuffer, kOffset, kFrequency),
     });
     effect.Apply();
-    // Exactly enough: the SHARED layer must accept it. A backend may still reject afterwards -- it
+    // Exactly enough: the SHARED layer must accept it. A renderer may still reject afterwards -- it
     // may implement no instanced path at all, or bound its own staging copy more tightly. Those are
     // native capability limits, not verdicts on the public range, so they are told apart by the
     // shared gate's own wording: only it names the offending slot.
@@ -2363,12 +2363,12 @@ TEST_F(InstancedDrawMultiStreamTest, InstanceFrequencyFixesTheExactConsumedRecor
 }
 
 // ---------------------------------------------------------------------------
-// The declared capability boundary, asserted on EVERY backend. A backend that does not claim
+// The declared capability boundary, asserted on EVERY renderer. A renderer that does not claim
 // MultiStreamVertexInput must REJECT a mixed-stream instanced draw with System::NotSupportedException
 // rather than render it from a subset of the bound streams; one that claims it must accept the
 // same call. This is what keeps the skips above from outliving the gap they describe.
 // ---------------------------------------------------------------------------
-TEST_F(InstancedDrawMultiStreamTest, UnsupportedBackendRejectsMixedStreamInstancingDeterministically)
+TEST_F(InstancedDrawMultiStreamTest, UnsupportedRendererRejectsMixedStreamInstancingDeterministically)
 {
     const GridLayout layout = TargetLayout();
     const MixedStreamFixture fixture = BuildMixedStreamFixture(layout);
@@ -2412,17 +2412,17 @@ TEST_F(InstancedDrawMultiStreamTest, UnsupportedBackendRejectsMixedStreamInstanc
     if (!device.SupportsCapability(GraphicsCapability::MultiStreamVertexInput))
     {
         EXPECT_THROW(draw(), System::NotSupportedException)
-            << "a backend that does not claim MultiStreamVertexInput must reject a mixed-stream "
+            << "a renderer that does not claim MultiStreamVertexInput must reject a mixed-stream "
                "instanced draw deterministically, never render it from a subset of the streams";
         return;
     }
 
 #ifdef CNA_INSTANCED_MULTI_STREAM_ORACLE
     EXPECT_NO_THROW(draw())
-        << "a backend that claims MultiStreamVertexInput and implements instanced drawing must "
+        << "a renderer that claims MultiStreamVertexInput and implements instanced drawing must "
            "accept a mixed-frequency multi-stream instanced draw";
-#elif defined(CNA_BACKEND_WICKED)
-    // A FOURTH measured outcome (plan_wicked.md WICKED-58 / REMED-GFX-202): this backend claims
+#elif defined(CNA_RENDERER_WICKED)
+    // A FOURTH measured outcome (plan_wicked.md WICKED-58 / REMED-GFX-202): this renderer claims
     // MultiStreamVertexInput because several PER-VERTEX streams genuinely re-slot, and it
     // implements instanced drawing -- but its instanced vertex programs declare exactly one
     // per-instance record, so a second per-instance stream cannot be expressed. The draw must
@@ -2432,46 +2432,46 @@ TEST_F(InstancedDrawMultiStreamTest, UnsupportedBackendRejectsMixedStreamInstanc
     {
         draw();
         ADD_FAILURE()
-            << "this backend declares exactly one per-instance stream and was expected to refuse "
+            << "this renderer declares exactly one per-instance stream and was expected to refuse "
                "the second rather than render from a subset of the streams";
     }
     catch (const std::exception& e)
     {
         EXPECT_STREQ(
-            "Wicked backend: only one per-instance VertexBufferBinding is supported (2 were "
+            "Wicked renderer: only one per-instance VertexBufferBinding is supported (2 were "
             "bound).",
             e.what())
-            << "the refusal must be this backend's own declared one-instance-stream boundary, "
+            << "the refusal must be this renderer's own declared one-instance-stream boundary, "
                "not a different failure";
     }
 #else
-    // A THIRD, measured outcome, not a silent skip: this backend claims MultiStreamVertexInput
+    // A THIRD, measured outcome, not a silent skip: this renderer claims MultiStreamVertexInput
     // (REMED-GFX-201 taught it ordinary multi-stream input) but overrides no
     // DrawInstancedPrimitivesEx at all, so every instanced draw -- one stream or four -- reaches
-    // IGraphicsBackend's own default. The mixed-stream array must reach that SAME declared
-    // boundary and not some other failure; this arm fails the moment such a backend gains an
+    // IGraphicsRenderer's own default. The mixed-stream array must reach that SAME declared
+    // boundary and not some other failure; this arm fails the moment such a renderer gains an
     // instanced path, so the boundary cannot outlive itself. REMED-GFX-210 records that CNA has
     // no capability a caller can query for hardware instancing (FNA3D's own
-    // FNA3D_SupportsHardwareInstancing), which is why this arm has to be selected by backend set.
+    // FNA3D_SupportsHardwareInstancing), which is why this arm has to be selected by renderer set.
     try
     {
         draw();
         ADD_FAILURE()
-            << "this backend was expected to implement no instanced draw path at all, but the "
+            << "this renderer was expected to implement no instanced draw path at all, but the "
                "mixed-stream draw was accepted -- see REMED-GFX-210";
     }
     catch (const std::exception& e)
     {
         EXPECT_STREQ(
-            "DrawInstancedPrimitives is not supported on this graphics backend.", e.what())
-            << "a backend without an instanced draw path must reach IGraphicsBackend's own "
+            "DrawInstancedPrimitives is not supported on this graphics renderer.", e.what())
+            << "a renderer without an instanced draw path must reach IGraphicsRenderer's own "
                "declared boundary for a mixed-stream array too, not a different failure";
     }
 #endif
 }
 
 // ---------------------------------------------------------------------------
-// The public binding state itself, asserted without a rasterizer so every backend runs it: every
+// The public binding state itself, asserted without a rasterizer so every renderer runs it: every
 // slot keeps its own buffer, its own VertexOffset and its own InstanceFrequency, per-vertex and
 // per-instance alike, and a mixed-frequency array survives a round trip unchanged.
 // ---------------------------------------------------------------------------
@@ -2527,7 +2527,7 @@ TEST_F(InstancedDrawMultiStreamTest, BindingStateKeepsEverySlotsOwnOffsetAndFreq
 // ===========================================================================
 // REMED-GFX-211 / REMED-GFX-213 permanent matrices, on the CLASSIC 1+1 shape.
 //
-// The triage group above answers "does this backend read the two offsets and the divisor at all",
+// The triage group above answers "does this renderer read the two offsets and the divisor at all",
 // which is the question that classified the tickets. These legs answer the questions a correction
 // has to keep answering: that each term is applied to its OWN stream, exactly ONCE, that it
 // survives the deferred capture, the index width, the buffer kind, a return to zero and a return
@@ -2535,9 +2535,9 @@ TEST_F(InstancedDrawMultiStreamTest, BindingStateKeepsEverySlotsOwnOffsetAndFreq
 // arithmetic rather than a special case.
 //
 // The shape stays the classic one-per-vertex + one-per-instance pair throughout, so nothing here
-// depends on multi-stream input and every leg runs on every backend that has been taught the
+// depends on multi-stream input and every leg runs on every renderer that has been taught the
 // contract. Colour is deliberately not asserted: CNA's stock instanced shader takes DiffuseColor
-// on several backends (REMED-GFX-212, open), and WHICH RECORDS each stream supplied -- which is
+// on several renderers (REMED-GFX-212, open), and WHICH RECORDS each stream supplied -- which is
 // the whole question here -- is already carried by the cell positions.
 // ===========================================================================
 #ifdef CNA_INSTANCED_BINDING_OFFSET_ORACLE
@@ -2583,7 +2583,7 @@ namespace
 
 // ---------------------------------------------------------------------------
 // baseVertex and the geometry binding's VertexOffset are DIFFERENT terms that both advance the
-// per-vertex stream, so a backend that folds one into the other must fold it exactly once. They are
+// per-vertex stream, so a renderer that folds one into the other must fold it exactly once. They are
 // deliberately different multiples of a group here: losing the offset lands on group 1, losing
 // baseVertex on group 0, losing both on the mesh's own decoy cell, doubling the offset on group 3
 // and doubling baseVertex on group 4 -- five failures, five distinct frames, one correct one.
@@ -2781,7 +2781,7 @@ TEST_F(InstancedDrawMultiStreamTest, ClassicInstanceFrequencyIsArithmeticNotASpe
 }
 
 // ---------------------------------------------------------------------------
-// Deferred capture. Every draw in one frame is queued and replayed at the end of it, so a backend
+// Deferred capture. Every draw in one frame is queued and replayed at the end of it, so a renderer
 // that keeps a pointer into the mutable binding state -- rather than the values the draw was issued
 // under -- renders the LAST draw's offsets and frequency for all of them. Six draws, six different
 // (per-vertex offset, instance offset, frequency) triples, each landing in its own cells.
@@ -3069,7 +3069,7 @@ TEST_F(InstancedDrawMultiStreamTest, QueuedClassicInstancedDrawSurvivesWrapperDe
 }
 
 // ---------------------------------------------------------------------------
-// The same contract on DYNAMIC buffers, whose backing storage a backend may orphan or re-map
+// The same contract on DYNAMIC buffers, whose backing storage a renderer may orphan or re-map
 // between SetData calls -- a source offset computed once against a stale mapping is exactly the
 // defect this leg would catch.
 // ---------------------------------------------------------------------------
@@ -3190,7 +3190,7 @@ TEST_F(InstancedDrawMultiStreamTest, ClassicBothOffsetsHoldAtFrequencyThree)
 
 // ---------------------------------------------------------------------------
 // The frequency must be a property of each DRAW, not of the frame or of anything cached across
-// draws: three queued draws at frequencies 2, 1 and 2, in that order, in ONE frame. A backend that
+// draws: three queued draws at frequencies 2, 1 and 2, in that order, in ONE frame. A renderer that
 // carries the intervening frequency-1 state into the third draw lights band 3 as well; one that
 // carries the first draw's 2 into the second loses a cell in band 1. Each draw also has its own
 // pair of offsets, so no leg can pass on another's numbers.

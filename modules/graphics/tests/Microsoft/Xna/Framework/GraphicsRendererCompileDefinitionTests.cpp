@@ -1,0 +1,290 @@
+// SPDX-License-Identifier: MS-PL
+#include <gtest/gtest.h>
+#include "CNA/GraphicsRendererType.hpp"
+
+#if defined(CNA_RENDERER_BGFX) && __has_include(<bgfx/bgfx.h>)
+#define CNA_TEST_BGFX_AVAILABLE 1
+#include <bgfx/bgfx.h>
+#include "CNA/Internal/Renderers/Bgfx/BgfxRenderer.hpp"
+#endif
+
+#ifdef CNA_RENDERER_LLGL
+#include "CNA/Internal/Renderers/Llgl/LlglRendererSelection.hpp"
+#include <stdexcept>
+#endif
+
+TEST(GraphicsRendererCompileDefinitionsTest, ExactlyOneGraphicsRendererIsSelected)
+{
+    int enabled = 0;
+
+#ifdef CNA_RENDERER_SDL_RENDERER
+    ++enabled;
+#endif
+#ifdef CNA_RENDERER_EASYGL
+    ++enabled;
+#endif
+#ifdef CNA_RENDERER_BGFX
+    ++enabled;
+#endif
+#ifdef CNA_RENDERER_VULKAN
+    ++enabled;
+#endif
+#ifdef CNA_RENDERER_WEBGPU
+    ++enabled;
+#endif
+#ifdef CNA_RENDERER_MAGNUM
+    ++enabled;
+#endif
+#ifdef CNA_RENDERER_HEADLESS
+    ++enabled;
+#endif
+#ifdef CNA_RENDERER_SOFTWARE
+    ++enabled;
+#endif
+#ifdef CNA_RENDERER_STUB
+    ++enabled;
+#endif
+#ifdef CNA_RENDERER_CANVAS
+    ++enabled;
+#endif
+#ifdef CNA_RENDERER_HTML_DOM
+    ++enabled;
+#endif
+#ifdef CNA_RENDERER_SKIA
+    ++enabled;
+#endif
+#ifdef CNA_RENDERER_ASCII
+    ++enabled;
+#endif
+#ifdef CNA_RENDERER_D3D11
+    ++enabled;
+#endif
+#ifdef CNA_RENDERER_D3D12
+    ++enabled;
+#endif
+#ifdef CNA_RENDERER_DIRECT2D
+    ++enabled;
+#endif
+#ifdef CNA_RENDERER_FREEDIRECT
+    ++enabled;
+#endif
+    // A genuine, previously-uncaught gap in the D3D9 branch (feature/dx9): no commit in this
+    // file's own history ever added a D3D9 entry here (found 2026-07-16 while merging
+    // feature/sdlgpu). The full unfiltered CnaTests suite was never run under
+    // CNA_GRAPHICS_RENDERER=D3D9 (NEXT.md's own D9-123 note says as much), so this would have
+    // silently failed EXPECT_EQ(enabled, 1) the first time anyone actually did.
+#ifdef CNA_RENDERER_D3D9
+    ++enabled;
+#endif
+#ifdef CNA_RENDERER_DX1
+    ++enabled;
+#endif
+    // plan_dx2.md DX2-84: the same class of gap the D3D9 comment above documents -- no commit in
+    // this file's history ever added a DX2 entry either, so the full CnaTests suite's first-ever
+    // run under CNA_GRAPHICS_RENDERER=DX2 (this regression pass) would have silently failed
+    // EXPECT_EQ(enabled, 1) the same way D3D9's did.
+#ifdef CNA_RENDERER_DX2
+    ++enabled;
+#endif
+    // plan_dx3.md: same class of gap DX2-84's own comment above documents -- DX3 needs its own
+    // entry here too, added proactively this time rather than discovered by a from-scratch regression.
+#ifdef CNA_RENDERER_DX3
+    ++enabled;
+#endif
+#ifdef CNA_RENDERER_DX5
+    ++enabled;
+#endif
+#ifdef CNA_RENDERER_DX6
+    ++enabled;
+#endif
+#ifdef CNA_RENDERER_DX7
+    ++enabled;
+#endif
+#ifdef CNA_RENDERER_DX8
+    ++enabled;
+#endif
+#ifdef CNA_RENDERER_D3D10
+    ++enabled;
+#endif
+#ifdef CNA_RENDERER_SDL_GPU
+    ++enabled;
+#endif
+    // plan_opengles1.md: same class of gap DX2-84's comment above documents -- a new renderer that
+    // never gets an entry here makes this test report 0 enabled renderers rather than 1.
+#ifdef CNA_RENDERER_OPENGLES1
+    ++enabled;
+#endif
+#ifdef CNA_RENDERER_OPENGL4
+    ++enabled;
+#endif
+    // plan_opengl1.md phase 12 finding: same gap class as the D3D9 comment above -- no commit in
+    // this file's own history ever added an OPENGL1 entry either, and the full unfiltered
+    // CnaTests suite had never actually been run under CNA_GRAPHICS_RENDERER=OPENGL1 until this
+    // audit did so.
+#ifdef CNA_RENDERER_OPENGL1
+    ++enabled;
+#endif
+#ifdef CNA_RENDERER_OPENGL2
+    ++enabled;
+#endif
+    // plan_wicked.md: same gap class the D3D9 comment above documents -- the registration union
+    // that added the WICKED identity everywhere else never conflicted on this file, so its silent
+    // omission surfaced only when the full CnaTests suite first ran under
+    // CNA_GRAPHICS_RENDERER=WICKED and this test reported 0 enabled renderers.
+#ifdef CNA_RENDERER_WICKED
+    ++enabled;
+#endif
+#ifdef CNA_RENDERER_SOKOL
+    ++enabled;
+#endif
+#ifdef CNA_RENDERER_DILIGENT
+    ++enabled;
+#endif
+#ifdef CNA_RENDERER_GLIDE
+    ++enabled;
+#endif
+#ifdef CNA_RENDERER_GDI
+    ++enabled;
+#endif
+#ifdef CNA_RENDERER_LLGL
+    ++enabled;
+#endif
+
+    // plan_metal.md METAL-232: the identical class of gap the D3D9 comment above documents --
+    // no commit in this file's own history ever added a Metal entry here, and this file has never
+    // actually been built/run under CNA_GRAPHICS_RENDERER=METAL (no Apple toolchain in any session
+    // to date), so this would have silently failed EXPECT_EQ(enabled, 1) the first time
+    // metal-macos-ci.yml's build actually ran the full CnaTests suite.
+#ifdef CNA_RENDERER_METAL
+    ++enabled;
+#endif
+
+    EXPECT_EQ(enabled, 1);
+}
+
+#ifdef CNA_RENDERER_SOKOL
+TEST(GraphicsRendererCompileDefinitionsTest, SokolRendererIsReportedByName)
+{
+    // The compile-time renderer identity has to agree with the CNA_RENDERER_SOKOL define
+    // cmake/RendererSelection.cmake set; a new renderer that forgets its GraphicsRendererType.hpp
+    // entry would otherwise still link and silently report another renderer's name.
+    EXPECT_EQ(CNA::getCurrentGraphicsRendererType(), CNA::GraphicsRendererType::Sokol);
+    EXPECT_EQ(CNA::getCurrentGraphicsRendererName(), "SOKOL");
+}
+#endif
+
+#ifdef CNA_RENDERER_SKIA
+TEST(GraphicsRendererCompileDefinitionsTest, SkiaMacroMatchesPublicRendererIdentity)
+{
+    EXPECT_EQ(CNA::getCurrentGraphicsRendererType(), CNA::GraphicsRendererType::Skia);
+    EXPECT_EQ(CNA::getCurrentGraphicsRendererName(), "SKIA");
+}
+#endif
+
+#ifdef CNA_RENDERER_LLGL
+TEST(GraphicsRendererCompileDefinitionsTest, LlglDefaultRendererPreferenceIsRealAndDrawing)
+{
+    namespace Detail = CNA::Internal::Renderers::Llgl::Detail;
+
+    const auto preference = Detail::GetDefaultRendererPreference();
+    ASSERT_EQ(preference.size(), 1u);
+    EXPECT_EQ(preference[0], Detail::RendererModule::OpenGL);
+
+    // The Null module renders nothing, so it must never be reachable without being asked for by
+    // name: an automatic fallback onto it would turn "no usable GPU" into a silent black screen.
+    for (const auto module : preference)
+    {
+        EXPECT_NE(module, Detail::RendererModule::Null);
+        EXPECT_TRUE(Detail::IsRendererModuleCompiledIn(module));
+    }
+}
+
+TEST(GraphicsRendererCompileDefinitionsTest, LlglRendererOverrideParsingWorks)
+{
+    namespace Detail = CNA::Internal::Renderers::Llgl::Detail;
+
+    EXPECT_EQ(Detail::ParseRendererModuleOverride("auto"), Detail::GetDefaultRendererPreference());
+    EXPECT_EQ(Detail::ParseRendererModuleOverride(nullptr), Detail::GetDefaultRendererPreference());
+    EXPECT_EQ(Detail::ParseRendererModuleOverride(""), Detail::GetDefaultRendererPreference());
+
+    if (Detail::IsRendererModuleCompiledIn(Detail::RendererModule::OpenGL))
+    {
+        const auto parsed = Detail::ParseRendererModuleOverride("OpenGL");
+        ASSERT_EQ(parsed.size(), 1u);
+        EXPECT_EQ(parsed[0], Detail::RendererModule::OpenGL);
+        EXPECT_EQ(Detail::ParseRendererModuleOverride("gl"), parsed);
+    }
+
+    if (Detail::IsRendererModuleCompiledIn(Detail::RendererModule::Vulkan))
+    {
+        EXPECT_THROW((void)Detail::ParseRendererModuleOverride("vulkan"), std::runtime_error);
+    }
+}
+
+TEST(GraphicsRendererCompileDefinitionsTest, LlglRendererOverrideRejectsInvalidValue)
+{
+    namespace Detail = CNA::Internal::Renderers::Llgl::Detail;
+
+    EXPECT_THROW((void)Detail::ParseRendererModuleOverride("invalid-renderer"), std::runtime_error);
+}
+
+TEST(GraphicsRendererCompileDefinitionsTest, LlglModuleNamesMatchLlglsOwnModuleNames)
+{
+    namespace Detail = CNA::Internal::Renderers::Llgl::Detail;
+
+    EXPECT_STREQ(Detail::GetRendererModuleName(Detail::RendererModule::OpenGL), "OpenGL");
+    EXPECT_STREQ(Detail::GetRendererModuleName(Detail::RendererModule::Vulkan), "Vulkan");
+    EXPECT_STREQ(Detail::GetRendererModuleName(Detail::RendererModule::Null), "Null");
+}
+
+TEST(GraphicsRendererCompileDefinitionsTest, LlglOnlyOpenGLNeedsAnOpenGLWindow)
+{
+    namespace Detail = CNA::Internal::Renderers::Llgl::Detail;
+
+    EXPECT_TRUE(Detail::RendererModuleNeedsOpenGLWindow(Detail::RendererModule::OpenGL));
+    EXPECT_FALSE(Detail::RendererModuleNeedsOpenGLWindow(Detail::RendererModule::Vulkan));
+    EXPECT_FALSE(Detail::RendererModuleNeedsOpenGLWindow(Detail::RendererModule::Null));
+}
+#endif
+
+#ifdef CNA_TEST_BGFX_AVAILABLE
+TEST(GraphicsRendererCompileDefinitionsTest, BgfxApiIsLinkedForBgfxRenderer)
+{
+    const bgfx::TextureHandle invalidTexture = BGFX_INVALID_HANDLE;
+    EXPECT_FALSE(bgfx::isValid(invalidTexture));
+}
+
+TEST(GraphicsRendererCompileDefinitionsTest, BgfxRendererTypeDefaultIsSafeForPlatform)
+{
+    const auto renderer = CNA::Internal::Renderers::Bgfx::Detail::GetDefaultRendererType();
+#if defined(__linux__)
+EXPECT_EQ(renderer, bgfx::RendererType::OpenGL);
+#else
+EXPECT_EQ(renderer, bgfx::RendererType::Count);
+#endif
+}
+
+TEST(GraphicsRendererCompileDefinitionsTest, BgfxRendererTypeOverrideParsingWorks)
+{
+    EXPECT_EQ(
+        CNA::Internal::Renderers::Bgfx::Detail::ParseRendererTypeOverride("vulkan"),
+        bgfx::RendererType::Vulkan
+    );
+    EXPECT_EQ(
+        CNA::Internal::Renderers::Bgfx::Detail::ParseRendererTypeOverride("OpenGL"),
+        bgfx::RendererType::OpenGL
+    );
+    EXPECT_EQ(
+        CNA::Internal::Renderers::Bgfx::Detail::ParseRendererTypeOverride("auto"),
+        bgfx::RendererType::Count
+    );
+}
+
+TEST(GraphicsRendererCompileDefinitionsTest, BgfxRendererTypeOverrideRejectsInvalidValue)
+{
+    EXPECT_THROW(
+        CNA::Internal::Renderers::Bgfx::Detail::ParseRendererTypeOverride("invalid-renderer"),
+        std::runtime_error
+    );
+}
+#endif

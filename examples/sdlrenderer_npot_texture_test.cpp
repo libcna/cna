@@ -3,10 +3,10 @@
 // Mirrors Task 268 (EasyGL's easygl_npot_texture_test.cpp), extended to both a 3x5 and a
 // 7x11 texture per this task's own row.
 //
-// SDL_Renderer's SdlTextureBackend creates textures via SDL_CreateTexture+SDL_UpdateTexture,
+// SDL_Renderer's SdlTextureRenderer creates textures via SDL_CreateTexture+SDL_UpdateTexture,
 // which abstracts away POT/NPOT handling entirely (unlike EasyGL's raw OpenGL calls, which
 // must manage GL row alignment/padding manually for non-multiple-of-4 widths). This is a
-// genuinely backend-specific question since SDL_Renderer's own internal implementation could
+// genuinely renderer-specific question since SDL_Renderer's own internal implementation could
 // in principle pad an NPOT texture to POT on an older/limited GL profile, corrupting
 // sampling -- worth verifying with a real render+readback rather than assuming.
 //

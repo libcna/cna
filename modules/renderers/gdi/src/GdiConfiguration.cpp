@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 
-#include "CNA/Internal/Backends/Gdi/GdiConfiguration.hpp"
+#include "CNA/Internal/Renderers/Gdi/GdiConfiguration.hpp"
 
 #include <cstdio>
 #include <cstdlib>
@@ -8,7 +8,7 @@
 #include <string>
 #include <string_view>
 
-namespace CNA::Internal::Backends::Gdi
+namespace CNA::Internal::Renderers::Gdi
 {
     namespace
     {
@@ -132,7 +132,7 @@ namespace CNA::Internal::Backends::Gdi
     GdiConfiguration CaptureGdiConfigurationFromEnvironment()
     {
         // Copy immediately so the parser never retains pointers into mutable process-global
-        // environment storage. Each setting is queried exactly once for this backend instance.
+        // environment storage. Each setting is queried exactly once for this renderer instance.
         const std::optional<std::string> presentationFilter =
             ReadEnvironmentValue("CNA_GDI_PRESENT_FILTER");
         const std::optional<std::string> dirtyPresentation =

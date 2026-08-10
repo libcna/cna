@@ -5,7 +5,7 @@
 // (VSBasicVertexLighting*) -- lighting is computed ONCE per vertex and Gouraud-interpolated
 // across the triangle, not re-evaluated per fragment. lit_textured3d.vert/frag.glsl is the
 // PreferPerPixelLighting=true family; this is its per-vertex-lit sibling, selected by
-// VulkanGraphicsBackend when the flag is false (XNA's own default). Identical Blinn-Phong math to
+// VulkanRenderer when the flag is false (XNA's own default). Identical Blinn-Phong math to
 // lit_textured3d.frag.glsl (FNA's own Lighting.fxh ComputeLights(), same formula, same inputs) --
 // only the STAGE it runs in changes. Only ever bound when lightingEnabled is true (see the C++
 // dispatch), so unlike lit_textured3d.vert/frag.glsl this shader pair does not need its own

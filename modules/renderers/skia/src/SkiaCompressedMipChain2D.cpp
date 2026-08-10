@@ -1,13 +1,13 @@
-#include "CNA/Internal/Backends/Skia/SkiaCompressedMipChain2D.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaCompressedMipChain2D.hpp"
 
-#include "CNA/Internal/Backends/Skia/SkiaResourcePolicy.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaResourcePolicy.hpp"
 #include "System/NotSupportedException.hpp"
 
 #include <algorithm>
 #include <stdexcept>
 #include <utility>
 
-namespace CNA::Internal::Backends::Skia
+namespace CNA::Internal::Renderers::Skia
 {
     namespace
     {
@@ -130,4 +130,4 @@ namespace CNA::Internal::Backends::Skia
     {
         return storage_.data() + Level(level).offset;
     }
-} // namespace CNA::Internal::Backends::Skia
+} // namespace CNA::Internal::Renderers::Skia

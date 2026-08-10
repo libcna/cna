@@ -67,8 +67,8 @@ protected:
 
         auto& device = getGraphicsDeviceProperty();
         ShaderEffect effect(device, kVertexGlsl, kFragmentGlsl);
-        Check(!effect.IsEffectValid() && effect.GetEffectBackendPtr() == nullptr,
-              "untagged GLSL does not fabricate a Skia effect backend");
+        Check(!effect.IsEffectValid() && effect.GetEffectRendererPtr() == nullptr,
+              "untagged GLSL does not fabricate a Skia effect renderer");
         Check(effect.getVertexSourceProperty() == kVertexGlsl
               && effect.getFragmentSourceProperty() == kFragmentGlsl,
               "invalid effect retains both opaque source strings exactly");

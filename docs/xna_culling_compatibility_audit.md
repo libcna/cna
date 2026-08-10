@@ -68,7 +68,7 @@ important clue — it just needed to be tested at the scale of the whole tank, n
 All screenshots referenced below are preserved at `docs/xna_culling_compatibility_audit_images/`
 (not generated/build output — committed investigation reference material).
 
-**CNA (pre-fix, EasyGL backend, texture fix applied, no CullMode override), live screenshot:**
+**CNA (pre-fix, EasyGL renderer, texture fix applied, no CullMode override), live screenshot:**
 `cna_default_bug_present.png`.
 
 A dark, flat, disc-shaped surface is clearly visible poking out from behind/under the turret
@@ -93,7 +93,7 @@ behavior was compared, per the task's own explicit instruction.
 ## 4. Phase 1 — minimal CNA culling reproducer (no Model/FBX/texture/lighting/bones/animation)
 
 Two new permanent regression tests were added to `cna_graphics`, both registered on all 3
-runnable backends (EasyGL, Vulkan, Bgfx):
+runnable renderers (EasyGL, Vulkan, Bgfx):
 
 ### 4.1 `examples/rasterizerstate_cullmode_camera_test.cpp`
 
@@ -121,7 +121,7 @@ Five scenarios: (a) identity anchor, (b) orthographic + `CreateLookAt`, (c) pers
 (`CreateRotationY`), (e) same camera + negative-determinant World (`CreateScale(-1,1,1)`,
 documented separately — a real flip is *expected* here).
 
-**Result: 30/30 checks PASS on EasyGL, Vulkan, and Bgfx — identical outcome on all 3 backends.**
+**Result: 30/30 checks PASS on EasyGL, Vulkan, and Bgfx — identical outcome on all 3 renderers.**
 
 ### 4.2 `examples/rasterizerstate_cullmode_indexed_basiceffect_test.cpp`
 
@@ -143,9 +143,9 @@ actually works.
 **CNA's `CullMode`/`RasterizerState` implementation is self-consistent** across identity,
 orthographic, and perspective projection; a real `Matrix.CreateLookAt` view; positive- and
 negative-determinant World transforms; the simple and the real indexed/`BasicEffect` dispatch; and
-all 3 backends. This ruled out an *internal* framework inconsistency (an enum mapped backward on
-just one backend, or a Y-flip applied inconsistently with the cull-state mapping on one specific
-backend). **It could not, on its own, rule out CNA's entire convention being self-consistently
+all 3 renderers. This ruled out an *internal* framework inconsistency (an enum mapped backward on
+just one renderer, or a Y-flip applied inconsistently with the cull-state mapping on one specific
+renderer). **It could not, on its own, rule out CNA's entire convention being self-consistently
 different from real XNA's — see §5.5 and §6 for why, and how that was resolved.**
 
 ---
@@ -256,7 +256,7 @@ not done here.
 ## 6. The decisive test — resolving "CNA bug" vs. "asset bug" with real XNA 4.0, not FNA reading
 
 Phase 1 (§4) proved CNA's `CullMode` convention is *self-consistent*. It could not prove that
-convention matches *real* XNA — that conclusion was drawn from reading FNA's own native backend
+convention matches *real* XNA — that conclusion was drawn from reading FNA's own native renderer
 source (`FNA3D_Driver_OpenGL.c`/`FNA3D_Driver_D3D11.c`), which is authoritative for this project's
 own conventions (per `CLAUDE.md`) but is still an independent reimplementation, and the specific
 derivation involves an easy-to-invert detail (NDC space is Y-up; screen/pixel space is Y-down;
@@ -342,7 +342,7 @@ two different `startIndex` offsets (0 and 3). On Bgfx only, the second draw sile
 **first** triangle's own indices instead of the requested second range.
 
 **Root cause, confirmed by direct source reading**:
-`BgfxGraphicsBackend::DrawIndexedPrimitivesEx`'s non-wireframe branch calls the offset-less
+`BgfxRenderer::DrawIndexedPrimitivesEx`'s non-wireframe branch calls the offset-less
 `bgfx::setVertexBuffer(stream, handle)` / `bgfx::setIndexBuffer(handle)` overloads
 unconditionally — `GpuDrawParams::startIndex`/`baseVertex` are read and forwarded correctly to
 `ExpandWireframeIndices()` (the *wireframe* path only) but are **never applied** to the real,
@@ -388,7 +388,7 @@ evidence that closed this investigation.
   §6).
 
 Diagnostic-only changes made and **reverted, not committed**:
-- A temporary `BgfxGraphicsBackend::DrawIndexedPrimitivesEx` `startIndex`/`baseVertex` fix (§8) —
+- A temporary `BgfxRenderer::DrawIndexedPrimitivesEx` `startIndex`/`baseVertex` fix (§8) —
   reverted after it introduced a worse regression on retest.
 - A temporary Bgfx-only regression test for that fix — deleted along with the reverted fix.
 

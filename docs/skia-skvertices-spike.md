@@ -8,7 +8,7 @@ buffers, effects or capability reporting.
 ## Reference contract
 
 The current EasyGL fixed PCT program in
-`src/CNA/Internal/Backends/EasyGL/EasyGLGraphicsBackend.cpp`:
+`src/CNA/Internal/Renderers/EasyGL/EasyGLRenderer.cpp`:
 
 - uploads CNA's row-vector `World * View * Projection` matrix in column-major form;
 - computes `gl_Position = uWVP * vec4(aPos, 1.0)`;

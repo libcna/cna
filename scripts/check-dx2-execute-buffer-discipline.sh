@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# plan_dx2.md design decision 12: a real, automated proof that the DX2 backend never quietly
+# plan_dx2.md design decision 12: a real, automated proof that the DX2 renderer never quietly
 # reaches for the proven-broken execute-buffer Direct3D path (IDirect3D/IDirect3DDevice::Execute/
 # D3DEXECUTEBUFFERDESC/IDirect3DExecuteBuffer/D3DINSTRUCTION/D3DOP_*) instead of the working
 # IDirect3DDevice2::DrawPrimitive/DrawIndexedPrimitive one -- see plan_dx2.md's status note (the
@@ -27,17 +27,17 @@ set -uo pipefail
 
 repo_root="$1"
 dx2_src="${repo_root}/modules/renderers/dx2/src"
-dx2_include="${repo_root}/modules/renderers/dx2/include/CNA/Internal/Backends/Dx2"
+dx2_include="${repo_root}/modules/renderers/dx2/include/CNA/Internal/Renderers/Dx2"
 
 if [ ! -d "$dx2_src" ] || [ ! -d "$dx2_include" ]; then
-    echo "error: DX2 backend directories not found under ${repo_root}" >&2
+    echo "error: DX2 renderer directories not found under ${repo_root}" >&2
     exit 1
 fi
 
 pattern='IDirect3DDevice::Execute\b|D3DEXECUTEBUFFERDESC|IDirect3DExecuteBuffer|D3DINSTRUCTION|D3DOP_[A-Z]+|\bIDirect3D\b|\bIDirect3DDevice\b|IDirectDraw[247]\b|IDirectDrawSurface[234567]\b|DDSURFACEDESC2\b'
 
 # Strip // line comments before matching -- this check is about what the CODE references, not
-# about prose that documents the discipline by naming the forbidden symbols (which this backend's
+# about prose that documents the discipline by naming the forbidden symbols (which this renderer's
 # own header/source comments legitimately do). Processed one file at a time (not concatenated via
 # xargs) so a real hit reports the actual file/line.
 violations=0
@@ -48,7 +48,7 @@ while IFS= read -r -d '' file; do
 done < <(find "$dx2_src" "$dx2_include" -type f \( -name '*.cpp' -o -name '*.hpp' \) -print0)
 
 if [ "$violations" -ne 0 ]; then
-    echo "error: DX2 backend source references a forbidden execute-buffer/legacy-interface symbol" >&2
+    echo "error: DX2 renderer source references a forbidden execute-buffer/legacy-interface symbol" >&2
     echo "above -- DX2 must use ONLY IDirect3DDevice2::DrawPrimitive/DrawIndexedPrimitive for its 3D" >&2
     echo "layer (never IDirect3DDevice::Execute/D3DEXECUTEBUFFERDESC/IDirect3DExecuteBuffer/" >&2
     echo "D3DINSTRUCTION/D3DOP_*/the un-versioned IDirect3D/IDirect3DDevice), and ONLY v1 DirectDraw" >&2
@@ -57,5 +57,5 @@ if [ "$violations" -ne 0 ]; then
     exit 1
 fi
 
-echo "OK: DX2 backend source uses only DrawPrimitive-based Direct3D v2 and v1-only DirectDraw symbols."
+echo "OK: DX2 renderer source uses only DrawPrimitive-based Direct3D v2 and v1-only DirectDraw symbols."
 exit 0

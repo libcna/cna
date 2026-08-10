@@ -12,7 +12,7 @@
 #include <stdexcept>
 #include <thread>
 
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 
 #if defined(__EMSCRIPTEN__)
 #include <emscripten.h>
@@ -131,7 +131,7 @@ namespace Microsoft::Xna::Framework
             previousSleepTime = System::TimeSpan::FromMilliseconds(1.0);
         }
 
-        Window_.setWindowInternal(GraphicsDevice_.GetBackend().GetWindowInternal());
+        Window_.setWindowInternal(GraphicsDevice_.GetRenderer().GetWindowInternal());
         Content_.setGraphicsDevice(GraphicsDevice_);
 
         FrameworkDispatcher::Update();
@@ -919,9 +919,9 @@ namespace Microsoft::Xna::Framework
                     if (!event.key.repeat)
                     {
                         if (event.key.key == SDLK_F9)
-                            GraphicsDevice_.GetBackend().DebugSimulateContextLoss();
+                            GraphicsDevice_.GetRenderer().DebugSimulateContextLoss();
                         else if (event.key.key == SDLK_F10)
-                            GraphicsDevice_.GetBackend().DebugRestoreContext();
+                            GraphicsDevice_.GetRenderer().DebugRestoreContext();
                     }
                     break;
 

@@ -2,11 +2,11 @@
 // Task 709: Verify MRT (SetRenderTargets with 2+ bindings) throws clearly on SDL_Renderer.
 //
 // SDL_Renderer's 2D render pipeline supports exactly one active render target at a time (a
-// single SDL_Texture bound via SDL_SetRenderTarget). The shared IGraphicsBackend::SetRenderTargets
+// single SDL_Texture bound via SDL_SetRenderTarget). The shared IGraphicsRenderer::SetRenderTargets
 // default implementation would otherwise silently bind only the FIRST target and ignore the rest
 // -- meaning a game submitting genuine MRT draws (intending separate content per target) would
 // either lose data silently or have every draw land on the same single texture, with no error at
-// all. Fixed by overriding SdlGraphicsBackend::SetRenderTargets to throw a clear
+// all. Fixed by overriding SdlRenderer::SetRenderTargets to throw a clear
 // std::runtime_error whenever count > 1, rather than silently misbehaving.
 //
 // This test found while writing it that GraphicsDeviceValidationTests.cpp's own
@@ -19,12 +19,12 @@
 // (ctest never builds anything itself). The TRUE SDL_Renderer known-failure baseline from Task
 // 704 onward should have read 11, not 13 -- corrected here; see NEXT.md/plan_graphics.md for the
 // full note. SetRenderTargets_FourTargets_DoesNotThrow now needed updating for THIS task's own
-// decision (added a CNA_BACKEND_SDL_RENDERER conditional expecting a throw instead, since 4
-// targets now correctly throws here due to this backend's genuine MRT limitation, not the
+// decision (added a CNA_RENDERER_SDL_RENDERER conditional expecting a throw instead, since 4
+// targets now correctly throws here due to this renderer's genuine MRT limitation, not the
 // separate MAX_RENDERTARGET_BINDINGS cap check that test was originally written for).
 //
 // Requires PresentationMode::NativeBackBuffer (Task 915 finding): SDL_RenderReadPixels operates
-// in physical output coordinates, while this backend's default presentation mode
+// in physical output coordinates, while this renderer's default presentation mode
 // (FixedHeightDynamicWidth) does not map logical pixels 1:1 to physical ones.
 //
 // Exit code 0 = all checks PASS, 1 = at least one FAIL.

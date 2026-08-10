@@ -4,7 +4,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Logger.hpp"
 #include <iostream>
 
@@ -17,79 +17,79 @@ namespace Microsoft::Xna::Framework::Graphics
           vertSrc_(vertSrc),
           fragSrc_(fragSrc)
     {
-        if (device.backend_)
+        if (device.renderer_)
         {
-            effectBackend_ = device.backend_->CreateEffectBackend(vertSrc, fragSrc);
-            if (effectBackend_ && !effectBackend_->IsValid())
-                std::cerr << "[ShaderEffect] Compile error: " << effectBackend_->GetCompileError() << "\n";
+            effectRenderer_ = device.renderer_->CreateEffectRenderer(vertSrc, fragSrc);
+            if (effectRenderer_ && !effectRenderer_->IsValid())
+                std::cerr << "[ShaderEffect] Compile error: " << effectRenderer_->GetCompileError() << "\n";
         }
     }
 
     bool ShaderEffect::IsEffectValid() const
     {
-        return effectBackend_ && effectBackend_->IsValid();
+        return effectRenderer_ && effectRenderer_->IsValid();
     }
 
     void ShaderEffect::SetUniformMat4(const char* name, const float* matrix)
     {
-        if (effectBackend_) effectBackend_->SetUniformMat4(name, matrix);
+        if (effectRenderer_) effectRenderer_->SetUniformMat4(name, matrix);
     }
 
     void ShaderEffect::SetUniformVec4(const char* name, float x, float y, float z, float w)
     {
-        if (effectBackend_) effectBackend_->SetUniformVec4(name, x, y, z, w);
+        if (effectRenderer_) effectRenderer_->SetUniformVec4(name, x, y, z, w);
     }
 
     void ShaderEffect::SetUniformVec3(const char* name, float x, float y, float z)
     {
-        if (effectBackend_) effectBackend_->SetUniformVec3(name, x, y, z);
+        if (effectRenderer_) effectRenderer_->SetUniformVec3(name, x, y, z);
     }
 
     void ShaderEffect::SetUniformVec2(const char* name, float x, float y)
     {
-        if (effectBackend_) effectBackend_->SetUniformVec2(name, x, y);
+        if (effectRenderer_) effectRenderer_->SetUniformVec2(name, x, y);
     }
 
     void ShaderEffect::SetUniformFloat(const char* name, float value)
     {
-        if (effectBackend_) effectBackend_->SetUniformFloat(name, value);
+        if (effectRenderer_) effectRenderer_->SetUniformFloat(name, value);
     }
 
     void ShaderEffect::SetUniformInt(const char* name, int value)
     {
-        if (effectBackend_) effectBackend_->SetUniformInt(name, value);
+        if (effectRenderer_) effectRenderer_->SetUniformInt(name, value);
     }
 
     void ShaderEffect::SetUniformFloatArray(const char* name, const float* values, int count)
     {
-        if (effectBackend_) effectBackend_->SetUniformFloatArray(name, values, count);
+        if (effectRenderer_) effectRenderer_->SetUniformFloatArray(name, values, count);
     }
 
     void ShaderEffect::SetUniformVec2Array(const char* name, const float* values, int count)
     {
-        if (effectBackend_) effectBackend_->SetUniformVec2Array(name, values, count);
+        if (effectRenderer_) effectRenderer_->SetUniformVec2Array(name, values, count);
     }
 
     void ShaderEffect::SetTexture(int unit, Texture2D& texture)
     {
-        if (effectBackend_) effectBackend_->BindTexture(unit, &texture.GetBackend());
+        if (effectRenderer_) effectRenderer_->BindTexture(unit, &texture.GetRenderer());
     }
 
     void ShaderEffect::SetTexture(int unit, TextureCube& texture)
     {
-        if (effectBackend_) effectBackend_->BindTextureCube(unit, &texture.GetBackend());
+        if (effectRenderer_) effectRenderer_->BindTextureCube(unit, &texture.GetRenderer());
     }
 
     void ShaderEffect::SetTexture(int unit, Texture3D& texture)
     {
-        if (effectBackend_) effectBackend_->BindTexture3D(unit, &texture.GetBackend());
+        if (effectRenderer_) effectRenderer_->BindTexture3D(unit, &texture.GetRenderer());
     }
 
     ShaderEffect::~ShaderEffect() = default;
 
     void ShaderEffect::Dispose(bool disposing)
     {
-        effectBackend_.reset();
+        effectRenderer_.reset();
         Effect::Dispose(disposing);
     }
 
@@ -100,20 +100,20 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void ShaderEffect::OnApply()
     {
-        if (effectBackend_ && effectBackend_->IsValid())
-            effectBackend_->Bind();
+        if (effectRenderer_ && effectRenderer_->IsValid())
+            effectRenderer_->Bind();
         else
-            CNA::Logger::Debug("ShaderEffect::OnApply() — no backend or compile failed.");
+            CNA::Logger::Debug("ShaderEffect::OnApply() — no renderer or compile failed.");
     }
 
-    CNA::Internal::Backends::IEffectBackend* ShaderEffect::GetEffectBackendPtr() const
+    CNA::Internal::Renderers::IEffectRenderer* ShaderEffect::GetEffectRendererPtr() const
     {
-        return effectBackend_.get();
+        return effectRenderer_.get();
     }
 
-    void ShaderEffect::FillGpuDrawParams(CNA::Internal::Backends::GpuDrawParams& params) const
+    void ShaderEffect::FillGpuDrawParams(CNA::Internal::Renderers::GpuDrawParams& params) const
     {
-        params.customEffectBackend = effectBackend_.get();
+        params.customEffectRenderer = effectRenderer_.get();
     }
 
     const std::string& ShaderEffect::GetTypeName() const

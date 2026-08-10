@@ -1,5 +1,5 @@
 // Shader Model 5.0 (ps_5_0). Ported line-by-line from
-// src/CNA/Internal/Backends/Vulkan/shaders/alpha_test3d.frag.glsl.
+// src/CNA/Internal/Renderers/Vulkan/shaders/alpha_test3d.frag.glsl.
 
 Texture2D    uTexture        : register(t0);
 SamplerState uTextureSampler : register(s0);

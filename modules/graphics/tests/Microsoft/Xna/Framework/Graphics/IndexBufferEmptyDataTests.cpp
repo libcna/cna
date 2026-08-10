@@ -3,7 +3,7 @@
 //
 // Empty model parts are represented by a logical zero-capacity IndexBuffer.  Uploading an empty
 // range, including the pointer returned by an empty std::vector (which may be null), is a true
-// no-op: it must not mutate the backend's last real upload.  The native allocation, if a backend
+// no-op: it must not mutate the renderer's last real upload.  The native allocation, if a renderer
 // needs a non-zero minimum internally, must not make a non-empty upload legal.
 
 #include <array>
@@ -12,7 +12,7 @@
 #include <gtest/gtest.h>
 
 #include "CNA/GraphicsCapability.hpp"
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
@@ -33,8 +33,8 @@
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
-#ifdef CNA_BACKEND_WEBGPU
-#include "CNA/Internal/Backends/WebGPU/WebGPUGraphicsBackend.hpp"
+#ifdef CNA_RENDERER_WEBGPU
+#include "CNA/Internal/Renderers/WebGPU/WebGPURenderer.hpp"
 #endif
 
 using CNA::GraphicsCapability;
@@ -65,7 +65,7 @@ namespace
         void RequireIndexBuffers()
         {
             if (!device.SupportsCapability(GraphicsCapability::ThreeD))
-                GTEST_SKIP() << "Backend explicitly does not support index buffers";
+                GTEST_SKIP() << "Renderer explicitly does not support index buffers";
         }
     };
 
@@ -81,7 +81,7 @@ namespace
             });
     }
 
-#ifdef CNA_BACKEND_WEBGPU
+#ifdef CNA_RENDERER_WEBGPU
     struct WebGpuErrorScopeState
     {
         bool completed = false;
@@ -109,16 +109,16 @@ namespace
         state.completed = true;
     }
 
-    void PopAndExpectClean(CNA::Internal::Backends::WebGPU::WebGPUGraphicsBackend& backend)
+    void PopAndExpectClean(CNA::Internal::Renderers::WebGPU::WebGPURenderer& renderer)
     {
         WebGpuErrorScopeState state;
         WGPUPopErrorScopeCallbackInfo callback{};
         callback.mode = WGPUCallbackMode_AllowProcessEvents;
         callback.callback = OnWebGpuErrorScope;
         callback.userdata1 = &state;
-        wgpuDevicePopErrorScope(backend.Device(), callback);
+        wgpuDevicePopErrorScope(renderer.Device(), callback);
         for (int attempt = 0; attempt < 10000 && !state.completed; ++attempt)
-            wgpuInstanceProcessEvents(backend.Instance());
+            wgpuInstanceProcessEvents(renderer.Instance());
 
         ASSERT_TRUE(state.completed) << "wgpu-native did not complete the error scope";
         EXPECT_EQ(WGPUPopErrorScopeStatus_Success, state.status) << state.message;
@@ -171,8 +171,8 @@ TEST_F(IndexBufferEmptyDataTest, ZeroCountAtStartAndSourceEndIsANoOpAfterARealUp
     buffer16.SetData(source16.data(), static_cast<int>(source16.size()));
     buffer32.SetData(source32.data(), static_cast<int>(source32.size()));
 
-    ASSERT_EQ(4, buffer16.GetBackend().GetIndexCount());
-    ASSERT_EQ(4, buffer32.GetBackend().GetIndexCount());
+    ASSERT_EQ(4, buffer16.GetRenderer().GetIndexCount());
+    ASSERT_EQ(4, buffer32.GetRenderer().GetIndexCount());
 
     EXPECT_NO_THROW(buffer16.SetData(source16.data(), 0));
     EXPECT_NO_THROW(buffer32.SetData(source32.data(), 0));
@@ -183,8 +183,8 @@ TEST_F(IndexBufferEmptyDataTest, ZeroCountAtStartAndSourceEndIsANoOpAfterARealUp
     EXPECT_NO_THROW(buffer16.SetData(static_cast<const std::uint16_t*>(nullptr), 0));
     EXPECT_NO_THROW(buffer32.SetData(static_cast<const std::uint32_t*>(nullptr), 0));
 
-    EXPECT_EQ(4, buffer16.GetBackend().GetIndexCount());
-    EXPECT_EQ(4, buffer32.GetBackend().GetIndexCount());
+    EXPECT_EQ(4, buffer16.GetRenderer().GetIndexCount());
+    EXPECT_EQ(4, buffer32.GetRenderer().GetIndexCount());
 
     std::array<std::uint16_t, 4> result16{};
     std::array<std::uint32_t, 4> result32{};
@@ -305,8 +305,8 @@ TEST_F(IndexBufferEmptyDataTest, DisposedBuffersRejectEmptyOperationsBeforeNoOp)
     dynamic32.Dispose();
     dynamic32.Dispose();
 
-    EXPECT_FALSE(static16.HasBackend());
-    EXPECT_FALSE(dynamic32.HasBackend());
+    EXPECT_FALSE(static16.HasRenderer());
+    EXPECT_FALSE(dynamic32.HasRenderer());
     EXPECT_THROW(static16.SetData(static_cast<const std::uint16_t*>(nullptr), 0),
                  System::ObjectDisposedException);
     EXPECT_THROW(dynamic32.SetData(
@@ -357,24 +357,24 @@ TEST_F(IndexBufferEmptyDataTest, NonzeroUploadsRemainExactForBothWidthsAndBuffer
     static32.GetData(&single32, 1);
     EXPECT_EQ(source16.front(), single16);
     EXPECT_EQ(source32.front(), single32);
-    EXPECT_EQ(1, static16.GetBackend().GetIndexCount());
-    EXPECT_EQ(1, static32.GetBackend().GetIndexCount());
+    EXPECT_EQ(1, static16.GetRenderer().GetIndexCount());
+    EXPECT_EQ(1, static32.GetRenderer().GetIndexCount());
 }
 
-#ifdef CNA_BACKEND_WEBGPU
+#ifdef CNA_RENDERER_WEBGPU
 TEST_F(IndexBufferEmptyDataTest, WebGpuNativeErrorScopesStayClean)
 {
     RequireIndexBuffers();
 
-    auto* backend =
-        dynamic_cast<CNA::Internal::Backends::WebGPU::WebGPUGraphicsBackend*>(
-            &device.GetBackend());
-    ASSERT_NE(nullptr, backend);
+    auto* renderer =
+        dynamic_cast<CNA::Internal::Renderers::WebGPU::WebGPURenderer*>(
+            &device.GetRenderer());
+    ASSERT_NE(nullptr, renderer);
 
     // Nest the two error-filter classes accepted by the pinned wgpu-native runtime so validation
     // and allocation errors are test-fatal instead of merely reaching the uncaptured-error logger.
-    wgpuDevicePushErrorScope(backend->Device(), WGPUErrorFilter_OutOfMemory);
-    wgpuDevicePushErrorScope(backend->Device(), WGPUErrorFilter_Validation);
+    wgpuDevicePushErrorScope(renderer->Device(), WGPUErrorFilter_OutOfMemory);
+    wgpuDevicePushErrorScope(renderer->Device(), WGPUErrorFilter_Validation);
 
     IndexBuffer empty16(device, IndexElementSize::SixteenBits, 0, BufferUsage::None);
     IndexBuffer empty32(device, IndexElementSize::ThirtyTwoBits, 0, BufferUsage::None);
@@ -388,19 +388,19 @@ TEST_F(IndexBufferEmptyDataTest, WebGpuNativeErrorScopesStayClean)
     EXPECT_NO_THROW(real16.SetData(&one16, 1));
     EXPECT_NO_THROW(real32.SetData(&one32, 1));
 
-    PopAndExpectClean(*backend);
-    PopAndExpectClean(*backend);
+    PopAndExpectClean(*renderer);
+    PopAndExpectClean(*renderer);
 }
 
 TEST_F(IndexBufferEmptyDataTest, WebGpuDeferredThreeIndexDrawKeepsNativeScopeClean)
 {
     RequireIndexBuffers();
 
-    auto* backend =
-        dynamic_cast<CNA::Internal::Backends::WebGPU::WebGPUGraphicsBackend*>(
-            &device.GetBackend());
-    ASSERT_NE(nullptr, backend);
-    wgpuDevicePushErrorScope(backend->Device(), WGPUErrorFilter_Validation);
+    auto* renderer =
+        dynamic_cast<CNA::Internal::Renderers::WebGPU::WebGPURenderer*>(
+            &device.GetRenderer());
+    ASSERT_NE(nullptr, renderer);
+    wgpuDevicePushErrorScope(renderer->Device(), WGPUErrorFilter_Validation);
 
     const std::array<VertexPositionColor, 3> vertices{
         VertexPositionColor(Vector3(-0.5f, -0.5f, 0), Color::Red),
@@ -424,6 +424,6 @@ TEST_F(IndexBufferEmptyDataTest, WebGpuDeferredThreeIndexDrawKeepsNativeScopeCle
         PrimitiveType::TriangleList, 0, 0, 3, 0, 1);
     device.Present();
 
-    PopAndExpectClean(*backend);
+    PopAndExpectClean(*renderer);
 }
 #endif

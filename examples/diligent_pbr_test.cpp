@@ -53,7 +53,7 @@ namespace
     constexpr int kSize = 64;
     constexpr int kChecks = 5;
 
-    // Stride 48: position/normal/tangent/uv, matching DiligentGraphicsBackend's own Pbr3D layout.
+    // Stride 48: position/normal/tangent/uv, matching DiligentRenderer's own Pbr3D layout.
     struct PbrGpuVertex
     {
         float px, py, pz;
@@ -81,7 +81,7 @@ namespace
     }
 
     // Stride 68: the PBR layout above with BlendWeight/BlendIndices appended, matching
-    // DiligentGraphicsBackend's own SkinnedPbr3D layout.
+    // DiligentRenderer's own SkinnedPbr3D layout.
     struct SkinnedPbrGpuVertex
     {
         float px, py, pz;

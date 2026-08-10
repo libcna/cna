@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MS-PL
-// OPENGL1 backend: RenderTarget2D mip-chain generation on unbind (plan_opengl1.md item 21,
+// OPENGL1 renderer: RenderTarget2D mip-chain generation on unbind (plan_opengl1.md item 21,
 // EasyGL parity).
 //
-// Before this, OpenGL1GraphicsBackend::CreateRenderTarget2D() silently dropped its own mipMap
-// parameter (unnamed bool) -- OpenGL1RenderTargetBackend never generated any mip levels beyond
+// Before this, OpenGL1Renderer::CreateRenderTarget2D() silently dropped its own mipMap
+// parameter (unnamed bool) -- OpenGL1RenderTargetRenderer never generated any mip levels beyond
 // level 0, and even a texture that DID have real mip storage would still have been sampled with
 // mip=false everywhere (BasicEffect/DualTextureEffect 3D sampling and SpriteBatch::Draw all
-// dynamic_cast<const OpenGL1TextureBackend*> to decide mip-awareness, which is always null for an
-// OpenGL1RenderTargetBackend -- a different class entirely).
+// dynamic_cast<const OpenGL1TextureRenderer*> to decide mip-awareness, which is always null for an
+// OpenGL1RenderTargetRenderer -- a different class entirely).
 //
 // A solid-color fill is NOT a valid probe here: OpenGL1's mip-aware sampling path gracefully
 // degrades to a plain (non-mipmap) GL_LINEAR MIN_FILTER whenever the sampled texture's HasMips()

@@ -1,7 +1,7 @@
 # RasterizerState Support Matrix
 
 Phase 38 (`plan_graphics.md` Tasks 321–330) audited and pixel-verified `RasterizerState`
-conformance against FNA across all three graphics backends (EasyGL, Vulkan, Bgfx). This document
+conformance against FNA across all three graphics renderers (EasyGL, Vulkan, Bgfx). This document
 summarizes the findings.
 
 ---
@@ -43,17 +43,17 @@ side by side, redrawn under all 3 `CullMode` values:
 | `CullCounterClockwiseFace` (XNA default) | visible (RED) | culled (background) |
 | `CullClockwiseFace` | culled (background) | visible (GREEN) |
 
-All 6 checks pass on **both** backends. This directly satisfies Task 323's own goal (`CullNone`
+All 6 checks pass on **both** renderers. This directly satisfies Task 323's own goal (`CullNone`
 disables culling for both windings) and, because each quad's visibility is checked under all 3
 modes rather than just one, also fully satisfies Tasks 324 (`CullClockwiseFace`) and 325
 (`CullCounterClockwiseFace`) — no separate test files were needed for them, mirroring the Task 295
 precedent (one well-designed test covering multiple planned verification tasks).
 
-**Cross-backend consistency, confirmed empirically**: Vulkan's `colored3d.vert.glsl` flips clip-space
-Y (`pos.y = -pos.y`) to convert from OpenGL's Y-up NDC convention, and `VulkanGraphicsBackend`
+**Cross-renderer consistency, confirmed empirically**: Vulkan's `colored3d.vert.glsl` flips clip-space
+Y (`pos.y = -pos.y`) to convert from OpenGL's Y-up NDC convention, and `VulkanRenderer`
 explicitly sets `VK_FRONT_FACE_CLOCKWISE` (instead of the API default `VK_FRONT_FACE_COUNTER_CLOCKWISE`)
 to compensate. The net effect is that the *same* input vertex winding culls identically on both
-backends — this test is the first in the project to empirically confirm that compensation is
+renderers — this test is the first in the project to empirically confirm that compensation is
 correct, rather than only asserting it in a comment.
 
 **Real, minor finding (not a bug, noted for the record, not fixed)**: while designing this test,
@@ -70,10 +70,10 @@ windings, which they still do) and was left unfixed there as out of scope.
 
 `examples/vulkan_fill_mode_test.cpp` (Task 327) already covered both `FillMode::Solid` (baseline,
 checked before and after the `WireFrame` sub-test) and `FillMode::WireFrame`, but was registered
-for Vulkan only. Task 326 found the source is fully backend-agnostic (`VertexBuffer`+`BasicEffect`,
-no Vulkan-specific API — confirmed by compiling it standalone outside any backend target) and
+for Vulkan only. Task 326 found the source is fully renderer-agnostic (`VertexBuffer`+`BasicEffect`,
+no Vulkan-specific API — confirmed by compiling it standalone outside any renderer target) and
 registered the same source as a new EasyGL test (`EasyGL_FillMode_Solid`). All 3 sub-tests pass on
-EasyGL too, confirming both the `Solid` baseline and `EasyGLGraphicsBackend`'s `GL_LINES`
+EasyGL too, confirming both the `Solid` baseline and `EasyGLRenderer`'s `GL_LINES`
 re-expansion emulation for `WireFrame` (OpenGL ES has no `glPolygonMode`) work correctly. No bug
 found — closed a real test-registration gap.
 
@@ -108,7 +108,7 @@ post-assignment mutation would be visible). This closes Phase 38's last open tas
 
 ---
 
-## Summary: what actually works today, per backend
+## Summary: what actually works today, per renderer
 
 | Feature | EasyGL | Vulkan | Bgfx |
 |---|---|---|---|
@@ -132,13 +132,13 @@ smoke-test/no-regression only by design).
   findings). The only gaps found were test-coverage/registration gaps (`Name` on presets, missing
   EasyGL `FillMode` registration), both closed within this phase.
 - `DepthBias`/`SlopeScaleDepthBias` still has no EasyGL pixel test registered (only Vulkan). Not
-  blocking — `examples/vulkan_depth_bias_test.cpp` appears backend-agnostic like the `FillMode`
+  blocking — `examples/vulkan_depth_bias_test.cpp` appears renderer-agnostic like the `FillMode`
   test was, so registering it for EasyGL too would likely be a similarly small, low-risk task if
   ever prioritized.
 - Pre-existing, unrelated to `RasterizerState`: `Vulkan_DepthBias`'s `DepthBias=-1e6` sub-case
   (documented since before this phase), and `Vulkan_FillMode_WireFrame`/`Vulkan_RenderTargetUsage`'s
   order-dependent full-suite flakiness (tracked since Task 279).
 - Tasks 866/869 (closed/tracked in earlier phases) and Tasks 868/870/871/872 (Vulkan blend/stencil
-  fakes, `Clear` stencil gap, `ReferenceStencil` backend gap) remain as documented in
+  fakes, `Clear` stencil gap, `ReferenceStencil` renderer gap) remain as documented in
   `docs/sampler-state-support.md` and `docs/depthstencilstate-support.md` — none are
   `RasterizerState`-specific and none were touched in this phase.

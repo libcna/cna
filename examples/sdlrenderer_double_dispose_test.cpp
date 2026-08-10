@@ -9,14 +9,14 @@
 // post-disposal behavior from Task 717 still holds after the SECOND Dispose() call too.
 //
 // Particular attention to RenderTarget2D: Task 717 fixed RenderTarget2D::Dispose() to clear its
-// cached rtBackend_ raw pointer to nullptr (previously left dangling) -- this test confirms that
+// cached rtRenderer_ raw pointer to nullptr (previously left dangling) -- this test confirms that
 // fix is itself idempotent (setting an already-null pointer to null again is trivially safe, but
 // worth confirming the whole Dispose() call chain -- including Texture2D::Dispose()'s shared_ptr
 // reset() and the base GraphicsResource's own isDisposed_ guard -- behaves correctly end-to-end
 // on a second call).
 //
 // Requires PresentationMode::NativeBackBuffer (Task 915 finding): SDL_RenderReadPixels operates
-// in physical output coordinates, while this backend's default presentation mode
+// in physical output coordinates, while this renderer's default presentation mode
 // (FixedHeightDynamicWidth) does not map logical pixels 1:1 to physical ones.
 //
 // Exit code 0 = all checks PASS, 1 = at least one FAIL.
@@ -73,14 +73,14 @@ protected:
         auto& dev = getGraphicsDeviceProperty();
         dev.setBlendStateProperty(BlendState::Opaque);
 
-        // --- RenderTarget2D: double-Dispose is safe, and GetRenderTargetBackend() stays null. ---
+        // --- RenderTarget2D: double-Dispose is safe, and GetRenderTargetRenderer() stays null. ---
         {
             RenderTarget2D rt(dev, 4, 4);
             rt.Dispose();
             rt.Dispose();
             check(rt.getIsDisposedProperty(), "RenderTarget2D reports disposed after a double-Dispose");
-            check(rt.GetRenderTargetBackend() == nullptr,
-                  "RenderTarget2D::GetRenderTargetBackend() is still safely null after a double-Dispose");
+            check(rt.GetRenderTargetRenderer() == nullptr,
+                  "RenderTarget2D::GetRenderTargetRenderer() is still safely null after a double-Dispose");
         }
 
         // --- BlendState: double-Dispose is safe; still usable afterward (matches FNA's own lack of guard). ---

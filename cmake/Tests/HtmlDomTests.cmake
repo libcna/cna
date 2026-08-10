@@ -1,14 +1,14 @@
-# plan_html_dom.md HTMLDOM-15/HTMLDOM-72: the HTML_DOM backend's end-to-end smoke test.
+# plan_html_dom.md HTMLDOM-15/HTMLDOM-72: the HTML_DOM renderer's end-to-end smoke test.
 #
 # Deliberately NOT registered as a CTest, for the same reason every CANVAS entry is not: this
-# backend produces a wasm module that only runs inside a browser -- SDL_Init(SDL_INIT_VIDEO) itself
-# throws under `node` (no DOM), before any backend code runs. Unlike CANVAS, though, this one is
+# renderer produces a wasm module that only runs inside a browser -- SDL_Init(SDL_INIT_VIDEO) itself
+# throws under `node` (no DOM), before any renderer code runs. Unlike CANVAS, though, this one is
 # genuinely runnable here: scripts/run-htmldom-browser-test.sh serves the generated page and drives
 # it through headless Chromium, reading the PASS/FAIL lines the test prints.
 #
 # SUFFIX ".html" makes Emscripten emit its default shell page (which provides the <canvas> element
-# SDL3 binds to and this backend anchors its DOM surface over) alongside the .js/.wasm.
-if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "HTML_DOM")
+# SDL3 binds to and this renderer anchors its DOM surface over) alongside the .js/.wasm.
+if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "HTML_DOM")
     add_executable(cna_test_htmldom_smoke examples/htmldom_smoke_test.cpp)
     target_link_libraries(cna_test_htmldom_smoke PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
     set_target_properties(cna_test_htmldom_smoke PROPERTIES SUFFIX ".html")
@@ -85,16 +85,16 @@ endif()
 # It is not browser/runtime coverage; it exists so configurations without an Emscripten SDK can
 # still exercise the CNA-owned validation, row-packing, draw-command and wrapper-lifetime code.
 option(CNA_BUILD_HTML_DOM_HOST_TESTS
-    "Build native host-side HTML DOM backend contract tests" OFF)
+    "Build native host-side HTML DOM renderer contract tests" OFF)
 
 if(CNA_BUILD_TESTS AND CNA_BUILD_HTML_DOM_HOST_TESTS AND NOT EMSCRIPTEN)
     add_executable(cna_test_htmldom_host
-        modules/renderers/html-dom/tests/CNA/Internal/Backends/HtmlDom/HtmlDomGraphicsBackendTests.cpp
-        modules/renderers/html-dom/src/HtmlDomGraphicsBackend.cpp
-        modules/renderers/html-dom/src/HtmlDomRenderTargetBackend.cpp
-        modules/renderers/html-dom/src/HtmlDomSpriteBatchBackend.cpp
+        modules/renderers/html-dom/tests/CNA/Internal/Renderers/HtmlDom/HtmlDomRendererTests.cpp
+        modules/renderers/html-dom/src/HtmlDomRenderer.cpp
+        modules/renderers/html-dom/src/HtmlDomRenderTargetRenderer.cpp
+        modules/renderers/html-dom/src/HtmlDomSpriteBatchRenderer.cpp
         modules/renderers/html-dom/src/HtmlDomState.cpp
-        modules/renderers/html-dom/src/HtmlDomTextureBackend.cpp)
+        modules/renderers/html-dom/src/HtmlDomTextureRenderer.cpp)
     target_compile_definitions(cna_test_htmldom_host PRIVATE CNA_HTML_DOM_HOST_TESTS=1)
     target_link_libraries(cna_test_htmldom_host PRIVATE CNA SHARP_RUNTIME gtest_main SDL3::SDL3)
     add_test(NAME HtmlDomHostContracts COMMAND cna_test_htmldom_host)

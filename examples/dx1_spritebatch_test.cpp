@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // plan_dx1.md Phase O4 (DX1-30..DX1-39): CPU compositor / SpriteBatch draw path tests for the DX1
-// (real DirectDraw v1, run under Wine -- no ../free-direct anywhere in this backend) graphics backend.
+// (real DirectDraw v1, run under Wine -- no ../free-direct anywhere in this renderer) graphics renderer.
 //
 // Check A -- Draw() before Begin()/End() without Begin() throw (DX1-30 Begin/End contract).
 // Check B -- Identity draw (BlendState::Opaque, 1:1 scale, no rotation/flip, white tint) is a real
@@ -18,9 +18,9 @@
 // Check H -- SetTransformMatrix() (a translation) shifts an otherwise-identity draw by exactly the
 //   translation offset (DX1-36).
 // Check I -- SpriteSortMode is fully handled by shared SpriteBatch.cpp -- Begin(sortMode, ...)
-//   with a non-Deferred mode draws without throwing or needing backend-specific code (DX1-37).
+//   with a non-Deferred mode draws without throwing or needing renderer-specific code (DX1-37).
 // Check J -- Begin(..., a non-null custom Effect) throws: no programmable shader stage exists on
-//   this backend (DX1-38).
+//   this renderer (DX1-38).
 //
 // Source-rectangle cropping (DX1-39) is exercised implicitly by every Draw() call above (all use
 // an explicit sourceRectangle).
@@ -239,7 +239,7 @@ protected:
                   "SetTransformMatrix() (translation) shifts the draw by exactly the offset");
         }
 
-        // Check I: SpriteSortMode is fully handled by shared SpriteBatch.cpp -- no backend-specific
+        // Check I: SpriteSortMode is fully handled by shared SpriteBatch.cpp -- no renderer-specific
         // code needed; a non-Deferred mode must draw without throwing.
         {
             bool threw = false;

@@ -3,7 +3,7 @@
 //
 // Uses a custom packed vertex struct (4-byte RGBA color + 12-byte position = 16 bytes)
 // whose layout deliberately differs from the stride-16 VertexPositionColor layout inferred by
-// the backend.  The supplied VertexDeclaration must therefore reach the backend:
+// the renderer.  The supplied VertexDeclaration must therefore reach the renderer:
 //   DrawUserPrimitives(PrimitiveType, const void*, vertexOffset, primitiveCount, VertexDeclaration)
 //
 // Two sub-tests:
@@ -35,7 +35,7 @@ using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
 
 // Custom vertex: intentionally the inverse of the inferred stride-16 VPC layout.  Without the
-// explicit declaration, the backend reads this color as a float3 position and position bytes as
+// explicit declaration, the renderer reads this color as a float3 position and position bytes as
 // color, so the red quad cannot be drawn correctly.
 struct MyVertex
 {

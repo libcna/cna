@@ -2,7 +2,7 @@
 
 // Stride 56: the stride-52 SkinnedEffect vertex layout (VertexPositionNormalTextureSkinned) with
 // a per-vertex Color (normalized ubyte4) appended at offset 52, matching
-// EasyGLGraphicsBackend::ApplyLayout's stride==56 case exactly -- float3 pos + float3 normal +
+// EasyGLRenderer::ApplyLayout's stride==56 case exactly -- float3 pos + float3 normal +
 // float2 uv + float4 blendWeight + ubyte4 blendIndices (non-normalized) + ubyte4 color (normalized).
 layout(location = 0) in vec3  inPos;
 layout(location = 1) in vec3  inNormal;
@@ -54,7 +54,7 @@ layout(set = 1, binding = 1) uniform SkinnedLightParams {
 
 // REMED-GFX-009: fog forwarded to the fragment stage as a varying (the shared PC block is fully
 // packed, no spare bytes). Keep-factor computed from raw object-space Z, matching
-// VulkanGraphicsBackend's FogParams shape byte-for-byte.
+// VulkanRenderer's FogParams shape byte-for-byte.
 layout(set = 1, binding = 2) uniform FogParams {
     vec4 fogColorEnabled;  // xyz = FogColor, w = fogEnabled
     vec4 fogVector;        // REMED-GFX-010: FNA fog vector (dot with object/skin pos)

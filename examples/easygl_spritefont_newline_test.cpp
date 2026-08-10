@@ -2,7 +2,7 @@
 // Task 426: Pixel test -- newline advances by line spacing on EasyGL.
 //
 // Direct EasyGL port of Task 692's SDL_Renderer test, building on Task 424's fixture pattern to
-// exercise the newline branch of the shared, backend-agnostic SpriteBatch::DrawString:
+// exercise the newline branch of the shared, renderer-agnostic SpriteBatch::DrawString:
 // `curOffset.X = 0; curOffset.Y += spriteFont.lineSpacing_; firstInLine = true;`.
 //
 // Single-glyph font: 'A' (White, 8x8, kerning=(0,8,0)), lineSpacing=10 -- deliberately different

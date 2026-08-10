@@ -1,18 +1,18 @@
 // SPDX-License-Identifier: MS-PL
-// Task 894: SkinnedEffect pixel test — real specular highlights (EasyGL backend). See
+// Task 894: SkinnedEffect pixel test — real specular highlights (EasyGL renderer). See
 // examples/easygl_basiceffect_specular_test.cpp for the full FNA-reference half-vector
 // Blinn-Phong derivation (Lighting.fxh's ComputeLights) — SkinnedEffect uses the exact same
 // formula and (with an identity bone palette + identity World) the exact same expected numbers.
 //
 // Before this task, SkinnedEffect had zero specular infrastructure: no SpecularColor/SpecularPower
 // forwarding, no per-light SpecularColor forwarding, no EyePosition/world-position plumbing in any
-// backend's skinned shader at all.
+// renderer's skinned shader at all.
 //
 // Uses an identity bone palette (weight=1 on bone 0, which defaults to Identity), isolating
 // skinning from the specular formula under test.
 //
 // Task 1102b correction (plan_graphics.md Phase 80): this test never calls
-// SetPreferPerPixelLightingProperty(), so it always exercised whatever this backend's
+// SetPreferPerPixelLightingProperty(), so it always exercised whatever this renderer's
 // SkinnedEffect dispatch treated as its default. Before Task 1102b, that default was
 // unconditionally per-pixel (the opposite of real XNA's own default, per-vertex/Gouraud) --
 // after Task 1102b, it correctly matches XNA's own PreferPerPixelLighting=false default. Case

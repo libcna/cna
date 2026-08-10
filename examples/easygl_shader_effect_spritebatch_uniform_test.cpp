@@ -1,21 +1,21 @@
 // SPDX-License-Identifier: MS-PL
 // Task 1077: ShaderEffect uniforms set via SetUniformXxx() must actually reach the real draw
-// when the effect is used through SpriteBatch::Begin(..., &fx) (EasyGL backend).
+// when the effect is used through SpriteBatch::Begin(..., &fx) (EasyGL renderer).
 //
 // Found while prototyping Task 946 (BloomSample's shader-conversion proof): every one of
 // BloomSample's 3 pixel shaders needs custom uniforms (BloomThreshold; SampleOffsets/
 // SampleWeights arrays; BloomIntensity/BaseIntensity/BloomSaturation/BaseSaturation), and a probe
 // test showed none of them ever reached the real draw.
 //
-// Root cause: EasyGLSpriteBatchBackend::FlushBatch() used to compile its OWN separate GL program
+// Root cause: EasyGLSpriteBatchRenderer::FlushBatch() used to compile its OWN separate GL program
 // (customProgram_) from the ShaderEffect's raw GLSL source text, instead of using the
-// ShaderEffect's own already-compiled program (effectBackend_). ShaderEffect::SetUniformXxx()
-// writes to effectBackend_'s program via glUniform*, which only affects whichever program is
+// ShaderEffect's own already-compiled program (effectRenderer_). ShaderEffect::SetUniformXxx()
+// writes to effectRenderer_'s program via glUniform*, which only affects whichever program is
 // CURRENTLY BOUND (glUseProgram) -- but FlushBatch() always bound its own separately-compiled
 // customProgram_ for the real draw, so the uniform value was silently discarded.
 //
 // Fixed by having FlushBatch() bind the SAME compiled program the effect itself owns
-// (Effect::GetEffectBackendPtr(), overridden by ShaderEffect) instead of maintaining a redundant
+// (Effect::GetEffectRendererPtr(), overridden by ShaderEffect) instead of maintaining a redundant
 // second copy -- matching how Vulkan's custom-effect path already works (it never recompiles at
 // flush time either, since the effect's own pipeline is used directly).
 //

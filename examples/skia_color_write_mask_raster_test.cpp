@@ -3,7 +3,7 @@
 // component *after* calculating the source-over result, retaining the destination component for a
 // disabled channel. Public API exposure belongs to SKIA-57.
 
-#include "CNA/Internal/Backends/Skia/SkiaSurface.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaSurface.hpp"
 
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColor.h"
@@ -16,7 +16,7 @@
 #include <cstdint>
 #include <cstdio>
 
-using CNA::Internal::Backends::Skia::SkiaSurface;
+using CNA::Internal::Renderers::Skia::SkiaSurface;
 
 namespace
 {

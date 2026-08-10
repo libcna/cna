@@ -14,16 +14,16 @@
 //   * bind the instance buffer at a native byte offset that is
 //     not the copy's own base                                  -> a validation error.
 //
-// Every CNA-side count is read from the live backend and every native count from wgpu-native's own
+// Every CNA-side count is read from the live renderer and every native count from wgpu-native's own
 // wgpuGenerateReport(), before and after a known public sequence, so each expectation is an exact
 // number or an exact equality between two sequences rather than a trend.
 //
 // What the native counts do and do not measure, stated because a boundary that overclaims is worse
-// than none: this backend releases a queued draw's transient buffers inside the same flush that
+// than none: this renderer releases a queued draw's transient buffers inside the same flush that
 // creates them, so a delta taken across a whole render-target cycle is a NET LIVE count, not a
 // created count. It therefore proves that no offset, no frequency and no repeat leaves a resource
 // behind -- the persistent-growth half of the contract -- while the "no second draw, pass, submit
-// or pipeline variant" half is carried by the backend's own counters below, which are cumulative.
+// or pipeline variant" half is carried by the renderer's own counters below, which are cumulative.
 //
 // Exit code 0 = all checks PASS, 1 = any FAIL.
 
@@ -52,7 +52,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
-#include "CNA/Internal/Backends/WebGPU/WebGPUGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/WebGPU/WebGPURenderer.hpp"
 
 #if __has_include(<webgpu/wgpu.h>)
 #include <webgpu/wgpu.h>
@@ -68,7 +68,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using CNA::Internal::Backends::WebGPU::WebGPUGraphicsBackend;
+using CNA::Internal::Renderers::WebGPU::WebGPURenderer;
 
 namespace
 {
@@ -158,30 +158,30 @@ class WebGpuInstancedOffsetFrequencyCardinalityTest : public Game
 
     /// wgpu-native's own live-object registry. A render pipeline per frequency, a buffer retained
     /// per logical instance, or a command buffer left alive by a divisor would appear here
-    /// regardless of what the backend's own counters say. These are LIVE counts -- see this file's
+    /// regardless of what the renderer's own counters say. These are LIVE counts -- see this file's
     /// header for exactly what a delta over one cycle does and does not prove.
-    static Cost NativeCost(WebGPUGraphicsBackend& backend, Cost cost)
+    static Cost NativeCost(WebGPURenderer& renderer, Cost cost)
     {
 #ifdef CNA_HAVE_WGPU_NATIVE_REPORT
         WGPUGlobalReport report{};
-        wgpuGenerateReport(backend.Instance(), &report);
+        wgpuGenerateReport(renderer.Instance(), &report);
         cost.nativeBuffers = report.hub.buffers.numAllocated;
         cost.nativePipelines = report.hub.renderPipelines.numAllocated;
         cost.nativeCommandBuffers = report.hub.commandBuffers.numAllocated;
 #else
-        (void)backend;
+        (void)renderer;
 #endif
         return cost;
     }
 
-    Cost Snapshot(WebGPUGraphicsBackend& backend)
+    Cost Snapshot(WebGPURenderer& renderer)
     {
         Cost cost;
-        cost.passes = backend.GetRenderPassCountEXT();
-        cost.submits = backend.GetQueueSubmitCountEXT();
-        cost.coloredPipelines = backend.GetColoredPipelineCacheSizeEXT();
-        cost.instancedPipelines = backend.GetInstancedPipelineCacheSizeEXT();
-        return NativeCost(backend, cost);
+        cost.passes = renderer.GetRenderPassCountEXT();
+        cost.submits = renderer.GetQueueSubmitCountEXT();
+        cost.coloredPipelines = renderer.GetColoredPipelineCacheSizeEXT();
+        cost.instancedPipelines = renderer.GetInstancedPipelineCacheSizeEXT();
+        return NativeCost(renderer, cost);
     }
 
     static Cost Delta(const Cost& before, const Cost& after)
@@ -210,13 +210,13 @@ class WebGpuInstancedOffsetFrequencyCardinalityTest : public Game
     /// One render-target cycle of @p drawCount instanced draws issued under the given binding
     /// state, and everything it cost. The baseline is taken INSIDE the cycle: binding a target
     /// flushes whatever was pending, which is not what this file is measuring.
-    Cost CycleCost(GraphicsDevice& dev, WebGPUGraphicsBackend& backend,
+    Cost CycleCost(GraphicsDevice& dev, WebGPURenderer& renderer,
                    int perVertexOffset, int instanceOffset, int frequency,
                    int instanceCount, int drawCount)
     {
         auto rt = MakeTarget(dev);
         dev.SetRenderTarget(rt.get());
-        const Cost before = Snapshot(backend);
+        const Cost before = Snapshot(renderer);
 
         dev.Clear(kBlack);
         dev.SetVertexBuffers({
@@ -234,7 +234,7 @@ class WebGpuInstancedOffsetFrequencyCardinalityTest : public Game
         dev.SetIndexBuffer(nullptr);
         dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
 
-        return Delta(before, Snapshot(backend));
+        return Delta(before, Snapshot(renderer));
     }
 
     void Draw(const GameTime&) override
@@ -244,22 +244,22 @@ class WebGpuInstancedOffsetFrequencyCardinalityTest : public Game
         phase_ = 2;
 
         auto& dev = getGraphicsDeviceProperty();
-        auto& backend = static_cast<WebGPUGraphicsBackend&>(dev.GetBackend());
+        auto& renderer = static_cast<WebGPURenderer&>(dev.GetRenderer());
         std::printf("REMED-GFX-211/213 instanced offset+frequency cardinality -- WEBGPU\n");
 #ifndef CNA_HAVE_WGPU_NATIVE_REPORT
         std::printf("NOTE: wgpu.h was not found, so native live-object counts read 0 and only the "
                     "CNA-side counters below are decisive.\n");
 #endif
-        const std::size_t errors0 = backend.GetUncapturedErrorCountEXT();
+        const std::size_t errors0 = renderer.GetUncapturedErrorCountEXT();
 
         // Warm-up: builds the one Instanced3D pipeline variant these draws need and gets the frame
         // past its first swapchain acquisition, so every delta below measures the sequence under
         // test rather than one-off setup.
-        CycleCost(dev, backend, 0, 0, 1, 4, 4);
+        CycleCost(dev, renderer, 0, 0, 1, 4, 4);
 
         // ---- C1: the same frame at frequency 1 and at frequency 2 ----
-        const Cost fourAtOne = CycleCost(dev, backend, 0, 0, 1, 6, 4);
-        const Cost fourAtTwo = CycleCost(dev, backend, 0, 0, 2, 6, 4);
+        const Cost fourAtOne = CycleCost(dev, renderer, 0, 0, 1, 6, 4);
+        const Cost fourAtTwo = CycleCost(dev, renderer, 0, 0, 2, 6, 4);
         Print("4 draws x 6 instances @frequency=1", fourAtOne);
         Print("4 draws x 6 instances @frequency=2", fourAtTwo);
 
@@ -277,8 +277,8 @@ class WebGpuInstancedOffsetFrequencyCardinalityTest : public Game
                    "C1 frequency 2 built no new native render pipeline");
 
         // ---- C2: the per-draw cost itself, isolated from the fixed cost of a cycle ----
-        const Cost eightAtOne = CycleCost(dev, backend, 0, 0, 1, 6, 8);
-        const Cost eightAtTwo = CycleCost(dev, backend, 0, 0, 2, 6, 8);
+        const Cost eightAtOne = CycleCost(dev, renderer, 0, 0, 1, 6, 8);
+        const Cost eightAtTwo = CycleCost(dev, renderer, 0, 0, 2, 6, 8);
         Print("8 draws x 6 instances @frequency=1", eightAtOne);
         Print("8 draws x 6 instances @frequency=2", eightAtTwo);
 
@@ -294,7 +294,7 @@ class WebGpuInstancedOffsetFrequencyCardinalityTest : public Game
         // Twelve instances at frequency 2 consume six source records and produce twelve
         // destination ones. If either count reached a GPU allocation, this cycle would cost more
         // native buffers than the six-instance one it is compared against.
-        const Cost twelveAtTwo = CycleCost(dev, backend, 0, 0, 2, 12, 4);
+        const Cost twelveAtTwo = CycleCost(dev, renderer, 0, 0, 2, 12, 4);
         Print("4 draws x 12 instances @frequency=2", twelveAtTwo);
         checkCount(twelveAtTwo.nativeBuffers, fourAtTwo.nativeBuffers,
                    "C3 doubling the instance count left no additional live native buffer");
@@ -302,8 +302,8 @@ class WebGpuInstancedOffsetFrequencyCardinalityTest : public Game
                    "C3 doubling the instance count built no new pipeline variant");
 
         // ---- C4: neither binding's VertexOffset is part of any cache key ----
-        const Cost offsets = CycleCost(dev, backend, 3, 5, 1, 6, 4);
-        const Cost offsetsAndFrequency = CycleCost(dev, backend, 6, 2, 3, 6, 4);
+        const Cost offsets = CycleCost(dev, renderer, 3, 5, 1, 6, 4);
+        const Cost offsetsAndFrequency = CycleCost(dev, renderer, 6, 2, 3, 6, 4);
         Print("4 draws, offsets (3,5) @frequency=1", offsets);
         Print("4 draws, offsets (6,2) @frequency=3", offsetsAndFrequency);
 
@@ -323,7 +323,7 @@ class WebGpuInstancedOffsetFrequencyCardinalityTest : public Game
                    "C4 offsets plus frequency 3 left the same live native buffer count");
 
         // ---- C5: repeating the whole sequence must not grow anything ----
-        const Cost repeat = CycleCost(dev, backend, 3, 5, 1, 6, 4);
+        const Cost repeat = CycleCost(dev, renderer, 3, 5, 1, 6, 4);
         Print("4 draws, offsets (3,5) @frequency=1 (repeat)", repeat);
         checkCount(repeat.instancedPipelines, 0,
                    "C5 repeating an offset sequence built no further pipeline variant");
@@ -333,7 +333,7 @@ class WebGpuInstancedOffsetFrequencyCardinalityTest : public Game
                    "C5 repeating an offset sequence opened the same render passes");
 
         // ---- C6: WebGPU validation stayed silent through every offset and frequency ----
-        const std::size_t errors = backend.GetUncapturedErrorCountEXT() - errors0;
+        const std::size_t errors = renderer.GetUncapturedErrorCountEXT() - errors0;
         check(errors == 0, errors == 0
                   ? "C6 WebGPU validation stayed silent through every offset and frequency"
                   : "C6 WebGPU reported " + std::to_string(errors) + " uncaptured errors");

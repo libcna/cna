@@ -34,7 +34,7 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Returns the fully qualified .NET type name. */
         NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
 
-        /** @brief Identifies only this exact stock runtime type to 2D backends. */
+        /** @brief Identifies only this exact stock runtime type to 2D renderers. */
         NOXNA [[nodiscard]] bool IsExactStockSpriteEffectEXT() const noexcept override
         {
             return typeid(*this) == typeid(SpriteEffect);

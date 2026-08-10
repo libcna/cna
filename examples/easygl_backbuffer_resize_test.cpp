@@ -4,7 +4,7 @@
 // Two resize paths are tested:
 //   A. GDM path: setPreferredBackBufferWidth/Height + ApplyChanges()
 //      - PP dimensions updated
-//      - backend virtual resolution updated (SetVirtualResolution called)
+//      - renderer virtual resolution updated (SetVirtualResolution called)
 //      - viewport updated via UpdateViewportFromWindow()
 //   B. Direct path: GraphicsDevice::SetPresentationParameters(pp)
 //      - PP dimensions updated
@@ -76,7 +76,7 @@ protected:
         check(dev.getViewportProperty().getWidthProperty() > 0, "Viewport width > 0 after GDM resize to 1280");
 
         // --- Direct path: SetPresentationParameters ---
-        // Only the PP is updated; virtual resolution is not forwarded to backend.
+        // Only the PP is updated; virtual resolution is not forwarded to renderer.
         PresentationParameters pp = dev.getPresentationParametersProperty().Clone();
         pp.setBackBufferWidthProperty(320);
         pp.setBackBufferHeightProperty(240);

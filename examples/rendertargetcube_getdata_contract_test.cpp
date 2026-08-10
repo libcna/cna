@@ -4,8 +4,8 @@
 // request deterministically. Never a fabricated face, never another face's content, never a
 // mirrored or rotated one, never an unresolved multisample surface.
 //
-// REMED-GFX-130 made the *reporting* honest: `ITextureCubeBackend::GetData`'s default became
-// `return false`, so a backend with no rendered-cube readback raises System::NotSupportedException
+// REMED-GFX-130 made the *reporting* honest: `ITextureCubeRenderer::GetData`'s default became
+// `return false`, so a renderer with no rendered-cube readback raises System::NotSupportedException
 // instead of handing back the shared layer's own zeroed scratch buffer. What it deliberately did
 // NOT do was implement the missing readback, and it recorded the consequence: only SdlGpu and
 // WebGPU could answer at all, while EasyGL, Vulkan, Bgfx, D3D9, D3D11 and D3D12 -- each of which
@@ -23,14 +23,14 @@
 // changes the colour at EVERY asserted texel.
 //
 // The palette is deliberately restricted to fully saturated 0/255 channel values. Those are exact
-// fixed points of sRGB encoding, so the one backend whose cube target is sRGB-encoded
+// fixed points of sRGB encoding, so the one renderer whose cube target is sRGB-encoded
 // (REMED-GFX-096 already records WebGPU's) needs no tolerance, no colour-space model and no
 // weakened assertion here -- every comparison in this file is byte-exact.
 //
 // The public row order is not assumed. `RenderTarget2D::GetData` is the established, already
 // REMED-GFX-127-verified normalization for "what did rendering put at the top of this target", so
 // check O1 renders the identical pattern into a RenderTarget2D of the same size, reads it back, and
-// requires the cube-face readback to agree with it. A backend whose native cube readback is
+// requires the cube-face readback to agree with it. A renderer whose native cube readback is
 // bottom-up (REMED-GFX-067's originBottomLeft class of question) must normalize exactly once, and
 // checks R4/R5/R6 -- final row, final column, lower-right corner -- fail loudly if it normalizes
 // twice, or not at all, or on the wrong axis.
@@ -86,11 +86,11 @@ namespace
     constexpr int kMsaaRequest = 4;  ///< Multisample count requested by the MSAA check.
 
     /**
-     * @brief What one public RenderTargetCube readback path on this backend is required to do.
+     * @brief What one public RenderTargetCube readback path on this renderer is required to do.
      *
      * `Exact` -- GetData must return the rendered face byte for byte.
      * `Unsupported` -- GetData must throw System::NotSupportedException and leave the caller's
-     * destination byte-for-byte untouched. Reserved for a target this backend genuinely cannot read
+     * destination byte-for-byte untouched. Reserved for a target this renderer genuinely cannot read
      * back, never for one that merely has not been checked.
      */
     enum class Support
@@ -100,7 +100,7 @@ namespace
     };
 
     /**
-     * @brief What a `mipMap=true` RenderTargetCube really is on this backend.
+     * @brief What a `mipMap=true` RenderTargetCube really is on this renderer.
      *
      * `Real` -- the mip chain exists and its levels above 0 hold rendered content.
      * `RefusedAtCreation` -- constructing or first using one throws, rather than under-delivering
@@ -116,7 +116,7 @@ namespace
         LevelsWithoutStorage,
     };
 
-    /// The complete, reviewed per-backend claim this file enforces.
+    /// The complete, reviewed per-renderer claim this file enforces.
     struct Contract
     {
         const char* name;
@@ -130,110 +130,110 @@ namespace
         bool    preservesOnRebind; ///< RenderTargetUsage::PreserveContents survives a rebind cycle.
         bool    exactAlpha;        ///< A non-255 rendered alpha survives readback exactly.
         bool    rtCubeSetData;     ///< RenderTargetCube::SetData stores pixels (REMED-GFX-135).
-        /// True when an UPLOADED face reads back vertically mirrored, i.e. this backend's rendering
+        /// True when an UPLOADED face reads back vertically mirrored, i.e. this renderer's rendering
         /// and its CPU upload write the same face's rows in opposite order. See check W1.
         bool    rtCubeUploadMirrored;
         bool    wantHiDefProfile;  ///< Request GraphicsProfile::HiDef.
     };
 
-#if defined(CNA_BACKEND_HEADLESS)
+#if defined(CNA_RENDERER_HEADLESS)
     // Headless executes no rasterization at all: CreateRenderTargetCube returns a real object so
     // binding/tracing works, but nothing is ever drawn into it, so there is no rendered face it
     // could honestly return. REMED-GFX-130 already deleted the zero-filled buffers that used to
     // make its cube readback look like one.
-    // `msaaCubeTargets` true: this backend records and reports the requested sample count as
-    // applied, which is what a state-tracking diagnostic backend is for -- it is a bookkeeping
+    // `msaaCubeTargets` true: this renderer records and reports the requested sample count as
+    // applied, which is what a state-tracking diagnostic renderer is for -- it is a bookkeeping
     // claim, not a rasterized one, and there is no resolved surface behind it to read (hence
     // `msaaReadback` Unsupported, like every other readback here).
     constexpr Contract kContract{"HEADLESS", true, Support::Unsupported, Support::Unsupported,
                                  false, true, Support::Unsupported, MipTargets::Real, true, false, false, false, false};
-#elif defined(CNA_BACKEND_SOFTWARE)
+#elif defined(CNA_RENDERER_SOFTWARE)
     // Cube-map render targets are an explicit documented v1 scope boundary here
-    // (CreateRenderTargetCube keeps IGraphicsBackend's nullptr default), so binding one is refused
+    // (CreateRenderTargetCube keeps IGraphicsRenderer's nullptr default), so binding one is refused
     // by GraphicsDevice::SetRenderTargets and there is no resource to read.
     constexpr Contract kContract{"SOFTWARE", false, Support::Unsupported, Support::Unsupported,
                                  true, false, Support::Unsupported, MipTargets::Real, true, false, false, false, false};
-#elif defined(CNA_BACKEND_EASYGL)
+#elif defined(CNA_RENDERER_EASYGL)
     constexpr Contract kContract{"EASYGL", true, Support::Exact, Support::Exact,
                                  true, true, Support::Exact, MipTargets::Real, true, true, true, true, false};
-#elif defined(CNA_BACKEND_SKIA)
+#elif defined(CNA_RENDERER_SKIA)
     // Skia's 2D emulation owns six independent CPU raster surfaces at every requested mip level.
     // Rendering and uploads are byte-exact; leaving a rendered face regenerates its mip chain.
     // It deliberately clamps MSAA to zero because these SkSurface targets are single-sample.
     constexpr Contract kContract{"SKIA", true, Support::Exact, Support::Exact,
                                  true, false, Support::Exact, MipTargets::Real, true, true, true, false, false};
-#elif defined(CNA_BACKEND_BGFX)
+#elif defined(CNA_RENDERER_BGFX)
     // REMED-GFX-138: GFX-154's ordered completion now exposes both bgfx's resolved cube level 0
     // and every auto-generated mip before the readback blit. The combined MSAA+mip path is exact
     // too, so both formerly Unsupported declarations are deliberately re-armed.
     constexpr Contract kContract{"BGFX", true, Support::Exact, Support::Exact,
                                  true, true, Support::Exact, MipTargets::Real, true, true, false, false, false};
-#elif defined(CNA_BACKEND_VULKAN)
+#elif defined(CNA_RENDERER_VULKAN)
     // `msaaCubeTargets` false: Task 903 deliberately piggybacks a cube target's sample count on
-    // the backend's own global `sampleCount_`, so a cube target multisamples only when the
+    // the renderer's own global `sampleCount_`, so a cube target multisamples only when the
     // BACKBUFFER was created multisampled -- which this test does not request. The applied count is
     // still asserted against this claim below rather than assumed.
-    // `preservesOnRebind` true since REMED-GFX-136: IGraphicsBackend::CreateRenderTargetCube now
-    // carries a `preserveContents` flag, so VulkanRenderTargetCubeBackend builds its face
+    // `preservesOnRebind` true since REMED-GFX-136: IGraphicsRenderer::CreateRenderTargetCube now
+    // carries a `preserveContents` flag, so VulkanRenderTargetCubeRenderer builds its face
     // framebuffers against GetOrCreateRTRenderPass(depthFmt, !preserveContents) instead of
     // hardcoding the discard variant. examples/rendertargetcube_usage_test.cpp is that finding's
     // own full battery; what U1/U2 below keep is the single check that a preserved face is exactly
     // what GetData reports.
     constexpr Contract kContract{"VULKAN", true, Support::Exact, Support::Exact,
                                  true, false, Support::Exact, MipTargets::Real, true, true, false, false, false};
-#elif defined(CNA_BACKEND_WEBGPU)
+#elif defined(CNA_RENDERER_WEBGPU)
     // `mipMapCubeTargets` false: WEBGPU-114 refuses a mipMap=true RenderTargetCube at construction
     // rather than under-delivering the mip chain RenderTargetCube already told the XNA layer to
-    // expect -- a recorded boundary of this backend, checked here rather than assumed.
+    // expect -- a recorded boundary of this renderer, checked here rather than assumed.
     // `preservesOnRebind` true since REMED-GFX-136: RenderPendingDrawsToRenderTargetCubeFace() no
     // longer hardcodes WGPULoadOp_Clear, it uses the same `clearPending || !preserveContents`
     // choice as its RenderTarget2D sibling. See examples/rendertargetcube_usage_test.cpp.
     constexpr Contract kContract{"WEBGPU", true, Support::Exact, Support::Unsupported,
                                  true, false, Support::Exact, MipTargets::RefusedAtCreation, true, true, false, false, false};
-#elif defined(CNA_BACKEND_SDL_GPU)
+#elif defined(CNA_RENDERER_SDL_GPU)
     constexpr Contract kContract{"SDL_GPU", true, Support::Exact, Support::Exact,
                                  true, true, Support::Exact, MipTargets::Real, true, true, false, false, false};
-#elif defined(CNA_BACKEND_SDL_RENDERER)
-    // 2D-only by design: CreateRenderTargetCube keeps IGraphicsBackend's nullptr default.
+#elif defined(CNA_RENDERER_SDL_RENDERER)
+    // 2D-only by design: CreateRenderTargetCube keeps IGraphicsRenderer's nullptr default.
     constexpr Contract kContract{"SDL_RENDERER", false, Support::Unsupported, Support::Unsupported,
                                  true, false, Support::Unsupported, MipTargets::Real, true, false, false, false, false};
-#elif defined(CNA_BACKEND_ASCII)
+#elif defined(CNA_RENDERER_ASCII)
     constexpr Contract kContract{"ASCII", false, Support::Unsupported, Support::Unsupported,
                                  true, false, Support::Unsupported, MipTargets::Real, true, false, false, false, false};
-#elif defined(CNA_BACKEND_CANVAS)
+#elif defined(CNA_RENDERER_CANVAS)
     constexpr Contract kContract{"CANVAS", false, Support::Unsupported, Support::Unsupported,
                                  true, false, Support::Unsupported, MipTargets::Real, true, false, false, false, false};
-#elif defined(CNA_BACKEND_FREEDIRECT)
+#elif defined(CNA_RENDERER_FREEDIRECT)
     constexpr Contract kContract{"FREEDIRECT", false, Support::Unsupported, Support::Unsupported,
                                  true, false, Support::Unsupported, MipTargets::Real, true, false, false, false, false};
-#elif defined(CNA_BACKEND_D3D9)
-    // D3D9RenderTargetCubeBackend reports GetMultiSampleCount() == 0 unconditionally and its
+#elif defined(CNA_RENDERER_D3D9)
+    // D3D9RenderTargetCubeRenderer reports GetMultiSampleCount() == 0 unconditionally and its
     // Recreate() allocates exactly ONE level whatever `mipMap` asked for, so this target is
     // single-sample and level-0-only -- while RenderTargetCube::LevelCount still reports the whole
     // chain. `MipTargets::LevelsWithoutStorage` records that mismatch as an independent finding and
     // pins what GetData must do about it: refuse the levels that were never allocated.
     constexpr Contract kContract{"D3D9", true, Support::Exact, Support::Unsupported,
                                  true, false, Support::Exact, MipTargets::LevelsWithoutStorage, true, true, false, false, true};
-#elif defined(CNA_BACKEND_D3D11)
+#elif defined(CNA_RENDERER_D3D11)
     constexpr Contract kContract{"D3D11", true, Support::Exact, Support::Exact,
                                  true, true, Support::Exact, MipTargets::Real, true, true, false, false, false};
-#elif defined(CNA_BACKEND_D3D12)
+#elif defined(CNA_RENDERER_D3D12)
     constexpr Contract kContract{"D3D12", true, Support::Exact, Support::Exact,
                                  true, true, Support::Exact, MipTargets::Real, true, true, false, false, false};
-#elif defined(CNA_BACKEND_LLGL)
-    // `msaaCubeTargets` true (LLGL-34): unlike Vulkan's own backend-wide sampleCount_ piggyback,
-    // this backend reads multiSampleCount at each RenderTargetCube's own construction, so a cube
+#elif defined(CNA_RENDERER_LLGL)
+    // `msaaCubeTargets` true (LLGL-34): unlike Vulkan's own renderer-wide sampleCount_ piggyback,
+    // this renderer reads multiSampleCount at each RenderTargetCube's own construction, so a cube
     // target multisamples independently of the back buffer -- already pixel-verified by
     // examples/llgl_msaa_rendertargetcube_test.cpp.
     // `mipMapCubeTargets` Real / `mipLevel` Exact (LLGL-35): a real mip chain on the shared cube
     // colour texture, byte-exact readback at every level -- already pixel-verified by
     // examples/llgl_mip_rendertargetcube_test.cpp.
     // `preservesOnRebind` false, specifically for THIS file's own U1/U2 exercise, which calls
-    // GetData() BETWEEN the producer draw and the second (marker) draw. This backend's own
+    // GetData() BETWEEN the producer draw and the second (marker) draw. This renderer's own
     // CreateRenderTargetCube never reads its preserveContents argument at all (`bool
     // /*preserveContents*/`); what it relies on instead is that every command naming the SAME
     // target within one UNFLUSHED frame is grouped into ONE render pass at replay time (its "one
-    // render pass per distinct target, not per bind" architecture -- see docs/llgl-backend.md's own
+    // render pass per distinct target, not per bind" architecture -- see docs/llgl-renderer.md's own
     // "Two implementation choices" paragraph). GetData() calls FlushPendingFrameEXT(), which submits
     // and clears the queued frame -- so the SECOND bind here starts a genuinely NEW render pass with
     // undefined/discard-style load semantics, and the untouched region is really lost. Contrast with
@@ -242,12 +242,12 @@ namespace
     // issued with no GetData()/flush in between (their own header comments say so explicitly), so
     // content genuinely survives there -- this is not a contradiction between the three files, it is
     // the same underlying architecture measured two different, both faithfully reproduced, ways.
-    // `rtCubeSetData` false: LlglRenderTargetCubeBackend declares no SetData override of its own,
-    // so it inherits ITextureCubeBackend::SetData's own default refusal.
+    // `rtCubeSetData` false: LlglRenderTargetCubeRenderer declares no SetData override of its own,
+    // so it inherits ITextureCubeRenderer::SetData's own default refusal.
     constexpr Contract kContract{"LLGL", true, Support::Exact, Support::Exact,
                                  true, true, Support::Exact, MipTargets::Real, false, true, false, false, false};
 #else
-#error "REMED-GFX-134: this backend has no declared RenderTargetCube GetData contract."
+#error "REMED-GFX-134: this renderer has no declared RenderTargetCube GetData contract."
 #endif
 
     /// Two unrelated destination pre-fills. Neither equals any pattern colour, so "still the
@@ -255,7 +255,7 @@ namespace
     Color SentinelCD() { return Color(0xCD, 0xCD, 0xCD, 0xCD); }
     Color SentinelA5() { return Color(0xA5, 0xA5, 0xA5, 0xA5); }
 
-    /// The fabricated content a no-op backend produced through the pre-REMED-GFX-130 shared layer.
+    /// The fabricated content a no-op renderer produced through the pre-REMED-GFX-130 shared layer.
     Color Fabricated() { return Color(0, 0, 0, 0); }
 
     /**
@@ -274,7 +274,7 @@ namespace
     };
 
     /// Alpha of the centre marker. Non-trivial (neither 0 nor 255) and exactly representable in an
-    /// 8-bit UNORM target, so a backend that drops the rendered alpha channel is detectable.
+    /// 8-bit UNORM target, so a renderer that drops the rendered alpha channel is detectable.
     constexpr std::uint8_t kCentreAlpha = 128;
 
     /**
@@ -488,7 +488,7 @@ class RenderTargetCubeGetDataContractTest : public Game
     }
 
     /**
-     * @brief Judges one probe against this backend's declared contract.
+     * @brief Judges one probe against this renderer's declared contract.
      *
      * `Exact`: no exception, every asserted entry equals its expectation, and every padding entry
      * outside the asserted window is still the sentinel.
@@ -564,7 +564,7 @@ class RenderTargetCubeGetDataContractTest : public Game
         std::vector<Color> reference;
         if (!kContract.rt2dReadback)
         {
-            check(true, "O1 reference: RenderTarget2D readback is unavailable on this backend -- "
+            check(true, "O1 reference: RenderTarget2D readback is unavailable on this renderer -- "
                         "no orientation reference to establish");
             return reference;
         }
@@ -615,12 +615,12 @@ class RenderTargetCubeGetDataContractTest : public Game
 
         if (kContract.cubeTargetBinds)
         {
-            check(bound, "B1 binding: this backend declares a real RenderTargetCube, so binding a "
+            check(bound, "B1 binding: this renderer declares a real RenderTargetCube, so binding a "
                          "face must succeed [" + (bound ? std::string("bound") : "threw:" + what) + "]");
         }
         else
         {
-            check(!bound, "B1 binding: this backend creates no cube render target, so binding a "
+            check(!bound, "B1 binding: this renderer creates no cube render target, so binding a "
                           "face must be refused deterministically [" +
                               (bound ? std::string("bound anyway") : "threw:" + what) + "]");
         }
@@ -630,7 +630,7 @@ class RenderTargetCubeGetDataContractTest : public Game
     void RunFaceChecks(GraphicsDevice& dev, RenderTargetCube& cube,
                        const std::vector<Color>& reference)
     {
-        // Render all six faces first, then read them back in a DIFFERENT order, so a backend that
+        // Render all six faces first, then read them back in a DIFFERENT order, so a renderer that
         // only ever answers for the most recently bound face cannot pass.
         for (int face = 0; face < 6; ++face) RenderFace(dev, cube, face, 0);
 
@@ -695,7 +695,7 @@ class RenderTargetCubeGetDataContractTest : public Game
         }
         else
         {
-            check(true, "F7: face-confusion probe skipped -- this backend rejects cube readback");
+            check(true, "F7: face-confusion probe skipped -- this renderer rejects cube readback");
         }
 
         // ---- F8: the cube face agrees with the RenderTarget2D orientation reference ---------
@@ -716,7 +716,7 @@ class RenderTargetCubeGetDataContractTest : public Game
         else
         {
             check(true, "F8 orientation: reference comparison skipped -- no cube readback or no "
-                        "RenderTarget2D reference on this backend");
+                        "RenderTarget2D reference on this renderer");
         }
 
         // ---- T1: face A -> face B -> face A ------------------------------------------------
@@ -918,7 +918,7 @@ class RenderTargetCubeGetDataContractTest : public Game
         }
         else
         {
-            check(true, "A5 active: skipped -- no RenderTarget2D on this backend");
+            check(true, "A5 active: skipped -- no RenderTarget2D on this renderer");
         }
 
         // And after a plain unbind.
@@ -968,8 +968,8 @@ class RenderTargetCubeGetDataContractTest : public Game
         }
         else
         {
-            check(true, "S2 switch: skipped -- no RenderTarget2D on this backend");
-            check(true, "S3 switch: skipped -- no RenderTarget2D on this backend");
+            check(true, "S2 switch: skipped -- no RenderTarget2D on this renderer");
+            check(true, "S3 switch: skipped -- no RenderTarget2D on this renderer");
         }
 
         // Two independent cube targets must not alias.
@@ -991,8 +991,8 @@ class RenderTargetCubeGetDataContractTest : public Game
             }
             else
             {
-                check(true, "S4 switch: skipped -- no cube render target on this backend");
-                check(true, "S5 switch: skipped -- no cube render target on this backend");
+                check(true, "S4 switch: skipped -- no cube render target on this renderer");
+                check(true, "S5 switch: skipped -- no cube render target on this renderer");
             }
         }
     }
@@ -1001,8 +1001,8 @@ class RenderTargetCubeGetDataContractTest : public Game
     {
         if (!kContract.cubeTargetBinds)
         {
-            check(true, "U1 usage: skipped -- no cube render target on this backend");
-            check(true, "U2 usage: skipped -- no cube render target on this backend");
+            check(true, "U1 usage: skipped -- no cube render target on this renderer");
+            check(true, "U2 usage: skipped -- no cube render target on this renderer");
             return;
         }
 
@@ -1041,21 +1041,21 @@ class RenderTargetCubeGetDataContractTest : public Game
             }
             else
             {
-                // This backend drops the previous bind cycle's content even under
+                // This renderer drops the previous bind cycle's content even under
                 // PreserveContents, so the untouched region is NOT asserted -- claiming it would be
-                // claiming preservation this backend does not provide. What IS still required is
+                // claiming preservation this renderer does not provide. What IS still required is
                 // that the region actually drawn this cycle reads back exactly, and that the
                 // dropped region is a real cleared colour rather than a fabricated (0,0,0,0).
                 const Rectangle marker(0, 0, 2, 2);
                 Probe drawn = ProbeFace(preserve, 1, 0, &marker, 2, 2, 0, SentinelCD(),
                                         Uniform(kPalette[0], 4));
                 Judge(drawn, kContract.level0, 0, SentinelCD(),
-                      "U2 usage: this backend discards on every cube bind cycle regardless of "
+                      "U2 usage: this renderer discards on every cube bind cycle regardless of "
                       "PreserveContents -- only the region drawn in the last cycle is asserted");
                 Probe whole = ProbeFace(preserve, 1, 0, nullptr, kCube, kCube, 0, SentinelCD(),
                                         ExpectedFace(1, 0));
                 check(whole.fabricated == 0,
-                      "U2b usage: the region this backend dropped comes back as its real cleared "
+                      "U2b usage: the region this renderer dropped comes back as its real cleared "
                       "colour, never as the fabricated (0,0,0,0) [fabricated=" +
                       std::to_string(whole.fabricated) + "/" + std::to_string(whole.window) + "]");
             }
@@ -1089,8 +1089,8 @@ class RenderTargetCubeGetDataContractTest : public Game
     {
         if (!kContract.cubeTargetBinds)
         {
-            check(true, "D1 depth: skipped -- no cube render target on this backend");
-            check(true, "D2 depth: skipped -- no cube render target on this backend");
+            check(true, "D1 depth: skipped -- no cube render target on this renderer");
+            check(true, "D2 depth: skipped -- no cube render target on this renderer");
             return;
         }
 
@@ -1117,8 +1117,8 @@ class RenderTargetCubeGetDataContractTest : public Game
     {
         if (!kContract.cubeTargetBinds)
         {
-            check(true, "M1 msaa: skipped -- no cube render target on this backend");
-            check(true, "M2 msaa: skipped -- no cube render target on this backend");
+            check(true, "M1 msaa: skipped -- no cube render target on this renderer");
+            check(true, "M2 msaa: skipped -- no cube render target on this renderer");
             return;
         }
 
@@ -1126,7 +1126,7 @@ class RenderTargetCubeGetDataContractTest : public Game
                               kMsaaRequest, RenderTargetUsage::PreserveContents);
         const int applied = msaa.getMultiSampleCountProperty();
         check(kContract.msaaCubeTargets == (applied > 0),
-              "M1 msaa: the applied cube-target sample count matches this backend's declared "
+              "M1 msaa: the applied cube-target sample count matches this renderer's declared "
               "capability (requested " + std::to_string(kMsaaRequest) + ", applied " +
               std::to_string(applied) + ", declared msaaCubeTargets=" +
               std::string(kContract.msaaCubeTargets ? "true" : "false") + ")");
@@ -1148,15 +1148,15 @@ class RenderTargetCubeGetDataContractTest : public Game
     {
         if (!kContract.cubeTargetBinds)
         {
-            check(true, "L1 mip: skipped -- no cube render target on this backend");
-            check(true, "L2 mip: skipped -- no cube render target on this backend");
-            check(true, "L3 mip: skipped -- no cube render target on this backend");
+            check(true, "L1 mip: skipped -- no cube render target on this renderer");
+            check(true, "L2 mip: skipped -- no cube render target on this renderer");
+            check(true, "L3 mip: skipped -- no cube render target on this renderer");
             return;
         }
 
         if (kContract.mipMapCubeTargets == MipTargets::RefusedAtCreation)
         {
-            // A backend that cannot build the mip chain RenderTargetCube's own LevelCount already
+            // A renderer that cannot build the mip chain RenderTargetCube's own LevelCount already
             // promised may refuse it -- what it must not do is accept the request and silently
             // under-deliver. Whether the refusal lands at construction or at first use, it has to
             // be an exception rather than a target whose declared levels have no storage.
@@ -1172,7 +1172,7 @@ class RenderTargetCubeGetDataContractTest : public Game
             catch (const std::exception& e) { what = e.what(); }
             catch (...) { what = "non-std exception"; }
             check(!what.empty(),
-                  "L1 mip: this backend refuses a mipMap=true RenderTargetCube deterministically "
+                  "L1 mip: this renderer refuses a mipMap=true RenderTargetCube deterministically "
                   "rather than reporting levels it has no storage for [" +
                   (what.empty() ? std::string("accepted it silently") : what) + "]");
             check(true, "L2 mip: level-count probe skipped -- no mipmapped cube target here");
@@ -1183,7 +1183,7 @@ class RenderTargetCubeGetDataContractTest : public Game
         RenderTargetCube mipped(dev, kCube, true, SurfaceFormat::Color, DepthFormat::None, 0,
                                 RenderTargetUsage::PreserveContents);
         // A UNIFORM face colour makes the level-1 expectation independent of whichever box/linear
-        // filter each backend's mip generation uses, so this asserts real downsampled content
+        // filter each renderer's mip generation uses, so this asserts real downsampled content
         // without asserting a filter this project never specified.
         dev.SetRenderTarget(&mipped, CubeMapFace::NegativeY);
         DrawUniform(kPalette[4], kCube);
@@ -1205,7 +1205,7 @@ class RenderTargetCubeGetDataContractTest : public Game
                              Uniform(kPalette[4], dim * dim));
         Judge(l1, kContract.mipLevel, 0, SentinelA5(),
               kContract.mipMapCubeTargets == MipTargets::LevelsWithoutStorage
-                  ? std::string("L3 mip: this backend allocates ONLY level 0 while LevelCount "
+                  ? std::string("L3 mip: this renderer allocates ONLY level 0 while LevelCount "
                                 "reports the whole chain -- the levels it never allocated must be "
                                 "REFUSED, never answered from level 0")
                   : std::string("L3 mip: level 1 of a mipMap=true cube target"));
@@ -1215,7 +1215,7 @@ class RenderTargetCubeGetDataContractTest : public Game
      * @brief W1 -- how a face UPLOADED through the inherited TextureCube::SetData relates to the
      *        same face read back.
      *
-     * EasyGL and Skia implement this upload; other backends inherit the deterministic refusal.
+     * EasyGL and Skia implement this upload; other renderers inherit the deterministic refusal.
      * Where it is implemented, the round trip is measured rather than assumed because rendered
      * and uploaded writers need not share row orientation. EasyGL intentionally records a mirrored
      * upload/readback relationship; Skia's canonical CPU transfer shadow records the same order.
@@ -1224,7 +1224,7 @@ class RenderTargetCubeGetDataContractTest : public Game
     {
         if (!kContract.cubeTargetBinds)
         {
-            check(true, "W1 upload: skipped -- no cube render target on this backend");
+            check(true, "W1 upload: skipped -- no cube render target on this renderer");
             return;
         }
 
@@ -1246,7 +1246,7 @@ class RenderTargetCubeGetDataContractTest : public Game
         if (!kContract.rtCubeSetData)
         {
             check(refused,
-                  "W1 upload: this backend's RenderTargetCube refuses SetData (REMED-GFX-135), so "
+                  "W1 upload: this renderer's RenderTargetCube refuses SetData (REMED-GFX-135), so "
                   "there is no uploaded face to round-trip");
             return;
         }
@@ -1265,7 +1265,7 @@ class RenderTargetCubeGetDataContractTest : public Game
               "W1 upload: an uploaded face reads back " +
               std::string(kContract.rtCubeUploadMirrored ? "vertically mirrored"
                                                          : "in the same row order") +
-              " -- the measured relationship must match this backend's declared row convention "
+              " -- the measured relationship must match this renderer's declared row convention "
               "[sameOrder=" + std::to_string(p.exact) + "/" + std::to_string(p.window) +
               " mirrored=" + std::to_string(mirrored) + "/" + std::to_string(p.window) +
               " refused=" + std::string(refused ? "1" : "0") + "]");
@@ -1275,7 +1275,7 @@ class RenderTargetCubeGetDataContractTest : public Game
     {
         if (!kContract.cubeTargetBinds)
         {
-            check(true, "P1 dispose: skipped -- no cube render target on this backend");
+            check(true, "P1 dispose: skipped -- no cube render target on this renderer");
             return;
         }
 
@@ -1345,12 +1345,12 @@ protected:
     void Draw(const GameTime&) override
     {
         if (done_) { Exit(); return; }
-        // Frame 0 is a deliberate warm-up: a backend that stages resource uploads until the next
+        // Frame 0 is a deliberate warm-up: a renderer that stages resource uploads until the next
         // frame boundary (bgfx copies every createTexture payload at bgfx::frame()) would otherwise
         // have every 1x1 source texture still unuploaded during the very first Draw, and the whole
         // battery -- including the RenderTarget2D orientation reference -- would measure black
         // instead of the pattern. One throwaway frame makes the producer identical on every
-        // backend.
+        // renderer.
         if (!warmedUp_)
         {
             warmedUp_ = true;
@@ -1360,7 +1360,7 @@ protected:
         done_ = true;
 
         auto& dev = getGraphicsDeviceProperty();
-        std::printf("REMED-GFX-134 RenderTargetCube GetData contract -- backend %s\n",
+        std::printf("REMED-GFX-134 RenderTargetCube GetData contract -- renderer %s\n",
                     kContract.name);
 
         const std::vector<Color> reference = RunOrientationReference(dev);
@@ -1378,12 +1378,12 @@ protected:
         }
         else
         {
-            // The readback contract still has to hold on a cube target with no backend at all:
+            // The readback contract still has to hold on a cube target with no renderer at all:
             // it must refuse, with the caller's destination untouched.
             Probe p = ProbeFace(cube, 0, 0, nullptr, kCube, kCube, 3, SentinelCD(),
                                 ExpectedFace(0, 0));
             Judge(p, kContract.level0, 3, SentinelCD(),
-                  "F1 face: a RenderTargetCube with no backend resource refuses readback");
+                  "F1 face: a RenderTargetCube with no renderer resource refuses readback");
         }
         RunRejectionChecks(dev, cube);
         RunUsageChecks(dev);

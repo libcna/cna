@@ -6,12 +6,12 @@
 // Check A -- DualTextureEffect with a mid-grey second layer leaves the first layer's colour
 //   essentially unchanged (XNA doubles the first layer before the modulate, so 2 * c * 0.5 = c).
 // Check B -- the same first layer with a BLUE second layer loses its red channel entirely. A and B
-//   together prove both samplers are genuinely read: a backend sampling only the first layer
+//   together prove both samplers are genuinely read: a renderer sampling only the first layer
 //   passes A and fails B, one sampling only the second fails A.
 // Check C -- EnvironmentMapEffect with EnvironmentMapAmount = 1 and a solid cube map takes the
 //   cube's colour, not the diffuse texture's.
 // Check D -- the same geometry with EnvironmentMapAmount = 0 shows the lit diffuse colour instead,
-//   so C cannot pass on a backend that always samples the cube.
+//   so C cannot pass on a renderer that always samples the cube.
 // Check E/F -- plan_diligent.md DILIGENT-48: GraphicsDevice.SamplerStates[1] (texture2's own slot)
 //   is genuinely independent of SamplerStates[0] (texture0's slot), not silently aliased to it.
 //   Texture0 is a uniform white 1x1 (immune to address mode -- any sample reads the same value, so
@@ -19,7 +19,7 @@
 //   red|green strip sampled at U=1.25 (25% past the right edge): SamplerStates[1]=PointClamp reads
 //   the clamped edge texel (green); PointWrap reads the wrapped-around texel (red) instead --
 //   different results from touching ONLY slot 1, with slot 0 never changed across either draw. A
-//   backend that aliases slot 1 to slot 0's own state (always Clamp here) would read green both
+//   renderer that aliases slot 1 to slot 0's own state (always Clamp here) would read green both
 //   times, since it would never see the Wrap request at all.
 //
 // Exit code 0 = all checks PASS, 1 = any FAIL, 77 = no usable device.

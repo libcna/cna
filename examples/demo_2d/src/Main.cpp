@@ -6,7 +6,7 @@
 //
 // Description
 // cna-demo is a simple demonstration of how CNA can be used to create 2D games in C++.
-// The project displays a moving sprite on the screen using SDL 3 as the backend.
+// The project displays a moving sprite on the screen using SDL 3 as the renderer.
 //
 // Main features:
 //

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // SKIA-125: checked, stable, CNA-owned 2D mip-chain layout and storage.
 
-#include "CNA/Internal/Backends/Skia/SkiaMipChain2D.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaMipChain2D.hpp"
 
 #include "System/NotSupportedException.hpp"
 
@@ -15,7 +15,7 @@
 #include <stdexcept>
 #include <vector>
 
-using namespace CNA::Internal::Backends::Skia;
+using namespace CNA::Internal::Renderers::Skia;
 
 namespace
 {

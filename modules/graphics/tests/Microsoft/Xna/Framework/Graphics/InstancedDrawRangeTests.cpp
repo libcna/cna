@@ -32,7 +32,7 @@
 //
 // The two axes are independent, so a draw cannot satisfy one by accident while breaking the other.
 //
-// Backend scope. The permanent suite runs on the backends whose stock (non-custom-effect) instanced
+// Renderer scope. The permanent suite runs on the renderers whose stock (non-custom-effect) instanced
 // path consumes the per-instance stream and an exact index range: Bgfx, Vulkan, WebGPU, D3D9,
 // EasyGL (REMED-GFX-122) and, after REMED-GFX-123, D3D11 and D3D12.
 
@@ -81,8 +81,8 @@
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 
-#ifdef CNA_BACKEND_BGFX
-#include "CNA/Internal/Backends/Bgfx/BgfxGraphicsBackend.hpp"
+#ifdef CNA_RENDERER_BGFX
+#include "CNA/Internal/Renderers/Bgfx/BgfxRenderer.hpp"
 #endif
 
 using CNA::GraphicsCapability;
@@ -110,15 +110,15 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 using Microsoft::Xna::Framework::Graphics::VertexPositionColor;
 using Microsoft::Xna::Framework::Graphics::Viewport;
 
-// REMED-GFX-123: the binding-offset/InstanceFrequency oracle is asserted only on the backends whose
+// REMED-GFX-123: the binding-offset/InstanceFrequency oracle is asserted only on the renderers whose
 // instanced path has actually been corrected to consume VertexBufferBinding.VertexOffset and
 // InstanceFrequency -- EasyGL (REMED-GFX-122), D3D11/D3D12 (REMED-GFX-123), Vulkan, bgfx and
 // WebGPU (REMED-GFX-211/213). D3D9 runs the index-range contract above and nothing here; whether
 // it honours the binding offsets is a separate question that belongs to its own measurement, not
 // to this file's compiled expectations, and no D3D display has been reachable to take it.
-#if defined(CNA_BACKEND_EASYGL) || defined(CNA_BACKEND_D3D11) || \
-    defined(CNA_BACKEND_D3D12) || defined(CNA_BACKEND_VULKAN) || \
-    defined(CNA_BACKEND_BGFX) || defined(CNA_BACKEND_WEBGPU)
+#if defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_D3D11) || \
+    defined(CNA_RENDERER_D3D12) || defined(CNA_RENDERER_VULKAN) || \
+    defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_WEBGPU)
 #define CNA_INSTANCED_BINDING_OFFSET_ORACLE 1
 #endif
 
@@ -148,7 +148,7 @@ namespace
     }
 
     /// The per-instance stream: one 4x4 column-major world matrix per instance, the layout every
-    /// CNA instanced backend already expects (four consecutive Vector4 columns, stride 64).
+    /// CNA instanced renderer already expects (four consecutive Vector4 columns, stride 64).
     VertexDeclaration InstanceMatrixDeclaration()
     {
         return VertexDeclaration(
@@ -251,7 +251,7 @@ namespace
 
     /// The complete mesh: one triangle per slot, all authored inside instance band 0, all opaque
     /// white. Colour carries no information in this fixture — the two position axes do — so the
-    /// backends whose instanced shader colours from `DiffuseColor` instead of the vertex stream
+    /// renderers whose instanced shader colours from `DiffuseColor` instead of the vertex stream
     /// produce the exact same pixels.
     std::vector<VertexPositionColor> BuildSlotMesh(const GridLayout& layout)
     {
@@ -312,7 +312,7 @@ namespace
     }
 
     /// "Did any geometry render here?" compares RGB only: every primitive in this fixture is opaque
-    /// white on a black clear, while the alpha a backend leaves in a cleared target is its own
+    /// white on a black clear, while the alpha a renderer leaves in a cleared target is its own
     /// convention and says nothing about which vertices a draw consumed.
     bool HasSameRgb(const Color& left, const Color& right)
     {
@@ -436,7 +436,7 @@ namespace
     }
 
     /// Every requested (slot, instance) pair rendered its own triangle. The 5x5 probe absorbs the
-    /// one-pixel differences each backend's pixel-centre convention legitimately allows without
+    /// one-pixel differences each renderer's pixel-centre convention legitimately allows without
     /// accepting a different pixel.
     void ExpectInstancedGeometryRendered(
         const FrameSnapshot& snapshot,
@@ -643,7 +643,7 @@ namespace
         void RequireInstancedRendering()
         {
             if (!device.SupportsCapability(GraphicsCapability::ThreeD))
-                GTEST_SKIP() << "Backend explicitly does not support 3D rendering";
+                GTEST_SKIP() << "Renderer explicitly does not support 3D rendering";
             device.setRasterizerStateProperty(RasterizerState::CullNone);
             device.setDepthStencilStateProperty(DepthStencilState::None);
             device.setBlendStateProperty(BlendState::Opaque);
@@ -670,7 +670,7 @@ namespace
         }
 
         /// The BasicEffect every draw in this file uses: identity transforms and an opaque white
-        /// diffuse, so a backend whose instanced shader colours from DiffuseColor and one that
+        /// diffuse, so a renderer whose instanced shader colours from DiffuseColor and one that
         /// colours from the vertex stream both produce white.
         void ApplyInstancedEffect(BasicEffect& effect)
         {
@@ -680,7 +680,7 @@ namespace
             effect.Apply();
         }
 
-        /// Whether the running backend AND renderer actually apply the bound per-instance world
+        /// Whether the running renderer AND renderer actually apply the bound per-instance world
         /// matrix. Bgfx's Vulkan renderer currently does not: `vs_instanced3d.sc` builds the
         /// per-instance matrix with the raw `mat4(i_data0..i_data3)` constructor, which bgfx maps
         /// to GLSL's column constructor on the GLSL profile and to HLSL's ROW constructor on
@@ -869,10 +869,10 @@ namespace
 
 }
 
-#if defined(CNA_BACKEND_BGFX) || defined(CNA_BACKEND_VULKAN) || \
-    defined(CNA_BACKEND_WEBGPU) || defined(CNA_BACKEND_D3D9) || \
-    defined(CNA_BACKEND_EASYGL) || defined(CNA_BACKEND_D3D11) || \
-    defined(CNA_BACKEND_D3D12)
+#if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_VULKAN) || \
+    defined(CNA_RENDERER_WEBGPU) || defined(CNA_RENDERER_D3D9) || \
+    defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_D3D11) || \
+    defined(CNA_RENDERER_D3D12)
 
 // Zero-offset control. Identical state, buffers and instance stream to every case below, with
 // startIndex = baseVertex = 0 and the geometry range covering the complete first three slots. It
@@ -1321,7 +1321,7 @@ TEST_F(InstancedDrawRangeTest, InstancedThirtyTwoBitIndicesHonorTheSameElementRa
 
 // A -> B -> A in one frame: three queued instanced draws with three different ranges and three
 // different instance counts, then one readback. Each draw must keep its own parameters by value; a
-// backend that resolved either from live state at flush time would render the last one three times.
+// renderer that resolved either from live state at flush time would render the last one three times.
 TEST_F(InstancedDrawRangeTest, DeferredInstancedDrawsAtoBtoAKeepTheirOwnParameters)
 {
     RequireInstancedRendering();
@@ -1683,15 +1683,15 @@ TEST_F(InstancedDrawRangeTest, InstancedDrawRespectsViewportAndScissor)
     };
 
     // Control first: the ORDINARY indexed draw, same buffers and same requested range, under the
-    // same rectangles. This test is about whether the *instanced* path inherits them; a backend
-    // that does not apply them to any 3D draw is a separate matter, so establish that the backend
+    // same rectangles. This test is about whether the *instanced* path inherits them; a renderer
+    // that does not apply them to any 3D draw is a separate matter, so establish that the renderer
     // can do it at all before holding the instanced path to it.
     const FrameSnapshot viewportControl = renderUnder(true, false, false);
     if (viewportControl.CountLitInColumns(halfWidth, layout.width, Color::Black) != 0 ||
         viewportControl.CountLitInRows(halfHeight, layout.height, Color::Black) != 0)
     {
         GTEST_SKIP()
-            << "this backend does not clip an ordinary indexed 3D draw to Viewport either, so the "
+            << "this renderer does not clip an ordinary indexed 3D draw to Viewport either, so the "
                "instanced path cannot be held to it here -- "
             << viewportControl.DescribeFirstLitInColumns(halfWidth, layout.width, Color::Black);
     }
@@ -1722,7 +1722,7 @@ TEST_F(InstancedDrawRangeTest, InstancedDrawRespectsViewportAndScissor)
     if (scissorControl.CountLitInColumns(0, scissorX, Color::Black) != 0)
     {
         GTEST_SKIP()
-            << "this backend does not clip an ordinary indexed 3D draw to ScissorRectangle either, "
+            << "this renderer does not clip an ordinary indexed 3D draw to ScissorRectangle either, "
                "so the instanced path cannot be held to it here -- "
             << scissorControl.DescribeFirstLitInColumns(0, scissorX, Color::Black);
     }
@@ -1933,7 +1933,7 @@ TEST_F(InstancedDrawRangeTest, DisposingAfterQueuedInstancedDrawsIsSafe)
 }
 #endif
 
-#ifdef CNA_BACKEND_BGFX
+#ifdef CNA_RENDERER_BGFX
 // REMED-GFX-121, pinned: `vs_instanced3d.sc` builds the per-instance world matrix with the raw
 // `mat4(i_data0, i_data1, i_data2, i_data3)` constructor. bgfx maps `mat4()` to GLSL's COLUMN
 // constructor on the GLSL profile and to HLSL's `float4x4` ROW constructor on SPIR-V/HLSL/Metal/
@@ -1968,16 +1968,16 @@ TEST_F(InstancedDrawRangeTest, BgfxPerInstanceWorldMatrixIsAppliedOnGlslRenderer
 }
 
 // The exact native bindings, not just their pixels. bgfx offers no way to read a submitted draw's
-// stream ranges back, so BgfxGraphicsBackend records the (startVertex, numVertices),
+// stream ranges back, so BgfxRenderer records the (startVertex, numVertices),
 // (firstIndex, numIndices) and instance-count triple it handed to bgfx. The whole-buffer overloads
 // this replaced carried none of the public range at all.
 TEST_F(InstancedDrawRangeTest, BgfxInstancedBindingsAreTheExactPublicRanges)
 {
     RequireInstancedRendering();
 
-    auto* backend =
-        dynamic_cast<CNA::Internal::Backends::Bgfx::BgfxGraphicsBackend*>(&device.GetBackend());
-    ASSERT_NE(nullptr, backend);
+    auto* renderer =
+        dynamic_cast<CNA::Internal::Renderers::Bgfx::BgfxRenderer*>(&device.GetRenderer());
+    ASSERT_NE(nullptr, renderer);
 
     const GridLayout layout = BackbufferLayout();
     const InstancedFixture fixture = BuildFixture(layout);
@@ -2035,31 +2035,31 @@ TEST_F(InstancedDrawRangeTest, BgfxInstancedBindingsAreTheExactPublicRanges)
 
         EXPECT_EQ(
             static_cast<std::uint32_t>(bindingCase.startIndex),
-            backend->lastInstancedIndexBindStartEXT_)
+            renderer->lastInstancedIndexBindStartEXT_)
             << TopologyName(bindingCase.primitive)
             << ": native firstIndex is not the public startIndex element offset";
-        EXPECT_EQ(bindingCase.expectedIndexCount, backend->lastInstancedIndexBindCountEXT_)
+        EXPECT_EQ(bindingCase.expectedIndexCount, renderer->lastInstancedIndexBindCountEXT_)
             << TopologyName(bindingCase.primitive)
             << ": native numIndices is not the topology-derived consumed count";
         EXPECT_LE(
-            backend->lastInstancedIndexBindStartEXT_ +
-                backend->lastInstancedIndexBindCountEXT_,
+            renderer->lastInstancedIndexBindStartEXT_ +
+                renderer->lastInstancedIndexBindCountEXT_,
             static_cast<std::uint32_t>(kElementCount))
             << TopologyName(bindingCase.primitive)
             << ": native index binding leaves the logical index buffer";
         EXPECT_EQ(
             static_cast<std::uint32_t>(bindingCase.baseVertex),
-            backend->lastInstancedVertexBindStartEXT_)
+            renderer->lastInstancedVertexBindStartEXT_)
             << TopologyName(bindingCase.primitive)
             << ": native startVertex is not the public baseVertex addend";
         EXPECT_EQ(
             static_cast<std::uint32_t>(kElementCount - bindingCase.baseVertex),
-            backend->lastInstancedVertexBindCountEXT_)
+            renderer->lastInstancedVertexBindCountEXT_)
             << TopologyName(bindingCase.primitive)
             << ": native numVertices is not the safe remainder after baseVertex";
         EXPECT_EQ(
             static_cast<std::uint32_t>(bindingCase.instanceCount),
-            backend->lastInstancedInstanceCountEXT_)
+            renderer->lastInstancedInstanceCountEXT_)
             << TopologyName(bindingCase.primitive)
             << ": native instance count is not the public instanceCount";
     }
@@ -2072,9 +2072,9 @@ TEST_F(InstancedDrawRangeTest, BgfxInstancedWireframeKeepsItsRangeWithAZeroBased
 {
     RequireInstancedRendering();
 
-    auto* backend =
-        dynamic_cast<CNA::Internal::Backends::Bgfx::BgfxGraphicsBackend*>(&device.GetBackend());
-    ASSERT_NE(nullptr, backend);
+    auto* renderer =
+        dynamic_cast<CNA::Internal::Renderers::Bgfx::BgfxRenderer*>(&device.GetRenderer());
+    ASSERT_NE(nullptr, renderer);
 
     const GridLayout layout = BackbufferLayout();
     const InstancedFixture fixture = BuildFixture(layout);
@@ -2113,17 +2113,17 @@ TEST_F(InstancedDrawRangeTest, BgfxInstancedWireframeKeepsItsRangeWithAZeroBased
 
     // The expanded indices are absolute (startIndex + local, plus baseVertex), so the stream must
     // start at zero and keep every vertex those indices can address bound.
-    EXPECT_EQ(0u, backend->lastInstancedVertexBindStartEXT_)
+    EXPECT_EQ(0u, renderer->lastInstancedVertexBindStartEXT_)
         << "the wireframe path's absolute expanded indices need a zero-based vertex binding";
     EXPECT_EQ(
         static_cast<std::uint32_t>(kElementCount),
-        backend->lastInstancedVertexBindCountEXT_)
+        renderer->lastInstancedVertexBindCountEXT_)
         << "the wireframe path must keep every vertex its expanded indices can address bound";
     // Two triangles, three edges each, two indices per edge.
-    EXPECT_EQ(12u, backend->lastInstancedIndexBindCountEXT_)
+    EXPECT_EQ(12u, renderer->lastInstancedIndexBindCountEXT_)
         << "the wireframe path expanded the wrong number of edges for the requested range";
     EXPECT_EQ(
-        static_cast<std::uint32_t>(instances), backend->lastInstancedInstanceCountEXT_);
+        static_cast<std::uint32_t>(instances), renderer->lastInstancedInstanceCountEXT_);
 
     const FrameSnapshot pixels = CaptureBackbuffer(device, layout.width, layout.height);
     device.setRasterizerStateProperty(RasterizerState::CullNone);
@@ -2321,7 +2321,7 @@ TEST_F(InstancedDrawRangeTest, BgfxInstanceFrequencyCostsNoExtraSubmissionOrTran
 }
 #endif
 
-#ifdef CNA_BACKEND_EASYGL
+#ifdef CNA_RENDERER_EASYGL
 // REMED-GFX-122's EasyGL binding-offset pin, unchanged in name and in what it asserts; its body is
 // now the fixture's shared oracle so REMED-GFX-123's D3D route asserts exactly the same contract.
 TEST_F(InstancedDrawRangeTest, EasyGLHonorsBindingOffsetsAndInstanceFrequency)
@@ -2330,9 +2330,9 @@ TEST_F(InstancedDrawRangeTest, EasyGLHonorsBindingOffsetsAndInstanceFrequency)
 }
 #endif
 
-#if defined(CNA_BACKEND_D3D11) || defined(CNA_BACKEND_D3D12)
+#if defined(CNA_RENDERER_D3D11) || defined(CNA_RENDERER_D3D12)
 // REMED-GFX-123's D3D binding oracle: the same contract REMED-GFX-122 pinned on EasyGL, asserted on
-// the two backends whose instanced path hardcoded every offset. D3D11 converts the element offsets
+// the two renderers whose instanced path hardcoded every offset. D3D11 converts the element offsets
 // with each stream's own stride for IASetVertexBuffers; D3D12 folds them into each
 // D3D12_VERTEX_BUFFER_VIEW; both key their instanced input layout / PSO on InstanceDataStepRate, so
 // the A->B->A leg fails on a cache that still holds the previous frequency.

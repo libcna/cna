@@ -1,9 +1,9 @@
-if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_BACKEND STREQUAL "DILIGENT")
+if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "DILIGENT")
     enable_testing()
 
-    # plan_diligent.md DILIGENT-16. Same link shape as the other backends' GPU test binaries; the
+    # plan_diligent.md DILIGENT-16. Same link shape as the other renderers' GPU test binaries; the
     # extra cna_link_diligent() call is needed because cna_link_diligent() keeps DiligentCore
-    # PRIVATE to the backend target (mirroring how the WebGPU backend keeps wgpu-native private).
+    # PRIVATE to the renderer target (mirroring how the WebGPU renderer keeps wgpu-native private).
     macro(cna_diligent_test target src)
         add_executable(${target} ${src})
         if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
@@ -11,7 +11,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_BACKEND STREQUAL "DILIGEN
                 CNA
                 SHARP_RUNTIME SDL3::SDL3)
         else()
-            target_link_libraries(${target} PRIVATE CNA ${BACKEND_TARGET} SHARP_RUNTIME SDL3::SDL3)
+            target_link_libraries(${target} PRIVATE CNA ${RENDERER_TARGET} SHARP_RUNTIME SDL3::SDL3)
         endif()
         if(TARGET SDL3::SDL3main)
             target_link_libraries(${target} PRIVATE SDL3::SDL3main)
@@ -25,15 +25,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_BACKEND STREQUAL "DILIGEN
     # unless a human remembers to export the override by hand -- exactly how the OpenGL-specific
     # defects DILIGENT-30/DILIGENT-66 found went unnoticed for as long as they did. Same
     # executable, same properties, twice the coverage; both variants read the override via
-    # std::getenv("CNA_DILIGENT_DEVICE") inside the backend's own device-creation loop, which
-    # every construction path (GraphicsDeviceManager or a test's own direct IGraphicsBackend
+    # std::getenv("CNA_DILIGENT_DEVICE") inside the renderer's own device-creation loop, which
+    # every construction path (GraphicsDeviceManager or a test's own direct IGraphicsRenderer
     # construction, e.g. Diligent_BackbufferReadbackBounds) goes through identically.
     macro(cna_register_diligent_test name command)
-        cna_register_backend_test(NAME ${name} COMMAND ${command}
+        cna_register_renderer_test(NAME ${name} COMMAND ${command}
             TIMEOUT 90 LABELS "GraphicsSmoke;Diligent"
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
             SKIP_REGULAR_EXPRESSION "\\[SKIP\\] CNA Diligent smoke")
-        cna_register_backend_test(NAME ${name}_OpenGL COMMAND ${command}
+        cna_register_renderer_test(NAME ${name}_OpenGL COMMAND ${command}
             TIMEOUT 90 LABELS "GraphicsSmoke;Diligent;DiligentOpenGL"
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_DILIGENT_DEVICE=opengl"
             SKIP_REGULAR_EXPRESSION "\\[SKIP\\] CNA Diligent smoke")
@@ -177,12 +177,12 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_BACKEND STREQUAL "DILIGEN
                                 cna_test_diligent_capability_consistency)
 
     # plan_diligent.md DILIGENT-63: ReadBackbuffer() must be valid and bounded for every
-    # CnaPresentationMode, constructed directly against IGraphicsBackend (not through
+    # CnaPresentationMode, constructed directly against IGraphicsRenderer (not through
     # GraphicsDeviceManager -- see the test file's own header for why). Unlike every other
-    # Diligent test, this one includes DiligentGraphicsBackend.hpp directly (to construct the
-    # backend itself), so it needs cna_link_diligent()'s own include dirs -- the same reason
+    # Diligent test, this one includes DiligentRenderer.hpp directly (to construct the
+    # renderer itself), so it needs cna_link_diligent()'s own include dirs -- the same reason
     # CnaTests calls it for DiligentDeviceSelectionTests.cpp (cmake/UnitTests.cmake). Still gets
-    # the dual-device treatment: CNA_DILIGENT_DEVICE is read inside the backend's own
+    # the dual-device treatment: CNA_DILIGENT_DEVICE is read inside the renderer's own
     # device-creation loop regardless of construction path.
     cna_diligent_test(cna_test_diligent_backbuffer_readback_bounds
                       examples/diligent_backbuffer_readback_bounds_test.cpp)
@@ -200,7 +200,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_BACKEND STREQUAL "DILIGEN
     # no new coverage, just doubling this already-longest test's ~6s runtime.
     cna_diligent_test(cna_test_diligent_device_selection_integration
                       examples/diligent_device_selection_integration_test.cpp)
-    cna_register_backend_test(NAME Diligent_DeviceSelectionIntegration
+    cna_register_renderer_test(NAME Diligent_DeviceSelectionIntegration
         COMMAND cna_test_diligent_device_selection_integration
         TIMEOUT 120 LABELS "GraphicsSmoke;Diligent"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")

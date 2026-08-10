@@ -3,20 +3,20 @@
 //
 // GraphicsDevice::Reset(presentationParameters) stores the new PresentationParameters, calls
 // applyPresentationParametersToWindow() (shared code -- calls SDL_SetWindowSize() on the real
-// window), then backend_->SetVirtualResolution(width, height) to reconfigure logical presentation,
+// window), then renderer_->SetVirtualResolution(width, height) to reconfigure logical presentation,
 // then UpdateViewportFromWindow(). This test confirms the WHOLE chain genuinely resizes the real
 // rendering surface on SDL_Renderer, not just the XNA-level PresentationParameters/Viewport
 // properties -- draws a full-viewport fill, resizes to a LARGER backbuffer via Reset(), and reads
 // back a pixel near the NEW, larger edge to confirm the real surface actually grew.
 //
 // Requires PresentationMode::NativeBackBuffer (Task 915 finding): SDL_RenderReadPixels operates
-// in physical output coordinates, while this backend's default presentation mode
+// in physical output coordinates, while this renderer's default presentation mode
 // (FixedHeightDynamicWidth) does not map logical pixels 1:1 to physical ones.
 //
-// Real-window resizes (SDL_SetWindowSize) are ASYNCHRONOUS under X11 -- SdlGraphicsBackend::
+// Real-window resizes (SDL_SetWindowSize) are ASYNCHRONOUS under X11 -- SdlRenderer::
 // Present() is what detects the real output size actually changing and re-applies logical
 // presentation to match (SetVirtualResolution() alone, called synchronously inside Reset(),
-// only updates the backend's own stored logical size, not the real window). Reading pixels
+// only updates the renderer's own stored logical size, not the real window). Reading pixels
 // within the SAME Draw() call as Reset() -- before a Present() has run to let the resize land --
 // throws "physical/logical size mismatch", matching this project's own deliberate no-silent-
 // wrong-data design (see ReadBackbuffer's own comment). This is expected, correct behavior for

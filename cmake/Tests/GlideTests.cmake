@@ -1,13 +1,13 @@
-if(CNA_BUILD_TESTS AND WIN32 AND CNA_GRAPHICS_BACKEND STREQUAL "GLIDE")
+if(CNA_BUILD_TESTS AND WIN32 AND CNA_GRAPHICS_RENDERER STREQUAL "GLIDE")
     # AUD-006 starts below the full CNA layer on purpose: this contract test builds a tiny x86
     # fake DLL and a loader client directly, so it stays runnable even when an unrelated CNA or
     # sharp-runtime executable dependency is not currently i686-compatible.
     add_library(cna_glide_fake_dll SHARED
-        modules/renderers/glide/tests/CNA/Internal/Backends/Glide/FakeGlide3xDll.cpp)
+        modules/renderers/glide/tests/CNA/Internal/Renderers/Glide/FakeGlide3xDll.cpp)
     set_target_properties(cna_glide_fake_dll PROPERTIES PREFIX "" OUTPUT_NAME "fake_glide3x")
 
     add_executable(cna_glide_abi_loader_test
-        modules/renderers/glide/tests/CNA/Internal/Backends/Glide/GlideAbiLoaderTests.cpp)
+        modules/renderers/glide/tests/CNA/Internal/Renderers/Glide/GlideAbiLoaderTests.cpp)
     # The ABI declarations live in the glide renderer module's always-defined header
     # interface (GlideAbi.hpp is self-contained: loader decls + <cstdint> only).
     target_link_libraries(cna_glide_abi_loader_test PRIVATE cna_renderer_glide_headers)
@@ -42,7 +42,7 @@ if(CNA_BUILD_TESTS AND WIN32 AND CNA_GRAPHICS_BACKEND STREQUAL "GLIDE")
     endif()
 
     # This target intentionally has no add_test(): it executes real Glide commands and needs an
-    # externally supplied emulator DLL. See docs/glide-backend.md for the manual dgVoodoo2 loop.
+    # externally supplied emulator DLL. See docs/glide-renderer.md for the manual dgVoodoo2 loop.
     add_executable(cna_glide_smoke examples/glide_smoke_test.cpp)
     target_link_libraries(cna_glide_smoke PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
     if(TARGET SDL3::SDL3main)

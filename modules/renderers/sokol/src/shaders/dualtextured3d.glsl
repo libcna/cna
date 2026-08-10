@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_sokol.md SOKOL-33: the Sokol backend's DualTextureEffect program -- two textures sampled at
-// the SAME texcoord0 (this codebase has no second UV-set concept anywhere; every CNA backend's own
+// plan_sokol.md SOKOL-33: the Sokol renderer's DualTextureEffect program -- two textures sampled at
+// the SAME texcoord0 (this codebase has no second UV-set concept anywhere; every CNA renderer's own
 // DualTextureEffect implementation already reuses one shared UV for both textures, matching
-// EasyGLGraphicsBackend::EnsureDualTextured3DProgram()'s identical shape). FNA's PSDualTexture:
+// EasyGLRenderer::EnsureDualTextured3DProgram()'s identical shape). FNA's PSDualTexture:
 //     color = SAMPLE(Texture);  color.rgb *= 2;  color *= overlay * pin.Diffuse;
 // -- a doubling factor on the base texture's RGB (alpha untouched), then multiplied by the overlay
 // texture and DiffuseColor. No alpha test: FNA's DualTextureEffect.fx has none.

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-079: the Software (CPU-raster) backend's 3D draw path (DrawColoredPrimitives /
+// REMED-GFX-079: the Software (CPU-raster) renderer's 3D draw path (DrawColoredPrimitives /
 // DrawIndexedColoredPrimitives / DrawPrimitivesEx / DrawIndexedPrimitivesEx) must honor a custom
-// GraphicsDevice.Viewport, exactly like the GPU backends and like the SpriteBatch path fixed by
+// GraphicsDevice.Viewport, exactly like the GPU renderers and like the SpriteBatch path fixed by
 // REMED-GFX-073.
 //
 // XNA/FNA contract (FNA Viewport.Project, verbatim): a post-perspective-divide NDC position is
@@ -21,7 +21,7 @@
 // position -- every vertex lands at an exactly computable screen pixel, no projection matrix needed.
 //
 // Testing strategy: read the whole 96x72 backbuffer (or the bound RT) once per check via
-// GetBackBufferData (the Software backend serves this from its real CPU framebuffer), then
+// GetBackBufferData (the Software renderer serves this from its real CPU framebuffer), then
 // bounding-box / probe on the CPU. Only binary/full-intensity colors are used for spatial
 // assertions so no encoding can masquerade as a coordinate error.
 //

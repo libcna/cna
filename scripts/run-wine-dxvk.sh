@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# plan_dx.md DX-3: run a Windows cross-compiled .exe (D3D11 backend) under Wine
+# plan_dx.md DX-3: run a Windows cross-compiled .exe (D3D11 renderer) under Wine
 # with DXVK, using this project's own dedicated Wine prefix.
 #
 # Usage: scripts/run-wine-dxvk.sh <path-to.exe> [args...]

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // plan_opengl2.md: proof that a genuinely custom VertexDeclaration (attribute order that matches
-// NONE of this backend's fixed byte-strides) is honored via VertexBuffer::SetDataRaw() ->
-// IVertexBufferBackend::SetVertexDeclaration() -> BindVertexAttributesForDeclaration(), instead
+// NONE of this renderer's fixed byte-strides) is honored via VertexBuffer::SetDataRaw() ->
+// IVertexBufferRenderer::SetVertexDeclaration() -> BindVertexAttributesForDeclaration(), instead
 // of silently falling back to (and misreading data through) the fixed-offset stride dispatch.
 //
 // The declaration below deliberately REORDERS the standard VertexPositionColorTexture fields --
@@ -14,9 +14,9 @@
 // is genuinely driving the bind, not a coincidence of matching sizes.
 //
 // A custom ShaderEffect (World/View/Projection uniforms, the real XNA-HLSL-style names direct 3D
-// custom-effect draws use -- see opengl2_shadereffect_test.cpp) consumes it via this backend's
+// custom-effect draws use -- see opengl2_shadereffect_test.cpp) consumes it via this renderer's
 // own established attribute-naming convention (aColor/aPosition/aTexCoord), proving the
-// customEffectBackend + custom-declaration combination this backend also wires works together.
+// customEffectRenderer + custom-declaration combination this renderer also wires works together.
 //
 // Check A -- the reordered-declaration quad renders its own solid texture colour at the centre
 //   pixel (not black/garbage) -- proves the declaration, not stale/misread offsets, drove the bind.
@@ -40,7 +40,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
 
-#include "CNA/Internal/Backends/OpenGL2/OpenGL2GraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/OpenGL2/OpenGL2Renderer.hpp"
 
 #include "common/PixelTestGame.hpp"
 
@@ -54,7 +54,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::OpenGL2;
+using namespace CNA::Internal::Renderers::OpenGL2;
 
 namespace
 {

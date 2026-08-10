@@ -8,14 +8,14 @@
 // `SamplerStates[1]` filters the cube (`EnvironmentMapEffect.EnvironmentMap`). This is not a summary
 // taken on trust: `env_map3d.frag.glsl` declares `binding = 0 sampler2D uTexture` and
 // `binding = 1 samplerCube uEnvMap`, and Vulkan's `GetOrCreateEnvMapDescSet` -- corrected under
-// REMED-GFX-169 and the reference this fixture measures every other backend against -- writes
+// REMED-GFX-169 and the reference this fixture measures every other renderer against -- writes
 // `slotSamplers_[0]` into binding 0 and `slotSamplers_[1]` into binding 1. The two slots are
 // INDEPENDENT: changing one may not alter what the other resource looks like, both must be captured
 // when the draw is issued so a later public change cannot reach back into a queued command, and an
 // explicit sampler must never be replaced by a fixed constant. An unset slot uses the documented
 // device default (`SamplerState::LinearWrap`).
 //
-// THE DEFECT this reproduces is SDL_GPU-local. `SdlGpuGraphicsBackend::IssueEnvMapDraw` binds
+// THE DEFECT this reproduces is SDL_GPU-local. `SdlGpuRenderer::IssueEnvMapDraw` binds
 // `samplerBindings[1].sampler = GetOrCreateSampler(0, 1, 1, ...)` -- a literal LinearClamp -- for
 // the cube, and `QueueEnvMapDraw` captures only `samplerSlots_[0]`, so `EnvMapDrawCommand` has no
 // field in which slot 1 could survive to replay even if the constant were removed. Both halves are
@@ -27,7 +27,7 @@
 //
 // THE ORACLE is byte-exact for every Point mode and strictly differential for every Linear mode,
 // and it never depends on where a particular texel lands on screen -- so cube-face orientation
-// conventions, which differ across backends and are settled elsewhere (REMED-GFX-134), cannot make
+// conventions, which differ across renderers and are settled elsewhere (REMED-GFX-134), cannot make
 // it pass or fail.
 //
 //   * A PALETTE built at start-up guarantees, and CHECKS, two properties: every entry is at least
@@ -121,39 +121,39 @@ using namespace Microsoft::Xna::Framework::Graphics;
 
 namespace
 {
-#if defined(CNA_BACKEND_HEADLESS)
+#if defined(CNA_RENDERER_HEADLESS)
     constexpr bool kRasterizes = false;
-    constexpr const char* kBackendName = "HEADLESS";
-#elif defined(CNA_BACKEND_SOFTWARE)
+    constexpr const char* kRendererName = "HEADLESS";
+#elif defined(CNA_RENDERER_SOFTWARE)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "SOFTWARE";
-#elif defined(CNA_BACKEND_EASYGL)
+    constexpr const char* kRendererName = "SOFTWARE";
+#elif defined(CNA_RENDERER_EASYGL)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "EASYGL";
-#elif defined(CNA_BACKEND_BGFX)
+    constexpr const char* kRendererName = "EASYGL";
+#elif defined(CNA_RENDERER_BGFX)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "BGFX";
-#elif defined(CNA_BACKEND_VULKAN)
+    constexpr const char* kRendererName = "BGFX";
+#elif defined(CNA_RENDERER_VULKAN)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "VULKAN";
-#elif defined(CNA_BACKEND_WEBGPU)
+    constexpr const char* kRendererName = "VULKAN";
+#elif defined(CNA_RENDERER_WEBGPU)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "WEBGPU";
-#elif defined(CNA_BACKEND_SDL_GPU)
+    constexpr const char* kRendererName = "WEBGPU";
+#elif defined(CNA_RENDERER_SDL_GPU)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "SDL_GPU";
-#elif defined(CNA_BACKEND_D3D9)
+    constexpr const char* kRendererName = "SDL_GPU";
+#elif defined(CNA_RENDERER_D3D9)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "D3D9";
-#elif defined(CNA_BACKEND_D3D11)
+    constexpr const char* kRendererName = "D3D9";
+#elif defined(CNA_RENDERER_D3D11)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "D3D11";
-#elif defined(CNA_BACKEND_D3D12)
+    constexpr const char* kRendererName = "D3D11";
+#elif defined(CNA_RENDERER_D3D12)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "D3D12";
+    constexpr const char* kRendererName = "D3D12";
 #else
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "UNKNOWN";
+    constexpr const char* kRendererName = "UNKNOWN";
 #endif
 
     constexpr int kBBW = 128;
@@ -318,7 +318,7 @@ class EnvMapCubeSamplerContractTest : public Game
 
     /// Builds a palette in which no two entries are closer than kSep and no midpoint of two
     /// entries is within kMidSep of any entry. Deterministic (a fixed LCG, no <random>), so the
-    /// same colours are measured on every backend and in every run.
+    /// same colours are measured on every renderer and in every run.
     static std::vector<Color> BuildPalette()
     {
         std::vector<Color> out;
@@ -558,7 +558,7 @@ class EnvMapCubeSamplerContractTest : public Game
             }
             case Path::DynamicNonIndexed:
             {
-                // A dynamic buffer written twice, so the draw reads the SECOND write -- a backend
+                // A dynamic buffer written twice, so the draw reads the SECOND write -- a renderer
                 // that shadows vertex data at creation time cannot pass this by accident.
                 std::vector<VtxPNT> decoy(quad.size(), quad.front());
                 VertexBuffer vb(dev, static_cast<int>(quad.size()));
@@ -979,7 +979,7 @@ class EnvMapCubeSamplerContractTest : public Game
         }
         else
         {
-            skip("E4/E5: the second cube texture is unavailable on this backend");
+            skip("E4/E5: the second cube texture is unavailable on this renderer");
         }
 
         // E6: swapping which slot holds which sampler must not alias one binding onto the other.
@@ -1050,7 +1050,7 @@ class EnvMapCubeSamplerContractTest : public Game
             }
             catch (const std::exception& e)
             {
-                skip(tag + "this backend does not implement the path (" + std::string(e.what()) + ")");
+                skip(tag + "this renderer does not implement the path (" + std::string(e.what()) + ")");
                 continue;
             }
             check(OffPalette(point, cubeSet_) == 0,
@@ -1148,7 +1148,7 @@ class EnvMapCubeSamplerContractTest : public Game
     {
         if (!cubeMip_ || !cubeFlat_)
         {
-            skip("J: this backend could not store a mipmapped cube");
+            skip("J: this renderer could not store a mipmapped cube");
             return;
         }
         check(cubeMip_->getLevelCountProperty() == 6,
@@ -1362,7 +1362,7 @@ class EnvMapCubeSamplerContractTest : public Game
         }
         catch (const std::exception& e)
         {
-            skip(std::string("L: this backend does not support RenderTargetCube (") + e.what() + ")");
+            skip(std::string("L: this renderer does not support RenderTargetCube (") + e.what() + ")");
             return;
         }
 
@@ -1376,7 +1376,7 @@ class EnvMapCubeSamplerContractTest : public Game
         }
         catch (const std::exception& e)
         {
-            skip(std::string("L: this backend does not accept a RenderTargetCube as an "
+            skip(std::string("L: this renderer does not accept a RenderTargetCube as an "
                              "EnvironmentMap (") + e.what() + ")");
             return;
         }
@@ -1457,7 +1457,7 @@ protected:
         for (int i = 0; i < kTex * kTex; ++i) basePattern.push_back(BaseTexel(i));
         base_ = Texture2D::CreateFromPixels(dev, kTex, kTex, Bytes(basePattern));
 
-        // A non-rasterizing backend rejects cube uploads by REMED-GFX-130/135's contract; the run
+        // A non-rasterizing renderer rejects cube uploads by REMED-GFX-130/135's contract; the run
         // must still reach its honest-rejection leg rather than abort in LoadContent.
         try
         {
@@ -1493,7 +1493,7 @@ protected:
             // components at once. The one-level control keeps a real pattern, which is what makes
             // its own stored-texel check meaningful.
             //
-            // Levels above 0 are written AFTER every level-0 upload, because a backend that
+            // Levels above 0 are written AFTER every level-0 upload, because a renderer that
             // regenerates the chain on a full level-0 write would otherwise overwrite them.
             cubeMip_ = std::make_unique<TextureCube>(dev, kMipFace, true, SurfaceFormat::Color);
             cubeFlat_ = std::make_unique<TextureCube>(dev, kMipFace, false, SurfaceFormat::Color);
@@ -1532,7 +1532,7 @@ protected:
         auto& dev = getGraphicsDeviceProperty();
 
         std::printf("=== REMED-GFX-173 EnvironmentMapEffect cube-sampler contract on %s ===\n",
-                    kBackendName);
+                    kRendererName);
 
         RunPalette();
 
@@ -1545,7 +1545,7 @@ protected:
             try { rt.GetData(pix.data(), 0, static_cast<int>(pix.size())); }
             catch (const System::Exception&) { threw = true; }
             catch (const std::exception&) { threw = true; }
-            check(threw, "Z1: a non-rasterizing backend rejects the readback instead of fabricating "
+            check(threw, "Z1: a non-rasterizing renderer rejects the readback instead of fabricating "
                          "a sampled image");
             Finish();
             return;
@@ -1553,7 +1553,7 @@ protected:
 
         if (!cubeA_)
         {
-            skip("A..M: this backend could not store a TextureCube, so EnvironmentMapEffect has no "
+            skip("A..M: this renderer could not store a TextureCube, so EnvironmentMapEffect has no "
                  "reflection resource to measure");
             Finish();
             return;
@@ -1568,7 +1568,7 @@ protected:
         }
         catch (const std::exception& e)
         {
-            skip(std::string("A..M: this backend does not implement EnvironmentMapEffect (") +
+            skip(std::string("A..M: this renderer does not implement EnvironmentMapEffect (") +
                  e.what() + ")");
             Finish();
             return;

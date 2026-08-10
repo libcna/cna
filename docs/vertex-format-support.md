@@ -1,7 +1,7 @@
-# VertexElementFormat / VertexElementUsage Backend Support — CNA
+# VertexElementFormat / VertexElementUsage Renderer Support — CNA
 
 > Source-inspected against Tasks 248–250 (Phase 30).
-> Covers: EasyGL, Vulkan, Bgfx, SDL_Renderer backends.
+> Covers: EasyGL, Vulkan, Bgfx, SDL_Renderer renderers.
 
 ---
 
@@ -12,16 +12,16 @@
 | ✅ | Fully supported; correct GPU mapping. |
 | ⚠️ | Partially supported; works with caveats documented below. |
 | ❌ | Unsupported; throws, silently ignored, or falls back to a wrong type. |
-| — | Not applicable (backend has no 3D vertex pipeline). |
+| — | Not applicable (renderer has no 3D vertex pipeline). |
 
 ---
 
 ## How vertex layout selection works (current state)
 
-All four backends select their GPU vertex attribute layout from the **byte stride** of the
+All four renderers select their GPU vertex attribute layout from the **byte stride** of the
 bound `VertexBuffer`, not from the `VertexDeclaration` elements.  The `VertexDeclaration`
 is stored in the XNA layer and used for stride auto-computation and API conformance, but
-it is not forwarded to `IGraphicsBackend::DrawPrimitivesEx`.
+it is not forwarded to `IGraphicsRenderer::DrawPrimitivesEx`.
 
 The practical consequence is that only the **five hardcoded strides** described below are
 rendered correctly.  Any other stride triggers a fallback that may produce incorrect shading
@@ -29,7 +29,7 @@ or a crash-free but visually wrong draw.
 
 ---
 
-## Supported vertex strides per backend
+## Supported vertex strides per renderer
 
 | Stride | Vertex type                   | EasyGL | Vulkan | Bgfx | SDL_Renderer |
 |-------:|-------------------------------|:------:|:------:|:----:|:------------:|
@@ -53,9 +53,9 @@ or no shading if the shader reads from those attributes.
 
 ---
 
-## VertexElementFormat — backend mapping table
+## VertexElementFormat — renderer mapping table
 
-Each row shows what GPU type the XNA format maps to in each backend.
+Each row shows what GPU type the XNA format maps to in each renderer.
 
 | XNA format            | Byte size | EasyGL                       | Vulkan                      | Bgfx                              | SDL_Renderer |
 |-----------------------|:---------:|------------------------------|-----------------------------|-----------------------------------|:------------:|
@@ -85,12 +85,12 @@ until per-declaration pipeline compilation is implemented.
 
 **Bgfx caveat**: `BgfxVertexFormatHelper::VertexElementFormatToBgfx()` provides correct
 bgfx attrib parameters for all 12 formats, but `MakeBgfxLayout()` in
-`BgfxGraphicsBackend.cpp` still uses the stride-keyed fallback rather than the helper.
+`BgfxRenderer.cpp` still uses the stride-keyed fallback rather than the helper.
 Migrating `MakeBgfxLayout` to use the `VertexDeclaration` elements is a future task.
 
 ---
 
-## VertexElementUsage — backend mapping table
+## VertexElementUsage — renderer mapping table
 
 | XNA usage             | EasyGL                  | Vulkan                  | Bgfx                    | SDL_Renderer |
 |-----------------------|-------------------------|-------------------------|-------------------------|:------------:|
@@ -115,7 +115,7 @@ it.
 
 ---
 
-## SDL_Renderer backend
+## SDL_Renderer renderer
 
 SDL_Renderer has no 3D vertex pipeline.  `CreateVertexBuffer()` throws immediately
 (`ThrowNo3D`).  All vertex-related APIs (`DrawPrimitives`, `DrawIndexedPrimitives`, etc.)

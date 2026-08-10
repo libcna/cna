@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // Task 394: verify EnvironmentMapEffect's cube-map contribution at
-// EnvironmentMapAmount=1 (EasyGL backend).
+// EnvironmentMapAmount=1 (EasyGL renderer).
 //
 // Task 393 found a real formula-level question: FNA's real pixel shader (PSEnvMap) does
 // `color.rgb = lerp(color.rgb, envmap.rgb, EnvironmentMapAmount)` -- at Amount=1 the cube
@@ -129,7 +129,7 @@ protected:
         dev.SetDepthTestEnabled(false);
         dev.setBlendStateProperty(BlendState::Opaque);
         // Task 896 finding (mirrors the Bgfx sibling's Task 364/884 fix): once
-        // GraphicsDevice's real default RasterizerState is pushed to every backend,
+        // GraphicsDevice's real default RasterizerState is pushed to every renderer,
         // this quad's winding is culled unless explicitly disabled.
         dev.setRasterizerStateProperty(RasterizerState::CullNone);
 

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-084: the Bgfx backend cannot represent two DIFFERENT SpriteBatch.Begin(transformMatrix)
+// REMED-GFX-084: the Bgfx renderer cannot represent two DIFFERENT SpriteBatch.Begin(transformMatrix)
 // states submitted to the SAME GraphicsDevice.Viewport within one frame. EnsureViewState() bakes the
 // batch transform into the sprite view's PER-VIEW bgfx::setViewTransform (orthoWithTransform =
 // transformColMajor * ortho), which is resolved once at bgfx::frame() (last-write-wins). GFX-065's

@@ -2,7 +2,7 @@
 
 // PbrEffect vertex shader — stride 48 (VertexPositionNormalTangentTexture): float3 position +
 // float3 normal + float4 tangent (xyz + bitangent handedness in w, glTF convention) + float2 uv.
-// Mirrors EasyGLGraphicsBackend::EnsurePbrProgram()'s vertex stage.
+// Mirrors EasyGLRenderer::EnsurePbrProgram()'s vertex stage.
 layout(location = 0) in vec3 aPos;
 layout(location = 1) in vec3 aNormal;
 layout(location = 2) in vec4 aTangent;
@@ -49,7 +49,7 @@ layout(set = 0, binding = 5) uniform PbrParams {
 void main() {
     gl_Position = pc.mvp * vec4(aPos, 1.0);
     // REMED-GFX-011: Vulkan NDC Y is inverted vs OpenGL and the C++ side supplies no correction,
-    // so every 3D vertex shader in this backend flips here. This is a backend-wide convention,
+    // so every 3D vertex shader in this renderer flips here. This is a renderer-wide convention,
     // not a per-family choice -- omitting it renders PbrEffect vertically mirrored relative to
     // every other effect in the same frame.
     gl_Position.y = -gl_Position.y;
@@ -59,7 +59,7 @@ void main() {
     vNormal = normalize(normalMatrix * aNormal);
     // Tangent transforms as a plain direction under mat3(world) (not the normal's inverse-
     // transpose) — correct for uniform-scale World transforms, matching
-    // EasyGLGraphicsBackend::EnsurePbrProgram()'s own documented simplification.
+    // EasyGLRenderer::EnsurePbrProgram()'s own documented simplification.
     vTangent = mat3(pbr.world) * aTangent.xyz;
     vBitangentSign = aTangent.w;
     vUV = aUV;

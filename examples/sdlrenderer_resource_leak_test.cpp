@@ -3,13 +3,13 @@
 // verify GraphicsDevice's tracking list (GetTrackedResourceCount) returns to baseline.
 // Mirrors Task 219's EasyGL leak-check, scoped to the two resource types named in this
 // task: Texture2D and RenderTarget2D (VertexBuffer/IndexBuffer are already covered by
-// Task 219's own test, which exercises shared, backend-agnostic GraphicsDevice code).
+// Task 219's own test, which exercises shared, renderer-agnostic GraphicsDevice code).
 //
 // For each of N=40 iterations, creates one Texture2D and one RenderTarget2D (80 resources
 // total), disposes them all explicitly, then checks:
 //   - ResourceCreated fired exactly 80 times (all tracked).
 //   - ResourceDestroyed fired exactly 80 times (all untracked).
-//   - Every HasBackend() is false (no SDL_Texture handle leaked).
+//   - Every HasRenderer() is false (no SDL_Texture handle leaked).
 //   - GraphicsDevice tracking list is back to its pre-creation count.
 //   - No crash (no double-free or use-after-free from stray SDL_Renderer calls).
 
@@ -91,8 +91,8 @@ protected:
               "Tracking list returned to pre-creation count after disposal");
 
         int leaked = 0;
-        for (auto& r : textures) if (r->HasBackend()) ++leaked;
-        for (auto& r : rts)      if (r->HasBackend()) ++leaked;
+        for (auto& r : textures) if (r->HasRenderer()) ++leaked;
+        for (auto& r : rts)      if (r->HasRenderer()) ++leaked;
         check(leaked == 0, "No SDL_Texture handles remain after disposing all resources");
 
         textures.clear();

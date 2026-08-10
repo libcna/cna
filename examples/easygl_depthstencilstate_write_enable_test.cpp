@@ -11,7 +11,7 @@
 //     0.5 < 0.8 -> PASSES -> centre ends BLUE.
 //   - If B's write happened anyway (bug: write-disable ignored), the buffer holds B's 0.2. C's
 //     compare is 0.5 < 0.2 -> FAILS -> centre stays GREEN (B's colour, drawn on top of A).
-// C is deliberately NOT drawn at the same depth as A: this project's Vulkan backend hardcodes its
+// C is deliberately NOT drawn at the same depth as A: this project's Vulkan renderer hardcodes its
 // depth-compare op per pipeline (ignoring DepthStencilState.DepthBufferFunction entirely -- a
 // separate, already-tracked-shape bug, see plan_graphics.md), and at least one of those hardcoded
 // ops is strict VK_COMPARE_OP_LESS rather than FNA's actual LessEqual default -- an equal-depth C
@@ -26,11 +26,11 @@
 //
 // NOTE on Z range: with an identity World/View/Projection (as used here), the vertex Z value
 // passed to BasicEffect becomes the clip-space Z directly. XNA/DirectX (and this project's Vulkan
-// backend, matching it -- see colored3d.vert.glsl) use a [0, +w] clip-space Z range, NOT OpenGL's
+// renderer, matching it -- see colored3d.vert.glsl) use a [0, +w] clip-space Z range, NOT OpenGL's
 // [-1, +1] -- a negative Z is behind the near plane and gets clipped away entirely on Vulkan
 // (silently, no error), which does NOT happen on EasyGL/OpenGL's more permissive convention. All Z
 // values here are deliberately kept within [0, 1] (0.2 = near, 0.8 = far) so this test exercises
-// the SAME valid geometry on both backends -- do not reintroduce negative Z values here.
+// the SAME valid geometry on both renderers -- do not reintroduce negative Z values here.
 //
 // Exit code 0 = both checks PASS, 1 = either FAILs.
 

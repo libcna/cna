@@ -1,5 +1,5 @@
 // Shader Model 5.0 (vs_5_0). Ported line-by-line from
-// src/CNA/Internal/Backends/Vulkan/shaders/dual_texture3d.vert.glsl.
+// src/CNA/Internal/Renderers/Vulkan/shaders/dual_texture3d.vert.glsl.
 // Stride 20: VertexPositionTexture -- float3 pos + float2 uv.
 //
 // Task 899: dedicated vertex shader (mirrors the GLSL source's own history -- previously

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Task 396: verify EnvironmentMapEffect's Fresnel edge-weighting (EasyGL backend).
+// Task 396: verify EnvironmentMapEffect's Fresnel edge-weighting (EasyGL renderer).
 //
 // FNA's real vertex shader computes the env-map blend factor as either a flat
 // EnvironmentMapAmount (Fresnel disabled) or a per-vertex, view-angle-dependent term
@@ -7,8 +7,8 @@
 //   float viewAngle = dot(eyeVector, worldNormal);
 //   return pow(max(1 - abs(viewAngle), 0), FresnelFactor) * EnvironmentMapAmount;
 // Tasks 393/394 already confirmed CNA implemented NO Fresnel uniform at all in any of the 3
-// backends -- the blend factor was always the flat EnvironmentMapAmount regardless of view
-// angle. This task adds the missing Fresnel term to all 3 backends' env-map shaders.
+// renderers -- the blend factor was always the flat EnvironmentMapAmount regardless of view
+// angle. This task adds the missing Fresnel term to all 3 renderers' env-map shaders.
 //
 // (a) Grazing/coplanar camera (View=Identity, same setup as Tasks 393-395): the eye sits in
 //     the same plane as the quad's surface, so viewAngle = dot(eyeVector, normal) ~= 0 at
@@ -138,7 +138,7 @@ protected:
         dev.SetDepthTestEnabled(false);
         dev.setBlendStateProperty(BlendState::Opaque);
         // Task 896 finding (mirrors the Bgfx sibling's Task 364/884 fix): once
-        // GraphicsDevice's real default RasterizerState is pushed to every backend,
+        // GraphicsDevice's real default RasterizerState is pushed to every renderer,
         // this quad's winding is culled unless explicitly disabled.
         dev.setRasterizerStateProperty(RasterizerState::CullNone);
 

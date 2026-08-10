@@ -16,7 +16,7 @@
 // synchronization or resource-identity one. bgfx does not execute views in the order they were
 // submitted to. Every draw carries a sort key whose high bits are its view's SORT POSITION, the
 // whole frame is radix-sorted by that key, and the position defaults to the numeric view id. The
-// bgfx backend partitions ids as backbuffer = 0, render-target base ids in [1, 192), per-frame
+// bgfx renderer partitions ids as backbuffer = 0, render-target base ids in [1, 192), per-frame
 // ordered segments in [192, 255) -- so "execute in ascending id" meant "execute the backbuffer
 // FIRST, then render targets in the order their ids happened to be allocated". Measured, the frame
 // behind REMED-GFX-151's leg D6 used views 1, 192, 0 in public order and executed them 0, 1, 192:
@@ -35,7 +35,7 @@
 //     and compares the two side by side. A failure names which side is wrong instead of reporting
 //     that "the frame is black".
 //
-// THE FIX is bgfx::setViewOrder(): the backend records the view ids a frame's public commands use,
+// THE FIX is bgfx::setViewOrder(): the renderer records the view ids a frame's public commands use,
 // in first-use order, and programs that as the frame's execution order. No GetData, no extra
 // bgfx::frame(), no Present, no readback, no wait, and no per-target-switch flush is added -- see
 // the cardinality leg, which measures that a repeated producer/consumer frame allocates a bounded,
@@ -43,7 +43,7 @@
 //
 // THE ORACLE is GetBackBufferData. It is honest here: the Texture2D control drawn beside every
 // render-target region is read through the very same call, so a broken readback would fail the
-// control too. Where a backend cannot read its backbuffer at all, the leg says so and the
+// control too. Where a renderer cannot read its backbuffer at all, the leg says so and the
 // render-target-to-render-target control still carries the ordering contract.
 //
 // THE PATTERN is 8x4 -- deliberately NON-SQUARE, so a transpose cannot masquerade as a pass -- and
@@ -108,66 +108,66 @@ using namespace Microsoft::Xna::Framework::Graphics;
 namespace
 {
     /**
-     * @brief Whether this backend rasterizes at all.
+     * @brief Whether this renderer rasterizes at all.
      *
      * HEADLESS performs no rasterization, so REMED-GFX-127's contract makes every readback reject
      * deterministically. There is no consumer result to observe there; the legs below assert the
      * rejection instead of a value.
      */
-#if defined(CNA_BACKEND_HEADLESS)
+#if defined(CNA_RENDERER_HEADLESS)
     constexpr bool kRasterizes = false;
-    constexpr const char* kBackendName = "HEADLESS";
-#elif defined(CNA_BACKEND_SOFTWARE)
+    constexpr const char* kRendererName = "HEADLESS";
+#elif defined(CNA_RENDERER_SOFTWARE)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "SOFTWARE";
-#elif defined(CNA_BACKEND_EASYGL)
+    constexpr const char* kRendererName = "SOFTWARE";
+#elif defined(CNA_RENDERER_EASYGL)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "EASYGL";
-#elif defined(CNA_BACKEND_BGFX)
+    constexpr const char* kRendererName = "EASYGL";
+#elif defined(CNA_RENDERER_BGFX)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "BGFX";
-#elif defined(CNA_BACKEND_VULKAN)
+    constexpr const char* kRendererName = "BGFX";
+#elif defined(CNA_RENDERER_VULKAN)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "VULKAN";
-#elif defined(CNA_BACKEND_WEBGPU)
+    constexpr const char* kRendererName = "VULKAN";
+#elif defined(CNA_RENDERER_WEBGPU)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "WEBGPU";
-#elif defined(CNA_BACKEND_SDL_GPU)
+    constexpr const char* kRendererName = "WEBGPU";
+#elif defined(CNA_RENDERER_SDL_GPU)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "SDL_GPU";
-#elif defined(CNA_BACKEND_SDL_RENDERER)
+    constexpr const char* kRendererName = "SDL_GPU";
+#elif defined(CNA_RENDERER_SDL_RENDERER)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "SDL_RENDERER";
-#elif defined(CNA_BACKEND_ASCII)
+    constexpr const char* kRendererName = "SDL_RENDERER";
+#elif defined(CNA_RENDERER_ASCII)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "ASCII";
-#elif defined(CNA_BACKEND_FREEDIRECT)
+    constexpr const char* kRendererName = "ASCII";
+#elif defined(CNA_RENDERER_FREEDIRECT)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "FREEDIRECT";
-#elif defined(CNA_BACKEND_D3D9)
+    constexpr const char* kRendererName = "FREEDIRECT";
+#elif defined(CNA_RENDERER_D3D9)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "D3D9";
-#elif defined(CNA_BACKEND_D3D11)
+    constexpr const char* kRendererName = "D3D9";
+#elif defined(CNA_RENDERER_D3D11)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "D3D11";
-#elif defined(CNA_BACKEND_D3D12)
+    constexpr const char* kRendererName = "D3D11";
+#elif defined(CNA_RENDERER_D3D12)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "D3D12";
-#elif defined(CNA_BACKEND_CANVAS)
+    constexpr const char* kRendererName = "D3D12";
+#elif defined(CNA_RENDERER_CANVAS)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "CANVAS";
-#elif defined(CNA_BACKEND_SOKOL)
-    // plan_sokol.md SOKOL-25/38: real geometry is genuinely rasterized, and `SokolRenderTargetBackend`
-    // now overrides `ITextureBackend::GetData` via a throwaway GL FBO around the raw texture handle
+    constexpr const char* kRendererName = "CANVAS";
+#elif defined(CNA_RENDERER_SOKOL)
+    // plan_sokol.md SOKOL-25/38: real geometry is genuinely rasterized, and `SokolRenderTargetRenderer`
+    // now overrides `ITextureRenderer::GetData` via a throwaway GL FBO around the raw texture handle
     // `sg_gl_query_image_info()` exposes -- `RequireReadable`'s direct `ReadWholeTarget` (a
     // RenderTarget2D::GetData) round-trips real content, so `kRasterizes = true` is accurate.
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "SOKOL";
-#elif defined(CNA_BACKEND_LLGL)
+    constexpr const char* kRendererName = "SOKOL";
+#elif defined(CNA_RENDERER_LLGL)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "LLGL";
+    constexpr const char* kRendererName = "LLGL";
 #else
-#error "REMED-GFX-155: this backend has no declared backbuffer-consumer contract."
+#error "REMED-GFX-155: this renderer has no declared backbuffer-consumer contract."
 #endif
 
     /**
@@ -176,9 +176,9 @@ namespace
      * REMED-GFX-152 CLOSED this (2026-07-29), and the declaration is now unconditionally true.
      *
      * It used to read false on SDL_GPU, whose stock-effect paths
-     * `static_cast<const SdlGpuTextureBackend*>(params.textureN)` onto the unrelated sibling
-     * SdlGpuRenderTargetBackend and died, so the 3D consumer cases were skipped there. They now run
-     * and were A/B-proven against the pre-fix backend.
+     * `static_cast<const SdlGpuTextureRenderer*>(params.textureN)` onto the unrelated sibling
+     * SdlGpuRenderTargetRenderer and died, so the 3D consumer cases were skipped there. They now run
+     * and were A/B-proven against the pre-fix renderer.
      */
     constexpr bool kStockEffectRtSourceSupported = true;
 
@@ -190,7 +190,7 @@ namespace
      * followed by an OVERLAPPING 3D draw came out with the sprite on top there, and only leg I0's
      * overlapping render-target probe could see it: every other leg here draws its two families
      * into disjoint slots, which any grouping renders correctly. REMED-GFX-159 replaced WebGPU's
-     * fixed per-family replay list with one ordered reference stream, so every backend now owes
+     * fixed per-family replay list with one ordered reference stream, so every renderer now owes
      * public order and this is asserted unconditionally.
      */
     constexpr bool kFamiliesReplayInPublicOrder = true;
@@ -285,7 +285,7 @@ class RenderTargetBackbufferConsumerTest : public Game
         dev.setBlendStateProperty(BlendState::Opaque);
     }
 
-    /** @brief True when this backend declared it cannot rasterize at all. */
+    /** @brief True when this renderer declared it cannot rasterize at all. */
     static bool Unsupported() { return !kRasterizes; }
 
     // ---------------------------------------------------------------- readback
@@ -307,7 +307,7 @@ class RenderTargetBackbufferConsumerTest : public Game
         }
     };
 
-    /// Reads a whole render target back, pre-filled with a poison value so a backend that writes
+    /// Reads a whole render target back, pre-filled with a poison value so a renderer that writes
     /// nothing cannot be mistaken for one that wrote transparent black.
     static Readback ReadWholeTarget(RenderTarget2D& target, int w, int h)
     {
@@ -336,7 +336,7 @@ class RenderTargetBackbufferConsumerTest : public Game
         return r;
     }
 
-    /// Asserts an unreadable backend rejected, and reports whether the caller should continue.
+    /// Asserts an unreadable renderer rejected, and reports whether the caller should continue.
     bool RequireReadable(const Readback& r, const std::string& label)
     {
         if (Unsupported())
@@ -363,7 +363,7 @@ class RenderTargetBackbufferConsumerTest : public Game
         {
             std::printf("[INFO] %s: backbuffer oracle unavailable on %s (%s) -- boundary recorded, "
                         "the render-target-consumer control carries the contract\n",
-                        label.c_str(), kBackendName,
+                        label.c_str(), kRendererName,
                         out.ok() ? "non-rasterizing"
                                  : (out.threwNotSupported ? "NotSupportedException"
                                                           : out.otherWhat.c_str()));
@@ -618,7 +618,7 @@ class RenderTargetBackbufferConsumerTest : public Game
         {
             std::printf("[INFO] B2: %s cannot hand a RenderTarget2D to a stock 3D effect "
                         "(REMED-GFX-152) -- boundary recorded, B1 carries the contract here\n",
-                        kBackendName);
+                        kRendererName);
             std::fflush(stdout);
         }
         else
@@ -718,7 +718,7 @@ class RenderTargetBackbufferConsumerTest : public Game
      * @brief Leg E -- one producer sampled more than once by backbuffer consumers.
      *
      * E1 samples it twice inside a single batch; E2 samples it in two separate batches, which on a
-     * view-based backend is what forces a second consumer segment. Both must agree with the control.
+     * view-based renderer is what forces a second consumer segment. Both must agree with the control.
      */
     void LegSampledTwice(GraphicsDevice& dev)
     {
@@ -745,7 +745,7 @@ class RenderTargetBackbufferConsumerTest : public Game
      * @brief Leg F -- two live producers under orders that defeat an id-based execution rule.
      *
      * F1 consumes them in the reverse of the order they were produced in. F2 is the latent case
-     * this task exposed: the CONSUMER's target is created BEFORE the producer's, so a backend that
+     * this task exposed: the CONSUMER's target is created BEFORE the producer's, so a renderer that
      * executes render targets in resource-allocation order rather than public order runs the
      * consumer first. Both patterns are used so sampling the wrong live producer fails on every
      * texel rather than on a few.
@@ -876,8 +876,8 @@ class RenderTargetBackbufferConsumerTest : public Game
     void LegCubeFaceProducer(GraphicsDevice& dev)
     {
         // Whether a cube face can be BOUND at all is asked of the public API rather than of a
-        // hard-coded backend list, because the two disagree: Software implements RenderTargetCube
-        // yet rejects SetRenderTarget for a face. A backend that cannot bind one has no cube bind
+        // hard-coded renderer list, because the two disagree: Software implements RenderTargetCube
+        // yet rejects SetRenderTarget for a face. A renderer that cannot bind one has no cube bind
         // cycle to order, so the boundary is recorded and the leg ends.
         std::unique_ptr<RenderTargetCube> cube;
         try
@@ -890,7 +890,7 @@ class RenderTargetBackbufferConsumerTest : public Game
         catch (const System::NotSupportedException& e)
         {
             std::printf("[INFO] H: %s cannot bind a RenderTargetCube face (%s) -- boundary "
-                        "recorded\n", kBackendName, e.what());
+                        "recorded\n", kRendererName, e.what());
             std::fflush(stdout);
             dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
             return;
@@ -898,7 +898,7 @@ class RenderTargetBackbufferConsumerTest : public Game
         catch (const std::exception& e)
         {
             std::printf("[INFO] H: %s cannot bind a RenderTargetCube face (%s) -- boundary "
-                        "recorded\n", kBackendName, e.what());
+                        "recorded\n", kRendererName, e.what());
             std::fflush(stdout);
             dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
             return;
@@ -940,7 +940,7 @@ class RenderTargetBackbufferConsumerTest : public Game
         if (threw)
         {
             std::printf("[INFO] H2 cube readback unavailable on %s (%s) -- boundary recorded\n",
-                        kBackendName, what.c_str());
+                        kRendererName, what.c_str());
             std::fflush(stdout);
             return;
         }
@@ -966,7 +966,7 @@ class RenderTargetBackbufferConsumerTest : public Game
     /**
      * @brief Leg I -- SpriteBatch and 3D consumers interleaved on the backbuffer.
      *
-     * A prior finding noted that this backend may replay a bind cycle's sprites and its 3D draws as
+     * A prior finding noted that this renderer may replay a bind cycle's sprites and its 3D draws as
      * two separate queues. That is a DIFFERENT question from view ordering, and this leg measures it
      * rather than assuming either answer: every draw here samples a producer that was finished
      * before the whole backbuffer cycle began, and every draw targets its own slot, so the legs pass
@@ -1002,7 +1002,7 @@ class RenderTargetBackbufferConsumerTest : public Game
         if (!kStockEffectRtSourceSupported)
         {
             std::printf("[INFO] I: %s cannot hand a RenderTarget2D to a stock 3D effect "
-                        "(REMED-GFX-152) -- boundary recorded\n", kBackendName);
+                        "(REMED-GFX-152) -- boundary recorded\n", kRendererName);
             std::fflush(stdout);
             return;
         }
@@ -1015,12 +1015,12 @@ class RenderTargetBackbufferConsumerTest : public Game
         if (Unsupported() || !c1.ok() || !c2.ok())
         {
             std::printf("[INFO] I: backbuffer oracle unavailable on %s -- boundary recorded\n",
-                        kBackendName);
+                        kRendererName);
             std::fflush(stdout);
             return;
         }
 
-        /// True when the ordinary-texture control put @p want in @p slot, i.e. this backend can
+        /// True when the ordinary-texture control put @p want in @p slot, i.e. this renderer can
         /// place a draw of that family at that position at all.
         auto controlPlaced = [&](const Readback& r, int slot, PatternFn want) {
             const Rectangle d = Slot(slot);
@@ -1034,12 +1034,12 @@ class RenderTargetBackbufferConsumerTest : public Game
         const bool c2Last = controlPlaced(c2, 2, PatternColor);      // 3D after a sprite batch
 
         // REMED-GFX-157: these two were a DECLARATION here, not a check -- an INFO line reporting
-        // that this backend "cannot place a stock 3D draw issued after a SpriteBatch in the same
+        // that this renderer "cannot place a stock 3D draw issued after a SpriteBatch in the same
         // bind cycle", which then restricted the render-target cases below to the positions the
-        // backend was believed able to place. Both halves of that were wrong. The draw was not
+        // renderer was believed able to place. Both halves of that were wrong. The draw was not
         // lost: this leg let SpriteBatch.Begin default the rasterizer state (a null means
         // RasterizerState.CullCounterClockwise, which FNA assigns to the device and never restores)
-        // and then drew a quad of exactly the winding four backends cull under it. DrawSpriteSlot
+        // and then drew a quad of exactly the winding four renderers cull under it. DrawSpriteSlot
         // now states the state it wants, and the contract is asserted rather than declared.
         check(c1Mid,
               "I0 a stock 3D draw issued BETWEEN two SpriteBatch cycles reaches the backbuffer, "
@@ -1102,14 +1102,14 @@ class RenderTargetBackbufferConsumerTest : public Game
                                   "bind cycle ") +
                       (kFamiliesReplayInPublicOrder
                            ? "puts the 3D draw on top"
-                           : "puts the SPRITE on top, because this backend groups a cycle's draws "
+                           : "puts the SPRITE on top, because this renderer groups a cycle's draws "
                              "by family and replays all 3D draws first (declared open finding)") +
                       " (" + std::to_string(good) + "/" + std::to_string(kPW * kPH) + ")");
             }
             else
             {
                 std::printf("[INFO] I0 the render-target probe is not readable on %s -- boundary "
-                            "recorded\n", kBackendName);
+                            "recorded\n", kRendererName);
                 std::fflush(stdout);
             }
         }
@@ -1169,7 +1169,7 @@ class RenderTargetBackbufferConsumerTest : public Game
             std::fflush(stdout);
             if (preferMultiSampling_)
                 check(a.getMultiSampleCountProperty() > 1,
-                      "J0 the --msaa run genuinely applies a multisample count on this backend "
+                      "J0 the --msaa run genuinely applies a multisample count on this renderer "
                       "(applied " + std::to_string(a.getMultiSampleCountProperty()) + ")");
 
             ProduceInto(dev, a, patternTex_);
@@ -1184,7 +1184,7 @@ class RenderTargetBackbufferConsumerTest : public Game
                     ") resolves before a BACKBUFFER consumer samples it", PatternColor);
         }
 
-        // J2: mipmapped producer, sampled at level 0. Whether a backend supports a mipmapped render
+        // J2: mipmapped producer, sampled at level 0. Whether a renderer supports a mipmapped render
         // target AT ALL is measured, not assumed: WebGPU documents the chain regeneration
         // unimplemented (plan_webgpu.md WEBGPU-53/54). That is a declared capability boundary, not
         // an ordering result.
@@ -1200,7 +1200,7 @@ class RenderTargetBackbufferConsumerTest : public Game
             {
                 std::printf("[INFO] J2 mipmapped RenderTarget2D unsupported on %s (%s) -- boundary "
                             "recorded; J1 and the sample-count-one legs carry the contract\n",
-                            kBackendName, e.what());
+                            kRendererName, e.what());
                 std::fflush(stdout);
                 return;
             }
@@ -1299,7 +1299,7 @@ class RenderTargetBackbufferConsumerTest : public Game
     /**
      * @brief Leg L -- cardinality: many bind cycles in one frame, and many frames.
      *
-     * L1 runs eight producer/consumer pairs inside a SINGLE public frame. On a view-based backend
+     * L1 runs eight producer/consumer pairs inside a SINGLE public frame. On a view-based renderer
      * every bind cycle consumes ordered view identifiers from a bounded per-frame pool, so a fix
      * that allocated an identifier per draw rather than per cycle would exhaust that pool and throw
      * here rather than merely running slowly. L2 repeats the canonical leg across eight consecutive
@@ -1384,7 +1384,7 @@ class RenderTargetBackbufferConsumerTest : public Game
             if (!oracle)
             {
                 std::printf("[INFO] L2: backbuffer oracle unavailable on %s -- boundary recorded\n",
-                            kBackendName);
+                            kRendererName);
                 std::fflush(stdout);
             }
             else
@@ -1428,7 +1428,7 @@ protected:
         dev.Clear(Color(0, 0, 0, 255));
 
         std::printf("[INFO] REMED-GFX-155 same-frame render target -> BACKBUFFER consumer on %s "
-                    "(%dx%d pattern, %dx%d backbuffer, %s)\n", kBackendName, kPW, kPH, kBBW, kBBH,
+                    "(%dx%d pattern, %dx%d backbuffer, %s)\n", kRendererName, kPW, kPH, kBBW, kBBH,
                     preferMultiSampling_ ? "PreferMultiSampling=true" : "PreferMultiSampling=false");
         std::fflush(stdout);
 
@@ -1445,7 +1445,7 @@ protected:
         LegUsageAndClearOnlyProducer(dev);
         LegCardinality(dev);
 
-        std::printf("[INFO] %s: %d/%d checks passed\n", kBackendName, passCount_, totalCount_);
+        std::printf("[INFO] %s: %d/%d checks passed\n", kRendererName, passCount_, totalCount_);
         std::fflush(stdout);
         result_ = (passCount_ == totalCount_) ? 0 : 1;
         Exit();
@@ -1455,7 +1455,7 @@ public:
     /**
      * @brief Builds the fixture.
      *
-     * @param preferMultiSampling Requests a multisampled device. Backends that derive a render
+     * @param preferMultiSampling Requests a multisampled device. Renderers that derive a render
      *        target's sample count from the device's own only apply a target MultiSampleCount when
      *        this is set, so the `--msaa` run is what turns leg J1 into a genuinely multisampled
      *        producer instead of a second sample-count-one case.

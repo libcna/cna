@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # plan_html_dom.md HTMLDOM-112: the one official command that builds and runs every HTML_DOM browser
 # test page. Before this script existed, run-htmldom-browser-test.sh only ever served the smoke
-# page, so reproducing the pixel/stress/dispose PASS counts documented in docs/html-dom-backend.md
+# page, so reproducing the pixel/stress/dispose PASS counts documented in docs/html-dom-renderer.md
 # and plan_html_dom.md required four separate manual `cmake --build --target ...` plus four manual/
 # adjusted harness invocations -- this collapses that to one command.
 #
 # Usage: scripts/run-htmldom-test-suite.sh [build-dir]
 #        build-dir defaults to cmake-build-htmldom; it must already be configured, e.g.:
-#          emcmake cmake -S . -B cmake-build-htmldom -DCNA_GRAPHICS_BACKEND=HTML_DOM \
+#          emcmake cmake -S . -B cmake-build-htmldom -DCNA_GRAPHICS_RENDERER=HTML_DOM \
 #            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_C_COMPILER_LAUNCHER=ccache
 #
 # Exit code 0 only when every page passes every one of its own checks.
@@ -18,7 +18,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 if [[ ! -f "${BUILD_DIR}/CMakeCache.txt" ]]; then
     echo "error: ${BUILD_DIR} is not a configured build -- run:" >&2
-    echo "  emcmake cmake -S . -B ${BUILD_DIR} -DCNA_GRAPHICS_BACKEND=HTML_DOM \\" >&2
+    echo "  emcmake cmake -S . -B ${BUILD_DIR} -DCNA_GRAPHICS_RENDERER=HTML_DOM \\" >&2
     echo "    -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_C_COMPILER_LAUNCHER=ccache" >&2
     exit 2
 fi

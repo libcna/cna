@@ -2,13 +2,13 @@
 // Task 328: Vulkan depth bias / slope-scale depth bias integration test.
 //
 // Verifies that RasterizerState.DepthBias and RasterizerState.SlopeScaleDepthBias
-// are applied by the Vulkan backend (via vkCmdSetDepthBias) and actually change the
+// are applied by the Vulkan renderer (via vkCmdSetDepthBias) and actually change the
 // outcome of the depth test.
 //
 // Method (a "shadow acne"-style coplanar test):
 //   The depth buffer is cleared to 1.0 and DepthStencilState.DepthBufferFunction is explicitly
 //   set to CompareFunction::Less (Task 870: real per-DepthBufferFunction pipeline selection
-//   landed on Vulkan, so this can no longer rely on incidental backend-hardcoded LESS behavior
+//   landed on Vulkan, so this can no longer rely on incidental renderer-hardcoded LESS behavior
 //   the way it did before -- XNA's real DepthStencilState.Default is actually LessEqual, under
 //   which this coplanar-redraw trick can never discriminate anything, since an equal-depth
 //   redraw always passes regardless of bias).

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // SKIA-130: exact DDS/XNB Texture2D mip-chain content loading.
 
-#include "CNA/Internal/Backends/Skia/SkiaGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaRenderer.hpp"
 #include "CNA/Internal/Xnb/Texture2DContentTypeReader.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentReader.hpp"
@@ -23,8 +23,8 @@
 #include <utility>
 #include <vector>
 
-using CNA::Internal::Backends::Skia::SkiaGraphicsBackend;
-using CNA::Internal::Backends::Skia::SkiaResourceStats;
+using CNA::Internal::Renderers::Skia::SkiaRenderer;
+using CNA::Internal::Renderers::Skia::SkiaResourceStats;
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Content;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -197,7 +197,7 @@ namespace
     [[nodiscard]] bool SameAllocationStats(
         const SkiaResourceStats& left, const SkiaResourceStats& right)
     {
-        return left.textureBackends == right.textureBackends
+        return left.textureRenderers == right.textureRenderers
             && left.textureImageViews == right.textureImageViews
             && left.mipChains2D == right.mipChains2D
             && left.textureImageBytes == right.textureImageBytes
@@ -231,8 +231,8 @@ protected:
     {
         Game::Initialize();
         auto& device = getGraphicsDeviceProperty();
-        auto* skia = dynamic_cast<SkiaGraphicsBackend*>(&device.GetBackend());
-        Check(skia != nullptr, "fixture uses the Skia backend");
+        auto* skia = dynamic_cast<SkiaRenderer*>(&device.GetRenderer());
+        Check(skia != nullptr, "fixture uses the Skia renderer");
         if (!skia)
         {
             Exit();

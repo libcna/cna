@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: MS-PL
 //
 // plan_diligent.md DILIGENT-24: real-device proof that binding several render targets at once on
-// the Diligent backend genuinely reaches all of them, through the public XNA API only.
+// the Diligent renderer genuinely reaches all of them, through the public XNA API only.
 //
 // Check A -- with two targets bound, Clear() reaches slot 0...
-// Check B -- ...and slot 1 as well. XNA clears every bound target, and a backend that only ever
+// Check B -- ...and slot 1 as well. XNA clears every bound target, and a renderer that only ever
 //   binds slot 0 passes A and fails B.
 // Check C -- a stock (single-output) draw while both are bound writes slot 0...
 // Check D -- ...and leaves slot 1 exactly as the clear left it. That is CNA's real contract, not a
 //   gap in the binding: every built-in shader in this codebase declares one SV_TARGET, so slots
 //   1..3 receive clears but no fragments until a multi-output custom ShaderEffect exists
-//   (DILIGENT-42). D is what would catch a backend that wrongly broadcast slot 0's fragments to
+//   (DILIGENT-42). D is what would catch a renderer that wrongly broadcast slot 0's fragments to
 //   every bound target.
 //
 // Exit code 0 = all checks PASS, 1 = any FAIL, 77 = no usable device.

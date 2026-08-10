@@ -163,16 +163,16 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_FourTargets_DoesNotThrow)
         targets.push_back(std::make_unique<RenderTarget2D>(gd, 4, 4));
         bindings.emplace_back(targets.back().get());
     }
-#if defined(CNA_BACKEND_SDL_RENDERER) || defined(CNA_BACKEND_ASCII) || defined(CNA_BACKEND_FREEDIRECT) || defined(CNA_BACKEND_DX1) || defined(CNA_BACKEND_DX2) || defined(CNA_BACKEND_DX3) || defined(CNA_BACKEND_DX5) || defined(CNA_BACKEND_DX6) || defined(CNA_BACKEND_DX7) || defined(CNA_BACKEND_DX8) || defined(CNA_BACKEND_GDI)
+#if defined(CNA_RENDERER_SDL_RENDERER) || defined(CNA_RENDERER_ASCII) || defined(CNA_RENDERER_FREEDIRECT) || defined(CNA_RENDERER_DX1) || defined(CNA_RENDERER_DX2) || defined(CNA_RENDERER_DX3) || defined(CNA_RENDERER_DX5) || defined(CNA_RENDERER_DX6) || defined(CNA_RENDERER_DX7) || defined(CNA_RENDERER_DX8) || defined(CNA_RENDERER_GDI)
     // Task 709 (SDL_Renderer) / DX3-27 (DirectDraw, plan_freedirect.md) / DX1-27 (real DirectDraw v1,
     // plan_dx1.md) / DX2-84 (same DirectDraw v1 2D layer, plan_dx2.md) / plan_dx3.md (same 2D
     // layer, now DirectDraw v2) / plan_dx5.md (same 2D layer, now DirectDraw v4): each supports
-    // exactly one active render target at a time -- unlike the other, real-MRT-capable backends,
+    // exactly one active render target at a time -- unlike the other, real-MRT-capable renderers,
     // binding more than one target here must throw clearly rather than silently rendering to only
     // the first. 4 is still within the MAX_RENDERTARGET_BINDINGS cap
     // this test's name/history (Task 881) refers to, so the throw here comes entirely from the
-    // backend's own single-target limitation, not the cap check. ASCII (plan_ascii.md) forwards
-    // SetRenderTargets straight to the same real SdlGraphicsBackend instance it wraps, so it
+    // renderer's own single-target limitation, not the cap check. ASCII (plan_ascii.md) forwards
+    // SetRenderTargets straight to the same real SdlRenderer instance it wraps, so it
     // inherits this exact throw too.
     // Sokol left this list at plan_sokol.md SOKOL-26: it is now real-MRT-capable too (a genuine
     // multi-attachment sg_pass, 2-4 RenderTarget2D targets), so 4 real targets bind cleanly here
@@ -180,23 +180,23 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_FourTargets_DoesNotThrow)
     // Diligent left this list at plan_diligent.md DILIGENT-24: it is now real-MRT-capable
     // too (up to four attachments), so 4 real targets bind cleanly here as well.
     EXPECT_THROW(gd.SetRenderTargets(bindings), std::runtime_error);
-#elif defined(CNA_BACKEND_STUB)
-    // plan_stub.md: Stub supports no render targets AT ALL -- it keeps IGraphicsBackend's nullptr
+#elif defined(CNA_RENDERER_STUB)
+    // plan_stub.md: Stub supports no render targets AT ALL -- it keeps IGraphicsRenderer's nullptr
     // CreateRenderTarget2D()/CreateRenderTargetCube() defaults -- so this is a different case from
-    // the single-target backends above, which support one. GraphicsDevice rejects the bind before
-    // reaching the backend, because RenderTarget2D::GetRenderTargetBackend() is null. Rejecting is
-    // the correct behaviour and the reason it is asserted here: a no-op backend must not report
+    // the single-target renderers above, which support one. GraphicsDevice rejects the bind before
+    // reaching the renderer, because RenderTarget2D::GetRenderTargetRenderer() is null. Rejecting is
+    // the correct behaviour and the reason it is asserted here: a no-op renderer must not report
     // false success for a target it cannot honour.
     EXPECT_THROW(gd.SetRenderTargets(bindings), System::NotSupportedException);
-#elif defined(CNA_BACKEND_OPENGLES1)
+#elif defined(CNA_RENDERER_OPENGLES1)
     // plan_opengles1.md: OpenGL ES 1.1 has no MRT mechanism, and no extension in the CM registry
-    // adds one -- a third distinct case from the single-target backends above (which support one)
+    // adds one -- a third distinct case from the single-target renderers above (which support one)
     // and from Stub (which supports none). A single RenderTarget2D binds normally via
     // GL_OES_framebuffer_object; more than one is refused rather than binding the first and
     // silently dropping the rest, which is also why SupportsCapability(MultipleRenderTargets)
     // reports false.
     EXPECT_THROW(gd.SetRenderTargets(bindings), System::NotSupportedException);
-#elif defined(CNA_BACKEND_OPENGL1)
+#elif defined(CNA_RENDERER_OPENGL1)
     // plan_opengl1.md: the same single-colour-attachment refusal shape as OPENGLES1 above, for the
     // desktop fixed-function pipeline -- a single RenderTarget2D binds normally via the
     // ARB_framebuffer_object/core FBO path; more than one is refused rather than binding the
@@ -213,7 +213,7 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_OneTarget_DoesNotThrow)
     GraphicsDevice gd;
     RenderTarget2D rt(gd, 4, 4);
     std::vector<RenderTargetBinding> bindings{ RenderTargetBinding(&rt) };
-#if defined(CNA_BACKEND_STUB)
+#if defined(CNA_RENDERER_STUB)
     // Same Stub contract as the four-target case above: no render-target support of any kind, so
     // even a single binding is refused deterministically rather than silently accepted.
     EXPECT_THROW(gd.SetRenderTargets(bindings), System::NotSupportedException);
@@ -279,9 +279,9 @@ TEST(GraphicsDeviceValidationTest, SetVertexBuffers_EmptyClearsSingularBinding)
 // Regression test for a real reported crash (cna-template/missing.md): the single-argument
 // Clear(const Color&) overload matches FNA's own semantics by requesting
 // Target|DepthBuffer|Stencil together, which used to forward unconditionally to
-// ClearColorDepthAndStencil() -- a hard throw on SDL_Renderer, since that backend is entirely
+// ClearColorDepthAndStencil() -- a hard throw on SDL_Renderer, since that renderer is entirely
 // 2D-only and never has a depth/stencil buffer at all. GraphicsDevice::Clear(ClearOptions, ...)
-// now masks DepthBuffer/Stencil out of the request when IGraphicsBackend::SupportsDepthStencil()
+// now masks DepthBuffer/Stencil out of the request when IGraphicsRenderer::SupportsDepthStencil()
 // reports false, degrading to a color-only clear instead of crashing (matching FNA's own
 // dsFormat == DepthFormat.None masking behavior in GraphicsDevice.Clear(ClearOptions, ...)).
 TEST(GraphicsDeviceValidationTest, Clear_SingleArgumentColorOverload_DoesNotThrow)

@@ -1,10 +1,10 @@
 // plan_dx.md Phase DX12 (DX-111/DX-112 follow-up).
-#include "CNA/Internal/Backends/D3D12/D3D12SpriteBatch.hpp"
-#include "CNA/Internal/Backends/D3D12/D3D12GraphicsBackend.hpp"
-#include "CNA/Internal/Backends/D3D12/D3D12Textures.hpp"
-#include "CNA/Internal/Backends/D3D12/D3D12EffectBackend.hpp"
-#include "CNA/Internal/Backends/D3DCommon/D3DShaderCache.hpp"
-#include "CNA/Internal/Backends/D3DCommon/D3DConstantBuffers.hpp"
+#include "CNA/Internal/Renderers/D3D12/D3D12SpriteBatch.hpp"
+#include "CNA/Internal/Renderers/D3D12/D3D12Renderer.hpp"
+#include "CNA/Internal/Renderers/D3D12/D3D12Textures.hpp"
+#include "CNA/Internal/Renderers/D3D12/D3D12EffectRenderer.hpp"
+#include "CNA/Internal/Renderers/D3DCommon/D3DShaderCache.hpp"
+#include "CNA/Internal/Renderers/D3DCommon/D3DConstantBuffers.hpp"
 
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
@@ -15,9 +15,9 @@
 #include <string>
 #include <utility>
 
-namespace CNA::Internal::Backends::D3D12
+namespace CNA::Internal::Renderers::D3D12
 {
-    using namespace CNA::Internal::Backends::D3DCommon;
+    using namespace CNA::Internal::Renderers::D3DCommon;
     using Microsoft::Xna::Framework::Color;
     using Microsoft::Xna::Framework::Rectangle;
     using Microsoft::Xna::Framework::Vector2;
@@ -32,15 +32,15 @@ namespace CNA::Internal::Backends::D3D12
             return buf;
         }
 
-        /// Same single-concrete-type SRV resolution as D3D12GraphicsBackend.cpp's own (private,
+        /// Same single-concrete-type SRV resolution as D3D12Renderer.cpp's own (private,
         /// not exported) GetSrvGpuHandleForTextureEXT -- duplicated rather than factored into a
         /// shared header for a few lines of logic, matching D3D11SpriteBatch.cpp's own established
         /// precedent of duplicating GetSrvForTextureEXT locally rather than sharing it.
-        D3D12_GPU_DESCRIPTOR_HANDLE GetSrvGpuHandle(const ITextureBackend* tex)
+        D3D12_GPU_DESCRIPTOR_HANDLE GetSrvGpuHandle(const ITextureRenderer* tex)
         {
             D3D12_GPU_DESCRIPTOR_HANDLE handle{};
             if (tex == nullptr) return handle;
-            if (const auto* t = dynamic_cast<const D3D12TextureBackend*>(tex))
+            if (const auto* t = dynamic_cast<const D3D12TextureRenderer*>(tex))
                 return t->GetShaderResourceViewGpuHandleEXT();
             return handle;
         }
@@ -48,7 +48,7 @@ namespace CNA::Internal::Backends::D3D12
         D3D12_PRIMITIVE_TOPOLOGY_TYPE kSpriteTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
     }
 
-    D3D12SpriteBatchBackend::D3D12SpriteBatchBackend(D3D12GraphicsBackend* owner)
+    D3D12SpriteBatchRenderer::D3D12SpriteBatchRenderer(D3D12Renderer* owner)
         : owner_(owner)
         , device_(owner_->GetDeviceEXT())
         , vb_(owner_, 256)
@@ -56,24 +56,24 @@ namespace CNA::Internal::Backends::D3D12
     {
     }
 
-    void D3D12SpriteBatchBackend::Begin()
+    void D3D12SpriteBatchRenderer::Begin()
     {
         if (begun_) return;
         begun_ = true;
     }
 
-    void D3D12SpriteBatchBackend::End()
+    void D3D12SpriteBatchRenderer::End()
     {
         FlushBatch();
         begun_ = false;
     }
 
-    void D3D12SpriteBatchBackend::SetTransformMatrix(const Matrix& m)
+    void D3D12SpriteBatchRenderer::SetTransformMatrix(const Matrix& m)
     {
         transform_ = m;
     }
 
-    void D3D12SpriteBatchBackend::SetCustomEffect(Effect* effect)
+    void D3D12SpriteBatchRenderer::SetCustomEffect(Effect* effect)
     {
         if (customEffect_ != effect)
         {
@@ -82,18 +82,18 @@ namespace CNA::Internal::Backends::D3D12
         }
     }
 
-    void D3D12SpriteBatchBackend::SetSamplerFilter(int textureFilter)
+    void D3D12SpriteBatchRenderer::SetSamplerFilter(int textureFilter)
     {
         pendingFilter_ = textureFilter;
     }
 
-    void D3D12SpriteBatchBackend::SetSamplerAddressMode(int addressU, int addressV)
+    void D3D12SpriteBatchRenderer::SetSamplerAddressMode(int addressU, int addressV)
     {
         pendingAddressU_ = addressU;
         pendingAddressV_ = addressV;
     }
 
-    ID3D12PipelineState* D3D12SpriteBatchBackend::GetOrCreateSprite2DPso(ID3D12RootSignature* rootSig)
+    ID3D12PipelineState* D3D12SpriteBatchRenderer::GetOrCreateSprite2DPso(ID3D12RootSignature* rootSig)
     {
         if (sprite2DPso_)
             return sprite2DPso_.Get();
@@ -103,7 +103,7 @@ namespace CNA::Internal::Backends::D3D12
         GetVertexShaderBytecode(D3DShaderVariant::Sprite2d, vsBytes, vsSize);
         GetPixelShaderBytecode(D3DShaderVariant::Sprite2d, psBytes, psSize);
         if (!vsBytes || !psBytes)
-            throw std::runtime_error("D3D12SpriteBatchBackend: missing sprite2d DXBC bytecode");
+            throw std::runtime_error("D3D12SpriteBatchRenderer: missing sprite2d DXBC bytecode");
 
         // Fixed Sprite2DVertex contract -- deliberately NOT resolved via
         // D3DVertexFormatHelper::InputElementsForStrideD3D12(32, ...), which would incorrectly
@@ -153,11 +153,11 @@ namespace CNA::Internal::Backends::D3D12
 
         HRESULT hr = device_->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(sprite2DPso_.ReleaseAndGetAddressOf()));
         if (FAILED(hr))
-            throw std::runtime_error("D3D12SpriteBatchBackend: CreateGraphicsPipelineState failed, hr=" + FormatHr(hr));
+            throw std::runtime_error("D3D12SpriteBatchRenderer: CreateGraphicsPipelineState failed, hr=" + FormatHr(hr));
         return sprite2DPso_.Get();
     }
 
-    ID3D12Resource* D3D12SpriteBatchBackend::GetOrCreatePerDrawConstantBuffer()
+    ID3D12Resource* D3D12SpriteBatchRenderer::GetOrCreatePerDrawConstantBuffer()
     {
         if (perDrawConstantBuffer_)
             return perDrawConstantBuffer_.Get();
@@ -179,23 +179,23 @@ namespace CNA::Internal::Backends::D3D12
             &heapProps, D3D12_HEAP_FLAG_NONE, &desc,
             D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(perDrawConstantBuffer_.ReleaseAndGetAddressOf()));
         if (FAILED(hr))
-            throw std::runtime_error("D3D12SpriteBatchBackend: constant buffer CreateCommittedResource failed, hr=" + FormatHr(hr));
+            throw std::runtime_error("D3D12SpriteBatchRenderer: constant buffer CreateCommittedResource failed, hr=" + FormatHr(hr));
 
         const D3D12_RANGE readRange{0, 0};
         hr = perDrawConstantBuffer_->Map(0, &readRange, &perDrawConstantBufferMapped_);
         if (FAILED(hr))
-            throw std::runtime_error("D3D12SpriteBatchBackend: constant buffer Map failed, hr=" + FormatHr(hr));
+            throw std::runtime_error("D3D12SpriteBatchRenderer: constant buffer Map failed, hr=" + FormatHr(hr));
         return perDrawConstantBuffer_.Get();
     }
 
-    void D3D12SpriteBatchBackend::FlushBatch()
+    void D3D12SpriteBatchRenderer::FlushBatch()
     {
         if (pendingVertices_.empty()) return;
 
         if (!owner_->HasBoundColorTargetEXT())
         {
             throw std::runtime_error(
-                "D3D12SpriteBatchBackend::FlushBatch: no off-screen color target bound -- "
+                "D3D12SpriteBatchRenderer::FlushBatch: no off-screen color target bound -- "
                 "BindOffscreenColorTargetEXT (plan_dx.md DX-111's own scaffolding; a real D3D12 swap "
                 "chain back buffer is unusable under this machine's Wine+vkd3d-proton dev loop, DX-100)");
         }
@@ -207,7 +207,7 @@ namespace CNA::Internal::Backends::D3D12
         // the ACTIVE GraphicsDevice.Viewport's width/height, not the full bound-target size. XNA/FNA
         // build the SpriteBatch ortho from Viewport.Width/Height (CreateOrthographicOffCenter(0,
         // Viewport.Width, Viewport.Height, 0)), so a custom sub-Viewport makes sprite coordinates
-        // VIEWPORT-LOCAL. This mirrors D3D11SpriteBatchBackend, which reads the live viewport size via
+        // VIEWPORT-LOCAL. This mirrors D3D11SpriteBatchRenderer, which reads the live viewport size via
         // RSGetViewports. GetEffectiveViewportEXT() (REMED-GFX-064) already returns the custom
         // sub-region when a Viewport was set (else the full target), and it also drives the rasterizer
         // viewport below (RSSetViewports) -- previously only the rasterizer honored it while the
@@ -219,32 +219,32 @@ namespace CNA::Internal::Backends::D3D12
 
         auto rootSig = owner_->GetRootSignatureCacheEXT().GetOrCreate(device_.Get(), /*numCbvs=*/1, /*numSrvs=*/1, /*numSamplers=*/1);
         if (!rootSig)
-            throw std::runtime_error("D3D12SpriteBatchBackend: failed to create sprite2d root signature");
+            throw std::runtime_error("D3D12SpriteBatchRenderer: failed to create sprite2d root signature");
 
         // DX-121: a valid custom Effect (SpriteBatch::Begin(effect)) draws through its own
         // real, compiled PSO+constant-buffer instead of the stock sprite2d pipeline -- both share
         // the exact same (1,1,1) root signature above (D3D12RootSignatureCache caches by shape),
         // so every root-signature-relative binding below (CBV@0/SRV table@1/sampler table@2) stays
         // correct regardless of which path supplied pso/cb.
-        D3D12EffectBackend* customBackend = nullptr;
+        D3D12EffectRenderer* customRenderer = nullptr;
         if (customEffect_)
-            customBackend = dynamic_cast<D3D12EffectBackend*>(customEffect_->GetEffectBackendPtr());
+            customRenderer = dynamic_cast<D3D12EffectRenderer*>(customEffect_->GetEffectRendererPtr());
 
         ID3D12PipelineState* pso = nullptr;
         ID3D12Resource* cb = nullptr;
 
-        if (customBackend && customBackend->IsValid())
+        if (customRenderer && customRenderer->IsValid())
         {
-            // DX-121: vpSize is set here, once per flush, mirroring D3D11EffectBackend's own
+            // DX-121: vpSize is set here, once per flush, mirroring D3D11EffectRenderer's own
             // "set automatically by the sprite-batch runtime" convention -- the game/effect
             // author never calls SetViewportSizeEXT() itself.
-            customBackend->SetViewportSizeEXT(static_cast<float>(vpW), static_cast<float>(vpH));
+            customRenderer->SetViewportSizeEXT(static_cast<float>(vpW), static_cast<float>(vpH));
             customEffect_->Apply();
-            customBackend->Bind();
-            pso = customBackend->GetPipelineStateEXT();
-            cb = customBackend->GetConstantBufferEXT();
+            customRenderer->Bind();
+            pso = customRenderer->GetPipelineStateEXT();
+            cb = customRenderer->GetConstantBufferEXT();
             if (!pso || !cb)
-                throw std::runtime_error("D3D12SpriteBatchBackend: custom Effect's D3D12EffectBackend is not valid");
+                throw std::runtime_error("D3D12SpriteBatchRenderer: custom Effect's D3D12EffectRenderer is not valid");
         }
         else
         {
@@ -292,9 +292,9 @@ namespace CNA::Internal::Backends::D3D12
         // DX-133: pendingFilter_/pendingAddressU_/pendingAddressV_ (set via SetSamplerFilter()/
         // SetSamplerAddressMode(), i.e. the SamplerState passed to SpriteBatch::Begin()) now
         // genuinely drive slot 0's real sampler descriptor via DX-119's dynamic sampler system --
-        // mirrors D3D11SpriteBatchBackend's own exact ApplySamplerState() call, same placement
+        // mirrors D3D11SpriteBatchRenderer's own exact ApplySamplerState() call, same placement
         // (right before the sampler handle is read below). Before this task, SpriteBatch draws
-        // silently used whatever slot 0's sampler happened to already be (or D3D12GraphicsBackend's
+        // silently used whatever slot 0's sampler happened to already be (or D3D12Renderer's
         // own pre-DX-119 LINEAR/WRAP fallback if nothing had ever called ApplySamplerState) instead
         // of the SamplerState the game's own SpriteBatch::Begin() call actually requested.
         owner_->ApplySamplerState(0, pendingFilter_, pendingAddressU_, pendingAddressV_, 1);
@@ -312,7 +312,7 @@ namespace CNA::Internal::Backends::D3D12
 
         HRESULT hr = cmdList->Close();
         if (FAILED(hr))
-            throw std::runtime_error("D3D12SpriteBatchBackend::FlushBatch: command list Close failed, hr=" + FormatHr(hr));
+            throw std::runtime_error("D3D12SpriteBatchRenderer::FlushBatch: command list Close failed, hr=" + FormatHr(hr));
         owner_->ExecuteCommandListAndWaitEXT(cmdList);
 
         pendingVertices_.clear();
@@ -320,7 +320,7 @@ namespace CNA::Internal::Backends::D3D12
         currentTexture_ = nullptr;
     }
 
-    void D3D12SpriteBatchBackend::Draw(const ITextureBackend& texture, float x, float y)
+    void D3D12SpriteBatchRenderer::Draw(const ITextureRenderer& texture, float x, float y)
     {
         const int w = texture.GetWidth();
         const int h = texture.GetHeight();
@@ -328,7 +328,7 @@ namespace CNA::Internal::Backends::D3D12
              Color::White);
     }
 
-    void D3D12SpriteBatchBackend::Draw(const ITextureBackend& texture,
+    void D3D12SpriteBatchRenderer::Draw(const ITextureRenderer& texture,
                                        const Rectangle& destinationRectangle,
                                        const Rectangle& sourceRectangle,
                                        const Color& color)
@@ -336,7 +336,7 @@ namespace CNA::Internal::Backends::D3D12
         Draw(texture, destinationRectangle, sourceRectangle, color, 0.0f, Vector2(0, 0), SpriteEffects::None, 0.0f);
     }
 
-    void D3D12SpriteBatchBackend::Draw(const ITextureBackend& texture,
+    void D3D12SpriteBatchRenderer::Draw(const ITextureRenderer& texture,
                                        const Rectangle& destinationRectangle,
                                        const Rectangle& sourceRectangle,
                                        const Color& color,
@@ -345,7 +345,7 @@ namespace CNA::Internal::Backends::D3D12
                                        SpriteEffects effects,
                                        float /*layerDepth*/)
     {
-        if (!begun_) throw std::runtime_error("D3D12SpriteBatchBackend::Draw called before Begin()");
+        if (!begun_) throw std::runtime_error("D3D12SpriteBatchRenderer::Draw called before Begin()");
 
         if (currentTexture_ != nullptr && currentTexture_ != &texture)
             FlushBatch();
@@ -355,7 +355,7 @@ namespace CNA::Internal::Backends::D3D12
         const float texH = static_cast<float>(texture.GetHeight());
 
         // No [0,1] clamp -- matches FNA (SpriteBatch.cs divides straight through), same convention
-        // D3D11SpriteBatchBackend::Draw already established.
+        // D3D11SpriteBatchRenderer::Draw already established.
         float u1 = static_cast<float>(sourceRectangle.X) / texW;
         float v1 = static_cast<float>(sourceRectangle.Y) / texH;
         float u2 = static_cast<float>(sourceRectangle.X + sourceRectangle.Width)  / texW;
@@ -404,7 +404,7 @@ namespace CNA::Internal::Backends::D3D12
         rotateAndTranslate(p3x, p3y, v3x, v3y);
 
         // SpriteBatch's own transform matrix is applied here, in pixel space, before upload -- same
-        // reasoning D3D11SpriteBatchBackend's own header comment already documents (sprite2d.vert
+        // reasoning D3D11SpriteBatchRenderer's own header comment already documents (sprite2d.vert
         // .hlsl's real contract has no projection-matrix uniform to fold it into GPU-side).
         const Vector2 tv0 = Vector2::Transform(Vector2(v0x, v0y), transform_);
         const Vector2 tv1 = Vector2::Transform(Vector2(v1x, v1y), transform_);

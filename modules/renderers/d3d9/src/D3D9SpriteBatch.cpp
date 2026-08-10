@@ -1,12 +1,12 @@
-#include "CNA/Internal/Backends/D3D9/D3D9SpriteBatch.hpp"
-#include "CNA/Internal/Backends/D3D9/D3D9GraphicsBackend.hpp"
-#include "CNA/Internal/Backends/D3D9/D3D9Textures.hpp"
-#include "CNA/Internal/Backends/D3D9/D3D9RenderTargets.hpp"
-#include "CNA/Internal/Backends/D3D9/D3D9VertexDeclarations.hpp"
-#include "CNA/Internal/Backends/D3D9/D3D9ConstantUpload.hpp"
-#include "CNA/Internal/Backends/D3D9/D3D9EffectBackend.hpp"
+#include "CNA/Internal/Renderers/D3D9/D3D9SpriteBatch.hpp"
+#include "CNA/Internal/Renderers/D3D9/D3D9Renderer.hpp"
+#include "CNA/Internal/Renderers/D3D9/D3D9Textures.hpp"
+#include "CNA/Internal/Renderers/D3D9/D3D9RenderTargets.hpp"
+#include "CNA/Internal/Renderers/D3D9/D3D9VertexDeclarations.hpp"
+#include "CNA/Internal/Renderers/D3D9/D3D9ConstantUpload.hpp"
+#include "CNA/Internal/Renderers/D3D9/D3D9EffectRenderer.hpp"
 #include "shaders/d3d9_shaders.hpp"
-#include "CNA/Internal/Backends/D3D9/shaders/D3D9ShaderRegisters.hpp"
+#include "CNA/Internal/Renderers/D3D9/shaders/D3D9ShaderRegisters.hpp"
 
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
@@ -18,7 +18,7 @@
 #include <string>
 #include <utility>
 
-namespace CNA::Internal::Backends::D3D9
+namespace CNA::Internal::Renderers::D3D9
 {
     using Microsoft::Xna::Framework::Color;
     using Microsoft::Xna::Framework::Matrix;
@@ -40,25 +40,25 @@ namespace CNA::Internal::Backends::D3D9
         }
 
         /// Same two-concrete-type resolution as D3D9EffectDraw.cpp's own ResolveD3D9TextureEXT
-        /// (RenderTarget2D used as a SpriteBatch texture is the same real, legal ITextureBackend
-        /// runtime type this project's D3D11 backend already handles) -- duplicated per-file
+        /// (RenderTarget2D used as a SpriteBatch texture is the same real, legal ITextureRenderer
+        /// runtime type this project's D3D11 renderer already handles) -- duplicated per-file
         /// rather than factored into a shared header, matching D3D11SpriteBatch.cpp's own
         /// documented precedent for the identical situation. Previously this call site only tried
-        /// D3D9TextureBackend and silently dropped the texture (drew untextured) for a
+        /// D3D9TextureRenderer and silently dropped the texture (drew untextured) for a
         /// RenderTarget2D -- wrong, but not the crash; kept as dynamic_cast-safe here since the
         /// crash's own root cause was the *effect*-draw path's static_cast, not this one.
-        IDirect3DTexture9* ResolveD3D9TextureEXT(const ITextureBackend* tex)
+        IDirect3DTexture9* ResolveD3D9TextureEXT(const ITextureRenderer* tex)
         {
             if (tex == nullptr) return nullptr;
-            if (const auto* t = dynamic_cast<const D3D9TextureBackend*>(tex))
+            if (const auto* t = dynamic_cast<const D3D9TextureRenderer*>(tex))
                 return t->GetTextureEXT();
-            if (const auto* rt = dynamic_cast<const D3D9RenderTargetBackend*>(tex))
+            if (const auto* rt = dynamic_cast<const D3D9RenderTargetRenderer*>(tex))
                 return rt->GetTextureEXT();
             return nullptr;
         }
     }
 
-    D3D9SpriteBatchBackend::D3D9SpriteBatchBackend(D3D9GraphicsBackend* owner)
+    D3D9SpriteBatchRenderer::D3D9SpriteBatchRenderer(D3D9Renderer* owner)
         : owner_(owner)
         , device_(owner_->GetDeviceEXT())
         , vb_(*owner_, device_.Get(), 256)
@@ -66,26 +66,26 @@ namespace CNA::Internal::Backends::D3D9
     {
     }
 
-    void D3D9SpriteBatchBackend::Begin()
+    void D3D9SpriteBatchRenderer::Begin()
     {
         if (begun_) return;
         begun_ = true;
     }
 
-    void D3D9SpriteBatchBackend::End()
+    void D3D9SpriteBatchRenderer::End()
     {
         FlushBatch();
         begun_ = false;
     }
 
-    void D3D9SpriteBatchBackend::SetTransformMatrix(const Matrix& m)
+    void D3D9SpriteBatchRenderer::SetTransformMatrix(const Matrix& m)
     {
         transform_ = m;
     }
 
-    void D3D9SpriteBatchBackend::SetCustomEffect(Effect* effect)
+    void D3D9SpriteBatchRenderer::SetCustomEffect(Effect* effect)
     {
-        // D9-112: flush on change (mirrors D3D11SpriteBatchBackend::SetCustomEffect() exactly) --
+        // D9-112: flush on change (mirrors D3D11SpriteBatchRenderer::SetCustomEffect() exactly) --
         // any pending batch was built expecting the PREVIOUS shader/effect, so it must be drawn
         // before the switch takes effect, not silently redrawn with the new one.
         if (customEffect_ != effect)
@@ -95,18 +95,18 @@ namespace CNA::Internal::Backends::D3D9
         }
     }
 
-    void D3D9SpriteBatchBackend::SetSamplerFilter(int textureFilter)
+    void D3D9SpriteBatchRenderer::SetSamplerFilter(int textureFilter)
     {
         pendingFilter_ = textureFilter;
     }
 
-    void D3D9SpriteBatchBackend::SetSamplerAddressMode(int addressU, int addressV)
+    void D3D9SpriteBatchRenderer::SetSamplerAddressMode(int addressU, int addressV)
     {
         pendingAddressU_ = addressU;
         pendingAddressV_ = addressV;
     }
 
-    void D3D9SpriteBatchBackend::GetCurrentViewportSizeEXT(float& width, float& height) const
+    void D3D9SpriteBatchRenderer::GetCurrentViewportSizeEXT(float& width, float& height) const
     {
         D3DVIEWPORT9 vp{};
         device_->GetViewport(&vp);
@@ -114,7 +114,7 @@ namespace CNA::Internal::Backends::D3D9
         height = static_cast<float>(vp.Height);
     }
 
-    void D3D9SpriteBatchBackend::EnsureShadersEXT()
+    void D3D9SpriteBatchRenderer::EnsureShadersEXT()
     {
         if (vertexShader_ && pixelShader_) return;
 
@@ -122,30 +122,30 @@ namespace CNA::Internal::Backends::D3D9
             reinterpret_cast<const DWORD*>(Shaders::kSpriteEffect_SpriteVertexShader),
             vertexShader_.ReleaseAndGetAddressOf());
         if (FAILED(hr))
-            throw std::runtime_error("D3D9SpriteBatchBackend: CreateVertexShader failed, hr=" + FormatHr(hr));
+            throw std::runtime_error("D3D9SpriteBatchRenderer: CreateVertexShader failed, hr=" + FormatHr(hr));
 
         hr = device_->CreatePixelShader(
             reinterpret_cast<const DWORD*>(Shaders::kSpriteEffect_SpritePixelShader),
             pixelShader_.ReleaseAndGetAddressOf());
         if (FAILED(hr))
-            throw std::runtime_error("D3D9SpriteBatchBackend: CreatePixelShader failed, hr=" + FormatHr(hr));
+            throw std::runtime_error("D3D9SpriteBatchRenderer: CreatePixelShader failed, hr=" + FormatHr(hr));
     }
 
-    void D3D9SpriteBatchBackend::EnsureVertexDeclarationEXT()
+    void D3D9SpriteBatchRenderer::EnsureVertexDeclarationEXT()
     {
         if (vertexDecl_) return;
 
         UINT count = 0;
         const D3DVERTEXELEMENT9* elements = VertexElementsForStrideD3D9(24, count);
         if (elements == nullptr)
-            throw std::runtime_error("D3D9SpriteBatchBackend: no stride-24 vertex layout available");
+            throw std::runtime_error("D3D9SpriteBatchRenderer: no stride-24 vertex layout available");
 
         const HRESULT hr = device_->CreateVertexDeclaration(elements, vertexDecl_.ReleaseAndGetAddressOf());
         if (FAILED(hr))
-            throw std::runtime_error("D3D9SpriteBatchBackend: CreateVertexDeclaration failed, hr=" + FormatHr(hr));
+            throw std::runtime_error("D3D9SpriteBatchRenderer: CreateVertexDeclaration failed, hr=" + FormatHr(hr));
     }
 
-    Matrix D3D9SpriteBatchBackend::BuildMatrixTransformEXT(float viewportWidth, float viewportHeight) const
+    Matrix D3D9SpriteBatchRenderer::BuildMatrixTransformEXT(float viewportWidth, float viewportHeight) const
     {
         // Design decision 10 / D9-91: real XNA 4.0's D3D9 SpriteBatch bakes a half-texel
         // correction into the same orthographic projection it already builds for
@@ -181,12 +181,12 @@ namespace CNA::Internal::Backends::D3D9
         projection.M42 += -0.5f * projection.M22;
 
         // Row-vector convention (matches every other effect's own World*View*Projection
-        // ordering established throughout this backend): the caller's own transform is applied
+        // ordering established throughout this renderer): the caller's own transform is applied
         // FIRST, then the projection.
         return transform_ * projection;
     }
 
-    void D3D9SpriteBatchBackend::FlushBatch()
+    void D3D9SpriteBatchRenderer::FlushBatch()
     {
         if (pendingVertices_.empty()) return;
 
@@ -206,21 +206,21 @@ namespace CNA::Internal::Backends::D3D9
         //
         // Unlike the stock path's real XNA "MatrixTransform" register, a custom shader receives
         // the current viewport size via a "vpSize" uniform instead (mirrors
-        // D3D11SpriteBatchBackend's own established, NOXNA, documented CNA convention for this
+        // D3D11SpriteBatchRenderer's own established, NOXNA, documented CNA convention for this
         // mechanism -- SetViewportSizeEXT() there, the generic per-name SetUniformVec2() here,
-        // since D3D9EffectBackend's name-based lookup makes a dedicated method unnecessary): the
+        // since D3D9EffectRenderer's name-based lookup makes a dedicated method unnecessary): the
         // custom vertex shader is expected to build its own 2D->clip-space transform from
         // viewport width/height, the same responsibility D3D11's own custom-shader contract
-        // already assigns to the shader author, for cross-backend consistency.
-        D3D9EffectBackend* customBackend = nullptr;
+        // already assigns to the shader author, for cross-renderer consistency.
+        D3D9EffectRenderer* customRenderer = nullptr;
         if (customEffect_)
-            customBackend = dynamic_cast<D3D9EffectBackend*>(customEffect_->GetEffectBackendPtr());
+            customRenderer = dynamic_cast<D3D9EffectRenderer*>(customEffect_->GetEffectRendererPtr());
 
-        if (customBackend && customBackend->IsValid())
+        if (customRenderer && customRenderer->IsValid())
         {
-            customBackend->SetUniformVec2("vpSize", vpW, vpH);
+            customRenderer->SetUniformVec2("vpSize", vpW, vpH);
             customEffect_->Apply();
-            customBackend->Bind();
+            customRenderer->Bind();
         }
         else
         {
@@ -257,7 +257,7 @@ namespace CNA::Internal::Backends::D3D9
         currentTexture_ = nullptr;
     }
 
-    void D3D9SpriteBatchBackend::Draw(const ITextureBackend& texture, float x, float y)
+    void D3D9SpriteBatchRenderer::Draw(const ITextureRenderer& texture, float x, float y)
     {
         const int w = texture.GetWidth();
         const int h = texture.GetHeight();
@@ -265,7 +265,7 @@ namespace CNA::Internal::Backends::D3D9
              Color::White);
     }
 
-    void D3D9SpriteBatchBackend::Draw(const ITextureBackend& texture,
+    void D3D9SpriteBatchRenderer::Draw(const ITextureRenderer& texture,
                                       const Rectangle& destinationRectangle,
                                       const Rectangle& sourceRectangle,
                                       const Color& color)
@@ -273,7 +273,7 @@ namespace CNA::Internal::Backends::D3D9
         Draw(texture, destinationRectangle, sourceRectangle, color, 0.0f, Vector2(0, 0), SpriteEffects::None, 0.0f);
     }
 
-    void D3D9SpriteBatchBackend::Draw(const ITextureBackend& texture,
+    void D3D9SpriteBatchRenderer::Draw(const ITextureRenderer& texture,
                                       const Rectangle& destinationRectangle,
                                       const Rectangle& sourceRectangle,
                                       const Color& color,
@@ -282,7 +282,7 @@ namespace CNA::Internal::Backends::D3D9
                                       SpriteEffects effects,
                                       float layerDepth)
     {
-        if (!begun_) throw std::runtime_error("D3D9SpriteBatchBackend::Draw called before Begin()");
+        if (!begun_) throw std::runtime_error("D3D9SpriteBatchRenderer::Draw called before Begin()");
 
         if (currentTexture_ != nullptr && currentTexture_ != &texture)
             FlushBatch();

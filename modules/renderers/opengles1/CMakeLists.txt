@@ -3,8 +3,8 @@
 # (GLESv1_CM.so + GLES/gl.h + GLES/glext.h), or the equivalent on an embedded/Android SDK.
 # Same "hard system dependency, not vendored, FATAL_ERROR with install instructions if
 # missing" shape as VULKAN's find_package(Vulkan REQUIRED), not a soft find_library
-# fallback -- this backend cannot function at all without a genuine ES1 CM implementation.
-cna_add_renderer_backend()
+# fallback -- this renderer cannot function at all without a genuine ES1 CM implementation.
+cna_add_renderer()
 find_library(CNA_GLESV1_CM_LIBRARY NAMES GLESv1_CM)
 find_path(CNA_GLES_INCLUDE_DIR NAMES GLES/gl.h)
 if(NOT CNA_GLESV1_CM_LIBRARY OR NOT CNA_GLES_INCLUDE_DIR)
@@ -14,5 +14,5 @@ if(NOT CNA_GLESV1_CM_LIBRARY OR NOT CNA_GLES_INCLUDE_DIR)
         "GLES/glext.h, or the equivalent on other distros/embedded SDKs.")
 endif()
 message(STATUS "CNA: using GLESv1_CM at ${CNA_GLESV1_CM_LIBRARY} (headers: ${CNA_GLES_INCLUDE_DIR})")
-target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 "${CNA_GLESV1_CM_LIBRARY}")
-target_include_directories(${BACKEND_TARGET} PRIVATE "${CNA_GLES_INCLUDE_DIR}")
+target_link_libraries(${RENDERER_TARGET} PRIVATE SDL3::SDL3 "${CNA_GLESV1_CM_LIBRARY}")
+target_include_directories(${RENDERER_TARGET} PRIVATE "${CNA_GLES_INCLUDE_DIR}")

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // Task 331: RenderTarget2D constructor/property audit against FNA's RenderTarget2D.cs.
 //
-// Backend-agnostic (no pixel readback, no rendering) - just constructs RenderTarget2D via
+// Renderer-agnostic (no pixel readback, no rendering) - just constructs RenderTarget2D via
 // each public constructor overload and asserts every property getter against the values FNA
 // documents/computes, plus the newly-added IsContentLost/ContentLost (Task 331 found these were
 // missing entirely - RenderTargetCube already had them, RenderTarget2D did not).
@@ -9,10 +9,10 @@
 // Task 336 fix: LevelCount now correctly reflects `mipMap` (mirroring Texture2D/TextureCube's own
 // CalculateMipLevels), and EasyGL actually allocates + auto-generates the full mip chain on
 // unbind (mirroring FNA3D's OPENGL_ResolveTarget). This assertion holds on Vulkan/Bgfx too — the
-// LevelCount computation is shared, backend-agnostic C++ — but only EasyGL's GPU resource is
+// LevelCount computation is shared, renderer-agnostic C++ — but only EasyGL's GPU resource is
 // truly mip-complete right now; Vulkan/Bgfx accept and ignore the `mipMap` flag (Task 878).
 //
-// Task 337 fix: MultiSampleCount now reflects the backend's real, device-clamped value (mirroring
+// Task 337 fix: MultiSampleCount now reflects the renderer's real, device-clamped value (mirroring
 // FNA's MathHelper.ClosestMSAAPower + FNA3D_GetMaxMultiSampleCount), not a raw pass-through, and
 // EasyGL actually creates a multisampled color/depth renderbuffer, resolved into the sampleable
 // texture on unbind. Same Vulkan/Bgfx caveat as LevelCount above (Task 879).
@@ -93,10 +93,10 @@ protected:
                   "Ctor2 mipMap=true: LevelCount == 7 (64x64 full mip chain, Task 336 fix)");
         }
 
-        // --- Task 337 fix: MultiSampleCount reflects the real, per-backend value, never a
+        // --- Task 337 fix: MultiSampleCount reflects the real, per-renderer value, never a
         // blind pass-through. EasyGL actually implements MSAA-for-RT (clamped to real device
         // capability); Vulkan/Bgfx don't yet (Task 879) and honestly report 0 rather than
-        // lying about support they don't have — this test is shared between both backends, so
+        // lying about support they don't have — this test is shared between both renderers, so
         // both outcomes are accepted as correct; only an unclamped pass-through (e.g. exactly
         // 9999) would be a failure. ---
         {

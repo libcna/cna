@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: MS-PL
 // plan_opengl4.md GL4-33: real hardware instancing (DrawInstancedPrimitivesEx) for the OpenGL4
-// graphics backend -- OpenGL4GraphicsBackend previously didn't override DrawInstancedPrimitivesEx
-// at all (inherited IGraphicsBackend's default, which unconditionally throws
-// std::runtime_error("DrawInstancedPrimitives is not supported on this graphics backend.")).
+// graphics renderer -- OpenGL4Renderer previously didn't override DrawInstancedPrimitivesEx
+// at all (inherited IGraphicsRenderer's default, which unconditionally throws
+// std::runtime_error("DrawInstancedPrimitives is not supported on this graphics renderer.")).
 // GraphicsDevice::DrawInstancedPrimitives/SetVertexBuffers/VertexBufferBinding were already fully
-// wired at the XNA API layer; the only missing piece was this backend's own implementation.
+// wired at the XNA API layer; the only missing piece was this renderer's own implementation.
 //
 // This required first adding a generic VertexElement-driven attribute mapper
-// (OpenGL4VertexBufferBackend::SetVertexDeclaration/GetDeclarationElements + ApplyLayout's new
-// generic path) -- previously this backend only recognized a fixed set of byte-strides (16/20/24/
+// (OpenGL4VertexBufferRenderer::SetVertexDeclaration/GetDeclarationElements + ApplyLayout's new
+// generic path) -- previously this renderer only recognized a fixed set of byte-strides (16/20/24/
 // 32/48/52/56/68), which a per-instance attribute buffer never matches. With a custom
-// ShaderEffect (params.customEffectBackend), DrawInstancedPrimitivesEx now binds the per-instance
+// ShaderEffect (params.customEffectRenderer), DrawInstancedPrimitivesEx now binds the per-instance
 // buffer's own attributes generically into the mesh buffer's VAO, continuing at locations right
 // after the mesh buffer's own declared attributes, each with glVertexAttribDivisor(location, 1)
 // (advance once per instance, not once per vertex) -- then calls the real GL 3.1 core
@@ -23,7 +23,7 @@
 // consecutive per-instance vec4 attributes (the classic D3D9 hardware-instancing convention this
 // project's InstancedModel.fx HLSL->GLSL port already established) -- see that file's own header
 // comment for the full row/column-major packing derivation (this test reuses it unchanged, since
-// the math is backend-agnostic).
+// the math is renderer-agnostic).
 //
 // Check A -- instance 0 (pure translation): local normal unrotated, faces the light head-on,
 //   diffuseAmount=1 -- expect pure WHITE (255,255,255,255) at its own on-screen position.
@@ -82,7 +82,7 @@ namespace
 
     // Packs Matrix::Transpose(instanceModelMatrix)'s own 4 rows as the 4 per-instance vertex
     // attributes -- see easygl_instancedmodel_shader_test.cpp's own header comment for the full
-    // derivation (backend-agnostic, reused verbatim here).
+    // derivation (renderer-agnostic, reused verbatim here).
     InstanceVertex PackInstance(const Matrix& instanceModelMatrix)
     {
         const Matrix t = Matrix::Transpose(instanceModelMatrix);

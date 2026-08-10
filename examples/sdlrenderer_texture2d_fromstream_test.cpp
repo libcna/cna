@@ -2,18 +2,18 @@
 // Task 682: Verify Texture2D::FromStream (PNG/JPG/BMP/DDS) round-trip renders correctly
 // when drawn via SDL_Renderer.
 //
-// The existing backend-agnostic Texture2DTests.cpp (Task 262) already thoroughly verifies
+// The existing renderer-agnostic Texture2DTests.cpp (Task 262) already thoroughly verifies
 // FromStream's DECODE correctness (PNG/JPEG/BMP byte layouts, resize/crop overload) via
 // SetData/SaveAsPng/SaveAsJpeg round trips read back through Texture2D::GetData -- a pure
-// CPU-side cache read (Task 678's finding), guaranteed correct on every backend by
+// CPU-side cache read (Task 678's finding), guaranteed correct on every renderer by
 // construction and already exercised on SDL_Renderer whenever CnaTests runs there.
 //
-// The genuinely backend-specific question here: does the REAL GPU texture SDL_Renderer
+// The genuinely renderer-specific question here: does the REAL GPU texture SDL_Renderer
 // creates from a FromStream-decoded image actually render the right pixels. Tracing the
 // code: Texture2D::FromStream -> DecodeStreamToImageData (DDS via DxtUtil, everything else
-// via the shared, backend-agnostic ImageLoader::LoadFromMemory, built on SDL3_image --
-// independent of which CNA_GRAPHICS_BACKEND is active) -> MakeTextureFromPixels, which calls
-// `device.GetBackend().CreateTexture(img)` -- the EXACT SAME call site already used by
+// via the shared, renderer-agnostic ImageLoader::LoadFromMemory, built on SDL3_image --
+// independent of which CNA_GRAPHICS_RENDERER is active) -> MakeTextureFromPixels, which calls
+// `device.GetRenderer().CreateTexture(img)` -- the EXACT SAME call site already used by
 // Texture2D::SetData's full-array overload, which Task 678 already proved renders correctly
 // on SDL_Renderer via a real SpriteBatch draw + framebuffer readback. FromStream should
 // therefore be correct by construction, sharing that already-verified code path; this test
@@ -25,7 +25,7 @@
 // the real framebuffer for all 4 quadrants.
 //
 // Requires PresentationMode::NativeBackBuffer (Task 915 finding): SDL_RenderReadPixels
-// operates in physical output coordinates, while this backend's default presentation mode
+// operates in physical output coordinates, while this renderer's default presentation mode
 // (FixedHeightDynamicWidth) does not map logical pixels 1:1 to physical ones.
 //
 // Exit code 0 = all PASS, 1 = at least one FAIL.

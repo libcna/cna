@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Task 378: AlphaTestEffect fog behavior (EasyGL backend).
+// Task 378: AlphaTestEffect fog behavior (EasyGL renderer).
 //
 // REAL BUG FOUND AND FIXED by writing this test: `AlphaTestEffect::FillGpuDrawParams()` never
 // forwarded `FogEnabled`/`FogColor`/`FogStart`/`FogEnd` to the GPU at all — fog was a total no-op
@@ -29,13 +29,13 @@
 // CONFIRMED, NOT FIXED HERE (a much larger, pre-existing, project-wide gap discovered while
 // investigating this task, unrelated to `AlphaTestEffect` specifically): **fog is completely
 // unimplemented in every Vulkan and Bgfx 3D shader** — confirmed by grepping every `.glsl`/`.sc`
-// shader file in both backends for "fog" and finding zero matches anywhere, not just in the
+// shader file in both renderers for "fog" and finding zero matches anywhere, not just in the
 // alpha-test-specific shaders Task 377 already flagged. This means `BasicEffect.FogEnabled` (and
 // every other stock effect's fog support) is *also* a silent no-op on Vulkan/Bgfx today, despite
 // `BasicEffect::FillGpuDrawParams()` already (and correctly) forwarding the fog fields — the C++
 // side was never the problem there, only the GPU side. Implementing real fog on Vulkan/Bgfx means
 // adding fog uniforms/varyings and the blend formula to essentially every 3D shader in both
-// backends (8+ shader pairs × 2 backends) — a genuinely large, project-wide feature addition, not
+// renderers (8+ shader pairs × 2 renderers) — a genuinely large, project-wide feature addition, not
 // a Task-378-sized fix. Tracked as new **Task 888**; no Vulkan/Bgfx test is added here for the
 // same reason Task 377 didn't commit one — it would encode today's confirmed no-op as a "passing"
 // assertion that would need updating (and could be forgotten) once Task 888 lands.

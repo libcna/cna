@@ -22,9 +22,9 @@ namespace Microsoft::Xna::Framework
     struct Vector4;
 }
 
-namespace CNA::Internal::Backends
+namespace CNA::Internal::Renderers
 {
-    class ITextureBackend;
+    class ITextureRenderer;
 }
 
 namespace Microsoft::Xna::Framework::Graphics::PackedVector
@@ -45,7 +45,7 @@ namespace Microsoft::Xna::Framework::Graphics::PackedVector
 
 namespace Microsoft::Xna::Framework::Graphics
 {
-    using namespace CNA::Internal::Backends;
+    using namespace CNA::Internal::Renderers;
 
     /** @brief Represents a 2D texture. Mirrors XNA 4.0 Texture2D. */
     class Texture2D : public Texture
@@ -74,7 +74,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param width          Width in pixels.
          * @param height         Height in pixels.
          * @throws System::NotSupportedException if @p width or @p height exceeds the active
-         *         backend's maximum texture dimension (see GraphicsDevice::GetMaxTextureDimension()).
+         *         renderer's maximum texture dimension (see GraphicsDevice::GetMaxTextureDimension()).
          */
         Texture2D(GraphicsDevice& graphicsDevice, int width, int height);
 
@@ -86,7 +86,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param mipMap         True to generate a full mipmap chain.
          * @param format         The desired surface format.
          * @throws System::NotSupportedException if @p width or @p height exceeds the active
-         *         backend's maximum texture dimension (see GraphicsDevice::GetMaxTextureDimension()).
+         *         renderer's maximum texture dimension (see GraphicsDevice::GetMaxTextureDimension()).
          */
         Texture2D(GraphicsDevice& graphicsDevice, int width, int height,
                   bool mipMap, SurfaceFormat format);
@@ -471,16 +471,16 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         NOXNA void SetDataRGBA(const uint8_t* data, int pixelCount);
 
-        /** @brief Returns a reference to the GPU texture backend. */
-        NOXNA ITextureBackend& GetBackend() const { return *backend_; }
+        /** @brief Returns a reference to the GPU texture renderer. */
+        NOXNA ITextureRenderer& GetRenderer() const { return *renderer_; }
 
         /**
-         * @brief Returns a weak pointer to the GPU texture backend.
+         * @brief Returns a weak pointer to the GPU texture renderer.
          *
          * Used by ContentManager's weak texture cache.
-         * @return A weak_ptr to the backend; may be expired if the texture is destroyed.
+         * @return A weak_ptr to the renderer; may be expired if the texture is destroyed.
          */
-        NOXNA std::weak_ptr<ITextureBackend> GetBackendWeak() const { return backend_; }
+        NOXNA std::weak_ptr<ITextureRenderer> GetRendererWeak() const { return renderer_; }
 
         /**
          * @brief Returns a weak pointer to the CPU-side pixel buffer.
@@ -506,7 +506,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                                 const std::vector<std::uint8_t>& rgba);
 
         /**
-         * @brief NOXNA test-only: builds a CPU-only Texture2D (no GraphicsDevice, no GPU backend)
+         * @brief NOXNA test-only: builds a CPU-only Texture2D (no GraphicsDevice, no GPU renderer)
          *        from raw pixels, so headless tests can exercise CPU pixel paths such as
          *        MouseCursor::FromTexture2D without a real graphics device.
          *
@@ -514,34 +514,34 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param h      Height in pixels.
          * @param format Surface format the texture reports.
          * @param pixels w * h Color values in row-major order.
-         * @return A Texture2D holding the pixels CPU-side with a null backend.
+         * @return A Texture2D holding the pixels CPU-side with a null renderer.
          */
         NOXNA static Texture2D CreateCpuOnlyForTests(int w, int h, SurfaceFormat format,
                                                      const std::vector<Color>& pixels);
 
         /**
-         * @brief NOXNA test-only: builds a Texture2D wrapping an arbitrary backend (e.g. a
-         *        mock/recording ITextureBackend) without a GraphicsDevice, so callers that
-         *        dereference GetBackend() (such as SpriteBatch::Draw) can be exercised
+         * @brief NOXNA test-only: builds a Texture2D wrapping an arbitrary renderer (e.g. a
+         *        mock/recording ITextureRenderer) without a GraphicsDevice, so callers that
+         *        dereference GetRenderer() (such as SpriteBatch::Draw) can be exercised
          *        headlessly against distinct, identifiable texture instances.
          *
          * @param w       Width in pixels.
          * @param h       Height in pixels.
-         * @param backend Backend to attach; must be non-null.
-         * @return A Texture2D wrapping the given backend, with no GraphicsDevice.
+         * @param renderer Renderer to attach; must be non-null.
+         * @return A Texture2D wrapping the given renderer, with no GraphicsDevice.
          */
-        NOXNA static Texture2D CreateWithBackendForTests(int w, int h,
-                                                         std::shared_ptr<ITextureBackend> backend);
+        NOXNA static Texture2D CreateWithRendererForTests(int w, int h,
+                                                         std::shared_ptr<ITextureRenderer> renderer);
 
         /**
-         * @brief Reconstructs a Texture2D from a cached backend and CPU pixel buffer without reloading from disk.
+         * @brief Reconstructs a Texture2D from a cached renderer and CPU pixel buffer without reloading from disk.
          *
          * @param device    The device to associate with the texture.
          * @param w         Width in pixels.
          * @param h         Height in pixels.
          * @param fmt       Surface format.
          * @param levelCount Number of mip levels.
-         * @param backend   Shared backend handle from a previous Texture2D.
+         * @param renderer   Shared renderer handle from a previous Texture2D.
          * @param cpuPixels Shared CPU pixel buffer from a previous Texture2D.
          * @return The reconstructed Texture2D.
          */
@@ -549,29 +549,29 @@ namespace Microsoft::Xna::Framework::Graphics
                                                     int w, int h,
                                                     SurfaceFormat fmt,
                                                     int levelCount,
-                                                    std::shared_ptr<ITextureBackend> backend,
+                                                    std::shared_ptr<ITextureRenderer> renderer,
                                                     std::shared_ptr<std::vector<uint8_t>> cpuPixels);
 
     protected:
         /**
-         * @brief Constructs a Texture2D from a pre-built backend (used by RenderTarget2D).
+         * @brief Constructs a Texture2D from a pre-built renderer (used by RenderTarget2D).
          * @param device     The owning device.
          * @param w          Width in pixels.
          * @param h          Height in pixels.
          * @param fmt        Surface format.
          * @param levelCount Number of mip levels.
-         * @param backend    Shared ownership of the pre-built GPU backend.
+         * @param renderer    Shared ownership of the pre-built GPU renderer.
          */
         Texture2D(GraphicsDevice& device, int w, int h, SurfaceFormat fmt, int levelCount,
-                  std::shared_ptr<ITextureBackend> backend);
+                  std::shared_ptr<ITextureRenderer> renderer);
 
         /**
-         * @brief Returns the raw non-owning backend pointer.
+         * @brief Returns the raw non-owning renderer pointer.
          *
          * Used by RenderTarget2D after construction.
-         * @return Pointer to the backend, or nullptr.
+         * @return Pointer to the renderer, or nullptr.
          */
-        [[nodiscard]] ITextureBackend* GetBackendRaw() const { return backend_.get(); }
+        [[nodiscard]] ITextureRenderer* GetRendererRaw() const { return renderer_.get(); }
 
         /** @brief Releases the GPU texture handle when the resource is disposed. */
         void Dispose(bool disposing) override;
@@ -582,27 +582,27 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * Becomes false immediately after `Dispose()` is called.
          */
-        NOXNA [[nodiscard]] bool HasBackend() const { return backend_ != nullptr; }
+        NOXNA [[nodiscard]] bool HasRenderer() const { return renderer_ != nullptr; }
 
     private:
-        std::shared_ptr<ITextureBackend> backend_;
+        std::shared_ptr<ITextureRenderer> renderer_;
         int width  = 0;
         int height = 0;
         std::shared_ptr<std::vector<uint8_t>> cpuPixels_;
         std::shared_ptr<std::vector<std::vector<uint8_t>>> extraMipLevels_;
 
-        /// Declares that this resource's live backend is the sole authority for its pixels and
+        /// Declares that this resource's live renderer is the sole authority for its pixels and
         /// that no CPU shadow may be trusted. True only for a real RenderTarget2D: its content
         /// genuinely comes from GPU rendering, never SetData(), so an empty CPU shadow means "ask
-        /// the backend", not "the shadow was freed" (see GetData()'s fallback). This applies to
+        /// the renderer", not "the shadow was freed" (see GetData()'s fallback). This applies to
         /// every mip -- target descendants can be regenerated after a render pass or parent
         /// upload, so common-layer transfer staging is never authoritative -- and it is why
-        /// SetData() updates a target's existing backend in place instead of replacing it.
+        /// SetData() updates a target's existing renderer in place instead of replacing it.
         ///
         /// It is NOT a synonym for "was built by the protected constructor below".
-        /// ReconstructFromCache() borrows that constructor to wrap an already-created backend and
+        /// ReconstructFromCache() borrows that constructor to wrap an already-created renderer and
         /// clears this flag again: a cache hit is an ordinary content texture whose CPU shadow is
-        /// authoritative and whose shared backend must never be written through (REMED-GFX-223).
+        /// authoritative and whose shared renderer must never be written through (REMED-GFX-223).
         bool gpuOnlyContent_ = false;
 
         /// Frees cpuPixels_ when context recovery is disabled, saving ~1x texture RAM.
@@ -628,7 +628,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
         /// Raw block-compressed byte upload for Dxt1/Dxt3/Dxt5 (SKIA-140). Unlike SetDataBytes,
         /// there is no CPU-side mirror: each call reads back, patches, and re-uploads through
-        /// the backend directly, since compressed storage cannot be sliced by texel row.
+        /// the renderer directly, since compressed storage cannot be sliced by texel row.
         void SetCompressedDataBytes(int level, const Rectangle* rect, const std::uint8_t* data,
                                     int startIndex, int elementCount);
         /// Raw block-compressed byte readback counterpart of SetCompressedDataBytes.

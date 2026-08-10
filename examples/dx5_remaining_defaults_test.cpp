@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx2.md Phase O7 (DX2-60..DX2-66): the remaining IGraphicsBackend entry points that are
+// plan_dx2.md Phase O7 (DX2-60..DX2-66): the remaining IGraphicsRenderer entry points that are
 // genuinely unavailable at this DirectX era. None of these needed any DX2-specific code -- they
-// were already satisfied by simply not overriding IGraphicsBackend's own shared defaults
+// were already satisfied by simply not overriding IGraphicsRenderer's own shared defaults
 // (matching DX1/DX3's identical precedent), but this test proves that claim rather than just
 // asserting it.
 //
 // Check A -- CreateOcclusionQuery() returns nullptr (occlusion queries are DX9-only).
 // Check B -- CreateTexture3D/CreateTextureCube/CreateRenderTargetCube all return nullptr (volume/
 //   cube textures are DX7/DX8+).
-// Check C -- CreateEffectBackend() returns nullptr (no programmable shaders exist at this era).
+// Check C -- CreateEffectRenderer() returns nullptr (no programmable shaders exist at this era).
 // Check D -- DrawInstancedPrimitivesEx throws (no instancing concept exists).
 // Check E -- DebugSimulateContextLoss()/DebugRestoreContext() are no-ops (do not throw).
 //
@@ -20,7 +20,7 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 
-#include "CNA/Internal/Backends/Dx5/Dx5GraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Dx5/Dx5Renderer.hpp"
 
 #include <cstdio>
 #include <cstdlib>
@@ -28,8 +28,8 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::Dx5;
-using CNA::Internal::Backends::GpuDrawParams;
+using namespace CNA::Internal::Renderers::Dx5;
+using CNA::Internal::Renderers::GpuDrawParams;
 
 static constexpr int kCanvasSize = 64;
 
@@ -49,28 +49,28 @@ protected:
     void Draw(const GameTime&) override
     {
         auto& dev = getGraphicsDeviceProperty();
-        auto& backend = static_cast<Dx5GraphicsBackend&>(dev.GetBackend());
+        auto& renderer = static_cast<Dx5Renderer&>(dev.GetRenderer());
 
-        check(backend.CreateOcclusionQuery() == nullptr,
+        check(renderer.CreateOcclusionQuery() == nullptr,
               "CreateOcclusionQuery() returns nullptr (occlusion queries are DX9-only)");
 
-        check(backend.CreateTexture3D(2, 2, 2, false, 0) == nullptr &&
-              backend.CreateTextureCube(2, false, 0) == nullptr &&
-              backend.CreateRenderTargetCube(2, 0) == nullptr,
+        check(renderer.CreateTexture3D(2, 2, 2, false, 0) == nullptr &&
+              renderer.CreateTextureCube(2, false, 0) == nullptr &&
+              renderer.CreateRenderTargetCube(2, 0) == nullptr,
               "CreateTexture3D/CreateTextureCube/CreateRenderTargetCube all return nullptr (DX7/DX8+ features)");
 
-        check(backend.CreateEffectBackend("", "") == nullptr,
-              "CreateEffectBackend() returns nullptr (no programmable shaders at this era)");
+        check(renderer.CreateEffectRenderer("", "") == nullptr,
+              "CreateEffectRenderer() returns nullptr (no programmable shaders at this era)");
 
         {
-            auto vb = backend.CreateVertexBuffer(3);
-            auto ib = backend.CreateIndexBuffer16(3);
+            auto vb = renderer.CreateVertexBuffer(3);
+            auto ib = renderer.CreateIndexBuffer16(3);
             const Matrix identity = Matrix::getIdentityProperty();
             GpuDrawParams params;
             bool threw = false;
             try
             {
-                backend.DrawInstancedPrimitivesEx(*vb, *ib, identity, identity, identity,
+                renderer.DrawInstancedPrimitivesEx(*vb, *ib, identity, identity, identity,
                                                   PrimitiveType::TriangleList, 1, 2, params);
             }
             catch (const std::exception&) { threw = true; }
@@ -81,8 +81,8 @@ protected:
             bool threw = false;
             try
             {
-                backend.DebugSimulateContextLoss();
-                backend.DebugRestoreContext();
+                renderer.DebugSimulateContextLoss();
+                renderer.DebugRestoreContext();
             }
             catch (const std::exception& e)
             {

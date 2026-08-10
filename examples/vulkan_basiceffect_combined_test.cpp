@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Task 370: BasicEffect cross-backend image comparison suite — closes Phase 42 (Vulkan backend).
+// Task 370: BasicEffect cross-renderer image comparison suite — closes Phase 42 (Vulkan renderer).
 //
 // See examples/easygl_basiceffect_combined_test.cpp for the full FNA-derived expected-output
 // derivation. Summary: TextureEnabled+VertexColorEnabled+DiffuseColor+EmissiveColor combined

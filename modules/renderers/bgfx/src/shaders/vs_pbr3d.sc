@@ -4,7 +4,7 @@ $output v_texcoord0, v_normal, v_tangent, v_worldPos, v_fogFactor
 #include <bgfx_shader.sh>
 
 // plan_cnj.md CNB-58/60 (Phase 13A), Bgfx port: PbrEffect's vertex stage. Mirrors
-// EasyGLGraphicsBackend::EnsurePbrProgram()'s vertex shader exactly -- see that function's own
+// EasyGLRenderer::EnsurePbrProgram()'s vertex shader exactly -- see that function's own
 // doc comment for the full glTF metallic-roughness BRDF rationale.
 
 uniform mat4 u_wvp;

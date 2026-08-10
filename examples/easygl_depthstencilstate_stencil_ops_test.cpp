@@ -43,7 +43,7 @@
 // Column 3 is the one case in this test where a WORKING implementation must show BACKGROUND, not
 // GREEN, making it the only check capable of catching a fully-bypassed stencil test.
 //
-// NOTE: this project's Vulkan backend (VulkanGraphicsBackend::ApplyDepthStencilState, tracked as
+// NOTE: this project's Vulkan renderer (VulkanRenderer::ApplyDepthStencilState, tracked as
 // Task 870) discards stencilPass/stencilFail/stencilDepthFail entirely and never enables the
 // stencil test at all (stencilTestEnable is never set), so every fragment always passes the
 // (nonexistent) stencil test regardless of the requested compare or reference value. This was

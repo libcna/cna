@@ -4,13 +4,13 @@
 // Direct port of Task 419's EasyGL test (examples/easygl_spritebatch_sourcerect_test.cpp) -- same
 // methodology, same geometry, same expected pixel outcomes. See that file's header comment for
 // the full rationale. Unlike the SpriteSortMode/scale overload tasks (667-670, 672), source
-// rectangle cropping IS genuinely backend-specific: confirmed by reading
-// SdlSpriteBatchBackend::Draw() directly, it passes sourceRectangle straight through as
+// rectangle cropping IS genuinely renderer-specific: confirmed by reading
+// SdlSpriteBatchRenderer::Draw() directly, it passes sourceRectangle straight through as
 // SDL_RenderTexture()'s own `srcrect` parameter, so this is real GPU-dispatch-level behaviour to
 // verify, not just shared SpriteBatch.cpp logic.
 //
 // Requires PresentationMode::NativeBackBuffer (Task 915 finding): SDL_RenderReadPixels operates
-// in physical output coordinates, while this backend's default presentation mode
+// in physical output coordinates, while this renderer's default presentation mode
 // (FixedHeightDynamicWidth) does not map logical pixels 1:1 to physical ones.
 //
 // Design: a 20x20 texture split into a 2x2 grid of 10x10 solid-color cells:

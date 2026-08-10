@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-081 (cross-backend): SpriteBatch.Begin must APPLY its RasterizerState argument on every
-// backend. This is a shared-layer test -- the fix lives in SpriteBatch.cpp (setRasterizerStateProperty
-// in Begin), not in any backend -- so the SAME source is registered against multiple backends to
+// REMED-GFX-081 (cross-renderer): SpriteBatch.Begin must APPLY its RasterizerState argument on every
+// renderer. This is a shared-layer test -- the fix lives in SpriteBatch.cpp (setRasterizerStateProperty
+// in Begin), not in any renderer -- so the SAME source is registered against multiple renderers to
 // prove the shared change works across very different architectures (deferred BatchSnapshot on
 // Vulkan/SdlGpu, view-state on Bgfx, immediate on D3D11/EasyGL). The scissor rectangle itself is
-// already correct per backend (GFX-013 Vulkan / GFX-068 SdlGpu / GFX-066 Bgfx / native D3D11); the
+// already correct per renderer (GFX-013 Vulkan / GFX-068 SdlGpu / GFX-066 Bgfx / native D3D11); the
 // only thing under test here is whether the RasterizerState reaches it THROUGH Begin.
 //
 // Everything renders into an off-screen 64x64 RenderTarget2D and is read back with GetData(), the
-// portable path that works even on backends without GetBackBufferData (SdlGpu). Scene: bind the RT,
+// portable path that works even on renderers without GetBackBufferData (SdlGpu). Scene: bind the RT,
 // clear GREEN, set ScissorRectangle = top-left 32x32, then a full-target red sprite drawn via
 // SpriteBatch with the scissor RasterizerState supplied ONLY through Begin (never assigned to
 // GraphicsDevice.RasterizerState). Probe the top-left quadrant centre (16,16) and the bottom-right

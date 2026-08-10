@@ -14,19 +14,19 @@
 // Check F2 -- a mipMap RenderTarget2D regenerates its chain on unbind (OPENGLES1-85): sampling it
 //   minified reads a blended mip level rather than a single point-sampled texel.
 // Check F3 -- Texture2D::GetData returns an ordinary texture's texels. NOTE: this deliberately
-//   does NOT exercise the backend's own GetData -- Texture2D answers from its CPU shadow and only
-//   asks the backend for render targets (OPENGLES1-89's row explains why). The check is kept
+//   does NOT exercise the renderer's own GetData -- Texture2D answers from its CPU shadow and only
+//   asks the renderer for render targets (OPENGLES1-89's row explains why). The check is kept
 //   because the row-major/channel-order contract is still worth pinning down.
 // Check G -- FillMode::WireFrame leaves the interior of a triangle unfilled...
 // Check H -- ...while still drawing its edges.
 //
 // Render targets and wireframe are optional on ES 1.1: RenderTarget2D needs
-// GL_OES_framebuffer_object, and wireframe is emulated. Where the backend reports the capability
+// GL_OES_framebuffer_object, and wireframe is emulated. Where the renderer reports the capability
 // as unsupported the corresponding checks are skipped rather than failed -- an honest "not
 // available here" instead of a false red.
 //
 // Exit code 0 = all checks PASS (or were legitimately skipped), 1 = any FAILs. Requires a genuine
-// OpenGL ES 1.1 driver; see docs/opengles1-backend.md.
+// OpenGL ES 1.1 driver; see docs/opengles1-renderer.md.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
@@ -49,7 +49,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "CNA/GraphicsCapability.hpp"
-#include "CNA/Internal/Backends/OpenGLES1/OpenGLES1GraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/OpenGLES1/OpenGLES1Renderer.hpp"
 
 #include <cmath>
 #include <cstdio>
@@ -128,8 +128,8 @@ protected:
         done_ = true;
 
         auto& dev = getGraphicsDeviceProperty();
-        auto& backend = static_cast<CNA::Internal::Backends::OpenGLES1::OpenGLES1GraphicsBackend&>(
-            dev.GetBackend());
+        auto& renderer = static_cast<CNA::Internal::Renderers::OpenGLES1::OpenGLES1Renderer&>(
+            dev.GetRenderer());
         const int mid = kSize / 2;
 
         dev.setRasterizerStateProperty(RasterizerState::CullNone);
@@ -203,7 +203,7 @@ protected:
         }
 
         // ---- Check C2: 32-bit indices ----------------------------------------------------
-        if (!backend.SupportsThirtyTwoBitIndicesEXT())
+        if (!renderer.SupportsThirtyTwoBitIndicesEXT())
         {
             skip("IndexBuffer -- 32-bit indices (driver lacks GL_OES_element_index_uint)");
         }
@@ -345,7 +345,7 @@ protected:
         // ---- Checks G/H: wireframe emulation ---------------------------------------------
         if (!dev.SupportsCapability(CNA::GraphicsCapability::WireFrame))
         {
-            skip("FillMode::WireFrame -- backend reports the capability as unsupported");
+            skip("FillMode::WireFrame -- renderer reports the capability as unsupported");
         }
         else
         {

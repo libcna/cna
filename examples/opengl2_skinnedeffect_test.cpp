@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl2.md: pixel-exact SkinnedEffect proof for the native OpenGL 2.1 graphics backend --
-// bone-palette vertex skinning, matching EasyGLGraphicsBackend::EnsureSkinnedProgram's formula.
+// plan_opengl2.md: pixel-exact SkinnedEffect proof for the native OpenGL 2.1 graphics renderer --
+// bone-palette vertex skinning, matching EasyGLRenderer::EnsureSkinnedProgram's formula.
 // All draws use World=View=Projection=Identity (this project's own established convention -- see
 // opengl2_effects_test.cpp) with the quad at local Z=-0.8.
 //
@@ -22,7 +22,7 @@
 //   still samples uTex, but Texture unset so the white fallback isolates the light response, same
 //   technique as opengl2_effects_test.cpp's Check C), one lit by a light pointing straight into
 //   the surface (near-white) and one lit by a light pointing away (ambient-only, dim).
-// Check D -- Texture==null falls back to the backend's default-white sampler (reused from
+// Check D -- Texture==null falls back to the renderer's default-white sampler (reused from
 //   EnvironmentMapEffect's ensureDefaultWhiteTextures(), not black/garbage): with lights off and
 //   EmissiveColor=0.5, expected rgb = EmissiveColor*white = mid-gray (128,128,128), not black.
 // Check E -- 30 frames of the whole scene render with no exception.
@@ -45,7 +45,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTextureSkinned.hpp"
 
-#include "CNA/Internal/Backends/OpenGL2/OpenGL2GraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/OpenGL2/OpenGL2Renderer.hpp"
 
 #include "common/PixelTestGame.hpp"
 
@@ -58,7 +58,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::OpenGL2;
+using namespace CNA::Internal::Renderers::OpenGL2;
 
 namespace
 {

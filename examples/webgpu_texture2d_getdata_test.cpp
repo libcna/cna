@@ -1,18 +1,18 @@
 // SPDX-License-Identifier: MS-PL
-// WEBGPU-51: verify WebGPUTextureBackend::GetData() -- real CPU readback of an arbitrary
-// Texture2D backend, via the same staged MAP_READ-buffer/aligned-row/async-map-and-poll technique
-// WEBGPU-91's ReadBackbuffer() and WebGPURenderTargetBackend::GetData() (WEBGPU-53/54) already
-// established. Before this task, WebGPUTextureBackend had no GetData() override at all, silently
-// falling back to ITextureBackend's own no-op default (data left untouched).
+// WEBGPU-51: verify WebGPUTextureRenderer::GetData() -- real CPU readback of an arbitrary
+// Texture2D renderer, via the same staged MAP_READ-buffer/aligned-row/async-map-and-poll technique
+// WEBGPU-91's ReadBackbuffer() and WebGPURenderTargetRenderer::GetData() (WEBGPU-53/54) already
+// established. Before this task, WebGPUTextureRenderer had no GetData() override at all, silently
+// falling back to ITextureRenderer's own no-op default (data left untouched).
 //
 // Design note: Texture2D::GetData() (the XNA-facing API) is implemented entirely via a CPU-side
-// pixel shadow (cpuPixels_) maintained in the shared, backend-agnostic Texture2D.cpp -- it only
-// ever calls through to ITextureBackend::GetData() for a RenderTarget2D-backed instance
-// (gpuOnlyContent_), which on this backend already uses the separate WebGPURenderTargetBackend
-// class (see webgpu_rendertarget2d_test.cpp). So exercising WebGPUTextureBackend::GetData()
-// itself requires going around the XNA Texture2D layer and driving IGraphicsBackend directly --
+// pixel shadow (cpuPixels_) maintained in the shared, renderer-agnostic Texture2D.cpp -- it only
+// ever calls through to ITextureRenderer::GetData() for a RenderTarget2D-backed instance
+// (gpuOnlyContent_), which on this renderer already uses the separate WebGPURenderTargetRenderer
+// class (see webgpu_rendertarget2d_test.cpp). So exercising WebGPUTextureRenderer::GetData()
+// itself requires going around the XNA Texture2D layer and driving IGraphicsRenderer directly --
 // matching examples/webgpu_instanced3d_test.cpp's own established convention for testing a
-// backend capability with no XNA-layer round trip of its own.
+// renderer capability with no XNA-layer round trip of its own.
 //
 // Check A -- full-texture round trip: upload a 4x4 RGBA8 image (16 distinct-ish pixels, a
 //   gradient) via CreateTexture()+UpdatePixels(), then GetData(level=0, whole rect) must return
@@ -31,7 +31,7 @@
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Graphics/ImageData.hpp"
 
 #include <cstdint>
@@ -42,7 +42,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using CNA::Internal::Backends::IGraphicsBackend;
+using CNA::Internal::Renderers::IGraphicsRenderer;
 using CNA::Internal::Graphics::ImageData;
 
 namespace
@@ -90,7 +90,7 @@ protected:
         if (frame_++ < 1) return;
 
         auto& dev = getGraphicsDeviceProperty();
-        IGraphicsBackend& backend = dev.GetBackend();
+        IGraphicsRenderer& renderer = dev.GetRenderer();
 
         // Check A: full 4x4 round trip.
         {
@@ -102,7 +102,7 @@ protected:
             img.height = h;
             img.pixels = pixels;
             img.mipLevels = 1;
-            auto tex = backend.CreateTexture(img);
+            auto tex = renderer.CreateTexture(img);
 
             std::vector<std::uint8_t> readback(static_cast<std::size_t>(w) * h * 4, 0xAA);
             tex->GetData(0, 0, 0, w, h, readback.data(), static_cast<int>(readback.size()));
@@ -121,7 +121,7 @@ protected:
             img.height = h;
             img.pixels = pixels;
             img.mipLevels = 1;
-            auto tex = backend.CreateTexture(img);
+            auto tex = renderer.CreateTexture(img);
 
             constexpr int rx = 3, ry = 2, rw = 2, rh = 2;
             std::vector<std::uint8_t> readback(static_cast<std::size_t>(rw) * rh * 4, 0xAA);
@@ -153,7 +153,7 @@ protected:
             img.height = h;
             img.pixels = level0;
             img.mipLevels = 2; // pre-allocate level 1 too
-            auto tex = backend.CreateTexture(img);
+            auto tex = renderer.CreateTexture(img);
             tex->UpdatePixelsLevel(1, level1.data(), w / 2, h / 2);
 
             std::vector<std::uint8_t> readback(static_cast<std::size_t>(w / 2) * (h / 2) * 4, 0xAA);

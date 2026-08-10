@@ -31,7 +31,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 
-#include "CNA/Internal/Backends/Llgl/LlglGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Llgl/LlglRenderer.hpp"
 
 #include "common/PixelTestGame.hpp"
 
@@ -44,8 +44,8 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::Llgl;
-using CNA::Internal::Backends::CnaPresentationMode;
+using namespace CNA::Internal::Renderers::Llgl;
+using CNA::Internal::Renderers::CnaPresentationMode;
 
 namespace
 {
@@ -88,10 +88,10 @@ class LlglPresentationTest : public Game
                                             int& logicalWidthOut, int& logicalHeightOut)
     {
         auto& device = getGraphicsDeviceProperty();
-        auto& backend = static_cast<LlglGraphicsBackend&>(device.GetBackend());
+        auto& renderer = static_cast<LlglRenderer&>(device.GetRenderer());
 
-        backend.SetPresentationMode(static_cast<int>(mode));
-        backend.SetVirtualResolution(kLogicalSize, kLogicalSize);
+        renderer.SetPresentationMode(static_cast<int>(mode));
+        renderer.SetVirtualResolution(kLogicalSize, kLogicalSize);
 
         device.Clear(kClearColor);
         spriteBatch_->Begin();
@@ -99,22 +99,22 @@ class LlglPresentationTest : public Game
                            Rectangle(0, 0, 1, 1), kSpriteColor);
         spriteBatch_->End();
 
-        backend.GetViewportSize(logicalWidthOut, logicalHeightOut);
+        renderer.GetViewportSize(logicalWidthOut, logicalHeightOut);
 
         // Switch to a 1:1 window-sized presentation purely for reading back, and read through the
-        // backend directly. GraphicsDevice::GetBackBufferData would validate the region against
+        // renderer directly. GraphicsDevice::GetBackBufferData would validate the region against
         // PresentationParameters, which this test deliberately leaves at the window size while the
-        // backend draws at a 100x100 canvas -- an arrangement no game produces, and not what is
+        // renderer draws at a 100x100 canvas -- an arrangement no game produces, and not what is
         // under test here.
-        backend.SetPresentationMode(static_cast<int>(CnaPresentationMode::NativeBackBuffer));
-        backend.SetVirtualResolution(kWindowWidth, kWindowHeight);
+        renderer.SetPresentationMode(static_cast<int>(CnaPresentationMode::NativeBackBuffer));
+        renderer.SetVirtualResolution(kWindowWidth, kWindowHeight);
 
         std::vector<Color> samples;
         samples.reserve(windowSamples.size());
         for (const Rectangle& region : windowSamples)
         {
             std::uint8_t rgba[4] = {0, 0, 0, 0};
-            backend.ReadBackbuffer(region.X, region.Y, 1, 1, rgba);
+            renderer.ReadBackbuffer(region.X, region.Y, 1, 1, rgba);
             samples.emplace_back(rgba[0], rgba[1], rgba[2], rgba[3]);
         }
         return samples;
@@ -145,7 +145,7 @@ protected:
             return;
         done_ = true;
 
-        auto& backend = static_cast<LlglGraphicsBackend&>(getGraphicsDeviceProperty().GetBackend());
+        auto& renderer = static_cast<LlglRenderer&>(getGraphicsDeviceProperty().GetRenderer());
 
         // The window is 800x480 and the canvas is square, so Letterbox fits it to 480x480 centred
         // at x = 160..640: the centre is canvas, x = 40 and x = 760 are bars.
@@ -210,16 +210,16 @@ protected:
         {
             // Back in Letterbox: the centre of the logical canvas must map to the centre of the
             // 480x480 drawn area, and the transforms must be inverses of each other.
-            backend.SetPresentationMode(static_cast<int>(CnaPresentationMode::Letterbox));
-            backend.SetVirtualResolution(kLogicalSize, kLogicalSize);
+            renderer.SetPresentationMode(static_cast<int>(CnaPresentationMode::Letterbox));
+            renderer.SetVirtualResolution(kLogicalSize, kLogicalSize);
 
             float windowX = 0.0f;
             float windowY = 0.0f;
-            const bool forward = backend.TransformLogicalToWindow(50.0f, 50.0f, windowX, windowY);
+            const bool forward = renderer.TransformLogicalToWindow(50.0f, 50.0f, windowX, windowY);
 
             float logicalX = 0.0f;
             float logicalY = 0.0f;
-            const bool inverse = backend.TransformWindowToLogical(windowX, windowY, logicalX, logicalY);
+            const bool inverse = renderer.TransformWindowToLogical(windowX, windowY, logicalX, logicalY);
 
             const bool centred = std::fabs(windowX - kWindowWidth * 0.5f) < 1.0f &&
                                  std::fabs(windowY - kWindowHeight * 0.5f) < 1.0f;

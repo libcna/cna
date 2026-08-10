@@ -39,7 +39,7 @@ using namespace Microsoft::Xna::Framework::Graphics;
 
 // ---------------------------------------------------------------------------
 // Pre-compiled SPIR-V for the tint shaders (NDC pixel-coord vertex + tint frag).
-// Push-constant layout matches VulkanEffectBackend contract:
+// Push-constant layout matches VulkanEffectRenderer contract:
 //   vec2 vpSize | mat4 uMatrix | vec4 uColor | float uFloat0
 // ---------------------------------------------------------------------------
 

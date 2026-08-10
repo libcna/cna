@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // SKIA-118: display-free proof of shared successor limits, checked arithmetic and oracle policy.
 
-#include "CNA/Internal/Backends/Skia/SkiaResourcePolicy.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaResourcePolicy.hpp"
 #include "common/SkiaSuccessorOracle.hpp"
 
 #include <array>
@@ -12,7 +12,7 @@
 #include <limits>
 #include <string_view>
 
-using namespace CNA::Internal::Backends::Skia;
+using namespace CNA::Internal::Renderers::Skia;
 using namespace CnaTest::Skia;
 
 namespace

@@ -1,20 +1,20 @@
 // SPDX-License-Identifier: MS-PL
-// plan_sdlgpu.md SDLGPU-38: RenderTarget2D MSAA proof for the SDL_GPU graphics backend --
+// plan_sdlgpu.md SDLGPU-38: RenderTarget2D MSAA proof for the SDL_GPU graphics renderer --
 // SDL_GPUSampleCount texture creation + SDL_GPUColorTargetInfo.resolve_texture automatic
-// resolve-on-render-pass-end (the exact mechanism SdlGpuRenderTargetCubeBackend's own MSAA
+// resolve-on-render-pass-end (the exact mechanism SdlGpuRenderTargetCubeRenderer's own MSAA
 // support, SDLGPU-36, already proved out; this closes the matching RenderTarget2D leg).
 //
-// This backend has no ReadBackbuffer() yet (SDLGPU-39's swapchain leg is a documented, unresolved
+// This renderer has no ReadBackbuffer() yet (SDLGPU-39's swapchain leg is a documented, unresolved
 // segfault), so verification here follows the established convention: real draws with no
 // exception, MultiSampleCount property fidelity, plus sampling the MSAA target via SpriteBatch for
 // a real screenshot (not just "didn't throw"). All render targets are members (created once in
 // LoadContent(), not Draw()-local) per the real use-after-free finding documented in
-// plan_sdlgpu.md's SDLGPU-37 row -- this backend defers rendering to Present() time, so a target
+// plan_sdlgpu.md's SDLGPU-37 row -- this renderer defers rendering to Present() time, so a target
 // destroyed before that pass runs would release its GPU texture while queued commands still
 // reference it.
 //
 // Check A -- MultiSampleCount property fidelity: preferredMultiSampleCount=4 must report a real,
-//   device-clamped value >1 (proving the request reached the backend, not silently dropped).
+//   device-clamped value >1 (proving the request reached the renderer, not silently dropped).
 // Check B -- a real colored3d quad drawn into the MSAA target, resolved automatically at
 //   render-pass end, then sampled back via SpriteBatch -- renders every frame with no exception.
 // Check C -- a depth-tested MSAA target (DepthFormat::Depth24Stencil8): draws a farther red quad
@@ -47,7 +47,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 
-#include "CNA/Internal/Backends/SdlGpu/SdlGpuGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/SdlGpu/SdlGpuRenderer.hpp"
 
 #include "common/PixelTestGame.hpp"
 
@@ -59,7 +59,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::SdlGpu;
+using namespace CNA::Internal::Renderers::SdlGpu;
 
 namespace
 {

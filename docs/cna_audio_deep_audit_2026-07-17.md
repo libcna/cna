@@ -91,7 +91,7 @@ This can produce silence, stale pending-buffer accounting, or a framework state 
 
 #### A-05 — Raw SoundEffect boundaries permit exact octave/speed mistakes — **confirmed design risk**
 
-`SoundEffect(buffer, sampleRate, channels, ...)` always labels the supplied bytes as `SDL_AUDIO_S16LE` and trusts the caller-provided sample rate and channel enum. It does not currently validate sample-frame alignment or a supported sample-rate/channel domain before passing data to the backend.
+`SoundEffect(buffer, sampleRate, channels, ...)` always labels the supplied bytes as `SDL_AUDIO_S16LE` and trusts the caller-provided sample rate and channel enum. It does not currently validate sample-frame alignment or a supported sample-rate/channel domain before passing data to the renderer.
 
 This is especially dangerous in a C#→C++ port because C++ byte vectors do not retain audio metadata. Common symptom signatures:
 
@@ -107,7 +107,7 @@ This is especially dangerous in a C#→C++ port because C++ byte vectors do not 
 
 #### A-06 — Hard-coded 44.1 kHz stereo S16 mixer without negotiated-spec diagnostics — **confirmed**
 
-`AudioMixer.cpp:36-41` requests S16 stereo 44,100 Hz. SDL may convert to the physical device, but CNA does not record the actual device/mixer format, conversion path, resampler behavior, buffer size, or latency. This prevents diagnosis of 44.1↔48 kHz issues and makes backend-version differences hard to detect.
+`AudioMixer.cpp:36-41` requests S16 stereo 44,100 Hz. SDL may convert to the physical device, but CNA does not record the actual device/mixer format, conversion path, resampler behavior, buffer size, or latency. This prevents diagnosis of 44.1↔48 kHz issues and makes renderer-version differences hard to detect.
 
 Hard-coding 44.1 kHz is not by itself proof of a pitch bug; the defect is the absence of verified negotiation and test evidence.
 
@@ -152,7 +152,7 @@ Content resolution uses `std::filesystem::exists` on literal paths and extension
 
 #### A-14 — Important playback failures are silent or weakly surfaced — **confirmed**
 
-Examples include `MediaPlayer` returning when loading/track creation/playback fails and XACT wave creation returning null after stderr logging. A perfect audio layer needs one structured error policy: content exceptions for invalid assets, device exceptions for unavailable hardware, result state for expected voice exhaustion, and diagnostics containing asset/cue/wave/format/backend context.
+Examples include `MediaPlayer` returning when loading/track creation/playback fails and XACT wave creation returning null after stderr logging. A perfect audio layer needs one structured error policy: content exceptions for invalid assets, device exceptions for unavailable hardware, result state for expected voice exhaustion, and diagnostics containing asset/cue/wave/format/renderer context.
 
 ### Medium / P2
 
@@ -168,9 +168,9 @@ SDL3_mixer lacks a direct equivalent of XACT's complete DSP/reverb graph in the 
 
 A wall-clock timer can diverge from actually rendered media during device stalls, resampling, seeking, pause races, decoder startup, or playback failure. Position/end-of-song behavior should be driven by decoder/track state where possible and tested against XNA semantics.
 
-#### A-18 — Microphone state can claim success after backend failure — **confirmed**
+#### A-18 — Microphone state can claim success after renderer failure — **confirmed**
 
-The microphone path can set state to started even if opening the capture stream fails, conflates no-data and backend error, and caches device enumeration without a clear hotplug refresh strategy. This is not the reported playback defect but is part of audio completeness.
+The microphone path can set state to started even if opening the capture stream fails, conflates no-data and renderer error, and caches device enumeration without a clear hotplug refresh strategy. This is not the reported playback defect but is part of audio completeness.
 
 #### A-19 — Audio dependencies are not auditable from this archive — **confirmed release-process gap**
 
@@ -184,7 +184,7 @@ Album/artist/genre/playlist/picture and collection operations contain explicit `
 
 ### 1. Content-pipeline metadata may have been lost
 
-The XNA content pipeline emits format, sample rate, channels, block alignment, compression metadata, loop points, and duration. A manual C++ port often copies only bytes and calls a raw constructor. If the port guessed `44100` or `Stereo`, the backend will faithfully play the wrong interpretation.
+The XNA content pipeline emits format, sample rate, channels, block alignment, compression metadata, loop points, and duration. A manual C++ port often copies only bytes and calls a raw constructor. If the port guessed `44100` or `Stereo`, the renderer will faithfully play the wrong interpretation.
 
 ### 2. The C++ type system no longer protects array/asset assumptions
 
@@ -226,11 +226,11 @@ The exact thresholds should be finalized after collecting XNA reference captures
 - Neutral pitch: final frequency ratio exactly 1.0 within floating-point tolerance.
 - Calibration tone frequency: within 0.1% of expected after steady-state analysis.
 - PCM duration: within one source frame in offline decode; within 2 ms end-to-end after device resampling.
-- Loop boundary: no missing/repeated frame beyond documented backend latency; click energy below an agreed threshold.
+- Loop boundary: no missing/repeated frame beyond documented renderer latency; click energy below an agreed threshold.
 - Channel identity: no channel swap; mono duplication/pan matrix documented and golden-tested.
 - Static PCM parity: sample-identical after normalizing container metadata when the same decoder path is used.
 - Compressed parity: decoded frame count exact; waveform similarity and spectral error within codec-appropriate tolerance.
-- No silent backend failures: every failed SDL/MIX operation produces a structured diagnostic and leaves public state truthful.
+- No silent renderer failures: every failed SDL/MIX operation produces a structured diagnostic and leaves public state truthful.
 - No unbounded queue/memory growth under underrun, pause/resume, device loss, or failed submission.
 - Cross-platform smoke: Linux, Windows, macOS, Android, and Web targets execute the applicable calibration subset.
 

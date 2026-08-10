@@ -1,18 +1,18 @@
 // SPDX-License-Identifier: MS-PL
 //
 // REMED-GFX-223. Texture2D::ReconstructFromCache() builds through the protected constructor
-// RenderTarget2D owns, which raises gpuOnlyContent_ -- the flag that declares "the live backend
+// RenderTarget2D owns, which raises gpuOnlyContent_ -- the flag that declares "the live renderer
 // is the sole authority for this resource's pixels, trust no CPU shadow". A cache hit is not a
 // render target: it is an ordinary content texture whose shadow IS authoritative and whose
-// backend is shared with every other wrapper reconstructed from the same cache entry.
+// renderer is shared with every other wrapper reconstructed from the same cache entry.
 //
-// These tests pin both halves of that contract, which no single-backend suite exercised:
-//   * a reconstructed wrapper reads its own cached pixels rather than delegating to a backend
+// These tests pin both halves of that contract, which no single-renderer suite exercised:
+//   * a reconstructed wrapper reads its own cached pixels rather than delegating to a renderer
 //     that cannot serve them;
-//   * a full-level SetData on any ordinary texture detaches by building a fresh backend, so an
-//     upload can never be published through a shared cached backend into an unrelated wrapper
+//   * a full-level SetData on any ordinary texture detaches by building a fresh renderer, so an
+//     upload can never be published through a shared cached renderer into an unrelated wrapper
 //     (the CNB-33 aliasing CnjCacheIsolationTests pins, reached here from the Texture2D side);
-//   * a real RenderTarget2D keeps the opposite semantics unchanged -- in-place backend update,
+//   * a real RenderTarget2D keeps the opposite semantics unchanged -- in-place renderer update,
 //     no retained shadow.
 
 #include <gtest/gtest.h>
@@ -22,7 +22,7 @@
 #include <memory>
 #include <vector>
 
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
@@ -49,14 +49,14 @@ namespace
         };
     }
 
-    /// Reproduces what ContentManager's weak texture cache does on a hit: hand the cached backend
+    /// Reproduces what ContentManager's weak texture cache does on a hit: hand the cached renderer
     /// and cached CPU pixel buffer to ReconstructFromCache and wrap them in a new Texture2D.
     Texture2D ReconstructLike(GraphicsDevice& device, const Texture2D& cached)
     {
         return Texture2D::ReconstructFromCache(
             device, cached.getWidthProperty(), cached.getHeightProperty(),
             cached.getFormatProperty(), cached.getLevelCountProperty(),
-            cached.GetBackendWeak().lock(), cached.GetCpuPixelsWeak().lock());
+            cached.GetRendererWeak().lock(), cached.GetCpuPixelsWeak().lock());
     }
 }
 
@@ -79,7 +79,7 @@ TEST_F(Texture2DCacheReconstructionTest, OrdinaryTextureRoundTripsThroughItsCpuS
 }
 
 // (2) ordinary texture cache reconstruction -> GetData. Before the fix this delegated to the
-// backend and threw on every backend without plain-texture readback.
+// renderer and threw on every renderer without plain-texture readback.
 TEST_F(Texture2DCacheReconstructionTest, ReconstructedTextureReadsTheCachedPixels)
 {
     Texture2D original(gd, kW, kH);
@@ -94,26 +94,26 @@ TEST_F(Texture2DCacheReconstructionTest, ReconstructedTextureReadsTheCachedPixel
 }
 
 // (3) cache reconstruction -> SetData -> GetData, and (10) the isolation that upload owes the
-// wrapper it was cached from: a shared backend must not be written through.
-TEST_F(Texture2DCacheReconstructionTest, SetDataOnAReconstructedTextureDetachesFromTheCachedBackend)
+// wrapper it was cached from: a shared renderer must not be written through.
+TEST_F(Texture2DCacheReconstructionTest, SetDataOnAReconstructedTextureDetachesFromTheCachedRenderer)
 {
     Texture2D original(gd, kW, kH);
     const auto in = Pattern(30);
     original.SetData(in.data(), static_cast<int>(in.size()));
 
     Texture2D reconstructed = ReconstructLike(gd, original);
-    const auto sharedBackend = original.GetBackendWeak().lock();
-    ASSERT_NE(sharedBackend, nullptr);
-    ASSERT_EQ(sharedBackend, reconstructed.GetBackendWeak().lock())
-        << "a cache hit must start out sharing the cached backend";
+    const auto sharedRenderer = original.GetRendererWeak().lock();
+    ASSERT_NE(sharedRenderer, nullptr);
+    ASSERT_EQ(sharedRenderer, reconstructed.GetRendererWeak().lock())
+        << "a cache hit must start out sharing the cached renderer";
 
     const auto patch = Pattern(40);
     reconstructed.SetData(patch.data(), static_cast<int>(patch.size()));
 
-    EXPECT_NE(sharedBackend, reconstructed.GetBackendWeak().lock())
-        << "a full-level upload must detach rather than mutate the shared cached backend";
-    EXPECT_EQ(sharedBackend, original.GetBackendWeak().lock())
-        << "the wrapper the cache entry came from must keep its own backend";
+    EXPECT_NE(sharedRenderer, reconstructed.GetRendererWeak().lock())
+        << "a full-level upload must detach rather than mutate the shared cached renderer";
+    EXPECT_EQ(sharedRenderer, original.GetRendererWeak().lock())
+        << "the wrapper the cache entry came from must keep its own renderer";
 
     std::vector<Color> out(patch.size(), Color(0, 0, 0, 0));
     ASSERT_NO_THROW(reconstructed.GetData(out.data(), static_cast<int>(out.size())));
@@ -129,7 +129,7 @@ TEST_F(Texture2DCacheReconstructionTest, SetDataOnAReconstructedTextureDetachesF
 TEST_F(Texture2DCacheReconstructionTest, ReconstructionSurvivesSourceWrapperDestruction)
 {
     const auto in = Pattern(50);
-    std::shared_ptr<CNA::Internal::Backends::ITextureBackend> backend;
+    std::shared_ptr<CNA::Internal::Renderers::ITextureRenderer> renderer;
     std::shared_ptr<std::vector<std::uint8_t>> pixels;
     SurfaceFormat fmt = SurfaceFormat::Color;
     int levels = 1;
@@ -137,16 +137,16 @@ TEST_F(Texture2DCacheReconstructionTest, ReconstructionSurvivesSourceWrapperDest
     {
         Texture2D original(gd, kW, kH);
         original.SetData(in.data(), static_cast<int>(in.size()));
-        backend = original.GetBackendWeak().lock();
+        renderer = original.GetRendererWeak().lock();
         pixels = original.GetCpuPixelsWeak().lock();
         fmt = original.getFormatProperty();
         levels = original.getLevelCountProperty();
     }
-    ASSERT_NE(backend, nullptr);
+    ASSERT_NE(renderer, nullptr);
     ASSERT_NE(pixels, nullptr);
 
     Texture2D reconstructed =
-        Texture2D::ReconstructFromCache(gd, kW, kH, fmt, levels, backend, pixels);
+        Texture2D::ReconstructFromCache(gd, kW, kH, fmt, levels, renderer, pixels);
 
     std::vector<Color> out(in.size(), Color(0, 0, 0, 0));
     ASSERT_NO_THROW(reconstructed.GetData(out.data(), static_cast<int>(out.size())));
@@ -201,29 +201,29 @@ TEST_F(Texture2DCacheReconstructionTest, RepeatedReconstructionCyclesStayCorrect
     EXPECT_EQ(out, in);
 }
 
-// (6) a real RenderTarget2D keeps the opposite semantics: its backend is updated in place -- it
-// must not be swapped for an ordinary texture backend -- and it retains no CPU shadow.
-TEST_F(Texture2DCacheReconstructionTest, RenderTargetKeepsItsBackendAndDropsTheShadowOnUpload)
+// (6) a real RenderTarget2D keeps the opposite semantics: its renderer is updated in place -- it
+// must not be swapped for an ordinary texture renderer -- and it retains no CPU shadow.
+TEST_F(Texture2DCacheReconstructionTest, RenderTargetKeepsItsRendererAndDropsTheShadowOnUpload)
 {
     RenderTarget2D rt(gd, kW, kH);
-    const auto before = rt.GetBackendWeak().lock();
+    const auto before = rt.GetRendererWeak().lock();
     ASSERT_NE(before, nullptr);
 
     const auto in = Pattern(100);
     rt.SetData(in.data(), static_cast<int>(in.size()));
 
-    EXPECT_EQ(before, rt.GetBackendWeak().lock())
-        << "a render target must keep the backend its IRenderTargetBackend view points at";
+    EXPECT_EQ(before, rt.GetRendererWeak().lock())
+        << "a render target must keep the renderer its IRenderTargetRenderer view points at";
     EXPECT_TRUE(rt.GetCpuPixelsWeak().expired())
-        << "a render target's backend is authoritative; no upload shadow may be retained";
+        << "a render target's renderer is authoritative; no upload shadow may be retained";
 }
 
 // (7) render-target readback is served by the target's own surface, never by a retained upload
-// shadow, and a backend that cannot read its colour attachment back refuses without fabricating
+// shadow, and a renderer that cannot read its colour attachment back refuses without fabricating
 // pixels (REMED-GFX-127's contract).
 //
-// Deliberately NOT asserted: that the readback equals the bytes just uploaded. ITextureBackend
-// declares UpdatePixels with an empty default body, and a render-target backend that does not
+// Deliberately NOT asserted: that the readback equals the bytes just uploaded. ITextureRenderer
+// declares UpdatePixels with an empty default body, and a render-target renderer that does not
 // override it drops the upload silently -- EasyGL's does not override it, so the honest answer
 // there is the target's cleared surface. That gap is recorded separately as REMED-GFX-224; it is
 // not what this test is for, and pinning the upload here would pin the gap instead of the

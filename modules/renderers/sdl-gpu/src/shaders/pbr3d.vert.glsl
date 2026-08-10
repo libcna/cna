@@ -46,7 +46,7 @@ layout(set = 1, binding = 1) uniform LitLightParams {
 
 // REMED-GFX-009: fog forwarded to the fragment stage as a varying (the shared PC block is fully
 // packed, no spare bytes). Keep-factor computed from raw object-space Z, matching
-// VulkanGraphicsBackend's FogParams shape byte-for-byte.
+// VulkanRenderer's FogParams shape byte-for-byte.
 layout(set = 1, binding = 2) uniform FogParams {
     vec4 fogColorEnabled;  // xyz = FogColor, w = fogEnabled
     vec4 fogVector;        // REMED-GFX-010: FNA fog vector (dot with object/skin pos)
@@ -61,7 +61,7 @@ void main() {
     fragNormal = normalize(normalMatrix * inNormal);
     // Tangent transforms as a plain direction under mat3(World) (not the inverse-transpose
     // normalMatrix used for the normal) -- correct for uniform-scale World transforms, mirrors
-    // EasyGLGraphicsBackend::EnsurePbrProgram()'s own documented simplification exactly.
+    // EasyGLRenderer::EnsurePbrProgram()'s own documented simplification exactly.
     fragTangent = mat3(lp.world) * inTangent.xyz;
     fragBitangentSign = inTangent.w;
     fragWorldPos = (lp.world * vec4(inPos, 1.0)).xyz;

@@ -13,9 +13,9 @@
 //
 // THE DEFECT this file reproduces is WebGPU-local and it is a LIFETIME defect. Every deferred
 // command stored the bound texture as a raw `const IWebGPUSamplable*` — a pointer to the resource's
-// BACKEND OBJECT — under this justification, written in the header next to the field:
+// RENDERER OBJECT — under this justification, written in the header next to the field:
 //
-//     "a bound Texture2D's WebGPUTextureBackend is owned by long-lived game/content state
+//     "a bound Texture2D's WebGPUTextureRenderer is owned by long-lived game/content state
 //      (unlike DrawUserPrimitives' transient vertex buffers), so it is guaranteed to still be
 //      alive when this command actually renders later in the same frame."
 //
@@ -23,13 +23,13 @@
 // a VIRTUAL call through a freed pointer. Measured (`cmake-build-webgpu-asan-ubsan`, `DISPLAY=:101`):
 //
 //     ERROR: AddressSanitizer: heap-use-after-free on address 0x508000068528
-//       #0 WebGPUGraphicsBackend::IssueTexturedDraw(...)   WebGPUGraphicsBackend.cpp:7228
-//       #1 WebGPUGraphicsBackend::ReplayDrawsInOrder(...)  WebGPUGraphicsBackend.cpp:5679
-//       #2 WebGPUGraphicsBackend::ReplayOrderedSegments(...)
-//       #3 WebGPUGraphicsBackend::EnsureFrameRendered()
-//       #4 WebGPUGraphicsBackend::Present()
+//       #0 WebGPURenderer::IssueTexturedDraw(...)   WebGPURenderer.cpp:7228
+//       #1 WebGPURenderer::ReplayDrawsInOrder(...)  WebGPURenderer.cpp:5679
+//       #2 WebGPURenderer::ReplayOrderedSegments(...)
+//       #3 WebGPURenderer::EnsureFrameRendered()
+//       #4 WebGPURenderer::Present()
 //     freed by thread T0 here:
-//       #1 WebGPURenderTargetBackend::~WebGPURenderTargetBackend()  WebGPUGraphicsBackend.cpp:1746
+//       #1 WebGPURenderTargetRenderer::~WebGPURenderTargetRenderer()  WebGPURenderer.cpp:1746
 //       #9 RenderTarget2D::~RenderTarget2D()
 //
 // and, without a sanitizer, SIGSEGV (exit 139) inside `ReplayDrawsInOrder` with a program counter
@@ -42,7 +42,7 @@
 // `SetRenderTarget()`, but a BACKBUFFER destination is not replayed until `Present()` — so only the
 // backbuffer route leaves the queue alive across the destructor. That distinction is why the
 // pre-existing lifetime leg of `rendertarget_effect_source_test.cpp` did not catch this: it
-// destroys its source AFTER unbinding the destination, so on this backend the flush had already
+// destroys its source AFTER unbinding the destination, so on this renderer the flush had already
 // consumed the command. Every dead-source leg here therefore states which destination it uses.
 //
 // THE FIX resolves the view ONCE, at the public draw call, into a `WebGPUSampledTextureEXT` — the
@@ -52,7 +52,7 @@
 // `wgpuTextureDestroy`, so a held reference genuinely keeps the resource usable.
 //
 // THE ORACLE is pixels, never "did not crash". Every consumer leg reads its destination back and
-// compares it to the exact producer pattern, so a backend that silently DROPS a queued draw whose
+// compares it to the exact producer pattern, so a renderer that silently DROPS a queued draw whose
 // source died (rather than crashing on it) fails just as loudly. Point sampling and a pattern whose
 // every channel is a multiple of 5 away from 0 and 255 make each comparison byte-exact.
 //
@@ -136,7 +136,7 @@ namespace
     constexpr int kPH = 4;    ///< producer pattern height
     /// Backbuffer extent. Each source texel must cover an ODD number of destination pixels, so that
     /// the middle pixel of a block lands EXACTLY on that texel's centre: with an even block, the
-    /// centre falls between two pixels and a backend using linear filtering returns a slight blend
+    /// centre falls between two pixels and a renderer using linear filtering returns a slight blend
     /// of two neighbours instead of the texel itself. 9 pixels per texel makes the probe exact
     /// under point AND linear sampling, so the comparison stays byte-exact everywhere rather than
     /// needing a tolerance that would also admit a genuinely wrong resource.
@@ -144,39 +144,39 @@ namespace
     constexpr int kBBW = kPW * kBBBlock;   ///< 72
     constexpr int kBBH = kPH * kBBBlock;   ///< 36
 
-    /** @brief Whether this backend rasterizes and can read anything back at all. */
-#if defined(CNA_BACKEND_HEADLESS)
+    /** @brief Whether this renderer rasterizes and can read anything back at all. */
+#if defined(CNA_RENDERER_HEADLESS)
     constexpr bool kRasterizes = false;
 #else
     constexpr bool kRasterizes = true;
 #endif
 
-#if defined(CNA_BACKEND_HEADLESS)
-    constexpr const char* kBackendName = "HEADLESS";
-#elif defined(CNA_BACKEND_SOFTWARE)
-    constexpr const char* kBackendName = "SOFTWARE";
-#elif defined(CNA_BACKEND_EASYGL)
-    constexpr const char* kBackendName = "EASYGL";
-#elif defined(CNA_BACKEND_BGFX)
-    constexpr const char* kBackendName = "BGFX";
-#elif defined(CNA_BACKEND_VULKAN)
-    constexpr const char* kBackendName = "VULKAN";
-#elif defined(CNA_BACKEND_WEBGPU)
-    constexpr const char* kBackendName = "WEBGPU";
-#elif defined(CNA_BACKEND_SDL_GPU)
-    constexpr const char* kBackendName = "SDL_GPU";
-#elif defined(CNA_BACKEND_SDL_RENDERER)
-    constexpr const char* kBackendName = "SDL_RENDERER";
-#elif defined(CNA_BACKEND_D3D9)
-    constexpr const char* kBackendName = "D3D9";
-#elif defined(CNA_BACKEND_D3D11)
-    constexpr const char* kBackendName = "D3D11";
-#elif defined(CNA_BACKEND_D3D12)
-    constexpr const char* kBackendName = "D3D12";
-#elif defined(CNA_BACKEND_LLGL)
-    constexpr const char* kBackendName = "LLGL";
+#if defined(CNA_RENDERER_HEADLESS)
+    constexpr const char* kRendererName = "HEADLESS";
+#elif defined(CNA_RENDERER_SOFTWARE)
+    constexpr const char* kRendererName = "SOFTWARE";
+#elif defined(CNA_RENDERER_EASYGL)
+    constexpr const char* kRendererName = "EASYGL";
+#elif defined(CNA_RENDERER_BGFX)
+    constexpr const char* kRendererName = "BGFX";
+#elif defined(CNA_RENDERER_VULKAN)
+    constexpr const char* kRendererName = "VULKAN";
+#elif defined(CNA_RENDERER_WEBGPU)
+    constexpr const char* kRendererName = "WEBGPU";
+#elif defined(CNA_RENDERER_SDL_GPU)
+    constexpr const char* kRendererName = "SDL_GPU";
+#elif defined(CNA_RENDERER_SDL_RENDERER)
+    constexpr const char* kRendererName = "SDL_RENDERER";
+#elif defined(CNA_RENDERER_D3D9)
+    constexpr const char* kRendererName = "D3D9";
+#elif defined(CNA_RENDERER_D3D11)
+    constexpr const char* kRendererName = "D3D11";
+#elif defined(CNA_RENDERER_D3D12)
+    constexpr const char* kRendererName = "D3D12";
+#elif defined(CNA_RENDERER_LLGL)
+    constexpr const char* kRendererName = "LLGL";
 #else
-#error "REMED-GFX-167: this backend has no declared deferred-source lifetime contract."
+#error "REMED-GFX-167: this renderer has no declared deferred-source lifetime contract."
 #endif
 
     /**
@@ -186,7 +186,7 @@ namespace
      * rather than asserted, exactly as the neighbouring render-target fixtures already do.
      */
     constexpr bool kRenderTargetCubeSupported =
-#if defined(CNA_BACKEND_SDL_RENDERER) || defined(CNA_BACKEND_HEADLESS)
+#if defined(CNA_RENDERER_SDL_RENDERER) || defined(CNA_RENDERER_HEADLESS)
         false;
 #else
         true;
@@ -270,7 +270,7 @@ class DeferredSourceLifetimeTest : public Game
         if (ok) ++passCount_;
     }
 
-    /** @brief Records something this backend genuinely cannot measure, and marks the run explained. */
+    /** @brief Records something this renderer genuinely cannot measure, and marks the run explained. */
     void boundary(const std::string& text)
     {
         boundaryDeclared_ = true;
@@ -325,7 +325,7 @@ class DeferredSourceLifetimeTest : public Game
      * @brief Reads the kBBW x kBBH backbuffer through the rectangle-LESS overload.
      *
      * REMED-GFX-165 is fixed: a rectangle-less GetBackBufferData now sizes its region from the
-     * authoritative PresentationParameters backbuffer, not the backend's live viewport, so a
+     * authoritative PresentationParameters backbuffer, not the renderer's live viewport, so a
      * correctly-sized W*H array reads the whole backbuffer on WebGPU and SDL_GPU too. This used to
      * name an explicit rectangle to avoid that defect; the workaround has been removed now that the
      * overload it worked around is correct.
@@ -343,12 +343,12 @@ class DeferredSourceLifetimeTest : public Game
     }
 
     /// True when the caller may assert on @p r. A declared-unreadable oracle is recorded as a
-    /// boundary rather than a failure, so a backend without the oracle still runs its other legs.
+    /// boundary rather than a failure, so a renderer without the oracle still runs its other legs.
     bool Readable(const Readback& r, const std::string& label)
     {
         if (!kRasterizes || !r.ok())
         {
-            boundary(label + ": oracle unavailable on " + kBackendName + " (" +
+            boundary(label + ": oracle unavailable on " + kRendererName + " (" +
                      (!kRasterizes ? "non-rasterizing"
                                    : (r.threwNotSupported ? "NotSupportedException" : r.otherWhat)) +
                      ") -- boundary recorded");
@@ -362,8 +362,8 @@ class DeferredSourceLifetimeTest : public Game
     using PatternFn = Color (*)(int, int);
 
     /// Asserts an 8x4-texel image reproduces @p want exactly, naming the failure shape rather than
-    /// only a count -- an all-poison result (a backend that wrote nothing) reads differently from
-    /// an all-zero one (a backend that DROPPED the queued draw), and the two mean different things.
+    /// only a count -- an all-poison result (a renderer that wrote nothing) reads differently from
+    /// an all-zero one (a renderer that DROPPED the queued draw), and the two mean different things.
     void CheckExact(const Readback& r, const std::string& label, PatternFn want)
     {
         int good = 0, poison = 0, zero = 0;
@@ -374,7 +374,7 @@ class DeferredSourceLifetimeTest : public Game
                 // The middle pixel of the block this source texel occupies. Both destination sizes
                 // this fixture uses give an odd block (1 for a render target, kBBBlock for the
                 // backbuffer), so this pixel's texture coordinate is exactly the texel centre and
-                // the comparison is byte-exact whatever the backend filters with.
+                // the comparison is byte-exact whatever the renderer filters with.
                 const int px = (x * r.w) / kPW + (r.w / kPW) / 2;
                 const int py = (y * r.h) / kPH + (r.h / kPH) / 2;
                 const Color& got = r.at(px, py);
@@ -404,7 +404,7 @@ class DeferredSourceLifetimeTest : public Game
      * no shading model at all.
      *
      * @p live must also carry real content: at least a quarter of its probed pixels differing from
-     * the opaque-black clear, so that a backend which renders nothing in BOTH runs -- the exact
+     * the opaque-black clear, so that a renderer which renders nothing in BOTH runs -- the exact
      * failure this is watching for -- cannot pass by being equally empty twice.
      */
     void CheckSameAndLively(const Readback& live, const Readback& dead, const std::string& label)
@@ -494,7 +494,7 @@ class DeferredSourceLifetimeTest : public Game
      * @brief Queues ONE stock-3D draw sampling @p src across the whole current destination.
      *
      * Configured so the output is the sampled texel unchanged: unit diffuse, no lighting, no vertex
-     * colour. On a backend that binds the wrong resource — or replays a freed one — this fails on
+     * colour. On a renderer that binds the wrong resource — or replays a freed one — this fails on
      * colour rather than on a tolerance.
      */
     void Consume3D(GraphicsDevice& dev, Texture2D* src)
@@ -581,7 +581,7 @@ class DeferredSourceLifetimeTest : public Game
      * @brief Leg A3 -- THE FINDING. A render target destroyed while its backbuffer draw is queued.
      *
      * This is the exact sequence that reproduced the SIGSEGV: no flush happens between the consumer
-     * draw and `a`'s destructor, so the queued command still carried a pointer to a freed backend
+     * draw and `a`'s destructor, so the queued command still carried a pointer to a freed renderer
      * when `Present()` replayed it.
      */
     void LegA3(GraphicsDevice& dev)
@@ -603,7 +603,7 @@ class DeferredSourceLifetimeTest : public Game
     /**
      * @brief Leg B1 -- render-target destination, source destroyed AFTER the unbind flushed it.
      *
-     * "After the flush" is only true for a backend that renders a render-target destination at
+     * "After the flush" is only true for a renderer that renders a render-target destination at
      * `SetRenderTarget()`. A WHOLE-FRAME-deferred recorder holds even this draw until Present, so
      * for it B1 is a dead-source case like the rest and belongs behind the same declaration.
      */
@@ -621,7 +621,7 @@ class DeferredSourceLifetimeTest : public Game
             Consume3D(dev, &a);
             dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
             ResetState(dev);
-        }   // <-- a backend that flushes at unbind has already consumed the draw here
+        }   // <-- a renderer that flushes at unbind has already consumed the draw here
         Readback r = ReadWholeTarget(dst, kPW, kPH);
         if (Readable(r, "B1"))
             CheckExact(r, "B1 source destroyed after the destination unbind is sampled correctly",
@@ -631,9 +631,9 @@ class DeferredSourceLifetimeTest : public Game
     /**
      * @brief Leg B2 -- render-target destination, source destroyed BEFORE the unbind.
      *
-     * B1's ordering lets a flush-at-unbind backend consume the draw while the source is still
+     * B1's ordering lets a flush-at-unbind renderer consume the draw while the source is still
      * alive, which is exactly how this defect stayed invisible in the pre-existing lifetime leg.
-     * Here the destructor runs first, so the queue outlives the source on EVERY backend.
+     * Here the destructor runs first, so the queue outlives the source on EVERY renderer.
      */
     void LegB2(GraphicsDevice& dev)
     {
@@ -725,7 +725,7 @@ class DeferredSourceLifetimeTest : public Game
     {
         if (!kRenderTargetCubeSupported)
         {
-            boundary(std::string("E1 ") + kBackendName + " has no render-into-a-cube path -- "
+            boundary(std::string("E1 ") + kRendererName + " has no render-into-a-cube path -- "
                      "declared, not measured");
             return;
         }
@@ -753,7 +753,7 @@ class DeferredSourceLifetimeTest : public Game
                 // family. A stride-20 VertexPositionTexture quad is silently routed to the plain
                 // textured family instead, which never binds the cube slot at all -- so this leg
                 // would "pass" while measuring nothing. Measured, not assumed: with stride 20 this
-                // leg passed even against the unfixed backend.
+                // leg passed even against the unfixed renderer.
                 VertexPositionNormalTexture q[6];
                 FillQuadWithNormals(q);
                 EnvironmentMapEffect fx(dev);
@@ -773,10 +773,10 @@ class DeferredSourceLifetimeTest : public Game
         }
         catch (const System::NotSupportedException& e)
         {
-            // A backend without a render-into-a-cube path says so through the public API. That is a
+            // A renderer without a render-into-a-cube path says so through the public API. That is a
             // declared capability boundary, not a lifetime result -- recorded rather than counted,
             // so this leg can never pass by quietly catching a real failure either.
-            boundary(std::string("E1 ") + kBackendName + " has no RenderTargetCube path (" +
+            boundary(std::string("E1 ") + kRendererName + " has no RenderTargetCube path (" +
                      e.what() + ") -- declared, not measured");
             return;
         }
@@ -877,7 +877,7 @@ class DeferredSourceLifetimeTest : public Game
         const int applied = probe.getMultiSampleCountProperty();
         if (applied <= 0)
         {
-            boundary(std::string("J1 ") + kBackendName + " applied multisample count " +
+            boundary(std::string("J1 ") + kRendererName + " applied multisample count " +
                      std::to_string(applied) + " for a requested 4 -- no MSAA resolve to measure");
             return;
         }
@@ -938,7 +938,7 @@ class DeferredSourceLifetimeTest : public Game
     {
         if (!kRenderTargetCubeSupported)
         {
-            boundary(std::string("E2 ") + kBackendName + " has no render-into-a-cube path -- "
+            boundary(std::string("E2 ") + kRendererName + " has no render-into-a-cube path -- "
                      "declared, not measured");
             return;
         }
@@ -978,7 +978,7 @@ class DeferredSourceLifetimeTest : public Game
             }
             catch (const System::NotSupportedException& e)
             {
-                boundary(std::string("E2 ") + kBackendName + " has no RenderTargetCube path (" +
+                boundary(std::string("E2 ") + kRendererName + " has no RenderTargetCube path (" +
                          e.what() + ") -- declared, not measured");
                 return;
             }
@@ -1098,7 +1098,7 @@ protected:
         {
             LegL1(dev, frame_);
             if (frame_ < 3) return;
-            std::printf("[INFO] %s: %d/%d checks passed\n", kBackendName, passCount_, totalCount_);
+            std::printf("[INFO] %s: %d/%d checks passed\n", kRendererName, passCount_, totalCount_);
             std::fflush(stdout);
             result_ = (passCount_ == totalCount_ && (totalCount_ > 0 || boundaryDeclared_)) ? 0 : 1;
             Exit();
@@ -1117,7 +1117,7 @@ protected:
         }
 
         std::printf("[INFO] REMED-GFX-167 deferred-source lifetime on %s (%dx%d pattern%s)\n",
-                    kBackendName, kPW, kPH,
+                    kRendererName, kPW, kPH,
                     onlyLeg_.empty() ? "" : (", leg " + onlyLeg_).c_str());
         std::fflush(stdout);
 
@@ -1169,9 +1169,9 @@ protected:
                               "still correct", PatternColor);
         }
 
-        std::printf("[INFO] %s: %d/%d checks passed\n", kBackendName, passCount_, totalCount_);
+        std::printf("[INFO] %s: %d/%d checks passed\n", kRendererName, passCount_, totalCount_);
         std::fflush(stdout);
-        // A leg may legitimately have nothing to measure on a backend that lacks the capability --
+        // A leg may legitimately have nothing to measure on a renderer that lacks the capability --
         // but only when it SAID so. A run that measured nothing and explained nothing is a failure.
         result_ = (passCount_ == totalCount_ && (totalCount_ > 0 || boundaryDeclared_)) ? 0 : 1;
         Exit();
@@ -1203,7 +1203,7 @@ public:
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
         gdm_->setPreferredBackBufferWidthProperty(kBBW);
         gdm_->setPreferredBackBufferHeightProperty(kBBH);
-        // Leg J1's subject is a MULTISAMPLED source, and on backends that tie render-target MSAA to
+        // Leg J1's subject is a MULTISAMPLED source, and on renderers that tie render-target MSAA to
         // the device's own sample count (Vulkan does) a render target can only engage it when the
         // backbuffer itself was created multisampled. Requested ONLY in J1's own child process --
         // the supervisor runs one leg per child -- so no other leg's measurement moves, and the

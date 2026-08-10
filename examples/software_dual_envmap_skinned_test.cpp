@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // plan_software.md Phase S9 (SOFTWARE-82): DualTextureEffect, EnvironmentMapEffect, and
-// SkinnedEffect support in the Software backend.
+// SkinnedEffect support in the Software renderer.
 //
 // None of these compute per-light diffuse lighting (design decision 6: no lighting engine in
 // v1) -- their "lit" base color is just vertexColor*diffuseColor*texture0, the same

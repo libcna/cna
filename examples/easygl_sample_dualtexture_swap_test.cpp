@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Task 498 (sample 2 of 4 new samples; EasyGL backend): a "reactive material" demo -- a static
+// Task 498 (sample 2 of 4 new samples; EasyGL renderer): a "reactive material" demo -- a static
 // full-screen DualTextureEffect quad whose Texture2 reference is swapped between two different
 // Texture2D objects based on Update()-driven game state (an early-game vs. late-game "palette
 // swap", a common real XNA gameplay pattern -- e.g. a damaged/healthy sprite variant). Proves the

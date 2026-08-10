@@ -67,8 +67,8 @@ void main()
 
     vec3 rgb = mix(baseColor, envSample.rgb * combinedAlpha, blendFactor)
              + envMapSpecularFresnelFactor.xyz * envSample.a * combinedAlpha;
-    // vFogFactor is "how much fog" (0 = none, 1 = full), matching this backend's own convention
-    // (see lit_textured3d.gl.frag.glsl) -- NOT the plain Vulkan backend's opposite "how much of
+    // vFogFactor is "how much fog" (0 = none, 1 = full), matching this renderer's own convention
+    // (see lit_textured3d.gl.frag.glsl) -- NOT the plain Vulkan renderer's opposite "how much of
     // the original colour to keep" convention its own env_map3d.vert.glsl computes it as.
     rgb = mix(rgb, fogColor.rgb, vFogFactor);
 

@@ -42,7 +42,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColorTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp"
 
-#include "CNA/Internal/Backends/Vulkan/VulkanVertexFormatHelper.hpp"
+#include "CNA/Internal/Renderers/Vulkan/VulkanVertexFormatHelper.hpp"
 
 #include <cstdint>
 #include <cstdio>
@@ -50,7 +50,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::Vulkan;
+using namespace CNA::Internal::Renderers::Vulkan;
 
 // ── Compact GPU vertex structs (packed, no vtable) ───────────────────────────
 

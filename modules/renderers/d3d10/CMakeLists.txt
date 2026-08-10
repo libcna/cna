@@ -3,5 +3,5 @@
 # (only d3d10core.dll); the real d3d10.dll/d3d10_1.dll come from Wine's own builtin, which
 # forward to d3d10core (overridden to DXVK's real implementation at the Wine-prefix level, not
 # a link-time concern).
-cna_add_renderer_backend()
-target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 d3d10 dxgi d3dcompiler)
+cna_add_renderer()
+target_link_libraries(${RENDERER_TARGET} PRIVATE SDL3::SDL3 d3d10 dxgi d3dcompiler)

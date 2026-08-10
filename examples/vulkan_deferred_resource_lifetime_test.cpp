@@ -7,7 +7,7 @@
 //   * dereference freed memory (heap-use-after-free -- run under ASan), nor
 //   * hand Vulkan a destroyed VkImageView / VkPipeline / VkQueryPool (validation lifetime VUIDs), nor
 //   * silently drop / alter the already-issued draw.
-// The draw was legitimately issued; a deferred backend must behave like an immediate one, i.e. the
+// The draw was legitimately issued; a deferred renderer must behave like an immediate one, i.e. the
 // resource is logically consumed the moment the public Draw()/SpriteBatch.End() returns.
 //
 // GFX-074 fixed the *destination* render-target identity (PurgeDeferredWorkForTarget). This pins the
@@ -344,7 +344,7 @@ protected:
         // S3 above contains `(void)readRt(*rtSrc)`, commented "force rtSrc content into its image".
         // That call is a FLUSH, and it is why S3 could not see REMED-GFX-166: it consumed rtSrc's
         // own producer work while rtSrc was still alive, so the destination-keyed purge in
-        // ~VulkanRenderTargetBackend had nothing left to drop. Its comment asserted the right thing
+        // ~VulkanRenderTargetRenderer had nothing left to drop. Its comment asserted the right thing
         // about the CONSUMER draw ("rtSrc is its SOURCE, not its destination") and missed that the
         // purge was removing rtSrc's PRODUCER instead -- after which the consumer sampled an image
         // nothing had written.
@@ -358,7 +358,7 @@ protected:
             dev.Clear(Color::Black);
             // A tint no other scene in this file uses, checked EXACTLY. Measured, not assumed: with
             // the loose IsBlue predicate and Color::Blue this scene PASSED against the unfixed
-            // backend, because a purged producer leaves the target's image UNDEFINED and the
+            // renderer, because a purged producer leaves the target's image UNDEFINED and the
             // recycled device memory happened to satisfy "blue enough". An exact, unique colour
             // cannot be produced by accident.
             const Color kS3bTint(bytecs(205), bytecs(145), bytecs(65), bytecs(255));
@@ -507,7 +507,7 @@ protected:
         }
 
         // --- S8: OcclusionQuery DESTROYED before Present (Phase 8). ----------------------------
-        // The deferred 3D draw stores a raw VulkanOcclusionQueryBackend* (read at record time).
+        // The deferred 3D draw stores a raw VulkanOcclusionQueryRenderer* (read at record time).
         // Destroying the query before Present must detach it (draw preserved) without dereferencing
         // freed memory. Result is intentionally unobservable after disposal; safety is the contract.
         {

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // SKIA-8: zero/minimized output, repeated physical resize, and presenter recovery.
 
-#include "CNA/Internal/Backends/Skia/SkiaGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaRenderer.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -12,8 +12,8 @@
 #include <stdexcept>
 #include <string>
 
-using CNA::Internal::Backends::CnaPresentationMode;
-using CNA::Internal::Backends::Skia::SkiaGraphicsBackend;
+using CNA::Internal::Renderers::CnaPresentationMode;
+using CNA::Internal::Renderers::Skia::SkiaRenderer;
 
 namespace
 {
@@ -34,12 +34,12 @@ namespace
         return pixel == expected;
     }
 
-    [[nodiscard]] bool ReadPixel(SkiaGraphicsBackend& backend, int x, int y,
+    [[nodiscard]] bool ReadPixel(SkiaRenderer& renderer, int x, int y,
                                  std::array<std::uint8_t, 4>& pixel)
     {
         try
         {
-            backend.ReadBackbuffer(x, y, 1, 1, pixel.data());
+            renderer.ReadBackbuffer(x, y, 1, 1, pixel.data());
             return true;
         }
         catch (const std::exception& exception)
@@ -69,15 +69,15 @@ int main()
 
     try
     {
-        SkiaGraphicsBackend backend(window, kVirtualWidth, kVirtualHeight,
+        SkiaRenderer renderer(window, kVirtualWidth, kVirtualHeight,
                                     CnaPresentationMode::FixedHeightDynamicWidth, 0);
         int initialOutputWidth = 0;
         int initialOutputHeight = 0;
         const bool initialOutput = SDL_GetRenderOutputSize(
-            backend.GetRendererInternal(), &initialOutputWidth, &initialOutputHeight);
+            renderer.GetRendererInternal(), &initialOutputWidth, &initialOutputHeight);
         int logicalWidth = 0;
         int logicalHeight = 0;
-        backend.GetViewportSize(logicalWidth, logicalHeight);
+        renderer.GetViewportSize(logicalWidth, logicalHeight);
         const int expectedInitialWidth = initialOutput && initialOutputHeight > 0
             ? static_cast<int>(static_cast<double>(initialOutputWidth) * kVirtualHeight
                                / initialOutputHeight + 0.5)
@@ -86,16 +86,16 @@ int main()
                   && logicalHeight == kVirtualHeight,
               "initial fixed-height raster follows the real renderer output");
 
-        backend.Clear(1.0f, 0.0f, 0.0f, 1.0f);
+        renderer.Clear(1.0f, 0.0f, 0.0f, 1.0f);
         std::array<std::uint8_t, 4> pixel{};
-        Check(ReadPixel(backend, logicalWidth - 1, logicalHeight - 1, pixel)
+        Check(ReadPixel(renderer, logicalWidth - 1, logicalHeight - 1, pixel)
                   && Same(pixel, {255, 0, 0, 255}),
               "initial raster contains an exact preserved sentinel");
 
         bool negativeOverrideRejected = false;
         try
         {
-            backend.DebugSetPresentationOutputSizeEXT(-1, 0);
+            renderer.DebugSetPresentationOutputSizeEXT(-1, 0);
         }
         catch (const std::out_of_range&)
         {
@@ -103,20 +103,20 @@ int main()
         }
         int unchangedWidth = 0;
         int unchangedHeight = 0;
-        backend.GetViewportSize(unchangedWidth, unchangedHeight);
+        renderer.GetViewportSize(unchangedWidth, unchangedHeight);
         Check(negativeOverrideRejected && unchangedWidth == logicalWidth
                   && unchangedHeight == logicalHeight,
               "invalid debug output dimensions reject without changing the live surface");
 
-        backend.DebugSetPresentationOutputSizeEXT(0, 0);
+        renderer.DebugSetPresentationOutputSizeEXT(0, 0);
         int zeroWidth = 0;
         int zeroHeight = 0;
-        backend.GetViewportSize(zeroWidth, zeroHeight);
+        renderer.GetViewportSize(zeroWidth, zeroHeight);
         Check(zeroWidth == logicalWidth && zeroHeight == logicalHeight,
               "0x0 minimized output preserves the last valid CPU surface dimensions");
-        backend.Present();
+        renderer.Present();
         pixel.fill(0);
-        Check(ReadPixel(backend, zeroWidth - 1, zeroHeight - 1, pixel)
+        Check(ReadPixel(renderer, zeroWidth - 1, zeroHeight - 1, pixel)
                   && Same(pixel, {255, 0, 0, 255}),
               "Present during 0x0 output preserves raster contents");
 
@@ -124,7 +124,7 @@ int main()
         bool hiddenPresent = true;
         try
         {
-            backend.Present();
+            renderer.Present();
         }
         catch (const std::exception& exception)
         {
@@ -135,17 +135,17 @@ int main()
         Check(SDL_ShowWindow(window) && SDL_SyncWindow(window),
               "hidden window returns to a synchronized visible state");
 
-        backend.DebugSetPresentationOutputSizeEXT(200, 100);
-        backend.GetViewportSize(logicalWidth, logicalHeight);
+        renderer.DebugSetPresentationOutputSizeEXT(200, 100);
+        renderer.GetViewportSize(logicalWidth, logicalHeight);
         Check(logicalWidth == 48 && logicalHeight == kVirtualHeight,
               "restored non-zero output recalculates and reallocates dynamic width");
-        backend.Clear(0.0f, 1.0f, 0.0f, 1.0f);
-        backend.Present();
+        renderer.Clear(0.0f, 1.0f, 0.0f, 1.0f);
+        renderer.Present();
         pixel.fill(0);
-        Check(ReadPixel(backend, logicalWidth - 1, logicalHeight - 1, pixel)
+        Check(ReadPixel(renderer, logicalWidth - 1, logicalHeight - 1, pixel)
                   && Same(pixel, {0, 255, 0, 255}),
               "restored output clears, presents, and reads the replacement raster exactly");
-        backend.DebugClearPresentationOutputSizeEXT();
+        renderer.DebugClearPresentationOutputSizeEXT();
 
         bool everyResizeMatched = true;
         bool everyResizeRendered = true;
@@ -163,24 +163,24 @@ int main()
 
             int outputWidth = 0;
             int outputHeight = 0;
-            if (!SDL_GetRenderOutputSize(backend.GetRendererInternal(), &outputWidth, &outputHeight)
+            if (!SDL_GetRenderOutputSize(renderer.GetRendererInternal(), &outputWidth, &outputHeight)
                 || outputWidth <= 0 || outputHeight <= 0)
             {
                 everyResizeMatched = false;
                 break;
             }
-            backend.GetViewportSize(logicalWidth, logicalHeight);
+            renderer.GetViewportSize(logicalWidth, logicalHeight);
             const int expectedWidth = static_cast<int>(
                 static_cast<double>(outputWidth) * kVirtualHeight / outputHeight + 0.5);
             everyResizeMatched = everyResizeMatched && logicalWidth == expectedWidth
                 && logicalHeight == kVirtualHeight;
 
             const float red = static_cast<float>(cycle + 1) / 8.0f;
-            backend.Clear(red, 0.0f, 1.0f - red, 1.0f);
-            backend.Present();
+            renderer.Clear(red, 0.0f, 1.0f - red, 1.0f);
+            renderer.Present();
             pixel.fill(0);
             everyResizeRendered = everyResizeRendered
-                && ReadPixel(backend, logicalWidth - 1, logicalHeight - 1, pixel)
+                && ReadPixel(renderer, logicalWidth - 1, logicalHeight - 1, pixel)
                 && pixel[3] == 255;
         }
         Check(everyResizeMatched,
@@ -189,15 +189,15 @@ int main()
               "every resized raster clears, presents, and reads its far corner safely");
 
         bool everyRecoveryPreserved = true;
-        backend.Clear(0.0f, 0.0f, 1.0f, 1.0f);
+        renderer.Clear(0.0f, 0.0f, 1.0f, 1.0f);
         for (int cycle = 0; cycle < 4; ++cycle)
         {
-            backend.DebugSimulateContextLoss();
+            renderer.DebugSimulateContextLoss();
             pixel.fill(0);
             everyRecoveryPreserved = everyRecoveryPreserved
-                && ReadPixel(backend, logicalWidth / 2, logicalHeight / 2, pixel)
+                && ReadPixel(renderer, logicalWidth / 2, logicalHeight / 2, pixel)
                 && Same(pixel, {0, 0, 255, 255});
-            backend.Present();
+            renderer.Present();
         }
         Check(everyRecoveryPreserved,
               "four presenter-loss recoveries preserve the live CPU raster and Present path");

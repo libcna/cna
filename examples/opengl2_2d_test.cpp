@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl2.md: end-to-end 2D vertical-slice proof for the native OpenGL 2.1 graphics backend
+// plan_opengl2.md: end-to-end 2D vertical-slice proof for the native OpenGL 2.1 graphics renderer
 // -- a real Texture2D upload and real SpriteBatch draws, verified with actual pixel readback
-// (OpenGL2GraphicsBackend::ReadBackbuffer), not just "didn't throw". Mirrors the shape of
+// (OpenGL2Renderer::ReadBackbuffer), not just "didn't throw". Mirrors the shape of
 // sdlgpu_2d_test.cpp/sdlgpu_samplerstate_test.cpp (checks on frame 1, then kTotalFrames of the
 // same scene to prove stability).
 //
@@ -47,7 +47,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 
-#include "CNA/Internal/Backends/OpenGL2/OpenGL2GraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/OpenGL2/OpenGL2Renderer.hpp"
 
 #include "common/PixelTestGame.hpp"
 
@@ -59,7 +59,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::OpenGL2;
+using namespace CNA::Internal::Renderers::OpenGL2;
 
 namespace
 {

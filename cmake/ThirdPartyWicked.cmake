@@ -1,4 +1,4 @@
-# Wicked Engine integration for the CNA WICKED graphics backend (plan_wicked.md).
+# Wicked Engine integration for the CNA WICKED graphics renderer (plan_wicked.md).
 #
 # CNA consumes exactly one layer of Wicked Engine: its render hardware interface,
 # `wi::graphics::GraphicsDevice` (plus `wi::shadercompiler`). None of the engine layers above it
@@ -6,7 +6,7 @@
 # runtime and only needs a device abstraction underneath it (plan_wicked.md design decision 1).
 #
 # The preferred input is a local Wicked Engine checkout:
-#   cmake -DCNA_GRAPHICS_BACKEND=WICKED -DCNA_WICKED_ROOT=/path/to/WickedEngine ...
+#   cmake -DCNA_GRAPHICS_RENDERER=WICKED -DCNA_WICKED_ROOT=/path/to/WickedEngine ...
 #
 # When CNA_WICKED_ROOT is empty and CNA_WICKED_AUTO_FETCH is ON, the pinned revision is cloned via
 # FetchContent. Auto-fetch defaults to OFF (unlike cmake/ThirdPartyWebGPU.cmake's small binary
@@ -36,7 +36,7 @@ set(CNA_WICKED_STAGING_FOOTPRINT_PATCH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patche
 # Wicked Engine's Unix platform layer is SDL2-only upstream: wiPlatform.h calls SDL2 window
 # functions unconditionally under PLATFORM_LINUX, and GraphicsDevice_Vulkan::CreateSwapChain has a
 # hard `#error PLATFORM NOT SUPPORTED` when neither _WIN32 nor SDL2 is defined. CNA is SDL3-only
-# and hands the backend an SDL3 window, and SDL2 and SDL3 cannot be loaded into one process (they
+# and hands the renderer an SDL3 window, and SDL2 and SDL3 cannot be loaded into one process (they
 # export the same symbol names with different ABIs), so the patch adds a parallel SDL3 branch
 # everywhere the SDL2 one exists (plan_wicked.md design decision 2).
 function(cna_wicked_check_sdl3_support _root)
@@ -170,7 +170,7 @@ function(cna_configure_wicked)
                 "Engine once and point CNA at it:\n"
                 "  git clone https://github.com/turanszkij/WickedEngine.git\n"
                 "  git -C WickedEngine checkout ${CNA_WICKED_COMMIT}\n"
-                "  cmake -DCNA_GRAPHICS_BACKEND=WICKED -DCNA_WICKED_ROOT=<path> ...\n"
+                "  cmake -DCNA_GRAPHICS_RENDERER=WICKED -DCNA_WICKED_ROOT=<path> ...\n"
                 "or configure with -DCNA_WICKED_AUTO_FETCH=ON to let CMake clone it (several GB).")
         endif()
 
@@ -197,7 +197,7 @@ function(cna_configure_wicked)
         cna_wicked_check_sdl3_support("${_root}")
         set(WICKED_USE_SDL3 ON CACHE BOOL "" FORCE)
     endif()
-    # Platform-independent: the Vulkan device is the one this backend selects everywhere
+    # Platform-independent: the Vulkan device is the one this renderer selects everywhere
     # (WICKED-60 keeps D3D12 unselectable), so its teardown fix applies on every platform.
     cna_wicked_check_device_teardown_fix("${_root}")
     # Equally platform-independent, and required by the WICKED-79/WICKED-80 staged-transfer

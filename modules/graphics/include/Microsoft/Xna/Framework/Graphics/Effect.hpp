@@ -9,7 +9,7 @@
 #include "CNA/CNAHelper.hpp"
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
 
-namespace CNA::Internal::Backends { struct GpuDrawParams; class IEffectBackend; }
+namespace CNA::Internal::Renderers { struct GpuDrawParams; class IEffectRenderer; }
 
 namespace Microsoft::Xna::Framework::Graphics
 {
@@ -142,7 +142,7 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Returns the GLSL vertex shader source if this is a source-based effect, or empty string.
          *
-         * Overridden by ShaderEffect. Used by backends to compile custom programs without
+         * Overridden by ShaderEffect. Used by renderers to compile custom programs without
          * a dependency on the concrete ShaderEffect type.
          */
         NOXNA [[nodiscard]] virtual const std::string& GetVertexSource() const;
@@ -150,25 +150,25 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Returns the GLSL fragment shader source if this is a source-based effect, or empty string.
          *
-         * Overridden by ShaderEffect. Used by backends to compile custom programs without
+         * Overridden by ShaderEffect. Used by renderers to compile custom programs without
          * a dependency on the concrete ShaderEffect type.
          */
         NOXNA [[nodiscard]] virtual const std::string& GetFragmentSource() const;
 
         /**
-         * @brief Returns the backend-specific compiled program for this effect, if it is a
+         * @brief Returns the renderer-specific compiled program for this effect, if it is a
          * source-based effect (e.g. ShaderEffect), or nullptr.
          *
-         * Overridden by ShaderEffect. Lets a backend (e.g. SpriteBatch) bind the SAME compiled
+         * Overridden by ShaderEffect. Lets a renderer (e.g. SpriteBatch) bind the SAME compiled
          * program the effect itself uses, instead of maintaining a redundant separate copy that
          * a caller's SetUniformXxx() calls would never actually reach.
          */
-        NOXNA [[nodiscard]] virtual CNA::Internal::Backends::IEffectBackend* GetEffectBackendPtr() const;
+        NOXNA [[nodiscard]] virtual CNA::Internal::Renderers::IEffectRenderer* GetEffectRendererPtr() const;
 
         /**
          * @brief Returns true only for an exact stock SpriteEffect instance.
          *
-         * Backend code can recognize the stock sprite alias without linking directly against the
+         * Renderer code can recognize the stock sprite alias without linking directly against the
          * concrete SpriteEffect RTTI. The base answer is false; SpriteEffect's override also
          * rejects derived runtime types so custom OnApply behavior is never silently discarded.
          */
@@ -180,14 +180,14 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Fills a GpuDrawParams struct with this effect's current render parameters.
          *
-         * Called by GraphicsDevice before every draw call so the backend can select the
+         * Called by GraphicsDevice before every draw call so the renderer can select the
          * correct shader variant and upload uniforms. Default implementation is a no-op;
          * concrete effect classes override it to populate texture, color, lighting, and
-         * other backend-relevant fields.
+         * other renderer-relevant fields.
          *
          * @param params Output struct to populate.
          */
-        NOXNA virtual void FillGpuDrawParams(CNA::Internal::Backends::GpuDrawParams& params) const;
+        NOXNA virtual void FillGpuDrawParams(CNA::Internal::Renderers::GpuDrawParams& params) const;
 
     protected:
         /**

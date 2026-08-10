@@ -4,7 +4,7 @@
 // content, closing the gap that row's own notes left open (mip regeneration was implemented and
 // reachable, but nothing asserted on what the generated levels actually contain).
 //
-// DiligentRenderTargetBackend::UnbindAsRenderTarget() (DiligentGraphicsBackend.cpp) calls
+// DiligentRenderTargetRenderer::UnbindAsRenderTarget() (DiligentRenderer.cpp) calls
 // IDeviceContext::GenerateMips(srv_) whenever a mipMap render target stops being the bound draw
 // target -- the same point FNA3D itself regenerates mips. This test proves that call performs a
 // real box-filter downsample, not a nearest-pixel copy or a silent no-op:
@@ -14,7 +14,7 @@
 //   PointClamp-sampled 1:1 so level 0's content is byte-exact, not itself a filtering artifact).
 //   Checkerboard means every aligned 2x2 block in level 0 contains exactly 2 Red + 2 Blue texels,
 //   so a CORRECT box-filter downsample must read back level 1 as a blended ~(128,0,128) at every
-//   texel -- neither pure Red nor pure Blue. A backend that silently used nearest-pixel sampling
+//   texel -- neither pure Red nor pure Blue. A renderer that silently used nearest-pixel sampling
 //   instead of averaging (or that left level 1 as stale/garbage/zeroed data) would read back
 //   something else: pure Red, pure Blue, or black. Level 2 (1x1) averages all 16 checkerboard
 //   texels (8 Red + 8 Blue), landing at the same ~(128,0,128) by the same reasoning.
@@ -160,7 +160,7 @@ protected:
             Check(exact, "level 0 is the exact checkerboard before unbinding");
         }
 
-        // Unbind: DiligentRenderTargetBackend::UnbindAsRenderTarget() regenerates mips here.
+        // Unbind: DiligentRenderTargetRenderer::UnbindAsRenderTarget() regenerates mips here.
         device.SetRenderTargets({});
 
         // Check B -- level 1 (2x2): every texel is a genuine Red/Blue blend.

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // REMED-GFX-140: every public render-target bind/unbind cycle is its own logical pass.
 //
-// A deferred backend may delay native submission for as long as it likes, but it must not merge
+// A deferred renderer may delay native submission for as long as it likes, but it must not merge
 // two logically distinct bind cycles into one native pass when the two cycles differ in load
 // action, clear operation, viewport, scissor or ordering. The sequence
 //
@@ -12,7 +12,7 @@
 //
 //     SetRenderTarget(A); Draw(...); Draw(...); SetRenderTarget(nullptr);
 //
-// `VulkanGraphicsBackend::RecordCommandBuffer` did exactly that: its Phase 1 collected ONE entry
+// `VulkanRenderer::RecordCommandBuffer` did exactly that: its Phase 1 collected ONE entry
 // per unique `VulkanRTSource` and replayed every queued sprite batch and 3D draw for that source
 // inside a single `vkCmdBeginRenderPass`/`vkCmdEndRenderPass`. Two bind cycles of one target in
 // one flush window therefore shared one load action.
@@ -22,7 +22,7 @@
 // Collapsing is INVISIBLE on a PreserveContents target: one LOAD pass containing both cycles'
 // draws produces exactly the same pixels as two LOAD passes. That is precisely why REMED-GFX-136
 // needed an artificial readback barrier (`Settle()`) before eleven of its preservation checks
-// could see a discarding backend at all. The shape that cannot be faked is a target whose SECOND
+// could see a discarding renderer at all. The shape that cannot be faked is a target whose SECOND
 // bind is supposed to throw the first bind's content away:
 //
 //     RT d(DiscardContents)
@@ -30,7 +30,7 @@
 //     bind d; paint a 2x2 marker only; unbind      // ... and must clear AGAIN here
 //     read d                                       // -> black everywhere but the marker
 //
-// A backend that collapses the two cycles clears once, then runs both draws, and returns the full
+// A renderer that collapses the two cycles clears once, then runs both draws, and returns the full
 // pattern with a marker on top. No flush, no readback and no Present sits between the two cycles:
 // the ONLY readback in each check happens after every command of that check is queued.
 //
@@ -46,7 +46,7 @@
 //   * An explicit Clear() inside a bind cycle -- REMED-GFX-129 records that Vulkan drops it on a
 //     PreserveContents target, because the clear colour is delivered ONLY through the render
 //     pass's load op and there is no vkCmdClearAttachments path. That is a SEPARATE defect from
-//     pass collapsing, so this file declares it per backend (`clearOnPreserveTarget`) and asserts
+//     pass collapsing, so this file declares it per renderer (`clearOnPreserveTarget`) and asserts
 //     the declared behaviour either way -- checks X1/X2 are the exact GFX-129 reproduction, kept
 //     here so GFX-140's fix can be re-measured against it rather than assumed to have covered it.
 //   * Clear ordering inside ONE cycle -- same root cause: a load-op-only clear necessarily runs
@@ -54,7 +54,7 @@
 //     Declared as `clearAfterDrawWins` and asserted, not glossed over.
 //
 // The palette is 0/255-only, an exact fixed point of sRGB encoding, so every comparison in this
-// file is byte-exact on every backend including sRGB ones.
+// file is byte-exact on every renderer including sRGB ones.
 //
 // Exit code 0 = all checks PASS, 1 = any FAIL.
 
@@ -105,7 +105,7 @@ namespace
     constexpr int kMsaaRequest = 4;  ///< Multisample count requested by the MSAA check.
 
     /**
-     * @brief What a rendered render target's public readback must do on this backend.
+     * @brief What a rendered render target's public readback must do on this renderer.
      *
      * `Exact` -- GetData returns the rendered surface byte for byte.
      * `Unsupported` -- GetData raises System::NotSupportedException with the caller's destination
@@ -117,7 +117,7 @@ namespace
         Unsupported,
     };
 
-    /// The complete, reviewed per-backend claim this file enforces.
+    /// The complete, reviewed per-renderer claim this file enforces.
     struct Contract
     {
         const char* name;
@@ -133,13 +133,13 @@ namespace
         bool    clearOnPreserveTarget;
         /**
          * A Clear() issued AFTER a draw inside the SAME bind cycle wipes that draw, per XNA's
-         * command order. False on a backend whose only clear mechanism is the pass load action.
+         * command order. False on a renderer whose only clear mechanism is the pass load action.
          */
         bool    clearAfterDrawWins;
         /**
          * Ask for a multisampled BACKBUFFER. Only true where that is the sole way a render target
-         * can engage MSAA at all: Vulkan gates `VulkanRenderTargetBackend`'s MSAA resources on the
-         * backend's own `sampleCount_`, so `multiSampleCount=4` on a target reports 0 unless the
+         * can engage MSAA at all: Vulkan gates `VulkanRenderTargetRenderer`'s MSAA resources on the
+         * renderer's own `sampleCount_`, so `multiSampleCount=4` on a target reports 0 unless the
          * device itself was created multisampled. Where this is true, check K1 REQUIRES the target
          * to come back with a real applied sample count -- an MSAA check that silently degraded to
          * single-sample would be a false positive.
@@ -147,9 +147,9 @@ namespace
         bool    preferMultiSampling;
         /**
          * REMED-GFX-140's own subject: every public bind/unbind cycle becomes its own logical pass
-         * here. False is a declared, still-open defect on that backend (recorded with its own
+         * here. False is a declared, still-open defect on that renderer (recorded with its own
          * finding); check S1 then asserts the COLLAPSED result, so it stays falsifiable in both
-         * directions and turns red the day the backend is fixed, and every other check that can
+         * directions and turns red the day the renderer is fixed, and every other check that can
          * only distinguish the two shapes reports a skip naming the reason rather than a failure
          * that belongs to a different task.
          */
@@ -158,7 +158,7 @@ namespace
          * A SpriteBatch fill honours a custom sub-Viewport, i.e. sprite coordinates are
          * VIEWPORT-LOCAL (FNA `SpriteBatch.PrepRenderState` builds its ortho from
          * `Viewport.Width/Height`). False where the fill covers the whole target regardless; that
-         * is a pre-existing viewport defect on that backend, not a pass-boundary one, so check S10
+         * is a pre-existing viewport defect on that renderer, not a pass-boundary one, so check S10
          * asserts the whole-target result there instead of failing for the wrong reason.
          */
         bool    spriteViewportIsLocal;
@@ -174,29 +174,29 @@ namespace
         bool    wantHiDefProfile;  ///< Request GraphicsProfile::HiDef.
     };
 
-#if defined(CNA_BACKEND_HEADLESS)
+#if defined(CNA_RENDERER_HEADLESS)
     // Headless rasterizes nothing, so it owns no colour to preserve or discard and its readback is
     // REMED-GFX-127/130's deterministic refusal. Every sequence must still be legal.
     constexpr Contract kContract{"HEADLESS", true, Support::Unsupported, true, Support::Unsupported,
                                  true, true, false, true, true, true, true, false};
-#elif defined(CNA_BACKEND_SOFTWARE)
+#elif defined(CNA_RENDERER_SOFTWARE)
     constexpr Contract kContract{"SOFTWARE", true, Support::Exact, false, Support::Unsupported,
                                  true, true, false, true, true, true, true, false};
-#elif defined(CNA_BACKEND_EASYGL)
+#elif defined(CNA_RENDERER_EASYGL)
     constexpr Contract kContract{"EASYGL", true, Support::Exact, true, Support::Exact,
                                  true, true, false, true, true, true, true, false};
-#elif defined(CNA_BACKEND_SKIA)
+#elif defined(CNA_RENDERER_SKIA)
     // Raster Skia gives every public bind cycle an immediate canvas boundary. Both target shapes
     // have exact level-zero readback; real MSAA remains a declared refusal and is not fabricated.
     constexpr Contract kContract{"SKIA", true, Support::Exact, true, Support::Exact,
                                  true, true, false, true, true, true, false, false};
-#elif defined(CNA_BACKEND_BGFX)
+#elif defined(CNA_RENDERER_BGFX)
     // `msaaTargetReadback` was false while a multisampled RenderTarget2D reported a successful
     // readback over untouched memory; REMED-GFX-154 fixed that, so K1/K2 measure pass boundaries on
     // a multisampled destination instead of skipping them.
     constexpr Contract kContract{"BGFX", true, Support::Exact, true, Support::Exact,
                                  true, true, false, true, false, true, true, false};
-#elif defined(CNA_BACKEND_VULKAN)
+#elif defined(CNA_RENDERER_VULKAN)
     // `clearOnPreserveTarget` / `clearAfterDrawWins` were BOTH false here while REMED-GFX-129 was
     // open: `GetOrCreateRTRenderPass` delivered the clear colour through VK_ATTACHMENT_LOAD_OP_CLEAR
     // only, and a PreserveContents target's pass uses LOAD_OP_LOAD. REMED-GFX-129 replaced that with
@@ -205,7 +205,7 @@ namespace
     // reproduction the finding was narrowed with.
     constexpr Contract kContract{"VULKAN", true, Support::Exact, true, Support::Exact,
                                  true, true, true, true, true, true, true, false};
-#elif defined(CNA_BACKEND_WEBGPU)
+#elif defined(CNA_RENDERER_WEBGPU)
     // `clearAfterDrawWins` was false while REMED-GFX-156 was open: wgpu delivers a clear colour
     // only through the render-pass load op, so a Clear() issued after a draw inside ONE cycle could
     // not wipe that draw (X3). REMED-GFX-156 put Clear into the ordered stream REMED-GFX-159 built
@@ -213,7 +213,7 @@ namespace
     // the fix landed, which is what turned this declaration over.
     constexpr Contract kContract{"WEBGPU", true, Support::Exact, true, Support::Exact,
                                  true, true, false, true, true, true, true, false};
-#elif defined(CNA_BACKEND_SDL_GPU)
+#elif defined(CNA_RENDERER_SDL_GPU)
     // `segmentsBindCycles` true since REMED-GFX-145. SdlGpu collapsed bind cycles exactly as Vulkan
     // did and for the same reason -- `EnsureFrameRendered` gave each DISTINCT `DrawTarget` one
     // `SDL_BeginGPURenderPass` holding every draw ever queued against it that frame -- and declared
@@ -226,28 +226,28 @@ namespace
     // SECOND cycle too, because that cycle is a real second pass with its own load op.
     constexpr Contract kContract{"SDL_GPU", true, Support::Exact, true, Support::Exact,
                                  true, true, false, true, true, true, true, false};
-#elif defined(CNA_BACKEND_SDL_RENDERER)
+#elif defined(CNA_RENDERER_SDL_RENDERER)
     constexpr Contract kContract{"SDL_RENDERER", true, Support::Exact, false, Support::Unsupported,
                                  true, true, false, true, false, true, true, false};
-#elif defined(CNA_BACKEND_ASCII)
+#elif defined(CNA_RENDERER_ASCII)
     constexpr Contract kContract{"ASCII", true, Support::Exact, false, Support::Unsupported,
                                  true, true, false, true, false, true, true, false};
-#elif defined(CNA_BACKEND_CANVAS)
+#elif defined(CNA_RENDERER_CANVAS)
     constexpr Contract kContract{"CANVAS", true, Support::Exact, false, Support::Unsupported,
                                  true, true, false, true, true, true, true, false};
-#elif defined(CNA_BACKEND_FREEDIRECT)
+#elif defined(CNA_RENDERER_FREEDIRECT)
     constexpr Contract kContract{"FREEDIRECT", true, Support::Exact, false, Support::Unsupported,
                                  true, true, false, true, false, false, true, false};
-#elif defined(CNA_BACKEND_D3D9)
+#elif defined(CNA_RENDERER_D3D9)
     constexpr Contract kContract{"D3D9", true, Support::Exact, true, Support::Exact,
                                  true, true, false, true, true, true, true, true};
-#elif defined(CNA_BACKEND_D3D11)
+#elif defined(CNA_RENDERER_D3D11)
     constexpr Contract kContract{"D3D11", true, Support::Exact, true, Support::Exact,
                                  true, true, false, true, true, true, true, false};
-#elif defined(CNA_BACKEND_D3D12)
+#elif defined(CNA_RENDERER_D3D12)
     constexpr Contract kContract{"D3D12", true, Support::Exact, true, Support::Exact,
                                  true, true, false, true, true, true, true, false};
-#elif defined(CNA_BACKEND_SOKOL)
+#elif defined(CNA_RENDERER_SOKOL)
     // plan_sokol.md SOKOL-25/26/38: both RenderTarget2D and RenderTargetCube can be created and
     // bound, and GetData() now works on both single-sample targets (a throwaway GL FBO around the
     // raw GL texture sg_gl_query_image_info() exposes), so readback/cubeReadback=Exact and every
@@ -265,13 +265,13 @@ namespace
     // command-ordered semantics exactly.
     constexpr Contract kContract{"SOKOL", true, Support::Exact, true, Support::Exact,
                                  true, true, false, true, true, true, false, false};
-#elif defined(CNA_BACKEND_LLGL)
+#elif defined(CNA_RENDERER_LLGL)
     // Commands are segmented in public target-transition order. Clear is an explicit ordered LLGL
     // command, and both 2D and cube targets resolve to textures with exact readback.
     constexpr Contract kContract{"LLGL", true, Support::Exact, false, Support::Unsupported,
                                  true, true, false, true, true, true, true, false};
 #else
-#error "REMED-GFX-140: this backend has no declared render-target pass-boundary contract."
+#error "REMED-GFX-140: this renderer has no declared render-target pass-boundary contract."
 #endif
 
     /// Destination pre-fill. Equals no pattern colour, no marker colour and not the discard colour.
@@ -369,14 +369,14 @@ class RenderTargetPassBoundaryTest : public Game
     /**
      * @brief Gate for a check that can only distinguish a real pass boundary from a collapsed one.
      *
-     * On a backend that declares `segmentsBindCycles == false` such a check would fail for a defect
-     * that belongs to that backend's own finding, not to this file's subject. Check S1 still runs
+     * On a renderer that declares `segmentsBindCycles == false` such a check would fail for a defect
+     * that belongs to that renderer's own finding, not to this file's subject. Check S1 still runs
      * there and asserts the collapsed shape, so the declaration remains falsifiable.
      */
     bool RequireSegments(const std::string& label)
     {
         if (kContract.segmentsBindCycles) return true;
-        skip(label + ": skipped -- this backend does not give every public bind cycle its own "
+        skip(label + ": skipped -- this renderer does not give every public bind cycle its own "
                      "logical pass (declared open defect)");
         return false;
     }
@@ -517,7 +517,7 @@ class RenderTargetPassBoundaryTest : public Game
         });
     }
 
-    /// Judges one probe against this backend's declared readback contract.
+    /// Judges one probe against this renderer's declared readback contract.
     void Judge(const Probe& p, Support required, const std::string& label)
     {
         const std::string facts =
@@ -583,7 +583,7 @@ class RenderTargetPassBoundaryTest : public Game
     /**
      * @brief S1 -- the decisive shape. Two DiscardContents cycles of ONE target, no barrier.
      *
-     * The second bind must discard the first cycle's whole pattern. A backend that collapses the
+     * The second bind must discard the first cycle's whole pattern. A renderer that collapses the
      * two cycles into one pass clears once and then runs both draws, returning the pattern with
      * the marker on top.
      */
@@ -599,7 +599,7 @@ class RenderTargetPassBoundaryTest : public Game
                   "discards the first cycle's content");
         else
             Judge(ProbeTarget(*rt, ExpectedWithMark(0, 0, 0, kPalette[2])), kContract.readback,
-                  "S1 same-target discard: this backend COLLAPSES the two bind cycles into one "
+                  "S1 same-target discard: this renderer COLLAPSES the two bind cycles into one "
                   "pass, so the first cycle's content survives (declared open defect)");
     }
 
@@ -750,7 +750,7 @@ class RenderTargetPassBoundaryTest : public Game
                   "only");
         else
             Judge(ProbeTarget(*a, Uniform(kPalette[2])), kContract.readback,
-                  "S10 viewport per cycle: this backend's SpriteBatch ignores a sub-Viewport, so "
+                  "S10 viewport per cycle: this renderer's SpriteBatch ignores a sub-Viewport, so "
                   "the second cycle covers the whole target -- what is asserted here is that the "
                   "first cycle's pattern is still gone");
     }
@@ -790,7 +790,7 @@ class RenderTargetPassBoundaryTest : public Game
                   "S11 scissor per cycle: the second cycle's scissor applies to that cycle only");
         else
             Judge(ProbeTarget(*a, Uniform(kPalette[2])), kContract.readback,
-                  "S11 scissor per cycle: this backend's SpriteBatch ignores ScissorRectangle, so "
+                  "S11 scissor per cycle: this renderer's SpriteBatch ignores ScissorRectangle, so "
                   "the second cycle covers the whole target -- what is asserted here is that the "
                   "first cycle's pattern is still gone");
     }
@@ -821,7 +821,7 @@ class RenderTargetPassBoundaryTest : public Game
     {
         if (!kContract.cubeTargets)
         {
-            skip("C1 cube A->B->A: skipped -- no RenderTargetCube on this backend");
+            skip("C1 cube A->B->A: skipped -- no RenderTargetCube on this renderer");
             return;
         }
         if (!RequireSegments("C1 cube A->B->A")) return;
@@ -842,7 +842,7 @@ class RenderTargetPassBoundaryTest : public Game
     {
         if (!kContract.cubeTargets)
         {
-            skip("C2 cube preserve A->B->A: skipped -- no RenderTargetCube on this backend");
+            skip("C2 cube preserve A->B->A: skipped -- no RenderTargetCube on this renderer");
             return;
         }
         RenderTargetCube cube(dev, kRT, false, SurfaceFormat::Color, DepthFormat::None, 0,
@@ -862,10 +862,10 @@ class RenderTargetPassBoundaryTest : public Game
     // =====================================================================
 
     /**
-     * @brief Binds two colour attachments, or reports that this backend refuses to.
+     * @brief Binds two colour attachments, or reports that this renderer refuses to.
      *
      * `SupportsCapability(MultipleRenderTargets)` cannot be trusted as the gate: it has no override
-     * on any backend and `IGraphicsBackend`'s default answers true, so Software (whose
+     * on any renderer and `IGraphicsRenderer`'s default answers true, so Software (whose
      * `SetRenderTargets` throws outright) claims MRT support. The only honest probe is the bind
      * itself, with the backbuffer restored if it fails.
      */
@@ -889,7 +889,7 @@ class RenderTargetPassBoundaryTest : public Game
     {
         if (kContract.readback != Support::Exact)
         {
-            skip("M1 MRT cycles: skipped -- no readback on this backend");
+            skip("M1 MRT cycles: skipped -- no readback on this renderer");
             return;
         }
         if (!RequireSegments("M1 MRT cycles")) return;
@@ -898,7 +898,7 @@ class RenderTargetPassBoundaryTest : public Game
 
         if (!TryBindMrt(dev, *a, *b))
         {
-            skip("M1 MRT cycles: skipped -- this backend refuses two simultaneous render targets");
+            skip("M1 MRT cycles: skipped -- this renderer refuses two simultaneous render targets");
             return;
         }
         DrawPattern(0);
@@ -918,7 +918,7 @@ class RenderTargetPassBoundaryTest : public Game
     {
         if (kContract.readback != Support::Exact)
         {
-            skip("M2 MRT attachment set: skipped -- no readback on this backend");
+            skip("M2 MRT attachment set: skipped -- no readback on this renderer");
             return;
         }
         if (!RequireSegments("M2 MRT attachment set")) return;
@@ -928,7 +928,7 @@ class RenderTargetPassBoundaryTest : public Game
 
         if (!TryBindMrt(dev, *a, *b))
         {
-            skip("M2 MRT attachment set: skipped -- this backend refuses two simultaneous render "
+            skip("M2 MRT attachment set: skipped -- this renderer refuses two simultaneous render "
                  "targets");
             return;
         }
@@ -945,7 +945,7 @@ class RenderTargetPassBoundaryTest : public Game
               "logical pass for the first");
         // The 2D sprite pipeline writes colour attachment 0 only, so b holds exactly what ITS own
         // bind cycle's load action left -- a single uniform colour, whose exact value is the
-        // backend's own choice of what an unwritten extra attachment ends up as and is deliberately
+        // renderer's own choice of what an unwritten extra attachment ends up as and is deliberately
         // not asserted here. What IS asserted is that the SECOND cycle, which does not include b,
         // never reaches into it: a marker or a pattern texel showing up would mean the attachment
         // set leaked across the boundary.
@@ -974,7 +974,7 @@ class RenderTargetPassBoundaryTest : public Game
      * @brief K1 -- two bind cycles of a MULTISAMPLED DiscardContents target.
      *
      * The resolve of each segment must complete before the next segment loads, and the final
-     * readback must see the resolved single-sample content of the LAST cycle only. A backend where
+     * readback must see the resolved single-sample content of the LAST cycle only. A renderer where
      * `MultiSampleCount` comes back 0 never engaged MSAA (Vulkan only multisamples a render target
      * when the BACKBUFFER was created multisampled) -- that is reported, and the single-sample
      * segmentation assertion still runs.
@@ -983,7 +983,7 @@ class RenderTargetPassBoundaryTest : public Game
     {
         if (kContract.readback != Support::Exact || !kContract.msaaTargetReadback)
         {
-            skip("K1 MSAA cycles: skipped -- this backend has no honest readback of a multisampled "
+            skip("K1 MSAA cycles: skipped -- this renderer has no honest readback of a multisampled "
                  "render target");
             return;
         }
@@ -992,7 +992,7 @@ class RenderTargetPassBoundaryTest : public Game
         const int applied = a->getMultiSampleCountProperty();
         if (kContract.preferMultiSampling)
             check(applied > 1,
-                  "K1 MSAA cycles: this backend declares that a multisampled backbuffer engages "
+                  "K1 MSAA cycles: this renderer declares that a multisampled backbuffer engages "
                   "render-target MSAA, so the target must report a real applied sample count "
                   "[applied=" + std::to_string(applied) + "]");
         CyclePattern(dev, *a, 0);
@@ -1026,7 +1026,7 @@ class RenderTargetPassBoundaryTest : public Game
     {
         if (kContract.readback != Support::Exact)
         {
-            skip("X1 GFX-129 single cycle: skipped -- no readback on this backend");
+            skip("X1 GFX-129 single cycle: skipped -- no readback on this renderer");
             return;
         }
         auto rt = MakeTarget(dev, RenderTargetUsage::PreserveContents);
@@ -1063,7 +1063,7 @@ class RenderTargetPassBoundaryTest : public Game
     {
         if (kContract.readback != Support::Exact)
         {
-            skip("X2 GFX-129 second cycle: skipped -- no readback on this backend");
+            skip("X2 GFX-129 second cycle: skipped -- no readback on this renderer");
             return;
         }
         if (!RequireSegments("X2 GFX-129 second cycle")) return;
@@ -1103,7 +1103,7 @@ class RenderTargetPassBoundaryTest : public Game
     {
         if (kContract.readback != Support::Exact)
         {
-            skip("X3 clear after draw: skipped -- no readback on this backend");
+            skip("X3 clear after draw: skipped -- no readback on this renderer");
             return;
         }
         auto rt = MakeTarget(dev, RenderTargetUsage::DiscardContents);
@@ -1127,7 +1127,7 @@ class RenderTargetPassBoundaryTest : public Game
                 if (Same(p.dest[i], loadOpOnly[i])) ++exactLoadOpOnly;
             check(!p.threwNotSupported && !p.threwSomethingElse &&
                       exactLoadOpOnly == p.dest.size(),
-                  "X3 clear after draw: this backend's only clear mechanism is the pass load "
+                  "X3 clear after draw: this renderer's only clear mechanism is the pass load "
                   "action, so the earlier draw survives (recorded, same root cause as GFX-129) -- "
                   "exactLoadOpOnly=" + std::to_string(exactLoadOpOnly) + "/" +
                       std::to_string(p.dest.size()));
@@ -1143,14 +1143,14 @@ class RenderTargetPassBoundaryTest : public Game
      *        being created.
      *
      * The assertion is behavioural, not a memory measurement: after many segments the same
-     * sequence must still produce the same exact pixels. A backend that keyed a cache on a segment
+     * sequence must still produce the same exact pixels. A renderer that keyed a cache on a segment
      * identity would either grow without bound or start missing.
      */
     void RunRepeatedSegments(GraphicsDevice& dev)
     {
         if (kContract.readback != Support::Exact)
         {
-            skip("R1 repetition: skipped -- no readback on this backend");
+            skip("R1 repetition: skipped -- no readback on this renderer");
             return;
         }
         if (!RequireSegments("R1 repetition")) return;
@@ -1178,7 +1178,7 @@ class RenderTargetPassBoundaryTest : public Game
      * @brief Queues P1/P2/P3's work and then lets the frame END.
      *
      * Every other check in this file reaches the recorder through a readback, which on a deferred
-     * backend may flush ONE target at a time and therefore hide anything that only goes wrong when
+     * renderer may flush ONE target at a time and therefore hide anything that only goes wrong when
      * several targets' passes are recorded into the SAME command buffer. These three targets are
      * left entirely un-read until the next frame, so their passes are recorded by the ordinary
      * Present path, in one command buffer, in one submission.
@@ -1196,7 +1196,7 @@ class RenderTargetPassBoundaryTest : public Game
         // texture differs -- so pa_/pb_/pc_ cannot see a shared vertex arena whose cursor restarts
         // per pass being overwritten between them. These two differ in GEOMETRY: if one pass's
         // vertices were replaced by a later pass's before the queue was submitted, the marker
-        // would land in the wrong corner. P6 makes the same measurement, but only on a backend
+        // would land in the wrong corner. P6 makes the same measurement, but only on a renderer
         // that can read its backbuffer -- SdlGpu cannot, so that route skips there and this one,
         // riding the ordinary Present path, is the only place the question gets asked
         // (REMED-GFX-145's own false-positive audit).
@@ -1211,7 +1211,7 @@ class RenderTargetPassBoundaryTest : public Game
     {
         if (kContract.readback != Support::Exact)
         {
-            skip("P1 present path: skipped -- no readback on this backend");
+            skip("P1 present path: skipped -- no readback on this renderer");
             return;
         }
         if (!RequireSegments("P1 present path")) return;
@@ -1247,7 +1247,7 @@ class RenderTargetPassBoundaryTest : public Game
     {
         if (kContract.readback != Support::Exact)
         {
-            skip("P4 shared command buffer: skipped -- no readback on this backend");
+            skip("P4 shared command buffer: skipped -- no readback on this renderer");
             return;
         }
         if (!RequireSegments("P4 shared command buffer")) return;
@@ -1266,7 +1266,7 @@ class RenderTargetPassBoundaryTest : public Game
         catch (...) { backbufferReadable = false; }
         if (!backbufferReadable)
         {
-            skip("P4 shared command buffer: skipped -- this backend cannot read the backbuffer, so "
+            skip("P4 shared command buffer: skipped -- this renderer cannot read the backbuffer, so "
                  "the full record cannot be forced without naming a target");
             return;
         }
@@ -1311,7 +1311,7 @@ class RenderTargetPassBoundaryTest : public Game
     {
         if (kContract.readback != Support::Exact)
         {
-            skip("R2 across frames: skipped -- no readback on this backend");
+            skip("R2 across frames: skipped -- no readback on this renderer");
             return;
         }
         auto a = MakeTarget(dev, RenderTargetUsage::PreserveContents);
@@ -1380,11 +1380,11 @@ protected:
         phase_ = 2;
 
         auto& dev = getGraphicsDeviceProperty();
-        std::printf("REMED-GFX-140 render-target pass boundaries -- backend %s\n", kContract.name);
+        std::printf("REMED-GFX-140 render-target pass boundaries -- renderer %s\n", kContract.name);
 
         if (!kContract.rt2dTargets)
         {
-            skip("no RenderTarget2D on this backend -- nothing to segment");
+            skip("no RenderTarget2D on this renderer -- nothing to segment");
             phase_ = 3;
             std::printf("%d/%d checks passed on %s\n", passCount_, totalCount_, kContract.name);
             result_ = (passCount_ == totalCount_) ? 0 : 1;

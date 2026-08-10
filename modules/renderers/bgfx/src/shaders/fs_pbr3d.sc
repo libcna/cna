@@ -3,7 +3,7 @@ $input v_texcoord0, v_normal, v_tangent, v_worldPos, v_fogFactor
 #include <bgfx_shader.sh>
 
 // plan_cnj.md CNB-58/60 (Phase 13A), Bgfx port: PbrEffect's fragment stage. Mirrors
-// EasyGLGraphicsBackend::EnsurePbrProgram()'s PbrLight()/main() exactly (real glTF 2.0 reference
+// EasyGLRenderer::EnsurePbrProgram()'s PbrLight()/main() exactly (real glTF 2.0 reference
 // BRDF -- GGX/Trowbridge-Reitz D, Smith-Schlick-GGX visibility, Schlick Fresnel, glTF Appendix
 // B.3.2-B.3.4) -- see that function's own doc comment for the full rationale, and
 // EnsureDefaultFlatNormalTexture()'s for why each of the 4 additional PBR maps needs its own

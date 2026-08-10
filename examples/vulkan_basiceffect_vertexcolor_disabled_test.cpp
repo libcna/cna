@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // Task 364: BasicEffect pixel test — VertexColorEnabled=false, no texture, diffuse color only
-// (Vulkan backend).
+// (Vulkan renderer).
 //
 // See examples/easygl_basiceffect_vertexcolor_disabled_test.cpp for the full FNA-derived
 // expected-output derivation. Summary: with LightingEnabled=false, TextureEnabled=false and

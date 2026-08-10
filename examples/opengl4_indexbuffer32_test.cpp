@@ -1,21 +1,21 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl4.md GL4-31: real 32-bit index buffer support for the OpenGL4 graphics backend --
+// plan_opengl4.md GL4-31: real 32-bit index buffer support for the OpenGL4 graphics renderer --
 // discovered as a separate, newly-found gap while scoping GL4-27 (`baseVertex`), not attempted
-// there since it needed real new work: `OpenGL4IndexBufferBackend::IsThirtyTwoBit()` was
+// there since it needed real new work: `OpenGL4IndexBufferRenderer::IsThirtyTwoBit()` was
 // unconditionally `false`, `CreateIndexBuffer32` wasn't overridden (silently fell back to a
-// 16-bit buffer via the `IGraphicsBackend` default), and every index-buffer draw path hardcoded
-// `GL_UNSIGNED_SHORT`/`sizeof(uint16_t)` -- this backend had no 32-bit index buffer support at
-// all, unlike every other established backend.
+// 16-bit buffer via the `IGraphicsRenderer` default), and every index-buffer draw path hardcoded
+// `GL_UNSIGNED_SHORT`/`sizeof(uint16_t)` -- this renderer had no 32-bit index buffer support at
+// all, unlike every other established renderer.
 //
-// Fixed by: `OpenGL4IndexBufferBackend` gained a `thirtyTwoBit_` flag (set at construction),
+// Fixed by: `OpenGL4IndexBufferRenderer` gained a `thirtyTwoBit_` flag (set at construction),
 // real `SetData32`/`SetData32WithOptions` overrides (`GL_UNSIGNED_INT` storage instead of
 // `GL_UNSIGNED_SHORT`), and `IsThirtyTwoBit()` now reports the real flag instead of a hardcoded
-// `false`. `OpenGL4GraphicsBackend::CreateIndexBuffer32()` is now overridden (previously fell
+// `false`. `OpenGL4Renderer::CreateIndexBuffer32()` is now overridden (previously fell
 // back to `CreateIndexBuffer16`). Every index-buffer draw call site
-// (`DrawIndexedPrimitivesEx`'s `customEffectBackend` branch and its normal
+// (`DrawIndexedPrimitivesEx`'s `customEffectRenderer` branch and its normal
 // `BindProgramForStride` branch, `DrawIndexedColoredPrimitives`) now selects
 // `GL_UNSIGNED_INT`/`sizeof(uint32_t)` vs `GL_UNSIGNED_SHORT`/`sizeof(uint16_t)` from
-// `IIndexBufferBackend::IsThirtyTwoBit()` instead of hardcoding the 16-bit path.
+// `IIndexBufferRenderer::IsThirtyTwoBit()` instead of hardcoding the 16-bit path.
 //
 // Combines the same shared-vertex-buffer/two-draws methodology `OpenGL4_BaseVertex`
 // (`opengl4_basevertex_test.cpp`, GL4-27) already established, but with a real

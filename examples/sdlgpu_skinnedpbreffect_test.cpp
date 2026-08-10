@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// PBR + skinning combo proof for the SDL_GPU graphics backend (SdlGpuGraphicsBackend::
+// PBR + skinning combo proof for the SDL_GPU graphics renderer (SdlGpuRenderer::
 // CreatePbrResources()'s pbrSkinnedVertexShader_/pbr_skinned3d.vert.glsl) -- proves the stride-68
 // VertexPositionNormalTangentTextureSkinned layout, the bone-palette skin transform applied to
 // Position/Normal/Tangent, and pbr3d.frag.glsl's shared BRDF fragment stage all work end-to-end.

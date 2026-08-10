@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Task 888: AlphaTestEffect linear fog pixel integration test — Bgfx backend.
+// Task 888: AlphaTestEffect linear fog pixel integration test — Bgfx renderer.
 //
 // Fog was a total GPU no-op on Bgfx for AlphaTestEffect (Task 378's finding). Fixed by adding
 // u_fogColor/u_fogParams uniforms (shared by every 3D program) and the standard fog blend to
@@ -20,7 +20,7 @@
 // texture (identity factor) and AlphaTestEffect's own default AlphaFunction=Greater/
 // ReferenceAlpha=0 (always passes here since combined alpha is always 1.0), isolating the fog
 // blend from the alpha-test discard logic entirely. Same z-sweep and expected values as
-// examples/easygl_alphatest_fog_test.cpp (Bgfx's OpenGL backend uses the same [-1,1] clip-space Z
+// examples/easygl_alphatest_fog_test.cpp (Bgfx's OpenGL renderer uses the same [-1,1] clip-space Z
 // range as EasyGL, unlike Vulkan's [0,1]).
 //
 // Bgfx-only note (Task 364/896 finding): RasterizerState::CullNone is required, matching every

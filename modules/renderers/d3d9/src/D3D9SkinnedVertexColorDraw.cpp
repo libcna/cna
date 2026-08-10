@@ -2,7 +2,7 @@
 // D3D9 skinned-vertex-color porting task: real DrawPrimitivesEx/DrawIndexedPrimitivesEx dispatch
 // for CNA's own NOXNA "SkinnedVertexColor3D" shader (stride 56 -- SkinnedEffect + a vertex Color
 // real XNA's own compiled SkinnedEffect.fx bytecode never carries), porting
-// EasyGLGraphicsBackend.cpp's EnsureSkinnedProgram() vertex-color wiring (aColor/vColor/
+// EasyGLRenderer.cpp's EnsureSkinnedProgram() vertex-color wiring (aColor/vColor/
 // uVertexColorEnabled, multiplied into the combined diffuse+specular output AFTER the specular add)
 // to real vs_3_0/ps_3_0 bytecode (shaders/cna/SkinnedVertexColor3D.hlsl -- see that file's own
 // header comment for the SM3 justification and the documented World-normal-transform deviation
@@ -20,11 +20,11 @@
 // D3DDisassemble()-verified register table (D3D9CnaShaderRegisters.hpp) -- see D3D9PbrDraw.cpp's
 // own header comment for why (the World-register-count trap this avoids).
 
-#include "CNA/Internal/Backends/D3D9/D3D9GraphicsBackend.hpp"
-#include "CNA/Internal/Backends/D3D9/D3D9Buffers.hpp"
-#include "CNA/Internal/Backends/D3D9/D3D9Textures.hpp"
-#include "CNA/Internal/Backends/D3D9/D3D9RenderTargets.hpp"
-#include "CNA/Internal/Backends/D3D9/D3D9ConstantUpload.hpp"
+#include "CNA/Internal/Renderers/D3D9/D3D9Renderer.hpp"
+#include "CNA/Internal/Renderers/D3D9/D3D9Buffers.hpp"
+#include "CNA/Internal/Renderers/D3D9/D3D9Textures.hpp"
+#include "CNA/Internal/Renderers/D3D9/D3D9RenderTargets.hpp"
+#include "CNA/Internal/Renderers/D3D9/D3D9ConstantUpload.hpp"
 #include "shaders/d3d9_skinned_vertex_color_shader.hpp"
 #include "shaders/D3D9CnaShaderRegisters.hpp"
 
@@ -35,7 +35,7 @@
 #include <string>
 #include <vector>
 
-namespace CNA::Internal::Backends::D3D9
+namespace CNA::Internal::Renderers::D3D9
 {
     using Microsoft::Xna::Framework::Matrix;
 
@@ -62,12 +62,12 @@ namespace CNA::Internal::Backends::D3D9
 
         // Duplicated locally per this codebase's own established per-file convention -- see
         // D3D9PbrDraw.cpp's own identical copy for the precedent citation.
-        IDirect3DTexture9* ResolveD3D9TextureEXT(const ITextureBackend* tex)
+        IDirect3DTexture9* ResolveD3D9TextureEXT(const ITextureRenderer* tex)
         {
             if (tex == nullptr) return nullptr;
-            if (const auto* t = dynamic_cast<const D3D9TextureBackend*>(tex))
+            if (const auto* t = dynamic_cast<const D3D9TextureRenderer*>(tex))
                 return t->GetTextureEXT();
-            if (const auto* rt = dynamic_cast<const D3D9RenderTargetBackend*>(tex))
+            if (const auto* rt = dynamic_cast<const D3D9RenderTargetRenderer*>(tex))
                 return rt->GetTextureEXT();
             return nullptr;
         }
@@ -103,8 +103,8 @@ namespace CNA::Internal::Backends::D3D9
         }
     }
 
-    void D3D9GraphicsBackend::DrawSkinnedVertexColorEXT(
-        const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
+    void D3D9Renderer::DrawSkinnedVertexColorEXT(
+        const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
         const Matrix& world, const Matrix& view, const Matrix& projection,
         PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
     {
@@ -112,7 +112,7 @@ namespace CNA::Internal::Backends::D3D9
 
         if (!params.texture0)
             throw std::runtime_error(
-                "D3D9GraphicsBackend::DrawPrimitivesEx (SkinnedVertexColor3D): requires non-null "
+                "D3D9Renderer::DrawPrimitivesEx (SkinnedVertexColor3D): requires non-null "
                 "texture0 (matches DrawSkinnedEffectEXT's own identical requirement)");
 
         if (!skinnedVertexColorVS_)
@@ -178,12 +178,12 @@ namespace CNA::Internal::Backends::D3D9
         device_->SetTexture(0, ResolveD3D9TextureEXT(params.texture0));
 
         device_->SetVertexDeclaration(GetOrCreateVertexDeclarationEXT(56));
-        const auto& d3dVb = static_cast<const D3D9VertexBufferBackend&>(vb);
+        const auto& d3dVb = static_cast<const D3D9VertexBufferRenderer&>(vb);
         device_->SetStreamSource(0, d3dVb.GetBufferEXT(), 0, 56);
 
         if (ib)
         {
-            const auto& d3dIb = static_cast<const D3D9IndexBufferBackend&>(*ib);
+            const auto& d3dIb = static_cast<const D3D9IndexBufferRenderer&>(*ib);
             device_->SetIndices(d3dIb.GetBufferEXT());
             // REMED-GFX-060: honor DrawIndexedPrimitives baseVertex/startIndex (was hardcoded
             // BaseVertexIndex=0/StartIndex=0). NumVertices is the vertex-buffer remainder from

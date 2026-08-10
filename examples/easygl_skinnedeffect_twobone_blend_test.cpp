@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Task 408: pixel test for SkinnedEffect's two-bone weighted blend (EasyGL backend).
+// Task 408: pixel test for SkinnedEffect's two-bone weighted blend (EasyGL renderer).
 //
 // Confirms FNA's real Skin(vin, boneCount) formula for boneCount=2:
 //   skinMat = Bones[Indices[0]] * Weights[0] + Bones[Indices[1]] * Weights[1]

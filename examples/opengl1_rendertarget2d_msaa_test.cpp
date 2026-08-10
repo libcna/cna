@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// OPENGL1 backend: RenderTarget2D MSAA (plan_opengl1.md item 25, further improvement beyond
+// OPENGL1 renderer: RenderTarget2D MSAA (plan_opengl1.md item 25, further improvement beyond
 // EasyGL parity).
 //
 // Before this, GetMultiSampleCount() was hardcoded 0 and the multiSampleCount constructor
@@ -19,7 +19,7 @@
 // that raw glReadPixels from a driver-confirmed multisample GLX *window* visual reads back
 // perfectly binary on this sandbox's Mesa llvmpipe software rasterizer (a real environment
 // limitation in implicit resolve-on-read for the window-system default framebuffer). This
-// render-target path is different: it uses this backend's OWN EXPLICIT glBlitFramebuffer resolve
+// render-target path is different: it uses this renderer's OWN EXPLICIT glBlitFramebuffer resolve
 // rather than relying on any driver-implicit resolve, and empirically DOES produce a real,
 // exactly-mid-value blended pixel at the edge on this same sandbox (confirmed: R=128 exactly,
 // neither the fully-covered R=255 nor the uncovered R=0 -- reliable enough to assert here, unlike

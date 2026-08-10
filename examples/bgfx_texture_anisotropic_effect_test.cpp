@@ -10,7 +10,7 @@
 // does not apply -- no RunCheck()-style restructuring needed.
 //
 // Per Task 299's own audit: Bgfx enables its ANISOTROPIC sampler flags (BGFX_SAMPLER_*_ANISOTROPIC)
-// but the requested MaxAnisotropy level itself is unused in BgfxGraphicsBackend::ApplySamplerState
+// but the requested MaxAnisotropy level itself is unused in BgfxRenderer::ApplySamplerState
 // (the actual clamp level is device/driver-determined by the flag alone, not a queried/clamped
 // numeric value like Vulkan's real VkPhysicalDeviceProperties::limits.maxSamplerAnisotropy path).
 // A true visual anisotropic-quality pixel test is inherently driver-dependent and fragile to assert
@@ -143,7 +143,7 @@ protected:
             if (isBlack)
             {
                 std::printf("[INFO] Sample is solid black -- a mipmap-incomplete-texture symptom if this\n"
-                            "       backend requires a complete mip chain for Anisotropic. Not a failure of\n"
+                            "       renderer requires a complete mip chain for Anisotropic. Not a failure of\n"
                             "       THIS test's real ask (does extreme MaxAnisotropy crash?).\n");
             }
             else if (isBlended)

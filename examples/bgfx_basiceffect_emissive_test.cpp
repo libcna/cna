@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MS-PL
 // Task 369: BasicEffect pixel test — DiffuseColor + EmissiveColor combination with
-// LightingEnabled=false (Bgfx backend).
+// LightingEnabled=false (Bgfx renderer).
 //
 // See examples/easygl_basiceffect_emissive_test.cpp for the full FNA-derived expected-output
 // derivation and for the `EmissiveColor`-dropped bug this test found and fixed in the shared
-// `BasicEffect::FillGpuDrawParams()` (common C++ code — one fix covers all 3 backends, no shader
+// `BasicEffect::FillGpuDrawParams()` (common C++ code — one fix covers all 3 renderers, no shader
 // changes needed for this specific no-lighting case).
 //
 // Per Task 364's finding (tracked as Task 884, not fixed there or here): Bgfx's default
-// RasterizerState cull state (`BGFX_STATE_CULL_CCW`) is the only one of the 3 backends that
+// RasterizerState cull state (`BGFX_STATE_CULL_CCW`) is the only one of the 3 renderers that
 // actually matches FNA's real `CullCounterClockwiseFace` default, so it silently culls the
 // standard NDC quad winding used throughout this pixel-test family unless `RasterizerState::
 // CullNone` is set explicitly — worked around here identically to Tasks 364-368's own Bgfx tests.

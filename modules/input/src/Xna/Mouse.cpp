@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Input/Mouse.hpp"
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Input/InputManager.hpp"
 #include "CNA/Internal/Input/SystemMouseBackend.hpp"
 #include <SDL3/SDL.h>
@@ -19,10 +19,10 @@ namespace
 
     /// Converts a point from logical (game/render) coordinates to physical window coordinates —
     /// the inverse of SdlInputBridge::to_logical_position, so SetPosition warps the OS cursor to
-    /// the right pixel on a scaled window (plan.md a-0001). Two backend paths:
+    /// the right pixel on a scaled window (plan.md a-0001). Two renderer paths:
     ///   - SDL_Renderer: SDL_RenderCoordinatesToWindow — fully offset-aware, so true-letterbox
     ///     modes (bars) map correctly, including the centering offset (verified, task 858).
-    ///   - Other backends: IGraphicsBackend::TransformLogicalToWindow — for EasyGL this is a
+    ///   - Other renderers: IGraphicsRenderer::TransformLogicalToWindow — for EasyGL this is a
     ///     uniform height-scale with no offset, which is exact for its FixedHeightDynamicWidth
     ///     model (the logical viewport fills the window; no bars, so no offset).
     /// Falls back to pass-through (window == logical) when no scaling transform is available —
@@ -45,10 +45,10 @@ namespace
             }
         }
 
-        if (auto* backend = CNA::Internal::Backends::IGraphicsBackend::GetForWindow(window))
+        if (auto* renderer = CNA::Internal::Renderers::IGraphicsRenderer::GetForWindow(window))
         {
             float wx = logX, wy = logY;
-            if (backend->TransformLogicalToWindow(logX, logY, wx, wy))
+            if (renderer->TransformLogicalToWindow(logX, logY, wx, wy))
             {
                 outX = wx;
                 outY = wy;

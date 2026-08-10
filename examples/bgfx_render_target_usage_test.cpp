@@ -8,8 +8,8 @@
 // For PreserveContents, BindAsRenderTarget() calls setViewClear(BGFX_CLEAR_NONE)
 // to suppress any carry-over clear from previous frames.
 //
-// Pixel-level verification is not available in the Bgfx backend (SpriteBatch
-// casts textures to BgfxTextureBackend, not BgfxRenderTargetBackend, and the
+// Pixel-level verification is not available in the Bgfx renderer (SpriteBatch
+// casts textures to BgfxTextureRenderer, not BgfxRenderTargetRenderer, and the
 // 3D state API throws for depth/blend changes).  This is a smoke test: create
 // both RT types, bind/unbind them across two frames, and verify no crash.
 //
@@ -64,7 +64,7 @@ protected:
         if (frame_ == 0)
         {
             // Bind both RTs; just exercise the bind/unbind path — no 3D draws
-            // since the Bgfx backend requires the 3D pipeline to be initialised.
+            // since the Bgfx renderer requires the 3D pipeline to be initialised.
             dev.SetRenderTarget(rt_discard_.get());
             dev.Clear(Color::Red);
             dev.SetRenderTarget(nullptr);

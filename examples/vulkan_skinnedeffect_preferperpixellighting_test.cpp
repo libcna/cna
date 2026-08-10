@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MS-PL
 // Task 1103 (plan_graphics.md Phase 80 / plan_dx9.md Divergence 1): SkinnedEffect pixel test --
 // PreferPerPixelLighting genuinely selects between two different lighting evaluations (Vulkan
-// backend), mirroring the BasicEffect test exactly.
+// renderer), mirroring the BasicEffect test exactly.
 //
 // Real XNA 4.0 default: PreferPerPixelLighting=false -> lighting is computed ONCE per vertex
 // (VSSkinnedVertexLighting*) and Gouraud-interpolated across the triangle. true -> lighting is
-// re-evaluated per fragment. Before this task, this backend's SkinnedEffect path always
+// re-evaluated per fragment. Before this task, this renderer's SkinnedEffect path always
 // evaluated per pixel regardless of this flag's value (the same gap this task already fixed for
 // BasicEffect).
 //
@@ -17,16 +17,16 @@
 // vulkan_skinnedeffect_specular_test.cpp already establish).
 //
 // vulkan_skinnedeffect_specular_test.cpp's own "(a) eye straight on" case measured 125 (vertex-
-// lit, this backend's real render) vs 155 (pixel-lit) for this identical scene -- confirmed
+// lit, this renderer's real render) vs 155 (pixel-lit) for this identical scene -- confirmed
 // against the actual render, not assumed by analogy to BasicEffect (which measured 127 for the
-// same math on this backend, a small, expected floating-point/interpolation difference between
+// same math on this renderer, a small, expected floating-point/interpolation difference between
 // the two vertex formats' own shader variants).
 //
 // 3 checks:
 //   (a) Default (PreferPerPixelLighting left at its real XNA default, false): expect the
 //       vertex-lit/Gouraud value (~125).
 //   (b) PreferPerPixelLighting=true: expect the pixel-lit value (~155) -- the OLD, pre-Task-1103
-//       value this backend always produced regardless of the flag.
+//       value this renderer always produced regardless of the flag.
 //   (c) (a) != (b): proves the flag is a genuine, live dispatch selector, not a decorative no-op.
 //
 // Exit code 0 = PASS, 1 = FAIL.
@@ -57,7 +57,7 @@ using namespace Microsoft::Xna::Framework::Graphics;
 
 static constexpr int kSize = 64;
 
-// GPU-compact skinned vertex: matches this backend's stride-52 layout (same convention
+// GPU-compact skinned vertex: matches this renderer's stride-52 layout (same convention
 // vulkan_skinnedeffect_specular_test.cpp already established).
 struct SkinnedGpuVertex
 {
@@ -82,7 +82,7 @@ static const float kNx = 0.0f, kNy = 0.0f, kNz = 1.0f;
 static const Vector3 kEyeStraightOn(0.0f, 0.0f, 3.0f);
 
 // Same values as vulkan_skinnedeffect_specular_test.cpp's own case (a), confirmed against this
-// backend's real render (Task 1103).
+// renderer's real render (Task 1103).
 static const Color kExpectedVertexLit(125, 125, 125, 255);
 static const Color kExpectedPixelLit(155, 155, 155, 255);
 

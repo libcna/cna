@@ -1,11 +1,11 @@
 // plan_dx.md Phase DX12 (DX-108).
-#include "CNA/Internal/Backends/D3D12/D3D12RootSignatureCache.hpp"
+#include "CNA/Internal/Renderers/D3D12/D3D12RootSignatureCache.hpp"
 
 #include <d3dcommon.h>
 
 #include <vector>
 
-namespace CNA::Internal::Backends::D3D12
+namespace CNA::Internal::Renderers::D3D12
 {
     ComPtr<ID3D12RootSignature> D3D12RootSignatureCache::GetOrCreate(ID3D12Device* device, int numCbvs,
                                                                       int numSrvs, int numSamplers)
@@ -41,7 +41,7 @@ namespace CNA::Internal::Backends::D3D12
         // 1-descriptor tables sidesteps this entirely: each texture's OWN existing permanent SRV
         // handle (created once, at texture-construction time) is bound directly to its own root
         // parameter, exactly matching the already-proven-working numSrvs==1 path -- no per-draw
-        // descriptor copy is needed at all now (D3D12GraphicsBackend::DrawPrimitivesExImpl no longer
+        // descriptor copy is needed at all now (D3D12Renderer::DrawPrimitivesExImpl no longer
         // needs its own CopyDescriptorsSimple scratch-table logic for this). std::vector<...>
         // srvRanges is declared with a FIXED reserved capacity up front so its elements' addresses
         // (referenced by each root param's pDescriptorRanges below) stay stable across every

@@ -8,7 +8,7 @@
 // VertexBuffer draw wearing a Model label -- which would prove nothing new. A real 2-bone hierarchy
 // (root -> child) is built so Model::Draw() genuinely exercises the bone path, not just a
 // single-identity-bone no-op. D3D12's own version of this exact test found a real crash (calling
-// through several previously-unimplemented state-setter stubs) that nothing else in that backend's
+// through several previously-unimplemented state-setter stubs) that nothing else in that renderer's
 // test suite happened to exercise, so this is a real "does the orchestration code path actually
 // work end to end" check, not a formality.
 //

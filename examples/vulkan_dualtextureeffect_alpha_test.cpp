@@ -10,7 +10,7 @@
 // non-black background this would make a real end-to-end RGB-premultiplication
 // pixel test spuriously fail on Vulkan for a reason entirely unrelated to
 // DualTextureEffect's own correctness (already fixed/verified for EasyGL/Bgfx,
-// and directly formula-verified for all 3 backends via the GPU-independent
+// and directly formula-verified for all 3 renderers via the GPU-independent
 // FillGpuDrawParams() unit tests in DualTextureEffectTests.cpp) -- writing
 // that test here would misattribute an already-tracked, unrelated bug to
 // this effect, the same anti-pattern Task 377/378 avoided by not committing

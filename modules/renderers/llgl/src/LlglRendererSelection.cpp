@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-#include "CNA/Internal/Backends/Llgl/LlglRendererSelection.hpp"
+#include "CNA/Internal/Renderers/Llgl/LlglRendererSelection.hpp"
 
 #include <LLGL/RenderSystem.h>
 #include <LLGL/Report.h>
@@ -12,7 +12,7 @@
 #include <string>
 #include <string_view>
 
-namespace CNA::Internal::Backends::Llgl::Detail
+namespace CNA::Internal::Renderers::Llgl::Detail
 {
     namespace
     {
@@ -148,7 +148,7 @@ namespace CNA::Internal::Backends::Llgl::Detail
         if (preference.empty())
         {
             throw std::runtime_error(
-                "LLGL backend: no renderer module is available in this build (built modules: " +
+                "LLGL renderer: no renderer module is available in this build (built modules: " +
                 DescribeCompiledInModules() + ")");
         }
         return preference;
@@ -158,7 +158,7 @@ namespace CNA::Internal::Backends::Llgl::Detail
     {
         // The probe result is cached rather than recomputed because the two callers must agree:
         // GraphicsDevice asks before the window exists (to pick the window's SDL flags) and the
-        // backend asks afterwards (to load the render system it will actually draw with). A second
+        // renderer asks afterwards (to load the render system it will actually draw with). A second
         // probe could legitimately answer differently -- a driver that has since become
         // unavailable, for instance -- and leave the window configured for the wrong API.
         static std::optional<RendererModule> cached;
@@ -193,7 +193,7 @@ namespace CNA::Internal::Backends::Llgl::Detail
         }
 
         throw std::runtime_error(
-            "LLGL backend: no renderer module could be loaded (" +
+            "LLGL renderer: no renderer module could be loaded (" +
             (failures.empty() ? std::string("no candidates") : failures) + ")");
     }
 

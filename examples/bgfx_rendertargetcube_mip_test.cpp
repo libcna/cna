@@ -9,10 +9,10 @@
 // result oracle from a retrying backbuffer sample to one direct public read of generated level 1,
 // which is the exact contract this fixture names.
 //
-// **Closes Task 874 as a hard prerequisite**: BgfxGraphicsBackend's EnvironmentMapEffect dispatch
-// previously did an unsafe static_cast<const BgfxTextureCubeBackend&> on whatever
-// ITextureCubeBackend it was handed -- reading BgfxRenderTargetCubeBackend::fbo (a framebuffer-
-// pool handle) where BgfxTextureCubeBackend::handle (a texture-pool handle) was expected whenever
+// **Closes Task 874 as a hard prerequisite**: BgfxRenderer's EnvironmentMapEffect dispatch
+// previously did an unsafe static_cast<const BgfxTextureCubeRenderer&> on whatever
+// ITextureCubeRenderer it was handed -- reading BgfxRenderTargetCubeRenderer::fbo (a framebuffer-
+// pool handle) where BgfxTextureCubeRenderer::handle (a texture-pool handle) was expected whenever
 // the argument was actually a RenderTargetCube, the identical bug shape Task 873 already fixed
 // for RenderTarget2D via IBgfxSamplable. Fixed via a new IBgfxCubeSamplable interface + a safe
 // dynamic_cast, mirroring that exact precedent -- this test is Bgfx's first-ever RenderTargetCube-
@@ -20,7 +20,7 @@
 // data) without this fix landing first.
 //
 // **Found and fixed a second real, previously-unreported prerequisite bug**: the shared
-// IGraphicsBackend::SetRenderTargetCubeFace default only calls BindAsRenderTargetFace -- it never
+// IGraphicsRenderer::SetRenderTargetCubeFace default only calls BindAsRenderTargetFace -- it never
 // updates currentRtWidth_/currentRtHeight_ (the state EnsureViewState() uses to size the 2D
 // ortho/viewport for SpriteBatch draws), the identical bug shape Task 901 already fixed for 2D
 // RenderTarget2D. Without a Bgfx-specific override, every SpriteBatch draw into a cube face

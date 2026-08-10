@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 //
 // plan_html_dom.md Phase D9: HTMLDOM-89 (performance) and HTMLDOM-90 (long-running stability),
-// the two remaining unverified claims about this backend -- its whole performance premise had
+// the two remaining unverified claims about this renderer -- its whole performance premise had
 // never been measured, and the longest run to date was 6 frames.
 //
 // Driven by the same scripts/run-htmldom-browser-test.sh / htmldom-browser-test.mjs harness as
@@ -15,8 +15,8 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 
-#include "CNA/Internal/Backends/HtmlDom/HtmlDomGraphicsBackend.hpp"
-#include "CNA/Internal/Backends/HtmlDom/HtmlDomTextureBackend.hpp"
+#include "CNA/Internal/Renderers/HtmlDom/HtmlDomRenderer.hpp"
+#include "CNA/Internal/Renderers/HtmlDom/HtmlDomTextureRenderer.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -36,7 +36,7 @@ namespace
     constexpr int kExpectedChecks = 10;
 
     // plan_html_dom.md HTMLDOM-89: 500 sprites is a reasonable "real 2D game" upper-middle
-    // sprite count (well past typical tile/UI/particle counts for the kind of game this backend
+    // sprite count (well past typical tile/UI/particle counts for the kind of game this renderer
     // targets, per its own documented "static sprite sheets, moving sprites" sweet spot).
     constexpr int kBenchmarkSpriteCount = 500;
     constexpr int kBenchmarkFrames = 60;
@@ -81,7 +81,7 @@ namespace
     });
 
     // plan_html_dom.md HTMLDOM-110: NOXNA instrumentation reads -- see
-    // HtmlDomSpriteBatchBackend.cpp's own cnaDomStyleWriteCount/cnaDomFlushCallCount comments for
+    // HtmlDomSpriteBatchRenderer.cpp's own cnaDomStyleWriteCount/cnaDomFlushCallCount comments for
     // what each counts. Reset variants zero the counter for a clean measurement window.
     EM_JS(int, JsStyleWriteCount, (), { return Module['cnaDomStyleWriteCount'] || 0; });
     EM_JS(void, JsResetStyleWriteCount, (), { Module['cnaDomStyleWriteCount'] = 0; });
@@ -180,10 +180,10 @@ protected:
         // sprite index `i`) never depends on `frame_` at all -- only the TINT (via `tintSeed`) does.
         // So despite this row's own older text, this measures HEAVY TINT CHURN with STATIC
         // position, not "moving sprites" -- the opposite of what "moving sprites costs nothing" is
-        // actually about. `graphics_backend_benchmark.cpp`'s own HTMLDOM-111 rework measures BOTH a
+        // actually about. `graphics_renderer_benchmark.cpp`'s own HTMLDOM-111 rework measures BOTH a
         // genuinely moving/stable-tint workload and this heavy-churn one side by side, which is the
         // right place to compare the two; this benchmark's job is narrower -- catch a gross
-        // regression under sustained load, which the churn case (this backend's own documented
+        // regression under sustained load, which the churn case (this renderer's own documented
         // worst case, not its best) is if anything the MORE conservative choice for that purpose.
         //
         // plan_html_dom.md HTMLDOM-111: submission time (t0/t1 bracketing just Begin/Draw/End,
@@ -230,8 +230,8 @@ protected:
             // 60fps budget would demand. Checked against SUBMISSION time deliberately -- the
             // real end-to-end number is dominated by the browser's own vsync/compositor cadence
             // (headless Chromium still paces requestAnimationFrame near a real display's refresh
-            // rate), which this backend's own CPU work does not control and a regression in this
-            // backend's own code cannot fix or break on its own.
+            // rate), which this renderer's own CPU work does not control and a regression in this
+            // renderer's own code cannot fix or break on its own.
             check(avgMs >= 0.0 && avgMs < 50.0,
                   "HTMLDOM-89: submission CPU cost for 500 sprites/frame under heavy tint churn "
                   "stays well within a sane budget (no accidental O(n^2)/per-sprite-call "
@@ -292,9 +292,9 @@ protected:
         // (the next-oldest UNTOUCHED key), not r=0 (touched) and not the brand-new insertion.
         if (frame_ == 4 + kBenchmarkFrames + kStabilityFrames)
         {
-            const auto& backend =
-                static_cast<CNA::Internal::Backends::HtmlDom::HtmlDomTextureBackend&>(texture_->GetBackend());
-            const int id = backend.GetCanvasId();
+            const auto& renderer =
+                static_cast<CNA::Internal::Renderers::HtmlDom::HtmlDomTextureRenderer&>(texture_->GetRenderer());
+            const int id = renderer.GetCanvasId();
 
             spriteBatch_->Begin();
             for (int r = 0; r < 256; ++r)
@@ -338,9 +338,9 @@ protected:
         // variant sharing the same key.
         if (frame_ == 5 + kBenchmarkFrames + kStabilityFrames)
         {
-            const auto& backend =
-                static_cast<CNA::Internal::Backends::HtmlDom::HtmlDomTextureBackend&>(texture_->GetBackend());
-            const int id = backend.GetCanvasId();
+            const auto& renderer =
+                static_cast<CNA::Internal::Renderers::HtmlDom::HtmlDomTextureRenderer&>(texture_->GetRenderer());
+            const int id = renderer.GetCanvasId();
 
             spriteBatch_->Begin();
             spriteBatch_->Draw(*texture_, Vector2(0, 0), Color(77, 202, 151, 255));
@@ -412,7 +412,7 @@ protected:
             std::fflush(stdout);
             // "No JS runs" is false, measurably: one real CNA_HtmlDom_FlushSprites call happens
             // for every one of the kStaticMeasureFrames frames, no fewer -- a real XNA game
-            // resubmits static sprites every frame, and this backend's own End() has no way to
+            // resubmits static sprites every frame, and this renderer's own End() has no way to
             // know in advance that a batch will turn out identical to the last one without first
             // walking it, which is exactly what this call does.
             check(flushCalls == kStaticMeasureFrames,

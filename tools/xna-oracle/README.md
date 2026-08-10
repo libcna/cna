@@ -4,7 +4,7 @@
 through the real XNA 4.0 runtime (`Oracle.cs`, under Wine) and once through CNA's real public
 `Game`/`GraphicsDeviceManager`/`GraphicsDevice` API, using any of the 5 real XNA Stock Effects
 (`BasicEffect`/`AlphaTestEffect`/`DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect`)
-(`CnaOracleRender.cpp`, built against whichever `CNA_GRAPHICS_BACKEND` this branch targets —
+(`CnaOracleRender.cpp`, built against whichever `CNA_GRAPHICS_RENDERER` this branch targets —
 `D3D9` on `feature/dx9`) — and diffs the two resulting PNGs pixel-for-pixel (`scripts/xna-diff.py`).
 
 This is what makes "indistinguishable from real XNA" a testable claim rather than an aspiration
@@ -142,7 +142,7 @@ Requires Pillow (`pip install pillow`) — not previously a dependency of this p
 
 ### Skia 2D subset
 
-The Skia backend builds this same renderer as `cna_oracle_render_skia` and registers
+The Skia renderer builds this same renderer as `cna_oracle_render_skia` and registers
 `Skia_XNA_2D_Oracle`. `scripts/run-skia-2d-oracle-diff.sh` automatically selects all nine scenes
 whose declarative source contains `spritebatchmode=true`; the other 30 require the intentionally
 unsupported 3D/effect path. Seven Skia results are exact RGBA matches. The flipped and rotated
@@ -316,7 +316,7 @@ coverage is now COMPLETE) is now represented in the corpus:
   value (`Less`), not just the single `Greater` value `alphatest_quad.scene` covers. Reuses the
   exact same 2×2 texture and `ReferenceAlpha=128` threshold, only `AlphaFunction` changes — this
   deliberately flips which texels pass vs. get discarded relative to the `Greater` scene, proving
-  the compare function itself is genuinely honored (a backend that silently ignored
+  the compare function itself is genuinely honored (a renderer that silently ignored
   `AlphaFunction` would still pass `alphatest_quad.scene` but fail this one). No code changes were
   needed on either side (`Less` was already a supported `CompareFunction` value in both parsers).
   **Real finding — a PNG-encoder quirk in the oracle tooling, not a rendering bug**: a first draft
@@ -414,15 +414,15 @@ coverage is now COMPLETE) is now represented in the corpus:
   `layerDepth=1.0` drawn SECOND, `spritesortmode=Deferred`, `BlendState.NonPremultiplied`. Under
   `Deferred`, sprites draw in insertion order regardless of depth, so GREEN (drawn second) ends up
   on top — hand-derived green-dominant blend `(64,128,0,159)`, confirmed pixel-for-pixel identical
-  to real XNA 4.0. This scene also caught a real, previously-undetected D3D9 backend bug (see
+  to real XNA 4.0. This scene also caught a real, previously-undetected D3D9 renderer bug (see
   `sprite_sortmode_backtofront_quad`'s own bullet below for the fix).
 - `sprite_sortmode_backtofront_quad` — the SAME two `spritedraw=` lines, same insertion order, as
   `sprite_sortmode_deferred_quad.scene`, only `spritesortmode=BackToFront` differs. `BackToFront`
   reorders the batch far-to-near before drawing, so RED (`layerDepth=0.0`, near) ends up on top
   instead — red-dominant blend `(128,64,0,159)`, from the identical two `Draw()` calls in the
-  identical order as the Deferred scene. **Real, previously-undetected D3D9 backend bug found and
+  identical order as the Deferred scene. **Real, previously-undetected D3D9 renderer bug found and
   fixed via this pair of scenes**: every earlier `D9-90`/`91`/`92` scene only ever drew with
-  `layerDepth=0.0`, so `D3D9SpriteBatchBackend::BuildMatrixTransformEXT`'s own Z-row math was
+  `layerDepth=0.0`, so `D3D9SpriteBatchRenderer::BuildMatrixTransformEXT`'s own Z-row math was
   never exercised before now. Its projection used `CreateOrthographicOffCenter(0,W,H,0,0,
   zFarPlane=1)`, giving `Z'=-layerDepth` — outside Direct3D 9's valid `[0,1]` clip-space Z range
   for ANY `layerDepth > 0` — silently clipping the GREEN sprite away entirely regardless of sort
@@ -454,7 +454,7 @@ coverage is now COMPLETE) is now represented in the corpus:
   irrelevant here — the only thing under test is whether each destination rectangle shows the
   texture actually bound for its OWN draw call, not a stale one left over from an earlier flush.
   `0/65536` pixels differ, pixel-perfect on the first attempt. Mutation-verified: disabling the
-  texture-change flush trigger in `D3D9SpriteBatchBackend::Draw()` made the middle (BLUE) sprite's
+  texture-change flush trigger in `D3D9SpriteBatchRenderer::Draw()` made the middle (BLUE) sprite's
   color leak into the third position (`1600/65536` pixels wrong, exactly that sprite's own area),
   confirmed the scene is genuinely sensitive to this bug class, then restored and reconfirmed
   green.
@@ -506,13 +506,13 @@ exactly that check went red, restored).
 the oracle diffs alone)**: `sprite_basic_quad.scene`'s own 1×1 texture is structurally incapable
 of detecting the classic D3D9 half-pixel bug — it shifts which TEXTURE CONTENT a screen pixel
 samples, not where a rectangle's geometric edges land, and a single-texel texture has nothing to
-shift between. Discovered by commenting out the offset in `D3D9SpriteBatchBackend` and re-running
+shift between. Discovered by commenting out the offset in `D3D9SpriteBatchRenderer` and re-running
 every scene: `sprite_basic_quad.scene` stayed pixel-perfect even with the offset entirely removed
 (a false-positive "this proves it" trap), while `sprite_rotated_quad.scene`/
 `sprite_flipped_quad.scene` (both using the four-color texture) diverged from real XNA by
 `4800/65536` pixels — confirming the offset is genuinely necessary, and that a multi-texel,
 crisp-content-boundary scene is required to actually observe its effect. See
-`src/CNA/Internal/Backends/D3D9/D3D9SpriteBatch.cpp`'s own `BuildMatrixTransformEXT()` comment
+`src/CNA/Internal/Renderers/D3D9/D3D9SpriteBatch.cpp`'s own `BuildMatrixTransformEXT()` comment
 and the new `D3D9_SpriteBatch` CTest for the full record.
 
 `scripts/xna-diff.py` itself is mutation-verified: a deliberately 1-off-mutated copy of a passing

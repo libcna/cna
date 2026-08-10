@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 
-#include "CNA/Internal/Backends/Software/SoftwareGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Software/SoftwareRenderer.hpp"
 #include "SoftwareFramebufferErrors.hpp"
 
 #include "System/ArgumentNullException.hpp"
@@ -15,9 +15,9 @@
 #include <string>
 #include <vector>
 
-namespace CNA::Internal::Backends::Software
+namespace CNA::Internal::Renderers::Software
 {
-    SoftwareRenderTargetBackend::SoftwareRenderTargetBackend(
+    SoftwareRenderTargetRenderer::SoftwareRenderTargetRenderer(
         int w, int h, int depthFormat, bool mipMap, int multiSampleCount,
         bool hasRealDepthBuffer, bool hasStandaloneStencilBuffer)
         : framebuffer_(hasRealDepthBuffer,
@@ -63,7 +63,7 @@ namespace CNA::Internal::Backends::Software
         }
     }
 
-    void SoftwareRenderTargetBackend::UpdatePixels(const uint8_t* rgba, int stride)
+    void SoftwareRenderTargetRenderer::UpdatePixels(const uint8_t* rgba, int stride)
     {
         if (rgba == nullptr) return;
         const std::size_t rowBytes = static_cast<std::size_t>(framebuffer_.width) * 4u;
@@ -93,7 +93,7 @@ namespace CNA::Internal::Backends::Software
             GenerateMipMaps();
     }
 
-    int SoftwareRenderTargetBackend::MipWidth(int level) const
+    int SoftwareRenderTargetRenderer::MipWidth(int level) const
     {
         int width = framebuffer_.width;
         for (int i = 0; i < level; ++i)
@@ -101,7 +101,7 @@ namespace CNA::Internal::Backends::Software
         return width;
     }
 
-    int SoftwareRenderTargetBackend::MipHeight(int level) const
+    int SoftwareRenderTargetRenderer::MipHeight(int level) const
     {
         int height = framebuffer_.height;
         for (int i = 0; i < level; ++i)
@@ -109,24 +109,24 @@ namespace CNA::Internal::Backends::Software
         return height;
     }
 
-    int SoftwareRenderTargetBackend::ColorWidth(int level) const
+    int SoftwareRenderTargetRenderer::ColorWidth(int level) const
     {
         return level > 0 && level < ColorLevelCount() ? MipWidth(level) : framebuffer_.width;
     }
 
-    int SoftwareRenderTargetBackend::ColorHeight(int level) const
+    int SoftwareRenderTargetRenderer::ColorHeight(int level) const
     {
         return level > 0 && level < ColorLevelCount() ? MipHeight(level) : framebuffer_.height;
     }
 
-    const std::vector<std::uint8_t>& SoftwareRenderTargetBackend::ColorPixels(int level) const
+    const std::vector<std::uint8_t>& SoftwareRenderTargetRenderer::ColorPixels(int level) const
     {
         if (level > 0 && level < ColorLevelCount())
             return mipLevels_[static_cast<std::size_t>(level - 1)];
         return framebuffer_.color;
     }
 
-    void SoftwareRenderTargetBackend::GenerateMipMaps()
+    void SoftwareRenderTargetRenderer::GenerateMipMaps()
     {
         if (!mipMap_ || levelCount_ <= 1)
             return;
@@ -154,7 +154,7 @@ namespace CNA::Internal::Backends::Software
                 destination.resize(static_cast<std::size_t>(destinationWidth) *
                                    static_cast<std::size_t>(destinationHeight) * 4u);
 
-                // Match the CPU box-filter convention used by the D3D12 render-target backend: a
+                // Match the CPU box-filter convention used by the D3D12 render-target renderer: a
                 // 2x2 average with the second source coordinate clamped for odd dimensions.
                 for (int y = 0; y < destinationHeight; ++y)
                 {
@@ -196,7 +196,7 @@ namespace CNA::Internal::Backends::Software
         mipLevelsReady_ = true;
     }
 
-    void SoftwareRenderTargetBackend::BindAsRenderTarget()
+    void SoftwareRenderTargetRenderer::BindAsRenderTarget()
     {
         // Lower levels describe the prior completed pass and must never be sampled while this
         // target is being changed again. They become available only after UnbindAsRenderTarget.
@@ -204,7 +204,7 @@ namespace CNA::Internal::Backends::Software
         bound_ = true;
     }
 
-    void SoftwareRenderTargetBackend::UnbindAsRenderTarget()
+    void SoftwareRenderTargetRenderer::UnbindAsRenderTarget()
     {
         if (!bound_)
             return;
@@ -215,7 +215,7 @@ namespace CNA::Internal::Backends::Software
         bound_ = false;
     }
 
-    bool SoftwareRenderTargetBackend::GetData(int level, int x, int y, int w, int h,
+    bool SoftwareRenderTargetRenderer::GetData(int level, int x, int y, int w, int h,
                                               void* data, int dataLength) const
     {
         ++readbackCallCount_;
@@ -226,12 +226,12 @@ namespace CNA::Internal::Backends::Software
                 "level", std::to_string(level), "level must not be negative.");
         if (level >= levelCount_)
             throw System::NotSupportedException(
-                "SoftwareRenderTargetBackend::GetData: this render target has " +
+                "SoftwareRenderTargetRenderer::GetData: this render target has " +
                 std::to_string(levelCount_) + " mip level(s); level " +
                 std::to_string(level) + " was requested.");
         if (level > 0 && !mipLevelsReady_)
             throw System::NotSupportedException(
-                "SoftwareRenderTargetBackend::GetData: generated mip levels are unavailable "
+                "SoftwareRenderTargetRenderer::GetData: generated mip levels are unavailable "
                 "until the active render-target pass is unbound.");
         if (w <= 0 || h <= 0)
             throw System::ArgumentOutOfRangeException(

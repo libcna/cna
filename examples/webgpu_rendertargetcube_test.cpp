@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: MS-PL
-// WEBGPU-114: verify WebGPURenderTargetCubeBackend / WebGPUGraphicsBackend::CreateRenderTargetCube()
-// -- this backend's first real render-into-a-cube-face support. Before this task,
-// CreateRenderTargetCube on this backend was IGraphicsBackend's own safe nullptr-returning default,
+// WEBGPU-114: verify WebGPURenderTargetCubeRenderer / WebGPURenderer::CreateRenderTargetCube()
+// -- this renderer's first real render-into-a-cube-face support. Before this task,
+// CreateRenderTargetCube on this renderer was IGraphicsRenderer's own safe nullptr-returning default,
 // so any game creating a RenderTargetCube on WEBGPU (e.g. for a dynamic reflection/environment map)
-// got a null backend handle.
+// got a null renderer handle.
 //
-// Architecture note: this backend renders every queued Clear()/3D-draw/SpriteBatch command into
+// Architecture note: this renderer renders every queued Clear()/3D-draw/SpriteBatch command into
 // exactly ONE deferred render pass per logical frame, lazily flushed the instant the bound target
-// changes (see WebGPURenderTargetBackend/WebGPUGraphicsBackend::SetRenderTarget2D()'s own doc
+// changes (see WebGPURenderTargetRenderer/WebGPURenderer::SetRenderTarget2D()'s own doc
 // comments, WEBGPU-53/54). RenderTargetCube extends the same "flush on target switch" design so
-// each of the 6 faces acts as its own distinct target identity -- WebGPUGraphicsBackend::
+// each of the 6 faces acts as its own distinct target identity -- WebGPURenderer::
 // FlushCurrentRenderTarget()/currentRenderTargetCubeFace_ generalise the pre-existing
-// RenderTarget2D-only switch logic to also cover a cube face (see WebGPURenderTargetCubeBackend::
+// RenderTarget2D-only switch logic to also cover a cube face (see WebGPURenderTargetCubeRenderer::
 // BindAsRenderTargetFace()'s own comment).
 //
 // Check A -- each of the 6 faces bound DIRECTLY one after another (face i -> face i+1, no
@@ -29,8 +29,8 @@
 //   for why): solid blue drawn into all 6 faces, unbound, then sampled back as
 //   EnvironmentMapEffect.EnvironmentMap on a full-screen quad -- centre pixel must be blue. This
 //   specifically exercises IWebGPUCubeSamplable/ResolveCubeSamplable(): before this task,
-//   GpuDrawParams::envMap was resolved via a dynamic_cast to the concrete WebGPUTextureCubeBackend
-//   type only, so a WebGPURenderTargetCubeBackend (a different concrete class) would have silently
+//   GpuDrawParams::envMap was resolved via a dynamic_cast to the concrete WebGPUTextureCubeRenderer
+//   type only, so a WebGPURenderTargetCubeRenderer (a different concrete class) would have silently
 //   failed that cast and rendered the 1x1 white-cube fallback instead -- this check would fail
 //   (read back white/grey, not blue) if that wiring regressed.
 // Check D -- the critical architecture check (mirrors webgpu_rendertarget2d_test.cpp's own Check
@@ -42,7 +42,7 @@
 //   creating a single-level target while the XNA layer expects a full mip chain (a deliberate,
 //   documented scope cut -- see plan_webgpu.md WEBGPU-114).
 // Check F -- MultiSampleCount property fidelity: MSAA is not implemented for RenderTargetCube on
-//   this backend (a deliberate, documented scope cut, separate from RenderTarget2D's own real MSAA
+//   this renderer (a deliberate, documented scope cut, separate from RenderTarget2D's own real MSAA
 //   support) -- requesting 4 must still honestly report 0.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
@@ -215,11 +215,11 @@ protected:
         }
 
         // Check C: EnvironmentMapEffect sampling round trip -- proves IWebGPUCubeSamplable
-        // resolves a WebGPURenderTargetCubeBackend, not just a WebGPUTextureCubeBackend.
+        // resolves a WebGPURenderTargetCubeRenderer, not just a WebGPUTextureCubeRenderer.
         //
         // NOTE (real finding, out of scope here): the 6 faces below are painted via
         // DrawFullScreenQuad() (a real 3D/BasicEffect draw), NOT SpriteBatch, deliberately.
-        // WebGPUGraphicsBackend::QueueSprite() computes each sprite's clip-space geometry from
+        // WebGPURenderer::QueueSprite() computes each sprite's clip-space geometry from
         // ComputeLogicalViewport(), which is always derived from the BACKBUFFER's own
         // virtualWidth_/virtualHeight_/physicalWidth_/physicalHeight_ -- never from whatever
         // render target (a RenderTarget2D OR a RenderTargetCube face) happens to be currently
@@ -228,7 +228,7 @@ protected:
         // logical size, so it does not necessarily cover the whole bound target the way a caller
         // would expect (confirmed empirically: with this test's 64x64 backbuffer and 32x32 cube
         // faces, a SpriteBatch Draw(dest=(0,0,32,32)) only covered one quadrant of each face,
-        // leaving the centre pixel un-painted). This is a pre-existing backend-wide gap (equally
+        // leaving the centre pixel un-painted). This is a pre-existing renderer-wide gap (equally
         // true for RenderTarget2D, not introduced by RenderTargetCube/WEBGPU-114), previously
         // untested because no existing WebGPU test draws INTO an off-screen target via
         // SpriteBatch (webgpu_rendertarget2d_test.cpp's own SpriteBatch check only samples FROM
@@ -321,12 +321,12 @@ protected:
         }
 
         // Check F: MultiSampleCount property fidelity -- MSAA is not implemented for
-        // RenderTargetCube on this backend; requesting 4 must still honestly report 0.
+        // RenderTargetCube on this renderer; requesting 4 must still honestly report 0.
         {
             RenderTargetCube rtcMsaa(dev, kCubeSize, false, SurfaceFormat::Color, DepthFormat::None, 4);
             check(rtcMsaa.getMultiSampleCountProperty() == 0,
                   "Check F: RenderTargetCube MultiSampleCount request 4 -> honestly reports 0 "
-                  "(MSAA not implemented for RenderTargetCube on this backend, see WEBGPU-114)");
+                  "(MSAA not implemented for RenderTargetCube on this renderer, see WEBGPU-114)");
         }
 
         std::printf("=== %d/%d PASS ===\n", passCount, totalCount);

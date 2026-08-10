@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Task 498 (sample 1 of 4 new samples; EasyGL backend): a classic "moving 3D object" demo --
+// Task 498 (sample 1 of 4 new samples; EasyGL renderer): a classic "moving 3D object" demo --
 // a small unlit, vertex-colored BasicEffect quad translated along the World-space X axis by a
 // fixed amount every Update() call, over several real frames, proving the full
 // Update()-state -> World matrix -> BasicEffect -> EasyGL draw -> backbuffer readback pipeline

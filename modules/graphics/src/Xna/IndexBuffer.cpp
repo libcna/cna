@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
@@ -15,7 +15,7 @@ namespace Microsoft::Xna::Framework::Graphics
 {
     namespace
     {
-        std::unique_ptr<CNA::Internal::Backends::IIndexBufferBackend> CreateIndexBufferBackend(
+        std::unique_ptr<CNA::Internal::Renderers::IIndexBufferRenderer> CreateIndexBufferRenderer(
             GraphicsDevice& device,
             IndexElementSize indexElementSize,
             int indexCount)
@@ -32,8 +32,8 @@ namespace Microsoft::Xna::Framework::Graphics
                     "Index buffers support only sixteen-bit or thirty-two-bit elements.");
             }
             return indexElementSize == IndexElementSize::ThirtyTwoBits
-                       ? device.GetBackend().CreateIndexBuffer32(indexCount)
-                       : device.GetBackend().CreateIndexBuffer16(indexCount);
+                       ? device.GetRenderer().CreateIndexBuffer32(indexCount)
+                       : device.GetRenderer().CreateIndexBuffer16(indexCount);
         }
 
         std::size_t CheckedByteCount(int elementCount,
@@ -86,7 +86,7 @@ namespace Microsoft::Xna::Framework::Graphics
                              BufferUsage bufferUsage,
                              bool /*dynamic*/)
         : GraphicsResource(&device)
-        , backend_(CreateIndexBufferBackend(device, indexElementSize, indexCount))
+        , renderer_(CreateIndexBufferRenderer(device, indexElementSize, indexCount))
         , indexElementSize_(indexElementSize)
         , bufferUsage_(bufferUsage)
         , indexCount_(indexCount)
@@ -99,7 +99,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void IndexBuffer::Dispose(bool disposing)
     {
-        backend_.reset();
+        renderer_.reset();
         GraphicsResource::Dispose(disposing);
     }
 
@@ -172,7 +172,7 @@ namespace Microsoft::Xna::Framework::Graphics
                 "The source index width does not match the IndexBuffer element size.", "data");
 
         // Empty ranges are a real no-op. In particular, return before pointer arithmetic,
-        // backend dispatch, native allocation/write, or the CPU shadow's memcpy/assign path.
+        // renderer dispatch, native allocation/write, or the CPU shadow's memcpy/assign path.
         if (elementCount == 0)
             return;
         if (data == nullptr)
@@ -186,16 +186,16 @@ namespace Microsoft::Xna::Framework::Graphics
         if (dataElementSize == IndexElementSize::ThirtyTwoBits)
         {
             if (useOptions)
-                backend_->SetData32WithOptions(source, elementCount, options);
+                renderer_->SetData32WithOptions(source, elementCount, options);
             else
-                backend_->SetData32(source, elementCount);
+                renderer_->SetData32(source, elementCount);
         }
         else
         {
             if (useOptions)
-                backend_->SetData16WithOptions(source, elementCount, options);
+                renderer_->SetData16WithOptions(source, elementCount, options);
             else
-                backend_->SetData16(source, elementCount);
+                renderer_->SetData16(source, elementCount);
         }
 
         // Task 930: cache exactly the logical source bytes for a future GetData() call.

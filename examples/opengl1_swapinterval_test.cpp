@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
-// OPENGL1 backend: runtime SetSwapInterval() override (plan_opengl1.md item 20, EasyGL parity).
+// OPENGL1 renderer: runtime SetSwapInterval() override (plan_opengl1.md item 20, EasyGL parity).
 //
-// Before this, OpenGL1GraphicsBackend never overrode IGraphicsBackend::SetSwapInterval() at all
+// Before this, OpenGL1Renderer never overrode IGraphicsRenderer::SetSwapInterval() at all
 // (inherited the interface's no-op default) -- only the construction-time swapInterval ever
 // reached SDL_GL_SetSwapInterval(), so a runtime GraphicsDevice.PresentationParameters change
 // (e.g. toggling vsync) silently did nothing. Verified directly against the real driver via
@@ -11,7 +11,7 @@
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 
 #include <SDL3/SDL.h>
@@ -43,13 +43,13 @@ protected:
 
         auto& dev = getGraphicsDeviceProperty();
 
-        dev.GetBackend().SetSwapInterval(0);
+        dev.GetRenderer().SetSwapInterval(0);
         int gotImmediate = -999;
         SDL_GL_GetSwapInterval(&gotImmediate);
         std::printf("after SetSwapInterval(0): SDL_GL_GetSwapInterval=%d\n", gotImmediate);
         Check(gotImmediate == 0, "SetSwapInterval(0) reaches SDL (immediate/no vsync)");
 
-        dev.GetBackend().SetSwapInterval(1);
+        dev.GetRenderer().SetSwapInterval(1);
         int gotVsync = -999;
         SDL_GL_GetSwapInterval(&gotVsync);
         std::printf("after SetSwapInterval(1): SDL_GL_GetSwapInterval=%d\n", gotVsync);

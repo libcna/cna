@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 //
 // REMED-GFX-170: every public TextureFilter ordinal names a SEPARATE magnification filter, a
-// SEPARATE minification filter and a SEPARATE mipmap filter, and a conforming backend must
+// SEPARATE minification filter and a SEPARATE mipmap filter, and a conforming renderer must
 // translate all three, not reduce the ordinal to one boolean.
 //
 // THE PUBLIC TABLE, read from include/Microsoft/Xna/Framework/Graphics/TextureFilter.hpp and
@@ -29,7 +29,7 @@
 //
 //     filter = textureFilter == 0 ? LINEAR : NEAREST
 //
-// (WebGPUGraphicsBackend.cpp:4891 and SdlGpuGraphicsBackend.cpp:2742), applied to min, mag and mip
+// (WebGPURenderer.cpp:4891 and SdlGpuRenderer.cpp:2742), applied to min, mag and mip
 // alike, and -- the half that would have defeated a descriptor-only correction -- they keyed the
 // sampler cache with `filterIndex = filter == 0 ? 0 : 1`, so all eight non-Linear ordinals shared
 // ONE cached native sampler per address-mode pair. On WebGPU that expression served SpriteBatch
@@ -49,7 +49,7 @@
 //
 // MIP BOUNDARY, declared. Every leg here samples a texture with ONE level. The mip half of an
 // ordinal is therefore not observable through pixels in this fixture and is asserted only through
-// the native sampler descriptor, via each backend's own CNA_WEBGPU_SAMPLER_TRACE /
+// the native sampler descriptor, via each renderer's own CNA_WEBGPU_SAMPLER_TRACE /
 // CNA_SDLGPU_SAMPLER_TRACE. No mip-generation capability is added by this task. Leg H states the
 // boundary as a reported note rather than pretending to measure it.
 //
@@ -132,42 +132,42 @@ using namespace Microsoft::Xna::Framework::Graphics;
 
 namespace
 {
-#if defined(CNA_BACKEND_HEADLESS)
+#if defined(CNA_RENDERER_HEADLESS)
     constexpr bool kRasterizes = false;
-    constexpr const char* kBackendName = "HEADLESS";
-#elif defined(CNA_BACKEND_SOFTWARE)
+    constexpr const char* kRendererName = "HEADLESS";
+#elif defined(CNA_RENDERER_SOFTWARE)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "SOFTWARE";
-#elif defined(CNA_BACKEND_EASYGL)
+    constexpr const char* kRendererName = "SOFTWARE";
+#elif defined(CNA_RENDERER_EASYGL)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "EASYGL";
-#elif defined(CNA_BACKEND_BGFX)
+    constexpr const char* kRendererName = "EASYGL";
+#elif defined(CNA_RENDERER_BGFX)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "BGFX";
-#elif defined(CNA_BACKEND_VULKAN)
+    constexpr const char* kRendererName = "BGFX";
+#elif defined(CNA_RENDERER_VULKAN)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "VULKAN";
-#elif defined(CNA_BACKEND_WEBGPU)
+    constexpr const char* kRendererName = "VULKAN";
+#elif defined(CNA_RENDERER_WEBGPU)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "WEBGPU";
-#elif defined(CNA_BACKEND_SDL_GPU)
+    constexpr const char* kRendererName = "WEBGPU";
+#elif defined(CNA_RENDERER_SDL_GPU)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "SDL_GPU";
-#elif defined(CNA_BACKEND_D3D9)
+    constexpr const char* kRendererName = "SDL_GPU";
+#elif defined(CNA_RENDERER_D3D9)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "D3D9";
-#elif defined(CNA_BACKEND_D3D11)
+    constexpr const char* kRendererName = "D3D9";
+#elif defined(CNA_RENDERER_D3D11)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "D3D11";
-#elif defined(CNA_BACKEND_D3D12)
+    constexpr const char* kRendererName = "D3D11";
+#elif defined(CNA_RENDERER_D3D12)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "D3D12";
-#elif defined(CNA_BACKEND_LLGL)
+    constexpr const char* kRendererName = "D3D12";
+#elif defined(CNA_RENDERER_LLGL)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "LLGL";
+    constexpr const char* kRendererName = "LLGL";
 #else
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "UNKNOWN";
+    constexpr const char* kRendererName = "UNKNOWN";
 #endif
 
     constexpr int kBBW = 160;
@@ -642,7 +642,7 @@ class TextureFilterOrdinalContractTest : public Game
     // B -----------------------------------------------------------------------------------------
     // Every ordinal's MINIFICATION half, through SpriteBatch. This is a DIFFERENT partition of the
     // nine ordinals from leg A's -- 5, 6 magnify point but minify linear; 7, 8 do the reverse --
-    // so a backend that passes A with one boolean per ordinal still fails here.
+    // so a renderer that passes A with one boolean per ordinal still fails here.
     void RunB_SpriteMinification(GraphicsDevice& dev)
     {
         const Rectangle dest(0, 0, 3, 2);
@@ -756,12 +756,12 @@ class TextureFilterOrdinalContractTest : public Game
             }
             catch (const System::Exception& e)
             {
-                note(tag + ": NOT EXERCISED on " + kBackendName + " -- " + e.what());
+                note(tag + ": NOT EXERCISED on " + kRendererName + " -- " + e.what());
                 continue;
             }
             catch (const std::exception& e)
             {
-                note(tag + ": NOT EXERCISED on " + kBackendName + " -- " + e.what());
+                note(tag + ": NOT EXERCISED on " + kRendererName + " -- " + e.what());
                 continue;
             }
 
@@ -855,7 +855,7 @@ class TextureFilterOrdinalContractTest : public Game
     void DrawEnvMap(GraphicsDevice& dev)
     {
         if (cube_ == nullptr)
-            throw std::runtime_error("no TextureCube on this backend");
+            throw std::runtime_error("no TextureCube on this renderer");
         EnvironmentMapEffect fx(dev);
         Matrices(fx);
         fx.setTextureProperty(&tex8x4_);
@@ -956,7 +956,7 @@ class TextureFilterOrdinalContractTest : public Game
     }
 
     // G -----------------------------------------------------------------------------------------
-    // A queued draw must keep the sampler it was queued with. Both backends defer their commands to
+    // A queued draw must keep the sampler it was queued with. Both renderers defer their commands to
     // the end of the frame, so a mutable per-slot read at replay time would give BOTH draws the
     // LAST sampler.
     void RunG_QueuedTransitions(GraphicsDevice& dev)
@@ -1100,7 +1100,7 @@ class TextureFilterOrdinalContractTest : public Game
                             "selects the exact texel (mismatches=" + std::to_string(bad) + ")");
         }
 
-        // 1:1 -- every ordinal must agree here, because neither half is exercised. A backend that
+        // 1:1 -- every ordinal must agree here, because neither half is exercised. A renderer that
         // passes only this scale is exactly the false positive that let GFX-170 survive.
         {
             std::vector<std::vector<Color>> at11;
@@ -1179,7 +1179,7 @@ class TextureFilterOrdinalContractTest : public Game
 
     void Finish()
     {
-        std::printf("=== %d/%d checks passed on %s ===\n", passCount_, totalCount_, kBackendName);
+        std::printf("=== %d/%d checks passed on %s ===\n", passCount_, totalCount_, kRendererName);
         std::fflush(stdout);
         result_ = (totalCount_ > 0 && passCount_ == totalCount_) ? 0 : 1;
         Exit();
@@ -1197,7 +1197,7 @@ protected:
         tex4x4_ = Texture2D::CreateFromPixels(dev, p4x4_.w, p4x4_.h, b4);
         white_  = Texture2D::CreateFromPixels(dev, 1, 1,
                       std::vector<std::uint8_t>{255, 255, 255, 255});
-        // A non-rasterizing backend rejects cube uploads by REMED-GFX-135's contract, and it never
+        // A non-rasterizing renderer rejects cube uploads by REMED-GFX-135's contract, and it never
         // reaches the effect families anyway, so an unavailable cube must not abort the run.
         try
         {
@@ -1219,7 +1219,7 @@ protected:
         done_ = true;
         auto& dev = getGraphicsDeviceProperty();
 
-        std::printf("=== REMED-GFX-170 TextureFilter ordinal contract on %s ===\n", kBackendName);
+        std::printf("=== REMED-GFX-170 TextureFilter ordinal contract on %s ===\n", kRendererName);
         note("MIP BOUNDARY: every texture here has ONE level, so the mipmap half of each ordinal "
              "is asserted through the native sampler descriptor (CNA_WEBGPU_SAMPLER_TRACE / "
              "CNA_SDLGPU_SAMPLER_TRACE), not through pixels. No mip generation is added.");
@@ -1236,7 +1236,7 @@ protected:
             try { rt.GetData(pix.data(), 0, static_cast<int>(pix.size())); }
             catch (const System::Exception&) { threw = true; }
             catch (const std::exception&) { threw = true; }
-            check(threw, std::string("Z1: ") + kBackendName +
+            check(threw, std::string("Z1: ") + kRendererName +
                   " rejects a render-target readback instead of fabricating a sampled image");
             Finish();
             return;

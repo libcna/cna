@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // plan_opengles1.md OPENGLES1-1..OPENGLES1-20-ish baseline smoke test: Clear()/Present() and
-// SpriteBatch through the real OpenGL ES 1.1 fixed-function backend.
+// SpriteBatch through the real OpenGL ES 1.1 fixed-function renderer.
 //
 // Check A -- Clear(Red) is visible via GetBackBufferData().
 // Check B -- a second Clear(Blue) right after replaces it.
@@ -10,7 +10,7 @@
 //   GraphicsDevice::DrawUserPrimitives) is visible at its center.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs. Requires a genuine OpenGL ES 1.1 driver -- see
-// docs/opengles1-backend.md for this project's own finding that not every EGL/Mesa host actually
+// docs/opengles1-renderer.md for this project's own finding that not every EGL/Mesa host actually
 // implements ES1 context creation.
 
 #include "Microsoft/Xna/Framework/Game.hpp"

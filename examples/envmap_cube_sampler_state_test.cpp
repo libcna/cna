@@ -8,7 +8,7 @@
 // (`EnvironmentMapEffect.EnvironmentMap`); the two are independent; every draw uses the state that
 // was public when IT was issued; and an explicit sampler is never replaced by an implicit one.
 //
-// THE DEFECT this closes is Software-local. `SoftwareGraphicsBackend::SampleCubeMap` took no
+// THE DEFECT this closes is Software-local. `SoftwareRenderer::SampleCubeMap` took no
 // sampler state at all -- after face selection it ended in a single clamped
 // `static_cast<int>(s * size)` fetch of level 0 -- so the cube was point-sampled at level 0 however
 // `SamplerStates[1]` was set. REMED-GFX-150 replaced that shape on the ordinary 2D path and
@@ -36,7 +36,7 @@
 //                                     the draw must not crash, must be deterministic, and must
 //                                     still land on stored texels under Point.
 //   N8  DECLARED-BUT-UNWRITTEN CHAIN  a mipMap=true cube whose game wrote only level 0, minified.
-//   N9  RenderTargetCube              classified honestly, per backend.
+//   N9  RenderTargetCube              classified honestly, per renderer.
 //
 // THE ORACLE is byte-exact, and identical in construction to REMED-GFX-173's: a generated palette
 // whose entries are at least `kSep` apart in L-inf and whose every pairwise midpoint is at least
@@ -97,38 +97,38 @@ using namespace Microsoft::Xna::Framework::Graphics;
 
 namespace
 {
-#if defined(CNA_BACKEND_HEADLESS)
+#if defined(CNA_RENDERER_HEADLESS)
     constexpr bool kRasterizes = false;
-    constexpr const char* kBackendName = "HEADLESS";
-#elif defined(CNA_BACKEND_SOFTWARE)
+    constexpr const char* kRendererName = "HEADLESS";
+#elif defined(CNA_RENDERER_SOFTWARE)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "SOFTWARE";
-#elif defined(CNA_BACKEND_EASYGL)
+    constexpr const char* kRendererName = "SOFTWARE";
+#elif defined(CNA_RENDERER_EASYGL)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "EASYGL";
-#elif defined(CNA_BACKEND_BGFX)
+    constexpr const char* kRendererName = "EASYGL";
+#elif defined(CNA_RENDERER_BGFX)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "BGFX";
-#elif defined(CNA_BACKEND_VULKAN)
+    constexpr const char* kRendererName = "BGFX";
+#elif defined(CNA_RENDERER_VULKAN)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "VULKAN";
-#elif defined(CNA_BACKEND_WEBGPU)
+    constexpr const char* kRendererName = "VULKAN";
+#elif defined(CNA_RENDERER_WEBGPU)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "WEBGPU";
-#elif defined(CNA_BACKEND_SDL_GPU)
+    constexpr const char* kRendererName = "WEBGPU";
+#elif defined(CNA_RENDERER_SDL_GPU)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "SDL_GPU";
+    constexpr const char* kRendererName = "SDL_GPU";
 #else
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "UNKNOWN";
+    constexpr const char* kRendererName = "UNKNOWN";
 #endif
 
-    /// Whether a declared-but-unwritten mip chain has a DEFINED answer on this backend. Real
+    /// Whether a declared-but-unwritten mip chain has a DEFINED answer on this renderer. Real
     /// XNA/D3D leave the content of a level nobody uploaded undefined, so this is not a public
     /// contract; REMED-GFX-175 made it a deliberate, conservative Software guarantee (the sampler
     /// bounds itself at the last level that was really supplied) and REMED-GFX-182 extended that
     /// per cube face. Asserted where it is a guarantee, reported everywhere else.
-#if defined(CNA_BACKEND_SOFTWARE)
+#if defined(CNA_RENDERER_SOFTWARE)
     constexpr bool kUnwrittenChainIsBounded = true;
 #else
     constexpr bool kUnwrittenChainIsBounded = false;
@@ -273,7 +273,7 @@ class EnvMapCubeSamplerStateTest : public Game
     // Palette
     // --------------------------------------------------------------------------------------
 
-    /// Deterministic (a fixed LCG, no <random>), so the same colours are measured on every backend
+    /// Deterministic (a fixed LCG, no <random>), so the same colours are measured on every renderer
     /// and in every run.
     static std::vector<Color> BuildPalette()
     {
@@ -710,7 +710,7 @@ class EnvMapCubeSamplerStateTest : public Game
         {
             // A ZERO vertex normal: `reflect(-E, N)` collapses, so the cube is addressed by a
             // direction with no major axis. The requirement is not a particular pixel -- it is that
-            // the backend stays defined: no crash, the same answer twice, and no fetch outside the
+            // the renderer stays defined: no crash, the same answer twice, and no fetch outside the
             // cube's own storage.
             const std::vector<Color> a = Render(dev, cube_.get(), 1.0f, &base_, kRT, 0.0f, 0.0f, 0.0f);
             const std::vector<Color> b = Render(dev, cube_.get(), 1.0f, &base_, kRT, 0.0f, 0.0f, 0.0f);
@@ -734,7 +734,7 @@ class EnvMapCubeSamplerStateTest : public Game
     {
         if (!cubeLevel0Only_)
         {
-            skip("N8: this backend could not store a mipmapped cube");
+            skip("N8: this renderer could not store a mipmapped cube");
             return;
         }
         SetSlot(dev, 0, 1, TextureAddressMode::Clamp);
@@ -750,7 +750,7 @@ class EnvMapCubeSamplerStateTest : public Game
                   "really supplied and never fades into a level nobody uploaded" + diag);
         else
             note("N8: a mipMap=true cube whose game wrote only level 0 has UNDEFINED content above "
-                 "level 0 in XNA/D3D, so this backend's answer is reported, not required" + diag);
+                 "level 0 in XNA/D3D, so this renderer's answer is reported, not required" + diag);
     }
 
     void RunN9_RenderTargetCube(GraphicsDevice& dev)
@@ -764,7 +764,7 @@ class EnvMapCubeSamplerStateTest : public Game
         }
         catch (const std::exception& e)
         {
-            note(std::string("N9: this backend refuses to CREATE a RenderTargetCube (") + e.what() +
+            note(std::string("N9: this renderer refuses to CREATE a RenderTargetCube (") + e.what() +
                  "), so no cube render target can reach the sampler. REMED-GFX-173's leg L is the "
                  "place that measures it where it exists.");
             return;
@@ -774,13 +774,13 @@ class EnvMapCubeSamplerStateTest : public Game
             dev.SetRenderTarget(rtc.get(), CubeMapFace::PositiveX);
             dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
             ResetDeviceState(dev, kBBW, kBBH);
-            note("N9: this backend BINDS a RenderTargetCube face; REMED-GFX-173's leg L measures "
+            note("N9: this renderer BINDS a RenderTargetCube face; REMED-GFX-173's leg L measures "
                  "the sampler contract against it, and this fixture leaves it there.");
         }
         catch (const std::exception& e)
         {
             ResetDeviceState(dev, kBBW, kBBH);
-            note(std::string("N9: this backend creates a RenderTargetCube but refuses to BIND a "
+            note(std::string("N9: this renderer creates a RenderTargetCube but refuses to BIND a "
                              "face (") + e.what() + "), so it can never hold content to sample. "
                  "The refusal is a clean exception, not a silent no-op.");
         }
@@ -885,7 +885,7 @@ protected:
 
         GraphicsDevice& dev = getGraphicsDeviceProperty();
         std::printf("=== REMED-GFX-182 EnvironmentMapEffect slot-1 sampler state [%s] ===\n",
-                    kBackendName);
+                    kRendererName);
 
         if (!paletteOk_)
         {
@@ -893,11 +893,11 @@ protected:
         }
         else if (!kRasterizes)
         {
-            skip("N1..N9: this backend produces no pixels, so a sampler is unobservable here");
+            skip("N1..N9: this renderer produces no pixels, so a sampler is unobservable here");
         }
         else if (!cube_)
         {
-            skip("N1..N9: this backend could not store a TextureCube, so EnvironmentMapEffect has "
+            skip("N1..N9: this renderer could not store a TextureCube, so EnvironmentMapEffect has "
                  "no reflection source");
         }
         else
@@ -916,7 +916,7 @@ protected:
             }
             catch (const System::Exception& e)
             {
-                skip(std::string("N1..N9: this backend does not implement EnvironmentMapEffect (") +
+                skip(std::string("N1..N9: this renderer does not implement EnvironmentMapEffect (") +
                      e.what() + ")");
             }
             catch (const std::exception& e)

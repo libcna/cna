@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // WEBGPU-52: verify real, render-pass-based mip generation for a plain Texture2D/TextureCube --
-// WebGPUGraphicsBackend::GenerateMipsForLayer() (GenerateMips2D()/GenerateMipsCubeFace()), a
+// WebGPURenderer::GenerateMipsForLayer() (GenerateMips2D()/GenerateMipsCubeFace()), a
 // render pass per mip level drawing a full-screen triangle that samples the PREVIOUS level through
 // a real linear WGPUSampler into the NEXT level's own render-attachment view. wgpu-native has no
 // vkCmdBlitImage-equivalent filtered-downsample primitive (verified against this project's pinned
@@ -8,17 +8,17 @@
 // so this is the technique other WebGPU-based engines use.
 //
 // IMPORTANT, DELIBERATE DIVERGENCE this test also documents: unlike every other CNA graphics
-// backend (VulkanGraphicsBackend/EasyGLGraphicsBackend), which only regenerate mip content for a
+// renderer (VulkanRenderer/EasyGLRenderer), which only regenerate mip content for a
 // RENDER TARGET being unbound (matching real FNA3D semantics -- a plain Texture2D/TextureCube never
 // auto-generates mip content from level 0 in FNA/XNA itself), this WebGPU-only behaviour DOES
 // generate real mip content for a plain Texture2D/TextureCube automatically whenever mipMap=true
 // AND content is written to level 0 (at construction, or any later level-0 SetData()/
-// UpdatePixels() call). See plan_webgpu.md's WEBGPU-52 row and docs/webgpu-backend.md for the full
+// UpdatePixels() call). See plan_webgpu.md's WEBGPU-52 row and docs/webgpu-renderer.md for the full
 // investigation.
 //
-// Uses IGraphicsBackend/ImageData directly (bypassing the XNA Texture2D/TextureCube layer),
+// Uses IGraphicsRenderer/ImageData directly (bypassing the XNA Texture2D/TextureCube layer),
 // matching examples/webgpu_texture2d_getdata_test.cpp's own established convention for testing a
-// backend capability that has no dedicated XNA-layer entry point of its own.
+// renderer capability that has no dedicated XNA-layer entry point of its own.
 //
 // Check A -- a hard-edged red/blue vertical stripe (source width 8: columns 0-2 red, columns 3-7
 //   blue) uploaded to level 0 of a mipMap=true Texture2D (mipLevels=4 for size 8); level 1 (width
@@ -43,7 +43,7 @@
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Graphics/ImageData.hpp"
 
 #include <cstdint>
@@ -55,7 +55,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using CNA::Internal::Backends::IGraphicsBackend;
+using CNA::Internal::Renderers::IGraphicsRenderer;
 using CNA::Internal::Graphics::ImageData;
 
 namespace
@@ -123,7 +123,7 @@ protected:
         if (frame_++ < 1) return;
 
         auto& dev = getGraphicsDeviceProperty();
-        IGraphicsBackend& backend = dev.GetBackend();
+        IGraphicsRenderer& renderer = dev.GetRenderer();
 
         // Check A + B: Texture2D, source width 8 -> level1 width 4 -> level2 width 2.
         {
@@ -135,7 +135,7 @@ protected:
             img.height = h;
             img.pixels = level0;
             img.mipLevels = 4; // 8 -> 4 -> 2 -> 1
-            auto tex = backend.CreateTexture(img);
+            auto tex = renderer.CreateTexture(img);
 
             std::vector<std::uint8_t> level1(static_cast<std::size_t>(4) * 4 * 4, 0xAA);
             tex->GetData(1, 0, 0, 4, 4, level1.data(), static_cast<int>(level1.size()));
@@ -179,7 +179,7 @@ protected:
         // Check C: TextureCube, same stripe pattern on one face.
         {
             constexpr int size = 8;
-            auto cube = backend.CreateTextureCube(size, /*mipMap=*/true, /*surfaceFormat=*/0);
+            auto cube = renderer.CreateTextureCube(size, /*mipMap=*/true, /*surfaceFormat=*/0);
             const auto faceLevel0 = MakeStripe(size, size, 3);
             constexpr int face = 2; // PositiveY
             cube->SetData(face, 0, 0, 0, size, size, faceLevel0.data(), static_cast<int>(faceLevel0.size()));
@@ -214,7 +214,7 @@ protected:
                 img.height = h;
                 img.pixels = MakeStripe(w, h, 2);
                 img.mipLevels = 1;
-                auto tex = backend.CreateTexture(img);
+                auto tex = renderer.CreateTexture(img);
                 (void) tex;
             }
             catch (const std::exception&)

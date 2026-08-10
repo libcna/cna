@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Phase 63: verify WebGPUGraphicsBackend::DrawPrimitivesEx()/DrawIndexedPrimitivesEx() forward the
+// Phase 63: verify WebGPURenderer::DrawPrimitivesEx()/DrawIndexedPrimitivesEx() forward the
 // caller's real GpuDrawParams (via BasicEffect::FillGpuDrawParams()) into colored3d.wgsl's uniform
 // buffer, rather than the DrawColoredPrimitives fallback's hardcoded diffuseColor=white/
 // vertexColorEnabled=true.

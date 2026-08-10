@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Task 379: AlphaTestEffect null/no-texture behavior (EasyGL backend).
+// Task 379: AlphaTestEffect null/no-texture behavior (EasyGL renderer).
 //
 // FNA reference: `AlphaTestEffect` has no `TextureEnabled` flag at all (unlike `BasicEffect`) —
 // every one of its 4 shader variants unconditionally does `SAMPLE_TEXTURE(Texture,pin.TexCoord) *
@@ -7,7 +7,7 @@
 // happens if `Texture` is left null (sampling an unbound texture unit is graphics-API-dependent
 // undefined behavior in real Direct3D9/OpenGL, not a documented XNA fallback).
 //
-// CNA's own, already-established, cross-backend convention (used by every texture-sampling
+// CNA's own, already-established, cross-renderer convention (used by every texture-sampling
 // shader path, not just `AlphaTestEffect`): if no texture is bound, sample an internal 1×1 opaque
 // **white** texture instead of leaving the sampler unbound or stale — a safe, defined, documented
 // intentional deviation from FNA's undefined behavior (matches this project's `EnsureDefaultWhiteTexture()`

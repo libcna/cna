@@ -86,7 +86,7 @@ existing hand-rolled-JSON-parser convention (no new JSON library dependency) use
   `SetAppearanceEXT(appearance)` sets the skin/hair tint (see below).
   `DrawRealEXT(clipName, position, loop)` samples the clip, feeds bone matrices to the
   `SkinnedEffect`, and draws each part via the standard `GraphicsDevice` path — meaning it
-  inherits whatever a given backend already does for 3D draws (see Backend support below).
+  inherits whatever a given renderer already does for 3D draws (see Renderer support below).
   Throws `InvalidOperationException` if rendering wasn't enabled, `ObjectDisposedException`
   after `Dispose()`.
 - `AvatarAnimation::SetRealClipNameEXT` / `GetRealClipNameEXT` — the clip name to drive real
@@ -106,9 +106,9 @@ existing hand-rolled-JSON-parser convention (no new JSON library dependency) use
   carries real body-type data (always lazily defaults to `Female`, matching the real XNA
   implementation's undocumented, never-populated description format).
 
-### Backend support
+### Renderer support
 
-| Backend | Status |
+| Renderer | Status |
 |---|---|
 | EasyGL | Real, GPU-skinning proven end-to-end (`examples/avatar_real_render_integration_test.cpp`, pixel-readback, passing) |
 | Vulkan | Real skinned pipeline exists (descriptor sets, per-frame bone UBO, dedicated pipeline); not yet smoke-tested for this feature |

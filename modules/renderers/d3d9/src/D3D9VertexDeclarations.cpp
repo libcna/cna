@@ -1,11 +1,11 @@
 // plan_dx9.md Phase D9-2 (D9-22). COLOR0 element type corrected in D9-82 (see below).
-#include "CNA/Internal/Backends/D3D9/D3D9VertexDeclarations.hpp"
+#include "CNA/Internal/Renderers/D3D9/D3D9VertexDeclarations.hpp"
 
-namespace CNA::Internal::Backends::D3D9
+namespace CNA::Internal::Renderers::D3D9
 {
     namespace
     {
-        // D9-82 real finding (plan_dx9.md's D3D9GraphicsBackend's own first real draw, empirically
+        // D9-82 real finding (plan_dx9.md's D3D9Renderer's own first real draw, empirically
         // verified with cna_test_d3d9_draw before AND after this fix -- not assumed): COLOR0 was
         // originally declared D3DDECLTYPE_D3DCOLOR (D9-22, "same semantic meaning" as D3D11's
         // DXGI_FORMAT_R8G8B8A8_UNORM). That is wrong -- MSDN's own D3DDECLTYPE reference says
@@ -75,7 +75,7 @@ namespace CNA::Internal::Backends::D3D9
 
         // plan_cnj.md CNB-58/CNB-67-equivalent D3D9 porting task: VertexPositionNormalTangentTexture
         // (stride 48), used by the CNA NOXNA "Pbr3D" custom shader (PbrEffect, unskinned). Byte
-        // offsets match EasyGLGraphicsBackend.cpp's own ApplyLayout() `case 48:` exactly: POSITION0
+        // offsets match EasyGLRenderer.cpp's own ApplyLayout() `case 48:` exactly: POSITION0
         // (FLOAT3, 0), NORMAL0 (FLOAT3, 12), TANGENT0 (FLOAT4, 24 -- xyz=tangent, w=bitangent sign,
         // glTF convention), TEXCOORD0 (FLOAT2, 40).
         constexpr D3DVERTEXELEMENT9 kStride48[] = {
@@ -88,7 +88,7 @@ namespace CNA::Internal::Backends::D3D9
 
         // D3D9 porting task (CNB-67-equivalent): the stride-52 SkinnedVertex layout above with a
         // per-vertex Color (normalized ubyte4) appended at the end (offset 52), matching
-        // EasyGLGraphicsBackend.cpp's own ApplyLayout() `case 56:` byte-for-byte -- used by CNA's own
+        // EasyGLRenderer.cpp's own ApplyLayout() `case 56:` byte-for-byte -- used by CNA's own
         // NOXNA "SkinnedVertexColor3D" custom shader (real XNA SkinnedEffect has no vertex-color
         // input at all; Microsoft's own compiled SkinnedEffect.fx bytecode is never modified to add
         // one, see D3D9EffectDraw.cpp's own header comment on staying byte-identical to Microsoft's
@@ -106,7 +106,7 @@ namespace CNA::Internal::Backends::D3D9
         // plan_cnj.md CNB-75..79-equivalent D3D9 porting task: VertexPositionNormalTangentTextureSkinned
         // (stride 68), used by the CNA NOXNA "PbrSkinned3D" custom shader (SkinnedPbrEffect). The
         // stride-48 PBR layout above with the stride-52/56 skinning suffix (BlendWeight, BlendIndices)
-        // appended, matching EasyGLGraphicsBackend.cpp's own ApplyLayout() `case 68:` exactly.
+        // appended, matching EasyGLRenderer.cpp's own ApplyLayout() `case 68:` exactly.
         constexpr D3DVERTEXELEMENT9 kStride68[] = {
             {0, 0,  D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_POSITION,     0},
             {0, 12, D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_NORMAL,       0},

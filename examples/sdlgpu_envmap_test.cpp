@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_sdlgpu.md SDLGPU-33: EnvironmentMapEffect proof for the SDL_GPU graphics backend -- a real
+// plan_sdlgpu.md SDLGPU-33: EnvironmentMapEffect proof for the SDL_GPU graphics renderer -- a real
 // cube-map reflection, verified via RenderTarget2D::GetData() pixel readback (SDLGPU-39's
 // RenderTarget2D leg), mirroring this project's existing
 // vulkan_environmentmapeffect_amount_one_test.cpp: since the test cubemap is uniformly solid-colored
@@ -38,7 +38,7 @@
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp"
 
-#include "CNA/Internal/Backends/SdlGpu/SdlGpuGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/SdlGpu/SdlGpuRenderer.hpp"
 
 #include "common/PixelTestGame.hpp"
 
@@ -48,7 +48,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::SdlGpu;
+using namespace CNA::Internal::Renderers::SdlGpu;
 
 namespace
 {

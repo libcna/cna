@@ -7,7 +7,7 @@
 // left to be matched by name. Name matching is what the OpenGL module does by default, and on this
 // project's own test environment (Mesa llvmpipe, GL 4.5 core) it did not work: only the first
 // vertex attribute arrived, and the uniform block was never fed, so the whole sprite collapsed to
-// a degenerate triangle. See docs/llgl-backend.md and known_bugs.md -- the OpenGL module is still
+// a degenerate triangle. See docs/llgl-renderer.md and known_bugs.md -- the OpenGL module is still
 // an unverified path, and these qualifiers narrow rather than close that gap.
 
 #version 450 core

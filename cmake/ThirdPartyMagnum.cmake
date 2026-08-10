@@ -1,4 +1,4 @@
-# --- Magnum / Corrade acquisition for the MAGNUM graphics backend ---
+# --- Magnum / Corrade acquisition for the MAGNUM graphics renderer ---
 #
 # plan_magnum.md MAGNUM-1/MAGNUM-2. Magnum is a real multi-repository C++ graphics middleware
 # (mosra/corrade + mosra/magnum), not a single vendorable header like cgltf.h/stb_image.h, so it is
@@ -22,12 +22,12 @@ include_guard(GLOBAL)
 
 # Pinned upstream revisions. Magnum's last tagged release (v2020.06) predates the C++20/23 toolchains
 # CNA builds with and does not compile cleanly against them; upstream's own recommendation is to
-# track master, so these are the exact master revisions this backend was developed and verified
+# track master, so these are the exact master revisions this renderer was developed and verified
 # against rather than a moving branch name.
 set(CNA_CORRADE_GIT_TAG "783e4e4807536ec52c352986fc9317db986ace96"
-    CACHE STRING "Corrade revision fetched for the MAGNUM graphics backend")
+    CACHE STRING "Corrade revision fetched for the MAGNUM graphics renderer")
 set(CNA_MAGNUM_GIT_TAG "5a7424643bfd4621fbcff8c361d37795502cf890"
-    CACHE STRING "Magnum revision fetched for the MAGNUM graphics backend")
+    CACHE STRING "Magnum revision fetched for the MAGNUM graphics renderer")
 
 set(CNA_MAGNUM_ROOT "" CACHE PATH
     "Existing Corrade+Magnum install prefix to use instead of downloading them")
@@ -42,7 +42,7 @@ elseif(APPLE)
     set(_cna_magnum_context_component "CglContext")
 else()
     option(CNA_MAGNUM_USE_EGL
-        "Load OpenGL entry points through EGL instead of GLX in the MAGNUM backend" OFF)
+        "Load OpenGL entry points through EGL instead of GLX in the MAGNUM renderer" OFF)
     if(CNA_MAGNUM_USE_EGL)
         set(_cna_magnum_context_component "EglContext")
     else()
@@ -50,10 +50,10 @@ else()
     endif()
 endif()
 set(CNA_MAGNUM_CONTEXT_COMPONENT "${_cna_magnum_context_component}" CACHE INTERNAL
-    "Magnum platform GL context component the MAGNUM backend links")
+    "Magnum platform GL context component the MAGNUM renderer links")
 
 function(_cna_magnum_set_build_options)
-    # Only the pieces the backend actually uses. Magnum's default configuration builds a large set
+    # Only the pieces the renderer actually uses. Magnum's default configuration builds a large set
     # of libraries, plugins and utilities CNA has no consumer for; every one of them left ON is
     # build time paid on every fresh build directory for nothing.
     set(BUILD_STATIC ON CACHE BOOL "" FORCE)

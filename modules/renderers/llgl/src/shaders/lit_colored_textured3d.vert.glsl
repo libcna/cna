@@ -2,7 +2,7 @@
 // Lit, coloured and textured 3D vertex shader, Vulkan flavour (SPIR-V). A vertex colour is
 // multiplied into the tint as well; see lit_textured3d.vert.glsl for the plain variant without
 // one -- no standard XNA vertex type combines Color and Normal, but nothing stops a game from
-// declaring one, and this backend's shader-variant selection follows the vertex layout either way.
+// declaring one, and this renderer's shader-variant selection follows the vertex layout either way.
 //
 // The uniform block extends the common one (see effect3d_common.glsl.inc) with everything a lit
 // draw needs -- the world matrix (for the normal and world-position transforms) and all three
@@ -10,8 +10,8 @@
 // existing byte layout is untouched by this file's existence.
 //
 // Lighting is evaluated per pixel, not per vertex -- the same choice every other established CNA
-// backend except D3D9 makes (see GpuDrawParams::preferPerPixelLighting's own doc comment); this
-// backend ignores that field identically.
+// renderer except D3D9 makes (see GpuDrawParams::preferPerPixelLighting's own doc comment); this
+// renderer ignores that field identically.
 
 #version 450
 

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MS-PL
-#include "CNA/Internal/Backends/D3D9/D3D9ProfileCapabilities.hpp"
+#include "CNA/Internal/Renderers/D3D9/D3D9ProfileCapabilities.hpp"
 
 #include <wrl/client.h>
 
-namespace CNA::Internal::Backends::D3D9
+namespace CNA::Internal::Renderers::D3D9
 {
     using Microsoft::WRL::ComPtr;
 
@@ -28,7 +28,7 @@ namespace CNA::Internal::Backends::D3D9
         if (caps.MaxVolumeExtent < 256) return false;
         if (caps.NumSimultaneousRTs < 4) return false;
         // D9-100's own HiDef floor: unconditional (unrestricted) NPOT texture support -- POW2
-        // must NOT be required at all, matching D3D9GraphicsBackend::RequiresPowerOfTwoTexturesEXT
+        // must NOT be required at all, matching D3D9Renderer::RequiresPowerOfTwoTexturesEXT
         // and NonPowerOfTwoRequiresClampAddressingEXT's own established TextureCaps convention.
         if (caps.TextureCaps & D3DPTEXTURECAPS_POW2) return false;
 
@@ -114,7 +114,7 @@ namespace CNA::Internal::Backends::D3D9
             return 0;
 
         // D3D9's D3DMULTISAMPLE_TYPE enumerators for 2..16 samples are numerically equal to the
-        // sample count itself (matches D3D9GraphicsBackend::ClampMultiSampleCountEXT's own
+        // sample count itself (matches D3D9Renderer::ClampMultiSampleCountEXT's own
         // established convention -- no lookup table needed).
         DWORD qualityLevels = 0;
         const HRESULT hr = d3d9->CheckDeviceMultiSampleType(

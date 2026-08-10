@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MS-PL
-// Task 407: pixel test for SkinnedEffect's single translation bone (EasyGL backend).
+// Task 407: pixel test for SkinnedEffect's single translation bone (EasyGL renderer).
 //
 // Formalizes the pre-existing (Task 123) examples/skinned_effect_integration_test.cpp scenario
-// into this phase's own per-backend, per-task naming/registration convention (mirroring Task
+// into this phase's own per-renderer, per-task naming/registration convention (mirroring Task
 // 406's identity-bone baseline). All vertices are bound 100% to bone 0 (weight=1, all other
 // weights=0), and bone 0 is set to a real, non-identity translation
 // (Matrix.CreateTranslation(+0.5, 0, 0)): `skinMat = 1 * Bones[0] = Translate(+0.5,0,0)`, so
@@ -77,7 +77,7 @@ protected:
         device.SetDepthTestEnabled(false);
         device.setBlendStateProperty(BlendState::Opaque);
         // Task 896 finding (mirrors the Bgfx sibling's Task 364/884 fix): once
-        // GraphicsDevice's real default RasterizerState is pushed to every backend,
+        // GraphicsDevice's real default RasterizerState is pushed to every renderer,
         // this quad's winding is culled unless explicitly disabled.
         device.setRasterizerStateProperty(RasterizerState::CullNone);
 

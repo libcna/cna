@@ -1,6 +1,6 @@
 # Skia occlusion-query feasibility
 
-SKIA-104 concludes that the selected Skia raster backend cannot implement XNA/FNA occlusion-query
+SKIA-104 concludes that the selected Skia raster renderer cannot implement XNA/FNA occlusion-query
 semantics soundly. SKIA-105 therefore retains a deterministic unsupported path: construction is
 safe, `IsComplete` is false, `PixelCount` is zero, `Begin`/`End` throw the stable Skia 3D error,
 and `GraphicsCapability::OcclusionQuery` remains false.
@@ -12,7 +12,7 @@ must poll availability without blocking and `PixelCount` must expose the result 
 passed rasterization and depth/stencil testing. EasyGL uses `GL_ANY_SAMPLES_PASSED`, so its
 documented result is the weaker but still meaningful zero/one question: did any sample pass?
 
-The current backend instead owns an immediate CPU raster `SkSurface`/`SkCanvas`, has no depth or
+The current renderer instead owns an immediate CPU raster `SkSurface`/`SkCanvas`, has no depth or
 stencil attachment, and presents its completed RGBA8 pixels through SDL. The pinned artifact is
 built with Ganesh, Graphite, OpenGL, Vulkan and Dawn disabled. The pinned source does contain
 submission-wide Graphite/Vulkan `GpuStats::numOcclusionPassSamples`, but that API is not linked into
@@ -51,10 +51,10 @@ they are not a public submission bridge and cannot observe ordinary SpriteBatch/
 ### Hidden GPU context
 
 Creating Ganesh/Graphite or a raw GL/Vulkan query solely for this type would introduce a second
-device/context and resource-ownership model into a deliberately CPU-raster backend. It also would
-not observe CPU `SkCanvas` work. A future accelerated Skia backend may investigate its own native
+device/context and resource-ownership model into a deliberately CPU-raster renderer. It also would
+not observe CPU `SkCanvas` work. A future accelerated Skia renderer may investigate its own native
 submission statistics, but only under a replacement architecture decision and with dedicated
-visible/occluded/availability tests; it cannot change this raster backend's capability claim.
+visible/occluded/availability tests; it cannot change this raster renderer's capability claim.
 
 ## Resulting contract
 

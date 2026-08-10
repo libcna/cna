@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-#include "CNA/Internal/Backends/Llgl/LlglSdlSurface.hpp"
+#include "CNA/Internal/Renderers/Llgl/LlglSdlSurface.hpp"
 
 #include <LLGL/Display.h>
 
@@ -29,7 +29,7 @@
 #   define CNA_LLGL_SURFACE_X11 1
 #endif
 
-namespace CNA::Internal::Backends::Llgl
+namespace CNA::Internal::Renderers::Llgl
 {
     namespace
     {
@@ -64,7 +64,7 @@ namespace CNA::Internal::Backends::Llgl
         : window_(window)
     {
         if (window_ == nullptr)
-            throw std::runtime_error("LLGL backend: cannot build a surface from a null SDL window");
+            throw std::runtime_error("LLGL renderer: cannot build a surface from a null SDL window");
 
 #ifdef CNA_LLGL_SURFACE_X11
         const X11WindowHandles handles = GetX11Handles(window_);
@@ -72,13 +72,13 @@ namespace CNA::Internal::Backends::Llgl
         {
             const char* driver = SDL_GetCurrentVideoDriver();
             throw std::runtime_error(
-                std::string("LLGL backend: the SDL window exposes no X11 handles (video driver '") +
+                std::string("LLGL renderer: the SDL window exposes no X11 handles (video driver '") +
                 (driver != nullptr ? driver : "unknown") +
-                "'). This backend needs the x11 driver -- run with SDL_VIDEODRIVER=x11.");
+                "'). This renderer needs the x11 driver -- run with SDL_VIDEODRIVER=x11.");
         }
 #else
         throw std::runtime_error(
-            "LLGL backend: no native window handle is implemented for this platform yet");
+            "LLGL renderer: no native window handle is implemented for this platform yet");
 #endif
     }
 

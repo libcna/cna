@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-**CNA** is a C++ reimplementation of the XNA 4.0 programming model, built on SDL3 and a pluggable graphics backend
+**CNA** is a C++ reimplementation of the XNA 4.0 programming model, built on SDL3 and a pluggable graphics renderer
 layer. It is a framework/runtime and abstraction layer — not a game — designed to preserve XNA-style APIs
 (`Microsoft::Xna::Framework`) while using modern C++23 internals.
 
@@ -45,7 +45,7 @@ Microsoft::Xna::Framework::Graphics::Texture2D
 Microsoft::Xna::Framework::Graphics::SpriteBatch
 ```
 
-The `CNA` namespace is for project-specific extensions, helpers, internal backends, and non-XNA additions only.
+The `CNA` namespace is for project-specific extensions, helpers, internal renderers, and non-XNA additions only.
 Do not move original XNA API types into the `CNA` namespace.
 
 ---
@@ -194,7 +194,7 @@ spelling is stable API and identical across modules:
 
 ```text
 modules/graphics/include/Microsoft/Xna/Framework/Graphics/Texture2D.hpp
-modules/graphics/include/CNA/Internal/Backends/Common/IGraphicsBackend.hpp
+modules/graphics/include/CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp
 modules/audio/include/Microsoft/Xna/Framework/Audio/SoundEffect.hpp
 ```
 
@@ -397,7 +397,7 @@ Default debug build dir: `cmake-build-debug/`. Vulkan build dir: `cmake-build-vu
 
 ### Build locations & caching (mandatory)
 
-- **Always build into the stable in-repo `cmake-build-<variant>/` directories** (one per backend
+- **Always build into the stable in-repo `cmake-build-<variant>/` directories** (one per renderer
   variant). They survive across sessions and allow **incremental** rebuilds — never do a full rebuild
   when a handful of files changed.
 - **Never build in the session scratchpad / a system temp dir.** Scratchpad is only for throwaway
@@ -412,8 +412,8 @@ Default debug build dir: `cmake-build-debug/`. Vulkan build dir: `cmake-build-vu
 
 ## Existence-Gate Spikes — Persistent Directories Too
 
-Standalone existence-gate spike programs (throwaway-looking probes proving a new backend's
-underlying API works before any backend code is written — see `DX1-0`, `DX2-0`, `D9-0`) follow
+Standalone existence-gate spike programs (throwaway-looking probes proving a new renderer's
+underlying API works before any renderer code is written — see `DX1-0`, `DX2-0`, `D9-0`) follow
 the same build-location rule as CMake builds (see *Build locations & caching* above): write and
 compile them in a `<name>-spike/` directory at the repo root (see `dx9-spike/README.md` for the
 precedent), never in the session scratchpad. Once a spike's finding is settled, keep its `.cpp`
@@ -445,11 +445,11 @@ individual task. Do not push unless the user explicitly asks to push.
 | Layer                     | Location                                                        | Purpose                        |
 |---------------------------|-----------------------------------------------------------------|--------------------------------|
 | XNA public API            | `modules/<module>/include/Microsoft/Xna/Framework/…`            | Game-facing, must match XNA    |
-| Backend contracts         | `modules/graphics/include/CNA/Internal/Backends/Common/…`       | `IGraphicsBackend` etc.        |
-| Backend implementations   | `modules/renderers/<family>/{src,include}/…`                    | Hidden from XNA API            |
+| Renderer contracts         | `modules/graphics/include/CNA/Internal/Renderers/Common/…`       | `IGraphicsRenderer` etc.        |
+| Renderer implementations   | `modules/renderers/<family>/{src,include}/…`                    | Hidden from XNA API            |
 | CNA utilities/extensions  | `modules/core/include/CNA/…`, `modules/*-ext/…`                 | NOXNA helpers, logging, etc.   |
 
-Backend selection is compile-time via `CNA_GRAPHICS_BACKEND` CMake option
+Renderer selection is compile-time via `CNA_GRAPHICS_RENDERER` CMake option
 (`SDL_RENDERER` | `OPENGLES` | `OPENGL33` | `WEBGL1` | `WEBGL2` | `BGFX` | `VULKAN` | `WEBGPU` |
 `MAGNUM` | `HEADLESS` | `SOFTWARE` | `STUB` | `D3D11` | `D3D12` | `DIRECT2D` | `CANVAS` |
 `HTML_DOM` | `SKIA` | `ASCII` | `FREEDIRECT` | `D3D9` | `DX1` | `DX2` | `DX3` | `DX5` | `DX6` |
@@ -457,15 +457,15 @@ Backend selection is compile-time via `CNA_GRAPHICS_BACKEND` CMake option
 `WICKED` | `SOKOL` | `DILIGENT` | `GLIDE` | `GDI` | `LLGL` | `METAL`). These are exactly 41
 public identities; EasyGL remains an internal implementation shared by four GL profiles. `WEBGPU`
 is experimental and has a functional native
-2D baseline, not yet the 3D/effect parity of the established GPU backends.
-`MAGNUM` is a desktop-OpenGL backend built on mosra/magnum -- see `docs/magnum-backend.md` and
+2D baseline, not yet the 3D/effect parity of the established GPU renderers.
+`MAGNUM` is a desktop-OpenGL renderer built on mosra/magnum -- see `docs/magnum-renderer.md` and
 `plan_magnum.md` for its own capability boundary.
-`DILIGENT` is experimental too, and is the one backend whose native API is chosen at **runtime**
+`DILIGENT` is experimental too, and is the one renderer whose native API is chosen at **runtime**
 (DiligentCore is itself an abstraction over D3D11/D3D12/Vulkan/OpenGL/Metal) — see
-`plan_diligent.md` and `docs/diligent-backend.md`.
-`SKIA` is a separate experimental CPU-raster 2D backend backed by a pinned external Skia artifact;
+`plan_diligent.md` and `docs/diligent-renderer.md`.
+`SKIA` is a separate experimental CPU-raster 2D renderer backed by a pinned external Skia artifact;
 it does not delegate rendering to EasyGL and does not advertise 3D/depth/MSAA/MRT capabilities.
-Use `plan_skia.md`, `NEXT_skia.md`, `docs/skia-backend.md`, and
+Use `plan_skia.md`, `NEXT_skia.md`, `docs/skia-renderer.md`, and
 `docs/skia-developer-build.md` for that subsystem; do not reconstruct its state from the general
 `NEXT.md`.
 
@@ -474,20 +474,20 @@ Use `plan_skia.md`, `NEXT_skia.md`, `docs/skia-backend.md`, and
 ## WebGPU Is Active (Experimental)
 
 The project owner explicitly lifted the former WebGPU prohibition on **2026-07-12** and authorized
-its backend implementation.
+its renderer implementation.
 
 - WebGPU tasks live in **`plan_webgpu.md`** (`WEBGPU-1`–`WEBGPU-123`). Keep task statuses and
   limitations current as implementation proceeds.
-- The native backend uses pinned **wgpu-native v29.0.1.1**, selected with
-  `-DCNA_GRAPHICS_BACKEND=WEBGPU`. Prefer `CNA_WEBGPU_ROOT` for reproducible/offline builds; the
+- The native renderer uses pinned **wgpu-native v29.0.1.1**, selected with
+  `-DCNA_GRAPHICS_RENDERER=WEBGPU`. Prefer `CNA_WEBGPU_ROOT` for reproducible/offline builds; the
   CMake integration may otherwise download the matching official binary package.
 - The current baseline implements native surface/device setup, clear/present, Texture2D, buffer
   uploads and WGSL SpriteBatch. Do not describe it as Vulkan-level or full XNA 3D parity until the
   remaining shader, state, effect, render-target, readback and test tasks are actually complete.
-- Preserve the established backends: WebGPU changes should remain backend-local or common only
-  where a common-interface change is genuinely required and verified across existing backends.
+- Preserve the established renderers: WebGPU changes should remain renderer-local or common only
+  where a common-interface change is genuinely required and verified across existing renderers.
 
-See `docs/webgpu-backend.md` for the current capability boundary.
+See `docs/webgpu-renderer.md` for the current capability boundary.
 
 ---
 
@@ -502,7 +502,7 @@ sudo apt-get install -y libavcodec-dev libavformat-dev libavutil-dev libswresamp
 # Note: libswscale-dev may not be available in some repos (runtime libswscale8 is enough).
 # CNA implements YUV→RGBA conversion internally and does NOT depend on libswscale headers.
 
-# Magnum — required only for CNA_GRAPHICS_BACKEND=MAGNUM (desktop OpenGL). Magnum itself is
+# Magnum — required only for CNA_GRAPHICS_RENDERER=MAGNUM (desktop OpenGL). Magnum itself is
 # fetched/built by cmake/ThirdPartyMagnum.cmake; these are the system GL/X11 headers it links
 # against. Add libegl1-mesa-dev as well when configuring with -DCNA_MAGNUM_USE_EGL=ON.
 sudo apt-get install -y libgl1-mesa-dev libglx-dev libx11-dev

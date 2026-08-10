@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MS-PL
-// plan_d3d10.md design decision 3/5: D3D10 genuinely supports MRT (unlike every DX1..DX8 backend,
+// plan_d3d10.md design decision 3/5: D3D10 genuinely supports MRT (unlike every DX1..DX8 renderer,
 // where DirectDraw/early-Direct3D has exactly one active render target) -- verifies
 // SetRenderTargets(count=2) does not throw AND that each bound target keeps its own genuinely
 // distinct buffer (not silently aliased to the same one): two render targets are each cleared to
 // their own distinct color, bound together, then a colored-primitives draw (which only writes
-// SV_Target0 in this backend's shader) covers the screen -- afterward, target 0 shows the draw's
+// SV_Target0 in this renderer's shader) covers the screen -- afterward, target 0 shows the draw's
 // color but target 1 still shows its own original clear color, unchanged.
 //
 // Exit code 0 = PASS, 1 = FAIL.
@@ -85,7 +85,7 @@ protected:
         check(!threw, "SetRenderTargets(count=2) does not throw (real MRT support)");
 
         // A full-screen triangle-strip-covering quad (2 triangles), solid white -- only writes
-        // SV_Target0 in this backend's colored3d shader.
+        // SV_Target0 in this renderer's colored3d shader.
         const VertexPositionColor verts[6] = {
             { Vector3(-1.0f,  1.0f, 0.0f), Color::White },
             { Vector3( 1.0f,  1.0f, 0.0f), Color::White },

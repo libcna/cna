@@ -29,7 +29,7 @@
 //
 // WHY THIS FILE EXISTS SEPARATELY FROM InstancedVertexColorTests.cpp. That file's oracle already
 // separates "COLOR0 applied" from "COLOR0 dropped". It cannot separate "DiffuseColor applied" from
-// "DiffuseColor dropped" on a backend that consumes COLOR0, because REMED-GFX-212's own checkpoint
+// "DiffuseColor dropped" on a renderer that consumes COLOR0, because REMED-GFX-212's own checkpoint
 // triage used a WHITE DiffuseColor -- and under white,
 //
 //                        COLOR0 * white  ==  COLOR0
@@ -90,7 +90,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
 
-#ifdef CNA_BACKEND_BGFX
+#ifdef CNA_RENDERER_BGFX
 #include <bgfx/bgfx.h>
 #endif
 
@@ -118,26 +118,26 @@ using Microsoft::Xna::Framework::Graphics::VertexElement;
 using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
 using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 
-// The backends whose stock instanced path rasterizes and whose RenderTarget2D::GetData reads the
+// The renderers whose stock instanced path rasterizes and whose RenderTarget2D::GetData reads the
 // result back -- InstancedVertexColorTests.cpp's own suite set, for the same reason.
-#if defined(CNA_BACKEND_BGFX) || defined(CNA_BACKEND_EASYGL) || \
-    defined(CNA_BACKEND_WEBGPU) || defined(CNA_BACKEND_VULKAN) || \
-    defined(CNA_BACKEND_D3D9) || defined(CNA_BACKEND_D3D11) || \
-    defined(CNA_BACKEND_D3D12)
+#if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_EASYGL) || \
+    defined(CNA_RENDERER_WEBGPU) || defined(CNA_RENDERER_VULKAN) || \
+    defined(CNA_RENDERER_D3D9) || defined(CNA_RENDERER_D3D11) || \
+    defined(CNA_RENDERER_D3D12)
 #define CNA_INSTANCED_DIFFUSE_ORACLE 1
 #endif
 
-// The backends whose instanced route this file has MEASURED on a real display. D3D9/D3D11/D3D12
+// The renderers whose instanced route this file has MEASURED on a real display. D3D9/D3D11/D3D12
 // stay outside it because no D3D display is reachable here (SDL reports "x11 not available" under
-// Wine on the Xvfb displays this environment permits), and an unmeasured backend must not be
+// Wine on the Xvfb displays this environment permits), and an unmeasured renderer must not be
 // asserted in either direction. Every leg still PRINTS its reading there, which is the evidence
-// those backends lack.
+// those renderers lack.
 //
-// UNLIKE InstancedVertexColorTests.cpp, this file grants NO backend an exemption: every measured
-// backend is asserted against the CONTRACT above, never against its own measured behaviour. That is
+// UNLIKE InstancedVertexColorTests.cpp, this file grants NO renderer an exemption: every measured
+// renderer is asserted against the CONTRACT above, never against its own measured behaviour. That is
 // what makes it red-first -- it failed on bgfx before REMED-GFX-215 and passes after.
-#if defined(CNA_BACKEND_EASYGL) || defined(CNA_BACKEND_BGFX) || \
-    defined(CNA_BACKEND_VULKAN) || defined(CNA_BACKEND_WEBGPU)
+#if defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_BGFX) || \
+    defined(CNA_RENDERER_VULKAN) || defined(CNA_RENDERER_WEBGPU)
 #define CNA_INSTANCED_DIFFUSE_MEASURED 1
 #endif
 
@@ -145,20 +145,20 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 
 namespace
 {
-    constexpr const char* kBackendName =
-#if defined(CNA_BACKEND_EASYGL)
+    constexpr const char* kRendererName =
+#if defined(CNA_RENDERER_EASYGL)
         "EasyGL";
-#elif defined(CNA_BACKEND_VULKAN)
+#elif defined(CNA_RENDERER_VULKAN)
         "Vulkan";
-#elif defined(CNA_BACKEND_BGFX)
+#elif defined(CNA_RENDERER_BGFX)
         "bgfx";
-#elif defined(CNA_BACKEND_WEBGPU)
+#elif defined(CNA_RENDERER_WEBGPU)
         "WebGPU";
-#elif defined(CNA_BACKEND_D3D9)
+#elif defined(CNA_RENDERER_D3D9)
         "D3D9";
-#elif defined(CNA_BACKEND_D3D11)
+#elif defined(CNA_RENDERER_D3D11)
         "D3D11";
-#elif defined(CNA_BACKEND_D3D12)
+#elif defined(CNA_RENDERER_D3D12)
         "D3D12";
 #else
         "unknown";
@@ -552,7 +552,7 @@ namespace
     }
 
     /// Every column's reading in one line, printed by every leg whether it passes or fails -- a gate
-    /// that merely excludes a backend records only that somebody once believed it broken.
+    /// that merely excludes a renderer records only that somebody once believed it broken.
     std::string DescribeFrame(const FrameSnapshot& snapshot)
     {
         std::ostringstream os;
@@ -569,13 +569,13 @@ namespace
 
     void PrintMeasurement(const char* leg, const FrameSnapshot& snapshot)
     {
-        std::cout << "[ GFX-215  ] " << kBackendName << ' ' << leg << ':'
+        std::cout << "[ GFX-215  ] " << kRendererName << ' ' << leg << ':'
                   << DescribeFrame(snapshot) << std::endl;
     }
 
     /// Every distinct non-black colour anywhere in the frame, with how many pixels carry it. This
     /// reads the WHOLE target rather than a per-column box, so it stays meaningful even when a
-    /// backend places the geometry wrongly -- what colour was written is then still answerable even
+    /// renderer places the geometry wrongly -- what colour was written is then still answerable even
     /// though where is not.
     std::vector<std::pair<Rgba, int>> DistinctLitColors(const FrameSnapshot& snapshot)
     {
@@ -638,7 +638,7 @@ protected:
     void RequireInstancedRendering()
     {
         if (!device.SupportsCapability(GraphicsCapability::ThreeD))
-            GTEST_SKIP() << "Backend explicitly does not support 3D rendering";
+            GTEST_SKIP() << "Renderer explicitly does not support 3D rendering";
         device.setRasterizerStateProperty(RasterizerState::CullNone);
         device.setDepthStencilStateProperty(DepthStencilState::None);
         device.setBlendStateProperty(BlendState::Opaque);
@@ -1231,7 +1231,7 @@ TEST_F(InstancedDiffuseColorTest, InstanceFrequencyKeepsTheFullContract)
 // This leg reads the WHOLE target rather than per-column boxes, because WHAT colour was written and
 // WHERE it was written are separable questions here, and only the first belongs to REMED-GFX-215.
 // bgfx derives its native vertex layout from the buffer STRIDE, not from the VertexDeclaration
-// (`MakeBgfxLayout`, called from `BgfxVertexBufferBackend::SetData` before any draw route is
+// (`MakeBgfxLayout`, called from `BgfxVertexBufferRenderer::SetData` before any draw route is
 // chosen): a stride of 12 is not in its table, so the fallback adds Position + Color0 and produces
 // a 16-byte native layout over a 12-byte buffer. The geometry is consequently strided wrongly --
 // which is a DIFFERENT defect from this ticket's, is route-independent, and is recorded as
@@ -1258,9 +1258,9 @@ TEST_F(InstancedDiffuseColorTest, PositionOnlyDeclarationRendersDiffuseColorWhen
 
     BasicEffect effect(device);
 
-    // A backend is entitled to REJECT a stride its native layout cannot express, and some do. What
+    // A renderer is entitled to REJECT a stride its native layout cannot express, and some do. What
     // it may never do is accept the draw and return wrong pixels. So each route is measured
-    // through its own rejection barrier: a throw is recorded verbatim as that backend's declared
+    // through its own rejection barrier: a throw is recorded verbatim as that renderer's declared
     // boundary, and anything that RENDERS is held to the full contract.
     struct RouteResult
     {
@@ -1306,13 +1306,13 @@ TEST_F(InstancedDiffuseColorTest, PositionOnlyDeclarationRendersDiffuseColorWhen
     const auto report = [&](const char* leg, const RouteResult& r) {
         if (!r.rendered)
         {
-            std::cout << "[ GFX-215  ] " << kBackendName << ' ' << leg
+            std::cout << "[ GFX-215  ] " << kRendererName << ' ' << leg
                       << ": REJECTED -- \"" << r.rejection << '"' << std::endl;
             return std::vector<std::pair<Rgba, int>>{};
         }
         PrintMeasurement(leg, r.frame);
         const auto lit = DistinctLitColors(r.frame);
-        std::cout << "[ GFX-215  ] " << kBackendName << ' ' << leg
+        std::cout << "[ GFX-215  ] " << kRendererName << ' ' << leg
                   << " distinct lit colours:" << DescribeLitColors(lit) << std::endl;
         return lit;
     };
@@ -1333,7 +1333,7 @@ TEST_F(InstancedDiffuseColorTest, PositionOnlyDeclarationRendersDiffuseColorWhen
         if (r.rendered)
             return;
         EXPECT_FALSE(r.rejection.empty())
-            << leg << ": the draw was refused without saying why. A backend may decline a stride "
+            << leg << ": the draw was refused without saying why. A renderer may decline a stride "
                       "it cannot express, but the refusal has to be legible";
     };
     expectLoudRejection(ordinary, "positionOnly/ordinary");
@@ -1341,7 +1341,7 @@ TEST_F(InstancedDiffuseColorTest, PositionOnlyDeclarationRendersDiffuseColorWhen
 
     // REMED-GFX-215's own guarantee, and the whole of it: on any route that DID render, with the
     // property disabled, the plain DiffuseColor is the ONLY colour that may reach the target. This
-    // holds no matter how the backend derives its native layout, because a disabled COLOR0 is never
+    // holds no matter how the renderer derives its native layout, because a disabled COLOR0 is never
     // consumed at all.
     for (const auto& entry : instancedLit)
     {
@@ -1378,7 +1378,7 @@ TEST_F(InstancedDiffuseColorTest, PositionOnlyDeclarationRendersDiffuseColorWhen
             << ". A vertex layout derived before either route is chosen cannot differ between them";
     }
 
-    // Every measured backend that ACCEPTS the stride builds its native layout from the
+    // Every measured renderer that ACCEPTS the stride builds its native layout from the
     // declaration, so the geometry lands exactly where it belongs and the full contract holds.
     //
     // bgfx carried a declared exemption here until REMED-GFX-216: its `MakeBgfxLayout` keyed on the
@@ -1408,7 +1408,7 @@ TEST_F(InstancedDiffuseColorTest, PositionOnlyDeclarationRendersDiffuseColorWhen
 // object counts, and they lag one frame, so every reading is taken after two Presents.
 // ---------------------------------------------------------------------------
 
-#ifdef CNA_BACKEND_BGFX
+#ifdef CNA_RENDERER_BGFX
 
 class BgfxInstancedColorCardinalityTest : public InstancedDiffuseColorTest
 {
@@ -1634,6 +1634,6 @@ TEST_F(BgfxInstancedColorCardinalityTest, InstancedColorDrawSubmitsExactlyOnce)
     }
 }
 
-#endif   // CNA_BACKEND_BGFX
+#endif   // CNA_RENDERER_BGFX
 
 #endif   // CNA_INSTANCED_DIFFUSE_ORACLE

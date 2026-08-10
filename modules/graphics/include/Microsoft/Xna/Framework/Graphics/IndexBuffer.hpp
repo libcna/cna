@@ -11,9 +11,9 @@
 #include "Microsoft/Xna/Framework/Graphics/IndexElementSize.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SetDataOptions.hpp"
 
-namespace CNA::Internal::Backends
+namespace CNA::Internal::Renderers
 {
-    class IIndexBufferBackend;
+    class IIndexBufferRenderer;
 }
 
 namespace Microsoft::Xna::Framework::Graphics
@@ -159,16 +159,16 @@ namespace Microsoft::Xna::Framework::Graphics
         void GetData(std::uint32_t* data, int startIndex, int elementCount);
 
         /**
-         * @brief Internal accessor used by the backend draw paths.
+         * @brief Internal accessor used by the renderer draw paths.
          */
-        NOXNA [[nodiscard]] CNA::Internal::Backends::IIndexBufferBackend& GetBackend() const { return *backend_; }
+        NOXNA [[nodiscard]] CNA::Internal::Renderers::IIndexBufferRenderer& GetRenderer() const { return *renderer_; }
 
         /**
          * @brief Returns true while the GPU index buffer handle is allocated.
          *
          * Becomes false immediately after `Dispose()` is called.
          */
-        NOXNA [[nodiscard]] bool HasBackend() const { return backend_ != nullptr; }
+        NOXNA [[nodiscard]] bool HasRenderer() const { return renderer_ != nullptr; }
 
     protected:
         /**
@@ -176,7 +176,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param data         Source index array.
          * @param startIndex   First element to read from @p data.
          * @param elementCount Number of indices to upload.
-         * @param options      Streaming hint passed to the backend.
+         * @param options      Streaming hint passed to the renderer.
          */
         void SetDataWithOptions(const std::uint16_t* data, int startIndex,
                                 int elementCount, SetDataOptions options);
@@ -186,7 +186,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param data         Source index array.
          * @param startIndex   First element to read from @p data.
          * @param elementCount Number of indices to upload.
-         * @param options      Streaming hint passed to the backend.
+         * @param options      Streaming hint passed to the renderer.
          */
         void SetDataWithOptions(const std::uint32_t* data, int startIndex,
                                 int elementCount, SetDataOptions options);
@@ -195,7 +195,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Protected constructor used by DynamicIndexBuffer to pass the dynamic flag.
          *
          * The @p dynamic hint is accepted for XNA API conformance but is currently
-         * ignored by all CNA backends — static and dynamic IBOs use the same GPU path.
+         * ignored by all CNA renderers — static and dynamic IBOs use the same GPU path.
          *
          * @param device           The graphics device.
          * @param indexElementSize Element size — SixteenBits or ThirtyTwoBits.
@@ -224,12 +224,12 @@ namespace Microsoft::Xna::Framework::Graphics
                              int elementCount,
                              IndexElementSize dataElementSize);
 
-        std::unique_ptr<CNA::Internal::Backends::IIndexBufferBackend> backend_;
+        std::unique_ptr<CNA::Internal::Renderers::IIndexBufferRenderer> renderer_;
         IndexElementSize indexElementSize_{IndexElementSize::SixteenBits};
         BufferUsage bufferUsage_{BufferUsage::None};
         int indexCount_{0};
         // Task 930: CPU-side shadow of the most recent SetData call's raw index bytes, enabling
-        // GetData() without a real per-backend GPU readback path (see VertexBuffer's own
+        // GetData() without a real per-renderer GPU readback path (see VertexBuffer's own
         // identical cpuShadow_ precedent for the full rationale).
         std::vector<std::uint8_t> cpuShadow_;
     };

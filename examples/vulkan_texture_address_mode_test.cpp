@@ -12,7 +12,7 @@
 //   - PointClamp: clamps to the texture's last texel -> Blue.
 // Point filtering keeps samples crisp (no bilinear blending) for exact comparison.
 //
-// Before Task 665's fix, VulkanSpriteBatchBackend didn't override SetSamplerFilter/
+// Before Task 665's fix, VulkanSpriteBatchRenderer didn't override SetSamplerFilter/
 // SetSamplerAddressMode at all (silent no-op via the base class), and separately clamped the
 // sourceRectangle-derived UVs to [0,1] on the CPU side regardless of sampler -- both PointWrap
 // and PointClamp would have read the SAME (clamped-to-edge) pixel here, since Wrap addressing

@@ -14,8 +14,8 @@ namespace CNA::Internal::Xnb
     /**
      * @brief FNA's real `Microsoft.Xna.Framework.Content.Texture3DReader`
      *        (`src/Content/ContentReaders/Texture3DReader.cs`), implemented strictly against
-     *        CNA's backend-neutral `Texture3D`/`GraphicsDevice` API -- never against any one
-     *        backend's internals directly.
+     *        CNA's renderer-neutral `Texture3D`/`GraphicsDevice` API -- never against any one
+     *        renderer's internals directly.
      *
      * Targets `std::shared_ptr<Texture3D>` rather than a bare `Texture3D`: unlike `Texture2D`
      * (copy-constructible) or `SoundEffect`/`TextureCube` (move-only but movable), `Texture3D` had

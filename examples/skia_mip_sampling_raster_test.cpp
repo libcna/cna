@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // SKIA-129: display-free TextureFilter decomposition and affine LOD selection oracle.
 
-#include "CNA/Internal/Backends/Skia/SkiaMipSampling.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaMipSampling.hpp"
 
 #include <array>
 #include <cmath>
@@ -9,7 +9,7 @@
 #include <limits>
 #include <stdexcept>
 
-using namespace CNA::Internal::Backends::Skia;
+using namespace CNA::Internal::Renderers::Skia;
 
 namespace
 {

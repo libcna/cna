@@ -269,7 +269,7 @@ protected:
 
         // Depth testing disabled: stored 0.2 cannot reject 0.9, and no depth write occurs. The
         // custom write=true state proves DepthBufferEnable controls the whole depth operation, as on
-        // the reference GL/D3D backends, rather than only bypassing comparison.
+        // the reference GL/D3D renderers, rather than only bypassing comparison.
         ClearTargetAndDepth(device, kClear, 0.2f);
         device.setDepthStencilStateProperty(DepthStencilState::None);
         DrawQuad(device, effect, -1.0f, 1.0f, 0.9f, kGreen);

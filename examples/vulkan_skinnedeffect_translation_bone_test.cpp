@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Task 407: pixel test for SkinnedEffect's single translation bone (Vulkan backend). See
+// Task 407: pixel test for SkinnedEffect's single translation bone (Vulkan renderer). See
 // examples/easygl_skinnedeffect_translation_bone_test.cpp for the full derivation.
 //
 // Exit code 0 = PASS, 1 = FAIL.

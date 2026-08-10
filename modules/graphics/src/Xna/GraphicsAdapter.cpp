@@ -12,13 +12,13 @@
 #endif
 
 // plan_dx9.md Phase D9-10 (D9-101/D9-102): GraphicsProfile.Reach/HiDef is a real, D3DCAPS9-backed
-// distinction ONLY on this backend -- the other 9 CNA backends have no D3DCAPS9 to consult and
+// distinction ONLY on this renderer -- the other 9 CNA renderers have no D3DCAPS9 to consult and
 // keep their honest `return true;`/hardcoded-fallback behavior below (see plan_dx9.md's own
 // "Boundaries" section: an implementation would otherwise be a hardcoded table pretending to be a
 // capability query, which this project explicitly refuses to fake).
-#ifdef CNA_BACKEND_D3D9
-#include "CNA/Internal/Backends/D3D9/D3D9FormatMapping.hpp"
-#include "CNA/Internal/Backends/D3D9/D3D9ProfileCapabilities.hpp"
+#ifdef CNA_RENDERER_D3D9
+#include "CNA/Internal/Renderers/D3D9/D3D9FormatMapping.hpp"
+#include "CNA/Internal/Renderers/D3D9/D3D9ProfileCapabilities.hpp"
 #endif
 
 namespace Microsoft::Xna::Framework::Graphics
@@ -221,8 +221,8 @@ namespace Microsoft::Xna::Framework::Graphics
 
     bool GraphicsAdapter::IsProfileSupported(GraphicsProfile graphicsProfile) const
     {
-#ifdef CNA_BACKEND_D3D9
-        using namespace CNA::Internal::Backends::D3D9;
+#ifdef CNA_RENDERER_D3D9
+        using namespace CNA::Internal::Renderers::D3D9;
 
         // D9-32's own construction-time finding, re-used here: Reach has no floor worth checking
         // -- every real D3D9 HAL device already exceeds vs_2_0/ps_2_0 and every other Reach
@@ -232,7 +232,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
         return MeetsHiDefFloorEXT(QueryAdapterCapsEXT());
 #else
-        // D9-101: the other 9 CNA backends have no D3DCAPS9 to consult -- an implementation here
+        // D9-101: the other 9 CNA renderers have no D3DCAPS9 to consult -- an implementation here
         // would be a hardcoded table pretending to be a capability query (plan_dx9.md's own
         // "Boundaries" section explicitly refuses that), so they keep this honest.
         (void)graphicsProfile;
@@ -250,8 +250,8 @@ namespace Microsoft::Xna::Framework::Graphics
         SharpRuntime::intcs& selectedMultiSampleCount
     ) const
     {
-#ifdef CNA_BACKEND_D3D9
-        using namespace CNA::Internal::Backends::D3D9;
+#ifdef CNA_RENDERER_D3D9
+        using namespace CNA::Internal::Renderers::D3D9;
 
         // D9-102: a render-target format must be BOTH valid for the requested profile (D9-100's
         // own whitelist -- a Reach game may not request a HiDef-only format even if the
@@ -293,8 +293,8 @@ namespace Microsoft::Xna::Framework::Graphics
         SharpRuntime::intcs& selectedMultiSampleCount
     ) const
     {
-#ifdef CNA_BACKEND_D3D9
-        using namespace CNA::Internal::Backends::D3D9;
+#ifdef CNA_RENDERER_D3D9
+        using namespace CNA::Internal::Renderers::D3D9;
 
         // D9-102: the back buffer (swap chain) has its own, stricter display-compatibility
         // restriction distinct from a general render-target texture (D9-30's own finding, e.g.

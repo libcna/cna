@@ -1,5 +1,5 @@
 // Shader Model 5.0 (ps_5_0). Ported line-by-line from
-// src/CNA/Internal/Backends/Vulkan/shaders/sprite2d.frag.glsl.
+// src/CNA/Internal/Renderers/Vulkan/shaders/sprite2d.frag.glsl.
 
 Texture2D    texSampler        : register(t0);
 SamplerState texSamplerSampler : register(s0);

@@ -1,20 +1,20 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_sokol.md SOKOL-34: the Sokol backend's environment-mapped 3D program --
+// plan_sokol.md SOKOL-34: the Sokol renderer's environment-mapped 3D program --
 // EnvironmentMapEffect (reflection cube mapping), always textured (a real base Texture2D, or the
-// backend's 1x1 white fallback, same convention lit3d.glsl already uses) and always lit (ambient
+// renderer's 1x1 white fallback, same convention lit3d.glsl already uses) and always lit (ambient
 // folded into `emissiveColor` CPU-side -- EnvironmentMapEffect::FillGpuDrawParams's own
 // "emissive + ambient*diffuse, pre-combined and pre-multiplied by alpha" comment -- plus up to 3
 // directional lights). No vertex-colour support: real XNA's EnvironmentMapEffect has no
 // VertexColorEnabled property at all (`FillGpuDrawParams` always sets `vertexColorEnabled=false`),
-// matching EasyGLGraphicsBackend::EnsureEnvMapped3DProgram()'s own 3-attribute (position/normal/
+// matching EasyGLRenderer::EnsureEnvMapped3DProgram()'s own 3-attribute (position/normal/
 // texcoord0 only, no color0) vertex layout -- this shader mirrors that shape exactly rather than
 // reusing lit3d.glsl's optional-color0 pattern.
 //
 // GpuDrawParams::diffuseColor/emissiveColor both arrive PRE-multiplied by alpha from the CPU side
 // for this effect specifically (unlike BasicEffect/lit3d.glsl, which keep diffuse.rgb unmultiplied
 // and apply alpha only via the alpha channel) -- ported verbatim from
-// EasyGLGraphicsBackend::EnsureEnvMapped3DProgram()'s own `litRGB=lightSum*uDiffuseColor.rgb+
+// EasyGLRenderer::EnsureEnvMapped3DProgram()'s own `litRGB=lightSum*uDiffuseColor.rgb+
 // uEmissiveColor` / `combinedAlpha=uDiffuseColor.a*texColor.a` shape, itself matching FNA's
 // EnvironmentMapEffect.fx (PSEnvMap) exactly -- see docs/environmentmapeffect-support.md for the
 // additive-vs-lerp / unscaled-vs-alpha-scaled-specular bug history this formula fixes.
@@ -25,7 +25,7 @@
 // ComputeFresnelFactor/EnvCoord (a per-fragment recompute is not equivalent once vertices carry
 // different normals). The diffuse lighting sum (NdotL against each directional light), by
 // contrast, IS computed per-fragment from the interpolated world normal, matching
-// EasyGLGraphicsBackend's identical split.
+// EasyGLRenderer's identical split.
 
 @module cna
 

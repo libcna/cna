@@ -12,8 +12,8 @@ namespace CNA::Graphics {
      * @brief Stores configuration for the NOXNA extended render pipeline.
      *
      * This is a pure settings bag — it does not perform any rendering itself.
-     * The active backend reads these settings and adjusts its render passes
-     * accordingly (once backend support is implemented for each feature).
+     * The active renderer reads these settings and adjusts its render passes
+     * accordingly (once renderer support is implemented for each feature).
      *
      * Construct via `GraphicsDevice::GetRenderPipelineSettings()` or standalone.
      */

@@ -1,5 +1,5 @@
 // plan_dx.md Phase DX6 (DX-40/DX-41/DX-42).
-#include "CNA/Internal/Backends/D3D11/D3D11Textures.hpp"
+#include "CNA/Internal/Renderers/D3D11/D3D11Textures.hpp"
 
 #include <algorithm>
 #include <cstdio>
@@ -7,7 +7,7 @@
 #include <stdexcept>
 #include <vector>
 
-namespace CNA::Internal::Backends::D3D11
+namespace CNA::Internal::Renderers::D3D11
 {
     namespace
     {
@@ -18,7 +18,7 @@ namespace CNA::Internal::Backends::D3D11
             return buf;
         }
 
-        /// Mirrors EasyGLGraphicsBackend.cpp's CalculateRenderTargetMipLevels / Texture2D.cpp's
+        /// Mirrors EasyGLRenderer.cpp's CalculateRenderTargetMipLevels / Texture2D.cpp's
         /// own CalculateMipLevels: full mip chain down to a 1x1 level.
         int CalculateMipLevels(int w, int h)
         {
@@ -34,10 +34,10 @@ namespace CNA::Internal::Backends::D3D11
     }
 
     // -------------------------------------------------------------------------
-    // D3D11TextureBackend
+    // D3D11TextureRenderer
     // -------------------------------------------------------------------------
 
-    D3D11TextureBackend::D3D11TextureBackend(
+    D3D11TextureRenderer::D3D11TextureRenderer(
         ID3D11Device* device, ID3D11DeviceContext* context, const ImageData& data)
         : device_(device), context_(context)
         , width_(data.width), height_(data.height)
@@ -55,7 +55,7 @@ namespace CNA::Internal::Backends::D3D11
 
         HRESULT hr = device_->CreateTexture2D(&desc, nullptr, texture_.GetAddressOf());
         if (FAILED(hr))
-            throw std::runtime_error("D3D11TextureBackend: CreateTexture2D failed, hr=" + FormatHr(hr));
+            throw std::runtime_error("D3D11TextureRenderer: CreateTexture2D failed, hr=" + FormatHr(hr));
 
         if (!data.pixels.empty())
         {
@@ -65,16 +65,16 @@ namespace CNA::Internal::Backends::D3D11
 
         hr = device_->CreateShaderResourceView(texture_.Get(), nullptr, srv_.GetAddressOf());
         if (FAILED(hr))
-            throw std::runtime_error("D3D11TextureBackend: CreateShaderResourceView failed, hr=" + FormatHr(hr));
+            throw std::runtime_error("D3D11TextureRenderer: CreateShaderResourceView failed, hr=" + FormatHr(hr));
     }
 
-    void D3D11TextureBackend::UpdatePixels(const uint8_t* rgba, int stride)
+    void D3D11TextureRenderer::UpdatePixels(const uint8_t* rgba, int stride)
     {
         const UINT rowPitch = stride > 0 ? static_cast<UINT>(stride) : static_cast<UINT>(width_) * 4;
         context_->UpdateSubresource(texture_.Get(), 0, nullptr, rgba, rowPitch, 0);
     }
 
-    void D3D11TextureBackend::UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH)
+    void D3D11TextureRenderer::UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH)
     {
         (void)levelH;
         if (level < 0 || level >= mipLevels_) return;
@@ -84,10 +84,10 @@ namespace CNA::Internal::Backends::D3D11
     }
 
     // -------------------------------------------------------------------------
-    // D3D11TextureCubeBackend
+    // D3D11TextureCubeRenderer
     // -------------------------------------------------------------------------
 
-    D3D11TextureCubeBackend::D3D11TextureCubeBackend(
+    D3D11TextureCubeRenderer::D3D11TextureCubeRenderer(
         ID3D11Device* device, ID3D11DeviceContext* context, int size, bool mipMap, int /*surfaceFormat*/)
         : device_(device), context_(context)
         , size_(size), mipLevels_(mipMap ? CalculateMipLevels(size, size) : 1)
@@ -105,7 +105,7 @@ namespace CNA::Internal::Backends::D3D11
 
         HRESULT hr = device_->CreateTexture2D(&desc, nullptr, texture_.GetAddressOf());
         if (FAILED(hr))
-            throw std::runtime_error("D3D11TextureCubeBackend: CreateTexture2D failed, hr=" + FormatHr(hr));
+            throw std::runtime_error("D3D11TextureCubeRenderer: CreateTexture2D failed, hr=" + FormatHr(hr));
 
         D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc{};
         srvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
@@ -115,10 +115,10 @@ namespace CNA::Internal::Backends::D3D11
 
         hr = device_->CreateShaderResourceView(texture_.Get(), &srvDesc, srv_.GetAddressOf());
         if (FAILED(hr))
-            throw std::runtime_error("D3D11TextureCubeBackend: CreateShaderResourceView failed, hr=" + FormatHr(hr));
+            throw std::runtime_error("D3D11TextureCubeRenderer: CreateShaderResourceView failed, hr=" + FormatHr(hr));
     }
 
-    bool D3D11TextureCubeBackend::SetData(int face, int level, int x, int y, int w, int h,
+    bool D3D11TextureCubeRenderer::SetData(int face, int level, int x, int y, int w, int h,
                                           const void* data, int dataLength)
     {
         // REMED-GFX-135: these used to be a silent `return` the shared layer read as a completed
@@ -144,7 +144,7 @@ namespace CNA::Internal::Backends::D3D11
         return true;
     }
 
-    bool D3D11TextureCubeBackend::GetData(int face, int level, int x, int y, int w, int h,
+    bool D3D11TextureCubeRenderer::GetData(int face, int level, int x, int y, int w, int h,
                                           void* data, int dataLength) const
     {
         // REMED-GFX-130: each silent `return` here became a complete transparent-black face once
@@ -183,10 +183,10 @@ namespace CNA::Internal::Backends::D3D11
     }
 
     // -------------------------------------------------------------------------
-    // D3D11Texture3DBackend
+    // D3D11Texture3DRenderer
     // -------------------------------------------------------------------------
 
-    D3D11Texture3DBackend::D3D11Texture3DBackend(
+    D3D11Texture3DRenderer::D3D11Texture3DRenderer(
         ID3D11Device* device, ID3D11DeviceContext* context,
         int w, int h, int depth, bool mipMap, int /*surfaceFormat*/)
         : device_(device), context_(context)
@@ -204,17 +204,17 @@ namespace CNA::Internal::Backends::D3D11
 
         HRESULT hr = device_->CreateTexture3D(&desc, nullptr, texture_.GetAddressOf());
         if (FAILED(hr))
-            throw std::runtime_error("D3D11Texture3DBackend: CreateTexture3D failed, hr=" + FormatHr(hr));
+            throw std::runtime_error("D3D11Texture3DRenderer: CreateTexture3D failed, hr=" + FormatHr(hr));
 
         hr = device_->CreateShaderResourceView(texture_.Get(), nullptr, srv_.GetAddressOf());
         if (FAILED(hr))
-            throw std::runtime_error("D3D11Texture3DBackend: CreateShaderResourceView failed, hr=" + FormatHr(hr));
+            throw std::runtime_error("D3D11Texture3DRenderer: CreateShaderResourceView failed, hr=" + FormatHr(hr));
     }
 
-    bool D3D11Texture3DBackend::SetData(int level, int x, int y, int z, int w, int h, int depth,
+    bool D3D11Texture3DRenderer::SetData(int level, int x, int y, int z, int w, int h, int depth,
                                         const void* data, int dataLength)
     {
-        // REMED-GFX-135: see D3D11TextureCubeBackend::SetData -- silent returns looked like writes.
+        // REMED-GFX-135: see D3D11TextureCubeRenderer::SetData -- silent returns looked like writes.
         if (level < 0 || level >= mipLevels_) return false;
         if (data == nullptr || w <= 0 || h <= 0 || depth <= 0) return false;
         const int levelW = std::max(1, width_ >> level);
@@ -235,10 +235,10 @@ namespace CNA::Internal::Backends::D3D11
         return true;
     }
 
-    bool D3D11Texture3DBackend::GetData(int level, int x, int y, int z, int w, int h, int depth,
+    bool D3D11Texture3DRenderer::GetData(int level, int x, int y, int z, int w, int h, int depth,
                                         void* data, int dataLength) const
     {
-        // REMED-GFX-130: see D3D11TextureCubeBackend::GetData above.
+        // REMED-GFX-130: see D3D11TextureCubeRenderer::GetData above.
         if (level < 0 || level >= mipLevels_ || w <= 0 || h <= 0 || depth <= 0) return false;
         if (data == nullptr || dataLength < w * h * depth * 4) return false;
 

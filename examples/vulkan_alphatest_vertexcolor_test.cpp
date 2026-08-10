@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Task 887: AlphaTestEffect.VertexColorEnabled fix verification (Vulkan backend).
+// Task 887: AlphaTestEffect.VertexColorEnabled fix verification (Vulkan renderer).
 //
 // Direct port of examples/easygl_alphatest_vertexcolor_diffuse_test.cpp (Task 377's test), which
 // found this exact gap on Vulkan/Bgfx: their alpha-test pipeline/shader only ever declared

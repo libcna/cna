@@ -17,17 +17,17 @@ from collections import Counter
 
 
 BACKEND_INTERFACES = (
-    "IVertexBufferBackend",
-    "IIndexBufferBackend",
-    "IOcclusionQueryBackend",
-    "ITextureCubeBackend",
-    "ITexture3DBackend",
-    "ITextureBackend",
-    "IRenderTargetBackend",
-    "IRenderTargetCubeBackend",
-    "IEffectBackend",
-    "ISpriteBatchBackend",
-    "IGraphicsBackend",
+    "IVertexBufferRenderer",
+    "IIndexBufferRenderer",
+    "IOcclusionQueryRenderer",
+    "ITextureCubeRenderer",
+    "ITexture3DRenderer",
+    "ITextureRenderer",
+    "IRenderTargetRenderer",
+    "IRenderTargetCubeRenderer",
+    "IEffectRenderer",
+    "ISpriteBatchRenderer",
+    "IGraphicsRenderer",
 )
 
 ALLOWED_STATUSES = {"implemented", "bounded", "unsupported", "internal"}
@@ -216,8 +216,8 @@ def capability_entries(source: str) -> list[str]:
 
 
 def expected_entries(root: pathlib.Path) -> list[str]:
-    backend_source = sanitized_cpp(
-        (root / "modules/graphics/include/CNA/Internal/Backends/Common/IGraphicsBackend.hpp").read_text()
+    renderer_source = sanitized_cpp(
+        (root / "modules/graphics/include/CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp").read_text()
     )
     device_source = sanitized_cpp(
         (root / "modules/graphics/include/Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp").read_text()
@@ -225,7 +225,7 @@ def expected_entries(root: pathlib.Path) -> list[str]:
     capability_source = sanitized_cpp((root / "modules/graphics/include/CNA/GraphicsCapability.hpp").read_text())
     entries: list[str] = []
     for class_name in BACKEND_INTERFACES:
-        entries.extend(disambiguated(method_bases(backend_source, class_name)))
+        entries.extend(disambiguated(method_bases(renderer_source, class_name)))
     entries.extend(capability_entries(capability_source))
     entries.extend(disambiguated(method_bases(device_source, "GraphicsDevice")))
     return entries

@@ -2,17 +2,17 @@
 // Task 678: SDL_Renderer Texture2D::SetData/GetData full-array round-trip audit.
 //
 // Texture2D::GetData is implemented entirely via a CPU-side cache (cpuPixels_, maintained in the
-// shared, backend-agnostic Texture2D.cpp) -- it never queries the GPU texture at all, so a plain
-// SetData()-then-GetData() round trip is guaranteed correct identically on every backend by
-// construction, not something specific to SDL_Renderer to verify. The genuinely backend-specific
+// shared, renderer-agnostic Texture2D.cpp) -- it never queries the GPU texture at all, so a plain
+// SetData()-then-GetData() round trip is guaranteed correct identically on every renderer by
+// construction, not something specific to SDL_Renderer to verify. The genuinely renderer-specific
 // question this task's own hint ("SDL_UpdateTexture/SDL_LockTexture path") points at is whether
 // the REAL GPU texture SDL_Renderer creates from SetData's full-array overload (which calls
-// GraphicsDevice::GetBackend().CreateTexture(), constructing a brand-new SdlTextureBackend via
+// GraphicsDevice::GetRenderer().CreateTexture(), constructing a brand-new SdlTextureRenderer via
 // SDL_CreateTexture()+SDL_UpdateTexture()) actually contains the correct pixels when drawn --
 // not just whatever the CPU-side cache happens to report.
 //
 // Requires PresentationMode::NativeBackBuffer (Task 915 finding): SDL_RenderReadPixels operates
-// in physical output coordinates, while this backend's default presentation mode
+// in physical output coordinates, while this renderer's default presentation mode
 // (FixedHeightDynamicWidth) does not map logical pixels 1:1 to physical ones.
 //
 // Design: a 2x2 texture, 4 distinct solid-colour pixels (Red/Green/Blue/Yellow), written via the

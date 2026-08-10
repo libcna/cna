@@ -47,13 +47,13 @@ using Microsoft::Xna::Framework::Graphics::TextureCollection;
 // Constructor / properties
 // -----------------------------------------------------------------------
 
-// REMED-CONTENT-004: Texture3D is a documented, backend-dependent capability -- Headless has no
+// REMED-CONTENT-004: Texture3D is a documented, renderer-dependent capability -- Headless has no
 // real GPU resource of any kind, and Software's Texture3D support is an explicit v1 scope boundary
-// (plan_software.md Boundaries). Every test below constructs a real Texture3D, so on a backend that
+// (plan_software.md Boundaries). Every test below constructs a real Texture3D, so on a renderer that
 // doesn't support it the constructor now throws System::NotSupportedException before any test body
 // logic runs -- skip cleanly rather than fail, matching this project's own hardware-capability-skip
-// convention (e.g. Accelerometer/Gyroscope). See Texture3DUnsupportedBackendTest below for the
-// positive verification that the new throw behavior actually fires on such a backend.
+// convention (e.g. Accelerometer/Gyroscope). See Texture3DUnsupportedRendererTest below for the
+// positive verification that the new throw behavior actually fires on such a renderer.
 class Texture3DTest : public ::testing::Test
 {
 protected:
@@ -61,21 +61,21 @@ protected:
     {
         if (!gd.SupportsCapability(CNA::GraphicsCapability::Texture3D))
         {
-            GTEST_SKIP() << "Texture3D is not supported on this backend (REMED-CONTENT-004)";
+            GTEST_SKIP() << "Texture3D is not supported on this renderer (REMED-CONTENT-004)";
         }
     }
 
     GraphicsDevice gd;
 };
 
-// Deliberately NOT a Texture3DTest fixture (that fixture skips on an unsupported backend) --
-// this is the mirror-image check, verifying the new throw behavior on such a backend.
-TEST(Texture3DUnsupportedBackendTest, ConstructorThrowsNotSupportedExceptionWhenBackendLacksTexture3D)
+// Deliberately NOT a Texture3DTest fixture (that fixture skips on an unsupported renderer) --
+// this is the mirror-image check, verifying the new throw behavior on such a renderer.
+TEST(Texture3DUnsupportedRendererTest, ConstructorThrowsNotSupportedExceptionWhenRendererLacksTexture3D)
 {
     GraphicsDevice gd;
     if (gd.SupportsCapability(CNA::GraphicsCapability::Texture3D))
     {
-        GTEST_SKIP() << "this backend supports Texture3D; nothing to verify here";
+        GTEST_SKIP() << "this renderer supports Texture3D; nothing to verify here";
     }
     EXPECT_THROW((Texture3D(gd, 2, 2, 2, false, SurfaceFormat::Color)), System::NotSupportedException);
 }
@@ -168,8 +168,8 @@ TEST_F(Texture3DTest, SetDataStartIndexNegativeStartIndexThrowsOutOfRange)
     EXPECT_THROW(tex.SetData(buf.data(), -1, 8), std::out_of_range);
 }
 
-// REMED-GFX-135: both overloads used to be bare EXPECT_NO_THROWs, which a backend that dropped the
-// upload passed just as easily as one that stored it. Every backend reaching this fixture has real
+// REMED-GFX-135: both overloads used to be bare EXPECT_NO_THROWs, which a renderer that dropped the
+// upload passed just as easily as one that stored it. Every renderer reaching this fixture has real
 // volume storage (the SetUp above skips the rest), so the readback is the oracle: it proves the
 // second (startIndex) overload stored ITS OWN data rather than leaving the first call's behind.
 TEST_F(Texture3DTest, SetDataExactElementCountStoresTheWholeVolume)
@@ -297,7 +297,7 @@ TEST_F(Texture3DTest, SetDataBoxWithinBoundsStoresOnlyThatSlice)
 }
 
 // Task 913: elementCount must cover the full requested region (right-left)*(bottom-top)*
-// (back-front) — previously unvalidated, so a too-small elementCount caused the backend to
+// (back-front) — previously unvalidated, so a too-small elementCount caused the renderer to
 // write/read past the caller-supplied buffer (confirmed via a live heap-corruption crash while
 // building Task 663's DDS test fixture for the analogous TextureCube gap).
 TEST_F(Texture3DTest, SetDataBoxElementCountLessThanRegionThrowsOutOfRange)
@@ -363,7 +363,7 @@ TEST_F(Texture3DTest, GetDataBoxLeftNotLessThanRightThrowsOutOfRange)
 }
 
 // REMED-GFX-130 false-positive audit: this test used to be a bare EXPECT_NO_THROW, which asserted
-// nothing about what GetData produced -- a backend that read nothing and a backend that read the
+// nothing about what GetData produced -- a renderer that read nothing and a renderer that read the
 // slice correctly both passed it. It now asserts the uploaded content itself.
 TEST_F(Texture3DTest, GetDataBoxWithinBoundsReturnsUploadedSlice)
 {
@@ -376,9 +376,9 @@ TEST_F(Texture3DTest, GetDataBoxWithinBoundsReturnsUploadedSlice)
     };
     tex.SetData(uploaded, 8);
 
-    // Every backend that reaches this point reports GraphicsCapability::Texture3D (the fixture
+    // Every renderer that reaches this point reports GraphicsCapability::Texture3D (the fixture
     // skips the ones that do not), and REMED-GFX-130 made that report honest everywhere -- ASCII
-    // used to answer true from IGraphicsBackend::SupportsCapability's own default while creating
+    // used to answer true from IGraphicsRenderer::SupportsCapability's own default while creating
     // no volume resource at all. So real content is the only acceptable outcome here.
     const Color sentinel(0xCD, 0xCD, 0xCD, 0xCD);
     std::vector<Color> buf(4, sentinel);
@@ -444,9 +444,9 @@ TEST_F(Texture3DTest, CanBeAssignedIntoRealGraphicsDeviceTexturesSlot)
 
 // Texture::Dispose(bool) removes the texture from GraphicsDevice.Textures/VertexTextures on
 // disposal (matches FNA's Texture.Dispose unbind behaviour). Texture3D::Dispose(bool) previously
-// only released its own backend handle without ever calling into Texture::Dispose(bool), so this
+// only released its own renderer handle without ever calling into Texture::Dispose(bool), so this
 // unbind never applied to Texture3D. Now it does, since Texture3D::Dispose(bool) calls
-// Texture::Dispose(disposing) after releasing its own backend handle (same order as
+// Texture::Dispose(disposing) after releasing its own renderer handle (same order as
 // Texture2D::Dispose(bool)).
 TEST_F(Texture3DTest, DisposeUnbindsFromGraphicsDeviceTextures)
 {

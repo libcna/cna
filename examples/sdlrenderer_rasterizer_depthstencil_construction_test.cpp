@@ -2,17 +2,17 @@
 // Task 729: Verify RasterizerState/DepthStencilState can be constructed and assigned without
 // throwing on SDL_Renderer -- pure data, mirrors Task 724's VertexDeclaration pattern.
 //
-// Unlike VertexBuffer/IndexBuffer/Texture3D/etc. (which call a backend factory method that either
+// Unlike VertexBuffer/IndexBuffer/Texture3D/etc. (which call a renderer factory method that either
 // throws -- Tasks 720-723, 727 -- or is BLOCKED pending a decision -- Task 725),
 // GraphicsDevice::setRasterizerStateProperty/setDepthStencilStateProperty call
-// IGraphicsBackend::ApplyRasterizerState/ApplyDepthStencilState, whose documented DEFAULT
-// (in IGraphicsBackend.hpp) is an explicit no-op -- "Applies a RasterizerState to the backend.
-// Default: no-op." / "Applies a DepthStencilState to the backend. Default: no-op." --
-// SdlGraphicsBackend does not override either, so both are genuine, already-decided,
-// intentional no-ops on this 2D-only backend: construction and assignment never touch anything
+// IGraphicsRenderer::ApplyRasterizerState/ApplyDepthStencilState, whose documented DEFAULT
+// (in IGraphicsRenderer.hpp) is an explicit no-op -- "Applies a RasterizerState to the renderer.
+// Default: no-op." / "Applies a DepthStencilState to the renderer. Default: no-op." --
+// SdlRenderer does not override either, so both are genuine, already-decided,
+// intentional no-ops on this 2D-only renderer: construction and assignment never touch anything
 // that could throw, and the property values themselves round-trip correctly regardless (they are
 // pure data, same as RasterizerState/DepthStencilState's own GraphicsResource base -- like
-// VertexDeclaration, Task 724 -- never actually reaching GPU state on this backend).
+// VertexDeclaration, Task 724 -- never actually reaching GPU state on this renderer).
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
@@ -77,7 +77,7 @@ protected:
               }),
               "DepthStencilState() with property setters does not throw");
 
-        // --- Assignment via GraphicsDevice: this is where a genuine backend call happens
+        // --- Assignment via GraphicsDevice: this is where a genuine renderer call happens
         //     (ApplyRasterizerState/ApplyDepthStencilState) -- confirmed to never throw here. ---
         check(DoesNotThrow([&] { dev.setRasterizerStateProperty(RasterizerState::CullNone); }),
               "setRasterizerStateProperty(CullNone) does not throw");
@@ -89,7 +89,7 @@ protected:
               "setDepthStencilStateProperty(Default) does not throw");
 
         // --- The assigned state is genuinely stored and reported back (pure data, not silently
-        //     dropped), even though this backend's own GPU application is a no-op. ---
+        //     dropped), even though this renderer's own GPU application is a no-op. ---
         dev.setRasterizerStateProperty(RasterizerState::CullClockwise);
         check(dev.getRasterizerStateProperty().getCullModeProperty() == CullMode::CullClockwiseFace,
               "GraphicsDevice reports back the exact RasterizerState just assigned");

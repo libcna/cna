@@ -1,4 +1,4 @@
-#include "CNA/Internal/Backends/Skia/SkiaMipGeneration.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaMipGeneration.hpp"
 
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/HalfTypeHelper.hpp"
 
@@ -6,7 +6,7 @@
 #include <bit>
 #include <cmath>
 
-namespace CNA::Internal::Backends::Skia
+namespace CNA::Internal::Renderers::Skia
 {
     using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 
@@ -454,4 +454,4 @@ namespace CNA::Internal::Backends::Skia
             }
         }
     }
-} // namespace CNA::Internal::Backends::Skia
+} // namespace CNA::Internal::Renderers::Skia

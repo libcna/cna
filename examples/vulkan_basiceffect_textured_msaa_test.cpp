@@ -3,9 +3,9 @@
 // Task 899) correctly selects the MSAA-aware render pass when backbuffer MSAA is engaged.
 //
 // Direct port of vulkan_basiceffect_texture_enabled_test.cpp (Task 366) with backbuffer MSAA
-// forced via GraphicsDevice::RecreateBackendForMultiSampleCount(8) (the same NOXNA test-only hook
+// forced via GraphicsDevice::RecreateRendererForMultiSampleCount(8) (the same NOXNA test-only hook
 // Task 878/879's MSAA test uses, since GraphicsDeviceManager.PreferMultiSampling never actually
-// reaches the Vulkan backend -- Task 902).
+// reaches the Vulkan renderer -- Task 902).
 //
 // Every other Vulkan 3D pipeline-creation function selects its render pass via
 // `(msaa && renderPassMsaa_) ? renderPassMsaa_ : renderPass_` when colorAttachmentCount<=1 --
@@ -92,7 +92,7 @@ protected:
         Game::Initialize();
         // Force real backbuffer MSAA -- see this file's header comment for why this hook is
         // needed instead of GraphicsDeviceManager.PreferMultiSampling (Task 902).
-        getGraphicsDeviceProperty().RecreateBackendForMultiSampleCount(8);
+        getGraphicsDeviceProperty().RecreateRendererForMultiSampleCount(8);
     }
 
     void Draw(const GameTime&) override

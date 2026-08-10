@@ -55,36 +55,36 @@ using namespace Microsoft::Xna::Framework::Graphics;
 
 namespace
 {
-#if defined(CNA_BACKEND_SOFTWARE)
-    constexpr const char* kBackendName = "SOFTWARE";
+#if defined(CNA_RENDERER_SOFTWARE)
+    constexpr const char* kRendererName = "SOFTWARE";
     constexpr bool kRasterizes = true;
     constexpr bool kBackbufferReadback = true;
-#elif defined(CNA_BACKEND_EASYGL)
-    constexpr const char* kBackendName = "EASYGL";
+#elif defined(CNA_RENDERER_EASYGL)
+    constexpr const char* kRendererName = "EASYGL";
     constexpr bool kRasterizes = true;
     constexpr bool kBackbufferReadback = true;
-#elif defined(CNA_BACKEND_VULKAN)
-    constexpr const char* kBackendName = "VULKAN";
+#elif defined(CNA_RENDERER_VULKAN)
+    constexpr const char* kRendererName = "VULKAN";
     constexpr bool kRasterizes = true;
     constexpr bool kBackbufferReadback = true;
-#elif defined(CNA_BACKEND_SDL_GPU)
-    constexpr const char* kBackendName = "SDL_GPU";
+#elif defined(CNA_RENDERER_SDL_GPU)
+    constexpr const char* kRendererName = "SDL_GPU";
     constexpr bool kRasterizes = true;
     constexpr bool kBackbufferReadback = false;
-#elif defined(CNA_BACKEND_BGFX)
-    constexpr const char* kBackendName = "BGFX";
+#elif defined(CNA_RENDERER_BGFX)
+    constexpr const char* kRendererName = "BGFX";
     constexpr bool kRasterizes = true;
     constexpr bool kBackbufferReadback = true;
-#elif defined(CNA_BACKEND_WEBGPU)
-    constexpr const char* kBackendName = "WEBGPU";
+#elif defined(CNA_RENDERER_WEBGPU)
+    constexpr const char* kRendererName = "WEBGPU";
     constexpr bool kRasterizes = true;
     constexpr bool kBackbufferReadback = true;
-#elif defined(CNA_BACKEND_HEADLESS)
-    constexpr const char* kBackendName = "HEADLESS";
+#elif defined(CNA_RENDERER_HEADLESS)
+    constexpr const char* kRendererName = "HEADLESS";
     constexpr bool kRasterizes = false;
     constexpr bool kBackbufferReadback = false;
 #else
-#error "REMED-GFX-148: this backend has no declared Additive control contract."
+#error "REMED-GFX-148: this renderer has no declared Additive control contract."
 #endif
 
     constexpr int kW = 12;
@@ -439,7 +439,7 @@ class AdditiveBlendContractTest final : public Game
         if (!kBackbufferReadback)
         {
             if (frame_ == 1)
-                Check(true, "J1 backbuffer readback unavailable on this control backend; RT path is authoritative");
+                Check(true, "J1 backbuffer readback unavailable on this control renderer; RT path is authoritative");
             return;
         }
         dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
@@ -473,13 +473,13 @@ protected:
         auto& dev = getGraphicsDeviceProperty();
         if (frame_ == 1)
         {
-            std::printf("[INFO] REMED-GFX-148 Additive contract on %s\n", kBackendName);
+            std::printf("[INFO] REMED-GFX-148 Additive contract on %s\n", kRendererName);
             ContractDefinitions();
             if (!kRasterizes)
             {
                 HeadlessControl(dev);
                 result_ = (passCount_ == totalCount_) ? 0 : 1;
-                std::printf("[INFO] %s: %d/%d checks passed\n", kBackendName, passCount_, totalCount_);
+                std::printf("[INFO] %s: %d/%d checks passed\n", kRendererName, passCount_, totalCount_);
                 Exit();
                 return;
             }
@@ -494,7 +494,7 @@ protected:
                   "K1 source texture disposed before clean game/device teardown");
             result_ = (passCount_ == totalCount_) ? 0 : 1;
             std::printf("[INFO] %s: %d/%d checks passed across %d frames\n",
-                        kBackendName, passCount_, totalCount_, frame_);
+                        kRendererName, passCount_, totalCount_, frame_);
             Exit();
         }
     }

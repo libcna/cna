@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl4.md GL4-14: real FBO-backed RenderTarget2D proof for the OpenGL4 graphics backend --
+// plan_opengl4.md GL4-14: real FBO-backed RenderTarget2D proof for the OpenGL4 graphics renderer --
 // a colour texture attachment, an optional depth/stencil renderbuffer, an optional multisampled
 // colour renderbuffer resolved into the colour texture on unbind, and an optional mip chain
-// regenerated from level 0 on unbind (OpenGL4RenderTargetBackend, modeled on
-// EasyGLRenderTargetBackend's own resource shape but using raw GL4Loader calls).
+// regenerated from level 0 on unbind (OpenGL4RenderTargetRenderer, modeled on
+// EasyGLRenderTargetRenderer's own resource shape but using raw GL4Loader calls).
 //
 // Check A -- Clear()-only fill of a RenderTarget2D (no draw call between bind/unbind), sampled
 //   back via SpriteBatch onto the backbuffer, reads the expected colour.
@@ -15,7 +15,7 @@
 // Check D -- MultiSampleCount property fidelity: a RenderTarget2D constructed with
 //   preferredMultiSampleCount=0 must report 0.
 // Check E/F/G -- real RenderTarget2D::GetData() pixel assertions on the Check A/B/C targets'
-//   centre pixels (OpenGL4RenderTargetBackend::GetData(), via a throwaway per-level read FBO),
+//   centre pixels (OpenGL4RenderTargetRenderer::GetData(), via a throwaway per-level read FBO),
 //   proving the same 3 targets actually contain the expected content, not just "didn't throw".
 // Check H -- mipMap request: LevelCount reflects a full mip chain, and GetData() on level 0 of a
 //   mipmapped target (after UnbindAsRenderTarget()'s glGenerateMipmap regen) still reads correctly.
@@ -23,7 +23,7 @@
 //   resolves via glBlitFramebuffer on unbind; MultiSampleCount is real and clamped (not silently
 //   dropped to 0), and the resolved interior pixel matches the flat colour drawn into it.
 // Check J -- SpriteBatch::Draw() INTO a bound RenderTarget2D smaller than the window: proves
-//   OpenGL4SpriteBatchBackend::FlushBatch's viewport/ortho sizing correctly follows the bound
+//   OpenGL4SpriteBatchRenderer::FlushBatch's viewport/ortho sizing correctly follows the bound
 //   RT's own size (GetCurrentRenderTarget2DSize), not the window's physical size -- without that
 //   fix this check would sample the wrong region (or nothing) instead of the sprite's flat colour.
 //
@@ -260,7 +260,7 @@ protected:
         }
 
         // Check J: SpriteBatch::Draw() INTO a bound RenderTarget2D smaller than the window --
-        // exercises OpenGL4SpriteBatchBackend::FlushBatch's RT-size-aware viewport fix.
+        // exercises OpenGL4SpriteBatchRenderer::FlushBatch's RT-size-aware viewport fix.
         {
             const Color kBlue2x2(0, 0, 255, 255);
             Texture2D blueTex = Texture2D::CreateFromPixels(dev, 2, 2, SolidTexturePixels(kBlue2x2));

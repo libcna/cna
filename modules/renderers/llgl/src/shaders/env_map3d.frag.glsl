@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // EnvironmentMapEffect fragment shader, Vulkan flavour (SPIR-V). See env_map3d.vert.glsl for the
-// EnvMapParams uniform block this shares, and the Vulkan backend's own env_map3d.frag.glsl for the
+// EnvMapParams uniform block this shares, and the Vulkan renderer's own env_map3d.frag.glsl for the
 // formula this transliterates verbatim -- three real formula bugs (additive instead of lerp'd
 // base blend, an unscaled specular term, and an unscaled base-lerp target) were found and fixed
 // there empirically (see docs/environmentmapeffect-support.md); this shader copies the corrected
@@ -83,8 +83,8 @@ void main()
     // and the base blend is a lerp (mix), not additive -- see the file header comment.
     vec3 rgb = mix(baseColor, envSample.rgb * combinedAlpha, blendFactor)
              + envMapSpecularFresnelFactor.xyz * envSample.a * combinedAlpha;
-    // vFogFactor is "how much fog" (0 = none, 1 = full), matching this backend's own convention
-    // (see lit_textured3d.frag.glsl) -- NOT the plain Vulkan backend's opposite "how much of the
+    // vFogFactor is "how much fog" (0 = none, 1 = full), matching this renderer's own convention
+    // (see lit_textured3d.frag.glsl) -- NOT the plain Vulkan renderer's opposite "how much of the
     // original colour to keep" convention its own env_map3d.vert.glsl computes vFogFactor as.
     rgb = mix(rgb, fogColor.rgb, vFogFactor);
 

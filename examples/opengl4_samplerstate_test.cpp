@@ -2,20 +2,20 @@
 // plan_opengl4.md GL4-26: real dynamic SamplerState for OpenGL4's direct 3D draws
 // (DrawPrimitivesEx/DrawIndexedPrimitivesEx). A real, now-fixed bug: BindProgramForStride used to
 // unconditionally call ApplySamplerState(slot, 0, 1, 1, 1) (Linear + hardcoded Clamp) for every
-// bound texture unit AFTER GraphicsDevice::applySamplerStatesToBackend() had already applied the
+// bound texture unit AFTER GraphicsDevice::applySamplerStatesToRenderer() had already applied the
 // REAL per-slot GraphicsDevice.SamplerStates[slot] value moments earlier -- silently overwriting
 // it on every single direct 3D draw, always Clamp, regardless of what SamplerState a game
 // actually assigned. Real XNA's own SamplerState default is Linear+Wrap (not Clamp), so the old
 // hardcoded value was not just non-dynamic but the wrong default too. Fixed by simply removing
 // the redundant/incorrect override calls -- the real per-slot state was already being applied
-// correctly by the caller all along; this backend just needed to stop clobbering it.
+// correctly by the caller all along; this renderer just needed to stop clobbering it.
 //
-// Check A ports easygl_sampler_state_effect_test.cpp's own already-cross-backend-verified proof
+// Check A ports easygl_sampler_state_effect_test.cpp's own already-cross-renderer-verified proof
 // verbatim: a 2-texel red|green pattern texture, UV spanning u=[0,2] (so u=1.25 either wraps to
 // the pattern's own left/red texel, or clamps to its right/green edge depending on AddressU),
 // sampled with SamplerState::PointWrap explicitly assigned to slot 0 -- must read RED.
 // Check B -- the SAME scene with the SamplerState left at its untouched default -- must ALSO read
-//   RED, since real XNA's own default AddressU is Wrap, not Clamp (decisive proof the backend's
+//   RED, since real XNA's own default AddressU is Wrap, not Clamp (decisive proof the renderer's
 //   own default was wrong before this fix, not just that an explicit assignment now works).
 // Check C -- SamplerState::PointClamp explicitly assigned -- must read GREEN (the clamped edge),
 //   proving Clamp still works correctly when a game genuinely wants it (the fix didn't just

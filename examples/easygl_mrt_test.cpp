@@ -90,7 +90,7 @@ void main()
 
     // gl_SampleMask is an ESSL 3.20 core output. Selecting exactly sample 0 makes a full-screen
     // draw resolve to 1/N of its source on a real N-sample attachment, but remain fully opaque
-    // if a backend silently substituted a single-sample texture.
+    // if a renderer silently substituted a single-sample texture.
     const char* kMsaaVertexShader = R"GLSL(#version 320 es
 precision highp float;
 layout(location = 0) in vec3 aPosition;
@@ -517,7 +517,7 @@ class EasyGlMrtTest final : public Game
             countThrew = true;
         }
         Check(countThrew && device.GetRenderTargets().empty(),
-              "CNA's public four-target ceiling rejects five targets before backend mutation");
+              "CNA's public four-target ceiling rejects five targets before renderer mutation");
     }
 
     void TestMsaa()

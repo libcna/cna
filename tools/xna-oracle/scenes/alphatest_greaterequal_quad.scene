@@ -10,7 +10,7 @@
 # specifically because it already has a texel at the EXACT boundary -- alphatest_quad.scene's own
 # texture (alpha=255,1,255,64) never lands exactly on 128, so it could not distinguish Greater
 # from GreaterEqual at all. Under GreaterEqual: alpha=128 (exact match) now PASSES (unlike plain
-# Greater, where it would fail); alpha=129 (above) PASSES; alpha=127/1 (below) FAIL. A backend
+# Greater, where it would fail); alpha=129 (above) PASSES; alpha=127/1 (below) FAIL. A renderer
 # that silently treated GreaterEqual identically to Greater would incorrectly discard the
 # alpha=128 texel here -- this scene exists specifically to close that verification gap.
 width=256

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 // GDI-073: exact contract for GDI's deliberately narrow backbuffer-only 4x CPU MSAA.
 
-#include "CNA/GraphicsBackendType.hpp"
+#include "CNA/GraphicsRendererType.hpp"
 #include "CNA/GraphicsCapability.hpp"
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -15,7 +15,7 @@
 #include <memory>
 #include <vector>
 
-using namespace CNA::Internal::Backends;
+using namespace CNA::Internal::Renderers;
 
 namespace
 {
@@ -48,46 +48,46 @@ namespace
         return Expect(equal, message);
     }
 
-    [[nodiscard]] Pixel ReadPixel(IGraphicsBackend& backend, int x, int y)
+    [[nodiscard]] Pixel ReadPixel(IGraphicsRenderer& renderer, int x, int y)
     {
         Pixel pixel{};
-        backend.ReadBackbuffer(x, y, 1, 1, pixel.data());
+        renderer.ReadBackbuffer(x, y, 1, 1, pixel.data());
         return pixel;
     }
 
-    void SetOpaqueMask(IGraphicsBackend& backend, unsigned int mask)
+    void SetOpaqueMask(IGraphicsRenderer& renderer, unsigned int mask)
     {
         BlendWriteState writeState;
         writeState.multiSampleMask = mask;
-        backend.ApplyBlendState(
+        renderer.ApplyBlendState(
             /*One*/ 0, /*One*/ 0, /*Zero*/ 1, /*Zero*/ 1,
             /*Add*/ 0, /*Add*/ 0, writeState);
     }
 
-    void SetStencil(IGraphicsBackend& backend, int compare, int pass, int fail,
+    void SetStencil(IGraphicsRenderer& renderer, int compare, int pass, int fail,
                     int reference)
     {
-        backend.ApplyDepthStencilState(
+        renderer.ApplyDepthStencilState(
             /*depthEnable*/ false, /*depthWriteEnable*/ false, /*LessEqual*/ 3,
             /*stencilEnable*/ true, compare, pass, fail, /*depthFail Keep*/ 0,
             /*readMask*/ 0xFF, /*writeMask*/ 0xFF, reference,
             /*twoSided*/ false, 0, 0, 0, 0);
     }
 
-    void DisableStencil(IGraphicsBackend& backend)
+    void DisableStencil(IGraphicsRenderer& renderer)
     {
-        backend.ApplyDepthStencilState(
+        renderer.ApplyDepthStencilState(
             false, false, /*LessEqual*/ 3, false, /*Always*/ 0,
             /*Keep*/ 0, /*Keep*/ 0, /*Keep*/ 0, 0xFF, 0xFF, 0,
             false, 0, 0, 0, 0);
     }
 
-    void Draw(IGraphicsBackend& backend, const ITextureBackend& texture,
+    void Draw(IGraphicsRenderer& renderer, const ITextureRenderer& texture,
               const Rectangle& destination, const Rectangle& source,
               float rotation = 0.0f,
               const Vector2& origin = Vector2(0.0f, 0.0f))
     {
-        std::unique_ptr<ISpriteBatchBackend> sprites = backend.CreateSpriteBatch();
+        std::unique_ptr<ISpriteBatchRenderer> sprites = renderer.CreateSpriteBatch();
         sprites->Begin();
         sprites->SetSamplerFilter(/*Point*/ 1);
         sprites->SetSamplerAddressMode(/*Clamp*/ 1, /*Clamp*/ 1);
@@ -96,7 +96,7 @@ namespace
         sprites->End();
     }
 
-    bool ExerciseContract(IGraphicsBackend& backend)
+    bool ExerciseContract(IGraphicsRenderer& renderer)
     {
         bool ok = true;
         const Pixel black{0, 0, 0, 255};
@@ -111,24 +111,24 @@ namespace
                 0, 255, 0, 255,
                 0, 0, 255, 255,
             }};
-        std::unique_ptr<ITextureBackend> atlas = backend.CreateTexture(atlasData);
+        std::unique_ptr<ITextureRenderer> atlas = renderer.CreateTexture(atlasData);
         const Rectangle redSource(0, 0, 1, 1);
         const Rectangle greenSource(1, 0, 1, 1);
         const Rectangle blueSource(2, 0, 1, 1);
         const Rectangle full(0, 0, kWidth, kHeight);
 
-        ok &= Expect(backend.SupportsCapability(CNA::GraphicsCapability::MultiSampleAntiAliasing),
+        ok &= Expect(renderer.SupportsCapability(CNA::GraphicsCapability::MultiSampleAntiAliasing),
                      "GDI advertises its real but deliberately narrow backbuffer MSAA path");
-        ok &= Expect(backend.ApplyMultiSampleCount(4) == 4 &&
-                         backend.GetMultiSampleCount() == 4,
+        ok &= Expect(renderer.ApplyMultiSampleCount(4) == 4 &&
+                         renderer.GetMultiSampleCount() == 4,
                      "exactly four CPU colour samples are active");
-        std::unique_ptr<IRenderTargetBackend> target = backend.CreateRenderTarget2D(
+        std::unique_ptr<IRenderTargetRenderer> target = renderer.CreateRenderTarget2D(
             2, 2, /*DepthFormat.None*/ 0, false, false, /*requested samples*/ 4);
         ok &= Expect(target != nullptr && target->GetMultiSampleCount() == 0,
                      "GDI RenderTarget2D remains explicitly single-sampled");
 
-        DisableStencil(backend);
-        backend.ApplyRasterizerState(/*CullCounterClockwise*/ 2, /*Solid*/ 0, false);
+        DisableStencil(renderer);
+        renderer.ApplyRasterizerState(/*CullCounterClockwise*/ 2, /*Solid*/ 0, false);
 
         struct MaskCase
         {
@@ -146,10 +146,10 @@ namespace
         };
         for (const MaskCase& maskCase : maskCases)
         {
-            backend.Clear(0.0f, 0.0f, 0.0f, 1.0f);
-            SetOpaqueMask(backend, maskCase.mask);
-            Draw(backend, *atlas, full, redSource);
-            ok &= ExpectPixel(ReadPixel(backend, 1, 5),
+            renderer.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+            SetOpaqueMask(renderer, maskCase.mask);
+            Draw(renderer, *atlas, full, redSource);
+            ok &= ExpectPixel(ReadPixel(renderer, 1, 5),
                               Pixel{maskCase.expectedRed, 0, 0, 255}, maskCase.message, 1);
         }
 
@@ -160,11 +160,11 @@ namespace
         int resolvedRedSum = 0;
         for (int sample = 0; sample < 4; ++sample)
         {
-            backend.Clear(0.0f, 0.0f, 0.0f, 1.0f);
-            SetOpaqueMask(backend, 1u << sample);
-            Draw(backend, *atlas, Rectangle(6, 2, 4, 4), redSource,
+            renderer.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+            SetOpaqueMask(renderer, 1u << sample);
+            Draw(renderer, *atlas, Rectangle(6, 2, 4, 4), redSource,
                  0.78539816339f, Vector2(0.5f, 0.5f));
-            const int resolvedRed = ReadPixel(backend, 3, 1)[0];
+            const int resolvedRed = ReadPixel(renderer, 3, 1)[0];
             resolvedRedSum += resolvedRed;
             nonzeroMasks += resolvedRed != 0 ? 1 : 0;
         }
@@ -173,74 +173,74 @@ namespace
 
         // Wireframe deliberately remains the established one-pixel DDA line rasterizer. It emits
         // every mask-enabled sample for each visited pixel; it does not claim subpixel line AA.
-        backend.ApplyRasterizerState(/*CullNone*/ 0, /*WireFrame*/ 1, false);
-        backend.Clear(0.0f, 0.0f, 0.0f, 1.0f);
-        SetOpaqueMask(backend, 0xFu);
-        Draw(backend, *atlas, Rectangle(1, 1, 5, 5), redSource);
-        ok &= ExpectPixel(ReadPixel(backend, 1, 1), red,
+        renderer.ApplyRasterizerState(/*CullNone*/ 0, /*WireFrame*/ 1, false);
+        renderer.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+        SetOpaqueMask(renderer, 0xFu);
+        Draw(renderer, *atlas, Rectangle(1, 1, 5, 5), redSource);
+        ok &= ExpectPixel(ReadPixel(renderer, 1, 1), red,
                           "wireframe edge writes every enabled sample without claiming line AA");
-        ok &= ExpectPixel(ReadPixel(backend, 2, 4), black,
+        ok &= ExpectPixel(ReadPixel(renderer, 2, 4), black,
                           "wireframe still leaves the quad interior untouched");
 
-        backend.Clear(0.0f, 0.0f, 0.0f, 1.0f);
-        SetOpaqueMask(backend, 0x1u);
-        Draw(backend, *atlas, Rectangle(1, 1, 5, 5), redSource);
-        ok &= ExpectPixel(ReadPixel(backend, 1, 1), Pixel{63, 0, 0, 255},
+        renderer.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+        SetOpaqueMask(renderer, 0x1u);
+        Draw(renderer, *atlas, Rectangle(1, 1, 5, 5), redSource);
+        ok &= ExpectPixel(ReadPixel(renderer, 1, 1), Pixel{63, 0, 0, 255},
                           "wireframe pixels still honor MultiSampleMask", 1);
-        backend.ApplyRasterizerState(/*CullCounterClockwise*/ 2, /*Solid*/ 0, false);
+        renderer.ApplyRasterizerState(/*CullCounterClockwise*/ 2, /*Solid*/ 0, false);
 
         // Stencil storage is intentionally one byte per pixel, not four values per sample. An
         // Increment pass therefore runs once for this off-diagonal triangle fragment even though
         // it covers all four colour samples; Equal(1) passes and Equal(4) fails afterward.
-        backend.ClearStencil(0);
-        SetOpaqueMask(backend, 0xFu);
-        SetStencil(backend, /*Always*/ 0, /*Increment*/ 3, /*Keep*/ 0, 0);
-        backend.Clear(0.0f, 0.0f, 0.0f, 1.0f);
-        Draw(backend, *atlas, full, redSource);
-        backend.Clear(0.0f, 0.0f, 0.0f, 1.0f);
-        SetStencil(backend, /*Equal*/ 4, /*Keep*/ 0, /*Keep*/ 0, 1);
-        Draw(backend, *atlas, full, greenSource);
-        ok &= ExpectPixel(ReadPixel(backend, 1, 5), green,
+        renderer.ClearStencil(0);
+        SetOpaqueMask(renderer, 0xFu);
+        SetStencil(renderer, /*Always*/ 0, /*Increment*/ 3, /*Keep*/ 0, 0);
+        renderer.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+        Draw(renderer, *atlas, full, redSource);
+        renderer.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+        SetStencil(renderer, /*Equal*/ 4, /*Keep*/ 0, /*Keep*/ 0, 1);
+        Draw(renderer, *atlas, full, greenSource);
+        ok &= ExpectPixel(ReadPixel(renderer, 1, 5), green,
                           "4x coverage applies one per-pixel stencil operation, not four");
 
-        backend.Clear(0.0f, 0.0f, 0.0f, 1.0f);
-        SetStencil(backend, /*Equal*/ 4, /*Keep*/ 0, /*Keep*/ 0, 4);
-        Draw(backend, *atlas, full, blueSource);
-        ok &= ExpectPixel(ReadPixel(backend, 1, 5), black,
+        renderer.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+        SetStencil(renderer, /*Equal*/ 4, /*Keep*/ 0, /*Keep*/ 0, 4);
+        Draw(renderer, *atlas, full, blueSource);
+        ok &= ExpectPixel(ReadPixel(renderer, 1, 5), black,
                           "the standalone stencil plane does not pretend to be per-sample");
 
         // Sample-mask rejection happens before stencil. With no active colour samples, a Replace
         // operation cannot mutate the pixel's stencil value.
-        backend.ClearStencil(0);
-        backend.Clear(0.0f, 0.0f, 0.0f, 1.0f);
-        SetOpaqueMask(backend, 0x0u);
-        SetStencil(backend, /*Always*/ 0, /*Replace*/ 2, /*Keep*/ 0, 7);
-        Draw(backend, *atlas, full, redSource);
-        backend.Clear(0.0f, 0.0f, 0.0f, 1.0f);
-        SetOpaqueMask(backend, 0xFu);
-        SetStencil(backend, /*Equal*/ 4, /*Keep*/ 0, /*Keep*/ 0, 0);
-        Draw(backend, *atlas, full, greenSource);
-        ok &= ExpectPixel(ReadPixel(backend, 1, 5), green,
+        renderer.ClearStencil(0);
+        renderer.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+        SetOpaqueMask(renderer, 0x0u);
+        SetStencil(renderer, /*Always*/ 0, /*Replace*/ 2, /*Keep*/ 0, 7);
+        Draw(renderer, *atlas, full, redSource);
+        renderer.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+        SetOpaqueMask(renderer, 0xFu);
+        SetStencil(renderer, /*Equal*/ 4, /*Keep*/ 0, /*Keep*/ 0, 0);
+        Draw(renderer, *atlas, full, greenSource);
+        ok &= ExpectPixel(ReadPixel(renderer, 1, 5), green,
                           "zero active samples suppress stencil operations as well as colour");
 
         // One per-pixel comparison gates the complete active colour-sample set. This is useful for
         // crisp 2D masks but intentionally cannot represent different stencil values per sample.
-        backend.ClearStencil(0);
-        backend.Clear(0.0f, 0.0f, 0.0f, 1.0f);
-        SetStencil(backend, /*Always*/ 0, /*Replace*/ 2, /*Keep*/ 0, 1);
-        Draw(backend, *atlas, Rectangle(0, 0, 4, kHeight), redSource);
-        backend.Clear(0.0f, 0.0f, 0.0f, 1.0f);
-        SetStencil(backend, /*Equal*/ 4, /*Keep*/ 0, /*Keep*/ 0, 1);
-        Draw(backend, *atlas, full, blueSource);
-        ok &= ExpectPixel(ReadPixel(backend, 1, 5), blue,
+        renderer.ClearStencil(0);
+        renderer.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+        SetStencil(renderer, /*Always*/ 0, /*Replace*/ 2, /*Keep*/ 0, 1);
+        Draw(renderer, *atlas, Rectangle(0, 0, 4, kHeight), redSource);
+        renderer.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+        SetStencil(renderer, /*Equal*/ 4, /*Keep*/ 0, /*Keep*/ 0, 1);
+        Draw(renderer, *atlas, full, blueSource);
+        ok &= ExpectPixel(ReadPixel(renderer, 1, 5), blue,
                           "matching per-pixel stencil admits all four active colour samples");
-        ok &= ExpectPixel(ReadPixel(backend, 6, 5), black,
+        ok &= ExpectPixel(ReadPixel(renderer, 6, 5), black,
                           "failing per-pixel stencil rejects all four active colour samples");
 
-        DisableStencil(backend);
-        SetOpaqueMask(backend, 0xFFFFFFFFu);
-        ok &= Expect(backend.ApplyMultiSampleCount(0) == 0 &&
-                         backend.GetMultiSampleCount() == 0,
+        DisableStencil(renderer);
+        SetOpaqueMask(renderer, 0xFFFFFFFFu);
+        ok &= Expect(renderer.ApplyMultiSampleCount(0) == 0 &&
+                         renderer.GetMultiSampleCount() == 0,
                      "disabling MSAA releases the optional four-sample colour plane");
         return ok;
     }
@@ -266,21 +266,21 @@ int main()
     int result = 0;
     try
     {
-        GraphicsBackendCreateArgs args;
+        GraphicsRendererCreateArgs args;
         args.window = window;
         args.virtualWidth = kWidth;
         args.virtualHeight = kHeight;
         args.presentationMode = CnaPresentationMode::Stretch;
-        std::unique_ptr<IGraphicsBackend> backend = CreateGraphicsBackend(args);
+        std::unique_ptr<IGraphicsRenderer> renderer = CreateGraphicsRenderer(args);
 
-        if (CNA::getCurrentGraphicsBackendType() != CNA::GraphicsBackendType::Gdi)
+        if (CNA::getCurrentGraphicsRendererType() != CNA::GraphicsRendererType::Gdi)
         {
-            std::fprintf(stderr, "GDI MSAA target selected a non-GDI backend.\n");
+            std::fprintf(stderr, "GDI MSAA target selected a non-GDI renderer.\n");
             result = 1;
         }
         else
         {
-            result = ExerciseContract(*backend) ? 0 : 1;
+            result = ExerciseContract(*renderer) ? 0 : 1;
         }
     }
     catch (const std::exception& error)

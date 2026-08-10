@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // plan_opengl2.md: pixel-exact RenderTargetCube/FBO proof for the native OpenGL 2.1 graphics
-// backend -- render a distinct color into each of the 6 faces, read each back directly, and
+// renderer -- render a distinct color into each of the 6 faces, read each back directly, and
 // prove a real depth-test occlusion + mipmap generation inside the shared cube FBO.
 //
 // Check A -- RenderTargetCube construction succeeds and reports the requested size.
@@ -33,7 +33,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 
-#include "CNA/Internal/Backends/OpenGL2/OpenGL2GraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/OpenGL2/OpenGL2Renderer.hpp"
 
 #include "common/PixelTestGame.hpp"
 
@@ -45,7 +45,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::OpenGL2;
+using namespace CNA::Internal::Renderers::OpenGL2;
 
 namespace
 {

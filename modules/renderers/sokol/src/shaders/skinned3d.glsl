@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_sokol.md SOKOL-35: the Sokol backend's skinned 3D program -- SkinnedEffect, always
+// plan_sokol.md SOKOL-35: the Sokol renderer's skinned 3D program -- SkinnedEffect, always
 // textured and lit (ambient + up to 3 directional lights, Blinn-Phong specular, emissive, fog,
 // alpha test), matching FNA's SkinnedEffect.fx exactly (it always samples a texture and always
 // lights, unlike BasicEffect's toggles). The fragment stage is a byte-for-byte copy of
@@ -12,7 +12,7 @@
 // gated 1/2/4 to match FNA's real Skin(vin, boneCount) shader behavior of only summing the first
 // N weight/index pairs -- Task 895) and transforms Position (affine) and Normal (via the
 // blended matrix's rotation/scale part only) with the result, mirroring
-// EasyGLGraphicsBackend::EnsureSkinnedProgram()'s own shape: same stride-52 attribute layout
+// EasyGLRenderer::EnsureSkinnedProgram()'s own shape: same stride-52 attribute layout
 // (position/normal/texcoord0/blendweight0/blendindices0), same mat4[72] bone array, same
 // >=2/>=4 weight-count gating, same post-skin fog dot.
 //

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_sokol.md SOKOL-45: SokolGraphicsBackend construction must be fully transactional, including
+// plan_sokol.md SOKOL-45: SokolRenderer construction must be fully transactional, including
 // the GL-context-creation step itself.
 //
 // Before this fix, CreateGpuContext() ran BEFORE the constructor's cleanup try/catch block. A real
@@ -13,17 +13,17 @@
 //
 // Check A -- construction throws.
 // Check B -- exactly one context was destroyed (the leaked-context bug would report zero).
-// Check C -- no backend is left registered for the window.
-// Check D -- the same window can construct a real, working backend immediately afterward (proves
+// Check C -- no renderer is left registered for the window.
+// Check D -- the same window can construct a real, working renderer immediately afterward (proves
 //   the window itself, and SDL's own GL state, were left usable -- not just that this instance's
 //   own destructor ran).
-// Check E -- that immediately-succeeding backend also destroys its own context exactly once when
+// Check E -- that immediately-succeeding renderer also destroys its own context exactly once when
 //   it is torn down normally, confirming the shared cleanup path double-counts nothing.
 //
 // Exit code 0 = PASS, 1 = FAIL, 77 = skipped (no GPU/display).
 
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
-#include "CNA/Internal/Backends/Sokol/SokolGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/Internal/Renderers/Sokol/SokolRenderer.hpp"
 
 #include "common/PixelTestGame.hpp"
 
@@ -33,8 +33,8 @@
 #include <stdexcept>
 #include <string>
 
-using namespace CNA::Internal::Backends;
-using namespace CNA::Internal::Backends::Sokol;
+using namespace CNA::Internal::Renderers;
+using namespace CNA::Internal::Renderers::Sokol;
 
 namespace
 {
@@ -70,7 +70,7 @@ int main()
         return 1;
     }
 
-    GraphicsBackendCreateArgs args;
+    GraphicsRendererCreateArgs args;
     args.window = window;
     args.virtualWidth = 64;
     args.virtualHeight = 64;
@@ -82,7 +82,7 @@ int main()
     std::string diagnostic;
     try
     {
-        SokolGraphicsBackend backend(args, /*forceMakeCurrentFailureEXT=*/true, &failedDestroyCount);
+        SokolRenderer renderer(args, /*forceMakeCurrentFailureEXT=*/true, &failedDestroyCount);
     }
     catch (const std::exception& exception)
     {
@@ -97,30 +97,30 @@ int main()
         std::printf("       diagnostic: %s\n", diagnostic.c_str());
     Check(failedDestroyCount == 1,
           "exactly one SDL_GL_DestroyContext() call -- the leaked-context bug reports zero");
-    Check(IGraphicsBackend::GetForWindow(window) == nullptr,
-          "no backend is left registered for the window after the failed construction");
+    Check(IGraphicsRenderer::GetForWindow(window) == nullptr,
+          "no renderer is left registered for the window after the failed construction");
 
     int successDestroyCount = 0;
     bool usable = false;
     try
     {
         {
-            SokolGraphicsBackend backend(args, /*forceMakeCurrentFailureEXT=*/false,
+            SokolRenderer renderer(args, /*forceMakeCurrentFailureEXT=*/false,
                                           &successDestroyCount);
-            usable = IGraphicsBackend::GetForWindow(window) == &backend;
-            backend.Clear(0.1f, 0.2f, 0.3f, 1.0f);
-            backend.Present();
+            usable = IGraphicsRenderer::GetForWindow(window) == &renderer;
+            renderer.Clear(0.1f, 0.2f, 0.3f, 1.0f);
+            renderer.Present();
         }
-        usable = usable && IGraphicsBackend::GetForWindow(window) == nullptr;
+        usable = usable && IGraphicsRenderer::GetForWindow(window) == nullptr;
     }
     catch (const std::exception& exception)
     {
         usable = false;
         std::printf("       unexpected recovery exception: %s\n", exception.what());
     }
-    Check(usable, "the same window constructs a real, working backend immediately afterward");
+    Check(usable, "the same window constructs a real, working renderer immediately afterward");
     Check(successDestroyCount == 1,
-          "the succeeding backend destroys its own context exactly once on teardown");
+          "the succeeding renderer destroys its own context exactly once on teardown");
 
     SDL_DestroyWindow(window);
     SDL_Quit();

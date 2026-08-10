@@ -2,12 +2,12 @@
 // Task 674: SDL_Renderer SpriteEffects::FlipHorizontally/FlipVertically pixel test.
 //
 // Direct port of Task 167's EasyGL test (examples/easygl_sprite_effects_test.cpp) -- same
-// methodology, same geometry, same expected pixel outcomes. Genuinely backend-specific: confirmed
-// by reading SdlSpriteBatchBackend::Draw() directly, SpriteEffects is mapped to an SDL_FlipMode
+// methodology, same geometry, same expected pixel outcomes. Genuinely renderer-specific: confirmed
+// by reading SdlSpriteBatchRenderer::Draw() directly, SpriteEffects is mapped to an SDL_FlipMode
 // and passed to SDL_RenderTextureRotated()'s own flip parameter.
 //
 // Requires PresentationMode::NativeBackBuffer (Task 915 finding): SDL_RenderReadPixels operates
-// in physical output coordinates, while this backend's default presentation mode
+// in physical output coordinates, while this renderer's default presentation mode
 // (FixedHeightDynamicWidth) does not map logical pixels 1:1 to physical ones.
 //
 // Design:

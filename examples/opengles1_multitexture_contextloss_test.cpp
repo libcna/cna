@@ -16,7 +16,7 @@
 //   with the other faces left untouched so a target that ignores the face index is detectable.
 // Check D -- a simulated context loss followed by a restore leaves the device drawing correctly.
 // Check E -- ...and a texture uploaded before the loss still samples correctly afterwards, i.e.
-//   the backend really re-uploaded it rather than leaving a dead GL name bound...
+//   the renderer really re-uploaded it rather than leaving a dead GL name bound...
 // Check F -- ...as does an indexed draw out of vertex/index buffers filled before the loss
 //   (OPENGLES1-80), which would otherwise render nothing from dead buffer names.
 //
@@ -25,11 +25,11 @@
 //   really released rather than merely promised to be.
 //
 // Both multitexturing paths are optional on ES 1.1 (dual texture needs GL_MAX_TEXTURE_UNITS >= 2,
-// environment mapping needs GL_OES_texture_cube_map). When the driver lacks them the backend
+// environment mapping needs GL_OES_texture_cube_map). When the driver lacks them the renderer
 // falls back to the plain colored path by design, so those checks are skipped rather than failed.
 //
 // Exit code 0 = all checks PASS (or were legitimately skipped), 1 = any FAILs. Requires a genuine
-// OpenGL ES 1.1 driver; see docs/opengles1-backend.md.
+// OpenGL ES 1.1 driver; see docs/opengles1-renderer.md.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
@@ -57,7 +57,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColorTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
-#include "CNA/Internal/Backends/OpenGLES1/OpenGLES1GraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/OpenGLES1/OpenGLES1Renderer.hpp"
 
 #include <cmath>
 #include <cstdio>
@@ -178,7 +178,7 @@ protected:
         done_ = true;
 
         auto& dev = getGraphicsDeviceProperty();
-        auto& backend = static_cast<CNA::Internal::Backends::OpenGLES1::OpenGLES1GraphicsBackend&>(dev.GetBackend());
+        auto& renderer = static_cast<CNA::Internal::Renderers::OpenGLES1::OpenGLES1Renderer&>(dev.GetRenderer());
         const int mid = kSize / 2;
 
         dev.setRasterizerStateProperty(RasterizerState::CullNone);
@@ -186,7 +186,7 @@ protected:
         dev.setBlendStateProperty(BlendState::Opaque);
 
         // ---- Checks A/B: DualTextureEffect ----------------------------------------------
-        if (!backend.SupportsSecondTextureUnit())
+        if (!renderer.SupportsSecondTextureUnit())
         {
             skip("DualTextureEffect -- driver exposes fewer than two texture units");
             skip("DualTextureEffect -- second stage sampling (same reason)");
@@ -229,7 +229,7 @@ protected:
         }
 
         // ---- Check C: the second UV set actually reaches the second texture unit ---------
-        if (!backend.SupportsSecondTextureUnit())
+        if (!renderer.SupportsSecondTextureUnit())
         {
             skip("DualTextureEffect -- second UV set (fewer than two texture units)");
         }
@@ -237,7 +237,7 @@ protected:
         {
             // Unit 0 samples a 1x1 white texture, so UV0 cannot affect the result. Unit 1 samples a
             // 2x1 red|blue texture through UV1 only. Feeding UV1 = 0.75 (right texel, blue) while
-            // UV0 stays 0 means a backend that wrongly points unit 1 at UV0 samples the LEFT texel
+            // UV0 stays 0 means a renderer that wrongly points unit 1 at UV0 samples the LEFT texel
             // and comes out red -- the two outcomes are unambiguous.
             Texture2D splitTex = Texture2D::CreateFromPixels(dev, 2, 1, std::vector<std::uint8_t>{
                 255, 0, 0, 255,
@@ -288,7 +288,7 @@ protected:
                 cube.reset();
             }
 
-            if (!cube || !backend.SupportsTextureCubeMap())
+            if (!cube || !renderer.SupportsTextureCubeMap())
             {
                 skip("EnvironmentMapEffect -- driver lacks GL_OES_texture_cube_map");
             }
@@ -320,7 +320,7 @@ protected:
         // ---- Check C2: RenderTargetCube --------------------------------------------------
         {
             constexpr int kFaceSize = 16;
-            auto cubeTarget = backend.CreateRenderTargetCube(kFaceSize, /*depthFormat=*/0);
+            auto cubeTarget = renderer.CreateRenderTargetCube(kFaceSize, /*depthFormat=*/0);
             if (!cubeTarget)
             {
                 skip("RenderTargetCube -- driver lacks framebuffer objects or cube maps");
@@ -362,8 +362,8 @@ protected:
             spriteBatch_->Draw(greyTex_, Rectangle(0, 0, kSize, kSize), Color::White);
             spriteBatch_->End();
 
-            backend.DebugSimulateContextLoss();
-            backend.DebugRestoreContext();
+            renderer.DebugSimulateContextLoss();
+            renderer.DebugRestoreContext();
 
             dev.Clear(Color::Red);
             check(colorNear(readPixel(dev, mid, mid), Color::Red),
@@ -396,15 +396,15 @@ protected:
             const std::vector<std::uint16_t> indices = { 0, 1, 2, 0, 2, 3 };
 
             // Fill both buffers, THEN lose the context -- nothing is re-uploaded afterwards, so
-            // the draw can only work if the backend rebuilt them itself.
+            // the draw can only work if the renderer rebuilt them itself.
             VertexBuffer vb(dev, decl, static_cast<int>(verts.size()), BufferUsage::None);
             vb.SetData(verts.data(), 0, static_cast<int>(verts.size()));
             IndexBuffer ib(dev, IndexElementSize::SixteenBits,
                            static_cast<int>(indices.size()), BufferUsage::None);
             ib.SetData(indices.data(), 0, static_cast<int>(indices.size()));
 
-            backend.DebugSimulateContextLoss();
-            backend.DebugRestoreContext();
+            renderer.DebugSimulateContextLoss();
+            renderer.DebugRestoreContext();
 
             dev.setRasterizerStateProperty(RasterizerState::CullNone);
             dev.setDepthStencilStateProperty(DepthStencilState::None);
@@ -434,7 +434,7 @@ protected:
 
         // ---- Check F2: context recovery can be switched off ------------------------------
         {
-            // With recovery disabled the backend must decline to keep a CPU copy, so the same
+            // With recovery disabled the renderer must decline to keep a CPU copy, so the same
             // loss/restore that check E proves survivable must now NOT restore the texture.
             dev.SetContextRecoveryEnabled(false);
 
@@ -445,8 +445,8 @@ protected:
             spriteBatch_->End();
             const Color beforeLoss = readPixel(dev, mid, mid);
 
-            backend.DebugSimulateContextLoss();
-            backend.DebugRestoreContext();
+            renderer.DebugSimulateContextLoss();
+            renderer.DebugRestoreContext();
 
             dev.Clear(Color::Black);
             spriteBatch_->Begin();

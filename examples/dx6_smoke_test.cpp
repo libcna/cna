@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MS-PL
 // plan_dx3.md Phase P2 (DX30-10, ported from plan_dx2.md's DX2-10/DX1-10..DX1-18): smoke test for
-// the DX6 (real DirectDraw v4, run under Wine -- no ../free-direct anywhere in this backend)
-// graphics backend's foundation -- real DirectDrawCreate -> QueryInterface(IID_IDirectDraw2) ->
+// the DX6 (real DirectDraw v4, run under Wine -- no ../free-direct anywhere in this renderer)
+// graphics renderer's foundation -- real DirectDrawCreate -> QueryInterface(IID_IDirectDraw2) ->
 // SetCooperativeLevel(DDSCL_NORMAL) -> CreateSurface device bring-up, real Clear()/Present(), real
 // pixel readback. SpriteBatch/Texture2D draws are covered by dx3_spritebatch_test.cpp (Phase P4).
 //
 // This test's own success IS the proof the IDirectDraw2 upgrade (plan_dx3.md design decision 2)
-// actually happened: Dx6GraphicsBackend's constructor unconditionally throws if
+// actually happened: Dx6Renderer's constructor unconditionally throws if
 // QueryInterface(IID_IDirectDraw2) fails, so every check below only ever runs against a genuine
 // v2 object -- no separate "did the upgrade happen" CTest is needed on top of that.
 //
@@ -27,7 +27,7 @@
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 
-#include "CNA/Internal/Backends/Dx6/Dx6GraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Dx6/Dx6Renderer.hpp"
 
 #include <cstdio>
 #include <cstdlib>
@@ -36,7 +36,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::Dx6;
+using namespace CNA::Internal::Renderers::Dx6;
 
 static constexpr int kCanvasSize = 64;
 
@@ -56,10 +56,10 @@ protected:
     void Draw(const GameTime&) override
     {
         auto& dev = getGraphicsDeviceProperty();
-        auto& backend = static_cast<Dx6GraphicsBackend&>(dev.GetBackend());
+        auto& renderer = static_cast<Dx6Renderer&>(dev.GetRenderer());
 
         // Check A: real window.
-        check(backend.GetWindowInternal() != nullptr, "GraphicsDevice has a real window under the DX6 backend");
+        check(renderer.GetWindowInternal() != nullptr, "GraphicsDevice has a real window under the DX6 renderer");
 
         // Check B: real, correct pixel readback after Clear(), via the shadow-backbuffer surface,
         // including the alpha channel.

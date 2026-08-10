@@ -25,7 +25,7 @@
 //   * SpriteBatch visibility after an opposing 3D cull state, with every relevant state explicit.
 //
 // CMake registers this executable for Bgfx's OpenGL route and its Vulkan route. The program also
-// prints the active route through the backend's normal startup diagnostics.
+// prints the active route through the renderer's normal startup diagnostics.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
@@ -314,7 +314,7 @@ class BgfxRasterizerStateCullModeTest final : public Game
         // views by id; flush the off-screen view before the backbuffer samples it." That was a
         // correct diagnosis of a real defect and an accidental workaround for it -- bgfx sorted a
         // frame's draws by numeric view id, and the backbuffer owns the lowest one, so the consumer
-        // ran before its producer unless a frame boundary separated them. The backend now orders
+        // ran before its producer unless a frame boundary separated them. The renderer now orders
         // views by public submission order, so the extra frame is gone and this fixture measures
         // culling in the ordinary same-frame sequence a game would write.
         BlitRenderTargetToBackbuffer(device);

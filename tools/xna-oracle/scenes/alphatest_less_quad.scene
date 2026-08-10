@@ -11,7 +11,7 @@
 #     alpha=1/64 (top-right, bottom-right).
 #   Less (this scene):              passes alpha=1/64 texels (top-right, bottom-right), discards
 #     alpha=255 (top-left, bottom-left) -- the exact inverse pass/discard pattern.
-# A backend that silently ignored AlphaFunction and always used Greater (or always discarded
+# A renderer that silently ignored AlphaFunction and always used Greater (or always discarded
 # nothing) would still pass alphatest_quad.scene but fail this one -- this scene exists
 # specifically to close that verification gap.
 #

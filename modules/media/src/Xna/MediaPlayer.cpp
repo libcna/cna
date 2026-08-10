@@ -32,7 +32,7 @@ namespace Microsoft::Xna::Framework::Media
 
     // Visualization capture state (plan_media.md MEDIA-186/188). Kept outside the SOUND_ENABLED
     // guard so IsVisualizationEnabled still round-trips in a no-audio build; only the actual
-    // post-mix tap below is audio-backend specific.
+    // post-mix tap below is audio-renderer specific.
     namespace
     {
         bool g_visualizationEnabled = false;

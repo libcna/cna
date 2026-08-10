@@ -1,9 +1,9 @@
 // plan_dx.md Phase DX3 (DX-16-vtx).
-#include "CNA/Internal/Backends/D3DCommon/D3DVertexFormatHelper.hpp"
+#include "CNA/Internal/Renderers/D3DCommon/D3DVertexFormatHelper.hpp"
 
 #include <iterator>
 
-namespace CNA::Internal::Backends::D3DCommon
+namespace CNA::Internal::Renderers::D3DCommon
 {
     namespace
     {
@@ -44,7 +44,7 @@ namespace CNA::Internal::Backends::D3DCommon
 
         // plan_cnj.md CNB-58 follow-up: stride 48, VertexPositionNormalTangentTexture -- the
         // layout PbrEffect's normal mapping needs to build a per-pixel TBN basis. Matches
-        // EasyGLGraphicsBackend::ApplyLayout's own case 48 byte-for-byte.
+        // EasyGLRenderer::ApplyLayout's own case 48 byte-for-byte.
         const D3D11_INPUT_ELEMENT_DESC kStride48[] = {
             { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT,    0, 0,  D3D11_INPUT_PER_VERTEX_DATA, 0 },
             { "NORMAL",   0, DXGI_FORMAT_R32G32B32_FLOAT,    0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 },
@@ -55,7 +55,7 @@ namespace CNA::Internal::Backends::D3DCommon
         // plan_cnj.md CNB-67 follow-up: stride 56, the stride-52 SkinnedVertex layout above with a
         // per-vertex Color (normalized ubyte4) appended at the end (offset 52), rather than
         // inserted mid-layout -- keeps locations 0-4 byte-identical to kStride52, matching
-        // EasyGLGraphicsBackend::ApplyLayout's own case 56 byte-for-byte.
+        // EasyGLRenderer::ApplyLayout's own case 56 byte-for-byte.
         const D3D11_INPUT_ELEMENT_DESC kStride56[] = {
             { "POSITION",     0, DXGI_FORMAT_R32G32B32_FLOAT,    0, 0,  D3D11_INPUT_PER_VERTEX_DATA, 0 },
             { "NORMAL",       0, DXGI_FORMAT_R32G32B32_FLOAT,    0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 },
@@ -67,7 +67,7 @@ namespace CNA::Internal::Backends::D3DCommon
 
         // plan_cnj.md CNB-58 follow-up: stride 68, VertexPositionNormalTangentTextureSkinned
         // (SkinnedPbrEffect) -- the stride-48 layout above with the stride-52 skinning suffix
-        // (BlendWeight, BlendIndices) appended. Matches EasyGLGraphicsBackend::ApplyLayout's own
+        // (BlendWeight, BlendIndices) appended. Matches EasyGLRenderer::ApplyLayout's own
         // case 68 byte-for-byte.
         const D3D11_INPUT_ELEMENT_DESC kStride68[] = {
             { "POSITION",     0, DXGI_FORMAT_R32G32B32_FLOAT,    0, 0,  D3D11_INPUT_PER_VERTEX_DATA, 0 },

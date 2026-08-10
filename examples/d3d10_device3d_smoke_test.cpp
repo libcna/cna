@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MS-PL
-// plan_d3d10.md: smoke test for the D3D10 backend's 3D device state -- a real attached
+// plan_d3d10.md: smoke test for the D3D10 renderer's 3D device state -- a real attached
 // DXGI_FORMAT_D24_UNORM_S8_UINT depth-stencil buffer and the ClearColorAndDepth/
 // ClearColorDepthAndStencil entry points. Pixel-verified 3D rendering (real shader draws) is
 // covered by the shared EasyGL-authored BlendState/DepthStencilState/RasterizerState tests
 // (cmake/Tests/D3D10Tests.cmake). Check D below only confirms the simple state-toggle methods
 // don't throw (a smoke-level check, not a pixel proof).
 //
-// Check A -- backend.SupportsDepthStencil() reports true (device bring-up succeeded).
+// Check A -- renderer.SupportsDepthStencil() reports true (device bring-up succeeded).
 // Check B -- GraphicsDevice::Clear(color, depth) (the two-arg overload, which requests
 //   Target|DepthBuffer) does not throw and correctly clears the color buffer to the exact
 //   requested color, read back via GetBackBufferData() -- proves ClearColorAndDepth ran for real.
@@ -23,7 +23,7 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ClearOptions.hpp"
 
-#include "CNA/Internal/Backends/D3D10/D3D10GraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/D3D10/D3D10Renderer.hpp"
 
 #include <cstdio>
 #include <cstdlib>
@@ -32,7 +32,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::D3D10;
+using namespace CNA::Internal::Renderers::D3D10;
 
 static constexpr int kCanvasSize = 64;
 
@@ -66,10 +66,10 @@ protected:
     void Draw(const GameTime&) override
     {
         auto& dev = getGraphicsDeviceProperty();
-        auto& backend = static_cast<D3D10GraphicsBackend&>(dev.GetBackend());
+        auto& renderer = static_cast<D3D10Renderer&>(dev.GetRenderer());
 
         // Check A: device bring-up succeeded -- SupportsDepthStencil() reports true.
-        check(backend.SupportsDepthStencil(), "SupportsDepthStencil() reports true after device bring-up");
+        check(renderer.SupportsDepthStencil(), "SupportsDepthStencil() reports true after device bring-up");
 
         // Check B: Clear(color, depth) -- the two-arg overload requesting Target|DepthBuffer --
         // does not throw and correctly clears the color buffer to the exact requested color.
@@ -110,8 +110,8 @@ protected:
             bool threw = false;
             try
             {
-                backend.SetDepthTestEnabled(true);
-                backend.SetDepthWriteEnabled(true);
+                renderer.SetDepthTestEnabled(true);
+                renderer.SetDepthWriteEnabled(true);
             }
             catch (const std::exception& e)
             {

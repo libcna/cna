@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-076: the Vulkan backend caches one descriptor set per unique sampled-texture combination
+// REMED-GFX-076: the Vulkan renderer caches one descriptor set per unique sampled-texture combination
 // for each 3D effect (BasicEffect-textured -> litTextured/fogTex3D, DualTextureEffect, Environment-
 // MapEffect, SkinnedEffect, PbrEffect/SkinnedPbrEffect). Those seven per-frame caches key on a HASH
 // of raw VkImageView handle *values* and persist across frames with no per-view free path. GFX-075's
@@ -12,7 +12,7 @@
 // This regression proves the structural fix DETERMINISTICALLY (independent of whether the driver
 // happens to recycle a handle in a given run): a sampled resource's effect-cache entries are evicted
 // the moment the resource is destroyed, so no entry keyed on a recyclable VkImageView value can ever
-// outlive its resource. It reads the backend's read-only cache introspection
+// outlive its resource. It reads the renderer's read-only cache introspection
 // (EffectDescSetEntriesForViewInTests / TotalEffectDescSetEntriesForTests) to observe this directly.
 // It ALSO runs a best-effort real-handle-reuse scene (destroy A, free its view, create B, redraw) and
 // asserts B renders its own colour, reporting whether the raw handle was actually recycled.
@@ -44,10 +44,10 @@
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp"
 
-// REMED-GFX-076: read-only cache introspection lives on the concrete Vulkan backend (reached via the
-// NOXNA GraphicsDevice::GetBackend()), and the raw sampled VkImageView via IVulkanSamplable -- both
-// backend-internal, exactly as the other backend lifetime/diag tests reach their backends.
-#include "CNA/Internal/Backends/Vulkan/VulkanGraphicsBackend.hpp"
+// REMED-GFX-076: read-only cache introspection lives on the concrete Vulkan renderer (reached via the
+// NOXNA GraphicsDevice::GetRenderer()), and the raw sampled VkImageView via IVulkanSamplable -- both
+// renderer-internal, exactly as the other renderer lifetime/diag tests reach their renderers.
+#include "CNA/Internal/Renderers/Vulkan/VulkanRenderer.hpp"
 
 #include <cstdint>
 #include <cstdio>
@@ -58,9 +58,9 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using CNA::Internal::Backends::Vulkan::VulkanGraphicsBackend;
-using CNA::Internal::Backends::Vulkan::IVulkanSamplable;
-using CNA::Internal::Backends::Vulkan::IVulkanCubeSamplable;
+using CNA::Internal::Renderers::Vulkan::VulkanRenderer;
+using CNA::Internal::Renderers::Vulkan::IVulkanSamplable;
+using CNA::Internal::Renderers::Vulkan::IVulkanCubeSamplable;
 
 namespace {
     constexpr int kW = 96, kH = 72;
@@ -85,22 +85,22 @@ class EffectDescriptorCacheIdentityTest : public Game
         if (ok) ++pass_;
     }
 
-    VulkanGraphicsBackend& backend()
+    VulkanRenderer& renderer()
     {
-        return static_cast<VulkanGraphicsBackend&>(getGraphicsDeviceProperty().GetBackend());
+        return static_cast<VulkanRenderer&>(getGraphicsDeviceProperty().GetRenderer());
     }
 
     // Raw VkImageView handle value (as uint64_t) a texture/cube is sampled through -- the exact value
     // the effect caches hash into their key.
     std::uint64_t viewHandleOf(const Texture2D& t)
     {
-        const auto* s = dynamic_cast<const IVulkanSamplable*>(&t.GetBackend());
+        const auto* s = dynamic_cast<const IVulkanSamplable*>(&t.GetRenderer());
         return s ? reinterpret_cast<std::uint64_t>(s->GetVkImageView()) : 0;
     }
     std::uint64_t viewHandleOf(const TextureCube& c)
     {
         // A cube is sampled through its own IVulkanCubeSamplable::GetVkCubeImageView().
-        const auto* s = dynamic_cast<const IVulkanCubeSamplable*>(&c.GetBackend());
+        const auto* s = dynamic_cast<const IVulkanCubeSamplable*>(&c.GetRenderer());
         return s ? reinterpret_cast<std::uint64_t>(s->GetVkCubeImageView()) : 0;
     }
 
@@ -269,14 +269,14 @@ protected:
             auto tex = makeColorTex(255, 0, 0);
             const std::uint64_t h = viewHandleOf(*tex);
             check(h != 0, "T1a source texture exposes a VkImageView handle");
-            check(backend().EffectDescSetEntriesForViewInTests(h) == 0,
+            check(renderer().EffectDescSetEntriesForViewInTests(h) == 0,
                   "T1b litTextured cache has no entry for the view before drawing");
             drawTexturedBasic(*tex, rt.get());
             (void)readRt(*rt);                                  // record the deferred draw
-            check(backend().EffectDescSetEntriesForViewInTests(h) >= 1,
+            check(renderer().EffectDescSetEntriesForViewInTests(h) >= 1,
                   "T1c litTextured cache holds an entry for the view after drawing");
             tex.reset();                                        // destroy the source texture
-            check(backend().EffectDescSetEntriesForViewInTests(h) == 0,
+            check(renderer().EffectDescSetEntriesForViewInTests(h) == 0,
                   "T1d litTextured cache entry EVICTED when the source texture is destroyed");
         }
 
@@ -294,7 +294,7 @@ protected:
                 drawTexturedBasic(*texA, rtA.get());
                 (void)readRt(*rtA);
                 texA.reset();
-                staleForA = staleForA || (backend().EffectDescSetEntriesForViewInTests(hA) != 0);
+                staleForA = staleForA || (renderer().EffectDescSetEntriesForViewInTests(hA) != 0);
                 advanceFrames(4);                               // fence-safe free of texA's view
 
                 auto rtB = makeRt();
@@ -319,10 +319,10 @@ protected:
             check(h != 0, "T3a cube exposes a VkImageView handle");
             drawEnvMap(*cube, rt.get());
             (void)readRt(*rt);
-            check(backend().EffectDescSetEntriesForViewInTests(h) >= 1,
+            check(renderer().EffectDescSetEntriesForViewInTests(h) >= 1,
                   "T3b envMap cache holds an entry for the cube view after drawing");
             cube.reset();
-            check(backend().EffectDescSetEntriesForViewInTests(h) == 0,
+            check(renderer().EffectDescSetEntriesForViewInTests(h) == 0,
                   "T3c envMap cache entry EVICTED when the source cube is destroyed");
         }
 
@@ -335,13 +335,13 @@ protected:
             const std::uint64_t h1 = viewHandleOf(*t1);
             drawDualTex(*t0, *t1, rt.get());
             (void)readRt(*rt);
-            check(backend().EffectDescSetEntriesForViewInTests(h0) >= 1 &&
-                  backend().EffectDescSetEntriesForViewInTests(h1) >= 1,
+            check(renderer().EffectDescSetEntriesForViewInTests(h0) >= 1 &&
+                  renderer().EffectDescSetEntriesForViewInTests(h1) >= 1,
                   "T4a dualTex cache holds an entry referencing both views after drawing");
             t0.reset();
-            check(backend().EffectDescSetEntriesForViewInTests(h0) == 0,
+            check(renderer().EffectDescSetEntriesForViewInTests(h0) == 0,
                   "T4b destroying texture0 evicts the shared dualTex entry (via view0)");
-            check(backend().EffectDescSetEntriesForViewInTests(h1) == 0,
+            check(renderer().EffectDescSetEntriesForViewInTests(h1) == 0,
                   "T4c the same entry is gone for view1 too (one entry, two views)");
             t1.reset();
         }
@@ -350,18 +350,18 @@ protected:
         // Without a per-view free path the litTextured cache (and its pool) would grow by one every
         // iteration; with eviction it returns to its baseline after each destroyed texture.
         {
-            const std::size_t base = backend().TotalEffectDescSetEntriesForTests();
+            const std::size_t base = renderer().TotalEffectDescSetEntriesForTests();
             std::size_t peak = base;
             for (int i = 0; i < 64; ++i) {
                 auto rt  = makeRt();
                 auto tex = makeColorTex(static_cast<std::uint8_t>(i * 3), 128, 200);
                 drawTexturedBasic(*tex, rt.get());
                 (void)readRt(*rt);
-                const std::size_t during = backend().TotalEffectDescSetEntriesForTests();
+                const std::size_t during = renderer().TotalEffectDescSetEntriesForTests();
                 if (during > peak) peak = during;
                 tex.reset();
             }
-            const std::size_t after = backend().TotalEffectDescSetEntriesForTests();
+            const std::size_t after = renderer().TotalEffectDescSetEntriesForTests();
             std::printf("    (T5 effect-cache entries: base=%zu peak=%zu after=%zu over 64 temp textures)\n",
                         base, peak, after);
             check(peak <= base + 3,  "T5a cache stays bounded while cycling 64 temporary textures");

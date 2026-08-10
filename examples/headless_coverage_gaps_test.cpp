@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // plan_headless.md: closes a batch of small, previously-flagged test-coverage gaps that were
 // left as honest "implemented but not individually verified" notes after the first three
-// Headless backend commits: HEADLESS-40 (trace log coverage for state-change methods),
+// Headless renderer commits: HEADLESS-40 (trace log coverage for state-change methods),
 // HEADLESS-32/61 (GetLastFrameStatistics()'s diff math), HEADLESS-33 (per-type alive-resource
 // breakdown), HEADLESS-11 (the 32-bit IndexBuffer path), and HEADLESS-5 (CNA_HEADLESS_MODE
 // environment-variable parsing).
@@ -41,7 +41,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 
-#include "CNA/Internal/Backends/Headless/HeadlessGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Headless/HeadlessRenderer.hpp"
 #include "System/Environment.hpp"
 
 #include <cstdio>
@@ -51,7 +51,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::Headless;
+using namespace CNA::Internal::Renderers::Headless;
 
 namespace
 {
@@ -71,41 +71,41 @@ namespace
         if (ok) ++g_passCount;
     }
 
-    // Checks F-J: env-var parsing needs no window/Game at all -- HeadlessGraphicsBackend can be
+    // Checks F-J: env-var parsing needs no window/Game at all -- HeadlessRenderer can be
     // constructed directly, and each constructor call re-reads CNA_HEADLESS_MODE fresh.
     void CheckEnvironmentModeParsing()
     {
         System::Environment::SetEnvironmentVariable("CNA_HEADLESS_MODE", "Fast");
         {
-            HeadlessGraphicsBackend backend(64, 64);
-            Check(backend.GetMode() == HeadlessMode::Fast, "CNA_HEADLESS_MODE=Fast parses to HeadlessMode::Fast");
+            HeadlessRenderer renderer(64, 64);
+            Check(renderer.GetMode() == HeadlessMode::Fast, "CNA_HEADLESS_MODE=Fast parses to HeadlessMode::Fast");
         }
 
         System::Environment::SetEnvironmentVariable("CNA_HEADLESS_MODE", "TRACE");
         {
-            HeadlessGraphicsBackend backend(64, 64);
-            Check(backend.GetMode() == HeadlessMode::Trace,
+            HeadlessRenderer renderer(64, 64);
+            Check(renderer.GetMode() == HeadlessMode::Trace,
                   "CNA_HEADLESS_MODE=TRACE (uppercase) parses to HeadlessMode::Trace");
         }
 
         System::Environment::SetEnvironmentVariable("CNA_HEADLESS_MODE", "validation");
         {
-            HeadlessGraphicsBackend backend(64, 64);
-            Check(backend.GetMode() == HeadlessMode::Validation,
+            HeadlessRenderer renderer(64, 64);
+            Check(renderer.GetMode() == HeadlessMode::Validation,
                   "CNA_HEADLESS_MODE=validation (lowercase) parses to HeadlessMode::Validation");
         }
 
         System::Environment::SetEnvironmentVariable("CNA_HEADLESS_MODE", "bogus");
         {
-            HeadlessGraphicsBackend backend(64, 64);
-            Check(backend.GetMode() == HeadlessMode::Validation,
+            HeadlessRenderer renderer(64, 64);
+            Check(renderer.GetMode() == HeadlessMode::Validation,
                   "an unrecognized CNA_HEADLESS_MODE value defaults to HeadlessMode::Validation");
         }
 
         System::Environment::SetEnvironmentVariable("CNA_HEADLESS_MODE", "");
         {
-            HeadlessGraphicsBackend backend(64, 64);
-            Check(backend.GetMode() == HeadlessMode::Validation,
+            HeadlessRenderer renderer(64, 64);
+            Check(renderer.GetMode() == HeadlessMode::Validation,
                   "an unset CNA_HEADLESS_MODE defaults to HeadlessMode::Validation");
         }
     }
@@ -122,14 +122,14 @@ protected:
     {
         ++frame_;
         auto& dev = getGraphicsDeviceProperty();
-        auto& backend = static_cast<HeadlessGraphicsBackend&>(dev.GetBackend());
+        auto& renderer = static_cast<HeadlessRenderer&>(dev.GetRenderer());
 
         // Check B: at the top of this frame, before any draw this frame has issued, the
         // per-frame diff should be zero -- the previous frame's automatic EndDraw()->Present()
         // already rolled the snapshot forward.
         if (frame_ == 2)
         {
-            const HeadlessStatistics& diff = backend.GetLastFrameStatistics();
+            const HeadlessStatistics& diff = renderer.GetLastFrameStatistics();
             Check(diff.drawCallCount == 0,
                   "GetLastFrameStatistics() reports zero draw calls at the top of a fresh frame");
         }
@@ -154,7 +154,7 @@ protected:
         {
             // Check C: exactly 2 DrawPrimitives calls happened in this frame -- the diff must
             // read 2, not the cumulative total across frames 1 and 2 (which would be 4).
-            const HeadlessStatistics& diff = backend.GetLastFrameStatistics();
+            const HeadlessStatistics& diff = renderer.GetLastFrameStatistics();
             Check(diff.drawCallCount == 2,
                   "GetLastFrameStatistics() reports exactly 2 draw calls for the current frame only");
         }
@@ -164,20 +164,20 @@ protected:
             // Check A: HeadlessTrace now logs state-change methods, not just draws/clears/
             // resource creation/SetData/Present.
             {
-                backend.SetMode(HeadlessMode::Trace);
-                const std::size_t before = backend.TraceLog().size();
-                backend.ApplyBlendState(0, 0, 0, 0, 0, 0, CNA::Internal::Backends::BlendWriteState{}); // REMED-GFX-077 default write state
-                backend.ApplyDepthStencilState(false, false, 0, false, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 0);
-                backend.ApplyRasterizerState(0, 0, false, 0.0f, 0.0f);
-                backend.ApplySamplerState(0, 0, 0, 0, 0);
-                const std::string formatted = backend.FormatTraceLog();
-                Check(backend.TraceLog().size() == before + 4 &&
+                renderer.SetMode(HeadlessMode::Trace);
+                const std::size_t before = renderer.TraceLog().size();
+                renderer.ApplyBlendState(0, 0, 0, 0, 0, 0, CNA::Internal::Renderers::BlendWriteState{}); // REMED-GFX-077 default write state
+                renderer.ApplyDepthStencilState(false, false, 0, false, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 0);
+                renderer.ApplyRasterizerState(0, 0, false, 0.0f, 0.0f);
+                renderer.ApplySamplerState(0, 0, 0, 0, 0);
+                const std::string formatted = renderer.FormatTraceLog();
+                Check(renderer.TraceLog().size() == before + 4 &&
                       formatted.find("ApplyBlendState") != std::string::npos &&
                       formatted.find("ApplyDepthStencilState") != std::string::npos &&
                       formatted.find("ApplyRasterizerState") != std::string::npos &&
                       formatted.find("ApplySamplerState") != std::string::npos,
                       "HeadlessTrace log now records ApplyBlendState/DepthStencil/Rasterizer/SamplerState calls");
-                backend.SetMode(HeadlessMode::Validation);
+                renderer.SetMode(HeadlessMode::Validation);
             }
 
             // Check D: per-type alive-resource breakdown, measured as a delta against a baseline
@@ -186,7 +186,7 @@ protected:
             {
                 auto countByType = [&](const std::string& typeName) {
                     std::size_t n = 0;
-                    for (const HeadlessResourceRecord& r : backend.AliveResources())
+                    for (const HeadlessResourceRecord& r : renderer.AliveResources())
                         if (r.typeName == typeName) ++n;
                     return n;
                 };

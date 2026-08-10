@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
-#include "CNA/Internal/Backends/Magnum/MagnumRenderTargets.hpp"
+#include "CNA/Internal/Renderers/Magnum/MagnumRenderTargets.hpp"
 
-#include "CNA/Internal/Backends/Magnum/MagnumTextures.hpp"
+#include "CNA/Internal/Renderers/Magnum/MagnumTextures.hpp"
 
 #include <Corrade/Containers/ArrayView.h>
 #include <Magnum/GL/PixelFormat.h>
@@ -15,7 +15,7 @@
 #include <cstring>
 #include <vector>
 
-namespace CNA::Internal::Backends::Magnum
+namespace CNA::Internal::Renderers::Magnum
 {
     namespace
     {
@@ -89,14 +89,14 @@ namespace CNA::Internal::Backends::Magnum
         }
     }
 
-    bool SampledRowOrderIsBottomUp(const ITextureBackend* texture)
+    bool SampledRowOrderIsBottomUp(const ITextureRenderer* texture)
     {
-        return dynamic_cast<const IRenderTargetBackend*>(texture) != nullptr;
+        return dynamic_cast<const IRenderTargetRenderer*>(texture) != nullptr;
     }
 
-    // ---- MagnumRenderTargetBackend ----
+    // ---- MagnumRenderTargetRenderer ----
 
-    MagnumRenderTargetBackend::MagnumRenderTargetBackend(int width, int height, int depthFormat,
+    MagnumRenderTargetRenderer::MagnumRenderTargetRenderer(int width, int height, int depthFormat,
                                                          std::weak_ptr<MagnumBoundTarget> binding,
                                                          bool mipMap, int multiSampleCount)
         : width_(std::max(1, width))
@@ -150,12 +150,12 @@ namespace CNA::Internal::Backends::Magnum
         }
     }
 
-    MagnumRenderTargetBackend::~MagnumRenderTargetBackend()
+    MagnumRenderTargetRenderer::~MagnumRenderTargetRenderer()
     {
         DetachFromBinding();
     }
 
-    void MagnumRenderTargetBackend::DetachFromBinding()
+    void MagnumRenderTargetRenderer::DetachFromBinding()
     {
         const auto binding = binding_.lock();
         if (!binding)
@@ -169,18 +169,18 @@ namespace CNA::Internal::Backends::Magnum
         }
     }
 
-    void MagnumRenderTargetBackend::BindGL(int /*unit*/) const
+    void MagnumRenderTargetRenderer::BindGL(int /*unit*/) const
     {
         colorTexture_->bind(0);
     }
 
-    void MagnumRenderTargetBackend::BindAsRenderTarget()
+    void MagnumRenderTargetRenderer::BindAsRenderTarget()
     {
         framebuffer_->bind();
         framebuffer_->setViewport(Mg::Range2Di{{}, Mg::Vector2i{width_, height_}});
     }
 
-    void MagnumRenderTargetBackend::ResolveColor() const
+    void MagnumRenderTargetRenderer::ResolveColor() const
     {
         if (multiSampleCount_ <= 0 || !resolveFramebuffer_)
             return;
@@ -190,14 +190,14 @@ namespace CNA::Internal::Backends::Magnum
             Mg::GL::FramebufferBlit::Color);
     }
 
-    void MagnumRenderTargetBackend::UnbindAsRenderTarget()
+    void MagnumRenderTargetRenderer::UnbindAsRenderTarget()
     {
         ResolveColor();
         if (mipMap_ && levelCount_ > 1)
             colorTexture_->generateMipmap();
     }
 
-    bool MagnumRenderTargetBackend::GetData(int level, int x, int y, int w, int h,
+    bool MagnumRenderTargetRenderer::GetData(int level, int x, int y, int w, int h,
                                             void* data, int dataLength) const
     {
         if (data == nullptr || w <= 0 || h <= 0)
@@ -248,9 +248,9 @@ namespace CNA::Internal::Backends::Magnum
         return ReadFramebufferRegion(readSource, height_, x, y, w, h, data);
     }
 
-    // ---- MagnumRenderTargetCubeBackend ----
+    // ---- MagnumRenderTargetCubeRenderer ----
 
-    MagnumRenderTargetCubeBackend::MagnumRenderTargetCubeBackend(
+    MagnumRenderTargetCubeRenderer::MagnumRenderTargetCubeRenderer(
         int size, int depthFormat, std::weak_ptr<MagnumBoundTarget> binding,
         bool mipMap, int multiSampleCount)
         : size_(std::max(1, size))
@@ -298,19 +298,19 @@ namespace CNA::Internal::Backends::Magnum
         BindAsRenderTargetFace(0);
     }
 
-    MagnumRenderTargetCubeBackend::~MagnumRenderTargetCubeBackend()
+    MagnumRenderTargetCubeRenderer::~MagnumRenderTargetCubeRenderer()
     {
         DetachFromBinding();
     }
 
-    void MagnumRenderTargetCubeBackend::DetachFromBinding()
+    void MagnumRenderTargetCubeRenderer::DetachFromBinding()
     {
         const auto binding = binding_.lock();
         if (binding && binding->renderTargetCube == this)
             binding->renderTargetCube = nullptr;
     }
 
-    void MagnumRenderTargetCubeBackend::BindAsRenderTargetFace(int face)
+    void MagnumRenderTargetCubeRenderer::BindAsRenderTargetFace(int face)
     {
         const int clamped = (face < 0 || face > 5) ? 0 : face;
 
@@ -336,7 +336,7 @@ namespace CNA::Internal::Backends::Magnum
         framebuffer_->setViewport(Mg::Range2Di{{}, Mg::Vector2i{size_, size_}});
     }
 
-    void MagnumRenderTargetCubeBackend::ResolveFace(int face) const
+    void MagnumRenderTargetCubeRenderer::ResolveFace(int face) const
     {
         if (multiSampleCount_ <= 0 || !resolveFramebuffer_)
             return;
@@ -348,19 +348,19 @@ namespace CNA::Internal::Backends::Magnum
             Mg::GL::FramebufferBlit::Color);
     }
 
-    void MagnumRenderTargetCubeBackend::UnbindAsRenderTarget()
+    void MagnumRenderTargetCubeRenderer::UnbindAsRenderTarget()
     {
         ResolveFace(lastFace_);
         if (mipMap_ && levelCount_ > 1)
             texture_->generateMipmap();
     }
 
-    void MagnumRenderTargetCubeBackend::BindGL(int /*unit*/) const
+    void MagnumRenderTargetCubeRenderer::BindGL(int /*unit*/) const
     {
         texture_->bind(0);
     }
 
-    bool MagnumRenderTargetCubeBackend::SetData(int face, int level, int x, int y, int w, int h,
+    bool MagnumRenderTargetCubeRenderer::SetData(int face, int level, int x, int y, int w, int h,
                                                 const void* data, int dataLength)
     {
         if (data == nullptr || face < 0 || face > 5 || level < 0 || level >= levelCount_)
@@ -379,7 +379,7 @@ namespace CNA::Internal::Backends::Magnum
         return true;
     }
 
-    bool MagnumRenderTargetCubeBackend::GetData(int face, int level, int x, int y, int w, int h,
+    bool MagnumRenderTargetCubeRenderer::GetData(int face, int level, int x, int y, int w, int h,
                                                 void* data, int dataLength) const
     {
         if (data == nullptr || face < 0 || face > 5 || level < 0 || level >= levelCount_)

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
-// Phase 58/59/63 (WEBGPU-24): verify WebGPUGraphicsBackend's dual_texture3d.wgsl /
+// Phase 58/59/63 (WEBGPU-24): verify WebGPURenderer's dual_texture3d.wgsl /
 // dual_texture_colored3d shader / GetOrCreatePipelineDualTexture3D() / DrawPrimitivesEx() dispatch
-// for DualTextureEffect, ported from VulkanGraphicsBackend's dual_texture3d.{vert,frag}.glsl /
+// for DualTextureEffect, ported from VulkanRenderer's dual_texture3d.{vert,frag}.glsl /
 // dual_texture_colored3d.vert.glsl. The first WebGPU 3D shader with a genuinely new bind-group
 // shape: group 1 needs THREE bindings (one shared sampler + two textures), unlike every prior
 // shader's single-texture group 1.

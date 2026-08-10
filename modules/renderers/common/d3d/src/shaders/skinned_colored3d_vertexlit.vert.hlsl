@@ -1,6 +1,6 @@
 // Shader Model 5.0 (vs_5_0). skinned3d_vertexlit.vert.hlsl's own stride-56 sibling: adds a
 // per-vertex Color (COLOR0) input, matching skinned_colored3d.vert.hlsl's own per-pixel-lit
-// sibling. Ported from EasyGLGraphicsBackend::EnsureSkinnedVertexLitProgram()'s vertex stage
+// sibling. Ported from EasyGLRenderer::EnsureSkinnedVertexLitProgram()'s vertex stage
 // (CNB-67, Phase 13C) -- identical skinning + per-vertex Blinn-Phong math, plus Color pass-through
 // (vertex color is a final-output modulation, not part of the light sum itself, so it is simply
 // forwarded unlit here and applied in the pixel shader).

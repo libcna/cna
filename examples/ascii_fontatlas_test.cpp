@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_ascii.md Phase G2 (ASCII-10/11): smoke test for the ASCII backend's hand-authored
+// plan_ascii.md Phase G2 (ASCII-10/11): smoke test for the ASCII renderer's hand-authored
 // glyph-density font atlas.
 //
 // Check A -- every glyph's pixel-count (popcount of its 8x8 bitmap) is strictly increasing along
@@ -17,14 +17,14 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteFont.hpp"
 
-#include "CNA/Internal/Backends/Ascii/AsciiFontAtlas.hpp"
+#include "CNA/Internal/Renderers/Ascii/AsciiFontAtlas.hpp"
 
 #include <cstdio>
 #include <memory>
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::Ascii;
+using namespace CNA::Internal::Renderers::Ascii;
 
 namespace
 {

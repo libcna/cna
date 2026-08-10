@@ -12,7 +12,7 @@
 //
 // Unlike Vulkan, Bgfx's per-RT MSAA (BGFX_TEXTURE_RT_MSAA_Xn) is fully independent of any
 // backbuffer MSAA state — bgfx resolves an MSAA-flagged render target's color attachment
-// internally into the same sampleable texture handle, with no backend-wide "did the game ask for
+// internally into the same sampleable texture handle, with no renderer-wide "did the game ask for
 // backbuffer MSAA" precondition the way Vulkan's piggyback-on-sampleCount_ scope decision
 // requires (see plan_graphics.md Task 878/879). No GraphicsDeviceManager.PreferMultiSampling is
 // needed here.
@@ -21,11 +21,11 @@
 // RenderTarget2D) only works correctly now because Task 878/879 also fixed two real, separate,
 // previously-undiscovered, pre-existing bugs -- both invisible until now because no earlier
 // Bgfx test both rendered into an RT smaller than the window AND could pixel-verify the result:
-//   1. Task 873: BgfxSpriteBatchBackend::Draw's unsafe cast silently sampled the RT's framebuffer
-//      handle as if it were a texture handle whenever the drawn ITextureBackend was actually a
-//      BgfxRenderTargetBackend. Fixed via a new IBgfxSamplable accessor both BgfxTextureBackend
-//      and BgfxRenderTargetBackend implement correctly.
-//   2. BgfxGraphicsBackend::EnsureViewState() (called from Clear()/SubmitSprite()) unconditionally
+//   1. Task 873: BgfxSpriteBatchRenderer::Draw's unsafe cast silently sampled the RT's framebuffer
+//      handle as if it were a texture handle whenever the drawn ITextureRenderer was actually a
+//      BgfxRenderTargetRenderer. Fixed via a new IBgfxSamplable accessor both BgfxTextureRenderer
+//      and BgfxRenderTargetRenderer implement correctly.
+//   2. BgfxRenderer::EnsureViewState() (called from Clear()/SubmitSprite()) unconditionally
 //      reset the current view's rect and 2D ortho projection to the full WINDOW size on every
 //      call, silently clobbering BindAsRenderTarget()'s correctly RT-sized bgfx::setViewRect()
 //      the moment Clear() was next called on that RT -- meaning every draw into a RenderTarget2D
@@ -40,17 +40,17 @@
 // framebuffer-attached textures do not actually resolve with real sub-pixel blending under that
 // legacy GL 2.1 context path on this system, despite bgfx::getCaps() reporting
 // BGFX_CAPS_FORMAT_TEXTURE_FRAMEBUFFER_MSAA/BGFX_CAPS_FORMAT_TEXTURE_MSAA support for RGBA8.
-// Confirmed this is NOT a defect in this task's C++ wiring (which is 100% backend-agnostic bgfx::
+// Confirmed this is NOT a defect in this task's C++ wiring (which is 100% renderer-agnostic bgfx::
 // API calls) by forcing bgfx onto its Vulkan renderer instead (CNA_BGFX_RENDERER=VULKAN, routing
 // through the same real AMD GPU Vulkan uses) -- both checks pass cleanly, including a genuine
 // intermediate (blended) pixel value, with zero code changes. This test is therefore registered
 // (see CMakeLists.txt) with CNA_BGFX_RENDERER=VULKAN in its environment, exercising bgfx's own
-// Vulkan backend rather than its default OpenGL one specifically for this reason -- a bgfx/legacy-
-// GL-context limitation, not a Bgfx-graphics-backend-API code gap, and out of scope to fix here.
+// Vulkan renderer rather than its default OpenGL one specifically for this reason -- a bgfx/legacy-
+// GL-context limitation, not a Bgfx-graphics-renderer-API code gap, and out of scope to fix here.
 //
 // Bgfx-only conventions mirrored from this test family (Task 364/896 finding):
 //   - RasterizerState::CullNone is required — Bgfx's default cull state is the only one of the 3
-//     backends that actually culls this test family's standard triangle winding.
+//     renderers that actually culls this test family's standard triangle winding.
 //   - GetBackBufferData() only reliably reflects the *first* read call per rendered frame,
 //     so the backbuffer-sample-and-read step retries (<=20 attempts) until a genuinely fresh
 //     (non-all-black) row is captured. Only the backbuffer-sampling step is retried — the RT's

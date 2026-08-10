@@ -1,9 +1,9 @@
-# Building and validating the Skia backend
+# Building and validating the Skia renderer
 
 This is the reproducible developer procedure for the experimental
-`CNA_GRAPHICS_BACKEND=SKIA` CPU-raster 2D backend. The commands describe the only implemented Skia
+`CNA_GRAPHICS_RENDERER=SKIA` CPU-raster 2D renderer. The commands describe the only implemented Skia
 execution mode. They do not build or silently select Ganesh, Graphite, OpenGL, Vulkan, Metal, or
-Dawn. Read [`skia-backend.md`](skia-backend.md) for the verified feature boundary before treating a
+Dawn. Read [`skia-renderer.md`](skia-renderer.md) for the verified feature boundary before treating a
 successful build as a capability claim.
 
 ## Supported build shape
@@ -110,7 +110,7 @@ From the CNA repository root:
 ```sh
 cmake -S . -B build-skia -G Ninja \
   -DCMAKE_BUILD_TYPE=Debug \
-  -DCNA_GRAPHICS_BACKEND=SKIA \
+  -DCNA_GRAPHICS_RENDERER=SKIA \
   -DCNA_SKIA_ROOT="$CNA_SKIA_SRC" \
   -DCNA_SKIA_BUILD_DIR="$CNA_SKIA_OUT" \
   -DCNA_BUILD_TESTS=ON \
@@ -120,7 +120,7 @@ cmake -S . -B build-skia -G Ninja \
 cmake --build build-skia --parallel 3
 ```
 
-Expected configure output includes `CNA: Using SKIA raster graphics backend`. It must not mention
+Expected configure output includes `CNA: Using SKIA raster graphics renderer`. It must not mention
 an EasyGL fallback. Wait for the build command to finish before starting CTest; a partially linked
 executable is not a valid test artifact.
 
@@ -185,7 +185,7 @@ xvfb-run -a env SDL_VIDEODRIVER=x11 CNA_SKIA_STATE_TRACE=1 \
 The working-directory change is required because the post-build step copies the demo's relative
 `Content/` tree next to the executable.
 
-Every constructed backend prints one immutable startup line containing the pinned revision,
+Every constructed renderer prints one immutable startup line containing the pinned revision,
 `surface=raster`, `colour=RGBA_8888/premultiplied`, `samples=0`, and
 `anisotropic filtering=unsupported`. `CNA_SKIA_STATE_TRACE=1` additionally prints target identity,
 size, blend, sampler, and scissor transitions; unset it (or set it to `0`) for normal runs.
@@ -201,7 +201,7 @@ This is not the release-gated configuration -- see
 [Accelerated prerequisites and raster fallback policy](#accelerated-prerequisites-and-raster-fallback-policy)
 below and [`skia-ganesh-artifact.md`](skia-ganesh-artifact.md) for the full contract. It exists to
 build and exercise `SkiaGaneshContext`/`SkiaGaneshSurface` and their `Skia_Ganesh_*` tests; it does
-not wire a presentable Ganesh backbuffer into `SkiaGraphicsBackend`/`IGraphicsBackend` itself.
+not wire a presentable Ganesh backbuffer into `SkiaRenderer`/`IGraphicsRenderer` itself.
 
 First build the separately pinned Ganesh GN artifact, reusing the exact same `$CNA_SKIA_SRC`
 checkout from step 2 above (never re-clone Skia for this):
@@ -218,7 +218,7 @@ project's own `cmake-build-<variant>/` convention, not a per-ticket one-off:
 ```sh
 cmake -S . -B cmake-build-skia-ganesh -G Ninja \
   -DCMAKE_BUILD_TYPE=Debug \
-  -DCNA_GRAPHICS_BACKEND=SKIA \
+  -DCNA_GRAPHICS_RENDERER=SKIA \
   -DCNA_SKIA_MODE=GANESH \
   -DCNA_SKIA_ROOT="$CNA_SKIA_SRC" \
   -DCNA_SKIA_GANESH_BUILD_DIR="$CNA_SKIA_GANESH_OUT" \
@@ -229,12 +229,12 @@ cmake -S . -B cmake-build-skia-ganesh -G Ninja \
 cmake --build cmake-build-skia-ganesh -j3
 ```
 
-Expected configure output includes `CNA: Using SKIA backend in Ganesh/OpenGL mode (experimental,
-SKIA-159-161)`, distinct from step 3's `CNA: Using SKIA raster graphics backend`. Unlike this
+Expected configure output includes `CNA: Using SKIA renderer in Ganesh/OpenGL mode (experimental,
+SKIA-159-161)`, distinct from step 3's `CNA: Using SKIA raster graphics renderer`. Unlike this
 section's own earlier revision, `-DCNA_TEST_DISPLAY` does **not** need to be a real desktop display:
 confirmed directly (SKIA-161) that Xvfb (`:99`/`:101`, the same displays step 4 already uses for the
 raster suite) provides a real, if software-only (Mesa llvmpipe), GLX implementation, sufficient for
-every Ganesh correctness check this backend has -- prefer the existing Xvfb displays for this reason
+every Ganesh correctness check this renderer has -- prefer the existing Xvfb displays for this reason
 (and to avoid disturbing a real desktop session); a real display also works if that is what is
 available. `Skia_Ganesh_ModeConstruction`/`Skia_Ganesh_Backbuffer` and the 170+ raster-labeled tests
 already present in this same build directory all run identically either way.
@@ -250,7 +250,7 @@ options as above:
 ```sh
 cmake -S . -B cmake-build-skia-ganesh-asan -G Ninja \
   -DCMAKE_BUILD_TYPE=Debug \
-  -DCNA_GRAPHICS_BACKEND=SKIA \
+  -DCNA_GRAPHICS_RENDERER=SKIA \
   -DCNA_SKIA_MODE=GANESH \
   -DCNA_SKIA_ROOT="$CNA_SKIA_SRC" \
   -DCNA_SKIA_GANESH_BUILD_DIR="$CNA_SKIA_GANESH_OUT" \
@@ -270,8 +270,8 @@ same real GLX presenter every Display-labeled Skia test already opens in any bui
 
 ## Accelerated prerequisites and raster fallback policy
 
-There is no accelerated Skia binary or runtime fallback wired into `SkiaGraphicsBackend` (the real
-`IGraphicsBackend` implementation) in this revision. The default `CNA_SKIA_MODE=RASTER` build's
+There is no accelerated Skia binary or runtime fallback wired into `SkiaRenderer` (the real
+`IGraphicsRenderer` implementation) in this revision. The default `CNA_SKIA_MODE=RASTER` build's
 pinned GN arguments disable every Skia GPU API, and `SKIA` construction always selects raster
 regardless of what else is built. SDL may use a GPU only to upload/present the completed CPU image;
 that does not change the Skia execution mode.
@@ -280,8 +280,8 @@ A separate, independently pinned Ganesh/OpenGL GN artifact and CMake target (`CN
 SKIA-159) exist, selectable at CMake configure time via `-DCNA_SKIA_MODE=GANESH` (SKIA-160,
 [`skia-ganesh-artifact.md`](skia-ganesh-artifact.md)), and a real, testable
 `SkiaGaneshContext` proves a genuine `GrDirectContext` constructs (or fails transactionally) in that
-mode. Neither is wired into `SkiaGraphicsBackend` itself, though -- there is still no presentable
-Ganesh backbuffer, and ordinary `CNA_GRAPHICS_BACKEND=SKIA` builds default to `RASTER` and are
+mode. Neither is wired into `SkiaRenderer` itself, though -- there is still no presentable
+Ganesh backbuffer, and ordinary `CNA_GRAPHICS_RENDERER=SKIA` builds default to `RASTER` and are
 completely unaffected.
 
 The accepted [`skia-surface-mode-adr.md`](skia-surface-mode-adr.md) selects raster for this release
@@ -302,12 +302,12 @@ build directory, for example:
 
 ```sh
 cmake -S . -B build-sdl-renderer -G Ninja \
-  -DCNA_GRAPHICS_BACKEND=SDL_RENDERER \
+  -DCNA_GRAPHICS_RENDERER=SDL_RENDERER \
   -DCNA_BUILD_TESTS=ON
 cmake --build build-sdl-renderer --parallel 3
 ```
 
-Never reuse one CMake build directory while comparing backend selections.
+Never reuse one CMake build directory while comparing renderer selections.
 
 ## Common failures
 

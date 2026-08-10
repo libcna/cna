@@ -2,16 +2,16 @@
 // Task 705: Verify RenderTarget2D can be sampled as Texture2D after unbinding on SDL_Renderer.
 //
 // RenderTarget2D IS-A Texture2D, so once unbound it must be drawable via the same
-// SpriteBatch::Draw(Texture2D&, ...) path as any other texture. Its backend
-// (SdlRenderTargetBackend) is a SIBLING class of SdlTextureBackend (both derive independently
-// from ITextureBackend) -- NOT a subclass of it.
+// SpriteBatch::Draw(Texture2D&, ...) path as any other texture. Its renderer
+// (SdlRenderTargetRenderer) is a SIBLING class of SdlTextureRenderer (both derive independently
+// from ITextureRenderer) -- NOT a subclass of it.
 //
-// This test found a real bug while being written: SdlSpriteBatchBackend::Draw's 3 overloads all
-// did `static_cast<const SdlTextureBackend&>(texture)` unconditionally, assuming every
-// ITextureBackend passed to Draw() really is an SdlTextureBackend. Passing an SdlRenderTargetBackend
+// This test found a real bug while being written: SdlSpriteBatchRenderer::Draw's 3 overloads all
+// did `static_cast<const SdlTextureRenderer&>(texture)` unconditionally, assuming every
+// ITextureRenderer passed to Draw() really is an SdlTextureRenderer. Passing an SdlRenderTargetRenderer
 // through that cast is undefined behavior (an unchecked downcast between unrelated sibling
-// classes) -- fixed by switching to the already-existing virtual ITextureBackend::GetNativeTexture()/
-// GetWidth()/GetHeight() accessors, which are safe for either concrete backend.
+// classes) -- fixed by switching to the already-existing virtual ITextureRenderer::GetNativeTexture()/
+// GetWidth()/GetHeight() accessors, which are safe for either concrete renderer.
 //
 // Draws a distinctive pattern INTO a RenderTarget2D while it's bound (a Blue background with a
 // smaller Red square marker in one corner), unbinds it, then draws the RenderTarget2D itself onto
@@ -19,7 +19,7 @@
 // backbuffer to confirm the pattern survived the round trip byte-for-byte.
 //
 // Requires PresentationMode::NativeBackBuffer (Task 915 finding): SDL_RenderReadPixels operates
-// in physical output coordinates, while this backend's default presentation mode
+// in physical output coordinates, while this renderer's default presentation mode
 // (FixedHeightDynamicWidth) does not map logical pixels 1:1 to physical ones.
 //
 // Exit code 0 = all checks PASS, 1 = at least one FAIL.

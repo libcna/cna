@@ -166,7 +166,7 @@ namespace Microsoft::Xna::Framework::Media
         static void Stop();
 
         /**
-         * @brief Fills visualization data for the current song when supported by the backend.
+         * @brief Fills visualization data for the current song when supported by the renderer.
          *
          * @param data Visualization data buffer to populate.
          */
@@ -181,7 +181,7 @@ namespace Microsoft::Xna::Framework::Media
         /** @brief Raises the deferred MediaStateChanged event. */
         NOXNA static void OnMediaStateChanged();
 
-        /** @brief Releases backend media resources if initialized. Called at application exit. */
+        /** @brief Releases renderer media resources if initialized. Called at application exit. */
         NOXNA static void ProgramExit();
 
         /**

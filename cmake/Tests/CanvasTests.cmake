@@ -1,4 +1,4 @@
-if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "CANVAS")
+if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "CANVAS")
     add_executable(cna_test_canvas_smoke examples/canvas_smoke_test.cpp)
     target_link_libraries(cna_test_canvas_smoke PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
 
@@ -10,7 +10,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "CANVAS")
 
     # REMED-GFX-127: every public Texture2D::GetData call must return the resource's real content or
     # reject the request deterministically -- never fabricate one. Built (not ctest-registered, like
-    # every Canvas test: this backend produces a wasm module that needs a browser), so the readback
+    # every Canvas test: this renderer produces a wasm module that needs a browser), so the readback
     # contract at least stays compile-verified on the Emscripten toolchain.
     add_executable(cna_test_canvas_texture2d_getdata_contract examples/texture2d_getdata_contract_test.cpp)
     target_link_libraries(cna_test_canvas_texture2d_getdata_contract PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
@@ -25,7 +25,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "CANVAS")
     target_link_libraries(cna_test_canvas_texture2d_getdata_transfer_range PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
 
     # REMED-GFX-130: the TextureCube/Texture3D half of the same finding. Built (not ctest-registered,
-    # like every Canvas test) so this backend's deterministic cube/volume rejection stays
+    # like every Canvas test) so this renderer's deterministic cube/volume rejection stays
     # compile-verified on the Emscripten toolchain.
     add_executable(cna_test_canvas_cube_volume_getdata_contract
                    examples/texturecube_texture3d_getdata_contract_test.cpp)
@@ -33,7 +33,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "CANVAS")
 
     # REMED-GFX-134: `RenderTargetCube::GetData` must return the face that was really rendered or
     # reject the request deterministically. REMED-GFX-130 made the reporting honest but left the
-    # readback itself implemented on only two backends, so a rendered cube face had no byte-exact
+    # readback itself implemented on only two renderers, so a rendered cube face had no byte-exact
     # public oracle anywhere else. Drawn geometry (never Clear -- see REMED-GFX-129) paints an
     # asymmetric five-region pattern whose colours rotate per face, so a flip, a rotation, a wrong
     # array layer/subresource, a stale face or an unresolved multisample surface all fail.
@@ -42,11 +42,11 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "CANVAS")
                    examples/rendertargetcube_getdata_contract_test.cpp)
     target_link_libraries(cna_test_canvas_rendertargetcube_getdata_contract PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
 
-    # REMED-GFX-136: IGraphicsBackend::CreateRenderTargetCube had no `preserveContents` parameter,
+    # REMED-GFX-136: IGraphicsRenderer::CreateRenderTargetCube had no `preserveContents` parameter,
     # unlike CreateRenderTarget2D, so a RenderTargetCube's real RenderTargetUsage never reached the
-    # backend and Vulkan/WebGPU discarded a PreserveContents cube face on every bind cycle. Reuses
+    # renderer and Vulkan/WebGPU discarded a PreserveContents cube face on every bind cycle. Reuses
     # REMED-GFX-134's asymmetric face producer, then rebinds and draws only a small marker: "the
-    # marker landed" is what a discarding backend also achieves, so it can never pass for
+    # marker landed" is what a discarding renderer also achieves, so it can never pass for
     # preservation.
     add_executable(cna_test_canvas_rendertargetcube_usage
                    examples/rendertargetcube_usage_test.cpp)
@@ -58,7 +58,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "CANVAS")
     # a small partial update -- with no readback, Present or flush in between -- and reads the whole of
     # A: the resolved single-sample layer still held the correct A, which is why a full redraw and an
     # immediate read both passed before this.
-    # Built (not ctest-registered, like every Canvas test) so this backend's own "no cube target"
+    # Built (not ctest-registered, like every Canvas test) so this renderer's own "no cube target"
     # declaration stays compile-verified on the Emscripten toolchain.
     add_executable(cna_test_canvas_rendertargetcube_msaa_face
                    examples/rendertargetcube_msaa_face_test.cpp)
@@ -75,7 +75,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "CANVAS")
     target_link_libraries(cna_test_canvas_rendertarget_depthstencil_usage PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
 
     # REMED-GFX-140: every public render-target bind/unbind cycle must be its own logical pass.
-    # `VulkanGraphicsBackend::RecordCommandBuffer` collected ONE render pass per unique render-target
+    # `VulkanRenderer::RecordCommandBuffer` collected ONE render pass per unique render-target
     # source per flush and replayed every queued batch for it inside that pass, so two bind cycles of
     # one target within a single flush window shared one load action. The decisive checks all use
     # DiscardContents -- collapsing is invisible on a preserving target, which is why REMED-GFX-136
@@ -97,7 +97,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "CANVAS")
     target_link_libraries(cna_test_canvas_backbuffer_pass_order PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
 
     # REMED-GFX-135: the WRITE half of the same finding. `TextureCube::SetData`/`Texture3D::SetData`
-    # kept the pre-REMED-GFX-127 shape -- a `void` backend method behind `if (backend_)` -- so an
+    # kept the pre-REMED-GFX-127 shape -- a `void` renderer method behind `if (renderer_)` -- so an
     # upload that stored nothing, or only part of the requested region, still returned normally.
     add_executable(cna_test_canvas_cube_volume_setdata_contract
                    examples/texturecube_texture3d_setdata_contract_test.cpp)

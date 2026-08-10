@@ -5,7 +5,7 @@
 // and RenderTarget2D (80 resources total), disposes them all explicitly, then checks:
 //   - ResourceCreated event fired exactly 80 times (all tracked).
 //   - ResourceDestroyed event fired exactly 80 times (all untracked).
-//   - Every HasBackend() is false (no GPU handle leaked).
+//   - Every HasRenderer() is false (no GPU handle leaked).
 //   - GraphicsDevice tracking list is empty (GetTrackedResourceCount() == 0).
 //   - No crash (no double-free or use-after-free from stray GL calls).
 
@@ -97,17 +97,17 @@ protected:
         check(dev.GetTrackedResourceCount() == trackBefore,
               "Tracking list returned to pre-creation count after disposal");
 
-        // ── Verify no backends remain alive ───────────────────────────────
+        // ── Verify no renderers remain alive ───────────────────────────────
         int leaked = 0;
-        for (auto& r : textures) if (r->HasBackend()) ++leaked;
-        for (auto& r : vbufs)    if (r->HasBackend()) ++leaked;
-        for (auto& r : ibufs)    if (r->HasBackend()) ++leaked;
-        for (auto& r : rts)      if (r->HasBackend()) ++leaked;
+        for (auto& r : textures) if (r->HasRenderer()) ++leaked;
+        for (auto& r : vbufs)    if (r->HasRenderer()) ++leaked;
+        for (auto& r : ibufs)    if (r->HasRenderer()) ++leaked;
+        for (auto& r : rts)      if (r->HasRenderer()) ++leaked;
 
         check(leaked == 0, "No GPU handles remain after disposing all resources");
 
         // ── Verify unique_ptrs can go out of scope without crashing ───────
-        // (destructors run here; backends are null so no GL calls made)
+        // (destructors run here; renderers are null so no GL calls made)
         textures.clear();
         vbufs.clear();
         ibufs.clear();

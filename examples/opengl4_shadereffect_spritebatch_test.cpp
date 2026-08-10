@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: MS-PL
 // plan_opengl4.md GL4-32: real SpriteBatch::SetCustomEffect integration for the OpenGL4 graphics
-// backend -- discovered as a separate, newly-found gap while scoping GL4-30 (custom
-// ShaderEffect/CreateEffectBackend), not attempted there since it's a separate feature (driving
-// 2D sprite rendering, not 3D DrawIndexedPrimitives). OpenGL4SpriteBatchBackend previously had no
+// renderer -- discovered as a separate, newly-found gap while scoping GL4-30 (custom
+// ShaderEffect/CreateEffectRenderer), not attempted there since it's a separate feature (driving
+// 2D sprite rendering, not 3D DrawIndexedPrimitives). OpenGL4SpriteBatchRenderer previously had no
 // SetCustomEffect() override (inherited the default no-op), so a custom ShaderEffect passed to
 // SpriteBatch::Begin() was silently ignored -- every sprite still rendered with the built-in
 // sprite program regardless.
 //
-// Fixed by: OpenGL4SpriteBatchBackend gained a `customEffect_` field + a real SetCustomEffect()
+// Fixed by: OpenGL4SpriteBatchRenderer gained a `customEffect_` field + a real SetCustomEffect()
 // override (flushes any already-batched sprites under the previous effect before switching,
-// mirroring EasyGLSpriteBatchBackend::SetCustomEffect's own guard). FlushBatch() now binds the
-// SAME compiled program the custom ShaderEffect itself owns (Effect::GetEffectBackendPtr(),
+// mirroring EasyGLSpriteBatchRenderer::SetCustomEffect's own guard). FlushBatch() now binds the
+// SAME compiled program the custom ShaderEffect itself owns (Effect::GetEffectRendererPtr(),
 // overridden by ShaderEffect) instead of the built-in sprite program when one is set, then calls
 // Effect::Apply() and sets "projection" -- this codebase's established custom-2D-effect
 // uniform-name convention (see easygl_shader_effect_test.cpp), distinct from the built-in
@@ -50,7 +50,7 @@ using namespace Microsoft::Xna::Framework::Graphics;
 
 namespace
 {
-    // Attribute layout matches OpenGL4SpriteBatchBackend's own VAO exactly: location 0 = vec2
+    // Attribute layout matches OpenGL4SpriteBatchRenderer's own VAO exactly: location 0 = vec2
     // position, location 1 = vec2 texcoord, location 2 = vec4 colour (all float, unnormalized).
     const char* kVertSrc = R"GLSL(
 #version 410 core

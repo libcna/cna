@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: MS-PL
-// WEBGPU-27/38/68: verify WebGPUGraphicsBackend's instanced3d.wgsl / GetOrCreatePipelineInstanced3D()
+// WEBGPU-27/38/68: verify WebGPURenderer's instanced3d.wgsl / GetOrCreatePipelineInstanced3D()
 // / DrawInstancedPrimitivesEx() -- a genuine SECOND vertex buffer binding
 // (WGPUVertexStepMode_Instance) carrying a per-instance mat4 world transform, ported from
-// VulkanGraphicsBackend's instanced3d.{vert,frag}.glsl. Tested directly at the IGraphicsBackend
+// VulkanRenderer's instanced3d.{vert,frag}.glsl. Tested directly at the IGraphicsRenderer
 // level (bypassing GraphicsDevice's own VertexBufferBinding/instance-frequency plumbing, which is
-// pre-existing and backend-agnostic -- GraphicsDevice::DrawInstancedPrimitives() already forwards
-// to IGraphicsBackend::DrawInstancedPrimitivesEx() unchanged), matching
+// pre-existing and renderer-agnostic -- GraphicsDevice::DrawInstancedPrimitives() already forwards
+// to IGraphicsRenderer::DrawInstancedPrimitivesEx() unchanged), matching
 // examples/d3d9_instanced_test.cpp's own established test-authoring convention for this exact API.
-// Deliberately uses only the backend-agnostic IGraphicsBackend/IVertexBufferBackend/
-// IIndexBufferBackend interfaces (Common/IGraphicsBackend.hpp) rather than the concrete
-// WebGPUGraphicsBackend class -- unlike D3D9/D3D11/Vulkan, this backend's own header transitively
+// Deliberately uses only the renderer-agnostic IGraphicsRenderer/IVertexBufferRenderer/
+// IIndexBufferRenderer interfaces (Common/IGraphicsRenderer.hpp) rather than the concrete
+// WebGPURenderer class -- unlike D3D9/D3D11/Vulkan, this renderer's own header transitively
 // requires wgpu-native's webgpu.h, whose include path is only exposed to
-// cna_backend_graphics_webgpu's own (PRIVATE-linked) translation units, not to a separate test
+// cna_renderer_webgpu's own (PRIVATE-linked) translation units, not to a separate test
 // executable that merely links against it.
 //
 // Checks A/B/C -- ONE DrawInstancedPrimitivesEx() call, instanceCount=3, each instance a pure
@@ -26,7 +26,7 @@
 // Check E -- a binding set with no per-instance stream falls back to a real (non-instanced)
 //   DrawIndexedPrimitivesEx() draw (stride-16 VertexPositionColor, VertexColorEnabled=false, a
 //   distinct pure-component DiffuseColor overriding the per-vertex colour) instead of throwing or
-//   corrupting the frame -- matches D3D11GraphicsBackend::DrawInstancedPrimitivesEx()'s own
+//   corrupting the frame -- matches D3D11Renderer::DrawInstancedPrimitivesEx()'s own
 //   identical fallback contract.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
@@ -39,7 +39,7 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 
 #include <cstdint>
 #include <cstdio>
@@ -48,8 +48,8 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using CNA::Internal::Backends::GpuDrawParams;
-using CNA::Internal::Backends::IGraphicsBackend;
+using CNA::Internal::Renderers::GpuDrawParams;
+using CNA::Internal::Renderers::IGraphicsRenderer;
 
 namespace
 {
@@ -68,7 +68,7 @@ namespace
     struct VP { float x, y, z; };
 
     // A small quad near the origin (4 vertices + 6 indices, NOT a 3-index triangle -- an odd
-    // index count is only 6 bytes, which trips this backend's wgpuQueueWriteBuffer
+    // index count is only 6 bytes, which trips this renderer's wgpuQueueWriteBuffer
     // COPY_BUFFER_ALIGNMENT requirement, a real but unrelated pre-existing IndexBuffer limitation;
     // every other index-buffer-using WebGPU test in this suite already happens to use an
     // even/4-byte-aligned index count for the same reason) -- small enough that a per-instance X
@@ -85,7 +85,7 @@ namespace
     // survives the device's own default RasterizerState.CullCounterClockwise -- which it never
     // sets, and therefore relies on. Over the vertices above, {0,1,2}/{0,2,3} is the
     // counter-clockwise (BACK-facing) order; it used to be that, and passed only because this
-    // backend's cull mapping was inverted to match. This test's subject is instancing, not
+    // renderer's cull mapping was inverted to match. This test's subject is instancing, not
     // culling, so it draws front-facing geometry like a real game would.
     const std::uint16_t kSmallQuadIdx[6] = {0, 2, 1, 0, 3, 2};
 
@@ -131,13 +131,13 @@ protected:
         if (frame_++ < 1) return;
 
         auto& dev = getGraphicsDeviceProperty();
-        IGraphicsBackend& backend = dev.GetBackend();
+        IGraphicsRenderer& renderer = dev.GetRenderer();
 
         // Checks A/B/C/D: 3 instances, one draw call.
         {
-            auto vb = backend.CreateVertexBuffer(4);
+            auto vb = renderer.CreateVertexBuffer(4);
             vb->SetData(kSmallQuad, 4, sizeof(VP));
-            auto ib = backend.CreateIndexBuffer16(6);
+            auto ib = renderer.CreateIndexBuffer16(6);
             ib->SetData16(kSmallQuadIdx, 6);
 
             const InstanceColumns instances[3] = {
@@ -145,7 +145,7 @@ protected:
                 TranslationInstance( 0.0f, 0.0f, 0.0f),
                 TranslationInstance( 0.5f, 0.0f, 0.0f),
             };
-            auto instVb = backend.CreateVertexBuffer(3);
+            auto instVb = renderer.CreateVertexBuffer(3);
             instVb->SetData(instances, 3, sizeof(InstanceColumns));
 
             GpuDrawParams params;
@@ -161,7 +161,7 @@ protected:
 
             dev.Clear(Color(0, 0, 255, 255));
 
-            backend.DrawInstancedPrimitivesEx(*vb, *ib, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+            renderer.DrawInstancedPrimitivesEx(*vb, *ib, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                               Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 2, 3, params);
 
             // kSmallQuad is symmetric (a real square, not a right triangle), so its exact
@@ -190,7 +190,7 @@ protected:
 
         // Check E: no per-instance stream falls back to a real (non-instanced) draw.
         {
-            auto vb = backend.CreateVertexBuffer(4);
+            auto vb = renderer.CreateVertexBuffer(4);
             struct VPC { float x, y, z; std::uint8_t r, g, b, a; };
             static const VPC kQuad[4] = {
                 {-1.0f, -1.0f, 0.0f, 255, 0, 0, 255},
@@ -199,10 +199,10 @@ protected:
                 {-1.0f,  1.0f, 0.0f, 255, 0, 0, 255},
             };
             vb->SetData(kQuad, 4, sizeof(VPC));
-            auto ib = backend.CreateIndexBuffer16(6);
+            auto ib = renderer.CreateIndexBuffer16(6);
             ib->SetData16(kSmallQuadIdx, 6);
 
-            // A pure 0/1-component colour (yellow), not a mid-tone -- this backend's swapchain
+            // A pure 0/1-component colour (yellow), not a mid-tone -- this renderer's swapchain
             // prefers an sRGB format, so a genuinely mid-range linear fragment value reads back
             // gamma-encoded, not linear (see webgpu_littextured3d_test.cpp's identical, pre-existing
             // documented caveat); pure extremes are gamma-invariant.
@@ -215,7 +215,7 @@ protected:
             bool threw = false;
             try
             {
-                backend.DrawInstancedPrimitivesEx(*vb, *ib, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                renderer.DrawInstancedPrimitivesEx(*vb, *ib, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                                   Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 2, 1, params);
             }
             catch (const std::exception&) { threw = true; }

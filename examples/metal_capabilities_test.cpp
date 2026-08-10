@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // One assertion per current CNA::GraphicsCapability. This is intentionally conservative: known
-// broken or unadapted paths assert false so adding a backend enum cannot inherit a default true.
+// broken or unadapted paths assert false so adding a renderer enum cannot inherit a default true.
 //
 // Exit code 0 = PASS, 1 = FAIL.
 

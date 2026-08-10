@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // Flat (untextured, unlit, no vertex-colour attribute) 3D vertex shader, Vulkan flavour (SPIR-V).
 //
-// LLGL-52: the one 3D vertex-layout permutation this backend previously refused outright --
+// LLGL-52: the one 3D vertex-layout permutation this renderer previously refused outright --
 // TextureEnabled=false, VertexColorEnabled=false/no colour attribute, lighting off. A flat,
 // constant-DiffuseColor-only draw (every ModelMeshPart without a texture or per-vertex colour)
 // needs a shader with NO colour attribute declared at all, unlike colored3d.vert.glsl's own

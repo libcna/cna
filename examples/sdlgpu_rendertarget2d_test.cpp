@@ -1,18 +1,18 @@
 // SPDX-License-Identifier: MS-PL
-// plan_sdlgpu.md SDLGPU-35: RenderTarget2D proof for the SDL_GPU graphics backend -- a
+// plan_sdlgpu.md SDLGPU-35: RenderTarget2D proof for the SDL_GPU graphics renderer -- a
 // COLOR_TARGET|SAMPLER texture rendered into during its own render pass and sampled during a
 // later pass within the same frame (Phase SDLGPU-8's per-target multi-pass EnsureFrameRendered).
 //
-// This backend does not implement ReadBackbuffer() (SDLGPU-39's swapchain leg is a documented,
+// This renderer does not implement ReadBackbuffer() (SDLGPU-39's swapchain leg is a documented,
 // unresolved segfault -- see plan_sdlgpu.md), but RenderTarget2D::GetData() itself IS real
-// (SDLGPU-39's RenderTarget2D leg, closed via a real ITextureBackend::GetData virtual +
-// SdlGpuRenderTargetBackend::GetData(), which reads its own self-owned colorTexture_, not the
+// (SDLGPU-39's RenderTarget2D leg, closed via a real ITextureRenderer::GetData virtual +
+// SdlGpuRenderTargetRenderer::GetData(), which reads its own self-owned colorTexture_, not the
 // swapchain) -- so Checks E/F/G below assert exact pixel values, not just "didn't throw".
 //
 // Check A -- Clear()-only fill of a RenderTarget2D (no draw call between bind/unbind), then
 //   sampled back via SpriteBatch onto the backbuffer, draws every frame with no exception. This
 //   specifically exercises whether a render target with only a Clear() (no draw) still gets its
-//   own render pass at all under this backend's per-target grouping.
+//   own render pass at all under this renderer's per-target grouping.
 // Check B -- A real colored3d triangle (BasicEffect, VertexPositionColor) drawn into a
 //   RenderTarget2D, then sampled back via SpriteBatch, draws every frame with no exception.
 //   Proves the format-parameterized pipeline cache (Phase SDLGPU-8's refactor) produces a
@@ -46,7 +46,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 
-#include "CNA/Internal/Backends/SdlGpu/SdlGpuGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/SdlGpu/SdlGpuRenderer.hpp"
 
 #include "common/PixelTestGame.hpp"
 
@@ -58,7 +58,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::SdlGpu;
+using namespace CNA::Internal::Renderers::SdlGpu;
 
 namespace
 {

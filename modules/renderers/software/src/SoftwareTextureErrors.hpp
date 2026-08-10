@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
-#include "CNA/Internal/Backends/Software/SoftwareTextureAllocation.hpp"
+#include "CNA/Internal/Renderers/Software/SoftwareTextureAllocation.hpp"
 
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
@@ -9,7 +9,7 @@
 
 #include <string>
 
-namespace CNA::Internal::Backends::Software
+namespace CNA::Internal::Renderers::Software
 {
     [[noreturn]] inline void ThrowInvalidTextureLayout(
         const SoftwareTextureAllocationRequest& request,

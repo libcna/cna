@@ -33,7 +33,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 
-#include "CNA/Internal/Backends/SdlGpu/SdlGpuGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/SdlGpu/SdlGpuRenderer.hpp"
 #include "common/PixelTestGame.hpp"
 
 #include <array>
@@ -203,11 +203,11 @@ protected:
         done_ = true;
 
         auto& device = getGraphicsDeviceProperty();
-        auto& backend = static_cast<CNA::Internal::Backends::SdlGpu::SdlGpuGraphicsBackend&>(
-            device.GetBackend());
-        Check(backend.IsDebugModeEnabledEXT(),
+        auto& renderer = static_cast<CNA::Internal::Renderers::SdlGpu::SdlGpuRenderer&>(
+            device.GetRenderer());
+        Check(renderer.IsDebugModeEnabledEXT(),
               "SDL_GPU debug mode requested for the validation route");
-        Check(backend.GetSpritePipelineCacheSizeEXT() == 0,
+        Check(renderer.GetSpritePipelineCacheSizeEXT() == 0,
               "SpriteBatch pipeline cache begins empty");
 
         RenderTargetCube cubeA(device, kCubeSize, false, SurfaceFormat::Color,
@@ -234,7 +234,7 @@ protected:
                         expected.getBProperty(), expected.getAProperty());
         }
         Check(facesCorrect, "only NegativeZ receives the opaque SpriteBatch result");
-        Check(backend.GetSpritePipelineCacheSizeEXT() == 1,
+        Check(renderer.GetSpritePipelineCacheSizeEXT() == 1,
               "fresh depthless cube creates exactly one compatible SpriteBatch pipeline");
 
         // Depthless RenderTarget2D is the same attachment compatibility class as a depthless
@@ -244,11 +244,11 @@ protected:
         Draw2D(depthless2D, *marker_);
         Check(Matches(Read2D(depthless2D), kMarker),
               "depthless RenderTarget2D SpriteBatch control is pixel-correct");
-        Check(backend.GetSpritePipelineCacheSizeEXT() == 1,
+        Check(renderer.GetSpritePipelineCacheSizeEXT() == 1,
               "depthless RT2D reuses the depthless cube compatibility pipeline");
 
         // A(depthless) -> B(depth-backed) -> A(depthless), with a flush/readback at each step so
-        // the deferred backend truly executes the transition in that order.
+        // the deferred renderer truly executes the transition in that order.
         RenderTargetCube cubeDepth(device, kCubeSize, false, SurfaceFormat::Color,
                                    DepthFormat::Depth24Stencil8, 0,
                                    RenderTargetUsage::PreserveContents);
@@ -259,14 +259,14 @@ protected:
         const Color depthBackedResult = ReadCube(cubeDepth, kSelectedFace);
         Check(Matches(depthBackedResult, kMarker),
               "depth-backed cube with DepthStencilState.None is pixel-correct");
-        Check(backend.GetSpritePipelineCacheSizeEXT() == 2,
+        Check(renderer.GetSpritePipelineCacheSizeEXT() == 2,
               "depth-backed pass creates one distinct compatibility pipeline");
 
         DrawCubeFace(cubeA, kSelectedFace, *finalMarker_, false, BlendState::Opaque, noDepth);
         const Color finalA = ReadCube(cubeA, kSelectedFace);
         Check(Matches(finalA, kFinalMarker) && Matches(ReadCube(cubeDepth, kSelectedFace), kMarker),
               "A depthless -> B depth-backed -> A depthless keeps both results exact");
-        Check(backend.GetSpritePipelineCacheSizeEXT() == 2,
+        Check(renderer.GetSpritePipelineCacheSizeEXT() == 2,
               "A -> B -> A reuses both compatibility entries without growth");
 
         RenderTargetCube cubeB(device, kCubeSize, false, SurfaceFormat::Color,
@@ -275,12 +275,12 @@ protected:
                      BlendState::Opaque, noDepth);
         Check(Matches(ReadCube(cubeB, CubeMapFace::PositiveX), kMarker),
               "second depthless cube object renders correctly");
-        Check(backend.GetSpritePipelineCacheSizeEXT() == 2,
+        Check(renderer.GetSpritePipelineCacheSizeEXT() == 2,
               "cube object and face identity do not fragment the pipeline cache");
 
         // Backbuffer transition. Its color format may or may not be distinct on a given SDL_GPU
         // driver, so the first use may add at most one entry; a repeat and return to cube must not.
-        const std::size_t beforeBackbuffer = backend.GetSpritePipelineCacheSizeEXT();
+        const std::size_t beforeBackbuffer = renderer.GetSpritePipelineCacheSizeEXT();
         device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
         device.Clear(Color::Black);
         SamplerState point = SamplerState::PointClamp;
@@ -291,7 +291,7 @@ protected:
                        Rectangle(0, 0, 1, 1), Color::White);
         sprites_->End();
         device.Present();
-        const std::size_t afterBackbuffer = backend.GetSpritePipelineCacheSizeEXT();
+        const std::size_t afterBackbuffer = renderer.GetSpritePipelineCacheSizeEXT();
         Check(afterBackbuffer >= beforeBackbuffer && afterBackbuffer <= beforeBackbuffer + 1,
               "first backbuffer use adds at most one genuine compatibility entry");
         device.Clear(Color::Black);
@@ -304,7 +304,7 @@ protected:
         DrawCubeFace(cubeA, CubeMapFace::PositiveX, *marker_, false,
                      BlendState::Opaque, noDepth);
         ReadCube(cubeA, CubeMapFace::PositiveX);
-        Check(backend.GetSpritePipelineCacheSizeEXT() == afterBackbuffer,
+        Check(renderer.GetSpritePipelineCacheSizeEXT() == afterBackbuffer,
               "backbuffer reuse and return to depthless cube do not grow the cache");
 
         // Singular/plural parity on genuinely depthless targets.
@@ -465,7 +465,7 @@ protected:
               "same-submission producer -> cube consumer observes the new face contents");
 
         std::printf("[INFO] final SpriteBatch pipeline-cache cardinality: %zu\n",
-                    backend.GetSpritePipelineCacheSizeEXT());
+                    renderer.GetSpritePipelineCacheSizeEXT());
 
         std::printf("=== %d/%d PASS ===\n", passed_, total_);
         result_ = passed_ == total_ ? 0 : 1;

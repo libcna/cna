@@ -215,7 +215,7 @@ def main():
         "#pragma once\n"
         "#include <cstddef>\n"
         "#include <cstdint>\n\n"
-        "namespace CNA::Internal::Backends::Vulkan::Shaders {\n\n"
+        "namespace CNA::Internal::Renderers::Vulkan::Shaders {\n\n"
     ]
 
     for filename, kind, cname in shaders:
@@ -229,7 +229,7 @@ def main():
         print(f"OK ({len(spv)} bytes, {len(spv)//4} words)")
         parts.append(spv_to_cpp_array(cname, spv) + "\n")
 
-    parts.append("} // namespace CNA::Internal::Backends::Vulkan::Shaders\n")
+    parts.append("} // namespace CNA::Internal::Renderers::Vulkan::Shaders\n")
 
     output_path.write_text("".join(parts))
     print(f"Written: {output_path}")

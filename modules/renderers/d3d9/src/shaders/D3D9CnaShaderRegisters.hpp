@@ -30,9 +30,9 @@
 
 // D3D9ShaderConstantSlot is declared in shaders/D3D9ShaderRegisters.hpp (D9-72's own auto-generated
 // header) -- reused verbatim rather than re-declaring an identical struct here.
-#include "CNA/Internal/Backends/D3D9/shaders/D3D9ShaderRegisters.hpp"
+#include "CNA/Internal/Renderers/D3D9/shaders/D3D9ShaderRegisters.hpp"
 
-namespace CNA::Internal::Backends::D3D9::Shaders
+namespace CNA::Internal::Renderers::D3D9::Shaders
 {
 
 static constexpr D3D9ShaderConstantSlot kPbr3DVS_Registers[] = {
@@ -119,4 +119,4 @@ static constexpr D3D9ShaderConstantSlot kSkinnedVertexColor3DPS_Registers[] = {
 };
 static constexpr int kSkinnedVertexColor3DPS_RegistersCount = 17;
 
-} // namespace CNA::Internal::Backends::D3D9::Shaders
+} // namespace CNA::Internal::Renderers::D3D9::Shaders

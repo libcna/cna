@@ -2,7 +2,7 @@
 // Task 386: verify DualTextureEffect's first texture (`Texture`, slot 0) null behavior on
 // Bgfx. See examples/easygl_dualtextureeffect_null_texture0_test.cpp for the full
 // derivation. Verify-only, zero bugs expected: source-reading confirmed
-// BgfxGraphicsBackend's dual-texture dispatch branch already falls back to
+// BgfxRenderer's dual-texture dispatch branch already falls back to
 // `defaultWhiteTexture3D_` for `params.texture0` when null -- this was part of Task 379's
 // general fix (7 call sites unified), which already covered this exact branch. This test
 // empirically confirms that with a real pixel readback.
@@ -13,7 +13,7 @@
 // this task's.
 //
 // Per Task 364's finding (tracked as Task 884, not fixed there or here): Bgfx's default
-// RasterizerState cull state is the only one of the 3 backends that actually matches FNA's
+// RasterizerState cull state is the only one of the 3 renderers that actually matches FNA's
 // real CullCounterClockwiseFace default, so it silently culls the standard NDC quad winding
 // used throughout this pixel-test family unless RasterizerState::CullNone is set
 // explicitly -- worked around here identically to prior Bgfx tests.

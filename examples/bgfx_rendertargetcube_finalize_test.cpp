@@ -47,7 +47,7 @@
 #include <string>
 #include <vector>
 
-#ifndef CNA_BACKEND_BGFX
+#ifndef CNA_RENDERER_BGFX
 #error "REMED-GFX-138's focused finalization fixture is Bgfx-only."
 #endif
 

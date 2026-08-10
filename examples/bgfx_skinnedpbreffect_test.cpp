@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MS-PL
-// PBR + skinning combo pixel test for SkinnedPbrEffect's shader (BgfxGraphicsBackend's
+// PBR + skinning combo pixel test for SkinnedPbrEffect's shader (BgfxRenderer's
 // vs_pbr_skinned3d.sc, sharing fs_pbr3d.sc's fragment stage with the unskinned PbrEffect) --
 // proves the stride-68 VertexPositionNormalTangentTextureSkinned layout, the bone-palette skin
 // transform applied to Position/Normal/Tangent, and the PBR BRDF fragment stage all work
-// end-to-end via a real GPU draw on the Bgfx backend.
+// end-to-end via a real GPU draw on the Bgfx renderer.
 //
 // Reuses examples/bgfx_pbreffect_test.cpp's exact scene (same camera, same single directional
 // light, same per-check material setup) but through SkinnedPbrEffect with a single identity bone
@@ -43,7 +43,7 @@ using namespace Microsoft::Xna::Framework::Graphics;
 
 static constexpr int kSize = 64;
 
-// Stride-68 GPU-compact skinned PBR vertex: matches BgfxGraphicsBackend's MakeBgfxLayout
+// Stride-68 GPU-compact skinned PBR vertex: matches BgfxRenderer's MakeBgfxLayout
 // stride==68 case (Position+Normal+Tangent+TextureCoordinate+BlendWeight+BlendIndices).
 struct SkinnedPbrGpuVertex
 {

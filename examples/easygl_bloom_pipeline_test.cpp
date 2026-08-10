@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // Task 946: HLSL→GLSL shader-conversion proof — full 4-pass BloomSample pipeline (EasyGL
-// backend), proving the 3 individually-ported shaders (BloomExtract/GaussianBlur/BloomCombine,
+// renderer), proving the 3 individually-ported shaders (BloomExtract/GaussianBlur/BloomCombine,
 // see the 3 sibling `easygl_bloom_*_test.cpp` files) compose end-to-end via chained
 // RenderTarget2D passes, mirroring BloomComponent.cs's own Draw() sequence exactly:
 //
@@ -25,13 +25,13 @@
 //           `base + bloom` never darkens fully-lit source pixels).
 //
 // Writing this test found and fixed a real, previously-unknown bug (Task 1078):
-// EasyGLSpriteBatchBackend::FlushBatch() always sized its viewport/orthographic projection to
+// EasyGLSpriteBatchRenderer::FlushBatch() always sized its viewport/orthographic projection to
 // the WINDOW (SDL_GetWindowSize), never to whatever RenderTarget2D is currently bound -- so a
 // custom-effect draw into a half-res intermediate RT (exactly what this real 4-pass pipeline
 // needs) rendered into the wrong sub-region instead of filling the RT. Every prior ShaderEffect/
 // SpriteBatch pixel test in this codebase happened to use a RenderTarget2D the same size as the
 // window, which silently masked this. Fixed by adding
-// EasyGLGraphicsBackend::GetCurrentRenderTarget2DSize() and preferring it over the window size
+// EasyGLRenderer::GetCurrentRenderTarget2DSize() and preferring it over the window size
 // whenever a 2D render target is bound.
 //
 // Exit code 0 = all 3 PASS, 1 = any FAIL.

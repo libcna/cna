@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: MS-PL
-// plan_software.md Phase S4 (SOFTWARE-30..34): the actual proof this backend's rasterizer core
+// plan_software.md Phase S4 (SOFTWARE-30..34): the actual proof this renderer's rasterizer core
 // works -- real, pixel-verified triangle rendering with no GPU, no window, no display server.
 //
 // Draws go through the normal GraphicsDevice::DrawPrimitives()/DrawIndexedPrimitives() public API
 // with a BasicEffect applied (VertexColorEnabled explicitly set true -- it defaults to false in
 // real XNA/FNA, so a plain BasicEffect ignores vertex colors entirely unless a game opts in).
-// GraphicsDevice routes these to IGraphicsBackend::DrawPrimitivesEx()/DrawIndexedPrimitivesEx(),
-// which SoftwareGraphicsBackend overrides directly (Phase S6) using the same rasterizer core
+// GraphicsDevice routes these to IGraphicsRenderer::DrawPrimitivesEx()/DrawIndexedPrimitivesEx(),
+// which SoftwareRenderer overrides directly (Phase S6) using the same rasterizer core
 // Phase S4's DrawColoredPrimitives()/DrawIndexedColoredPrimitives() proved correct. So this is
 // exercising the real rasterizer end-to-end through the exact same public API a real game uses,
-// not a backend-internal-only code path.
+// not a renderer-internal-only code path.
 //
 // Since World/View/Projection are all identity, clip.W == 1 for every vertex and NDC coordinates
 // equal the raw vertex positions directly -- this lets the test place vertices at exact,

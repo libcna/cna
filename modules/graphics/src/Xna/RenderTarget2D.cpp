@@ -2,7 +2,7 @@
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
 
@@ -10,7 +10,7 @@
 
 namespace Microsoft::Xna::Framework::Graphics
 {
-    using CNA::Internal::Backends::IRenderTargetBackend;
+    using CNA::Internal::Renderers::IRenderTargetRenderer;
 
     // Mirrors Texture2D.cpp's/TextureCube.cpp's CalculateMipLevels.
     static int CalculateMipLevels(int w, int h)
@@ -37,9 +37,9 @@ namespace Microsoft::Xna::Framework::Graphics
         return static_cast<int>(result >> 1);
     }
 
-#ifdef CNA_BACKEND_SKIA
+#ifdef CNA_RENDERER_SKIA
     // SKIA-142: the formats FNA itself reports renderable (see the surface-format matrix's
-    // "FNA/Skia RT decision" column) that this raster backend can now genuinely render into --
+    // "FNA/Skia RT decision" column) that this raster renderer can now genuinely render into --
     // Skia's raster SkSurface has no hardware format restriction, but promoting only these keeps
     // parity with real XNA/FNA renderability, not "whatever Skia happens to allow". Every other
     // format (packed 16-bit colours, all compressed formats, SNORM, Alpha8, ColorBgraEXT) is a
@@ -63,11 +63,11 @@ namespace Microsoft::Xna::Framework::Graphics
     }
 #endif
 
-    static std::shared_ptr<IRenderTargetBackend> CreateValidatedRenderTargetBackend(
+    static std::shared_ptr<IRenderTargetRenderer> CreateValidatedRenderTargetRenderer(
         GraphicsDevice& device, int width, int height, SurfaceFormat format,
         DepthFormat depthFormat, bool preserveContents, bool mipMap, int multiSampleCount)
     {
-#ifdef CNA_BACKEND_SKIA
+#ifdef CNA_RENDERER_SKIA
         if (!IsRenderableSkiaFormatEXT(format))
         {
             throw System::NotSupportedException(
@@ -77,8 +77,8 @@ namespace Microsoft::Xna::Framework::Graphics
 #else
         Texture::ValidateFormat(format);
 #endif
-        return std::shared_ptr<IRenderTargetBackend>(
-            device.GetBackend().CreateRenderTarget2DEXT(
+        return std::shared_ptr<IRenderTargetRenderer>(
+            device.GetRenderer().CreateRenderTarget2DEXT(
                 width, height, static_cast<int>(depthFormat), preserveContents, mipMap,
                 ClosestMSAAPower(multiSampleCount), static_cast<int>(format)));
     }
@@ -98,41 +98,41 @@ namespace Microsoft::Xna::Framework::Graphics
                                    RenderTargetUsage usage)
         : Texture2D(device, width, height, preferredFormat,
                     mipMap ? CalculateMipLevels(width, height) : 1,
-                    CreateValidatedRenderTargetBackend(
+                    CreateValidatedRenderTargetRenderer(
                             device, width, height, preferredFormat, preferredDepthFormat,
                             // REMED-GFX-136: one shared mapping for both public render targets.
                             // The literal `usage == PreserveContents` this replaces contradicted
                             // GraphicsDevice::SetRenderTargets, which only ever clears a
                             // DiscardContents target, so PlatformContents was preserved by the
-                            // shared layer and discarded by the backend at the same time.
+                            // shared layer and discarded by the renderer at the same time.
                             RenderTargetUsagePreservesContentsEXT(usage), mipMap,
                             preferredMultiSampleCount))
         , depthFormat_(preferredDepthFormat)
         , multiSampleCount_(preferredMultiSampleCount)
         , usage_(usage)
     {
-        rtBackend_ = static_cast<IRenderTargetBackend*>(GetBackendRaw());
+        rtRenderer_ = static_cast<IRenderTargetRenderer*>(GetRendererRaw());
         // GDI-058: the public property describes the attachment that was actually created, not a
-        // request the backend normalized away. The interface default is identity for backends that
+        // request the renderer normalized away. The interface default is identity for renderers that
         // honor the requested format; GDI's shared CPU target reports DepthFormat::None.
-        if (rtBackend_)
+        if (rtRenderer_)
         {
             depthFormat_ = static_cast<DepthFormat>(
-                rtBackend_->GetAppliedDepthStencilFormatEXT(
+                rtRenderer_->GetAppliedDepthStencilFormatEXT(
                     static_cast<int>(preferredDepthFormat)));
         }
-        // MultiSampleCount reflects the backend's real, device-clamped value (matching FNA's
+        // MultiSampleCount reflects the renderer's real, device-clamped value (matching FNA's
         // FNA3D_GetMaxMultiSampleCount), not the raw constructor argument.
-        if (rtBackend_) multiSampleCount_ = rtBackend_->GetMultiSampleCount();
+        if (rtRenderer_) multiSampleCount_ = rtRenderer_->GetMultiSampleCount();
     }
 
     RenderTargetUsage RenderTarget2D::getRenderTargetUsageProperty() const { return usage_; }
     DepthFormat RenderTarget2D::getDepthStencilFormatProperty() const { return depthFormat_; }
     int RenderTarget2D::getMultiSampleCountProperty() const { return multiSampleCount_; }
 
-    IRenderTargetBackend* RenderTarget2D::GetRenderTargetBackend() const
+    IRenderTargetRenderer* RenderTarget2D::GetRenderTargetRenderer() const
     {
-        return rtBackend_;
+        return rtRenderer_;
     }
 
     const std::string& RenderTarget2D::GetTypeName() const
@@ -152,10 +152,10 @@ namespace Microsoft::Xna::Framework::Graphics
             }
         }
         Texture2D::Dispose(disposing);
-        // Task 717 finding: rtBackend_ is a raw, non-owning pointer cached at construction time
-        // into the object owned by Texture2D::backend_ (a shared_ptr, just reset() above) --
-        // left uncleared, GetRenderTargetBackend() would return a dangling pointer after
+        // Task 717 finding: rtRenderer_ is a raw, non-owning pointer cached at construction time
+        // into the object owned by Texture2D::renderer_ (a shared_ptr, just reset() above) --
+        // left uncleared, GetRenderTargetRenderer() would return a dangling pointer after
         // disposal, a use-after-free the instant any caller dereferenced it.
-        rtBackend_ = nullptr;
+        rtRenderer_ = nullptr;
     }
 }

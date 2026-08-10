@@ -3,8 +3,8 @@
 // plan_cnj.md CNB-33: a .cnj sidecar's metadata transform (colorKey) must never leak into a
 // separately-cached, separately-requested load of the same underlying native file, in either
 // load order. Investigation found the specific mechanism the task described -- ApplyColorKey's
-// SetData() mutating a texture backend shared through the weak cache -- does not currently
-// reproduce: Texture2D::SetData(const Color*, int) reassigns backend_/cpuPixels_ to freshly
+// SetData() mutating a texture renderer shared through the weak cache -- does not currently
+// reproduce: Texture2D::SetData(const Color*, int) reassigns renderer_/cpuPixels_ to freshly
 // created targets rather than mutating the existing shared objects in place, so a .cnj's
 // recursively-loaded source texture is already effectively detached before ApplyColorKey runs.
 // These tests pin that invariant as a permanent regression guard (including the case that

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Xnb/XnbBuiltInReaders.hpp"
 
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Xnb/CurveContentTypeReader.hpp"
 #include "CNA/Internal/Xnb/DecimalDateTimeContentTypeReaders.hpp"
 #include "CNA/Internal/Xnb/MathContentTypeReaders.hpp"

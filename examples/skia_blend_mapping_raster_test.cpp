@@ -2,12 +2,12 @@
 // SKIA-51/SKIA-55/SKIA-123: table audit for optimized mappings plus the bounded generated fallback.
 // It exhaustively classifies the XNA Blend/BlendFunction matrix without creating an SDL window.
 
-#include "CNA/Internal/Backends/Skia/SkiaBlendMapping.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaBlendMapping.hpp"
 
 #include <cstdio>
 #include <string>
 
-using namespace CNA::Internal::Backends::Skia;
+using namespace CNA::Internal::Renderers::Skia;
 
 namespace
 {

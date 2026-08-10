@@ -4,7 +4,7 @@
 // source, SetUniformX/SetTexture, Clone(), and SpriteBatch::DrawMeshEXT() drawing real pixels.
 // Every earlier task in this lineage (SKIA-153/154/155/156) deliberately stayed below this API.
 
-#include "CNA/Internal/Backends/Skia/SkiaGlslToSkslTranslatorEXT.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaGlslToSkslTranslatorEXT.hpp"
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
@@ -26,7 +26,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using CNA::Internal::Backends::Skia::TranslateGlslToSkslEXT;
+using CNA::Internal::Renderers::Skia::TranslateGlslToSkslEXT;
 
 namespace
 {

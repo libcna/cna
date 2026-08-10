@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Task 377: AlphaTestEffect vertex color × diffuse color interaction (EasyGL backend).
+// Task 377: AlphaTestEffect vertex color × diffuse color interaction (EasyGL renderer).
 //
 // FNA reference (Graphics/Effect/StockEffects/HLSL/AlphaTestEffect.fx): `VSAlphaTestVcNoFog`
 // executes `vout.Diffuse *= vin.Color` on top of `ComputeCommonVSOutput()`'s `vout.Diffuse =
@@ -30,7 +30,7 @@
 // vertex-color-blind pipeline unless `AlphaFunction=Always` is explicitly set (which defeats the
 // point of using `AlphaTestEffect` at all). Fixing this properly means unifying Vulkan/Bgfx's
 // alpha-test dispatch with their already-correct per-stride textured/colored-textured pipelines
-// (mirroring EasyGL's architecture) — a genuinely large, multi-shader-file, multi-backend change,
+// (mirroring EasyGL's architecture) — a genuinely large, multi-shader-file, multi-renderer change,
 // not a Task-377-sized fix. Tracked as new **Task 887**; no Vulkan/Bgfx test is added here to
 // avoid encoding today's confirmed-wrong behavior as a "passing" assertion that would need
 // updating (and could be forgotten) once Task 887 lands.

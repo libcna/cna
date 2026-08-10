@@ -25,7 +25,7 @@
 //   GetData(face, 1, ...) on it also returns false -- mip-mapping stays opt-in.
 //
 // No _OpenGL CTest variant: this project's own OpenGL module has no cube-texture support at all,
-// the same reason every other RenderTargetCube test on this backend is Vulkan-module only.
+// the same reason every other RenderTargetCube test on this renderer is Vulkan-module only.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 

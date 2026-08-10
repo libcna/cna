@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MS-PL
-// SKIA-102: exhaustive public/backend refusal gate after the accepted 2D-only ADR.
+// SKIA-102: exhaustive public/renderer refusal gate after the accepted 2D-only ADR.
 
 #include "CNA/GraphicsCapability.hpp"
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
-#include "CNA/Internal/Backends/Skia/SkiaUnsupported3D.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaUnsupported3D.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
@@ -56,12 +56,12 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends;
-using CNA::Internal::Backends::Skia::kSkiaUnsupported3DPrefix;
+using namespace CNA::Internal::Renderers;
+using CNA::Internal::Renderers::Skia::kSkiaUnsupported3DPrefix;
 
 namespace
 {
-    class DummyVertexBuffer final : public IVertexBufferBackend
+    class DummyVertexBuffer final : public IVertexBufferRenderer
     {
     public:
         void SetData(const void*, int, std::size_t) override {}
@@ -69,7 +69,7 @@ namespace
         [[nodiscard]] int GetVertexCount() const override { return 3; }
     };
 
-    class DummyIndexBuffer final : public IIndexBufferBackend
+    class DummyIndexBuffer final : public IIndexBufferRenderer
     {
     public:
         void SetData16(const void*, int) override {}
@@ -97,7 +97,7 @@ protected:
         done_ = true;
 
         auto& device = getGraphicsDeviceProperty();
-        auto& backend = device.GetBackend();
+        auto& renderer = device.GetRenderer();
         const Color sentinel(17, 34, 51, 255);
         const Color blue(0, 0, 255, 255);
         const Color green(0, 255, 0, 255);
@@ -111,8 +111,8 @@ protected:
         device.Clear(sentinel);
 
         CheckBuffers(device);
-        CheckDraws(device, backend);
-        CheckDepthStencil(device, backend);
+        CheckDraws(device, renderer);
+        CheckDepthStencil(device, renderer);
         CheckEffectsAndModel(device);
         CheckStorageAndShaderBindings(device);
         CheckQuery(device);
@@ -233,7 +233,7 @@ private:
               "32-bit index buffers no longer masquerade as the 16-bit route");
     }
 
-    void CheckDraws(GraphicsDevice& device, IGraphicsBackend& backend)
+    void CheckDraws(GraphicsDevice& device, IGraphicsRenderer& renderer)
     {
         const std::array<VertexPositionColor, 3> vertices = {
             VertexPositionColor(Vector3(-1, -1, 0), Color::Red),
@@ -272,29 +272,29 @@ private:
         DummyIndexBuffer ib;
         const Matrix identity = Matrix::getIdentityProperty();
         GpuDrawParams params;
-        Check(Refuses([&] { backend.DrawColoredPrimitives(
+        Check(Refuses([&] { renderer.DrawColoredPrimitives(
                                  vb, identity, identity, identity, PrimitiveType::TriangleList, 1); },
                              "DrawColoredPrimitives")
-                  && Refuses([&] { backend.DrawPrimitivesEx(
+                  && Refuses([&] { renderer.DrawPrimitivesEx(
                                  vb, identity, identity, identity, PrimitiveType::TriangleList, 1,
                                  params); }, "DrawPrimitivesEx"),
-              "both non-indexed backend draw entry points use the shared diagnostic");
-        Check(Refuses([&] { backend.DrawIndexedColoredPrimitives(
+              "both non-indexed renderer draw entry points use the shared diagnostic");
+        Check(Refuses([&] { renderer.DrawIndexedColoredPrimitives(
                                  vb, ib, identity, identity, identity,
                                  PrimitiveType::TriangleList, 1); },
                              "DrawIndexedColoredPrimitives")
-                  && Refuses([&] { backend.DrawIndexedPrimitivesEx(
+                  && Refuses([&] { renderer.DrawIndexedPrimitivesEx(
                                  vb, ib, identity, identity, identity,
                                  PrimitiveType::TriangleList, 1, params); },
                              "DrawIndexedPrimitivesEx")
-                  && Refuses([&] { backend.DrawInstancedPrimitivesEx(
+                  && Refuses([&] { renderer.DrawInstancedPrimitivesEx(
                                  vb, ib, identity, identity, identity,
                                  PrimitiveType::TriangleList, 1, 1, params); },
                              "DrawInstancedPrimitivesEx"),
-              "indexed/effect/instanced backend draws never fall through generic defaults");
+              "indexed/effect/instanced renderer draws never fall through generic defaults");
     }
 
-    void CheckDepthStencil(GraphicsDevice& device, IGraphicsBackend& backend)
+    void CheckDepthStencil(GraphicsDevice& device, IGraphicsRenderer& renderer)
     {
         Check(Refuses([&] { device.SetDepthTestEnabled(true); }, "SetDepthTestEnabled")
                   && Refuses([&] { device.SetDepthWriteEnabled(true); }, "SetDepthWriteEnabled"),
@@ -314,17 +314,17 @@ private:
                           "RasterizerState::FillMode::WireFrame")
                   && device.getRasterizerStateProperty().getFillModeProperty() == FillMode::Solid,
               "wireframe state rejects atomically and capability remains false");
-        Check(Refuses([&] { backend.ClearColorAndDepth(1, 0, 0, 1, 1); },
+        Check(Refuses([&] { renderer.ClearColorAndDepth(1, 0, 0, 1, 1); },
                           "ClearColorAndDepth")
-                  && Refuses([&] { backend.ClearDepth(1); }, "ClearDepth")
-                  && Refuses([&] { backend.ClearStencil(1); }, "ClearStencil")
-                  && Refuses([&] { backend.ClearDepthAndStencil(1, 1); },
+                  && Refuses([&] { renderer.ClearDepth(1); }, "ClearDepth")
+                  && Refuses([&] { renderer.ClearStencil(1); }, "ClearStencil")
+                  && Refuses([&] { renderer.ClearDepthAndStencil(1, 1); },
                              "ClearDepthAndStencil")
-                  && Refuses([&] { backend.ClearColorAndStencil(1, 0, 0, 1, 1); },
+                  && Refuses([&] { renderer.ClearColorAndStencil(1, 0, 0, 1, 1); },
                              "ClearColorAndStencil")
-                  && Refuses([&] { backend.ClearColorDepthAndStencil(1, 0, 0, 1, 1, 1); },
+                  && Refuses([&] { renderer.ClearColorDepthAndStencil(1, 0, 0, 1, 1, 1); },
                              "ClearColorDepthAndStencil"),
-              "all six attachment-bearing backend clear methods refuse before color mutation");
+              "all six attachment-bearing renderer clear methods refuse before color mutation");
     }
 
     void CheckEffectsAndModel(GraphicsDevice& device)

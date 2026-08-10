@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MS-PL
 // Task 420: EasyGL SpriteBatch layerDepth-affects-draw-order pixel test.
 //
-// Tasks 415/416 already proved (via a mock/recording backend) that SpriteSortMode::FrontToBack/
-// BackToFront deliver draw calls to the backend in the correct layerDepth order. This task closes
+// Tasks 415/416 already proved (via a mock/recording renderer) that SpriteSortMode::FrontToBack/
+// BackToFront deliver draw calls to the renderer in the correct layerDepth order. This task closes
 // the loop with a real GPU pixel test proving that the resulting draw ORDER actually determines
 // which sprite is VISIBLE on screen where 2 opaque sprites overlap -- CNA's sprite vertices carry
-// no Z component (confirmed by reading EasyGLSpriteBatchBackend::Draw directly: layerDepth is
+// no Z component (confirmed by reading EasyGLSpriteBatchRenderer::Draw directly: layerDepth is
 // used only as a CPU-side sort key in flushBatch(), never written into vertex data), so with no
 // depth test the sprite drawn LAST in the sorted sequence wins the overlap via simple painter's
 // algorithm -- matching FNA's own default (DepthStencilState.None) SpriteBatch behaviour.

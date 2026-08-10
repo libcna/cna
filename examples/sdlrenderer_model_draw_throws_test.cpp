@@ -5,7 +5,7 @@
 // GraphicsDevice::SetVertexBuffer/DrawIndexedPrimitives, per mesh part with an assigned Effect
 // and a positive PrimitiveCount (parts with no Effect or PrimitiveCount<=0 are silently skipped,
 // matching FNA's own ModelMesh.Draw). Since VertexBuffer/IndexBuffer construction itself throws
-// immediately on this backend (Tasks 720-723), a real GPU-backed VertexBuffer/IndexBuffer can
+// immediately on this renderer (Tasks 720-723), a real GPU-backed VertexBuffer/IndexBuffer can
 // never exist here -- so this test mirrors the EasyGL integration test's structure
 // (examples/easygl_model_draw_test.cpp: 2-bone hierarchy, 1 mesh, 1 part, BasicEffect) but passes
 // nullptr for the part's VertexBuffer*/IndexBuffer* (ModelMeshPart accepts raw pointers, no
@@ -65,7 +65,7 @@ protected:
         ModelBone bone1(1, "child");
         bone0.AddChild(&bone1);
 
-        // nullptr VertexBuffer/IndexBuffer: a real one can never be constructed on this backend
+        // nullptr VertexBuffer/IndexBuffer: a real one can never be constructed on this renderer
         // (Tasks 720-723). numVertices=4, primitiveCount=2 (> 0, so this part is NOT skipped).
         ModelMeshPart part(nullptr, nullptr, 4, 2, 0, 0);
         ModelMesh mesh(&dev, { &part });

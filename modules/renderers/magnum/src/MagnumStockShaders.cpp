@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MS-PL
-#include "CNA/Internal/Backends/Magnum/MagnumStockShaders.hpp"
+#include "CNA/Internal/Renderers/Magnum/MagnumStockShaders.hpp"
 
 #include <iostream>
 
-namespace CNA::Internal::Backends::Magnum
+namespace CNA::Internal::Renderers::Magnum
 {
     namespace
     {

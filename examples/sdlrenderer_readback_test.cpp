@@ -2,16 +2,16 @@
 // Task 666 (SDL_Renderer audit phase, foundational prerequisite): verify
 // GraphicsDevice::GetBackBufferData actually reads real pixel content on SDL_Renderer.
 //
-// Before this fix, SdlGraphicsBackend never overrode IGraphicsBackend::ReadBackbuffer at all --
+// Before this fix, SdlRenderer never overrode IGraphicsRenderer::ReadBackbuffer at all --
 // the shared default throws std::runtime_error("ReadBackbuffer: not implemented in this
-// backend"), meaning EVERY pixel-verification test written using this project's established
+// renderer"), meaning EVERY pixel-verification test written using this project's established
 // methodology (SpriteBatch/BasicEffect draw + GetBackBufferData readback, used by every EasyGL/
-// Vulkan/Bgfx test in this project) was structurally impossible on this backend. This blocked the
+// Vulkan/Bgfx test in this project) was structurally impossible on this renderer. This blocked the
 // entire SDL_Renderer-specific pixel-test audit phase (plan_graphics.md Tasks 666-861) before any
 // of it could even start.
 //
 // Fixed via SDL_RenderReadPixels(). One real subtlety found while implementing it: that function
-// operates in *physical* output coordinates, but every other backend (and GetViewportSize()'s own
+// operates in *physical* output coordinates, but every other renderer (and GetViewportSize()'s own
 // contract) works in *logical* (virtual-resolution) coordinates. This project's default
 // presentation mode, CnaPresentationMode::FixedHeightDynamicWidth, deliberately does NOT map
 // logical pixels 1:1 to physical pixels (it derives a dynamic logical width from the window's
@@ -19,7 +19,7 @@
 // that scaling. This test explicitly requests PresentationMode::NativeBackBuffer (maps to
 // SDL_LOGICAL_PRESENTATION_DISABLED), which is the mode that actually gives 1:1 logical/physical
 // correspondence, matching how a real test-writer needing exact pixel control would configure it.
-// SdlGraphicsBackend::ReadBackbuffer itself now detects any non-1:1 scaling (letterbox/stretch
+// SdlRenderer::ReadBackbuffer itself now detects any non-1:1 scaling (letterbox/stretch
 // still active) and throws clearly rather than silently returning wrong/aliased data.
 //
 // Draws a 20x20 red sprite at (10,10) over a green-cleared 64x64 backbuffer, then reads back one

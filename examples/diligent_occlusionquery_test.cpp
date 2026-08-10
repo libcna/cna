@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_diligent.md DILIGENT-41: real-device proof that OcclusionQuery on the Diligent backend
+// plan_diligent.md DILIGENT-41: real-device proof that OcclusionQuery on the Diligent renderer
 // reports a genuine GPU visible-sample result, through the public XNA API only.
 //
 // The checks below only ever assert "zero" vs. "greater than zero", deliberately, rather than an
-// exact expected count: DiligentOcclusionQueryBackend transparently falls back from
+// exact expected count: DiligentOcclusionQueryRenderer transparently falls back from
 // QUERY_TYPE_OCCLUSION (an exact count) to QUERY_TYPE_BINARY_OCCLUSION (0 or 1) on a device without
 // the `occlusionQueryPrecise` feature -- which includes Mesa's `lavapipe` software rasterizer, the
 // only device this test actually runs against in this sandbox -- so a check that expected a
-// specific fraction of the viewport's pixel count would be backend-correct but environment-flaky.
+// specific fraction of the viewport's pixel count would be renderer-correct but environment-flaky.
 //
 // Check A -- a query that was constructed but never Begin()/End()'d is not complete and reports
 //   zero pixels: the baseline state before any GPU work has happened.
@@ -19,7 +19,7 @@
 // Check D -- the actual point of an occlusion query: a far quad fully hidden behind a nearer,
 //   depth-tested quad reports zero visible samples, exactly like check B's empty span but this
 //   time real geometry was submitted and the depth test rejected every one of its fragments. A
-//   backend that counted submitted fragments regardless of the depth test would pass B/C but fail
+//   renderer that counted submitted fragments regardless of the depth test would pass B/C but fail
 //   this one.
 //
 // Exit code 0 = all checks PASS, 1 = any FAIL, 77 = no usable device.
@@ -83,7 +83,7 @@ namespace
 
     /// Polls getIsCompleteProperty() against a wall-clock deadline rather than an iteration count.
     /// The query is a genuinely asynchronous GPU object -- even though
-    /// DiligentOcclusionQueryBackend::End() flushes the immediate context so the result doesn't
+    /// DiligentOcclusionQueryRenderer::End() flushes the immediate context so the result doesn't
     /// require waiting for a frame boundary, a real (if software) GPU still takes real time,
     /// especially the first draw of a given pipeline state, which also has to compile it. A tight
     /// CPU spin loop bounded only by iteration count can burn through thousands of iterations

@@ -4,7 +4,7 @@
 // The public CNA/FNA contract is an explicitly authored mip chain: mipMap=true allocates levels,
 // while SetData chooses which level receives exact texels. Plain Texture3D does not implicitly
 // regenerate the chain from level 0. SDL_GPU sampling is not part of CNA's current Texture3D
-// backend; this test covers the implemented SetData/GetData contract only.
+// renderer; this test covers the implemented SetData/GetData contract only.
 //
 // The checks couple byte-exact content with validation-fatal CTest output. They cover:
 // - one-mip level 0 and four distinguishable depth planes;
@@ -270,7 +270,7 @@ protected:
         CheckExact(secondary, 1, 2, 2, 2, secondaryLevel1,
                    "reverse write order 2->0->1 preserves level 1");
 
-        // Object A -> B -> A: no backend-global descriptor/region state may leak.
+        // Object A -> B -> A: no renderer-global descriptor/region state may leak.
         CheckExact(primary, 1, 2, 2, 2, level1Cyan,
                    "resource A->B->A: A");
         CheckExact(secondary, 1, 2, 2, 2, secondaryLevel1,

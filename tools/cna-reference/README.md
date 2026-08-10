@@ -4,11 +4,11 @@ Task 479 (`plan_graphics.md` Phase 53, "FNA comparison harness"). A standalone C
 that mirrors `tools/fna-reference/`'s own reference-value categories (enums, state presets,
 PackedVector, Viewport) using CNA's real C++ implementation, and emits the same JSON shape so
 `scripts/compare-fna-reference.py` can diff the two outputs key-for-key. None of these 4
-categories need a `GraphicsDevice`, so this tool runs standalone with no window/backend
+categories need a `GraphicsDevice`, so this tool runs standalone with no window/renderer
 initialization.
 
 Registered as the `cna_reference_dump` CMake target (built whenever `CNA_BUILD_EXAMPLES` is on,
-any graphics backend). Not registered as a `ctest`: the full comparison additionally needs
+any graphics renderer). Not registered as a `ctest`: the full comparison additionally needs
 `mono`/`xbuild` and a locally-built `FNA.dll` (`tools/fna-reference/README.md`), which isn't
 guaranteed on every machine that builds CNA — this is a manually-invoked developer verification
 tool, not an automated regression gate.

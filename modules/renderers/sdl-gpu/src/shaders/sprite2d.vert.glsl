@@ -16,7 +16,7 @@ layout(set = 1, binding = 0) uniform UBO {
 
 void main() {
     // pixel-space -> NDC: (0,0) top-left, Y-down to match XNA. SDL_gpu's Vulkan driver flips
-    // clip-space Y internally so shaders present a consistent cross-backend NDC convention
+    // clip-space Y internally so shaders present a consistent cross-renderer NDC convention
     // (confirmed empirically: without this negation, a texture's top row renders at the bottom
     // of the sprite) -- negate Y here to cancel that out and keep pixel-space Y-down semantics.
     vec2 ndc = (inPos / ubo.viewportSize) * 2.0 - 1.0;

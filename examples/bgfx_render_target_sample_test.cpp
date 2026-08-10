@@ -15,7 +15,7 @@
 // clearest false positive REMED-GFX-155's audit found, and it now reads the result.
 //
 // It keeps its original subject too (REMED-GFX-078 / Task 873: SpriteBatch must not reach a
-// RenderTarget2D's backend through a static_cast to the unrelated sibling BgfxTextureBackend --
+// RenderTarget2D's renderer through a static_cast to the unrelated sibling BgfxTextureRenderer --
 // undefined behaviour that corrupted the draw). A crash is still a failure; producing nothing is
 // now also a failure.
 //
@@ -136,7 +136,7 @@ protected:
         sb_->End();
 
         check(true, "Bgfx RenderTarget2D-as-Texture2D SpriteBatch::Draw did not crash "
-                    "(REMED-GFX-078 / Task 873: no static_cast to an unrelated sibling backend)");
+                    "(REMED-GFX-078 / Task 873: no static_cast to an unrelated sibling renderer)");
 
         std::vector<Color> frame(static_cast<std::size_t>(kRTSize) * kRTSize,
                                  Color(0xCD, 0xCD, 0xCD, 0xCD));

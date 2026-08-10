@@ -5,7 +5,7 @@
 // diffuse+specular output (not just diffuse alone), applied after the specular add so
 // VertexColorEnabled=true with a black vertex color genuinely zeroes the pixel (a specular
 // highlight added afterward would otherwise leak through unmodulated) — mirrors
-// EasyGLGraphicsBackend::EnsureSkinnedProgram()'s own fragment shader exactly.
+// EasyGLRenderer::EnsureSkinnedProgram()'s own fragment shader exactly.
 
 layout(location = 0) in vec3 vNormal;
 layout(location = 1) in vec2 vUV;

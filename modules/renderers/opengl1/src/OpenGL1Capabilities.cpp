@@ -1,4 +1,4 @@
-#include "CNA/Internal/Backends/OpenGL1/OpenGL1Capabilities.hpp"
+#include "CNA/Internal/Renderers/OpenGL1/OpenGL1Capabilities.hpp"
 #include <SDL3/SDL.h>
 #if defined(_WIN32)
 #include <windows.h>
@@ -7,7 +7,7 @@
 #include <cstdio>
 #include <string>
 
-namespace CNA::Internal::Backends::OpenGL1
+namespace CNA::Internal::Renderers::OpenGL1
 {
 namespace
 {

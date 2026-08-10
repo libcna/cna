@@ -3,7 +3,7 @@
 // REMED-GFX-150: TextureFilter::Point must select exactly ONE texel, and TextureAddressMode must
 // decide which one, on every textured draw path.
 //
-// THE PUBLIC CONTRACT, stated as the arithmetic a conforming backend performs. A destination pixel
+// THE PUBLIC CONTRACT, stated as the arithmetic a conforming renderer performs. A destination pixel
 // is sampled at its CENTRE, (x + 0.5, y + 0.5). That centre is mapped back through the sprite's
 // (or the primitive's) geometry to a coordinate in TEXEL space, `s`, whose origin is the texture's
 // top-left corner and whose unit is one texel. Point filtering then selects
@@ -24,9 +24,9 @@
 //     coordinate before it. Clamp reaches the first and last texel and blends with nothing;
 //     Wrap tiles; Mirror tiles and flips.
 //
-// THE DEFECT (Software). `SoftwareGraphicsBackend::ApplySamplerState(int slot, int, int, int, int)`
+// THE DEFECT (Software). `SoftwareRenderer::ApplySamplerState(int slot, int, int, int, int)`
 // named none of its parameters -- filter, addressU, addressV and maxAnisotropy were all discarded,
-// and `SoftwareSpriteBatchBackend`'s `textureFilter_`/`addressU_`/`addressV_` were dead stores that
+// and `SoftwareSpriteBatchRenderer`'s `textureFilter_`/`addressU_`/`addressV_` were dead stores that
 // nothing ever read. One function, `SampleBilinear`, served every textured fragment, so every draw
 // was LinearClamp regardless of the SamplerState the game selected:
 //
@@ -142,42 +142,42 @@ using namespace Microsoft::Xna::Framework::Graphics;
 
 namespace
 {
-#if defined(CNA_BACKEND_HEADLESS)
+#if defined(CNA_RENDERER_HEADLESS)
     constexpr bool kRasterizes = false;
-    constexpr const char* kBackendName = "HEADLESS";
-#elif defined(CNA_BACKEND_SOFTWARE)
+    constexpr const char* kRendererName = "HEADLESS";
+#elif defined(CNA_RENDERER_SOFTWARE)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "SOFTWARE";
-#elif defined(CNA_BACKEND_EASYGL)
+    constexpr const char* kRendererName = "SOFTWARE";
+#elif defined(CNA_RENDERER_EASYGL)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "EASYGL";
-#elif defined(CNA_BACKEND_BGFX)
+    constexpr const char* kRendererName = "EASYGL";
+#elif defined(CNA_RENDERER_BGFX)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "BGFX";
-#elif defined(CNA_BACKEND_VULKAN)
+    constexpr const char* kRendererName = "BGFX";
+#elif defined(CNA_RENDERER_VULKAN)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "VULKAN";
-#elif defined(CNA_BACKEND_WEBGPU)
+    constexpr const char* kRendererName = "VULKAN";
+#elif defined(CNA_RENDERER_WEBGPU)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "WEBGPU";
-#elif defined(CNA_BACKEND_SDL_GPU)
+    constexpr const char* kRendererName = "WEBGPU";
+#elif defined(CNA_RENDERER_SDL_GPU)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "SDL_GPU";
-#elif defined(CNA_BACKEND_D3D9)
+    constexpr const char* kRendererName = "SDL_GPU";
+#elif defined(CNA_RENDERER_D3D9)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "D3D9";
-#elif defined(CNA_BACKEND_D3D11)
+    constexpr const char* kRendererName = "D3D9";
+#elif defined(CNA_RENDERER_D3D11)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "D3D11";
-#elif defined(CNA_BACKEND_D3D12)
+    constexpr const char* kRendererName = "D3D11";
+#elif defined(CNA_RENDERER_D3D12)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "D3D12";
-#elif defined(CNA_BACKEND_LLGL)
+    constexpr const char* kRendererName = "D3D12";
+#elif defined(CNA_RENDERER_LLGL)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "LLGL";
+    constexpr const char* kRendererName = "LLGL";
 #else
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "UNKNOWN";
+    constexpr const char* kRendererName = "UNKNOWN";
 #endif
 
     constexpr int kBBW = 160;
@@ -252,7 +252,7 @@ namespace
     /// The 8x4 pattern GFX-150 was measured on: every one of its 32 texels is unique, R ramps with
     /// x, G ramps with y, B adds a third asymmetry, A carries four distinct values. Texel (1,0) is
     /// (50,25,190,200) and texel (0,0) is (20,25,40,255) -- the pair whose 0.75/0.25 blend the
-    /// pre-fix backend returned at destination (2,0).
+    /// pre-fix renderer returned at destination (2,0).
     Pattern Make8x4()
     {
         Pattern p{8, 4, {}, "8x4"};
@@ -397,7 +397,7 @@ namespace
 
     /// How close to a texel boundary a coordinate may land before the two texels it separates become
     /// indistinguishable. The contract's tie rule (an integral coordinate selects the HIGHER texel)
-    /// is exact in real arithmetic, but a backend interpolates u,v in single precision across the
+    /// is exact in real arithmetic, but a renderer interpolates u,v in single precision across the
     /// primitive, so at an exact boundary either neighbour is a legitimate answer. Anything that is
     /// neither -- a blend -- still fails.
     constexpr double kTieEpsilon = 1e-4;
@@ -742,7 +742,7 @@ protected:
         done_ = true;
         auto& dev = getGraphicsDeviceProperty();
 
-        std::printf("=== REMED-GFX-150 point-sampling contract on %s ===\n", kBackendName);
+        std::printf("=== REMED-GFX-150 point-sampling contract on %s ===\n", kRendererName);
 
         if (!kRasterizes)
         {
@@ -798,7 +798,7 @@ private:
         try { rt.GetData(pix.data(), 0, static_cast<int>(pix.size())); }
         catch (const System::Exception&) { threw = true; }
         catch (const std::exception&) { threw = true; }
-        check(threw, "Z1: a non-rasterizing backend rejects the readback instead of fabricating a "
+        check(threw, "Z1: a non-rasterizing renderer rejects the readback instead of fabricating a "
                      "sampled image");
     }
 
@@ -1492,7 +1492,7 @@ private:
         }
 
         // The four ordinals that name a DIFFERENT minification and magnification filter. Only the
-        // MAGNIFICATION half is asserted cross-backend: on a GL-family backend these four also
+        // MAGNIFICATION half is asserted cross-renderer: on a GL-family renderer these four also
         // select a mipmap minification filter, and a texture with no mip chain is then incomplete,
         // so their minification half is not a portable measurement. Software's own minification
         // half is covered by Y6/Y7 below, which use ordinals whose two halves agree.
@@ -1577,7 +1577,7 @@ private:
 
         // UVs large enough that u * width overflows to infinity on the 3D path. The requirement is
         // that this is DEFINED -- a real texel, no crash, no out-of-bounds read -- not that a
-        // particular texel is chosen, which no backend specifies.
+        // particular texel is chosen, which no renderer specifies.
         {
             RenderTarget2D rt(dev, 8, 8, false, SurfaceFormat::Color, DepthFormat::None, 0,
                               RenderTargetUsage::DiscardContents);

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // D3D9 PBR porting task: real vs_3_0/ps_3_0 bytecode for CNA's own NOXNA "Pbr3D"/"PbrSkinned3D"
-// shaders (src/CNA/Internal/Backends/D3D9/shaders/cna/Pbr3D.hlsl,
-// src/CNA/Internal/Backends/D3D9/shaders/cna/PbrSkinned3D.hlsl -- see those files' own header
+// shaders (src/CNA/Internal/Renderers/D3D9/shaders/cna/Pbr3D.hlsl,
+// src/CNA/Internal/Renderers/D3D9/shaders/cna/PbrSkinned3D.hlsl -- see those files' own header
 // comments for the BRDF source and the empirical ps_2_0-fails/ps_3_0-fits finding), compiled
 // through the same real d3dcompiler_47.dll (D9-71's own fxc_tool.exe, under Wine) used for the
 // vendored XNA Stock Effects, and register-verified against a real D3DDisassemble() (D9-72's own
@@ -18,7 +18,7 @@
 #include <cstdint>
 #include <cstddef>
 
-namespace CNA::Internal::Backends::D3D9::Shaders
+namespace CNA::Internal::Renderers::D3D9::Shaders
 {
 
 // Pbr3D vertex shader (700 bytes)
@@ -910,4 +910,4 @@ static constexpr uint8_t kPbrSkinned3DPSBytecode[3776] = {
 };
 static constexpr std::size_t kPbrSkinned3DPSBytecode_size = 3776;
 
-} // namespace CNA::Internal::Backends::D3D9::Shaders
+} // namespace CNA::Internal::Renderers::D3D9::Shaders

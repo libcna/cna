@@ -27,7 +27,7 @@
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 
-#include "CNA/Internal/Backends/Ascii/AsciiGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Ascii/AsciiRenderer.hpp"
 
 #include <cstdio>
 #include <memory>
@@ -36,7 +36,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::Ascii;
+using namespace CNA::Internal::Renderers::Ascii;
 
 namespace
 {
@@ -64,8 +64,8 @@ protected:
     void Draw(const GameTime&) override
     {
         auto& dev = getGraphicsDeviceProperty();
-        auto& backend = static_cast<AsciiGraphicsBackend&>(dev.GetBackend());
-        backend.SetMode(AsciiQuantizeMode::Color);
+        auto& renderer = static_cast<AsciiRenderer&>(dev.GetRenderer());
+        renderer.SetMode(AsciiQuantizeMode::Color);
 
         dev.Clear(Color(140, 140, 140, 255));
 
@@ -81,12 +81,12 @@ protected:
         // what was just shown). gameTarget_ still holds the same content Present() only ever
         // read from -- DrawQuantizedGridForTesting() redraws the identical quantized grid onto
         // the real backbuffer WITHOUT swapping, so it can be read immediately afterward.
-        backend.DrawQuantizedGridForTesting();
+        renderer.DrawQuantizedGridForTesting();
 
         int realWidth = 0, realHeight = 0;
-        backend.GetViewportSize(realWidth, realHeight);
+        renderer.GetViewportSize(realWidth, realHeight);
         std::vector<std::uint8_t> pixels(static_cast<std::size_t>(realWidth) * static_cast<std::size_t>(realHeight) * 4);
-        backend.ReadRealBackbufferForTesting(0, 0, realWidth, realHeight, pixels.data());
+        renderer.ReadRealBackbufferForTesting(0, 0, realWidth, realHeight, pixels.data());
 
         // NativeBackBuffer + a 64x64 virtual resolution (exact multiple of the 8x8 glyph cell)
         // means the real window is pixel-for-pixel identical to the logical resolution -- cell
@@ -105,25 +105,25 @@ protected:
         // just a fixed 8x8 baked into Present() -- SetCellSize()/GetCellSize() round-trip,
         // reject an invalid size, and actually change the grid Present() draws.
         int defaultCellW = 0, defaultCellH = 0;
-        backend.GetCellSize(defaultCellW, defaultCellH);
+        renderer.GetCellSize(defaultCellW, defaultCellH);
         check(defaultCellW == 8 && defaultCellH == 8, "GetCellSize() defaults to 8x8 (kAsciiGlyphWidth x kAsciiGlyphHeight)");
 
         int gridCols = 0, gridRows = 0;
-        backend.GetLastGridDimensionsForTesting(gridCols, gridRows);
+        renderer.GetLastGridDimensionsForTesting(gridCols, gridRows);
         check(gridCols == 8 && gridRows == 8, "Default 8x8 cell size on a 64x64 view produces an 8x8 grid");
 
         bool threwInvalid = false;
-        try { backend.SetCellSize(0, 8); }
+        try { renderer.SetCellSize(0, 8); }
         catch (const std::invalid_argument&) { threwInvalid = true; }
         check(threwInvalid, "SetCellSize(0, 8) throws std::invalid_argument");
 
-        backend.SetCellSize(16, 16);
+        renderer.SetCellSize(16, 16);
         int newCellW = 0, newCellH = 0;
-        backend.GetCellSize(newCellW, newCellH);
+        renderer.GetCellSize(newCellW, newCellH);
         check(newCellW == 16 && newCellH == 16, "SetCellSize(16, 16) / GetCellSize() round-trip");
 
-        backend.DrawQuantizedGridForTesting();
-        backend.GetLastGridDimensionsForTesting(gridCols, gridRows);
+        renderer.DrawQuantizedGridForTesting();
+        renderer.GetLastGridDimensionsForTesting(gridCols, gridRows);
         check(gridCols == 4 && gridRows == 4,
               "SetCellSize(16, 16) on a 64x64 view produces a 4x4 grid -- Present() actually honors it, not just the accessor");
 

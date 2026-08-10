@@ -5,7 +5,7 @@
 // ModelMeshPart/ModelEffectCollection -- confirmed by reading both .cpp files -- never
 // dereferenced. This lets these tests use plain, never-dereferenced fake pointer values
 // (reinterpret_cast from a small integer) for identity-only checks, avoiding any need for a real
-// GraphicsDevice/backend -- a genuine unit test, not an integration test, matching this task's own
+// GraphicsDevice/renderer -- a genuine unit test, not an integration test, matching this task's own
 // "Unit tests" framing.
 
 #include <gtest/gtest.h>

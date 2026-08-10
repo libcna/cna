@@ -23,7 +23,7 @@
 // WHY: bgfx's GL renderer performs a framebuffer's multisample RESOLVE (`FrameBufferGL::resolve`,
 // the `glBlitFramebuffer` from `m_fbo[0]`, the multisample renderbuffer, into `m_fbo[1]`, the
 // single-sample texture) only from `setFrameBuffer()`, i.e. when the renderer switches AWAY from
-// that framebuffer to a DIFFERENT one. The readback blit this backend queues on the reserved
+// that framebuffer to a DIFFERENT one. The readback blit this renderer queues on the reserved
 // highest view id is drained by the TAIL `submitBlit(bs, BGFX_CONFIG_MAX_VIEWS)` at the end of
 // `RendererContextGL::submit`, which runs while the producer's framebuffer is still current and
 // still unresolved -- so `glCopyImageSubData` copies the resolve texture that nothing has written
@@ -40,7 +40,7 @@
 // ticket: same unbound public sequence, same target, same all-zero result, same source handle, and
 // the two are NOT independently reproducible. GFX-154 is canonical for Bgfx. GFX-164 retained the
 // distinct EasyGL sequence in which GetData reads the target while it is still bound; that active
-// producer required its own resolve correction. This fixture remains the cross-backend control for
+// producer required its own resolve correction. This fixture remains the cross-renderer control for
 // the unbound first-read contract and fully asserts EasyGL content as well as transfer boundaries.
 //
 // THE ORACLE
@@ -107,33 +107,33 @@ namespace
     constexpr int kBBW = 64;   ///< Backbuffer width. Nothing in this file reads the backbuffer.
     constexpr int kBBH = 64;   ///< Backbuffer height.
 
-#if defined(CNA_BACKEND_HEADLESS)
-    constexpr const char* kBackendName = "HEADLESS";
+#if defined(CNA_RENDERER_HEADLESS)
+    constexpr const char* kRendererName = "HEADLESS";
     constexpr bool kRasterizes = false;
-#elif defined(CNA_BACKEND_SOFTWARE)
-    constexpr const char* kBackendName = "SOFTWARE";
+#elif defined(CNA_RENDERER_SOFTWARE)
+    constexpr const char* kRendererName = "SOFTWARE";
     constexpr bool kRasterizes = true;
-#elif defined(CNA_BACKEND_EASYGL)
-    constexpr const char* kBackendName = "EASYGL";
+#elif defined(CNA_RENDERER_EASYGL)
+    constexpr const char* kRendererName = "EASYGL";
     constexpr bool kRasterizes = true;
-#elif defined(CNA_BACKEND_BGFX)
-    constexpr const char* kBackendName = "BGFX";
+#elif defined(CNA_RENDERER_BGFX)
+    constexpr const char* kRendererName = "BGFX";
     constexpr bool kRasterizes = true;
-#elif defined(CNA_BACKEND_VULKAN)
-    constexpr const char* kBackendName = "VULKAN";
+#elif defined(CNA_RENDERER_VULKAN)
+    constexpr const char* kRendererName = "VULKAN";
     constexpr bool kRasterizes = true;
-#elif defined(CNA_BACKEND_WEBGPU)
-    constexpr const char* kBackendName = "WEBGPU";
+#elif defined(CNA_RENDERER_WEBGPU)
+    constexpr const char* kRendererName = "WEBGPU";
     constexpr bool kRasterizes = true;
-#elif defined(CNA_BACKEND_SDL_GPU)
-    constexpr const char* kBackendName = "SDL_GPU";
+#elif defined(CNA_RENDERER_SDL_GPU)
+    constexpr const char* kRendererName = "SDL_GPU";
     constexpr bool kRasterizes = true;
 #else
-#error "REMED-GFX-154: this backend has no declared first-readback contract."
+#error "REMED-GFX-154: this renderer has no declared first-readback contract."
 #endif
 
     /**
-     * @brief Whether a MULTISAMPLED render target's CONTENT is asserted on this backend.
+     * @brief Whether a MULTISAMPLED render target's CONTENT is asserted on this renderer.
      *
      * TRUE EVERYWHERE, INCLUDING EASYGL -- and that is a measurement, not an assumption.
      *
@@ -145,12 +145,12 @@ namespace
      * checks**, so EasyGL's multisampled readback is byte-exact through THIS public sequence.
      * REMED-GFX-164 subsequently proved that its own failure required the distinct active-target
      * sequence: the unresolved public texture lagged the live multisample renderbuffer until
-     * unbind. The active resolve correction leaves this unbound cross-backend contract unchanged.
+     * unbind. The active resolve correction leaves this unbound cross-renderer contract unchanged.
      */
     constexpr bool kMsaaContentReadable = true;
 
     /**
-     * @brief Whether this backend can read a render target's colour attachment back at all.
+     * @brief Whether this renderer can read a render target's colour attachment back at all.
      *
      * False on HEADLESS, which rasterizes nothing and therefore owns no colour to return. Its
      * `GetData` is REMED-GFX-127/130's deterministic public REFUSAL --
@@ -160,7 +160,7 @@ namespace
      * indistinguishable from the defect this whole ticket is about.
      */
     constexpr bool kTargetReadbackSupported =
-#if defined(CNA_BACKEND_HEADLESS)
+#if defined(CNA_RENDERER_HEADLESS)
         false;
 #else
         true;
@@ -178,7 +178,7 @@ namespace
      * REMED-GFX-186 has since fixed it -- SDL_GPU's multisampled target now carries the full
      * declared mip chain on its resolved single-sample texture, and an out-of-range level is a
      * catchable public exception -- so the carve-out is gone and leg G1 issues the read on every
-     * backend again.
+     * renderer again.
      */
     constexpr bool kMsaaMipLevelProbeSafe = true;
 
@@ -189,7 +189,7 @@ namespace
      * for `mipMap=true` (WEBGPU-53/54) -- a separately tracked boundary, not this task's subject.
      */
     constexpr bool kMipMappedTargetSupported =
-#if defined(CNA_BACKEND_WEBGPU)
+#if defined(CNA_RENDERER_WEBGPU)
         false;
 #else
         true;
@@ -209,7 +209,7 @@ namespace
     /// Absent from the rendered image on every channel, and distinct from (0,0,0,0).
     const Color kSentinel(7, 3, 11, 199);
 
-    /// Vertex-colour round trips differ by a unit or two across backends and MSAA resolves.
+    /// Vertex-colour round trips differ by a unit or two across renderers and MSAA resolves.
     constexpr int kTol = 14;
 
     /// Protected elements written before and after every requested destination window.
@@ -290,7 +290,7 @@ class RenderTargetMsaaFirstReadbackTest : public Game
         if (ok) ++passCount_;
     }
 
-    /** @brief Records something this backend genuinely cannot measure, and marks the run explained. */
+    /** @brief Records something this renderer genuinely cannot measure, and marks the run explained. */
     void boundary(const std::string& text)
     {
         boundaryDeclared_ = true;
@@ -372,9 +372,9 @@ class RenderTargetMsaaFirstReadbackTest : public Game
     }
 
     /**
-     * @brief Runs @p doRead, or asserts this backend's deterministic refusal instead.
+     * @brief Runs @p doRead, or asserts this renderer's deterministic refusal instead.
      *
-     * On a backend that cannot read a render target back, the ONLY correct behaviour is a public
+     * On a renderer that cannot read a render target back, the ONLY correct behaviour is a public
      * exception that writes nothing -- so that is what gets asserted, using the same sentinel
      * buffer. A refusal that silently wrote zeroes would look exactly like REMED-GFX-154 itself.
      *
@@ -391,7 +391,7 @@ class RenderTargetMsaaFirstReadbackTest : public Game
         bool threw = false;
         try { doRead(); }
         catch (const std::exception&) { threw = true; }
-        check(threw, label + ": this backend REFUSES render-target readback, and does so through a "
+        check(threw, label + ": this renderer REFUSES render-target readback, and does so through a "
                              "catchable public exception");
         bool untouched = true;
         for (const Color& c : buf)
@@ -474,7 +474,7 @@ class RenderTargetMsaaFirstReadbackTest : public Game
      *
      * Prefills a sentinel destination, issues EXACTLY ONE `GetData`, and asserts: every requested
      * element was overwritten, the guards survived, and the window holds the resolved pattern. On a
-     * backend where multisampled CONTENT is a declared boundary the last of those three becomes a
+     * renderer where multisampled CONTENT is a declared boundary the last of those three becomes a
      * printed measurement instead of a failure -- the other two stay assertions.
      *
      * @return the texels read, for a differential comparison by the caller.
@@ -510,7 +510,7 @@ class RenderTargetMsaaFirstReadbackTest : public Game
         }
         else
         {
-            boundary(label + ": multisampled CONTENT is not asserted on this backend -- measured " +
+            boundary(label + ": multisampled CONTENT is not asserted on this renderer -- measured " +
                      std::to_string(zeroed) + "/" +
                      std::to_string(count) + " texels exactly (0,0,0,0), centre " +
                      ColorText(buf[static_cast<std::size_t>(kGuard + (h / 4) * w + (w / 4))]));
@@ -604,7 +604,7 @@ class RenderTargetMsaaFirstReadbackTest : public Game
         }
         else
         {
-            boundary("A4 multisampled content is not asserted on this backend -- measured " +
+            boundary("A4 multisampled content is not asserted on this renderer -- measured " +
                      std::to_string(zeroed) + "/" + std::to_string(count) + " exactly (0,0,0,0)");
         }
     }
@@ -739,7 +739,7 @@ class RenderTargetMsaaFirstReadbackTest : public Game
             return;
         }
         if (!kMsaaContentReadable)
-            boundary("A10 content unasserted on this backend");
+            boundary("A10 content unasserted on this renderer");
         check(good == 6, "A10 six create/render/first-read/dispose cycles all correct (" +
                              std::to_string(good) + "/6)");
     }
@@ -993,7 +993,7 @@ class RenderTargetMsaaFirstReadbackTest : public Game
         // here and never absorbed into this ticket.
         if (!kMsaaMipLevelProbeSafe)
         {
-            boundary("G1 mip level 1 of a mipmapped multisampled target SEGFAULTS on this backend "
+            boundary("G1 mip level 1 of a mipmapped multisampled target SEGFAULTS on this renderer "
                      "(REMED-GFX-186, isolated by this task's controls) -- a SIGSEGV cannot be "
                      "caught, so the probe is declared instead of issued. Level 0 above is exact.");
             check(true, "G1 mip level 1 behaviour is classified rather than absorbed");
@@ -1100,7 +1100,7 @@ class RenderTargetMsaaFirstReadbackTest : public Game
 
     void Finish()
     {
-        std::printf("[INFO] %s: %d/%d checks passed\n", kBackendName, passCount_, totalCount_);
+        std::printf("[INFO] %s: %d/%d checks passed\n", kRendererName, passCount_, totalCount_);
         std::fflush(stdout);
         result_ = (passCount_ == totalCount_ && (totalCount_ > 0 || boundaryDeclared_)) ? 0 : 1;
         Exit();
@@ -1228,7 +1228,7 @@ int main(int argc, char** argv)
     {
         const int total = static_cast<int>(sizeof(kLegs) / sizeof(kLegs[0]));
         std::printf("[INFO] REMED-GFX-154 supervisor on %s: %d legs, each in its own process\n",
-                    kBackendName, total);
+                    kRendererName, total);
         std::fflush(stdout);
         int passed = 0, skippedCount = 0;
         for (const char* legId : kLegs)

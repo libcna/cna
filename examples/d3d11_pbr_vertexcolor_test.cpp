@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_cnj.md CNB-58/CNB-67 follow-up: real-GPU pixel test for the D3D11 backend's new
+// plan_cnj.md CNB-58/CNB-67 follow-up: real-GPU pixel test for the D3D11 renderer's new
 // PbrEffect (stride 48)/SkinnedPbrEffect (stride 68)/SkinnedEffect vertex-color-on-skinned-mesh
 // (stride 56, Skinned3dColored/Skinned3dVertexLitColored) shader variants -- proves each new
 // stride/variant is actually selected and executes correctly end-to-end via a real D3D11 draw
@@ -12,7 +12,7 @@
 // light (multiplied by a zero lightColor) and the ambient term is zero too -- the shader's output
 // collapses to EmissiveFactor * emissiveMap exactly, with EmissiveMap deliberately left unbound so
 // the result also exercises the new default-white-SRV fallback path
-// (D3D11GraphicsBackend::GetOrCreateDefaultWhiteSrvEXT). EmissiveFactor=(1,0,0) with 0/1-only
+// (D3D11Renderer::GetOrCreateDefaultWhiteSrvEXT). EmissiveFactor=(1,0,0) with 0/1-only
 // channel values is also gamma/sRGB-invariant (the sRGB transfer function fixes both endpoints),
 // so the expected pixel is exactly pure red regardless of the swapchain's sRGB back buffer format.
 //
@@ -152,7 +152,7 @@ protected:
             fx.setTextureProperty(&whiteTex);
             fx.setEmissiveFactorProperty(Vector3(1.0f, 0.0f, 0.0f));
             // NormalMap/MetallicRoughnessMap/EmissiveMap/OcclusionMap deliberately left unbound --
-            // exercises D3D11GraphicsBackend's new default-fallback-texture path for all four.
+            // exercises D3D11Renderer's new default-fallback-texture path for all four.
 
             std::vector<PbrGpuVertex> verts;
             AppendPbrQuad(verts, -1.0f, -0.5f);
@@ -238,7 +238,7 @@ protected:
 
         // --- REMED-GFX-020 regression: DrawPrimitives() must honor a non-zero startVertex. ---
         // The quad-D failure above was ROOT-CAUSED not to vertex color but to
-        // D3D11GraphicsBackend ignoring GpuDrawParams::vertexStart (context->Draw() hardcoded
+        // D3D11Renderer ignoring GpuDrawParams::vertexStart (context->Draw() hardcoded
         // StartVertexLocation=0), so DrawPrimitives(..., startVertex=6, ...) silently redrew the
         // first quad's vertices and left quad D's screen region at the clear color. This dedicated,
         // lighting-independent check pins the fix: a single 2-quad PbrEffect emissive VB (pure-red

@@ -15,7 +15,7 @@
 // cases. This extends Task 448's own already-documented finding (IsComplete()/PixelCount() don't
 // discriminate a wired-up query from a never-submitted one) to show PixelCount()'s actual numeric
 // value also fails to discriminate genuinely-visible from genuinely-occluded geometry here -- not
-// a CNA defect (BgfxOcclusionQueryBackend::PixelCount() correctly forwards bgfx::getResult(), and
+// a CNA defect (BgfxOcclusionQueryRenderer::PixelCount() correctly forwards bgfx::getResult(), and
 // Task 448 already verified the query IS being genuinely submitted attached to the real draw call);
 // the ceiling is this software rasterizer's own occlusion-query result reporting. Matches this
 // project's established precedent for sandbox/renderer limitations (Task 448 itself, Task 923's

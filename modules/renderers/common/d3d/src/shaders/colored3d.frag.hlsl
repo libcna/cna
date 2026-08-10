@@ -1,5 +1,5 @@
 // Shader Model 5.0 (ps_5_0). Ported line-by-line from
-// src/CNA/Internal/Backends/Vulkan/shaders/colored3d.frag.glsl.
+// src/CNA/Internal/Renderers/Vulkan/shaders/colored3d.frag.glsl.
 
 // Task 899: this shader never samples a texture, but binding=0 (t0/s0) is still reserved in the
 // shared colored3d/textured3d/colored_textured3d layout convention (mirroring the GLSL source's

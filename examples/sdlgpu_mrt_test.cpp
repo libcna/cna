@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_sdlgpu.md SDLGPU-37: Multiple Render Targets (MRT) proof for the SDL_GPU graphics backend.
+// plan_sdlgpu.md SDLGPU-37: Multiple Render Targets (MRT) proof for the SDL_GPU graphics renderer.
 //
 // Stock (single fragment output) effects keep the same scope boundary this project's D3D11/D3D12
 // MRT support established: rts[0] is the real draw target; rts[1..count-1] are bound and
@@ -15,14 +15,14 @@
 // what makes "several SDL_GPUColorTargetInfo entries in one render pass" real, not just Clear()
 // propagation.
 //
-// This backend has no ReadBackbuffer() yet (SDLGPU-39's swapchain leg is a documented, unresolved
+// This renderer has no ReadBackbuffer() yet (SDLGPU-39's swapchain leg is a documented, unresolved
 // segfault -- see that row), so verification here follows the established convention: real draws
 // with no exception, plus sampling all 3 targets via SpriteBatch into distinct screen regions for
 // a real screenshot (not just "didn't throw"), PLUS (new) real RenderTarget2D::GetData() pixel
 // readback for the actual MRT discriminator.
 //
 // The render targets are members created once in LoadContent(), not Draw()-local variables --
-// this backend defers all rendering to its own Present()-time EnsureFrameRendered() pass, so a
+// this renderer defers all rendering to its own Present()-time EnsureFrameRendered() pass, so a
 // render target destroyed before that pass runs releases its GPU texture while sprite/draw
 // commands still queued against it hold the now-freed handle, a real use-after-free crash
 // (discovered while first authoring this test with Draw()-local RenderTarget2D instances --
@@ -67,7 +67,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 
-#include "CNA/Internal/Backends/SdlGpu/SdlGpuGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/SdlGpu/SdlGpuRenderer.hpp"
 
 #include "common/PixelTestGame.hpp"
 
@@ -81,7 +81,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::SdlGpu;
+using namespace CNA::Internal::Renderers::SdlGpu;
 
 namespace
 {
@@ -120,7 +120,7 @@ void main() {
     // 0 is texture*tint (the same value sdlgpu_shadereffect_test.cpp already proves is genuinely
     // read from pc.color); output 1 is a channel-swapped derivative of the SAME value, computed by
     // the SAME fragment invocation -- objectively different from output 0, and only reaches its
-    // own distinct render target if this backend's render pass really has 2 simultaneous color
+    // own distinct render target if this renderer's render pass really has 2 simultaneous color
     // attachments (SDLGPU-37's own task description) rather than 1.
     const char* kMrtFragSrc = R"GLSL(
 #version 450
@@ -262,7 +262,7 @@ class SdlGpuMrtTest : public Game
         Check(allChannels ? Matches(got0, Color::White)
                           : got0.getRProperty() == 255,
               "stock SpriteBatch " + label + " writes slot 0 correctly");
-        return static_cast<SdlGpuGraphicsBackend&>(dev.GetBackend()).GetSpritePipelineCacheSizeEXT();
+        return static_cast<SdlGpuRenderer&>(dev.GetRenderer()).GetSpritePipelineCacheSizeEXT();
     }
 
     void RunMrtWriteMaskCheck(GraphicsDevice& dev)
@@ -305,7 +305,7 @@ class SdlGpuMrtTest : public Game
      *        changing between them and no `GetData` in between.
      *
      * Every other MRT check above ends its bind cycle with a `GetData`, which on this deferred
-     * backend flushes the whole frame -- so each of them is its own flush window by construction
+     * renderer flushes the whole frame -- so each of them is its own flush window by construction
      * and none can tell one merged native pass from two logical ones. That made the whole file
      * false-positive-capable for a defect it looks well placed to catch. Here both cycles are
      * queued before anything is read.
@@ -493,13 +493,13 @@ protected:
                 RunMrtCountCheck(dev, depthBacked, 3, "depth-backed three targets");
                 RunMrtCountCheck(dev, msaa, 2, "two targets with requested/applied " +
                                  std::to_string(rtMrtMsaaA_->getMultiSampleCountProperty()) + "x MSAA");
-                auto& backend = static_cast<SdlGpuGraphicsBackend&>(dev.GetBackend());
-                Check(backend.GetSpritePipelineCacheSizeEXT() == 0, "MRT SpriteBatch cache begins cold");
+                auto& renderer = static_cast<SdlGpuRenderer&>(dev.GetRenderer());
+                Check(renderer.GetSpritePipelineCacheSizeEXT() == 0, "MRT SpriteBatch cache begins cold");
                 const std::array<RenderTarget2D*, 4> msaaThree{{rtMrtMsaaA_.get(), rtMrtMsaaB_.get(), rtMrtMsaaC_.get(), nullptr}};
                 const auto cacheStep = [&](const std::array<RenderTarget2D*, 4>& targets, int count,
                                            const BlendState& blend, std::size_t expected, const std::string& label)
                 {
-                    const std::size_t before = backend.GetSpritePipelineCacheSizeEXT();
+                    const std::size_t before = renderer.GetSpritePipelineCacheSizeEXT();
                     const std::size_t after = RunStockSpriteCacheStep(dev, targets, count, blend, label);
                     std::printf("[INFO] cache %s: %zu -> %zu\n", label.c_str(), before, after);
                     Check(after == expected, "MRT cache " + label + " has the expected cardinality");

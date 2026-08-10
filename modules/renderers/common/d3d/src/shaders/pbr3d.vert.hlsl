@@ -1,5 +1,5 @@
 // Shader Model 5.0 (vs_5_0). Physically-based (metallic-roughness) unskinned pipeline -- HLSL
-// port of EasyGLGraphicsBackend::EnsurePbrProgram()'s vertex stage (plan_cnj.md CNB-58, PbrEffect).
+// port of EasyGLRenderer::EnsurePbrProgram()'s vertex stage (plan_cnj.md CNB-58, PbrEffect).
 // Stride 48: VertexPositionNormalTangentTexture (float3 pos + float3 normal + float4 tangent
 // [xyz + bitangent handedness sign in w, glTF convention] + float2 uv).
 
@@ -44,7 +44,7 @@ struct VSOutput
 };
 
 // Returns transpose(inverse(m)) directly (the cofactor matrix over the determinant) -- reuses the
-// same helper lit_textured3d.vert.hlsl/env_map3d.vert.hlsl already established for this backend's
+// same helper lit_textured3d.vert.hlsl/env_map3d.vert.hlsl already established for this renderer's
 // own normal-matrix convention (design decision: HLSL has no built-in inverse()).
 float3x3 InverseTranspose3x3(float3x3 m)
 {
@@ -73,9 +73,9 @@ VSOutput main(VSInput input)
     output.UV = input.UV;
     output.WorldPos = mul(float4(input.Position, 1.0), World).xyz;
 
-    // Matches this backend's own established fog-factor formula (lit_textured3d.vert.hlsl/
+    // Matches this renderer's own established fog-factor formula (lit_textured3d.vert.hlsl/
     // skinned3d.vert.hlsl) -- not EasyGL's own differently-derived formula (Task 1111's own note);
-    // this file follows the D3D11 backend's existing convention, same "don't invent a new one"
+    // this file follows the D3D11 renderer's existing convention, same "don't invent a new one"
     // discipline the rest of this port already applies.
     // REMED-GFX-005/010: FNA view-space fog. FogVector now carries EffectHelpers.SetFogVector
     // (World*View 3rd column baked CPU-side); keep = 1 - saturate(dot(pos, fogVector)) is the

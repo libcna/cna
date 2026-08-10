@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// SKIA-87--SKIA-88: prove that the raster backend rejects MRT atomically.
+// SKIA-87--SKIA-88: prove that the raster renderer rejects MRT atomically.
 //
 // SkCanvas produces one destination colour per draw. CNA's public MRT contract additionally
 // permits ShaderEffect fragment programs with distinct outputs at locations 0--3 and independent
@@ -148,15 +148,15 @@ protected:
         ExpectFailure(
             device, anchor,
             {RenderTargetBinding(&a), RenderTargetBinding(&small)},
-            "matching dimensions", "dimension validation precedes backend MRT refusal");
+            "matching dimensions", "dimension validation precedes renderer MRT refusal");
         ExpectFailure(
             device, anchor,
             {RenderTargetBinding(&a), RenderTargetBinding(&a)},
-            "same render-target subresource", "duplicate validation precedes backend MRT refusal");
+            "same render-target subresource", "duplicate validation precedes renderer MRT refusal");
         ExpectFailure(
             device, anchor,
             {RenderTargetBinding(&a), RenderTargetBinding()},
-            "null render target", "null validation precedes backend MRT refusal");
+            "null render target", "null validation precedes renderer MRT refusal");
         ExpectFailure(
             device, anchor,
             {RenderTargetBinding(&a), RenderTargetBinding(&discard),

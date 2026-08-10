@@ -2,8 +2,8 @@
 // plan_metal.md Phase 14 (METAL-142-152): SpriteBatch::Begin(effect) wiring, real runtime-compiled
 // MSL. Mirrors D3D9's own d3d9_spritebatch_customeffect_test.cpp exactly (same 4 checks, same
 // deliberate RGB-inversion methodology), adapted to Metal's own fixed vertex/uniform contract (see
-// docs/metal-shader-effect-contract.md and MetalEffectBackend's own header comment in
-// MetalGraphicsBackend.mm) rather than D3D9's stride-24 SpriteVertex/HLSL shape.
+// docs/metal-shader-effect-contract.md and MetalEffectRenderer's own header comment in
+// MetalRenderer.mm) rather than D3D9's stride-24 SpriteVertex/HLSL shape.
 //
 // Check A -- ShaderEffect compiles for real (two separate MSL libraries, one function each).
 // Check B -- SpriteBatch::Begin(..., &invertEffect) draws sprites through the custom shader
@@ -54,8 +54,8 @@ namespace
         if (ok) ++passCount;
     }
 
-    // Matches MetalEffectBackend's own documented fixed contract exactly (see this class's header
-    // comment in MetalGraphicsBackend.mm / docs/metal-shader-effect-contract.md): buffer(0) vertex
+    // Matches MetalEffectRenderer's own documented fixed contract exactly (see this class's header
+    // comment in MetalRenderer.mm / docs/metal-shader-effect-contract.md): buffer(0) vertex
     // data (V2In, 32 bytes: float2 position, float2 uv, float4 color), buffer(1) the automatic
     // letterbox-aware U2D transform. No fixed entry-point name required -- each source declares
     // exactly one function, found via MTLLibrary.functionNames.
@@ -82,7 +82,7 @@ vertex V2Out invertVertexMain(uint vid [[vertex_id]],
 )";
 
     // buffer(3) = uColor (float4), the fixed slot SetUniformVec4()/SetUniformVec3()/
-    // SetUniformVec2() all write into (see MetalEffectBackend's own header comment).
+    // SetUniformVec2() all write into (see MetalEffectRenderer's own header comment).
     const char* kFragmentShaderSrc = R"(
 #include <metal_stdlib>
 using namespace metal;

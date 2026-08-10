@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MS-PL
-#include "CNA/Internal/Backends/OpenGL4/GL4Loader.hpp"
+#include "CNA/Internal/Renderers/OpenGL4/GL4Loader.hpp"
 
 #include <cstdio>
 
-namespace CNA::Internal::Backends::OpenGL4::GL4
+namespace CNA::Internal::Renderers::OpenGL4::GL4
 {
     PFNGL4GENBUFFERSPROC               gl4_glGenBuffers               = nullptr;
     PFNGL4BINDBUFFERPROC               gl4_glBindBuffer               = nullptr;
@@ -99,7 +99,7 @@ namespace CNA::Internal::Backends::OpenGL4::GL4
             void* p = getProcAddress(name);
             if (!p)
             {
-                std::fprintf(stderr, "CNA: OpenGL4 backend: failed to resolve GL entry point '%s'\n", name);
+                std::fprintf(stderr, "CNA: OpenGL4 renderer: failed to resolve GL entry point '%s'\n", name);
                 return false;
             }
             out = reinterpret_cast<Fn>(p);

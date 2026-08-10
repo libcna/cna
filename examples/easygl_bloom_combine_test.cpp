@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Task 946: HLSL→GLSL shader-conversion proof — BloomCombine.fx (EasyGL backend).
+// Task 946: HLSL→GLSL shader-conversion proof — BloomCombine.fx (EasyGL renderer).
 //
 // FNA reference (`BloomSample_4_0/BloomPostprocess/Content/BloomCombine.fx`):
 //   sampler BloomSampler : register(s0);

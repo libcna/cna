@@ -1,21 +1,21 @@
 // SPDX-License-Identifier: MS-PL
 // Task 727: Verify OcclusionQuery::Begin/End throw correctly on SDL_Renderer.
 //
-// Found and fixed a real bug while investigating: SdlGraphicsBackend never overrode
-// CreateOcclusionQuery, so it fell through to IGraphicsBackend's own default (silent nullptr, no
-// throw) -- OcclusionQuery construction silently succeeded with a permanently-null backend, and
-// Begin()/End() both guard with `if (backend_) ...`, silently no-op-ing instead of ever running a
-// real occlusion query. Every OTHER 3D-only entry point on this backend (CreateVertexBuffer,
+// Found and fixed a real bug while investigating: SdlRenderer never overrode
+// CreateOcclusionQuery, so it fell through to IGraphicsRenderer's own default (silent nullptr, no
+// throw) -- OcclusionQuery construction silently succeeded with a permanently-null renderer, and
+// Begin()/End() both guard with `if (renderer_) ...`, silently no-op-ing instead of ever running a
+// real occlusion query. Every OTHER 3D-only entry point on this renderer (CreateVertexBuffer,
 // CreateIndexBuffer16, DrawColoredPrimitives, etc.) throws loudly and immediately -- this was the
 // one inconsistent silent gap. Confirmed safe to fix (unlike Task 725's Texture3D/TextureCube,
 // which has a 94-test blast radius): OcclusionQuery's only existing test coverage is
 // EasyGL_OcclusionQuery_Cycle (examples/occlusion_query_test.cpp), registered ONLY for the EasyGL
-// backend -- zero existing SDL_Renderer-run tests construct an OcclusionQuery at all.
+// renderer -- zero existing SDL_Renderer-run tests construct an OcclusionQuery at all.
 //
-// Fixed by adding SdlGraphicsBackend::CreateOcclusionQuery() -> ThrowNo3D("CreateOcclusionQuery"),
+// Fixed by adding SdlRenderer::CreateOcclusionQuery() -> ThrowNo3D("CreateOcclusionQuery"),
 // mirroring CreateVertexBuffer/CreateIndexBuffer16's exact pattern (Tasks 720-723). Since
 // construction itself now throws first, Begin()/End() can never actually be reached on a valid
-// instance on this backend -- same shape as Task 720's DrawPrimitives/VertexBuffer finding.
+// instance on this renderer -- same shape as Task 720's DrawPrimitives/VertexBuffer finding.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"

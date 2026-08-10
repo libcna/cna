@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 // plan_opengl2.md: pixel-exact proof for real CnaPresentationMode::Letterbox semantics --
 // previously fell back to the virtual size verbatim (no actual bars), a documented shared gap
-// with EasyGL. Mirrors SdlGpuGraphicsBackend::ComputeLogicalViewport's algorithm (the established
-// "this backend actually does it right" reference elsewhere in this codebase).
+// with EasyGL. Mirrors SdlGpuRenderer::ComputeLogicalViewport's algorithm (the established
+// "this renderer actually does it right" reference elsewhere in this codebase).
 //
 // Uses a deliberately non-square window (128x64, resized in after startup -- see below) against a
 // square virtual resolution (64x64): Letterbox scale=min(128/64,64/64)=1, giving centred 64x64
@@ -33,7 +33,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 
-#include "CNA/Internal/Backends/OpenGL2/OpenGL2GraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/OpenGL2/OpenGL2Renderer.hpp"
 
 #include "common/PixelTestGame.hpp"
 
@@ -46,7 +46,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::OpenGL2;
+using namespace CNA::Internal::Renderers::OpenGL2;
 
 namespace
 {
@@ -91,10 +91,10 @@ class OpenGL2PresentationModeLetterboxTest : public Game
         // GFX-165: GetBackBufferData validates its rectangle against PresentationParameters'
         // backbuffer size, which this test's own raw SDL_SetWindowSize deliberately does not
         // update -- XNA's backbuffer does not follow the OS window until a device reset. What
-        // this test needs is the REAL framebuffer pixel, which is exactly the backend's own
+        // this test needs is the REAL framebuffer pixel, which is exactly the renderer's own
         // ReadBackbuffer (the same top-down row convention GetBackBufferData itself wraps).
         std::uint8_t px[4] = {0, 0, 0, 0};
-        getGraphicsDeviceProperty().GetBackend().ReadBackbuffer(x, y, 1, 1, px);
+        getGraphicsDeviceProperty().GetRenderer().ReadBackbuffer(x, y, 1, 1, px);
         return Color(px[0], px[1], px[2], px[3]);
     }
 
@@ -120,12 +120,12 @@ protected:
     {
         ++frame_;
         auto& dev = getGraphicsDeviceProperty();
-        auto& backend = static_cast<OpenGL2GraphicsBackend&>(dev.GetBackend());
+        auto& renderer = static_cast<OpenGL2Renderer&>(dev.GetRenderer());
 
         if (frame_ == 1)
         {
-            SDL_SetWindowSize(backend.GetWindowInternal(), kWindowW, kWindowH);
-            SDL_SyncWindow(backend.GetWindowInternal());
+            SDL_SetWindowSize(renderer.GetWindowInternal(), kWindowW, kWindowH);
+            SDL_SyncWindow(renderer.GetWindowInternal());
             return;
         }
 

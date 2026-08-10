@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // Task 890: EnvironmentMapEffect pixel test — DirectionalLight1/DirectionalLight2 forwarded
-// (EasyGL backend).
+// (EasyGL renderer).
 //
 // FNA reference (Graphics/Effect/StockEffects/HLSL/EnvironmentMapEffect.fx + Lighting.fxh):
 // EnvironmentMapEffect's vertex shader calls the same shared Lighting.fxh ComputeLights(eyeVector,

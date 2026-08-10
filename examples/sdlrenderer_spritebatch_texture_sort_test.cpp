@@ -6,11 +6,11 @@
 // SpriteBatch::flushBatch() does std::stable_sort(..., [](a,b){ return a.texture < b.texture; })).
 // Which texture group ends up "first" on screen depends on runtime pointer addresses, not
 // something a test can predict in advance -- already covered at the logic level by
-// SpriteBatchTests.cpp's mock-backend `TextureGroupsDrawsByTextureAndPreservesGroupOrder` (Task
+// SpriteBatchTests.cpp's mock-renderer `TextureGroupsDrawsByTextureAndPreservesGroupOrder` (Task
 // 414), which asserts the 2 properties that ARE part of the contract (adjacency + submission-order
 // stability within a group) without depending on pointer order.
 //
-// This test instead pixel-verifies the property a mock recording backend CAN'T: that after
+// This test instead pixel-verifies the property a mock recording renderer CAN'T: that after
 // SpriteBatch reorders the draw sequence by texture, SDL_Renderer's actual draw dispatch still
 // binds the CORRECT texture for each reordered call -- i.e. the sort doesn't desynchronize which
 // texture ends up associated with which destination rectangle. 4 non-overlapping sprites (so the
@@ -24,10 +24,10 @@
 //
 // Regardless of which texture SpriteBatch's pointer-based sort places first, each destination
 // rectangle must show ITS OWN assigned colour -- a texture/position mismatch here would mean the
-// backend misattributed a texture binding to the wrong reordered draw call.
+// renderer misattributed a texture binding to the wrong reordered draw call.
 //
 // Requires PresentationMode::NativeBackBuffer (Task 915 finding): SDL_RenderReadPixels operates
-// in physical output coordinates, while this backend's default presentation mode
+// in physical output coordinates, while this renderer's default presentation mode
 // (FixedHeightDynamicWidth) does not map logical pixels 1:1 to physical ones.
 //
 // Exit code 0 = all PASS, 1 = at least one FAIL.

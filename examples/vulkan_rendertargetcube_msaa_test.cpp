@@ -232,8 +232,8 @@ protected:
         auto& device = getGraphicsDeviceProperty();
 
         // Task 878/879's narrow test hook is required because per-target MSAA
-        // currently uses the backend's already-selected sample count.
-        device.RecreateBackendForMultiSampleCount(8);
+        // currently uses the renderer's already-selected sample count.
+        device.RecreateRendererForMultiSampleCount(8);
 
         sb_ = std::make_unique<SpriteBatch>(device);
         whiteTexture_ = std::make_unique<Texture2D>(

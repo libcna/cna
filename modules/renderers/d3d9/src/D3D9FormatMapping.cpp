@@ -1,10 +1,10 @@
 // plan_dx9.md Phase D9-2 (D9-20).
-#include "CNA/Internal/Backends/D3D9/D3D9FormatMapping.hpp"
+#include "CNA/Internal/Renderers/D3D9/D3D9FormatMapping.hpp"
 
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 
-namespace CNA::Internal::Backends::D3D9
+namespace CNA::Internal::Renderers::D3D9
 {
     using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
     using Microsoft::Xna::Framework::Graphics::DepthFormat;

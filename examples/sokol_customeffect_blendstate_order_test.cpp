@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // plan_sokol.md SOKOL-41: SpriteBatch's raw-GL custom-effect draw path
-// (SokolSpriteBatchBackend::DrawSpriteRunEXT's custom branch) must apply the device's real
+// (SokolSpriteBatchRenderer::DrawSpriteRunEXT's custom branch) must apply the device's real
 // BlendState, not silently keep whatever GL_BLEND state a previous draw happened to leave behind.
 //
 // Before this fix, the custom branch bound a program/texture/VAO and drew with glDrawElements

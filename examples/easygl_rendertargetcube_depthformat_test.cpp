@@ -2,7 +2,7 @@
 // Task 877: verify RenderTargetCube honors its exact requested DepthFormat on EasyGL, not just
 // RenderTarget2D (which Task 335 already covers).
 //
-// Before this task, EasyGLGraphicsBackend::CreateRenderTargetCube() hardcoded `hasDepth=true`
+// Before this task, EasyGLRenderer::CreateRenderTargetCube() hardcoded `hasDepth=true`
 // unconditionally, ignoring whatever DepthFormat the caller actually requested — so a
 // RenderTargetCube constructed with DepthFormat::None still silently got a real depth buffer.
 //

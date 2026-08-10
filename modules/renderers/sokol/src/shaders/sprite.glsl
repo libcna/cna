@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_sokol.md SOKOL-14: the Sokol backend's built-in SpriteBatch program, written in
+// plan_sokol.md SOKOL-14: the Sokol renderer's built-in SpriteBatch program, written in
 // sokol-shdc's annotated GLSL (Vulkan syntax -- separate texture and sampler uniforms).
 // Compiled offline by compile_shaders.py into sokol_shaders.hpp, which is checked in.
 //
-// Vertex layout matches SokolSpriteBatchBackend::Vertex exactly: vec2 position, vec2 texcoord0,
+// Vertex layout matches SokolSpriteBatchRenderer::Vertex exactly: vec2 position, vec2 texcoord0,
 // vec4 color0 (32 bytes, tightly packed). `mvp` is the SpriteBatch transform matrix multiplied
 // by CreateOrthographicOffCenter(0, viewportW, viewportH, 0, -1, 1), so vertex positions are
 // supplied in XNA's own top-left-origin pixel space.

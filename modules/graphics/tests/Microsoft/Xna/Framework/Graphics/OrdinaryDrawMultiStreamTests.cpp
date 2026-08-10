@@ -10,7 +10,7 @@
 // and lets the native draw's start-vertex advance every stream by the same element count -- again
 // each by its own stride. The reconciled CNA contract this file locks down is therefore:
 //
-//   every bound per-vertex stream reaches the backend, not only binding 0
+//   every bound per-vertex stream reaches the renderer, not only binding 0
 //   each stream keeps its OWN slot, declaration, stride and VertexOffset
 //   VertexOffset is a vertex-ELEMENT offset, converted with that stream's own stride, exactly once
 //   vertexStart advances EVERY per-vertex stream, each by that many of its own elements
@@ -31,9 +31,9 @@
 // it is produced by a buffer stream 0 does not contain a single byte of. Stream 0 is POSITION
 // ONLY, 12 bytes per record; stream 1 is COLOUR ONLY, 4 bytes per record. Their concatenation is
 // byte-for-byte CNA::Internal::Graphics::PositionColorStream, the packed 16-byte layout every
-// backend already recognizes, so the combined vertex needs no new shader anywhere -- but no
+// renderer already recognizes, so the combined vertex needs no new shader anywhere -- but no
 // rendered pixel of it can be produced from stream 0 alone, whose 12-byte stride is not a layout
-// any backend has.
+// any renderer has.
 //
 // Every buffer begins with a three-record prefix decoy, so a binding offset of `kPrefixOffset` is
 // exactly "skip the decoy" and each defect lights a different cell or paints a different colour:
@@ -56,7 +56,7 @@
 // a nearest-corner classifier is exact rather than tolerant. Black is the background and is never
 // a code.
 //
-// Backend scope. The RenderTarget2D group is the portable one: every backend that rasterizes 3D
+// Renderer scope. The RenderTarget2D group is the portable one: every renderer that rasterizes 3D
 // triangles and implements RenderTarget2D::GetData, which is REMED-GFX-200's own oracle set.
 
 #include <algorithm>
@@ -128,11 +128,11 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 
 // The portable pixel oracle: rasterizes 3D triangles and implements RenderTarget2D::GetData.
 // REMED-GFX-200's own set, which this file's geometry and readback path are taken from.
-#if defined(CNA_BACKEND_BGFX) || defined(CNA_BACKEND_EASYGL) || \
-    defined(CNA_BACKEND_WEBGPU) || defined(CNA_BACKEND_VULKAN) || \
-    defined(CNA_BACKEND_D3D9) || defined(CNA_BACKEND_D3D11) || \
-    defined(CNA_BACKEND_D3D12) || defined(CNA_BACKEND_SOFTWARE) || \
-    defined(CNA_BACKEND_SDL_GPU)
+#if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_EASYGL) || \
+    defined(CNA_RENDERER_WEBGPU) || defined(CNA_RENDERER_VULKAN) || \
+    defined(CNA_RENDERER_D3D9) || defined(CNA_RENDERER_D3D11) || \
+    defined(CNA_RENDERER_D3D12) || defined(CNA_RENDERER_SOFTWARE) || \
+    defined(CNA_RENDERER_SDL_GPU)
 #define CNA_ORDINARY_MULTI_STREAM_ORACLE 1
 #endif
 
@@ -183,7 +183,7 @@ namespace
     static_assert(sizeof(PositionRecord) == 12);
 
     /// Stream 1's record: colour only. Byte-for-byte the trailing 4 bytes of the same stream, in
-    /// the R8G8B8A8 memory order every backend's `Color` VertexElementFormat reads.
+    /// the R8G8B8A8 memory order every renderer's `Color` VertexElementFormat reads.
     struct ColorRecord
     {
         std::uint8_t r, g, b, a;
@@ -202,7 +202,7 @@ namespace
     constexpr int kTexCoordStride = static_cast<int>(sizeof(TexCoordRecord));
 
     /// Position-only declaration for stream 0. Its 12-byte stride deliberately matches no
-    /// single-stream layout any backend has, so a draw that reaches a backend with stream 0 alone
+    /// single-stream layout any renderer has, so a draw that reaches a renderer with stream 0 alone
     /// cannot accidentally render the expected picture.
     VertexDeclaration PositionOnlyDeclaration()
     {
@@ -212,7 +212,7 @@ namespace
     }
 
     /// Colour-only declaration for stream 1. Its 4-byte stride is deliberately different from
-    /// stream 0's, so a backend that converts this stream's element offset with stream 0's stride
+    /// stream 0's, so a renderer that converts this stream's element offset with stream 0's stride
     /// lands three records too far in.
     VertexDeclaration ColorOnlyDeclaration()
     {
@@ -544,7 +544,7 @@ namespace
         void RequireOrdinaryRendering()
         {
             if (!device.SupportsCapability(GraphicsCapability::ThreeD))
-                GTEST_SKIP() << "Backend explicitly does not support 3D rendering";
+                GTEST_SKIP() << "Renderer explicitly does not support 3D rendering";
             device.setRasterizerStateProperty(RasterizerState::CullNone);
             device.setDepthStencilStateProperty(DepthStencilState::None);
             device.setBlendStateProperty(BlendState::Opaque);
@@ -616,11 +616,11 @@ namespace
     };
 }
 
-/// REMED-GFX-201: a DECLARED boundary, not a silent skip. A backend that has not yet been taught
+/// REMED-GFX-201: a DECLARED boundary, not a silent skip. A renderer that has not yet been taught
 /// to re-slot its stride-derived input elements across several bindings reports the capability as
 /// false and is rejected deterministically by GraphicsDevice;
-/// UnsupportedBackendRejectsMultiStreamDeterministically below asserts exactly that on every
-/// backend and flips to the positive assertion the moment one claims the capability, so this skip
+/// UnsupportedRendererRejectsMultiStreamDeterministically below asserts exactly that on every
+/// renderer and flips to the positive assertion the moment one claims the capability, so this skip
 /// cannot outlive the gap it describes. A macro rather than a helper because GTEST_SKIP() returns
 /// from the function it is written in -- inside a helper it would mark the test skipped and then
 /// let it run on anyway.
@@ -629,11 +629,11 @@ namespace
         if (!device.SupportsCapability(GraphicsCapability::MultiStreamVertexInput))           \
         {                                                                                    \
             GTEST_SKIP()                                                                     \
-                << "Backend reports GraphicsCapability::MultiStreamVertexInput = false: "     \
-                   "ordinary multi-stream vertex input is not implemented on this backend "   \
+                << "Renderer reports GraphicsCapability::MultiStreamVertexInput = false: "     \
+                   "ordinary multi-stream vertex input is not implemented on this renderer "   \
                    "(REMED-GFX-201). The draw is rejected with System::NotSupportedException "\
                    "rather than rendered from stream 0 alone -- see "                         \
-                   "UnsupportedBackendRejectsMultiStreamDeterministically.";                  \
+                   "UnsupportedRendererRejectsMultiStreamDeterministically.";                  \
         }                                                                                    \
     } while (false)
 
@@ -682,7 +682,7 @@ TEST_F(OrdinaryDrawMultiStreamTest, NonIndexedBothOffsetsZeroRendersBothPrefixDe
 // ---------------------------------------------------------------------------
 // Coverage item 2: non-indexed, STREAM 0's offset nonzero and stream 1's zero. The two offsets are
 // independent, so the position stream skips its decoy while the colour stream does not: the live
-// geometry's cell painted in the COLOUR STREAM'S PREFIX code. A backend that applies one binding's
+// geometry's cell painted in the COLOUR STREAM'S PREFIX code. A renderer that applies one binding's
 // offset to both streams paints liveA here instead.
 // ---------------------------------------------------------------------------
 TEST_F(OrdinaryDrawMultiStreamTest, NonIndexedStream0OffsetOnlyLeavesStream1OnItsDecoy)
@@ -723,7 +723,7 @@ TEST_F(OrdinaryDrawMultiStreamTest, NonIndexedStream0OffsetOnlyLeavesStream1OnIt
 // ---------------------------------------------------------------------------
 // Coverage item 3: non-indexed, STREAM 1's offset nonzero and stream 0's zero -- the mirror image.
 // The position stream stays on its decoy (slot 6, band 3) while the colour stream supplies slot
-// 0's live colour. Only a backend that binds stream 1 with its OWN offset can produce this frame.
+// 0's live colour. Only a renderer that binds stream 1 with its OWN offset can produce this frame.
 // ---------------------------------------------------------------------------
 TEST_F(OrdinaryDrawMultiStreamTest, NonIndexedStream1OffsetOnlyLeavesStream0OnItsDecoy)
 {
@@ -989,7 +989,7 @@ TEST_F(OrdinaryDrawMultiStreamTest, Indexed16StartIndexAndBaseVertexApplyToEvery
 }
 
 // ---------------------------------------------------------------------------
-// Coverage item 9: the 32-bit index equivalent of item 8. A backend that computes its index-buffer
+// Coverage item 9: the 32-bit index equivalent of item 8. A renderer that computes its index-buffer
 // byte offset with the wrong element size lands on a different slot.
 // ---------------------------------------------------------------------------
 TEST_F(OrdinaryDrawMultiStreamTest, Indexed32StartIndexAndBaseVertexApplyToEveryStreamOnce)
@@ -1040,7 +1040,7 @@ TEST_F(OrdinaryDrawMultiStreamTest, Indexed32StartIndexAndBaseVertexApplyToEvery
 // ---------------------------------------------------------------------------
 // Coverage item 11: streams with DIFFERENT vertex counts and a range valid in both. The colour
 // stream is deliberately shorter than the position stream, which is legal as long as the requested
-// window fits it -- a backend that sizes any native binding from stream 0's count reads past this
+// window fits it -- a renderer that sizes any native binding from stream 0's count reads past this
 // buffer's end and a validation layer reports it.
 // ---------------------------------------------------------------------------
 TEST_F(OrdinaryDrawMultiStreamTest, StreamsWithDifferentVertexCountsRenderTheValidRange)
@@ -1115,7 +1115,7 @@ TEST_F(OrdinaryDrawMultiStreamTest, RangeLeavingStream0IsRejected)
 // Coverage item 13: an invalid range in STREAM 1 ONLY. This is the validation case that cannot be
 // expressed at all without per-stream ranges: stream 0 is long enough for the whole request, and
 // only the secondary stream is short. A gate that validates stream 0 alone lets the draw through
-// and the backend reads past the colour buffer's end.
+// and the renderer reads past the colour buffer's end.
 // ---------------------------------------------------------------------------
 TEST_F(OrdinaryDrawMultiStreamTest, RangeLeavingOnlyStream1IsRejected)
 {
@@ -1187,7 +1187,7 @@ TEST_F(OrdinaryDrawMultiStreamTest, IndexedRangeLeavingOnlyStream1IsRejected)
 // ---------------------------------------------------------------------------
 // Coverage items 14, 15 and 19: a state change affecting ONLY stream 1, a return to the previous
 // binding set, and three frames in one target. Each leg must carry its own complete binding set:
-// a backend that caches an input layout or a native binding across the change repeats a colour.
+// a renderer that caches an input layout or a native binding across the change repeats a colour.
 // ---------------------------------------------------------------------------
 TEST_F(OrdinaryDrawMultiStreamTest, ReplacingOnlyStream1AndReturningKeepsEachLegsOwnBindings)
 {
@@ -1331,7 +1331,7 @@ TEST_F(OrdinaryDrawMultiStreamTest, MultiStreamSingleStreamMultiStreamEachRender
 
 // ---------------------------------------------------------------------------
 // Coverage item 17: THREE per-vertex streams. Position(12) + Colour(4) + TexCoord(8) concatenate
-// to the packed 24-byte VertexPositionColorTexture layout every backend recognizes. The texture is
+// to the packed 24-byte VertexPositionColorTexture layout every renderer recognizes. The texture is
 // two texels wide, so the third stream's own records -- and its own VertexOffset -- decide which
 // texel every pixel samples, and its contribution cannot be produced by the other two.
 // ---------------------------------------------------------------------------
@@ -1408,7 +1408,7 @@ TEST_F(OrdinaryDrawMultiStreamTest, ThreePerVertexStreamsEachSupplyTheirOwnEleme
 
 // ---------------------------------------------------------------------------
 // Coverage item 20: destroying the secondary stream's public wrapper and letting a new buffer take
-// its handle/address. The new binding set must be the one that renders -- a backend that kept a
+// its handle/address. The new binding set must be the one that renders -- a renderer that kept a
 // pointer or a cached layout keyed on the old address paints the old colour or crashes.
 // ---------------------------------------------------------------------------
 TEST_F(OrdinaryDrawMultiStreamTest, DestroyingAndRecreatingStream1RebindsTheNewBuffer)
@@ -1445,7 +1445,7 @@ TEST_F(OrdinaryDrawMultiStreamTest, DestroyingAndRecreatingStream1RebindsTheNewB
         const FrameSnapshot snapshot = CaptureTarget(target);
         ExpectOnlyCellLitWithCode(
             snapshot, layout, 3, kLiveBand, LiveCodeForSlot(3), "before destruction");
-        // The readback above has already flushed every deferred backend, so the wrapper below is
+        // The readback above has already flushed every deferred renderer, so the wrapper below is
         // destroyed with no draw of its own outstanding -- the lifetime this leg tests is the
         // CACHED one, not an in-flight command's.
         device.SetVertexBuffer(nullptr);
@@ -1473,18 +1473,18 @@ TEST_F(OrdinaryDrawMultiStreamTest, DestroyingAndRecreatingStream1RebindsTheNewB
 #endif  // CNA_ORDINARY_MULTI_STREAM_ORACLE
 
 // ---------------------------------------------------------------------------
-// The capability boundary itself, asserted on EVERY backend and in BOTH directions. A backend that
+// The capability boundary itself, asserted on EVERY renderer and in BOTH directions. A renderer that
 // reports GraphicsCapability::MultiStreamVertexInput = false must reject an ordinary multi-stream
 // draw with a deterministic public exception before any native submission -- never render from
-// stream 0 alone, which would look like a correct draw of the wrong data. A backend that reports
+// stream 0 alone, which would look like a correct draw of the wrong data. A renderer that reports
 // true must accept it. This is what stops the skips above from outliving the gap they describe:
-// the moment a backend claims the capability, this test switches to the positive assertion and
+// the moment a renderer claims the capability, this test switches to the positive assertion and
 // every skipped pixel case starts running.
 // ---------------------------------------------------------------------------
-TEST_F(OrdinaryDrawMultiStreamTest, UnsupportedBackendRejectsMultiStreamDeterministically)
+TEST_F(OrdinaryDrawMultiStreamTest, UnsupportedRendererRejectsMultiStreamDeterministically)
 {
     if (!device.SupportsCapability(GraphicsCapability::ThreeD))
-        GTEST_SKIP() << "Backend explicitly does not support 3D rendering";
+        GTEST_SKIP() << "Renderer explicitly does not support 3D rendering";
 
     const GridLayout layout = GridLayout{kTargetSize, kTargetSize};
     const std::vector<PositionRecord> positions = BuildPositionStream(layout, kLiveBand);
@@ -1505,24 +1505,24 @@ TEST_F(OrdinaryDrawMultiStreamTest, UnsupportedBackendRejectsMultiStreamDetermin
     ApplyMeshEffect(effect);
 
     // Deliberately NOT inside a render target: this asserts the shared gate, which runs before any
-    // backend work, so it is meaningful even on a backend with no readback.
+    // renderer work, so it is meaningful even on a renderer with no readback.
     if (device.SupportsCapability(GraphicsCapability::MultiStreamVertexInput))
     {
         EXPECT_NO_THROW(device.DrawPrimitives(PrimitiveType::TriangleList, 0, 1))
-            << "a backend that claims MultiStreamVertexInput must accept a two-stream draw";
+            << "a renderer that claims MultiStreamVertexInput must accept a two-stream draw";
     }
     else
     {
         EXPECT_THROW(
             device.DrawPrimitives(PrimitiveType::TriangleList, 0, 1),
             System::NotSupportedException)
-            << "a backend that does not claim MultiStreamVertexInput must reject a two-stream "
+            << "a renderer that does not claim MultiStreamVertexInput must reject a two-stream "
                "draw deterministically, not render binding 0 alone";
     }
 }
 
 // ---------------------------------------------------------------------------
-// Coverage item 18: a missing required stream. Runs on every backend -- it is a public-API
+// Coverage item 18: a missing required stream. Runs on every renderer -- it is a public-API
 // contract, not a pixel one. XNA's SetVertexBuffers rejects a null binding outright, so a
 // half-described vertex can never reach a draw in the first place.
 // ---------------------------------------------------------------------------
@@ -1546,7 +1546,7 @@ TEST_F(OrdinaryDrawMultiStreamTest, NullSecondaryStreamBindingIsAcceptedAsUnused
 
 // ---------------------------------------------------------------------------
 // Coverage item 10 / the public binding-state contract, asserted without a rasterizer so every
-// backend runs it: GetVertexBuffers returns every slot with its own buffer, offset and frequency,
+// renderer runs it: GetVertexBuffers returns every slot with its own buffer, offset and frequency,
 // SetVertexBuffer collapses the set to one, and the 16-slot ceiling is enforced.
 // ---------------------------------------------------------------------------
 TEST_F(OrdinaryDrawMultiStreamTest, BindingStateKeepsEverySlotsOwnBufferAndOffset)

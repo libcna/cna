@@ -2,8 +2,8 @@
 // REMED-GFX-145: the SDL_GPU-specific half of "every public bind cycle is its own logical pass".
 //
 // The shared oracle `examples/rendertarget_pass_boundary_test.cpp` proves the boundary itself, on
-// every backend, using SpriteBatch only. Three things it deliberately cannot ask are asked here,
-// because each is specific to how THIS backend defers work:
+// every renderer, using SpriteBatch only. Three things it deliberately cannot ask are asked here,
+// because each is specific to how THIS renderer defers work:
 //
 //  1. The 3D families. SdlGpu keeps nine separate draw-command queues plus `spriteCommands_`, all
 //     replayed through one `drawOrder_` walk. The oracle exercises `DrawKind::Sprite`; the
@@ -30,7 +30,7 @@
 // happens only after that check's whole public sequence has been queued.
 //
 // Left/right, never up/down: every asserted geometry difference is a horizontal one, so nothing
-// here depends on this backend's clip-space Y convention.
+// here depends on this renderer's clip-space Y convention.
 //
 // Exit code 0 = all checks PASS, 1 = any FAIL.
 
@@ -390,7 +390,7 @@ class SdlGpuPassBoundaryUploadTest : public Game
     /**
      * @brief U6 -- the same question with SpriteBatch and 3D geometry INTERLEAVED across cycles.
      *
-     * Sprites and 3D draws use different upload storage in this backend (the shared
+     * Sprites and 3D draws use different upload storage in this renderer (the shared
      * `spriteVertexBuffer_` versus a per-command buffer), and `drawOrder_` replays both from one
      * list, so this is the only shape that exercises both at once across a pass boundary.
      */
@@ -427,7 +427,7 @@ class SdlGpuPassBoundaryUploadTest : public Game
      *
      * Cycle 1 writes a NEAR full-target quad and its depth. Cycle 2 draws a FAR one with no depth
      * clear: LessEqual must reject it, so the colour stays. Cycle 3 clears depth only -- not
-     * colour -- and draws the same far quad, which must now win. A backend that attached the depth
+     * colour -- and draws the same far quad, which must now win. A renderer that attached the depth
      * clear to the wrong cycle fails one of the two; one that merged the cycles fails both.
      */
     void RunDepthClearPerCycle(GraphicsDevice& dev)

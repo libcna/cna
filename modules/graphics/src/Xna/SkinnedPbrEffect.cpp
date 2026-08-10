@@ -6,7 +6,7 @@
 #include "Microsoft/Xna/Framework/Graphics/EffectParameterType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 
 #include <stdexcept>
 
@@ -339,20 +339,20 @@ namespace Microsoft::Xna::Framework::Graphics
         }
     }
 
-    void SkinnedPbrEffect::FillGpuDrawParams(CNA::Internal::Backends::GpuDrawParams& p) const
+    void SkinnedPbrEffect::FillGpuDrawParams(CNA::Internal::Renderers::GpuDrawParams& p) const
     {
-        using namespace CNA::Internal::Backends;
+        using namespace CNA::Internal::Renderers;
 
         p.pbr             = true;
         p.skinned         = true;
         p.textureEnabled  = true;
         p.lightingEnabled = true;
 
-        if (texture_)              p.texture0 = &texture_->GetBackend();
-        if (normalMap_)             p.pbrNormalMap = &normalMap_->GetBackend();
-        if (metallicRoughnessMap_)  p.pbrMetallicRoughnessMap = &metallicRoughnessMap_->GetBackend();
-        if (emissiveMap_)           p.pbrEmissiveMap = &emissiveMap_->GetBackend();
-        if (occlusionMap_)          p.pbrOcclusionMap = &occlusionMap_->GetBackend();
+        if (texture_)              p.texture0 = &texture_->GetRenderer();
+        if (normalMap_)             p.pbrNormalMap = &normalMap_->GetRenderer();
+        if (metallicRoughnessMap_)  p.pbrMetallicRoughnessMap = &metallicRoughnessMap_->GetRenderer();
+        if (emissiveMap_)           p.pbrEmissiveMap = &emissiveMap_->GetRenderer();
+        if (occlusionMap_)          p.pbrOcclusionMap = &occlusionMap_->GetRenderer();
 
         p.diffuseColor[0] = diffuseColor_.X;
         p.diffuseColor[1] = diffuseColor_.Y;

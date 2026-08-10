@@ -7,7 +7,7 @@
 // back to a 1x1 opaque white texture when a texture slot is left null, rather than leaving
 // the sampler in an undefined/stale state.
 //
-// **Verify-only, zero bugs expected**: source-reading confirmed all 3 backends already
+// **Verify-only, zero bugs expected**: source-reading confirmed all 3 renderers already
 // correctly implement this for the first texture slot --
 //   EasyGL: EnsureDualTextured3DProgram()'s draw dispatch already has an else-branch
 //   binding default_white_texture_ when params.texture0 is null (part of Task 379's
@@ -101,7 +101,7 @@ protected:
         dev.SetDepthTestEnabled(false);
         dev.setBlendStateProperty(BlendState::Opaque);
         // Task 896 finding (mirrors the Bgfx sibling's Task 364/884 fix): once
-        // GraphicsDevice's real default RasterizerState is pushed to every backend,
+        // GraphicsDevice's real default RasterizerState is pushed to every renderer,
         // this quad's winding is culled unless explicitly disabled.
         dev.setRasterizerStateProperty(RasterizerState::CullNone);
 

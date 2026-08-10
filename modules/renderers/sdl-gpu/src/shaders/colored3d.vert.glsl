@@ -8,7 +8,7 @@ layout(location = 0) out vec4 fragColor;
 layout(location = 1) out vec4 fragFog;    // REMED-GFX-009 xyz=FogColor, w=keep-factor
 
 // plan_sdlgpu.md: vertex-stage uniform buffers live in set 1 (SDL_gpu's SPIR-V graphics-pipeline
-// convention). This 128-byte layout mirrors VulkanGraphicsBackend::FillExtPushConst() byte-for-
+// convention). This 128-byte layout mirrors VulkanRenderer::FillExtPushConst() byte-for-
 // byte (pushed via SDL_PushGPUVertexUniformData, not a raw Vulkan push constant) so every 3D
 // shader in this family shares one fill function and one uniform shape. Fog (REMED-GFX-009) is
 // supplied separately via the FogParams block below, since this PC block is fully packed.
@@ -25,7 +25,7 @@ layout(set = 1, binding = 0) uniform PC {
 
 // REMED-GFX-009: fog forwarded to the fragment stage as a varying (the shared PC block is fully
 // packed, no spare bytes). Keep-factor computed from raw object-space Z, matching
-// VulkanGraphicsBackend's FogParams shape byte-for-byte.
+// VulkanRenderer's FogParams shape byte-for-byte.
 layout(set = 1, binding = 1) uniform FogParams {
     vec4 fogColorEnabled;  // xyz = FogColor, w = fogEnabled
     vec4 fogVector;        // REMED-GFX-010: FNA fog vector (dot with object/skin pos)
@@ -34,7 +34,7 @@ layout(set = 1, binding = 1) uniform FogParams {
 void main() {
     // No Vulkan-style Y-flip here -- confirmed empirically via sprite2d.vert.glsl that SDL_gpu's
     // Vulkan driver already presents a D3D/OpenGL-style Y-up clip space to shaders, so XNA's own
-    // Y-up-convention projection matrix needs no additional correction on this backend.
+    // Y-up-convention projection matrix needs no additional correction on this renderer.
     gl_Position = pc.mvp * vec4(inPos, 1.0);
     fragColor = (pc.vertexColorEnabled > 0.5) ? inColor * pc.diffuseColor : pc.diffuseColor;
     // REMED-GFX-009: keep-factor from raw object-space Z (GFX-005 corrected form

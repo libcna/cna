@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# plan_html_dom.md HTMLDOM-72/HTMLDOM-112: runs one of the HTML_DOM backend's browser test pages in
+# plan_html_dom.md HTMLDOM-72/HTMLDOM-112: runs one of the HTML_DOM renderer's browser test pages in
 # a real browser.
 #
-# The HTML_DOM backend renders through actual DOM elements and CSS, so a wasm module loaded under
-# `node` proves nothing at all -- SDL_Init(SDL_INIT_VIDEO) throws there before any backend code
+# The HTML_DOM renderer renders through actual DOM elements and CSS, so a wasm module loaded under
+# `node` proves nothing at all -- SDL_Init(SDL_INIT_VIDEO) throws there before any renderer code
 # runs. This drives the generated page through headless Chromium instead, so the checks the test
 # makes against the produced DOM are real.
 #
@@ -43,7 +43,7 @@ PAGE="${TARGET}.html"
 
 if [[ ! -f "${BUILD_DIR}/${PAGE}" ]]; then
     echo "error: ${BUILD_DIR}/${PAGE} not found -- build it first:" >&2
-    echo "  emcmake cmake -S . -B ${BUILD_DIR} -DCNA_GRAPHICS_BACKEND=HTML_DOM" >&2
+    echo "  emcmake cmake -S . -B ${BUILD_DIR} -DCNA_GRAPHICS_RENDERER=HTML_DOM" >&2
     echo "  cmake --build ${BUILD_DIR} --target ${TARGET} -j3" >&2
     exit 2
 fi

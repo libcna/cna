@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // Task 365: BasicEffect pixel test — VertexColorEnabled=true, no texture, vertex color
-// multiplication (Bgfx backend).
+// multiplication (Bgfx renderer).
 //
 // See examples/easygl_basiceffect_vertexcolor_enabled_test.cpp for the full FNA-derived expected-
 // output derivation. Summary: with LightingEnabled=false, TextureEnabled=false (both real FNA
@@ -11,7 +11,7 @@
 // 364 preserved rather than the newly-added skip branch.
 //
 // Per Task 364's finding (tracked as Task 884, not fixed there or here): Bgfx's default
-// RasterizerState cull state (`BGFX_STATE_CULL_CCW`) is the only one of the 3 backends that
+// RasterizerState cull state (`BGFX_STATE_CULL_CCW`) is the only one of the 3 renderers that
 // actually matches FNA's real `CullCounterClockwiseFace` default, so it silently culls the
 // standard NDC quad winding used throughout this pixel-test family unless `RasterizerState::
 // CullNone` is set explicitly — worked around here identically to Task 364's own Bgfx test.

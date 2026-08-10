@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 // GDI-056/GDI-072: registered variants plus immutable typed configuration coverage.
 
-#include "CNA/Internal/Backends/Gdi/GdiConfiguration.hpp"
-#include "CNA/Internal/Backends/Gdi/GdiGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Gdi/GdiConfiguration.hpp"
+#include "CNA/Internal/Renderers/Gdi/GdiRenderer.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -12,8 +12,8 @@
 #include <string>
 #include <string_view>
 
-using namespace CNA::Internal::Backends;
-using namespace CNA::Internal::Backends::Gdi;
+using namespace CNA::Internal::Renderers;
+using namespace CNA::Internal::Renderers::Gdi;
 
 namespace
 {
@@ -159,7 +159,7 @@ int main(int argc, char** argv)
     try
     {
         {
-            GdiGraphicsBackend backend(
+            GdiRenderer renderer(
                 window, logicalWidth, logicalHeight,
                 halftoneVariant ? CnaPresentationMode::Stretch
                                 : CnaPresentationMode::NativeBackBuffer);
@@ -168,14 +168,14 @@ int main(int argc, char** argv)
                                : GdiPresentationFilter::Nearest,
                 expectDirty,
                 false};
-            ok &= Expect(backend.DebugGetConfiguration() == expectedConfiguration,
-                         "backend captures the registered environment as typed construction state");
+            ok &= Expect(renderer.DebugGetConfiguration() == expectedConfiguration,
+                         "renderer captures the registered environment as typed construction state");
 
-            backend.Clear(0.1f, 0.2f, 0.3f, 1.0f);
-            backend.Present();
+            renderer.Clear(0.1f, 0.2f, 0.3f, 1.0f);
+            renderer.Present();
 
             GdiPresentationTelemetry telemetry;
-            ok &= Expect(backend.DebugGetLastPresentationTelemetry(telemetry) &&
+            ok &= Expect(renderer.DebugGetLastPresentationTelemetry(telemetry) &&
                              telemetry.result.success,
                          "configured GDI presentation completes successfully");
 
@@ -200,12 +200,12 @@ int main(int argc, char** argv)
             ok &= Expect(filterEnvironment.Set(expectHalftone ? "nearest" : "halftone") &&
                              dirtyEnvironment.Set(expectDirty ? "0" : "1") &&
                              dwmEnvironment.Set("1"),
-                         "test mutates all process settings after backend construction");
+                         "test mutates all process settings after renderer construction");
 
-            backend.Present();
-            ok &= Expect(backend.DebugGetConfiguration() == expectedConfiguration,
+            renderer.Present();
+            ok &= Expect(renderer.DebugGetConfiguration() == expectedConfiguration,
                          "post-construction environment mutation cannot alter captured policy");
-            ok &= Expect(backend.DebugGetLastPresentationTelemetry(telemetry) &&
+            ok &= Expect(renderer.DebugGetLastPresentationTelemetry(telemetry) &&
                              telemetry.result.success &&
                              telemetry.stretchMode ==
                                  (expectHalftone ? kHalftoneStretchMode
@@ -228,17 +228,17 @@ int main(int argc, char** argv)
 
             const GdiConfiguration overrideConfiguration{
                 GdiPresentationFilter::Halftone, true, false};
-            GdiGraphicsBackend backend(window, clientWidth, clientHeight,
+            GdiRenderer renderer(window, clientWidth, clientHeight,
                                        CnaPresentationMode::NativeBackBuffer,
                                        overrideConfiguration);
-            ok &= Expect(backend.DebugGetConfiguration() == overrideConfiguration,
+            ok &= Expect(renderer.DebugGetConfiguration() == overrideConfiguration,
                          "typed test override bypasses every process setting");
-            backend.Clear(0.2f, 0.3f, 0.4f, 1.0f);
-            backend.Present();
-            backend.Present();
+            renderer.Clear(0.2f, 0.3f, 0.4f, 1.0f);
+            renderer.Present();
+            renderer.Present();
 
             GdiPresentationTelemetry telemetry;
-            ok &= Expect(backend.DebugGetLastPresentationTelemetry(telemetry) &&
+            ok &= Expect(renderer.DebugGetLastPresentationTelemetry(telemetry) &&
                              telemetry.result.success &&
                              telemetry.plan.path == GdiBlitPath::None &&
                              telemetry.stretchMode == kHalftoneStretchMode,

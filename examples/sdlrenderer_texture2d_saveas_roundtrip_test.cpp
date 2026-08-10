@@ -2,24 +2,24 @@
 // Task 683: Verify SaveAsPng/SaveAsJpeg round-trip when the source texture was
 // created/updated through SDL_Renderer.
 //
-// SaveAsPng/SaveAsJpeg (shared, backend-agnostic Texture2D.cpp) operate ENTIRELY on the
+// SaveAsPng/SaveAsJpeg (shared, renderer-agnostic Texture2D.cpp) operate ENTIRELY on the
 // CPU-side pixel shadow cache (cpuPixels_) via SDL3_image (SDL_CreateSurfaceFrom +
-// IMG_SavePNG_IO / STBIW-based JPEG encode) -- neither ever touches backend_ or the real GPU
-// texture at all. cpuPixels_ is populated identically regardless of which backend created or
+// IMG_SavePNG_IO / STBIW-based JPEG encode) -- neither ever touches renderer_ or the real GPU
+// texture at all. cpuPixels_ is populated identically regardless of which renderer created or
 // updated the texture (confirmed: Texture2D::MaybeFreeCpuPixels() only frees it when
 // GraphicsDevice::contextRecoveryEnabled_ is false, and that defaults to true -- a
-// GraphicsDevice-level flag, not a backend-specific one). So the CPU-side save path is
+// GraphicsDevice-level flag, not a renderer-specific one). So the CPU-side save path is
 // guaranteed correct by construction once SetData has correctly populated cpuPixels_, which
-// Tasks 678-680 already proved true for SDL_Renderer's real backend texture.
+// Tasks 678-680 already proved true for SDL_Renderer's real renderer texture.
 //
 // This test verifies that guarantee holds end-to-end for a texture that was actually
-// SetData'd through the real SDL_Renderer backend: SetData -> SaveAsPng/SaveAsJpeg -> a
+// SetData'd through the real SDL_Renderer renderer: SetData -> SaveAsPng/SaveAsJpeg -> a
 // fresh FromStream decode -> drawn via SpriteBatch and read back from the real framebuffer
 // (reusing Task 682's already-proven "draw + real readback" method, chained onto the save
 // path this task is actually about).
 //
 // Requires PresentationMode::NativeBackBuffer (Task 915 finding): SDL_RenderReadPixels
-// operates in physical output coordinates, while this backend's default presentation mode
+// operates in physical output coordinates, while this renderer's default presentation mode
 // (FixedHeightDynamicWidth) does not map logical pixels 1:1 to physical ones.
 //
 // Exit code 0 = all PASS, 1 = at least one FAIL.
@@ -79,8 +79,8 @@ protected:
         auto& dev = getGraphicsDeviceProperty();
         sb_ = std::make_unique<SpriteBatch>(dev);
 
-        // 2x2 source, updated through the real SDL_Renderer backend (full-array SetData
-        // reaches SdlTextureBackend's constructor, per Task 678's already-verified path).
+        // 2x2 source, updated through the real SDL_Renderer renderer (full-array SetData
+        // reaches SdlTextureRenderer's constructor, per Task 678's already-verified path).
         Texture2D src(dev, 2, 2);
         const Color pixels[4] = { kRed, kGreen, kBlue, kYellow };
         src.SetData(pixels, 4);

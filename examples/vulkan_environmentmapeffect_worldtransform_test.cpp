@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // Task 398: verify EnvironmentMapEffect's normal transform under a non-uniform-scale World
-// matrix (Vulkan backend). See examples/easygl_environmentmapeffect_worldtransform_test.cpp
+// matrix (Vulkan renderer). See examples/easygl_environmentmapeffect_worldtransform_test.cpp
 // for the full derivation. Vulkan's vertex shader already computes
 // `transpose(inverse(mat3(world)))` directly (env_map3d.vert.glsl) -- already CORRECT, no fix
 // needed here; this test exists to confirm that and guard against regression.

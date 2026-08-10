@@ -8,15 +8,15 @@
 // `easygl_shadereffect_custom_vertex_layout_test.cpp` proofs had to the shader ports that
 // followed each).
 //
-// Background: `IEffectBackend::BindTexture()` only accepts an `ITextureBackend*` -- `TextureCube`
-// backs onto a *separate* interface, `ITextureCubeBackend` (confirmed via direct source read, not
-// assumption: `class ITextureCubeBackend` does not derive from `ITextureBackend` in
-// `IGraphicsBackend.hpp`), so binding a cube texture to a custom shader's own `samplerCube`
+// Background: `IEffectRenderer::BindTexture()` only accepts an `ITextureRenderer*` -- `TextureCube`
+// backs onto a *separate* interface, `ITextureCubeRenderer` (confirmed via direct source read, not
+// assumption: `class ITextureCubeRenderer` does not derive from `ITextureRenderer` in
+// `IGraphicsRenderer.hpp`), so binding a cube texture to a custom shader's own `samplerCube`
 // uniform previously had no code path at all. Implementation (3 small, additive changes, EasyGL
-// only, matching this session's established backend scope): (1) `IEffectBackend` gained
-// `BindTextureCube(int unit, ITextureCubeBackend*)`, defaulting to a no-op; (2)
-// `EasyGLEffectBackend::BindTextureCube()` mirrors the existing `BindTexture()` exactly (bind the
-// unit, call the backend's own `BindGL()`, restore unit 0) -- `EasyGLTextureCubeBackend` already
+// only, matching this session's established renderer scope): (1) `IEffectRenderer` gained
+// `BindTextureCube(int unit, ITextureCubeRenderer*)`, defaulting to a no-op; (2)
+// `EasyGLEffectRenderer::BindTextureCube()` mirrors the existing `BindTexture()` exactly (bind the
+// unit, call the renderer's own `BindGL()`, restore unit 0) -- `EasyGLTextureCubeRenderer` already
 // had a working `BindGL()` implementation (used elsewhere for `EnvironmentMapEffect`/
 // `RenderTargetCube`), so this is pure plumbing, no new GL logic; (3) `ShaderEffect::SetTexture()`
 // gained a `TextureCube&` overload alongside the existing `Texture2D&` one. GL itself allows a 2D

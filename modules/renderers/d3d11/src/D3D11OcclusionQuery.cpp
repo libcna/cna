@@ -1,11 +1,11 @@
 // plan_dx.md Phase DX6 (DX-47).
-#include "CNA/Internal/Backends/D3D11/D3D11OcclusionQuery.hpp"
+#include "CNA/Internal/Renderers/D3D11/D3D11OcclusionQuery.hpp"
 
 #include <algorithm>
 #include <cstdio>
 #include <stdexcept>
 
-namespace CNA::Internal::Backends::D3D11
+namespace CNA::Internal::Renderers::D3D11
 {
     namespace
     {
@@ -17,7 +17,7 @@ namespace CNA::Internal::Backends::D3D11
         }
     }
 
-    D3D11OcclusionQueryBackend::D3D11OcclusionQueryBackend(ID3D11Device* device, ID3D11DeviceContext* context)
+    D3D11OcclusionQueryRenderer::D3D11OcclusionQueryRenderer(ID3D11Device* device, ID3D11DeviceContext* context)
         : device_(device), context_(context)
     {
         D3D11_QUERY_DESC desc{};
@@ -26,25 +26,25 @@ namespace CNA::Internal::Backends::D3D11
 
         const HRESULT hr = device_->CreateQuery(&desc, query_.GetAddressOf());
         if (FAILED(hr))
-            throw std::runtime_error("D3D11OcclusionQueryBackend: CreateQuery failed, hr=" + FormatHr(hr));
+            throw std::runtime_error("D3D11OcclusionQueryRenderer: CreateQuery failed, hr=" + FormatHr(hr));
     }
 
-    void D3D11OcclusionQueryBackend::Begin()
+    void D3D11OcclusionQueryRenderer::Begin()
     {
         context_->Begin(query_.Get());
     }
 
-    void D3D11OcclusionQueryBackend::End()
+    void D3D11OcclusionQueryRenderer::End()
     {
         context_->End(query_.Get());
     }
 
-    bool D3D11OcclusionQueryBackend::IsComplete() const
+    bool D3D11OcclusionQueryRenderer::IsComplete() const
     {
         return context_->GetData(query_.Get(), nullptr, 0, D3D11_ASYNC_GETDATA_DONOTFLUSH) == S_OK;
     }
 
-    int D3D11OcclusionQueryBackend::PixelCount() const
+    int D3D11OcclusionQueryRenderer::PixelCount() const
     {
         UINT64 count = 0;
         const HRESULT hr = context_->GetData(query_.Get(), &count, sizeof(count), 0);

@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-083: the Software (CPU-raster) backend must honor RasterizerState.DepthBias and
-// RasterizerState.SlopeScaleDepthBias. Before this task SoftwareGraphicsBackend::ApplyRasterizerState
+// REMED-GFX-083: the Software (CPU-raster) renderer must honor RasterizerState.DepthBias and
+// RasterizerState.SlopeScaleDepthBias. Before this task SoftwareRenderer::ApplyRasterizerState
 // dropped BOTH float arguments (its 4th/5th params were unnamed `float, float`), so the per-fragment
 // depth written by the rasterizer received no polygon offset -- Software behaved as if DepthBias == 0
-// and SlopeScaleDepthBias == 0 for every draw. The GPU backends honor these: EasyGL/Vulkan feed them
+// and SlopeScaleDepthBias == 0 for every draw. The GPU renderers honor these: EasyGL/Vulkan feed them
 // UNSCALED into glPolygonOffset(slopeScaleDepthBias, depthBias) / vkCmdSetDepthBias(depthBias, 0,
 // slopeScaleDepthBias), and D3D11 rounds DepthBias to D3D11_RASTERIZER_DESC::DepthBias (INT) and maps
 // SlopeScaleDepthBias to ::SlopeScaledDepthBias. So coplanar/decal geometry that relies on a depth
-// bias to win/lose a z-fight rendered differently on Software than on the GPU backends.
+// bias to win/lose a z-fight rendered differently on Software than on the GPU renderers.
 //
-// XNA/FNA + cross-backend contract (verified against FNA RasterizerState, GraphicsDevice's unscaled
+// XNA/FNA + cross-renderer contract (verified against FNA RasterizerState, GraphicsDevice's unscaled
 // forwarding, and CNA's D3D11/Vulkan/EasyGL ApplyRasterizerState):
 //   effectiveOffset = SlopeScaleDepthBias * m + DepthBias * r        (added to post-viewport depth)
 //     m = max(|dz/dx|, |dz/dy|)  -- the triangle's max screen-space depth slope (window depth, pixels)
@@ -24,7 +24,7 @@
 // is bit-identical (no z-fighting noise -- the flip comes only from the bias), read back the real CPU
 // framebuffer via GetBackBufferData, and probe the center. Bias magnitudes are large integer-valued
 // floats so the offset is an unambiguous ~0.18 in normalized depth (and D3D11's round-to-int preserves
-// them, keeping cross-backend parity).
+// them, keeping cross-renderer parity).
 //
 // Pre-fix (bias dropped): every "biased" check below sees the SAME result as its zero-bias baseline
 // (the later coplanar polygon always wins), so the biased checks FAIL. Post-fix they flip.
@@ -71,7 +71,7 @@ namespace
     constexpr int kBBH = 72;
 
     // A large integer-valued DepthBias: offset = 3e6 * 2^-24 == 0.17881 in normalized depth. Unambiguous
-    // (not z-fighting noise) and integer so D3D11's round-to-int keeps the same value (cross-backend
+    // (not z-fighting noise) and integer so D3D11's round-to-int keeps the same value (cross-renderer
     // parity). SlopeScaleDepthBias for the slope section: 150 * m (m ~ 0.003 for the sloped quad below)
     // ~ 0.45, a clean full flip.
     constexpr float kBias = 3000000.0f;
@@ -220,7 +220,7 @@ class SoftwareDepthBiasTest : public Game
         done_ = true;
         auto& dev = getGraphicsDeviceProperty();
 
-#if defined(CNA_BACKEND_LLGL)
+#if defined(CNA_RENDERER_LLGL)
         bool rejected = false;
         try
         {

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-006: SkinnedEffect world-space normal transform, Vulkan backend.
+// REMED-GFX-006: SkinnedEffect world-space normal transform, Vulkan renderer.
 //
 // FNA's authoritative path (SkinnedEffect.fx + Lighting.fxh):
 //   Skin():                        vin.Normal = mul(vin.Normal, (float3x3)skinning);

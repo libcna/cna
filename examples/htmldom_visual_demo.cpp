@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// NOXNA. A small visual demo of the HTML_DOM graphics backend, distinct from
+// NOXNA. A small visual demo of the HTML_DOM graphics renderer, distinct from
 // examples/htmldom_smoke_test.cpp's automated PASS/FAIL checks: this one exists to be looked at.
 // It draws a soft radial-gradient sprite with real alpha falloff (rotated/scaled/tinted copies
 // under AlphaBlend and Additive), a multi-character SpriteFont string ("HI"), and a small

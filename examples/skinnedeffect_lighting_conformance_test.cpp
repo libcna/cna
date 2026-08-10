@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // REMED-GFX-008: analytic SkinnedEffect ambient/emissive lighting conformance harness.
 //
-// Backend-agnostic (registered per backend by the CMake test files). Isolates each individual
+// Renderer-agnostic (registered per renderer by the CMake test files). Isolates each individual
 // lighting term of FNA's SkinnedEffect lighting model so an incorrect ambient/emissive
 // consumption is numerically distinguishable from the correct one.
 //
@@ -14,14 +14,14 @@
 //
 //     litRGB = ((ambient + Σ lightᵢ·max(0,N·L)) · diffuse + emissive) · alpha
 //
-// The historical backend bug reads an always-zero `ambientColor` for the ambient term AND never adds
+// The historical renderer bug reads an always-zero `ambientColor` for the ambient term AND never adds
 // the pre-folded emissive uniform, so it silently drops BOTH ambient and emissive. Every case below
 // is chosen so that bug family renders a numerically different (usually much darker or black) pixel.
 //
 // Geometry: one identity-bone quad whose normal faces +Z; DirectionalLight0 points down −Z, so
 // N·(−L0) = 1 exactly. Lights 1/2 are disabled (they contribute nothing) unless a case needs them.
 // Identity World/View/Proj, white 1×1 texture, opaque blend, CullNone. Backbuffer readback is linear
-// on every backend this test is registered for (matches the established Vulkan/EasyGL/SdlGpu/Bgfx/
+// on every renderer this test is registered for (matches the established Vulkan/EasyGL/SdlGpu/Bgfx/
 // D3D11 skinned tests, which assert linear 0.3→77 etc.).
 //
 // Exit code 0 = PASS (all cases), 1 = FAIL.
@@ -173,7 +173,7 @@ class SkinnedEffectLightingConformanceTest : public Game
             dev.SetVertexBuffer(&vb);
             dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
             got = readCenter(dev);
-            // Cases B/C/F/I legitimately render black on a buggy backend; accept the frame once the
+            // Cases B/C/F/I legitimately render black on a buggy renderer; accept the frame once the
             // clear/draw cycle has settled (2 warm-up frames), do not spin waiting for non-black.
             if (i >= 2) break;
         }

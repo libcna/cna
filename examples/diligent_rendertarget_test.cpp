@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MS-PL
 //
 // plan_diligent.md DILIGENT-20/DILIGENT-21: real-device proof that RenderTarget2D on the Diligent
-// backend renders off-screen and reads back, through the public XNA API only.
+// renderer renders off-screen and reads back, through the public XNA API only.
 //
 // Check A -- a Clear() while a render target is bound lands in the target, read back via
 //   RenderTarget2D::GetData.
 // Check B -- ...and the back buffer was NOT touched by it. This is what separates a real
-//   off-screen target from a backend that quietly kept drawing to the back buffer: check A alone
+//   off-screen target from a renderer that quietly kept drawing to the back buffer: check A alone
 //   passes in both worlds.
 // Check C -- a SpriteBatch quad drawn into the target covers only its own destination rectangle
 //   inside the target (partial coverage, so a full-target overwrite fails).
@@ -204,7 +204,7 @@ int main()
     catch (const std::exception& error)
     {
         // Only a genuine "there is no device here" failure is a skip. Any other exception is a
-        // real defect and must fail: an over-broad catch turned a backend bug into a green skip
+        // real defect and must fail: an over-broad catch turned a renderer bug into a green skip
         // once already while this test was being written.
         const std::string message = error.what();
         const bool noDevice = message.find("no device type could be created") != std::string::npos ||

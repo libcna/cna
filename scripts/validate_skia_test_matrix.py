@@ -108,7 +108,7 @@ def expected_entries(root: pathlib.Path) -> set[str]:
     cmake = (root / "cmake/Tests/EasyGLTests.cmake").read_text()
     cmake = re.sub(r"#[^\n]*", "", cmake)
     tests = re.findall(
-        r"\bcna_register_backend_test\s*\(\s*NAME\s+([A-Za-z0-9_]+)", cmake
+        r"\bcna_register_renderer_test\s*\(\s*NAME\s+([A-Za-z0-9_]+)", cmake
     )
     tools = re.findall(
         r"\bcna_easygl_test\s*\(\s*(cna_diag_easygl|cna_oracle_render_easygl)\b", cmake

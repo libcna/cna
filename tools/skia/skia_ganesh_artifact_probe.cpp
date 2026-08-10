@@ -6,13 +6,13 @@
 // GrDirectContexts::MakeGL() to construct a real Ganesh GrDirectContext over it (internally via
 // GrGLMakeNativeInterface(), which on this pinned revision's Linux/X11 GN configuration resolves to
 // the GLX native interface -- see docs/skia-ganesh-artifact.md for the GN args that select that
-// path). This is strictly a below-the-API artifact-correctness probe, matching this backend's
+// path). This is strictly a below-the-API artifact-correctness probe, matching this renderer's
 // established "prove it below the API first" sequencing (SKIA-93/145/147/153-156); it is not part of
-// SkiaGraphicsBackend and is not wired into the raster CTest suite -- SKIA-160/161 own the real
-// construction-time mode selection and backend integration.
+// SkiaRenderer and is not wired into the raster CTest suite -- SKIA-160/161 own the real
+// construction-time mode selection and renderer integration.
 //
 // Only built when -DCNA_SKIA_GANESH_BUILD_DIR is explicitly set (cmake/Harnesses.cmake); the
-// ordinary CNA_GRAPHICS_BACKEND=SKIA (raster) build never sets it, so this target does not exist
+// ordinary CNA_GRAPHICS_RENDERER=SKIA (raster) build never sets it, so this target does not exist
 // there and the validated raster artifact/build graph is unaffected.
 //
 // Runs fine against this repository's usual Xvfb test displays (:99/:101): Mesa provides a real,

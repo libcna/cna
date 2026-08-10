@@ -1,18 +1,18 @@
 // SPDX-License-Identifier: MS-PL
 // plan_ascii.md Phase G6 (ASCII-50/51): Mouse/Keyboard/GamePad need zero new code against this
-// backend's real window (design decision 1/section 0.2) -- this test proves it directly, on top
+// renderer's real window (design decision 1/section 0.2) -- this test proves it directly, on top
 // of the pre-existing MouseTest.SetPositionConvertsLogicalToWindowForLetterboxedRenderer /
 // SetPositionHandlesLetterboxOffsetNotJustScale tests (tests/Microsoft/Xna/Framework/Input/
-// MouseInputTests.cpp) already confirmed passing under CNA_GRAPHICS_BACKEND=ASCII as part of the
+// MouseInputTests.cpp) already confirmed passing under CNA_GRAPHICS_RENDERER=ASCII as part of the
 // full CnaTests regression.
 //
 // Check A -- a real window exists (GetWindowInternal() != nullptr) -- unlike HEADLESS/SOFTWARE,
-//   this backend needs one (design decision 1).
+//   this renderer needs one (design decision 1).
 // Check B -- Mouse.GetState()/Keyboard.GetState()/GamePad.GetState() do not throw.
 // Check C -- Mouse.SetPosition() to the logical center of the game's own virtual resolution,
 //   then Mouse.GetState() reads back a position within 1px of that -- a real, ASCII-specific
 //   round-trip through the actual coordinate-transform path (SdlInputBridge), not just relying
-//   on the shared test suite happening to also cover this backend.
+//   on the shared test suite happening to also cover this renderer.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
@@ -24,7 +24,7 @@
 #include "Microsoft/Xna/Framework/Input/GamePad.hpp"
 #include "Microsoft/Xna/Framework/PlayerIndex.hpp"
 
-#include "CNA/Internal/Backends/Ascii/AsciiGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Ascii/AsciiRenderer.hpp"
 
 #include <cmath>
 #include <cstdio>
@@ -33,7 +33,7 @@
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
 using namespace Microsoft::Xna::Framework::Input;
-using namespace CNA::Internal::Backends::Ascii;
+using namespace CNA::Internal::Renderers::Ascii;
 
 class AsciiInputTest : public Game
 {
@@ -51,9 +51,9 @@ protected:
     void Draw(const GameTime&) override
     {
         auto& dev = getGraphicsDeviceProperty();
-        auto& backend = static_cast<AsciiGraphicsBackend&>(dev.GetBackend());
+        auto& renderer = static_cast<AsciiRenderer&>(dev.GetRenderer());
 
-        check(backend.GetWindowInternal() != nullptr, "A real window exists for the ASCII backend");
+        check(renderer.GetWindowInternal() != nullptr, "A real window exists for the ASCII renderer");
 
         bool threw = false;
         try

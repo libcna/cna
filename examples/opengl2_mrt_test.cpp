@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MS-PL
 // plan_opengl2.md: real Multiple Render Targets (MRT) proof via SetRenderTargets.
 //
-// Until this task, IGraphicsBackend::SetRenderTargets() was not overridden on OpenGL2 (the shared
+// Until this task, IGraphicsRenderer::SetRenderTargets() was not overridden on OpenGL2 (the shared
 // base-class default binds only rts[0] via SetRenderTarget2D and silently drops every other
 // target). Implemented via a shared FBO re-attached on every call (glFramebufferTexture2D per
-// target + glDrawBuffers), mirroring EasyGLGraphicsBackend::SetRenderTargets's own mrtFbo_
+// target + glDrawBuffers), mirroring EasyGLRenderer::SetRenderTargets's own mrtFbo_
 // precedent.
 //
 // This test deliberately does NOT port easygl_mrt_test.cpp's exact scene (draw only writes
@@ -16,7 +16,7 @@
 // driver was empirically observed (via a diagnostic readback added while developing this test) to
 // write black/zero into the unassigned attachment rather than preserve its prior content --
 // contradicting the "stays untouched" assumption. That is a genuine GLSL-1.10-vs-GLES3/GL3+
-// platform difference, not a bug in this backend's SetRenderTargets/glDrawBuffers wiring.
+// platform difference, not a bug in this renderer's SetRenderTargets/glDrawBuffers wiring.
 //
 // Instead, this test uses the pattern real MRT-using shaders actually rely on (G-buffer style:
 // EVERY bound attachment is explicitly written in the same draw): a custom ShaderEffect whose

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 // plan_opengl4.md GL4-15: real per-face FBO-backed RenderTargetCube + real MRT for the OpenGL4
-// graphics backend.
+// graphics renderer.
 //
-// RenderTargetCube (OpenGL4RenderTargetCubeBackend, one shared cube-map texture + FBO,
+// RenderTargetCube (OpenGL4RenderTargetCubeRenderer, one shared cube-map texture + FBO,
 // re-attaching the requested face on BindAsRenderTargetFace):
 // Check A -- Clear() into face +X, sampled back via real GetData() (not "didn't throw"), reads
 //   the expected colour.
@@ -22,7 +22,7 @@
 //
 // MRT (SetRenderTargets, plural -- a persistent multi-attachment FBO + glDrawBuffers):
 // Check H -- binding 2 RenderTarget2D instances via GraphicsDevice.SetRenderTargets(), then
-//   drawing one colored3d quad: with a single-output fragment shader (this backend has no
+//   drawing one colored3d quad: with a single-output fragment shader (this renderer has no
 //   multi-output/G-buffer shader variant -- XNA's own MRT story is a custom ShaderEffect
 //   concern, not something BasicEffect ever declares), only COLOR_ATTACHMENT0 receives the
 //   quad's colour via glDrawBuffers' first slot. Both targets' GetData() are checked: the FIRST

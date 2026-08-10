@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# plan_dx6.md design decision 11: run a Windows cross-compiled .exe (DX6 backend, CNA's real
+# plan_dx6.md design decision 11: run a Windows cross-compiled .exe (DX6 renderer, CNA's real
 # DirectX 6 -- DirectDraw v4 + Direct3D v3 FVF DrawPrimitive, plus real stencil buffer operations)
 # under Wine against real DirectDraw v4, using this project's own dedicated Wine prefix.
 #
 # Usage: scripts/run-wine-dx6.sh <path-to.exe> [args...]
 #
 # Unlike scripts/run-wine-dxvk9.sh/run-wine-dxvk.sh, this deliberately does NOT install or gate on
-# DXVK: docs/directx-legacy-backends-analysis.md section 4 confirms DXVK does not translate
+# DXVK: docs/directx-legacy-renderers-analysis.md section 4 confirms DXVK does not translate
 # DirectDraw at all, so a vanilla Wine prefix's own builtin ddraw.dll IS the real DirectDraw
-# implementation for this backend -- no extra setup beyond `wineboot --init`.
+# implementation for this renderer -- no extra setup beyond `wineboot --init`.
 #
 # Set CNA_DX6_WINEPREFIX to point at a different prefix; defaults to ~/.wine-cna-dx1 -- DX6
 # deliberately REUSES DX1/DX2/DX3's own already-initialized prefix rather than creating a fresh

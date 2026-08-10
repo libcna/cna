@@ -12,18 +12,18 @@ on it) rather than assuming either way.
 - **`../NEXT.md`** (repo root) — the single most reliable, actively-maintained document in the
   repository. §5 is the current known-bugs-and-limitations list; treat it as the source of truth for
   "is X still broken" over any dated snapshot below.
-- **`graphics-backend-feature-matrix.md`** — current per-backend Graphics feature status
-  (SDL_Renderer/EasyGL/Vulkan/Bgfx). Start here for "does backend X support feature Y."
-- **[`webgpu-backend.md`](webgpu-backend.md)** — current status, build instructions and explicit
-  limitations for the experimental fifth backend; detailed remaining work is in `../plan_webgpu.md`.
-- **[`sokol-backend.md`](sokol-backend.md)** — capability boundary, build options and known
-  limitations for the experimental `sokol_gfx` backend (a pixel-verified 2D baseline; no 3D path,
+- **`graphics-renderer-feature-matrix.md`** — current per-renderer Graphics feature status
+  (SDL_Renderer/EasyGL/Vulkan/Bgfx). Start here for "does renderer X support feature Y."
+- **[`webgpu-renderer.md`](webgpu-renderer.md)** — current status, build instructions and explicit
+  limitations for the experimental fifth renderer; detailed remaining work is in `../plan_webgpu.md`.
+- **[`sokol-renderer.md`](sokol-renderer.md)** — capability boundary, build options and known
+  limitations for the experimental `sokol_gfx` renderer (a pixel-verified 2D baseline; no 3D path,
   render targets or custom effects yet); task breakdown is in `../plan_sokol.md`.
-- **[`diligent-backend.md`](diligent-backend.md)** — capability boundary, build options, the
+- **[`diligent-renderer.md`](diligent-renderer.md)** — capability boundary, build options, the
   runtime device-type selection (`CNA_DILIGENT_DEVICE`) and known limitations for the experimental
-  Diligent Engine backend, the one backend whose native graphics API is chosen at run time rather
+  Diligent Engine renderer, the one renderer whose native graphics API is chosen at run time rather
   than by the CMake option; task breakdown is in `../plan_diligent.md`.
-- **[`skia-backend.md`](skia-backend.md)** — current verified CPU-raster 2D capability boundary,
+- **[`skia-renderer.md`](skia-renderer.md)** — current verified CPU-raster 2D capability boundary,
   dependency policy, tests, and explicit direct/emulation decisions; the 249-entry API ledger is
   [`skia-easygl-parity-ledger.md`](skia-easygl-parity-ledger.md), active work is in
   `../plan_skia.md`, Skia-only continuity is in `../NEXT_skia.md`, and the fresh-checkout procedure
@@ -42,14 +42,14 @@ on it) rather than assuming either way.
   [`skia-generated-blender.md`](skia-generated-blender.md) and its exact raster surface is promoted
   by SKIA-124. Checked 2D mip storage is documented in the successor resource policy; public mip
   construction remains gated by SKIA-126 and later tasks.
-- **[`canvas-backend.md`](canvas-backend.md)** — current status for the Emscripten-only HTML Canvas
-  2D backend, incl. a manual browser verification checklist (this dev loop has no real browser DOM
+- **[`canvas-renderer.md`](canvas-renderer.md)** — current status for the Emscripten-only HTML Canvas
+  2D renderer, incl. a manual browser verification checklist (this dev loop has no real browser DOM
   to pixel-verify against); detailed task breakdown is in `../plan_canvas.md`.
-- **[`glide-backend.md`](glide-backend.md)** — build/runtime setup and current native
+- **[`glide-renderer.md`](glide-renderer.md)** — build/runtime setup and current native
   fixed-function 2D plus constrained color/textured-vertex 3D scope of the Windows-only historical
-  Glide 3.x backend, which dynamically loads an external emulator DLL.
-- **[`html-dom-backend.md`](html-dom-backend.md)** — current status for the Emscripten-only HTML DOM
-  backend, which renders SpriteBatch output as pooled CSS-transformed `<div>` elements instead of
+  Glide 3.x renderer, which dynamically loads an external emulator DLL.
+- **[`html-dom-renderer.md`](html-dom-renderer.md)** — current status for the Emscripten-only HTML DOM
+  renderer, which renders SpriteBatch output as pooled CSS-transformed `<div>` elements instead of
   rasterizing into a canvas; detailed task breakdown is in `../plan_html_dom.md`.
 - **`xna-4-api-coverage.md`** — current per-class Graphics coverage table plus the overall
   per-namespace XNA 4.0 API-surface numbers (227/245 = 92.7%, computed 2026-07-11).
@@ -73,7 +73,7 @@ original phase closed — check each file's own status banner/date.
 - `sampler-state-support.md` — **refreshed 2026-07-11**: mip-level `SetData` (Tasks 924-926) and
   EasyGL anisotropic filtering (Task 918) corrected from stale ❌ to ✅/fixed.
 - `rasterizerstate-support.md` — Phase 38 audit; Bgfx `DepthBias` status here predates Task 767's
-  later fix (see `graphics-backend-feature-matrix.md` instead for current Bgfx `DepthBias` status).
+  later fix (see `graphics-renderer-feature-matrix.md` instead for current Bgfx `DepthBias` status).
 - `model-content-pipeline-support.md` — current as of Task 916 (2026-07-09); honestly documents
   real remaining content-pipeline-loader gaps (no bone hierarchy, no `ParentBone`/`BoundingSphere`).
 - `occlusionquery-support.md` — current; tracks the Task 447/854 Vulkan fix correctly.
@@ -93,7 +93,7 @@ Kept for their investigation methodology and root-cause detail, not as current s
 - `easygl_bugs.md` — dated Task 227 (2026-06-27), predates hundreds of subsequent EasyGL changes.
   Has a 2026-07-11 status banner flagging 2 confirmed-stale rows (fixed inline) and noting the rest
   is spot-checked, not exhaustively re-audited.
-- `coverage.md` — superseded for Graphics by `graphics-backend-feature-matrix.md` (see that file's
+- `coverage.md` — superseded for Graphics by `graphics-renderer-feature-matrix.md` (see that file's
   own header); its non-Graphics namespace estimates (Audio/Media/Content/Net/GamerServices) are
   the reason it's kept.
 - `graphicsdevice-fna-audit.md`, `graphicsresource-fna-audit.md`, `graphics-resource-lifetime.md` —
@@ -102,23 +102,23 @@ Kept for their investigation methodology and root-cause detail, not as current s
   `_images/` folders) — recent (Tasks 954/955, 2026-07-11), cross-repo `../cna-samples`
   investigation write-ups; current as of their own dates.
 
-## Platform / backend limitations
+## Platform / renderer limitations
 
 - `android-graphics-limitations.md`, `web-emscripten-graphics-limitations.md` — per-platform
   Graphics constraints (Emscripten, Android NDK).
 - `sdl-renderer-2d-completeness.md` — SDL_Renderer's own full Phase 70 2D audit.
-- **[`skia-backend.md`](skia-backend.md)** — the experimental Skia CPU-raster 2D backend; unlike
+- **[`skia-renderer.md`](skia-renderer.md)** — the experimental Skia CPU-raster 2D renderer; unlike
   an accelerated Skia/GPU path, only its evidence-linked bounded feature table is advertised.
-- `canvas-backend.md` — the CANVAS (HTML Canvas 2D) backend's own completeness status; unlike the
+- `canvas-renderer.md` — the CANVAS (HTML Canvas 2D) renderer's own completeness status; unlike the
   others here, its ✅ marks mean "implemented and structurally reviewed," not "pixel-verified" — see
   the doc's own caveat.
-- `html-dom-backend.md` — the HTML_DOM (DOM/CSS) backend's own capability status; its ✅ marks are
+- `html-dom-renderer.md` — the HTML_DOM (DOM/CSS) renderer's own capability status; its ✅ marks are
   backed by a real headless-browser run, not only a structural review.
-- **[`ascii-backend.md`](ascii-backend.md)** — current status for the `ASCII` (SDL-windowed retro
-  glyph-grid) backend; see `../plan_ascii.md` for full task-by-task detail.
-- `freedirect-backend.md` — FreeDirect (formerly `DX3`; DirectDraw via the `../free-direct` sibling)'s own completeness status,
+- **[`ascii-renderer.md`](ascii-renderer.md)** — current status for the `ASCII` (SDL-windowed retro
+  glyph-grid) renderer; see `../plan_ascii.md` for full task-by-task detail.
+- `freedirect-renderer.md` — FreeDirect (formerly `DX3`; DirectDraw via the `../free-direct` sibling)'s own completeness status,
   current as of `plan_freedirect.md`'s Phase X1-X7 closure (2026-07-15).
-- `glide-backend.md` — Glide 3.x's native-API SpriteBatch and constrained color-vertex 3D path;
+- `glide-renderer.md` — Glide 3.x's native-API SpriteBatch and constrained color-vertex 3D path;
   runtime verification needs a separately supplied `glide3x.dll`, so this repository does not
   claim a bundled emulator.
 - `fna-reference-harness.md` — the differential-testing infra (`tools/fna-reference/`) mentioned
@@ -150,4 +150,4 @@ scope for the 2026-07-11 Graphics documentation-accuracy pass; check each file's
 *This index was written 2026-07-11 as part of a documentation-accuracy pass (see `../AUDIT.md` and
 `../NEXT.md` for what changed). It is a map, not a guarantee — a file listed above without a
 "refreshed"/"current" note may still contain stale claims that simply weren't hit by this pass.
-When in doubt, prefer `../NEXT.md` §5 and `graphics-backend-feature-matrix.md` over any file below.*
+When in doubt, prefer `../NEXT.md` §5 and `graphics-renderer-feature-matrix.md` over any file below.*

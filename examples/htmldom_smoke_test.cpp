@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_html_dom.md HTMLDOM-15/HTMLDOM-72: end-to-end smoke test for the HTML_DOM graphics backend,
+// plan_html_dom.md HTMLDOM-15/HTMLDOM-72: end-to-end smoke test for the HTML_DOM graphics renderer,
 // written to produce a real PASS/FAIL in a real browser.
 //
-// Unlike the CANVAS backend's own smoke test -- which could only ever prove that it configures and
+// Unlike the CANVAS renderer's own smoke test -- which could only ever prove that it configures and
 // links, because its dev loop had no browser -- this one asserts the actual rendered result: it
-// inspects the DOM the backend produced, checking the surface element, the sprite pool, the CSS
+// inspects the DOM the renderer produced, checking the surface element, the sprite pool, the CSS
 // transforms and background images, the element recycling across frames, and a RenderTarget2D
 // round-trip. It is driven headlessly by scripts/run-htmldom-browser-test.sh (Chromium via
 // Playwright), which reads the same PASS/FAIL lines this file prints.
@@ -26,7 +26,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 
-#include "CNA/Internal/Backends/HtmlDom/HtmlDomGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/HtmlDom/HtmlDomRenderer.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -41,7 +41,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::HtmlDom;
+using namespace CNA::Internal::Renderers::HtmlDom;
 
 namespace
 {
@@ -73,7 +73,7 @@ namespace
     /// helper here: a backslash in an EM_JS body does not survive the preprocessor's stringification
     /// of that body, so `/(\d+)/g` silently becomes `/(d+)/g` -- a check that then quietly matches
     /// nothing instead of failing loudly. (Found the hard way: three checks in this file failed
-    /// against a backend that was producing exactly the right DOM.)
+    /// against a renderer that was producing exactly the right DOM.)
     EM_JS(int, JsClearColorMatches, (int r, int g, int b), {
         const root = document.getElementById('cna-dom-root');
         if (!root) return 0;
@@ -143,10 +143,10 @@ namespace
     });
 
     /// plan_html_dom.md HTMLDOM-113: 1 when THIS browser actually recognises
-    /// `mix-blend-mode: plus-lighter` (docs/html-dom-backend.md's own documented "requires
+    /// `mix-blend-mode: plus-lighter` (docs/html-dom-renderer.md's own documented "requires
     /// Chromium 108+/Safari 16.4+/Firefox 122+" boundary -- older engines silently ignore the
     /// value and Additive degrades to normal alpha blending instead of failing, the one place this
-    /// backend degrades silently rather than throwing). An automated CI browser cannot itself be
+    /// renderer degrades silently rather than throwing). An automated CI browser cannot itself be
     /// downgraded to exercise that fallback path, so this check instead confirms the assumption
     /// every OTHER Additive test in this suite depends on: that plus-lighter is genuinely
     /// supported here, and those tests are therefore exercising the real blend, not a silently
@@ -240,7 +240,7 @@ namespace
 
     /// plan_html_dom.md HTMLDOM-103: the DEFAULT ('full') region's own pool element at
     /// `poolIndex`'s current CSS `z-index`, or -1 if that pool slot does not exist. Reads the pool
-    /// array directly (not `root.children[i]`) so the index is exactly the same one the backend
+    /// array directly (not `root.children[i]`) so the index is exactly the same one the renderer
     /// itself uses, with no dependency on where that element happens to sit in root's child list.
     EM_JS(int, JsFullRegionSpriteZIndexAt, (int poolIndex), {
         const regions = Module['cnaDomRegions'];
@@ -292,7 +292,7 @@ namespace
     });
 
     /// plan_html_dom.md HTMLDOM-108: the per-CnaPresentationMode scale factor
-    /// HtmlDomGraphicsBackend::ComputeLogicalViewport last computed and CNA_HtmlDom_UpdateSurface
+    /// HtmlDomRenderer::ComputeLogicalViewport last computed and CNA_HtmlDom_UpdateSurface
     /// applied to #cna-dom-root, read directly from the Module state it is stored in (not parsed
     /// back out of the CSS transform string, which is empty whenever the scale is exactly 1).
     EM_JS(double, JsViewportScaleX, (), {
@@ -393,8 +393,8 @@ protected:
 
         // plan_html_dom.md HTMLDOM-38: a one-glyph SpriteFont ('A', a 4x4 fully-opaque atlas cell,
         // no cropping offset, no bearing) -- enough to exercise DrawString() through the shared
-        // SpriteFont/SpriteBatch layer and confirm it reaches the DOM path with zero backend-
-        // specific code, per this backend's own claim.
+        // SpriteFont/SpriteBatch layer and confirm it reaches the DOM path with zero renderer-
+        // specific code, per this renderer's own claim.
         std::vector<std::uint8_t> glyphPixels(4 * 4 * 4, 0);
         for (std::size_t i = 0; i < glyphPixels.size(); i += 4)
         {
@@ -415,16 +415,16 @@ protected:
     {
         ++frame_;
         auto& dev = getGraphicsDeviceProperty();
-        auto& backend = static_cast<HtmlDomGraphicsBackend&>(dev.GetBackend());
+        auto& renderer = static_cast<HtmlDomRenderer&>(dev.GetRenderer());
 
         if (frame_ == 1)
         {
-            check(backend.GetWindowInternal() != nullptr,
-                  "GraphicsDevice has a real SDL_Window under the HTML_DOM backend");
-            check(backend.GetRendererInternal() == nullptr,
-                  "GetRendererInternal() is null -- no SDL_Renderer exists on this backend");
+            check(renderer.GetWindowInternal() != nullptr,
+                  "GraphicsDevice has a real SDL_Window under the HTML_DOM renderer");
+            check(renderer.GetRendererInternal() == nullptr,
+                  "GetRendererInternal() is null -- no SDL_Renderer exists on this renderer");
             int w = 0, h = 0;
-            backend.GetViewportSize(w, h);
+            renderer.GetViewportSize(w, h);
             check(w > 0 && h > 0, "GetViewportSize() reports a positive logical size");
             check(JsSurfaceExists() == 1, "the #cna-dom-root surface element was created");
             check(JsCanvasHidden() == 1, "the SDL <canvas> is hidden, so only the DOM surface shows");
@@ -432,7 +432,7 @@ protected:
                   "HTMLDOM-113: this test browser genuinely supports mix-blend-mode: "
                   "plus-lighter -- every other Additive pixel check in this suite (and "
                   "htmldom_pixel_verification_test.cpp's own) is therefore exercising the real "
-                  "CSS blend, not this backend's documented old-browser silent-degradation "
+                  "CSS blend, not this renderer's documented old-browser silent-degradation "
                   "fallback, which an automated CI browser cannot itself be downgraded to exercise");
             // plan_html_dom.md HTMLDOM-117: the PUBLIC, game-facing query -- not just the raw CSS
             // check the line above uses directly -- agrees with it. A real game can now check
@@ -443,7 +443,7 @@ protected:
                   (JsSupportsPlusLighter() == 1),
                   "HTMLDOM-117: GraphicsDevice::SupportsCapability(AdditiveBlending) reports the "
                   "SAME real answer as the raw CSS.supports() query it wraps -- a real, queryable "
-                  "capability, not a blanket false this backend gives every other 2D-only-boundary "
+                  "capability, not a blanket false this renderer gives every other 2D-only-boundary "
                   "capability");
         }
 
@@ -462,7 +462,7 @@ protected:
         else if (frame_ <= 4)
         {
             // One sprite: the pool must recycle, leaving the second element hidden rather than
-            // removed -- that recycling is the whole performance premise of this backend.
+            // removed -- that recycling is the whole performance premise of this renderer.
             spriteBatch_->Begin();
             spriteBatch_->Draw(*texture_, Vector2(8, 8), Color::White);
             spriteBatch_->End();
@@ -509,7 +509,7 @@ protected:
             {
                 std::printf("       RenderTarget2D::GetData threw: %s\n", e.what());
             }
-            check(readbackOk, "RenderTarget2D::GetData completes against the DOM backend");
+            check(readbackOk, "RenderTarget2D::GetData completes against the DOM renderer");
             const bool allMatch = readbackOk &&
                 std::all_of(pixels.begin(), pixels.end(), [](const Color& c) {
                     return c.getRProperty() == 10 && c.getGProperty() == 200 &&
@@ -536,7 +536,7 @@ protected:
 
         if (frame_ == 5)
         {
-            // plan_html_dom.md HTMLDOM-38: DrawString needs no backend-specific code -- every
+            // plan_html_dom.md HTMLDOM-38: DrawString needs no renderer-specific code -- every
             // glyph funnels through the same Draw() overload as an ordinary sprite.
             spriteBatch_->Begin();
             spriteBatch_->DrawString(*font_, "A", Vector2(2, 2), Color::White);
@@ -731,10 +731,10 @@ protected:
         // against the surface size at SetScissorRect()-call time) go stale relative to the surface's
         // new size once it actually resizes, or get automatically re-derived.
         //
-        // Deliberately calls HtmlDomGraphicsBackend::SetScissorRect/Present() directly rather than
+        // Deliberately calls HtmlDomRenderer::SetScissorRect/Present() directly rather than
         // going through GraphicsDevice::setScissorRectangleProperty()/Present(): a real, separate
         // finding while building this test was that GraphicsDevice::UpdateViewportFromWindow()
-        // (called from every GraphicsDevice::Present(), for every backend, not an HTML_DOM
+        // (called from every GraphicsDevice::Present(), for every renderer, not an HTML_DOM
         // peculiarity) already resets BOTH Viewport and ScissorRectangle to the complete new
         // backbuffer size the instant it detects any viewport-size change -- matching FNA's own
         // real-resize behaviour. That means this staleness can never actually manifest through the
@@ -743,27 +743,27 @@ protected:
         // shape of finding as HTMLDOM-81's SetViewport one), verified by first reproducing this
         // exact scenario through dev.setScissorRectangleProperty()/dev.Present() and observing
         // GraphicsDevice's own reset win, not assumed. What this test verifies instead is
-        // HtmlDomGraphicsBackend's OWN contract in isolation -- it must not depend on
+        // HtmlDomRenderer's OWN contract in isolation -- it must not depend on
         // GraphicsDevice's reset to stay correct, since nothing stops a future caller from reaching
-        // the backend directly the way this test now deliberately does.
+        // the renderer directly the way this test now deliberately does.
         if (frame_ == 8)
         {
             // The constructor's PreferredBackBufferWidth/Height (64x64) already pinned a FIXED
             // virtual resolution equal to the initial backbuffer size (GraphicsDevice's own
             // constructor takes virtualWidth_/virtualHeight_ straight from
-            // PresentationParameters.BackBufferWidth/Height and pushes them into the backend via
+            // PresentationParameters.BackBufferWidth/Height and pushes them into the renderer via
             // SetVirtualResolution()). Force 1:1 mode (no virtual resolution) directly on the
-            // backend instead -- a real, supported configuration (getLogicalSize()'s own
+            // renderer instead -- a real, supported configuration (getLogicalSize()'s own
             // `virtualHeight_ <= 0` branch) where logical size tracks physical size exactly, so a
             // physical resize genuinely moves the ground a previously-set scissor rect was measured
             // against.
-            backend.SetVirtualResolution(0, 0);
+            renderer.SetVirtualResolution(0, 0);
 
             // Surface is currently still 64x64 (SetVirtualResolution alone doesn't resize anything;
             // it only changes how future geometry is computed). Draw one sprite under this rect so a
             // region for it actually gets created (HTMLDOM-94: SetScissorRect alone only records
             // the rect -- a region only exists once a batch flushes under it).
-            backend.SetScissorRect(5, 5, 10, 10);
+            renderer.SetScissorRect(5, 5, 10, 10);
             spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend, nullptr, nullptr,
                                 &scissorEnabledState_);
             spriteBatch_->Draw(*texture_, Vector2(5, 5), Color::White);
@@ -772,22 +772,22 @@ protected:
                   "HTMLDOM-93a: a region created against the current (pre-resize) 64x64 surface "
                   "gets the expected insets");
 
-            // Resize the real SDL window, then call the backend's own Present() directly -- that is
+            // Resize the real SDL window, then call the renderer's own Present() directly -- that is
             // what notices the logical size changed and re-derives every region's clip-path
             // (HtmlDomState's CNA_HtmlDom_UpdateSurface). Not dev.Present(): see the note above for
             // why that would hide what this test is checking behind GraphicsDevice's own separate
             // reset.
-            SDL_SetWindowSize(backend.GetWindowInternal(), 128, 128);
-            backend.Present();
+            SDL_SetWindowSize(renderer.GetWindowInternal(), 128, 128);
+            renderer.Present();
 
             // HTMLDOM-98: real XNA/FNA Viewport does NOT auto-track a resized backbuffer on its own
             // -- GraphicsDevice::UpdateViewportFromWindow() is the thing that resets it, and this
-            // test deliberately calls the backend directly instead of dev.Present() (see above), so
+            // test deliberately calls the renderer directly instead of dev.Present() (see above), so
             // it must reproduce that reset by hand, the same way a complete real resize flow would
-            // do both together. Without this call the backend correctly (not a bug) keeps treating
+            // do both together. Without this call the renderer correctly (not a bug) keeps treating
             // the OLD 64x64 viewport as still active, which is real XNA/FNA-consistent behaviour for
             // an unreset Viewport, not something this test is checking.
-            backend.SetViewport(0, 0, 128, 128, 0.0f, 1.0f);
+            renderer.SetViewport(0, 0, 128, 128, 0.0f, 1.0f);
 
             // Without CNA_HtmlDom_UpdateSurface re-deriving every region's clip on resize, this
             // region would still carry the OLD (5,49,49,5) insets computed against the pre-resize
@@ -799,7 +799,7 @@ protected:
                   "new 128x128 surface after a resize, with no GraphicsDevice.Reset() and no "
                   "scissor reapplication by the caller");
 
-            backend.SetScissorRect(0, 0, 128, 128);
+            renderer.SetScissorRect(0, 0, 128, 128);
         }
 
         // plan_html_dom.md HTMLDOM-97: the DOM-path (no render target bound) side of Mirror/mixed-
@@ -934,7 +934,7 @@ protected:
         }
 
         // plan_html_dom.md HTMLDOM-108: every CnaPresentationMode, implemented for real via
-        // HtmlDomGraphicsBackend::ComputeLogicalViewport (ported from SdlGpuGraphicsBackend's own
+        // HtmlDomRenderer::ComputeLogicalViewport (ported from SdlGpuRenderer's own
         // reference implementation) -- an earlier version only had correct geometry for
         // FixedHeightDynamicWidth; Letterbox/Overscan/Stretch/NativeBackBuffer all fell through to
         // the SAME height-derived uniform scale, silently wrong for every one of them whenever the
@@ -947,14 +947,14 @@ protected:
         // FixedHeightDynamicWidth alone pass before this task.
         if (frame_ == 11)
         {
-            using CNA::Internal::Backends::CnaPresentationMode;
+            using CNA::Internal::Renderers::CnaPresentationMode;
 
             // Letterbox: scale = min(physW/virtW, physH/virtH) = min(128/256, 128/128) = min(0.5,1.0)
             // = 0.5 (uniform, both axes). Scaled content is 128x64, centred vertically in the
             // 128-tall physical surface -> bars top and bottom, offsetX=0, offsetY=(128-64)/2=32.
-            backend.SetVirtualResolution(256, 128);
-            backend.SetPresentationMode(static_cast<int>(CnaPresentationMode::Letterbox));
-            backend.Present();
+            renderer.SetVirtualResolution(256, 128);
+            renderer.SetPresentationMode(static_cast<int>(CnaPresentationMode::Letterbox));
+            renderer.Present();
             check(JsViewportScaleX() == 0.5 && JsViewportScaleY() == 0.5,
                   "HTMLDOM-108a: Letterbox scales both axes by the SAME factor -- the smaller of the "
                   "two per-axis ratios, so the whole logical rect fits inside the physical one");
@@ -964,8 +964,8 @@ protected:
 
             // Overscan: scale = max(0.5, 1.0) = 1.0. Scaled content is 256x128, wider than the
             // 128-wide physical surface -> cropped left/right, offsetX=(128-256)/2=-64, offsetY=0.
-            backend.SetPresentationMode(static_cast<int>(CnaPresentationMode::Overscan));
-            backend.Present();
+            renderer.SetPresentationMode(static_cast<int>(CnaPresentationMode::Overscan));
+            renderer.Present();
             check(JsViewportScaleX() == 1.0 && JsViewportScaleY() == 1.0,
                   "HTMLDOM-108b: Overscan scales both axes by the LARGER of the two per-axis ratios "
                   "-- here that is exactly 1.0, unlike Letterbox's 0.5 above for the identical "
@@ -981,8 +981,8 @@ protected:
             // Stretch: independent per-axis scale, NO aspect-ratio preservation -- scaleX =
             // physW/virtW = 128/256 = 0.5, scaleY = physH/virtH = 128/128 = 1.0. Deliberately
             // DIFFERENT from each other, unlike every other mode's uniform scale.
-            backend.SetPresentationMode(static_cast<int>(CnaPresentationMode::Stretch));
-            backend.Present();
+            renderer.SetPresentationMode(static_cast<int>(CnaPresentationMode::Stretch));
+            renderer.Present();
             check(JsViewportScaleX() == 0.5 && JsViewportScaleY() == 1.0,
                   "HTMLDOM-108c: Stretch scales each axis independently to exactly fill the "
                   "physical surface -- the only mode whose two scale factors legitimately differ");
@@ -992,17 +992,17 @@ protected:
 
             // NativeBackBuffer: ignores virtualWidth_/virtualHeight_ entirely (still 256x128 from
             // the scenarios above) -- no scaling, GetViewportSize reports the PHYSICAL 128x128, not
-            // the configured virtual resolution, matching SdlGpuGraphicsBackend::
+            // the configured virtual resolution, matching SdlGpuRenderer::
             // ComputeLogicalViewport's own treatment of this mode.
-            backend.SetPresentationMode(static_cast<int>(CnaPresentationMode::NativeBackBuffer));
-            backend.Present();
+            renderer.SetPresentationMode(static_cast<int>(CnaPresentationMode::NativeBackBuffer));
+            renderer.Present();
             check(JsViewportScaleX() == 1.0 && JsViewportScaleY() == 1.0 &&
                   JsRootLeft() == 0.0 && JsRootTop() == 0.0,
                   "HTMLDOM-108d: NativeBackBuffer never scales or offsets -- the logical surface IS "
                   "the physical one, regardless of any virtual resolution configured");
             {
                 int vw = 0, vh = 0;
-                backend.GetViewportSize(vw, vh);
+                renderer.GetViewportSize(vw, vh);
                 check(vw == 128 && vh == 128,
                       "HTMLDOM-108d: NativeBackBuffer's own logical size is the PHYSICAL 128x128, "
                       "not the 256x128 virtual resolution still configured from the earlier "
@@ -1013,9 +1013,9 @@ protected:
             // physical surface's own aspect ratio (here 1:1, so 128), which by construction always
             // exactly fills the physical surface -- scale 1,1, no offset. Confirms switching back to
             // this mode after the other four re-derives geometry correctly, not stale state.
-            backend.SetVirtualResolution(1, 128);
-            backend.SetPresentationMode(static_cast<int>(CnaPresentationMode::FixedHeightDynamicWidth));
-            backend.Present();
+            renderer.SetVirtualResolution(1, 128);
+            renderer.SetPresentationMode(static_cast<int>(CnaPresentationMode::FixedHeightDynamicWidth));
+            renderer.Present();
             check(JsViewportScaleX() == 1.0 && JsViewportScaleY() == 1.0 &&
                   JsRootLeft() == 0.0 && JsRootTop() == 0.0,
                   "HTMLDOM-108e: FixedHeightDynamicWidth still fills the physical surface exactly "
@@ -1025,13 +1025,13 @@ protected:
             // earlier version accepted anything and stored it unchecked. A rejected call must not
             // have changed the mode in effect, the same "rejected state leaves the prior one alone"
             // contract ApplyBlendStateAcceptsPresetsAndRejectsCustomOnes already established for
-            // BlendState (HtmlDomGraphicsBackendTests.cpp).
+            // BlendState (HtmlDomRendererTests.cpp).
             bool threw = false;
-            try { backend.SetPresentationMode(99); }
+            try { renderer.SetPresentationMode(99); }
             catch (const std::out_of_range&) { threw = true; }
             check(threw, "HTMLDOM-108f: SetPresentationMode throws std::out_of_range for an "
                          "invalid CnaPresentationMode ordinal");
-            backend.Present();
+            renderer.Present();
             check(JsViewportScaleX() == 1.0 && JsViewportScaleY() == 1.0 &&
                   JsRootLeft() == 0.0 && JsRootTop() == 0.0,
                   "HTMLDOM-108f: the rejected SetPresentationMode(99) call left the previously-set "
@@ -1042,14 +1042,14 @@ protected:
             // (bars top/bottom, content in physical y in [32,96)). A window point in the TOP BAR
             // (y=10 < 32) has no logical counterpart at all; a point inside the content band
             // (y=64, dead centre of [32,96)) does, at the hand-derived logical coordinates.
-            backend.SetVirtualResolution(256, 128);
-            backend.SetPresentationMode(static_cast<int>(CnaPresentationMode::Letterbox));
-            backend.Present();
+            renderer.SetVirtualResolution(256, 128);
+            renderer.SetPresentationMode(static_cast<int>(CnaPresentationMode::Letterbox));
+            renderer.Present();
             float logX = -1.0f, logY = -1.0f;
-            const bool inBar = backend.TransformWindowToLogical(64.0f, 10.0f, logX, logY);
+            const bool inBar = renderer.TransformWindowToLogical(64.0f, 10.0f, logX, logY);
             check(!inBar, "HTMLDOM-108g: a window coordinate inside a Letterbox bar (above the "
                           "scaled content, not inside it) reports no logical mapping at all");
-            const bool inContent = backend.TransformWindowToLogical(64.0f, 64.0f, logX, logY);
+            const bool inContent = renderer.TransformWindowToLogical(64.0f, 64.0f, logX, logY);
             check(inContent && logX == 128.0f && logY == 64.0f,
                   "HTMLDOM-108g: a window coordinate inside the scaled content band DOES map, at "
                   "the hand-derived logical position ((64,64) physical -> (128,64) logical for "
@@ -1060,12 +1060,12 @@ protected:
             // swapped X/Y factor). Logical (100,50) -> window (100*0.5, 50*1.0) = (50,50) -> back to
             // logical must reproduce (100,50) exactly (every factor here divides evenly, so this is
             // an exact-equality check, not a tolerance one).
-            backend.SetPresentationMode(static_cast<int>(CnaPresentationMode::Stretch));
-            backend.Present();
+            renderer.SetPresentationMode(static_cast<int>(CnaPresentationMode::Stretch));
+            renderer.Present();
             float winX = -1.0f, winY = -1.0f;
-            const bool toWindowOk = backend.TransformLogicalToWindow(100.0f, 50.0f, winX, winY);
+            const bool toWindowOk = renderer.TransformLogicalToWindow(100.0f, 50.0f, winX, winY);
             const bool roundTripOk = toWindowOk &&
-                backend.TransformWindowToLogical(winX, winY, logX, logY);
+                renderer.TransformWindowToLogical(winX, winY, logX, logY);
             check(roundTripOk && winX == 50.0f && winY == 50.0f && logX == 100.0f && logY == 50.0f,
                   "HTMLDOM-108h: TransformLogicalToWindow/TransformWindowToLogical round-trip "
                   "exactly under Stretch's independent per-axis scale -- (100,50) logical -> "
@@ -1073,8 +1073,8 @@ protected:
 
             // Restores the exact "128x128 physical, 1:1 (unset virtual resolution) mode, scale
             // exactly 1" state frame 12 (below) and its own comments depend on.
-            backend.SetVirtualResolution(0, 0);
-            backend.Present();
+            renderer.SetVirtualResolution(0, 0);
+            renderer.Present();
         }
 
         if (frame_ == 12)

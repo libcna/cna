@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MS-PL
 // Task 816: verify explicitly calling Dispose() on an ACTIVE OcclusionQuery (Begin() called, no
-// matching End()) is safe on Bgfx -- no crash, no corrupted backend state affecting subsequently
+// matching End()) is safe on Bgfx -- no crash, no corrupted renderer state affecting subsequently
 // created queries.
 //
 // Distinct from Task 449's own examples/occlusion_query_test.cpp (EasyGL-only): that file covers
 // destroying (the C++ destructor) an active query, explicitly noting "CNA's own
-// OcclusionQuery::Dispose() doesn't touch backend_ at all... so the real backend teardown happens
+// OcclusionQuery::Dispose() doesn't touch renderer_ at all... so the real renderer teardown happens
 // in ~OcclusionQuery(), not Dispose()" -- an already-established, deliberate, FNA-matching design
 // (GraphicsResource.Dispose(bool) isn't overridden by OcclusionQuery). This test instead covers
 // calling the explicit .Dispose() XNA API method itself while active, on Bgfx specifically (no
@@ -13,10 +13,10 @@
 //
 // Given that finding, Dispose()-ing an active query is expected to be "safe" (per this row's own
 // either/or acceptance: safe OR throws correctly) -- it only flips IsDisposed to true; the real
-// bgfx::OcclusionQueryHandle stays alive (owned by BgfxOcclusionQueryBackend, released at C++
+// bgfx::OcclusionQueryHandle stays alive (owned by BgfxOcclusionQueryRenderer, released at C++
 // destruction) so subsequent Begin()/End()/IsComplete()/PixelCount() calls on the "disposed"
 // object remain well-defined (they don't check isDisposed_, so they proceed against a still-live
-// handle) rather than corrupting shared backend state. Repetition-based stress verification
+// handle) rather than corrupting shared renderer state. Repetition-based stress verification
 // (mirroring Task 449's own established convention for "no natural incorrect-vs-correct branch"
 // safety confirmations), not sabotage-and-revert.
 //
@@ -71,14 +71,14 @@ protected:
                 wasDisposed = query->getIsDisposedProperty();
 
                 // Using the query after Dispose() must not crash, whether it silently proceeds
-                // (current behavior, since backend_ isn't released by Dispose()) or throws.
+                // (current behavior, since renderer_ isn't released by Dispose()) or throws.
                 try { query->End(); } catch (...) {}
                 try { (void)query->getIsCompleteProperty(); } catch (...) {}
                 try { (void)query->getPixelCountProperty(); } catch (...) {}
             }
 
             // A fresh, ordinary query afterward must still work normally -- proves no shared
-            // backend-side state (e.g. BgfxGraphicsBackend::activeOcclusionQuery_) was left
+            // renderer-side state (e.g. BgfxRenderer::activeOcclusionQuery_) was left
             // corrupted by the disposed-while-active queries above.
             OcclusionQuery freshQuery(dev);
             freshQuery.Begin();

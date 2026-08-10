@@ -28,7 +28,7 @@
 
 #include "System/IO/MemoryStream.hpp"
 
-#include "CNA/Internal/Backends/HtmlDom/HtmlDomGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/HtmlDom/HtmlDomRenderer.hpp"
 
 #include <cmath>
 #include <cstdio>
@@ -65,10 +65,10 @@ namespace
 
     // Channel-wise tolerance for a pixel comparison. Real algebra bugs (wrong operand, double
     // application of a division, a swapped factor) produce errors far larger than this; the
-    // tolerance exists only to absorb legitimate 8-bit rounding -- this backend's own
+    // tolerance exists only to absorb legitimate 8-bit rounding -- this renderer's own
     // round-to-nearest during its per-pixel maths, PLUS (for the AlphaBlend check specifically)
     // the browser's own internal premultiply-for-compositing/un-premultiply-for-readback round
-    // trip, which is a second, independent source of +-1-ish rounding this backend does not
+    // trip, which is a second, independent source of +-1-ish rounding this renderer does not
     // control at all.
     bool CloseEnough(std::uint8_t actual, int expected, int tolerance)
     {
@@ -260,7 +260,7 @@ protected:
         // premultiplied source data (srcBlend=One). Upload a texel that is deliberately
         // premultiplied by hand -- straight colour (255,100,50) at alpha=128 becomes
         // (255*128/255, 100*128/255, 50*128/255, 128) = (128, 50, 25, 128), mirroring
-        // SDL_RENDERER's own Task 697 pixel test -- and confirm the backend's un-premultiply pass
+        // SDL_RENDERER's own Task 697 pixel test -- and confirm the renderer's un-premultiply pass
         // reconstructs the ORIGINAL straight colour, not a double-divided or undivided one.
         if (frame_ == 2)
         {
@@ -273,7 +273,7 @@ protected:
                         result.getRProperty(), result.getGProperty(), result.getBProperty(),
                         result.getAProperty());
             // Wider tolerance: this result passes through TWO independent 8-bit roundings -- this
-            // backend's own un-premultiply division, then the browser's own internal
+            // renderer's own un-premultiply division, then the browser's own internal
             // premultiply-for-compositing/un-premultiply-for-readback round trip.
             check(CloseEnough(result.getRProperty(), 255, 2) &&
                   CloseEnough(result.getGProperty(), 100, 2) &&
@@ -314,7 +314,7 @@ protected:
         // just apply SOME blend. Two fully opaque, non-overlapping-in-colour-space draws
         // (pure red then pure blue) at the exact same destination pixel: a correct 'lighter'
         // composite must read back as pure magenta at full alpha (255+0, 0, 0+255 clamped); a
-        // backend that fell back to plain source-over would read back as just blue (the second
+        // renderer that fell back to plain source-over would read back as just blue (the second
         // draw fully overwriting the first).
         if (frame_ == 4)
         {
@@ -365,7 +365,7 @@ protected:
         // kerning triple (0, width=4, rightBearing=2). Hand-derived: B's left edge lands at
         // exactly position.X + glyphWidth(4) + rightBearing(2) = position.X + 6, proving the
         // kerning-driven advance between two DIFFERENT glyphs in one DrawString call reaches this
-        // backend's Draw() correctly (not silently zeroed or only applied to a single-glyph case).
+        // renderer's Draw() correctly (not silently zeroed or only applied to a single-glyph case).
         if (frame_ == 6)
         {
             const auto pixels = ReadBackWholeTarget(*fontRt_, 20, 20, [&] {
@@ -564,10 +564,10 @@ protected:
         if (frame_ == 12)
         {
             // plan_html_dom.md HTMLDOM-96a: Texture2D::GetData on a PLAIN (non-render-target)
-            // texture. Unlike RenderTarget2D::GetData (HTMLDOM-83/HtmlDomRenderTargetBackend's own
-            // Canvas2D getImageData), this path is entirely shared/backend-agnostic code
+            // texture. Unlike RenderTarget2D::GetData (HTMLDOM-83/HtmlDomRenderTargetRenderer's own
+            // Canvas2D getImageData), this path is entirely shared/renderer-agnostic code
             // (Texture2D::GetData reads from its own cpuPixels_ CPU-side shadow copy, never
-            // touching the backend at all) -- but it had never been exercised end-to-end under the
+            // touching the renderer at all) -- but it had never been exercised end-to-end under the
             // HTML_DOM Emscripten build specifically, only reviewed by reading the source. Four
             // distinct, unambiguous colours (one per texel, including a non-255 alpha) rule out
             // both a wrong-channel and a wrong-texel-order bug; CreateFromPixels/GetData is a
@@ -589,14 +589,14 @@ protected:
                         px[3].getRProperty(), px[3].getGProperty(), px[3].getBProperty(), px[3].getAProperty());
             check(plainMatches,
                   "HTMLDOM-96a: Texture2D::GetData on a plain (non-render-target) texture returns "
-                  "the exact uploaded pixels, byte-for-byte, under the HTML_DOM backend");
+                  "the exact uploaded pixels, byte-for-byte, under the HTML_DOM renderer");
 
             // plan_html_dom.md HTMLDOM-96b: Texture2D::FromStream decode, closing the loop for this
-            // backend specifically. The decode itself (stb_image, via SaveAsPng/FromStream) is
-            // fully backend-agnostic shared code -- what had never been proven under HTML_DOM is
-            // the two backend-touching ends of that pipeline: the SOURCE texture's own upload
+            // renderer specifically. The decode itself (stb_image, via SaveAsPng/FromStream) is
+            // fully renderer-agnostic shared code -- what had never been proven under HTML_DOM is
+            // the two renderer-touching ends of that pipeline: the SOURCE texture's own upload
             // (SetData, exercised by CreateFromPixels below) and the DECODED texture's own upload
-            // (FromStream's internal CreateFromPixels call), each going through this backend's real
+            // (FromStream's internal CreateFromPixels call), each going through this renderer's real
             // Emscripten canvas/PNG-data-URL machinery, not a native/desktop one.
             Texture2D src = Texture2D::CreateFromPixels(dev, 4, 4, std::vector<std::uint8_t>(
                 static_cast<std::size_t>(4 * 4 * 4), 0));
@@ -627,7 +627,7 @@ protected:
                         decodedPx[0].getRProperty(), decodedPx[0].getGProperty(),
                         decodedPx[0].getBProperty(), decodedPx[0].getAProperty());
             check(decodedMatches,
-                  "HTMLDOM-96b: Texture2D::FromStream decodes a PNG produced by this backend's own "
+                  "HTMLDOM-96b: Texture2D::FromStream decodes a PNG produced by this renderer's own "
                   "SaveAsPng and re-uploads it correctly -- both the source and decoded textures "
                   "round-trip through the real HTML_DOM upload/readback path");
         }
@@ -953,7 +953,7 @@ protected:
         // an accepted architectural limitation for TRANSLUCENT sources specifically (opaque sources,
         // src_a=255, make the two formulas coincide exactly, which is why every earlier opaque-only
         // test -- HTMLDOM-87 included -- could never have caught this). These checks MEASURE this
-        // backend's actual (CSS-native, non-squared) result with real translucent source AND
+        // renderer's actual (CSS-native, non-squared) result with real translucent source AND
         // destination data and raw RGBA readback, documenting the XNA-exact delta by hand rather than
         // asserting pixel-exactness that is not architecturally achievable here.
         if (frame_ == 19)
@@ -979,14 +979,14 @@ protected:
             check(CloseEnough(npSingle.getRProperty(), 200, 1) && CloseEnough(npSingle.getGProperty(), 100, 1) &&
                   CloseEnough(npSingle.getBProperty(), 50, 1) && CloseEnough(npSingle.getAProperty(), 128, 1),
                   "HTMLDOM-105: NonPremultiplied with a translucent source drawn onto a transparent "
-                  "target reproduces the source's colour AND alpha unchanged (this backend's actual, "
+                  "target reproduces the source's colour AND alpha unchanged (this renderer's actual, "
                   "CSS-native source-over result) -- XNA's own literal alphaSrcBlend=SourceAlpha "
                   "factor would instead SQUARE the source alpha here (~64, not 128), a documented "
-                  "architectural gap this backend does not reproduce");
+                  "architectural gap this renderer does not reproduce");
 
             // Additive, two sequential translucent draws (the ticket's own reported scenario: two
             // 50%-alpha 'lighter' draws) -- reproduces the exact numbers HTMLDOM-105's own audit
-            // measured: this backend's real CSS-native result is (128,0,128,255); XNA's own squared-
+            // measured: this renderer's real CSS-native result is (128,0,128,255); XNA's own squared-
             // alpha formula, applied recursively across both draws, would give (128,0,128,~128).
             const Color addTwoDraw = [&] {
                 Texture2D blue = Make1x1(dev, 0, 0, 255, 128);
@@ -1011,7 +1011,7 @@ protected:
                   "HTMLDOM-105: Additive with two sequential translucent draws sums colour exactly "
                   "(128,0,128) and clamps alpha via CSS-native Porter-Duff 'plus' to 255 -- XNA's own "
                   "squared alphaSrcBlend=SourceAlpha factor, applied recursively across both draws, "
-                  "would instead give alpha~128, a documented architectural gap this backend does "
+                  "would instead give alpha~128, a documented architectural gap this renderer does "
                   "not reproduce");
 
             // Zero-alpha draw: both formulas trivially agree here (0*0=0), so this is a plain
@@ -1152,7 +1152,7 @@ protected:
                   "browser's own source-over algebra exactly -- not the double-divided value");
 
             // Leg 4 (a second preset, confirming the fix is scoped correctly): NonPremultiplied never
-            // requested mode 1 in the first place (see HtmlDomTextureBackend.cpp's own mode table), so
+            // requested mode 1 in the first place (see HtmlDomTextureRenderer.cpp's own mode table), so
             // sampling rtA_ under NonPremultiplied onto a transparent rtB_ was never affected by this
             // bug and must still reproduce the identical (255,100,50,128) result as leg 2 -- confirming
             // the isRenderTarget-aware downgrade in cnaDomGetVariant is additive, not a behaviour
@@ -1185,7 +1185,7 @@ protected:
             // -- confirmed here rather than left untested. Shift of -1 (not a multiple of the 2px
             // Wrap period or the 4px Mirror period) so the result is genuinely different from --
             // not accidentally identical to -- the existing (0,0,4,4) checks above, and hand-derived
-            // from the real tiling formula rather than compared against this backend's own output.
+            // from the real tiling formula rather than compared against this renderer's own output.
             {
                 SamplerState wrapSampler;
                 wrapSampler.setAddressUProperty(TextureAddressMode::Wrap);
@@ -1289,7 +1289,7 @@ protected:
             // pick up real bilinear bleed from the atlas's adjacent (undrawn) blue region, and that
             // is the CORRECT, hardware-matching result, not a bug: real D3D/XNA hardware sampling
             // an unpadded atlas sub-rectangle under LinearWrap/LinearClamp exhibits the identical
-            // texel bleed (why real games pad their own atlases) -- this backend faithfully
+            // texel bleed (why real games pad their own atlases) -- this renderer faithfully
             // reproducing it is what "correct" means here. Hand-derived exactly, not just measured
             // once and pinned: local x=37 maps to source-space x=37/19.5=1.897, which is
             // 0.397 texels past the last drawn (red) texel's own centre (1.5) toward the

@@ -2,7 +2,7 @@
 // plan_d3d10.md: verifies GraphicsDevice::SupportsCapability() correctly reports D3D10's
 // capability set (plan_d3d10.md design decision 5). ThreeD/DepthStencilBuffer/WireFrame/
 // AnisotropicFiltering/MultipleRenderTargets all report true (real GPU via DXVK, real
-// OMSetRenderTargets(count>1,...) support -- a genuine difference from every DX1..DX8 backend).
+// OMSetRenderTargets(count>1,...) support -- a genuine difference from every DX1..DX8 renderer).
 // OcclusionQuery/CustomEffects report false -- out of this v1's scope (plan_d3d10.md design
 // decision 3), not a hardware limitation.
 //
@@ -42,7 +42,7 @@ protected:
         check(dev.SupportsCapability(GraphicsCapability::WireFrame), "WireFrame supported");
         check(dev.SupportsCapability(GraphicsCapability::AnisotropicFiltering), "AnisotropicFiltering supported (real GPU via DXVK)");
         check(dev.SupportsCapability(GraphicsCapability::MultipleRenderTargets),
-              "MultipleRenderTargets supported (real, unlike every DX1..DX8 backend)");
+              "MultipleRenderTargets supported (real, unlike every DX1..DX8 renderer)");
         check(!dev.SupportsCapability(GraphicsCapability::OcclusionQuery), "OcclusionQuery not supported (out of this v1's scope)");
         check(!dev.SupportsCapability(GraphicsCapability::CustomEffects), "CustomEffects not supported (out of this v1's scope)");
 

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 
-#include "CNA/Internal/Backends/Software/SoftwareGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Software/SoftwareRenderer.hpp"
 
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 
@@ -9,50 +9,50 @@
 #include <stdexcept>
 #include <utility>
 
-namespace CNA::Internal::Backends::Software
+namespace CNA::Internal::Renderers::Software
 {
     using Vector3 = Microsoft::Xna::Framework::Vector3;
 
     // Phase S6 (SOFTWARE-51): SpriteBatch owns the public quad geometry and transform path; its
-    // four prepared corners then enter SoftwareGraphicsBackend::RasterizeSpriteQuad(), where they
-    // reuse the same shared CPU triangle fragment rasterizer as the complete Software 3D backend.
+    // four prepared corners then enter SoftwareRenderer::RasterizeSpriteQuad(), where they
+    // reuse the same shared CPU triangle fragment rasterizer as the complete Software 3D renderer.
 
-    SoftwareSpriteBatchBackend::SoftwareSpriteBatchBackend(SoftwareGraphicsBackend& owner) : owner_(owner) {}
+    SoftwareSpriteBatchRenderer::SoftwareSpriteBatchRenderer(SoftwareRenderer& owner) : owner_(owner) {}
 
-    void SoftwareSpriteBatchBackend::Begin()
+    void SoftwareSpriteBatchRenderer::Begin()
     {
         if (begun_)
-            throw std::runtime_error("SoftwareSpriteBatchBackend::Begin: Begin() called without a matching End()");
+            throw std::runtime_error("SoftwareSpriteBatchRenderer::Begin: Begin() called without a matching End()");
         begun_ = true;
     }
 
-    void SoftwareSpriteBatchBackend::End()
+    void SoftwareSpriteBatchRenderer::End()
     {
         if (!begun_)
-            throw std::runtime_error("SoftwareSpriteBatchBackend::End: End() called without a matching Begin()");
+            throw std::runtime_error("SoftwareSpriteBatchRenderer::End: End() called without a matching Begin()");
         begun_ = false;
     }
 
-    void SoftwareSpriteBatchBackend::Draw(const ITextureBackend& texture, float x, float y)
+    void SoftwareSpriteBatchRenderer::Draw(const ITextureRenderer& texture, float x, float y)
     {
         Draw(texture, Rectangle(static_cast<int>(x), static_cast<int>(y), texture.GetWidth(), texture.GetHeight()),
              Rectangle(0, 0, texture.GetWidth(), texture.GetHeight()), Color(255, 255, 255, 255),
              0.0f, Vector2(0.0f, 0.0f), SpriteEffects::None, 0.0f);
     }
 
-    void SoftwareSpriteBatchBackend::Draw(const ITextureBackend& texture, const Rectangle& destinationRectangle,
+    void SoftwareSpriteBatchRenderer::Draw(const ITextureRenderer& texture, const Rectangle& destinationRectangle,
                                           const Rectangle& sourceRectangle, const Color& color)
     {
         Draw(texture, destinationRectangle, sourceRectangle, color, 0.0f, Vector2(0.0f, 0.0f),
              SpriteEffects::None, 0.0f);
     }
 
-    void SoftwareSpriteBatchBackend::Draw(const ITextureBackend& texture, const Rectangle& destinationRectangle,
+    void SoftwareSpriteBatchRenderer::Draw(const ITextureRenderer& texture, const Rectangle& destinationRectangle,
                                           const Rectangle& sourceRectangle, const Color& color, float rotation,
                                           const Vector2& origin, SpriteEffects effects, float layerDepth)
     {
         if (!begun_)
-            throw std::runtime_error("SoftwareSpriteBatchBackend::Draw: Draw() called before Begin()");
+            throw std::runtime_error("SoftwareSpriteBatchRenderer::Draw: Draw() called before Begin()");
 
         const float texW = static_cast<float>(std::max(1, texture.GetWidth()));
         const float texH = static_cast<float>(std::max(1, texture.GetHeight()));

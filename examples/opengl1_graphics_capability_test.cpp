@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MS-PL
 // plan_opengl1.md phase 11: locks in GraphicsDevice::SupportsCapability()'s truth table for the
-// OPENGL1 backend against concrete, independently-checkable evidence -- not just "it returns
+// OPENGL1 renderer against concrete, independently-checkable evidence -- not just "it returns
 // true/false", but that the *reason* it returns that value is real: AnisotropicFiltering is
-// cross-checked against OpenGL1GraphicsBackend's own runtime extension detection (not a static
+// cross-checked against OpenGL1Renderer's own runtime extension detection (not a static
 // guess), and the "false" capabilities are cross-checked against the shared-default behavior
 // (CreateOcclusionQuery() returning nullptr) that backs each "false" claim, the same way
 // sdlrenderer_graphics_capability_test.cpp/dx3_graphics_capability_test.cpp/
-// canvas_graphics_capability_test.cpp do for their own (much narrower) 2D-only backends.
+// canvas_graphics_capability_test.cpp do for their own (much narrower) 2D-only renderers.
 //
 // plan_opengl1.md item 23 (EasyGL parity, found 2026-07-20): OcclusionQuery is no longer
 // unconditionally false -- real ARB_occlusion_query/core-1.5 support is now cross-checked the
@@ -78,7 +78,7 @@ protected:
 
         auto& dev = getGraphicsDeviceProperty();
 
-        // OPENGL1 is a real desktop 3D backend, not a 2D-only one -- these must be true.
+        // OPENGL1 is a real desktop 3D renderer, not a 2D-only one -- these must be true.
         check(dev.SupportsCapability(GraphicsCapability::ThreeD), "ThreeD supported");
         check(dev.SupportsCapability(GraphicsCapability::DepthStencilBuffer), "DepthStencilBuffer supported");
         check(dev.SupportsCapability(GraphicsCapability::WireFrame), "WireFrame supported (glPolygonMode)");
@@ -90,7 +90,7 @@ protected:
         check(dev.SupportsCapability(GraphicsCapability::AnisotropicFiltering) == realAniso,
               "AnisotropicFiltering matches real GL_EXT_texture_filter_anisotropic presence");
 
-        // Not implemented by this backend at all -- must not over-report.
+        // Not implemented by this renderer at all -- must not over-report.
         check(!dev.SupportsCapability(GraphicsCapability::MultiSampleAntiAliasing), "MultiSampleAntiAliasing not supported");
         check(!dev.SupportsCapability(GraphicsCapability::MultipleRenderTargets), "MultipleRenderTargets not supported");
         check(!dev.SupportsCapability(GraphicsCapability::CustomEffects), "CustomEffects not supported");

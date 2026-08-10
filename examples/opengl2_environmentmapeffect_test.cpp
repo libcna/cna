@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // plan_opengl2.md: pixel-exact EnvironmentMapEffect proof for the native OpenGL 2.1 graphics
-// backend -- the one remaining piece needed for cube-map feature parity, now that both
+// renderer -- the one remaining piece needed for cube-map feature parity, now that both
 // TextureCube and RenderTargetCube exist (see plan_opengl2.md's session 6 status entries).
 //
 // Checks A/B use World=View=Projection=Identity (this project's own established convention --
@@ -26,11 +26,11 @@
 // Check C -- reuses examples/easygl_environmentmapeffect_golden_test.cpp's own independently
 //   FNA-derived "combined scene" (real non-identity World/View/Projection, EmissiveColor,
 //   EnvironmentMapAmount, EnvironmentMapSpecular, Fresnel all combined) and its own derived
-//   expected pixel (151,101,76) -- a genuine cross-backend consistency check against a value
+//   expected pixel (151,101,76) -- a genuine cross-renderer consistency check against a value
 //   already validated correct against FNA's own math (see that file's header comment for the
 //   full derivation).
 // Check D -- Texture==null and EnvironmentMap==null (never assigned): must not crash/throw, and
-//   the backend's default-white sampler fallback must actually take effect (reads back pure
+//   the renderer's default-white sampler fallback must actually take effect (reads back pure
 //   white, not black/garbage) -- proves ensureDefaultEnvMapTextures()'s fallback binding is real.
 // Check E -- 30 frames of the whole scene render with no exception.
 //
@@ -57,7 +57,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp"
 
-#include "CNA/Internal/Backends/OpenGL2/OpenGL2GraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/OpenGL2/OpenGL2Renderer.hpp"
 
 #include "common/PixelTestGame.hpp"
 
@@ -68,7 +68,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::OpenGL2;
+using namespace CNA::Internal::Renderers::OpenGL2;
 
 namespace
 {
@@ -244,7 +244,7 @@ protected:
                   Matches(got, Color(49, 154, 12, 255), 15));
         }
 
-        // Check C: cross-backend consistency against the EasyGL golden scene's own
+        // Check C: cross-renderer consistency against the EasyGL golden scene's own
         // independently FNA-derived expected value.
         dev.Clear(Color::Black);
         DrawGoldenScene(dev);
@@ -256,7 +256,7 @@ protected:
         }
 
         // Check D: Texture==null, EnvironmentMap==null -- must not crash and must fall back to
-        // the backend's default-white samplers (not black/garbage).
+        // the renderer's default-white samplers (not black/garbage).
         dev.Clear(Color::Black);
         DrawHeadOn(dev, /*fresnelEnabled=*/false, /*envMapAmount=*/1.0f, Vector3::Zero,
                   nullptr, nullptr);

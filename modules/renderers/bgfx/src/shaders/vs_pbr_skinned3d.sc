@@ -4,7 +4,7 @@ $output v_texcoord0, v_normal, v_tangent, v_worldPos, v_fogFactor
 #include <bgfx_shader.sh>
 
 // PBR + skinning combo (SkinnedPbrEffect), Bgfx port: mirrors
-// EasyGLGraphicsBackend::EnsurePbrSkinnedProgram()'s vertex shader exactly -- vs_skinned3d.sc's
+// EasyGLRenderer::EnsurePbrSkinnedProgram()'s vertex shader exactly -- vs_skinned3d.sc's
 // own bone-palette skin transform (applied to Position, Normal, and Tangent) feeding
 // vs_pbr3d.sc/fs_pbr3d.sc's own BRDF fragment stage unchanged. Both this shader and
 // vs_skinned3d.sc apply a World-space transform after the bone skin (post REMED-GFX-006); PBR's

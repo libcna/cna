@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MS-PL
-// Minimal integration test for the Win32 GDI backend. It verifies that CNA gets an HWND from SDL,
+// Minimal integration test for the Win32 GDI renderer. It verifies that CNA gets an HWND from SDL,
 // uses GDI Present() successfully, keeps its 2D framebuffer readable, and rejects 3D access.
 
-#include "CNA/GraphicsBackendType.hpp"
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/GraphicsRendererType.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "System/NotSupportedException.hpp"
 
 #include <SDL3/SDL.h>
@@ -14,7 +14,7 @@
 #include <memory>
 #include <stdexcept>
 
-using namespace CNA::Internal::Backends;
+using namespace CNA::Internal::Renderers;
 
 int main()
 {
@@ -35,35 +35,35 @@ int main()
     int result = 0;
     try
     {
-        GraphicsBackendCreateArgs args;
+        GraphicsRendererCreateArgs args;
         args.window = window;
         args.virtualWidth = 32;
         args.virtualHeight = 32;
         args.presentationMode = CnaPresentationMode::Stretch;
-        std::unique_ptr<IGraphicsBackend> backend = CreateGraphicsBackend(args);
+        std::unique_ptr<IGraphicsRenderer> renderer = CreateGraphicsRenderer(args);
 
-        if (CNA::getCurrentGraphicsBackendType() != CNA::GraphicsBackendType::Gdi ||
-            CNA::getCurrentGraphicsBackendName() != "GDI")
+        if (CNA::getCurrentGraphicsRendererType() != CNA::GraphicsRendererType::Gdi ||
+            CNA::getCurrentGraphicsRendererName() != "GDI")
         {
-            std::fprintf(stderr, "GDI backend identity is wrong.\n");
+            std::fprintf(stderr, "GDI renderer identity is wrong.\n");
             result = 1;
         }
 
-        backend->Clear(1.0f, 0.0f, 0.0f, 1.0f);
+        renderer->Clear(1.0f, 0.0f, 0.0f, 1.0f);
         std::array<std::uint8_t, 4> pixel{};
-        backend->ReadBackbuffer(0, 0, 1, 1, pixel.data());
+        renderer->ReadBackbuffer(0, 0, 1, 1, pixel.data());
         if (pixel != std::array<std::uint8_t, 4>{ 255, 0, 0, 255 })
         {
             std::fprintf(stderr, "GDI CPU backbuffer clear/readback mismatch.\n");
             result = 1;
         }
 
-        backend->Present();
+        renderer->Present();
 
         bool vertexBufferRejected = false;
-        try { (void)backend->CreateVertexBuffer(3); }
+        try { (void)renderer->CreateVertexBuffer(3); }
         catch (const System::NotSupportedException&) { vertexBufferRejected = true; }
-        if (backend->SupportsCapability(CNA::GraphicsCapability::ThreeD) || !vertexBufferRejected)
+        if (renderer->SupportsCapability(CNA::GraphicsCapability::ThreeD) || !vertexBufferRejected)
         {
             std::fprintf(stderr, "GDI must expose a 2D-only contract.\n");
             result = 1;

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // SKIA-12: transactional construction, window registry ownership, and repeated cleanup.
 
-#include "CNA/Internal/Backends/Skia/SkiaGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaRenderer.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -11,10 +11,10 @@
 #include <exception>
 #include <string>
 
-using CNA::Internal::Backends::CnaPresentationMode;
-using CNA::Internal::Backends::IGraphicsBackend;
-using CNA::Internal::Backends::Skia::SkiaGraphicsBackend;
-using CNA::Internal::Backends::Skia::SkiaInitializationFailurePointEXT;
+using CNA::Internal::Renderers::CnaPresentationMode;
+using CNA::Internal::Renderers::IGraphicsRenderer;
+using CNA::Internal::Renderers::Skia::SkiaRenderer;
+using CNA::Internal::Renderers::Skia::SkiaInitializationFailurePointEXT;
 
 namespace
 {
@@ -27,7 +27,7 @@ namespace
     constexpr std::array<FailureCase, 3> kFailureCases{{
         {SkiaInitializationFailurePointEXT::AfterRenderer, "renderer creation"},
         {SkiaInitializationFailurePointEXT::AfterBackbuffer, "backbuffer creation"},
-        {SkiaInitializationFailurePointEXT::AfterRegistration, "backend registration"},
+        {SkiaInitializationFailurePointEXT::AfterRegistration, "renderer registration"},
     }};
 
     int failures = 0;
@@ -43,16 +43,16 @@ namespace
     {
         bool usable = false;
         {
-            SkiaGraphicsBackend backend(window, 16, 12, CnaPresentationMode::NativeBackBuffer, 0);
+            SkiaRenderer renderer(window, 16, 12, CnaPresentationMode::NativeBackBuffer, 0);
             std::array<std::uint8_t, 4> pixel{};
-            backend.Clear(1.0f, 0.0f, 0.0f, 1.0f);
-            backend.ReadBackbuffer(0, 0, 1, 1, pixel.data());
-            backend.Present();
-            usable = IGraphicsBackend::GetForWindow(window) == &backend
-                && SDL_GetRenderer(window) == backend.GetRendererInternal()
+            renderer.Clear(1.0f, 0.0f, 0.0f, 1.0f);
+            renderer.ReadBackbuffer(0, 0, 1, 1, pixel.data());
+            renderer.Present();
+            usable = IGraphicsRenderer::GetForWindow(window) == &renderer
+                && SDL_GetRenderer(window) == renderer.GetRendererInternal()
                 && pixel == std::array<std::uint8_t, 4>{255, 0, 0, 255};
         }
-        return usable && IGraphicsBackend::GetForWindow(window) == nullptr
+        return usable && IGraphicsRenderer::GetForWindow(window) == nullptr
             && SDL_GetRenderer(window) == nullptr && SDL_GetWindowID(window) != 0;
     }
 }
@@ -77,7 +77,7 @@ int main()
     std::string nullDiagnostic;
     try
     {
-        SkiaGraphicsBackend invalid(nullptr, 16, 12, CnaPresentationMode::NativeBackBuffer, 0);
+        SkiaRenderer invalid(nullptr, 16, 12, CnaPresentationMode::NativeBackBuffer, 0);
     }
     catch (const std::exception& exception)
     {
@@ -93,7 +93,7 @@ int main()
         std::string diagnostic;
         try
         {
-            SkiaGraphicsBackend backend(window, 16, 12, CnaPresentationMode::NativeBackBuffer, 0,
+            SkiaRenderer renderer(window, 16, 12, CnaPresentationMode::NativeBackBuffer, 0,
                                         {}, failure.point);
         }
         catch (const std::exception& exception)
@@ -107,11 +107,11 @@ int main()
             std::string("Skia injected initialization failure after ") + failure.stage;
         Check(threw && diagnostic.find(expectedDiagnostic) != std::string::npos,
               prefix + " retains its exact stage diagnostic");
-        Check(IGraphicsBackend::GetForWindow(window) == nullptr && SDL_GetRenderer(window) == nullptr
+        Check(IGraphicsRenderer::GetForWindow(window) == nullptr && SDL_GetRenderer(window) == nullptr
                   && SDL_GetWindowID(window) != 0,
               prefix + " releases renderer/texture/registry and preserves the caller window");
         Check(ConstructUseAndDestroy(window),
-              prefix + " permits an immediately usable succeeding backend");
+              prefix + " permits an immediately usable succeeding renderer");
     }
 
     bool repeatedLifecycle = true;

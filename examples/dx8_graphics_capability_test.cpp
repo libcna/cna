@@ -4,7 +4,7 @@
 // both report true. What remains false is genuinely unavailable at this DirectX era (MSAA/MRT/
 // occlusion query/custom effects). WireFrame reports true (D3DFILL_WIREFRAME genuinely renders
 // edge-only output). Unlike DX2-DX7's own software rasterizer, AnisotropicFiltering also reports
-// true here -- DX8 runs on a real GPU via DXVK (see Dx8GraphicsBackend.hpp's own
+// true here -- DX8 runs on a real GPU via DXVK (see Dx8Renderer.hpp's own
 // SupportsCapability() comment for the full rationale).
 //
 // Exit code 0 = PASS, 1 = FAIL.
@@ -14,7 +14,7 @@
 #include "CNA/GraphicsCapability.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 
-#include "CNA/Internal/Backends/Dx8/Dx8GraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Dx8/Dx8Renderer.hpp"
 
 #include <cstdio>
 #include <memory>
@@ -22,8 +22,8 @@
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
 using CNA::GraphicsCapability;
-using CNA::Internal::Backends::IRenderTargetBackend;
-using CNA::Internal::Backends::RenderTargetBindingDescriptor;
+using CNA::Internal::Renderers::IRenderTargetRenderer;
+using CNA::Internal::Renderers::RenderTargetBindingDescriptor;
 
 class Dx8GraphicsCapabilityTest : public Game
 {
@@ -52,7 +52,7 @@ protected:
         done_ = true;
 
         auto& dev = getGraphicsDeviceProperty();
-        auto& backend = static_cast<CNA::Internal::Backends::Dx8::Dx8GraphicsBackend&>(dev.GetBackend());
+        auto& renderer = static_cast<CNA::Internal::Renderers::Dx8::Dx8Renderer&>(dev.GetRenderer());
 
         // Phase O6 completes the real 3D pipeline -- both report true now.
         check(dev.SupportsCapability(GraphicsCapability::ThreeD), "ThreeD supported");
@@ -76,7 +76,7 @@ protected:
         const RenderTargetBindingDescriptor twoTargets[2] = {
             RenderTargetBindingDescriptor::ForRenderTarget2D(nullptr, 0, 4, 4, 0),
             RenderTargetBindingDescriptor::ForRenderTarget2D(nullptr, 0, 4, 4, 0)};
-        check(Throws([&] { backend.SetRenderTargets(twoTargets, 2); }),
+        check(Throws([&] { renderer.SetRenderTargets(twoTargets, 2); }),
               "SetRenderTargets(count=2) still throws (no MRT support)");
 
         std::printf("=== %d/%d PASS ===\n", pass_, pass_ + fail_);

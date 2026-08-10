@@ -22,9 +22,9 @@
 // match here either. This closes the Tasks 442-444 invalid-call-sequence trio.
 //
 // Task 449: destroying (the C++ destructor -- CNA's own OcclusionQuery::Dispose() doesn't touch
-// backend_ at all, matching FNA's own inherited GraphicsResource.Dispose(bool) shape closely, so
-// the real backend teardown happens in ~OcclusionQuery(), not Dispose()) a query while it's still
-// "active" (Begin() called, no matching End()) must be safe -- no crash, no corrupted GL/backend
+// renderer_ at all, matching FNA's own inherited GraphicsResource.Dispose(bool) shape closely, so
+// the real renderer teardown happens in ~OcclusionQuery(), not Dispose()) a query while it's still
+// "active" (Begin() called, no matching End()) must be safe -- no crash, no corrupted GL/renderer
 // state affecting subsequently-created queries. EasyGL's own GL query object is owned by an
 // easygl::Query member with RAII semantics (its own destructor calls glDeleteQueries
 // unconditionally); per the GL spec, deleting an active query object is well-defined (deletion is
@@ -173,7 +173,7 @@ protected:
             check(device.GetTrackedResourceCount() == baseline,
                   "GetTrackedResourceCount() returns to baseline after 50 active-disposed queries");
 
-            // Confirm the device/backend is still healthy afterward: a fresh, normal query cycle
+            // Confirm the device/renderer is still healthy afterward: a fresh, normal query cycle
             // still works correctly, proving no corrupted state lingered from the active-disposes.
             OcclusionQuery q5(device);
             q5.Begin();

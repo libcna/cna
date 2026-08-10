@@ -36,7 +36,7 @@ layout(set = 3, binding = 1) uniform LitLightParams {
 } lp;
 
 // A disabled/never-configured DirectionalLight can forward Direction=(0,0,0) (matches FNA's own
-// DirectionalLight.cs zeroing, and this codebase's WebGPU backend's own WEBGPU-22 finding) --
+// DirectionalLight.cs zeroing, and this codebase's WebGPU renderer's own WEBGPU-22 finding) --
 // normalize() on a true zero vector is undefined and can poison the whole light sum with NaN.
 vec3 safeNormalize(vec3 v) {
     float len2 = dot(v, v);

@@ -35,6 +35,7 @@ MAPS = os.path.join(os.path.dirname(HERE), "maps")
 # --------------------------------------------------------------------------- scopes
 
 FULL_PATHSPECS = [
+    "modules/CMakeLists.txt",
     "modules/core", "modules/math", "modules/graphics", "modules/graphics-ext",
     "modules/runtime", "modules/media", "modules/content", "modules/storage",
     "modules/renderers", "cmake", "scripts", "tests", "tools", "examples", "docs",
@@ -196,8 +197,9 @@ RULES_B1 = [
     (r"modules/renderers/dx([1-8])\b", r"modules/renderers/directx\1"),
     (r"\bD3D(9|10|11|12)_(?=[A-Z][a-z])", r"DirectX\1_"),
     (r"\bDx([1-8])(?=[A-Z_])", r"DirectX\1"),
-    (r"\bDx([1-8])\b", r"DirectX\1"),
-    (r"\bDX([1-8])\b", r"DIRECTX\1"),
+    (r"\bDx([1-8])\b(?!-)", r"DirectX\1"),
+    # (?!-) keeps plan-ledger task IDs (DX2-46, DX7-0, ...) and SDK-era references intact
+    (r"\bDX([1-8])\b(?!-)", r"DIRECTX\1"),
     (r"examples/d3d(9|10|11|12)_", r"examples/directx\1_"),
     (r"\bd3d(9|10|11|12)_((?:[a-z0-9]+_)*(?:test|diag|smoke))", r"directx\1_\2"),
     (r"run-wine-dx([1-8])\.sh", r"run-wine-directx\1.sh"),
@@ -243,6 +245,8 @@ RULES_C = [
     (r"CNA::NoXna", "CNA::CnaExt"),
     (r"probe_noxna", "probe_cnaext"),
     (r"noxna_settings_example", "cnaext_settings_example"),
+    (r"_noxna_", "_cnaext_"),
+    (r"NOXNA_", "CNAEXT_"),
     (r"cmake-build-noxna", "cmake-build-cnaext"),
     (r"NoXna(?=[A-Z])", "CnaExt"),
     (r"\bNoXna\b", "CnaExt"),

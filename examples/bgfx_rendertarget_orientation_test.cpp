@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // REMED-GFX-067: a RenderTarget2D sampled back through SpriteBatch must read UPRIGHT (XNA top-left
-// origin), NOT vertically mirrored, on the Bgfx backend — for EVERY render-target size.
+// origin), NOT vertically mirrored, on the Bgfx renderer — for EVERY render-target size.
 //
 // Root cause: on bgfx renderers whose caps->originBottomLeft is true (OpenGL/GLES/WebGL) a render
 // target's color attachment stores its texel memory BOTTOM-UP, so sampling it with the ordinary
@@ -8,7 +8,7 @@
 // Texture2D is top-down and unaffected; the backbuffer readback already compensates its own
 // bottom-up storage via the screenshot's _yflip. bgfx Vulkan/D3D/Metal (originBottomLeft == false)
 // store the attachment top-down and never mirrored. The fix flips the sampled V of a render-target
-// source in BgfxGraphicsBackend::SubmitSprite when caps->originBottomLeft is set.
+// source in BgfxRenderer::SubmitSprite when caps->originBottomLeft is set.
 //
 // The finding was originally recorded as "some RT sizes read Y-mirrored, others upright" — a FALSE
 // size dependency. It is uniform across all sizes; the earlier flaky, size-correlated observations

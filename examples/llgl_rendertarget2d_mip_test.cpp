@@ -4,7 +4,7 @@
 //
 // Adapted from examples/vulkan_rendertarget2d_mip_test.cpp's own asymmetric-split technique, but
 // reads mip content directly via RenderTarget2D::GetData(level, ...) instead of forcing GPU
-// automatic LOD selection through an extreme on-screen minification draw. This backend's own
+// automatic LOD selection through an extreme on-screen minification draw. This renderer's own
 // GetData(level) is real now (this same follow-up), so a direct per-level readback is the more
 // robust way to prove the same property without depending on derivative-based LOD selection under
 // a software rasterizer.

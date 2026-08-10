@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Task 379: AlphaTestEffect null/no-texture behavior (Bgfx backend).
+// Task 379: AlphaTestEffect null/no-texture behavior (Bgfx renderer).
 //
 // See examples/easygl_alphatest_null_texture_test.cpp for the full derivation and for the real
 // bug this test found and fixed: Bgfx's texture-binding code previously only called
@@ -10,7 +10,7 @@
 // deliberate white-texture fallback.
 //
 // Per Task 364's finding (tracked as Task 884, not fixed there or here): Bgfx's default
-// RasterizerState cull state (`BGFX_STATE_CULL_CCW`) is the only one of the 3 backends that
+// RasterizerState cull state (`BGFX_STATE_CULL_CCW`) is the only one of the 3 renderers that
 // actually matches FNA's real `CullCounterClockwiseFace` default, so it silently culls the
 // standard NDC quad winding used throughout this pixel-test family unless `RasterizerState::
 // CullNone` is set explicitly — worked around here identically to prior Bgfx tests.

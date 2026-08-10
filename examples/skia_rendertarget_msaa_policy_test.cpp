@@ -42,7 +42,7 @@ protected:
 
         auto& device = getGraphicsDeviceProperty();
         Check(!device.SupportsCapability(CNA::GraphicsCapability::MultiSampleAntiAliasing),
-              "raster backend does not advertise MSAA");
+              "raster renderer does not advertise MSAA");
 
         constexpr std::array<int, 5> backbufferRequests{{0, 1, 2, 4, 4096}};
         for (const int requested : backbufferRequests)

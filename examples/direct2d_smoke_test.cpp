@@ -12,7 +12,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 
-#include "CNA/Internal/Backends/Direct2D/Direct2DGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Direct2D/Direct2DRenderer.hpp"
 
 #include <cstdio>
 #include <memory>
@@ -64,8 +64,8 @@ protected:
         if (done_) return;
         done_ = true;
         auto& device = getGraphicsDeviceProperty();
-        auto& backend = static_cast<CNA::Internal::Backends::Direct2D::Direct2DGraphicsBackend&>(device.GetBackend());
-        bool passed = backend.GetWindowInternal() != nullptr && backend.GetRendererInternal() == nullptr;
+        auto& renderer = static_cast<CNA::Internal::Renderers::Direct2D::Direct2DRenderer&>(device.GetRenderer());
+        bool passed = renderer.GetWindowInternal() != nullptr && renderer.GetRendererInternal() == nullptr;
 
         device.Clear(Color(12, 34, 56, 255));
         Color clearPixel(0, 0, 0, 0);

@@ -1,5 +1,5 @@
 // Shader Model 5.0 (vs_5_0). Ported line-by-line from
-// src/CNA/Internal/Backends/Vulkan/shaders/env_map3d.vert.glsl.
+// src/CNA/Internal/Renderers/Vulkan/shaders/env_map3d.vert.glsl.
 
 cbuffer PerDraw : register(b0)
 {

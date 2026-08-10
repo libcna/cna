@@ -3,7 +3,7 @@
 // lit_colored_textured3d.vert.glsl minus the texture coordinate attribute/output -- see that file
 // for the uniform block's shape and why it is shared byte for byte across every 3D shader here.
 //
-// Attribute locations still follow the backend's usage-to-location mapping (position 0, colour 1,
+// Attribute locations still follow the renderer's usage-to-location mapping (position 0, colour 1,
 // texture coordinate 2, normal 3): this variant simply never declares location 2, the same way
 // colored3d.vert.glsl (the unlit sibling) does.
 

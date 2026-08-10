@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // Task 666: audit all SpriteBatch::Draw overloads specifically through SDL_Renderer (not
 // inherited from EasyGL test assumptions -- this is a fresh, from-scratch exercise of every
-// overload against this backend's own SdlSpriteBatchBackend::Draw implementations).
+// overload against this renderer's own SdlSpriteBatchRenderer::Draw implementations).
 //
 // SpriteBatch::Draw has 9 public overloads (3 NOXNA taking a raw Texture2D + explicit Rectangle/
 // float args, 6 real XNA overloads taking Vector2/optional<Rectangle>). Each is exercised exactly
@@ -16,7 +16,7 @@
 // anything".
 //
 // Requires PresentationMode::NativeBackBuffer (see sdlrenderer_readback_test.cpp's header comment
-// for why): SDL_RenderReadPixels operates in physical coordinates, while this backend's default
+// for why): SDL_RenderReadPixels operates in physical coordinates, while this renderer's default
 // presentation mode (FixedHeightDynamicWidth) does not map logical pixels 1:1 to physical ones.
 //
 // Exit code 0 = all PASS, 1 = at least one FAIL.

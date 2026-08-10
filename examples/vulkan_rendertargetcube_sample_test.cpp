@@ -15,15 +15,15 @@
 //   GetBackBufferData triggers Present() -> RecordCommandBuffer records both cycles in public
 //   order (REMED-GFX-140/143 replaced its old two-phase "every target pass, then one trailing
 //   swapchain pass" shape with one ordered stream of bind cycles); centre
-//   pixel must be blue if VulkanRenderTargetCubeBackend's actual rendered cubeView_ (not stale
-//   or garbage data) was sampled — confirmed via VulkanRenderTargetCubeBackend's
+//   pixel must be blue if VulkanRenderTargetCubeRenderer's actual rendered cubeView_ (not stale
+//   or garbage data) was sampled — confirmed via VulkanRenderTargetCubeRenderer's
 //   IVulkanCubeSamplable::GetVkCubeImageView() override, reached through a safe dynamic_cast in
-//   VulkanGraphicsBackend (unlike Bgfx's unsafe static_cast, see Tasks 873/874).
+//   VulkanRenderer (unlike Bgfx's unsafe static_cast, see Tasks 873/874).
 //
 // NOTE: Phase 1 must use a real draw call (SpriteBatch), not GraphicsDevice::Clear() alone.
 // An earlier version of this test used Clear()-only per face and failed with a Vulkan
 // validation error (every face's image layer stuck at VK_IMAGE_LAYOUT_UNDEFINED instead of
-// SHADER_READ_ONLY_OPTIMAL) — VulkanGraphicsBackend::Clear() only records a single global clear
+// SHADER_READ_ONLY_OPTIMAL) — VulkanRenderer::Clear() only records a single global clear
 // colour (clearR_/G_/B_/A_) and does not register the currently-bound RT as "used"; only an
 // actual draw call adds the RT to RecordCommandBuffer's usedRTs list and gets its render pass
 // (and the finalLayout transition to SHADER_READ_ONLY_OPTIMAL) recorded at all. Confirmed this

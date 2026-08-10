@@ -1,5 +1,5 @@
 // plan_dx.md Phase DX3 (DX-12-state).
-#include "CNA/Internal/Backends/D3DCommon/D3DStateMapping.hpp"
+#include "CNA/Internal/Renderers/D3DCommon/D3DStateMapping.hpp"
 
 #include "Microsoft/Xna/Framework/Graphics/Blend.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendFunction.hpp"
@@ -10,7 +10,7 @@
 #include "Microsoft/Xna/Framework/Graphics/TextureAddressMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureFilter.hpp"
 
-namespace CNA::Internal::Backends::D3DCommon
+namespace CNA::Internal::Renderers::D3DCommon
 {
     using namespace Microsoft::Xna::Framework::Graphics;
 

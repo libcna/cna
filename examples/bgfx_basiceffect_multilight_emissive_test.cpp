@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: MS-PL
 // Task 885: BasicEffect pixel test — LightingEnabled=true with DirectionalLight1/DirectionalLight2
-// forwarded, and EmissiveColor added on the lit path (Bgfx backend).
+// forwarded, and EmissiveColor added on the lit path (Bgfx renderer).
 //
 // See examples/easygl_basiceffect_multilight_emissive_test.cpp for the full FNA-derived expected-
 // output derivation and for the previously-missing DirectionalLight1/DirectionalLight2/
 // EmissiveColor forwarding this task found and fixed in the shared `BasicEffect::
-// FillGpuDrawParams()` (common C++ code — one fix covers all 3 backends) plus each backend's own
+// FillGpuDrawParams()` (common C++ code — one fix covers all 3 renderers) plus each renderer's own
 // lit shader (EasyGL/Bgfx here; Vulkan's push-constant-budget expansion tracked separately as a
 // follow-up, since its 128-byte push constant is already fully used by the shared Ext3D layout).
 //
 // Per Task 364's finding (tracked as Task 896, not fixed there or here): Bgfx's default
-// RasterizerState cull state (`BGFX_STATE_CULL_CCW`) is the only one of the 3 backends that
+// RasterizerState cull state (`BGFX_STATE_CULL_CCW`) is the only one of the 3 renderers that
 // actually matches FNA's real `CullCounterClockwiseFace` default, so it silently culls the
 // standard NDC quad winding used throughout this pixel-test family unless `RasterizerState::
 // CullNone` is set explicitly — worked around here identically to Tasks 364-369's own Bgfx tests.

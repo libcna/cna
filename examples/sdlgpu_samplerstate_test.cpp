@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // plan_sdlgpu.md SDLGPU-21: real dynamic SamplerState proof for direct 3D draws on the SDL_GPU
-// graphics backend -- before this task, every 3D draw (BasicEffect/AlphaTestEffect/
+// graphics renderer -- before this task, every 3D draw (BasicEffect/AlphaTestEffect/
 // DualTextureEffect/EnvironmentMapEffect/SkinnedEffect) hardcoded Linear+Wrap-then-Clamp
 // regardless of what GraphicsDevice.SamplerStates[slot] was assigned; only SpriteBatch's own
 // per-draw sampler selection was wired up.
@@ -47,7 +47,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 
-#include "CNA/Internal/Backends/SdlGpu/SdlGpuGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/SdlGpu/SdlGpuRenderer.hpp"
 
 #include "common/PixelTestGame.hpp"
 
@@ -60,7 +60,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::SdlGpu;
+using namespace CNA::Internal::Renderers::SdlGpu;
 
 namespace
 {

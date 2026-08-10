@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# plan_dx.md DX-100/DX-102: run a Windows cross-compiled .exe (D3D12 backend) under Wine with
+# plan_dx.md DX-100/DX-102: run a Windows cross-compiled .exe (D3D12 renderer) under Wine with
 # vkd3d-proton, using a dedicated Wine prefix distinct from D3D11's own DXVK prefix
 # (run-wine-dxvk.sh / ~/.wine-cna-d3d11) -- D3D11 and D3D12 need different translation layers
 # (DXVK vs. vkd3d-proton) with different native-DLL overrides, so sharing one prefix would require
@@ -20,7 +20,7 @@
 # (WineD3D never implemented D3D12) -- if device creation had silently gone through some other
 # path, feature-level negotiation itself would have failed outright (D3D12CreateDevice has no
 # non-vkd3d-proton implementation to fall back to under Wine), so this gate mainly guards against a
-# stale/misconfigured prefix rather than a silent wrong-backend substitution the way DXVK's own gate
+# stale/misconfigured prefix rather than a silent wrong-renderer substitution the way DXVK's own gate
 # does. Set CNA_D3D12_SKIP_VKD3D_GATE=1 for a binary that legitimately never creates a device (none
 # exist yet, but mirrors DX-85's own escape hatch for consistency).
 set -uo pipefail

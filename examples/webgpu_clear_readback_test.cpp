@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MS-PL
-// WEBGPU-91/92: verify WebGPUGraphicsBackend::ReadBackbuffer()/GraphicsDevice::GetBackBufferData()
+// WEBGPU-91/92: verify WebGPURenderer::ReadBackbuffer()/GraphicsDevice::GetBackBufferData()
 // actually return the pixels that were just drawn, including within a single Draw() call with no
 // intervening real Present() -- WebGPU's swapchain-backed render target means a naive
 // implementation can only ever observe the *previous* frame's content (nothing is readable until
 // the frame has been submitted), so ReadBackbuffer() renders any pending Clear()/SpriteBatch work
-// on demand before mapping the readback buffer, matching the Vulkan/Bgfx backends' own
-// on-demand-submit readback semantics (see WebGPUGraphicsBackend::EnsureFrameRendered()).
+// on demand before mapping the readback buffer, matching the Vulkan/Bgfx renderers' own
+// on-demand-submit readback semantics (see WebGPURenderer::EnsureFrameRendered()).
 //
 // Check A -- Clear(Red) is visible via GetBackBufferData() in the same Draw() call.
 // Check B -- a second Clear(Blue) right after replaces it (no stale/cached frame served).
@@ -22,7 +22,7 @@
 //   match its own shader's straight/non-premultiplied output, so any alpha strictly between 0 and
 //   255 was silently ignored for colour. Fixed to match Vulkan's sprite2d.frag.glsl pairing
 //   (SRC_ALPHA/ONE_MINUS_SRC_ALPHA). The exact resulting value depends on whether the chosen
-//   swapchain format blends in linear or sRGB-encoded space (both are legitimate, backend/
+//   swapchain format blends in linear or sRGB-encoded space (both are legitimate, renderer/
 //   platform-dependent choices), so this asserts direction and magnitude, not an exact value.
 //
 // Checks H/I/J (WEBGPU-92's remaining scope) -- sampler address-mode (Wrap/Clamp/Mirror) pixel

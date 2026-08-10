@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 
-#include "CNA/Internal/Backends/Gdi/GdiPresentation.hpp"
+#include "CNA/Internal/Renderers/Gdi/GdiPresentation.hpp"
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -11,7 +11,7 @@
 #include <cmath>
 #include <limits>
 
-namespace CNA::Internal::Backends::Gdi
+namespace CNA::Internal::Renderers::Gdi
 {
     namespace
     {

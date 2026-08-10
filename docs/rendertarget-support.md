@@ -1,12 +1,12 @@
 # RenderTarget2D / RenderTargetCube Support Matrix
 
 > **Metal adaptation note (2026-08-09):** Metal's current conservative contract supersedes the
-> historical Metal cells that were added to this cross-backend audit. MSAA and MRT now report
+> historical Metal cells that were added to this cross-renderer audit. MSAA and MRT now report
 > unsupported and reject/clamp deterministically; backbuffer readback throws. See
-> `docs/metal-backend.md` for the evidence boundary.
+> `docs/metal-renderer.md` for the evidence boundary.
 
 Phase 39 (`plan_graphics.md` Tasks 331–340) audited and pixel-verified `RenderTarget2D` and
-`RenderTargetCube` conformance against FNA across all three graphics backends (EasyGL, Vulkan,
+`RenderTargetCube` conformance against FNA across all three graphics renderers (EasyGL, Vulkan,
 Bgfx). This document summarizes the findings and closes the phase.
 
 ---
@@ -36,11 +36,11 @@ downstream consequence of Task 863, not a new independent bug.
 before this phase — reconfirmed, no new work needed.
 
 **`RenderTargetCube`**: no existing test covered sampling a cube render target back out via
-`EnvironmentMapEffect` after unbinding. New tests found real bugs on 2 of 3 backends:
+`EnvironmentMapEffect` after unbinding. New tests found real bugs on 2 of 3 renderers:
 
-- **EasyGL: works.** `EnvironmentMapEffect` reads the cube texture via `TextureCube::GetBackend()`
+- **EasyGL: works.** `EnvironmentMapEffect` reads the cube texture via `TextureCube::GetRenderer()`
   (shared with `RenderTargetCube`) and calls `BindGL()` through virtual dispatch — both the plain
-  cube-texture and render-target-cube backends override it correctly.
+  cube-texture and render-target-cube renderers override it correctly.
 - **Vulkan: broken, two distinct bugs found** (see §7 for the Clear-only-RT gap, and §8 for the
   black-render bug specific to sampling a cube after rendering into its faces).
 - **Bgfx: broken by the same unsafe-cast pattern** found for `RenderTarget2D` (see §5).
@@ -54,7 +54,7 @@ behavior with a real pixel test: draws a near quad then a far quad into a `Rende
 genuinely gates the draws on **both EasyGL and Vulkan** — not just a property.
 
 Found (not fixed, tracked as **Task 877**) a real, scoped format-fidelity gap distinct from "does
-it work at all": no backend honors the *exact* requested `DepthStencilFormat` — EasyGL always
+it work at all": no renderer honors the *exact* requested `DepthStencilFormat` — EasyGL always
 allocates depth-only `DepthComponent24` (zero stencil bits, ever); Vulkan ignores `hasDepth`
 entirely (always allocates, using the device-global depth format); Bgfx always uses `D24S8`
 (closest to correct, but not format-exact).
@@ -68,27 +68,27 @@ EasyGL:
 
 - `RenderTarget2D`/`RenderTargetCube`'s `LevelCount` now correctly reflects `mipMap` (previously a
   `mipMap ? 1 : 1` no-op).
-- `EasyGLRenderTargetBackend`/`EasyGLRenderTargetCubeBackend` pre-allocate GPU storage for every
+- `EasyGLRenderTargetRenderer`/`EasyGLRenderTargetCubeRenderer` pre-allocate GPU storage for every
   mip level and regenerate the chain from level 0 on unbind.
-- Discovered `IRenderTargetBackend`/`IRenderTargetCubeBackend::UnbindAsRenderTarget()` were
+- Discovered `IRenderTargetRenderer`/`IRenderTargetCubeRenderer::UnbindAsRenderTarget()` were
   **completely dead code** — never called by anything in the project. Fixed by adding
-  `currentRt2D_`/`currentRtCube_` tracking to `EasyGLGraphicsBackend` so switching away from a
+  `currentRt2D_`/`currentRtCube_` tracking to `EasyGLRenderer` so switching away from a
   bound target actually invokes it.
 - Pixel-verified with a mip-completeness probe reusing the established
   `TextureFilter::Anisotropic`-renders-solid-black-on-incomplete-mip-chains signature (Task 867/299).
 
 Vulkan/Bgfx accept-and-ignore the `mipMap` parameter (no functional change) — tracked as
 **Task 878**, matching the project's existing precedent for regular `Texture2D`/`TextureCube`
-(property correct everywhere, GPU support lags per-backend).
+(property correct everywhere, GPU support lags per-renderer).
 
 ## 5. MSAA support (Task 337) — real fix on EasyGL
 
 Reusing Task 336's exact resolve-on-unbind mechanism, Task 337 **fixed** MSAA render targets on
 EasyGL, following FNA's real algorithm (`MathHelper.ClosestMSAAPower` + `FNA3D_GetMaxMultiSampleCount`):
 
-- `MultiSampleCount` now reflects the backend's real, device-capability-clamped value (queried via
+- `MultiSampleCount` now reflects the renderer's real, device-capability-clamped value (queried via
   `glGetIntegerv(GL_MAX_SAMPLES, ...)`), not a raw pass-through.
-- `EasyGLRenderTargetBackend`/`EasyGLRenderTargetCubeBackend` render into a real multisampled color
+- `EasyGLRenderTargetRenderer`/`EasyGLRenderTargetCubeRenderer` render into a real multisampled color
   (+ depth) renderbuffer and resolve it via `glBlitFramebuffer` on unbind (same call site as
   Task 336's mip regeneration, correctly ordered: resolve first, then regenerate mips).
 - Pixel-verified with a genuine anti-aliasing **differential** proof (a solid-fill-only test cannot
@@ -97,16 +97,16 @@ EasyGL, following FNA's real algorithm (`MathHelper.ClosestMSAAPower` + `FNA3D_G
   edge; at `=8` it produces genuinely intermediate (blended) pixel values.
 
 Key design distinction from `LevelCount`: `MultiSampleCount` is legitimately
-backend/device-capability-dependent even in real FNA, so Vulkan/Bgfx honestly reporting
-`MultiSampleCount=0` (not implemented) is the *correct* per-backend design, not a shortcut — tracked
+renderer/device-capability-dependent even in real FNA, so Vulkan/Bgfx honestly reporting
+`MultiSampleCount=0` (not implemented) is the *correct* per-renderer design, not a shortcut — tracked
 as **Task 879**.
 
 ## 6. Bgfx wrong-handle-type casts (Tasks 873/874, found via Tasks 333–334)
 
-`BgfxSpriteBatchBackend::Draw` and `BgfxGraphicsBackend`'s `envMapping` branch each unconditionally
-`static_cast` any `ITextureBackend`/`ITextureCubeBackend` to the plain-texture concrete type.
-`RenderTarget2D`/`RenderTargetCube`'s backends are unrelated sibling classes
-(`BgfxRenderTargetBackend`/`BgfxRenderTargetCubeBackend`), whose first data member is a *framebuffer*
+`BgfxSpriteBatchRenderer::Draw` and `BgfxRenderer`'s `envMapping` branch each unconditionally
+`static_cast` any `ITextureRenderer`/`ITextureCubeRenderer` to the plain-texture concrete type.
+`RenderTarget2D`/`RenderTargetCube`'s renderers are unrelated sibling classes
+(`BgfxRenderTargetRenderer`/`BgfxRenderTargetCubeRenderer`), whose first data member is a *framebuffer*
 handle, not a *texture* handle — both handle types are `struct { uint16_t idx; }`, so the cast
 compiles and doesn't crash, but reads a framebuffer-pool handle where a texture-pool handle is
 expected, silently sampling wrong data. Confirmed by direct memory-layout analysis and new
@@ -115,7 +115,7 @@ doesn't-crash smoke tests on both `RenderTarget2D` and `RenderTargetCube`. Not f
 
 ## 7. Vulkan Clear-only-RT gap (Task 875, found via Task 334)
 
-`VulkanGraphicsBackend::Clear()` only records a global clear-colour scalar and never registers the
+`VulkanRenderer::Clear()` only records a global clear-colour scalar and never registers the
 currently-bound render target as "used" — only an actual draw call does. A
 `SetRenderTarget(rt); Clear(color); SetRenderTarget(nullptr);` pattern with **no draw call** in
 between silently never gets a render pass recorded; the target's image stays
@@ -141,59 +141,59 @@ found a real, previously-undiscovered gap: FNA *always* resets `Viewport`/`Sciss
 the backbuffer's size when unbinding) — CNA never touched either property at all. **Fixed**: added
 `GraphicsDevice::ResetViewportAndScissorForRenderTarget`, wired into all 3
 `SetRenderTarget*`/`SetRenderTargets` overloads. Pixel-verified on both EasyGL and Vulkan with a
-real GPU-level proof (`ScissorRectangle` is wired to the backend's scissor test on all 3 backends).
+real GPU-level proof (`ScissorRectangle` is wired to the renderer's scissor test on all 3 renderers).
 
 Found and deliberately deferred a much larger, separate gap discovered along the way:
-`GraphicsDevice.Viewport` had **zero GPU wiring on the 3 backends audited in that phase** — EasyGL,
+`GraphicsDevice.Viewport` had **zero GPU wiring on the 3 renderers audited in that phase** — EasyGL,
 Vulkan, and Bgfx hardcoded the full render-target/window size. Metal joined this document later;
 its post-audit adaptation now preserves and submits the requested viewport (`METAL-265`), so Task
-880's historical statement does not describe the current Metal backend.
+880's historical statement does not describe the current Metal renderer.
 
 ## 10. Multiple render targets with mixed formats (Task 339) — audit only, no bug
 
 Read FNA's actual `SetRenderTargets` source: it performs **zero explicit validation** of
 format/size/count mismatches between bound targets — it computes dimensions from the first target
 only and delegates everything to the native driver. "Reject invalid combinations" is not an
-XNA-level behavior. Confirmed CNA's own 3 backends behave the same way (no CNA-level validation),
+XNA-level behavior. Confirmed CNA's own 3 renderers behave the same way (no CNA-level validation),
 consistent with FNA — no bug.
 
 Found one real, minor divergence: FNA's actual MRT cap is `MAX_RENDERTARGET_BINDINGS = 4`
 (implicitly enforced via a fixed-size array that would throw past 4) — see §11 for the actual
-per-backend caps CNA uses instead, none of which match. Tracked as **Task 881**.
+per-renderer caps CNA uses instead, none of which match. Tracked as **Task 881**.
 
 Deliberately did not touch the already-tracked, off-limits `EasyGL_MRT_TwoAttachments` bug
 (Task 145) — even the basic same-size 2-target MRT case is already known-broken on EasyGL, which
 blocks any meaningful deeper mismatched-format verification.
 
-## 11. MRT limits per backend (Task 340)
+## 11. MRT limits per renderer (Task 340)
 
-| Backend | Simultaneous color attachments | Enforcement |
+| Renderer | Simultaneous color attachments | Enforcement |
 |---|---|---|
 | EasyGL | 8 (hardcoded `constexpr int kMaxMRT = 8`) | Silently truncates anything beyond 8 — no error. |
 | Vulkan | No CNA-level cap | Relies entirely on the actual GPU's `VkPhysicalDeviceLimits::maxColorAttachments`; `VulkanMRTProxy` sizes its internal vector to whatever `count` is passed, uncapped. |
 | Bgfx | 8 (hardcoded `constexpr int kMaxAttachments = 8`, matching bgfx's own `BGFX_CONFIG_MAX_FRAME_BUFFER_ATTACHMENTS` default) | Silently truncates anything beyond 8 — no error. |
 | **Real FNA/XNA** | **4** (`MAX_RENDERTARGET_BINDINGS`) | Implicit — a fixed-size internal array throws if a game passes more than 4. |
 
-**None of CNA's 3 backends match FNA's real 4-target limit** (confirmed Task 339 finding, tracked
+**None of CNA's 3 renderers match FNA's real 4-target limit** (confirmed Task 339 finding, tracked
 as Task 881, not fixed — no test in this repo exercises more than 2 simultaneous targets). All 3
-backends additionally assume every bound target shares the first target's dimensions/format, with
+renderers additionally assume every bound target shares the first target's dimensions/format, with
 zero CNA-level cross-target validation — matching FNA's own delegate-to-native-driver behavior
 (§10), not a divergence.
 
 ---
 
-## Summary: what actually works today, per backend
+## Summary: what actually works today, per renderer
 
 | Feature | EasyGL | Vulkan | Bgfx | Metal |
 |---|---|---|---|---|
-| `RenderTarget2D`/`RenderTargetCube` constructors, properties, `IsContentLost`/`ContentLost` | ✅ | ✅ | ✅ | ✅ (shared `GraphicsDevice`-level code, backend-independent) |
-| `RenderTarget2D` sampling after unbind (`SpriteBatch`) | ✅ | ✅ | ❌ wrong-handle-cast bug (Task 873) | 🔍¹ adapted source has a real `MetalRenderTargetBackend::colorTexture()` path to the resolved single-sample texture. Only the historical predecessor compiled/ran on macOS; the adapted Objective-C++ has no Apple compile/runtime or pixel proof. |
+| `RenderTarget2D`/`RenderTargetCube` constructors, properties, `IsContentLost`/`ContentLost` | ✅ | ✅ | ✅ | ✅ (shared `GraphicsDevice`-level code, renderer-independent) |
+| `RenderTarget2D` sampling after unbind (`SpriteBatch`) | ✅ | ✅ | ❌ wrong-handle-cast bug (Task 873) | 🔍¹ adapted source has a real `MetalRenderTargetRenderer::colorTexture()` path to the resolved single-sample texture. Only the historical predecessor compiled/ran on macOS; the adapted Objective-C++ has no Apple compile/runtime or pixel proof. |
 | `RenderTargetCube` sampling after unbind (`EnvironmentMapEffect`) | ✅ | ❌ renders black (Task 876) | ❌ wrong-handle-cast bug (Task 874) | 🔍 source-complete (`plan_metal.md` Phase 6/11, `METAL-64`–`71`/`120`ff), never pixel-tested on real hardware — no dedicated `CTest` exists yet |
 | Depth buffer functionality (does depth testing work inside an RT) | ✅ | ✅ | 🔍 not pixel-verified (no GPU readback) | 🔶 a real single-sample depth32+stencil8 texture is allocated and bound as the render pass's depth attachment — GPU-level depth-test *gating* itself is not independently pixel-verified after adaptation |
 | Depth/stencil format fidelity (exact `DepthFormat` honored) | ❌ always `DepthComponent24`, no stencil (Task 877) | ❌ `hasDepth` ignored, always allocates (Task 877) | ❌ always `D24S8` (Task 877) | ❌ always `Depth32Float_Stencil8` regardless of requested `DepthFormat` — deliberate, documented simplification (`plan_metal.md METAL-101`), matching Vulkan's own precedent exactly |
 | Mipmap generation (`LevelCount`, real GPU mips) | ✅ (fixed, Task 336) | 🔶 `LevelCount` correct, no real GPU mips (Task 878) | 🔶 same as Vulkan (Task 878) | 🔍 adapted source encodes `generateMipmapsForTexture:` on every unbind (`plan_metal.md METAL-103`) and tracks defined levels only after successful completion. Only the historical predecessor compiled on Apple; the adapted path has no Apple compile/runtime or pixel proof (`METAL-117` remains open). |
 | MSAA (`MultiSampleCount`, real resolve) | ✅ (fixed, Task 337) | 🔶 honestly reports `0`, not implemented (Task 879) | 🔶 same as Vulkan (Task 879) | ❌ deliberately unsupported: requested counts clamp to `0`, capability is false, and native attachments remain single-sample; the historical sample-count-four path produced a binary edge |
-| `SetRenderTarget`/`SetRenderTargets` Viewport/ScissorRectangle reset | ✅ (fixed, Task 338) | ✅ (fixed, Task 338) | ✅ (fixed, Task 338; shared code, not independently pixel-tested) | ✅ shared `GraphicsDevice`-level code, backend-independent |
+| `SetRenderTarget`/`SetRenderTargets` Viewport/ScissorRectangle reset | ✅ (fixed, Task 338) | ✅ (fixed, Task 338) | ✅ (fixed, Task 338; shared code, not independently pixel-tested) | ✅ shared `GraphicsDevice`-level code, renderer-independent |
 | `Viewport`'s actual GPU effect (any sub-region viewport) | ❌ zero wiring (Task 880) | ❌ zero wiring (Task 880) | ❌ zero wiring (Task 880) | 🔍 adapted source preserves and submits the requested `GraphicsDevice.Viewport` unchanged on every encoder (`METAL-265`); portable state tests pass, but adapted Apple compile/runtime evidence is absent. |
 | MRT (2+ same-size/format targets) | ❌ `EasyGL_MRT_TwoAttachments`, attachment 1 stays black (Task 145) | 🔍 not independently re-verified this phase | 🔍 not independently re-verified this phase | ❌ deliberately unsupported: count greater than one throws before active-target state changes; capability is false |
 | MRT count cap matches FNA's `MAX_RENDERTARGET_BINDINGS=4` | ❌ caps at 8 instead (Task 881) | ❌ uncapped at CNA level (Task 881) | ❌ caps at 8 instead (Task 881) | ❌ supported-contract cap is one; zero restores the backbuffer and one binds a normalized 2D/cube-face descriptor |
@@ -203,10 +203,10 @@ Legend: ✅ verified working · ❌ confirmed broken/gap · 🔶 partially corre
 support lags) · 🔍 not empirically verified this phase.
 
 ¹ The historical Metal run returned only the clear color for every backbuffer-readback test. The
-adapted backend therefore throws for backbuffer readback and does not register those pixel tests.
+adapted renderer therefore throws for backbuffer readback and does not register those pixel tests.
 Historical Objective-C++ build evidence predates the current interfaces; a fresh macOS workflow
 result is the external support-confidence boundary, not an integration blocker under the
-repository's authoritative source-continuity policy. See `docs/metal-backend.md`.
+repository's authoritative source-continuity policy. See `docs/metal-renderer.md`.
 
 ## Open, tracked follow-up work
 
@@ -218,13 +218,13 @@ Phase 39 opened 9 new tracked tasks while auditing/fixing `RenderTarget2D`/`Rend
 - **Task 875** — Vulkan `Clear()`-only RT never records a render pass.
 - **Task 876** — Vulkan `RenderTargetCube`-via-`EnvironmentMapEffect` renders black; root cause not
   isolated.
-- **Task 877** — no backend honors the exact requested `DepthStencilFormat`.
+- **Task 877** — no renderer honors the exact requested `DepthStencilFormat`.
 - **Task 878** — Vulkan/Bgfx render target mip support (EasyGL already fixed).
 - **Task 879** — Vulkan/Bgfx render target MSAA support (EasyGL already fixed).
 - **Task 880** — `GraphicsDevice.Viewport` still has zero GPU wiring on EasyGL, Vulkan, and Bgfx
   (large, pre-existing, broader than render targets specifically); Metal's adapted path is closed
   separately by `METAL-265`, pending native Apple confidence evidence.
-- **Task 881** — `SetRenderTargets`'s per-backend MRT cap doesn't match FNA's real limit of 4.
+- **Task 881** — `SetRenderTargets`'s per-renderer MRT cap doesn't match FNA's real limit of 4.
 
 Pre-existing, not opened this phase, still blocking deeper MRT work: `EasyGL_MRT_TwoAttachments`
 (Task 145) — even a basic same-size 2-target MRT setup doesn't render correctly on EasyGL. Needs

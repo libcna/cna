@@ -3,7 +3,7 @@
 // SpriteBatch-based counterpart to Task 297's 3D DualTextureEffect test
 // (easygl_texture_filter_point_vs_linear_test.cpp), scoped to magnification (the natural
 // SpriteBatch use case) as this task's own row specifically names "via SDL_ScaleMode" --
-// the exact SDL3 API SdlSpriteBatchBackend::SetSamplerFilter maps TextureFilter onto
+// the exact SDL3 API SdlSpriteBatchRenderer::SetSamplerFilter maps TextureFilter onto
 // (SDL_SetTextureScaleMode(SDL_SCALEMODE_NEAREST/LINEAR)).
 //
 // Draws a 2x1 (Red|Green) texture stretched wide via SpriteBatch, once with
@@ -14,7 +14,7 @@
 //   Linear: a genuine blend -- both R and G channels must be significant at that exact point.
 //
 // Requires PresentationMode::NativeBackBuffer (Task 915 finding): SDL_RenderReadPixels operates
-// in physical output coordinates, while this backend's default presentation mode
+// in physical output coordinates, while this renderer's default presentation mode
 // (FixedHeightDynamicWidth) does not map logical pixels 1:1 to physical ones.
 //
 // Exit code 0 = all PASS, 1 = at least one FAIL.

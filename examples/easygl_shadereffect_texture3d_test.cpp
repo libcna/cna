@@ -7,16 +7,16 @@
 //
 // Background: before Task 863, `Texture3D` inherited `GraphicsResource` directly (not `Texture`),
 // so it could not be stored in a `TextureCollection` (`GraphicsDevice.Textures[slot]`) at all --
-// and separately, `IEffectBackend` had no texture-binding API whatsoever for a volume texture
-// (only `BindTexture()` for `ITextureBackend` and, since Task 1081, `BindTextureCube()` for
-// `ITextureCubeBackend`), so a custom shader's own `sampler3D` uniform had no way to ever receive
+// and separately, `IEffectRenderer` had no texture-binding API whatsoever for a volume texture
+// (only `BindTexture()` for `ITextureRenderer` and, since Task 1081, `BindTextureCube()` for
+// `ITextureCubeRenderer`), so a custom shader's own `sampler3D` uniform had no way to ever receive
 // real texture data. Implementation (3 small, additive changes, EasyGL only, matching Task 1081's
-// established backend scope and this session's own explicit deferral of the other 9 CNA
-// backends): (1) `ITexture3DBackend` gained a `BindGL()` virtual (defaulting to a no-op, mirroring
-// `ITextureCubeBackend::BindGL()`); `IEffectBackend` gained `BindTexture3D(int unit,
-// ITexture3DBackend*)`, also defaulting to a no-op; (2) `EasyGLTexture3DBackend::BindGL()` binds
-// `GL_TEXTURE_3D` and `EasyGLEffectBackend::BindTexture3D()` mirrors `BindTextureCube()` exactly
-// (bind the unit, call the backend's own `BindGL()`, restore unit 0); (3) `ShaderEffect::
+// established renderer scope and this session's own explicit deferral of the other 9 CNA
+// renderers): (1) `ITexture3DRenderer` gained a `BindGL()` virtual (defaulting to a no-op, mirroring
+// `ITextureCubeRenderer::BindGL()`); `IEffectRenderer` gained `BindTexture3D(int unit,
+// ITexture3DRenderer*)`, also defaulting to a no-op; (2) `EasyGLTexture3DRenderer::BindGL()` binds
+// `GL_TEXTURE_3D` and `EasyGLEffectRenderer::BindTexture3D()` mirrors `BindTextureCube()` exactly
+// (bind the unit, call the renderer's own `BindGL()`, restore unit 0); (3) `ShaderEffect::
 // SetTexture()` gained a `Texture3D&` overload alongside the existing `Texture2D&`/`TextureCube&`
 // ones. GL itself allows a 2D/cube/3D texture bound to the *same* unit simultaneously (each
 // occupies a distinct binding target), so this needed no changes to either existing path.
@@ -25,7 +25,7 @@
 // Z-slice (slice 0 = red, slice 1 = blue). A trivial fragment shader samples the volume directly
 // along a uniform `vec3 coord` (no real ray-marching/volumetric geometry needed for this
 // capability proof -- the vertex shader just projects a screen-covering quad). Both the min and
-// mag filters are GL_LINEAR (`EasyGLTexture3DBackend`'s own fixed setup), but sampling exactly at
+// mag filters are GL_LINEAR (`EasyGLTexture3DRenderer`'s own fixed setup), but sampling exactly at
 // each slice's texel centre (Z = 0.25 for slice 0, Z = 0.75 for slice 1, matching
 // `(sliceIndex + 0.5) / depth`) still reads back that slice's exact colour: linear filtering
 // exactly at a texel centre puts 100% of the interpolation weight on that one texel.

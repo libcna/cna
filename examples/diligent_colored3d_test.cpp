@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_diligent.md DILIGENT-16: real-GPU pixel proof for the Diligent backend's 3D draw path,
-// through the public BasicEffect / DrawUserPrimitives API rather than the backend interface.
+// plan_diligent.md DILIGENT-16: real-GPU pixel proof for the Diligent renderer's 3D draw path,
+// through the public BasicEffect / DrawUserPrimitives API rather than the renderer interface.
 //
 // Check A -- non-indexed DrawUserPrimitives renders a vertex-coloured quad.
 // Check B -- indexed DrawUserIndexedPrimitives renders one too (a separate code path: it binds an
@@ -219,7 +219,7 @@ int main()
     catch (const std::exception& error)
     {
         // Only a genuine "there is no device here" failure is a skip. Any other exception is a
-        // real defect and must fail: an over-broad catch turned a backend bug into a green skip
+        // real defect and must fail: an over-broad catch turned a renderer bug into a green skip
         // once already while this test was being written.
         const std::string message = error.what();
         const bool noDevice = message.find("no device type could be created") != std::string::npos ||

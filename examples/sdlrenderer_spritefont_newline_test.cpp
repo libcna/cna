@@ -4,7 +4,7 @@
 // Task 426 (this row's own "mirrors" reference, the EasyGL original) is itself not yet
 // implemented (still ⬜ in plan_graphics.md's Phase 48) -- there is no existing test to port
 // here, same situation as Tasks 690/691. This is a NEW SpriteFont pixel test, building on
-// Task 690's fixture pattern to exercise the newline branch of the shared, backend-agnostic
+// Task 690's fixture pattern to exercise the newline branch of the shared, renderer-agnostic
 // SpriteBatch::DrawString: `curOffset.X = 0; curOffset.Y += spriteFont.lineSpacing_;
 // firstInLine = true;`.
 //
@@ -18,7 +18,7 @@
 // Leaving an exact 2px gap (y in [10,12)) between the two lines that must stay background.
 //
 // Requires PresentationMode::NativeBackBuffer (Task 915 finding): SDL_RenderReadPixels operates
-// in physical output coordinates, while this backend's default presentation mode
+// in physical output coordinates, while this renderer's default presentation mode
 // (FixedHeightDynamicWidth) does not map logical pixels 1:1 to physical ones.
 //
 // Exit code 0 = all PASS, 1 = at least one FAIL.

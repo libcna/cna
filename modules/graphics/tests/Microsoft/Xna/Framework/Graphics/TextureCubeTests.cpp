@@ -50,33 +50,33 @@ using Microsoft::Xna::Framework::Graphics::TextureCube;
 using Microsoft::Xna::Framework::Graphics::TextureCollection;
 
 // -----------------------------------------------------------------------
-// REMED-GFX-130: does THIS build's backend actually read a cube face back?
+// REMED-GFX-130: does THIS build's renderer actually read a cube face back?
 //
 // TextureCube::GetData now has exactly two outcomes -- the resource's real content, or a
 // deterministic System::NotSupportedException with the caller's destination untouched. Before that
 // finding the shared layer converted its own zero-initialized scratch buffer for the caller
 // regardless, so "GetData did not throw" and "GetData produced transparent black" were satisfied by
-// a backend that had read nothing at all. The tests below therefore assert the real outcome for
-// this backend rather than merely that the call returned.
+// a renderer that had read nothing at all. The tests below therefore assert the real outcome for
+// this renderer rather than merely that the call returned.
 //
-// SDL_Renderer, ASCII, Canvas and DX3 keep IGraphicsBackend::CreateTextureCube's nullptr default
-// (no cube resource exists at all); Headless stores no pixel data by design. Every other backend
+// SDL_Renderer, ASCII, Canvas and DX3 keep IGraphicsRenderer::CreateTextureCube's nullptr default
+// (no cube resource exists at all); Headless stores no pixel data by design. Every other renderer
 // reads level 0 back exactly -- Software only at level 0, since it stores no cube mip levels.
 // -----------------------------------------------------------------------
 //
 // REMED-GFX-135 adds the write-side half of the same question. `TextureCube::SetData` now has
 // exactly two outcomes too -- the complete requested region is stored, or it throws -- so the
 // "does not throw" tests below became false-positive-capable in the opposite direction: on a
-// backend with no cube storage they used to pass for a call that discarded the data. Storage
-// support and readback support are the same set (a backend either owns cube pixels or it does
+// renderer with no cube storage they used to pass for a call that discarded the data. Storage
+// support and readback support are the same set (a renderer either owns cube pixels or it does
 // not), so one constant drives both.
 //
-// plan_sokol.md SOKOL-27: SokolTextureCubeBackend stores every declared mip level's six faces in a
+// plan_sokol.md SOKOL-27: SokolTextureCubeRenderer stores every declared mip level's six faces in a
 // real CPU shadow (SetData/GetData round-trip exactly, at every level -- not level-0-only like
-// Software), even though nothing on this backend samples a cube texture as a GPU resource yet.
-#if defined(CNA_BACKEND_SDL_RENDERER) || defined(CNA_BACKEND_ASCII) || \
-    defined(CNA_BACKEND_CANVAS) || defined(CNA_BACKEND_HTML_DOM) || \
-    defined(CNA_BACKEND_FREEDIRECT) || defined(CNA_BACKEND_HEADLESS) || defined(CNA_BACKEND_GDI)
+// Software), even though nothing on this renderer samples a cube texture as a GPU resource yet.
+#if defined(CNA_RENDERER_SDL_RENDERER) || defined(CNA_RENDERER_ASCII) || \
+    defined(CNA_RENDERER_CANVAS) || defined(CNA_RENDERER_HTML_DOM) || \
+    defined(CNA_RENDERER_FREEDIRECT) || defined(CNA_RENDERER_HEADLESS) || defined(CNA_RENDERER_GDI)
 constexpr bool kCubeLevel0ReadbackSupported = false;
 constexpr bool kCubeStorageSupported        = false;
 #else
@@ -88,13 +88,13 @@ constexpr bool kCubeStorageSupported        = true;
 // above deliberately only answer the latter -- their names say so. OpenGL ES 1.1 reads a cube face
 // back by attaching it to a framebuffer, and GL_OES_framebuffer_object requires an attached
 // texture's level to be 0, so no mip level above 0 can be read there however much storage exists.
-#if defined(CNA_BACKEND_OPENGLES1)
+#if defined(CNA_RENDERER_OPENGLES1)
 constexpr bool kCubeMipReadbackSupported = false;
 #else
 constexpr bool kCubeMipReadbackSupported = kCubeLevel0ReadbackSupported;
 #endif
 
-/// Runs one TextureCube::SetData call and asserts REMED-GFX-135's contract for this backend:
+/// Runs one TextureCube::SetData call and asserts REMED-GFX-135's contract for this renderer:
 /// it either completes, or it refuses with System::NotSupportedException. Never both, never
 /// neither.
 template <typename Fn>
@@ -195,7 +195,7 @@ TEST_F(TextureCubeTest, SetDataStartIndexNegativeStartIndexThrowsOutOfRange)
     EXPECT_THROW(tex.SetData(CubeMapFace::PositiveX, buf.data(), -1, 4), std::out_of_range);
 }
 
-// REMED-GFX-135: both overloads used to be bare EXPECT_NO_THROWs, which a backend that dropped
+// REMED-GFX-135: both overloads used to be bare EXPECT_NO_THROWs, which a renderer that dropped
 // the upload passed just as easily as one that stored it. They now assert the real outcome, and
 // the readback proves the second (startIndex) overload really stored ITS OWN data rather than
 // leaving the first call's behind.
@@ -256,7 +256,7 @@ TEST_F(TextureCubeTest, SetDataRectOutOfBoundsThrowsOutOfRange)
     EXPECT_THROW(tex.SetData(CubeMapFace::PositiveX, 0, &rect, buf, 0, 4), std::out_of_range);
 }
 
-// REMED-GFX-135: was a bare EXPECT_NO_THROW. It now asserts the outcome, and -- where the backend
+// REMED-GFX-135: was a bare EXPECT_NO_THROW. It now asserts the outcome, and -- where the renderer
 // can read back -- that the 1x1 write landed on exactly one texel and left the other three alone.
 TEST_F(TextureCubeTest, SetDataRectWithinBoundsStoresOnlyThatTexel)
 {
@@ -279,7 +279,7 @@ TEST_F(TextureCubeTest, SetDataRectWithinBoundsStoresOnlyThatTexel)
 }
 
 // Task 913: elementCount must cover the full requested region (w*h) — previously unvalidated,
-// so a too-small elementCount caused the backend to write/read past the caller-supplied buffer
+// so a too-small elementCount caused the renderer to write/read past the caller-supplied buffer
 // (confirmed via a live heap-corruption crash while building Task 663's DDS test fixture).
 TEST_F(TextureCubeTest, SetDataRectElementCountLessThanRegionThrowsOutOfRange)
 {
@@ -297,7 +297,7 @@ TEST_F(TextureCubeTest, SetDataRectElementCountLessThanRegionThrowsOutOfRange)
 TEST_F(TextureCubeTest, SetDataNullRectAtMipLevelUsesReducedSize)
 {
     // size=4, mipMap=true -> levels 4x4, 2x2, 1x1. Level 1 is 2x2 = 4 elements.
-    // REMED-GFX-135: every backend that stores cube faces at all now stores the whole declared mip
+    // REMED-GFX-135: every renderer that stores cube faces at all now stores the whole declared mip
     // chain (Software was the last one allocating level 0 only), so this level-1 write is either a
     // real store or a deterministic refusal -- never the silent drop it used to be.
     TextureCube tex(gd, 4, true, SurfaceFormat::Color);
@@ -372,8 +372,8 @@ TEST_F(TextureCubeTest, GetDataRectOutOfBoundsThrowsOutOfRange)
 }
 
 // REMED-GFX-130 false-positive audit: this test used to be a bare EXPECT_NO_THROW, which asserted
-// nothing about what GetData produced -- a backend that read nothing and a backend that read the
-// texel correctly both passed it. It now asserts the real outcome: the uploaded texel on a backend
+// nothing about what GetData produced -- a renderer that read nothing and a renderer that read the
+// texel correctly both passed it. It now asserts the real outcome: the uploaded texel on a renderer
 // with cube readback, and a deterministic rejection that leaves the destination untouched on one
 // without.
 TEST_F(TextureCubeTest, GetDataRectWithinBoundsReturnsUploadedTexelOrRejectsDeterministically)
@@ -415,8 +415,8 @@ TEST_F(TextureCubeTest, GetDataRectElementCountLessThanRegionThrowsOutOfRange)
 //
 // FNA itself never validates cubeMapFace — it's passed straight through to
 // FNA3D_SetTextureDataCube/FNA3D_GetTextureDataCube with no range check (confirmed in
-// TextureCube.cs). All 3 CNA backends (EasyGL/Vulkan/Bgfx) already guard against an
-// out-of-range face value at the backend layer (`if (face < 0 || face >= 6) return;`), so an
+// TextureCube.cs). All 3 CNA renderers (EasyGL/Vulkan/Bgfx) already guard against an
+// out-of-range face value at the renderer layer (`if (face < 0 || face >= 6) return;`), so an
 // invalid face was already memory-safe — it just silently did nothing instead of surfacing a
 // clear, catchable error. This is a deliberate CNA safety extra beyond FNA, matching the
 // established pattern of Tasks 265/271/272's added guards.
@@ -471,7 +471,7 @@ TEST_F(TextureCubeTest, GetDataRectInvalidFaceThrowsOutOfRange)
 }
 
 // REMED-GFX-135: uploading the SAME colour to all six faces could not distinguish them, so this
-// used to pass on a backend that stored one face, all six, or none. Each face now gets its own
+// used to pass on a renderer that stored one face, all six, or none. Each face now gets its own
 // colour and is read back independently.
 TEST_F(TextureCubeTest, SetDataAllSixValidFacesStoreIndependently)
 {
@@ -508,7 +508,7 @@ TEST_F(TextureCubeTest, SetDataAllSixValidFacesStoreIndependently)
 }
 
 // REMED-GFX-135: a source array with padding on both sides of the uploaded window. Whatever the
-// backend stores, the padding must never reach the resource -- that is what proves startIndex is
+// renderer stores, the padding must never reach the resource -- that is what proves startIndex is
 // applied exactly once and that the call reads only elementCount elements from it.
 TEST_F(TextureCubeTest, SetDataNonZeroStartIndexUploadsOnlyItsOwnWindow)
 {
@@ -536,7 +536,7 @@ TEST_F(TextureCubeTest, SetDataNonZeroStartIndexUploadsOnlyItsOwnWindow)
 }
 
 // REMED-GFX-135: a mipmapped cube declares LevelCount mip levels; every one of them must have real
-// storage behind it. Software was the last backend allocating level 0 only, so this walked the
+// storage behind it. Software was the last renderer allocating level 0 only, so this walked the
 // whole declared chain and passed on a resource that kept just the first level.
 TEST_F(TextureCubeTest, EveryDeclaredMipLevelStoresItsOwnContent)
 {
@@ -559,10 +559,10 @@ TEST_F(TextureCubeTest, EveryDeclaredMipLevelStoresItsOwnContent)
 
     if (!kCubeLevel0ReadbackSupported) return;
 
-    // Read back in reverse, so a backend that kept only the LAST write cannot pass either.
+    // Read back in reverse, so a renderer that kept only the LAST write cannot pass either.
     for (int level = levels - 1; level >= 0; --level)
     {
-        // A backend that stores the whole chain but can only read the base level back still has
+        // A renderer that stores the whole chain but can only read the base level back still has
         // its level-0 content verified; the levels it cannot read are skipped rather than
         // asserted away.
         if (!kCubeMipReadbackSupported && level != 0) continue;
@@ -642,9 +642,9 @@ TEST_F(TextureCubeTest, CanBeAssignedIntoRealGraphicsDeviceTexturesSlot)
 
 // Texture::Dispose(bool) removes the texture from GraphicsDevice.Textures/VertexTextures on
 // disposal (matches FNA's Texture.Dispose unbind behaviour). TextureCube::Dispose(bool)
-// previously only released its own backend handle without ever calling into
+// previously only released its own renderer handle without ever calling into
 // Texture::Dispose(bool), so this unbind never applied to TextureCube. Now it does, since
-// TextureCube::Dispose(bool) calls Texture::Dispose(disposing) after releasing its own backend
+// TextureCube::Dispose(bool) calls Texture::Dispose(disposing) after releasing its own renderer
 // handle (same order as Texture2D::Dispose(bool)).
 TEST_F(TextureCubeTest, DisposeUnbindsFromGraphicsDeviceTextures)
 {
@@ -812,7 +812,7 @@ TEST_F(TextureCubeTest, DDSFromStreamEXTDecodesSizeFormatAndLevelCount)
     System::IO::MemoryStream stream(dds.data(), static_cast<System::IO::intcs>(dds.size()));
 
     // REMED-GFX-135: DDSFromStreamEXT decodes on the CPU and then uploads every face through
-    // SetData, which on a backend with no cube storage is now a deterministic refusal instead of a
+    // SetData, which on a renderer with no cube storage is now a deterministic refusal instead of a
     // silent discard -- so the whole load fails rather than returning a TextureCube holding nothing.
     if (!kCubeStorageSupported)
     {
@@ -841,7 +841,7 @@ TEST_F(TextureCubeTest, DDSFromStreamEXTDecodesAllSixFacesWithDistinctColours)
     std::vector<uint8_t> dds = BuildSolidColorCubeDds(4, expected);
     System::IO::MemoryStream stream(dds.data(), static_cast<System::IO::intcs>(dds.size()));
 
-    // REMED-GFX-135: see the sibling test above -- a backend that cannot store a cube face now
+    // REMED-GFX-135: see the sibling test above -- a renderer that cannot store a cube face now
     // fails the load outright rather than handing back an empty resource.
     if (!kCubeStorageSupported)
     {
@@ -863,9 +863,9 @@ TEST_F(TextureCubeTest, DDSFromStreamEXTDecodesAllSixFacesWithDistinctColours)
         // it is not an arbitrary partial-read count), so read all 4x4=16 texels and just check
         // the first (every texel is the same solid colour by construction).
         // REMED-GFX-130 false-positive audit: the readback used to be issued unconditionally and
-        // only asserted on three named backends, so every other backend ran a call whose result was
+        // only asserted on three named renderers, so every other renderer ran a call whose result was
         // never checked -- including the ones that answered with a fabricated transparent-black
-        // face. Both halves are now asserted: the decoded colour where the backend really reads a
+        // face. Both halves are now asserted: the decoded colour where the renderer really reads a
         // cube face back, and the deterministic rejection (destination untouched) where it cannot.
         const Color sentinel(0xA5, 0xA5, 0xA5, 0xA5);
         std::vector<Color> got(16, sentinel);

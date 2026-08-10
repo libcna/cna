@@ -20,7 +20,7 @@
 //   A, call setReferenceStencilProperty(0x99) directly (NOT via a new DepthStencilState) -- if
 //   this genuinely reaches the draw, the actual reference used is now 0x99, and 0x99 != 0x05 ->
 //   stencil test FAILS -> BACKGROUND. If GraphicsDevice.ReferenceStencil is silently ignored on
-//   this backend (a no-op, as Bgfx's IGraphicsBackend::SetReferenceStencil base default was before
+//   this renderer (a no-op, as Bgfx's IGraphicsRenderer::SetReferenceStencil base default was before
 //   this task), the draw would incorrectly still use the stale baked-in 0x05 -> incorrectly GREEN.
 //
 // Exit code 0 = both checks PASS, 1 = either FAILs.

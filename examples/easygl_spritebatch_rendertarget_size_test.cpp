@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-019 cross-backend parity: SpriteBatch drawn INTO an off-screen RenderTarget2D whose
+// REMED-GFX-019 cross-renderer parity: SpriteBatch drawn INTO an off-screen RenderTarget2D whose
 // size differs from the backbuffer must map its destination rectangle in the RENDER TARGET's own
 // pixel space. EasyGL already derives its sprite ortho from the bound render target's size
-// (EasyGLGraphicsBackend::FlushBatch's GetCurrentRenderTarget2DSize branch), so it is an
+// (EasyGLRenderer::FlushBatch's GetCurrentRenderTarget2DSize branch), so it is an
 // INDEPENDENT oracle for the RT-relative placement the WebGPU fix must reproduce -- the geometry
 // (96x72 backbuffer, 48x32 / 64x40 render targets, Rectangle(7,5,17,11) sprite) matches
-// examples/webgpu_spritebatch_rendertarget_test.cpp, so a match on both backends proves identical
-// XNA pixel semantics rather than one backend being graded against itself.
+// examples/webgpu_spritebatch_rendertarget_test.cpp, so a match on both renderers proves identical
+// XNA pixel semantics rather than one renderer being graded against itself.
 //
 // The render target is read back INDIRECTLY -- blitted 1:1 onto the top-left of the backbuffer,
 // then the backbuffer is read -- matching the established EasyGL render-target read-back idiom

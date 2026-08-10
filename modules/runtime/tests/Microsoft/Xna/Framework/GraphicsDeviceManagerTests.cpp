@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-TEST-002: GraphicsDeviceManager requires a live Game/SDL window/graphics backend, which is
+// REMED-TEST-002: GraphicsDeviceManager requires a live Game/SDL window/graphics renderer, which is
 // exactly what GraphicsDeviceCapabilityTests.cpp's bare `GraphicsDevice gd;` already constructs
 // successfully in this same CnaTests binary. Following GameWindowTests.cpp's own skip-when-
 // unavailable precedent, a cheap up-front SDL video probe still guards every TEST() here so a
-// genuinely display-less environment skips rather than fails deep inside backend construction.
+// genuinely display-less environment skips rather than fails deep inside renderer construction.
 
 #include <gtest/gtest.h>
 
@@ -94,12 +94,12 @@ TEST(GraphicsDeviceManagerTest, ApplyChangesRaisesResettingAndResetExactlyOnce)
 // REMED-CORE-007 (fixed): CreateDevice() now subscribes graphicsDevice_->DeviceResetting/
 // DeviceReset, forwarding to this manager's own OnDeviceResetting()/OnDeviceReset(), matching FNA's
 // IGraphicsDeviceManager.CreateDevice() (graphicsDevice.DeviceResetting += OnDeviceResetting;
-// graphicsDevice.DeviceReset += OnDeviceReset;). A real backend-detected device-lost/reset
-// (GraphicsDevice's own deviceEventCallback seam, currently wired up only by the D3D9 backend)
+// graphicsDevice.DeviceReset += OnDeviceReset;). A real renderer-detected device-lost/reset
+// (GraphicsDevice's own deviceEventCallback seam, currently wired up only by the D3D9 renderer)
 // raises GraphicsDevice::DeviceResetting/DeviceReset directly -- simulated here by raising those
 // events directly on the managed GraphicsDevice instance, which is exactly what that callback does
 // on a real device-lost, without requiring D3D9 hardware.
-TEST(GraphicsDeviceManagerTest, BackendDetectedDeviceLostIsForwardedToManagerListeners)
+TEST(GraphicsDeviceManagerTest, RendererDetectedDeviceLostIsForwardedToManagerListeners)
 {
     if (!VideoSubsystemAvailable())
     {
@@ -118,7 +118,7 @@ TEST(GraphicsDeviceManagerTest, BackendDetectedDeviceLostIsForwardedToManagerLis
     gdm.getDeviceResettingEvent() += [&](System::Object*, const System::EventArgs&) { ++resettingCount; };
     gdm.getDeviceResetEvent() += [&](System::Object*, const System::EventArgs&) { ++resetCount; };
 
-    // Simulates what GraphicsDevice's internal deviceEventCallback does on a real backend-detected
+    // Simulates what GraphicsDevice's internal deviceEventCallback does on a real renderer-detected
     // device-lost/reset cycle -- raised directly on the device's own public events.
     device->DeviceResetting.Raise(device, System::EventArgs::Empty);
     device->DeviceReset.Raise(device, System::EventArgs::Empty);

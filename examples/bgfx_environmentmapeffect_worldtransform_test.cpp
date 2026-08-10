@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // Task 398: verify EnvironmentMapEffect's normal transform under a non-uniform-scale World
-// matrix (Bgfx backend). See examples/easygl_environmentmapeffect_worldtransform_test.cpp for
+// matrix (Bgfx renderer). See examples/easygl_environmentmapeffect_worldtransform_test.cpp for
 // the full derivation and the real bug this test found and fixed: Bgfx's `vs_env_map3d.sc`
 // transformed the normal by `mul(u_world, vec4(a_normal,0.0))` directly -- WRONG under
 // non-uniform scale, same shape as EasyGL's bug. Fixed by computing the correct
@@ -8,7 +8,7 @@
 // as a new `u_normalMatrix` uniform.
 //
 // Per Task 364's finding (tracked as Task 884, not fixed there or here): Bgfx's default
-// RasterizerState cull state is the only one of the 3 backends that actually matches FNA's
+// RasterizerState cull state is the only one of the 3 renderers that actually matches FNA's
 // real CullCounterClockwiseFace default, so it silently culls the standard NDC quad winding
 // used throughout this pixel-test family unless RasterizerState::CullNone is set
 // explicitly -- worked around here identically to prior Bgfx tests.

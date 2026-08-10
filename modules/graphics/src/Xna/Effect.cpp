@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "System/NotImplementedException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
@@ -58,7 +58,7 @@ namespace Microsoft::Xna::Framework::Graphics
         if (device_) device_->SetCurrentEffect(this);
     }
 
-    void Effect::FillGpuDrawParams(CNA::Internal::Backends::GpuDrawParams& /*params*/) const
+    void Effect::FillGpuDrawParams(CNA::Internal::Renderers::GpuDrawParams& /*params*/) const
     {
         // Default: no-op. Concrete subclasses override to populate shader parameters.
     }
@@ -75,7 +75,7 @@ namespace Microsoft::Xna::Framework::Graphics
         return empty;
     }
 
-    CNA::Internal::Backends::IEffectBackend* Effect::GetEffectBackendPtr() const
+    CNA::Internal::Renderers::IEffectRenderer* Effect::GetEffectRendererPtr() const
     {
         return nullptr;
     }

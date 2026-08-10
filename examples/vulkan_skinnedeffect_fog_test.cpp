@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Task 899: SkinnedEffect linear fog pixel integration test — Vulkan backend.
+// Task 899: SkinnedEffect linear fog pixel integration test — Vulkan renderer.
 //
 // skinned3d was one of 5 Vulkan pipelines sharing FillExtPushConst()'s fully-packed 128-byte
 // push constant (zero spare bytes for fog). skinned3d's existing BoneBlock UBO (set=0,

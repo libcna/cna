@@ -5,7 +5,7 @@
 //
 // REMED-GFX-151 update: leg G0 -- the canonical render-to-texture sequence with NO readback of the
 // source -- used to be DECLARED broken on Vulkan and is now an ordinary orientation check on every
-// backend. See its own fixture, examples/rendertarget_producer_consumer_test.cpp.
+// renderer. See its own fixture, examples/rendertarget_producer_consumer_test.cpp.
 //
 // The public contract this pins down, in CNA/XNA/FNA terms:
 //
@@ -23,7 +23,7 @@
 // public readback has always been correct. Sampling did not compensate, so texel v=0 -- the first
 // row of GL texture memory -- is the LAST logical row, and a rendered texture arrived upside down
 // while an uploaded one did not. Measured first on EasyGL while building REMED-GFX-131's
-// cross-backend controls: leg D of that fixture (sample a plain Texture2D into a target) was
+// cross-renderer controls: leg D of that fixture (sample a plain Texture2D into a target) was
 // byte-exact, and leg E (sample a render target into a target) returned the same image with its
 // rows reversed. This is the EasyGL counterpart of REMED-GFX-067's bgfx finding.
 //
@@ -57,7 +57,7 @@
 //   G  target A -> B -> C                 no double flip
 //   H  target A sampled twice in a frame  the correction is not consumed by the first use
 //   I  GetData before/after sampling      sampling does not mutate stored bytes
-//   J  SpriteEffects composition          the public flip and the backend correction are separate
+//   J  SpriteEffects composition          the public flip and the renderer correction are separate
 //   K  source rect / rotation / origin / transform / viewport / scissor / Linear / alpha blend
 //   L  MSAA and resolve                   the correction does not depend on sample count
 //   M  mipmapped target                   level 0 upright; level 1 orientation-consistent
@@ -113,75 +113,75 @@ using namespace Microsoft::Xna::Framework::Graphics;
 namespace
 {
     /**
-     * @brief Whether this backend rasterizes and can read a render target back at all.
+     * @brief Whether this renderer rasterizes and can read a render target back at all.
      *
      * HEADLESS performs no rasterization, so REMED-GFX-127's contract makes its `GetData` reject
      * deterministically. There is no orientation to measure there; the legs below assert the
      * rejection instead of a value.
      */
-#if defined(CNA_BACKEND_HEADLESS)
+#if defined(CNA_RENDERER_HEADLESS)
     constexpr bool kRasterizes = false;
-    constexpr const char* kBackendName = "HEADLESS";
-#elif defined(CNA_BACKEND_SOFTWARE)
+    constexpr const char* kRendererName = "HEADLESS";
+#elif defined(CNA_RENDERER_SOFTWARE)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "SOFTWARE";
-#elif defined(CNA_BACKEND_EASYGL)
+    constexpr const char* kRendererName = "SOFTWARE";
+#elif defined(CNA_RENDERER_EASYGL)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "EASYGL";
-#elif defined(CNA_BACKEND_BGFX)
+    constexpr const char* kRendererName = "EASYGL";
+#elif defined(CNA_RENDERER_BGFX)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "BGFX";
-#elif defined(CNA_BACKEND_VULKAN)
+    constexpr const char* kRendererName = "BGFX";
+#elif defined(CNA_RENDERER_VULKAN)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "VULKAN";
-#elif defined(CNA_BACKEND_WEBGPU)
+    constexpr const char* kRendererName = "VULKAN";
+#elif defined(CNA_RENDERER_WEBGPU)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "WEBGPU";
-#elif defined(CNA_BACKEND_SDL_GPU)
+    constexpr const char* kRendererName = "WEBGPU";
+#elif defined(CNA_RENDERER_SDL_GPU)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "SDL_GPU";
-#elif defined(CNA_BACKEND_SDL_RENDERER)
+    constexpr const char* kRendererName = "SDL_GPU";
+#elif defined(CNA_RENDERER_SDL_RENDERER)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "SDL_RENDERER";
-#elif defined(CNA_BACKEND_ASCII)
+    constexpr const char* kRendererName = "SDL_RENDERER";
+#elif defined(CNA_RENDERER_ASCII)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "ASCII";
-#elif defined(CNA_BACKEND_FREEDIRECT)
+    constexpr const char* kRendererName = "ASCII";
+#elif defined(CNA_RENDERER_FREEDIRECT)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "FREEDIRECT";
-#elif defined(CNA_BACKEND_D3D9)
+    constexpr const char* kRendererName = "FREEDIRECT";
+#elif defined(CNA_RENDERER_D3D9)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "D3D9";
-#elif defined(CNA_BACKEND_D3D11)
+    constexpr const char* kRendererName = "D3D9";
+#elif defined(CNA_RENDERER_D3D11)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "D3D11";
-#elif defined(CNA_BACKEND_D3D12)
+    constexpr const char* kRendererName = "D3D11";
+#elif defined(CNA_RENDERER_D3D12)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "D3D12";
-#elif defined(CNA_BACKEND_CANVAS)
+    constexpr const char* kRendererName = "D3D12";
+#elif defined(CNA_RENDERER_CANVAS)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "CANVAS";
-#elif defined(CNA_BACKEND_SOKOL)
+    constexpr const char* kRendererName = "CANVAS";
+#elif defined(CNA_RENDERER_SOKOL)
     // plan_sokol.md SOKOL-38: real geometry is genuinely rasterized, and RenderTarget2D sampling
     // orientation is now correct -- REMED-GFX-147 found (via this very file, once GetData() below
     // could finally observe a real comparison instead of always throwing) that it was NOT correct
     // before this task: a render target's colour image is written by GPU rasterization, whose
     // framebuffer-origin convention stores CNA's logical row 0 at OpenGL's HIGH y, the opposite of
-    // a plain SokolTextureBackend's un-flipped CPU upload -- sampling both the same way silently
+    // a plain SokolTextureRenderer's un-flipped CPU upload -- sampling both the same way silently
     // mirrored every render-target source vertically. Fixed with a per-draw `rtFlipV` shader
     // uniform (sprite_fs_params/textured3d_fs_params/lit3d_fs_params), the same per-slot-uniform
     // shape EasyGL's own uRtFlipV and bgfx's u_rtFlipV use for this identical finding.
     // `RequireReadable`'s direct RenderTarget2D::GetData now round-trips real content too
-    // (SokolRenderTargetBackend::GetData reads back via a throwaway GL FBO around the raw GL
+    // (SokolRenderTargetRenderer::GetData reads back via a throwaway GL FBO around the raw GL
     // texture sg_gl_query_image_info() exposes), so `kRasterizes = true` is accurate for what this
     // file measures -- and, as of this task, every one of its 53 checks passes for real.
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "SOKOL";
-#elif defined(CNA_BACKEND_LLGL)
+    constexpr const char* kRendererName = "SOKOL";
+#elif defined(CNA_RENDERER_LLGL)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "LLGL";
+    constexpr const char* kRendererName = "LLGL";
 #else
-#error "REMED-GFX-147: this backend has no declared render-target orientation contract."
+#error "REMED-GFX-147: this renderer has no declared render-target orientation contract."
 #endif
 
     /**
@@ -204,12 +204,12 @@ namespace
      * REMED-GFX-152 CLOSED this (2026-07-29), and the declaration is now unconditionally true.
      *
      * It used to read false on SDL_GPU: thirteen stock-effect sites there did
-     * `static_cast<const SdlGpuTextureBackend*>(params.textureN)` while a RenderTarget2D's backend
-     * is the unrelated sibling SdlGpuRenderTargetBackend, so the cast was undefined behaviour and
+     * `static_cast<const SdlGpuTextureRenderer*>(params.textureN)` while a RenderTarget2D's renderer
+     * is the unrelated sibling SdlGpuRenderTargetRenderer, so the cast was undefined behaviour and
      * the process died -- the SDL_GPU counterpart of REMED-GFX-078's bgfx finding. All thirteen now
      * go through one shared `ResolveSampledTextureEXT`, and this file's CD legs were A/B-proven
-     * against the pre-fix backend: SIGSEGV before, exact pixels after. The constant is kept rather
-     * than deleted so a future backend can declare the boundary again if it genuinely has one.
+     * against the pre-fix renderer: SIGSEGV before, exact pixels after. The constant is kept rather
+     * than deleted so a future renderer can declare the boundary again if it genuinely has one.
      */
     constexpr bool kStockEffectRtSourceSupported = true;
 
@@ -309,7 +309,7 @@ class RenderTargetSamplingOrientationTest : public Game
         }
     };
 
-    /// Reads a whole target back. The destination is pre-filled with a poison value so a backend
+    /// Reads a whole target back. The destination is pre-filled with a poison value so a renderer
     /// that writes nothing cannot be mistaken for one that wrote transparent black.
     static Readback ReadWhole(RenderTarget2D& target, int w, int h)
     {
@@ -327,10 +327,10 @@ class RenderTargetSamplingOrientationTest : public Game
         return r;
     }
 
-    /// True when this backend declared it cannot rasterize/read targets at all.
+    /// True when this renderer declared it cannot rasterize/read targets at all.
     static bool Unsupported() { return !kRasterizes; }
 
-    /// Asserts an unreadable backend rejected, and reports whether the caller should continue.
+    /// Asserts an unreadable renderer rejected, and reports whether the caller should continue.
     bool RequireReadable(const Readback& r, const std::string& label)
     {
         if (Unsupported())
@@ -656,13 +656,13 @@ class RenderTargetSamplingOrientationTest : public Game
         if (!kStockEffectRtSourceSupported)
         {
             // REMED-GFX-152: handing a RenderTarget2D to a stock effect is undefined behaviour on
-            // this backend and terminates the process, so the pair cannot be drawn at all. The
+            // this renderer and terminates the process, so the pair cannot be drawn at all. The
             // boundary is recorded rather than silently skipped; the SpriteBatch legs above still
             // cover render-target sampling here, and the ordinary-texture control below still
             // covers mesh-UV sampling.
             std::printf("[INFO] CD legs: %s cannot use a RenderTarget2D as a stock 3D effect's "
-                        "texture (REMED-GFX-152: SdlGpuRenderTargetBackend static_cast to the "
-                        "unrelated SdlGpuTextureBackend) -- boundary recorded\n", kBackendName);
+                        "texture (REMED-GFX-152: SdlGpuRenderTargetRenderer static_cast to the "
+                        "unrelated SdlGpuTextureRenderer) -- boundary recorded\n", kRendererName);
             std::fflush(stdout);
         }
 
@@ -687,7 +687,7 @@ class RenderTargetSamplingOrientationTest : public Game
                 std::uint16_t idx[6];
                 FillSamplingQuad(q);
 
-                // A stock effect/vertex combination a backend has not implemented (e.g. lighting
+                // A stock effect/vertex combination a renderer has not implemented (e.g. lighting
                 // with no Normal in the vertex, or DualTextureEffect at all) is a declared boundary
                 // there, not a defect this orientation oracle owns -- caught here so it reports
                 // as one case skipped rather than terminating the whole fixture.
@@ -763,7 +763,7 @@ class RenderTargetSamplingOrientationTest : public Game
             {
                 std::printf("[INFO] %s: %s cannot draw this effect/vertex combination against a "
                             "RenderTarget2D source (%s) -- boundary recorded\n",
-                            c.name, kBackendName, drawWhat.c_str());
+                            c.name, kRendererName, drawWhat.c_str());
                 std::fflush(stdout);
                 continue;
             }
@@ -782,7 +782,7 @@ class RenderTargetSamplingOrientationTest : public Game
             if (!kStockEffectRtSourceSupported)
             {
                 // Only the ordinary-texture control ran; still assert it, so mesh-UV sampling is
-                // covered on this backend even though the pair could not be formed.
+                // covered on this renderer even though the pair could not be formed.
                 if (c.kind == 0 || c.kind == 1)
                     CheckPattern(reads[1], std::string(c.name) +
                                  ": the Texture2D control itself samples upright");
@@ -828,7 +828,7 @@ class RenderTargetSamplingOrientationTest : public Game
 
     /// Leg G0: the canonical XNA render-to-texture sequence -- render, unbind, sample -- with NO
     /// readback of the source anywhere. Every other leg reads its source at some point, which is
-    /// exactly how a backend that only materialises a target on readback stays hidden.
+    /// exactly how a renderer that only materialises a target on readback stays hidden.
     void LegSampleWithoutReadback(GraphicsDevice& dev)
     {
         RenderTarget2D source(dev, kPW, kPH, false, SurfaceFormat::Color, DepthFormat::None, 0,
@@ -848,8 +848,8 @@ class RenderTargetSamplingOrientationTest : public Game
         if (!RequireReadable(r, "G0 sample a never-read target")) return;
 
         static_assert(kSampleWithoutReadbackWorks,
-                      "REMED-GFX-151 is fixed on every backend; this leg is an orientation check "
-                      "again, not a pinned defect. A backend that regresses must fail G0, not "
+                      "REMED-GFX-151 is fixed on every renderer; this leg is an orientation check "
+                      "again, not a pinned defect. A renderer that regresses must fail G0, not "
                       "re-declare it.");
         CheckPattern(r, "G0 render -> unbind -> sample with no readback of the source is upright");
     }
@@ -886,7 +886,7 @@ class RenderTargetSamplingOrientationTest : public Game
 
         // Different dimensions in the chain. Deliberately 1:1 at every hop -- a target that is
         // LARGER than the sprite, not a magnified sprite -- so this leg measures orientation and
-        // nothing else. A magnifying hop would fold each backend's texture-filter fidelity into an
+        // nothing else. A magnifying hop would fold each renderer's texture-filter fidelity into an
         // orientation result, and a difference there would be neither this finding nor evidence
         // against it.
         RenderTarget2D big(dev, kPW * 2, kPH * 2, false, SurfaceFormat::Color, DepthFormat::None, 0,
@@ -961,20 +961,20 @@ class RenderTargetSamplingOrientationTest : public Game
 
         if (threw)
         {
-            // Backbuffer readback is an optional capability; where a backend does not implement it
+            // Backbuffer readback is an optional capability; where a renderer does not implement it
             // there is simply no honest oracle for this leg, and the render-target legs above
             // already carry the contract. Recorded, not asserted either way.
             std::printf("[INFO] F1 GetBackBufferData unavailable on %s (%s) -- boundary recorded\n",
-                        kBackendName, what.c_str());
+                        kRendererName, what.c_str());
             std::fflush(stdout);
             return;
         }
         if (Unsupported())
         {
-            // A declared non-rasterizing backend drew nothing, so there is no orientation in the
+            // A declared non-rasterizing renderer drew nothing, so there is no orientation in the
             // frame to measure. What it returns instead is REMED-GFX-127's question about the
             // BACKBUFFER, which this task does not own -- recorded, not asserted.
-            std::printf("[INFO] F1 GetBackBufferData on a non-rasterizing backend returned %s at "
+            std::printf("[INFO] F1 GetBackBufferData on a non-rasterizing renderer returned %s at "
                         "(0,0) -- no orientation to measure here\n", ColorText(frame[0]).c_str());
             std::fflush(stdout);
             return;
@@ -1033,7 +1033,7 @@ class RenderTargetSamplingOrientationTest : public Game
                          "was sampled");
     }
 
-    /// Leg J: the application's SpriteEffects flip and the backend's correction are separate
+    /// Leg J: the application's SpriteEffects flip and the renderer's correction are separate
     /// transforms and must compose, not cancel.
     void LegSpriteEffects(GraphicsDevice& dev, RenderTarget2D& a, Texture2D& b)
     {
@@ -1076,7 +1076,7 @@ class RenderTargetSamplingOrientationTest : public Game
             check(mismatched == 0, std::string(c.name) +
                   ": the public flip composes identically over a render target and a texture" + first);
 
-            // And the texture control really performed the requested flip, so a backend that
+            // And the texture control really performed the requested flip, so a renderer that
             // ignored SpriteEffects entirely cannot pass this pair by doing nothing on both sides.
             int good = 0;
             for (int y = 0; y < kPH; ++y)
@@ -1250,11 +1250,11 @@ class RenderTargetSamplingOrientationTest : public Game
         RenderTarget2D msaa(dev, kPW, kPH, false, SurfaceFormat::Color, DepthFormat::None, 4,
                             RenderTargetUsage::DiscardContents);
         const int applied = msaa.getMultiSampleCountProperty();
-        std::printf("[INFO] L1 requested MSAA 4, backend applied %d\n", applied);
+        std::printf("[INFO] L1 requested MSAA 4, renderer applied %d\n", applied);
         std::fflush(stdout);
         if (applied <= 0)
         {
-            check(true, "L1 MSAA not applied by this backend (requested 4, got " +
+            check(true, "L1 MSAA not applied by this renderer (requested 4, got " +
                         std::to_string(applied) + ") -- sample-count-one path already covered above");
             return;
         }
@@ -1290,7 +1290,7 @@ class RenderTargetSamplingOrientationTest : public Game
     /// orientation-consistent with it rather than mirrored.
     void LegMips(GraphicsDevice& dev, Texture2D& b)
     {
-        // Whether a backend supports a mipmapped render target at all is measured, not assumed:
+        // Whether a renderer supports a mipmapped render target at all is measured, not assumed:
         // WebGPU documents the chain regeneration as unimplemented and throws from here.
         std::unique_ptr<RenderTarget2D> mippedOwner;
         try
@@ -1303,7 +1303,7 @@ class RenderTargetSamplingOrientationTest : public Game
         catch (const std::exception& e)
         {
             std::printf("[INFO] M1 mipmapped RenderTarget2D unsupported on %s (%s) "
-                        "-- boundary recorded\n", kBackendName, e.what());
+                        "-- boundary recorded\n", kRendererName, e.what());
             std::fflush(stdout);
             return;
         }
@@ -1325,7 +1325,7 @@ class RenderTargetSamplingOrientationTest : public Game
         if (RequireReadable(rs, "M2 mipmapped target sampled"))
             CheckPair(rs, 0, kPW, "M2 mipmapped target level 0 sampled", true);
 
-        // Level 1 (if this backend exposes it): compare against the top-down and the bottom-up
+        // Level 1 (if this renderer exposes it): compare against the top-down and the bottom-up
         // 2x2 box predictions and report which one it matches. A generated chain that inverted
         // rows would match the mirrored prediction, which is a separate finding, not this one.
         const int w1 = kPW / 2, h1 = kPH / 2;
@@ -1338,7 +1338,7 @@ class RenderTargetSamplingOrientationTest : public Game
         if (threw)
         {
             std::printf("[INFO] M3 mip level 1 readback unavailable on %s (%s) -- boundary recorded\n",
-                        kBackendName, what.c_str());
+                        kRendererName, what.c_str());
             std::fflush(stdout);
             return;
         }
@@ -1421,10 +1421,10 @@ class RenderTargetSamplingOrientationTest : public Game
 
         // Destination offset, through the rectangle overload -- the one that honours startIndex on
         // a render target. REMED-GFX-149 (recorded, not owned here): the 3-argument
-        // GetData(Color*, startIndex, elementCount) overload gates its render-target backend
+        // GetData(Color*, startIndex, elementCount) overload gates its render-target renderer
         // fallback on startIndex == 0 and throws std::runtime_error for any other offset, while
         // this rectangle overload accepts the same offset. That asymmetry is in the shared
-        // Texture2D layer, is identical on every backend and has nothing to do with orientation.
+        // Texture2D layer, is identical on every renderer and has nothing to do with orientation.
         const int count = kPW * kPH;
         const Rectangle whole(0, 0, kPW, kPH);
         std::vector<Color> offset(static_cast<std::size_t>(count) + 5, Color(0x11, 0x22, 0x33, 0x44));
@@ -1484,7 +1484,7 @@ class RenderTargetSamplingOrientationTest : public Game
     /// it deliberately asserts nothing about which orientation is correct.
     void LegCubeBoundary(GraphicsDevice& dev)
     {
-        if (Unsupported()) { check(true, "O1 cube boundary: not applicable on a non-rasterizing backend"); return; }
+        if (Unsupported()) { check(true, "O1 cube boundary: not applicable on a non-rasterizing renderer"); return; }
 
         bool threw = false;
         std::string what;
@@ -1551,7 +1551,7 @@ protected:
         dev.Clear(Color(0, 0, 0, 255));
 
         std::printf("[INFO] REMED-GFX-147 render-target sampling orientation on %s (%dx%d pattern)\n",
-                    kBackendName, kPW, kPH);
+                    kRendererName, kPW, kPH);
         std::fflush(stdout);
 
         RenderTarget2D a(dev, kPW, kPH, false, SurfaceFormat::Color, DepthFormat::None, 0,
@@ -1584,7 +1584,7 @@ protected:
         LegReadbackContract(dev, a, aBytes);
         LegCubeBoundary(dev);
 
-        std::printf("[INFO] %s: %d/%d checks passed\n", kBackendName, passCount_, totalCount_);
+        std::printf("[INFO] %s: %d/%d checks passed\n", kRendererName, passCount_, totalCount_);
         std::fflush(stdout);
         result_ = (passCount_ == totalCount_) ? 0 : 1;
         Exit();

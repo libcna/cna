@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Task 947 (Phase 78 rollout): HLSL->GLSL shader-conversion proof -- Clouds.fx (EasyGL backend).
+// Task 947 (Phase 78 rollout): HLSL->GLSL shader-conversion proof -- Clouds.fx (EasyGL renderer).
 // Blocks NetRumble (DEFERRED.md item #11) -- NetRumble's own missing.md documents 4 blocking
 // shaders total: the 3-shader bloom trio (already proven, Task 946) plus this one, Clouds.fx.
 // With this shader proven too, NetRumble's shader blocker is now fully cleared.

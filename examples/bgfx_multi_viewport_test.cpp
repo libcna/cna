@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-065: the Bgfx backend cannot represent two DIFFERENT GraphicsDevice.Viewport states
+// REMED-GFX-065: the Bgfx renderer cannot represent two DIFFERENT GraphicsDevice.Viewport states
 // submitted to the same target within one frame. bgfx view state (setViewRect / setViewTransform)
 // is PER-VIEW (the last call before bgfx::frame() applies to every draw in that view), and both the
 // 3D path (ApplyViewportOverride -> setViewRect(currentViewId_)) and the SpriteBatch path

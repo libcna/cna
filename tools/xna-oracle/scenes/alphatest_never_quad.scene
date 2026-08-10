@@ -6,7 +6,7 @@
 # fragment regardless of its actual alpha value. Reuses alphatest_quad.scene's exact texture
 # (alpha=255,1,255,64) unchanged -- under plain Greater, the alpha=255 texels would normally
 # PASS, but under Never they must ALL be discarded, including the ones that would otherwise
-# clearly pass. A backend that silently treated Never as "always pass" (a plausible off-by-one
+# clearly pass. A renderer that silently treated Never as "always pass" (a plausible off-by-one
 # mistake given Never/Always are easy to invert) would render the full texture here instead of
 # nothing -- this scene exists specifically to close that verification gap.
 width=256

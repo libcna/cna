@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/ModelMesh.hpp"
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectPass.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectPassCollection.hpp"
@@ -42,7 +42,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void ModelMesh::Draw()
     {
         if (graphicsDevice_ != nullptr)
-            graphicsDevice_->GetBackend().Ensure3DSupported("ModelMesh::Draw");
+            graphicsDevice_->GetRenderer().Ensure3DSupported("ModelMesh::Draw");
 
         for (ModelMeshPart* part : meshParts_)
         {

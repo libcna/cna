@@ -2,7 +2,7 @@
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Graphics/DxtUtil.hpp"
 #include "System/IO/Stream.hpp"
 #include "System/FormatException.hpp"
@@ -16,10 +16,10 @@
 #include <vector>
 
 // plan_dx9.md Phase D9-10 (D9-103 follow-up): GraphicsProfile.Reach/HiDef cube-texture-size
-// ceilings, real on this backend only -- matches Texture2D.cpp's own #ifdef CNA_BACKEND_D3D9
+// ceilings, real on this renderer only -- matches Texture2D.cpp's own #ifdef CNA_RENDERER_D3D9
 // convention exactly.
-#ifdef CNA_BACKEND_D3D9
-#include "CNA/Internal/Backends/D3D9/D3D9ProfileCapabilities.hpp"
+#ifdef CNA_RENDERER_D3D9
+#include "CNA/Internal/Renderers/D3D9/D3D9ProfileCapabilities.hpp"
 #endif
 
 namespace Microsoft::Xna::Framework::Graphics
@@ -38,13 +38,13 @@ namespace Microsoft::Xna::Framework::Graphics
         return std::max(1, base >> level);
     }
 
-#ifdef CNA_BACKEND_D3D9
+#ifdef CNA_RENDERER_D3D9
     // D9-103 follow-up: same profile-CEILING enforcement Texture2D.cpp already established
-    // (D9-100's own table: Reach=512, HiDef=4096), checked BEFORE the backend is created.
+    // (D9-100's own table: Reach=512, HiDef=4096), checked BEFORE the renderer is created.
     static void ValidateCubeSizeForProfileEXT(const GraphicsDevice& device, int size)
     {
         const int profile = static_cast<int>(device.getGraphicsProfileProperty());
-        const int maxSize = CNA::Internal::Backends::D3D9::MaxCubeSizeForProfileEXT(profile);
+        const int maxSize = CNA::Internal::Renderers::D3D9::MaxCubeSizeForProfileEXT(profile);
         if (size > maxSize)
         {
             throw System::NotSupportedException(
@@ -60,27 +60,27 @@ namespace Microsoft::Xna::Framework::Graphics
     TextureCube::TextureCube(GraphicsDevice& device, int size, bool mipMap, SurfaceFormat format)
         : Texture(&device)
         , size_(size)
-        , backend_(nullptr)
+        , renderer_(nullptr)
     {
-#ifdef CNA_BACKEND_D3D9
+#ifdef CNA_RENDERER_D3D9
         ValidateCubeSizeForProfileEXT(device, size);
 #endif
         Texture::ValidateFormat(format);
         format_     = format;
         levelCount_ = mipMap ? CalculateMipLevels(size, size) : 1;
-        backend_ = device.GetBackend().CreateTextureCube(size, mipMap, static_cast<int>(format));
+        renderer_ = device.GetRenderer().CreateTextureCube(size, mipMap, static_cast<int>(format));
     }
 
     TextureCube::TextureCube(GraphicsDevice& device, int size, SurfaceFormat format,
-                             std::shared_ptr<CNA::Internal::Backends::ITextureCubeBackend> backend,
+                             std::shared_ptr<CNA::Internal::Renderers::ITextureCubeRenderer> renderer,
                              int levelCount)
         : Texture(&device)
         , size_(size)
-        , backend_(std::move(backend))
+        , renderer_(std::move(renderer))
     {
         // Task 774 finding: this constructor (used exclusively by RenderTargetCube) previously
         // skipped ValidateFormat entirely, silently accepting any SurfaceFormat even though
-        // CreateTextureCube's own backend call never actually forwards it -- a RenderTargetCube
+        // CreateTextureCube's own renderer call never actually forwards it -- a RenderTargetCube
         // could report a non-Color Format() while its real GPU resource was always Color.
         Texture::ValidateFormat(format);
         format_     = format;
@@ -89,7 +89,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void TextureCube::Dispose(bool disposing)
     {
-        backend_.reset();
+        renderer_.reset();
         Texture::Dispose(disposing);
     }
 
@@ -168,37 +168,37 @@ namespace Microsoft::Xna::Framework::Graphics
             throw std::out_of_range("TextureCube::SetData: elementCount is less than the number of pixels in the requested region");
 
         // REMED-GFX-135 (REMED-GFX-127/130's contract, applied to the WRITE direction). Every check
-        // above runs BEFORE anything is converted or handed to a backend, so a rejected call cannot
-        // have changed one texel. A backend that was never created at all (SDL_Renderer, ASCII,
-        // Canvas, DX3 keep IGraphicsBackend::CreateTextureCube's nullptr default) used to be skipped
-        // by a bare `if (backend_)`, which turned "no storage exists" into a successful-looking
+        // above runs BEFORE anything is converted or handed to a renderer, so a rejected call cannot
+        // have changed one texel. A renderer that was never created at all (SDL_Renderer, ASCII,
+        // Canvas, DX3 keep IGraphicsRenderer::CreateTextureCube's nullptr default) used to be skipped
+        // by a bare `if (renderer_)`, which turned "no storage exists" into a successful-looking
         // upload -- it is the same answer as an unimplemented write, reached one step earlier.
-        if (!backend_)
+        if (!renderer_)
         {
             throw System::NotSupportedException(
-                "TextureCube::SetData: this graphics backend creates no cube-map texture resource, "
+                "TextureCube::SetData: this graphics renderer creates no cube-map texture resource, "
                 "so a cube face's content cannot be stored");
         }
 
-        // Converted to the REQUESTED REGION, not to elementCount: the backend stores exactly w*h
+        // Converted to the REQUESTED REGION, not to elementCount: the renderer stores exactly w*h
         // texels, so converting more would read source elements the call never uploads and hand
-        // backends a buffer whose length disagrees with the region they are told to write.
+        // renderers a buffer whose length disagrees with the region they are told to write.
         const auto rgba = colorsToRgba(data, startIndex, w * h);
-        if (!backend_->SetData(static_cast<int>(face), level, x, y, w, h,
+        if (!renderer_->SetData(static_cast<int>(face), level, x, y, w, h,
                                rgba.data(), static_cast<int>(rgba.size())))
         {
             throw System::NotSupportedException(
-                "TextureCube::SetData: this graphics backend did not store the complete requested "
+                "TextureCube::SetData: this graphics renderer did not store the complete requested "
                 "cube face region -- the face, mip level or region is not supported here");
         }
 
         // Level-0-only CPU shadow (see the header's own comment on cpuPixels_ for scope) --
         // lazily created on first write, then mutated in place for every subsequent write to
-        // the SAME face; only re-shared with the backend when the shared_ptr object itself is
+        // the SAME face; only re-shared with the renderer when the shared_ptr object itself is
         // first created, since mutating the existing buffer is already visible through the
-        // backend's own aliased shared_ptr (same convention Texture2D::SetData(level,rect,...)
+        // renderer's own aliased shared_ptr (same convention Texture2D::SetData(level,rect,...)
         // already established for its own single-face cpuPixels_ buffer). Updated only after the
-        // backend accepted the store above, so a refused write cannot desynchronize the shadow.
+        // renderer accepted the store above, so a refused write cannot desynchronize the shadow.
         if (level == 0)
         {
             const int faceIdx = static_cast<int>(face);
@@ -211,7 +211,7 @@ namespace Microsoft::Xna::Framework::Graphics
                             rgba.data() + static_cast<std::size_t>(row) * w * 4,
                             static_cast<std::size_t>(w) * 4);
             if (isNew)
-                backend_->ShareCpuPixels(faceIdx, shadow);
+                renderer_->ShareCpuPixels(faceIdx, shadow);
         }
     }
 
@@ -252,31 +252,31 @@ namespace Microsoft::Xna::Framework::Graphics
             throw std::out_of_range("TextureCube::GetData: elementCount is less than the number of pixels in the requested region");
         Texture::ValidateGetDataFormat(format_, 4);
 
-        // REMED-GFX-130 (REMED-GFX-127's contract, applied to ITextureCubeBackend). `rgba` is
+        // REMED-GFX-130 (REMED-GFX-127's contract, applied to ITextureCubeRenderer). `rgba` is
         // scratch memory THIS layer owns and zero-initializes, so converting it unconditionally is
-        // not "leaving the caller's buffer untouched" when the backend has no readback -- it
+        // not "leaving the caller's buffer untouched" when the renderer has no readback -- it
         // fabricates a complete transparent-black cube face. Conversion happens only when the
-        // backend reports it wrote the whole region; otherwise the caller's `data` is left
+        // renderer reports it wrote the whole region; otherwise the caller's `data` is left
         // byte-for-byte as it was and the missing capability is raised instead of being answered
-        // with invented content. A backend that was never created at all (SDL_Renderer, ASCII,
-        // Canvas, DX3 keep IGraphicsBackend::CreateTextureCube's nullptr default) is the same
+        // with invented content. A renderer that was never created at all (SDL_Renderer, ASCII,
+        // Canvas, DX3 keep IGraphicsRenderer::CreateTextureCube's nullptr default) is the same
         // answer reached one step earlier: no storage exists, so there is nothing to return.
-        if (!backend_)
+        if (!renderer_)
         {
             throw System::NotSupportedException(
-                "TextureCube::GetData: this graphics backend creates no cube-map texture resource, "
+                "TextureCube::GetData: this graphics renderer creates no cube-map texture resource, "
                 "so a cube face's content cannot be read back");
         }
 
-        // Sized to the REQUESTED REGION, not to elementCount: the backend fills exactly w*h texels,
+        // Sized to the REQUESTED REGION, not to elementCount: the renderer fills exactly w*h texels,
         // so a larger elementCount would otherwise hand the caller this buffer's untouched tail as
         // if it were content.
         std::vector<uint8_t> rgba(static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4, 0);
-        if (!backend_->GetData(static_cast<int>(face), level, x, y, w, h,
+        if (!renderer_->GetData(static_cast<int>(face), level, x, y, w, h,
                                rgba.data(), static_cast<int>(rgba.size())))
         {
             throw System::NotSupportedException(
-                "TextureCube::GetData: this graphics backend cannot read a cube face back to the "
+                "TextureCube::GetData: this graphics renderer cannot read a cube face back to the "
                 "CPU at the requested mip level");
         }
         rgbaToColors(rgba, data, startIndex, w * h);
@@ -382,7 +382,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // precedent for the identical DDS/DXT problem): every face/level is fully decompressed to
         // RGBA8 on the CPU via DxtUtil and uploaded as SurfaceFormat::Color, rather than uploading
         // the compressed blocks directly to a real compressed GPU format — CNA doesn't implement
-        // compressed GPU texture formats end-to-end on any backend (NEXT.md's documented
+        // compressed GPU texture formats end-to-end on any renderer (NEXT.md's documented
         // "SurfaceFormat support is Color-only for real GPU formats" limitation).
         TextureCube result(device, width, levels > 1, SurfaceFormat::Color);
 

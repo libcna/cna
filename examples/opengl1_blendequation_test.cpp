@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MS-PL
-// OPENGL1 backend: blend equation beyond additive (plan_opengl1.md item 18, EasyGL parity).
+// OPENGL1 renderer: blend equation beyond additive (plan_opengl1.md item 18, EasyGL parity).
 //
 // Before this, ApplyBlendState() dropped colorBlendFunc/alphaBlendFunc entirely -- glBlendFunc
 // always implied GL_FUNC_ADD regardless of what BlendState.ColorBlendFunction/AlphaBlendFunction
 // actually requested.
 //
 // Uses the 3D draw path (BasicEffect + DrawUserPrimitives), not SpriteBatch -- see
-// opengl1_blendfactor_test.cpp's own header for why (OpenGL1SpriteBatchBackend::Begin() hardcodes
+// opengl1_blendfactor_test.cpp's own header for why (OpenGL1SpriteBatchRenderer::Begin() hardcodes
 // its own additive-only glBlendFunc, independent of any BlendState a game passes in).
 //
 // Method: draw an opaque destination quad (200,50,50), then a second quad (50,20,20) with

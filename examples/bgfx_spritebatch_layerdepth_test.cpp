@@ -9,14 +9,14 @@
 // established Bgfx pattern (each check redoes the full Clear+Begin/Draw/End sequence).
 //
 // Scope note (matches Task 420's own established scope on EasyGL): Tasks 415/416 already proved,
-// via a mock/recording backend, that SpriteSortMode::FrontToBack/BackToFront/Deferred/Texture
-// deliver draw calls to the SpriteBatch backend in the CORRECT order for each mode -- that CPU-side
-// sorting logic is backend-agnostic and already fully covered there for all 4 modes. This task (like
-// Task 420 before it) verifies the remaining, genuinely backend-specific question: that whatever
-// order the backend receives draws in is ACTUALLY reflected on screen via simple painter's algorithm
-// (CNA's sprite vertices carry no Z component -- confirmed by reading BgfxSpriteBatchBackend::Draw
+// via a mock/recording renderer, that SpriteSortMode::FrontToBack/BackToFront/Deferred/Texture
+// deliver draw calls to the SpriteBatch renderer in the CORRECT order for each mode -- that CPU-side
+// sorting logic is renderer-agnostic and already fully covered there for all 4 modes. This task (like
+// Task 420 before it) verifies the remaining, genuinely renderer-specific question: that whatever
+// order the renderer receives draws in is ACTUALLY reflected on screen via simple painter's algorithm
+// (CNA's sprite vertices carry no Z component -- confirmed by reading BgfxSpriteBatchRenderer::Draw
 // directly: layerDepth is used only as a CPU-side sort key, never written into vertex data), with no
-// backend-specific surprise (e.g. accidental depth-test interference). SpriteSortMode::FrontToBack
+// renderer-specific surprise (e.g. accidental depth-test interference). SpriteSortMode::FrontToBack
 // is used as the representative mode, matching Task 420's own precedent.
 //
 // Design: 2 overlapping 60x60 opaque sprites.

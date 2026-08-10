@@ -3,24 +3,24 @@
   SPDX-License-Identifier: MS-PL
 
   plan_html_dom.md HTMLDOM-99 / HTMLDOM-111. Standalone (no Emscripten/CMake needed -- this is a
-  pure DOM/CSS technique question, not a backend-integration one) reproduction of the experiment
-  HTMLDOM-99 ran to decide between the HTML_DOM backend's current PNG-variant-cache sprite tinting
+  pure DOM/CSS technique question, not a renderer-integration one) reproduction of the experiment
+  HTMLDOM-99 ran to decide between the HTML_DOM renderer's current PNG-variant-cache sprite tinting
   technique and a real-time SVG `feColorMatrix` filter alternative. HTMLDOM-111 checked this in
   (it did not previously exist in the repository) so HTMLDOM-99's own conclusion is independently
   reproducible rather than only asserted in plan_html_dom.md's prose.
 
   Methodology (same shape as examples/htmldom_stress_test.cpp's own HTMLDOM-89 benchmark, and
-  examples/graphics_backend_benchmark.cpp's HTMLDOM-111 rework): 500 pooled sprite elements,
+  examples/graphics_renderer_benchmark.cpp's HTMLDOM-111 rework): 500 pooled sprite elements,
   position animating every frame (never the thing under test), one warm-up frame excluded, 60
   requestAnimationFrame-paced timed frames per technique per workload. Two workloads:
     - steady-state: 8 fixed, already-cached tint values cycled by sprite index -- no tint EVER
       changes after the first frame each sprite uses it. The common case: most games use a
       handful of stable tint colours, not a fresh one per sprite per frame.
     - heavy churn: every sprite's tint changes every single frame, cycling through hundreds of
-      distinct RGB values -- this backend's own documented worst case (a fresh cached PNG variant
+      distinct RGB values -- this renderer's own documented worst case (a fresh cached PNG variant
       per distinct colour under the current technique).
   Two techniques:
-    - variant-cache (what this backend actually ships): background-image swapped to a cached,
+    - variant-cache (what this renderer actually ships): background-image swapped to a cached,
       pre-tinted PNG data URL per (colour) value, generated via getImageData/putImageData +
       toDataURL, cached and reused across frames/sprites that share a colour.
     - feColorMatrix: one dedicated per-sprite <filter><feColorMatrix></filter>, `background-image`
@@ -45,7 +45,7 @@
   frame) could not be perfectly reconstructed from plan_html_dom.md's prose description alone -- and
   three-plus years of subsequent browser/compositor optimisation work is also a plausible factor.
   What this file DOES support, reliably and reproducibly, is HTMLDOM-99's actual DECISION: keep the
-  variant-cache. At the sprite counts and workloads this backend targets, neither technique's cost is
+  variant-cache. At the sprite counts and workloads this renderer targets, neither technique's cost is
   large enough, in either absolute terms or relative to the other, to justify a real-time SVG filter
   and the architectural complexity/compatibility narrowing it would add over plain
   `background-image`/`toDataURL` compositing. Treat this file's own freshly-measured numbers, not the
@@ -94,7 +94,7 @@ function log(line) {
 }
 
 // -- shared: a tiny cached 1x1 white texture, tinted variants generated on demand (the exact
-// technique HtmlDomTextureBackend.cpp's own cnaDomGetVariant uses) -----------------------------
+// technique HtmlDomTextureRenderer.cpp's own cnaDomGetVariant uses) -----------------------------
 const baseCanvas = document.createElement("canvas");
 baseCanvas.width = 8; baseCanvas.height = 8;
 {
@@ -274,7 +274,7 @@ document.getElementById("runBtn").addEventListener("click", async () => {
       "own top-of-file HONEST CAVEAT for why this run's numbers may not match plan_html_dom.md's " +
       "originally-cited ones, and why that does not change HTMLDOM-99's actual decision: at this " +
       "sprite count, on real hardware, neither technique's absolute cost is large enough to " +
-      "justify a real-time SVG filter's added complexity over the variant-cache this backend " +
+      "justify a real-time SVG filter's added complexity over the variant-cache this renderer " +
       "already ships -- re-run this file for a current, environment-specific measurement rather " +
       "than trusting either set of numbers as a permanent constant.");
 

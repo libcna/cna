@@ -16,7 +16,7 @@
 //   to the full row) also round-trips exactly, exercising the row-pitch-vs-requested-width skip
 //   path independently of the full-texture case.
 // Check C -- a real draw samples the exact colour from the NPOT texture through the normal
-//   BasicEffect/SpriteBatch path (not just a raw backend round-trip), matching DX-140's own "does
+//   BasicEffect/SpriteBatch path (not just a raw renderer round-trip), matching DX-140's own "does
 //   NPOT upload/sample corrupt anything" concern.
 //
 // Exit code 0 = all checks PASS, 1 = any FAIL, 77 = no usable device.
@@ -128,7 +128,7 @@ protected:
         }
 
         // Check C: a real draw samples the exact colour through BasicEffect/SpriteBatch, not just a
-        // raw backend round-trip -- proves NPOT upload/sample doesn't corrupt through the normal
+        // raw renderer round-trip -- proves NPOT upload/sample doesn't corrupt through the normal
         // draw path either.
         {
             SamplerState point;
@@ -161,7 +161,7 @@ protected:
             device.DrawUserPrimitives(PrimitiveType::TriangleList, verts, 0, 2);
 
             // Sample the viewport centre. Exactly which of the 5x3 texels maps there depends on the
-            // backend's own Y-flip convention (immaterial to this check), so instead of predicting
+            // renderer's own Y-flip convention (immaterial to this check), so instead of predicting
             // one exact texel, verify the sampled colour matches ANY of the 15 known, sparse,
             // pseudo-random texture colours -- something corruption/garbage/an all-black or
             // all-clear-colour result could not plausibly produce by chance.

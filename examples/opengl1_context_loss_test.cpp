@@ -1,23 +1,23 @@
 // SPDX-License-Identifier: MS-PL
-// OPENGL1 backend: context-loss resource recreation registry (plan_opengl1.md phase 8).
+// OPENGL1 renderer: context-loss resource recreation registry (plan_opengl1.md phase 8).
 //
-// OpenGL1GraphicsBackend::DebugSimulateContextLoss() destroys and immediately recreates the SDL
-// GL context (one atomic operation on desktop -- matching every other backend's own
-// DebugSimulateContextLoss()/DebugRestoreContext() semantics, see IGraphicsBackend.hpp's own doc
+// OpenGL1Renderer::DebugSimulateContextLoss() destroys and immediately recreates the SDL
+// GL context (one atomic operation on desktop -- matching every other renderer's own
+// DebugSimulateContextLoss()/DebugRestoreContext() semantics, see IGraphicsRenderer.hpp's own doc
 // comment), then walks an OPENGL1-private OpenGL1ResourceRegistry (no dependency on EasyGL's own
 // ::easygl::ResourceRegistry) to rebuild every tracked GPU resource:
 //   - Texture2D/TextureCube: re-uploaded from the SAME CPU-side pixel buffer(s) Texture2D/
-//     TextureCube themselves keep and share with the backend via ITextureBackend::
-//     ShareCpuPixels()/ITextureCubeBackend::ShareCpuPixels(face,...) -- content survives exactly.
+//     TextureCube themselves keep and share with the renderer via ITextureRenderer::
+//     ShareCpuPixels()/ITextureCubeRenderer::ShareCpuPixels(face,...) -- content survives exactly.
 //     TextureCube's own CPU shadow (and the ShareCpuPixels(face,...) hook itself) were added
-//     specifically to close this backend's own previously-documented, intentional gap.
+//     specifically to close this renderer's own previously-documented, intentional gap.
 //   - RenderTarget2D: rebuilt as an empty FBO/color-texture/depth-renderbuffer of the same
 //     size/format -- content does NOT survive (a render target's content is GPU-produced, XNA/FNA
 //     RenderTarget2D itself does not guarantee content survives a real device reset either unless
-//     RenderTargetUsage.PreserveContents, which this backend does not implement). This test keeps
+//     RenderTargetUsage.PreserveContents, which this renderer does not implement). This test keeps
 //     the RT bound as the ACTIVE render target across the simulated loss (the scenario that
 //     matters -- see the check's own comment below) and proves a post-recovery draw into it
-//     actually lands on the RT itself, not silently on the backbuffer: OpenGL1GraphicsBackend
+//     actually lands on the RT itself, not silently on the backbuffer: OpenGL1Renderer
 //     must explicitly re-bind currentRt_'s rebuilt FBO after recovery, since a brand-new GL
 //     context always defaults to the backbuffer regardless of what was bound before the loss.
 //
@@ -27,7 +27,7 @@
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
@@ -96,7 +96,7 @@ protected:
         Check(before.getRProperty() > 200 && before.getBProperty() > 200 && before.getGProperty() < 20,
               "Texture2D: magenta before simulated context loss");
 
-        dev.GetBackend().DebugSimulateContextLoss();
+        dev.GetRenderer().DebugSimulateContextLoss();
 
         Color after = drawTexAndReadCenter();
         std::printf("texture after context loss: (%d,%d,%d)\n",
@@ -118,7 +118,7 @@ protected:
                   cubeBefore[0].getGProperty() < 180 && cubeBefore[0].getBProperty() < 20,
                   "TextureCube: orange face before simulated context loss");
 
-            dev.GetBackend().DebugSimulateContextLoss();
+            dev.GetRenderer().DebugSimulateContextLoss();
 
             Color cubeAfter[4] = { kBlack, kBlack, kBlack, kBlack };
             cube.GetData(CubeMapFace::PositiveY, cubeAfter, 4);
@@ -153,13 +153,13 @@ protected:
             dev.Clear(Color(0, 255, 0, 255)); // pre-loss content -- not expected to survive.
 
             bool survivedLossWhileBound = true;
-            try { dev.GetBackend().DebugSimulateContextLoss(); }
+            try { dev.GetRenderer().DebugSimulateContextLoss(); }
             catch (...) { survivedLossWhileBound = false; }
             Check(survivedLossWhileBound,
                   "RenderTarget2D: DebugSimulateContextLoss() does not throw while the RT is still the active target");
 
             // The new context defaults to the backbuffer regardless of what was bound before the
-            // loss. If OpenGL1GraphicsBackend doesn't explicitly re-bind the still-current render
+            // loss. If OpenGL1Renderer doesn't explicitly re-bind the still-current render
             // target's rebuilt FBO after recovery, this Clear() would silently land on the
             // backbuffer instead -- leaving the RT's own (freshly rebuilt, empty/black) content
             // unchanged. Sampling the RT back afterward is what actually discriminates the two

@@ -55,13 +55,13 @@ a starting sketch, re-verify before actually implementing):
 - **AOSP / no-GMS baseline:** `android.location.LocationManager`
   (`requestLocationUpdates()`, `GPS_PROVIDER`/`NETWORK_PROVIDER`) — works on any Android
   device, no Google Play Services dependency. This should be the default/required
-  backend, matching this project's general "don't require proprietary vendor services
+  renderer, matching this project's general "don't require proprietary vendor services
   for a core feature" posture (see e.g. `VibrateController`'s SDL3-only approach, no
   vendor-specific rumble APIs).
 - **Optional, `NOXNA`/opt-in enhancement:** Google's Fused Location Provider API
   (`com.google.android.gms.location.FusedLocationProviderClient`) — better accuracy/
   battery behavior, but requires Google Play Services, so it must be a strictly
-  optional, separately-buildable backend, never the only path, to keep AOSP/no-GMS
+  optional, separately-buildable renderer, never the only path, to keep AOSP/no-GMS
   devices fully supported.
 - Requires `ACCESS_FINE_LOCATION`/`ACCESS_COARSE_LOCATION` runtime permission
   (Android 6.0+) — a JNI/Kotlin bridge would need to surface permission-denied as a
@@ -95,12 +95,12 @@ sketched above, `Compass`'s consumption of it should be:
   `GeoCoordinateWatcher` surface directly), so `AndroidCompassBackend` depends on
   "give me a declination value" rather than the entire location subsystem's shape —
   mirroring this codebase's existing `Detail::ICompassBackend`/`IMotionBackend`
-  seam-injection pattern (`SetBackendForTesting()`) rather than inventing a new
+  seam-injection pattern (`SetRendererForTesting()`) rather than inventing a new
   dependency-injection style.
 - This keeps the strict XNA `Compass` public surface completely unpolluted — no new
   public method/property/constructor parameter on `Compass` itself; the injection point
-  would live entirely in `Detail::`, exactly like `Compass::SetBackendForTesting()`
-  already does for its main backend.
+  would live entirely in `Detail::`, exactly like `Compass::SetRendererForTesting()`
+  already does for its main renderer.
 - **Still not implemented, still not scheduled** — this is a plan for *if* it's ever
   built, not a commitment that it will be. The answer to "should CNA implement real
   declination right now" remains **no**, per this document's existing reasoning

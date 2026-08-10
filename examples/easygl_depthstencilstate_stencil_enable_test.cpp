@@ -13,7 +13,7 @@
 //   1. A full-screen "zero stamp" draw first writes stencil=0 everywhere (StencilFunction=Always,
 //      StencilPass=Replace, ReferenceStencil=0), in the background colour -- this establishes a
 //      known baseline explicitly via a real draw, NOT via GraphicsDevice::Clear(), because
-//      GraphicsDevice::Clear ignores ClearOptions::Stencil entirely on every backend (confirmed
+//      GraphicsDevice::Clear ignores ClearOptions::Stencil entirely on every renderer (confirmed
 //      while writing this test, tracked as a new Task 871 -- see plan_graphics.md) and this
 //      project's Vulkan render passes use stencilLoadOp=VK_ATTACHMENT_LOAD_OP_DONT_CARE, so the
 //      stencil aspect's initial content is genuinely undefined there. Depth testing is disabled
@@ -31,7 +31,7 @@
 // Check B (StencilEnable=false): the stencil test is skipped entirely (FNA/XNA semantics: fragments
 //   always pass when disabled) -- BOTH halves -> GREEN, regardless of the stencil buffer contents.
 //
-// NOTE: this project's Vulkan backend (VulkanGraphicsBackend::ApplyDepthStencilState, tracked as
+// NOTE: this project's Vulkan renderer (VulkanRenderer::ApplyDepthStencilState, tracked as
 // Task 870) never sets VkPipelineDepthStencilStateCreateInfo::stencilTestEnable/front/back at all
 // -- stencil testing is completely non-functional there regardless of StencilEnable. Expect Check
 // A to fail outright on Vulkan (both halves show GREEN, since no gating ever happens) while Check

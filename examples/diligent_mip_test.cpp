@@ -4,9 +4,9 @@
 //
 // Unlike the EasyGL precedent (easygl_texture2d_mip_test.cpp, Task 171), which explicitly notes its
 // GetData() reads a pure CPU shadow buffer rather than the GPU, DiligentSampledTexture::GetData()
-// (DiligentGraphicsBackend.hpp) is documented as reading "a sub-rectangle of a mip level back to
+// (DiligentRenderer.hpp) is documented as reading "a sub-rectangle of a mip level back to
 // the CPU through a staging texture" -- a genuine GPU round-trip. This test therefore exercises the
-// real thing D3D11's own DX-126 exists to catch: other backends (Vulkan, Bgfx) were found to
+// real thing D3D11's own DX-126 exists to catch: other renderers (Vulkan, Bgfx) were found to
 // silently no-op a non-zero mip level's SetData/GetData entirely (Task 867).
 //
 // A 4x4 mipMap texture has 3 mip levels: 4x4 (mip 0), 2x2 (mip 1), 1x1 (mip 2). Each level is

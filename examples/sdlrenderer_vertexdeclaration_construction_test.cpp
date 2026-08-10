@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: MS-PL
 // Task 724: Verify VertexDeclaration construction does NOT throw on SDL_Renderer -- it is pure
-// data (stride + element list), no backend call is involved at all, so only an actual draw call
+// data (stride + element list), no renderer call is involved at all, so only an actual draw call
 // using it should throw, never declaring/constructing the layout itself.
 //
 // Unlike VertexBuffer/IndexBuffer (whose constructors immediately call
-// device.GetBackend().CreateVertexBuffer/CreateIndexBuffer16, throwing on this 2D-only backend --
+// device.GetRenderer().CreateVertexBuffer/CreateIndexBuffer16, throwing on this 2D-only renderer --
 // Tasks 720-723), VertexDeclaration extends GraphicsResource but every one of its constructors
 // relies on GraphicsResource's default `device = nullptr` argument -- it is NEVER tied to any
-// GraphicsDevice, let alone a specific backend. This test confirms all 4 constructor overloads
+// GraphicsDevice, let alone a specific renderer. This test confirms all 4 constructor overloads
 // construct cleanly on SDL_Renderer, and that passing the resulting declaration to
 // GraphicsDevice::DrawUserPrimitives's raw+VertexDeclaration overload (Task 721) still throws
-// only at the DRAW call, never at declaration time -- proving the "pure data, no backend touch"
+// only at the DRAW call, never at declaration time -- proving the "pure data, no renderer touch"
 // claim end to end rather than just asserting it.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
@@ -59,7 +59,7 @@ protected:
 
         auto& dev = getGraphicsDeviceProperty();
 
-        // --- All 4 constructor overloads construct cleanly, no backend involved. ---
+        // --- All 4 constructor overloads construct cleanly, no renderer involved. ---
         check(DoesNotThrow([&] { VertexDeclaration vd; (void)vd; }),
               "VertexDeclaration() [default] does not throw");
 

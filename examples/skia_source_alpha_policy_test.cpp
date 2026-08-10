@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MS-PL
 // SKIA-119: raw working-colour probes for every source storage and blend convention route.
 
-#include "CNA/Internal/Backends/Skia/SkiaBlendMapping.hpp"
-#include "CNA/Internal/Backends/Skia/SkiaEffectBackend.hpp"
-#include "CNA/Internal/Backends/Skia/SkiaRenderTargetBackend.hpp"
-#include "CNA/Internal/Backends/Skia/SkiaSourceAlphaPolicy.hpp"
-#include "CNA/Internal/Backends/Skia/SkiaSurface.hpp"
-#include "CNA/Internal/Backends/Skia/SkiaTextureBackend.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaBlendMapping.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaEffectRenderer.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaRenderTargetRenderer.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaSourceAlphaPolicy.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaSurface.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaTextureRenderer.hpp"
 
 #include "include/core/SkCanvas.h"
 #include "include/core/SkImageInfo.h"
@@ -23,7 +23,7 @@
 #include <memory>
 #include <string>
 
-using namespace CNA::Internal::Backends::Skia;
+using namespace CNA::Internal::Renderers::Skia;
 using CNA::Internal::Graphics::ImageData;
 using Microsoft::Xna::Framework::Color;
 
@@ -118,7 +118,7 @@ int main()
           "every accepted blend tuple explicitly declares one source convention");
 
     const ImageData data{1, 1, {96, 32, 16, 128}};
-    SkiaTextureBackend texture(data);
+    SkiaTextureRenderer texture(data);
     Check(texture.StorageAlphaEXT() == SkiaSourceStorageAlpha::CanonicalRgbaBytes,
           "Texture2D identifies its exact public RGBA byte shadow");
     Check(ReadWorkingPixel(texture.SnapshotImage(SkiaSourceAlphaConvention::Premultiplied))
@@ -128,7 +128,7 @@ int main()
               == std::array<std::uint8_t, 4>{48, 16, 8, 128},
           "straight-labelled Texture2D multiplies RGB by source alpha exactly once");
 
-    SkiaRenderTargetBackend target(1, 1, true, {}, {});
+    SkiaRenderTargetRenderer target(1, 1, true, {}, {});
     const std::array<std::uint8_t, 4> targetSource{96, 32, 16, 128};
     target.UpdatePixels(targetSource.data(), 4);
     const auto targetPremultiplied = ReadWorkingPixel(
@@ -156,7 +156,7 @@ int main()
               && Near(straightTint.alpha, 128.0f / 255.0f),
           "straight source folds tint alpha into working RGB exactly once");
 
-    SkiaEffectBackend effect;
+    SkiaEffectRenderer effect;
     const bool compiled = effect.CompileProgram(std::string(kSkiaSkslSpriteEffectMarkerEXT), R"(
         uniform shader cnaTexture0;
         uniform float4 cnaTint;
@@ -172,7 +172,7 @@ int main()
     if (compiled)
     {
         const ImageData effectData{1, 1, {64, 32, 16, 128}};
-        SkiaTextureBackend effectTexture(effectData);
+        SkiaTextureRenderer effectTexture(effectData);
         sk_sp<SkShader> primary = effectTexture
             .SnapshotImage(SkiaSourceAlphaConvention::Premultiplied)
             ->makeShader(SkTileMode::kClamp, SkTileMode::kClamp,

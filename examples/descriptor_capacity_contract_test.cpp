@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// REMED-GFX-177: a backend's descriptor (or view, or binding-slot) bookkeeping must be a function of
+// REMED-GFX-177: a renderer's descriptor (or view, or binding-slot) bookkeeping must be a function of
 // what is LIVE, never of what has ever existed. D3D12 owned four fixed-capacity heaps with a
 // monotonic bump cursor and no free list, so the 65th sampleable resource EVER CREATED threw
 // `CBV/SRV/UAV descriptor heap exhausted` even when six were alive -- REMED-GFX-175's contract
@@ -8,7 +8,7 @@
 // RenderTarget2D per measurement.
 //
 // WHAT THIS FIXTURE PINS. Three properties that no existing fixture in this tree asserted, all of
-// them through the public XNA API only, so every backend runs the same file as a control:
+// them through the public XNA API only, so every renderer runs the same file as a control:
 //
 //   1. CARDINALITY OVER TIME. Creating and destroying resources in a loop must not consume a finite
 //      pool. Leg E runs 256 create/draw/read/destroy cycles with at most two resources live.
@@ -24,14 +24,14 @@
 // THE ORACLE, and why it is stronger than a colour comparison. Texture i is 2x2 RGBA whose twelve
 // 0/255-only colour channels spell out i in binary (texel t, channel c carries bit t*3+c). Drawn
 // one-to-one into a 2x2 render target under a Point sampler, the readback is byte-exact on every
-// backend and DECODES BACK TO AN INTEGER. So a check does not merely ask "is this the right shade";
+// renderer and DECODES BACK TO AN INTEGER. So a check does not merely ask "is this the right shade";
 // it recovers which texture was actually sampled and names it. An off-by-one in a recycled slot, a
 // stale descriptor left pointing at a destroyed resource, or an index aliased after a heap grew all
 // report the wrong integer rather than a near-miss colour. 0/255-only channels also keep the
 // comparison byte-exact under any sRGB or filtering convention, and 12 bits addresses 4096
 // identities, far past anything this fixture creates.
 //
-// WHAT THIS FIXTURE MUST NOT DO. It must not stay under any backend's capacity to pass: shrinking
+// WHAT THIS FIXTURE MUST NOT DO. It must not stay under any renderer's capacity to pass: shrinking
 // the number of variants is the failure mode this file exists to prevent, so the thresholds are
 // fixed constants and the high-cardinality legs are unconditional wherever the feature is
 // supported at all.
@@ -105,39 +105,39 @@ using namespace Microsoft::Xna::Framework::Graphics;
 
 namespace
 {
-#if defined(CNA_BACKEND_HEADLESS)
+#if defined(CNA_RENDERER_HEADLESS)
     constexpr bool kRasterizes = false;
-    constexpr const char* kBackendName = "HEADLESS";
-#elif defined(CNA_BACKEND_SOFTWARE)
+    constexpr const char* kRendererName = "HEADLESS";
+#elif defined(CNA_RENDERER_SOFTWARE)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "SOFTWARE";
-#elif defined(CNA_BACKEND_EASYGL)
+    constexpr const char* kRendererName = "SOFTWARE";
+#elif defined(CNA_RENDERER_EASYGL)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "EASYGL";
-#elif defined(CNA_BACKEND_BGFX)
+    constexpr const char* kRendererName = "EASYGL";
+#elif defined(CNA_RENDERER_BGFX)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "BGFX";
-#elif defined(CNA_BACKEND_VULKAN)
+    constexpr const char* kRendererName = "BGFX";
+#elif defined(CNA_RENDERER_VULKAN)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "VULKAN";
-#elif defined(CNA_BACKEND_WEBGPU)
+    constexpr const char* kRendererName = "VULKAN";
+#elif defined(CNA_RENDERER_WEBGPU)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "WEBGPU";
-#elif defined(CNA_BACKEND_SDL_GPU)
+    constexpr const char* kRendererName = "WEBGPU";
+#elif defined(CNA_RENDERER_SDL_GPU)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "SDL_GPU";
-#elif defined(CNA_BACKEND_D3D9)
+    constexpr const char* kRendererName = "SDL_GPU";
+#elif defined(CNA_RENDERER_D3D9)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "D3D9";
-#elif defined(CNA_BACKEND_D3D11)
+    constexpr const char* kRendererName = "D3D9";
+#elif defined(CNA_RENDERER_D3D11)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "D3D11";
-#elif defined(CNA_BACKEND_D3D12)
+    constexpr const char* kRendererName = "D3D11";
+#elif defined(CNA_RENDERER_D3D12)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "D3D12";
+    constexpr const char* kRendererName = "D3D12";
 #else
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "UNKNOWN";
+    constexpr const char* kRendererName = "UNKNOWN";
 #endif
 
     constexpr int kBBW = 160;
@@ -268,7 +268,7 @@ class DescriptorCapacityContractTest : public Game
     int result_ = 1;
 
     /// Set once by a real construct-and-write probe: CNA::GraphicsCapability has no TextureCube
-    /// entry, so "does this backend have cube textures" is answered by trying, not by asking.
+    /// entry, so "does this renderer have cube textures" is answered by trying, not by asking.
     bool cubeSupported_ = false;
 
     void check(bool ok, const std::string& label)
@@ -644,8 +644,8 @@ class DescriptorCapacityContractTest : public Game
 
         const SamplerState sampler = MakeSampler();
         // Stride 20: DualTextureEffect's only portable vertex shape -- the stride-28 two-UV-set
-        // sibling was never ported on the D3D-family backends, so it is not the common denominator
-        // this cross-backend fixture can drive.
+        // sibling was never ported on the D3D-family renderers, so it is not the common denominator
+        // this cross-renderer fixture can drive.
         const std::vector<VtxPT> verts = MakeQuad();
         const VertexDeclaration decl = PositionTextureDecl();
 
@@ -762,7 +762,7 @@ class DescriptorCapacityContractTest : public Game
         }
         else
         {
-            note(std::string(kBackendName) +
+            note(std::string(kRendererName) +
                  " cannot create a TextureCube; H2 (EnvironmentMapEffect cardinality) is not observable");
         }
     }
@@ -872,7 +872,7 @@ class DescriptorCapacityContractTest : public Game
     // across the rounds, five times D3D12's starting capacity, but only 40 are ever live.
     //
     // No Present() here on purpose. A public frame boundary is not portable in this fixture's
-    // environment -- the D3D12 backend has no swap chain under this dev loop (DX-100/DX-102) and
+    // environment -- the D3D12 renderer has no swap chain under this dev loop (DX-100/DX-102) and
     // throws from Present -- and the property being measured is reclamation between rounds, which
     // does not need one. The fence-gated, submission-crossing half of that property is measured
     // natively instead, in examples/d3d12_descriptor_allocator_test.cpp's own frame leg.
@@ -964,7 +964,7 @@ class DescriptorCapacityContractTest : public Game
     {
         if (!cubeSupported_)
         {
-            note(std::string(kBackendName) + " cannot create a TextureCube; M1 is not observable");
+            note(std::string(kRendererName) + " cannot create a TextureCube; M1 is not observable");
             return;
         }
 
@@ -1000,7 +1000,7 @@ class DescriptorCapacityContractTest : public Game
         }
         if (unreadable == kCubes)
         {
-            note(std::string(kBackendName) +
+            note(std::string(kRendererName) +
                  " rejects TextureCube::GetData; M1 asserts creation only at this cardinality");
             check(true, "M1: " + std::to_string(kCubes) +
                             " simultaneously live TextureCubes were all created");
@@ -1033,16 +1033,16 @@ public:
         if (!kRasterizes)
         {
             std::printf("[SKIP] %s does not rasterize; descriptor capacity is not observable\n",
-                        kBackendName);
+                        kRendererName);
             result_ = 77;
             Exit();
             return;
         }
 
         GraphicsDevice& dev = getGraphicsDeviceProperty();
-        std::printf("=== REMED-GFX-177 descriptor capacity contract -- backend %s ===\n", kBackendName);
+        std::printf("=== REMED-GFX-177 descriptor capacity contract -- renderer %s ===\n", kRendererName);
 
-        // One probe, before any leg: construct a cube and write one face. Whatever this backend
+        // One probe, before any leg: construct a cube and write one face. Whatever this renderer
         // does with cube textures, it does it here and not inside a cardinality measurement.
         try
         {
@@ -1070,7 +1070,7 @@ public:
         runLeg("L", [&] { RunL(dev); });
         runLeg("M", [&] { RunM(dev); });
 
-        std::printf("=== %d/%d checks passed on %s ===\n", passCount_, totalCount_, kBackendName);
+        std::printf("=== %d/%d checks passed on %s ===\n", passCount_, totalCount_, kRendererName);
         result_ = (passCount_ == totalCount_) ? 0 : 1;
         Exit();
     }

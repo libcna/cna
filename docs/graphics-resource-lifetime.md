@@ -2,18 +2,18 @@
 
 This document describes how GPU resources are created, tracked, and destroyed in CNA.
 It applies to `Texture2D`, `VertexBuffer`, `IndexBuffer`, `RenderTarget2D`, and any
-future class that inherits `GraphicsResource` and holds a backend handle.
+future class that inherits `GraphicsResource` and holds a renderer handle.
 
 ---
 
 ## 1. Ownership Model
 
-Every GPU-backed resource holds a `std::unique_ptr<IXxxBackend>` (e.g.
-`IVertexBufferBackend`, `ITexture2DBackend`). Ownership is exclusive: only one
+Every GPU-backed resource holds a `std::unique_ptr<IXxxRenderer>` (e.g.
+`IVertexBufferRenderer`, `ITexture2DRenderer`). Ownership is exclusive: only one
 `GraphicsResource` object at a time owns the underlying GPU handle.
 
-`GraphicsResource` itself does not hold a backend pointer. The derived class is
-responsible for declaring and managing `backend_`.
+`GraphicsResource` itself does not hold a renderer pointer. The derived class is
+responsible for declaring and managing `renderer_`.
 
 ---
 
@@ -25,23 +25,23 @@ destroyed. Derived classes achieve this by overriding `Dispose(bool)`:
 ```cpp
 void VertexBuffer::Dispose(bool disposing)
 {
-    backend_.reset();                       // frees the GL/Vulkan/bgfx object
+    renderer_.reset();                       // frees the GL/Vulkan/bgfx object
     GraphicsResource::Dispose(disposing);   // sets isDisposed_, fires events, unregisters
 }
 ```
 
 The destructor calls `Dispose(false)`, so if the user forgets to call `Dispose()` the
-backend is still freed eventually — but the `Disposing` event is **not** fired and
+renderer is still freed eventually — but the `Disposing` event is **not** fired and
 `ResourceDestroyed` is **not** raised in that path. Always call `Dispose()` explicitly.
 
 ### Override chain
 
 | Class              | Calls                              |
 |--------------------|------------------------------------|
-| `VertexBuffer`     | `backend_.reset()` → `GraphicsResource::Dispose(bool)` |
-| `IndexBuffer`      | `backend_.reset()` → `GraphicsResource::Dispose(bool)` |
-| `Texture2D`        | `backend_.reset()` → `Texture::Dispose(bool)` → `GraphicsResource::Dispose(bool)` |
-| `RenderTarget2D`   | `backend_.reset()` → `Texture2D::Dispose(bool)` → … |
+| `VertexBuffer`     | `renderer_.reset()` → `GraphicsResource::Dispose(bool)` |
+| `IndexBuffer`      | `renderer_.reset()` → `GraphicsResource::Dispose(bool)` |
+| `Texture2D`        | `renderer_.reset()` → `Texture::Dispose(bool)` → `GraphicsResource::Dispose(bool)` |
+| `RenderTarget2D`   | `renderer_.reset()` → `Texture2D::Dispose(bool)` → … |
 
 ---
 
@@ -70,11 +70,11 @@ destroyNativeResources();   // SDL context, Vulkan instance, etc.
 
 This means:
 
-1. All resource backends are released **before** the device backend is torn down.
+1. All resource renderers are released **before** the device renderer is torn down.
    No GL/Vulkan/bgfx call is made against a destroyed context.
 2. `RemoveResourceReference` is a no-op during device disposal (the list is already
    empty), so re-entrancy is safe.
-3. The device backend (`destroyNativeResources()`) is destroyed last.
+3. The device renderer (`destroyNativeResources()`) is destroyed last.
 
 If you destroy resources after their `GraphicsDevice` has been disposed, the GPU handles
 are already gone; the C++ `Dispose()` call is still valid (it resets a null `unique_ptr`)
@@ -113,12 +113,12 @@ duplicating or releasing the GPU handle:
 
 ```cpp
 VertexBuffer a(dev, 64);
-VertexBuffer b = std::move(a);   // b owns the GPU buffer; a.backend_ == nullptr
+VertexBuffer b = std::move(a);   // b owns the GPU buffer; a.renderer_ == nullptr
 ```
 
-Move operations are declared in `.hpp` without `= default` because the backend type is
+Move operations are declared in `.hpp` without `= default` because the renderer type is
 forward-declared there and `unique_ptr`'s move requires a complete deleter type. The
-`= default` is placed in the `.cpp` where the complete backend header is included:
+`= default` is placed in the `.cpp` where the complete renderer header is included:
 
 ```cpp
 // VertexBuffer.cpp
@@ -126,7 +126,7 @@ VertexBuffer::VertexBuffer(VertexBuffer&&) noexcept = default;
 VertexBuffer& VertexBuffer::operator=(VertexBuffer&&) noexcept = default;
 ```
 
-After a move, calling `Dispose()` on the moved-from object is safe: `backend_.reset()`
+After a move, calling `Dispose()` on the moved-from object is safe: `renderer_.reset()`
 on a null `unique_ptr` is a no-op.
 
 The `GraphicsResource` base's `resources_` pointer entry is **not** updated during a
@@ -147,26 +147,26 @@ Some resources (e.g. `BlendState`, `SamplerState`) may be constructed without a
 
 ---
 
-## 7. Backend-Specific Caveats
+## 7. Renderer-Specific Caveats
 
 ### EasyGL
 
-- GL object IDs are freed by the backend destructor (`glDeleteTextures`,
+- GL object IDs are freed by the renderer destructor (`glDeleteTextures`,
   `glDeleteBuffers`, `glDeleteFramebuffers`). This must happen while the SDL/OpenGL
   context is current.
 - Disposing a `RenderTarget2D` that is currently bound as the active render target
   produces a framebuffer with a dangling attachment. Always unbind (call
   `SetRenderTarget(nullptr)`) before disposing.
-- If the GL context is lost (window resize, driver crash), backends may hold invalid
+- If the GL context is lost (window resize, driver crash), renderers may hold invalid
   IDs. Current EasyGL does not implement context-loss recovery; the safest approach is
   to dispose all resources and recreate from scratch.
 
 ### Vulkan
 
-- Vulkan handles (`VkBuffer`, `VkImage`, `VkDeviceMemory`) are freed during backend
+- Vulkan handles (`VkBuffer`, `VkImage`, `VkDeviceMemory`) are freed during renderer
   destruction. The logical device (`VkDevice`) must still be valid at that point.
 - The disposal order guaranteed by `GraphicsDevice::Dispose()` (resources first, device
-  backend second) satisfies this requirement automatically.
+  renderer second) satisfies this requirement automatically.
 - Destroying a `RenderTarget2D` whose image is referenced by an in-flight command buffer
   is undefined behavior. Ensure GPU work is complete (e.g. `vkDeviceWaitIdle`) before
   disposing render targets that were used in the previous frame.
@@ -174,10 +174,10 @@ Some resources (e.g. `BlendState`, `SamplerState`) may be constructed without a
 ### Bgfx
 
 - Bgfx handles (`bgfx::TextureHandle`, `bgfx::VertexBufferHandle`, etc.) are freed
-  via `bgfx::destroy(handle)` inside the backend destructor.
+  via `bgfx::destroy(handle)` inside the renderer destructor.
 - Bgfx queues destructions internally; the actual GPU deallocation may be deferred to
   the next `bgfx::frame()` call.
-- Do not call `bgfx::shutdown()` before all resource backends are destroyed. The
+- Do not call `bgfx::shutdown()` before all resource renderers are destroyed. The
   `GraphicsDevice::Dispose()` order guarantees this as long as `bgfx::shutdown()` is
   called inside `destroyNativeResources()`.
 
@@ -196,7 +196,7 @@ Some resources (e.g. `BlendState`, `SamplerState`) may be constructed without a
 |---|---|
 | When is the GPU handle freed? | On `Dispose()`, not on C++ destructor |
 | Is double-dispose safe? | Yes — `isDisposed_` guard makes it a no-op |
-| What happens when the device is disposed? | All tracked resources are disposed first, then the device backend |
+| What happens when the device is disposed? | All tracked resources are disposed first, then the device renderer |
 | Do events fire on destructor path? | No — only on the `Dispose()` path |
 | Does move transfer the tracking pointer? | No — avoid moving tracked resources to a different address |
 | Can I use a resource after `Dispose()`? | No — `isDisposed_` is set; GPU handle is null |

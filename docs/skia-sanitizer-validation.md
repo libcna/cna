@@ -1,8 +1,8 @@
 # Skia sanitizer and recreation validation
 
-SKIA-110 validates the accepted CPU-raster backend with AddressSanitizer,
+SKIA-110 validates the accepted CPU-raster renderer with AddressSanitizer,
 UndefinedBehaviorSanitizer, and LeakSanitizer. It does not claim an accelerated comparison: the
-pinned Skia archives and CNA backend deliberately disable Ganesh, Graphite, GL, Vulkan, and Dawn,
+pinned Skia archives and CNA renderer deliberately disable Ganesh, Graphite, GL, Vulkan, and Dawn,
 and `ctest -N -L Accelerated` currently reports zero tests.
 
 ## Instrumentation boundary
@@ -11,7 +11,7 @@ A fresh sanitizer configuration uses CNA's common switch:
 
 ```sh
 cmake -S . -B cmake-build-skia-sanitize \
-  -DCNA_GRAPHICS_BACKEND=SKIA \
+  -DCNA_GRAPHICS_RENDERER=SKIA \
   -DCNA_SKIA_ROOT=/path/to/skia \
   -DCNA_SKIA_BUILD_DIR=/path/to/skia-out/raster \
   -DCNA_BUILD_TESTS=ON \

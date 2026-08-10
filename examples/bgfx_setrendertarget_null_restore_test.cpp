@@ -6,7 +6,7 @@
 // now-pervasive GetBackBufferData pixel-readback convention (Task 406) and Task 901's own
 // EnsureViewState() fix (which specifically corrected a bug where a bound RenderTarget2D's smaller
 // viewport/ortho-projection leaked into subsequent backbuffer draws) -- its own header comment
-// ("Pixel-level verification is not available in the Bgfx backend") is now stale: this test
+// ("Pixel-level verification is not available in the Bgfx renderer") is now stale: this test
 // supersedes that limitation with real assertions.
 //
 // Sequence per check: bind a 16x16 RenderTarget2D, Clear it Red, call SetRenderTarget(nullptr),

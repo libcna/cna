@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MS-PL
-// plan_llgl.md LLGL-27: custom ShaderEffect proof for the LLGL graphics backend -- a REAL runtime
+// plan_llgl.md LLGL-27: custom ShaderEffect proof for the LLGL graphics renderer -- a REAL runtime
 // GLSL->SPIR-V compile via libshaderc when the Vulkan module is loaded (LLGL's OpenGL module
 // accepts the same GLSL text directly), not just a "didn't throw" smoke test.
 //
 // Adapted from examples/sdlgpu_shadereffect_test.cpp, which solved the identical "custom effect
 // needs a runtime shader compile" problem for SDL_GPU. The uniform layout matches the native
-// Vulkan backend's own VulkanEffectBackend push-constant contract (vpSize/uMatrix/uColor/uFloat0),
-// just uploaded to a real constant buffer instead of a push constant -- see LlglEffectBackend's
+// Vulkan renderer's own VulkanEffectRenderer push-constant contract (vpSize/uMatrix/uColor/uFloat0),
+// just uploaded to a real constant buffer instead of a push constant -- see LlglEffectRenderer's
 // own doc comment.
 //
 // Check A -- IsEffectValid() is true after CompileProgram() -- proves the runtime compile (GLSL
@@ -44,7 +44,7 @@ namespace
 {
     constexpr int kRTSize = 64;
 
-    // Pixel-space -> NDC, matching this backend's stock sprite2d.vert.glsl technique. pc.uColor
+    // Pixel-space -> NDC, matching this renderer's stock sprite2d.vert.glsl technique. pc.uColor
     // is the sole discriminator between Check B and Check C -- the vertex colour is deliberately
     // never referenced, so a tinted result can only come from THIS shader's own uniform.
     const char* kVertSrc = R"GLSL(

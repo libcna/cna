@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl2.md: cross-backend visual-parity proof -- reuses
+// plan_opengl2.md: cross-renderer visual-parity proof -- reuses
 // examples/easygl_pbreffect_golden_test.cpp's own glTF metallic-roughness BRDF scene and
 // hand-derived/captured expected values verbatim (4 quads: A=white/rough/non-metallic/flat
 // normal, B=same as A with a tilted normal map, C=red/fully-metallic, D=red/fully-dielectric).
-// Both backends implement the same physically-based glTF reference BRDF, so the same expected
+// Both renderers implement the same physically-based glTF reference BRDF, so the same expected
 // values should hold; see that file's own header comment for the full derivation/rationale.
 
 #include "common/PixelTestGame.hpp"

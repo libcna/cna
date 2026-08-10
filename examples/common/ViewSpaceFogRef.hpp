@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 // REMED-GFX-010 — shared transformed-camera fog conformance scenes + FNA reference math.
 //
-// Purpose: give every backend's view-space-fog test the SAME canonical scenes and the SAME
-// analytically-derived expected colors, so their numeric results are directly cross-backend
+// Purpose: give every renderer's view-space-fog test the SAME canonical scenes and the SAME
+// analytically-derived expected colors, so their numeric results are directly cross-renderer
 // comparable (REMED-GFX-010 Phase 5 / Phase 12).
 //
 // The XNA/FNA fog semantic (EffectHelpers.SetFogVector + Common.fxh ComputeFogFactor):
@@ -13,13 +13,13 @@
 //   => fogFactor = saturate((viewZ + fogStart)/(fogStart - fogEnd)),  viewZ = (objPos*World*View).z
 // i.e. fog is driven by the VIEW-SPACE Z of the vertex, not its raw object-space Z.
 //
-// CNA backends carry the inverse "keep" convention (keep = 1 - fogFactor;
+// CNA renderers carry the inverse "keep" convention (keep = 1 - fogFactor;
 // finalRGB = mix(FogColor, geomRGB, keep)). This header computes both the correct view-space keep
 // and the OLD buggy object-space keep, so each test can assert (a) the scene is genuinely
 // discriminating (viewKeep != objKeep) and (b) the actual pixel matches the view-space value.
 //
 // A real perspective/identity projection cannot separate object-space Z from view-space Z without
-// putting geometry at negative clip Z (which the DirectX-convention backends clip). We therefore use
+// putting geometry at negative clip Z (which the DirectX-convention renderers clip). We therefore use
 // an ORTHOGRAPHIC projection: it renders geometry at negative view-space Z full-screen (screen XY is
 // independent of view Z) while leaving fog — which depends only on World*View, never the projection
 // — untouched. Every quad is centered on the view axis so the sampled center pixel corresponds to
@@ -40,7 +40,7 @@ namespace CNA::Examples::VSFogRef
     using Microsoft::Xna::Framework::Vector3;
     using Microsoft::Xna::Framework::Color;
 
-    // Canonical scene constants (shared by every backend for cross-backend numeric comparability).
+    // Canonical scene constants (shared by every renderer for cross-renderer numeric comparability).
     inline constexpr float kFogStart = 2.0f;   // eye-space distance where fog begins
     inline constexpr float kFogEnd   = 6.0f;   // eye-space distance where fog is full
 

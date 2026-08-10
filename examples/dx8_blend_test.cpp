@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Blend-mode compositing tests for the DX8 (real Direct3D 8 via DXVK) graphics backend.
+// Blend-mode compositing tests for the DX8 (real Direct3D 8 via DXVK) graphics renderer.
 //
 // Unlike DX2-DX7 (DirectDraw-based, no programmable blend hardware -- ApplyBlendState there
 // detects which of the 4 XNA BlendState *presets* a caller's factors match and falls back to a

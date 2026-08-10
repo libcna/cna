@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl4.md GL4-22: SkinnedEffect for the OpenGL4 graphics backend -- adds a dedicated
+// plan_opengl4.md GL4-22: SkinnedEffect for the OpenGL4 graphics renderer -- adds a dedicated
 // skinned3d GLSL 410 core program (new stride 52/56, VertexPositionNormalTextureSkinned +
 // optional trailing Color), selected by BindProgramForStride for those two strides. Also adds
-// OpenGL4VertexBufferBackend::ApplyLayout's stride-52/56 vertex attribute cases (BlendWeight as a
+// OpenGL4VertexBufferRenderer::ApplyLayout's stride-52/56 vertex attribute cases (BlendWeight as a
 // real float4 attribute, BlendIndices as a true GLSL integer attribute via the newly-loaded
 // gl4_glVertexAttribIPointer -- glVertexAttribPointer's implicit int-to-float conversion would be
 // wrong for bone indices used to subscript the uBones[] array in the shader).
 //
-// Ported near-verbatim from EasyGLGraphicsBackend::EnsureSkinnedProgram's GLSL ES 300 source,
+// Ported near-verbatim from EasyGLRenderer::EnsureSkinnedProgram's GLSL ES 300 source,
 // which itself already matches real XNA SkinnedEffect.fx's Skin() function: skinMat is the sum of
 // only the first WeightsPerVertex (1, 2, or 4) uBones[index]*weight pairs -- never all 4
 // unconditionally (a real bug, Task 895, already found and fixed while porting this effect to the
-// other backends; this OpenGL4 port uses the corrected formula from the start).
+// other renderers; this OpenGL4 port uses the corrected formula from the start).
 //
 // Check A -- identity bones (weightsPerVertex=1, single bone = Identity): the quad renders at its
 //   own unshifted NDC position -- proves skinning with an identity bone is a true no-op, not
@@ -57,7 +57,7 @@ namespace
 {
     constexpr int kSize = 64;
 
-    // GPU-compact skinned vertex: matches OpenGL4VertexBufferBackend::ApplyLayout's stride-52
+    // GPU-compact skinned vertex: matches OpenGL4VertexBufferRenderer::ApplyLayout's stride-52
     // case (position(12) + normal(12) + uv(8) + weights(16) + indices(4) = 52 bytes).
     struct SkinnedGpuVertex
     {

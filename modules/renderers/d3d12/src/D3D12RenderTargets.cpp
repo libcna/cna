@@ -1,7 +1,7 @@
 // plan_dx.md Phase DX13 (DX-117); DX-144 (mip-chain generation).
-#include "CNA/Internal/Backends/D3D12/D3D12RenderTargets.hpp"
-#include "CNA/Internal/Backends/D3D12/D3D12GraphicsBackend.hpp"
-#include "CNA/Internal/Backends/D3DCommon/D3DFormatMapping.hpp"
+#include "CNA/Internal/Renderers/D3D12/D3D12RenderTargets.hpp"
+#include "CNA/Internal/Renderers/D3D12/D3D12Renderer.hpp"
+#include "CNA/Internal/Renderers/D3DCommon/D3DFormatMapping.hpp"
 
 #include <algorithm>
 #include <cstdint>
@@ -13,7 +13,7 @@
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/NotSupportedException.hpp"
 
-namespace CNA::Internal::Backends::D3D12
+namespace CNA::Internal::Renderers::D3D12
 {
     namespace
     {
@@ -31,7 +31,7 @@ namespace CNA::Internal::Backends::D3D12
             return (value + alignment - 1) & ~(alignment - 1);
         }
 
-        /// Mirrors D3D11RenderTargetBackend's own CalculateMipLevels() exactly (D3D11RenderTargets.cpp)
+        /// Mirrors D3D11RenderTargetRenderer's own CalculateMipLevels() exactly (D3D11RenderTargets.cpp)
         /// -- full mip chain down to 1x1.
         int CalculateMipLevels(int w, int h)
         {
@@ -69,7 +69,7 @@ namespace CNA::Internal::Backends::D3D12
         /// synchronous readback discipline D3D12Buffers.cpp/D3D12Textures.cpp already establish.
         /// Returns an empty vector on any failure (honest bail-out, not a silently wrong result).
         std::vector<uint8_t> ReadbackSubresourceRGBA8(
-            D3D12GraphicsBackend* owner, ID3D12Device* device, ID3D12Resource* resource,
+            D3D12Renderer* owner, ID3D12Device* device, ID3D12Resource* resource,
             UINT subresource, int w, int h)
         {
             const D3D12_RESOURCE_DESC desc = resource->GetDesc();
@@ -131,12 +131,12 @@ namespace CNA::Internal::Backends::D3D12
         }
 
         /// DX-144: uploads a w*h RGBA8 byte buffer into subresource `subresource` of `resource`, via
-        /// an UPLOAD-heap CopyTextureRegion -- mirrors D3D12TextureBackend::UploadRegion() exactly
+        /// an UPLOAD-heap CopyTextureRegion -- mirrors D3D12TextureRenderer::UploadRegion() exactly
         /// (D3D12Textures.cpp), just against an arbitrary render-target resource instead of a
         /// texture. Silently returns on failure (caller treats a still-missing mip as an honest gap,
         /// not a crash).
         void UploadSubresourceRGBA8(
-            D3D12GraphicsBackend* owner, ID3D12Device* device, ID3D12Resource* resource,
+            D3D12Renderer* owner, ID3D12Device* device, ID3D12Resource* resource,
             UINT subresource, const uint8_t* rgba, int w, int h)
         {
             const UINT rowPitch = (static_cast<UINT>(w) * 4 + D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1)
@@ -233,17 +233,17 @@ namespace CNA::Internal::Backends::D3D12
     }
 
     // -------------------------------------------------------------------------
-    // D3D12RenderTargetBackend
+    // D3D12RenderTargetRenderer
     // -------------------------------------------------------------------------
 
-    D3D12RenderTargetBackend::D3D12RenderTargetBackend(
-        D3D12GraphicsBackend* owner, ID3D12Device* device, int w, int h, int depthFormat, bool mipMap,
+    D3D12RenderTargetRenderer::D3D12RenderTargetRenderer(
+        D3D12Renderer* owner, ID3D12Device* device, int w, int h, int depthFormat, bool mipMap,
         int multiSampleCount)
         : owner_(owner), device_(device), width_(w), height_(h)
         , appliedMultiSampleCount_(ClampMultiSampleCount(device, DXGI_FORMAT_R8G8B8A8_UNORM, multiSampleCount))
     {
         isMsaa_ = appliedMultiSampleCount_ > 0;
-        // Mutually exclusive on the same attachment, same rationale D3D11RenderTargetBackend's own
+        // Mutually exclusive on the same attachment, same rationale D3D11RenderTargetRenderer's own
         // DX-45 already established -- a full mip chain needs a single-sample source.
         mipMap_ = mipMap && !isMsaa_;
         levelCount_ = mipMap_ ? CalculateMipLevels(w, h) : 1;
@@ -269,7 +269,7 @@ namespace CNA::Internal::Backends::D3D12
             &heapProps, D3D12_HEAP_FLAG_NONE, &colorDesc,
             D3D12_RESOURCE_STATE_RENDER_TARGET, &colorClear, IID_PPV_ARGS(colorResource_.ReleaseAndGetAddressOf()));
         if (FAILED(hr))
-            throw std::runtime_error("D3D12RenderTargetBackend: CreateCommittedResource(color) failed, hr=" + FormatHr(hr));
+            throw std::runtime_error("D3D12RenderTargetRenderer: CreateCommittedResource(color) failed, hr=" + FormatHr(hr));
 
         owner_->GetResourceStateTrackerEXT().TrackResource(colorResource_.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET);
 
@@ -296,7 +296,7 @@ namespace CNA::Internal::Backends::D3D12
         {
             // The MSAA resource itself is never sampled directly -- ResolveSubresource() into this
             // separate single-sample resource on UnbindAsRenderTarget() (mirrors
-            // D3D11RenderTargetBackend's own resolveTexture_/DX-45 design exactly). Created in
+            // D3D11RenderTargetRenderer's own resolveTexture_/DX-45 design exactly). Created in
             // COMMON, a legal generic initial state for CreateCommittedResource, and tracked from
             // there -- ResolveMsaaEXT() transitions it to RESOLVE_DEST before the first resolve.
             D3D12_RESOURCE_DESC resolveDesc = colorDesc;
@@ -306,7 +306,7 @@ namespace CNA::Internal::Backends::D3D12
                 &heapProps, D3D12_HEAP_FLAG_NONE, &resolveDesc,
                 D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(resolveResource_.ReleaseAndGetAddressOf()));
             if (FAILED(hr))
-                throw std::runtime_error("D3D12RenderTargetBackend: CreateCommittedResource(resolve) failed, hr=" + FormatHr(hr));
+                throw std::runtime_error("D3D12RenderTargetRenderer: CreateCommittedResource(resolve) failed, hr=" + FormatHr(hr));
             owner_->GetResourceStateTrackerEXT().TrackResource(resolveResource_.Get(), D3D12_RESOURCE_STATE_COMMON);
         }
 
@@ -344,7 +344,7 @@ namespace CNA::Internal::Backends::D3D12
                 &heapProps, D3D12_HEAP_FLAG_NONE, &depthDesc,
                 D3D12_RESOURCE_STATE_DEPTH_WRITE, &depthClear, IID_PPV_ARGS(depthResource_.ReleaseAndGetAddressOf()));
             if (FAILED(hr))
-                throw std::runtime_error("D3D12RenderTargetBackend: CreateCommittedResource(depth) failed, hr=" + FormatHr(hr));
+                throw std::runtime_error("D3D12RenderTargetRenderer: CreateCommittedResource(depth) failed, hr=" + FormatHr(hr));
             owner_->GetResourceStateTrackerEXT().TrackResource(depthResource_.Get(), D3D12_RESOURCE_STATE_DEPTH_WRITE);
 
             dsv_ = owner_->AllocateDsvDescriptorEXT();
@@ -356,7 +356,7 @@ namespace CNA::Internal::Backends::D3D12
         }
     }
 
-    D3D12RenderTargetBackend::~D3D12RenderTargetBackend()
+    D3D12RenderTargetRenderer::~D3D12RenderTargetRenderer()
     {
         if (!heaps_) return;
         heaps_->cbvSrvUav.Free(srvIndex_);
@@ -364,7 +364,7 @@ namespace CNA::Internal::Backends::D3D12
         if (hasDepth_) heaps_->dsv.Free(dsv_);
     }
 
-    void D3D12RenderTargetBackend::BindAsRenderTarget()
+    void D3D12RenderTargetRenderer::BindAsRenderTarget()
     {
         if (owner_)
         {
@@ -378,19 +378,19 @@ namespace CNA::Internal::Backends::D3D12
         }
     }
 
-    void D3D12RenderTargetBackend::UnbindAsRenderTarget()
+    void D3D12RenderTargetRenderer::UnbindAsRenderTarget()
     {
         ResolveMsaaEXT();
         GenerateMipsEXT();
         if (owner_) owner_->RestoreBackBufferRenderTargetEXT();
     }
 
-    void D3D12RenderTargetBackend::ResolveMsaaEXT()
+    void D3D12RenderTargetRenderer::ResolveMsaaEXT()
     {
         if (!isMsaa_ || !resolveResource_ || !owner_) return;
 
         // The "any shader stage can read this" resting state every other real texture/resolved
-        // resource in this backend settles into once its content is ready (D3D12Textures.cpp's own
+        // resource in this renderer settles into once its content is ready (D3D12Textures.cpp's own
         // kTextureShaderReadableState) -- ResolveSubresource() needs the two resources in
         // RESOLVE_SOURCE/RESOLVE_DEST specifically, D3D12's own explicit-transition requirement
         // D3D11's identical ResolveSubresource() call never needed.
@@ -421,7 +421,7 @@ namespace CNA::Internal::Backends::D3D12
         owner_->ExecuteCommandListAndWaitEXT(cmdList);
     }
 
-    bool D3D12RenderTargetBackend::GetData(int level, int x, int y, int w, int h,
+    bool D3D12RenderTargetRenderer::GetData(int level, int x, int y, int w, int h,
                                            void* data, int dataLength) const
     {
         if (level < 0)
@@ -429,7 +429,7 @@ namespace CNA::Internal::Backends::D3D12
                 "level", std::to_string(level), "level must not be negative.");
         if (level >= levelCount_)
             throw System::NotSupportedException(
-                "D3D12RenderTargetBackend::GetData: this render target has " +
+                "D3D12RenderTargetRenderer::GetData: this render target has " +
                 std::to_string(levelCount_) + " mip level(s); level " + std::to_string(level) +
                 " was requested.");
 
@@ -474,7 +474,7 @@ namespace CNA::Internal::Backends::D3D12
         return true;
     }
 
-    void D3D12RenderTargetBackend::GenerateMipsEXT()
+    void D3D12RenderTargetRenderer::GenerateMipsEXT()
     {
         if (!mipMap_ || levelCount_ <= 1 || !owner_) return;
 
@@ -498,17 +498,17 @@ namespace CNA::Internal::Backends::D3D12
     }
 
     // -------------------------------------------------------------------------
-    // D3D12RenderTargetCubeBackend
+    // D3D12RenderTargetCubeRenderer
     // -------------------------------------------------------------------------
 
-    D3D12RenderTargetCubeBackend::D3D12RenderTargetCubeBackend(
-        D3D12GraphicsBackend* owner, ID3D12Device* device, int size, int depthFormat, bool mipMap,
+    D3D12RenderTargetCubeRenderer::D3D12RenderTargetCubeRenderer(
+        D3D12Renderer* owner, ID3D12Device* device, int size, int depthFormat, bool mipMap,
         int multiSampleCount)
         : owner_(owner), device_(device), size_(size)
         , appliedMultiSampleCount_(ClampMultiSampleCount(device, DXGI_FORMAT_R8G8B8A8_UNORM, multiSampleCount))
     {
         isMsaa_ = appliedMultiSampleCount_ > 0;
-        // Mutually exclusive on the same attachment, same rationale D3D12RenderTargetBackend's own
+        // Mutually exclusive on the same attachment, same rationale D3D12RenderTargetRenderer's own
         // DX-117 MSAA follow-up already established for the 2D leg.
         mipMap_ = mipMap && !isMsaa_;
         levelCount_ = mipMap_ ? CalculateMipLevels(size, size) : 1;
@@ -534,7 +534,7 @@ namespace CNA::Internal::Backends::D3D12
             &heapProps, D3D12_HEAP_FLAG_NONE, &colorDesc,
             D3D12_RESOURCE_STATE_RENDER_TARGET, &colorClear, IID_PPV_ARGS(colorResource_.ReleaseAndGetAddressOf()));
         if (FAILED(hr))
-            throw std::runtime_error("D3D12RenderTargetCubeBackend: CreateCommittedResource(color) failed, hr=" + FormatHr(hr));
+            throw std::runtime_error("D3D12RenderTargetCubeRenderer: CreateCommittedResource(color) failed, hr=" + FormatHr(hr));
 
         owner_->GetResourceStateTrackerEXT().TrackResource(colorResource_.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET);
 
@@ -574,7 +574,7 @@ namespace CNA::Internal::Backends::D3D12
                 &heapProps, D3D12_HEAP_FLAG_NONE, &resolveDesc,
                 D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(resolveResource_.ReleaseAndGetAddressOf()));
             if (FAILED(hr))
-                throw std::runtime_error("D3D12RenderTargetCubeBackend: CreateCommittedResource(resolve) failed, hr=" + FormatHr(hr));
+                throw std::runtime_error("D3D12RenderTargetCubeRenderer: CreateCommittedResource(resolve) failed, hr=" + FormatHr(hr));
             owner_->GetResourceStateTrackerEXT().TrackResource(resolveResource_.Get(), D3D12_RESOURCE_STATE_COMMON);
         }
 
@@ -612,7 +612,7 @@ namespace CNA::Internal::Backends::D3D12
                 &heapProps, D3D12_HEAP_FLAG_NONE, &depthDesc,
                 D3D12_RESOURCE_STATE_DEPTH_WRITE, &depthClear, IID_PPV_ARGS(depthResource_.ReleaseAndGetAddressOf()));
             if (FAILED(hr))
-                throw std::runtime_error("D3D12RenderTargetCubeBackend: CreateCommittedResource(depth) failed, hr=" + FormatHr(hr));
+                throw std::runtime_error("D3D12RenderTargetCubeRenderer: CreateCommittedResource(depth) failed, hr=" + FormatHr(hr));
             owner_->GetResourceStateTrackerEXT().TrackResource(depthResource_.Get(), D3D12_RESOURCE_STATE_DEPTH_WRITE);
 
             dsv_ = owner_->AllocateDsvDescriptorEXT();
@@ -623,7 +623,7 @@ namespace CNA::Internal::Backends::D3D12
         }
     }
 
-    D3D12RenderTargetCubeBackend::~D3D12RenderTargetCubeBackend()
+    D3D12RenderTargetCubeRenderer::~D3D12RenderTargetCubeRenderer()
     {
         if (!heaps_) return;
         heaps_->cbvSrvUav.Free(srvIndex_);
@@ -631,7 +631,7 @@ namespace CNA::Internal::Backends::D3D12
         if (hasDepth_) heaps_->dsv.Free(dsv_);
     }
 
-    void D3D12RenderTargetCubeBackend::BindAsRenderTargetFace(int face)
+    void D3D12RenderTargetCubeRenderer::BindAsRenderTargetFace(int face)
     {
         activeFace_ = face;
         if (owner_)
@@ -641,7 +641,7 @@ namespace CNA::Internal::Backends::D3D12
         }
     }
 
-    void D3D12RenderTargetCubeBackend::ResolveMsaaEXT()
+    void D3D12RenderTargetCubeRenderer::ResolveMsaaEXT()
     {
         if (!isMsaa_ || !resolveResource_ || !owner_ || activeFace_ < 0) return;
 
@@ -676,11 +676,11 @@ namespace CNA::Internal::Backends::D3D12
         owner_->ExecuteCommandListAndWaitEXT(cmdList);
     }
 
-    bool D3D12RenderTargetCubeBackend::GetData(int face, int level, int x, int y, int w, int h,
+    bool D3D12RenderTargetCubeRenderer::GetData(int face, int level, int x, int y, int w, int h,
                                                void* data, int dataLength) const
     {
-        // REMED-GFX-134: closes the refusal this class inherited from ITextureCubeBackend's
-        // `return false` default. Same readback-heap mechanism as D3D12TextureCubeBackend::GetData.
+        // REMED-GFX-134: closes the refusal this class inherited from ITextureCubeRenderer's
+        // `return false` default. Same readback-heap mechanism as D3D12TextureCubeRenderer::GetData.
         if (!owner_ || data == nullptr) return false;
         if (face < 0 || face >= 6 || w <= 0 || h <= 0) return false;
         if (level < 0 || level >= levelCount_) return false;
@@ -773,7 +773,7 @@ namespace CNA::Internal::Backends::D3D12
         return true;
     }
 
-    void D3D12RenderTargetCubeBackend::UnbindAsRenderTarget()
+    void D3D12RenderTargetCubeRenderer::UnbindAsRenderTarget()
     {
         // DX-152/DX-144: resolve MSAA, then generate the active face's mip chain (mutually
         // exclusive in practice -- isMsaa_ forces mipMap_ false -- but ordered the same way the
@@ -784,12 +784,12 @@ namespace CNA::Internal::Backends::D3D12
         if (owner_) owner_->RestoreBackBufferRenderTargetEXT();
     }
 
-    void D3D12RenderTargetCubeBackend::GenerateMipsEXT()
+    void D3D12RenderTargetCubeRenderer::GenerateMipsEXT()
     {
         if (!mipMap_ || levelCount_ <= 1 || !owner_ || activeFace_ < 0) return;
 
         // Only the face that was actually just drawn to gets its chain regenerated -- mirrors
-        // D3D11RenderTargetCubeBackend's own single-active-face convention (one shared
+        // D3D11RenderTargetCubeRenderer's own single-active-face convention (one shared
         // depth/color resource, only one face is ever the current draw target at a time).
         const UINT face = static_cast<UINT>(activeFace_);
         int srcW = size_, srcH = size_;

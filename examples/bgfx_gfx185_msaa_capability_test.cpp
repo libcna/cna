@@ -3,7 +3,7 @@
 // native ceiling. CNA must report that selected count, and must encode the same count on colour
 // and depth attachments for RenderTarget2D and RenderTargetCube.
 
-#include "CNA/Internal/Backends/Bgfx/BgfxGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Bgfx/BgfxRenderer.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
@@ -30,7 +30,7 @@
 #include <string>
 #include <vector>
 
-using namespace CNA::Internal::Backends::Bgfx;
+using namespace CNA::Internal::Renderers::Bgfx;
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
 
@@ -165,48 +165,48 @@ class BgfxGfx185MsaaCapabilityTest final : public Game
               "missing depth MSAA capability disables the shared attachment count");
     }
 
-    void CheckAttachmentFlags(const BgfxRenderTargetBackend& backend, DepthFormat depth,
+    void CheckAttachmentFlags(const BgfxRenderTargetRenderer& renderer, DepthFormat depth,
                               int applied, const std::string& label)
     {
-        const int colourSamples = DecodeRtSamples(backend.creationFlags_);
+        const int colourSamples = DecodeRtSamples(renderer.creationFlags_);
         Check(colourSamples == applied,
               label + ": 2D colour attachment selects " + std::to_string(colourSamples) + "x");
 
         if (depth == DepthFormat::None)
         {
-            Check(backend.depthCreationFlags_ == 0, label + ": 2D has no depth attachment");
+            Check(renderer.depthCreationFlags_ == 0, label + ": 2D has no depth attachment");
             return;
         }
 
-        const int depthSamples = DecodeRtSamples(backend.depthCreationFlags_);
+        const int depthSamples = DecodeRtSamples(renderer.depthCreationFlags_);
         Check(depthSamples == applied,
               label + ": 2D depth attachment selects " + std::to_string(depthSamples) + "x");
-        Check(((backend.depthCreationFlags_ & BGFX_TEXTURE_RT_WRITE_ONLY) != 0) == (applied > 0),
+        Check(((renderer.depthCreationFlags_ & BGFX_TEXTURE_RT_WRITE_ONLY) != 0) == (applied > 0),
               label + ": GFX-163 write-only depth rule is unchanged");
     }
 
-    void CheckAttachmentFlags(const BgfxRenderTargetCubeBackend& backend, DepthFormat depth,
+    void CheckAttachmentFlags(const BgfxRenderTargetCubeRenderer& renderer, DepthFormat depth,
                               int applied, const std::string& label)
     {
         const uint64_t producerFlags =
-            applied > 0 ? backend.msaaProducerCreationFlags_ : backend.creationFlags_;
+            applied > 0 ? renderer.msaaProducerCreationFlags_ : renderer.creationFlags_;
         const int colourSamples = DecodeRtSamples(producerFlags);
         Check(colourSamples == applied,
               label + ": cube colour producer selects " + std::to_string(colourSamples) + "x");
         if (applied > 0)
-            Check(DecodeRtSamples(backend.creationFlags_) == 0,
+            Check(DecodeRtSamples(renderer.creationFlags_) == 0,
                   label + ": GFX-195 resolved cube destination stays single-sampled");
 
         if (depth == DepthFormat::None)
         {
-            Check(backend.depthCreationFlags_ == 0, label + ": cube has no depth attachment");
+            Check(renderer.depthCreationFlags_ == 0, label + ": cube has no depth attachment");
             return;
         }
 
-        const int depthSamples = DecodeRtSamples(backend.depthCreationFlags_);
+        const int depthSamples = DecodeRtSamples(renderer.depthCreationFlags_);
         Check(depthSamples == applied,
               label + ": cube depth attachment selects " + std::to_string(depthSamples) + "x");
-        Check(((backend.depthCreationFlags_ & BGFX_TEXTURE_RT_WRITE_ONLY) != 0) == (applied > 0),
+        Check(((renderer.depthCreationFlags_ & BGFX_TEXTURE_RT_WRITE_ONLY) != 0) == (applied > 0),
               label + ": cube keeps the GFX-163 write-only depth rule");
     }
 
@@ -251,16 +251,16 @@ class BgfxGfx185MsaaCapabilityTest final : public Game
                     if (ClosestMsaaPower(requested) > 0 && CapabilityLimit(depth) > 0)
                         Check(expected > 0, label + ": a supported count is not disabled");
 
-                    auto* backend2D = dynamic_cast<BgfxRenderTargetBackend*>(
-                        target2D.GetRenderTargetBackend());
-                    auto* backendCube = dynamic_cast<BgfxRenderTargetCubeBackend*>(
-                        targetCube.GetRenderTargetCubeBackend());
-                    Check(backend2D != nullptr && backendCube != nullptr,
+                    auto* renderer2D = dynamic_cast<BgfxRenderTargetRenderer*>(
+                        target2D.GetRenderTargetRenderer());
+                    auto* rendererCube = dynamic_cast<BgfxRenderTargetCubeRenderer*>(
+                        targetCube.GetRenderTargetCubeRenderer());
+                    Check(renderer2D != nullptr && rendererCube != nullptr,
                           label + ": concrete Bgfx attachment diagnostics are available");
-                    if (backend2D && backendCube)
+                    if (renderer2D && rendererCube)
                     {
-                        CheckAttachmentFlags(*backend2D, depth, expected, label);
-                        CheckAttachmentFlags(*backendCube, depth, expected, label);
+                        CheckAttachmentFlags(*renderer2D, depth, expected, label);
+                        CheckAttachmentFlags(*rendererCube, depth, expected, label);
                     }
 
                     Check(target2D.getLevelCountProperty() == (mipMap ? 4 : 1) &&
@@ -269,8 +269,8 @@ class BgfxGfx185MsaaCapabilityTest final : public Game
 
                     target2D.Dispose();
                     targetCube.Dispose();
-                    Check(target2D.GetRenderTargetBackend() == nullptr &&
-                          targetCube.GetRenderTargetCubeBackend() == nullptr,
+                    Check(target2D.GetRenderTargetRenderer() == nullptr &&
+                          targetCube.GetRenderTargetCubeRenderer() == nullptr,
                           label + ": explicit disposal releases both target mechanisms");
                 }
             }

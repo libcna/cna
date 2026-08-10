@@ -9,7 +9,7 @@
 // declare no per-instance semantic). Real XNA hardware instancing requires the game author's own
 // custom Effect with a custom vertex shader that reads the per-instance stream -- there is no
 // "instanced BasicEffect" in real XNA. This shader is CNA's own opinionated minimal stand-in for
-// that custom-Effect role, matching every other backend's own identical choice (D3D11/Vulkan/Bgfx
+// that custom-Effect role, matching every other renderer's own identical choice (D3D11/Vulkan/Bgfx
 // all authored their own equivalent "instanced3d" shader rather than attempting to instance a
 // stock effect).
 //
@@ -19,12 +19,12 @@
 // don't assume" discipline, not because the layout was ever in doubt.
 //
 // Vertex declaration (2 streams, NOT one of D3D9VertexDeclarations.hpp's single-stream stride-keyed
-// layouts -- see D3D9GraphicsBackend::GetOrCreateInstancedVertexDeclarationEXT()):
+// layouts -- see D3D9Renderer::GetOrCreateInstancedVertexDeclarationEXT()):
 //   Stream 0 (per-vertex, step rate 1):      POSITION0 (FLOAT3, offset 0)
 //   Stream 1 (per-instance, step rate 1):    TEXCOORD1..4 (FLOAT4 each, offsets 0/16/32/48,
 //                                             stride 64) -- one float4 "row" per semantic, matching
 //                                             the 64-byte-per-instance world-matrix convention
-//                                             D3D11GraphicsBackend::DrawInstancedPrimitivesEx()
+//                                             D3D11Renderer::DrawInstancedPrimitivesEx()
 //                                             already established for GpuDrawParams::instanceVb.
 
 float4 ViewProj0 : register(c0);

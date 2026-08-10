@@ -3,7 +3,7 @@
 //
 // A logical zero-capacity VertexBuffer is valid.  Once the public arguments have been
 // validated, an empty upload is a true no-op: it must not reach pointer arithmetic, packing,
-// shadow copies, or a graphics backend, and must not replace the most recent real upload.
+// shadow copies, or a graphics renderer, and must not replace the most recent real upload.
 
 #include <array>
 #include <cstdint>
@@ -12,7 +12,7 @@
 #include <gtest/gtest.h>
 
 #include "CNA/GraphicsCapability.hpp"
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
@@ -39,12 +39,12 @@
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
-#ifdef CNA_BACKEND_EASYGL
-#include "CNA/Internal/Backends/EasyGL/EasyGLGraphicsBackend.hpp"
+#ifdef CNA_RENDERER_EASYGL
+#include "CNA/Internal/Renderers/EasyGL/EasyGLRenderer.hpp"
 #endif
 
-#ifdef CNA_BACKEND_WEBGPU
-#include "CNA/Internal/Backends/WebGPU/WebGPUGraphicsBackend.hpp"
+#ifdef CNA_RENDERER_WEBGPU
+#include "CNA/Internal/Renderers/WebGPU/WebGPURenderer.hpp"
 #endif
 
 using CNA::GraphicsCapability;
@@ -165,11 +165,11 @@ namespace
         void RequireVertexBuffers()
         {
             if (!device.SupportsCapability(GraphicsCapability::ThreeD))
-                GTEST_SKIP() << "Backend explicitly does not support vertex buffers";
+                GTEST_SKIP() << "Renderer explicitly does not support vertex buffers";
         }
     };
 
-#ifdef CNA_BACKEND_WEBGPU
+#ifdef CNA_RENDERER_WEBGPU
     struct WebGpuErrorScopeState
     {
         bool completed = false;
@@ -198,16 +198,16 @@ namespace
     }
 
     void PopAndExpectClean(
-        CNA::Internal::Backends::WebGPU::WebGPUGraphicsBackend& backend)
+        CNA::Internal::Renderers::WebGPU::WebGPURenderer& renderer)
     {
         WebGpuErrorScopeState state;
         WGPUPopErrorScopeCallbackInfo callback{};
         callback.mode = WGPUCallbackMode_AllowProcessEvents;
         callback.callback = OnWebGpuErrorScope;
         callback.userdata1 = &state;
-        wgpuDevicePopErrorScope(backend.Device(), callback);
+        wgpuDevicePopErrorScope(renderer.Device(), callback);
         for (int attempt = 0; attempt < 10000 && !state.completed; ++attempt)
-            wgpuInstanceProcessEvents(backend.Instance());
+            wgpuInstanceProcessEvents(renderer.Instance());
 
         ASSERT_TRUE(state.completed) << "wgpu-native did not complete the error scope";
         EXPECT_EQ(WGPUPopErrorScopeStatus_Success, state.status) << state.message;
@@ -227,8 +227,8 @@ TEST_F(VertexBufferEmptyDataTest, ZeroCapacityConstructionPreservesLogicalCapaci
 
     EXPECT_EQ(0, staticBuffer.getVertexCountProperty());
     EXPECT_EQ(0, dynamicBuffer.getVertexCountProperty());
-    EXPECT_EQ(0, staticBuffer.GetBackend().GetVertexCount());
-    EXPECT_EQ(0, dynamicBuffer.GetBackend().GetVertexCount());
+    EXPECT_EQ(0, staticBuffer.GetRenderer().GetVertexCount());
+    EXPECT_EQ(0, dynamicBuffer.GetRenderer().GetVertexCount());
 }
 
 TEST_F(VertexBufferEmptyDataTest, ZeroCountAcceptsNullForStaticAndDynamicBuffers)
@@ -274,8 +274,8 @@ TEST_F(VertexBufferEmptyDataTest, EmptyVectorAndSourceEndSlicesAreTrueNoOps)
     typedBuffer.SetData(source.data(), static_cast<int>(source.size()));
     dynamicBuffer.SetData(
         source.data(), 0, static_cast<int>(source.size()), SetDataOptions::Discard);
-    ASSERT_EQ(2, typedBuffer.GetBackend().GetVertexCount());
-    ASSERT_EQ(2, dynamicBuffer.GetBackend().GetVertexCount());
+    ASSERT_EQ(2, typedBuffer.GetRenderer().GetVertexCount());
+    ASSERT_EQ(2, dynamicBuffer.GetRenderer().GetVertexCount());
 
     // A zero-length slice whose source start is exactly one-past-the-source end is valid.
     EXPECT_NO_THROW(typedBuffer.SetData(
@@ -284,8 +284,8 @@ TEST_F(VertexBufferEmptyDataTest, EmptyVectorAndSourceEndSlicesAreTrueNoOps)
         source.data(), static_cast<int>(source.size()), 0,
         SetDataOptions::NoOverwrite));
     EXPECT_NO_THROW(typedBuffer.SetData(static_cast<const VertexPositionColor*>(nullptr), 0));
-    EXPECT_EQ(2, typedBuffer.GetBackend().GetVertexCount());
-    EXPECT_EQ(2, dynamicBuffer.GetBackend().GetVertexCount());
+    EXPECT_EQ(2, typedBuffer.GetRenderer().GetVertexCount());
+    EXPECT_EQ(2, dynamicBuffer.GetRenderer().GetVertexCount());
 
     std::array<VertexPositionColor, 2> staticResult{};
     std::array<VertexPositionColor, 2> dynamicResult{};
@@ -338,8 +338,8 @@ TEST_F(VertexBufferEmptyDataTest, EmptyUploadBetweenAAndBDoesNotClearEitherBuffe
     EXPECT_EQ(uploadB, result);
     dynamicBuffer.GetData(result.data(), 3);
     EXPECT_EQ(uploadB, result);
-    EXPECT_EQ(3, staticBuffer.GetBackend().GetVertexCount());
-    EXPECT_EQ(3, dynamicBuffer.GetBackend().GetVertexCount());
+    EXPECT_EQ(3, staticBuffer.GetRenderer().GetVertexCount());
+    EXPECT_EQ(3, dynamicBuffer.GetRenderer().GetVertexCount());
 }
 
 TEST_F(VertexBufferEmptyDataTest, NullIsLegalOnlyForEmptyUploads)
@@ -390,7 +390,7 @@ TEST_F(VertexBufferEmptyDataTest, LogicalEndAndBeyondCapacityRemainDistinct)
         SetDataOptions::Discard));
     EXPECT_NO_THROW(rawBuffer.SetDataRaw(nullptr, 0, 13));
 
-    // A real range extends beyond that logical end even if a native backend pads its allocation.
+    // A real range extends beyond that logical end even if a native renderer pads its allocation.
     EXPECT_THROW(staticBuffer.SetData(&vertex, 1),
                  System::ArgumentOutOfRangeException);
     EXPECT_THROW(dynamicBuffer.SetData(
@@ -456,8 +456,8 @@ TEST_F(VertexBufferEmptyDataTest, DisposedBuffersRejectEmptyUploadsBeforeNoOp)
     dynamicBuffer.Dispose();
     dynamicBuffer.Dispose();
 
-    EXPECT_FALSE(staticBuffer.HasBackend());
-    EXPECT_FALSE(dynamicBuffer.HasBackend());
+    EXPECT_FALSE(staticBuffer.HasRenderer());
+    EXPECT_FALSE(dynamicBuffer.HasRenderer());
     EXPECT_THROW(staticBuffer.SetData(
                      static_cast<const VertexPositionColor*>(nullptr), -1, 0),
                  System::ObjectDisposedException);
@@ -527,10 +527,10 @@ TEST_F(VertexBufferEmptyDataTest, NonemptyTypedUploadsCoverCompactLayoutsAndSour
     EXPECT_EQ(
         (std::array<VertexPositionNormalTexture, 2>{vpnt[1], vpnt[2]}), vpntResult);
     EXPECT_EQ(skinned[1], skinnedResult);
-    EXPECT_EQ(2, vptBuffer.GetBackend().GetVertexCount());
-    EXPECT_EQ(2, vpctBuffer.GetBackend().GetVertexCount());
-    EXPECT_EQ(2, vpntBuffer.GetBackend().GetVertexCount());
-    EXPECT_EQ(1, skinnedBuffer.GetBackend().GetVertexCount());
+    EXPECT_EQ(2, vptBuffer.GetRenderer().GetVertexCount());
+    EXPECT_EQ(2, vpctBuffer.GetRenderer().GetVertexCount());
+    EXPECT_EQ(2, vpntBuffer.GetRenderer().GetVertexCount());
+    EXPECT_EQ(1, skinnedBuffer.GetRenderer().GetVertexCount());
 }
 
 TEST_F(VertexBufferEmptyDataTest, DynamicPartialUploadKeepsExactCompactShadow)
@@ -553,7 +553,7 @@ TEST_F(VertexBufferEmptyDataTest, DynamicPartialUploadKeepsExactCompactShadow)
     buffer.GetData(result.data(), 2);
     EXPECT_EQ(
         (std::array<VertexPositionColorTexture, 2>{source[1], source[2]}), result);
-    EXPECT_EQ(2, buffer.GetBackend().GetVertexCount());
+    EXPECT_EQ(2, buffer.GetRenderer().GetVertexCount());
 }
 
 TEST_F(VertexBufferEmptyDataTest, RawDeclarationsAcceptOddAndAlignedStrides)
@@ -569,16 +569,16 @@ TEST_F(VertexBufferEmptyDataTest, RawDeclarationsAcceptOddAndAlignedStrides)
         device, PositionColorDeclaration(), 1, BufferUsage::None);
     EXPECT_NO_THROW(oddBuffer.SetDataRaw(odd.data(), 1, 13));
     EXPECT_NO_THROW(alignedBuffer.SetDataRaw(aligned.data(), 1, 16));
-    EXPECT_EQ(1, oddBuffer.GetBackend().GetVertexCount());
-    EXPECT_EQ(1, alignedBuffer.GetBackend().GetVertexCount());
+    EXPECT_EQ(1, oddBuffer.GetRenderer().GetVertexCount());
+    EXPECT_EQ(1, alignedBuffer.GetRenderer().GetVertexCount());
 
-#ifdef CNA_BACKEND_EASYGL
+#ifdef CNA_RENDERER_EASYGL
     auto* oddEasy =
-        dynamic_cast<CNA::Internal::Backends::EasyGL::EasyGLVertexBufferBackend*>(
-            &oddBuffer.GetBackend());
+        dynamic_cast<CNA::Internal::Renderers::EasyGL::EasyGLVertexBufferRenderer*>(
+            &oddBuffer.GetRenderer());
     auto* alignedEasy =
-        dynamic_cast<CNA::Internal::Backends::EasyGL::EasyGLVertexBufferBackend*>(
-            &alignedBuffer.GetBackend());
+        dynamic_cast<CNA::Internal::Renderers::EasyGL::EasyGLVertexBufferRenderer*>(
+            &alignedBuffer.GetRenderer());
     ASSERT_NE(nullptr, oddEasy);
     ASSERT_NE(nullptr, alignedEasy);
     EXPECT_EQ(OddStrideDeclaration().GetVertexElements(),
@@ -618,77 +618,77 @@ TEST_F(VertexBufferEmptyDataTest, UploadedVerticesSupportNormalAndIndexedDrawing
     EXPECT_NO_THROW(device.Present());
 }
 
-#ifdef CNA_BACKEND_WEBGPU
+#ifdef CNA_RENDERER_WEBGPU
 TEST_F(VertexBufferEmptyDataTest, WebGpuNativeScopesCoverEmptyOddAndAlignedUploads)
 {
     RequireVertexBuffers();
 
-    auto* graphicsBackend =
-        dynamic_cast<CNA::Internal::Backends::WebGPU::WebGPUGraphicsBackend*>(
-            &device.GetBackend());
-    ASSERT_NE(nullptr, graphicsBackend);
-    wgpuDevicePushErrorScope(graphicsBackend->Device(), WGPUErrorFilter_OutOfMemory);
-    wgpuDevicePushErrorScope(graphicsBackend->Device(), WGPUErrorFilter_Validation);
+    auto* graphicsRenderer =
+        dynamic_cast<CNA::Internal::Renderers::WebGPU::WebGPURenderer*>(
+            &device.GetRenderer());
+    ASSERT_NE(nullptr, graphicsRenderer);
+    wgpuDevicePushErrorScope(graphicsRenderer->Device(), WGPUErrorFilter_OutOfMemory);
+    wgpuDevicePushErrorScope(graphicsRenderer->Device(), WGPUErrorFilter_Validation);
 
     VertexBuffer emptyBuffer(
         device, OddStrideDeclaration(), 0, BufferUsage::None);
-    auto* emptyBackend =
-        dynamic_cast<CNA::Internal::Backends::WebGPU::WebGPUVertexBufferBackend*>(
-            &emptyBuffer.GetBackend());
-    ASSERT_NE(nullptr, emptyBackend);
-    ASSERT_EQ(nullptr, emptyBackend->Buffer());
-    ASSERT_TRUE(emptyBackend->ShadowData().empty());
+    auto* emptyRenderer =
+        dynamic_cast<CNA::Internal::Renderers::WebGPU::WebGPUVertexBufferRenderer*>(
+            &emptyBuffer.GetRenderer());
+    ASSERT_NE(nullptr, emptyRenderer);
+    ASSERT_EQ(nullptr, emptyRenderer->Buffer());
+    ASSERT_TRUE(emptyRenderer->ShadowData().empty());
     emptyBuffer.SetDataRaw(nullptr, 0, 13);
-    EXPECT_EQ(nullptr, emptyBackend->Buffer());
-    EXPECT_TRUE(emptyBackend->ShadowData().empty());
-    EXPECT_EQ(0, emptyBackend->GetVertexCount());
-    EXPECT_EQ(0u, emptyBackend->Stride());
+    EXPECT_EQ(nullptr, emptyRenderer->Buffer());
+    EXPECT_TRUE(emptyRenderer->ShadowData().empty());
+    EXPECT_EQ(0, emptyRenderer->GetVertexCount());
+    EXPECT_EQ(0u, emptyRenderer->Stride());
 
     const std::array<std::uint8_t, 13> odd{
         0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
     VertexBuffer oddBuffer(device, OddStrideDeclaration(), 1, BufferUsage::None);
     oddBuffer.SetDataRaw(odd.data(), 1, 13);
-    auto* oddBackend =
-        dynamic_cast<CNA::Internal::Backends::WebGPU::WebGPUVertexBufferBackend*>(
-            &oddBuffer.GetBackend());
-    ASSERT_NE(nullptr, oddBackend);
-    ASSERT_NE(nullptr, oddBackend->Buffer());
-    EXPECT_EQ(1, oddBackend->GetVertexCount());
-    EXPECT_EQ(13u, oddBackend->Stride());
+    auto* oddRenderer =
+        dynamic_cast<CNA::Internal::Renderers::WebGPU::WebGPUVertexBufferRenderer*>(
+            &oddBuffer.GetRenderer());
+    ASSERT_NE(nullptr, oddRenderer);
+    ASSERT_NE(nullptr, oddRenderer->Buffer());
+    EXPECT_EQ(1, oddRenderer->GetVertexCount());
+    EXPECT_EQ(13u, oddRenderer->Stride());
     EXPECT_EQ(std::vector<std::uint8_t>(odd.begin(), odd.end()),
-              oddBackend->ShadowData());
-    const auto oddShadow = oddBackend->ShadowData();
+              oddRenderer->ShadowData());
+    const auto oddShadow = oddRenderer->ShadowData();
     oddBuffer.SetDataRaw(nullptr, 0, 13);
-    EXPECT_EQ(oddShadow, oddBackend->ShadowData());
-    EXPECT_EQ(1, oddBackend->GetVertexCount());
+    EXPECT_EQ(oddShadow, oddRenderer->ShadowData());
+    EXPECT_EQ(1, oddRenderer->GetVertexCount());
 
     const std::array<std::uint8_t, 16> aligned{};
     VertexBuffer alignedBuffer(
         device, PositionColorDeclaration(), 1, BufferUsage::None);
     alignedBuffer.SetDataRaw(aligned.data(), 1, 16);
-    auto* alignedBackend =
-        dynamic_cast<CNA::Internal::Backends::WebGPU::WebGPUVertexBufferBackend*>(
-            &alignedBuffer.GetBackend());
-    ASSERT_NE(nullptr, alignedBackend);
-    ASSERT_NE(nullptr, alignedBackend->Buffer());
-    EXPECT_EQ(1, alignedBackend->GetVertexCount());
-    EXPECT_EQ(16u, alignedBackend->Stride());
-    EXPECT_EQ(16u, alignedBackend->ShadowData().size());
+    auto* alignedRenderer =
+        dynamic_cast<CNA::Internal::Renderers::WebGPU::WebGPUVertexBufferRenderer*>(
+            &alignedBuffer.GetRenderer());
+    ASSERT_NE(nullptr, alignedRenderer);
+    ASSERT_NE(nullptr, alignedRenderer->Buffer());
+    EXPECT_EQ(1, alignedRenderer->GetVertexCount());
+    EXPECT_EQ(16u, alignedRenderer->Stride());
+    EXPECT_EQ(16u, alignedRenderer->ShadowData().size());
 
     const VertexPositionColor typed(
         Vector3(1, 2, 3), Color(4, 5, 6, 7));
     VertexBuffer typedBuffer(
         device, PositionColorDeclaration(), 1, BufferUsage::None);
     typedBuffer.SetData(&typed, 1);
-    auto* typedBackend =
-        dynamic_cast<CNA::Internal::Backends::WebGPU::WebGPUVertexBufferBackend*>(
-            &typedBuffer.GetBackend());
-    ASSERT_NE(nullptr, typedBackend);
-    EXPECT_EQ(1, typedBackend->GetVertexCount());
-    EXPECT_EQ(16u, typedBackend->Stride());
-    EXPECT_EQ(16u, typedBackend->ShadowData().size());
+    auto* typedRenderer =
+        dynamic_cast<CNA::Internal::Renderers::WebGPU::WebGPUVertexBufferRenderer*>(
+            &typedBuffer.GetRenderer());
+    ASSERT_NE(nullptr, typedRenderer);
+    EXPECT_EQ(1, typedRenderer->GetVertexCount());
+    EXPECT_EQ(16u, typedRenderer->Stride());
+    EXPECT_EQ(16u, typedRenderer->ShadowData().size());
 
-    PopAndExpectClean(*graphicsBackend);
-    PopAndExpectClean(*graphicsBackend);
+    PopAndExpectClean(*graphicsRenderer);
+    PopAndExpectClean(*graphicsRenderer);
 }
 #endif

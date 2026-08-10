@@ -1,6 +1,6 @@
 // plan_dx.md Phase DX13 (DX-120).
-#include "CNA/Internal/Backends/D3D12/D3D12OcclusionQuery.hpp"
-#include "CNA/Internal/Backends/D3D12/D3D12GraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/D3D12/D3D12OcclusionQuery.hpp"
+#include "CNA/Internal/Renderers/D3D12/D3D12Renderer.hpp"
 
 #include <algorithm>
 #include <cstdint>
@@ -9,7 +9,7 @@
 #include <stdexcept>
 #include <string>
 
-namespace CNA::Internal::Backends::D3D12
+namespace CNA::Internal::Renderers::D3D12
 {
     namespace
     {
@@ -21,10 +21,10 @@ namespace CNA::Internal::Backends::D3D12
         }
     }
 
-    D3D12OcclusionQueryBackend::D3D12OcclusionQueryBackend(D3D12GraphicsBackend* backend)
-        : backend_(backend)
+    D3D12OcclusionQueryRenderer::D3D12OcclusionQueryRenderer(D3D12Renderer* renderer)
+        : renderer_(renderer)
     {
-        ID3D12Device* device = backend_->GetDeviceEXT();
+        ID3D12Device* device = renderer_->GetDeviceEXT();
 
         D3D12_QUERY_HEAP_DESC heapDesc{};
         heapDesc.Type = D3D12_QUERY_HEAP_TYPE_OCCLUSION;
@@ -32,7 +32,7 @@ namespace CNA::Internal::Backends::D3D12
 
         HRESULT hr = device->CreateQueryHeap(&heapDesc, IID_PPV_ARGS(queryHeap_.ReleaseAndGetAddressOf()));
         if (FAILED(hr))
-            throw std::runtime_error("D3D12OcclusionQueryBackend: CreateQueryHeap failed, hr=" + FormatHr(hr));
+            throw std::runtime_error("D3D12OcclusionQueryRenderer: CreateQueryHeap failed, hr=" + FormatHr(hr));
 
         D3D12_HEAP_PROPERTIES heapProps{};
         heapProps.Type = D3D12_HEAP_TYPE_READBACK;
@@ -51,10 +51,10 @@ namespace CNA::Internal::Backends::D3D12
             &heapProps, D3D12_HEAP_FLAG_NONE, &bufferDesc,
             D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(readbackBuffer_.ReleaseAndGetAddressOf()));
         if (FAILED(hr))
-            throw std::runtime_error("D3D12OcclusionQueryBackend: readback CreateCommittedResource failed, hr=" + FormatHr(hr));
+            throw std::runtime_error("D3D12OcclusionQueryRenderer: readback CreateCommittedResource failed, hr=" + FormatHr(hr));
     }
 
-    void D3D12OcclusionQueryBackend::Begin()
+    void D3D12OcclusionQueryRenderer::Begin()
     {
         // Real, non-obvious constraint found while landing this task: BeginQuery()/EndQuery() must
         // be recorded within the SAME command-list submission as the draw(s) they bracket (a
@@ -62,25 +62,25 @@ namespace CNA::Internal::Backends::D3D12
         // followed by the game's own separately-submitted draw call(s), followed by a separately-
         // submitted End(), does NOT correctly capture any samples (confirmed: PixelCount() reported
         // 0 for a visible full-viewport triangle before this fix). Rather than record BeginQuery
-        // here, this now just marks the query heap "active" on the owning backend --
-        // D3D12GraphicsBackend's own draw-recording methods (DrawColoredPrimitives/
+        // here, this now just marks the query heap "active" on the owning renderer --
+        // D3D12Renderer's own draw-recording methods (DrawColoredPrimitives/
         // DrawIndexedColoredPrimitives/DrawPrimitivesExImpl/DrawInstancedPrimitivesEx) check
         // SetActiveOcclusionQueryEXT()'s tracked heap and record BeginQuery/EndQuery around their
         // own single command-list submission when set -- correct for exactly one draw call between
         // Begin()/End() (see this class's own header doc comment for the multi-draw gap).
         resolved_ = false;
-        backend_->SetActiveOcclusionQueryEXT(queryHeap_.Get());
+        renderer_->SetActiveOcclusionQueryEXT(queryHeap_.Get());
     }
 
-    void D3D12OcclusionQueryBackend::End()
+    void D3D12OcclusionQueryRenderer::End()
     {
-        backend_->SetActiveOcclusionQueryEXT(nullptr);
+        renderer_->SetActiveOcclusionQueryEXT(nullptr);
 
         // The EndQuery() itself already happened inside the intervening draw call's own command
         // list (see Begin()'s own doc comment) -- this submission only resolves the now-complete
         // query result into the CPU-readable readback buffer.
-        ID3D12CommandAllocator* allocator = backend_->GetCommandAllocatorEXT(0);
-        ID3D12GraphicsCommandList* cmdList = backend_->GetCommandListEXT();
+        ID3D12CommandAllocator* allocator = renderer_->GetCommandAllocatorEXT(0);
+        ID3D12GraphicsCommandList* cmdList = renderer_->GetCommandListEXT();
         allocator->Reset();
         cmdList->Reset(allocator, nullptr);
 
@@ -88,8 +88,8 @@ namespace CNA::Internal::Backends::D3D12
 
         HRESULT hr = cmdList->Close();
         if (FAILED(hr))
-            throw std::runtime_error("D3D12OcclusionQueryBackend::End: command list Close failed, hr=" + FormatHr(hr));
-        backend_->ExecuteCommandListAndWaitEXT(cmdList);
+            throw std::runtime_error("D3D12OcclusionQueryRenderer::End: command list Close failed, hr=" + FormatHr(hr));
+        renderer_->ExecuteCommandListAndWaitEXT(cmdList);
 
         // ExecuteCommandListAndWaitEXT only returns once the GPU has genuinely finished this
         // submission, including the ResolveQueryData call above -- see this class's own header
@@ -98,12 +98,12 @@ namespace CNA::Internal::Backends::D3D12
         resolved_ = true;
     }
 
-    bool D3D12OcclusionQueryBackend::IsComplete() const
+    bool D3D12OcclusionQueryRenderer::IsComplete() const
     {
         return resolved_;
     }
 
-    int D3D12OcclusionQueryBackend::PixelCount() const
+    int D3D12OcclusionQueryRenderer::PixelCount() const
     {
         if (!resolved_) return 0;
 

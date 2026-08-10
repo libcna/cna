@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// D2D-1: public-API pixel baseline for the Direct2D 2D-only backend.
+// D2D-1: public-API pixel baseline for the Direct2D 2D-only renderer.
 //
 // This is deliberately a compact, real presentation test rather than a Direct2D implementation
 // test. It validates four independent 2D contracts through GraphicsDevice:
@@ -33,7 +33,7 @@
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "System/NotSupportedException.hpp"
 
 #include <SDL3/SDL.h>
@@ -145,7 +145,7 @@ protected:
         check("SpriteEffects::FlipHorizontally right", 28, 3, Color(255, 0, 0, 255));
         check("SpriteBatch opaque tint", 35, 3, Color(128, 64, 32, 255));
 
-        // Odd-width, asymmetric RGBA data exercises the backend's RGBA<->BGRA mapping without a
+        // Odd-width, asymmetric RGBA data exercises the renderer's RGBA<->BGRA mapping without a
         // symmetric-channel false positive. Repeated partial writes must preserve neighboring
         // pixels, and a rejected short write must be transactional.
         Texture2D updateTexture(device, 3, 2, false, SurfaceFormat::Color);
@@ -243,8 +243,8 @@ protected:
                             Color(0, 255, 0, 255), Color::Red, Color::Yellow, Color::Blue);
 
         // 4. Render into an 8x8 target, unbind, then sample it as a Texture2D. This exercises
-        // the sibling ITextureBackend path instead of assuming every SpriteBatch source is a
-        // plain Direct2DTextureBackend.
+        // the sibling ITextureRenderer path instead of assuming every SpriteBatch source is a
+        // plain Direct2DTextureRenderer.
         RenderTarget2D target(device, 8, 8);
         device.SetRenderTarget(&target);
         device.Clear(Color(0, 0, 255, 255));
@@ -267,7 +267,7 @@ protected:
 
         device.SetRenderTarget(nullptr);
 
-        // RenderTarget2D has no CPU shadow. This must exercise Direct2DRenderTargetBackend's
+        // RenderTarget2D has no CPU shadow. This must exercise Direct2DRenderTargetRenderer's
         // CopyFromRenderTarget/CopyFromBitmap -> CPU_READ bitmap -> Map path rather than the
         // ordinary Texture2D shadow-data path.
         Color targetPixel(0, 0, 0, 0);
@@ -984,7 +984,7 @@ protected:
             // SpriteBatch source must throw a NAMED, documented capability exception instead of a
             // generic std::runtime_error wrapping a raw HRESULT like "hr=0x88990028". Unlike
             // Texture2D, a RenderTarget2D source has no CPU fallback to fall back to instead.
-            // SpriteSortMode::Immediate is used (not Deferred) so Draw() calls the native backend
+            // SpriteSortMode::Immediate is used (not Deferred) so Draw() calls the native renderer
             // synchronously instead of queueing -- with Deferred, the actual native draw (and this
             // exception) would fire inside End()'s flushBatch(), not Draw(), and a caught exception
             // there would leave the queued sprite for a retry loop rather than a clean recovery.
@@ -1049,7 +1049,7 @@ protected:
             bool presentWhileTargetActiveRejected = false;
             try
             {
-                device.GetBackend().Present();
+                device.GetRenderer().Present();
             }
             catch (const System::NotSupportedException&)
             {
@@ -1254,12 +1254,12 @@ protected:
         // recoverable Texture2D must acquire a new bitmap from its CPU shadow; a recoverable RT
         // must be safely reallocated with transparent contents instead of exposing its old COM
         // bitmap. This uses the public debug hook, exactly like EasyGL's desktop recovery probe.
-        auto& direct2dBackend = device.GetBackend();
+        auto& direct2dRenderer = device.GetRenderer();
 
-        // Backend-entry-point hardening: these calls are normally normalized by GraphicsDevice,
-        // but the concrete backend must still reject invalid input without corrupting the next
+        // Renderer-entry-point hardening: these calls are normally normalized by GraphicsDevice,
+        // but the concrete renderer must still reject invalid input without corrupting the next
         // frame. This is deliberately separate from the public BlendState rejection checks below.
-        const auto expectBackendRejection = [&](const char* label, const auto& action) {
+        const auto expectRendererRejection = [&](const char* label, const auto& action) {
             bool rejected = false;
             try
             {
@@ -1272,63 +1272,63 @@ protected:
             std::printf("[%s] %s\n", rejected ? "PASS" : "FAIL", label);
             passed = passed && rejected;
         };
-        expectBackendRejection("Direct2D rejects null MRT array with count one", [&] {
-            direct2dBackend.SetRenderTargets(nullptr, 1);
+        expectRendererRejection("Direct2D rejects null MRT array with count one", [&] {
+            direct2dRenderer.SetRenderTargets(nullptr, 1);
         });
-        expectBackendRejection("Direct2D rejects negative MRT count", [&] {
-            direct2dBackend.SetRenderTargets(nullptr, -1);
+        expectRendererRejection("Direct2D rejects negative MRT count", [&] {
+            direct2dRenderer.SetRenderTargets(nullptr, -1);
         });
-        expectBackendRejection("Direct2D rejects negative scissor dimensions", [&] {
-            direct2dBackend.SetScissorRect(0, 0, -1, 1);
+        expectRendererRejection("Direct2D rejects negative scissor dimensions", [&] {
+            direct2dRenderer.SetScissorRect(0, 0, -1, 1);
         });
-        expectBackendRejection("Direct2D rejects negative viewport dimensions", [&] {
-            direct2dBackend.SetViewport(0, 0, 1, -1, 0.0f, 1.0f);
+        expectRendererRejection("Direct2D rejects negative viewport dimensions", [&] {
+            direct2dRenderer.SetViewport(0, 0, 1, -1, 0.0f, 1.0f);
         });
-        expectBackendRejection("Direct2D rejects unknown presentation mode", [&] {
-            direct2dBackend.SetPresentationMode(99);
+        expectRendererRejection("Direct2D rejects unknown presentation mode", [&] {
+            direct2dRenderer.SetPresentationMode(99);
         });
-        expectBackendRejection("Direct2D rejects unsupported swap interval", [&] {
-            direct2dBackend.SetSwapInterval(3);
+        expectRendererRejection("Direct2D rejects unsupported swap interval", [&] {
+            direct2dRenderer.SetSwapInterval(3);
         });
-        expectBackendRejection("Direct2D rejects half-zero virtual resolution", [&] {
-            direct2dBackend.SetVirtualResolution(0, 8);
+        expectRendererRejection("Direct2D rejects half-zero virtual resolution", [&] {
+            direct2dRenderer.SetVirtualResolution(0, 8);
         });
-        expectBackendRejection("Direct2D rejects non-Color backbuffer format", [&] {
-            direct2dBackend.UpdatePresentationFormatEXT(
+        expectRendererRejection("Direct2D rejects non-Color backbuffer format", [&] {
+            direct2dRenderer.UpdatePresentationFormatEXT(
                 static_cast<int>(SurfaceFormat::Bgr565), static_cast<int>(DepthFormat::None), false);
         });
-        expectBackendRejection("Direct2D rejects backbuffer depth format", [&] {
-            direct2dBackend.UpdatePresentationFormatEXT(
+        expectRendererRejection("Direct2D rejects backbuffer depth format", [&] {
+            direct2dRenderer.UpdatePresentationFormatEXT(
                 static_cast<int>(SurfaceFormat::Color), static_cast<int>(DepthFormat::Depth16), false);
         });
-        expectBackendRejection("Direct2D rejects non-Color RenderTarget2D format", [&] {
-            (void)direct2dBackend.CreateRenderTarget2DEXT(2, 2, 0, false, false, 0,
+        expectRendererRejection("Direct2D rejects non-Color RenderTarget2D format", [&] {
+            (void)direct2dRenderer.CreateRenderTarget2DEXT(2, 2, 0, false, false, 0,
                                                           static_cast<int>(SurfaceFormat::Bgr565));
         });
-        expectBackendRejection("Direct2D rejects RenderTarget2D depth format", [&] {
-            (void)direct2dBackend.CreateRenderTarget2DEXT(
+        expectRendererRejection("Direct2D rejects RenderTarget2D depth format", [&] {
+            (void)direct2dRenderer.CreateRenderTarget2DEXT(
                 2, 2, static_cast<int>(DepthFormat::Depth16), false, false, 0,
                 static_cast<int>(SurfaceFormat::Color));
         });
-        expectBackendRejection("Direct2D rejects mipmapped RenderTarget2D", [&] {
-            (void)direct2dBackend.CreateRenderTarget2DEXT(7, 5, 0, false, true, 0, 0);
+        expectRendererRejection("Direct2D rejects mipmapped RenderTarget2D", [&] {
+            (void)direct2dRenderer.CreateRenderTarget2DEXT(7, 5, 0, false, true, 0, 0);
         });
-        expectBackendRejection("Direct2D rejects multisampled RenderTarget2D", [&] {
-            (void)direct2dBackend.CreateRenderTarget2DEXT(2, 2, 0, false, false, 4, 0);
+        expectRendererRejection("Direct2D rejects multisampled RenderTarget2D", [&] {
+            (void)direct2dRenderer.CreateRenderTarget2DEXT(2, 2, 0, false, false, 4, 0);
         });
-        expectBackendRejection("Direct2D rejects extreme RenderTarget2D dimensions before allocation", [&] {
-            (void)direct2dBackend.CreateRenderTarget2DEXT(
+        expectRendererRejection("Direct2D rejects extreme RenderTarget2D dimensions before allocation", [&] {
+            (void)direct2dRenderer.CreateRenderTarget2DEXT(
                 std::numeric_limits<int>::max(), 1, 0, false, false, 0, 0);
         });
-        expectBackendRejection("Direct2D rejects non-finite viewport depth", [&] {
-            direct2dBackend.SetViewport(
+        expectRendererRejection("Direct2D rejects non-finite viewport depth", [&] {
+            direct2dRenderer.SetViewport(
                 0, 0, 1, 1, std::numeric_limits<float>::quiet_NaN(), 1.0f);
         });
-        expectBackendRejection("Direct2D rejects non-finite blend factors", [&] {
-            direct2dBackend.SetBlendFactor(
+        expectRendererRejection("Direct2D rejects non-finite blend factors", [&] {
+            direct2dRenderer.SetBlendFactor(
                 std::numeric_limits<float>::quiet_NaN(), 1.0f, 1.0f, 1.0f);
         });
-        expectBackendRejection("Direct2D rejects unknown SpriteEffects bits", [&] {
+        expectRendererRejection("Direct2D rejects unknown SpriteEffects bits", [&] {
             std::exception_ptr rejection;
             sprites_->Begin(SpriteSortMode::Immediate, BlendState::Opaque, &point, nullptr,
                             &scissorDisabled);
@@ -1350,26 +1350,26 @@ protected:
         bool default3DPolicyRejected = false;
         try
         {
-            direct2dBackend.Ensure3DSupported("Direct2D parity policy probe");
+            direct2dRenderer.Ensure3DSupported("Direct2D parity policy probe");
         }
         catch (const std::exception&)
         {
             default3DPolicyRejected = true;
         }
-        direct2dBackend.SetUnsupported3DGraphicsCallBehavior(
+        direct2dRenderer.SetUnsupported3DGraphicsCallBehavior(
             CNA::Unsupported3DGraphicsCallBehavior::WarnAndStub);
         bool warnAndStubReturnedResource = false;
         try
         {
-            direct2dBackend.Ensure3DSupported("Direct2D parity policy probe");
+            direct2dRenderer.Ensure3DSupported("Direct2D parity policy probe");
             warnAndStubReturnedResource =
-                static_cast<bool>(direct2dBackend.CreateVertexBuffer(3));
+                static_cast<bool>(direct2dRenderer.CreateVertexBuffer(3));
         }
         catch (const std::exception&)
         {
             warnAndStubReturnedResource = false;
         }
-        direct2dBackend.SetUnsupported3DGraphicsCallBehavior(
+        direct2dRenderer.SetUnsupported3DGraphicsCallBehavior(
             CNA::Unsupported3DGraphicsCallBehavior::Throw);
         std::printf("[%s] Direct2D unsupported-3D policy throws by default and returns safe stubs only in WarnAndStub\n",
                     default3DPolicyRejected && warnAndStubReturnedResource ? "PASS" : "FAIL");
@@ -1425,14 +1425,14 @@ protected:
               0, 0, Color::White);
 
         // Disposed and foreign targets are rejected before native state changes. Exercise both
-        // public binding overloads and the backend entry point, then continue rendering on the
+        // public binding overloads and the renderer entry point, then continue rendering on the
         // original device to prove each failure was transactional.
         RenderTarget2D disposedTarget(device, 2, 2);
         disposedTarget.Dispose();
-        expectBackendRejection("SetRenderTarget rejects a disposed target", [&] {
+        expectRendererRejection("SetRenderTarget rejects a disposed target", [&] {
             device.SetRenderTarget(&disposedTarget);
         });
-        expectBackendRejection("SetRenderTargets rejects a disposed target", [&] {
+        expectRendererRejection("SetRenderTargets rejects a disposed target", [&] {
             device.SetRenderTargets({RenderTargetBinding(static_cast<Texture*>(&disposedTarget))});
         });
         {
@@ -1442,14 +1442,14 @@ protected:
             GraphicsDevice foreignDevice(GraphicsAdapter::getDefaultAdapterProperty(),
                                           GraphicsProfile::Reach, foreignPresentation);
             RenderTarget2D foreignTarget(foreignDevice, 2, 2);
-            expectBackendRejection("SetRenderTarget rejects a foreign GraphicsDevice target", [&] {
+            expectRendererRejection("SetRenderTarget rejects a foreign GraphicsDevice target", [&] {
                 device.SetRenderTarget(&foreignTarget);
             });
-            expectBackendRejection("SetRenderTargets rejects a foreign GraphicsDevice target", [&] {
+            expectRendererRejection("SetRenderTargets rejects a foreign GraphicsDevice target", [&] {
                 device.SetRenderTargets({RenderTargetBinding(static_cast<Texture*>(&foreignTarget))});
             });
-            expectBackendRejection("Direct2D backend rejects a foreign device target", [&] {
-                direct2dBackend.SetRenderTarget2D(foreignTarget.GetRenderTargetBackend());
+            expectRendererRejection("Direct2D renderer rejects a foreign device target", [&] {
+                direct2dRenderer.SetRenderTarget2D(foreignTarget.GetRenderTargetRenderer());
             });
         }
         const bool targetFailuresKeptBackbuffer = device.GetRenderTargets().empty();
@@ -1458,10 +1458,10 @@ protected:
         passed = passed && targetFailuresKeptBackbuffer;
 
         // D2D-64: a Texture2D/RenderTarget2D that outlives the C++ scope of its GraphicsDevice
-        // must not dereference a dangling backend/device pointer in its own later destructor.
+        // must not dereference a dangling renderer/device pointer in its own later destructor.
         // GraphicsDevice::Dispose() proactively disposes every GraphicsResource it still tracks
-        // (which resets each one's own backend_ while the owning Direct2DGraphicsBackend is still
-        // alive) before tearing down its own backend, so this is safe by construction -- verified
+        // (which resets each one's own renderer_ while the owning Direct2DRenderer is still
+        // alive) before tearing down its own renderer, so this is safe by construction -- verified
         // empirically here rather than trusted from reading the code alone. Reaching the PASS
         // print below (instead of crashing) is the test.
         {
@@ -1508,14 +1508,14 @@ protected:
         verifyRenderTargetUsage(RenderTargetUsage::PlatformContents, "PlatformContents", Color(173, 31, 97, 255));
 
         // D2D-60: RenderTarget2D::Dispose() rejects destroying a target GraphicsDevice still
-        // considers bound, but a target bound directly through the backend (bypassing
-        // GraphicsDevice::SetRenderTarget, as CNA's device-agnostic ITextureBackend contract
-        // permits) is invisible to that guard. Destroying it while still the backend's active
-        // target must not let ~Direct2DRenderTargetBackend's unbind path escape the destructor;
+        // considers bound, but a target bound directly through the renderer (bypassing
+        // GraphicsDevice::SetRenderTarget, as CNA's device-agnostic ITextureRenderer contract
+        // permits) is invisible to that guard. Destroying it while still the renderer's active
+        // target must not let ~Direct2DRenderTargetRenderer's unbind path escape the destructor;
         // this exercises that edge case and proves the device stays usable afterward.
         {
             RenderTarget2D directBoundTarget(device, 2, 2);
-            directBoundTarget.GetRenderTargetBackend()->BindAsRenderTarget();
+            directBoundTarget.GetRenderTargetRenderer()->BindAsRenderTarget();
         }
         device.Clear(Color::Black);
         sprites_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, nullptr, &scissorDisabled);
@@ -1530,7 +1530,7 @@ protected:
         device.Clear(Color(255, 0, 0, 255));
         device.SetRenderTarget(nullptr);
 
-        direct2dBackend.DebugSimulateContextLoss();
+        direct2dRenderer.DebugSimulateContextLoss();
         device.Clear(Color::Black);
         sprites_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, nullptr, &scissorDisabled);
         sprites_->Draw(recoveryTexture, Rectangle(0, 0, 4, 4), Rectangle(0, 0, 1, 1), Color::White);
@@ -1550,11 +1550,11 @@ protected:
         auto unrecoverableTexture = Texture2D::CreateFromPixels(
             device, 1, 1, std::vector<uint8_t>{241, 77, 19, 255});
         RenderTarget2D unrecoverableTarget(device, 2, 2);
-        direct2dBackend.DebugRestoreContext();
+        direct2dRenderer.DebugRestoreContext();
         bool staleResourceRejected = false;
         try
         {
-            // Immediate mode reaches the backend synchronously. This makes the probe entirely
+            // Immediate mode reaches the renderer synchronously. This makes the probe entirely
             // public-API based, while its finally-like End below returns SpriteBatch to a usable
             // state if the stale resource correctly rejects the draw.
             sprites_->Begin(SpriteSortMode::Immediate, BlendState::Opaque, &point, nullptr, &scissorDisabled);
@@ -1621,7 +1621,7 @@ protected:
         // trusting it from reading the code.
         sprites_->Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend, &point, nullptr, &scissorDisabled);
         sprites_->Draw(*white_, Rectangle(0, 0, 2, 2), Rectangle(0, 0, 1, 1), Color(10, 20, 30, 128));
-        direct2dBackend.DebugSimulateContextLoss();
+        direct2dRenderer.DebugSimulateContextLoss();
         sprites_->Draw(*white_, Rectangle(0, 0, 2, 2), Rectangle(0, 0, 1, 1), Color::White);
         sprites_->End();
         check("Direct2D SpriteBatch survives mid-batch device loss", 0, 0, Color::White);
@@ -1651,7 +1651,7 @@ protected:
                     stressTextures[i].texture.reset();
                 for (std::size_t i = 0; i < stressTargets.size(); i += 2)
                     stressTargets[i].reset();
-                direct2dBackend.DebugSimulateContextLoss();
+                direct2dRenderer.DebugSimulateContextLoss();
             }
 
             bool stressPassed = true;
@@ -1699,7 +1699,7 @@ protected:
             std::printf("[%s] Direct2D GraphicsDeviceStatus starts Normal\n", statusStartedNormal ? "PASS" : "FAIL");
             passed = passed && statusStartedNormal;
 
-            direct2dBackend.DebugSimulateContextLoss();
+            direct2dRenderer.DebugSimulateContextLoss();
 
             const bool orderCorrect = deviceEventOrder_.size() == 3 &&
                 deviceEventOrder_[0] == "Lost" && deviceEventOrder_[1] == "Resetting" &&
@@ -1763,7 +1763,7 @@ protected:
 
         // D2D-63: device loss while an unrecoverable render target (created with recovery
         // disabled) is the ACTIVE target must not silently leave GraphicsDevice's public binding
-        // out of sync with the backend's actual current target -- it now surfaces loudly instead
+        // out of sync with the renderer's actual current target -- it now surfaces loudly instead
         // of quietly redirecting later Clear/Draw calls to the backbuffer.
         device.SetContextRecoveryEnabled(false);
         RenderTarget2D unrecoverableActiveTarget(device, 2, 2);
@@ -1772,7 +1772,7 @@ protected:
         bool deviceLossWithUnrecoverableActiveRejected = false;
         try
         {
-            direct2dBackend.DebugSimulateContextLoss();
+            direct2dRenderer.DebugSimulateContextLoss();
         }
         catch (const std::exception&)
         {
@@ -1791,7 +1791,7 @@ protected:
 
         // D2D-62: rejecting a stale RT bind while a DIFFERENT, live RT is the active target must
         // leave that original RT active and still draw-able -- not silently fall back to the
-        // backbuffer or leave the backend in a broken state. Render target content is documented
+        // backbuffer or leave the renderer in a broken state. Render target content is documented
         // to reset to transparent across a device loss regardless (RecreateBitmap), so this checks
         // a fresh control draw after the rejection, not content predating the loss.
         RenderTarget2D liveActiveTarget(device, 2, 2);
@@ -1799,7 +1799,7 @@ protected:
         device.SetRenderTarget(nullptr); // unbind before the loss so D2D-63's own check does not trip here
         device.SetContextRecoveryEnabled(false);
         RenderTarget2D staleWhileOtherActiveTarget(device, 2, 2);
-        direct2dBackend.DebugRestoreContext();
+        direct2dRenderer.DebugRestoreContext();
         device.SetContextRecoveryEnabled(true);
         device.SetRenderTarget(&liveActiveTarget);
         bool staleBindWhileOtherActiveRejected = false;
@@ -1858,7 +1858,7 @@ protected:
 
         // 14. Direct2D primitive antialiasing is not an XNA requested-sample-count pipeline.
         // Reject the request rather than silently clamping it to a different resource contract.
-        expectBackendRejection("Direct2D RenderTarget2D rejects requested 4x MSAA", [&] {
+        expectRendererRejection("Direct2D RenderTarget2D rejects requested 4x MSAA", [&] {
             RenderTarget2D requestedMsaaTarget(device, 4, 4, false, SurfaceFormat::Color,
                                                DepthFormat::None, 4);
             (void)requestedMsaaTarget;
@@ -1929,7 +1929,7 @@ protected:
         });
         // D2D-135: ApplyBlendState and the embedded BlendFactor validation are one transaction.
         // Keep a supported state active, reject a different candidate, then bypass SpriteBatch's
-        // front-end state setup for one draw so the pixel proves the native backend did not
+        // front-end state setup for one draw so the pixel proves the native renderer did not
         // partially publish the rejected candidate.
         device.Clear(blendBackground);
         device.setBlendStateProperty(BlendState::NonPremultiplied);
@@ -1945,10 +1945,10 @@ protected:
         std::printf("[%s] rejected BlendState preserves the public state cache\n",
                     blendCachePreserved ? "PASS" : "FAIL");
         passed = passed && blendCachePreserved;
-        auto transactionalBatch = device.GetBackend().CreateSpriteBatch();
+        auto transactionalBatch = device.GetRenderer().CreateSpriteBatch();
         transactionalBatch->SetSamplerFilter(1);
         transactionalBatch->Begin();
-        transactionalBatch->Draw(straightHalfRed.GetBackend(), Rectangle(0, 0, 4, 4),
+        transactionalBatch->Draw(straightHalfRed.GetRenderer(), Rectangle(0, 0, 4, 4),
                                   Rectangle(0, 0, 1, 1), Color::White);
         transactionalBatch->End();
         check("rejected BlendState preserves Direct2D blend pixels", 1, 1,
@@ -1960,7 +1960,7 @@ protected:
         device.setBlendFactorProperty(Color::White);
 
         // D2D-99: GraphicsDevice's constructor applies DepthStencilState.Default once before game
-        // code can run. The backend permits only that bootstrap write; subsequent depth or stencil
+        // code can run. The renderer permits only that bootstrap write; subsequent depth or stencil
         // requests must reject because the advertised 2D surface has no such buffer. None remains
         // the supported state.
         DepthStencilState depthEnabledState = DepthStencilState::Default;
@@ -2031,15 +2031,15 @@ protected:
         // 16. Presentation transforms use the physical HWND client size, rather than assuming
         // GraphicsDeviceManager's virtual dimensions. The default scene now lives in a logical
         // Direct2D target, so these non-1:1 modes retain exact logical GetBackBufferData as well.
-        auto& backend = device.GetBackend();
-        SDL_Window* const window = backend.GetWindowInternal();
+        auto& renderer = device.GetRenderer();
+        SDL_Window* const window = renderer.GetWindowInternal();
         bool emptyFrameResizeAccepted = true;
         try
         {
-            backend.Present(); // close the prior frame before the resize-under-no-draw probe
+            renderer.Present(); // close the prior frame before the resize-under-no-draw probe
             emptyFrameResizeAccepted = SDL_SetWindowSize(window, 80, 24) && SDL_SyncWindow(window);
             if (emptyFrameResizeAccepted)
-                backend.Present(); // no Clear/Draw: Present itself must realize the new client size
+                renderer.Present(); // no Clear/Draw: Present itself must realize the new client size
         }
         catch (const std::exception&)
         {
@@ -2053,22 +2053,22 @@ protected:
         std::printf("[%s] Direct2D empty-frame Present realizes an 80x24 SDL client resize\n",
                     emptyFrameResizeAccepted ? "PASS" : "FAIL");
         passed = passed && emptyFrameResizeAccepted;
-        backend.SetVirtualResolution(48, 32);
+        renderer.SetVirtualResolution(48, 32);
         const auto near = [](float actual, float expected) {
             return std::abs(actual - expected) <= 0.05f;
         };
         const auto verifyPresentationTransform = [&](PresentationMode mode, const char* label,
                                                      float scaleX, float scaleY,
                                                      float offsetX, float offsetY) {
-            backend.SetPresentationMode(static_cast<int>(mode));
+            renderer.SetPresentationMode(static_cast<int>(mode));
             device.Clear(Color::Black); // realizes the resized DXGI backbuffer before querying transforms
             float windowX = 0.0f;
             float windowY = 0.0f;
             float logicalX = 0.0f;
             float logicalY = 0.0f;
-            const bool transformedOut = backend.TransformLogicalToWindow(
+            const bool transformedOut = renderer.TransformLogicalToWindow(
                 12.0f, 8.0f, windowX, windowY);
-            const bool transformedBack = transformedOut && backend.TransformWindowToLogical(
+            const bool transformedBack = transformedOut && renderer.TransformWindowToLogical(
                 windowX, windowY, logicalX, logicalY);
             const bool matches = transformedBack && near(windowX, 12.0f * scaleX + offsetX) &&
                 near(windowY, 8.0f * scaleY + offsetY) && near(logicalX, 12.0f) && near(logicalY, 8.0f);
@@ -2100,14 +2100,14 @@ protected:
         // D2D-46: NativeBackBuffer applies no virtual-resolution scaling at all, so it must draw
         // across the entire physical backbuffer (80x24 here) rather than only a virtual-size
         // (48x32) corner of it left uncovered by a stale identity transform. This probes the
-        // backend directly (GetViewportSize/ReadBackbuffer): GraphicsDevice::GetBackBufferData
+        // renderer directly (GetViewportSize/ReadBackbuffer): GraphicsDevice::GetBackBufferData
         // validates against PresentationParameters, which this section intentionally never
-        // resizes through GraphicsDeviceManager (it drives the backend's SDL window/virtual
-        // resolution directly to isolate the backend's own presentation-transform contract).
-        backend.SetPresentationMode(static_cast<int>(PresentationMode::NativeBackBuffer));
+        // resizes through GraphicsDeviceManager (it drives the renderer's SDL window/virtual
+        // resolution directly to isolate the renderer's own presentation-transform contract).
+        renderer.SetPresentationMode(static_cast<int>(PresentationMode::NativeBackBuffer));
         int nativeViewportWidth = 0;
         int nativeViewportHeight = 0;
-        backend.GetViewportSize(nativeViewportWidth, nativeViewportHeight);
+        renderer.GetViewportSize(nativeViewportWidth, nativeViewportHeight);
         const bool nativeViewportMatchesPhysical =
             nativeViewportWidth == physicalWidth && nativeViewportHeight == physicalHeight;
         std::printf("[%s] Direct2D NativeBackBuffer viewport matches physical size: got=(%d,%d), expected=(%d,%d)\n",
@@ -2115,16 +2115,16 @@ protected:
                     nativeViewportWidth, nativeViewportHeight, physicalWidth, physicalHeight);
         passed = passed && nativeViewportMatchesPhysical;
 
-        // Earlier sections left the backend's own SpriteBatch-local viewport clip set to a small
+        // Earlier sections left the renderer's own SpriteBatch-local viewport clip set to a small
         // sub-region; reset it to the full physical target so it cannot hide this probe's marker.
-        backend.SetViewport(0, 0, physicalWidth, physicalHeight, 0.0f, 1.0f);
+        renderer.SetViewport(0, 0, physicalWidth, physicalHeight, 0.0f, 1.0f);
         device.Clear(Color::Black);
         sprites_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, nullptr, &scissorDisabled);
         sprites_->Draw(*white_, Rectangle(physicalWidth - 4, physicalHeight - 4, 4, 4),
                        Rectangle(0, 0, 1, 1), Color::White);
         sprites_->End();
         std::array<uint8_t, 4> farCornerPixel{};
-        backend.ReadBackbuffer(physicalWidth - 1, physicalHeight - 1, 1, 1, farCornerPixel.data());
+        renderer.ReadBackbuffer(physicalWidth - 1, physicalHeight - 1, 1, 1, farCornerPixel.data());
         const bool farCornerMatches = farCornerPixel[0] == 255 && farCornerPixel[1] == 255 &&
             farCornerPixel[2] == 255 && farCornerPixel[3] == 255;
         std::printf("[%s] Direct2D NativeBackBuffer covers full physical backbuffer far corner: got=(%d,%d,%d,%d)\n",
@@ -2132,7 +2132,7 @@ protected:
                     farCornerPixel[2], farCornerPixel[3]);
         passed = passed && farCornerMatches;
         std::array<uint8_t, 4> nearCornerPixel{};
-        backend.ReadBackbuffer(1, 1, 1, 1, nearCornerPixel.data());
+        renderer.ReadBackbuffer(1, 1, 1, 1, nearCornerPixel.data());
         const bool nearCornerMatches = nearCornerPixel[0] == 0 && nearCornerPixel[1] == 0 &&
             nearCornerPixel[2] == 0 && nearCornerPixel[3] == 255;
         std::printf("[%s] Direct2D NativeBackBuffer keeps other physical pixels background: got=(%d,%d,%d,%d)\n",
@@ -2140,7 +2140,7 @@ protected:
                     nearCornerPixel[2], nearCornerPixel[3]);
         passed = passed && nearCornerMatches;
 
-        backend.SetPresentationMode(static_cast<int>(PresentationMode::Letterbox));
+        renderer.SetPresentationMode(static_cast<int>(PresentationMode::Letterbox));
         device.Clear(Color::Black);
         sprites_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, nullptr, &scissorDisabled);
         sprites_->Draw(*white_, Rectangle(2, 2, 4, 4), Rectangle(0, 0, 1, 1), Color::White);
@@ -2156,11 +2156,11 @@ protected:
         std::printf("[%s] SDL accepts Direct2D extreme-aspect resize request\n",
                     extremeResizeAccepted ? "PASS" : "FAIL");
         passed = passed && extremeResizeAccepted;
-        backend.SetVirtualResolution(8, 8);
-        backend.SetPresentationMode(static_cast<int>(PresentationMode::FixedHeightDynamicWidth));
+        renderer.SetVirtualResolution(8, 8);
+        renderer.SetPresentationMode(static_cast<int>(PresentationMode::FixedHeightDynamicWidth));
         int extremeViewportWidth = 0;
         int extremeViewportHeight = 0;
-        backend.GetViewportSize(extremeViewportWidth, extremeViewportHeight);
+        renderer.GetViewportSize(extremeViewportWidth, extremeViewportHeight);
         const bool extremeViewportPositive = extremeViewportWidth >= 1 && extremeViewportHeight >= 1;
         std::printf("[%s] Direct2D FixedHeightDynamicWidth keeps a >=1x1 logical framebuffer for "
                     "an extreme aspect ratio: got=(%d,%d)\n",
@@ -2172,7 +2172,7 @@ protected:
         sprites_->Draw(*white_, Rectangle(0, 0, 1, 1), Rectangle(0, 0, 1, 1), Color::White);
         sprites_->End();
         std::array<uint8_t, 4> extremePixel{};
-        backend.ReadBackbuffer(0, 0, 1, 1, extremePixel.data());
+        renderer.ReadBackbuffer(0, 0, 1, 1, extremePixel.data());
         const bool extremePixelValid = extremePixel[3] == 255;
         std::printf("[%s] Direct2D usable with an extreme FixedHeightDynamicWidth aspect ratio: "
                     "got=(%d,%d,%d,%d)\n",
@@ -2187,11 +2187,11 @@ protected:
         // the replacement before releasing the current one, so the prior logical target survives
         // a failed resize untouched.
         int viewportBeforeFault[2] = {0, 0};
-        backend.GetViewportSize(viewportBeforeFault[0], viewportBeforeFault[1]);
+        renderer.GetViewportSize(viewportBeforeFault[0], viewportBeforeFault[1]);
         bool virtualResolutionFaultRejected = false;
         try
         {
-            backend.SetVirtualResolution(std::numeric_limits<int>::max(), std::numeric_limits<int>::max());
+            renderer.SetVirtualResolution(std::numeric_limits<int>::max(), std::numeric_limits<int>::max());
         }
         catch (const std::exception&)
         {
@@ -2201,7 +2201,7 @@ protected:
                     virtualResolutionFaultRejected ? "PASS" : "FAIL");
         passed = passed && virtualResolutionFaultRejected;
         int viewportAfterFault[2] = {0, 0};
-        backend.GetViewportSize(viewportAfterFault[0], viewportAfterFault[1]);
+        renderer.GetViewportSize(viewportAfterFault[0], viewportAfterFault[1]);
         const bool viewportRestoredAfterFault = viewportAfterFault[0] == viewportBeforeFault[0] &&
             viewportAfterFault[1] == viewportBeforeFault[1];
         std::printf("[%s] Rejected SetVirtualResolution restored the previous viewport: got=(%d,%d), expected=(%d,%d)\n",

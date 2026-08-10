@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // Task 893: SkinnedEffect pixel test — DirectionalLight1/DirectionalLight2 forwarded
-// (Bgfx backend). See examples/easygl_environmentmapeffect_multilight_test.cpp and
+// (Bgfx renderer). See examples/easygl_environmentmapeffect_multilight_test.cpp and
 // examples/easygl_basiceffect_multilight_emissive_test.cpp for the full FNA-reference derivation
 // and discrimination-trick rationale (identical Lighting.fxh ComputeLights() formula).
 //

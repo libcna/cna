@@ -5,7 +5,7 @@
 // (BlendWeight, BlendIndices) appended. Bone-palette skin transform (mirrors skinned3d.vert.glsl's
 // own weightsPerVertex-gated sum) applied to position/normal/tangent before the TBN basis is
 // built in the fragment stage — mirrors
-// EasyGLGraphicsBackend::EnsurePbrSkinnedProgram()'s vertex stage.
+// EasyGLRenderer::EnsurePbrSkinnedProgram()'s vertex stage.
 layout(location = 0) in vec3  aPos;
 layout(location = 1) in vec3  aNormal;
 layout(location = 2) in vec4  aTangent;
@@ -58,15 +58,15 @@ void main() {
     vec4 skinnedPos = skinMat * vec4(aPos, 1.0);
     gl_Position = pc.mvp * skinnedPos;
     // REMED-GFX-011: matches skinned3d.vert.glsl, which does flip (the comment previously here
-    // claimed it never does). Backend-wide convention -- see pbr3d.vert.glsl.
+    // claimed it never does). Renderer-wide convention -- see pbr3d.vert.glsl.
     gl_Position.y = -gl_Position.y;
     mat3 skinNormalMat = mat3(skinMat);
     // REMED-GFX-006 (Variant B): the normal takes the inverse-transpose of World, not raw World.
     // The previous comment justified raw mat3(pbr.world) as deliberate fidelity to
-    // EasyGLGraphicsBackend::EnsurePbrSkinnedProgram(), but EasyGL has the same defect -- raw World
+    // EasyGLRenderer::EnsurePbrSkinnedProgram(), but EasyGL has the same defect -- raw World
     // is only correct for rotation and uniform scale, and diverges from FNA's
     // mul(normal, WorldInverseTranspose) under non-uniform scale. It also contradicted this
-    // backend's own unskinned pbr3d.vert.glsl, which already uses the inverse transpose.
+    // renderer's own unskinned pbr3d.vert.glsl, which already uses the inverse transpose.
     mat3 worldNormalMat = transpose(inverse(mat3(pbr.world)));
     vNormal = normalize(worldNormalMat * (skinNormalMat * aNormal));
     // Tangent stays on raw World: tangents transform as directions, not as normals (glTF

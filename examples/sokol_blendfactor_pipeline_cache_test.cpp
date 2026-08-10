@@ -3,11 +3,11 @@
 // created under a stale constant.
 //
 // Unlike Vulkan (VK_DYNAMIC_STATE_BLEND_CONSTANTS, set per-draw with vkCmdSetBlendConstants -- see
-// VulkanGraphicsBackend's own "the BlendFactor *value* is dynamic" comment) or EasyGL (a plain
+// VulkanRenderer's own "the BlendFactor *value* is dynamic" comment) or EasyGL (a plain
 // glBlendColor call before every draw), sokol_gfx has no dynamic blend-constant API at all:
 // sg_pipeline_desc.blend_color is baked into the pipeline object at sg_make_pipeline() time, the
 // same "no dynamic call, so it lives in the pipeline key" situation SOKOL-23 already documents for
-// sg_stencil_state.ref. Before this fix, SokolGraphicsBackend's PipelineKey/Pipeline3DKey/
+// sg_stencil_state.ref. Before this fix, SokolRenderer's PipelineKey/Pipeline3DKey/
 // PipelineInstanced3DKey did not include the blend factor at all, so a second draw with an
 // otherwise-identical pipeline state but a different GraphicsDevice.BlendFactor silently reused the
 // first cached pipeline object -- and its stale baked-in constant.
@@ -51,7 +51,7 @@ static constexpr int kSize = 64;
 
 class BlendFactorPipelineCacheTest : public Game
 {
-    // Owned, not leaked: every other harness in examples/ -- including this backend's own
+    // Owned, not leaked: every other harness in examples/ -- including this renderer's own
     // sokol_2d_test/sokol_wireframe_test -- holds its GraphicsDeviceManager in a unique_ptr
     // member. This file was the only one that raw-`new`ed it, which ASan reported as a real
     // 488-byte leak plus the 40-byte EventHandler vector reachable only from it.

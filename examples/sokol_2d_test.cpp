@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MS-PL
-// plan_sokol.md SOKOL-17: 2D vertical-slice proof for the sokol_gfx graphics backend -- a real
+// plan_sokol.md SOKOL-17: 2D vertical-slice proof for the sokol_gfx graphics renderer -- a real
 // Texture2D upload and real SpriteBatch draws, every one of them verified by reading the rendered
 // pixels back off the real back buffer, not just "did not throw".
 //
 // The source texture is a 4x4 image with one solid colour per 2x2 quadrant (red / green / blue /
 // white). Drawn with PointClamp into a 64x64 destination, each quadrant lands on an exact 32x32
 // block, so every assertion below samples a pixel whose expected colour is derivable from the
-// sprite geometry alone rather than from whatever the backend happened to produce.
+// sprite geometry alone rather than from whatever the renderer happened to produce.
 //
 // Check A -- Texture2D::CreateFromPixels() succeeds for the 4x4 quadrant texture.
 // Check B -- an untinted Opaque draw reproduces all four quadrant colours in the right corners,

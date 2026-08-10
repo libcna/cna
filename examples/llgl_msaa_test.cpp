@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 // plan_llgl.md LLGL-23: MSAA back buffer -- a real antialiased edge, not just a bookkeeping check.
 //
-// MultiSampleCount is honoured by the LLGL backend ONLY at swap-chain construction time
-// (LlglGraphicsBackend::LlglGraphicsBackend reads it once into requestedSampleCount_, forwarded
+// MultiSampleCount is honoured by the LLGL renderer ONLY at swap-chain construction time
+// (LlglRenderer::LlglRenderer reads it once into requestedSampleCount_, forwarded
 // straight into LLGL::SwapChainDescriptor::samples). There is no ApplyMultiSampleCount() override,
 // matching EasyGL's own documented precedent ("there is no way to resize the MSAA renderbuffers
 // without recreating the whole GL context") -- so a Game's single, eagerly-constructed
@@ -24,7 +24,7 @@
 //   that ordinary, non-multisampled swap chain.
 // Check B -- without MSAA, the diagonal edge is a hard, unblended step: every sampled pixel across
 //   it is pure background or pure foreground, never a mid-tone.
-// Check C -- GetMultiSampleCount() reports a real, backend-applied sample count once
+// Check C -- GetMultiSampleCount() reports a real, renderer-applied sample count once
 //   MultiSampleCount is requested at construction (not silently 0).
 // Check D -- with MSAA on, drawing the SAME diagonal edge produces at least one genuinely blended,
 //   mid-tone pixel across it -- real multisample antialiasing, not merely "didn't crash".
@@ -47,7 +47,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 
-#include "CNA/Internal/Backends/Llgl/LlglGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Llgl/LlglRenderer.hpp"
 
 #include "common/PixelTestGame.hpp"
 
@@ -57,7 +57,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::Llgl;
+using namespace CNA::Internal::Renderers::Llgl;
 
 namespace
 {
@@ -104,8 +104,8 @@ namespace
         pp.setMultiSampleCountProperty(multiSampleCount);
 
         GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::Reach, pp);
-        auto& backend = static_cast<LlglGraphicsBackend&>(device.GetBackend());
-        out.appliedSampleCount = backend.GetMultiSampleCount();
+        auto& renderer = static_cast<LlglRenderer&>(device.GetRenderer());
+        out.appliedSampleCount = renderer.GetMultiSampleCount();
 
         BasicEffect effect(device);
         effect.VertexColorEnabled = true;
@@ -182,7 +182,7 @@ int main()
     // bug, so the module-dependent checks below are skipped (not failed) rather than papered over.
     if (msaa.appliedSampleCount > 1)
     {
-        Check(true, "GetMultiSampleCount() reports a real, backend-applied sample count once "
+        Check(true, "GetMultiSampleCount() reports a real, renderer-applied sample count once "
                     "MultiSampleCount is requested at construction");
 
         bool blended = false;

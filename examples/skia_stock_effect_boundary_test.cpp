@@ -4,7 +4,7 @@
 // primitives. Until that route exists, every property combination must reject before pixels.
 
 #include "CNA/GraphicsCapability.hpp"
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
@@ -33,7 +33,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using CNA::Internal::Backends::GpuDrawParams;
+using CNA::Internal::Renderers::GpuDrawParams;
 
 namespace
 {
@@ -141,7 +141,7 @@ protected:
             alpha.setAlphaFunctionProperty(function);
             GpuDrawParams params;
             alpha.FillGpuDrawParams(params);
-            alphaForwardingMatches &= params.texture0 == &primary.GetBackend()
+            alphaForwardingMatches &= params.texture0 == &primary.GetRenderer()
                 && params.textureEnabled && params.vertexColorEnabled && params.fogEnabled;
             for (int sampleAlpha : {127, 128, 129})
             {
@@ -172,8 +172,8 @@ protected:
         GpuDrawParams dualParams;
         dual.FillGpuDrawParams(dualParams);
         Check(dualParams.dualTexture && dualParams.textureEnabled
-                  && dualParams.texture0 == &primary.GetBackend()
-                  && dualParams.texture1 == &secondary.GetBackend()
+                  && dualParams.texture0 == &primary.GetRenderer()
+                  && dualParams.texture1 == &secondary.GetRenderer()
                   && dualParams.vertexColorEnabled && dualParams.fogEnabled
                   && Near(dualParams.diffuseColor[0], 0.4f)
                   && Near(dualParams.diffuseColor[1], 0.2f)

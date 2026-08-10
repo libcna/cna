@@ -4,7 +4,7 @@
 // The original Vulkan_Texture3D_Mip_RoundTrip test proved that mip data happened to round-trip,
 // but Vulkan validation still reported VUID-vkCmdDraw-None-09600 four times.  The complete
 // messages identify copy-layout mismatches, not a sampled descriptor: SetData/GetData copy mip
-// levels 1 and 2 while VulkanGraphicsBackend::TransitionImageLayout barriers mip level 0.
+// levels 1 and 2 while VulkanRenderer::TransitionImageLayout barriers mip level 0.
 //
 // This Vulkan-only state-cycle test keeps data correctness and validation correctness coupled:
 // CMake makes the exact VUID test-fatal, while the checks below cover level 0, nonzero levels,
@@ -12,7 +12,7 @@
 // independent Texture3D objects, a one-level texture, and a non-power-of-two volume.
 //
 // Vulkan Texture3D shader sampling is not exercised here: Task 863 deliberately implemented
-// ShaderEffect Texture3D binding on EasyGL only, and VulkanTexture3DBackend has no Vulkan sampling
+// ShaderEffect Texture3D binding on EasyGL only, and VulkanTexture3DRenderer has no Vulkan sampling
 // interface or descriptor path.  GFX-093 is the copy/barrier defect exposed by validation in the
 // existing public SetData/GetData path; adding Vulkan sampler3D support is a separate feature.
 
@@ -164,7 +164,7 @@ protected:
         CheckSolid(secondary, 1, 4, 4, 4, white,
                    "mixed order level 2->0->1 preserves level 1");
 
-        // Resource A -> B -> A: state must be per image, never backend-global.
+        // Resource A -> B -> A: state must be per image, never renderer-global.
         CheckSolid(primary,   1, 4, 4, 4, magenta, "resource A->B->A: A");
         CheckSolid(secondary, 1, 4, 4, 4, white,   "resource A->B->A: B");
         CheckSolid(primary,   1, 4, 4, 4, magenta, "resource A->B->A: A again");

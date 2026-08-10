@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl4.md GL4-18: real Texture2D mip level support for the OpenGL4 graphics backend --
+// plan_opengl4.md GL4-18: real Texture2D mip level support for the OpenGL4 graphics renderer --
 // Texture2D::SetData(level, ...) for level>0 previously reached
-// OpenGL4TextureBackend::UpdatePixelsLevel(), which was unoverridden (inherited no-op default),
+// OpenGL4TextureRenderer::UpdatePixelsLevel(), which was unoverridden (inherited no-op default),
 // so any mip level beyond 0 was silently discarded. GL_TEXTURE_MAX_LEVEL also defaulted to GL's
 // own 1000, so a texture with any mip levels genuinely uploaded was still "incomplete" once
 // sampled with a mip-aware filter.
@@ -17,8 +17,8 @@
 // Check A -- TextureFilter::LinearMipPoint at a tiny (8x8px) destination size samples GREEN: a
 //   real high mip level was genuinely selected and its genuinely-uploaded content sampled, not
 //   just "didn't throw".
-// Check B -- TextureFilter::Point at the SAME tiny size samples RED: this backend deliberately
-//   maps Point to a non-mip-aware GL_NEAREST (matching EasyGLGraphicsBackend's own identical,
+// Check B -- TextureFilter::Point at the SAME tiny size samples RED: this renderer deliberately
+//   maps Point to a non-mip-aware GL_NEAREST (matching EasyGLRenderer's own identical,
 //   documented choice) -- Point never mip-selects regardless of minification, a known behavior
 //   this check asserts, not a bug.
 // Check C -- the SAME mip texture sampled at a NORMAL (non-minified, 1:1) destination size with
@@ -123,7 +123,7 @@ protected:
 
         const Color pointOnly = DrawAndSample(sb, mipTex, TextureFilter::Point, 8);
         Check(IsRed(pointOnly),
-              "Check B: Point at the same tiny size samples RED (documented: Point never mip-selects on this backend)");
+              "Check B: Point at the same tiny size samples RED (documented: Point never mip-selects on this renderer)");
 
         const Color level0 = DrawAndSample(sb, mipTex, TextureFilter::LinearMipPoint, kWindowSize);
         Check(IsRed(level0),

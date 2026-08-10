@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Task 379: AlphaTestEffect null/no-texture behavior (Vulkan backend).
+// Task 379: AlphaTestEffect null/no-texture behavior (Vulkan renderer).
 //
 // See examples/easygl_alphatest_null_texture_test.cpp for the full derivation. Vulkan already had
 // the correct white-texture fallback (`defaultWhiteDescSet_`, used generically in the draw

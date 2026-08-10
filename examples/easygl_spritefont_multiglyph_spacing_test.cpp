@@ -3,7 +3,7 @@
 //
 // Direct EasyGL port of Task 691's SDL_Renderer test, building on Task 424's established
 // single-glyph fixture pattern to additionally exercise the horizontal-advance math in the
-// shared, backend-agnostic SpriteBatch::DrawString: for the 2nd+ glyph in a line,
+// shared, renderer-agnostic SpriteBatch::DrawString: for the 2nd+ glyph in a line,
 // `curOffset.X += spacing + cKern.X` (extra inter-character spacing plus the next glyph's own
 // left-bearing kerning), and after each glyph, `curOffset.X += cKern.Y + cKern.Z` (that glyph's
 // own width plus right-bearing).

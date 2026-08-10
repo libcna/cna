@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // SKIA-80/SKIA-82: direct proof of bounded, checked CPU cube/volume storage.
 
-#include "CNA/Internal/Backends/Skia/SkiaTextureStorageBackends.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaTextureStorageRenderers.hpp"
 
 #include <algorithm>
 #include <array>
@@ -11,7 +11,7 @@
 #include <memory>
 #include <vector>
 
-using namespace CNA::Internal::Backends::Skia;
+using namespace CNA::Internal::Renderers::Skia;
 
 namespace
 {
@@ -47,15 +47,15 @@ int main()
 
     auto counters = std::make_shared<SkiaResourceCounters>();
     {
-        SkiaTextureCubeBackend cube(8, true, counters);
-        SkiaTexture3DBackend volume(4, 3, 5, true, counters);
+        SkiaTextureCubeRenderer cube(8, true, counters);
+        SkiaTexture3DRenderer volume(4, 3, 5, true, counters);
         Check(cube.LevelCountEXT() == 4 && cube.StorageBytesEXT() == 2040,
               "8x8 cube allocates six isolated zeroed faces across four exact mip levels");
         Check(volume.LevelCountEXT() == 3 && volume.StorageBytesEXT() == 260,
               "4x3x5 volume follows the public width/height-driven three-level mip contract");
 
         const SkiaResourceStats live = counters->GetStats();
-        Check(live.cpuTextureCubeBackends == 1 && live.cpuTexture3DBackends == 1
+        Check(live.cpuTextureCubeRenderers == 1 && live.cpuTexture3DRenderers == 1
                   && live.cpuTextureStorageBytes == 2300,
               "debug accounting reports exact live cube and volume storage bytes");
 
@@ -105,19 +105,19 @@ int main()
               "volume rejects an overflowing box without integer addition overflow");
     }
     const SkiaResourceStats released = counters->GetStats();
-    Check(released.cpuTextureCubeBackends == 0 && released.cpuTexture3DBackends == 0
+    Check(released.cpuTextureCubeRenderers == 0 && released.cpuTexture3DRenderers == 0
               && released.cpuTextureStorageBytes == 0,
           "cube and volume destruction return CPU storage counters to zero");
 
-    Check(Throws([] { SkiaTextureCubeBackend invalid(0, false); }),
+    Check(Throws([] { SkiaTextureCubeRenderer invalid(0, false); }),
           "zero-sized cube rejects before allocation");
-    Check(Throws([] { SkiaTexture3DBackend invalid(1, -1, 1, false); }),
+    Check(Throws([] { SkiaTexture3DRenderer invalid(1, -1, 1, false); }),
           "negative volume dimension rejects before allocation");
-    Check(Throws([] { SkiaTextureCubeBackend oversized(4096, false); }),
+    Check(Throws([] { SkiaTextureCubeRenderer oversized(4096, false); }),
           "cube exceeding 256 MiB rejects before allocating any face");
-    Check(Throws([] { SkiaTexture3DBackend oversized(512, 512, 512, false); }),
+    Check(Throws([] { SkiaTexture3DRenderer oversized(512, 512, 512, false); }),
           "volume exceeding 256 MiB rejects before allocating voxel storage");
-    Check(Throws([] { SkiaTexture3DBackend oversized(16385, 1, 1, false); }),
+    Check(Throws([] { SkiaTexture3DRenderer oversized(16385, 1, 1, false); }),
           "axis exceeding 16384 rejects independently from byte budget");
 
     return failures == 0 ? 0 : 1;

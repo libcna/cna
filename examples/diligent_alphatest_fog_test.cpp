@@ -11,7 +11,7 @@
 // Check C -- BasicEffect fog at a depth well inside the fog range pulls the surface colour toward
 //   FogColor...
 // Check D -- ...while the same geometry with fog disabled keeps its original colour, so C cannot
-//   pass by accident on a backend that simply renders something dark.
+//   pass by accident on a renderer that simply renders something dark.
 //
 // Exit code 0 = all checks PASS, 1 = any FAIL, 77 = no usable device.
 
@@ -195,7 +195,7 @@ int main()
     catch (const std::exception& error)
     {
         // Only a genuine "there is no device here" failure is a skip. Any other exception is a
-        // real defect and must fail: an over-broad catch turned a backend bug into a green skip
+        // real defect and must fail: an over-broad catch turned a renderer bug into a green skip
         // once already while this test was being written.
         const std::string message = error.what();
         const bool noDevice = message.find("no device type could be created") != std::string::npos ||

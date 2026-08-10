@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MS-PL
-// plan_sokol.md SOKOL-16: end-to-end lifecycle proof for the sokol_gfx graphics backend -- a real
+// plan_sokol.md SOKOL-16: end-to-end lifecycle proof for the sokol_gfx graphics renderer -- a real
 // SDL window, a real GPU context, a real sg_setup(), and a 60-frame Clear()+Present() loop, with
 // the cleared colour read back off the real back buffer rather than merely "did not throw".
 //
 // Check A -- GetWindowInternal() returns a real, non-null SDL_Window.
-// Check B -- GetRendererInternal() is null (this backend does not use SDL_Renderer).
+// Check B -- GetRendererInternal() is null (this renderer does not use SDL_Renderer).
 // Check C -- GetViewportSize() reports the requested logical size.
 // Check D -- GetApiEXT() reports the API CNA_SOKOL_API selected at configure time.
 // Check E -- a real vertex/index buffer round-trip: SetData() then GetVertexCount()/
@@ -14,7 +14,7 @@
 // Check G -- binding a RenderTarget2D, clearing it and unbinding completes with no exception
 //   (SOKOL-25: render targets are implemented; the dedicated rendertarget_*_test.cpp fixtures are
 //   what prove their pixel content and lifetime semantics).
-// Check H -- SupportsCapability() reports this backend's documented boundary.
+// Check H -- SupportsCapability() reports this renderer's documented boundary.
 // Check I -- 60 frames of Clear() + the automatic end-of-frame Present() complete with no
 //   exception.
 //
@@ -33,8 +33,8 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 
-#include "CNA/GraphicsBackendType.hpp"
-#include "CNA/Internal/Backends/Sokol/SokolGraphicsBackend.hpp"
+#include "CNA/GraphicsRendererType.hpp"
+#include "CNA/Internal/Renderers/Sokol/SokolRenderer.hpp"
 
 #include "common/PixelTestGame.hpp"
 
@@ -47,7 +47,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::Sokol;
+using namespace CNA::Internal::Renderers::Sokol;
 
 namespace
 {
@@ -116,22 +116,22 @@ class SokolSmokeTest : public Game
         check(!threw, "binding a RenderTarget2D, clearing it and unbinding raises no exception");
     }
 
-    void CheckCapabilities(SokolGraphicsBackend& backend)
+    void CheckCapabilities(SokolRenderer& renderer)
     {
         using CNA::GraphicsCapability;
         const bool boundaryHolds =
-            backend.SupportsCapability(GraphicsCapability::DepthStencilBuffer)
+            renderer.SupportsCapability(GraphicsCapability::DepthStencilBuffer)
             // Real as of SOKOL-20 -- vertex/index buffers and depth-tested colored draws exist.
-            && backend.SupportsCapability(GraphicsCapability::ThreeD)
+            && renderer.SupportsCapability(GraphicsCapability::ThreeD)
             // Real as of SOKOL-26 -- a real multi-attachment sg_pass, 2-4 RenderTarget2D targets.
-            && backend.SupportsCapability(GraphicsCapability::MultipleRenderTargets)
-            && backend.SupportsCapability(GraphicsCapability::CustomEffects)
-            // Real as of SOKOL-27 -- SokolTexture3DBackend is a CPU-shadow store, same shape as
+            && renderer.SupportsCapability(GraphicsCapability::MultipleRenderTargets)
+            && renderer.SupportsCapability(GraphicsCapability::CustomEffects)
+            // Real as of SOKOL-27 -- SokolTexture3DRenderer is a CPU-shadow store, same shape as
             // TextureCube's.
-            && backend.SupportsCapability(GraphicsCapability::Texture3D)
+            && renderer.SupportsCapability(GraphicsCapability::Texture3D)
             // Real as of SOKOL-29 -- a raw GL_SAMPLES_PASSED query, GL-only (matches
-            // ReadBackbuffer's own GL-only boundary; see SokolOcclusionQueryBackend).
-            && backend.SupportsCapability(GraphicsCapability::OcclusionQuery);
+            // ReadBackbuffer's own GL-only boundary; see SokolOcclusionQueryRenderer).
+            && renderer.SupportsCapability(GraphicsCapability::OcclusionQuery);
         check(boundaryHolds, "SupportsCapability() reports the documented capability boundary");
     }
 
@@ -140,7 +140,7 @@ protected:
     {
         ++frame_;
         auto& device = getGraphicsDeviceProperty();
-        auto& backend = static_cast<SokolGraphicsBackend&>(device.GetBackend());
+        auto& renderer = static_cast<SokolRenderer&>(device.GetRenderer());
 
         device.Clear(static_cast<ClearOptions>(
                          static_cast<int>(ClearOptions::Target) |
@@ -150,26 +150,26 @@ protected:
 
         if (frame_ == 1)
         {
-            check(backend.GetWindowInternal() != nullptr,
+            check(renderer.GetWindowInternal() != nullptr,
                   "GetWindowInternal() returns a real window");
-            check(backend.GetRendererInternal() == nullptr,
+            check(renderer.GetRendererInternal() == nullptr,
                   "GetRendererInternal() is null (no SDL_Renderer)");
 
             int width = 0;
             int height = 0;
-            backend.GetViewportSize(width, height);
+            renderer.GetViewportSize(width, height);
             check(width == kBackBufferWidth && height == kBackBufferHeight,
                   "GetViewportSize() reports the requested logical size");
 
-            check(CNA::getCurrentGraphicsBackendName() == "SOKOL",
-                  "the compiled-in backend identity is SOKOL");
-            check(SokolGraphicsBackend::GetApiEXT() == SokolApiEXT::GLCore,
+            check(CNA::getCurrentGraphicsRendererName() == "SOKOL",
+                  "the compiled-in renderer identity is SOKOL");
+            check(SokolRenderer::GetApiEXT() == SokolApiEXT::GLCore,
                   "GetApiEXT() reports the GLCore API this build selected");
-            check(SokolGraphicsBackend::GetMaxSpriteQuadsPerFrameEXT() > 0,
+            check(SokolRenderer::GetMaxSpriteQuadsPerFrameEXT() > 0,
                   "the per-frame sprite capacity is a positive, documented number");
 
             CheckBuffers(device);
-            CheckCapabilities(backend);
+            CheckCapabilities(renderer);
         }
 
         if (frame_ == 2)

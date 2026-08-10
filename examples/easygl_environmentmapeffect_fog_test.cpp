@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MS-PL
-// Task 900: EnvironmentMapEffect linear fog pixel integration test — EasyGL backend.
+// Task 900: EnvironmentMapEffect linear fog pixel integration test — EasyGL renderer.
 //
 // REAL BUG FOUND AND FIXED by writing this test: `EnvironmentMapEffect::FillGpuDrawParams()`
 // never forwarded `FogEnabled`/`FogColor`/`FogStart`/`FogEnd` to the GPU at all — fog was a total
-// no-op for `EnvironmentMapEffect` regardless of what the user set, on EVERY backend including
+// no-op for `EnvironmentMapEffect` regardless of what the user set, on EVERY renderer including
 // EasyGL, despite the effect having a complete, correct `IEffectFog`/`FogVector` implementation
 // in `OnApply()`. Fixed by forwarding the 4 fields in `FillGpuDrawParams()` (mirroring
 // `BasicEffect`'s identical pattern), plus adding the same fog uniforms/blend formula EasyGL's
@@ -158,7 +158,7 @@ protected:
         auto& dev = getGraphicsDeviceProperty();
         dev.SetDepthTestEnabled(false);
         // Task 896 finding (mirrors the Bgfx sibling's Task 364/884 fix): once
-        // GraphicsDevice's real default RasterizerState is pushed to every backend,
+        // GraphicsDevice's real default RasterizerState is pushed to every renderer,
         // this quad's winding is culled unless explicitly disabled.
         dev.setRasterizerStateProperty(RasterizerState::CullNone);
 

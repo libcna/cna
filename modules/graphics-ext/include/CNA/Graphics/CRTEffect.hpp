@@ -11,7 +11,7 @@ namespace CNA::Graphics {
     /**
      * @brief Full-screen CRT display emulation post-process effect.
      *
-     * A `ShaderEffect` (GLSL, EasyGL backend) that emulates a period CRT monitor: darkened
+     * A `ShaderEffect` (GLSL, EasyGL renderer) that emulates a period CRT monitor: darkened
      * alternating scanlines, an RGB sub-pixel mask (aperture grille or shadow mask), mild
      * barrel-distortion curvature of the screen edges, and a corner vignette. Every parameter
      * is independently tunable and defaults to a moderate, generally-flattering combination.

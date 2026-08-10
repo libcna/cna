@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 // SKIA-120: one cached runtime blender covers every factor/function selector independently.
 
-#include "CNA/Internal/Backends/Skia/SkiaGeneratedBlender.hpp"
-#include "CNA/Internal/Backends/Skia/SkiaSurface.hpp"
-#include "CNA/Internal/Backends/Skia/SkiaTextureBackend.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaGeneratedBlender.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaSurface.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaTextureRenderer.hpp"
 
 #include "include/core/SkCanvas.h"
 #include "include/core/SkPaint.h"
@@ -17,7 +17,7 @@
 #include <limits>
 #include <string>
 
-using namespace CNA::Internal::Backends::Skia;
+using namespace CNA::Internal::Renderers::Skia;
 using CNA::Internal::Graphics::ImageData;
 
 namespace
@@ -131,7 +131,7 @@ namespace
         sk_sp<SkBlender> blender = TryMakeSkiaGeneratedBlender(selectors, constant, 15, error);
         if (!blender)
             return {};
-        SkiaTextureBackend source(ImageData{1, 1, {
+        SkiaTextureRenderer source(ImageData{1, 1, {
             sourceBytes[0], sourceBytes[1], sourceBytes[2], sourceBytes[3],
         }});
         SkiaSurface surface(1, 1);

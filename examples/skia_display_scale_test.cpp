@@ -8,7 +8,7 @@
 // Skia must use SDL_RenderCoordinates{From,To}Window rather than mixing window points with output
 // pixels. Public GetBackBufferData must remain in the 40x30 logical raster coordinate system.
 
-#include "CNA/Internal/Backends/Skia/SkiaGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaRenderer.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
@@ -105,15 +105,15 @@ protected:
 
         finished_ = true;
         auto& device = getGraphicsDeviceProperty();
-        auto* backend = dynamic_cast<CNA::Internal::Backends::Skia::SkiaGraphicsBackend*>(&device.GetBackend());
-        Check(backend != nullptr, "GraphicsDevice owns SkiaGraphicsBackend");
-        if (!backend)
+        auto* renderer = dynamic_cast<CNA::Internal::Renderers::Skia::SkiaRenderer*>(&device.GetRenderer());
+        Check(renderer != nullptr, "GraphicsDevice owns SkiaRenderer");
+        if (!renderer)
         {
             Exit();
             return;
         }
 
-        SDL_Renderer* renderer = backend->GetRendererInternal();
+        SDL_Renderer* renderer = renderer->GetRendererInternal();
         int outputWidth = 0;
         int outputHeight = 0;
         Check(renderer != nullptr && SDL_GetRenderOutputSize(renderer, &outputWidth, &outputHeight),
@@ -127,19 +127,19 @@ protected:
 
         float logicalX = -1.0f;
         float logicalY = -1.0f;
-        Check(backend->TransformWindowToLogical(20.0f, 0.0f, logicalX, logicalY)
+        Check(renderer->TransformWindowToLogical(20.0f, 0.0f, logicalX, logicalY)
                   && Near(logicalX, 0.0f) && Near(logicalY, 0.0f),
               "window letterbox origin maps to logical origin without output-pixel scaling");
-        Check(backend->TransformWindowToLogical(60.0f, 30.0f, logicalX, logicalY)
+        Check(renderer->TransformWindowToLogical(60.0f, 30.0f, logicalX, logicalY)
                   && Near(logicalX, 20.0f) && Near(logicalY, 15.0f),
               "window centre maps to logical centre with the letterbox offset");
 
         float windowX = -1.0f;
         float windowY = -1.0f;
-        Check(backend->TransformLogicalToWindow(0.0f, 0.0f, windowX, windowY)
+        Check(renderer->TransformLogicalToWindow(0.0f, 0.0f, windowX, windowY)
                   && Near(windowX, 20.0f) && Near(windowY, 0.0f),
               "logical origin maps back to the window letterbox origin");
-        Check(backend->TransformLogicalToWindow(20.0f, 15.0f, windowX, windowY)
+        Check(renderer->TransformLogicalToWindow(20.0f, 15.0f, windowX, windowY)
                   && Near(windowX, 60.0f) && Near(windowY, 30.0f),
               "logical centre maps back to the window centre");
 

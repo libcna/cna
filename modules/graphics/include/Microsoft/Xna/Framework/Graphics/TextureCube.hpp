@@ -11,9 +11,9 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 
-namespace CNA::Internal::Backends
+namespace CNA::Internal::Renderers
 {
-    class ITextureCubeBackend;
+    class ITextureCubeRenderer;
 }
 
 namespace System::IO { class Stream; }
@@ -39,13 +39,13 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Destructor. */
         NOXNA ~TextureCube() override;
 
-        /** @brief Not copyable — owns a unique GPU backend handle. */
+        /** @brief Not copyable — owns a unique GPU renderer handle. */
         NOXNA TextureCube(const TextureCube&) = delete;
-        /** @brief Not copyable — owns a unique GPU backend handle. */
+        /** @brief Not copyable — owns a unique GPU renderer handle. */
         NOXNA TextureCube& operator=(const TextureCube&) = delete;
-        /** @brief Movable — transfers ownership of the GPU backend handle. */
+        /** @brief Movable — transfers ownership of the GPU renderer handle. */
         NOXNA TextureCube(TextureCube&&) noexcept = default;
-        /** @brief Movable — transfers ownership of the GPU backend handle. */
+        /** @brief Movable — transfers ownership of the GPU renderer handle. */
         NOXNA TextureCube& operator=(TextureCube&&) noexcept = default;
 
         /** @brief Returns the fully qualified .NET type name. */
@@ -92,8 +92,8 @@ namespace Microsoft::Xna::Framework::Graphics
          *                     number of texels in the requested region, of which exactly that many
          *                     are read starting at @p startIndex.
          * @throws System::ObjectDisposedException if this TextureCube has been disposed.
-         * @throws System::NotSupportedException if this backend cannot store the requested face,
-         *         mip level or region -- including a backend that creates no cube-map resource.
+         * @throws System::NotSupportedException if this renderer cannot store the requested face,
+         *         mip level or region -- including a renderer that creates no cube-map resource.
          * @throws std::invalid_argument if @p data is null.
          * @throws std::out_of_range for an invalid face, level, startIndex, elementCount or
          *         rectangle.
@@ -138,8 +138,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param elementCount Number of Color elements to read; must be at least the number of
          *                     texels in the requested region.
          * @throws System::ObjectDisposedException if this texture has been disposed.
-         * @throws System::NotSupportedException if this graphics backend cannot read the requested
-         *         cube face/mip level back to the CPU (including backends that create no cube-map
+         * @throws System::NotSupportedException if this graphics renderer cannot read the requested
+         *         cube face/mip level back to the CPU (including renderers that create no cube-map
          *         resource at all).
          * @throws std::invalid_argument if @p data is null.
          * @throws std::out_of_range if @p face, @p level, @p startIndex, @p elementCount or the
@@ -158,41 +158,41 @@ namespace Microsoft::Xna::Framework::Graphics
         NOXNA static TextureCube DDSFromStreamEXT(GraphicsDevice& device, System::IO::Stream& stream);
 
         /**
-         * @brief Returns a reference to the backend implementation object.
+         * @brief Returns a reference to the renderer implementation object.
          *
-         * @return Reference to the backend ITextureCubeBackend.
+         * @return Reference to the renderer ITextureCubeRenderer.
          */
-        NOXNA [[nodiscard]] CNA::Internal::Backends::ITextureCubeBackend& GetBackend() const { return *backend_; }
+        NOXNA [[nodiscard]] CNA::Internal::Renderers::ITextureCubeRenderer& GetRenderer() const { return *renderer_; }
 
     protected:
         /**
-         * @brief Constructs a TextureCube from a pre-built backend (used by RenderTargetCube).
+         * @brief Constructs a TextureCube from a pre-built renderer (used by RenderTargetCube).
          *
          * @param device     The owning device.
          * @param size       Width and height of each cube face in texels.
          * @param format     Surface format.
-         * @param backend    Owning pointer to the pre-built GPU backend.
-         * @param levelCount Number of mip levels the backend actually allocated (1 if none).
+         * @param renderer    Owning pointer to the pre-built GPU renderer.
+         * @param levelCount Number of mip levels the renderer actually allocated (1 if none).
          */
         NOXNA TextureCube(GraphicsDevice& device, int size, SurfaceFormat format,
-                          std::shared_ptr<CNA::Internal::Backends::ITextureCubeBackend> backend,
+                          std::shared_ptr<CNA::Internal::Renderers::ITextureCubeRenderer> renderer,
                           int levelCount = 1);
 
-        /** @brief Returns the raw backend pointer (used by RenderTargetCube to retrieve the RT handle). */
-        NOXNA [[nodiscard]] CNA::Internal::Backends::ITextureCubeBackend* GetBackendRaw() const { return backend_.get(); }
+        /** @brief Returns the raw renderer pointer (used by RenderTargetCube to retrieve the RT handle). */
+        NOXNA [[nodiscard]] CNA::Internal::Renderers::ITextureCubeRenderer* GetRendererRaw() const { return renderer_.get(); }
 
-        /** @brief Releases the backend cube texture handle when the resource is disposed. */
+        /** @brief Releases the renderer cube texture handle when the resource is disposed. */
         void Dispose(bool disposing) override;
 
     private:
         int size_;
-        // SKIA-149: shared (not unique) ownership so a SkiaEffectBackend can hold a weak_ptr for
-        // cube-sampling lifetime tracking, matching Texture2D's identical ITextureBackend pattern.
+        // SKIA-149: shared (not unique) ownership so a SkiaEffectRenderer can hold a weak_ptr for
+        // cube-sampling lifetime tracking, matching Texture2D's identical ITextureRenderer pattern.
         // TextureCube itself remains non-copyable; this only lets a second, weak observer outlive
         // a single call without becoming the resource's owner.
-        std::shared_ptr<CNA::Internal::Backends::ITextureCubeBackend> backend_;
+        std::shared_ptr<CNA::Internal::Renderers::ITextureCubeRenderer> renderer_;
         /// Level-0-only CPU-side pixel shadow, one per face, lazily created on first SetData()
-        /// at level 0 and shared with the backend via ITextureCubeBackend::ShareCpuPixels() for
+        /// at level 0 and shared with the renderer via ITextureCubeRenderer::ShareCpuPixels() for
         /// GL-style context-loss restoration (mirrors Texture2D::cpuPixels_'s own level-0-only
         /// scope -- higher mip levels are not restored from any CPU shadow, matching how
         /// Texture2D's own context recovery re-derives them via mipmap generation instead).

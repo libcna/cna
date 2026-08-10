@@ -1,7 +1,7 @@
 # SkinnedEffect Exactness Support Matrix
 
 Phase 46 (`plan_graphics.md` Tasks 401–410) audited and pixel-verified `SkinnedEffect` conformance
-against FNA across all three graphics backends (EasyGL, Vulkan, Bgfx). This document summarizes
+against FNA across all three graphics renderers (EasyGL, Vulkan, Bgfx). This document summarizes
 the findings and closes the phase.
 
 ---
@@ -33,14 +33,14 @@ the same one-line-per-field pattern used for `FogColor`.
 Opened 3 new backlog tasks: **Task 893** (`DirectionalLight1`/`DirectionalLight2` unforwarded,
 same shape as `BasicEffect`'s Task 885 and `EnvironmentMapEffect`'s Task 890 — `SkinnedEffect.fx`
 shares the same `Lighting.fxh`/`ComputeLights` mechanism), **Task 894** (`SpecularColor`/
-`SpecularPower` have zero GPU implementation on any of the 3 backends — `GpuDrawParams` has no
+`SpecularPower` have zero GPU implementation on any of the 3 renderers — `GpuDrawParams` has no
 generic specular fields at all, same shape as `BasicEffect`'s Task 886), and **Task 895**
-(`WeightsPerVertex` is a complete GPU no-op on all 3 backends — FNA's real `Skin(vin, boneCount)`
+(`WeightsPerVertex` is a complete GPU no-op on all 3 renderers — FNA's real `Skin(vin, boneCount)`
 HLSL function only sums the first `boneCount` weight/index pairs, but CNA's skinning shader
 unconditionally sums all 4 regardless of the property's value; only visible when unused weight
 slots hold nonzero data). Also noted, **not** opened as a bug (an acceptable, strictly-more-
 accurate deviation, same class as Task 396's per-pixel-Fresnel note): `PreferPerPixelLighting=false`
-is effectively a no-op since `NdotL` is always computed in the fragment shader on every backend.
+is effectively a no-op since `NdotL` is always computed in the fragment shader on every renderer.
 
 ## 2. Default-value unit tests, `MaxBones` linker gap (Task 402)
 
@@ -87,7 +87,7 @@ exactly its authored position. Deliberately structured as a direct contrast with
 bone 0 to a `+0.5` X translation — this test leaves the default identity palette untouched and
 confirms the quad does **not** move.
 
-**Found a genuinely new Bgfx-specific test-harness pitfall** (not a `SkinnedEffect`/backend bug):
+**Found a genuinely new Bgfx-specific test-harness pitfall** (not a `SkinnedEffect`/renderer bug):
 reading 3 distinct screen rectangles from a single rendered Bgfx frame within one retry-loop
 iteration only reliably reflects the *first* read — every prior multi-region Bgfx pixel test in
 this project (audited all existing `bgfx_*_test.cpp` files) already reads exactly one rectangle
@@ -98,12 +98,12 @@ established pattern reused by every subsequent multi-point Bgfx test in this pha
 ## 5. Single translation bone (Task 407)
 
 **Verify-only, zero bugs found.** Formalized the pre-existing (Task 123) EasyGL-only
-`skinned_effect_integration_test.cpp` translation-bone scenario into Phase 46's own per-backend
+`skinned_effect_integration_test.cpp` translation-bone scenario into Phase 46's own per-renderer
 naming/registration convention, extending it to Vulkan and Bgfx for the first time. All vertices
 bound 100% to a single bone set to a real, non-identity `Matrix.CreateTranslation(+0.5,0,0)`. All
-3 backends produced the exact predicted output on the first attempt (EasyGL `(174,0,0)`, Vulkan/
+3 renderers produced the exact predicted output on the first attempt (EasyGL `(174,0,0)`, Vulkan/
 Bgfx `(160,0,0)` — the small EasyGL-vs-Vulkan/Bgfx RGB difference is the same pre-existing
-per-backend lighting-precision variance seen throughout this project, not a bug).
+per-renderer lighting-precision variance seen throughout this project, not a bug).
 
 ## 6. Two-bone weighted blend (Task 408)
 
@@ -113,15 +113,15 @@ Deliberately chose a discriminating, non-trivial bone pair rather than a saturat
 `Bones[0]=Translate(-0.5,0,0)`, `Bones[1]=Translate(+1.5,0,0)`, weights split `0.5`/`0.5` → net
 blended shift `= 0.5×(-0.5)+0.5×(1.5) = +0.5`, a value distinct from either individual bone's own
 shift — so a bug that picked one bone alone (ignoring the other's weight) would produce a clearly
-different, wrong result rather than accidentally matching. All 3 backends produced the exact
-predicted output on the first attempt, byte-identical to Task 407's own per-backend values.
+different, wrong result rather than accidentally matching. All 3 renderers produced the exact
+predicted output on the first attempt, byte-identical to Task 407's own per-renderer values.
 
 **Discriminating power independently verified**: temporarily changed the EasyGL test's weights to
 `(1,0)` (bone 0 alone) and reran — predicted shift becomes `-0.5` instead of `+0.5`; observed
 exactly the predicted swap (quad moved to the *left* read-back point instead of centre) before
 restoring the real `0.5`/`0.5` test.
 
-## 7. Cross-backend consistency (Task 409)
+## 7. Cross-renderer consistency (Task 409)
 
 **Capstone, zero new bugs found.** Combined Tasks 406–408's individually-verified pieces (identity
 no-op, single-bone translation, 2-bone weighted blend) into **one scene, one bone-palette upload,
@@ -130,8 +130,8 @@ within a single draw*, not just when each is exercised in its own dedicated draw
 share identical authored geometry and are distinguished only by their per-vertex weight/index
 data, directly testing that the vertex shader reads genuinely per-vertex skinning attributes.
 
-**Result: all 3 backends produced the exact predicted output on the first attempt**, each
-byte-identical across all 3 quads within itself and matching each backend's own Task 406–408
+**Result: all 3 renderers produced the exact predicted output on the first attempt**, each
+byte-identical across all 3 quads within itself and matching each renderer's own Task 406–408
 single-quad values exactly (EasyGL all 3 = `(174,0,0)`; Vulkan/Bgfx all 3 = `(160,0,0)`) — strong
 evidence the 3 independent bone/weight combinations apply correctly and simultaneously within one
 draw call.
@@ -159,14 +159,14 @@ Legend: ✅ verified working · ❌ confirmed not implemented.
 Phase 46 opened 3 new tracked tasks (all from Task 401's opener audit):
 
 - ~~**Task 893**~~ — **fixed, 2026-07-11**: `DirectionalLight1`/`DirectionalLight2` now forward on
-  `SkinnedEffect` on all 3 backends, mirroring `BasicEffect`'s (Task 885/886) and
+  `SkinnedEffect` on all 3 renderers, mirroring `BasicEffect`'s (Task 885/886) and
   `EnvironmentMapEffect`'s (Task 890) own fixes. See `NEXT.md` §3 for the full write-up.
 - ~~**Task 894**~~ — **fixed, 2026-07-11**: real GPU specular highlights (half-vector Blinn-Phong,
   matching `BasicEffect`'s Task 886 formula exactly) now implemented for `SkinnedEffect`'s
-  `SpecularColor`/`SpecularPower` on all 3 backends, including new World-matrix/EyePosition
-  plumbing each backend's skinned shader previously had zero infrastructure for. See `NEXT.md` §3.
+  `SpecularColor`/`SpecularPower` on all 3 renderers, including new World-matrix/EyePosition
+  plumbing each renderer's skinned shader previously had zero infrastructure for. See `NEXT.md` §3.
 - ~~**Task 895**~~ — **fixed, 2026-07-11**: `WeightsPerVertex` is now a real GPU-enforced constraint
-  on all 3 backends — each backend's skinning vertex shader gates bone-weight accumulation with
+  on all 3 renderers — each renderer's skinning vertex shader gates bone-weight accumulation with
   `>=2`/`>=4` conditionals, matching FNA's real `Skin(vin, boneCount)` behavior of only summing the
   first `boneCount` weight/index pairs. See `NEXT.md` §3.
 

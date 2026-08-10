@@ -193,7 +193,7 @@ TEST_F(Texture2DContentTypeReaderTest, AbsurdlyLargeDimensionsThrowContentLoadEx
 // exceed any real device's maximum texture dimension, but with the OTHER axis small enough that
 // the width*height*4 product stays comfortably under CheckDecodedByteSize's own 256MB ceiling
 // (confirmed: 500000*1*4 = 2,000,000 bytes). Before this task's fix, this shape reached
-// Texture2D's backend-specific construction unchecked; the byte-size check alone never caught it.
+// Texture2D's renderer-specific construction unchecked; the byte-size check alone never caught it.
 TEST_F(Texture2DContentTypeReaderTest, SingleAxisExceedingMaxTextureDimensionThrowsContentLoadException)
 {
     ContentManager cm;

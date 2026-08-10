@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Task 408: pixel test for SkinnedEffect's two-bone weighted blend (Vulkan backend). See
+// Task 408: pixel test for SkinnedEffect's two-bone weighted blend (Vulkan renderer). See
 // examples/easygl_skinnedeffect_twobone_blend_test.cpp for the full derivation.
 //
 // Exit code 0 = PASS, 1 = FAIL.

@@ -3,7 +3,7 @@
 // This deliberately stays below the public stock-effect API: AlphaTestEffect and
 // DualTextureEffect also require vertex processing, primitive coverage, fog and depth semantics.
 
-#include "CNA/Internal/Backends/Skia/SkiaSurface.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaSurface.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CompareFunction.hpp"
 
 #include "include/core/SkCanvas.h"
@@ -23,7 +23,7 @@
 #include <cstdio>
 #include <vector>
 
-using CNA::Internal::Backends::Skia::SkiaSurface;
+using CNA::Internal::Renderers::Skia::SkiaSurface;
 using Microsoft::Xna::Framework::Graphics::CompareFunction;
 
 namespace

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // Task 397: verify EnvironmentMapEffect's reflection vector responds to EyePosition
-// (Vulkan backend). See examples/easygl_environmentmapeffect_eyeposition_test.cpp for the
+// (Vulkan renderer). See examples/easygl_environmentmapeffect_eyeposition_test.cpp for the
 // full derivation.
 //
 // Exit code 0 = PASS, 1 = FAIL.

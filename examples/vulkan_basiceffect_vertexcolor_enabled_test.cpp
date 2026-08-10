@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // Task 365: BasicEffect pixel test — VertexColorEnabled=true, no texture, vertex color
-// multiplication (Vulkan backend).
+// multiplication (Vulkan renderer).
 //
 // See examples/easygl_basiceffect_vertexcolor_enabled_test.cpp for the full FNA-derived expected-
 // output derivation. Summary: with LightingEnabled=false, TextureEnabled=false (both real FNA

@@ -1,10 +1,10 @@
-#include "CNA/Internal/Backends/Skia/SkiaMipSampling.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaMipSampling.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
 
-namespace CNA::Internal::Backends::Skia
+namespace CNA::Internal::Renderers::Skia
 {
     SkiaMipFilter DecodeSkiaMipFilter(int textureFilter)
     {
@@ -14,7 +14,7 @@ namespace CNA::Internal::Backends::Skia
         {
             case 0: return {Within::Linear, Within::Linear, Mip::Linear};
             case 1: return {Within::Point, Within::Point, Mip::Point};
-            // The selected CPU-raster backend has no anisotropic footprint. Its documented exact
+            // The selected CPU-raster renderer has no anisotropic footprint. Its documented exact
             // fallback is the complete Linear filter, including Linear's mip component.
             case 2: return {Within::Linear, Within::Linear, Mip::Linear};
             case 3: return {Within::Linear, Within::Linear, Mip::Point};
@@ -86,4 +86,4 @@ namespace CNA::Internal::Backends::Skia
         result.upperLevel = result.lowerLevel + 1;
         return result;
     }
-} // namespace CNA::Internal::Backends::Skia
+} // namespace CNA::Internal::Renderers::Skia

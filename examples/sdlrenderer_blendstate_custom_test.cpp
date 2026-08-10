@@ -12,12 +12,12 @@
 //
 // DECISIONS (documented here, per this task's own framing):
 //   1. Blend::BlendFactor / InverseBlendFactor / SourceAlphaSaturation have no SDL_BlendFactor
-//      equivalent at all -- SdlGraphicsBackend::ApplyBlendState's ToSdlBlendFactor() throws
+//      equivalent at all -- SdlRenderer::ApplyBlendState's ToSdlBlendFactor() throws
 //      std::runtime_error for these 3 values (confirmed by this test) rather than silently
 //      substituting a wrong factor. This is deliberately narrower than a full custom-blend
 //      feature -- these 3 values are rare in practice (no built-in FNA/CNA effect or the 4
 //      standard presets use them) and there is no SDL_BlendFactor that could honor them
-//      correctly, so throwing (matching this backend's established ThrowNo3D/SetCustomEffect
+//      correctly, so throwing (matching this renderer's established ThrowNo3D/SetCustomEffect
 //      "must not silently misrender" convention) is the right choice, not a workaround away from.
 //   2. BlendFunction::Add is confirmed universally reliable (all 4 presets + this task's custom
 //      test use it). BlendFunction::Subtract/ReverseSubtract/Max/Min are technically composable
@@ -32,7 +32,7 @@
 //      DO work here), but this caveat is documented rather than silently assumed universal.
 //
 // Requires PresentationMode::NativeBackBuffer (Task 915 finding): SDL_RenderReadPixels operates
-// in physical output coordinates, while this backend's default presentation mode
+// in physical output coordinates, while this renderer's default presentation mode
 // (FixedHeightDynamicWidth) does not map logical pixels 1:1 to physical ones.
 //
 // Exit code 0 = all PASS, 1 = at least one FAIL.

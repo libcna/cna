@@ -1,4 +1,4 @@
-// plan_html_dom.md HTMLDOM-72: Playwright driver for the HTML_DOM backend's smoke test.
+// plan_html_dom.md HTMLDOM-72: Playwright driver for the HTML_DOM renderer's smoke test.
 //
 // Loads the Emscripten-generated page in headless Chromium, mirrors everything the wasm module
 // prints, and waits for the test to publish its verdict on window.__cnaSmokeResult. Exits 0 only
@@ -122,11 +122,11 @@ async function verifyPixelVerificationScreenshot(page) {
     // Near-edge: measured first, NOT assumed -- unlike the Canvas2D-path check (which hand-derives
     // and asserts a REAL, expected bleed of roughly R~154/B~101, see
     // htmldom_pixel_verification_test.cpp's own comment for the derivation), the DOM path measures
-    // PURE RED here, zero bleed. This is a genuine, real divergence BETWEEN this backend's own two
+    // PURE RED here, zero bleed. This is a genuine, real divergence BETWEEN this renderer's own two
     // draw paths, not a bug in this check: a CSS `background-image` element's own box is a hard
     // clip by spec (`background-repeat:no-repeat` + no `background-size` override), structurally
     // unlike `drawImage`'s explicit sub-rectangle-extraction-then-resample model, which is exactly
-    // where Canvas2D's own bleed comes from. See docs/html-dom-backend.md's Known Limitations for
+    // where Canvas2D's own bleed comes from. See docs/html-dom-renderer.md's Known Limitations for
     // the full writeup -- this assertion is deliberately tight (matching the interior check's own
     // tolerance) specifically BECAUSE the DOM path is not expected to bleed at all here.
     const nearEdgeOk = near(pixels.nearEdge[0], 255, 25) && near(pixels.nearEdge[1], 0, 25) &&

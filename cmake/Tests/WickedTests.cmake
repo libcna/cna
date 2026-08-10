@@ -1,5 +1,5 @@
 if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
-   AND CNA_GRAPHICS_BACKEND STREQUAL "WICKED")
+   AND CNA_GRAPHICS_RENDERER STREQUAL "WICKED")
 
     enable_testing()
 
@@ -17,8 +17,8 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             target_link_libraries(${target} PRIVATE SDL3::SDL3main)
         endif()
         # wi::shadercompiler dlopens "./libdxcompiler.so" relative to the CURRENT WORKING
-        # DIRECTORY, so every executable that constructs the backend needs it beside the binary and
-        # must be run from there (docs/wicked-backend.md).
+        # DIRECTORY, so every executable that constructs the renderer needs it beside the binary and
+        # must be run from there (docs/wicked-renderer.md).
         if(CNA_WICKED_DXCOMPILER)
             add_custom_command(TARGET ${target} POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -28,31 +28,31 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     endmacro()
 
     # plan_wicked.md WICKED-70. Device-independent: the pipeline cache key is the one piece of this
-    # backend that can be tested without a GPU, and also the piece where a mistake is silent -- a
+    # renderer that can be tested without a GPU, and also the piece where a mistake is silent -- a
     # key that compares or hashes two different render states as equal makes the cache return a
     # pipeline built for the wrong state, which renders with no error at all.
     cna_wicked_test(cna_test_wicked_pipeline_key
-        modules/renderers/wicked/tests/CNA/Internal/Backends/Wicked/WickedPipelineKeyTest.cpp)
+        modules/renderers/wicked/tests/CNA/Internal/Renderers/Wicked/WickedPipelineKeyTest.cpp)
     add_test(NAME Wicked_PipelineKey COMMAND cna_test_wicked_pipeline_key)
     set_tests_properties(Wicked_PipelineKey PROPERTIES LABELS "Unit;Wicked" TIMEOUT 60)
 
     # plan_wicked.md WICKED-78. The regression signal is the process surviving plain device
     # lifecycles: before the teardown fix, the first bare create/destroy aborted the binary inside
     # Wicked's VMA ("Some allocations were not freed"), which is also why the shared corpus could
-    # not run under this backend at all. Needs a real device, window and display, like the smoke
+    # not run under this renderer at all. Needs a real device, window and display, like the smoke
     # test below.
     cna_wicked_test(cna_test_wicked_device_lifecycle
-        modules/renderers/wicked/tests/CNA/Internal/Backends/Wicked/WickedDeviceLifecycleTest.cpp)
+        modules/renderers/wicked/tests/CNA/Internal/Renderers/Wicked/WickedDeviceLifecycleTest.cpp)
     add_test(NAME Wicked_DeviceLifecycle COMMAND cna_test_wicked_device_lifecycle)
     set_tests_properties(Wicked_DeviceLifecycle PROPERTIES LABELS "GraphicsSmoke;Wicked"
         TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # plan_wicked.md WICKED-77. The instanced route carries the geometry stream's whole public
     # VertexOffset in the stream table (the ordinary routes fold it into baseVertex), and this
-    # backend dropped it at bind time -- an offset-selected record rendered nothing while the
+    # renderer dropped it at bind time -- an offset-selected record rendered nothing while the
     # identical bytes drew correctly through the ordinary indexed route.
     cna_wicked_test(cna_test_wicked_geometry_offset
-        modules/renderers/wicked/tests/CNA/Internal/Backends/Wicked/WickedGeometryVertexOffsetTest.cpp)
+        modules/renderers/wicked/tests/CNA/Internal/Renderers/Wicked/WickedGeometryVertexOffsetTest.cpp)
     add_test(NAME Wicked_GeometryVertexOffset COMMAND cna_test_wicked_geometry_offset)
     set_tests_properties(Wicked_GeometryVertexOffset PROPERTIES LABELS "GraphicsSmoke;Wicked"
         TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
@@ -64,17 +64,17 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # every narrow staging buffer and this matrix corrupts (preserved probe evidence in
     # cmake-build-wicked/wicked-repro/); with the patch it must stay green byte-for-byte.
     cna_wicked_test(cna_test_wicked_texture3d_staged_transfer
-        modules/renderers/wicked/tests/CNA/Internal/Backends/Wicked/WickedTexture3DStagedTransferTest.cpp)
+        modules/renderers/wicked/tests/CNA/Internal/Renderers/Wicked/WickedTexture3DStagedTransferTest.cpp)
     add_test(NAME Wicked_Texture3DStagedTransfer COMMAND cna_test_wicked_texture3d_staged_transfer)
     set_tests_properties(Wicked_Texture3DStagedTransfer PROPERTIES LABELS "GraphicsSmoke;Wicked"
         TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_wicked.md WICKED-74. Everything else in this backend needs a real Vulkan device, a
-    # window and a display, so it is covered by the same demo smoke test the other GPU backends
+    # plan_wicked.md WICKED-74. Everything else in this renderer needs a real Vulkan device, a
+    # window and a display, so it is covered by the same demo smoke test the other GPU renderers
     # register. It is registered only when the examples are built, and skips rather than fails when
     # no display is available.
     if(TARGET cna_demo_2d)
-        cna_register_backend_test(NAME Wicked_Demo2D_SmokeTest COMMAND cna_demo_2d --smoke 3
+        cna_register_renderer_test(NAME Wicked_Demo2D_SmokeTest COMMAND cna_demo_2d --smoke 3
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
             LABELS "GraphicsSmoke;Wicked")
     endif()

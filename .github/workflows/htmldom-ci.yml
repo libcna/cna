@@ -1,4 +1,4 @@
-# plan_html_dom.md HTMLDOM-112: the HTML_DOM backend's browser test suite had never run in CI --
+# plan_html_dom.md HTMLDOM-112: the HTML_DOM renderer's browser test suite had never run in CI --
 # scripts/run-htmldom-browser-test.sh only ever served the smoke page manually, and no workflow in
 # this directory mentioned "htmldom" at all. This job builds the whole suite
 # (scripts/run-htmldom-test-suite.sh, which itself builds the cna_test_htmldom_all CMake target and
@@ -29,7 +29,7 @@ jobs:
     timeout-minutes: 60
     env:
       # Pinned to the emsdk version verified working in this project's own dev sandbox
-      # (docs/html-dom-backend.md's "emsdk 6.0.5" mention predates this pin; re-verify before
+      # (docs/html-dom-renderer.md's "emsdk 6.0.5" mention predates this pin; re-verify before
       # bumping rather than tracking "latest", which can silently break a wasm build).
       EMSDK_VERSION: "6.0.3"
     steps:
@@ -116,7 +116,7 @@ jobs:
           set -euo pipefail
           source ~/emsdk/emsdk_env.sh
           emcmake cmake -S . -B cmake-build-htmldom \
-            -DCNA_GRAPHICS_BACKEND=HTML_DOM \
+            -DCNA_GRAPHICS_RENDERER=HTML_DOM \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache
 

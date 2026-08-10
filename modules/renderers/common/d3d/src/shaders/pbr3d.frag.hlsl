@@ -1,5 +1,5 @@
 // Shader Model 5.0 (ps_5_0). Physically-based (metallic-roughness) unskinned pipeline -- HLSL
-// port of EasyGLGraphicsBackend::EnsurePbrProgram()'s fragment stage (plan_cnj.md CNB-58,
+// port of EasyGLRenderer::EnsurePbrProgram()'s fragment stage (plan_cnj.md CNB-58,
 // PbrEffect): GGX/Trowbridge-Reitz normal distribution, Smith-Schlick-GGX visibility
 // (direct-lighting k=(roughness+1)^2/8), Schlick Fresnel -- glTF 2.0's own reference BRDF
 // (Appendix B.3.2/B.3.3/B.3.4), driven by the same 3-DirectionalLight + AmbientLightColor
@@ -11,7 +11,7 @@
 // discard branch (uAlphaTest), copied there purely for boilerplate consistency with its sibling
 // shaders -- PbrEffect itself never implements IEffectAlphaTest and its own FillGpuDrawParams()
 // never sets GpuDrawParams::alphaTest away from the default "always pass" {0,0,1,1}, and this
-// backend's own DrawPrimitivesExImpl dispatch already routes any real AlphaTestEffect draw to the
+// renderer's own DrawPrimitivesExImpl dispatch already routes any real AlphaTestEffect draw to the
 // separate alpha_test3d/alpha_test_colored3d variants instead (mutually exclusive with `pbr` in
 // the priority chain), so the branch is unreachable dead code for real PbrEffect usage. Left out
 // here rather than ported unused.
@@ -62,7 +62,7 @@ struct PSInput
 static const float kPi = 3.14159265;
 
 // GGX/Trowbridge-Reitz D, Smith-Schlick-GGX visibility, Schlick Fresnel -- the glTF 2.0 spec's own
-// reference BRDF, ported term-for-term from EasyGLGraphicsBackend::EnsurePbrProgram()'s PbrLight().
+// reference BRDF, ported term-for-term from EasyGLRenderer::EnsurePbrProgram()'s PbrLight().
 float3 PbrLight(float3 N, float3 V, float3 L, float3 lightColor, float3 albedo, float3 F0,
                 float roughness, float metallic)
 {

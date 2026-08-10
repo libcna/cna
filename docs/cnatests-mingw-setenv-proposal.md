@@ -5,7 +5,7 @@ written as a proposal-only document; the table below is kept as-written (62 call
 64 — this table slightly overcounted `SoundEffectTests.cpp`, see the correction note at the bottom)
 for the historical record of what was scoped before implementation. See `plan_dx9.md`'s `D9-123`
 row for the full implementation/verification result: `CnaTests` now compiles cleanly under
-`CNA_GRAPHICS_BACKEND=D3D9` (first time ever for any Windows-cross backend), AND the follow-up
+`CNA_GRAPHICS_RENDERER=D3D9` (first time ever for any Windows-cross renderer), AND the follow-up
 `gtest_discover_tests` CTest-registration blocker this fix surfaced (`ctest -L D3D9` couldn't
 execute the cross-compiled `.exe` to enumerate test names) is also fixed and verified
 end-to-end — `ctest -L D3D9` runs clean, 4383 tests are registered, and spot-checked individual
@@ -21,11 +21,11 @@ proven compiling under those same toolchains, but this specific commit's effect 
 
 ## The problem
 
-`CnaTests` (the GoogleTest suite) fails to build under every Windows-cross-compiled backend
+`CnaTests` (the GoogleTest suite) fails to build under every Windows-cross-compiled renderer
 (`D3D9`/`D3D11`/`D3D12`, via MinGW-w64) because **13 test/tool files call POSIX-only
 `::setenv()`/`::unsetenv()` directly**, which MinGW-w64's `<cstdlib>` does not declare. This is a
 pure build-time blocker (compilation fails, nothing runs) — it has nothing to do with any one
-backend's rendering correctness.
+renderer's rendering correctness.
 
 ## Exact scope — 62 `setenv`+`unsetenv` call sites, 13 files, 100% test setup/teardown
 
@@ -60,7 +60,7 @@ deferred it: *"a real, pre-existing, much larger portability gap ... genuinely o
 worth its own separate, explicitly-scoped task."* `DX-115` (`D3D12` docs closure) repeated the same
 deferral verbatim. `D9-123` (this plan) independently hit the same wall and predicted it in
 advance. All three tasks agree: this is real, cross-cutting, shared-file (`tests/`) work that
-doesn't belong to any one backend's branch — fixing it inline from `feature/dx9` risks a merge
+doesn't belong to any one renderer's branch — fixing it inline from `feature/dx9` risks a merge
 collision with `feature/graphics`, a separate, independently-active clone doing `D3D11`/`D3D12`
 work on the same shared test files right now.
 
@@ -107,7 +107,7 @@ needs is already shipped and already exercised by other code paths.
 3. **D3D9 verified**: `cmake --build cmake-build-d3d9 --target CnaTests` — **`CnaTests.exe` now
    compiles and links with zero errors and zero remaining `setenv`/`unsetenv`** (grepped the full
    build log, not just the tail). This is the first time this binary has ever successfully built
-   for any Windows-cross-compiled backend.
+   for any Windows-cross-compiled renderer.
 4. **New, previously-unreachable finding, fixed the same day**: `ctest -L D3D9` initially failed at
    a *different*, later step — `gtest_discover_tests(CnaTests DISCOVERY_MODE PRE_TEST)`
    (`CMakeLists.txt:7117`, unconditional, no `MINGW` guard) tried to directly execute
@@ -115,12 +115,12 @@ needs is already shipped and already exercised by other code paths.
    (confirmed via `file`), so it cannot run natively on this Linux host (`run-detectors: unable to
    find an interpreter`) — no `CMAKE_CROSSCOMPILING_EMULATOR` routed it through Wine. This was
    invisible before because the binary never compiled far enough to reach this step under any
-   Windows-cross backend. **Fixed**: measured the naive fix's real cost first (a single Wine
+   Windows-cross renderer. **Fixed**: measured the naive fix's real cost first (a single Wine
    process spawn costs ~1.2s; the 4367 individually-discovered test cases would cost ~87 minutes
    of pure process overhead if each became its own separately-spawned CTest entry) before choosing
    an approach. Set `CROSSCOMPILING_EMULATOR` on the `CnaTests` target — the same CMake-native
    mechanism `plan_dx.md` `DX-80`'s own `cna_d3d11_ctest_command` macro already uses for D3D11/
-   D3D12's own CTests — selecting the correct per-backend Wine wrapper
+   D3D12's own CTests — selecting the correct per-renderer Wine wrapper
    (`run-wine-dxvk9.sh`/`run-wine-dxvk.sh`/`run-wine-vkd3d.sh`) with that wrapper's own
    authenticity gate deliberately disabled inline (`env CNA_D3D9_SKIP_DXVK_GATE=1 <wrapper>`, no
    new script needed) — `CnaTests` spans non-Graphics namespaces that never open a device, so the

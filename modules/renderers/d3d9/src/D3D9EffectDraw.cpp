@@ -1,10 +1,10 @@
 // plan_dx9.md Phase D9-8 (D9-82b/c/d/e/f): real effect-aware DrawPrimitivesEx/
 // DrawIndexedPrimitivesEx dispatch, ALL 5 XNA Stock Effects: BasicEffect (D9-82b), AlphaTestEffect
 // (D9-82c), DualTextureEffect (D9-82d), EnvironmentMapEffect (D9-82e), SkinnedEffect (D9-82f) --
-// matching the priority-cascade shape D3D11GraphicsBackend::DrawPrimitivesExImpl already
+// matching the priority-cascade shape D3D11Renderer::DrawPrimitivesExImpl already
 // established (flag-driven effect selection, GpuDrawParams as the only per-draw input).
 //
-// BasicEffect coverage is bounded by which vertex layout this backend actually supports (D9-22's
+// BasicEffect coverage is bounded by which vertex layout this renderer actually supports (D9-22's
 // 5 stride-keyed D3DVERTEXELEMENT9 declarations: 16/20/24/32/52 bytes) -- BasicEffect's 32
 // ShaderIndex values need a VSInput shape (VSInput/VSInputVc/VSInputTx/VSInputTxVc/VSInputNm/
 // VSInputNmVc/VSInputNmTx/VSInputNmTxVc, per Structures.fxh) that not every one of those 5 strides
@@ -36,20 +36,20 @@
 //
 // PreferPerPixelLighting (plan_dx9.md D9-81, item 1) and EnvironmentMapEffect's specularEnabled
 // (item 4) are RESOLVED 2026-07-16: GpuDrawParams now carries both real fields (see
-// IGraphicsBackend.hpp), forwarded by BasicEffect/SkinnedEffect/EnvironmentMapEffect's own
+// IGraphicsRenderer.hpp), forwarded by BasicEffect/SkinnedEffect/EnvironmentMapEffect's own
 // FillGpuDrawParams(). This file's dispatch functions read them directly instead of hardcoding
 // false -- see each DrawXxxEffectEXT()'s own ComputeXxxShaderIndex() call, and each
 // GetXxxRegisterTablesEXT()'s newly-added cases for the previously-unreachable ShaderIndex values.
 
-#include "CNA/Internal/Backends/D3D9/D3D9GraphicsBackend.hpp"
-#include "CNA/Internal/Backends/D3D9/D3D9Buffers.hpp"
-#include "CNA/Internal/Backends/D3D9/D3D9ConstantUpload.hpp"
-#include "CNA/Internal/Backends/D3D9/D3D9ShaderCache.hpp"
-#include "CNA/Internal/Backends/D3D9/D3D9ShaderDispatch.hpp"
-#include "CNA/Internal/Backends/D3D9/D3D9Textures.hpp"
-#include "CNA/Internal/Backends/D3D9/D3D9VertexDeclarations.hpp"
-#include "CNA/Internal/Backends/D3D9/D3D9RenderTargets.hpp"
-#include "CNA/Internal/Backends/D3D9/shaders/D3D9ShaderRegisters.hpp"
+#include "CNA/Internal/Renderers/D3D9/D3D9Renderer.hpp"
+#include "CNA/Internal/Renderers/D3D9/D3D9Buffers.hpp"
+#include "CNA/Internal/Renderers/D3D9/D3D9ConstantUpload.hpp"
+#include "CNA/Internal/Renderers/D3D9/D3D9ShaderCache.hpp"
+#include "CNA/Internal/Renderers/D3D9/D3D9ShaderDispatch.hpp"
+#include "CNA/Internal/Renderers/D3D9/D3D9Textures.hpp"
+#include "CNA/Internal/Renderers/D3D9/D3D9VertexDeclarations.hpp"
+#include "CNA/Internal/Renderers/D3D9/D3D9RenderTargets.hpp"
+#include "CNA/Internal/Renderers/D3D9/shaders/D3D9ShaderRegisters.hpp"
 
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 
@@ -59,7 +59,7 @@
 #include <string>
 #include <vector>
 
-namespace CNA::Internal::Backends::D3D9
+namespace CNA::Internal::Renderers::D3D9
 {
     using Microsoft::Xna::Framework::Matrix;
 
@@ -79,38 +79,38 @@ namespace CNA::Internal::Backends::D3D9
 
         /// Real root cause of the NEXT.md-documented "RenderTarget2D sampled as an ordinary
         /// texture crashes on the next draw" bug: GpuDrawParams::texture0/texture1 are declared as
-        /// `const ITextureBackend*`, and D3D9RenderTargetBackend (a RenderTarget2D's own backend)
-        /// implements IRenderTargetBackend : ITextureBackend -- a real, legal runtime type this
+        /// `const ITextureRenderer*`, and D3D9RenderTargetRenderer (a RenderTarget2D's own renderer)
+        /// implements IRenderTargetRenderer : ITextureRenderer -- a real, legal runtime type this
         /// pointer can hold whenever an XNA game sets `effect.Texture = someRenderTarget2D`. Every
-        /// call site below used to do `static_cast<const D3D9TextureBackend*>(params.texture0)`
-        /// unconditionally, which silently reinterprets a D3D9RenderTargetBackend* as if it were a
-        /// D3D9TextureBackend* (an unrelated sibling class, not a base/derived relationship) --
-        /// undefined behavior that read whichever field happens to sit at D3D9TextureBackend's own
-        /// `texture_` offset in a D3D9RenderTargetBackend's actual, different layout, handed a
+        /// call site below used to do `static_cast<const D3D9TextureRenderer*>(params.texture0)`
+        /// unconditionally, which silently reinterprets a D3D9RenderTargetRenderer* as if it were a
+        /// D3D9TextureRenderer* (an unrelated sibling class, not a base/derived relationship) --
+        /// undefined behavior that read whichever field happens to sit at D3D9TextureRenderer's own
+        /// `texture_` offset in a D3D9RenderTargetRenderer's actual, different layout, handed a
         /// garbage IDirect3DTexture9* to SetTexture(), and crashed later when DXVK's async
         /// shader-compiler thread actually tried to use it. Same two-concrete-type resolution as
-        /// D3D11GraphicsBackend.cpp's own (anonymous-namespace-local, not exported)
+        /// D3D11Renderer.cpp's own (anonymous-namespace-local, not exported)
         /// GetSrvForTextureEXT -- duplicated per-file rather than factored into a shared header,
         /// matching that precedent's own documented rationale.
-        IDirect3DTexture9* ResolveD3D9TextureEXT(const ITextureBackend* tex)
+        IDirect3DTexture9* ResolveD3D9TextureEXT(const ITextureRenderer* tex)
         {
             if (tex == nullptr) return nullptr;
-            if (const auto* t = dynamic_cast<const D3D9TextureBackend*>(tex))
+            if (const auto* t = dynamic_cast<const D3D9TextureRenderer*>(tex))
                 return t->GetTextureEXT();
-            if (const auto* rt = dynamic_cast<const D3D9RenderTargetBackend*>(tex))
+            if (const auto* rt = dynamic_cast<const D3D9RenderTargetRenderer*>(tex))
                 return rt->GetTextureEXT();
             return nullptr;
         }
 
         /// Same two-concrete-type resolution as ResolveD3D9TextureEXT above, but for
-        /// ITextureCubeBackend (EnvironmentMapEffect's cube map) -- a plain D3D9TextureCubeBackend,
-        /// or a D3D9RenderTargetCubeBackend used as a sampled cube texture.
-        IDirect3DCubeTexture9* ResolveD3D9TextureCubeEXT(const ITextureCubeBackend* tex)
+        /// ITextureCubeRenderer (EnvironmentMapEffect's cube map) -- a plain D3D9TextureCubeRenderer,
+        /// or a D3D9RenderTargetCubeRenderer used as a sampled cube texture.
+        IDirect3DCubeTexture9* ResolveD3D9TextureCubeEXT(const ITextureCubeRenderer* tex)
         {
             if (tex == nullptr) return nullptr;
-            if (const auto* t = dynamic_cast<const D3D9TextureCubeBackend*>(tex))
+            if (const auto* t = dynamic_cast<const D3D9TextureCubeRenderer*>(tex))
                 return t->GetTextureEXT();
-            if (const auto* rt = dynamic_cast<const D3D9RenderTargetCubeBackend*>(tex))
+            if (const auto* rt = dynamic_cast<const D3D9RenderTargetCubeRenderer*>(tex))
                 return rt->GetTextureEXT();
             return nullptr;
         }
@@ -166,7 +166,7 @@ namespace CNA::Internal::Backends::D3D9
             const Shaders::D3D9ShaderConstantSlot* ps; int psCount;
         };
 
-        /// D9-82b: the register table pair for each of the 10 ShaderIndex values this backend can
+        /// D9-82b: the register table pair for each of the 10 ShaderIndex values this renderer can
         /// currently draw (see this file's own header comment for why only these 10). Selected by
         /// C++ symbol, not a re-typed string lookup -- a mismatch between the chosen shader and
         /// its constants would be a compile error, not a runtime one.
@@ -515,24 +515,24 @@ namespace CNA::Internal::Backends::D3D9
         }
     }
 
-    void D3D9GraphicsBackend::DrawPrimitivesExImpl(
-        const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
+    void D3D9Renderer::DrawPrimitivesExImpl(
+        const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
         const Matrix& world, const Matrix& view, const Matrix& projection,
         PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
     {
         // REMED-GFX-DECL-GUARD: before EnsureRenderReadyEXT, before any IDirect3DVertexDeclaration9
-        // is created and before any draw is issued. This backend selects that declaration from the
+        // is created and before any draw is issued. This renderer selects that declaration from the
         // shared D3DCommon stride table (REMED-GFX-217), so a declaration the table's entry cannot
         // represent is refused rather than rendered from the wrong bytes. An out-of-table stride is
         // left to GetOrCreateVertexDeclarationEXT's own established rejection.
         RequireFaithfulDeclarationEXT(vb, ib != nullptr ? "ordinary-indexed" : "ordinary-nonindexed");
         EnsureRenderReadyEXT();
 
-        const auto& d3dVb = static_cast<const D3D9VertexBufferBackend&>(vb);
+        const auto& d3dVb = static_cast<const D3D9VertexBufferRenderer&>(vb);
         const std::size_t stride = d3dVb.GetStrideEXT() > 0 ? d3dVb.GetStrideEXT() : 16;
 
         // D3D9 PBR porting task: params.pbr takes the HIGHEST priority of every flag below,
-        // mirroring EasyGLGraphicsBackend::SelectProgram()'s own identical
+        // mirroring EasyGLRenderer::SelectProgram()'s own identical
         // "pbr-before-everything-else" cascade (checked before alpha test/dual texture/env
         // mapping/skinned, not after). PbrEffect/SkinnedPbrEffect are not Microsoft Stock Effects
         // at all, so this dispatches to D3D9PbrDraw.cpp's own self-contained shader, not one of
@@ -543,7 +543,7 @@ namespace CNA::Internal::Backends::D3D9
             return;
         }
 
-        // D9-82b: same flag priority cascade D3D11GraphicsBackend::DrawPrimitivesExImpl already
+        // D9-82b: same flag priority cascade D3D11Renderer::DrawPrimitivesExImpl already
         // established (GpuDrawParams is the only per-draw signal available to pick an effect).
         const bool needsAlphaTest = (params.alphaTest[3] < 0.0f || params.alphaTest[2] < 0.0f);
         const bool needsDualTex   = params.dualTexture && !needsAlphaTest;
@@ -584,23 +584,23 @@ namespace CNA::Internal::Backends::D3D9
         DrawBasicEffectEXT(vb, ib, stride, world, view, projection, primitive, primitiveCount, params);
     }
 
-    void D3D9GraphicsBackend::DrawPrimitivesEx(
-        const IVertexBufferBackend& vb, const Matrix& world, const Matrix& view, const Matrix& projection,
+    void D3D9Renderer::DrawPrimitivesEx(
+        const IVertexBufferRenderer& vb, const Matrix& world, const Matrix& view, const Matrix& projection,
         PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
     {
         DrawPrimitivesExImpl(vb, nullptr, world, view, projection, primitive, primitiveCount, params);
     }
 
-    void D3D9GraphicsBackend::DrawIndexedPrimitivesEx(
-        const IVertexBufferBackend& vb, const IIndexBufferBackend& ib,
+    void D3D9Renderer::DrawIndexedPrimitivesEx(
+        const IVertexBufferRenderer& vb, const IIndexBufferRenderer& ib,
         const Matrix& world, const Matrix& view, const Matrix& projection,
         PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
     {
         DrawPrimitivesExImpl(vb, &ib, world, view, projection, primitive, primitiveCount, params);
     }
 
-    void D3D9GraphicsBackend::DrawBasicEffectEXT(
-        const IVertexBufferBackend& vb, const IIndexBufferBackend* ib, std::size_t stride,
+    void D3D9Renderer::DrawBasicEffectEXT(
+        const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib, std::size_t stride,
         const Matrix& world, const Matrix& view, const Matrix& projection,
         PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
     {
@@ -616,7 +616,7 @@ namespace CNA::Internal::Backends::D3D9
         if (!comboOk)
         {
             throw std::runtime_error(
-                "D3D9GraphicsBackend::DrawPrimitivesEx (BasicEffect): stride " + std::to_string(stride) +
+                "D3D9Renderer::DrawPrimitivesEx (BasicEffect): stride " + std::to_string(stride) +
                 " with lighting=" + (params.lightingEnabled ? "true" : "false") +
                 " vertexColor=" + (params.vertexColorEnabled ? "true" : "false") +
                 " texture=" + (params.textureEnabled ? "true" : "false") +
@@ -682,7 +682,7 @@ namespace CNA::Internal::Backends::D3D9
             // EmissiveColor: FNA's Lighting.fxh folds the ambient contribution into this constant
             // (result.Diffuse = mul(diffuse, lightDiffuse) * DiffuseColor.rgb + EmissiveColor) so
             // the shader never needs a separate ambient add -- GpuDrawParams keeps ambientColor
-            // and emissiveColor as separate, un-folded fields (other backends fold them
+            // and emissiveColor as separate, un-folded fields (other renderers fold them
             // differently in their own shader math), so this exact real-shader value must be
             // reconstructed here: emissiveColor + ambientColor*diffuseColor (diffuseColor already
             // carries the alpha multiply, matching FNA's own (emissiveColor+ambient*diffuse)*alpha
@@ -748,12 +748,12 @@ namespace CNA::Internal::Backends::D3D9
         }
 
         device_->SetVertexDeclaration(GetOrCreateVertexDeclarationEXT(stride));
-        const auto& d3dVb = static_cast<const D3D9VertexBufferBackend&>(vb);
+        const auto& d3dVb = static_cast<const D3D9VertexBufferRenderer&>(vb);
         device_->SetStreamSource(0, d3dVb.GetBufferEXT(), 0, static_cast<UINT>(stride));
 
         if (ib)
         {
-            const auto& d3dIb = static_cast<const D3D9IndexBufferBackend&>(*ib);
+            const auto& d3dIb = static_cast<const D3D9IndexBufferRenderer&>(*ib);
             device_->SetIndices(d3dIb.GetBufferEXT());
             // REMED-GFX-060: honor DrawIndexedPrimitives baseVertex/startIndex (was hardcoded
             // BaseVertexIndex=0/StartIndex=0). NumVertices is the vertex-buffer remainder from
@@ -770,8 +770,8 @@ namespace CNA::Internal::Backends::D3D9
         }
     }
 
-    void D3D9GraphicsBackend::DrawAlphaTestEffectEXT(
-        const IVertexBufferBackend& vb, const IIndexBufferBackend* ib, std::size_t stride,
+    void D3D9Renderer::DrawAlphaTestEffectEXT(
+        const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib, std::size_t stride,
         const Matrix& world, const Matrix& view, const Matrix& projection,
         PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
     {
@@ -780,7 +780,7 @@ namespace CNA::Internal::Backends::D3D9
         // parameter, unlike BasicEffect's.
         if (!params.texture0)
             throw std::runtime_error(
-                "D3D9GraphicsBackend::DrawPrimitivesEx (AlphaTestEffect): requires a non-null "
+                "D3D9Renderer::DrawPrimitivesEx (AlphaTestEffect): requires a non-null "
                 "texture0 (plan_dx9.md D9-82c)");
 
         // AlphaTestEffect's only two VSInput shapes map 1:1 onto the existing CNA strides -- no
@@ -795,7 +795,7 @@ namespace CNA::Internal::Backends::D3D9
         }
         if (!comboOk)
             throw std::runtime_error(
-                "D3D9GraphicsBackend::DrawPrimitivesEx (AlphaTestEffect): stride " + std::to_string(stride) +
+                "D3D9Renderer::DrawPrimitivesEx (AlphaTestEffect): stride " + std::to_string(stride) +
                 " with vertexColor=" + (params.vertexColorEnabled ? "true" : "false") +
                 " has no matching CNA vertex layout (plan_dx9.md D9-82c)");
 
@@ -832,12 +832,12 @@ namespace CNA::Internal::Backends::D3D9
         device_->SetTexture(0, ResolveD3D9TextureEXT(params.texture0));
 
         device_->SetVertexDeclaration(GetOrCreateVertexDeclarationEXT(stride));
-        const auto& d3dVb = static_cast<const D3D9VertexBufferBackend&>(vb);
+        const auto& d3dVb = static_cast<const D3D9VertexBufferRenderer&>(vb);
         device_->SetStreamSource(0, d3dVb.GetBufferEXT(), 0, static_cast<UINT>(stride));
 
         if (ib)
         {
-            const auto& d3dIb = static_cast<const D3D9IndexBufferBackend&>(*ib);
+            const auto& d3dIb = static_cast<const D3D9IndexBufferRenderer&>(*ib);
             device_->SetIndices(d3dIb.GetBufferEXT());
             // REMED-GFX-060: honor DrawIndexedPrimitives baseVertex/startIndex (was hardcoded
             // BaseVertexIndex=0/StartIndex=0). NumVertices is the vertex-buffer remainder from
@@ -854,14 +854,14 @@ namespace CNA::Internal::Backends::D3D9
         }
     }
 
-    void D3D9GraphicsBackend::DrawDualTextureEffectEXT(
-        const IVertexBufferBackend& vb, const IIndexBufferBackend* ib, std::size_t stride,
+    void D3D9Renderer::DrawDualTextureEffectEXT(
+        const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib, std::size_t stride,
         const Matrix& world, const Matrix& view, const Matrix& projection,
         PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
     {
         if (!params.texture0 || !params.texture1)
             throw std::runtime_error(
-                "D3D9GraphicsBackend::DrawPrimitivesEx (DualTextureEffect): requires non-null "
+                "D3D9Renderer::DrawPrimitivesEx (DualTextureEffect): requires non-null "
                 "texture0 AND texture1 (plan_dx9.md D9-82d)");
 
         // Only the no-vertex-color combination is drawable: VSInputTx2Vc (32 bytes) collides with
@@ -869,7 +869,7 @@ namespace CNA::Internal::Backends::D3D9
         // gaps -- see D3D9VertexDeclarations.hpp's own header comment.
         if (stride != 28 || params.vertexColorEnabled)
             throw std::runtime_error(
-                "D3D9GraphicsBackend::DrawPrimitivesEx (DualTextureEffect): stride " + std::to_string(stride) +
+                "D3D9Renderer::DrawPrimitivesEx (DualTextureEffect): stride " + std::to_string(stride) +
                 " with vertexColor=" + (params.vertexColorEnabled ? "true" : "false") +
                 " has no matching CNA vertex layout (plan_dx9.md D9-82d)");
 
@@ -899,12 +899,12 @@ namespace CNA::Internal::Backends::D3D9
         device_->SetTexture(1, ResolveD3D9TextureEXT(params.texture1));
 
         device_->SetVertexDeclaration(GetOrCreateVertexDeclarationEXT(stride));
-        const auto& d3dVb = static_cast<const D3D9VertexBufferBackend&>(vb);
+        const auto& d3dVb = static_cast<const D3D9VertexBufferRenderer&>(vb);
         device_->SetStreamSource(0, d3dVb.GetBufferEXT(), 0, static_cast<UINT>(stride));
 
         if (ib)
         {
-            const auto& d3dIb = static_cast<const D3D9IndexBufferBackend&>(*ib);
+            const auto& d3dIb = static_cast<const D3D9IndexBufferRenderer&>(*ib);
             device_->SetIndices(d3dIb.GetBufferEXT());
             // REMED-GFX-060: honor DrawIndexedPrimitives baseVertex/startIndex (was hardcoded
             // BaseVertexIndex=0/StartIndex=0). NumVertices is the vertex-buffer remainder from
@@ -921,21 +921,21 @@ namespace CNA::Internal::Backends::D3D9
         }
     }
 
-    void D3D9GraphicsBackend::DrawEnvironmentMapEffectEXT(
-        const IVertexBufferBackend& vb, const IIndexBufferBackend* ib, std::size_t stride,
+    void D3D9Renderer::DrawEnvironmentMapEffectEXT(
+        const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib, std::size_t stride,
         const Matrix& world, const Matrix& view, const Matrix& projection,
         PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
     {
         if (!params.texture0 || !params.envMap)
             throw std::runtime_error(
-                "D3D9GraphicsBackend::DrawPrimitivesEx (EnvironmentMapEffect): requires non-null "
+                "D3D9Renderer::DrawPrimitivesEx (EnvironmentMapEffect): requires non-null "
                 "texture0 AND envMap (plan_dx9.md D9-82e)");
 
         // VSInputNmTx (Position+Normal+TexCoord) matches the existing stride-32 layout exactly --
         // no new vertex declaration needed here (unlike DualTextureEffect's D9-82d case).
         if (stride != 32)
             throw std::runtime_error(
-                "D3D9GraphicsBackend::DrawPrimitivesEx (EnvironmentMapEffect): stride " +
+                "D3D9Renderer::DrawPrimitivesEx (EnvironmentMapEffect): stride " +
                 std::to_string(stride) + " has no matching CNA vertex layout (plan_dx9.md D9-82e)");
 
         // specularEnabled now reads GpuDrawParams' real field (plan_dx9.md D9-81 item 4, resolved
@@ -1004,12 +1004,12 @@ namespace CNA::Internal::Backends::D3D9
         device_->SetTexture(1, ResolveD3D9TextureCubeEXT(params.envMap));
 
         device_->SetVertexDeclaration(GetOrCreateVertexDeclarationEXT(stride));
-        const auto& d3dVb = static_cast<const D3D9VertexBufferBackend&>(vb);
+        const auto& d3dVb = static_cast<const D3D9VertexBufferRenderer&>(vb);
         device_->SetStreamSource(0, d3dVb.GetBufferEXT(), 0, static_cast<UINT>(stride));
 
         if (ib)
         {
-            const auto& d3dIb = static_cast<const D3D9IndexBufferBackend&>(*ib);
+            const auto& d3dIb = static_cast<const D3D9IndexBufferRenderer&>(*ib);
             device_->SetIndices(d3dIb.GetBufferEXT());
             // REMED-GFX-060: honor DrawIndexedPrimitives baseVertex/startIndex (was hardcoded
             // BaseVertexIndex=0/StartIndex=0). NumVertices is the vertex-buffer remainder from
@@ -1026,21 +1026,21 @@ namespace CNA::Internal::Backends::D3D9
         }
     }
 
-    void D3D9GraphicsBackend::DrawSkinnedEffectEXT(
-        const IVertexBufferBackend& vb, const IIndexBufferBackend* ib, std::size_t stride,
+    void D3D9Renderer::DrawSkinnedEffectEXT(
+        const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib, std::size_t stride,
         const Matrix& world, const Matrix& view, const Matrix& projection,
         PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
     {
         if (!params.texture0)
             throw std::runtime_error(
-                "D3D9GraphicsBackend::DrawPrimitivesEx (SkinnedEffect): requires non-null texture0 "
+                "D3D9Renderer::DrawPrimitivesEx (SkinnedEffect): requires non-null texture0 "
                 "(plan_dx9.md D9-82f)");
 
         // VSInputNmTxWeights (Position+Normal+TexCoord+BlendWeight+BlendIndices) matches the
         // existing stride-52 layout exactly -- no new vertex declaration needed here.
         if (stride != 52)
             throw std::runtime_error(
-                "D3D9GraphicsBackend::DrawPrimitivesEx (SkinnedEffect): stride " + std::to_string(stride) +
+                "D3D9Renderer::DrawPrimitivesEx (SkinnedEffect): stride " + std::to_string(stride) +
                 " has no matching CNA vertex layout (plan_dx9.md D9-82f)");
 
         const bool oneLight = ComputeOneLightEXT(params);
@@ -1138,12 +1138,12 @@ namespace CNA::Internal::Backends::D3D9
         device_->SetTexture(0, ResolveD3D9TextureEXT(params.texture0));
 
         device_->SetVertexDeclaration(GetOrCreateVertexDeclarationEXT(stride));
-        const auto& d3dVb = static_cast<const D3D9VertexBufferBackend&>(vb);
+        const auto& d3dVb = static_cast<const D3D9VertexBufferRenderer&>(vb);
         device_->SetStreamSource(0, d3dVb.GetBufferEXT(), 0, static_cast<UINT>(stride));
 
         if (ib)
         {
-            const auto& d3dIb = static_cast<const D3D9IndexBufferBackend&>(*ib);
+            const auto& d3dIb = static_cast<const D3D9IndexBufferRenderer&>(*ib);
             device_->SetIndices(d3dIb.GetBufferEXT());
             // REMED-GFX-060: honor DrawIndexedPrimitives baseVertex/startIndex (was hardcoded
             // BaseVertexIndex=0/StartIndex=0). NumVertices is the vertex-buffer remainder from

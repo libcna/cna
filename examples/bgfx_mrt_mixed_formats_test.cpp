@@ -8,10 +8,10 @@
 // match at the SetRenderTargets call site itself. The real, already-shipped, already-tested
 // constraint lives one level earlier: Texture::ValidateFormat (Texture.cpp), called unconditionally
 // by every format-taking Texture2D/Texture3D/TextureCube constructor (and therefore
-// RenderTarget2D's own full constructor, which delegates to Texture2D's) on ALL FOUR backends,
+// RenderTarget2D's own full constructor, which delegates to Texture2D's) on ALL FOUR renderers,
 // already throws std::runtime_error for every SurfaceFormat value except Color (Task 176's
 // contract, confirmed in examples/easygl_surface_format_throws_test.cpp -- registered for EasyGL
-// only before this task, reused verbatim here for Bgfx below since it is 100% backend-agnostic,
+// only before this task, reused verbatim here for Bgfx below since it is 100% renderer-agnostic,
 // pure CPU-side construction, no rendering at all).
 //
 // This means "MRT with mixed formats" is not merely rejected at bind time -- it is IMPOSSIBLE TO

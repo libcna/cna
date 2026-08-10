@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl4.md GL4-20: plain (non-render-target) TextureCube for the OpenGL4 graphics backend
-// -- CreateTextureCube previously fell through to IGraphicsBackend's default (returns nullptr),
-// so TextureCube::SetData/GetData silently no-op'd on this backend. OpenGL4TextureCubeBackend now
+// plan_opengl4.md GL4-20: plain (non-render-target) TextureCube for the OpenGL4 graphics renderer
+// -- CreateTextureCube previously fell through to IGraphicsRenderer's default (returns nullptr),
+// so TextureCube::SetData/GetData silently no-op'd on this renderer. OpenGL4TextureCubeRenderer now
 // allocates a real GL_TEXTURE_CUBE_MAP with every face x every mip level pre-allocated via
 // glTexImage2D (needed so glTexSubImage2D's box writes land on defined storage) -- reusing the
-// same GL_TEXTURE_CUBE_MAP_POSITIVE_X+face arithmetic OpenGL4RenderTargetCubeBackend (GL4-15)
+// same GL_TEXTURE_CUBE_MAP_POSITIVE_X+face arithmetic OpenGL4RenderTargetCubeRenderer (GL4-15)
 // already established. GetData deliberately does NOT Y-flip (unlike
-// OpenGL4RenderTargetCubeBackend::GetData, which flips because it reads back a framebuffer-origin
-// render target) -- this is a plain texture, matching EasyGLTextureCubeBackend::GetData's own
+// OpenGL4RenderTargetCubeRenderer::GetData, which flips because it reads back a framebuffer-origin
+// render target) -- this is a plain texture, matching EasyGLTextureCubeRenderer::GetData's own
 // non-flipped convention; Check C below is the real proof this direction is correct, not assumed.
 //
 // Methodology matches this project's own established easygl_texturecube_faces_test.cpp /

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // plan_dx2.md Phase O2 (DX2-14, 2D layer ported from DX1-68): TransformWindowToLogical/TransformLogicalToWindow (real
 // letterbox scale+offset) tests for the DX3 (real DirectDraw v2, run under Wine -- no
-// ../free-direct anywhere in this backend) graphics backend.
+// ../free-direct anywhere in this renderer) graphics renderer.
 //
 // The game requests a 64x64 logical/virtual resolution. Rather than forcing a specific physical
 // window size (SDL_SetWindowSize is not reliably honored by every window manager/virtual
@@ -29,7 +29,7 @@
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 
-#include "CNA/Internal/Backends/Dx3/Dx3GraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Dx3/Dx3Renderer.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -40,7 +40,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::Dx3;
+using namespace CNA::Internal::Renderers::Dx3;
 
 static constexpr int kLogicalSize = 64;
 
@@ -66,9 +66,9 @@ protected:
     void Draw(const GameTime&) override
     {
         auto& dev = getGraphicsDeviceProperty();
-        auto& backend = static_cast<Dx3GraphicsBackend&>(dev.GetBackend());
+        auto& renderer = static_cast<Dx3Renderer&>(dev.GetRenderer());
 
-        SDL_Window* window = backend.GetWindowInternal();
+        SDL_Window* window = renderer.GetWindowInternal();
         int physW = 0, physH = 0;
         SDL_GetWindowSize(window, &physW, &physH);
         std::printf("Real physical window size: %dx%d (logical: %dx%d)\n", physW, physH, kLogicalSize, kLogicalSize);
@@ -80,9 +80,9 @@ protected:
             for (const auto& s : samples)
             {
                 float wx = 0.0f, wy = 0.0f;
-                if (!backend.TransformLogicalToWindow(s[0], s[1], wx, wy)) { allOk = false; break; }
+                if (!renderer.TransformLogicalToWindow(s[0], s[1], wx, wy)) { allOk = false; break; }
                 float logX = 0.0f, logY = 0.0f;
-                if (!backend.TransformWindowToLogical(wx, wy, logX, logY)) { allOk = false; break; }
+                if (!renderer.TransformWindowToLogical(wx, wy, logX, logY)) { allOk = false; break; }
                 if (!NearlyEqual(logX, s[0]) || !NearlyEqual(logY, s[1])) { allOk = false; break; }
             }
             check(allOk, "logical -> window -> logical round trip returns the original point (DX2-68)");
@@ -92,7 +92,7 @@ protected:
         // letterbox property).
         {
             float wx = 0.0f, wy = 0.0f;
-            const bool ok1 = backend.TransformLogicalToWindow(32.0f, 32.0f, wx, wy);
+            const bool ok1 = renderer.TransformLogicalToWindow(32.0f, 32.0f, wx, wy);
             check(ok1 && NearlyEqual(wx, static_cast<float>(physW) / 2.0f) &&
                   NearlyEqual(wy, static_cast<float>(physH) / 2.0f),
                   "logical center (32,32) maps to the window's real geometric center (DX2-68)");
@@ -103,9 +103,9 @@ protected:
         float measuredScale = 0.0f;
         {
             float ox = 0.0f, oy = 0.0f, hx = 0.0f, hy = 0.0f, vx = 0.0f, vy = 0.0f;
-            backend.TransformLogicalToWindow(0.0f, 0.0f, ox, oy);
-            backend.TransformLogicalToWindow(10.0f, 0.0f, hx, hy);
-            backend.TransformLogicalToWindow(0.0f, 10.0f, vx, vy);
+            renderer.TransformLogicalToWindow(0.0f, 0.0f, ox, oy);
+            renderer.TransformLogicalToWindow(10.0f, 0.0f, hx, hy);
+            renderer.TransformLogicalToWindow(0.0f, 10.0f, vx, vy);
             const float hLen = std::sqrt((hx - ox) * (hx - ox) + (hy - oy) * (hy - oy));
             const float vLen = std::sqrt((vx - ox) * (vx - ox) + (vy - oy) * (vy - oy));
             measuredScale = hLen / 10.0f;

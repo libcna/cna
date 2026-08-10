@@ -2,8 +2,8 @@
 // GDI-059/GDI-070: public rejection plus the complete direct 3D/resource boundary.
 
 #include "CNA/GraphicsCapability.hpp"
-#include "CNA/Internal/Backends/Gdi/GdiGraphicsBackend.hpp"
-#include "CNA/Internal/Backends/Software/SoftwareGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Gdi/GdiRenderer.hpp"
+#include "CNA/Internal/Renderers/Software/SoftwareRenderer.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
@@ -41,16 +41,16 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends;
-using namespace CNA::Internal::Backends::Gdi;
+using namespace CNA::Internal::Renderers;
+using namespace CNA::Internal::Renderers::Gdi;
 
-static_assert(std::is_base_of_v<IGraphicsBackend, GdiGraphicsBackend>);
-static_assert(!std::is_base_of_v<Software::SoftwareGraphicsBackend, GdiGraphicsBackend>,
+static_assert(std::is_base_of_v<IGraphicsRenderer, GdiRenderer>);
+static_assert(!std::is_base_of_v<Software::SoftwareRenderer, GdiRenderer>,
               "GDI must compose the CPU core rather than inherit Software's 3D contract");
 
 namespace
 {
-    class DummyVertexBuffer final : public IVertexBufferBackend
+    class DummyVertexBuffer final : public IVertexBufferRenderer
     {
     public:
         void SetData(const void*, int, std::size_t) override {}
@@ -58,14 +58,14 @@ namespace
         [[nodiscard]] int GetVertexCount() const override { return 0; }
     };
 
-    class DummyIndexBuffer final : public IIndexBufferBackend
+    class DummyIndexBuffer final : public IIndexBufferRenderer
     {
     public:
         void SetData16(const void*, int) override {}
         [[nodiscard]] int GetIndexCount() const override { return 0; }
     };
 
-    class DummyRenderTargetCube final : public IRenderTargetCubeBackend
+    class DummyRenderTargetCube final : public IRenderTargetCubeRenderer
     {
     public:
         [[nodiscard]] bool SetData(int, int, int, int, int, int,
@@ -235,60 +235,60 @@ namespace
         return ok;
     }
 
-    bool ExerciseDirectBackendBoundary(GdiGraphicsBackend& backend)
+    bool ExerciseDirectRendererBoundary(GdiRenderer& renderer)
     {
         bool ok = true;
-        ok &= Expect(!backend.SupportsDepthStencil() && !backend.SupportsDepthBuffer() &&
-                         backend.SupportsStencilBuffer(),
+        ok &= Expect(!renderer.SupportsDepthStencil() && !renderer.SupportsDepthBuffer() &&
+                         renderer.SupportsStencilBuffer(),
                      "direct attachment contract remains depthless and stencil-only");
-        ok &= Expect(backend.GetMaxTextureDimension() ==
+        ok &= Expect(renderer.GetMaxTextureDimension() ==
                          Software::SoftwareFramebufferMaxDimension,
                      "direct texture ceiling matches the guarded CPU allocation ceiling");
 
         ok &= ExpectNotSupported(
             "direct TextureCube factory remains outside the 2D boundary",
-            "TextureCube resources", [&] { (void)backend.CreateTextureCube(2, false, 0); });
+            "TextureCube resources", [&] { (void)renderer.CreateTextureCube(2, false, 0); });
         ok &= ExpectNotSupported(
             "direct Texture3D factory remains outside the 2D boundary",
-            "Texture3D resources", [&] { (void)backend.CreateTexture3D(2, 2, 2, false, 0); });
+            "Texture3D resources", [&] { (void)renderer.CreateTexture3D(2, 2, 2, false, 0); });
         ok &= ExpectNotSupported(
             "direct RenderTargetCube factory remains outside the 2D boundary",
             "RenderTargetCube resources",
-            [&] { (void)backend.CreateRenderTargetCube(2, 0, false, false, 0); });
+            [&] { (void)renderer.CreateRenderTargetCube(2, 0, false, false, 0); });
         ok &= ExpectNotSupported(
             "direct shader-effect factory remains outside the 2D boundary",
             "ShaderEffect programs",
-            [&] { (void)backend.CreateEffectBackend("void main() {}", "void main() {}"); });
+            [&] { (void)renderer.CreateEffectRenderer("void main() {}", "void main() {}"); });
         ok &= ExpectNotSupported(
             "direct occlusion-query factory remains outside the 2D boundary",
-            "occlusion queries", [&] { (void)backend.CreateOcclusionQuery(); });
+            "occlusion queries", [&] { (void)renderer.CreateOcclusionQuery(); });
         ok &= ExpectNotSupported(
             "direct vertex-buffer factory remains outside the 2D boundary",
-            "vertex buffers", [&] { (void)backend.CreateVertexBuffer(3); });
+            "vertex buffers", [&] { (void)renderer.CreateVertexBuffer(3); });
         ok &= ExpectNotSupported(
             "direct 16-bit index factory remains outside the 2D boundary",
-            "16-bit index buffers", [&] { (void)backend.CreateIndexBuffer16(3); });
+            "16-bit index buffers", [&] { (void)renderer.CreateIndexBuffer16(3); });
         ok &= ExpectNotSupported(
             "direct 32-bit index factory remains outside the 2D boundary",
-            "32-bit index buffers", [&] { (void)backend.CreateIndexBuffer32(3); });
+            "32-bit index buffers", [&] { (void)renderer.CreateIndexBuffer32(3); });
 
         DummyRenderTargetCube cubeTarget;
         ok &= ExpectNotSupported(
             "direct cube-face binding cannot reach a foreign cube implementation",
             "RenderTargetCube face bindings",
-            [&] { backend.SetRenderTargetCubeFace(&cubeTarget, 0); });
+            [&] { renderer.SetRenderTargetCubeFace(&cubeTarget, 0); });
         const RenderTargetBindingDescriptor cubeBinding =
             RenderTargetBindingDescriptor::ForRenderTargetCubeFace(
                 &cubeTarget, 0, cubeTarget.GetSize(), 0);
         ok &= ExpectNotSupported(
             "normalized cube descriptor remains outside the 2D boundary",
             "RenderTargetCube face bindings",
-            [&] { backend.SetRenderTargets(&cubeBinding, 1); });
+            [&] { renderer.SetRenderTargets(&cubeBinding, 1); });
 
-        std::unique_ptr<IRenderTargetBackend> firstTarget =
-            backend.CreateRenderTarget2D(2, 2, 0, true, false, 0);
-        std::unique_ptr<IRenderTargetBackend> secondTarget =
-            backend.CreateRenderTarget2D(2, 2, 0, true, false, 0);
+        std::unique_ptr<IRenderTargetRenderer> firstTarget =
+            renderer.CreateRenderTarget2D(2, 2, 0, true, false, 0);
+        std::unique_ptr<IRenderTargetRenderer> secondTarget =
+            renderer.CreateRenderTarget2D(2, 2, 0, true, false, 0);
         const std::array<RenderTargetBindingDescriptor, 2> multipleBindings = {
             RenderTargetBindingDescriptor::ForRenderTarget2D(
                 firstTarget.get(), 0, 2, 2, 0),
@@ -298,40 +298,40 @@ namespace
         ok &= ExpectNotSupported(
             "multiple 2D targets cannot fall through to Software behavior",
             "multiple simultaneous render targets",
-            [&] { backend.SetRenderTargets(multipleBindings.data(), 2); });
+            [&] { renderer.SetRenderTargets(multipleBindings.data(), 2); });
         const RenderTargetBindingDescriptor arraySliceBinding =
             RenderTargetBindingDescriptor::ForRenderTarget2D(
                 firstTarget.get(), 1, 2, 2, 0);
         ok &= ExpectNotSupported(
             "2D array slices cannot fall through to Software behavior",
             "RenderTarget2D array slices",
-            [&] { backend.SetRenderTargets(&arraySliceBinding, 1); });
+            [&] { renderer.SetRenderTargets(&arraySliceBinding, 1); });
 
-        backend.SetRenderTargetCubeFace(nullptr, 0);
-        backend.SetRenderTargets(nullptr, 0);
+        renderer.SetRenderTargetCubeFace(nullptr, 0);
+        renderer.SetRenderTargets(nullptr, 0);
         ok &= Expect(true, "null cube/plural bindings explicitly restore the GDI backbuffer");
 
         ok &= ExpectNotSupported(
             "direct ClearColorAndDepth is rejected", "ClearColorAndDepth",
-            [&] { backend.ClearColorAndDepth(0.0f, 0.0f, 0.0f, 1.0f, 1.0f); });
+            [&] { renderer.ClearColorAndDepth(0.0f, 0.0f, 0.0f, 1.0f, 1.0f); });
         ok &= ExpectNotSupported(
             "direct ClearDepth is rejected", "ClearDepth",
-            [&] { backend.ClearDepth(1.0f); });
+            [&] { renderer.ClearDepth(1.0f); });
         ok &= ExpectNotSupported(
             "direct ClearDepthAndStencil is rejected", "ClearDepthAndStencil",
-            [&] { backend.ClearDepthAndStencil(1.0f, 0); });
+            [&] { renderer.ClearDepthAndStencil(1.0f, 0); });
         ok &= ExpectNotSupported(
             "direct ClearColorDepthAndStencil is rejected", "ClearColorDepthAndStencil",
-            [&] { backend.ClearColorDepthAndStencil(0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0); });
+            [&] { renderer.ClearColorDepthAndStencil(0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0); });
         ok &= ExpectNotSupported(
             "direct depth-test toggle is rejected", "SetDepthTestEnabled",
-            [&] { backend.SetDepthTestEnabled(true); });
+            [&] { renderer.SetDepthTestEnabled(true); });
         ok &= ExpectNotSupported(
             "direct depth-write toggle is rejected", "SetDepthWriteEnabled",
-            [&] { backend.SetDepthWriteEnabled(true); });
+            [&] { renderer.SetDepthWriteEnabled(true); });
         ok &= ExpectNotSupported(
             "legacy direct blend toggle is rejected", "SetBlendEnabled",
-            [&] { backend.SetBlendEnabled(true); });
+            [&] { renderer.SetBlendEnabled(true); });
 
         DummyVertexBuffer vertexBuffer;
         DummyIndexBuffer indexBuffer;
@@ -341,7 +341,7 @@ namespace
             "direct colored draw is rejected", "DrawColoredPrimitives",
             [&]
             {
-                backend.DrawColoredPrimitives(
+                renderer.DrawColoredPrimitives(
                     vertexBuffer, identity, identity, identity,
                     PrimitiveType::TriangleList, 1);
             });
@@ -349,7 +349,7 @@ namespace
             "direct indexed colored draw is rejected", "DrawIndexedColoredPrimitives",
             [&]
             {
-                backend.DrawIndexedColoredPrimitives(
+                renderer.DrawIndexedColoredPrimitives(
                     vertexBuffer, indexBuffer, identity, identity, identity,
                     PrimitiveType::TriangleList, 1);
             });
@@ -357,7 +357,7 @@ namespace
             "direct effect-aware draw is rejected", "DrawPrimitivesEx",
             [&]
             {
-                backend.DrawPrimitivesEx(
+                renderer.DrawPrimitivesEx(
                     vertexBuffer, identity, identity, identity,
                     PrimitiveType::TriangleList, 1, drawParameters);
             });
@@ -365,7 +365,7 @@ namespace
             "direct indexed effect-aware draw is rejected", "DrawIndexedPrimitivesEx",
             [&]
             {
-                backend.DrawIndexedPrimitivesEx(
+                renderer.DrawIndexedPrimitivesEx(
                     vertexBuffer, indexBuffer, identity, identity, identity,
                     PrimitiveType::TriangleList, 1, drawParameters);
             });
@@ -373,7 +373,7 @@ namespace
             "direct instanced draw is rejected", "DrawInstancedPrimitivesEx",
             [&]
             {
-                backend.DrawInstancedPrimitivesEx(
+                renderer.DrawInstancedPrimitivesEx(
                     vertexBuffer, indexBuffer, identity, identity, identity,
                     PrimitiveType::TriangleList, 1, 2, drawParameters);
             });
@@ -424,10 +424,10 @@ int main()
             ok &= ExerciseUnsupported3DCalls(device);
         }
         {
-            GdiGraphicsBackend backend(
+            GdiRenderer renderer(
                 window, 8, 8, CnaPresentationMode::NativeBackBuffer,
                 GdiConfiguration{});
-            ok &= ExerciseDirectBackendBoundary(backend);
+            ok &= ExerciseDirectRendererBoundary(renderer);
         }
         result = ok ? 0 : 1;
     }

@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MS-PL
 // Task 394: verify EnvironmentMapEffect's cube-map contribution at
-// EnvironmentMapAmount=1 (Bgfx backend). See
+// EnvironmentMapAmount=1 (Bgfx renderer). See
 // examples/easygl_environmentmapeffect_amount_one_test.cpp for the full derivation and the
-// real bug this test found and fixed: CNA's env-map fragment shaders (all 3 backends)
+// real bug this test found and fixed: CNA's env-map fragment shaders (all 3 renderers)
 // computed `rgb = litRGB*texColor.rgb + envColor*amount + specular` (additive) instead of
 // FNA's real `lerp(baseColor, envColor, amount)` (interpolate/replace). Fixed by changing
 // to `mix(baseColor, envColor, amount) + specular`.
 //
 // Per Task 364's finding (tracked as Task 884, not fixed there or here): Bgfx's default
-// RasterizerState cull state is the only one of the 3 backends that actually matches FNA's
+// RasterizerState cull state is the only one of the 3 renderers that actually matches FNA's
 // real CullCounterClockwiseFace default, so it silently culls the standard NDC quad winding
 // used throughout this pixel-test family unless RasterizerState::CullNone is set
 // explicitly -- worked around here identically to prior Bgfx tests.

@@ -3,7 +3,7 @@
 SKIA-97 established a bounded CPU-owned RGBA8 plus floating-point depth target as the only
 candidate bridge after direct `SkVertices` lost perspective and clipping information. SKIA-98
 tests whether CNA's complete draw-time stencil state can be expressed on that bridge without
-changing the public Skia backend.
+changing the public Skia renderer.
 
 The implementation lives only in the headless `Skia_CpuStencil_Spike` test. It does not add a
 public attachment, connect any `Draw*` call, or change `HasRealDepthBuffer`, stencil, or `ThreeD`
@@ -11,7 +11,7 @@ capability reporting.
 
 ## EasyGL contract used as the oracle
 
-The model follows `EasyGLGraphicsBackend::ApplyDepthStencilState` and its existing stencil
+The model follows `EasyGLRenderer::ApplyDepthStencilState` and its existing stencil
 fixtures:
 
 1. select the ordinary face state, or the counter-clockwise state when two-sided mode is enabled;

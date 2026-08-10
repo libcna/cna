@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // plan_sokol.md SOKOL-23: RasterizerState.FillMode == WireFrame is implemented via the same
-// CPU-side triangle-to-GL_LINES re-expansion EasyGLGraphicsBackend::DrawWireframe() uses --
+// CPU-side triangle-to-GL_LINES re-expansion EasyGLRenderer::DrawWireframe() uses --
 // sokol_gfx exposes no native polygon-fill-mode API at all, but the technique needs none of one:
 // it only changes which indices are drawn and with what primitive topology
 // (BuildWireframeLineIndicesEXT()'s own doc comment). Previously accepted and silently ignored.

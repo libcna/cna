@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: MS-PL
 // plan_sdlgpu.md SDLGPU-22..25: end-to-end 2D vertical-slice proof for the SDL_GPU graphics
-// backend -- a real Texture2D upload and real SpriteBatch draws (tint, alpha, rotation, both
+// renderer -- a real Texture2D upload and real SpriteBatch draws (tint, alpha, rotation, both
 // flips, and Point/Linear + Wrap/Clamp/Mirror samplers), rendered for many frames with no
 // exception. This is the "declare a verified native 2D baseline" gate (SDLGPU-25's own bar,
 // mirroring WEBGPU-124-131's).
 //
-// No pixel-level readback exists yet on this backend (ReadBackbuffer is not implemented --
+// No pixel-level readback exists yet on this renderer (ReadBackbuffer is not implemented --
 // plan_sdlgpu.md's Phase SDLGPU-8/39), so this test cannot assert exact pixel colors the way the
 // WebGPU/D3D11/Vulkan smoke tests do. It proves: real texture upload, a real multi-sprite scene
 // (tint/alpha/rotation/flip/sampler variants) drawn over many frames with no crash -- the same
-// bar WEBGPU-126 met before automated GPU readback existed for that backend.
+// bar WEBGPU-126 met before automated GPU readback existed for that renderer.
 //
 // Check A -- Texture2D::CreateFromPixels() succeeds for a 4x4 per-quadrant-colored texture.
 // Check B -- a SpriteBatch scene mixing tint, alpha, rotation, both flips, and
@@ -31,7 +31,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 
-#include "CNA/Internal/Backends/SdlGpu/SdlGpuGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/SdlGpu/SdlGpuRenderer.hpp"
 
 #include "common/PixelTestGame.hpp"
 
@@ -41,7 +41,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::SdlGpu;
+using namespace CNA::Internal::Renderers::SdlGpu;
 
 namespace
 {

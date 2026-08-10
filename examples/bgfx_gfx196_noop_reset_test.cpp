@@ -13,7 +13,7 @@
 //   * native fatal/assert/abort/segfault/timeout (signal classification).
 
 #include "CNA/GraphicsCapability.hpp"
-#include "CNA/Internal/Backends/Bgfx/BgfxGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Bgfx/BgfxRenderer.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GameTime.hpp"
@@ -196,7 +196,7 @@ namespace
                       device.getPresentationParametersProperty().getBackBufferHeightProperty() == 41,
                   "GraphicsDeviceManager resize applies an ordinary 73x41 backbuffer");
 
-            SDL_Window* window = device.GetBackend().GetWindowInternal();
+            SDL_Window* window = device.GetRenderer().GetWindowInternal();
             Check(window != nullptr, "Noop keeps the normal CNA window contract");
             if (window != nullptr)
             {
@@ -207,7 +207,7 @@ namespace
                 device.Clear(Color(1, 2, 3, 255));
                 int width = 0;
                 int height = 0;
-                device.GetBackend().GetViewportSize(width, height);
+                device.GetRenderer().GetViewportSize(width, height);
                 Check(width == 1 && height == 1,
                       "Noop resize path observes the minimal 1x1 client size");
 
@@ -216,7 +216,7 @@ namespace
                 Check(SDL_SyncWindow(window),
                       "ordinary client resize is synchronized for an immediate observation");
                 device.Clear(Color(4, 5, 6, 255));
-                device.GetBackend().GetViewportSize(width, height);
+                device.GetRenderer().GetViewportSize(width, height);
                 Check(width == 127 && height == 79,
                       "Noop resize path observes the ordinary 127x79 client size");
             }
@@ -437,7 +437,7 @@ int main(int argc, char** argv)
     // diagnostic the process supervisor can distinguish from a native signal.
     try
     {
-        CNA::Internal::Backends::Bgfx::BgfxCnaCallback callback;
+        CNA::Internal::Renderers::Bgfx::BgfxCnaCallback callback;
         callback.fatal("gfx196", 196, bgfx::Fatal::DebugCheck,
                        "GFX-196 fatal callback probe");
         check(false, "Bgfx fatal callback throws");

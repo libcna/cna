@@ -18,7 +18,7 @@ Status labels:
 | `GraphicsProfile` | `getGraphicsProfileProperty()` / `setGraphicsProfileProperty()` | ✅ supported | |
 | `GraphicsDevice` | `getGraphicsDeviceProperty()` | ✅ supported | Returns the Game-owned device |
 | `IsFullScreen` | `getIsFullScreenProperty()` / `setIsFullScreenProperty()` | ✅ supported | `SDL_SetWindowFullscreen` failure is non-fatal (soft-skip); PP field always correct |
-| `PreferMultiSampling` | `getPreferMultiSamplingProperty()` / `setPreferMultiSamplingProperty()` | ⚠ partial | PP stores `MultiSampleCount=8` when true; backend MSAA cannot change at runtime (construction-time only) |
+| `PreferMultiSampling` | `getPreferMultiSamplingProperty()` / `setPreferMultiSamplingProperty()` | ⚠ partial | PP stores `MultiSampleCount=8` when true; renderer MSAA cannot change at runtime (construction-time only) |
 | `PreferredBackBufferFormat` | `getPreferredBackBufferFormatProperty()` / `setPreferredBackBufferFormatProperty()` | ✅ supported | |
 | `PreferredBackBufferHeight` | `getPreferredBackBufferHeightProperty()` / `setPreferredBackBufferHeightProperty()` | ✅ supported | |
 | `PreferredBackBufferWidth` | `getPreferredBackBufferWidthProperty()` / `setPreferredBackBufferWidthProperty()` | ✅ supported | |
@@ -106,16 +106,16 @@ graphicsDevice.Reset(gdi.PresentationParameters, gdi.Adapter);
 `GraphicsDevice.Reset()` in FNA triggers a full device reset: it can change back-buffer
 format, sample count, depth format, and present interval simultaneously.
 
-**CNA** ends `ApplyChanges()` with `applyToExistingBackend(gdi)`, which:
+**CNA** ends `ApplyChanges()` with `applyToExistingRenderer(gdi)`, which:
 1. Calls `GraphicsDevice::SetPresentationParameters(pp)` — stores PP + updates swap interval.
 2. Calls `SDL_SetWindowFullscreen` (soft-fail).
 3. Calls `SDL_SetWindowSize`.
 4. Calls `GraphicsDevice::SetPresentationMode` (NOXNA scaling).
-5. Calls `GraphicsDevice::SetVirtualResolution` — updates backend virtual size + viewport.
+5. Calls `GraphicsDevice::SetVirtualResolution` — updates renderer virtual size + viewport.
 
 **Consequence**: changes to `PreferredBackBufferFormat`, `PreferredDepthStencilFormat`, and
-`PreferMultiSampling` are reflected in the device PP but are **not applied to backend GPU
-resources** until the backend is recreated. Changing `BackBufferWidth/Height` and
+`PreferMultiSampling` are reflected in the device PP but are **not applied to renderer GPU
+resources** until the renderer is recreated. Changing `BackBufferWidth/Height` and
 `SynchronizeWithVerticalRetrace` are fully applied at runtime.
 
 ---

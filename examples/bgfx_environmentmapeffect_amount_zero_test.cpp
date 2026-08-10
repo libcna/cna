@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // Task 393: verify EnvironmentMapEffect ignores the cube map entirely when
-// EnvironmentMapAmount=0 (Bgfx backend). See
+// EnvironmentMapAmount=0 (Bgfx renderer). See
 // examples/easygl_environmentmapeffect_amount_zero_test.cpp for the full derivation and
 // the note on CNA's additive vs. FNA's real lerp-based blend formula (they coincide at
 // EnvironmentMapAmount=0, so this test doesn't discriminate that divergence -- flagged
@@ -9,7 +9,7 @@
 // project (Tasks 379/383-389) -- this test uses real pixel verification, not a smoke test.
 //
 // Per Task 364's finding (tracked as Task 884, not fixed there or here): Bgfx's default
-// RasterizerState cull state is the only one of the 3 backends that actually matches FNA's
+// RasterizerState cull state is the only one of the 3 renderers that actually matches FNA's
 // real CullCounterClockwiseFace default, so it silently culls the standard NDC quad winding
 // used throughout this pixel-test family unless RasterizerState::CullNone is set
 // explicitly -- worked around here identically to prior Bgfx tests.

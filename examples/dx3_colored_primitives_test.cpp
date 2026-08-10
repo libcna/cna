@@ -5,7 +5,7 @@
 //
 // Draws go through the normal GraphicsDevice::DrawPrimitives()/DrawIndexedPrimitives() public API
 // with a BasicEffect applied (VertexColorEnabled explicitly set true), which GraphicsDevice routes
-// to IGraphicsBackend::DrawPrimitivesEx() -- Dx3GraphicsBackend's own override, built on the same
+// to IGraphicsRenderer::DrawPrimitivesEx() -- Dx3Renderer's own override, built on the same
 // CPU transform/clip helpers DrawColoredPrimitives()/DrawIndexedColoredPrimitives() use. So this
 // exercises the real pipeline end-to-end through the exact same public API a real game uses.
 //
@@ -13,7 +13,7 @@
 // equal the raw vertex positions directly -- lets the test place vertices at exact, easy-to-reason
 // screen locations without needing a real projection matrix. RasterizerState::CullNone is set
 // explicitly since Phase O6 (ApplyRasterizerState) hasn't landed yet -- Phase O4 only guarantees a
-// safe D3DCULL_NONE default (see Dx3GraphicsBackend.cpp's Create3DDevice), so this test's own
+// safe D3DCULL_NONE default (see Dx3Renderer.cpp's Create3DDevice), so this test's own
 // triangle winding is deliberately not relied upon either way.
 //
 // Check A -- a large flat-colored (solid red) triangle covering the center of a 64x64 backbuffer

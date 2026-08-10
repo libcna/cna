@@ -2,7 +2,7 @@
 // SKIA-74/SKIA-110: prove bounded raster snapshots, live-resource counter release/reuse, and
 // repeated presenter reconstruction while a target and its immutable sampling snapshot are live.
 
-#include "CNA/Internal/Backends/Skia/SkiaGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaRenderer.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
@@ -24,8 +24,8 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using CNA::Internal::Backends::Skia::SkiaGraphicsBackend;
-using CNA::Internal::Backends::Skia::SkiaResourceStats;
+using CNA::Internal::Renderers::Skia::SkiaRenderer;
+using CNA::Internal::Renderers::Skia::SkiaResourceStats;
 
 namespace
 {
@@ -69,19 +69,19 @@ protected:
         finished_ = true;
 
         auto& device = getGraphicsDeviceProperty();
-        auto* backend = dynamic_cast<SkiaGraphicsBackend*>(&device.GetBackend());
-        Check(backend != nullptr, "GraphicsDevice exposes Skia debug resource counters");
-        if (!backend)
+        auto* renderer = dynamic_cast<SkiaRenderer*>(&device.GetRenderer());
+        Check(renderer != nullptr, "GraphicsDevice exposes Skia debug resource counters");
+        if (!renderer)
         {
             Exit();
             return;
         }
 
-        Check(IsEmpty(backend->GetResourceStatsEXT()), "resource counters start without hidden images or targets");
+        Check(IsEmpty(renderer->GetResourceStatsEXT()), "resource counters start without hidden images or targets");
         auto texture = std::make_unique<Texture2D>(device, 1, 1, false, SurfaceFormat::Color);
         texture->SetData(&kRed, 1);
-        const SkiaResourceStats textureStats = backend->GetResourceStatsEXT();
-        Check(textureStats.textureBackends == 1 && textureStats.textureImageViews == 2
+        const SkiaResourceStats textureStats = renderer->GetResourceStatsEXT();
+        Check(textureStats.textureRenderers == 1 && textureStats.textureImageViews == 2
                   && textureStats.textureImageBytes == 8,
               "one Texture2D owns exactly two bounded alpha-labelled SkImages");
 
@@ -93,7 +93,7 @@ protected:
         device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
         DrawTarget(*target);
         DrawTarget(*target);
-        SkiaResourceStats targetStats = backend->GetResourceStatsEXT();
+        SkiaResourceStats targetStats = renderer->GetResourceStatsEXT();
         Check(targetStats.renderTargets == 1 && targetStats.targetSnapshots == 1
                   && targetStats.targetSurfaceBytes == 16 && targetStats.targetSnapshotBytes == 16,
               "repeated sampling retains one bounded target snapshot");
@@ -101,14 +101,14 @@ protected:
         device.SetRenderTarget(target.get());
         device.Clear(kRed);
         device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
-        Check(backend->GetResourceStatsEXT().targetSnapshots == 0,
+        Check(renderer->GetResourceStatsEXT().targetSnapshots == 0,
               "target Clear invalidates its old immutable sampling snapshot");
         DrawTarget(*target);
-        Check(backend->GetResourceStatsEXT().targetSnapshots == 1,
+        Check(renderer->GetResourceStatsEXT().targetSnapshots == 1,
               "sampling after a target write recreates exactly one current snapshot");
         target.reset();
-        Check(backend->GetResourceStatsEXT().renderTargets == 0
-                  && backend->GetResourceStatsEXT().targetSnapshots == 0,
+        Check(renderer->GetResourceStatsEXT().renderTargets == 0
+                  && renderer->GetResourceStatsEXT().targetSnapshots == 0,
               "target destruction releases its surface and cached snapshot");
 
         int lostCount = 0;
@@ -133,15 +133,15 @@ protected:
             device.Clear(expected);
             device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
             DrawTarget(*transient);
-            const SkiaResourceStats live = backend->GetResourceStatsEXT();
+            const SkiaResourceStats live = renderer->GetResourceStatsEXT();
             boundedAcrossCycles = boundedAcrossCycles && live.renderTargets == 1
                 && live.targetSnapshots == 1 && live.targetSurfaceBytes == 16
                 && live.targetSnapshotBytes == 16;
 
             // Reconstruct SDL's presentation renderer/texture while both the mutable target and
             // immutable SkImage snapshot are live. Reuse the snapshot after recovery so stats alone
-            // cannot hide a stale Skia or backend pointer.
-            backend->DebugSimulateContextLoss();
+            // cannot hide a stale Skia or renderer pointer.
+            renderer->DebugSimulateContextLoss();
             device.Clear(kBlack);
             DrawTarget(*transient);
             device.Present();
@@ -149,10 +149,10 @@ protected:
             const Rectangle sample(0, 0, 1, 1);
             device.GetBackBufferData(&sample, &actual, 0, 1);
             recoveredAcrossCycles = recoveredAcrossCycles && SameStats(
-                live, backend->GetResourceStatsEXT()) && actual == expected;
+                live, renderer->GetResourceStatsEXT()) && actual == expected;
 
             transient.reset();
-            const SkiaResourceStats released = backend->GetResourceStatsEXT();
+            const SkiaResourceStats released = renderer->GetResourceStatsEXT();
             boundedAcrossCycles = boundedAcrossCycles && released.renderTargets == 0
                 && released.targetSnapshots == 0 && released.targetSurfaceBytes == 0
                 && released.targetSnapshotBytes == 0;
@@ -163,9 +163,9 @@ protected:
               "64 paired presenter recreations preserve live targets, snapshots, pixels, and reset events");
 
         texture.reset();
-        Check(IsEmpty(backend->GetResourceStatsEXT()), "all debug resource counters return to zero after release");
+        Check(IsEmpty(renderer->GetResourceStatsEXT()), "all debug resource counters return to zero after release");
 
-        CheckWideFormatBudgetBoundary(device, *backend);
+        CheckWideFormatBudgetBoundary(device, *renderer);
         Exit();
     }
 
@@ -176,14 +176,14 @@ private:
     // budget) would wrongly ACCEPT this request, while the native-bytes check (Single widens to
     // kRGBA_F32, 16 bytes/texel: ~324 MB) correctly rejects it -- proving the second checked
     // layout pass added for the two extract-subset formats is load-bearing, not redundant.
-    void CheckWideFormatBudgetBoundary(GraphicsDevice& device, SkiaGraphicsBackend& backend)
+    void CheckWideFormatBudgetBoundary(GraphicsDevice& device, SkiaRenderer& renderer)
     {
-        const SkiaResourceStats before = backend.GetResourceStatsEXT();
+        const SkiaResourceStats before = renderer.GetResourceStatsEXT();
         const bool rejected = Throws([&] {
             RenderTarget2D target(device, 4500, 4500, false, SurfaceFormat::Single, DepthFormat::None);
             (void)target;
         });
-        Check(rejected && SameStats(backend.GetResourceStatsEXT(), before),
+        Check(rejected && SameStats(renderer.GetResourceStatsEXT(), before),
               "a 4500x4500 Single RenderTarget2D rejects transactionally: fits the public "
               "4-byte transfer budget but exceeds the 256 MiB native kRGBA_F32 surface budget");
     }
@@ -191,10 +191,10 @@ private:
     [[nodiscard]] static bool SameStats(const SkiaResourceStats& left,
                                         const SkiaResourceStats& right)
     {
-        return left.textureBackends == right.textureBackends
+        return left.textureRenderers == right.textureRenderers
             && left.textureImageViews == right.textureImageViews
-            && left.cpuTextureCubeBackends == right.cpuTextureCubeBackends
-            && left.cpuTexture3DBackends == right.cpuTexture3DBackends
+            && left.cpuTextureCubeRenderers == right.cpuTextureCubeRenderers
+            && left.cpuTexture3DRenderers == right.cpuTexture3DRenderers
             && left.renderTargets == right.renderTargets
             && left.renderTargetCubes == right.renderTargetCubes
             && left.targetSnapshots == right.targetSnapshots
@@ -209,8 +209,8 @@ private:
 
     [[nodiscard]] static bool IsEmpty(const SkiaResourceStats& stats)
     {
-        return stats.textureBackends == 0 && stats.textureImageViews == 0 && stats.renderTargets == 0
-            && stats.cpuTextureCubeBackends == 0 && stats.cpuTexture3DBackends == 0
+        return stats.textureRenderers == 0 && stats.textureImageViews == 0 && stats.renderTargets == 0
+            && stats.cpuTextureCubeRenderers == 0 && stats.cpuTexture3DRenderers == 0
             && stats.renderTargetCubes == 0
             && stats.targetSnapshots == 0 && stats.mipChains2D == 0
             && stats.textureImageBytes == 0

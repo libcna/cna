@@ -34,28 +34,28 @@
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/Rgba64.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "System/IO/Stream.hpp"
 #include "System/FormatException.hpp"
 #include "System/NotSupportedException.hpp"
 
 // plan_dx9.md Phase D9-10 (D9-103): GraphicsProfile.Reach/HiDef texture-size ceilings are real,
-// enforced-at-creation-time, ONLY on this backend -- the other 9 CNA backends have no profile
-// distinction to enforce (matches GraphicsAdapter.cpp's own #ifdef CNA_BACKEND_D3D9 convention).
-#ifdef CNA_BACKEND_D3D9
-#include "CNA/Internal/Backends/D3D9/D3D9ProfileCapabilities.hpp"
+// enforced-at-creation-time, ONLY on this renderer -- the other 9 CNA renderers have no profile
+// distinction to enforce (matches GraphicsAdapter.cpp's own #ifdef CNA_RENDERER_D3D9 convention).
+#ifdef CNA_RENDERER_D3D9
+#include "CNA/Internal/Renderers/D3D9/D3D9ProfileCapabilities.hpp"
 #endif
 
 namespace Microsoft::Xna::Framework::Graphics
 {
-    using namespace CNA::Internal::Backends;
+    using namespace CNA::Internal::Renderers;
     using namespace CNA::Internal::Graphics;
 
     // -----------------------------------------------------------------------
     // Private helpers
     // -----------------------------------------------------------------------
 
-#ifdef CNA_BACKEND_D3D9
+#ifdef CNA_RENDERER_D3D9
     // D9-103: a HiDef-only size requested on a Reach device (or a size exceeding even HiDef's own
     // 4096 ceiling) throws the XNA-correct exception (System::NotSupportedException, matching
     // this file's own established convention for other unsupported-request cases) -- D9-100's own
@@ -65,7 +65,7 @@ namespace Microsoft::Xna::Framework::Graphics
     static void ValidateTextureSizeForProfileEXT(const GraphicsDevice& device, int w, int h)
     {
         const int profile = static_cast<int>(device.getGraphicsProfileProperty());
-        const int maxSize = CNA::Internal::Backends::D3D9::MaxTextureSizeForProfileEXT(profile);
+        const int maxSize = CNA::Internal::Renderers::D3D9::MaxTextureSizeForProfileEXT(profile);
         if (w > maxSize || h > maxSize)
         {
             throw System::NotSupportedException(
@@ -79,7 +79,7 @@ namespace Microsoft::Xna::Framework::Graphics
     // REMED-CONTENT-001: the native graphics APIs' own validation does not substitute for this --
     // Vulkan's validation layer is advisory (RADV proceeds anyway), and wgpu-native validates
     // lazily at submit time, past CNA's own creation-time null checks. Reject before any
-    // backend-specific texture creation is attempted, using the active backend's real reported
+    // renderer-specific texture creation is attempted, using the active renderer's real reported
     // maximum rather than a value guessed independently of it.
     static void ValidateTextureDimensionEXT(const GraphicsDevice& device, int w, int h)
     {
@@ -94,7 +94,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     static void ValidateTexture2DFormatEXT(SurfaceFormat format)
     {
-#ifdef CNA_BACKEND_SKIA
+#ifdef CNA_RENDERER_SKIA
         if (format == SurfaceFormat::Color
             || format == SurfaceFormat::Bgr565
             || format == SurfaceFormat::Bgra5551
@@ -135,18 +135,18 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (format == SurfaceFormat::Color)
             return true;
-#ifdef CNA_BACKEND_SKIA
+#ifdef CNA_RENDERER_SKIA
         // Skia stores each promoted format in its own native layout, so a `Color*` transfer is
         // only meaningful for the two that are genuinely 32-bit RGBA-shaped. Every other promoted
         // format has a typed overload that reads its real bits instead.
         return format == SurfaceFormat::ColorBgraEXT
             || format == SurfaceFormat::ColorSrgbEXT;
 #else
-        // Every other backend keeps exactly the contract it had before this gate existed: the
+        // Every other renderer keeps exactly the contract it had before this gate existed: the
         // `Color*` overloads accept any format whose texel is a multiple of four bytes, which is
         // the rule Texture::ValidateGetDataFormat(format, 4) applies on the next line. Returning a
-        // flat false here would withdraw a public route those backends genuinely serve --
-        // MouseCursor::FromTexture2D reads a ColorSrgbEXT texture through it -- from backends this
+        // flat false here would withdraw a public route those renderers genuinely serve --
+        // MouseCursor::FromTexture2D reads a ColorSrgbEXT texture through it -- from renderers this
         // lane does not otherwise touch.
         return Texture::GetFormatSizeEXT(format) % 4 == 0;
 #endif
@@ -158,7 +158,7 @@ namespace Microsoft::Xna::Framework::Graphics
     /// method.
     [[nodiscard]] static bool IsCompressedTransferFormatEXT(SurfaceFormat format) noexcept
     {
-#ifdef CNA_BACKEND_SKIA
+#ifdef CNA_RENDERER_SKIA
         return format == SurfaceFormat::Dxt1
             || format == SurfaceFormat::Dxt3
             || format == SurfaceFormat::Dxt5
@@ -257,9 +257,9 @@ namespace Microsoft::Xna::Framework::Graphics
         ImageData data = ImageLoader::Load(assetName);
         width    = data.width;
         height   = data.height;
-        backend_   = graphicsDevice.GetBackend().CreateTexture(data);
+        renderer_   = graphicsDevice.GetRenderer().CreateTexture(data);
         cpuPixels_ = std::make_shared<std::vector<uint8_t>>(std::move(data.pixels));
-        backend_->ShareCpuPixels(cpuPixels_);
+        renderer_->ShareCpuPixels(cpuPixels_);
         MaybeFreeCpuPixels();
     }
 
@@ -269,13 +269,13 @@ namespace Microsoft::Xna::Framework::Graphics
         width    = data.width;
         height   = data.height;
         cpuPixels_ = std::make_shared<std::vector<uint8_t>>(std::move(data.pixels));
-        // No GraphicsDevice — backend stays null until attached.
+        // No GraphicsDevice — renderer stays null until attached.
     }
 
     Texture2D::Texture2D(GraphicsDevice& graphicsDevice, int w, int h)
         : Texture(&graphicsDevice), width(w), height(h)
     {
-#ifdef CNA_BACKEND_D3D9
+#ifdef CNA_RENDERER_D3D9
         ValidateTextureSizeForProfileEXT(graphicsDevice, w, h);
 #endif
         ValidateTextureDimensionEXT(graphicsDevice, w, h);
@@ -283,9 +283,9 @@ namespace Microsoft::Xna::Framework::Graphics
         data.width  = w;
         data.height = h;
         data.pixels.assign(static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4, 0);
-        backend_   = graphicsDevice.GetBackend().CreateTexture(data);
+        renderer_   = graphicsDevice.GetRenderer().CreateTexture(data);
         cpuPixels_ = std::make_shared<std::vector<uint8_t>>(std::move(data.pixels));
-        backend_->ShareCpuPixels(cpuPixels_);
+        renderer_->ShareCpuPixels(cpuPixels_);
         MaybeFreeCpuPixels();
     }
 
@@ -300,7 +300,7 @@ namespace Microsoft::Xna::Framework::Graphics
                          bool mipMap, SurfaceFormat format)
         : Texture(&graphicsDevice), width(w), height(h)
     {
-#ifdef CNA_BACKEND_D3D9
+#ifdef CNA_RENDERER_D3D9
         ValidateTextureSizeForProfileEXT(graphicsDevice, w, h);
 #endif
         ValidateTextureDimensionEXT(graphicsDevice, w, h);
@@ -329,28 +329,28 @@ namespace Microsoft::Xna::Framework::Graphics
                                    * static_cast<std::size_t>(Texture::GetFormatSizeEXT(format)),
                                0);
         }
-        backend_   = graphicsDevice.GetBackend().CreateTexture(data);
+        renderer_   = graphicsDevice.GetRenderer().CreateTexture(data);
         cpuPixels_ = std::make_shared<std::vector<uint8_t>>(std::move(data.pixels));
-        backend_->ShareCpuPixels(cpuPixels_);
+        renderer_->ShareCpuPixels(cpuPixels_);
         MaybeFreeCpuPixels();
     }
 
     Texture2D::Texture2D(GraphicsDevice& device, int w, int h, SurfaceFormat fmt,
-                         int lvlCount, std::shared_ptr<ITextureBackend> backend)
-        : Texture(&device), width(w), height(h), backend_(std::move(backend))
+                         int lvlCount, std::shared_ptr<ITextureRenderer> renderer)
+        : Texture(&device), width(w), height(h), renderer_(std::move(renderer))
     {
         // Task 774 finding: this constructor (used exclusively by RenderTarget2D) previously
         // skipped format validation entirely, silently accepting any SurfaceFormat even though
-        // CreateRenderTarget2D's own backend call never actually forwarded it -- a RenderTarget2D
+        // CreateRenderTarget2D's own renderer call never actually forwarded it -- a RenderTarget2D
         // could report a non-Color Format() while its real GPU resource was always Color.
         //
         // SKIA-142: that validation now happens one call frame up, in RenderTarget2D.cpp's
-        // CreateValidatedRenderTargetBackend -- which must run (and throw on an unsupported
-        // format) before `backend` above can even be constructed, since it supplies this
-        // constructor's `backend` argument. Re-validating here with the base Texture::ValidateFormat
-        // (a hardcoded Color-only check, the same for every backend) would silently re-reject every
-        // one of the thirteen formats CreateValidatedRenderTargetBackend's Skia-aware gate just
-        // accepted, so it must not run again; `fmt` is already known consistent with `backend`.
+        // CreateValidatedRenderTargetRenderer -- which must run (and throw on an unsupported
+        // format) before `renderer` above can even be constructed, since it supplies this
+        // constructor's `renderer` argument. Re-validating here with the base Texture::ValidateFormat
+        // (a hardcoded Color-only check, the same for every renderer) would silently re-reject every
+        // one of the thirteen formats CreateValidatedRenderTargetRenderer's Skia-aware gate just
+        // accepted, so it must not run again; `fmt` is already known consistent with `renderer`.
         format_     = fmt;
         levelCount_ = lvlCount;
         gpuOnlyContent_ = true;
@@ -360,7 +360,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void Texture2D::Dispose(bool disposing)
     {
-        backend_.reset();
+        renderer_.reset();
         Texture::Dispose(disposing);
     }
 
@@ -405,19 +405,19 @@ namespace Microsoft::Xna::Framework::Graphics
             img.pixels[i * 4 + 2] = data[i].getBProperty();
             img.pixels[i * 4 + 3] = data[i].getAProperty();
         }
-        // RenderTarget2D uses this inherited overload too. Replacing an existing backend would
-        // turn its render-target backend into an ordinary Texture2D backend and leave its cached
-        // IRenderTargetBackend pointer dangling. Update the existing level-0 resource instead.
+        // RenderTarget2D uses this inherited overload too. Replacing an existing renderer would
+        // turn its render-target renderer into an ordinary Texture2D renderer and leave its cached
+        // IRenderTargetRenderer pointer dangling. Update the existing level-0 resource instead.
         //
         // REMED-GFX-223: this in-place update must stay confined to render targets. An ordinary
-        // Texture2D's backend is shareable -- ContentManager's weak texture cache hands the same
-        // ITextureBackend to every wrapper reconstructed from a cache hit -- so updating it in
+        // Texture2D's renderer is shareable -- ContentManager's weak texture cache hands the same
+        // ITextureRenderer to every wrapper reconstructed from a cache hit -- so updating it in
         // place would publish this upload to every other holder of that texture, which is exactly
-        // the aliasing CnjCacheIsolationTests pins (plan_cnj.md CNB-33). Building a fresh backend
+        // the aliasing CnjCacheIsolationTests pins (plan_cnj.md CNB-33). Building a fresh renderer
         // detaches this wrapper, which is what a full-level upload has always done here.
-        if (backend_ && gpuOnlyContent_)
+        if (renderer_ && gpuOnlyContent_)
         {
-            backend_->UpdatePixels(img.pixels.data(), width * 4);
+            renderer_->UpdatePixels(img.pixels.data(), width * 4);
             // Subsequent draws change the target surface directly, so retain no stale CPU
             // upload shadow that could mask real target readback or generated descendants.
             cpuPixels_.reset();
@@ -425,9 +425,9 @@ namespace Microsoft::Xna::Framework::Graphics
             return;
         }
 
-        backend_   = graphicsDevice_->GetBackend().CreateTexture(img);
+        renderer_   = graphicsDevice_->GetRenderer().CreateTexture(img);
         cpuPixels_ = std::make_shared<std::vector<uint8_t>>(std::move(img.pixels));
-        backend_->ShareCpuPixels(cpuPixels_);
+        renderer_->ShareCpuPixels(cpuPixels_);
         MaybeFreeCpuPixels();
     }
 
@@ -464,18 +464,18 @@ namespace Microsoft::Xna::Framework::Graphics
         // outside the region with black. Fail loudly instead of corrupting the texture.
         const bool coversFullLevel = (x == 0 && y == 0 && w == levelW && h == levelH);
 
-        // RenderTarget2D content has one authoritative owner: its live backend. A previous
+        // RenderTarget2D content has one authoritative owner: its live renderer. A previous
         // higher-level upload may have left a common-layer staging shadow, but rendering or a
         // parent upload is allowed to regenerate that level later. Drop every target mip staging
         // buffer before composing this transfer so partial updates are always seeded from the
-        // backend's current chain rather than from stale bytes.
+        // renderer's current chain rather than from stale bytes.
         if (gpuOnlyContent_)
         {
             cpuPixels_.reset();
             extraMipLevels_.reset();
         }
 
-        if (level == 0 && backend_ && !cpuPixels_ && !coversFullLevel)
+        if (level == 0 && renderer_ && !cpuPixels_ && !coversFullLevel)
         {
             if (!gpuOnlyContent_)
             {
@@ -489,30 +489,30 @@ namespace Microsoft::Xna::Framework::Graphics
             // Seed a temporary full-level shadow from its actual surface before applying a partial
             // upload, so untouched texels are not accidentally replaced with transparent black.
             std::vector<uint8_t> currentPixels(static_cast<std::size_t>(levelW) * levelH * 4u);
-            if (!backend_->GetData(0, 0, 0, levelW, levelH, currentPixels.data(),
+            if (!renderer_->GetData(0, 0, 0, levelW, levelH, currentPixels.data(),
                                    static_cast<int>(currentPixels.size())))
             {
                 throw System::NotSupportedException(
-                    "Texture2D::SetData: this graphics backend cannot preserve untouched render-target pixels "
+                    "Texture2D::SetData: this graphics renderer cannot preserve untouched render-target pixels "
                     "for a partial update");
             }
             cpuPixels_ = std::make_shared<std::vector<uint8_t>>(std::move(currentPixels));
         }
 
-        // A backend may own deterministic generated bytes for a level that the caller has not
+        // A renderer may own deterministic generated bytes for a level that the caller has not
         // authored yet. Seed a partial update from those real bytes before creating the ordinary
         // caller-authored shadow; otherwise getMipBuffer would preserve the rectangle against
         // zeroes and destroy generated texels outside it. Full-level writes need no seed.
-        if (level > 0 && backend_ && !coversFullLevel && !getMipBufferConst(level)
-            && backend_->HasDefinedMipLevel(level))
+        if (level > 0 && renderer_ && !coversFullLevel && !getMipBufferConst(level)
+            && renderer_->HasDefinedMipLevel(level))
         {
             std::vector<uint8_t> currentPixels(
                 static_cast<std::size_t>(levelW) * levelH * 4u);
-            if (!backend_->GetData(level, 0, 0, levelW, levelH, currentPixels.data(),
+            if (!renderer_->GetData(level, 0, 0, levelW, levelH, currentPixels.data(),
                                    static_cast<int>(currentPixels.size())))
             {
                 throw System::NotSupportedException(
-                    "Texture2D::SetData: this graphics backend cannot preserve untouched "
+                    "Texture2D::SetData: this graphics renderer cannot preserve untouched "
                     "generated mip pixels for a partial update");
             }
             getMipBuffer(level) = std::move(currentPixels);
@@ -535,8 +535,8 @@ namespace Microsoft::Xna::Framework::Graphics
 
         if (level == 0)
         {
-            if (backend_)
-                backend_->UpdatePixels(buf.data(), levelW * 4);
+            if (renderer_)
+                renderer_->UpdatePixels(buf.data(), levelW * 4);
             else if (graphicsDevice_)
             {
                 ImageData img;
@@ -545,8 +545,8 @@ namespace Microsoft::Xna::Framework::Graphics
                 img.mipLevels = levelCount_;
                 img.surfaceFormat = static_cast<int>(format_);
                 img.pixels    = buf;
-                backend_   = graphicsDevice_->GetBackend().CreateTexture(img);
-                backend_->ShareCpuPixels(cpuPixels_);
+                renderer_   = graphicsDevice_->GetRenderer().CreateTexture(img);
+                renderer_->ShareCpuPixels(cpuPixels_);
             }
             if (gpuOnlyContent_)
             {
@@ -558,9 +558,9 @@ namespace Microsoft::Xna::Framework::Graphics
             }
             MaybeFreeCpuPixels();
         }
-        else if (backend_)
+        else if (renderer_)
         {
-            backend_->UpdatePixelsLevel(level, buf.data(), levelW, levelH);
+            renderer_->UpdatePixelsLevel(level, buf.data(), levelW, levelH);
             if (gpuOnlyContent_)
                 extraMipLevels_.reset();
         }
@@ -609,7 +609,7 @@ namespace Microsoft::Xna::Framework::Graphics
             extraMipLevels_.reset();
         }
 
-        if (level == 0 && backend_ && !cpuPixels_ && !coversFullLevel)
+        if (level == 0 && renderer_ && !cpuPixels_ && !coversFullLevel)
         {
             if (!gpuOnlyContent_)
             {
@@ -619,25 +619,25 @@ namespace Microsoft::Xna::Framework::Graphics
             }
             std::vector<uint8_t> currentPixels(
                 static_cast<std::size_t>(levelW) * levelH * bytesPerTexel);
-            if (!backend_->GetData(0, 0, 0, levelW, levelH, currentPixels.data(),
+            if (!renderer_->GetData(0, 0, 0, levelW, levelH, currentPixels.data(),
                                    static_cast<int>(currentPixels.size())))
             {
                 throw System::NotSupportedException(
-                    "Texture2D::SetData: backend cannot preserve untouched target pixels");
+                    "Texture2D::SetData: renderer cannot preserve untouched target pixels");
             }
             cpuPixels_ = std::make_shared<std::vector<uint8_t>>(std::move(currentPixels));
         }
 
-        if (level > 0 && backend_ && !coversFullLevel && !getMipBufferConst(level)
-            && backend_->HasDefinedMipLevel(level))
+        if (level > 0 && renderer_ && !coversFullLevel && !getMipBufferConst(level)
+            && renderer_->HasDefinedMipLevel(level))
         {
             std::vector<uint8_t> currentPixels(
                 static_cast<std::size_t>(levelW) * levelH * bytesPerTexel);
-            if (!backend_->GetData(level, 0, 0, levelW, levelH, currentPixels.data(),
+            if (!renderer_->GetData(level, 0, 0, levelW, levelH, currentPixels.data(),
                                    static_cast<int>(currentPixels.size())))
             {
                 throw System::NotSupportedException(
-                    "Texture2D::SetData: backend cannot preserve untouched generated mip pixels");
+                    "Texture2D::SetData: renderer cannot preserve untouched generated mip pixels");
             }
             getMipBuffer(level) = std::move(currentPixels);
         }
@@ -655,9 +655,9 @@ namespace Microsoft::Xna::Framework::Graphics
 
         if (level == 0)
         {
-            if (backend_)
+            if (renderer_)
             {
-                backend_->UpdatePixels(destination.data(), levelW * bytesPerTexel);
+                renderer_->UpdatePixels(destination.data(), levelW * bytesPerTexel);
             }
             else if (graphicsDevice_)
             {
@@ -667,8 +667,8 @@ namespace Microsoft::Xna::Framework::Graphics
                 image.mipLevels = levelCount_;
                 image.surfaceFormat = static_cast<int>(format_);
                 image.pixels = destination;
-                backend_ = graphicsDevice_->GetBackend().CreateTexture(image);
-                backend_->ShareCpuPixels(cpuPixels_);
+                renderer_ = graphicsDevice_->GetRenderer().CreateTexture(image);
+                renderer_->ShareCpuPixels(cpuPixels_);
             }
             if (gpuOnlyContent_)
             {
@@ -678,9 +678,9 @@ namespace Microsoft::Xna::Framework::Graphics
             }
             MaybeFreeCpuPixels();
         }
-        else if (backend_)
+        else if (renderer_)
         {
-            backend_->UpdatePixelsLevel(level, destination.data(), levelW, levelH);
+            renderer_->UpdatePixelsLevel(level, destination.data(), levelW, levelH);
             if (gpuOnlyContent_)
                 extraMipLevels_.reset();
         }
@@ -695,8 +695,8 @@ namespace Microsoft::Xna::Framework::Graphics
         if (startIndex < 0)
             throw std::out_of_range("Texture2D::SetData: startIndex must be >= 0");
         validateMipLevel("Texture2D::SetData", level, levelCount_);
-        if (!backend_)
-            throw std::runtime_error("Texture2D::SetData: compressed texture has no backend");
+        if (!renderer_)
+            throw std::runtime_error("Texture2D::SetData: compressed texture has no renderer");
 
         const int levelW = mipDim(width, level);
         const int levelH = mipDim(height, level);
@@ -744,13 +744,13 @@ namespace Microsoft::Xna::Framework::Graphics
         else
         {
             // No lasting compressed CPU shadow is kept (unlike getMipBuffer for other formats):
-            // the backend is always the authoritative store, so a partial update reads it back,
+            // the renderer is always the authoritative store, so a partial update reads it back,
             // patches only the requested block rectangle, and re-uploads the whole level.
-            if (!backend_->GetData(level, 0, 0, levelW, levelH, levelBytes.data(),
+            if (!renderer_->GetData(level, 0, 0, levelW, levelH, levelBytes.data(),
                                    static_cast<int>(levelBytes.size())))
             {
                 throw System::NotSupportedException(
-                    "Texture2D::SetData: backend cannot preserve untouched compressed block bytes");
+                    "Texture2D::SetData: renderer cannot preserve untouched compressed block bytes");
             }
             const int blockX = x / 4;
             const int blockY = y / 4;
@@ -767,7 +767,7 @@ namespace Microsoft::Xna::Framework::Graphics
             }
         }
 
-        backend_->UpdatePixelsLevel(level, levelBytes.data(), levelW, levelH);
+        renderer_->UpdatePixelsLevel(level, levelBytes.data(), levelW, levelH);
     }
 
     namespace
@@ -1295,16 +1295,16 @@ namespace Microsoft::Xna::Framework::Graphics
         if (format_ != SurfaceFormat::Color)
             throw std::invalid_argument(
                 "Texture2D::SetDataRGBA: raw RGBA requires SurfaceFormat::Color");
-        if (!backend_ || !data || pixelCount <= 0) return;
+        if (!renderer_ || !data || pixelCount <= 0) return;
         if (gpuOnlyContent_)
         {
-            backend_->UpdatePixels(data, width * 4);
+            renderer_->UpdatePixels(data, width * 4);
             cpuPixels_.reset();
             extraMipLevels_.reset();
             return;
         }
         storeCpuPixels(data, pixelCount);
-        backend_->UpdatePixels(data, width * 4);
+        renderer_->UpdatePixels(data, width * 4);
     }
 
     // -----------------------------------------------------------------------
@@ -1341,7 +1341,7 @@ namespace Microsoft::Xna::Framework::Graphics
     }
 
     /// Records exactly what a transfer was asked for and what it is authorised to write, so the
-    /// shared layer's interpretation can be compared against a backend's without a debugger.
+    /// shared layer's interpretation can be compared against a renderer's without a debugger.
     static void traceTransfer(const char* overload, int resourceW, int resourceH, int level,
                               int x, int y, int w, int h, int startIndex, int elementCount,
                               int requiredElements, const char* source)
@@ -1376,36 +1376,36 @@ namespace Microsoft::Xna::Framework::Graphics
         // The requested region of this overload is the COMPLETE level 0 -- never elementCount,
         // never a viewport, never a previous request. Argument validation runs BEFORE the storage
         // and capability decision below, so an undersized or overflowing request is answered with
-        // its own specific error on every backend rather than being weakened into a capability
+        // its own specific error on every renderer rather than being weakened into a capability
         // rejection (REMED-GFX-162's precedence, from the texture side).
         const int total = width * height;
         validateTransferWindow("Texture2D::GetData", startIndex, elementCount, total);
 
-        // RenderTarget2D delegates level zero to the backend even when a CPU shadow exists: a
+        // RenderTarget2D delegates level zero to the renderer even when a CPU shadow exists: a
         // temporary SetData staging buffer is not authoritative, because a later render into the
         // target may have replaced its contents.
         //
-        // The backend result is PREFERRED, not required. Where the backend cannot read its colour
+        // The renderer result is PREFERRED, not required. Where the renderer cannot read its colour
         // attachment back, an existing shadow is still the best answer available and is what this
         // overload returned before the preference was introduced -- so fall through to it rather
-        // than withdrawing a working readback from every backend whose render targets are not
+        // than withdrawing a working readback from every renderer whose render targets are not
         // CPU-readable. The NotSupportedException below stays reachable, and stays the right
         // answer, only when there is genuinely nothing to return: no readback AND no shadow.
-        if (gpuOnlyContent_ && backend_ && total > 0)
+        if (gpuOnlyContent_ && renderer_ && total > 0)
         {
             traceTransfer("whole-level(gpu)", width, height, 0, 0, 0, width, height,
-                          startIndex, elementCount, total, "backend");
+                          startIndex, elementCount, total, "renderer");
             // REMED-GFX-127: `pixels` is scratch memory THIS layer owns and zero-initializes,
             // so converting it unconditionally is not "leaving the caller's buffer untouched"
-            // when the backend has no readback -- it fabricates a complete transparent-black
-            // frame. Conversion happens only when the backend reports it wrote the whole
+            // when the renderer has no readback -- it fabricates a complete transparent-black
+            // frame. Conversion happens only when the renderer reports it wrote the whole
             // region; otherwise the caller's `data` is left byte-for-byte as it was.
             //
-            // Sized to the REQUESTED REGION, not to elementCount: the backend fills exactly
+            // Sized to the REQUESTED REGION, not to elementCount: the renderer fills exactly
             // width*height texels, so a larger elementCount would otherwise hand the caller
             // this buffer's untouched tail as if it were content.
             std::vector<uint8_t> pixels(static_cast<std::size_t>(total) * 4, 0);
-            if (backend_->GetData(0, 0, 0, width, height, pixels.data(),
+            if (renderer_->GetData(0, 0, 0, width, height, pixels.data(),
                                   static_cast<int>(pixels.size())))
             {
                 for (int i = 0; i < total; ++i)
@@ -1419,14 +1419,14 @@ namespace Microsoft::Xna::Framework::Graphics
             if (!cpuPixels_ || cpuPixels_->empty())
             {
                 throw System::NotSupportedException(
-                    "Texture2D::GetData: this graphics backend cannot read a render target's "
+                    "Texture2D::GetData: this graphics renderer cannot read a render target's "
                     "colour attachment back to the CPU");
             }
         }
 
         // For a plain Texture2D, an empty shadow means it was freed because context recovery is
         // disabled (MaybeFreeCpuPixels). That must throw rather than silently read back whatever
-        // the backend texture currently holds.
+        // the renderer texture currently holds.
         if (!cpuPixels_ || cpuPixels_->empty())
         {
             throw std::runtime_error("Texture2D::GetData: no CPU-side pixel data available");
@@ -1464,26 +1464,26 @@ namespace Microsoft::Xna::Framework::Graphics
         Texture::ValidateGetDataFormat(format_, 4);
 
         // Delegate before touching the CPU-side mip shadow at all -- the 3-arg overload has its
-        // own complete bounds checking and (for a RenderTarget2D with no shadow) backend fallback.
+        // own complete bounds checking and (for a RenderTarget2D with no shadow) renderer fallback.
         if (level == 0 && rect == nullptr)
         {
             GetData(data, startIndex, elementCount);
             return;
         }
 
-        // A RenderTarget2D's backend is authoritative for every mip. Its descendants may be
+        // A RenderTarget2D's renderer is authoritative for every mip. Its descendants may be
         // regenerated after a later render pass or parent SetData, so a common-layer transfer
         // staging buffer must never mask the live target chain during readback.
         const std::vector<uint8_t>* buf = gpuOnlyContent_ ? nullptr : getMipBufferConst(level);
         if (!buf)
         {
-            // Render targets normally own live backend pixels. A plain texture may also expose a
-            // backend-generated mip that has no caller-authored CPU shadow, but only through the
+            // Render targets normally own live renderer pixels. A plain texture may also expose a
+            // renderer-generated mip that has no caller-authored CPU shadow, but only through the
             // explicit HasDefinedMipLevel contract. Level zero still follows the three-argument
             // overload's stricter context-recovery rule above.
-            const bool backendOwnsDefinedMip =
-                level > 0 && backend_ && backend_->HasDefinedMipLevel(level);
-            if (backend_ && (gpuOnlyContent_ || backendOwnsDefinedMip))
+            const bool rendererOwnsDefinedMip =
+                level > 0 && renderer_ && renderer_->HasDefinedMipLevel(level);
+            if (renderer_ && (gpuOnlyContent_ || rendererOwnsDefinedMip))
             {
                 const int levelW = mipDim(width, level);
                 const int levelH = mipDim(height, level);
@@ -1495,19 +1495,19 @@ namespace Microsoft::Xna::Framework::Graphics
                 // dimensions at THIS mip level -- never from level 0 and never from the full
                 // resource -- and the destination window is checked overflow-safely.
                 validateTransferWindow("Texture2D::GetData", startIndex, elementCount, w * h);
-                traceTransfer(backendOwnsDefinedMip ? "rectangle(defined-mip)" : "rectangle(gpu)",
+                traceTransfer(rendererOwnsDefinedMip ? "rectangle(defined-mip)" : "rectangle(gpu)",
                               levelW, levelH, level, x, y, w, h,
-                              startIndex, elementCount, w * h, "backend");
+                              startIndex, elementCount, w * h, "renderer");
 
                 // REMED-GFX-127: same contract as the whole-level overload above -- scratch memory
                 // this layer zero-initialized is never handed to the caller as if it were content.
                 std::vector<uint8_t> pixels(static_cast<std::size_t>(w) * h * 4, 0);
-                if (!backend_->GetData(level, x, y, w, h, pixels.data(),
+                if (!renderer_->GetData(level, x, y, w, h, pixels.data(),
                                        static_cast<int>(pixels.size())))
                 {
                     throw System::NotSupportedException(
-                        "Texture2D::GetData: this graphics backend cannot read the requested "
-                        "backend-owned mip pixels back to the CPU");
+                        "Texture2D::GetData: this graphics renderer cannot read the requested "
+                        "renderer-owned mip pixels back to the CPU");
                 }
                 for (int row = 0; row < h; ++row)
                     for (int col = 0; col < w; ++col)
@@ -1608,19 +1608,19 @@ namespace Microsoft::Xna::Framework::Graphics
             return;
         }
 
-        const bool backendOwnsDefinedMip = level > 0 && backend_
-            && backend_->HasDefinedMipLevel(level);
-        if (!backend_ || (!gpuOnlyContent_ && !backendOwnsDefinedMip))
+        const bool rendererOwnsDefinedMip = level > 0 && renderer_
+            && renderer_->HasDefinedMipLevel(level);
+        if (!renderer_ || (!gpuOnlyContent_ && !rendererOwnsDefinedMip))
             throw std::runtime_error(
                 "Texture2D::GetData: no CPU-side packed pixel data for requested mip level");
 
         std::vector<uint8_t> scratch(
             static_cast<std::size_t>(requiredElements) * bytesPerTexel);
-        if (!backend_->GetData(level, x, y, w, h, scratch.data(),
+        if (!renderer_->GetData(level, x, y, w, h, scratch.data(),
                                static_cast<int>(scratch.size())))
         {
             throw System::NotSupportedException(
-                "Texture2D::GetData: backend cannot read the requested packed pixels");
+                "Texture2D::GetData: renderer cannot read the requested packed pixels");
         }
         std::memcpy(data + static_cast<std::size_t>(startIndex) * bytesPerTexel,
                     scratch.data(), scratch.size());
@@ -1634,8 +1634,8 @@ namespace Microsoft::Xna::Framework::Graphics
         if (startIndex < 0)
             throw std::out_of_range("Texture2D::GetData: startIndex must be >= 0");
         validateMipLevel("Texture2D::GetData", level, levelCount_);
-        if (!backend_)
-            throw std::runtime_error("Texture2D::GetData: compressed texture has no backend");
+        if (!renderer_)
+            throw std::runtime_error("Texture2D::GetData: compressed texture has no renderer");
 
         const int levelW = mipDim(width, level);
         const int levelH = mipDim(height, level);
@@ -1664,10 +1664,10 @@ namespace Microsoft::Xna::Framework::Graphics
         const int requiredElements = blockCols * blockRows * blockByteSize;
         validateTransferWindow("Texture2D::GetData", startIndex, elementCount, requiredElements);
 
-        if (!backend_->GetData(level, x, y, w, h, data + startIndex, requiredElements))
+        if (!renderer_->GetData(level, x, y, w, h, data + startIndex, requiredElements))
         {
             throw System::NotSupportedException(
-                "Texture2D::GetData: backend cannot read the requested compressed block bytes");
+                "Texture2D::GetData: renderer cannot read the requested compressed block bytes");
         }
     }
 
@@ -2316,7 +2316,7 @@ namespace Microsoft::Xna::Framework::Graphics
         GraphicsDevice& device, int w, int h,
         std::vector<std::vector<std::uint8_t>>&& rgbaLevels)
     {
-#ifdef CNA_BACKEND_D3D9
+#ifdef CNA_RENDERER_D3D9
         ValidateTextureSizeForProfileEXT(device, w, h);
 #endif
         ValidateTextureDimensionEXT(device, w, h);
@@ -2355,9 +2355,9 @@ namespace Microsoft::Xna::Framework::Graphics
         tex.width           = w;
         tex.height          = h;
         tex.levelCount_      = img.mipLevels;
-        tex.backend_        = device.GetBackend().CreateTexture(img);
+        tex.renderer_        = device.GetRenderer().CreateTexture(img);
         tex.cpuPixels_      = std::make_shared<std::vector<uint8_t>>(std::move(img.pixels));
-        tex.backend_->ShareCpuPixels(tex.cpuPixels_);
+        tex.renderer_->ShareCpuPixels(tex.cpuPixels_);
 
         if (rgbaLevels.size() > 1u)
         {
@@ -2369,7 +2369,7 @@ namespace Microsoft::Xna::Framework::Graphics
             {
                 tex.extraMipLevels_->push_back(std::move(rgbaLevels[level]));
                 const auto& pixels = tex.extraMipLevels_->back();
-                tex.backend_->UpdatePixelsLevel(
+                tex.renderer_->UpdatePixelsLevel(
                     static_cast<int>(level), pixels.data(), levelWidth, levelHeight);
                 levelWidth = std::max(1, levelWidth / 2);
                 levelHeight = std::max(1, levelHeight / 2);
@@ -2641,7 +2641,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     SDL_Texture* Texture2D::GetNativeTextureInternal() const
     {
-        return backend_ ? backend_->GetNativeTexture() : nullptr;
+        return renderer_ ? renderer_->GetNativeTexture() : nullptr;
     }
 
     Texture2D Texture2D::CreateFromPixels(GraphicsDevice& device,
@@ -2656,9 +2656,9 @@ namespace Microsoft::Xna::Framework::Graphics
         tex.graphicsDevice_ = &device;
         tex.width           = w;
         tex.height          = h;
-        tex.backend_        = device.GetBackend().CreateTexture(data);
+        tex.renderer_        = device.GetRenderer().CreateTexture(data);
         tex.cpuPixels_      = std::make_shared<std::vector<uint8_t>>(std::move(data.pixels));
-        tex.backend_->ShareCpuPixels(tex.cpuPixels_);
+        tex.renderer_->ShareCpuPixels(tex.cpuPixels_);
         tex.MaybeFreeCpuPixels();
         return tex;
     }
@@ -2666,7 +2666,7 @@ namespace Microsoft::Xna::Framework::Graphics
     Texture2D Texture2D::CreateCpuOnlyForTests(int w, int h, SurfaceFormat format,
                                                const std::vector<Color>& pixels)
     {
-        Texture2D tex;              // default ctor: no GraphicsDevice, null backend
+        Texture2D tex;              // default ctor: no GraphicsDevice, null renderer
         tex.width       = w;
         tex.height      = h;
         tex.format_     = format;
@@ -2685,13 +2685,13 @@ namespace Microsoft::Xna::Framework::Graphics
         return tex;
     }
 
-    Texture2D Texture2D::CreateWithBackendForTests(int w, int h,
-                                                   std::shared_ptr<ITextureBackend> backend)
+    Texture2D Texture2D::CreateWithRendererForTests(int w, int h,
+                                                   std::shared_ptr<ITextureRenderer> renderer)
     {
         Texture2D tex;              // default ctor: no GraphicsDevice
         tex.width   = w;
         tex.height  = h;
-        tex.backend_ = std::move(backend);
+        tex.renderer_ = std::move(renderer);
         return tex;
     }
 
@@ -2699,16 +2699,16 @@ namespace Microsoft::Xna::Framework::Graphics
                                               int w, int h,
                                               SurfaceFormat fmt,
                                               int levelCount,
-                                              std::shared_ptr<ITextureBackend> backend,
+                                              std::shared_ptr<ITextureRenderer> renderer,
                                               std::shared_ptr<std::vector<uint8_t>> cpuPixels)
     {
-        Texture2D tex(device, w, h, fmt, levelCount, std::move(backend));
+        Texture2D tex(device, w, h, fmt, levelCount, std::move(renderer));
         // REMED-GFX-223: the constructor above belongs to RenderTarget2D and therefore raises
         // gpuOnlyContent_, but a cache hit reconstructs an ordinary content texture -- its pixels
         // come from the loader and SetData, never from rendering into it. Leaving the flag raised
-        // declares the shared cached backend authoritative, which makes GetData stop consulting
+        // declares the shared cached renderer authoritative, which makes GetData stop consulting
         // the CPU shadow this factory is about to install and makes SetData mutate the cached
-        // backend in place instead of detaching from it.
+        // renderer in place instead of detaching from it.
         tex.gpuOnlyContent_ = false;
         tex.cpuPixels_ = std::move(cpuPixels);
         return tex;

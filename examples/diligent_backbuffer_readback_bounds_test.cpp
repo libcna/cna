@@ -1,18 +1,18 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_diligent.md DILIGENT-63: real-device proof that DiligentGraphicsBackend::ReadBackbuffer()
+// plan_diligent.md DILIGENT-63: real-device proof that DiligentRenderer::ReadBackbuffer()
 // is valid and bounded for every CnaPresentationMode -- constructed directly against
-// IGraphicsBackend (bypassing GraphicsDevice/GraphicsDeviceManager, matching
+// IGraphicsRenderer (bypassing GraphicsDevice/GraphicsDeviceManager, matching
 // dx3_resize_transaction_test.cpp's own established low-level pattern), since the physical
 // (window) vs. virtual (logical) resolution mismatch this test needs cannot be produced through
-// the public XNA API alone: SDL_SetWindowSize is a no-op under the headless Xvfb this backend runs
+// the public XNA API alone: SDL_SetWindowSize is a no-op under the headless Xvfb this renderer runs
 // on (see backbuffer_readback_dimension_test.cpp's own note), but a mismatch can be requested
-// directly at construction via GraphicsBackendCreateArgs::virtualWidth/virtualHeight.
+// directly at construction via GraphicsRendererCreateArgs::virtualWidth/virtualHeight.
 //
 // Physical window: 64x48 (4:3). Virtual/logical canvas: 40x40 (1:1, deliberately a different
 // aspect) for every mode except NativeBackBuffer (which ignores virtual entirely) and
 // FixedHeightDynamicWidth (which locks height and derives width from the physical aspect,
-// replicated here with the exact same formula DiligentGraphicsBackend::ComputeLogicalViewport()
+// replicated here with the exact same formula DiligentRenderer::ComputeLogicalViewport()
 // itself uses -- 40 * 64/48 = 53.33).
 //
 // Before DILIGENT-63, ReadBackbuffer() clamped MinX/MinY to 0 but computed MaxX/MaxY as
@@ -33,8 +33,8 @@
 //
 // Exit code 0 = all checks PASS, 1 = any FAIL, 77 = no usable device.
 
-#include "CNA/Internal/Backends/Diligent/DiligentGraphicsBackend.hpp"
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Diligent/DiligentRenderer.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -47,9 +47,9 @@
 #include <string>
 #include <vector>
 
-using CNA::Internal::Backends::CnaPresentationMode;
-using CNA::Internal::Backends::GraphicsBackendCreateArgs;
-using CNA::Internal::Backends::Diligent::DiligentGraphicsBackend;
+using CNA::Internal::Renderers::CnaPresentationMode;
+using CNA::Internal::Renderers::GraphicsRendererCreateArgs;
+using CNA::Internal::Renderers::Diligent::DiligentRenderer;
 
 namespace
 {
@@ -83,12 +83,12 @@ namespace
             ++passCount;
     }
 
-    /// Reads a single pixel via the backend's own ReadBackbuffer(), returning whether it threw.
-    bool ReadPixel(DiligentGraphicsBackend& backend, int x, int y, std::uint8_t out[4])
+    /// Reads a single pixel via the renderer's own ReadBackbuffer(), returning whether it threw.
+    bool ReadPixel(DiligentRenderer& renderer, int x, int y, std::uint8_t out[4])
     {
         try
         {
-            backend.ReadBackbuffer(x, y, 1, 1, out);
+            renderer.ReadBackbuffer(x, y, 1, 1, out);
             return true;
         }
         catch (const std::exception& error)
@@ -101,14 +101,14 @@ namespace
     void RunMode(SDL_Window* window, const char* label, CnaPresentationMode mode, int virtualW,
                 int virtualH)
     {
-        GraphicsBackendCreateArgs args;
+        GraphicsRendererCreateArgs args;
         args.window = window;
         args.virtualWidth = virtualW;
         args.virtualHeight = virtualH;
         args.presentationMode = mode;
 
-        DiligentGraphicsBackend backend(args);
-        backend.Clear(kClearR, kClearG, kClearB, 1.0f);
+        DiligentRenderer renderer(args);
+        renderer.Clear(kClearR, kClearG, kClearB, 1.0f);
 
         // A full-canvas read's solidly-interior pixels (well away from any edge that could be
         // affected by rounding or, for Overscan, genuine cropping) must read the clear colour and
@@ -116,7 +116,7 @@ namespace
         const int cx = virtualW / 2;
         const int cy = virtualH / 2;
         std::uint8_t px[4] = {0, 0, 0, 0};
-        const bool readOk = ReadPixel(backend, cx, cy, px);
+        const bool readOk = ReadPixel(renderer, cx, cy, px);
         Check(readOk, std::string(label) + ": centre pixel read does not throw");
         if (readOk)
             Check(IsClearColor(px), std::string(label) + ": centre pixel reads the clear colour");
@@ -129,13 +129,13 @@ namespace
             // outside the real back buffer and must read back zero, not the clear colour, garbage,
             // or crash the copy.
             std::uint8_t top[4] = {0, 0, 0, 0};
-            const bool topOk = ReadPixel(backend, cx, 0, top);
+            const bool topOk = ReadPixel(renderer, cx, 0, top);
             Check(topOk, "Overscan: top-edge pixel read does not throw");
             if (topOk)
                 Check(IsZero(top), "Overscan: top-edge pixel (physically out of bounds) reads zero");
 
             std::uint8_t bottom[4] = {0, 0, 0, 0};
-            const bool bottomOk = ReadPixel(backend, cx, virtualH - 1, bottom);
+            const bool bottomOk = ReadPixel(renderer, cx, virtualH - 1, bottom);
             Check(bottomOk, "Overscan: bottom-edge pixel read does not throw");
             if (bottomOk)
                 Check(IsZero(bottom),
@@ -152,7 +152,7 @@ namespace
             bool subThrew = false;
             try
             {
-                backend.ReadBackbuffer(cx - kSubW / 2, cy - kSubH / 2, kSubW, kSubH, sub.data());
+                renderer.ReadBackbuffer(cx - kSubW / 2, cy - kSubH / 2, kSubW, kSubH, sub.data());
             }
             catch (const std::exception& error)
             {

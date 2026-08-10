@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Task 399: cross-backend EnvironmentMapEffect capstone — combines everything Tasks 393-398
+// Task 399: cross-renderer EnvironmentMapEffect capstone — combines everything Tasks 393-398
 // verified individually into one non-trivial scene, to prove the fixes compose correctly
 // together rather than just in isolation (mirrors Task 370/389's precedent for
 // BasicEffect/DualTextureEffect).
@@ -123,7 +123,7 @@ protected:
         dev.SetDepthTestEnabled(false);
         dev.setBlendStateProperty(BlendState::Opaque);
         // Task 896 finding (mirrors the Bgfx sibling's Task 364/884 fix): once
-        // GraphicsDevice's real default RasterizerState is pushed to every backend,
+        // GraphicsDevice's real default RasterizerState is pushed to every renderer,
         // this quad's winding is culled unless explicitly disabled.
         dev.setRasterizerStateProperty(RasterizerState::CullNone);
 

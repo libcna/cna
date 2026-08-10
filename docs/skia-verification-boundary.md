@@ -1,6 +1,6 @@
 # Skia verification boundary
 
-SKIA-107 closes the backend-specific verification checklist against the selected CPU-raster
+SKIA-107 closes the renderer-specific verification checklist against the selected CPU-raster
 architecture. The implementation has no Ganesh or Graphite mode, so a CPU/GPU image comparison
 would fabricate a second execution mode. Instead, the raster-mode coherence test makes the single
 mode observable and immutable. Adding an accelerated mode must reopen this row and run the same
@@ -10,7 +10,7 @@ pixel corpus in both modes before any fallback or parity claim is accepted.
 
 | Boundary | Direct tests | Targeted defect that the assertions expose |
 |---|---|---|
-| Surface ownership | `Skia_Surface_Raster`, `Skia_RenderTargetBinding_Raster`, `Skia_Ownership` | Alias/null the active surface, remove identity validation, allow a foreign thread, or retain a backend pointer after destruction; identity, diagnostic, unchanged-pixel, recovery and late-use assertions fail. |
+| Surface ownership | `Skia_Surface_Raster`, `Skia_RenderTargetBinding_Raster`, `Skia_Ownership` | Alias/null the active surface, remove identity validation, allow a foreign thread, or retain a renderer pointer after destruction; identity, diagnostic, unchanged-pixel, recovery and late-use assertions fail. |
 | Context/presenter loss | `Skia_ContextRecovery`, `Skia_WindowLifecycle`, `Skia_RasterMode_Coherence` | Clear/reallocate a CPU surface, drop a texture/target snapshot, reorder reset events, emit false device loss, mutate capability state, or switch Skia execution mode during presenter rebuild; exact resources, pixels, events and mode checks fail. |
 | CPU/GPU mode policy | `Skia_StartupDiagnostic_Raster`, `Skia_RasterMode_Coherence`, `Skia_GraphicsCapability` | Probe or silently select a Skia GPU surface, change samples/filter support, or switch mode after recovery; diagnostic, capability, pixel and immutability checks fail. There is deliberately no GPU parity result until such a mode exists. |
 | Alpha conversion | `Skia_Texture_AlphaBoundary`, `Skia_Surface_Raster`, `Skia_RasterMode_Coherence`, four `Skia_BlendState_*` fixtures | Treat straight bytes as premultiplied (or vice versa), premultiply twice, change public readback to premultiplied bytes, consume row padding, or change top-row ordering; discriminating translucent bytes and stride/row assertions fail. |
@@ -33,7 +33,7 @@ Therefore SKIA-107 proves:
 2. the live capability set agrees with that report;
 3. semi-transparent straight-RGBA8 readback is exact at the public backbuffer boundary;
 4. presenter recovery preserves pixels and the capability/diagnostic set; and
-5. the SDL presenter remains backend-owned without changing the reported Skia execution mode.
+5. the SDL presenter remains renderer-owned without changing the reported Skia execution mode.
 
 The accepted [`skia-surface-mode-adr.md`](skia-surface-mode-adr.md) selects raster for this release
 and makes the following list a mandatory reopening gate. Any future accelerated implementation

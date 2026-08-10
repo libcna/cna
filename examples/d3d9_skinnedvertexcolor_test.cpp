@@ -43,9 +43,9 @@
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 
-#include "CNA/Internal/Backends/D3D9/D3D9GraphicsBackend.hpp"
-#include "CNA/Internal/Backends/D3D9/D3D9Textures.hpp"
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/D3D9/D3D9Renderer.hpp"
+#include "CNA/Internal/Renderers/D3D9/D3D9Textures.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Graphics/ImageData.hpp"
 
 #include <cstdint>
@@ -54,9 +54,9 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::D3D9;
-using CNA::Internal::Backends::GpuDrawParams;
-using CNA::Internal::Backends::ImageData;
+using namespace CNA::Internal::Renderers::D3D9;
+using CNA::Internal::Renderers::GpuDrawParams;
+using CNA::Internal::Renderers::ImageData;
 
 namespace
 {
@@ -85,14 +85,14 @@ namespace
         {-1.0f,  3.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, {0, 0, 0, 0}, {255, 0, 0, 255}},
     };
 
-    std::unique_ptr<CNA::Internal::Backends::ITextureBackend> Make1x1Texture(
-        D3D9GraphicsBackend& backend, uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255)
+    std::unique_ptr<CNA::Internal::Renderers::ITextureRenderer> Make1x1Texture(
+        D3D9Renderer& renderer, uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255)
     {
         ImageData img;
         img.width = 1;
         img.height = 1;
         img.pixels = {r, g, b, a};
-        return backend.CreateTexture(img);
+        return renderer.CreateTexture(img);
     }
 
     bool ReadCenterPixel(GraphicsDevice& dev, Color& out)
@@ -104,7 +104,7 @@ namespace
         return true;
     }
 
-    void SetBaseParams(GpuDrawParams& params, CNA::Internal::Backends::ITextureBackend* tex)
+    void SetBaseParams(GpuDrawParams& params, CNA::Internal::Renderers::ITextureRenderer* tex)
     {
         params.skinned = true;
         params.texture0 = tex;
@@ -135,18 +135,18 @@ protected:
         if (frame_++ < 1) return;
 
         auto& dev = getGraphicsDeviceProperty();
-        auto& backend = static_cast<D3D9GraphicsBackend&>(dev.GetBackend());
+        auto& renderer = static_cast<D3D9Renderer&>(dev.GetRenderer());
 
-        backend.ApplyBlendState(0, 0, 1, 1, 0, 0, CNA::Internal::Backends::BlendWriteState{}); // REMED-GFX-077 default write state
-        backend.ApplyDepthStencilState(false, false, 0, false, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 0);
-        backend.ApplyRasterizerState(0 /*CullMode::None*/, 0 /*FillMode::Solid*/, false, 0.0f, 0.0f);
-        backend.ApplySamplerState(0, 1 /*TextureFilter::Point*/, 0, 0, 1);
+        renderer.ApplyBlendState(0, 0, 1, 1, 0, 0, CNA::Internal::Renderers::BlendWriteState{}); // REMED-GFX-077 default write state
+        renderer.ApplyDepthStencilState(false, false, 0, false, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 0);
+        renderer.ApplyRasterizerState(0 /*CullMode::None*/, 0 /*FillMode::Solid*/, false, 0.0f, 0.0f);
+        renderer.ApplySamplerState(0, 1 /*TextureFilter::Point*/, 0, 0, 1);
 
-        auto whiteTex = Make1x1Texture(backend, 255, 255, 255, 255);
+        auto whiteTex = Make1x1Texture(renderer, 255, 255, 255, 255);
 
         // Check A: VertexColorEnabled=true, red vertex color -- exact red readback.
         {
-            auto vb = backend.CreateVertexBuffer(3);
+            auto vb = renderer.CreateVertexBuffer(3);
             vb->SetData(kTriRedVertexColor, 3, sizeof(VPNTWC));
 
             GpuDrawParams params;
@@ -154,7 +154,7 @@ protected:
             params.vertexColorEnabled = true;
 
             dev.Clear(Color(0, 0, 255, 255));
-            backend.DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+            renderer.DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                      Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, params);
             Color px(0, 0, 0, 0);
             ReadCenterPixel(dev, px);
@@ -166,7 +166,7 @@ protected:
 
         // Check B: VertexColorEnabled=false, SAME red vertex data -- exact white readback.
         {
-            auto vb = backend.CreateVertexBuffer(3);
+            auto vb = renderer.CreateVertexBuffer(3);
             vb->SetData(kTriRedVertexColor, 3, sizeof(VPNTWC));
 
             GpuDrawParams params;
@@ -174,7 +174,7 @@ protected:
             params.vertexColorEnabled = false;
 
             dev.Clear(Color(0, 0, 255, 255));
-            backend.DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+            renderer.DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                      Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, params);
             Color px(0, 0, 0, 0);
             ReadCenterPixel(dev, px);
@@ -185,9 +185,9 @@ protected:
 
         // Check C: Identity bone doesn't corrupt vertex-color output (Check A's setup, indexed draw).
         {
-            auto vb = backend.CreateVertexBuffer(3);
+            auto vb = renderer.CreateVertexBuffer(3);
             vb->SetData(kTriRedVertexColor, 3, sizeof(VPNTWC));
-            auto ib = backend.CreateIndexBuffer16(3);
+            auto ib = renderer.CreateIndexBuffer16(3);
             static const uint16_t kIdx[3] = {0, 1, 2};
             ib->SetData16(kIdx, 3);
 
@@ -196,7 +196,7 @@ protected:
             params.vertexColorEnabled = true;
 
             dev.Clear(Color(0, 0, 255, 255));
-            backend.DrawIndexedPrimitivesEx(*vb, *ib, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+            renderer.DrawIndexedPrimitivesEx(*vb, *ib, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                             Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, params);
             Color px(0, 0, 0, 0);
             ReadCenterPixel(dev, px);
@@ -207,7 +207,7 @@ protected:
 
         // Check D: missing texture0 throws a named error.
         {
-            auto vb = backend.CreateVertexBuffer(3);
+            auto vb = renderer.CreateVertexBuffer(3);
             vb->SetData(kTriRedVertexColor, 3, sizeof(VPNTWC));
 
             GpuDrawParams params;
@@ -218,7 +218,7 @@ protected:
             bool threw = false;
             try
             {
-                backend.DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                renderer.DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                          Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, params);
             }
             catch (const std::exception&) { threw = true; }
@@ -230,7 +230,7 @@ protected:
         // litRGB = lightSum(0)*0.5 + 0.8 = 0.8 -> ~204. The old (EmissiveColor + lightSum)*DiffuseColor
         // bug gave 0.8*0.5 = 0.4 -> ~102, so this discriminates the fix.
         {
-            auto vb = backend.CreateVertexBuffer(3);
+            auto vb = renderer.CreateVertexBuffer(3);
             vb->SetData(kTriRedVertexColor, 3, sizeof(VPNTWC));
 
             GpuDrawParams params;
@@ -241,7 +241,7 @@ protected:
             params.emissiveColor[0] = params.emissiveColor[1] = params.emissiveColor[2] = 0.8f;
 
             dev.Clear(Color(0, 0, 255, 255));
-            backend.DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+            renderer.DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                      Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, params);
             Color px(0, 0, 0, 0);
             ReadCenterPixel(dev, px);

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 // plan_cnj.md CNB-58/60 (Phase 13A), Bgfx port: pixel test for PbrEffect's real glTF
-// metallic-roughness BRDF shader (BgfxGraphicsBackend's vs_pbr3d.sc/fs_pbr3d.sc) -- proves the
+// metallic-roughness BRDF shader (BgfxRenderer's vs_pbr3d.sc/fs_pbr3d.sc) -- proves the
 // stride-48 VertexPositionNormalTangentTexture layout, the TBN construction, and the BRDF math
-// itself all work end-to-end via a real GPU draw on the Bgfx backend.
+// itself all work end-to-end via a real GPU draw on the Bgfx renderer.
 //
 // Unlike examples/easygl_pbreffect_golden_test.cpp (a 4-quad multi-material scene whose own
 // header comment explains why its exact expected values had to be captured-and-confirmed rather
@@ -48,7 +48,7 @@ using namespace Microsoft::Xna::Framework::Graphics;
 
 static constexpr int kSize = 64;
 
-// Stride-48 GPU-compact PBR vertex: matches BgfxGraphicsBackend's MakeBgfxLayout stride==48 case
+// Stride-48 GPU-compact PBR vertex: matches BgfxRenderer's MakeBgfxLayout stride==48 case
 // (Position+Normal+Tangent+TextureCoordinate).
 struct PbrGpuVertex
 {

@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: MS-PL
-// OPENGL1 backend: virtual-resolution/presentation-mode scaling (plan_opengl1.md item 13,
+// OPENGL1 renderer: virtual-resolution/presentation-mode scaling (plan_opengl1.md item 13,
 // EasyGL parity).
 //
-// Before this, EffectiveWidth()/EffectiveHeight() (OpenGL1SpriteBatchBackend::Begin()'s own glOrtho
+// Before this, EffectiveWidth()/EffectiveHeight() (OpenGL1SpriteBatchRenderer::Begin()'s own glOrtho
 // range) always returned the raw, never-recomputed virtualWidth_/virtualHeight_ from construction
 // -- if a game resized its window, the physical viewport genuinely grew/shrank, but SpriteBatch's
 // own internal logical-to-screen mapping stayed frozen at the original size, and
 // TransformWindowToLogical/TransformLogicalToWindow (input coordinate mapping) were never
 // overridden at all (always "window==logical", the shared interface's own no-op default).
 //
-// This backend's fix is deliberately narrow: only presentationMode==FixedHeightDynamicWidth (the
+// This renderer's fix is deliberately narrow: only presentationMode==FixedHeightDynamicWidth (the
 // default) recomputes; every other mode keeps today's original (unrecomputed) behavior --
 // Stretch/NativeBackBuffer are honestly already correct that way, and true Letterbox/Overscan
 // (real bars/cropping) would need the actual glViewport sub-rectangle adjusted, not just this
@@ -32,7 +32,7 @@
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
@@ -83,10 +83,10 @@ class OpenGL1PresentationModeTest : public Game
         // GFX-165: GetBackBufferData validates its rectangle against PresentationParameters'
         // backbuffer size, which this test's own raw SDL_SetWindowSize deliberately does not
         // update -- XNA's backbuffer does not follow the OS window until a device reset. What
-        // this test needs is the REAL framebuffer row, which is exactly the backend's own
+        // this test needs is the REAL framebuffer row, which is exactly the renderer's own
         // ReadBackbuffer (the same top-down row convention GetBackBufferData itself wraps).
         std::vector<std::uint8_t> pixels(static_cast<std::size_t>(physW) * 4, 0);
-        dev.GetBackend().ReadBackbuffer(0, physH / 2, physW, 1, pixels.data());
+        dev.GetRenderer().ReadBackbuffer(0, physH / 2, physW, 1, pixels.data());
         for (int x = 0; x < physW; ++x)
             if (pixels[static_cast<std::size_t>(x) * 4] >= 200) return x;
         return -1;
@@ -141,9 +141,9 @@ protected:
                   "stripe lands at the real physical centre, not offset to ~180 (the pre-existing "
                   "stuck-at-320 bug's answer)");
 
-            auto& backend = dev.GetBackend();
+            auto& renderer = dev.GetRenderer();
             float logX = -1.0f, logY = -1.0f;
-            const bool wOk = backend.TransformWindowToLogical(240.0f, 240.0f, logX, logY);
+            const bool wOk = renderer.TransformWindowToLogical(240.0f, 240.0f, logX, logY);
             std::printf("TransformWindowToLogical(240,240) -> ok=%d (%.1f,%.1f) (expect ok=true, ~120,120)\n",
                         (int)wOk, logX, logY);
             Check(wOk, "TransformWindowToLogical engages (no longer the shared no-op default)");
@@ -152,7 +152,7 @@ protected:
                   "matching the same 0.5 scale EffectiveWidth() itself now uses");
 
             float winX = -1.0f, winY = -1.0f;
-            const bool lOk = backend.TransformLogicalToWindow(120.0f, 120.0f, winX, winY);
+            const bool lOk = renderer.TransformLogicalToWindow(120.0f, 120.0f, winX, winY);
             std::printf("TransformLogicalToWindow(120,120) -> ok=%d (%.1f,%.1f) (expect ok=true, ~240,240)\n",
                         (int)lOk, winX, winY);
             Check(lOk, "TransformLogicalToWindow engages");

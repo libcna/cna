@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Task 388: DualTextureEffect fog behavior (EasyGL backend).
+// Task 388: DualTextureEffect fog behavior (EasyGL renderer).
 //
 // REAL BUG FOUND AND FIXED by writing this test: `DualTextureEffect::FillGpuDrawParams()` never
 // forwarded `FogEnabled`/`FogColor`/`FogStart`/`FogEnd` to the GPU at all — fog was a total no-op
@@ -27,7 +27,7 @@
 // OpenGL's valid clip-space NDC range `[-1,1]` or the primitive gets frustum-clipped away).
 //
 // CONFIRMED, NOT FIXED HERE: Vulkan and Bgfx have zero fog GPU implementation for any 3D effect
-// (Task 888, discovered by Task 378) — no test is added for either backend, matching Task 377/378's
+// (Task 888, discovered by Task 378) — no test is added for either renderer, matching Task 377/378's
 // precedent of not committing a test that would encode a known no-op as a passing assertion.
 //
 // Exit code 0 = PASS, 1 = FAIL.
@@ -134,7 +134,7 @@ class DualTextureFogTest : public Game
             dev.Clear(Color(0, 0, 0, 255));
             dev.setBlendStateProperty(BlendState::Opaque);
             // Task 896 finding (mirrors the Bgfx sibling's Task 364/884 fix): once
-            // GraphicsDevice's real default RasterizerState is pushed to every backend,
+            // GraphicsDevice's real default RasterizerState is pushed to every renderer,
             // this quad's winding is culled unless explicitly disabled.
             dev.setRasterizerStateProperty(RasterizerState::CullNone);
             dev.DrawUserPrimitives(PrimitiveType::TriangleList, quad, 0, 2);

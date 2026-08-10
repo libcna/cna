@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MS-PL
-// PbrEffect proof for the SDL_GPU graphics backend (SdlGpuGraphicsBackend::CreatePbrResources()/
+// PbrEffect proof for the SDL_GPU graphics renderer (SdlGpuRenderer::CreatePbrResources()/
 // GetOrCreatePipelinePbr3D(), pbr3d.vert.glsl/pbr3d.frag.glsl) -- proves the stride-48
 // VertexPositionNormalTangentTexture layout, TBN construction, and the metallic-roughness BRDF
 // itself all work end-to-end via a real GPU draw.
 //
 // Unlike easygl_pbreffect_golden_test.cpp's own scene (View=Identity places the eye exactly
 // inside the quad's own z=0 plane, a genuinely degenerate grazing-angle view direction that
-// backend's own header comment says makes exact hand-derivation "impractical"), this test moves
+// renderer's own header comment says makes exact hand-derivation "impractical"), this test moves
 // the quad to z=-0.5 while keeping View=Identity (eye at object-space origin) and points
 // DirectionalLight0 straight down -Z -- N=V=L=H=(0,0,1) exactly at the sampled center pixel, a
 // fully analytic case. Expected values below are independently reproduced by a standalone Python

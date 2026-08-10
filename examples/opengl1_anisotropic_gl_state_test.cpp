@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: MS-PL
-// OPENGL1 backend: verifies the real GL_EXT_texture_filter_anisotropic wiring added to
-// OpenGL1GraphicsBackend::ApplySamplerState() (plan_opengl1.md phase 1, runtime GL version/
+// OPENGL1 renderer: verifies the real GL_EXT_texture_filter_anisotropic wiring added to
+// OpenGL1Renderer::ApplySamplerState() (plan_opengl1.md phase 1, runtime GL version/
 // extension discovery) actually reaches the driver, rather than trusting the startup
 // capability-dump log alone.
 //
 // Unlike EasyGL's own analogous test (examples/easygl_anisotropic_gl_state_test.cpp), which
 // talks to easy-gl's own Sampler object class (GL 3.3+ core sampler objects), OpenGL1 is a
-// strict fixed-function 1.x backend with no sampler objects at all -- anisotropy is a plain
+// strict fixed-function 1.x renderer with no sampler objects at all -- anisotropy is a plain
 // per-texture-object parameter (GL_TEXTURE_MAX_ANISOTROPY_EXT via glTexParameterf on
 // GL_TEXTURE_2D). This test drives it through the real public API (SamplerState + a real draw,
-// so OpenGL1GraphicsBackend::ApplySamplerState() actually runs) and then reads the parameter
+// so OpenGL1Renderer::ApplySamplerState() actually runs) and then reads the parameter
 // straight back off the currently-bound GL_TEXTURE_2D object with plain glGetTexParameterfv,
 // confirming the driver actually stored the (possibly clamped) value.
 //

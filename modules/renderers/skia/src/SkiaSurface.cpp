@@ -1,5 +1,5 @@
-#include "CNA/Internal/Backends/Skia/SkiaSurface.hpp"
-#include "CNA/Internal/Backends/Skia/SkiaResourcePolicy.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaSurface.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaResourcePolicy.hpp"
 
 #include "System/NotSupportedException.hpp"
 
@@ -15,7 +15,7 @@
 #include <stdexcept>
 #include <utility>
 
-namespace CNA::Internal::Backends::Skia
+namespace CNA::Internal::Renderers::Skia
 {
     namespace
     {
@@ -157,4 +157,4 @@ namespace CNA::Internal::Backends::Skia
             throw std::runtime_error("Skia failed to read its raster backbuffer.");
         return pixels;
     }
-} // namespace CNA::Internal::Backends::Skia
+} // namespace CNA::Internal::Renderers::Skia

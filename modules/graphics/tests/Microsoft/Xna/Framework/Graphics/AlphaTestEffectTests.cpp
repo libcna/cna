@@ -13,7 +13,7 @@
 
 #include <memory>
 
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/AlphaTestEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CompareFunction.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
@@ -26,7 +26,7 @@ using Microsoft::Xna::Framework::Graphics::AlphaTestEffect;
 using Microsoft::Xna::Framework::Graphics::CompareFunction;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
-using CNA::Internal::Backends::GpuDrawParams;
+using CNA::Internal::Renderers::GpuDrawParams;
 
 namespace
 {

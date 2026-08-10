@@ -3,7 +3,7 @@
 //
 // LLGL-52: a lit+textured draw from a vertex layout with no normal (e.g. plain
 // VertexPositionTexture) previously threw outright rather than draw. Every stock lit-textured
-// shader elsewhere in this backend takes its normal from a `layout(location = 3) in vec3 normal`
+// shader elsewhere in this renderer takes its normal from a `layout(location = 3) in vec3 normal`
 // attribute; this variant has none to read, so it substitutes a fixed (0, 0, 1) object-space
 // normal (transformed by the same world normal matrix as lit_textured3d.vert.glsl, so lighting
 // still responds to World rotation) instead of refusing the draw. Otherwise identical to

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Task 888: BasicEffect linear fog pixel integration test — Vulkan backend.
+// Task 888: BasicEffect linear fog pixel integration test — Vulkan renderer.
 //
 // Fog was a total GPU no-op on Vulkan for every 3D effect (opened by Task 378's investigation,
 // confirmed by grepping every .glsl shader file for "fog" and finding zero matches). Fixed on

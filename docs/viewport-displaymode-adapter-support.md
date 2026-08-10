@@ -63,7 +63,7 @@ Task 349 found and fixed a real bug while checking whether a `GraphicsDeviceMana
 split-screen): `UpdateViewportFromWindow()` decided "did the size change?" by comparing against
 `Viewport`'s own current width/height — so a custom `Viewport` was silently stomped back to
 full-window size on the very next frame (`Present()` calls this every frame), even with no actual
-resize. Fixed by tracking the last-known backend-derived size in dedicated fields instead of
+resize. Fixed by tracking the last-known renderer-derived size in dedicated fields instead of
 diffing against `Viewport` itself.
 
 ---
@@ -87,7 +87,7 @@ project's verify-over-assume standard everywhere else in `plan_graphics.md`.
   `DisplayModeCollection.cpp`/`Viewport.cpp` has any Android-specific code path at all; they call
   plain cross-platform SDL3 display APIs.
 - **Web (Emscripten/WASM)**: `CMakeLists.txt` has real, working Emscripten-aware build logic
-  (EasyGL/WebGL 2 is the default backend on Emscripten, a prebuilt-SDL3 hint path exists,
+  (EasyGL/WebGL 2 is the default renderer on Emscripten, a prebuilt-SDL3 hint path exists,
   exception-handling flags are set), but this is all forward-looking scaffolding — no actual
   `emcc` build of `CNA` has ever been performed in this project's history (no
   `.sdl-prebuilt-emscripten` directory exists, and a full Emscripten/WebGPU target is tracked as

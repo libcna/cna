@@ -1,12 +1,12 @@
-#include "CNA/Internal/Backends/Ascii/AsciiQuantizer.hpp"
-#include "CNA/Internal/Backends/Ascii/AsciiFontAtlas.hpp"
+#include "CNA/Internal/Renderers/Ascii/AsciiQuantizer.hpp"
+#include "CNA/Internal/Renderers/Ascii/AsciiFontAtlas.hpp"
 
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
 #include <string>
 
-namespace CNA::Internal::Backends::Ascii
+namespace CNA::Internal::Renderers::Ascii
 {
     using Microsoft::Xna::Framework::Color;
 

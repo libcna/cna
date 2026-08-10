@@ -5,7 +5,7 @@
 // WebGPU collects a bind cycle's Clear/3D/SpriteBatch work and records ONE native render pass for
 // it later (`EnsureFrameRendered`, `RenderPendingDrawsToRenderTarget`,
 // `RenderPendingDrawsToRenderTargetCubeFace`). Until this task all three issued exactly one
-// `wgpuRenderPassEncoderSetScissorRect` at the top of that pass, computed from the LIVE backend
+// `wgpuRenderPassEncoderSetScissorRect` at the top of that pass, computed from the LIVE renderer
 // members `scissorEnabled_`/`scissorX_`/`scissorY_`/`scissorW_`/`scissorH_`. Deferring the
 // RECORDING is legal; RESOLVING the value late is not. The consequence is that
 //
@@ -17,7 +17,7 @@
 // executed all three draws under the FULL rectangle, i.e. whatever happened to be current when the
 // pass was recorded. Two rectangles in one cycle collapsed last-wins, and a restore before the
 // flush silently unclipped every already-queued draw. `SetRenderTarget` itself resets
-// ScissorRectangle to the newly bound target's full size (FNA parity), so on this backend an
+// ScissorRectangle to the newly bound target's full size (FNA parity), so on this renderer an
 // ordinary bind cycle ALWAYS ended with the full rectangle live -- which is why the defect reached
 // every render target as well as the backbuffer.
 //
@@ -30,7 +30,7 @@
 //     fence, no sleep, no extra frame, no render-target switch. Each sequence is queued whole and
 //     observed exactly once at its end. A fixture that reads or switches targets between scissor
 //     changes cannot see this defect at all -- a render-target switch IS the flush on this
-//     backend, which is exactly how the defect survived every existing scissor test.
+//     renderer, which is exactly how the defect survived every existing scissor test.
 //   * The rectangle is restored to the whole target BEFORE the single observation, so "resolve at
 //     flush time" and "capture at queue time" predict visibly different images rather than the
 //     same one.
@@ -39,7 +39,7 @@
 //     rectangle applied as a VIEWPORT (which squeezes rather than clips), X/Y dropped but
 //     Width/Height kept, Width/Height dropped but X/Y kept, the offset applied twice and a
 //     flipped Y all produce distinct, asserted pixel layouts.
-//   * ScissorTestEnable is exercised in both states and across transitions, so a backend that
+//   * ScissorTestEnable is exercised in both states and across transitions, so a renderer that
 //     captures the rectangle but reads the enable flag live still fails.
 //
 // The palette is 0/255-only, an exact fixed point of sRGB encoding, so every comparison is
@@ -127,7 +127,7 @@ namespace
         Unsupported,  ///< Raises; the caller's destination is left untouched.
     };
 
-    /// The complete, reviewed per-backend claim this file enforces.
+    /// The complete, reviewed per-renderer claim this file enforces.
     struct Contract
     {
         const char* name;
@@ -137,7 +137,7 @@ namespace
         /// A 3D draw into a RenderTarget2D is clipped by GraphicsDevice.ScissorRectangle.
         bool targetScissorApplies;
         /// A 3D draw on the BACKBUFFER is clipped by GraphicsDevice.ScissorRectangle. Declared
-        /// separately from the render-target answer: a backend can honour one and not the other.
+        /// separately from the render-target answer: a renderer can honour one and not the other.
         bool backbufferScissorApplies;
         /// A SpriteBatch fill is clipped when Begin's RasterizerState enables the scissor test.
         bool spriteScissorApplies;
@@ -145,64 +145,64 @@ namespace
         bool emptyScissorDrawsNothing;
         /**
          * A ScissorRectangle reaching past the bound target is REJECTED with a diagnostic instead
-         * of being clipped to the target. True only where the backend's declared job is to validate
-         * (Headless, HEADLESS-23); every rendering backend clips, which is the CNA/FNA contract.
+         * of being clipped to the target. True only where the renderer's declared job is to validate
+         * (Headless, HEADLESS-23); every rendering renderer clips, which is the CNA/FNA contract.
          */
         bool outOfBoundsScissorRejected;
         bool wantHiDefProfile;
     };
 
-#if defined(CNA_BACKEND_WEBGPU)
+#if defined(CNA_RENDERER_WEBGPU)
     constexpr Contract kContract{"WEBGPU", Support::Exact, Support::Exact, true,
                                  true, true, true, true, false, false};
-#elif defined(CNA_BACKEND_VULKAN)
-    // `emptyScissorDrawsNothing` false: measured here. `VulkanGraphicsBackend`'s `computeScissor`
+#elif defined(CNA_RENDERER_VULKAN)
+    // `emptyScissorDrawsNothing` false: measured here. `VulkanRenderer`'s `computeScissor`
     // returns the WHOLE framebuffer for `sw == 0 || sh == 0`, so a degenerate rectangle does not
     // clip the draw away. Every other check in this file passes on Vulkan, which isolates this to
     // the degenerate case; it is recorded as its own finding rather than fixed here, and check E1
     // asserts the IGNORED outcome exactly so the declaration is falsifiable in both directions.
     constexpr Contract kContract{"VULKAN", Support::Exact, Support::Exact, true,
                                  true, true, true, false, false, false};
-#elif defined(CNA_BACKEND_EASYGL)
+#elif defined(CNA_RENDERER_EASYGL)
     // `emptyScissorDrawsNothing` false: measured here, by a DIFFERENT mechanism from Vulkan's.
-    // `EasyGLGraphicsBackend::SetScissorRect` returns early on `w <= 0 || h <= 0` and leaves the
+    // `EasyGLRenderer::SetScissorRect` returns early on `w <= 0 || h <= 0` and leaves the
     // previously installed rectangle in place, so a degenerate rectangle is not merely unclipping,
-    // it never reaches the backend at all. Same observable, recorded as its own finding.
+    // it never reaches the renderer at all. Same observable, recorded as its own finding.
     constexpr Contract kContract{"EASYGL", Support::Exact, Support::Exact, true,
                                  true, true, true, false, false, false};
-#elif defined(CNA_BACKEND_BGFX)
+#elif defined(CNA_RENDERER_BGFX)
     // `emptyScissorDrawsNothing` false: measured here, the same observable as Vulkan and EasyGL.
     constexpr Contract kContract{"BGFX", Support::Exact, Support::Exact, true,
                                  true, true, true, false, false, false};
-#elif defined(CNA_BACKEND_SDL_GPU)
+#elif defined(CNA_RENDERER_SDL_GPU)
     // SdlGpu has no `ReadBackbuffer` override at all, so `GetBackBufferData` raises; its
     // render-target oracle still answers every render-target question in this file.
     // `emptyScissorDrawsNothing` false: measured here, the same observable as Vulkan and EasyGL.
     constexpr Contract kContract{"SDL_GPU", Support::Unsupported, Support::Exact, true,
                                  true, true, true, false, false, false};
-#elif defined(CNA_BACKEND_SOFTWARE)
+#elif defined(CNA_RENDERER_SOFTWARE)
     constexpr Contract kContract{"SOFTWARE", Support::Exact, Support::Exact, true,
                                  true, true, true, true, false, false};
-#elif defined(CNA_BACKEND_HEADLESS)
+#elif defined(CNA_RENDERER_HEADLESS)
     // Headless rasterizes nothing and its readback is REMED-GFX-127/130's deterministic refusal.
-    // Every sequence must still be legal. `outOfBoundsScissorRejected` true: this is the backend
+    // Every sequence must still be legal. `outOfBoundsScissorRejected` true: this is the renderer
     // whose declared job is to validate, and HEADLESS-23 makes `SetScissorRect` cross-reference the
     // bound target's real size and raise `HeadlessValidationException` for a rectangle that leaves
     // it, instead of clipping. Checks E2/E3 assert the REJECTION there, so the declaration is
     // falsifiable in both directions rather than being an untested exemption.
     constexpr Contract kContract{"HEADLESS", Support::Unsupported, Support::Unsupported, true,
                                  true, true, true, true, true, false};
-#elif defined(CNA_BACKEND_D3D11)
+#elif defined(CNA_RENDERER_D3D11)
     constexpr Contract kContract{"D3D11", Support::Exact, Support::Exact, true,
                                  true, true, true, true, false, false};
-#elif defined(CNA_BACKEND_D3D9)
+#elif defined(CNA_RENDERER_D3D9)
     constexpr Contract kContract{"D3D9", Support::Exact, Support::Exact, true,
                                  true, true, true, true, false, true};
-#elif defined(CNA_BACKEND_LLGL)
+#elif defined(CNA_RENDERER_LLGL)
     constexpr Contract kContract{"LLGL", Support::Exact, Support::Exact, true,
                                  true, true, true, true, false, false};
 #else
-#error "REMED-GFX-146: this backend has no declared deferred-scissor contract."
+#error "REMED-GFX-146: this renderer has no declared deferred-scissor contract."
 #endif
 
     const Color kBlack  (  0,   0,   0, 255);
@@ -432,7 +432,7 @@ class DeferredScissorCaptureTest : public Game
      *
      * These sequences deliberately queue every draw of a bind cycle before anything flushes, so a
      * buffer destroyed at the end of the calling helper would be gone while the draw is still
-     * pending on backends that do not shadow-copy vertex data at queue time. Each section clears
+     * pending on renderers that do not shadow-copy vertex data at queue time. Each section clears
      * the list on entry, i.e. after the previous section's single observation.
      */
     VertexBuffer& MakeVb(GraphicsDevice& dev, const std::array<VertexPositionColor, 6>& v)
@@ -523,7 +523,7 @@ class DeferredScissorCaptureTest : public Game
      * @brief A1 -- left half red, right half blue, a smaller green quad back in the left half.
      *
      * The rectangle is restored to the whole target after the last draw and before the only
-     * readback, so a backend that resolves the scissor when it records the pass paints the whole
+     * readback, so a renderer that resolves the scissor when it records the pass paints the whole
      * target blue with a green centre band instead. This is the canonical sequence: bind, enable
      * the scissor test, rectangle A, a full-target red quad, rectangle B, a full-target blue quad,
      * rectangle A again, a SMALLER green quad, unbind, one readback.
@@ -534,7 +534,7 @@ class DeferredScissorCaptureTest : public Game
         keepAlive_.clear();
         if (!kContract.draws3D || !kContract.targetScissorApplies)
         {
-            skip(label + ": skipped -- no 3D render-target scissor on this backend");
+            skip(label + ": skipped -- no 3D render-target scissor on this renderer");
             return;
         }
         auto rt = MakeTarget(dev, kRTW, kRTH);
@@ -583,7 +583,7 @@ class DeferredScissorCaptureTest : public Game
         keepAlive_.clear();
         if (!kContract.draws3D || !kContract.targetScissorApplies)
         {
-            skip(label + ": skipped -- no 3D render-target scissor on this backend");
+            skip(label + ": skipped -- no 3D render-target scissor on this renderer");
             return;
         }
         auto rt = MakeTarget(dev, kRTW, kRTH);
@@ -620,7 +620,7 @@ class DeferredScissorCaptureTest : public Game
         keepAlive_.clear();
         if (!kContract.draws3D || !kContract.targetScissorApplies)
         {
-            skip(label + ": skipped -- no 3D render-target scissor on this backend");
+            skip(label + ": skipped -- no 3D render-target scissor on this renderer");
             return;
         }
         auto rt = MakeTarget(dev, kRTW, kRTH);
@@ -663,7 +663,7 @@ class DeferredScissorCaptureTest : public Game
         keepAlive_.clear();
         if (!kContract.draws3D || !kContract.targetScissorApplies)
         {
-            skip(label + ": skipped -- no 3D render-target scissor on this backend");
+            skip(label + ": skipped -- no 3D render-target scissor on this renderer");
             return;
         }
         auto rt = MakeTarget(dev, kRTW, kRTH);
@@ -712,7 +712,7 @@ class DeferredScissorCaptureTest : public Game
         keepAlive_.clear();
         if (!kContract.draws3D || !kContract.targetScissorApplies)
         {
-            skip(label + ": skipped -- no 3D render-target scissor on this backend");
+            skip(label + ": skipped -- no 3D render-target scissor on this renderer");
             return;
         }
         auto rt = MakeTarget(dev, kOddW, kOddH);
@@ -742,15 +742,15 @@ class DeferredScissorCaptureTest : public Game
     /**
      * @brief E1 -- what a degenerate (zero-width or zero-height) rectangle does.
      *
-     * A measured cross-backend divergence, declared per backend rather than standardised away.
+     * A measured cross-renderer divergence, declared per renderer rather than standardised away.
      * WebGPU takes the natural hardware semantics -- a zero-extent scissor rejects every fragment.
      * Vulkan's `computeScissor` returns the WHOLE framebuffer for `sw == 0 || sh == 0`, and
      * EasyGL's `SetScissorRect` returns early on `w <= 0 || h <= 0` and leaves the previous
      * rectangle installed; two different mechanisms, one shared observable -- the draw is not
      * clipped away. Both outcomes are asserted EXACTLY here, so either declaration turns red the
-     * day its backend changes.
+     * day its renderer changes.
      *
-     * The final real rectangle is a control on every backend: whatever the degenerate ones do,
+     * The final real rectangle is a control on every renderer: whatever the degenerate ones do,
      * a genuine rectangle after them must still clip exactly, which rules out "the rectangle
      * stopped working at all".
      */
@@ -760,7 +760,7 @@ class DeferredScissorCaptureTest : public Game
         keepAlive_.clear();
         if (!kContract.draws3D || !kContract.targetScissorApplies)
         {
-            skip(label + ": skipped -- no 3D render-target scissor on this backend");
+            skip(label + ": skipped -- no 3D render-target scissor on this renderer");
             return;
         }
         auto rt = MakeTarget(dev, kRTW, kRTH);
@@ -811,7 +811,7 @@ class DeferredScissorCaptureTest : public Game
     /**
      * @brief E2 -- a rectangle that hangs off the target is clipped at the boundary, not wrapped.
      *
-     * On a backend that declares `outOfBoundsScissorRejected` the same rectangle must instead
+     * On a renderer that declares `outOfBoundsScissorRejected` the same rectangle must instead
      * raise, and the target must be left as it was: both outcomes are asserted, so neither
      * declaration is an untested exemption.
      */
@@ -821,7 +821,7 @@ class DeferredScissorCaptureTest : public Game
         keepAlive_.clear();
         if (!kContract.draws3D || !kContract.targetScissorApplies)
         {
-            skip(label + ": skipped -- no 3D render-target scissor on this backend");
+            skip(label + ": skipped -- no 3D render-target scissor on this renderer");
             return;
         }
         auto rt = MakeTarget(dev, kRTW, kRTH);
@@ -847,7 +847,7 @@ class DeferredScissorCaptureTest : public Game
         {
             check(threw, threw ? label + ": rejected with a diagnostic (declared): " + why
                                : label + ": accepted an out-of-bounds rectangle although this "
-                                         "backend declares it a validation error");
+                                         "renderer declares it a validation error");
             return;
         }
         if (threw)
@@ -874,7 +874,7 @@ class DeferredScissorCaptureTest : public Game
         keepAlive_.clear();
         if (!kContract.draws3D || !kContract.targetScissorApplies)
         {
-            skip(label + ": skipped -- no 3D render-target scissor on this backend");
+            skip(label + ": skipped -- no 3D render-target scissor on this renderer");
             return;
         }
         auto rt = MakeTarget(dev, kRTW, kRTH);
@@ -900,7 +900,7 @@ class DeferredScissorCaptureTest : public Game
         {
             check(threw, threw ? label + ": rejected with a diagnostic (declared): " + why
                                : label + ": accepted a wholly out-of-bounds rectangle although "
-                                         "this backend declares it a validation error");
+                                         "this renderer declares it a validation error");
             return;
         }
         if (threw)
@@ -926,7 +926,7 @@ class DeferredScissorCaptureTest : public Game
         keepAlive_.clear();
         if (!kContract.draws3D || !kContract.targetScissorApplies)
         {
-            skip(label + ": skipped -- no 3D render-target scissor on this backend");
+            skip(label + ": skipped -- no 3D render-target scissor on this renderer");
             return;
         }
         auto a = MakeTarget(dev, kRTW, kRTH);
@@ -957,7 +957,7 @@ class DeferredScissorCaptureTest : public Game
     {
         const std::string label = "F2 target -> backbuffer -> target";
         keepAlive_.clear();
-        if (!kContract.draws3D) { skip(label + ": skipped -- no 3D on this backend"); return; }
+        if (!kContract.draws3D) { skip(label + ": skipped -- no 3D on this renderer"); return; }
         auto rt = MakeTarget(dev, kRTW, kRTH);
 
         dev.SetRenderTarget(rt.get());
@@ -985,7 +985,7 @@ class DeferredScissorCaptureTest : public Game
         }
         if (!kContract.backbufferScissorApplies)
         {
-            skip(label + " (backbuffer): sequence issued, judgement skipped -- this backend does "
+            skip(label + " (backbuffer): sequence issued, judgement skipped -- this renderer does "
                          "not clip backbuffer draws with ScissorRectangle");
             return;
         }
@@ -1004,7 +1004,7 @@ class DeferredScissorCaptureTest : public Game
     {
         const std::string label = "F3 backbuffer 3D A->B->A";
         keepAlive_.clear();
-        if (!kContract.draws3D) { skip(label + ": skipped -- no 3D on this backend"); return; }
+        if (!kContract.draws3D) { skip(label + ": skipped -- no 3D on this renderer"); return; }
         const int third = bbW_ / 3;
 
         dev.Clear(kBlack);
@@ -1019,7 +1019,7 @@ class DeferredScissorCaptureTest : public Game
 
         if (!kContract.backbufferScissorApplies)
         {
-            skip(label + ": sequence issued, judgement skipped -- this backend does not clip "
+            skip(label + ": sequence issued, judgement skipped -- this renderer does not clip "
                          "backbuffer draws with ScissorRectangle");
             return;
         }
@@ -1041,7 +1041,7 @@ class DeferredScissorCaptureTest : public Game
     {
         const std::string label = "F4 backbuffer A -> target -> backbuffer B";
         keepAlive_.clear();
-        if (!kContract.draws3D) { skip(label + ": skipped -- no 3D on this backend"); return; }
+        if (!kContract.draws3D) { skip(label + ": skipped -- no 3D on this renderer"); return; }
         auto rt = MakeTarget(dev, kRTW, kRTH);
         const int third = bbW_ / 3;
 
@@ -1065,7 +1065,7 @@ class DeferredScissorCaptureTest : public Game
         }
         if (!kContract.backbufferScissorApplies)
         {
-            skip(label + " (backbuffer): sequence issued, judgement skipped -- this backend does "
+            skip(label + " (backbuffer): sequence issued, judgement skipped -- this renderer does "
                          "not clip backbuffer draws with ScissorRectangle");
             return;
         }
@@ -1089,7 +1089,7 @@ class DeferredScissorCaptureTest : public Game
         keepAlive_.clear();
         if (!kContract.draws3D || !kContract.targetScissorApplies)
         {
-            skip(label + ": skipped -- no 3D render-target scissor on this backend");
+            skip(label + ": skipped -- no 3D render-target scissor on this renderer");
             return;
         }
         auto rt = MakeTarget(dev, kRTW, kRTH);
@@ -1167,7 +1167,7 @@ class DeferredScissorCaptureTest : public Game
         keepAlive_.clear();
         if (!kContract.draws3D || !kContract.targetScissorApplies)
         {
-            skip(label + ": skipped -- no 3D render-target scissor on this backend");
+            skip(label + ": skipped -- no 3D render-target scissor on this renderer");
             return;
         }
         auto rt = MakeTarget(dev, kRTW, kRTH);
@@ -1196,7 +1196,7 @@ class DeferredScissorCaptureTest : public Game
 
         if (!CanJudgeTarget(label)) return;
         const Image image = ReadTarget(*rt, kRTW, kRTH);
-        // Whatever this backend's buffer-lifetime rule says about the COLOUR, the CLIP must be
+        // Whatever this renderer's buffer-lifetime rule says about the COLOUR, the CLIP must be
         // rectangle A: the right half must not have been painted at all.
         CheckProbes(image, {{ 40, 24, kBlack }, { 63, 24, kBlack }}, label);
     }
@@ -1208,7 +1208,7 @@ class DeferredScissorCaptureTest : public Game
     /**
      * @brief Runs one effect family twice under two disjoint rectangles and asserts both landed.
      *
-     * A family that raises before drawing (unimplemented on this backend) is reported as a
+     * A family that raises before drawing (unimplemented on this renderer) is reported as a
      * capability boundary rather than a failure -- this task adds no new functionality.
      */
     void RunFamilyCase(GraphicsDevice& dev, const std::string& label,
@@ -1219,7 +1219,7 @@ class DeferredScissorCaptureTest : public Game
         keepAlive_.clear();
         if (!kContract.draws3D || !kContract.targetScissorApplies)
         {
-            skip(label + ": skipped -- no 3D render-target scissor on this backend");
+            skip(label + ": skipped -- no 3D render-target scissor on this renderer");
             return;
         }
         auto rt = MakeTarget(dev, kRTW, kRTH);
@@ -1253,13 +1253,13 @@ class DeferredScissorCaptureTest : public Game
         // If the family rasterized nothing at all, the target still holds the clear colour and the
         // scissor question is unanswerable here -- a scissor defect would show the SECOND draw's
         // colour on the left half, never the clear colour on both. Reported as a boundary so a
-        // shading gap on some backend is not silently credited to, or blamed on, this task.
+        // shading gap on some renderer is not silently credited to, or blamed on, this task.
         const bool renderedNothing = !image.threw &&
             Same(image.At(8, 24), kBlack) && Same(image.At(24, 24), kBlack) &&
             Same(image.At(40, 24), kBlack) && Same(image.At(56, 24), kBlack);
         if (renderedNothing)
         {
-            skip(label + ": capability boundary -- this family rasterized nothing on this backend, "
+            skip(label + ": capability boundary -- this family rasterized nothing on this renderer, "
                          "so it cannot answer the scissor question");
             return;
         }
@@ -1745,7 +1745,7 @@ class DeferredScissorCaptureTest : public Game
         keepAlive_.clear();
         if (!kContract.draws3D || !kContract.targetScissorApplies)
         {
-            skip(label + ": skipped -- no 3D render-target scissor on this backend");
+            skip(label + ": skipped -- no 3D render-target scissor on this renderer");
             return;
         }
         auto rt = MakeTarget(dev, kRTW, kRTH);
@@ -1775,7 +1775,7 @@ class DeferredScissorCaptureTest : public Game
         keepAlive_.clear();
         if (!kContract.draws3D || !kContract.targetScissorApplies)
         {
-            skip(label + ": skipped -- no 3D render-target scissor on this backend");
+            skip(label + ": skipped -- no 3D render-target scissor on this renderer");
             return;
         }
         auto rt = MakeTarget(dev, kRTW, kRTH);
@@ -1812,7 +1812,7 @@ class DeferredScissorCaptureTest : public Game
         keepAlive_.clear();
         if (!kContract.draws3D || !kContract.targetScissorApplies)
         {
-            skip(label + ": skipped -- no 3D render-target scissor on this backend");
+            skip(label + ": skipped -- no 3D render-target scissor on this renderer");
             return;
         }
         auto rt = MakeTarget(dev, kRTW, kRTH);
@@ -1853,7 +1853,7 @@ class DeferredScissorCaptureTest : public Game
         keepAlive_.clear();
         if (!kContract.draws3D || !kContract.targetScissorApplies)
         {
-            skip(label + ": skipped -- no 3D render-target scissor on this backend");
+            skip(label + ": skipped -- no 3D render-target scissor on this renderer");
             return;
         }
         auto rt = MakeTarget(dev, kRTW, kRTH);
@@ -1885,7 +1885,7 @@ class DeferredScissorCaptureTest : public Game
     {
         const std::string label = "K1 ScissorTestEnable false ignores the rectangle";
         keepAlive_.clear();
-        if (!kContract.draws3D) { skip(label + ": skipped -- no 3D on this backend"); return; }
+        if (!kContract.draws3D) { skip(label + ": skipped -- no 3D on this renderer"); return; }
         auto rt = MakeTarget(dev, kRTW, kRTH);
 
         dev.SetRenderTarget(rt.get());
@@ -1909,7 +1909,7 @@ class DeferredScissorCaptureTest : public Game
      * @brief K2 -- enabled -> DISABLED -> enabled inside one bind cycle.
      *
      * The middle draw must cover the whole target and the two outer ones must be clipped, so a
-     * backend that captures the RECTANGLE but reads the ENABLE flag live fails here even though
+     * renderer that captures the RECTANGLE but reads the ENABLE flag live fails here even though
      * every other check in this file passes.
      */
     void RunScissorTestToggledInOneCycle(GraphicsDevice& dev)
@@ -1918,7 +1918,7 @@ class DeferredScissorCaptureTest : public Game
         keepAlive_.clear();
         if (!kContract.draws3D || !kContract.targetScissorApplies)
         {
-            skip(label + ": skipped -- no 3D render-target scissor on this backend");
+            skip(label + ": skipped -- no 3D render-target scissor on this renderer");
             return;
         }
         auto rt = MakeTarget(dev, kRTW, kRTH);
@@ -1961,7 +1961,7 @@ class DeferredScissorCaptureTest : public Game
         keepAlive_.clear();
         if (!kContract.draws3D || !kContract.targetScissorApplies)
         {
-            skip(label + ": skipped -- no 3D render-target scissor on this backend");
+            skip(label + ": skipped -- no 3D render-target scissor on this renderer");
             return;
         }
         auto rt = MakeTarget(dev, kRTW, kRTH);
@@ -2018,7 +2018,7 @@ class DeferredScissorCaptureTest : public Game
         keepAlive_.clear();
         if (!kContract.draws3D || !kContract.targetScissorApplies)
         {
-            skip(label + ": skipped -- no 3D render-target scissor on this backend");
+            skip(label + ": skipped -- no 3D render-target scissor on this renderer");
             return;
         }
         auto rt = MakeTarget(dev, kRTW, kRTH);
@@ -2054,7 +2054,7 @@ class DeferredScissorCaptureTest : public Game
         keepAlive_.clear();
         if (!kContract.draws3D || !kContract.targetScissorApplies)
         {
-            skip(label + ": skipped -- no 3D render-target scissor on this backend");
+            skip(label + ": skipped -- no 3D render-target scissor on this renderer");
             return;
         }
         auto rt = MakeTarget(dev, kRTW, kRTH);
@@ -2124,7 +2124,7 @@ class DeferredScissorCaptureTest : public Game
 
     void Draw(const GameTime&) override
     {
-        // Frame 0 is a warm-up: some backends copy texture payloads only at frame boundaries.
+        // Frame 0 is a warm-up: some renderers copy texture payloads only at frame boundaries.
         if (phase_ == 0)
         {
             phase_ = 1;
@@ -2143,7 +2143,7 @@ class DeferredScissorCaptureTest : public Game
             bbW_ = vp.getWidthProperty();
             bbH_ = vp.getHeightProperty();
         }
-        std::printf("REMED-GFX-146 deferred scissor capture -- backend %s, backbuffer %dx%d\n",
+        std::printf("REMED-GFX-146 deferred scissor capture -- renderer %s, backbuffer %dx%d\n",
                     kContract.name, bbW_, bbH_);
 
         RunLeftRightLeft(dev);

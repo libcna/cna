@@ -2,7 +2,7 @@
 
 ## Decision
 
-One bounded stock-effect route is feasible below the public backend: unlit, no-fog, textured
+One bounded stock-effect route is feasible below the public renderer: unlit, no-fog, textured
 `BasicEffect` geometry with optional vertex colour. The CPU bridge owns already-clipped geometry,
 reciprocal-W interpolation, point sampling, material colour, depth and the final RGBA8 image. Skia
 only receives that completed image through `SkiaSurface::WritePixels`.

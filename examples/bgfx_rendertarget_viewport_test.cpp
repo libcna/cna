@@ -2,7 +2,7 @@
 // REMED-GFX-063: Bgfx GraphicsDevice.Viewport must be honored for draws issued while a
 // RenderTarget2D is bound — not hardcoded to the render target's full extent.
 //
-// Before the fix, BgfxGraphicsBackend::ApplyViewportOverride() gated the custom viewport on
+// Before the fix, BgfxRenderer::ApplyViewportOverride() gated the custom viewport on
 // currentViewId_ == 0 (the backbuffer view), so a custom sub-region Viewport set while a render
 // target was bound was ignored: RT views stayed at their BindAsRenderTarget()/EnsureViewState()
 // full-RT-size setViewRect(). The backbuffer pass honored it (Task 880); render targets did not.

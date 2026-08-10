@@ -20,10 +20,10 @@
 //     so a custom viewport did nothing -- the sprite landed at its raw full-target absolute rect.
 //
 // Testing strategy: assertions read the BACKBUFFER via GetBackBufferData -- the top-left-consistent
-// presented image, robust across backends and headless environments (unlike direct RenderTarget2D
-// readback of a still-deferred sprite batch, which does not flush on some backends). The whole
+// presented image, robust across renderers and headless environments (unlike direct RenderTarget2D
+// readback of a still-deferred sprite batch, which does not flush on some renderers). The whole
 // 96x72 backbuffer is read ONCE per check, then probed / bounding-boxed on the CPU. The RenderTarget2D
-// custom-Viewport path is the same per-backend clip-space bake as the backbuffer path (each backend's
+// custom-Viewport path is the same per-renderer clip-space bake as the backbuffer path (each renderer's
 // sprite NDC/ortho divides by the active Viewport regardless of RT vs backbuffer), and is additionally
 // guarded against regression by the full RT test suite; the switch test covers per-batch viewports.
 //
@@ -263,7 +263,7 @@ protected:
         // -------------------------------------------------------------------------------------
         // Check D (REMED-GFX-116) -- the mirror image of Check A: a FULL-TARGET sprite followed by
         // a sub-Viewport that no draw ever uses. Check A only proves a SUB-REGION batch is not
-        // promoted to the whole target; nothing here proved the converse, and a backend that
+        // promoted to the whole target; nothing here proved the converse, and a renderer that
         // captures the viewport only for the sub-region case (WebGPU after REMED-GFX-072) then
         // resolved the full-target batch against whatever was live when it recorded the pass --
         // squeezing this sprite into the trailing sub-Viewport. The viewport is deliberately NOT

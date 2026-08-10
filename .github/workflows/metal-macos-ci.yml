@@ -1,4 +1,4 @@
-name: Native Metal backend (macOS)
+name: Native Metal renderer (macOS)
 
 on:
   push:
@@ -6,21 +6,21 @@ on:
       - '.github/workflows/metal-macos-ci.yml'
       - 'CMakeLists.txt'
       - 'cmake/BackendLibraries.cmake'
-      - 'cmake/BackendSelection.cmake'
+      - 'cmake/RendererSelection.cmake'
       - 'modules/CMakeLists.txt'
       - 'cmake/Examples.cmake'
       - 'cmake/Tests/MetalTests.cmake'
       - 'examples/metal_capabilities_test.cpp'
       - 'examples/metal_smoke_test.cpp'
       - 'modules/graphics/include/CNA/GraphicsCapability.hpp'
-      - 'modules/core/include/CNA/GraphicsBackendType.hpp'
-      - 'modules/graphics/include/CNA/Internal/Backends/Common/IGraphicsBackend.hpp'
-      - 'modules/renderers/metal/include/CNA/Internal/Backends/Metal/**'
+      - 'modules/core/include/CNA/GraphicsRendererType.hpp'
+      - 'modules/graphics/include/CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp'
+      - 'modules/renderers/metal/include/CNA/Internal/Renderers/Metal/**'
       - 'modules/graphics/include/Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp'
       - 'modules/renderers/metal/src/**'
       - 'modules/graphics/src/Xna/GraphicsDevice.cpp'
-      - 'modules/renderers/metal/tests/CNA/Internal/Backends/Metal/**'
-      - 'modules/graphics/tests/Microsoft/Xna/Framework/GraphicsBackendCompileDefinitionTests.cpp'
+      - 'modules/renderers/metal/tests/CNA/Internal/Renderers/Metal/**'
+      - 'modules/graphics/tests/Microsoft/Xna/Framework/GraphicsRendererCompileDefinitionTests.cpp'
   pull_request:
   workflow_dispatch:
 
@@ -52,18 +52,18 @@ jobs:
       - name: Install build dependencies
         run: brew install ccache ffmpeg
 
-      - name: Configure native Metal backend
+      - name: Configure native Metal renderer
         working-directory: cna
         run: >
           cmake -S . -B cmake-build-metal
-          -DCNA_GRAPHICS_BACKEND=METAL
+          -DCNA_GRAPHICS_RENDERER=METAL
           -DCNA_BUILD_TESTS=ON
           -DCNA_USE_CCACHE=ON
           -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
           -DCNA_MAX_VENDORED_BUILD_JOBS=2
           -DCMAKE_POLICY_VERSION_MINIMUM=3.5
 
-      - name: Build native Metal backend
+      - name: Build native Metal renderer
         working-directory: cna
         run: cmake --build cmake-build-metal --parallel 3
 
@@ -78,10 +78,10 @@ jobs:
           --output-on-failure
           --parallel 3
 
-      - name: Run backend compile-definition control
+      - name: Run renderer compile-definition control
         working-directory: cna
         run: >
           ctest --test-dir cmake-build-metal
-          -R '^GraphicsBackendCompileDefinitionsTest\.'
+          -R '^GraphicsRendererCompileDefinitionsTest\.'
           --output-on-failure
           --parallel 3

@@ -6,15 +6,15 @@
 // reported by PresentationParameters as W x H, a call passing exactly W*H Color elements must succeed
 // and return the whole backbuffer, byte-exact, on the FIRST observable frame -- with NO SetRenderTarget
 // round trip, no extra Present, no dummy draw and no viewport reset first. Its required element count
-// must come from the backbuffer description, never from the backend's live viewport, a previously bound
+// must come from the backbuffer description, never from the renderer's live viewport, a previously bound
 // target, a stale drawable size or a lazily initialised pass extent.
 //
-// Pre-fix, WebGPU and SDL_GPU sized the rectangle-less region from the backend's live viewport
-// (GraphicsDevice::GetBackBufferData asked backend_->GetViewportSize), which under the default
+// Pre-fix, WebGPU and SDL_GPU sized the rectangle-less region from the renderer's live viewport
+// (GraphicsDevice::GetBackBufferData asked renderer_->GetViewportSize), which under the default
 // FixedHeightDynamicWidth presentation mode is height-locked to the virtual resolution and width-scaled
 // by the window's aspect and, before the window is realised, is derived from a stale physical size --
 // so a full-surface read of exactly W*H elements was rejected with "data array too small for requested
-// region" on those two backends while it was byte-exact on Software, EasyGL, Vulkan and Bgfx.
+// region" on those two renderers while it was byte-exact on Software, EasyGL, Vulkan and Bgfx.
 //
 // Each leg runs in its own process (fork+exec) so its FIRST frame is genuinely first: no earlier leg's
 // SetRenderTarget or Present can warm the surface up. A leg's exit code is the only PASS/FAIL signal; a
@@ -62,57 +62,57 @@ using namespace Microsoft::Xna::Framework::Graphics;
 
 namespace
 {
-#if defined(CNA_BACKEND_HEADLESS)
-    constexpr const char* kBackendName = "HEADLESS";
+#if defined(CNA_RENDERER_HEADLESS)
+    constexpr const char* kRendererName = "HEADLESS";
     constexpr bool kRasterizes = false;
-#elif defined(CNA_BACKEND_SOFTWARE)
-    constexpr const char* kBackendName = "SOFTWARE";
+#elif defined(CNA_RENDERER_SOFTWARE)
+    constexpr const char* kRendererName = "SOFTWARE";
     constexpr bool kRasterizes = true;
-#elif defined(CNA_BACKEND_EASYGL)
-    constexpr const char* kBackendName = "EASYGL";
+#elif defined(CNA_RENDERER_EASYGL)
+    constexpr const char* kRendererName = "EASYGL";
     constexpr bool kRasterizes = true;
-#elif defined(CNA_BACKEND_BGFX)
-    constexpr const char* kBackendName = "BGFX";
+#elif defined(CNA_RENDERER_BGFX)
+    constexpr const char* kRendererName = "BGFX";
     constexpr bool kRasterizes = true;
-#elif defined(CNA_BACKEND_VULKAN)
-    constexpr const char* kBackendName = "VULKAN";
+#elif defined(CNA_RENDERER_VULKAN)
+    constexpr const char* kRendererName = "VULKAN";
     constexpr bool kRasterizes = true;
-#elif defined(CNA_BACKEND_WEBGPU)
-    constexpr const char* kBackendName = "WEBGPU";
+#elif defined(CNA_RENDERER_WEBGPU)
+    constexpr const char* kRendererName = "WEBGPU";
     constexpr bool kRasterizes = true;
-#elif defined(CNA_BACKEND_SDL_GPU)
-    constexpr const char* kBackendName = "SDL_GPU";
+#elif defined(CNA_RENDERER_SDL_GPU)
+    constexpr const char* kRendererName = "SDL_GPU";
     constexpr bool kRasterizes = true;
-#elif defined(CNA_BACKEND_SDL_RENDERER)
-    constexpr const char* kBackendName = "SDL_RENDERER";
+#elif defined(CNA_RENDERER_SDL_RENDERER)
+    constexpr const char* kRendererName = "SDL_RENDERER";
     constexpr bool kRasterizes = true;
-#elif defined(CNA_BACKEND_SKIA)
-    constexpr const char* kBackendName = "SKIA";
+#elif defined(CNA_RENDERER_SKIA)
+    constexpr const char* kRendererName = "SKIA";
     constexpr bool kRasterizes = true;
-#elif defined(CNA_BACKEND_D3D9)
-    constexpr const char* kBackendName = "D3D9";
+#elif defined(CNA_RENDERER_D3D9)
+    constexpr const char* kRendererName = "D3D9";
     constexpr bool kRasterizes = true;
-#elif defined(CNA_BACKEND_D3D11)
-    constexpr const char* kBackendName = "D3D11";
+#elif defined(CNA_RENDERER_D3D11)
+    constexpr const char* kRendererName = "D3D11";
     constexpr bool kRasterizes = true;
-#elif defined(CNA_BACKEND_D3D12)
-    constexpr const char* kBackendName = "D3D12";
+#elif defined(CNA_RENDERER_D3D12)
+    constexpr const char* kRendererName = "D3D12";
     constexpr bool kRasterizes = true;
-#elif defined(CNA_BACKEND_LLGL)
-    constexpr const char* kBackendName = "LLGL";
+#elif defined(CNA_RENDERER_LLGL)
+    constexpr const char* kRendererName = "LLGL";
     constexpr bool kRasterizes = true;
 #else
-#error "REMED-GFX-165: this backend has no declared backbuffer-readback contract."
+#error "REMED-GFX-165: this renderer has no declared backbuffer-readback contract."
 #endif
 
-    // REMED-GFX-165 cross-backend control scope. These are PRE-EXISTING backend behaviours this task
+    // REMED-GFX-165 cross-renderer control scope. These are PRE-EXISTING renderer behaviours this task
     // must NOT change (only WebGPU/SDL_GPU production changes here); they are recorded as independent
     // findings and declared as boundaries rather than failed:
     //   - BGFX's backbuffer read honours only a full-surface read; a sub-rectangle reads back zeros
     //     (the rectangle-coordinate path through GraphicsDevice::GetBackBufferData is unchanged by this
     //     task, so this is Bgfx's own ReadBackbuffer, not the shared fix).
     //   - BGFX faults inside a runtime backbuffer resize (its bgfx::reset path, cf. REMED-GFX-158).
-#if defined(CNA_BACKEND_BGFX)
+#if defined(CNA_RENDERER_BGFX)
     constexpr bool kSupportsSubRectangleBackbufferRead = false;
     constexpr bool kSupportsRuntimeResize = false;
 #else
@@ -212,8 +212,8 @@ class BackbufferReadbackDimensionTest : public Game
         dev.setViewportProperty(Viewport(0, 0, w, h));
         dev.Clear(Color(0, 0, 0, 255));
 
-        // Build the exact W x H pattern and blit it 1:1 (no scaling) so every backend's point sampler
-        // maps each destination pixel to exactly one texel -- byte-exact on all backends, including the
+        // Build the exact W x H pattern and blit it 1:1 (no scaling) so every renderer's point sampler
+        // maps each destination pixel to exactly one texel -- byte-exact on all renderers, including the
         // Software rasterizer whose upscaling sampler otherwise perturbs stretched fills by 1 LSB.
         std::vector<std::uint8_t> px(static_cast<std::size_t>(w) * h * 4);
         for (int y = 0; y < h; ++y)
@@ -287,7 +287,7 @@ class BackbufferReadbackDimensionTest : public Game
     {
         if (!kRasterizes || r.threwNotSupported)
         {
-            boundary(label + ": oracle unavailable on " + kBackendName + " (" +
+            boundary(label + ": oracle unavailable on " + kRendererName + " (" +
                      (!kRasterizes ? "non-rasterizing" : "NotSupportedException") + ")");
             return false;
         }
@@ -323,13 +323,13 @@ class BackbufferReadbackDimensionTest : public Game
     {
         if (!kRasterizes)
         {
-            // REMED-GFX-162: a non-rasterizing backend rasterizes no backbuffer, so a VALID read
+            // REMED-GFX-162: a non-rasterizing renderer rasterizes no backbuffer, so a VALID read
             // must reject with NotSupportedException rather than fabricate a correctly-sized frame
             // (it formerly filled the caller's buffer with the last Clear() colour). The dimension
             // oracle is therefore unavailable here; the honest, deterministic rejection is asserted
             // instead. The full rejection matrix lives in backbuffer_headless_reject_test.cpp.
             check(r.threwNotSupported,
-                  label + ": non-rasterizing backend rejects the readback with NotSupportedException "
+                  label + ": non-rasterizing renderer rejects the readback with NotSupportedException "
                           "(GFX-162), got " + (r.ok() ? "success" : r.otherWhat));
             return;
         }
@@ -416,7 +416,7 @@ class BackbufferReadbackDimensionTest : public Game
         };
         if (!kSupportsSubRectangleBackbufferRead)
             boundary("D1: sub-rectangle backbuffer read is a pre-existing gap on " +
-                     std::string(kBackendName) + " (full-surface read only) -- recorded, not failed");
+                     std::string(kRendererName) + " (full-surface read only) -- recorded, not failed");
         for (const RectCase& c : valid)
         {
             if (c.sub && !kSupportsSubRectangleBackbufferRead) continue;
@@ -425,7 +425,7 @@ class BackbufferReadbackDimensionTest : public Game
             if (!kRasterizes)
             {
                 boundary(std::string(c.name) + ": read succeeded; pixel oracle unavailable on " +
-                         kBackendName + " (non-rasterizing)");
+                         kRendererName + " (non-rasterizing)");
                 continue;
             }
             int good = 0;
@@ -497,7 +497,7 @@ class BackbufferReadbackDimensionTest : public Game
      *
      * This asserts the GFX-165 dimension contract only. The PHYSICAL surface following a runtime resize
      * is a separate window-management concern: SDL_SetWindowSize is a no-op under the headless Xvfb the
-     * native backends run on here, so a window-surface backend cannot grow its swapchain at runtime in
+     * native renderers run on here, so a window-surface renderer cannot grow its swapchain at runtime in
      * this environment. Full-surface pixel exactness after a resize is therefore verified on the
      * Software control (whose backbuffer is a CPU buffer that genuinely resizes), not here.
      */
@@ -506,7 +506,7 @@ class BackbufferReadbackDimensionTest : public Game
         if (!kSupportsRuntimeResize)
         {
             boundary(id + ": runtime backbuffer resize is a pre-existing gap on " +
-                     std::string(kBackendName) + " -- recorded, not exercised");
+                     std::string(kRendererName) + " -- recorded, not exercised");
             return;
         }
         DrawPattern(dev, fromW, fromH);
@@ -568,7 +568,7 @@ class BackbufferReadbackDimensionTest : public Game
 
     void Finish()
     {
-        std::printf("[INFO] %s: %d/%d checks passed\n", kBackendName, passCount_, totalCount_);
+        std::printf("[INFO] %s: %d/%d checks passed\n", kRendererName, passCount_, totalCount_);
         std::fflush(stdout);
         result_ = (passCount_ == totalCount_ && (totalCount_ > 0 || boundaryDeclared_)) ? 0 : 1;
         Exit();

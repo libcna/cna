@@ -5,14 +5,14 @@
 // raw-pointer + explicit VertexDeclaration overload.
 //
 // Unlike Task 720's DrawPrimitives/DrawIndexedPrimitives/DrawInstancedPrimitives (which check
-// for an already-bound VertexBuffer that can never exist on this backend), DrawUserPrimitives
+// for an already-bound VertexBuffer that can never exist on this renderer), DrawUserPrimitives
 // builds its OWN transient vertex buffer from caller-supplied data on every call. Each of the 5
 // overloads checks "has an Effect been applied" FIRST (a shared, not SDL_Renderer-specific check)
 // -- so with NO effect applied, all 5 throw std::runtime_error("GraphicsDevice::DrawUserPrimitives:
 // no effect has been applied."). But WITH a real Effect applied (BasicEffect::Apply() itself does
-// not throw on SDL_Renderer -- effects are backend-agnostic data objects until actually used to
+// not throw on SDL_Renderer -- effects are renderer-agnostic data objects until actually used to
 // draw, confirmed separately by Task 726), each overload proceeds to
-// backend_->CreateVertexBuffer(n), which DOES throw SDL_Renderer's own
+// renderer_->CreateVertexBuffer(n), which DOES throw SDL_Renderer's own
 // std::runtime_error("SDL_Renderer does not support 3D: CreateVertexBuffer"). This test exercises
 // BOTH reachable exception paths for all 5 overloads -- 10 distinct throw checks in total.
 
@@ -103,13 +103,13 @@ protected:
         check(ThrowsExactRuntimeError([&] { dev.DrawUserPrimitives(PrimitiveType::TriangleList, vpc, 0, 1, vertexDecl); }, kNoEffect),
               "DrawUserPrimitives(raw+VertexDeclaration) with no applied effect throws the exact expected message");
 
-        // --- Apply a real effect (does not throw on SDL_Renderer -- backend-agnostic until draw). ---
+        // --- Apply a real effect (does not throw on SDL_Renderer -- renderer-agnostic until draw). ---
         BasicEffect effect(dev);
         bool effectApplyThrew = false;
         try { effect.Apply(); } catch (const std::exception&) { effectApplyThrew = true; }
         check(!effectApplyThrew, "BasicEffect::Apply() does not throw on SDL_Renderer");
 
-        // --- With an effect applied: all 5 overloads now reach backend_->CreateVertexBuffer,
+        // --- With an effect applied: all 5 overloads now reach renderer_->CreateVertexBuffer,
         //     which throws SDL_Renderer's own 3D-unsupported message. ---
         check(ThrowsExactRuntimeError([&] { dev.DrawUserPrimitives(PrimitiveType::TriangleList, vpc, 0, 1); }, kNo3D),
               "DrawUserPrimitives(VertexPositionColor) with an applied effect throws SDL_Renderer's exact 3D-unsupported message");

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // Task 911: Vulkan RenderTarget2D per-instance DepthStencilFormat fidelity.
 //
-// Before this task every Vulkan RenderTarget2D/RenderTargetCube silently shared the backend's
+// Before this task every Vulkan RenderTarget2D/RenderTargetCube silently shared the renderer's
 // own device-wide depthFormat_ VkFormat regardless of the DepthFormat actually requested at
 // construction time -- a RenderTarget2D constructed with DepthFormat::None still got a full,
 // real depth+stencil buffer under the hood, so depth testing "worked" (incorrectly) against it.

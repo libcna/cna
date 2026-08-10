@@ -1,7 +1,7 @@
 // Shader Model 5.0 (ps_5_0). skinned3d_vertexlit.frag.hlsl's own stride-56 sibling: consumes the
 // already-computed LitRGB/SpecularRGB/Alpha/Color varyings from
 // skinned_colored3d_vertexlit.vert.hlsl instead of recomputing Blinn-Phong per pixel. Ported from
-// EasyGLGraphicsBackend::EnsureSkinnedVertexLitProgram()'s fragment stage (CNB-67, Phase 13C).
+// EasyGLRenderer::EnsureSkinnedVertexLitProgram()'s fragment stage (CNB-67, Phase 13C).
 //
 // Same "multiply after specular add" discipline as skinned_colored3d.frag.hlsl -- see that file's
 // own doc comment for the historical bug this avoids.

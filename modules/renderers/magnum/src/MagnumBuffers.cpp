@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MS-PL
-#include "CNA/Internal/Backends/Magnum/MagnumBuffers.hpp"
+#include "CNA/Internal/Renderers/Magnum/MagnumBuffers.hpp"
 
 #include <Corrade/Containers/ArrayView.h>
 
 #include <algorithm>
 
-namespace CNA::Internal::Backends::Magnum
+namespace CNA::Internal::Renderers::Magnum
 {
     namespace
     {
@@ -167,16 +167,16 @@ namespace CNA::Internal::Backends::Magnum
         return attributes;
     }
 
-    // ---- MagnumVertexBufferBackend ----
+    // ---- MagnumVertexBufferRenderer ----
 
-    MagnumVertexBufferBackend::MagnumVertexBufferBackend(int vertexCapacity)
+    MagnumVertexBufferRenderer::MagnumVertexBufferRenderer(int vertexCapacity)
         : buffer_(std::make_unique<Mg::GL::Buffer>(Mg::GL::Buffer::TargetHint::Array))
         , identity_(NextBufferIdentity())
         , vertexCapacity_(std::max(0, vertexCapacity))
     {
     }
 
-    Mg::GL::Mesh* MagnumVertexBufferBackend::FindCachedMesh(
+    Mg::GL::Mesh* MagnumVertexBufferRenderer::FindCachedMesh(
         const std::vector<std::uint64_t>& key) const
     {
         for (const MagnumMeshCacheEntry& entry : meshCache_)
@@ -187,7 +187,7 @@ namespace CNA::Internal::Backends::Magnum
         return nullptr;
     }
 
-    Mg::GL::Mesh& MagnumVertexBufferBackend::StoreCachedMesh(
+    Mg::GL::Mesh& MagnumVertexBufferRenderer::StoreCachedMesh(
         std::vector<std::uint64_t> key, std::unique_ptr<Mg::GL::Mesh> mesh) const
     {
         if (meshCache_.size() >= kMeshCacheCapacity)
@@ -196,13 +196,13 @@ namespace CNA::Internal::Backends::Magnum
         return *meshCache_.back().mesh;
     }
 
-    void MagnumVertexBufferBackend::SetData(const void* data, int vertexCount,
+    void MagnumVertexBufferRenderer::SetData(const void* data, int vertexCount,
                                             std::size_t strideInBytes)
     {
         SetDataWithOptions(data, vertexCount, strideInBytes, SetDataOptions::None);
     }
 
-    void MagnumVertexBufferBackend::SetDataWithOptions(const void* data, int vertexCount,
+    void MagnumVertexBufferRenderer::SetDataWithOptions(const void* data, int vertexCount,
                                                        std::size_t strideInBytes,
                                                        SetDataOptions options)
     {
@@ -230,7 +230,7 @@ namespace CNA::Internal::Backends::Magnum
         Upload(data, byteCount, options);
     }
 
-    void MagnumVertexBufferBackend::Upload(const void* data, std::size_t byteCount,
+    void MagnumVertexBufferRenderer::Upload(const void* data, std::size_t byteCount,
                                            SetDataOptions options)
     {
         const std::size_t capacityBytes =
@@ -251,7 +251,7 @@ namespace CNA::Internal::Backends::Magnum
         buffer_->setSubData(0, Corrade::Containers::ArrayView<const void>{data, byteCount});
     }
 
-    void MagnumVertexBufferBackend::SetVertexDeclaration(const VertexDeclaration& vertexDeclaration)
+    void MagnumVertexBufferRenderer::SetVertexDeclaration(const VertexDeclaration& vertexDeclaration)
     {
         declarationElements_ = vertexDeclaration.GetVertexElements();
         // Every cached vertex array was built against the previous declaration, so the revision is
@@ -261,9 +261,9 @@ namespace CNA::Internal::Backends::Magnum
             strideInBytes_ = static_cast<std::size_t>(vertexDeclaration.getVertexStrideProperty());
     }
 
-    // ---- MagnumIndexBufferBackend ----
+    // ---- MagnumIndexBufferRenderer ----
 
-    MagnumIndexBufferBackend::MagnumIndexBufferBackend(int indexCapacity, bool thirtyTwoBit)
+    MagnumIndexBufferRenderer::MagnumIndexBufferRenderer(int indexCapacity, bool thirtyTwoBit)
         : buffer_(std::make_unique<Mg::GL::Buffer>(Mg::GL::Buffer::TargetHint::ElementArray))
         , identity_(NextBufferIdentity())
         , indexCapacity_(std::max(0, indexCapacity))
@@ -271,29 +271,29 @@ namespace CNA::Internal::Backends::Magnum
     {
     }
 
-    void MagnumIndexBufferBackend::SetData16(const void* data, int indexCount)
+    void MagnumIndexBufferRenderer::SetData16(const void* data, int indexCount)
     {
         SetData16WithOptions(data, indexCount, SetDataOptions::None);
     }
 
-    void MagnumIndexBufferBackend::SetData32(const void* data, int indexCount)
+    void MagnumIndexBufferRenderer::SetData32(const void* data, int indexCount)
     {
         SetData32WithOptions(data, indexCount, SetDataOptions::None);
     }
 
-    void MagnumIndexBufferBackend::SetData16WithOptions(const void* data, int indexCount,
+    void MagnumIndexBufferRenderer::SetData16WithOptions(const void* data, int indexCount,
                                                         SetDataOptions options)
     {
         Upload(data, indexCount, 2, options);
     }
 
-    void MagnumIndexBufferBackend::SetData32WithOptions(const void* data, int indexCount,
+    void MagnumIndexBufferRenderer::SetData32WithOptions(const void* data, int indexCount,
                                                         SetDataOptions options)
     {
         Upload(data, indexCount, 4, options);
     }
 
-    void MagnumIndexBufferBackend::Upload(const void* data, int indexCount, int indexSize,
+    void MagnumIndexBufferRenderer::Upload(const void* data, int indexCount, int indexSize,
                                           SetDataOptions options)
     {
         if (indexCount < 0)
@@ -307,7 +307,7 @@ namespace CNA::Internal::Backends::Magnum
         if (capacityBytes == 0)
             return;
 
-        // See MagnumVertexBufferBackend::Upload for why Discard reallocates rather than writing in
+        // See MagnumVertexBufferRenderer::Upload for why Discard reallocates rather than writing in
         // place.
         if (allocatedBytes_ < capacityBytes || options == SetDataOptions::Discard)
         {
@@ -320,32 +320,32 @@ namespace CNA::Internal::Backends::Magnum
             buffer_->setSubData(0, Corrade::Containers::ArrayView<const void>{data, byteCount});
     }
 
-    // ---- MagnumOcclusionQueryBackend ----
+    // ---- MagnumOcclusionQueryRenderer ----
 
-    MagnumOcclusionQueryBackend::MagnumOcclusionQueryBackend()
+    MagnumOcclusionQueryRenderer::MagnumOcclusionQueryRenderer()
         : query_(std::make_unique<Mg::GL::SampleQuery>(Mg::GL::SampleQuery::Target::SamplesPassed))
     {
     }
 
-    void MagnumOcclusionQueryBackend::Begin()
+    void MagnumOcclusionQueryRenderer::Begin()
     {
         query_->begin();
         started_ = true;
     }
 
-    void MagnumOcclusionQueryBackend::End()
+    void MagnumOcclusionQueryRenderer::End()
     {
         if (!started_)
             return;
         query_->end();
     }
 
-    bool MagnumOcclusionQueryBackend::IsComplete() const
+    bool MagnumOcclusionQueryRenderer::IsComplete() const
     {
         return started_ && query_->resultAvailable();
     }
 
-    int MagnumOcclusionQueryBackend::PixelCount() const
+    int MagnumOcclusionQueryRenderer::PixelCount() const
     {
         if (!started_)
             return 0;

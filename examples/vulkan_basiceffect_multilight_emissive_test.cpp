@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MS-PL
 // Task 897: BasicEffect pixel test — LightingEnabled=true with DirectionalLight1/DirectionalLight2
-// forwarded, and EmissiveColor added on the lit path (Vulkan backend).
+// forwarded, and EmissiveColor added on the lit path (Vulkan renderer).
 //
 // See examples/easygl_basiceffect_multilight_emissive_test.cpp for the full FNA-derived expected-
 // output derivation. Task 885 fixed this gap on EasyGL/Bgfx; this task (897) fixes it on Vulkan,
-// which needed new descriptor-set/UBO infrastructure (VulkanGraphicsBackend's
+// which needed new descriptor-set/UBO infrastructure (VulkanRenderer's
 // descriptorSetLayoutLitTextured_/pipelineLayoutLitTextured3D_/litTexturedUBO_, mirroring
 // EnvironmentMapEffect's own small-UBO pattern) since the 128-byte push constant shared with
 // strides 20/24/Instanced3D was already fully packed with the existing MVP/diffuse/ambient/

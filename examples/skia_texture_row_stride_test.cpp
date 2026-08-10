@@ -18,7 +18,7 @@
 // misalignment from level 0, which is what makes the two levels an independent pair rather than
 // one check run twice.
 //
-// This is verified independently rather than by reusing another backend's staging logic: Skia's
+// This is verified independently rather than by reusing another renderer's staging logic: Skia's
 // storage is CNA-owned and tightly packed, whereas a mapped GPU allocation has a driver-chosen
 // pitch, so the two cannot share a correctness argument. The GetData legs prove the CPU shadow;
 // the drawn leg proves the sampling image Skia builds over that same storage, which is the half a

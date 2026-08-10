@@ -62,7 +62,7 @@ protected:
     {
         auto& dev = getGraphicsDeviceProperty();
         dev.setRasterizerStateProperty(RasterizerState::CullNone);
-        // NOTE: setDepthStencilStateProperty() is deliberately NOT called here -- Dx8GraphicsBackend
+        // NOTE: setDepthStencilStateProperty() is deliberately NOT called here -- Dx8Renderer
         // does not wire ApplyDepthStencilState until Phase O6, so it would have no effect yet. This
         // test instead relies on Create3DDevice()'s own explicit Phase-O4 default (ZENABLE=TRUE,
         // ZFUNC=LESSEQUAL), which matches real XNA's DepthStencilState.Default exactly.

@@ -104,7 +104,7 @@ namespace CNA::Internal::Xnb
             CheckedMultiplyOrThrow({width, height, 4}, "Texture2DReader"), "Texture2DReader");
 
         // Always decompress DXT to Color -- see this reader's class docs for why (XNB-24's
-        // fuller per-backend capability query is deferred, not required for correctness).
+        // fuller per-renderer capability query is deferred, not required for correctness).
         const SurfaceFormat uploadFormat = IsCompressed(surfaceFormat) ? SurfaceFormat::Color : surfaceFormat;
         if (uploadFormat != SurfaceFormat::Color)
         {
@@ -123,8 +123,8 @@ namespace CNA::Internal::Xnb
                 "this ContentReader).");
         }
 
-        // REMED-CONTENT-001: reject dimensions/mip counts the active backend cannot actually
-        // create, before any backend-specific texture creation is attempted. Neither the native
+        // REMED-CONTENT-001: reject dimensions/mip counts the active renderer cannot actually
+        // create, before any renderer-specific texture creation is attempted. Neither the native
         // graphics APIs' own validation (Vulkan's validation layer is advisory; wgpu-native
         // validates lazily at submit time) nor CheckDecodedByteSize() above (which only bounds the
         // width*height product, not either axis individually) catches these -- confirmed

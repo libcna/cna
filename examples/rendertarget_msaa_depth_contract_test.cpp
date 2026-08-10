@@ -15,7 +15,7 @@
 //   cannot be resolved. It must be created with either `BGFX_TEXTURE_RT_WRITE_ONLY` or
 //   `BGFX_TEXTURE_MSAA_SAMPLE` flag.'
 //
-// `BgfxRenderTargetBackend`'s constructor created the depth attachment with the sample-count flag
+// `BgfxRenderTargetRenderer`'s constructor created the depth attachment with the sample-count flag
 // ALONE. bgfx's rule (src/bgfx.cpp, isFrameBufferValid) reads the DEPTH texture's own creation
 // flags: a depth attachment whose `BGFX_TEXTURE_RT_MSAA_MASK` field is greater than 1 must also
 // carry `BGFX_TEXTURE_RT_WRITE_ONLY` or `BGFX_TEXTURE_MSAA_SAMPLE`, because bgfx has no way to
@@ -104,29 +104,29 @@ namespace
     constexpr int kBBW = 64;  ///< Backbuffer width -- the only surface this file ever reads.
     constexpr int kBBH = 64;  ///< Backbuffer height.
 
-#if defined(CNA_BACKEND_HEADLESS)
-    constexpr const char* kBackendName = "HEADLESS";
+#if defined(CNA_RENDERER_HEADLESS)
+    constexpr const char* kRendererName = "HEADLESS";
     constexpr bool kRasterizes = false;
-#elif defined(CNA_BACKEND_SOFTWARE)
-    constexpr const char* kBackendName = "SOFTWARE";
+#elif defined(CNA_RENDERER_SOFTWARE)
+    constexpr const char* kRendererName = "SOFTWARE";
     constexpr bool kRasterizes = true;
-#elif defined(CNA_BACKEND_EASYGL)
-    constexpr const char* kBackendName = "EASYGL";
+#elif defined(CNA_RENDERER_EASYGL)
+    constexpr const char* kRendererName = "EASYGL";
     constexpr bool kRasterizes = true;
-#elif defined(CNA_BACKEND_BGFX)
-    constexpr const char* kBackendName = "BGFX";
+#elif defined(CNA_RENDERER_BGFX)
+    constexpr const char* kRendererName = "BGFX";
     constexpr bool kRasterizes = true;
-#elif defined(CNA_BACKEND_VULKAN)
-    constexpr const char* kBackendName = "VULKAN";
+#elif defined(CNA_RENDERER_VULKAN)
+    constexpr const char* kRendererName = "VULKAN";
     constexpr bool kRasterizes = true;
-#elif defined(CNA_BACKEND_WEBGPU)
-    constexpr const char* kBackendName = "WEBGPU";
+#elif defined(CNA_RENDERER_WEBGPU)
+    constexpr const char* kRendererName = "WEBGPU";
     constexpr bool kRasterizes = true;
-#elif defined(CNA_BACKEND_SDL_GPU)
-    constexpr const char* kBackendName = "SDL_GPU";
+#elif defined(CNA_RENDERER_SDL_GPU)
+    constexpr const char* kRendererName = "SDL_GPU";
     constexpr bool kRasterizes = true;
 #else
-#error "REMED-GFX-163: this backend has no declared MSAA/depth attachment contract."
+#error "REMED-GFX-163: this renderer has no declared MSAA/depth attachment contract."
 #endif
 
     /**
@@ -137,14 +137,14 @@ namespace
      * rather than measured on those two.
      */
     constexpr bool kCubeTargetSupported =
-#if defined(CNA_BACKEND_HEADLESS) || defined(CNA_BACKEND_SOFTWARE)
+#if defined(CNA_RENDERER_HEADLESS) || defined(CNA_RENDERER_SOFTWARE)
         false;
 #else
         true;
 #endif
 
     /**
-     * @brief Whether this backend can sample a render target and rasterize the result.
+     * @brief Whether this renderer can sample a render target and rasterize the result.
      *
      * The producer -> consumer oracle needs a textured draw. Headless rasterizes nothing at all, so
      * every content leg there records a boundary and only the LIFECYCLE (construct, bind, Clear,
@@ -155,15 +155,15 @@ namespace
     /**
      * @brief Whether a stencil test actually gates rasterization here.
      *
-     * False on SOFTWARE, whose `SoftwareGraphicsBackend::ClearStencil` is an empty body and whose
+     * False on SOFTWARE, whose `SoftwareRenderer::ClearStencil` is an empty body and whose
      * rasterizer runs no stencil test, and on WEBGPU, which stores the stencil state and
      * deliberately never bakes it into a pipeline's `WGPUStencilFaceState` (WEBGPU-83). Both are
      * pre-existing, separately recorded boundaries -- the same two the neighbouring
      * `rendertarget_depthstencil_usage_test` declares through its `stencilInRT` field -- so leg D5
-     * reports them instead of claiming a stencil result those backends cannot produce.
+     * reports them instead of claiming a stencil result those renderers cannot produce.
      */
     constexpr bool kStencilSupported =
-#if defined(CNA_BACKEND_SOFTWARE) || defined(CNA_BACKEND_WEBGPU)
+#if defined(CNA_RENDERER_SOFTWARE) || defined(CNA_RENDERER_WEBGPU)
         false;
 #else
         true;
@@ -174,12 +174,12 @@ namespace
      *
      * False on WEBGPU, whose `RenderTarget2D` constructor raises
      * `std::runtime_error("... mip-chain regeneration (mipMap=true) is not implemented on this
-     * backend yet -- see plan_webgpu.md WEBGPU-53/54")`. That is a deliberate, separately tracked
+     * renderer yet -- see plan_webgpu.md WEBGPU-53/54")`. That is a deliberate, separately tracked
      * boundary and -- importantly for this file -- it is a CATCHABLE public refusal rather than a
      * process abort, which is exactly the contract leg M14 asserts there.
      */
     constexpr bool kMipMappedTargetSupported =
-#if defined(CNA_BACKEND_WEBGPU)
+#if defined(CNA_RENDERER_WEBGPU)
         false;
 #else
         true;
@@ -198,7 +198,7 @@ namespace
     const Color kFar(30, 200, 110, 255);    ///< The farther quad (z = 0.8).
     const Color kFlat(200, 40, 120, 255);   ///< Leg S3's calibration colour.
 
-    /// Vertex-colour and sampled-texture round trips differ by a unit or two across backends.
+    /// Vertex-colour and sampled-texture round trips differ by a unit or two across renderers.
     constexpr int kTol = 14;
 
     bool Near(const Color& got, const Color& want)
@@ -245,7 +245,7 @@ class RenderTargetMsaaDepthContractTest : public Game
         if (ok) ++passCount_;
     }
 
-    /** @brief Records something this backend genuinely cannot measure, and marks the run explained. */
+    /** @brief Records something this renderer genuinely cannot measure, and marks the run explained. */
     void boundary(const std::string& text)
     {
         boundaryDeclared_ = true;
@@ -292,7 +292,7 @@ class RenderTargetMsaaDepthContractTest : public Game
      * `CullCounterClockwiseFace` without the consumer having to change rasterizer state. The
      * counter-clockwise spelling of the same quad is silently culled and the backbuffer stays at its
      * clear colour -- which reads identically to "the producer wrote nothing", so getting this wrong
-     * would have blamed the backend for a fixture defect.
+     * would have blamed the renderer for a fixture defect.
      */
     static void FillSamplingQuad(VertexPositionTexture* q)
     {
@@ -375,14 +375,14 @@ class RenderTargetMsaaDepthContractTest : public Game
     {
         if (!kSamplesTextures)
         {
-            boundary(label + ": " + kBackendName + " does not rasterize -- boundary recorded");
+            boundary(label + ": " + kRendererName + " does not rasterize -- boundary recorded");
             return;
         }
         bool failed = false;
         const Color got = SampleThroughBackbuffer(dev, rt, failed);
         if (failed)
         {
-            boundary(label + ": the producer->consumer path is unavailable on " + kBackendName +
+            boundary(label + ": the producer->consumer path is unavailable on " + kRendererName +
                      " -- boundary recorded");
             return;
         }
@@ -475,7 +475,7 @@ class RenderTargetMsaaDepthContractTest : public Game
      *
      * This is the cell that used to end the process. It asserts the PUBLIC properties the target must
      * report and that the whole lifecycle completes -- content is left to the D and S legs, so a
-     * backend without a working readback still gets a real result here.
+     * renderer without a working readback still gets a real result here.
      *
      * @param depth        the requested depth format.
      * @param samples      the requested multisample count.
@@ -492,7 +492,7 @@ class RenderTargetMsaaDepthContractTest : public Game
         check(rt->getDepthStencilFormatProperty() == depth,
               label + ": reports the requested DepthFormat back");
 
-        // The APPLIED count is device- and backend-dependent and the XNA contract permits rounding
+        // The APPLIED count is device- and renderer-dependent and the XNA contract permits rounding
         // DOWN to the nearest supported count: Vulkan and WebGPU gate render-target MSAA on the
         // device's own sample count and legitimately apply 0 here, EasyGL caps at GL_MAX_SAMPLES,
         // and SDL_GPU clamps to what the adapter reports. Asserting one exact number per cell would
@@ -606,7 +606,7 @@ class RenderTargetMsaaDepthContractTest : public Game
         }
         catch (const std::exception& e) { refused = true; what = e.what(); }
         catch (...) { what = "(non-std exception)"; }
-        check(refused, "M14 " + std::string(kBackendName) + " refuses a mip-mapped target at a "
+        check(refused, "M14 " + std::string(kRendererName) + " refuses a mip-mapped target at a "
               "PUBLIC, catchable boundary rather than aborting: " + what);
     }
 
@@ -634,7 +634,7 @@ class RenderTargetMsaaDepthContractTest : public Game
      * @brief S2 -- the depth attachment's sample count follows the colour attachment's.
      *
      * Asserted publicly: two targets differing ONLY in depth format must apply the same sample count.
-     * A backend that quietly dropped MSAA to make the depth attachment legal would fail here, which
+     * A renderer that quietly dropped MSAA to make the depth attachment legal would fail here, which
      * is exactly the fallback this task is forbidden from introducing.
      */
     void LegS2()
@@ -648,7 +648,7 @@ class RenderTargetMsaaDepthContractTest : public Game
               "S2 adding a depth format does not change the applied sample count (" +
               std::to_string(noDepth->getMultiSampleCountProperty()) + " vs " +
               std::to_string(withDepth->getMultiSampleCountProperty()) + ")");
-        // Only where this backend engages render-target MSAA at all can "not silently reduced" be
+        // Only where this renderer engages render-target MSAA at all can "not silently reduced" be
         // asserted as a number. Where it applies 0 for a depthless 4x target too, there is no MSAA
         // to lose and the equality above is the whole of the available evidence.
         const int colourOnly = noDepth->getMultiSampleCountProperty();
@@ -657,7 +657,7 @@ class RenderTargetMsaaDepthContractTest : public Game
                   "S2 and that shared count is the applied " + std::to_string(colourOnly) +
                   ", not a silent reduction forced by the depth attachment");
         else
-            boundary("S2: " + std::string(kBackendName) + " applies no render-target MSAA for a "
+            boundary("S2: " + std::string(kRendererName) + " applies no render-target MSAA for a "
                      "depthless 4x target either (applied 0), so there is no multisampling for a "
                      "depth attachment to cost -- the equality above is the whole contract here.");
     }
@@ -674,7 +674,7 @@ class RenderTargetMsaaDepthContractTest : public Game
         auto& dev = getGraphicsDeviceProperty();
         if (!kSamplesTextures)
         {
-            boundary("S3: " + std::string(kBackendName) +
+            boundary("S3: " + std::string(kRendererName) +
                      " does not rasterize -- boundary recorded");
             return;
         }
@@ -723,7 +723,7 @@ class RenderTargetMsaaDepthContractTest : public Game
         }
         else
         {
-            boundary("S3: " + std::string(kBackendName) + " on this renderer does not resolve a "
+            boundary("S3: " + std::string(kRendererName) + " on this renderer does not resolve a "
                      "MULTISAMPLED colour attachment into its sampleable handle (4x no-depth read " +
                      std::string(got[2] ? "exact" : "black") + ", 4x depth read " +
                      std::string(got[3] ? "exact" : "black") + ") -- a renderer capability boundary, "
@@ -834,7 +834,7 @@ class RenderTargetMsaaDepthContractTest : public Game
         auto& dev = getGraphicsDeviceProperty();
         if (!kStencilSupported)
         {
-            boundary("D5: " + std::string(kBackendName) + " runs no stencil test at all (see "
+            boundary("D5: " + std::string(kRendererName) + " runs no stencil test at all (see "
                      "kStencilSupported) -- boundary recorded, not a REMED-GFX-163 result");
             return;
         }
@@ -1001,7 +1001,7 @@ class RenderTargetMsaaDepthContractTest : public Game
         auto& dev = getGraphicsDeviceProperty();
         if (!kCubeTargetSupported)
         {
-            boundary("X1: " + std::string(kBackendName) +
+            boundary("X1: " + std::string(kRendererName) +
                      " has no cube destination -- boundary recorded");
             return;
         }
@@ -1070,9 +1070,9 @@ class RenderTargetMsaaDepthContractTest : public Game
 
     void Finish()
     {
-        std::printf("[INFO] %s: %d/%d checks passed\n", kBackendName, passCount_, totalCount_);
+        std::printf("[INFO] %s: %d/%d checks passed\n", kRendererName, passCount_, totalCount_);
         std::fflush(stdout);
-        // A leg may legitimately have nothing to measure on a backend lacking the capability -- but
+        // A leg may legitimately have nothing to measure on a renderer lacking the capability -- but
         // only when it SAID so. A run that measured nothing and explained nothing is a failure.
         result_ = (passCount_ == totalCount_ && (totalCount_ > 0 || boundaryDeclared_)) ? 0 : 1;
         Exit();
@@ -1207,7 +1207,7 @@ int main(int argc, char** argv)
     {
         const int total = static_cast<int>(sizeof(kLegs) / sizeof(kLegs[0]));
         std::printf("[INFO] REMED-GFX-163 supervisor on %s: %d legs, each in its own process\n",
-                    kBackendName, total);
+                    kRendererName, total);
         std::fflush(stdout);
         int passed = 0, skippedCount = 0;
         for (const char* legId : kLegs)

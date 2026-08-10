@@ -5,7 +5,7 @@
 // Bgfx-specific adaptation of examples/easygl_graphicsdevice_clear_stencil_test.cpp (already
 // reused verbatim on Vulkan) -- same 1-step-per-real-frame structure (stamp in frame N, clear +
 // compare + readback in frame N+1), since a same-frame "stamp, then Clear(), then compare"
-// sequence cannot reliably discriminate this fix on a backend whose own render pass/view clear
+// sequence cannot reliably discriminate this fix on a renderer whose own render pass/view clear
 // always applies before that frame's draws regardless of call order within the frame (confirmed
 // on Vulkan; kept here too since Bgfx's own EnsureViewState()/setViewClear() call is similarly
 // only reissued once per Clear()/frame, not truly interleavable with draws mid-frame).
@@ -15,10 +15,10 @@
 // GraphicsDevice::Clear() under test, then a StencilFunction::Equal test draw comparing against
 // the value the clear was supposed to establish.
 //
-// Check A -- ClearOptions::Stencil alone (exercises IGraphicsBackend::ClearStencil): clear
+// Check A -- ClearOptions::Stencil alone (exercises IGraphicsRenderer::ClearStencil): clear
 //   stencil to 0x03 (NOT Target/DepthBuffer). Test draw with ReferenceStencil=0x03.
 // Check B -- Target|DepthBuffer|Stencil together with a non-zero stencil value (exercises
-//   IGraphicsBackend::ClearColorDepthAndStencil): clear to 0x09, test draw with
+//   IGraphicsRenderer::ClearColorDepthAndStencil): clear to 0x09, test draw with
 //   ReferenceStencil=0x09. Deliberately non-zero so a broken dispatch leaving the stencil clear
 //   value at its uninitialized/leftover-default 0 cannot coincidentally still match.
 //

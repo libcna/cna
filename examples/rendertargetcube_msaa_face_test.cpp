@@ -3,11 +3,11 @@
 // state, so a PreserveContents face reloads ITS OWN samples and resolves into ITS OWN cube layer.
 //
 // REMED-GFX-136 gave RenderTargetCube a real RenderTargetUsage and then measured the one place it
-// still could not be honoured: three backends allocated exactly ONE multisample colour attachment
+// still could not be honoured: three renderers allocated exactly ONE multisample colour attachment
 // per cube target and pointed all six faces at it, because only one face is ever rendered at a time.
 //
-//   * `EasyGLRenderTargetCubeBackend::msaaColorRbo_`  -- one multisample renderbuffer.
-//   * `VulkanRenderTargetCubeBackend::msaaColorImage_` -- one single-layer TRANSIENT_ATTACHMENT
+//   * `EasyGLRenderTargetCubeRenderer::msaaColorRbo_`  -- one multisample renderbuffer.
+//   * `VulkanRenderTargetCubeRenderer::msaaColorImage_` -- one single-layer TRANSIENT_ATTACHMENT
 //     image, and `GetOrCreateRTRenderPassMsaa` had no LOAD variant at all.
 //   * `SdlGpuRenderTargetCubeState::msaaTexture`       -- one single-layer scratch texture that had
 //     to be cycled (wiped) on every pass.
@@ -30,7 +30,7 @@
 //   4. read the WHOLE of face A.
 //
 // Under PreserveContents the answer must be A's own pattern with just that marker replaced, and no
-// texel anywhere may carry B's pattern. A backend reloading the shared attachment passes "the marker
+// texel anywhere may carry B's pattern. A renderer reloading the shared attachment passes "the marker
 // landed" and fails everything else.
 //
 // Nothing forces a flush between the producer and the rebind: no Settle(), no Present, no
@@ -89,7 +89,7 @@ namespace
     constexpr int kMsaaRequest = 4;  ///< Multisample count every MSAA check requests.
 
     /**
-     * @brief What a rendered cube face's public readback must do on this backend.
+     * @brief What a rendered cube face's public readback must do on this renderer.
      *
      * `Exact` -- GetData returns the resolved face byte for byte.
      * `Unsupported` -- GetData raises System::NotSupportedException with the caller's destination
@@ -101,7 +101,7 @@ namespace
         Unsupported,
     };
 
-    /// The complete, reviewed per-backend claim this file enforces.
+    /// The complete, reviewed per-renderer claim this file enforces.
     struct Contract
     {
         const char* name;
@@ -121,99 +121,99 @@ namespace
          * GetData on a MULTISAMPLED cube target, and therefore this file's whole claim about it:
          * where this is `Exact`, every multisampled preservation check below REQUIRES exact
          * content -- that is REMED-GFX-141's post-fix contract, stated as one falsifiable value per
-         * backend rather than per check. `Unsupported` remains the honest no-content outcome on
+         * renderer rather than per check. `Unsupported` remains the honest no-content outcome on
          * other routes.
          */
         Support msaaReadback;
         /**
          * Ask for a multisampled BACKBUFFER. Only true where that is the sole way a cube target can
-         * engage MSAA at all: `VulkanRenderTargetCubeBackend` gates its MSAA resources on the
-         * backend's own `sampleCount_`, so `multiSampleCount = 4` reports 0 unless the device
+         * engage MSAA at all: `VulkanRenderTargetCubeRenderer` gates its MSAA resources on the
+         * renderer's own `sampleCount_`, so `multiSampleCount = 4` reports 0 unless the device
          * itself was created multisampled.
          */
         bool    preferMultiSampling;
         bool    wantHiDefProfile;  ///< Request GraphicsProfile::HiDef.
     };
 
-#if defined(CNA_BACKEND_HEADLESS)
+#if defined(CNA_RENDERER_HEADLESS)
     // Headless rasterizes nothing, so it owns no face colour at all and its readback stays
     // REMED-GFX-130's deterministic refusal. The whole public sequence must still be legal.
     constexpr Contract kContract{"HEADLESS", true, Support::Unsupported, true,
                                  Support::Unsupported, false, false};
-#elif defined(CNA_BACKEND_SOFTWARE)
+#elif defined(CNA_RENDERER_SOFTWARE)
     constexpr Contract kContract{"SOFTWARE", false, Support::Unsupported, false,
                                  Support::Unsupported, false, false};
-#elif defined(CNA_BACKEND_EASYGL)
+#elif defined(CNA_RENDERER_EASYGL)
     // Pre-fix: ONE multisample renderbuffer for the whole cube. Post-fix: six, one per face,
     // re-attached to the render FBO on every bind.
     constexpr Contract kContract{"EASYGL", true, Support::Exact, true,
                                  Support::Exact, false, false};
-#elif defined(CNA_BACKEND_BGFX)
+#elif defined(CNA_RENDERER_BGFX)
     // REMED-GFX-138 makes the resolved readback real. REMED-GFX-195 closes the separately exposed
     // Bgfx face-aliasing defect, so the same direct oracle now requires exact per-face contents.
     constexpr Contract kContract{"BGFX", true, Support::Exact, true,
                                  Support::Exact, false, false};
-#elif defined(CNA_BACKEND_VULKAN)
+#elif defined(CNA_RENDERER_VULKAN)
     // Pre-fix: ONE single-layer TRANSIENT_ATTACHMENT image AND no LOAD variant of the MSAA render
     // pass. Post-fix: a six-layer multisampled image with one per-layer view per face, plus a
     // LOAD/STORE MSAA render pass for preserving targets.
     constexpr Contract kContract{"VULKAN", true, Support::Exact, true,
                                  Support::Exact, true, false};
-#elif defined(CNA_BACKEND_WEBGPU)
-    // `msaaEngages` false: WebGPUGraphicsBackend::CreateRenderTargetCube ignores multiSampleCount
+#elif defined(CNA_RENDERER_WEBGPU)
+    // `msaaEngages` false: WebGPURenderer::CreateRenderTargetCube ignores multiSampleCount
     // outright, so there is no multisampled cube storage to share OR to isolate here.
     constexpr Contract kContract{"WEBGPU", true, Support::Exact, false,
                                  Support::Exact, false, false};
-#elif defined(CNA_BACKEND_SDL_GPU)
+#elif defined(CNA_RENDERER_SDL_GPU)
     // Pre-fix: ONE single-layer scratch texture that had to be cycled on every pass. Post-fix: six
     // single-layer multisampled textures (SDL_gpu forbids sample_count > 1 on an array texture), no
     // cycling, LOAD + RESOLVE_AND_STORE for a preserving target.
     constexpr Contract kContract{"SDL_GPU", true, Support::Exact, true,
                                  Support::Exact, false, false};
-#elif defined(CNA_BACKEND_SDL_RENDERER)
+#elif defined(CNA_RENDERER_SDL_RENDERER)
     constexpr Contract kContract{"SDL_RENDERER", false, Support::Unsupported, false,
                                  Support::Unsupported, false, false};
-#elif defined(CNA_BACKEND_ASCII)
+#elif defined(CNA_RENDERER_ASCII)
     constexpr Contract kContract{"ASCII", false, Support::Unsupported, false,
                                  Support::Unsupported, false, false};
-#elif defined(CNA_BACKEND_CANVAS)
+#elif defined(CNA_RENDERER_CANVAS)
     constexpr Contract kContract{"CANVAS", false, Support::Unsupported, false,
                                  Support::Unsupported, false, false};
-#elif defined(CNA_BACKEND_FREEDIRECT)
+#elif defined(CNA_RENDERER_FREEDIRECT)
     constexpr Contract kContract{"FREEDIRECT", false, Support::Unsupported, false,
                                  Support::Unsupported, false, false};
-#elif defined(CNA_BACKEND_D3D9)
-    // `msaaEngages` false: D3D9RenderTargetCubeBackend::Recreate() allocates a plain
+#elif defined(CNA_RENDERER_D3D9)
+    // `msaaEngages` false: D3D9RenderTargetCubeRenderer::Recreate() allocates a plain
     // D3DUSAGE_RENDERTARGET cube texture and GetMultiSampleCount() reports 0 by construction.
     constexpr Contract kContract{"D3D9", true, Support::Exact, false,
                                  Support::Exact, false, true};
-#elif defined(CNA_BACKEND_D3D11)
+#elif defined(CNA_RENDERER_D3D11)
     // Already correct: a six-slice DXGI_SAMPLE_DESC array with one Texture2DMSArray RTV per slice.
     constexpr Contract kContract{"D3D11", true, Support::Exact, true,
                                  Support::Exact, false, false};
-#elif defined(CNA_BACKEND_D3D12)
+#elif defined(CNA_RENDERER_D3D12)
     // Already correct: DepthOrArraySize = 6 at the requested sample count, one
     // D3D12_RTV_DIMENSION_TEXTURE2DMSARRAY view per face.
     constexpr Contract kContract{"D3D12", true, Support::Exact, true,
                                  Support::Exact, false, false};
-#elif defined(CNA_BACKEND_SOKOL)
+#elif defined(CNA_RENDERER_SOKOL)
     // `msaaEngages` false: sokol_gfx's own validation layer hard-rejects a CUBE image with
     // sample_count > 1 (VALIDATE_IMAGEDESC_ATTACHMENT_MSAA_CUBE_IMAGE) -- a permanent API boundary
-    // this backend cannot cross, unlike RenderTarget2D's real MSAA support. `readback` Exact as of
-    // plan_sokol.md SOKOL-38: SokolRenderTargetCubeBackend::GetData now round-trips a single-sample
+    // this renderer cannot cross, unlike RenderTarget2D's real MSAA support. `readback` Exact as of
+    // plan_sokol.md SOKOL-38: SokolRenderTargetCubeRenderer::GetData now round-trips a single-sample
     // face's content via a throwaway GL FBO around the raw GL texture sg_gl_query_image_info()
     // exposes; `msaaReadback` stays Unsupported since a multisampled cube can never exist here at
     // all (nothing to read back).
     constexpr Contract kContract{"SOKOL", true, Support::Exact, false,
                                  Support::Unsupported, false, false};
-#elif defined(CNA_BACKEND_LLGL)
+#elif defined(CNA_RENDERER_LLGL)
     // LLGL allocates one anonymous multisampled colour attachment per face and resolves every
     // attachment into the corresponding layer of the shared cube texture. GetData reads that
     // resolved layer, so both single-sample and multisampled face contents are exact.
     constexpr Contract kContract{"LLGL", true, Support::Exact, true,
                                  Support::Exact, false, false};
 #else
-#error "REMED-GFX-141: this backend has no declared multisampled RenderTargetCube contract."
+#error "REMED-GFX-141: this renderer has no declared multisampled RenderTargetCube contract."
 #endif
 
     /// Destination pre-fills. Neither equals any pattern colour nor the discard colour.
@@ -469,7 +469,7 @@ class RenderTargetCubeMsaaFaceTest : public Game
      *
      * The direct signature of a multisample attachment shared between faces. Texels where the two
      * faces happen to agree are excluded, so this counts only real contamination and is exactly 0
-     * on a correct backend.
+     * on a correct renderer.
      */
     static std::size_t CountStaleFrom(const std::vector<Color>& got,
                                       const std::vector<Color>& expected,
@@ -500,13 +500,13 @@ class RenderTargetCubeMsaaFaceTest : public Game
         applied_ = msaa->getMultiSampleCountProperty();
         check(kContract.msaaEngages == (applied_ > 0),
               "M1 capability: a multiSampleCount=" + std::to_string(kMsaaRequest) +
-              " RenderTargetCube applies exactly this backend's declared capability (applied " +
+              " RenderTargetCube applies exactly this renderer's declared capability (applied " +
               std::to_string(applied_) + ", declared " +
               (kContract.msaaEngages ? "multisampled" : "single-sample") + ")");
         return applied_ > 0;
     }
 
-    /// The readback contract that applies to a multisampled target on this backend.
+    /// The readback contract that applies to a multisampled target on this renderer.
     static Support MsaaRequired()
     {
         return kContract.msaaReadback;
@@ -538,7 +538,7 @@ class RenderTargetCubeMsaaFaceTest : public Game
                   "F1b canonical: not one texel of face 0 came back holding face 1's pattern "
                   "[contaminated texels = " + std::to_string(stale) + "]");
         else
-            skip("F1b canonical: skipped -- no multisampled cube readback on this backend");
+            skip("F1b canonical: skipped -- no multisampled cube readback on this renderer");
 
         Probe b = ProbeWholeFace(*cube, 1, SentinelA5(), ExpectedFace(1, 0));
         Judge(b, MsaaRequired(),
@@ -585,7 +585,7 @@ class RenderTargetCubeMsaaFaceTest : public Game
                   "F4 six faces: all six faces are simultaneously live and independent [exact "
                   "faces = " + std::to_string(exactFaces) + "/6" + detail + "]");
         else
-            skip("F4 six faces: skipped -- no multisampled cube readback on this backend");
+            skip("F4 six faces: skipped -- no multisampled cube readback on this renderer");
     }
 
     /// F5 -- the sample-count-one control. The same sequence at samples=0 must be exact, and stays
@@ -850,7 +850,7 @@ protected:
         done_ = true;
 
         auto& dev = getGraphicsDeviceProperty();
-        std::printf("REMED-GFX-141 multisampled RenderTargetCube face isolation -- backend %s\n",
+        std::printf("REMED-GFX-141 multisampled RenderTargetCube face isolation -- renderer %s\n",
                     kContract.name);
 
         if (!kContract.cubeTargets)
@@ -871,7 +871,7 @@ protected:
             catch (const std::exception& e) { what = e.what(); }
             catch (...) { what = "non-std exception"; }
             check(!created && !what.empty(),
-                  "E1 unsupported: this backend refuses a multisampled RenderTargetCube "
+                  "E1 unsupported: this renderer refuses a multisampled RenderTargetCube "
                   "deterministically [" +
                   (created ? std::string("accepted and bound it") : what) + "]");
             std::printf("%d/%d checks passed on %s\n", passCount_, totalCount_, kContract.name);

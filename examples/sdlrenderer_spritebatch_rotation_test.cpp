@@ -6,7 +6,7 @@
 // the full FNA-derived rotation-formula rationale.
 //
 // Requires PresentationMode::NativeBackBuffer (Task 915 finding): SDL_RenderReadPixels operates
-// in physical output coordinates, while this backend's default presentation mode
+// in physical output coordinates, while this renderer's default presentation mode
 // (FixedHeightDynamicWidth) does not map logical pixels 1:1 to physical ones.
 //
 // Verifies SpriteBatch::Draw's rotation genuinely pivots around the caller-specified `origin`

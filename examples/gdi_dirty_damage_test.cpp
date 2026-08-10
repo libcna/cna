@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // GDI-051: deterministic damage tracking from the Software rasterizer's final SpriteBatch quad.
 
-#include "CNA/Internal/Backends/Gdi/GdiGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Gdi/GdiRenderer.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -13,8 +13,8 @@
 #include <memory>
 #include <vector>
 
-using namespace CNA::Internal::Backends;
-using namespace CNA::Internal::Backends::Gdi;
+using namespace CNA::Internal::Renderers;
+using namespace CNA::Internal::Renderers::Gdi;
 
 namespace
 {
@@ -34,12 +34,12 @@ namespace
                actual.Width == expected.Width && actual.Height == expected.Height;
     }
 
-    bool ExpectDamage(GdiGraphicsBackend& backend, const Rectangle& expected,
+    bool ExpectDamage(GdiRenderer& renderer, const Rectangle& expected,
                       const char* message)
     {
         Rectangle actual;
         bool fullyDirty = false;
-        const bool valid = backend.DebugGetBackbufferDamage(actual, fullyDirty);
+        const bool valid = renderer.DebugGetBackbufferDamage(actual, fullyDirty);
         if (!valid || fullyDirty || !SameRectangle(actual, expected))
         {
             std::fprintf(stderr,
@@ -52,23 +52,23 @@ namespace
         return Expect(true, message);
     }
 
-    bool ExpectNoDamage(GdiGraphicsBackend& backend, const char* message)
+    bool ExpectNoDamage(GdiRenderer& renderer, const char* message)
     {
         Rectangle ignored;
         bool fullyDirty = false;
-        return Expect(!backend.DebugGetBackbufferDamage(ignored, fullyDirty), message);
+        return Expect(!renderer.DebugGetBackbufferDamage(ignored, fullyDirty), message);
     }
 
-    void ResetState(GdiGraphicsBackend& backend)
+    void ResetState(GdiRenderer& renderer)
     {
-        backend.SetViewport(0, 0, kWidth, kHeight, 0.0f, 1.0f);
-        backend.SetScissorRect(0, 0, kWidth, kHeight);
-        backend.ApplyRasterizerState(/*CullCounterClockwise*/ 2, /*Solid*/ 0,
+        renderer.SetViewport(0, 0, kWidth, kHeight, 0.0f, 1.0f);
+        renderer.SetScissorRect(0, 0, kWidth, kHeight);
+        renderer.ApplyRasterizerState(/*CullCounterClockwise*/ 2, /*Solid*/ 0,
                                      /*scissor disabled*/ false, 0.0f, 0.0f);
-        backend.DebugResetBackbufferDamage();
+        renderer.DebugResetBackbufferDamage();
     }
 
-    void Draw(ISpriteBatchBackend& sprites, const ITextureBackend& texture,
+    void Draw(ISpriteBatchRenderer& sprites, const ITextureRenderer& texture,
               const Rectangle& destination,
               const Matrix& transform = Matrix::getIdentityProperty(),
               float rotation = 0.0f,
@@ -102,90 +102,90 @@ int main()
     int result = 0;
     try
     {
-        GdiGraphicsBackend backend(window, kWidth, kHeight, CnaPresentationMode::Stretch);
+        GdiRenderer renderer(window, kWidth, kHeight, CnaPresentationMode::Stretch);
         const ImageData image{1, 1, std::vector<std::uint8_t>{255, 0, 0, 255}};
-        std::unique_ptr<ITextureBackend> texture = backend.CreateTexture(image);
-        std::unique_ptr<ISpriteBatchBackend> sprites = backend.CreateSpriteBatch();
+        std::unique_ptr<ITextureRenderer> texture = renderer.CreateTexture(image);
+        std::unique_ptr<ISpriteBatchRenderer> sprites = renderer.CreateSpriteBatch();
         bool ok = true;
 
-        ResetState(backend);
+        ResetState(renderer);
         Draw(*sprites, *texture, Rectangle(10, 12, 4, 3));
-        ok &= ExpectDamage(backend, Rectangle(10, 12, 5, 4),
+        ok &= ExpectDamage(renderer, Rectangle(10, 12, 5, 4),
                            "axis-aligned damage comes from raster candidate bounds");
 
-        ResetState(backend);
+        ResetState(renderer);
         Draw(*sprites, *texture, Rectangle(20, 20, 4, 4),
              Matrix::getIdentityProperty(), 0.0f, Vector2(1.0f, 1.0f));
-        ok &= ExpectDamage(backend, Rectangle(16, 16, 5, 5),
+        ok &= ExpectDamage(renderer, Rectangle(16, 16, 5, 5),
                            "non-zero origin moves damage with the rasterized quad");
 
-        ResetState(backend);
-        backend.SetViewport(5, 7, 30, 30, 0.0f, 1.0f);
+        ResetState(renderer);
+        renderer.SetViewport(5, 7, 30, 30, 0.0f, 1.0f);
         Draw(*sprites, *texture, Rectangle(2, 3, 4, 4));
-        ok &= ExpectDamage(backend, Rectangle(7, 10, 5, 5),
+        ok &= ExpectDamage(renderer, Rectangle(7, 10, 5, 5),
                            "viewport origin is included in damage coordinates");
 
-        ResetState(backend);
-        backend.SetScissorRect(12, 13, 2, 2);
-        backend.ApplyRasterizerState(/*CullCounterClockwise*/ 2, /*Solid*/ 0,
+        ResetState(renderer);
+        renderer.SetScissorRect(12, 13, 2, 2);
+        renderer.ApplyRasterizerState(/*CullCounterClockwise*/ 2, /*Solid*/ 0,
                                      /*scissor enabled*/ true, 0.0f, 0.0f);
         Draw(*sprites, *texture, Rectangle(10, 10, 10, 10));
-        ok &= ExpectDamage(backend, Rectangle(12, 13, 2, 2),
+        ok &= ExpectDamage(renderer, Rectangle(12, 13, 2, 2),
                            "damage is clipped by the active scissor rectangle");
 
-        ResetState(backend);
+        ResetState(renderer);
         Draw(*sprites, *texture, Rectangle(-5, -4, 10, 8));
-        ok &= ExpectDamage(backend, Rectangle(0, 0, 6, 5),
+        ok &= ExpectDamage(renderer, Rectangle(0, 0, 6, 5),
                            "negative partially-offscreen damage is safely clipped");
 
-        ResetState(backend);
+        ResetState(renderer);
         Draw(*sprites, *texture, Rectangle(-100, -100, 10, 10));
-        ok &= ExpectNoDamage(backend, "wholly offscreen sprite produces no damage");
+        ok &= ExpectNoDamage(renderer, "wholly offscreen sprite produces no damage");
 
-        ResetState(backend);
+        ResetState(renderer);
         Draw(*sprites, *texture,
              Rectangle(0, 0, std::numeric_limits<int>::max(),
                        std::numeric_limits<int>::max()));
-        ok &= ExpectDamage(backend, Rectangle(0, 0, kWidth, kHeight),
+        ok &= ExpectDamage(renderer, Rectangle(0, 0, kWidth, kHeight),
                            "very large intersecting rectangle saturates to the framebuffer");
 
-        ResetState(backend);
+        ResetState(renderer);
         Draw(*sprites, *texture,
              Rectangle(std::numeric_limits<int>::max() - 4,
                        std::numeric_limits<int>::max() - 4, 4, 4));
-        ok &= ExpectNoDamage(backend,
+        ok &= ExpectNoDamage(renderer,
                              "very large offscreen coordinates do not overflow into damage");
 
-        ResetState(backend);
+        ResetState(renderer);
         Draw(*sprites, *texture, Rectangle(1, 2, 2, 2));
         Draw(*sprites, *texture, Rectangle(10, 12, 2, 2));
-        ok &= ExpectDamage(backend, Rectangle(1, 2, 12, 13),
+        ok &= ExpectDamage(renderer, Rectangle(1, 2, 12, 13),
                            "multiple sprite bounds are unioned without losing an edge");
 
-        ResetState(backend);
+        ResetState(renderer);
         Draw(*sprites, *texture, Rectangle(3, 4, 2, 2),
              Matrix::CreateTranslation(7.0f, 9.0f, 0.0f));
-        ok &= ExpectDamage(backend, Rectangle(10, 13, 3, 3),
+        ok &= ExpectDamage(renderer, Rectangle(10, 13, 3, 3),
                            "SpriteBatch transform is applied before damage reporting");
 
-        ResetState(backend);
+        ResetState(renderer);
         Draw(*sprites, *texture, Rectangle(20, 20, 4, 2),
              Matrix::getIdentityProperty(), 1.57079632679f);
         Rectangle rotated;
         bool rotatedFull = false;
-        const bool rotatedValid = backend.DebugGetBackbufferDamage(rotated, rotatedFull);
+        const bool rotatedValid = renderer.DebugGetBackbufferDamage(rotated, rotatedFull);
         ok &= Expect(rotatedValid && !rotatedFull && rotated.X <= 18 && rotated.Y <= 20 &&
                          rotated.getRightProperty() >= 20 && rotated.getBottomProperty() >= 24 &&
                          rotated.Width < kWidth && rotated.Height < kHeight,
                      "rotated quad reports a finite transformed partial bound");
 
-        ResetState(backend);
-        std::unique_ptr<IRenderTargetBackend> target =
-            backend.CreateRenderTarget2D(8, 8, 0, true, false, 0);
-        backend.SetRenderTarget2D(target.get());
+        ResetState(renderer);
+        std::unique_ptr<IRenderTargetRenderer> target =
+            renderer.CreateRenderTarget2D(8, 8, 0, true, false, 0);
+        renderer.SetRenderTarget2D(target.get());
         Draw(*sprites, *texture, Rectangle(0, 0, 4, 4));
-        backend.SetRenderTarget2D(nullptr);
-        ok &= ExpectNoDamage(backend, "off-screen target draws do not dirty the backbuffer");
+        renderer.SetRenderTarget2D(nullptr);
+        ok &= ExpectNoDamage(renderer, "off-screen target draws do not dirty the backbuffer");
 
         result = ok ? 0 : 1;
     }

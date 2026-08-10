@@ -1,8 +1,8 @@
 if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
-   AND CNA_GRAPHICS_BACKEND STREQUAL "WEBGPU")
+   AND CNA_GRAPHICS_RENDERER STREQUAL "WEBGPU")
     enable_testing()
     if(TARGET cna_demo_2d)
-        cna_register_backend_test(NAME WebGPU_Native2D_Smoke COMMAND ${CMAKE_COMMAND} -DCNA_WEBGPU_DEMO=$<TARGET_FILE:cna_demo_2d> -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/WebGPUNativeSmokeTest.cmake
+        cna_register_renderer_test(NAME WebGPU_Native2D_Smoke COMMAND ${CMAKE_COMMAND} -DCNA_WEBGPU_DEMO=$<TARGET_FILE:cna_demo_2d> -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/WebGPUNativeSmokeTest.cmake
             TIMEOUT 70 LABELS "GraphicsSmoke;WebGPU" SKIP_REGULAR_EXPRESSION "\\[SKIP\\] CNA WebGPU native smoke")
     else()
         message(WARNING "CNA WebGPU: native smoke test requires CNA_BUILD_EXAMPLES=ON")
@@ -35,65 +35,65 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     endmacro()
 
     cna_webgpu_test(cna_test_webgpu_clear_readback examples/webgpu_clear_readback_test.cpp)
-    cna_register_backend_test(NAME WebGPU_Clear_Readback COMMAND cna_test_webgpu_clear_readback
+    cna_register_renderer_test(NAME WebGPU_Clear_Readback COMMAND cna_test_webgpu_clear_readback
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Phase 57/63 vertical slice: DrawColoredPrimitives/DrawIndexedColoredPrimitives.
     cna_webgpu_test(cna_test_webgpu_colored3d examples/webgpu_colored3d_test.cpp)
-    cna_register_backend_test(NAME WebGPU_Colored3D COMMAND cna_test_webgpu_colored3d
+    cna_register_renderer_test(NAME WebGPU_Colored3D COMMAND cna_test_webgpu_colored3d
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Phase 63: DrawPrimitivesEx/DrawIndexedPrimitivesEx real GpuDrawParams dispatch (stride 16).
     cna_webgpu_test(cna_test_webgpu_drawprimitivesex examples/webgpu_drawprimitivesex_test.cpp)
-    cna_register_backend_test(NAME WebGPU_DrawPrimitivesEx COMMAND cna_test_webgpu_drawprimitivesex
+    cna_register_renderer_test(NAME WebGPU_DrawPrimitivesEx COMMAND cna_test_webgpu_drawprimitivesex
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Phase 58/59/63: textured3d.wgsl / GetOrCreatePipelineTextured3D / stride-20 dispatch.
     cna_webgpu_test(cna_test_webgpu_textured3d examples/webgpu_textured3d_test.cpp)
-    cna_register_backend_test(NAME WebGPU_Textured3D COMMAND cna_test_webgpu_textured3d
+    cna_register_renderer_test(NAME WebGPU_Textured3D COMMAND cna_test_webgpu_textured3d
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Phase 58/59/63: colored_textured3d.wgsl / GetOrCreatePipelineColoredTextured3D / stride-24.
     cna_webgpu_test(cna_test_webgpu_coloredtextured3d examples/webgpu_coloredtextured3d_test.cpp)
-    cna_register_backend_test(NAME WebGPU_ColoredTextured3D COMMAND cna_test_webgpu_coloredtextured3d
+    cna_register_renderer_test(NAME WebGPU_ColoredTextured3D COMMAND cna_test_webgpu_coloredtextured3d
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # WEBGPU-22: lit_textured3d.wgsl / GetOrCreatePipelineLitTextured3D / stride-32 dispatch,
     # real Blinn-Phong lighting.
     cna_webgpu_test(cna_test_webgpu_littextured3d examples/webgpu_littextured3d_test.cpp)
-    cna_register_backend_test(NAME WebGPU_LitTextured3D COMMAND cna_test_webgpu_littextured3d
+    cna_register_renderer_test(NAME WebGPU_LitTextured3D COMMAND cna_test_webgpu_littextured3d
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 1105 (plan_graphics.md Phase 80): GetOrCreatePipelineLitTextured3DVertexLit /
     # BasicEffect.PreferPerPixelLighting real dispatch.
     cna_webgpu_test(cna_test_webgpu_basiceffect_preferperpixellighting examples/webgpu_basiceffect_preferperpixellighting_test.cpp)
-    cna_register_backend_test(NAME WebGPU_BasicEffect_PreferPerPixelLighting COMMAND cna_test_webgpu_basiceffect_preferperpixellighting
+    cna_register_renderer_test(NAME WebGPU_BasicEffect_PreferPerPixelLighting COMMAND cna_test_webgpu_basiceffect_preferperpixellighting
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # WEBGPU-23/34/72: alpha_test3d.wgsl / GetOrCreatePipelineAlphaTest3D / AlphaTestEffect
     # per-pixel discard, strides 20/24/32.
     cna_webgpu_test(cna_test_webgpu_alphatest3d examples/webgpu_alphatest3d_test.cpp)
-    cna_register_backend_test(NAME WebGPU_AlphaTest3D COMMAND cna_test_webgpu_alphatest3d
+    cna_register_renderer_test(NAME WebGPU_AlphaTest3D COMMAND cna_test_webgpu_alphatest3d
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # WEBGPU-24: dual_texture3d.wgsl / GetOrCreatePipelineDualTexture3D / DualTextureEffect,
     # strides 20/24, second texture bind group.
     cna_webgpu_test(cna_test_webgpu_dualtexture3d examples/webgpu_dualtexture3d_test.cpp)
-    cna_register_backend_test(NAME WebGPU_DualTexture3D COMMAND cna_test_webgpu_dualtexture3d
+    cna_register_renderer_test(NAME WebGPU_DualTexture3D COMMAND cna_test_webgpu_dualtexture3d
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # WEBGPU-25/36/74: env_map3d.wgsl / GetOrCreatePipelineEnvMap3D / EnvironmentMapEffect (stride
-    # 32, this backend's first cube-map shader) -- also exercises WebGPUTextureCubeBackend
-    # (CreateTextureCube()/SetData()), this backend's first cube-map texture support.
+    # 32, this renderer's first cube-map shader) -- also exercises WebGPUTextureCubeRenderer
+    # (CreateTextureCube()/SetData()), this renderer's first cube-map texture support.
     cna_webgpu_test(cna_test_webgpu_envmap3d examples/webgpu_envmap3d_test.cpp)
-    cna_register_backend_test(NAME WebGPU_EnvMap3D COMMAND cna_test_webgpu_envmap3d
+    cna_register_renderer_test(NAME WebGPU_EnvMap3D COMMAND cna_test_webgpu_envmap3d
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # REMED-GFX-007: EnvironmentMapEffect must add EmissiveColor UNSCALED (FNA Lighting.fxh),
     # not (Emissive+lightSum)*Diffuse. Discriminating non-white-Diffuse / non-zero-Emissive /
     # non-default-Alpha cases; transfer-function-agnostic via env-map full-replace calibration.
     cna_webgpu_test(cna_test_webgpu_envmap_emissive examples/webgpu_environmentmapeffect_emissive_test.cpp)
-    cna_register_backend_test(NAME WebGPU_EnvMapEmissive COMMAND cna_test_webgpu_envmap_emissive
+    cna_register_renderer_test(NAME WebGPU_EnvMapEmissive COMMAND cna_test_webgpu_envmap_emissive
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # REMED-GFX-100: EnvironmentMapEffect fog must consume the CPU-prepared World*View vector.
@@ -101,65 +101,65 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # enabled/disabled A->B->A, transform A->B->A/deferred capture, range boundaries, zero range,
     # complete environment/material composition, and alpha preservation on an sRGB-safe RT path.
     cna_webgpu_test(cna_test_webgpu_environmentmapeffect_fog examples/webgpu_environmentmapeffect_fog_test.cpp)
-    cna_register_backend_test(NAME WebGPU_EnvironmentMapEffect_Fog COMMAND cna_test_webgpu_environmentmapeffect_fog
+    cna_register_renderer_test(NAME WebGPU_EnvironmentMapEffect_Fog COMMAND cna_test_webgpu_environmentmapeffect_fog
         TIMEOUT 90 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # WEBGPU-27/38/68: instanced3d.wgsl / GetOrCreatePipelineInstanced3D / DrawInstancedPrimitivesEx
     # -- a genuine second (WGPUVertexStepMode_Instance) vertex buffer binding carrying a
     # per-instance mat4 world transform.
     cna_webgpu_test(cna_test_webgpu_instanced3d examples/webgpu_instanced3d_test.cpp)
-    cna_register_backend_test(NAME WebGPU_Instanced3D COMMAND cna_test_webgpu_instanced3d
+    cna_register_renderer_test(NAME WebGPU_Instanced3D COMMAND cna_test_webgpu_instanced3d
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # REMED-GFX-211/213 structural half: honouring both bindings' VertexOffset and every legal
     # InstanceFrequency must cost no extra render pass, queue submit, pipeline variant or GPU
-    # buffer, and must not allocate per logical instance. Counts come from the backend's own EXT
+    # buffer, and must not allocate per logical instance. Counts come from the renderer's own EXT
     # counters and from wgpu-native's wgpuGenerateReport() live-object registry.
     cna_webgpu_test(cna_test_webgpu_instanced_offset_frequency_cardinality
                     examples/webgpu_instanced_offset_frequency_cardinality_test.cpp)
     target_link_libraries(cna_test_webgpu_instanced_offset_frequency_cardinality
                           PRIVATE WebGPU::WebGPU)
-    cna_register_backend_test(NAME WebGPU_InstancedOffsetFrequency_Cardinality
+    cna_register_renderer_test(NAME WebGPU_InstancedOffsetFrequency_Cardinality
         COMMAND cna_test_webgpu_instanced_offset_frequency_cardinality
         TIMEOUT 60 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # REMED-GFX-212 structural half: honouring BasicEffect.VertexColorEnabled on the instanced
     # route must build no render-pipeline variant per setting, must keep a position-only and a
     # position+colour declaration in separate variants, and must add no render pass or queue
-    # submit. Counts come from the backend's own EXT counters and from wgpu-native's
+    # submit. Counts come from the renderer's own EXT counters and from wgpu-native's
     # wgpuGenerateReport() live-object registry.
     cna_webgpu_test(cna_test_webgpu_instanced_vertex_color_cardinality
                     examples/webgpu_instanced_vertex_color_cardinality_test.cpp)
     target_link_libraries(cna_test_webgpu_instanced_vertex_color_cardinality
                           PRIVATE WebGPU::WebGPU)
-    cna_register_backend_test(NAME WebGPU_InstancedVertexColor_Cardinality
+    cna_register_renderer_test(NAME WebGPU_InstancedVertexColor_Cardinality
         COMMAND cna_test_webgpu_instanced_vertex_color_cardinality
         TIMEOUT 60 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # plan_cnj.md CNB-58 WebGPU counterpart: pbr3d.wgsl / GetOrCreatePipelinePbr3D / PbrEffect
-    # (unskinned only, stride 48), the WebGPU backend's real glTF 2.0 metallic-roughness BRDF.
+    # (unskinned only, stride 48), the WebGPU renderer's real glTF 2.0 metallic-roughness BRDF.
     cna_webgpu_test(cna_test_webgpu_pbr3d examples/webgpu_pbr3d_test.cpp)
-    cna_register_backend_test(NAME WebGPU_Pbr3D COMMAND cna_test_webgpu_pbr3d
+    cna_register_renderer_test(NAME WebGPU_Pbr3D COMMAND cna_test_webgpu_pbr3d
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # plan_cnj.md Phase 14J WebGPU counterpart: skinned3d.wgsl family / GetOrCreatePipelineSkinned3D
     # / SkinnedEffect (strides 52/56, both PreferPerPixelLighting variants, VertexColorEnabled) --
-    # closes this backend's pre-existing "no skinning shader at all" gap.
+    # closes this renderer's pre-existing "no skinning shader at all" gap.
     cna_webgpu_test(cna_test_webgpu_skinned3d examples/webgpu_skinned3d_test.cpp)
-    cna_register_backend_test(NAME WebGPU_Skinned3D COMMAND cna_test_webgpu_skinned3d
+    cna_register_renderer_test(NAME WebGPU_Skinned3D COMMAND cna_test_webgpu_skinned3d
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # plan_cnj.md Phase 14J WebGPU counterpart: skinned_pbr3d.wgsl / GetOrCreatePipelineSkinnedPbr3D
     # / SkinnedPbrEffect (stride 68, PBR + skinning combo).
     cna_webgpu_test(cna_test_webgpu_skinnedpbr3d examples/webgpu_skinnedpbr3d_test.cpp)
-    cna_register_backend_test(NAME WebGPU_SkinnedPbr3D COMMAND cna_test_webgpu_skinnedpbr3d
+    cna_register_renderer_test(NAME WebGPU_SkinnedPbr3D COMMAND cna_test_webgpu_skinnedpbr3d
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # REMED-GFX-006: SkinnedEffect world-space normal transform under non-identity World (rotation,
     # non-uniform scale, and both) for both PreferPerPixelLighting variants -- the cases every
     # existing skinned test, all of which use World = Identity, structurally cannot detect.
     cna_webgpu_test(cna_test_webgpu_skinnedeffect_world_normal examples/webgpu_skinnedeffect_world_normal_test.cpp)
-    cna_register_backend_test(NAME WebGPU_SkinnedEffect_WorldNormal COMMAND cna_test_webgpu_skinnedeffect_world_normal
+    cna_register_renderer_test(NAME WebGPU_SkinnedEffect_WorldNormal COMMAND cna_test_webgpu_skinnedeffect_world_normal
         TIMEOUT 60 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # REMED-GFX-090: all four SkinnedEffect WGSL modules must add the CPU-pre-folded
@@ -168,24 +168,24 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # Alpha, vertex colour, A->B->A, and post-draw effect mutation through an encoding-calibrated
     # RenderTarget2D readback.
     cna_webgpu_test(cna_test_webgpu_skinnedeffect_material examples/webgpu_skinnedeffect_material_test.cpp)
-    cna_register_backend_test(NAME WebGPU_SkinnedEffect_Material COMMAND cna_test_webgpu_skinnedeffect_material
+    cna_register_renderer_test(NAME WebGPU_SkinnedEffect_Material COMMAND cna_test_webgpu_skinnedeffect_material
         TIMEOUT 90 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # WEBGPU-41/77/78/79/80/81/82/83: real BlendState/RasterizerState (cull mode, wireframe)/
     # scissor/viewport wiring -- previously ApplyBlendState/ApplyRasterizerState/SetScissorRect/
-    # SetViewport had no override at all on this backend, silently falling back to
-    # IGraphicsBackend's no-op defaults for every 3D draw.
+    # SetViewport had no override at all on this renderer, silently falling back to
+    # IGraphicsRenderer's no-op defaults for every 3D draw.
     cna_webgpu_test(cna_test_webgpu_graphicsstate examples/webgpu_graphicsstate_test.cpp)
-    cna_register_backend_test(NAME WebGPU_GraphicsState COMMAND cna_test_webgpu_graphicsstate
+    cna_register_renderer_test(NAME WebGPU_GraphicsState COMMAND cna_test_webgpu_graphicsstate
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # WEBGPU-53/54: WebGPURenderTargetBackend / CreateRenderTarget2D() / SetRenderTarget2D() --
-    # this backend's first real RenderTarget2D support (Clear-only, real BasicEffect 3D draw, and
+    # WEBGPU-53/54: WebGPURenderTargetRenderer / CreateRenderTarget2D() / SetRenderTarget2D() --
+    # this renderer's first real RenderTarget2D support (Clear-only, real BasicEffect 3D draw, and
     # depth+stencil-tested round trips via GetData(), sampling a RenderTarget2D back through
     # SpriteBatch, and the critical "an intervening RT-targeted Clear() must not leak into the
     # backbuffer's own render pass" architecture check).
     cna_webgpu_test(cna_test_webgpu_rendertarget2d examples/webgpu_rendertarget2d_test.cpp)
-    cna_register_backend_test(NAME WebGPU_RenderTarget2D COMMAND cna_test_webgpu_rendertarget2d
+    cna_register_renderer_test(NAME WebGPU_RenderTarget2D COMMAND cna_test_webgpu_rendertarget2d
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # WEBGPU-58: MSAA infrastructure for both the swapchain backbuffer and RenderTarget2D --
@@ -200,40 +200,40 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # individually verified -- see this test's own top-of-file comment and plan_webgpu.md's
     # WEBGPU-58 row for the full investigation.
     cna_webgpu_test(cna_test_webgpu_msaa examples/webgpu_msaa_test.cpp)
-    cna_register_backend_test(NAME WebGPU_Msaa COMMAND cna_test_webgpu_msaa
+    cna_register_renderer_test(NAME WebGPU_Msaa COMMAND cna_test_webgpu_msaa
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # WEBGPU-51: WebGPUTextureBackend::GetData() -- real staged-copy CPU readback for an arbitrary
-    # Texture2D backend (previously the ITextureBackend::GetData() no-op default, since only the
+    # WEBGPU-51: WebGPUTextureRenderer::GetData() -- real staged-copy CPU readback for an arbitrary
+    # Texture2D renderer (previously the ITextureRenderer::GetData() no-op default, since only the
     # swapchain (ReadBackbuffer, WEBGPU-91) and RenderTarget2D (WEBGPU-53/54) had real readback).
     cna_webgpu_test(cna_test_webgpu_texture2d_getdata examples/webgpu_texture2d_getdata_test.cpp)
-    cna_register_backend_test(NAME WebGPU_Texture2D_GetData COMMAND cna_test_webgpu_texture2d_getdata
+    cna_register_renderer_test(NAME WebGPU_Texture2D_GetData COMMAND cna_test_webgpu_texture2d_getdata
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # WEBGPU-113: WebGPUTextureCubeBackend::GetData() -- real per-face staged-copy CPU readback,
+    # WEBGPU-113: WebGPUTextureCubeRenderer::GetData() -- real per-face staged-copy CPU readback,
     # closing the no-op default WEBGPU-56/74 deliberately left in place. Also exercises a real
     # TextureCube mip level 1 SetData()/GetData() round trip (untested since WEBGPU-56/74).
     cna_webgpu_test(cna_test_webgpu_texturecube_getdata examples/webgpu_texturecube_getdata_test.cpp)
-    cna_register_backend_test(NAME WebGPU_TextureCube_GetData COMMAND cna_test_webgpu_texturecube_getdata
+    cna_register_renderer_test(NAME WebGPU_TextureCube_GetData COMMAND cna_test_webgpu_texturecube_getdata
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # WEBGPU-57/112: WebGPUTexture3DBackend / CreateTexture3D() -- this backend's first Texture3D
-    # (volume texture) support (previously IGraphicsBackend's own nullptr-returning default).
+    # WEBGPU-57/112: WebGPUTexture3DRenderer / CreateTexture3D() -- this renderer's first Texture3D
+    # (volume texture) support (previously IGraphicsRenderer's own nullptr-returning default).
     cna_webgpu_test(cna_test_webgpu_texture3d examples/webgpu_texture3d_test.cpp)
-    cna_register_backend_test(NAME WebGPU_Texture3D COMMAND cna_test_webgpu_texture3d
+    cna_register_renderer_test(NAME WebGPU_Texture3D COMMAND cna_test_webgpu_texture3d
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # WEBGPU-114: WebGPURenderTargetCubeBackend / CreateRenderTargetCube() -- this backend's first
-    # real render-into-a-cube-face support (previously IGraphicsBackend's own nullptr-returning
+    # WEBGPU-114: WebGPURenderTargetCubeRenderer / CreateRenderTargetCube() -- this renderer's first
+    # real render-into-a-cube-face support (previously IGraphicsRenderer's own nullptr-returning
     # default). Direct face-to-face switching (no intervening backbuffer bind), a real BasicEffect
     # 3D draw into a face, an EnvironmentMapEffect sampling round trip proving IWebGPUCubeSamplable
     # resolves a RenderTargetCube (not just a plain TextureCube), and the "an intervening cube-
     # face-targeted Clear() must not leak into the backbuffer's own render pass" architecture check.
     cna_webgpu_test(cna_test_webgpu_rendertargetcube examples/webgpu_rendertargetcube_test.cpp)
-    cna_register_backend_test(NAME WebGPU_RenderTargetCube COMMAND cna_test_webgpu_rendertargetcube
+    cna_register_renderer_test(NAME WebGPU_RenderTargetCube COMMAND cna_test_webgpu_rendertargetcube
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # REMED-GFX-096: backend-neutral singular/plural cube-face binding parity.
+    # REMED-GFX-096: renderer-neutral singular/plural cube-face binding parity.
     cna_webgpu_test(cna_test_webgpu_rendertargetcube_plural_binding
                     examples/rendertargetcube_plural_binding_test.cpp)
     # REMED-GFX-131: CNA_GFX096_EXPECT_SRGB_ENCODED is gone. It sRGB-encoded this shared fixture's
@@ -242,7 +242,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # encoding a defect into the oracle rather than describing a platform difference.
     target_compile_definitions(cna_test_webgpu_rendertargetcube_plural_binding
         PRIVATE CNA_GFX096_CUBE_GETDATA=1)
-    cna_register_backend_test(NAME WebGPU_RenderTargetCube_PluralBinding
+    cna_register_renderer_test(NAME WebGPU_RenderTargetCube_PluralBinding
         COMMAND cna_test_webgpu_rendertargetcube_plural_binding
         TIMEOUT 60 LABELS "WebGPU"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
@@ -253,17 +253,17 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # + ComputeLogicalViewport() unconditionally). Asymmetric 96x72 backbuffer vs 48x32/64x40 render
     # targets, transformMatrix, different-sized targets, transition isolation, orientation control.
     cna_webgpu_test(cna_test_webgpu_spritebatch_rendertarget examples/webgpu_spritebatch_rendertarget_test.cpp)
-    cna_register_backend_test(NAME WebGPU_SpriteBatch_RenderTarget COMMAND cna_test_webgpu_spritebatch_rendertarget
+    cna_register_renderer_test(NAME WebGPU_SpriteBatch_RenderTarget COMMAND cna_test_webgpu_spritebatch_rendertarget
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # WEBGPU-52: real, render-pass-based, genuinely-linear-filtered mip generation for a plain
     # Texture2D/TextureCube from level 0 -- previously mipMap=true only pre-allocated empty
     # levels. A hard-edged red/blue stripe proves genuine LINEAR blending at the boundary (not a
     # nearest-neighbor copy), for both Texture2D and one TextureCube face; also documents the
-    # deliberate divergence this introduces from FNA/every sibling CNA backend (which only
+    # deliberate divergence this introduces from FNA/every sibling CNA renderer (which only
     # auto-regenerate mips for a RENDER TARGET being unbound, never a plain texture).
     cna_webgpu_test(cna_test_webgpu_mipgen examples/webgpu_mipgen_test.cpp)
-    cna_register_backend_test(NAME WebGPU_MipGen COMMAND cna_test_webgpu_mipgen
+    cna_register_renderer_test(NAME WebGPU_MipGen COMMAND cna_test_webgpu_mipgen
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # REMED-GFX-072: SpriteBatch clip space must be built from the active GraphicsDevice.Viewport
@@ -273,20 +273,20 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # viewport-relative NDC for a custom sub-Viewport. Check D is REMED-GFX-116's addition: the
     # converse case, a full-target batch followed by a sub-Viewport, which GFX-072's capture-only-
     # if-custom rule got wrong. The former "two viewports in one backbuffer frame are per-pass
-    # last-wins" note is gone: REMED-GFX-116 made the viewport per-draw state on this backend, so
+    # last-wins" note is gone: REMED-GFX-116 made the viewport per-draw state on this renderer, so
     # examples/spritebatch_viewport_switch_test.cpp is registered here too (below).
     cna_webgpu_test(cna_test_webgpu_spritebatch_custom_viewport
                     examples/spritebatch_custom_viewport_test.cpp)
-    cna_register_backend_test(NAME WebGPU_SpriteBatch_CustomViewport COMMAND cna_test_webgpu_spritebatch_custom_viewport
+    cna_register_renderer_test(NAME WebGPU_SpriteBatch_CustomViewport COMMAND cna_test_webgpu_spritebatch_custom_viewport
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # REMED-GFX-116: two SpriteBatch cycles under two different Viewports inside ONE frame. This
     # file was deliberately NOT registered here while WebGPU applied one viewport per render pass.
     # The viewport is per-draw state now, so the per-batch requirement is a real gate on this
-    # backend too.
+    # renderer too.
     cna_webgpu_test(cna_test_webgpu_spritebatch_viewport_switch
                     examples/spritebatch_viewport_switch_test.cpp)
-    cna_register_backend_test(NAME WebGPU_SpriteBatch_ViewportSwitch COMMAND cna_test_webgpu_spritebatch_viewport_switch
+    cna_register_renderer_test(NAME WebGPU_SpriteBatch_ViewportSwitch COMMAND cna_test_webgpu_spritebatch_viewport_switch
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # REMED-GFX-102: every SpriteBatch.Begin() BlendState must be captured by value and select a
@@ -299,7 +299,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_webgpu_test(cna_test_webgpu_spritebatch_blendstate
                     examples/webgpu_spritebatch_blendstate_test.cpp)
     target_link_libraries(cna_test_webgpu_spritebatch_blendstate PRIVATE WebGPU::WebGPU)
-    cna_register_backend_test(NAME WebGPU_SpriteBatch_BlendState
+    cna_register_renderer_test(NAME WebGPU_SpriteBatch_BlendState
         COMMAND cna_test_webgpu_spritebatch_blendstate
         TIMEOUT 60 LABELS "WebGPU"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
@@ -310,18 +310,18 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # path for both fields. MultiSampleMask IS compiled in (wgpu-native mask is real).
     cna_webgpu_test(cna_test_webgpu_colorwritechannels examples/gfx077_colorwritechannels_3d_test.cpp)
     target_compile_definitions(cna_test_webgpu_colorwritechannels PRIVATE GFX077_MULTISAMPLEMASK_SUPPORTED)
-    cna_register_backend_test(NAME WebGPU_ColorWriteChannels COMMAND cna_test_webgpu_colorwritechannels
+    cna_register_renderer_test(NAME WebGPU_ColorWriteChannels COMMAND cna_test_webgpu_colorwritechannels
         TIMEOUT 60 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # REMED-GFX-127: every public Texture2D::GetData call must return the resource's real content or
     # reject the request deterministically -- never fabricate one. Pre-fix the shared render-target
-    # fallback zero-initialized its own scratch buffer, handed it to ITextureBackend::GetData (whose
-    # interface default did nothing) and converted it for the caller regardless, so a backend with no
+    # fallback zero-initialized its own scratch buffer, handed it to ITextureRenderer::GetData (whose
+    # interface default did nothing) and converted it for the caller regardless, so a renderer with no
     # readback returned a complete, uniformly transparent-black frame that satisfied both "the
     # destination was overwritten" and any transparent-black content expectation.
     cna_webgpu_test(cna_test_webgpu_texture2d_getdata_contract
                     examples/texture2d_getdata_contract_test.cpp)
-    cna_register_backend_test(NAME WebGPU_Texture2D_GetDataContract COMMAND cna_test_webgpu_texture2d_getdata_contract
+    cna_register_renderer_test(NAME WebGPU_Texture2D_GetDataContract COMMAND cna_test_webgpu_texture2d_getdata_contract
         TIMEOUT 60 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # REMED-GFX-149 (and REMED-GFX-128, the same expression): the exact XNA-compatible
@@ -332,38 +332,38 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # undersized one.
     cna_webgpu_test(cna_test_webgpu_texture2d_getdata_transfer_range
                     examples/texture2d_getdata_transfer_range_test.cpp)
-    cna_register_backend_test(NAME WebGPU_Texture2D_GetDataTransferRange COMMAND cna_test_webgpu_texture2d_getdata_transfer_range
+    cna_register_renderer_test(NAME WebGPU_Texture2D_GetDataTransferRange COMMAND cna_test_webgpu_texture2d_getdata_transfer_range
         TIMEOUT 60 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # REMED-GFX-130: the TextureCube/Texture3D half of REMED-GFX-127's finding. This backend's own
+    # REMED-GFX-130: the TextureCube/Texture3D half of REMED-GFX-127's finding. This renderer's own
     # cube/volume readbacks additionally `memset` the caller's destination to zero and returned as if
-    # successful whenever the readback buffer could not be mapped -- the same fabrication in backend
+    # successful whenever the readback buffer could not be mapped -- the same fabrication in renderer
     # clothing, closed here.
     cna_webgpu_test(cna_test_webgpu_cube_volume_getdata_contract
                     examples/texturecube_texture3d_getdata_contract_test.cpp)
-    cna_register_backend_test(NAME WebGPU_CubeVolume_GetDataContract COMMAND cna_test_webgpu_cube_volume_getdata_contract
+    cna_register_renderer_test(NAME WebGPU_CubeVolume_GetDataContract COMMAND cna_test_webgpu_cube_volume_getdata_contract
         TIMEOUT 60 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # REMED-GFX-134: `RenderTargetCube::GetData` must return the face that was really rendered or
     # reject the request deterministically. REMED-GFX-130 made the reporting honest but left the
-    # readback itself implemented on only two backends, so a rendered cube face had no byte-exact
+    # readback itself implemented on only two renderers, so a rendered cube face had no byte-exact
     # public oracle anywhere else. Drawn geometry (never Clear -- see REMED-GFX-129) paints an
     # asymmetric five-region pattern whose colours rotate per face, so a flip, a rotation, a wrong
     # array layer/subresource, a stale face or an unresolved multisample surface all fail.
     cna_webgpu_test(cna_test_webgpu_rendertargetcube_getdata_contract
                     examples/rendertargetcube_getdata_contract_test.cpp)
-    cna_register_backend_test(NAME WebGPU_RenderTargetCube_GetDataContract COMMAND cna_test_webgpu_rendertargetcube_getdata_contract
+    cna_register_renderer_test(NAME WebGPU_RenderTargetCube_GetDataContract COMMAND cna_test_webgpu_rendertargetcube_getdata_contract
         TIMEOUT 60 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # REMED-GFX-136: IGraphicsBackend::CreateRenderTargetCube had no `preserveContents` parameter,
+    # REMED-GFX-136: IGraphicsRenderer::CreateRenderTargetCube had no `preserveContents` parameter,
     # unlike CreateRenderTarget2D, so a RenderTargetCube's real RenderTargetUsage never reached the
-    # backend and Vulkan/WebGPU discarded a PreserveContents cube face on every bind cycle. Reuses
+    # renderer and Vulkan/WebGPU discarded a PreserveContents cube face on every bind cycle. Reuses
     # REMED-GFX-134's asymmetric face producer, then rebinds and draws only a small marker: "the
-    # marker landed" is what a discarding backend also achieves, so it can never pass for
+    # marker landed" is what a discarding renderer also achieves, so it can never pass for
     # preservation.
     cna_webgpu_test(cna_test_webgpu_rendertargetcube_usage
                     examples/rendertargetcube_usage_test.cpp)
-    cna_register_backend_test(NAME WebGPU_RenderTargetCube_Usage COMMAND cna_test_webgpu_rendertargetcube_usage
+    cna_register_renderer_test(NAME WebGPU_RenderTargetCube_Usage COMMAND cna_test_webgpu_rendertargetcube_usage
         TIMEOUT 60 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # REMED-GFX-141: a MULTISAMPLED RenderTargetCube shared ONE multisample colour attachment
@@ -374,7 +374,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # immediate read both passed before this.
     cna_webgpu_test(cna_test_webgpu_rendertargetcube_msaa_face
                     examples/rendertargetcube_msaa_face_test.cpp)
-    cna_register_backend_test(NAME WebGPU_RenderTargetCube_MsaaFace COMMAND cna_test_webgpu_rendertargetcube_msaa_face
+    cna_register_renderer_test(NAME WebGPU_RenderTargetCube_MsaaFace COMMAND cna_test_webgpu_rendertargetcube_msaa_face
         TIMEOUT 60 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # REMED-GFX-142: RenderTargetUsage's DEPTH and STENCIL half. FNA3D's own header documents
@@ -385,11 +385,11 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # never drew. A parallel stencil stamp/gate sequence does the same for stencil.
     cna_webgpu_test(cna_test_webgpu_rendertarget_depthstencil_usage
                     examples/rendertarget_depthstencil_usage_test.cpp)
-    cna_register_backend_test(NAME WebGPU_RenderTarget_DepthStencilUsage COMMAND cna_test_webgpu_rendertarget_depthstencil_usage
+    cna_register_renderer_test(NAME WebGPU_RenderTarget_DepthStencilUsage COMMAND cna_test_webgpu_rendertarget_depthstencil_usage
         TIMEOUT 60 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # REMED-GFX-140: every public render-target bind/unbind cycle must be its own logical pass.
-    # `VulkanGraphicsBackend::RecordCommandBuffer` collected ONE render pass per unique render-target
+    # `VulkanRenderer::RecordCommandBuffer` collected ONE render pass per unique render-target
     # source per flush and replayed every queued batch for it inside that pass, so two bind cycles of
     # one target within a single flush window shared one load action. The decisive checks all use
     # DiscardContents -- collapsing is invisible on a preserving target, which is why REMED-GFX-136
@@ -397,13 +397,13 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # flush.
     cna_webgpu_test(cna_test_webgpu_rendertarget_pass_boundary
                     examples/rendertarget_pass_boundary_test.cpp)
-    cna_register_backend_test(NAME WebGPU_RenderTarget_PassBoundary COMMAND cna_test_webgpu_rendertarget_pass_boundary
+    cna_register_renderer_test(NAME WebGPU_RenderTarget_PassBoundary COMMAND cna_test_webgpu_rendertarget_pass_boundary
         TIMEOUT 90 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # REMED-GFX-129: cross-backend control for Vulkan's ordered-Clear correction.
+    # REMED-GFX-129: cross-renderer control for Vulkan's ordered-Clear correction.
     cna_webgpu_test(cna_test_webgpu_ordered_clear
                     examples/graphicsdevice_ordered_clear_test.cpp)
-    cna_register_backend_test(NAME WebGPU_GraphicsDevice_OrderedClear COMMAND cna_test_webgpu_ordered_clear
+    cna_register_renderer_test(NAME WebGPU_GraphicsDevice_OrderedClear COMMAND cna_test_webgpu_ordered_clear
         TIMEOUT 120 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # REMED-GFX-143: backbuffer work and render-target work must replay in ONE ordered stream.
@@ -415,26 +415,26 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # Present, GetData, flush or extra frame between the cycles, and only then reads once.
     cna_webgpu_test(cna_test_webgpu_backbuffer_pass_order
                     examples/backbuffer_pass_order_test.cpp)
-    cna_register_backend_test(NAME WebGPU_Backbuffer_PassOrder COMMAND cna_test_webgpu_backbuffer_pass_order
+    cna_register_renderer_test(NAME WebGPU_Backbuffer_PassOrder COMMAND cna_test_webgpu_backbuffer_pass_order
         TIMEOUT 120 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # REMED-GFX-135: the WRITE half of the same finding. `TextureCube::SetData`/`Texture3D::SetData`
-    # kept the pre-REMED-GFX-127 shape -- a `void` backend method behind `if (backend_)` -- so an
+    # kept the pre-REMED-GFX-127 shape -- a `void` renderer method behind `if (renderer_)` -- so an
     # upload that stored nothing, or only part of the requested region, still returned normally.
     cna_webgpu_test(cna_test_webgpu_cube_volume_setdata_contract
                     examples/texturecube_texture3d_setdata_contract_test.cpp)
-    cna_register_backend_test(NAME WebGPU_CubeVolume_SetDataContract COMMAND cna_test_webgpu_cube_volume_setdata_contract
+    cna_register_renderer_test(NAME WebGPU_CubeVolume_SetDataContract COMMAND cna_test_webgpu_cube_volume_setdata_contract
         TIMEOUT 60 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # REMED-GFX-116: every deferred draw must execute under the GraphicsDevice.Viewport active at
-    # its own public call. All three of this backend's render-pass recorders applied the viewport
+    # its own public call. All three of this renderer's render-pass recorders applied the viewport
     # once, at the top of the pass, from the live viewport*_ members -- so two viewports in one bind
     # cycle collapsed last-wins and an ordinary restore before the flush promoted every queued draw
     # to the whole target. Every sequence here is queued whole, with no GetData/Present/flush/target
     # switch in between, and observed exactly once at its end.
     cna_webgpu_test(cna_test_webgpu_deferred_viewport
                     examples/deferred_viewport_capture_test.cpp)
-    cna_register_backend_test(NAME WebGPU_Deferred_Viewport COMMAND cna_test_webgpu_deferred_viewport
+    cna_register_renderer_test(NAME WebGPU_Deferred_Viewport COMMAND cna_test_webgpu_deferred_viewport
         TIMEOUT 120 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # REMED-GFX-116's structural half: the captured viewport must be dynamic pass state. It may not
@@ -443,7 +443,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_webgpu_test(cna_test_webgpu_viewport_cardinality
                     examples/webgpu_viewport_cardinality_test.cpp)
     target_link_libraries(cna_test_webgpu_viewport_cardinality PRIVATE WebGPU::WebGPU)
-    cna_register_backend_test(NAME WebGPU_Viewport_Cardinality COMMAND cna_test_webgpu_viewport_cardinality
+    cna_register_renderer_test(NAME WebGPU_Viewport_Cardinality COMMAND cna_test_webgpu_viewport_cardinality
         TIMEOUT 90 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # REMED-GFX-146: the scissor counterpart of REMED-GFX-116. All three render-pass recorders
@@ -454,7 +454,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # GetData/Present/flush/target switch in between, and observed exactly once at its end.
     cna_webgpu_test(cna_test_webgpu_deferred_scissor
                     examples/deferred_scissor_capture_test.cpp)
-    cna_register_backend_test(NAME WebGPU_Deferred_Scissor COMMAND cna_test_webgpu_deferred_scissor
+    cna_register_renderer_test(NAME WebGPU_Deferred_Scissor COMMAND cna_test_webgpu_deferred_scissor
         TIMEOUT 120 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # REMED-GFX-146's structural half: the captured scissor state must be dynamic pass state. It may
@@ -464,28 +464,28 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_webgpu_test(cna_test_webgpu_scissor_cardinality
                     examples/webgpu_scissor_cardinality_test.cpp)
     target_link_libraries(cna_test_webgpu_scissor_cardinality PRIVATE WebGPU::WebGPU)
-    cna_register_backend_test(NAME WebGPU_Scissor_Cardinality COMMAND cna_test_webgpu_scissor_cardinality
+    cna_register_renderer_test(NAME WebGPU_Scissor_Cardinality COMMAND cna_test_webgpu_scissor_cardinality
         TIMEOUT 90 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # REMED-GFX-159's structural half: replaying the two draw families in public order must not cost
     # a render-pass split, a submit or wait per family transition, or a pipeline variant keyed on a
     # draw's position. The pixel oracle in examples/spritebatch_3d_order_test.cpp cannot see any of
     # those -- each renders the correct picture -- so the cost contract is measured separately, on
-    # both the backbuffer and a render target, against this backend's own native counters.
+    # both the backbuffer and a render target, against this renderer's own native counters.
     cna_webgpu_test(cna_test_webgpu_draw_order_cardinality
                     examples/webgpu_draw_order_cardinality_test.cpp)
     target_link_libraries(cna_test_webgpu_draw_order_cardinality PRIVATE WebGPU::WebGPU)
-    cna_register_backend_test(NAME WebGPU_DrawOrder_Cardinality COMMAND cna_test_webgpu_draw_order_cardinality
+    cna_register_renderer_test(NAME WebGPU_DrawOrder_Cardinality COMMAND cna_test_webgpu_draw_order_cardinality
         TIMEOUT 90 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # REMED-GFX-146 false-positive audit: REMED-GFX-081's shared SpriteBatch.Begin(rasterizerState)
     # fixture was registered for SdlGpu and Vulkan but never for WebGPU, on no recorded grounds, so
-    # the one backend whose scissor state was resolved late was the one backend this never ran on.
-    # Registered here; it renders into a RenderTarget2D, which on this backend is its own flush, so
+    # the one renderer whose scissor state was resolved late was the one renderer this never ran on.
+    # Registered here; it renders into a RenderTarget2D, which on this renderer is its own flush, so
     # it complements rather than duplicates the deferral fixture above.
     cna_webgpu_test(cna_test_webgpu_spritebatch_begin_rasterizerstate_scissor
                     examples/spritebatch_begin_rasterizerstate_scissor_test.cpp)
-    cna_register_backend_test(NAME WebGPU_SpriteBatch_Begin_RasterizerState_Scissor
+    cna_register_renderer_test(NAME WebGPU_SpriteBatch_Begin_RasterizerState_Scissor
         COMMAND cna_test_webgpu_spritebatch_begin_rasterizerstate_scissor
         TIMEOUT 90 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
@@ -498,30 +498,30 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # For GetUncapturedErrorCountEXT(): the fix changes a resource format and introduces a
     # view-format reinterpretation, so the suite asserts wgpu-native reported no validation error.
     target_link_libraries(cna_test_webgpu_colorspace_midtone PRIVATE WebGPU::WebGPU)
-    cna_register_backend_test(NAME WebGPU_ColorSpace_MidTone COMMAND cna_test_webgpu_colorspace_midtone
+    cna_register_renderer_test(NAME WebGPU_ColorSpace_MidTone COMMAND cna_test_webgpu_colorspace_midtone
         TIMEOUT 120 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     cna_webgpu_test(cna_test_webgpu_additive_blend_contract
                     examples/additive_blend_contract_test.cpp)
-    cna_register_backend_test(NAME WebGPU_AdditiveBlendContract
+    cna_register_renderer_test(NAME WebGPU_AdditiveBlendContract
         COMMAND cna_test_webgpu_additive_blend_contract
         TIMEOUT 120 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # REMED-GFX-147: a RenderTarget2D used as a texture must sample in the same logical orientation
-    # as an ordinary Texture2D holding identical bytes. Registered here as a cross-backend control:
+    # as an ordinary Texture2D holding identical bytes. Registered here as a cross-renderer control:
     # the defect was EasyGL-local (an OpenGL framebuffer's origin is bottom-left, so a target's
     # colour texture stores the image bottom-up and sampling did not compensate even though GetData
     # already did), and these runs are what establish that render-target and ordinary-texture
     # sampling already agree everywhere else rather than being made to agree by the fix.
     cna_webgpu_test(cna_test_webgpu_rt_sampling_orientation
                     examples/rendertarget_sampling_orientation_test.cpp)
-    cna_register_backend_test(NAME WebGPU_RenderTarget_SamplingOrientation COMMAND cna_test_webgpu_rt_sampling_orientation
+    cna_register_renderer_test(NAME WebGPU_RenderTarget_SamplingOrientation COMMAND cna_test_webgpu_rt_sampling_orientation
         TIMEOUT 120 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # REMED-GFX-153 cross-backend source-selection and destination-orientation control.
+    # REMED-GFX-153 cross-renderer source-selection and destination-orientation control.
     cna_webgpu_test(cna_test_webgpu_gfx153_source_rectangle
                     examples/source_rectangle_orientation_test.cpp)
-    cna_register_backend_test(NAME WebGPU_GFX153_SourceRectangleOrientation
+    cna_register_renderer_test(NAME WebGPU_GFX153_SourceRectangleOrientation
         COMMAND cna_test_webgpu_gfx153_source_rectangle
         TIMEOUT 180 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
@@ -532,45 +532,45 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # ApplySamplerState is correct and SpriteBatch reads slotSamplers_[0], but six stock 3D
     # descriptor builders take NO sampler parameter at all, so all 15 of their combined-image-
     # sampler bindings are hardcoded to defaultSampler_ (LINEAR + CLAMP_TO_EDGE) and the sampler is
-    # absent from their cache keys too. Vulkan is where the defect lives; the other backends run the
+    # absent from their cache keys too. Vulkan is where the defect lives; the other renderers run the
     # same public fixture as controls.
     cna_webgpu_test(cna_test_webgpu_stock_effect_sampler
         examples/stock_effect_sampler_contract_test.cpp)
-    cna_register_backend_test(NAME WebGPU_StockEffectSamplerContract COMMAND cna_test_webgpu_stock_effect_sampler
+    cna_register_renderer_test(NAME WebGPU_StockEffectSamplerContract COMMAND cna_test_webgpu_stock_effect_sampler
         TIMEOUT 300 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # REMED-GFX-150 cross-backend control: TextureFilter::Point must select exactly ONE texel and
+    # REMED-GFX-150 cross-renderer control: TextureFilter::Point must select exactly ONE texel and
     # TextureAddressMode must decide which one, on SpriteBatch and on the device SamplerStates[0] 3D
     # path alike. The defect was Software-local (its ApplySamplerState named none of its parameters
     # and one bilinear function served every textured fragment, so every draw was LinearClamp); this
-    # run is what establishes that this backend already honoured the contract rather than being made
+    # run is what establishes that this renderer already honoured the contract rather than being made
     # to.
     # REMED-GFX-170: every public TextureFilter ordinal names a SEPARATE magnification, a separate
-    # minification and a separate mipmap filter, so a backend may not reduce the ordinal to one
+    # minification and a separate mipmap filter, so a renderer may not reduce the ordinal to one
     # boolean. WebGPU's SpriteBatch sampler and SDL_GPU's ONE shared sampler helper both resolved
     # `textureFilter == 0 ? LINEAR : NEAREST`, and both keyed their sampler cache on
     # `filter == 0 ? 0 : 1`, so Anisotropic, LinearMipPoint, MinPointMagLinearMipLinear and
     # MinPointMagLinearMipPoint all magnified with POINT. This fixture measures the two DIFFERENT
     # partitions of the nine ordinals that magnification and minification induce, on SpriteBatch and
-    # on every textured stock family; the other backends run it as controls.
+    # on every textured stock family; the other renderers run it as controls.
     cna_webgpu_test(cna_test_webgpu_texture_filter_ordinal
         examples/texture_filter_ordinal_contract_test.cpp)
-    cna_register_backend_test(NAME WebGPU_TextureFilterOrdinalContract COMMAND cna_test_webgpu_texture_filter_ordinal
+    cna_register_renderer_test(NAME WebGPU_TextureFilterOrdinalContract COMMAND cna_test_webgpu_texture_filter_ordinal
         TIMEOUT 300 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # REMED-GFX-173 cross-backend control: EnvironmentMapEffect samples TWO independent
+    # REMED-GFX-173 cross-renderer control: EnvironmentMapEffect samples TWO independent
     # resources -- the ordinary 2D texture through GraphicsDevice.SamplerStates[0] and the
     # reflection cube through SamplerStates[1]. SDL_GPU bound a literal LinearClamp for the cube
     # and captured only slot 0, so slot 1 could not reach replay at all. This fixture makes the
     # two slots independently observable (EnvironmentMapAmount 1 leaves the cube the only
-    # contributor, 0 leaves the 2D texture the only one) and measures what every other backend
+    # contributor, 0 leaves the 2D texture the only one) and measures what every other renderer
     # does with the same public state.
     # REMED-GFX-172 fixed WebGPU's half of this: its EnvironmentMap3D bind group had ONE sampler
     # entry for two texture views, so SamplerStates[1] was inexpressible for the cube and slot 1
     # silently inherited slot 0's sampler. Both the WGSL and the layout now carry a second sampler.
     cna_webgpu_test(cna_test_webgpu_envmap_cube_sampler
         examples/envmap_cube_sampler_contract_test.cpp)
-    cna_register_backend_test(NAME WebGPU_EnvMapCubeSamplerContract COMMAND cna_test_webgpu_envmap_cube_sampler
+    cna_register_renderer_test(NAME WebGPU_EnvMapCubeSamplerContract COMMAND cna_test_webgpu_envmap_cube_sampler
         TIMEOUT 600 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # REMED-GFX-172: DualTextureEffect's own half of the same defect. FNA's DualTextureEffect.fx
@@ -580,22 +580,22 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # DualTextureDrawCommand carried one sampler-state group filled from slotSamplers_[0]. This
     # fixture observes BOTH layers in the same image -- slot 0's texture varies along X only, slot
     # 1's along Y only, and the shader's product is separable -- so "changing one sampler affects
-    # only its own resource" is measured rather than inferred. The other backends run it as controls.
+    # only its own resource" is measured rather than inferred. The other renderers run it as controls.
     cna_webgpu_test(cna_test_webgpu_dualtexture_slot_sampler
         examples/dualtexture_slot_sampler_contract_test.cpp)
-    cna_register_backend_test(NAME WebGPU_DualTextureSlotSamplerContract COMMAND cna_test_webgpu_dualtexture_slot_sampler
+    cna_register_renderer_test(NAME WebGPU_DualTextureSlotSamplerContract COMMAND cna_test_webgpu_dualtexture_slot_sampler
         TIMEOUT 600 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # REMED-GFX-175 cross-backend control: the MIPMAP component of a TextureFilter ordinal.
+    # REMED-GFX-175 cross-renderer control: the MIPMAP component of a TextureFilter ordinal.
     # EasyGL mapped ordinals 0 and 1 onto a GL filter with no mipmap term and Software had no
-    # mip pipeline at all; this fixture measures what every other backend does with a chain
+    # mip pipeline at all; this fixture measures what every other renderer does with a chain
     # whose levels name themselves, so a divergence is classified rather than assumed.
     cna_webgpu_test(cna_test_webgpu_texture_filter_mip_contract
         examples/texture_filter_mip_contract_test.cpp)
-    cna_register_backend_test(NAME WebGPU_TextureFilterMipContract COMMAND cna_test_webgpu_texture_filter_mip_contract
+    cna_register_renderer_test(NAME WebGPU_TextureFilterMipContract COMMAND cna_test_webgpu_texture_filter_mip_contract
         TIMEOUT 300 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # REMED-GFX-177 cross-backend control: descriptor/binding bookkeeping must be a function of what
+    # REMED-GFX-177 cross-renderer control: descriptor/binding bookkeeping must be a function of what
     # is LIVE, never of what has ever existed. D3D12 owned four fixed-capacity heaps with a monotonic
     # bump cursor and no free list, so the 65th sampleable resource EVER CREATED threw even when six
     # were alive. Every draw here is checked against a self-identifying oracle that decodes back to an
@@ -603,59 +603,59 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # wrong resource rather than merely producing an odd colour.
     cna_webgpu_test(cna_test_webgpu_descriptor_capacity
         examples/descriptor_capacity_contract_test.cpp)
-    cna_register_backend_test(NAME WebGPU_DescriptorCapacityContract COMMAND cna_test_webgpu_descriptor_capacity
+    cna_register_renderer_test(NAME WebGPU_DescriptorCapacityContract COMMAND cna_test_webgpu_descriptor_capacity
         TIMEOUT 900 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     cna_webgpu_test(cna_test_webgpu_point_sampling
         examples/point_sampling_contract_test.cpp)
-    cna_register_backend_test(NAME WebGPU_PointSamplingContract COMMAND cna_test_webgpu_point_sampling
+    cna_register_renderer_test(NAME WebGPU_PointSamplingContract COMMAND cna_test_webgpu_point_sampling
         TIMEOUT 300 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # REMED-GFX-151 cross-backend control: the canonical XNA render-to-texture sequence -- render
+    # REMED-GFX-151 cross-renderer control: the canonical XNA render-to-texture sequence -- render
     # into a target, unbind it, sample it -- must complete in ONE public frame with no intervening
     # GetData, Present, extra frame, manual flush or wait. The defect was Vulkan-local (its deferred
     # recorder's readback flush filtered the frame's segment list down to the target being READ, so a
     # producer's pass was never recorded before the consumer that sampled it); these runs are what
-    # establish that every other backend already honoured the contract rather than being made to.
+    # establish that every other renderer already honoured the contract rather than being made to.
     cna_webgpu_test(cna_test_webgpu_rt_producer_consumer
                     examples/rendertarget_producer_consumer_test.cpp)
-    cna_register_backend_test(NAME WebGPU_RenderTarget_ProducerConsumer COMMAND cna_test_webgpu_rt_producer_consumer
+    cna_register_renderer_test(NAME WebGPU_RenderTarget_ProducerConsumer COMMAND cna_test_webgpu_rt_producer_consumer
         TIMEOUT 120 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # REMED-GFX-152 cross-backend control: a RenderTarget2D handed to a stock or custom 3D effect as
+    # REMED-GFX-152 cross-renderer control: a RenderTarget2D handed to a stock or custom 3D effect as
     # its texture must be sampled, not reinterpreted. The defect was SDL_GPU-local and fatal (its
-    # stock-effect paths static_cast an ITextureBackend* to the unrelated sibling
-    # SdlGpuTextureBackend, fabricating an SDL_GPUTexture* out of a render target's own fields); this
+    # stock-effect paths static_cast an ITextureRenderer* to the unrelated sibling
+    # SdlGpuTextureRenderer, fabricating an SDL_GPUTexture* out of a render target's own fields); this
     # run is what establishes that WEBGPU already honoured the contract rather than being made to.
     cna_webgpu_test(cna_test_webgpu_rt_effect_source
                     examples/rendertarget_effect_source_test.cpp)
-    cna_register_backend_test(NAME WebGPU_RenderTarget_EffectSource COMMAND cna_test_webgpu_rt_effect_source
+    cna_register_renderer_test(NAME WebGPU_RenderTarget_EffectSource COMMAND cna_test_webgpu_rt_effect_source
         TIMEOUT 300 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # REMED-GFX-167 deferred-source lifetime: a resource sampled by a draw that has only been
     # QUEUED must stay bindable until that draw actually renders, and destroying the public wrapper
     # first must never terminate the process. The defect was WebGPU-local -- every deferred command
-    # stored a raw pointer to the resource's BACKEND OBJECT and called a VIRTUAL method on it at
+    # stored a raw pointer to the resource's RENDERER OBJECT and called a VIRTUAL method on it at
     # replay, so a RenderTarget2D produced, sampled onto the BACKBUFFER and dropped inside one
-    # Draw() was a heap-use-after-free at Present(). These runs establish which backends already
+    # Draw() was a heap-use-after-free at Present(). These runs establish which renderers already
     # honoured the contract rather than being made to; each leg runs in its own process so a
     # SIGSEGV is an attributable result instead of a lost shard.
     cna_webgpu_test(cna_test_webgpu_deferred_source_lifetime
                     examples/deferred_source_lifetime_test.cpp)
-    cna_register_backend_test(NAME WebGPU_DeferredSourceLifetime COMMAND cna_test_webgpu_deferred_source_lifetime
+    cna_register_renderer_test(NAME WebGPU_DeferredSourceLifetime COMMAND cna_test_webgpu_deferred_source_lifetime
         TIMEOUT 300 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # REMED-GFX-168 cross-backend control: destroying a RenderTarget2D that is STILL the bound
+    # REMED-GFX-168 cross-renderer control: destroying a RenderTarget2D that is STILL the bound
     # render target must never make the next SetRenderTarget transition unsafe, and must leave the
     # next target and the backbuffer exactly correct. The defect was EasyGL-local -- it remembered
-    # the bound destination as a raw IRenderTargetBackend* and the next transition called
+    # the bound destination as a raw IRenderTargetRenderer* and the next transition called
     # UnbindAsRenderTarget() on it, so a scoped target leaving scope while bound made that
     # transition a virtual call through freed storage. This run is what establishes that WEBGPU
     # already honoured the contract rather than being made to; each leg runs in its own process so
     # a SIGSEGV is an attributable result instead of a lost shard.
     cna_webgpu_test(cna_test_webgpu_bound_target_lifetime
         examples/bound_target_lifetime_test.cpp)
-    cna_register_backend_test(NAME WebGPU_BoundTargetLifetime COMMAND cna_test_webgpu_bound_target_lifetime
+    cna_register_renderer_test(NAME WebGPU_BoundTargetLifetime COMMAND cna_test_webgpu_bound_target_lifetime
         TIMEOUT 600 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # REMED-GFX-180: the public render-target -> Present lifecycle contract. `SdlGpu_RenderState`
@@ -667,49 +667,49 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # process; leg C2 reproduces the abort end to end and its correct outcome is SIGABRT.
     cna_webgpu_test(cna_test_webgpu_present_lifecycle
         examples/present_lifecycle_contract_test.cpp)
-    cna_register_backend_test(NAME WebGPU_PresentLifecycle COMMAND cna_test_webgpu_present_lifecycle
+    cna_register_renderer_test(NAME WebGPU_PresentLifecycle COMMAND cna_test_webgpu_present_lifecycle
         TIMEOUT 900 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # REMED-GFX-163 cross-backend control: the same public depth-backed MULTISAMPLED
+    # REMED-GFX-163 cross-renderer control: the same public depth-backed MULTISAMPLED
     # RenderTarget2D construction and lifecycle that aborted the process on Bgfx. Only Bgfx
-    # production changed; this backend is registered to show the construction was always legal
+    # production changed; this renderer is registered to show the construction was always legal
     # and to keep it that way.
     cna_webgpu_test(cna_test_webgpu_msaa_depth_contract
         examples/rendertarget_msaa_depth_contract_test.cpp)
-    cna_register_backend_test(NAME WebGPU_MsaaDepthContract COMMAND cna_test_webgpu_msaa_depth_contract
+    cna_register_renderer_test(NAME WebGPU_MsaaDepthContract COMMAND cna_test_webgpu_msaa_depth_contract
         TIMEOUT 900 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # REMED-GFX-154 cross-backend control: the same PUBLIC first-readback contract on this
-    # backend. The defect was Bgfx-only and only Bgfx production changed; running the identical
+    # REMED-GFX-154 cross-renderer control: the same PUBLIC first-readback contract on this
+    # renderer. The defect was Bgfx-only and only Bgfx production changed; running the identical
     # fixture here is what makes that claim falsifiable rather than asserted.
     cna_webgpu_test(cna_test_webgpu_msaa_first_readback
         examples/rendertarget_msaa_first_readback_test.cpp)
-    cna_register_backend_test(NAME WebGPU_MsaaFirstReadback COMMAND cna_test_webgpu_msaa_first_readback
+    cna_register_renderer_test(NAME WebGPU_MsaaFirstReadback COMMAND cna_test_webgpu_msaa_first_readback
         TIMEOUT 900 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # REMED-GFX-186 cross-backend control: the same PUBLIC generated-mip readback contract on this
-    # backend. The SIGSEGV was SDL_GPU-only and only SDL_GPU production changed; running the
+    # REMED-GFX-186 cross-renderer control: the same PUBLIC generated-mip readback contract on this
+    # renderer. The SIGSEGV was SDL_GPU-only and only SDL_GPU production changed; running the
     # identical fixture here is what makes that claim falsifiable rather than asserted.
     cna_webgpu_test(cna_test_webgpu_msaa_mip_readback
         examples/rendertarget_msaa_mip_readback_test.cpp)
-    cna_register_backend_test(NAME WebGPU_MsaaMipReadback COMMAND cna_test_webgpu_msaa_mip_readback
+    cna_register_renderer_test(NAME WebGPU_MsaaMipReadback COMMAND cna_test_webgpu_msaa_mip_readback
         TIMEOUT 1200 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
-    # REMED-GFX-189 cross-backend control: the same PUBLIC invalid-mip-level contract on this
-    # backend. The fabrication was Vulkan-only and only Vulkan production changed; running the
+    # REMED-GFX-189 cross-renderer control: the same PUBLIC invalid-mip-level contract on this
+    # renderer. The fabrication was Vulkan-only and only Vulkan production changed; running the
     # identical fixture here is what makes that claim falsifiable rather than asserted.
     cna_webgpu_test(cna_test_webgpu_invalid_mip_level
         examples/rendertarget_invalid_mip_level_test.cpp)
-    cna_register_backend_test(NAME WebGPU_InvalidMipLevel COMMAND cna_test_webgpu_invalid_mip_level
+    cna_register_renderer_test(NAME WebGPU_InvalidMipLevel COMMAND cna_test_webgpu_invalid_mip_level
         TIMEOUT 1200 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
-    # REMED-GFX-155 cross-backend control: a render target produced and unbound earlier in a public
+    # REMED-GFX-155 cross-renderer control: a render target produced and unbound earlier in a public
     # frame must be visible to a consumer that draws on the BACKBUFFER later in that same frame. The
     # defect was bgfx-local (it radix-sorts a frame's draws by their view's sort position, which
     # defaults to the numeric view id, and its backbuffer owns the lowest id -- so a backbuffer
     # consumer executed before its own producer); these runs are what establish that every other
-    # backend already honoured the contract rather than being made to.
+    # renderer already honoured the contract rather than being made to.
     cna_webgpu_test(cna_test_webgpu_rt_backbuffer_consumer
                     examples/rendertarget_backbuffer_consumer_test.cpp)
-    cna_register_backend_test(NAME WebGPU_RenderTarget_BackbufferConsumer COMMAND cna_test_webgpu_rt_backbuffer_consumer
+    cna_register_renderer_test(NAME WebGPU_RenderTarget_BackbufferConsumer COMMAND cna_test_webgpu_rt_backbuffer_consumer
         TIMEOUT 180 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # REMED-GFX-158's control: a RenderTarget2D constructed during a public frame must be usable in
@@ -720,7 +720,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # contract rather than being made to.
     cna_webgpu_test(cna_test_webgpu_rt_first_use
                     examples/rendertarget_first_use_test.cpp)
-    cna_register_backend_test(NAME WebGPU_RenderTarget_FirstUse COMMAND cna_test_webgpu_rt_first_use
+    cna_register_renderer_test(NAME WebGPU_RenderTarget_FirstUse COMMAND cna_test_webgpu_rt_first_use
         TIMEOUT 180 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # REMED-GFX-157: a stock 3D draw issued AFTER a SpriteBatch inside ONE render-target bind cycle
@@ -731,7 +731,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # happened in the issued order.
     cna_webgpu_test(cna_test_webgpu_spritebatch_3d_order
                     examples/spritebatch_3d_order_test.cpp)
-    cna_register_backend_test(NAME WebGPU_SpriteBatch3DOrder COMMAND cna_test_webgpu_spritebatch_3d_order
+    cna_register_renderer_test(NAME WebGPU_SpriteBatch3DOrder COMMAND cna_test_webgpu_spritebatch_3d_order
         TIMEOUT 300 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # REMED-GFX-160: the XNA/FNA front-face winding contract. FNA's SpriteBatch emits
@@ -741,7 +741,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # make every cull mode's expected answer complementary in one readback.
     cna_webgpu_test(cna_test_webgpu_frontface_winding
                     examples/frontface_winding_test.cpp)
-    cna_register_backend_test(NAME WebGPU_FrontFaceWinding COMMAND cna_test_webgpu_frontface_winding
+    cna_register_renderer_test(NAME WebGPU_FrontFaceWinding COMMAND cna_test_webgpu_frontface_winding
         TIMEOUT 300 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # REMED-GFX-183: dedicated TriangleStrip parity/culling matrix. Covers native and DrawUser,
@@ -750,19 +750,19 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_webgpu_test(cna_test_webgpu_triangle_strip_winding
                     examples/triangle_strip_winding_test.cpp)
     target_link_libraries(cna_test_webgpu_triangle_strip_winding PRIVATE WebGPU::WebGPU)
-    cna_register_backend_test(NAME WebGPU_TriangleStripWinding
+    cna_register_renderer_test(NAME WebGPU_TriangleStripWinding
         COMMAND cna_test_webgpu_triangle_strip_winding
         TIMEOUT 300 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # REMED-GFX-165: a rectangle-less GetBackBufferData must address the whole logical backbuffer
     # (PresentationParameters W x H) from the first observable frame, with no SetRenderTarget round
     # trip, no extra Present and no viewport reset -- sized from the backbuffer description, never from
-    # the backend's live viewport. The defect was WebGPU/SDL_GPU-local (the rectangle-less path asked
-    # backend_->GetViewportSize, which under FixedHeightDynamicWidth is aspect-scaled and, before the
+    # the renderer's live viewport. The defect was WebGPU/SDL_GPU-local (the rectangle-less path asked
+    # renderer_->GetViewportSize, which under FixedHeightDynamicWidth is aspect-scaled and, before the
     # window is realised, stale). Each leg runs in its own process so its first frame is genuinely first.
     cna_webgpu_test(cna_test_webgpu_backbuffer_readback_dimension
                     examples/backbuffer_readback_dimension_test.cpp)
-    cna_register_backend_test(NAME WebGPU_BackbufferReadbackDimension COMMAND cna_test_webgpu_backbuffer_readback_dimension
+    cna_register_renderer_test(NAME WebGPU_BackbufferReadbackDimension COMMAND cna_test_webgpu_backbuffer_readback_dimension
         TIMEOUT 300 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # REMED-GFX-161: the FIRST GetBackBufferData of a process must fully and synchronously write the
@@ -771,13 +771,13 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # leg runs in its own process (fork+exec) so its first read is genuinely first.
     cna_webgpu_test(cna_test_webgpu_backbuffer_first_read
                     examples/backbuffer_first_read_test.cpp)
-    cna_register_backend_test(NAME WebGPU_BackbufferFirstRead COMMAND cna_test_webgpu_backbuffer_first_read
+    cna_register_renderer_test(NAME WebGPU_BackbufferFirstRead COMMAND cna_test_webgpu_backbuffer_first_read
         TIMEOUT 300 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # REMED-GFX-162 cross-backend control: a rasterizing backend's GetBackBufferData SUCCEEDS and
+    # REMED-GFX-162 cross-renderer control: a rasterizing renderer's GetBackBufferData SUCCEEDS and
     # fully writes the requested range (GFX-161/165 preserved), so the Headless rejection is specific.
     cna_webgpu_test(cna_test_webgpu_backbuffer_reject
                     examples/backbuffer_headless_reject_test.cpp)
-    cna_register_backend_test(NAME WebGPU_BackbufferReject COMMAND cna_test_webgpu_backbuffer_reject
+    cna_register_renderer_test(NAME WebGPU_BackbufferReject COMMAND cna_test_webgpu_backbuffer_reject
         TIMEOUT 300 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

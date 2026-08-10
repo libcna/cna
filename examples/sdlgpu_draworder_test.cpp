@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
-// plan_sdlgpu.md: real chronological draw-order proof for the SDL_GPU graphics backend
-// (adversarial-review finding #4) -- the backend used to always render all 7 3D shader families
+// plan_sdlgpu.md: real chronological draw-order proof for the SDL_GPU graphics renderer
+// (adversarial-review finding #4) -- the renderer used to always render all 7 3D shader families
 // first and every SpriteBatch sprite last, regardless of the real order the game called
 // Draw()/SpriteBatch.Draw() in. drawOrder_ + RenderQueuedDraws() now replay every queued draw in
 // real chronological issue order instead.
@@ -40,7 +40,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 
-#include "CNA/Internal/Backends/SdlGpu/SdlGpuGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/SdlGpu/SdlGpuRenderer.hpp"
 
 #include "common/PixelTestGame.hpp"
 
@@ -52,7 +52,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::SdlGpu;
+using namespace CNA::Internal::Renderers::SdlGpu;
 
 namespace
 {

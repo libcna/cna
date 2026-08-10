@@ -17,7 +17,7 @@
 //   Draw 3 (scalar overload, non-zero origin): position=(300,150), origin=(10,10) (the source
 //     rectangle's own centre), scale=2.0f -> expected 40x40 destination rectangle CENTRED on
 //     position, spanning screen x:[280,320), y:[130,170). Regression check for a real bug (see
-//     ComputeSpriteScreenCorners()'s own fix comment, OpenGL2GraphicsBackend.cpp): origin is
+//     ComputeSpriteScreenCorners()'s own fix comment, OpenGL2Renderer.cpp): origin is
 //     defined in SOURCE-rectangle pixel units and must be scaled by (destination/source) before
 //     being applied against the destination rectangle -- using it unscaled shifts the sprite by
 //     `origin - origin*(dest/source)` = a 10px down-right offset here (destination would instead

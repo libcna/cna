@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MS-PL
-// Task 888: DualTextureEffect linear fog pixel integration test — Bgfx backend.
+// Task 888: DualTextureEffect linear fog pixel integration test — Bgfx renderer.
 //
 // Direct port of examples/easygl_dualtextureeffect_fog_test.cpp (Task 388), which found this
-// exact gap on Vulkan/Bgfx: fog was a total GPU no-op for DualTextureEffect on both backends
+// exact gap on Vulkan/Bgfx: fog was a total GPU no-op for DualTextureEffect on both renderers
 // (Task 888, discovered by Task 378). Fixed by adding u_fogColor/u_fogParams uniforms (shared by
 // every 3D program) and the standard fog blend to vs/fs_dual_texture3d.sc.
 //
@@ -12,7 +12,7 @@
 //
 // A 3-point Z-sweep (z=-0.9 no fog, z=0.9 full fog, z=0 half fog) proves the blend is a genuine
 // interpolation, not just an on/off switch. `World`/`View`/`Projection` are all Identity, so raw
-// vertex Z is `gl_Position.z` directly (Bgfx's OpenGL backend uses the same [-1,1] clip-space Z
+// vertex Z is `gl_Position.z` directly (Bgfx's OpenGL renderer uses the same [-1,1] clip-space Z
 // range as EasyGL, unlike Vulkan's [0,1] -- this is why Vulkan's DualTextureEffect fog is
 // deferred to Task 899 rather than needing a Z-range workaround here).
 //

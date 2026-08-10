@@ -3,7 +3,7 @@
 // untraced state-toggle/Clear-variant methods and the two remaining untraced Create* factories)
 // and HEADLESS-43 (trace-log comparison tooling, previously flagged aspirational/unimplemented).
 //
-// Needs no window, no Game, no GraphicsDeviceManager at all -- HeadlessGraphicsBackend and the
+// Needs no window, no Game, no GraphicsDeviceManager at all -- HeadlessRenderer and the
 // new CompareTraceLogs()/FormatTraceLogDiff() free functions are fully self-contained, so this is
 // a plain standalone main(), matching how HEADLESS-5's env-var parsing check needed no game loop
 // either.
@@ -29,12 +29,12 @@
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
-#include "CNA/Internal/Backends/Headless/HeadlessGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Headless/HeadlessRenderer.hpp"
 
 #include <cstdio>
 #include <cstdlib>
 
-using namespace CNA::Internal::Backends::Headless;
+using namespace CNA::Internal::Renderers::Headless;
 
 namespace
 {
@@ -48,18 +48,18 @@ namespace
 
     // A small, deterministic sequence exercising the newly-traced methods plus a couple of
     // already-traced ones, so the resulting log is non-trivial for the diff checks below.
-    void RunDeterministicSequence(HeadlessGraphicsBackend& backend, int viewportSize)
+    void RunDeterministicSequence(HeadlessRenderer& renderer, int viewportSize)
     {
-        backend.SetMode(HeadlessMode::Trace);
-        backend.Clear(0.0f, 0.0f, 0.0f, 1.0f);
-        backend.SetViewport(0, 0, viewportSize, viewportSize, 0.0f, 1.0f);
-        backend.ClearDepth(1.0f);
-        backend.ClearStencil(0);
-        backend.ClearDepthAndStencil(1.0f, 0);
-        backend.SetDepthTestEnabled(true);
-        backend.SetBlendEnabled(true);
-        backend.SetDepthWriteEnabled(false);
-        backend.Present();
+        renderer.SetMode(HeadlessMode::Trace);
+        renderer.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+        renderer.SetViewport(0, 0, viewportSize, viewportSize, 0.0f, 1.0f);
+        renderer.ClearDepth(1.0f);
+        renderer.ClearStencil(0);
+        renderer.ClearDepthAndStencil(1.0f, 0);
+        renderer.SetDepthTestEnabled(true);
+        renderer.SetBlendEnabled(true);
+        renderer.SetDepthWriteEnabled(false);
+        renderer.Present();
     }
 }
 
@@ -67,13 +67,13 @@ int main()
 {
     // Checks A/B: the previously-untraced methods now show up in FormatTraceLog().
     {
-        HeadlessGraphicsBackend backend(64, 64);
-        RunDeterministicSequence(backend, 64);
+        HeadlessRenderer renderer(64, 64);
+        RunDeterministicSequence(renderer, 64);
         {
-            auto sb = backend.CreateSpriteBatch();
-            auto oq = backend.CreateOcclusionQuery();
+            auto sb = renderer.CreateSpriteBatch();
+            auto oq = renderer.CreateOcclusionQuery();
         }
-        const std::string formatted = backend.FormatTraceLog();
+        const std::string formatted = renderer.FormatTraceLog();
         Check(formatted.find("ClearDepth") != std::string::npos &&
               formatted.find("ClearStencil") != std::string::npos &&
               formatted.find("ClearDepthAndStencil") != std::string::npos &&
@@ -89,28 +89,28 @@ int main()
 
     // Check C: identical sequences -> identical logs.
     {
-        HeadlessGraphicsBackend backendA(64, 64);
-        RunDeterministicSequence(backendA, 64);
-        HeadlessGraphicsBackend backendB(64, 64);
-        RunDeterministicSequence(backendB, 64);
+        HeadlessRenderer rendererA(64, 64);
+        RunDeterministicSequence(rendererA, 64);
+        HeadlessRenderer rendererB(64, 64);
+        RunDeterministicSequence(rendererB, 64);
 
-        const HeadlessTraceLogDiff diff = CompareTraceLogs(backendA.TraceLog(), backendB.TraceLog());
+        const HeadlessTraceLogDiff diff = CompareTraceLogs(rendererA.TraceLog(), rendererB.TraceLog());
         Check(diff.identical, "CompareTraceLogs() reports two identical call sequences as identical");
     }
 
     // Check D: a genuine mid-sequence divergence (different SetViewport size) is located
     // precisely -- SetViewport is call index 1 (after Clear at index 0).
     {
-        HeadlessGraphicsBackend backendA(64, 64);
-        RunDeterministicSequence(backendA, 64);
-        HeadlessGraphicsBackend backendC(64, 64);
-        RunDeterministicSequence(backendC, 32);
+        HeadlessRenderer rendererA(64, 64);
+        RunDeterministicSequence(rendererA, 64);
+        HeadlessRenderer rendererC(64, 64);
+        RunDeterministicSequence(rendererC, 32);
 
-        const HeadlessTraceLogDiff diff = CompareTraceLogs(backendA.TraceLog(), backendC.TraceLog());
+        const HeadlessTraceLogDiff diff = CompareTraceLogs(rendererA.TraceLog(), rendererC.TraceLog());
         Check(!diff.identical && diff.firstDivergingIndex == 1,
               "CompareTraceLogs() locates a mid-sequence divergence at the correct index");
 
-        const std::string formatted = FormatTraceLogDiff(backendA.TraceLog(), backendC.TraceLog());
+        const std::string formatted = FormatTraceLogDiff(rendererA.TraceLog(), rendererC.TraceLog());
         Check(formatted.find("diverge") != std::string::npos &&
               formatted.find("SetViewport") != std::string::npos,
               "FormatTraceLogDiff() renders a human-readable report naming the diverging call");
@@ -118,28 +118,28 @@ int main()
 
     // Check E: one log is a strict prefix of the other (a run that stopped early).
     {
-        HeadlessGraphicsBackend backendA(64, 64);
-        RunDeterministicSequence(backendA, 64);
+        HeadlessRenderer rendererA(64, 64);
+        RunDeterministicSequence(rendererA, 64);
 
-        HeadlessGraphicsBackend backendD(64, 64);
-        backendD.SetMode(HeadlessMode::Trace);
-        backendD.Clear(0.0f, 0.0f, 0.0f, 1.0f);
-        backendD.SetViewport(0, 0, 64, 64, 0.0f, 1.0f);
+        HeadlessRenderer rendererD(64, 64);
+        rendererD.SetMode(HeadlessMode::Trace);
+        rendererD.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+        rendererD.SetViewport(0, 0, 64, 64, 0.0f, 1.0f);
         // Stops here -- no ClearDepth/ClearStencil/.../Present.
 
-        const HeadlessTraceLogDiff diff = CompareTraceLogs(backendA.TraceLog(), backendD.TraceLog());
-        Check(!diff.identical && diff.firstDivergingIndex == backendD.TraceLog().size(),
+        const HeadlessTraceLogDiff diff = CompareTraceLogs(rendererA.TraceLog(), rendererD.TraceLog());
+        Check(!diff.identical && diff.firstDivergingIndex == rendererD.TraceLog().size(),
               "CompareTraceLogs() reports a prefix-only log as diverging at its own length");
     }
 
     // Check F: FormatTraceLogDiff()'s one-line summary for a genuinely identical pair.
     {
-        HeadlessGraphicsBackend backendA(64, 64);
-        RunDeterministicSequence(backendA, 64);
-        HeadlessGraphicsBackend backendB(64, 64);
-        RunDeterministicSequence(backendB, 64);
+        HeadlessRenderer rendererA(64, 64);
+        RunDeterministicSequence(rendererA, 64);
+        HeadlessRenderer rendererB(64, 64);
+        RunDeterministicSequence(rendererB, 64);
 
-        const std::string formatted = FormatTraceLogDiff(backendA.TraceLog(), backendB.TraceLog());
+        const std::string formatted = FormatTraceLogDiff(rendererA.TraceLog(), rendererB.TraceLog());
         Check(formatted.find("identical") != std::string::npos,
               "FormatTraceLogDiff() renders a one-line 'identical' summary for matching logs");
     }

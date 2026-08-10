@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl4.md GL4-17: real backbuffer (window-level) MSAA for the OpenGL4 graphics backend --
-// GraphicsBackendCreateArgs::multiSampleCount was previously accepted but ignored entirely
+// plan_opengl4.md GL4-17: real backbuffer (window-level) MSAA for the OpenGL4 graphics renderer --
+// GraphicsRendererCreateArgs::multiSampleCount was previously accepted but ignored entirely
 // (GetMultiSampleCount() always reported 0, PreferMultiSampling had no effect).
 //
 // Methodology (matches this project's own established MSAA differential test family --
@@ -13,22 +13,22 @@
 //
 // A Game's own GraphicsDevice member is unconditionally default-constructed with
 // MultiSampleCount=0 before any derived Game subclass or GraphicsDeviceManager code can run
-// (see GraphicsDevice::RecreateBackendForMultiSampleCount's own doc comment) -- so setting
+// (see GraphicsDevice::RecreateRendererForMultiSampleCount's own doc comment) -- so setting
 // GraphicsDeviceManager.PreferMultiSampling in this test's constructor would never reach the
-// FIRST backend at all. And unlike Vulkan/WebGPU (which support ApplyMultiSampleCount()
-// reconfiguring an EXISTING backend at runtime via GraphicsDeviceManager.ApplyChanges()),
-// OpenGL4's backbuffer MSAA -- like EasyGL's own equivalent -- is fixed at backend construction
-// time only (a manually-managed multisample FBO; see OpenGL4GraphicsBackend's own
+// FIRST renderer at all. And unlike Vulkan/WebGPU (which support ApplyMultiSampleCount()
+// reconfiguring an EXISTING renderer at runtime via GraphicsDeviceManager.ApplyChanges()),
+// OpenGL4's backbuffer MSAA -- like EasyGL's own equivalent -- is fixed at renderer construction
+// time only (a manually-managed multisample FBO; see OpenGL4Renderer's own
 // ApplyMultiSampleCount doc comment for why). This test therefore uses the same NOXNA-only
-// `GraphicsDevice::RecreateBackendForMultiSampleCount()` escape hatch Vulkan's own pre-Task-902
+// `GraphicsDevice::RecreateRendererForMultiSampleCount()` escape hatch Vulkan's own pre-Task-902
 // MSAA tests used for the identical reason (vulkan_rendertarget2d_msaa_test.cpp,
 // vulkan_basiceffect_textured_msaa_test.cpp): Check A's triangle draw+readback happens entirely
-// inside Initialize() (so no GPU resource crosses the backend-recreate boundary), then the
-// backend is recreated with MultiSampleCount=8, then Check B repeats the identical draw against
-// the new, MSAA-enabled backend.
+// inside Initialize() (so no GPU resource crosses the renderer-recreate boundary), then the
+// renderer is recreated with MultiSampleCount=8, then Check B repeats the identical draw against
+// the new, MSAA-enabled renderer.
 //
 // Check A -- MultiSampleCount off (the default): the diagonal edge is a hard binary transition.
-// Check B -- after RecreateBackendForMultiSampleCount(8): GetMultiSampleCountProperty() reports a
+// Check B -- after RecreateRendererForMultiSampleCount(8): GetMultiSampleCountProperty() reports a
 //   real (non-zero, device-clamped) sample count, and the SAME diagonal-edge geometry now shows
 //   genuinely blended intermediate pixels -- not the hard transition Check A saw.
 //
@@ -126,10 +126,10 @@ protected:
     void Initialize() override
     {
         Game::Initialize();
-        // Check A's draw+readback happens here, entirely before RecreateBackendForMultiSampleCount
-        // destroys and rebuilds the backend -- see this file's header comment for why.
+        // Check A's draw+readback happens here, entirely before RecreateRendererForMultiSampleCount
+        // destroys and rebuilds the renderer -- see this file's header comment for why.
         noMsaaRow_ = RenderAndReadRow(getGraphicsDeviceProperty());
-        getGraphicsDeviceProperty().RecreateBackendForMultiSampleCount(8);
+        getGraphicsDeviceProperty().RecreateRendererForMultiSampleCount(8);
     }
 
     void RunTest() override
@@ -140,11 +140,11 @@ protected:
         auto& dev = getGraphicsDeviceProperty();
         const int applied = dev.getPresentationParametersProperty().getMultiSampleCountProperty();
         Check(applied > 0,
-              "Check B: RecreateBackendForMultiSampleCount(8) -- GetMultiSampleCount() reports a real, non-zero, device-clamped value");
+              "Check B: RecreateRendererForMultiSampleCount(8) -- GetMultiSampleCount() reports a real, non-zero, device-clamped value");
 
         const std::vector<Color> msaaRow = RenderAndReadRow(dev);
         Check(HasIntermediate(msaaRow),
-              "Check B: RecreateBackendForMultiSampleCount(8) -- diagonal edge now has genuinely blended intermediate pixels");
+              "Check B: RecreateRendererForMultiSampleCount(8) -- diagonal edge now has genuinely blended intermediate pixels");
     }
 
 public:

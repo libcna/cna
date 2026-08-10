@@ -12,7 +12,7 @@
 #include <gtest/gtest.h>
 #include <sstream>
 
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Xnb/Texture3DContentTypeReader.hpp"
 #include "CNA/Internal/Xnb/TextureCubeContentTypeReader.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
@@ -39,22 +39,22 @@ using Microsoft::Xna::Framework::Graphics::Texture3D;
 using Microsoft::Xna::Framework::Graphics::TextureCube;
 
 // -----------------------------------------------------------------------
-// REMED-GFX-130: does THIS build's backend actually read a cube face back? See the identical
+// REMED-GFX-130: does THIS build's renderer actually read a cube face back? See the identical
 // constant (and its full rationale) in tests/Microsoft/Xna/Framework/Graphics/TextureCubeTests.cpp.
 // -----------------------------------------------------------------------
-// REMED-GFX-135 additionally makes the UPLOAD side of this fixture load-bearing: a backend that
+// REMED-GFX-135 additionally makes the UPLOAD side of this fixture load-bearing: a renderer that
 // cannot store a cube face now throws System::NotSupportedException out of TextureCubeReader's own
 // SetData call, so the whole ContentManager::Load fails instead of quietly returning an empty cube.
 // Software gained real per-mip cube storage in that finding, so its mip readback is now exact.
-// plan_sokol.md SOKOL-27: SokolTextureCubeBackend stores every declared mip level's six faces in a
+// plan_sokol.md SOKOL-27: SokolTextureCubeRenderer stores every declared mip level's six faces in a
 // real CPU shadow, so its readback is exact at every level too.
-#if defined(CNA_BACKEND_SDL_RENDERER) || defined(CNA_BACKEND_ASCII) || \
-    defined(CNA_BACKEND_CANVAS) || defined(CNA_BACKEND_HTML_DOM) || \
-    defined(CNA_BACKEND_FREEDIRECT) || defined(CNA_BACKEND_HEADLESS) || defined(CNA_BACKEND_GDI)
+#if defined(CNA_RENDERER_SDL_RENDERER) || defined(CNA_RENDERER_ASCII) || \
+    defined(CNA_RENDERER_CANVAS) || defined(CNA_RENDERER_HTML_DOM) || \
+    defined(CNA_RENDERER_FREEDIRECT) || defined(CNA_RENDERER_HEADLESS) || defined(CNA_RENDERER_GDI)
 constexpr bool kCubeStorageSupported         = false;
 constexpr bool kCubeLevel0ReadbackSupported  = false;
 constexpr bool kCubeMipReadbackSupported     = false;
-#elif defined(CNA_BACKEND_OPENGLES1)
+#elif defined(CNA_RENDERER_OPENGLES1)
 // OpenGL ES 1.1 stores the whole declared chain and reads the base level back through a scratch
 // framebuffer, but GL_OES_framebuffer_object requires an attached texture's level to be 0, so no
 // mip level above 0 can be read there however much storage exists. The three-way split is exactly
@@ -106,7 +106,7 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest, TextureCubeReaderLoadsRealMono
     ContentManager cm(nullptr, "tests/assets/xnb/monogame/windows/uncompressed");
     cm.setGraphicsDevice(gd);
 
-    // REMED-GFX-135: on a backend with no cube storage, TextureCubeReader's own SetData call now
+    // REMED-GFX-135: on a renderer with no cube storage, TextureCubeReader's own SetData call now
     // throws instead of silently discarding all 42 face/level uploads, so the load fails as a whole
     // rather than handing back a TextureCube that reports LevelCount 7 and holds nothing. That is
     // the content-pipeline consequence of the finding, asserted here rather than worked around.
@@ -128,11 +128,11 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest, TextureCubeReaderLoadsRealMono
     // plausible non-degenerate image) -- spot-check level 0 (64x64) and the smallest levels (the
     // sub-4x4 DXT1 block-rounding edge cases, 2x2 and 1x1, each still exactly one 8-byte block).
     //
-    // REMED-GFX-130: the readback half of this test is only meaningful where the backend really
+    // REMED-GFX-130: the readback half of this test is only meaningful where the renderer really
     // reads a cube face back. It used to be issued unconditionally, and the smallest-level check
-    // was a bare EXPECT_NO_THROW that asserted nothing at all -- a backend answering with the
+    // was a bare EXPECT_NO_THROW that asserted nothing at all -- a renderer answering with the
     // shared layer's fabricated transparent-black face passed it. Both halves now assert the real
-    // outcome for this backend, and the sentinel proves the rejection path writes nothing.
+    // outcome for this renderer, and the sentinel proves the rejection path writes nothing.
     const Color sentinel(0xA5, 0xA5, 0xA5, 0xA5);
     std::vector<Color> level0(64 * 64, sentinel);
     Color onePixel = sentinel;
@@ -151,7 +151,7 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest, TextureCubeReaderLoadsRealMono
         }
         EXPECT_TRUE(sawNonUniform) << "level 0 should not decode to a uniformly flat image";
 
-        // The smallest mip level (1x1) is the sub-4x4 DXT1 block-rounding edge case. Every backend
+        // The smallest mip level (1x1) is the sub-4x4 DXT1 block-rounding edge case. Every renderer
         // that stores cube faces at all now stores the whole declared chain (REMED-GFX-135 gave
         // Software the per-mip storage it was the last to be missing).
         if (kCubeMipReadbackSupported)
@@ -176,9 +176,9 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest, TextureCubeReaderLoadsRealMono
     }
 }
 
-// REMED-CONTENT-004: Texture3D is a documented, backend-dependent capability -- Headless has no
+// REMED-CONTENT-004: Texture3D is a documented, renderer-dependent capability -- Headless has no
 // real GPU resource of any kind, and Software's Texture3D support is an explicit v1 scope boundary
-// (plan_software.md Boundaries). On a backend that doesn't support it, reading now throws a clean
+// (plan_software.md Boundaries). On a renderer that doesn't support it, reading now throws a clean
 // System::NotSupportedException (from Texture3D's own constructor) instead of previously silently
 // succeeding with all-zero pixel data.
 TEST_F(Texture3DTextureCubeContentTypeReaderTest, Texture3DReaderParsesHandConstructedBytesMatchingFnaByteOrder)

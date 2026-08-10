@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-082: the Software (CPU-raster) backend must honor RasterizerState.FillMode. Before this
-// task SoftwareGraphicsBackend::ApplyRasterizerState dropped its fillMode argument and the rasterizer
+// REMED-GFX-082: the Software (CPU-raster) renderer must honor RasterizerState.FillMode. Before this
+// task SoftwareRenderer::ApplyRasterizerState dropped its fillMode argument and the rasterizer
 // only ever filled solid triangles, so FillMode.WireFrame rendered as a solid fill (no line-raster
-// path existed). This is the Software counterpart of the GPU backends' wireframe support (e.g. EasyGL
+// path existed). This is the Software counterpart of the GPU renderers' wireframe support (e.g. EasyGL
 // expands each triangle into GL_LINES; D3D11/Vulkan use the hardware WIREFRAME fill mode).
 //
 // XNA/FNA contract (verified against FNA RasterizerState.FillMode + PipelineCache):
@@ -144,7 +144,7 @@ class SoftwareWireframeTest : public Game
         dev.setRasterizerStateProperty(MakeRaster(cull, fill, scissor));
     }
 
-    // ---- draw helpers: one triangle / quad through each backend entry point ----
+    // ---- draw helpers: one triangle / quad through each renderer entry point ----
 
     // DrawColoredPrimitives (via DrawUserPrimitives<VertexPositionColor>).
     void TriColored(GraphicsDevice& dev, const Color& c, float z = 0.5f)

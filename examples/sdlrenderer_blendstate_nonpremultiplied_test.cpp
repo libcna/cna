@@ -15,7 +15,7 @@
 //   dst = (255,0,0)*(128/255) + (0,0,255)*(1-128/255) ≈ (128, 0, 127) -- a proper 50/50 blend.
 //
 // Requires PresentationMode::NativeBackBuffer (Task 915 finding): SDL_RenderReadPixels operates
-// in physical output coordinates, while this backend's default presentation mode
+// in physical output coordinates, while this renderer's default presentation mode
 // (FixedHeightDynamicWidth) does not map logical pixels 1:1 to physical ones.
 //
 // Exit code 0 = all PASS, 1 = at least one FAIL.

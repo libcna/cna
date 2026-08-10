@@ -10,10 +10,10 @@
 // must leave B everywhere C did not touch, and nothing of A anywhere -- on a PreserveContents
 // target just as much as on a DiscardContents one.
 //
-// `VulkanGraphicsBackend` delivered a clear ONLY through the render pass load op:
+// `VulkanRenderer` delivered a clear ONLY through the render pass load op:
 // `GetOrCreateRTRenderPass(depthFormat, discardContents)` chose
 // `discardContents ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD` and there was no
-// `vkCmdClearAttachments` path anywhere in the backend. A pass has exactly one load action, so
+// `vkCmdClearAttachments` path anywhere in the renderer. A pass has exactly one load action, so
 //
 //   * a preserving pass (LOAD_OP_LOAD) had no mechanism to deliver a clear colour at all;
 //   * a clear necessarily ran BEFORE every draw of its pass, so "draw, then Clear" could not wipe
@@ -31,20 +31,20 @@
 // ------------------------------------
 //   * The whole public sequence of a check is queued, and only THEN is anything read. No GetData,
 //     GetBackBufferData, Present, flush, fence wait, sleep or extra frame sits between two commands
-//     of one sequence -- a backend must not be able to pass by being forced to settle in between.
+//     of one sequence -- a renderer must not be able to pass by being forced to settle in between.
 //   * The palette is 0/255-only, an exact fixed point of sRGB encoding, so every colour comparison
-//     is byte-exact on every backend including sRGB ones.
+//     is byte-exact on every renderer including sRGB ones.
 //   * Depth and stencil are never read back directly. They are proven by RENDERING: geometry that
 //     the stored depth must reject or accept, and geometry the stored stencil must gate. Absence of
 //     a validation message proves nothing and is never used as evidence.
-//   * Colour work and 3D work never share one bind cycle, so a backend that replays sprites and 3D
+//   * Colour work and 3D work never share one bind cycle, so a renderer that replays sprites and 3D
 //     draws in separate groups within a cycle is not being measured on that.
 //
 // The clear rectangle
 // -------------------
-// REMED-GFX-018 established this project's cross-backend contract on Bgfx: "each clear is a
+// REMED-GFX-018 established this project's cross-renderer contract on Bgfx: "each clear is a
 // full-target ordered operation ... viewport and scissor do not restrict Clear". Checks `V1`/`V2`
-// assert exactly that and are declared per backend, so a backend that genuinely scopes Clear to the
+// assert exactly that and are declared per renderer, so a renderer that genuinely scopes Clear to the
 // viewport is recorded rather than silently standardised away.
 //
 // Exit code 0 = all checks PASS, 1 = any FAIL.
@@ -114,10 +114,10 @@ namespace
     Color DiscardColour() { return kBlack; }
 
     /**
-     * @brief The complete, reviewed per-backend claim this file enforces.
+     * @brief The complete, reviewed per-renderer claim this file enforces.
      *
      * Every flag is asserted in BOTH directions: a check whose flag is false asserts the declared
-     * defective shape, so the declaration turns red the day the backend is fixed as well as the day
+     * defective shape, so the declaration turns red the day the renderer is fixed as well as the day
      * it regresses.
      */
     struct Contract
@@ -135,20 +135,20 @@ namespace
          * REMED-GFX-129's subject. True when Clear() is an ordered command: a Clear() issued after
          * a draw wipes that draw, a Clear() on a PreserveContents target is honoured, two Clear()s
          * in one bind cycle both happen, and a depth-only or stencil-only Clear() reaches the
-         * buffer it names. False is a declared defect whose whole cause is that the backend's only
+         * buffer it names. False is a declared defect whose whole cause is that the renderer's only
          * clear mechanism is the render-pass load action.
          */
         bool orderedClear;
         /**
          * A Clear() on a PreserveContents target is honoured even where `orderedClear` is false --
-         * true on a backend that chooses the load action per bind cycle and can therefore deliver a
+         * true on a renderer that chooses the load action per bind cycle and can therefore deliver a
          * leading clear, but still cannot deliver one after a draw.
          */
         bool clearOnPreserveTarget;
         /**
          * Clear covers the whole target regardless of the current Viewport (REMED-GFX-018's
-         * cross-backend contract: "each clear is a full-target ordered operation ... viewport and
-         * scissor do not restrict Clear"). False records a backend that scopes it to the viewport.
+         * cross-renderer contract: "each clear is a full-target ordered operation ... viewport and
+         * scissor do not restrict Clear"). False records a renderer that scopes it to the viewport.
          */
         bool clearIgnoresViewport;
         /// The same question for ScissorRectangle, declared separately because they can differ.
@@ -158,26 +158,26 @@ namespace
         bool wantHiDefProfile;
     };
 
-#if defined(CNA_BACKEND_VULKAN)
+#if defined(CNA_RENDERER_VULKAN)
     // REMED-GFX-129's subject. `orderedClear` and `clearOnPreserveTarget` declare the CORRECT
     // contract from the start: this file was written red, with every ordered-Clear check failing on
-    // the pre-fix backend, precisely so the fix is measured against it instead of being credited
+    // the pre-fix renderer, precisely so the fix is measured against it instead of being credited
     // with it.
     constexpr Contract kContract{"VULKAN", true, true, true, true, true,
                                  true, true, true,
                                  true, true, true, true, true, true, false};
-#elif defined(CNA_BACKEND_EASYGL)
+#elif defined(CNA_RENDERER_EASYGL)
     // `clearIgnoresScissor` false is an INDEPENDENT, separately recorded divergence, not this
     // finding: EasyGL clears with glClear, which GL_SCISSOR_TEST narrows. Its Clear IS
     // viewport-independent, which is why the two questions are declared separately.
     constexpr Contract kContract{"EASYGL", true, true, true, true, true,
                                  true, true, true,
                                  true, true, true, false, false, true, false};
-#elif defined(CNA_BACKEND_SOFTWARE)
+#elif defined(CNA_RENDERER_SOFTWARE)
     constexpr Contract kContract{"SOFTWARE", true, true, true, false, false,
                                  true, true, false,
                                  true, true, true, true, false, true, false};
-#elif defined(CNA_BACKEND_SDL_GPU)
+#elif defined(CNA_RENDERER_SDL_GPU)
     // SDL_gpu delivers a clear colour only through SDL_GPUColorTargetInfo.load_op, and a render pass
     // has exactly one. REMED-GFX-156 made the LOGICAL SEGMENT the unit that owns a load action
     // instead of the bind cycle: an observable Clear() closes the open segment and opens another one
@@ -187,14 +187,14 @@ namespace
     constexpr Contract kContract{"SDL_GPU", true, true, false, true, true,
                                  true, true, false,
                                  true, true, true, true, false, true, false};
-#elif defined(CNA_BACKEND_BGFX)
+#elif defined(CNA_RENDERER_BGFX)
     // `msaaTargetReadback` was false while a multisampled RenderTarget2D reported a successful
     // readback over untouched memory; REMED-GFX-154 fixed that, so check S1 measures the ordered
     // Clear on a multisampled destination instead of skipping it.
     constexpr Contract kContract{"BGFX", true, true, true, true, true,
                                  true, true, true,
                                  true, true, true, true, false, true, false};
-#elif defined(CNA_BACKEND_WEBGPU)
+#elif defined(CNA_RENDERER_WEBGPU)
     // wgpu delivers a clear only through the pass load op, exactly as SDL_gpu does, and a
     // WGPURenderPassDescriptor has exactly one set of them. REMED-GFX-156 put Clear() into the same
     // ordered stream REMED-GFX-159 built for the eleven draw families and cuts that stream into one
@@ -202,37 +202,37 @@ namespace
     constexpr Contract kContract{"WEBGPU", true, true, true, true, true,
                                  true, true, false,
                                  true, true, true, true, false, true, false};
-#elif defined(CNA_BACKEND_HEADLESS)
+#elif defined(CNA_RENDERER_HEADLESS)
     // Rasterizes nothing and owns no readable colour: every sequence must still be legal.
     constexpr Contract kContract{"HEADLESS", true, false, false, true, false,
                                  true, false, false,
                                  true, true, true, true, false, false, false};
-#elif defined(CNA_BACKEND_D3D9)
+#elif defined(CNA_RENDERER_D3D9)
     // `clearIgnoresViewport` / `clearIgnoresScissor` BOTH false, and both measured: D3D9's
     // IDirect3DDevice9::Clear is bounded by the current viewport and, with scissor testing enabled,
     // by the scissor rectangle -- which is real XNA's own behaviour, since XNA ran on D3D9. It
-    // disagrees with REMED-GFX-018's cross-backend contract and with the five other measurable
-    // backends; recorded as an independent finding rather than standardised away here.
+    // disagrees with REMED-GFX-018's cross-renderer contract and with the five other measurable
+    // renderers; recorded as an independent finding rather than standardised away here.
     constexpr Contract kContract{"D3D9", true, true, true, true, true,
                                  true, true, true,
                                  true, true, false, false, false, true, true};
-#elif defined(CNA_BACKEND_D3D11)
+#elif defined(CNA_RENDERER_D3D11)
     constexpr Contract kContract{"D3D11", true, true, true, true, true,
                                  true, true, true,
                                  true, true, true, true, false, true, false};
-#elif defined(CNA_BACKEND_LLGL)
+#elif defined(CNA_RENDERER_LLGL)
     // Cube targets and stencil testing are deliberately unsupported on the validated OpenGL path;
     // their dedicated LLGL checks require deterministic NotSupportedException instead.
     // `preferMultiSampling` false: measured -- RenderTarget2D.MultiSampleCount applies regardless of
     // whether the device itself was constructed with PreferMultiSampling (LLGL reads a render
     // target's own requested sample count at ITS OWN construction, not the swap chain's).
-    // `orderedClear`/`clearOnPreserveTarget` true: every command this backend queues, including
+    // `orderedClear`/`clearOnPreserveTarget` true: every command this renderer queues, including
     // Clear(), replays in original public order within its own target's bucket.
     constexpr Contract kContract{"LLGL", true, true, true, false, false,
                                  true, true, false,
                                  true, true, true, true, false, true, false};
 #else
-#error "REMED-GFX-129: this backend has no declared ordered-Clear contract."
+#error "REMED-GFX-129: this renderer has no declared ordered-Clear contract."
 #endif
 
     std::string ColorText(const Color& c)
@@ -485,7 +485,7 @@ class OrderedClearTest : public Game
     bool NeedRtReadback(const std::string& label)
     {
         if (kContract.rt2dTargets && kContract.rtReadback) return true;
-        skip(label + ": skipped -- this backend has no exact RenderTarget2D readback");
+        skip(label + ": skipped -- this renderer has no exact RenderTarget2D readback");
         return false;
     }
 
@@ -515,7 +515,7 @@ class OrderedClearTest : public Game
                           "cycle of a PreserveContents target, wipes that draw");
         else
             ExpectUniform(p, kRT, kRT, kRed,
-                          "O1 draw then Clear: this backend's only clear mechanism is the pass load "
+                          "O1 draw then Clear: this renderer's only clear mechanism is the pass load "
                           "action, so the earlier draw survives (declared REMED-GFX-129 defect)");
     }
 
@@ -536,7 +536,7 @@ class OrderedClearTest : public Game
                          "later draw did not touch");
         else
             // The freshly created preserving target has never been written, so what shows outside
-            // the marker is the backend's own untouched surface -- asserted as "not the clear
+            // the marker is the renderer's own untouched surface -- asserted as "not the clear
             // colour", which is exactly the claim, and the marker must still have landed.
             check(!p.threw && Same(p.dest[0], kBlue) &&
                       !Same(p.dest[static_cast<std::size_t>(kRT) - 1], kGreen),
@@ -754,7 +754,7 @@ class OrderedClearTest : public Game
     {
         if (!kContract.backbufferReadback)
         {
-            skip("B1 backbuffer Clear: skipped -- this backend cannot read the backbuffer");
+            skip("B1 backbuffer Clear: skipped -- this renderer cannot read the backbuffer");
             return;
         }
         FillBackbuffer(kRed);
@@ -828,7 +828,7 @@ class OrderedClearTest : public Game
 
         if (!TryBindMrt(dev, *a, *b))
         {
-            skip("M1 MRT Clear: skipped -- this backend refuses two simultaneous render targets");
+            skip("M1 MRT Clear: skipped -- this renderer refuses two simultaneous render targets");
             return;
         }
         // The 2D pipeline writes attachment 0 only, so this draw is what the clear must overwrite
@@ -870,7 +870,7 @@ class OrderedClearTest : public Game
         if (!NeedRtReadback("D1 depth-only Clear")) return;
         if (!kContract.primitives3D || !kContract.depthBuffer3D)
         {
-            skip("D1 depth-only Clear: skipped -- no depth-tested 3D draws on this backend");
+            skip("D1 depth-only Clear: skipped -- no depth-tested 3D draws on this renderer");
             return;
         }
         auto rt = MakeTarget(dev, RenderTargetUsage::PreserveContents, DepthFormat::Depth24Stencil8);
@@ -935,7 +935,7 @@ class OrderedClearTest : public Game
         if (!NeedRtReadback("D3 Target|DepthBuffer")) return;
         if (!kContract.primitives3D || !kContract.depthBuffer3D)
         {
-            skip("D3 Target|DepthBuffer: skipped -- no depth-tested 3D draws on this backend");
+            skip("D3 Target|DepthBuffer: skipped -- no depth-tested 3D draws on this renderer");
             return;
         }
         auto rt = MakeTarget(dev, RenderTargetUsage::PreserveContents, DepthFormat::Depth24Stencil8);
@@ -992,7 +992,7 @@ class OrderedClearTest : public Game
         if (!NeedRtReadback("D5 DepthBuffer|Stencil")) return;
         if (!kContract.primitives3D || !kContract.depthBuffer3D || !kContract.stencilBuffer3D)
         {
-            skip("D5 DepthBuffer|Stencil: skipped -- no depth or stencil oracle on this backend");
+            skip("D5 DepthBuffer|Stencil: skipped -- no depth or stencil oracle on this renderer");
             return;
         }
         auto rt = MakeTarget(dev, RenderTargetUsage::PreserveContents, DepthFormat::Depth24Stencil8);
@@ -1068,7 +1068,7 @@ class OrderedClearTest : public Game
         if (!NeedRtReadback("D7 depth clear value")) return;
         if (!kContract.primitives3D || !kContract.depthBuffer3D)
         {
-            skip("D7 depth clear value: skipped -- no depth-tested 3D draws on this backend");
+            skip("D7 depth clear value: skipped -- no depth-tested 3D draws on this renderer");
             return;
         }
         auto near0 = MakeTarget(dev, RenderTargetUsage::PreserveContents,
@@ -1177,7 +1177,7 @@ class OrderedClearTest : public Game
         else
             Expect(p, kRT, kRT,
                    [](int x, int y) { return (x < kHalf && y < kHalf) ? kGreen : kRed; },
-                   "V1 Clear under a sub-viewport: this backend scopes Clear to the Viewport "
+                   "V1 Clear under a sub-viewport: this renderer scopes Clear to the Viewport "
                    "(declared divergence)");
     }
 
@@ -1213,7 +1213,7 @@ class OrderedClearTest : public Game
         else
             Expect(p, kRT, kRT,
                    [](int x, int y) { return (x < kHalf && y < kHalf) ? kGreen : kRed; },
-                   "V2 Clear under a scissor: this backend scopes Clear to the scissor rectangle "
+                   "V2 Clear under a scissor: this renderer scopes Clear to the scissor rectangle "
                    "(declared divergence)");
     }
 
@@ -1269,7 +1269,7 @@ class OrderedClearTest : public Game
     /**
      * @brief The parity oracle every P check uses.
      *
-     * A backend that delivers an ordered mid-cycle Clear by ending its native render pass and
+     * A renderer that delivers an ordered mid-cycle Clear by ending its native render pass and
      * beginning another one has to reinstate, for the second pass, every piece of pass state the
      * first pass's end discarded. A pixel oracle that only asks "did the clear happen" is blind to
      * all of it, so each check runs the SAME state-sensitive draw twice: once at the head of a bind
@@ -1349,7 +1349,7 @@ class OrderedClearTest : public Game
     /// P3 -- the blend constant (GraphicsDevice.BlendFactor) still reaches the reopened pass.
     void RunBlendFactorAcrossClearBoundary(GraphicsDevice& dev)
     {
-#if defined(CNA_BACKEND_LLGL)
+#if defined(CNA_RENDERER_LLGL)
         bool rejected = false;
         try
         {
@@ -1566,7 +1566,7 @@ class OrderedClearTest : public Game
                      "T4 second cube face Clear: the second face's ordered Clear wipes only that "
                      "face's earlier draw");
         // A face neither cycle ever bound has never been rendered into, so what it holds is this
-        // backend's own uninitialized surface -- not something to predict. What IS asserted is the
+        // renderer's own uninitialized surface -- not something to predict. What IS asserted is the
         // claim: neither ordered Clear reached it. K1 already asserts the positive form for a face
         // that WAS painted.
         Probe untouched = ReadFace(*cube, static_cast<int>(CubeMapFace::PositiveY));
@@ -1591,7 +1591,7 @@ class OrderedClearTest : public Game
         dev.Clear(ClearOptions::Target | ClearOptions::DepthBuffer, kBlack, 1.0f, 0);
         Draw3D(dev, DepthState(), -1.0f, 1.0f, 0.3f, kBlue);   // near, writes depth
         // Two ordered Clears, no draw between them: colour red, then depth back to far. Both must
-        // reach the SAME reopened pass -- a backend that let the second replace the first would
+        // reach the SAME reopened pass -- a renderer that let the second replace the first would
         // leave either the colour uncleared or the depth uncleared.
         dev.Clear(ClearOptions::Target, kRed, 1.0f, 0);
         dev.Clear(ClearOptions::DepthBuffer, kWhite, 1.0f, 0);
@@ -1680,7 +1680,7 @@ protected:
         phase_ = 2;
 
         auto& dev = getGraphicsDeviceProperty();
-        std::printf("REMED-GFX-129 ordered GraphicsDevice::Clear -- backend %s\n", kContract.name);
+        std::printf("REMED-GFX-129 ordered GraphicsDevice::Clear -- renderer %s\n", kContract.name);
 
         RunDrawThenClearSingleCycle(dev);
         RunClearThenPartialDraw(dev);

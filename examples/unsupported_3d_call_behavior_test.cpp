@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MS-PL
-// Cross-backend integration test for Unsupported3DGraphicsCallBehavior on CNA's permanently
-// 2D-only graphics backends (SDL_RENDERER, DX3, CANVAS and ASCII).
+// Cross-renderer integration test for Unsupported3DGraphicsCallBehavior on CNA's permanently
+// 2D-only graphics renderers (SDL_RENDERER, DX3, CANVAS and ASCII).
 //
 // Exit code 0 = PASS, 1 = FAIL.
 
 #include "CNA/GraphicsCapability.hpp"
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Unsupported3DGraphicsCallBehavior.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
@@ -119,7 +119,7 @@ protected:
         done_ = true;
 
         auto& device = getGraphicsDeviceProperty();
-        auto& backend = device.GetBackend();
+        auto& renderer = device.GetRenderer();
 
         Check(!device.SupportsCapability(CNA::GraphicsCapability::ThreeD),
               "3D capability remains unsupported");
@@ -223,16 +223,16 @@ protected:
 
         const Matrix identity = Matrix::getIdentityProperty();
         Check(DoesNotThrow([&] {
-                  backend.DrawColoredPrimitives(
-                      vertexBuffer.GetBackend(), identity, identity, identity,
+                  renderer.DrawColoredPrimitives(
+                      vertexBuffer.GetRenderer(), identity, identity, identity,
                       PrimitiveType::TriangleList, 1);
-                  backend.DrawIndexedColoredPrimitives(
-                      vertexBuffer.GetBackend(), indexBuffer.GetBackend(),
+                  renderer.DrawIndexedColoredPrimitives(
+                      vertexBuffer.GetRenderer(), indexBuffer.GetRenderer(),
                       identity, identity, identity, PrimitiveType::TriangleList, 1);
-                  backend.DrawInstancedPrimitivesEx(
-                      vertexBuffer.GetBackend(), indexBuffer.GetBackend(),
+                  renderer.DrawInstancedPrimitivesEx(
+                      vertexBuffer.GetRenderer(), indexBuffer.GetRenderer(),
                       identity, identity, identity, PrimitiveType::TriangleList,
-                      1, 2, CNA::Internal::Backends::GpuDrawParams{});
+                      1, 2, CNA::Internal::Renderers::GpuDrawParams{});
               }),
               "unsupported draw calls become no-ops");
 

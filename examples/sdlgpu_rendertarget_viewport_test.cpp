@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MS-PL
 // REMED-GFX-064: SdlGpu GraphicsDevice.Viewport must be honored for GPU rasterization — the
-// SdlGpu backend never overrode the no-op base IGraphicsBackend::SetViewport and never called
+// SdlGpu renderer never overrode the no-op base IGraphicsRenderer::SetViewport and never called
 // SDL_SetGPUViewport, so a custom sub-region Viewport was a total no-op (backbuffer AND render
 // target).
 //
-// SdlGpu is a DEFERRED backend: every draw is queued (drawOrder_) and replayed at Present-time
+// SdlGpu is a DEFERRED renderer: every draw is queued (drawOrder_) and replayed at Present-time
 // inside a per-target render pass. GraphicsDevice::SetRenderTarget resets the Viewport to the
 // target's full size on both bind and unbind (ResetViewportAndScissorForRenderTarget), so by the
 // time the queued draws are replayed the frame-global Viewport is the post-unbind full-backbuffer

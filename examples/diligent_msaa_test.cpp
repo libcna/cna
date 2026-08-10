@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_diligent.md DILIGENT-25: real-device proof that MSAA on the Diligent backend performs a
+// plan_diligent.md DILIGENT-25: real-device proof that MSAA on the Diligent renderer performs a
 // genuine multisample resolve, both for the back buffer and for RenderTarget2D, through the
 // public XNA API only.
 //
@@ -15,12 +15,12 @@
 //
 // Check A/B -- back buffer: MultiSampleCount=0 is a binary edge, then
 //   GraphicsDeviceManager.PreferMultiSampling + ApplyChanges() (the real, non-test-only path --
-//   GraphicsDevice::Reset() already forwards to IGraphicsBackend::ApplyMultiSampleCount()
-//   generically, so this backend needs no NOXNA RecreateBackendForMultiSampleCount() escape hatch,
+//   GraphicsDevice::Reset() already forwards to IGraphicsRenderer::ApplyMultiSampleCount()
+//   generically, so this renderer needs no NOXNA RecreateRendererForMultiSampleCount() escape hatch,
 //   unlike the older Vulkan/EasyGL sibling tests that had to work around a plumbing gap since
 //   fixed) makes the edge blended.
 // Check C/D -- RenderTarget2D: the SAME differential, this time through RenderTarget2D's own
-//   multiSampleCount constructor parameter. This backend gives each render target its own
+//   multiSampleCount constructor parameter. This renderer gives each render target its own
 //   independent multisampled texture and resolve target, so it does not depend on check A/B's
 //   back buffer state at all (unlike Vulkan's coupled implementation). Check D also (already) uses
 //   DepthFormat::None -- DILIGENT-62's own "never use swap-chain depth support to decide a
@@ -235,7 +235,7 @@ protected:
         device.Reset(extremeRequest);
         device.setRasterizerStateProperty(RasterizerState::CullNone);
         const int clamped = device.getPresentationParametersProperty().getMultiSampleCountProperty();
-        std::printf("    (requested MultiSampleCount=1024, backend applied %d)\n", clamped);
+        std::printf("    (requested MultiSampleCount=1024, renderer applied %d)\n", clamped);
         Check(clamped > 0 && clamped < 1024,
               "an unreasonable MultiSampleCount request is clamped, not accepted verbatim");
 

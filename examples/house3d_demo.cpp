@@ -4,7 +4,7 @@
  *
  * Exercises the XNA-like 3D subset (Vector3 / Matrix / VertexPositionColor /
  * VertexBuffer / IndexBuffer / BasicEffect / GraphicsDevice) with the EasyGL
- * backend. SDL_Renderer and bgfx still throw a clear "3D not supported" error.
+ * renderer. SDL_Renderer and bgfx still throw a clear "3D not supported" error.
  *
  * The scene is composed entirely from colored axis-aligned boxes built by the
  * demo-local AddBox / AddGround / AddFence / AddTree / AddPath helpers. No
@@ -1225,7 +1225,7 @@ private:
         upload(solid_builder_, meshes_);
         upload(edge_builder_,  edgeMeshes_);
         upload(glass_builder_, glassMeshes_);
-        // Benchmark (EasyGL backend, desktop, 60 FPS, metagl METAGLDEBUG counter):
+        // Benchmark (EasyGL renderer, desktop, 60 FPS, metagl METAGLDEBUG counter):
         //   Before merge: ~700 000 GL calls / 5 s  (~400 meshes x ~6 calls x 60 FPS x 5 s)
         //   After  merge: ~15 000 GL calls / 5 s   (~46x reduction)
     }

@@ -1,5 +1,5 @@
 // Shader Model 5.0 (vs_5_0). Ported line-by-line from
-// src/CNA/Internal/Backends/Vulkan/shaders/lit_textured3d.vert.glsl.
+// src/CNA/Internal/Renderers/Vulkan/shaders/lit_textured3d.vert.glsl.
 // Stride 32: VertexPositionNormalTexture -- float3 pos + float3 normal + float2 uv.
 
 cbuffer PerDraw : register(b0)

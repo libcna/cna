@@ -58,7 +58,7 @@ protected:
         // PrepareVertexBindingArray carries null entries through, so a null-entry guard here would
         // reject a shape XNA allows. This assertion was written before REMED-GFX-222 landed and
         // asserted the opposite; it is restored to the current shared contract, which every
-        // backend including this one already implements.
+        // renderer including this one already implements.
         {
             bool threw = false;
             try { device.SetVertexBuffers(std::vector<VertexBufferBinding>(16)); }
@@ -67,9 +67,9 @@ protected:
             device.SetVertexBuffers({});
         }
 
-        // 3. Sixteen LIVE bindings are valid on a 3D backend. Raster-only Skia instead proves
+        // 3. Sixteen LIVE bindings are valid on a 3D renderer. Raster-only Skia instead proves
         // its already-declared resource boundary; the count/null validation above remains shared.
-#if defined(CNA_BACKEND_SKIA)
+#if defined(CNA_RENDERER_SKIA)
         {
             bool refused = false;
             try { VertexBuffer value(device, 1); }

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 
-#include "CNA/Internal/Backends/Software/SoftwareGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Software/SoftwareRenderer.hpp"
 #include "SoftwareTextureErrors.hpp"
 
 #include "System/ArgumentOutOfRangeException.hpp"
@@ -13,14 +13,14 @@
 #include <string>
 #include <vector>
 
-namespace CNA::Internal::Backends::Software
+namespace CNA::Internal::Renderers::Software
 {
     // GDI-076: GDI's own 16,384-per-axis ceiling made a single square RGBA8 level as large as
-    // 1 GiB before this planner existed -- neither this constructor, GdiGraphicsBackend's
+    // 1 GiB before this planner existed -- neither this constructor, GdiRenderer's
     // CreateTexture forward, nor the direct-ImageData boundary rejected it, and a caller-supplied
     // pixel buffer smaller than width*height*4 was copied verbatim rather than validated, an
     // out-of-bounds read waiting to happen the first time the rasterizer sampled past it.
-    SoftwareTextureBackend::SoftwareTextureBackend(const ImageData& data)
+    SoftwareTextureRenderer::SoftwareTextureRenderer(const ImageData& data)
         : width_(data.width), height_(data.height)
         , declaredLevels_(data.mipLevels > 0 ? data.mipLevels : 1)
     {
@@ -50,7 +50,7 @@ namespace CNA::Internal::Backends::Software
         }
     }
 
-    SoftwareTextureBackend::SoftwareTextureBackend(int width, int height)
+    SoftwareTextureRenderer::SoftwareTextureRenderer(int width, int height)
         : width_(width), height_(height)
     {
         const SoftwareTextureAllocationRequest request{width_, height_, declaredLevels_};
@@ -72,15 +72,15 @@ namespace CNA::Internal::Backends::Software
         }
     }
 
-    void SoftwareTextureBackend::UpdatePixels(const uint8_t* rgba, int stride)
+    void SoftwareTextureRenderer::UpdatePixels(const uint8_t* rgba, int stride)
     {
         if (rgba == nullptr)
-            throw std::runtime_error("SoftwareTextureBackend::UpdatePixels: rgba must not be null");
+            throw std::runtime_error("SoftwareTextureRenderer::UpdatePixels: rgba must not be null");
         const std::size_t rowBytes = static_cast<std::size_t>(width_) * 4u;
         // REMED-GFX-229: a positive pitch smaller than one complete RGBA8 row makes the
         // row-by-row copy overlap the prior row and read past the caller's final row. Validate it
         // before resizing or changing the authoritative texture bytes. Zero/negative retains the
-        // existing backend contract of selecting a tightly packed upload.
+        // existing renderer contract of selecting a tightly packed upload.
         if (stride > 0 && static_cast<std::size_t>(stride) < rowBytes)
             throw System::ArgumentOutOfRangeException(
                 "stride", std::to_string(stride),
@@ -112,12 +112,12 @@ namespace CNA::Internal::Backends::Software
     }
 
     // REMED-GFX-175: mip levels above 0 used to be dropped on the floor here, which is why NO
-    // TextureFilter ordinal could mip-filter on this backend -- not merely ordinals 0 and 1. The
+    // TextureFilter ordinal could mip-filter on this renderer -- not merely ordinals 0 and 1. The
     // level a caller supplies is now STORED, exactly as given: nothing is downsampled, nothing is
     // generated, and a level the caller never writes is never invented. `storedLevels_` counts only
     // the levels held CONTIGUOUSLY from 0, so a chain written out of order, or abandoned half way,
     // bounds the sampler at the last level that really exists instead of exposing a gap.
-    void SoftwareTextureBackend::UpdatePixelsLevel(int level, const uint8_t* rgba,
+    void SoftwareTextureRenderer::UpdatePixelsLevel(int level, const uint8_t* rgba,
                                                    int levelW, int levelH)
     {
         if (level <= 0 || rgba == nullptr) return;
@@ -162,19 +162,19 @@ namespace CNA::Internal::Backends::Software
         storedLevels_ = contiguous;
     }
 
-    int SoftwareTextureBackend::ColorWidth(int level) const
+    int SoftwareTextureRenderer::ColorWidth(int level) const
     {
         if (level <= 0 || level > static_cast<int>(mipLevels_.size())) return width_;
         return mipLevels_[static_cast<std::size_t>(level - 1)].width;
     }
 
-    int SoftwareTextureBackend::ColorHeight(int level) const
+    int SoftwareTextureRenderer::ColorHeight(int level) const
     {
         if (level <= 0 || level > static_cast<int>(mipLevels_.size())) return height_;
         return mipLevels_[static_cast<std::size_t>(level - 1)].height;
     }
 
-    const std::vector<std::uint8_t>& SoftwareTextureBackend::ColorPixels(int level) const
+    const std::vector<std::uint8_t>& SoftwareTextureRenderer::ColorPixels(int level) const
     {
         if (level <= 0 || level > static_cast<int>(mipLevels_.size())) return pixels_;
         return mipLevels_[static_cast<std::size_t>(level - 1)].pixels;

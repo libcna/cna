@@ -7,10 +7,10 @@ successor feature may be advertised only after its individual evidence and promo
 SKIA-170 remains the final gate for the successor set as a whole.
 
 SKIA-124 arbitrary-raster-blend promotion: PASS. This promotes one bounded feature inside the
-experimental Skia backend; it does not mark the successor expansion complete.
+experimental Skia renderer; it does not mark the successor expansion complete.
 
 SKIA-133 mutable 2D mip promotion: PASS. Texture2D and Color RenderTarget2D complete-chain
-construction, transfer, generation and sampling are promoted for the CPU-raster backend. This
+construction, transfer, generation and sampling are promoted for the CPU-raster renderer. This
 does not promote non-Color formats, MSAA, 3D, cube/volume sampling or the successor set as a whole.
 
 SKIA-135 packed Texture2D promotion: PASS. `Bgr565`, `Bgra4444`, and `Rgba1010102` have exact
@@ -36,7 +36,7 @@ SKIA-139 shadow Texture2D promotion: PASS. `Bgra5551`, `NormalizedByte2`, and
 views, and generate deterministic native-component mips. They remain Texture2D-only; target,
 cube, and volume routes remain independently refused.
 
-Scope: experimental `CNA_GRAPHICS_BACKEND=SKIA` CPU-raster 2D backend at the SKIA-114 checkpoint.
+Scope: experimental `CNA_GRAPHICS_RENDERER=SKIA` CPU-raster 2D renderer at the SKIA-114 checkpoint.
 This is not a Ganesh/Graphite, general 3D, or full EasyGL feature-equivalence claim.
 
 ## Plan and architecture sign-off
@@ -45,7 +45,7 @@ This is not a Ganesh/Graphite, general 3D, or full EasyGL feature-equivalence cl
   as not applicable to the selected raster release, not as an accelerated implementation.
 - The accepted [surface-mode ADR](skia-surface-mode-adr.md) selects raster, records ownership and
   platform boundaries, and requires a successor plan to reopen Ganesh/OpenGL acceleration.
-- The accepted [3D ADR](skia-3d-emulation-adr.md) keeps the backend 2D-only after bounded
+- The accepted [3D ADR](skia-3d-emulation-adr.md) keeps the renderer 2D-only after bounded
   SkVertices and CPU depth/stencil/geometry/effect prototypes. Production calls refuse uniformly.
 - The 249-entry [API parity ledger](skia-easygl-parity-ledger.md) and 347-entry
   [test matrix](skia-easygl-test-matrix.md) cover the current interfaces, capability enum, public
@@ -55,7 +55,7 @@ Engineering sign-off: PASS
 
 ## Capability sign-off
 
-These are the exact live results of `SkiaGraphicsBackend::SupportsCapability`. A true value means
+These are the exact live results of `SkiaRenderer::SupportsCapability`. A true value means
 only the contract named by the enum; in particular `Texture3D` means bounded CPU transfer storage,
 not volume sampling or a 3D renderer.
 
@@ -74,7 +74,7 @@ not volume sampling or a 3D renderer.
 | `GraphicsCapability::Instancing` | `false` | REMED-GFX-202; the instanced draw route refuses through `Ensure3DSupported()` rather than drawing one instance |
 
 The release audit extracts this table and compares its complete enum coverage and true set with the
-live backend implementation. Any new enum or capability change must update evidence before the
+live renderer implementation. Any new enum or capability change must update evidence before the
 audit can pass.
 
 ## Direct / bounded emulation / refusal coverage
@@ -199,7 +199,7 @@ refusal decision. No row relies on a silent no-op or an implicit EasyGL fallback
   pinned raster build.
 - SKIA-112 clean exported-source build: 132/132 at that checkpoint, plus build instructions and
   three-frame demo smoke.
-- SKIA-113 fresh backend matrix: Skia/EasyGL/SDL_Renderer/Software/Vulkan/BGFX compile; D3D11
+- SKIA-113 fresh renderer matrix: Skia/EasyGL/SDL_Renderer/Software/Vulkan/BGFX compile; D3D11
   runtime 41/41 and D3D12 runtime 2/2 pass through their translation-layer engagement gates.
 
 ## Known release boundaries
@@ -211,8 +211,8 @@ refusal decision. No row relies on a silent no-op or an implicit EasyGL fallback
   textures, non-Color render targets, and cube/volume sampling remain unavailable as documented.
 - Windowed LSan retains the already isolated, non-growing Mesa GLX process-exit baseline; the same
   64-cycle ownership test is clean with SDL dummy/software presentation.
-- The SKIA backend remains labelled experimental because its packaged-platform matrix is narrower
-  than CNA's established backends. Within the documented raster scope, the gate is complete and
+- The SKIA renderer remains labelled experimental because its packaged-platform matrix is narrower
+  than CNA's established renderers. Within the documented raster scope, the gate is complete and
   release-ready.
 
 ## Reopening rule

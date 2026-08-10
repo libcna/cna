@@ -9,7 +9,7 @@
 # FresnelFactor) * EnvironmentMapAmount`, computed PER-VERTEX in the vertex shader (not
 # recomputed per-pixel -- same Gouraud-interpolation discipline this corpus's own lighting/fog
 # scenes already established: BasicEffect/EnvironmentMapEffect never use per-pixel lighting on
-# this backend, D9-82b/D9-82f's own "preferPerPixelLighting always false" finding), then linearly
+# this renderer, D9-82b/D9-82f's own "preferPerPixelLighting always false" finding), then linearly
 # interpolated across the triangle like any other per-vertex quantity.
 #
 # World/View/Projection are Identity everywhere in this corpus, so EyePosition=(0,0,0) always.

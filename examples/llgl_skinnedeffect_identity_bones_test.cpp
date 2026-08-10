@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Task 406: pixel test for SkinnedEffect's identity bone palette (LLGL backend). See
+// Task 406: pixel test for SkinnedEffect's identity bone palette (LLGL renderer). See
 // examples/easygl_skinnedeffect_identity_bones_test.cpp for the full derivation.
 //
 // Exit code 0 = PASS, 1 = FAIL.

@@ -62,7 +62,7 @@ add_library(CNA::BuildFlags ALIAS cna_build_flags)
 target_compile_definitions(cna_build_flags INTERFACE
         SOUND_ENABLED
         XNA5
-        ${CNA_BACKEND_DEFINE}
+        ${CNA_RENDERER_DEFINE}
         $<$<BOOL:${CNA_NOXNA}>:CNA_NOXNA>
         $<$<BOOL:${CNA_DEVICES}>:CNA_DEVICES>
         $<$<BOOL:${CNA_DRACO_AVAILABLE}>:CNA_DRACO_AVAILABLE>
@@ -73,7 +73,7 @@ target_compile_definitions(cna_build_flags INTERFACE
 # shared public build surface, and the calling module's own public include/ root. No module
 # needs another module's src/ as an include root: every cross-module internal header lives
 # under some module's include/CNA/Internal/ (public-internal contract headers), and the only
-# headers under src/ are backend-local shader headers, addressed includer-relative from
+# headers under src/ are renderer-local shader headers, addressed includer-relative from
 # inside their own renderer directory.
 function(cna_add_module target alias)
     add_library(${target} STATIC ${ARGN})
@@ -112,7 +112,7 @@ add_library(CNA::NoXna ALIAS cna_noxna)
 target_link_libraries(cna_noxna INTERFACE cna_graphics_ext cna_devices_ext)
 
 # --- Compatible umbrella. `CNA` keeps its historical meaning for every consumer: the whole
-# framework plus the selected backend, with the aggregate public include surface (via the
+# framework plus the selected renderer, with the aggregate public include surface (via the
 # module targets) and the public defines.
 add_library(CNA INTERFACE)
 target_link_libraries(CNA INTERFACE
@@ -130,7 +130,7 @@ target_link_libraries(CNA INTERFACE
         cna_core
         cna_math
         cna_build_flags
-        ${BACKEND_TARGET}
+        ${RENDERER_TARGET}
 )
 
 # --- Physical source-partition validator (no-loss ownership gate, MODULARIZATION_PLAN.md

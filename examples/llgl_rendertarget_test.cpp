@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MS-PL
-// plan_llgl.md LLGL-26: RenderTarget2D proof for the LLGL graphics backend, asserted against real
+// plan_llgl.md LLGL-26: RenderTarget2D proof for the LLGL graphics renderer, asserted against real
 // pixels read back from the GPU.
 //
 // The same 4x4 quadrant texture used by llgl_2d_test.cpp (red / green / blue / white) is drawn
 // INTO a RenderTarget2D, the render target is unbound, and its colour texture is then sampled
 // back onto the back buffer with SpriteBatch -- proving CreateRenderTarget2D's colour attachment
 // really was written to by the draws issued while it was bound, that unbinding restores the back
-// buffer's own render pass (a second, independent Clear), and that a RenderTarget2D's backend
-// (LlglRenderTargetBackend) is accepted anywhere a Texture2D is (the RenderTarget2D-vs-
-// LlglTextureBackend cross-cast fixed while implementing this).
+// buffer's own render pass (a second, independent Clear), and that a RenderTarget2D's renderer
+// (LlglRenderTargetRenderer) is accepted anywhere a Texture2D is (the RenderTarget2D-vs-
+// LlglTextureRenderer cross-cast fixed while implementing this).
 //
 // Check A -- RenderTarget2D construction succeeds.
 // Check B -- the back buffer keeps its own clear colour after a render target was drawn into
@@ -16,7 +16,7 @@
 // Check C..F -- sampling the render target back onto the screen reproduces all four quadrants in
 //   the right corners (proves the colour attachment orientation, not just that something drew).
 // Check G -- RenderTarget2D::GetData() reads the same pixel back directly, without going through
-//   SpriteBatch at all (proves LlglRenderTargetBackend::GetData()).
+//   SpriteBatch at all (proves LlglRenderTargetRenderer::GetData()).
 // Check H -- the 3D path (BasicEffect + VertexBuffer + depth test) also works while a
 //   RenderTarget2D is bound: a nearer quad drawn first survives a farther one drawn second,
 //   proving the render target's own always-allocated depth/stencil attachment is real and that
@@ -158,8 +158,8 @@ public:
                     Rectangle(10, 10, 1, 1), Color(50, 50, 50, 255));
 
         // Sample the render target's colour texture back onto the screen -- RenderTarget2D IS-A
-        // Texture2D, and this is exactly the cross-cast (LlglRenderTargetBackend vs
-        // LlglTextureBackend) SpriteBatch::Draw has to accept.
+        // Texture2D, and this is exactly the cross-cast (LlglRenderTargetRenderer vs
+        // LlglTextureRenderer) SpriteBatch::Draw has to accept.
         spriteBatch.Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend, &pointClamp, nullptr, nullptr);
         spriteBatch.Draw(*renderTarget, Rectangle(100, 100, 64, 64), Rectangle(0, 0, 64, 64), Color::White);
         spriteBatch.End();

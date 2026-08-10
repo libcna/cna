@@ -1,24 +1,24 @@
 // SPDX-License-Identifier: MS-PL
-// plan_sdlgpu.md SDLGPU-6..12: end-to-end smoke test for the SDL_GPU graphics backend's
+// plan_sdlgpu.md SDLGPU-6..12: end-to-end smoke test for the SDL_GPU graphics renderer's
 // device/window/swapchain lifecycle and color+depth+stencil clear/present. Real window, real
-// SDL_GPUDevice, a real 60-frame Clear()+Present() loop -- this is the backend's first genuine
+// SDL_GPUDevice, a real 60-frame Clear()+Present() loop -- this is the renderer's first genuine
 // proof gate (SDLGPU-12's own bar). Texture2D/VertexBuffer/SpriteBatch are not yet implemented on
-// this backend (later phases), so this test deliberately does not touch them beyond confirming
+// this renderer (later phases), so this test deliberately does not touch them beyond confirming
 // they still throw (rather than silently no-op).
 //
 // Check A -- GetWindowInternal() returns a real, non-null SDL_Window.
-// Check B -- GetRendererInternal() is null (this backend does not use SDL_Renderer).
+// Check B -- GetRendererInternal() is null (this renderer does not use SDL_Renderer).
 // Check C -- GetViewportSize() reports a positive width/height matching the real window.
-// Check D -- a real SdlGpuVertexBufferBackend/SdlGpuIndexBufferBackend round-trip: SetData()
+// Check D -- a real SdlGpuVertexBufferRenderer/SdlGpuIndexBufferRenderer round-trip: SetData()
 //   followed by GetVertexCount()/GetIndexCount() reports the exact count uploaded (Phase SDLGPU-5,
 //   SDLGPU-23) -- see sdlgpu_2d_test.cpp for the fuller Texture2D/SpriteBatch vertical-slice proof.
 // Check E -- 60 frames of Clear(Target|DepthBuffer|Stencil, color, depth, stencil) + the automatic
 //   end-of-frame Present() complete with no exception.
 // Check F/G -- SetDataWithOptions()/SetData16WithOptions() with both Discard and NoOverwrite hints
 //   (SDLGPU-23) round-trip the exact byte data either way -- these are real overrides now (they
-//   used to silently fall through to IGraphicsBackend's default, which ignores the hint entirely),
+//   used to silently fall through to IGraphicsRenderer's default, which ignores the hint entirely),
 //   mapped to SDL_UploadToGPUBuffer's own cycle flag (Discard/None -> cycle=true, NoOverwrite ->
-//   cycle=false, mirroring EasyGLVertexBufferBackend's established orphan-vs-sub-data convention).
+//   cycle=false, mirroring EasyGLVertexBufferRenderer's established orphan-vs-sub-data convention).
 //   A full-buffer overwrite's correctness is identical either way (cycle only affects whether the
 //   GPU stalls on in-flight reads of the old backing memory, not what ends up readable afterward),
 //   so this is a real-API-usage/no-longer-silently-ignored proof, not a visually distinguishing one.
@@ -32,7 +32,7 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SetDataOptions.hpp"
 
-#include "CNA/Internal/Backends/SdlGpu/SdlGpuGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/SdlGpu/SdlGpuRenderer.hpp"
 
 #include "common/PixelTestGame.hpp"
 
@@ -43,7 +43,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::SdlGpu;
+using namespace CNA::Internal::Renderers::SdlGpu;
 
 namespace
 {
@@ -68,24 +68,24 @@ protected:
     {
         ++frame_;
         auto& dev = getGraphicsDeviceProperty();
-        auto& backend = static_cast<SdlGpuGraphicsBackend&>(dev.GetBackend());
+        auto& renderer = static_cast<SdlGpuRenderer&>(dev.GetRenderer());
 
         if (frame_ == 1)
         {
-            check(backend.GetWindowInternal() != nullptr, "GetWindowInternal() returns a real window");
-            check(backend.GetRendererInternal() == nullptr, "GetRendererInternal() is null (no SDL_Renderer)");
+            check(renderer.GetWindowInternal() != nullptr, "GetWindowInternal() returns a real window");
+            check(renderer.GetRendererInternal() == nullptr, "GetRendererInternal() is null (no SDL_Renderer)");
 
             int width = 0;
             int height = 0;
-            backend.GetViewportSize(width, height);
+            renderer.GetViewportSize(width, height);
             check(width > 0 && height > 0, "GetViewportSize() reports a positive size");
 
-            auto vb = backend.CreateVertexBuffer(3);
+            auto vb = renderer.CreateVertexBuffer(3);
             const float verts[3 * 2] = {0, 0, 1, 0, 0, 1};
             vb->SetData(verts, 3, sizeof(float) * 2);
             check(vb->GetVertexCount() == 3, "VertexBuffer.SetData()+GetVertexCount() round-trips the exact count");
 
-            auto ib = backend.CreateIndexBuffer16(3);
+            auto ib = renderer.CreateIndexBuffer16(3);
             const std::uint16_t indices[3] = {0, 1, 2};
             ib->SetData16(indices, 3);
             check(ib->GetIndexCount() == 3 && !ib->IsThirtyTwoBit(),

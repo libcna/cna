@@ -5,10 +5,10 @@
 // `Transform` uniform block (see effect3d_common.glsl.inc) -- EnvironmentMapEffect needs a
 // genuinely different field set (Fresnel factor, environment map amount/specular, no per-light
 // specular or alpha test) and this vertex/fragment pair is never linked with any other shader in
-// this backend, so there is no cross-program layout to keep byte-compatible with. The layout
-// mirrors the Vulkan backend's own EnvMapParams uniform block (env_map3d.vert.glsl there), with
+// this renderer, so there is no cross-program layout to keep byte-compatible with. The layout
+// mirrors the Vulkan renderer's own EnvMapParams uniform block (env_map3d.vert.glsl there), with
 // the MVP/world matrices folded into the same buffer instead of a separate push constant, since
-// this backend's own established convention (see lit_textured3d.vert.glsl) is one constant
+// this renderer's own established convention (see lit_textured3d.vert.glsl) is one constant
 // buffer per draw, not push constants.
 
 #version 450

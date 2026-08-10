@@ -15,9 +15,9 @@ void SkBitmapDevice::drawMesh(const SkMesh&, sk_sp<SkBlender>, const SkPaint&) {
 }
 ```
 
-CNA's Skia backend creates its surfaces via `SkSurfaces::Raster(...)` (`SkiaSurface.cpp`), which is
+CNA's Skia renderer creates its surfaces via `SkSurfaces::Raster(...)` (`SkiaSurface.cpp`), which is
 backed by exactly this `SkBitmapDevice` class. `SkMesh`/`SkMeshSpecification` therefore draws nothing
-at all on this backend -- not a CNA gap, an upstream Skia stub in the pinned revision. The user was
+at all on this renderer -- not a CNA gap, an upstream Skia stub in the pinned revision. The user was
 asked how to proceed and explicitly chose redesigning around `SkVertices` (the older, simpler mesh
 API) rather than pausing Phase S16 or investigating a Skia re-pin.
 
@@ -67,7 +67,7 @@ ordinary 2D Skia geometry (`SkPath` fill has no camera-facing concept either) an
 expected, not a bug to work around. A caller wanting XNA `CullMode` semantics (cull clockwise or
 counter-clockwise triangles before submission) must perform that check itself, CPU-side, before
 building the `SkVertices` object -- matching this project's own established "pre-check on the CPU
-side, submit only what should render" pattern used elsewhere in this backend (e.g. `RasterizerState`
+side, submit only what should render" pattern used elsewhere in this renderer (e.g. `RasterizerState`
 wireframe-before-cull ordering). SKIA-153's own spike proves both windings render *identically*
 through `SkVertices` (since nothing culls), which is the correct, expected raster contract for this
 API -- not evidence of a defect.
@@ -76,13 +76,13 @@ API -- not evidence of a defect.
 
 `SkDraw_vertices.cpp`'s `convert_colors` treats every caller-supplied `SkColor` vertex colour as
 **unpremultiplied** (`kUnpremul_SkAlphaType` source), converting internally to premultiplied `float`
-for rasterization -- ordinary `SkColor` semantics, matching how the rest of this Skia backend already
+for rasterization -- ordinary `SkColor` semantics, matching how the rest of this Skia renderer already
 treats straight-alpha 8-bit colour input elsewhere (`Color`'s own RGBA8 straight-alpha convention).
 The vertex-colour and paint-shader (texture) contributions combine via the blend mode passed to
 `drawVertices` -- `SkBlendMode::kModulate` (multiply) reproduces `BasicEffect`'s own
 `vertexColour * textureSample * uDiffuseColor`-shaped combine (`docs/skia-easygl-effect-inventory.md`),
 matching the default blend `SkCanvas::drawMesh` itself falls back to when no blender is supplied
-(`SkBlender::Mode(SkBlendMode::kModulate)`), even though `drawMesh` cannot draw on this backend --
+(`SkBlender::Mode(SkBlendMode::kModulate)`), even though `drawMesh` cannot draw on this renderer --
 `drawVertices` is given the same mode explicitly since it takes no blender-optional default.
 
 ## What SKIA-153 actually builds
@@ -159,8 +159,8 @@ invoking the SkSL compiler again. Cache entries are retained for the lifetime of
 object with no eviction policy in this task's scope -- bounding cache growth, time limits, and
 malicious-input stress are SKIA-156's "harden" job, not this one's "define and implement" job.
 
-**Clone isolation**: the cached object is immutable and shared read-only across every backend
-instance compiled from identical source. Each `SkiaMeshEffectBackend` instance still owns its own
+**Clone isolation**: the cached object is immutable and shared read-only across every renderer
+instance compiled from identical source. Each `SkiaMeshEffectRenderer` instance still owns its own
 independent mutable uniform-value byte buffer (freshly zero-initialized to the compiled program's
 own uniform block size on construction, exactly like the sprite ABI's `uniformBytes_`) and its own
 independent `weak_ptr` array of bound texture children. Two instances sharing one cached compiled
@@ -169,7 +169,7 @@ program therefore never observe each other's `SetUniformX`/`BindTexture` calls -
 
 ### What SKIA-154 built
 
-A new, standalone below-the-API class, `SkiaMeshEffectBackend` (not an `IEffectBackend` override --
+A new, standalone below-the-API class, `SkiaMeshEffectRenderer` (not an `IEffectRenderer` override --
 that interface is sprite-shaped around a single primary texture/tint the mesh ABI deliberately has
 neither of), with a dedicated `SkiaMeshEffectCacheEXT` cache class, proven directly against
 `SkCanvas::drawVertices` the same way SKIA-153's spike did (`Skia_MeshEffect_ABI`, 19 checks) --
@@ -178,10 +178,10 @@ still no public `ShaderEffect`/`SpriteBatch` wiring, which stayed SKIA-157's job
 ### SKIA-157: reaching the real public API
 
 SKIA-157 added a second, thin class, `SkiaMeshEffectAdapterEXT`, that *does* conform to
-`IEffectBackend` -- it wraps a `SkiaMeshEffectBackend` and forwards every interface method, so a
+`IEffectRenderer` -- it wraps a `SkiaMeshEffectRenderer` and forwards every interface method, so a
 `CNA_SKIA_SKSL_MESH_V1`-tagged `ShaderEffect` flows through `ShaderEffect`'s existing, completely
-unmodified public surface. Drawing reuses `ISpriteBatchBackend`'s established additive-virtual-
-with-safe-default pattern: a new `DrawMeshEXT` method, implemented only by `SkiaSpriteBatchBackend`,
+unmodified public surface. Drawing reuses `ISpriteBatchRenderer`'s established additive-virtual-
+with-safe-default pattern: a new `DrawMeshEXT` method, implemented only by `SkiaSpriteBatchRenderer`,
 reached from a new public `SpriteBatch::DrawMeshEXT` (NOXNA) restricted to `SpriteSortMode::
 Immediate`, since a mesh draw does not participate in the shared deferred sort/batch queue that
 every ordinary `Draw()` overload's quad-shaped `SpriteInfo` does. See `plan_skia.md`'s own SKIA-157
@@ -235,6 +235,6 @@ known-correct formula result -- and SKIA-157's public-API test proved the identi
 through the real `SpriteBatch::DrawMeshEXT`/`ShaderEffect` surface. A fourth golden image comparing
 the same already-proven formula against itself would add no new evidence; see
 `docs/skia-easygl-test-matrix.md` for this codebase's existing golden-image classification. A true
-live dual-backend (Skia vs. EasyGL) runtime comparison remains architecturally impossible under CNA's
-one-backend-per-build CMake selection, matching every prior phase's own "derive the expected value
+live dual-renderer (Skia vs. EasyGL) runtime comparison remains architecturally impossible under CNA's
+one-renderer-per-build CMake selection, matching every prior phase's own "derive the expected value
 from real EasyGL source text" golden methodology rather than a live side-by-side render.

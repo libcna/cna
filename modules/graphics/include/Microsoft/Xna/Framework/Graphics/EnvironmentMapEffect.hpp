@@ -338,11 +338,11 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * Populates the diffuse texture, cube-map env map, lighting, diffuse/emissive colors,
          * eye position, env map amount and specular tint. Sets the envMapping flag so the
-         * backend selects the reflection shader variant.
+         * renderer selects the reflection shader variant.
          *
          * @param params Output struct to populate.
          */
-        NOXNA void FillGpuDrawParams(CNA::Internal::Backends::GpuDrawParams& params) const override;
+        NOXNA void FillGpuDrawParams(CNA::Internal::Renderers::GpuDrawParams& params) const override;
 
     protected:
         /**

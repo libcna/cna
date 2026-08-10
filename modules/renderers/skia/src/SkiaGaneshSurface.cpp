@@ -1,4 +1,4 @@
-#include "CNA/Internal/Backends/Skia/SkiaGaneshSurface.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaGaneshSurface.hpp"
 
 #include <cstdint>
 #include <memory>
@@ -24,7 +24,7 @@
 #include <GL/gl.h>
 #endif
 
-namespace CNA::Internal::Backends::Skia
+namespace CNA::Internal::Renderers::Skia
 {
 #if defined(CNA_SKIA_MODE_GANESH)
     struct SkiaGaneshSurface::Impl
@@ -63,7 +63,7 @@ namespace CNA::Internal::Backends::Skia
         {
             throw std::runtime_error(
                 "SkiaGaneshSurface: default framebuffer reported an unsupported stencil bit "
-                "depth (" + std::to_string(stencilBits) + "); Skia's GL backend render target "
+                "depth (" + std::to_string(stencilBits) + "); Skia's GL renderer render target "
                 "requires exactly 0, 8, or 16.");
         }
 
@@ -71,12 +71,12 @@ namespace CNA::Internal::Backends::Skia
         fbInfo.fFBOID = 0; // The real window-system default framebuffer, never an off-screen FBO.
         fbInfo.fFormat = GL_RGBA8;
 
-        GrBackendRenderTarget backendRenderTarget =
+        GrBackendRenderTarget rendererRenderTarget =
             GrBackendRenderTargets::MakeGL(width, height, /*sampleCnt=*/1, stencilBits, fbInfo);
-        if (!backendRenderTarget.isValid())
+        if (!rendererRenderTarget.isValid())
         {
             throw std::runtime_error(
-                "SkiaGaneshSurface: GrBackendRenderTargets::MakeGL produced an invalid backend "
+                "SkiaGaneshSurface: GrBackendRenderTargets::MakeGL produced an invalid renderer "
                 "render target.");
         }
 
@@ -96,7 +96,7 @@ namespace CNA::Internal::Backends::Skia
         // and so passed anyway; a genuine mid-tone clear color first exposed it (caught by this
         // file's own accompanying test) -- (128,64,200) read back as (55,13,147).
         sk_sp<SkSurface> surface = SkSurfaces::WrapBackendRenderTarget(
-            grContext, backendRenderTarget, kBottomLeft_GrSurfaceOrigin, kRGBA_8888_SkColorType,
+            grContext, rendererRenderTarget, kBottomLeft_GrSurfaceOrigin, kRGBA_8888_SkColorType,
             nullptr, nullptr);
         if (!surface)
         {
@@ -144,7 +144,7 @@ namespace CNA::Internal::Backends::Skia
 
     void SkiaGaneshSurface::DebugSimulateContextLossEXT()
     {
-        // Mirrors EasyGLGraphicsBackend::DebugSimulateContextLoss()'s own established desktop
+        // Mirrors EasyGLRenderer::DebugSimulateContextLoss()'s own established desktop
         // path exactly: destroy the GL context, create a brand new one, and rebuild everything
         // that depended on the old one. There is no ResourceRegistry-equivalent recreate step
         // here (unlike EasyGL) because no textures/targets/effects exist in the Ganesh path yet
@@ -194,4 +194,4 @@ namespace CNA::Internal::Backends::Skia
 
     bool SkiaGaneshSurface::ReadPixels(int, int, int, int, std::uint8_t*) const { return false; }
 #endif
-} // namespace CNA::Internal::Backends::Skia
+} // namespace CNA::Internal::Renderers::Skia

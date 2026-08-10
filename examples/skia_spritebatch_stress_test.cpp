@@ -4,7 +4,7 @@
 // A fixed twelve-texture/two-target fixture is created once. Each of 64 real Game::Draw frames
 // performs 26 separate Begin/Draw/End blocks and exactly three target changes (A -> B ->
 // backbuffer). The complete backbuffer is hashed after every frame and must retain the first
-// frame's hash. Keeping the fixture lifetime outside the frame loop also makes any backend cache
+// frame's hash. Keeping the fixture lifetime outside the frame loop also makes any renderer cache
 // growth caused by this fixed workload observable to leak/resource-checking configurations.
 
 #include "Microsoft/Xna/Framework/Color.hpp"

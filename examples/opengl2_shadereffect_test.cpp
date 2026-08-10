@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl2.md: pixel-exact ShaderEffect (CreateEffectBackend) proof for the native OpenGL 2.1
-// graphics backend -- a user-authored, runtime-compiled GLSL program bypassing every built-in
+// plan_opengl2.md: pixel-exact ShaderEffect (CreateEffectRenderer) proof for the native OpenGL 2.1
+// graphics renderer -- a user-authored, runtime-compiled GLSL program bypassing every built-in
 // program entirely. GLSL 1.10/1.20 has no `layout(location=N)` qualifier (unlike EasyGL's GLES3
-// shaders), so a custom shader MUST use this backend's own fixed attribute names (aPosition,
-// aColor, aTexCoord -- see EffectBackend's own doc comment) to receive vertex data at all; every
+// shaders), so a custom shader MUST use this renderer's own fixed attribute names (aPosition,
+// aColor, aTexCoord -- see EffectRenderer's own doc comment) to receive vertex data at all; every
 // shader source below follows that convention.
 //
 // Check A -- CompileProgram() with valid GLSL succeeds: IsEffectValid() true, GetCompileError()
@@ -12,7 +12,7 @@
 //   false, GetCompileError() non-empty, and constructing/using the effect does not crash.
 // Check C -- World/View/Projection wiring + vertex-color pass-through: a custom shader that just
 //   forwards aColor unchanged reads back the vertex's own color exactly -- proves
-//   drawInternal()'s customEffectBackend path binds the program, uploads the matrices under their
+//   drawInternal()'s customEffectRenderer path binds the program, uploads the matrices under their
 //   real XNA-HLSL-style uniform names, and feeds the vertex buffer through the same stride-based
 //   attribute layout as every built-in program.
 // Check D -- SetUniformVec4() actually reaches the shader: the SAME draw with a uTint uniform
@@ -40,7 +40,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 
-#include "CNA/Internal/Backends/OpenGL2/OpenGL2GraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/OpenGL2/OpenGL2Renderer.hpp"
 
 #include "common/PixelTestGame.hpp"
 
@@ -51,7 +51,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::OpenGL2;
+using namespace CNA::Internal::Renderers::OpenGL2;
 
 namespace
 {

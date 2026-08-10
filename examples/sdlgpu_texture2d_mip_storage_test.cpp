@@ -4,13 +4,13 @@
 //
 // REMED-GFX-175 settled the CONTRACT a TextureFilter ordinal names and measured SDL_GPU at 55/87 on
 // it, with all nine ordinals sampling level 0 at an exact 2x, 4x and 8x minification. That fixture
-// asks "which level did the sampler choose?" -- and on this backend the honest answer was "the only
+// asks "which level did the sampler choose?" -- and on this renderer the honest answer was "the only
 // one that existed". This fixture asks the question underneath it, which no filter fixture can:
 // does the RESOURCE have the levels its public LevelCount claims, and can a caller put content in
 // them? Those are storage and upload questions, and they are answered here against the native
 // SDL_GPU texture rather than inferred from a sampled pixel.
 //
-// THE TWO PRE-FIX MECHANISMS, both in SdlGpuTextureBackend and neither in the sampler:
+// THE TWO PRE-FIX MECHANISMS, both in SdlGpuTextureRenderer and neither in the sampler:
 //
 //   1. ALLOCATION. The constructor hardcoded `createInfo.num_levels = 1` and never read
 //      `ImageData::mipLevels`, the field Texture2D's own constructor fills from
@@ -18,9 +18,9 @@
 //      game and owned a native resource with exactly one level.
 //
 //   2. UPLOAD. The class declared no `UpdatePixelsLevel` override at all, so it inherited
-//      `ITextureBackend`'s default -- an empty body. Every `SetData(level>0, ...)` a game issued
+//      `ITextureRenderer`'s default -- an empty body. Every `SetData(level>0, ...)` a game issued
 //      was accepted by the shared layer, written into its CPU-side mip buffer, handed to the
-//      backend and silently dropped. No error, no warning, no pixel.
+//      renderer and silently dropped. No error, no warning, no pixel.
 //
 // The two are independent: fixing allocation alone gives a chain of undefined levels, and fixing
 // upload alone writes into levels that do not exist. Leg A measures the first directly and leg B
@@ -65,7 +65,7 @@
 // Texture` is not called by the code under test and not expected here.
 //
 // GetData BOUNDARY (leg K). A plain Texture2D's `GetData` is served by the shared layer's own CPU
-// pixel shadow on EVERY backend and never reaches `ITextureBackend::GetData` at all, so it cannot
+// pixel shadow on EVERY renderer and never reaches `ITextureRenderer::GetData` at all, so it cannot
 // witness what is in GPU memory and is not used as a content oracle anywhere above. Leg K states
 // that boundary as a check rather than leaving it implied. No CPU shadow was added for testing.
 //
@@ -123,7 +123,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 
-#include "CNA/Internal/Backends/SdlGpu/SdlGpuGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/SdlGpu/SdlGpuRenderer.hpp"
 
 #include <algorithm>
 #include <array>
@@ -137,7 +137,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using CNA::Internal::Backends::SdlGpu::SdlGpuTextureBackend;
+using CNA::Internal::Renderers::SdlGpu::SdlGpuTextureRenderer;
 
 namespace
 {
@@ -355,9 +355,9 @@ class SdlGpuTexture2DMipStorageTest : public Game
     /// LevelCount is bookkeeping in the shared layer and says nothing about the GPU resource.
     static int NativeLevels(const Texture2D& tex)
     {
-        if (!tex.HasBackend()) return -1;
-        const auto* backend = dynamic_cast<const SdlGpuTextureBackend*>(&tex.GetBackend());
-        return backend != nullptr ? backend->LevelCountEXT() : -1;
+        if (!tex.HasRenderer()) return -1;
+        const auto* renderer = dynamic_cast<const SdlGpuTextureRenderer*>(&tex.GetRenderer());
+        return renderer != nullptr ? renderer->LevelCountEXT() : -1;
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -1113,7 +1113,7 @@ class SdlGpuTexture2DMipStorageTest : public Game
 
     void LegI(GraphicsDevice& dev)
     {
-        // A chain destroyed as a short-lived local AFTER its draw was queued: this backend replays
+        // A chain destroyed as a short-lived local AFTER its draw was queued: this renderer replays
         // draws at Present, so the native handle has to outlive the public wrapper.
         {
             RenderTarget2D rt(dev, 2, 2, false, SurfaceFormat::Color, DepthFormat::None, 0,
@@ -1208,7 +1208,7 @@ class SdlGpuTexture2DMipStorageTest : public Game
     void LegJ(GraphicsDevice& dev)
     {
         // An out-of-range level must not corrupt anything. The shared layer accepts level >= 0 and
-        // hands it down; the backend's job is to leave the resource alone.
+        // hands it down; the renderer's job is to leave the resource alone.
         {
             std::unique_ptr<Texture2D> tex = MakeChain(dev, 8, 8, LevelPattern);
             const std::vector<Color> junk(1, kMagenta);
@@ -1224,7 +1224,7 @@ class SdlGpuTexture2DMipStorageTest : public Game
                   std::to_string(Mismatches(got, want)) + " mismatches)");
         }
 
-        // A negative level is rejected by the shared layer before it can reach the backend.
+        // A negative level is rejected by the shared layer before it can reach the renderer.
         {
             std::unique_ptr<Texture2D> tex = MakeChain(dev, 8, 8, LevelPattern);
             const std::vector<Color> junk(64, kMagenta);
@@ -1275,10 +1275,10 @@ class SdlGpuTexture2DMipStorageTest : public Game
         const std::vector<Color> want = LevelPattern(8, 8, 0);
         check(served && Mismatches(out, want) == 0,
               "K Texture2D::GetData returns level 0 from the shared layer's CPU shadow, which no "
-              "backend readback is involved in (" + std::to_string(Mismatches(out, want)) +
+              "renderer readback is involved in (" + std::to_string(Mismatches(out, want)) +
               " mismatches)");
         note("K BOUNDARY: a plain Texture2D's GetData is served by the shared layer's own CPU "
-             "pixel buffer on EVERY backend and never reaches ITextureBackend::GetData, so it "
+             "pixel buffer on EVERY renderer and never reaches ITextureRenderer::GetData, so it "
              "cannot witness GPU storage and is not used as a content oracle in this fixture. "
              "Rendered sampling is. No CPU shadow was added to make this fixture pass.");
         (void)dev;

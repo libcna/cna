@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "System/IServiceProvider.hpp"
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/CnjEnvelope.hpp"
 #include "CNA/Internal/CnjSourceFile.hpp"
 #include "CNA/Internal/GltfImport/GltfImportCore.hpp"
@@ -2903,7 +2903,7 @@ namespace Microsoft::Xna::Framework::Content
 // ---------------------------------------------------------------------------
 // Textures are NOT stored in loadedAssets_ (strong cache). Instead only weak
 // references are kept. When the last external Texture2D copy is destroyed its
-// GPU backend is freed immediately, preventing per-world RAM growth caused by
+// GPU renderer is freed immediately, preventing per-world RAM growth caused by
 // world-specific background textures accumulating in the cache.
 // ---------------------------------------------------------------------------
 
@@ -2921,22 +2921,22 @@ namespace Microsoft::Xna::Framework::Content
         auto cacheIt = textureCache_.find(key);
         if (cacheIt != textureCache_.end())
         {
-            auto backendSp   = cacheIt->second.backend.lock();
+            auto rendererSp   = cacheIt->second.renderer.lock();
             auto cpuPixelsSp = cacheIt->second.cpuPixels.lock(); // may be null when context recovery disabled
-            if (backendSp)
+            if (rendererSp)
             {
-                // Reuse the existing GPU backend — no reload from disk needed.
-                const int w = backendSp->GetWidth();
-                const int h = backendSp->GetHeight();
+                // Reuse the existing GPU renderer — no reload from disk needed.
+                const int w = rendererSp->GetWidth();
+                const int h = rendererSp->GetHeight();
                 return Graphics::Texture2D::ReconstructFromCache(
                     getGraphicsDeviceInternal(),
                     w, h,
                     cacheIt->second.fmt,
                     cacheIt->second.levelCount,
-                    std::move(backendSp),
+                    std::move(rendererSp),
                     std::move(cpuPixelsSp));
             }
-            // Backend expired — remove stale entry and fall through to reload.
+            // Renderer expired — remove stale entry and fall through to reload.
             textureCache_.erase(cacheIt);
         }
 
@@ -2950,7 +2950,7 @@ namespace Microsoft::Xna::Framework::Content
             Graphics::Texture2D result = LoadXnbAsset<Graphics::Texture2D>(xnbCandidate, assetName);
 
             WeakTextureEntry entry;
-            entry.backend    = result.GetBackendWeak();
+            entry.renderer    = result.GetRendererWeak();
             entry.cpuPixels  = result.GetCpuPixelsWeak();
             entry.fmt        = result.getFormatProperty();
             entry.levelCount = result.getLevelCountProperty();
@@ -2978,10 +2978,10 @@ namespace Microsoft::Xna::Framework::Content
 
         Graphics::Texture2D result = reader.Read(resolvedPath, *this);
 
-        // Cache weak references so the GPU backend is freed as soon as the
+        // Cache weak references so the GPU renderer is freed as soon as the
         // caller drops all its Texture2D copies.
         WeakTextureEntry entry;
-        entry.backend    = result.GetBackendWeak();
+        entry.renderer    = result.GetRendererWeak();
         entry.cpuPixels  = result.GetCpuPixelsWeak();
         entry.fmt        = result.getFormatProperty();
         entry.levelCount = result.getLevelCountProperty();
@@ -3031,7 +3031,7 @@ namespace Microsoft::Xna::Framework::Content
     }
 
     // Task 934: TextureCube is move-only (NOXNA, copy constructor deleted -- unlike Texture2D,
-    // which supports reference-counted backend sharing via its own weak-cache specialisation
+    // which supports reference-counted renderer sharing via its own weak-cache specialisation
     // above), so it cannot be held in the generic strong (std::any-based) cache either. Mirrors
     // SoundEffect's own identical not-cached specialisation immediately above: reader.Read()
     // already does a fresh decode per call, which is exactly what a cache MISS did before this

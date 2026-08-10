@@ -5,8 +5,8 @@
 //
 // Direct port of vulkan_rendertargetcube_sample_test.cpp (Task 334) with mipMap=true added to
 // the RenderTargetCube constructor -- same 6-face solid-colour-fill + EnvironmentMapEffect-sample
-// sequence, proving VulkanRenderTargetCubeBackend::FaceProxy::MaybeGenerateMips' per-face
-// vkCmdBlitImage cascade (mirroring VulkanRenderTargetBackend::MaybeGenerateMips, Task 878) runs
+// sequence, proving VulkanRenderTargetCubeRenderer::FaceProxy::MaybeGenerateMips' per-face
+// vkCmdBlitImage cascade (mirroring VulkanRenderTargetRenderer::MaybeGenerateMips, Task 878) runs
 // without corrupting level 0's actual rendered content or crashing.
 //
 // Scope decision (deliberate, not an oversight -- tried harder first): unlike RenderTarget2D's
@@ -29,7 +29,7 @@
 // touched by any render pass (only level 0 of an actually-rendered face gets that from its own
 // render pass) -- produced live `VUID-vkCmdDraw-None-09600` validation errors (correct pixel
 // output regardless, silent otherwise) until fixed with a construction-time full-range initial
-// transition (mirrors VulkanRenderTargetBackend's identical Task 878 fix). Independently
+// transition (mirrors VulkanRenderTargetRenderer's identical Task 878 fix). Independently
 // confirmed via `git stash`: reverting only that specific initial-transition addition reproduces
 // the exact validation errors this test's own pixel assertion cannot detect on its own.
 //

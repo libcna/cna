@@ -7,10 +7,10 @@
 // the secondary chain must contain the clear colour; reversing the bindings reverses those roles.
 //
 // Every check runs inside one ordinary Game frame. The fixture never calls Present and verifies
-// that the backend records exactly the one submit/present performed by Game::EndDraw. Readback
+// that the renderer records exactly the one submit/present performed by Game::EndDraw. Readback
 // flushes producer work synchronously, but add no public frame or presentation.
 
-#include "CNA/Internal/Backends/Vulkan/VulkanGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Vulkan/VulkanRenderer.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GameTime.hpp"
@@ -43,13 +43,13 @@
 #include <string>
 #include <vector>
 
-#ifndef CNA_BACKEND_VULKAN
+#ifndef CNA_RENDERER_VULKAN
 #error "REMED-GFX-190's MRT mip-finalization matrix is Vulkan-only."
 #endif
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using CNA::Internal::Backends::Vulkan::VulkanGraphicsBackend;
+using CNA::Internal::Renderers::Vulkan::VulkanRenderer;
 
 namespace
 {
@@ -88,7 +88,7 @@ class VulkanMrtMipFinalizationTest final : public Game
     std::unique_ptr<RenderTarget2D> heldPrimary_;
     std::unique_ptr<RenderTarget2D> heldSecondary_;
     std::unique_ptr<RenderTarget2D> heldUnboundControl_;
-    VulkanGraphicsBackend* vk_ = nullptr;
+    VulkanRenderer* vk_ = nullptr;
     uint64_t presentCountAtDraw_ = 0;
     uint64_t submitCountAtDraw_ = 0;
     int passed_ = 0;
@@ -526,8 +526,8 @@ protected:
     {
         try
         {
-            vk_ = dynamic_cast<VulkanGraphicsBackend*>(&getGraphicsDeviceProperty().GetBackend());
-            Check(vk_ != nullptr, "Vulkan backend is reachable from GraphicsDevice");
+            vk_ = dynamic_cast<VulkanRenderer*>(&getGraphicsDeviceProperty().GetRenderer());
+            Check(vk_ != nullptr, "Vulkan renderer is reachable from GraphicsDevice");
             if (!vk_)
             {
                 Exit();
@@ -557,7 +557,7 @@ protected:
     {
         if (vk_)
         {
-            Check(VulkanGraphicsBackend::IsValidationActiveEXT(),
+            Check(VulkanRenderer::IsValidationActiveEXT(),
                   "VK_LAYER_KHRONOS_validation is active");
             const auto& messages = vk_->GetValidationMessagesEXT();
             if (!messages.empty())

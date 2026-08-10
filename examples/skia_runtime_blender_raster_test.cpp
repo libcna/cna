@@ -3,7 +3,7 @@
 // alpha equations.  This is intentionally below CNA's public API: SKIA-54 owns the first public
 // BlendState prototype and its per-batch state capture.
 
-#include "CNA/Internal/Backends/Skia/SkiaSurface.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaSurface.hpp"
 
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColor.h"
@@ -17,7 +17,7 @@
 #include <cstdio>
 #include <vector>
 
-using CNA::Internal::Backends::Skia::SkiaSurface;
+using CNA::Internal::Renderers::Skia::SkiaSurface;
 
 namespace
 {

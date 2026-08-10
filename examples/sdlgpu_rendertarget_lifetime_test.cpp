@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // plan_sdlgpu.md: real regression proof for the render-target-destroyed-before-flush
-// use-after-free documented in this backend's own status banner -- this backend batches all
+// use-after-free documented in this renderer's own status banner -- this renderer batches all
 // draws/clears and only actually renders them once, at Present() time (EnsureFrameRendered()),
 // but a RenderTarget2D's destructor previously released its real SDL_GPUTexture* handles
 // IMMEDIATELY (synchronously, at C++ scope-exit time). A render target destroyed as a short-lived
@@ -8,7 +8,7 @@
 // ALREADY-QUEUED, not-yet-submitted draw command (e.g. a SpriteBatch draw sampling its contents
 // elsewhere) referencing that now-released handle. Fixed by deferring the actual
 // SDL_ReleaseGPUTexture() call until right after the next real command-buffer submit
-// (SdlGpuGraphicsBackend::QueueTextureRelease/pendingTextureReleases_).
+// (SdlGpuRenderer::QueueTextureRelease/pendingTextureReleases_).
 //
 // Check A -- a RenderTarget2D created, drawn into, sampled by a SpriteBatch draw (queued but NOT
 //   yet submitted), and then destroyed -- all as a local variable inside ONE Draw() call, before
@@ -33,7 +33,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 
-#include "CNA/Internal/Backends/SdlGpu/SdlGpuGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/SdlGpu/SdlGpuRenderer.hpp"
 
 #include "common/PixelTestGame.hpp"
 
@@ -45,7 +45,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::SdlGpu;
+using namespace CNA::Internal::Renderers::SdlGpu;
 
 namespace
 {

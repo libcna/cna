@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // Task 885: BasicEffect pixel test — LightingEnabled=true with DirectionalLight1/DirectionalLight2
-// forwarded, and EmissiveColor added on the lit path (EasyGL backend).
+// forwarded, and EmissiveColor added on the lit path (EasyGL renderer).
 //
 // FNA reference (Graphics/Effect/StockEffects/BasicEffect.cs + HLSL/BasicEffect.fx + Lighting.fxh):
 // EffectHelpers.SetMaterialColor bakes EmissiveColor+AmbientLightColor*DiffuseColor into the

@@ -4,7 +4,7 @@
 // skinned3d.frag.glsl for the lighting equation this mirrors -- unchanged here except for the
 // vertex-colour modulation added at the end.
 //
-// Gate and modulation order match every other backend's own SkinnedEffect.VertexColorEnabled
+// Gate and modulation order match every other renderer's own SkinnedEffect.VertexColorEnabled
 // implementation exactly (EasyGL's EnsureSkinnedProgram() fragment shader is the reference): vertex
 // colour's alpha multiplies into the combined colour BEFORE the specular highlight is added (so
 // alpha itself is never double-counted against specular), and its RGB multiplies the WHOLE combined

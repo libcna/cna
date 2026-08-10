@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 // SKIA-136: BGRA/sRGB Texture2D transfer bytes, colour-space routing, mips and refusal gates.
 
-#include "CNA/Internal/Backends/Skia/SkiaGraphicsBackend.hpp"
-#include "CNA/Internal/Backends/Skia/SkiaTextureBackend.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaRenderer.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaTextureRenderer.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
@@ -35,10 +35,10 @@
 #include <string>
 #include <utility>
 
-using CNA::Internal::Backends::Skia::SkiaGraphicsBackend;
-using CNA::Internal::Backends::Skia::SkiaResourceStats;
-using CNA::Internal::Backends::Skia::SkiaSourceAlphaConvention;
-using CNA::Internal::Backends::Skia::SkiaTextureBackend;
+using CNA::Internal::Renderers::Skia::SkiaRenderer;
+using CNA::Internal::Renderers::Skia::SkiaResourceStats;
+using CNA::Internal::Renderers::Skia::SkiaSourceAlphaConvention;
+using CNA::Internal::Renderers::Skia::SkiaTextureRenderer;
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
 
@@ -117,9 +117,9 @@ class InspectableColourTexture2D final : public Texture2D
 public:
     using Texture2D::Texture2D;
 
-    [[nodiscard]] SkiaTextureBackend* SkiaBackend() const
+    [[nodiscard]] SkiaTextureRenderer* SkiaRenderer() const
     {
-        return dynamic_cast<SkiaTextureBackend*>(GetBackendRaw());
+        return dynamic_cast<SkiaTextureRenderer*>(GetRendererRaw());
     }
 };
 
@@ -150,25 +150,25 @@ protected:
         done_ = true;
 
         auto& device = getGraphicsDeviceProperty();
-        auto* graphicsBackend = dynamic_cast<SkiaGraphicsBackend*>(&device.GetBackend());
-        Check(graphicsBackend != nullptr, "public GraphicsDevice owns the Skia backend");
-        if (!graphicsBackend)
+        auto* graphicsRenderer = dynamic_cast<SkiaRenderer*>(&device.GetRenderer());
+        Check(graphicsRenderer != nullptr, "public GraphicsDevice owns the Skia renderer");
+        if (!graphicsRenderer)
         {
             Exit();
             return;
         }
 
-        const SkiaResourceStats baseline = graphicsBackend->GetResourceStatsEXT();
-        ExerciseRawTransfers(device, *graphicsBackend, SurfaceFormat::ColorBgraEXT,
+        const SkiaResourceStats baseline = graphicsRenderer->GetResourceStatsEXT();
+        ExerciseRawTransfers(device, *graphicsRenderer, SurfaceFormat::ColorBgraEXT,
                              "ColorBgraEXT");
-        ExerciseRawTransfers(device, *graphicsBackend, SurfaceFormat::ColorSrgbEXT,
+        ExerciseRawTransfers(device, *graphicsRenderer, SurfaceFormat::ColorSrgbEXT,
                              "ColorSrgbEXT");
         CheckMipGeneration(device);
         CheckColourMetadata(device);
         CheckSampling(device);
-        CheckRefusals(device, *graphicsBackend);
-        CheckSrgbRenderTargetPromotion(device, *graphicsBackend);
-        Check(SameTextureStats(graphicsBackend->GetResourceStatsEXT(), baseline),
+        CheckRefusals(device, *graphicsRenderer);
+        CheckSrgbRenderTargetPromotion(device, *graphicsRenderer);
+        Check(SameTextureStats(graphicsRenderer->GetResourceStatsEXT(), baseline),
               "all colour-format fixtures return resource counters to baseline");
 
         std::printf("=== %d/%d PASS ===\n", checks_ - failures_, checks_);
@@ -176,18 +176,18 @@ protected:
     }
 
 private:
-    void ExerciseRawTransfers(GraphicsDevice& device, SkiaGraphicsBackend& graphicsBackend,
+    void ExerciseRawTransfers(GraphicsDevice& device, SkiaRenderer& graphicsRenderer,
                               SurfaceFormat format, const char* name)
     {
-        const SkiaResourceStats before = graphicsBackend.GetResourceStatsEXT();
+        const SkiaResourceStats before = graphicsRenderer.GetResourceStatsEXT();
         {
             InspectableColourTexture2D texture(device, 3, 2, true, format);
-            SkiaTextureBackend* backend = texture.SkiaBackend();
-            const SkiaResourceStats allocated = graphicsBackend.GetResourceStatsEXT();
+            SkiaTextureRenderer* renderer = texture.SkiaRenderer();
+            const SkiaResourceStats allocated = graphicsRenderer.GetResourceStatsEXT();
             Check(texture.getFormatProperty() == format && texture.getLevelCountProperty() == 2
-                      && backend && backend->FormatEXT() == format,
-                  std::string(name) + " constructs the exact public/backend format and mip count");
-            Check(allocated.textureBackends == before.textureBackends + 1u
+                      && renderer && renderer->FormatEXT() == format,
+                  std::string(name) + " constructs the exact public/renderer format and mip count");
+            Check(allocated.textureRenderers == before.textureRenderers + 1u
                       && allocated.textureImageViews == before.textureImageViews + 2u
                       && allocated.textureImageBytes == before.textureImageBytes + 48u
                       && allocated.mipChains2D == before.mipChains2D + 1u
@@ -211,10 +211,10 @@ private:
                 exact = exact && SameBytes(read[index + 1u], expected[index]);
             Check(exact, std::string(name) + " full transfer preserves exact caller bytes and guards");
 
-            bool rawExact = backend != nullptr;
-            if (backend)
+            bool rawExact = renderer != nullptr;
+            if (renderer)
             {
-                const std::uint8_t* raw = backend->MipChainEXT().LevelData(0);
+                const std::uint8_t* raw = renderer->MipChainEXT().LevelData(0);
                 for (std::size_t index = 0; index < expected.size(); ++index)
                 {
                     rawExact = rawExact
@@ -224,7 +224,7 @@ private:
                         && raw[index * 4u + 3u] == expected[index].getAProperty();
                 }
             }
-            Check(rawExact, std::string(name) + " backend storage retains the public raw byte order");
+            Check(rawExact, std::string(name) + " renderer storage retains the public raw byte order");
 
             const Rectangle patchRectangle(1, 0, 1, 2);
             std::array<Color, 4> patchUpload{guard, Color(9, 19, 29, 39),
@@ -254,7 +254,7 @@ private:
             Check(SameBytes(whole, beforeFailure),
                   std::string(name) + " rejected upload leaves all raw bytes unchanged");
         }
-        Check(SameTextureStats(graphicsBackend.GetResourceStatsEXT(), before),
+        Check(SameTextureStats(graphicsRenderer.GetResourceStatsEXT(), before),
               std::string(name) + " destruction releases exact resource accounting");
     }
 
@@ -269,7 +269,7 @@ private:
         Color bgraMip = Color::Transparent;
         bgra.GetData(1, nullptr, &bgraMip, 0, 1);
         Check(SameBytes(bgraMip, Color(25, 35, 45, 112))
-                  && bgra.SkiaBackend() && bgra.SkiaBackend()->MipGenerationCountEXT(1) == 1u,
+                  && bgra.SkiaRenderer() && bgra.SkiaRenderer()->MipGenerationCountEXT(1) == 1u,
               "ColorBgraEXT mip generation averages its four raw byte channels once");
 
         InspectableColourTexture2D srgb(device, 2, 2, true, SurfaceFormat::ColorSrgbEXT);
@@ -281,7 +281,7 @@ private:
         Color srgbMip = Color::Transparent;
         srgb.GetData(1, nullptr, &srgbMip, 0, 1);
         Check(SameBytes(srgbMip, Color(188, 188, 188, 112))
-                  && srgb.SkiaBackend() && srgb.SkiaBackend()->MipGenerationCountEXT(1) == 1u,
+                  && srgb.SkiaRenderer() && srgb.SkiaRenderer()->MipGenerationCountEXT(1) == 1u,
               "ColorSrgbEXT mip RGB averages in linear light while alpha averages linearly");
     }
 
@@ -289,9 +289,9 @@ private:
     {
         InspectableColourTexture2D bgra(device, 1, 1, false, SurfaceFormat::ColorBgraEXT);
         InspectableColourTexture2D srgb(device, 1, 1, false, SurfaceFormat::ColorSrgbEXT);
-        const sk_sp<SkImage> bgraImage = bgra.SkiaBackend()->SnapshotImage(
+        const sk_sp<SkImage> bgraImage = bgra.SkiaRenderer()->SnapshotImage(
             SkiaSourceAlphaConvention::Straight);
-        const sk_sp<SkImage> srgbImage = srgb.SkiaBackend()->SnapshotImage(
+        const sk_sp<SkImage> srgbImage = srgb.SkiaRenderer()->SnapshotImage(
             SkiaSourceAlphaConvention::Straight);
         Check(bgraImage && bgraImage->colorType() == kBGRA_8888_SkColorType
                   && bgraImage->colorSpace() == nullptr,
@@ -302,7 +302,7 @@ private:
 
         const Color encoded(128, 64, 32, 255);
         srgb.SetData(&encoded, 1);
-        const sk_sp<SkImage> encodedImage = srgb.SkiaBackend()->SnapshotImage(
+        const sk_sp<SkImage> encodedImage = srgb.SkiaRenderer()->SnapshotImage(
             SkiaSourceAlphaConvention::Straight);
         const auto linear = DrawToColourSpace(encodedImage, SkColorSpace::MakeSRGBLinear());
         const auto encodedAgain = DrawToColourSpace(encodedImage, SkColorSpace::MakeSRGB());
@@ -346,14 +346,14 @@ private:
               "ColorSrgbEXT SpriteBatch sampling decodes RGB exactly once to linear output");
     }
 
-    void CheckRefusals(GraphicsDevice& device, SkiaGraphicsBackend& graphicsBackend)
+    void CheckRefusals(GraphicsDevice& device, SkiaRenderer& graphicsRenderer)
     {
-        const SkiaResourceStats before = graphicsBackend.GetResourceStatsEXT();
+        const SkiaResourceStats before = graphicsRenderer.GetResourceStatsEXT();
         Check(Throws([&] {
                   RenderTarget2D target(device, 2, 2, false, SurfaceFormat::ColorBgraEXT,
                                         DepthFormat::None);
                   (void)target;
-              }) && SameTextureStats(graphicsBackend.GetResourceStatsEXT(), before),
+              }) && SameTextureStats(graphicsRenderer.GetResourceStatsEXT(), before),
               "ColorBgraEXT RenderTarget2D requests reject transactionally");
 
         Texture2D srgb(device, 1, 1, false, SurfaceFormat::ColorSrgbEXT);
@@ -366,25 +366,25 @@ private:
               "raw-RGBA convenience overload remains restricted to SurfaceFormat::Color");
     }
 
-    void CheckSrgbRenderTargetPromotion(GraphicsDevice& device, SkiaGraphicsBackend& graphicsBackend)
+    void CheckSrgbRenderTargetPromotion(GraphicsDevice& device, SkiaRenderer& graphicsRenderer)
     {
-        const SkiaResourceStats before = graphicsBackend.GetResourceStatsEXT();
+        const SkiaResourceStats before = graphicsRenderer.GetResourceStatsEXT();
         {
             RenderTarget2D target(device, 2, 2, false, SurfaceFormat::ColorSrgbEXT,
                                   DepthFormat::None);
-            const SkiaResourceStats allocated = graphicsBackend.GetResourceStatsEXT();
+            const SkiaResourceStats allocated = graphicsRenderer.GetResourceStatsEXT();
             Check(allocated.renderTargets == before.renderTargets + 1u
                       && allocated.targetSurfaceBytes == before.targetSurfaceBytes + 16u,
                   "SKIA-142 promotes ColorSrgbEXT to a constructible RenderTarget2D");
         }
-        Check(SameTextureStats(graphicsBackend.GetResourceStatsEXT(), before),
+        Check(SameTextureStats(graphicsRenderer.GetResourceStatsEXT(), before),
               "ColorSrgbEXT RenderTarget2D destruction releases its surface accounting");
     }
 
     [[nodiscard]] static bool SameTextureStats(const SkiaResourceStats& left,
                                                const SkiaResourceStats& right)
     {
-        return left.textureBackends == right.textureBackends
+        return left.textureRenderers == right.textureRenderers
             && left.textureImageViews == right.textureImageViews
             && left.textureImageBytes == right.textureImageBytes
             && left.mipChains2D == right.mipChains2D

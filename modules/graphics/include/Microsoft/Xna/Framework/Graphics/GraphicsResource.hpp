@@ -21,7 +21,7 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Raised when this resource is disposed. */
         System::EventHandler<System::EventArgs> Disposing;
 
-        /** @brief Destroys the GraphicsResource and releases backend resources. */
+        /** @brief Destroys the GraphicsResource and releases renderer resources. */
         NOXNA ~GraphicsResource() override;
 
         /** @brief Returns the graphics device that owns this resource. */

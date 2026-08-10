@@ -1,4 +1,4 @@
-if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "DX5")
+if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DX5")
     enable_testing()
 
     macro(cna_dx5_test target src)
@@ -28,7 +28,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "DX5")
         endif()
     endmacro()
 
-    # plan_dx5.md design decision 12: a real, automated proof this backend never quietly reaches
+    # plan_dx5.md design decision 12: a real, automated proof this renderer never quietly reaches
     # for the proven-broken execute-buffer Direct3D path (or the old D3DVT_*-enum vertex-type
     # submission) instead of the working IDirect3DDevice3::DrawPrimitive + D3DFVF_TLVERTEX one --
     # pure text check via scripts/check-dx5-execute-buffer-discipline.sh, no compiled binary, no
@@ -41,39 +41,39 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "DX5")
     # Clear/Present/readback foundation CTest.
     cna_dx5_test(cna_test_dx5_smoke examples/dx5_smoke_test.cpp)
     cna_dx5_ctest_command(_dx5_smoke_cmd cna_test_dx5_smoke)
-    cna_register_backend_test(NAME Dx5_Smoke COMMAND ${_dx5_smoke_cmd}
+    cna_register_renderer_test(NAME Dx5_Smoke COMMAND ${_dx5_smoke_cmd}
         TIMEOUT 60 LABELS "DX5")
 
-    # Phase O2 (DX2-11, 2D layer ported from DX1-20..DX1-28): texture/render-target backend CTest.
+    # Phase O2 (DX2-11, 2D layer ported from DX1-20..DX1-28): texture/render-target renderer CTest.
     cna_dx5_test(cna_test_dx5_texture_rendertarget examples/dx5_texture_rendertarget_test.cpp)
     cna_dx5_ctest_command(_dx5_texture_rendertarget_cmd cna_test_dx5_texture_rendertarget)
-    cna_register_backend_test(NAME Dx5_TextureRenderTarget COMMAND ${_dx5_texture_rendertarget_cmd}
+    cna_register_renderer_test(NAME Dx5_TextureRenderTarget COMMAND ${_dx5_texture_rendertarget_cmd}
         TIMEOUT 60 LABELS "DX5")
 
     # Phase O2 (DX2-12, 2D layer ported from DX1-30..DX1-39): CPU compositor / SpriteBatch draw
     # path CTest.
     cna_dx5_test(cna_test_dx5_spritebatch examples/dx5_spritebatch_test.cpp)
     cna_dx5_ctest_command(_dx5_spritebatch_cmd cna_test_dx5_spritebatch)
-    cna_register_backend_test(NAME Dx5_SpriteBatch COMMAND ${_dx5_spritebatch_cmd}
+    cna_register_renderer_test(NAME Dx5_SpriteBatch COMMAND ${_dx5_spritebatch_cmd}
         TIMEOUT 60 LABELS "DX5")
 
     # Phase O2 (DX2-12, 2D layer ported from DX1-40..DX1-44): blend-mode compositing math CTest.
     cna_dx5_test(cna_test_dx5_blend examples/dx5_blend_test.cpp)
     cna_dx5_ctest_command(_dx5_blend_cmd cna_test_dx5_blend)
-    cna_register_backend_test(NAME Dx5_Blend COMMAND ${_dx5_blend_cmd}
+    cna_register_renderer_test(NAME Dx5_Blend COMMAND ${_dx5_blend_cmd}
         TIMEOUT 60 LABELS "DX5")
 
     # Phase O2 (DX2-12, 2D layer ported from DX1-45/DX1-46): TextureFilter + TextureAddressMode
     # sampling CTest.
     cna_dx5_test(cna_test_dx5_sampling examples/dx5_sampling_test.cpp)
     cna_dx5_ctest_command(_dx5_sampling_cmd cna_test_dx5_sampling)
-    cna_register_backend_test(NAME Dx5_AddressMode COMMAND ${_dx5_sampling_cmd}
+    cna_register_renderer_test(NAME Dx5_AddressMode COMMAND ${_dx5_sampling_cmd}
         TIMEOUT 60 LABELS "DX5")
 
     # Phase O2 (DX2-13, 2D layer ported from DX1-50..DX1-54): SpriteFont / DrawString CTest.
     cna_dx5_test(cna_test_dx5_spritefont examples/dx5_spritefont_test.cpp)
     cna_dx5_ctest_command(_dx5_spritefont_cmd cna_test_dx5_spritefont)
-    cna_register_backend_test(NAME Dx5_SpriteFont COMMAND ${_dx5_spritefont_cmd}
+    cna_register_renderer_test(NAME Dx5_SpriteFont COMMAND ${_dx5_spritefont_cmd}
         TIMEOUT 60 LABELS "DX5")
 
     # CNA::GraphicsCapability: DX5 is fully 3D-capable from day one (a port of DX3's own, itself a port of DX2's
@@ -82,13 +82,13 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "DX5")
     # DirectX era vs. real.
     cna_dx5_test(cna_test_dx5_graphics_capability examples/dx5_graphics_capability_test.cpp)
     cna_dx5_ctest_command(_dx5_graphics_capability_cmd cna_test_dx5_graphics_capability)
-    cna_register_backend_test(NAME Dx5_GraphicsCapability COMMAND ${_dx5_graphics_capability_cmd}
+    cna_register_renderer_test(NAME Dx5_GraphicsCapability COMMAND ${_dx5_graphics_capability_cmd}
         TIMEOUT 60 LABELS "DX5")
 
     # Phase O2 (DX2-14, 2D layer ported from DX1-68): logical/window coordinate transform CTest.
     cna_dx5_test(cna_test_dx5_logical_transform examples/dx5_logical_transform_test.cpp)
     cna_dx5_ctest_command(_dx5_logical_transform_cmd cna_test_dx5_logical_transform)
-    cna_register_backend_test(NAME Dx5_LogicalTransform COMMAND ${_dx5_logical_transform_cmd}
+    cna_register_renderer_test(NAME Dx5_LogicalTransform COMMAND ${_dx5_logical_transform_cmd}
         TIMEOUT 60 LABELS "DX5")
 
     # NOTE: Dx1_No3D has no DX5 equivalent here either, same reasoning as DX2/DX3 -- DX5's
@@ -101,64 +101,64 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "DX5")
     # test's own Check D confirms CreateVertexBuffer still throws, rather than over-claiming.
     cna_dx5_test(cna_test_dx5_device3d_smoke examples/dx5_device3d_smoke_test.cpp)
     cna_dx5_ctest_command(_dx5_device3d_smoke_cmd cna_test_dx5_device3d_smoke)
-    cna_register_backend_test(NAME Dx5_Device3DSmoke COMMAND ${_dx5_device3d_smoke_cmd}
+    cna_register_renderer_test(NAME Dx5_Device3DSmoke COMMAND ${_dx5_device3d_smoke_cmd}
         TIMEOUT 60 LABELS "DX5")
 
-    # Phase O5 (DX2-40..DX2-42): Dx2VertexBufferBackend/Dx2IndexBufferBackend CTest.
+    # Phase O5 (DX2-40..DX2-42): Dx2VertexBufferRenderer/Dx2IndexBufferRenderer CTest.
     cna_dx5_test(cna_test_dx5_vertex_index_buffer examples/dx5_vertex_index_buffer_test.cpp)
     cna_dx5_ctest_command(_dx5_vertex_index_buffer_cmd cna_test_dx5_vertex_index_buffer)
-    cna_register_backend_test(NAME Dx5_VertexIndexBuffer COMMAND ${_dx5_vertex_index_buffer_cmd}
+    cna_register_renderer_test(NAME Dx5_VertexIndexBuffer COMMAND ${_dx5_vertex_index_buffer_cmd}
         TIMEOUT 60 LABELS "DX5")
 
     # Phase O4 (DX2-30..DX2-35): real CPU transform/clip -> D3DTLVERTEX -> DrawIndexedPrimitive
     # pipeline CTest -- pixel-verified triangle rendering through the real Direct3D v2 device.
     cna_dx5_test(cna_test_dx5_colored_primitives examples/dx5_colored_primitives_test.cpp)
     cna_dx5_ctest_command(_dx5_colored_primitives_cmd cna_test_dx5_colored_primitives)
-    cna_register_backend_test(NAME Dx5_ColoredPrimitives COMMAND ${_dx5_colored_primitives_cmd}
+    cna_register_renderer_test(NAME Dx5_ColoredPrimitives COMMAND ${_dx5_colored_primitives_cmd}
         TIMEOUT 60 LABELS "DX5")
 
     # Phase O4 (DX2-33, DX2-36): DrawIndexedPrimitives (16-bit and 32-bit indices) CTest.
     cna_dx5_test(cna_test_dx5_indexed_primitives examples/dx5_indexed_primitives_test.cpp)
     cna_dx5_ctest_command(_dx5_indexed_primitives_cmd cna_test_dx5_indexed_primitives)
-    cna_register_backend_test(NAME Dx5_IndexedPrimitives COMMAND ${_dx5_indexed_primitives_cmd}
+    cna_register_renderer_test(NAME Dx5_IndexedPrimitives COMMAND ${_dx5_indexed_primitives_cmd}
         TIMEOUT 60 LABELS "DX5")
 
     # Phase O4 (DX2-37): real depth-test occlusion CTest, order-independent.
     cna_dx5_test(cna_test_dx5_ztest examples/dx5_ztest_test.cpp)
     cna_dx5_ctest_command(_dx5_ztest_cmd cna_test_dx5_ztest)
-    cna_register_backend_test(NAME Dx5_ZTest COMMAND ${_dx5_ztest_cmd}
+    cna_register_renderer_test(NAME Dx5_ZTest COMMAND ${_dx5_ztest_cmd}
         TIMEOUT 60 LABELS "DX5")
 
     # Phase O4 (DX2-34, DX2-38): real texture0 sampling via D3DRENDERSTATE_TEXTUREHANDLE CTest.
     cna_dx5_test(cna_test_dx5_texture3d examples/dx5_texture3d_test.cpp)
     cna_dx5_ctest_command(_dx5_texture3d_cmd cna_test_dx5_texture3d)
-    cna_register_backend_test(NAME Dx5_Texture3D COMMAND ${_dx5_texture3d_cmd}
+    cna_register_renderer_test(NAME Dx5_Texture3D COMMAND ${_dx5_texture3d_cmd}
         TIMEOUT 60 LABELS "DX5")
 
     # Phase O4 (DX2-30, DX2-39): near-plane clipping CTest.
     cna_dx5_test(cna_test_dx5_clipping examples/dx5_clipping_test.cpp)
     cna_dx5_ctest_command(_dx5_clipping_cmd cna_test_dx5_clipping)
-    cna_register_backend_test(NAME Dx5_Clipping COMMAND ${_dx5_clipping_cmd}
+    cna_register_renderer_test(NAME Dx5_Clipping COMMAND ${_dx5_clipping_cmd}
         TIMEOUT 60 LABELS "DX5")
 
-    # Phase O7 (DX2-60..DX2-66): remaining IGraphicsBackend entry points genuinely unavailable at
+    # Phase O7 (DX2-60..DX2-66): remaining IGraphicsRenderer entry points genuinely unavailable at
     # this DirectX era -- occlusion query, volume/cube textures, custom effects, instancing.
     cna_dx5_test(cna_test_dx5_remaining_defaults examples/dx5_remaining_defaults_test.cpp)
     cna_dx5_ctest_command(_dx5_remaining_defaults_cmd cna_test_dx5_remaining_defaults)
-    cna_register_backend_test(NAME Dx5_RemainingDefaults COMMAND ${_dx5_remaining_defaults_cmd}
+    cna_register_renderer_test(NAME Dx5_RemainingDefaults COMMAND ${_dx5_remaining_defaults_cmd}
         TIMEOUT 60 LABELS "DX5")
 
     # Phase O9 (DX2-91..DX2-96): real CPU-side BasicEffect lighting (ambient + directional
     # Lambertian/Blinn-Phong specular) for the normal-bearing vertex layouts, design decision 13.
     cna_dx5_test(cna_test_dx5_lighting examples/dx5_lighting_test.cpp)
     cna_dx5_ctest_command(_dx5_lighting_cmd cna_test_dx5_lighting)
-    cna_register_backend_test(NAME Dx5_Lighting COMMAND ${_dx5_lighting_cmd}
+    cna_register_renderer_test(NAME Dx5_Lighting COMMAND ${_dx5_lighting_cmd}
         TIMEOUT 60 LABELS "DX5")
 
     # Phase O9 (DX2-95, DX2-97): WireFrame/AnisotropicFiltering re-verification -- WireFrame now
     # real (SupportsCapability flipped true), AnisotropicFiltering empirically confirmed absent.
     cna_dx5_test(cna_test_dx5_wireframe_aniso examples/dx5_wireframe_aniso_test.cpp)
     cna_dx5_ctest_command(_dx5_wireframe_aniso_cmd cna_test_dx5_wireframe_aniso)
-    cna_register_backend_test(NAME Dx5_WireframeAniso COMMAND ${_dx5_wireframe_aniso_cmd}
+    cna_register_renderer_test(NAME Dx5_WireframeAniso COMMAND ${_dx5_wireframe_aniso_cmd}
         TIMEOUT 60 LABELS "DX5")
 endif()

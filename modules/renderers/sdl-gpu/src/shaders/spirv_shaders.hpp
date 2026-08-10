@@ -4,7 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 
-namespace CNA::Internal::Backends::SdlGpu::Shaders {
+namespace CNA::Internal::Renderers::SdlGpu::Shaders {
 
 static constexpr uint32_t kSprite2dVertSpv[] = {
     0x07230203u, 0x00010000u, 0x000d000bu, 0x00000038u, 0x00000000u, 0x00020011u, 0x00000001u, 0x0006000bu,
@@ -2256,4 +2256,4 @@ static constexpr uint32_t kPbrSkinned3dVertSpv[] = {
 };
 static constexpr size_t kPbrSkinned3dVertSpv_size = sizeof(kPbrSkinned3dVertSpv);
 
-} // namespace CNA::Internal::Backends::SdlGpu::Shaders
+} // namespace CNA::Internal::Renderers::SdlGpu::Shaders

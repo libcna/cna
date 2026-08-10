@@ -2,10 +2,10 @@
 // Task 766: verify RasterizerState.FillMode = FillMode::WireFrame actually suppresses triangle
 // interior rasterization on Bgfx (bgfx has no native polygon-fill-mode toggle, unlike D3D9/Vulkan
 // -- emulated by re-expanding triangle indices into a line list, see
-// BgfxGraphicsBackend::ExpandWireframeIndices).
+// BgfxRenderer::ExpandWireframeIndices).
 //
 // Adapted from examples/vulkan_fill_mode_test.cpp (Task 327) -- no EasyGL/shared source exists for
-// this property (confirmed via search; EasyGLGraphicsBackend::DrawWireframe has no dedicated pixel
+// this property (confirmed via search; EasyGLRenderer::DrawWireframe has no dedicated pixel
 // test anywhere in this project prior to this task). Restructured into per-check RunCheck() passes
 // (own Clear+Draw+Read retry loop) since Bgfx's own GetBackBufferData only reliably reflects the
 // first read per rendered frame (Task 406 finding).

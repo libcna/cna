@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MS-PL
-// Task 375: AlphaTestEffect all CompareFunction modes — threshold sweep (Bgfx backend).
+// Task 375: AlphaTestEffect all CompareFunction modes — threshold sweep (Bgfx renderer).
 //
 // See examples/easygl_alphatest_comparefunction_sweep_test.cpp for the full derivation. This is
 // the first AlphaTestEffect CompareFunction pixel test on Bgfx at all (Task 190 was EasyGL-only).
 //
 // Per Task 364's finding (tracked as Task 884, not fixed there or here): Bgfx's default
-// RasterizerState cull state (`BGFX_STATE_CULL_CCW`) is the only one of the 3 backends that
+// RasterizerState cull state (`BGFX_STATE_CULL_CCW`) is the only one of the 3 renderers that
 // actually matches FNA's real `CullCounterClockwiseFace` default, so it silently culls the
 // standard NDC quad winding used throughout this pixel-test family unless `RasterizerState::
 // CullNone` is set explicitly — worked around here identically to prior Bgfx tests.
@@ -108,7 +108,7 @@ protected:
     void Draw(const GameTime&) override
     {
         auto& dev = getGraphicsDeviceProperty();
-        // Note: SetDepthTestEnabled is not exercised here — the Bgfx backend doesn't wire it up
+        // Note: SetDepthTestEnabled is not exercised here — the Bgfx renderer doesn't wire it up
         // yet (throws), same as examples/bgfx_env_map_test.cpp. Not needed: each iteration clears
         // depth via dev.Clear() before drawing a single full-screen quad at z=0.
         dev.setBlendStateProperty(BlendState::Opaque);

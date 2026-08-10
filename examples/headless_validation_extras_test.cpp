@@ -2,7 +2,7 @@
 // plan_headless.md: closes HEADLESS-23 (viewport/scissor bounds vs. the currently-bound target's
 // real size), HEADLESS-41 (debug-label creation-site tracking in HeadlessTrace mode), and
 // HEADLESS-42 (trace log export) -- all three were flagged as narrower-than-planned or unverified
-// after the first two Headless backend commits.
+// after the first two Headless renderer commits.
 //
 // Check A -- SetViewport() with a rectangle that fits inside the (default, no render target bound)
 //   backbuffer size does not throw under HeadlessValidation.
@@ -37,7 +37,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
 
-#include "CNA/Internal/Backends/Headless/HeadlessGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Headless/HeadlessRenderer.hpp"
 
 #include <cstdio>
 #include <cstdlib>
@@ -45,7 +45,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::Headless;
+using namespace CNA::Internal::Renderers::Headless;
 
 namespace
 {
@@ -74,14 +74,14 @@ protected:
     void Draw(const GameTime&) override
     {
         auto& dev = getGraphicsDeviceProperty();
-        auto& backend = static_cast<HeadlessGraphicsBackend&>(dev.GetBackend());
+        auto& renderer = static_cast<HeadlessRenderer&>(dev.GetRenderer());
 
         // Check A: an in-bounds viewport against the default backbuffer doesn't throw.
         {
             int bw = 0, bh = 0;
-            backend.GetViewportSize(bw, bh);
+            renderer.GetViewportSize(bw, bh);
             bool threw = false;
-            try { backend.SetViewport(0, 0, bw, bh, 0.0f, 1.0f); }
+            try { renderer.SetViewport(0, 0, bw, bh, 0.0f, 1.0f); }
             catch (const HeadlessValidationException&) { threw = true; }
             check(!threw, "SetViewport() within the backbuffer's own bounds does not throw");
         }
@@ -92,44 +92,44 @@ protected:
                               RenderTargetUsage::DiscardContents);
             dev.SetRenderTarget(&rt);
 
-            backend.SetMode(HeadlessMode::Validation);
+            renderer.SetMode(HeadlessMode::Validation);
             bool validationThrew = false;
-            try { backend.SetViewport(0, 0, 64, 64, 0.0f, 1.0f); }
+            try { renderer.SetViewport(0, 0, 64, 64, 0.0f, 1.0f); }
             catch (const HeadlessValidationException&) { validationThrew = true; }
             check(validationThrew,
                   "SetViewport(64x64) against a bound 16x16 RenderTarget2D throws under HeadlessValidation");
 
-            backend.SetMode(HeadlessMode::Fast);
+            renderer.SetMode(HeadlessMode::Fast);
             bool fastThrew = false;
-            try { backend.SetViewport(0, 0, 64, 64, 0.0f, 1.0f); }
+            try { renderer.SetViewport(0, 0, 64, 64, 0.0f, 1.0f); }
             catch (const HeadlessValidationException&) { fastThrew = true; }
             check(!fastThrew, "the same oversized SetViewport() call does not throw under HeadlessFast");
 
-            backend.SetMode(HeadlessMode::Validation);
+            renderer.SetMode(HeadlessMode::Validation);
             dev.SetRenderTarget(nullptr);
         }
 
         // Check D: negative scissor origin.
         {
             bool threw = false;
-            try { backend.SetScissorRect(-1, -1, 4, 4); }
+            try { renderer.SetScissorRect(-1, -1, 4, 4); }
             catch (const HeadlessValidationException&) { threw = true; }
             check(threw, "SetScissorRect() with a negative origin throws under HeadlessValidation");
         }
 
         // Check E/F: debug-label creation-site tracking.
         {
-            backend.SetMode(HeadlessMode::Trace);
+            renderer.SetMode(HeadlessMode::Trace);
 
-            backend.PushDebugLabel("MyTestScene/PlayerBuffers");
+            renderer.PushDebugLabel("MyTestScene/PlayerBuffers");
             auto labeled = std::make_unique<VertexBuffer>(dev, PosColorDecl(), 3, BufferUsage::None);
-            backend.PopDebugLabel();
+            renderer.PopDebugLabel();
 
             auto unlabeled = std::make_unique<VertexBuffer>(dev, PosColorDecl(), 3, BufferUsage::None);
 
             bool threw = false;
             std::string message;
-            try { backend.AssertNoLeaks(); }
+            try { renderer.AssertNoLeaks(); }
             catch (const HeadlessValidationException& ex) { threw = true; message = ex.what(); }
             check(threw && message.find("MyTestScene/PlayerBuffers") != std::string::npos,
                   "AssertNoLeaks() report includes the pushed debug label for the labeled resource");
@@ -145,22 +145,22 @@ protected:
 
             labeled.reset();
             unlabeled.reset();
-            backend.SetMode(HeadlessMode::Validation);
+            renderer.SetMode(HeadlessMode::Validation);
         }
 
         // Check G: trace log formatting/export.
         {
-            backend.SetMode(HeadlessMode::Trace);
+            renderer.SetMode(HeadlessMode::Trace);
             dev.Clear(Color::Black);
-            const std::string formatted = backend.FormatTraceLog();
+            const std::string formatted = renderer.FormatTraceLog();
             check(!formatted.empty() && formatted.find("Clear") != std::string::npos,
                   "FormatTraceLog() returns non-empty text mentioning a real call after HeadlessTrace activity");
 
             bool dumpThrew = false;
-            try { backend.DumpTraceLog(stdout); }
+            try { renderer.DumpTraceLog(stdout); }
             catch (...) { dumpThrew = true; }
             check(!dumpThrew, "DumpTraceLog() does not throw");
-            backend.SetMode(HeadlessMode::Validation);
+            renderer.SetMode(HeadlessMode::Validation);
         }
 
         std::printf("=== %d/%d PASS ===\n", passCount_, 8);

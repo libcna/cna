@@ -9,8 +9,8 @@
       "binaryDir": "${sourceDir}/cmake-build-web",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE":        "Release",
-        "CNA_GRAPHICS_BACKEND":    "WEBGL2",
-        "CNA_BACKEND_WEBGL2":      "ON",
+        "CNA_GRAPHICS_RENDERER":    "WEBGL2",
+        "CNA_RENDERER_WEBGL2":      "ON",
         "CNA_BUILD_TESTS":         "OFF",
         "CNA_BUILD_EXAMPLES":      "ON",
         "EASYGL_BUILD_EXAMPLES":   "OFF",
@@ -24,7 +24,7 @@
       "binaryDir": "${sourceDir}/cmake-build-devices-asan",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE":          "Debug",
-        "CNA_GRAPHICS_BACKEND":      "OPENGLES",
+        "CNA_GRAPHICS_RENDERER":      "OPENGLES",
         "CNA_BUILD_TESTS":           "ON",
         "CNA_DEVICES":               "ON",
         "CMAKE_CXX_FLAGS":           "-fsanitize=address -fno-omit-frame-pointer -g -O0",
@@ -38,7 +38,7 @@
       "binaryDir": "${sourceDir}/cmake-build-devices-tsan",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE":          "Debug",
-        "CNA_GRAPHICS_BACKEND":      "OPENGLES",
+        "CNA_GRAPHICS_RENDERER":      "OPENGLES",
         "CNA_BUILD_TESTS":           "ON",
         "CNA_DEVICES":               "ON",
         "CMAKE_CXX_FLAGS":           "-fsanitize=thread -fno-omit-frame-pointer -g -O1",
@@ -52,7 +52,7 @@
       "binaryDir": "${sourceDir}/cmake-build-devices-ubsan",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE":          "Debug",
-        "CNA_GRAPHICS_BACKEND":      "OPENGLES",
+        "CNA_GRAPHICS_RENDERER":      "OPENGLES",
         "CNA_BUILD_TESTS":           "ON",
         "CNA_DEVICES":               "ON",
         "CMAKE_CXX_FLAGS":           "-fsanitize=undefined -fno-omit-frame-pointer -g -O1",
@@ -61,13 +61,13 @@
     },
     {
       "name": "tests",
-      "displayName": "Native desktop tests (OpenGL ES backend, Debug)",
+      "displayName": "Native desktop tests (OpenGL ES renderer, Debug)",
       "description": "P9-BUILD-002: native (non-Emscripten) debug build with CNA_BUILD_TESTS/CNA_BUILD_EXAMPLES on, for running CnaTests (including all Audio suites) locally. Requires 'git submodule update --init --recursive' first (third_party/SDL, third_party/SDL_image, third_party/SDL_mixer, vendor/googletest) -- see NEXTaudio.md §7 / plan_audio.md Phase 9 P9-BUILD for the full dependency story. First configure builds SDL3/SDL3_image/SDL3_mixer from source into .sdl-prebuilt/ (several minutes); every later configure/build reuses that cache. Run: cmake --preset tests && cmake --build --preset tests --target CnaTests && SDL_AUDIODRIVER=dummy ./cmake-build-tests/CnaTests -- running the CnaTests binary directly (not `ctest`) is the authoritative way to run the suite: `ctest` discovers and runs each gtest case as its own short-lived process, which both spuriously reports every unbuilt display-dependent graphics smoke-test executable as failed and races several tests that share hardcoded /tmp fixture paths across processes -- neither is a real bug in the tests themselves, see plan_audio.md P9-BUILD-007.",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/cmake-build-tests",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE":     "Debug",
-        "CNA_GRAPHICS_BACKEND": "OPENGLES",
+        "CNA_GRAPHICS_RENDERER": "OPENGLES",
         "CNA_BUILD_TESTS":      "ON",
         "CNA_BUILD_EXAMPLES":   "ON"
       }

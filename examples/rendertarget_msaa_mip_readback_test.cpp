@@ -47,7 +47,7 @@
 //   * every level             -- owned by the SINGLE-SAMPLE resolved texture;
 //   * `level >= LevelCount`   -- a caller error, rejected deterministically before any native call.
 //
-// CNA's own conforming backends already implement exactly this: `VulkanTargetPassEXT::Mip`-
+// CNA's own conforming renderers already implement exactly this: `VulkanTargetPassEXT::Mip`-
 // `GenerateMips` regenerates "from level 0's just-rendered (and, where MSAA was engaged,
 // just-resolved) content" right after the render pass ends, and EasyGL regenerates on unbind.
 //
@@ -127,26 +127,26 @@ namespace
     constexpr int kBBW = 64;   ///< Backbuffer width. Nothing in this file reads the backbuffer.
     constexpr int kBBH = 64;   ///< Backbuffer height.
 
-#if defined(CNA_BACKEND_HEADLESS)
-    constexpr const char* kBackendName = "HEADLESS";
-#elif defined(CNA_BACKEND_SOFTWARE)
-    constexpr const char* kBackendName = "SOFTWARE";
-#elif defined(CNA_BACKEND_EASYGL)
-    constexpr const char* kBackendName = "EASYGL";
-#elif defined(CNA_BACKEND_BGFX)
-    constexpr const char* kBackendName = "BGFX";
-#elif defined(CNA_BACKEND_VULKAN)
-    constexpr const char* kBackendName = "VULKAN";
-#elif defined(CNA_BACKEND_WEBGPU)
-    constexpr const char* kBackendName = "WEBGPU";
-#elif defined(CNA_BACKEND_SDL_GPU)
-    constexpr const char* kBackendName = "SDL_GPU";
+#if defined(CNA_RENDERER_HEADLESS)
+    constexpr const char* kRendererName = "HEADLESS";
+#elif defined(CNA_RENDERER_SOFTWARE)
+    constexpr const char* kRendererName = "SOFTWARE";
+#elif defined(CNA_RENDERER_EASYGL)
+    constexpr const char* kRendererName = "EASYGL";
+#elif defined(CNA_RENDERER_BGFX)
+    constexpr const char* kRendererName = "BGFX";
+#elif defined(CNA_RENDERER_VULKAN)
+    constexpr const char* kRendererName = "VULKAN";
+#elif defined(CNA_RENDERER_WEBGPU)
+    constexpr const char* kRendererName = "WEBGPU";
+#elif defined(CNA_RENDERER_SDL_GPU)
+    constexpr const char* kRendererName = "SDL_GPU";
 #else
-#error "REMED-GFX-186: this backend has no declared target mip-readback contract."
+#error "REMED-GFX-186: this renderer has no declared target mip-readback contract."
 #endif
 
     /**
-     * @brief Whether this backend can read a render target's colour attachment back at all.
+     * @brief Whether this renderer can read a render target's colour attachment back at all.
      *
      * False on HEADLESS, which rasterizes nothing and therefore owns no colour to return. Its
      * `GetData` is REMED-GFX-127/130's deterministic public REFUSAL, and that refusal is what this
@@ -154,7 +154,7 @@ namespace
      * A refusal that quietly wrote zeroes would be indistinguishable from a fabricated read.
      */
     constexpr bool kTargetReadbackSupported =
-#if defined(CNA_BACKEND_HEADLESS)
+#if defined(CNA_RENDERER_HEADLESS)
         false;
 #else
         true;
@@ -169,29 +169,29 @@ namespace
      * abort, which is the only thing this file can honestly claim there.
      */
     constexpr bool kMipMappedTargetSupported =
-#if defined(CNA_BACKEND_WEBGPU)
+#if defined(CNA_RENDERER_WEBGPU)
         false;
 #else
         true;
 #endif
 
     /**
-     * @brief Whether GENERATED mip CONTENT of a render target is asserted on this backend.
+     * @brief Whether GENERATED mip CONTENT of a render target is asserted on this renderer.
      *
      * The transfer contract -- the call returns, every requested element is written, the protected
      * prefix and suffix survive, nothing crashes -- is asserted EVERYWHERE. Content is asserted
-     * everywhere it is measurable; a backend that cannot regenerate a target's chain prints what it
+     * everywhere it is measurable; a renderer that cannot regenerate a target's chain prints what it
      * actually measured instead of skipping, so a stale declaration cannot outlive the defect.
      */
     constexpr bool kGeneratedMipContentAsserted = true;
 
     /**
-     * @brief Whether this backend POPULATES a render target's levels above zero at all.
+     * @brief Whether this renderer POPULATES a render target's levels above zero at all.
      *
-     * False on SOFTWARE, whose `SoftwareRenderTargetBackend::GetData` raises
-     * "the Software backend stores mip level 0 only; level N was requested" -- a specific,
+     * False on SOFTWARE, whose `SoftwareRenderTargetRenderer::GetData` raises
+     * "the Software renderer stores mip level 0 only; level N was requested" -- a specific,
      * catchable public refusal, with `LevelCount` still correct and level 0 still byte-exact.
-     * That is that backend's own declared boundary, not this ticket's subject, and it is ASSERTED
+     * That is that renderer's own declared boundary, not this ticket's subject, and it is ASSERTED
      * here rather than skipped: a nonzero level must throw and must leave the destination
      * completely untouched. If Software ever grows a real chain, this check turns red and says so.
      *
@@ -199,7 +199,7 @@ namespace
      * (`kTargetReadbackSupported`), so the refusal is already asserted one level up.
      */
     constexpr bool kTargetMipReadbackSupported =
-#if defined(CNA_BACKEND_SOFTWARE)
+#if defined(CNA_RENDERER_SOFTWARE)
         false;
 #else
         true;
@@ -207,7 +207,7 @@ namespace
 
     /** @brief Whether `SetRenderTargets` with more than one attachment is executed here. */
     constexpr bool kMrtSupported =
-#if defined(CNA_BACKEND_SOFTWARE) || defined(CNA_BACKEND_HEADLESS)
+#if defined(CNA_RENDERER_SOFTWARE) || defined(CNA_RENDERER_HEADLESS)
         false;
 #else
         true;
@@ -222,7 +222,7 @@ namespace
      * this file measures and prints what the extra attachment holds rather than inventing a value.
      */
     constexpr bool kMrtExtraAttachmentContentClaimable =
-#if defined(CNA_BACKEND_SDL_GPU) || defined(CNA_BACKEND_VULKAN)
+#if defined(CNA_RENDERER_SDL_GPU) || defined(CNA_RENDERER_VULKAN)
         true;
 #else
         false;
@@ -230,7 +230,7 @@ namespace
 
     /** @brief Whether `RenderTargetCube` is a bindable render target here. */
     constexpr bool kCubeTargetSupported =
-#if defined(CNA_BACKEND_SOFTWARE)
+#if defined(CNA_RENDERER_SOFTWARE)
         false;
 #else
         true;
@@ -250,7 +250,7 @@ namespace
     /// Absent from the rendered image on every channel, and distinct from (0,0,0,0).
     const Color kSentinel(7, 3, 11, 199);
 
-    /// Vertex-colour round trips differ by a unit or two across backends, MSAA resolves and blits.
+    /// Vertex-colour round trips differ by a unit or two across renderers, MSAA resolves and blits.
     constexpr int kTol = 14;
 
     /// Protected elements written before and after every requested destination window.
@@ -403,7 +403,7 @@ class RenderTargetMsaaMipReadbackTest : public Game
         if (ok) ++passCount_;
     }
 
-    /** @brief Records something this backend genuinely cannot measure, and marks the run explained. */
+    /** @brief Records something this renderer genuinely cannot measure, and marks the run explained. */
     void boundary(const std::string& text)
     {
         boundaryDeclared_ = true;
@@ -511,9 +511,9 @@ class RenderTargetMsaaMipReadbackTest : public Game
     }
 
     /**
-     * @brief Runs @p doRead, or asserts this backend's deterministic refusal instead.
+     * @brief Runs @p doRead, or asserts this renderer's deterministic refusal instead.
      *
-     * On a backend that cannot read a render target back, the ONLY correct behaviour is a public
+     * On a renderer that cannot read a render target back, the ONLY correct behaviour is a public
      * exception that writes nothing -- so that is what gets asserted, using the same sentinel
      * buffer. A refusal that silently wrote zeroes would look exactly like a fabricated read.
      *
@@ -530,7 +530,7 @@ class RenderTargetMsaaMipReadbackTest : public Game
         bool threw = false;
         try { doRead(); }
         catch (const std::exception&) { threw = true; }
-        check(threw, label + ": this backend REFUSES render-target readback, and does so through a "
+        check(threw, label + ": this renderer REFUSES render-target readback, and does so through a "
                              "catchable public exception");
         bool untouched = true;
         for (const Color& c : buf)
@@ -565,18 +565,18 @@ class RenderTargetMsaaMipReadbackTest : public Game
         std::vector<Color> buf = SentinelBuffer(count);
         const Rectangle r(rx, ry, rw, rh);
 
-        // A backend that populates level 0 only owes a DETERMINISTIC REFUSAL for every other
+        // A renderer that populates level 0 only owes a DETERMINISTIC REFUSAL for every other
         // level, and owes it without touching the destination -- a refusal that quietly wrote
         // zeroes would be indistinguishable from an ungenerated chain being handed back as content.
         if (level > 0 && !kTargetMipReadbackSupported)
         {
-            step(label + ": GetData(level=" + std::to_string(level) + ") -- this backend stores "
+            step(label + ": GetData(level=" + std::to_string(level) + ") -- this renderer stores "
                  "level 0 only and must REFUSE");
             bool threw = false;
             std::string what;
             try { rt.GetData(level, &r, buf.data(), kGuard, count); }
             catch (const std::exception& e) { threw = true; what = e.what(); }
-            check(threw, label + ": a level this backend does not populate is refused through a "
+            check(threw, label + ": a level this renderer does not populate is refused through a "
                                  "catchable public exception, not a signal");
             if (threw) note(label + ": " + what);
             bool untouched = true;
@@ -635,7 +635,7 @@ class RenderTargetMsaaMipReadbackTest : public Game
 
         if (!contentAsserted)
         {
-            boundary(label + ": generated mip CONTENT is not asserted on this backend -- measured " +
+            boundary(label + ": generated mip CONTENT is not asserted on this renderer -- measured " +
                      std::to_string(zeroed) + "/" + std::to_string(count) +
                      " texels exactly (0,0,0,0), " + std::to_string(exactWrong) + "/" +
                      std::to_string(exactChecked) + " derivable texels wrong, first " +
@@ -717,15 +717,15 @@ class RenderTargetMsaaMipReadbackTest : public Game
         // REMED-GFX-189 CLOSED (2026-07-31): Vulkan used to answer an out-of-range level with
         // fabricated level-0 content instead of refusing, so this file carried a
         // `kOutOfRangeLevelRejected` carve-out asserting that defect. The carve-out is DELETED
-        // rather than flipped, so every backend now runs the same unconditional assertion here and
-        // a backend that regresses fails outright instead of quietly matching a declaration.
+        // rather than flipped, so every renderer now runs the same unconditional assertion here and
+        // a renderer that regresses fails outright instead of quietly matching a declaration.
         check(threw, label + ": rejected through a catchable public exception, not a signal");
         if (threw) note(label + ": " + what);
         check(untouched, label + ": the refused read left the whole destination untouched");
     }
 
     /**
-     * @brief Builds a target, or declares this backend's catchable refusal and returns null.
+     * @brief Builds a target, or declares this renderer's catchable refusal and returns null.
      */
     std::unique_ptr<RenderTarget2D> MakeTarget(GraphicsDevice& dev, int w, int h, bool mipMap,
                                                int samples, DepthFormat depth,
@@ -1067,7 +1067,7 @@ class RenderTargetMsaaMipReadbackTest : public Game
         if (!kTargetMipReadbackSupported)
         {
             // Same declared boundary as every other nonzero-level read here; the oversized-window
-            // contract is exercised at level 0 by REMED-GFX-149's own fixture on this backend.
+            // contract is exercised at level 0 by REMED-GFX-149's own fixture on this renderer.
             ReadLevelRect(*rt, 1, 0, 0, kRT / 2, kRT / 2, kRT, kRT, "F6 level 1");
             return;
         }
@@ -1330,7 +1330,7 @@ class RenderTargetMsaaMipReadbackTest : public Game
      * @brief I1 -- an MRT member: the SAME helper, so the fix must cover it and this proves it.
      *
      * `SetRenderTargets({a, b})` makes `b` a real simultaneous colour attachment of ONE pass, but
-     * `b` is still an ordinary `RenderTarget2D` read through `SdlGpuRenderTargetBackend::GetData`.
+     * `b` is still an ordinary `RenderTarget2D` read through `SdlGpuRenderTargetRenderer::GetData`.
      * Its generated chain is therefore the same route, not a separate one -- which is exactly why
      * it belongs in this ticket rather than in a new one.
      */
@@ -1396,7 +1396,7 @@ class RenderTargetMsaaMipReadbackTest : public Game
      *
      * GFX-186 originally classified the SDL_GPU cube as a separate, safely refusing route. GFX-188
      * now requires its resolved cube to own and populate every public level, so the SDL_GPU branch
-     * below must answer and expose the generated level-1 content. Other backends retain this
+     * below must answer and expose the generated level-1 content. Other renderers retain this
      * fixture's original all-or-nothing safety boundary; the focused GFX-188 matrix is SDL_GPU-only.
      */
     void LegI2()
@@ -1450,11 +1450,11 @@ class RenderTargetMsaaMipReadbackTest : public Game
             if (Exact(c, kSentinel)) ++untouched;
             if (Exact(c, black)) ++zeroed;
         }
-        boundary(std::string("I2 mipmapped multisampled CUBE level 1 on this backend: ") +
+        boundary(std::string("I2 mipmapped multisampled CUBE level 1 on this renderer: ") +
                  (threw ? ("REFUSED -- " + what) : "answered") + "; " + std::to_string(untouched) +
                  "/" + std::to_string(count) + " destination elements untouched, " +
                  std::to_string(zeroed) + "/" + std::to_string(count) + " exactly (0,0,0,0)");
-#if defined(CNA_BACKEND_SDL_GPU)
+#if defined(CNA_RENDERER_SDL_GPU)
         check(!threw, "I2: SDL_GPU answers the valid multisampled cube level-1 read");
         check(untouched == 0,
               "I2: SDL_GPU writes the complete level-1 destination window");
@@ -1527,10 +1527,10 @@ class RenderTargetMsaaMipReadbackTest : public Game
             }
             else
             {
-                boundary(cycleLabel + ": this backend refuses nonzero target-mip readback, so the "
+                boundary(cycleLabel + ": this renderer refuses nonzero target-mip readback, so the "
                          "sampled pixel is measured but cannot be compared to a direct final mip");
                 check(true, cycleLabel + ": sampling completed without inventing a direct-mip "
-                            "claim on this backend");
+                            "claim on this renderer");
             }
         }
 
@@ -1638,7 +1638,7 @@ protected:
 
     void Finish()
     {
-        std::printf("[INFO] %s: %d/%d checks passed\n", kBackendName, passCount_, totalCount_);
+        std::printf("[INFO] %s: %d/%d checks passed\n", kRendererName, passCount_, totalCount_);
         std::fflush(stdout);
         result_ = (passCount_ == totalCount_ && (totalCount_ > 0 || boundaryDeclared_)) ? 0 : 1;
         Exit();
@@ -1771,7 +1771,7 @@ int main(int argc, char** argv)
     {
         const int total = static_cast<int>(sizeof(kLegs) / sizeof(kLegs[0]));
         std::printf("[INFO] REMED-GFX-186 supervisor on %s: %d legs, each in its own process\n",
-                    kBackendName, total);
+                    kRendererName, total);
         std::fflush(stdout);
         int passed = 0, skippedCount = 0;
         for (const char* legId : kLegs)

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // High-level integration coverage for GDI-022's fixed CPU SpriteBatch ColorMatrixEffect.
 
-#include "CNA/GraphicsBackendType.hpp"
+#include "CNA/GraphicsRendererType.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
@@ -96,7 +96,7 @@ int main()
         parameters.setDeviceWindowHandleProperty(
             reinterpret_cast<PresentationParameters::IntPtr>(window));
         GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::Reach, parameters);
-        if (CNA::getCurrentGraphicsBackendType() != CNA::GraphicsBackendType::Gdi)
+        if (CNA::getCurrentGraphicsRendererType() != CNA::GraphicsRendererType::Gdi)
         {
             std::fprintf(stderr, "ColorMatrixEffect integration test was not built for GDI.\n");
             result = 1;

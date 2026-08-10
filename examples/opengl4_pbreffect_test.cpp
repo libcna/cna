@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl4.md GL4-23: PbrEffect for the OpenGL4 graphics backend -- adds a dedicated pbr3d
+// plan_opengl4.md GL4-23: PbrEffect for the OpenGL4 graphics renderer -- adds a dedicated pbr3d
 // GLSL 410 core program (new stride 48, VertexPositionNormalTangentTexture) implementing the
 // real glTF 2.0 metallic-roughness BRDF (GGX normal distribution, Smith-Schlick-GGX visibility,
 // Schlick Fresnel), plus a pbr_skinned3d sibling (new stride 68) for SkinnedPbrEffect. Ported
-// near-verbatim from EasyGLGraphicsBackend::EnsurePbrProgram()'s GLSL ES 300 source, cross-checked
-// against VulkanGraphicsBackend's pbr3d.frag.glsl and BgfxGraphicsBackend's fs_pbr3d.sc (both
+// near-verbatim from EasyGLRenderer::EnsurePbrProgram()'s GLSL ES 300 source, cross-checked
+// against VulkanRenderer's pbr3d.frag.glsl and BgfxRenderer's fs_pbr3d.sc (both
 // byte-for-byte identical PbrLight() math) before writing any OpenGL4 code. Also adds
-// OpenGL4VertexBufferBackend::ApplyLayout's stride-48/68 vertex attribute cases and 2 lazily
+// OpenGL4VertexBufferRenderer::ApplyLayout's stride-48/68 vertex attribute cases and 2 lazily
 // created 1x1 fallback textures (defaultWhiteTexture_/defaultFlatNormalTexture_) since the PBR
 // fragment shader samples all 5 texture units unconditionally, unlike DualTextureEffect/
 // EnvironmentMapEffect's uniform-gated optional samplers.
@@ -14,7 +14,7 @@
 // Reuses Task-verified easygl_pbreffect_golden_test.cpp's own exact scene setup and independently
 // hand-derived+captured expected pixel values as the correctness oracle (same rationale GL4-21
 // reused Task 399's EnvironmentMapEffect combined-scene oracle) -- the strongest possible
-// correctness proof for a 4th/5th backend port of the same BRDF formula.
+// correctness proof for a 4th/5th renderer port of the same BRDF formula.
 //
 // Check A -- white albedo, fully rough, non-metallic, flat (unperturbed) normal: a non-black,
 //   non-clamped lit result under the default light rig.
@@ -53,7 +53,7 @@ namespace
 {
     constexpr int kSize = 64;
 
-    // GPU-compact PBR vertex: matches OpenGL4VertexBufferBackend::ApplyLayout's stride-48 case
+    // GPU-compact PBR vertex: matches OpenGL4VertexBufferRenderer::ApplyLayout's stride-48 case
     // (position(12) + normal(12) + tangent(16) + uv(8) = 48 bytes).
     struct PbrGpuVertex
     {

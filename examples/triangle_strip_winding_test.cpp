@@ -15,7 +15,7 @@
 // probes every odd and even primitive independently under all three public CullMode values.
 //
 // The original GFX-183 GTest used TL, BL, TR, BR, which is the counter-clockwise form, but labelled
-// it front-facing. Its observed pixels were therefore the exact XNA answer, not a backend defect.
+// it front-facing. Its observed pixels were therefore the exact XNA answer, not a renderer defect.
 // This fixture keeps geometry and oracle separate so that inversion cannot recur unnoticed.
 //
 // Coverage:
@@ -29,7 +29,7 @@
 //   * caller-array mutation, buffer disposal before replay, repeated target disposal, and device
 //     teardown.
 //
-// Exit code 0 means every supported-path assertion passed. A backend that does not rasterize, or
+// Exit code 0 means every supported-path assertion passed. A renderer that does not rasterize, or
 // whose documented 3D boundary excludes strips, reports that boundary instead of inventing pixels.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
@@ -58,8 +58,8 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 
-#ifdef CNA_BACKEND_WEBGPU
-#include "CNA/Internal/Backends/WebGPU/WebGPUGraphicsBackend.hpp"
+#ifdef CNA_RENDERER_WEBGPU
+#include "CNA/Internal/Renderers/WebGPU/WebGPURenderer.hpp"
 #endif
 
 #include <algorithm>
@@ -87,40 +87,40 @@ namespace
     const Color kWhite(255, 255, 255, 255);
     const Color kPoison(0xCD, 0xCD, 0xCD, 0xCD);
 
-#if defined(CNA_BACKEND_HEADLESS)
-    constexpr const char* kBackendName = "HEADLESS";
+#if defined(CNA_RENDERER_HEADLESS)
+    constexpr const char* kRendererName = "HEADLESS";
     constexpr bool kRasterizes = false;
     constexpr bool kKnownStripBoundary = true;
-#elif defined(CNA_BACKEND_SOFTWARE)
-    constexpr const char* kBackendName = "SOFTWARE";
+#elif defined(CNA_RENDERER_SOFTWARE)
+    constexpr const char* kRendererName = "SOFTWARE";
     constexpr bool kRasterizes = true;
     constexpr bool kKnownStripBoundary = true; // Software v1 accepts TriangleList only.
-#elif defined(CNA_BACKEND_EASYGL)
-    constexpr const char* kBackendName = "EASYGL";
+#elif defined(CNA_RENDERER_EASYGL)
+    constexpr const char* kRendererName = "EASYGL";
     constexpr bool kRasterizes = true;
     constexpr bool kKnownStripBoundary = false;
-#elif defined(CNA_BACKEND_BGFX)
-    constexpr const char* kBackendName = "BGFX";
+#elif defined(CNA_RENDERER_BGFX)
+    constexpr const char* kRendererName = "BGFX";
     constexpr bool kRasterizes = true;
     constexpr bool kKnownStripBoundary = false;
-#elif defined(CNA_BACKEND_VULKAN)
-    constexpr const char* kBackendName = "VULKAN";
+#elif defined(CNA_RENDERER_VULKAN)
+    constexpr const char* kRendererName = "VULKAN";
     constexpr bool kRasterizes = true;
     constexpr bool kKnownStripBoundary = false;
-#elif defined(CNA_BACKEND_WEBGPU)
-    constexpr const char* kBackendName = "WEBGPU";
+#elif defined(CNA_RENDERER_WEBGPU)
+    constexpr const char* kRendererName = "WEBGPU";
     constexpr bool kRasterizes = true;
     constexpr bool kKnownStripBoundary = false;
-#elif defined(CNA_BACKEND_SDL_GPU)
-    constexpr const char* kBackendName = "SDL_GPU";
+#elif defined(CNA_RENDERER_SDL_GPU)
+    constexpr const char* kRendererName = "SDL_GPU";
     constexpr bool kRasterizes = true;
     constexpr bool kKnownStripBoundary = false;
 #else
-#error "REMED-GFX-183: this backend has no declared triangle-strip control boundary."
+#error "REMED-GFX-183: this renderer has no declared triangle-strip control boundary."
 #endif
 
     constexpr bool kEveryPathRequired =
-#if defined(CNA_BACKEND_WEBGPU)
+#if defined(CNA_RENDERER_WEBGPU)
         true;
 #else
         false;
@@ -240,7 +240,7 @@ namespace
                        (a.Z + b.Z + c.Z) / 3.0f);
     }
 
-#ifdef CNA_BACKEND_WEBGPU
+#ifdef CNA_RENDERER_WEBGPU
     struct ErrorScopeResult
     {
         bool complete = false;
@@ -264,16 +264,16 @@ namespace
     }
 
     ErrorScopeResult PopErrorScope(
-        CNA::Internal::Backends::WebGPU::WebGPUGraphicsBackend& backend)
+        CNA::Internal::Renderers::WebGPU::WebGPURenderer& renderer)
     {
         ErrorScopeResult result;
         WGPUPopErrorScopeCallbackInfo callback{};
         callback.mode = WGPUCallbackMode_AllowProcessEvents;
         callback.callback = OnErrorScope;
         callback.userdata1 = &result;
-        wgpuDevicePopErrorScope(backend.Device(), callback);
+        wgpuDevicePopErrorScope(renderer.Device(), callback);
         for (int attempt = 0; attempt < 10000 && !result.complete; ++attempt)
-            wgpuInstanceProcessEvents(backend.Instance());
+            wgpuInstanceProcessEvents(renderer.Instance());
         return result;
     }
 #endif
@@ -628,7 +628,7 @@ class TriangleStripWindingTest : public Game
                     if (!supported)
                     {
                         const std::string label = std::string(PathText(path)) +
-                            " is unavailable on " + kBackendName + " (" + failure + ")";
+                            " is unavailable on " + kRendererName + " (" + failure + ")";
                         if (kEveryPathRequired) check(false, label);
                         else boundary(label + " -- control boundary recorded");
                     }
@@ -642,7 +642,7 @@ class TriangleStripWindingTest : public Game
                   std::to_string(matrixCasesRun_) + "/36 cases)");
         else if (!kKnownStripBoundary)
             check(matrixCasesRun_ > 0,
-                  std::string("M0 ") + kBackendName +
+                  std::string("M0 ") + kRendererName +
                   " executed at least one supported triangle-strip control path");
     }
 
@@ -743,7 +743,7 @@ class TriangleStripWindingTest : public Game
                 check(false, std::string("O0 deferred order/lifetime sequence threw: ") + e.what());
             else
                 boundary(std::string("O0 deferred order/lifetime control unavailable on ") +
-                         kBackendName + " (" + e.what() + ")");
+                         kRendererName + " (" + e.what() + ")");
             return;
         }
 
@@ -826,7 +826,7 @@ class TriangleStripWindingTest : public Game
                 if (kEveryPathRequired)
                     check(false, "D cycle " + std::to_string(cycle) + " threw: " + e.what());
                 else
-                    boundary("D cycle unavailable on " + std::string(kBackendName) +
+                    boundary("D cycle unavailable on " + std::string(kRendererName) +
                              " (" + e.what() + ")");
                 target.Dispose();
                 return;
@@ -851,7 +851,7 @@ class TriangleStripWindingTest : public Game
         done_ = true;
         auto& device = getGraphicsDeviceProperty();
 
-        std::printf("[INFO] REMED-GFX-183 triangle-strip winding on %s\n", kBackendName);
+        std::printf("[INFO] REMED-GFX-183 triangle-strip winding on %s\n", kRendererName);
         std::fflush(stdout);
 
         if (!kRasterizes ||
@@ -859,19 +859,19 @@ class TriangleStripWindingTest : public Game
             kKnownStripBoundary)
         {
             check(kKnownStripBoundary || !kRasterizes,
-                  std::string("B0 ") + kBackendName +
+                  std::string("B0 ") + kRendererName +
                   " declares its non-rasterizing/TriangleList-only boundary");
             result_ = passCount_ == totalCount_ ? 0 : 1;
             Exit();
             return;
         }
 
-#ifdef CNA_BACKEND_WEBGPU
-        auto& backend = static_cast<
-            CNA::Internal::Backends::WebGPU::WebGPUGraphicsBackend&>(device.GetBackend());
-        const std::size_t uncapturedBefore = backend.GetUncapturedErrorCountEXT();
-        wgpuDevicePushErrorScope(backend.Device(), WGPUErrorFilter_OutOfMemory);
-        wgpuDevicePushErrorScope(backend.Device(), WGPUErrorFilter_Validation);
+#ifdef CNA_RENDERER_WEBGPU
+        auto& renderer = static_cast<
+            CNA::Internal::Renderers::WebGPU::WebGPURenderer&>(device.GetRenderer());
+        const std::size_t uncapturedBefore = renderer.GetUncapturedErrorCountEXT();
+        wgpuDevicePushErrorScope(renderer.Device(), WGPUErrorFilter_OutOfMemory);
+        wgpuDevicePushErrorScope(renderer.Device(), WGPUErrorFilter_Validation);
 #endif
 
         try
@@ -891,9 +891,9 @@ class TriangleStripWindingTest : public Game
             check(false, std::string("T0 unhandled fixture exception: ") + e.what());
         }
 
-#ifdef CNA_BACKEND_WEBGPU
-        const ErrorScopeResult validation = PopErrorScope(backend);
-        const ErrorScopeResult outOfMemory = PopErrorScope(backend);
+#ifdef CNA_RENDERER_WEBGPU
+        const ErrorScopeResult validation = PopErrorScope(renderer);
+        const ErrorScopeResult outOfMemory = PopErrorScope(renderer);
         check(validation.complete &&
               validation.status == WGPUPopErrorScopeStatus_Success &&
               validation.type == WGPUErrorType_NoError && validation.message.empty(),
@@ -904,7 +904,7 @@ class TriangleStripWindingTest : public Game
               outOfMemory.type == WGPUErrorType_NoError && outOfMemory.message.empty(),
               "V2 WebGPU out-of-memory error scope is clean" +
               (outOfMemory.message.empty() ? std::string() : ": " + outOfMemory.message));
-        check(backend.GetUncapturedErrorCountEXT() == uncapturedBefore,
+        check(renderer.GetUncapturedErrorCountEXT() == uncapturedBefore,
               "V3 WebGPU emitted no uncaptured validation/device errors");
 #endif
 
@@ -918,7 +918,7 @@ class TriangleStripWindingTest : public Game
         }
 
         std::printf("[INFO] %s: %d/%d checks passed (%d boundaries, %d matrix cases)\n",
-                    kBackendName, passCount_, totalCount_, boundaryCount_, matrixCasesRun_);
+                    kRendererName, passCount_, totalCount_, boundaryCount_, matrixCasesRun_);
         std::fflush(stdout);
         result_ = passCount_ == totalCount_ ? 0 : 1;
         Exit();

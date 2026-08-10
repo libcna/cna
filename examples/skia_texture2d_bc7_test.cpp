@@ -5,8 +5,8 @@
 // modes, sRGB colour-space handling, block transfer/alignment, malformed input, deterministic
 // reserved-mode fallback, and continued RenderTarget2D refusal.
 
-#include "CNA/Internal/Backends/Skia/SkiaGraphicsBackend.hpp"
-#include "CNA/Internal/Backends/Skia/SkiaTextureBackend.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaRenderer.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaTextureRenderer.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
@@ -30,10 +30,10 @@
 #include <string>
 #include <vector>
 
-using CNA::Internal::Backends::Skia::SkiaGraphicsBackend;
-using CNA::Internal::Backends::Skia::SkiaResourceStats;
-using CNA::Internal::Backends::Skia::SkiaSourceAlphaConvention;
-using CNA::Internal::Backends::Skia::SkiaTextureBackend;
+using CNA::Internal::Renderers::Skia::SkiaRenderer;
+using CNA::Internal::Renderers::Skia::SkiaResourceStats;
+using CNA::Internal::Renderers::Skia::SkiaSourceAlphaConvention;
+using CNA::Internal::Renderers::Skia::SkiaTextureRenderer;
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
 
@@ -75,7 +75,7 @@ namespace
     [[nodiscard]] bool SameStats(const SkiaResourceStats& left,
                                  const SkiaResourceStats& right) noexcept
     {
-        return left.textureBackends == right.textureBackends
+        return left.textureRenderers == right.textureRenderers
             && left.textureImageViews == right.textureImageViews
             && left.textureImageBytes == right.textureImageBytes
             && left.mipChains2D == right.mipChains2D
@@ -95,9 +95,9 @@ class InspectableBc7Texture2D final : public Texture2D
 public:
     using Texture2D::Texture2D;
 
-    [[nodiscard]] SkiaTextureBackend* SkiaBackend() const
+    [[nodiscard]] SkiaTextureRenderer* SkiaRenderer() const
     {
-        return dynamic_cast<SkiaTextureBackend*>(GetBackendRaw());
+        return dynamic_cast<SkiaTextureRenderer*>(GetRendererRaw());
     }
 };
 
@@ -127,12 +127,12 @@ protected:
         done_ = true;
 
         auto& device = getGraphicsDeviceProperty();
-        auto* graphicsBackend = dynamic_cast<SkiaGraphicsBackend*>(&device.GetBackend());
-        Check(checks_, failures_, graphicsBackend != nullptr,
-              "public GraphicsDevice owns the Skia backend");
-        if (!graphicsBackend) { Exit(); return; }
+        auto* graphicsRenderer = dynamic_cast<SkiaRenderer*>(&device.GetRenderer());
+        Check(checks_, failures_, graphicsRenderer != nullptr,
+              "public GraphicsDevice owns the Skia renderer");
+        if (!graphicsRenderer) { Exit(); return; }
 
-        const SkiaResourceStats baseline = graphicsBackend->GetResourceStatsEXT();
+        const SkiaResourceStats baseline = graphicsRenderer->GetResourceStatsEXT();
 
         CheckExactTransferAndMetadata(device);
         CheckSrgbColourSpace(device);
@@ -140,9 +140,9 @@ protected:
         CheckBlockAlignment(device);
         CheckMalformedData(device);
         CheckDecodedSampling(device);
-        CheckTargetRefusal(device, *graphicsBackend);
+        CheckTargetRefusal(device, *graphicsRenderer);
 
-        Check(checks_, failures_, SameStats(graphicsBackend->GetResourceStatsEXT(), baseline),
+        Check(checks_, failures_, SameStats(graphicsRenderer->GetResourceStatsEXT(), baseline),
               "every BC7 texture releases its exact resource accounting on disposal");
         Exit();
     }
@@ -157,9 +157,9 @@ private:
             texture.GetData(readback.data(), static_cast<int>(readback.size()));
             Check(checks_, failures_, readback == kBc7ModeSixSolid,
                   "Bc7EXT 4x4 SetData/GetData round-trips the exact 16-byte mode-6 block");
-            auto* backend = texture.SkiaBackend();
+            auto* renderer = texture.SkiaRenderer();
             Check(checks_, failures_,
-                  backend && backend->SnapshotImage(SkiaSourceAlphaConvention::Straight)
+                  renderer && renderer->SnapshotImage(SkiaSourceAlphaConvention::Straight)
                                  ->colorType() == kRGBA_8888_SkColorType,
                   "Bc7EXT exposes a decoded kRGBA_8888 sampling image");
         }
@@ -170,9 +170,9 @@ private:
             texture.GetData(readback.data(), static_cast<int>(readback.size()));
             Check(checks_, failures_, readback == kBc7ModeSixSolid,
                   "Bc7SrgbEXT 4x4 SetData/GetData round-trips the exact 16-byte mode-6 block");
-            auto* backend = texture.SkiaBackend();
+            auto* renderer = texture.SkiaRenderer();
             Check(checks_, failures_,
-                  backend && backend->SnapshotImage(SkiaSourceAlphaConvention::Straight)
+                  renderer && renderer->SnapshotImage(SkiaSourceAlphaConvention::Straight)
                                  ->colorType() == kSRGBA_8888_SkColorType,
                   "Bc7SrgbEXT exposes a decoded kSRGBA_8888 sampling image, distinct from Bc7EXT");
         }
@@ -224,8 +224,8 @@ private:
         Check(checks_, failures_, readback == kBc7Reserved,
               "the reserved (all-zero) encoding still round-trips its exact raw bytes");
 
-        auto* backend = texture.SkiaBackend();
-        const auto image = backend->SnapshotImage(SkiaSourceAlphaConvention::Straight);
+        auto* renderer = texture.SkiaRenderer();
+        const auto image = renderer->SnapshotImage(SkiaSourceAlphaConvention::Straight);
         std::array<std::uint8_t, 4> pixel{};
         const SkImageInfo info =
             SkImageInfo::Make(1, 1, kRGBA_8888_SkColorType, kUnpremul_SkAlphaType);
@@ -297,9 +297,9 @@ private:
               "Bc7EXT solid mode-6 texture samples through public SpriteBatch drawing");
     }
 
-    void CheckTargetRefusal(GraphicsDevice& device, SkiaGraphicsBackend& graphicsBackend)
+    void CheckTargetRefusal(GraphicsDevice& device, SkiaRenderer& graphicsRenderer)
     {
-        const SkiaResourceStats before = graphicsBackend.GetResourceStatsEXT();
+        const SkiaResourceStats before = graphicsRenderer.GetResourceStatsEXT();
         const std::array formats{SurfaceFormat::Bc7EXT, SurfaceFormat::Bc7SrgbEXT};
         bool allRejected = true;
         for (const SurfaceFormat format : formats)
@@ -310,7 +310,7 @@ private:
             });
         }
         Check(checks_, failures_,
-              allRejected && SameStats(graphicsBackend.GetResourceStatsEXT(), before),
+              allRejected && SameStats(graphicsRenderer.GetResourceStatsEXT(), before),
               "Bc7EXT/Bc7SrgbEXT RenderTarget2D construction rejects transactionally "
               "(block-compressed formats are never FNA-renderable)");
     }

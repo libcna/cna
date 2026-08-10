@@ -5,7 +5,7 @@
 // RenderTargetCube face alike.
 //
 // The defect this reproduces is WebGPU-local: ConfigureSurface() prefers *UnormSrgb surface
-// formats and both WebGPURenderTargetBackend and WebGPURenderTargetCubeBackend copy that
+// formats and both WebGPURenderTargetRenderer and WebGPURenderTargetCubeRenderer copy that
 // surfaceFormat_ into their own colour attachment, so the render pass applies a hardware
 // linear-to-sRGB ENCODE on every store. Measured before the fix: a channel written as 128 reads
 // back as 188, which is exactly round(255 * srgb_encode(128/255)).
@@ -43,7 +43,7 @@
 //   H  rectangle / destination-offset readback       region semantics survive the palette
 //   I  blending with mid-tone source and destination the blend operates on the stored bytes
 //
-// Leg A is expected to pass even before the fix on every backend -- plain WebGPU textures already
+// Leg A is expected to pass even before the fix on every renderer -- plain WebGPU textures already
 // use a non-sRGB RGBA8Unorm -- and that asymmetry is itself an asserted fact (check A5), because it
 // proves ordinary textures and render targets did NOT share colour semantics.
 //
@@ -77,8 +77,8 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "System/NotSupportedException.hpp"
-#if defined(CNA_BACKEND_WEBGPU)
-#include "CNA/Internal/Backends/WebGPU/WebGPUGraphicsBackend.hpp"
+#if defined(CNA_RENDERER_WEBGPU)
+#include "CNA/Internal/Renderers/WebGPU/WebGPURenderer.hpp"
 #endif
 
 #include <algorithm>
@@ -95,11 +95,11 @@ using namespace Microsoft::Xna::Framework::Graphics;
 namespace
 {
     /**
-     * @brief What this backend's render-target colour readback is required to do.
+     * @brief What this renderer's render-target colour readback is required to do.
      *
      * `Exact` -- GetData must return the stored bytes verbatim.
      * `Unsupported` -- GetData must throw System::NotSupportedException (REMED-GFX-127's contract),
-     * reserved for backends that perform no rasterization at all.
+     * reserved for renderers that perform no rasterization at all.
      */
     enum class RtContract
     {
@@ -108,17 +108,17 @@ namespace
     };
 
     /**
-     * @brief Row order this backend produces when a RenderTarget2D is SAMPLED as a texture.
+     * @brief Row order this renderer produces when a RenderTarget2D is SAMPLED as a texture.
      *
-     * `TopDown` -- texel (x, y) of the target is sampled at (x, y). What every backend does.
+     * `TopDown` -- texel (x, y) of the target is sampled at (x, y). What every renderer does.
      * `BottomUp` -- the sampled image arrives vertically flipped.
      *
      * REMED-GFX-147 was measured here: EasyGL's leg D (sampling a plain Texture2D) was exactly
      * top-down while its leg E (sampling a render target) was not, so the asymmetry was in
-     * render-target sampling alone. Declaring it per backend is what kept every COLOUR assertion
+     * render-target sampling alone. Declaring it per renderer is what kept every COLOUR assertion
      * in this file at full strength while the orientation defect was open, and is what made
      * fixing it show up HERE as a failure rather than passing silently. REMED-GFX-147 is now
-     * closed and no backend declares `BottomUp`; the enum stays because that is the property this
+     * closed and no renderer declares `BottomUp`; the enum stays because that is the property this
      * file must keep pinning.
      */
     enum class RtSampleOrientation
@@ -128,7 +128,7 @@ namespace
     };
 
     /**
-     * @brief What BlendState::Additive stores on this backend.
+     * @brief What BlendState::Additive stores on this renderer.
      *
      * `SourcePlusDestination` -- XNA's own SourceAlpha/One equation.
      * `SourceOnly` -- the destination term is dropped, as if ColorDestinationBlend were Zero.
@@ -142,100 +142,100 @@ namespace
         SourceOnly,
     };
 
-#if defined(CNA_BACKEND_HEADLESS)
+#if defined(CNA_RENDERER_HEADLESS)
     constexpr RtContract kRtContract = RtContract::Unsupported;
     constexpr bool kCubeSupported = false;
     constexpr RtSampleOrientation kRtSampleOrientation = RtSampleOrientation::TopDown;
     constexpr AdditiveContract kAdditiveContract = AdditiveContract::SourcePlusDestination;
-    constexpr const char* kBackendName = "HEADLESS";
-#elif defined(CNA_BACKEND_SOFTWARE)
+    constexpr const char* kRendererName = "HEADLESS";
+#elif defined(CNA_RENDERER_SOFTWARE)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr bool kCubeSupported = false;
     constexpr RtSampleOrientation kRtSampleOrientation = RtSampleOrientation::TopDown;
     constexpr AdditiveContract kAdditiveContract = AdditiveContract::SourcePlusDestination;
-    constexpr const char* kBackendName = "SOFTWARE";
-#elif defined(CNA_BACKEND_EASYGL)
+    constexpr const char* kRendererName = "SOFTWARE";
+#elif defined(CNA_RENDERER_EASYGL)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr bool kCubeSupported = true;
     // REMED-GFX-147 fixed: EasyGL now samples a render target in the same logical orientation as
     // an ordinary Texture2D holding identical bytes.
     constexpr RtSampleOrientation kRtSampleOrientation = RtSampleOrientation::TopDown;
     constexpr AdditiveContract kAdditiveContract = AdditiveContract::SourcePlusDestination;
-    constexpr const char* kBackendName = "EASYGL";
-#elif defined(CNA_BACKEND_BGFX)
+    constexpr const char* kRendererName = "EASYGL";
+#elif defined(CNA_RENDERER_BGFX)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr bool kCubeSupported = true;
     constexpr RtSampleOrientation kRtSampleOrientation = RtSampleOrientation::TopDown;
     constexpr AdditiveContract kAdditiveContract = AdditiveContract::SourcePlusDestination;
-    constexpr const char* kBackendName = "BGFX";
-#elif defined(CNA_BACKEND_VULKAN)
+    constexpr const char* kRendererName = "BGFX";
+#elif defined(CNA_RENDERER_VULKAN)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr bool kCubeSupported = true;
     constexpr RtSampleOrientation kRtSampleOrientation = RtSampleOrientation::TopDown;
     constexpr AdditiveContract kAdditiveContract = AdditiveContract::SourcePlusDestination;
-    constexpr const char* kBackendName = "VULKAN";
-#elif defined(CNA_BACKEND_WEBGPU)
+    constexpr const char* kRendererName = "VULKAN";
+#elif defined(CNA_RENDERER_WEBGPU)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr bool kCubeSupported = true;
     constexpr RtSampleOrientation kRtSampleOrientation = RtSampleOrientation::TopDown;
     constexpr AdditiveContract kAdditiveContract = AdditiveContract::SourcePlusDestination;
-    constexpr const char* kBackendName = "WEBGPU";
-#elif defined(CNA_BACKEND_SDL_GPU)
+    constexpr const char* kRendererName = "WEBGPU";
+#elif defined(CNA_RENDERER_SDL_GPU)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr bool kCubeSupported = false;
     constexpr RtSampleOrientation kRtSampleOrientation = RtSampleOrientation::TopDown;
     constexpr AdditiveContract kAdditiveContract = AdditiveContract::SourcePlusDestination;
-    constexpr const char* kBackendName = "SDL_GPU";
-#elif defined(CNA_BACKEND_SDL_RENDERER)
+    constexpr const char* kRendererName = "SDL_GPU";
+#elif defined(CNA_RENDERER_SDL_RENDERER)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr bool kCubeSupported = false;
     constexpr RtSampleOrientation kRtSampleOrientation = RtSampleOrientation::TopDown;
     constexpr AdditiveContract kAdditiveContract = AdditiveContract::SourcePlusDestination;
-    constexpr const char* kBackendName = "SDL_RENDERER";
-#elif defined(CNA_BACKEND_ASCII)
+    constexpr const char* kRendererName = "SDL_RENDERER";
+#elif defined(CNA_RENDERER_ASCII)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr bool kCubeSupported = false;
     constexpr RtSampleOrientation kRtSampleOrientation = RtSampleOrientation::TopDown;
     constexpr AdditiveContract kAdditiveContract = AdditiveContract::SourcePlusDestination;
-    constexpr const char* kBackendName = "ASCII";
-#elif defined(CNA_BACKEND_FREEDIRECT)
+    constexpr const char* kRendererName = "ASCII";
+#elif defined(CNA_RENDERER_FREEDIRECT)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr bool kCubeSupported = false;
     constexpr RtSampleOrientation kRtSampleOrientation = RtSampleOrientation::TopDown;
     constexpr AdditiveContract kAdditiveContract = AdditiveContract::SourcePlusDestination;
-    constexpr const char* kBackendName = "FREEDIRECT";
-#elif defined(CNA_BACKEND_D3D9)
+    constexpr const char* kRendererName = "FREEDIRECT";
+#elif defined(CNA_RENDERER_D3D9)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr bool kCubeSupported = true;
     constexpr RtSampleOrientation kRtSampleOrientation = RtSampleOrientation::TopDown;
     constexpr AdditiveContract kAdditiveContract = AdditiveContract::SourcePlusDestination;
-    constexpr const char* kBackendName = "D3D9";
-#elif defined(CNA_BACKEND_D3D11)
+    constexpr const char* kRendererName = "D3D9";
+#elif defined(CNA_RENDERER_D3D11)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr bool kCubeSupported = true;
     constexpr RtSampleOrientation kRtSampleOrientation = RtSampleOrientation::TopDown;
     constexpr AdditiveContract kAdditiveContract = AdditiveContract::SourcePlusDestination;
-    constexpr const char* kBackendName = "D3D11";
-#elif defined(CNA_BACKEND_D3D12)
+    constexpr const char* kRendererName = "D3D11";
+#elif defined(CNA_RENDERER_D3D12)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr bool kCubeSupported = true;
     constexpr RtSampleOrientation kRtSampleOrientation = RtSampleOrientation::TopDown;
     constexpr AdditiveContract kAdditiveContract = AdditiveContract::SourcePlusDestination;
-    constexpr const char* kBackendName = "D3D12";
-#elif defined(CNA_BACKEND_CANVAS)
+    constexpr const char* kRendererName = "D3D12";
+#elif defined(CNA_RENDERER_CANVAS)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr bool kCubeSupported = false;
     constexpr RtSampleOrientation kRtSampleOrientation = RtSampleOrientation::TopDown;
     constexpr AdditiveContract kAdditiveContract = AdditiveContract::SourcePlusDestination;
-    constexpr const char* kBackendName = "CANVAS";
-#elif defined(CNA_BACKEND_LLGL)
+    constexpr const char* kRendererName = "CANVAS";
+#elif defined(CNA_RENDERER_LLGL)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr bool kCubeSupported = false;
     constexpr RtSampleOrientation kRtSampleOrientation = RtSampleOrientation::TopDown;
     constexpr AdditiveContract kAdditiveContract = AdditiveContract::SourcePlusDestination;
-    constexpr const char* kBackendName = "LLGL";
+    constexpr const char* kRendererName = "LLGL";
 #else
-#error "REMED-GFX-131: this backend has no declared mid-tone colour contract."
+#error "REMED-GFX-131: this renderer has no declared mid-tone colour contract."
 #endif
 
     constexpr int kBBW = 64;   ///< Backbuffer width.
@@ -458,7 +458,7 @@ class ColorSpaceMidToneContractTest : public Game
         return r;
     }
 
-    /// True when this backend declared it cannot read render targets back at all. Those backends
+    /// True when this renderer declared it cannot read render targets back at all. Those renderers
     /// must reject, and every rendered leg below is asserted as a rejection instead of a value.
     static bool RtUnsupported() { return kRtContract == RtContract::Unsupported; }
 
@@ -515,7 +515,7 @@ class ColorSpaceMidToneContractTest : public Game
         {
             std::printf("[TRANSFER] %s %s channel %s: "
                         "input | normalized | identity | srgb-encode | srgb-decode | actual | match\n",
-                        kBackendName, legLabel.c_str(), kChannelName[ch]);
+                        kRendererName, legLabel.c_str(), kChannelName[ch]);
             for (int x = 0; x < kValueCount; ++x)
             {
                 const int in = kValues[x];
@@ -732,9 +732,9 @@ class ColorSpaceMidToneContractTest : public Game
         dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
         ResetState(dev);
         Readback r = ReadWhole(second, kW, kH);
-        // REMED-GFX-147: on a backend that DECLARES it samples a render target bottom-up, undo
+        // REMED-GFX-147: on a renderer that DECLARES it samples a render target bottom-up, undo
         // ONLY the row order before comparing, so every colour comparison below stays byte-exact --
-        // which is what this file is for. No backend declares that any more (REMED-GFX-147 is
+        // which is what this file is for. No renderer declares that any more (REMED-GFX-147 is
         // fixed), so this is inert; it stays because the declaration is what makes an orientation
         // change in either direction fail here instead of passing silently. The dedicated
         // orientation contract lives in rendertarget_sampling_orientation_test.cpp.
@@ -789,7 +789,7 @@ class ColorSpaceMidToneContractTest : public Game
     {
         if (!kCubeSupported)
         {
-            check(true, std::string("G1 RenderTargetCube not supported on ") + kBackendName +
+            check(true, std::string("G1 RenderTargetCube not supported on ") + kRendererName +
                         " -- declared, not inferred");
             return;
         }
@@ -832,7 +832,7 @@ class ColorSpaceMidToneContractTest : public Game
     {
         if (RtUnsupported())
         {
-            check(true, "H1 render-target region readback not applicable on a rejecting backend");
+            check(true, "H1 render-target region readback not applicable on a rejecting renderer");
             return;
         }
         const Rectangle rect(6, 1, 5, 3);
@@ -891,13 +891,13 @@ class ColorSpaceMidToneContractTest : public Game
     }
 
     /// Leg I: blending with a mid-tone source over a mid-tone destination. The expectation is
-    /// computed on the STORED BYTES, which is what every non-WebGPU backend does; a gamma-space
+    /// computed on the STORED BYTES, which is what every non-WebGPU renderer does; a gamma-space
     /// blend differs from it by far more than the +-2 rounding tolerance allowed here.
     void LegI(GraphicsDevice& dev)
     {
         if (RtUnsupported())
         {
-            check(true, "I1 blending not applicable on a backend that cannot read targets back");
+            check(true, "I1 blending not applicable on a renderer that cannot read targets back");
             return;
         }
         const Color dst(36, 92, 173, 255);
@@ -969,7 +969,7 @@ class ColorSpaceMidToneContractTest : public Game
             {
                 const Color& got = r.pixels[static_cast<std::size_t>(kH / 2) * kW + kW / 2];
                 // BlendState::Additive is SourceAlpha/One; the source alpha is 255 here. On a
-                // backend declared SourceOnly the destination term is dropped (REMED-GFX-148),
+                // renderer declared SourceOnly the destination term is dropped (REMED-GFX-148),
                 // which is asserted as such so the divergence is pinned, not tolerated -- the
                 // mid-tone source bytes are still required to arrive exactly.
                 const bool addsDst = kAdditiveContract == AdditiveContract::SourcePlusDestination;
@@ -1015,7 +1015,7 @@ protected:
         ResetState(dev);
         dev.Clear(Color(0, 0, 0, 255));
 
-        std::printf("[INFO] REMED-GFX-131 mid-tone colour contract on %s\n", kBackendName);
+        std::printf("[INFO] REMED-GFX-131 mid-tone colour contract on %s\n", kRendererName);
         std::fflush(stdout);
 
         LegA(dev);
@@ -1031,22 +1031,22 @@ protected:
         LegH(sampled);
         LegI(dev);
 
-#if defined(CNA_BACKEND_WEBGPU)
+#if defined(CNA_RENDERER_WEBGPU)
         // REMED-GFX-131 changes a resource format and adds a view-format reinterpretation, both of
         // which wgpu-native validates. Nothing above may have produced a validation error: an
         // unsupported renderable format, an illegal base/view format pair, a copy-format mismatch
         // or a bad row pitch would all surface here rather than being silently tolerated.
         {
-            using CNA::Internal::Backends::WebGPU::WebGPUGraphicsBackend;
+            using CNA::Internal::Renderers::WebGPU::WebGPURenderer;
             const std::size_t validationErrors =
-                static_cast<WebGPUGraphicsBackend&>(dev.GetBackend()).GetUncapturedErrorCountEXT();
+                static_cast<WebGPURenderer&>(dev.GetRenderer()).GetUncapturedErrorCountEXT();
             check(validationErrors == 0,
                   "V1 WebGPU reported no uncaptured validation errors across every leg: " +
                   std::to_string(validationErrors));
         }
 #endif
 
-        std::printf("[INFO] %s: %d/%d checks passed\n", kBackendName, passCount_, totalCount_);
+        std::printf("[INFO] %s: %d/%d checks passed\n", kRendererName, passCount_, totalCount_);
         std::fflush(stdout);
         result_ = (passCount_ == totalCount_) ? 0 : 1;
         Exit();

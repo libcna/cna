@@ -1,10 +1,10 @@
 // plan_dx.md Phase DX3 (DX-11-fmt).
-#include "CNA/Internal/Backends/D3DCommon/D3DFormatMapping.hpp"
+#include "CNA/Internal/Renderers/D3DCommon/D3DFormatMapping.hpp"
 
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 
-namespace CNA::Internal::Backends::D3DCommon
+namespace CNA::Internal::Renderers::D3DCommon
 {
     using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
     using Microsoft::Xna::Framework::Graphics::DepthFormat;
@@ -51,7 +51,7 @@ namespace CNA::Internal::Backends::D3DCommon
             case DepthFormat::None:             return DXGI_FORMAT_UNKNOWN;
             case DepthFormat::Depth16:          return DXGI_FORMAT_D16_UNORM;
             // D3D11 has no pure 24-bit depth-only format -- Depth24 and Depth24Stencil8 both map
-            // to the same combined format, matching this project's own Vulkan backend's fallback.
+            // to the same combined format, matching this project's own Vulkan renderer's fallback.
             case DepthFormat::Depth24:          return DXGI_FORMAT_D24_UNORM_S8_UINT;
             case DepthFormat::Depth24Stencil8:  return DXGI_FORMAT_D24_UNORM_S8_UINT;
             default:                             return DXGI_FORMAT_UNKNOWN;

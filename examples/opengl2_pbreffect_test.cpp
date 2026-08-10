@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // plan_opengl2.md: pixel-exact PbrEffect/SkinnedPbrEffect proof for the native OpenGL 2.1
-// graphics backend -- metallic-roughness BRDF, tangent-space normal mapping, and (for
+// graphics renderer -- metallic-roughness BRDF, tangent-space normal mapping, and (for
 // SkinnedPbrEffect) bone-palette vertex skinning combined with the PBR shader. All non-skinned
 // checks use World=View=Projection=Identity (this project's own established convention -- see
 // opengl2_effects_test.cpp) with the quad at local Z=-0.8, normal (0,0,1), tangent (1,0,0,1).
@@ -44,7 +44,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTangentTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTangentTextureSkinned.hpp"
 
-#include "CNA/Internal/Backends/OpenGL2/OpenGL2GraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/OpenGL2/OpenGL2Renderer.hpp"
 
 #include "common/PixelTestGame.hpp"
 
@@ -57,7 +57,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::OpenGL2;
+using namespace CNA::Internal::Renderers::OpenGL2;
 
 namespace
 {

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // Task 1102 (plan_graphics.md Phase 80 / plan_dx9.md Divergence 1): BasicEffect pixel test --
 // PreferPerPixelLighting genuinely selects between two different lighting evaluations (EasyGL
-// backend).
+// renderer).
 //
 // Real XNA 4.0 default: PreferPerPixelLighting=false -> lighting is computed ONCE per vertex
 // (VSBasicVertexLighting*) and Gouraud-interpolated across the triangle. true -> lighting is
@@ -31,7 +31,7 @@
 //   (a) Default (PreferPerPixelLighting left at its real XNA default, false): expect the
 //       vertex-lit/Gouraud value (~127).
 //   (b) PreferPerPixelLighting=true: expect the pixel-lit value (~155) -- the OLD, pre-Task-1102
-//       value this backend always produced regardless of the flag.
+//       value this renderer always produced regardless of the flag.
 //   (c) (a) != (b): proves the flag is a genuine, live dispatch selector, not a decorative no-op.
 //
 // Exit code 0 = PASS, 1 = FAIL.

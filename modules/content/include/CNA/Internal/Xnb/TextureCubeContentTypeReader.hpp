@@ -15,8 +15,8 @@ namespace CNA::Internal::Xnb
     /**
      * @brief FNA's real `Microsoft.Xna.Framework.Content.TextureCubeReader`
      *        (`src/Content/ContentReaders/TextureCubeReader.cs`), implemented strictly against
-     *        CNA's backend-neutral `TextureCube`/`GraphicsDevice` API -- never against any one
-     *        backend's internals directly.
+     *        CNA's renderer-neutral `TextureCube`/`GraphicsDevice` API -- never against any one
+     *        renderer's internals directly.
      *
      * `TextureCube` is move-only (matching `Texture2D::FromStream`-adjacent GPU-resource
      * conventions elsewhere in this codebase); this reader targets a bare `TextureCube` (not

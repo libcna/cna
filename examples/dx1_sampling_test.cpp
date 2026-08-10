@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // plan_dx1.md Phase O5 (DX1-45/DX1-46): TextureFilter (nearest vs. bilinear) and
 // TextureAddressMode (Wrap/Mirror/Clamp) sampling tests for the DX1 (DirectDraw, via the
-// real DirectDraw v1, run under Wine -- no ../free-direct anywhere in this backend) graphics backend.
+// real DirectDraw v1, run under Wine -- no ../free-direct anywhere in this renderer) graphics renderer.
 //
 // All draws use BlendState::AlphaBlend with a fully-opaque (alpha=255) source texture: under
 // AlphaBlend's premultiplied formula (out = src + dst*(1-srcAlpha)), srcAlpha=255 makes

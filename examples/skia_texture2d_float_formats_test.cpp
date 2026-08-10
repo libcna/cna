@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 // SKIA-138: exact float/half Texture2D transfer, mip, sampling, HDR and refusal gates.
 
-#include "CNA/Internal/Backends/Skia/SkiaGraphicsBackend.hpp"
-#include "CNA/Internal/Backends/Skia/SkiaTextureBackend.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaRenderer.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaTextureRenderer.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
@@ -35,10 +35,10 @@
 #include <utility>
 #include <vector>
 
-using CNA::Internal::Backends::Skia::SkiaGraphicsBackend;
-using CNA::Internal::Backends::Skia::SkiaResourceStats;
-using CNA::Internal::Backends::Skia::SkiaSourceAlphaConvention;
-using CNA::Internal::Backends::Skia::SkiaTextureBackend;
+using CNA::Internal::Renderers::Skia::SkiaRenderer;
+using CNA::Internal::Renderers::Skia::SkiaResourceStats;
+using CNA::Internal::Renderers::Skia::SkiaSourceAlphaConvention;
+using CNA::Internal::Renderers::Skia::SkiaTextureRenderer;
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
 using namespace Microsoft::Xna::Framework::Graphics::PackedVector;
@@ -145,7 +145,7 @@ namespace
     [[nodiscard]] bool SameStats(const SkiaResourceStats& left,
                                  const SkiaResourceStats& right) noexcept
     {
-        return left.textureBackends == right.textureBackends
+        return left.textureRenderers == right.textureRenderers
             && left.textureImageViews == right.textureImageViews
             && left.textureImageBytes == right.textureImageBytes
             && left.mipChains2D == right.mipChains2D
@@ -160,9 +160,9 @@ class InspectableFloatTexture2D final : public Texture2D
 public:
     using Texture2D::Texture2D;
 
-    [[nodiscard]] SkiaTextureBackend* SkiaBackend() const
+    [[nodiscard]] SkiaTextureRenderer* SkiaRenderer() const
     {
-        return dynamic_cast<SkiaTextureBackend*>(GetBackendRaw());
+        return dynamic_cast<SkiaTextureRenderer*>(GetRendererRaw());
     }
 };
 
@@ -192,30 +192,30 @@ protected:
         done_ = true;
 
         auto& device = getGraphicsDeviceProperty();
-        auto* graphicsBackend = dynamic_cast<SkiaGraphicsBackend*>(&device.GetBackend());
-        Check(graphicsBackend != nullptr, "public GraphicsDevice owns the Skia backend");
-        if (!graphicsBackend)
+        auto* graphicsRenderer = dynamic_cast<SkiaRenderer*>(&device.GetRenderer());
+        Check(graphicsRenderer != nullptr, "public GraphicsDevice owns the Skia renderer");
+        if (!graphicsRenderer)
         {
             Exit();
             return;
         }
 
-        const SkiaResourceStats baseline = graphicsBackend->GetResourceStatsEXT();
-        ExerciseFloat32<float>(device, *graphicsBackend, SurfaceFormat::Single, "Single");
-        ExerciseFloat32<Vector2>(device, *graphicsBackend, SurfaceFormat::Vector2, "Vector2");
-        ExerciseFloat32<Vector4>(device, *graphicsBackend, SurfaceFormat::Vector4, "Vector4");
+        const SkiaResourceStats baseline = graphicsRenderer->GetResourceStatsEXT();
+        ExerciseFloat32<float>(device, *graphicsRenderer, SurfaceFormat::Single, "Single");
+        ExerciseFloat32<Vector2>(device, *graphicsRenderer, SurfaceFormat::Vector2, "Vector2");
+        ExerciseFloat32<Vector4>(device, *graphicsRenderer, SurfaceFormat::Vector4, "Vector4");
         ExerciseHalf<HalfSingle, std::uint16_t>(
-            device, *graphicsBackend, SurfaceFormat::HalfSingle, "HalfSingle", 1);
+            device, *graphicsRenderer, SurfaceFormat::HalfSingle, "HalfSingle", 1);
         ExerciseHalf<HalfVector2, std::uint32_t>(
-            device, *graphicsBackend, SurfaceFormat::HalfVector2, "HalfVector2", 2);
+            device, *graphicsRenderer, SurfaceFormat::HalfVector2, "HalfVector2", 2);
         ExerciseHalf<HalfVector4, std::uint64_t>(
-            device, *graphicsBackend, SurfaceFormat::HalfVector4, "HalfVector4", 4);
+            device, *graphicsRenderer, SurfaceFormat::HalfVector4, "HalfVector4", 4);
         ExerciseHalf<HalfVector4, std::uint64_t>(
-            device, *graphicsBackend, SurfaceFormat::HdrBlendable, "HdrBlendable", 4);
+            device, *graphicsRenderer, SurfaceFormat::HdrBlendable, "HdrBlendable", 4);
         CheckSpecialMipPolicy(device);
         CheckMetadataSamplingAndHdr(device);
-        CheckTypedRefusalAndTargetPromotion(device, *graphicsBackend);
-        Check(SameStats(graphicsBackend->GetResourceStatsEXT(), baseline),
+        CheckTypedRefusalAndTargetPromotion(device, *graphicsRenderer);
+        Check(SameStats(graphicsRenderer->GetResourceStatsEXT(), baseline),
               "all float fixtures return Skia resource counters to baseline");
 
         std::printf("=== %d/%d PASS ===\n", checks_ - failures_, checks_);
@@ -224,7 +224,7 @@ protected:
 
 private:
     template<typename Element>
-    void ExerciseFloat32(GraphicsDevice& device, SkiaGraphicsBackend& graphicsBackend,
+    void ExerciseFloat32(GraphicsDevice& device, SkiaRenderer& graphicsRenderer,
                          SurfaceFormat format, const char* name)
     {
         constexpr int components = FloatTraits<Element>::Components;
@@ -238,14 +238,14 @@ private:
         for (std::size_t index = 0; index < source.size(); ++index)
             source[index] = MakeFloatElement<Element>(bitRows[index]);
 
-        const SkiaResourceStats before = graphicsBackend.GetResourceStatsEXT();
+        const SkiaResourceStats before = graphicsRenderer.GetResourceStatsEXT();
         {
             InspectableFloatTexture2D texture(device, 2, 2, false, format);
-            SkiaTextureBackend* backend = texture.SkiaBackend();
+            SkiaTextureRenderer* renderer = texture.SkiaRenderer();
             const std::size_t transferBytes = static_cast<std::size_t>(components) * 4u;
-            const SkiaResourceStats allocated = graphicsBackend.GetResourceStatsEXT();
-            Check(backend && backend->FormatEXT() == format
-                      && allocated.textureBackends == before.textureBackends + 1u
+            const SkiaResourceStats allocated = graphicsRenderer.GetResourceStatsEXT();
+            Check(renderer && renderer->FormatEXT() == format
+                      && allocated.textureRenderers == before.textureRenderers + 1u
                       && allocated.textureImageBytes == before.textureImageBytes + 128u
                       && allocated.mipChain2DStorageBytes
                           == before.mipChain2DStorageBytes + 4u * transferBytes,
@@ -263,10 +263,10 @@ private:
             Check(exact, std::string(name)
                       + " round-trips signed zero, subnormal, infinity and NaN payload bits");
 
-            bool littleEndian = backend != nullptr;
-            if (backend)
+            bool littleEndian = renderer != nullptr;
+            if (renderer)
             {
-                const std::uint8_t* raw = backend->MipChainEXT().LevelData(0);
+                const std::uint8_t* raw = renderer->MipChainEXT().LevelData(0);
                 for (std::size_t texel = 0; texel < source.size(); ++texel)
                 {
                     for (int channel = 0; channel < components; ++channel)
@@ -295,12 +295,12 @@ private:
                       && SameFloatBits(patchRead[1], patch[1]),
                   std::string(name) + " partial rectangle preserves exact component words");
         }
-        Check(SameStats(graphicsBackend.GetResourceStatsEXT(), before),
+        Check(SameStats(graphicsRenderer.GetResourceStatsEXT(), before),
               std::string(name) + " destruction releases transfer and working storage");
     }
 
     template<typename Packed, typename Word>
-    void ExerciseHalf(GraphicsDevice& device, SkiaGraphicsBackend& graphicsBackend,
+    void ExerciseHalf(GraphicsDevice& device, SkiaRenderer& graphicsRenderer,
                       SurfaceFormat format, const char* name, int channels)
     {
         const Word channelWords[4] = {
@@ -320,12 +320,12 @@ private:
         }
 
         const std::size_t bytesPerTexel = static_cast<std::size_t>(channels) * 2u;
-        const SkiaResourceStats before = graphicsBackend.GetResourceStatsEXT();
+        const SkiaResourceStats before = graphicsRenderer.GetResourceStatsEXT();
         {
             InspectableFloatTexture2D texture(device, 2, 2, false, format);
-            SkiaTextureBackend* backend = texture.SkiaBackend();
-            const SkiaResourceStats allocated = graphicsBackend.GetResourceStatsEXT();
-            Check(backend && backend->FormatEXT() == format
+            SkiaTextureRenderer* renderer = texture.SkiaRenderer();
+            const SkiaResourceStats allocated = graphicsRenderer.GetResourceStatsEXT();
+            Check(renderer && renderer->FormatEXT() == format
                       && allocated.textureImageBytes
                           == before.textureImageBytes + 8u * bytesPerTexel
                       && allocated.mipChain2DStorageBytes
@@ -346,10 +346,10 @@ private:
             Check(exact, std::string(name)
                       + " round-trips signed zero, infinities and NaN payload bits");
 
-            bool littleEndian = backend != nullptr;
-            if (backend)
+            bool littleEndian = renderer != nullptr;
+            if (renderer)
             {
-                const std::uint8_t* raw = backend->MipChainEXT().LevelData(0);
+                const std::uint8_t* raw = renderer->MipChainEXT().LevelData(0);
                 for (std::size_t texel = 0; texel < source.size(); ++texel)
                 {
                     const Word word = source[texel].getPackedValueProperty();
@@ -363,7 +363,7 @@ private:
             }
             Check(littleEndian, std::string(name) + " stores explicit little-endian half words");
         }
-        Check(SameStats(graphicsBackend.GetResourceStatsEXT(), before),
+        Check(SameStats(graphicsRenderer.GetResourceStatsEXT(), before),
               std::string(name) + " destruction releases native image and mip storage");
     }
 
@@ -428,7 +428,7 @@ private:
         hdr.SetData(&hdrValue, 1);
 
         const auto image = [&](InspectableFloatTexture2D& texture) {
-            return texture.SkiaBackend()->SnapshotImage(SkiaSourceAlphaConvention::Straight);
+            return texture.SkiaRenderer()->SnapshotImage(SkiaSourceAlphaConvention::Straight);
         };
         Check(image(single)->colorType() == kRGBA_F32_SkColorType
                   && image(single)->alphaType() == kOpaque_SkAlphaType
@@ -514,7 +514,7 @@ private:
     }
 
     void CheckTypedRefusalAndTargetPromotion(GraphicsDevice& device,
-                                    SkiaGraphicsBackend& graphicsBackend)
+                                    SkiaRenderer& graphicsRenderer)
     {
         InspectableFloatTexture2D single(device, 1, 1, false, SurfaceFormat::Single);
         const float original = 0.25f;
@@ -541,17 +541,17 @@ private:
         }};
         for (const auto& [format, nativeBytesPerPixel] : promoted)
         {
-            const SkiaResourceStats before = graphicsBackend.GetResourceStatsEXT();
+            const SkiaResourceStats before = graphicsRenderer.GetResourceStatsEXT();
             {
                 RenderTarget2D target(device, 2, 2, false, format, DepthFormat::None);
-                const SkiaResourceStats allocated = graphicsBackend.GetResourceStatsEXT();
+                const SkiaResourceStats allocated = graphicsRenderer.GetResourceStatsEXT();
                 Check(allocated.renderTargets == before.renderTargets + 1u
                           && allocated.targetSurfaceBytes
                               == before.targetSurfaceBytes + 4u * nativeBytesPerPixel,
                       "SKIA-142 promotes a constructible float/half RenderTarget2D with exact "
                       "native surface accounting");
             }
-            Check(SameStats(graphicsBackend.GetResourceStatsEXT(), before),
+            Check(SameStats(graphicsRenderer.GetResourceStatsEXT(), before),
                   "promoted float/half RenderTarget2D destruction releases its surface accounting");
         }
     }

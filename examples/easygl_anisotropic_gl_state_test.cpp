@@ -4,14 +4,14 @@
 // driver, rather than trusting the startup capability-dump log alone.
 //
 // This talks to easy-gl's own Sampler class directly (not through CNA's GraphicsDevice/
-// EasyGLGraphicsBackend), inside a real GL context established by Game::Run(). It sets
+// EasyGLRenderer), inside a real GL context established by Game::Run(). It sets
 // SamplerParameter::MaxAnisotropy to a specific value, reads it straight back via
 // glGetSamplerParameterfv (get_parameter_fv), and confirms the driver actually stored it —
 // proving the new enum entries are wired to the real GL calls, not silently ignored.
 //
 // A genuine over-cap request (Task 299's own 9999 case) is also exercised here directly against
 // the raw Sampler API to confirm the driver clamps it to a sane value (rather than storing 9999
-// verbatim or erroring), independent of CNA's own EasyGLGraphicsBackend::ApplySamplerState clamp.
+// verbatim or erroring), independent of CNA's own EasyGLRenderer::ApplySamplerState clamp.
 //
 // Exit code 0 = PASS, 1 = FAIL.
 

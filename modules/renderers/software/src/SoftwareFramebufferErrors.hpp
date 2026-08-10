@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
-#include "CNA/Internal/Backends/Software/SoftwareFramebufferAllocation.hpp"
+#include "CNA/Internal/Renderers/Software/SoftwareFramebufferAllocation.hpp"
 
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/OutOfMemoryException.hpp"
 
 #include <string>
 
-namespace CNA::Internal::Backends::Software
+namespace CNA::Internal::Renderers::Software
 {
     [[noreturn]] inline void ThrowInvalidFramebufferLayout(
         const SoftwareFramebufferAllocationRequest& request,

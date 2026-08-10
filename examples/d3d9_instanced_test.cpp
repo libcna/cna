@@ -10,12 +10,12 @@
 //   (instanceCount=2): paints at a DIFFERENT screen location with the SAME DiffuseColor -- proves
 //   two genuinely distinct instances were drawn, not just one.
 // Check C -- no per-instance stream falls back to a real DrawIndexedPrimitivesEx() draw
-//   (BasicEffect dispatch) rather than throwing, matching D3D11GraphicsBackend's own identical
+//   (BasicEffect dispatch) rather than throwing, matching D3D11Renderer's own identical
 //   fallback.
 // Check D -- stream-frequency reset: a NORMAL (non-instanced) DrawIndexedColoredPrimitives() call
 //   issued immediately after the instanced draw still paints correctly -- proves
 //   SetStreamSourceFreq(0/1, 1) genuinely resets D3D9's own persistent per-stream frequency state,
-//   which every other draw path in this backend depends on (stream 0 is reused everywhere).
+//   which every other draw path in this renderer depends on (stream 0 is reused everywhere).
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
@@ -28,16 +28,16 @@
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 
-#include "CNA/Internal/Backends/D3D9/D3D9GraphicsBackend.hpp"
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/D3D9/D3D9Renderer.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 
 #include <cstdint>
 #include <cstdio>
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::D3D9;
-using CNA::Internal::Backends::GpuDrawParams;
+using namespace CNA::Internal::Renderers::D3D9;
+using CNA::Internal::Renderers::GpuDrawParams;
 
 namespace
 {
@@ -63,7 +63,7 @@ namespace
     const uint16_t kSmallTriIdx[3] = {0, 1, 2};
 
     // Per-instance world matrix, 4 row-major float4 "rows" (64 bytes) -- matches
-    // D3D11GraphicsBackend::DrawInstancedPrimitivesEx's own established convention for
+    // D3D11Renderer::DrawInstancedPrimitivesEx's own established convention for
     // the per-instance stream of GpuDrawParams::vertexStreams. A pure translation matrix:
     // row3 = (Tx,Ty,Tz,1).
     struct InstanceRow { float row0[4], row1[4], row2[4], row3[4]; };
@@ -99,11 +99,11 @@ protected:
         if (frame_++ < 1) return;
 
         auto& dev = getGraphicsDeviceProperty();
-        auto& backend = static_cast<D3D9GraphicsBackend&>(dev.GetBackend());
+        auto& renderer = static_cast<D3D9Renderer&>(dev.GetRenderer());
 
-        backend.ApplyBlendState(0, 0, 1, 1, 0, 0, CNA::Internal::Backends::BlendWriteState{}); // REMED-GFX-077 default write state
-        backend.ApplyDepthStencilState(false, false, 0, false, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 0);
-        backend.ApplyRasterizerState(0 /*CullMode::None*/, 0 /*FillMode::Solid*/, false, 0.0f, 0.0f);
+        renderer.ApplyBlendState(0, 0, 1, 1, 0, 0, CNA::Internal::Renderers::BlendWriteState{}); // REMED-GFX-077 default write state
+        renderer.ApplyDepthStencilState(false, false, 0, false, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 0);
+        renderer.ApplyRasterizerState(0 /*CullMode::None*/, 0 /*FillMode::Solid*/, false, 0.0f, 0.0f);
 
         // NDC -0.5 -> pixel (64*0.25)=16; NDC +0.5 -> pixel (64*0.75)=48; NDC 0 -> pixel 32.
         const Microsoft::Xna::Framework::Rectangle instance0Region(14, 30, 4, 4);
@@ -111,16 +111,16 @@ protected:
 
         // Checks A+B: two instances, one draw call.
         {
-            auto vb = backend.CreateVertexBuffer(3);
+            auto vb = renderer.CreateVertexBuffer(3);
             vb->SetData(kSmallTri, 3, sizeof(VP));
-            auto ib = backend.CreateIndexBuffer16(3);
+            auto ib = renderer.CreateIndexBuffer16(3);
             ib->SetData16(kSmallTriIdx, 3);
 
             const InstanceRow instances[2] = {
                 TranslationInstance(-0.5f, 0.0f, 0.0f),
                 TranslationInstance(0.5f, 0.0f, 0.0f),
             };
-            auto instVb = backend.CreateVertexBuffer(2);
+            auto instVb = renderer.CreateVertexBuffer(2);
             instVb->SetData(instances, 2, sizeof(InstanceRow));
 
             GpuDrawParams params;
@@ -145,7 +145,7 @@ protected:
             for (const Color& p : before1)
                 if (p.getRProperty() != 0 || p.getGProperty() != 0 || p.getBProperty() != 255) before1IsBlue = false;
 
-            backend.DrawInstancedPrimitivesEx(*vb, *ib, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+            renderer.DrawInstancedPrimitivesEx(*vb, *ib, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                               Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, 2, params);
 
             // kSmallTri is a right triangle; its hypotenuse runs exactly through (16,32)/(48,32) at
@@ -167,7 +167,7 @@ protected:
 
         // Check C: no per-instance stream falls back to a real (non-instanced) draw.
         {
-            auto vb = backend.CreateVertexBuffer(3);
+            auto vb = renderer.CreateVertexBuffer(3);
             struct VPT { float x, y, z, u, v; };
             static const VPT kTriTx[3] = {
                 {-1.0f, -1.0f, 0.0f, 0.0f, 0.0f},
@@ -175,7 +175,7 @@ protected:
                 {-1.0f,  3.0f, 0.0f, 0.0f, 0.0f},
             };
             vb->SetData(kTriTx, 3, sizeof(VPT));
-            auto ib = backend.CreateIndexBuffer16(3);
+            auto ib = renderer.CreateIndexBuffer16(3);
             ib->SetData16(kSmallTriIdx, 3);
 
             GpuDrawParams params; // no per-instance stream; textureEnabled false -> BasicEffect combo throws
@@ -186,7 +186,7 @@ protected:
             bool threw = false;
             try
             {
-                backend.DrawInstancedPrimitivesEx(*vb, *ib, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                renderer.DrawInstancedPrimitivesEx(*vb, *ib, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                                   Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, 1, params);
             }
             catch (const std::exception&) { threw = true; }
@@ -200,7 +200,7 @@ protected:
 
         // Check D: stream-frequency reset -- a normal draw right after the instanced one still works.
         {
-            auto vb = backend.CreateVertexBuffer(3);
+            auto vb = renderer.CreateVertexBuffer(3);
             struct VPC { float x, y, z; uint32_t color; };
             static const VPC kTri[3] = {
                 {-1.0f, -1.0f, 0.0f, 0xFF00FF00u}, // opaque green
@@ -208,11 +208,11 @@ protected:
                 {-1.0f,  3.0f, 0.0f, 0xFF00FF00u},
             };
             vb->SetData(kTri, 3, sizeof(VPC));
-            auto ib = backend.CreateIndexBuffer16(3);
+            auto ib = renderer.CreateIndexBuffer16(3);
             ib->SetData16(kSmallTriIdx, 3);
 
             dev.Clear(Color(0, 0, 255, 255));
-            backend.DrawIndexedColoredPrimitives(*vb, *ib, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+            renderer.DrawIndexedColoredPrimitives(*vb, *ib, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                                  Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1);
             Color px(0, 0, 0, 0);
             ReadPixel(dev, 32, 32, px);

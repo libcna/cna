@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MS-PL
 // Task 448: Implement/verify Bgfx occlusion query result behavior.
 //
-// Task 441's own audit found BgfxOcclusionQueryBackend::Begin()/End() were literally empty
+// Task 441's own audit found BgfxOcclusionQueryRenderer::Begin()/End() were literally empty
 // no-ops, and no bgfx::setCondition()/occlusion-query submit() overload was ever used anywhere in
-// the backend -- the created bgfx::OcclusionQueryHandle was never wired to any draw call at all.
+// the renderer -- the created bgfx::OcclusionQueryHandle was never wired to any draw call at all.
 //
 // Fixed (this task) via bgfx's own dedicated submit(id, program, occlusionQuery, depth, flags)
-// overload: BgfxGraphicsBackend now tracks an activeOcclusionQuery_ handle, set by
-// BgfxOcclusionQueryBackend::Begin() and cleared by End(); every one of the 12 3D-draw submit()
+// overload: BgfxRenderer now tracks an activeOcclusionQuery_ handle, set by
+// BgfxOcclusionQueryRenderer::Begin() and cleared by End(); every one of the 12 3D-draw submit()
 // call sites (colored3d/textured3d/dualTexture3d/skinned3d/envMap3d/alphaTest3d/etc.) is routed
 // through a new SubmitViewProgram() helper that uses the occlusion-query overload whenever a query
 // is active -- this exactly matches bgfx's own documented API contract and its official

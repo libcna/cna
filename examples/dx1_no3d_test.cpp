@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 // plan_dx1.md Phase O7 (DX1-60..DX1-67, DX1-69): ThrowNo3D wiring and remaining-default
-// verification for the DX1 (real DirectDraw v1, run under Wine -- no ../free-direct anywhere in this backend) graphics backend.
+// verification for the DX1 (real DirectDraw v1, run under Wine -- no ../free-direct anywhere in this renderer) graphics renderer.
 // DirectDraw is 2D-only -- every 3D entry point either throws honestly or degrades to a
-// documented "unsupported, returns nullptr" default, matching this backend's own class-level
+// documented "unsupported, returns nullptr" default, matching this renderer's own class-level
 // doc comment.
 //
 // Check A (DX1-62) -- VertexBuffer construction throws.
@@ -11,23 +11,23 @@
 //   CreateIndexBuffer32's base-class delegation to CreateIndexBuffer16 composes correctly.
 // Check D (DX1-60/63/65) -- GraphicsDevice::Clear(Target|DepthBuffer|Stencil, ...) does NOT
 //   throw: shared GraphicsDevice.cpp masks Depth/Stencil out of the request before it ever
-//   reaches the backend, because SupportsDepthStencil() is false (DX1-65) -- this makes
+//   reaches the renderer, because SupportsDepthStencil() is false (DX1-65) -- this makes
 //   ClearColorAndDepth/etc and the Draw*PrimitivesEx family (DX1-60/63) provably unreachable
-//   from the public API; direct backend-level calls (Check D2) confirm they still throw if ever
+//   from the public API; direct renderer-level calls (Check D2) confirm they still throw if ever
 //   reached some other way.
 // Check E (DX1-61) -- SetDepthTestEnabled/SetBlendEnabled/SetDepthWriteEnabled all throw (these
 //   ARE directly, unconditionally reachable from GraphicsDevice, no masking).
 // Check F (DX1-64) -- Texture3D construction throws System::NotSupportedException up front
 //   (REMED-CONTENT-004: the constructor queries SupportsCapability(Texture3D) before creating
-//   any backend resource); TextureCube/RenderTargetCube construction still does NOT throw
+//   any renderer resource); TextureCube/RenderTargetCube construction still does NOT throw
 //   (their factories return nullptr; both classes degrade gracefully).
 // Check G (DX1-66) -- OcclusionQuery construction does NOT throw; IsComplete()/PixelCount()
 //   degrade to false/0 -- CreateOcclusionQuery() is deliberately never overridden, letting
-//   IGraphicsBackend's own nullptr-returning default apply directly (ported from DX3-66's own
+//   IGraphicsRenderer's own nullptr-returning default apply directly (ported from DX3-66's own
 //   corrected final state, not re-discovered here as a bug).
 // Check H (DX1-67) -- ShaderEffect construction does NOT throw; IsEffectValid() is false.
-// Check I (DX1-69) -- DebugSimulateContextLoss()/DebugRestoreContext() (direct backend calls)
-//   are confirmed no-ops (inherited IGraphicsBackend default -- no real "context" to lose in a
+// Check I (DX1-69) -- DebugSimulateContextLoss()/DebugRestoreContext() (direct renderer calls)
+//   are confirmed no-ops (inherited IGraphicsRenderer default -- no real "context" to lose in a
 //   CPU/DirectDraw compositor, same reasoning SDL_RENDERER/SOFTWARE/DX3 already established).
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
@@ -52,7 +52,7 @@
 
 #include "System/NotSupportedException.hpp"
 
-#include "CNA/Internal/Backends/Dx1/Dx1GraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Dx1/Dx1Renderer.hpp"
 
 #include <cstdio>
 #include <cstdlib>
@@ -60,7 +60,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::Dx1;
+using namespace CNA::Internal::Renderers::Dx1;
 
 static constexpr int kCanvasSize = 32;
 
@@ -89,7 +89,7 @@ protected:
     void Draw(const GameTime&) override
     {
         auto& dev = getGraphicsDeviceProperty();
-        auto& backend = static_cast<Dx1GraphicsBackend&>(dev.GetBackend());
+        auto& renderer = static_cast<Dx1Renderer&>(dev.GetRenderer());
 
         // Check A (DX1-62): VertexBuffer construction throws.
         check(Throws([&] { VertexBuffer vb(dev, 1); }),
@@ -105,22 +105,22 @@ protected:
               "IndexBuffer (32-bit) construction throws (DX1-62)");
 
         // Check D (DX1-60/63/65): Clear(Target|DepthBuffer|Stencil, ...) does NOT throw --
-        // shared GraphicsDevice.cpp masks Depth/Stencil out before reaching the backend, since
-        // SupportsDepthStencil() is false. Direct backend calls confirm the throwing methods
+        // shared GraphicsDevice.cpp masks Depth/Stencil out before reaching the renderer, since
+        // SupportsDepthStencil() is false. Direct renderer calls confirm the throwing methods
         // still throw if ever reached some other way.
         {
             const bool clearOk = !Throws([&] {
                 dev.Clear(ClearOptions::Target | ClearOptions::DepthBuffer | ClearOptions::Stencil,
                          Color(1, 2, 3, 255), 1.0f, 0);
             });
-            const bool directThrows = Throws([&] { backend.ClearColorAndDepth(0, 0, 0, 255, 1.0f); }) &&
-                                      Throws([&] { backend.ClearDepth(1.0f); }) &&
-                                      Throws([&] { backend.ClearStencil(0); }) &&
-                                      Throws([&] { backend.ClearDepthAndStencil(1.0f, 0); }) &&
-                                      Throws([&] { backend.ClearColorAndStencil(0, 0, 0, 255, 0); }) &&
-                                      Throws([&] { backend.ClearColorDepthAndStencil(0, 0, 0, 255, 1.0f, 0); });
+            const bool directThrows = Throws([&] { renderer.ClearColorAndDepth(0, 0, 0, 255, 1.0f); }) &&
+                                      Throws([&] { renderer.ClearDepth(1.0f); }) &&
+                                      Throws([&] { renderer.ClearStencil(0); }) &&
+                                      Throws([&] { renderer.ClearDepthAndStencil(1.0f, 0); }) &&
+                                      Throws([&] { renderer.ClearColorAndStencil(0, 0, 0, 255, 0); }) &&
+                                      Throws([&] { renderer.ClearColorDepthAndStencil(0, 0, 0, 255, 1.0f, 0); });
             check(clearOk && directThrows,
-                  "Clear() with Depth/Stencil degrades gracefully; direct backend calls still throw (DX1-60/65)");
+                  "Clear() with Depth/Stencil degrades gracefully; direct renderer calls still throw (DX1-60/65)");
         }
 
         // Check E (DX1-61): directly, unconditionally reachable -- all three throw.
@@ -131,8 +131,8 @@ protected:
 
         // Check F (DX1-64): Texture3D construction now throws a typed rejection up front --
         // REMED-CONTENT-004 made the constructor check SupportsCapability(Texture3D) before
-        // creating any backend resource, so a capability-less backend fails loudly instead of
-        // leaving a null backend whose SetData/GetData silently discard the caller's bytes.
+        // creating any renderer resource, so a capability-less renderer fails loudly instead of
+        // leaving a null renderer whose SetData/GetData silently discard the caller's bytes.
         // TextureCube/RenderTargetCube keep the original degrade-gracefully contract: their
         // factories return nullptr and construction succeeds.
         {
@@ -182,11 +182,11 @@ protected:
                 notValid = !fx.IsEffectValid();
             }
             catch (const std::exception&) { threw = true; }
-            check(!threw && notValid, "ShaderEffect degrades gracefully (CreateEffectBackend -> nullptr) (DX1-67)");
+            check(!threw && notValid, "ShaderEffect degrades gracefully (CreateEffectRenderer -> nullptr) (DX1-67)");
         }
 
         // Check I (DX1-69): confirmed no-ops (inherited default; no real "context" to lose).
-        check(!Throws([&] { backend.DebugSimulateContextLoss(); backend.DebugRestoreContext(); }),
+        check(!Throws([&] { renderer.DebugSimulateContextLoss(); renderer.DebugRestoreContext(); }),
               "DebugSimulateContextLoss()/DebugRestoreContext() are confirmed no-ops (DX1-69)");
 
         std::printf("=== %d/%d PASS ===\n", passCount_, kTotal);

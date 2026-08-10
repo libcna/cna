@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // D3D9 skinned-vertex-color porting task: CNA's own NOXNA "SkinnedVertexColor3D" shader -- a
 // per-pixel-lit, textured, skinned mesh shader with an added vertex-color modulate, mirroring
-// EasyGLGraphicsBackend.cpp's EnsureSkinnedProgram() (GLSL/GLES 3.00) wiring for the stride-56
+// EasyGLRenderer.cpp's EnsureSkinnedProgram() (GLSL/GLES 3.00) wiring for the stride-56
 // vertex format (VertexPositionNormalTextureSkinned + a trailing normalized ubyte4 Color, see
 // D3D9VertexDeclarations.hpp's own `case 56` doc comment).
 //
@@ -46,7 +46,7 @@
 // REMED-GFX-006: applies the World INVERSE-TRANSPOSE (computed in-shader via InverseTranspose3x3)
 //       after the skin-local rotation, not raw (float3x3)World. This is correct under non-uniform
 //       World scale as well as rotation, matching SkinnedEffect.fx's own WorldInverseTranspose and
-//       the corrected cross-backend skinned shaders (Vulkan/EasyGL/Bgfx/SdlGpu). EasyGL itself is
+//       the corrected cross-renderer skinned shaders (Vulkan/EasyGL/Bgfx/SdlGpu). EasyGL itself is
 //       out of scope for this task and was not touched.
 //
 // Vertex declaration (stride 56, D3D9VertexDeclarations.hpp): POSITION0 (FLOAT3, 0), NORMAL0
@@ -80,7 +80,7 @@ struct VSOutput
 };
 
 // REMED-GFX-006: transpose(inverse(m)) of a 3x3 (cofactor matrix over its determinant). HLSL has
-// no built-in inverse(); vs_3_0 has ample instruction budget. Matches the corrected cross-backend
+// no built-in inverse(); vs_3_0 has ample instruction budget. Matches the corrected cross-renderer
 // skinned normal transform.
 float3x3 InverseTranspose3x3(float3x3 m)
 {

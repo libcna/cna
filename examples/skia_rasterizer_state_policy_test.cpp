@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // SKIA-58: the CPU SpriteBatch path uses only RasterizerState.ScissorTestEnable.
 // Cull/depth-bias/MSAA fields remain constructible 3D state, but do not alter a 2D sprite;
-// WireFrame is rejected explicitly because the raster backend neither advertises nor emulates it.
+// WireFrame is rejected explicitly because the raster renderer neither advertises nor emulates it.
 
 #include "CNA/GraphicsCapability.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
@@ -70,11 +70,11 @@ protected:
 
         auto& device = getGraphicsDeviceProperty();
         Check(!device.SupportsCapability(CNA::GraphicsCapability::WireFrame),
-              "WireFrame is not advertised by the raster backend");
+              "WireFrame is not advertised by the raster renderer");
         Check(!device.SupportsCapability(CNA::GraphicsCapability::ThreeD),
-              "3D is not advertised by the raster backend");
+              "3D is not advertised by the raster renderer");
         Check(!device.SupportsCapability(CNA::GraphicsCapability::MultiSampleAntiAliasing),
-              "MSAA is not advertised by the raster backend");
+              "MSAA is not advertised by the raster renderer");
 
         RasterizerState solid;
         solid.setCullModeProperty(CullMode::CullClockwiseFace);

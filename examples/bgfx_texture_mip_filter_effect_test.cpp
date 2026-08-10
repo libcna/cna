@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // Task 298/926: verify mipmap filter behavior (MipPoint/MipLinear/etc.) on a 3D stock effect
-// (DualTextureEffect), Bgfx backend.
+// (DualTextureEffect), Bgfx renderer.
 //
 // Bgfx-specific adaptation of examples/easygl_texture_mip_filter_effect_test.cpp (Task 298).
 // Not a verbatim reuse: that file's own "Point" check asserts Point NEVER selects a higher mip
@@ -9,12 +9,12 @@
 // shared that limitation — Point maps to BGFX_SAMPLER_MIN_POINT|MAG_POINT|MIP_POINT (mip-aware
 // nearest-level selection, matching real XNA/D3D9 TextureFilter::Point semantics exactly — point
 // filtering on all 3 axes, including mip selection, not "no mip selection at all"). Before Task
-// 926, this was invisible because BgfxTextureBackend::UpdatePixelsLevel was never overridden (the
+// 926, this was invisible because BgfxTextureRenderer::UpdatePixelsLevel was never overridden (the
 // shared no-op default) and the texture was always created with hasMips=false regardless of the
 // request, so there was no real mip chain for the sampler to select from even though its own
 // mapping already asked for one. Task 926 fixed that image-side allocation/upload gap, which
 // makes Point's pre-existing mip-aware mapping actually take effect for the first time — a
-// genuine improvement in XNA-faithfulness on this backend, not a regression to paper over. Both
+// genuine improvement in XNA-faithfulness on this renderer, not a regression to paper over. Both
 // checks below therefore expect GREEN (real mip selection).
 //
 // Exit code 0 = PASS (both expectations hold), 1 = FAIL.

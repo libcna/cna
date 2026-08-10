@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Task 946: HLSL→GLSL shader-conversion proof — GaussianBlur.fx (EasyGL backend).
+// Task 946: HLSL→GLSL shader-conversion proof — GaussianBlur.fx (EasyGL renderer).
 //
 // FNA reference (`BloomSample_4_0/BloomPostprocess/Content/GaussianBlur.fx`):
 //   sampler TextureSampler : register(s0);

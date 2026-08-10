@@ -8,18 +8,18 @@
 // type -- FNA's own BlendState/SamplerState/SpriteBatch have zero self-guards anywhere, and
 // GraphicsDevice.BlendState's setter is a trivial field assignment with no disposed check either.
 // This test verifies that established, narrower-by-design policy holds consistently across the
-// consumption points that exist today, on this specific backend.
+// consumption points that exist today, on this specific renderer.
 //
 // Real bug found and fixed while writing this test: SpriteBatch::Draw(Texture2D&, ...) had NO
-// guard at all -- worse than FNA's own leniency, since a disposed Texture2D's backend_ (a
-// shared_ptr<ITextureBackend>) becomes null on Dispose(), and SpriteBatch::pushSprite ultimately
-// dereferences it via Texture2D::GetBackend() (`return *backend_;`) with no null check --
+// guard at all -- worse than FNA's own leniency, since a disposed Texture2D's renderer_ (a
+// shared_ptr<ITextureRenderer>) becomes null on Dispose(), and SpriteBatch::pushSprite ultimately
+// dereferences it via Texture2D::GetRenderer() (`return *renderer_;`) with no null check --
 // a GUARANTEED crash (virtual call through a reference to address 0), not a graceful failure or
 // even FNA's own safer managed-exception failure mode. Fixed by adding an ObjectDisposedException
 // guard in pushSprite (the single funnel point for every Draw/DrawString overload).
 //
 // Requires PresentationMode::NativeBackBuffer (Task 915 finding): SDL_RenderReadPixels operates
-// in physical output coordinates, while this backend's default presentation mode
+// in physical output coordinates, while this renderer's default presentation mode
 // (FixedHeightDynamicWidth) does not map logical pixels 1:1 to physical ones.
 //
 // Exit code 0 = all checks PASS, 1 = at least one FAIL.
@@ -142,7 +142,7 @@ protected:
         }
 
         // --- SpriteBatch: matches FNA -- disposing a SpriteBatch here doesn't tear down anything
-        // Begin/Draw/End depend on (backend_ is untouched), so it keeps working normally. ---
+        // Begin/Draw/End depend on (renderer_ is untouched), so it keeps working normally. ---
         {
             SpriteBatch localSb(dev);
             localSb.Dispose();

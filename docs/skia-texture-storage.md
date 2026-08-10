@@ -1,11 +1,11 @@
 # Skia cube and volume CPU-storage contract
 
-This is the SKIA-80 through SKIA-84 storage-versus-sampling decision. The selected Skia backend
+This is the SKIA-80 through SKIA-84 storage-versus-sampling decision. The selected Skia renderer
 is a 2D CPU rasterizer: it has no native cube-map or volume-image primitive and no *general*
 shader path (`samplerCUBE`/`sampler3D` GLSL translation, a stock `EnvironmentMapEffect`, or any
 other 3D consumer) that could sample one. It can nevertheless implement the independently
 observable `TextureCube` and `Texture3D` transfer APIs exactly with bounded RGBA8 CPU storage. The
-backend does so without advertising a 3D renderer or silently pretending storage alone is
+renderer does so without advertising a 3D renderer or silently pretending storage alone is
 sampleable.
 
 SKIA-144–151 (Phase S15, `docs/skia-cube-volume-sampling-contract.md`) later added a separate,
@@ -41,7 +41,7 @@ orientation, addressing, filtering, mip/LOD, precision, and resource-limit decis
 Assigning either resource to a public texture collection is harmless state storage, not a sampling
 claim. Every currently supported Skia draw path consumes `Texture2D`/`SkiaImageSource`; every
 custom-effect and 3D entry remains rejected before it could interpret a cube or volume binding.
-The CPU storage backends intentionally leave `BindGL()` at its no-op interface default and expose
+The CPU storage renderers intentionally leave `BindGL()` at its no-op interface default and expose
 no alternative native sampling handle.
 
 ## Allocation and transfer limits
@@ -57,11 +57,11 @@ no alternative native sampling handle.
 - Allocated content is zero initialized. A rejected face, level, region, null pointer, short byte
   range, overflow, or budget violation reports failure before copying and cannot partially alter
   the resource or destination.
-- Backend transfers copy directly row by row (and slice by slice for volumes), with no second
+- Renderer transfers copy directly row by row (and slice by slice for volumes), with no second
   full-resource staging allocation. The shared `Color` conversion layer owns one tightly packed
   scratch buffer exactly the requested region's RGBA8 size, so its additional transfer storage is
   also bounded by 256 MiB and is released when the call returns.
-- `SkiaResourceStats` separately counts live cube/volume backends and their combined exact CPU
+- `SkiaResourceStats` separately counts live cube/volume renderers and their combined exact CPU
   bytes. Destruction, including constructor unwinding after a rejected later mip, releases all
   vectors; the direct policy test verifies counters return to zero.
 

@@ -4,7 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 
-namespace CNA::Internal::Backends::Vulkan::Shaders {
+namespace CNA::Internal::Renderers::Vulkan::Shaders {
 
 static constexpr uint32_t kSprite2dVertSpv[] = {
     0x07230203u, 0x00010000u, 0x000d000bu, 0x00000032u, 0x00000000u, 0x00020011u, 0x00000001u, 0x0006000bu,
@@ -3542,4 +3542,4 @@ static constexpr uint32_t kInstancedColored3dVertSpv[] = {
 };
 static constexpr size_t kInstancedColored3dVertSpv_size = sizeof(kInstancedColored3dVertSpv);
 
-} // namespace CNA::Internal::Backends::Vulkan::Shaders
+} // namespace CNA::Internal::Renderers::Vulkan::Shaders

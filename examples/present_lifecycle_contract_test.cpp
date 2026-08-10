@@ -39,7 +39,7 @@
 //
 // THE ORACLE IS NEVER "did not throw". Leg C1 asserts each link of that chain separately -- the
 // range rejection, the target still being publicly bound afterwards, the refusal, and the recovery
-// -- so a future backend that swallowed the range error, or a future Present that consulted backend
+// -- so a future renderer that swallowed the range error, or a future Present that consulted renderer
 // state instead of the public binding, turns a specific leg red and names which link moved.
 //
 // LEG C2 IS THE PROCESS-LEVEL REPRODUCTION. It runs the same sequence with nothing catching it and
@@ -132,29 +132,29 @@ namespace
     constexpr int kBBW = 64;   ///< backbuffer width
     constexpr int kBBH = 48;   ///< backbuffer height
 
-#if defined(CNA_BACKEND_HEADLESS)
-    constexpr const char* kBackendName = "HEADLESS";
+#if defined(CNA_RENDERER_HEADLESS)
+    constexpr const char* kRendererName = "HEADLESS";
     constexpr bool kRasterizes = false;
-#elif defined(CNA_BACKEND_SOFTWARE)
-    constexpr const char* kBackendName = "SOFTWARE";
+#elif defined(CNA_RENDERER_SOFTWARE)
+    constexpr const char* kRendererName = "SOFTWARE";
     constexpr bool kRasterizes = true;
-#elif defined(CNA_BACKEND_EASYGL)
-    constexpr const char* kBackendName = "EASYGL";
+#elif defined(CNA_RENDERER_EASYGL)
+    constexpr const char* kRendererName = "EASYGL";
     constexpr bool kRasterizes = true;
-#elif defined(CNA_BACKEND_BGFX)
-    constexpr const char* kBackendName = "BGFX";
+#elif defined(CNA_RENDERER_BGFX)
+    constexpr const char* kRendererName = "BGFX";
     constexpr bool kRasterizes = true;
-#elif defined(CNA_BACKEND_VULKAN)
-    constexpr const char* kBackendName = "VULKAN";
+#elif defined(CNA_RENDERER_VULKAN)
+    constexpr const char* kRendererName = "VULKAN";
     constexpr bool kRasterizes = true;
-#elif defined(CNA_BACKEND_WEBGPU)
-    constexpr const char* kBackendName = "WEBGPU";
+#elif defined(CNA_RENDERER_WEBGPU)
+    constexpr const char* kRendererName = "WEBGPU";
     constexpr bool kRasterizes = true;
-#elif defined(CNA_BACKEND_SDL_GPU)
-    constexpr const char* kBackendName = "SDL_GPU";
+#elif defined(CNA_RENDERER_SDL_GPU)
+    constexpr const char* kRendererName = "SDL_GPU";
     constexpr bool kRasterizes = true;
 #else
-#error "REMED-GFX-180: this backend has no declared present-lifecycle contract."
+#error "REMED-GFX-180: this renderer has no declared present-lifecycle contract."
 #endif
 
     /**
@@ -165,7 +165,7 @@ namespace
      * and Headless does not rasterize at all.
      */
     constexpr bool kCubeTargetSupported =
-#if defined(CNA_BACKEND_HEADLESS) || defined(CNA_BACKEND_SOFTWARE)
+#if defined(CNA_RENDERER_HEADLESS) || defined(CNA_RENDERER_SOFTWARE)
         false;
 #else
         true;
@@ -174,12 +174,12 @@ namespace
     /**
      * @brief Whether a multisampled render target may be given a real DepthFormat here.
      *
-     * True on every backend. This was false on BGFX while REMED-GFX-163 was open: a depth-backed
+     * True on every renderer. This was false on BGFX while REMED-GFX-163 was open: a depth-backed
      * multisampled target aborted the PROCESS by SIGTRAP inside `bgfx::createFrameBuffer`, so leg A9
      * had to drop the depth attachment THERE and declare the boundary rather than measure it. That
      * defect is fixed -- `BgfxDepthAttachmentFlags` now gives a multisampled depth attachment
      * `BGFX_TEXTURE_RT_WRITE_ONLY` -- so A9 asks for `DepthFormat::Depth24` everywhere again and
-     * this constant is kept only as the place any future backend would declare the same limit.
+     * this constant is kept only as the place any future renderer would declare the same limit.
      */
     constexpr bool kMsaaTargetMayHaveDepth = true;
 
@@ -190,7 +190,7 @@ namespace
     const Color kClearB(200, 40, 120, 255);
     const Color kDrawB(40, 200, 90, 255);
 
-    /// Vertex-colour interpolation across a flat quad is exact in principle, but the GPU backends
+    /// Vertex-colour interpolation across a flat quad is exact in principle, but the GPU renderers
     /// differ by a unit or two on the sRGB round trip. 12 is far below the >= 100 separation between
     /// any two colours this fixture uses.
     constexpr int kTol = 12;
@@ -243,7 +243,7 @@ class PresentLifecycleContractTest : public Game
         if (ok) ++passCount_;
     }
 
-    /** @brief Records something this backend genuinely cannot measure, and marks the run explained. */
+    /** @brief Records something this renderer genuinely cannot measure, and marks the run explained. */
     void boundary(const std::string& text)
     {
         boundaryDeclared_ = true;
@@ -345,7 +345,7 @@ class PresentLifecycleContractTest : public Game
     {
         if (!kRasterizes)
         {
-            boundary(label + ": " + kBackendName + " does not rasterize -- boundary recorded");
+            boundary(label + ": " + kRendererName + " does not rasterize -- boundary recorded");
             return;
         }
         bool leftFailed = false, rightFailed = false;
@@ -353,7 +353,7 @@ class PresentLifecycleContractTest : public Game
         const Color right = ReadPixel(rt, (kRT * 3) / 4, kRT / 2, rightFailed);
         if (leftFailed || rightFailed)
         {
-            boundary(label + ": GetData is unavailable on " + kBackendName + " -- boundary recorded");
+            boundary(label + ": GetData is unavailable on " + kRendererName + " -- boundary recorded");
             return;
         }
         check(Near(left, drawn),
@@ -508,7 +508,7 @@ class PresentLifecycleContractTest : public Game
     {
         if (!kCubeTargetSupported)
         {
-            boundary("A7: " + std::string(kBackendName) +
+            boundary("A7: " + std::string(kRendererName) +
                      " has no RenderTargetCube destination -- boundary recorded");
             return;
         }
@@ -538,7 +538,7 @@ class PresentLifecycleContractTest : public Game
         try { dev.SetRenderTargets(set); }
         catch (const std::exception& e)
         {
-            boundary("A8: " + std::string(kBackendName) + " refuses this MRT set (" + e.what() +
+            boundary("A8: " + std::string(kRendererName) + " refuses this MRT set (" + e.what() +
                      ") -- boundary recorded");
             return;
         }
@@ -555,12 +555,12 @@ class PresentLifecycleContractTest : public Game
     {
         std::unique_ptr<RenderTarget2D> a;
         // REMED-GFX-163 re-armed this: BGFX used to abort the process here, so this leg dropped the
-        // depth attachment on that backend alone. It no longer does, and every backend now measures
+        // depth attachment on that renderer alone. It no longer does, and every renderer now measures
         // the resolve-on-unbind-then-Present transition with a real depth attachment attached.
         const DepthFormat msaaDepth =
             kMsaaTargetMayHaveDepth ? DepthFormat::Depth24 : DepthFormat::None;
         if (!kMsaaTargetMayHaveDepth)
-            boundary("A9: " + std::string(kBackendName) + " cannot build a depth-backed multisampled "
+            boundary("A9: " + std::string(kRendererName) + " cannot build a depth-backed multisampled "
                      "render target -- measured without a depth attachment");
         step("A9: create a 4x multisampled DEPTH-BACKED target");
         try
@@ -571,7 +571,7 @@ class PresentLifecycleContractTest : public Game
         }
         catch (const std::exception& e)
         {
-            boundary("A9: " + std::string(kBackendName) + " refuses a multisampled target (" +
+            boundary("A9: " + std::string(kRendererName) + " refuses a multisampled target (" +
                      e.what() + ") -- boundary recorded");
             return;
         }
@@ -585,7 +585,7 @@ class PresentLifecycleContractTest : public Game
     /**
      * @brief Leg A10 (matrix 13) -- REMED-GFX-156's ordered mid-cycle Clear before the unbind.
      *
-     * The Clear lands BETWEEN two draws inside a single bind cycle, so a backend that batches the
+     * The Clear lands BETWEEN two draws inside a single bind cycle, so a renderer that batches the
      * cycle into one pass has to segment it. This leg's job here is only that segmenting a cycle does
      * not leave the device unpresentable; GFX-156's own fixture owns the ordering oracle.
      */
@@ -626,7 +626,7 @@ class PresentLifecycleContractTest : public Game
         catch (const std::exception& e)
         {
             readable = false;
-            boundary("A11: GetBackBufferData is unavailable on " + std::string(kBackendName) + " (" +
+            boundary("A11: GetBackBufferData is unavailable on " + std::string(kRendererName) + " (" +
                      e.what() + ") -- boundary recorded");
         }
         if (readable && kRasterizes)
@@ -691,7 +691,7 @@ class PresentLifecycleContractTest : public Game
             // anything, which is the behaviour this leg accepts and records. The tail of the leg is
             // still asserted below, so the boundary costs coverage of the COUNT only.
             dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
-            boundary("A14: " + std::string(kBackendName) + " has a documented per-frame bind-cycle "
+            boundary("A14: " + std::string(kRendererName) + " has a documented per-frame bind-cycle "
                      "ceiling and reached it after " + std::to_string(completed) +
                      " cycles: " + limitWhat);
         }
@@ -791,7 +791,7 @@ class PresentLifecycleContractTest : public Game
         }
         else
         {
-            boundary("B4: " + std::string(kBackendName) +
+            boundary("B4: " + std::string(kRendererName) +
                      " has no RenderTargetCube destination -- cube half skipped");
         }
 
@@ -806,7 +806,7 @@ class PresentLifecycleContractTest : public Game
         try { dev.SetRenderTargets(set); }
         catch (const std::exception& e)
         {
-            boundary("B4: " + std::string(kBackendName) + " refuses this MRT set (" + e.what() +
+            boundary("B4: " + std::string(kRendererName) + " refuses this MRT set (" + e.what() +
                      ") -- MRT half skipped");
             return;
         }
@@ -1054,9 +1054,9 @@ class PresentLifecycleContractTest : public Game
 
     void Finish()
     {
-        std::printf("[INFO] %s: %d/%d checks passed\n", kBackendName, passCount_, totalCount_);
+        std::printf("[INFO] %s: %d/%d checks passed\n", kRendererName, passCount_, totalCount_);
         std::fflush(stdout);
-        // A leg may legitimately have nothing to measure on a backend that lacks the capability --
+        // A leg may legitimately have nothing to measure on a renderer that lacks the capability --
         // but only when it SAID so. A run that measured nothing and explained nothing is a failure.
         result_ = (passCount_ == totalCount_ && (totalCount_ > 0 || boundaryDeclared_)) ? 0 : 1;
         Exit();
@@ -1079,7 +1079,7 @@ public:
         // No real vblank exists on the virtual displays these runs use, so leaving VSync on would
         // cost about a second per frame. Requested at the property level before CreateDevice reads it.
         gdm_->setSynchronizeWithVerticalRetraceProperty(false);
-        // Leg A9's subject is a MULTISAMPLED target, and on backends that tie render-target MSAA to
+        // Leg A9's subject is a MULTISAMPLED target, and on renderers that tie render-target MSAA to
         // the device's own sample count it can only engage when the backbuffer was created
         // multisampled. Requested in A9's own child only, so no other leg's measurement moves.
         if (onlyLeg_ == "A9") gdm_->setPreferMultiSamplingProperty(true);
@@ -1216,7 +1216,7 @@ int main(int argc, char** argv)
     {
         const int total = static_cast<int>(sizeof(kLegs) / sizeof(kLegs[0]));
         std::printf("[INFO] REMED-GFX-180 supervisor on %s: %d legs, each in its own process\n",
-                    kBackendName, total);
+                    kRendererName, total);
         std::fflush(stdout);
         int passed = 0, skippedCount = 0;
         for (const LegSpec& leg : kLegs)

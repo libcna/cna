@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Task 887: AlphaTestEffect.VertexColorEnabled fix verification (Bgfx backend).
+// Task 887: AlphaTestEffect.VertexColorEnabled fix verification (Bgfx renderer).
 //
 // Direct port of examples/easygl_alphatest_vertexcolor_diffuse_test.cpp (Task 377's test), which
 // found this exact gap on Vulkan/Bgfx: their alpha-test pipeline/shader only ever declared
@@ -11,7 +11,7 @@
 // TextureAlpha*VertexAlpha*EffectAlpha gates the alpha test, not the diffuse alpha alone).
 //
 // Bgfx-only note (Task 364/896 finding): Bgfx's `RasterizerState` cull state (`BGFX_STATE_CULL_CCW`)
-// is the only one of the 3 backends that matches FNA's real default, so it's the only backend that
+// is the only one of the 3 renderers that matches FNA's real default, so it's the only renderer that
 // silently culls the standard NDC quad winding used here unless `RasterizerState::CullNone` is set
 // explicitly — worked around identically to every other Bgfx pixel test in this family.
 //

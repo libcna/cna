@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Phase 58/59/63: verify WebGPUGraphicsBackend's colored_textured3d.wgsl /
+// Phase 58/59/63: verify WebGPURenderer's colored_textured3d.wgsl /
 // GetOrCreatePipelineColoredTextured3D() / DrawPrimitivesEx() dispatch for stride-24
 // (VertexPositionColorTexture) draws -- combines colored3d.wgsl's vertex-colour mixing with
 // textured3d.wgsl's texture sampling in one shader, reusing the exact same UBO/texture bind

@@ -83,8 +83,8 @@ void main()
     vec4 color = vec4(litRGB * tex.rgb, diffuseColor.a * tex.a);
     color.rgb += specularRGB * color.a;
 
-    // vFogFactor is "how much fog" (0 = none, 1 = full), matching this backend's own convention
-    // (see lit_textured3d.frag.glsl / env_map3d.frag.glsl) -- NOT the plain Vulkan backend's
+    // vFogFactor is "how much fog" (0 = none, 1 = full), matching this renderer's own convention
+    // (see lit_textured3d.frag.glsl / env_map3d.frag.glsl) -- NOT the plain Vulkan renderer's
     // opposite convention.
     color.rgb = mix(color.rgb, fogColor.rgb, vFogFactor);
 

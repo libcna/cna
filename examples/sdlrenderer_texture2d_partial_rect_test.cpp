@@ -2,19 +2,19 @@
 // Task 679: SDL_Renderer Texture2D::SetData partial-rectangle region pixel test.
 //
 // Task 678 found that Texture2D::GetData is implemented entirely via a CPU-side cache, so a pure
-// SetData()-then-GetData() round trip (like the existing backend-agnostic
+// SetData()-then-GetData() round trip (like the existing renderer-agnostic
 // examples/easygl_texture2d_partial_rect_test.cpp, which does no framebuffer readback at all) is
-// guaranteed correct identically on every backend by construction -- not something SDL_Renderer-
-// specific to verify. The genuinely backend-specific question here: Texture2D::SetData's PARTIAL
+// guaranteed correct identically on every renderer by construction -- not something SDL_Renderer-
+// specific to verify. The genuinely renderer-specific question here: Texture2D::SetData's PARTIAL
 // overload (SetData(level, rect, data, startIndex, elementCount)) merges the sub-rect write into
-// the full per-level CPU buffer, then calls SdlTextureBackend::UpdatePixels() -- which always
+// the full per-level CPU buffer, then calls SdlTextureRenderer::UpdatePixels() -- which always
 // re-uploads via SDL_UpdateTexture(texture, nullptr /* whole texture */, rgba, stride), i.e. the
 // WHOLE merged buffer, not just the sub-rect. This test confirms that "always re-upload the
 // whole buffer" approach genuinely produces the correct GPU-visible result end-to-end (not just
 // a correct CPU-side cache).
 //
 // Requires PresentationMode::NativeBackBuffer (Task 915 finding): SDL_RenderReadPixels operates
-// in physical output coordinates, while this backend's default presentation mode
+// in physical output coordinates, while this renderer's default presentation mode
 // (FixedHeightDynamicWidth) does not map logical pixels 1:1 to physical ones.
 //
 // Design: a 4x4 texture, filled entirely Red via the full-array SetData overload, then a 2x2 Blue

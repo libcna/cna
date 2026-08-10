@@ -29,14 +29,14 @@ namespace Microsoft::Xna::Framework::Graphics
     class SpriteFont;
 }
 
-namespace CNA::Internal::Backends
+namespace CNA::Internal::Renderers
 {
-    class ISpriteBatchBackend;
+    class ISpriteBatchRenderer;
 }
 
 namespace Microsoft::Xna::Framework::Graphics
 {
-    using namespace CNA::Internal::Backends;
+    using namespace CNA::Internal::Renderers;
 
     /** @brief High-performance batched sprite rendering engine matching XNA 4.0 SpriteBatch. */
     class SpriteBatch : public GraphicsResource
@@ -53,7 +53,7 @@ namespace Microsoft::Xna::Framework::Graphics
             float layerDepth         = 0.0f;
         };
 
-        std::unique_ptr<ISpriteBatchBackend> backend_;
+        std::unique_ptr<ISpriteBatchRenderer> renderer_;
         bool begun = false;
         SpriteSortMode sortMode_    = SpriteSortMode::Deferred;
         Matrix transformMatrix_     = Matrix::getIdentityProperty();
@@ -79,14 +79,14 @@ namespace Microsoft::Xna::Framework::Graphics
         NOXNA SpriteBatch();
 
         /**
-         * @brief NOXNA test-only: creates a sprite batch bound directly to an explicit backend,
+         * @brief NOXNA test-only: creates a sprite batch bound directly to an explicit renderer,
          *        bypassing GraphicsDevice entirely. Enables deterministic unit testing of
-         *        Begin/Draw/End batching and sort-mode logic against a mock/recording backend
+         *        Begin/Draw/End batching and sort-mode logic against a mock/recording renderer
          *        without a real graphics context.
          *
-         * @param backend Backend implementation to receive Begin/End/Draw calls.
+         * @param renderer Renderer implementation to receive Begin/End/Draw calls.
          */
-        NOXNA explicit SpriteBatch(std::unique_ptr<ISpriteBatchBackend> backend);
+        NOXNA explicit SpriteBatch(std::unique_ptr<ISpriteBatchRenderer> renderer);
 
         /** @brief Destructor. */
         NOXNA ~SpriteBatch() override;
@@ -456,9 +456,9 @@ namespace Microsoft::Xna::Framework::Graphics
          *       `SpriteSortMode::Immediate`: unlike ordinary sprite `Draw()` calls, a mesh draw
          *       does not participate in the deferred sort/batch queue, so it throws if the active
          *       `Begin()` used any other sort mode -- a declared, tested scope boundary, not a
-         *       silent misbatch. Currently implemented only by the Skia backend; every other
-         *       backend's `ISpriteBatchBackend` throws `std::runtime_error` (matching `Draw()`'s
-         *       own existing "backend does not support this" convention).
+         *       silent misbatch. Currently implemented only by the Skia renderer; every other
+         *       renderer's `ISpriteBatchRenderer` throws `std::runtime_error` (matching `Draw()`'s
+         *       own existing "renderer does not support this" convention).
          *
          * @param effect      A `ShaderEffect` compiled from `CNA_SKIA_SKSL_MESH_V1` source.
          * @param positions   Per-vertex 2D positions, in the same local space ordinary sprite

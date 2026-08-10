@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_llgl.md LLGL-26: RenderTargetCube proof for the LLGL graphics backend, asserted against
+// plan_llgl.md LLGL-26: RenderTargetCube proof for the LLGL graphics renderer, asserted against
 // real pixels read back from the GPU.
 //
 // A distinct solid colour is cleared into each of the 6 faces (via GraphicsDevice.SetRenderTarget
@@ -15,7 +15,7 @@
 //   face isolation -- the one property that makes a cube render target different from 6 unrelated
 //   RenderTarget2Ds sharing a name).
 // Check I -- EnvironmentMapEffect can sample the resulting RenderTargetCube (ResolveSampledTextureCube,
-//   fixed in this same task: a hard dynamic_cast<const LlglTextureCubeBackend*> alone would have
+//   fixed in this same task: a hard dynamic_cast<const LlglTextureCubeRenderer*> alone would have
 //   silently failed to sample a RenderTargetCube face, the entire real-time-reflection use case this
 //   feature exists for). Every face is re-filled with the SAME colour first, sidestepping exact
 //   reflection-vector-to-face selection (not what this check is about) while still proving the
@@ -122,7 +122,7 @@ public:
         // through EnvironmentMapEffect work at all" from "which face does this exact reflection
         // vector select", which is a separate, already-covered question (see
         // examples/environmentmapeffect_alphascaledlerp_test.cpp, reused verbatim by this same
-        // backend).
+        // renderer).
         const Color uniformColor(200, 100, 50, 255);
         for (CubeMapFace face : faces)
         {

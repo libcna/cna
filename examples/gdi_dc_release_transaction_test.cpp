@@ -4,7 +4,7 @@
 // telemetry, must not let damage/the invalidation generation be acknowledged, and must never be
 // attempted more than once for a given Present().
 
-#include "CNA/Internal/Backends/Gdi/GdiGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Gdi/GdiRenderer.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -13,8 +13,8 @@
 #include <stdexcept>
 #include <string>
 
-using namespace CNA::Internal::Backends;
-using namespace CNA::Internal::Backends::Gdi;
+using namespace CNA::Internal::Renderers;
+using namespace CNA::Internal::Renderers::Gdi;
 
 namespace
 {
@@ -29,11 +29,11 @@ namespace
         return a.X == b.X && a.Y == b.Y && a.Width == b.Width && a.Height == b.Height;
     }
 
-    bool RunPresent(GdiGraphicsBackend& backend, std::string* message)
+    bool RunPresent(GdiRenderer& renderer, std::string* message)
     {
         try
         {
-            backend.Present();
+            renderer.Present();
         }
         catch (const std::runtime_error& error)
         {
@@ -47,15 +47,15 @@ namespace
     bool ExerciseDcReleaseTransaction(SDL_Window* window)
     {
         bool ok = true;
-        GdiGraphicsBackend backend(window, 16, 12, CnaPresentationMode::NativeBackBuffer);
+        GdiRenderer renderer(window, 16, 12, CnaPresentationMode::NativeBackBuffer);
 
         // Ordinary present establishes a clean baseline: no pending damage, generation
         // acknowledged.
-        backend.Clear(0.1f, 0.2f, 0.3f, 1.0f);
-        ok &= Expect(RunPresent(backend, nullptr), "ordinary present succeeds");
+        renderer.Clear(0.1f, 0.2f, 0.3f, 1.0f);
+        ok &= Expect(RunPresent(renderer, nullptr), "ordinary present succeeds");
         Rectangle ignored;
         bool ignoredFull = false;
-        ok &= Expect(!backend.DebugGetBackbufferDamage(ignored, ignoredFull),
+        ok &= Expect(!renderer.DebugGetBackbufferDamage(ignored, ignoredFull),
                      "ordinary present commits and clears damage");
 
         // A real minimize/restore round-trip requests a retained no-draw repaint, so the watched
@@ -68,26 +68,26 @@ namespace
         ok &= Expect(SDL_RestoreWindow(window) && SDL_SyncWindow(window),
                      "native window completes the restore round-trip");
         SDL_PumpEvents();
-        ok &= Expect(backend.DebugIsNativeClientInvalidated(),
+        ok &= Expect(renderer.DebugIsNativeClientInvalidated(),
                      "real restore requests a retained repaint before the injected failure");
 
-        backend.Clear(0.4f, 0.5f, 0.6f, 1.0f);
+        renderer.Clear(0.4f, 0.5f, 0.6f, 1.0f);
         Rectangle damageBeforeFailure;
         bool fullyDirtyBeforeFailure = false;
         const bool damageValidBeforeFailure =
-            backend.DebugGetBackbufferDamage(damageBeforeFailure, fullyDirtyBeforeFailure);
+            renderer.DebugGetBackbufferDamage(damageBeforeFailure, fullyDirtyBeforeFailure);
         ok &= Expect(damageValidBeforeFailure, "clear leaves pending damage before the injection");
 
-        backend.DebugForceNextReleaseDcFailure();
+        renderer.DebugForceNextReleaseDcFailure();
         std::string failureMessage;
-        const bool presentedOk = RunPresent(backend, &failureMessage);
+        const bool presentedOk = RunPresent(renderer, &failureMessage);
         ok &= Expect(!presentedOk &&
                          failureMessage.find("ReleaseDC") != std::string::npos &&
                          failureMessage.find("Win32 error") != std::string::npos,
                      "forced ReleaseDC failure surfaces as a diagnosed presentation failure");
 
         GdiPresentationTelemetry telemetry;
-        ok &= Expect(backend.DebugGetLastPresentationTelemetry(telemetry) &&
+        ok &= Expect(renderer.DebugGetLastPresentationTelemetry(telemetry) &&
                          !telemetry.result.success &&
                          std::string(telemetry.result.operation) == "ReleaseDC",
                      "telemetry identifies ReleaseDC as the operation that failed");
@@ -95,30 +95,30 @@ namespace
         Rectangle damageAfterFailure;
         bool fullyDirtyAfterFailure = false;
         const bool damageValidAfterFailure =
-            backend.DebugGetBackbufferDamage(damageAfterFailure, fullyDirtyAfterFailure);
+            renderer.DebugGetBackbufferDamage(damageAfterFailure, fullyDirtyAfterFailure);
         ok &= Expect(damageValidAfterFailure == damageValidBeforeFailure &&
                          fullyDirtyAfterFailure == fullyDirtyBeforeFailure &&
                          SameRectangle(damageAfterFailure, damageBeforeFailure),
                      "a failed checked release conservatively retains pending damage");
-        ok &= Expect(backend.DebugIsNativeClientInvalidated(),
+        ok &= Expect(renderer.DebugIsNativeClientInvalidated(),
                      "a failed checked release does not acknowledge the invalidation generation");
 
         // Exactly one release attempt is made per Present() -- repeating the injected failure a
-        // few times must never crash, double-release, or otherwise corrupt backend state.
+        // few times must never crash, double-release, or otherwise corrupt renderer state.
         for (int i = 0; i < 3; ++i)
         {
-            backend.Clear(0.1f, 0.1f * static_cast<float>(i), 0.2f, 1.0f);
-            backend.DebugForceNextReleaseDcFailure();
-            ok &= Expect(!RunPresent(backend, nullptr),
+            renderer.Clear(0.1f, 0.1f * static_cast<float>(i), 0.2f, 1.0f);
+            renderer.DebugForceNextReleaseDcFailure();
+            ok &= Expect(!RunPresent(renderer, nullptr),
                          "repeated forced release failures behave deterministically");
         }
 
-        // A subsequent ordinary present succeeds and fully commits, proving the backend recovers.
-        ok &= Expect(RunPresent(backend, nullptr),
+        // A subsequent ordinary present succeeds and fully commits, proving the renderer recovers.
+        ok &= Expect(RunPresent(renderer, nullptr),
                      "a subsequent Present() succeeds after repeated injected failures");
-        ok &= Expect(!backend.DebugGetBackbufferDamage(damageAfterFailure, fullyDirtyAfterFailure),
+        ok &= Expect(!renderer.DebugGetBackbufferDamage(damageAfterFailure, fullyDirtyAfterFailure),
                      "successful retry commits and clears retained damage");
-        ok &= Expect(!backend.DebugIsNativeClientInvalidated(),
+        ok &= Expect(!renderer.DebugIsNativeClientInvalidated(),
                      "successful retry acknowledges the retained invalidation generation");
         return ok;
     }

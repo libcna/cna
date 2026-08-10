@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // plan_sdlgpu.md SDLGPU-51: plain, non-render-target TextureCube proof for the SDL_GPU graphics
-// backend -- a single SDL_GPU_TEXTURETYPE_CUBE texture, SAMPLER usage only (never a render
+// renderer -- a single SDL_GPU_TEXTURETYPE_CUBE texture, SAMPLER usage only (never a render
 // target), real per-face SetData/GetData via a transfer-buffer copy pass. Matches the byte-exact
 // round-trip bar SDLGPU-40 (Texture3D) already met, and re-checks that the cycle=true orphan-write
 // bug found there (SDL_UploadToGPUTexture silently swapping in a fresh GPU resource on each call,
@@ -26,7 +26,7 @@
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
 
-#include "CNA/Internal/Backends/SdlGpu/SdlGpuGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/SdlGpu/SdlGpuRenderer.hpp"
 
 #include "common/PixelTestGame.hpp"
 
@@ -35,7 +35,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::SdlGpu;
+using namespace CNA::Internal::Renderers::SdlGpu;
 
 namespace
 {

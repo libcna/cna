@@ -3,7 +3,7 @@
 // stock-effect set, gained a Clone() override as a mechanical consequence of
 // Effect::Clone() becoming a pure virtual base-class contract. Unlike the
 // other 7 concrete Effect subclasses, ShaderEffect deliberately recompiles a
-// fresh backend program from the same GLSL source rather than sharing the
+// fresh renderer program from the same GLSL source rather than sharing the
 // original's compiled program object (see ShaderEffect.hpp's Clone() doc
 // comment for the ownership-model rationale). No prior test file exercised
 // ShaderEffect at all before this task; source strings here are deliberately

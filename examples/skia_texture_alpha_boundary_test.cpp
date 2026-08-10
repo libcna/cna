@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 // Direct SKIA-30 boundary contract: alpha labels alter compositing, never public texture bytes.
 
-#include "CNA/Internal/Backends/Skia/SkiaSurface.hpp"
-#include "CNA/Internal/Backends/Skia/SkiaTextureBackend.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaSurface.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaTextureRenderer.hpp"
 
 #include "include/core/SkCanvas.h"
 #include "include/core/SkPaint.h"
@@ -14,9 +14,9 @@
 #include <cstdio>
 #include <vector>
 
-using CNA::Internal::Backends::Skia::SkiaSourceAlphaConvention;
-using CNA::Internal::Backends::Skia::SkiaSurface;
-using CNA::Internal::Backends::Skia::SkiaTextureBackend;
+using CNA::Internal::Renderers::Skia::SkiaSourceAlphaConvention;
+using CNA::Internal::Renderers::Skia::SkiaSurface;
+using CNA::Internal::Renderers::Skia::SkiaTextureRenderer;
 using CNA::Internal::Graphics::ImageData;
 
 namespace
@@ -37,7 +37,7 @@ namespace
             && std::equal(pixels.begin(), pixels.end(), expected.begin(), expected.end());
     }
 
-    [[nodiscard]] std::vector<std::uint8_t> Composite(SkiaTextureBackend& texture,
+    [[nodiscard]] std::vector<std::uint8_t> Composite(SkiaTextureRenderer& texture,
                                                        SkiaSourceAlphaConvention convention)
     {
         SkiaSurface surface(1, 1);
@@ -53,7 +53,7 @@ int main()
 {
     // Same CPU bytes, two explicitly selected XNA source-alpha interpretations.
     ImageData alphaData{1, 1, {128, 0, 0, 128}};
-    SkiaTextureBackend alphaTexture(alphaData);
+    SkiaTextureRenderer alphaTexture(alphaData);
     Check(SamePixel(Composite(alphaTexture, SkiaSourceAlphaConvention::Premultiplied),
                     {128, 0, 127, 255}),
           "premultiplied RGBA source composites without a second premultiplication");
@@ -64,7 +64,7 @@ int main()
     // UpdatePixels accepts a source pitch larger than the stored row.  Padding bytes are not
     // texture content and must neither leak into the second row nor alter GetData's exact shadow.
     ImageData strideData{1, 2, {0, 0, 0, 0, 0, 0, 0, 0}};
-    SkiaTextureBackend strideTexture(strideData);
+    SkiaTextureRenderer strideTexture(strideData);
     constexpr std::array<std::uint8_t, 16> sourceWithPadding{
         12, 34, 56, 78, 0xA5, 0xA5, 0xA5, 0xA5,
         90, 87, 65, 43, 0x5A, 0x5A, 0x5A, 0x5A,

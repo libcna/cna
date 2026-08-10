@@ -3,14 +3,14 @@
 // renders correctly on OpenGL2 across None/Discard/NoOverwrite -- reuses
 // examples/easygl_dynamic_buffer_stress_test.cpp's own scene and cycling scheme verbatim.
 //
-// Until this task, IGraphicsBackend::SetDataWithOptions()/SetData16WithOptions()/
+// Until this task, IGraphicsRenderer::SetDataWithOptions()/SetData16WithOptions()/
 // SetData32WithOptions() were never overridden on OpenGL2, so the shared base-class default
 // silently ignored `options` and fell back to a full SetData()/SetData16()/SetData32() (plain
 // glBufferData every call). That default is always CORRECT (this test exists to prove behavior,
 // not just that it compiles), but it forgoes the Discard/NoOverwrite upload paths a dynamic
 // buffer needs for the perf case they exist for. OpenGL2's VB/IB now implement the same
 // orphan-then-glBufferSubData (Discard) / plain-glBufferSubData (NoOverwrite) strategy as
-// EasyGLVertexBufferBackend::uploadWithOptions.
+// EasyGLVertexBufferRenderer::uploadWithOptions.
 //
 // Runs 12 frames cycling through SetDataOptions::None, Discard, NoOverwrite, verifying the
 // rendered center pixel matches the just-uploaded color every frame, and that vertex/index

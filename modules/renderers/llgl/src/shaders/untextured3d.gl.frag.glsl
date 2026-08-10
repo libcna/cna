@@ -3,7 +3,7 @@
 //
 // The uniform block is the one described in effect3d_common.glsl.inc; every 3D shader here shares
 // it byte for byte, so a change to one must change all of them and FillEffectUniforms together.
-// Attribute locations follow the backend's usage-to-location mapping (position 0, colour 1,
+// Attribute locations follow the renderer's usage-to-location mapping (position 0, colour 1,
 // texture coordinate 2), which is why a layout without vertex colours simply has no location 1.
 
 #version 450 core

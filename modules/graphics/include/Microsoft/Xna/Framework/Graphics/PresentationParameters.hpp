@@ -84,12 +84,12 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * CNA extension. When true, GraphicsDevice creates no SDL window and never initialises
          * SDL's video subsystem, so it can run with no display server at all -- the same thing the
-         * Headless and Software backends do unconditionally, but as an opt-in for a backend that
+         * Headless and Software renderers do unconditionally, but as an opt-in for a renderer that
          * normally does want a window.
          *
-         * Only backends that can genuinely operate without a swap chain support this. Today that
-         * means D3D12 (its backend already treats a null window as a real off-screen mode).
-         * Backends whose device creation is inseparable from a window/swap chain -- notably D3D11,
+         * Only renderers that can genuinely operate without a swap chain support this. Today that
+         * means D3D12 (its renderer already treats a null window as a real off-screen mode).
+         * Renderers whose device creation is inseparable from a window/swap chain -- notably D3D11,
          * whose constructor always creates a swap chain, and EasyGL, whose GL context is bound to a
          * window -- will throw if this is set.
          *

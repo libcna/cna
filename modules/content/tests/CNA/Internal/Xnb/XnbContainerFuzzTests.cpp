@@ -20,7 +20,7 @@
 #include <gtest/gtest.h>
 #include <sstream>
 
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Xnb/XnbBuiltInReaders.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
@@ -153,7 +153,7 @@ namespace
                 // rather than reading past the end of the caller's data. The stride guard
                 // (VertexBuffer.cpp:153) raises the derived ArgumentOutOfRangeException on the same
                 // path, which this base catch also covers. Only the ArgumentException family is
-                // accepted here -- System::NotSupportedException (a backend capability boundary),
+                // accepted here -- System::NotSupportedException (a renderer capability boundary),
                 // std::runtime_error, and every other class still fail this test.
                 ++cleanlyRejected;
             }

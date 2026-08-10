@@ -22,7 +22,7 @@
 //   which the deviation table used to call impossible. Neither input alone gives the answer.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs. Requires a genuine OpenGL ES 1.1 driver; see
-// docs/opengles1-backend.md (stock Debian Mesa is built with -Dgles1=disabled and cannot run this).
+// docs/opengles1-renderer.md (stock Debian Mesa is built with -Dgles1=disabled and cannot run this).
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"

@@ -5,16 +5,16 @@
 // all, so a custom Effect passed to SpriteBatch::Begin can never actually be applied. Silently
 // ignoring it (drawing with the built-in sprite blit instead) would misrender any game that
 // depends on the custom shader's visual output, with no error at all -- unacceptable. Mirrors
-// this backend's own already-established ThrowNo3D convention (a genuinely-unsupported category
+// this renderer's own already-established ThrowNo3D convention (a genuinely-unsupported category
 // of feature throws a clear std::runtime_error rather than silently no-op'ing or misrendering).
 //
-// SdlSpriteBatchBackend::SetCustomEffect() now throws whenever a non-null Effect is supplied; a
+// SdlSpriteBatchRenderer::SetCustomEffect() now throws whenever a non-null Effect is supplied; a
 // null Effect (the default "no custom effect" case used by every other SpriteBatch call in this
 // project) remains a no-op, since SpriteBatch::Begin() calls SetCustomEffect() unconditionally on
 // every Begin().
 //
 // Test: constructs a ShaderEffect (Effect itself is abstract; ShaderEffect is the minimal
-// concrete subclass -- its constructor safely no-ops when the backend's CreateEffectBackend()
+// concrete subclass -- its constructor safely no-ops when the renderer's CreateEffectRenderer()
 // returns nullptr, which SDL_Renderer's does by default, so no actual shader compilation is
 // attempted) and confirms passing it to Begin() throws std::runtime_error, while omitting it
 // (nullptr, i.e. every other Begin() overload already exercised by every other SDL_Renderer test
@@ -82,7 +82,7 @@ protected:
         check(!threwOnNull, "Begin() with a null Effect does not throw");
 
         // A genuinely non-null custom Effect must throw -- there is no programmable shader
-        // stage on this backend to apply it with.
+        // stage on this renderer to apply it with.
         ShaderEffect fx(dev, "", "");
         bool threwOnCustom = false;
         try

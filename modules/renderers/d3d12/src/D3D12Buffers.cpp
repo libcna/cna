@@ -1,12 +1,12 @@
 // plan_dx.md Phase DX12 (DX-109).
-#include "CNA/Internal/Backends/D3D12/D3D12Buffers.hpp"
-#include "CNA/Internal/Backends/D3D12/D3D12GraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/D3D12/D3D12Buffers.hpp"
+#include "CNA/Internal/Renderers/D3D12/D3D12Renderer.hpp"
 
 #include <cstdio>
 #include <cstring>
 #include <stdexcept>
 
-namespace CNA::Internal::Backends::D3D12
+namespace CNA::Internal::Renderers::D3D12
 {
     namespace
     {
@@ -21,7 +21,7 @@ namespace CNA::Internal::Backends::D3D12
         /// initial state D3D12_RESOURCE_STATE_COMMON (the documented legal initial state for a
         /// DEFAULT-heap buffer that will immediately be transitioned by whoever uses it -- design
         /// decision 11's own device-lifetime-group discipline doesn't apply here, this is a plain
-        /// standalone resource, not part of any of D3D12GraphicsBackend's own lifetime groups).
+        /// standalone resource, not part of any of D3D12Renderer's own lifetime groups).
         ComPtr<ID3D12Resource> CreateDefaultHeapBuffer(ID3D12Device* device, UINT byteWidth, const char* what)
         {
             D3D12_HEAP_PROPERTIES heapProps{};
@@ -86,15 +86,15 @@ namespace CNA::Internal::Backends::D3D12
     }
 
     // -------------------------------------------------------------------------
-    // D3D12VertexBufferBackend
+    // D3D12VertexBufferRenderer
     // -------------------------------------------------------------------------
 
-    D3D12VertexBufferBackend::D3D12VertexBufferBackend(D3D12GraphicsBackend* backend, int vertex_capacity)
-        : backend_(backend), capacity_(vertex_capacity)
+    D3D12VertexBufferRenderer::D3D12VertexBufferRenderer(D3D12Renderer* renderer, int vertex_capacity)
+        : renderer_(renderer), capacity_(vertex_capacity)
     {
     }
 
-    void D3D12VertexBufferBackend::EnsureCapacity(std::size_t requiredBytes)
+    void D3D12VertexBufferRenderer::EnsureCapacity(std::size_t requiredBytes)
     {
         if (buffer_ && requiredBytes <= byteWidth_) return;
 
@@ -102,42 +102,42 @@ namespace CNA::Internal::Backends::D3D12
         UINT newByteWidth = static_cast<UINT>(requiredBytes > capacityBytes ? requiredBytes : capacityBytes);
         if (newByteWidth == 0) newByteWidth = static_cast<UINT>(requiredBytes);
 
-        buffer_ = CreateDefaultHeapBuffer(backend_->GetDeviceEXT(), newByteWidth, "D3D12VertexBufferBackend");
+        buffer_ = CreateDefaultHeapBuffer(renderer_->GetDeviceEXT(), newByteWidth, "D3D12VertexBufferRenderer");
         byteWidth_ = newByteWidth;
         // Fresh (or freshly reallocated) resource -- (re)register it at its real, documented
         // initial state; TrackResource() overwriting a prior entry for an old, now-released
         // resource pointer is a non-issue since that pointer's ComPtr just dropped its last
         // reference above.
-        backend_->GetResourceStateTrackerEXT().TrackResource(buffer_.Get(), D3D12_RESOURCE_STATE_COMMON);
+        renderer_->GetResourceStateTrackerEXT().TrackResource(buffer_.Get(), D3D12_RESOURCE_STATE_COMMON);
     }
 
-    void D3D12VertexBufferBackend::UploadAndCopy(const void* data, std::size_t byteCount)
+    void D3D12VertexBufferRenderer::UploadAndCopy(const void* data, std::size_t byteCount)
     {
         ComPtr<ID3D12Resource> staging =
-            CreateAndFillUploadBuffer(backend_->GetDeviceEXT(), data, byteCount, "D3D12VertexBufferBackend");
+            CreateAndFillUploadBuffer(renderer_->GetDeviceEXT(), data, byteCount, "D3D12VertexBufferRenderer");
 
-        ID3D12CommandAllocator* allocator = backend_->GetCommandAllocatorEXT(0);
-        ID3D12GraphicsCommandList* cmdList = backend_->GetCommandListEXT();
+        ID3D12CommandAllocator* allocator = renderer_->GetCommandAllocatorEXT(0);
+        ID3D12GraphicsCommandList* cmdList = renderer_->GetCommandListEXT();
         allocator->Reset();
         cmdList->Reset(allocator, nullptr);
 
-        auto& tracker = backend_->GetResourceStateTrackerEXT();
+        auto& tracker = renderer_->GetResourceStateTrackerEXT();
         tracker.TransitionTo(cmdList, buffer_.Get(), D3D12_RESOURCE_STATE_COPY_DEST);
         cmdList->CopyBufferRegion(buffer_.Get(), 0, staging.Get(), 0, byteCount);
         tracker.TransitionTo(cmdList, buffer_.Get(), D3D12_RESOURCE_STATE_GENERIC_READ);
 
         HRESULT hr = cmdList->Close();
         if (FAILED(hr))
-            throw std::runtime_error("D3D12VertexBufferBackend: command list Close failed, hr=" + FormatHr(hr));
-        backend_->ExecuteCommandListAndWaitEXT(cmdList); // synchronous -- staging is safe to release after this
+            throw std::runtime_error("D3D12VertexBufferRenderer: command list Close failed, hr=" + FormatHr(hr));
+        renderer_->ExecuteCommandListAndWaitEXT(cmdList); // synchronous -- staging is safe to release after this
     }
 
-    void D3D12VertexBufferBackend::SetData(const void* data, int vertex_count, std::size_t stride_in_bytes)
+    void D3D12VertexBufferRenderer::SetData(const void* data, int vertex_count, std::size_t stride_in_bytes)
     {
         SetDataWithOptions(data, vertex_count, stride_in_bytes, SetDataOptions::None);
     }
 
-    void D3D12VertexBufferBackend::SetDataWithOptions(
+    void D3D12VertexBufferRenderer::SetDataWithOptions(
         const void* data, int vertex_count, std::size_t stride_in_bytes, SetDataOptions /*options*/)
     {
         stride_ = stride_in_bytes;
@@ -147,7 +147,7 @@ namespace CNA::Internal::Backends::D3D12
         vertexCount_ = vertex_count;
     }
 
-    D3D12_VERTEX_BUFFER_VIEW D3D12VertexBufferBackend::GetViewEXT() const
+    D3D12_VERTEX_BUFFER_VIEW D3D12VertexBufferRenderer::GetViewEXT() const
     {
         D3D12_VERTEX_BUFFER_VIEW view{};
         if (buffer_)
@@ -160,21 +160,21 @@ namespace CNA::Internal::Backends::D3D12
     }
 
     // -------------------------------------------------------------------------
-    // D3D12IndexBufferBackend
+    // D3D12IndexBufferRenderer
     // -------------------------------------------------------------------------
 
-    D3D12IndexBufferBackend::D3D12IndexBufferBackend(
-        D3D12GraphicsBackend* backend, int index_capacity, bool thirtyTwoBit)
-        : backend_(backend), capacity_(index_capacity), thirtyTwoBit_(thirtyTwoBit)
+    D3D12IndexBufferRenderer::D3D12IndexBufferRenderer(
+        D3D12Renderer* renderer, int index_capacity, bool thirtyTwoBit)
+        : renderer_(renderer), capacity_(index_capacity), thirtyTwoBit_(thirtyTwoBit)
     {
     }
 
-    DXGI_FORMAT D3D12IndexBufferBackend::GetFormatEXT() const
+    DXGI_FORMAT D3D12IndexBufferRenderer::GetFormatEXT() const
     {
         return thirtyTwoBit_ ? DXGI_FORMAT_R32_UINT : DXGI_FORMAT_R16_UINT;
     }
 
-    void D3D12IndexBufferBackend::EnsureCapacity(std::size_t requiredBytes)
+    void D3D12IndexBufferRenderer::EnsureCapacity(std::size_t requiredBytes)
     {
         if (buffer_ && requiredBytes <= byteWidth_) return;
 
@@ -183,64 +183,64 @@ namespace CNA::Internal::Backends::D3D12
         UINT newByteWidth = static_cast<UINT>(requiredBytes > capacityBytes ? requiredBytes : capacityBytes);
         if (newByteWidth == 0) newByteWidth = static_cast<UINT>(requiredBytes);
 
-        buffer_ = CreateDefaultHeapBuffer(backend_->GetDeviceEXT(), newByteWidth, "D3D12IndexBufferBackend");
+        buffer_ = CreateDefaultHeapBuffer(renderer_->GetDeviceEXT(), newByteWidth, "D3D12IndexBufferRenderer");
         byteWidth_ = newByteWidth;
-        backend_->GetResourceStateTrackerEXT().TrackResource(buffer_.Get(), D3D12_RESOURCE_STATE_COMMON);
+        renderer_->GetResourceStateTrackerEXT().TrackResource(buffer_.Get(), D3D12_RESOURCE_STATE_COMMON);
     }
 
-    void D3D12IndexBufferBackend::UploadAndCopy(const void* data, std::size_t byteCount, bool dataIsThirtyTwoBit)
+    void D3D12IndexBufferRenderer::UploadAndCopy(const void* data, std::size_t byteCount, bool dataIsThirtyTwoBit)
     {
         if (dataIsThirtyTwoBit != thirtyTwoBit_)
         {
             throw std::runtime_error(
                 thirtyTwoBit_
-                    ? "D3D12IndexBufferBackend: SetData16 called on a 32-bit index buffer"
-                    : "D3D12IndexBufferBackend: SetData32 called on a 16-bit index buffer");
+                    ? "D3D12IndexBufferRenderer: SetData16 called on a 32-bit index buffer"
+                    : "D3D12IndexBufferRenderer: SetData32 called on a 16-bit index buffer");
         }
 
         EnsureCapacity(byteCount);
         ComPtr<ID3D12Resource> staging =
-            CreateAndFillUploadBuffer(backend_->GetDeviceEXT(), data, byteCount, "D3D12IndexBufferBackend");
+            CreateAndFillUploadBuffer(renderer_->GetDeviceEXT(), data, byteCount, "D3D12IndexBufferRenderer");
 
-        ID3D12CommandAllocator* allocator = backend_->GetCommandAllocatorEXT(0);
-        ID3D12GraphicsCommandList* cmdList = backend_->GetCommandListEXT();
+        ID3D12CommandAllocator* allocator = renderer_->GetCommandAllocatorEXT(0);
+        ID3D12GraphicsCommandList* cmdList = renderer_->GetCommandListEXT();
         allocator->Reset();
         cmdList->Reset(allocator, nullptr);
 
-        auto& tracker = backend_->GetResourceStateTrackerEXT();
+        auto& tracker = renderer_->GetResourceStateTrackerEXT();
         tracker.TransitionTo(cmdList, buffer_.Get(), D3D12_RESOURCE_STATE_COPY_DEST);
         cmdList->CopyBufferRegion(buffer_.Get(), 0, staging.Get(), 0, byteCount);
         tracker.TransitionTo(cmdList, buffer_.Get(), D3D12_RESOURCE_STATE_GENERIC_READ);
 
         HRESULT hr = cmdList->Close();
         if (FAILED(hr))
-            throw std::runtime_error("D3D12IndexBufferBackend: command list Close failed, hr=" + FormatHr(hr));
-        backend_->ExecuteCommandListAndWaitEXT(cmdList);
+            throw std::runtime_error("D3D12IndexBufferRenderer: command list Close failed, hr=" + FormatHr(hr));
+        renderer_->ExecuteCommandListAndWaitEXT(cmdList);
 
         indexCount_ = static_cast<int>(byteCount / (dataIsThirtyTwoBit ? sizeof(std::uint32_t) : sizeof(std::uint16_t)));
     }
 
-    void D3D12IndexBufferBackend::SetData16(const void* data, int index_count)
+    void D3D12IndexBufferRenderer::SetData16(const void* data, int index_count)
     {
         SetData16WithOptions(data, index_count, SetDataOptions::None);
     }
 
-    void D3D12IndexBufferBackend::SetData32(const void* data, int index_count)
+    void D3D12IndexBufferRenderer::SetData32(const void* data, int index_count)
     {
         SetData32WithOptions(data, index_count, SetDataOptions::None);
     }
 
-    void D3D12IndexBufferBackend::SetData16WithOptions(const void* data, int index_count, SetDataOptions /*options*/)
+    void D3D12IndexBufferRenderer::SetData16WithOptions(const void* data, int index_count, SetDataOptions /*options*/)
     {
         UploadAndCopy(data, static_cast<std::size_t>(index_count) * sizeof(std::uint16_t), false);
     }
 
-    void D3D12IndexBufferBackend::SetData32WithOptions(const void* data, int index_count, SetDataOptions /*options*/)
+    void D3D12IndexBufferRenderer::SetData32WithOptions(const void* data, int index_count, SetDataOptions /*options*/)
     {
         UploadAndCopy(data, static_cast<std::size_t>(index_count) * sizeof(std::uint32_t), true);
     }
 
-    D3D12_INDEX_BUFFER_VIEW D3D12IndexBufferBackend::GetViewEXT() const
+    D3D12_INDEX_BUFFER_VIEW D3D12IndexBufferRenderer::GetViewEXT() const
     {
         D3D12_INDEX_BUFFER_VIEW view{};
         if (buffer_)

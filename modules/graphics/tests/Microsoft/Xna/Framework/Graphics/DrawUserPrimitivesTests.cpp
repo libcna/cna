@@ -6,7 +6,7 @@
 //   • GraphicsDevice::PrimitiveVerts() vertex-count formula for all five topologies.
 //   • Invalid primitiveType throws InvalidOperationException.
 //   • primitiveCount ≤ 0 throws ArgumentOutOfRangeException for every typed overload
-//     (VPC/VPT/VPCT/VPNT + VertexDeclaration), exercised with a real EasyGL backend
+//     (VPC/VPT/VPCT/VPNT + VertexDeclaration), exercised with a real EasyGL renderer
 //     and an applied BasicEffect so the check under test is reached.
 //
 // Draw-call pixel-readback tests live in tasks 255–256 (integration tests).
@@ -128,8 +128,8 @@ TEST(DrawUserPrimitivesAPITest, PrimitiveVertsIsPublicStaticNOXNA)
 // =============================================================================
 // Task 259: primitiveCount <= 0 throws ArgumentOutOfRangeException
 //
-// The default GraphicsDevice() constructor initializes a real EasyGL backend
-// (backend_ non-null), and BasicEffect::Apply() performs no GPU calls, so
+// The default GraphicsDevice() constructor initializes a real EasyGL renderer
+// (renderer_ non-null), and BasicEffect::Apply() performs no GPU calls, so
 // applying an effect here reaches the primitiveCount guard without requiring
 // an actual draw.
 // =============================================================================

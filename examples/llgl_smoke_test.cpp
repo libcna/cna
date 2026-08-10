@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MS-PL
-// plan_llgl.md LLGL-1..LLGL-9: first end-to-end proof for the LLGL graphics backend. A real SDL
+// plan_llgl.md LLGL-1..LLGL-9: first end-to-end proof for the LLGL graphics renderer. A real SDL
 // window, a real LLGL render system (whichever module the runtime selection picked), a real swap
 // chain, and a real 60-frame Clear()+Present() loop.
 //
 // Check A -- GetWindowInternal() returns the real SDL window.
-// Check B -- GetRendererInternal() is null; this backend never creates an SDL_Renderer.
+// Check B -- GetRendererInternal() is null; this renderer never creates an SDL_Renderer.
 // Check C -- GetViewportSize() reports the logical resolution that was requested.
 // Check D -- the loaded module is one that actually draws, and names itself.
 // Check E -- VertexBuffer.SetData()/GetVertexCount() round-trips the exact count uploaded.
@@ -22,7 +22,7 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 
-#include "CNA/Internal/Backends/Llgl/LlglGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Llgl/LlglRenderer.hpp"
 
 #include "common/PixelTestGame.hpp"
 
@@ -35,7 +35,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::Llgl;
+using namespace CNA::Internal::Renderers::Llgl;
 
 namespace
 {
@@ -61,16 +61,16 @@ protected:
     {
         ++frame_;
         auto& device = getGraphicsDeviceProperty();
-        auto& backend = static_cast<LlglGraphicsBackend&>(device.GetBackend());
+        auto& renderer = static_cast<LlglRenderer&>(device.GetRenderer());
 
         if (frame_ == 1)
         {
-            check(backend.GetWindowInternal() != nullptr, "GetWindowInternal() returns a real window");
-            check(backend.GetRendererInternal() == nullptr, "GetRendererInternal() is null (no SDL_Renderer)");
+            check(renderer.GetWindowInternal() != nullptr, "GetWindowInternal() returns a real window");
+            check(renderer.GetRendererInternal() == nullptr, "GetRendererInternal() is null (no SDL_Renderer)");
 
             int width = 0;
             int height = 0;
-            backend.GetViewportSize(width, height);
+            renderer.GetViewportSize(width, height);
             std::printf("       GetViewportSize(): %dx%d\n", width, height);
             // The default presentation mode is FixedHeightDynamicWidth, so only the height is the
             // requested one: the logical width is derived from the window's real aspect ratio, and
@@ -78,8 +78,8 @@ protected:
             check(height == 240 && width > 0,
                   "GetViewportSize() keeps the requested logical height and derives the width");
 
-            const auto module = backend.GetRendererModule();
-            const char* rendererName = backend.GetRendererNameEXT();
+            const auto module = renderer.GetRendererModule();
+            const char* rendererName = renderer.GetRendererNameEXT();
             std::printf("       LLGL module: %s, renderer: %s\n",
                         Detail::GetRendererModuleName(module),
                         rendererName != nullptr ? rendererName : "<none>");
@@ -87,13 +87,13 @@ protected:
                   std::strlen(rendererName) > 0,
                   "a real (non-Null) renderer module was selected and names itself");
 
-            auto vertexBuffer = backend.CreateVertexBuffer(3);
+            auto vertexBuffer = renderer.CreateVertexBuffer(3);
             const float vertices[3 * 2] = {0, 0, 1, 0, 0, 1};
             vertexBuffer->SetData(vertices, 3, sizeof(float) * 2);
             check(vertexBuffer->GetVertexCount() == 3,
                   "VertexBuffer.SetData()+GetVertexCount() round-trips the exact count");
 
-            auto indexBuffer = backend.CreateIndexBuffer16(3);
+            auto indexBuffer = renderer.CreateIndexBuffer16(3);
             const std::uint16_t indices[3] = {0, 1, 2};
             indexBuffer->SetData16(indices, 3);
             check(indexBuffer->GetIndexCount() == 3 && !indexBuffer->IsThirtyTwoBit(),
@@ -102,7 +102,7 @@ protected:
             bool threw = false;
             try
             {
-                backend.DrawColoredPrimitives(*vertexBuffer, Matrix::getIdentityProperty(),
+                renderer.DrawColoredPrimitives(*vertexBuffer, Matrix::getIdentityProperty(),
                                               Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                               PrimitiveType::TriangleList, 1);
             }

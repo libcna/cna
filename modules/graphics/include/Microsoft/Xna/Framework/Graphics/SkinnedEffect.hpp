@@ -359,11 +359,11 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Fills a GpuDrawParams struct with this effect's current render parameters.
          *
          * Populates bone transforms, lighting, diffuse/emissive colors, eye position, and
-         * diffuse texture. Sets the skinned flag so the backend selects the skinning shader variant.
+         * diffuse texture. Sets the skinned flag so the renderer selects the skinning shader variant.
          *
          * @param params Output struct to populate.
          */
-        NOXNA void FillGpuDrawParams(CNA::Internal::Backends::GpuDrawParams& params) const override;
+        NOXNA void FillGpuDrawParams(CNA::Internal::Renderers::GpuDrawParams& params) const override;
 
     protected:
         /**

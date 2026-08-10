@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // plan_dx9.md Phase D9-10 (D9-100/D9-101/D9-102/D9-103): GraphicsProfile.Reach/HiDef made real on
-// this backend, through the real public GraphicsAdapter/Game/GraphicsDeviceManager/Texture2D API.
+// this renderer, through the real public GraphicsAdapter/Game/GraphicsDeviceManager/Texture2D API.
 //
 // Check A/B -- GraphicsAdapter::IsProfileSupported(): Reach is always true (every real D3D9 HAL
 //   device already exceeds Reach's own floor, D9-32's own construction-time finding, re-used
@@ -229,10 +229,10 @@ protected:
         // test -- Game's own GraphicsDevice_ member is eagerly default-constructed (hardcoded
         // GraphicsProfile::Reach) BEFORE GraphicsDeviceManager even exists, so
         // GraphicsDeviceManager::setGraphicsProfileProperty(HiDef) had NO path to ever reach the
-        // real device: GraphicsDeviceManager::applyToExistingBackend() carried the requested
+        // real device: GraphicsDeviceManager::applyToExistingRenderer() carried the requested
         // profile into a transient GraphicsDeviceInformation but never wrote it back onto the
         // live GraphicsDevice before this fix. Fixed with a new NOXNA
-        // GraphicsDevice::SetGraphicsProfileEXT(), called from applyToExistingBackend() right
+        // GraphicsDevice::SetGraphicsProfileEXT(), called from applyToExistingRenderer() right
         // before Reset(). Without this fix, dev.getGraphicsProfileProperty() here would
         // incorrectly report Reach even though this Game's own constructor requested HiDef --
         // which would also make Check H/I below meaningless (both would silently run under the

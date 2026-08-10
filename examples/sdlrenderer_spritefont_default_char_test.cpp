@@ -4,7 +4,7 @@
 // Task 427 (this row's own "mirrors" reference, the EasyGL original) is itself not yet
 // implemented (still ⬜ in plan_graphics.md's Phase 48) -- there is no existing test to port
 // here, same situation as Tasks 690-692. This is a NEW SpriteFont pixel test, building on
-// Task 690's fixture pattern to exercise the shared, backend-agnostic SpriteBatch::DrawString's
+// Task 690's fixture pattern to exercise the shared, renderer-agnostic SpriteBatch::DrawString's
 // unknown-character fallback branch:
 //   auto it = spriteFont.characterIndexMap_.find(c);
 //   if (it == spriteFont.characterIndexMap_.end())
@@ -22,7 +22,7 @@
 // project's own established Task 675/676/681 "must not silently no-op/misrender" convention).
 //
 // Requires PresentationMode::NativeBackBuffer (Task 915 finding): SDL_RenderReadPixels operates
-// in physical output coordinates, while this backend's default presentation mode
+// in physical output coordinates, while this renderer's default presentation mode
 // (FixedHeightDynamicWidth) does not map logical pixels 1:1 to physical ones.
 //
 // Exit code 0 = all PASS, 1 = at least one FAIL.

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MS-PL
-// Task 888: BasicEffect linear fog pixel integration test — Bgfx backend.
+// Task 888: BasicEffect linear fog pixel integration test — Bgfx renderer.
 //
 // Direct port of examples/easygl_basiceffect_fog_test.cpp (Task 195), which found this exact gap
-// on Vulkan/Bgfx (Task 378): fog was a total GPU no-op for every 3D effect on both backends.
+// on Vulkan/Bgfx (Task 378): fog was a total GPU no-op for every 3D effect on both renderers.
 // Fixed on Bgfx by adding fog uniforms (u_fogColor/u_fogParams, shared by every 3D program) and
 // the standard fog blend to every 3D vertex/fragment shader pair -- bgfx has no push-constant
 // byte-budget constraint the way Vulkan does, so Bgfx gets full fog coverage across all

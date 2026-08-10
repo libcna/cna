@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // D3D9 PBR porting task: real DrawPrimitivesEx/DrawIndexedPrimitivesEx dispatch for CNA's own
 // NOXNA "Pbr3D"/"PbrSkinned3D" shaders (PbrEffect/SkinnedPbrEffect, plan_cnj.md CNB-56..79
-// equivalent), porting EasyGLGraphicsBackend.cpp's EnsurePbrProgram()/EnsurePbrSkinnedProgram() +
+// equivalent), porting EasyGLRenderer.cpp's EnsurePbrProgram()/EnsurePbrSkinnedProgram() +
 // SelectProgram()'s own pbr-highest-priority dispatch to real vs_3_0/ps_3_0 bytecode
 // (shaders/cna/Pbr3D.hlsl, shaders/cna/PbrSkinned3D.hlsl -- see those files' own header comments
 // for the BRDF source and the SM3-not-SM2 justification).
@@ -21,11 +21,11 @@
 // development (World's un-allocated 4th register collides with a compiler-emitted literal
 // constant at the same index).
 
-#include "CNA/Internal/Backends/D3D9/D3D9GraphicsBackend.hpp"
-#include "CNA/Internal/Backends/D3D9/D3D9Buffers.hpp"
-#include "CNA/Internal/Backends/D3D9/D3D9Textures.hpp"
-#include "CNA/Internal/Backends/D3D9/D3D9RenderTargets.hpp"
-#include "CNA/Internal/Backends/D3D9/D3D9ConstantUpload.hpp"
+#include "CNA/Internal/Renderers/D3D9/D3D9Renderer.hpp"
+#include "CNA/Internal/Renderers/D3D9/D3D9Buffers.hpp"
+#include "CNA/Internal/Renderers/D3D9/D3D9Textures.hpp"
+#include "CNA/Internal/Renderers/D3D9/D3D9RenderTargets.hpp"
+#include "CNA/Internal/Renderers/D3D9/D3D9ConstantUpload.hpp"
 #include "shaders/d3d9_pbr_shaders.hpp"
 #include "shaders/D3D9CnaShaderRegisters.hpp"
 #include "CNA/Internal/Graphics/ImageData.hpp"
@@ -37,7 +37,7 @@
 #include <string>
 #include <vector>
 
-namespace CNA::Internal::Backends::D3D9
+namespace CNA::Internal::Renderers::D3D9
 {
     using Microsoft::Xna::Framework::Matrix;
     using CNA::Internal::Graphics::ImageData;
@@ -67,12 +67,12 @@ namespace CNA::Internal::Backends::D3D9
         // D3D9SpriteBatch.cpp's own independent copy -- duplicated locally per this codebase's own
         // established per-file convention (see D3D9VertexDeclarations.cpp's own "Task 11.10"
         // comment for the precedent of accepting this kind of small duplication).
-        IDirect3DTexture9* ResolveD3D9TextureEXT(const ITextureBackend* tex)
+        IDirect3DTexture9* ResolveD3D9TextureEXT(const ITextureRenderer* tex)
         {
             if (tex == nullptr) return nullptr;
-            if (const auto* t = dynamic_cast<const D3D9TextureBackend*>(tex))
+            if (const auto* t = dynamic_cast<const D3D9TextureRenderer*>(tex))
                 return t->GetTextureEXT();
-            if (const auto* rt = dynamic_cast<const D3D9RenderTargetBackend*>(tex))
+            if (const auto* rt = dynamic_cast<const D3D9RenderTargetRenderer*>(tex))
                 return rt->GetTextureEXT();
             return nullptr;
         }
@@ -116,10 +116,10 @@ namespace CNA::Internal::Backends::D3D9
         }
 
         /// Binds `tex` (or `fallback` when `tex` is null) to sampler stage `stage`, matching
-        /// EasyGLGraphicsBackend::BindDrawParams()'s own per-map fallback convention (see
+        /// EasyGLRenderer::BindDrawParams()'s own per-map fallback convention (see
         /// GetOrCreateDefault{FlatNormal,White}TextureEXT()'s own doc comments for which fallback
         /// each PBR map uses and why).
-        void BindPbrSampler(IDirect3DDevice9* device, int stage, const ITextureBackend* tex,
+        void BindPbrSampler(IDirect3DDevice9* device, int stage, const ITextureRenderer* tex,
                             IDirect3DTexture9* fallback)
         {
             IDirect3DTexture9* d3dTex = ResolveD3D9TextureEXT(tex);
@@ -127,7 +127,7 @@ namespace CNA::Internal::Backends::D3D9
         }
     }
 
-    ITextureBackend* D3D9GraphicsBackend::GetOrCreateDefaultFlatNormalTextureEXT()
+    ITextureRenderer* D3D9Renderer::GetOrCreateDefaultFlatNormalTextureEXT()
     {
         if (!defaultFlatNormalTexture_)
         {
@@ -140,7 +140,7 @@ namespace CNA::Internal::Backends::D3D9
         return defaultFlatNormalTexture_.get();
     }
 
-    ITextureBackend* D3D9GraphicsBackend::GetOrCreateDefaultWhiteTextureEXT()
+    ITextureRenderer* D3D9Renderer::GetOrCreateDefaultWhiteTextureEXT()
     {
         if (!defaultWhiteTexture_)
         {
@@ -153,8 +153,8 @@ namespace CNA::Internal::Backends::D3D9
         return defaultWhiteTexture_.get();
     }
 
-    void D3D9GraphicsBackend::DrawPbrEffectEXT(
-        const IVertexBufferBackend& vb, const IIndexBufferBackend* ib, std::size_t stride,
+    void D3D9Renderer::DrawPbrEffectEXT(
+        const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib, std::size_t stride,
         const Matrix& world, const Matrix& view, const Matrix& projection,
         PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
     {
@@ -163,12 +163,12 @@ namespace CNA::Internal::Backends::D3D9
         const bool skinned = params.skinned;
         if (skinned && stride != 68)
             throw std::runtime_error(
-                "D3D9GraphicsBackend::DrawPrimitivesEx (PbrEffect, skinned): stride " +
+                "D3D9Renderer::DrawPrimitivesEx (PbrEffect, skinned): stride " +
                 std::to_string(stride) + " has no matching CNA vertex layout (expected 68, "
                 "VertexPositionNormalTangentTextureSkinned)");
         if (!skinned && stride != 48)
             throw std::runtime_error(
-                "D3D9GraphicsBackend::DrawPrimitivesEx (PbrEffect): stride " +
+                "D3D9Renderer::DrawPrimitivesEx (PbrEffect): stride " +
                 std::to_string(stride) + " has no matching CNA vertex layout (expected 48, "
                 "VertexPositionNormalTangentTexture)");
 
@@ -279,12 +279,12 @@ namespace CNA::Internal::Backends::D3D9
         BindPbrSampler(device_.Get(), 4, params.pbrOcclusionMap, ResolveD3D9TextureEXT(GetOrCreateDefaultWhiteTextureEXT()));
 
         device_->SetVertexDeclaration(GetOrCreateVertexDeclarationEXT(stride));
-        const auto& d3dVb = static_cast<const D3D9VertexBufferBackend&>(vb);
+        const auto& d3dVb = static_cast<const D3D9VertexBufferRenderer&>(vb);
         device_->SetStreamSource(0, d3dVb.GetBufferEXT(), 0, static_cast<UINT>(stride));
 
         if (ib)
         {
-            const auto& d3dIb = static_cast<const D3D9IndexBufferBackend&>(*ib);
+            const auto& d3dIb = static_cast<const D3D9IndexBufferRenderer&>(*ib);
             device_->SetIndices(d3dIb.GetBufferEXT());
             // REMED-GFX-060: honor DrawIndexedPrimitives baseVertex/startIndex (was hardcoded
             // BaseVertexIndex=0/StartIndex=0). NumVertices is the vertex-buffer remainder from

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_html_dom.md HTMLDOM-95: verifies that HtmlDomTextureBackend/HtmlDomRenderTargetBackend
+// plan_html_dom.md HTMLDOM-95: verifies that HtmlDomTextureRenderer/HtmlDomRenderTargetRenderer
 // dispose/cleanup is REAL, not just "looks right on paper". Code review alone showed
-// ~HtmlDomTextureBackend() calling CNA_HtmlDom_DestroyTexture (which deletes
-// Module['cnaDomTextures'][id]) and ~HtmlDomRenderTargetBackend() unbinding itself if it was the
+// ~HtmlDomTextureRenderer() calling CNA_HtmlDom_DestroyTexture (which deletes
+// Module['cnaDomTextures'][id]) and ~HtmlDomRenderTargetRenderer() unbinding itself if it was the
 // currently-bound target -- this test creates and destroys many textures and render targets in a
 // real browser and checks the JS-side registry actually shrinks back down, rather than trusting
 // that the C++ destructor chain runs the way the source suggests it does.
@@ -20,8 +20,8 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 
-#include "CNA/Internal/Backends/HtmlDom/HtmlDomGraphicsBackend.hpp"
-#include "CNA/Internal/Backends/HtmlDom/HtmlDomState.hpp"
+#include "CNA/Internal/Renderers/HtmlDom/HtmlDomRenderer.hpp"
+#include "CNA/Internal/Renderers/HtmlDom/HtmlDomState.hpp"
 
 #include <cstdio>
 #include <memory>
@@ -33,7 +33,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::HtmlDom;
+using namespace CNA::Internal::Renderers::HtmlDom;
 
 namespace
 {
@@ -45,7 +45,7 @@ namespace
 #if defined(__EMSCRIPTEN__)
     /// Number of textures currently registered in Module['cnaDomTextures'] -- every live
     /// Texture2D/RenderTarget2D owns exactly one entry, so this is a direct proxy for "how many
-    /// off-screen canvases does the backend currently think it owns".
+    /// off-screen canvases does the renderer currently think it owns".
     EM_JS(int, JsTextureRegistryCount, (), {
         return Module['cnaDomTextures'] ? Object.keys(Module['cnaDomTextures']).length : 0;
     });
@@ -62,9 +62,9 @@ namespace
     // CNA_HtmlDom_EnsureRoot owns) currently exists at all.
     EM_JS(int, JsSurfaceExists, (), { return Module['cnaDomRoot'] ? 1 : 0; });
 
-    /// plan_html_dom.md HTMLDOM-114: how many live HtmlDomGraphicsBackend instances currently
+    /// plan_html_dom.md HTMLDOM-114: how many live HtmlDomRenderer instances currently
     /// reference the shared DOM surface -- see CNA_HtmlDom_EnsureRoot/DestroyRoot's own comments.
-    EM_JS(int, JsBackendRefCount, (), { return Module['cnaDomBackendRefCount'] || 0; });
+    EM_JS(int, JsRendererRefCount, (), { return Module['cnaDomRendererRefCount'] || 0; });
 
     EM_JS(void, JsPublishResult, (int result, int passed, int expected), {
         window.__cnaSmokeResult = result;
@@ -76,7 +76,7 @@ namespace
     int JsTextureRegistryCount() { return -1; }
     int JsVariantCacheSize() { return -1; }
     int JsSurfaceExists() { return 0; }
-    int JsBackendRefCount() { return 0; }
+    int JsRendererRefCount() { return 0; }
     void JsPublishResult(int, int, int) {}
 #endif
 }
@@ -137,7 +137,7 @@ protected:
             check(afterCreate == baselineCount_ + kBatchSize,
                   "HTMLDOM-95a: creating 50 textures registers exactly 50 new entries");
 
-            batch.clear();   // destroys all 50 Texture2Ds (and their backends) right here.
+            batch.clear();   // destroys all 50 Texture2Ds (and their renderers) right here.
             const int afterDestroy = JsTextureRegistryCount();
             check(afterDestroy == baselineCount_,
                   "HTMLDOM-95a: destroying all 50 textures removes exactly those 50 entries, "
@@ -165,13 +165,13 @@ protected:
             dev.Clear(Color(200, 50, 25, 255));
             targets.clear();
 
-            check(CNA::Internal::Backends::HtmlDom::GetBoundRenderTargetIdEXT() == 0,
-                  "HTMLDOM-95c: destroying the currently-bound render target resets the backend's "
+            check(CNA::Internal::Renderers::HtmlDom::GetBoundRenderTargetIdEXT() == 0,
+                  "HTMLDOM-95c: destroying the currently-bound render target resets the renderer's "
                   "bound-target id back to the DOM backbuffer (0), rather than leaving it pointing "
                   "at a canvas that no longer exists");
 
             // GraphicsDevice's OWN renderTargetBound_ flag is a separate piece of bookkeeping from
-            // the backend's bound-canvas id just checked above -- it has no way to know the target
+            // the renderer's bound-canvas id just checked above -- it has no way to know the target
             // object was destroyed out from under it, and Present() (called automatically by
             // Game::EndDraw() right after this Draw() returns) throws while it is still set. Real
             // XNA/FNA usage always calls SetRenderTarget(null) before disposing a bound target; this
@@ -295,51 +295,51 @@ protected:
                   "(id,key) pairs the cache never reclaims");
         }
 
-        // plan_html_dom.md HTMLDOM-114: a SECOND HtmlDomGraphicsBackend, constructed while the
+        // plan_html_dom.md HTMLDOM-114: a SECOND HtmlDomRenderer, constructed while the
         // FIRST (this test's own, real) one is still alive and sharing the SAME window, must not
-        // silently ADOPT the shared DOM surface and then rip it out from under the first backend
+        // silently ADOPT the shared DOM surface and then rip it out from under the first renderer
         // when the second one alone is destroyed. This is a real, confirmed defect the reference-
-        // counted CNA_HtmlDom_EnsureRoot/DestroyRoot fix closes: constructing a second backend was
+        // counted CNA_HtmlDom_EnsureRoot/DestroyRoot fix closes: constructing a second renderer was
         // ALREADY a no-op for the JS surface itself (guarded as "already initialized"), but
-        // destroying that second backend unconditionally tore the WHOLE shared surface down --
-        // breaking the first, still-alive backend too, purely because ANOTHER backend happened to
+        // destroying that second renderer unconditionally tore the WHOLE shared surface down --
+        // breaking the first, still-alive renderer too, purely because ANOTHER renderer happened to
         // exist and get destroyed.
         if (frame_ == 6)
         {
-            auto& realBackend = static_cast<HtmlDomGraphicsBackend&>(dev.GetBackend());
-            check(JsSurfaceExists() == 1 && JsBackendRefCount() == 1,
-                  "HTMLDOM-114: before constructing a second backend, the shared surface exists "
-                  "with exactly one live reference -- this test's own real backend");
+            auto& realRenderer = static_cast<HtmlDomRenderer&>(dev.GetRenderer());
+            check(JsSurfaceExists() == 1 && JsRendererRefCount() == 1,
+                  "HTMLDOM-114: before constructing a second renderer, the shared surface exists "
+                  "with exactly one live reference -- this test's own real renderer");
             {
-                HtmlDomGraphicsBackend altBackend(
-                    realBackend.GetWindowInternal(), 64, 64,
-                    CNA::Internal::Backends::CnaPresentationMode::FixedHeightDynamicWidth);
-                check(JsBackendRefCount() == 2,
-                      "HTMLDOM-114: constructing a second backend sharing the same window "
+                HtmlDomRenderer altRenderer(
+                    realRenderer.GetWindowInternal(), 64, 64,
+                    CNA::Internal::Renderers::CnaPresentationMode::FixedHeightDynamicWidth);
+                check(JsRendererRefCount() == 2,
+                      "HTMLDOM-114: constructing a second renderer sharing the same window "
                       "increments the shared surface's reference count to 2, rather than either "
                       "silently creating an independent surface or leaving the count unaware of it");
                 check(JsSurfaceExists() == 1,
-                      "HTMLDOM-114: the shared surface still exists while both backends are alive");
-            }   // altBackend destroyed here.
-            check(JsBackendRefCount() == 1,
-                  "HTMLDOM-114: destroying the second backend decrements the reference count back "
+                      "HTMLDOM-114: the shared surface still exists while both renderers are alive");
+            }   // altRenderer destroyed here.
+            check(JsRendererRefCount() == 1,
+                  "HTMLDOM-114: destroying the second renderer decrements the reference count back "
                   "to 1, rather than tearing the surface down out from under the first");
             check(JsSurfaceExists() == 1,
-                  "HTMLDOM-114: the shared surface genuinely SURVIVES the second backend's own "
+                  "HTMLDOM-114: the shared surface genuinely SURVIVES the second renderer's own "
                   "destruction -- the real defect this task fixed: an earlier version tore the "
-                  "surface down unconditionally on ANY backend's destruction, breaking the "
-                  "first, still-alive backend too");
+                  "surface down unconditionally on ANY renderer's destruction, breaking the "
+                  "first, still-alive renderer too");
 
-            // The real, observable consequence: THIS test's own real backend must still be
-            // GENUINELY functional after the second backend's full construct-then-destroy cycle --
+            // The real, observable consequence: THIS test's own real renderer must still be
+            // GENUINELY functional after the second renderer's full construct-then-destroy cycle --
             // not just "the root element object still exists".
             const int beforeFresh = JsTextureRegistryCount();
             {
                 Texture2D freshTex = Texture2D::CreateFromPixels(
                     dev, 1, 1, std::vector<std::uint8_t>{1, 2, 3, 4});
                 check(JsTextureRegistryCount() == beforeFresh + 1,
-                      "HTMLDOM-114: creating a texture through the real backend still works "
-                      "normally after the second backend's construct-destroy cycle");
+                      "HTMLDOM-114: creating a texture through the real renderer still works "
+                      "normally after the second renderer's construct-destroy cycle");
             }
             check(JsTextureRegistryCount() == beforeFresh,
                   "HTMLDOM-114: ...and destroying that texture still works normally too");

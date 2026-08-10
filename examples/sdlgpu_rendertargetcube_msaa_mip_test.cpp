@@ -22,7 +22,7 @@
 //   * mipmapped 1x1 and non-mipmapped one-level targets;
 //   * disposal before deferred work flushes and a live target across device teardown.
 
-#include "CNA/Internal/Backends/SdlGpu/SdlGpuGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/SdlGpu/SdlGpuRenderer.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GameTime.hpp"
@@ -62,14 +62,14 @@
 #include <string>
 #include <vector>
 
-#ifndef CNA_BACKEND_SDL_GPU
+#ifndef CNA_RENDERER_SDL_GPU
 #error "REMED-GFX-188's native/public cube-mip regression is SDL_GPU-only."
 #endif
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using CNA::Internal::Backends::SdlGpu::SdlGpuGraphicsBackend;
-using CNA::Internal::Backends::SdlGpu::SdlGpuRenderTargetCubeBackend;
+using CNA::Internal::Renderers::SdlGpu::SdlGpuRenderer;
+using CNA::Internal::Renderers::SdlGpu::SdlGpuRenderTargetCubeRenderer;
 
 namespace
 {
@@ -188,7 +188,7 @@ class SdlGpuRenderTargetCubeMsaaMipTest final : public Game
 {
     std::unique_ptr<GraphicsDeviceManager> gdm_;
     std::unique_ptr<RenderTargetCube> heldForTeardown_;
-    SdlGpuGraphicsBackend* backend_ = nullptr;
+    SdlGpuRenderer* renderer_ = nullptr;
     bool done_ = false;
     int passed_ = 0;
     int total_ = 0;
@@ -215,9 +215,9 @@ class SdlGpuRenderTargetCubeMsaaMipTest final : public Game
         device.setRasterizerStateProperty(RasterizerState::CullNone);
     }
 
-    [[nodiscard]] SdlGpuRenderTargetCubeBackend* Native(RenderTargetCube& cube)
+    [[nodiscard]] SdlGpuRenderTargetCubeRenderer* Native(RenderTargetCube& cube)
     {
-        return dynamic_cast<SdlGpuRenderTargetCubeBackend*>(cube.GetRenderTargetCubeBackend());
+        return dynamic_cast<SdlGpuRenderTargetCubeRenderer*>(cube.GetRenderTargetCubeRenderer());
     }
 
     [[nodiscard]] std::unique_ptr<RenderTargetCube> MakeCube(
@@ -230,8 +230,8 @@ class SdlGpuRenderTargetCubeMsaaMipTest final : public Game
         auto cube = std::make_unique<RenderTargetCube>(
             device, size, mipMap, SurfaceFormat::Color, DepthFormat::None,
             requestedSamples, usage);
-        SdlGpuRenderTargetCubeBackend* native = Native(*cube);
-        Check(native != nullptr, label + ": concrete SDL_GPU cube backend is reachable");
+        SdlGpuRenderTargetCubeRenderer* native = Native(*cube);
+        Check(native != nullptr, label + ": concrete SDL_GPU cube renderer is reachable");
 
         const int expectedLevels = mipMap ? ChainLength(size) : 1;
         Check(cube->getLevelCountProperty() == expectedLevels,
@@ -692,8 +692,8 @@ protected:
         if (done_) return;
         done_ = true;
         auto& device = getGraphicsDeviceProperty();
-        backend_ = dynamic_cast<SdlGpuGraphicsBackend*>(&device.GetBackend());
-        Check(backend_ != nullptr, "SDL_GPU backend is reachable from GraphicsDevice");
+        renderer_ = dynamic_cast<SdlGpuRenderer*>(&device.GetRenderer());
+        Check(renderer_ != nullptr, "SDL_GPU renderer is reachable from GraphicsDevice");
 
         try
         {
@@ -727,8 +727,8 @@ protected:
 
     void EndRun() override
     {
-        if (backend_ != nullptr)
-            Check(backend_->IsDebugModeEnabledEXT(), "SDL_GPU native debug mode is enabled");
+        if (renderer_ != nullptr)
+            Check(renderer_->IsDebugModeEnabledEXT(), "SDL_GPU native debug mode is enabled");
         std::printf("[INFO] REMED-GFX-188 SDL_GPU cube mip matrix: %d/%d checks passed\n",
                     passed_, total_);
         std::fflush(stdout);
@@ -777,7 +777,7 @@ int main()
     {
         game.DisposeGraphicsDeviceForTeardown();
         const bool disposed = game.TeardownDisposedHeldCube();
-        std::printf("[%s] device teardown disposed the retained cube before backend destruction\n",
+        std::printf("[%s] device teardown disposed the retained cube before renderer destruction\n",
                     disposed ? "PASS" : "FAIL");
         if (!disposed) result = 1;
         game.Dispose();

@@ -16,7 +16,7 @@
 //   -- real GL, like D3D/Vulkan, requires every simultaneously-bound attachment in one FBO to
 //   share the same sample count; mixing an MSAA and a non-MSAA target in one MRT set is not a
 //   valid GL framebuffer to begin with, GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE regardless of this
-//   backend's own resolve logic, confirmed empirically while developing this test) bound
+//   renderer's own resolve logic, confirmed empirically while developing this test) bound
 //   together, a diagonal-edge triangle drawn once (same geometry reaches both attachments in the
 //   same draw) -- BOTH targets' edge pixels must show a real resolve blend (not a flat colour)
 //   after their own independent per-target blit (mirrors OpenGL2_RenderTarget2D's own single-RT

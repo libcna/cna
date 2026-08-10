@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MS-PL
-// plan_sokol.md SOKOL-20: 3D vertical-slice proof for the sokol_gfx graphics backend -- real
+// plan_sokol.md SOKOL-20: 3D vertical-slice proof for the sokol_gfx graphics renderer -- real
 // vertex-coloured geometry drawn through the public XNA API (`VertexBuffer` + `BasicEffect` +
 // `GraphicsDevice.DrawPrimitives`/`DrawIndexedPrimitives`), every result verified by reading the
 // rendered pixels back off the real back buffer.
 //
 // The scene is deliberately built from screen-aligned quads under an orthographic projection, so
-// each expected pixel colour follows from the geometry alone rather than from whatever the backend
+// each expected pixel colour follows from the geometry alone rather than from whatever the renderer
 // happened to produce.
 //
 // Check A -- a non-indexed vertex-coloured quad renders its own vertex colour.
@@ -213,7 +213,7 @@ public:
         // Check G -- culling. Under XNA's default CullCounterClockwiseFace a screen-space
         // clockwise triangle is front-facing and must survive, while the same triangle with two
         // corners swapped is counter-clockwise and must vanish. This pair is what caught the
-        // backend's cull-mode mapping being inverted, which rendered every triangle as background.
+        // renderer's cull-mode mapping being inverted, which rendered every triangle as background.
         const Color kYellow(255, 255, 0, 255);
         DrawQuad({
             VertexPositionColor(Vector3(190.0f, 80.0f, kMidZ), kYellow),

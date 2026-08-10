@@ -10,8 +10,8 @@
 //   * call wgpuRenderPassEncoderSetViewport per draw  -> unbounded redundant native calls;
 //   * keep a heap-allocated snapshot per queued draw  -> per-frame allocation growth.
 //
-// Every count below is read from the live backend, before and after a known public sequence, so
-// each expectation is an exact number rather than a trend. The backend's uncaptured-error callback
+// Every count below is read from the live renderer, before and after a known public sequence, so
+// each expectation is an exact number rather than a trend. The renderer's uncaptured-error callback
 // count is also reported: WebGPU validation must stay silent through every viewport used here,
 // including the boundary ones (final row/column, whole target, 1x1) and the narrowed depth ranges.
 //
@@ -41,7 +41,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
-#include "CNA/Internal/Backends/WebGPU/WebGPUGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/WebGPU/WebGPURenderer.hpp"
 
 #include <array>
 #include <cstdint>
@@ -52,7 +52,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using CNA::Internal::Backends::WebGPU::WebGPUGraphicsBackend;
+using CNA::Internal::Renderers::WebGPU::WebGPURenderer;
 
 namespace
 {
@@ -140,7 +140,7 @@ class WebGpuViewportCardinalityTest : public Game
         phase_ = 2;
 
         auto& dev = getGraphicsDeviceProperty();
-        auto& backend = static_cast<WebGPUGraphicsBackend&>(dev.GetBackend());
+        auto& renderer = static_cast<WebGPURenderer&>(dev.GetRenderer());
         std::printf("REMED-GFX-116 viewport state cardinality -- WEBGPU\n");
 
         // Warm-up cycle: creates the one Colored3D and the one sprite pipeline this file's draws
@@ -166,10 +166,10 @@ class WebGpuViewportCardinalityTest : public Game
             dev.SetRenderTarget(rt.get());
             // Baseline INSIDE the cycle: binding a target flushes whatever the backbuffer had
             // pending, which is not what this check is measuring.
-            const std::size_t pass0 = backend.GetRenderPassCountEXT();
-            const std::size_t submit0 = backend.GetQueueSubmitCountEXT();
-            const std::size_t sv0 = backend.GetSetViewportCallCountEXT();
-            const std::size_t pipe0 = backend.GetColoredPipelineCacheSizeEXT();
+            const std::size_t pass0 = renderer.GetRenderPassCountEXT();
+            const std::size_t submit0 = renderer.GetQueueSubmitCountEXT();
+            const std::size_t sv0 = renderer.GetSetViewportCallCountEXT();
+            const std::size_t pipe0 = renderer.GetColoredPipelineCacheSizeEXT();
 
             dev.Clear(kBlack);
             for (int i = 0; i < 4; ++i)
@@ -180,14 +180,14 @@ class WebGpuViewportCardinalityTest : public Game
             SetVp(dev, 0, 0, kRT, kRT);
             dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
 
-            checkCount(backend.GetRenderPassCountEXT() - pass0, 1,
+            checkCount(renderer.GetRenderPassCountEXT() - pass0, 1,
                        "P1 four viewports in one cycle: render passes");
-            checkCount(backend.GetQueueSubmitCountEXT() - submit0, 1,
+            checkCount(renderer.GetQueueSubmitCountEXT() - submit0, 1,
                        "P1 four viewports in one cycle: queue submits");
             // One pass-opening call plus one per genuine viewport transition.
-            checkCount(backend.GetSetViewportCallCountEXT() - sv0, 5,
+            checkCount(renderer.GetSetViewportCallCountEXT() - sv0, 5,
                        "P1 four viewports in one cycle: native setViewport calls");
-            checkCount(backend.GetColoredPipelineCacheSizeEXT() - pipe0, 0,
+            checkCount(renderer.GetColoredPipelineCacheSizeEXT() - pipe0, 0,
                        "P1 four viewports in one cycle: new Colored3D pipeline variants");
         }
 
@@ -195,8 +195,8 @@ class WebGpuViewportCardinalityTest : public Game
         {
             auto rt = MakeTarget(dev);
             dev.SetRenderTarget(rt.get());
-            const std::size_t sv0 = backend.GetSetViewportCallCountEXT();
-            const std::size_t pipe0 = backend.GetColoredPipelineCacheSizeEXT();
+            const std::size_t sv0 = renderer.GetSetViewportCallCountEXT();
+            const std::size_t pipe0 = renderer.GetColoredPipelineCacheSizeEXT();
 
             dev.Clear(kBlack);
             SetVp(dev, 4, 4, kRT / 2, kRT / 2);
@@ -205,9 +205,9 @@ class WebGpuViewportCardinalityTest : public Game
             SetVp(dev, 0, 0, kRT, kRT);
             dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
 
-            checkCount(backend.GetSetViewportCallCountEXT() - sv0, 2,
+            checkCount(renderer.GetSetViewportCallCountEXT() - sv0, 2,
                        "P2 four draws sharing one viewport: native setViewport calls");
-            checkCount(backend.GetColoredPipelineCacheSizeEXT() - pipe0, 0,
+            checkCount(renderer.GetColoredPipelineCacheSizeEXT() - pipe0, 0,
                        "P2 four draws sharing one viewport: new pipeline variants");
         }
 
@@ -215,9 +215,9 @@ class WebGpuViewportCardinalityTest : public Game
         {
             auto rt = MakeTarget(dev);
             dev.SetRenderTarget(rt.get());
-            const std::size_t pipe0 = backend.GetColoredPipelineCacheSizeEXT();
-            const std::size_t sprite0 = backend.GetSpritePipelineCacheSizeEXT();
-            const std::size_t pass0 = backend.GetRenderPassCountEXT();
+            const std::size_t pipe0 = renderer.GetColoredPipelineCacheSizeEXT();
+            const std::size_t sprite0 = renderer.GetSpritePipelineCacheSizeEXT();
+            const std::size_t pass0 = renderer.GetRenderPassCountEXT();
 
             dev.Clear(kBlack);
             for (int i = 0; i < 32; ++i)
@@ -229,11 +229,11 @@ class WebGpuViewportCardinalityTest : public Game
             SetVp(dev, 0, 0, kRT, kRT);
             dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
 
-            checkCount(backend.GetColoredPipelineCacheSizeEXT() - pipe0, 0,
+            checkCount(renderer.GetColoredPipelineCacheSizeEXT() - pipe0, 0,
                        "P3 32 distinct viewports: new Colored3D pipeline variants");
-            checkCount(backend.GetSpritePipelineCacheSizeEXT() - sprite0, 0,
+            checkCount(renderer.GetSpritePipelineCacheSizeEXT() - sprite0, 0,
                        "P3 32 distinct viewports: new sprite pipeline variants");
-            checkCount(backend.GetRenderPassCountEXT() - pass0, 1,
+            checkCount(renderer.GetRenderPassCountEXT() - pass0, 1,
                        "P3 32 distinct viewports: render passes");
         }
 
@@ -245,7 +245,7 @@ class WebGpuViewportCardinalityTest : public Game
             for (int frame = 0; frame < 3; ++frame)
             {
                 dev.SetRenderTarget(rt.get());
-                const std::size_t pass0 = backend.GetRenderPassCountEXT();
+                const std::size_t pass0 = renderer.GetRenderPassCountEXT();
                 dev.Clear(kBlack);
                 for (int i = 0; i < 8; ++i)
                 {
@@ -254,7 +254,7 @@ class WebGpuViewportCardinalityTest : public Game
                 }
                 SetVp(dev, 0, 0, kRT, kRT);
                 dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
-                const std::size_t used = backend.GetRenderPassCountEXT() - pass0;
+                const std::size_t used = renderer.GetRenderPassCountEXT() - pass0;
                 if (frame > 0 && used != previousPasses) stable = false;
                 previousPasses = used;
             }
@@ -268,8 +268,8 @@ class WebGpuViewportCardinalityTest : public Game
         {
             auto rt = MakeTarget(dev);
             dev.SetRenderTarget(rt.get());
-            const std::size_t sv0 = backend.GetSetViewportCallCountEXT();
-            const std::size_t sprite0 = backend.GetSpritePipelineCacheSizeEXT();
+            const std::size_t sv0 = renderer.GetSetViewportCallCountEXT();
+            const std::size_t sprite0 = renderer.GetSpritePipelineCacheSizeEXT();
 
             dev.Clear(kBlack);
             SamplerState point = SamplerState::PointClamp;
@@ -285,13 +285,13 @@ class WebGpuViewportCardinalityTest : public Game
             SetVp(dev, 0, 0, kRT, kRT);
             dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
 
-            checkCount(backend.GetSetViewportCallCountEXT() - sv0, 4,
+            checkCount(renderer.GetSetViewportCallCountEXT() - sv0, 4,
                        "P5 three sprite viewports: native setViewport calls");
-            check(backend.GetSpritePipelineCacheSizeEXT() - sprite0 <= 1,
+            check(renderer.GetSpritePipelineCacheSizeEXT() - sprite0 <= 1,
                   "P5 three sprite viewports: at most one new sprite pipeline");
         }
 
-        const std::size_t errors = backend.GetUncapturedErrorCountEXT();
+        const std::size_t errors = renderer.GetUncapturedErrorCountEXT();
         check(errors == 0, errors == 0
                   ? "P6 WebGPU validation stayed silent through every viewport"
                   : "P6 WebGPU reported " + std::to_string(errors) + " uncaptured errors");

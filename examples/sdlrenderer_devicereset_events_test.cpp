@@ -2,8 +2,8 @@
 // Task 715: Verify DeviceResetting/DeviceReset events fire correctly on SDL_Renderer backbuffer
 // resize. Closes the Viewport/PresentationParameters section (710-715).
 //
-// GraphicsDevice::Reset() (shared, backend-agnostic code) raises DeviceResetting BEFORE storing
-// the new PresentationParameters, and DeviceReset AFTER the whole reconfiguration (backend
+// GraphicsDevice::Reset() (shared, renderer-agnostic code) raises DeviceResetting BEFORE storing
+// the new PresentationParameters, and DeviceReset AFTER the whole reconfiguration (renderer
 // resolution update, viewport refresh) completes. This is exercised here specifically in the
 // context of a REAL SDL_Renderer backbuffer resize (Task 711's own scenario) to confirm: both
 // events fire exactly once per Reset() call, in the correct order, and DeviceResetting's handler
@@ -12,7 +12,7 @@
 // updated) state.
 //
 // Requires PresentationMode::NativeBackBuffer (Task 915 finding): SDL_RenderReadPixels operates
-// in physical output coordinates, while this backend's default presentation mode
+// in physical output coordinates, while this renderer's default presentation mode
 // (FixedHeightDynamicWidth) does not map logical pixels 1:1 to physical ones.
 //
 // Exit code 0 = all checks PASS, 1 = at least one FAIL.

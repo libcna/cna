@@ -9,7 +9,7 @@
 // unsafe: A/B/A ordering, per-frame ID reuse, readback's reserved highest view, native-handle
 // reuse, disposal/recreation, and normal teardown with many targets still live.
 
-#include "CNA/Internal/Backends/Bgfx/BgfxGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Bgfx/BgfxRenderer.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
@@ -31,8 +31,8 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using CNA::Internal::Backends::Bgfx::BgfxGraphicsBackend;
-using CNA::Internal::Backends::Bgfx::BgfxRenderTargetBackend;
+using CNA::Internal::Renderers::Bgfx::BgfxRenderer;
+using CNA::Internal::Renderers::Bgfx::BgfxRenderTargetRenderer;
 
 namespace
 {
@@ -54,9 +54,9 @@ namespace
             DepthFormat::None, 0, RenderTargetUsage::PreserveContents);
     }
 
-    BgfxRenderTargetBackend& NativeTarget(RenderTarget2D& target)
+    BgfxRenderTargetRenderer& NativeTarget(RenderTarget2D& target)
     {
-        return *static_cast<BgfxRenderTargetBackend*>(target.GetRenderTargetBackend());
+        return *static_cast<BgfxRenderTargetRenderer*>(target.GetRenderTargetRenderer());
     }
 }
 
@@ -78,7 +78,7 @@ class BgfxGfx179ViewCapacityTest final : public Game
     bool framebufferReuse_ = false;
     bool textureReuse_ = false;
     bool sequentialNativeValid_ = true;
-    bool disposedBackendCleared_ = true;
+    bool disposedRendererCleared_ = true;
 
     void Check(bool condition, const std::string& label)
     {
@@ -87,9 +87,9 @@ class BgfxGfx179ViewCapacityTest final : public Game
         std::printf("[%s] %s\n", condition ? "PASS" : "FAIL", label.c_str());
     }
 
-    BgfxGraphicsBackend& Backend()
+    BgfxRenderer& Renderer()
     {
-        return static_cast<BgfxGraphicsBackend&>(getGraphicsDeviceProperty().GetBackend());
+        return static_cast<BgfxRenderer&>(getGraphicsDeviceProperty().GetRenderer());
     }
 
     void RecordNativeIds(RenderTarget2D& target)
@@ -137,8 +137,8 @@ class BgfxGfx179ViewCapacityTest final : public Game
             auto target = MakeTarget(device);
             RecordNativeIds(*target);
             target->Dispose();
-            disposedBackendCleared_ = disposedBackendCleared_ &&
-                                      target->GetRenderTargetBackend() == nullptr;
+            disposedRendererCleared_ = disposedRendererCleared_ &&
+                                      target->GetRenderTargetRenderer() == nullptr;
             ++sequentialCreated_;
         }
     }
@@ -150,7 +150,7 @@ class BgfxGfx179ViewCapacityTest final : public Game
         bool valid = order.size() == expectedCount;
         for (std::size_t i = 0; valid && i < order.size(); ++i)
         {
-            valid = order[i] < CNA::Internal::Backends::Bgfx::Detail::kBackbufferFlushViewId;
+            valid = order[i] < CNA::Internal::Renderers::Bgfx::Detail::kBackbufferFlushViewId;
             if (i > 0) valid = valid && order[i - 1] < order[i];
         }
         Check(valid, label);
@@ -195,7 +195,7 @@ class BgfxGfx179ViewCapacityTest final : public Game
         device.Clear(Color(20, 210, 60, 255));
         device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
 
-        const auto& order = Backend().frameViewOrder_;
+        const auto& order = Renderer().frameViewOrder_;
         CheckStrictPublicViewOrder(order, 3,
                                    "target A/B/A bind-unbind operations own three collision-free "
                                    "views in public order");
@@ -211,7 +211,7 @@ class BgfxGfx179ViewCapacityTest final : public Game
         device.Clear(Color(230, 180, 20, 255));
         device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
 
-        const auto& order = Backend().frameViewOrder_;
+        const auto& order = Renderer().frameViewOrder_;
         Check(order.size() == 1 && order.front() == firstFrameFirstView_,
               "the first ordered view ID is reused after Present starts a new frame");
 
@@ -234,7 +234,7 @@ class BgfxGfx179ViewCapacityTest final : public Game
         const Color backbufferColor(70, 30, 190, 255);
         device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
         device.Clear(backbufferColor);
-        CheckStrictPublicViewOrder(Backend().frameViewOrder_, 1,
+        CheckStrictPublicViewOrder(Renderer().frameViewOrder_, 1,
                                    "a fresh backbuffer frame uses one non-reserved public view");
 
         Color pixel(0, 0, 0, 0);
@@ -248,9 +248,9 @@ class BgfxGfx179ViewCapacityTest final : public Game
         device.SetRenderTarget(targetA_.get());
         device.Clear(Color(15, 100, 235, 255));
         device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
-        const auto& order = Backend().frameViewOrder_;
+        const auto& order = Renderer().frameViewOrder_;
         Check(order.size() == 1 && order.front() == firstFrameFirstView_ &&
-                  order.front() != CNA::Internal::Backends::Bgfx::Detail::kBackbufferFlushViewId,
+                  order.front() != CNA::Internal::Renderers::Bgfx::Detail::kBackbufferFlushViewId,
               "readback view 255 never collides with the reclaimed first target view ID");
         CheckTargetColor(*targetA_, Color(15, 100, 235, 255),
                          "target rendering remains exact after reserved-view readback");
@@ -269,7 +269,7 @@ class BgfxGfx179ViewCapacityTest final : public Game
 
     void RunTeardownFrame(GraphicsDevice& device)
     {
-        Check(sequentialCreated_ == 264 && sequentialNativeValid_ && disposedBackendCleared_,
+        Check(sequentialCreated_ == 264 && sequentialNativeValid_ && disposedRendererCleared_,
               "264 sequential create/dispose cycles across frames keep native objects valid and "
               "release wrappers");
         Check(framebufferReuse_ && textureReuse_,

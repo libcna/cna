@@ -2,7 +2,7 @@
 // Minimal-link probe for CNA::GraphicsCore (MODULARIZATION_PLAN.md §4): device-free graphics
 // state objects and vertex metadata must be usable without content, media, runtime, devices
 // or networking. The paired ModuleLinkClosure_Graphics ctest inspects this executable's
-// generated link line; under CNA_GRAPHICS_BACKEND=HEADLESS it additionally proves the closure
+// generated link line; under CNA_GRAPHICS_RENDERER=HEADLESS it additionally proves the closure
 // contains no native renderer SDK library.
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"

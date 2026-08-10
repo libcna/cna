@@ -10,7 +10,7 @@
 // TextureFilter::Anisotropic + single-level Texture2D combination must now produce a real
 // magnified blend of the 2-texel source, not solid black.
 //
-// Root cause (Task 867/924): EasyGLTextureBackend never set GL_TEXTURE_MAX_LEVEL, so GL's own
+// Root cause (Task 867/924): EasyGLTextureRenderer never set GL_TEXTURE_MAX_LEVEL, so GL's own
 // default (1000) made every texture appear "incomplete" under a *_MIPMAP_* minification filter
 // (which TextureFilter::Anisotropic and every other Mip-suffixed TextureFilter value map to)
 // unless every level from 0 to 1000 (or until 1x1) was populated — true even for a single-level

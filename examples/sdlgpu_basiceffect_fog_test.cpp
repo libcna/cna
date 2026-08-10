@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-009 (SdlGpu slice): stock-effect fog, entirely unimplemented on this backend until this
-// task (grep of every .glsl + SdlGpuGraphicsBackend.cpp for any fog identifier returned zero).
+// REMED-GFX-009 (SdlGpu slice): stock-effect fog, entirely unimplemented on this renderer until this
+// task (grep of every .glsl + SdlGpuRenderer.cpp for any fog identifier returned zero).
 //
 // This file covers the four BasicEffect shader families:
 //   colored3d           (VertexPositionColor,        stride 16)
@@ -12,7 +12,7 @@
 //   keep     = clamp((Z + FogEnd) / (FogEnd - FogStart), 0, 1)   (raw object-space Z)
 //   finalRGB = mix(FogColor, geomRGB, keep)                      (keep=1 -> no fog, 0 -> full fog)
 //
-// Shared scene (identical to the verified Vulkan fog tests, so results are numerically cross-backend
+// Shared scene (identical to the verified Vulkan fog tests, so results are numerically cross-renderer
 // comparable): blue geometry (0,0,255), red fog (255,0,0), FogStart=0, FogEnd=-0.9.
 //   Z=0.00 -> keep=1.0 -> pure blue        (0,0,255)
 //   Z=0.45 -> keep=0.5 -> mix -> purple    (128,0,128)
@@ -24,7 +24,7 @@
 //
 // SdlGpu renders into a RenderTarget2D (SurfaceFormat::Color = RGBA8 UNORM, linear -- see
 // sdlgpu_environmentmapeffect_emissive_test.cpp / sdlgpu_envmap_test.cpp) whose GetData readback is
-// the linear byte value directly (the swapchain download path segfaults on this backend, SDLGPU-39).
+// the linear byte value directly (the swapchain download path segfaults on this renderer, SDLGPU-39).
 //
 // Exit code 0 = all PASS, 1 = any FAIL, 77 = SKIP (no GPU-backed display).
 

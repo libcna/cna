@@ -14,7 +14,7 @@
 // Root cause this guards against: without the MAX_LEVEL clamp, GL's own default (1000) makes
 // every texture appear "incomplete" under a *_MIPMAP_* minification filter (which
 // TextureFilter::Anisotropic maps to) unless every level from 0 to 1000 is populated -- true even
-// for a single-level texture -- so a broken backend would render solid black here.
+// for a single-level texture -- so a broken renderer would render solid black here.
 //
 // Exit code 0 = PASS, 1 = FAIL.
 

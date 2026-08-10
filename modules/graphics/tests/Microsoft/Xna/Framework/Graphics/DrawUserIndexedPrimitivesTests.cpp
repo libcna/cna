@@ -4,12 +4,12 @@
 // Tests cover:
 //   • Index count formula (identical to PrimitiveVerts — verified via the public static).
 //   • All 8 typed overloads + 2 VertexDeclaration overloads compile and link.
-//   • Null-backend (headless GraphicsDevice) → silent return, no throw for every overload.
+//   • Null-renderer (headless GraphicsDevice) → silent return, no throw for every overload.
 //   • primitiveCount <= 0 throws ArgumentOutOfRangeException, mirroring Task 259's
 //     DrawUserPrimitives coverage, for all 8 typed + 2 VertexDeclaration overloads plus
 //     the untyped raw-void* overload (whose guard was missing until this task).
 //
-// Missing-effect throw and pixel-readback tests require a real GPU backend:
+// Missing-effect throw and pixel-readback tests require a real GPU renderer:
 // see integration tests Tasks 257–258.
 
 #include <gtest/gtest.h>
@@ -81,15 +81,15 @@ TEST(DrawUserIndexedPrimitivesIndexCountTest, PointListEXT_SevenPoints)
 // =============================================================================
 // Missing-effect throws — all typed + VertexDeclaration overloads
 //
-// The default GraphicsDevice() constructor initializes an EasyGL backend, so
-// backend_ is non-null. With no effect applied, every typed overload must throw
+// The default GraphicsDevice() constructor initializes an EasyGL renderer, so
+// renderer_ is non-null. With no effect applied, every typed overload must throw
 // std::runtime_error instead of silently returning (the pre-Task-252 bug).
 // =============================================================================
 
 class DrawUserIndexedPrimitivesNoEffectTest : public ::testing::Test
 {
 protected:
-    GraphicsDevice gd; // default ctor → real EasyGL backend, but no currentEffect_
+    GraphicsDevice gd; // default ctor → real EasyGL renderer, but no currentEffect_
 
     const Color red   { 255, 0,   0,   255 };
     const Color green { 0,   255, 0,   255 };

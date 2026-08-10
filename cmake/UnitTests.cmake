@@ -35,7 +35,7 @@ if(CNA_BUILD_TESTS)
     # recursive test glob add them to CnaTests breaks every non-Windows configuration (including
     # HTML_DOM/Emscripten) at <windows.h>, and would duplicate main in a Windows CnaTests link.
     list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX
-        ".*/CNA/Internal/Backends/Glide/(FakeGlide3xDll|GlideAbiLoaderTests)\\.cpp$")
+        ".*/CNA/Internal/Renderers/Glide/(FakeGlide3xDll|GlideAbiLoaderTests)\\.cpp$")
 
     # The minimal-link module probes (tests/modules/*.cpp, cmake/Tests/ModuleProbes.cmake) are
     # standalone executables with their own main(), not GTest translation units -- same reason
@@ -125,25 +125,25 @@ if(CNA_BUILD_TESTS)
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/Microsoft/Devices/Detail/DevicesShutdownOrderingTests\\.cpp$")
     endif()
 
-    # plan_wicked.md: the Wicked backend's own regression suites live under
+    # plan_wicked.md: the Wicked renderer's own regression suites live under
     # modules/renderers/wicked/tests/, and the pipeline-key test among them includes the
-    # backend's header, which resolves only when the WICKED backend is configured (the
-    # WickedEngine include directories come with the backend target). Excluded from every other
-    # backend's corpus the same way the conditional files above are -- an unconditional glob of
-    # a backend-local test directory otherwise breaks every other backend's CnaTests configure.
+    # renderer's header, which resolves only when the WICKED renderer is configured (the
+    # WickedEngine include directories come with the renderer target). Excluded from every other
+    # renderer's corpus the same way the conditional files above are -- an unconditional glob of
+    # a renderer-local test directory otherwise breaks every other renderer's CnaTests configure.
     # Under WICKED the corpus keeps them, and the dedicated cna_test_wicked_* targets
     # (cmake/Tests/WickedTests.cmake) build them standalone as well.
-    if(NOT CNA_GRAPHICS_BACKEND STREQUAL "WICKED")
-        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Backends/Wicked/.*\\.cpp$")
+    if(NOT CNA_GRAPHICS_RENDERER STREQUAL "WICKED")
+        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Renderers/Wicked/.*\\.cpp$")
     endif()
 
-    # plan_magnum.md: the MAGNUM backend's own GTest suite lives under
-    # modules/renderers/magnum/tests/ and includes the backend's headers, which resolve only
-    # when the MAGNUM backend is configured (the Magnum::GL include directories come with the
-    # backend target). Excluded from every other backend's corpus by the same convention as the
+    # plan_magnum.md: the MAGNUM renderer's own GTest suite lives under
+    # modules/renderers/magnum/tests/ and includes the renderer's headers, which resolve only
+    # when the MAGNUM renderer is configured (the Magnum::GL include directories come with the
+    # renderer target). Excluded from every other renderer's corpus by the same convention as the
     # Wicked directory above; under MAGNUM the corpus keeps it.
-    if(NOT CNA_GRAPHICS_BACKEND STREQUAL "MAGNUM")
-        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Backends/Magnum/.*\\.cpp$")
+    if(NOT CNA_GRAPHICS_RENDERER STREQUAL "MAGNUM")
+        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Renderers/Magnum/.*\\.cpp$")
     endif()
 
     add_executable(CnaTests
@@ -185,7 +185,7 @@ if(CNA_BUILD_TESTS)
             SDL3::SDL3
     )
 
-    # The metal and glide policy suites deliberately compile on every backend (see their own
+    # The metal and glide policy suites deliberately compile on every renderer (see their own
     # header comments); their policy headers ride the unconditional header-interface targets
     # those renderer modules always define.
     target_link_libraries(CnaTests PRIVATE cna_renderer_metal_headers cna_renderer_glide_headers)
@@ -199,24 +199,24 @@ if(CNA_BUILD_TESTS)
     )
 
     # REMED-GFX-054's WebGPU-only IndexBuffer regression opens native error scopes around the
-    # public operation. CNA's backend intentionally keeps wgpu-native PRIVATE, so expose it only
+    # public operation. CNA's renderer intentionally keeps wgpu-native PRIVATE, so expose it only
     # to this test executable in the WebGPU configuration.
-    if(CNA_GRAPHICS_BACKEND STREQUAL "WEBGPU")
+    if(CNA_GRAPHICS_RENDERER STREQUAL "WEBGPU")
         target_link_libraries(CnaTests PRIVATE WebGPU::WebGPU)
     endif()
 
-    # plan_magnum.md MAGNUM-40: the MAGNUM backend's own tests exercise its XNA-ordinal -> Magnum-enum
+    # plan_magnum.md MAGNUM-40: the MAGNUM renderer's own tests exercise its XNA-ordinal -> Magnum-enum
     # mappings and its generated stock GLSL directly, so they include Magnum's GL headers. CNA keeps
-    # Magnum PRIVATE on the backend target (same discipline as wgpu-native above), so it is exposed
+    # Magnum PRIVATE on the renderer target (same discipline as wgpu-native above), so it is exposed
     # to this test executable only, and only in the Magnum configuration.
-    if(CNA_GRAPHICS_BACKEND STREQUAL "MAGNUM")
+    if(CNA_GRAPHICS_RENDERER STREQUAL "MAGNUM")
         target_link_libraries(CnaTests PRIVATE Magnum::GL Magnum::Magnum)
     endif()
 
-    # plan_diligent.md DILIGENT-15: DiligentDeviceSelectionTests.cpp includes the backend header,
+    # plan_diligent.md DILIGENT-15: DiligentDeviceSelectionTests.cpp includes the renderer header,
     # which includes DiligentCore's own headers. cna_link_diligent() keeps those PRIVATE to the
-    # backend target (same discipline as WebGPU just above), so expose them here too.
-    if(CNA_GRAPHICS_BACKEND STREQUAL "DILIGENT")
+    # renderer target (same discipline as WebGPU just above), so expose them here too.
+    if(CNA_GRAPHICS_RENDERER STREQUAL "DILIGENT")
         cna_link_diligent(CnaTests)
     endif()
 
@@ -302,64 +302,64 @@ if(CNA_BUILD_TESTS)
     # gate those wrappers normally enforce would misfire here. MUST be set before
     # gtest_discover_tests() below -- it reads this property immediately at configure time, not
     # lazily at generate/test time. `CMAKE_CROSSCOMPILING` is used as the outer guard (equivalent
-    # to `MINGW` for every real build configuration this project uses, since these three backends
+    # to `MINGW` for every real build configuration this project uses, since these three renderers
     # are only ever built via the MinGW cross-toolchain) so a D3D9 branch could be added without
     # touching D3D11/D3D12's own already-working invocation style.
     if(CMAKE_CROSSCOMPILING)
-        if(CNA_GRAPHICS_BACKEND STREQUAL "D3D9")
-            # D9-123: this backend's own wrapper takes a simpler `env;VAR=1;script` form (no
+        if(CNA_GRAPHICS_RENDERER STREQUAL "D3D9")
+            # D9-123: this renderer's own wrapper takes a simpler `env;VAR=1;script` form (no
             # `${CMAKE_COMMAND} -E env`/explicit `bash` prefix) -- proven end-to-end for D3D9
             # (`ctest -L D3D9` green) and for D3D11 when reused verbatim there too (Task 1106).
             set_target_properties(CnaTests PROPERTIES CROSSCOMPILING_EMULATOR
                 "env;CNA_D3D9_SKIP_DXVK_GATE=1;${CMAKE_SOURCE_DIR}/scripts/run-wine-dxvk9.sh")
-        elseif(CNA_GRAPHICS_BACKEND STREQUAL "D3D11")
+        elseif(CNA_GRAPHICS_RENDERER STREQUAL "D3D11")
             set_target_properties(CnaTests PROPERTIES
                 CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_D3D11_SKIP_DXVK_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-dxvk.sh")
-        elseif(CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
+        elseif(CNA_GRAPHICS_RENDERER STREQUAL "D3D12")
             set_target_properties(CnaTests PROPERTIES
                 CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_D3D12_SKIP_VKD3D_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-vkd3d.sh")
-        elseif(CNA_GRAPHICS_BACKEND STREQUAL "DX1")
+        elseif(CNA_GRAPHICS_RENDERER STREQUAL "DX1")
             # plan_dx2.md DX2-84 follow-up: this gap pre-dates DX2 (DX1 never got this wiring
             # either, plan_dx1.md's own DX1-88 full-suite regression must have run CnaTests.exe
             # directly through run-wine-dx1.sh by hand rather than via `ctest -L DX1`'s
-            # gtest_discover_tests(PRE_TEST) step) -- fixed here for both backends together, same
+            # gtest_discover_tests(PRE_TEST) step) -- fixed here for both renderers together, same
             # skip-gate reasoning as D3D9/D3D11/D3D12 above (a bare --gtest_list_tests never opens
             # a real DirectDraw object).
             set_target_properties(CnaTests PROPERTIES
                 CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_DX1_SKIP_DDRAW_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-dx1.sh")
-        elseif(CNA_GRAPHICS_BACKEND STREQUAL "DX2")
+        elseif(CNA_GRAPHICS_RENDERER STREQUAL "DX2")
             set_target_properties(CnaTests PROPERTIES
                 CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_DX2_SKIP_DDRAW_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-dx2.sh")
-        elseif(CNA_GRAPHICS_BACKEND STREQUAL "DX3")
+        elseif(CNA_GRAPHICS_RENDERER STREQUAL "DX3")
             # plan_dx3.md: wired proactively (not discovered by a from-scratch regression this
-            # time) -- same DX2-84 finding/fix, applied up front for this new backend.
+            # time) -- same DX2-84 finding/fix, applied up front for this new renderer.
             set_target_properties(CnaTests PROPERTIES
                 CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_DX3_SKIP_DDRAW_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-dx3.sh")
-        elseif(CNA_GRAPHICS_BACKEND STREQUAL "DX5")
+        elseif(CNA_GRAPHICS_RENDERER STREQUAL "DX5")
             # plan_dx5.md: same proactive wiring as DX3.
             set_target_properties(CnaTests PROPERTIES
                 CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_DX5_SKIP_DDRAW_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-dx5.sh")
-        elseif(CNA_GRAPHICS_BACKEND STREQUAL "DX6")
+        elseif(CNA_GRAPHICS_RENDERER STREQUAL "DX6")
             # plan_dx6.md: same proactive wiring as DX3/DX5.
             set_target_properties(CnaTests PROPERTIES
                 CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_DX6_SKIP_DDRAW_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-dx6.sh")
-        elseif(CNA_GRAPHICS_BACKEND STREQUAL "DX7")
+        elseif(CNA_GRAPHICS_RENDERER STREQUAL "DX7")
             # plan_dx7.md: same proactive wiring as DX3/DX5/DX6.
             set_target_properties(CnaTests PROPERTIES
                 CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_DX7_SKIP_DDRAW_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-dx7.sh")
-        elseif(CNA_GRAPHICS_BACKEND STREQUAL "DX8")
+        elseif(CNA_GRAPHICS_RENDERER STREQUAL "DX8")
             # plan_dx8.md: DXVK-delivered (not DirectDraw-based), same proactive wiring shape as
             # D3D9's own run-wine-dxvk9.sh gate -- CNA_DX8_SKIP_DXVK_GATE for a binary that
             # legitimately never opens a real D3D8 device (e.g. a bare --gtest_list_tests call).
             set_target_properties(CnaTests PROPERTIES
                 CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_DX8_SKIP_DXVK_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-dx8.sh")
-        elseif(CNA_GRAPHICS_BACKEND STREQUAL "D3D10")
+        elseif(CNA_GRAPHICS_RENDERER STREQUAL "D3D10")
             # plan_d3d10.md: DXVK-delivered (via d3d10core), same proactive wiring shape as DX8's
             # own gate -- CNA_D3D10_SKIP_DXVK_GATE for a binary that legitimately never opens a
             # real D3D10 device (e.g. a bare --gtest_list_tests call).
             set_target_properties(CnaTests PROPERTIES
                 CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_D3D10_SKIP_DXVK_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-d3d10.sh")
-        elseif(CNA_GRAPHICS_BACKEND STREQUAL "DIRECT2D")
+        elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECT2D")
             # Direct2D needs the normal/dedicated prefix selected by run-wine-direct2d.sh, not the
             # D3D11-only DXVK prefix (which may not contain Wine's d2d1 runtime). Pure unit tests
             # do not create a device, so skip the unrelated DXVK renderer-log gate.
@@ -376,10 +376,10 @@ if(CNA_BUILD_TESTS)
     # cmake/Tests/EasyGLTests.cmake / VulkanTests.cmake.
     gtest_discover_tests(CnaTests DISCOVERY_MODE PRE_TEST WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 
-    # D2D-118/D2D-119: a stable label and one explicit runner make the backend's device-free
+    # D2D-118/D2D-119: a stable label and one explicit runner make the renderer's device-free
     # capability, blend, mip-policy, HRESULT and pixel-conversion contract independently runnable.
-    if(CNA_GRAPHICS_BACKEND STREQUAL "DIRECT2D")
-        cna_register_backend_test(NAME Direct2D_Unit
+    if(CNA_GRAPHICS_RENDERER STREQUAL "DIRECT2D")
+        cna_register_renderer_test(NAME Direct2D_Unit
             COMMAND CnaTests --gtest_filter=Direct2D*
             TIMEOUT 60 LABELS "Direct2D;Unit" WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
     endif()
@@ -396,11 +396,11 @@ if(CNA_BUILD_TESTS)
     # The input state is a process-wide singleton (InputManager / GestureDetector / MouseCursor stock
     # cursors persist for the whole binary), so a static-state leak would reintroduce order dependence;
     # running the filtered subset 5x under a fresh shuffle each iteration is the required check that
-    # catches it. `ctest -L input` runs exactly this on every backend/CI job.
+    # catches it. `ctest -L input` runs exactly this on every renderer/CI job.
     # Headless-safe audio everywhere; the video driver is left to the runner (Xvfb+x11 in CI, real
     # display or `xvfb-run` locally) because the MouseCursor tests need real cursors (the SDL dummy
     # driver has null cursors).
-    cna_register_backend_test(NAME CnaInputTests COMMAND CnaTests --gtest_filter=${CNA_INPUT_TEST_FILTER} --gtest_shuffle --gtest_repeat=5
+    cna_register_renderer_test(NAME CnaInputTests COMMAND CnaTests --gtest_filter=${CNA_INPUT_TEST_FILTER} --gtest_shuffle --gtest_repeat=5
         LABELS "input" ENVIRONMENT "SDL_AUDIODRIVER=dummy")
 
     if(MINGW)

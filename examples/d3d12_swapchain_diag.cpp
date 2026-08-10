@@ -10,16 +10,16 @@
 // swap-chain creation. Real windowed CTest coverage is not attempted here (Proton's own bootstrap
 // launch is too heavy/slow for a normal CTest run) -- this manual diagnostic plus DX-114's own real
 // Windows hardware pass are the actual verification path for the presentation side of this
-// backend.
-#include "CNA/Internal/Backends/D3D12/D3D12GraphicsBackend.hpp"
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+// renderer.
+#include "CNA/Internal/Renderers/D3D12/D3D12Renderer.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 
 #include <SDL3/SDL.h>
 
 #include <cstdio>
 
-using CNA::Internal::Backends::GraphicsBackendCreateArgs;
-using CNA::Internal::Backends::D3D12::D3D12GraphicsBackend;
+using CNA::Internal::Renderers::GraphicsRendererCreateArgs;
+using CNA::Internal::Renderers::D3D12::D3D12Renderer;
 
 int main()
 {
@@ -44,20 +44,20 @@ int main()
         return 2;
     }
 
-    GraphicsBackendCreateArgs args;
+    GraphicsRendererCreateArgs args;
     args.window = window;
     args.virtualWidth = 64;
     args.virtualHeight = 64;
 
-    std::fprintf(log, "Constructing D3D12GraphicsBackend with a real window (real CreateSwapChainForHwnd attempt)...\n");
+    std::fprintf(log, "Constructing D3D12Renderer with a real window (real CreateSwapChainForHwnd attempt)...\n");
     std::fflush(log);
 
-    D3D12GraphicsBackend backend(args);
+    D3D12Renderer renderer(args);
 
     // If we get here without crashing, print the real, honest outcome.
-    std::fprintf(log, "Backend constructed without crashing.\n");
-    std::fprintf(log, "IsSwapChainAvailableEXT() = %s\n", backend.IsSwapChainAvailableEXT() ? "true" : "false");
-    std::fprintf(log, "GetSwapChainEXT() = %p\n", static_cast<void*>(backend.GetSwapChainEXT()));
+    std::fprintf(log, "Renderer constructed without crashing.\n");
+    std::fprintf(log, "IsSwapChainAvailableEXT() = %s\n", renderer.IsSwapChainAvailableEXT() ? "true" : "false");
+    std::fprintf(log, "GetSwapChainEXT() = %p\n", static_cast<void*>(renderer.GetSwapChainEXT()));
     std::fflush(log);
 
     // DX-116: real Clear()+Present() cycle, several frames, proving the whole pipeline (back-buffer
@@ -65,14 +65,14 @@ int main()
     // works end to end, not just swap-chain creation -- a different color each frame so a human
     // reviewing this log (or, on real Windows, actually watching the window) can tell each frame
     // genuinely reached the screen rather than the same clear silently repeating.
-    if (backend.IsSwapChainAvailableEXT())
+    if (renderer.IsSwapChainAvailableEXT())
     {
         const int frameCount = 10;
         for (int i = 0; i < frameCount; ++i)
         {
             const float t = static_cast<float>(i) / static_cast<float>(frameCount - 1);
-            backend.Clear(t, 1.0f - t, 0.25f, 1.0f);
-            backend.Present();
+            renderer.Clear(t, 1.0f - t, 0.25f, 1.0f);
+            renderer.Present();
             std::fprintf(log, "Frame %d: Clear()+Present() returned without throwing (t=%.2f).\n", i, t);
             std::fflush(log);
         }

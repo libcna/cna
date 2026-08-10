@@ -1,6 +1,6 @@
 # `demo_input` — Manual Input Verification Checklist
 
-> **Related input docs (INP-0003):** [plan](../plan_input.md) · [backend](input-backend.md) · [FNA fidelity + deviations](input-fna-fidelity.md) · [member-parity matrix](input-member-parity-matrix.md) · [frozen API + tier glossary](input-public-api-frozen.md) · [test coverage](input-test-coverage.md) · [build & test](input-build-and-test.md) · [platform notes](platform-input-notes.md) · [manual results](input-manual-verification-results.md) · [demo checklist](demo-input-checklist.md)
+> **Related input docs (INP-0003):** [plan](../plan_input.md) · [renderer](input-backend.md) · [FNA fidelity + deviations](input-fna-fidelity.md) · [member-parity matrix](input-member-parity-matrix.md) · [frozen API + tier glossary](input-public-api-frozen.md) · [test coverage](input-test-coverage.md) · [build & test](input-build-and-test.md) · [platform notes](platform-input-notes.md) · [manual results](input-manual-verification-results.md) · [demo checklist](demo-input-checklist.md)
 
 `examples/demo_input` (`cna_demo_input`) is the interactive input demo. The unit suite
 (`CnaTests`) exercises the input pipeline headlessly, but some behavior can only be confirmed with
@@ -12,7 +12,7 @@ each platform you care about; pair it with the platform-specific caveats in
 
 ```bash
 git submodule update --init --recursive           # first time only
-cmake -S . -B cmake-build-debug -G Ninja -DCNA_GRAPHICS_BACKEND=OPENGLES
+cmake -S . -B cmake-build-debug -G Ninja -DCNA_GRAPHICS_RENDERER=OPENGLES
 cmake --build cmake-build-debug --target cna_demo_input -j"$(nproc)"
 ./cmake-build-debug/cna_demo_input                 # needs a display
 ```
@@ -100,7 +100,7 @@ hardware is still human/hardware-gated** — see `input-manual-verification-resu
   above), or `Power` (battery query for any input device). There is therefore no manual-checklist item to
   physically exercise for these three, and no Phase 11 task names them (`plan_input.md`'s P11-001..015
   cover Keyboard/Mouse/GamePad/Touch/high-DPI only). Their current verification tier is unit tests against
-  the fake SDL backends (`SdlJoystickBackendTests.cpp`, `SensorsTests.cpp`, `PowerTests.cpp` — real,
+  the fake SDL renderers (`SdlJoystickBackendTests.cpp`, `SensorsTests.cpp`, `PowerTests.cpp` — real,
   substantial coverage, just not hardware-gated). Extending the demo UI to surface them is a legitimate
   follow-up but is out of this audit/documentation plan's scope (CLAUDE.md: no new features beyond audit/
   repair/test/doc); recorded here so the gap is explicit rather than silently unverifiable.

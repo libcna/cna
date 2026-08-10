@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-077: the Bgfx backend must honor BlendState.ColorWriteChannels via the per-draw
+// REMED-GFX-077: the Bgfx renderer must honor BlendState.ColorWriteChannels via the per-draw
 // BGFX_STATE_WRITE_{R,G,B,A} bits (identical bit values to the XNA ColorWriteChannels flags), now
-// that the mask is plumbed through IGraphicsBackend::ApplyBlendState. Previously every bgfx::setState
+// that the mask is plumbed through IGraphicsRenderer::ApplyBlendState. Previously every bgfx::setState
 // hardcoded BGFX_STATE_WRITE_RGB|BGFX_STATE_WRITE_A -> the mask was a silent no-op.
 //
 // Bgfx colour write is a single GLOBAL per-draw mask (not per-attachment), so independent MRT masks

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MS-PL
-// Task 399: cross-backend EnvironmentMapEffect capstone (Bgfx backend). See
+// Task 399: cross-renderer EnvironmentMapEffect capstone (Bgfx renderer). See
 // examples/easygl_environmentmapeffect_combined_test.cpp for the full derivation.
 //
 // Per Task 364's finding (tracked as Task 884, not fixed there or here): Bgfx's default
-// RasterizerState cull state is the only one of the 3 backends that actually matches FNA's
+// RasterizerState cull state is the only one of the 3 renderers that actually matches FNA's
 // real CullCounterClockwiseFace default, so it silently culls the standard NDC quad winding
 // used throughout this pixel-test family unless RasterizerState::CullNone is set
 // explicitly -- worked around here identically to prior Bgfx tests.

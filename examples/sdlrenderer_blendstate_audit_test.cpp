@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // Task 695: Audit BlendState -> SDL_BlendMode mapping for all 4 presets on SDL_Renderer.
 //
-// FOUND AND FIXED A REAL BUG (SDL_Renderer-specific -- SdlGraphicsBackend::ApplyBlendState):
+// FOUND AND FIXED A REAL BUG (SDL_Renderer-specific -- SdlRenderer::ApplyBlendState):
 // the previous mapping only special-cased 2 of the 4 presets by their exact (colorSrcBlend,
 // colorDstBlend) pair (Opaque -> SDL_BLENDMODE_NONE; Additive -> SDL_BLENDMODE_ADD) and fell
 // through to the single generic SDL_BLENDMODE_BLEND constant for EVERYTHING else -- meaning
@@ -25,7 +25,7 @@
 // values, not the 10 commonly-used ones the 4 standard presets and most custom BlendStates rely
 // on. All 4 presets use BlendFunction::Add for both channels (confirmed via BlendState.cpp), and
 // SDL_ComposeCustomBlendMode's ADD operation is universally supported by every SDL renderer
-// backend (per its own doc comment) -- so this fix is safe and reliable specifically for the 4
+// renderer (per its own doc comment) -- so this fix is safe and reliable specifically for the 4
 // presets this task audits.
 //
 // This test proves the fix's core, most consequential finding: AlphaBlend and NonPremultiplied
@@ -41,7 +41,7 @@
 // makes this a strong, unambiguous discriminating check.
 //
 // Requires PresentationMode::NativeBackBuffer (Task 915 finding): SDL_RenderReadPixels operates
-// in physical output coordinates, while this backend's default presentation mode
+// in physical output coordinates, while this renderer's default presentation mode
 // (FixedHeightDynamicWidth) does not map logical pixels 1:1 to physical ones.
 //
 // Exit code 0 = all PASS, 1 = at least one FAIL.

@@ -2,8 +2,8 @@
 """Renderer-identity registry gate (MODULARIZATION_PLAN.md §2.3).
 
 CNA has exactly 41 public renderer identities. This check mechanically compares
-the two authoritative registries -- the public GraphicsBackendType enum and the
-CNA_GRAPHICS_BACKEND cmake selection list -- against the canonical identity
+the two authoritative registries -- the public GraphicsRendererType enum and the
+CNA_GRAPHICS_RENDERER cmake selection list -- against the canonical identity
 table below. Any addition, removal or rename of a public identity fails here
 until the table (and therefore the documented public count) is deliberately
 updated.
@@ -63,23 +63,23 @@ IDENTITIES = [
 
 
 def enum_identities():
-    path = os.path.join(REPO, "modules", "core", "include", "CNA", "GraphicsBackendType.hpp")
+    path = os.path.join(REPO, "modules", "core", "include", "CNA", "GraphicsRendererType.hpp")
     text = open(path, encoding="utf-8").read()
-    body = re.search(r"enum class GraphicsBackendType\s*\{(.*?)\n\s*\};", text, re.S)
+    body = re.search(r"enum class GraphicsRendererType\s*\{(.*?)\n\s*\};", text, re.S)
     if not body:
-        sys.exit("cannot locate enum class GraphicsBackendType")
+        sys.exit("cannot locate enum class GraphicsRendererType")
     stripped = re.sub(r"/\*.*?\*/|//[^\n]*", "", body.group(1), flags=re.S)
     return re.findall(r"\b([A-Za-z_]\w*)\b", stripped)
 
 
 def cmake_identities():
-    path = os.path.join(REPO, "cmake", "BackendSelection.cmake")
+    path = os.path.join(REPO, "cmake", "RendererSelection.cmake")
     text = open(path, encoding="utf-8").read()
     m = re.search(
-        r"set_property\(CACHE CNA_GRAPHICS_BACKEND PROPERTY STRINGS((?:\s+\"[A-Z0-9_]+\")+)\)",
+        r"set_property\(CACHE CNA_GRAPHICS_RENDERER PROPERTY STRINGS((?:\s+\"[A-Z0-9_]+\")+)\)",
         text)
     if not m:
-        sys.exit("cannot locate CNA_GRAPHICS_BACKEND STRINGS property")
+        sys.exit("cannot locate CNA_GRAPHICS_RENDERER STRINGS property")
     return re.findall(r"\"([A-Z0-9_]+)\"", m.group(1))
 
 
@@ -91,7 +91,7 @@ def main():
     actual_enum = enum_identities()
     if actual_enum != expected_enum:
         ok = False
-        print("GraphicsBackendType enum diverges from the canonical identity table:")
+        print("GraphicsRendererType enum diverges from the canonical identity table:")
         print(f"  expected ({len(expected_enum)}): {expected_enum}")
         print(f"  actual   ({len(actual_enum)}): {actual_enum}")
 
@@ -100,7 +100,7 @@ def main():
     actual_cmake = cmake_identities()
     if sorted(actual_cmake) != sorted(expected_cmake) or len(actual_cmake) != len(expected_cmake):
         ok = False
-        print("CNA_GRAPHICS_BACKEND STRINGS diverge from the canonical identity table:")
+        print("CNA_GRAPHICS_RENDERER STRINGS diverge from the canonical identity table:")
         print(f"  expected ({len(expected_cmake)}): {sorted(expected_cmake)}")
         print(f"  actual   ({len(actual_cmake)}): {sorted(actual_cmake)}")
 

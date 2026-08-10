@@ -7,8 +7,8 @@
 // examples/easygl_occlusion_query_occluded_quad_test.cpp (Task 446), and
 // examples/bgfx_occlusionquery_pixelcount_test.cpp (Tasks 814/815), combined into one file (same
 // shape as the Bgfx counterpart). Unlike those, this file's whole point is verifying the previously
-// entirely-stubbed Vulkan OcclusionQueryBackend::Begin()/End() (Task 447/854's real fix: draws are
-// tagged with the currently-active query via VulkanGraphicsBackend::PushPending3DDraw(), and
+// entirely-stubbed Vulkan OcclusionQueryRenderer::Begin()/End() (Task 447/854's real fix: draws are
+// tagged with the currently-active query via VulkanRenderer::PushPending3DDraw(), and
 // RecordCommandBuffer() wraps the tagged run in a real vkCmdBeginQuery/vkCmdEndQuery pair, with a
 // real per-frame vkCmdResetQueryPool before it) -- so PixelCount()/IsComplete() ARE this test's
 // primary subject, not an informational aside.

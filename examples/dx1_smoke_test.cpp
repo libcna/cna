@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // plan_dx1.md Phase O1/O2 (DX1-1..DX1-18): smoke test for the DX1 (real DirectDraw v1, run under
-// Wine -- no ../free-direct anywhere in this backend) graphics backend's foundation -- real
+// Wine -- no ../free-direct anywhere in this renderer) graphics renderer's foundation -- real
 // DirectDrawCreate/SetCooperativeLevel(DDSCL_NORMAL)/CreateSurface device bring-up, real
 // Clear()/Present(), real pixel readback. SpriteBatch/Texture2D draws are covered by
 // dx1_spritebatch_test.cpp (Phase O4).
@@ -22,7 +22,7 @@
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 
-#include "CNA/Internal/Backends/Dx1/Dx1GraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Dx1/Dx1Renderer.hpp"
 
 #include <cstdio>
 #include <cstdlib>
@@ -31,7 +31,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::Dx1;
+using namespace CNA::Internal::Renderers::Dx1;
 
 static constexpr int kCanvasSize = 64;
 
@@ -51,10 +51,10 @@ protected:
     void Draw(const GameTime&) override
     {
         auto& dev = getGraphicsDeviceProperty();
-        auto& backend = static_cast<Dx1GraphicsBackend&>(dev.GetBackend());
+        auto& renderer = static_cast<Dx1Renderer&>(dev.GetRenderer());
 
         // Check A: real window.
-        check(backend.GetWindowInternal() != nullptr, "GraphicsDevice has a real window under the DX1 backend");
+        check(renderer.GetWindowInternal() != nullptr, "GraphicsDevice has a real window under the DX1 renderer");
 
         // Check B: real, correct pixel readback after Clear(), via the shadow-backbuffer surface,
         // including the alpha channel.

@@ -1,12 +1,12 @@
 // plan_dx.md Phase DX6 (DX-44).
-#include "CNA/Internal/Backends/D3D11/D3D11SamplerCache.hpp"
-#include "CNA/Internal/Backends/D3DCommon/D3DStateMapping.hpp"
+#include "CNA/Internal/Renderers/D3D11/D3D11SamplerCache.hpp"
+#include "CNA/Internal/Renderers/D3DCommon/D3DStateMapping.hpp"
 
 #include <algorithm>
 #include <cstdio>
 #include <stdexcept>
 
-namespace CNA::Internal::Backends::D3D11
+namespace CNA::Internal::Renderers::D3D11
 {
     namespace
     {
@@ -37,7 +37,7 @@ namespace CNA::Internal::Backends::D3D11
         desc.Filter = D3DCommon::TextureFilterToD3D11(filter);
         desc.AddressU = D3DCommon::TextureAddressModeToD3D11(addressU);
         desc.AddressV = D3DCommon::TextureAddressModeToD3D11(addressV);
-        // IGraphicsBackend::ApplySamplerState has no addressW parameter (a pre-existing interface
+        // IGraphicsRenderer::ApplySamplerState has no addressW parameter (a pre-existing interface
         // limitation, not introduced here) -- reuse addressV, matching the V axis rather than
         // leaving W at an arbitrary default.
         desc.AddressW = desc.AddressV;

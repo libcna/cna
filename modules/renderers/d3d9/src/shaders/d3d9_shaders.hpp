@@ -6,7 +6,7 @@
 #include <cstddef>
 #include <cstdint>
 
-namespace CNA::Internal::Backends::D3D9::Shaders {
+namespace CNA::Internal::Renderers::D3D9::Shaders {
 
 static constexpr uint8_t kBasicEffect_VSBasic[] = {
     0x00u, 0x02u, 0xfeu, 0xffu, 0xfeu, 0xffu, 0x35u, 0x00u, 0x43u, 0x54u, 0x41u, 0x42u,
@@ -4566,4 +4566,4 @@ static constexpr D3D9EmbeddedShader kAllShaders[] = {
 };
 static constexpr size_t kAllShadersCount = 66;
 
-} // namespace CNA::Internal::Backends::D3D9::Shaders
+} // namespace CNA::Internal::Renderers::D3D9::Shaders

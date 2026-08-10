@@ -7,7 +7,7 @@
 #include <gtest/gtest.h>
 #include <stdexcept>
 
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PbrEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
@@ -19,7 +19,7 @@ using Microsoft::Xna::Framework::Vector3;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::PbrEffect;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
-using CNA::Internal::Backends::GpuDrawParams;
+using CNA::Internal::Renderers::GpuDrawParams;
 
 namespace
 {

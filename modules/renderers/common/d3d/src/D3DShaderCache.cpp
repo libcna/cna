@@ -1,9 +1,9 @@
 // plan_dx.md Phase DX3 (DX-15-embed).
-#include "CNA/Internal/Backends/D3DCommon/D3DShaderCache.hpp"
+#include "CNA/Internal/Renderers/D3DCommon/D3DShaderCache.hpp"
 
 #include "shaders/hlsl_shaders.hpp"
 
-namespace CNA::Internal::Backends::D3DCommon
+namespace CNA::Internal::Renderers::D3DCommon
 {
     namespace
     {
@@ -15,7 +15,7 @@ namespace CNA::Internal::Backends::D3DCommon
 
         Bytecode VertexBytecodeFor(D3DShaderVariant variant)
         {
-            using namespace CNA::Internal::Backends::D3DCommon::Shaders;
+            using namespace CNA::Internal::Renderers::D3DCommon::Shaders;
             switch (variant)
             {
                 case D3DShaderVariant::Colored3d:         return {kColored3dVertDxbc, kColored3dVertDxbc_size};
@@ -41,7 +41,7 @@ namespace CNA::Internal::Backends::D3DCommon
 
         Bytecode PixelBytecodeFor(D3DShaderVariant variant)
         {
-            using namespace CNA::Internal::Backends::D3DCommon::Shaders;
+            using namespace CNA::Internal::Renderers::D3DCommon::Shaders;
             switch (variant)
             {
                 case D3DShaderVariant::Colored3d:         return {kColored3dFragDxbc, kColored3dFragDxbc_size};

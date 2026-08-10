@@ -1,9 +1,9 @@
 // plan_dx.md Phase DX5 (DX-32).
-#include "CNA/Internal/Backends/D3D11/D3D11InputLayoutCache.hpp"
+#include "CNA/Internal/Renderers/D3D11/D3D11InputLayoutCache.hpp"
 
-#include "CNA/Internal/Backends/D3DCommon/D3DVertexFormatHelper.hpp"
+#include "CNA/Internal/Renderers/D3DCommon/D3DVertexFormatHelper.hpp"
 
-namespace CNA::Internal::Backends::D3D11
+namespace CNA::Internal::Renderers::D3D11
 {
     ComPtr<ID3D11InputLayout> D3D11InputLayoutCache::GetOrCreate(
         ID3D11Device* device, D3DShaderVariant variant, std::size_t strideInBytes)
@@ -17,7 +17,7 @@ namespace CNA::Internal::Backends::D3D11
 
         UINT elementCount = 0;
         const D3D11_INPUT_ELEMENT_DESC* elements =
-            CNA::Internal::Backends::D3DCommon::InputElementsForStride(strideInBytes, elementCount);
+            CNA::Internal::Renderers::D3DCommon::InputElementsForStride(strideInBytes, elementCount);
         if (elements == nullptr || elementCount == 0 || device == nullptr)
         {
             cache_.emplace(key, layout);
@@ -26,7 +26,7 @@ namespace CNA::Internal::Backends::D3D11
 
         const uint8_t* vsBytes = nullptr;
         std::size_t vsSize = 0;
-        CNA::Internal::Backends::D3DCommon::GetVertexShaderBytecode(variant, vsBytes, vsSize);
+        CNA::Internal::Renderers::D3DCommon::GetVertexShaderBytecode(variant, vsBytes, vsSize);
         if (vsBytes == nullptr || vsSize == 0)
         {
             cache_.emplace(key, layout);

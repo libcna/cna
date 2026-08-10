@@ -231,7 +231,7 @@ TEST_F(SoundEffectContentTypeReaderTest, Pcm8WithZeroSampleRateFailsCleanlyRathe
     body_ = std::make_unique<System::IO::MemoryStream>(bytes.data(), static_cast<int32_t>(bytes.size()));
     reader_ = std::make_unique<ContentReader>(&cm_, body_.get(), "test", 5, 'w');
 
-    // AUD-06-024: BuildViaWavWrapper now re-throws the root SDL/backend decode failure as
+    // AUD-06-024: BuildViaWavWrapper now re-throws the root SDL/renderer decode failure as
     // ContentLoadException(assetContext, inner) instead of letting the raw NotSupportedException
     // propagate unadorned -- the asset name and format fields are now present, and the original
     // "Invalid sample rate"-style root cause is preserved verbatim via the " ---> " inner-
@@ -532,7 +532,7 @@ TEST_F(SoundEffectContentTypeReaderTest, UnknownFormatTagDiagnosticIncludesAllRe
 // either rejected or trusted. With the correct block size (2 bytes/frame) 20 bytes decodes as
 // exactly 10 frames (confirmed: 20/2=10 frames, 10/44100 ~= 0.000227s, matching the value
 // observed here before this comment was written from a raw debug probe). No CNA-side coherence
-// check is needed on top of this -- the backend already can't be confused by this specific class
+// check is needed on top of this -- the renderer already can't be confused by this specific class
 // of incoherent WAVEFORMATEX.
 TEST_F(SoundEffectContentTypeReaderTest, IncoherentBlockAlignForPcm8IsIgnoredNotTrustedBySdlDecoder)
 {

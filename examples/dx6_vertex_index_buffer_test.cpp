@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx2.md Phase O5 (DX2-40..DX2-42): Dx6VertexBufferBackend/Dx6IndexBufferBackend CTest.
-// Neither IVertexBufferBackend nor IIndexBufferBackend exposes a GetData()-style readback (both
-// are write-only from the public interface's own perspective, matching every other CNA backend) --
+// plan_dx2.md Phase O5 (DX2-40..DX2-42): Dx6VertexBufferRenderer/Dx6IndexBufferRenderer CTest.
+// Neither IVertexBufferRenderer nor IIndexBufferRenderer exposes a GetData()-style readback (both
+// are write-only from the public interface's own perspective, matching every other CNA renderer) --
 // so "round-trip" here means: SetData() succeeds and the buffer's own count/width metadata
 // (GetVertexCount/GetIndexCount/IsThirtyTwoBit) reports back exactly what was just set, and
 // over-capacity SetData calls are rejected rather than silently overflowing.
@@ -18,7 +18,7 @@
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 
-#include "CNA/Internal/Backends/Dx6/Dx6GraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Dx6/Dx6Renderer.hpp"
 
 #include <cstdint>
 #include <cstdio>
@@ -28,7 +28,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::Dx6;
+using namespace CNA::Internal::Renderers::Dx6;
 
 static constexpr int kCanvasSize = 64;
 
@@ -48,11 +48,11 @@ protected:
     void Draw(const GameTime&) override
     {
         auto& dev = getGraphicsDeviceProperty();
-        auto& backend = static_cast<Dx6GraphicsBackend&>(dev.GetBackend());
+        auto& renderer = static_cast<Dx6Renderer&>(dev.GetRenderer());
 
         // Check A: VertexPositionColor-shaped data (stride 16), SetData -> GetVertexCount().
         {
-            auto vb = backend.CreateVertexBuffer(8);
+            auto vb = renderer.CreateVertexBuffer(8);
             struct { float x, y, z; uint32_t color; } verts[3] = {
                 {0.0f, 0.0f, 0.0f, 0xFFFF0000u},
                 {1.0f, 0.0f, 0.0f, 0xFF00FF00u},
@@ -64,7 +64,7 @@ protected:
 
         // Check B: over-capacity SetData throws.
         {
-            auto vb = backend.CreateVertexBuffer(2);
+            auto vb = renderer.CreateVertexBuffer(2);
             struct { float x, y, z; uint32_t color; } verts[3] = {};
             bool threw = false;
             try { vb->SetData(verts, 3, sizeof(verts[0])); }
@@ -74,7 +74,7 @@ protected:
 
         // Check C: 16-bit index buffer.
         {
-            auto ib = backend.CreateIndexBuffer16(6);
+            auto ib = renderer.CreateIndexBuffer16(6);
             uint16_t idx[3] = {0, 1, 2};
             ib->SetData16(idx, 3);
             check(ib->GetIndexCount() == 3 && !ib->IsThirtyTwoBit(),
@@ -83,7 +83,7 @@ protected:
 
         // Check D: 32-bit index buffer.
         {
-            auto ib = backend.CreateIndexBuffer32(6);
+            auto ib = renderer.CreateIndexBuffer32(6);
             uint32_t idx[3] = {0, 1, 2};
             ib->SetData32(idx, 3);
             check(ib->GetIndexCount() == 3 && ib->IsThirtyTwoBit(),
@@ -92,7 +92,7 @@ protected:
 
         // Check E: a 16-bit index buffer rejects a 32-bit SetData call (bit-width mismatch).
         {
-            auto ib = backend.CreateIndexBuffer16(6);
+            auto ib = renderer.CreateIndexBuffer16(6);
             uint32_t idx[3] = {0, 1, 2};
             bool threw = false;
             try { ib->SetData32(idx, 3); }

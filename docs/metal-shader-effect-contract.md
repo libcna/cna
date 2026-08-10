@@ -2,18 +2,18 @@
 
 ## Current status
 
-Custom effects are **not supported** by the adapted Metal backend. This is an intentional runtime
+Custom effects are **not supported** by the adapted Metal renderer. This is an intentional runtime
 contract, not a missing capability declaration:
 
 - `SupportsCapability(CNA::GraphicsCapability::CustomEffects)` returns `false`;
-- `MetalGraphicsBackend::CreateEffectBackend` throws `System::NotSupportedException`;
+- `MetalRenderer::CreateEffectRenderer` throws `System::NotSupportedException`;
 - `MetalSpriteBatch::SetCustomEffect` throws for every non-null effect;
-- ordinary 3D draws reject a non-null `GpuDrawParams::customEffectBackend` before submission;
+- ordinary 3D draws reject a non-null `GpuDrawParams::customEffectRenderer` before submission;
 - the historical `Metal_SpriteBatch_CustomEffect` diagnostic is not registered in the supported
   native test set.
 
 Callers must query the capability and use a supported built-in effect path. They must not depend on
-the dormant `MetalEffectBackend` implementation in `MetalGraphicsBackend.mm`; it is unreachable
+the dormant `MetalEffectRenderer` implementation in `MetalRenderer.mm`; it is unreachable
 implementation scaffolding, not a public contract.
 
 ## Why it is disabled
@@ -25,7 +25,7 @@ readback returned the frame's clear color instead of draw output. The same sympt
 unrelated 2D and 3D tests, so the evidence did not isolate the custom shader as the cause, but it
 also did not establish correct custom-effect execution.
 
-The current backend has since been adapted to new graphics interfaces and has no post-adaptation
+The current renderer has since been adapted to new graphics interfaces and has no post-adaptation
 Apple compile or runtime result. Advertising custom effects until that evidence exists would make
 an unverified historical path part of the supported API.
 
@@ -47,7 +47,7 @@ may change during a future reimplementation.
 
 Enabling `CustomEffects` requires one coherent change that supplies all of the following:
 
-1. a successful build of the then-current Objective-C++ backend and runtime MSL compilation on the
+1. a successful build of the then-current Objective-C++ renderer and runtime MSL compilation on the
    supported macOS toolchain;
 2. Metal validation with no API, resource-binding, or shader diagnostics;
 3. a native test proving stock SpriteBatch output and custom-effect output without relying on the

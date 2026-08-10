@@ -19,7 +19,7 @@ layout(set = 1, binding = 0) uniform PC {
     vec4 emissiveAmount;  // xyz = emissive+ambient*diffuse (pre-summed by the XNA layer), w = envMapAmount
 } pc;
 
-// Mirrors VulkanGraphicsBackend's env_map3d.vert.glsl EnvMapParams field-for-field. Fog
+// Mirrors VulkanRenderer's env_map3d.vert.glsl EnvMapParams field-for-field. Fog
 // (REMED-GFX-009) is supplied separately via the FogParams block further below.
 layout(set = 1, binding = 1) uniform EnvMapParams {
     mat4 world;
@@ -35,7 +35,7 @@ layout(set = 1, binding = 1) uniform EnvMapParams {
 
 // REMED-GFX-009: fog forwarded to the fragment stage as a varying (the shared PC block is fully
 // packed, no spare bytes). Keep-factor computed from raw object-space Z, matching
-// VulkanGraphicsBackend's FogParams shape byte-for-byte.
+// VulkanRenderer's FogParams shape byte-for-byte.
 layout(set = 1, binding = 2) uniform FogParams {
     vec4 fogColorEnabled;  // xyz = FogColor, w = fogEnabled
     vec4 fogVector;        // REMED-GFX-010: FNA fog vector (dot with object/skin pos)

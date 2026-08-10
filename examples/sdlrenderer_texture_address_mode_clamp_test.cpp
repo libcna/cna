@@ -2,11 +2,11 @@
 // Task 685: Pixel test — TextureAddressMode::Clamp via SpriteBatch on SDL_Renderer.
 // Direct port of Task 269's EasyGL test (easygl_texture_address_mode_test.cpp).
 //
-// SpriteBatch.cpp calls backend_->SetSamplerAddressMode(addressU, addressV) once per Begin().
-// ISpriteBatchBackend::SetSamplerAddressMode defaults to a silent no-op, and SdlSpriteBatchBackend
+// SpriteBatch.cpp calls renderer_->SetSamplerAddressMode(addressU, addressV) once per Begin().
+// ISpriteBatchRenderer::SetSamplerAddressMode defaults to a silent no-op, and SdlSpriteBatchRenderer
 // never overrode it. Investigated fixing this via SDL3's real SDL_SetRenderTextureAddressMode
 // (renderer, uMode, vMode) API -- but its own doc comment says it configures addressing "used in
-// SDL_RenderGeometry()" specifically; SdlSpriteBatchBackend::Draw uses SDL_RenderTexture /
+// SDL_RenderGeometry()" specifically; SdlSpriteBatchRenderer::Draw uses SDL_RenderTexture /
 // SDL_RenderTextureRotated / SDL_RenderTextureAffine instead (texel-space sourceRectangle, not
 // raw UV geometry), which are UNAFFECTED by it -- confirmed empirically: wiring up the override
 // and calling it produced byte-for-byte identical results to not calling it at all.
@@ -38,7 +38,7 @@
 // Point filtering keeps samples crisp (no bilinear blending) for exact comparison.
 //
 // Requires PresentationMode::NativeBackBuffer (Task 915 finding): SDL_RenderReadPixels operates
-// in physical output coordinates, while this backend's default presentation mode
+// in physical output coordinates, while this renderer's default presentation mode
 // (FixedHeightDynamicWidth) does not map logical pixels 1:1 to physical ones.
 //
 // Exit code 0 = PointClamp check passes, 1 = it fails.

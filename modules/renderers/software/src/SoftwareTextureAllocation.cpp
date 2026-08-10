@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MS-PL
 
-#include "CNA/Internal/Backends/Software/SoftwareTextureAllocation.hpp"
+#include "CNA/Internal/Renderers/Software/SoftwareTextureAllocation.hpp"
 
 #include <algorithm>
 #include <limits>
 
-namespace CNA::Internal::Backends::Software
+namespace CNA::Internal::Renderers::Software
 {
     namespace
     {

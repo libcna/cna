@@ -127,7 +127,7 @@ protected:
         Check(derivedRejected && error.find("exact stock SpriteEffect") != std::string::npos,
               "derived SpriteEffect rejects instead of losing custom behavior");
 
-        // Begin did not publish a begun session when the backend rejected the effect.
+        // Begin did not publish a begun session when the renderer rejected the effect.
         device.Clear(Color::Black);
         spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::Opaque);
         spriteBatch_->Draw(

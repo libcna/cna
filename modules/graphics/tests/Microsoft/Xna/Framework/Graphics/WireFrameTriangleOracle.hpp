@@ -2,9 +2,9 @@
 #pragma once
 
 // REMED-GFX-209's asymmetric-triangle wireframe oracle, shared by every suite that measures a
-// backend's FillMode contract. It lives in a header rather than being copied because two copies of
+// renderer's FillMode contract. It lives in a header rather than being copied because two copies of
 // a pixel oracle drift, and the whole point of this one is that the readings taken by different
-// suites are comparable: `GraphicsDeviceCapabilityTests.cpp` measures the per-backend contract,
+// suites are comparable: `GraphicsDeviceCapabilityTests.cpp` measures the per-renderer contract,
 // `WebGpuWireFrameContractTests.cpp` measures WEBGPU-115's rejection boundary, and both must be
 // judging the same geometry, the same probes and the same colours.
 
@@ -40,15 +40,15 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 
-// Backends whose CnaTests build reaches a rasterizing device and reads pixels back through
+// Renderers whose CnaTests build reaches a rasterizing device and reads pixels back through
 // RenderTarget2D::GetData -- VertexDeclarationLayoutTests.cpp's own oracle set.
-#if defined(CNA_BACKEND_EASYGL) || defined(CNA_BACKEND_SOFTWARE) || \
-    defined(CNA_BACKEND_VULKAN) || defined(CNA_BACKEND_BGFX) || \
-    defined(CNA_BACKEND_WEBGPU) || defined(CNA_BACKEND_SDL_GPU) || \
-    defined(CNA_BACKEND_D3D9) || defined(CNA_BACKEND_D3D11) || defined(CNA_BACKEND_D3D12) || \
-    defined(CNA_BACKEND_OPENGL4) || defined(CNA_BACKEND_OPENGL1) || defined(CNA_BACKEND_OPENGL2) || \
-    defined(CNA_BACKEND_WICKED) || defined(CNA_BACKEND_MAGNUM) || defined(CNA_BACKEND_SOKOL) || \
-    defined(CNA_BACKEND_DILIGENT)
+#if defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_SOFTWARE) || \
+    defined(CNA_RENDERER_VULKAN) || defined(CNA_RENDERER_BGFX) || \
+    defined(CNA_RENDERER_WEBGPU) || defined(CNA_RENDERER_SDL_GPU) || \
+    defined(CNA_RENDERER_D3D9) || defined(CNA_RENDERER_D3D11) || defined(CNA_RENDERER_D3D12) || \
+    defined(CNA_RENDERER_OPENGL4) || defined(CNA_RENDERER_OPENGL1) || defined(CNA_RENDERER_OPENGL2) || \
+    defined(CNA_RENDERER_WICKED) || defined(CNA_RENDERER_MAGNUM) || defined(CNA_RENDERER_SOKOL) || \
+    defined(CNA_RENDERER_DILIGENT)
 #define CNA_WIREFRAME_PIXEL_ORACLE 1
 #endif
 
@@ -56,22 +56,22 @@
 // environment: its device creation aborts under Wine for every device test in this file, including
 // the untouched `SupportsThreeD`, so calling it clean would be a fabrication. It still compiles
 // the oracle, and gains its reading the day a D3D12 runtime is available.
-#if defined(CNA_WIREFRAME_PIXEL_ORACLE) && !defined(CNA_BACKEND_D3D12)
+#if defined(CNA_WIREFRAME_PIXEL_ORACLE) && !defined(CNA_RENDERER_D3D12)
 #define CNA_WIREFRAME_MEASURED 1
 #endif
 
 // Measured to render a genuine wireframe: edges lit, interior empty. WebGPU is excluded because it
 // has no polygon-mode API at all and now refuses the request outright (WEBGPU-115).
-#if defined(CNA_WIREFRAME_MEASURED) && !defined(CNA_BACKEND_WEBGPU)
+#if defined(CNA_WIREFRAME_MEASURED) && !defined(CNA_RENDERER_WEBGPU)
 #define CNA_WIREFRAME_RENDERS_EDGES 1
 #endif
 
-// WEBGPU-115: the backends that answer a WireFrame request with a deterministic refusal instead of
-// pixels. This arm used to have an empty registration set -- no backend rejected, so REMED-GFX-209
+// WEBGPU-115: the renderers that answer a WireFrame request with a deterministic refusal instead of
+// pixels. This arm used to have an empty registration set -- no renderer rejected, so REMED-GFX-209
 // recorded the absence rather than manufacturing one. WebGPU now fills it, and it is the only
 // member: EasyGL renders a genuine wireframe despite reporting false (REMED-GFX-219, deferred and
-// deliberately untouched here), and every other measured backend reports true and renders one.
-#if defined(CNA_WIREFRAME_MEASURED) && defined(CNA_BACKEND_WEBGPU)
+// deliberately untouched here), and every other measured renderer reports true and renders one.
+#if defined(CNA_WIREFRAME_MEASURED) && defined(CNA_RENDERER_WEBGPU)
 #define CNA_WIREFRAME_REJECTED 1
 #endif
 
@@ -79,38 +79,38 @@
 
 namespace CnaTest::WireFrameOracle
 {
-    inline constexpr const char* kBackendName =
-#if defined(CNA_BACKEND_EASYGL)
+    inline constexpr const char* kRendererName =
+#if defined(CNA_RENDERER_EASYGL)
         "EasyGL";
-#elif defined(CNA_BACKEND_VULKAN)
+#elif defined(CNA_RENDERER_VULKAN)
         "Vulkan";
-#elif defined(CNA_BACKEND_BGFX)
+#elif defined(CNA_RENDERER_BGFX)
         "bgfx";
-#elif defined(CNA_BACKEND_WEBGPU)
+#elif defined(CNA_RENDERER_WEBGPU)
         "WebGPU";
-#elif defined(CNA_BACKEND_SOFTWARE)
+#elif defined(CNA_RENDERER_SOFTWARE)
         "Software";
-#elif defined(CNA_BACKEND_SDL_GPU)
+#elif defined(CNA_RENDERER_SDL_GPU)
         "SDL_GPU";
-#elif defined(CNA_BACKEND_D3D9)
+#elif defined(CNA_RENDERER_D3D9)
         "D3D9";
-#elif defined(CNA_BACKEND_D3D11)
+#elif defined(CNA_RENDERER_D3D11)
         "D3D11";
-#elif defined(CNA_BACKEND_D3D12)
+#elif defined(CNA_RENDERER_D3D12)
         "D3D12";
-#elif defined(CNA_BACKEND_OPENGL4)
+#elif defined(CNA_RENDERER_OPENGL4)
         "OpenGL4";
-#elif defined(CNA_BACKEND_OPENGL1)
+#elif defined(CNA_RENDERER_OPENGL1)
         "OpenGL1";
-#elif defined(CNA_BACKEND_OPENGL2)
+#elif defined(CNA_RENDERER_OPENGL2)
         "OpenGL2";
-#elif defined(CNA_BACKEND_WICKED)
+#elif defined(CNA_RENDERER_WICKED)
         "Wicked";
-#elif defined(CNA_BACKEND_MAGNUM)
+#elif defined(CNA_RENDERER_MAGNUM)
         "Magnum";
-#elif defined(CNA_BACKEND_SOKOL)
+#elif defined(CNA_RENDERER_SOKOL)
         "Sokol";
-#elif defined(CNA_BACKEND_DILIGENT)
+#elif defined(CNA_RENDERER_DILIGENT)
         "Diligent";
 #else
         "unknown";
@@ -300,7 +300,7 @@ namespace CnaTest::WireFrameOracle
         return os.str();
     }
 
-    /// One rendered frame, or the backend's own refusal.
+    /// One rendered frame, or the renderer's own refusal.
     struct Result
     {
         Frame frame;
@@ -414,17 +414,17 @@ namespace CnaTest::WireFrameOracle
     inline void ExpectClearOnly(const Frame& frame, const char* what)
     {
         EXPECT_EQ(0, frame.LitTotal())
-            << kBackendName << ' ' << what << " mutated the target -- " << frame.Describe();
+            << kRendererName << ' ' << what << " mutated the target -- " << frame.Describe();
         EXPECT_EQ(0, frame.LitIn(kInterior))
-            << kBackendName << ' ' << what << " filled the triangle interior -- "
+            << kRendererName << ' ' << what << " filled the triangle interior -- "
             << frame.Describe();
     }
 
-    /// Every reading is PRINTED before it is judged, on every backend including the unmeasured
+    /// Every reading is PRINTED before it is judged, on every renderer including the unmeasured
     /// one -- a boundary that never states its measurement outlives the thing it describes.
     inline void PrintReading(const char* label, const Result& r)
     {
-        std::cout << "[ GFX-209  ] " << kBackendName << ' ' << label << ": ";
+        std::cout << "[ GFX-209  ] " << kRendererName << ' ' << label << ": ";
         if (!r.rendered)
             std::cout << "REJECTED, target " << r.frame.Describe() << " -- \"" << r.rejection << '"'
                       << std::endl;
@@ -437,23 +437,23 @@ namespace CnaTest::WireFrameOracle
     inline void ExpectSolidTriangle(const Result& solid)
     {
         ASSERT_TRUE(solid.rendered)
-            << kBackendName << " refused an ordinary Solid draw: " << solid.rejection;
+            << kRendererName << " refused an ordinary Solid draw: " << solid.rejection;
         EXPECT_EQ(kInteriorArea, solid.frame.LitIn(kInterior))
-            << kBackendName << " Solid left part of the triangle interior unfilled -- "
+            << kRendererName << " Solid left part of the triangle interior unfilled -- "
             << solid.frame.Describe();
         EXPECT_TRUE(Frame::NearInk(solid.frame.FirstLitIn(kInterior)))
-            << kBackendName << " Solid filled the interior with "
+            << kRendererName << " Solid filled the interior with "
             << Describe(solid.frame.FirstLitIn(kInterior)) << ", not the ink colour";
         // The rasterized area is a fixed property of the geometry; a few pixels of slack absorbs
-        // each backend's own top-left/pixel-centre rule and nothing more.
+        // each renderer's own top-left/pixel-centre rule and nothing more.
         EXPECT_GE(solid.frame.LitTotal(), kSolidArea - 64)
-            << kBackendName << " Solid covered less than the triangle -- "
+            << kRendererName << " Solid covered less than the triangle -- "
             << solid.frame.Describe();
         EXPECT_LE(solid.frame.LitTotal(), kSolidArea + 64)
-            << kBackendName << " Solid covered more than the triangle -- "
+            << kRendererName << " Solid covered more than the triangle -- "
             << solid.frame.Describe();
         EXPECT_TRUE(solid.frame.EveryLitPixelIsInk())
-            << kBackendName << " Solid produced a lit pixel that is neither ink nor clear";
+            << kRendererName << " Solid produced a lit pixel that is neither ink nor clear";
     }
 }   // namespace CnaTest::WireFrameOracle
 

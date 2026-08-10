@@ -22,11 +22,11 @@ def main() -> int:
     release_path = root / "docs/skia-release-gate.md"
     surface_adr_path = root / "docs/skia-surface-mode-adr.md"
     capability_path = root / "modules/graphics/include/CNA/GraphicsCapability.hpp"
-    backend_path = root / "modules/renderers/skia/src/SkiaGraphicsBackend.cpp"
+    renderer_path = root / "modules/renderers/skia/src/SkiaRenderer.cpp"
     tests_path = root / "cmake/Tests/SkiaTests.cmake"
-    diagnostic_path = root / "modules/renderers/skia/include/CNA/Internal/Backends/Skia/SkiaStartupDiagnostic.hpp"
+    diagnostic_path = root / "modules/renderers/skia/include/CNA/Internal/Renderers/Skia/SkiaStartupDiagnostic.hpp"
     parity_path = root / "docs/skia-easygl-parity-ledger.md"
-    feature_matrix_path = root / "docs/graphics-backend-feature-matrix.md"
+    feature_matrix_path = root / "docs/graphics-renderer-feature-matrix.md"
     generated_blender_path = root / "docs/skia-generated-blender.md"
 
     try:
@@ -34,7 +34,7 @@ def main() -> int:
         release = release_path.read_text()
         surface_adr = surface_adr_path.read_text()
         capability_header = capability_path.read_text()
-        backend = backend_path.read_text()
+        renderer = renderer_path.read_text()
         tests = tests_path.read_text()
         diagnostic = diagnostic_path.read_text()
         parity = parity_path.read_text()
@@ -75,7 +75,7 @@ def main() -> int:
         if task > BASELINE_LAST_TASK:
             successor_statuses.append(status)
             successor_status_by_task[task] = status
-    if "Status: COMPLETE — verified CPU-raster 2D backend." not in plan:
+    if "Status: COMPLETE — verified CPU-raster 2D renderer." not in plan:
         errors.append(f"{plan_path}: baseline COMPLETE status banner is missing")
 
     if successor_statuses:
@@ -137,22 +137,22 @@ def main() -> int:
     # stops at the switch's own closing brace. Brace-match the real body, accept either shape, and
     # additionally require the exhaustiveness the switch exists to provide.
     signature = re.search(
-        r"bool SkiaGraphicsBackend::SupportsCapability\([^)]*\) const\s*\{", backend
+        r"bool SkiaRenderer::SupportsCapability\([^)]*\) const\s*\{", renderer
     )
     if not signature:
-        errors.append(f"{backend_path}: SupportsCapability implementation was not found")
+        errors.append(f"{renderer_path}: SupportsCapability implementation was not found")
     else:
         depth = 0
         end = signature.end()
-        for index in range(signature.end() - 1, len(backend)):
-            if backend[index] == "{":
+        for index in range(signature.end() - 1, len(renderer)):
+            if renderer[index] == "{":
                 depth += 1
-            elif backend[index] == "}":
+            elif renderer[index] == "}":
                 depth -= 1
                 if depth == 0:
                     end = index
                     break
-        body = backend[signature.end():end]
+        body = renderer[signature.end():end]
 
         equality_form = set(
             re.findall(r"capability\s*==\s*CNA::GraphicsCapability::([A-Za-z0-9]+)", body)
@@ -176,18 +176,18 @@ def main() -> int:
         returned = equality_form | switch_true
         if returned != true_capabilities:
             errors.append(
-                f"{backend_path}: true capabilities {sorted(returned)} do not match release table "
+                f"{renderer_path}: true capabilities {sorted(returned)} do not match release table "
                 f"{sorted(true_capabilities)}"
             )
         if labelled:
             if re.search(r"^\s*default\s*:", body, flags=re.MULTILINE):
                 errors.append(
-                    f"{backend_path}: SupportsCapability must not carry a `default:` arm -- a "
+                    f"{renderer_path}: SupportsCapability must not carry a `default:` arm -- a "
                     f"capability added later has to be a -Wswitch diagnostic, not a silent answer"
                 )
             for name in sorted(capability_names - labelled):
                 errors.append(
-                    f"{backend_path}: SupportsCapability has no case arm for {name}"
+                    f"{renderer_path}: SupportsCapability has no case arm for {name}"
                 )
 
     if "Status: passed" not in release:

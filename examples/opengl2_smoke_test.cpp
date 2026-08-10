@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl2.md: end-to-end smoke test for the native OpenGL 2.1 graphics backend's device/
+// plan_opengl2.md: end-to-end smoke test for the native OpenGL 2.1 graphics renderer's device/
 // window/GL-context lifecycle and color+depth+stencil clear/present. Real window, real SDL GL
 // context, a real 60-frame Clear()+Present() loop -- the same bar SDLGPU-12/sdlgpu_smoke_test.cpp
-// established when that backend was first bootstrapped.
+// established when that renderer was first bootstrapped.
 //
 // Check A -- GetWindowInternal() returns a real, non-null SDL_Window.
-// Check B -- GetRendererInternal() is null (this backend does not use SDL_Renderer).
+// Check B -- GetRendererInternal() is null (this renderer does not use SDL_Renderer).
 // Check C -- GetViewportSize() reports a positive width/height matching the real window.
 // Check D -- a real VertexBuffer round-trip: SetData() followed by GetVertexCount() reports the
 //   exact count uploaded.
@@ -23,7 +23,7 @@
 #include "Microsoft/Xna/Framework/Graphics/ClearOptions.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 
-#include "CNA/Internal/Backends/OpenGL2/OpenGL2GraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/OpenGL2/OpenGL2Renderer.hpp"
 
 #include "common/PixelTestGame.hpp"
 
@@ -33,7 +33,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::OpenGL2;
+using namespace CNA::Internal::Renderers::OpenGL2;
 
 namespace
 {
@@ -58,29 +58,29 @@ protected:
     {
         ++frame_;
         auto& dev = getGraphicsDeviceProperty();
-        auto& backend = static_cast<OpenGL2GraphicsBackend&>(dev.GetBackend());
+        auto& renderer = static_cast<OpenGL2Renderer&>(dev.GetRenderer());
 
         if (frame_ == 1)
         {
-            check(backend.GetWindowInternal() != nullptr, "GetWindowInternal() returns a real window");
-            check(backend.GetRendererInternal() == nullptr, "GetRendererInternal() is null (no SDL_Renderer)");
+            check(renderer.GetWindowInternal() != nullptr, "GetWindowInternal() returns a real window");
+            check(renderer.GetRendererInternal() == nullptr, "GetRendererInternal() is null (no SDL_Renderer)");
 
             int width = 0, height = 0;
-            backend.GetViewportSize(width, height);
+            renderer.GetViewportSize(width, height);
             check(width > 0 && height > 0, "GetViewportSize() reports a positive size");
 
-            auto vb = backend.CreateVertexBuffer(3);
+            auto vb = renderer.CreateVertexBuffer(3);
             const float verts[3 * 2] = {0, 0, 1, 0, 0, 1};
             vb->SetData(verts, 3, sizeof(float) * 2);
             check(vb->GetVertexCount() == 3, "VertexBuffer.SetData()+GetVertexCount() round-trips the exact count");
 
-            auto ib16 = backend.CreateIndexBuffer16(3);
+            auto ib16 = renderer.CreateIndexBuffer16(3);
             const std::uint16_t indices16[3] = {0, 1, 2};
             ib16->SetData16(indices16, 3);
             check(ib16->GetIndexCount() == 3 && !ib16->IsThirtyTwoBit(),
                   "IndexBuffer16.SetData16()+GetIndexCount()/IsThirtyTwoBit() round-trips correctly");
 
-            auto ib32 = backend.CreateIndexBuffer32(3);
+            auto ib32 = renderer.CreateIndexBuffer32(3);
             const std::uint32_t indices32[3] = {0, 1, 2};
             ib32->SetData32(indices32, 3);
             check(ib32->GetIndexCount() == 3 && ib32->IsThirtyTwoBit(),

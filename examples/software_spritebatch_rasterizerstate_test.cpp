@@ -3,9 +3,9 @@
 // already applies BlendState / DepthStencilState / SamplerState. The canonical 7-arg Begin
 // previously named the parameter `/*rasterizerState*/` and dropped it on the floor, so a
 // RasterizerState supplied to Begin (e.g. one with ScissorTestEnable=true) never reached the device
-// or backend on ANY backend -- the only way to affect sprite rasterizer state was to assign
+// or renderer on ANY renderer -- the only way to affect sprite rasterizer state was to assign
 // GraphicsDevice.RasterizerState directly. This is a shared-layer defect in SpriteBatch.cpp, not a
-// backend bug; the Software backend is used here purely as a deterministic CPU-readback oracle
+// renderer bug; the Software renderer is used here purely as a deterministic CPU-readback oracle
 // (its ScissorRectangle became genuinely functional in REMED-GFX-080).
 //
 // FNA contract (SpriteBatch.cs Begin + PrepRenderState, verbatim):
@@ -235,7 +235,7 @@ protected:
             {
                 auto rs = std::make_unique<RasterizerState>(MakeRS(true));
                 sb.Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, nullptr, rs.get());
-            }   // rs destroyed here -- Begin already copied the state into the device/backend
+            }   // rs destroyed here -- Begin already copied the state into the device/renderer
             sb.Draw(whiteTex_, Rectangle(0, 0, kBBW, kBBH), Rectangle(0, 0, 1, 1), Color(255, 0, 0, 255));
             sb.End();   // deferred flush after the RasterizerState object is gone
             const BBox b = RedBox(dev);
@@ -280,7 +280,7 @@ protected:
             check(b.isFullFramebuffer(), "J: default Begin() -> CullCounterClockwise default, full framebuffer: " + b.str());
         }
 
-        // ---- K (Phase 10): CullMode reaches the backend through Begin (same ApplyRasterizerState) -
+        // ---- K (Phase 10): CullMode reaches the renderer through Begin (same ApplyRasterizerState) -
         // Software SpriteBatch quads are authored to survive CullCounterClockwise; passing CullNone
         // (scissor enabled) still renders (clipped). This proves BOTH RasterizerState fields (cull +
         // scissor) travel through Begin, not just scissor.

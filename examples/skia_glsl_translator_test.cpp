@@ -5,8 +5,8 @@
 // docs/skia-glsl-to-sksl-translator-contract.md's `dual_textured` core formula. No public
 // ShaderEffect/content integration here -- that stays SKIA-157's job, same as SKIA-153/154.
 
-#include "CNA/Internal/Backends/Skia/SkiaGlslToSkslTranslatorEXT.hpp"
-#include "CNA/Internal/Backends/Skia/SkiaSurface.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaGlslToSkslTranslatorEXT.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaSurface.hpp"
 
 #include "include/core/SkBlendMode.h"
 #include "include/core/SkCanvas.h"
@@ -27,7 +27,7 @@
 #include <string>
 #include <vector>
 
-using namespace CNA::Internal::Backends::Skia;
+using namespace CNA::Internal::Renderers::Skia;
 
 namespace
 {
@@ -76,7 +76,7 @@ namespace
     }
 
     // The real, complete dual_textured fragment source (docs/skia-easygl-effect-inventory.md),
-    // copied verbatim from EasyGLGraphicsBackend.cpp's own embedded string literal.
+    // copied verbatim from EasyGLRenderer.cpp's own embedded string literal.
     const std::string kRealDualTexturedSource = R"(#version 300 es
 precision highp float;
 in vec2 vUV;
@@ -154,7 +154,7 @@ int main()
               "in vec2 vUV;\nout vec4 FragColor;\n"
               "void main() { FragColor = vec4(cnaSampleUV(vUV, 0.0), 0.0, 1.0); }",
               "cnaSampleUV"),
-          "the backend-specific `cnaSampleUV` flip-V macro call is rejected");
+          "the renderer-specific `cnaSampleUV` flip-V macro call is rejected");
     Check(RejectsCiting(
               "in vec2 vUV;\nout vec4 FragColor;\n"
               "vec3 Helper(vec3 x) { return x; }\n"

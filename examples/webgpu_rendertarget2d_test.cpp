@@ -1,18 +1,18 @@
 // SPDX-License-Identifier: MS-PL
-// WEBGPU-53/54: verify WebGPURenderTargetBackend / WebGPUGraphicsBackend::CreateRenderTarget2D()/
-// SetRenderTarget2D() -- this backend's first real RenderTarget2D support. Before this task,
-// CreateRenderTarget2D/SetRenderTarget2D on this backend were IGraphicsBackend's own safe no-op
+// WEBGPU-53/54: verify WebGPURenderTargetRenderer / WebGPURenderer::CreateRenderTarget2D()/
+// SetRenderTarget2D() -- this renderer's first real RenderTarget2D support. Before this task,
+// CreateRenderTarget2D/SetRenderTarget2D on this renderer were IGraphicsRenderer's own safe no-op
 // defaults (CreateRenderTarget2D returned nullptr, SetRenderTarget2D did nothing), so any game
 // creating a RenderTarget2D on WEBGPU silently drew to the visible backbuffer instead of the
-// intended off-screen target, or crashed on the null backend handle.
+// intended off-screen target, or crashed on the null renderer handle.
 //
-// Architecture note: this backend renders every queued Clear()/3D-draw/SpriteBatch command into
+// Architecture note: this renderer renders every queued Clear()/3D-draw/SpriteBatch command into
 // exactly ONE deferred render pass per logical frame, lazily, the first time something needs the
 // frame to be real (EnsureFrameRendered()). SetRenderTarget2D() now eagerly flushes whatever was
 // queued for the OUTGOING target into its own render pass the instant the target actually
 // changes, so draws before/after a target switch land in the correct pass instead of collapsing
-// into one -- see WebGPUGraphicsBackend::SetRenderTarget2D()'s own comment for the full design
-// discussion (and why this smaller change was chosen over VulkanGraphicsBackend's own per-draw
+// into one -- see WebGPURenderer::SetRenderTarget2D()'s own comment for the full design
+// discussion (and why this smaller change was chosen over VulkanRenderer's own per-draw
 // target-tag/replay model).
 //
 // Check A -- Clear-only fill of a RenderTarget2D (DepthFormat::None), read back via GetData():
@@ -33,19 +33,19 @@
 //   SetRenderTarget(rt) + Clear(Red) + SetRenderTarget(nullptr) targeting a SEPARATE
 //   RenderTarget2D, then read back the BACKBUFFER's centre pixel -- must still be Blue, proving
 //   the intervening render-target-targeted Clear() did NOT leak into the backbuffer's own render
-//   pass (the single biggest risk of this backend's "one deferred pass" architecture). Uses
+//   pass (the single biggest risk of this renderer's "one deferred pass" architecture). Uses
 //   Blue/Red (0/255-only channel values) rather than a blended reference colour such as
-//   CornflowerBlue deliberately: this backend's swapchain format is frequently an sRGB variant,
+//   CornflowerBlue deliberately: this renderer's swapchain format is frequently an sRGB variant,
 //   and a Clear() colour's exact byte-for-byte round trip through an sRGB-encoded attachment is a
-//   separate, already-known, backend-wide characteristic (see plan_webgpu.md's WEBGPU-132 note on
+//   separate, already-known, renderer-wide characteristic (see plan_webgpu.md's WEBGPU-132 note on
 //   "the exact value depends on whether the chosen swapchain format blends in linear or
 //   sRGB-encoded space") -- 0/255 channel values are gamma-invariant at both encoding endpoints,
 //   so this check exercises target separation specifically, without also depending on that
 //   unrelated, pre-existing question.
 // Check F -- MultiSampleCount property fidelity: this test's own GraphicsDeviceManager never
-//   enables PreferMultiSampling, so the backend's global sample count (WEBGPU-58) stays 1 (no
+//   enables PreferMultiSampling, so the renderer's global sample count (WEBGPU-58) stays 1 (no
 //   MSAA) throughout -- requesting 4 on this specific RenderTarget2D instance must still report
-//   0, since WebGPURenderTargetBackend unconditionally mirrors the BACKEND's own current global
+//   0, since WebGPURenderTargetRenderer unconditionally mirrors the RENDERER's own current global
 //   state (not the per-instance request -- see that class's own doc comment), which is disabled
 //   here. See examples/webgpu_msaa_test.cpp for full MSAA coverage (backbuffer AND
 //   RenderTarget2D, with MSAA actually engaged).
@@ -278,8 +278,8 @@ protected:
         }
 
         // Check F: MultiSampleCount property fidelity -- this test's GraphicsDeviceManager never
-        // enables PreferMultiSampling, so the backend's own global MSAA sample count (WEBGPU-58)
-        // stays disabled throughout; a RenderTarget2D unconditionally mirrors that backend-global
+        // enables PreferMultiSampling, so the renderer's own global MSAA sample count (WEBGPU-58)
+        // stays disabled throughout; a RenderTarget2D unconditionally mirrors that renderer-global
         // state (not its own per-instance request), so requesting 4 here must still honestly
         // report 0. See examples/webgpu_msaa_test.cpp for the counterpart with MSAA actually
         // engaged.
@@ -288,7 +288,7 @@ protected:
                                         DepthFormat::None, 4, RenderTargetUsage::DiscardContents);
             check(rtMsaaRequest.getMultiSampleCountProperty() == 0,
                   "Check F: RenderTarget2D MultiSampleCount request 4 -> honestly reports 0 "
-                  "(backend's own global MSAA is disabled in this test -- see webgpu_msaa_test.cpp)");
+                  "(renderer's own global MSAA is disabled in this test -- see webgpu_msaa_test.cpp)");
         }
 
         // Check G: mipMap=true is a deliberate, documented scope cut -- must throw a clear

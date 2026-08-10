@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MS-PL
-// WEBGPU-57/112: verify WebGPUTexture3DBackend / WebGPUGraphicsBackend::CreateTexture3D() -- this
-// backend's first Texture3D (volume texture) support. Before this task, CreateTexture3D was
-// IGraphicsBackend's own safe no-op default (returns nullptr), so Texture3D::backend_ was always
-// null on this backend and every SetData/GetData call silently did nothing.
+// WEBGPU-57/112: verify WebGPUTexture3DRenderer / WebGPURenderer::CreateTexture3D() -- this
+// renderer's first Texture3D (volume texture) support. Before this task, CreateTexture3D was
+// IGraphicsRenderer's own safe no-op default (returns nullptr), so Texture3D::renderer_ was always
+// null on this renderer and every SetData/GetData call silently did nothing.
 //
 // Texture3D's XNA-layer SetData/GetData (Texture3D.cpp) have no CPU-side pixel shadow at all --
-// unlike Texture2D, every call goes straight through to ITexture3DBackend::SetData()/GetData(),
-// so this is a genuine end-to-end XNA-layer test (Texture3D, not the backend interface directly).
+// unlike Texture2D, every call goes straight through to ITexture3DRenderer::SetData()/GetData(),
+// so this is a genuine end-to-end XNA-layer test (Texture3D, not the renderer interface directly).
 //
 // Check A -- per-depth-slice distinct colour upload + full-volume readback: a 2x2x4 volume, each
 //   of the 4 depth slices filled with its own distinct solid colour via the 10-arg

@@ -112,7 +112,7 @@ protected:
 
         // Bind per-vertex VB as currentVertexBuffer_ (needed by DrawInstancedPrimitives).
         device.SetVertexBuffer(&perVertVb);
-        // Register both VBs so the backend can find the per-instance one.
+        // Register both VBs so the renderer can find the per-instance one.
         std::vector<VertexBufferBinding> bindings = {
             VertexBufferBinding(&perVertVb, 0, 0),  // per-vertex
             VertexBufferBinding(&instVb,    0, 1),  // per-instance (instanceFrequency=1)

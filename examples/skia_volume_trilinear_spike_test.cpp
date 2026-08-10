@@ -4,8 +4,8 @@
 // below the public ShaderEffect/SetTexture(Texture3D) API, matching the SKIA-93/145/146/147
 // spike precedent; SKIA-149 wires the real, weak-lifetime-tracked public path.
 
-#include "CNA/Internal/Backends/Skia/SkiaSurface.hpp"
-#include "CNA/Internal/Backends/Skia/SkiaVolumeSampling.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaSurface.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaVolumeSampling.hpp"
 
 #include "include/core/SkCanvas.h"
 #include "include/core/SkData.h"
@@ -25,7 +25,7 @@
 #include <string>
 #include <vector>
 
-using namespace CNA::Internal::Backends::Skia;
+using namespace CNA::Internal::Renderers::Skia;
 
 namespace
 {

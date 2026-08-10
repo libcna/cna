@@ -1,18 +1,18 @@
 // SPDX-License-Identifier: MS-PL
 // Task 677: SDL_Renderer SpriteBatch Begin/End sequencing guard integration test.
 //
-// Tasks 161-166's mock-backend unit tests (SpriteBatchTests.cpp) already thoroughly cover these
-// guards at the shared, backend-agnostic SpriteBatch.cpp layer (`begun` flag, checked before any
-// backend_ call in every case) using a no-backend SpriteBatch instance. This task instead
+// Tasks 161-166's mock-renderer unit tests (SpriteBatchTests.cpp) already thoroughly cover these
+// guards at the shared, renderer-agnostic SpriteBatch.cpp layer (`begun` flag, checked before any
+// renderer_ call in every case) using a no-renderer SpriteBatch instance. This task instead
 // confirms the guards still hold end-to-end with a REAL SDL_Renderer-backed GraphicsDevice/
-// SpriteBatch/Texture2D -- i.e. that no real backend call happens (or throws for some unrelated
+// SpriteBatch/Texture2D -- i.e. that no real renderer call happens (or throws for some unrelated
 // reason) before the sequencing check fires.
 //
 // Verifies:
 //   1. End() before Begin() throws.
 //   2. Draw() before Begin() throws.
 //   3. A second Begin() without an intervening End() throws.
-//   4. Begin()/Draw()/End() succeeds without throwing (sanity: the real backend engages fine).
+//   4. Begin()/Draw()/End() succeeds without throwing (sanity: the real renderer engages fine).
 //   5. Begin()/End()/Begin()/End() (re-entrant sequencing) succeeds without throwing.
 //
 // Exit code 0 = PASS, 1 = FAIL.
@@ -85,7 +85,7 @@ protected:
         check(threw, "Second Begin() without End() throws");
         sb_->End(); // clean up the still-open batch from step 3's first Begin().
 
-        // 4. Begin()/Draw()/End() succeeds -- real backend engages without throwing.
+        // 4. Begin()/Draw()/End() succeeds -- real renderer engages without throwing.
         bool okNoThrow = true;
         try
         {

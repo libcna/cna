@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
 {
@@ -48,9 +48,9 @@ namespace Microsoft::Xna::Framework::Graphics
         // SetCurrentEffect is now called by Effect::Apply() after OnApply() returns.
     }
 
-    void BasicEffect::FillGpuDrawParams(CNA::Internal::Backends::GpuDrawParams& p) const
+    void BasicEffect::FillGpuDrawParams(CNA::Internal::Renderers::GpuDrawParams& p) const
     {
-        using namespace CNA::Internal::Backends;
+        using namespace CNA::Internal::Renderers;
 
         p.textureEnabled     = textureEnabled_;
         p.vertexColorEnabled = VertexColorEnabled;
@@ -59,7 +59,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
         if (p.textureEnabled)
         {
-            if (texture_) p.texture0 = &texture_->GetBackend();
+            if (texture_) p.texture0 = &texture_->GetRenderer();
         }
 
         // FNA's EffectHelpers.SetMaterialColor: when lighting is disabled, ambient/directional
@@ -107,7 +107,7 @@ namespace Microsoft::Xna::Framework::Graphics
         p.light2Specular[0]= ls2.X;  p.light2Specular[1]= ls2.Y;  p.light2Specular[2]= ls2.Z;
 
         // Lit path only: EmissiveColor is added after the ambient/light sum is multiplied by
-        // DiffuseColor (see each backend's lit shader formula) — the disabled-lighting path
+        // DiffuseColor (see each renderer's lit shader formula) — the disabled-lighting path
         // already bakes EmissiveColor into the forwarded diffuse color above instead. Specular is
         // likewise lit-path only: FNA's Lighting.fxh only ever computes it inside the lit branch,
         // and the material SpecularColor is applied once to the summed per-light contribution

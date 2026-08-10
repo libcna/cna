@@ -3,7 +3,7 @@
 # different draw model from every prior scene in this corpus: no Effect, no vertex declaration,
 # no explicit World/View/Projection -- just SpriteBatch.Begin()/Draw(texture, destRect,
 # color)/End() through the real public API, matching D9-93's own explicit requirement to test
-# through SpriteBatch/Texture2D, not the raw ISpriteBatchBackend interface.
+# through SpriteBatch/Texture2D, not the raw ISpriteBatchRenderer interface.
 #
 # This is also the FIRST empirical measurement of D9-91's own half-pixel offset (design
 # decision 10): real XNA 4.0's D3D9-era SpriteBatch bakes a half-texel correction into its own

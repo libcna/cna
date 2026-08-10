@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# plan_dx1.md section 1: a real, automated proof that the DX1 backend never silently drifts into
+# plan_dx1.md section 1: a real, automated proof that the DX1 renderer never silently drifts into
 # DX3+ (or Direct3D) territory -- greps its own source for any IDirectDraw2+/IDirectDrawSurface2+/
 # DDSURFACEDESC2 symbol, or anything from d3d.h. Registered as the Dx1_V1OnlyDiscipline CTest
 # (cmake/Tests/Dx1Tests.cmake) -- pure text check, no compiled binary, no Wine needed, runs
@@ -8,10 +8,10 @@ set -uo pipefail
 
 repo_root="$1"
 dx1_src="${repo_root}/modules/renderers/dx1/src"
-dx1_include="${repo_root}/modules/renderers/dx1/include/CNA/Internal/Backends/Dx1"
+dx1_include="${repo_root}/modules/renderers/dx1/include/CNA/Internal/Renderers/Dx1"
 
 if [ ! -d "$dx1_src" ] || [ ! -d "$dx1_include" ]; then
-    echo "error: DX1 backend directories not found under ${repo_root}" >&2
+    echo "error: DX1 renderer directories not found under ${repo_root}" >&2
     exit 1
 fi
 
@@ -29,11 +29,11 @@ while IFS= read -r -d '' file; do
 done < <(find "$dx1_src" "$dx1_include" -type f \( -name '*.cpp' -o -name '*.hpp' \) -print0)
 
 if [ "$violations" -ne 0 ]; then
-    echo "error: DX1 backend source references a DX3+/Direct3D symbol above -- DX1 must use ONLY" >&2
+    echo "error: DX1 renderer source references a DX3+/Direct3D symbol above -- DX1 must use ONLY" >&2
     echo "v1 DirectDraw interfaces (IDirectDraw/IDirectDrawSurface/DDSURFACEDESC), never" >&2
     echo "IDirectDraw2+/IDirectDrawSurface2+/DDSURFACEDESC2/anything from d3d.h (plan_dx1.md section 1)." >&2
     exit 1
 fi
 
-echo "OK: DX1 backend source uses only v1 DirectDraw symbols."
+echo "OK: DX1 renderer source uses only v1 DirectDraw symbols."
 exit 0

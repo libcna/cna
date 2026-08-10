@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MS-PL
-// OPENGL1 backend: RenderTargetCube support (plan_opengl1.md item 24, EasyGL parity).
+// OPENGL1 renderer: RenderTargetCube support (plan_opengl1.md item 24, EasyGL parity).
 //
-// Before this, CreateRenderTargetCube() inherited the IGraphicsBackend nullptr default --
-// RenderTargetCube always failed to construct a usable backend on OPENGL1, despite this backend
+// Before this, CreateRenderTargetCube() inherited the IGraphicsRenderer nullptr default --
+// RenderTargetCube always failed to construct a usable renderer on OPENGL1, despite this renderer
 // already having both pieces needed to combine it (FBO render targets, item 2; cube-map textures,
 // item 5).
 //
 // Method: render two DIFFERENT solid colors into two DIFFERENT faces of the same
 // RenderTargetCube (+X red, +Y blue), unbind, then read both faces back via
-// RenderTargetCube::GetData() (a genuine GPU readback -- OpenGL1RenderTargetCubeBackend::GetData()
+// RenderTargetCube::GetData() (a genuine GPU readback -- OpenGL1RenderTargetCubeRenderer::GetData()
 // via glGetTexImage, not a CPU shadow) and confirm each face independently kept its own distinct
 // content -- not just "something got painted somewhere" (which a single-face test could not rule
 // out an all-faces-aliased bug). A third, never-rendered face is also checked to not have picked
@@ -22,7 +22,7 @@
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
@@ -100,7 +100,7 @@ protected:
         // drawable after recovery (not silently landing on the backbuffer / a stale handle).
         dev.SetRenderTarget(&rt, CubeMapFace::NegativeY);
         dev.Clear(Color(0, 255, 0, 255));
-        dev.GetBackend().DebugSimulateContextLoss();
+        dev.GetRenderer().DebugSimulateContextLoss();
         dev.Clear(Color(0, 255, 0, 255)); // Re-draw: the pre-loss draw's content is not expected
                                            // to survive (GPU-only, no CPU shadow -- documented,
                                            // same as every other OPENGL1 render target), only that

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // Task 895: SkinnedEffect pixel test — WeightsPerVertex is a real GPU-enforced constraint
-// (EasyGL backend).
+// (EasyGL renderer).
 //
 // FNA reference (Graphics/Effect/StockEffects/HLSL/SkinnedEffect.fx's Skin(vin, boneCount)):
 //   skinning = sum_{i=0}^{boneCount-1} Bones[Indices[i]] * Weights[i]

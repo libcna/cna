@@ -3,13 +3,13 @@
 // it returns the resource's real content, or it rejects the request deterministically. It must
 // never fabricate content out of the shared layer's own scratch memory.
 //
-// The defect this reproduces (shared, backend-neutral, in Texture2D::GetData itself):
+// The defect this reproduces (shared, renderer-neutral, in Texture2D::GetData itself):
 //
 //     std::vector<uint8_t> pixels(total * 4, 0);   // zero-initialized by the SHARED layer
-//     backend_->GetData(0, 0, 0, w, h, pixels.data(), size);  // interface default = no-op
+//     renderer_->GetData(0, 0, 0, w, h, pixels.data(), size);  // interface default = no-op
 //     for (i) data[i] = Color(pixels[..]);          // converted for the caller REGARDLESS
 //
-// A backend that overrides nothing therefore does not "leave the caller's buffer untouched": it
+// A renderer that overrides nothing therefore does not "leave the caller's buffer untouched": it
 // returns a complete, confidently-wrong, uniformly transparent-black frame. That is strictly worse
 // than an empty result, because
 //   * the obvious oracle "did GetData overwrite my sentinel destination?" PASSES on it, and
@@ -17,15 +17,15 @@
 // Both facts are asserted below (checks Z1/Z2) so this file records WHY sentinel-only testing is
 // not a valid success oracle, rather than merely avoiding it.
 //
-// What every backend must satisfy after the fix:
-//   * an ordinary Texture2D populated by SetData reads back EXACTLY, on every backend, for the full
+// What every renderer must satisfy after the fix:
+//   * an ordinary Texture2D populated by SetData reads back EXACTLY, on every renderer, for the full
 //     level, an arbitrary rectangle, an arbitrary destination offset and repeated calls;
 //   * a RenderTarget2D readback either returns the exact rendered pattern, or throws a deterministic
 //     System::NotSupportedException WITHOUT having touched one byte of the caller's destination;
 //   * nothing in between: no fabricated frame, no partially written destination, no silent success.
 //
-// Each backend's render-target readback capability is declared here explicitly (kRtContract) rather
-// than inferred at runtime, so "this backend cannot read render targets back" is a reviewed claim
+// Each renderer's render-target readback capability is declared here explicitly (kRtContract) rather
+// than inferred at runtime, so "this renderer cannot read render targets back" is a reviewed claim
 // this test enforces, not an escape hatch that lets any result pass.
 //
 // The rendered/uploaded pattern deliberately carries opaque red, opaque green, opaque blue, a block
@@ -75,11 +75,11 @@ namespace
     constexpr int kBlock = 4;  ///< Side of each corner colour block.
 
     /**
-     * @brief What this backend's RenderTarget2D colour readback is required to do.
+     * @brief What this renderer's RenderTarget2D colour readback is required to do.
      *
      * `Exact` — GetData must return the rendered pattern byte for byte.
      * `Unsupported` — GetData must throw System::NotSupportedException and leave the caller's
-     * destination byte-for-byte untouched. Reserved for backends that perform no rasterization at
+     * destination byte-for-byte untouched. Reserved for renderers that perform no rasterization at
      * all, so a render target's colour attachment has no content they could honestly return.
      */
     enum class RtContract
@@ -88,59 +88,59 @@ namespace
         Unsupported,
     };
 
-#if defined(CNA_BACKEND_HEADLESS)
-    // The Headless backend deliberately executes no rasterization: it records API usage and
+#if defined(CNA_RENDERER_HEADLESS)
+    // The Headless renderer deliberately executes no rasterization: it records API usage and
     // resource state for validation/tracing. A render target's colour attachment is produced only
-    // by rendering, so this backend has nothing real to return and must say so.
+    // by rendering, so this renderer has nothing real to return and must say so.
     constexpr RtContract kRtContract = RtContract::Unsupported;
-    constexpr const char* kBackendName = "HEADLESS";
-#elif defined(CNA_BACKEND_SOFTWARE)
+    constexpr const char* kRendererName = "HEADLESS";
+#elif defined(CNA_RENDERER_SOFTWARE)
     constexpr RtContract kRtContract = RtContract::Exact;
-    constexpr const char* kBackendName = "SOFTWARE";
-#elif defined(CNA_BACKEND_EASYGL)
+    constexpr const char* kRendererName = "SOFTWARE";
+#elif defined(CNA_RENDERER_EASYGL)
     constexpr RtContract kRtContract = RtContract::Exact;
-    constexpr const char* kBackendName = "EASYGL";
-#elif defined(CNA_BACKEND_BGFX)
+    constexpr const char* kRendererName = "EASYGL";
+#elif defined(CNA_RENDERER_BGFX)
     constexpr RtContract kRtContract = RtContract::Exact;
-    constexpr const char* kBackendName = "BGFX";
-#elif defined(CNA_BACKEND_VULKAN)
+    constexpr const char* kRendererName = "BGFX";
+#elif defined(CNA_RENDERER_VULKAN)
     constexpr RtContract kRtContract = RtContract::Exact;
-    constexpr const char* kBackendName = "VULKAN";
-#elif defined(CNA_BACKEND_WEBGPU)
+    constexpr const char* kRendererName = "VULKAN";
+#elif defined(CNA_RENDERER_WEBGPU)
     constexpr RtContract kRtContract = RtContract::Exact;
-    constexpr const char* kBackendName = "WEBGPU";
-#elif defined(CNA_BACKEND_SDL_GPU)
+    constexpr const char* kRendererName = "WEBGPU";
+#elif defined(CNA_RENDERER_SDL_GPU)
     constexpr RtContract kRtContract = RtContract::Exact;
-    constexpr const char* kBackendName = "SDL_GPU";
-#elif defined(CNA_BACKEND_SDL_RENDERER)
+    constexpr const char* kRendererName = "SDL_GPU";
+#elif defined(CNA_RENDERER_SDL_RENDERER)
     constexpr RtContract kRtContract = RtContract::Exact;
-    constexpr const char* kBackendName = "SDL_RENDERER";
-#elif defined(CNA_BACKEND_ASCII)
+    constexpr const char* kRendererName = "SDL_RENDERER";
+#elif defined(CNA_RENDERER_ASCII)
     constexpr RtContract kRtContract = RtContract::Exact;
-    constexpr const char* kBackendName = "ASCII";
-#elif defined(CNA_BACKEND_FREEDIRECT)
+    constexpr const char* kRendererName = "ASCII";
+#elif defined(CNA_RENDERER_FREEDIRECT)
     constexpr RtContract kRtContract = RtContract::Exact;
-    constexpr const char* kBackendName = "FREEDIRECT";
-#elif defined(CNA_BACKEND_D3D9)
+    constexpr const char* kRendererName = "FREEDIRECT";
+#elif defined(CNA_RENDERER_D3D9)
     constexpr RtContract kRtContract = RtContract::Exact;
-    constexpr const char* kBackendName = "D3D9";
-#elif defined(CNA_BACKEND_D3D11)
+    constexpr const char* kRendererName = "D3D9";
+#elif defined(CNA_RENDERER_D3D11)
     constexpr RtContract kRtContract = RtContract::Exact;
-    constexpr const char* kBackendName = "D3D11";
-#elif defined(CNA_BACKEND_D3D12)
+    constexpr const char* kRendererName = "D3D11";
+#elif defined(CNA_RENDERER_D3D12)
     constexpr RtContract kRtContract = RtContract::Exact;
-    constexpr const char* kBackendName = "D3D12";
-#elif defined(CNA_BACKEND_CANVAS)
+    constexpr const char* kRendererName = "D3D12";
+#elif defined(CNA_RENDERER_CANVAS)
     constexpr RtContract kRtContract = RtContract::Exact;
-    constexpr const char* kBackendName = "CANVAS";
-#elif defined(CNA_BACKEND_SKIA)
+    constexpr const char* kRendererName = "CANVAS";
+#elif defined(CNA_RENDERER_SKIA)
     constexpr RtContract kRtContract = RtContract::Exact;
-    constexpr const char* kBackendName = "SKIA";
-#elif defined(CNA_BACKEND_LLGL)
+    constexpr const char* kRendererName = "SKIA";
+#elif defined(CNA_RENDERER_LLGL)
     constexpr RtContract kRtContract = RtContract::Exact;
-    constexpr const char* kBackendName = "LLGL";
+    constexpr const char* kRendererName = "LLGL";
 #else
-#error "REMED-GFX-127: this backend has no declared Texture2D::GetData render-target contract."
+#error "REMED-GFX-127: this renderer has no declared Texture2D::GetData render-target contract."
 #endif
 
     /// Two unrelated destination pre-fills. Neither equals any pattern colour, so "still the
@@ -148,15 +148,15 @@ namespace
     Color SentinelCD() { return Color(0xCD, 0xCD, 0xCD, 0xCD); }
     Color SentinelA5() { return Color(0xA5, 0xA5, 0xA5, 0xA5); }
 
-    /// The fabricated frame the pre-fix shared layer produces from a no-op backend.
+    /// The fabricated frame the pre-fix shared layer produces from a no-op renderer.
     Color Fabricated() { return Color(0, 0, 0, 0); }
 
     // Every RGB component is 0 or 255 and only the ALPHA carries an intermediate value. Alpha is
-    // linear in every colour space these backends use, while an intermediate RGB component is not:
+    // linear in every colour space these renderers use, while an intermediate RGB component is not:
     // WebGPU picks an *UnormSrgb surface/render-target format, so a mid-tone written through its
     // render pass comes back gamma-encoded (measured: 128 -> 188). That colour-space difference is
     // a separate, pre-existing concern; encoding it into this file's expectations would make a
-    // readback-honesty regression fail for an unrelated reason on one backend.
+    // readback-honesty regression fail for an unrelated reason on one renderer.
     Color BlockTopLeft()     { return Color(255, 0, 0, 255); }     ///< opaque red
     Color BlockTopRight()    { return Color(0, 255, 0, 255); }     ///< opaque green
     Color BlockBottomLeft()  { return Color(0, 0, 255, 255); }     ///< opaque blue
@@ -256,7 +256,7 @@ class Texture2DGetDataContractTest : public Game
     /// Renders the canonical pattern into @p target and leaves the backbuffer active again.
     ///
     /// The asserted background is DRAWN, not cleared: `GraphicsDevice::Clear` on a bound render
-    /// target interacts with each backend's RenderTargetUsage handling, and this file is about
+    /// target interacts with each renderer's RenderTargetUsage handling, and this file is about
     /// readback honesty, not about clear semantics. The opaque-black Clear below only establishes a
     /// deterministic base that every asserted pixel is then painted over.
     void ProducePattern(GraphicsDevice& dev, RenderTarget2D& target)
@@ -329,7 +329,7 @@ class Texture2DGetDataContractTest : public Game
         return r;
     }
 
-    /// Asserts the single honest outcome this backend declared, and prints the measured facts either
+    /// Asserts the single honest outcome this renderer declared, and prints the measured facts either
     /// way so a failure identifies which wrong outcome occurred.
     void CheckHonestOutcome(const Readback& r, const std::string& label)
     {
@@ -566,7 +566,7 @@ class Texture2DGetDataContractTest : public Game
 
         // Z1/Z2: the recorded reason sentinel-only testing cannot be trusted here. Pre-fix the
         // destination IS fully overwritten (with fabricated zeros) and no exception is raised, so
-        // both of the two obvious oracles report success on an unimplemented backend. These two
+        // both of the two obvious oracles report success on an unimplemented renderer. These two
         // checks pass under BOTH honest outcomes and would only fail if the fabrication returned.
         check(!(cd.sentinelSurvivors == 0 && cd.fabricatedPixels == cd.total &&
                 !cd.threwNotSupported && !cd.threwSomethingElse),
@@ -643,7 +643,7 @@ class Texture2DGetDataContractTest : public Game
 
         // B8: the same rectangle set Section A applies to an ordinary texture -- one pixel, the
         // final row, the final column and the lower-right corner -- so an off-by-one in a
-        // backend's row-pitch or origin handling cannot hide in the interior.
+        // renderer's row-pitch or origin handling cannot hide in the interior.
         if (kRtContract == RtContract::Exact)
         {
             struct RectCase { Rectangle rect; const char* name; };
@@ -683,7 +683,7 @@ class Texture2DGetDataContractTest : public Game
 
         // B9: reading a target that is STILL BOUND, on a target of its own so the rebind cannot
         // disturb anything above (RenderTargetUsage::DiscardContents legitimately wipes a target
-        // when it is bound again). Backends differ on whether they can serve an active-target read
+        // when it is bound again). Renderers differ on whether they can serve an active-target read
         // -- some flush their pending work and can, others cannot -- so this asserts only the
         // property this finding is about: whichever way it goes, the answer must be honest, the
         // exact content or a deterministic rejection, never a fabricated frame reported as success.
@@ -865,7 +865,7 @@ protected:
         auto& dev = getGraphicsDeviceProperty();
         ResetState(dev);
 
-        std::printf("backend=%s declaredRenderTargetReadback=%s\n", kBackendName,
+        std::printf("renderer=%s declaredRenderTargetReadback=%s\n", kRendererName,
                     kRtContract == RtContract::Exact ? "exact" : "unsupported");
 
         SectionA(dev);

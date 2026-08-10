@@ -15,7 +15,7 @@
 // onto GL_LINEAR_MIPMAP_LINEAR and GL_NEAREST_MIPMAP_NEAREST. Linear and Point are therefore FULL
 // filters that mip-filter a real chain; they are NOT "the ordinals without a mip component". They are
 // also the ordinals a game gets by default -- SamplerState::LinearWrap, the device default, is
-// ordinal 0 -- so a backend that drops their mip term drops mipmapping for almost every real game.
+// ordinal 0 -- so a renderer that drops their mip term drops mipmapping for almost every real game.
 //
 // WHAT THIS FIXTURE PINS, and why the existing fixtures could not see it. REMED-GFX-174's leg D
 // MEASURED this and deliberately declined to assert it (its D4 note), because asserting the
@@ -127,39 +127,39 @@ using namespace Microsoft::Xna::Framework::Graphics;
 
 namespace
 {
-#if defined(CNA_BACKEND_HEADLESS)
+#if defined(CNA_RENDERER_HEADLESS)
     constexpr bool kRasterizes = false;
-    constexpr const char* kBackendName = "HEADLESS";
-#elif defined(CNA_BACKEND_SOFTWARE)
+    constexpr const char* kRendererName = "HEADLESS";
+#elif defined(CNA_RENDERER_SOFTWARE)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "SOFTWARE";
-#elif defined(CNA_BACKEND_EASYGL)
+    constexpr const char* kRendererName = "SOFTWARE";
+#elif defined(CNA_RENDERER_EASYGL)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "EASYGL";
-#elif defined(CNA_BACKEND_BGFX)
+    constexpr const char* kRendererName = "EASYGL";
+#elif defined(CNA_RENDERER_BGFX)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "BGFX";
-#elif defined(CNA_BACKEND_VULKAN)
+    constexpr const char* kRendererName = "BGFX";
+#elif defined(CNA_RENDERER_VULKAN)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "VULKAN";
-#elif defined(CNA_BACKEND_WEBGPU)
+    constexpr const char* kRendererName = "VULKAN";
+#elif defined(CNA_RENDERER_WEBGPU)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "WEBGPU";
-#elif defined(CNA_BACKEND_SDL_GPU)
+    constexpr const char* kRendererName = "WEBGPU";
+#elif defined(CNA_RENDERER_SDL_GPU)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "SDL_GPU";
-#elif defined(CNA_BACKEND_D3D9)
+    constexpr const char* kRendererName = "SDL_GPU";
+#elif defined(CNA_RENDERER_D3D9)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "D3D9";
-#elif defined(CNA_BACKEND_D3D11)
+    constexpr const char* kRendererName = "D3D9";
+#elif defined(CNA_RENDERER_D3D11)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "D3D11";
-#elif defined(CNA_BACKEND_D3D12)
+    constexpr const char* kRendererName = "D3D11";
+#elif defined(CNA_RENDERER_D3D12)
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "D3D12";
+    constexpr const char* kRendererName = "D3D12";
 #else
     constexpr bool kRasterizes = true;
-    constexpr const char* kBackendName = "UNKNOWN";
+    constexpr const char* kRendererName = "UNKNOWN";
 #endif
 
     constexpr int kBBW = 160;
@@ -474,7 +474,7 @@ class TextureFilterMipContractTest : public Game
 
     // ---------------------------------------------------------------------------------------------
     // Chain construction. Every level is written explicitly through the public SetData(level, ...)
-    // overload; nothing here asks any backend to generate a level.
+    // overload; nothing here asks any renderer to generate a level.
     // ---------------------------------------------------------------------------------------------
 
     static void FillLevelFlat(Texture2D& tex, int level, int w, int h, const Color& c)
@@ -786,7 +786,7 @@ class TextureFilterMipContractTest : public Game
         // make filtering "observable" would be asserting a value nobody wrote.
         //
         // What IS the contract, and what this leg asserts, is that declaring a chain must not damage
-        // the level that WAS written. A backend that leaves the declared range wider than the levels
+        // the level that WAS written. A renderer that leaves the declared range wider than the levels
         // it really allocated has an INCOMPLETE texture, and on GL an incomplete texture samples as
         // opaque black over its whole surface -- level 0 included, magnification included. So a
         // magnifying draw, which can only ever touch level 0, is a complete and portable test of
@@ -804,12 +804,12 @@ class TextureFilterMipContractTest : public Game
                   std::to_string(black) + ", " + Describe(pix) + ")");
         }
         // The minifying case is MEASURED, not asserted: the level it lands on was never written, so
-        // its content belongs to the backend's own allocation, not to this contract.
+        // its content belongs to the renderer's own allocation, not to this contract.
         {
             const std::vector<Color> pix =
                 Draw3D(dev, 2, 2, *mipPartial_, MakeSampler(TextureFilter::Point));
             note("G0 minifying a declared-but-unwritten chain reads a level no caller supplied; its"
-                 " content is the backend's allocation, reported not asserted -- " + Describe(pix));
+                 " content is the renderer's allocation, reported not asserted -- " + Describe(pix));
         }
     }
 
@@ -1017,19 +1017,19 @@ protected:
         if (!kRasterizes)
         {
             std::printf("[SKIP] %s does not rasterize; mip level selection is not observable\n",
-                        kBackendName);
+                        kRendererName);
             result_ = 77;
             Exit();
             return;
         }
 
         GraphicsDevice& dev = getGraphicsDeviceProperty();
-        std::printf("=== REMED-GFX-175 TextureFilter mip contract -- backend %s ===\n", kBackendName);
+        std::printf("=== REMED-GFX-175 TextureFilter mip contract -- renderer %s ===\n", kRendererName);
 
         RunA();
         if (flatLevels_ < 4)
         {
-            note(std::string(kBackendName) + " allocated " + std::to_string(flatLevels_) +
+            note(std::string(kRendererName) + " allocated " + std::to_string(flatLevels_) +
                  " level(s) for a mipMap=true 8x8 Texture2D; the LOD legs below are not observable");
         }
         RunB(dev);
@@ -1043,7 +1043,7 @@ protected:
         RunJ(dev);
         RunK(dev);
 
-        std::printf("=== %d/%d checks passed on %s ===\n", passCount_, totalCount_, kBackendName);
+        std::printf("=== %d/%d checks passed on %s ===\n", passCount_, totalCount_, kRendererName);
         result_ = (passCount_ == totalCount_) ? 0 : 1;
         Exit();
     }

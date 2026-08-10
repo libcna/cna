@@ -94,8 +94,8 @@ protected:
 public:
     EasyGLMsaaTest()
     {
-        // Request MSAA via PresentationParameters before backend creation.
-        // GraphicsDeviceManager caps MultiSampleCount at 8; the GL backend
+        // Request MSAA via PresentationParameters before renderer creation.
+        // GraphicsDeviceManager caps MultiSampleCount at 8; the GL renderer
         // clamps to GL_MAX_SAMPLES at runtime.
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
         gdm_->setPreferredBackBufferWidthProperty(320);

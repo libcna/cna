@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // DepthEffect is a NOXNA CNA extension (no XNA/FNA precedent) — like ShaderEffectTests.cpp,
 // these tests exercise the structural contract (mode round-trip, Clone() independence,
-// GetTypeName()) against a default-constructed GraphicsDevice with no real backend, not GLSL
+// GetTypeName()) against a default-constructed GraphicsDevice with no real renderer, not GLSL
 // compile/render correctness (that needs a live EasyGL context — see
 // examples/easygl_postprocesseffect_shader_test.cpp for the runtime-verified pattern).
 
@@ -78,7 +78,7 @@ TEST(DepthEffectTest, SetModeRoundTripsForEveryMode)
     }
 }
 
-TEST(DepthEffectTest, ApplyDoesNotCrashWithoutABackend)
+TEST(DepthEffectTest, ApplyDoesNotCrashWithoutARenderer)
 {
     GraphicsDevice gd;
     DepthEffect fx(gd);
@@ -89,9 +89,9 @@ TEST(DepthEffectTest, ApplyDoesNotCrashWithoutABackend)
 }
 
 // Palette256/Palette16 lazily build their lookup textures inside OnApply() (via Apply()) --
-// this must stay a no-op (not throw) when there is no working backend, same as every other
-// mode, rather than crashing on GraphicsDevice::GetBackend()'s "no backend" exception.
-TEST(DepthEffectTest, ApplyDoesNotCrashForPaletteModesWithoutABackend)
+// this must stay a no-op (not throw) when there is no working renderer, same as every other
+// mode, rather than crashing on GraphicsDevice::GetRenderer()'s "no renderer" exception.
+TEST(DepthEffectTest, ApplyDoesNotCrashForPaletteModesWithoutARenderer)
 {
     GraphicsDevice gd;
     DepthEffect fx(gd);

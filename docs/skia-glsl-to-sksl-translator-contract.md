@@ -38,7 +38,7 @@ translator's accepted subset actually needs to bridge are narrow and lexical, no
   the end (again keeping its own name, e.g. `FragColor`, so the body's existing `FragColor = ...`/
   `FragColor.rgb *= ...` assignments are emitted completely unchanged).
 - `sampler2D` uniforms become `shader` uniforms, **renamed** to the mesh ABI's own reserved
-  `cnaTexture0`-`7` child-naming convention (SKIA-154, `SkiaMeshEffectBackend`) in declaration
+  `cnaTexture0`-`7` child-naming convention (SKIA-154, `SkiaMeshEffectRenderer`) in declaration
   order -- unlike the `in`/`out` variable above, a sampler's *original* GLSL name cannot be kept:
   SKIA-157's own public integration test caught this exact gap on its first run (the translator
   originally preserved each sampler's original name, e.g. `uTexture`, but the mesh ABI rejects any
@@ -97,7 +97,7 @@ reject-scan, which runs over the whole token stream including inside `body`) nor
   explicitly excluded; SKIA-144-151's own bounded extension is a completely separate ABI with its
   own reserved preamble, not a target for this translator).
 - `cnaSampleUV`, `CNA_GL_RT_SAMPLE_UV_DECL` (the render-target-source flip-V macro
-  `docs/skia-easygl-effect-inventory.md` already flagged as backend-specific with no SkSL
+  `docs/skia-easygl-effect-inventory.md` already flagged as renderer-specific with no SkSL
   equivalent need -- Skia has no analogous render-target-source V-flip convention to reconcile).
 - A second `in` declaration, or any `in` declaration whose type is not `vec2` (only the UV varying
   has a direct SkSL local-coordinate equivalent; per-vertex colour/normal/tangent/fog-factor

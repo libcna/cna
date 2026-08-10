@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MS-PL
 
-#include "CNA/Internal/Backends/D3D12/D3D12DescriptorHeaps.hpp"
+#include "CNA/Internal/Renderers/D3D12/D3D12DescriptorHeaps.hpp"
 
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <stdexcept>
 
-namespace CNA::Internal::Backends::D3D12
+namespace CNA::Internal::Renderers::D3D12
 {
     namespace
     {

@@ -9,10 +9,10 @@
 # once passed in CI at all.
 #
 # This job runs the FULL, unfiltered default suite (no -L, no --gtest_filter) on EasyGL, the
-# documented default backend on Linux (cmake/BackendSelection.cmake). Per REMED-BUILD-004's own
-# "decide explicitly which backends CI runs the general suite on" requirement: EasyGL only, for now
-# -- deliberately narrower than "all 14 backends", which remains future work (each other backend
-# already has its own narrower, backend-specific CI path or none at all).
+# documented default renderer on Linux (cmake/RendererSelection.cmake). Per REMED-BUILD-004's own
+# "decide explicitly which renderers CI runs the general suite on" requirement: EasyGL only, for now
+# -- deliberately narrower than "all 14 renderers", which remains future work (each other renderer
+# already has its own narrower, renderer-specific CI path or none at all).
 #
 # Known pre-existing failures and the classification step below:
 # As of this job's introduction, a full unfiltered run on this exact configuration (EasyGL, Debug,
@@ -58,7 +58,7 @@ concurrency:
 
 jobs:
   general-tests:
-    name: CnaTests (unfiltered, EasyGL default backend)
+    name: CnaTests (unfiltered, EasyGL default renderer)
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     env:
@@ -130,13 +130,13 @@ jobs:
         run: |
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Debug \
-            -DCNA_GRAPHICS_BACKEND=EASYGL \
+            -DCNA_GRAPHICS_RENDERER=EASYGL \
             -DCNA_BUILD_TESTS=ON \
             -DCNA_BUILD_EXAMPLES=ON \
             -DCNA_TEST_DISPLAY=:99
 
       # Unlike the other 3 workflows (which build only the CnaTests target, since their own label/
-      # filter selections don't reach any of the ~247 separately-registered backend smoke-test
+      # filter selections don't reach any of the ~247 separately-registered renderer smoke-test
       # executables), the unfiltered general suite does exercise those executables directly
       # (add_test(COMMAND <exe>) against targets that are part of the default `all` target) -- so
       # this job needs a full default build, not just CnaTests.

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// SkinnedEffect.VertexColorEnabled proof for the SDL_GPU graphics backend (stride-56
+// SkinnedEffect.VertexColorEnabled proof for the SDL_GPU graphics renderer (stride-56
 // skinnedColoredVertexShader_/skinned_colored3d.vert.glsl+skinned_colored3d.frag.glsl) -- proves
 // the stride-56 skinned+Color vertex layout's Color attribute (location 5) is actually read and
 // correctly gated by the VertexColorEnabled uniform, and that the multiply happens AFTER the
@@ -14,7 +14,7 @@
 // color would otherwise be, independent of the lighting math -- a rigorously provable (not
 // "ran once and pasted"), lighting-independent expected value. Quad A's own expected value is a
 // deliberately qualitative "red-dominant, non-black" check (matching sdlgpu_skinned_test.cpp's
-// own established convention for this backend's lit-shading results), since this is the "control"
+// own established convention for this renderer's lit-shading results), since this is the "control"
 // side of the test, not the property under test.
 
 #include "Microsoft/Xna/Framework/Game.hpp"

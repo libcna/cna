@@ -1,23 +1,23 @@
 // SPDX-License-Identifier: MS-PL
-// plan_sokol.md SOKOL-42: OcclusionQuery and ShaderEffect must release their raw-GL backend objects
-// during GraphicsDevice::Dispose(), before the backend device/GL context is torn down.
+// plan_sokol.md SOKOL-42: OcclusionQuery and ShaderEffect must release their raw-GL renderer objects
+// during GraphicsDevice::Dispose(), before the renderer device/GL context is torn down.
 //
 // GraphicsDevice::Dispose() disposes every tracked GraphicsResource (calling each one's Dispose())
-// BEFORE destroyNativeResources() resets its own backend_ (which shuts sokol_gfx down and destroys
+// BEFORE destroyNativeResources() resets its own renderer_ (which shuts sokol_gfx down and destroys
 // the SDL GL context) -- see docs/graphics-resource-lifetime.md. VertexBuffer/IndexBuffer/Texture2D
-// already reset their own backend_ inside Dispose(bool) (see easygl_device_dispose_order_test.cpp,
+// already reset their own renderer_ inside Dispose(bool) (see easygl_device_dispose_order_test.cpp,
 // this test's own model). Before this fix, OcclusionQuery had no Dispose(bool) override at all, and
 // ShaderEffect inherited Effect::Dispose(bool), which only reaches GraphicsResource::Dispose(bool)
-// -- neither ever touched their own backend_/effectBackend_ unique_ptr. That member would then only
+// -- neither ever touched their own renderer_/effectRenderer_ unique_ptr. That member would then only
 // be destroyed whenever the OcclusionQuery/ShaderEffect C++ object's own destructor happened to run
 // -- which this test deliberately delays until well after GraphicsDevice::Dispose() -- calling raw
 // glDeleteQueries()/glDeleteProgram() with no current GL context.
 //
-// Check A/B -- both resources have a real backend before device disposal.
+// Check A/B -- both resources have a real renderer before device disposal.
 // Check C/D -- both are marked disposed by GraphicsDevice::Dispose().
-// Check E/F -- both backends are released (HasBackend() == false) by that same call, not merely
+// Check E/F -- both renderers are released (HasRenderer() == false) by that same call, not merely
 //   scheduled for later release by some future destructor.
-// Check G/H -- querying state after disposal returns the documented safe defaults (no backend to
+// Check G/H -- querying state after disposal returns the documented safe defaults (no renderer to
 //   dereference), proving the release in E/F was real, not just a flag flip.
 // Check I -- explicitly disposing the already-disposed resources afterward does not throw.
 // Check J -- destroying both objects (heap-allocated, deleted here, well after device disposal)
@@ -42,7 +42,7 @@ using namespace Microsoft::Xna::Framework::Graphics;
 namespace
 {
     // Trivial, real GLSL -- attribute layout is irrelevant to this test (nothing is drawn), only
-    // that SokolEffectBackend genuinely compiles and links a GL program to release later.
+    // that SokolEffectRenderer genuinely compiles and links a GL program to release later.
     const char* kVertSrc = R"(#version 410 core
 layout(location = 0) in vec2 aPos;
 void main() { gl_Position = vec4(aPos, 0.0, 1.0); }
@@ -78,23 +78,23 @@ protected:
         auto* query = new OcclusionQuery(dev);
         auto* effect = new ShaderEffect(dev, kVertSrc, kFragSrc);
 
-        check(query->HasBackend(), "A: OcclusionQuery has a backend before device dispose");
-        check(effect->HasBackend(), "B: ShaderEffect has a backend before device dispose");
+        check(query->HasRenderer(), "A: OcclusionQuery has a renderer before device dispose");
+        check(effect->HasRenderer(), "B: ShaderEffect has a renderer before device dispose");
 
         dev.Dispose();
 
         check(query->getIsDisposedProperty(), "C: OcclusionQuery disposed by device.Dispose()");
         check(effect->getIsDisposedProperty(), "D: ShaderEffect disposed by device.Dispose()");
 
-        check(!query->HasBackend(),
-              "E: OcclusionQuery backend released by device.Dispose(), not deferred");
-        check(!effect->HasBackend(),
-              "F: ShaderEffect backend released by device.Dispose(), not deferred");
+        check(!query->HasRenderer(),
+              "E: OcclusionQuery renderer released by device.Dispose(), not deferred");
+        check(!effect->HasRenderer(),
+              "F: ShaderEffect renderer released by device.Dispose(), not deferred");
 
         check(!query->getIsCompleteProperty() && query->getPixelCountProperty() == 0,
-              "G: OcclusionQuery reports safe defaults once its backend is gone");
+              "G: OcclusionQuery reports safe defaults once its renderer is gone");
         check(!effect->IsEffectValid(),
-              "H: ShaderEffect reports safe defaults once its backend is gone");
+              "H: ShaderEffect reports safe defaults once its renderer is gone");
 
         bool noThrow = true;
         try
@@ -108,7 +108,7 @@ protected:
         catch (...) { noThrow = false; }
         check(noThrow, "I: disposing already-disposed resources does not throw");
 
-        // The discriminating check: pre-fix, backend_/effectBackend_ were still alive here, so
+        // The discriminating check: pre-fix, renderer_/effectRenderer_ were still alive here, so
         // these deletes would run a real glDeleteQueries()/glDeleteProgram() with no current GL
         // context (device.Dispose() already destroyed it above).
         bool destroyedCleanly = true;

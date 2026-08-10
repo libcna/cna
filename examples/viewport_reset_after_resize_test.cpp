@@ -10,11 +10,11 @@
 //
 // CNA has no FNA-style Reset() wired into GraphicsDeviceManager::ApplyChanges() yet (tracked
 // separately); instead GraphicsDevice::UpdateViewportFromWindow() re-derives the Viewport from
-// the backend's current logical size, called both from ApplyChanges()'s backend-sync path and
+// the renderer's current logical size, called both from ApplyChanges()'s renderer-sync path and
 // unconditionally every GraphicsDevice::Present() call (a stronger, event-independent guarantee
 // than FNA's — see Task 348, and Game::EndDraw() which calls Present() after every Draw()).
 // Before this task, UpdateViewportFromWindow() decided "did the size change?" by comparing the
-// backend's computed size against viewport_'s OWN current width/height — which meant a custom
+// renderer's computed size against viewport_'s OWN current width/height — which meant a custom
 // Viewport (deliberately sized differently than the backbuffer) got silently stomped back to
 // full-window size on the very next frame's Present(), even with no resize at all. Fixed by
 // tracking the last-seen size in dedicated lastKnownViewportWidth_/Height_ fields instead of

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // plan_d3d10.md: smoke test for the D3D10 (real Direct3D 10 via DXVK's d3d10core, real HLSL
-// shaders) graphics backend's device/swap-chain/back-buffer foundation.
+// shaders) graphics renderer's device/swap-chain/back-buffer foundation.
 //
 // Check A -- GetWindowInternal() returns a real, non-null window.
 // Check B -- Clear(r,g,b,a) followed by GetBackBufferData() reads back the exact clear color
@@ -16,7 +16,7 @@
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 
-#include "CNA/Internal/Backends/D3D10/D3D10GraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/D3D10/D3D10Renderer.hpp"
 
 #include <cstdio>
 #include <cstdlib>
@@ -25,7 +25,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::D3D10;
+using namespace CNA::Internal::Renderers::D3D10;
 
 static constexpr int kCanvasSize = 64;
 
@@ -45,9 +45,9 @@ protected:
     void Draw(const GameTime&) override
     {
         auto& dev = getGraphicsDeviceProperty();
-        auto& backend = static_cast<D3D10GraphicsBackend&>(dev.GetBackend());
+        auto& renderer = static_cast<D3D10Renderer&>(dev.GetRenderer());
 
-        check(backend.GetWindowInternal() != nullptr, "GraphicsDevice has a real window under the D3D10 backend");
+        check(renderer.GetWindowInternal() != nullptr, "GraphicsDevice has a real window under the D3D10 renderer");
 
         {
             dev.Clear(Color(20, 40, 60, 255));

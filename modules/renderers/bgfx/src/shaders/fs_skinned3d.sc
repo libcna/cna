@@ -64,7 +64,7 @@ void main()
     vec3 litRGB   = lightSum * v_color0.rgb + u_emissiveColor.xyz;
     vec3 finalRGB = mix(v_color0.rgb, litRGB, u_lightingEnabled.x);
     // CNB-67 (Phase 13C) Bgfx port: vc is (1,1,1,1) unless VertexColorEnabled is set, matching
-    // EasyGLGraphicsBackend::EnsureSkinnedProgram()'s vc gate exactly.
+    // EasyGLRenderer::EnsureSkinnedProgram()'s vc gate exactly.
     vec4 vc = mix(vec4(1.0, 1.0, 1.0, 1.0), v_vertexColor0, u_vertexColorEnabled3D.x);
     gl_FragColor = vec4(tex.rgb * finalRGB, tex.a * v_color0.a);
     gl_FragColor.a *= vc.a;

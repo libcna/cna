@@ -238,11 +238,11 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * Populates texture, diffuse color, alpha, vertex-color flag, world matrix,
          * and the alphaTest vec4 (reference value, tolerance, pass/fail weights) so
-         * the backend fragment shader can perform per-pixel alpha testing via discard.
+         * the renderer fragment shader can perform per-pixel alpha testing via discard.
          *
          * @param params Output struct to populate.
          */
-        NOXNA void FillGpuDrawParams(CNA::Internal::Backends::GpuDrawParams& params) const override;
+        NOXNA void FillGpuDrawParams(CNA::Internal::Renderers::GpuDrawParams& params) const override;
 
     protected:
         /**

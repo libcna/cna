@@ -12,7 +12,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Utf8Decode.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/Collections/Generic/KeyNotFoundException.hpp"
@@ -20,7 +20,7 @@
 
 namespace Microsoft::Xna::Framework::Graphics
 {
-    using namespace CNA::Internal::Backends;
+    using namespace CNA::Internal::Renderers;
 
     namespace
     {
@@ -84,15 +84,15 @@ namespace Microsoft::Xna::Framework::Graphics
 
     SpriteBatch::SpriteBatch(GraphicsDevice& graphicsDevice)
         : GraphicsResource(&graphicsDevice)
-        , backend_(graphicsDevice.GetBackend().CreateSpriteBatch())
+        , renderer_(graphicsDevice.GetRenderer().CreateSpriteBatch())
     {
     }
 
     SpriteBatch::SpriteBatch() = default;
 
-    SpriteBatch::SpriteBatch(std::unique_ptr<ISpriteBatchBackend> backend)
+    SpriteBatch::SpriteBatch(std::unique_ptr<ISpriteBatchRenderer> renderer)
         : GraphicsResource(nullptr)
-        , backend_(std::move(backend))
+        , renderer_(std::move(renderer))
     {
     }
 
@@ -153,7 +153,7 @@ namespace Microsoft::Xna::Framework::Graphics
             graphicsDevice_->setBlendStateProperty(blendState);
             // Task 803 finding: this parameter was previously entirely unused -- SpriteBatch
             // draws silently inherited whatever DepthStencilState the game's own 3D rendering
-            // last configured (or each backend's own construction-time default), instead of
+            // last configured (or each renderer's own construction-time default), instead of
             // FNA's real default of DepthStencilState.None when the caller passes null. Matches
             // FNA's SpriteBatch.Begin(): a null depthStencilState always means None, the state is
             // always (re-)applied here, never left over from a previous Begin() (mirrors the
@@ -162,13 +162,13 @@ namespace Microsoft::Xna::Framework::Graphics
                 depthStencilState ? *depthStencilState : DepthStencilState::None);
             // REMED-GFX-081: this parameter was previously discarded (`/*rasterizerState*/`), so a
             // RasterizerState supplied to Begin -- e.g. one with ScissorTestEnable/CullMode/FillMode
-            // set -- never reached the device or backend; the only way to affect sprite rasterizer
+            // set -- never reached the device or renderer; the only way to affect sprite rasterizer
             // state was to assign GraphicsDevice.RasterizerState directly. FNA's PrepRenderState
             // applies `rasterizerState ?? RasterizerState.CullCounterClockwise`; do the same here
             // (a null rasterizerState always resolves to the SpriteBatch default and is always
             // (re-)applied, never left over from a previous Begin -- mirrors the blend/depth/sampler
             // handling). Applied via the GraphicsDevice property so it routes through the same
-            // ApplyRasterizerState path every backend already uses; the state is copied (no raw
+            // ApplyRasterizerState path every renderer already uses; the state is copied (no raw
             // pointer to the caller's RasterizerState is retained).
             graphicsDevice_->setRasterizerStateProperty(
                 rasterizerState ? *rasterizerState : RasterizerState::CullCounterClockwise);
@@ -179,27 +179,27 @@ namespace Microsoft::Xna::Framework::Graphics
         sortMode_        = sortMode;
         spriteQueue_.clear();
 
-        if (backend_)
+        if (renderer_)
         {
             try
             {
-                backend_->SetCustomEffect(customEffect_);
-                backend_->SetTransformMatrix(transformMatrix_);
+                renderer_->SetCustomEffect(customEffect_);
+                renderer_->SetTransformMatrix(transformMatrix_);
                 // Matches FNA: a null samplerState defaults to SamplerState.LinearClamp, and the
                 // resolved state is always (re-)applied — never left over from a previous Begin().
                 const SamplerState& effectiveSampler = samplerState ? *samplerState : SamplerState::LinearClamp;
-                backend_->SetSamplerFilter(static_cast<int>(effectiveSampler.getFilterProperty()));
-                backend_->SetSamplerAddressMode(static_cast<int>(effectiveSampler.getAddressUProperty()),
+                renderer_->SetSamplerFilter(static_cast<int>(effectiveSampler.getFilterProperty()));
+                renderer_->SetSamplerAddressMode(static_cast<int>(effectiveSampler.getAddressUProperty()),
                                                 static_cast<int>(effectiveSampler.getAddressVProperty()));
-                backend_->SetImmediateMode(sortMode_ == SpriteSortMode::Immediate);
-                backend_->Begin();
+                renderer_->SetImmediateMode(sortMode_ == SpriteSortMode::Immediate);
+                renderer_->Begin();
             }
             catch (...)
             {
-                // A rejected custom effect used to leave `begun` true even though the backend never
+                // A rejected custom effect used to leave `begun` true even though the renderer never
                 // began. Clear the retained front-end state as well, so callers can catch the
                 // honest capability exception and begin a valid batch immediately afterwards.
-                try { backend_->SetCustomEffect(nullptr); }
+                try { renderer_->SetCustomEffect(nullptr); }
                 catch (...) {}
                 customEffect_ = nullptr;
                 spriteQueue_.clear();
@@ -207,7 +207,7 @@ namespace Microsoft::Xna::Framework::Graphics
                 throw;
             }
         }
-        // Backend setup can reject an unsupported requested state (for example Skia's mip-only
+        // Renderer setup can reject an unsupported requested state (for example Skia's mip-only
         // sampler filters). Publish a successful Begin only after that setup completes, so the
         // same SpriteBatch remains reusable after the caller catches the exception.
         begun = true;
@@ -217,12 +217,12 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (!begun)
             throw std::runtime_error("End was called, but Begin has not yet been called.");
-        if (backend_)
+        if (renderer_)
         {
             if (sortMode_ != SpriteSortMode::Immediate)
                 flushBatch();
-            backend_->End();
-            backend_->SetCustomEffect(nullptr);
+            renderer_->End();
+            renderer_->SetCustomEffect(nullptr);
         }
         begun         = false;
         customEffect_ = nullptr;
@@ -238,8 +238,8 @@ namespace Microsoft::Xna::Framework::Graphics
                                  SpriteEffects effects, float layerDepth)
     {
         // Task 717 finding: without this guard, a fully-disposed Texture2D (its last shared_ptr
-        // reference released, backend_ now null) reaching flushSingle/flushBatch would dereference
-        // a null ITextureBackend& via GetBackend() -- a guaranteed crash, not a graceful failure.
+        // reference released, renderer_ now null) reaching flushSingle/flushBatch would dereference
+        // a null ITextureRenderer& via GetRenderer() -- a guaranteed crash, not a graceful failure.
         // FNA itself doesn't guard SpriteBatch.Draw's texture argument, but its managed runtime
         // fails more safely there than a raw C++ null-reference dereference would here, so this is
         // a genuine hardening fix, not just an FNA-parity gap.
@@ -266,8 +266,8 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void SpriteBatch::flushSingle(const SpriteInfo& s)
     {
-        if (!backend_ || !s.texture) return;
-        backend_->Draw(s.texture->GetBackend(),
+        if (!renderer_ || !s.texture) return;
+        renderer_->Draw(s.texture->GetRenderer(),
                        s.destRect, s.srcRect, s.color,
                        s.rotation, s.origin, s.effects, s.layerDepth);
     }
@@ -312,7 +312,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void SpriteBatch::Draw(const Texture2D& texture, float x, float y)
     {
         if (!begun) throw std::runtime_error("SpriteBatch::Draw called before Begin().");
-        if (!backend_) return;
+        if (!renderer_) return;
         ValidateFinite(x, "x");
         ValidateFinite(y, "y");
         const intcs destinationX = TruncateDestinationComponent(x, "x");
@@ -332,7 +332,7 @@ namespace Microsoft::Xna::Framework::Graphics
                            Color color)
     {
         if (!begun) throw std::runtime_error("SpriteBatch::Draw called before Begin().");
-        if (!backend_) return;
+        if (!renderer_) return;
         pushSprite(texture, destinationRectangle, sourceRectangle,
                    color, 0.0f, Vector2::Zero, SpriteEffects::None, 0.0f);
     }
@@ -347,7 +347,7 @@ namespace Microsoft::Xna::Framework::Graphics
                            float layerDepth)
     {
         if (!begun) throw std::runtime_error("SpriteBatch::Draw called before Begin().");
-        if (!backend_) return;
+        if (!renderer_) return;
         pushSprite(texture, destinationRectangle, sourceRectangle,
                    color, rotation_rad, origin, effect, layerDepth);
     }
@@ -363,7 +363,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void SpriteBatch::Draw(const Texture2D& texture, Vector2 position, Color color)
     {
         if (!begun) throw std::runtime_error("SpriteBatch::Draw called before Begin().");
-        if (!backend_) return;
+        if (!renderer_) return;
         ValidateFinite(position, "position");
         const intcs destinationX = TruncateDestinationComponent(position.X, "position");
         const intcs destinationY = TruncateDestinationComponent(position.Y, "position");
@@ -379,7 +379,7 @@ namespace Microsoft::Xna::Framework::Graphics
                            std::optional<Rectangle> sourceRectangle, Color color)
     {
         if (!begun) throw std::runtime_error("SpriteBatch::Draw called before Begin().");
-        if (!backend_) return;
+        if (!renderer_) return;
         ValidateFinite(position, "position");
         const intcs destinationX = TruncateDestinationComponent(position.X, "position");
         const intcs destinationY = TruncateDestinationComponent(position.Y, "position");
@@ -399,7 +399,7 @@ namespace Microsoft::Xna::Framework::Graphics
                            SpriteEffects effects, float layerDepth)
     {
         if (!begun) throw std::runtime_error("SpriteBatch::Draw called before Begin().");
-        if (!backend_) return;
+        if (!renderer_) return;
         ValidateFinite(position, "position");
         ValidateFinite(scale, "scale");
         const intcs destinationX = TruncateDestinationComponent(position.X, "position");
@@ -424,7 +424,7 @@ namespace Microsoft::Xna::Framework::Graphics
                            SpriteEffects effects, float layerDepth)
     {
         if (!begun) throw std::runtime_error("SpriteBatch::Draw called before Begin().");
-        if (!backend_) return;
+        if (!renderer_) return;
         ValidateFinite(position, "position");
         ValidateFinite(scale, "scale");
         const intcs destinationX = TruncateDestinationComponent(position.X, "position");
@@ -447,7 +447,7 @@ namespace Microsoft::Xna::Framework::Graphics
                            const Rectangle& destinationRectangle, Color color)
     {
         if (!begun) throw std::runtime_error("SpriteBatch::Draw called before Begin().");
-        if (!backend_) return;
+        if (!renderer_) return;
         const int w = texture.getWidthProperty();
         const int h = texture.getHeightProperty();
         pushSprite(texture, destinationRectangle, Rectangle(0, 0, w, h),
@@ -459,7 +459,7 @@ namespace Microsoft::Xna::Framework::Graphics
                            std::optional<Rectangle> sourceRectangle, Color color)
     {
         if (!begun) throw std::runtime_error("SpriteBatch::Draw called before Begin().");
-        if (!backend_) return;
+        if (!renderer_) return;
         const int w = texture.getWidthProperty();
         const int h = texture.getHeightProperty();
         const Rectangle src = sourceRectangle.has_value() ? sourceRectangle.value() : Rectangle(0, 0, w, h);
@@ -477,7 +477,7 @@ namespace Microsoft::Xna::Framework::Graphics
                            float layerDepth)
     {
         if (!begun) throw std::runtime_error("SpriteBatch::Draw called before Begin().");
-        if (!backend_) return;
+        if (!renderer_) return;
         const int w = texture.getWidthProperty();
         const int h = texture.getHeightProperty();
         const Rectangle src = sourceRectangle.has_value() ? sourceRectangle.value() : Rectangle(0, 0, w, h);
@@ -523,7 +523,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                  float layerDepth)
     {
         if (!begun) throw std::runtime_error("SpriteBatch::DrawString called before Begin().");
-        if (!backend_ || text.empty()) return;
+        if (!renderer_ || text.empty()) return;
 
         const Texture2D& texture = spriteFont.textureValue_;
         if (texture.getWidthProperty() == 0) return;
@@ -684,7 +684,7 @@ namespace Microsoft::Xna::Framework::Graphics
                 "SpriteBatch::DrawMeshEXT requires SpriteSortMode::Immediate; it does not "
                 "participate in the deferred sprite sort/batch queue.");
         }
-        if (!backend_) return;
-        backend_->DrawMeshEXT(effect, positions, colors, uvs, vertexCount, indices, indexCount);
+        if (!renderer_) return;
+        renderer_->DrawMeshEXT(effect, positions, colors, uvs, vertexCount, indices, indexCount);
     }
 }

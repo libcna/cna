@@ -1,4 +1,4 @@
-#include "CNA/Internal/Backends/Ascii/AsciiFontAtlas.hpp"
+#include "CNA/Internal/Renderers/Ascii/AsciiFontAtlas.hpp"
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
@@ -10,7 +10,7 @@
 #include <stdexcept>
 #include <vector>
 
-namespace CNA::Internal::Backends::Ascii
+namespace CNA::Internal::Renderers::Ascii
 {
     using Microsoft::Xna::Framework::Color;
     using Microsoft::Xna::Framework::Rectangle;

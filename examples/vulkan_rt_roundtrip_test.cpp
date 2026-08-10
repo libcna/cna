@@ -2,7 +2,7 @@
 // Task 875: verify a real, XNA-legal Clear-only render-target pattern (no draw call between
 // SetRenderTarget and SetRenderTarget(nullptr)) actually takes effect on Vulkan.
 //
-// Before this task, VulkanGraphicsBackend::Clear()/ClearColorAndDepth() only recorded a global
+// Before this task, VulkanRenderer::Clear()/ClearColorAndDepth() only recorded a global
 // clear-colour scalar and never added the currently-bound render target to
 // RecordCommandBuffer's `usedRTs` list -- only an actual draw call did. Consequence:
 // `SetRenderTarget(rt); Clear(color); SetRenderTarget(nullptr);` with no draw call in between

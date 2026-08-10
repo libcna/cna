@@ -8,7 +8,7 @@
 
 namespace CNA::Internal::Media
 {
-    /// Shared storage/indexer/enumerator/dispose backend for the 6 public XNA read-only
+    /// Shared storage/indexer/enumerator/dispose renderer for the 6 public XNA read-only
     /// collection types (AlbumCollection/ArtistCollection/GenreCollection/PictureCollection/
     /// PictureAlbumCollection/PlaylistCollection), which are structurally identical in FNA except
     /// for their element type. Public class names, constructors, and exception contracts stay

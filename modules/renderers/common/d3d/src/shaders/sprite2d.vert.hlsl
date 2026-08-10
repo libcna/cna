@@ -1,5 +1,5 @@
 // Shader Model 5.0 (vs_5_0). Ported line-by-line from
-// src/CNA/Internal/Backends/Vulkan/shaders/sprite2d.vert.glsl.
+// src/CNA/Internal/Renderers/Vulkan/shaders/sprite2d.vert.glsl.
 //
 // D3D-specific deviation from the GLSL source (genuine, not a copy-paste of the Vulkan flip):
 // the GLSL formula maps pixel-space Y (top-left origin, Y-down) directly onto Vulkan's own NDC,

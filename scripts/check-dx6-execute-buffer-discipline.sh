@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# plan_dx6.md design decision 12: a real, automated proof that the DX6 backend never quietly
+# plan_dx6.md design decision 12: a real, automated proof that the DX6 renderer never quietly
 # reaches for the proven-broken execute-buffer Direct3D path (IDirect3D/IDirect3DDevice::Execute/
 # D3DEXECUTEBUFFERDESC/IDirect3DExecuteBuffer/D3DINSTRUCTION/D3DOP_*) or the old D3DVERTEXTYPE-enum
 # vertex-type submission (D3DVT_*) instead of the working IDirect3DDevice3::DrawPrimitive/
@@ -24,17 +24,17 @@ set -uo pipefail
 
 repo_root="$1"
 dx6_src="${repo_root}/modules/renderers/dx6/src"
-dx6_include="${repo_root}/modules/renderers/dx6/include/CNA/Internal/Backends/Dx6"
+dx6_include="${repo_root}/modules/renderers/dx6/include/CNA/Internal/Renderers/Dx6"
 
 if [ ! -d "$dx6_src" ] || [ ! -d "$dx6_include" ]; then
-    echo "error: DX6 backend directories not found under ${repo_root}" >&2
+    echo "error: DX6 renderer directories not found under ${repo_root}" >&2
     exit 1
 fi
 
 pattern='IDirect3DDevice::Execute\b|D3DEXECUTEBUFFERDESC|IDirect3DExecuteBuffer|D3DINSTRUCTION|D3DOP_[A-Z]+|\bIDirect3D\b|\bIDirect3DDevice\b|D3DVT_[A-Z]+|IDirectDraw[237]\b|\bIDirectDrawSurface\b|IDirectDrawSurface[237]\b'
 
 # Strip // line comments before matching -- this check is about what the CODE references, not
-# about prose that documents the discipline by naming the forbidden symbols (which this backend's
+# about prose that documents the discipline by naming the forbidden symbols (which this renderer's
 # own header/source comments legitimately do). Processed one file at a time (not concatenated via
 # xargs) so a real hit reports the actual file/line.
 violations=0
@@ -45,7 +45,7 @@ while IFS= read -r -d '' file; do
 done < <(find "$dx6_src" "$dx6_include" -type f \( -name '*.cpp' -o -name '*.hpp' \) -print0)
 
 if [ "$violations" -ne 0 ]; then
-    echo "error: DX6 backend source references a forbidden execute-buffer/legacy-interface/" >&2
+    echo "error: DX6 renderer source references a forbidden execute-buffer/legacy-interface/" >&2
     echo "old-vertex-type symbol above -- DX6 must use ONLY IDirect3DDevice3::DrawPrimitive/" >&2
     echo "DrawIndexedPrimitive with the D3DFVF_TLVERTEX FVF bitmask for its 3D layer (never" >&2
     echo "IDirect3DDevice::Execute/D3DEXECUTEBUFFERDESC/IDirect3DExecuteBuffer/D3DINSTRUCTION/" >&2
@@ -56,5 +56,5 @@ if [ "$violations" -ne 0 ]; then
     exit 1
 fi
 
-echo "OK: DX6 backend source uses only FVF-based DrawPrimitive Direct3D v3 and v4-only DirectDraw symbols."
+echo "OK: DX6 renderer source uses only FVF-based DrawPrimitive Direct3D v3 and v4-only DirectDraw symbols."
 exit 0

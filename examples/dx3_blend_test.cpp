@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // plan_dx2.md Phase O2 (DX2-12, 2D layer ported from DX1-40..DX1-44): blend-mode compositing math tests for the DX2
-// (real DirectDraw v1, run under Wine -- no ../free-direct anywhere in this backend) graphics backend.
+// (real DirectDraw v1, run under Wine -- no ../free-direct anywhere in this renderer) graphics renderer.
 //
 // All 4 checks draw the SAME source pixel (200, 0, 0, 100) over the SAME background
 // (0, 50, 0, 255), varying only the BlendState. The 4 presets' real, distinct formulas produce

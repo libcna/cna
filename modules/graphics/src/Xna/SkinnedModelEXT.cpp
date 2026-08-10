@@ -59,7 +59,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                       Texture2D texture)
     {
         Texture2D* texturePtr = nullptr;
-        if (texture.HasBackend())
+        if (texture.HasRenderer())
         {
             textures_.push_back(std::make_unique<Texture2D>(std::move(texture)));
             texturePtr = textures_.back().get();

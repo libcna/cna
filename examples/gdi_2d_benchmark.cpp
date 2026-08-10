@@ -2,8 +2,8 @@
 // Short, repeatable GDI baseline benchmark. It is intentionally a manual target rather than CTest:
 // the timings depend on the native Windows/Wine compositor and the host CPU.
 
-#include "CNA/GraphicsBackendType.hpp"
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/GraphicsRendererType.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -16,7 +16,7 @@
 #include <string>
 #include <vector>
 
-using namespace CNA::Internal::Backends;
+using namespace CNA::Internal::Renderers;
 
 namespace
 {
@@ -60,9 +60,9 @@ namespace
         return ImageData{ size, size, std::move(pixels) };
     }
 
-    void SetAlphaBlend(IGraphicsBackend& backend)
+    void SetAlphaBlend(IGraphicsRenderer& renderer)
     {
-        backend.ApplyBlendState(/*One*/ 0, /*One*/ 0,
+        renderer.ApplyBlendState(/*One*/ 0, /*One*/ 0,
                                 /*InverseSourceAlpha*/ 5, /*InverseSourceAlpha*/ 5,
                                 /*Add*/ 0, /*Add*/ 0, BlendWriteState{});
     }
@@ -79,24 +79,24 @@ namespace
         {
             Measurements measurements;
             {
-                GraphicsBackendCreateArgs args;
+                GraphicsRendererCreateArgs args;
                 args.window = window;
                 args.virtualWidth = benchmarkCase.width;
                 args.virtualHeight = benchmarkCase.height;
                 args.presentationMode = CnaPresentationMode::Stretch;
-                std::unique_ptr<IGraphicsBackend> backend = CreateGraphicsBackend(args);
-                if (backend->ApplyMultiSampleCount(requestedMultiSampleCount) !=
+                std::unique_ptr<IGraphicsRenderer> renderer = CreateGraphicsRenderer(args);
+                if (renderer->ApplyMultiSampleCount(requestedMultiSampleCount) !=
                     requestedMultiSampleCount)
                     throw std::runtime_error("GDI benchmark could not apply its requested MSAA count.");
-                std::unique_ptr<ITextureBackend> texture = backend->CreateTexture(MakeBenchmarkTexture());
-                std::unique_ptr<ISpriteBatchBackend> spriteBatch = backend->CreateSpriteBatch();
-                SetAlphaBlend(*backend);
+                std::unique_ptr<ITextureRenderer> texture = renderer->CreateTexture(MakeBenchmarkTexture());
+                std::unique_ptr<ISpriteBatchRenderer> spriteBatch = renderer->CreateSpriteBatch();
+                SetAlphaBlend(*renderer);
 
                 constexpr int warmupFrames = 1;
                 for (int frame = -warmupFrames; frame < frames; ++frame)
                 {
                     const Clock::time_point rasterStart = Clock::now();
-                    backend->Clear(0.05f, 0.08f, 0.12f, 1.0f);
+                    renderer->Clear(0.05f, 0.08f, 0.12f, 1.0f);
                     spriteBatch->Begin();
                     spriteBatch->SetSamplerFilter(textureFilter);
                     spriteBatch->SetSamplerAddressMode(/*Clamp*/ 1, /*Clamp*/ 1);
@@ -114,7 +114,7 @@ namespace
                     }
                     spriteBatch->End();
                     const Clock::time_point rasterEnd = Clock::now();
-                    backend->Present();
+                    renderer->Present();
                     const Clock::time_point presentEnd = Clock::now();
 
                     if (frame >= 0)
@@ -166,8 +166,8 @@ int main(int argc, char* argv[])
     int result = 0;
     try
     {
-        if (CNA::getCurrentGraphicsBackendType() != CNA::GraphicsBackendType::Gdi)
-            throw std::runtime_error("GDI benchmark was built with a non-GDI backend.");
+        if (CNA::getCurrentGraphicsRendererType() != CNA::GraphicsRendererType::Gdi)
+            throw std::runtime_error("GDI benchmark was built with a non-GDI renderer.");
 
         constexpr BenchmarkCase cases[] = {
             { "GDI benchmark 800x600 modest", 800, 600, 12 },

@@ -1,23 +1,23 @@
 // SPDX-License-Identifier: MS-PL
 // SKIA-163: the "resource-budget"/"repeated reconstruction" half of this task's acceptance text,
 // scoped to what genuinely exists in the Ganesh path today (SkiaGaneshSurface, still not an
-// IGraphicsBackend). Mirrors examples/skia_resource_budget_test.cpp's own 64-cycle precedent and
+// IGraphicsRenderer). Mirrors examples/skia_resource_budget_test.cpp's own 64-cycle precedent and
 // scale, at the level that actually exists here. See docs/skia-ganesh-artifact.md's "SKIA-163"
 // section for why the "2D parity oracle"/"performance" halves of this task's acceptance text are
-// explicitly NOT attempted by this file -- they need a real Ganesh IGraphicsBackend that does not
+// explicitly NOT attempted by this file -- they need a real Ganesh IGraphicsRenderer that does not
 // exist yet, a genuine gap in plan_skia.md's own Phase S17 task sequencing, not something this
 // file can honestly claim to close.
 //
 // This source only compiles its real assertions in a GANESH-mode build (CNA_SKIA_MODE_GANESH).
 
-#include "CNA/Internal/Backends/Skia/SkiaGaneshSurface.hpp"
+#include "CNA/Internal/Renderers/Skia/SkiaGaneshSurface.hpp"
 
 #include <SDL3/SDL.h>
 
 #include <cstdio>
 #include <cstdint>
 
-using CNA::Internal::Backends::Skia::SkiaGaneshSurface;
+using CNA::Internal::Renderers::Skia::SkiaGaneshSurface;
 
 namespace
 {

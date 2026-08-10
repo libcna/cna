@@ -41,7 +41,7 @@
 #define SOKOL_SHDC_ALIGN(a) __attribute__((aligned(a)))
 #endif
 #endif
-const sg_shader_desc* cna_sprite_shader_desc(sg_backend backend);
+const sg_shader_desc* cna_sprite_shader_desc(sg_backend renderer);
 #define ATTR_cna_sprite_position (0)
 #define ATTR_cna_sprite_texcoord0 (1)
 #define ATTR_cna_sprite_color0 (2)
@@ -796,9 +796,9 @@ static const uint8_t cna_sprite_fs_source_wgsl[793] = {
     0x6c,0x6f,0x72,0x29,0x3b,0x0a,0x7d,0x0a,0x00,
 };
 #endif
-const sg_shader_desc* cna_sprite_shader_desc(sg_backend backend) {
+const sg_shader_desc* cna_sprite_shader_desc(sg_backend renderer) {
     #if defined(SOKOL_GLCORE)
-    if (backend == SG_BACKEND_GLCORE) {
+    if (renderer == SG_BACKEND_GLCORE) {
         static sg_shader_desc desc;
         static bool valid;
         if (!valid) {
@@ -841,7 +841,7 @@ const sg_shader_desc* cna_sprite_shader_desc(sg_backend backend) {
     }
     #endif /* SOKOL_GLCORE */
     #if defined(SOKOL_GLES3)
-    if (backend == SG_BACKEND_GLES3) {
+    if (renderer == SG_BACKEND_GLES3) {
         static sg_shader_desc desc;
         static bool valid;
         if (!valid) {
@@ -884,7 +884,7 @@ const sg_shader_desc* cna_sprite_shader_desc(sg_backend backend) {
     }
     #endif /* SOKOL_GLES3 */
     #if defined(SOKOL_D3D11)
-    if (backend == SG_BACKEND_D3D11) {
+    if (renderer == SG_BACKEND_D3D11) {
         static sg_shader_desc desc;
         static bool valid;
         if (!valid) {
@@ -929,7 +929,7 @@ const sg_shader_desc* cna_sprite_shader_desc(sg_backend backend) {
     }
     #endif /* SOKOL_D3D11 */
     #if defined(SOKOL_METAL)
-    if (backend == SG_BACKEND_METAL_MACOS) {
+    if (renderer == SG_BACKEND_METAL_MACOS) {
         static sg_shader_desc desc;
         static bool valid;
         if (!valid) {
@@ -966,7 +966,7 @@ const sg_shader_desc* cna_sprite_shader_desc(sg_backend backend) {
     }
     #endif /* SOKOL_METAL */
     #if defined(SOKOL_WGPU)
-    if (backend == SG_BACKEND_WGPU) {
+    if (renderer == SG_BACKEND_WGPU) {
         static sg_shader_desc desc;
         static bool valid;
         if (!valid) {
@@ -1034,7 +1034,7 @@ const sg_shader_desc* cna_sprite_shader_desc(sg_backend backend) {
 #define SOKOL_SHDC_ALIGN(a) __attribute__((aligned(a)))
 #endif
 #endif
-const sg_shader_desc* cna_colored3d_shader_desc(sg_backend backend);
+const sg_shader_desc* cna_colored3d_shader_desc(sg_backend renderer);
 #define ATTR_cna_colored3d_position (0)
 #define ATTR_cna_colored3d_color0 (1)
 #define UB_cna_colored3d_vs_params (0)
@@ -1631,9 +1631,9 @@ static const uint8_t cna_colored3d_fs_source_wgsl[343] = {
     0x72,0x29,0x3b,0x0a,0x7d,0x0a,0x00,
 };
 #endif
-const sg_shader_desc* cna_colored3d_shader_desc(sg_backend backend) {
+const sg_shader_desc* cna_colored3d_shader_desc(sg_backend renderer) {
     #if defined(SOKOL_GLCORE)
-    if (backend == SG_BACKEND_GLCORE) {
+    if (renderer == SG_BACKEND_GLCORE) {
         static sg_shader_desc desc;
         static bool valid;
         if (!valid) {
@@ -1658,7 +1658,7 @@ const sg_shader_desc* cna_colored3d_shader_desc(sg_backend backend) {
     }
     #endif /* SOKOL_GLCORE */
     #if defined(SOKOL_GLES3)
-    if (backend == SG_BACKEND_GLES3) {
+    if (renderer == SG_BACKEND_GLES3) {
         static sg_shader_desc desc;
         static bool valid;
         if (!valid) {
@@ -1683,7 +1683,7 @@ const sg_shader_desc* cna_colored3d_shader_desc(sg_backend backend) {
     }
     #endif /* SOKOL_GLES3 */
     #if defined(SOKOL_D3D11)
-    if (backend == SG_BACKEND_D3D11) {
+    if (renderer == SG_BACKEND_D3D11) {
         static sg_shader_desc desc;
         static bool valid;
         if (!valid) {
@@ -1710,7 +1710,7 @@ const sg_shader_desc* cna_colored3d_shader_desc(sg_backend backend) {
     }
     #endif /* SOKOL_D3D11 */
     #if defined(SOKOL_METAL)
-    if (backend == SG_BACKEND_METAL_MACOS) {
+    if (renderer == SG_BACKEND_METAL_MACOS) {
         static sg_shader_desc desc;
         static bool valid;
         if (!valid) {
@@ -1731,7 +1731,7 @@ const sg_shader_desc* cna_colored3d_shader_desc(sg_backend backend) {
     }
     #endif /* SOKOL_METAL */
     #if defined(SOKOL_WGPU)
-    if (backend == SG_BACKEND_WGPU) {
+    if (renderer == SG_BACKEND_WGPU) {
         static sg_shader_desc desc;
         static bool valid;
         if (!valid) {
@@ -1795,7 +1795,7 @@ const sg_shader_desc* cna_colored3d_shader_desc(sg_backend backend) {
 #define SOKOL_SHDC_ALIGN(a) __attribute__((aligned(a)))
 #endif
 #endif
-const sg_shader_desc* cna_textured3d_shader_desc(sg_backend backend);
+const sg_shader_desc* cna_textured3d_shader_desc(sg_backend renderer);
 #define ATTR_cna_textured3d_position (0)
 #define ATTR_cna_textured3d_texcoord0 (1)
 #define ATTR_cna_textured3d_color0 (2)
@@ -3235,9 +3235,9 @@ static const uint8_t cna_textured3d_fs_source_wgsl[1834] = {
     0x6f,0x6c,0x6f,0x72,0x29,0x3b,0x0a,0x7d,0x0a,0x00,
 };
 #endif
-const sg_shader_desc* cna_textured3d_shader_desc(sg_backend backend) {
+const sg_shader_desc* cna_textured3d_shader_desc(sg_backend renderer) {
     #if defined(SOKOL_GLCORE)
-    if (backend == SG_BACKEND_GLCORE) {
+    if (renderer == SG_BACKEND_GLCORE) {
         static sg_shader_desc desc;
         static bool valid;
         if (!valid) {
@@ -3280,7 +3280,7 @@ const sg_shader_desc* cna_textured3d_shader_desc(sg_backend backend) {
     }
     #endif /* SOKOL_GLCORE */
     #if defined(SOKOL_GLES3)
-    if (backend == SG_BACKEND_GLES3) {
+    if (renderer == SG_BACKEND_GLES3) {
         static sg_shader_desc desc;
         static bool valid;
         if (!valid) {
@@ -3323,7 +3323,7 @@ const sg_shader_desc* cna_textured3d_shader_desc(sg_backend backend) {
     }
     #endif /* SOKOL_GLES3 */
     #if defined(SOKOL_D3D11)
-    if (backend == SG_BACKEND_D3D11) {
+    if (renderer == SG_BACKEND_D3D11) {
         static sg_shader_desc desc;
         static bool valid;
         if (!valid) {
@@ -3368,7 +3368,7 @@ const sg_shader_desc* cna_textured3d_shader_desc(sg_backend backend) {
     }
     #endif /* SOKOL_D3D11 */
     #if defined(SOKOL_METAL)
-    if (backend == SG_BACKEND_METAL_MACOS) {
+    if (renderer == SG_BACKEND_METAL_MACOS) {
         static sg_shader_desc desc;
         static bool valid;
         if (!valid) {
@@ -3405,7 +3405,7 @@ const sg_shader_desc* cna_textured3d_shader_desc(sg_backend backend) {
     }
     #endif /* SOKOL_METAL */
     #if defined(SOKOL_WGPU)
-    if (backend == SG_BACKEND_WGPU) {
+    if (renderer == SG_BACKEND_WGPU) {
         static sg_shader_desc desc;
         static bool valid;
         if (!valid) {
@@ -3486,7 +3486,7 @@ const sg_shader_desc* cna_textured3d_shader_desc(sg_backend backend) {
 #define SOKOL_SHDC_ALIGN(a) __attribute__((aligned(a)))
 #endif
 #endif
-const sg_shader_desc* cna_lit3d_shader_desc(sg_backend backend);
+const sg_shader_desc* cna_lit3d_shader_desc(sg_backend renderer);
 #define ATTR_cna_lit3d_position (0)
 #define ATTR_cna_lit3d_normal (1)
 #define ATTR_cna_lit3d_texcoord0 (2)
@@ -5746,9 +5746,9 @@ static const uint8_t cna_lit3d_fs_source_wgsl[4007] = {
     0x72,0x29,0x3b,0x0a,0x7d,0x0a,0x00,
 };
 #endif
-const sg_shader_desc* cna_lit3d_shader_desc(sg_backend backend) {
+const sg_shader_desc* cna_lit3d_shader_desc(sg_backend renderer) {
     #if defined(SOKOL_GLCORE)
-    if (backend == SG_BACKEND_GLCORE) {
+    if (renderer == SG_BACKEND_GLCORE) {
         static sg_shader_desc desc;
         static bool valid;
         if (!valid) {
@@ -5793,7 +5793,7 @@ const sg_shader_desc* cna_lit3d_shader_desc(sg_backend backend) {
     }
     #endif /* SOKOL_GLCORE */
     #if defined(SOKOL_GLES3)
-    if (backend == SG_BACKEND_GLES3) {
+    if (renderer == SG_BACKEND_GLES3) {
         static sg_shader_desc desc;
         static bool valid;
         if (!valid) {
@@ -5838,7 +5838,7 @@ const sg_shader_desc* cna_lit3d_shader_desc(sg_backend backend) {
     }
     #endif /* SOKOL_GLES3 */
     #if defined(SOKOL_D3D11)
-    if (backend == SG_BACKEND_D3D11) {
+    if (renderer == SG_BACKEND_D3D11) {
         static sg_shader_desc desc;
         static bool valid;
         if (!valid) {
@@ -5886,7 +5886,7 @@ const sg_shader_desc* cna_lit3d_shader_desc(sg_backend backend) {
     }
     #endif /* SOKOL_D3D11 */
     #if defined(SOKOL_METAL)
-    if (backend == SG_BACKEND_METAL_MACOS) {
+    if (renderer == SG_BACKEND_METAL_MACOS) {
         static sg_shader_desc desc;
         static bool valid;
         if (!valid) {
@@ -5924,7 +5924,7 @@ const sg_shader_desc* cna_lit3d_shader_desc(sg_backend backend) {
     }
     #endif /* SOKOL_METAL */
     #if defined(SOKOL_WGPU)
-    if (backend == SG_BACKEND_WGPU) {
+    if (renderer == SG_BACKEND_WGPU) {
         static sg_shader_desc desc;
         static bool valid;
         if (!valid) {
@@ -6013,7 +6013,7 @@ const sg_shader_desc* cna_lit3d_shader_desc(sg_backend backend) {
 #define SOKOL_SHDC_ALIGN(a) __attribute__((aligned(a)))
 #endif
 #endif
-const sg_shader_desc* cna_dualtextured3d_shader_desc(sg_backend backend);
+const sg_shader_desc* cna_dualtextured3d_shader_desc(sg_backend renderer);
 #define ATTR_cna_dualtextured3d_position (0)
 #define ATTR_cna_dualtextured3d_texcoord0 (1)
 #define ATTR_cna_dualtextured3d_color0 (2)
@@ -7189,9 +7189,9 @@ static const uint8_t cna_dualtextured3d_fs_source_wgsl[1686] = {
     0x29,0x3b,0x0a,0x7d,0x0a,0x00,
 };
 #endif
-const sg_shader_desc* cna_dualtextured3d_shader_desc(sg_backend backend) {
+const sg_shader_desc* cna_dualtextured3d_shader_desc(sg_backend renderer) {
     #if defined(SOKOL_GLCORE)
-    if (backend == SG_BACKEND_GLCORE) {
+    if (renderer == SG_BACKEND_GLCORE) {
         static sg_shader_desc desc;
         static bool valid;
         if (!valid) {
@@ -7244,7 +7244,7 @@ const sg_shader_desc* cna_dualtextured3d_shader_desc(sg_backend backend) {
     }
     #endif /* SOKOL_GLCORE */
     #if defined(SOKOL_GLES3)
-    if (backend == SG_BACKEND_GLES3) {
+    if (renderer == SG_BACKEND_GLES3) {
         static sg_shader_desc desc;
         static bool valid;
         if (!valid) {
@@ -7297,7 +7297,7 @@ const sg_shader_desc* cna_dualtextured3d_shader_desc(sg_backend backend) {
     }
     #endif /* SOKOL_GLES3 */
     #if defined(SOKOL_D3D11)
-    if (backend == SG_BACKEND_D3D11) {
+    if (renderer == SG_BACKEND_D3D11) {
         static sg_shader_desc desc;
         static bool valid;
         if (!valid) {
@@ -7353,7 +7353,7 @@ const sg_shader_desc* cna_dualtextured3d_shader_desc(sg_backend backend) {
     }
     #endif /* SOKOL_D3D11 */
     #if defined(SOKOL_METAL)
-    if (backend == SG_BACKEND_METAL_MACOS) {
+    if (renderer == SG_BACKEND_METAL_MACOS) {
         static sg_shader_desc desc;
         static bool valid;
         if (!valid) {
@@ -7401,7 +7401,7 @@ const sg_shader_desc* cna_dualtextured3d_shader_desc(sg_backend backend) {
     }
     #endif /* SOKOL_METAL */
     #if defined(SOKOL_WGPU)
-    if (backend == SG_BACKEND_WGPU) {
+    if (renderer == SG_BACKEND_WGPU) {
         static sg_shader_desc desc;
         static bool valid;
         if (!valid) {
@@ -7495,7 +7495,7 @@ const sg_shader_desc* cna_dualtextured3d_shader_desc(sg_backend backend) {
 #define SOKOL_SHDC_ALIGN(a) __attribute__((aligned(a)))
 #endif
 #endif
-const sg_shader_desc* cna_skinned3d_shader_desc(sg_backend backend);
+const sg_shader_desc* cna_skinned3d_shader_desc(sg_backend renderer);
 #define ATTR_cna_skinned3d_position (0)
 #define ATTR_cna_skinned3d_normal (1)
 #define ATTR_cna_skinned3d_texcoord0 (2)
@@ -10250,9 +10250,9 @@ static const uint8_t cna_skinned3d_fs_source_wgsl[4015] = {
     0x72,0x61,0x67,0x5f,0x63,0x6f,0x6c,0x6f,0x72,0x29,0x3b,0x0a,0x7d,0x0a,0x00,
 };
 #endif
-const sg_shader_desc* cna_skinned3d_shader_desc(sg_backend backend) {
+const sg_shader_desc* cna_skinned3d_shader_desc(sg_backend renderer) {
     #if defined(SOKOL_GLCORE)
-    if (backend == SG_BACKEND_GLCORE) {
+    if (renderer == SG_BACKEND_GLCORE) {
         static sg_shader_desc desc;
         static bool valid;
         if (!valid) {
@@ -10301,7 +10301,7 @@ const sg_shader_desc* cna_skinned3d_shader_desc(sg_backend backend) {
     }
     #endif /* SOKOL_GLCORE */
     #if defined(SOKOL_GLES3)
-    if (backend == SG_BACKEND_GLES3) {
+    if (renderer == SG_BACKEND_GLES3) {
         static sg_shader_desc desc;
         static bool valid;
         if (!valid) {
@@ -10350,7 +10350,7 @@ const sg_shader_desc* cna_skinned3d_shader_desc(sg_backend backend) {
     }
     #endif /* SOKOL_GLES3 */
     #if defined(SOKOL_D3D11)
-    if (backend == SG_BACKEND_D3D11) {
+    if (renderer == SG_BACKEND_D3D11) {
         static sg_shader_desc desc;
         static bool valid;
         if (!valid) {
@@ -10404,7 +10404,7 @@ const sg_shader_desc* cna_skinned3d_shader_desc(sg_backend backend) {
     }
     #endif /* SOKOL_D3D11 */
     #if defined(SOKOL_METAL)
-    if (backend == SG_BACKEND_METAL_MACOS) {
+    if (renderer == SG_BACKEND_METAL_MACOS) {
         static sg_shader_desc desc;
         static bool valid;
         if (!valid) {
@@ -10444,7 +10444,7 @@ const sg_shader_desc* cna_skinned3d_shader_desc(sg_backend backend) {
     }
     #endif /* SOKOL_METAL */
     #if defined(SOKOL_WGPU)
-    if (backend == SG_BACKEND_WGPU) {
+    if (renderer == SG_BACKEND_WGPU) {
         static sg_shader_desc desc;
         static bool valid;
         if (!valid) {
@@ -10518,7 +10518,7 @@ const sg_shader_desc* cna_skinned3d_shader_desc(sg_backend backend) {
 #define SOKOL_SHDC_ALIGN(a) __attribute__((aligned(a)))
 #endif
 #endif
-const sg_shader_desc* cna_instanced3d_shader_desc(sg_backend backend);
+const sg_shader_desc* cna_instanced3d_shader_desc(sg_backend renderer);
 #define ATTR_cna_instanced3d_position (0)
 #define ATTR_cna_instanced3d_instCol0 (1)
 #define ATTR_cna_instanced3d_instCol1 (2)
@@ -11208,9 +11208,9 @@ static const uint8_t cna_instanced3d_fs_source_wgsl[368] = {
 
 };
 #endif
-const sg_shader_desc* cna_instanced3d_shader_desc(sg_backend backend) {
+const sg_shader_desc* cna_instanced3d_shader_desc(sg_backend renderer) {
     #if defined(SOKOL_GLCORE)
-    if (backend == SG_BACKEND_GLCORE) {
+    if (renderer == SG_BACKEND_GLCORE) {
         static sg_shader_desc desc;
         static bool valid;
         if (!valid) {
@@ -11241,7 +11241,7 @@ const sg_shader_desc* cna_instanced3d_shader_desc(sg_backend backend) {
     }
     #endif /* SOKOL_GLCORE */
     #if defined(SOKOL_GLES3)
-    if (backend == SG_BACKEND_GLES3) {
+    if (renderer == SG_BACKEND_GLES3) {
         static sg_shader_desc desc;
         static bool valid;
         if (!valid) {
@@ -11272,7 +11272,7 @@ const sg_shader_desc* cna_instanced3d_shader_desc(sg_backend backend) {
     }
     #endif /* SOKOL_GLES3 */
     #if defined(SOKOL_D3D11)
-    if (backend == SG_BACKEND_D3D11) {
+    if (renderer == SG_BACKEND_D3D11) {
         static sg_shader_desc desc;
         static bool valid;
         if (!valid) {
@@ -11308,7 +11308,7 @@ const sg_shader_desc* cna_instanced3d_shader_desc(sg_backend backend) {
     }
     #endif /* SOKOL_D3D11 */
     #if defined(SOKOL_METAL)
-    if (backend == SG_BACKEND_METAL_MACOS) {
+    if (renderer == SG_BACKEND_METAL_MACOS) {
         static sg_shader_desc desc;
         static bool valid;
         if (!valid) {
@@ -11332,7 +11332,7 @@ const sg_shader_desc* cna_instanced3d_shader_desc(sg_backend backend) {
     }
     #endif /* SOKOL_METAL */
     #if defined(SOKOL_WGPU)
-    if (backend == SG_BACKEND_WGPU) {
+    if (renderer == SG_BACKEND_WGPU) {
         static sg_shader_desc desc;
         static bool valid;
         if (!valid) {
@@ -11407,7 +11407,7 @@ const sg_shader_desc* cna_instanced3d_shader_desc(sg_backend backend) {
 #define SOKOL_SHDC_ALIGN(a) __attribute__((aligned(a)))
 #endif
 #endif
-const sg_shader_desc* cna_envmap3d_shader_desc(sg_backend backend);
+const sg_shader_desc* cna_envmap3d_shader_desc(sg_backend renderer);
 #define ATTR_cna_envmap3d_position (0)
 #define ATTR_cna_envmap3d_normal (1)
 #define ATTR_cna_envmap3d_texcoord0 (2)
@@ -13462,9 +13462,9 @@ static const uint8_t cna_envmap3d_fs_source_wgsl[3094] = {
     0x29,0x3b,0x0a,0x7d,0x0a,0x00,
 };
 #endif
-const sg_shader_desc* cna_envmap3d_shader_desc(sg_backend backend) {
+const sg_shader_desc* cna_envmap3d_shader_desc(sg_backend renderer) {
     #if defined(SOKOL_GLCORE)
-    if (backend == SG_BACKEND_GLCORE) {
+    if (renderer == SG_BACKEND_GLCORE) {
         static sg_shader_desc desc;
         static bool valid;
         if (!valid) {
@@ -13517,7 +13517,7 @@ const sg_shader_desc* cna_envmap3d_shader_desc(sg_backend backend) {
     }
     #endif /* SOKOL_GLCORE */
     #if defined(SOKOL_GLES3)
-    if (backend == SG_BACKEND_GLES3) {
+    if (renderer == SG_BACKEND_GLES3) {
         static sg_shader_desc desc;
         static bool valid;
         if (!valid) {
@@ -13570,7 +13570,7 @@ const sg_shader_desc* cna_envmap3d_shader_desc(sg_backend backend) {
     }
     #endif /* SOKOL_GLES3 */
     #if defined(SOKOL_D3D11)
-    if (backend == SG_BACKEND_D3D11) {
+    if (renderer == SG_BACKEND_D3D11) {
         static sg_shader_desc desc;
         static bool valid;
         if (!valid) {
@@ -13626,7 +13626,7 @@ const sg_shader_desc* cna_envmap3d_shader_desc(sg_backend backend) {
     }
     #endif /* SOKOL_D3D11 */
     #if defined(SOKOL_METAL)
-    if (backend == SG_BACKEND_METAL_MACOS) {
+    if (renderer == SG_BACKEND_METAL_MACOS) {
         static sg_shader_desc desc;
         static bool valid;
         if (!valid) {
@@ -13674,7 +13674,7 @@ const sg_shader_desc* cna_envmap3d_shader_desc(sg_backend backend) {
     }
     #endif /* SOKOL_METAL */
     #if defined(SOKOL_WGPU)
-    if (backend == SG_BACKEND_WGPU) {
+    if (renderer == SG_BACKEND_WGPU) {
         static sg_shader_desc desc;
         static bool valid;
         if (!valid) {

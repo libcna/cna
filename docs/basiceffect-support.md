@@ -3,15 +3,15 @@
 > **Status update, 2026-07-11:** Tasks 885 (`DirectionalLight1`/`2` + lit-path `EmissiveColor`) and
 > 886 (real specular highlights) — listed as open in §4 and the support matrix below — **are now
 > implemented**: `BasicEffect.cpp` forwards both additional lights (gated on their own `Enabled`
-> flags) and a real `SpecularColor`/`SpecularPower` term. Per `docs/graphics-backend-feature-matrix.md`,
+> flags) and a real `SpecularColor`/`SpecularPower` term. Per `docs/graphics-renderer-feature-matrix.md`,
 > "BasicEffect core (MVP, lighting, texture, vertex color)", "`DirectionalLight1`/`2` +
 > `EmissiveColor`", and "real specular highlights" are all ✅ on EasyGL/Vulkan/Bgfx with no open
 > gaps. This document predates that work (flagged in the feature matrix's own "See also" section)
 > and has not been refreshed row-by-row; treat §4 and the matrix below as historical, and
-> `docs/graphics-backend-feature-matrix.md`/`docs/xna-4-api-coverage.md` as current.
+> `docs/graphics-renderer-feature-matrix.md`/`docs/xna-4-api-coverage.md` as current.
 
 Phase 42 (`plan_graphics.md` Tasks 361–370) audited and pixel-verified `BasicEffect` conformance
-against FNA across all three graphics backends (EasyGL, Vulkan, Bgfx). This document summarizes
+against FNA across all three graphics renderers (EasyGL, Vulkan, Bgfx). This document summarizes
 the findings and closes the phase.
 
 ---
@@ -28,13 +28,13 @@ direction/diffuse/specular) match FNA literal-for-literal — no fix needed.
 ## 2. No-lighting shader paths (Tasks 364–367)
 
 All four combinations of `TextureEnabled`/`VertexColorEnabled` with `LightingEnabled=false` (the
-real FNA default) were pixel-verified on all 3 backends, each with a discriminating,
+real FNA default) were pixel-verified on all 3 renderers, each with a discriminating,
 non-degenerate test (distinct non-white/non-primary colors chosen so partial-product failure modes
 are numerically distinguishable from the correct result — never a case where "ignored" and
 "correct" would coincidentally look the same):
 
 - **Task 364** (no texture, `VertexColorEnabled` toggle): found and fixed **3 real bugs, one per
-  backend** — `VertexColorEnabled` wasn't honored by any of the 3 backends' no-texture shaders.
+  renderer** — `VertexColorEnabled` wasn't honored by any of the 3 renderers' no-texture shaders.
   Also found (not fixed there) that Bgfx's default `RasterizerState` cull state is the only one of
   the 3 that actually matches FNA's real `CullCounterClockwiseFace` default, silently culling the
   standard NDC quad winding used throughout this whole test family unless `RasterizerState::
@@ -57,10 +57,10 @@ dot product is real math and not a boolean lit/unlit check — plus a back-facin
 the negative-dot clamp) and a `DirectionalLight0.Enabled=false` case (proves the light can be
 switched off). Found and fixed **2 real bugs**:
 
-- **Shared C++, all 3 backends**: `BasicEffect::FillGpuDrawParams()` forwarded
+- **Shared C++, all 3 renderers**: `BasicEffect::FillGpuDrawParams()` forwarded
   `DirectionalLight0`'s `Direction`/`DiffuseColor` unconditionally, never checking
   `DirectionalLight0.Enabled` — a disabled light still lit the surface.
-- **Bgfx-only, much wider-reaching**: `BgfxGraphicsBackend.cpp`'s `MakeBgfxLayout()` never declared
+- **Bgfx-only, much wider-reaching**: `BgfxRenderer.cpp`'s `MakeBgfxLayout()` never declared
   a `Normal` or `TexCoord0` vertex attribute for any stride except 52 (skinned) — every other
   stride fell through to a `Position`+`Color0`+padding-only layout. For stride 32
   (`VertexPositionNormalTexture`) this left `a_normal` permanently unbound, silently sinking every
@@ -80,7 +80,7 @@ independently-structured lit formula (ambient forwarded as its own raw uniform, 
 Task 368) is mathematically identical to FNA's once a plain `+EmissiveColor` term is added after
 the ambient/diffuse multiply.
 
-**Fixed** (shared C++, all 3 backends, no shader changes needed): `FillGpuDrawParams()` forwarded
+**Fixed** (shared C++, all 3 renderers, no shader changes needed): `FillGpuDrawParams()` forwarded
 `DiffuseColor*Alpha` alone in every case, always silently dropping `EmissiveColor` in the
 no-lighting path — the exact gap Task 366 had deferred.
 
@@ -98,9 +98,9 @@ changes into a single task):
   anywhere** for `BasicEffect` (no `GpuDrawParams` fields for `SpecularColor`/`SpecularPower`/
   per-light specular; no eye-position wiring in `BasicEffect::FillGpuDrawParams()`, though
   `EnvironmentMapEffect`/`SkinnedEffect` already have prior art to reuse). A new feature, not a bug
-  fix, sized similarly to the already-tracked Task 868/870/878/879 backend-parity items.
+  fix, sized similarly to the already-tracked Task 868/870/878/879 renderer-parity items.
 
-## 5. Cross-backend consistency (Task 370)
+## 5. Cross-renderer consistency (Task 370)
 
 Closed the phase with a capstone test combining everything Tasks 364–369 verified individually —
 `TextureEnabled` + `VertexColorEnabled` + `DiffuseColor` + `EmissiveColor`, `LightingEnabled=false`
@@ -109,7 +109,7 @@ any `BasicEffect` pixel test, a **real 2×2 multi-texel texture** (every prior t
 solid color) sampled at all 4 texel centers via 4 separate draws, deliberately exercising the exact
 `TexCoord0`-binding path Task 368 found and fixed on Bgfx.
 
-**Result: all 3 backends produced byte-identical pixel output**, matching the FNA-derived expected
+**Result: all 3 renderers produced byte-identical pixel output**, matching the FNA-derived expected
 formula (`TextureColor × VertexColor × (DiffuseColor+EmissiveColor)`) at all 4 sample points. No
 new bugs found — this was pure integration verification, and it passed cleanly on the first attempt
 thanks to Tasks 364–369's fixes already being in place.
@@ -129,7 +129,7 @@ thanks to Tasks 364–369's fixes already being in place.
 | `EmissiveColor` while lit | ✅ fixed Task 885 | ✅ fixed Task 885 | ✅ fixed Task 885 |
 | `DirectionalLight1`/`2` (multi-light) | ✅ fixed Task 885 | ✅ fixed Task 885 | ✅ fixed Task 885 |
 | Real specular highlights | ✅ fixed Task 886 | ✅ fixed Task 886 | ✅ fixed Task 886 |
-| Cross-backend pixel consistency | ✅ Task 370 | ✅ Task 370 | ✅ Task 370 |
+| Cross-renderer pixel consistency | ✅ Task 370 | ✅ Task 370 | ✅ Task 370 |
 
 Legend: ✅ verified working · ❌ confirmed not implemented (historical — see status banner at top).
 
@@ -138,9 +138,9 @@ Legend: ✅ verified working · ❌ confirmed not implemented (historical — se
 Phase 42 opened 2 new tracked tasks, both since closed:
 
 - ~~**Task 885**~~ — **fixed.** Lit-path `EmissiveColor` + `DirectionalLight1`/`DirectionalLight2`
-  forwarding now implemented on all 3 backends.
+  forwarding now implemented on all 3 renderers.
 - ~~**Task 886**~~ — **fixed.** Real specular highlights (`SpecularColor`/`SpecularPower`) now
-  implemented on all 3 backends.
+  implemented on all 3 renderers.
 
 This closes Phase 42 (`plan_graphics.md` Tasks 361–370) in full. Note `BasicEffect` is unrelated to
 `EnvironmentMapEffect`/`SkinnedEffect`, whose own `DirectionalLight1`/`2` forwarding gaps (Tasks

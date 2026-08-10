@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl4.md GL4-11/GL4-12: real 3D proof for the OpenGL4 graphics backend -- a colored
+// plan_opengl4.md GL4-11/GL4-12: real 3D proof for the OpenGL4 graphics renderer -- a colored
 // (VertexPositionColor, BasicEffect.VertexColorEnabled=true) triangle/quad through
 // DrawColoredPrimitives, a real depth-test occlusion proof (a nearer quad drawn BEFORE a farther
 // one still occludes it, verified by an actual pixel readback rather than "didn't throw"), and an
 // indexed draw through DrawIndexedColoredPrimitives.
 //
-// This backend does not yet implement DrawPrimitivesEx (plan_opengl4.md remaining work) -- it
-// inherits IGraphicsBackend's own default fallback to DrawColoredPrimitives, which ignores
+// This renderer does not yet implement DrawPrimitivesEx (plan_opengl4.md remaining work) -- it
+// inherits IGraphicsRenderer's own default fallback to DrawColoredPrimitives, which ignores
 // texture/lighting and only reproduces vertex color correctly for the stride-16
 // VertexPositionColor layout. This test therefore only exercises that stride, matching what is
-// genuinely implemented -- it deliberately does not claim textured/lit 3D coverage this backend
+// genuinely implemented -- it deliberately does not claim textured/lit 3D coverage this renderer
 // does not have yet.
 //
 // Check A -- a solid-red VertexPositionColor quad, drawn via DrawPrimitives, is visible at its

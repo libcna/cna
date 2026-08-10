@@ -8,7 +8,7 @@
 #
 # Real XNA's SpriteBatch rotation formula (SpriteBatch.cs's own GenerateVertexInfo, confirmed
 # against FNA's transcription of it, same rotate-then-translate-around-origin shape this
-# project's own D3D11SpriteBatchBackend already implements): a positive rotation angle rotates
+# project's own D3D11SpriteBatchRenderer already implements): a positive rotation angle rotates
 # CLOCKWISE on screen (screen Y increases downward, so the standard mathematical CCW convention
 # with Y-up becomes CW with Y-down) -- confirmed empirically here, not assumed, since this is the
 # oracle's own job.

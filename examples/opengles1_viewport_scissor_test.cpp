@@ -15,7 +15,7 @@
 // Check G -- a scissor rectangle set while ScissorTestEnable=false clips nothing.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs. Requires a genuine OpenGL ES 1.1 driver; see
-// docs/opengles1-backend.md.
+// docs/opengles1-renderer.md.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"

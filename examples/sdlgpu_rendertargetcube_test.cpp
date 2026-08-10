@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: MS-PL
-// plan_sdlgpu.md SDLGPU-36: RenderTargetCube proof for the SDL_GPU graphics backend -- a single
+// plan_sdlgpu.md SDLGPU-36: RenderTargetCube proof for the SDL_GPU graphics renderer -- a single
 // SDL_GPU_TEXTURETYPE_CUBE texture (6 layers), one face bound as the active render target at a
 // time, including real MSAA (auto-resolved via SDL_GPUColorTargetInfo.resolve_texture/
 // resolve_layer at render-pass end) and mip generation.
 //
-// This backend has no EnvironmentMapEffect yet (SDLGPU-33, deferred), so unlike
+// This renderer has no EnvironmentMapEffect yet (SDLGPU-33, deferred), so unlike
 // vulkan_rendertargetcube_msaa_test.cpp's reflection-vector sampling (which the Vulkan test's own
 // header comment documents as unable to discriminate between individual faces), verification here
-// uses a real per-face GPU readback (SdlGpuRenderTargetCubeBackend::GetData, pulled forward from
-// SDLGPU-39 -- targets a texture this backend fully controls, not the swapchain, so it does not
+// uses a real per-face GPU readback (SdlGpuRenderTargetCubeRenderer::GetData, pulled forward from
+// SDLGPU-39 -- targets a texture this renderer fully controls, not the swapchain, so it does not
 // hit the segfault documented in plan_sdlgpu.md's SDLGPU-39 row) -- a stronger, per-face-precise
-// check than the reflection-based "some face came back non-garbage" bar other backends settle for.
+// check than the reflection-based "some face came back non-garbage" bar other renderers settle for.
 //
 // Check A -- all 6 faces filled with distinct solid colors via Clear() (no draw), each read back
 //   individually and confirmed correct -- proves real per-face bind/clear/pass + readback.
@@ -40,7 +40,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 
-#include "CNA/Internal/Backends/SdlGpu/SdlGpuGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/SdlGpu/SdlGpuRenderer.hpp"
 
 #include "common/PixelTestGame.hpp"
 
@@ -52,7 +52,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::SdlGpu;
+using namespace CNA::Internal::Renderers::SdlGpu;
 
 namespace
 {

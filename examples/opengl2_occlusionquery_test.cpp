@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // plan_opengl2.md: pixel-exact proof for OcclusionQuery on the native OpenGL 2.1 graphics
-// backend (GL_SAMPLES_PASSED / ARB_occlusion_query, core since GL 1.5).
+// renderer (GL_SAMPLES_PASSED / ARB_occlusion_query, core since GL 1.5).
 //
 // Check A -- a query wrapping a fully visible full-screen quad reports PixelCount() > 0 (close
 //   to the full backbuffer pixel count).
@@ -24,7 +24,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 
-#include "CNA/Internal/Backends/OpenGL2/OpenGL2GraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/OpenGL2/OpenGL2Renderer.hpp"
 
 #include "common/PixelTestGame.hpp"
 
@@ -34,7 +34,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::OpenGL2;
+using namespace CNA::Internal::Renderers::OpenGL2;
 
 namespace
 {

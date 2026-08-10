@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MS-PL
-// OPENGL1 backend: EnvironmentMapEffect's fixed-function cube-map reflection subset
+// OPENGL1 renderer: EnvironmentMapEffect's fixed-function cube-map reflection subset
 // (plan_opengl1.md phase 5).
 //
-// OpenGL1GraphicsBackend::DrawInternal blends a real ARB_texture_cube_map cube texture into a
+// OpenGL1Renderer::DrawInternal blends a real ARB_texture_cube_map cube texture into a
 // VertexPositionNormalTexture draw via GL_REFLECTION_MAP texture-coordinate generation on
 // texture unit 1, GL_INTERPOLATEd against unit 0's lit/textured result using
 // GL_CONSTANT.a = EnvironmentMapAmount -- i.e. exactly FNA's real

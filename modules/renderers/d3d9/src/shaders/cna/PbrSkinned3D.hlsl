@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // D3D9 PBR porting task: CNA's own NOXNA "PbrSkinned3D" shader -- SkinnedPbrEffect (same
 // metallic-roughness BRDF as Pbr3D.hlsl, plus bone skinning), ported line-by-line from
-// EasyGLGraphicsBackend.cpp's EnsurePbrSkinnedProgram() (GLSL/GLES 3.00) to HLSL Shader Model 3
+// EasyGLRenderer.cpp's EnsurePbrSkinnedProgram() (GLSL/GLES 3.00) to HLSL Shader Model 3
 // (vs_3_0/ps_3_0). See Pbr3D.hlsl's own header comment for why this is a CNA custom shader (no
 // Microsoft Stock Effect equivalent) and why SM3 (not SM2) is the target -- both reasons apply
 // identically here; this file's own pixel shader is a straight copy of Pbr3D.hlsl's (same BRDF,
@@ -9,7 +9,7 @@
 // register index exceeded, ps_3_0 compiles cleanly" finding applies without re-deriving it.
 //
 // Bone skinning mirrors the vendored, real Microsoft SkinnedEffect.fx's own Skin() function
-// exactly (src/CNA/Internal/Backends/D3D9/shaders/xna/SkinnedEffect.fx): a fixed-size
+// exactly (src/CNA/Internal/Renderers/D3D9/shaders/xna/SkinnedEffect.fx): a fixed-size
 // float4x3 Bones[72] array (3 registers/bone, the same ColumnCount==4/RowCount==3
 // EffectParameter.SetValue(Matrix) packing D3D9EffectDraw.cpp's own UploadBonesVS() already
 // uses for the real SkinnedEffect), accumulated per-vertex via BLENDINDICES0/BLENDWEIGHT0, and the

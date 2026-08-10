@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-#include "CNA/Internal/Backends/Magnum/MagnumProgram.hpp"
+#include "CNA/Internal/Renderers/Magnum/MagnumProgram.hpp"
 
 #include <Corrade/Containers/ArrayView.h>
 // Iterable.h is what makes the braced `{vertex, fragment}` argument to attachShaders()/checkLink()
@@ -19,7 +19,7 @@
 #include <cctype>
 #include <sstream>
 
-namespace CNA::Internal::Backends::Magnum
+namespace CNA::Internal::Renderers::Magnum
 {
     // `GL::Shader` emits its own `#version` line from the version handed to its constructor and
     // then prefixes every added source with a `#line` directive, so a source that declares one
@@ -83,7 +83,7 @@ namespace CNA::Internal::Backends::Magnum
 
         // Magnum reports compile/link diagnostics through Corrade's global Error/Warning streams
         // rather than returning them, so both are redirected into one buffer for the duration of
-        // the build. This is the only way to satisfy IEffectBackend::GetCompileError(), which must
+        // the build. This is the only way to satisfy IEffectRenderer::GetCompileError(), which must
         // hand the driver's own message back to the game.
         std::ostringstream diagnostics;
         Corrade::Utility::Error redirectError{&diagnostics};

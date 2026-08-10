@@ -1,11 +1,11 @@
-#include "CNA/Internal/Backends/Bgfx/BgfxGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Bgfx/BgfxRenderer.hpp"
 
 #include <cctype>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 
-namespace CNA::Internal::Backends::Bgfx::Detail
+namespace CNA::Internal::Renderers::Bgfx::Detail
 {
     namespace
     {

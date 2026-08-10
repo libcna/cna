@@ -5,16 +5,16 @@
 // ClearOptions is a 3-bit flags enum: Target=1, DepthBuffer=2, Stencil=4 (8 combinations,
 // including "none"). GraphicsDevice::Clear(ClearOptions, ...) only actually branches on
 // Target/DepthBuffer -- its `stencil` parameter is explicitly discarded (`(void)stencil;`), an
-// ALREADY-TRACKED, cross-backend, not-yet-fixed gap (NEXT.md §5, Task 871) -- NOT something this
+// ALREADY-TRACKED, cross-renderer, not-yet-fixed gap (NEXT.md §5, Task 871) -- NOT something this
 // task fixes; it is verified/pixel-tested here in its concrete SDL_Renderer manifestation only.
-// On THIS 2D-only backend, ANY combination including DepthBuffer routes to ClearDepth or
+// On THIS 2D-only renderer, ANY combination including DepthBuffer routes to ClearDepth or
 // ClearColorAndDepth, both unconditional ThrowNo3D -- so the only non-throwing combinations here
 // are Target alone, Stencil alone (a genuine no-op per the Task 871 gap), Target|Stencil (Target
 // clears normally, Stencil silently ignored), and the empty/"none" case (also a no-op, correctly
 // so -- XNA itself defines no-op semantics for an empty ClearOptions).
 //
 // Requires PresentationMode::NativeBackBuffer (Task 915 finding): SDL_RenderReadPixels operates
-// in physical output coordinates, while this backend's default presentation mode
+// in physical output coordinates, while this renderer's default presentation mode
 // (FixedHeightDynamicWidth) does not map logical pixels 1:1 to physical ones.
 //
 // Exit code 0 = all checks PASS, 1 = at least one FAIL.
@@ -89,8 +89,8 @@ protected:
         check(afterTarget.getRProperty() >= 240 && afterTarget.getBProperty() >= 240,
               "ClearOptions::Target alone genuinely clears the color target to the requested colour");
 
-        // --- Any combination including DepthBuffer throws (this 2D-only backend has no depth buffer). ---
-        check(ClearThrows(dev, ClearOptions::DepthBuffer), "ClearOptions::DepthBuffer alone throws (no depth buffer on this backend)");
+        // --- Any combination including DepthBuffer throws (this 2D-only renderer has no depth buffer). ---
+        check(ClearThrows(dev, ClearOptions::DepthBuffer), "ClearOptions::DepthBuffer alone throws (no depth buffer on this renderer)");
         check(ClearThrows(dev, ClearOptions::Target | ClearOptions::DepthBuffer), "ClearOptions::Target|DepthBuffer throws");
         check(ClearThrows(dev, ClearOptions::DepthBuffer | ClearOptions::Stencil), "ClearOptions::DepthBuffer|Stencil throws");
         check(ClearThrows(dev, ClearOptions::Target | ClearOptions::DepthBuffer | ClearOptions::Stencil), "ClearOptions::Target|DepthBuffer|Stencil throws");

@@ -2,7 +2,7 @@
 # Closes D9-90's own explicitly-named "known, explicitly-scoped-out gap": multi-texture
 # SpriteBatch batching, i.e. a genuine FlushBatch()-on-texture-change mid-batch. Every earlier
 # spritebatchmode scene either draws exactly one sprite, or (D9-93's sortmode scenes) 2+ sprites
-# sharing the SAME texture object -- none has ever forced D3D9SpriteBatchBackend::Draw() to see
+# sharing the SAME texture object -- none has ever forced D3D9SpriteBatchRenderer::Draw() to see
 # `currentTexture_ != nullptr && currentTexture_ != &texture` and actually flush+rebind mid-batch.
 #
 # Three NON-overlapping sprites at three separate positions, deliberately interleaved

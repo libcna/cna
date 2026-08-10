@@ -158,12 +158,12 @@ TEST(RenderTargetUsageTest, DefaultIsDiscardContents)
 // -----------------------------------------------------------------------
 // RenderTargetCube::SetData — REMED-GFX-135
 //
-// RenderTargetCube IS a TextureCube, so it inherits SetData. Every backend except EasyGL leaves
-// IRenderTargetCubeBackend::SetData at its interface body, which used to be `{}` -- the same
-// accept-and-discard this finding removes, reached through inheritance rather than a null backend.
-// EasyGL is the one backend that overrides it with a real upload into the shared GL cube texture.
+// RenderTargetCube IS a TextureCube, so it inherits SetData. Every renderer except EasyGL leaves
+// IRenderTargetCubeRenderer::SetData at its interface body, which used to be `{}` -- the same
+// accept-and-discard this finding removes, reached through inheritance rather than a null renderer.
+// EasyGL is the one renderer that overrides it with a real upload into the shared GL cube texture.
 //
-// Constructing a RenderTargetCube can legitimately fail on a backend that has no cube-map render
+// Constructing a RenderTargetCube can legitimately fail on a renderer that has no cube-map render
 // target at all (Software, SDL_Renderer, ASCII, Canvas, DX3 keep CreateRenderTargetCube's nullptr
 // default); that is not what is under test, so it is skipped rather than asserted either way.
 // -----------------------------------------------------------------------
@@ -185,9 +185,9 @@ namespace
     using Microsoft::Xna::Framework::Graphics::RenderTargetCube;
     using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 
-#if defined(CNA_BACKEND_EASYGL) || defined(CNA_BACKEND_MAGNUM)
-    /// EasyGLRenderTargetCubeBackend::SetData is a real glTexSubImage2D upload into the shared cube
-    /// texture, and MagnumRenderTargetCubeBackend::SetData is the same upload expressed through
+#if defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_MAGNUM)
+    /// EasyGLRenderTargetCubeRenderer::SetData is a real glTexSubImage2D upload into the shared cube
+    /// texture, and MagnumRenderTargetCubeRenderer::SetData is the same upload expressed through
     /// Magnum's CubeMapTexture::setSubImage -- in both the framebuffer's colour attachment IS an
     /// ordinary GL cube texture, so an upload reaches it directly.
     /// REMED-GFX-130 left RenderTargetCube READBACK unimplemented here (tracked as
@@ -195,18 +195,18 @@ namespace
     /// content assertion for the identical `set_sub_image_2d` path lives on the plain cube in
     /// examples/texturecube_texture3d_setdata_contract_test.cpp.
     constexpr bool kRenderTargetCubeAcceptsSetData = true;
-#elif defined(CNA_BACKEND_OPENGL4)
-    /// OpenGL4RenderTargetCubeBackend::SetData is the same real glTexSubImage2D upload shape as
-    /// EasyGL's above -- and unlike EasyGL this backend also implements the per-face+level FBO
+#elif defined(CNA_RENDERER_OPENGL4)
+    /// OpenGL4RenderTargetCubeRenderer::SetData is the same real glTexSubImage2D upload shape as
+    /// EasyGL's above -- and unlike EasyGL this renderer also implements the per-face+level FBO
     /// readback, so the byte-exact round trip is asserted directly by its own
     /// OpenGL4_RenderTargetCube CTest (plan_opengl4.md GL4-15).
     constexpr bool kRenderTargetCubeAcceptsSetData = true;
-#elif defined(CNA_BACKEND_WICKED)
-    /// WickedRenderTargetCubeBackend::SetData is a real staged upload into the rendered cube's
-    /// colour array (UploadTextureRegion, plan_wicked.md WICKED-55/79), and the backend also
+#elif defined(CNA_RENDERER_WICKED)
+    /// WickedRenderTargetCubeRenderer::SetData is a real staged upload into the rendered cube's
+    /// colour array (UploadTextureRegion, plan_wicked.md WICKED-55/79), and the renderer also
     /// implements the per-face readback, so the byte-exact round trip is asserted by the shared
     /// TextureCube/RenderTargetCube suites. A multisampled cube still refuses -- resolving into
-    /// one face needs a per-face resolve subresource this backend does not create.
+    /// one face needs a per-face resolve subresource this renderer does not create.
     constexpr bool kRenderTargetCubeAcceptsSetData = true;
 #else
     constexpr bool kRenderTargetCubeAcceptsSetData = false;
@@ -225,7 +225,7 @@ TEST(RenderTargetCubeSetDataContractTest, StoresTheFaceOrRefusesButNeverSilently
     }
     catch (const std::exception&)
     {
-        GTEST_SKIP() << "this backend creates no cube-map render target, so the inherited SetData "
+        GTEST_SKIP() << "this renderer creates no cube-map render target, so the inherited SetData "
                         "is unreachable";
     }
 
@@ -249,7 +249,7 @@ TEST(RenderTargetCubeSetDataContractTest, SetDataAfterDisposeThrowsObjectDispose
     }
     catch (const std::exception&)
     {
-        GTEST_SKIP() << "this backend creates no cube-map render target";
+        GTEST_SKIP() << "this renderer creates no cube-map render target";
     }
 
     std::vector<Color> face(16, Color(64, 128, 192, 255));

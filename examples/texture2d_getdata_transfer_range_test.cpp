@@ -20,10 +20,10 @@
 //     the public destination type is `Color`, so the element size is 4 bytes on every path: there
 //     is no templated element type, no compressed block and no per-format pitch case to cover.
 //
-// THE DEFECT this file reproduces, entirely inside the shared, backend-neutral
+// THE DEFECT this file reproduces, entirely inside the shared, renderer-neutral
 // `Texture2D::GetData(Color*, int startIndex, int elementCount)`:
 //
-//     if (gpuOnlyContent_ && backend_ && startIndex == 0 && elementCount == total && total > 0)
+//     if (gpuOnlyContent_ && renderer_ && startIndex == 0 && elementCount == total && total > 0)
 //         ... for (i < elementCount) data[i] = ...;          // (1) (2) (3)
 //     throw std::runtime_error("no CPU-side pixel data available");
 //     ...
@@ -59,7 +59,7 @@
 // an *UnormSrgb render-target format, so a mid-tone written through its render pass comes back
 // gamma-encoded. Instead the ALREADY-CORRECT rectangle overload reading at startIndex 0 is the
 // reference, and the whole-level overload must reproduce it byte for byte at an arbitrary offset.
-// That isolates this ticket from every backend colour-space and orientation concern.
+// That isolates this ticket from every renderer colour-space and orientation concern.
 //
 // Exit code 0 = all checks PASS, 1 = any FAIL.
 
@@ -107,9 +107,9 @@ namespace
     constexpr int kSuffix = 4; ///< Protected destination elements AFTER the writable range.
 
     /**
-     * @brief Whether this backend can read a render target's colour attachment back to the CPU.
+     * @brief Whether this renderer can read a render target's colour attachment back to the CPU.
      *
-     * Declared per backend rather than probed, so "this backend cannot" is a reviewed claim this
+     * Declared per renderer rather than probed, so "this renderer cannot" is a reviewed claim this
      * file enforces (REMED-GFX-127's contract), not an escape hatch that lets any result pass.
      */
     enum class RtContract
@@ -121,8 +121,8 @@ namespace
     /**
      * @brief The exact policy used when an application requests a 2D mip chain.
      *
-     * Declared, not probed, for the same reason as RtContract: three backends document that their
-     * 2D texture API has no mip chain (SDL_Renderer, the ASCII backend that wraps it, and DX3's
+     * Declared, not probed, for the same reason as RtContract: three renderers document that their
+     * 2D texture API has no mip chain (SDL_Renderer, the ASCII renderer that wraps it, and DX3's
      * IDirectDrawSurface), and Canvas the same. Most still create a mipmapped resource and reject
      * `SetData(level=1, ...)`. SKIA-127 now implements that upload/readback path after SKIA-126
      * opened construction. These honest policies must not be conflated by a test that terminates
@@ -135,74 +135,74 @@ namespace
         RejectConstruction,
     };
 
-#if defined(CNA_BACKEND_HEADLESS)
+#if defined(CNA_RENDERER_HEADLESS)
     // Headless performs no rasterization at all, so a render target's colour attachment has no
     // content it could honestly return (REMED-GFX-127 / REMED-GFX-162).
     constexpr RtContract kRtContract = RtContract::Unsupported;
-    constexpr const char* kBackendName = "HEADLESS";
+    constexpr const char* kRendererName = "HEADLESS";
     constexpr MipPolicy kMipPolicy = MipPolicy::Supported;
-#elif defined(CNA_BACKEND_SOFTWARE)
+#elif defined(CNA_RENDERER_SOFTWARE)
     constexpr RtContract kRtContract = RtContract::Exact;
-    constexpr const char* kBackendName = "SOFTWARE";
+    constexpr const char* kRendererName = "SOFTWARE";
     constexpr MipPolicy kMipPolicy = MipPolicy::Supported;
-#elif defined(CNA_BACKEND_EASYGL)
+#elif defined(CNA_RENDERER_EASYGL)
     constexpr RtContract kRtContract = RtContract::Exact;
-    constexpr const char* kBackendName = "EASYGL";
+    constexpr const char* kRendererName = "EASYGL";
     constexpr MipPolicy kMipPolicy = MipPolicy::Supported;
-#elif defined(CNA_BACKEND_BGFX)
+#elif defined(CNA_RENDERER_BGFX)
     constexpr RtContract kRtContract = RtContract::Exact;
-    constexpr const char* kBackendName = "BGFX";
+    constexpr const char* kRendererName = "BGFX";
     constexpr MipPolicy kMipPolicy = MipPolicy::Supported;
-#elif defined(CNA_BACKEND_VULKAN)
+#elif defined(CNA_RENDERER_VULKAN)
     constexpr RtContract kRtContract = RtContract::Exact;
-    constexpr const char* kBackendName = "VULKAN";
+    constexpr const char* kRendererName = "VULKAN";
     constexpr MipPolicy kMipPolicy = MipPolicy::Supported;
-#elif defined(CNA_BACKEND_WEBGPU)
+#elif defined(CNA_RENDERER_WEBGPU)
     constexpr RtContract kRtContract = RtContract::Exact;
-    constexpr const char* kBackendName = "WEBGPU";
+    constexpr const char* kRendererName = "WEBGPU";
     constexpr MipPolicy kMipPolicy = MipPolicy::Supported;
-#elif defined(CNA_BACKEND_SDL_GPU)
+#elif defined(CNA_RENDERER_SDL_GPU)
     constexpr RtContract kRtContract = RtContract::Exact;
-    constexpr const char* kBackendName = "SDL_GPU";
+    constexpr const char* kRendererName = "SDL_GPU";
     constexpr MipPolicy kMipPolicy = MipPolicy::Supported;
-#elif defined(CNA_BACKEND_SDL_RENDERER)
+#elif defined(CNA_RENDERER_SDL_RENDERER)
     constexpr RtContract kRtContract = RtContract::Exact;
-    constexpr const char* kBackendName = "SDL_RENDERER";
+    constexpr const char* kRendererName = "SDL_RENDERER";
     constexpr MipPolicy kMipPolicy = MipPolicy::RejectUpload;
-#elif defined(CNA_BACKEND_ASCII)
+#elif defined(CNA_RENDERER_ASCII)
     constexpr RtContract kRtContract = RtContract::Exact;
-    constexpr const char* kBackendName = "ASCII";
+    constexpr const char* kRendererName = "ASCII";
     constexpr MipPolicy kMipPolicy = MipPolicy::RejectUpload;
-#elif defined(CNA_BACKEND_FREEDIRECT)
+#elif defined(CNA_RENDERER_FREEDIRECT)
     constexpr RtContract kRtContract = RtContract::Exact;
-    constexpr const char* kBackendName = "FREEDIRECT";
+    constexpr const char* kRendererName = "FREEDIRECT";
     constexpr MipPolicy kMipPolicy = MipPolicy::RejectUpload;
-#elif defined(CNA_BACKEND_D3D9)
+#elif defined(CNA_RENDERER_D3D9)
     constexpr RtContract kRtContract = RtContract::Exact;
-    constexpr const char* kBackendName = "D3D9";
+    constexpr const char* kRendererName = "D3D9";
     constexpr MipPolicy kMipPolicy = MipPolicy::Supported;
-#elif defined(CNA_BACKEND_D3D11)
+#elif defined(CNA_RENDERER_D3D11)
     constexpr RtContract kRtContract = RtContract::Exact;
-    constexpr const char* kBackendName = "D3D11";
+    constexpr const char* kRendererName = "D3D11";
     constexpr MipPolicy kMipPolicy = MipPolicy::Supported;
-#elif defined(CNA_BACKEND_D3D12)
+#elif defined(CNA_RENDERER_D3D12)
     constexpr RtContract kRtContract = RtContract::Exact;
-    constexpr const char* kBackendName = "D3D12";
+    constexpr const char* kRendererName = "D3D12";
     constexpr MipPolicy kMipPolicy = MipPolicy::Supported;
-#elif defined(CNA_BACKEND_CANVAS)
+#elif defined(CNA_RENDERER_CANVAS)
     constexpr RtContract kRtContract = RtContract::Exact;
-    constexpr const char* kBackendName = "CANVAS";
+    constexpr const char* kRendererName = "CANVAS";
     constexpr MipPolicy kMipPolicy = MipPolicy::RejectUpload;
-#elif defined(CNA_BACKEND_SKIA)
+#elif defined(CNA_RENDERER_SKIA)
     constexpr RtContract kRtContract = RtContract::Exact;
-    constexpr const char* kBackendName = "SKIA";
+    constexpr const char* kRendererName = "SKIA";
     constexpr MipPolicy kMipPolicy = MipPolicy::Supported;
-#elif defined(CNA_BACKEND_LLGL)
+#elif defined(CNA_RENDERER_LLGL)
     constexpr RtContract kRtContract = RtContract::Exact;
-    constexpr const char* kBackendName = "LLGL";
+    constexpr const char* kRendererName = "LLGL";
     constexpr MipPolicy kMipPolicy = MipPolicy::Supported;
 #else
-#error "REMED-GFX-149: this backend has no declared Texture2D::GetData render-target contract."
+#error "REMED-GFX-149: this renderer has no declared Texture2D::GetData render-target contract."
 #endif
 
     // ───────────────────────────────────────────────────────────────────────────
@@ -787,7 +787,7 @@ class Texture2DGetDataTransferRangeTest : public Game
         //      level-0-sized capacity requirement (91) would wrongly reject this legal call and a
         //      level-0-sized region would wrongly demand 91 elements of output. A separate
         //      MIPMAPPED texture is used: uploading a level a non-mipmapped resource does not have
-        //      is rejected by the backends that validate it (WebGPU, bgfx) and is not what this
+        //      is rejected by the renderers that validate it (WebGPU, bgfx) and is not what this
         //      check is about.
         {
             if (kMipPolicy == MipPolicy::RejectConstruction)
@@ -797,7 +797,7 @@ class Texture2DGetDataTransferRangeTest : public Game
                     (void)rejectedMipTexture;
                 });
                 check(creation.threw,
-                      "R12 this backend rejects mipmapped Texture2D construction before accepting data" +
+                      "R12 this renderer rejects mipmapped Texture2D construction before accepting data" +
                           (creation.threw ? " (" + creation.what + ")"
                                            : std::string(" -- but construction SUCCEEDED")));
                 return;
@@ -816,11 +816,11 @@ class Texture2DGetDataTransferRangeTest : public Game
             });
             if (kMipPolicy == MipPolicy::RejectUpload)
             {
-                // Pinned, not skipped: this backend's 2D texture API documents that it has no mip
+                // Pinned, not skipped: this renderer's 2D texture API documents that it has no mip
                 // chain, so the level-1 upload must raise that rejection. If it ever succeeds, this
                 // check fails and the declaration above has to be revisited.
                 check(upload.threw,
-                      "R12 this backend has no mip storage and rejects a level-1 upload" +
+                      "R12 this renderer has no mip storage and rejects a level-1 upload" +
                           (upload.threw ? " (" + upload.what + ")"
                                         : std::string(" -- but it SUCCEEDED")));
                 return;
@@ -871,7 +871,7 @@ class Texture2DGetDataTransferRangeTest : public Game
         dev.SetRenderTarget(&target);
         ResetState(dev);
         dev.Clear(Color(0, 0, 0, 255));
-        // Four quadrant fills with pure-channel colours: every backend reproduces 0/255 exactly, so
+        // Four quadrant fills with pure-channel colours: every renderer reproduces 0/255 exactly, so
         // the reference read below cannot be a uniform frame that would hide a stride error.
         FillRect(dev, Rectangle(0, 0, kRtW, kRtH), Color(0, 0, 255, 255));
         FillRect(dev, Rectangle(0, 0, kRtW / 2, kRtH / 2), Color(255, 0, 0, 255));
@@ -883,7 +883,7 @@ class Texture2DGetDataTransferRangeTest : public Game
         // G0: the reference. The rectangle overload at startIndex 0 already honoured the contract
         //     before this ticket, so it -- not an absolute colour table -- states what the
         //     whole-level overload must reproduce. That keeps this section independent of every
-        //     backend colour-space, orientation and MSAA concern.
+        //     renderer colour-space, orientation and MSAA concern.
         std::vector<Color> reference(kRtN, Guard(0));
         {
             const Rectangle full(0, 0, kRtW, kRtH);
@@ -893,7 +893,7 @@ class Texture2DGetDataTransferRangeTest : public Game
             if (kRtContract == RtContract::Unsupported)
             {
                 checkThrew(o, "NotSupportedException",
-                           "G0 non-rasterizing backend rejects the reference read");
+                           "G0 non-rasterizing renderer rejects the reference read");
                 CheckUntouched(probe, "G0 rejected reference read touched nothing");
             }
             else
@@ -916,7 +916,7 @@ class Texture2DGetDataTransferRangeTest : public Game
             if (kRtContract == RtContract::Unsupported)
             {
                 checkThrew(o, "NotSupportedException",
-                           "G1 non-rasterizing backend rejects the whole-level read");
+                           "G1 non-rasterizing renderer rejects the whole-level read");
                 CheckUntouched(got, "G1 rejected whole-level read touched nothing");
             }
             else
@@ -930,14 +930,14 @@ class Texture2DGetDataTransferRangeTest : public Game
 
         // G2: THE headline case -- a render target read at a NON-ZERO destination offset. Pre-fix
         //     the gate `startIndex == 0` makes this throw std::runtime_error("no CPU-side pixel
-        //     data available") on every backend.
+        //     data available") on every renderer.
         {
             auto got = GuardedBuffer(kPrefix + kRtN + kSuffix);
             const Outcome o = Attempt([&] { target.GetData(got.data(), kPrefix, kRtN); });
             if (kRtContract == RtContract::Unsupported)
             {
                 checkThrew(o, "NotSupportedException",
-                           "G2 non-rasterizing backend rejects the offset read AFTER argument "
+                           "G2 non-rasterizing renderer rejects the offset read AFTER argument "
                            "validation (capability rejection stays last)");
                 CheckUntouched(got, "G2 rejected offset read touched nothing");
             }
@@ -960,7 +960,7 @@ class Texture2DGetDataTransferRangeTest : public Game
             if (kRtContract == RtContract::Unsupported)
             {
                 checkThrew(o, "NotSupportedException",
-                           "G3 non-rasterizing backend rejects the excess-capacity read");
+                           "G3 non-rasterizing renderer rejects the excess-capacity read");
                 CheckUntouched(got, "G3 rejected excess-capacity read touched nothing");
             }
             else
@@ -974,7 +974,7 @@ class Texture2DGetDataTransferRangeTest : public Game
             }
         }
 
-        // G4: an undersized capacity must be rejected with the ARGUMENT error, on every backend --
+        // G4: an undersized capacity must be rejected with the ARGUMENT error, on every renderer --
         //     including the non-rasterizing one, where it must NOT be weakened into the capability
         //     rejection. This is REMED-GFX-162's precedence, asserted from the texture side.
         {
@@ -1058,9 +1058,9 @@ protected:
         auto& dev = getGraphicsDeviceProperty();
         ResetState(dev);
 
-        std::printf("backend=%s declaredRenderTargetReadback=%s declaredMipPolicy=%s "
+        std::printf("renderer=%s declaredRenderTargetReadback=%s declaredMipPolicy=%s "
                     "texture=%dx%d renderTarget=%dx%d\n",
-                    kBackendName, kRtContract == RtContract::Exact ? "exact" : "unsupported",
+                    kRendererName, kRtContract == RtContract::Exact ? "exact" : "unsupported",
                     kMipPolicy == MipPolicy::Supported ? "supported"
                         : (kMipPolicy == MipPolicy::RejectConstruction ? "reject-construction" : "reject-upload"),
                     kTexW, kTexH, kRtW, kRtH);

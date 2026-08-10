@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // REMED-GFX-124: a Software (CPU-raster) RenderTarget2D must be readable and sampleable once it is
 // no longer the active target -- the ordinary XNA/FNA producer -> unbind -> consumer contract every
-// GPU backend already honors.
+// GPU renderer already honors.
 //
 // Public contract under test:
 //   * RenderTarget2D::GetData returns the target's rendered COLOUR attachment (full level, arbitrary
@@ -10,16 +10,16 @@
 //     through a textured 3D primitive alike -- reproducing its real pixels, not a fallback colour.
 //
 // Pre-fix Software signature (this test FAILS pre-fix, two independent causes):
-//   A  readback: SoftwareRenderTargetBackend overrides no ITextureBackend::GetData, so
+//   A  readback: SoftwareRenderTargetRenderer overrides no ITextureRenderer::GetData, so
 //      Texture2D::GetData's render-target fallback reaches the interface's DEFAULT no-op. The
-//      backend writes nothing -- but the buffer it was handed is a scratch vector Texture2D
+//      renderer writes nothing -- but the buffer it was handed is a scratch vector Texture2D
 //      ZERO-INITIALIZED itself, and those zeros are then converted into the caller's Color array.
 //      The observable public result is therefore not an untouched destination but a fabricated,
 //      fully written, uniformly transparent-black frame, which is strictly worse: a "did GetData
 //      write anything?" sentinel check passes, and any assertion whose expected content is
 //      transparent black passes on an empty target.
-//   B  sampling: SoftwareRenderTargetBackend is not a SoftwareTextureBackend, so both sampler entry
-//      points (SoftwareSpriteBatchBackend::Draw and RasterizeTriangleShaded) dynamic_cast it to
+//   B  sampling: SoftwareRenderTargetRenderer is not a SoftwareTextureRenderer, so both sampler entry
+//      points (SoftwareSpriteBatchRenderer::Draw and RasterizeTriangleShaded) dynamic_cast it to
 //      nullptr and shade the geometry untextured -- a white quad instead of the target's contents.
 //
 // Every readback check here fills its destination with a distinctive NON-RESULT sentinel first and
@@ -55,8 +55,8 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
-#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
-#include "CNA/Internal/Backends/Software/SoftwareGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/Internal/Renderers/Software/SoftwareRenderer.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/InvalidOperationException.hpp"
@@ -225,8 +225,8 @@ class SoftwareRenderTargetReadbackTest : public Game
                   " of " + std::to_string(total) + ")");
 
         // The sentinel check above is necessary but NOT sufficient, and pre-fix it already passes:
-        // Texture2D::GetData's render-target fallback hands the backend a scratch buffer it
-        // zero-initialized itself, so a no-op backend still yields a fully written destination -- of
+        // Texture2D::GetData's render-target fallback hands the renderer a scratch buffer it
+        // zero-initialized itself, so a no-op renderer still yields a fully written destination -- of
         // fabricated Color(0,0,0,0). A uniform frame therefore has to fail on its own, or a caller
         // whose expected content happens to be transparent black could never tell the difference.
         std::size_t blank = 0;
@@ -450,7 +450,7 @@ class SoftwareRenderTargetReadbackTest : public Game
 
     /// The render target and an identical plain texture must produce byte-identical frames under
     /// the same sampler state -- proving the target goes through the ORDINARY sampler rather than
-    /// any special-cased path, whatever filtering and addressing this backend actually implements.
+    /// any special-cased path, whatever filtering and addressing this renderer actually implements.
     void CheckSamplerParity(GraphicsDevice& dev, RenderTarget2D& target, const Texture2D& plain,
                             const SamplerState& sampler, const Rectangle& destination,
                             const Rectangle& source, SpriteEffects effects,
@@ -631,24 +631,24 @@ protected:
                   "E8 negative mip level rejected");
             // REMED-GFX-198: this public request is an invalid Texture2D argument, not a request
             // for a valid level that Software happens not to implement. Before GFX-192, level 1
-            // reached SoftwareRenderTargetBackend::GetData and raised its level-0-only
+            // reached SoftwareRenderTargetRenderer::GetData and raised its level-0-only
             // NotSupportedException after the shared layer had allocated scratch storage. The
             // shared [0, LevelCount) validator now owns the request and must reject it before mip
             // dimensions, scratch allocation, capability policy or Software dispatch.
             {
-                using CNA::Internal::Backends::Software::SoftwareRenderTargetBackend;
+                using CNA::Internal::Renderers::Software::SoftwareRenderTargetRenderer;
                 constexpr int requestedLevel = 1;
                 constexpr int prefix = 3;
                 constexpr int requestedCount = 1;
                 constexpr int suffix = 5;
                 const int publicLevelCount = target.getLevelCountProperty();
-                auto* softwareBackend =
-                    dynamic_cast<SoftwareRenderTargetBackend*>(target.GetRenderTargetBackend());
+                auto* softwareRenderer =
+                    dynamic_cast<SoftwareRenderTargetRenderer*>(target.GetRenderTargetRenderer());
 
                 check(publicLevelCount == 1 && requestedLevel == publicLevelCount,
                       "E9a request level 1 is exactly LevelCount 1, outside [0, LevelCount)");
-                check(softwareBackend != nullptr,
-                      "E9b the production Software render-target backend is observable");
+                check(softwareRenderer != nullptr,
+                      "E9b the production Software render-target renderer is observable");
 
                 std::vector<Color> rejected(prefix + requestedCount + suffix, SentinelA5());
                 const std::vector<Color> rejectedBefore = rejected;
@@ -660,10 +660,10 @@ protected:
                 std::size_t depthSizeBefore = 0, depthCapacityBefore = 0;
                 std::vector<std::uint8_t> colorBefore;
                 std::vector<float> depthBefore;
-                if (softwareBackend != nullptr)
+                if (softwareRenderer != nullptr)
                 {
-                    callsBefore = softwareBackend->GetReadbackCallCountEXT();
-                    const auto& framebuffer = softwareBackend->Framebuffer();
+                    callsBefore = softwareRenderer->GetReadbackCallCountEXT();
+                    const auto& framebuffer = softwareRenderer->Framebuffer();
                     colorAddressBefore = framebuffer.color.data();
                     depthAddressBefore = framebuffer.depthBuffer.data();
                     colorSizeBefore = framebuffer.color.size();
@@ -699,14 +699,14 @@ protected:
                       "E9e rejected read leaves destination prefix, requested range and suffix "
                       "unchanged");
 
-                check(softwareBackend != nullptr &&
-                          softwareBackend->GetReadbackCallCountEXT() == callsBefore,
-                      "E9f invalid public level makes zero Software backend readback calls");
+                check(softwareRenderer != nullptr &&
+                          softwareRenderer->GetReadbackCallCountEXT() == callsBefore,
+                      "E9f invalid public level makes zero Software renderer readback calls");
 
                 bool storageUnchanged = false;
-                if (softwareBackend != nullptr)
+                if (softwareRenderer != nullptr)
                 {
-                    const auto& framebuffer = softwareBackend->Framebuffer();
+                    const auto& framebuffer = softwareRenderer->Framebuffer();
                     storageUnchanged = framebuffer.color.data() == colorAddressBefore &&
                         framebuffer.depthBuffer.data() == depthAddressBefore &&
                         framebuffer.color.size() == colorSizeBefore &&
@@ -722,12 +722,12 @@ protected:
                 // The same object must remain a live render target and a readable texture after
                 // the refusal. This deliberately performs new rendering before the valid read.
                 ProduceTargetPattern(dev, target);
-                const std::size_t callsBeforeValid = softwareBackend != nullptr
-                    ? softwareBackend->GetReadbackCallCountEXT() : 0;
+                const std::size_t callsBeforeValid = softwareRenderer != nullptr
+                    ? softwareRenderer->GetReadbackCallCountEXT() : 0;
                 CheckFullReadback(target, SentinelCD(),
                                   "E9h valid render/GetData after invalid level");
-                check(softwareBackend != nullptr &&
-                          softwareBackend->GetReadbackCallCountEXT() == callsBeforeValid + 1,
+                check(softwareRenderer != nullptr &&
+                          softwareRenderer->GetReadbackCallCountEXT() == callsBeforeValid + 1,
                       "E9i the later valid GetData reaches Software production exactly once");
             }
             // REMED-GFX-149 (REMED-GFX-128's expression). This check used to assert the DEFECT --
@@ -787,55 +787,55 @@ protected:
                                       std::to_string(tail) + "/40 intact)");
             }
 
-            // The same guards straight against the backend, where a hostile rectangle can be built
+            // The same guards straight against the renderer, where a hostile rectangle can be built
             // that the public layer would have rejected first. All arithmetic there is 64-bit, so a
             // rectangle near INT_MAX must be rejected rather than wrap into an apparently valid one.
-            auto* rtBackend = target.GetRenderTargetBackend();
-            check(rtBackend != nullptr, "E11 the render target exposes its backend handle");
-            if (rtBackend != nullptr)
+            auto* rtRenderer = target.GetRenderTargetRenderer();
+            check(rtRenderer != nullptr, "E11 the render target exposes its renderer handle");
+            if (rtRenderer != nullptr)
             {
                 std::vector<std::uint8_t> raw(total * 4, 0xCD);
                 const int rawLength = static_cast<int>(raw.size());
                 check(Throws<System::ArgumentNullException>(
-                          [&] { rtBackend->GetData(0, 0, 0, kRTW, kRTH, nullptr, rawLength); }),
-                      "E12 backend rejects a null destination");
+                          [&] { rtRenderer->GetData(0, 0, 0, kRTW, kRTH, nullptr, rawLength); }),
+                      "E12 renderer rejects a null destination");
                 check(Throws<System::NotSupportedException>(
-                          [&] { rtBackend->GetData(2, 0, 0, 4, 4, raw.data(), rawLength); }),
-                      "E13 backend rejects a mip level above 0");
+                          [&] { rtRenderer->GetData(2, 0, 0, 4, 4, raw.data(), rawLength); }),
+                      "E13 renderer rejects a mip level above 0");
                 check(Throws<System::ArgumentOutOfRangeException>(
-                          [&] { rtBackend->GetData(-1, 0, 0, 4, 4, raw.data(), rawLength); }),
-                      "E14 backend rejects a negative mip level");
+                          [&] { rtRenderer->GetData(-1, 0, 0, 4, 4, raw.data(), rawLength); }),
+                      "E14 renderer rejects a negative mip level");
                 check(Throws<System::ArgumentOutOfRangeException>(
-                          [&] { rtBackend->GetData(0, 0, 0, 0, 4, raw.data(), rawLength); }),
-                      "E15 backend rejects an empty rectangle");
+                          [&] { rtRenderer->GetData(0, 0, 0, 0, 4, raw.data(), rawLength); }),
+                      "E15 renderer rejects an empty rectangle");
                 check(Throws<System::ArgumentOutOfRangeException>(
-                          [&] { rtBackend->GetData(0, 0, 0, -4, 4, raw.data(), rawLength); }),
-                      "E16 backend rejects a negative rectangle size");
+                          [&] { rtRenderer->GetData(0, 0, 0, -4, 4, raw.data(), rawLength); }),
+                      "E16 renderer rejects a negative rectangle size");
                 check(Throws<System::ArgumentOutOfRangeException>(
                           [&] {
-                              rtBackend->GetData(0, std::numeric_limits<int>::max() - 1, 0, 4, 4,
+                              rtRenderer->GetData(0, std::numeric_limits<int>::max() - 1, 0, 4, 4,
                                                  raw.data(), rawLength);
                           }),
-                      "E17 backend rejects a rectangle whose right edge would overflow int32");
+                      "E17 renderer rejects a rectangle whose right edge would overflow int32");
                 check(Throws<System::ArgumentOutOfRangeException>(
                           [&] {
-                              rtBackend->GetData(0, 0, std::numeric_limits<int>::max() - 1, 4, 4,
+                              rtRenderer->GetData(0, 0, std::numeric_limits<int>::max() - 1, 4, 4,
                                                  raw.data(), rawLength);
                           }),
-                      "E18 backend rejects a rectangle whose bottom edge would overflow int32");
+                      "E18 renderer rejects a rectangle whose bottom edge would overflow int32");
                 check(Throws<System::ArgumentOutOfRangeException>(
                           [&] {
-                              rtBackend->GetData(0, 0, 0, kRTW, kRTH, raw.data(),
+                              rtRenderer->GetData(0, 0, 0, kRTW, kRTH, raw.data(),
                                                  kRTW * kRTH * 4 - 1);
                           }),
-                      "E19 backend rejects a destination smaller than the rectangle needs");
+                      "E19 renderer rejects a destination smaller than the rectangle needs");
                 check(Throws<System::ArgumentOutOfRangeException>(
                           [&] {
-                              rtBackend->GetData(0, 0, 0, std::numeric_limits<int>::max(),
+                              rtRenderer->GetData(0, 0, 0, std::numeric_limits<int>::max(),
                                                  std::numeric_limits<int>::max(), raw.data(),
                                                  rawLength);
                           }),
-                      "E20 backend rejects a rectangle whose byte size would overflow int32");
+                      "E20 renderer rejects a rectangle whose byte size would overflow int32");
 
                 // A rejected request must leave the destination completely alone -- the whole point
                 // of throwing rather than partially filling it.
@@ -843,7 +843,7 @@ protected:
                 for (std::uint8_t b : raw)
                     if (b == 0xCD) ++intact;
                 check(intact == raw.size(),
-                      "E21 every rejected backend request left the destination untouched (" +
+                      "E21 every rejected renderer request left the destination untouched (" +
                           std::to_string(intact) + " of " + std::to_string(raw.size()) +
                           " sentinel bytes)");
             }

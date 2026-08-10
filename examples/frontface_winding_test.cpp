@@ -2,7 +2,7 @@
 //
 // REMED-GFX-160 -- the XNA/FNA front-face winding contract, measured against an explicit oracle.
 //
-// THE AUTHORITATIVE CONTRACT, taken from the FNA source and not from any backend's behaviour:
+// THE AUTHORITATIVE CONTRACT, taken from the FNA source and not from any renderer's behaviour:
 //
 //   FNA SpriteBatch.cs lays a sprite's four corners out as
 //       CornerOffsetX = { 0, 1, 0, 1 }      CornerOffsetY = { 0, 0, 1, 1 }
@@ -54,8 +54,8 @@
 // (the two rows swap), culling not applied at all (both present under both modes), everything
 // culled (neither present), and a mirror (a never-covered quadrant lights up).
 //
-// This file asserts the XNA contract UNCONDITIONALLY on every rasterizing backend. There is no
-// per-backend "declared defect" constant for the winding itself: a backend that inverts it fails
+// This file asserts the XNA contract UNCONDITIONALLY on every rasterizing renderer. There is no
+// per-renderer "declared defect" constant for the winding itself: a renderer that inverts it fails
 // here, which is the point.
 //
 // Exit code 0 = all checks PASS, 1 = any FAIL.
@@ -108,66 +108,66 @@ using namespace Microsoft::Xna::Framework::Graphics;
 
 namespace
 {
-    /** @brief Whether this backend rasterizes at all (HEADLESS does not; readbacks must reject). */
+    /** @brief Whether this renderer rasterizes at all (HEADLESS does not; readbacks must reject). */
     /** @brief Whether the public backbuffer readback works here. */
     /** @brief Whether stock 3D geometry rasterizes here at all. */
-#if defined(CNA_BACKEND_HEADLESS)
+#if defined(CNA_RENDERER_HEADLESS)
     constexpr bool kRasterizes = false;
     constexpr bool kReadsBackbuffer = false;
     constexpr bool kDraws3D = false;
-    constexpr const char* kBackendName = "HEADLESS";
-#elif defined(CNA_BACKEND_SOFTWARE)
+    constexpr const char* kRendererName = "HEADLESS";
+#elif defined(CNA_RENDERER_SOFTWARE)
     constexpr bool kRasterizes = true;
     constexpr bool kReadsBackbuffer = true;
     constexpr bool kDraws3D = true;
-    constexpr const char* kBackendName = "SOFTWARE";
-#elif defined(CNA_BACKEND_EASYGL)
+    constexpr const char* kRendererName = "SOFTWARE";
+#elif defined(CNA_RENDERER_EASYGL)
     constexpr bool kRasterizes = true;
     constexpr bool kReadsBackbuffer = true;
     constexpr bool kDraws3D = true;
-    constexpr const char* kBackendName = "EASYGL";
-#elif defined(CNA_BACKEND_BGFX)
+    constexpr const char* kRendererName = "EASYGL";
+#elif defined(CNA_RENDERER_BGFX)
     constexpr bool kRasterizes = true;
     constexpr bool kReadsBackbuffer = true;
     constexpr bool kDraws3D = true;
-    constexpr const char* kBackendName = "BGFX";
-#elif defined(CNA_BACKEND_VULKAN)
+    constexpr const char* kRendererName = "BGFX";
+#elif defined(CNA_RENDERER_VULKAN)
     constexpr bool kRasterizes = true;
     constexpr bool kReadsBackbuffer = true;
     constexpr bool kDraws3D = true;
-    constexpr const char* kBackendName = "VULKAN";
-#elif defined(CNA_BACKEND_WEBGPU)
+    constexpr const char* kRendererName = "VULKAN";
+#elif defined(CNA_RENDERER_WEBGPU)
     constexpr bool kRasterizes = true;
     constexpr bool kReadsBackbuffer = true;
     constexpr bool kDraws3D = true;
-    constexpr const char* kBackendName = "WEBGPU";
-#elif defined(CNA_BACKEND_SDL_GPU)
+    constexpr const char* kRendererName = "WEBGPU";
+#elif defined(CNA_RENDERER_SDL_GPU)
     constexpr bool kRasterizes = true;
     constexpr bool kReadsBackbuffer = false;
     constexpr bool kDraws3D = true;
-    constexpr const char* kBackendName = "SDL_GPU";
-#elif defined(CNA_BACKEND_D3D9)
+    constexpr const char* kRendererName = "SDL_GPU";
+#elif defined(CNA_RENDERER_D3D9)
     constexpr bool kRasterizes = true;
     constexpr bool kReadsBackbuffer = true;
     constexpr bool kDraws3D = true;
-    constexpr const char* kBackendName = "D3D9";
-#elif defined(CNA_BACKEND_D3D11)
+    constexpr const char* kRendererName = "D3D9";
+#elif defined(CNA_RENDERER_D3D11)
     constexpr bool kRasterizes = true;
     constexpr bool kReadsBackbuffer = true;
     constexpr bool kDraws3D = true;
-    constexpr const char* kBackendName = "D3D11";
-#elif defined(CNA_BACKEND_D3D12)
+    constexpr const char* kRendererName = "D3D11";
+#elif defined(CNA_RENDERER_D3D12)
     constexpr bool kRasterizes = true;
     constexpr bool kReadsBackbuffer = true;
     constexpr bool kDraws3D = true;
-    constexpr const char* kBackendName = "D3D12";
-#elif defined(CNA_BACKEND_LLGL)
+    constexpr const char* kRendererName = "D3D12";
+#elif defined(CNA_RENDERER_LLGL)
     constexpr bool kRasterizes = true;
     constexpr bool kReadsBackbuffer = true;
     constexpr bool kDraws3D = true;
-    constexpr const char* kBackendName = "LLGL";
+    constexpr const char* kRendererName = "LLGL";
 #else
-#error "REMED-GFX-160: this backend has no declared winding contract."
+#error "REMED-GFX-160: this renderer has no declared winding contract."
 #endif
 
     /**
@@ -179,14 +179,14 @@ namespace
      * performs one discarded read and this file measures its own subject. Remove when 161 lands.
      */
     constexpr bool kFirstBackbufferReadIsWarmUp =
-#if defined(CNA_BACKEND_WEBGPU)
+#if defined(CNA_RENDERER_WEBGPU)
         true;
 #else
         false;
 #endif
 
     /**
-     * @brief Whether the BACKBUFFER readback rejects on a backend that rasterizes nothing.
+     * @brief Whether the BACKBUFFER readback rejects on a renderer that rasterizes nothing.
      *
      * REMED-GFX-127/130 brought the texture and render-target readbacks under a contract that
      * REJECTS rather than handing back scratch as a rendered frame; the backbuffer readback was
@@ -194,7 +194,7 @@ namespace
      * so it is declared here rather than absorbed into a winding assertion.
      */
     constexpr bool kBackbufferReadRejectsWhenNonRasterizing =
-#if defined(CNA_BACKEND_HEADLESS)
+#if defined(CNA_RENDERER_HEADLESS)
         false;   // REMED-GFX-162, open
 #else
         true;
@@ -389,7 +389,7 @@ class FrontFaceWindingTest : public Game
         {
             if (dest.rt == nullptr && !kBackbufferReadRejectsWhenNonRasterizing)
             {
-                skip(label + ": " + kBackendName + " does not yet reject the BACKBUFFER readback "
+                skip(label + ": " + kRendererName + " does not yet reject the BACKBUFFER readback "
                      "on a non-rasterizing device (REMED-GFX-162, open) -- declared, not absorbed");
                 return false;
             }
@@ -400,7 +400,7 @@ class FrontFaceWindingTest : public Game
         }
         if (!r.ok())
         {
-            skip(label + ": " + dest.name + " oracle unavailable on " + kBackendName + " (" +
+            skip(label + ": " + dest.name + " oracle unavailable on " + kRendererName + " (" +
                  (r.threwNotSupported ? "NotSupportedException" : r.otherWhat) +
                  ") -- boundary recorded");
             return false;
@@ -411,7 +411,7 @@ class FrontFaceWindingTest : public Game
     /**
      * @brief The colour of a 3x3 block centred on (@p cx, @p cy), or poison if it is not uniform.
      *
-     * Every probe sits deep inside its quadrant, far from any primitive edge, so a backend's fill
+     * Every probe sits deep inside its quadrant, far from any primitive edge, so a renderer's fill
      * rule cannot influence the answer and the comparison stays byte-exact.
      */
     static Color Probe(const Readback& r, int cx, int cy)
@@ -515,7 +515,7 @@ class FrontFaceWindingTest : public Game
      * hardware precisely so that every triangle of the strip keeps the SAME winding. Laying the
      * square out as (TL, TR, BL, BR) therefore yields two clockwise triangles that tile the whole
      * quadrant; swapping the middle pair yields two counter-clockwise ones. Both halves of the
-     * quadrant are probed, so a backend that gets the odd triangle's winding wrong is caught.
+     * quadrant are probed, so a renderer that gets the odd triangle's winding wrong is caught.
      */
     static void Strip(Quad q, Wind w, const Color& c, VertexPositionColor* out)
     {
@@ -733,7 +733,7 @@ class FrontFaceWindingTest : public Game
     /**
      * @brief Draws A clockwise and B counter-clockwise under @p cull and classifies the result.
      *
-     * A is the FRONT face and B the BACK face, so a correct backend answers each cull mode with a
+     * A is the FRONT face and B the BACK face, so a correct renderer answers each cull mode with a
      * COMPLEMENTARY pair and the two modes are mirror images of one another.
      */
     Outcome RunPair(GraphicsDevice& dev, const Dest& dest, CullMode cull,
@@ -749,7 +749,7 @@ class FrontFaceWindingTest : public Game
         }
         catch (const std::exception& e)
         {
-            // A backend that does not implement this entry point / topology at all rejects the
+            // A renderer that does not implement this entry point / topology at all rejects the
             // draw. That is a capability boundary, not a winding result: record it and let the
             // caller skip, rather than inventing the capability here.
             Outcome o; o.unsupported = true; o.what = e.what();
@@ -783,14 +783,14 @@ class FrontFaceWindingTest : public Game
 
         if (none.unsupported || cw.unsupported || ccw.unsupported)
         {
-            skip(tag + ": not supported on " + kBackendName + " (" +
+            skip(tag + ": not supported on " + kRendererName + " (" +
                  (none.unsupported ? none.what : cw.unsupported ? cw.what : ccw.what) +
                  ") -- capability boundary recorded, not a winding result");
             return;
         }
         if (none.unreadable || cw.unreadable || ccw.unreadable)
         {
-            skip(tag + ": " + dest.name + " became unreadable mid-leg on " + kBackendName +
+            skip(tag + ": " + dest.name + " became unreadable mid-leg on " + kRendererName +
                  " -- boundary recorded");
             return;
         }
@@ -804,7 +804,7 @@ class FrontFaceWindingTest : public Game
         if (!Same(none.atTR, kClear) || !Same(none.atBL, kClear))
         {
             skip(tag + ": " + dest.name + " does not reproduce even the clear colour on " +
-                 kBackendName + " (never-covered quadrants read " + ColorText(none.atTR) + "/" +
+                 kRendererName + " (never-covered quadrants read " + ColorText(none.atTR) + "/" +
                  ColorText(none.atBL) + ", expected " + ColorText(kClear) +
                  ") -- readback boundary recorded, no winding claim made");
             return;
@@ -835,7 +835,7 @@ class FrontFaceWindingTest : public Game
         check(!ccw.bPresent,
               tag + " CullCounterClockwise REMOVES the counter-clockwise-wound triangle");
 
-        // Complementarity, stated as its own assertion so a backend that culls everything or
+        // Complementarity, stated as its own assertion so a renderer that culls everything or
         // nothing cannot satisfy the four checks above by accident.
         check(cw.aPresent != ccw.aPresent && cw.bPresent != ccw.bPresent,
               tag + " the two cull modes are exact complements of one another on both windings");
@@ -887,7 +887,7 @@ class FrontFaceWindingTest : public Game
         }
         catch (const std::exception& e)
         {
-            skip(std::string("W1msaa: MSAA render target unavailable on ") + kBackendName + " (" +
+            skip(std::string("W1msaa: MSAA render target unavailable on ") + kRendererName + " (" +
                  e.what() + ") -- boundary recorded");
         }
     }
@@ -910,7 +910,7 @@ class FrontFaceWindingTest : public Game
         const Outcome afterTarget = RunPair(dev, bb, CullMode::CullCounterClockwiseFace);
         if (afterTarget.unsupported || afterTarget.unreadable)
         {
-            skip("W2: unavailable on " + std::string(kBackendName) + " -- boundary recorded");
+            skip("W2: unavailable on " + std::string(kRendererName) + " -- boundary recorded");
             dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
             return;
         }
@@ -1011,7 +1011,7 @@ class FrontFaceWindingTest : public Game
             const Readback r = Read(dev, bb);
             if (!r.ok())
             {
-                skip(std::string("W5 ") + c.name + ": unavailable on " + kBackendName +
+                skip(std::string("W5 ") + c.name + ": unavailable on " + kRendererName +
                      " -- boundary recorded");
                 continue;
             }
@@ -1051,7 +1051,7 @@ class FrontFaceWindingTest : public Game
         const Outcome back = RunPair(dev, bb, CullMode::CullCounterClockwiseFace);
         if (first.unsupported || first.unreadable || back.unsupported || back.unreadable)
         {
-            skip("W6: unavailable on " + std::string(kBackendName) + " -- boundary recorded");
+            skip("W6: unavailable on " + std::string(kRendererName) + " -- boundary recorded");
             return;
         }
         check(first.aPresent == back.aPresent && first.bPresent == back.bPresent &&
@@ -1130,7 +1130,7 @@ class FrontFaceWindingTest : public Game
         }
 
         // 1 -- a sprite drawn through a DEFAULTED rasterizer state (null => CullCounterClockwise)
-        //      must be visible. If it is not, this backend culls FNA's own sprite winding.
+        //      must be visible. If it is not, this renderer culls FNA's own sprite winding.
         Begin(dev, bb);
         {
             SamplerState point = SamplerState::PointClamp;
@@ -1244,7 +1244,7 @@ class FrontFaceWindingTest : public Game
 
         std::printf("[INFO] REMED-GFX-160 front-face winding on %s "
                     "(requested %dx%d backbuffer, actual %dx%d)\n",
-                    kBackendName, kW, kH,
+                    kRendererName, kW, kH,
                     dev.getPresentationParametersProperty().getBackBufferWidthProperty(),
                     dev.getPresentationParametersProperty().getBackBufferHeightProperty());
         std::fflush(stdout);
@@ -1264,7 +1264,7 @@ class FrontFaceWindingTest : public Game
         LegSpriteBatchReference(dev);
 
         std::printf("[INFO] %s: %d/%d checks passed (%d skipped)\n",
-                    kBackendName, passCount_, totalCount_, skipCount_);
+                    kRendererName, passCount_, totalCount_, skipCount_);
         std::fflush(stdout);
         result_ = (passCount_ == totalCount_) ? 0 : 1;
         Exit();

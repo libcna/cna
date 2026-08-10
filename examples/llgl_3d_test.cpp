@@ -3,7 +3,7 @@
 //
 // Every draw goes through the public API -- BasicEffect with VertexColorEnabled, a real
 // VertexBuffer, GraphicsDevice::DrawPrimitives / DrawIndexedPrimitives -- so this exercises the
-// same route a game takes, not a backend-internal shortcut.
+// same route a game takes, not a renderer-internal shortcut.
 //
 // The projection is orthographic over the back buffer in pixels, so a vertex at (x, y) lands at
 // window pixel (x, y) and every expectation below is a coordinate, not a guess.
@@ -46,7 +46,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 
 #include "CNA/GraphicsCapability.hpp"
-#include "CNA/Internal/Backends/Llgl/LlglGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Llgl/LlglRenderer.hpp"
 
 #include "common/PixelTestGame.hpp"
 
@@ -96,16 +96,16 @@ class Llgl3DTest : public CNA::Examples::PixelTestGame
     // Orthographic over the LOGICAL canvas in pixels, with the origin top-left, so a vertex
     // position is a pixel position and every expectation below is a coordinate.
     //
-    // The extent comes from the backend rather than from the requested back-buffer size: under the
+    // The extent comes from the renderer rather than from the requested back-buffer size: under the
     // default FixedHeightDynamicWidth presentation the canvas keeps the requested height but takes
     // its width from the window's aspect ratio, so a projection built from the requested width
     // would stretch the whole scene sideways -- which is exactly what happened the first time this
     // test ran, and is a mistake a game could make just as easily.
     void SetUpEffect(GraphicsDevice& device)
     {
-        auto& backend = static_cast<CNA::Internal::Backends::Llgl::LlglGraphicsBackend&>(
-            device.GetBackend());
-        backend.GetViewportSize(logicalWidth_, logicalHeight_);
+        auto& renderer = static_cast<CNA::Internal::Renderers::Llgl::LlglRenderer&>(
+            device.GetRenderer());
+        renderer.GetViewportSize(logicalWidth_, logicalHeight_);
 
         effect_ = std::make_unique<BasicEffect>(device);
         effect_->VertexColorEnabled = true;

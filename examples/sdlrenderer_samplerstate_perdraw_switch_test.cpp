@@ -2,7 +2,7 @@
 // Task 703: Verify per-draw sampler state changes take effect on the next SpriteBatch::Begin
 // on SDL_Renderer.
 //
-// SdlSpriteBatchBackend::SetSamplerFilter (called once per SpriteBatch::Begin(), from
+// SdlSpriteBatchRenderer::SetSamplerFilter (called once per SpriteBatch::Begin(), from
 // SpriteBatch.cpp's own Begin() sequence) stores its result into a single `scaleMode` member,
 // which every Draw() overload re-applies via SDL_SetTextureScaleMode() immediately before
 // rendering. This test proves that mechanism is genuinely LIVE per Begin() -- not applied once
@@ -14,7 +14,7 @@
 //      switching TO Linear works but switching BACK to Point does not.
 //
 // Requires PresentationMode::NativeBackBuffer (Task 915 finding): SDL_RenderReadPixels operates
-// in physical output coordinates, while this backend's default presentation mode
+// in physical output coordinates, while this renderer's default presentation mode
 // (FixedHeightDynamicWidth) does not map logical pixels 1:1 to physical ones.
 //
 // Exit code 0 = all 3 draws show the correct filter for their SamplerState, 1 = at least one does not.

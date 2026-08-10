@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // PbrEffect fragment shader, Vulkan flavour (SPIR-V). See pbr3d.vert.glsl for the PbrParams
-// uniform block this shares. PbrLight() is transliterated verbatim from the Vulkan backend's own
+// uniform block this shares. PbrLight() is transliterated verbatim from the Vulkan renderer's own
 // already-correct pbr3d.frag.glsl (the glTF 2.0 metallic-roughness BRDF: GGX distribution +
 // Smith-Schlick-GGX visibility + Schlick Fresnel), not re-derived from first principles.
 
@@ -112,8 +112,8 @@ void main()
     vec3 emissive = emissiveMetallic.xyz * texture(sampler2D(emissiveMap, emissiveMapSampler), vTexCoord).rgb;
 
     vec3 rgb = ambient + Lo + emissive;
-    // vFogFactor is "how much fog" (0 = none, 1 = full), matching this backend's own convention
-    // (see lit_textured3d.frag.glsl) -- NOT the plain Vulkan backend's opposite "how much of the
+    // vFogFactor is "how much fog" (0 = none, 1 = full), matching this renderer's own convention
+    // (see lit_textured3d.frag.glsl) -- NOT the plain Vulkan renderer's opposite "how much of the
     // original colour to keep" convention.
     rgb = mix(rgb, fogColor.rgb, vFogFactor);
 

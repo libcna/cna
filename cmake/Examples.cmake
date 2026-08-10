@@ -1,10 +1,10 @@
 # --- Examples ---
-# The 3D house demo exercises the EasyGL 3D pipeline. Other backends throw
-# "3D not supported", so the target is only enabled with a GL-family public backend
+# The 3D house demo exercises the EasyGL 3D pipeline. Other renderers throw
+# "3D not supported", so the target is only enabled with a GL-family public renderer
 # (OPENGLES/OPENGL33/WEBGL1/WEBGL2, all implemented by EasyGL -- see plan_glbackends.md).
 option(CNA_BUILD_EXAMPLES "Build CNA example applications (house3d demo, demo_2d, ...)" ON)
 if(CNA_BUILD_EXAMPLES)
-    # ---- 2D sprite demo (works with all backends) ----------------------------
+    # ---- 2D sprite demo (works with all renderers) ----------------------------
     add_executable(cna_demo_2d
         examples/demo_2d/src/Main.cpp
         examples/demo_2d/src/Game1.cpp
@@ -16,7 +16,7 @@ if(CNA_BUILD_EXAMPLES)
     if(EMSCRIPTEN)
         set_target_properties(cna_demo_2d PROPERTIES SUFFIX ".html")
         target_link_libraries(cna_demo_2d PRIVATE
-            CNA ${BACKEND_TARGET} SDL3::SDL3-static SHARP_RUNTIME)
+            CNA ${RENDERER_TARGET} SDL3::SDL3-static SHARP_RUNTIME)
         target_link_options(cna_demo_2d PRIVATE
             -sALLOW_MEMORY_GROWTH=1
             -sSTACK_SIZE=1048576
@@ -40,7 +40,7 @@ if(CNA_BUILD_EXAMPLES)
                 "${CMAKE_CURRENT_SOURCE_DIR}/examples/demo_2d/Content"
                 "$<TARGET_FILE_DIR:cna_demo_2d>/Content"
             COMMENT "Copying Content next to cna_demo_2d executable")
-        if(CNA_GRAPHICS_BACKEND STREQUAL "WEBGPU" AND CNA_WEBGPU_RUNTIME_LIBRARY)
+        if(CNA_GRAPHICS_RENDERER STREQUAL "WEBGPU" AND CNA_WEBGPU_RUNTIME_LIBRARY)
             add_custom_command(TARGET cna_demo_2d POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different
                     "${CNA_WEBGPU_RUNTIME_LIBRARY}" "$<TARGET_FILE_DIR:cna_demo_2d>"
@@ -52,7 +52,7 @@ if(CNA_BUILD_EXAMPLES)
         if(WIN32)
             set_target_properties(cna_demo_2d PROPERTIES WIN32_EXECUTABLE TRUE)
             # The cross-compiled demo is a distributable Windows GUI executable, just like the
-            # Windows backend smoke tests.  Keep libgcc/libstdc++ self-contained and copy the
+            # Windows renderer smoke tests.  Keep libgcc/libstdc++ self-contained and copy the
             # remaining MinGW thread runtime so a clean Proton/Windows prefix can load it.
             if(MINGW)
                 target_link_options(cna_demo_2d PRIVATE -static-libgcc -static-libstdc++)
@@ -61,7 +61,7 @@ if(CNA_BUILD_EXAMPLES)
             endif()
             cna_copy_sdl_runtime(cna_demo_2d)
         endif()
-        # The 2D demo is the cross-backend visual verification target.  Stage
+        # The 2D demo is the cross-renderer visual verification target.  Stage
         # MinGW's dynamic runtimes so it runs under Wine/a clean Windows
         # installation without relying on a compiler-specific PATH.
         if(MINGW)
@@ -69,7 +69,7 @@ if(CNA_BUILD_EXAMPLES)
         endif()
     endif()
 
-    # ---- Audio demo (works with all backends) --------------------------------
+    # ---- Audio demo (works with all renderers) --------------------------------
     add_executable(cna_demo_sound
         examples/demo_sound/src/Main.cpp
         examples/demo_sound/src/SoundDemo.cpp
@@ -81,7 +81,7 @@ if(CNA_BUILD_EXAMPLES)
     if(EMSCRIPTEN)
         set_target_properties(cna_demo_sound PROPERTIES SUFFIX ".html")
         target_link_libraries(cna_demo_sound PRIVATE
-            CNA ${BACKEND_TARGET} SDL3::SDL3-static SHARP_RUNTIME)
+            CNA ${RENDERER_TARGET} SDL3::SDL3-static SHARP_RUNTIME)
         target_link_options(cna_demo_sound PRIVATE
             -sALLOW_MEMORY_GROWTH=1
             -sSTACK_SIZE=1048576
@@ -140,7 +140,7 @@ if(CNA_BUILD_EXAMPLES)
     endif()
     endif() # NOT EMSCRIPTEN AND NOT ANDROID
 
-    # ---- Input & Touch demo (works with all backends) ------------------------
+    # ---- Input & Touch demo (works with all renderers) ------------------------
     add_executable(cna_demo_input
         examples/demo_input/src/Main.cpp
         examples/demo_input/src/InputDemo.cpp
@@ -152,7 +152,7 @@ if(CNA_BUILD_EXAMPLES)
     if(EMSCRIPTEN)
         set_target_properties(cna_demo_input PROPERTIES SUFFIX ".html")
         target_link_libraries(cna_demo_input PRIVATE
-            CNA ${BACKEND_TARGET} SDL3::SDL3-static SHARP_RUNTIME)
+            CNA ${RENDERER_TARGET} SDL3::SDL3-static SHARP_RUNTIME)
         target_link_options(cna_demo_input PRIVATE
             -sALLOW_MEMORY_GROWTH=1
             -sSTACK_SIZE=1048576
@@ -176,7 +176,7 @@ if(CNA_BUILD_EXAMPLES)
         endif()
     endif()
 
-    # ---- Devices (Sensors/VibrateController) demo (works with all backends) --
+    # ---- Devices (Sensors/VibrateController) demo (works with all renderers) --
     # Desktop/Emscripten only: NOT ANDROID (Task DEV-BUILD-004). A plain
     # add_executable() cannot be a valid Android app target at all --
     # <SDL3/SDL_main.h> #defines main to SDL_main on Android
@@ -202,7 +202,7 @@ if(CNA_BUILD_EXAMPLES)
     if(EMSCRIPTEN)
         set_target_properties(cna_demo_devices PROPERTIES SUFFIX ".html")
         target_link_libraries(cna_demo_devices PRIVATE
-            CNA ${BACKEND_TARGET} SDL3::SDL3-static SHARP_RUNTIME)
+            CNA ${RENDERER_TARGET} SDL3::SDL3-static SHARP_RUNTIME)
         target_link_options(cna_demo_devices PRIVATE
             -sALLOW_MEMORY_GROWTH=1
             -sSTACK_SIZE=1048576
@@ -275,7 +275,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_NOXNA)
 endif()
 
 # ---- DepthEffect manual verification demo (renders + screenshots each colour-depth mode) -----
-if(CNA_BUILD_EXAMPLES AND CNA_NOXNA AND (CNA_GRAPHICS_BACKEND STREQUAL "OPENGLES" OR CNA_GRAPHICS_BACKEND STREQUAL "OPENGL33") AND NOT EMSCRIPTEN AND NOT ANDROID)
+if(CNA_BUILD_EXAMPLES AND CNA_NOXNA AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES" OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGL33") AND NOT EMSCRIPTEN AND NOT ANDROID)
     add_executable(cna_depth_effect_demo examples/depth_effect_demo_test.cpp)
     target_include_directories(cna_depth_effect_demo PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/examples)
     target_compile_definitions(cna_depth_effect_demo PRIVATE
@@ -296,7 +296,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_NOXNA AND (CNA_GRAPHICS_BACKEND STREQUAL "OPENGLES
 endif()
 
 # ---- CRTEffect manual verification demo (renders + screenshots each CRT parameter set) --------
-if(CNA_BUILD_EXAMPLES AND CNA_NOXNA AND (CNA_GRAPHICS_BACKEND STREQUAL "OPENGLES" OR CNA_GRAPHICS_BACKEND STREQUAL "OPENGL33") AND NOT EMSCRIPTEN AND NOT ANDROID)
+if(CNA_BUILD_EXAMPLES AND CNA_NOXNA AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES" OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGL33") AND NOT EMSCRIPTEN AND NOT ANDROID)
     add_executable(cna_crt_effect_demo examples/crt_effect_demo_test.cpp)
     target_include_directories(cna_crt_effect_demo PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/examples)
     target_compile_definitions(cna_crt_effect_demo PRIVATE
@@ -330,9 +330,9 @@ if(CNA_BUILD_EXAMPLES AND NOT EMSCRIPTEN AND NOT ANDROID)
     endif()
 endif()
 
-if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "OPENGLES" OR CNA_GRAPHICS_BACKEND STREQUAL "OPENGL33"
-        OR CNA_GRAPHICS_BACKEND STREQUAL "WEBGL1" OR CNA_GRAPHICS_BACKEND STREQUAL "WEBGL2"
-        OR CNA_GRAPHICS_BACKEND STREQUAL "VULKAN"))
+if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES" OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGL33"
+        OR CNA_GRAPHICS_RENDERER STREQUAL "WEBGL1" OR CNA_GRAPHICS_RENDERER STREQUAL "WEBGL2"
+        OR CNA_GRAPHICS_RENDERER STREQUAL "VULKAN"))
     # ---- 3D house demo (EasyGL and Vulkan) -----------------------------------
     add_executable(cna_house3d_demo examples/house3d_demo.cpp)
 
@@ -343,14 +343,14 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "OPENGLES" OR CNA_GRAPH
         set_target_properties(cna_house3d_demo PROPERTIES SUFFIX ".html")
         # wasm-ld resolves circular static-lib references without linker groups.
         target_link_libraries(cna_house3d_demo PRIVATE
-            CNA ${BACKEND_TARGET} SDL3::SDL3-static SHARP_RUNTIME)
+            CNA ${RENDERER_TARGET} SDL3::SDL3-static SHARP_RUNTIME)
         # plan_glbackends.md GLB-9 (revisited): MIN_WEBGL_VERSION/MAX_WEBGL_VERSION must match
         # whichever GL profile this target is actually compiled for -- pre-GLB-9 this was
         # hardcoded to WebGL 2 unconditionally, which would have forced a WebGL 2 context even
-        # under -DCNA_GRAPHICS_BACKEND=WEBGL1 (contradicting EasyGLGraphicsBackend's own
+        # under -DCNA_GRAPHICS_RENDERER=WEBGL1 (contradicting EasyGLRenderer's own
         # SDL_GL_CONTEXT_MAJOR_VERSION=2 request for that profile, GLB-8) -- found while verifying
         # GLB-36's real emcc WEBGL1 build.
-        if(CNA_GRAPHICS_BACKEND STREQUAL "WEBGL1")
+        if(CNA_GRAPHICS_RENDERER STREQUAL "WEBGL1")
             set(_cna_house3d_min_webgl_version 1)
             set(_cna_house3d_max_webgl_version 1)
         else()
@@ -367,8 +367,8 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "OPENGLES" OR CNA_GRAPH
         )
     else()
         # ---- Native desktop --------------------------------------------------
-        # The CNA library and the EasyGL backend static lib have circular symbol
-        # references (backend uses Color/Rectangle from CNA, CNA uses backend
+        # The CNA library and the EasyGL renderer static lib have circular symbol
+        # references (renderer uses Color/Rectangle from CNA, CNA uses renderer
         # interfaces); wrap them in a linker group so GNU ld resolves both.
         if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32 AND NOT APPLE)
             target_link_libraries(cna_house3d_demo PRIVATE

@@ -2,7 +2,7 @@
 // behaviours that can ONLY be observed by manipulating the DOM BEFORE the Emscripten module ever
 // loads -- CNA_HtmlDom_EnsureRoot's own "capture the canvas's pre-existing visibility" and "detect
 // an existing conflicting #cna-dom-root" logic both run once, synchronously, inside the very first
-// backend construction, which happens extremely early (as part of the module's own bootstrap
+// renderer construction, which happens extremely early (as part of the module's own bootstrap
 // script executing, before this harness's own JS could ever run first via a normal page-load
 // hook). `page.route()` HTML-response interception is the one thing that reliably wins that race:
 // it rewrites the page's OWN HTML source text before the browser ever parses it, so the injected
@@ -78,7 +78,7 @@ async function runIdCollisionCheck(browser) {
             await route.fulfill({ response, body });
         });
         await page.goto(url, { waitUntil: 'domcontentloaded' });
-        // No real #cna-dom-viewport can ever appear here (the backend refuses to proceed), so
+        // No real #cna-dom-viewport can ever appear here (the renderer refuses to proceed), so
         // waiting for the surface would hang -- give the module a fixed window to attempt (and
         // fail) its own init instead.
         await page.waitForTimeout(2000);
@@ -96,7 +96,7 @@ async function runIdCollisionCheck(browser) {
                     `${state.conflictStillOwnedByHost} viewportCreated=${state.viewportCreated} ` +
                     `moduleRoot=${JSON.stringify(state.moduleRoot)} sawRefusalMessage=${sawRefusal}`);
         console.log(`[${ok ? 'PASS' : 'FAIL'}] HTMLDOM-115: a pre-existing, host-page-owned element ` +
-                    `with id "cna-dom-root" is never silently adopted or replaced -- the backend ` +
+                    `with id "cna-dom-root" is never silently adopted or replaced -- the renderer ` +
                     `logs a clear refusal and does not create its own DOM surface at all, rather ` +
                     `than corrupting or conflating itself with the host's own unrelated element`);
         return ok;

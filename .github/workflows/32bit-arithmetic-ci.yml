@@ -34,9 +34,9 @@ on:
       - 'tools/media/**'
       - 'tools/graphics/framebuffer_allocation_32bit_check.cpp'
       - 'tools/graphics/texture_allocation_32bit_check.cpp'
-      - 'modules/renderers/software/include/CNA/Internal/Backends/Software/SoftwareFramebufferAllocation.hpp'
+      - 'modules/renderers/software/include/CNA/Internal/Renderers/Software/SoftwareFramebufferAllocation.hpp'
       - 'modules/renderers/software/src/SoftwareFramebufferAllocation.cpp'
-      - 'modules/renderers/software/include/CNA/Internal/Backends/Software/SoftwareTextureAllocation.hpp'
+      - 'modules/renderers/software/include/CNA/Internal/Renderers/Software/SoftwareTextureAllocation.hpp'
       - 'modules/renderers/software/src/SoftwareTextureAllocation.cpp'
       - '.github/workflows/32bit-arithmetic-ci.yml'
   pull_request:
@@ -48,9 +48,9 @@ on:
       - 'tools/media/**'
       - 'tools/graphics/framebuffer_allocation_32bit_check.cpp'
       - 'tools/graphics/texture_allocation_32bit_check.cpp'
-      - 'modules/renderers/software/include/CNA/Internal/Backends/Software/SoftwareFramebufferAllocation.hpp'
+      - 'modules/renderers/software/include/CNA/Internal/Renderers/Software/SoftwareFramebufferAllocation.hpp'
       - 'modules/renderers/software/src/SoftwareFramebufferAllocation.cpp'
-      - 'modules/renderers/software/include/CNA/Internal/Backends/Software/SoftwareTextureAllocation.hpp'
+      - 'modules/renderers/software/include/CNA/Internal/Renderers/Software/SoftwareTextureAllocation.hpp'
       - 'modules/renderers/software/src/SoftwareTextureAllocation.cpp'
       - '.github/workflows/32bit-arithmetic-ci.yml'
   workflow_dispatch: {}

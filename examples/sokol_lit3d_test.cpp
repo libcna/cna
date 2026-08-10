@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MS-PL
-// plan_sokol.md SOKOL-21: textured and lit 3D proof for the sokol_gfx graphics backend -- real
+// plan_sokol.md SOKOL-21: textured and lit 3D proof for the sokol_gfx graphics renderer -- real
 // BasicEffect.TextureEnabled and BasicEffect.LightingEnabled draws, every result verified by
 // reading the rendered pixels back off the real back buffer.
 //
 // The scene reuses sokol_3d_test.cpp's screen-aligned-quad-under-orthographic-projection
 // technique so expected colours follow from the effect's own math rather than from anything
-// backend-specific.
+// renderer-specific.
 //
 // Check A -- an untinted textured quad (white diffuse, VertexColorEnabled off) renders the
 //   texture's own colour.
@@ -244,7 +244,7 @@ public:
         }
         ExpectPixel("an opaque texel (red) is not discarded",
                     Rectangle(200, 20, 1, 1), Color(255, 0, 0, 255));
-        // The translucent corner is drawn but this backend's AlphaTest default is "always pass"
+        // The translucent corner is drawn but this renderer's AlphaTest default is "always pass"
         // (GpuDrawParams::alphaTest defaults to {0,0,1,1}) -- BasicEffect itself has no alpha-test
         // knob, so this check instead confirms the corner renders WITH its real alpha through
         // AlphaBlend: over a black clear, 64/255 alpha yellow blends to a dim, not full-bright,

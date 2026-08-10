@@ -1,20 +1,20 @@
 // SPDX-License-Identifier: MS-PL
 // Task 680: SDL_Renderer Texture2D::SetData startIndex/elementCount slice pixel test.
 //
-// The existing backend-agnostic examples/easygl_texture2d_partial_rect_test.cpp (Task 170)
+// The existing renderer-agnostic examples/easygl_texture2d_partial_rect_test.cpp (Task 170)
 // exercises the startIndex/elementCount slicing math with a pure SetData()-then-GetData()
 // round trip and no framebuffer readback at all. Per Task 678's finding, Texture2D::GetData
 // never touches the GPU texture (it is a CPU-side cache read), so that CPU-side slicing
-// arithmetic (in the shared, backend-agnostic Texture2D::SetData(level, rect, data,
+// arithmetic (in the shared, renderer-agnostic Texture2D::SetData(level, rect, data,
 // startIndex, elementCount) -- "src = startIndex + row * w + col") is guaranteed correct
-// identically on every backend by construction. The genuinely backend-specific question,
+// identically on every renderer by construction. The genuinely renderer-specific question,
 // mirroring Task 679: once that slice has been merged into the per-level CPU buffer and
-// handed to SdlTextureBackend::UpdatePixels() (which always re-uploads the WHOLE merged
+// handed to SdlTextureRenderer::UpdatePixels() (which always re-uploads the WHOLE merged
 // buffer via SDL_UpdateTexture(texture, nullptr, ...)), does the REAL GPU texture actually
 // contain the correct pixels when drawn -- not just what the CPU cache reports.
 //
 // Requires PresentationMode::NativeBackBuffer (Task 915 finding): SDL_RenderReadPixels
-// operates in physical output coordinates, while this backend's default presentation mode
+// operates in physical output coordinates, while this renderer's default presentation mode
 // (FixedHeightDynamicWidth) does not map logical pixels 1:1 to physical ones.
 //
 // Design: direct port of Task 170A's scenario. A 4x1 texture filled entirely Red, then a

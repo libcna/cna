@@ -16,15 +16,15 @@
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
-#include "CNA/Internal/Backends/Ascii/AsciiQuantizer.hpp"
-#include "CNA/Internal/Backends/Ascii/AsciiFontAtlas.hpp"
+#include "CNA/Internal/Renderers/Ascii/AsciiQuantizer.hpp"
+#include "CNA/Internal/Renderers/Ascii/AsciiFontAtlas.hpp"
 
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <vector>
 
-using namespace CNA::Internal::Backends::Ascii;
+using namespace CNA::Internal::Renderers::Ascii;
 
 namespace
 {

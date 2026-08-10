@@ -22,22 +22,22 @@
 //     result:  stripe 0 = step 4, stripe 1 = step 3, ... stripe 4 = step 0, stripes 5.. = clear
 //
 // One readback therefore proves BOTH that every draw happened (each owns exactly one final stripe)
-// and that they happened in the exact public order (a reordered pair swaps two stripes). A backend
-// that drops the last 3D draw shows the clear colour where that step's stripe must be; a backend
+// and that they happened in the exact public order (a reordered pair swaps two stripes). A renderer
+// that drops the last 3D draw shows the clear colour where that step's stripe must be; a renderer
 // that replays all sprites and then all 3D draws shows the stripes permuted by family. The two
 // failure shapes are distinguishable, which is the whole point.
 //
-// Every stripe is FULL HEIGHT, so nothing here depends on whether a backend's readback or its
+// Every stripe is FULL HEIGHT, so nothing here depends on whether a renderer's readback or its
 // render-target sampling is Y-flipped (REMED-GFX-067/147/153 are not this file's subject). The
 // palette is 0/255-only, an exact fixed point of sRGB encoding, so every comparison is byte-exact
-// on sRGB backends too. Clip-space stripe coordinates are used for the 3D family, so this file
+// on sRGB renderers too. Clip-space stripe coordinates are used for the 3D family, so this file
 // cannot accidentally exercise the viewport-segmentation machinery (REMED-GFX-063/065) instead of
 // the ordering under test.
 //
 // Two confounds are separated rather than assumed away:
 //
 //   * EFFECT AND BUFFER LIFETIME. Leg A-F hold their Effect, VertexBuffer and IndexBuffer objects
-//     as long-lived members, so a deferred backend replaying after they died cannot be blamed. Leg
+//     as long-lived members, so a deferred renderer replaying after they died cannot be blamed. Leg
 //     L then repeats the canonical sequence with a scope-LOCAL effect and local buffers, exactly as
 //     REMED-GFX-155's leg I0 wrote it, so lifetime is measured on its own.
 //   * WHAT THE EFFECT ACTUALLY SHADES. Legs G/H use a PARITY oracle: the identical 3D draw is
@@ -67,7 +67,7 @@
 //   J  clears between families                   before, between and after the two families, both
 //                                                orders, alternating Clear/draw runs, and two
 //                                                consecutive Clears (REMED-GFX-156)
-//   P  every family ACROSS a Clear boundary      REMED-GFX-156: a backend that splits its bind
+//   P  every family ACROSS a Clear boundary      REMED-GFX-156: a renderer that splits its bind
 //                                                cycle into two native passes at the Clear must
 //                                                rebuild all pass state for the second one; parity
 //                                                against the same draw at the head of a fresh pass
@@ -135,7 +135,7 @@ using namespace Microsoft::Xna::Framework::Graphics;
 namespace
 {
     /**
-     * @brief Whether this backend rasterizes at all.
+     * @brief Whether this renderer rasterizes at all.
      *
      * HEADLESS performs no rasterization, so REMED-GFX-127/130's contract makes every readback
      * reject deterministically. There is no ordering result to observe there; the legs assert that
@@ -143,91 +143,91 @@ namespace
      */
     /** @brief Whether the public backbuffer readback works, so the backbuffer legs can assert. */
     /** @brief Whether stock 3D geometry rasterizes here at all. */
-#if defined(CNA_BACKEND_HEADLESS)
+#if defined(CNA_RENDERER_HEADLESS)
     constexpr bool kRasterizes = false;
     constexpr bool kReadsBackbuffer = false;
     constexpr bool kDraws3D = false;
-    constexpr const char* kBackendName = "HEADLESS";
-#elif defined(CNA_BACKEND_SOFTWARE)
+    constexpr const char* kRendererName = "HEADLESS";
+#elif defined(CNA_RENDERER_SOFTWARE)
     constexpr bool kRasterizes = true;
     constexpr bool kReadsBackbuffer = true;
     constexpr bool kDraws3D = true;
-    constexpr const char* kBackendName = "SOFTWARE";
-#elif defined(CNA_BACKEND_EASYGL)
+    constexpr const char* kRendererName = "SOFTWARE";
+#elif defined(CNA_RENDERER_EASYGL)
     constexpr bool kRasterizes = true;
     constexpr bool kReadsBackbuffer = true;
     constexpr bool kDraws3D = true;
-    constexpr const char* kBackendName = "EASYGL";
-#elif defined(CNA_BACKEND_BGFX)
+    constexpr const char* kRendererName = "EASYGL";
+#elif defined(CNA_RENDERER_BGFX)
     constexpr bool kRasterizes = true;
     constexpr bool kReadsBackbuffer = true;
     constexpr bool kDraws3D = true;
-    constexpr const char* kBackendName = "BGFX";
-#elif defined(CNA_BACKEND_VULKAN)
+    constexpr const char* kRendererName = "BGFX";
+#elif defined(CNA_RENDERER_VULKAN)
     constexpr bool kRasterizes = true;
     constexpr bool kReadsBackbuffer = true;
     constexpr bool kDraws3D = true;
-    constexpr const char* kBackendName = "VULKAN";
-#elif defined(CNA_BACKEND_WEBGPU)
+    constexpr const char* kRendererName = "VULKAN";
+#elif defined(CNA_RENDERER_WEBGPU)
     constexpr bool kRasterizes = true;
     constexpr bool kReadsBackbuffer = true;
     constexpr bool kDraws3D = true;
-    constexpr const char* kBackendName = "WEBGPU";
-#elif defined(CNA_BACKEND_SDL_GPU)
+    constexpr const char* kRendererName = "WEBGPU";
+#elif defined(CNA_RENDERER_SDL_GPU)
     // SdlGpu has no ReadBackbuffer override at all, so GetBackBufferData raises. Its render-target
     // legs still carry the whole contract.
     constexpr bool kRasterizes = true;
     constexpr bool kReadsBackbuffer = false;
     constexpr bool kDraws3D = true;
-    constexpr const char* kBackendName = "SDL_GPU";
-#elif defined(CNA_BACKEND_SDL_RENDERER)
+    constexpr const char* kRendererName = "SDL_GPU";
+#elif defined(CNA_RENDERER_SDL_RENDERER)
     constexpr bool kRasterizes = true;
     constexpr bool kReadsBackbuffer = true;
     constexpr bool kDraws3D = false;
-    constexpr const char* kBackendName = "SDL_RENDERER";
-#elif defined(CNA_BACKEND_ASCII)
+    constexpr const char* kRendererName = "SDL_RENDERER";
+#elif defined(CNA_RENDERER_ASCII)
     constexpr bool kRasterizes = true;
     constexpr bool kReadsBackbuffer = true;
     constexpr bool kDraws3D = false;
-    constexpr const char* kBackendName = "ASCII";
-#elif defined(CNA_BACKEND_CANVAS)
+    constexpr const char* kRendererName = "ASCII";
+#elif defined(CNA_RENDERER_CANVAS)
     constexpr bool kRasterizes = true;
     constexpr bool kReadsBackbuffer = true;
     constexpr bool kDraws3D = true;
-    constexpr const char* kBackendName = "CANVAS";
-#elif defined(CNA_BACKEND_FREEDIRECT)
+    constexpr const char* kRendererName = "CANVAS";
+#elif defined(CNA_RENDERER_FREEDIRECT)
     constexpr bool kRasterizes = true;
     constexpr bool kReadsBackbuffer = true;
     constexpr bool kDraws3D = false;
-    constexpr const char* kBackendName = "FREEDIRECT";
-#elif defined(CNA_BACKEND_D3D9)
+    constexpr const char* kRendererName = "FREEDIRECT";
+#elif defined(CNA_RENDERER_D3D9)
     constexpr bool kRasterizes = true;
     constexpr bool kReadsBackbuffer = true;
     constexpr bool kDraws3D = true;
-    constexpr const char* kBackendName = "D3D9";
-#elif defined(CNA_BACKEND_D3D11)
+    constexpr const char* kRendererName = "D3D9";
+#elif defined(CNA_RENDERER_D3D11)
     constexpr bool kRasterizes = true;
     constexpr bool kReadsBackbuffer = true;
     constexpr bool kDraws3D = true;
-    constexpr const char* kBackendName = "D3D11";
-#elif defined(CNA_BACKEND_D3D12)
+    constexpr const char* kRendererName = "D3D11";
+#elif defined(CNA_RENDERER_D3D12)
     constexpr bool kRasterizes = true;
     constexpr bool kReadsBackbuffer = true;
     constexpr bool kDraws3D = true;
-    constexpr const char* kBackendName = "D3D12";
-#elif defined(CNA_BACKEND_LLGL)
+    constexpr const char* kRendererName = "D3D12";
+#elif defined(CNA_RENDERER_LLGL)
     constexpr bool kRasterizes = true;
     constexpr bool kReadsBackbuffer = true;
     constexpr bool kDraws3D = true;
-    constexpr const char* kBackendName = "LLGL";
+    constexpr const char* kRendererName = "LLGL";
 #else
-#error "REMED-GFX-157: this backend has no declared SpriteBatch/3D ordering contract."
+#error "REMED-GFX-157: this renderer has no declared SpriteBatch/3D ordering contract."
 #endif
 
     /**
-     * @brief The quads this file's 3D family draws are XNA BACK faces, on every backend.
+     * @brief The quads this file's 3D family draws are XNA BACK faces, on every renderer.
      *
-     * This constant used to be `kCcwCullsSpriteWoundQuad`, a per-backend declaration built on a
+     * This constant used to be `kCcwCullsSpriteWoundQuad`, a per-renderer declaration built on a
      * premise that was wrong at the source. It claimed FNA's SpriteBatch emits its corners as
      * "TL, BL, TR, BR, so its first triangle is TL -> BL -> TR", and that the quads drawn here
      * (TL -> BL -> BR) were "the SAME winding" and therefore front faces that
@@ -238,14 +238,14 @@ namespace
      * indices the two sprite triangles are TL -> TR -> BL and BR -> BL -> TR, both CLOCKWISE as
      * displayed. The quads here are TL -> BL -> BR, the OPPOSITE winding, i.e. counter-clockwise
      * as displayed and therefore XNA BACK faces. So CullCounterClockwise must REMOVE them
-     * everywhere, and the four backends that did so were correct all along; WEBGPU, which kept
-     * them, was the one inverted backend (REMED-GFX-160, fixed).
+     * everywhere, and the four renderers that did so were correct all along; WEBGPU, which kept
+     * them, was the one inverted renderer (REMED-GFX-160, fixed).
      *
      * The contract itself is now measured directly, on both windings and every cull mode, by
      * examples/frontface_winding_test.cpp. Leg M5 below asserts it unconditionally.
      */
 
-    /** @brief How a backend replays a bind cycle's two draw families relative to each other. */
+    /** @brief How a renderer replays a bind cycle's two draw families relative to each other. */
     enum class Replay
     {
         PublicOrder,            ///< The contract: exactly the order the game issued them in.
@@ -254,30 +254,30 @@ namespace
     };
 
     /**
-     * @brief This backend's measured family-replay order.
+     * @brief This renderer's measured family-replay order.
      *
-     * Anything but `PublicOrder` is a declared, still-open defect on that backend, and the staircase
+     * Anything but `PublicOrder` is a declared, still-open defect on that renderer, and the staircase
      * below asserts the COLLAPSED result so the declaration stays falsifiable in both directions --
-     * the day the backend is corrected, these checks fail and this constant has to be turned over
+     * the day the renderer is corrected, these checks fail and this constant has to be turned over
      * deliberately rather than silently.
      *
      * WEBGPU replayed all of a cycle's 3D draws and then all of its sprites, so `SpriteBatch -> 3D`
      * came out inverted while `3D -> SpriteBatch` looked correct. That was the same root cause
      * REMED-GFX-157 corrected on Vulkan and bgfx (which grouped the other way round), and
-     * REMED-GFX-159 has now corrected it here: every backend owes public order, so this constant is
+     * REMED-GFX-159 has now corrected it here: every renderer owes public order, so this constant is
      * `PublicOrder` everywhere and the enum is kept only so a regression names the shape it
      * regressed to instead of merely reporting permuted stripes.
      */
     constexpr Replay kReplay = Replay::PublicOrder;
 
-    /** @brief True when this backend honours public order between the two families. */
+    /** @brief True when this renderer honours public order between the two families. */
     constexpr bool kPublicFamilyOrder = (kReplay == Replay::PublicOrder);
 
     // REMED-GFX-161 (RESOLVED, 2026-07-30): the discarded first-read warm-up this file used to carry
     // for WEBGPU is gone. The measured symptom -- the very first GetBackBufferData of a run left part
     // of the caller's buffer holding its poison prefill while later reads were correct -- was the
     // pre-REMED-GFX-165 rectangle-less dimension source: GraphicsDevice::GetBackBufferData sized the
-    // region from backend_->GetViewportSize() evaluated BEFORE the read's own EnsureFrameRendered
+    // region from renderer_->GetViewportSize() evaluated BEFORE the read's own EnsureFrameRendered
     // realised the surface, so on the first frame WebGPU's aspect-scaled viewport (53x32 for a 64x32
     // backbuffer) undersized the region and a trailing block stayed poison. GFX-165 sizes the region
     // from the authoritative PresentationParameters, so the first read is now complete; leg A asserts
@@ -286,9 +286,9 @@ namespace
     /**
      * @brief Whether a `Clear()` issued AFTER a draw in the SAME bind cycle wipes that draw.
      *
-     * False on a backend whose only clear mechanism for a pass is its load action, which
+     * False on a renderer whose only clear mechanism for a pass is its load action, which
      * necessarily runs before every draw of that pass. REMED-GFX-143's fixture declares the same
-     * property per backend under the name `clearAfterDrawWinsOnBackbuffer`; leg J measures it on a
+     * property per renderer under the name `clearAfterDrawWinsOnBackbuffer`; leg J measures it on a
      * PreserveContents render target and is not this task's subject either way -- it is declared so
      * that a clear-ordering regression cannot hide inside a family-ordering fixture.
      *
@@ -300,18 +300,18 @@ namespace
      *
      * REMED-GFX-156 fixed both: each cuts its bind cycle into one native render pass per observable
      * Clear, so the declaration is unconditional and leg J -- which was SKIPPED, not failing, on
-     * exactly those two backends, and is this file's only Clear coverage -- now runs everywhere.
+     * exactly those two renderers, and is this file's only Clear coverage -- now runs everywhere.
      */
     constexpr bool kClearAfterDrawWins = true;
 
     /**
-     * @brief Whether `GetBackBufferData` rejects on a backend that rasterizes nothing.
+     * @brief Whether `GetBackBufferData` rejects on a renderer that rasterizes nothing.
      *
      * REMED-GFX-127/130 made the texture and render-target readbacks reject rather than return a
      * fabricated image. REMED-GFX-162 brought HEADLESS's BACKBUFFER readback under the same
      * contract: it formerly returned successfully and FILLED the caller's buffer with the last
      * Clear() colour (a caller could not distinguish a non-rasterizing device from a rendered
-     * frame), and now raises `System::NotSupportedException` instead. So every backend -- rasterizing
+     * frame), and now raises `System::NotSupportedException` instead. So every renderer -- rasterizing
      * or not -- rejects a readback it cannot honestly satisfy, hence `true` for all of them.
      */
     constexpr bool kBackbufferReadRejectsWhenNonRasterizing = true;
@@ -394,7 +394,7 @@ namespace
          *
          * Empty -- the shape every leg before N uses -- means "whatever effect the staircase itself
          * was given", so one sequence stays inside one 3D command family. Leg N sets it per step
-         * precisely so a sequence spans SEVERAL of them: a deferred backend that keeps one queue
+         * precisely so a sequence spans SEVERAL of them: a deferred renderer that keeps one queue
          * per stock effect can invert two 3D draws exactly as it can invert a 3D draw against a
          * sprite, and only a sequence whose steps land in different queues can see it.
          */
@@ -503,7 +503,7 @@ class SpriteBatch3DOrderTest : public Game
         }
     };
 
-    /// Reads @p dest back, pre-filled with a poison value so a backend that writes nothing cannot
+    /// Reads @p dest back, pre-filled with a poison value so a renderer that writes nothing cannot
     /// be mistaken for one that wrote transparent black.
     Readback Read(GraphicsDevice& dev, const Dest& dest)
     {
@@ -534,7 +534,7 @@ class SpriteBatch3DOrderTest : public Game
         }
         if (!r.ok())
         {
-            skip(label + ": " + dest.name + " oracle unavailable on " + kBackendName + " (" +
+            skip(label + ": " + dest.name + " oracle unavailable on " + kRendererName + " (" +
                  (r.threwNotSupported ? "NotSupportedException" : r.otherWhat) +
                  ") -- boundary recorded");
             return false;
@@ -556,7 +556,7 @@ class SpriteBatch3DOrderTest : public Game
      * @brief The colour stripe @p stripe of @p r holds, or a poison value when it is not uniform.
      *
      * A one-pixel margin is left on every side of the stripe: stripe boundaries fall exactly on a
-     * pixel edge, and backends legitimately differ on the fill rule for a primitive edge, so an
+     * pixel edge, and renderers legitimately differ on the fill rule for a primitive edge, so an
      * interior sample is what makes this comparison byte-exact rather than fill-rule-dependent.
      */
     static Color StripeColor(const Readback& r, int stripe)
@@ -808,7 +808,7 @@ class SpriteBatch3DOrderTest : public Game
         case Draw3D::BufferPrimitivesRange:
         {
             // The wanted quad sits at vertex 6 of a 12-vertex buffer whose first six vertices are a
-            // degenerate quad, so a backend that ignores vertexStart draws nothing visible rather
+            // degenerate quad, so a renderer that ignores vertexStart draws nothing visible rather
             // than the right thing by accident (REMED-GFX-119/125's contract).
             VertexPositionTexture q[12];
             QuadVPT(0, 0, q);          // degenerate: zero width
@@ -871,7 +871,7 @@ class SpriteBatch3DOrderTest : public Game
         Readback r = Read(dev, dest);
         if (!Readable(r, dest, label)) return;
 
-        /// The replay position of step @p i under this backend's declared family order. Steps of
+        /// The replay position of step @p i under this renderer's declared family order. Steps of
         /// the same family always keep their relative order, so the family key dominates and the
         /// issue index breaks ties.
         auto rank = [&](int i) -> long long {
@@ -929,7 +929,7 @@ class SpriteBatch3DOrderTest : public Game
     {
         if (!kDraws3D)
         {
-            skip(prefix + ": skipped -- this backend does not rasterize stock 3D geometry");
+            skip(prefix + ": skipped -- this renderer does not rasterize stock 3D geometry");
             return;
         }
         Staircase(dev, dest, { {Fam::Sprite, kRed}, {Fam::Three, kBlue} },
@@ -971,7 +971,7 @@ class SpriteBatch3DOrderTest : public Game
         if (Same(ctrlColor, kClear))
         {
             skip(label + ": skipped -- this draw entry point / effect renders nothing on " +
-                 kBackendName + " even as the FIRST draw of a cycle, so it cannot measure ordering");
+                 kRendererName + " even as the FIRST draw of a cycle, so it cannot measure ordering");
             return;
         }
 
@@ -991,11 +991,11 @@ class SpriteBatch3DOrderTest : public Game
               ", and the sprite stripe is " + ColorText(sprite)));
     }
 
-    /// True when this backend may be asserted on for inter-family order; skips and says so if not.
+    /// True when this renderer may be asserted on for inter-family order; skips and says so if not.
     bool RequirePublicFamilyOrder(const std::string& label)
     {
         if (kPublicFamilyOrder) return true;
-        skip(label + ": skipped -- " + kBackendName + " replays a bind cycle's draws grouped by "
+        skip(label + ": skipped -- " + kRendererName + " replays a bind cycle's draws grouped by "
              "family, not in public order (declared open finding); the staircase legs assert that "
              "collapsed shape instead");
         return false;
@@ -1009,7 +1009,7 @@ class SpriteBatch3DOrderTest : public Game
         Dest bb;
         if (!kRasterizes)
         {
-            // A non-rasterizing backend has no ordering result to observe, but the sequence must
+            // A non-rasterizing renderer has no ordering result to observe, but the sequence must
             // still be legal and REMED-GFX-127/130's contract must still reject the readback
             // deterministically rather than fabricating a frame. That is what is asserted here.
             bool threw = false;
@@ -1021,9 +1021,9 @@ class SpriteBatch3DOrderTest : public Game
             }
             catch (...) { threw = true; }
             check(!threw, "A0 a mixed SpriteBatch/3D bind cycle is legal on " +
-                          std::string(kBackendName) + " even though nothing rasterizes");
+                          std::string(kRendererName) + " even though nothing rasterizes");
             Readback r = Read(dev, bb);
-            info(std::string("A0 the backbuffer readback on ") + kBackendName + " " +
+            info(std::string("A0 the backbuffer readback on ") + kRendererName + " " +
                  (r.threwNotSupported ? "threw NotSupportedException"
                   : r.threwSomethingElse ? ("threw: " + r.otherWhat)
                                          : "returned without throwing"));
@@ -1035,7 +1035,7 @@ class SpriteBatch3DOrderTest : public Game
                  (!r.ok() ? "rejected"
                   : stillPoison ? "left the caller's buffer completely untouched"
                                 : "filled the caller's buffer"));
-            // REMED-GFX-127/130 established that a backend which rasterizes nothing must REJECT a
+            // REMED-GFX-127/130 established that a renderer which rasterizes nothing must REJECT a
             // readback rather than hand back scratch as if it were a rendered frame. That contract
             // was established for the TEXTURE and RENDER-TARGET readbacks; REMED-GFX-162 extended it
             // to `GraphicsDevice.GetBackBufferData` on HEADLESS, which formerly filled the caller's
@@ -1043,7 +1043,7 @@ class SpriteBatch3DOrderTest : public Game
             // overload/precedence/destination-integrity oracle lives in
             // backbuffer_headless_reject_test.cpp; this leg just asserts the rejection is in force.
             check(r.ok() == !kBackbufferReadRejectsWhenNonRasterizing,
-                  "A0 the backbuffer readback behaves as declared for a non-rasterizing backend "
+                  "A0 the backbuffer readback behaves as declared for a non-rasterizing renderer "
                   "(declared: " +
                   std::string(kBackbufferReadRejectsWhenNonRasterizing ? "rejects"
                                                                        : "does not reject") + ")");
@@ -1051,7 +1051,7 @@ class SpriteBatch3DOrderTest : public Game
         }
         if (!kReadsBackbuffer)
         {
-            skip("A: skipped -- no public backbuffer readback on " + std::string(kBackendName) +
+            skip("A: skipped -- no public backbuffer readback on " + std::string(kRendererName) +
                  "; legs B and C carry the whole contract");
             return;
         }
@@ -1128,7 +1128,7 @@ class SpriteBatch3DOrderTest : public Game
             SpriteStripes(da, 0, 2, kRed);
             Draw3DStripes(dev, 0, 1, kGreen);
             Readback ra = Read(dev, da);
-            // The public backbuffer oracle reads whatever is BOUND on the backends whose readback
+            // The public backbuffer oracle reads whatever is BOUND on the renderers whose readback
             // follows the binding, so the backbuffer has to be current to be read. Every draw of
             // both cycles is already queued at this point, so this unbind is not a barrier between
             // the two families -- it is the end of the target's bind cycle.
@@ -1250,11 +1250,11 @@ class SpriteBatch3DOrderTest : public Game
             catch (const System::NotSupportedException& e)
             {
                 skip(std::string(c.name) + ": skipped -- NotSupportedException on " +
-                     kBackendName + " (" + e.what() + ")");
+                     kRendererName + " (" + e.what() + ")");
             }
             catch (const std::exception& e)
             {
-                skip(std::string(c.name) + ": skipped -- threw on " + kBackendName + " (" +
+                skip(std::string(c.name) + ": skipped -- threw on " + kRendererName + " (" +
                      e.what() + ")");
             }
         }
@@ -1288,11 +1288,11 @@ class SpriteBatch3DOrderTest : public Game
             catch (const System::NotSupportedException& e)
             {
                 skip(std::string(c.name) + ": skipped -- NotSupportedException on " +
-                     kBackendName + " (" + e.what() + ")");
+                     kRendererName + " (" + e.what() + ")");
             }
             catch (const std::exception& e)
             {
-                skip(std::string(c.name) + ": skipped -- threw on " + kBackendName + " (" +
+                skip(std::string(c.name) + ": skipped -- threw on " + kRendererName + " (" +
                      e.what() + ")");
             }
         }
@@ -1427,7 +1427,7 @@ class SpriteBatch3DOrderTest : public Game
         static_assert(kClearAfterDrawWins,
                       "REMED-GFX-156: leg J used to be SKIPPED behind this gate on SDL_GPU and "
                       "WebGPU, which is how a whole file's worth of Clear coverage measured "
-                      "nothing on the two backends that needed it. A backend that regresses must "
+                      "nothing on the two renderers that needed it. A renderer that regresses must "
                       "restore the declaration rather than re-introduce the skip.");
         RenderTarget2D rt(dev, kRTW, kRTH, false, SurfaceFormat::Color, DepthFormat::None, 0,
                           RenderTargetUsage::PreserveContents);
@@ -1515,7 +1515,7 @@ class SpriteBatch3DOrderTest : public Game
 
         // J6 two consecutive Clears with nothing between them: the LAST one wins, and it costs no
         // more than the one pass a single leading Clear costs (asserted structurally by the
-        // per-backend native traces, not here).
+        // per-renderer native traces, not here).
         {
             Begin(dev, d);
             SpriteStripes(d, 0, 4, kRed);
@@ -1535,7 +1535,7 @@ class SpriteBatch3DOrderTest : public Game
     /**
      * @brief REMED-GFX-156: every draw entry point and every stock effect ACROSS a Clear boundary.
      *
-     * A backend that delivers an ordered mid-cycle Clear by cutting its bind cycle into two native
+     * A renderer that delivers an ordered mid-cycle Clear by cutting its bind cycle into two native
      * render passes has to rebuild, in the second pass, everything the first pass's end discarded:
      * the pipeline, the vertex and index buffers, the vertex declaration, the topology, the texture
      * and sampler bindings, the bind/resource groups, the blend, depth/stencil and rasterizer state,
@@ -1585,7 +1585,7 @@ class SpriteBatch3DOrderTest : public Game
                 if (Same(StripeColor(ctrl, 0), kClear))
                 {
                     skip(label + ": skipped -- this entry point / effect renders nothing on " +
-                         kBackendName + " even as the FIRST draw of a cycle");
+                         kRendererName + " even as the FIRST draw of a cycle");
                     continue;
                 }
 
@@ -1614,12 +1614,12 @@ class SpriteBatch3DOrderTest : public Game
             }
             catch (const System::NotSupportedException& e)
             {
-                skip(label + ": skipped -- NotSupportedException on " + kBackendName + " (" +
+                skip(label + ": skipped -- NotSupportedException on " + kRendererName + " (" +
                      e.what() + ")");
             }
             catch (const std::exception& e)
             {
-                skip(label + ": skipped -- threw on " + kBackendName + " (" + e.what() + ")");
+                skip(label + ": skipped -- threw on " + kRendererName + " (" + e.what() + ")");
             }
         }
 
@@ -1813,7 +1813,7 @@ class SpriteBatch3DOrderTest : public Game
 
         // M5 first: the winding question with NO SpriteBatch anywhere, so M1 below can be compared
         // against it instead of merely reported. Exactly one of the two culling modes must remove
-        // the quad; which one names this backend's front-face convention for this winding.
+        // the quad; which one names this renderer's front-face convention for this winding.
         auto cullProbe = [&](const RasterizerState& rs) {
             Begin(dev, bb);
             dev.setRasterizerStateProperty(rs);
@@ -1831,7 +1831,7 @@ class SpriteBatch3DOrderTest : public Game
              (underCw ? "drawn" : "culled"));
         check(underNone, "M5 the quad is drawn under CullNone, so the probe itself is sound");
         check(underCcw != underCw,
-              "M5 exactly one of the two culling modes removes the quad, so this backend honours "
+              "M5 exactly one of the two culling modes removes the quad, so this renderer honours "
               "RasterizerState.CullMode and has a definite front-face convention for this winding");
         check(!underCcw && underCw,
               std::string("M5 this quad (TL -> BL -> BR, counter-clockwise as displayed) is an XNA "
@@ -1932,10 +1932,10 @@ class SpriteBatch3DOrderTest : public Game
     /**
      * @brief N -- public order between 3D draws that use DIFFERENT stock effects.
      *
-     * Every leg above puts one sequence's 3D steps through one stock effect, so a backend keeping
+     * Every leg above puts one sequence's 3D steps through one stock effect, so a renderer keeping
      * one deferred queue per effect can replay those steps in issue order and still be reordering
      * everything else. REMED-GFX-159's ticket names only the SpriteBatch-against-3D direction, but
-     * on a backend whose replay is a fixed list of per-family loops the ten 3D families are ordered
+     * on a renderer whose replay is a fixed list of per-family loops the ten 3D families are ordered
      * against each other by exactly the same mechanism, and a game mixing a textured BasicEffect
      * with a vertex-colour one inside a cycle sees it without a SpriteBatch anywhere.
      *
@@ -1974,7 +1974,7 @@ class SpriteBatch3DOrderTest : public Game
             }
             catch (const std::exception& e)
             {
-                skip(tag + ": skipped -- threw on " + kBackendName + " (" + e.what() + ")");
+                skip(tag + ": skipped -- threw on " + kRendererName + " (" + e.what() + ")");
             }
         }
 
@@ -1991,7 +1991,7 @@ class SpriteBatch3DOrderTest : public Game
         }
         catch (const std::exception& e)
         {
-            skip(std::string("N5: skipped -- threw on ") + kBackendName + " (" + e.what() + ")");
+            skip(std::string("N5: skipped -- threw on ") + kRendererName + " (" + e.what() + ")");
         }
 
         dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
@@ -2083,7 +2083,7 @@ protected:
 
         std::printf("[INFO] REMED-GFX-157 SpriteBatch/3D public ordering on %s "
                     "(%d stripes, requested %dx%d backbuffer, actual %dx%d)\n",
-                    kBackendName, kStripes, kBBW, kBBH,
+                    kRendererName, kStripes, kBBW, kBBH,
                     dev.getPresentationParametersProperty().getBackBufferWidthProperty(),
                     dev.getPresentationParametersProperty().getBackBufferHeightProperty());
         std::fflush(stdout);
@@ -2105,7 +2105,7 @@ protected:
         LegCrossEffectOrder(dev);
 
         std::printf("[INFO] %s: %d/%d checks passed (%d skipped)\n",
-                    kBackendName, passCount_, totalCount_, skipCount_);
+                    kRendererName, passCount_, totalCount_, skipCount_);
         std::fflush(stdout);
         result_ = (passCount_ == totalCount_) ? 0 : 1;
         Exit();

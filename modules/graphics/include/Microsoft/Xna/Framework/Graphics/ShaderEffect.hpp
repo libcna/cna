@@ -9,7 +9,7 @@
 #include <string>
 #include <memory>
 
-namespace CNA::Internal::Backends { class IEffectBackend; }
+namespace CNA::Internal::Renderers { class IEffectRenderer; }
 
 namespace Microsoft::Xna::Framework::Graphics
 {
@@ -36,14 +36,14 @@ namespace Microsoft::Xna::Framework::Graphics
                            const std::string& vertSrc,
                            const std::string& fragSrc);
 
-        // Destructor defined in .cpp to avoid incomplete-type error on IEffectBackend.
+        // Destructor defined in .cpp to avoid incomplete-type error on IEffectRenderer.
         ~ShaderEffect();
 
-        /** @brief Returns true if the backend compiled the shader program successfully. */
+        /** @brief Returns true if the renderer compiled the shader program successfully. */
         NOXNA [[nodiscard]] bool IsEffectValid() const;
 
-        /** @brief Returns true while the native compiled-program backend is still alive. */
-        NOXNA [[nodiscard]] bool HasBackend() const { return effectBackend_ != nullptr; }
+        /** @brief Returns true while the native compiled-program renderer is still alive. */
+        NOXNA [[nodiscard]] bool HasRenderer() const { return effectRenderer_ != nullptr; }
 
         /** @brief Sets a column-major 4×4 matrix uniform by name. */
         NOXNA void SetUniformMat4(const char* name, const float* matrix);
@@ -100,7 +100,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * DrawIndexedPrimitives`/`DrawUserPrimitives` call (not just `SpriteBatch`), by
          * implementing `IEffectMatrices` the same way every stock effect
          * (`BasicEffect`/`AlphaTestEffect`/…) does — `World`/`View`/`Projection` set here are
-         * extracted by `GraphicsDevice::ExtractMatrices()` and forwarded to the backend's draw
+         * extracted by `GraphicsDevice::ExtractMatrices()` and forwarded to the renderer's draw
          * call, which binds them as `World`/`View`/`Projection` uniforms on the compiled GLSL
          * program (matching the uniform names every original XNA sample's own `.fx` source
          * already uses) when this effect is the one currently applied.
@@ -134,14 +134,14 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Returns the GLSL vertex shader source (Effect base override).
          *
-         * Allows backends to access source without depending on the ShaderEffect type.
+         * Allows renderers to access source without depending on the ShaderEffect type.
          */
         NOXNA [[nodiscard]] const std::string& GetVertexSource() const override;
 
         /**
          * @brief Returns the GLSL fragment shader source (Effect base override).
          *
-         * Allows backends to access source without depending on the ShaderEffect type.
+         * Allows renderers to access source without depending on the ShaderEffect type.
          */
         NOXNA [[nodiscard]] const std::string& GetFragmentSource() const override;
 
@@ -151,34 +151,34 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Creates a clone of this effect.
          *
-         * Recompiles a new backend program from the same GLSL source strings rather than
+         * Recompiles a new renderer program from the same GLSL source strings rather than
          * sharing the original's compiled program object — deliberate deviation from the other
          * concrete Effect subclasses' Clone() (which share GPU state implicitly, since CNA's
          * stock-effect pipelines are cached globally by state, not per-instance):
          * ShaderEffect uniquely owns a per-instance compiled program
-         * (`std::unique_ptr<IEffectBackend>`), so genuine sharing would need a reference-counted
-         * backend-ownership model, out of scope for this NOXNA extension.
+         * (`std::unique_ptr<IEffectRenderer>`), so genuine sharing would need a reference-counted
+         * renderer-ownership model, out of scope for this NOXNA extension.
          *
          * @return Pointer to the cloned Effect.
          */
         [[nodiscard]] Effect* Clone() override;
 
         /**
-         * @brief Returns the backend-specific compiled program for this effect (CNA extension).
+         * @brief Returns the renderer-specific compiled program for this effect (CNA extension).
          *
-         * Lets a backend (e.g. SpriteBatch) bind the same compiled program this ShaderEffect
+         * Lets a renderer (e.g. SpriteBatch) bind the same compiled program this ShaderEffect
          * uses, instead of maintaining a redundant separate copy.
          */
-        NOXNA [[nodiscard]] CNA::Internal::Backends::IEffectBackend* GetEffectBackendPtr() const override;
+        NOXNA [[nodiscard]] CNA::Internal::Renderers::IEffectRenderer* GetEffectRendererPtr() const override;
 
         /**
-         * @brief Task 1079: marks `GpuDrawParams::customEffectBackend` so a backend's 3D draw
+         * @brief Task 1079: marks `GpuDrawParams::customEffectRenderer` so a renderer's 3D draw
          * path binds this effect's own compiled program instead of one of its built-in
          * stride-dispatched shaders. Every other field is left at its default — unlike the stock
          * effects, a `ShaderEffect`'s own uniforms are set directly by the caller via
          * `SetUniformXxx()`/`SetTexture()`, not translated from XNA-shaped effect properties.
          */
-        NOXNA void FillGpuDrawParams(CNA::Internal::Backends::GpuDrawParams& params) const override;
+        NOXNA void FillGpuDrawParams(CNA::Internal::Renderers::GpuDrawParams& params) const override;
 
     protected:
         /**
@@ -187,15 +187,15 @@ namespace Microsoft::Xna::Framework::Graphics
         void OnApply() override;
 
         /**
-         * @brief Releases the compiled backend program before the base class marks this resource
+         * @brief Releases the compiled renderer program before the base class marks this resource
          * disposed (plan_sokol.md SOKOL-42).
          *
          * `Effect::Dispose(bool)` only reaches `GraphicsResource::Dispose(bool)`, which never
-         * touches `effectBackend_`. `GraphicsDevice::Dispose()` disposes tracked resources before
-         * tearing down the backend device/GL context, so without this override effectBackend_ is
+         * touches `effectRenderer_`. `GraphicsDevice::Dispose()` disposes tracked resources before
+         * tearing down the renderer device/GL context, so without this override effectRenderer_ is
          * only destroyed whenever this ShaderEffect's own C++ destructor happens to run -- possibly
          * long after that teardown -- e.g. a raw `glDeleteProgram` call after `sg_shutdown()` and
-         * SDL GL-context destruction on the Sokol backend.
+         * SDL GL-context destruction on the Sokol renderer.
          *
          * @param disposing True when called from Dispose(); false when called from the finalizer.
          */
@@ -204,7 +204,7 @@ namespace Microsoft::Xna::Framework::Graphics
     private:
         std::string vertSrc_;
         std::string fragSrc_;
-        std::unique_ptr<CNA::Internal::Backends::IEffectBackend> effectBackend_;
+        std::unique_ptr<CNA::Internal::Renderers::IEffectRenderer> effectRenderer_;
         Matrix world_      = Matrix::getIdentityProperty();
         Matrix view_       = Matrix::getIdentityProperty();
         Matrix projection_ = Matrix::getIdentityProperty();

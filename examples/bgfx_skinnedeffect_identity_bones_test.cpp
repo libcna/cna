@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MS-PL
-// Task 406: pixel test for SkinnedEffect's identity bone palette (Bgfx backend). See
+// Task 406: pixel test for SkinnedEffect's identity bone palette (Bgfx renderer). See
 // examples/easygl_skinnedeffect_identity_bones_test.cpp for the full derivation.
 //
 // Per Task 364's finding (tracked as Task 884, not fixed there or here): Bgfx's default
-// RasterizerState cull state is the only one of the 3 backends that actually matches FNA's
+// RasterizerState cull state is the only one of the 3 renderers that actually matches FNA's
 // real CullCounterClockwiseFace default, so it silently culls the standard NDC quad winding
 // used throughout this pixel-test family unless RasterizerState::CullNone is set
 // explicitly -- worked around here identically to prior Bgfx tests.

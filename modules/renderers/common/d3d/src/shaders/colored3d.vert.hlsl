@@ -1,5 +1,5 @@
 // Shader Model 5.0 (vs_5_0). Ported line-by-line from
-// src/CNA/Internal/Backends/Vulkan/shaders/colored3d.vert.glsl (Task 364/888/899 history).
+// src/CNA/Internal/Renderers/Vulkan/shaders/colored3d.vert.glsl (Task 364/888/899 history).
 //
 // Matrix convention (plan_dx.md design decision 14): cbuffer matrices are declared row_major so
 // the exact same byte layout XNA's CPU-side Matrix (row-major) uploads for Vulkan/EasyGL/Bgfx can
@@ -7,7 +7,7 @@
 // `mul(v, M)` here (row-vector convention) -- this is the standard XNA/HLSL idiom (matches
 // MonoGame's own DX11 HLSL effect sources) and is applied consistently across all 10 shader pairs.
 //
-// D3D-specific deviation from the GLSL source (not a bug carried over, a genuine backend
+// D3D-specific deviation from the GLSL source (not a bug carried over, a genuine renderer
 // difference): no `pos.y = -pos.y` flip. That flip exists only in the Vulkan shader to correct for
 // Vulkan's inverted-Y NDC vs OpenGL; D3D11's clip space already matches XNA's own convention
 // directly. Same for depth range: D3D11 (like Vulkan-with-this-project's depth-clip-control setup)

@@ -2,7 +2,7 @@
 // Task 891: verify EnvironmentMapEffect's base cube-map lerp target is scaled by the combined
 // texture x diffuse alpha, mirroring Task 395's own discriminating technique but for the BASE
 // lerp term instead of the specular term (shared source across EasyGL/Vulkan/Bgfx, mirroring
-// Task 950's one-source-3-backends pattern).
+// Task 950's one-source-3-renderers pattern).
 //
 // FNA's real PSEnvMap/PSEnvMapSpecular pixel shaders compute:
 //   envmap = SAMPLE_CUBEMAP(EnvironmentMap, pin.EnvCoord) * color.a;   // color.a = combinedAlpha
@@ -129,7 +129,7 @@ class EnvironmentMapAlphaScaledLerpTest : public Game
             dev.Clear(Color(0, 0, 0, 255));
             dev.setBlendStateProperty(BlendState::Opaque);
             // Task 896 finding (mirrors the Bgfx sibling's Task 364/884 fix): once
-            // GraphicsDevice's real default RasterizerState is pushed to every backend,
+            // GraphicsDevice's real default RasterizerState is pushed to every renderer,
             // this quad's winding is culled unless explicitly disabled.
             dev.setRasterizerStateProperty(RasterizerState::CullNone);
             fx.Apply();

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // plan_opengl2.md: pixel-exact RenderTarget2D/FBO proof for the native OpenGL 2.1 graphics
-// backend -- render into an off-screen target, read it back directly, sample it as an ordinary
+// renderer -- render into an off-screen target, read it back directly, sample it as an ordinary
 // Texture2D via SpriteBatch, and prove a depth-test occlusion inside the FBO itself.
 //
 // Check A -- RenderTarget2D construction succeeds and reports the requested size.
@@ -8,7 +8,7 @@
 //   RenderTarget2D::GetData() exactly (proves the FBO color attachment + RenderTarget::GetData()).
 // Check C -- that same RT, unbound and drawn via SpriteBatch onto the backbuffer, reads back the
 //   same color at the expected screen position (proves a RenderTarget2D can be sampled as a plain
-//   Texture2D through SpriteBatch -- this backend's Sprite::Draw used to dynamic_cast to the
+//   Texture2D through SpriteBatch -- this renderer's Sprite::Draw used to dynamic_cast to the
 //   concrete Tex type and silently no-op for anything else, including RenderTarget2D).
 // Check D -- real depth-test occlusion INSIDE the RT: a nearer quad wins regardless of draw
 //   order, read back via GetData() (proves the RT's own depth/stencil renderbuffer is real).
@@ -46,7 +46,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 
-#include "CNA/Internal/Backends/OpenGL2/OpenGL2GraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/OpenGL2/OpenGL2Renderer.hpp"
 
 #include "common/PixelTestGame.hpp"
 
@@ -57,7 +57,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::OpenGL2;
+using namespace CNA::Internal::Renderers::OpenGL2;
 
 namespace
 {
@@ -141,7 +141,7 @@ class OpenGL2RenderTarget2DTest : public Game
     // whatever the target was Clear()'d to. The hypotenuse passes exactly through the target's
     // center pixel. Authored for the corrected top-down render-target orientation (clip +Y =
     // caller row 0): the pre-fix vertex set only straddled the (c,c) probe diagonal because the
-    // backend's old bottom-up storage flipped it there.
+    // renderer's old bottom-up storage flipped it there.
     void DrawDiagonalTriangle(GraphicsDevice& dev, const Color& color)
     {
         BasicEffect fx(dev);
@@ -156,7 +156,7 @@ class OpenGL2RenderTarget2DTest : public Game
         // view/projection). The original CCW ordering here was silently backface-culled in both
         // the MSAA and single-sample RTs, which the single-sample check didn't catch (an
         // all-background result is trivially "flat, unblended" too) -- a test bug, not a
-        // backend one.
+        // renderer one.
         const VertexPositionColor verts[3] = {
             {Vector3(-1.0f, -1.0f, 0.0f), color}, {Vector3(-1.0f, 1.0f, 0.0f), color}, {Vector3(1.0f, -1.0f, 0.0f), color},
         };

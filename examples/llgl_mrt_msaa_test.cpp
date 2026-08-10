@@ -14,10 +14,10 @@
 //   just slot 0 (proves both that LlglMRTBinding::GetSampleCount() reported a real sample count
 //   to AcquirePrimitivePipeline()'s own `rasterizer.multiSampleEnabled`, previously hardcoded to 1
 //   regardless of what the bound slots requested, AND that LLGL's own per-attachment resolve,
-//   wired via this backend's own per-slot `targetDesc.resolveAttachments[i]`, actually resolves
+//   wired via this renderer's own per-slot `targetDesc.resolveAttachments[i]`, actually resolves
 //   attachment 1 too, not just slot 0).
 // Check C -- a mixed-sample-count bind (slot 0 at 4x, slot 1 at 0x/none) is rejected by the SHARED
-//   GraphicsDevice::SetRenderTargets() validation layer, by name, before this backend ever sees it
+//   GraphicsDevice::SetRenderTargets() validation layer, by name, before this renderer ever sees it
 //   -- confirms this ticket's own "mixed requested/effective sample-count validation" acceptance
 //   item is already enforced upstream, not silently accepted and only one slot's count honoured.
 //
@@ -175,7 +175,7 @@ public:
 
         // --- Check B: the MRT bind's real sample count is exercised indirectly by Check C below
         // (LlglMRTBinding::GetSampleCount() is consulted by AcquirePrimitivePipeline() to decide
-        // rasterizer.multiSampleEnabled; it is not itself part of this backend's public API
+        // rasterizer.multiSampleEnabled; it is not itself part of this renderer's public API
         // surface to query directly from a test, so a genuinely antialiased resolved edge in
         // Check C is the observable proof that it reported the right value).
 
@@ -238,7 +238,7 @@ public:
         ExpectTrue("slot 1's own multisampled attachment ALSO independently resolves to a "
                   "genuinely blended edge pixel (not just slot 0's)", blended1);
 
-        // --- Check C: a mixed-sample-count bind is rejected upstream, before this backend sees it
+        // --- Check C: a mixed-sample-count bind is rejected upstream, before this renderer sees it
         std::unique_ptr<RenderTarget2D> rt2NoMsaa;
         try
         {
@@ -265,7 +265,7 @@ public:
                 mixedThrew = true;
             }
             ExpectTrue("SetRenderTargets() refuses a bind mixing a MultiSampleCount=4 slot with "
-                      "a MultiSampleCount=0 slot, by name, before this backend's own MRT creation "
+                      "a MultiSampleCount=0 slot, by name, before this renderer's own MRT creation "
                       "ever runs", mixedThrew);
         }
     }

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl2.md: cross-backend visual-parity proof #2 -- reuses
+// plan_opengl2.md: cross-renderer visual-parity proof #2 -- reuses
 // examples/easygl_basiceffect_golden_test.cpp's own BasicEffect scene verbatim (TextureEnabled+
 // VertexColorEnabled, DiffuseColor+EmissiveColor, LightingEnabled=false, constant UV=(0.25,0.25))
 // and its own golden PNG (examples/golden/easygl_basiceffect_golden_test.png), instead of a
-// same-backend-only numeric check.
+// same-renderer-only numeric check.
 //
 // Expected = TexelColor * VertexColor/255 * (DiffuseColor+EmissiveColor), component-wise --
 // reuses that test's own derived (99,52,23) expected value and tolerance=8.

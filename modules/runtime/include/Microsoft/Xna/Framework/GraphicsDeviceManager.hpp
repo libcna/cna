@@ -30,7 +30,7 @@ namespace Microsoft::Xna::Framework
 {
     class Game;
 
-    /** @brief CNA-specific presentation/scaling policy for the rendering backend. */
+    /** @brief CNA-specific presentation/scaling policy for the rendering renderer. */
     NOXNA enum class PresentationMode
     {
         /** @brief Scale with black bars to preserve aspect ratio. */
@@ -356,6 +356,6 @@ namespace Microsoft::Xna::Framework
         void registerServices();
         void unregisterServices();
         [[nodiscard]] SDL_Window* tryGetSDLWindow() const;
-        void applyToExistingBackend(GraphicsDeviceInformation& gdi);
+        void applyToExistingRenderer(GraphicsDeviceInformation& gdi);
     };
 }

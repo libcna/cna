@@ -2,7 +2,7 @@
 // Task 707: Verify GetBackBufferData reads correct pixels after SetRenderTarget(nullptr)
 // restores the backbuffer on SDL_Renderer.
 //
-// SdlGraphicsBackend::ReadBackbuffer branches on SDL_GetRenderTarget(renderer) == nullptr to
+// SdlRenderer::ReadBackbuffer branches on SDL_GetRenderTarget(renderer) == nullptr to
 // decide whether to map through SDL_GetRenderLogicalPresentationRect() (the real backbuffer path)
 // or treat coordinates as addressing a bound render target's own texture space directly -- so its
 // correctness after unbinding genuinely depends on GraphicsDevice::SetRenderTarget(nullptr)
@@ -12,14 +12,14 @@
 // Tasks 704-706's tests all used explicit small Rectangle regions for GetBackBufferData; this
 // test instead specifically exercises the NO-RECT, "whole backbuffer" overload
 // (GetBackBufferData(Color*, int)), which internally resolves its region from
-// backend_->GetViewportSize() -- deliberately binding a render target of a DIFFERENT, SMALLER
+// renderer_->GetViewportSize() -- deliberately binding a render target of a DIFFERENT, SMALLER
 // size than the backbuffer in between, so that if the viewport/size resolution were left stale
 // (still reflecting the smaller render target instead of reverting to the backbuffer), the
 // full-backbuffer readback would only fill part of the buffer, leaving the rest at whatever the
 // caller's buffer was pre-filled with instead of the backbuffer's own actual Magenta content.
 //
 // Requires PresentationMode::NativeBackBuffer (Task 915 finding): SDL_RenderReadPixels operates
-// in physical output coordinates, while this backend's default presentation mode
+// in physical output coordinates, while this renderer's default presentation mode
 // (FixedHeightDynamicWidth) does not map logical pixels 1:1 to physical ones.
 //
 // Exit code 0 = all checks PASS, 1 = at least one FAIL.

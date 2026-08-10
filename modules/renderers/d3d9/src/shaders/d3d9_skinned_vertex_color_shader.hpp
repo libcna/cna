@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // D3D9 skinned-vertex-color porting task: real vs_3_0/ps_3_0 bytecode for CNA's own NOXNA
-// "SkinnedVertexColor3D" shader (src/CNA/Internal/Backends/D3D9/shaders/cna/SkinnedVertexColor3D.hlsl
+// "SkinnedVertexColor3D" shader (src/CNA/Internal/Renderers/D3D9/shaders/cna/SkinnedVertexColor3D.hlsl
 // -- see that file's own header comment for why this is a separate custom shader and the empirical
 // ps_2_0-fails(X5608)/ps_3_0-fits finding), compiled through the same real d3dcompiler_47.dll
 // (D9-71's own fxc_tool.exe, under Wine) used for the vendored XNA Stock Effects, and
@@ -16,7 +16,7 @@
 #include <cstdint>
 #include <cstddef>
 
-namespace CNA::Internal::Backends::D3D9::Shaders
+namespace CNA::Internal::Renderers::D3D9::Shaders
 {
 
 // SkinnedVertexColor3D vertex shader (2064 bytes)
@@ -357,4 +357,4 @@ static constexpr uint8_t kSkinnedVertexColor3DPSBytecode[1872] = {
 };
 static constexpr std::size_t kSkinnedVertexColor3DPSBytecode_size = 1872;
 
-} // namespace CNA::Internal::Backends::D3D9::Shaders
+} // namespace CNA::Internal::Renderers::D3D9::Shaders

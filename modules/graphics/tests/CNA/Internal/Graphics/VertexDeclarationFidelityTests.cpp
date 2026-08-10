@@ -2,10 +2,10 @@
 //
 // REMED-GFX-DECL-GUARD -- the declaration-fidelity rule itself.
 //
-// The rendering oracle in VertexDeclarationLayoutTests.cpp proves the OUTCOME on whichever backend
+// The rendering oracle in VertexDeclarationLayoutTests.cpp proves the OUTCOME on whichever renderer
 // this build selected. This file proves the DECISION, on every build, without a device: the
 // predicate is a pure header-only function over a declaration and a description of the native
-// layout a backend actually programs, so the whole matrix REMED-GFX-217 and REMED-GFX-218 care
+// layout a renderer actually programs, so the whole matrix REMED-GFX-217 and REMED-GFX-218 care
 // about can be asserted directly rather than inferred from pixels.
 //
 // WHY THE RULE IS ASYMMETRIC. The exit triage rejected "the declaration must equal the stride
@@ -95,7 +95,7 @@ namespace
 
     /// Runs the predicate against the canonical layout for @p stride under @p fallback.
     std::string Verdict(const std::vector<VertexElement>& elements, int stride,
-                        UnlistedStrideLayout fallback = UnlistedStrideLayout::BackendRefusesIt)
+                        UnlistedStrideLayout fallback = UnlistedStrideLayout::RendererRefusesIt)
     {
         return DescribeUnrepresentableVertexDeclaration(
             elements, stride, stride, InferredLayoutForStride(stride, fallback));
@@ -103,7 +103,7 @@ namespace
 }
 
 // ---------------------------------------------------------------------------
-// Every built-in declaration must stay representable on every backend in scope. These seven are
+// Every built-in declaration must stay representable on every renderer in scope. These seven are
 // the layouts SpriteBatch, the stock BasicEffect routes, SkinnedEffect, PbrEffect and every
 // currently-green rendering test go through, so a rule that rejects one of them is a rule that
 // broke the framework rather than a rule that made it safe.
@@ -129,7 +129,7 @@ TEST(VertexDeclarationFidelityTest, EveryBuiltInDeclarationIsRepresentable)
     {
         const int stride = b.declaration->getVertexStrideProperty();
         for (const UnlistedStrideLayout fallback :
-             {UnlistedStrideLayout::BackendRefusesIt, UnlistedStrideLayout::PositionColorFallback,
+             {UnlistedStrideLayout::RendererRefusesIt, UnlistedStrideLayout::PositionColorFallback,
               UnlistedStrideLayout::PositionOnlyFallback})
         {
             const std::string failure =
@@ -142,7 +142,7 @@ TEST(VertexDeclarationFidelityTest, EveryBuiltInDeclarationIsRepresentable)
 }
 
 // The stride-56 SkinnedEffect+VertexColorEnabled layout has no built-in type of its own -- it is
-// the stride-52 skinned stream with a packed colour appended at 52, which every backend's own
+// the stride-52 skinned stream with a packed colour appended at 52, which every renderer's own
 // stride table already carries.
 TEST(VertexDeclarationFidelityTest, SkinnedVertexColorStride56IsRepresentable)
 {
@@ -171,9 +171,9 @@ TEST(VertexDeclarationFidelityTest, PositionOnlyAtAListedStrideIsRepresentable)
         EXPECT_EQ("", Verdict(Elements({Pos()}), stride)) << "stride " << stride;
 }
 
-TEST(VertexDeclarationFidelityTest, ABackendThatRefusesTheStrideKeepsItsOwnRejection)
+TEST(VertexDeclarationFidelityTest, ARendererThatRefusesTheStrideKeepsItsOwnRejection)
 {
-    // Software, WebGPU's ordinary route and the three D3D backends throw on an out-of-table stride
+    // Software, WebGPU's ordinary route and the three D3D renderers throw on an out-of-table stride
     // themselves. The guard must abstain there rather than substitute its own message for an
     // established boundary -- including for a declaration it could not otherwise represent.
     EXPECT_EQ("", Verdict(Elements({Pos(), Col(12)}), 28));
@@ -182,7 +182,7 @@ TEST(VertexDeclarationFidelityTest, ABackendThatRefusesTheStrideKeepsItsOwnRejec
 
 // ---------------------------------------------------------------------------
 // The collisions. Same stride, different composition -- the shapes REMED-GFX-217 measured
-// rendering silently wrong on all seven backends.
+// rendering silently wrong on all seven renderers.
 // ---------------------------------------------------------------------------
 
 TEST(VertexDeclarationFidelityTest, SameStrideDifferentSemanticOrderIsRefused)
@@ -246,11 +246,11 @@ TEST(VertexDeclarationFidelityTest, ASemanticNoNativeLayoutBindsIsRefused)
 
 TEST(VertexDeclarationFidelityTest, AStrideThatDisagreesWithTheBufferIsRefused)
 {
-    // R0: the backend advances records by the stride the buffer was uploaded with. A declaration
+    // R0: the renderer advances records by the stride the buffer was uploaded with. A declaration
     // that claims another one describes a different record, whatever its elements say.
     const std::string failure = DescribeUnrepresentableVertexDeclaration(
         Elements({Pos(), Col(12)}), /*declaredStride=*/16, /*nativeRecordStride=*/24,
-        InferredLayoutForStride(16, UnlistedStrideLayout::BackendRefusesIt));
+        InferredLayoutForStride(16, UnlistedStrideLayout::RendererRefusesIt));
     EXPECT_NE("", failure);
     EXPECT_NE(std::string::npos, failure.find("wrong address")) << failure;
 }
@@ -289,14 +289,14 @@ TEST(VertexDeclarationFidelityTest, AnEmptyDeclarationIsNotSecondGuessed)
     // this guard existed: there is nothing declared to reinterpret.
     EXPECT_EQ("", Verdict({}, 16));
     EXPECT_EQ("", DescribeUnrepresentableVertexDeclaration({}, 16, 999,
-                                                           InferredLayoutForStride(16, UnlistedStrideLayout::BackendRefusesIt)));
+                                                           InferredLayoutForStride(16, UnlistedStrideLayout::RendererRefusesIt)));
 }
 
 TEST(VertexDeclarationFidelityTest, ABufferWithNoUploadYetIsNotSecondGuessed)
 {
     EXPECT_EQ("", DescribeUnrepresentableVertexDeclaration(
                       Elements({Col(0), Pos(4)}), 16, /*nativeRecordStride=*/0,
-                      InferredLayoutForStride(16, UnlistedStrideLayout::BackendRefusesIt)));
+                      InferredLayoutForStride(16, UnlistedStrideLayout::RendererRefusesIt)));
 }
 
 // ---------------------------------------------------------------------------
@@ -309,14 +309,14 @@ TEST(VertexDeclarationFidelityTest, AnUnrepresentableDeclarationThrowsNotSupport
     declared.Remember(VertexDeclaration(16, {Col(0), Pos(4)}));
     try
     {
-        RequireFaithfulVertexDeclaration(declared, 16, UnlistedStrideLayout::BackendRefusesIt,
-                                         "TestBackend", "ordinary-indexed");
+        RequireFaithfulVertexDeclaration(declared, 16, UnlistedStrideLayout::RendererRefusesIt,
+                                         "TestRenderer", "ordinary-indexed");
         FAIL() << "an unrepresentable declaration was accepted";
     }
     catch (const System::NotSupportedException& e)
     {
         const std::string what = e.what();
-        EXPECT_NE(std::string::npos, what.find("TestBackend")) << what;
+        EXPECT_NE(std::string::npos, what.find("TestRenderer")) << what;
         EXPECT_NE(std::string::npos, what.find("ordinary-indexed")) << what;
         EXPECT_NE(std::string::npos, what.find("Color0@0")) << what;
     }
@@ -327,7 +327,7 @@ TEST(VertexDeclarationFidelityTest, ARepresentableDeclarationThrowsNothing)
     DeclaredVertexLayout declared;
     declared.Remember(VertexDeclaration(16, {Pos(), Col(12)}));
     EXPECT_NO_THROW(RequireFaithfulVertexDeclaration(
-        declared, 16, UnlistedStrideLayout::BackendRefusesIt, "TestBackend", "ordinary-indexed"));
+        declared, 16, UnlistedStrideLayout::RendererRefusesIt, "TestRenderer", "ordinary-indexed"));
 }
 
 TEST(VertexDeclarationFidelityTest, RememberingIsIdempotentAndRecoversAfterARejection)
@@ -337,17 +337,17 @@ TEST(VertexDeclarationFidelityTest, RememberingIsIdempotentAndRecoversAfterAReje
     DeclaredVertexLayout declared;
     declared.Remember(VertexDeclaration(16, {Pos(), Col(12)}));
     EXPECT_NO_THROW(RequireFaithfulVertexDeclaration(
-        declared, 16, UnlistedStrideLayout::BackendRefusesIt, "TestBackend", "ordinary-indexed"));
+        declared, 16, UnlistedStrideLayout::RendererRefusesIt, "TestRenderer", "ordinary-indexed"));
 
     declared.Remember(VertexDeclaration(16, {Col(0), Pos(4)}));
     EXPECT_THROW(RequireFaithfulVertexDeclaration(
-                     declared, 16, UnlistedStrideLayout::BackendRefusesIt, "TestBackend",
+                     declared, 16, UnlistedStrideLayout::RendererRefusesIt, "TestRenderer",
                      "ordinary-indexed"),
                  System::NotSupportedException);
 
     declared.Remember(VertexDeclaration(16, {Pos(), Col(12)}));
     EXPECT_NO_THROW(RequireFaithfulVertexDeclaration(
-        declared, 16, UnlistedStrideLayout::BackendRefusesIt, "TestBackend", "ordinary-indexed"));
+        declared, 16, UnlistedStrideLayout::RendererRefusesIt, "TestRenderer", "ordinary-indexed"));
     EXPECT_EQ(16, declared.GetStride());
     EXPECT_EQ(2u, declared.GetElements().size());
 }

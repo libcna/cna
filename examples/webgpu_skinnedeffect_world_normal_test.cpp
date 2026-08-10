@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-006: SkinnedEffect world-space normal transform, WebGPU backend.
+// REMED-GFX-006: SkinnedEffect world-space normal transform, WebGPU renderer.
 //
 // FNA's authoritative path (SkinnedEffect.fx + Lighting.fxh):
 //   Skin():                        vin.Normal = mul(vin.Normal, (float3x3)skinning);
@@ -36,8 +36,8 @@
 //        no-world  (Variant A)                 = norm(1,1,0)   -> N.L = 0.707 -> ~180
 //   4. World = RotationZ(90) * Scale(2,1,1): CPU-derived by the same formula.
 //
-// REMED-GFX-131: the readback byte is now simply round(N.L * 255), exactly as on a backend like
-// EasyGL or Vulkan. SurfaceFormat::Color is a plain UNORM byte format, so this backend's render
+// REMED-GFX-131: the readback byte is now simply round(N.L * 255), exactly as on a renderer like
+// EasyGL or Vulkan. SurfaceFormat::Color is a plain UNORM byte format, so this renderer's render
 // targets and backbuffer no longer use an *UnormSrgb format that gamma-encoded every stored value
 // (correct scale N.L=0.894 read ~243 instead of 228, un-worlded 0.707 read ~219, raw-World 0.447
 // read ~178). The three cases remain three-way distinguishable.

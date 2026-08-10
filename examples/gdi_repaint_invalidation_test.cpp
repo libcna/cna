@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // GDI-052: retained-client repaint invalidation independent of Win32 GetUpdateRect lifetime.
 
-#include "CNA/Internal/Backends/Gdi/GdiGraphicsBackend.hpp"
+#include "CNA/Internal/Renderers/Gdi/GdiRenderer.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -22,8 +22,8 @@
 #include <string>
 #include <vector>
 
-using namespace CNA::Internal::Backends;
-using namespace CNA::Internal::Backends::Gdi;
+using namespace CNA::Internal::Renderers;
+using namespace CNA::Internal::Renderers::Gdi;
 
 namespace
 {
@@ -75,41 +75,41 @@ int main()
     int result = 0;
     try
     {
-        GdiGraphicsBackend backend(window, 32, 24, CnaPresentationMode::Stretch);
+        GdiRenderer renderer(window, 32, 24, CnaPresentationMode::Stretch);
         bool ok = true;
 
-        backend.Clear(0.1f, 0.2f, 0.3f, 1.0f);
-        backend.Present();
-        ok &= Expect(!backend.DebugIsNativeClientInvalidated(),
+        renderer.Clear(0.1f, 0.2f, 0.3f, 1.0f);
+        renderer.Present();
+        ok &= Expect(!renderer.DebugIsNativeClientInvalidated(),
                      "successful initial present acknowledges native client generation");
         GdiPresentationTelemetry telemetry;
-        ok &= Expect(backend.DebugGetLastPresentationTelemetry(telemetry) &&
+        ok &= Expect(renderer.DebugGetLastPresentationTelemetry(telemetry) &&
                          telemetry.plan.path == GdiBlitPath::NativeFull &&
                          telemetry.result.success,
-                     "backend telemetry records the initial full native path");
+                     "renderer telemetry records the initial full native path");
 
-        backend.Present();
-        ok &= Expect(backend.DebugGetLastPresentationTelemetry(telemetry) &&
+        renderer.Present();
+        ok &= Expect(renderer.DebugGetLastPresentationTelemetry(telemetry) &&
                          telemetry.plan.path == GdiBlitPath::None &&
                          telemetry.result.success,
-                     "backend telemetry records a no-damage dirty-present skip");
+                     "renderer telemetry records a no-damage dirty-present skip");
 
-        backend.DebugResetBackbufferDamage();
+        renderer.DebugResetBackbufferDamage();
         ok &= Expect(PushWindowEvent(other, SDL_EVENT_WINDOW_EXPOSED),
                      "unrelated synthetic expose event was queued");
-        ok &= Expect(!backend.DebugIsNativeClientInvalidated(),
+        ok &= Expect(!renderer.DebugIsNativeClientInvalidated(),
                      "another SDL window cannot invalidate this GDI client");
 
         ok &= Expect(PushWindowEvent(window, SDL_EVENT_WINDOW_EXPOSED),
                      "synthetic expose event was queued");
-        ok &= Expect(backend.DebugIsNativeClientInvalidated(),
+        ok &= Expect(renderer.DebugIsNativeClientInvalidated(),
                      "SDL exposed event records a repaint even if WM_PAINT was already validated");
         Rectangle damage;
         bool fullyDirty = false;
-        ok &= Expect(!backend.DebugGetBackbufferDamage(damage, fullyDirty),
+        ok &= Expect(!renderer.DebugGetBackbufferDamage(damage, fullyDirty),
                      "native expose is retained separately from new CPU drawing damage");
-        backend.Present();
-        ok &= Expect(!backend.DebugIsNativeClientInvalidated(),
+        renderer.Present();
+        ok &= Expect(!renderer.DebugIsNativeClientInvalidated(),
                      "no-draw present repairs and acknowledges an exposed client");
 
         constexpr std::array<std::uint32_t, 5> invalidatingEvents{
@@ -123,20 +123,20 @@ int main()
         {
             ok &= Expect(PushWindowEvent(window, eventType),
                          "synthetic lifecycle event was queued");
-            ok &= Expect(backend.DebugIsNativeClientInvalidated(),
+            ok &= Expect(renderer.DebugIsNativeClientInvalidated(),
                          "lifecycle event requests a complete retained-client repaint");
-            backend.Present();
-            ok &= Expect(!backend.DebugIsNativeClientInvalidated(),
+            renderer.Present();
+            ok &= Expect(!renderer.DebugIsNativeClientInvalidated(),
                          "successful lifecycle repaint acknowledges only its captured generation");
         }
 
         SDL_Event foreground{};
         foreground.type = SDL_EVENT_DID_ENTER_FOREGROUND;
         ok &= Expect(SDL_PushEvent(&foreground), "foreground event was queued");
-        ok &= Expect(backend.DebugIsNativeClientInvalidated(),
+        ok &= Expect(renderer.DebugIsNativeClientInvalidated(),
                      "process foreground transition invalidates the retained GDI client");
-        backend.Present();
-        ok &= Expect(!backend.DebugIsNativeClientInvalidated(),
+        renderer.Present();
+        ok &= Expect(!renderer.DebugIsNativeClientInvalidated(),
                      "foreground repaint completes through a no-draw dirty present");
 
         // Exercise the real Win32/SDL paint lifecycle behind F3, not only injected SDL events.
@@ -145,7 +145,7 @@ int main()
         ok &= Expect(SDL_ShowWindow(window) && SDL_SyncWindow(window),
                      "native repaint test shows and synchronizes its Win32 client");
         SDL_PumpEvents();
-        backend.Present(); // acknowledge SHOWN/EXPOSED before the explicit WM_PAINT below.
+        renderer.Present(); // acknowledge SHOWN/EXPOSED before the explicit WM_PAINT below.
         const HWND nativeWindow = static_cast<HWND>(SDL_GetPointerProperty(
             SDL_GetWindowProperties(window), SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr));
         ok &= Expect(nativeWindow != nullptr && InvalidateRect(nativeWindow, nullptr, FALSE) &&
@@ -153,53 +153,53 @@ int main()
                      "native InvalidateRect/UpdateWindow dispatches WM_PAINT through SDL");
         SDL_PumpEvents();
         ok &= Expect(GetUpdateRect(nativeWindow, nullptr, FALSE) == FALSE &&
-                         backend.DebugIsNativeClientInvalidated(),
+                         renderer.DebugIsNativeClientInvalidated(),
                      "SDL-validated WM_PAINT still leaves a watched repaint generation pending");
-        backend.Present();
-        ok &= Expect(!backend.DebugIsNativeClientInvalidated(),
+        renderer.Present();
+        ok &= Expect(!renderer.DebugIsNativeClientInvalidated(),
                      "no-draw present repairs the real validated WM_PAINT client");
 
         int logicalWidthBeforeMinimize = 0;
         int logicalHeightBeforeMinimize = 0;
-        backend.GetViewportSize(logicalWidthBeforeMinimize, logicalHeightBeforeMinimize);
+        renderer.GetViewportSize(logicalWidthBeforeMinimize, logicalHeightBeforeMinimize);
         ok &= Expect(SDL_MinimizeWindow(window) && SDL_SyncWindow(window),
                      "native window enters the minimized lifecycle state");
         SDL_PumpEvents();
         int logicalWidthWhileMinimized = 0;
         int logicalHeightWhileMinimized = 0;
-        backend.GetViewportSize(logicalWidthWhileMinimized, logicalHeightWhileMinimized);
-        ok &= Expect(backend.DebugIsNativeClientInvalidated() &&
+        renderer.GetViewportSize(logicalWidthWhileMinimized, logicalHeightWhileMinimized);
+        ok &= Expect(renderer.DebugIsNativeClientInvalidated() &&
                          logicalWidthWhileMinimized == logicalWidthBeforeMinimize &&
                          logicalHeightWhileMinimized == logicalHeightBeforeMinimize,
                      "minimize retains logical storage and leaves native repaint pending");
         ok &= Expect(SDL_RestoreWindow(window) && SDL_SyncWindow(window),
                      "native window completes the restore round-trip");
         SDL_PumpEvents();
-        ok &= Expect(backend.DebugIsNativeClientInvalidated(),
+        ok &= Expect(renderer.DebugIsNativeClientInvalidated(),
                      "real restore requests a retained no-draw repaint");
-        backend.Present();
-        ok &= Expect(!backend.DebugIsNativeClientInvalidated(),
+        renderer.Present();
+        ok &= Expect(!renderer.DebugIsNativeClientInvalidated(),
                      "real restore repaint acknowledges the latest lifecycle generation");
         (void)SDL_HideWindow(window);
 
         const ImageData image{1, 1, std::vector<std::uint8_t>{255, 0, 0, 255}};
-        std::unique_ptr<ITextureBackend> texture = backend.CreateTexture(image);
-        std::unique_ptr<ISpriteBatchBackend> sprites = backend.CreateSpriteBatch();
+        std::unique_ptr<ITextureRenderer> texture = renderer.CreateTexture(image);
+        std::unique_ptr<ISpriteBatchRenderer> sprites = renderer.CreateSpriteBatch();
         sprites->Begin();
         sprites->Draw(*texture, Rectangle(4, 7, 3, 2), Rectangle(0, 0, 1, 1), Color::White);
         sprites->End();
 
         Rectangle beforeFailure;
         bool beforeFailureFull = true;
-        ok &= Expect(backend.DebugGetBackbufferDamage(beforeFailure, beforeFailureFull) &&
+        ok &= Expect(renderer.DebugGetBackbufferDamage(beforeFailure, beforeFailureFull) &&
                          !beforeFailureFull && beforeFailure.Y > 0,
                      "non-zero-Y sprite prepares a partial dirty-band present");
-        backend.DebugForceNextDibBlitFailure();
+        renderer.DebugForceNextDibBlitFailure();
         bool injectedFailureThrew = false;
         std::string injectedFailureMessage;
         try
         {
-            backend.Present();
+            renderer.Present();
         }
         catch (const std::runtime_error& error)
         {
@@ -211,39 +211,39 @@ int main()
                              std::string::npos &&
                          injectedFailureMessage.find("Win32 error") != std::string::npos,
                      "zero-line DIB failure reports operation and Win32 error context");
-        ok &= Expect(backend.DebugGetLastPresentationTelemetry(telemetry) &&
+        ok &= Expect(renderer.DebugGetLastPresentationTelemetry(telemetry) &&
                          telemetry.plan.path == GdiBlitPath::NativeDirty &&
                          !telemetry.result.success &&
                          telemetry.plan.source.x == beforeFailure.X &&
                          telemetry.plan.source.y == beforeFailure.Y &&
                          telemetry.plan.source.width == beforeFailure.Width &&
                          telemetry.plan.source.height == beforeFailure.Height,
-                     "backend telemetry exposes selected dirty path, bounds, and failure");
+                     "renderer telemetry exposes selected dirty path, bounds, and failure");
 
         Rectangle afterFailure;
         bool afterFailureFull = true;
-        ok &= Expect(backend.DebugGetBackbufferDamage(afterFailure, afterFailureFull) &&
+        ok &= Expect(renderer.DebugGetBackbufferDamage(afterFailure, afterFailureFull) &&
                          !afterFailureFull &&
                          afterFailure.X == beforeFailure.X &&
                          afterFailure.Y == beforeFailure.Y &&
                          afterFailure.Width == beforeFailure.Width &&
                          afterFailure.Height == beforeFailure.Height,
                      "failed partial present retains the complete pending damage rectangle");
-        backend.Present();
-        ok &= Expect(!backend.DebugGetBackbufferDamage(afterFailure, afterFailureFull),
+        renderer.Present();
+        ok &= Expect(!renderer.DebugGetBackbufferDamage(afterFailure, afterFailureFull),
                      "successful retry commits and clears retained presentation damage");
 
         ok &= Expect(SDL_SetWindowSize(window, 40, 30),
                      "scaled-present test resized the native client");
         ok &= Expect(SDL_SyncWindow(window),
                      "scaled-present test synchronized the native resize");
-        backend.Clear(0.2f, 0.3f, 0.4f, 1.0f);
-        backend.DebugForceNextDibBlitFailure();
+        renderer.Clear(0.2f, 0.3f, 0.4f, 1.0f);
+        renderer.DebugForceNextDibBlitFailure();
         bool stretchFailureThrew = false;
         std::string stretchFailureMessage;
         try
         {
-            backend.Present();
+            renderer.Present();
         }
         catch (const std::runtime_error& error)
         {
@@ -254,17 +254,17 @@ int main()
                          stretchFailureMessage.find("StretchDIBits") != std::string::npos &&
                          stretchFailureMessage.find("Win32 error") != std::string::npos,
                      "zero-line StretchDIBits result is a diagnosed presentation failure");
-        ok &= Expect(backend.DebugGetLastPresentationTelemetry(telemetry) &&
+        ok &= Expect(renderer.DebugGetLastPresentationTelemetry(telemetry) &&
                          telemetry.plan.path == GdiBlitPath::Stretch &&
                          !telemetry.result.success &&
                          telemetry.stretchMode == kColorOnColorStretchMode,
-                     "backend telemetry exposes scaled path, default filter, and failure");
-        ok &= Expect(backend.DebugGetBackbufferDamage(afterFailure, afterFailureFull) &&
-                         afterFailureFull && backend.DebugIsNativeClientInvalidated(),
+                     "renderer telemetry exposes scaled path, default filter, and failure");
+        ok &= Expect(renderer.DebugGetBackbufferDamage(afterFailure, afterFailureFull) &&
+                         afterFailureFull && renderer.DebugIsNativeClientInvalidated(),
                      "failed scaled present retains full CPU and native-client damage");
-        backend.Present();
-        ok &= Expect(!backend.DebugGetBackbufferDamage(afterFailure, afterFailureFull) &&
-                         !backend.DebugIsNativeClientInvalidated(),
+        renderer.Present();
+        ok &= Expect(!renderer.DebugGetBackbufferDamage(afterFailure, afterFailureFull) &&
+                         !renderer.DebugIsNativeClientInvalidated(),
                      "successful scaled retry commits both pending damage sources");
 
         result = ok ? 0 : 1;

@@ -2,7 +2,7 @@
 # Third D9-73 oracle-proof scene for SkinnedEffect.PreferPerPixelLighting=true (see
 # skinned_pixellighting_quad.scene's own header for the full split-normal discriminator
 # rationale) -- this one selects VSSkinnedPixelLightingFourBones/PSSkinnedPixelLighting, the last
-# of the 5 D9-73-divergent shader variants that is actually reachable given this backend's current
+# of the 5 D9-73-divergent shader variants that is actually reachable given this renderer's current
 # vertex-layout constraints (VSBasicPixelLighting, the untextured bucket, remains permanently
 # blocked by the same missing Position-only vertex layout gap D9-82b's own "10 of 32 ShaderIndex
 # values" finding already documents -- unrelated to PreferPerPixelLighting itself). Reuses

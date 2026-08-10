@@ -2,7 +2,7 @@
 
 // PbrEffect fragment shader — the glTF 2.0 metallic-roughness BRDF (GGX distribution + Smith-
 // Schlick-GGX visibility + Schlick Fresnel), mirroring
-// EasyGLGraphicsBackend::EnsurePbrProgram()'s fragment stage exactly. 4 additional texture units
+// EasyGLRenderer::EnsurePbrProgram()'s fragment stage exactly. 4 additional texture units
 // beyond base color: normal map, metallic-roughness map (G=roughness, B=metallic, glTF packing),
 // emissive map, occlusion map.
 
@@ -46,7 +46,7 @@ layout(set = 0, binding = 5) uniform PbrParams {
 
 // GGX/Trowbridge-Reitz D, Smith-Schlick-GGX visibility (direct-lighting k=(roughness+1)^2/8), and
 // Schlick Fresnel — the glTF 2.0 spec's own reference BRDF (Appendix B.3.3/B.3.4/B.3.2), byte-for-
-// byte identical to EasyGLGraphicsBackend::EnsurePbrProgram()'s own PbrLight().
+// byte identical to EasyGLRenderer::EnsurePbrProgram()'s own PbrLight().
 vec3 PbrLight(vec3 N, vec3 V, vec3 L, vec3 lightColor, vec3 albedo, vec3 F0, float roughness, float metallic) {
     vec3 H = normalize(V + L);
     float NdotL = max(dot(N, L), 0.0);
