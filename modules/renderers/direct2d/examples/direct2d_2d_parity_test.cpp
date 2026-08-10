@@ -1264,6 +1264,127 @@ protected:
                 check(targetLabel.c_str(), tileX, 5, expectedColor);
             }
         }
+        // D2D-45: golden matrix over blend preset x source type x tint x alpha representation,
+        // generated from the data below rather than written out case by case, and compared against
+        // the same independent CPU reference D2D-40 uses. The destination is opaque so it can be
+        // established with Clear on every runtime -- an exact premultiplied destination would need
+        // the bounded-copy composite, which Wine ignores, and that would have made the whole matrix
+        // native-only for no gain.
+        //
+        // Only the two source-over presets appear here. Opaque's independent RGB/alpha tint is
+        // still an open native question (D2D-41), and asserting an answer for it from this matrix
+        // would be inventing evidence rather than collecting it.
+        {
+            struct AlphaRepresentation
+            {
+                const char* name;
+                bool straight;
+                std::array<std::uint8_t, 4> stored;
+            };
+            struct TintCase
+            {
+                const char* name;
+                Color tint;
+            };
+            const std::array<AlphaRepresentation, 2> representations{{
+                // Premultiplied: every channel is already scaled by alpha, so it must not be
+                // scaled again anywhere in the pipeline.
+                {"premultiplied", false, {{120, 60, 30, 200}}},
+                // Straight: the same visual colour stored unmultiplied, converted exactly once.
+                {"straight", true, {{153, 77, 38, 200}}},
+            }};
+            const std::array<TintCase, 3> tints{{
+                {"white", Color::White},
+                {"rgb", Color(200, 150, 100, 255)},
+                {"alpha", Color(255, 255, 255, 128)},
+            }};
+            const std::array<std::uint8_t, 4> matrixDestination{{40, 80, 120, 255}};
+
+            const auto expectedFor = [&](const AlphaRepresentation& representation,
+                                         const TintCase& tintCase) {
+                // The renderer's documented contract (D2D-34): a straight source is premultiplied
+                // exactly once, then Color.RGB scales the premultiplied RGB and Color.A scales only
+                // the alpha. Everything after that is plain source-over.
+                const int storedAlpha = representation.stored[3];
+                std::array<std::uint8_t, 4> effective{};
+                for (int channel = 0; channel < 3; ++channel)
+                {
+                    const int premultiplied = representation.straight
+                        ? representation.stored[static_cast<std::size_t>(channel)] * storedAlpha / 255
+                        : representation.stored[static_cast<std::size_t>(channel)];
+                    const int tintChannel = channel == 0 ? tintCase.tint.getRProperty()
+                        : (channel == 1 ? tintCase.tint.getGProperty() : tintCase.tint.getBProperty());
+                    effective[static_cast<std::size_t>(channel)] =
+                        static_cast<std::uint8_t>(premultiplied * tintChannel / 255);
+                }
+                effective[3] = static_cast<std::uint8_t>(storedAlpha * tintCase.tint.getAProperty() / 255);
+                const std::array<std::uint8_t, 4> composited = CompositePorterDuffReference(
+                    Direct2DBlendMode::SourceOver, effective, matrixDestination);
+                return Color(composited[0], composited[1], composited[2], composited[3]);
+            };
+
+            SamplerState matrixSampler = SamplerState::PointClamp;
+            for (std::size_t representationIndex = 0; representationIndex < representations.size();
+                 ++representationIndex)
+            {
+                const AlphaRepresentation& representation = representations[representationIndex];
+                auto matrixTexture = Texture2D::CreateFromPixels(
+                    device, 1, 1,
+                    std::vector<uint8_t>{representation.stored[0], representation.stored[1],
+                                         representation.stored[2], representation.stored[3]});
+                const BlendState& blend = representation.straight
+                    ? BlendState::NonPremultiplied : BlendState::AlphaBlend;
+
+                device.Clear(Color(matrixDestination[0], matrixDestination[1], matrixDestination[2],
+                                   matrixDestination[3]));
+                for (std::size_t tintIndex = 0; tintIndex < tints.size(); ++tintIndex)
+                {
+                    sprites_->Begin(SpriteSortMode::Deferred, blend, &matrixSampler, nullptr,
+                                    &scissorDisabled);
+                    sprites_->Draw(matrixTexture,
+                                   Rectangle(static_cast<int>(tintIndex) * 4, 0, 4, 4),
+                                   Rectangle(0, 0, 1, 1), tints[tintIndex].tint);
+                    sprites_->End();
+                }
+                for (std::size_t tintIndex = 0; tintIndex < tints.size(); ++tintIndex)
+                {
+                    const std::string label = std::string("golden matrix ") + representation.name +
+                        " x " + tints[tintIndex].name + " (Texture2D)";
+                    check(label.c_str(), static_cast<int>(tintIndex) * 4 + 1, 1,
+                          expectedFor(representation, tints[tintIndex]));
+                }
+
+                // The same matrix with a GPU-resident source. Its decoration needs the built-in
+                // effects, so this half -- and only this half -- is the documented native branch.
+                if (!verifyRenderTargetDecoration) continue;
+                RenderTarget2D matrixTarget(device, 1, 1, false, SurfaceFormat::Color,
+                                            DepthFormat::None);
+                const std::array<Color, 1> matrixTargetPixel{
+                    Color(representation.stored[0], representation.stored[1],
+                          representation.stored[2], representation.stored[3])};
+                matrixTarget.SetData(matrixTargetPixel.data(),
+                                     static_cast<int>(matrixTargetPixel.size()));
+                device.Clear(Color(matrixDestination[0], matrixDestination[1], matrixDestination[2],
+                                   matrixDestination[3]));
+                for (std::size_t tintIndex = 0; tintIndex < tints.size(); ++tintIndex)
+                {
+                    sprites_->Begin(SpriteSortMode::Deferred, blend, &matrixSampler, nullptr,
+                                    &scissorDisabled);
+                    sprites_->Draw(matrixTarget,
+                                   Rectangle(static_cast<int>(tintIndex) * 4, 0, 4, 4),
+                                   Rectangle(0, 0, 1, 1), tints[tintIndex].tint);
+                    sprites_->End();
+                }
+                for (std::size_t tintIndex = 0; tintIndex < tints.size(); ++tintIndex)
+                {
+                    const std::string label = std::string("golden matrix ") + representation.name +
+                        " x " + tints[tintIndex].name + " (RenderTarget2D)";
+                    check(label.c_str(), static_cast<int>(tintIndex) * 4 + 1, 1,
+                          expectedFor(representation, tints[tintIndex]));
+                }
+            }
+        }
+
         if (verifyRenderTargetDecoration)
         {
             device.Clear(blendBackground);

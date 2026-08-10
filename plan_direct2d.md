@@ -11,7 +11,7 @@
 > veřejný pixelový test; položky závislé na těchto funkcích musí navíc projít nativním Windows
 > Direct2D.
 
-<!-- direct2d-plan-status: total=131 done=91 partial=30 open=10 -->
+<!-- direct2d-plan-status: total=131 done=91 partial=31 open=9 -->
 <!-- Maintained by scripts/validate_direct2d_plan.py (D2D-132): the counts above are recomputed
      from the rows below and must be updated in the same commit that changes any status. -->
 
@@ -165,7 +165,7 @@ Historické potvrzené chyby jsou zachovány jako provenance, ale už nejsou akt
 | D2D-42 | Odmítej blend kombinace, které nelze přesně vyjádřit, ještě před zahájením nebo změnou draw stavu. | ✅ | Mapping validates the complete tuple before publishing `blendMode_`; unsupported tuple tests and subsequent control draws pass. |
 | D2D-43 | Zvaliduj blend vstupy včetně neznámých enum hodnot a neplatného blend factoru transakčně. | ✅ | Unknown tuples, masks, Additive, embedded/public non-white factor and non-finite factor are rejected; D2D-135 additionally proves that embedded-factor failure preserves both the public cache and prior native blend pixels. |
 | D2D-44 | Zdokumentuj alpha reprezentaci každé upload/readback/RT/effect hranice. | ✅ | `docs/direct2d-renderer.md` má sekci *Alpha representation at every boundary*: tabulka vyjmenovává deset hranic (SetData bytes, storage všech tří bitmap druhů, tři blend presety, `Color` modulaci, `ColorMatrix` stupeň, `Clear`, fyzický swap chain, `GetData` a readback staging), u každé uvádí straight/premultiplied/ignored a **místo** konverze. Dvě odvozené konsekvence jsou uvedeny explicitně: readback vrací premultiplied bajty i pro obsah nahraný jako straight, a žádná aplikačně viditelná bitmapa nepoužívá alpha-ignoring formát. Audit hranic zároveň odhalil, že parametr `CreateBitmapFromRgba(..., ignoreAlpha)` se stal po D2D-28 nedosažitelným — mrtvá alpha větev byla odstraněna, takže dokumentace popisuje přesně to, co kód dělá. |
-| D2D-45 | Vytvoř úplnou golden matici blend × source typ × tint × alpha reprezentace. | ⬜ | Matici generuje datově řízený test s CPU referencí; běží ve Wine i nativně a runtime skip je povolen pouze pro konkrétní nedostupný effect. |
+| D2D-45 | Vytvoř úplnou golden matici blend × source typ × tint × alpha reprezentace. | 🟨 | Matice je datově řízená: dvě alpha reprezentace (premultiplied a straight) × tři tinty (white, RGB, alpha) × dva typy zdroje, generovaná z tabulky, ne psaná případ po případu, a porovnávaná proti **stejné nezávislé CPU referenci** jako D2D-40 (`CompositePorterDuffReference` nad efektivním zdrojem odvozeným z kontraktu D2D-34). Destinace je záměrně neprůhledná, aby ji šlo ustavit `Clear`em na každém runtimu — přesná premultiplied destinace by vyžadovala bounded-copy composite, který Wine ignoruje, a udělala by tím celou matici zbytečně native-only. `Texture2D` polovina proto běží i ve Wine (přes CPU fallback); `RenderTarget2D` polovina je jediná část za `CNA_DIRECT2D_SKIP_RENDER_TARGET_DECORATION`, tedy skip pojmenovává konkrétní nedostupný effect, ne runtime. `Opaque` osa v matici **není**: jeho nezávislý RGB/alpha tint je stále otevřená nativní otázka (D2D-41) a tvrdit pro ni odpověď by znamenalo evidenci vymyslet, ne posbírat. Kompilačně ověřeno; běh zbývá. |
 
 ## Fáze D2D-7 — presentation, resize, DPI a swap chain
 
