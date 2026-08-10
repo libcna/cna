@@ -115,6 +115,8 @@ if(CNA_BUILD_TESTS AND CNA_BUILD_HTML_DOM_HOST_TESTS AND NOT EMSCRIPTEN)
     target_compile_definitions(cna_test_htmldom_host PRIVATE CNA_HTML_DOM_HOST_TESTS=1)
     target_link_libraries(cna_test_htmldom_host PRIVATE CNA SHARP_RUNTIME gtest_main SDL3::SDL3)
     add_test(NAME HtmlDomHostContracts COMMAND cna_test_htmldom_host)
+    # Historical root-scope registration CWD, preserved (see cna_register_renderer_test).
+    set_tests_properties(HtmlDomHostContracts PROPERTIES WORKING_DIRECTORY "${CMAKE_BINARY_DIR}")
     set_tests_properties(HtmlDomHostContracts PROPERTIES LABELS "HTML_DOM;host-only")
 endif()
 

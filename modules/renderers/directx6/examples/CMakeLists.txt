@@ -50,6 +50,8 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX6")
     # Wine needed, runs identically whether cross-compiling or not. Registered FIRST, mirroring
     # DirectX1Tests.cmake's own DirectX1_V1OnlyDiscipline placement.
     add_test(NAME DirectX6_ExecuteBufferDiscipline COMMAND bash "${CMAKE_SOURCE_DIR}/scripts/check-directx6-execute-buffer-discipline.sh" "${CMAKE_SOURCE_DIR}")
+    # Historical root-scope registration CWD, preserved (see cna_register_renderer_test).
+    set_tests_properties(DirectX6_ExecuteBufferDiscipline PROPERTIES WORKING_DIRECTORY "${CMAKE_BINARY_DIR}")
     set_tests_properties(DirectX6_ExecuteBufferDiscipline PROPERTIES LABELS "DIRECTX6")
 
     # Phase O2 (DX2-10, 2D layer ported from DX1-10..DX1-18): device/window bring-up +

@@ -37,6 +37,16 @@ function(cna_register_renderer_test)
     endif()
     if(DEFINED T_WORKING_DIRECTORY)
         list(APPEND _cna_test_props WORKING_DIRECTORY "${T_WORKING_DIRECTORY}")
+    else()
+        # Historical default, made explicit: every renderer/example test used to be
+        # registered at root scope, where ctest's implicit working directory is the top
+        # build directory -- and Content-loading tests (e.g. the demo_2d smoke tests)
+        # resolve their assets CWD-relative next to the executable there. Registrations
+        # are module-local now, and ctest's implicit CWD would otherwise become the
+        # registering module's own binary subdirectory (found for real: the Vulkan demo_2d
+        # smoke test aborted on Content lookup after the move). Pin the historical CWD for
+        # every registration that does not choose one explicitly.
+        list(APPEND _cna_test_props WORKING_DIRECTORY "${CMAKE_BINARY_DIR}")
     endif()
     if(T_SKIP_REGULAR_EXPRESSION)
         string(REPLACE ";" "\\;" _cna_skip_regex_escaped "${T_SKIP_REGULAR_EXPRESSION}")

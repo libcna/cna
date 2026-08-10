@@ -51,6 +51,8 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX8")
     # needed, runs identically whether cross-compiling or not. Registered FIRST, mirroring
     # DirectX1Tests.cmake's own DirectX1_V1OnlyDiscipline placement.
     add_test(NAME DirectX8_LegacyInterfaceDiscipline COMMAND bash "${CMAKE_SOURCE_DIR}/scripts/check-directx8-legacy-interface-discipline.sh" "${CMAKE_SOURCE_DIR}")
+    # Historical root-scope registration CWD, preserved (see cna_register_renderer_test).
+    set_tests_properties(DirectX8_LegacyInterfaceDiscipline PROPERTIES WORKING_DIRECTORY "${CMAKE_BINARY_DIR}")
     set_tests_properties(DirectX8_LegacyInterfaceDiscipline PROPERTIES LABELS "DIRECTX8")
 
     # Phase O2 (DX2-10, 2D layer ported from DX1-10..DX1-18): device/window bring-up +

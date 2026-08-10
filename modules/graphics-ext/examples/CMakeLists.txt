@@ -15,6 +15,8 @@ if(CNA_BUILD_EXAMPLES AND CNA_CNAEXT)
     if(CNA_BUILD_TESTS)
         add_test(NAME CNAEXT_Settings_Compile_Run
                  COMMAND cna_example_cnaext_settings)
+        # Historical root-scope registration CWD, preserved (see cna_register_renderer_test).
+        set_tests_properties(CNAEXT_Settings_Compile_Run PROPERTIES WORKING_DIRECTORY "${CMAKE_BINARY_DIR}")
     endif()
 endif()
 

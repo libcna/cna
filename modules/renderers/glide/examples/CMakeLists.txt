@@ -54,6 +54,9 @@ if(CNA_BUILD_TESTS AND WIN32 AND CNA_GRAPHICS_RENDERER STREQUAL "GLIDE")
         endif()
     elseif(NOT CMAKE_CROSSCOMPILING)
         add_test(NAME GlideAbiLoaderContract COMMAND $<TARGET_FILE:cna_glide_abi_loader_test>)
+        # Historical root-scope registration CWD (the fake glide3x DLL is loaded by
+        # CWD-relative name on the native branch), preserved.
+        set_tests_properties(GlideAbiLoaderContract PROPERTIES WORKING_DIRECTORY "${CMAKE_BINARY_DIR}")
     endif()
 
     # This target intentionally has no add_test(): it executes real Glide commands and needs an

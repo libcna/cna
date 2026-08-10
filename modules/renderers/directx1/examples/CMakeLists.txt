@@ -50,6 +50,8 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX1")
     # document the discipline are excluded). Pure text check via scripts/check-directx1-v1-only.sh, no
     # compiled binary, no Wine needed -- runs identically whether cross-compiling or not.
     add_test(NAME DirectX1_V1OnlyDiscipline COMMAND bash "${CMAKE_SOURCE_DIR}/scripts/check-directx1-v1-only.sh" "${CMAKE_SOURCE_DIR}")
+    # Historical root-scope registration CWD, preserved (see cna_register_renderer_test).
+    set_tests_properties(DirectX1_V1OnlyDiscipline PROPERTIES WORKING_DIRECTORY "${CMAKE_BINARY_DIR}")
     set_tests_properties(DirectX1_V1OnlyDiscipline PROPERTIES LABELS "DIRECTX1")
 
     # Phase O2 (DX1-1..DX1-18): device/window bring-up + Clear/Present/readback foundation.
