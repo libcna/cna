@@ -99,9 +99,10 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
 
     if(CNA_ENABLE_NET)
         # Net: the networking closure (gamer-services -> runtime stack + enet), but never a
-        # device module or an extension module.
+        # device module or an extension module. FFmpeg is legitimately present through the
+        # runtime stack's media module, so it is deliberately NOT forbidden here.
         cna_add_module_probe(probe_net CNA::Net
-            "libcna_(devices|graphics_ext)|libav")
+            "libcna_(devices|graphics_ext)")
         if(Python3_Interpreter_FOUND)
             add_test(NAME ModuleLinkClosure_NetHasENet
                 COMMAND Python3::Interpreter
