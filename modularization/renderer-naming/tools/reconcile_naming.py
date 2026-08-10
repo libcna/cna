@@ -60,6 +60,9 @@ MANUAL_EDITS = {
     "CLAUDE.md": "selector list entries",
     "README.md": "renderer identity references",
     "CNAEXT.md": "renaming provenance banner",
+    "CMakeLists.txt": "DX3 naming-history accuracy note (7409b0361)",
+    "modules/renderers/freedirect/include/CNA/Internal/Renderers/FreeDirect/FreeDirectRenderer.hpp":
+        "formerly-DX3 history phrases restored (7409b0361)",
 }
 
 NEW_FILE_PREFIXES = ("modularization/renderer-naming/",)
