@@ -26,7 +26,7 @@
 set -uo pipefail
 
 repo_root="$1"
-dx2_src="${repo_root}/src/CNA/Internal/Backends/Dx2"
+dx2_src="${repo_root}/src/Graphics/Backends/Dx2"
 dx2_include="${repo_root}/include/CNA/Internal/Backends/Dx2"
 
 if [ ! -d "$dx2_src" ] || [ ! -d "$dx2_include" ]; then

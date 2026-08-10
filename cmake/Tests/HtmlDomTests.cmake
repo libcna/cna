@@ -90,11 +90,11 @@ option(CNA_BUILD_HTML_DOM_HOST_TESTS
 if(CNA_BUILD_TESTS AND CNA_BUILD_HTML_DOM_HOST_TESTS AND NOT EMSCRIPTEN)
     add_executable(cna_test_htmldom_host
         tests/CNA/Internal/Backends/HtmlDom/HtmlDomGraphicsBackendTests.cpp
-        src/CNA/Internal/Backends/HtmlDom/HtmlDomGraphicsBackend.cpp
-        src/CNA/Internal/Backends/HtmlDom/HtmlDomRenderTargetBackend.cpp
-        src/CNA/Internal/Backends/HtmlDom/HtmlDomSpriteBatchBackend.cpp
-        src/CNA/Internal/Backends/HtmlDom/HtmlDomState.cpp
-        src/CNA/Internal/Backends/HtmlDom/HtmlDomTextureBackend.cpp)
+        src/Graphics/Backends/HtmlDom/HtmlDomGraphicsBackend.cpp
+        src/Graphics/Backends/HtmlDom/HtmlDomRenderTargetBackend.cpp
+        src/Graphics/Backends/HtmlDom/HtmlDomSpriteBatchBackend.cpp
+        src/Graphics/Backends/HtmlDom/HtmlDomState.cpp
+        src/Graphics/Backends/HtmlDom/HtmlDomTextureBackend.cpp)
     target_compile_definitions(cna_test_htmldom_host PRIVATE CNA_HTML_DOM_HOST_TESTS=1)
     target_link_libraries(cna_test_htmldom_host PRIVATE CNA SHARP_RUNTIME gtest_main SDL3::SDL3)
     add_test(NAME HtmlDomHostContracts COMMAND cna_test_htmldom_host)

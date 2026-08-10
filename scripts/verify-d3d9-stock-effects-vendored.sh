@@ -16,7 +16,7 @@ set -euo pipefail
 FNA_TREE="${1:-${CNA_FNA_TREE:-/rv/data/library/github.com/FNA-XNA/FNA}}"
 SRC_DIR="$FNA_TREE/src/Graphics/Effect/StockEffects/HLSL"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-DST_DIR="$REPO_ROOT/src/CNA/Internal/Backends/D3D9/shaders/xna"
+DST_DIR="$REPO_ROOT/src/Graphics/Backends/D3D9/shaders/xna"
 
 FILES=(
     BasicEffect.fx AlphaTestEffect.fx DualTextureEffect.fx EnvironmentMapEffect.fx

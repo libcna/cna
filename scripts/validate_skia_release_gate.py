@@ -22,7 +22,7 @@ def main() -> int:
     release_path = root / "docs/skia-release-gate.md"
     surface_adr_path = root / "docs/skia-surface-mode-adr.md"
     capability_path = root / "include/CNA/GraphicsCapability.hpp"
-    backend_path = root / "src/CNA/Internal/Backends/Skia/SkiaGraphicsBackend.cpp"
+    backend_path = root / "src/Graphics/Backends/Skia/SkiaGraphicsBackend.cpp"
     tests_path = root / "cmake/Tests/SkiaTests.cmake"
     diagnostic_path = root / "include/CNA/Internal/Backends/Skia/SkiaStartupDiagnostic.hpp"
     parity_path = root / "docs/skia-easygl-parity-ledger.md"

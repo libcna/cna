@@ -7,13 +7,13 @@
 # Two independent offline HLSL->bytecode pipelines exist (see each shaders/ dir):
 #
 #   1. D3DCommon (D3D11/D3D12)  hlsl_shaders.hpp   vs_5_0/ps_5_0 DXBC
-#        tool  : src/CNA/Internal/Backends/D3DCommon/shaders/hlsl_compiler_tool.cpp (D3DCompile)
+#        tool  : src/Graphics/Backends/D3DCommon/shaders/hlsl_compiler_tool.cpp (D3DCompile)
 #        DLL   : Wine BUILTIN d3dcompiler_47.dll (vkd3d-shader) in ~/.wine-cna-d3d11
 #        flags : D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_OPTIMIZATION_LEVEL3
 #        script: compile_shaders_hlsl.py
 #
 #   2. D3D9 (custom NOXNA shaders)  d3d9_pbr_shaders.hpp / d3d9_skinned_vertex_color_shader.hpp
-#        tool  : src/CNA/Internal/Backends/D3D9/shaders/fxc_tool.cpp (D3DCompile)
+#        tool  : src/Graphics/Backends/D3D9/shaders/fxc_tool.cpp (D3DCompile)
 #        DLL   : REAL Microsoft d3dcompiler_47.dll in ~/.wine-cna-d3d9-spike
 #        flags : D3DCOMPILE_OPTIMIZATION_LEVEL3, profiles vs_3_0/ps_3_0
 #
@@ -27,8 +27,8 @@
 set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-D3DC="$REPO_ROOT/src/CNA/Internal/Backends/D3DCommon/shaders"
-D9="$REPO_ROOT/src/CNA/Internal/Backends/D3D9/shaders"
+D3DC="$REPO_ROOT/src/Graphics/Backends/D3DCommon/shaders"
+D9="$REPO_ROOT/src/Graphics/Backends/D3D9/shaders"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/cna-d3d-repro.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 D3DCOMMON_ONLY=0

@@ -94,7 +94,7 @@ def main() -> int:
 
     root = pathlib.Path(sys.argv[1]).resolve()
     enum_path = root / "include/Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
-    texture_path = root / "src/Microsoft/Xna/Framework/Graphics/Texture.cpp"
+    texture_path = root / "src/Graphics/Xna/Texture.cpp"
     matrix_path = root / "docs/skia-surface-format-matrix.md"
     errors: list[str] = []
 

@@ -13,7 +13,7 @@
 set -uo pipefail
 
 repo_root="$1"
-dx8_src="${repo_root}/src/CNA/Internal/Backends/Dx8"
+dx8_src="${repo_root}/src/Graphics/Backends/Dx8"
 dx8_include="${repo_root}/include/CNA/Internal/Backends/Dx8"
 
 if [ ! -d "$dx8_src" ] || [ ! -d "$dx8_include" ]; then

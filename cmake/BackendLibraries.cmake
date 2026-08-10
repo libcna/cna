@@ -12,7 +12,7 @@ target_include_directories(cna_backend_graphics_common INTERFACE
 # different enum space from DXGI_FORMAT and D3D9 has no state objects at all -- D3D9 gets its own
 # D3D9FormatMapping/D3D9StateMapping/D3D9VertexDeclarations instead of expanding this shared core.
 if(CNA_GRAPHICS_BACKEND STREQUAL "D3D11" OR CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
-    file(GLOB D3DCOMMON_SOURCES "src/CNA/Internal/Backends/D3DCommon/*.cpp")
+    file(GLOB D3DCOMMON_SOURCES "src/Graphics/Backends/D3DCommon/*.cpp")
     add_library(cna_backend_graphics_d3dcommon STATIC ${D3DCOMMON_SOURCES})
     target_link_libraries(cna_backend_graphics_d3dcommon PUBLIC cna_backend_graphics_common d3d11 dxgi)
     cna_link_sharp_runtime(cna_backend_graphics_d3dcommon PUBLIC)
@@ -28,7 +28,7 @@ endif()
 # compiled out here, leaving Ascii's own CreateGraphicsBackend() (guarded by CNA_BACKEND_ASCII) as
 # the only factory definition -- no duplicate-symbol clash.
 if(CNA_GRAPHICS_BACKEND STREQUAL "ASCII")
-    file(GLOB CNA_ASCII_SDLRENDERER_SOURCES "src/CNA/Internal/Backends/SdlRenderer/*.cpp")
+    file(GLOB CNA_ASCII_SDLRENDERER_SOURCES "src/Graphics/Backends/SdlRenderer/*.cpp")
     add_library(cna_backend_graphics_sdl_renderer_core STATIC ${CNA_ASCII_SDLRENDERER_SOURCES})
     target_link_libraries(cna_backend_graphics_sdl_renderer_core PUBLIC cna_backend_graphics_common)
     cna_link_sharp_runtime(cna_backend_graphics_sdl_renderer_core PUBLIC)
@@ -44,14 +44,14 @@ endif()
 set(CNA_GDI_SOFTWARE_SOURCES)
 if(CNA_GRAPHICS_BACKEND STREQUAL "GDI")
     set(CNA_GDI_SOFTWARE_SOURCES
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/CNA/Internal/Backends/Software/SoftwareFramebufferAllocation.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/CNA/Internal/Backends/Software/SoftwareTextureAllocation.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/CNA/Internal/Backends/Software/SoftwareFramebuffer.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/CNA/Internal/Backends/Software/SoftwareTexture2D.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/CNA/Internal/Backends/Software/SoftwareRenderTarget2D.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/CNA/Internal/Backends/Software/SoftwareGraphicsBackend2DState.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/CNA/Internal/Backends/Software/SoftwareSpriteBatch.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/CNA/Internal/Backends/Software/SoftwareGraphicsBackend2D.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/Graphics/Backends/Software/SoftwareFramebufferAllocation.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/Graphics/Backends/Software/SoftwareTextureAllocation.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/Graphics/Backends/Software/SoftwareFramebuffer.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/Graphics/Backends/Software/SoftwareTexture2D.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/Graphics/Backends/Software/SoftwareRenderTarget2D.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/Graphics/Backends/Software/SoftwareGraphicsBackend2DState.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/Graphics/Backends/Software/SoftwareSpriteBatch.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/Graphics/Backends/Software/SoftwareGraphicsBackend2D.cpp"
     )
     # GDI-078: report the actual GDI archive boundary at configure time, so plan_gdi.md/NEXT_gdi.md
     # source/object counts can be checked against generated evidence instead of a copied number.
@@ -72,7 +72,7 @@ if(CNA_GRAPHICS_BACKEND STREQUAL "SOFTWARE")
     # This wrapper includes SoftwareGraphicsBackend.cpp with CNA_SOFTWARE_2D_ONLY for the GDI
     # archive. The complete SOFTWARE archive compiles the implementation directly, once.
     list(REMOVE_ITEM BACKEND_SOURCES
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/CNA/Internal/Backends/Software/SoftwareGraphicsBackend2D.cpp")
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/Graphics/Backends/Software/SoftwareGraphicsBackend2D.cpp")
 endif()
 list(APPEND BACKEND_SOURCES ${CNA_GDI_SOFTWARE_SOURCES})
 
@@ -90,10 +90,10 @@ list(APPEND BACKEND_SOURCES ${CNA_GDI_SOFTWARE_SOURCES})
 # assumed in advance. ${BACKEND_TARGET} links this target (D9-112) so
 # D3D9GraphicsBackend::CreateEffectBackend() can construct one.
 set(D3D9_EFFECT_BACKEND_SOURCES
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/CNA/Internal/Backends/D3D9/D3D9EffectBackend.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/CNA/Internal/Backends/D3D9/D3D9ConstantTable.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/Graphics/Backends/D3D9/D3D9EffectBackend.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/Graphics/Backends/D3D9/D3D9ConstantTable.cpp"
 )
-if(CNA_GRAPHICS_BACKEND STREQUAL "D3D9" AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/CNA/Internal/Backends/D3D9/D3D9EffectBackend.cpp")
+if(CNA_GRAPHICS_BACKEND STREQUAL "D3D9" AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/Graphics/Backends/D3D9/D3D9EffectBackend.cpp")
     list(REMOVE_ITEM BACKEND_SOURCES ${D3D9_EFFECT_BACKEND_SOURCES})
     add_library(cna_backend_graphics_d3d9_effect STATIC ${D3D9_EFFECT_BACKEND_SOURCES})
     target_link_libraries(cna_backend_graphics_d3d9_effect PUBLIC cna_backend_graphics_common)

@@ -3,7 +3,7 @@
 
 #include "CNA/Logger.hpp"
 #include "CNA/LogCategory.hpp"
-#include "CNA/Internal/Backends/SdlGpu/shaders/spirv_shaders.hpp"
+#include "shaders/spirv_shaders.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 

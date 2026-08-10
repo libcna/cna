@@ -15,7 +15,7 @@
 
 #include "CNA/Internal/Backends/D3D9/D3D9GraphicsBackend.hpp"
 #include "CNA/Internal/Backends/D3D9/D3D9Buffers.hpp"
-#include "CNA/Internal/Backends/D3D9/shaders/d3d9_instanced3d_shader.hpp"
+#include "shaders/d3d9_instanced3d_shader.hpp"
 
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 

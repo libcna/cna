@@ -75,100 +75,41 @@ function(cna_add_module target alias)
     target_include_directories(${target} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 endfunction()
 
-# --- Framework-root source split (the one directory whose files belong to three different
-# modules; every other module owns whole directories). Kept as explicit lists on purpose:
-# the partition validator below fails the configure if a newly added root TU is missing
-# from exactly one of these lists.
-set(CNA_MATH_ROOT_SOURCES
-    src/Microsoft/Xna/Framework/BoundingBox.cpp
-    src/Microsoft/Xna/Framework/BoundingFrustum.cpp
-    src/Microsoft/Xna/Framework/BoundingSphere.cpp
-    src/Microsoft/Xna/Framework/Color.cpp
-    src/Microsoft/Xna/Framework/Curve.cpp
-    src/Microsoft/Xna/Framework/CurveKey.cpp
-    src/Microsoft/Xna/Framework/CurveKeyCollection.cpp
-    src/Microsoft/Xna/Framework/MathHelper.cpp
-    src/Microsoft/Xna/Framework/Matrix.cpp
-    src/Microsoft/Xna/Framework/Plane.cpp
-    src/Microsoft/Xna/Framework/Point.cpp
-    src/Microsoft/Xna/Framework/Quaternion.cpp
-    src/Microsoft/Xna/Framework/Ray.cpp
-    src/Microsoft/Xna/Framework/Rectangle.cpp
-    src/Microsoft/Xna/Framework/Vector2.cpp
-    src/Microsoft/Xna/Framework/Vector3.cpp
-    src/Microsoft/Xna/Framework/Vector4.cpp
-)
-# FrameworkDispatcher lives with audio, not runtime: its implementation state is the audio
+# --- Per-module directory-owned sources (Phase-2 physical layout: every module owns the
+# src/<Module>/ directory named after it, with the XNA API implementation under <Module>/Xna/,
+# CNA::Internal engine parts under <Module>/Internal/, and NOXNA extension surfaces under
+# <Module>/NoXna/ where a module has more than one area). Ownership is purely directory-based;
+# the partition validator below keeps it total, so a TU added outside every module directory
+# still fails the configure.
+#
+# FrameworkDispatcher.cpp lives in src/Audio/Xna/: its implementation state is the audio
 # stream list, and audio/media/runtime all call INTO it (ownership follows dependency
 # direction; assigning it to runtime would create a runtime<->audio link cycle for nothing).
-set(CNA_AUDIO_ROOT_SOURCES
-    src/Microsoft/Xna/Framework/FrameworkDispatcher.cpp
-)
-set(CNA_RUNTIME_ROOT_SOURCES
-    src/Microsoft/Xna/Framework/DrawableGameComponent.cpp
-    src/Microsoft/Xna/Framework/ExitingEventArgs.cpp
-    src/Microsoft/Xna/Framework/Game.cpp
-    src/Microsoft/Xna/Framework/GameComponent.cpp
-    src/Microsoft/Xna/Framework/GameComponentCollection.cpp
-    src/Microsoft/Xna/Framework/GameComponentCollectionEventArgs.cpp
-    src/Microsoft/Xna/Framework/GameServiceContainer.cpp
-    src/Microsoft/Xna/Framework/GameTime.cpp
-    src/Microsoft/Xna/Framework/GameWindow.cpp
-    src/Microsoft/Xna/Framework/GraphicsDeviceInformation.cpp
-    src/Microsoft/Xna/Framework/GraphicsDeviceManager.cpp
-    src/Microsoft/Xna/Framework/LaunchParameters.cpp
-    src/Microsoft/Xna/Framework/PreparingDeviceSettingsEventArgs.cpp
-    src/Microsoft/Xna/Framework/TitleContainer.cpp
-    src/Microsoft/Xna/Framework/TitleLocation.cpp
-)
-
-# --- Per-module directory-owned sources ---
-file(GLOB CNA_CORE_SOURCES CONFIGURE_DEPENDS "src/CNA/*.cpp")
+file(GLOB CNA_MATH_SOURCES CONFIGURE_DEPENDS "src/Math/*.cpp")
+file(GLOB CNA_CORE_SOURCES CONFIGURE_DEPENDS "src/Core/*.cpp")
+file(GLOB CNA_RUNTIME_SOURCES CONFIGURE_DEPENDS "src/Runtime/*.cpp")
 file(GLOB_RECURSE CNA_GRAPHICS_CORE_SOURCES CONFIGURE_DEPENDS
-    "src/Microsoft/Xna/Framework/Graphics/*.cpp"
-    "src/CNA/Internal/Graphics/*.cpp"
-    "src/CNA/Internal/Backends/Common/*.cpp"
+    "src/Graphics/Xna/*.cpp"
+    "src/Graphics/Internal/*.cpp"
 )
-file(GLOB_RECURSE CNA_INPUT_SOURCES CONFIGURE_DEPENDS
-    "src/Microsoft/Xna/Framework/Input/*.cpp"
-    "src/CNA/Internal/Input/*.cpp"
-    "src/CNA/Input/*.cpp"
-)
-file(GLOB_RECURSE CNA_AUDIO_SOURCES CONFIGURE_DEPENDS
-    "src/Microsoft/Xna/Framework/Audio/*.cpp"
-    "src/CNA/Internal/Audio/*.cpp"
-)
-list(APPEND CNA_AUDIO_SOURCES ${CNA_AUDIO_ROOT_SOURCES})
-file(GLOB_RECURSE CNA_MEDIA_SOURCES CONFIGURE_DEPENDS
-    "src/Microsoft/Xna/Framework/Media/*.cpp"
-    "src/CNA/Internal/Media/*.cpp"
-)
-file(GLOB_RECURSE CNA_CONTENT_SOURCES CONFIGURE_DEPENDS
-    "src/Microsoft/Xna/Framework/Content/*.cpp"
-    "src/CNA/Internal/Xnb/*.cpp"
-    "src/CNA/Internal/GltfImport/*.cpp"
-)
-file(GLOB CNA_STORAGE_SOURCES CONFIGURE_DEPENDS
-    "src/Microsoft/Xna/Framework/Storage/*.cpp"
-)
-file(GLOB_RECURSE CNA_DEVICES_SOURCES CONFIGURE_DEPENDS
-    "src/Microsoft/Devices/*.cpp"
-    "src/CNA/Devices/*.cpp"
-)
-file(GLOB CNA_NOXNA_SOURCES CONFIGURE_DEPENDS
-    "src/CNA/Graphics/*.cpp"
-)
+file(GLOB_RECURSE CNA_INPUT_SOURCES CONFIGURE_DEPENDS "src/Input/*.cpp")
+file(GLOB_RECURSE CNA_AUDIO_SOURCES CONFIGURE_DEPENDS "src/Audio/*.cpp")
+file(GLOB_RECURSE CNA_MEDIA_SOURCES CONFIGURE_DEPENDS "src/Media/*.cpp")
+file(GLOB_RECURSE CNA_CONTENT_SOURCES CONFIGURE_DEPENDS "src/Content/*.cpp")
+file(GLOB CNA_STORAGE_SOURCES CONFIGURE_DEPENDS "src/Storage/*.cpp")
+file(GLOB_RECURSE CNA_DEVICES_SOURCES CONFIGURE_DEPENDS "src/Devices/*.cpp")
+file(GLOB_RECURSE CNA_NOXNA_SOURCES CONFIGURE_DEPENDS "src/NoXna/*.cpp")
 
 # Exclude FFmpeg-dependent sources on platforms where FFmpeg is unavailable
 if(NOT CNA_FFMPEG_AVAILABLE)
-    list(FILTER CNA_MEDIA_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Media/VideoDecoder\\.cpp$")
-    list(FILTER CNA_MEDIA_SOURCES EXCLUDE REGEX ".*/Media/Video/VideoPlayer\\.cpp$")
-    list(FILTER CNA_MEDIA_SOURCES EXCLUDE REGEX ".*/Media/Video/Video\\.cpp$")
+    list(FILTER CNA_MEDIA_SOURCES EXCLUDE REGEX ".*/Media/Internal/VideoDecoder\\.cpp$")
+    list(FILTER CNA_MEDIA_SOURCES EXCLUDE REGEX ".*/Media/Xna/Video/VideoPlayer\\.cpp$")
+    list(FILTER CNA_MEDIA_SOURCES EXCLUDE REGEX ".*/Media/Xna/Video/Video\\.cpp$")
     # REMED-BUILD-013 (discovered while verifying it): VideoContentTypeReader.cpp constructs a
     # Video (Media::Video::Video(...)) -- a genuine, previously-latent gap in this same exclusion
     # list, never hit before because every FFmpeg-unavailable target (MinGW D3D9/D3D11/D3D12,
     # Emscripten, Android) that links a full CNA never got far enough in a real build to reach it.
-    list(FILTER CNA_CONTENT_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Xnb/VideoContentTypeReader\\.cpp$")
+    list(FILTER CNA_CONTENT_SOURCES EXCLUDE REGEX ".*/Content/Xnb/VideoContentTypeReader\\.cpp$")
 endif()
 
 # --- Source-partition validator (no-loss ownership gate, MODULARIZATION_PLAN.md §5):
@@ -177,21 +118,19 @@ endif()
 # FFmpeg-gated exclusion. A new file that matches none of the module globs, or a file
 # matched by two of them, fails the configure here rather than silently changing coverage.
 file(GLOB_RECURSE _cna_all_production_sources CONFIGURE_DEPENDS "src/*.cpp")
-list(FILTER _cna_all_production_sources EXCLUDE REGEX "src/CNA/Internal/Backends/.*")
-list(FILTER _cna_all_production_sources EXCLUDE REGEX "src/Microsoft/Xna/Framework/GamerServices/.*")
-list(FILTER _cna_all_production_sources EXCLUDE REGEX "src/CNA/Internal/GamerServices/.*")
-list(FILTER _cna_all_production_sources EXCLUDE REGEX "src/Microsoft/Xna/Framework/Net/.*")
-list(FILTER _cna_all_production_sources EXCLUDE REGEX "src/CNA/Internal/Net/.*")
+list(FILTER _cna_all_production_sources EXCLUDE REGEX "src/Graphics/Backends/.*")
+list(FILTER _cna_all_production_sources EXCLUDE REGEX "src/GamerServices/.*")
+list(FILTER _cna_all_production_sources EXCLUDE REGEX "src/Net/.*")
 if(NOT CNA_FFMPEG_AVAILABLE)
-    list(FILTER _cna_all_production_sources EXCLUDE REGEX ".*/CNA/Internal/Media/VideoDecoder\\.cpp$")
-    list(FILTER _cna_all_production_sources EXCLUDE REGEX ".*/Media/Video/VideoPlayer\\.cpp$")
-    list(FILTER _cna_all_production_sources EXCLUDE REGEX ".*/Media/Video/Video\\.cpp$")
-    list(FILTER _cna_all_production_sources EXCLUDE REGEX ".*/CNA/Internal/Xnb/VideoContentTypeReader\\.cpp$")
+    list(FILTER _cna_all_production_sources EXCLUDE REGEX ".*/Media/Internal/VideoDecoder\\.cpp$")
+    list(FILTER _cna_all_production_sources EXCLUDE REGEX ".*/Media/Xna/Video/VideoPlayer\\.cpp$")
+    list(FILTER _cna_all_production_sources EXCLUDE REGEX ".*/Media/Xna/Video/Video\\.cpp$")
+    list(FILTER _cna_all_production_sources EXCLUDE REGEX ".*/Content/Xnb/VideoContentTypeReader\\.cpp$")
 endif()
 
 set(_cna_owned_sources)
 foreach(_cna_list IN ITEMS
-        CNA_MATH_ROOT_SOURCES CNA_RUNTIME_ROOT_SOURCES CNA_CORE_SOURCES
+        CNA_MATH_SOURCES CNA_RUNTIME_SOURCES CNA_CORE_SOURCES
         CNA_GRAPHICS_CORE_SOURCES CNA_INPUT_SOURCES CNA_AUDIO_SOURCES
         CNA_MEDIA_SOURCES CNA_CONTENT_SOURCES CNA_STORAGE_SOURCES
         CNA_DEVICES_SOURCES CNA_NOXNA_SOURCES)
@@ -225,7 +164,7 @@ unset(_cna_unknown)
 # --- Module target definitions and their real link edges (derived, not aspirational;
 # see MODULARIZATION_PLAN.md §1.4 for the mechanical include-graph evidence) ---
 
-cna_add_module(cna_math Math ${CNA_MATH_ROOT_SOURCES})
+cna_add_module(cna_math Math ${CNA_MATH_SOURCES})
 cna_link_sharp_runtime(cna_math PUBLIC Core.Base)
 
 cna_add_module(cna_core Core ${CNA_CORE_SOURCES})
@@ -291,7 +230,7 @@ cna_add_module(cna_storage Storage ${CNA_STORAGE_SOURCES})
 cna_link_sharp_runtime(cna_storage PUBLIC Core.Base IO Runtime Threading)
 target_link_libraries(cna_storage PRIVATE SDL3::SDL3)
 
-cna_add_module(cna_runtime Runtime ${CNA_RUNTIME_ROOT_SOURCES})
+cna_add_module(cna_runtime Runtime ${CNA_RUNTIME_SOURCES})
 target_link_libraries(cna_runtime PUBLIC
         cna_graphics_core cna_input cna_content cna_audio cna_media cna_core cna_math)
 cna_link_sharp_runtime(cna_runtime PUBLIC Core.Base IO)
@@ -410,10 +349,7 @@ endif()
 
 # --- GamerServices + Net ---
 if(CNA_ENABLE_NET)
-    file(GLOB_RECURSE CNA_GAMERSERVICES_SOURCES CONFIGURE_DEPENDS
-        "src/Microsoft/Xna/Framework/GamerServices/*.cpp"
-        "src/CNA/Internal/GamerServices/*.cpp"
-    )
+    file(GLOB_RECURSE CNA_GAMERSERVICES_SOURCES CONFIGURE_DEPENDS "src/GamerServices/*.cpp")
     add_library(CNA_GamerServices STATIC ${CNA_GAMERSERVICES_SOURCES})
     add_library(CNA::GamerServices ALIAS CNA_GamerServices)
     target_include_directories(CNA_GamerServices
@@ -426,10 +362,7 @@ if(CNA_ENABLE_NET)
     target_link_libraries(CNA_GamerServices PUBLIC cna_runtime cna_storage PRIVATE SDL3::SDL3)
     cna_link_sharp_runtime(CNA_GamerServices PUBLIC Core.Base IO Collections.Core Globalization Runtime Threading)
 
-    file(GLOB_RECURSE CNA_NET_SOURCES CONFIGURE_DEPENDS
-        "src/Microsoft/Xna/Framework/Net/*.cpp"
-        "src/CNA/Internal/Net/*.cpp"
-    )
+    file(GLOB_RECURSE CNA_NET_SOURCES CONFIGURE_DEPENDS "src/Net/*.cpp")
     add_library(CNA_Net STATIC ${CNA_NET_SOURCES})
     add_library(CNA::Net ALIAS CNA_Net)
     target_include_directories(CNA_Net

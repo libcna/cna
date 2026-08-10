@@ -25,8 +25,8 @@
 #include "CNA/Internal/Backends/D3D9/D3D9Textures.hpp"
 #include "CNA/Internal/Backends/D3D9/D3D9RenderTargets.hpp"
 #include "CNA/Internal/Backends/D3D9/D3D9ConstantUpload.hpp"
-#include "CNA/Internal/Backends/D3D9/shaders/d3d9_skinned_vertex_color_shader.hpp"
-#include "CNA/Internal/Backends/D3D9/shaders/D3D9CnaShaderRegisters.hpp"
+#include "shaders/d3d9_skinned_vertex_color_shader.hpp"
+#include "shaders/D3D9CnaShaderRegisters.hpp"
 
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 

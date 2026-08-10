@@ -1,7 +1,7 @@
 // plan_dx.md Phase DX3 (DX-15-embed).
 #include "CNA/Internal/Backends/D3DCommon/D3DShaderCache.hpp"
 
-#include "CNA/Internal/Backends/D3DCommon/shaders/hlsl_shaders.hpp"
+#include "shaders/hlsl_shaders.hpp"
 
 namespace CNA::Internal::Backends::D3DCommon
 {

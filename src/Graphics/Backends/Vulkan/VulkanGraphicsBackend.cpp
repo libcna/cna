@@ -1,5 +1,5 @@
 #include "CNA/Internal/Backends/Vulkan/VulkanGraphicsBackend.hpp"
-#include "CNA/Internal/Backends/Vulkan/shaders/spirv_shaders.hpp"
+#include "shaders/spirv_shaders.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"

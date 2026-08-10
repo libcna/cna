@@ -30,7 +30,7 @@
 
 // D3D9ShaderConstantSlot is declared in shaders/D3D9ShaderRegisters.hpp (D9-72's own auto-generated
 // header) -- reused verbatim rather than re-declaring an identical struct here.
-#include "CNA/Internal/Backends/D3D9/shaders/D3D9ShaderRegisters.hpp"
+#include "D3D9ShaderRegisters.hpp"
 
 namespace CNA::Internal::Backends::D3D9::Shaders
 {

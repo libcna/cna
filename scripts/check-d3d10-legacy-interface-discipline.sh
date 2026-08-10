@@ -12,7 +12,7 @@
 set -uo pipefail
 
 repo_root="$1"
-d3d10_src="${repo_root}/src/CNA/Internal/Backends/D3D10"
+d3d10_src="${repo_root}/src/Graphics/Backends/D3D10"
 d3d10_include="${repo_root}/include/CNA/Internal/Backends/D3D10"
 
 if [ ! -d "$d3d10_src" ] || [ ! -d "$d3d10_include" ]; then

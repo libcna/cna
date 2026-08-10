@@ -17,4 +17,4 @@
 #include "sokol_log.h"
 #include "sokol_gfx.h"
 
-#include "CNA/Internal/Backends/Sokol/shaders/sokol_shaders.hpp"
+#include "shaders/sokol_shaders.hpp"

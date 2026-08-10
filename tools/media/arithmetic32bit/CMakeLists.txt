@@ -34,8 +34,8 @@ get_filename_component(CNA_ROOT "${CNA_ROOT}" ABSOLUTE)
 
 add_executable(cna_audio_tag_parser_32bit_overflow_check
     "${CMAKE_CURRENT_SOURCE_DIR}/../audio_tag_parser_32bit_overflow_check.cpp"
-    "${CNA_ROOT}/src/CNA/Internal/Media/AudioTagParser.cpp"
-    "${CNA_ROOT}/src/Microsoft/Xna/Framework/Content/ContentLoadException.cpp"
+    "${CNA_ROOT}/src/Media/Internal/AudioTagParser.cpp"
+    "${CNA_ROOT}/src/Content/Xna/ContentLoadException.cpp"
 )
 target_include_directories(cna_audio_tag_parser_32bit_overflow_check PRIVATE
     "${CNA_ROOT}/include"
@@ -43,7 +43,7 @@ target_include_directories(cna_audio_tag_parser_32bit_overflow_check PRIVATE
 
 add_executable(cna_framebuffer_allocation_32bit_overflow_check
     "${CNA_ROOT}/tools/graphics/framebuffer_allocation_32bit_check.cpp"
-    "${CNA_ROOT}/src/CNA/Internal/Backends/Software/SoftwareFramebufferAllocation.cpp"
+    "${CNA_ROOT}/src/Graphics/Backends/Software/SoftwareFramebufferAllocation.cpp"
 )
 target_include_directories(cna_framebuffer_allocation_32bit_overflow_check PRIVATE
     "${CNA_ROOT}/include"
@@ -53,7 +53,7 @@ target_include_directories(cna_framebuffer_allocation_32bit_overflow_check PRIVA
 # framebuffer planner above -- see tools/graphics/texture_allocation_32bit_check.cpp.
 add_executable(cna_texture_allocation_32bit_overflow_check
     "${CNA_ROOT}/tools/graphics/texture_allocation_32bit_check.cpp"
-    "${CNA_ROOT}/src/CNA/Internal/Backends/Software/SoftwareTextureAllocation.cpp"
+    "${CNA_ROOT}/src/Graphics/Backends/Software/SoftwareTextureAllocation.cpp"
 )
 target_include_directories(cna_texture_allocation_32bit_overflow_check PRIVATE
     "${CNA_ROOT}/include"

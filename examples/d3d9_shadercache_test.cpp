@@ -23,7 +23,7 @@
 
 #include "CNA/Internal/Backends/D3D9/D3D9GraphicsBackend.hpp"
 #include "CNA/Internal/Backends/D3D9/D3D9ShaderCache.hpp"
-#include "CNA/Internal/Backends/D3D9/shaders/d3d9_shaders.hpp"
+#include "Graphics/Backends/D3D9/shaders/d3d9_shaders.hpp"
 
 #include <cstdio>
 #include <stdexcept>

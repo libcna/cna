@@ -26,8 +26,8 @@
 #include "CNA/Internal/Backends/D3D9/D3D9Textures.hpp"
 #include "CNA/Internal/Backends/D3D9/D3D9RenderTargets.hpp"
 #include "CNA/Internal/Backends/D3D9/D3D9ConstantUpload.hpp"
-#include "CNA/Internal/Backends/D3D9/shaders/d3d9_pbr_shaders.hpp"
-#include "CNA/Internal/Backends/D3D9/shaders/D3D9CnaShaderRegisters.hpp"
+#include "shaders/d3d9_pbr_shaders.hpp"
+#include "shaders/D3D9CnaShaderRegisters.hpp"
 #include "CNA/Internal/Graphics/ImageData.hpp"
 
 #include "Microsoft/Xna/Framework/Matrix.hpp"
