@@ -1,9 +1,10 @@
 # OPENGL33 (desktop OpenGL 3.3 core profile) Renderer — Status
 
-`OPENGL33` is one of the 4 public GL-family `CNA_GRAPHICS_RENDERER` values introduced by
-`plan_glbackends.md` — it shares its entire implementation with `OPENGLES3`/`WEBGL1`/`WEBGL2`
-(`src/Graphics/Renderers/EasyGL/`, on top of the sibling `easy-gl` library), distinguished at
-compile time by the `CNA_GL_PROFILE_OPENGL33` definition. Unlike the other 3 profiles (all
+`OPENGL33` is one of the public GL-family `CNA_GRAPHICS_RENDERER` values (the original 4 were
+introduced by `plan_glbackends.md`; the Phase-2 expansion later added `OPENGLES2`) — it shares
+its entire implementation with `OPENGLES2`/`OPENGLES3`/`WEBGL1`/`WEBGL2`
+(`modules/renderers/easygl/`, on top of the sibling `easy-gl` library), distinguished at
+compile time by the `CNA_GL_PROFILE_OPENGL33` definition. Unlike the other profiles (all
 OpenGL ES / WebGL, GLSL ES syntax), `OPENGL33` requests a real desktop `SDL_GL_CONTEXT_PROFILE_CORE`
 context, GL 3.3.
 

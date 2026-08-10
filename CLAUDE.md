@@ -451,12 +451,12 @@ individual task. Do not push unless the user explicitly asks to push.
 | CNA utilities/extensions  | `modules/core/include/CNA/…`, `modules/*-ext/…`                 | CNAEXT helpers, logging, etc.   |
 
 Renderer selection is compile-time via `CNA_GRAPHICS_RENDERER` CMake option
-(`SDL_RENDERER` | `OPENGLES3` | `OPENGL33` | `WEBGL1` | `WEBGL2` | `BGFX` | `VULKAN` | `WEBGPU` |
+(`SDL_RENDERER` | `OPENGLES2` | `OPENGLES3` | `OPENGL33` | `WEBGL1` | `WEBGL2` | `BGFX` | `VULKAN` | `WEBGPU` |
 `MAGNUM` | `HEADLESS` | `SOFTWARE` | `STUB` | `DIRECTX11` | `DIRECTX12` | `DIRECT2D` | `CANVAS` |
 `HTML_DOM` | `SKIA` | `ASCII` | `FREEDIRECT` | `DIRECTX9` | `DIRECTX1` | `DIRECTX2` | `DIRECTX3` | `DIRECTX5` | `DIRECTX6` |
 `DIRECTX7` | `DIRECTX8` | `DIRECTX10` | `SDL_GPU` | `OPENGLES1` | `OPENGL4` | `OPENGL1` | `OPENGL2` |
-`WICKED` | `SOKOL` | `DILIGENT` | `GLIDE` | `GDI` | `LLGL` | `METAL`). These are exactly 41
-public identities; EasyGL remains an internal implementation shared by four GL profiles. `WEBGPU`
+`WICKED` | `SOKOL` | `DILIGENT` | `GLIDE` | `GDI` | `LLGL` | `METAL`). These are exactly 42
+public identities; EasyGL remains an internal implementation shared by five GL profiles. `WEBGPU`
 is experimental and has a functional native
 2D baseline, not yet the 3D/effect parity of the established GPU renderers.
 `MAGNUM` is a desktop-OpenGL renderer built on mosra/magnum -- see `docs/magnum-renderer.md` and
