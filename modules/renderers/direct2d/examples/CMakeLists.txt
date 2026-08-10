@@ -130,6 +130,12 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECT2D")
     endif()
     # The default 2000 cycles are the routine gate; the D2D-117 acceptance run raises them with
     # CNA_DIRECT2D_SOAK_CYCLES=10000, which is why the timeout is generous rather than tight.
+    # D2D-129: this renderer's half of the cross-renderer 2D differential corpus. Same precedent
+    # as EasyGL's cna_diag_easygl and SOFTWARE's cna_diag_software -- a plain executable, not a
+    # CTest, because comparing two renderers needs two separate builds' dumps plus the comparator
+    # (CNA_GRAPHICS_RENDERER is a compile-time choice). See docs/direct2d-easygl-differential.md.
+    cna_direct2d_test(cna_corpus2d_direct2d ${CNA_GRAPHICS_EXAMPLES_DIR}/cross_renderer_2d_corpus.cpp)
+
     cna_register_renderer_test(NAME Direct2D_Soak COMMAND ${_direct2d_soak_command}
         TIMEOUT 900 LABELS "Direct2D;2D;Lifetime;Soak" ENVIRONMENT "${_direct2d_soak_environment}")
 endif()
