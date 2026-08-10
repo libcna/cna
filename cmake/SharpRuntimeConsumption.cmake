@@ -1,17 +1,18 @@
 # sharp-runtime consumption seam (MODULARIZATION_PLAN.md §3).
 #
-# sharp-runtime exists in two shapes during the modularization transition:
+# sharp-runtime exists in two shapes:
 #
-#   - monolithic (current sharp-runtime develop): one SHARP_RUNTIME static archive;
-#   - modular (the completed sharp-runtime modularization): ~41 SharpRuntime::<Component>
-#     targets plus a compatibility SHARP_RUNTIME INTERFACE that exists only under the
-#     default "All" selection.
+#   - modular (sharp-runtime develop since 2026-08-10, commit 81624983): the
+#     SharpRuntime::<Component> targets plus a compatibility SHARP_RUNTIME INTERFACE that
+#     exists only under the default "All" selection — the AUTHORITATIVE shape for the
+#     sibling-develop combination;
+#   - monolithic (pre-modularization checkouts): one SHARP_RUNTIME static archive — kept as
+#     a cheap fallback for old checkouts.
 #
 # Every CNA module declares the specific sharp-runtime components it actually needs through
 # cna_link_sharp_runtime(); against a modular checkout it links exactly those component
 # targets (their PUBLIC dependencies close over the rest), against the monolith it links the
-# single archive. The seam collapses to components-only once the modular sharp-runtime lands
-# in sharp-runtime develop.
+# single archive.
 
 # The complete component closure CNA needs anywhere (derived from CNA's System/... and
 # SharpRuntime/... includes; MODULARIZATION_PLAN.md §1.6): used when a target does not name

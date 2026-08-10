@@ -691,6 +691,22 @@ before this session's check). sharp-runtime develop remains untouched at
 merge-time adaptation stays documented (§ P5) and deliberately unapplied while
 the branch API is still moving.
 
+**CLOSED later on 2026-08-10** (owner decision: integrate the current snapshot
+now, without waiting for the post-audit campaign to finish). The exact snapshot
+`7888a29f` of the remediation branch was merged into sharp-runtime `develop`
+with a history-preserving GPG-signed merge commit `81624983` — five textual
+conflicts resolved semantically (FINAL-STAB-001's int128 probe published on the
+`sharp_runtime_headers` INTERFACE; Decimal.cpp leaving the Core.Base source
+list without native `__int128`; BitConverter keeping both the audit bounds
+checks and the int128 guard; README/NEXT reconciled) — validated
+(validators green; 0-warning build; 16,341/16,341 tests across 37 executables;
+i686 MinGW boundary built and run under Wine with Decimal.cpp proven excluded;
+selective components 10/10) and pushed: `origin/develop == 81624983`. The
+remediation branch was not touched and keeps advancing (observed `5c8e057f`,
+3 commits beyond the integrated snapshot); later increments merge separately.
+The P5 adaptation is now APPLIED on `feature/sharp-runtime-modular-adaptation`
+— see the NEXT.md top section for the retaken CNA matrix.
+
 ---
 
 ## 10. PROMOTION — modularization merged into `develop` (2026-08-10)
@@ -778,3 +794,10 @@ fetched, nothing modified, nothing pushed): sharp-runtime `develop` still
 moving, so no accepted checkpoint exists and the merge was not attempted. The stable modularized public `develop` head is the base future work
 must start from — FUTURE.md Phase 2 (renderer expansion) is unblocked but not
 started and needs its own owner instruction.
+
+*Update, later on 2026-08-10:* the §9.7 gate is now **CLOSED** (see §9.7's
+closing note). Modular sharp-runtime is public on its `develop` (`81624983`)
+and CNA's modular consumption is live via
+`feature/sharp-runtime-modular-adaptation`; after that branch's promotion, the
+resulting CNA `develop` head supersedes `60c363a7` as the base for FUTURE.md
+Phase 2.

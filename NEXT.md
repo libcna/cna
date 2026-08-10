@@ -1,5 +1,63 @@
 # NEXT.md
 
+## MODULAR SHARP-RUNTIME LIVE — **CNA CONSUMES THE PUBLIC MODULAR sharp-runtime `develop`** (2026-08-10)
+
+> The §9.7 external gate is closed by owner decision (integrate the current remediation
+> snapshot now; do not wait for the post-audit campaign to finish). The exact snapshot
+> **`7888a29f`** of `claude/remediation-batch-1804-namespace-b1yjh5` was merged into
+> sharp-runtime `develop` with a history-preserving GPG-signed merge commit **`81624983`**
+> (parents `1e51c2d8` + `7888a29f`; 5 textual conflicts resolved semantically) and published:
+> `origin/develop == 81624983`. FINAL-STAB-001 survived intact — the native-`__int128` probe
+> with `SHARP_RUNTIME_HAS_NATIVE_INT128` published on the `sharp_runtime_headers` INTERFACE,
+> `Decimal.cpp` leaving the Core.Base source list without native `__int128`, BitConverter
+> keeping BOTH the audit bounds checks and the int128 guard, and the i686 MinGW boundary
+> regression rebuilt against the modular graph (256-step cross build, `Decimal.cpp.obj`
+> proven absent, binary also runs under Wine). Gate on the merged develop: boundary/seam/
+> fixture validators green, build **0 warnings / 0 errors**, **16,341 tests passed across 37
+> executables (0 failures locally)**, Int128/UInt128 81 + Decimal 185 + BitConverter 113
+> focused green, selective components **10/10**. The remediation branch itself was not
+> touched and keeps advancing (observed `5c8e057f`, 3 commits beyond the integrated
+> snapshot); later increments merge separately.
+>
+> CNA side — branch `feature/sharp-runtime-modular-adaptation` from `60c363a7`: the
+> documented Net-only adaptation is now **APPLIED**. `NetworkSessionProperties` implements
+> the ticket-#1791 `IList<T>` contract: the non-const `operator[]` returns the tracked
+> `System::Collections::detail::ElementReference` proxy (FNA auto-append preserved at
+> indexing time, since a proxy binds an existing slot), new `getItem`/`setItem` accessors
+> carry real XNA indexer semantics (`get` throws, `set` appends past the end), and a
+> `MutationCounter` advances on every effective mutation. The four proxy-vs-`std::optional`
+> `EXPECT_EQ` sites in `NetDiscoveryProtocolTests` moved to `getItem` — exactly the 4
+> compile errors / 1 root cause the merge preview predicted; no other CNA code was affected
+> (`NetDiscoveryProtocol.cpp:96`'s `properties[index] = value;` is the spelling the proxy
+> exists to keep). 8 new proxy/getItem/setItem regression tests. The dual-mode seam is
+> unchanged in mechanism; against the sibling public sharp-runtime develop it selects
+> **MODULAR mode in every configuration** (monolithic fallback retained for old checkouts).
+> Per-module component sets re-derived from actual includes == the declared sets, unchanged.
+>
+> Retaken matrix on the modular combination (all four trees rebuilt): partition validator
+> green everywhere; module gates **12/12 HEADLESS** (probe_math link line =
+> `libcna_math.a + libsharp_runtime_core.a` only — the math-only closure proven at link
+> level; `GraphicsNativeSdkFree` green), **11/11 OPENGLES**, **11/11 VULKAN**; renderer
+> identities **41**; registrations **6138 / 6545 / 6442** (= promoted baseline 6130/6537/6434
+> + the 8 new Net tests); HEADLESS `-L Headless` 48 = 45 pass + 2 skip + the accepted
+> `Headless_Smoke` residual; EasyGL 293 on a dedicated Xvfb (`CNA_TEST_DISPLAY=:96`) =
+> **291 pass + 1 skip + 1 fail** — `EasyGL_GraphicsDevice_ReferenceStencil` (Task 872,
+> unchanged); VULKAN focused **222 = 221 + the accepted `Vulkan_DepthBias`** llvmpipe
+> residual; from the repo root: Net 195, NetworkSessionProperties 28, Content 247 (Decimal
+> XNB readers **5 = 5**), Audio 561, Input 412, Runtime 78, GamerServices 397 — all green.
+> ASan+UBSan (`address,undefined,float-cast-overflow`): all five probes clean under
+> `check_initialization_order=1:strict_init_order=1`; strict curated corpus **650 = 647
+> pass + 3 skip, zero reports** (REMED-GFX-221 coverage retained); the adapted Net paths
+> (38 tests) sanitizer-clean; the only leak reachable in the wider Net family is the
+> documented pre-existing `NetworkSession::EndCreate` P6 finding (NetworkSession.cpp:762),
+> not re-opened. No-loss: production **1357 → 1357** (content changes only in the two
+> NetworkSessionProperties files), `api-decls.tsv` **byte-identical at 1300**, tests
+> **483 → 483** (content changes only in the two Net test files).
+>
+> After this branch's fast-forward promotion, the resulting CNA `develop` head is the
+> renderer-expansion base (FUTURE.md Phase 2) — which remains **not started** and needs its
+> own owner instruction.
+
 ## MODULARIZATION PROMOTED — **CNA MODULARIZATION COMPLETE AND PROMOTED TO `develop`** (2026-08-10)
 
 > `develop` was fast-forwarded to the accepted modularization head: `5f2c4e941` →

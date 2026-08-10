@@ -16,7 +16,7 @@ Distinguish these three clearly. Everything in the FUTURE column is unstarted.
 |---|---|---|
 | **CURRENT** | Post-audit integration campaign promoted to `develop` | 21/21 lanes accepted, 0 pending, Batch 0–6 complete, `FINAL-STAB-001` complete |
 | **CURRENT** | Public CNA renderer identities | **41** — mechanically counted from `include/CNA/GraphicsBackendType.hpp` |
-| **CURRENT** | Phase 1 — CNA modularization | **COMPLETE AND PROMOTED** — fast-forwarded into `develop` on 2026-08-10 at `41028e995` (target graph 2026-08-09 + physical layout/hardening 2026-08-10, no-loss-proven); the sharp-runtime audit-remediation develop merge is a separate still-open external gate |
+| **CURRENT** | Phase 1 — CNA modularization | **COMPLETE AND PROMOTED** — fast-forwarded into `develop` on 2026-08-10 at `41028e995` (target graph 2026-08-09 + physical layout/hardening 2026-08-10, no-loss-proven); the former sharp-runtime external gate is closed: modular sharp-runtime is public on its `develop` (`81624983`) and CNA consumes it in modular mode (see `NEXT.md` top section) |
 | **FUTURE** | Phase 2 — renderer expansion (OPENGLES2 + 13 new renderers) | **not started**; its Phase-1 blocker is cleared, but starting it still requires a fresh explicit owner instruction |
 | **FUTURE** | Phase 3 — complete XNA sample campaign | **not started**; blocked on Phases 1–2 |
 | **FUTURE** | Phase 4 — historical plan/audit review | **not started**; blocked on Phase 3 |
@@ -27,8 +27,10 @@ Explicitly **not** true today, and not to be stated as true anywhere:
 - CNA does **not** have 55 renderers. It has 41.
 - Modularization is complete **and promoted**: `develop` is modularized as of 2026-08-10
   (`41028e995`, target graph + physical layout, no-loss-proven; see `MODULARIZATION_PLAN.md`
-  §10). The sharp-runtime audit-remediation develop merge is a separate still-open external
-  gate; it does **not** make CNA modularization incomplete.
+  §10). The sharp-runtime side is closed too: the remediation snapshot `7888a29f` was merged
+  into sharp-runtime `develop` (`81624983`, published) and CNA consumes the modular
+  `SharpRuntime::<Component>` targets; the audit-remediation campaign itself continues on its
+  feature branch and later increments merge separately.
 - The XNA samples do **not** all pass. The corpus has not been revisited.
 - glTF is **not** corrected. `cna-gltf-viewer` still displays many assets incorrectly.
 
