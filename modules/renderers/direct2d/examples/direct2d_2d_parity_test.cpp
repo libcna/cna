@@ -34,6 +34,15 @@
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+// D2D-40: CompositePorterDuffReference is the independent CPU oracle the composite-mode
+// matrix below compares Direct2D output against; Direct2DBlendMode names the modes.
+// NOGDI keeps <windows.h> (pulled in by d2d1_1.h) from declaring the global ::Rectangle
+// GDI function, which would otherwise make every unqualified Rectangle in this file
+// ambiguous against Microsoft::Xna::Framework::Rectangle. Direct2D itself never uses GDI.
+#ifndef NOGDI
+#define NOGDI
+#endif
+#include "CNA/Internal/Renderers/Direct2D/Direct2DRenderer.hpp"
 #include "System/NotSupportedException.hpp"
 
 #include <SDL3/SDL.h>
@@ -52,6 +61,8 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
+using CNA::Internal::Renderers::Direct2D::CompositePorterDuffReference;
+using CNA::Internal::Renderers::Direct2D::Direct2DBlendMode;
 
 namespace
 {
@@ -946,6 +957,104 @@ protected:
             check("DestinationOver direct fills transparent", 6, 1, Color(255, 0, 0, 255));
             check("DestinationOver brush preserves destination", 9, 1, Color(0, 0, 255, 255));
             check("DestinationOver brush fills transparent", 14, 1, Color(255, 0, 0, 255));
+
+            // D2D-40: every exact composite mode against an INDEPENDENT algebraic oracle. The
+            // checks above compare one Direct2D path with another Direct2D path, which cannot
+            // detect a mode that is uniformly mapped to the wrong operator.
+            // CompositePorterDuffReference evaluates the operator's own Fs/Fd definition on the
+            // CPU without consulting CNA's mapping at all, and both operands are deliberately
+            // channel-asymmetric and partially transparent so that no two operators agree by
+            // accident.
+            constexpr std::array<std::uint8_t, 4> compositeSource{{100, 50, 25, 200}};
+            constexpr std::array<std::uint8_t, 4> compositeDestination{{40, 80, 120, 150}};
+            struct CompositeModeCase
+            {
+                const char* name;
+                Blend colorSource;
+                Blend colorDestination;
+                Direct2DBlendMode mode;
+            };
+            const std::array<CompositeModeCase, 10> compositeCases{{
+                {"Copy", Blend::One, Blend::Zero, Direct2DBlendMode::Copy},
+                {"SourceOver", Blend::One, Blend::InverseSourceAlpha, Direct2DBlendMode::SourceOver},
+                {"DestinationOver", Blend::InverseDestinationAlpha, Blend::One,
+                 Direct2DBlendMode::DestinationOver},
+                {"SourceIn", Blend::DestinationAlpha, Blend::Zero, Direct2DBlendMode::SourceIn},
+                {"DestinationIn", Blend::Zero, Blend::SourceAlpha, Direct2DBlendMode::DestinationIn},
+                {"SourceOut", Blend::InverseDestinationAlpha, Blend::Zero, Direct2DBlendMode::SourceOut},
+                {"DestinationOut", Blend::Zero, Blend::InverseSourceAlpha,
+                 Direct2DBlendMode::DestinationOut},
+                {"SourceAtop", Blend::DestinationAlpha, Blend::InverseSourceAlpha,
+                 Direct2DBlendMode::SourceAtop},
+                {"DestinationAtop", Blend::InverseDestinationAlpha, Blend::SourceAlpha,
+                 Direct2DBlendMode::DestinationAtop},
+                {"Xor", Blend::InverseDestinationAlpha, Blend::InverseSourceAlpha,
+                 Direct2DBlendMode::Xor},
+            }};
+
+            auto compositeSourceTexture = Texture2D::CreateFromPixels(
+                device, 1, 1,
+                std::vector<uint8_t>{compositeSource[0], compositeSource[1], compositeSource[2],
+                                     compositeSource[3]});
+            auto compositeDestinationTexture = Texture2D::CreateFromPixels(
+                device, 1, 1,
+                std::vector<uint8_t>{compositeDestination[0], compositeDestination[1],
+                                     compositeDestination[2], compositeDestination[3]});
+            // SetData writes the render target's level-zero bytes exactly (D2D-87), so the
+            // GPU-resident source variant carries the same premultiplied operand as the texture
+            // instead of an approximation produced by a preceding blend.
+            RenderTarget2D compositeSourceTarget(device, 1, 1);
+            const std::array<Color, 1> compositeSourcePixel{
+                Color(compositeSource[0], compositeSource[1], compositeSource[2], compositeSource[3])};
+            compositeSourceTarget.SetData(compositeSourcePixel.data(),
+                                          static_cast<int>(compositeSourcePixel.size()));
+
+            device.Clear(Color::Transparent);
+            // One destination pass for the whole matrix: Copy writes the operand bytes verbatim.
+            sprites_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, nullptr,
+                            &scissorDisabled);
+            for (std::size_t index = 0; index < compositeCases.size(); ++index)
+            {
+                const int tileX = static_cast<int>(index) * 4;
+                sprites_->Draw(compositeDestinationTexture, Rectangle(tileX, 0, 4, 4),
+                               Rectangle(0, 0, 1, 1), Color::White);
+                sprites_->Draw(compositeDestinationTexture, Rectangle(tileX, 4, 4, 4),
+                               Rectangle(0, 0, 1, 1), Color::White);
+            }
+            sprites_->End();
+
+            for (std::size_t index = 0; index < compositeCases.size(); ++index)
+            {
+                const CompositeModeCase& testCase = compositeCases[index];
+                BlendState compositeBlend = BlendState::Opaque;
+                compositeBlend.setColorSourceBlendProperty(testCase.colorSource);
+                compositeBlend.setAlphaSourceBlendProperty(testCase.colorSource);
+                compositeBlend.setColorDestinationBlendProperty(testCase.colorDestination);
+                compositeBlend.setAlphaDestinationBlendProperty(testCase.colorDestination);
+                const int tileX = static_cast<int>(index) * 4;
+                sprites_->Begin(SpriteSortMode::Deferred, compositeBlend, &point, nullptr,
+                                &scissorDisabled);
+                sprites_->Draw(compositeSourceTexture, Rectangle(tileX, 0, 4, 4),
+                               Rectangle(0, 0, 1, 1), Color::White);
+                sprites_->Draw(compositeSourceTarget, Rectangle(tileX, 4, 4, 4),
+                               Rectangle(0, 0, 1, 1), Color::White);
+                sprites_->End();
+            }
+
+            for (std::size_t index = 0; index < compositeCases.size(); ++index)
+            {
+                const CompositeModeCase& testCase = compositeCases[index];
+                const std::array<std::uint8_t, 4> expected = CompositePorterDuffReference(
+                    testCase.mode, compositeSource, compositeDestination);
+                const Color expectedColor(expected[0], expected[1], expected[2], expected[3]);
+                const int tileX = static_cast<int>(index) * 4 + 1;
+                const std::string textureLabel =
+                    std::string("Porter-Duff oracle ") + testCase.name + " (Texture2D source)";
+                const std::string targetLabel =
+                    std::string("Porter-Duff oracle ") + testCase.name + " (RenderTarget2D source)";
+                check(textureLabel.c_str(), tileX, 1, expectedColor);
+                check(targetLabel.c_str(), tileX, 5, expectedColor);
+            }
         }
         if (verifyRenderTargetDecoration)
         {
@@ -2054,7 +2163,9 @@ protected:
                     emptyFrameResizeAccepted ? "PASS" : "FAIL");
         passed = passed && emptyFrameResizeAccepted;
         renderer.SetVirtualResolution(48, 32);
-        const auto near = [](float actual, float expected) {
+        // Not named `near`: <windows.h> (reached through the Direct2D renderer header above)
+        // still defines the legacy empty `near`/`far` macros.
+        const auto nearlyEqual = [](float actual, float expected) {
             return std::abs(actual - expected) <= 0.05f;
         };
         const auto verifyPresentationTransform = [&](PresentationMode mode, const char* label,
@@ -2070,8 +2181,9 @@ protected:
                 12.0f, 8.0f, windowX, windowY);
             const bool transformedBack = transformedOut && renderer.TransformWindowToLogical(
                 windowX, windowY, logicalX, logicalY);
-            const bool matches = transformedBack && near(windowX, 12.0f * scaleX + offsetX) &&
-                near(windowY, 8.0f * scaleY + offsetY) && near(logicalX, 12.0f) && near(logicalY, 8.0f);
+            const bool matches = transformedBack && nearlyEqual(windowX, 12.0f * scaleX + offsetX) &&
+                nearlyEqual(windowY, 8.0f * scaleY + offsetY) &&
+                nearlyEqual(logicalX, 12.0f) && nearlyEqual(logicalY, 8.0f);
             std::printf("[%s] Direct2D presentation %s uses physical client transform\n",
                         matches ? "PASS" : "FAIL", label);
             passed = passed && matches;

@@ -450,6 +450,74 @@ namespace CNA::Internal::Renderers::Direct2D
             "Direct2D supports only its exact SpriteBatch presets and symmetric Add Porter-Duff factors.");
     }
 
+    std::array<std::uint8_t, 4> CompositePorterDuffReference(
+        Direct2DBlendMode blendMode, const std::array<std::uint8_t, 4>& source,
+        const std::array<std::uint8_t, 4>& destination)
+    {
+        // D2D-40: the two factors below are read straight off the Porter-Duff operator table
+        // (Fa/Fb over premultiplied colors), deliberately without consulting
+        // ToImageCompositeMode/BlendStateToDirect2DBlendMode. A test that compared Direct2D's
+        // output against a reference derived from CNA's own mapping would only prove the mapping
+        // agrees with itself.
+        const double sourceAlpha = static_cast<double>(source[3]) / 255.0;
+        const double destinationAlpha = static_cast<double>(destination[3]) / 255.0;
+        double sourceFactor = 0.0;
+        double destinationFactor = 0.0;
+        switch (blendMode)
+        {
+            case Direct2DBlendMode::Copy:
+                sourceFactor = 1.0;
+                destinationFactor = 0.0;
+                break;
+            case Direct2DBlendMode::SourceOver:
+                sourceFactor = 1.0;
+                destinationFactor = 1.0 - sourceAlpha;
+                break;
+            case Direct2DBlendMode::DestinationOver:
+                sourceFactor = 1.0 - destinationAlpha;
+                destinationFactor = 1.0;
+                break;
+            case Direct2DBlendMode::SourceIn:
+                sourceFactor = destinationAlpha;
+                destinationFactor = 0.0;
+                break;
+            case Direct2DBlendMode::DestinationIn:
+                sourceFactor = 0.0;
+                destinationFactor = sourceAlpha;
+                break;
+            case Direct2DBlendMode::SourceOut:
+                sourceFactor = 1.0 - destinationAlpha;
+                destinationFactor = 0.0;
+                break;
+            case Direct2DBlendMode::DestinationOut:
+                sourceFactor = 0.0;
+                destinationFactor = 1.0 - sourceAlpha;
+                break;
+            case Direct2DBlendMode::SourceAtop:
+                sourceFactor = destinationAlpha;
+                destinationFactor = 1.0 - sourceAlpha;
+                break;
+            case Direct2DBlendMode::DestinationAtop:
+                sourceFactor = 1.0 - destinationAlpha;
+                destinationFactor = sourceAlpha;
+                break;
+            case Direct2DBlendMode::Xor:
+                sourceFactor = 1.0 - destinationAlpha;
+                destinationFactor = 1.0 - sourceAlpha;
+                break;
+        }
+
+        std::array<std::uint8_t, 4> result{};
+        for (std::size_t channel = 0; channel < result.size(); ++channel)
+        {
+            const double value = static_cast<double>(source[channel]) * sourceFactor +
+                                 static_cast<double>(destination[channel]) * destinationFactor;
+            const long rounded = std::lround(value);
+            result[channel] = static_cast<std::uint8_t>(std::clamp<long>(rounded, 0, 255));
+        }
+        return result;
+    }
+
     int PreferredMipLevelForTransform(
         int sourceWidth, int sourceHeight, int destinationWidth, int destinationHeight,
         float rotation, const Matrix& batchTransform, float presentationScaleX,

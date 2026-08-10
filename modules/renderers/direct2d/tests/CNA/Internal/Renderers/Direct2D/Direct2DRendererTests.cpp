@@ -13,6 +13,7 @@
 
 using CNA::Internal::Renderers::Direct2D::BlendStateToDirect2DBlendMode;
 using CNA::Internal::Renderers::Direct2D::CheckedRgbaByteCount;
+using CNA::Internal::Renderers::Direct2D::CompositePorterDuffReference;
 using CNA::Internal::Renderers::Direct2D::CopyBgraToTightRgba;
 using CNA::Internal::Renderers::Direct2D::CopyRgbaToTightBgra;
 using CNA::Internal::Renderers::Direct2D::Direct2DBlendMode;
@@ -285,5 +286,96 @@ TEST(Direct2DFractionalMipLod, MagnifyingTransformClampsToZeroNotNegative)
                                                        1.0f, 1.0f, &minifying);
     EXPECT_FALSE(minifying);
     EXPECT_NEAR(lod, 0.0, 1e-9);
+}
+
+// D2D-40: an algebraic Porter-Duff oracle for the exact composite modes D2D-33 maps. The expected
+// values below were derived by hand from the operator definitions
+// (out = Fs * source + Fd * destination over premultiplied colors) for one nontrivial,
+// channel-asymmetric, partially transparent pair, so this test pins the arithmetic itself rather
+// than restating the implementation.
+namespace
+{
+    constexpr std::array<std::uint8_t, 4> kReferenceSource{{100, 50, 25, 200}};
+    constexpr std::array<std::uint8_t, 4> kReferenceDestination{{40, 80, 120, 150}};
+}
+
+TEST(Direct2DPorterDuffReference, EveryExactCompositeModeMatchesTheHandDerivedAlgebra)
+{
+    struct ModeExpectation
+    {
+        Direct2DBlendMode mode;
+        std::array<std::uint8_t, 4> expected;
+    };
+    // Fs/Fd per operator, with alphaS = 200/255 and alphaD = 150/255:
+    //   Copy            1,            0
+    //   SourceOver      1,            1-alphaS
+    //   DestinationOver 1-alphaD,     1
+    //   SourceIn        alphaD,       0
+    //   DestinationIn   0,            alphaS
+    //   SourceOut       1-alphaD,     0
+    //   DestinationOut  0,            1-alphaS
+    //   SourceAtop      alphaD,       1-alphaS
+    //   DestinationAtop 1-alphaD,     alphaS
+    //   Xor             1-alphaD,     1-alphaS
+    const std::array<ModeExpectation, 10> expectations{{
+        {Direct2DBlendMode::Copy, {{100, 50, 25, 200}}},
+        {Direct2DBlendMode::SourceOver, {{109, 67, 51, 232}}},
+        {Direct2DBlendMode::DestinationOver, {{81, 101, 130, 232}}},
+        {Direct2DBlendMode::SourceIn, {{59, 29, 15, 118}}},
+        {Direct2DBlendMode::DestinationIn, {{31, 63, 94, 118}}},
+        {Direct2DBlendMode::SourceOut, {{41, 21, 10, 82}}},
+        {Direct2DBlendMode::DestinationOut, {{9, 17, 26, 32}}},
+        {Direct2DBlendMode::SourceAtop, {{67, 47, 41, 150}}},
+        {Direct2DBlendMode::DestinationAtop, {{73, 83, 104, 200}}},
+        {Direct2DBlendMode::Xor, {{50, 38, 36, 115}}},
+    }};
+
+    for (const auto& expectation : expectations)
+    {
+        const std::array<std::uint8_t, 4> actual = CompositePorterDuffReference(
+            expectation.mode, kReferenceSource, kReferenceDestination);
+        EXPECT_EQ(actual, expectation.expected)
+            << "composite mode ordinal " << static_cast<int>(expectation.mode);
+    }
+}
+
+TEST(Direct2DPorterDuffReference, PreservesTheAlphaInvariantsOfEachOperator)
+{
+    const auto composite = [](Direct2DBlendMode mode) {
+        return CompositePorterDuffReference(mode, kReferenceSource, kReferenceDestination);
+    };
+    // "Atop" keeps the alpha of whichever operand it is atop; "in" produces the product of both.
+    EXPECT_EQ(composite(Direct2DBlendMode::SourceAtop)[3], kReferenceDestination[3]);
+    EXPECT_EQ(composite(Direct2DBlendMode::DestinationAtop)[3], kReferenceSource[3]);
+    EXPECT_EQ(composite(Direct2DBlendMode::SourceIn)[3], composite(Direct2DBlendMode::DestinationIn)[3]);
+    // Copy discards the destination entirely, source-over never reduces the destination's alpha.
+    EXPECT_EQ(composite(Direct2DBlendMode::Copy), kReferenceSource);
+    EXPECT_GE(composite(Direct2DBlendMode::SourceOver)[3], kReferenceDestination[3]);
+}
+
+TEST(Direct2DPorterDuffReference, DegenerateOperandsCollapseToTheDefiningIdentities)
+{
+    constexpr std::array<std::uint8_t, 4> transparent{{0, 0, 0, 0}};
+    constexpr std::array<std::uint8_t, 4> opaque{{30, 60, 90, 255}};
+
+    // Compositing onto a fully transparent destination leaves the source unchanged for the
+    // operators whose destination factor vanishes there, and erases it for the "in"/"atop" family.
+    EXPECT_EQ(CompositePorterDuffReference(Direct2DBlendMode::SourceOver, kReferenceSource, transparent),
+              kReferenceSource);
+    EXPECT_EQ(CompositePorterDuffReference(Direct2DBlendMode::SourceOut, kReferenceSource, transparent),
+              kReferenceSource);
+    EXPECT_EQ(CompositePorterDuffReference(Direct2DBlendMode::SourceIn, kReferenceSource, transparent),
+              transparent);
+    EXPECT_EQ(CompositePorterDuffReference(Direct2DBlendMode::SourceAtop, kReferenceSource, transparent),
+              transparent);
+    // A fully transparent source cannot change the destination under source-over, and completely
+    // replaces it under Copy.
+    EXPECT_EQ(CompositePorterDuffReference(Direct2DBlendMode::SourceOver, transparent, opaque), opaque);
+    EXPECT_EQ(CompositePorterDuffReference(Direct2DBlendMode::Copy, transparent, opaque), transparent);
+    // An opaque source hides the destination under every "over"-like operator.
+    EXPECT_EQ(CompositePorterDuffReference(Direct2DBlendMode::SourceOver, opaque, kReferenceDestination),
+              opaque);
+    EXPECT_EQ(CompositePorterDuffReference(Direct2DBlendMode::DestinationOut, opaque, kReferenceDestination),
+              transparent);
 }
 #endif

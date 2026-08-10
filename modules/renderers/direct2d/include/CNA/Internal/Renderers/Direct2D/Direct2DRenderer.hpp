@@ -8,6 +8,7 @@
 #include <dxgi1_2.h>
 #include <wrl/client.h>
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -65,6 +66,24 @@ namespace CNA::Internal::Renderers::Direct2D
     Direct2DBlendMode BlendStateToDirect2DBlendMode(
         int colorSrcBlend, int alphaSrcBlend, int colorDstBlend, int alphaDstBlend,
         int colorBlendFunc, int alphaBlendFunc);
+
+    /**
+     * @brief Composites one premultiplied RGBA8 source pixel onto a destination pixel.
+     *
+     * The result comes from the Porter-Duff coefficient algebra alone --
+     * `out = sourceFactor * source + destinationFactor * destination`, with the two factors chosen
+     * by the operator's own definition -- and never consults CNA's Direct2D composite-mode mapping.
+     * A test comparing a rendered pixel against this value is therefore an independent oracle
+     * instead of the renderer checked against itself.
+     *
+     * @param blendMode Composition to evaluate.
+     * @param source Premultiplied source pixel as R, G, B, A bytes.
+     * @param destination Premultiplied destination pixel as R, G, B, A bytes.
+     * @return The premultiplied composited pixel as R, G, B, A bytes.
+     */
+    [[nodiscard]] std::array<std::uint8_t, 4> CompositePorterDuffReference(
+        Direct2DBlendMode blendMode, const std::array<std::uint8_t, 4>& source,
+        const std::array<std::uint8_t, 4>& destination);
 
     /**
      * @brief Classifies a Direct2D, D3D11, or DXGI device-loss result.
