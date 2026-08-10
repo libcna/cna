@@ -854,3 +854,34 @@ Highlights, in the same OBSERVED/PROVEN discipline as §9:
   module include (transitively from every TU) resolves through the declared module graph;
   the probe fleet grew from 5 to 14 modules plus the NoXna composition, Net/ENet, HEADLESS
   native-SDK-free (graphics/content/graphics-ext/devices-ext) and VULKAN closure gates.
+
+### 11.1 PROVEN — Phase-3 validation retakes (2026-08-10)
+
+- **No-loss:** production 1357 → 1357 (1287 byte-identical moves, 70 directive-only edited
+  moves, zero missing/added); API declaration set zero removed (+1: the relocated generated
+  D3D9 register struct now counted under an include tree); tests 483 → 492 (zero missing,
+  the 9 probes added); registered names HEADLESS 6120 → 6143 and OPENGLES 6527 → 6546 with
+  **zero removals, zero renames**. `modularization/physical-modules/` +
+  `modularization/tools/reconcile_phase3.py`.
+- **HEADLESS:** full suite 6099 ran, 10 first-pass failures — all 10 pass on rerun
+  (including the historically accepted `Headless_Smoke` and
+  `SetRenderTargets_FourTargets` residuals); the FFmpeg-restored 69 video tests pass;
+  the complete probe fleet + closure gates + `RendererIdentityRegistry` pass.
+- **OPENGLES/EasyGL:** the 293-test family on the dedicated `:96` Xvfb = 290 pass + the
+  documented accepted `EasyGL_GraphicsDevice_ReferenceStencil` failure (Task 872) + two
+  late-family MSAA readback flakes that pass standalone (the known one-Xvfb flake class).
+- **VULKAN:** the 211-test family = 210 pass + exactly the known `Vulkan_DepthBias`
+  failure — byte-exact parity with the Phase-2 accepted run.
+- **ASan+UBSan (Debug, address,undefined,float-cast-overflow, strict init order):** full
+  6074-test corpus = 6025 pass; the 5 failures are exactly the baseline-known set (3×
+  TwoProcessLoopback + GamerServicesDispatcherHangRegression under ASan, plus the known
+  SetRenderTargets residual). Zero new sanitizer classes: the GetHashCode signed-overflow
+  findings carry byte-identical arithmetic to the pre-campaign log, the
+  Net/GamerServices member-access class fires inside the same baseline-known-failing
+  subprocess test, and the exit leak profile matches (215502 B / 912 allocations vs
+  214998 B / 913).
+- **Header self-containment:** 542 public headers compile standalone against only their
+  module's declared closure; the three documented skips are the FFmpeg-private
+  VideoDecoder.hpp and the Windows-only Glide ABI loader pair.
+- **Include reachability:** every `#include` in every module TU (transitive) resolves
+  through the declared module graph (`check_include_reachability.py` clean).
