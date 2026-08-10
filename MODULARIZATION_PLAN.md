@@ -690,3 +690,91 @@ before this session's check). sharp-runtime develop remains untouched at
 `1e51c2d8`. The `NetworkSessionProperties::operator[]` ↔ `ElementReference<T>`
 merge-time adaptation stays documented (§ P5) and deliberately unapplied while
 the branch API is still moving.
+
+---
+
+## 10. PROMOTION — modularization merged into `develop` (2026-08-10)
+
+Promotion is a ref movement, not a code rewrite. `develop` `5f2c4e941` was
+fast-forwarded to the accepted head with `git merge --ff-only
+feature/modularization`; no merge commit was created and none was permitted as a
+fallback.
+
+- develop HEAD `5f2c4e941` → **`41028e99564838a2f7a8557fd75cf4074fdf56b9`**
+- develop tree **`d2a9ea2654653989f117a2956ecb50c4a39957c1`** — identical to the
+  accepted `feature/modularization` tree, which is the proof that the promotion
+  changed no content
+- merge-base `5f2c4e941`; 0 behind / 20 ahead; `git merge-tree` produced the
+  target tree with zero conflicts before the merge was attempted
+- all 20 campaign commits (11 Phase-1 + 9 Phase-2) retained, every one GPG-signed
+  by `FB9CE8E20AADA55F`; `git diff --check` over the whole range is clean
+
+### 10.1 Owner-local preservation (no `git stash`)
+
+The `develop` worktree carried four pre-existing owner-local items: `+4` lines in
+each of `cmake/Tests/EasyGLTests.cmake` and `cmake/Tests/SdlRendererTests.cmake`
+(an ad hoc xvfb screenshot-demo registration), plus untracked `AGENTS.md` and
+`examples/xvfb_screenshot_demo.cpp`. The two tracked files are also touched by
+this campaign (the `--start-group` collapse), so the fast-forward would have
+overwritten them.
+
+They were captured first in the signed snapshot commit `1e63f865` on the
+**unpushed** branch `owner/pre-develop-promotion-20260810` (parent `5f2c4e941`,
+containing exactly those four files and nothing else), then restored to `HEAD`
+for the merge and re-applied to the worktree afterwards — the owner's edits and
+the campaign's edits are in disjoint hunks. The earlier
+`owner/pre-develop-promotion-20260809` snapshot still byte-matches the two
+untracked files but no longer matches the two tracked ones, which is why a new
+snapshot was taken. No owner-local work entered the modularization history.
+
+### 10.2 PROVEN — bounded post-promotion gate
+
+The full Phase-2 matrix was deliberately **not** rerun; the branch name changed,
+the tree did not. Re-run from the promoted tree:
+
+- **Source partition:** HEADLESS, OPENGLES and VULKAN configures all succeed, so
+  the configure-time validator finds no unowned or doubly-owned production TU in
+  any of the three.
+- **Module gates:** 12/12 HEADLESS (5 probes + 5 closures + the HEADLESS-only
+  `ModuleLinkClosure_GraphicsNativeSdkFree` + identity), 11/11 OPENGLES, 11/11
+  VULKAN. `ModuleLinkClosure_probe_math` (math-only) and
+  `ModuleLinkClosure_probe_graphics` (selected-backend-only, incl. on VULKAN)
+  both green.
+- **Renderer identities:** `RendererIdentityRegistry` green on all three configures
+  and `scripts/check_renderer_identities.py` reports 41 preserved in both
+  registries.
+- **Registrations:** 6130 HEADLESS / 6537 OPENGLES / 6434 VULKAN — unchanged from
+  the accepted Phase-2 numbers.
+- **HEADLESS suite:** `-L Headless` = 48 tests, 47 pass + 2 skip + 1 fail
+  (`Headless_Smoke`, the accepted primitive-range residual). The preserved
+  pristine pre-modularization control build reproduces that same failure
+  identically, so it is not promotion-attributable.
+- **OPENGLES/EasyGL suite:** the 293-test `EasyGL_*` family on a deterministic
+  Xvfb = 291 pass, 1 skip, 1 fail — `EasyGL_GraphicsDevice_ReferenceStencil`, the
+  pre-existing documented known failure Task 872 (AUDIT.md:128), whose source is
+  byte-identical across the whole modularization range. The first pass of this
+  suite ran against the owner's live `:0` desktop and showed seven failures; six
+  of them pass when re-run on a clean display (occluded default-framebuffer
+  readback), and the seventh is that same Task 872 failure.
+- **No-loss:** `modularization/tools/capture_inventory.py` re-run on the promoted
+  worktree reproduces the accepted `after-phase2-layout` snapshots byte for byte —
+  1357 production files, 1300 API declarations, 483 test files. Against the
+  pristine baseline: `api-decls.tsv` is byte-identical (1300 = 1300); production
+  is 1357 → 1357 with 674 moved paths (662 `R100` plus 12 whose complete diff is
+  15 `#include` directives and zero other lines) and zero additions or deletions
+  under `include/` + `src/`; tests 478 → 483, the five module probes, with no
+  baseline test blob lost.
+
+### 10.3 Gate status after promotion
+
+The CNA side of P7 is met: reconciliation, docs and the develop promotion are
+done. The sharp-runtime audit-remediation develop merge (§9.7) is a separate
+external gate and remains **OPEN**; it does not make CNA modularization
+incomplete. Observed read-only at promotion time (`git ls-remote`, nothing
+fetched, nothing modified, nothing pushed): sharp-runtime `develop` still
+`1e51c2d8`, `claude/remediation-batch-1804-namespace-b1yjh5` now `a431bc80`
+(moved on from the §9.7 observation `832726e0`) and the sibling
+`remediation-batch-1804-namespace-b1yjh5` at `44d5ed96` — the campaign is still
+moving, so no accepted checkpoint exists and the merge was not attempted. The stable modularized public `develop` head is the base future work
+must start from — FUTURE.md Phase 2 (renderer expansion) is unblocked but not
+started and needs its own owner instruction.

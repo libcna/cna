@@ -1,6 +1,6 @@
 # CNA future development roadmap
 
-Date: 2026-08-09
+Date: 2026-08-09 (updated 2026-08-10 — Phase 1 promoted to `develop`)
 
 > **THIS DOCUMENT IS A ROADMAP, NOT AUTHORIZATION TO START FUTURE WORK.**
 >
@@ -16,8 +16,8 @@ Distinguish these three clearly. Everything in the FUTURE column is unstarted.
 |---|---|---|
 | **CURRENT** | Post-audit integration campaign promoted to `develop` | 21/21 lanes accepted, 0 pending, Batch 0–6 complete, `FINAL-STAB-001` complete |
 | **CURRENT** | Public CNA renderer identities | **41** — mechanically counted from `include/CNA/GraphicsBackendType.hpp` |
-| **NEXT** | Phase 1 — CNA modularization | **complete on `feature/modularization`** (target graph 2026-08-09 + physical layout/hardening 2026-08-10, no-loss-proven); pending owner review and develop promotion; the sharp-runtime audit-remediation develop merge is a separate still-open external gate |
-| **FUTURE** | Phase 2 — renderer expansion (OPENGLES2 + 13 new renderers) | **not started**; blocked on the Phase-1 develop promotion |
+| **CURRENT** | Phase 1 — CNA modularization | **COMPLETE AND PROMOTED** — fast-forwarded into `develop` on 2026-08-10 at `41028e995` (target graph 2026-08-09 + physical layout/hardening 2026-08-10, no-loss-proven); the sharp-runtime audit-remediation develop merge is a separate still-open external gate |
+| **FUTURE** | Phase 2 — renderer expansion (OPENGLES2 + 13 new renderers) | **not started**; its Phase-1 blocker is cleared, but starting it still requires a fresh explicit owner instruction |
 | **FUTURE** | Phase 3 — complete XNA sample campaign | **not started**; blocked on Phases 1–2 |
 | **FUTURE** | Phase 4 — historical plan/audit review | **not started**; blocked on Phase 3 |
 | **FUTURE** | Phase 5 — glTF correctness campaign | **not started**; blocked on Phase 4 |
@@ -25,10 +25,10 @@ Distinguish these three clearly. Everything in the FUTURE column is unstarted.
 Explicitly **not** true today, and not to be stated as true anywhere:
 
 - CNA does **not** have 55 renderers. It has 41.
-- Modularization is complete **on `feature/modularization` only** (target graph + physical
-  layout, no-loss-proven; see `MODULARIZATION_PLAN.md`); `develop` itself is **not** yet
-  modularized — the promotion merge has not happened, and the sharp-runtime
-  audit-remediation develop merge is a separate still-open gate.
+- Modularization is complete **and promoted**: `develop` is modularized as of 2026-08-10
+  (`41028e995`, target graph + physical layout, no-loss-proven; see `MODULARIZATION_PLAN.md`
+  §10). The sharp-runtime audit-remediation develop merge is a separate still-open external
+  gate; it does **not** make CNA modularization incomplete.
 - The XNA samples do **not** all pass. The corpus has not been revisited.
 - glTF is **not** corrected. `cna-gltf-viewer` still displays many assets incorrectly.
 
@@ -36,9 +36,10 @@ Phases are sequential. Each depends on its predecessor being completed and stabi
 
 ---
 
-## Phase 1 — CNA modularization (NEXT)
+## Phase 1 — CNA modularization (COMPLETE AND PROMOTED)
 
-The immediate next major CNA development campaign after the develop promotion.
+Completed as the CNA development campaign following the post-audit integration promotion, and
+promoted into `develop` on 2026-08-10 (`41028e995`).
 
 Goals:
 
@@ -55,6 +56,10 @@ Goals:
 Exit condition: modularization is completed **and stabilized**, and one stable modularized
 `develop` commit is established as the common base for renderer expansion.
 
+**Exit condition met (2026-08-10).** The stable modularized `develop` base for renderer expansion
+is the current public `develop` head; the campaign record, the promotion evidence and the bounded
+post-promotion gate are in `MODULARIZATION_PLAN.md` §9–§10 and `NEXT.md`.
+
 **Dependency:** Phase 2 must not begin before this exit condition holds. Starting renderer
 expansion against the pre-modular structure would create 14 new renderers that then have to be
 migrated.
@@ -63,7 +68,9 @@ migrated.
 
 ## Phase 2 — renderer expansion (FUTURE)
 
-Blocked on Phase 1.
+Unblocked by Phase 1's promotion, but **not started** — and, like every phase here, it requires a
+fresh explicit owner instruction before any work begins. It must start from the stable modularized
+public `develop` base, not from an older pre-modularization commit.
 
 Current public renderer count before this phase: **41**.
 

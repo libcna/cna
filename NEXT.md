@@ -1,5 +1,43 @@
 # NEXT.md
 
+## MODULARIZATION PROMOTED — **CNA MODULARIZATION COMPLETE AND PROMOTED TO `develop`** (2026-08-10)
+
+> `develop` was fast-forwarded to the accepted modularization head: `5f2c4e941` →
+> **`41028e995`**, tree **`d2a9ea265`** — byte-identical to the accepted `feature/modularization`
+> tree, so the promotion itself changed no content. No merge commit (`git merge --ff-only`);
+> merge-base `5f2c4e941`; 0 behind / 20 ahead; all 20 campaign commits retained with their GPG
+> signatures. Promotion evidence: `MODULARIZATION_PLAN.md` §10.
+>
+> **Owner-local `develop` work was preserved first**, not stashed: the two ad hoc xvfb test
+> registrations in `cmake/Tests/{EasyGL,SdlRenderer}Tests.cmake` plus untracked `AGENTS.md` and
+> `examples/xvfb_screenshot_demo.cpp` were captured in the unpushed signed snapshot branch
+> `owner/pre-develop-promotion-20260810` and re-applied to the worktree after the fast-forward.
+> No owner-local work entered the modularization history.
+>
+> **Bounded post-promotion gate** (a ref move is not a code rewrite — the full Phase-2 matrix was
+> deliberately not rerun): HEADLESS, OPENGLES and VULKAN configures green, so the source-partition
+> validator passes on all three; module gates 12/12 HEADLESS (including the math-only probe and
+> `ModuleLinkClosure_GraphicsNativeSdkFree`), 11/11 OPENGLES, 11/11 VULKAN — the Vulkan run
+> re-proving the selected-backend-only graphics closure; `RendererIdentityRegistry` green on all
+> three plus `scripts/check_renderer_identities.py` = **41**; registrations unchanged at 6130
+> HEADLESS / 6537 OPENGLES / 6434 VULKAN (211 `Vulkan_*` + 11 gates in the focused set). HEADLESS
+> `-L Headless`: 48 tests, 47 pass + 2 skip + the accepted `Headless_Smoke` primitive-range
+> residual, which the preserved **pristine pre-modularization control binary reproduces
+> identically**. OPENGLES/EasyGL focused suite (293) on a deterministic Xvfb: 291 pass, 1 skip,
+> 1 fail = the documented known failure `EasyGL_GraphicsDevice_ReferenceStencil` (Task 872,
+> AUDIT.md:128, carried visible); the seven failures first seen on the owner's live `:0` desktop
+> were re-run individually — six pass on a clean display (occluded-window readback artifacts) and
+> the seventh is that same Task 872 failure. No-loss re-verified against the promoted tree:
+> production 1357 → 1357 (674 moves = 662 R100 + 12 whose only changed lines are 15 `#include`
+> directives; 0 added, 0 deleted), `api-decls.tsv` **byte-identical** to the pristine baseline at
+> 1300 declarations, tests 478 → 483 (the 5 module probes; 0 baseline test lost).
+> `git diff --check` clean.
+>
+> **Still open, and unrelated:** the sharp-runtime audit-remediation merge gate (§9.7 of the plan,
+> summarized below). It does **not** make CNA modularization incomplete. The next CNA feature
+> phase would be the FUTURE.md renderer expansion, which has **not** begun and needs its own owner
+> instruction.
+
 ## MODULARIZATION PHASE 2 — **physical layout + architecture hardening complete on `feature/modularization`** (2026-08-10)
 
 > Continuation of the campaign below, same branch, from Phase-1 head `b072f0da6`. Authoritative
